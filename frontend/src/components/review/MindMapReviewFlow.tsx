@@ -1,42 +1,45 @@
 import * as React from 'react'
-import { Lightbulb, Sparkles } from 'lucide-react'
+import { Maximize2, Minimize2, Sparkles } from 'lucide-react'
+import type { MindMapDoc, MindMapDocNode, MindMapEditorState } from '@/api/client'
+import { MindMapFrame, type MindMapSelection } from '@/components/mindmap-host'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 
 export type ReviewRating = 'forgot' | 'fuzzy' | 'remembered'
+type RevealState = 'hidden' | 'placeholder' | 'revealed'
 
 export interface ReviewMindMapNode {
   id: string
   text: string
   note: string
+  parentId: string | null
   children: ReviewMindMapNode[]
 }
 
-export interface MindMapDocNode {
-  data?: {
-    text?: string
-    note?: string
-    uid?: string
-    memoryAnkiId?: number | null
-    [key: string]: unknown
-  }
-  children?: MindMapDocNode[]
+interface MindMapReviewFlowProps {
+  title: string
+  description?: string
+  editorState: MindMapEditorState
+  submitting?: boolean
+  onSubmit: (rating: ReviewRating) => void | Promise<void>
+  result?: ReviewRating | null
+  resultActions?: React.ReactNode
 }
 
-export interface MindMapDocLike {
-  root?: MindMapDocNode
+function cloneValue<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value)) as T
 }
 
-export function parseEditorDoc(raw: unknown): MindMapDocLike | null {
+export function parseEditorDoc(raw: unknown): MindMapDoc | null {
   if (!raw) return null
   if (typeof raw === 'string') {
     try {
-      return JSON.parse(raw) as MindMapDocLike
+      return JSON.parse(raw) as MindMapDoc
     } catch {
       return null
     }
   }
-  if (typeof raw === 'object') return raw as MindMapDocLike
+  if (typeof raw === 'object') return raw as MindMapDoc
   return null
 }
 
@@ -49,29 +52,75 @@ function plainText(value: unknown): string {
     .trim()
 }
 
-function normalizeNode(node: MindMapDocNode | undefined, fallbackId: string): ReviewMindMapNode {
+function getNodeId(node: MindMapDocNode | undefined, fallbackId: string) {
+  const data = node?.data ?? {}
+  return String(data.uid ?? data.memoryAnkiId ?? fallbackId)
+}
+
+function normalizeNode(node: MindMapDocNode | undefined, fallbackId: string, parentId: string | null): ReviewMindMapNode {
   const data = node?.data ?? {}
   const children = Array.isArray(node?.children) ? node.children : []
-  const text = plainText(data.text) || '未命名节点'
-  const note = plainText(data.note)
-  const id = String(data.uid ?? data.memoryAnkiId ?? fallbackId)
+  const id = getNodeId(node, fallbackId)
 
   return {
     id,
-    text,
-    note,
-    children: children.map((child, index) => normalizeNode(child, `${fallbackId}-${index}`)),
+    text: plainText(data.text) || '未命名节点',
+    note: plainText(data.note),
+    parentId,
+    children: children.map((child, index) => normalizeNode(child, `${fallbackId}-${index}`, id)),
   }
 }
 
-export function buildReviewTree(doc: MindMapDocLike | null, fallbackTitle: string): ReviewMindMapNode {
+function buildReviewTree(doc: MindMapDoc | null, fallbackTitle: string): ReviewMindMapNode {
   if (!doc?.root) {
-    return { id: 'root', text: fallbackTitle || '未命名导图', note: '', children: [] }
+    return { id: 'root', text: fallbackTitle || '未命名导图', note: '', parentId: null, children: [] }
   }
-  return normalizeNode(doc.root, 'root')
+  return normalizeNode(doc.root, 'root', null)
 }
 
-export function countNodes(node: ReviewMindMapNode): number {
+function buildInitialRevealState(root: ReviewMindMapNode): Record<string, RevealState> {
+  const state: Record<string, RevealState> = {}
+  const walk = (node: ReviewMindMapNode) => {
+    state[node.id] = 'hidden'
+    node.children.forEach(walk)
+  }
+  walk(root)
+  state[root.id] = 'revealed'
+  return state
+}
+
+function flattenNodes(root: ReviewMindMapNode): Map<string, ReviewMindMapNode> {
+  const map = new Map<string, ReviewMindMapNode>()
+  const walk = (node: ReviewMindMapNode) => {
+    map.set(node.id, node)
+    node.children.forEach(walk)
+  }
+  walk(root)
+  return map
+}
+
+function findNextHiddenChild(node: ReviewMindMapNode, revealMap: Record<string, RevealState>) {
+  return node.children.find((child) => (revealMap[child.id] ?? 'hidden') === 'hidden') ?? null
+}
+
+function findNextHiddenSibling(
+  node: ReviewMindMapNode,
+  nodeMap: Map<string, ReviewMindMapNode>,
+  revealMap: Record<string, RevealState>,
+) {
+  if (!node.parentId) return null
+  const parent = nodeMap.get(node.parentId)
+  if (!parent) return null
+  const index = parent.children.findIndex((child) => child.id === node.id)
+  if (index === -1) return null
+  for (let i = index + 1; i < parent.children.length; i += 1) {
+    const sibling = parent.children[i]
+    if ((revealMap[sibling.id] ?? 'hidden') === 'hidden') return sibling
+  }
+  return null
+}
+
+function countNodes(node: ReviewMindMapNode): number {
   return 1 + node.children.reduce((sum, child) => sum + countNodes(child), 0)
 }
 
@@ -81,191 +130,264 @@ function ratingLabel(rating: ReviewRating): string {
   return '记住'
 }
 
-function BranchCard({ node, level }: { node: ReviewMindMapNode; level: number }) {
-  return (
-    <div className="space-y-2" style={{ marginLeft: level * 20 }}>
-      <div className="rounded-2xl border border-border/70 bg-background/80 px-4 py-3">
-        <div className="text-sm font-medium">{node.text}</div>
-        {node.note ? <div className="mt-2 whitespace-pre-wrap text-sm text-muted-foreground">{node.note}</div> : null}
-      </div>
-      {node.children.length > 0 ? (
-        <div className="space-y-2">
-          {node.children.map((child) => (
-            <BranchCard key={child.id} node={child} level={level + 1} />
-          ))}
-        </div>
-      ) : null}
-    </div>
-  )
+function buildVisibleEditorDoc(
+  source: MindMapDoc | null,
+  revealMap: Record<string, RevealState>,
+  fallbackTitle: string,
+): MindMapDoc {
+  if (!source?.root) {
+    return {
+      root: {
+        data: { text: fallbackTitle || '未命名导图' },
+        children: [],
+      },
+    }
+  }
+
+  const walk = (node: MindMapDocNode | undefined, fallbackId: string, forceVisible = false): MindMapDocNode | null => {
+    if (!node) return null
+    const id = getNodeId(node, fallbackId)
+    const revealState = revealMap[id] ?? 'hidden'
+    if (!forceVisible && revealState === 'hidden') return null
+
+    const nextNode = cloneValue(node)
+    const nextData = { ...(nextNode.data ?? {}) }
+
+    if (forceVisible || revealState === 'revealed') {
+      if (!plainText(nextData.text)) {
+        nextData.text = fallbackId === 'root' ? fallbackTitle || '未命名导图' : '未命名节点'
+      }
+      delete nextData.hideText
+      delete nextData.customTextWidth
+    } else {
+      nextData.text = '待回忆'
+      nextData.note = ''
+      nextData.customTextWidth = 132
+    }
+
+    nextNode.data = nextData
+    const children = Array.isArray(node.children) ? node.children : []
+    nextNode.children = children
+      .map((child, index) => walk(child, `${fallbackId}-${index}`))
+      .filter((child): child is MindMapDocNode => Boolean(child))
+    return nextNode
+  }
+
+  return {
+    ...cloneValue(source),
+    root: walk(source.root, 'root', true) ?? {
+      data: { text: fallbackTitle || '未命名导图' },
+      children: [],
+    },
+    view: null,
+  }
 }
 
-interface MindMapReviewFlowProps {
-  title: string
-  description?: string
-  editorDoc: unknown
-  submitting?: boolean
-  onSubmit: (rating: ReviewRating) => void | Promise<void>
-  result?: ReviewRating | null
-  resultActions?: React.ReactNode
-  startLabel?: string
+function buildSelectionNodeId(node: MindMapSelection | null): string | null {
+  if (!node) return null
+  if (node.uid) return String(node.uid)
+  if (node.memoryAnkiId != null) return String(node.memoryAnkiId)
+  return null
 }
 
 export function MindMapReviewFlow({
   title,
   description,
-  editorDoc,
+  editorState,
   submitting = false,
   onSubmit,
   result = null,
   resultActions,
-  startLabel = '开始回忆',
 }: MindMapReviewFlowProps) {
-  const reviewTree = buildReviewTree(parseEditorDoc(editorDoc), title)
-  const branches = reviewTree.children
-  const totalNodeCount = countNodes(reviewTree)
-  const [started, setStarted] = React.useState(false)
-  const [revealedBranchCount, setRevealedBranchCount] = React.useState(0)
+  const parsedDoc = React.useMemo(() => parseEditorDoc(editorState.editor_doc), [editorState.editor_doc])
+  const root = React.useMemo(() => buildReviewTree(parsedDoc, title), [parsedDoc, title])
+  const nodeMap = React.useMemo(() => flattenNodes(root), [root])
+  const [revealMap, setRevealMap] = React.useState<Record<string, RevealState>>(() => buildInitialRevealState(root))
+  const [fullscreen, setFullscreen] = React.useState(false)
+  const clickTimerRef = React.useRef<number | null>(null)
+  const lastNodeIdRef = React.useRef<string | null>(null)
 
   React.useEffect(() => {
-    setStarted(false)
-    setRevealedBranchCount(0)
-  }, [title, editorDoc])
+    setRevealMap(buildInitialRevealState(root))
+  }, [root])
 
-  const currentBranch = revealedBranchCount > 0 ? branches[revealedBranchCount - 1] : null
-  const allBranchesRevealed = branches.length === 0 ? started : revealedBranchCount >= branches.length
-  const canRevealNext = started && revealedBranchCount < branches.length
+  React.useEffect(() => {
+    if (!fullscreen) return
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.body.style.overflow = previousOverflow
+    }
+  }, [fullscreen])
 
-  const startRecall = () => {
-    setStarted(true)
-    setRevealedBranchCount(branches.length > 0 ? 1 : 0)
-  }
+  React.useEffect(() => {
+    return () => {
+      if (clickTimerRef.current != null) {
+        window.clearTimeout(clickTimerRef.current)
+      }
+    }
+  }, [])
 
-  const revealNextBranch = () => {
-    setRevealedBranchCount((current) => Math.min(current + 1, branches.length))
-  }
+  const visibleEditorState = React.useMemo<MindMapEditorState>(
+    () => ({
+      editor_doc: buildVisibleEditorDoc(parsedDoc, revealMap, title),
+      editor_config: cloneValue(editorState.editor_config ?? {}),
+      editor_local_config: cloneValue(editorState.editor_local_config ?? {}),
+      lang: editorState.lang || 'zh',
+    }),
+    [editorState.editor_config, editorState.editor_local_config, editorState.lang, parsedDoc, revealMap, title],
+  )
 
-  return (
-    <div className="space-y-6">
-      {!started ? (
-        <div className="rounded-2xl border border-dashed border-border/80 bg-background/70 px-6 py-10 text-center">
-          <Lightbulb className="mx-auto mb-4 h-10 w-10 text-muted-foreground/60" />
-          <p className="text-lg font-medium">先在脑中完整回忆这张导图</p>
-          <p className="mt-2 text-sm text-muted-foreground">开始后会按主分支顺序逐条揭示，帮助你先想再核对。</p>
-          <Button className="mt-6" size="lg" onClick={startRecall}>
-            {startLabel}
+  const hasAnyNonRootRevealed = React.useMemo(
+    () => Object.entries(revealMap).some(([id, state]) => id !== root.id && state === 'revealed'),
+    [revealMap, root.id],
+  )
+
+  const handleSingleClick = React.useCallback((nodeId: string) => {
+    setRevealMap((current) => {
+      const node = nodeMap.get(nodeId)
+      if (!node) return current
+      const state = current[nodeId] ?? 'hidden'
+      if (state === 'placeholder') {
+        return { ...current, [nodeId]: 'revealed' }
+      }
+      if (state !== 'revealed') return current
+      const nextChild = findNextHiddenChild(node, current)
+      if (!nextChild) return current
+      return { ...current, [nextChild.id]: 'placeholder' }
+    })
+  }, [nodeMap])
+
+  const handleDoubleClick = React.useCallback((nodeId: string) => {
+    setRevealMap((current) => {
+      const node = nodeMap.get(nodeId)
+      if (!node) return current
+      const state = current[nodeId] ?? 'hidden'
+      if (state !== 'revealed') return current
+      const sibling = findNextHiddenSibling(node, nodeMap, current)
+      if (!sibling) return current
+      return { ...current, [sibling.id]: 'placeholder' }
+    })
+  }, [nodeMap])
+
+  const handleNodeActive = React.useCallback((nodes: MindMapSelection[]) => {
+    const nodeId = buildSelectionNodeId(nodes[0] ?? null)
+    if (!nodeId) return
+
+    if (clickTimerRef.current != null && lastNodeIdRef.current === nodeId) {
+      window.clearTimeout(clickTimerRef.current)
+      clickTimerRef.current = null
+      lastNodeIdRef.current = null
+      handleDoubleClick(nodeId)
+      return
+    }
+
+    if (clickTimerRef.current != null) {
+      window.clearTimeout(clickTimerRef.current)
+      if (lastNodeIdRef.current) {
+        handleSingleClick(lastNodeIdRef.current)
+      }
+      clickTimerRef.current = null
+    }
+
+    lastNodeIdRef.current = nodeId
+    clickTimerRef.current = window.setTimeout(() => {
+      handleSingleClick(nodeId)
+      clickTimerRef.current = null
+      lastNodeIdRef.current = null
+    }, 220)
+  }, [handleDoubleClick, handleSingleClick])
+
+  const mapPanel = (
+    <div className={`overflow-hidden rounded-2xl border border-border/70 bg-card ${fullscreen ? 'h-full' : ''}`}>
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/70 px-4 py-3">
+        <div>
+          <div className="text-sm font-semibold text-foreground">手动翻牌复习</div>
+          <div className="mt-1 text-xs text-muted-foreground">
+            单击空白卡翻开内容；单击已翻开卡片放出一个一级子卡片；双击已翻开卡片放出下一个同级卡片。
+          </div>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge variant="outline">共 {countNodes(root)} 个节点</Badge>
+          <Badge variant="secondary">宿主导图模式</Badge>
+          <Button variant="outline" size="sm" onClick={() => setFullscreen((current) => !current)}>
+            {fullscreen ? <Minimize2 className="mr-2 h-4 w-4" /> : <Maximize2 className="mr-2 h-4 w-4" />}
+            {fullscreen ? '退出全屏' : '全屏导图'}
           </Button>
+        </div>
+      </div>
+
+      <div className={`p-4 ${fullscreen ? 'h-[calc(100vh-210px)] min-h-0' : ''}`}>
+        <MindMapFrame
+          editorState={visibleEditorState}
+          readonly
+          showToolbarWhenReadonly
+          syncOnPropChange
+          preserveViewOnSync
+          onEditorStateChange={() => {}}
+          onNodeClick={handleNodeActive}
+          className={`w-full rounded-2xl border border-border/70 bg-white ${fullscreen ? 'h-full' : 'h-[68vh]'}`}
+        />
+      </div>
+    </div>
+  )
+
+  const scorePanel = (
+    <div className="rounded-2xl border border-border/70 bg-card p-4">
+      <div className="mb-3 flex items-center gap-2 text-sm font-semibold">
+        <Sparkles className="h-4 w-4" />
+        评分
+      </div>
+
+      {result ? (
+        <div className="space-y-4">
+          <div className="rounded-2xl bg-background/70 px-4 py-4 text-sm text-muted-foreground">
+            本次练习结果：<span className="font-medium text-foreground">{ratingLabel(result)}</span>
+          </div>
+          {resultActions}
         </div>
       ) : (
         <>
-          {description ? (
-            <div className="rounded-2xl bg-background/70 p-4 text-sm leading-relaxed whitespace-pre-wrap text-muted-foreground">
-              {description}
+          {!hasAnyNonRootRevealed ? (
+            <div className="mb-3 rounded-2xl border border-dashed border-border/80 bg-background/60 px-4 py-3 text-sm text-muted-foreground">
+              至少先翻开一张非根节点卡片，再进行评分。
             </div>
           ) : null}
-
-          <div className="space-y-4 rounded-2xl border border-border/70 bg-background/60 p-4">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <div className="text-sm font-semibold">中心主题</div>
-                <div className="text-xs text-muted-foreground">
-                  {branches.length > 0
-                    ? `已揭示 ${revealedBranchCount} / ${branches.length} 条主分支`
-                    : '这张导图没有主分支，可直接按整图回忆评分。'}
-                </div>
-              </div>
-              {canRevealNext ? (
-                <Button variant="outline" size="sm" onClick={revealNextBranch}>
-                  揭示下一分支
-                </Button>
-              ) : allBranchesRevealed ? (
-                <Badge variant="secondary">完整导图已展示</Badge>
-              ) : null}
-            </div>
-
-            <div className="rounded-3xl border border-primary/15 bg-card px-6 py-5 text-center shadow-sm">
-              <div className="text-xs tracking-[0.28em] text-muted-foreground">中心主题</div>
-              <div className="mt-2 text-xl font-semibold">{reviewTree.text}</div>
-              {reviewTree.note ? (
-                <div className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-muted-foreground">{reviewTree.note}</div>
-              ) : null}
-              <div className="mt-3 text-xs text-muted-foreground">{totalNodeCount} 个导图节点</div>
-            </div>
-
-            {branches.length > 0 ? (
-              <div className="grid gap-3 md:grid-cols-2">
-                {branches.map((branch, index) => {
-                  const isRevealed = index < revealedBranchCount
-                  const isCurrent = currentBranch?.id === branch.id
-                  return (
-                    <div
-                      key={branch.id}
-                      className={`rounded-2xl border px-4 py-4 transition-colors ${
-                        isRevealed ? 'border-primary/20 bg-card' : 'border-dashed border-border/80 bg-muted/20'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between gap-3">
-                        <div className="text-sm font-medium">{isRevealed ? branch.text : `主分支 ${index + 1}`}</div>
-                        <Badge variant={isRevealed ? 'secondary' : 'outline'}>
-                          {isRevealed ? (isCurrent ? '当前核对' : '已揭示') : '未揭示'}
-                        </Badge>
-                      </div>
-                      {isRevealed ? (
-                        <>
-                          {branch.note ? (
-                            <div className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-muted-foreground">{branch.note}</div>
-                          ) : null}
-                          {branch.children.length > 0 ? (
-                            <div className="mt-3 space-y-2 border-l border-border/60 pl-3">
-                              {branch.children.map((child) => (
-                                <BranchCard key={child.id} node={child} level={1} />
-                              ))}
-                            </div>
-                          ) : null}
-                        </>
-                      ) : (
-                        <div className="mt-3 h-16 rounded-xl bg-muted/50" />
-                      )}
-                    </div>
-                  )
-                })}
-              </div>
-            ) : null}
+          <div className="grid gap-3 sm:grid-cols-3">
+            <Button variant="destructive" disabled={submitting || !hasAnyNonRootRevealed} onClick={() => void onSubmit('forgot')}>
+              忘记
+            </Button>
+            <Button variant="outline" disabled={submitting || !hasAnyNonRootRevealed} onClick={() => void onSubmit('fuzzy')}>
+              模糊
+            </Button>
+            <Button disabled={submitting || !hasAnyNonRootRevealed} onClick={() => void onSubmit('remembered')}>
+              记住
+            </Button>
           </div>
+        </>
+      )}
+    </div>
+  )
 
-          <div className="rounded-2xl border border-border/70 bg-card p-4">
-            <div className="mb-3 flex items-center gap-2 text-sm font-semibold">
-              <Sparkles className="h-4 w-4" />
-              按整次回忆质量评分
-            </div>
+  return (
+    <div className="space-y-6">
+      {description ? (
+        <div className="rounded-2xl border border-border/70 bg-background/80 p-4 text-sm leading-relaxed whitespace-pre-wrap text-muted-foreground">
+          {description}
+        </div>
+      ) : null}
 
-            {result ? (
-              <div className="space-y-4">
-                <div className="rounded-2xl bg-background/70 px-4 py-4 text-sm text-muted-foreground">
-                  本次练习结果：<span className="font-medium text-foreground">{ratingLabel(result)}</span>
-                </div>
-                {resultActions}
-              </div>
-            ) : (
-              <>
-                {!allBranchesRevealed ? (
-                  <div className="mb-3 rounded-2xl border border-dashed border-border/80 bg-background/60 px-4 py-3 text-sm text-muted-foreground">
-                    请先把所有主分支都揭示完，再提交这次评分。
-                  </div>
-                ) : null}
-                <div className="grid gap-3 sm:grid-cols-3">
-                  <Button variant="destructive" disabled={submitting || !allBranchesRevealed} onClick={() => void onSubmit('forgot')}>
-                    忘记
-                  </Button>
-                  <Button variant="outline" disabled={submitting || !allBranchesRevealed} onClick={() => void onSubmit('fuzzy')}>
-                    模糊
-                  </Button>
-                  <Button disabled={submitting || !allBranchesRevealed} onClick={() => void onSubmit('remembered')}>
-                    记住
-                  </Button>
-                </div>
-              </>
-            )}
+      {fullscreen ? (
+        <div className="fixed inset-0 z-50 bg-black/55 backdrop-blur-sm">
+          <div className="flex h-full flex-col gap-4 p-4 sm:p-6">
+            <div className="min-h-0 flex-1">{mapPanel}</div>
+            <div className="shrink-0">{scorePanel}</div>
           </div>
+        </div>
+      ) : (
+        <>
+          {mapPanel}
+          {scorePanel}
         </>
       )}
     </div>

@@ -1,6 +1,6 @@
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { ArrowLeft, FileText } from 'lucide-react'
-import { api, type ReviewScheduleSummary } from '@/api/client'
+import { api, type MindMapEditorState, type ReviewScheduleSummary } from '@/api/client'
 import { PageIntro } from '@/components/layout/PageIntro'
 import { MindMapReviewFlow } from '@/components/review/MindMapReviewFlow'
 import { Badge } from '@/components/ui/badge'
@@ -19,6 +19,7 @@ export default function ReviewSession() {
   const chapterIdParam = searchParams.get('chapterId')
   const chapterId = chapterIdParam ? Number(chapterIdParam) : null
   const [session, setSession] = useState<ReviewScheduleSummary | null>(null)
+  const [editorState, setEditorState] = useState<MindMapEditorState | null>(null)
   const [submitting, setSubmitting] = useState(false)
 
   useEffect(() => {
@@ -26,6 +27,15 @@ export default function ReviewSession() {
     const load = async () => {
       const data = await api.getReviewSession(Number(id))
       setSession(data)
+      if (data.palace_id) {
+        const editor = await api.getPalaceEditor(data.palace_id)
+        setEditorState({
+          editor_doc: editor.editor_doc,
+          editor_config: editor.editor_config,
+          editor_local_config: editor.editor_local_config,
+          lang: editor.lang,
+        })
+      }
     }
     void load()
   }, [id])
@@ -54,7 +64,7 @@ export default function ReviewSession() {
     }
   }
 
-  if (!session || !palace) {
+  if (!session || !palace || !editorState) {
     return <div className="flex items-center justify-center py-32 text-sm text-muted-foreground">正在加载复习会话...</div>
   }
 
@@ -63,7 +73,7 @@ export default function ReviewSession() {
       <PageIntro
         eyebrow="正式复习"
         title={palace.title || '未命名宫殿'}
-        description="这次评分会写入正式复习记录，并按照当前算法推进后续复习计划。"
+        description="你需要自己逐张翻开导图卡片；本次评分会写入正式复习记录，并按照当前算法推进后续复习计划。"
         actions={
           <>
             <Link to={nextOverviewHref(chapterId)}>
@@ -84,7 +94,7 @@ export default function ReviewSession() {
             <MindMapReviewFlow
               title={palace.title || '未命名宫殿'}
               description={palace.description}
-              editorDoc={palace.editor_doc}
+              editorState={editorState}
               submitting={submitting}
               onSubmit={submit}
             />
@@ -100,6 +110,8 @@ export default function ReviewSession() {
               <div>算法：{session.algorithm_used}</div>
               <div>当前轮次：第 {session.review_number + 1} 次</div>
               <div>计划间隔：{session.interval_days} 天</div>
+              <div>复习区已经恢复为原来的导图宿主界面，底部和侧边的常用功能键可直接使用。</div>
+              <div>单击空白卡翻开内容，单击已翻开卡片放出一个子卡片，双击已翻开卡片放出一个同级卡片。</div>
               <div>本次提交会影响正式排程，并决定下一次到期时间。</div>
             </CardContent>
           </Card>

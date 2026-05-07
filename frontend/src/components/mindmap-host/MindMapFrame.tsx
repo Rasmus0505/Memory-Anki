@@ -13,9 +13,13 @@ export interface MindMapSelection {
 interface MindMapFrameProps {
   editorState: MindMapEditorState
   readonly?: boolean
+  showToolbarWhenReadonly?: boolean
+  syncOnPropChange?: boolean
+  preserveViewOnSync?: boolean
   className?: string
   onEditorStateChange: (nextState: MindMapEditorState) => void
   onNodeActive?: (nodes: MindMapSelection[]) => void
+  onNodeClick?: (nodes: MindMapSelection[]) => void
   onReady?: () => void
 }
 
@@ -44,21 +48,28 @@ function cloneValue<T>(value: T): T {
 export function MindMapFrame({
   editorState,
   readonly = false,
+  showToolbarWhenReadonly = false,
+  syncOnPropChange = false,
+  preserveViewOnSync = false,
   className,
   onEditorStateChange,
   onNodeActive,
+  onNodeClick,
   onReady,
 }: MindMapFrameProps) {
   const iframeRef = useRef<HTMLIFrameElement | null>(null)
   const stateRef = useRef(editorState)
   const onEditorStateChangeRef = useRef(onEditorStateChange)
   const onNodeActiveRef = useRef(onNodeActive)
+  const onNodeClickRef = useRef(onNodeClick)
   const onReadyRef = useRef(onReady)
+  const lastSyncedFingerprintRef = useRef('')
   const [isLoaded, setIsLoaded] = useState(false)
 
   stateRef.current = editorState
   onEditorStateChangeRef.current = onEditorStateChange
   onNodeActiveRef.current = onNodeActive
+  onNodeClickRef.current = onNodeClick
   onReadyRef.current = onReady
 
   const rawHostId = useId()
@@ -104,6 +115,9 @@ export function MindMapFrame({
         if (event === 'node_active') {
           onNodeActiveRef.current?.(Array.isArray(payload) ? (payload as MindMapSelection[]) : [])
         }
+        if (event === 'node_click') {
+          onNodeClickRef.current?.(Array.isArray(payload) ? (payload as MindMapSelection[]) : [])
+        }
       },
     }
 
@@ -114,18 +128,44 @@ export function MindMapFrame({
     }
   }, [hostId])
 
+  const syncHostEditorState = () => {
+    const iframeWindow = iframeRef.current?.contentWindow as
+      | (Window & {
+          syncHostEditorState?: (payload: { editorState: MindMapEditorState; preserveView: boolean }) => void
+        })
+      | null
+    iframeWindow?.syncHostEditorState?.({
+      editorState: cloneValue(stateRef.current),
+      preserveView: preserveViewOnSync,
+    })
+  }
+
   const syncHostState = () => {
     const iframeWindow = iframeRef.current?.contentWindow as
-      | (Window & { applyHostState?: (state: { readonly: boolean }) => void })
+      | (Window & { applyHostState?: (state: { readonly: boolean; showToolbarWhenReadonly: boolean }) => void })
       | null
-    iframeWindow?.applyHostState?.({ readonly })
+    iframeWindow?.applyHostState?.({ readonly, showToolbarWhenReadonly })
   }
 
   useEffect(() => {
     if (isLoaded) {
       syncHostState()
     }
-  }, [isLoaded, readonly])
+  }, [isLoaded, readonly, showToolbarWhenReadonly])
+
+  useEffect(() => {
+    if (!syncOnPropChange || !isLoaded) return
+    const fingerprint = JSON.stringify({
+      editor_doc: editorState.editor_doc,
+      editor_config: editorState.editor_config,
+      editor_local_config: editorState.editor_local_config,
+      lang: editorState.lang,
+      preserveViewOnSync,
+    })
+    if (lastSyncedFingerprintRef.current === fingerprint) return
+    lastSyncedFingerprintRef.current = fingerprint
+    syncHostEditorState()
+  }, [editorState, isLoaded, preserveViewOnSync, syncOnPropChange])
 
   return (
     <iframe

@@ -9,6 +9,14 @@ interface PersistedMindMapOptions<TResponse, TMeta> {
   selectEditorState: (response: TResponse) => MindMapEditorState
 }
 
+function stableSerialize(value: unknown) {
+  try {
+    return JSON.stringify(value) ?? ''
+  } catch {
+    return ''
+  }
+}
+
 export function usePersistedMindMapEditor<TResponse, TMeta>({
   entityId,
   fetcher,
@@ -27,9 +35,18 @@ export function usePersistedMindMapEditor<TResponse, TMeta>({
   const timerRef = useRef<number | null>(null)
   const changeVersionRef = useRef(0)
   const entityIdRef = useRef<number | null>(entityId)
+  const fetcherRef = useRef(fetcher)
+  const saverRef = useRef(saver)
+  const selectMetaRef = useRef(selectMeta)
+  const selectEditorStateRef = useRef(selectEditorState)
+  const lastStateFingerprintRef = useRef('')
 
   editorStateRef.current = editorState
   entityIdRef.current = entityId
+  fetcherRef.current = fetcher
+  saverRef.current = saver
+  selectMetaRef.current = selectMeta
+  selectEditorStateRef.current = selectEditorState
 
   const clearTimer = () => {
     if (timerRef.current != null) {
@@ -42,22 +59,25 @@ export function usePersistedMindMapEditor<TResponse, TMeta>({
     if (!entityId) {
       setMeta(null)
       setEditorState(null)
+      lastStateFingerprintRef.current = ''
       return
     }
     setIsLoading(true)
     setError(null)
     try {
-      const response = await fetcher(entityId)
+      const response = await fetcherRef.current(entityId)
+      const nextEditorState = selectEditorStateRef.current(response)
       changeVersionRef.current = 0
       dirtyRef.current = false
-      setMeta(selectMeta(response))
-      setEditorState(selectEditorState(response))
+      lastStateFingerprintRef.current = stableSerialize(nextEditorState)
+      setMeta(selectMetaRef.current(response))
+      setEditorState(nextEditorState)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load editor')
     } finally {
       setIsLoading(false)
     }
-  }, [entityId, fetcher, selectEditorState, selectMeta])
+  }, [entityId])
 
   const flushSave = useCallback(async () => {
     if (!entityIdRef.current || !editorStateRef.current || !dirtyRef.current || isSaving) return
@@ -68,11 +88,13 @@ export function usePersistedMindMapEditor<TResponse, TMeta>({
     setIsSaving(true)
     setError(null)
     try {
-      const response = await saver(saveEntityId, snapshot)
+      const response = await saverRef.current(saveEntityId, snapshot)
       if (entityIdRef.current !== saveEntityId) return
-      setMeta(selectMeta(response))
+      const nextEditorState = selectEditorStateRef.current(response)
+      lastStateFingerprintRef.current = stableSerialize(nextEditorState)
+      setMeta(selectMetaRef.current(response))
       if (changeVersionRef.current === saveVersion) {
-        setEditorState(selectEditorState(response))
+        setEditorState(nextEditorState)
       }
     } catch (err) {
       dirtyRef.current = true
@@ -86,10 +108,15 @@ export function usePersistedMindMapEditor<TResponse, TMeta>({
         }, 400)
       }
     }
-  }, [isSaving, saver, selectEditorState, selectMeta])
+  }, [isSaving])
 
   const scheduleSave = useCallback((nextState: MindMapEditorState) => {
+    const nextFingerprint = stableSerialize(nextState)
+    if (nextFingerprint === lastStateFingerprintRef.current) {
+      return
+    }
     changeVersionRef.current += 1
+    lastStateFingerprintRef.current = nextFingerprint
     setEditorState(nextState)
     dirtyRef.current = true
     clearTimer()

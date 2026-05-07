@@ -106,7 +106,7 @@ export default function ReviewOverview() {
       <Card className="border-border/70 bg-card/92">
         <CardHeader>
           <CardTitle className="text-base">待处理任务</CardTitle>
-          <CardDescription>正式复习会使用“先回忆，再按主分支逐条揭示”的导图复习流程。</CardDescription>
+          <CardDescription>正式复习会进入思维导图宿主界面，由你自己单击节点逐步翻开内容。</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
           {queue.reviews.length > 0 ? (
@@ -157,11 +157,11 @@ export default function ReviewOverview() {
         <CardContent className="space-y-2 text-sm text-muted-foreground">
           <div className="flex items-start gap-2">
             <Sparkles className="mt-0.5 h-4 w-4 shrink-0" />
-            <span>每次正式复习都会从中心主题开始，再按主分支顺序逐条揭示。</span>
+            <span>每次正式复习都会从中心主题开始，由你自己逐张翻开卡片并按层级展开。</span>
           </div>
           <div className="flex items-start gap-2">
             <Sparkles className="mt-0.5 h-4 w-4 shrink-0" />
-            <span>只有在所有主分支都揭示完成后，才允许提交正式评分。</span>
+            <span>复习区保留原来的思维导图控件，你可以放大、缩小、查看大纲或切换全屏。</span>
           </div>
           <div className="flex items-start gap-2">
             <Sparkles className="mt-0.5 h-4 w-4 shrink-0" />

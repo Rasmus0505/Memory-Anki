@@ -74,6 +74,7 @@ export default function PalaceView() {
               key={`readonly-${palace.id}`}
               editorState={editorState}
               readonly
+              showToolbarWhenReadonly
               onEditorStateChange={() => {}}
               className="h-[62vh] w-full rounded-2xl border border-border/70 bg-white"
             />

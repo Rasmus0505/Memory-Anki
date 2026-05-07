@@ -12,6 +12,8 @@ import {
   ChevronRight,
   FolderTree,
   Menu,
+  PanelLeftClose,
+  PanelLeftOpen,
   X,
 } from 'lucide-react'
 import Dashboard from './pages/Dashboard'
@@ -146,6 +148,16 @@ function Shell() {
         ) : null}
 
         <aside className={`fixed inset-y-4 left-4 z-20 hidden overflow-hidden rounded-[30px] border border-border/70 bg-background/92 shadow-[0_24px_80px_rgba(15,23,42,0.12)] backdrop-blur lg:flex lg:flex-col transition-all duration-300 ${compactNav ? 'w-[84px]' : 'w-[250px]'}`}>
+          <div className={`flex justify-end px-3 pt-3 ${compactNav ? 'pb-1' : 'pb-0'}`}>
+            <button
+              type="button"
+              onClick={() => setSidebarCollapsed(!compactNav)}
+              className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-border/70 bg-background/80 text-muted-foreground transition-colors hover:text-foreground"
+              aria-label={compactNav ? '展开导航' : '收起导航'}
+            >
+              {compactNav ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
+            </button>
+          </div>
           <div className={compactNav ? 'scale-[0.92] origin-top' : ''}>
             <SidebarContent />
           </div>
