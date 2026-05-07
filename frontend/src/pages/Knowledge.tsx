@@ -6,7 +6,7 @@ import { PageIntro } from '@/components/layout/PageIntro'
 import { MindMapFrame, type MindMapSelection } from '@/components/mindmap-host'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { usePersistedMindMapEditor } from '@/hooks/usePersistedMindMapEditor'
@@ -45,7 +45,6 @@ export default function Knowledge() {
     meta,
     editorState,
     setEditorState,
-    isLoading,
     isSaving,
     error,
     reload,
@@ -136,9 +135,7 @@ export default function Knowledge() {
   return (
     <div className="space-y-5">
       <PageIntro
-        eyebrow="Knowledge"
         title="知识树编辑器"
-        description="知识体系页已经切换到 mind-map 内核。左侧管理学科，中央直接编辑脑图，右侧查看当前章节关联的宫殿信息。"
         actions={renderStatus()}
       />
 
@@ -149,7 +146,6 @@ export default function Knowledge() {
               <FolderTree className="h-4 w-4" />
               学科
             </CardTitle>
-            <CardDescription>切换当前知识图谱的根主题。</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
@@ -197,7 +193,6 @@ export default function Knowledge() {
           <CardHeader className="flex flex-row items-center justify-between gap-3">
             <div>
               <CardTitle className="text-base">{activeSubject?.name ?? '选择一个学科'}</CardTitle>
-              <CardDescription>主编辑区直接由 simple-mind-map 承载，大纲入口保留在编辑器侧栏。</CardDescription>
             </div>
             {selectedChapterId ? <Badge variant="secondary">章节 #{selectedChapterId}</Badge> : null}
           </CardHeader>
@@ -224,7 +219,6 @@ export default function Knowledge() {
           <Card className="border-border/70 bg-card/92">
             <CardHeader>
               <CardTitle className="text-base">学科信息</CardTitle>
-              <CardDescription>业务字段仍由宿主侧栏维护，不塞进 mind-map 原生面板。</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
               <div className="space-y-2">
@@ -262,7 +256,6 @@ export default function Knowledge() {
           <Card className="border-border/70 bg-card/92">
             <CardHeader>
               <CardTitle className="text-base">当前章节</CardTitle>
-              <CardDescription>选中脑图节点后，这里展示章节业务详情与关联宫殿。</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               {chapterDetail ? (
@@ -315,16 +308,6 @@ export default function Knowledge() {
             </CardContent>
           </Card>
 
-          <Card className="border-border/70 bg-card/92">
-            <CardHeader>
-              <CardTitle className="text-base">桥接说明</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2 text-sm text-muted-foreground">
-              <div>脑图数据经由 `window.takeOverAppMethods` 读写后端 `editor_doc`。</div>
-              <div>结构节点会同步物化回 `chapters` 表，保留当前业务 API 可用。</div>
-              <div>节点样式、主题、图片、关联线等扩展状态只保存在 editor JSON。</div>
-            </CardContent>
-          </Card>
         </div>
       </div>
     </div>

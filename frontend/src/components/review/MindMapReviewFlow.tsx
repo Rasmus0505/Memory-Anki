@@ -130,9 +130,66 @@ function ratingLabel(rating: ReviewRating): string {
   return '记住'
 }
 
+const PLACEHOLDER_NODE_STYLE = {
+  fillColor: '#e5e7eb',
+  borderColor: '#9ca3af',
+  borderWidth: 2,
+  color: '#4b5563',
+}
+
+const REVEALED_NODE_STYLE = {
+  fillColor: '#dcfce7',
+  borderColor: '#22c55e',
+  borderWidth: 2,
+  color: '#14532d',
+}
+
+const ROOT_NODE_STYLE = {
+  fillColor: '#16a34a',
+  borderColor: '#15803d',
+  borderWidth: 2,
+  color: '#f0fdf4',
+  fontWeight: 'bold',
+}
+
+const DEFAULT_LINE_STYLE = {
+  lineColor: '#cbd5e1',
+  lineWidth: 2,
+}
+
+const COMPLETED_LINE_STYLE = {
+  lineColor: '#22c55e',
+  lineWidth: 3,
+}
+
+function parentChildrenAllRevealed(
+  parentId: string | null,
+  nodeMap: Map<string, ReviewMindMapNode>,
+  revealMap: Record<string, RevealState>,
+): boolean {
+  if (!parentId) return false
+  const parent = nodeMap.get(parentId)
+  if (!parent || parent.children.length === 0) return false
+  return parent.children.every((child) => (revealMap[child.id] ?? 'hidden') === 'revealed')
+}
+
+function getNodeVisualStyle(
+  state: RevealState,
+  isRoot: boolean,
+  edgeCompleted: boolean,
+): Record<string, string | number> {
+  const nodeStyle = isRoot ? ROOT_NODE_STYLE : state === 'placeholder' ? PLACEHOLDER_NODE_STYLE : REVEALED_NODE_STYLE
+  const lineStyle = edgeCompleted ? COMPLETED_LINE_STYLE : DEFAULT_LINE_STYLE
+  return {
+    ...nodeStyle,
+    ...lineStyle,
+  }
+}
+
 function buildVisibleEditorDoc(
   source: MindMapDoc | null,
   revealMap: Record<string, RevealState>,
+  nodeMap: Map<string, ReviewMindMapNode>,
   fallbackTitle: string,
 ): MindMapDoc {
   if (!source?.root) {
@@ -164,6 +221,15 @@ function buildVisibleEditorDoc(
       nextData.note = ''
       nextData.customTextWidth = 132
     }
+
+    Object.assign(
+      nextData,
+      getNodeVisualStyle(
+        forceVisible ? 'revealed' : revealState,
+        fallbackId === 'root',
+        parentChildrenAllRevealed(nodeMap.get(id)?.parentId ?? null, nodeMap, revealMap),
+      ),
+    )
 
     nextNode.data = nextData
     const children = Array.isArray(node.children) ? node.children : []
@@ -230,12 +296,12 @@ export function MindMapReviewFlow({
 
   const visibleEditorState = React.useMemo<MindMapEditorState>(
     () => ({
-      editor_doc: buildVisibleEditorDoc(parsedDoc, revealMap, title),
+      editor_doc: buildVisibleEditorDoc(parsedDoc, revealMap, nodeMap, title),
       editor_config: cloneValue(editorState.editor_config ?? {}),
       editor_local_config: cloneValue(editorState.editor_local_config ?? {}),
       lang: editorState.lang || 'zh',
     }),
-    [editorState.editor_config, editorState.editor_local_config, editorState.lang, parsedDoc, revealMap, title],
+    [editorState.editor_config, editorState.editor_local_config, editorState.lang, nodeMap, parsedDoc, revealMap, title],
   )
 
   const hasAnyNonRootRevealed = React.useMemo(

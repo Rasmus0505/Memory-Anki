@@ -50,7 +50,6 @@ function SidebarContent() {
           {!compact ? (
             <div className="min-w-0">
               <div className="truncate text-sm font-semibold">记忆宫殿</div>
-              <div className="text-xs text-muted-foreground">记忆复习工作台</div>
             </div>
           ) : null}
         </NavLink>
@@ -83,12 +82,6 @@ function SidebarContent() {
           </NavLink>
         ))}
       </nav>
-
-      <div className={compact ? 'px-2 pb-3' : 'px-4 pb-4'}>
-        <div className={`rounded-2xl border border-border/70 bg-muted/40 text-xs leading-5 text-muted-foreground ${compact ? 'px-2 py-3 text-center' : 'px-4 py-3'}`}>
-          {compact ? '主区' : '画布、知识树和宫殿编辑现在共用统一工作区，页面会在大屏下尽量铺满内容宽度。'}
-        </div>
-      </div>
     </>
   )
 }

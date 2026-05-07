@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { ArrowLeft, ArrowRight, BookOpen, Brain, Sparkles } from 'lucide-react'
+import { ArrowLeft, ArrowRight, BookOpen, Brain } from 'lucide-react'
 import { api, type ReviewQueueResponse } from '@/api/client'
 import { PageIntro } from '@/components/layout/PageIntro'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 
 function formatSessionHref(reviewId: number, chapterId: number | null) {
   if (chapterId == null) return `/review/session/${reviewId}`
@@ -37,16 +37,11 @@ export default function ReviewOverview() {
   }
 
   const title = chapterLabel ? `章节复习：${chapterLabel}` : '今日复习队列'
-  const description = chapterLabel
-    ? '这里只展示当前章节下已经到期的正式复习任务。'
-    : '从今天到期的正式复习队列开始，完成后会自动推进后续排程。'
 
   return (
     <div className="space-y-6">
       <PageIntro
-        eyebrow="复习"
         title={title}
-        description={description}
         actions={
           <>
             {chapterId ? (
@@ -57,7 +52,6 @@ export default function ReviewOverview() {
                 </Button>
               </Link>
             ) : null}
-            <Badge variant="secondary">{queue.due_count} 项待复习</Badge>
           </>
         }
       />
@@ -78,7 +72,6 @@ export default function ReviewOverview() {
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-semibold">{queue.due_count}</div>
-            <p className="mt-2 text-xs text-muted-foreground">今天需要完成的正式宫殿复习任务。</p>
           </CardContent>
         </Card>
         <Card className="border-border/70 bg-card/92">
@@ -87,7 +80,6 @@ export default function ReviewOverview() {
           </CardHeader>
           <CardContent>
             <div className={`text-3xl font-semibold ${queue.overdue_count > 0 ? 'text-destructive' : ''}`}>{queue.overdue_count}</div>
-            <p className="mt-2 text-xs text-muted-foreground">已超过计划日期、尚未完成的复习任务数量。</p>
           </CardContent>
         </Card>
         <Card className="border-border/70 bg-card/92">
@@ -96,9 +88,6 @@ export default function ReviewOverview() {
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-semibold">{queue.stats.completion_rate}%</div>
-            <p className="mt-2 text-xs text-muted-foreground">
-              本周已完成 {queue.stats.completed} / {queue.stats.total} 次正式复习。
-            </p>
           </CardContent>
         </Card>
       </div>
@@ -106,7 +95,6 @@ export default function ReviewOverview() {
       <Card className="border-border/70 bg-card/92">
         <CardHeader>
           <CardTitle className="text-base">待处理任务</CardTitle>
-          <CardDescription>正式复习会进入思维导图宿主界面，由你自己单击节点逐步翻开内容。</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
           {queue.reviews.length > 0 ? (
@@ -147,26 +135,6 @@ export default function ReviewOverview() {
               ) : null}
             </div>
           )}
-        </CardContent>
-      </Card>
-
-      <Card className="border-border/70 bg-card/92">
-        <CardHeader>
-          <CardTitle className="text-base">说明</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-2 text-sm text-muted-foreground">
-          <div className="flex items-start gap-2">
-            <Sparkles className="mt-0.5 h-4 w-4 shrink-0" />
-            <span>每次正式复习都会从中心主题开始，由你自己逐张翻开卡片并按层级展开。</span>
-          </div>
-          <div className="flex items-start gap-2">
-            <Sparkles className="mt-0.5 h-4 w-4 shrink-0" />
-            <span>复习区保留原来的思维导图控件，你可以放大、缩小、查看大纲或切换全屏。</span>
-          </div>
-          <div className="flex items-start gap-2">
-            <Sparkles className="mt-0.5 h-4 w-4 shrink-0" />
-            <span>从章节专题进入复习时，会保留当前章节上下文并继续在该范围内推进任务。</span>
-          </div>
         </CardContent>
       </Card>
     </div>

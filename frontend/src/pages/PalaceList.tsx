@@ -8,8 +8,26 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 
+interface PalaceListItem {
+  id: number
+  title: string
+  description: string
+  archived: boolean
+  mastered: boolean
+  next_scheduled_date: string | null
+  pegs?: Array<unknown>
+  chapters?: Array<unknown>
+}
+
+function formatNextScheduledDate(value: string | null): string {
+  if (!value) return '未排入正式复习'
+  const date = new Date(`${value}T00:00:00`)
+  if (Number.isNaN(date.getTime())) return '未排入正式复习'
+  return `下次复习：${date.toLocaleDateString('zh-CN')}`
+}
+
 export default function PalaceList() {
-  const [palaces, setPalaces] = useState<any[]>([])
+  const [palaces, setPalaces] = useState<PalaceListItem[]>([])
   const [searchParams, setSearchParams] = useSearchParams()
   const search = searchParams.get('search') || ''
 
@@ -89,6 +107,7 @@ export default function PalaceList() {
                   <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
                     <span>{palace.pegs?.length || 0} 个导图节点入口</span>
                     <span>{palace.chapters?.length || 0} 个关联章节</span>
+                    <span>{formatNextScheduledDate(palace.next_scheduled_date)}</span>
                   </div>
                   {palace.description ? (
                     <p className="mt-2 line-clamp-1 text-sm text-muted-foreground">{palace.description.slice(0, 150)}</p>

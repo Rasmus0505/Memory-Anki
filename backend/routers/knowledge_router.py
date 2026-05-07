@@ -238,8 +238,16 @@ def link_chapters(palace_id: int, data: dict, s: Session = Depends(session_dep))
     p = s.query(Palace).filter_by(id=palace_id).first()
     if not p:
         return {"error": "not found"}
-    ids = data.get("chapter_ids", [])
-    p.chapters = s.query(Chapter).filter(Chapter.id.in_(ids)).all() if ids else []
+    ids = [int(chapter_id) for chapter_id in data.get("chapter_ids", [])]
+    expanded_ids: set[int] = set()
+
+    for chapter_id in ids:
+        current = s.query(Chapter).filter_by(id=chapter_id).first()
+        while current:
+            expanded_ids.add(current.id)
+            current = current.parent
+
+    p.chapters = s.query(Chapter).filter(Chapter.id.in_(expanded_ids)).all() if expanded_ids else []
     s.commit()
     return {"ok": True, "count": len(p.chapters)}
 

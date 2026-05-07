@@ -35,11 +35,17 @@ def peg_json(peg) -> dict:
 
 
 def palace_json(p) -> dict:
+    next_schedule = None
+    pending_schedules = [schedule for schedule in (p.review_schedules or []) if not schedule.completed]
+    if pending_schedules:
+        next_schedule = min(pending_schedules, key=lambda schedule: (schedule.scheduled_date, schedule.id))
+
     return {
         "id": p.id, "title": p.title, "description": p.description,
         "archived": p.archived, "mastered": p.mastered,
         "created_at": p.created_at.isoformat() if p.created_at else None,
         "updated_at": p.updated_at.isoformat() if p.updated_at else None,
+        "next_scheduled_date": next_schedule.scheduled_date.isoformat() if next_schedule and next_schedule.scheduled_date else None,
         "pegs": [peg_json(peg) for peg in p.pegs],
         "attachments": [{"id": a.id, "filename": a.filename,
                          "original_name": a.original_name, "file_size": a.file_size}

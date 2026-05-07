@@ -6,7 +6,7 @@ import { PageIntro } from '@/components/layout/PageIntro'
 import { MindMapFrame, type MindMapSelection } from '@/components/mindmap-host'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
@@ -148,9 +148,7 @@ export default function PalaceEdit() {
   return (
     <div className="space-y-5">
       <PageIntro
-        eyebrow="Palace"
         title={palace?.title || '宫殿编辑器'}
-        description="复习模式与难度标签已从产品语义中移除，右侧只保留宫殿本身的业务字段与章节关联。"
         actions={
           <>
             <Link to="/palaces">
@@ -169,7 +167,6 @@ export default function PalaceEdit() {
           <CardHeader className="flex flex-row items-center justify-between gap-3">
             <div>
               <CardTitle className="text-base">宫殿脑图</CardTitle>
-              <CardDescription>节点结构、主题和大纲侧栏都由嵌入的 mind-map 编辑器承载。</CardDescription>
             </div>
             {selectedNode?.memoryAnkiId ? (
               <Badge variant="secondary">
@@ -238,11 +235,7 @@ export default function PalaceEdit() {
                       </Button>
                     </div>
                   ))
-                ) : (
-                  <div className="rounded-2xl border border-dashed border-border/80 px-3 py-4 text-sm text-muted-foreground">
-                    暂时还没有上传附件。
-                  </div>
-                )}
+                ) : null}
               </div>
             </CardContent>
           </Card>
@@ -253,7 +246,6 @@ export default function PalaceEdit() {
                 <Link2 className="h-4 w-4" />
                 章节关联
               </CardTitle>
-              <CardDescription>专题复习只会从这些章节关系中选出当前到期的 palace 任务。</CardDescription>
             </CardHeader>
             <CardContent className="max-h-[280px] space-y-2 overflow-y-auto">
               {chapterOptions.map((option) => (
@@ -267,26 +259,6 @@ export default function PalaceEdit() {
                   <span>{option.label}</span>
                 </label>
               ))}
-            </CardContent>
-          </Card>
-
-          <Card className="border-border/70 bg-card/92">
-            <CardHeader>
-              <CardTitle className="text-base">当前节点</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2 text-sm text-muted-foreground">
-              {selectedNode ? (
-                <>
-                  <div className="font-medium text-foreground">{selectedNode.text || '未命名节点'}</div>
-                  <div>节点类型：{selectedNode.memoryAnkiNodeType || '未标注'}</div>
-                  <div>业务 ID：{selectedNode.memoryAnkiId ?? '新建未落库'}</div>
-                  <div className="rounded-2xl bg-background/70 p-3 whitespace-pre-wrap">
-                    {selectedNode.note || '该节点还没有备注。'}
-                  </div>
-                </>
-              ) : (
-                <div>在脑图里选中一个节点后，这里会显示当前 peg 的业务映射。</div>
-              )}
             </CardContent>
           </Card>
         </div>
