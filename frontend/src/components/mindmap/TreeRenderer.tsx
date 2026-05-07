@@ -1,5 +1,4 @@
-import { useState, useCallback, type ReactNode } from 'react'
-import { ChevronRight, ChevronDown } from 'lucide-react'
+import { useState, useCallback, useRef, type ReactNode } from 'react'
 
 export interface TreeRenderMeta {
   depth: number
@@ -8,6 +7,7 @@ export interface TreeRenderMeta {
   isLeaf: boolean
   toggleExpand: () => void
   hasChildren: boolean
+  isLastChild: boolean
 }
 
 export interface TreeRendererProps<T> {
@@ -21,6 +21,46 @@ export interface TreeRendererProps<T> {
   expanded?: Set<string | number>
   onExpandedChange?: (s: Set<string | number>) => void
   showConnector?: boolean
+  /** 为 true 时所有节点始终展开，忽略 expand 状态 (适用于编辑模式) */
+  alwaysExpanded?: boolean
+}
+
+// Stable per-key toggle functions
+function useExpandState(
+  controlledExpanded: Set<string | number> | undefined,
+  onExpandedChange: ((s: Set<string | number>) => void) | undefined,
+  initialExpanded: Set<string | number>
+) {
+  const [internal, setInternal] = useState(initialExpanded)
+
+  const expanded = controlledExpanded ?? internal
+  const expandedRef = useRef(expanded)
+  expandedRef.current = expanded
+
+  const onExpandedChangeRef = useRef(onExpandedChange)
+  onExpandedChangeRef.current = onExpandedChange
+  const controlledRef = useRef(controlledExpanded)
+  controlledRef.current = controlledExpanded
+
+  const toggles = useRef<Map<string | number, () => void>>(new Map())
+
+  const getToggle = useCallback((key: string | number) => {
+    let fn = toggles.current.get(key)
+    if (!fn) {
+      fn = () => {
+        const current = controlledRef.current ?? expandedRef.current
+        const next = new Set(current)
+        if (next.has(key)) next.delete(key)
+        else next.add(key)
+        if (controlledRef.current === undefined) setInternal(next)
+        onExpandedChangeRef.current?.(next)
+      }
+      toggles.current.set(key, fn)
+    }
+    return fn
+  }, [])
+
+  return { expanded, getToggle }
 }
 
 export function TreeRenderer<T>({
@@ -34,46 +74,35 @@ export function TreeRenderer<T>({
   expanded: controlledExpanded,
   onExpandedChange,
   showConnector = false,
+  alwaysExpanded = false,
 }: TreeRendererProps<T>) {
-  const [internalExpanded, setInternalExpanded] = useState<Set<string | number>>(
+  const { expanded, getToggle } = useExpandState(
+    controlledExpanded,
+    onExpandedChange,
     initialExpanded ?? new Set()
   )
 
-  const isControlled = controlledExpanded !== undefined
-  const expanded = controlledExpanded ?? internalExpanded
-
-  const toggleExpand = useCallback(
-    (key: string | number) => {
-      const next = new Set(expanded)
-      if (next.has(key)) {
-        next.delete(key)
-      } else {
-        next.add(key)
-      }
-      if (!isControlled) setInternalExpanded(next)
-      onExpandedChange?.(next)
-    },
-    [expanded, isControlled, onExpandedChange]
-  )
-
   const renderTree = (items: T[], depth: number, path: number[]): ReactNode => {
+    const lastIdx = items.length - 1
     return items.map((node, i) => {
       const key = getKey(node, i)
       const children = getChildren(node)
       const hasChildren = children.length > 0
-      const isExpanded = expanded.has(key)
-      const isLeaf = !hasChildren
+      const isExpanded = alwaysExpanded || expanded.has(key)
       const currentPath = [...path, i]
+      const isLastChild = i === lastIdx
 
-      const row = renderNode(node, {
+      const meta: TreeRenderMeta = {
         depth,
         path: currentPath,
         isExpanded,
-        isLeaf,
-        toggleExpand: () => toggleExpand(key),
+        isLeaf: !hasChildren,
+        toggleExpand: getToggle(key),
         hasChildren,
-      })
+        isLastChild,
+      }
 
+      const row = renderNode(node, meta)
       const childrenRows =
         hasChildren && isExpanded ? renderTree(children, depth + 1, currentPath) : null
 
@@ -86,33 +115,33 @@ export function TreeRenderer<T>({
         )
       }
 
-      // Obsidian-style connector lines
+      // Obsidian-style connector: vertical line + horizontal T-branch
+      const connectorLeft = baseIndent + (depth - 1) * indentPerLevel + indentPerLevel / 2
+
       return (
-        <div key={key}>
-          <div className="relative">
-            {/* Vertical connector extending upward from this node */}
+        <div key={key} className="relative">
+          {/* Vertical line extending through this node */}
+          {!isLastChild && (
             <div
-              className="absolute border-l border-muted-foreground/20"
+              className="absolute border-l border-muted-foreground/25"
               style={{
-                left: baseIndent + (depth - 1) * indentPerLevel + indentPerLevel / 2,
-                top: 0,
-                height: '100%',
+                left: connectorLeft,
+                top: '50%',
+                bottom: 0,
               }}
             />
-            {/* Horizontal connector */}
-            <div className="relative">
-              <div
-                className="absolute border-t border-muted-foreground/20"
-                style={{
-                  left: baseIndent + (depth - 1) * indentPerLevel + indentPerLevel / 2,
-                  top: '50%',
-                  width: indentPerLevel / 2,
-                }}
-              />
-              {row}
-            </div>
-            {childrenRows}
-          </div>
+          )}
+          {/* Horizontal T-branch */}
+          <div
+            className="absolute border-t border-muted-foreground/25"
+            style={{
+              left: connectorLeft,
+              top: '50%',
+              width: indentPerLevel / 2,
+            }}
+          />
+          {row}
+          {childrenRows}
         </div>
       )
     })

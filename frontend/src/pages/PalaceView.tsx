@@ -5,13 +5,14 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { ArrowLeft, Brain, ChevronDown, ChevronRight } from 'lucide-react'
 import { MindMapContainer, pegTreeToGraph } from '@/components/mindmap'
-import type { TreeRenderMeta } from '@/components/mindmap'
+import type { TreeRenderMeta, ViewMode } from '@/components/mindmap'
 
 export default function PalaceView() {
   const { id } = useParams()
   const navigate = useNavigate()
   const [palace, setPalace] = useState<any>(null)
   const [expanded, setExpanded] = useState<Set<number>>(new Set())
+  const [pegView, setPegView] = useState<ViewMode>('outline')
 
   useEffect(() => { api.getPalace(Number(id)).then(setPalace) }, [id])
 
@@ -72,7 +73,8 @@ export default function PalaceView() {
             <MindMapContainer
               title="记忆桩"
               graphData={pegTreeToGraph(palace.pegs)}
-              defaultView="outline"
+              view={pegView}
+              onViewChange={setPegView}
               treeProps={{
                 nodes: palace.pegs,
                 getKey: (p: any) => p.id,

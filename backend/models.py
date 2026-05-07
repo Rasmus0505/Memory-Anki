@@ -124,9 +124,9 @@ class Chapter(Base):
     notes = Column(Text, default="")
 
     subject = relationship("Subject", back_populates="chapters")
-    children = relationship("Chapter", back_populates="parent", remote_side=[id],
+    children = relationship("Chapter", back_populates="parent", remote_side=[parent_id],
                             order_by="Chapter.sort_order")
-    parent = relationship("Chapter", back_populates="children", remote_side=[parent_id])
+    parent = relationship("Chapter", back_populates="children", remote_side=[id])
     palaces = relationship("Palace", secondary=chapter_palace_table, back_populates="chapters")
 
 

@@ -1,7 +1,10 @@
 """知识体系路由：学科 + 章节 + 双向关联 + 自定义连线"""
 from fastapi import APIRouter, Depends
+from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from models import get_session, Subject, Chapter, Palace, NodeConnection, chapter_palace_table
+from schemas import ChapterCreate, ChapterUpdate
+import traceback
 
 router = APIRouter(tags=["knowledge"])
 
@@ -67,7 +70,10 @@ def update_subject(subject_id: int, data: dict, s: Session = Depends(session_dep
 
 @router.delete("/subjects/{subject_id}")
 def delete_subject(subject_id: int, s: Session = Depends(session_dep)):
-    s.query(Subject).filter_by(id=subject_id).delete()
+    sub = s.query(Subject).filter_by(id=subject_id).first()
+    if not sub:
+        return {"error": "not found"}
+    s.delete(sub)
     s.commit()
     return {"ok": True}
 
@@ -124,17 +130,28 @@ def get_chapter(chapter_id: int, s: Session = Depends(session_dep)):
 
 
 @router.post("/subjects/{subject_id}/chapters")
-def create_chapter(subject_id: int, data: dict, s: Session = Depends(session_dep)):
-    c = Chapter(
-        subject_id=subject_id,
-        parent_id=data.get("parent_id"),
-        name=data.get("name", ""),
-        notes=data.get("notes", ""),
-        sort_order=data.get("sort_order", 0),
-    )
-    s.add(c)
-    s.commit()
-    return chapter_json(c)
+def create_chapter(subject_id: int, data: ChapterCreate, s: Session = Depends(session_dep)):
+    print(f"[DEBUG] create_chapter: subject_id={subject_id}, data={data}", flush=True)
+    try:
+        c = Chapter(
+            subject_id=subject_id,
+            parent_id=data.parent_id,
+            name=data.name,
+            notes=data.notes,
+            sort_order=data.sort_order,
+        )
+        s.add(c)
+        s.flush()
+        s.refresh(c)
+        result = chapter_json(c)
+        s.commit()
+        print(f"[DEBUG] create_chapter OK: chapter_id={c.id}", flush=True)
+        return result
+    except Exception:
+        s.rollback()
+        tb = traceback.format_exc()
+        print(f"[DEBUG] create_chapter FAIL: {tb}", flush=True)
+        return JSONResponse(status_code=500, content={"error": tb})
 
 
 @router.put("/chapters/{chapter_id}")
@@ -149,16 +166,28 @@ def update_chapter(chapter_id: int, data: dict, s: Session = Depends(session_dep
     return chapter_json(c)
 
 
+def _delete_recursive(chapter: Chapter, s: Session):
+    """递归删除章节及其所有后代"""
+    for child in chapter.children:
+        _delete_recursive(child, s)
+    s.delete(chapter)
+
+
 @router.delete("/chapters/{chapter_id}")
 def delete_chapter(chapter_id: int, s: Session = Depends(session_dep)):
-    c = s.query(Chapter).filter_by(id=chapter_id).first()
-    if c:
-        # 子章节上移
-        for child in c.children:
-            child.parent_id = c.parent_id
-        s.delete(c)
-        s.commit()
-    return {"ok": True}
+    print(f"[DEBUG] delete_chapter: chapter_id={chapter_id}", flush=True)
+    try:
+        c = s.query(Chapter).filter_by(id=chapter_id).first()
+        if c:
+            _delete_recursive(c, s)
+            s.commit()
+            print(f"[DEBUG] delete_chapter OK (cascade)", flush=True)
+        return {"ok": True}
+    except Exception:
+        s.rollback()
+        tb = traceback.format_exc()
+        print(f"[DEBUG] delete_chapter FAIL: {tb}", flush=True)
+        return JSONResponse(status_code=500, content={"error": tb})
 
 
 # === 双向关联 ===

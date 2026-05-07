@@ -85,6 +85,20 @@ class PalaceOut(BaseModel):
         from_attributes = True
 
 
+class ChapterCreate(BaseModel):
+    name: str = ""
+    parent_id: Optional[int] = None
+    notes: str = ""
+    sort_order: int = 0
+
+
+class ChapterUpdate(BaseModel):
+    name: Optional[str] = None
+    notes: Optional[str] = None
+    sort_order: Optional[int] = None
+    parent_id: Optional[int] = None
+
+
 class ReviewScheduleOut(BaseModel):
     id: int
     palace_id: int

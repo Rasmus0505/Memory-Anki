@@ -211,6 +211,7 @@ export default function PalaceEdit() {
               renderNode={renderPegRow}
               indentPerLevel={24}
               baseIndent={0}
+              alwaysExpanded
             />
           </CardContent>
         </Card>
@@ -237,6 +238,7 @@ export default function PalaceEdit() {
                     getKey={(n: any) => n.id}
                     getChildren={(n: any) => n.children || []}
                     renderNode={renderChTreeNode}
+                    alwaysExpanded
                   />
                 ) : <p className="text-sm text-muted-foreground text-center py-4">No chapters. <Link to="/knowledge" className="text-primary hover:underline">Create</Link></p>}
               </div>

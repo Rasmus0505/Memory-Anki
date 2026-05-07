@@ -5,7 +5,10 @@ async function request<T>(url: string, options?: RequestInit): Promise<T> {
     headers: { 'Content-Type': 'application/json', ...options?.headers },
     ...options,
   })
-  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  if (!res.ok) {
+    const body = await res.text().catch(() => '')
+    throw new Error(body || `HTTP ${res.status}`)
+  }
   const ct = res.headers.get('content-type')
   if (ct?.includes('application/json')) return res.json()
   return res.text() as unknown as T
@@ -66,6 +69,8 @@ export const api = {
   // Knowledge (Subjects & Chapters)
   getSubjects: () => request<any[]>('/subjects'),
   createSubject: (data: any) => request<any>('/subjects', { method: 'POST', body: JSON.stringify(data) }),
+  updateSubject: (id: number, data: any) => request<any>(`/subjects/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteSubject: (id: number) => request<any>(`/subjects/${id}`, { method: 'DELETE' }),
   getSubjectTree: (id: number) => request<any>(`/subjects/${id}/tree`),
   getChapter: (id: number) => request<any>(`/chapters/${id}`),
   createChapter: (subjectId: number, data: any) => request<any>(`/subjects/${subjectId}/chapters`, { method: 'POST', body: JSON.stringify(data) }),

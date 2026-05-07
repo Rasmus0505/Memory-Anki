@@ -162,8 +162,7 @@ export default function Review() {
                       getKey={(peg: any) => peg.id}
                       getChildren={getReviewChildren}
                       renderNode={renderPegRow}
-                      expanded={expandedPegs}
-                      onExpandedChange={setExpandedPegs}
+                      alwaysExpanded
                     />
                   </div>
 
@@ -215,6 +214,7 @@ export default function Review() {
                     nodes={p.pegs}
                     getKey={(pg: any) => pg.id}
                     getChildren={(pg: any) => pg.children || []}
+                    alwaysExpanded
                     renderNode={(pg: any, meta: TreeRenderMeta) => (
                       <div className="flex items-center gap-2 rounded-md py-1.5 px-2 hover:bg-secondary/50" style={{ paddingLeft: 8 + meta.depth * 24 }}>
                         <div className={`flex shrink-0 items-center justify-center rounded-full text-xs font-bold

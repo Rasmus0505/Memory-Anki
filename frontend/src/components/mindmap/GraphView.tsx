@@ -8,18 +8,16 @@ import {
   useNodesState,
   useEdgesState,
   type Node,
-  type Edge,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import dagre from 'dagre'
 import { nodeTypes } from './NodeCard'
 import type { GraphData } from './adapter'
 
-const dagreGraph = new dagre.graphlib.Graph().setDefaultEdgeLabel(() => ({}))
 const NODE_WIDTH = 160
 const NODE_HEIGHT = 80
 
-function applyDagreLayout(graphData: GraphData): { nodes: Node[]; edges: Edge[] } {
+function applyDagreLayout(graphData: GraphData): { nodes: Node[]; edges: any[] } {
   const g = new dagre.graphlib.Graph().setDefaultEdgeLabel(() => ({}))
   g.setGraph({ rankdir: 'TB', nodesep: 40, ranksep: 60 })
 
@@ -42,7 +40,7 @@ function applyDagreLayout(graphData: GraphData): { nodes: Node[]; edges: Edge[] 
     }
   })
 
-  const edges: Edge[] = graphData.edges.map((e) => ({
+  const edges = graphData.edges.map((e) => ({
     id: e.id,
     source: e.source,
     target: e.target,
@@ -61,15 +59,15 @@ function applyDagreLayout(graphData: GraphData): { nodes: Node[]; edges: Edge[] 
 interface GraphViewProps {
   data: GraphData
   onNodeClick?: (nodeId: string) => void
+  className?: string
 }
 
-export function GraphView({ data, onNodeClick }: GraphViewProps) {
+export function GraphView({ data, onNodeClick, className }: GraphViewProps) {
   const layouted = useMemo(() => applyDagreLayout(data), [data])
 
   const [nodes, setNodes, onNodesChange] = useNodesState(layouted.nodes as any)
   const [edges, setEdges, onEdgesChange] = useEdgesState(layouted.edges as any)
 
-  // Sync when data changes
   useMemo(() => {
     const { nodes: newNodes, edges: newEdges } = applyDagreLayout(data)
     setNodes(newNodes as any)
@@ -84,7 +82,7 @@ export function GraphView({ data, onNodeClick }: GraphViewProps) {
   )
 
   return (
-    <div className="w-full h-[500px] border rounded-lg">
+    <div className={`w-full min-h-[400px] flex-1 border rounded-lg ${className ?? ''}`}>
       <ReactFlow
         nodes={nodes}
         edges={edges}

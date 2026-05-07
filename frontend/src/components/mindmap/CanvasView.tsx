@@ -16,9 +16,10 @@ import type { GraphData } from './adapter'
 interface CanvasViewProps {
   data: GraphData
   onNodeClick?: (nodeId: string) => void
+  className?: string
 }
 
-export function CanvasView({ data, onNodeClick }: CanvasViewProps) {
+export function CanvasView({ data, onNodeClick, className }: CanvasViewProps) {
   const initialNodes: Node[] = useMemo(
     () =>
       data.nodes.map((n, i) => ({
@@ -65,7 +66,7 @@ export function CanvasView({ data, onNodeClick }: CanvasViewProps) {
   )
 
   return (
-    <div className="w-full h-[500px] border rounded-lg">
+    <div className={`w-full min-h-[400px] flex-1 border rounded-lg ${className ?? ''}`}>
       <ReactFlow
         nodes={nodes}
         edges={edges}
