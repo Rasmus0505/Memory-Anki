@@ -1,19 +1,18 @@
-import { useEffect, type ReactNode } from 'react'
-import { List, GitBranch, Move } from 'lucide-react'
+import { type ReactNode } from 'react'
+import { ListTree, GitBranch } from 'lucide-react'
 import { TreeRenderer } from './TreeRenderer'
 import type { TreeRenderMeta } from './TreeRenderer'
-import { GraphView } from './GraphView'
-import { CanvasView } from './CanvasView'
-import type { GraphData, MindMapNode } from './adapter'
+import { MindMapCanvas } from './MindMapCanvas'
+import type { MindMapCanvasProps } from './MindMapCanvas'
+import type { GraphData } from './adapter'
 
-export type ViewMode = 'outline' | 'graph' | 'canvas'
+export type ViewMode = 'outline' | 'canvas'
 
 export interface MindMapContainerProps {
   title?: string
   graphData: GraphData
   view: ViewMode
   onViewChange: (v: ViewMode) => void
-  onNodeClick?: (node: MindMapNode) => void
   treeProps: {
     nodes: any[]
     getKey: (node: any, index: number) => string | number
@@ -24,13 +23,15 @@ export interface MindMapContainerProps {
     indentPerLevel?: number
     baseIndent?: number
     showConnector?: boolean
+    alwaysExpanded?: boolean
   }
+  canvasProps: Omit<MindMapCanvasProps, 'graphData' | 'className'>
+  canvasClassName?: string
 }
 
-const views: { key: ViewMode; label: string; icon: typeof List }[] = [
-  { key: 'outline', label: '大纲', icon: List },
-  { key: 'graph', label: '图谱', icon: GitBranch },
-  { key: 'canvas', label: '画布', icon: Move },
+const views: { key: ViewMode; label: string; icon: typeof ListTree }[] = [
+  { key: 'outline', label: '大纲', icon: ListTree },
+  { key: 'canvas', label: '画布', icon: GitBranch },
 ]
 
 export function MindMapContainer({
@@ -38,50 +39,54 @@ export function MindMapContainer({
   graphData,
   view,
   onViewChange,
-  onNodeClick,
   treeProps,
+  canvasProps,
+  canvasClassName,
 }: MindMapContainerProps) {
-  const handleGraphNodeClick = (nodeId: string) => {
-    const found = graphData.nodes.find((n) => n.id === nodeId)
-    if (found) onNodeClick?.(found)
-  }
-
   return (
-    <div className="flex flex-col flex-1 min-h-0 space-y-2">
-      {/* Toolbar */}
-      <div className="flex items-center gap-2 shrink-0">
-        {title && <h3 className="text-sm font-semibold">{title}</h3>}
-        <div className="flex items-center rounded-lg border bg-muted/30 p-0.5">
+    <div className="flex h-full min-h-0 flex-1 flex-col gap-3">
+      <div className="flex shrink-0 items-center gap-3">
+        {title ? <h3 className="text-sm font-semibold text-foreground">{title}</h3> : null}
+        <div className="inline-flex items-center rounded-2xl border border-border/70 bg-muted/30 p-1">
           {views.map(({ key, label, icon: Icon }) => (
             <button
               key={key}
+              type="button"
               onClick={() => onViewChange(key)}
-              className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-colors
-                ${view === key ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
+              className={`inline-flex items-center gap-2 rounded-xl px-3 py-1.5 text-xs font-medium transition-colors ${
+                view === key
+                  ? 'bg-background text-foreground shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
             >
               <Icon className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">{label}</span>
+              <span>{label}</span>
             </button>
           ))}
         </div>
       </div>
 
-      {/* View content */}
-      {view === 'outline' && (
-        <div className="border rounded-lg p-3 flex-1 min-h-0 overflow-y-auto">
-          {graphData.nodes.length > 0 ? (
-            <TreeRenderer {...treeProps} />
-          ) : (
-            <p className="text-sm text-muted-foreground text-center py-8">还没有节点</p>
-          )}
-        </div>
-      )}
-      {view === 'graph' && (
-        <GraphView data={graphData} onNodeClick={handleGraphNodeClick} />
-      )}
-      {view === 'canvas' && (
-        <CanvasView data={graphData} onNodeClick={handleGraphNodeClick} />
-      )}
+      <div className="min-h-0 flex-1">
+        {view === 'outline' ? (
+          <div className="flex h-full min-h-[520px] flex-col overflow-hidden rounded-[24px] border border-border/70 bg-background/80">
+            <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
+              {graphData.nodes.length > 0 ? (
+                <TreeRenderer {...treeProps as any} />
+              ) : (
+                <p className="py-10 text-center text-sm text-muted-foreground">还没有节点</p>
+              )}
+            </div>
+          </div>
+        ) : (
+          <div className="flex h-full min-h-[520px] min-w-0 flex-1">
+            <MindMapCanvas
+              graphData={graphData}
+              className={canvasClassName ?? 'h-full min-h-[520px] w-full flex-1'}
+              {...canvasProps}
+            />
+          </div>
+        )}
+      </div>
     </div>
   )
 }

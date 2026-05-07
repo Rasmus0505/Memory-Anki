@@ -4,10 +4,8 @@ from models import Palace, Peg
 from schemas import PalaceCreate, PalaceUpdate, PegIn
 
 
-def list_palaces(session: Session, difficulty: int | None = None, search: str = ""):
+def list_palaces(session: Session, search: str = ""):
     q = session.query(Palace)
-    if difficulty:
-        q = q.filter(Palace.difficulty == difficulty)
     if search:
         q = q.filter(Palace.title.ilike(f"%{search}%"))
     return q.order_by(Palace.updated_at.desc()).all()
@@ -20,7 +18,7 @@ def get_palace(session: Session, palace_id: int) -> Palace | None:
 def create_palace(session: Session, data: PalaceCreate) -> Palace:
     palace = Palace(
         title=data.title, description=data.description,
-        difficulty=data.difficulty, review_mode=data.review_mode,
+        difficulty=0, review_mode="review",
     )
     session.add(palace)
     session.flush()
@@ -35,10 +33,6 @@ def update_palace(session: Session, palace: Palace, data: PalaceUpdate) -> Palac
         palace.title = data.title
     if data.description is not None:
         palace.description = data.description
-    if data.difficulty is not None:
-        palace.difficulty = data.difficulty
-    if data.review_mode is not None:
-        palace.review_mode = data.review_mode
     if data.pegs is not None:
         _sync_pegs(session, palace, data.pegs)
     session.commit()

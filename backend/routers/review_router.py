@@ -1,97 +1,187 @@
-from datetime import date as date_type
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
-from models import get_session, ReviewSchedule
+
+from models import Chapter, ReviewSchedule, get_session
 from services.review_service import (
-    get_today_reviews, get_due_count, submit_review, get_weekly_stats
+    get_chapter_queue_payload,
+    get_next_due_review,
+    get_overdue_count,
+    get_review_queue_payload,
+    get_weekly_stats,
+    map_rating_to_score,
+    spread_overdue,
+    submit_review,
 )
 
 router = APIRouter(tags=["review"])
 
 
 def session_dep():
-    s = get_session()
+    session = get_session()
     try:
-        yield s
+        yield session
     finally:
-        s.close()
+        session.close()
 
 
-def schedule_json(sched) -> dict:
+def peg_json(peg) -> dict:
     return {
-        "id": sched.id,
-        "palace_id": sched.palace_id,
-        "scheduled_date": sched.scheduled_date.isoformat(),
-        "interval_days": sched.interval_days,
-        "algorithm_used": sched.algorithm_used,
-        "completed": sched.completed,
-        "review_number": sched.review_number,
-        "review_type": sched.review_type,
-        "palace": {
-            "id": sched.palace.id,
-            "title": sched.palace.title,
-            "description": sched.palace.description,
-            "difficulty": sched.palace.difficulty,
-            "review_mode": sched.palace.review_mode,
-            "pegs": [{"id": p.id, "name": p.name, "content": p.content,
-                      "sort_order": p.sort_order, "parent_id": p.parent_id,
-                      "children": [{"id": c.id, "name": c.name, "content": c.content,
-                                    "sort_order": c.sort_order, "parent_id": c.parent_id,
-                                    "children": []} for c in (p.children or [])]}
-                     for p in sched.palace.pegs],
-            "attachments": [{"id": a.id, "filename": a.filename,
-                             "original_name": a.original_name} for a in sched.palace.attachments],
-        } if sched.palace else None,
+        "id": peg.id,
+        "name": peg.name,
+        "content": peg.content,
+        "sort_order": peg.sort_order,
+        "parent_id": peg.parent_id,
+        "children": [peg_json(child) for child in (peg.children or [])],
     }
 
 
-@router.get("/review")
-def api_reviews(s: Session = Depends(session_dep)):
-    reviews = get_today_reviews(s)
-    return {"due_count": len(reviews), "reviews": [schedule_json(r) for r in reviews]}
+def palace_json(palace) -> dict:
+    return {
+        "id": palace.id,
+        "title": palace.title,
+        "description": palace.description,
+        "archived": palace.archived,
+        "mastered": palace.mastered,
+        "editor_doc": palace.editor_doc,
+        "pegs": [peg_json(peg) for peg in palace.pegs],
+        "attachments": [
+            {
+                "id": attachment.id,
+                "filename": attachment.filename,
+                "original_name": attachment.original_name,
+            }
+            for attachment in palace.attachments
+        ],
+        "chapters": [
+            {
+                "id": chapter.id,
+                "name": chapter.name,
+                "subject_id": chapter.subject_id,
+                "subject": (
+                    {"id": chapter.subject.id, "name": chapter.subject.name}
+                    if chapter.subject
+                    else None
+                ),
+            }
+            for chapter in palace.chapters
+        ],
+    }
 
 
-@router.get("/review/{schedule_id}")
-def api_review_item(schedule_id: int, s: Session = Depends(session_dep)):
-    sched = s.query(ReviewSchedule).filter_by(id=schedule_id).first()
-    if not sched:
+def chapter_json(chapter: Chapter | None) -> dict | None:
+    if chapter is None:
+        return None
+    return {
+        "id": chapter.id,
+        "name": chapter.name,
+        "subject_id": chapter.subject_id,
+        "subject": (
+            {"id": chapter.subject.id, "name": chapter.subject.name}
+            if chapter.subject
+            else None
+        ),
+    }
+
+
+def schedule_json(schedule) -> dict:
+    return {
+        "id": schedule.id,
+        "palace_id": schedule.palace_id,
+        "scheduled_date": schedule.scheduled_date.isoformat(),
+        "interval_days": schedule.interval_days,
+        "algorithm_used": schedule.algorithm_used,
+        "completed": schedule.completed,
+        "review_number": schedule.review_number,
+        "review_type": schedule.review_type,
+        "palace": palace_json(schedule.palace) if schedule.palace else None,
+    }
+
+
+def queue_payload_json(payload: dict) -> dict:
+    return {
+        "due_count": payload["due_count"],
+        "overdue_count": payload["overdue_count"],
+        "smoothed_count": payload["smoothed_count"],
+        "stats": payload["stats"],
+        "chapter": chapter_json(payload.get("chapter")),
+        "reviews": [schedule_json(schedule) for schedule in payload["reviews"]],
+    }
+
+
+@router.get("/review/overdue-count")
+def api_overdue(session: Session = Depends(session_dep)):
+    return {"count": get_overdue_count(session)}
+
+
+@router.get("/review/stats/weekly")
+def api_stats(session: Session = Depends(session_dep)):
+    return get_weekly_stats(session)
+
+
+@router.post("/review/spread-overdue")
+def api_spread(data: dict, session: Session = Depends(session_dep)):
+    count = spread_overdue(session, int(data.get("days", 7)))
+    return {"ok": True, "spread": count}
+
+
+@router.get("/review/queue")
+def api_queue(session: Session = Depends(session_dep)):
+    return queue_payload_json(get_review_queue_payload(session))
+
+
+@router.get("/review/chapter/{chapter_id}/queue")
+def api_chapter_queue(chapter_id: int, session: Session = Depends(session_dep)):
+    payload = get_chapter_queue_payload(session, chapter_id)
+    return queue_payload_json(payload)
+
+
+@router.get("/review/session/{schedule_id}")
+def api_review_session(schedule_id: int, session: Session = Depends(session_dep)):
+    schedule = session.query(ReviewSchedule).filter_by(id=schedule_id).first()
+    if not schedule:
         return {"error": "not found"}
-    return schedule_json(sched)
+    return schedule_json(schedule)
 
 
-@router.post("/review/{schedule_id}/submit")
-def api_submit(schedule_id: int, data: dict, s: Session = Depends(session_dep)):
-    """data: {score: int, duration_seconds: int}"""
-    log, extra = submit_review(s, schedule_id, data.get("score", 0), data.get("duration_seconds", 0))
+@router.post("/review/session/{schedule_id}/submit")
+def api_submit_session(schedule_id: int, data: dict, session: Session = Depends(session_dep)):
+    rating = data.get("rating")
+    fallback_score = data.get("score")
+    numeric_score = map_rating_to_score(rating, fallback_score)
+    log, extra = submit_review(
+        session,
+        schedule_id,
+        numeric_score,
+        int(data.get("duration_seconds", 0)),
+    )
     if not log:
         return {"error": "not found"}
 
-    today = date_type.today()
-    next_sched = (
-        s.query(ReviewSchedule)
-        .filter(ReviewSchedule.scheduled_date <= today, ReviewSchedule.completed == False,
-                ReviewSchedule.id != schedule_id)
-        .order_by(ReviewSchedule.scheduled_date)
-        .first()
+    chapter_id = data.get("chapter_id")
+    next_schedule = get_next_due_review(
+        session,
+        exclude_schedule_id=schedule_id,
+        chapter_id=int(chapter_id) if chapter_id is not None else None,
     )
     return {
-        "ok": True, "score": log.score,
-        "next_id": next_sched.id if next_sched else None,
+        "ok": True,
+        "rating": rating,
+        "score": log.score,
+        "next_id": next_schedule.id if next_schedule else None,
         "mastered": extra.get("mastered", False),
     }
 
 
-@router.get("/review/stats/weekly")
-def api_stats(s: Session = Depends(session_dep)):
-    return get_weekly_stats(s)
+@router.get("/review")
+def api_reviews(session: Session = Depends(session_dep)):
+    return queue_payload_json(get_review_queue_payload(session))
 
 
-@router.post("/review/spread-overdue")
-def api_spread(data: dict, s: Session = Depends(session_dep)):
-    count = spread_overdue(s, data.get("days", 7))
-    return {"ok": True, "spread": count}
+@router.get("/review/{schedule_id}")
+def api_review_item(schedule_id: int, session: Session = Depends(session_dep)):
+    return api_review_session(schedule_id, session)
 
 
-@router.get("/review/overdue-count")
-def api_overdue(s: Session = Depends(session_dep)):
-    return {"count": get_overdue_count(s)}
+@router.post("/review/{schedule_id}/submit")
+def api_submit(schedule_id: int, data: dict, session: Session = Depends(session_dep)):
+    return api_submit_session(schedule_id, data, session)

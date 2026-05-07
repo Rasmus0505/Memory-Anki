@@ -1,28 +1,42 @@
-"""导入导出服务 (支持层级桩，无标签)"""
-import json, re
+"""Import/export helpers for palace data."""
+
+import json
+import re
+
 from sqlalchemy.orm import Session
+
 from models import Palace, Peg
 
 
 def _peg_tree(pegs) -> list[dict]:
-    return [{"name": p.name, "content": p.content, "sort_order": p.sort_order,
-             "children": _peg_tree(p.children or [])} for p in pegs]
+    return [
+        {
+            "name": peg.name,
+            "content": peg.content,
+            "sort_order": peg.sort_order,
+            "children": _peg_tree(peg.children or []),
+        }
+        for peg in pegs
+    ]
 
 
 def export_json(session: Session, palace_ids: list[int] | None = None) -> str:
-    q = session.query(Palace)
+    query = session.query(Palace)
     if palace_ids:
-        q = q.filter(Palace.id.in_(palace_ids))
-    data = [{
-        "title": p.title, "description": p.description,
-        "difficulty": p.difficulty, "review_mode": p.review_mode,
-        "pegs": _peg_tree(p.pegs),
-    } for p in q.all()]
+        query = query.filter(Palace.id.in_(palace_ids))
+    data = [
+        {
+            "title": palace.title,
+            "description": palace.description,
+            "pegs": _peg_tree(palace.pegs),
+        }
+        for palace in query.all()
+    ]
     return json.dumps(data, ensure_ascii=False, indent=2)
 
 
-def _peg_md(pegs, depth=0) -> list[str]:
-    lines = []
+def _peg_md(pegs, depth: int = 0) -> list[str]:
+    lines: list[str] = []
     indent = "  " * depth
     for peg in pegs:
         lines.append(f"{indent}- **{peg.name}**: {peg.content}" if peg.name else f"{indent}- {peg.content}")
@@ -32,23 +46,20 @@ def _peg_md(pegs, depth=0) -> list[str]:
 
 
 def export_markdown(session: Session, palace_ids: list[int] | None = None) -> str:
-    q = session.query(Palace)
+    query = session.query(Palace)
     if palace_ids:
-        q = q.filter(Palace.id.in_(palace_ids))
-    lines = []
-    for p in q.all():
-        lines.append(f"# {p.title}")
+        query = query.filter(Palace.id.in_(palace_ids))
+    lines: list[str] = []
+    for palace in query.all():
+        lines.append(f"# {palace.title}")
         lines.append("")
-        lines.append(f"**难度**: {'★' * p.difficulty}{'☆' * (5 - p.difficulty)}")
-        lines.append(f"**复习模式**: {p.review_mode}")
-        lines.append("")
-        if p.description:
-            lines.append(p.description)
+        if palace.description:
+            lines.append(palace.description)
             lines.append("")
-        if p.pegs:
-            lines.append("## 记忆桩")
+        if palace.pegs:
+            lines.append("## 记忆 peg")
             lines.append("")
-            lines.extend(_peg_md(p.pegs))
+            lines.extend(_peg_md(palace.pegs))
             lines.append("")
         lines.append("---")
         lines.append("")
@@ -56,14 +67,18 @@ def export_markdown(session: Session, palace_ids: list[int] | None = None) -> st
 
 
 def _import_pegs(session: Session, palace_id: int, pegs_data: list[dict], parent_id: int | None = None):
-    for i, pd in enumerate(pegs_data):
-        peg = Peg(palace_id=palace_id, parent_id=parent_id,
-                  name=pd.get("name", ""), content=pd.get("content", ""),
-                  sort_order=pd.get("sort_order", i))
+    for index, peg_data in enumerate(pegs_data):
+        peg = Peg(
+            palace_id=palace_id,
+            parent_id=parent_id,
+            name=peg_data.get("name", ""),
+            content=peg_data.get("content", ""),
+            sort_order=peg_data.get("sort_order", index),
+        )
         session.add(peg)
         session.flush()
-        if pd.get("children"):
-            _import_pegs(session, palace_id, pd["children"], peg.id)
+        if peg_data.get("children"):
+            _import_pegs(session, palace_id, peg_data["children"], peg.id)
 
 
 def import_json(session: Session, content: str) -> int:
@@ -72,9 +87,12 @@ def import_json(session: Session, content: str) -> int:
         data = [data]
     count = 0
     for item in data:
-        palace = Palace(title=item.get("title", ""), description=item.get("description", ""),
-                        difficulty=item.get("difficulty", 3),
-                        review_mode=item.get("review_mode", "flashcard"))
+        palace = Palace(
+            title=item.get("title", ""),
+            description=item.get("description", ""),
+            difficulty=0,
+            review_mode="review",
+        )
         session.add(palace)
         session.flush()
         _import_pegs(session, palace.id, item.get("pegs", []))
@@ -84,66 +102,58 @@ def import_json(session: Session, content: str) -> int:
 
 
 def _parse_md_pegs(lines: list[str], start_idx: int, depth: int = 0):
-    """解析 Markdown 层级桩，返回 (pegs_data, next_idx)"""
     pegs = []
-    idx = start_idx
+    index = start_idx
     indent = "  " * depth
     prefix = f"{indent}- "
-    while idx < len(lines):
-        line = lines[idx]
+    while index < len(lines):
+        line = lines[index]
         if not line.startswith(prefix):
             break
         peg_line = line[len(prefix):]
-        m = re.match(r'\*\*(.+?)\*\*:\s*(.*)', peg_line)
-        if m:
-            name, content = m.group(1), m.group(2)
+        match = re.match(r"\*\*(.+?)\*\*:\s*(.*)", peg_line)
+        if match:
+            name, content = match.group(1), match.group(2)
         else:
             name, content = "", peg_line
         children = []
-        next_idx = idx + 1
-        # 检查下一行是否有更深的缩进
+        next_index = index + 1
         deeper_prefix = f"{indent}  - "
-        if next_idx < len(lines) and lines[next_idx].startswith(deeper_prefix):
-            children, next_idx = _parse_md_pegs(lines, next_idx, depth + 1)
+        if next_index < len(lines) and lines[next_index].startswith(deeper_prefix):
+            children, next_index = _parse_md_pegs(lines, next_index, depth + 1)
         pegs.append({"name": name, "content": content, "sort_order": len(pegs), "children": children})
-        idx = next_idx
-    return pegs, idx
+        index = next_index
+    return pegs, index
 
 
 def import_markdown(session: Session, content: str) -> int:
-    blocks = re.split(r'\n(?=# )', content)
+    blocks = re.split(r"\n(?=# )", content)
     count = 0
     for block in blocks:
         if not block.strip():
             continue
         lines = block.strip().split("\n")
         title = lines[0].lstrip("# ").strip()
-        description_lines = []
-        pegs_data = []
-        difficulty = 3
-        review_mode = "flashcard"
+        description_lines: list[str] = []
+        pegs_data: list[dict] = []
         in_pegs = False
 
         for line in lines[1:]:
-            m = re.search(r'\*\*难度\*\*:\s*(★+)', line)
-            if m:
-                difficulty = len(m.group(1))
-                continue
-            if "**复习模式**:" in line:
-                if "browse" in line:
-                    review_mode = "browse"
-                continue
-            if line.strip().startswith("## 记忆桩"):
+            if line.strip().startswith("## 记忆 peg"):
                 in_pegs = True
                 continue
             if in_pegs and line.strip().startswith("- "):
                 pegs_data, _ = _parse_md_pegs(lines[lines.index(line):], 0)
                 break
-            if not line.startswith("#") and not line.startswith("**"):
+            if not line.startswith("#"):
                 description_lines.append(line)
 
-        palace = Palace(title=title, description="\n".join(description_lines).strip(),
-                        difficulty=difficulty, review_mode=review_mode)
+        palace = Palace(
+            title=title,
+            description="\n".join(description_lines).strip(),
+            difficulty=0,
+            review_mode="review",
+        )
         session.add(palace)
         session.flush()
         _import_pegs(session, palace.id, pegs_data)

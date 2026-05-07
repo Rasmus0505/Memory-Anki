@@ -1,11 +1,12 @@
-import { useEffect, useCallback, type ReactNode } from 'react'
+import { useEffect, useCallback, type ReactNode, type ComponentType } from 'react'
 import { Plus, Pencil, Trash2 } from 'lucide-react'
 
 export interface ContextMenuAction {
   label: string
-  icon: typeof Plus
+  icon: ComponentType<{ className?: string }>
   onClick: () => void
   variant?: 'default' | 'danger'
+  disabled?: boolean
 }
 
 interface NodeContextMenuProps {
@@ -44,8 +45,10 @@ export function NodeContextMenu({ x, y, onClose, actions, children }: NodeContex
       {actions.map((action, i) => (
         <button
           key={i}
+          disabled={action.disabled}
           onClick={(e) => {
             e.stopPropagation()
+            if (action.disabled) return
             action.onClick()
             onClose()
           }}
@@ -53,7 +56,7 @@ export function NodeContextMenu({ x, y, onClose, actions, children }: NodeContex
             ${action.variant === 'danger'
               ? 'text-destructive hover:bg-destructive/10'
               : 'hover:bg-secondary'
-            }`}
+            } ${action.disabled ? 'cursor-not-allowed opacity-40 hover:bg-transparent' : ''}`}
         >
           <action.icon className="h-3.5 w-3.5" />
           {action.label}

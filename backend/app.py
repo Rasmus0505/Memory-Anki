@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from models import init_db, get_session, Config
 from config import DEFAULTS, ATTACHMENTS_DIR
+from editor_state import ensure_editor_schema
 
 app = FastAPI(title="记忆宫殿 API")
 
@@ -33,6 +34,7 @@ app.include_router(knowledge_router, prefix="/api")
 @app.on_event("startup")
 def startup():
     init_db()
+    ensure_editor_schema()
     s = get_session()
     try:
         for key, value in DEFAULTS.items():
@@ -56,7 +58,6 @@ def api_dashboard():
         def palace_out(p):
             return {
                 "id": p.id, "title": p.title, "description": p.description,
-                "difficulty": p.difficulty, "review_mode": p.review_mode,
                 "peg_count": len(p.pegs),
                 "created_at": p.created_at.isoformat() if p.created_at else None,
             }

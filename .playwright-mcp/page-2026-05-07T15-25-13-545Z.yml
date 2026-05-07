@@ -1,0 +1,41 @@
+- generic [ref=e2]:
+  - generic [ref=e3]:
+    - banner [ref=e4]:
+      - generic [ref=e5]:
+        - button "打开导航" [ref=e6]:
+          - img [ref=e7]
+        - generic [ref=e8]: 记忆宫殿
+    - main [ref=e9]:
+      - generic [ref=e11]:
+        - generic [ref=e13]:
+          - generic [ref=e14]: Knowledge Canvas
+          - generic [ref=e15]:
+            - heading "知识大纲" [level=1] [ref=e16]
+            - paragraph [ref=e17]: 建立学科章节体系，并在大纲与画布视图之间切换。大纲模式默认就能清楚读出层级关系。
+        - generic [ref=e18]:
+          - complementary [ref=e19]:
+            - generic [ref=e20]:
+              - generic [ref=e22]:
+                - generic [ref=e23]: 学科
+                - generic [ref=e24]: 先选学科，再展开章节树。
+              - generic [ref=e26]:
+                - generic [ref=e27]:
+                  - generic [ref=e28]: 新学科
+                  - generic [ref=e29]: 为知识树创建新的根目录。
+                - generic [ref=e30]:
+                  - textbox "新学科名..." [ref=e31]
+                  - generic [ref=e32]:
+                    - textbox [ref=e33] [cursor=pointer]: "#2563eb"
+                    - button "创建学科" [ref=e34]
+          - generic [ref=e36]:
+            - generic [ref=e39]:
+              - generic [ref=e40]:
+                - img [ref=e41]
+                - text: 章节树
+              - generic [ref=e46]: 画布模式会隐藏两侧信息栏，让关系图尽量铺满视口。
+            - generic [ref=e48]: 先从左侧选择一个学科。
+          - complementary [ref=e49]:
+            - generic [ref=e52]:
+              - img [ref=e53]
+              - text: 选择一个章节，右侧会显示它关联的宫殿。
+  - region "Notifications alt+T"

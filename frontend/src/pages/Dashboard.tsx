@@ -1,28 +1,52 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { ArrowRight, BookOpen, Plus, Sparkles, Star, TrendingUp } from 'lucide-react'
 import { api } from '@/api/client'
-import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { BookOpen, TrendingUp, Star, ArrowRight, Plus } from 'lucide-react'
 
 export default function Dashboard() {
   const [data, setData] = useState<any>(null)
-  useEffect(() => { api.getDashboard().then(setData) }, [])
 
-  if (!data) return <div className="flex items-center justify-center py-32 text-sm text-muted-foreground">Loading...</div>
+  useEffect(() => {
+    api.getDashboard().then(setData)
+  }, [])
+
+  if (!data) {
+    return <div className="flex items-center justify-center py-32 text-sm text-muted-foreground">正在加载仪表盘...</div>
+  }
 
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
-        <p className="text-sm text-muted-foreground mt-1">Overview of your memory palaces.</p>
+        <h1 className="text-2xl font-semibold tracking-tight">仪表盘</h1>
+        <p className="mt-1 text-sm text-muted-foreground">查看当前记忆宫殿、到期任务和最近的复习状态。</p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
         {[
-          { label: 'Due Today', value: data.due_count, icon: BookOpen, color: data.due_count > 0 ? 'text-destructive' : 'text-emerald-500', link: '/review', linkText: 'Start Review' },
-          { label: 'Weekly Rate', value: `${data.stats.completion_rate}%`, icon: TrendingUp, color: '', subtitle: `${data.stats.total} reviews` },
-          { label: 'Avg Score', value: data.stats.avg_score, icon: Star, color: '', subtitle: 'Out of 5' },
+          {
+            label: '今日到期',
+            value: data.due_count,
+            icon: BookOpen,
+            color: data.due_count > 0 ? 'text-destructive' : 'text-emerald-500',
+            link: '/review',
+            linkText: '开始复习',
+          },
+          {
+            label: '本周完成率',
+            value: `${data.stats.completion_rate}%`,
+            icon: TrendingUp,
+            color: '',
+            subtitle: `${data.stats.total} 次会话`,
+          },
+          {
+            label: '平均回忆分',
+            value: data.stats.avg_score,
+            icon: Star,
+            color: '',
+            subtitle: '最近复习会话',
+          },
         ].map(({ label, value, icon: Icon, color, link, linkText, subtitle }) => (
           <Card key={label}>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
@@ -31,61 +55,98 @@ export default function Dashboard() {
             </CardHeader>
             <CardContent>
               <div className={`text-3xl font-bold ${color}`}>{value}</div>
-              {link && data.due_count > 0
-                ? <Link to={link} className="text-xs text-muted-foreground hover:text-primary transition-colors mt-1 inline-flex items-center gap-1">{linkText} <ArrowRight className="h-3 w-3" /></Link>
-                : <p className="text-xs text-muted-foreground mt-2">{subtitle}</p>}
+              {link && data.due_count > 0 ? (
+                <Link to={link} className="mt-1 inline-flex items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-primary">
+                  {linkText}
+                  <ArrowRight className="h-3 w-3" />
+                </Link>
+              ) : (
+                <p className="mt-2 text-xs text-muted-foreground">{subtitle}</p>
+              )}
             </CardContent>
           </Card>
         ))}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle className="text-base">Due Today</CardTitle>
-            <Link to="/review" className="text-xs text-muted-foreground hover:text-primary transition-colors flex items-center gap-1">All <ArrowRight className="h-3 w-3" /></Link>
+            <CardTitle className="text-base">今日到期</CardTitle>
+            <Link to="/review" className="flex items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-primary">
+              查看全部
+              <ArrowRight className="h-3 w-3" />
+            </Link>
           </CardHeader>
           <CardContent>
             {data.reviews.length > 0 ? (
               <div className="space-y-1">
-                {data.reviews.slice(0, 8).map((r: any) => (
-                  <Link key={r.id} to={`/review/${r.id}`}
-                    className="flex items-center justify-between rounded-lg px-3 py-2.5 hover:bg-secondary transition-colors group active:scale-[0.98]">
+                {data.reviews.slice(0, 8).map((review: any) => (
+                  <Link
+                    key={review.id}
+                    to={`/review/session/${review.id}`}
+                    className="group flex items-center justify-between rounded-lg px-3 py-2.5 transition-colors hover:bg-secondary active:scale-[0.98]"
+                  >
                     <div className="min-w-0">
-                      <div className="text-sm font-medium truncate">{r.palace?.title || 'Untitled'}</div>
-                      <div className="text-xs text-muted-foreground mt-0.5">{r.algorithm_used} · {r.interval_days}d · #{r.review_number + 1}</div>
+                      <div className="truncate text-sm font-medium">{review.palace?.title || '未命名宫殿'}</div>
+                      <div className="mt-0.5 text-xs text-muted-foreground">
+                        {review.algorithm_used} · {review.interval_days}d · #{review.review_number + 1}
+                      </div>
                     </div>
-                    <Button size="sm" variant="ghost" className="shrink-0 ml-2 opacity-0 group-hover:opacity-100 transition-opacity">Review</Button>
+                    <Button size="sm" variant="ghost" className="ml-2 shrink-0 opacity-0 transition-opacity group-hover:opacity-100">
+                      复习
+                    </Button>
                   </Link>
                 ))}
               </div>
             ) : (
-              <p className="text-sm text-muted-foreground text-center py-8">All caught up!</p>
+              <p className="py-8 text-center text-sm text-muted-foreground">当前没有到期任务，进度不错。</p>
             )}
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle className="text-base">Recent Activity</CardTitle>
-            <Link to="/palaces/new"><Button size="sm" variant="outline" className="h-8"><Plus className="h-3.5 w-3.5" /> New</Button></Link>
+            <CardTitle className="text-base">最近编辑</CardTitle>
+            <Link to="/palaces/new">
+              <Button size="sm" variant="outline" className="h-8">
+                <Plus className="h-3.5 w-3.5" />
+                新建
+              </Button>
+            </Link>
           </CardHeader>
           <CardContent>
             {data.recent_palaces.length > 0 ? (
               <div className="space-y-1">
-                {data.recent_palaces.map((p: any) => (
-                  <Link key={p.id} to={`/palaces/${p.id}/edit`}
-                    className="flex items-center justify-between rounded-lg px-3 py-2.5 hover:bg-secondary transition-colors active:scale-[0.98]">
+                {data.recent_palaces.map((palace: any) => (
+                  <Link
+                    key={palace.id}
+                    to={`/palaces/${palace.id}/edit`}
+                    className="flex items-center justify-between rounded-lg px-3 py-2.5 transition-colors hover:bg-secondary active:scale-[0.98]"
+                  >
                     <div className="min-w-0">
-                      <div className="text-sm font-medium truncate">{p.title || 'Untitled'}</div>
-                      <div className="text-xs text-muted-foreground mt-1">{p.peg_count} pegs · {'★'.repeat(p.difficulty)}{'☆'.repeat(5 - p.difficulty)}</div>
+                      <div className="truncate text-sm font-medium">{palace.title || '未命名宫殿'}</div>
+                      <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
+                        <span>{palace.peg_count} 个节点</span>
+                        <span>·</span>
+                        <span>{palace.created_at ? '最近更新' : '草稿'}</span>
+                      </div>
                     </div>
-                    <span className="text-xs text-muted-foreground shrink-0 ml-2">Edit</span>
+                    <span className="ml-2 shrink-0 text-xs text-muted-foreground">编辑</span>
                   </Link>
                 ))}
               </div>
             ) : (
-              <p className="text-sm text-muted-foreground text-center py-8">No palaces yet. <Link to="/palaces/new" className="text-primary underline underline-offset-4">Create one</Link></p>
+              <div className="py-8 text-center text-sm text-muted-foreground">
+                还没有记忆宫殿。
+                <div className="mt-3">
+                  <Link to="/palaces/new">
+                    <Button variant="outline" size="sm">
+                      <Sparkles className="mr-2 h-4 w-4" />
+                      创建一个
+                    </Button>
+                  </Link>
+                </div>
+              </div>
             )}
           </CardContent>
         </Card>

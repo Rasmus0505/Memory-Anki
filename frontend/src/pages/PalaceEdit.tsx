@@ -1,283 +1,296 @@
-import { useEffect, useState } from 'react'
-import { useParams, useNavigate, Link } from 'react-router-dom'
-import { api } from '@/api/client'
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card'
+import { type ChangeEvent, useEffect, useMemo, useState } from 'react'
+import { Link, useNavigate, useParams } from 'react-router-dom'
+import { ArrowLeft, Link2, Paperclip, Save, Upload } from 'lucide-react'
+import { api, type MindMapEditorState } from '@/api/client'
+import { PageIntro } from '@/components/layout/PageIntro'
+import { MindMapFrame, type MindMapSelection } from '@/components/mindmap-host'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
-import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
-import { ArrowLeft, Plus, X, Upload, ChevronRight, ChevronDown, GripVertical } from 'lucide-react'
-import { toast } from 'sonner'
-import { TreeRenderer } from '@/components/mindmap/TreeRenderer'
-import type { TreeRenderMeta } from '@/components/mindmap/TreeRenderer'
+import { Textarea } from '@/components/ui/textarea'
+import { usePersistedMindMapEditor } from '@/hooks/usePersistedMindMapEditor'
 
-interface PegNode {
-  id?: number; name: string; content: string; sort_order: number
-  parent_id?: number | null; children: PegNode[]
+interface PalaceMeta {
+  id: number
+  title: string
+  description: string
+  attachments: Array<{ id: number; original_name: string; file_size: number }>
+  chapters: Array<{ id: number; name: string; subject?: { id: number; name: string } | null }>
 }
 
-function newPeg(): PegNode { return { name: '', content: '', sort_order: 0, children: [] } }
+interface ChapterOption {
+  id: number
+  label: string
+}
 
 export default function PalaceEdit() {
   const { id } = useParams()
   const navigate = useNavigate()
-  const isEdit = !!id
-
+  const palaceId = id ? Number(id) : null
+  const [isCreatingDraft, setIsCreatingDraft] = useState(false)
+  const [frameVersion, setFrameVersion] = useState(0)
+  const [selectedNodes, setSelectedNodes] = useState<MindMapSelection[]>([])
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
-  const [difficulty, setDifficulty] = useState(3)
-  const [reviewMode, setReviewMode] = useState('flashcard')
-  const [pegs, setPegs] = useState<PegNode[]>([newPeg()])
-  const [attachments, setAttachments] = useState<any[]>([])
-  const [selectedChapters, setSelectedChapters] = useState<number[]>([])
-  const [subjects, setSubjects] = useState<any[]>([])
-  const [chapterTree, setChapterTree] = useState<any>(null)
+  const [chapterOptions, setChapterOptions] = useState<ChapterOption[]>([])
+  const [selectedChapterIds, setSelectedChapterIds] = useState<number[]>([])
 
-  useEffect(() => {
-    api.getSubjects().then(setSubjects)
-    if (isEdit) {
-      api.getPalace(Number(id)).then(p => {
-        setTitle(p.title || '')
-        setDescription(p.description || '')
-        setDifficulty(p.difficulty || 3)
-        setReviewMode(p.review_mode || 'flashcard')
-        setPegs(p.pegs.length > 0 ? p.pegs.map((pg: any) => mapPeg(pg)) : [newPeg()])
-        setAttachments(p.attachments || [])
-        setSelectedChapters((p.chapters || []).map((c: any) => c.id))
-      })
-    }
-  }, [id])
-
-  const mapPeg = (p: any): PegNode => ({
-    id: p.id, name: p.name, content: p.content, sort_order: p.sort_order,
-    parent_id: p.parent_id, children: (p.children || []).map(mapPeg),
+  const {
+    meta,
+    editorState,
+    setEditorState,
+    isSaving,
+    error,
+    reload,
+  } = usePersistedMindMapEditor({
+    entityId: palaceId,
+    fetcher: api.getPalaceEditor,
+    saver: api.savePalaceEditor,
+    selectMeta: (response) => response.palace as PalaceMeta,
+    selectEditorState: (response) => ({
+      editor_doc: response.editor_doc,
+      editor_config: response.editor_config,
+      editor_local_config: response.editor_local_config,
+      lang: response.lang,
+    }),
   })
 
-  const flattenPegs = (nodes: PegNode[], parentId: number | null = null): any[] => {
-    const result: any[] = []
-    nodes.forEach((n, i) => {
-      result.push({ id: n.id, name: n.name, content: n.content, sort_order: i, parent_id: parentId, children: [] })
-      if (n.children.length > 0) {
-        result.push(...flattenPegs(n.children, n.id))
-      }
+  const palace = meta as PalaceMeta | null
+  const selectedNode = selectedNodes[0] ?? null
+
+  useEffect(() => {
+    if (palaceId || isCreatingDraft) return
+    setIsCreatingDraft(true)
+    void api.createPalace({ title: '未命名宫殿', description: '', pegs: [] }).then((created) => {
+      navigate(`/palaces/${created.id}/edit`, { replace: true })
     })
-    return result
-  }
+  }, [isCreatingDraft, navigate, palaceId])
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    const flatPegs = flattenPegs(pegs.filter(p => p.name.trim() || p.content.trim()))
-    const data = { title, description, difficulty, review_mode: reviewMode, pegs: flatPegs }
-    if (isEdit) {
-      await api.updatePalace(Number(id), data)
-      await api.linkPalaceChapters(Number(id), selectedChapters)
-      toast.success('Saved')
-    } else {
-      const p = await api.createPalace(data)
-      if (selectedChapters.length > 0) await api.linkPalaceChapters(p.id, selectedChapters)
-      toast.success('Created')
-      navigate(`/palaces/${p.id}/edit`)
-      return
+  useEffect(() => {
+    if (!palace) return
+    setTitle(palace.title)
+    setDescription(palace.description)
+    setSelectedChapterIds(palace.chapters.map((chapter) => chapter.id))
+  }, [palace])
+
+  useEffect(() => {
+    const loadChapterOptions = async () => {
+      const subjects = await api.getSubjects()
+      const trees = await Promise.all(subjects.map((subject) => api.getSubjectTree(subject.id)))
+      const options: ChapterOption[] = []
+
+      const walk = (nodes: any[], depth: number, subjectName: string) => {
+        for (const node of nodes) {
+          options.push({
+            id: node.id,
+            label: `${subjectName} / ${'· '.repeat(depth)}${node.name}`,
+          })
+          walk(node.children || [], depth + 1, subjectName)
+        }
+      }
+
+      trees.forEach((tree) => {
+        walk(tree.chapters || [], 0, tree.subject?.name || '未命名学科')
+      })
+      setChapterOptions(options)
     }
+
+    void loadChapterOptions()
+  }, [])
+
+  const handleSaveMeta = async () => {
+    if (!palace) return
+    await api.updatePalace(palace.id, {
+      title: title.trim() || '未命名宫殿',
+      description,
+    })
+    await reload()
+    setFrameVersion((value) => value + 1)
   }
 
-  const addChild = (path: number[]) => {
-    const newPegs = structuredClone(pegs)
-    let node = newPegs
-    for (let i = 0; i < path.length - 1; i++) node = node[path[i]].children
-    node[path[path.length - 1]].children.push(newPeg())
-    setPegs(newPegs)
+  const handleAttachmentUpload = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file || !palace) return
+    await api.uploadAttachment(palace.id, file)
+    await reload()
+    event.target.value = ''
   }
 
-  const removePeg = (path: number[]) => {
-    const newPegs = structuredClone(pegs)
-    if (path.length === 1 && newPegs.length <= 1) return
-    let node = newPegs
-    for (let i = 0; i < path.length - 1; i++) node = node[path[i]].children
-    node.splice(path[path.length - 1], 1)
-    setPegs(newPegs)
+  const handleAttachmentDelete = async (attachmentId: number) => {
+    await api.deleteAttachment(attachmentId)
+    await reload()
   }
 
-  const updatePeg = (path: number[], field: string, value: string) => {
-    const newPegs = structuredClone(pegs)
-    let node = newPegs
-    for (let i = 0; i < path.length - 1; i++) node = node[path[i]].children
-    ;(node[path[path.length - 1]] as any)[field] = value
-    setPegs(newPegs)
+  const handleChapterToggle = async (chapterId: number) => {
+    if (!palace) return
+    const nextIds = selectedChapterIds.includes(chapterId)
+      ? selectedChapterIds.filter((item) => item !== chapterId)
+      : [...selectedChapterIds, chapterId]
+    setSelectedChapterIds(nextIds)
+    await api.linkPalaceChapters(palace.id, nextIds)
+    await reload()
   }
 
-  const renderPegRow = (peg: PegNode, meta: TreeRenderMeta) => (
-    <div className="flex gap-2 items-start" style={{ paddingLeft: meta.depth * 24 }}>
-      <div className="flex items-center gap-1 pt-2 text-xs text-muted-foreground shrink-0 w-6">
-        <GripVertical className="h-3 w-3" />
-      </div>
-      <Input value={peg.name} onChange={e => updatePeg(meta.path, 'name', e.target.value)}
-        placeholder={meta.depth === 0 ? '桩名称' : '子桩名称'} className="flex-[2] h-9" />
-      <Input value={peg.content} onChange={e => updatePeg(meta.path, 'content', e.target.value)}
-        placeholder="关联记忆内容" className="flex-[3] h-9" />
-      <Button type="button" variant="ghost" size="icon" className="h-9 w-9 shrink-0"
-        onClick={() => addChild(meta.path)}><Plus className="h-4 w-4" /></Button>
-      <Button type="button" variant="ghost" size="icon" className="h-9 w-9 shrink-0"
-        onClick={() => removePeg(meta.path)}><X className="h-4 w-4" /></Button>
-    </div>
-  )
+  const statusBadge = useMemo(() => {
+    if (!palaceId) return <Badge variant="secondary">正在创建草稿</Badge>
+    if (error) return <Badge variant="destructive">保存异常</Badge>
+    if (!editorState) return <Badge variant="secondary">加载中</Badge>
+    if (isSaving) return <Badge variant="secondary">自动保存脑图中</Badge>
+    return <Badge variant="secondary">宿主桥已连接</Badge>
+  }, [editorState, error, isSaving, palaceId])
 
-  const loadChapterTree = (sid: number) => api.getSubjectTree(sid).then(setChapterTree)
-  const toggleChapter = (cid: number) => setSelectedChapters(p => p.includes(cid) ? p.filter(x => x !== cid) : [...p, cid])
-
-  const renderChTreeNode = (n: any, meta: TreeRenderMeta) => (
-    <button type="button" onClick={() => toggleChapter(n.id)}
-      className={`flex items-center gap-2 w-full text-left rounded-md px-2 py-1 text-sm transition-colors
-        ${selectedChapters.includes(n.id) ? 'bg-primary/10 text-primary font-medium' : 'hover:bg-secondary'}`}
-      style={{ paddingLeft: 8 + meta.depth * 16 }}>
-      <span className={`h-3.5 w-3.5 rounded border flex items-center justify-center text-[10px] shrink-0
-        ${selectedChapters.includes(n.id) ? 'bg-primary border-primary text-primary-foreground' : 'border-input'}`}>
-        {selectedChapters.includes(n.id) ? '✓' : ''}
-      </span>
-      {n.name}
-    </button>
-  )
-
-  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]; if (!file || !id) return
-    await api.uploadAttachment(Number(id), file)
-    const p = await api.getPalace(Number(id)); setAttachments(p.attachments || [])
-    toast.success('Uploaded')
+  if (!palaceId) {
+    return <div className="flex min-h-[60vh] items-center justify-center text-sm text-muted-foreground">正在为新宫殿创建草稿…</div>
   }
 
   return (
-    <div className="space-y-6 max-w-3xl">
-      <div className="flex items-center gap-4">
-        <Link to="/palaces" className="text-muted-foreground hover:text-foreground transition-colors"><ArrowLeft className="h-5 w-5" /></Link>
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">{isEdit ? 'Edit Palace' : 'New Palace'}</h1>
-        </div>
-      </div>
+    <div className="space-y-5">
+      <PageIntro
+        eyebrow="Palace"
+        title={palace?.title || '宫殿编辑器'}
+        description="复习模式与难度标签已从产品语义中移除，右侧只保留宫殿本身的业务字段与章节关联。"
+        actions={
+          <>
+            <Link to="/palaces">
+              <Button variant="outline" size="sm">
+                <ArrowLeft className="mr-2 h-4 w-4" />
+                返回列表
+              </Button>
+            </Link>
+            {statusBadge}
+          </>
+        }
+      />
 
-      <form onSubmit={handleSubmit} className="space-y-6">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Basic Info</CardTitle>
-            <CardDescription>Name, description, difficulty.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="t">Title</Label>
-              <Input id="t" value={title} onChange={e => setTitle(e.target.value)} placeholder="Palace name..." />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="d">Description <span className="text-muted-foreground font-normal">(Markdown)</span></Label>
-              <Textarea id="d" value={description} onChange={e => setDescription(e.target.value)} rows={5} placeholder="Describe your palace..." />
-            </div>
-            <div className="grid grid-cols-2 gap-6">
-              <div className="space-y-2">
-                <Label>Difficulty</Label>
-                <div className="flex items-center gap-3">
-                  <input type="range" min={1} max={5} value={difficulty} onChange={e => setDifficulty(+e.target.value)} className="flex-1" />
-                  <span className="text-sm font-medium tabular-nums w-16 text-right">{'★'.repeat(difficulty)}{'☆'.repeat(5 - difficulty)}</span>
-                </div>
-              </div>
-              <div className="space-y-2">
-                <Label>Review Mode</Label>
-                <div className="flex gap-2">
-                  {[{ v: 'flashcard', l: 'Flashcard' }, { v: 'browse', l: 'Browse' }].map(({ v, l }) => (
-                    <button key={v} type="button" onClick={() => setReviewMode(v)}
-                      className={`flex-1 rounded-md border px-3 py-1.5 text-sm font-medium transition-all active:scale-95
-                        ${reviewMode === v ? 'bg-primary text-primary-foreground border-primary shadow-sm' : 'bg-background hover:bg-secondary'}`}>
-                      {l}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
+        <Card className="min-h-[74vh] border-border/70 bg-card/92">
+          <CardHeader className="flex flex-row items-center justify-between gap-3">
             <div>
-              <CardTitle className="text-base">Memory Pegs</CardTitle>
-              <CardDescription>Add pegs with unlimited sub-pegs for hierarchical memory.</CardDescription>
+              <CardTitle className="text-base">宫殿脑图</CardTitle>
+              <CardDescription>节点结构、主题和大纲侧栏都由嵌入的 mind-map 编辑器承载。</CardDescription>
             </div>
-            <Button type="button" variant="outline" size="sm" onClick={() => setPegs([...pegs, newPeg()])}>
-              <Plus className="h-4 w-4" /> Add Peg
-            </Button>
+            {selectedNode?.memoryAnkiId ? (
+              <Badge variant="secondary">
+                {selectedNode.memoryAnkiNodeType} #{selectedNode.memoryAnkiId}
+              </Badge>
+            ) : null}
           </CardHeader>
-          <CardContent className="space-y-1">
-            <TreeRenderer
-              nodes={pegs}
-              getKey={(_: PegNode, i: number) => `${i}`}
-              getChildren={(p: PegNode) => p.children}
-              renderNode={renderPegRow}
-              indentPerLevel={24}
-              baseIndent={0}
-              alwaysExpanded
-            />
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Link Chapters</CardTitle>
-            <CardDescription>Link this palace to your knowledge outline chapters.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="flex gap-2 flex-wrap">
-              {subjects.map((s: any) => (
-                <Button key={s.id} type="button" variant={chapterTree?.subject?.id === s.id ? 'default' : 'outline'} size="sm"
-                  onClick={() => loadChapterTree(s.id)}>
-                  <span className="h-2 w-2 rounded-full mr-1.5" style={{ background: s.color }} />{s.name}
-                </Button>
-              ))}
-            </div>
-            {chapterTree && (
-              <div className="border rounded-lg p-3 max-h-64 overflow-y-auto space-y-0.5">
-                {chapterTree.chapters?.length > 0 ? (
-                  <TreeRenderer
-                    nodes={chapterTree.chapters}
-                    getKey={(n: any) => n.id}
-                    getChildren={(n: any) => n.children || []}
-                    renderNode={renderChTreeNode}
-                    alwaysExpanded
-                  />
-                ) : <p className="text-sm text-muted-foreground text-center py-4">No chapters. <Link to="/knowledge" className="text-primary hover:underline">Create</Link></p>}
+          <CardContent className="min-h-[64vh]">
+            {editorState ? (
+              <MindMapFrame
+                key={`${palaceId}-${frameVersion}`}
+                editorState={editorState}
+                onEditorStateChange={(nextState: MindMapEditorState) => setEditorState(nextState)}
+                onNodeActive={setSelectedNodes}
+                className="h-[64vh] w-full rounded-2xl border border-border/70 bg-white"
+              />
+            ) : (
+              <div className="flex h-[64vh] items-center justify-center rounded-2xl border border-dashed border-border/80 bg-background/60 text-sm text-muted-foreground">
+                正在加载宫殿编辑器…
               </div>
             )}
-            {selectedChapters.length > 0 && <p className="text-xs text-muted-foreground">{selectedChapters.length} chapters linked</p>}
           </CardContent>
         </Card>
 
-        {isEdit && (
-          <Card>
+        <div className="space-y-4">
+          <Card className="border-border/70 bg-card/92">
             <CardHeader>
-              <CardTitle className="text-base">Attachments</CardTitle>
-              <CardDescription>Upload images or files.</CardDescription>
+              <CardTitle className="text-base">宫殿字段</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
-              {attachments.length > 0 && (
-                <div className="flex flex-wrap gap-2">
-                  {attachments.map((att: any) => (
-                    <div key={att.id} className="flex items-center gap-2 rounded-md border px-3 py-1.5 text-sm">
-                      <a href={`/api/attachments/${att.id}`} target="_blank" className="text-primary hover:underline max-w-[200px] truncate">{att.original_name}</a>
-                      <button type="button" onClick={async () => { await api.deleteAttachment(att.id); setAttachments(a => a.filter(x => x.id !== att.id)) }}
-                        className="text-muted-foreground hover:text-destructive"><X className="h-3.5 w-3.5" /></button>
-                    </div>
-                  ))}
-                </div>
-              )}
-              <label className="cursor-pointer inline-flex items-center gap-2 rounded-md border px-4 py-2 text-sm hover:bg-secondary transition-colors">
-                <Upload className="h-4 w-4" /> Choose File
-                <input type="file" onChange={handleUpload} className="hidden" />
-              </label>
+              <div className="space-y-2">
+                <Label htmlFor="palace-title">标题</Label>
+                <Input id="palace-title" value={title} onChange={(event) => setTitle(event.target.value)} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="palace-description">描述</Label>
+                <Textarea id="palace-description" value={description} onChange={(event) => setDescription(event.target.value)} rows={5} />
+              </div>
+              <Button type="button" className="w-full" onClick={handleSaveMeta}>
+                <Save className="mr-2 h-4 w-4" />
+                保存业务字段
+              </Button>
             </CardContent>
           </Card>
-        )}
 
-        <div className="flex items-center gap-3">
-          <Button type="submit">{isEdit ? 'Save' : 'Create Palace'}</Button>
-          <Link to="/palaces"><Button type="button" variant="outline">Cancel</Button></Link>
+          <Card className="border-border/70 bg-card/92">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Paperclip className="h-4 w-4" />
+                附件
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <label className="flex cursor-pointer items-center justify-center rounded-2xl border border-dashed border-border/80 px-3 py-4 text-sm text-muted-foreground transition-colors hover:text-foreground">
+                <Upload className="mr-2 h-4 w-4" />
+                上传附件
+                <input type="file" className="hidden" onChange={handleAttachmentUpload} />
+              </label>
+              <div className="space-y-2">
+                {palace?.attachments?.length ? (
+                  palace.attachments.map((attachment) => (
+                    <div key={attachment.id} className="flex items-center justify-between rounded-2xl border border-border/70 bg-background/70 px-3 py-3 text-sm">
+                      <span>{attachment.original_name}</span>
+                      <Button variant="ghost" size="sm" onClick={() => handleAttachmentDelete(attachment.id)}>
+                        删除
+                      </Button>
+                    </div>
+                  ))
+                ) : (
+                  <div className="rounded-2xl border border-dashed border-border/80 px-3 py-4 text-sm text-muted-foreground">
+                    暂时还没有上传附件。
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="border-border/70 bg-card/92">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Link2 className="h-4 w-4" />
+                章节关联
+              </CardTitle>
+              <CardDescription>专题复习只会从这些章节关系中选出当前到期的 palace 任务。</CardDescription>
+            </CardHeader>
+            <CardContent className="max-h-[280px] space-y-2 overflow-y-auto">
+              {chapterOptions.map((option) => (
+                <label key={option.id} className="flex items-start gap-3 rounded-2xl border border-border/70 bg-background/70 px-3 py-3 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={selectedChapterIds.includes(option.id)}
+                    onChange={() => void handleChapterToggle(option.id)}
+                    className="mt-1"
+                  />
+                  <span>{option.label}</span>
+                </label>
+              ))}
+            </CardContent>
+          </Card>
+
+          <Card className="border-border/70 bg-card/92">
+            <CardHeader>
+              <CardTitle className="text-base">当前节点</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2 text-sm text-muted-foreground">
+              {selectedNode ? (
+                <>
+                  <div className="font-medium text-foreground">{selectedNode.text || '未命名节点'}</div>
+                  <div>节点类型：{selectedNode.memoryAnkiNodeType || '未标注'}</div>
+                  <div>业务 ID：{selectedNode.memoryAnkiId ?? '新建未落库'}</div>
+                  <div className="rounded-2xl bg-background/70 p-3 whitespace-pre-wrap">
+                    {selectedNode.note || '该节点还没有备注。'}
+                  </div>
+                </>
+              ) : (
+                <div>在脑图里选中一个节点后，这里会显示当前 peg 的业务映射。</div>
+              )}
+            </CardContent>
+          </Card>
         </div>
-      </form>
+      </div>
     </div>
   )
 }

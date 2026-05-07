@@ -32,6 +32,9 @@ class Palace(Base):
     review_mode = Column(String(20), default="flashcard")
     archived = Column(Boolean, default=False)
     mastered = Column(Boolean, default=False)
+    editor_doc = Column(Text, default="")
+    editor_config = Column(Text, default="")
+    editor_local_config = Column(Text, default="")
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -108,6 +111,9 @@ class Subject(Base):
     name = Column(String(100), unique=True, nullable=False)
     color = Column(String(20), default="#6366f1")
     sort_order = Column(Integer, default=0)
+    editor_doc = Column(Text, default="")
+    editor_config = Column(Text, default="")
+    editor_local_config = Column(Text, default="")
 
     chapters = relationship("Chapter", back_populates="subject", cascade="all, delete-orphan",
                             order_by="Chapter.sort_order")

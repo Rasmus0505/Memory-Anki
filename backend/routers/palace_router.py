@@ -1,9 +1,13 @@
-from typing import Optional
 from fastapi import APIRouter, UploadFile, File, Depends
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from models import get_session, Palace, Attachment as AttachmentModel, Peg
 from schemas import PalaceCreate, PalaceUpdate
+from editor_state import (
+    get_palace_editor_state,
+    save_palace_editor_state,
+    sync_palace_editor_root,
+)
 from services.palace_service import (
     list_palaces, get_palace, create_palace, update_palace, delete_palace,
 )
@@ -33,7 +37,6 @@ def peg_json(peg) -> dict:
 def palace_json(p) -> dict:
     return {
         "id": p.id, "title": p.title, "description": p.description,
-        "difficulty": p.difficulty, "review_mode": p.review_mode,
         "archived": p.archived, "mastered": p.mastered,
         "created_at": p.created_at.isoformat() if p.created_at else None,
         "updated_at": p.updated_at.isoformat() if p.updated_at else None,
@@ -48,9 +51,8 @@ def palace_json(p) -> dict:
 
 
 @router.get("/palaces")
-def api_list(difficulty: Optional[int] = None, search: str = "",
-             s: Session = Depends(session_dep)):
-    return [palace_json(p) for p in list_palaces(s, difficulty, search)]
+def api_list(search: str = "", s: Session = Depends(session_dep)):
+    return [palace_json(p) for p in list_palaces(s, search)]
 
 
 @router.get("/palaces/{palace_id}")
@@ -71,7 +73,12 @@ def api_update(palace_id: int, data: PalaceUpdate, s: Session = Depends(session_
     p = get_palace(s, palace_id)
     if not p:
         return {"error": "not found"}
-    return palace_json(update_palace(s, p, data))
+    updated = update_palace(s, p, data)
+    if data.title is not None:
+        sync_palace_editor_root(updated)
+        s.commit()
+        s.refresh(updated)
+    return palace_json(updated)
 
 
 @router.delete("/palaces/{palace_id}")
@@ -88,6 +95,29 @@ def api_archive(palace_id: int, data: dict, s: Session = Depends(session_dep)):
     p.archived = data.get("archived", True)
     s.commit()
     return {"ok": True, "archived": p.archived}
+
+
+@router.get("/palaces/{palace_id}/editor")
+def api_get_editor(palace_id: int, s: Session = Depends(session_dep)):
+    palace = get_palace(s, palace_id)
+    if not palace:
+        return {"error": "not found"}
+    return {
+        "palace": palace_json(palace),
+        **get_palace_editor_state(palace),
+    }
+
+
+@router.put("/palaces/{palace_id}/editor")
+def api_update_editor(palace_id: int, data: dict, s: Session = Depends(session_dep)):
+    palace = get_palace(s, palace_id)
+    if not palace:
+        return {"error": "not found"}
+    state = save_palace_editor_state(s, palace, data)
+    return {
+        "palace": palace_json(palace),
+        **state,
+    }
 
 
 @router.post("/palaces/{palace_id}/upload")

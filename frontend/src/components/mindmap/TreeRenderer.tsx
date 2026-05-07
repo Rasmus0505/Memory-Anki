@@ -21,11 +21,9 @@ export interface TreeRendererProps<T> {
   expanded?: Set<string | number>
   onExpandedChange?: (s: Set<string | number>) => void
   showConnector?: boolean
-  /** 为 true 时所有节点始终展开，忽略 expand 状态 (适用于编辑模式) */
   alwaysExpanded?: boolean
 }
 
-// Stable per-key toggle functions
 function useExpandState(
   controlledExpanded: Set<string | number> | undefined,
   onExpandedChange: ((s: Set<string | number>) => void) | undefined,
@@ -68,8 +66,8 @@ export function TreeRenderer<T>({
   getKey,
   getChildren,
   renderNode,
-  indentPerLevel = 20,
-  baseIndent = 12,
+  indentPerLevel = 36,
+  baseIndent = 18,
   initialExpanded,
   expanded: controlledExpanded,
   onExpandedChange,
@@ -82,8 +80,14 @@ export function TreeRenderer<T>({
     initialExpanded ?? new Set()
   )
 
-  const renderTree = (items: T[], depth: number, path: number[]): ReactNode => {
+  const renderTree = (
+    items: T[],
+    depth: number,
+    path: number[],
+    ancestorHasNext: boolean[]
+  ): ReactNode => {
     const lastIdx = items.length - 1
+
     return items.map((node, i) => {
       const key = getKey(node, i)
       const children = getChildren(node)
@@ -103,10 +107,11 @@ export function TreeRenderer<T>({
       }
 
       const row = renderNode(node, meta)
-      const childrenRows =
-        hasChildren && isExpanded ? renderTree(children, depth + 1, currentPath) : null
+      const childrenRows = hasChildren && isExpanded
+        ? renderTree(children, depth + 1, currentPath, [...ancestorHasNext, !isLastChild])
+        : null
 
-      if (!showConnector || depth === 0) {
+      if (!showConnector) {
         return (
           <div key={key}>
             {row}
@@ -115,31 +120,37 @@ export function TreeRenderer<T>({
         )
       }
 
-      // Obsidian-style connector: vertical line + horizontal T-branch
-      const connectorLeft = baseIndent + (depth - 1) * indentPerLevel + indentPerLevel / 2
+      const verticals = ancestorHasNext.map((hasNext, idx) => {
+        if (!hasNext) return null
+        const left = baseIndent + idx * indentPerLevel + indentPerLevel / 2
+        return (
+          <div
+            key={`v-${key}-${idx}`}
+            className="absolute top-0 bottom-0 border-l border-slate-300/90"
+            style={{ left }}
+          />
+        )
+      })
+
+      const branchLeft = baseIndent + Math.max(depth - 1, 0) * indentPerLevel + indentPerLevel / 2
 
       return (
         <div key={key} className="relative">
-          {/* Vertical line extending through this node */}
-          {!isLastChild && (
-            <div
-              className="absolute border-l border-muted-foreground/25"
-              style={{
-                left: connectorLeft,
-                top: '50%',
-                bottom: 0,
-              }}
-            />
-          )}
-          {/* Horizontal T-branch */}
-          <div
-            className="absolute border-t border-muted-foreground/25"
-            style={{
-              left: connectorLeft,
-              top: '50%',
-              width: indentPerLevel / 2,
-            }}
-          />
+          {verticals}
+          {depth > 0 ? (
+            <>
+              {!isLastChild ? (
+                <div
+                  className="absolute border-l border-slate-300/90"
+                  style={{ left: branchLeft, top: '50%', bottom: 0 }}
+                />
+              ) : null}
+              <div
+                className="absolute border-t border-slate-400/90"
+                style={{ left: branchLeft, top: '50%', width: indentPerLevel / 2 + 8 }}
+              />
+            </>
+          ) : null}
           {row}
           {childrenRows}
         </div>
@@ -147,5 +158,5 @@ export function TreeRenderer<T>({
     })
   }
 
-  return <>{renderTree(nodes, 0, [])}</>
+  return <>{renderTree(nodes, 0, [], [])}</>
 }

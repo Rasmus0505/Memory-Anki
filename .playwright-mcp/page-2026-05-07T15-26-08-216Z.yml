@@ -1,0 +1,113 @@
+- generic [ref=e2]:
+  - generic [ref=e3]:
+    - banner [ref=e4]:
+      - generic [ref=e5]:
+        - button "打开导航" [ref=e6]:
+          - img [ref=e7]
+        - generic [ref=e8]: 记忆宫殿
+    - main [ref=e9]:
+      - generic [ref=e11]:
+        - generic [ref=e13]:
+          - generic [ref=e14]: Knowledge Canvas
+          - generic [ref=e15]:
+            - heading "知识大纲" [level=1] [ref=e16]
+            - paragraph [ref=e17]: 建立学科章节体系，并在大纲与画布视图之间切换。大纲模式默认就能清楚读出层级关系。
+        - generic [ref=e18]:
+          - complementary [ref=e19]:
+            - generic [ref=e20]:
+              - generic [ref=e21]:
+                - generic [ref=e22]:
+                  - generic [ref=e23]: 学科
+                  - generic [ref=e24]: 先选学科，再展开章节树。
+                - button "中国教育史" [ref=e55]:
+                  - generic [ref=e57]: 中国教育史
+                  - button "编辑学科" [ref=e58]:
+                    - img [ref=e59]
+                  - button "删除学科" [ref=e62]:
+                    - img [ref=e63]
+              - generic [ref=e26]:
+                - generic [ref=e27]:
+                  - generic [ref=e28]: 新学科
+                  - generic [ref=e29]: 为知识树创建新的根目录。
+                - generic [ref=e30]:
+                  - textbox "新学科名..." [ref=e31]
+                  - generic [ref=e32]:
+                    - textbox [ref=e33] [cursor=pointer]: "#2563eb"
+                    - button "创建学科" [ref=e34]
+          - generic [ref=e36]:
+            - generic [ref=e38]:
+              - generic [ref=e39]:
+                - generic [ref=e40]:
+                  - img [ref=e41]
+                  - text: 中国教育史
+                - generic [ref=e46]: 画布模式会隐藏两侧信息栏，让关系图尽量铺满视口。
+              - generic [ref=e66]:
+                - generic [ref=e67]: 当前视图
+                - generic [ref=e68]: 画布
+            - generic [ref=e72]:
+              - generic [ref=e74]:
+                - button "大纲" [ref=e75]:
+                  - img [ref=e76]
+                  - generic [ref=e79]: 大纲
+                - button "画布" [active] [ref=e80]:
+                  - img [ref=e81]
+                  - generic [ref=e85]: 画布
+              - generic [ref=e133]:
+                - generic [ref=e134]:
+                  - button "整理画布" [ref=e135]:
+                    - img [ref=e136]
+                    - generic [ref=e139]: 整理画布
+                  - button "缩小" [ref=e141]:
+                    - img [ref=e142]
+                  - button "放大" [ref=e145]:
+                    - img [ref=e146]
+                  - button "进入画布专注模式" [ref=e149]:
+                    - img [ref=e150]
+                  - generic [ref=e155]: 拖拽时会即时预演落点，只有点击“整理画布”才会全局重排
+                - application [ref=e158]:
+                  - generic [ref=e160]:
+                    - generic:
+                      - generic:
+                        - img:
+                          - group "Edge from chapter-5 to chapter-6" [ref=e161] [cursor=pointer]
+                        - img:
+                          - group "Edge from chapter-5 to chapter-7" [ref=e164] [cursor=pointer]
+                      - generic:
+                        - group [ref=e167]:
+                          - generic [ref=e168]:
+                            - button "第八章 近代教育体制的变革" [ref=e171]
+                            - generic [ref=e172]:
+                              - button "添加子节点" [ref=e173]:
+                                - img [ref=e174]
+                              - button "删除节点" [ref=e175]:
+                                - img [ref=e176]
+                        - group [ref=e180]:
+                          - generic [ref=e181]:
+                            - generic [ref=e183]:
+                              - button "第一节 民国初年的教育改革" [ref=e184]
+                              - generic: L2
+                            - generic [ref=e186]:
+                              - button "添加子节点" [ref=e187]:
+                                - img [ref=e188]
+                              - button "删除节点" [ref=e189]:
+                                - img [ref=e190]
+                        - group [ref=e194]:
+                          - generic [ref=e195]:
+                            - generic [ref=e197]:
+                              - button "第二节 蔡元培的教音思想与实践" [ref=e198]
+                              - generic: L2
+                            - generic [ref=e200]:
+                              - button "添加子节点" [ref=e201]:
+                                - img [ref=e202]
+                              - button "删除节点" [ref=e203]:
+                                - img [ref=e204]
+                  - generic "Control Panel" [ref=e208]:
+                    - button "Fit View" [ref=e209] [cursor=pointer]:
+                      - img [ref=e210]
+                  - img "Mini Map" [ref=e213]
+                  - img
+          - complementary [ref=e49]:
+            - generic [ref=e52]:
+              - img [ref=e53]
+              - text: 选择一个章节，右侧会显示它关联的宫殿。
+  - region "Notifications alt+T"

@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Memory Anki Mind Map Host</title>
+    <script>
+      window.externalPublicPath = '/vendor/mind-map/dist/'
+      window.takeOverApp = true
+      window.localStorage.setItem('webUseTip', '1')
+    </script>
+    <link rel="icon" href="/vendor/mind-map/dist/logo.ico" />
+    <link rel="stylesheet" href="/vendor/mind-map/dist/css/chunk-vendors.css" />
+    <link rel="stylesheet" href="/vendor/mind-map/dist/css/app.css" />
+    <style>
+      html,
+      body,
+      #app {
+        height: 100%;
+        margin: 0;
+      }
+
+      body {
+        overflow: hidden;
+        background: #f8fafc;
+      }
+
+      body.is-host-readonly .toolbarContainer {
+        display: none !important;
+      }
+
+      body.is-host-readonly .navigatorContainer .item:nth-child(6) {
+        display: none !important;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script>
+      const hostId = new URLSearchParams(window.location.search).get('host')
+
+      function cloneValue(value) {
+        if (value == null) return value
+        return JSON.parse(JSON.stringify(value))
+      }
+
+      function getHostBridge() {
+        const registry = window.parent && window.parent.__memoryAnkiMindMapHosts
+        if (!registry || !hostId) return null
+        return registry[hostId] || null
+      }
+
+      function getNodeData(node) {
+        if (!node || typeof node.getData !== 'function') return {}
+        try {
+          const whole = node.getData()
+          if (whole && typeof whole === 'object') return whole
+        } catch (error) {
+          console.warn(error)
+        }
+        const keys = ['text', 'note', 'uid', 'memoryAnkiId', 'memoryAnkiNodeType']
+        return keys.reduce((acc, key) => {
+          try {
+            acc[key] = node.getData(key)
+          } catch (error) {
+            acc[key] = null
+          }
+          return acc
+        }, {})
+      }
+
+      function serializeNode(node) {
+        const data = getNodeData(node)
+        return {
+          uid: data.uid || null,
+          text: typeof data.text === 'string' ? data.text : '',
+          note: typeof data.note === 'string' ? data.note : '',
+          memoryAnkiId:
+            data.memoryAnkiId == null || data.memoryAnkiId === ''
+              ? null
+              : Number(data.memoryAnkiId),
+          memoryAnkiNodeType:
+            typeof data.memoryAnkiNodeType === 'string' ? data.memoryAnkiNodeType : null,
+          rawData: data,
+        }
+      }
+
+      function applyHostState(nextState) {
+        window.__memoryAnkiHostState = {
+          ...(window.__memoryAnkiHostState || {}),
+          ...(nextState || {}),
+        }
+        const isReadonly = Boolean(window.__memoryAnkiHostState.readonly)
+        document.body.classList.toggle('is-host-readonly', isReadonly)
+        const appRoot =
+          document.getElementById('app')?.__vue__ ||
+          document.getElementById('app')?.firstElementChild?.__vue__ ||
+          null
+        const store = appRoot && appRoot.$store
+        if (store) {
+          store.commit('setIsReadonly', isReadonly)
+          if (isReadonly) {
+            store.commit('setActiveSidebar', null)
+          }
+        }
+        const mindMap = window.__memoryAnkiMindMapInstance
+        if (!mindMap) return
+        if (typeof window.__memoryAnkiHostState.readonly === 'boolean') {
+          mindMap.setMode(isReadonly ? 'readonly' : 'edit')
+        }
+      }
+
+      window.applyHostState = applyHostState
+
+      function setupTakeOverMethods() {
+        window.takeOverAppMethods = {
+          getMindMapData() {
+            return cloneValue(getHostBridge()?.getMindMapData?.()) || null
+          },
+          saveMindMapData(data) {
+            getHostBridge()?.saveMindMapData?.(cloneValue(data))
+          },
+          getMindMapConfig() {
+            return cloneValue(getHostBridge()?.getMindMapConfig?.()) || {}
+          },
+          saveMindMapConfig(config) {
+            getHostBridge()?.saveMindMapConfig?.(cloneValue(config))
+          },
+          getLanguage() {
+            return getHostBridge()?.getLanguage?.() || 'zh'
+          },
+          saveLanguage(lang) {
+            getHostBridge()?.saveLanguage?.(lang)
+          },
+          getLocalConfig() {
+            return cloneValue(getHostBridge()?.getLocalConfig?.()) || {}
+          },
+          saveLocalConfig(config) {
+            getHostBridge()?.saveLocalConfig?.(cloneValue(config))
+          },
+        }
+      }
+
+      function registerBusListeners() {
+        if (!window.$bus) return
+        window.$bus.$on('app_inited', mindMap => {
+          window.__memoryAnkiMindMapInstance = mindMap
+          applyHostState(window.__memoryAnkiHostState || {})
+          getHostBridge()?.notify?.('app_inited', null)
+        })
+        window.$bus.$on('node_active', (...args) => {
+          const activeNodes = Array.isArray(args[1]) ? args[1] : []
+          getHostBridge()?.notify?.(
+            'node_active',
+            activeNodes.map(node => serializeNode(node))
+          )
+        })
+        window.$bus.$on('node_tree_render_end', () => {
+          getHostBridge()?.notify?.('node_tree_render_end', null)
+        })
+      }
+
+      function bootMindMapHost() {
+        setupTakeOverMethods()
+        registerBusListeners()
+        if (typeof window.initApp === 'function') {
+          window.initApp()
+        }
+      }
+    </script>
+    <script src="/vendor/mind-map/dist/js/chunk-vendors.js"></script>
+    <script src="/vendor/mind-map/dist/js/app.js"></script>
+    <script>
+      bootMindMapHost()
+    </script>
+  </body>
+</html>

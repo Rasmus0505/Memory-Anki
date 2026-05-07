@@ -1,0 +1,83 @@
+- generic [ref=e2]:
+  - generic [ref=e3]:
+    - banner [ref=e4]:
+      - generic [ref=e5]:
+        - button "打开导航" [ref=e6]:
+          - img [ref=e7]
+        - generic [ref=e8]: 记忆宫殿
+    - main [ref=e9]:
+      - generic [ref=e11]:
+        - generic [ref=e12]:
+          - generic [ref=e13]:
+            - generic [ref=e14]: Memory Palace
+            - generic [ref=e15]:
+              - heading "编辑记忆宫殿" [level=1] [ref=e16]
+              - paragraph [ref=e17]: 整理宫殿信息、记忆节点和知识大纲关联。画布视图与知识大纲页面复用同一套工作区逻辑。
+          - link "返回列表" [ref=e19] [cursor=pointer]:
+            - /url: /palaces
+            - button "返回列表" [ref=e20]:
+              - img
+              - text: 返回列表
+        - generic [ref=e21]:
+          - generic [ref=e23]:
+            - generic [ref=e24]:
+              - generic [ref=e25]:
+                - generic [ref=e26]: 基本信息
+                - generic [ref=e27]: 先定义标题、描述和复习模式，再组织记忆节点。
+              - generic [ref=e28]:
+                - generic [ref=e29]:
+                  - text: 标题
+                  - textbox "标题" [ref=e30]:
+                    - /placeholder: 宫殿名称...
+                - generic [ref=e31]:
+                  - text: 描述
+                  - textbox "描述" [ref=e32]:
+                    - /placeholder: 描述这座记忆宫殿...
+                - generic [ref=e33]:
+                  - generic [ref=e34]:
+                    - text: 难度
+                    - generic [ref=e35]:
+                      - slider [ref=e36] [cursor=pointer]: "3"
+                      - generic [ref=e37]: ★★★☆☆
+                  - generic [ref=e38]:
+                    - text: 复习模式
+                    - generic [ref=e39]:
+                      - button "闪卡" [ref=e40]
+                      - button "浏览" [ref=e41]
+            - generic [ref=e42]:
+              - generic [ref=e44]:
+                - generic [ref=e45]:
+                  - generic [ref=e46]: 记忆节点
+                  - generic [ref=e47]: 大纲和画布共用同一套节点数据。画布模式优先让关系结构占满空间。
+                - button "添加卡片" [ref=e48]:
+                  - img
+                  - text: 添加卡片
+              - generic [ref=e50]:
+                - generic [ref=e52]:
+                  - button "大纲" [ref=e53]:
+                    - img [ref=e54]
+                    - generic [ref=e57]: 大纲
+                  - button "画布" [ref=e58]:
+                    - img [ref=e59]
+                    - generic [ref=e63]: 画布
+                - paragraph [ref=e67]: 还没有节点
+          - complementary [ref=e68]:
+            - generic [ref=e69]:
+              - generic [ref=e71]:
+                - generic [ref=e72]:
+                  - img [ref=e73]
+                  - text: 关联章节
+                - generic [ref=e76]: 把这座宫殿挂到知识大纲里的对应章节。
+              - generic [ref=e78]:
+                - generic [ref=e79]:
+                  - generic [ref=e80]:
+                    - img [ref=e81]
+                    - text: 附件
+                  - generic [ref=e83]: 上传图片或资料文件，挂到这座宫殿上。
+                - generic [ref=e84]:
+                  - generic [ref=e85]: 还没有附件。
+                  - generic [ref=e86] [cursor=pointer]:
+                    - img [ref=e87]
+                    - text: 选择文件
+              - generic [ref=e92]: 所有修改会自动保存，章节关联也会一起持久化。
+  - region "Notifications alt+T"

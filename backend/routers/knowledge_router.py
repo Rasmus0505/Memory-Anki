@@ -4,6 +4,11 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from models import get_session, Subject, Chapter, Palace, NodeConnection, chapter_palace_table
 from schemas import ChapterCreate, ChapterUpdate
+from editor_state import (
+    get_subject_editor_state,
+    save_subject_editor_state,
+    sync_subject_editor_root,
+)
 import traceback
 
 router = APIRouter(tags=["knowledge"])
@@ -64,6 +69,7 @@ def update_subject(subject_id: int, data: dict, s: Session = Depends(session_dep
     for key in ("name", "color", "sort_order"):
         if key in data:
             setattr(sub, key, data[key])
+    sync_subject_editor_root(sub)
     s.commit()
     return subject_json(sub)
 
@@ -93,6 +99,28 @@ def get_tree(subject_id: int, s: Session = Depends(session_dep)):
     }
 
 
+@router.get("/subjects/{subject_id}/editor")
+def get_subject_editor(subject_id: int, s: Session = Depends(session_dep)):
+    subject = s.query(Subject).filter_by(id=subject_id).first()
+    if not subject:
+        return {"error": "not found"}
+    return {
+        "subject": subject_json(subject),
+        **get_subject_editor_state(subject),
+    }
+
+
+@router.put("/subjects/{subject_id}/editor")
+def update_subject_editor(subject_id: int, data: dict, s: Session = Depends(session_dep)):
+    subject = s.query(Subject).filter_by(id=subject_id).first()
+    if not subject:
+        return {"error": "not found"}
+    return {
+        "subject": subject_json(subject),
+        **save_subject_editor_state(s, subject, data),
+    }
+
+
 @router.get("/chapters/{chapter_id}")
 def get_chapter(chapter_id: int, s: Session = Depends(session_dep)):
     """获取章节详情 + 关联的宫殿列表"""
@@ -102,8 +130,7 @@ def get_chapter(chapter_id: int, s: Session = Depends(session_dep)):
 
     def palace_out(p):
         return {
-            "id": p.id, "title": p.title, "difficulty": p.difficulty,
-            "review_mode": p.review_mode,
+            "id": p.id, "title": p.title,
             "pegs": [{"id": pg.id, "name": pg.name, "content": pg.content} for pg in p.pegs],
         }
 

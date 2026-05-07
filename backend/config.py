@@ -24,4 +24,7 @@ DEFAULTS = {
     "ebbinghaus_intervals": "1h,sleep,1,2,4,7,15,30,60",
     "daily_max_reviews": "0",
     "mastered_interval": "180",
+    "auto_smooth_overdue": "true",
+    "overdue_smoothing_days": "7",
+    "overdue_smoothing_threshold": "5",
 }
