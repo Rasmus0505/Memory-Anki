@@ -6,6 +6,7 @@ import { PageIntro } from '@/components/layout/PageIntro'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { formatDuration } from '@/lib/session-records'
 
 function formatSessionHref(reviewId: number, chapterId: number | null) {
   if (chapterId == null) return `/review/session/${reviewId}`
@@ -84,10 +85,10 @@ export default function ReviewOverview() {
         </Card>
         <Card className="border-border/70 bg-card/92">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">本周完成率</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">本周正式复习时长</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-semibold">{queue.stats.completion_rate}%</div>
+            <div className="text-3xl font-semibold">{formatDuration(queue.stats.review_duration_seconds)}</div>
           </CardContent>
         </Card>
       </div>

@@ -133,6 +133,34 @@
         return getRenderer()?.nodeCache?.[uid] || null
       }
 
+      function getNodeByElement(target) {
+        if (!target || typeof target.closest !== 'function') return null
+        const nodeElement = target.closest('.smm-node')
+        if (!nodeElement) return null
+        const nodes = getCachedNodes()
+        const directMatch =
+          nodes.find(node => node?.group?.node === nodeElement) ||
+          nodes.find(node => node?.group?.node?.contains?.(target)) ||
+          null
+        if (directMatch) return directMatch
+        if (typeof nodeElement.getBoundingClientRect !== 'function') return null
+        const rect = nodeElement.getBoundingClientRect()
+        const centerX = rect.left + rect.width / 2
+        const centerY = rect.top + rect.height / 2
+        return (
+          nodes.find(node => {
+            const nodeRect =
+              typeof node?.group?.node?.getBoundingClientRect === 'function'
+                ? node.group.node.getBoundingClientRect()
+                : null
+            if (!nodeRect) return false
+            const deltaX = Math.abs(nodeRect.left + nodeRect.width / 2 - centerX)
+            const deltaY = Math.abs(nodeRect.top + nodeRect.height / 2 - centerY)
+            return deltaX <= 2 && deltaY <= 2
+          }) || null
+        )
+      }
+
       function notifyNodeActive(node) {
         if (!node) return
         getHostBridge()?.notify?.('node_active', [serializeNode(node)])
@@ -393,6 +421,44 @@
         document.addEventListener('focusout', scheduleModeSync, true)
       }
 
+      function registerContextMenuListener() {
+        if (window.__memoryAnkiContextMenuRegistered) return
+        window.__memoryAnkiContextMenuRegistered = true
+        document.addEventListener(
+          'contextmenu',
+          event => {
+            if (!isReadonlyHost()) return
+            const node = getNodeByElement(event.target)
+            if (!node) return
+            event.preventDefault()
+            event.stopPropagation()
+            keyboardState.activeNodeUid = getNodeUid(node) || null
+            updateKeyboardFocusClass()
+            getHostBridge()?.notify?.('node_contextmenu', [serializeNode(node)])
+          },
+          true
+        )
+      }
+
+      function registerReadonlyClickListener() {
+        if (window.__memoryAnkiReadonlyClickRegistered) return
+        window.__memoryAnkiReadonlyClickRegistered = true
+        document.addEventListener(
+          'click',
+          event => {
+            if (!isReadonlyHost()) return
+            if (typeof event.button === 'number' && event.button !== 0) return
+            const node = getNodeByElement(event.target)
+            if (!node) return
+            event.preventDefault()
+            event.stopPropagation()
+            activateNode(node)
+            getHostBridge()?.notify?.('node_click', [serializeNode(node)])
+          },
+          true
+        )
+      }
+
       function serializeNode(node) {
         const data = getNodeData(node)
         return {
@@ -492,24 +558,28 @@
             return cloneValue(getHostBridge()?.getMindMapData?.()) || null
           },
           saveMindMapData(data) {
+            if (isReadonlyHost()) return
             getHostBridge()?.saveMindMapData?.(cloneValue(data))
           },
           getMindMapConfig() {
             return cloneValue(getHostBridge()?.getMindMapConfig?.()) || {}
           },
           saveMindMapConfig(config) {
+            if (isReadonlyHost()) return
             getHostBridge()?.saveMindMapConfig?.(cloneValue(config))
           },
           getLanguage() {
             return getHostBridge()?.getLanguage?.() || 'zh'
           },
           saveLanguage(lang) {
+            if (isReadonlyHost()) return
             getHostBridge()?.saveLanguage?.(lang)
           },
           getLocalConfig() {
             return cloneValue(getHostBridge()?.getLocalConfig?.()) || {}
           },
           saveLocalConfig(config) {
+            if (isReadonlyHost()) return
             getHostBridge()?.saveLocalConfig?.(cloneValue(config))
           },
         }
@@ -520,6 +590,8 @@
         window.$bus.$on('app_inited', mindMap => {
           window.__memoryAnkiMindMapInstance = mindMap
           registerKeyboardListeners()
+          registerContextMenuListener()
+          registerReadonlyClickListener()
           applyHostState(window.__memoryAnkiHostState || {})
           if (window.__memoryAnkiPendingEditorState) {
             syncHostEditorState(window.__memoryAnkiPendingEditorState)
@@ -539,6 +611,7 @@
           )
         })
         window.$bus.$on('node_click', (...args) => {
+          if (isReadonlyHost()) return
           const clickedNode = args[0]
           if (!clickedNode) return
           keyboardState.activeNodeUid = getNodeUid(clickedNode) || null

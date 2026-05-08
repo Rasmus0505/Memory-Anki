@@ -44,7 +44,6 @@ export default function Settings() {
             <div className="grid grid-cols-3 gap-3">
               {[
                 { k: 'ebbinghaus', t: '艾宾浩斯', d: '1, 2, 4, 7, 15, 30, 60 天' },
-                { k: 'sm2', t: 'SM-2', d: '根据评分动态调整间隔' },
                 { k: 'custom', t: '自定义', d: '完全自定义复习间隔' },
               ].map(a => (
                 <button key={a.k} type="button" onClick={() => setAlgorithm(a.k)}
@@ -60,23 +59,6 @@ export default function Settings() {
                 <Label>自定义间隔天数</Label>
                 <Input name="custom_intervals" defaultValue={config.custom_intervals} placeholder="1,2,4,7,15,30,60" />
                 <p className="text-xs text-muted-foreground">逗号分隔，每个数值代表一次复习的间隔天数。</p>
-              </div>
-            )}
-
-            {algorithm === 'sm2' && (
-              <div className="grid grid-cols-3 gap-4 rounded-lg border p-4">
-                <div className="space-y-2">
-                  <Label>初始 ease factor</Label>
-                  <Input name="sm2_initial_ease" defaultValue={config.sm2_initial_ease} type="number" step="0.1" />
-                </div>
-                <div className="space-y-2">
-                  <Label>最小 ease</Label>
-                  <Input name="sm2_min_ease" defaultValue={config.sm2_min_ease} type="number" step="0.1" />
-                </div>
-                <div className="space-y-2">
-                  <Label>初始间隔 (天)</Label>
-                  <Input name="sm2_initial_interval" defaultValue={config.sm2_initial_interval} type="number" />
-                </div>
               </div>
             )}
           </CardContent>

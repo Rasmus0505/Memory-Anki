@@ -7,6 +7,7 @@ interface PersistedMindMapOptions<TResponse, TMeta> {
   saver: (id: number, data: MindMapEditorState) => Promise<TResponse>
   selectMeta: (response: TResponse) => TMeta
   selectEditorState: (response: TResponse) => MindMapEditorState
+  onSaveError?: (error: Error, pendingState: MindMapEditorState) => Promise<boolean> | boolean
 }
 
 function stableSerialize(value: unknown) {
@@ -23,6 +24,7 @@ export function usePersistedMindMapEditor<TResponse, TMeta>({
   saver,
   selectMeta,
   selectEditorState,
+  onSaveError,
 }: PersistedMindMapOptions<TResponse, TMeta>) {
   const [meta, setMeta] = useState<TMeta | null>(null)
   const [editorState, setEditorState] = useState<MindMapEditorState | null>(null)
@@ -39,6 +41,7 @@ export function usePersistedMindMapEditor<TResponse, TMeta>({
   const saverRef = useRef(saver)
   const selectMetaRef = useRef(selectMeta)
   const selectEditorStateRef = useRef(selectEditorState)
+  const onSaveErrorRef = useRef(onSaveError)
   const lastStateFingerprintRef = useRef('')
 
   editorStateRef.current = editorState
@@ -47,6 +50,7 @@ export function usePersistedMindMapEditor<TResponse, TMeta>({
   saverRef.current = saver
   selectMetaRef.current = selectMeta
   selectEditorStateRef.current = selectEditorState
+  onSaveErrorRef.current = onSaveError
 
   const clearTimer = () => {
     if (timerRef.current != null) {
@@ -97,8 +101,13 @@ export function usePersistedMindMapEditor<TResponse, TMeta>({
         setEditorState(nextEditorState)
       }
     } catch (err) {
-      dirtyRef.current = true
-      setError(err instanceof Error ? err.message : 'Failed to save editor')
+      const nextError = err instanceof Error ? err : new Error('Failed to save editor')
+      let handled = false
+      if (onSaveErrorRef.current) {
+        handled = await onSaveErrorRef.current(nextError, snapshot)
+      }
+      dirtyRef.current = !handled
+      setError(nextError.message)
     } finally {
       setIsSaving(false)
       if (dirtyRef.current) {

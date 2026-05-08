@@ -42,13 +42,21 @@ export default function ReviewSession() {
 
   const palace = session?.palace ?? null
 
-  const submit = async (rating: 'forgot' | 'fuzzy' | 'remembered') => {
+  const submitCompletion = async (payload: {
+    durationSeconds: number
+    completionMode: 'manual_complete' | 'auto_complete'
+    revealedRemaining: boolean
+    redNodeIds: string[]
+  }) => {
     if (!session) return
     setSubmitting(true)
     try {
       const result = await api.submitReviewSession(session.id, {
-        rating,
         chapter_id: chapterId ?? undefined,
+        duration_seconds: payload.durationSeconds,
+        completion_mode: payload.completionMode,
+        revealed_remaining: payload.revealedRemaining,
+        red_marked_count: payload.redNodeIds.length,
       })
       if (result.next_id) {
         const nextHref =
@@ -73,7 +81,6 @@ export default function ReviewSession() {
       <PageIntro
         eyebrow="正式复习"
         title={palace.title || '未命名宫殿'}
-        description="你需要自己逐张翻开导图卡片；本次评分会写入正式复习记录，并按照当前算法推进后续复习计划。"
         actions={
           <>
             <Link to={nextOverviewHref(chapterId)}>
@@ -88,31 +95,41 @@ export default function ReviewSession() {
         }
       />
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
+      <div className="space-y-4">
         <Card className="border-border/70 bg-card/92">
           <CardContent className="p-5">
             <MindMapReviewFlow
               title={palace.title || '未命名宫殿'}
-              description={palace.description}
+              palaceId={palace.id}
+              sessionKind="review"
               editorState={editorState}
+              canPersistEdits
               submitting={submitting}
-              onSubmit={submit}
+              onEditorStateChange={async (nextState) => {
+                setEditorState(nextState)
+                const saved = await api.savePalaceEditor(palace.id, nextState)
+                setEditorState({
+                  editor_doc: saved.editor_doc,
+                  editor_config: saved.editor_config,
+                  editor_local_config: saved.editor_local_config,
+                  lang: saved.lang,
+                })
+              }}
+              onComplete={submitCompletion}
             />
           </CardContent>
         </Card>
 
-        <div className="space-y-4">
+        <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
           <Card className="border-border/70 bg-card/92">
             <CardHeader>
               <CardTitle className="text-base">复习信息</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3 text-sm text-muted-foreground">
-              <div>算法：{session.algorithm_used}</div>
               <div>当前轮次：第 {session.review_number + 1} 次</div>
               <div>计划间隔：{session.interval_days} 天</div>
-              <div>复习区已经恢复为原来的导图宿主界面，底部和侧边的常用功能键可直接使用。</div>
-              <div>单击空白卡翻开内容，单击已翻开卡片放出一个子卡片，双击已翻开卡片放出一个同级卡片。</div>
-              <div>本次提交会影响正式排程，并决定下一次到期时间。</div>
+              <div>本轮不再按“忘记/模糊/记住”改变排程强弱，完成后会固定推进到下一轮。</div>
+              <div>如果你提前点击完成，剩余未出现节点会直接揭示并标红，然后立即结束本轮。</div>
             </CardContent>
           </Card>
 

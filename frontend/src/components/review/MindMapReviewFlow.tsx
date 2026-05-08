@@ -1,12 +1,13 @@
 import * as React from 'react'
-import { Maximize2, Minimize2, Sparkles } from 'lucide-react'
+import { Edit3, Maximize2, Minimize2, PenLine, RotateCcw, Sparkles, SquareCheckBig } from 'lucide-react'
 import type { MindMapDoc, MindMapDocNode, MindMapEditorState } from '@/api/client'
 import { MindMapFrame, type MindMapSelection } from '@/components/mindmap-host'
+import { SessionTimerBar } from '@/components/session/SessionTimerBar'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-
-export type ReviewRating = 'forgot' | 'fuzzy' | 'remembered'
-type RevealState = 'hidden' | 'placeholder' | 'revealed'
+import { cn } from '@/lib/utils'
+import { type RevealState, formatDuration } from '@/lib/session-records'
+import { useTimedSession } from '@/hooks/useTimedSession'
 
 export interface ReviewMindMapNode {
   id: string
@@ -16,14 +17,35 @@ export interface ReviewMindMapNode {
   children: ReviewMindMapNode[]
 }
 
+export interface ReviewFlowSnapshot {
+  revealMap: Record<string, RevealState>
+  redNodeIds: string[]
+  completed: boolean
+}
+
+type ReviewMode = 'flip' | 'edit'
+
+interface CompleteFlowPayload {
+  durationSeconds: number
+  completionMode: 'manual_complete' | 'auto_complete'
+  revealedRemaining: boolean
+  redNodeIds: string[]
+}
+
 interface MindMapReviewFlowProps {
   title: string
-  description?: string
+  palaceId: number | null
+  sessionKind: 'practice' | 'review'
   editorState: MindMapEditorState
+  onEditorStateChange?: (nextState: MindMapEditorState) => void
+  onComplete: (payload: CompleteFlowPayload) => void | Promise<void>
+  onRestart?: () => void
   submitting?: boolean
-  onSubmit: (rating: ReviewRating) => void | Promise<void>
-  result?: ReviewRating | null
-  resultActions?: React.ReactNode
+  persistProgress?: boolean
+  initialSnapshot?: ReviewFlowSnapshot | null
+  onSnapshotChange?: (snapshot: ReviewFlowSnapshot) => void
+  allowEditing?: boolean
+  canPersistEdits?: boolean
 }
 
 function cloneValue<T>(value: T): T {
@@ -78,17 +100,6 @@ function buildReviewTree(doc: MindMapDoc | null, fallbackTitle: string): ReviewM
   return normalizeNode(doc.root, 'root', null)
 }
 
-function buildInitialRevealState(root: ReviewMindMapNode): Record<string, RevealState> {
-  const state: Record<string, RevealState> = {}
-  const walk = (node: ReviewMindMapNode) => {
-    state[node.id] = 'hidden'
-    node.children.forEach(walk)
-  }
-  walk(root)
-  state[root.id] = 'revealed'
-  return state
-}
-
 function flattenNodes(root: ReviewMindMapNode): Map<string, ReviewMindMapNode> {
   const map = new Map<string, ReviewMindMapNode>()
   const walk = (node: ReviewMindMapNode) => {
@@ -99,56 +110,69 @@ function flattenNodes(root: ReviewMindMapNode): Map<string, ReviewMindMapNode> {
   return map
 }
 
-function findNextHiddenChild(node: ReviewMindMapNode, revealMap: Record<string, RevealState>) {
-  return node.children.find((child) => (revealMap[child.id] ?? 'hidden') === 'hidden') ?? null
+function buildInitialRevealState(root: ReviewMindMapNode, previous: Record<string, RevealState> | null = null) {
+  const next: Record<string, RevealState> = {}
+  const walk = (node: ReviewMindMapNode) => {
+    const previousState = previous?.[node.id]
+    next[node.id] = previousState ?? 'hidden'
+    node.children.forEach(walk)
+  }
+  walk(root)
+  next[root.id] = 'revealed'
+  return next
 }
 
-function findNextHiddenSibling(
-  node: ReviewMindMapNode,
-  nodeMap: Map<string, ReviewMindMapNode>,
-  revealMap: Record<string, RevealState>,
-) {
-  if (!node.parentId) return null
-  const parent = nodeMap.get(node.parentId)
-  if (!parent) return null
-  const index = parent.children.findIndex((child) => child.id === node.id)
-  if (index === -1) return null
-  for (let i = index + 1; i < parent.children.length; i += 1) {
-    const sibling = parent.children[i]
-    if ((revealMap[sibling.id] ?? 'hidden') === 'hidden') return sibling
+function collectNodeIds(root: ReviewMindMapNode) {
+  const ids: string[] = []
+  const walk = (node: ReviewMindMapNode) => {
+    ids.push(node.id)
+    node.children.forEach(walk)
   }
-  return null
+  walk(root)
+  return ids
 }
 
 function countNodes(node: ReviewMindMapNode): number {
   return 1 + node.children.reduce((sum, child) => sum + countNodes(child), 0)
 }
 
-function ratingLabel(rating: ReviewRating): string {
-  if (rating === 'forgot') return '忘记'
-  if (rating === 'fuzzy') return '模糊'
-  return '记住'
+function findNextHiddenChild(node: ReviewMindMapNode, revealMap: Record<string, RevealState>) {
+  return node.children.find((child) => (revealMap[child.id] ?? 'hidden') === 'hidden') ?? null
+}
+
+function buildSelectionNodeId(node: MindMapSelection | null): string | null {
+  if (!node) return null
+  if (node.uid) return String(node.uid)
+  if (node.memoryAnkiId != null) return String(node.memoryAnkiId)
+  return null
 }
 
 const PLACEHOLDER_NODE_STYLE = {
-  fillColor: '#e5e7eb',
-  borderColor: '#9ca3af',
+  fillColor: '#eef2f7',
+  borderColor: '#94a3b8',
   borderWidth: 2,
-  color: '#4b5563',
+  color: '#475569',
 }
 
 const REVEALED_NODE_STYLE = {
-  fillColor: '#dcfce7',
+  fillColor: '#ecfdf5',
   borderColor: '#22c55e',
   borderWidth: 2,
   color: '#14532d',
 }
 
-const ROOT_NODE_STYLE = {
-  fillColor: '#16a34a',
-  borderColor: '#15803d',
+const RED_NODE_STYLE = {
+  fillColor: '#fef2f2',
+  borderColor: '#ef4444',
   borderWidth: 2,
-  color: '#f0fdf4',
+  color: '#7f1d1d',
+}
+
+const ROOT_NODE_STYLE = {
+  fillColor: '#111827',
+  borderColor: '#0f172a',
+  borderWidth: 2,
+  color: '#f8fafc',
   fontWeight: 'bold',
 }
 
@@ -162,23 +186,30 @@ const COMPLETED_LINE_STYLE = {
   lineWidth: 3,
 }
 
-function parentChildrenAllRevealed(
+function parentChildrenAllVisible(
   parentId: string | null,
   nodeMap: Map<string, ReviewMindMapNode>,
   revealMap: Record<string, RevealState>,
-): boolean {
+) {
   if (!parentId) return false
   const parent = nodeMap.get(parentId)
   if (!parent || parent.children.length === 0) return false
-  return parent.children.every((child) => (revealMap[child.id] ?? 'hidden') === 'revealed')
+  return parent.children.every((child) => (revealMap[child.id] ?? 'hidden') !== 'hidden')
 }
 
 function getNodeVisualStyle(
   state: RevealState,
   isRoot: boolean,
   edgeCompleted: boolean,
+  redMarked: boolean,
 ): Record<string, string | number> {
-  const nodeStyle = isRoot ? ROOT_NODE_STYLE : state === 'placeholder' ? PLACEHOLDER_NODE_STYLE : REVEALED_NODE_STYLE
+  const nodeStyle = isRoot
+    ? ROOT_NODE_STYLE
+    : redMarked
+      ? RED_NODE_STYLE
+      : state === 'placeholder'
+        ? PLACEHOLDER_NODE_STYLE
+        : REVEALED_NODE_STYLE
   const lineStyle = edgeCompleted ? COMPLETED_LINE_STYLE : DEFAULT_LINE_STYLE
   return {
     ...nodeStyle,
@@ -191,6 +222,7 @@ function buildVisibleEditorDoc(
   revealMap: Record<string, RevealState>,
   nodeMap: Map<string, ReviewMindMapNode>,
   fallbackTitle: string,
+  redNodeIds: Set<string>,
 ): MindMapDoc {
   if (!source?.root) {
     return {
@@ -227,7 +259,8 @@ function buildVisibleEditorDoc(
       getNodeVisualStyle(
         forceVisible ? 'revealed' : revealState,
         fallbackId === 'root',
-        parentChildrenAllRevealed(nodeMap.get(id)?.parentId ?? null, nodeMap, revealMap),
+        parentChildrenAllVisible(nodeMap.get(id)?.parentId ?? null, nodeMap, revealMap),
+        redNodeIds.has(id) && fallbackId !== 'root',
       ),
     )
 
@@ -249,32 +282,80 @@ function buildVisibleEditorDoc(
   }
 }
 
-function buildSelectionNodeId(node: MindMapSelection | null): string | null {
-  if (!node) return null
-  if (node.uid) return String(node.uid)
-  if (node.memoryAnkiId != null) return String(node.memoryAnkiId)
-  return null
+function revealRemainingNodes(
+  root: ReviewMindMapNode,
+  revealMap: Record<string, RevealState>,
+  redNodeIds: Set<string>,
+) {
+  const nextRevealMap = { ...revealMap }
+  const nextRedNodeIds = new Set(redNodeIds)
+  let revealedRemaining = false
+
+  const walk = (node: ReviewMindMapNode) => {
+    const currentState = nextRevealMap[node.id] ?? 'hidden'
+    if (node.id !== root.id && currentState !== 'revealed') {
+      nextRevealMap[node.id] = 'revealed'
+      nextRedNodeIds.add(node.id)
+      revealedRemaining = true
+    }
+    node.children.forEach(walk)
+  }
+
+  walk(root)
+  return {
+    revealMap: nextRevealMap,
+    redNodeIds: nextRedNodeIds,
+    revealedRemaining,
+  }
+}
+
+function allNodesVisible(root: ReviewMindMapNode, revealMap: Record<string, RevealState>) {
+  const ids = collectNodeIds(root).filter((id) => id !== root.id)
+  return ids.length > 0 && ids.every((id) => (revealMap[id] ?? 'hidden') !== 'hidden')
 }
 
 export function MindMapReviewFlow({
   title,
-  description,
+  palaceId,
+  sessionKind,
   editorState,
+  onEditorStateChange,
+  onComplete,
+  onRestart,
   submitting = false,
-  onSubmit,
-  result = null,
-  resultActions,
+  persistProgress = false,
+  initialSnapshot = null,
+  onSnapshotChange,
+  allowEditing = true,
+  canPersistEdits = true,
 }: MindMapReviewFlowProps) {
+  const timer = useTimedSession({
+    kind: sessionKind,
+    title,
+    palaceId,
+  })
   const parsedDoc = React.useMemo(() => parseEditorDoc(editorState.editor_doc), [editorState.editor_doc])
   const root = React.useMemo(() => buildReviewTree(parsedDoc, title), [parsedDoc, title])
   const nodeMap = React.useMemo(() => flattenNodes(root), [root])
-  const [revealMap, setRevealMap] = React.useState<Record<string, RevealState>>(() => buildInitialRevealState(root))
+  const [revealMap, setRevealMap] = React.useState<Record<string, RevealState>>(() =>
+    buildInitialRevealState(root, initialSnapshot?.revealMap ?? null),
+  )
+  const [redNodeIds, setRedNodeIds] = React.useState<Set<string>>(
+    () => new Set((initialSnapshot?.redNodeIds ?? []).filter(Boolean)),
+  )
+  const [mode, setMode] = React.useState<ReviewMode>('flip')
   const [fullscreen, setFullscreen] = React.useState(false)
-  const clickTimerRef = React.useRef<number | null>(null)
-  const lastNodeIdRef = React.useRef<string | null>(null)
+  const [completed, setCompleted] = React.useState(Boolean(initialSnapshot?.completed))
+  const submittingRef = React.useRef(false)
+  const timerRef = React.useRef(timer)
 
   React.useEffect(() => {
-    setRevealMap(buildInitialRevealState(root))
+    const nextRevealMap = buildInitialRevealState(root, revealMap)
+    setRevealMap(nextRevealMap)
+    setRedNodeIds((current) => {
+      const validIds = new Set(collectNodeIds(root))
+      return new Set([...current].filter((id) => validIds.has(id) && id !== root.id))
+    })
   }, [root])
 
   React.useEffect(() => {
@@ -287,174 +368,306 @@ export function MindMapReviewFlow({
   }, [fullscreen])
 
   React.useEffect(() => {
+    timerRef.current = timer
+  }, [timer])
+
+  React.useEffect(() => {
+    onSnapshotChange?.({
+      revealMap,
+      redNodeIds: [...redNodeIds],
+      completed,
+    })
+  }, [completed, onSnapshotChange, redNodeIds, revealMap])
+
+  React.useEffect(() => {
     return () => {
-      if (clickTimerRef.current != null) {
-        window.clearTimeout(clickTimerRef.current)
+      const currentTimer = timerRef.current
+      if (currentTimer.startedAt && currentTimer.status !== 'completed') {
+        currentTimer.complete('left_page', { persist_progress: persistProgress })
       }
     }
-  }, [])
+  }, [persistProgress])
 
   const visibleEditorState = React.useMemo<MindMapEditorState>(
     () => ({
-      editor_doc: buildVisibleEditorDoc(parsedDoc, revealMap, nodeMap, title),
+      editor_doc: buildVisibleEditorDoc(parsedDoc, revealMap, nodeMap, title, redNodeIds),
       editor_config: cloneValue(editorState.editor_config ?? {}),
       editor_local_config: cloneValue(editorState.editor_local_config ?? {}),
       lang: editorState.lang || 'zh',
     }),
-    [editorState.editor_config, editorState.editor_local_config, editorState.lang, nodeMap, parsedDoc, revealMap, title],
+    [editorState.editor_config, editorState.editor_local_config, editorState.lang, nodeMap, parsedDoc, redNodeIds, revealMap, title],
   )
 
-  const hasAnyNonRootRevealed = React.useMemo(
-    () => Object.entries(revealMap).some(([id, state]) => id !== root.id && state === 'revealed'),
-    [revealMap, root.id],
+  const totalNodeCount = React.useMemo(() => countNodes(root), [root])
+  const visibleNonRootCount = React.useMemo(
+    () =>
+      collectNodeIds(root).filter((id) => id !== root.id && (revealMap[id] ?? 'hidden') !== 'hidden').length,
+    [revealMap, root],
   )
 
-  const handleSingleClick = React.useCallback((nodeId: string) => {
-    setRevealMap((current) => {
-      const node = nodeMap.get(nodeId)
-      if (!node) return current
-      const state = current[nodeId] ?? 'hidden'
-      if (state === 'placeholder') {
-        return { ...current, [nodeId]: 'revealed' }
+  const finishFlow = React.useCallback(
+    async (modeName: 'manual_complete' | 'auto_complete') => {
+      if (completed || submittingRef.current) return
+
+      const finishState = revealRemainingNodes(root, revealMap, redNodeIds)
+      setRevealMap(finishState.revealMap)
+      setRedNodeIds(finishState.redNodeIds)
+      setCompleted(true)
+      timer.registerActivity({ source: 'complete' })
+      const record = timer.complete(modeName, {
+        revealed_remaining: finishState.revealedRemaining,
+        red_marked_count: finishState.redNodeIds.size,
+      })
+      submittingRef.current = true
+      try {
+        await onComplete({
+          durationSeconds: record?.effectiveSeconds ?? timer.effectiveSeconds,
+          completionMode: modeName,
+          revealedRemaining: finishState.revealedRemaining,
+          redNodeIds: [...finishState.redNodeIds],
+        })
+      } finally {
+        submittingRef.current = false
       }
-      if (state !== 'revealed') return current
-      const nextChild = findNextHiddenChild(node, current)
-      if (!nextChild) return current
-      return { ...current, [nextChild.id]: 'placeholder' }
-    })
-  }, [nodeMap])
+    },
+    [completed, onComplete, redNodeIds, revealMap, root, timer],
+  )
 
-  const handleDoubleClick = React.useCallback((nodeId: string) => {
-    setRevealMap((current) => {
+  React.useEffect(() => {
+    if (sessionKind !== 'review' || completed) return
+    if (allNodesVisible(root, revealMap)) {
+      void finishFlow('auto_complete')
+    }
+  }, [completed, finishFlow, revealMap, root, sessionKind])
+
+  const handleNodeClick = React.useCallback(
+    (nodes: MindMapSelection[]) => {
+      if (mode !== 'flip' || completed) return
+      const nodeId = buildSelectionNodeId(nodes[0] ?? null)
+      if (!nodeId) return
       const node = nodeMap.get(nodeId)
-      if (!node) return current
-      const state = current[nodeId] ?? 'hidden'
-      if (state !== 'revealed') return current
-      const sibling = findNextHiddenSibling(node, nodeMap, current)
-      if (!sibling) return current
-      return { ...current, [sibling.id]: 'placeholder' }
-    })
-  }, [nodeMap])
+      if (!node) return
+      timer.registerActivity({ source: 'left_click' })
+      setRevealMap((current) => {
+        const state = current[nodeId] ?? 'hidden'
+        if (state === 'placeholder') {
+          return { ...current, [nodeId]: 'revealed' }
+        }
+        if (state !== 'revealed') return current
+        const nextChild = findNextHiddenChild(node, current)
+        if (!nextChild) return current
+        return { ...current, [nextChild.id]: 'placeholder' }
+      })
+    },
+    [completed, mode, nodeMap, timer],
+  )
 
-  const handleNodeActive = React.useCallback((nodes: MindMapSelection[]) => {
-    const nodeId = buildSelectionNodeId(nodes[0] ?? null)
-    if (!nodeId) return
+  const handleNodeContextMenu = React.useCallback(
+    (nodes: MindMapSelection[]) => {
+      if (mode !== 'flip' || completed) return
+      const nodeId = buildSelectionNodeId(nodes[0] ?? null)
+      if (!nodeId || nodeId === root.id) return
+      timer.registerActivity({ source: 'right_click' })
+      setRedNodeIds((current) => {
+        const next = new Set(current)
+        if (next.has(nodeId)) {
+          next.delete(nodeId)
+        } else {
+          next.add(nodeId)
+        }
+        return next
+      })
+    },
+    [completed, mode, root.id, timer],
+  )
 
-    if (clickTimerRef.current != null && lastNodeIdRef.current === nodeId) {
-      window.clearTimeout(clickTimerRef.current)
-      clickTimerRef.current = null
-      lastNodeIdRef.current = null
-      handleDoubleClick(nodeId)
+  const toggleMode = React.useCallback((nextMode: ReviewMode) => {
+    setMode(nextMode)
+    if (nextMode === 'edit') {
+      timer.registerActivity({ source: 'edit_mode' })
+      timer.logEvent('enter_edit_mode')
       return
     }
+    timer.registerActivity({ source: 'flip_mode' })
+    timer.logEvent('exit_edit_mode')
+  }, [timer])
 
-    if (clickTimerRef.current != null) {
-      window.clearTimeout(clickTimerRef.current)
-      if (lastNodeIdRef.current) {
-        handleSingleClick(lastNodeIdRef.current)
-      }
-      clickTimerRef.current = null
+  const handleRestart = React.useCallback(() => {
+    const initialRevealMap = buildInitialRevealState(root)
+    setRevealMap(initialRevealMap)
+    setRedNodeIds(new Set())
+    setCompleted(false)
+    setMode('flip')
+    timer.complete('restart')
+    timer.reset()
+    onRestart?.()
+  }, [onRestart, root, timer])
+
+  const handleEditorStateChange = React.useCallback((nextState: MindMapEditorState) => {
+    if (mode !== 'edit' || !canPersistEdits) {
+      timer.registerActivity({ source: 'readonly_editor_event_ignored' })
+      return
     }
-
-    lastNodeIdRef.current = nodeId
-    clickTimerRef.current = window.setTimeout(() => {
-      handleSingleClick(nodeId)
-      clickTimerRef.current = null
-      lastNodeIdRef.current = null
-    }, 220)
-  }, [handleDoubleClick, handleSingleClick])
+    onEditorStateChange?.(nextState)
+    timer.registerActivity({ source: 'editor_change' })
+  }, [canPersistEdits, mode, onEditorStateChange, timer])
 
   const mapPanel = (
-    <div className={`overflow-hidden rounded-2xl border border-border/70 bg-card ${fullscreen ? 'h-full' : ''}`}>
+    <div className={cn('overflow-hidden rounded-2xl border border-border/70 bg-card', fullscreen ? 'h-full' : '')}>
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/70 px-4 py-3">
-        <div>
-          <div className="text-sm font-semibold text-foreground">手动翻牌复习</div>
-          <div className="mt-1 text-xs text-muted-foreground">
-            单击空白卡翻开内容；单击已翻开卡片放出一个一级子卡片；双击已翻开卡片放出下一个同级卡片。
+        <div className="flex items-center gap-3">
+          <div>
+            <div className="text-sm font-semibold text-foreground">手动翻牌复习</div>
+            <div className="mt-1 text-xs text-muted-foreground">
+              {mode === 'flip'
+                ? '左键揭示或放出子卡，右键标红没记住。'
+                : '编辑模式下会直接修改原宫殿内容，退出后会尽量保留已揭示与红标状态。'}
+            </div>
           </div>
+          {completed ? <Badge className="bg-emerald-600 text-white hover:bg-emerald-600">本次已完成</Badge> : null}
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <Badge variant="outline">共 {countNodes(root)} 个节点</Badge>
-          <Badge variant="secondary">宿主导图模式</Badge>
-          <Button variant="outline" size="sm" onClick={() => setFullscreen((current) => !current)}>
+          <Badge variant="outline">已出现 {visibleNonRootCount} / {Math.max(totalNodeCount - 1, 0)}</Badge>
+          <Badge variant={mode === 'flip' ? 'secondary' : 'outline'}>
+            {mode === 'flip' ? '翻卡模式' : '编辑模式'}
+          </Badge>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setFullscreen((current) => !current)}
+          >
             {fullscreen ? <Minimize2 className="mr-2 h-4 w-4" /> : <Maximize2 className="mr-2 h-4 w-4" />}
             {fullscreen ? '退出全屏' : '全屏导图'}
           </Button>
         </div>
       </div>
 
-      <div className={`p-4 ${fullscreen ? 'h-[calc(100vh-210px)] min-h-0' : ''}`}>
+      <div className="border-b border-border/70 px-4 py-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            type="button"
+            size="sm"
+            variant={mode === 'flip' ? 'default' : 'outline'}
+            onClick={() => toggleMode('flip')}
+          >
+            <Sparkles className="mr-2 h-4 w-4" />
+            翻卡模式
+          </Button>
+          {allowEditing ? (
+            <Button
+              type="button"
+              size="sm"
+              variant={mode === 'edit' ? 'default' : 'outline'}
+              onClick={() => toggleMode('edit')}
+            >
+              <Edit3 className="mr-2 h-4 w-4" />
+              编辑模式
+            </Button>
+          ) : null}
+          {onRestart ? (
+            <Button type="button" size="sm" variant="outline" onClick={handleRestart}>
+              <RotateCcw className="mr-2 h-4 w-4" />
+              重新开始练习
+            </Button>
+          ) : null}
+          <Button type="button" size="sm" disabled={submitting} onClick={() => void finishFlow('manual_complete')}>
+            <SquareCheckBig className="mr-2 h-4 w-4" />
+            完成
+          </Button>
+        </div>
+      </div>
+
+      <div className={cn('p-4', fullscreen ? 'h-[calc(100vh-235px)] min-h-0' : '')}>
         <MindMapFrame
-          editorState={visibleEditorState}
-          readonly
-          showToolbarWhenReadonly
+          editorState={mode === 'flip' ? visibleEditorState : editorState}
+          readonly={mode === 'flip'}
+          showToolbarWhenReadonly={false}
           syncOnPropChange
           preserveViewOnSync
-          onEditorStateChange={() => {}}
-          onNodeClick={handleNodeActive}
-          className={`w-full rounded-2xl border border-border/70 bg-white ${fullscreen ? 'h-full' : 'h-[68vh]'}`}
+          onEditorStateChange={handleEditorStateChange}
+          onNodeClick={handleNodeClick}
+          onNodeContextMenu={handleNodeContextMenu}
+          className={cn(
+            'w-full rounded-2xl border border-border/70 bg-white',
+            fullscreen ? 'h-full' : 'h-[68vh]',
+          )}
         />
       </div>
     </div>
   )
 
-  const scorePanel = (
+  const infoPanel = (
     <div className="rounded-2xl border border-border/70 bg-card p-4">
-      <div className="mb-3 flex items-center gap-2 text-sm font-semibold">
-        <Sparkles className="h-4 w-4" />
-        评分
+      <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+        <PenLine className="h-4 w-4" />
+        当前状态
       </div>
-
-      {result ? (
-        <div className="space-y-4">
-          <div className="rounded-2xl bg-background/70 px-4 py-4 text-sm text-muted-foreground">
-            本次练习结果：<span className="font-medium text-foreground">{ratingLabel(result)}</span>
-          </div>
-          {resultActions}
+      <div className="mt-3 space-y-3 text-sm text-muted-foreground">
+        <div className="rounded-2xl border border-border/70 bg-background/70 px-3 py-3">
+          已揭示 {collectNodeIds(root).filter((id) => id !== root.id && (revealMap[id] ?? 'hidden') === 'revealed').length} 张，
+          红标 {redNodeIds.size} 张，当前有效时长 {formatDuration(timer.effectiveSeconds)}。
         </div>
-      ) : (
-        <>
-          {!hasAnyNonRootRevealed ? (
-            <div className="mb-3 rounded-2xl border border-dashed border-border/80 bg-background/60 px-4 py-3 text-sm text-muted-foreground">
-              至少先翻开一张非根节点卡片，再进行评分。
-            </div>
-          ) : null}
-          <div className="grid gap-3 sm:grid-cols-3">
-            <Button variant="destructive" disabled={submitting || !hasAnyNonRootRevealed} onClick={() => void onSubmit('forgot')}>
-              忘记
-            </Button>
-            <Button variant="outline" disabled={submitting || !hasAnyNonRootRevealed} onClick={() => void onSubmit('fuzzy')}>
-              模糊
-            </Button>
-            <Button disabled={submitting || !hasAnyNonRootRevealed} onClick={() => void onSubmit('remembered')}>
-              记住
-            </Button>
+        <div className="rounded-2xl border border-dashed border-border/80 px-3 py-3">
+          {mode === 'flip'
+            ? '翻卡模式只接管鼠标揭示与标红，不影响导图正文。'
+            : '编辑模式下新增节点默认隐藏，删除节点会从当前进度里移除。'}
+        </div>
+        {persistProgress ? (
+          <div className="rounded-2xl border border-dashed border-emerald-200 bg-emerald-50 px-3 py-3 text-emerald-700">
+            未完成时会自动续练；完成或手动重开后会清空这次练习进度。
           </div>
-        </>
-      )}
+        ) : (
+          <div className="rounded-2xl border border-dashed border-amber-200 bg-amber-50 px-3 py-3 text-amber-700">
+            正式复习不会跨退出保留当前翻卡进度，但会记录本次有效时长。
+          </div>
+        )}
+      </div>
     </div>
   )
 
-  return (
-    <div className="space-y-6">
-      {description ? (
-        <div className="rounded-2xl border border-border/70 bg-background/80 p-4 text-sm leading-relaxed whitespace-pre-wrap text-muted-foreground">
-          {description}
-        </div>
-      ) : null}
+  const timerBar = (
+    <SessionTimerBar
+      effectiveSeconds={timer.effectiveSeconds}
+      pauseCount={timer.pauseCount}
+      status={timer.status}
+      onStart={() => timer.start({ source: 'manual' })}
+      onPause={() => timer.pause({ source: 'manual' })}
+      onResume={() => timer.resume({ source: 'manual' })}
+      onAdjustDuration={timer.adjustDuration}
+      showCompleteAction={false}
+      showRestartAction={false}
+      className={fullscreen ? 'fixed right-5 top-5 z-[90]' : 'sticky top-5 z-20'}
+    />
+  )
 
+  const screenGlowClass =
+    timer.glowState === 'running'
+      ? 'memory-anki-session-glow-running'
+      : timer.glowState === 'paused'
+        ? 'memory-anki-session-glow-paused'
+        : ''
+
+  return (
+    <div className={cn('space-y-6', screenGlowClass)}>
       {fullscreen ? (
         <div className="fixed inset-0 z-50 bg-black/55 backdrop-blur-sm">
-          <div className="flex h-full flex-col gap-4 p-4 sm:p-6">
+          {timerBar}
+          <div className="flex h-full gap-4 p-4 sm:p-6">
             <div className="min-h-0 flex-1">{mapPanel}</div>
-            <div className="shrink-0">{scorePanel}</div>
+            <div className="hidden w-[340px] shrink-0 xl:block xl:pt-24">
+              <div className="space-y-4">{infoPanel}</div>
+            </div>
           </div>
         </div>
       ) : (
-        <>
-          {mapPanel}
-          {scorePanel}
-        </>
+        <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
+          <div>{mapPanel}</div>
+          <div className="space-y-4">
+            {timerBar}
+            {infoPanel}
+          </div>
+        </div>
       )}
     </div>
   )

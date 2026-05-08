@@ -7,6 +7,11 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from models import Chapter, Palace, Peg, Subject, engine
+from services.backup_service import (
+    count_editor_doc_nodes,
+    create_palace_version,
+    is_dangerous_structure_change,
+)
 
 DEFAULT_LAYOUT = "logicalStructure"
 DEFAULT_THEME = {"template": "avocado", "config": {}}
@@ -100,6 +105,7 @@ def save_palace_editor_state(session: Session, palace: Palace, payload: dict[str
     config_input = payload.get("editor_config")
     local_input = payload.get("editor_local_config")
     lang_input = payload.get("lang")
+    allow_dangerous_delete = bool(payload.get("confirm_dangerous_change"))
 
     local_config = (
         _coerce_local_config(local_input, lang_input)
@@ -108,7 +114,12 @@ def save_palace_editor_state(session: Session, palace: Palace, payload: dict[str
     )
 
     if doc_input is not None:
+        existing_node_count = count_editor_doc_nodes(palace.editor_doc)
         doc = normalize_editor_doc(doc_input, root_text=palace.title, root_kind="palace")
+        next_node_count = count_editor_doc_nodes(doc)
+        if is_dangerous_structure_change(existing_node_count, next_node_count) and not allow_dangerous_delete:
+            raise ValueError("检测到危险结构变更：新导图节点数骤减，已拒绝保存。请在正式编辑中确认后再执行。")
+        create_palace_version(session, palace, "editor_save")
         sync_palace_tree_from_doc(session, palace, doc)
         palace.editor_doc = _serialize(doc)
     if config_input is not None:

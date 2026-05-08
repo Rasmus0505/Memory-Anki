@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from datetime import datetime
 from models import get_session, Config
-from services.schedule_service import update_all_pending_schedules
+from services.schedule_service import normalize_algorithm, update_all_pending_schedules
 from config import DEFAULTS
 
 router = APIRouter(tags=["settings"])
@@ -19,7 +19,7 @@ def session_dep():
 def read_settings(session: Session) -> dict:
     result = dict(DEFAULTS)
     for row in session.query(Config).all():
-        result[row.key] = row.value
+        result[row.key] = normalize_algorithm(row.value) if row.key == "default_algorithm" else row.value
     return result
 
 
@@ -31,12 +31,13 @@ def write_settings(data: dict, session: Session) -> dict:
 
     for key, value in data.items():
         if key in DEFAULTS:
+            nextValue = normalize_algorithm(value) if key == "default_algorithm" else value
             row = session.query(Config).filter_by(key=key).first()
             if row:
-                row.value = str(value)
+                row.value = str(nextValue)
                 row.updated_at = datetime.utcnow()
             else:
-                session.add(Config(key=key, value=str(value)))
+                session.add(Config(key=key, value=str(nextValue)))
     session.commit()
 
     # 如果算法变了且用户选择全部应用

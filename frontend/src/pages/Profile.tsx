@@ -1,13 +1,48 @@
-import { useEffect, useState } from 'react'
-import { Download, FileJson, FileText, Settings, Upload } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import { Link, useLocation } from 'react-router-dom'
+import { Download, FileJson, FileText, HardDriveDownload, History, RotateCcw, Settings, Upload } from 'lucide-react'
 import { toast } from 'sonner'
 import { api } from '@/api/client'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import {
+  formatCompletionMethod,
+  formatDuration,
+  formatSessionKind,
+  groupTimeRecordsByDate,
+  readTimeRecords,
+} from '@/lib/session-records'
 
-export default function Profile() {
+function ProfileNav() {
+  const location = useLocation()
+  const currentPath = location.pathname
+
+  const items = [
+    { href: '/profile', label: '复习配置与导入导出', icon: Settings },
+    { href: '/profile/time-records', label: '时间记录', icon: History },
+    { href: '/profile/backups', label: '备份与恢复', icon: HardDriveDownload },
+  ]
+
+  return (
+    <div className="flex flex-wrap gap-2">
+      {items.map(({ href, label, icon: Icon }) => {
+        const active = currentPath === href
+        return (
+          <Link key={href} to={href}>
+            <Button variant={active ? 'default' : 'outline'} size="sm">
+              <Icon className="mr-2 h-4 w-4" />
+              {label}
+            </Button>
+          </Link>
+        )
+      })}
+    </div>
+  )
+}
+
+export function ProfileSettingsPage() {
   const [tab, setTab] = useState<'config' | 'io'>('config')
   const [config, setConfig] = useState<any>(null)
   const [algorithm, setAlgorithm] = useState('ebbinghaus')
@@ -58,8 +93,11 @@ export default function Profile() {
 
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">个人中心</h1>
+      <div className="space-y-3">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">个人中心</h1>
+        </div>
+        <ProfileNav />
       </div>
 
       <div className="flex gap-1 border-b">
@@ -89,11 +127,10 @@ export default function Profile() {
               <CardTitle className="text-base">高级排程策略</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                 {[
-                  { key: 'ebbinghaus', title: 'Ebbinghaus', desc: '固定序列，适合稳定训练' },
-                  { key: 'sm2', title: 'SM-2', desc: '依据反馈动态调整间隔' },
-                  { key: 'custom', title: 'Custom', desc: '完全按你的间隔策略运行' },
+                  { key: 'ebbinghaus', title: '按顺序写复习点', desc: '按 1小时、睡前、1天、x天 这样往后排。' },
+                  { key: 'custom', title: '只写天数间隔', desc: '完全按你自己填的天数顺序运行。' },
                 ].map((item) => (
                   <button
                     key={item.key}
@@ -111,31 +148,14 @@ export default function Profile() {
 
               {algorithm === 'custom' ? (
                 <div className="space-y-2">
-                  <Label htmlFor="custom-intervals">自定义间隔</Label>
+                  <Label htmlFor="custom-intervals">按天数写，例如 1天、2天、7天</Label>
                   <Input id="custom-intervals" name="custom_intervals" defaultValue={config.custom_intervals} placeholder="1,2,4,7,15,30,60" />
-                </div>
-              ) : null}
-
-              {algorithm === 'sm2' ? (
-                <div className="grid grid-cols-1 gap-4 rounded-lg border p-4 md:grid-cols-3">
-                  <div className="space-y-2">
-                    <Label htmlFor="sm2-initial-ease">初始 ease</Label>
-                    <Input id="sm2-initial-ease" name="sm2_initial_ease" defaultValue={config.sm2_initial_ease} type="number" step="0.1" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="sm2-min-ease">最小 ease</Label>
-                    <Input id="sm2-min-ease" name="sm2_min_ease" defaultValue={config.sm2_min_ease} type="number" step="0.1" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="sm2-initial-interval">初始间隔</Label>
-                    <Input id="sm2-initial-interval" name="sm2_initial_interval" defaultValue={config.sm2_initial_interval} type="number" />
-                  </div>
                 </div>
               ) : null}
 
               {algorithm === 'ebbinghaus' ? (
                 <div className="space-y-2">
-                  <Label htmlFor="ebbinghaus-intervals">Ebbinghaus 序列</Label>
+                  <Label htmlFor="ebbinghaus-intervals">按这个顺序写：1小时，睡前，1天，x天</Label>
                   <Input
                     id="ebbinghaus-intervals"
                     name="ebbinghaus_intervals"
@@ -249,13 +269,13 @@ export default function Profile() {
                 <a href={api.exportJson()} className="flex items-center gap-3 rounded-lg border p-3 text-sm transition-colors hover:bg-secondary">
                   <FileJson className="h-5 w-5 shrink-0 text-muted-foreground" />
                   <div>
-                    <div className="font-medium">JSON</div>
+                    <div className="font-medium">JSON 导出/迁移</div>
                   </div>
                 </a>
                 <a href={api.exportMarkdown()} className="flex items-center gap-3 rounded-lg border p-3 text-sm transition-colors hover:bg-secondary">
                   <FileText className="h-5 w-5 shrink-0 text-muted-foreground" />
                   <div>
-                    <div className="font-medium">Markdown</div>
+                    <div className="font-medium">Markdown 导出/迁移</div>
                   </div>
                 </a>
               </CardContent>
@@ -298,4 +318,169 @@ export default function Profile() {
       )}
     </div>
   )
+}
+
+export function ProfileTimeRecordsPage() {
+  const records = useMemo(() => readTimeRecords(), [])
+  const grouped = useMemo(() => groupTimeRecordsByDate(records), [records])
+  const dates = Object.keys(grouped).sort((left, right) => right.localeCompare(left))
+
+  return (
+    <div className="space-y-8">
+      <div className="space-y-3">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">时间记录</h1>
+        </div>
+        <ProfileNav />
+      </div>
+
+      {dates.length === 0 ? (
+        <Card>
+          <CardContent className="py-10 text-center text-sm text-muted-foreground">
+            还没有可展示的时间记录。
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="space-y-6">
+          {dates.map((dateKey) => (
+            <Card key={dateKey}>
+              <CardHeader>
+                <CardTitle className="text-base">{dateKey}</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {grouped[dateKey].map((record) => (
+                  <div key={record.id} className="rounded-2xl border border-border/70 bg-background/70 px-4 py-4 text-sm">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <div className="font-medium">{record.title}</div>
+                        <div className="mt-1 text-xs text-muted-foreground">
+                          {formatSessionKind(record.kind)} · {new Date(record.startedAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}
+                        </div>
+                      </div>
+                      <div className="text-right text-xs text-muted-foreground">
+                        <div>有效时长：{formatDuration(record.effectiveSeconds)}</div>
+                        <div>暂停次数：{record.pauseCount}</div>
+                      </div>
+                    </div>
+                    <div className="mt-3 flex flex-wrap gap-2 text-xs">
+                      <span className="rounded-full border border-border/70 px-2 py-1">{formatCompletionMethod(record.completionMethod)}</span>
+                      <span className="rounded-full border border-border/70 px-2 py-1">
+                        {record.durationEdited ? '已补录总时长' : '未补录'}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+export function ProfileBackupsPage() {
+  const [backups, setBackups] = useState<Array<{
+    kind: 'full' | 'rescue'
+    name: string
+    path: string
+    created_at: string
+    reason: string
+    has_database: boolean
+    has_attachments: boolean
+  }>>([])
+  const [loading, setLoading] = useState(true)
+
+  const loadBackups = async () => {
+    setLoading(true)
+    try {
+      const result = await api.getBackups()
+      setBackups(result.items)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    void loadBackups()
+  }, [])
+
+  const handleCreateBackup = async () => {
+    const result = await api.createBackup('manual')
+    toast.success(`已创建整库备份：${result.path}`)
+    await loadBackups()
+  }
+
+  const handleRestoreBackup = async (path: string) => {
+    const confirmed = window.confirm('整库恢复会先自动生成事故快照，再把数据库和附件回到目标备份。确定继续吗？')
+    if (!confirmed) return
+    const result = await api.restoreBackup(path)
+    toast.success(`整库恢复完成，事故快照已保存到：${result.rescue_path}`)
+    await loadBackups()
+  }
+
+  return (
+    <div className="space-y-8">
+      <div className="space-y-3">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">备份与恢复</h1>
+        </div>
+        <ProfileNav />
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">整库备份</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="text-sm text-muted-foreground">
+            主库仍然是 SQLite。这里提供项目内整库快照和事故快照，用于快速回滚数据库与附件。
+          </div>
+          <Button onClick={() => void handleCreateBackup()}>
+            <HardDriveDownload className="mr-2 h-4 w-4" />
+            立即备份
+          </Button>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">备份列表</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {loading ? (
+            <div className="py-6 text-sm text-muted-foreground">正在读取备份列表…</div>
+          ) : backups.length === 0 ? (
+            <div className="py-6 text-sm text-muted-foreground">当前还没有可用备份。</div>
+          ) : (
+            backups.map((backup) => (
+              <div key={backup.path} className="rounded-2xl border border-border/70 bg-background/70 px-4 py-4 text-sm">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <div className="font-medium">{backup.name}</div>
+                    <div className="mt-1 text-xs text-muted-foreground">
+                      {backup.kind === 'full' ? '整库备份' : '事故快照'} · {backup.created_at}
+                    </div>
+                    <div className="mt-2 text-xs text-muted-foreground break-all">{backup.path}</div>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {backup.kind === 'full' ? (
+                      <Button variant="outline" size="sm" onClick={() => void handleRestoreBackup(backup.path)}>
+                        <RotateCcw className="mr-2 h-4 w-4" />
+                        整库恢复
+                      </Button>
+                    ) : null}
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  )
+}
+
+export default function Profile() {
+  return <ProfileSettingsPage />
 }

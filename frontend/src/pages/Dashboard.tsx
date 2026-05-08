@@ -1,15 +1,18 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowRight, BookOpen, Plus, Sparkles, Star, TrendingUp } from 'lucide-react'
+import { ArrowRight, BookOpen, Clock3, Plus, Sparkles, Timer, TrendingUp } from 'lucide-react'
 import { api } from '@/api/client'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { formatDuration, getWeeklyLocalSessionStats } from '@/lib/session-records'
 
 export default function Dashboard() {
   const [data, setData] = useState<any>(null)
+  const [localStats, setLocalStats] = useState(() => getWeeklyLocalSessionStats())
 
   useEffect(() => {
     api.getDashboard().then(setData)
+    setLocalStats(getWeeklyLocalSessionStats())
   }, [])
 
   if (!data) {
@@ -34,15 +37,21 @@ export default function Dashboard() {
       linkText: '开始复习',
     },
     {
-      label: '本周完成率',
-      value: `${data.stats.completion_rate}%`,
+      label: '本周正式复习次数',
+      value: data.stats.review_count,
       icon: TrendingUp,
       color: '',
     },
     {
-      label: '平均回忆分',
-      value: data.stats.avg_score,
-      icon: Star,
+      label: '本周正式复习时长',
+      value: formatDuration(data.stats.review_duration_seconds),
+      icon: Clock3,
+      color: '',
+    },
+    {
+      label: '本周练习时长',
+      value: formatDuration(localStats.practiceDurationSeconds),
+      icon: Timer,
       color: '',
     },
   ]
@@ -53,7 +62,7 @@ export default function Dashboard() {
         <h1 className="text-2xl font-semibold tracking-tight">仪表盘</h1>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
         {statCards.map(({ label, value, icon: Icon, color, link, linkText, subtitle }) => (
           <Card key={label}>
             <CardHeader className="flex flex-row items-center justify-between pb-2">

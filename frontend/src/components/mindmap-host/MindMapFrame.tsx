@@ -20,6 +20,7 @@ interface MindMapFrameProps {
   onEditorStateChange: (nextState: MindMapEditorState) => void
   onNodeActive?: (nodes: MindMapSelection[]) => void
   onNodeClick?: (nodes: MindMapSelection[]) => void
+  onNodeContextMenu?: (nodes: MindMapSelection[]) => void
   onReady?: () => void
 }
 
@@ -55,6 +56,7 @@ export function MindMapFrame({
   onEditorStateChange,
   onNodeActive,
   onNodeClick,
+  onNodeContextMenu,
   onReady,
 }: MindMapFrameProps) {
   const iframeRef = useRef<HTMLIFrameElement | null>(null)
@@ -62,6 +64,7 @@ export function MindMapFrame({
   const onEditorStateChangeRef = useRef(onEditorStateChange)
   const onNodeActiveRef = useRef(onNodeActive)
   const onNodeClickRef = useRef(onNodeClick)
+  const onNodeContextMenuRef = useRef(onNodeContextMenu)
   const onReadyRef = useRef(onReady)
   const lastSyncedFingerprintRef = useRef('')
   const [isLoaded, setIsLoaded] = useState(false)
@@ -70,6 +73,7 @@ export function MindMapFrame({
   onEditorStateChangeRef.current = onEditorStateChange
   onNodeActiveRef.current = onNodeActive
   onNodeClickRef.current = onNodeClick
+  onNodeContextMenuRef.current = onNodeContextMenu
   onReadyRef.current = onReady
 
   const rawHostId = useId()
@@ -117,6 +121,9 @@ export function MindMapFrame({
         }
         if (event === 'node_click') {
           onNodeClickRef.current?.(Array.isArray(payload) ? (payload as MindMapSelection[]) : [])
+        }
+        if (event === 'node_contextmenu') {
+          onNodeContextMenuRef.current?.(Array.isArray(payload) ? (payload as MindMapSelection[]) : [])
         }
       },
     }

@@ -19,7 +19,7 @@ import {
 import Dashboard from './pages/Dashboard'
 import PalaceList from './pages/PalaceList'
 import PalaceEdit from './pages/PalaceEdit'
-import Profile from './pages/Profile'
+import Profile, { ProfileBackupsPage, ProfileTimeRecordsPage } from './pages/Profile'
 import Knowledge from './pages/Knowledge'
 import PalaceView from './pages/PalaceView'
 import PalacePractice from './pages/PalacePractice'
@@ -169,6 +169,8 @@ function Shell() {
               <Route path="/review" element={<ReviewOverview />} />
               <Route path="/review/session/:id" element={<ReviewSession />} />
               <Route path="/profile" element={<Profile />} />
+              <Route path="/profile/time-records" element={<ProfileTimeRecordsPage />} />
+              <Route path="/profile/backups" element={<ProfileBackupsPage />} />
             </Routes>
           </div>
         </main>

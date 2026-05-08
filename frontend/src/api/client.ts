@@ -65,9 +65,8 @@ export interface ReviewQueueResponse {
   smoothed_count: number
   stats: {
     total: number
-    completed: number
-    completion_rate: number
-    avg_score: number
+    review_count: number
+    review_duration_seconds: number
   }
   chapter: ReviewQueueChapter | null
   reviews: ReviewScheduleSummary[]
@@ -78,6 +77,9 @@ export interface PalaceReviewPlanItem {
   scheduled_date: string | null
   completed: boolean
   review_number: number
+  sequence_label: string
+  same_day_index: number
+  same_day_total: number
   algorithm_used: string
   review_type: string
   interval_days: number
@@ -87,6 +89,35 @@ export interface PalaceReviewPlanResponse {
   palace_id: number
   palace_title: string
   plan: PalaceReviewPlanItem[]
+}
+
+export interface PalaceVersionSummary {
+  id: number
+  palace_id: number
+  trigger_reason: string
+  title: string
+  created_at_value: string | null
+  created_at: string | null
+}
+
+export interface PalaceVersionListResponse {
+  palace_id: number
+  palace_title: string
+  versions: PalaceVersionSummary[]
+}
+
+export interface BackupSummary {
+  kind: 'full' | 'rescue'
+  name: string
+  path: string
+  created_at: string
+  reason: string
+  has_database: boolean
+  has_attachments: boolean
+}
+
+export interface BackupListResponse {
+  items: BackupSummary[]
 }
 
 async function request<T>(url: string, options?: RequestInit): Promise<T> {
@@ -135,7 +166,16 @@ export const api = {
   getReviewItem: (id: number) => request<ReviewScheduleSummary>(`/review/${id}`),
   getReviewSession: (id: number) => request<ReviewScheduleSummary>(`/review/session/${id}`),
   submitReview: (id: number, data: any) => request<any>(`/review/${id}/submit`, { method: 'POST', body: JSON.stringify(data) }),
-  submitReviewSession: (id: number, data: { rating: 'forgot' | 'fuzzy' | 'remembered'; chapter_id?: number; duration_seconds?: number }) =>
+  submitReviewSession: (
+    id: number,
+    data: {
+      chapter_id?: number
+      duration_seconds?: number
+      completion_mode?: 'manual_complete' | 'auto_complete'
+      revealed_remaining?: boolean
+      red_marked_count?: number
+    },
+  ) =>
     request<any>(`/review/session/${id}/submit`, { method: 'POST', body: JSON.stringify(data) }),
   getWeeklyStats: () => request<any>('/review/stats/weekly'),
 
@@ -178,6 +218,18 @@ export const api = {
   getPalaceEditor: (id: number) => request<{ palace: any } & MindMapEditorState>(`/palaces/${id}/editor`),
   savePalaceEditor: (id: number, data: Partial<MindMapEditorState>) =>
     request<{ palace: any } & MindMapEditorState>(`/palaces/${id}/editor`, { method: 'PUT', body: JSON.stringify(data) }),
+  savePalaceEditorWithOptions: (id: number, data: Record<string, unknown>) =>
+    request<{ palace: any } & MindMapEditorState>(`/palaces/${id}/editor`, { method: 'PUT', body: JSON.stringify(data) }),
+  getPalaceVersions: (id: number) => request<PalaceVersionListResponse>(`/palaces/${id}/versions`),
+  restorePalaceVersion: (id: number, versionId: number) =>
+    request<any>(`/palaces/${id}/restore-version`, { method: 'POST', body: JSON.stringify({ version_id: versionId }) }),
+
+  // Backups
+  getBackups: () => request<BackupListResponse>('/backups'),
+  createBackup: (reason = 'manual') => request<{ ok: boolean; path: string }>('/backups/create', { method: 'POST', body: JSON.stringify({ reason }) }),
+  restoreBackup: (path: string) => request<{ ok: boolean; rescue_path: string }>('/backups/restore-database', { method: 'POST', body: JSON.stringify({ path }) }),
+  recoverPalacesFromCommit: (commit: string, palaceIds: number[]) =>
+    request<any>('/backups/recover-palaces', { method: 'POST', body: JSON.stringify({ commit, palace_ids: palaceIds }) }),
 
   // Node Connections
   getConnections: (params?: { source_type?: string; source_id?: number }) => {

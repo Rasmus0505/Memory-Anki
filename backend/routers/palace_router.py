@@ -9,6 +9,14 @@ from editor_state import (
     save_palace_editor_state,
     sync_palace_editor_root,
 )
+from services.backup_service import (
+    create_full_backup,
+    list_backups,
+    list_palace_versions,
+    recover_palaces_from_git_snapshot,
+    restore_database_backup,
+    restore_palace_version,
+)
 from services.palace_service import (
     list_palaces, get_palace, create_palace, update_palace, delete_palace, restore_archived_palaces,
 )
@@ -58,12 +66,19 @@ def schedule_display_datetime(schedule: ReviewSchedule, palace: Palace, session:
     return datetime.combine(schedule.scheduled_date, display_time)
 
 
-def review_plan_item_json(schedule: ReviewSchedule) -> dict:
+def review_plan_item_json(
+    schedule: ReviewSchedule,
+    same_day_index: int,
+    same_day_total: int,
+) -> dict:
     return {
         "id": schedule.id,
         "scheduled_date": schedule.scheduled_date.isoformat() if schedule.scheduled_date else None,
         "completed": schedule.completed,
         "review_number": schedule.review_number,
+        "sequence_label": f"第 {schedule.review_number + 1} 次复习",
+        "same_day_index": same_day_index,
+        "same_day_total": same_day_total,
         "algorithm_used": schedule.algorithm_used,
         "review_type": schedule.review_type,
         "interval_days": schedule.interval_days,
@@ -153,10 +168,27 @@ def api_review_plan(palace_id: int, s: Session = Depends(session_dep)):
         .order_by(ReviewSchedule.scheduled_date, ReviewSchedule.id)
         .all()
     )
+    same_day_totals: dict[str | None, int] = {}
+    same_day_seen: dict[str | None, int] = {}
+    for schedule in schedules:
+        key = schedule.scheduled_date.isoformat() if schedule.scheduled_date else None
+        same_day_totals[key] = same_day_totals.get(key, 0) + 1
+
+    plan = []
+    for schedule in schedules:
+        key = schedule.scheduled_date.isoformat() if schedule.scheduled_date else None
+        same_day_seen[key] = same_day_seen.get(key, 0) + 1
+        plan.append(
+            review_plan_item_json(
+                schedule,
+                same_day_index=same_day_seen[key],
+                same_day_total=same_day_totals[key],
+            )
+        )
     return {
         "palace_id": palace.id,
         "palace_title": palace.title,
-        "plan": [review_plan_item_json(schedule) for schedule in schedules],
+        "plan": plan,
     }
 
 
@@ -181,6 +213,66 @@ def api_update_editor(palace_id: int, data: dict, s: Session = Depends(session_d
         "palace": palace_json(palace, s),
         **state,
     }
+
+
+@router.get("/palaces/{palace_id}/versions")
+def api_list_palace_versions(palace_id: int, s: Session = Depends(session_dep)):
+    palace = get_palace(s, palace_id)
+    if not palace:
+        return {"error": "not found"}
+    return {
+        "palace_id": palace.id,
+        "palace_title": palace.title,
+        "versions": list_palace_versions(s, palace.id),
+    }
+
+
+@router.post("/palaces/{palace_id}/restore-version")
+def api_restore_palace_version(palace_id: int, data: dict, s: Session = Depends(session_dep)):
+    palace = get_palace(s, palace_id)
+    if not palace:
+        return {"error": "not found"}
+    version_id = int(data.get("version_id", 0))
+    if version_id <= 0:
+        return {"error": "invalid version id"}
+    restore_palace_version(s, palace, version_id)
+    s.refresh(palace)
+    return {
+        "ok": True,
+        "palace": palace_json(palace, s),
+        "versions": list_palace_versions(s, palace.id),
+    }
+
+
+@router.get("/backups")
+def api_list_backups():
+    return {"items": list_backups()}
+
+
+@router.post("/backups/create")
+def api_create_backup(data: dict | None = None):
+    reason = (data or {}).get("reason") or "manual"
+    folder = create_full_backup(str(reason))
+    return {"ok": True, "path": str(folder)}
+
+
+@router.post("/backups/restore-database")
+def api_restore_backup(data: dict, s: Session = Depends(session_dep)):
+    backup_path = str(data.get("path") or "")
+    if not backup_path:
+        return {"error": "missing backup path"}
+    rescue = restore_database_backup(backup_path)
+    return {"ok": True, "rescue_path": str(rescue)}
+
+
+@router.post("/backups/recover-palaces")
+def api_recover_palaces(data: dict, s: Session = Depends(session_dep)):
+    commit = str(data.get("commit") or "").strip()
+    palace_ids = [int(value) for value in (data.get("palace_ids") or []) if value is not None]
+    if not commit or not palace_ids:
+        return {"error": "missing commit or palace_ids"}
+    result = recover_palaces_from_git_snapshot(s, commit, palace_ids)
+    return {"ok": True, **result}
 
 
 @router.post("/palaces/{palace_id}/upload")

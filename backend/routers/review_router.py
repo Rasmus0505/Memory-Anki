@@ -8,7 +8,6 @@ from services.review_service import (
     get_overdue_count,
     get_review_queue_payload,
     get_weekly_stats,
-    map_rating_to_score,
     spread_overdue,
     submit_review,
 )
@@ -145,13 +144,9 @@ def api_review_session(schedule_id: int, session: Session = Depends(session_dep)
 
 @router.post("/review/session/{schedule_id}/submit")
 def api_submit_session(schedule_id: int, data: dict, session: Session = Depends(session_dep)):
-    rating = data.get("rating")
-    fallback_score = data.get("score")
-    numeric_score = map_rating_to_score(rating, fallback_score)
     log, extra = submit_review(
         session,
         schedule_id,
-        numeric_score,
         int(data.get("duration_seconds", 0)),
     )
     if not log:
@@ -165,7 +160,7 @@ def api_submit_session(schedule_id: int, data: dict, session: Session = Depends(
     )
     return {
         "ok": True,
-        "rating": rating,
+        "completion_mode": data.get("completion_mode"),
         "score": log.score,
         "next_id": next_schedule.id if next_schedule else None,
         "mastered": extra.get("mastered", False),

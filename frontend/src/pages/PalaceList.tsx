@@ -57,6 +57,20 @@ function getReviewLabel(reviewNumber: number): string {
   return `第 ${reviewNumber + 1} 次复习`
 }
 
+function formatPlanType(item: PalaceReviewPlanResponse['plan'][number]): string {
+  if (item.review_type === '1h') return '1小时'
+  if (item.review_type === 'sleep') return 'sleep'
+  return `${item.interval_days}天`
+}
+
+function formatCompactPlanTitle(item: PalaceReviewPlanResponse['plan'][number], palaceTitle: string) {
+  return `${item.same_day_index}.${palaceTitle}-${formatPlanType(item)}`
+}
+
+function formatPalaceRoundLabel(item: PalaceReviewPlanResponse['plan'][number]) {
+  return `宫殿第 ${item.review_number + 1} 轮`
+}
+
 function parsePlanDate(value: string): Date {
   return new Date(`${value}T00:00:00`)
 }
@@ -405,20 +419,22 @@ export default function PalaceList() {
                           <div key={item.id} className="rounded-xl border border-border/70 bg-background/80 px-4 py-3">
                             <div className="flex flex-wrap items-center justify-between gap-3">
                               <div className="text-sm font-medium text-foreground">
-                                {reviewPlan?.palace_title || '当前宫殿'} · {getReviewLabel(item.review_number)}
+                                {formatCompactPlanTitle(item, reviewPlan?.palace_title || '当前宫殿')}
                               </div>
-                              <Badge
-                                className={cn(
-                                  item.completed
-                                    ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-                                    : 'border-border/80 bg-background text-muted-foreground',
-                                )}
-                              >
-                                {item.completed ? '已完成' : '未完成'}
-                              </Badge>
+                              <div className="flex items-center gap-2">
+                                <Badge
+                                  className={cn(
+                                    item.completed
+                                      ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                                      : 'border-border/80 bg-background text-muted-foreground',
+                                  )}
+                                >
+                                  {item.completed ? '已完成' : '未完成'}
+                                </Badge>
+                              </div>
                             </div>
-                            <div className="mt-2 text-xs text-muted-foreground">
-                              间隔 {item.interval_days} 天
+                            <div className="mt-2 space-y-1 text-xs text-muted-foreground">
+                              <div>{formatPalaceRoundLabel(item)}</div>
                             </div>
                           </div>
                         ))}

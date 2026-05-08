@@ -45,6 +45,7 @@ class Palace(Base):
     review_schedules = relationship("ReviewSchedule", back_populates="palace", cascade="all, delete-orphan")
     review_logs = relationship("ReviewLog", back_populates="palace", cascade="all, delete-orphan")
     chapters = relationship("Chapter", secondary=chapter_palace_table, back_populates="palaces")
+    versions = relationship("PalaceVersion", back_populates="palace", cascade="all, delete-orphan")
 
 
 class Peg(Base):
@@ -155,6 +156,22 @@ class Config(Base):
     key = Column(String(100), unique=True, nullable=False)
     value = Column(Text, default="")
     updated_at = Column(DateTime, default=datetime.utcnow)
+
+
+class PalaceVersion(Base):
+    __tablename__ = "palace_versions"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    palace_id = Column(Integer, ForeignKey("palaces.id", ondelete="CASCADE"), nullable=False)
+    trigger_reason = Column(String(50), default="manual_save")
+    title = Column(String(200), nullable=False, default="")
+    created_at_value = Column(DateTime, nullable=True)
+    editor_doc = Column(Text, default="")
+    peg_snapshot = Column(Text, default="")
+    chapter_snapshot = Column(Text, default="")
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    palace = relationship("Palace", back_populates="versions")
 
 
 def init_db():

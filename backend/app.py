@@ -5,6 +5,8 @@ from fastapi.staticfiles import StaticFiles
 from models import init_db, get_session, Config
 from config import DEFAULTS, ATTACHMENTS_DIR
 from editor_state import ensure_editor_schema
+from services.backup_service import ensure_backup_schema, ensure_daily_backup
+from services.schedule_service import migrate_sm2_to_ebbinghaus, normalize_algorithm
 
 app = FastAPI(title="记忆宫殿 API")
 
@@ -37,11 +39,16 @@ def startup():
     ensure_editor_schema()
     s = get_session()
     try:
+        ensure_backup_schema(s)
         for key, value in DEFAULTS.items():
             existing = s.query(Config).filter_by(key=key).first()
             if not existing:
                 s.add(Config(key=key, value=value))
+            elif key == "default_algorithm":
+                existing.value = normalize_algorithm(existing.value)
         s.commit()
+        migrate_sm2_to_ebbinghaus(s)
+        ensure_daily_backup()
     finally:
         s.close()
 

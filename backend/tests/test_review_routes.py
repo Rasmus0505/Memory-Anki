@@ -8,6 +8,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
+import routers.palace_router as palace_router
 import routers.review_router as review_router
 from models import Base, Palace, ReviewSchedule
 
@@ -22,11 +23,13 @@ class ReviewRouteTests(unittest.TestCase):
         Base.metadata.create_all(self.engine)
         self.SessionLocal = sessionmaker(bind=self.engine)
         self.original_get_session = review_router.get_session
+        self.original_palace_get_session = palace_router.get_session
 
         def get_test_session():
             return self.SessionLocal()
 
         review_router.get_session = get_test_session
+        palace_router.get_session = get_test_session
 
         with self.SessionLocal() as session:
             palace = Palace(
@@ -63,10 +66,12 @@ class ReviewRouteTests(unittest.TestCase):
 
         app = FastAPI()
         app.include_router(review_router.router, prefix="/api")
+        app.include_router(palace_router.router, prefix="/api")
         self.client = TestClient(app)
 
     def tearDown(self):
         review_router.get_session = self.original_get_session
+        palace_router.get_session = self.original_palace_get_session
         Base.metadata.drop_all(self.engine)
         self.engine.dispose()
 
@@ -83,6 +88,34 @@ class ReviewRouteTests(unittest.TestCase):
         self.assertIn("editor_doc", payload["palace"])
         self.assertIsInstance(payload["palace"]["editor_doc"], str)
         self.assertIn("Branch A", payload["palace"]["editor_doc"])
+
+    def test_palace_review_plan_marks_same_day_multiple_reviews(self):
+        with self.SessionLocal() as session:
+            palace = session.query(Palace).filter_by(title="Test Palace").first()
+            self.assertIsNotNone(palace)
+            session.add(
+                ReviewSchedule(
+                    palace_id=palace.id,
+                    scheduled_date=date.today() - timedelta(days=1),
+                    interval_days=1,
+                    algorithm_used="ebbinghaus",
+                    completed=False,
+                    review_number=1,
+                    review_type="standard",
+                )
+            )
+            session.commit()
+
+        response = self.client.get("/api/palaces/1/review-plan")
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(len(payload["plan"]), 2)
+        self.assertEqual(payload["plan"][0]["sequence_label"], "第 1 次复习")
+        self.assertEqual(payload["plan"][0]["same_day_index"], 1)
+        self.assertEqual(payload["plan"][0]["same_day_total"], 2)
+        self.assertEqual(payload["plan"][1]["sequence_label"], "第 2 次复习")
+        self.assertEqual(payload["plan"][1]["same_day_index"], 2)
+        self.assertEqual(payload["plan"][1]["same_day_total"], 2)
 
 
 if __name__ == "__main__":

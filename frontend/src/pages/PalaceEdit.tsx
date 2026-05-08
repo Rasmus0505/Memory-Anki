@@ -1,6 +1,6 @@
 import { type ChangeEvent, useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, CheckCircle2, Link2, Paperclip, Save, Upload } from 'lucide-react'
+import { ArrowLeft, CheckCircle2, History, Link2, Paperclip, Save, Upload } from 'lucide-react'
 import { api, type MindMapEditorState } from '@/api/client'
 import { PageIntro } from '@/components/layout/PageIntro'
 import { MindMapFrame, type MindMapSelection } from '@/components/mindmap-host'
@@ -10,6 +10,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { usePersistedMindMapEditor } from '@/hooks/usePersistedMindMapEditor'
+import { SessionTimerBar } from '@/components/session/SessionTimerBar'
+import { useTimedSession } from '@/hooks/useTimedSession'
 
 interface PalaceMeta {
   id: number
@@ -27,9 +29,12 @@ interface ChapterOption {
 
 function formatDateTimeInputValue(value: string | null): string {
   if (!value) return ''
+  const match = value.match(/^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2})/)
+  if (match) {
+    return `${match[1]}T${match[2]}`
+  }
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return ''
-
   const year = date.getFullYear()
   const month = `${date.getMonth() + 1}`.padStart(2, '0')
   const day = `${date.getDate()}`.padStart(2, '0')
@@ -38,18 +43,8 @@ function formatDateTimeInputValue(value: string | null): string {
   return `${year}-${month}-${day}T${hours}:${minutes}`
 }
 
-function formatCreatedAtDisplay(value: string | null): string {
-  if (!value) return '尚未确立建造时间'
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return '尚未确立建造时间'
-  return new Intl.DateTimeFormat('zh-CN', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-  }).format(date).replace(/\//g, '-')
+function toLocalDateTimePayload(value: string): string {
+  return `${value}:00`
 }
 
 export default function PalaceEdit() {
@@ -63,6 +58,13 @@ export default function PalaceEdit() {
   const [createdAt, setCreatedAt] = useState('')
   const [chapterOptions, setChapterOptions] = useState<ChapterOption[]>([])
   const [selectedChapterIds, setSelectedChapterIds] = useState<number[]>([])
+  const [versionOpen, setVersionOpen] = useState(false)
+  const [versions, setVersions] = useState<Array<{
+    id: number
+    trigger_reason: string
+    created_at: string | null
+    created_at_value: string | null
+  }>>([])
 
   const {
     meta,
@@ -82,10 +84,35 @@ export default function PalaceEdit() {
       editor_local_config: response.editor_local_config,
       lang: response.lang,
     }),
+    onSaveError: async (nextError, pendingState) => {
+      if (!palaceId || !nextError.message.includes('危险结构变更')) return false
+      const confirmed = window.confirm('这次保存会让宫殿节点数量骤减。只有在你确实要大幅删除宫殿结构时才继续。确定继续保存吗？')
+      if (!confirmed) return true
+      await api.savePalaceEditorWithOptions(palaceId, {
+        ...pendingState,
+        confirm_dangerous_change: true,
+      })
+      await reload()
+      setFrameVersion((value) => value + 1)
+      return true
+    },
   })
 
   const palace = meta as PalaceMeta | null
   const selectedNode = selectedNodes[0] ?? null
+  const timer = useTimedSession({
+    kind: 'palace_edit',
+    title: title || palace?.title || '未命名宫殿',
+    palaceId,
+  })
+
+  useEffect(() => {
+    return () => {
+      if (timer.startedAt && timer.status !== 'completed') {
+        timer.complete('left_page')
+      }
+    }
+  }, [timer])
 
   useEffect(() => {
     if (palaceId || isCreatingDraft) return
@@ -129,9 +156,10 @@ export default function PalaceEdit() {
 
   const handleSaveMeta = async () => {
     if (!palace) return
+    timer.registerActivity({ source: 'save_meta' })
     await api.updatePalace(palace.id, {
       title: title.trim() || '未命名宫殿',
-      created_at: createdAt ? new Date(createdAt).toISOString() : null,
+      created_at: createdAt ? toLocalDateTimePayload(createdAt) : null,
     })
     await reload()
     setFrameVersion((value) => value + 1)
@@ -139,6 +167,7 @@ export default function PalaceEdit() {
 
   const handleEstablishCreatedAt = async () => {
     if (!palace) return
+    timer.registerActivity({ source: 'establish_created_at' })
     const now = new Date()
     await api.updatePalace(palace.id, {
       created_at: now.toISOString(),
@@ -149,24 +178,45 @@ export default function PalaceEdit() {
   const handleAttachmentUpload = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     if (!file || !palace) return
+    timer.registerActivity({ source: 'attachment_upload' })
     await api.uploadAttachment(palace.id, file)
     await reload()
     event.target.value = ''
   }
 
   const handleAttachmentDelete = async (attachmentId: number) => {
+    timer.registerActivity({ source: 'attachment_delete' })
     await api.deleteAttachment(attachmentId)
     await reload()
   }
 
   const handleChapterToggle = async (chapterId: number) => {
     if (!palace) return
+    timer.registerActivity({ source: 'chapter_toggle' })
     const nextIds = selectedChapterIds.includes(chapterId)
       ? selectedChapterIds.filter((item) => item !== chapterId)
       : [...selectedChapterIds, chapterId]
     setSelectedChapterIds(nextIds)
     await api.linkPalaceChapters(palace.id, nextIds)
     await reload()
+  }
+
+  const handleOpenVersions = async () => {
+    if (!palace) return
+    const result = await api.getPalaceVersions(palace.id)
+    setVersions(result.versions)
+    setVersionOpen(true)
+  }
+
+  const handleRestoreVersion = async (versionId: number) => {
+    if (!palace) return
+    const confirmed = window.confirm('恢复历史版本只会回滚当前宫殿内容，不会影响其他宫殿和复习记录。确定继续吗？')
+    if (!confirmed) return
+    await api.restorePalaceVersion(palace.id, versionId)
+    await reload()
+    setFrameVersion((value) => value + 1)
+    const result = await api.getPalaceVersions(palace.id)
+    setVersions(result.versions)
   }
 
   const statusBadge = useMemo(() => {
@@ -193,6 +243,12 @@ export default function PalaceEdit() {
                 返回列表
               </Button>
             </Link>
+            {palace ? (
+              <Button variant="outline" size="sm" onClick={() => void handleOpenVersions()}>
+                <History className="mr-2 h-4 w-4" />
+                历史版本
+              </Button>
+            ) : null}
             {statusBadge}
           </>
         }
@@ -200,6 +256,20 @@ export default function PalaceEdit() {
 
       <div className="grid gap-4 xl:grid-cols-[360px_minmax(0,1fr)]">
         <div className="space-y-4">
+          <SessionTimerBar
+            effectiveSeconds={timer.effectiveSeconds}
+            pauseCount={timer.pauseCount}
+            status={timer.status}
+            onStart={() => timer.start({ source: 'manual' })}
+            onPause={() => timer.pause({ source: 'manual' })}
+            onResume={() => timer.resume({ source: 'manual' })}
+            onComplete={() => {
+              timer.complete('saved')
+            }}
+            onAdjustDuration={timer.adjustDuration}
+            className="sticky top-5 z-20"
+          />
+
           <Card className="border-border/70 bg-card/92">
             <CardHeader>
               <CardTitle className="text-base">宫殿字段</CardTitle>
@@ -225,9 +295,6 @@ export default function PalaceEdit() {
                         value={createdAt}
                         onChange={(event) => setCreatedAt(event.target.value)}
                       />
-                      <p className="text-xs text-muted-foreground">
-                        当前记录：{formatCreatedAtDisplay(palace.created_at)}
-                      </p>
                     </div>
                   </div>
                 ) : (
@@ -243,7 +310,7 @@ export default function PalaceEdit() {
               </div>
               <Button type="button" className="w-full" onClick={handleSaveMeta}>
                 <Save className="mr-2 h-4 w-4" />
-                保存业务字段
+                保存
               </Button>
             </CardContent>
           </Card>
@@ -315,8 +382,14 @@ export default function PalaceEdit() {
               <MindMapFrame
                 key={`${palaceId}-${frameVersion}`}
                 editorState={editorState}
-                onEditorStateChange={(nextState: MindMapEditorState) => setEditorState(nextState)}
-                onNodeActive={setSelectedNodes}
+                onEditorStateChange={(nextState: MindMapEditorState) => {
+                  timer.registerActivity({ source: 'mind_map_edit' })
+                  setEditorState(nextState)
+                }}
+                onNodeActive={(nodes) => {
+                  timer.registerActivity({ source: 'node_active' })
+                  setSelectedNodes(nodes)
+                }}
                 className="h-[64vh] w-full rounded-2xl border border-border/70 bg-white"
               />
             ) : (
@@ -327,6 +400,34 @@ export default function PalaceEdit() {
           </CardContent>
         </Card>
       </div>
+
+      {versionOpen ? (
+        <Card className="border-border/70 bg-card/92">
+          <CardHeader className="flex flex-row items-center justify-between gap-3">
+            <CardTitle className="text-base">宫殿历史版本</CardTitle>
+            <Button variant="ghost" size="sm" onClick={() => setVersionOpen(false)}>关闭</Button>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {versions.length === 0 ? (
+              <div className="text-sm text-muted-foreground">当前还没有历史版本。</div>
+            ) : (
+              versions.map((version) => (
+                <div key={version.id} className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border/70 bg-background/70 px-4 py-4 text-sm">
+                  <div>
+                    <div className="font-medium">{version.trigger_reason}</div>
+                    <div className="mt-1 text-xs text-muted-foreground">
+                      {version.created_at || '未知时间'}
+                    </div>
+                  </div>
+                  <Button variant="outline" size="sm" onClick={() => void handleRestoreVersion(version.id)}>
+                    恢复这个版本
+                  </Button>
+                </div>
+              ))
+            )}
+          </CardContent>
+        </Card>
+      ) : null}
     </div>
   )
 }

@@ -12,6 +12,7 @@ from services.schedule_service import (
     ebbinghaus_intervals,
     generate_schedule_for_palace,
     get_config_value,
+    normalize_algorithm,
 )
 
 
@@ -93,7 +94,6 @@ def get_due_count(session: Session) -> int:
 
 
 def spread_overdue(session: Session, days: int = 7) -> int:
-    """Spread overdue items across the next N days."""
     restore_archived_palaces(session)
     today = date.today()
     overdue = (
@@ -151,26 +151,11 @@ def get_chapter_queue_payload(session: Session, chapter_id: int) -> dict:
     return payload
 
 
-def map_rating_to_score(rating: str | None, fallback_score: int | None = None) -> int:
-    mapping = {
-        "forgot": 0,
-        "fuzzy": 3,
-        "remembered": 5,
-    }
-    if rating in mapping:
-        return mapping[rating]
-    if fallback_score is not None:
-        return fallback_score
-    return 0
-
-
 def submit_review(
     session: Session,
     schedule_id: int,
-    score: int,
     duration_seconds: int = 0,
 ) -> tuple[ReviewLog | None, dict]:
-    """Return (log, extra_info)."""
     schedule = session.query(ReviewSchedule).filter_by(id=schedule_id).first()
     if not schedule:
         return None, {}
@@ -179,7 +164,7 @@ def submit_review(
     log = ReviewLog(
         palace_id=schedule.palace_id,
         review_date=today,
-        score=score,
+        score=5,
         review_mode="review",
         duration_seconds=duration_seconds,
     )
@@ -188,7 +173,7 @@ def submit_review(
 
     from services.schedule_service import use_anchor
 
-    algorithm = schedule.algorithm_used
+    algorithm = normalize_algorithm(schedule.algorithm_used)
     anchor = schedule.anchor_date if use_anchor(session) else None
     actual_interval = (today - schedule.scheduled_date).days
     effective_interval = max(schedule.interval_days, actual_interval)
@@ -197,7 +182,6 @@ def submit_review(
         algorithm,
         schedule.review_number + 1,
         effective_interval,
-        score,
         anchor,
     )
 
@@ -208,11 +192,7 @@ def submit_review(
     )
 
     extra: dict[str, bool] = {}
-    intervals: list[str] = []
-    if algorithm == "ebbinghaus":
-        intervals = ebbinghaus_intervals(session)
-    elif algorithm == "custom":
-        intervals = custom_intervals(session)
+    intervals: list[str] = custom_intervals(session) if algorithm == "custom" else ebbinghaus_intervals(session)
 
     if intervals and completed_count >= len(intervals):
         schedule.palace.mastered = True
@@ -242,10 +222,10 @@ def get_palace_stats(session: Session, palace_id: int) -> dict:
         .all()
     )
     total = len(logs)
-    average_score = sum(log.score for log in logs) / total if total > 0 else 0
+    total_duration = sum(log.duration_seconds for log in logs)
     return {
         "total_reviews": total,
-        "average_score": round(average_score, 1),
+        "total_duration_seconds": total_duration,
         "last_review": logs[-1].review_date.isoformat() if logs else None,
     }
 
@@ -259,12 +239,11 @@ def get_weekly_stats(session: Session) -> dict:
         .all()
     )
     total = len(logs)
-    completed = sum(1 for log in logs if log.score >= 3)
+    total_duration = sum(log.duration_seconds for log in logs)
     return {
         "total": total,
-        "completed": completed,
-        "completion_rate": round(completed / total * 100) if total > 0 else 0,
-        "avg_score": round(sum(log.score for log in logs) / total, 1) if total > 0 else 0,
+        "review_count": total,
+        "review_duration_seconds": total_duration,
     }
 
 
