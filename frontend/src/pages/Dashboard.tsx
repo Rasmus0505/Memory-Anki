@@ -16,38 +16,45 @@ export default function Dashboard() {
     return <div className="flex items-center justify-center py-32 text-sm text-muted-foreground">正在加载仪表盘...</div>
   }
 
+  const statCards: Array<{
+    label: string
+    value: string | number
+    icon: typeof BookOpen
+    color: string
+    link?: string
+    linkText?: string
+    subtitle?: string
+  }> = [
+    {
+      label: '今日到期',
+      value: data.due_count,
+      icon: BookOpen,
+      color: data.due_count > 0 ? 'text-destructive' : 'text-emerald-500',
+      link: '/review',
+      linkText: '开始复习',
+    },
+    {
+      label: '本周完成率',
+      value: `${data.stats.completion_rate}%`,
+      icon: TrendingUp,
+      color: '',
+    },
+    {
+      label: '平均回忆分',
+      value: data.stats.avg_score,
+      icon: Star,
+      color: '',
+    },
+  ]
+
   return (
     <div className="space-y-8">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">仪表盘</h1>
-        <p className="mt-1 text-sm text-muted-foreground">查看当前记忆宫殿、到期任务和最近的复习状态。</p>
       </div>
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-        {[
-          {
-            label: '今日到期',
-            value: data.due_count,
-            icon: BookOpen,
-            color: data.due_count > 0 ? 'text-destructive' : 'text-emerald-500',
-            link: '/review',
-            linkText: '开始复习',
-          },
-          {
-            label: '本周完成率',
-            value: `${data.stats.completion_rate}%`,
-            icon: TrendingUp,
-            color: '',
-            subtitle: `${data.stats.total} 次会话`,
-          },
-          {
-            label: '平均回忆分',
-            value: data.stats.avg_score,
-            icon: Star,
-            color: '',
-            subtitle: '最近复习会话',
-          },
-        ].map(({ label, value, icon: Icon, color, link, linkText, subtitle }) => (
+        {statCards.map(({ label, value, icon: Icon, color, link, linkText, subtitle }) => (
           <Card key={label}>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">{label}</CardTitle>
@@ -60,9 +67,9 @@ export default function Dashboard() {
                   {linkText}
                   <ArrowRight className="h-3 w-3" />
                 </Link>
-              ) : (
+              ) : subtitle ? (
                 <p className="mt-2 text-xs text-muted-foreground">{subtitle}</p>
-              )}
+              ) : null}
             </CardContent>
           </Card>
         ))}

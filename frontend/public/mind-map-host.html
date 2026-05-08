@@ -33,12 +33,29 @@
       body.is-host-readonly:not(.is-host-readonly-toolbar-visible) .navigatorContainer .item:nth-child(6) {
         display: none !important;
       }
+
+      .smm-node.memory-anki-keyboard-focus .smm-hover-node {
+        display: block !important;
+        opacity: 1 !important;
+        stroke: #2563eb !important;
+        stroke-width: 3 !important;
+      }
+
+      .smm-node.memory-anki-keyboard-focus .smm-node-shape {
+        filter: drop-shadow(0 0 0 rgba(37, 99, 235, 0.16))
+          drop-shadow(0 0 14px rgba(37, 99, 235, 0.28));
+      }
     </style>
   </head>
   <body>
     <div id="app"></div>
     <script>
       const hostId = new URLSearchParams(window.location.search).get('host')
+      const KEYBOARD_FOCUS_CLASS = 'memory-anki-keyboard-focus'
+      const keyboardState = {
+        activeNodeUid: null,
+        mode: 'navigating',
+      }
 
       function cloneValue(value) {
         if (value == null) return value
@@ -49,6 +66,34 @@
         const registry = window.parent && window.parent.__memoryAnkiMindMapHosts
         if (!registry || !hostId) return null
         return registry[hostId] || null
+      }
+
+      function getMindMap() {
+        return window.__memoryAnkiMindMapInstance || null
+      }
+
+      function getRenderer() {
+        return getMindMap()?.renderer || null
+      }
+
+      function isReadonlyHost() {
+        return Boolean(window.__memoryAnkiHostState?.readonly)
+      }
+
+      function isEditableElement(element) {
+        if (!element) return false
+        const tagName = element.tagName
+        if (tagName === 'TEXTAREA') return true
+        if (tagName === 'INPUT') {
+          const type = String(element.getAttribute('type') || 'text').toLowerCase()
+          return !['checkbox', 'radio', 'button', 'submit', 'reset'].includes(type)
+        }
+        if (typeof element.isContentEditable === 'boolean' && element.isContentEditable) return true
+        return false
+      }
+
+      function syncKeyboardMode() {
+        keyboardState.mode = isEditableElement(document.activeElement) ? 'editing' : 'navigating'
       }
 
       function getNodeData(node) {
@@ -68,6 +113,284 @@
           }
           return acc
         }, {})
+      }
+
+      function getNodeUid(node) {
+        if (!node) return null
+        if (typeof node.uid === 'string') return node.uid
+        const uid = typeof node.getData === 'function' ? node.getData('uid') : null
+        return typeof uid === 'string' ? uid : null
+      }
+
+      function getCachedNodes() {
+        const renderer = getRenderer()
+        if (!renderer?.nodeCache) return []
+        return Object.values(renderer.nodeCache).filter(Boolean)
+      }
+
+      function getNodeByUid(uid) {
+        if (!uid) return null
+        return getRenderer()?.nodeCache?.[uid] || null
+      }
+
+      function notifyNodeActive(node) {
+        if (!node) return
+        getHostBridge()?.notify?.('node_active', [serializeNode(node)])
+      }
+
+      function updateKeyboardFocusClass() {
+        getCachedNodes().forEach((node) => {
+          const element = node?.group?.node
+          if (!element?.classList) return
+          if (getNodeUid(node) === keyboardState.activeNodeUid) {
+            element.classList.add(KEYBOARD_FOCUS_CLASS)
+          } else {
+            element.classList.remove(KEYBOARD_FOCUS_CLASS)
+          }
+        })
+      }
+
+      function getCurrentActiveNode() {
+        const renderer = getRenderer()
+        const activeNode = renderer?.activeNodeList?.[0] || null
+        if (activeNode) return activeNode
+        if (keyboardState.activeNodeUid) return getNodeByUid(keyboardState.activeNodeUid)
+
+        const nodes = getCachedNodes()
+          .filter((node) => !node.isHide)
+          .sort((left, right) => {
+            if (Number(left.layerIndex || 0) !== Number(right.layerIndex || 0)) {
+              return Number(left.layerIndex || 0) - Number(right.layerIndex || 0)
+            }
+            if (Number(left._top || 0) !== Number(right._top || 0)) {
+              return Number(left._top || 0) - Number(right._top || 0)
+            }
+            return Number(left._left || 0) - Number(right._left || 0)
+          })
+        return nodes[0] || null
+      }
+
+      function activateNode(node, options = {}) {
+        if (!node) return false
+        const renderer = getRenderer()
+        if (!renderer) return false
+
+        try {
+          renderer.clearActiveNode?.()
+        } catch (error) {
+          console.warn(error)
+        }
+
+        try {
+          node.active?.()
+          renderer.render?.()
+        } catch (error) {
+          console.warn(error)
+          return false
+        }
+
+        keyboardState.activeNodeUid = getNodeUid(node)
+        updateKeyboardFocusClass()
+        if (options.notify !== false) notifyNodeActive(node)
+        return true
+      }
+
+      function getNodeCenter(node) {
+        return {
+          x: Number(node?._left || 0) + Number(node?.width || 0) / 2,
+          y: Number(node?._top || 0) + Number(node?.height || 0) / 2,
+        }
+      }
+
+      function getDirectionalScore(currentNode, targetNode, direction, strict = true) {
+        const current = getNodeCenter(currentNode)
+        const target = getNodeCenter(targetNode)
+        const dx = target.x - current.x
+        const dy = target.y - current.y
+        const absDx = Math.abs(dx)
+        const absDy = Math.abs(dy)
+        const epsilon = 4
+        const horizontalDrift = absDy / Math.max(absDx, 1)
+        const verticalDrift = absDx / Math.max(absDy, 1)
+
+        if (direction === 'left') {
+          if (dx >= -epsilon) return null
+          if (strict && horizontalDrift > 0.8) return null
+          return absDx * 10 + absDy * 4 + horizontalDrift * 40
+        }
+        if (direction === 'right') {
+          if (dx <= epsilon) return null
+          if (strict && horizontalDrift > 0.8) return null
+          return absDx * 10 + absDy * 4 + horizontalDrift * 40
+        }
+        if (direction === 'up') {
+          if (dy >= -epsilon) return null
+          if (strict && verticalDrift > 0.8) return null
+          return absDy * 10 + absDx * 4 + verticalDrift * 40
+        }
+        if (direction === 'down') {
+          if (dy <= epsilon) return null
+          if (strict && verticalDrift > 0.8) return null
+          return absDy * 10 + absDx * 4 + verticalDrift * 40
+        }
+        return null
+      }
+
+      function findDirectionalTarget(direction) {
+        const currentNode = getCurrentActiveNode()
+        if (!currentNode) return null
+
+        const candidates = getCachedNodes().filter((candidate) => {
+          const candidateUid = getNodeUid(candidate)
+          return candidateUid && candidateUid !== getNodeUid(currentNode) && !candidate.isHide
+        })
+
+        const pickBest = (strict) => {
+          let bestNode = null
+          let bestScore = Number.POSITIVE_INFINITY
+
+          candidates.forEach((candidate) => {
+            const score = getDirectionalScore(currentNode, candidate, direction, strict)
+            if (score == null || score >= bestScore) return
+            bestScore = score
+            bestNode = candidate
+          })
+
+          return bestNode
+        }
+
+        return pickBest(true) || pickBest(false)
+      }
+
+      function scheduleModeSync() {
+        window.setTimeout(() => {
+          syncKeyboardMode()
+          updateKeyboardFocusClass()
+        }, 0)
+        window.setTimeout(() => {
+          syncKeyboardMode()
+          updateKeyboardFocusClass()
+        }, 120)
+      }
+
+      function enterEditModeForNode(node) {
+        if (!node) return false
+        const element = node?.group?.node
+        if (!element) return false
+
+        activateNode(node)
+        const rect = element.getBoundingClientRect()
+        const eventInit = {
+          bubbles: true,
+          cancelable: true,
+          composed: true,
+          detail: 2,
+          view: window,
+          clientX: Math.max(rect.left + Math.min(rect.width / 2, 18), 1),
+          clientY: Math.max(rect.top + Math.min(rect.height / 2, 18), 1),
+        }
+
+        element.dispatchEvent(new MouseEvent('mousedown', eventInit))
+        element.dispatchEvent(new MouseEvent('mouseup', eventInit))
+        element.dispatchEvent(new MouseEvent('click', eventInit))
+        element.dispatchEvent(new MouseEvent('dblclick', eventInit))
+        scheduleModeSync()
+        return true
+      }
+
+      function createChildAtActiveNode() {
+        const renderer = getRenderer()
+        const activeNode = getCurrentActiveNode()
+        if (!renderer || !activeNode) return false
+
+        const parentUid = getNodeUid(activeNode)
+        activateNode(activeNode)
+
+        try {
+          renderer.insertChildNode?.()
+        } catch (error) {
+          console.warn(error)
+          return false
+        }
+
+        window.setTimeout(() => {
+          const parentNode = getNodeByUid(parentUid)
+          if (parentNode) activateNode(parentNode)
+          if (isEditableElement(document.activeElement)) {
+            document.activeElement.blur()
+          }
+          syncKeyboardMode()
+        }, 0)
+
+        window.setTimeout(() => {
+          const parentNode = getNodeByUid(parentUid)
+          if (parentNode) activateNode(parentNode)
+          syncKeyboardMode()
+        }, 120)
+
+        return true
+      }
+
+      function handleHostKeydown(event) {
+        if (isReadonlyHost()) return
+
+        syncKeyboardMode()
+        if (keyboardState.mode === 'editing') {
+          if (event.key === 'Enter' && !event.shiftKey) {
+            scheduleModeSync()
+          }
+          return
+        }
+
+        if (event.metaKey || event.ctrlKey || event.altKey) return
+
+        if (event.key === 'ArrowLeft') {
+          event.preventDefault()
+          event.stopPropagation()
+          const target = findDirectionalTarget('left')
+          if (target) activateNode(target)
+          return
+        }
+        if (event.key === 'ArrowRight') {
+          event.preventDefault()
+          event.stopPropagation()
+          const target = findDirectionalTarget('right')
+          if (target) activateNode(target)
+          return
+        }
+        if (event.key === 'ArrowUp') {
+          event.preventDefault()
+          event.stopPropagation()
+          const target = findDirectionalTarget('up')
+          if (target) activateNode(target)
+          return
+        }
+        if (event.key === 'ArrowDown') {
+          event.preventDefault()
+          event.stopPropagation()
+          const target = findDirectionalTarget('down')
+          if (target) activateNode(target)
+          return
+        }
+        if (event.key === 'Enter') {
+          event.preventDefault()
+          event.stopPropagation()
+          enterEditModeForNode(getCurrentActiveNode())
+          return
+        }
+        if (event.key === 'Tab' && !event.shiftKey) {
+          event.preventDefault()
+          event.stopPropagation()
+          createChildAtActiveNode()
+        }
+      }
+
+      function registerKeyboardListeners() {
+        if (window.__memoryAnkiKeyboardListenersRegistered) return
+        window.__memoryAnkiKeyboardListenersRegistered = true
+        document.addEventListener('keydown', handleHostKeydown, true)
+        document.addEventListener('focusin', syncKeyboardMode, true)
+        document.addEventListener('focusout', scheduleModeSync, true)
       }
 
       function serializeNode(node) {
@@ -196,14 +519,20 @@
         if (!window.$bus) return
         window.$bus.$on('app_inited', mindMap => {
           window.__memoryAnkiMindMapInstance = mindMap
+          registerKeyboardListeners()
           applyHostState(window.__memoryAnkiHostState || {})
           if (window.__memoryAnkiPendingEditorState) {
             syncHostEditorState(window.__memoryAnkiPendingEditorState)
           }
+          syncKeyboardMode()
+          updateKeyboardFocusClass()
           getHostBridge()?.notify?.('app_inited', null)
         })
         window.$bus.$on('node_active', (...args) => {
           const activeNodes = Array.isArray(args[1]) ? args[1] : []
+          keyboardState.activeNodeUid = getNodeUid(activeNodes[0]) || null
+          syncKeyboardMode()
+          updateKeyboardFocusClass()
           getHostBridge()?.notify?.(
             'node_active',
             activeNodes.map(node => serializeNode(node))
@@ -212,6 +541,9 @@
         window.$bus.$on('node_click', (...args) => {
           const clickedNode = args[0]
           if (!clickedNode) return
+          keyboardState.activeNodeUid = getNodeUid(clickedNode) || null
+          syncKeyboardMode()
+          updateKeyboardFocusClass()
           getHostBridge()?.notify?.('node_click', [serializeNode(clickedNode)])
         })
         window.$bus.$on('node_tree_render_end', () => {
@@ -230,6 +562,7 @@
             }
             window.__memoryAnkiPendingTransformRestore = null
           }
+          updateKeyboardFocusClass()
           getHostBridge()?.notify?.('node_tree_render_end', null)
         })
       }

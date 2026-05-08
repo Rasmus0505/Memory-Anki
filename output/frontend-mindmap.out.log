@@ -9,3 +9,39 @@ Port 5173 is in use, trying another one...
 
   [32m➜[39m  [1mLocal[22m:   [36mhttp://127.0.0.1:[1m5174[22m/[39m
 [2m00:03:36[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2mpublic/mind-map-host.html[22m
+[2m01:47:21[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2mpublic/mind-map-host.html[22m
+[2m01:53:40[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/index.css, /src/components/review/MindMapReviewFlow.tsx[22m
+[2m01:56:08[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/index.css, /src/components/mindmap-host/MindMapFrame.tsx[22m
+[2m01:56:16[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2mpublic/mind-map-host.html[22m
+[2m01:56:25[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/index.css, /src/components/review/MindMapReviewFlow.tsx[22m
+[2m01:56:44[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/index.css, /src/components/mindmap-host/MindMapFrame.tsx[22m
+[2m01:58:11[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/index.css, /src/components/review/MindMapReviewFlow.tsx[22m
+[2m01:59:11[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/index.css, /src/components/review/MindMapReviewFlow.tsx[22m
+[2m02:05:32[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/index.css, /src/components/mindmap-host/MindMapFrame.tsx[22m
+[2m02:05:50[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2mpublic/mind-map-host.html[22m
+[2m02:06:02[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/index.css, /src/components/review/MindMapReviewFlow.tsx[22m
+[2m02:06:11[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/index.css, /src/components/review/MindMapReviewFlow.tsx[22m
+[2m02:06:34[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/pages/PalacePractice.tsx, /src/index.css[22m
+[2m02:06:44[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/pages/PalacePractice.tsx, /src/index.css[22m
+[2m02:07:00[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/App.tsx, /src/index.css[22m
+[2m02:07:10[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/App.tsx, /src/index.css[22m
+[2m02:11:40[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2mpublic/mind-map-host.html[22m
+[2m02:12:40[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2mpublic/mind-map-host.html[22m
+[2m02:20:44[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/index.css, /src/components/review/MindMapReviewFlow.tsx[22m
+[2m02:20:55[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/index.css, /src/components/review/MindMapReviewFlow.tsx[22m
+[2m02:33:09[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/pages/review/ReviewOverview.tsx, /src/index.css[22m
+[2m02:33:37[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/pages/PalaceEdit.tsx, /src/index.css[22m
+[2m02:34:04[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/pages/Knowledge.tsx, /src/index.css[22m
+[2m02:34:25[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/App.tsx, /src/index.css[22m
+[2m02:35:58[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/pages/PalaceList.tsx, /src/index.css[22m
+[2m02:36:17[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/pages/review/ReviewOverview.tsx, /src/index.css[22m
+[2m02:36:33[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/pages/PalaceEdit.tsx, /src/index.css[22m
+[2m02:36:59[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/pages/Knowledge.tsx, /src/index.css[22m
+[2m02:56:33[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/index.css, /src/pages/Profile.tsx, /src/pages/review/ReviewSession.tsx, /src/pages/Dashboard.tsx, /src/pages/Knowledge.tsx, /src/pages/PalaceList.tsx, /src/pages/PalaceEdit.tsx, /src/pages/PalaceView.tsx, /src/pages/PalacePractice.tsx, /src/pages/review/ReviewOverview.tsx[22m
+[2m02:56:33[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/pages/PalaceList.tsx, /src/index.css[22m
+[2m02:56:33[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/pages/Dashboard.tsx, /src/index.css[22m
+[2m02:56:33[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/pages/Profile.tsx, /src/index.css[22m
+[2m02:56:33[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/pages/Knowledge.tsx, /src/index.css[22m
+[2m02:56:33[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/pages/PalaceEdit.tsx, /src/index.css[22m
+[2m02:57:01[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/pages/Dashboard.tsx, /src/index.css[22m
+[2m02:59:03[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/pages/Profile.tsx, /src/index.css[22m

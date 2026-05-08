@@ -21,6 +21,7 @@ class PalaceCreate(BaseModel):
 class PalaceUpdate(BaseModel):
     title: Optional[str] = None
     description: Optional[str] = None
+    created_at: Optional[datetime] = None
     pegs: Optional[list[PegIn]] = None
 
 

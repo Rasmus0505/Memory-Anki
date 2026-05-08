@@ -139,7 +139,7 @@ export default function Knowledge() {
         actions={renderStatus()}
       />
 
-      <div className="grid gap-4 xl:grid-cols-[280px_minmax(0,1fr)_340px]">
+      <div className="grid gap-4 xl:grid-cols-[320px_minmax(0,1fr)]">
         <Card className="border-border/70 bg-card/92">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
@@ -186,41 +186,9 @@ export default function Knowledge() {
                 创建学科
               </Button>
             </div>
-          </CardContent>
-        </Card>
 
-        <Card className="min-h-[72vh] border-border/70 bg-card/92">
-          <CardHeader className="flex flex-row items-center justify-between gap-3">
-            <div>
-              <CardTitle className="text-base">{activeSubject?.name ?? '选择一个学科'}</CardTitle>
-            </div>
-            {selectedChapterId ? <Badge variant="secondary">章节 #{selectedChapterId}</Badge> : null}
-          </CardHeader>
-          <CardContent className="min-h-[62vh]">
-            {selectedSubjectId && editorState ? (
-              <MindMapFrame
-                key={`${selectedSubjectId}-${frameVersion}`}
-                editorState={editorState}
-                onEditorStateChange={(nextState: MindMapEditorState) => {
-                  setEditorState(nextState)
-                }}
-                onNodeActive={setSelectedNodes}
-                className="h-[62vh] w-full rounded-2xl border border-border/70 bg-white"
-              />
-            ) : (
-              <div className="flex h-[62vh] items-center justify-center rounded-2xl border border-dashed border-border/80 bg-background/60 text-sm text-muted-foreground">
-                先创建或选择一个学科，宿主编辑器才会加载。
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        <div className="space-y-4">
-          <Card className="border-border/70 bg-card/92">
-            <CardHeader>
-              <CardTitle className="text-base">学科信息</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
+            <div className="space-y-3 rounded-2xl border border-border/70 bg-background/60 p-3">
+              <div className="text-sm font-semibold">当前学科</div>
               <div className="space-y-2">
                 <Label htmlFor="subject-name">名称</Label>
                 <Input
@@ -250,14 +218,10 @@ export default function Knowledge() {
                   删除
                 </Button>
               </div>
-            </CardContent>
-          </Card>
+            </div>
 
-          <Card className="border-border/70 bg-card/92">
-            <CardHeader>
-              <CardTitle className="text-base">当前章节</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
+            <div className="space-y-4 rounded-2xl border border-border/70 bg-background/60 p-3">
+              <div className="text-sm font-semibold">当前章节</div>
               {chapterDetail ? (
                 <>
                   <div>
@@ -302,13 +266,38 @@ export default function Knowledge() {
                 </>
               ) : (
                 <div className="rounded-2xl border border-dashed border-border/80 px-3 py-6 text-sm text-muted-foreground">
-                  在中央脑图中选中一个章节节点后，这里会展示业务详情。
+                  选中一个章节节点后，这里会显示章节信息。
                 </div>
               )}
-            </CardContent>
-          </Card>
+            </div>
+          </CardContent>
+        </Card>
 
-        </div>
+        <Card className="min-h-[72vh] border-border/70 bg-card/92">
+          <CardHeader className="flex flex-row items-center justify-between gap-3">
+            <div>
+              <CardTitle className="text-base">{activeSubject?.name ?? '选择一个学科'}</CardTitle>
+            </div>
+            {selectedChapterId ? <Badge variant="secondary">章节 #{selectedChapterId}</Badge> : null}
+          </CardHeader>
+          <CardContent className="min-h-[62vh]">
+            {selectedSubjectId && editorState ? (
+              <MindMapFrame
+                key={`${selectedSubjectId}-${frameVersion}`}
+                editorState={editorState}
+                onEditorStateChange={(nextState: MindMapEditorState) => {
+                  setEditorState(nextState)
+                }}
+                onNodeActive={setSelectedNodes}
+                className="h-[62vh] w-full rounded-2xl border border-border/70 bg-white"
+              />
+            ) : (
+              <div className="flex h-[62vh] items-center justify-center rounded-2xl border border-dashed border-border/80 bg-background/60 text-sm text-muted-foreground">
+                先创建或选择一个学科，宿主编辑器才会加载。
+              </div>
+            )}
+          </CardContent>
+        </Card>
       </div>
     </div>
   )

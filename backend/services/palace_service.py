@@ -4,7 +4,19 @@ from models import Palace, Peg
 from schemas import PalaceCreate, PalaceUpdate, PegIn
 
 
+def restore_archived_palaces(session: Session) -> int:
+    restored = (
+        session.query(Palace)
+        .filter(Palace.archived == True)
+        .update({Palace.archived: False}, synchronize_session=False)
+    )
+    if restored:
+        session.commit()
+    return restored
+
+
 def list_palaces(session: Session, search: str = ""):
+    restore_archived_palaces(session)
     q = session.query(Palace)
     if search:
         q = q.filter(Palace.title.ilike(f"%{search}%"))
@@ -12,6 +24,7 @@ def list_palaces(session: Session, search: str = ""):
 
 
 def get_palace(session: Session, palace_id: int) -> Palace | None:
+    restore_archived_palaces(session)
     return session.query(Palace).filter_by(id=palace_id).first()
 
 
@@ -19,6 +32,7 @@ def create_palace(session: Session, data: PalaceCreate) -> Palace:
     palace = Palace(
         title=data.title, description=data.description,
         difficulty=0, review_mode="review",
+        created_at=None,
     )
     session.add(palace)
     session.flush()
@@ -33,6 +47,8 @@ def update_palace(session: Session, palace: Palace, data: PalaceUpdate) -> Palac
         palace.title = data.title
     if data.description is not None:
         palace.description = data.description
+    if data.created_at is not None:
+        palace.created_at = data.created_at
     if data.pegs is not None:
         _sync_pegs(session, palace, data.pegs)
     session.commit()

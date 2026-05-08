@@ -3,7 +3,7 @@ import { Download, FileJson, FileText, Settings, Upload } from 'lucide-react'
 import { toast } from 'sonner'
 import { api } from '@/api/client'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 
@@ -60,7 +60,6 @@ export default function Profile() {
     <div className="space-y-8">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">个人中心</h1>
-        <p className="mt-1 text-sm text-muted-foreground">管理高级排程策略和数据导入导出。</p>
       </div>
 
       <div className="flex gap-1 border-b">
@@ -88,7 +87,6 @@ export default function Profile() {
           <Card>
             <CardHeader>
               <CardTitle className="text-base">高级排程策略</CardTitle>
-              <CardDescription>保留高度自定义能力，但日常复习前端不再暴露难度和旧的 review mode。</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
@@ -152,7 +150,6 @@ export default function Profile() {
           <Card>
             <CardHeader>
               <CardTitle className="text-base">会话与积压</CardTitle>
-              <CardDescription>控制每日上限、自动平滑逾期和提前复习锚定策略。</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
@@ -200,7 +197,6 @@ export default function Profile() {
           <Card>
             <CardHeader>
               <CardTitle className="text-base">算法切换策略</CardTitle>
-              <CardDescription>控制修改算法后，是否重建未完成计划。</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-3">
@@ -248,21 +244,18 @@ export default function Profile() {
                   <Download className="h-4 w-4" />
                   导出
                 </CardTitle>
-                <CardDescription>导出所有 palace 数据。</CardDescription>
               </CardHeader>
               <CardContent className="space-y-2">
                 <a href={api.exportJson()} className="flex items-center gap-3 rounded-lg border p-3 text-sm transition-colors hover:bg-secondary">
                   <FileJson className="h-5 w-5 shrink-0 text-muted-foreground" />
                   <div>
                     <div className="font-medium">JSON</div>
-                    <div className="text-xs text-muted-foreground">完整备份，适合迁移恢复。</div>
                   </div>
                 </a>
                 <a href={api.exportMarkdown()} className="flex items-center gap-3 rounded-lg border p-3 text-sm transition-colors hover:bg-secondary">
                   <FileText className="h-5 w-5 shrink-0 text-muted-foreground" />
                   <div>
                     <div className="font-medium">Markdown</div>
-                    <div className="text-xs text-muted-foreground">可读性导出，适合分享与整理。</div>
                   </div>
                 </a>
               </CardContent>
@@ -274,7 +267,6 @@ export default function Profile() {
                   <Upload className="h-4 w-4" />
                   导入
                 </CardTitle>
-                <CardDescription>从文件导入 palace。</CardDescription>
               </CardHeader>
               <CardContent>
                 <form onSubmit={handleImport} className="space-y-4">

@@ -5,6 +5,7 @@ from datetime import date, timedelta
 from sqlalchemy.orm import Session
 
 from models import Chapter, Palace, ReviewLog, ReviewSchedule
+from services.palace_service import restore_archived_palaces
 from services.schedule_service import (
     compute_next_review,
     custom_intervals,
@@ -15,6 +16,7 @@ from services.schedule_service import (
 
 
 def _due_query(session: Session, chapter_id: int | None = None):
+    restore_archived_palaces(session)
     today = date.today()
     query = (
         session.query(ReviewSchedule)
@@ -22,7 +24,6 @@ def _due_query(session: Session, chapter_id: int | None = None):
         .filter(
             ReviewSchedule.scheduled_date <= today,
             ReviewSchedule.completed == False,
-            Palace.archived == False,
             Palace.mastered == False,
         )
         .order_by(
@@ -62,6 +63,7 @@ def get_next_due_review(
 
 
 def get_overdue_count(session: Session) -> int:
+    restore_archived_palaces(session)
     today = date.today()
     return (
         session.query(ReviewSchedule)
@@ -69,7 +71,6 @@ def get_overdue_count(session: Session) -> int:
         .filter(
             ReviewSchedule.scheduled_date < today,
             ReviewSchedule.completed == False,
-            Palace.archived == False,
             Palace.mastered == False,
         )
         .count()
@@ -77,6 +78,7 @@ def get_overdue_count(session: Session) -> int:
 
 
 def get_due_count(session: Session) -> int:
+    restore_archived_palaces(session)
     today = date.today()
     return (
         session.query(ReviewSchedule)
@@ -84,7 +86,6 @@ def get_due_count(session: Session) -> int:
         .filter(
             ReviewSchedule.scheduled_date <= today,
             ReviewSchedule.completed == False,
-            Palace.archived == False,
             Palace.mastered == False,
         )
         .count()
@@ -93,6 +94,7 @@ def get_due_count(session: Session) -> int:
 
 def spread_overdue(session: Session, days: int = 7) -> int:
     """Spread overdue items across the next N days."""
+    restore_archived_palaces(session)
     today = date.today()
     overdue = (
         session.query(ReviewSchedule)
@@ -100,7 +102,6 @@ def spread_overdue(session: Session, days: int = 7) -> int:
         .filter(
             ReviewSchedule.scheduled_date < today,
             ReviewSchedule.completed == False,
-            Palace.archived == False,
             Palace.mastered == False,
         )
         .order_by(ReviewSchedule.scheduled_date, ReviewSchedule.id)

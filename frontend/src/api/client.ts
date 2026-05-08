@@ -73,6 +73,22 @@ export interface ReviewQueueResponse {
   reviews: ReviewScheduleSummary[]
 }
 
+export interface PalaceReviewPlanItem {
+  id: number
+  scheduled_date: string | null
+  completed: boolean
+  review_number: number
+  algorithm_used: string
+  review_type: string
+  interval_days: number
+}
+
+export interface PalaceReviewPlanResponse {
+  palace_id: number
+  palace_title: string
+  plan: PalaceReviewPlanItem[]
+}
+
 async function request<T>(url: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${API_BASE}${url}`, {
     headers: { 'Content-Type': 'application/json', ...options?.headers },
@@ -98,6 +114,7 @@ export const api = {
     return request<any[]>(`/palaces${q}`)
   },
   getPalace: (id: number) => request<any>(`/palaces/${id}`),
+  getPalaceReviewPlan: (id: number) => request<PalaceReviewPlanResponse>(`/palaces/${id}/review-plan`),
   createPalace: (data: any) => request<any>('/palaces', { method: 'POST', body: JSON.stringify(data) }),
   updatePalace: (id: number, data: any) => request<any>(`/palaces/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   deletePalace: (id: number) => request<any>(`/palaces/${id}`, { method: 'DELETE' }),
@@ -127,9 +144,6 @@ export const api = {
   updateSettings: (data: any) => request<any>('/settings', { method: 'PUT', body: JSON.stringify(data) }),
   getReviewSettings: () => request<any>('/profile/review-settings'),
   updateReviewSettings: (data: any) => request<any>('/profile/review-settings', { method: 'PUT', body: JSON.stringify(data) }),
-
-  // Archive & Master
-  archivePalace: (id: number, archived: boolean) => request<any>(`/palaces/${id}/archive`, { method: 'PUT', body: JSON.stringify({ archived }) }),
 
   // Overdue
   spreadOverdue: (days: number) => request<any>('/review/spread-overdue', { method: 'POST', body: JSON.stringify({ days }) }),
