@@ -45,6 +45,20 @@
         filter: drop-shadow(0 0 0 rgba(37, 99, 235, 0.16))
           drop-shadow(0 0 14px rgba(37, 99, 235, 0.28));
       }
+
+      body.is-host-readonly:not(.is-host-readonly-toolbar-visible)
+        .smm-node.memory-anki-keyboard-focus
+        .smm-hover-node {
+        display: none !important;
+        opacity: 0 !important;
+        stroke-width: 0 !important;
+      }
+
+      body.is-host-readonly:not(.is-host-readonly-toolbar-visible)
+        .smm-node.memory-anki-keyboard-focus
+        .smm-node-shape {
+        filter: none !important;
+      }
     </style>
   </head>
   <body>
@@ -452,11 +466,19 @@
             if (!node) return
             event.preventDefault()
             event.stopPropagation()
-            activateNode(node)
+            resetReadonlyInteractionState()
             getHostBridge()?.notify?.('node_click', [serializeNode(node)])
           },
           true
         )
+      }
+
+      function registerFullscreenListener() {
+        if (window.__memoryAnkiFullscreenListenerRegistered) return
+        window.__memoryAnkiFullscreenListenerRegistered = true
+        document.addEventListener('fullscreenchange', () => {
+          getHostBridge()?.notify?.('fullscreen_change', Boolean(document.fullscreenElement))
+        })
       }
 
       function serializeNode(node) {
@@ -503,9 +525,25 @@
         if (typeof window.__memoryAnkiHostState.readonly === 'boolean') {
           mindMap.setMode(isReadonly ? 'readonly' : 'edit')
         }
+        if (isReadonly) {
+          resetReadonlyInteractionState()
+        }
       }
 
       window.applyHostState = applyHostState
+
+      function resetReadonlyInteractionState() {
+        keyboardState.activeNodeUid = null
+        syncKeyboardMode()
+        try {
+          getRenderer()?.clearActiveNode?.()
+        } catch (error) {
+          console.warn(error)
+        }
+        updateKeyboardFocusClass()
+      }
+
+      window.resetReadonlyInteractionState = resetReadonlyInteractionState
 
       function syncHostEditorState(payload) {
         const nextEditorState = payload?.editorState
@@ -592,6 +630,7 @@
           registerKeyboardListeners()
           registerContextMenuListener()
           registerReadonlyClickListener()
+          registerFullscreenListener()
           applyHostState(window.__memoryAnkiHostState || {})
           if (window.__memoryAnkiPendingEditorState) {
             syncHostEditorState(window.__memoryAnkiPendingEditorState)

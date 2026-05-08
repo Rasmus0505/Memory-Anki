@@ -2,7 +2,7 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { ArrowLeft, FileText } from 'lucide-react'
 import { api, type MindMapEditorState, type ReviewScheduleSummary } from '@/api/client'
 import { PageIntro } from '@/components/layout/PageIntro'
-import { MindMapReviewFlow } from '@/components/review/MindMapReviewFlow'
+import { MindMapReviewFlow, type ReviewFlowSnapshot } from '@/components/review/MindMapReviewFlow'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -20,6 +20,7 @@ export default function ReviewSession() {
   const chapterId = chapterIdParam ? Number(chapterIdParam) : null
   const [session, setSession] = useState<ReviewScheduleSummary | null>(null)
   const [editorState, setEditorState] = useState<MindMapEditorState | null>(null)
+  const [initialSnapshot, setInitialSnapshot] = useState<ReviewFlowSnapshot | null>(null)
   const [submitting, setSubmitting] = useState(false)
 
   useEffect(() => {
@@ -28,13 +29,26 @@ export default function ReviewSession() {
       const data = await api.getReviewSession(Number(id))
       setSession(data)
       if (data.palace_id) {
-        const editor = await api.getPalaceEditor(data.palace_id)
+        const [editor, progressResponse] = await Promise.all([
+          api.getPalaceEditor(data.palace_id),
+          api.getReviewSessionProgress(Number(id)),
+        ])
         setEditorState({
           editor_doc: editor.editor_doc,
           editor_config: editor.editor_config,
           editor_local_config: editor.editor_local_config,
           lang: editor.lang,
         })
+        const progress = progressResponse.progress
+        setInitialSnapshot(
+          progress && !progress.completed
+            ? {
+                revealMap: progress.reveal_map,
+                redNodeIds: progress.red_node_ids,
+                completed: progress.completed,
+              }
+            : null,
+        )
       }
     }
     void load()
@@ -51,6 +65,7 @@ export default function ReviewSession() {
     if (!session) return
     setSubmitting(true)
     try {
+      await api.clearReviewSessionProgress(session.id)
       const result = await api.submitReviewSession(session.id, {
         chapter_id: chapterId ?? undefined,
         duration_seconds: payload.durationSeconds,
@@ -103,16 +118,18 @@ export default function ReviewSession() {
               palaceId={palace.id}
               sessionKind="review"
               editorState={editorState}
-              canPersistEdits
               submitting={submitting}
-              onEditorStateChange={async (nextState) => {
-                setEditorState(nextState)
-                const saved = await api.savePalaceEditor(palace.id, nextState)
-                setEditorState({
-                  editor_doc: saved.editor_doc,
-                  editor_config: saved.editor_config,
-                  editor_local_config: saved.editor_local_config,
-                  lang: saved.lang,
+              persistProgress
+              initialSnapshot={initialSnapshot}
+              onSnapshotChange={async (snapshot) => {
+                if (snapshot.completed) {
+                  await api.clearReviewSessionProgress(session.id)
+                  return
+                }
+                await api.saveReviewSessionProgress(session.id, {
+                  completed: snapshot.completed,
+                  reveal_map: snapshot.revealMap,
+                  red_node_ids: snapshot.redNodeIds,
                 })
               }}
               onComplete={submitCompletion}

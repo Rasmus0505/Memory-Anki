@@ -70,13 +70,35 @@ export function SessionTimerBar({
     setInputValue(secondsToInputValue(effectiveSeconds))
   }, [effectiveSeconds, inputValue, onAdjustDuration])
 
+  const primaryAction = isIdle
+    ? {
+        icon: Play,
+        label: '开始',
+        onClick: onStart,
+        variant: 'default' as const,
+      }
+    : isRunning
+      ? {
+          icon: Pause,
+          label: '暂停',
+          onClick: onPause,
+          variant: 'outline' as const,
+        }
+      : isPaused
+        ? {
+            icon: Play,
+            label: '继续',
+            onClick: onResume,
+            variant: 'default' as const,
+          }
+        : null
+
   return (
     <div className={className ?? 'fixed right-5 top-5 z-40'}>
       <div className="w-[320px] rounded-2xl border border-border/70 bg-background/95 p-4 shadow-[0_18px_60px_rgba(15,23,42,0.18)] backdrop-blur">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <div className="text-xs font-medium tracking-[0.16em] text-muted-foreground uppercase">计时</div>
-            <div className="mt-1 text-2xl font-semibold text-foreground">{formatDuration(effectiveSeconds)}</div>
+            <div className="text-2xl font-semibold text-foreground">{formatDuration(effectiveSeconds)}</div>
             <div className="mt-1 text-xs text-muted-foreground">已暂停 {pauseCount} 次</div>
           </div>
           {showRestartAction && onRestart ? (
@@ -87,10 +109,9 @@ export function SessionTimerBar({
         </div>
 
         <div className="mt-3 space-y-2">
-          <label className="block text-xs text-muted-foreground">
-            补录总时长
+          <label className="block">
             <Input
-              className="mt-1"
+              aria-label="调整总时长"
               value={inputValue}
               onFocus={() => setIsEditing(true)}
               onBlur={() => {
@@ -108,22 +129,10 @@ export function SessionTimerBar({
         </div>
 
         <div className="mt-4 flex flex-wrap gap-2">
-          {isIdle ? (
-            <Button type="button" size="sm" onClick={onStart}>
-              <Play className="mr-2 h-4 w-4" />
-              开始计时
-            </Button>
-          ) : null}
-          {isRunning ? (
-            <Button type="button" variant="outline" size="sm" onClick={onPause}>
-              <Pause className="mr-2 h-4 w-4" />
-              暂停
-            </Button>
-          ) : null}
-          {isPaused ? (
-            <Button type="button" size="sm" onClick={onResume}>
-              <Play className="mr-2 h-4 w-4" />
-              继续
+          {primaryAction ? (
+            <Button type="button" variant={primaryAction.variant} size="sm" onClick={primaryAction.onClick}>
+              <primaryAction.icon className="mr-2 h-4 w-4" />
+              {primaryAction.label}
             </Button>
           ) : null}
           {showCompleteAction && onComplete ? (

@@ -19,7 +19,7 @@ describe('SessionTimerBar', () => {
       />,
     )
 
-    const input = screen.getByLabelText('补录总时长') as HTMLInputElement
+    const input = screen.getByLabelText('调整总时长') as HTMLInputElement
     expect(input.value).toBe('00:00:01')
 
     fireEvent.focus(input)
@@ -57,7 +57,7 @@ describe('SessionTimerBar', () => {
       />,
     )
 
-    const input = screen.getByLabelText('补录总时长') as HTMLInputElement
+    const input = screen.getByLabelText('调整总时长') as HTMLInputElement
     fireEvent.focus(input)
     fireEvent.change(input, { target: { value: 'bad-value' } })
     fireEvent.blur(input)

@@ -8,8 +8,9 @@ from sqlalchemy.orm import Session
 
 from models import Chapter, Palace, Peg, Subject, engine
 from services.backup_service import (
+    MIN_DANGEROUS_NODE_COUNT,
     count_editor_doc_nodes,
-    create_palace_version,
+    create_effective_palace_version,
     is_dangerous_structure_change,
 )
 
@@ -22,6 +23,8 @@ NODE_ID_KEY = "memoryAnkiId"
 NODE_TYPE_KEY = "memoryAnkiNodeType"
 ROOT_KIND_KEY = "memoryAnkiRootKind"
 NODE_UID_KEY = "uid"
+SAFE_EDITOR_SOURCES = {"palace_edit", "version_restore", "backup_restore"}
+DANGEROUS_EDITOR_SOURCES = {"review_edit", "practice_edit", "unknown"}
 
 TAG_RE = re.compile(r"<[^>]+>")
 
@@ -106,6 +109,7 @@ def save_palace_editor_state(session: Session, palace: Palace, payload: dict[str
     local_input = payload.get("editor_local_config")
     lang_input = payload.get("lang")
     allow_dangerous_delete = bool(payload.get("confirm_dangerous_change"))
+    editor_source = str(payload.get("editor_source") or "unknown").strip() or "unknown"
 
     local_config = (
         _coerce_local_config(local_input, lang_input)
@@ -117,15 +121,20 @@ def save_palace_editor_state(session: Session, palace: Palace, payload: dict[str
         existing_node_count = count_editor_doc_nodes(palace.editor_doc)
         doc = normalize_editor_doc(doc_input, root_text=palace.title, root_kind="palace")
         next_node_count = count_editor_doc_nodes(doc)
+        if editor_source in DANGEROUS_EDITOR_SOURCES and next_node_count < existing_node_count:
+            raise ValueError("当前编辑内容来自复习/练习视图或未确认同步态，已拒绝写回宫殿，避免未显示节点被误删。")
+        if editor_source not in SAFE_EDITOR_SOURCES and allow_dangerous_delete:
+            raise ValueError("只有正式宫殿编辑器或受控恢复流程才能确认危险删除。")
         if is_dangerous_structure_change(existing_node_count, next_node_count) and not allow_dangerous_delete:
             raise ValueError("检测到危险结构变更：新导图节点数骤减，已拒绝保存。请在正式编辑中确认后再执行。")
-        create_palace_version(session, palace, "editor_save")
         sync_palace_tree_from_doc(session, palace, doc)
         palace.editor_doc = _serialize(doc)
     if config_input is not None:
         palace.editor_config = _serialize(_ensure_dict(config_input))
     if local_config is not None:
         palace.editor_local_config = _serialize(local_config)
+
+    create_effective_palace_version(session, palace, "editor_save")
 
     session.commit()
     session.refresh(palace)

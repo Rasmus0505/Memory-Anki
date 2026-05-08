@@ -7,11 +7,6 @@ import { MindMapReviewFlow, type ReviewFlowSnapshot } from '@/components/review/
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
-import {
-  clearPracticeProgress,
-  getPracticeProgress,
-  savePracticeProgress,
-} from '@/lib/session-records'
 
 interface PalaceMeta {
   id: number
@@ -32,6 +27,7 @@ export default function PalacePractice() {
   const [error, setError] = useState('')
   const [initialSnapshot, setInitialSnapshot] = useState<ReviewFlowSnapshot | null>(null)
   const [flowKey, setFlowKey] = useState(0)
+  const [hasResumeProgress, setHasResumeProgress] = useState(false)
 
   useEffect(() => {
     if (!palaceId) return
@@ -48,12 +44,14 @@ export default function PalacePractice() {
           editor_local_config: editor.editor_local_config,
           lang: editor.lang,
         })
-        const progress = getPracticeProgress(palaceId)
+        const progressResponse = await api.getPracticeSessionProgress(palaceId)
+        const progress = progressResponse.progress
+        setHasResumeProgress(Boolean(progress && !progress.completed))
         setInitialSnapshot(
           progress && !progress.completed
             ? {
-                revealMap: progress.revealMap,
-                redNodeIds: progress.redNodeIds,
+                revealMap: progress.reveal_map,
+                redNodeIds: progress.red_node_ids,
                 completed: progress.completed,
               }
             : null,
@@ -69,12 +67,11 @@ export default function PalacePractice() {
 
   const practiceBadge = useMemo(() => {
     if (!palaceId) return null
-    const progress = getPracticeProgress(palaceId)
-    if (progress && !progress.completed) {
+    if (hasResumeProgress) {
       return <Badge variant="secondary">已接续上次练习</Badge>
     }
-    return <Badge variant="outline">本地续练</Badge>
-  }, [flowKey, palaceId])
+    return <Badge variant="outline">项目内续练</Badge>
+  }, [flowKey, hasResumeProgress, palaceId])
 
   if (!palaceId || loading) {
     return <div className="flex min-h-[60vh] items-center justify-center text-sm text-muted-foreground">正在加载练习内容...</div>
@@ -110,39 +107,30 @@ export default function PalacePractice() {
             palaceId={palace.id}
             sessionKind="practice"
             editorState={editorState}
-            canPersistEdits
-            onEditorStateChange={async (nextState) => {
-              setEditorState(nextState)
-              const saved = await api.savePalaceEditor(palace.id, nextState)
-              setEditorState({
-                editor_doc: saved.editor_doc,
-                editor_config: saved.editor_config,
-                editor_local_config: saved.editor_local_config,
-                lang: saved.lang,
-              })
-            }}
             initialSnapshot={initialSnapshot}
             persistProgress
-            onSnapshotChange={(snapshot) => {
+            onSnapshotChange={async (snapshot) => {
               if (snapshot.completed) {
-                clearPracticeProgress(palace.id)
+                setHasResumeProgress(false)
+                await api.clearPracticeSessionProgress(palace.id)
                 return
               }
-              savePracticeProgress({
-                palaceId: palace.id,
-                updatedAt: new Date().toISOString(),
+              setHasResumeProgress(true)
+              await api.savePracticeSessionProgress(palace.id, {
                 completed: snapshot.completed,
-                revealMap: snapshot.revealMap,
-                redNodeIds: snapshot.redNodeIds,
+                reveal_map: snapshot.revealMap,
+                red_node_ids: snapshot.redNodeIds,
               })
             }}
-            onRestart={() => {
-              clearPracticeProgress(palace.id)
+            onRestart={async () => {
+              await api.clearPracticeSessionProgress(palace.id)
+              setHasResumeProgress(false)
               setInitialSnapshot(null)
               setFlowKey((value) => value + 1)
             }}
-            onComplete={() => {
-              clearPracticeProgress(palace.id)
+            onComplete={async () => {
+              await api.clearPracticeSessionProgress(palace.id)
+              setHasResumeProgress(false)
             }}
           />
         </CardContent>

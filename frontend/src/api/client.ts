@@ -1,7 +1,7 @@
 import { API_BASE } from '@/lib/utils'
 
 export interface MindMapEditorState {
-  editor_doc: Record<string, unknown>
+  editor_doc: Record<string, unknown> | string | null
   editor_config: Record<string, unknown>
   editor_local_config: Record<string, unknown>
   lang: string
@@ -103,7 +103,25 @@ export interface PalaceVersionSummary {
 export interface PalaceVersionListResponse {
   palace_id: number
   palace_title: string
+  removed_duplicates?: number
   versions: PalaceVersionSummary[]
+}
+
+export interface PalaceVersionDetail extends PalaceVersionSummary {
+  editor_doc: Record<string, unknown> | string | null
+  editor_config: Record<string, unknown> | string | null
+  editor_local_config: Record<string, unknown> | string | null
+}
+
+export interface SessionProgressSnapshot {
+  id: number
+  session_kind: 'practice' | 'review'
+  palace_id: number | null
+  review_schedule_id: number | null
+  reveal_map: Record<string, 'hidden' | 'placeholder' | 'revealed'>
+  red_node_ids: string[]
+  completed: boolean
+  updated_at: string | null
 }
 
 export interface BackupSummary {
@@ -165,6 +183,18 @@ export const api = {
   getChapterReviewQueue: (chapterId: number) => request<ReviewQueueResponse>(`/review/chapter/${chapterId}/queue`),
   getReviewItem: (id: number) => request<ReviewScheduleSummary>(`/review/${id}`),
   getReviewSession: (id: number) => request<ReviewScheduleSummary>(`/review/session/${id}`),
+  getReviewSessionProgress: (id: number) =>
+    request<{ progress: SessionProgressSnapshot | null }>(`/review/session/${id}/progress`),
+  saveReviewSessionProgress: (
+    id: number,
+    data: {
+      reveal_map: Record<string, 'hidden' | 'placeholder' | 'revealed'>
+      red_node_ids: string[]
+      completed: boolean
+    },
+  ) => request<{ progress: SessionProgressSnapshot }>(`/review/session/${id}/progress`, { method: 'PUT', body: JSON.stringify(data) }),
+  clearReviewSessionProgress: (id: number) =>
+    request<{ ok: boolean }>(`/review/session/${id}/progress`, { method: 'DELETE' }),
   submitReview: (id: number, data: any) => request<any>(`/review/${id}/submit`, { method: 'POST', body: JSON.stringify(data) }),
   submitReviewSession: (
     id: number,
@@ -217,10 +247,27 @@ export const api = {
   linkPalaceChapters: (palaceId: number, chapterIds: number[]) => request<any>(`/palaces/${palaceId}/chapters`, { method: 'PUT', body: JSON.stringify({ chapter_ids: chapterIds }) }),
   getPalaceEditor: (id: number) => request<{ palace: any } & MindMapEditorState>(`/palaces/${id}/editor`),
   savePalaceEditor: (id: number, data: Partial<MindMapEditorState>) =>
-    request<{ palace: any } & MindMapEditorState>(`/palaces/${id}/editor`, { method: 'PUT', body: JSON.stringify(data) }),
+    request<{ palace: any } & MindMapEditorState>(`/palaces/${id}/editor`, {
+      method: 'PUT',
+      body: JSON.stringify({ ...data, editor_source: 'palace_edit' }),
+    }),
   savePalaceEditorWithOptions: (id: number, data: Record<string, unknown>) =>
     request<{ palace: any } & MindMapEditorState>(`/palaces/${id}/editor`, { method: 'PUT', body: JSON.stringify(data) }),
+  getPracticeSessionProgress: (id: number) =>
+    request<{ progress: SessionProgressSnapshot | null }>(`/practice/session/${id}`),
+  savePracticeSessionProgress: (
+    id: number,
+    data: {
+      reveal_map: Record<string, 'hidden' | 'placeholder' | 'revealed'>
+      red_node_ids: string[]
+      completed: boolean
+    },
+  ) => request<{ progress: SessionProgressSnapshot }>(`/practice/session/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  clearPracticeSessionProgress: (id: number) =>
+    request<{ ok: boolean }>(`/practice/session/${id}`, { method: 'DELETE' }),
   getPalaceVersions: (id: number) => request<PalaceVersionListResponse>(`/palaces/${id}/versions`),
+  getPalaceVersionDetail: (palaceId: number, versionId: number) =>
+    request<PalaceVersionDetail>(`/palaces/${palaceId}/versions/${versionId}`),
   restorePalaceVersion: (id: number, versionId: number) =>
     request<any>(`/palaces/${id}/restore-version`, { method: 'POST', body: JSON.stringify({ version_id: versionId }) }),
 
@@ -230,6 +277,11 @@ export const api = {
   restoreBackup: (path: string) => request<{ ok: boolean; rescue_path: string }>('/backups/restore-database', { method: 'POST', body: JSON.stringify({ path }) }),
   recoverPalacesFromCommit: (commit: string, palaceIds: number[]) =>
     request<any>('/backups/recover-palaces', { method: 'POST', body: JSON.stringify({ commit, palace_ids: palaceIds }) }),
+  restorePalaceFromBackup: (path: string, palaceId: number) =>
+    request<{ ok: boolean; restored: { palace_id: number; source_backup_path: string; restored_title: string; restored_node_count: number; restored_peg_count: number; rescue_snapshot_path: string } }>(
+      '/backups/restore-palace-from-backup',
+      { method: 'POST', body: JSON.stringify({ path, palace_id: palaceId }) },
+    ),
 
   // Node Connections
   getConnections: (params?: { source_type?: string; source_id?: number }) => {

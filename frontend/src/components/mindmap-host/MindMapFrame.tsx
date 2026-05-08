@@ -21,12 +21,13 @@ interface MindMapFrameProps {
   onNodeActive?: (nodes: MindMapSelection[]) => void
   onNodeClick?: (nodes: MindMapSelection[]) => void
   onNodeContextMenu?: (nodes: MindMapSelection[]) => void
+  onFullscreenChange?: (active: boolean) => void
   onReady?: () => void
 }
 
 interface HostBridge {
-  getMindMapData: () => Record<string, unknown>
-  saveMindMapData: (data: Record<string, unknown>) => void
+  getMindMapData: () => Record<string, unknown> | string
+  saveMindMapData: (data: Record<string, unknown> | string) => void
   getMindMapConfig: () => Record<string, unknown>
   saveMindMapConfig: (config: Record<string, unknown>) => void
   getLanguage: () => string
@@ -46,6 +47,11 @@ function cloneValue<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T
 }
 
+function normalizeEditorDoc(value: MindMapEditorState['editor_doc']): Record<string, unknown> | string {
+  if (value == null) return {}
+  return cloneValue(value)
+}
+
 export function MindMapFrame({
   editorState,
   readonly = false,
@@ -57,6 +63,7 @@ export function MindMapFrame({
   onNodeActive,
   onNodeClick,
   onNodeContextMenu,
+  onFullscreenChange,
   onReady,
 }: MindMapFrameProps) {
   const iframeRef = useRef<HTMLIFrameElement | null>(null)
@@ -65,6 +72,7 @@ export function MindMapFrame({
   const onNodeActiveRef = useRef(onNodeActive)
   const onNodeClickRef = useRef(onNodeClick)
   const onNodeContextMenuRef = useRef(onNodeContextMenu)
+  const onFullscreenChangeRef = useRef(onFullscreenChange)
   const onReadyRef = useRef(onReady)
   const lastSyncedFingerprintRef = useRef('')
   const [isLoaded, setIsLoaded] = useState(false)
@@ -74,6 +82,7 @@ export function MindMapFrame({
   onNodeActiveRef.current = onNodeActive
   onNodeClickRef.current = onNodeClick
   onNodeContextMenuRef.current = onNodeContextMenu
+  onFullscreenChangeRef.current = onFullscreenChange
   onReadyRef.current = onReady
 
   const rawHostId = useId()
@@ -82,7 +91,7 @@ export function MindMapFrame({
   useEffect(() => {
     const registry = (window.__memoryAnkiMindMapHosts ??= {})
     registry[hostId] = {
-      getMindMapData: () => cloneValue(stateRef.current.editor_doc),
+      getMindMapData: () => normalizeEditorDoc(stateRef.current.editor_doc),
       saveMindMapData: (data) => {
         onEditorStateChangeRef.current({
           ...stateRef.current,
@@ -125,6 +134,9 @@ export function MindMapFrame({
         if (event === 'node_contextmenu') {
           onNodeContextMenuRef.current?.(Array.isArray(payload) ? (payload as MindMapSelection[]) : [])
         }
+        if (event === 'fullscreen_change') {
+          onFullscreenChangeRef.current?.(Boolean(payload))
+        }
       },
     }
 
@@ -149,9 +161,15 @@ export function MindMapFrame({
 
   const syncHostState = () => {
     const iframeWindow = iframeRef.current?.contentWindow as
-      | (Window & { applyHostState?: (state: { readonly: boolean; showToolbarWhenReadonly: boolean }) => void })
+      | (Window & {
+          applyHostState?: (state: { readonly: boolean; showToolbarWhenReadonly: boolean }) => void
+          resetReadonlyInteractionState?: () => void
+        })
       | null
     iframeWindow?.applyHostState?.({ readonly, showToolbarWhenReadonly })
+    if (readonly) {
+      iframeWindow?.resetReadonlyInteractionState?.()
+    }
   }
 
   useEffect(() => {
@@ -163,7 +181,7 @@ export function MindMapFrame({
   useEffect(() => {
     if (!syncOnPropChange || !isLoaded) return
     const fingerprint = JSON.stringify({
-      editor_doc: editorState.editor_doc,
+      editor_doc: normalizeEditorDoc(editorState.editor_doc),
       editor_config: editorState.editor_config,
       editor_local_config: editorState.editor_local_config,
       lang: editorState.lang,

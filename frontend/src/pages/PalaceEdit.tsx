@@ -1,17 +1,19 @@
 import { type ChangeEvent, useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, CheckCircle2, History, Link2, Paperclip, Save, Upload } from 'lucide-react'
-import { api, type MindMapEditorState } from '@/api/client'
+import { ArrowLeft, CheckCircle2, Eye, History, Link2, Paperclip, Save, Upload } from 'lucide-react'
+import { api, type MindMapEditorState, type PalaceVersionDetail, type PalaceVersionSummary } from '@/api/client'
 import { PageIntro } from '@/components/layout/PageIntro'
 import { MindMapFrame, type MindMapSelection } from '@/components/mindmap-host'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Dialog, DialogClose, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { usePersistedMindMapEditor } from '@/hooks/usePersistedMindMapEditor'
 import { SessionTimerBar } from '@/components/session/SessionTimerBar'
 import { useTimedSession } from '@/hooks/useTimedSession'
+import { cn } from '@/lib/utils'
 
 interface PalaceMeta {
   id: number
@@ -47,6 +49,59 @@ function toLocalDateTimePayload(value: string): string {
   return `${value}:00`
 }
 
+function formatVersionSavedAt(value: string | null): string {
+  if (!value) return '未知时间'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return new Intl.DateTimeFormat('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  }).format(date).replace(/\//g, '/')
+}
+
+function normalizePreviewEditorDoc(value: Record<string, unknown> | string | null): Record<string, unknown> | string {
+  if (!value) return ''
+  return value
+}
+
+function normalizePreviewConfig(value: Record<string, unknown> | string | null): Record<string, unknown> {
+  if (!value) {
+    return {
+      theme: { template: 'avocado', config: {} },
+      layout: 'logicalStructure',
+      config: {},
+    }
+  }
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value) as Record<string, unknown>
+      return {
+        theme: { template: 'avocado', config: {}, ...((parsed.theme as Record<string, unknown> | undefined) ?? {}) },
+        layout: parsed.layout ?? 'logicalStructure',
+        config: (parsed.config as Record<string, unknown> | undefined) ?? {},
+        ...parsed,
+      }
+    } catch {
+      return {
+        theme: { template: 'avocado', config: {} },
+        layout: 'logicalStructure',
+        config: {},
+      }
+    }
+  }
+  return {
+    theme: { template: 'avocado', config: {}, ...((value.theme as Record<string, unknown> | undefined) ?? {}) },
+    layout: value.layout ?? 'logicalStructure',
+    config: (value.config as Record<string, unknown> | undefined) ?? {},
+    ...value,
+  }
+}
+
 export default function PalaceEdit() {
   const { id } = useParams()
   const navigate = useNavigate()
@@ -59,12 +114,13 @@ export default function PalaceEdit() {
   const [chapterOptions, setChapterOptions] = useState<ChapterOption[]>([])
   const [selectedChapterIds, setSelectedChapterIds] = useState<number[]>([])
   const [versionOpen, setVersionOpen] = useState(false)
-  const [versions, setVersions] = useState<Array<{
-    id: number
-    trigger_reason: string
-    created_at: string | null
-    created_at_value: string | null
-  }>>([])
+  const [mindMapFullscreen, setMindMapFullscreen] = useState(false)
+  const [versions, setVersions] = useState<PalaceVersionSummary[]>([])
+  const [removedDuplicateCount, setRemovedDuplicateCount] = useState(0)
+  const [previewingVersionId, setPreviewingVersionId] = useState<number | null>(null)
+  const [previewVersionDetail, setPreviewVersionDetail] = useState<PalaceVersionDetail | null>(null)
+  const [previewLoading, setPreviewLoading] = useState(false)
+  const [previewError, setPreviewError] = useState('')
 
   const {
     meta,
@@ -91,6 +147,7 @@ export default function PalaceEdit() {
       await api.savePalaceEditorWithOptions(palaceId, {
         ...pendingState,
         confirm_dangerous_change: true,
+        editor_source: 'palace_edit',
       })
       await reload()
       setFrameVersion((value) => value + 1)
@@ -113,6 +170,15 @@ export default function PalaceEdit() {
       }
     }
   }, [timer])
+
+  useEffect(() => {
+    if (!mindMapFullscreen) return
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.body.style.overflow = previousOverflow
+    }
+  }, [mindMapFullscreen])
 
   useEffect(() => {
     if (palaceId || isCreatingDraft) return
@@ -205,7 +271,37 @@ export default function PalaceEdit() {
     if (!palace) return
     const result = await api.getPalaceVersions(palace.id)
     setVersions(result.versions)
+    setRemovedDuplicateCount(result.removed_duplicates ?? 0)
+    setPreviewingVersionId(null)
+    setPreviewVersionDetail(null)
+    setPreviewError('')
+    setPreviewLoading(false)
     setVersionOpen(true)
+  }
+
+  const handlePreviewVersion = async (versionId: number) => {
+    if (!palace) return
+    setPreviewingVersionId(versionId)
+    setPreviewLoading(true)
+    setPreviewError('')
+    try {
+      const detail = await api.getPalaceVersionDetail(palace.id, versionId)
+      setPreviewVersionDetail(detail)
+    } catch (err) {
+      setPreviewVersionDetail(null)
+      setPreviewError(err instanceof Error ? err.message : '加载版本预览失败。')
+    } finally {
+      setPreviewLoading(false)
+    }
+  }
+
+  const handleCloseVersions = () => {
+    setVersionOpen(false)
+    setPreviewingVersionId(null)
+    setPreviewVersionDetail(null)
+    setPreviewError('')
+    setPreviewLoading(false)
+    setRemovedDuplicateCount(0)
   }
 
   const handleRestoreVersion = async (versionId: number) => {
@@ -215,8 +311,7 @@ export default function PalaceEdit() {
     await api.restorePalaceVersion(palace.id, versionId)
     await reload()
     setFrameVersion((value) => value + 1)
-    const result = await api.getPalaceVersions(palace.id)
-    setVersions(result.versions)
+    handleCloseVersions()
   }
 
   const statusBadge = useMemo(() => {
@@ -246,7 +341,7 @@ export default function PalaceEdit() {
             {palace ? (
               <Button variant="outline" size="sm" onClick={() => void handleOpenVersions()}>
                 <History className="mr-2 h-4 w-4" />
-                历史版本
+                恢复点
               </Button>
             ) : null}
             {statusBadge}
@@ -263,11 +358,9 @@ export default function PalaceEdit() {
             onStart={() => timer.start({ source: 'manual' })}
             onPause={() => timer.pause({ source: 'manual' })}
             onResume={() => timer.resume({ source: 'manual' })}
-            onComplete={() => {
-              timer.complete('saved')
-            }}
             onAdjustDuration={timer.adjustDuration}
-            className="sticky top-5 z-20"
+            showCompleteAction={false}
+            className={mindMapFullscreen ? 'fixed right-5 top-5 z-[100]' : 'sticky top-5 z-20'}
           />
 
           <Card className="border-border/70 bg-card/92">
@@ -366,7 +459,12 @@ export default function PalaceEdit() {
           </Card>
         </div>
 
-        <Card className="min-h-[74vh] border-border/70 bg-card/92">
+        <Card
+          className={cn(
+            'min-h-[74vh] border-border/70 bg-card/92',
+            mindMapFullscreen && 'fixed inset-4 z-[90] min-h-0 bg-card/96 shadow-2xl',
+          )}
+        >
           <CardHeader className="flex flex-row items-center justify-between gap-3">
             <div>
               <CardTitle className="text-base">宫殿脑图</CardTitle>
@@ -377,7 +475,7 @@ export default function PalaceEdit() {
               </Badge>
             ) : null}
           </CardHeader>
-          <CardContent className="min-h-[64vh]">
+          <CardContent className={cn('min-h-[64vh]', mindMapFullscreen && 'h-[calc(100vh-120px)] min-h-0')}>
             {editorState ? (
               <MindMapFrame
                 key={`${palaceId}-${frameVersion}`}
@@ -390,7 +488,11 @@ export default function PalaceEdit() {
                   timer.registerActivity({ source: 'node_active' })
                   setSelectedNodes(nodes)
                 }}
-                className="h-[64vh] w-full rounded-2xl border border-border/70 bg-white"
+                onFullscreenChange={setMindMapFullscreen}
+                className={cn(
+                  'w-full rounded-2xl border border-border/70 bg-white',
+                  mindMapFullscreen ? 'h-full' : 'h-[64vh]',
+                )}
               />
             ) : (
               <div className="flex h-[64vh] items-center justify-center rounded-2xl border border-dashed border-border/80 bg-background/60 text-sm text-muted-foreground">
@@ -401,33 +503,127 @@ export default function PalaceEdit() {
         </Card>
       </div>
 
-      {versionOpen ? (
-        <Card className="border-border/70 bg-card/92">
-          <CardHeader className="flex flex-row items-center justify-between gap-3">
-            <CardTitle className="text-base">宫殿历史版本</CardTitle>
-            <Button variant="ghost" size="sm" onClick={() => setVersionOpen(false)}>关闭</Button>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {versions.length === 0 ? (
-              <div className="text-sm text-muted-foreground">当前还没有历史版本。</div>
-            ) : (
-              versions.map((version) => (
-                <div key={version.id} className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border/70 bg-background/70 px-4 py-4 text-sm">
-                  <div>
-                    <div className="font-medium">{version.trigger_reason}</div>
-                    <div className="mt-1 text-xs text-muted-foreground">
-                      {version.created_at || '未知时间'}
+      <Dialog open={versionOpen} onOpenChange={setVersionOpen}>
+        <DialogContent className="h-[min(80vh,900px)] max-h-[min(80vh,900px)] max-w-3xl overflow-hidden rounded-[28px] border-border/70 bg-background/98 p-0">
+          <DialogHeader>
+            <div>
+              <DialogTitle>宫殿恢复点</DialogTitle>
+            </div>
+            <DialogClose onClick={handleCloseVersions} />
+          </DialogHeader>
+
+          {previewingVersionId == null ? (
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-6">
+              <div className="space-y-3">
+              {versions.length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-border/80 bg-background/70 px-4 py-8 text-center text-sm text-muted-foreground">
+                  当前还没有可恢复的有效快照。
+                </div>
+              ) : (
+                <>
+                  {versions.map((version) => (
+                    <div
+                      key={version.id}
+                      className="flex flex-col gap-4 rounded-[24px] border border-border/70 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.82))] px-4 py-4 sm:flex-row sm:items-center sm:justify-between"
+                    >
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2 text-sm font-medium text-slate-950">
+                          <span>{version.trigger_reason === 'editor_save' ? '自动恢复点' : version.trigger_reason}</span>
+                          <span className="text-muted-foreground">·</span>
+                          <span className="text-muted-foreground">{formatVersionSavedAt(version.created_at)}</span>
+                          <span className="text-muted-foreground">·</span>
+                          <Badge variant="outline" className="rounded-full px-2.5 py-0.5 text-[11px]">
+                            恢复点 #{version.id}
+                          </Badge>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-wrap gap-2">
+                        <Button variant="outline" size="sm" onClick={() => void handlePreviewVersion(version.id)}>
+                          <Eye className="mr-2 h-4 w-4" />
+                          预览
+                        </Button>
+                        <Button variant="outline" size="sm" onClick={() => void handleRestoreVersion(version.id)}>
+                          恢复这个版本
+                        </Button>
+                      </div>
                     </div>
+                  ))}
+                  <div className="rounded-2xl border border-dashed border-border/80 bg-background/60 px-4 py-3 text-center text-sm text-muted-foreground">
+                    已显示全部 {versions.length} 个恢复点{removedDuplicateCount > 0 ? `，本次已自动清理 ${removedDuplicateCount} 条重复快照` : ''}。
                   </div>
-                  <Button variant="outline" size="sm" onClick={() => void handleRestoreVersion(version.id)}>
+                </>
+              )}
+              </div>
+            </div>
+          ) : (
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-6">
+              <div className="space-y-5">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <Button variant="outline" size="sm" onClick={() => {
+                  setPreviewingVersionId(null)
+                  setPreviewVersionDetail(null)
+                  setPreviewError('')
+                  setPreviewLoading(false)
+                }}>
+                  <ArrowLeft className="mr-2 h-4 w-4" />
+                  返回列表
+                </Button>
+                {previewVersionDetail ? (
+                  <Button variant="outline" size="sm" onClick={() => void handleRestoreVersion(previewVersionDetail.id)}>
                     恢复这个版本
                   </Button>
+                ) : null}
+              </div>
+
+              {previewLoading ? (
+                <div className="rounded-2xl border border-dashed border-border/80 bg-background/70 px-4 py-10 text-center text-sm text-muted-foreground">
+                  正在加载版本预览…
                 </div>
-              ))
-            )}
-          </CardContent>
-        </Card>
-      ) : null}
+              ) : previewError ? (
+                <div className="rounded-2xl border border-destructive/40 bg-destructive/10 px-4 py-4 text-sm text-destructive">
+                  {previewError}
+                </div>
+              ) : previewVersionDetail ? (
+                <div className="space-y-4">
+                  <div className="rounded-[24px] border border-border/70 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.82))] px-5 py-4">
+                    <div className="flex flex-wrap items-center gap-2 text-sm font-medium text-slate-950">
+                      <span>{previewVersionDetail.trigger_reason === 'editor_save' ? '自动恢复点' : previewVersionDetail.trigger_reason}</span>
+                      <span className="text-muted-foreground">·</span>
+                      <span className="text-muted-foreground">{formatVersionSavedAt(previewVersionDetail.created_at)}</span>
+                      <Badge variant="outline" className="rounded-full px-2.5 py-0.5 text-[11px]">
+                        恢复点 #{previewVersionDetail.id}
+                      </Badge>
+                    </div>
+                    <div className="mt-2 text-base font-semibold text-slate-950">
+                      {previewVersionDetail.title || '未命名宫殿'}
+                    </div>
+                  </div>
+
+                  <Card className="border-border/70 bg-card/92">
+                    <CardContent className="min-h-[56vh] p-4">
+                      <MindMapFrame
+                        key={`preview-version-${previewVersionDetail.id}`}
+                        editorState={{
+                          editor_doc: normalizePreviewEditorDoc(previewVersionDetail.editor_doc),
+                          editor_config: normalizePreviewConfig(previewVersionDetail.editor_config),
+                          editor_local_config: normalizePreviewConfig(previewVersionDetail.editor_local_config),
+                          lang: editorState?.lang || 'zh',
+                        }}
+                        readonly
+                        showToolbarWhenReadonly
+                        onEditorStateChange={() => {}}
+                        className="h-[56vh] w-full rounded-2xl border border-border/70 bg-white"
+                      />
+                    </CardContent>
+                  </Card>
+                </div>
+              ) : null}
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

@@ -1,0 +1,6 @@
+{
+  "reason": "shutdown",
+  "created_at": "2026-05-09T00:46:16",
+  "db_file": "memory_palace.db",
+  "attachments_dir": "attachments"
+}

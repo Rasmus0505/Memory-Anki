@@ -35,7 +35,7 @@ export function Dialog({ open, onOpenChange, children }: DialogProps) {
 
 export function DialogContent({ children, className = '' }: PropsWithChildren<{ className?: string }>) {
   return (
-    <div className={`relative z-10 w-full max-w-3xl rounded-2xl border bg-background shadow-2xl ${className}`}>
+    <div className={`relative z-10 flex w-full max-w-3xl flex-col rounded-2xl border bg-background shadow-2xl ${className}`}>
       {children}
     </div>
   )

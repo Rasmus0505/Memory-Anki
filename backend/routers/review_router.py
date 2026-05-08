@@ -11,6 +11,11 @@ from services.review_service import (
     spread_overdue,
     submit_review,
 )
+from services.session_progress_service import (
+    clear_review_progress,
+    get_review_progress,
+    upsert_review_progress,
+)
 
 router = APIRouter(tags=["review"])
 
@@ -142,6 +147,35 @@ def api_review_session(schedule_id: int, session: Session = Depends(session_dep)
     return schedule_json(schedule)
 
 
+@router.get("/review/session/{schedule_id}/progress")
+def api_review_progress(schedule_id: int, session: Session = Depends(session_dep)):
+    schedule = session.query(ReviewSchedule).filter_by(id=schedule_id).first()
+    if not schedule:
+        return {"error": "not found"}
+    return {"progress": get_review_progress(session, schedule_id)}
+
+
+@router.put("/review/session/{schedule_id}/progress")
+def api_upsert_review_progress(schedule_id: int, data: dict, session: Session = Depends(session_dep)):
+    schedule = session.query(ReviewSchedule).filter_by(id=schedule_id).first()
+    if not schedule:
+        return {"error": "not found"}
+    return {
+        "progress": upsert_review_progress(
+            session,
+            schedule_id,
+            schedule.palace_id,
+            data,
+        )
+    }
+
+
+@router.delete("/review/session/{schedule_id}/progress")
+def api_delete_review_progress(schedule_id: int, session: Session = Depends(session_dep)):
+    clear_review_progress(session, schedule_id)
+    return {"ok": True}
+
+
 @router.post("/review/session/{schedule_id}/submit")
 def api_submit_session(schedule_id: int, data: dict, session: Session = Depends(session_dep)):
     log, extra = submit_review(
@@ -151,6 +185,8 @@ def api_submit_session(schedule_id: int, data: dict, session: Session = Depends(
     )
     if not log:
         return {"error": "not found"}
+
+    clear_review_progress(session, schedule_id)
 
     chapter_id = data.get("chapter_id")
     next_schedule = get_next_due_review(

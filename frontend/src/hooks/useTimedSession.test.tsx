@@ -2,6 +2,7 @@ import * as React from 'react'
 import { render, act } from '@testing-library/react'
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest'
 import { useTimedSession } from '@/hooks/useTimedSession'
+import { setTimeRecordingThresholdSeconds } from '@/lib/session-records'
 import type { TimeSessionRecord } from '@/lib/session-records'
 
 function HookHarness(props: { onRender: (state: ReturnType<typeof useTimedSession>) => void }) {
@@ -26,6 +27,7 @@ describe('useTimedSession', () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-05-08T08:00:00.000Z'))
     window.localStorage.clear()
+    setTimeRecordingThresholdSeconds(0)
   })
 
   afterEach(() => {
@@ -74,5 +76,23 @@ describe('useTimedSession', () => {
     expect(controller!.effectiveSeconds).toBe(1)
     expect(record).not.toBeNull()
     expect(record!.effectiveSeconds).toBe(1)
+  })
+
+  it('does not persist auto records when duration is at or below threshold', () => {
+    setTimeRecordingThresholdSeconds(1)
+    render(<HookHarness onRender={(state) => { controller = state }} />)
+
+    act(() => {
+      controller!.start({ source: 'manual' })
+      vi.advanceTimersByTime(1900)
+    })
+
+    let record: TimeSessionRecord | null = null
+    act(() => {
+      record = controller!.complete('manual_complete')
+    })
+
+    expect(record).toBeNull()
+    expect(JSON.parse(window.localStorage.getItem('memory-anki.time-records.v1') ?? '[]')).toEqual([])
   })
 })

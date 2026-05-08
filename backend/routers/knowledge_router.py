@@ -9,6 +9,7 @@ from editor_state import (
     save_subject_editor_state,
     sync_subject_editor_root,
 )
+from services.backup_service import maybe_create_rolling_backup
 import traceback
 
 router = APIRouter(tags=["knowledge"])
@@ -115,10 +116,12 @@ def update_subject_editor(subject_id: int, data: dict, s: Session = Depends(sess
     subject = s.query(Subject).filter_by(id=subject_id).first()
     if not subject:
         return {"error": "not found"}
-    return {
+    result = {
         "subject": subject_json(subject),
         **save_subject_editor_state(s, subject, data),
     }
+    maybe_create_rolling_backup("rolling-subject-editor-save")
+    return result
 
 
 @router.get("/chapters/{chapter_id}")
@@ -172,6 +175,7 @@ def create_chapter(subject_id: int, data: ChapterCreate, s: Session = Depends(se
         s.refresh(c)
         result = chapter_json(c)
         s.commit()
+        maybe_create_rolling_backup("rolling-create-chapter")
         print(f"[DEBUG] create_chapter OK: chapter_id={c.id}", flush=True)
         return result
     except Exception:
@@ -190,6 +194,7 @@ def update_chapter(chapter_id: int, data: dict, s: Session = Depends(session_dep
         if key in data:
             setattr(c, key, data[key])
     s.commit()
+    maybe_create_rolling_backup("rolling-update-chapter")
     return chapter_json(c)
 
 
@@ -208,6 +213,7 @@ def delete_chapter(chapter_id: int, s: Session = Depends(session_dep)):
         if c:
             _delete_recursive(c, s)
             s.commit()
+            maybe_create_rolling_backup("rolling-delete-chapter")
             print(f"[DEBUG] delete_chapter OK (cascade)", flush=True)
         return {"ok": True}
     except Exception:
@@ -249,6 +255,7 @@ def link_chapters(palace_id: int, data: dict, s: Session = Depends(session_dep))
 
     p.chapters = s.query(Chapter).filter(Chapter.id.in_(expanded_ids)).all() if expanded_ids else []
     s.commit()
+    maybe_create_rolling_backup("rolling-link-chapters")
     return {"ok": True, "count": len(p.chapters)}
 
 
@@ -288,6 +295,7 @@ def create_connection(data: dict, s: Session = Depends(session_dep)):
     )
     s.add(conn)
     s.commit()
+    maybe_create_rolling_backup("rolling-create-connection")
     return connection_json(conn)
 
 
@@ -295,4 +303,5 @@ def create_connection(data: dict, s: Session = Depends(session_dep)):
 def delete_connection(conn_id: int, s: Session = Depends(session_dep)):
     s.query(NodeConnection).filter_by(id=conn_id).delete()
     s.commit()
+    maybe_create_rolling_backup("rolling-delete-connection")
     return {"ok": True}

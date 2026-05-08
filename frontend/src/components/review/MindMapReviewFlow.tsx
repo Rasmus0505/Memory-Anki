@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { Edit3, Maximize2, Minimize2, PenLine, RotateCcw, Sparkles, SquareCheckBig } from 'lucide-react'
+import { Maximize2, Minimize2, PenLine, RotateCcw, Sparkles, SquareCheckBig } from 'lucide-react'
 import type { MindMapDoc, MindMapDocNode, MindMapEditorState } from '@/api/client'
 import { MindMapFrame, type MindMapSelection } from '@/components/mindmap-host'
 import { SessionTimerBar } from '@/components/session/SessionTimerBar'
@@ -23,8 +23,6 @@ export interface ReviewFlowSnapshot {
   completed: boolean
 }
 
-type ReviewMode = 'flip' | 'edit'
-
 interface CompleteFlowPayload {
   durationSeconds: number
   completionMode: 'manual_complete' | 'auto_complete'
@@ -37,15 +35,12 @@ interface MindMapReviewFlowProps {
   palaceId: number | null
   sessionKind: 'practice' | 'review'
   editorState: MindMapEditorState
-  onEditorStateChange?: (nextState: MindMapEditorState) => void
   onComplete: (payload: CompleteFlowPayload) => void | Promise<void>
   onRestart?: () => void
   submitting?: boolean
   persistProgress?: boolean
   initialSnapshot?: ReviewFlowSnapshot | null
   onSnapshotChange?: (snapshot: ReviewFlowSnapshot) => void
-  allowEditing?: boolean
-  canPersistEdits?: boolean
 }
 
 function cloneValue<T>(value: T): T {
@@ -86,7 +81,7 @@ function normalizeNode(node: MindMapDocNode | undefined, fallbackId: string, par
 
   return {
     id,
-    text: plainText(data.text) || '未命名节点',
+    text: plainText(data.text),
     note: plainText(data.note),
     parentId,
     children: children.map((child, index) => normalizeNode(child, `${fallbackId}-${index}`, id)),
@@ -120,6 +115,12 @@ function buildInitialRevealState(root: ReviewMindMapNode, previous: Record<strin
   walk(root)
   next[root.id] = 'revealed'
   return next
+}
+
+function sanitizeRedNodeIds(root: ReviewMindMapNode, previous: Iterable<string>) {
+  const validIds = new Set(collectNodeIds(root))
+  validIds.delete(root.id)
+  return new Set([...previous].filter((id) => validIds.has(id)))
 }
 
 function collectNodeIds(root: ReviewMindMapNode) {
@@ -217,6 +218,29 @@ function getNodeVisualStyle(
   }
 }
 
+const PLACEHOLDER_CONTENT_KEYS = [
+  'text',
+  'note',
+  'richText',
+  'textWidth',
+  'textHeight',
+  'noteWidth',
+  'noteHeight',
+  'hyperlink',
+  'hyperlinkTitle',
+  'hideText',
+  'hideNote',
+  'customTextWidth',
+]
+
+function clearPlaceholderContentFields(data: Record<string, unknown>) {
+  const nextData = { ...data }
+  PLACEHOLDER_CONTENT_KEYS.forEach((key) => {
+    delete nextData[key]
+  })
+  return nextData
+}
+
 function buildVisibleEditorDoc(
   source: MindMapDoc | null,
   revealMap: Record<string, RevealState>,
@@ -240,18 +264,18 @@ function buildVisibleEditorDoc(
     if (!forceVisible && revealState === 'hidden') return null
 
     const nextNode = cloneValue(node)
-    const nextData = { ...(nextNode.data ?? {}) }
+    let nextData = { ...(nextNode.data ?? {}) }
 
     if (forceVisible || revealState === 'revealed') {
+      nextData = clearPlaceholderContentFields(nextData)
       if (!plainText(nextData.text)) {
-        nextData.text = fallbackId === 'root' ? fallbackTitle || '未命名导图' : '未命名节点'
+        nextData.text = fallbackId === 'root' ? fallbackTitle || '未命名导图' : nodeMap.get(id)?.text || ''
       }
-      delete nextData.hideText
-      delete nextData.customTextWidth
     } else {
+      nextData = clearPlaceholderContentFields(nextData)
       nextData.text = '待回忆'
-      nextData.note = ''
       nextData.customTextWidth = 132
+      nextData.hideNote = true
     }
 
     Object.assign(
@@ -309,9 +333,9 @@ function revealRemainingNodes(
   }
 }
 
-function allNodesVisible(root: ReviewMindMapNode, revealMap: Record<string, RevealState>) {
+function allNodesRevealed(root: ReviewMindMapNode, revealMap: Record<string, RevealState>) {
   const ids = collectNodeIds(root).filter((id) => id !== root.id)
-  return ids.length > 0 && ids.every((id) => (revealMap[id] ?? 'hidden') !== 'hidden')
+  return ids.length > 0 && ids.every((id) => (revealMap[id] ?? 'hidden') === 'revealed')
 }
 
 export function MindMapReviewFlow({
@@ -319,15 +343,12 @@ export function MindMapReviewFlow({
   palaceId,
   sessionKind,
   editorState,
-  onEditorStateChange,
   onComplete,
   onRestart,
   submitting = false,
   persistProgress = false,
   initialSnapshot = null,
   onSnapshotChange,
-  allowEditing = true,
-  canPersistEdits = true,
 }: MindMapReviewFlowProps) {
   const timer = useTimedSession({
     kind: sessionKind,
@@ -343,20 +364,23 @@ export function MindMapReviewFlow({
   const [redNodeIds, setRedNodeIds] = React.useState<Set<string>>(
     () => new Set((initialSnapshot?.redNodeIds ?? []).filter(Boolean)),
   )
-  const [mode, setMode] = React.useState<ReviewMode>('flip')
   const [fullscreen, setFullscreen] = React.useState(false)
   const [completed, setCompleted] = React.useState(Boolean(initialSnapshot?.completed))
   const submittingRef = React.useRef(false)
   const timerRef = React.useRef(timer)
+  const userAdvancedReviewRef = React.useRef(Boolean(initialSnapshot?.completed))
+  const docFingerprint = React.useMemo(() => JSON.stringify(parsedDoc ?? {}), [parsedDoc])
+  const lastSnapshotPayloadRef = React.useRef('')
 
   React.useEffect(() => {
     const nextRevealMap = buildInitialRevealState(root, revealMap)
     setRevealMap(nextRevealMap)
-    setRedNodeIds((current) => {
-      const validIds = new Set(collectNodeIds(root))
-      return new Set([...current].filter((id) => validIds.has(id) && id !== root.id))
-    })
-  }, [root])
+    setRedNodeIds((current) => sanitizeRedNodeIds(root, current))
+    if (sessionKind === 'review') {
+      setCompleted(false)
+    }
+    userAdvancedReviewRef.current = false
+  }, [docFingerprint, root, sessionKind])
 
   React.useEffect(() => {
     if (!fullscreen) return
@@ -372,11 +396,15 @@ export function MindMapReviewFlow({
   }, [timer])
 
   React.useEffect(() => {
-    onSnapshotChange?.({
+    const payload = {
       revealMap,
       redNodeIds: [...redNodeIds],
       completed,
-    })
+    }
+    const fingerprint = JSON.stringify(payload)
+    if (fingerprint === lastSnapshotPayloadRef.current) return
+    lastSnapshotPayloadRef.current = fingerprint
+    onSnapshotChange?.(payload)
   }, [completed, onSnapshotChange, redNodeIds, revealMap])
 
   React.useEffect(() => {
@@ -402,6 +430,11 @@ export function MindMapReviewFlow({
   const visibleNonRootCount = React.useMemo(
     () =>
       collectNodeIds(root).filter((id) => id !== root.id && (revealMap[id] ?? 'hidden') !== 'hidden').length,
+    [revealMap, root],
+  )
+  const revealedNonRootCount = React.useMemo(
+    () =>
+      collectNodeIds(root).filter((id) => id !== root.id && (revealMap[id] ?? 'hidden') === 'revealed').length,
     [revealMap, root],
   )
 
@@ -435,14 +468,14 @@ export function MindMapReviewFlow({
 
   React.useEffect(() => {
     if (sessionKind !== 'review' || completed) return
-    if (allNodesVisible(root, revealMap)) {
+    if (userAdvancedReviewRef.current && allNodesRevealed(root, revealMap)) {
       void finishFlow('auto_complete')
     }
   }, [completed, finishFlow, revealMap, root, sessionKind])
 
   const handleNodeClick = React.useCallback(
     (nodes: MindMapSelection[]) => {
-      if (mode !== 'flip' || completed) return
+      if (completed) return
       const nodeId = buildSelectionNodeId(nodes[0] ?? null)
       if (!nodeId) return
       const node = nodeMap.get(nodeId)
@@ -451,20 +484,22 @@ export function MindMapReviewFlow({
       setRevealMap((current) => {
         const state = current[nodeId] ?? 'hidden'
         if (state === 'placeholder') {
+          userAdvancedReviewRef.current = true
           return { ...current, [nodeId]: 'revealed' }
         }
         if (state !== 'revealed') return current
         const nextChild = findNextHiddenChild(node, current)
         if (!nextChild) return current
+        userAdvancedReviewRef.current = true
         return { ...current, [nextChild.id]: 'placeholder' }
       })
     },
-    [completed, mode, nodeMap, timer],
+    [completed, nodeMap, timer],
   )
 
   const handleNodeContextMenu = React.useCallback(
     (nodes: MindMapSelection[]) => {
-      if (mode !== 'flip' || completed) return
+      if (completed) return
       const nodeId = buildSelectionNodeId(nodes[0] ?? null)
       if (!nodeId || nodeId === root.id) return
       timer.registerActivity({ source: 'right_click' })
@@ -478,39 +513,19 @@ export function MindMapReviewFlow({
         return next
       })
     },
-    [completed, mode, root.id, timer],
+    [completed, root.id, timer],
   )
-
-  const toggleMode = React.useCallback((nextMode: ReviewMode) => {
-    setMode(nextMode)
-    if (nextMode === 'edit') {
-      timer.registerActivity({ source: 'edit_mode' })
-      timer.logEvent('enter_edit_mode')
-      return
-    }
-    timer.registerActivity({ source: 'flip_mode' })
-    timer.logEvent('exit_edit_mode')
-  }, [timer])
 
   const handleRestart = React.useCallback(() => {
     const initialRevealMap = buildInitialRevealState(root)
     setRevealMap(initialRevealMap)
     setRedNodeIds(new Set())
     setCompleted(false)
-    setMode('flip')
+    userAdvancedReviewRef.current = false
     timer.complete('restart')
     timer.reset()
     onRestart?.()
   }, [onRestart, root, timer])
-
-  const handleEditorStateChange = React.useCallback((nextState: MindMapEditorState) => {
-    if (mode !== 'edit' || !canPersistEdits) {
-      timer.registerActivity({ source: 'readonly_editor_event_ignored' })
-      return
-    }
-    onEditorStateChange?.(nextState)
-    timer.registerActivity({ source: 'editor_change' })
-  }, [canPersistEdits, mode, onEditorStateChange, timer])
 
   const mapPanel = (
     <div className={cn('overflow-hidden rounded-2xl border border-border/70 bg-card', fullscreen ? 'h-full' : '')}>
@@ -518,19 +533,13 @@ export function MindMapReviewFlow({
         <div className="flex items-center gap-3">
           <div>
             <div className="text-sm font-semibold text-foreground">手动翻牌复习</div>
-            <div className="mt-1 text-xs text-muted-foreground">
-              {mode === 'flip'
-                ? '左键揭示或放出子卡，右键标红没记住。'
-                : '编辑模式下会直接修改原宫殿内容，退出后会尽量保留已揭示与红标状态。'}
-            </div>
+            <div className="mt-1 text-xs text-muted-foreground">左键揭示或放出子卡，右键标红没记住；正式复习会在全部正文翻开后自动完成。</div>
           </div>
           {completed ? <Badge className="bg-emerald-600 text-white hover:bg-emerald-600">本次已完成</Badge> : null}
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Badge variant="outline">已出现 {visibleNonRootCount} / {Math.max(totalNodeCount - 1, 0)}</Badge>
-          <Badge variant={mode === 'flip' ? 'secondary' : 'outline'}>
-            {mode === 'flip' ? '翻卡模式' : '编辑模式'}
-          </Badge>
+          <Badge variant="secondary">翻卡模式</Badge>
           <Button
             type="button"
             variant="outline"
@@ -545,26 +554,10 @@ export function MindMapReviewFlow({
 
       <div className="border-b border-border/70 px-4 py-3">
         <div className="flex flex-wrap items-center gap-2">
-          <Button
-            type="button"
-            size="sm"
-            variant={mode === 'flip' ? 'default' : 'outline'}
-            onClick={() => toggleMode('flip')}
-          >
+          <Button type="button" size="sm" variant="default">
             <Sparkles className="mr-2 h-4 w-4" />
             翻卡模式
           </Button>
-          {allowEditing ? (
-            <Button
-              type="button"
-              size="sm"
-              variant={mode === 'edit' ? 'default' : 'outline'}
-              onClick={() => toggleMode('edit')}
-            >
-              <Edit3 className="mr-2 h-4 w-4" />
-              编辑模式
-            </Button>
-          ) : null}
           {onRestart ? (
             <Button type="button" size="sm" variant="outline" onClick={handleRestart}>
               <RotateCcw className="mr-2 h-4 w-4" />
@@ -580,12 +573,12 @@ export function MindMapReviewFlow({
 
       <div className={cn('p-4', fullscreen ? 'h-[calc(100vh-235px)] min-h-0' : '')}>
         <MindMapFrame
-          editorState={mode === 'flip' ? visibleEditorState : editorState}
-          readonly={mode === 'flip'}
+          editorState={visibleEditorState}
+          readonly
           showToolbarWhenReadonly={false}
           syncOnPropChange
           preserveViewOnSync
-          onEditorStateChange={handleEditorStateChange}
+          onEditorStateChange={() => {}}
           onNodeClick={handleNodeClick}
           onNodeContextMenu={handleNodeContextMenu}
           className={cn(
@@ -605,13 +598,11 @@ export function MindMapReviewFlow({
       </div>
       <div className="mt-3 space-y-3 text-sm text-muted-foreground">
         <div className="rounded-2xl border border-border/70 bg-background/70 px-3 py-3">
-          已揭示 {collectNodeIds(root).filter((id) => id !== root.id && (revealMap[id] ?? 'hidden') === 'revealed').length} 张，
+          已出现 {visibleNonRootCount} 张，已揭示 {revealedNonRootCount} 张，
           红标 {redNodeIds.size} 张，当前有效时长 {formatDuration(timer.effectiveSeconds)}。
         </div>
         <div className="rounded-2xl border border-dashed border-border/80 px-3 py-3">
-          {mode === 'flip'
-            ? '翻卡模式只接管鼠标揭示与标红，不影响导图正文。'
-            : '编辑模式下新增节点默认隐藏，删除节点会从当前进度里移除。'}
+          翻卡模式只接管鼠标揭示与标红，不影响导图正文。
         </div>
         {persistProgress ? (
           <div className="rounded-2xl border border-dashed border-emerald-200 bg-emerald-50 px-3 py-3 text-emerald-700">

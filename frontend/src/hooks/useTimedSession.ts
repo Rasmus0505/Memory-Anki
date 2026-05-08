@@ -224,8 +224,7 @@ export function useTimedSession({
       durationEdited: durationEditedRef.current,
       events: [...eventsRef.current],
     }
-    appendTimeRecord(record)
-    return record
+    return appendTimeRecord(record)
   }, [autoPauseRef, clearTimer, hiddenPauseRef, kind, palaceId, pushEvent, stopTicker, title])
 
   const reset = React.useCallback(() => {

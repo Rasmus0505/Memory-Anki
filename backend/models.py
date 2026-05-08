@@ -105,6 +105,19 @@ class ReviewLog(Base):
     palace = relationship("Palace", back_populates="review_logs")
 
 
+class SessionProgress(Base):
+    __tablename__ = "session_progress"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    session_kind = Column(String(20), nullable=False)
+    palace_id = Column(Integer, ForeignKey("palaces.id", ondelete="CASCADE"), nullable=True)
+    review_schedule_id = Column(Integer, ForeignKey("review_schedules.id", ondelete="CASCADE"), nullable=True)
+    reveal_map = Column(Text, default="{}")
+    red_node_ids = Column(Text, default="[]")
+    completed = Column(Boolean, default=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
 class Subject(Base):
     __tablename__ = "subjects"
 
@@ -167,6 +180,8 @@ class PalaceVersion(Base):
     title = Column(String(200), nullable=False, default="")
     created_at_value = Column(DateTime, nullable=True)
     editor_doc = Column(Text, default="")
+    editor_config = Column(Text, default="")
+    editor_local_config = Column(Text, default="")
     peg_snapshot = Column(Text, default="")
     chapter_snapshot = Column(Text, default="")
     created_at = Column(DateTime, default=datetime.utcnow)

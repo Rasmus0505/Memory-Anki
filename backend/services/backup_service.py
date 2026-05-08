@@ -1,10 +1,13 @@
 import copy
+import copy
 import json
 import shutil
 import sqlite3
 import subprocess
+import threading
+import time
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from sqlalchemy.orm import Session
@@ -16,6 +19,18 @@ from models import Chapter, Palace, PalaceVersion, Peg
 MAX_VERSION_COUNT = 50
 MIN_DANGEROUS_NODE_COUNT = 5
 MAX_SAFE_REMAINING_NODES = 2
+EDITOR_SNAPSHOT_INTERVAL = timedelta(minutes=5)
+AUTO_FULL_BACKUP_INTERVAL = timedelta(hours=4)
+ROLLING_EDIT_BACKUP_INTERVAL = timedelta(minutes=30)
+MILESTONE_TRIGGER_REASONS = {
+    "before-version-restore",
+    "before-git-recovery",
+    "before-backup-restore",
+    "before-db-restore",
+}
+_BACKUP_LOCK = threading.Lock()
+_BACKUP_LOOP_THREAD: threading.Thread | None = None
+_BACKUP_LOOP_STOP = threading.Event()
 
 
 @dataclass
@@ -26,7 +41,8 @@ class PalaceSnapshot:
 
 
 def ensure_backup_schema(session: Session) -> None:
-    session.connection().exec_driver_sql(
+    connection = session.connection()
+    connection.exec_driver_sql(
         """
         CREATE TABLE IF NOT EXISTS palace_versions (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -35,6 +51,8 @@ def ensure_backup_schema(session: Session) -> None:
             title VARCHAR(200) NOT NULL DEFAULT '',
             created_at_value DATETIME NULL,
             editor_doc TEXT DEFAULT '',
+            editor_config TEXT DEFAULT '',
+            editor_local_config TEXT DEFAULT '',
             peg_snapshot TEXT DEFAULT '',
             chapter_snapshot TEXT DEFAULT '',
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -42,7 +60,14 @@ def ensure_backup_schema(session: Session) -> None:
         )
         """
     )
-    session.connection().exec_driver_sql(
+    existing_columns = {
+        row[1]
+        for row in connection.exec_driver_sql("PRAGMA table_info(palace_versions)").fetchall()
+    }
+    for column in ("editor_config", "editor_local_config"):
+        if column not in existing_columns:
+            connection.exec_driver_sql(f"ALTER TABLE palace_versions ADD COLUMN {column} TEXT DEFAULT ''")
+    connection.exec_driver_sql(
         "CREATE INDEX IF NOT EXISTS ix_palace_versions_palace_id_created_at ON palace_versions (palace_id, created_at DESC)"
     )
     session.commit()
@@ -51,6 +76,18 @@ def ensure_backup_schema(session: Session) -> None:
 def timestamp_slug(now: datetime | None = None) -> str:
     current = now or datetime.now()
     return current.strftime("%Y%m%d-%H%M%S")
+
+
+def _deserialize_version_json(raw: str | None, fallback):
+    if raw in (None, ""):
+        return copy.deepcopy(fallback)
+    try:
+        value = json.loads(raw)
+    except Exception:
+        return copy.deepcopy(fallback)
+    if isinstance(fallback, dict) and not isinstance(value, dict):
+        return copy.deepcopy(fallback)
+    return value
 
 
 def _copy_attachments(destination: Path) -> None:
@@ -81,18 +118,19 @@ def ensure_daily_backup() -> Path | None:
 
 
 def create_full_backup(reason: str) -> Path:
-    folder = FULL_BACKUPS_DIR / f"{timestamp_slug()}-{reason}"
-    folder.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(DB_PATH, folder / DB_PATH.name)
-    _copy_attachments(folder)
-    manifest = {
-        "reason": reason,
-        "created_at": datetime.now().isoformat(timespec="seconds"),
-        "db_file": DB_PATH.name,
-        "attachments_dir": "attachments",
-    }
-    (folder / "manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
-    return folder
+    with _BACKUP_LOCK:
+        folder = FULL_BACKUPS_DIR / f"{timestamp_slug()}-{reason}"
+        folder.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(DB_PATH, folder / DB_PATH.name)
+        _copy_attachments(folder)
+        manifest = {
+            "reason": reason,
+            "created_at": datetime.now().isoformat(timespec="seconds"),
+            "db_file": DB_PATH.name,
+            "attachments_dir": "attachments",
+        }
+        (folder / "manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
+        return folder
 
 
 def list_backups() -> list[dict]:
@@ -138,6 +176,58 @@ def restore_database_backup(backup_folder: str) -> Path:
             shutil.rmtree(ATTACHMENTS_DIR)
         shutil.copytree(source_attachments, ATTACHMENTS_DIR)
     return rescue
+
+
+def maybe_create_interval_backup(reason: str, minimum_interval: timedelta) -> Path | None:
+    latest = _latest_full_backup()
+    if latest and _backup_age(latest) < minimum_interval:
+        return None
+    return create_full_backup(reason)
+
+
+def maybe_create_rolling_backup(reason: str = "rolling-edit") -> Path | None:
+    return maybe_create_interval_backup(reason, ROLLING_EDIT_BACKUP_INTERVAL)
+
+
+def maybe_create_periodic_backup() -> Path | None:
+    return maybe_create_interval_backup("periodic", AUTO_FULL_BACKUP_INTERVAL)
+
+
+def create_shutdown_backup() -> Path | None:
+    return create_full_backup("shutdown")
+
+
+def start_periodic_backup_loop() -> None:
+    global _BACKUP_LOOP_THREAD
+    if _BACKUP_LOOP_THREAD and _BACKUP_LOOP_THREAD.is_alive():
+        return
+    _BACKUP_LOOP_STOP.clear()
+
+    def run_loop() -> None:
+        while not _BACKUP_LOOP_STOP.wait(timeout=300):
+            try:
+                maybe_create_periodic_backup()
+            except Exception:
+                continue
+
+    _BACKUP_LOOP_THREAD = threading.Thread(target=run_loop, name="memory-anki-backup-loop", daemon=True)
+    _BACKUP_LOOP_THREAD.start()
+
+
+def stop_periodic_backup_loop() -> None:
+    _BACKUP_LOOP_STOP.set()
+
+
+def _latest_full_backup() -> Path | None:
+    folders = [child for child in FULL_BACKUPS_DIR.iterdir() if child.is_dir()]
+    if not folders:
+        return None
+    return max(folders, key=lambda item: item.stat().st_mtime)
+
+
+def _backup_age(folder: Path) -> timedelta:
+    modified_at = datetime.fromtimestamp(folder.stat().st_mtime)
+    return datetime.now() - modified_at
 
 
 def _fetch_snapshot_from_sqlite(db_path: Path, palace_id: int) -> PalaceSnapshot | None:
@@ -192,14 +282,29 @@ def create_palace_version(
         {"id": chapter.id, "name": chapter.name, "subject_id": chapter.subject_id}
         for chapter in palace.chapters
     ]
+    latest_version = (
+        session.query(PalaceVersion)
+        .filter_by(palace_id=palace.id)
+        .order_by(PalaceVersion.created_at.desc(), PalaceVersion.id.desc())
+        .first()
+    )
+    next_editor_doc = palace.editor_doc or ""
+    next_peg_snapshot = json.dumps(peg_snapshot, ensure_ascii=False)
+    next_chapter_snapshot = json.dumps(chapter_snapshot, ensure_ascii=False)
+
+    if latest_version and (latest_version.editor_doc or "") == next_editor_doc:
+        return latest_version
+
     version = PalaceVersion(
         palace_id=palace.id,
         trigger_reason=trigger_reason,
         title=palace.title or "",
         created_at_value=palace.created_at,
-        editor_doc=palace.editor_doc or "",
-        peg_snapshot=json.dumps(peg_snapshot, ensure_ascii=False),
-        chapter_snapshot=json.dumps(chapter_snapshot, ensure_ascii=False),
+        editor_doc=next_editor_doc,
+        editor_config=palace.editor_config or "",
+        editor_local_config=palace.editor_local_config or "",
+        peg_snapshot=next_peg_snapshot,
+        chapter_snapshot=next_chapter_snapshot,
     )
     session.add(version)
     session.flush()
@@ -207,24 +312,98 @@ def create_palace_version(
     return version
 
 
-def _trim_old_versions(session: Session, palace_id: int) -> None:
+def create_effective_palace_version(
+    session: Session,
+    palace: Palace,
+    trigger_reason: str,
+) -> PalaceVersion | None:
+    if trigger_reason in MILESTONE_TRIGGER_REASONS:
+        return create_palace_version(session, palace, trigger_reason)
+    if trigger_reason != "editor_save":
+        return create_palace_version(session, palace, trigger_reason)
+    if not should_create_editor_snapshot(session, palace):
+        return None
+    return create_palace_version(session, palace, trigger_reason)
+
+
+def should_create_editor_snapshot(session: Session, palace: Palace) -> bool:
+    candidate_signature = _build_version_signature_from_palace(palace)
+    latest_version = _get_latest_version(session, palace.id)
+    if latest_version is None:
+        return True
+    if _build_version_signature(latest_version) == candidate_signature:
+        return False
+
+    latest_editor_version = _get_latest_editor_version(session, palace.id)
+    if latest_editor_version is None or latest_editor_version.created_at is None:
+        return True
+
+    latest_editor_signature = _build_version_signature(latest_editor_version)
+    if latest_editor_signature == candidate_signature:
+        return False
+
+    now = palace.updated_at or datetime.utcnow()
+    return now - latest_editor_version.created_at >= EDITOR_SNAPSHOT_INTERVAL
+
+
+def cleanup_duplicate_palace_versions(session: Session, palace_id: int) -> int:
     versions = (
         session.query(PalaceVersion)
         .filter_by(palace_id=palace_id)
         .order_by(PalaceVersion.created_at.desc(), PalaceVersion.id.desc())
         .all()
     )
+    seen_signatures: set[tuple] = set()
+    removed = 0
+
+    for version in versions:
+        signature = (version.editor_doc or "",)
+        if signature in seen_signatures:
+            session.delete(version)
+            removed += 1
+            continue
+        seen_signatures.add(signature)
+
+    if removed:
+        session.flush()
+        _trim_old_versions(session, palace_id)
+    return removed
+
+
+def get_effective_palace_versions(session: Session, palace_id: int) -> list[PalaceVersion]:
+    versions = _list_versions_query(session, palace_id).all()
+    effective: list[PalaceVersion] = []
+    for version in versions:
+        if version.trigger_reason != "editor_save":
+            effective.append(version)
+            continue
+        if not effective:
+            effective.append(version)
+            continue
+        if any(existing.id == version.id for existing in effective):
+            continue
+        last_kept = effective[-1]
+        if _build_version_signature(last_kept) == _build_version_signature(version):
+            continue
+        if (
+            last_kept.trigger_reason == "editor_save"
+            and last_kept.created_at
+            and version.created_at
+            and last_kept.created_at - version.created_at < EDITOR_SNAPSHOT_INTERVAL
+        ):
+            continue
+        effective.append(version)
+    return effective
+
+
+def _trim_old_versions(session: Session, palace_id: int) -> None:
+    versions = _list_versions_query(session, palace_id).all()
     for version in versions[MAX_VERSION_COUNT:]:
         session.delete(version)
 
 
 def list_palace_versions(session: Session, palace_id: int) -> list[dict]:
-    versions = (
-        session.query(PalaceVersion)
-        .filter_by(palace_id=palace_id)
-        .order_by(PalaceVersion.created_at.desc(), PalaceVersion.id.desc())
-        .all()
-    )
+    versions = get_effective_palace_versions(session, palace_id)
     return [
         {
             "id": version.id,
@@ -238,6 +417,108 @@ def list_palace_versions(session: Session, palace_id: int) -> list[dict]:
     ]
 
 
+def get_palace_version_detail(session: Session, palace_id: int, version_id: int) -> dict | None:
+    from editor_state import (
+        DEFAULT_EDITOR_CONFIG,
+        DEFAULT_EDITOR_LOCAL_CONFIG,
+        normalize_editor_doc,
+    )
+
+    version = (
+        session.query(PalaceVersion)
+        .filter_by(id=version_id, palace_id=palace_id)
+        .first()
+    )
+    if version is None:
+        return None
+    editor_doc = _deserialize_version_json(version.editor_doc, {})
+    normalized_doc = normalize_editor_doc(editor_doc, root_text=version.title or "未命名宫殿", root_kind="palace")
+    editor_config = _deserialize_version_json(version.editor_config, DEFAULT_EDITOR_CONFIG)
+    editor_local_config = _deserialize_version_json(version.editor_local_config, DEFAULT_EDITOR_LOCAL_CONFIG)
+    return {
+        "id": version.id,
+        "palace_id": version.palace_id,
+        "trigger_reason": version.trigger_reason,
+        "title": version.title,
+        "created_at_value": version.created_at_value.isoformat() if version.created_at_value else None,
+        "created_at": version.created_at.isoformat() if version.created_at else None,
+        "editor_doc": normalized_doc,
+        "editor_config": editor_config,
+        "editor_local_config": editor_local_config,
+    }
+
+
+def _list_versions_query(session: Session, palace_id: int):
+    return (
+        session.query(PalaceVersion)
+        .filter_by(palace_id=palace_id)
+        .order_by(PalaceVersion.created_at.desc(), PalaceVersion.id.desc())
+    )
+
+
+def _get_latest_version(session: Session, palace_id: int) -> PalaceVersion | None:
+    return _list_versions_query(session, palace_id).first()
+
+
+def _get_latest_editor_version(session: Session, palace_id: int) -> PalaceVersion | None:
+    return (
+        session.query(PalaceVersion)
+        .filter_by(palace_id=palace_id, trigger_reason="editor_save")
+        .order_by(PalaceVersion.created_at.desc(), PalaceVersion.id.desc())
+        .first()
+    )
+
+
+def _build_version_signature_from_palace(palace: Palace) -> tuple[str, str | None, str, str, str, str, str]:
+    peg_snapshot = [
+        {
+            "id": peg.id,
+            "parent_id": peg.parent_id,
+            "name": peg.name,
+            "content": peg.content,
+            "sort_order": peg.sort_order,
+        }
+        for peg in sorted(_collect_all_pegs(palace.pegs), key=lambda peg: (peg.sort_order, peg.id))
+    ]
+    chapter_snapshot = [
+        {"id": chapter.id, "name": chapter.name, "subject_id": chapter.subject_id}
+        for chapter in palace.chapters
+    ]
+    return (
+        palace.title or "",
+        palace.created_at.isoformat() if palace.created_at else None,
+        palace.editor_doc or "",
+        palace.editor_config or "",
+        palace.editor_local_config or "",
+        json.dumps(peg_snapshot, ensure_ascii=False),
+        json.dumps(chapter_snapshot, ensure_ascii=False),
+    )
+
+
+def _build_version_signature(version: PalaceVersion) -> tuple[str, str | None, str, str, str, str, str]:
+    return (
+        version.title or "",
+        version.created_at_value.isoformat() if version.created_at_value else None,
+        version.editor_doc or "",
+        version.editor_config or "",
+        version.editor_local_config or "",
+        version.peg_snapshot or "",
+        version.chapter_snapshot or "",
+    )
+
+
+def _collect_all_pegs(pegs: list[Peg]) -> list[Peg]:
+    result: list[Peg] = []
+
+    def walk(items: list[Peg]) -> None:
+        for peg in items:
+            result.append(peg)
+            walk(list(peg.children or []))
+
+    walk(list(pegs or []))
+    return result
+
+
 def restore_palace_version(session: Session, palace: Palace, version_id: int) -> PalaceVersion:
     version = session.query(PalaceVersion).filter_by(id=version_id, palace_id=palace.id).first()
     if version is None:
@@ -247,12 +528,58 @@ def restore_palace_version(session: Session, palace: Palace, version_id: int) ->
         "title": version.title,
         "created_at": version.created_at_value.isoformat() if version.created_at_value else None,
         "editor_doc": version.editor_doc,
+        "editor_config": version.editor_config,
+        "editor_local_config": version.editor_local_config,
         "pegs": json.loads(version.peg_snapshot or "[]"),
         "chapter_ids": [item["id"] for item in json.loads(version.chapter_snapshot or "[]") if isinstance(item, dict) and item.get("id") is not None],
     })
     session.commit()
     session.refresh(version)
     return version
+
+
+def restore_palace_from_backup(
+    session: Session,
+    *,
+    backup_db_path: str,
+    palace_id: int,
+) -> dict:
+    source_path = Path(backup_db_path)
+    if not source_path.exists() or not source_path.is_file():
+        raise FileNotFoundError("指定的备份数据库不存在。")
+
+    snapshot = _fetch_snapshot_from_sqlite(source_path, palace_id)
+    if snapshot is None:
+        raise ValueError("备份里未找到这个宫殿。")
+
+    palace = session.query(Palace).filter_by(id=palace_id).first()
+    if palace is None:
+        raise ValueError("当前数据库里未找到这个宫殿。")
+
+    rescue_snapshot_path = create_rescue_snapshot("before-rescue-restore")
+    create_palace_version(session, palace, "before-rescue-restore")
+    _apply_snapshot_to_palace(session, palace, {
+        "title": snapshot.palace_row.get("title") or palace.title,
+        "description": snapshot.palace_row.get("description") or palace.description,
+        "created_at": snapshot.palace_row.get("created_at"),
+        "editor_doc": snapshot.palace_row.get("editor_doc") or "",
+        "editor_config": snapshot.palace_row.get("editor_config") or "",
+        "editor_local_config": snapshot.palace_row.get("editor_local_config") or "",
+        "pegs": snapshot.pegs,
+        "chapter_ids": snapshot.chapter_ids,
+    })
+    cleanup_duplicate_palace_versions(session, palace.id)
+    session.commit()
+    session.refresh(palace)
+
+    return {
+        "palace_id": palace.id,
+        "source_backup_path": str(source_path),
+        "restored_title": palace.title,
+        "restored_node_count": count_editor_doc_nodes(palace.editor_doc) + (1 if palace.editor_doc else 0),
+        "restored_peg_count": len(snapshot.pegs),
+        "rescue_snapshot_path": str(rescue_snapshot_path),
+    }
 
 
 def recover_palaces_from_git_snapshot(

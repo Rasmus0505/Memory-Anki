@@ -10,11 +10,15 @@ from editor_state import (
     sync_palace_editor_root,
 )
 from services.backup_service import (
+    cleanup_duplicate_palace_versions,
     create_full_backup,
+    get_palace_version_detail,
     list_backups,
     list_palace_versions,
+    maybe_create_rolling_backup,
     recover_palaces_from_git_snapshot,
     restore_database_backup,
+    restore_palace_from_backup,
     restore_palace_version,
 )
 from services.palace_service import (
@@ -22,6 +26,11 @@ from services.palace_service import (
 )
 from services.review_service import trigger_review_for_palace
 from services.schedule_service import get_config_value
+from services.session_progress_service import (
+    clear_practice_progress,
+    get_practice_progress,
+    upsert_practice_progress,
+)
 from config import ATTACHMENTS_DIR
 import os, uuid
 
@@ -124,6 +133,7 @@ def api_get(palace_id: int, s: Session = Depends(session_dep)):
 def api_create(data: PalaceCreate, s: Session = Depends(session_dep)):
     palace = create_palace(s, data)
     trigger_review_for_palace(s, palace.id)
+    maybe_create_rolling_backup("rolling-create-palace")
     return palace_json(palace, s)
 
 
@@ -137,6 +147,7 @@ def api_update(palace_id: int, data: PalaceUpdate, s: Session = Depends(session_
         sync_palace_editor_root(updated)
         s.commit()
         s.refresh(updated)
+    maybe_create_rolling_backup("rolling-update-palace")
     return palace_json(updated, s)
 
 
@@ -209,10 +220,33 @@ def api_update_editor(palace_id: int, data: dict, s: Session = Depends(session_d
     if not palace:
         return {"error": "not found"}
     state = save_palace_editor_state(s, palace, data)
+    maybe_create_rolling_backup("rolling-editor-save")
     return {
         "palace": palace_json(palace, s),
         **state,
     }
+
+
+@router.get("/practice/session/{palace_id}")
+def api_get_practice_progress(palace_id: int, s: Session = Depends(session_dep)):
+    palace = get_palace(s, palace_id)
+    if not palace:
+        return {"error": "not found"}
+    return {"progress": get_practice_progress(s, palace_id)}
+
+
+@router.put("/practice/session/{palace_id}")
+def api_upsert_practice_progress(palace_id: int, data: dict, s: Session = Depends(session_dep)):
+    palace = get_palace(s, palace_id)
+    if not palace:
+        return {"error": "not found"}
+    return {"progress": upsert_practice_progress(s, palace_id, data)}
+
+
+@router.delete("/practice/session/{palace_id}")
+def api_delete_practice_progress(palace_id: int, s: Session = Depends(session_dep)):
+    clear_practice_progress(s, palace_id)
+    return {"ok": True}
 
 
 @router.get("/palaces/{palace_id}/versions")
@@ -220,11 +254,26 @@ def api_list_palace_versions(palace_id: int, s: Session = Depends(session_dep)):
     palace = get_palace(s, palace_id)
     if not palace:
         return {"error": "not found"}
+    removed_duplicates = cleanup_duplicate_palace_versions(s, palace.id)
+    if removed_duplicates:
+        s.commit()
     return {
         "palace_id": palace.id,
         "palace_title": palace.title,
+        "removed_duplicates": removed_duplicates,
         "versions": list_palace_versions(s, palace.id),
     }
+
+
+@router.get("/palaces/{palace_id}/versions/{version_id}")
+def api_get_palace_version_detail(palace_id: int, version_id: int, s: Session = Depends(session_dep)):
+    palace = get_palace(s, palace_id)
+    if not palace:
+        return {"error": "not found"}
+    detail = get_palace_version_detail(s, palace.id, version_id)
+    if not detail:
+        return {"error": "version not found"}
+    return detail
 
 
 @router.post("/palaces/{palace_id}/restore-version")
@@ -275,6 +324,16 @@ def api_recover_palaces(data: dict, s: Session = Depends(session_dep)):
     return {"ok": True, **result}
 
 
+@router.post("/backups/restore-palace-from-backup")
+def api_restore_palace_from_backup(data: dict, s: Session = Depends(session_dep)):
+    backup_path = str(data.get("path") or "").strip()
+    palace_id = int(data.get("palace_id") or 0)
+    if not backup_path or palace_id <= 0:
+        return {"error": "missing path or palace_id"}
+    result = restore_palace_from_backup(s, backup_db_path=backup_path, palace_id=palace_id)
+    return {"ok": True, "restored": result}
+
+
 @router.post("/palaces/{palace_id}/upload")
 async def api_upload(palace_id: int, file: UploadFile = File(...),
                      s: Session = Depends(session_dep)):
@@ -288,6 +347,7 @@ async def api_upload(palace_id: int, file: UploadFile = File(...),
                           original_name=file.filename or "file", file_size=0)
     s.add(att)
     s.commit()
+    maybe_create_rolling_backup("rolling-attachment-upload")
     return {"id": att.id, "filename": unique_name, "original_name": att.original_name}
 
 
@@ -309,4 +369,5 @@ def api_attachment_delete(att_id: int, s: Session = Depends(session_dep)):
             os.remove(fp)
         s.delete(att)
         s.commit()
+        maybe_create_rolling_backup("rolling-attachment-delete")
     return {"ok": True}
