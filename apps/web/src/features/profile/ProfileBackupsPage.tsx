@@ -1,0 +1,123 @@
+import { useEffect, useState } from 'react'
+import { HardDriveDownload, RotateCcw } from 'lucide-react'
+import { toast } from 'sonner'
+import { ProfileNav } from '@/features/profile/ProfileNav'
+import type { BackupSummary } from '@/shared/api/contracts'
+import {
+  createBackupApi,
+  getBackupsApi,
+  restoreBackupApi,
+} from '@/shared/api/modules/profile'
+import { Button } from '@/shared/components/ui/button'
+import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card'
+
+export default function ProfileBackupsPage() {
+  const [backups, setBackups] = useState<BackupSummary[]>([])
+  const [loading, setLoading] = useState(true)
+
+  const loadBackups = async () => {
+    setLoading(true)
+    try {
+      const result = await getBackupsApi()
+      setBackups(result.items)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    void loadBackups()
+  }, [])
+
+  const handleCreateBackup = async () => {
+    const result = await createBackupApi('manual')
+    toast.success(`已创建整库备份：${result.path}`)
+    await loadBackups()
+  }
+
+  const handleRestoreBackup = async (path: string) => {
+    const confirmed = window.confirm(
+      '整库恢复会先自动生成事故快照，再把数据库和附件回到目标备份。确定继续吗？',
+    )
+    if (!confirmed) return
+
+    const result = await restoreBackupApi(path)
+    toast.success(`整库恢复完成，事故快照已保存到：${result.rescue_path}`)
+    await loadBackups()
+  }
+
+  return (
+    <div className="space-y-8">
+      <div className="space-y-3">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">备份与恢复</h1>
+        </div>
+        <ProfileNav />
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">整库备份</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="text-sm text-muted-foreground">
+            主库仍然是 SQLite。这里提供项目内整库快照和事故快照，用于快速回滚数据库与附件。
+          </div>
+          <Button onClick={() => void handleCreateBackup()}>
+            <HardDriveDownload className="mr-2 h-4 w-4" />
+            立即备份
+          </Button>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">备份列表</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {loading ? (
+            <div className="py-6 text-sm text-muted-foreground">
+              正在读取备份列表…
+            </div>
+          ) : backups.length === 0 ? (
+            <div className="py-6 text-sm text-muted-foreground">
+              当前还没有可用备份。
+            </div>
+          ) : (
+            backups.map((backup) => (
+              <div
+                key={backup.path}
+                className="rounded-2xl border border-border/70 bg-background/70 px-4 py-4 text-sm"
+              >
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <div className="font-medium">{backup.name}</div>
+                    <div className="mt-1 text-xs text-muted-foreground">
+                      {backup.kind === 'full' ? '整库备份' : '事故快照'} ·{' '}
+                      {backup.created_at}
+                    </div>
+                    <div className="mt-2 break-all text-xs text-muted-foreground">
+                      {backup.path}
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {backup.kind === 'full' ? (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => void handleRestoreBackup(backup.path)}
+                      >
+                        <RotateCcw className="mr-2 h-4 w-4" />
+                        整库恢复
+                      </Button>
+                    ) : null}
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  )
+}

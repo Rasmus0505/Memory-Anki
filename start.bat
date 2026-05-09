@@ -1,69 +1,66 @@
 @echo off
-title Memory Palace
+setlocal
+title Memory Anki
 cd /d "%~dp0"
 
+set "API_DIR=%~dp0apps\api"
+set "WEB_DIR=%~dp0apps\web"
+set "API_PORT=8000"
+set "WEB_PORT=5173"
+set "APP_HOME=%LOCALAPPDATA%\MemoryAnki"
+set "LEGACY_DATA_DIR=%~dp0data"
+
 echo.
 echo ============================================
-echo   Memory Palace Review System
+echo   Memory Anki ^(apps/api + apps/web^)
 echo ============================================
 echo.
 
-echo [0/2] Killing old processes...
+if exist "%LEGACY_DATA_DIR%\memory_palace.db" (
+    echo [i] Detected legacy repo data at "%LEGACY_DATA_DIR%".
+    echo [i] Runtime data now lives under "%APP_HOME%".
+    echo [i] API startup will migrate legacy data into the runtime directory when needed.
+    echo.
+)
 
-:: 1) Kill by window title (most reliable way to find our own processes)
-taskkill /F /FI "WINDOWTITLE eq Memory-Backend" 2>nul
-taskkill /F /FI "WINDOWTITLE eq Memory-Frontend" 2>nul
+echo [0/2] Cleaning previous dev servers...
+taskkill /F /FI "WINDOWTITLE eq Memory-Anki-API" 2>nul
+taskkill /F /FI "WINDOWTITLE eq Memory-Anki-WEB" 2>nul
 
-:: 2) Kill anything listening on port 8000 or 5173
-for /f "tokens=5" %%a in ('netstat -ano 2^>nul ^| findstr /R /C:":8000 .*LISTENING"') do (
+for /f "tokens=5" %%a in ('netstat -ano 2^>nul ^| findstr /R /C:":%API_PORT% .*LISTENING"') do (
     taskkill /F /PID %%a 2>nul
 )
-for /f "tokens=5" %%a in ('netstat -ano 2^>nul ^| findstr /R /C:":5173 .*LISTENING"') do (
+for /f "tokens=5" %%a in ('netstat -ano 2^>nul ^| findstr /R /C:":%WEB_PORT% .*LISTENING"') do (
     taskkill /F /PID %%a 2>nul
 )
 
-:: 3) Wait for sockets to release
-timeout /t 3 /nobreak >nul
+timeout /t 2 /nobreak >nul
 
-:: 4) Double-check ports are free
-set RETRIES=0
-:check8000
-netstat -ano 2>nul | findstr /R /C:":8000 .*LISTENING" >nul
-if %ERRORLEVEL% EQU 0 (
-    set /a RETRIES+=1
-    if %RETRIES% LSS 5 (
-        for /f "tokens=5" %%a in ('netstat -ano 2^>nul ^| findstr /R /C:":8000 .*LISTENING"') do taskkill /F /PID %%a 2>nul
-        timeout /t 2 /nobreak >nul
-        goto check8000
-    )
-    echo [!] WARNING: Port 8000 still occupied after 5 retries
-) else (
-    echo     Port 8000 free ^(retry %RETRIES%^)
-)
+echo [1/2] Starting API on port %API_PORT%...
+start "Memory-Anki-API" /MIN cmd /c "cd /d "%API_DIR%" && python -m uvicorn --app-dir src memory_anki.app.main:app --host 127.0.0.1 --port %API_PORT% --reload"
 
-echo [1/2] Starting backend on port 8000...
-start "Memory-Backend" /MIN cmd /c "cd /d "%~dp0backend" && python -m uvicorn app:app --host 127.0.0.1 --port 8000 --reload"
-
-echo [2/2] Starting frontend on port 5173...
-start "Memory-Frontend" /MIN cmd /c "cd /d "%~dp0frontend" && npx vite --host"
+echo [2/2] Starting WEB on port %WEB_PORT%...
+start "Memory-Anki-WEB" /MIN cmd /c "cd /d "%WEB_DIR%" && npx vite --host 127.0.0.1 --port %WEB_PORT%"
 
 echo.
-echo [*] Waiting for servers (6s)...
+echo [*] Waiting for servers ^(6s^)...
 timeout /t 6 /nobreak >nul
 
 echo [*] Opening browser...
-start "" http://localhost:5173
+start "" http://localhost:%WEB_PORT%
 
 echo.
 echo ============================================
-echo   Ready - Browser opened
-echo   Frontend : http://localhost:5173
-echo   Backend  : http://localhost:8000
-echo   API Docs : http://localhost:8000/docs
+echo   Ready
+echo   Web     : http://localhost:%WEB_PORT%
+echo   API     : http://127.0.0.1:%API_PORT%/api/v1
+echo   API Doc : http://127.0.0.1:%API_PORT%/docs
+echo   Data    : %APP_HOME%\data
 echo ============================================
 echo.
-echo Backend window : Memory-Backend (check debug info here)
-echo Frontend window: Memory-Frontend
+echo Windows:
+echo   Memory-Anki-API
+echo   Memory-Anki-WEB
 echo.
 
 pause

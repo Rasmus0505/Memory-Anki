@@ -1,0 +1,43 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "memory-anki-api"
+version = "0.1.0"
+requires-python = ">=3.12"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+ignore = ["B008", "E501", "E712"]
+
+[tool.mypy]
+python_version = "3.12"
+warn_unused_configs = true
+check_untyped_defs = true
+ignore_missing_imports = true
+packages = ["memory_anki"]
+plugins = ["sqlalchemy.ext.mypy.plugin"]
+
+[tool.importlinter]
+root_package = "memory_anki"
+include_external_packages = false
+contracts = [
+    { name = "application cannot import presentation", type = "forbidden", source_modules = ["memory_anki.modules.*.application"], forbidden_modules = ["memory_anki.modules.*.presentation"] },
+    { name = "domain cannot import application or presentation", type = "forbidden", source_modules = ["memory_anki.modules.*.domain"], forbidden_modules = ["memory_anki.modules.*.application", "memory_anki.modules.*.presentation"] },
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]

@@ -1,0 +1,20 @@
+import type { ChartConfig } from '@/shared/components/ui/chart'
+
+export const timeRecordChartConfig: ChartConfig = {
+  seconds: { label: '有效时长', color: '#2563eb' },
+  review: { label: '正式复习', color: '#0f172a' },
+  practice: { label: '练习', color: '#0f766e' },
+  palace_edit: { label: '宫殿编辑', color: '#c2410c' },
+}
+
+export function getTimeRecordChartColor(
+  kind: 'review' | 'practice' | 'palace_edit',
+) {
+  const colorByKind = {
+    review: 'var(--color-review)',
+    practice: 'var(--color-practice)',
+    palace_edit: 'var(--color-palace_edit)',
+  }
+
+  return colorByKind[kind]
+}

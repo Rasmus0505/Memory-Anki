@@ -2,18 +2,18 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "backend",
+      "name": "api",
       "runtimeExecutable": "python",
-      "runtimeArgs": ["app.py"],
+      "runtimeArgs": ["-m", "uvicorn", "--app-dir", "src", "memory_anki.app.main:app", "--host", "127.0.0.1", "--port", "8000", "--reload"],
       "port": 8000,
-      "cwd": "backend"
+      "cwd": "apps/api"
     },
     {
-      "name": "frontend",
+      "name": "web",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev"],
+      "runtimeArgs": ["run", "dev", "--", "--host", "127.0.0.1", "--port", "5173"],
       "port": 5173,
-      "cwd": "frontend",
+      "cwd": "apps/web",
       "autoPort": true
     }
   ]

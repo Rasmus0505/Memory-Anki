@@ -1,47 +1,44 @@
-# CLAUDE.md — 记忆宫殿复习系统
+# CLAUDE.md — Memory Anki
 
 ## 项目概述
 
-个人使用的记忆宫殿管理工具。记录每天创造的记忆宫殿，按记忆曲线自动安排复习。
+本项目是本地优先的记忆宫殿与复习工具，当前正式结构已经切换到 `apps/api` 与 `apps/web`。
 
-## 技术架构
+## 当前结构
 
-- **后端**: FastAPI REST API, 端口 8000
-- **前端**: Vite + React + shadcn/ui, 端口 5173
-- **数据库**: SQLite (data/memory_palace.db)
-- **存储**: 本地文件系统 (data/attachments/)
-
-## 项目结构
-
-```
+```text
 D:\Memory Anki\
-├── CLAUDE.md              # 本文件 - AI 开工前必读
-├── start.bat              # 一键启动入口
-├── doc/
-│   └── requirements.md    # 用户需求变更记录
-├── backend/               # FastAPI 后端
-│   ├── app.py             # 入口
-│   ├── models.py          # SQLAlchemy 数据模型
-│   ├── schemas.py         # Pydantic 校验
-│   ├── config.py          # 配置
-│   ├── services/          # 业务逻辑
-│   └── routers/           # API 路由
-├── frontend/              # React 前端
-│   ├── src/
-│   │   ├── api/           # API 调用层
-│   │   ├── components/    # shadcn 组件
-│   │   ├── pages/         # 页面
-│   │   └── lib/           # 工具函数
-│   └── ...
-└── data/                  # 运行时数据 (不纳入版本控制)
+├── start.bat                # Windows 一键启动入口
+├── apps/
+│   ├── api/                 # FastAPI + SQLAlchemy + Alembic
+│   │   ├── requirements.txt
+│   │   └── src/memory_anki/
+│   └── web/                 # React + Vite 前端
+│       └── src/
+├── docs/                    # 架构与项目文档
+├── doc/Phase/               # 需求记录
+├── tools/                   # 架构检查与辅助脚本
+└── data/                    # 仅保留为 legacy migration source
 ```
 
-## AI 协作规则
+## 运行与数据
 
-1. **开工前**：先读取 `doc/requirements.md` 了解用户最新需求
-2. **修改代码前**：理解现有架构，遵循项目结构
-3. **前端组件**：优先使用 shadcn/ui 组件，保持 UI 一致性
-4. **后端 API**：返回 JSON，不渲染模板
-5. **文件管理**：附件存 data/attachments/，数据库存 data/
-6. **启动方式**：`start.bat` 一键启动前后端
-7. **文档记录**：每次用户提新需求，记录到 doc/requirements.md
+- API 开发根：`apps/api`
+- Web 开发根：`apps/web`
+- 默认运行数据目录：`%LOCALAPPDATA%/MemoryAnki/data`
+- 可通过环境变量 `MEMORY_ANKI_HOME` 覆盖运行目录
+- 仓库根 `data/` 不是正式运行目录，只作为旧版本数据导入来源
+
+## 启动方式
+
+- Windows：运行 [start.bat](/D:/Memory%20Anki/start.bat)
+- API 本地启动：在 `apps/api` 下运行 `python -m uvicorn --app-dir src memory_anki.app.main:app --host 127.0.0.1 --port 8000 --reload`
+- Web 本地启动：在 `apps/web` 下运行 `npm run dev -- --host 127.0.0.1 --port 5173`
+
+## 协作规则
+
+1. 修改前先理解 `apps/api/src/memory_anki` 与 `apps/web/src` 的模块边界，不要回退到旧式全局堆叠结构。
+2. 新运行数据、备份、附件都应落在 `%LOCALAPPDATA%/MemoryAnki` 或 `MEMORY_ANKI_HOME` 指向的目录。
+3. 若仓库根存在旧 `data/`，应通过启动时迁移逻辑导入，不要把仓库内 `data/` 当作长期运行目录继续写入。
+4. 需求记录写入 `D:\Memory Anki\doc\Phase\YYYY-MM-DD.md`。
+5. 前端共享类型优先来自生成契约与 feature wrapper，不要重新引入旧的全局 API 杂糅入口。
