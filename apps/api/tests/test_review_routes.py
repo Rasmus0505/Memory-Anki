@@ -19,6 +19,7 @@ from memory_anki.modules.backups.application.backup_service import (
 )
 from memory_anki.modules.mindmap.application.editor_state_service import save_palace_editor_state
 from memory_anki.modules.reviews.application.review_service import submit_review
+from memory_anki.modules.reviews.application.schedule_service import ensure_current_review_schedule_model
 from memory_anki.modules.palaces.presentation import router as palace_router
 from memory_anki.modules.reviews.presentation import router as review_router
 from memory_anki.modules.sessions.application.session_progress_service import (
@@ -131,7 +132,7 @@ class ReviewRouteTests(unittest.TestCase):
         self.assertEqual(payload["reviews"][0]["schedule_count"], 2)
         self.assertEqual(payload["reviews"][0]["overdue_schedule_count"], 1)
 
-    def test_submit_review_completes_all_due_schedules_for_same_palace(self):
+    def test_submit_review_only_advances_current_due_schedule(self):
         with self.SessionLocal() as session:
             palace = session.query(Palace).filter_by(id=1).first()
             self.assertIsNotNone(palace)
@@ -169,12 +170,13 @@ class ReviewRouteTests(unittest.TestCase):
 
         with self.SessionLocal() as session:
             schedules = session.query(ReviewSchedule).filter_by(palace_id=1).order_by(ReviewSchedule.id).all()
-            completed_due = [schedule for schedule in schedules if schedule.review_number in (0, 1, 2)]
-            self.assertEqual(len(completed_due), 3)
-            self.assertTrue(all(schedule.completed for schedule in completed_due))
+            self.assertEqual(len(schedules), 2)
+            completed = [schedule for schedule in schedules if schedule.completed]
+            self.assertEqual(len(completed), 1)
+            self.assertEqual(completed[0].review_number, 0)
             pending = [schedule for schedule in schedules if not schedule.completed]
             self.assertEqual(len(pending), 1)
-            self.assertEqual(pending[0].review_number, 3)
+            self.assertEqual([schedule.review_number for schedule in pending], [1])
 
     def test_submit_review_creates_review_time_record(self):
         with self.SessionLocal() as session:
@@ -323,7 +325,7 @@ class ReviewRouteTests(unittest.TestCase):
         self.assertIsInstance(payload["palace"]["editor_doc"], str)
         self.assertIn("Branch A", payload["palace"]["editor_doc"])
 
-    def test_palace_review_plan_marks_same_day_multiple_reviews(self):
+    def test_palace_review_plan_groups_same_day_multiple_reviews(self):
         with self.SessionLocal() as session:
             palace = session.query(Palace).filter_by(title="Test Palace").first()
             self.assertIsNotNone(palace)
@@ -343,13 +345,146 @@ class ReviewRouteTests(unittest.TestCase):
         response = self.client.get("/api/v1/palaces/1/review-plan")
         self.assertEqual(response.status_code, 200)
         payload = response.json()
-        self.assertEqual(len(payload["plan"]), 2)
-        self.assertEqual(payload["plan"][0]["sequence_label"], "第 1 次复习")
-        self.assertEqual(payload["plan"][0]["same_day_index"], 1)
-        self.assertEqual(payload["plan"][0]["same_day_total"], 2)
-        self.assertEqual(payload["plan"][1]["sequence_label"], "第 2 次复习")
-        self.assertEqual(payload["plan"][1]["same_day_index"], 2)
-        self.assertEqual(payload["plan"][1]["same_day_total"], 2)
+        self.assertEqual(len(payload["plan"]), 1)
+        self.assertEqual(payload["plan"][0]["date"], (date.today() - timedelta(days=1)).isoformat())
+        self.assertEqual(payload["plan"][0]["representative_schedule_id"], 1)
+        self.assertEqual(payload["plan"][0]["schedule_count"], 2)
+        self.assertEqual(payload["plan"][0]["pending_count"], 2)
+        self.assertEqual(payload["plan"][0]["completed_count"], 0)
+        self.assertFalse(payload["plan"][0]["completed"])
+        self.assertEqual(payload["plan"][0]["review_number"], 1)
+        self.assertEqual(payload["plan"][0]["interval_days"], 1)
+
+    def test_palace_review_plan_groups_completed_and_pending_same_day(self):
+        with self.SessionLocal() as session:
+            first_schedule = session.query(ReviewSchedule).filter_by(id=1).first()
+            self.assertIsNotNone(first_schedule)
+            first_schedule.completed = True
+            session.add(
+                ReviewSchedule(
+                    palace_id=1,
+                    scheduled_date=first_schedule.scheduled_date,
+                    interval_days=2,
+                    algorithm_used="ebbinghaus",
+                    completed=False,
+                    review_number=1,
+                    review_type="standard",
+                )
+            )
+            session.commit()
+
+        response = self.client.get("/api/v1/palaces/1/review-plan")
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(len(payload["plan"]), 1)
+        self.assertEqual(payload["plan"][0]["schedule_count"], 2)
+        self.assertEqual(payload["plan"][0]["pending_count"], 1)
+        self.assertEqual(payload["plan"][0]["completed_count"], 1)
+        self.assertFalse(payload["plan"][0]["completed"])
+
+    def test_palace_list_includes_review_stage_progress_fields(self):
+        with self.SessionLocal() as session:
+            first_schedule = session.query(ReviewSchedule).filter_by(id=1).first()
+            self.assertIsNotNone(first_schedule)
+            first_schedule.completed = True
+            session.add(
+                ReviewLog(
+                    palace_id=1,
+                    review_date=date.today(),
+                    score=5,
+                    review_mode="review",
+                    duration_seconds=60,
+                )
+            )
+            session.add(
+                ReviewSchedule(
+                    palace_id=1,
+                    scheduled_date=date.today() + timedelta(days=1),
+                    interval_days=2,
+                    algorithm_used="ebbinghaus",
+                    completed=False,
+                    review_number=1,
+                    review_type="standard",
+                )
+            )
+            session.commit()
+
+        response = self.client.get("/api/v1/palaces")
+        self.assertEqual(response.status_code, 200)
+        item = response.json()[0]
+        self.assertEqual(item["review_stage_total"], 9)
+        self.assertEqual(item["review_stage_completed"], 1)
+        self.assertAlmostEqual(item["review_stage_progress"], 1 / 9)
+
+    def test_schedule_cleanup_collapses_legacy_future_chain(self):
+        with self.SessionLocal() as session:
+            palace = session.query(Palace).filter_by(id=1).first()
+            self.assertIsNotNone(palace)
+            palace.created_at = datetime.combine(date.today() - timedelta(days=2), datetime.min.time())
+            session.add_all(
+                [
+                    ReviewLog(
+                        palace_id=1,
+                        review_date=date.today() - timedelta(days=1),
+                        score=5,
+                        review_mode="review",
+                        duration_seconds=90,
+                    ),
+                    ReviewSchedule(
+                        palace_id=1,
+                        scheduled_date=date.today() - timedelta(days=1),
+                        interval_days=0,
+                        algorithm_used="ebbinghaus",
+                        completed=True,
+                        review_number=0,
+                        review_type="1h",
+                        anchor_date=date.today() - timedelta(days=2),
+                    ),
+                    ReviewSchedule(
+                        palace_id=1,
+                        scheduled_date=date.today() - timedelta(days=1),
+                        interval_days=0,
+                        algorithm_used="ebbinghaus",
+                        completed=False,
+                        review_number=1,
+                        review_type="sleep",
+                        anchor_date=date.today() - timedelta(days=2),
+                    ),
+                    ReviewSchedule(
+                        palace_id=1,
+                        scheduled_date=date.today() + timedelta(days=2),
+                        interval_days=4,
+                        algorithm_used="ebbinghaus",
+                        completed=False,
+                        review_number=4,
+                        review_type="standard",
+                        anchor_date=date.today() - timedelta(days=2),
+                    ),
+                ]
+            )
+            session.commit()
+
+            changed = ensure_current_review_schedule_model(session)
+            self.assertGreater(changed, 0)
+            schedules = session.query(ReviewSchedule).filter_by(palace_id=1).order_by(ReviewSchedule.review_number, ReviewSchedule.id).all()
+
+            self.assertEqual(len(schedules), 1)
+            self.assertFalse(schedules[0].completed)
+            self.assertEqual(schedules[0].review_number, 1)
+
+    def test_palace_list_shows_mastered_palace_as_full_progress(self):
+        with self.SessionLocal() as session:
+            palace = session.query(Palace).filter_by(id=1).first()
+            self.assertIsNotNone(palace)
+            palace.mastered = True
+            session.commit()
+
+        response = self.client.get("/api/v1/palaces")
+        self.assertEqual(response.status_code, 200)
+        item = response.json()[0]
+        self.assertEqual(item["review_stage_total"], 9)
+        self.assertEqual(item["review_stage_completed"], 9)
+        self.assertEqual(item["review_stage_progress"], 1.0)
 
     def test_practice_progress_round_trip(self):
         response = self.client.put(

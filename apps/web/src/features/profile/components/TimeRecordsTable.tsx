@@ -16,7 +16,6 @@ import { Button } from '@/shared/components/ui/button'
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from '@/shared/components/ui/card'
@@ -75,9 +74,6 @@ export function TimeRecordsTable({
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <CardTitle className="text-lg">时间记录列表</CardTitle>
-            <CardDescription>
-              支持筛选、编辑、软删除与恢复。
-            </CardDescription>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <label className="flex items-center gap-2 rounded-md border border-input px-3 py-2 text-sm">
@@ -93,9 +89,6 @@ export function TimeRecordsTable({
               />
               <span className="text-muted-foreground">秒</span>
             </label>
-            <div className="text-xs text-muted-foreground">
-              仅记录超过该时长的会话
-            </div>
             <Button variant="outline" size="sm" onClick={onCreateRecord}>
               <Plus className="mr-2 h-4 w-4" />
               手动新增记录

@@ -3,7 +3,10 @@ import { Link } from 'react-router-dom'
 import { FolderTree, Plus, Save, Trash2 } from 'lucide-react'
 import type { MindMapEditorState } from '@/shared/api/contracts'
 import { PageIntro } from '@/shared/components/layout/PageIntro'
-import { MindMapFrame, type MindMapSelection } from '@/shared/components/mindmap-host'
+import {
+  MindMapFrame,
+  type MindMapSelection,
+} from '@/shared/components/mindmap-host'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card'
@@ -220,7 +223,7 @@ export default function Knowledge() {
               <div className="flex gap-2">
                 <Button type="button" className="flex-1" onClick={handleSaveSubject} disabled={!activeSubject}>
                   <Save className="mr-2 h-4 w-4" />
-                  保存
+                  保存学科信息
                 </Button>
                 <Button type="button" variant="outline" onClick={handleDeleteSubject} disabled={!activeSubject}>
                   <Trash2 className="mr-2 h-4 w-4" />
@@ -308,6 +311,7 @@ export default function Knowledge() {
           </CardContent>
         </Card>
       </div>
+
     </div>
   )
 }

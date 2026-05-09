@@ -1,10 +1,12 @@
 """知识体系路由：学科 + 章节 + 双向关联 + 自定义连线"""
 import traceback
+from pathlib import Path
 
 from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
+from memory_anki.core.config import REPO_ROOT
 from memory_anki.infrastructure.db.models import (
     Chapter,
     NodeConnection,
@@ -21,6 +23,7 @@ from memory_anki.modules.mindmap.application.editor_state_service import (
 from memory_anki.modules.palaces.domain.schemas import ChapterCreate
 
 router = APIRouter(tags=["knowledge"])
+DEBUG_LOG_PATH = REPO_ROOT / "output" / "subject-editor-debug.log"
 
 
 def session_dep():
@@ -121,15 +124,39 @@ def get_subject_editor(subject_id: int, s: Session = Depends(session_dep)):
 
 @router.put("/subjects/{subject_id}/editor")
 def update_subject_editor(subject_id: int, data: dict, s: Session = Depends(session_dep)):
-    subject = s.query(Subject).filter_by(id=subject_id).first()
-    if not subject:
-        return {"error": "not found"}
-    result = {
-        "subject": subject_json(subject),
-        **save_subject_editor_state(s, subject, data),
-    }
-    maybe_create_rolling_backup("rolling-subject-editor-save")
-    return result
+    try:
+        subject = s.query(Subject).filter_by(id=subject_id).first()
+        if not subject:
+            return {"error": "not found"}
+        editor_doc = data.get("editor_doc")
+        root = editor_doc.get("root") if isinstance(editor_doc, dict) else None
+        top_children = len(editor_doc.get("children", [])) if isinstance(editor_doc, dict) and isinstance(editor_doc.get("children"), list) else None
+        root_children = len(root.get("children", [])) if isinstance(root, dict) and isinstance(root.get("children"), list) else None
+        print(
+            f"[DEBUG] update_subject_editor payload: subject_id={subject_id}, "
+            f"doc_keys={list(editor_doc.keys()) if isinstance(editor_doc, dict) else type(editor_doc).__name__}, "
+            f"top_children={top_children}, root_children={root_children}",
+            flush=True,
+        )
+        result = {
+            "subject": subject_json(subject),
+            **save_subject_editor_state(s, subject, data),
+        }
+        maybe_create_rolling_backup("rolling-subject-editor-save")
+        return result
+    except Exception:
+        s.rollback()
+        tb = traceback.format_exc()
+        DEBUG_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+        with DEBUG_LOG_PATH.open("a", encoding="utf-8") as handle:
+            handle.write(
+                "[update_subject_editor FAIL]\n"
+                f"subject_id={subject_id}\n"
+                f"payload_keys={list(data.keys()) if isinstance(data, dict) else type(data).__name__}\n"
+                f"traceback=\n{tb}\n"
+            )
+        print(f"[DEBUG] update_subject_editor FAIL: {tb}", flush=True)
+        return JSONResponse(status_code=500, content={"error": tb})
 
 
 @router.get("/chapters/{chapter_id}")

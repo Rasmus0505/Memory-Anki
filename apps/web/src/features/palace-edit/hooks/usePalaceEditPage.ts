@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ChangeEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import {
   createPalaceApi,
@@ -114,14 +114,26 @@ export function usePalaceEditPage() {
     title: title || palace?.title || '未命名宫殿',
     palaceId,
   })
+  const timerRef = useRef(timer)
+
+  useEffect(() => {
+    if (!palaceId || !editorState) return
+    if (timer.status !== 'idle') return
+    timer.start({ source: 'page_enter' })
+  }, [editorState, palaceId, timer])
+
+  useEffect(() => {
+    timerRef.current = timer
+  }, [timer, timerRef])
 
   useEffect(() => {
     return () => {
-      if (timer.startedAt && timer.status !== 'completed') {
-        void timer.complete('left_page')
+      const currentTimer = timerRef.current
+      if (currentTimer.startedAt && currentTimer.status !== 'completed') {
+        void currentTimer.complete('left_page')
       }
     }
-  }, [timer])
+  }, [timerRef])
 
   useEffect(() => {
     if (!mindMapFullscreen) return
@@ -148,6 +160,16 @@ export function usePalaceEditPage() {
     setCreatedAt(formatDateTimeInputValue(palace.created_at))
     setSelectedChapterIds(palace.chapters.map((chapter) => chapter.id))
   }, [palace])
+
+  const handleTitleChange = (value: string) => {
+    timer.registerActivity({ source: 'title_input' })
+    setTitle(value)
+  }
+
+  const handleCreatedAtChange = (value: string) => {
+    timer.registerActivity({ source: 'created_at_input' })
+    setCreatedAt(value)
+  }
 
   useEffect(() => {
     const loadChapterOptions = async () => {
@@ -298,9 +320,9 @@ export function usePalaceEditPage() {
     palace,
     timer,
     title,
-    setTitle,
+    setTitle: handleTitleChange,
     createdAt,
-    setCreatedAt,
+    setCreatedAt: handleCreatedAtChange,
     chapterOptions,
     selectedChapterIds,
     versionOpen,

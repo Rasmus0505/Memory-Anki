@@ -94,16 +94,15 @@ export interface DashboardResponse {
 }
 
 export interface PalaceReviewPlanItem {
-  id: number
-  scheduled_date: string | null
+  date: string | null
+  representative_schedule_id: number
+  schedule_count: number
+  pending_count: number
+  completed_count: number
   completed: boolean
   review_number: number
-  sequence_label: string
-  same_day_index: number
-  same_day_total: number
-  algorithm_used: string
-  review_type: string
   interval_days: number
+  review_type: string
 }
 
 export interface PalaceReviewPlanResponse {
@@ -121,6 +120,9 @@ export interface PalaceListItem {
   next_review_at: string | null
   has_due_review: boolean
   current_review_schedule_id: number | null
+  review_stage_total: number
+  review_stage_completed: number
+  review_stage_progress: number
   chapters?: Array<unknown>
 }
 

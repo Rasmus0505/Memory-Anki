@@ -8,6 +8,12 @@ export async function request<T>(url: string, options?: RequestInit): Promise<T>
 
   if (!response.ok) {
     const body = await response.text().catch(() => '')
+    console.error('[API ERROR]', {
+      url: `${API_BASE}${url}`,
+      method: options?.method || 'GET',
+      status: response.status,
+      body,
+    })
     throw new Error(body || `HTTP ${response.status}`)
   }
 

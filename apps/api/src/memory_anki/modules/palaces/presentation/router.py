@@ -1,5 +1,6 @@
 import os
 import uuid
+from collections import OrderedDict
 from datetime import datetime, time, timedelta
 
 from fastapi import APIRouter, Depends, File, UploadFile
@@ -36,7 +37,13 @@ from memory_anki.modules.palaces.application.palace_service import (
 )
 from memory_anki.modules.palaces.domain.schemas import PalaceCreate, PalaceUpdate
 from memory_anki.modules.reviews.application.review_service import trigger_review_for_palace
-from memory_anki.modules.reviews.application.schedule_service import get_config_value
+from memory_anki.modules.reviews.application.schedule_service import (
+    custom_intervals,
+    ebbinghaus_intervals,
+    get_config_value,
+    is_schedule_due,
+    normalize_algorithm,
+)
 from memory_anki.modules.sessions.application.session_progress_service import (
     clear_practice_progress,
     get_practice_progress,
@@ -85,31 +92,72 @@ def schedule_display_datetime(schedule: ReviewSchedule, palace: Palace, session:
 
 
 def review_plan_item_json(
-    schedule: ReviewSchedule,
-    same_day_index: int,
-    same_day_total: int,
+    date_key: str | None,
+    schedules: list[ReviewSchedule],
 ) -> dict:
+    representative_schedule = min(schedules, key=lambda item: (item.id, item.review_number))
+    latest_schedule = max(schedules, key=lambda item: (item.review_number, item.id))
+    pending_count = sum(0 if schedule.completed else 1 for schedule in schedules)
+    completed_count = sum(1 if schedule.completed else 0 for schedule in schedules)
     return {
-        "id": schedule.id,
-        "scheduled_date": schedule.scheduled_date.isoformat() if schedule.scheduled_date else None,
-        "completed": schedule.completed,
-        "review_number": schedule.review_number,
-        "sequence_label": f"第 {schedule.review_number + 1} 次复习",
-        "same_day_index": same_day_index,
-        "same_day_total": same_day_total,
-        "algorithm_used": schedule.algorithm_used,
-        "review_type": schedule.review_type,
-        "interval_days": schedule.interval_days,
+        "date": date_key,
+        "representative_schedule_id": representative_schedule.id,
+        "schedule_count": len(schedules),
+        "pending_count": pending_count,
+        "completed_count": completed_count,
+        "completed": pending_count == 0,
+        "review_number": latest_schedule.review_number,
+        "interval_days": representative_schedule.interval_days,
+        "review_type": representative_schedule.review_type,
     }
+
+
+def get_palace_stage_progress(palace: Palace, session: Session | None) -> tuple[int, int, float]:
+    if session is None:
+        return 0, 0, 0.0
+
+    schedules = palace.review_schedules or []
+    current_algorithm = next(
+        (
+            normalize_algorithm(schedule.algorithm_used)
+            for schedule in schedules
+            if schedule.algorithm_used
+        ),
+        normalize_algorithm(get_config_value(session, "default_algorithm")),
+    )
+    intervals = custom_intervals(session) if current_algorithm == "custom" else ebbinghaus_intervals(session)
+    if not intervals:
+        intervals = ["1", "2", "4", "7", "15", "30", "60"]
+
+    total = len(intervals)
+    pending_schedules = sorted(
+        [schedule for schedule in schedules if not schedule.completed],
+        key=lambda schedule: (schedule.review_number, schedule.id),
+    )
+    if pending_schedules:
+        completed = min(pending_schedules[0].review_number, total)
+    else:
+        review_logs = [
+            log
+            for log in (palace.review_logs or [])
+            if log.review_mode == "review"
+        ]
+        completed = min(len(review_logs), total)
+    if palace.mastered and total > 0:
+        completed = total
+
+    progress = completed / total if total > 0 else 0.0
+    return total, completed, progress
 
 
 def palace_json(p, session: Session | None = None) -> dict:
     next_schedule = None
     pending_schedules = [schedule for schedule in (p.review_schedules or []) if not schedule.completed]
     if pending_schedules:
-        next_schedule = min(pending_schedules, key=lambda schedule: (schedule.scheduled_date, schedule.id))
+        next_schedule = min(pending_schedules, key=lambda schedule: (schedule.review_number, schedule.id))
     next_review_at = schedule_display_datetime(next_schedule, p, session) if next_schedule and session else None
-    has_due_review = bool(next_schedule and next_schedule.scheduled_date and next_schedule.scheduled_date <= datetime.now().date())
+    has_due_review = bool(next_schedule and session and is_schedule_due(next_schedule, p, session))
+    review_stage_total, review_stage_completed, review_stage_progress = get_palace_stage_progress(p, session)
 
     return {
         "id": p.id, "title": p.title, "description": p.description,
@@ -120,6 +168,9 @@ def palace_json(p, session: Session | None = None) -> dict:
         "next_review_at": next_review_at.isoformat(timespec="minutes") if next_review_at else None,
         "has_due_review": has_due_review,
         "current_review_schedule_id": next_schedule.id if has_due_review and next_schedule else None,
+        "review_stage_total": review_stage_total,
+        "review_stage_completed": review_stage_completed,
+        "review_stage_progress": review_stage_progress,
         "pegs": [peg_json(peg) for peg in p.pegs],
         "attachments": [{"id": a.id, "filename": a.filename,
                          "original_name": a.original_name, "file_size": a.file_size}
@@ -191,23 +242,12 @@ def api_review_plan(palace_id: int, s: Session = Depends(session_dep)):
         .order_by(ReviewSchedule.scheduled_date, ReviewSchedule.id)
         .all()
     )
-    same_day_totals: dict[str | None, int] = {}
-    same_day_seen: dict[str | None, int] = {}
+    grouped_by_date: OrderedDict[str | None, list[ReviewSchedule]] = OrderedDict()
     for schedule in schedules:
         key = schedule.scheduled_date.isoformat() if schedule.scheduled_date else None
-        same_day_totals[key] = same_day_totals.get(key, 0) + 1
+        grouped_by_date.setdefault(key, []).append(schedule)
 
-    plan = []
-    for schedule in schedules:
-        key = schedule.scheduled_date.isoformat() if schedule.scheduled_date else None
-        same_day_seen[key] = same_day_seen.get(key, 0) + 1
-        plan.append(
-            review_plan_item_json(
-                schedule,
-                same_day_index=same_day_seen[key],
-                same_day_total=same_day_totals[key],
-            )
-        )
+    plan = [review_plan_item_json(date_key, grouped_schedules) for date_key, grouped_schedules in grouped_by_date.items()]
     return {
         "palace_id": palace.id,
         "palace_title": palace.title,

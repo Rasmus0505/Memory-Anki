@@ -76,15 +76,13 @@ export interface ReviewQueueResponse {
 }
 
 export interface PalaceReviewPlanItem {
-  id: number
-  scheduled_date: string | null
+  date: string | null
+  representative_schedule_id: number
+  schedule_count: number
+  pending_count: number
+  completed_count: number
   completed: boolean
   review_number: number
-  sequence_label: string
-  same_day_index: number
-  same_day_total: number
-  algorithm_used: string
-  review_type: string
   interval_days: number
 }
 

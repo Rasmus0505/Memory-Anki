@@ -43,6 +43,9 @@ export function usePersistedMindMapEditor<TResponse, TMeta>({
   const selectEditorStateRef = useRef(selectEditorState)
   const onSaveErrorRef = useRef(onSaveError)
   const lastStateFingerprintRef = useRef('')
+  const isSavingRef = useRef(false)
+  const previousEntityIdRef = useRef<number | null>(entityId)
+  const retryCountRef = useRef(0)
 
   editorStateRef.current = editorState
   entityIdRef.current = entityId
@@ -51,6 +54,7 @@ export function usePersistedMindMapEditor<TResponse, TMeta>({
   selectMetaRef.current = selectMeta
   selectEditorStateRef.current = selectEditorState
   onSaveErrorRef.current = onSaveError
+  isSavingRef.current = isSaving
 
   const clearTimer = () => {
     if (timerRef.current != null) {
@@ -58,6 +62,47 @@ export function usePersistedMindMapEditor<TResponse, TMeta>({
       timerRef.current = null
     }
   }
+
+  const persistSnapshot = useCallback(
+    async (
+      saveEntityId: number,
+      snapshot: MindMapEditorState,
+      saveVersion: number,
+    ) => {
+      dirtyRef.current = false
+      setIsSaving(true)
+      setError(null)
+      try {
+        const response = await saverRef.current(saveEntityId, snapshot)
+        if (entityIdRef.current !== saveEntityId) return
+        const nextEditorState = selectEditorStateRef.current(response)
+        retryCountRef.current = 0
+        lastStateFingerprintRef.current = stableSerialize(nextEditorState)
+        setMeta(selectMetaRef.current(response))
+        if (changeVersionRef.current === saveVersion) {
+          setEditorState(nextEditorState)
+        }
+      } catch (err) {
+        const nextError = err instanceof Error ? err : new Error('Failed to save editor')
+        let handled = false
+        if (onSaveErrorRef.current) {
+          handled = await onSaveErrorRef.current(nextError, snapshot)
+        }
+        retryCountRef.current += 1
+        dirtyRef.current = !handled && retryCountRef.current < 3
+        setError(nextError.message)
+      } finally {
+        setIsSaving(false)
+        if (dirtyRef.current) {
+          clearTimer()
+          timerRef.current = window.setTimeout(() => {
+            void flushSave()
+          }, 400)
+        }
+      }
+    },
+    [],
+  )
 
   const load = useCallback(async () => {
     if (!entityId) {
@@ -72,6 +117,7 @@ export function usePersistedMindMapEditor<TResponse, TMeta>({
       const response = await fetcherRef.current(entityId)
       const nextEditorState = selectEditorStateRef.current(response)
       changeVersionRef.current = 0
+      retryCountRef.current = 0
       dirtyRef.current = false
       lastStateFingerprintRef.current = stableSerialize(nextEditorState)
       setMeta(selectMetaRef.current(response))
@@ -84,40 +130,18 @@ export function usePersistedMindMapEditor<TResponse, TMeta>({
   }, [entityId])
 
   const flushSave = useCallback(async () => {
-    if (!entityIdRef.current || !editorStateRef.current || !dirtyRef.current || isSaving) return
+    if (!entityIdRef.current || !editorStateRef.current || !dirtyRef.current || isSavingRef.current) return
     const saveEntityId = entityIdRef.current
     const snapshot = editorStateRef.current
     const saveVersion = changeVersionRef.current
-    dirtyRef.current = false
-    setIsSaving(true)
-    setError(null)
-    try {
-      const response = await saverRef.current(saveEntityId, snapshot)
-      if (entityIdRef.current !== saveEntityId) return
-      const nextEditorState = selectEditorStateRef.current(response)
-      lastStateFingerprintRef.current = stableSerialize(nextEditorState)
-      setMeta(selectMetaRef.current(response))
-      if (changeVersionRef.current === saveVersion) {
-        setEditorState(nextEditorState)
-      }
-    } catch (err) {
-      const nextError = err instanceof Error ? err : new Error('Failed to save editor')
-      let handled = false
-      if (onSaveErrorRef.current) {
-        handled = await onSaveErrorRef.current(nextError, snapshot)
-      }
-      dirtyRef.current = !handled
-      setError(nextError.message)
-    } finally {
-      setIsSaving(false)
-      if (dirtyRef.current) {
-        clearTimer()
-        timerRef.current = window.setTimeout(() => {
-          void flushSave()
-        }, 400)
-      }
-    }
-  }, [isSaving])
+    await persistSnapshot(saveEntityId, snapshot, saveVersion)
+  }, [persistSnapshot])
+
+  const flushPendingForEntity = useCallback(async (targetEntityId: number | null) => {
+    if (!targetEntityId || !editorStateRef.current || !dirtyRef.current || isSavingRef.current) return
+    clearTimer()
+    await persistSnapshot(targetEntityId, editorStateRef.current, changeVersionRef.current)
+  }, [persistSnapshot])
 
   const scheduleSave = useCallback((nextState: MindMapEditorState) => {
     const nextFingerprint = stableSerialize(nextState)
@@ -125,6 +149,7 @@ export function usePersistedMindMapEditor<TResponse, TMeta>({
       return
     }
     changeVersionRef.current += 1
+    retryCountRef.current = 0
     lastStateFingerprintRef.current = nextFingerprint
     setEditorState(nextState)
     dirtyRef.current = true
@@ -135,9 +160,46 @@ export function usePersistedMindMapEditor<TResponse, TMeta>({
   }, [flushSave])
 
   useEffect(() => {
-    void load()
-    return () => clearTimer()
-  }, [load])
+    let disposed = false
+
+    const run = async () => {
+      const previousEntityId = previousEntityIdRef.current
+      if (previousEntityId !== entityId) {
+        await flushPendingForEntity(previousEntityId)
+        if (disposed) return
+        previousEntityIdRef.current = entityId
+      }
+      await load()
+    }
+
+    void run()
+
+    return () => {
+      disposed = true
+      clearTimer()
+    }
+  }, [entityId, flushPendingForEntity, load])
+
+  useEffect(() => {
+    const flushWhenHidden = () => {
+      if (document.visibilityState === 'hidden') {
+        void flushPendingForEntity(previousEntityIdRef.current)
+      }
+    }
+
+    const flushOnPageHide = () => {
+      void flushPendingForEntity(previousEntityIdRef.current)
+    }
+
+    document.addEventListener('visibilitychange', flushWhenHidden)
+    window.addEventListener('pagehide', flushOnPageHide)
+
+    return () => {
+      document.removeEventListener('visibilitychange', flushWhenHidden)
+      window.removeEventListener('pagehide', flushOnPageHide)
+      void flushPendingForEntity(previousEntityIdRef.current)
+    }
+  }, [flushPendingForEntity])
 
   return {
     meta,

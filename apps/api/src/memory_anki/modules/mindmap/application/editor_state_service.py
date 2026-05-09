@@ -201,12 +201,20 @@ def sync_subject_tree_from_doc(session: Session, subject: Subject, doc: dict[str
         for index, item in enumerate(items):
             data = _ensure_dict(item.get("data"))
             item["data"] = data
+            chapter_name = _plain_text(data.get("text"), fallback="新章节")
+            chapter_notes = _stringify(data.get("note"))
             chapter_id = _coerce_int(data.get(NODE_ID_KEY))
             if chapter_id is None:
                 chapter_id = uid_map.get(_stringify(data.get(NODE_UID_KEY)))
             chapter = by_id.get(chapter_id) if chapter_id else None
             if chapter is None:
-                chapter = Chapter(subject_id=subject.id)
+                chapter = Chapter(
+                    subject_id=subject.id,
+                    parent_id=parent_id,
+                    sort_order=index,
+                    name=chapter_name,
+                    notes=chapter_notes,
+                )
                 session.add(chapter)
                 session.flush()
                 by_id[chapter.id] = chapter
@@ -214,9 +222,11 @@ def sync_subject_tree_from_doc(session: Session, subject: Subject, doc: dict[str
             chapter.subject_id = subject.id
             chapter.parent_id = parent_id
             chapter.sort_order = index
-            chapter.name = _plain_text(data.get("text"), fallback="新章节")
-            chapter.notes = _stringify(data.get("note"))
+            chapter.name = chapter_name
+            chapter.notes = chapter_notes
 
+            data["text"] = chapter_name
+            data["note"] = chapter_notes
             data[NODE_ID_KEY] = chapter.id
             data[NODE_TYPE_KEY] = "chapter"
             seen_ids.add(chapter.id)
@@ -249,12 +259,20 @@ def sync_palace_tree_from_doc(session: Session, palace: Palace, doc: dict[str, A
         for index, item in enumerate(items):
             data = _ensure_dict(item.get("data"))
             item["data"] = data
+            peg_name = _plain_text(data.get("text"), fallback="新节点")
+            peg_content = _stringify(data.get("note"))
             peg_id = _coerce_int(data.get(NODE_ID_KEY))
             if peg_id is None:
                 peg_id = uid_map.get(_stringify(data.get(NODE_UID_KEY)))
             peg = by_id.get(peg_id) if peg_id else None
             if peg is None:
-                peg = Peg(palace_id=palace.id)
+                peg = Peg(
+                    palace_id=palace.id,
+                    parent_id=parent_id,
+                    sort_order=index,
+                    name=peg_name,
+                    content=peg_content,
+                )
                 session.add(peg)
                 session.flush()
                 by_id[peg.id] = peg
@@ -262,9 +280,11 @@ def sync_palace_tree_from_doc(session: Session, palace: Palace, doc: dict[str, A
             peg.palace_id = palace.id
             peg.parent_id = parent_id
             peg.sort_order = index
-            peg.name = _plain_text(data.get("text"), fallback="新节点")
-            peg.content = _stringify(data.get("note"))
+            peg.name = peg_name
+            peg.content = peg_content
 
+            data["text"] = peg_name
+            data["note"] = peg_content
             data[NODE_ID_KEY] = peg.id
             data[NODE_TYPE_KEY] = "peg"
             seen_ids.add(peg.id)

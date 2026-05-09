@@ -8,40 +8,46 @@ from sqlalchemy.orm import Session
 from memory_anki.infrastructure.db.models import Chapter, Palace, ReviewLog, ReviewSchedule, TimeRecord
 from memory_anki.modules.palaces.application.palace_service import restore_archived_palaces
 from memory_anki.modules.reviews.application.schedule_service import (
-    compute_next_review,
-    custom_intervals,
-    ebbinghaus_intervals,
-    generate_schedule_for_palace,
+    create_initial_review_schedules,
+    create_review_schedule,
+    ensure_palace_review_schedule_model,
+    get_algorithm_intervals,
     get_config_value,
+    is_schedule_due,
+    is_schedule_overdue,
     normalize_algorithm,
 )
 from memory_anki.modules.time_records.application.time_records_service import create_review_time_record
 
 
-def _due_query(session: Session, chapter_id: int | None = None):
+def _due_query(session: Session, chapter_id: int | None = None) -> list[ReviewSchedule]:
     restore_archived_palaces(session)
-    today = date.today()
     query = (
         session.query(ReviewSchedule)
         .join(Palace)
         .filter(
-            ReviewSchedule.scheduled_date <= today,
             ReviewSchedule.completed == False,
             Palace.mastered == False,
         )
         .order_by(
-            ReviewSchedule.review_type != "standard",
-            ReviewSchedule.scheduled_date,
+            ReviewSchedule.review_number,
             ReviewSchedule.id,
         )
     )
     if chapter_id is not None:
         query = query.filter(Palace.chapters.any(Chapter.id == chapter_id))
-    return query
+    schedules = query.all()
+    now = datetime.now()
+    return [
+        schedule
+        for schedule in schedules
+        if schedule.palace and is_schedule_due(schedule, schedule.palace, session, now=now)
+    ]
 
 
 def _group_due_reviews(
     reviews: list[ReviewSchedule],
+    session: Session,
     respect_daily_limit: bool = True,
     daily_limit: int = 0,
 ) -> list[dict]:
@@ -61,7 +67,7 @@ def _group_due_reviews(
             grouped[palace_id] = group
 
         group["schedule_count"] += 1
-        if schedule.scheduled_date < date.today():
+        if schedule.palace and is_schedule_overdue(schedule, schedule.palace, session):
             group["overdue_schedule_count"] += 1
         if schedule.scheduled_date < group["next_due_date"]:
             group["next_due_date"] = schedule.scheduled_date
@@ -74,13 +80,13 @@ def get_today_reviews(
     chapter_id: int | None = None,
     respect_daily_limit: bool = True,
 ) -> list[ReviewSchedule]:
-    query = _due_query(session, chapter_id=chapter_id)
+    reviews = _due_query(session, chapter_id=chapter_id)
     if chapter_id is not None:
         respect_daily_limit = False
     max_per_day = int(get_config_value(session, "daily_max_reviews") or "0")
     if respect_daily_limit and max_per_day > 0:
-        return query.limit(max_per_day).all()
-    return query.all()
+        return reviews[:max_per_day]
+    return reviews
 
 
 def get_today_review_groups(
@@ -88,13 +94,13 @@ def get_today_review_groups(
     chapter_id: int | None = None,
     respect_daily_limit: bool = True,
 ) -> list[dict]:
-    query = _due_query(session, chapter_id=chapter_id)
+    reviews = _due_query(session, chapter_id=chapter_id)
     if chapter_id is not None:
         respect_daily_limit = False
     max_per_day = int(get_config_value(session, "daily_max_reviews") or "0")
-    reviews = query.all()
     return _group_due_reviews(
         reviews,
+        session,
         respect_daily_limit=respect_daily_limit,
         daily_limit=max_per_day,
     )
@@ -105,13 +111,13 @@ def get_next_due_review(
     exclude_schedule_id: int | None = None,
     chapter_id: int | None = None,
 ) -> ReviewSchedule | None:
-    reviews = _due_query(session, chapter_id=chapter_id).all()
+    reviews = _due_query(session, chapter_id=chapter_id)
     excluded_palace_id: int | None = None
     if exclude_schedule_id is not None:
         excluded_schedule = session.query(ReviewSchedule).filter_by(id=exclude_schedule_id).first()
         excluded_palace_id = excluded_schedule.palace_id if excluded_schedule else None
 
-    groups = _group_due_reviews(reviews, respect_daily_limit=False)
+    groups = _group_due_reviews(reviews, session, respect_daily_limit=False)
     for group in groups:
         schedule = group["schedule"]
         if excluded_palace_id is not None and schedule.palace_id == excluded_palace_id:
@@ -122,18 +128,21 @@ def get_next_due_review(
 
 def get_overdue_count(session: Session) -> int:
     restore_archived_palaces(session)
-    today = date.today()
-    overdue_palace_ids = (
-        session.query(ReviewSchedule.palace_id)
+    schedules = (
+        session.query(ReviewSchedule)
         .join(Palace)
         .filter(
-            ReviewSchedule.scheduled_date < today,
             ReviewSchedule.completed == False,
             Palace.mastered == False,
         )
-        .distinct()
         .all()
     )
+    now = datetime.now()
+    overdue_palace_ids = {
+        schedule.palace_id
+        for schedule in schedules
+        if schedule.palace and is_schedule_overdue(schedule, schedule.palace, session, now=now)
+    }
     return len(overdue_palace_ids)
 
 
@@ -144,17 +153,22 @@ def get_due_count(session: Session) -> int:
 def spread_overdue(session: Session, days: int = 7) -> int:
     restore_archived_palaces(session)
     today = date.today()
-    overdue = (
+    candidates = (
         session.query(ReviewSchedule)
         .join(Palace)
         .filter(
-            ReviewSchedule.scheduled_date < today,
             ReviewSchedule.completed == False,
             Palace.mastered == False,
         )
         .order_by(ReviewSchedule.scheduled_date, ReviewSchedule.id)
         .all()
     )
+    now = datetime.now()
+    overdue = [
+        schedule
+        for schedule in candidates
+        if schedule.palace and is_schedule_overdue(schedule, schedule.palace, session, now=now)
+    ]
     if not overdue or days <= 0:
         return 0
 
@@ -212,22 +226,16 @@ def submit_review(
     schedule = session.query(ReviewSchedule).filter_by(id=schedule_id).first()
     if not schedule:
         return None, {}
-
-    today = date.today()
-    due_batch = (
-        session.query(ReviewSchedule)
-        .filter(
-            ReviewSchedule.palace_id == schedule.palace_id,
-            ReviewSchedule.scheduled_date <= today,
-            ReviewSchedule.completed == False,
-        )
-        .order_by(ReviewSchedule.review_number.desc(), ReviewSchedule.scheduled_date.desc(), ReviewSchedule.id.desc())
-        .all()
-    )
-    if not due_batch:
+    ensure_palace_review_schedule_model(session, schedule.palace_id)
+    schedule = session.query(ReviewSchedule).filter_by(id=schedule_id).first()
+    if not schedule:
         return None, {}
 
-    latest_schedule = due_batch[0]
+    if not schedule.palace or not is_schedule_due(schedule, schedule.palace, session):
+        return None, {}
+
+    today = date.today()
+    palace = schedule.palace
     log = ReviewLog(
         palace_id=schedule.palace_id,
         review_date=today,
@@ -236,53 +244,46 @@ def submit_review(
         duration_seconds=duration_seconds,
     )
     session.add(log)
-    for due_schedule in due_batch:
-        due_schedule.completed = True
-
-    from memory_anki.modules.reviews.application.schedule_service import use_anchor
-
-    algorithm = normalize_algorithm(latest_schedule.algorithm_used)
-    anchor = latest_schedule.anchor_date if use_anchor(session) else None
-    actual_interval = (today - latest_schedule.scheduled_date).days
-    effective_interval = max(latest_schedule.interval_days, actual_interval)
-    next_interval, next_date, review_type, algorithm_used = compute_next_review(
-        session,
-        algorithm,
-        latest_schedule.review_number + 1,
-        effective_interval,
-        anchor,
-    )
-
-    completed_count = (
-        session.query(ReviewSchedule)
-        .filter_by(palace_id=schedule.palace_id, completed=True)
-        .count()
-    )
-
+    schedule.completed = True
     extra: dict[str, bool] = {}
-    intervals: list[str] = custom_intervals(session) if algorithm == "custom" else ebbinghaus_intervals(session)
+    algorithm = normalize_algorithm(schedule.algorithm_used)
+    intervals = get_algorithm_intervals(session, algorithm)
+    next_review_number = schedule.review_number + 1
 
-    if intervals and completed_count >= len(intervals):
-        schedule.palace.mastered = True
+    if next_review_number >= len(intervals):
+        palace.mastered = True
         extra["mastered"] = True
     else:
-        next_schedule = ReviewSchedule(
-            palace_id=schedule.palace_id,
-            scheduled_date=next_date,
-            interval_days=next_interval,
-            algorithm_used=algorithm_used,
-            review_number=completed_count,
-            review_type=review_type,
-            anchor_date=latest_schedule.anchor_date,
+        existing_next_schedule = (
+            session.query(ReviewSchedule)
+            .filter(
+                ReviewSchedule.palace_id == schedule.palace_id,
+                ReviewSchedule.completed == False,
+                ReviewSchedule.review_number == next_review_number,
+            )
+            .order_by(ReviewSchedule.id.asc())
+            .first()
         )
-        session.add(next_schedule)
+        if existing_next_schedule is None:
+            next_schedule = create_review_schedule(
+                session=session,
+                palace_id=schedule.palace_id,
+                review_number=next_review_number,
+                algorithm=algorithm,
+                base_date=today,
+                anchor_date=schedule.anchor_date or today,
+                completed=False,
+            )
+            if next_schedule is None:
+                palace.mastered = True
+                extra["mastered"] = True
 
     session.flush()
     create_review_time_record(
         session,
         record_id=f"review-log-{log.id}",
         palace_id=schedule.palace_id,
-        title=schedule.palace.title if schedule.palace else "未命名宫殿",
+        title=palace.title if palace else "未命名宫殿",
         duration_seconds=duration_seconds,
         ended_at=datetime.now(),
         completion_method=completion_mode or "manual_complete",
@@ -374,4 +375,4 @@ def trigger_review_for_palace(session: Session, palace_id: int) -> None:
     if existing:
         return
     algorithm = get_config_value(session, "default_algorithm")
-    generate_schedule_for_palace(session, palace_id, algorithm)
+    create_initial_review_schedules(session, palace_id, algorithm)

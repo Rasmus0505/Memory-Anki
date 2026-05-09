@@ -22,6 +22,12 @@ import {
   type ReviewFlowSnapshot,
 } from '@/features/review/components/MindMapReviewFlow'
 
+function formatReviewStage(reviewType: string, reviewNumber: number) {
+  if (reviewType === '1h') return '首日 1 小时'
+  if (reviewType === 'sleep') return '首日睡前'
+  return `第 ${reviewNumber + 1} 次`
+}
+
 function nextOverviewHref(chapterId: number | null) {
   return chapterId == null ? '/review' : `/review?chapterId=${chapterId}`
 }
@@ -119,7 +125,7 @@ export default function ReviewSession() {
               </Button>
             </Link>
             <Badge variant="secondary">{session.algorithm_used}</Badge>
-            <Badge variant="outline">第 {session.review_number + 1} 次</Badge>
+            <Badge variant="outline">{formatReviewStage(session.review_type, session.review_number)}</Badge>
           </>
         }
       />
@@ -157,7 +163,7 @@ export default function ReviewSession() {
               <CardTitle className="text-base">复习信息</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3 text-sm text-muted-foreground">
-              <div>当前轮次：第 {session.review_number + 1} 次</div>
+              <div>当前轮次：{formatReviewStage(session.review_type, session.review_number)}</div>
               <div>计划间隔：{session.interval_days} 天</div>
               <div>本轮不再按“忘记/模糊/记住”改变排程强弱，完成后会固定推进到下一轮。</div>
               <div>如果你提前点击完成，剩余未出现节点会直接揭示并标红，然后立即结束本轮。</div>

@@ -4,7 +4,6 @@ import { ArrowRight, BookOpen, Clock3, Plus, Sparkles, Timer, TrendingUp } from 
 import type { DashboardResponse } from '@/shared/api/contracts'
 import { TimeRecordDialog } from '@/features/profile/components/TimeRecordDialog'
 import { TimeRecordsBreakdownChart } from '@/features/profile/components/TimeRecordsBreakdownChart'
-import { TimeRecordsSummaryCards } from '@/features/profile/components/TimeRecordsSummaryCards'
 import { TimeRecordsTable } from '@/features/profile/components/TimeRecordsTable'
 import { TimeRecordsTrendChart } from '@/features/profile/components/TimeRecordsTrendChart'
 import { useTimeRecordsDashboard } from '@/features/profile/hooks/useTimeRecordsDashboard'
@@ -12,6 +11,12 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui
 import { Button } from '@/shared/components/ui/button'
 import { formatDuration } from '@/entities/session/model'
 import { getDashboardApi } from '@/shared/api/modules/dashboard'
+
+function formatReviewStage(reviewType: string, reviewNumber: number) {
+  if (reviewType === '1h') return '首日 1 小时'
+  if (reviewType === 'sleep') return '首日睡前'
+  return `第 ${reviewNumber + 1} 次`
+}
 
 export default function Dashboard() {
   const [data, setData] = useState<DashboardResponse | null>(null)
@@ -115,7 +120,7 @@ export default function Dashboard() {
                     <div className="min-w-0">
                       <div className="truncate text-sm font-medium">{review.palace?.title || '未命名宫殿'}</div>
                       <div className="mt-0.5 text-xs text-muted-foreground">
-                        间隔 {review.interval_days} 天 · 第 {review.review_number + 1} 次
+                        间隔 {review.interval_days} 天 · {formatReviewStage(review.review_type, review.review_number)}
                         {review.schedule_count > 1 ? ` · ${review.schedule_count} 次待复习` : ''}
                       </div>
                     </div>
@@ -180,8 +185,6 @@ export default function Dashboard() {
       </div>
 
       <div className="space-y-6">
-        <TimeRecordsSummaryCards summary={timeRecordsDashboard.summary} />
-
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
           <TimeRecordsTrendChart trend={timeRecordsDashboard.trend} />
           <TimeRecordsBreakdownChart

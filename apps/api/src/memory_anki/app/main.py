@@ -21,6 +21,7 @@ from memory_anki.modules.mindmap.application.editor_state_service import ensure_
 from memory_anki.modules.palaces.presentation import import_router
 from memory_anki.modules.palaces.presentation import router as palace_router
 from memory_anki.modules.reviews.application.schedule_service import (
+    ensure_current_review_schedule_model,
     migrate_sm2_to_ebbinghaus,
     normalize_algorithm,
 )
@@ -57,6 +58,7 @@ async def lifespan(app: FastAPI):
                 existing.value = normalize_algorithm(existing.value)
         session.commit()
         migrate_sm2_to_ebbinghaus(session)
+        ensure_current_review_schedule_model(session)
         ensure_review_log_time_records(session)
         ensure_daily_backup()
         maybe_create_periodic_backup()

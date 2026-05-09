@@ -8,6 +8,12 @@ import { Button } from '@/shared/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card'
 import { getChapterReviewQueueApi, getReviewQueueApi } from '@/shared/api/modules/reviews'
 
+function formatReviewStage(reviewType: string, reviewNumber: number) {
+  if (reviewType === '1h') return '首日 1 小时'
+  if (reviewType === 'sleep') return '首日睡前'
+  return `第 ${reviewNumber + 1} 次`
+}
+
 function formatSessionHref(reviewId: number, chapterId: number | null) {
   if (chapterId == null) return `/review/session/${reviewId}`
   return `/review/session/${reviewId}?chapterId=${chapterId}`
@@ -81,7 +87,7 @@ export default function ReviewOverview() {
                       <span className="truncate font-medium">{review.palace?.title || '未命名宫殿'}</span>
                     </div>
                     <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                      <span>第 {review.review_number + 1} 次</span>
+                      <span>{formatReviewStage(review.review_type, review.review_number)}</span>
                       <span>间隔 {review.interval_days} 天</span>
                       {review.schedule_count > 1 ? <span>累计 {review.schedule_count} 次待复习</span> : <span>1 个宫殿复习对象</span>}
                       {review.overdue_schedule_count > 0 ? <span>{review.overdue_schedule_count} 次已逾期</span> : null}

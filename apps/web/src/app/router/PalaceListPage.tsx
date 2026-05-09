@@ -30,6 +30,47 @@ interface ReviewPlanDayGroup {
 
 const WEEKDAY_LABELS = ['一', '二', '三', '四', '五', '六', '日']
 
+function PalaceStageProgress({
+  total,
+  completed,
+}: {
+  total: number
+  completed: number
+}) {
+  if (total <= 0) {
+    return null
+  }
+
+  const safeCompleted = Math.max(0, Math.min(completed, total))
+  const progressPercent = total === 1 ? (safeCompleted > 0 ? 100 : 0) : (safeCompleted / total) * 100
+
+  return (
+    <div className="mt-3">
+      <div className="relative h-4">
+        <div className="absolute left-0 right-0 top-1/2 h-1.5 -translate-y-1/2 rounded-full bg-slate-200" />
+        <div
+          className="absolute left-0 top-1/2 h-1.5 -translate-y-1/2 rounded-full bg-emerald-500 transition-[width]"
+          style={{ width: `${progressPercent}%` }}
+        />
+        <div className="absolute inset-0 flex items-center justify-between">
+          {Array.from({ length: total }, (_, index) => {
+            const active = index < safeCompleted
+            return (
+              <span
+                key={index}
+                className={cn(
+                  'h-3.5 w-3.5 rounded-full border-2 border-white shadow-sm transition-colors',
+                  active ? 'bg-emerald-500' : 'bg-slate-300',
+                )}
+              />
+            )
+          })}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function formatRelativeReviewTime(value: string | null): string {
   if (!value) return '未排入正式复习'
   const target = new Date(value)
@@ -86,17 +127,18 @@ function formatPlanDate(value: string | null): string {
 }
 
 function formatPlanType(item: PalaceReviewPlanResponse['plan'][number]): string {
-  if (item.review_type === '1h') return '1小时'
-  if (item.review_type === 'sleep') return 'sleep'
   return `${item.interval_days}天`
 }
 
-function formatCompactPlanTitle(item: PalaceReviewPlanResponse['plan'][number], palaceTitle: string) {
-  return `${item.same_day_index}.${palaceTitle}-${formatPlanType(item)}`
-}
-
-function formatPalaceRoundLabel(item: PalaceReviewPlanResponse['plan'][number]) {
-  return `宫殿第 ${item.review_number + 1} 轮`
+function formatPlanSummary(item: PalaceReviewPlanResponse['plan'][number]) {
+  const parts = [`间隔 ${formatPlanType(item)}`]
+  if (item.pending_count > 1) {
+    parts.push(`累计 ${item.pending_count} 次待复习`)
+  }
+  if (item.completed_count > 0) {
+    parts.push(`已完成 ${item.completed_count} 次`)
+  }
+  return parts.join(' · ')
 }
 
 function parsePlanDate(value: string): Date {
@@ -140,21 +182,21 @@ function formatDateKey(date: Date): string {
 
 function getDayGroup(plan: PalaceReviewPlanResponse['plan']): Map<string, ReviewPlanDayGroup> {
   return plan.reduce((map, item) => {
-    if (!item.scheduled_date) return map
+    if (!item.date) return map
 
-    const existing = map.get(item.scheduled_date)
+    const existing = map.get(item.date)
     if (existing) {
       existing.items.push(item)
-      existing.completedCount += item.completed ? 1 : 0
-      existing.pendingCount += item.completed ? 0 : 1
+      existing.completedCount += item.completed_count
+      existing.pendingCount += item.pending_count
       return map
     }
 
-    map.set(item.scheduled_date, {
-      date: item.scheduled_date,
+    map.set(item.date, {
+      date: item.date,
       items: [item],
-      completedCount: item.completed ? 1 : 0,
-      pendingCount: item.completed ? 0 : 1,
+      completedCount: item.completed_count,
+      pendingCount: item.pending_count,
     })
     return map
   }, new Map<string, ReviewPlanDayGroup>())
@@ -195,7 +237,7 @@ export default function PalaceList() {
     setPlanLoadingId(palace.id)
     try {
       const response = await getPalaceReviewPlanApi(palace.id)
-      const firstPlanDate = response.plan.find((item) => item.scheduled_date)?.scheduled_date
+      const firstPlanDate = response.plan.find((item) => item.date)?.date
       const initialMonth = firstPlanDate ? getMonthStart(parsePlanDate(firstPlanDate)) : getMonthStart(new Date())
       setVisibleMonth(initialMonth)
       setSelectedDate(firstPlanDate ?? null)
@@ -283,9 +325,13 @@ export default function PalaceList() {
                     </Button>
                   </div>
                   <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-                    <span>创建时间 {formatCreatedAt(palace.created_at)}</span>
-                    <span>关联章节 {palace.chapters?.length || 0} 个</span>
+                    <span>{formatCreatedAt(palace.created_at)}</span>
+                    <span>章节 {palace.chapters?.length || 0} 个</span>
                   </div>
+                  <PalaceStageProgress
+                    total={palace.review_stage_total}
+                    completed={palace.review_stage_completed}
+                  />
                   {palace.description ? (
                     <p className="mt-2 line-clamp-1 text-sm text-muted-foreground">{palace.description.slice(0, 150)}</p>
                   ) : null}
@@ -415,15 +461,15 @@ export default function PalaceList() {
                                     : 'bg-secondary text-secondary-foreground',
                                 )}
                               >
-                                {group.items.length} 项
+                                1 个复习对象
                               </span>
                             ) : null}
                           </div>
 
                           {group ? (
-                            <div className="mt-4 space-y-1.5 text-[11px]">
-                              <div className="flex items-center justify-between rounded-lg border border-border/60 bg-background/90 px-2 py-1 text-muted-foreground">
-                                <span>未完成</span>
+                          <div className="mt-4 space-y-1.5 text-[11px]">
+                            <div className="flex items-center justify-between rounded-lg border border-border/60 bg-background/90 px-2 py-1 text-muted-foreground">
+                                <span>待复习</span>
                                 <span>{group.pendingCount}</span>
                               </div>
                               <div className="flex items-center justify-between rounded-lg bg-emerald-50 px-2 py-1 text-emerald-700">
@@ -446,9 +492,12 @@ export default function PalaceList() {
                           <div className="text-sm font-semibold text-foreground">
                             {formatPlanDate(selectedDayGroup.date)}
                           </div>
+                          <div className="mt-1 text-xs text-muted-foreground">
+                            当日复习对象
+                          </div>
                         </div>
                         <div className="flex items-center gap-2">
-                          <Badge variant="outline">未完成 {selectedDayGroup.pendingCount}</Badge>
+                          <Badge variant="outline">待复习 {selectedDayGroup.pendingCount}</Badge>
                           <Badge className="border-emerald-200 bg-emerald-50 text-emerald-700">
                             已完成 {selectedDayGroup.completedCount}
                           </Badge>
@@ -457,10 +506,10 @@ export default function PalaceList() {
 
                       <div className="space-y-3">
                         {selectedDayGroup.items.map((item) => (
-                          <div key={item.id} className="rounded-xl border border-border/70 bg-background/80 px-4 py-3">
+                          <div key={item.representative_schedule_id} className="rounded-xl border border-border/70 bg-background/80 px-4 py-3">
                             <div className="flex flex-wrap items-center justify-between gap-3">
                               <div className="text-sm font-medium text-foreground">
-                                {formatCompactPlanTitle(item, reviewPlan?.palace_title || '当前宫殿')}
+                                {reviewPlan?.palace_title || '当前宫殿'}
                               </div>
                               <div className="flex items-center gap-2">
                                 <Badge
@@ -475,7 +524,7 @@ export default function PalaceList() {
                               </div>
                             </div>
                             <div className="mt-2 space-y-1 text-xs text-muted-foreground">
-                              <div>{formatPalaceRoundLabel(item)}</div>
+                              <div>{formatPlanSummary(item)}</div>
                             </div>
                           </div>
                         ))}
@@ -483,7 +532,7 @@ export default function PalaceList() {
                     </div>
                   ) : (
                     <div className="rounded-xl border border-dashed border-border/80 px-4 py-10 text-center text-sm text-muted-foreground">
-                      选择一个有任务的日期，查看当天正式复习明细。
+                      选择一个有任务的日期，查看当天正式复习安排。
                     </div>
                   )}
                 </div>
