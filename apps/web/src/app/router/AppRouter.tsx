@@ -9,9 +9,6 @@ import ReviewOverviewPage from '@/features/review/ReviewOverviewPage'
 const KnowledgePage = lazy(() => import('@/features/knowledge/KnowledgePage'))
 const PalaceEditPage = lazy(() => import('@/features/palace-edit/PalaceEditPage'))
 const ProfilePage = lazy(() => import('@/features/profile/ProfilePage'))
-const ProfileTimeRecordsPage = lazy(
-  () => import('@/features/profile/ProfileTimeRecordsPage'),
-)
 const ProfileBackupsPage = lazy(
   () => import('@/features/profile/ProfileBackupsPage'),
 )
@@ -41,10 +38,6 @@ export function AppRouter() {
         <Route path="/review" element={<ReviewOverviewPage />} />
         <Route path="/review/session/:id" element={<ReviewSessionPage />} />
         <Route path="/profile" element={<ProfilePage />} />
-        <Route
-          path="/profile/time-records"
-          element={<ProfileTimeRecordsPage />}
-        />
         <Route path="/profile/backups" element={<ProfileBackupsPage />} />
       </Routes>
     </Suspense>

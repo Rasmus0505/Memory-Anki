@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { BookOpen, ChevronLeft, ChevronRight, Pencil, Plus, Search, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
-import type { PalaceReviewPlanResponse } from '@/shared/api/contracts'
+import type { PalaceListItem, PalaceReviewPlanResponse } from '@/shared/api/contracts'
 import {
   deletePalaceApi,
   getPalaceReviewPlanApi,
@@ -21,15 +21,6 @@ import {
 import { Input } from '@/shared/components/ui/input'
 import { cn } from '@/shared/lib/utils'
 
-interface PalaceListItem {
-  id: number
-  title: string
-  description: string
-  mastered: boolean
-  next_review_at: string | null
-  chapters?: Array<unknown>
-}
-
 interface ReviewPlanDayGroup {
   date: string
   items: PalaceReviewPlanResponse['plan']
@@ -39,17 +30,47 @@ interface ReviewPlanDayGroup {
 
 const WEEKDAY_LABELS = ['一', '二', '三', '四', '五', '六', '日']
 
-function formatNextReviewAt(value: string | null): string {
+function formatRelativeReviewTime(value: string | null): string {
   if (!value) return '未排入正式复习'
+  const target = new Date(value)
+  if (Number.isNaN(target.getTime())) return '未排入正式复习'
+
+  const diffMs = target.getTime() - Date.now()
+  if (diffMs <= 0) return '开始复习'
+
+  const totalMinutes = Math.floor(diffMs / (1000 * 60))
+  const totalHours = Math.floor(diffMs / (1000 * 60 * 60))
+  const totalDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
+
+  if (totalMinutes < 60) {
+    return `${Math.max(1, totalMinutes)}分钟`
+  }
+
+  if (totalHours < 24) {
+    const hours = totalHours
+    const minutes = totalMinutes % 60
+    return minutes > 0 ? `${hours}小时${minutes}分钟` : `${hours}小时`
+  }
+
+  if (totalDays < 30) {
+    const days = totalDays
+    const hours = totalHours % 24
+    return hours > 0 ? `${days}天${hours}小时` : `${days}天`
+  }
+
+  const months = Math.floor(totalDays / 30)
+  const days = totalDays % 30
+  return days > 0 ? `${months}月${days}天` : `${months}月`
+}
+
+function formatCreatedAt(value: string | null): string {
+  if (!value) return '未知'
   const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return '未排入正式复习'
+  if (Number.isNaN(date.getTime())) return '未知'
   return new Intl.DateTimeFormat('zh-CN', {
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
   }).format(date).replace(/\//g, '-')
 }
 
@@ -140,6 +161,7 @@ function getDayGroup(plan: PalaceReviewPlanResponse['plan']): Map<string, Review
 }
 
 export default function PalaceList() {
+  const navigate = useNavigate()
   const [palaces, setPalaces] = useState<PalaceListItem[]>([])
   const [reviewPlan, setReviewPlan] = useState<PalaceReviewPlanResponse | null>(null)
   const [planLoadingId, setPlanLoadingId] = useState<number | null>(null)
@@ -181,6 +203,14 @@ export default function PalaceList() {
     } finally {
       setPlanLoadingId(null)
     }
+  }
+
+  const handleReviewAction = async (palace: PalaceListItem) => {
+    if (palace.has_due_review && palace.current_review_schedule_id) {
+      navigate(`/review/session/${palace.current_review_schedule_id}`)
+      return
+    }
+    await handleOpenPlan(palace)
   }
 
   return (
@@ -240,17 +270,21 @@ export default function PalaceList() {
                       {palace.title || '未命名宫殿'}
                     </Link>
                     <Button
-                      variant="outline"
+                      variant={palace.has_due_review ? 'default' : 'outline'}
                       size="sm"
-                      className="h-8 shrink-0 text-xs"
-                      onClick={() => void handleOpenPlan(palace)}
+                      className={cn(
+                        'h-8 shrink-0 text-xs',
+                        palace.has_due_review && 'bg-emerald-600 text-white hover:bg-emerald-700',
+                      )}
+                      onClick={() => void handleReviewAction(palace)}
                       disabled={planLoadingId === palace.id}
                     >
-                      {planLoadingId === palace.id ? '加载中...' : formatNextReviewAt(palace.next_review_at)}
+                      {planLoadingId === palace.id ? '加载中...' : palace.has_due_review ? '开始复习' : formatRelativeReviewTime(palace.next_review_at)}
                     </Button>
                   </div>
                   <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-                    <span>{palace.chapters?.length || 0} 个关联章节</span>
+                    <span>创建时间 {formatCreatedAt(palace.created_at)}</span>
+                    <span>关联章节 {palace.chapters?.length || 0} 个</span>
                   </div>
                   {palace.description ? (
                     <p className="mt-2 line-clamp-1 text-sm text-muted-foreground">{palace.description.slice(0, 150)}</p>

@@ -1,29 +1,26 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowRight, BookOpen, Clock3, Plus, Sparkles, Timer, TrendingUp } from 'lucide-react'
+import type { DashboardResponse } from '@/shared/api/contracts'
+import { TimeRecordDialog } from '@/features/profile/components/TimeRecordDialog'
+import { TimeRecordsBreakdownChart } from '@/features/profile/components/TimeRecordsBreakdownChart'
+import { TimeRecordsSummaryCards } from '@/features/profile/components/TimeRecordsSummaryCards'
+import { TimeRecordsTable } from '@/features/profile/components/TimeRecordsTable'
+import { TimeRecordsTrendChart } from '@/features/profile/components/TimeRecordsTrendChart'
+import { useTimeRecordsDashboard } from '@/features/profile/hooks/useTimeRecordsDashboard'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card'
 import { Button } from '@/shared/components/ui/button'
 import { formatDuration } from '@/entities/session/model'
-import { listTimeRecordsApi } from '@/entities/session/api/time-records'
-import { getWeeklyLocalSessionStats } from '@/shared/hooks/useTimedSession'
 import { getDashboardApi } from '@/shared/api/modules/dashboard'
 
 export default function Dashboard() {
-  const [data, setData] = useState<any>(null)
-  const [localStats, setLocalStats] = useState(() =>
-    getWeeklyLocalSessionStats([]),
-  )
+  const [data, setData] = useState<DashboardResponse | null>(null)
+  const timeRecordsDashboard = useTimeRecordsDashboard()
 
   useEffect(() => {
     const load = async () => {
-      const [dashboard, timeRecords] = await Promise.all([
-        getDashboardApi(),
-        listTimeRecordsApi({ includeDeleted: true, includeBelowThreshold: true }).catch(() => ({
-          items: [],
-        })),
-      ])
+      const dashboard = await getDashboardApi()
       setData(dashboard)
-      setLocalStats(getWeeklyLocalSessionStats(timeRecords.items ?? []))
     }
     void load()
   }, [])
@@ -51,19 +48,19 @@ export default function Dashboard() {
     },
     {
       label: '今日时长',
-      value: data.stats.review_count,
+      value: formatDuration(data.today_total_review_duration_seconds),
       icon: TrendingUp,
       color: '',
     },
     {
       label: '本周时长',
-      value: formatDuration(data.stats.review_duration_seconds),
+      value: formatDuration(data.weekly_total_review_duration_seconds),
       icon: Clock3,
       color: '',
     },
     {
       label: '本周复习时长',
-      value: formatDuration(localStats.practiceDurationSeconds),
+      value: formatDuration(data.weekly_formal_review_duration_seconds),
       icon: Timer,
       color: '',
     },
@@ -118,7 +115,7 @@ export default function Dashboard() {
                     <div className="min-w-0">
                       <div className="truncate text-sm font-medium">{review.palace?.title || '未命名宫殿'}</div>
                       <div className="mt-0.5 text-xs text-muted-foreground">
-                        {review.algorithm_used} · {review.interval_days}d · #{review.review_number + 1}
+                        间隔 {review.interval_days} 天 · 第 {review.review_number + 1} 次
                         {review.schedule_count > 1 ? ` · ${review.schedule_count} 次待复习` : ''}
                       </div>
                     </div>
@@ -181,6 +178,53 @@ export default function Dashboard() {
           </CardContent>
         </Card>
       </div>
+
+      <div className="space-y-6">
+        <TimeRecordsSummaryCards summary={timeRecordsDashboard.summary} />
+
+        <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+          <TimeRecordsTrendChart trend={timeRecordsDashboard.trend} />
+          <TimeRecordsBreakdownChart
+            breakdown={timeRecordsDashboard.breakdown}
+          />
+        </div>
+
+        <TimeRecordsTable
+          thresholdInput={timeRecordsDashboard.thresholdInput}
+          onThresholdInputChange={timeRecordsDashboard.setThresholdInput}
+          onThresholdBlur={() => void timeRecordsDashboard.applyThreshold()}
+          keyword={timeRecordsDashboard.keyword}
+          onKeywordChange={timeRecordsDashboard.setKeyword}
+          kindFilter={timeRecordsDashboard.kindFilter}
+          onKindFilterChange={timeRecordsDashboard.setKindFilter}
+          showDeleted={timeRecordsDashboard.showDeleted}
+          onShowDeletedChange={timeRecordsDashboard.setShowDeleted}
+          onCreateRecord={timeRecordsDashboard.openCreateDialog}
+          onBulkDelete={() => void timeRecordsDashboard.handleBulkDelete()}
+          bulkDeleteDisabled={!timeRecordsDashboard.hasSelectedRecords}
+          visibleRecords={timeRecordsDashboard.visibleRecords}
+          hasSelectableRecords={timeRecordsDashboard.hasSelectableRecords}
+          allSelectableChecked={timeRecordsDashboard.allSelectableChecked}
+          selectedRecordIds={timeRecordsDashboard.selectedRecordIds}
+          onToggleSelectAllVisible={
+            timeRecordsDashboard.toggleSelectAllVisible
+          }
+          onToggleRecordSelection={timeRecordsDashboard.toggleRecordSelection}
+          onEditRecord={timeRecordsDashboard.openEditDialog}
+          onDeleteRecord={timeRecordsDashboard.handleDeleteRecord}
+          onRestoreRecord={timeRecordsDashboard.handleRestoreRecord}
+        />
+      </div>
+
+      <TimeRecordDialog
+        open={timeRecordsDashboard.dialogOpen}
+        mode={timeRecordsDashboard.dialogMode}
+        form={timeRecordsDashboard.formState}
+        error={timeRecordsDashboard.formError}
+        onOpenChange={timeRecordsDashboard.onDialogOpenChange}
+        onChange={timeRecordsDashboard.onFormChange}
+        onSubmit={(event) => void timeRecordsDashboard.handleSubmitRecord(event)}
+      />
     </div>
   )
 }

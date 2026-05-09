@@ -192,6 +192,7 @@ def api_submit_session(schedule_id: int, data: dict, session: Session = Depends(
         session,
         schedule_id,
         int(data.get("duration_seconds", 0)),
+        str(data.get("completion_mode", "manual_complete")),
     )
     if not log:
         return {"error": "not found"}

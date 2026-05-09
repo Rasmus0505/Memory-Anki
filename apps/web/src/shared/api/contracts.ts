@@ -73,6 +73,26 @@ export interface ReviewQueueResponse {
   reviews: ReviewScheduleSummary[]
 }
 
+export interface DashboardResponse {
+  due_count: number
+  reviews: ReviewScheduleSummary[]
+  stats: {
+    total: number
+    review_count: number
+    review_duration_seconds: number
+  }
+  today_total_review_duration_seconds: number
+  weekly_total_review_duration_seconds: number
+  weekly_formal_review_duration_seconds: number
+  recent_palaces: Array<{
+    id: number
+    title: string
+    description: string
+    peg_count: number
+    created_at: string | null
+  }>
+}
+
 export interface PalaceReviewPlanItem {
   id: number
   scheduled_date: string | null
@@ -90,6 +110,18 @@ export interface PalaceReviewPlanResponse {
   palace_id: number
   palace_title: string
   plan: PalaceReviewPlanItem[]
+}
+
+export interface PalaceListItem {
+  id: number
+  title: string
+  description: string
+  mastered: boolean
+  created_at: string | null
+  next_review_at: string | null
+  has_due_review: boolean
+  current_review_schedule_id: number | null
+  chapters?: Array<unknown>
 }
 
 export interface PalaceVersionSummary {

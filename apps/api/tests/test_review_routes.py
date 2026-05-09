@@ -10,7 +10,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from memory_anki.infrastructure.db.models import Base, Palace, PalaceVersion, ReviewSchedule
+from memory_anki.infrastructure.db.models import Base, Palace, PalaceVersion, ReviewLog, ReviewSchedule, TimeRecord
 from memory_anki.modules.backups.application.backup_service import (
     ROLLING_EDIT_BACKUP_INTERVAL,
     create_palace_version,
@@ -18,10 +18,17 @@ from memory_anki.modules.backups.application.backup_service import (
     restore_palace_from_backup,
 )
 from memory_anki.modules.mindmap.application.editor_state_service import save_palace_editor_state
+from memory_anki.modules.reviews.application.review_service import submit_review
 from memory_anki.modules.palaces.presentation import router as palace_router
 from memory_anki.modules.reviews.presentation import router as review_router
 from memory_anki.modules.sessions.application.session_progress_service import (
     ensure_session_progress_schema,
+)
+from memory_anki.modules.time_records.application.time_records_service import (
+    ensure_review_log_time_records,
+    get_today_total_review_duration_seconds,
+    get_weekly_formal_review_duration_seconds,
+    get_weekly_total_review_duration_seconds,
 )
 
 
@@ -168,6 +175,144 @@ class ReviewRouteTests(unittest.TestCase):
             pending = [schedule for schedule in schedules if not schedule.completed]
             self.assertEqual(len(pending), 1)
             self.assertEqual(pending[0].review_number, 3)
+
+    def test_submit_review_creates_review_time_record(self):
+        with self.SessionLocal() as session:
+            log, _ = submit_review(
+                session,
+                1,
+                duration_seconds=120,
+                completion_mode="manual_complete",
+            )
+            self.assertIsNotNone(log)
+            records = session.query(TimeRecord).filter_by(kind="review").all()
+            self.assertEqual(len(records), 1)
+            self.assertEqual(records[0].id, f"review-log-{log.id}")
+            self.assertEqual(records[0].effective_seconds, 120)
+            self.assertEqual(records[0].title, "Test Palace")
+
+    def test_ensure_review_log_time_records_backfills_once(self):
+        with self.SessionLocal() as session:
+            review_log = ReviewLog(
+                palace_id=1,
+                review_date=date.today() - timedelta(days=1),
+                score=5,
+                review_mode="review",
+                duration_seconds=300,
+            )
+            session.add(review_log)
+            session.commit()
+            session.refresh(review_log)
+
+            created_first = ensure_review_log_time_records(session)
+            created_second = ensure_review_log_time_records(session)
+            migrated = session.query(TimeRecord).filter_by(id=f"review-log-{review_log.id}").first()
+
+            self.assertEqual(created_first, 1)
+            self.assertEqual(created_second, 0)
+            self.assertIsNotNone(migrated)
+            self.assertEqual(migrated.kind, "review")
+            self.assertEqual(migrated.effective_seconds, 300)
+
+    def test_dashboard_duration_helpers_only_use_time_records(self):
+        with self.SessionLocal() as session:
+            session.add(
+                ReviewLog(
+                    palace_id=1,
+                    review_date=date.today(),
+                    score=5,
+                    review_mode="review",
+                    duration_seconds=999,
+                )
+            )
+            now = datetime.now().replace(microsecond=0)
+            session.add_all(
+                [
+                    TimeRecord(
+                        id="review-now",
+                        kind="review",
+                        palace_id=1,
+                        title="Test Palace",
+                        started_at=now - timedelta(seconds=120),
+                        ended_at=now,
+                        effective_seconds=120,
+                        pause_count=0,
+                        completion_method="manual_complete",
+                        duration_edited=False,
+                        events_json="[]",
+                    ),
+                    TimeRecord(
+                        id="practice-now",
+                        kind="practice",
+                        palace_id=1,
+                        title="Test Palace",
+                        started_at=now - timedelta(seconds=180),
+                        ended_at=now,
+                        effective_seconds=180,
+                        pause_count=0,
+                        completion_method="manual_complete",
+                        duration_edited=False,
+                        events_json="[]",
+                    ),
+                    TimeRecord(
+                        id="edit-now",
+                        kind="palace_edit",
+                        palace_id=1,
+                        title="Test Palace",
+                        started_at=now - timedelta(seconds=60),
+                        ended_at=now,
+                        effective_seconds=60,
+                        pause_count=0,
+                        completion_method="saved",
+                        duration_edited=False,
+                        events_json="[]",
+                    ),
+                ]
+            )
+            session.commit()
+
+            self.assertEqual(get_weekly_formal_review_duration_seconds(session), 120)
+            self.assertEqual(get_today_total_review_duration_seconds(session), 360)
+            self.assertEqual(get_weekly_total_review_duration_seconds(session), 360)
+
+    def test_ensure_review_log_time_records_deduplicates_existing_review_time_record(self):
+        with self.SessionLocal() as session:
+            review_log = ReviewLog(
+                palace_id=1,
+                review_date=date.today(),
+                score=5,
+                review_mode="review",
+                duration_seconds=180,
+            )
+            session.add(review_log)
+            session.flush()
+            session.add(
+                TimeRecord(
+                    id="existing-review-record",
+                    kind="review",
+                    palace_id=1,
+                    title="Test Palace",
+                    started_at=datetime.combine(date.today(), datetime.min.time()) + timedelta(hours=10),
+                    ended_at=datetime.combine(date.today(), datetime.min.time()) + timedelta(hours=10, seconds=180),
+                    effective_seconds=180,
+                    pause_count=0,
+                    completion_method="manual_complete",
+                    duration_edited=False,
+                    events_json="[]",
+                )
+            )
+            session.commit()
+
+            created = ensure_review_log_time_records(session)
+            active_records = (
+                session.query(TimeRecord)
+                .filter(TimeRecord.kind == "review", TimeRecord.deleted_at.is_(None))
+                .all()
+            )
+
+            self.assertEqual(created, 0)
+            self.assertEqual(len(active_records), 1)
+            self.assertEqual(active_records[0].id, "existing-review-record")
 
     def test_review_session_includes_editor_doc(self):
         response = self.client.get("/api/v1/review/session/1")

@@ -1,11 +1,11 @@
 """Review scheduling and queue services."""
 
 from collections import OrderedDict
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 from sqlalchemy.orm import Session
 
-from memory_anki.infrastructure.db.models import Chapter, Palace, ReviewLog, ReviewSchedule
+from memory_anki.infrastructure.db.models import Chapter, Palace, ReviewLog, ReviewSchedule, TimeRecord
 from memory_anki.modules.palaces.application.palace_service import restore_archived_palaces
 from memory_anki.modules.reviews.application.schedule_service import (
     compute_next_review,
@@ -15,6 +15,7 @@ from memory_anki.modules.reviews.application.schedule_service import (
     get_config_value,
     normalize_algorithm,
 )
+from memory_anki.modules.time_records.application.time_records_service import create_review_time_record
 
 
 def _due_query(session: Session, chapter_id: int | None = None):
@@ -206,6 +207,7 @@ def submit_review(
     session: Session,
     schedule_id: int,
     duration_seconds: int = 0,
+    completion_mode: str = "manual_complete",
 ) -> tuple[ReviewLog | None, dict]:
     schedule = session.query(ReviewSchedule).filter_by(id=schedule_id).first()
     if not schedule:
@@ -275,6 +277,16 @@ def submit_review(
         )
         session.add(next_schedule)
 
+    session.flush()
+    create_review_time_record(
+        session,
+        record_id=f"review-log-{log.id}",
+        palace_id=schedule.palace_id,
+        title=schedule.palace.title if schedule.palace else "未命名宫殿",
+        duration_seconds=duration_seconds,
+        ended_at=datetime.now(),
+        completion_method=completion_mode or "manual_complete",
+    )
     session.commit()
     session.refresh(log)
     return log, extra
@@ -312,6 +324,49 @@ def get_weekly_stats(session: Session) -> dict:
         "review_count": total,
         "review_duration_seconds": total_duration,
     }
+
+
+def get_today_formal_review_duration_seconds(session: Session) -> int:
+    today = date.today()
+    logs = session.query(ReviewLog).filter(ReviewLog.review_date == today).all()
+    return sum(log.duration_seconds for log in logs)
+
+
+def get_weekly_formal_review_duration_seconds(session: Session) -> int:
+    return get_weekly_stats(session)["review_duration_seconds"]
+
+
+def get_today_practice_duration_seconds(session: Session) -> int:
+    today = date.today()
+    start = datetime.combine(today, datetime.min.time())
+    end = start + timedelta(days=1)
+    records = (
+        session.query(TimeRecord)
+        .filter(
+            TimeRecord.deleted_at.is_(None),
+            TimeRecord.started_at >= start,
+            TimeRecord.started_at < end,
+        )
+        .all()
+    )
+    return sum(record.effective_seconds for record in records)
+
+
+def get_weekly_practice_duration_seconds(session: Session) -> int:
+    today = date.today()
+    start_of_week = today - timedelta(days=today.weekday())
+    start = datetime.combine(start_of_week, datetime.min.time())
+    end = datetime.combine(today + timedelta(days=1), datetime.min.time())
+    records = (
+        session.query(TimeRecord)
+        .filter(
+            TimeRecord.deleted_at.is_(None),
+            TimeRecord.started_at >= start,
+            TimeRecord.started_at < end,
+        )
+        .all()
+    )
+    return sum(record.effective_seconds for record in records)
 
 
 def trigger_review_for_palace(session: Session, palace_id: int) -> None:

@@ -30,6 +30,12 @@ from memory_anki.modules.sessions.application.session_progress_service import (
 )
 from memory_anki.modules.sessions.presentation import router as sessions_router
 from memory_anki.modules.settings.presentation import router as settings_router
+from memory_anki.modules.time_records.application.time_records_service import (
+    ensure_review_log_time_records,
+    get_today_total_review_duration_seconds,
+    get_weekly_formal_review_duration_seconds,
+    get_weekly_total_review_duration_seconds,
+)
 from memory_anki.modules.time_records.presentation import router as time_records_router
 
 
@@ -51,6 +57,7 @@ async def lifespan(app: FastAPI):
                 existing.value = normalize_algorithm(existing.value)
         session.commit()
         migrate_sm2_to_ebbinghaus(session)
+        ensure_review_log_time_records(session)
         ensure_daily_backup()
         maybe_create_periodic_backup()
     finally:
@@ -109,6 +116,10 @@ def api_dashboard():
                 "created_at": palace.created_at.isoformat() if palace.created_at else None,
             }
 
+        today_total_review_duration_seconds = get_today_total_review_duration_seconds(session)
+        weekly_formal_review_duration_seconds = get_weekly_formal_review_duration_seconds(session)
+        weekly_total_review_duration_seconds = get_weekly_total_review_duration_seconds(session)
+
         return {
             "due_count": len(reviews),
             "reviews": [
@@ -128,6 +139,9 @@ def api_dashboard():
                 for review in reviews
             ],
             "stats": get_weekly_stats(session),
+            "today_total_review_duration_seconds": today_total_review_duration_seconds,
+            "weekly_total_review_duration_seconds": weekly_total_review_duration_seconds,
+            "weekly_formal_review_duration_seconds": weekly_formal_review_duration_seconds,
             "recent_palaces": [palace_out(palace) for palace in recent],
         }
     finally:

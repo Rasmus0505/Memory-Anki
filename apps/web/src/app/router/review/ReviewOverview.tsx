@@ -6,7 +6,6 @@ import { PageIntro } from '@/shared/components/layout/PageIntro'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card'
-import { formatDuration } from '@/entities/session/model'
 import { getChapterReviewQueueApi, getReviewQueueApi } from '@/shared/api/modules/reviews'
 
 function formatSessionHref(reviewId: number, chapterId: number | null) {
@@ -38,7 +37,7 @@ export default function ReviewOverview() {
     return <div className="flex items-center justify-center py-32 text-sm text-muted-foreground">正在加载复习队列...</div>
   }
 
-  const title = chapterLabel ? `章节复习：${chapterLabel}` : '今日复习队列'
+  const title = chapterLabel ? `章节复习：${chapterLabel}` : `今日复习队列：${queue.due_count}`
 
   return (
     <div className="space-y-6">
@@ -67,33 +66,6 @@ export default function ReviewOverview() {
         </Card>
       ) : null}
 
-      <div className="grid gap-4 md:grid-cols-3">
-        <Card className="border-border/70 bg-card/92">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">今日到期</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-semibold">{queue.due_count}</div>
-          </CardContent>
-        </Card>
-        <Card className="border-border/70 bg-card/92">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">逾期任务</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className={`text-3xl font-semibold ${queue.overdue_count > 0 ? 'text-destructive' : ''}`}>{queue.overdue_count}</div>
-          </CardContent>
-        </Card>
-        <Card className="border-border/70 bg-card/92">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">本周正式复习时长</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-semibold">{formatDuration(queue.stats.review_duration_seconds)}</div>
-          </CardContent>
-        </Card>
-      </div>
-
       <Card className="border-border/70 bg-card/92">
         <CardHeader>
           <CardTitle className="text-base">待处理任务</CardTitle>
@@ -109,12 +81,10 @@ export default function ReviewOverview() {
                       <span className="truncate font-medium">{review.palace?.title || '未命名宫殿'}</span>
                     </div>
                     <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                      <Badge variant="secondary">{review.algorithm_used}</Badge>
                       <span>第 {review.review_number + 1} 次</span>
                       <span>间隔 {review.interval_days} 天</span>
                       {review.schedule_count > 1 ? <span>累计 {review.schedule_count} 次待复习</span> : <span>1 个宫殿复习对象</span>}
                       {review.overdue_schedule_count > 0 ? <span>{review.overdue_schedule_count} 次已逾期</span> : null}
-                      <span>{review.palace?.chapters.length || 0} 个关联章节</span>
                     </div>
                   </div>
                   <Button size="sm">

@@ -1,6 +1,7 @@
 import { API_BASE, request } from "@/shared/api/http"
 import type {
   MindMapEditorState,
+  PalaceListItem,
   PalaceReviewPlanResponse,
   PalaceVersionDetail,
   PalaceVersionListResponse,
@@ -13,7 +14,7 @@ export function buildAttachmentUrl(attachmentId: number) {
 
 export function getPalacesApi(params?: Record<string, string>) {
   const q = params ? `?${new URLSearchParams(params).toString()}` : ""
-  return request<any[]>(`/palaces${q}`)
+  return request<PalaceListItem[]>(`/palaces${q}`)
 }
 
 export function getPalaceApi(id: number) {
