@@ -2,19 +2,26 @@ import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import {
   createPalaceApi,
+  createPalaceSegmentApi,
+  deletePalaceSegmentApi,
   deleteAttachmentApi,
   getPalaceEditorApi,
+  getPalaceSegmentsApi,
   getPalaceVersionDetailApi,
   getPalaceVersionsApi,
   linkPalaceChaptersApi,
   restorePalaceVersionApi,
   savePalaceEditorApi,
   savePalaceEditorWithOptionsApi,
+  updatePalaceSegmentApi,
   updatePalaceApi,
   uploadAttachmentApi,
 } from '@/shared/api/modules/palaces'
 import { getSubjectsApi, getSubjectTreeApi } from '@/shared/api/modules/knowledge'
 import type {
+  MindMapDoc,
+  MindMapDocNode,
+  PalaceSegmentSummary,
   PalaceVersionDetail,
   PalaceVersionSummary,
 } from '@/shared/api/contracts'
@@ -49,6 +56,52 @@ type StatusBadgeState = {
   label: string
 }
 
+type RangeTarget = number | 'new' | null
+
+function parseMindMapDoc(value: unknown): MindMapDoc | null {
+  if (!value) return null
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value)
+      return parsed && typeof parsed === 'object' ? (parsed as MindMapDoc) : null
+    } catch {
+      return null
+    }
+  }
+  return typeof value === 'object' ? (value as MindMapDoc) : null
+}
+
+function buildSubtreeUidMap(doc: MindMapDoc | null) {
+  const subtreeMap = new Map<string, string[]>()
+
+  const walk = (node: MindMapDocNode | null | undefined): string[] => {
+    if (!node || typeof node !== 'object') return []
+    const ownUid =
+      node.data && typeof node.data === 'object' && typeof node.data.uid === 'string'
+        ? node.data.uid
+        : null
+    const childUids = (Array.isArray(node.children) ? node.children : []).flatMap((child) => walk(child))
+    const subtreeUids = ownUid ? [ownUid, ...childUids] : childUids
+    if (ownUid) {
+      subtreeMap.set(ownUid, Array.from(new Set(subtreeUids)))
+    }
+    return subtreeUids
+  }
+
+  walk(doc?.root)
+  return subtreeMap
+}
+
+function uniqueStrings(values: Iterable<string>) {
+  return Array.from(new Set(Array.from(values).filter(Boolean)))
+}
+
+function getEarlierDateTime(left: string | null, right: string | null) {
+  if (!left) return right
+  if (!right) return left
+  return new Date(left).getTime() <= new Date(right).getTime() ? left : right
+}
+
 export function usePalaceEditPage() {
   const { id } = useParams()
   const navigate = useNavigate()
@@ -71,6 +124,20 @@ export function usePalaceEditPage() {
     useState<PalaceVersionDetail | null>(null)
   const [previewLoading, setPreviewLoading] = useState(false)
   const [previewError, setPreviewError] = useState('')
+  const [segments, setSegments] = useState<PalaceSegmentSummary[]>([])
+  const [segmentDialogOpen, setSegmentDialogOpen] = useState(false)
+  const [segmentName, setSegmentName] = useState('')
+  const [segmentColor, setSegmentColor] = useState('#14b8a6')
+  const [segmentCreatedAt, setSegmentCreatedAt] = useState('')
+  const [editingSegmentId, setEditingSegmentId] = useState<number | null>(null)
+  const [activeSegmentId, setActiveSegmentId] = useState<number | null>(null)
+  const [segmentSaving, setSegmentSaving] = useState(false)
+  const [segmentMergingId, setSegmentMergingId] = useState<number | null>(null)
+  const [segmentError, setSegmentError] = useState('')
+  const [isSegmentRangeMode, setIsSegmentRangeMode] = useState(false)
+  const [rangeTargetSegmentId, setRangeTargetSegmentId] = useState<RangeTarget>(null)
+  const [selectedRangeNodeUids, setSelectedRangeNodeUids] = useState<string[]>([])
+  const [overriddenConflictNodeUids, setOverriddenConflictNodeUids] = useState<string[]>([])
 
   const {
     meta,
@@ -109,6 +176,15 @@ export function usePalaceEditPage() {
 
   const palace = meta as PalaceMeta | null
   const selectedNode = selectedNodes[0] ?? null
+  const parsedEditorDoc = useMemo(() => parseMindMapDoc(editorState?.editor_doc ?? null), [editorState?.editor_doc])
+  const subtreeUidMap = useMemo(() => buildSubtreeUidMap(parsedEditorDoc), [parsedEditorDoc])
+  const segmentById = useMemo(
+    () => new Map(segments.map((segment) => [segment.id, segment] as const)),
+    [segments],
+  )
+  const currentRangeTargetSegment =
+    typeof rangeTargetSegmentId === 'number' ? segmentById.get(rangeTargetSegmentId) ?? null : null
+  const selectedRangeNodeCount = selectedRangeNodeUids.length
   const timer = useTimedSession({
     kind: 'palace_edit',
     title: title || palace?.title || '未命名宫殿',
@@ -159,6 +235,19 @@ export function usePalaceEditPage() {
     setTitle(palace.title)
     setCreatedAt(formatDateTimeInputValue(palace.created_at))
     setSelectedChapterIds(palace.chapters.map((chapter) => chapter.id))
+    const nextSegments = Array.isArray((palace as any).segments) ? (palace as any).segments : []
+    setSegments(nextSegments)
+    setActiveSegmentId((current) =>
+      current != null && nextSegments.some((segment: PalaceSegmentSummary) => segment.id === current)
+        ? current
+        : nextSegments[0]?.id ?? null,
+    )
+    setRangeTargetSegmentId((current) => {
+      if (current === 'new') return current
+      return current != null && nextSegments.some((segment: PalaceSegmentSummary) => segment.id === current)
+        ? current
+        : null
+    })
   }, [palace])
 
   const handleTitleChange = (value: string) => {
@@ -258,6 +347,176 @@ export function usePalaceEditPage() {
     setVersionOpen(true)
   }
 
+  const refreshSegments = async () => {
+    if (!palaceId) return
+    const result = await getPalaceSegmentsApi(palaceId)
+    setSegments(result.items)
+    setActiveSegmentId((current) =>
+      current != null && result.items.some((segment) => segment.id === current)
+        ? current
+        : result.items[0]?.id ?? null,
+    )
+    setRangeTargetSegmentId((current) => {
+      if (current === 'new') return current
+      return current != null && result.items.some((segment) => segment.id === current) ? current : null
+    })
+  }
+
+  const handleOpenCreateSegment = () => {
+    setSegmentError('')
+    setEditingSegmentId(null)
+    setSegmentName('')
+    setSegmentColor('#14b8a6')
+    setSegmentCreatedAt(
+      formatDateTimeInputValue(
+        segments.length === 0 ? palace?.created_at ?? new Date().toISOString() : new Date().toISOString(),
+      ),
+    )
+    setSegmentDialogOpen(true)
+  }
+
+  const handleOpenEditSegment = (segment: PalaceSegmentSummary) => {
+    if (segment.is_virtual_default) {
+      setSegmentError('默认第 1 部分不单独保存为实体分块，时间沿用宫殿本身。')
+      return
+    }
+    setSegmentError('')
+    setEditingSegmentId(segment.id)
+    setSegmentName(segment.name)
+    setSegmentColor(segment.color)
+    setSegmentCreatedAt(formatDateTimeInputValue(segment.created_at))
+    setActiveSegmentId(segment.id)
+    setSegmentDialogOpen(true)
+  }
+
+  const enterSegmentRangeMode = (target: RangeTarget) => {
+    const sourceSegment =
+      target === 'new'
+        ? null
+        : typeof target === 'number'
+          ? segments.find((segment) => segment.id === target) ?? null
+          : null
+    setIsSegmentRangeMode(true)
+    setRangeTargetSegmentId(target)
+    setSelectedRangeNodeUids(sourceSegment ? [...sourceSegment.node_uids] : [])
+    setOverriddenConflictNodeUids([])
+    if (typeof target === 'number') {
+      setActiveSegmentId(target)
+    }
+  }
+
+  const exitSegmentRangeMode = () => {
+    setIsSegmentRangeMode(false)
+    setRangeTargetSegmentId(null)
+    setSelectedRangeNodeUids([])
+    setOverriddenConflictNodeUids([])
+  }
+
+  const handleSegmentRangeModeToggle = (payload: {
+    active: boolean
+    targetSegmentId: RangeTarget
+  }) => {
+    if (!payload.active) {
+      exitSegmentRangeMode()
+      return
+    }
+    enterSegmentRangeMode(payload.targetSegmentId ?? 'new')
+  }
+
+  const handleSegmentRangeDraftChange = (payload: {
+    selectedNodeUids: string[]
+    overriddenConflictNodeUids: string[]
+  }) => {
+    setSelectedRangeNodeUids(uniqueStrings(payload.selectedNodeUids))
+    setOverriddenConflictNodeUids(uniqueStrings(payload.overriddenConflictNodeUids))
+  }
+
+  const handleAdjustSegmentRange = (segment: PalaceSegmentSummary) => {
+    enterSegmentRangeMode(segment.id)
+  }
+
+  const handleConfirmSegmentRange = () => {
+    if (!selectedRangeNodeUids.length) {
+      window.alert('先在脑图里选中至少一个节点，再确认分块范围。')
+      return
+    }
+    if (typeof rangeTargetSegmentId === 'number') {
+      const segment = segments.find((item) => item.id === rangeTargetSegmentId)
+      if (!segment) return
+      handleOpenEditSegment(segment)
+      return
+    }
+    handleOpenCreateSegment()
+  }
+
+  const handleSaveSegment = async () => {
+    if (!palaceId) return
+    setSegmentSaving(true)
+    setSegmentError('')
+    const selectedNodeUids = uniqueStrings(
+      isSegmentRangeMode
+        ? selectedRangeNodeUids
+        : selectedNodes
+            .map((node) => node.uid)
+            .filter((value): value is string => Boolean(value)),
+    )
+    try {
+      const isEditingVirtualDefault = editingSegmentId != null && segments.find((segment) => segment.id === editingSegmentId)?.is_virtual_default
+      if (editingSegmentId && !isEditingVirtualDefault) {
+        await updatePalaceSegmentApi(editingSegmentId, {
+          name: segmentName,
+          color: segmentColor,
+          created_at: toLocalDateTimePayload(segmentCreatedAt),
+          ...(selectedNodeUids.length > 0 ? { node_uids: selectedNodeUids } : {}),
+        })
+      } else {
+        await createPalaceSegmentApi(palaceId, {
+          name: segmentName,
+          color: segmentColor,
+          created_at: toLocalDateTimePayload(segmentCreatedAt),
+          node_uids: selectedNodeUids,
+        })
+      }
+      await refreshSegments()
+      setSegmentDialogOpen(false)
+      exitSegmentRangeMode()
+    } catch (error) {
+      setSegmentError(error instanceof Error ? error.message : '保存分块失败，请稍后重试。')
+    } finally {
+      setSegmentSaving(false)
+    }
+  }
+
+  const handleDeleteSegment = async (segmentId: number) => {
+    const confirmed = window.confirm('删除这个分块只会取消这组节点的分块划分，不会删除任何脑图内容。确定继续吗？')
+    if (!confirmed) return
+    await deletePalaceSegmentApi(segmentId)
+    await refreshSegments()
+  }
+
+  const handleMergeSegment = async (sourceSegmentId: number, targetSegmentId: number) => {
+    if (sourceSegmentId === targetSegmentId) return
+    const sourceSegment = segments.find((segment) => segment.id === sourceSegmentId)
+    const targetSegment = segments.find((segment) => segment.id === targetSegmentId)
+    if (!sourceSegment || !targetSegment) return
+
+    setSegmentMergingId(sourceSegmentId)
+    try {
+      await updatePalaceSegmentApi(targetSegmentId, {
+        created_at: getEarlierDateTime(targetSegment.created_at, sourceSegment.created_at),
+        node_uids: uniqueStrings([...targetSegment.node_uids, ...sourceSegment.node_uids]),
+      })
+      await deletePalaceSegmentApi(sourceSegmentId)
+      await refreshSegments()
+      setActiveSegmentId(targetSegmentId)
+    } finally {
+      setSegmentMergingId(null)
+    }
+  }
+
+  const activeSegment =
+    segments.find((segment) => segment.id === activeSegmentId) ?? null
+
   const handlePreviewVersion = async (versionId: number) => {
     if (!palace) return
     setPreviewingVersionId(versionId)
@@ -335,8 +594,32 @@ export function usePalaceEditPage() {
     previewVersionDetail,
     previewLoading,
     previewError,
+    segments,
+    segmentDialogOpen,
+    setSegmentDialogOpen,
+    segmentName,
+    setSegmentName,
+    segmentColor,
+    setSegmentColor,
+    segmentCreatedAt,
+    setSegmentCreatedAt,
+    editingSegmentId,
+    activeSegmentId,
+    setActiveSegmentId,
+    activeSegment,
+    segmentSaving,
+    segmentMergingId,
+    segmentError,
+    isSegmentRangeMode,
+    rangeTargetSegmentId,
+    selectedRangeNodeUids,
+    overriddenConflictNodeUids,
+    selectedRangeNodeCount,
+    currentRangeTargetSegment,
+    subtreeUidMap,
     editorState,
     frameVersion,
+    selectedNodes,
     selectedNode,
     setSelectedNodes,
     setEditorState,
@@ -346,6 +629,15 @@ export function usePalaceEditPage() {
     handleAttachmentDelete,
     handleChapterToggle,
     handleOpenVersions,
+    handleOpenCreateSegment,
+    handleOpenEditSegment,
+    handleAdjustSegmentRange,
+    handleSegmentRangeModeToggle,
+    handleSegmentRangeDraftChange,
+    handleConfirmSegmentRange,
+    handleSaveSegment,
+    handleDeleteSegment,
+    handleMergeSegment,
     handlePreviewVersion,
     handleCloseVersions,
     handleRestoreVersion,

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from memory_anki.infrastructure.db.models import get_session
@@ -7,6 +7,7 @@ from memory_anki.modules.time_records.application.time_records_service import (
     get_threshold_seconds,
     import_legacy_time_records,
     list_time_records,
+    normalize_time_record_event_timezones,
     restore_time_record,
     set_threshold_seconds,
     soft_delete_time_record,
@@ -41,12 +42,18 @@ def api_list_time_records(
 
 @router.post("/time-records")
 def api_create_time_record(data: dict, session: Session = Depends(session_dep)):
-    return {"item": create_time_record(session, data)}
+    try:
+        return {"item": create_time_record(session, data)}
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.put("/time-records/{record_id}")
 def api_update_time_record(record_id: str, data: dict, session: Session = Depends(session_dep)):
-    return {"item": update_time_record(session, record_id, data)}
+    try:
+        return {"item": update_time_record(session, record_id, data)}
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.post("/time-records/{record_id}/soft-delete")
@@ -73,3 +80,8 @@ def api_update_time_recording_threshold(data: dict, session: Session = Depends(s
 def api_import_legacy_time_records(data: dict, session: Session = Depends(session_dep)):
     imported = import_legacy_time_records(session, data.get("records", []), bool(data.get("clearExisting", False)))
     return {"imported": imported}
+
+
+@router.post("/time-records/normalize-timezones")
+def api_normalize_time_record_timezones(session: Session = Depends(session_dep)):
+    return {"updated": normalize_time_record_event_timezones(session)}

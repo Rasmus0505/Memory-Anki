@@ -21,7 +21,7 @@ export function ChartContainer({
   return (
     <div
       className={cn(
-        'h-[280px] w-full rounded-3xl border border-border/60 bg-gradient-to-b from-background to-slate-50/80 p-3',
+        'h-[280px] min-h-0 min-w-0 w-full rounded-3xl border border-border/60 bg-gradient-to-b from-background to-slate-50/80 p-3',
         className,
       )}
       style={style as React.CSSProperties}

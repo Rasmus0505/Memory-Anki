@@ -26,6 +26,7 @@ interface TimeRecordDialogProps {
   mode: 'create' | 'edit'
   form: TimeRecordFormState
   error: string | null
+  isSubmitting: boolean
   onOpenChange: (open: boolean) => void
   onChange: (patch: Partial<TimeRecordFormState>) => void
   onSubmit: (event: FormEvent<HTMLFormElement>) => void
@@ -36,12 +37,26 @@ export function TimeRecordDialog({
   mode,
   form,
   error,
+  isSubmitting,
   onOpenChange,
   onChange,
   onSubmit,
 }: TimeRecordDialogProps) {
+  const submitText = isSubmitting
+    ? mode === 'create'
+      ? '新增中...'
+      : '保存中...'
+    : mode === 'create'
+      ? '新增记录'
+      : '保存修改'
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (!isSubmitting) onOpenChange(nextOpen)
+      }}
+    >
       <DialogContent className="max-h-[88vh] overflow-y-auto rounded-[28px] border-border/70 bg-background/98 p-0">
         <DialogHeader>
           <div>
@@ -50,11 +65,15 @@ export function TimeRecordDialog({
             </DialogTitle>
             <div className="text-sm text-muted-foreground">
               {mode === 'create'
-                ? '补录一条手动时间记录。'
+                ? '手动新增一条时间记录。'
                 : '修改后会同步更新图表与统计。'}
             </div>
           </div>
-          <DialogClose onClick={() => onOpenChange(false)} />
+          <DialogClose
+            onClick={() => {
+              if (!isSubmitting) onOpenChange(false)
+            }}
+          />
         </DialogHeader>
 
         <form onSubmit={onSubmit} className="space-y-5 p-6">
@@ -63,6 +82,7 @@ export function TimeRecordDialog({
               <Label>标题</Label>
               <Input
                 value={form.title}
+                disabled={isSubmitting}
                 onChange={(event) => onChange({ title: event.target.value })}
               />
             </label>
@@ -72,6 +92,7 @@ export function TimeRecordDialog({
               <select
                 className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                 value={form.kind}
+                disabled={isSubmitting}
                 onChange={(event) =>
                   onChange({ kind: event.target.value as SessionKind })
                 }
@@ -88,7 +109,9 @@ export function TimeRecordDialog({
               <Label>开始时间</Label>
               <Input
                 type="datetime-local"
+                step="1"
                 value={form.startedAt}
+                disabled={isSubmitting}
                 onChange={(event) =>
                   onChange({ startedAt: event.target.value })
                 }
@@ -99,7 +122,9 @@ export function TimeRecordDialog({
               <Label>结束时间</Label>
               <Input
                 type="datetime-local"
+                step="1"
                 value={form.endedAt}
+                disabled={isSubmitting}
                 onChange={(event) =>
                   onChange({ endedAt: event.target.value })
                 }
@@ -112,6 +137,7 @@ export function TimeRecordDialog({
                 type="number"
                 min="0"
                 value={form.effectiveSeconds}
+                disabled={isSubmitting}
                 onChange={(event) =>
                   onChange({ effectiveSeconds: event.target.value })
                 }
@@ -124,6 +150,7 @@ export function TimeRecordDialog({
                 type="number"
                 min="0"
                 value={form.pauseCount}
+                disabled={isSubmitting}
                 onChange={(event) =>
                   onChange({ pauseCount: event.target.value })
                 }
@@ -135,6 +162,7 @@ export function TimeRecordDialog({
               <select
                 className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                 value={form.completionMethod}
+                disabled={isSubmitting}
                 onChange={(event) =>
                   onChange({
                     completionMethod:
@@ -154,6 +182,7 @@ export function TimeRecordDialog({
               <Label>宫殿 ID（可选）</Label>
               <Input
                 value={form.palaceId}
+                disabled={isSubmitting}
                 onChange={(event) => onChange({ palaceId: event.target.value })}
               />
             </label>
@@ -163,11 +192,12 @@ export function TimeRecordDialog({
             <input
               type="checkbox"
               checked={form.durationEdited}
+              disabled={isSubmitting}
               onChange={(event) =>
                 onChange({ durationEdited: event.target.checked })
               }
             />
-            标记为“已补录总时长”
+            手动调整有效时长
           </label>
 
           {error ? (
@@ -180,12 +210,13 @@ export function TimeRecordDialog({
             <Button
               type="button"
               variant="outline"
+              disabled={isSubmitting}
               onClick={() => onOpenChange(false)}
             >
               取消
             </Button>
-            <Button type="submit">
-              {mode === 'create' ? '新增记录' : '保存修改'}
+            <Button type="submit" disabled={isSubmitting}>
+              {submitText}
             </Button>
           </div>
         </form>

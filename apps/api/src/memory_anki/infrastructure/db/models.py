@@ -88,6 +88,12 @@ class Palace(Base):
         back_populates="palace",
         cascade="all, delete-orphan",
     )
+    segments: Mapped[list[PalaceSegment]] = relationship(
+        "PalaceSegment",
+        back_populates="palace",
+        cascade="all, delete-orphan",
+        order_by="PalaceSegment.sort_order",
+    )
 
 
 class Peg(Base):
@@ -136,6 +142,39 @@ class Attachment(Base):
     palace: Mapped[Palace] = relationship("Palace", back_populates="attachments")
 
 
+class PalaceSegment(Base):
+    __tablename__ = "palace_segments"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    palace_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("palaces.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    name: Mapped[str] = mapped_column(String(200), nullable=False, default="")
+    color: Mapped[str] = mapped_column(String(24), nullable=False, default="#14b8a6")
+    node_uids_json: Mapped[str] = mapped_column(Text, default="[]")
+    created_at: Mapped[datetime | None] = mapped_column(DateTime, default=utc_now_naive)
+    updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime,
+        default=utc_now_naive,
+        onupdate=utc_now_naive,
+    )
+    sort_order: Mapped[int] = mapped_column(Integer, default=0)
+
+    palace: Mapped[Palace] = relationship("Palace", back_populates="segments")
+    review_schedules: Mapped[list[PalaceSegmentReviewSchedule]] = relationship(
+        "PalaceSegmentReviewSchedule",
+        back_populates="segment",
+        cascade="all, delete-orphan",
+    )
+    review_logs: Mapped[list[PalaceSegmentReviewLog]] = relationship(
+        "PalaceSegmentReviewLog",
+        back_populates="segment",
+        cascade="all, delete-orphan",
+    )
+
+
 class ReviewSchedule(Base):
     __tablename__ = "review_schedules"
 
@@ -145,9 +184,11 @@ class ReviewSchedule(Base):
         ForeignKey("palaces.id", ondelete="CASCADE"),
     )
     scheduled_date: Mapped[date] = mapped_column(Date, nullable=False)
+    scheduled_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     interval_days: Mapped[int] = mapped_column(Integer, default=0)
     algorithm_used: Mapped[str] = mapped_column(String(30), default="ebbinghaus")
     completed: Mapped[bool] = mapped_column(Boolean, default=False)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     review_number: Mapped[int] = mapped_column(Integer, default=0)
     review_type: Mapped[str] = mapped_column(String(20), default="standard")
     anchor_date: Mapped[date | None] = mapped_column(Date, nullable=True)
@@ -171,6 +212,51 @@ class ReviewLog(Base):
     palace: Mapped[Palace] = relationship("Palace", back_populates="review_logs")
 
 
+class PalaceSegmentReviewSchedule(Base):
+    __tablename__ = "palace_segment_review_schedules"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    palace_segment_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("palace_segments.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    scheduled_date: Mapped[date] = mapped_column(Date, nullable=False)
+    scheduled_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    interval_days: Mapped[int] = mapped_column(Integer, default=0)
+    algorithm_used: Mapped[str] = mapped_column(String(30), default="ebbinghaus")
+    completed: Mapped[bool] = mapped_column(Boolean, default=False)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    review_number: Mapped[int] = mapped_column(Integer, default=0)
+    review_type: Mapped[str] = mapped_column(String(20), default="standard")
+    anchor_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+
+    segment: Mapped[PalaceSegment] = relationship(
+        "PalaceSegment",
+        back_populates="review_schedules",
+    )
+
+
+class PalaceSegmentReviewLog(Base):
+    __tablename__ = "palace_segment_review_logs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    palace_segment_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("palace_segments.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    review_date: Mapped[date | None] = mapped_column(Date, default=date.today)
+    score: Mapped[int] = mapped_column(Integer, default=0)
+    review_mode: Mapped[str] = mapped_column(String(20), default="flashcard")
+    duration_seconds: Mapped[int] = mapped_column(Integer, default=0)
+
+    segment: Mapped[PalaceSegment] = relationship(
+        "PalaceSegment",
+        back_populates="review_logs",
+    )
+
+
 class SessionProgress(Base):
     __tablename__ = "session_progress"
 
@@ -184,6 +270,16 @@ class SessionProgress(Base):
     review_schedule_id: Mapped[int | None] = mapped_column(
         Integer,
         ForeignKey("review_schedules.id", ondelete="CASCADE"),
+        nullable=True,
+    )
+    palace_segment_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("palace_segments.id", ondelete="CASCADE"),
+        nullable=True,
+    )
+    palace_segment_review_schedule_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("palace_segment_review_schedules.id", ondelete="CASCADE"),
         nullable=True,
     )
     reveal_map: Mapped[str] = mapped_column(Text, default="{}")
@@ -301,6 +397,11 @@ class TimeRecord(Base):
     palace_id: Mapped[int | None] = mapped_column(
         Integer,
         ForeignKey("palaces.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    palace_segment_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("palace_segments.id", ondelete="SET NULL"),
         nullable=True,
     )
     title: Mapped[str] = mapped_column(String(300), nullable=False, default="")

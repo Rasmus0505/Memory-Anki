@@ -35,11 +35,26 @@ from memory_anki.modules.palaces.application.palace_service import (
     restore_archived_palaces,
     update_palace,
 )
+from memory_anki.modules.palaces.application.segment_service import (
+    adjust_palace_default_segment_review_progress,
+    adjust_segment_review_progress,
+    build_virtual_default_segment_summary,
+    build_segment_editor_doc,
+    create_palace_segment,
+    delete_palace_segment,
+    get_palace_segment,
+    estimate_palace_review_seconds,
+    list_palace_segments,
+    palace_review_stages_json,
+    segment_summary_json,
+    update_palace_segment,
+)
 from memory_anki.modules.palaces.domain.schemas import PalaceCreate, PalaceUpdate
 from memory_anki.modules.reviews.application.review_service import trigger_review_for_palace
 from memory_anki.modules.reviews.application.schedule_service import (
     custom_intervals,
     ebbinghaus_intervals,
+    get_algorithm_stage_labels,
     get_config_value,
     is_schedule_due,
     normalize_algorithm,
@@ -70,6 +85,8 @@ def peg_json(peg) -> dict:
 
 
 def schedule_display_datetime(schedule: ReviewSchedule, palace: Palace, session: Session) -> datetime | None:
+    if getattr(schedule, "scheduled_at", None):
+        return schedule.scheduled_at.replace(second=0, microsecond=0)
     if not schedule.scheduled_date:
         return None
 
@@ -135,7 +152,7 @@ def get_palace_stage_progress(palace: Palace, session: Session | None) -> tuple[
         key=lambda schedule: (schedule.review_number, schedule.id),
     )
     if pending_schedules:
-        completed = min(pending_schedules[0].review_number, total)
+        completed = min(pending_schedules[0].review_number + 1, total)
     else:
         review_logs = [
             log
@@ -158,6 +175,30 @@ def palace_json(p, session: Session | None = None) -> dict:
     next_review_at = schedule_display_datetime(next_schedule, p, session) if next_schedule and session else None
     has_due_review = bool(next_schedule and session and is_schedule_due(next_schedule, p, session))
     review_stage_total, review_stage_completed, review_stage_progress = get_palace_stage_progress(p, session)
+    stage_labels: list[str] = []
+    if session:
+        current_algorithm = next(
+            (
+                normalize_algorithm(schedule.algorithm_used)
+                for schedule in (p.review_schedules or [])
+                if schedule.algorithm_used
+            ),
+            normalize_algorithm(get_config_value(session, "default_algorithm")),
+        )
+        stage_labels = get_algorithm_stage_labels(session, current_algorithm)
+    default_segment = (
+        build_virtual_default_segment_summary(
+            p,
+            session=session,
+            estimated_review_seconds=estimate_palace_review_seconds(p),
+            review_stage_total=review_stage_total,
+            review_stage_completed=review_stage_completed,
+            review_stage_progress=review_stage_progress,
+            stage_labels=stage_labels,
+        )
+        if session
+        else None
+    )
 
     return {
         "id": p.id, "title": p.title, "description": p.description,
@@ -171,6 +212,8 @@ def palace_json(p, session: Session | None = None) -> dict:
         "review_stage_total": review_stage_total,
         "review_stage_completed": review_stage_completed,
         "review_stage_progress": review_stage_progress,
+        "stage_labels": stage_labels,
+        "review_stages": palace_review_stages_json(session, p, stage_labels) if session else [],
         "pegs": [peg_json(peg) for peg in p.pegs],
         "attachments": [{"id": a.id, "filename": a.filename,
                          "original_name": a.original_name, "file_size": a.file_size}
@@ -178,6 +221,7 @@ def palace_json(p, session: Session | None = None) -> dict:
         "chapters": [{"id": c.id, "name": c.name, "subject_id": c.subject_id,
                       "subject": {"id": c.subject.id, "name": c.subject.name} if c.subject else None}
                       for c in p.chapters],
+        "segments": list_palace_segments(session, p, default_segment_payload=default_segment) if session else [],
     }
 
 
@@ -276,6 +320,107 @@ def api_update_editor(palace_id: int, data: dict, s: Session = Depends(session_d
     return {
         "palace": palace_json(palace, s),
         **state,
+    }
+
+
+@router.get("/palaces/{palace_id}/segments")
+def api_list_segments(palace_id: int, s: Session = Depends(session_dep)):
+    palace = get_palace(s, palace_id)
+    if not palace:
+        return {"error": "not found"}
+    next_schedule = None
+    pending_schedules = [schedule for schedule in (palace.review_schedules or []) if not schedule.completed]
+    if pending_schedules:
+        next_schedule = min(pending_schedules, key=lambda schedule: (schedule.review_number, schedule.id))
+    next_review_at = schedule_display_datetime(next_schedule, palace, s) if next_schedule else None
+    has_due_review = bool(next_schedule and is_schedule_due(next_schedule, palace, s))
+    review_stage_total, review_stage_completed, review_stage_progress = get_palace_stage_progress(palace, s)
+    default_segment = build_virtual_default_segment_summary(
+        palace,
+        session=s,
+        estimated_review_seconds=estimate_palace_review_seconds(palace),
+        review_stage_total=review_stage_total,
+        review_stage_completed=review_stage_completed,
+        review_stage_progress=review_stage_progress,
+        stage_labels=get_algorithm_stage_labels(
+            s,
+            next(
+                (
+                    normalize_algorithm(schedule.algorithm_used)
+                    for schedule in (palace.review_schedules or [])
+                    if schedule.algorithm_used
+                ),
+                normalize_algorithm(get_config_value(s, "default_algorithm")),
+            ),
+        ),
+    )
+    return {"items": list_palace_segments(s, palace, default_segment_payload=default_segment)}
+
+
+@router.post("/palaces/{palace_id}/segments")
+def api_create_segment(palace_id: int, data: dict, s: Session = Depends(session_dep)):
+    palace = get_palace(s, palace_id)
+    if not palace:
+        return {"error": "not found"}
+    segment = create_palace_segment(s, palace, data)
+    maybe_create_rolling_backup("rolling-create-palace-segment")
+    return {"item": segment_summary_json(s, segment)}
+
+
+@router.put("/palace-segments/{segment_id}")
+def api_update_segment(segment_id: int, data: dict, s: Session = Depends(session_dep)):
+    segment = get_palace_segment(s, segment_id)
+    if not segment:
+        return {"error": "not found"}
+    updated = update_palace_segment(s, segment, data)
+    maybe_create_rolling_backup("rolling-update-palace-segment")
+    return {"item": segment_summary_json(s, updated)}
+
+
+@router.put("/palace-segments/{segment_id}/review-progress")
+def api_update_segment_review_progress(segment_id: int, data: dict, s: Session = Depends(session_dep)):
+    segment = get_palace_segment(s, segment_id)
+    if not segment:
+        return {"error": "not found"}
+    updated = adjust_segment_review_progress(s, segment, data)
+    maybe_create_rolling_backup("rolling-update-palace-segment-review-progress")
+    return {"item": segment_summary_json(s, updated)}
+
+
+@router.put("/palaces/{palace_id}/default-segment/review-progress")
+def api_update_default_segment_review_progress(palace_id: int, data: dict, s: Session = Depends(session_dep)):
+    palace = get_palace(s, palace_id)
+    if not palace:
+        return {"error": "not found"}
+    updated = adjust_palace_default_segment_review_progress(s, palace, data)
+    maybe_create_rolling_backup("rolling-update-default-segment-review-progress")
+    payload = palace_json(updated, s)
+    default_segment = next(
+        (item for item in payload.get("segments", []) if item.get("is_virtual_default")),
+        None,
+    )
+    return {"item": default_segment, "palace": payload}
+
+
+@router.delete("/palace-segments/{segment_id}")
+def api_delete_segment(segment_id: int, s: Session = Depends(session_dep)):
+    segment = get_palace_segment(s, segment_id)
+    if not segment:
+        return {"error": "not found"}
+    delete_palace_segment(s, segment)
+    maybe_create_rolling_backup("rolling-delete-palace-segment")
+    return {"ok": True}
+
+
+@router.get("/palace-segments/{segment_id}")
+def api_get_segment(segment_id: int, s: Session = Depends(session_dep)):
+    segment = get_palace_segment(s, segment_id)
+    if not segment or not segment.palace:
+        return {"error": "not found"}
+    return {
+        "item": segment_summary_json(s, segment),
+        "palace": palace_json(segment.palace, s),
+        "editor_doc": build_segment_editor_doc(segment.palace, segment),
     }
 
 

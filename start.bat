@@ -5,7 +5,7 @@ cd /d "%~dp0"
 
 set "API_DIR=%~dp0apps\api"
 set "WEB_DIR=%~dp0apps\web"
-set "API_PORT=8000"
+set "API_PORT=8012"
 set "WEB_PORT=5173"
 set "APP_HOME=%LOCALAPPDATA%\MemoryAnki"
 set "LEGACY_DATA_DIR=%~dp0data"

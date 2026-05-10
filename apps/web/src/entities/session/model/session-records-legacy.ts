@@ -17,6 +17,7 @@ import {
   softDeleteTimeRecordApi,
   updateTimeRecordApi,
 } from '@/entities/session/api/time-records'
+import { parseApiDateTime } from '@/shared/lib/dateTime'
 
 const PRACTICE_PROGRESS_KEY = 'memory-anki.practice-progress.v1'
 const TIME_RECORDS_KEY = 'memory-anki.time-records.v1'
@@ -164,7 +165,7 @@ export function getTimeRecordSummary(records: TimeSessionRecord[], reference = n
     .filter((record) => !record.deletedAt)
     .reduce<TimeRecordSummary>(
       (accumulator, record) => {
-        const startedAt = new Date(record.startedAt)
+        const startedAt = parseApiDateTime(record.startedAt)
         if (Number.isNaN(startedAt.getTime())) return accumulator
         accumulator.totalRecords += 1
         accumulator.totalEffectiveSeconds += record.effectiveSeconds
@@ -202,7 +203,7 @@ export function getDailyTrend(records: TimeSessionRecord[], days = 7, reference 
   records
     .filter((record) => !record.deletedAt)
     .forEach((record) => {
-      const startedAt = new Date(record.startedAt)
+      const startedAt = parseApiDateTime(record.startedAt)
       if (Number.isNaN(startedAt.getTime()) || startedAt < start || startedAt >= addDays(end, 1)) {
         return
       }
@@ -253,7 +254,7 @@ export function getWeeklyLocalSessionStats(records: TimeSessionRecord[], referen
 
   return records.reduce(
     (accumulator, record) => {
-      const startedAt = new Date(record.startedAt)
+      const startedAt = parseApiDateTime(record.startedAt)
       if (record.deletedAt || Number.isNaN(startedAt.getTime()) || !isOnOrAfter(startedAt, threshold)) {
         return accumulator
       }

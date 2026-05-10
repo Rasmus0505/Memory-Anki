@@ -3,12 +3,11 @@ from __future__ import annotations
 import json
 from collections import defaultdict
 from collections.abc import Callable
-from datetime import date, datetime, time, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 from typing import Any
 
 from sqlalchemy.orm import Session
 
-from memory_anki.core.time import iso_utc_now
 from memory_anki.infrastructure.db.models import Config, ReviewLog, TimeRecord
 
 TIME_RECORD_DASHBOARD_KINDS = ("review", "practice", "palace_edit")
@@ -19,14 +18,15 @@ def _normalize_record(record: TimeRecord) -> dict:
         "id": record.id,
         "kind": record.kind,
         "palaceId": record.palace_id,
+        "palaceSegmentId": getattr(record, "palace_segment_id", None),
         "title": record.title,
-        "startedAt": record.started_at.isoformat(),
-        "endedAt": record.ended_at.isoformat(),
+        "startedAt": serialize_storage_datetime(record.started_at),
+        "endedAt": serialize_storage_datetime(record.ended_at),
         "effectiveSeconds": record.effective_seconds,
         "pauseCount": record.pause_count,
         "completionMethod": record.completion_method,
         "durationEdited": bool(record.duration_edited),
-        "deletedAt": record.deleted_at.isoformat() if record.deleted_at else None,
+        "deletedAt": serialize_storage_datetime(record.deleted_at) if record.deleted_at else None,
         "deletedReason": record.deleted_reason,
         "events": json.loads(record.events_json or "[]"),
     }
@@ -70,19 +70,26 @@ def create_time_record(session: Session, payload: dict) -> dict | None:
     effective_seconds = max(0, int(payload.get("effectiveSeconds", 0)))
     if effective_seconds <= threshold:
         return None
+    started_at = parse_storage_datetime(payload.get("startedAt"))
+    ended_at = parse_storage_datetime(payload.get("endedAt"))
+    if started_at is None or ended_at is None:
+        raise ValueError("开始时间和结束时间不能为空。")
+    if started_at > ended_at:
+        raise ValueError("开始时间不能晚于结束时间。")
     record = TimeRecord(
         id=str(payload["id"]),
         kind=str(payload["kind"]),
         palace_id=payload.get("palaceId"),
+        palace_segment_id=payload.get("palaceSegmentId"),
         title=str(payload.get("title", "")),
-        started_at=_parse_datetime(payload["startedAt"]),
-        ended_at=_parse_datetime(payload["endedAt"]),
+        started_at=started_at,
+        ended_at=ended_at,
         effective_seconds=effective_seconds,
         pause_count=max(0, int(payload.get("pauseCount", 0))),
         completion_method=str(payload.get("completionMethod", "manual_complete")),
         duration_edited=bool(payload.get("durationEdited", False)),
         deleted_reason=payload.get("deletedReason"),
-        deleted_at=_parse_optional_datetime(payload.get("deletedAt")),
+        deleted_at=parse_optional_storage_datetime(payload.get("deletedAt")),
         events_json=json.dumps(payload.get("events", []), ensure_ascii=False),
     )
     persistent_record = session.merge(record)
@@ -99,20 +106,26 @@ def update_time_record(session: Session, record_id: str, updater: dict) -> dict 
     mapping: dict[str, tuple[str, Callable[[Any], Any]]] = {
         "kind": ("kind", str),
         "palaceId": ("palace_id", lambda value: value),
+        "palaceSegmentId": ("palace_segment_id", lambda value: value),
         "title": ("title", str),
-        "startedAt": ("started_at", _parse_datetime),
-        "endedAt": ("ended_at", _parse_datetime),
+        "startedAt": ("started_at", parse_storage_datetime),
+        "endedAt": ("ended_at", parse_storage_datetime),
         "effectiveSeconds": ("effective_seconds", lambda value: max(0, int(value))),
         "pauseCount": ("pause_count", lambda value: max(0, int(value))),
         "completionMethod": ("completion_method", str),
         "durationEdited": ("duration_edited", bool),
         "deletedReason": ("deleted_reason", lambda value: value),
-        "deletedAt": ("deleted_at", _parse_optional_datetime),
+        "deletedAt": ("deleted_at", parse_optional_storage_datetime),
         "events": ("events_json", lambda value: json.dumps(value, ensure_ascii=False)),
     }
     for key, (field, transform) in mapping.items():
         if key in updater:
             setattr(record, field, transform(updater[key]))
+
+    if record.started_at is None or record.ended_at is None:
+        raise ValueError("开始时间和结束时间不能为空。")
+    if record.started_at > record.ended_at:
+        raise ValueError("开始时间不能晚于结束时间。")
 
     session.commit()
     session.refresh(record)
@@ -123,7 +136,7 @@ def soft_delete_time_record(session: Session, record_id: str) -> dict | None:
     return update_time_record(
         session,
         record_id,
-        {"deletedAt": iso_utc_now(), "deletedReason": "manual"},
+        {"deletedAt": serialize_storage_datetime(datetime.now()), "deletedReason": "manual"},
     )
 
 
@@ -201,27 +214,65 @@ def ensure_review_log_time_records(session: Session) -> int:
     return created_count
 
 
+def normalize_time_record_event_timezones(session: Session) -> int:
+    records = session.query(TimeRecord).order_by(TimeRecord.started_at.asc()).all()
+    updated_count = 0
+    for record in records:
+        events = _parse_events(record.events_json)
+        start_event = _find_event_time(events, {"start"}) if events else None
+        end_event = _find_event_time(
+            events,
+            {"manual_complete", "auto_complete", "complete", "saved", "left_page", "restart"},
+            fallback="last",
+        ) if events else None
+        next_started_at = _normalize_stored_event_datetime(record.started_at, start_event)
+        next_ended_at = _normalize_stored_event_datetime(record.ended_at, end_event)
+        if next_started_at is None:
+            next_started_at = record.started_at
+        if next_ended_at is None:
+            next_ended_at = record.ended_at
+        next_started_at, next_ended_at = _repair_shifted_record_bounds(
+            record,
+            next_started_at,
+            next_ended_at,
+            start_event=start_event,
+            end_event=end_event,
+        )
+        if next_started_at == record.started_at and next_ended_at == record.ended_at:
+            continue
+        record.started_at = next_started_at
+        record.ended_at = next_ended_at
+        updated_count += 1
+    if updated_count > 0:
+        session.commit()
+    return updated_count
+
+
 def create_review_time_record(
     session: Session,
     *,
     record_id: str,
     palace_id: int | None,
+    palace_segment_id: int | None,
     title: str,
     duration_seconds: int,
     ended_at: datetime,
     completion_method: str = "manual_complete",
 ) -> dict | None:
     safe_duration = max(0, int(duration_seconds))
-    if safe_duration <= 0:
+    threshold = get_threshold_seconds(session)
+    if safe_duration <= threshold:
         return None
-    started_at = ended_at - timedelta(seconds=safe_duration)
+    normalized_ended_at = normalize_storage_datetime(ended_at)
+    started_at = normalized_ended_at - timedelta(seconds=safe_duration)
     record = TimeRecord(
         id=record_id,
         kind="review",
         palace_id=palace_id,
+        palace_segment_id=palace_segment_id,
         title=title,
         started_at=started_at,
-        ended_at=ended_at,
+        ended_at=normalized_ended_at,
         effective_seconds=safe_duration,
         pause_count=0,
         completion_method=completion_method or "manual_complete",
@@ -242,6 +293,18 @@ def get_today_total_review_duration_seconds(session: Session) -> int:
     return get_time_record_duration_seconds(
         session,
         kinds=TIME_RECORD_DASHBOARD_KINDS,
+        start=start,
+        end=end,
+    )
+
+
+def get_today_formal_review_duration_seconds(session: Session) -> int:
+    today = date.today()
+    start = datetime.combine(today, time.min)
+    end = start + timedelta(days=1)
+    return get_time_record_duration_seconds(
+        session,
+        kinds=("review",),
         start=start,
         end=end,
     )
@@ -274,11 +337,13 @@ def get_time_record_duration_seconds(
     start: datetime,
     end: datetime,
 ) -> int:
+    threshold = get_threshold_seconds(session)
     records = (
         session.query(TimeRecord)
         .filter(
             TimeRecord.deleted_at.is_(None),
             TimeRecord.kind.in_(kinds),
+            TimeRecord.effective_seconds > threshold,
             TimeRecord.started_at >= start,
             TimeRecord.started_at < end,
         )
@@ -287,14 +352,27 @@ def get_time_record_duration_seconds(
     return sum(record.effective_seconds for record in records)
 
 
-def _parse_datetime(raw: str) -> datetime:
-    return datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+def serialize_storage_datetime(value: datetime) -> str:
+    return normalize_storage_datetime(value).isoformat()
 
 
-def _parse_optional_datetime(raw: str | None) -> datetime | None:
+def parse_storage_datetime(raw: Any) -> datetime | None:
     if raw in (None, ""):
         return None
-    return _parse_datetime(str(raw))
+    parsed = datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+    return normalize_storage_datetime(parsed)
+
+
+def parse_optional_storage_datetime(raw: Any) -> datetime | None:
+    if raw in (None, ""):
+        return None
+    return parse_storage_datetime(raw)
+
+
+def normalize_storage_datetime(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value.replace(tzinfo=None)
+    return value.astimezone().replace(tzinfo=None)
 
 
 def _current_week_bounds() -> tuple[datetime, datetime]:
@@ -303,6 +381,118 @@ def _current_week_bounds() -> tuple[datetime, datetime]:
     start = datetime.combine(start_of_week, time.min)
     end = datetime.combine(today + timedelta(days=1), time.min)
     return start, end
+
+
+def _parse_events(raw: str | None) -> list[dict[str, Any]]:
+    try:
+        data = json.loads(raw or "[]")
+    except Exception:
+        return []
+    return data if isinstance(data, list) else []
+
+
+def _find_event_time(
+    events: list[dict[str, Any]],
+    preferred_types: set[str],
+    *,
+    fallback: str = "first",
+) -> datetime | None:
+    for event in events:
+        if str(event.get("type") or "") not in preferred_types:
+            continue
+        parsed = _parse_event_datetime(event.get("at"))
+        if parsed is not None:
+            return parsed
+    ordered = events if fallback == "first" else list(reversed(events))
+    for event in ordered:
+        parsed = _parse_event_datetime(event.get("at"))
+        if parsed is not None:
+            return parsed
+    return None
+
+
+def _parse_event_datetime(raw: Any) -> datetime | None:
+    if raw in (None, ""):
+        return None
+    try:
+        parsed = datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+    except Exception:
+        return None
+    if parsed.tzinfo is None:
+        return None
+    return parsed
+
+
+def _normalize_stored_event_datetime(
+    stored: datetime | None,
+    event_at: datetime | None,
+) -> datetime | None:
+    if stored is None or event_at is None:
+        return None
+    utc_naive = event_at.astimezone(UTC).replace(tzinfo=None)
+    if abs((stored - utc_naive).total_seconds()) > 2:
+        return stored
+    local_naive = event_at.astimezone().replace(tzinfo=None)
+    return local_naive
+
+
+def _repair_shifted_record_bounds(
+    record: TimeRecord,
+    started_at: datetime,
+    ended_at: datetime,
+    *,
+    start_event: datetime | None,
+    end_event: datetime | None,
+) -> tuple[datetime, datetime]:
+    expected_start = start_event.astimezone().replace(tzinfo=None) if start_event is not None else None
+    expected_end = end_event.astimezone().replace(tzinfo=None) if end_event is not None else None
+
+    if expected_start is not None and _is_whole_day_shift(started_at, expected_start):
+        started_at = expected_start
+    if expected_end is not None and _is_whole_day_shift(ended_at, expected_end):
+        ended_at = expected_end
+
+    if expected_start is not None and expected_end is not None:
+        if _needs_duration_repair(started_at, ended_at, record.effective_seconds) and _matches_expected_elapsed(expected_start, expected_end, record.effective_seconds):
+            return expected_start, expected_end
+
+    if (
+        expected_start is None
+        and expected_end is None
+        and not record.duration_edited
+        and record.pause_count == 0
+        and _needs_duration_repair(started_at, ended_at, record.effective_seconds)
+    ):
+        corrected_end = started_at + timedelta(seconds=max(0, int(record.effective_seconds)))
+        return started_at, corrected_end
+
+    return started_at, ended_at
+
+
+def _is_whole_day_shift(stored: datetime, expected: datetime, tolerance_seconds: int = 120) -> bool:
+    delta_seconds = abs((stored - expected).total_seconds())
+    if delta_seconds <= tolerance_seconds:
+        return False
+    whole_days = round(delta_seconds / 86400)
+    if whole_days <= 0:
+        return False
+    return abs(delta_seconds - (whole_days * 86400)) <= tolerance_seconds
+
+
+def _needs_duration_repair(started_at: datetime, ended_at: datetime, effective_seconds: int, tolerance_seconds: int = 120) -> bool:
+    actual_seconds = abs((ended_at - started_at).total_seconds())
+    delta_seconds = abs(actual_seconds - max(0, int(effective_seconds)))
+    if delta_seconds <= tolerance_seconds:
+        return False
+    whole_days = round(delta_seconds / 86400)
+    if whole_days <= 0:
+        return False
+    return abs(delta_seconds - (whole_days * 86400)) <= tolerance_seconds
+
+
+def _matches_expected_elapsed(started_at: datetime, ended_at: datetime, effective_seconds: int, tolerance_seconds: int = 120) -> bool:
+    actual_seconds = abs((ended_at - started_at).total_seconds())
+    return abs(actual_seconds - max(0, int(effective_seconds))) <= tolerance_seconds
 
 
 def _ensure_review_log_time_record(session: Session, log: ReviewLog) -> dict | None:
@@ -318,6 +508,7 @@ def _ensure_review_log_time_record(session: Session, log: ReviewLog) -> dict | N
         session,
         record_id=record_id,
         palace_id=log.palace_id,
+        palace_segment_id=None,
         title=title,
         duration_seconds=log.duration_seconds,
         ended_at=ended_at,

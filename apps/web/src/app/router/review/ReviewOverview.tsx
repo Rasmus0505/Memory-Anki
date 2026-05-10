@@ -6,7 +6,12 @@ import { PageIntro } from '@/shared/components/layout/PageIntro'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card'
-import { getChapterReviewQueueApi, getReviewQueueApi } from '@/shared/api/modules/reviews'
+import {
+  getChapterReviewQueueApi,
+  getReviewQueueApi,
+  getSegmentChapterReviewQueueApi,
+  getSegmentReviewQueueApi,
+} from '@/shared/api/modules/reviews'
 
 function formatReviewStage(reviewType: string, reviewNumber: number) {
   if (reviewType === '1h') return '首日 1 小时'
@@ -24,11 +29,16 @@ export default function ReviewOverview() {
   const chapterIdParam = searchParams.get('chapterId')
   const chapterId = chapterIdParam ? Number(chapterIdParam) : null
   const [queue, setQueue] = useState<ReviewQueueResponse | null>(null)
+  const [segmentQueue, setSegmentQueue] = useState<any | null>(null)
 
   useEffect(() => {
     const load = async () => {
       const nextQueue = chapterId ? await getChapterReviewQueueApi(chapterId) : await getReviewQueueApi()
       setQueue(nextQueue)
+      const nextSegmentQueue = chapterId
+        ? await getSegmentChapterReviewQueueApi(chapterId)
+        : await getSegmentReviewQueueApi()
+      setSegmentQueue(nextSegmentQueue)
     }
     void load()
   }, [chapterId])
@@ -113,6 +123,43 @@ export default function ReviewOverview() {
                   </Link>
                 </div>
               ) : null}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card className="border-border/70 bg-card/92">
+        <CardHeader>
+          <CardTitle className="text-base">分块复习任务</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {segmentQueue?.reviews?.length > 0 ? (
+            segmentQueue.reviews.map((review: any) => (
+              <Link key={review.id} to={`/segment-review/session/${review.id}`}>
+                <div className="flex items-center justify-between rounded-2xl border border-border/70 bg-background/70 px-4 py-4 transition-colors hover:bg-secondary/70">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <Brain className="h-4 w-4 text-muted-foreground" />
+                      <span className="truncate font-medium">
+                        {review.segment?.name || '未命名分块'}
+                      </span>
+                    </div>
+                    <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                      <span>{review.palace?.title || '未命名宫殿'}</span>
+                      <span>{formatReviewStage(review.review_type, review.review_number)}</span>
+                      <span>间隔 {review.interval_days} 天</span>
+                    </div>
+                  </div>
+                  <Button size="sm">
+                    开始复习
+                    <ArrowRight className="ml-2 h-4 w-4" />
+                  </Button>
+                </div>
+              </Link>
+            ))
+          ) : (
+            <div className="rounded-2xl border border-dashed border-border/80 px-4 py-8 text-center text-sm text-muted-foreground">
+              当前没有需要处理的分块复习任务。
             </div>
           )}
         </CardContent>

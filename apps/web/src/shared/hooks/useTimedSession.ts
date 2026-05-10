@@ -7,6 +7,7 @@ import {
   type SessionKind,
   type TimeSessionRecord,
 } from '@/entities/session/model'
+import { formatLocalApiDateTime } from '@/shared/lib/dateTime'
 
 const AUTO_PAUSE_MS = 2 * 60 * 1000
 const HIDDEN_PAUSE_MS = 15 * 1000
@@ -43,7 +44,7 @@ export interface TimedSessionController {
 }
 
 function nowIso() {
-  return new Date().toISOString()
+  return formatLocalApiDateTime(new Date())
 }
 
 function randomId() {

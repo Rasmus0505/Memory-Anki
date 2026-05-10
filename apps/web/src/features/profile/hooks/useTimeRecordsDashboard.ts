@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import type { FormEvent } from 'react'
 import { toast } from 'sonner'
 import {
   createTimeRecord,
@@ -16,6 +17,7 @@ import {
 } from '@/entities/session/model'
 import {
   buildTimeRecordFormState,
+  calculateTimeRangeSeconds,
   isTimeRecordAboveThreshold,
   parseTimeRecordFormState,
   type TimeRecordFormState,
@@ -25,6 +27,8 @@ export interface UseTimeRecordsDashboardResult {
   thresholdSeconds: number
   thresholdInput: string
   setThresholdInput: (value: string) => void
+  showBelowThreshold: boolean
+  setShowBelowThreshold: (value: boolean) => void
   showDeleted: boolean
   setShowDeleted: (value: boolean) => void
   kindFilter: 'all' | SessionKind
@@ -36,6 +40,10 @@ export interface UseTimeRecordsDashboardResult {
   dialogOpen: boolean
   formState: TimeRecordFormState
   formError: string | null
+  isSubmittingRecord: boolean
+  deletingRecordId: string | null
+  restoringRecordId: string | null
+  isBulkDeleting: boolean
   summary: ReturnType<typeof getTimeRecordSummary>
   trend: ReturnType<typeof getDailyTrend>
   breakdown: ReturnType<typeof getSessionKindBreakdown>
@@ -57,10 +65,17 @@ export interface UseTimeRecordsDashboardResult {
   handleSubmitRecord: (event: FormEvent<HTMLFormElement>) => Promise<void>
 }
 
-export function useTimeRecordsDashboard(): UseTimeRecordsDashboardResult {
+interface UseTimeRecordsDashboardOptions {
+  onRecordsChanged?: () => void | Promise<void>
+}
+
+export function useTimeRecordsDashboard(
+  options: UseTimeRecordsDashboardOptions = {},
+): UseTimeRecordsDashboardResult {
   const [records, setRecords] = useState<TimeSessionRecord[]>([])
   const [thresholdSeconds, setThresholdSeconds] = useState(0)
   const [thresholdInput, setThresholdInput] = useState('0')
+  const [showBelowThreshold, setShowBelowThreshold] = useState(false)
   const [showDeleted, setShowDeleted] = useState(false)
   const [kindFilter, setKindFilter] = useState<'all' | SessionKind>('all')
   const [keyword, setKeyword] = useState('')
@@ -74,11 +89,17 @@ export function useTimeRecordsDashboard(): UseTimeRecordsDashboardResult {
     buildTimeRecordFormState(),
   )
   const [formError, setFormError] = useState<string | null>(null)
+  const [isSubmittingRecord, setIsSubmittingRecord] = useState(false)
+  const [deletingRecordId, setDeletingRecordId] = useState<string | null>(null)
+  const [restoringRecordId, setRestoringRecordId] = useState<string | null>(
+    null,
+  )
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false)
 
   const refreshRecords = async () => {
     const nextRecords = await listTimeRecords({
       includeDeleted: true,
-      includeBelowThreshold: true,
+      includeBelowThreshold: showBelowThreshold,
     })
     setRecords(nextRecords)
   }
@@ -89,7 +110,7 @@ export function useTimeRecordsDashboard(): UseTimeRecordsDashboardResult {
         getTimeRecordingThresholdSeconds(),
         listTimeRecords({
           includeDeleted: true,
-          includeBelowThreshold: true,
+          includeBelowThreshold: showBelowThreshold,
         }),
       ])
       setThresholdSeconds(threshold)
@@ -98,7 +119,7 @@ export function useTimeRecordsDashboard(): UseTimeRecordsDashboardResult {
     }
 
     void load()
-  }, [])
+  }, [showBelowThreshold])
 
   const applyThreshold = async () => {
     const parsed = Number(thresholdInput)
@@ -163,6 +184,9 @@ export function useTimeRecordsDashboard(): UseTimeRecordsDashboardResult {
 
   const handleSubmitRecord = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
+    if (isSubmittingRecord) return
+
+    setFormError(null)
     const parsed = parseTimeRecordFormState(formState, editingRecord)
     if ('error' in parsed) {
       setFormError(parsed.error)
@@ -180,47 +204,82 @@ export function useTimeRecordsDashboard(): UseTimeRecordsDashboardResult {
       return
     }
 
-    if (dialogMode === 'create') {
-      const created = await createTimeRecord({
-        ...parsed.value,
-        deletedAt: null,
-        deletedReason: null,
-        events: [],
-      })
-      if (!created) {
-        setFormError(
-          `有效时长必须大于 ${thresholdSeconds} 秒，才会进入时间记录。`,
-        )
-        return
+    setIsSubmittingRecord(true)
+    try {
+      if (dialogMode === 'create') {
+        const created = await createTimeRecord({
+          ...parsed.value,
+          deletedAt: null,
+          deletedReason: null,
+          events: [],
+        })
+        if (!created) {
+          setFormError(
+            `有效时长必须大于 ${thresholdSeconds} 秒，才会进入时间记录。`,
+          )
+          return
+        }
+        setRecords((current) => [created, ...current])
+        toast.success('时间记录已新增')
+      } else if (editingRecord) {
+        const updated = await updateTimeRecord(editingRecord.id, parsed.value)
+        if (updated) {
+          setRecords((current) =>
+            current.map((record) =>
+              record.id === updated.id ? updated : record,
+            ),
+          )
+        }
+        toast.success('时间记录已更新')
       }
-      toast.success('时间记录已新增')
-    } else if (editingRecord) {
-      await updateTimeRecord(editingRecord.id, parsed.value)
-      toast.success('时间记录已更新')
-    }
 
-    setDialogOpen(false)
-    await refreshRecords()
+      setDialogOpen(false)
+      await refreshRecords()
+      await options.onRecordsChanged?.()
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : '保存失败，请重试。')
+      return
+    } finally {
+      setIsSubmittingRecord(false)
+    }
   }
 
   const handleDeleteRecord = async (record: TimeSessionRecord) => {
+    if (deletingRecordId || isBulkDeleting) return
+
     const confirmed = window.confirm(
       `确定删除“${record.title}”吗？你之后仍可以在“显示已删除”中恢复。`,
     )
     if (!confirmed) return
 
-    await softDeleteTimeRecord(record.id)
-    setSelectedRecordIds((current) =>
-      current.filter((id) => id !== record.id),
-    )
-    toast.success('时间记录已移入已删除')
-    await refreshRecords()
+    setDeletingRecordId(record.id)
+    try {
+      await softDeleteTimeRecord(record.id)
+      setSelectedRecordIds((current) =>
+        current.filter((id) => id !== record.id),
+      )
+      toast.success('时间记录已移入已删除')
+      await refreshRecords()
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '删除失败，请重试')
+    } finally {
+      setDeletingRecordId(null)
+    }
   }
 
   const handleRestoreRecord = async (record: TimeSessionRecord) => {
-    await restoreTimeRecord(record.id)
-    toast.success('时间记录已恢复')
-    await refreshRecords()
+    if (restoringRecordId || isBulkDeleting) return
+
+    setRestoringRecordId(record.id)
+    try {
+      await restoreTimeRecord(record.id)
+      toast.success('时间记录已恢复')
+      await refreshRecords()
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '恢复失败，请重试')
+    } finally {
+      setRestoringRecordId(null)
+    }
   }
 
   const toggleRecordSelection = (recordId: string, checked: boolean) => {
@@ -242,6 +301,8 @@ export function useTimeRecordsDashboard(): UseTimeRecordsDashboardResult {
   }
 
   const handleBulkDelete = async () => {
+    if (isBulkDeleting || deletingRecordId) return
+
     const targets = records.filter(
       (record) =>
         selectedRecordIds.includes(record.id) && !record.deletedAt,
@@ -253,12 +314,19 @@ export function useTimeRecordsDashboard(): UseTimeRecordsDashboardResult {
     )
     if (!confirmed) return
 
-    await Promise.all(
-      targets.map((record) => softDeleteTimeRecord(record.id)),
-    )
-    setSelectedRecordIds([])
-    toast.success(`已移入已删除：${targets.length} 条记录`)
-    await refreshRecords()
+    setIsBulkDeleting(true)
+    try {
+      await Promise.all(
+        targets.map((record) => softDeleteTimeRecord(record.id)),
+      )
+      setSelectedRecordIds([])
+      toast.success(`已移入已删除：${targets.length} 条记录`)
+      await refreshRecords()
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '批量删除失败，请重试')
+    } finally {
+      setIsBulkDeleting(false)
+    }
   }
 
   useEffect(() => {
@@ -283,6 +351,8 @@ export function useTimeRecordsDashboard(): UseTimeRecordsDashboardResult {
     thresholdSeconds,
     thresholdInput,
     setThresholdInput,
+    showBelowThreshold,
+    setShowBelowThreshold,
     showDeleted,
     setShowDeleted,
     kindFilter,
@@ -294,6 +364,10 @@ export function useTimeRecordsDashboard(): UseTimeRecordsDashboardResult {
     dialogOpen,
     formState,
     formError,
+    isSubmittingRecord,
+    deletingRecordId,
+    restoringRecordId,
+    isBulkDeleting,
     summary,
     trend,
     breakdown,
@@ -315,7 +389,41 @@ export function useTimeRecordsDashboard(): UseTimeRecordsDashboardResult {
       if (!open) setFormError(null)
     },
     onFormChange: (patch) =>
-      setFormState((current) => ({ ...current, ...patch })),
+      setFormState((current) => {
+        const next = { ...current, ...patch }
+        const timeChanged =
+          patch.startedAt !== undefined || patch.endedAt !== undefined
+        const durationEdited = patch.durationEdited ?? (
+          current.durationEdited || patch.effectiveSeconds !== undefined
+        )
+
+        if (timeChanged && !durationEdited) {
+          const seconds = calculateTimeRangeSeconds(
+            next.startedAt,
+            next.endedAt,
+          )
+          if (seconds !== null) {
+            next.effectiveSeconds = String(seconds)
+          }
+        }
+
+        if (patch.effectiveSeconds !== undefined) {
+          next.durationEdited = true
+        } else if (patch.durationEdited !== undefined) {
+          next.durationEdited = patch.durationEdited
+          if (!patch.durationEdited) {
+            const seconds = calculateTimeRangeSeconds(
+              next.startedAt,
+              next.endedAt,
+            )
+            if (seconds !== null) {
+              next.effectiveSeconds = String(seconds)
+            }
+          }
+        }
+
+        return next
+      }),
     handleSubmitRecord,
   }
 }

@@ -20,13 +20,21 @@ export function TimeRecordsTrendChart({
   trend,
 }: TimeRecordsTrendChartProps) {
   return (
-    <Card className="rounded-[28px] border-border/70">
+    <Card className="min-w-0 rounded-[28px] border-border/70">
       <CardHeader className="pb-2">
         <CardTitle className="text-lg">最近 7 天趋势</CardTitle>
       </CardHeader>
-      <CardContent className="h-[360px]">
-        <ChartContainer config={timeRecordChartConfig} className="h-full">
-          <ResponsiveContainer width="100%" height="100%">
+      <CardContent className="h-[360px] min-h-[360px] min-w-0">
+        <ChartContainer
+          config={timeRecordChartConfig}
+          className="h-full min-h-0 min-w-0"
+        >
+          <ResponsiveContainer
+            width="100%"
+            height="100%"
+            minWidth={0}
+            initialDimension={{ width: 1, height: 1 }}
+          >
             <AreaChart
               data={trend}
               margin={{ left: 8, right: 16, top: 16, bottom: 8 }}

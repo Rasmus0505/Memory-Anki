@@ -3,6 +3,7 @@ import type {
   MindMapEditorState,
   PalaceListItem,
   PalaceReviewPlanResponse,
+  PalaceSegmentSummary,
   PalaceVersionDetail,
   PalaceVersionListResponse,
   SessionProgressSnapshot,
@@ -55,6 +56,83 @@ export function getPalaceEditorApi(id: number) {
   return request<{ palace: any } & MindMapEditorState>(`/palaces/${id}/editor`)
 }
 
+export function getPalaceSegmentsApi(id: number) {
+  return request<{ items: PalaceSegmentSummary[] }>(`/palaces/${id}/segments`)
+}
+
+export function createPalaceSegmentApi(
+  palaceId: number,
+  data: {
+    name?: string
+    color?: string
+    created_at?: string | null
+    node_uids: string[]
+  },
+) {
+  return request<{ item: PalaceSegmentSummary }>(`/palaces/${palaceId}/segments`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  })
+}
+
+export function updatePalaceSegmentApi(
+  segmentId: number,
+  data: Partial<{
+    name: string
+    color: string
+    created_at: string | null
+    sort_order: number
+    node_uids: string[]
+  }>,
+) {
+  return request<{ item: PalaceSegmentSummary }>(`/palace-segments/${segmentId}`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  })
+}
+
+export function updatePalaceSegmentReviewProgressApi(
+  segmentId: number,
+  data: {
+    completed_count: number
+    completed_review_number?: number | null
+    completed_at?: string | null
+  },
+) {
+  return request<{ item: PalaceSegmentSummary }>(`/palace-segments/${segmentId}/review-progress`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  })
+}
+
+export function updateDefaultSegmentReviewProgressApi(
+  palaceId: number,
+  data: {
+    completed_count: number
+    completed_review_number?: number | null
+    completed_at?: string | null
+  },
+) {
+  return request<{ item: PalaceSegmentSummary | null }>(`/palaces/${palaceId}/default-segment/review-progress`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  })
+}
+
+export function deletePalaceSegmentApi(segmentId: number) {
+  return request<{ ok: boolean }>(`/palace-segments/${segmentId}`, {
+    method: "DELETE",
+  })
+}
+
+export function getPalaceSegmentApi(segmentId: number) {
+  return request<{
+    item: PalaceSegmentSummary
+    palace: any
+    editor_doc: Record<string, unknown> | string | null
+  }>(`/palace-segments/${segmentId}`)
+}
+
 export function savePalaceEditorApi(id: number, data: Partial<MindMapEditorState>) {
   return request<{ palace: any } & MindMapEditorState>(`/palaces/${id}/editor`, {
     method: "PUT",
@@ -73,6 +151,10 @@ export function getPracticeSessionProgressApi(id: number) {
   return request<{ progress: SessionProgressSnapshot | null }>(`/sessions/practice/${id}/progress`)
 }
 
+export function getSegmentPracticeSessionProgressApi(id: number) {
+  return request<{ progress: SessionProgressSnapshot | null }>(`/sessions/segment-practice/${id}/progress`)
+}
+
 export function savePracticeSessionProgressApi(
   id: number,
   data: {
@@ -89,6 +171,24 @@ export function savePracticeSessionProgressApi(
 
 export function clearPracticeSessionProgressApi(id: number) {
   return request<{ ok: boolean }>(`/sessions/practice/${id}/progress`, { method: "DELETE" })
+}
+
+export function saveSegmentPracticeSessionProgressApi(
+  id: number,
+  data: {
+    reveal_map: Record<string, "hidden" | "placeholder" | "revealed">
+    red_node_ids: string[]
+    completed: boolean
+  },
+) {
+  return request<{ progress: SessionProgressSnapshot }>(`/sessions/segment-practice/${id}/progress`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  })
+}
+
+export function clearSegmentPracticeSessionProgressApi(id: number) {
+  return request<{ ok: boolean }>(`/sessions/segment-practice/${id}/progress`, { method: "DELETE" })
 }
 
 export function getPalaceVersionsApi(id: number) {

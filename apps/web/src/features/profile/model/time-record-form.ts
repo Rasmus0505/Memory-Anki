@@ -3,6 +3,11 @@ import type {
   SessionKind,
   TimeSessionRecord,
 } from '@/entities/session/model'
+import {
+  formatLocalApiDateTime,
+  formatLocalDateTimeInputValue,
+  parseApiDateTime,
+} from '@/shared/lib/dateTime'
 
 export const sessionKindOptions: SessionKind[] = [
   'review',
@@ -51,16 +56,11 @@ export function isTimeRecordAboveThreshold(
 }
 
 export function toLocalDateTimeInputValue(value: string) {
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return ''
-  const offset = date.getTimezoneOffset()
-  return new Date(date.getTime() - offset * 60_000)
-    .toISOString()
-    .slice(0, 16)
+  return formatLocalDateTimeInputValue(value)
 }
 
 export function formatTableDate(dateString: string) {
-  return new Date(dateString).toLocaleDateString('zh-CN', {
+  return parseApiDateTime(dateString).toLocaleDateString('zh-CN', {
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
@@ -68,10 +68,24 @@ export function formatTableDate(dateString: string) {
 }
 
 export function formatTableTime(dateString: string) {
-  return new Date(dateString).toLocaleTimeString('zh-CN', {
+  return parseApiDateTime(dateString).toLocaleTimeString('zh-CN', {
     hour: '2-digit',
     minute: '2-digit',
+    second: '2-digit',
   })
+}
+
+export function formatTableDateTime(dateString: string) {
+  const date = parseApiDateTime(dateString)
+  return `${date.toLocaleDateString('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  })} ${date.toLocaleTimeString('zh-CN', {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  })}`
 }
 
 export function buildTimeRecordFormState(
@@ -89,6 +103,20 @@ export function buildTimeRecordFormState(
     completionMethod: record?.completionMethod ?? 'manual_complete',
     durationEdited: record?.durationEdited ?? false,
   }
+}
+
+export function calculateTimeRangeSeconds(
+  startedAtValue: string,
+  endedAtValue: string,
+) {
+  const startedAt = startedAtValue ? new Date(startedAtValue) : null
+  const endedAt = endedAtValue ? new Date(endedAtValue) : null
+  if (!startedAt || !endedAt) return null
+  if (Number.isNaN(startedAt.getTime()) || Number.isNaN(endedAt.getTime())) {
+    return null
+  }
+  if (endedAt < startedAt) return null
+  return Math.round((endedAt.getTime() - startedAt.getTime()) / 1000)
 }
 
 export function parseTimeRecordFormState(
@@ -129,8 +157,8 @@ export function parseTimeRecordFormState(
       title,
       kind: form.kind,
       palaceId,
-      startedAt: startedAt.toISOString(),
-      endedAt: endedAt.toISOString(),
+      startedAt: formatLocalApiDateTime(startedAt),
+      endedAt: formatLocalApiDateTime(endedAt),
       effectiveSeconds,
       pauseCount,
       completionMethod: form.completionMethod,

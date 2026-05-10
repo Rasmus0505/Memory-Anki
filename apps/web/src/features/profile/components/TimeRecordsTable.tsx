@@ -7,11 +7,10 @@ import {
   type TimeSessionRecord,
 } from '@/entities/session/model'
 import {
+  formatTableDateTime,
   formatTableDate,
-  formatTableTime,
   sessionKindOptions,
 } from '@/features/profile/model/time-record-form'
-import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
 import {
   Card,
@@ -25,6 +24,8 @@ interface TimeRecordsTableProps {
   thresholdInput: string
   onThresholdInputChange: (value: string) => void
   onThresholdBlur: () => void | Promise<void>
+  showBelowThreshold: boolean
+  onShowBelowThresholdChange: (value: boolean) => void
   keyword: string
   onKeywordChange: (value: string) => void
   kindFilter: 'all' | SessionKind
@@ -34,6 +35,9 @@ interface TimeRecordsTableProps {
   onCreateRecord: () => void
   onBulkDelete: () => void | Promise<void>
   bulkDeleteDisabled: boolean
+  isBulkDeleting: boolean
+  deletingRecordId: string | null
+  restoringRecordId: string | null
   visibleRecords: TimeSessionRecord[]
   hasSelectableRecords: boolean
   allSelectableChecked: boolean
@@ -49,6 +53,8 @@ export function TimeRecordsTable({
   thresholdInput,
   onThresholdInputChange,
   onThresholdBlur,
+  showBelowThreshold,
+  onShowBelowThresholdChange,
   keyword,
   onKeywordChange,
   kindFilter,
@@ -58,6 +64,9 @@ export function TimeRecordsTable({
   onCreateRecord,
   onBulkDelete,
   bulkDeleteDisabled,
+  isBulkDeleting,
+  deletingRecordId,
+  restoringRecordId,
   visibleRecords,
   hasSelectableRecords,
   allSelectableChecked,
@@ -68,6 +77,9 @@ export function TimeRecordsTable({
   onDeleteRecord,
   onRestoreRecord,
 }: TimeRecordsTableProps) {
+  const actionInProgress =
+    isBulkDeleting || deletingRecordId !== null || restoringRecordId !== null
+
   return (
     <Card className="rounded-[28px] border-border/70">
       <CardHeader className="gap-4">
@@ -89,18 +101,25 @@ export function TimeRecordsTable({
               />
               <span className="text-muted-foreground">秒</span>
             </label>
-            <Button variant="outline" size="sm" onClick={onCreateRecord}>
+            <Button
+              variant="outline"
+              size="sm"
+              className="active:scale-[0.98]"
+              onClick={onCreateRecord}
+              disabled={actionInProgress}
+            >
               <Plus className="mr-2 h-4 w-4" />
               手动新增记录
             </Button>
             <Button
               variant="outline"
               size="sm"
+              className="active:scale-[0.98]"
               onClick={onBulkDelete}
-              disabled={bulkDeleteDisabled}
+              disabled={bulkDeleteDisabled || isBulkDeleting}
             >
               <Trash2 className="mr-2 h-4 w-4" />
-              批量删除所选
+              {isBulkDeleting ? '删除中...' : '批量删除所选'}
             </Button>
           </div>
         </div>
@@ -125,6 +144,16 @@ export function TimeRecordsTable({
               </option>
             ))}
           </select>
+          <label className="flex items-center gap-2 rounded-md border border-input px-3 py-2 text-sm">
+            <input
+              type="checkbox"
+              checked={showBelowThreshold}
+              onChange={(event) =>
+                onShowBelowThresholdChange(event.target.checked)
+              }
+            />
+            显示低于阈值记录
+          </label>
           <label className="flex items-center gap-2 rounded-md border border-input px-3 py-2 text-sm">
             <input
               type="checkbox"
@@ -154,126 +183,119 @@ export function TimeRecordsTable({
                       onChange={(event) =>
                         onToggleSelectAllVisible(event.target.checked)
                       }
-                      disabled={!hasSelectableRecords}
+                      disabled={!hasSelectableRecords || isBulkDeleting}
                     />
                   </th>
                   <th className="px-4 py-3">标题</th>
                   <th className="px-4 py-3">类型</th>
-                  <th className="px-4 py-3">日期</th>
                   <th className="px-4 py-3">开始时间</th>
-                  <th className="px-4 py-3">结束时间</th>
                   <th className="px-4 py-3">有效时长</th>
-                  <th className="px-4 py-3">暂停次数</th>
                   <th className="px-4 py-3">完成方式</th>
-                  <th className="px-4 py-3">补录状态</th>
                   <th className="px-4 py-3">操作</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/80 bg-white">
-                {visibleRecords.map((record) => (
-                  <tr
-                    key={record.id}
-                    className={
-                      record.deletedAt
-                        ? 'bg-slate-50/70 text-muted-foreground'
-                        : ''
-                    }
-                  >
-                    <td className="px-4 py-4 align-top">
-                      {!record.deletedAt ? (
-                        <input
-                          aria-label={`选择记录 ${record.title}`}
-                          type="checkbox"
-                          checked={selectedRecordIds.includes(record.id)}
-                          onChange={(event) =>
-                            onToggleRecordSelection(
-                              record.id,
-                              event.target.checked,
-                            )
-                          }
-                        />
-                      ) : null}
-                    </td>
-                    <td className="px-4 py-4">
-                      <div className="min-w-[220px]">
-                        <div
-                          className={`font-medium ${
-                            record.deletedAt
-                              ? 'line-through'
-                              : 'text-slate-950'
-                          }`}
-                        >
-                          {record.title}
-                        </div>
-                        {record.deletedAt ? (
-                          <div className="mt-1 text-xs">
-                            已删除，时间 {formatTableDate(record.deletedAt)}
-                          </div>
-                        ) : null}
-                      </div>
-                    </td>
-                    <td className="px-4 py-4">
-                      {formatSessionKind(record.kind)}
-                    </td>
-                    <td className="px-4 py-4">
-                      {formatTableDate(record.startedAt)}
-                    </td>
-                    <td className="px-4 py-4">
-                      {formatTableTime(record.startedAt)}
-                    </td>
-                    <td className="px-4 py-4">
-                      {formatTableTime(record.endedAt)}
-                    </td>
-                    <td className="px-4 py-4 font-medium text-slate-950">
-                      {formatDuration(record.effectiveSeconds)}
-                    </td>
-                    <td className="px-4 py-4">{record.pauseCount}</td>
-                    <td className="px-4 py-4">
-                      {formatCompletionMethod(record.completionMethod)}
-                    </td>
-                    <td className="px-4 py-4">
-                      <Badge
-                        variant="outline"
-                        className="rounded-full px-3 py-1"
-                      >
-                        {record.durationEdited ? '已补录总时长' : '未补录'}
-                      </Badge>
-                    </td>
-                    <td className="px-4 py-4">
-                      <div className="flex flex-wrap gap-2">
+                {visibleRecords.map((record) => {
+                  const isDeleting = deletingRecordId === record.id
+                  const isRestoring = restoringRecordId === record.id
+
+                  return (
+                    <tr
+                      key={record.id}
+                      className={`transition-colors hover:bg-slate-50/80 active:bg-slate-100/70 ${
+                        record.deletedAt
+                          ? 'bg-slate-50/70 text-muted-foreground'
+                          : ''
+                      }`}
+                    >
+                      <td className="px-4 py-4 align-top">
                         {!record.deletedAt ? (
-                          <>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => onEditRecord(record)}
-                            >
-                              <Pencil className="mr-2 h-4 w-4" />
-                              编辑
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => void onDeleteRecord(record)}
-                            >
-                              <Trash2 className="mr-2 h-4 w-4" />
-                              删除
-                            </Button>
-                          </>
-                        ) : (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => void onRestoreRecord(record)}
+                          <input
+                            aria-label={`选择记录 ${record.title}`}
+                            type="checkbox"
+                            checked={selectedRecordIds.includes(record.id)}
+                            disabled={isBulkDeleting || isDeleting}
+                            onChange={(event) =>
+                              onToggleRecordSelection(
+                                record.id,
+                                event.target.checked,
+                              )
+                            }
+                          />
+                        ) : null}
+                      </td>
+                      <td className="px-4 py-4">
+                        <div className="min-w-[220px]">
+                          <div
+                            className={`font-medium ${
+                              record.deletedAt
+                                ? 'line-through'
+                                : 'text-slate-950'
+                            }`}
                           >
-                            <Undo2 className="mr-2 h-4 w-4" />
-                            恢复
-                          </Button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                            {record.title}
+                          </div>
+                          {record.deletedAt ? (
+                            <div className="mt-1 text-xs">
+                              已删除，时间 {formatTableDate(record.deletedAt)}
+                            </div>
+                          ) : null}
+                        </div>
+                      </td>
+                      <td className="px-4 py-4">
+                        {formatSessionKind(record.kind)}
+                      </td>
+                      <td className="px-4 py-4 whitespace-nowrap">
+                        {formatTableDateTime(record.startedAt)}
+                      </td>
+                      <td className="px-4 py-4 whitespace-nowrap font-medium text-slate-950">
+                        {formatDuration(record.effectiveSeconds)}
+                      </td>
+                      <td className="px-4 py-4">
+                        {formatCompletionMethod(record.completionMethod)}
+                      </td>
+                      <td className="px-4 py-4">
+                        <div className="flex flex-wrap gap-2">
+                          {!record.deletedAt ? (
+                            <>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="active:scale-[0.98]"
+                                onClick={() => onEditRecord(record)}
+                                disabled={actionInProgress}
+                              >
+                                <Pencil className="mr-2 h-4 w-4" />
+                                编辑
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="active:scale-[0.98]"
+                                onClick={() => void onDeleteRecord(record)}
+                                disabled={actionInProgress}
+                              >
+                                <Trash2 className="mr-2 h-4 w-4" />
+                                {isDeleting ? '删除中...' : '删除'}
+                              </Button>
+                            </>
+                          ) : (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="active:scale-[0.98]"
+                              onClick={() => void onRestoreRecord(record)}
+                              disabled={actionInProgress}
+                            >
+                              <Undo2 className="mr-2 h-4 w-4" />
+                              {isRestoring ? '恢复中...' : '恢复'}
+                            </Button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           </div>

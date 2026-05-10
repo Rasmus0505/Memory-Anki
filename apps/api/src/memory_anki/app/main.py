@@ -18,10 +18,12 @@ from memory_anki.modules.backups.application.backup_service import (
 )
 from memory_anki.modules.knowledge.presentation import router as knowledge_router
 from memory_anki.modules.mindmap.application.editor_state_service import ensure_editor_schema
+from memory_anki.modules.palaces.application.segment_service import ensure_segment_schema
 from memory_anki.modules.palaces.presentation import import_router
 from memory_anki.modules.palaces.presentation import router as palace_router
 from memory_anki.modules.reviews.application.schedule_service import (
     ensure_current_review_schedule_model,
+    ensure_review_schedule_schema,
     migrate_sm2_to_ebbinghaus,
     normalize_algorithm,
 )
@@ -32,8 +34,10 @@ from memory_anki.modules.sessions.application.session_progress_service import (
 from memory_anki.modules.sessions.presentation import router as sessions_router
 from memory_anki.modules.settings.presentation import router as settings_router
 from memory_anki.modules.time_records.application.time_records_service import (
+    get_today_formal_review_duration_seconds,
     ensure_review_log_time_records,
     get_today_total_review_duration_seconds,
+    normalize_time_record_event_timezones,
     get_weekly_formal_review_duration_seconds,
     get_weekly_total_review_duration_seconds,
 )
@@ -46,6 +50,8 @@ async def lifespan(app: FastAPI):
     ensure_legacy_repo_data_migrated()
     init_db()
     ensure_editor_schema()
+    ensure_segment_schema()
+    ensure_review_schedule_schema()
     ensure_session_progress_schema()
     session = get_session()
     try:
@@ -60,6 +66,7 @@ async def lifespan(app: FastAPI):
         migrate_sm2_to_ebbinghaus(session)
         ensure_current_review_schedule_model(session)
         ensure_review_log_time_records(session)
+        normalize_time_record_event_timezones(session)
         ensure_daily_backup()
         maybe_create_periodic_backup()
     finally:
@@ -119,6 +126,7 @@ def api_dashboard():
             }
 
         today_total_review_duration_seconds = get_today_total_review_duration_seconds(session)
+        today_review_duration_seconds = get_today_formal_review_duration_seconds(session)
         weekly_formal_review_duration_seconds = get_weekly_formal_review_duration_seconds(session)
         weekly_total_review_duration_seconds = get_weekly_total_review_duration_seconds(session)
 
@@ -141,6 +149,8 @@ def api_dashboard():
                 for review in reviews
             ],
             "stats": get_weekly_stats(session),
+            "today_review_duration_seconds": today_review_duration_seconds,
+            "weekly_review_duration_seconds": weekly_formal_review_duration_seconds,
             "today_total_review_duration_seconds": today_total_review_duration_seconds,
             "weekly_total_review_duration_seconds": weekly_total_review_duration_seconds,
             "weekly_formal_review_duration_seconds": weekly_formal_review_duration_seconds,

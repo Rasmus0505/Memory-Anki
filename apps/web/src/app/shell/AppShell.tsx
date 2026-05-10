@@ -28,6 +28,24 @@ function SidebarContent() {
   const shell = useShellContext()
   const compact = shell?.sidebarCollapsed ?? false
   const active = (to: string) => (to === '/' ? pathname === '/' : pathname.startsWith(to))
+  const [now, setNow] = useState(() => new Date())
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(new Date()), 1000)
+    return () => window.clearInterval(timer)
+  }, [])
+
+  const currentDate = new Intl.DateTimeFormat('zh-CN', {
+    month: '2-digit',
+    day: '2-digit',
+    weekday: 'short',
+  }).format(now)
+  const currentTime = new Intl.DateTimeFormat('zh-CN', {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  }).format(now)
 
   return (
     <>
@@ -39,6 +57,8 @@ function SidebarContent() {
           {!compact ? (
             <div className="min-w-0">
               <div className="truncate text-sm font-semibold">记忆宫殿</div>
+              <div className="mt-1 text-xs text-muted-foreground">{currentDate}</div>
+              <div className="text-xs font-medium text-foreground/80">{currentTime}</div>
             </div>
           ) : null}
         </NavLink>

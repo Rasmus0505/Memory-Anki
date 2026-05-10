@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowRight, BookOpen, Clock3, Plus, Sparkles, Timer, TrendingUp } from 'lucide-react'
 import type { DashboardResponse } from '@/shared/api/contracts'
@@ -20,15 +20,17 @@ function formatReviewStage(reviewType: string, reviewNumber: number) {
 
 export default function Dashboard() {
   const [data, setData] = useState<DashboardResponse | null>(null)
-  const timeRecordsDashboard = useTimeRecordsDashboard()
+  const loadDashboard = useCallback(async () => {
+    const dashboard = await getDashboardApi()
+    setData(dashboard)
+  }, [])
+  const timeRecordsDashboard = useTimeRecordsDashboard({
+    onRecordsChanged: loadDashboard,
+  })
 
   useEffect(() => {
-    const load = async () => {
-      const dashboard = await getDashboardApi()
-      setData(dashboard)
-    }
-    void load()
-  }, [])
+    void loadDashboard()
+  }, [loadDashboard])
 
   if (!data) {
     return <div className="flex items-center justify-center py-32 text-sm text-muted-foreground">正在加载仪表盘...</div>
@@ -196,6 +198,8 @@ export default function Dashboard() {
           thresholdInput={timeRecordsDashboard.thresholdInput}
           onThresholdInputChange={timeRecordsDashboard.setThresholdInput}
           onThresholdBlur={() => void timeRecordsDashboard.applyThreshold()}
+          showBelowThreshold={timeRecordsDashboard.showBelowThreshold}
+          onShowBelowThresholdChange={timeRecordsDashboard.setShowBelowThreshold}
           keyword={timeRecordsDashboard.keyword}
           onKeywordChange={timeRecordsDashboard.setKeyword}
           kindFilter={timeRecordsDashboard.kindFilter}
@@ -205,6 +209,9 @@ export default function Dashboard() {
           onCreateRecord={timeRecordsDashboard.openCreateDialog}
           onBulkDelete={() => void timeRecordsDashboard.handleBulkDelete()}
           bulkDeleteDisabled={!timeRecordsDashboard.hasSelectedRecords}
+          isBulkDeleting={timeRecordsDashboard.isBulkDeleting}
+          deletingRecordId={timeRecordsDashboard.deletingRecordId}
+          restoringRecordId={timeRecordsDashboard.restoringRecordId}
           visibleRecords={timeRecordsDashboard.visibleRecords}
           hasSelectableRecords={timeRecordsDashboard.hasSelectableRecords}
           allSelectableChecked={timeRecordsDashboard.allSelectableChecked}
@@ -224,6 +231,7 @@ export default function Dashboard() {
         mode={timeRecordsDashboard.dialogMode}
         form={timeRecordsDashboard.formState}
         error={timeRecordsDashboard.formError}
+        isSubmitting={timeRecordsDashboard.isSubmittingRecord}
         onOpenChange={timeRecordsDashboard.onDialogOpenChange}
         onChange={timeRecordsDashboard.onFormChange}
         onSubmit={(event) => void timeRecordsDashboard.handleSubmitRecord(event)}

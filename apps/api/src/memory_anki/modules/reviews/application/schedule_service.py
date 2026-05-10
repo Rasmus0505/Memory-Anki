@@ -57,12 +57,56 @@ def resolve_interval_from_base_date(value: str, base_date: date, algorithm: str)
     return days, base_date + timedelta(days=days), "standard", normalized_algorithm
 
 
+def _sleep_review_time(session) -> time:
+    raw_sleep_time = get_config_value(session, "sleep_review_time") or "22:00"
+    try:
+        hour_str, minute_str = raw_sleep_time.split(":", 1)
+        return time(int(hour_str), int(minute_str))
+    except (ValueError, TypeError):
+        return time(22, 0)
+
+
+def resolve_interval_from_base_datetime(
+    session,
+    value: str,
+    base_datetime: datetime,
+    algorithm: str,
+) -> tuple[int, datetime, str, str]:
+    normalized_algorithm = normalize_algorithm(algorithm)
+    clean_value = str(value or "").strip()
+    if clean_value == "1h":
+        return 0, base_datetime + timedelta(hours=1), "1h", normalized_algorithm
+    if clean_value == "sleep":
+        sleep_at = datetime.combine(base_datetime.date(), _sleep_review_time(session))
+        if base_datetime >= sleep_at:
+            sleep_at += timedelta(days=1)
+        return 0, sleep_at, "sleep", normalized_algorithm
+    days = int(clean_value)
+    return days, base_datetime + timedelta(days=days), "standard", normalized_algorithm
+
+
 def get_algorithm_intervals(session, algorithm: str) -> list[str]:
     normalized_algorithm = normalize_algorithm(algorithm)
     intervals = custom_intervals(session) if normalized_algorithm == "custom" else ebbinghaus_intervals(session)
     if not intervals:
         intervals = ["1", "2", "4", "7", "15", "30", "60"]
     return intervals
+
+
+def format_interval_label(value: str) -> str:
+    normalized = str(value or "").strip()
+    if normalized == "1h":
+        return "1小时"
+    if normalized == "sleep":
+        return "睡前"
+    if normalized.isdigit():
+        days = int(normalized)
+        return f"{days}天"
+    return normalized or "未命名轮次"
+
+
+def get_algorithm_stage_labels(session, algorithm: str) -> list[str]:
+    return [format_interval_label(item) for item in get_algorithm_intervals(session, algorithm)]
 
 
 def get_initial_same_day_slot_count(session, algorithm: str) -> int:
@@ -90,6 +134,8 @@ def compute_next_review(
 
 
 def schedule_display_datetime(schedule, palace, session) -> datetime | None:
+    if getattr(schedule, "scheduled_at", None):
+        return schedule.scheduled_at.replace(second=0, microsecond=0)
     if not schedule.scheduled_date:
         return None
 
@@ -97,12 +143,7 @@ def schedule_display_datetime(schedule, palace, session) -> datetime | None:
     base_time = created_at.time().replace(second=0, microsecond=0) if created_at else time(0, 0)
 
     if schedule.review_type == "sleep":
-        raw_sleep_time = get_config_value(session, "sleep_review_time") or "22:00"
-        try:
-            hour_str, minute_str = raw_sleep_time.split(":", 1)
-            display_time = time(int(hour_str), int(minute_str))
-        except (ValueError, TypeError):
-            display_time = time(22, 0)
+        display_time = _sleep_review_time(session)
     elif schedule.review_type == "1h":
         display_time = (datetime.combine(schedule.scheduled_date, base_time) + timedelta(hours=1)).time().replace(second=0, microsecond=0)
     else:
@@ -139,7 +180,9 @@ def create_review_schedule(
     algorithm: str,
     base_date: date,
     anchor_date: date,
+    base_datetime: datetime | None = None,
     completed: bool = False,
+    completed_at: datetime | None = None,
 ):
     from memory_anki.infrastructure.db.models import ReviewSchedule
 
@@ -149,23 +192,57 @@ def create_review_schedule(
         return None
 
     value = intervals[review_number]
-    interval_days, scheduled_date, review_type, algorithm_used = resolve_interval_from_base_date(
-        value,
-        base_date,
-        normalized_algorithm,
-    )
+    scheduled_at = None
+    if base_datetime is not None:
+        interval_days, scheduled_at, review_type, algorithm_used = resolve_interval_from_base_datetime(
+            session,
+            value,
+            base_datetime,
+            normalized_algorithm,
+        )
+        scheduled_date = scheduled_at.date()
+    else:
+        interval_days, scheduled_date, review_type, algorithm_used = resolve_interval_from_base_date(
+            value,
+            base_date,
+            normalized_algorithm,
+        )
     schedule = ReviewSchedule(
         palace_id=palace_id,
         scheduled_date=scheduled_date,
+        scheduled_at=scheduled_at,
         interval_days=interval_days,
         algorithm_used=algorithm_used,
         completed=completed,
+        completed_at=completed_at,
         review_number=review_number,
         review_type=review_type,
         anchor_date=anchor_date,
     )
     session.add(schedule)
     return schedule
+
+
+def ensure_review_schedule_schema() -> None:
+    from memory_anki.infrastructure.db.models import engine
+
+    table_columns = {
+        "review_schedules": (("scheduled_at", "DATETIME"), ("completed_at", "DATETIME")),
+        "palace_segment_review_schedules": (("scheduled_at", "DATETIME"), ("completed_at", "DATETIME")),
+    }
+    with engine.begin() as conn:
+        for table_name, columns in table_columns.items():
+            existing = {
+                row[1]
+                for row in conn.exec_driver_sql(f"PRAGMA table_info({table_name})").fetchall()
+            }
+            if not existing:
+                continue
+            for column_name, column_type in columns:
+                if column_name not in existing:
+                    conn.exec_driver_sql(
+                        f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_type}"
+                    )
 
 
 def create_initial_review_schedules(session, palace_id: int, algorithm: str, anchor_date: date | None = None) -> None:
@@ -344,6 +421,7 @@ def _rebuild_palace_review_schedule_model(session, palace) -> int:
     if created_schedule is not None:
         if preserved_schedule is not None and preserved_schedule.scheduled_date and preserved_schedule.scheduled_date >= date.today():
             created_schedule.scheduled_date = preserved_schedule.scheduled_date
+            created_schedule.scheduled_at = getattr(preserved_schedule, "scheduled_at", None)
         changed += 1
 
     session.flush()

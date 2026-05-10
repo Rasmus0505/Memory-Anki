@@ -11,6 +11,7 @@ import { cn } from '@/shared/lib/utils'
 import { PalaceAttachmentPanel } from '@/features/palace-edit/components/PalaceAttachmentPanel'
 import { PalaceChapterPanel } from '@/features/palace-edit/components/PalaceChapterPanel'
 import { PalaceMetaPanel } from '@/features/palace-edit/components/PalaceMetaPanel'
+import { PalaceSegmentsPanel } from '@/features/palace-edit/components/PalaceSegmentsPanel'
 import { PalaceVersionDialog } from '@/features/palace-edit/components/PalaceVersionDialog'
 import { usePalaceEditPage } from '@/features/palace-edit/hooks/usePalaceEditPage'
 
@@ -88,6 +89,32 @@ export default function PalaceEdit() {
             onToggleChapter={page.handleChapterToggle}
           />
 
+          <PalaceSegmentsPanel
+            segments={page.segments}
+            selectedNodeCount={page.isSegmentRangeMode ? page.selectedRangeNodeCount : page.selectedNodes.length}
+            activeSegmentId={page.activeSegmentId}
+            segmentDialogOpen={page.segmentDialogOpen}
+            segmentName={page.segmentName}
+            setSegmentName={page.setSegmentName}
+            segmentColor={page.segmentColor}
+            setSegmentColor={page.setSegmentColor}
+            segmentCreatedAt={page.segmentCreatedAt}
+            setSegmentCreatedAt={page.setSegmentCreatedAt}
+            editingSegmentId={page.editingSegmentId}
+            segmentSaving={page.segmentSaving}
+            segmentMergingId={page.segmentMergingId}
+            segmentError={page.segmentError}
+            isSegmentRangeMode={page.isSegmentRangeMode}
+            rangeTargetSegmentId={page.rangeTargetSegmentId}
+            onOpenDialog={page.handleOpenCreateSegment}
+            onOpenEdit={page.handleOpenEditSegment}
+            onOpenChange={page.setSegmentDialogOpen}
+            onSave={page.handleSaveSegment}
+            onDelete={page.handleDeleteSegment}
+            onAdjustRange={page.handleAdjustSegmentRange}
+            onMerge={page.handleMergeSegment}
+          />
+
           <PalaceAttachmentPanel
             palace={page.palace}
             onUpload={page.handleAttachmentUpload}
@@ -123,6 +150,23 @@ export default function PalaceEdit() {
               <MindMapFrame
                 key={`${page.palaceId}-${page.frameVersion}`}
                 editorState={page.editorState}
+                segments={page.segments
+                  .filter((segment) => !segment.is_virtual_default)
+                  .map((segment) => ({
+                    id: segment.id,
+                    name: segment.name,
+                    color: segment.color,
+                    created_at: segment.created_at,
+                    node_uids: segment.node_uids,
+                  }))}
+                activeSegmentId={page.activeSegmentId}
+                segmentColorMode="all-with-active-emphasis"
+                segmentRangeDraft={{
+                  active: page.isSegmentRangeMode,
+                  targetSegmentId: page.rangeTargetSegmentId,
+                  selectedNodeUids: page.selectedRangeNodeUids,
+                  overriddenConflictNodeUids: page.overriddenConflictNodeUids,
+                }}
                 onEditorStateChange={(nextState: MindMapEditorState) => {
                   page.timer.registerActivity({ source: 'mind_map_edit' })
                   page.setEditorState(nextState)
@@ -131,6 +175,11 @@ export default function PalaceEdit() {
                   page.timer.registerActivity({ source: 'node_active' })
                   page.setSelectedNodes(nodes)
                 }}
+                onSegmentSelect={page.setActiveSegmentId}
+                onCreateSegmentFromSelection={page.handleOpenCreateSegment}
+                onSegmentRangeDraftChange={page.handleSegmentRangeDraftChange}
+                onSegmentRangeModeToggle={page.handleSegmentRangeModeToggle}
+                onSegmentRangeConfirm={page.handleConfirmSegmentRange}
                 onFullscreenChange={page.setMindMapFullscreen}
                 className={cn(
                   'w-full rounded-2xl border border-border/70 bg-white',

@@ -52,6 +52,7 @@ export interface ReviewScheduleSummary {
   interval_days: number
   algorithm_used: string
   completed: boolean
+  completed_at?: string | null
   review_number: number
   review_type: string
   schedule_count: number
@@ -81,6 +82,8 @@ export interface DashboardResponse {
     review_count: number
     review_duration_seconds: number
   }
+  today_review_duration_seconds: number
+  weekly_review_duration_seconds: number
   today_total_review_duration_seconds: number
   weekly_total_review_duration_seconds: number
   weekly_formal_review_duration_seconds: number
@@ -111,6 +114,52 @@ export interface PalaceReviewPlanResponse {
   plan: PalaceReviewPlanItem[]
 }
 
+export interface PalaceSegmentSummary {
+  id: number
+  palace_id: number
+  name: string
+  display_name?: string
+  color: string
+  created_at: string | null
+  sort_order: number
+  node_uids: string[]
+  node_count: number
+  estimated_review_seconds: number
+  review_stage_total: number
+  review_stage_completed: number
+  review_stage_progress: number
+  stage_labels: string[]
+  review_stages: ReviewStageSummary[]
+  next_review_at: string | null
+  has_due_review: boolean
+  current_review_schedule_id: number | null
+  is_empty: boolean
+  is_virtual_default?: boolean
+}
+
+export interface ReviewStageSummary {
+  review_number: number
+  label: string
+  completed: boolean
+  completed_at: string | null
+  scheduled_at: string | null
+}
+
+export interface MindMapHostSegmentSummary {
+  id: number
+  name: string
+  color: string
+  created_at: string | null
+  node_uids: string[]
+}
+
+export interface MindMapHostSegmentRangeDraft {
+  active: boolean
+  targetSegmentId: number | "new" | null
+  selectedNodeUids: string[]
+  overriddenConflictNodeUids: string[]
+}
+
 export interface PalaceListItem {
   id: number
   title: string
@@ -123,6 +172,9 @@ export interface PalaceListItem {
   review_stage_total: number
   review_stage_completed: number
   review_stage_progress: number
+  stage_labels: string[]
+  review_stages?: ReviewStageSummary[]
+  segments: PalaceSegmentSummary[]
   chapters?: Array<unknown>
 }
 
@@ -150,13 +202,71 @@ export interface PalaceVersionDetail extends PalaceVersionSummary {
 
 export interface SessionProgressSnapshot {
   id: number
-  session_kind: "practice" | "review"
+  session_kind: "practice" | "review" | "segment_practice" | "segment_review"
   palace_id: number | null
   review_schedule_id: number | null
+  palace_segment_id: number | null
+  palace_segment_review_schedule_id: number | null
   reveal_map: Record<string, "hidden" | "placeholder" | "revealed">
   red_node_ids: string[]
   completed: boolean
   updated_at: string | null
+}
+
+export interface ReviewSessionSubmitResponse {
+  ok: boolean
+  completion_mode: "manual_complete" | "auto_complete" | string
+  score: number
+  next_id: number | null
+  mastered: boolean
+}
+
+export interface SegmentReviewScheduleSummary {
+  id: number
+  palace_segment_id: number
+  palace_id: number | null
+  scheduled_date: string
+  interval_days: number
+  algorithm_used: string
+  completed: boolean
+  completed_at?: string | null
+  review_number: number
+  review_type: string
+  schedule_count: number
+  overdue_schedule_count: number
+  next_due_date: string
+  estimated_review_seconds: number
+  segment: PalaceSegmentSummary | null
+}
+
+export interface SegmentReviewQueueResponse {
+  due_count: number
+  overdue_count: number
+  smoothed_count: number
+  stats: {
+    total: number
+    review_count: number
+    review_duration_seconds: number
+  }
+  chapter: ReviewQueueChapter | null
+  reviews: SegmentReviewScheduleSummary[]
+}
+
+export interface BatchSegmentReviewSessionResponse {
+  palace: {
+    id: number
+    title: string
+    description: string
+  }
+  segments: PalaceSegmentSummary[]
+  editor_doc: Record<string, unknown> | string | null
+  estimated_review_seconds: number
+}
+
+export interface BatchSegmentReviewSubmitResponse {
+  ok: boolean
+  completed_segment_ids: number[]
+  completion_mode: "manual_complete" | "auto_complete" | string
 }
 
 export interface BackupSummary {

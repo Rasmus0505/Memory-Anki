@@ -2,12 +2,24 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { BookOpen, ChevronLeft, ChevronRight, Pencil, Plus, Search, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
-import type { PalaceListItem, PalaceReviewPlanResponse } from '@/shared/api/contracts'
+import type {
+  PalaceListItem,
+  PalaceReviewPlanResponse,
+  PalaceSegmentSummary,
+  ReviewSessionSubmitResponse,
+  ReviewStageSummary,
+} from '@/shared/api/contracts'
 import {
   deletePalaceApi,
   getPalaceReviewPlanApi,
   getPalacesApi,
+  updateDefaultSegmentReviewProgressApi,
+  updatePalaceSegmentReviewProgressApi,
 } from '@/shared/api/modules/palaces'
+import {
+  submitReviewSessionApi,
+  submitSegmentReviewSessionApi,
+} from '@/shared/api/modules/reviews'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
 import { Card, CardContent } from '@/shared/components/ui/card'
@@ -28,21 +40,58 @@ interface ReviewPlanDayGroup {
   pendingCount: number
 }
 
+interface StageEditState {
+  palaceId: number
+  segment: PalaceSegmentSummary
+  stage: ReviewStageSummary
+}
+
 const WEEKDAY_LABELS = ['一', '二', '三', '四', '五', '六', '日']
 
+function ensureSubmitSucceeded(result: ReviewSessionSubmitResponse) {
+  if (!result?.ok) {
+    throw new Error('复习提交失败')
+  }
+  return result
+}
+
 function PalaceStageProgress({
-  total,
+  stageLabels,
   completed,
+  stages,
+  onStageClick,
 }: {
-  total: number
+  stageLabels: string[]
   completed: number
+  stages?: ReviewStageSummary[]
+  onStageClick?: (stage: ReviewStageSummary) => void
 }) {
+  const normalizedStages = stages?.length
+    ? stages
+    : stageLabels.map((label, index) => ({
+        review_number: index,
+        label,
+        completed: index < completed,
+        completed_at: null,
+        scheduled_at: null,
+      }))
+  const total = normalizedStages.length
   if (total <= 0) {
     return null
   }
 
-  const safeCompleted = Math.max(0, Math.min(completed, total))
-  const progressPercent = total === 1 ? (safeCompleted > 0 ? 100 : 0) : (safeCompleted / total) * 100
+  const safeCompleted = Math.max(
+    0,
+    Math.min(normalizedStages.filter((stage) => stage.completed).length, total),
+  )
+  const progressPercent =
+    total === 1
+      ? safeCompleted > 0 ? 100 : 0
+      : safeCompleted <= 0
+        ? 0
+        : safeCompleted >= total
+          ? 100
+          : ((safeCompleted - 1) / (total - 1)) * 100
 
   return (
     <div className="mt-3">
@@ -53,13 +102,18 @@ function PalaceStageProgress({
           style={{ width: `${progressPercent}%` }}
         />
         <div className="absolute inset-0 flex items-center justify-between">
-          {Array.from({ length: total }, (_, index) => {
-            const active = index < safeCompleted
+          {normalizedStages.map((stage) => {
+            const active = stage.completed
             return (
-              <span
-                key={index}
+              <button
+                key={stage.review_number}
+                type="button"
+                title={getStageTooltip(stage)}
+                onClick={() => onStageClick?.(stage)}
+                disabled={!onStageClick}
                 className={cn(
                   'h-3.5 w-3.5 rounded-full border-2 border-white shadow-sm transition-colors',
+                  onStageClick && 'cursor-pointer hover:scale-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
                   active ? 'bg-emerald-500' : 'bg-slate-300',
                 )}
               />
@@ -69,6 +123,38 @@ function PalaceStageProgress({
       </div>
     </div>
   )
+}
+
+function formatStageDateTime(value: string | null): string {
+  if (!value) return '未记录具体时间'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return '未记录具体时间'
+  return new Intl.DateTimeFormat('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(date).replace(/\//g, '-')
+}
+
+function getStageTooltip(stage: ReviewStageSummary): string {
+  if (stage.completed) {
+    return `${stage.label} · 完成于 ${formatStageDateTime(stage.completed_at)}`
+  }
+  return `${stage.label} · 预计 ${formatStageDateTime(stage.scheduled_at)}`
+}
+
+function toDateTimeLocalValue(value?: string | null): string {
+  const source = value ? new Date(value) : new Date()
+  const date = Number.isNaN(source.getTime()) ? new Date() : source
+  const year = date.getFullYear()
+  const month = `${date.getMonth() + 1}`.padStart(2, '0')
+  const day = `${date.getDate()}`.padStart(2, '0')
+  const hours = `${date.getHours()}`.padStart(2, '0')
+  const minutes = `${date.getMinutes()}`.padStart(2, '0')
+  return `${year}-${month}-${day}T${hours}:${minutes}`
 }
 
 function formatRelativeReviewTime(value: string | null): string {
@@ -113,6 +199,15 @@ function formatCreatedAt(value: string | null): string {
     month: '2-digit',
     day: '2-digit',
   }).format(date).replace(/\//g, '-')
+}
+
+function getSegmentDisplayName(segment: PalaceSegmentSummary, index: number): string {
+  if (segment.display_name) return segment.display_name
+  if (segment.is_virtual_default) return '第 1 部分'
+  if (/^第\s*1\s*部分$/.test(segment.name)) {
+    return `第 ${index + 1} 部分`
+  }
+  return segment.name
 }
 
 function formatPlanDate(value: string | null): string {
@@ -206,7 +301,15 @@ export default function PalaceList() {
   const navigate = useNavigate()
   const [palaces, setPalaces] = useState<PalaceListItem[]>([])
   const [reviewPlan, setReviewPlan] = useState<PalaceReviewPlanResponse | null>(null)
+  const [batchReviewPalace, setBatchReviewPalace] = useState<PalaceListItem | null>(null)
+  const [selectedBatchSegmentIds, setSelectedBatchSegmentIds] = useState<number[]>([])
   const [planLoadingId, setPlanLoadingId] = useState<number | null>(null)
+  const [segmentReviewLoadingId, setSegmentReviewLoadingId] = useState<number | null>(null)
+  const [markReviewedKey, setMarkReviewedKey] = useState<string | null>(null)
+  const [stageEdit, setStageEdit] = useState<StageEditState | null>(null)
+  const [stageCompletedAt, setStageCompletedAt] = useState('')
+  const [stageEditError, setStageEditError] = useState<string | null>(null)
+  const [stageEditSaving, setStageEditSaving] = useState(false)
   const [visibleMonth, setVisibleMonth] = useState<Date>(() => getMonthStart(new Date()))
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
   const [searchParams, setSearchParams] = useSearchParams()
@@ -216,15 +319,57 @@ export default function PalaceList() {
   const monthGrid = useMemo(() => getMonthGrid(visibleMonth), [visibleMonth])
   const selectedDayGroup = selectedDate ? dayGroups.get(selectedDate) ?? null : null
 
-  const fetchData = useCallback(() => {
+  const fetchData = useCallback(async () => {
     const params: Record<string, string> = {}
     if (search) params.search = search
-    getPalacesApi(params).then(setPalaces)
+    const data = await getPalacesApi(params)
+    setPalaces(data)
+    return data
   }, [search])
 
   useEffect(() => {
-    fetchData()
+    void fetchData()
   }, [fetchData, searchParams])
+
+  const markVirtualDefaultSegmentReviewed = async (palaceId: number) => {
+    let latestPalaces = palaces
+    for (let attempt = 0; attempt < 12; attempt += 1) {
+      const palace = latestPalaces.find((item) => item.id === palaceId)
+      const defaultSegment = palace?.segments.find((segment) => segment.is_virtual_default)
+      const scheduleId = defaultSegment?.current_review_schedule_id
+      if (!palace || !defaultSegment?.has_due_review || !scheduleId) {
+        break
+      }
+      ensureSubmitSucceeded(await submitSegmentReviewSessionApi(scheduleId, {
+        duration_seconds: 0,
+        completion_mode: 'manual_complete',
+        revealed_remaining: true,
+        red_marked_count: 0,
+      }))
+      latestPalaces = await fetchData()
+    }
+  }
+
+  const markSegmentReviewedUntilNotDue = async (
+    palaceId: number,
+    segmentId: number,
+  ) => {
+    let latestPalaces = palaces
+    for (let attempt = 0; attempt < 12; attempt += 1) {
+      const palace = latestPalaces.find((item) => item.id === palaceId)
+      const segment = palace?.segments.find((item) => item.id === segmentId)
+      if (!segment?.has_due_review || !segment.current_review_schedule_id) {
+        break
+      }
+      ensureSubmitSucceeded(await submitSegmentReviewSessionApi(segment.current_review_schedule_id, {
+        duration_seconds: 0,
+        completion_mode: 'manual_complete',
+        revealed_remaining: true,
+        red_marked_count: 0,
+      }))
+      latestPalaces = await fetchData()
+    }
+  }
 
   const handleDelete = async (id: number, title: string) => {
     if (!confirm(`确定删除“${title}”吗？此操作无法撤销。`)) return
@@ -253,6 +398,169 @@ export default function PalaceList() {
       return
     }
     await handleOpenPlan(palace)
+  }
+
+  const handleSegmentReviewAction = async (segment: PalaceSegmentSummary) => {
+    if (!segment.current_review_schedule_id) return
+    setSegmentReviewLoadingId(segment.id)
+    try {
+      navigate(`/segment-review/session/${segment.current_review_schedule_id}`)
+    } finally {
+      setSegmentReviewLoadingId(null)
+    }
+  }
+
+  const handleOpenBatchReview = (palace: PalaceListItem) => {
+    const dueSegments = (palace.segments || []).filter(
+      (segment) =>
+        !segment.is_virtual_default &&
+        segment.has_due_review &&
+        Boolean(segment.current_review_schedule_id),
+    )
+    if (dueSegments.length < 2) return
+    setBatchReviewPalace(palace)
+    setSelectedBatchSegmentIds(dueSegments.map((segment) => segment.id))
+  }
+
+  const handleToggleBatchSegment = (segmentId: number, checked: boolean) => {
+    setSelectedBatchSegmentIds((current) => {
+      if (checked) {
+        return current.includes(segmentId) ? current : [...current, segmentId]
+      }
+      return current.filter((item) => item !== segmentId)
+    })
+  }
+
+  const handleStartBatchReview = () => {
+    if (selectedBatchSegmentIds.length === 0) return
+    navigate(`/segment-review/batch?segmentIds=${selectedBatchSegmentIds.join(',')}`)
+    setBatchReviewPalace(null)
+    setSelectedBatchSegmentIds([])
+  }
+
+  const handleMarkPalaceReviewed = async (palace: PalaceListItem) => {
+    if (palace.has_due_review && palace.current_review_schedule_id) {
+      const requestKey = `palace-${palace.id}`
+      setMarkReviewedKey(requestKey)
+      try {
+        ensureSubmitSucceeded(await submitReviewSessionApi(palace.current_review_schedule_id, {
+          duration_seconds: 0,
+          completion_mode: 'manual_complete',
+          revealed_remaining: true,
+          red_marked_count: 0,
+        }))
+        await fetchData()
+        toast.success('已标记为完成本轮复习')
+      } catch (error) {
+        console.error(error)
+        toast.error('标记复习失败，请稍后重试')
+      } finally {
+        setMarkReviewedKey(null)
+      }
+      return
+    }
+
+    const defaultSegment = palace.segments.find((segment) => segment.is_virtual_default)
+    if (!defaultSegment?.has_due_review || !defaultSegment.current_review_schedule_id) return
+    const requestKey = `segment-${defaultSegment.id}`
+    setMarkReviewedKey(requestKey)
+    try {
+      await markVirtualDefaultSegmentReviewed(palace.id)
+      await fetchData()
+      toast.success('已标记为完成本轮复习')
+    } catch (error) {
+      console.error(error)
+      toast.error('标记复习失败，请稍后重试')
+    } finally {
+      setMarkReviewedKey(null)
+    }
+  }
+
+  const handleMarkSegmentReviewed = async (segment: PalaceSegmentSummary) => {
+    if (!segment.has_due_review || !segment.current_review_schedule_id) return
+    const requestKey = `segment-${segment.id}`
+    setMarkReviewedKey(requestKey)
+    try {
+      await markSegmentReviewedUntilNotDue(segment.palace_id, segment.id)
+      await fetchData()
+      toast.success('已标记为完成本轮复习')
+    } catch (error) {
+      console.error(error)
+      toast.error('标记复习失败，请稍后重试')
+    } finally {
+      setMarkReviewedKey(null)
+    }
+  }
+
+  const openStageEdit = (palace: PalaceListItem, segment: PalaceSegmentSummary, stage: ReviewStageSummary) => {
+    setStageEdit({ palaceId: palace.id, segment, stage })
+    setStageCompletedAt(toDateTimeLocalValue(stage.completed_at))
+    setStageEditError(null)
+  }
+
+  const submitStageProgress = async (
+    completedCount: number,
+    completedReviewNumber: number | null,
+    completedAt: string | null,
+    successMessage: string,
+  ) => {
+    if (!stageEdit) return
+    setStageEditSaving(true)
+    setStageEditError(null)
+    try {
+      const payload = {
+        completed_count: completedCount,
+        completed_review_number: completedReviewNumber,
+        completed_at: completedAt,
+      }
+      if (stageEdit.segment.is_virtual_default) {
+        await updateDefaultSegmentReviewProgressApi(stageEdit.palaceId, payload)
+      } else {
+        await updatePalaceSegmentReviewProgressApi(stageEdit.segment.id, payload)
+      }
+      await fetchData()
+      toast.success(successMessage)
+      setStageEdit(null)
+    } catch (error) {
+      console.error(error)
+      setStageEditError(error instanceof Error ? error.message : '进度更新失败，请稍后重试')
+    } finally {
+      setStageEditSaving(false)
+    }
+  }
+
+  const currentStageCompletedCount = stageEdit
+    ? stageEdit.segment.review_stages.filter((stage) => stage.completed).length
+    : 0
+
+  const handleSaveStageCompletedAt = () => {
+    if (!stageEdit) return
+    void submitStageProgress(
+      currentStageCompletedCount,
+      stageEdit.stage.review_number,
+      stageCompletedAt,
+      '完成时间已更新',
+    )
+  }
+
+  const handleAdvanceToStage = () => {
+    if (!stageEdit) return
+    void submitStageProgress(
+      stageEdit.stage.review_number + 1,
+      null,
+      stageCompletedAt,
+      '复习进度已前进',
+    )
+  }
+
+  const handleRollbackBeforeStage = () => {
+    if (!stageEdit) return
+    void submitStageProgress(
+      stageEdit.stage.review_number,
+      null,
+      null,
+      '复习进度已回退',
+    )
   }
 
   return (
@@ -307,34 +615,151 @@ export default function PalaceList() {
                   <BookOpen className="h-5 w-5 text-muted-foreground" />
                 </div>
                 <div className="min-w-0 flex-1">
+                  {(() => {
+                    const segmentCount = Array.isArray(palace.segments) ? palace.segments.length : 0
+                    const isMultiSegment = segmentCount > 1
+                    const hasSingleSegment = segmentCount === 1
+                    const dueBatchSegments = (palace.segments || []).filter(
+                      (segment) =>
+                        !segment.is_virtual_default &&
+                        segment.has_due_review &&
+                        Boolean(segment.current_review_schedule_id),
+                    )
+                    const canBatchReview = dueBatchSegments.length >= 2
+
+                    return (
+                      <>
                   <div className="flex flex-wrap items-start justify-between gap-3">
-                    <Link to={`/palaces/${palace.id}/edit`} className="font-semibold transition-colors hover:text-primary">
-                      {palace.title || '未命名宫殿'}
-                    </Link>
-                    <Button
-                      variant={palace.has_due_review ? 'default' : 'outline'}
-                      size="sm"
-                      className={cn(
-                        'h-8 shrink-0 text-xs',
-                        palace.has_due_review && 'bg-emerald-600 text-white hover:bg-emerald-700',
-                      )}
-                      onClick={() => void handleReviewAction(palace)}
-                      disabled={planLoadingId === palace.id}
-                    >
-                      {planLoadingId === palace.id ? '加载中...' : palace.has_due_review ? '开始复习' : formatRelativeReviewTime(palace.next_review_at)}
-                    </Button>
+                    <div className="flex min-w-0 flex-1 flex-wrap items-start gap-2">
+                      <Link to={`/palaces/${palace.id}/edit`} className="font-semibold transition-colors hover:text-primary">
+                        {palace.title || '未命名宫殿'}
+                      </Link>
+                      {canBatchReview ? (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-8 shrink-0 text-xs"
+                          onClick={() => handleOpenBatchReview(palace)}
+                        >
+                          开始多块复习
+                        </Button>
+                      ) : null}
+                    </div>
+                    {!isMultiSegment ? (
+                      <Button
+                        variant={palace.has_due_review ? 'default' : 'outline'}
+                        size="sm"
+                        className={cn(
+                          'h-8 shrink-0 text-xs',
+                          palace.has_due_review && 'bg-emerald-600 text-white hover:bg-emerald-700',
+                        )}
+                        onClick={() => void handleReviewAction(palace)}
+                        disabled={planLoadingId === palace.id}
+                      >
+                        {planLoadingId === palace.id ? '加载中...' : palace.has_due_review ? '开始复习' : formatRelativeReviewTime(palace.next_review_at)}
+                      </Button>
+                    ) : null}
                   </div>
                   <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
                     <span>{formatCreatedAt(palace.created_at)}</span>
                     <span>章节 {palace.chapters?.length || 0} 个</span>
                   </div>
-                  <PalaceStageProgress
-                    total={palace.review_stage_total}
-                    completed={palace.review_stage_completed}
-                  />
+                  {Array.isArray(palace.segments) && palace.segments.length > 0 ? (
+                    <div className="mt-3 space-y-2.5">
+                      {palace.segments.map((segment, index) => (
+                        <div
+                          key={segment.id}
+                          className="rounded-2xl border border-border/60 bg-background/70 px-3 py-3"
+                        >
+                          <div className="flex flex-wrap items-start gap-3">
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-2">
+                                <span
+                                  className="inline-block h-2.5 w-2.5 rounded-full"
+                                  style={{ backgroundColor: segment.color }}
+                                />
+                                <span className="truncate text-sm font-medium">
+                                  {getSegmentDisplayName(segment, index)}
+                                </span>
+                              </div>
+                              <div className="mt-1 flex flex-wrap gap-2 text-[11px] text-muted-foreground">
+                                <span>{segment.node_count} 节点</span>
+                                {!isMultiSegment && hasSingleSegment ? (
+                                  <span>预计 {formatRelativeReviewTime(segment.next_review_at)}</span>
+                                ) : null}
+                              </div>
+                              <PalaceStageProgress
+                                stageLabels={segment.stage_labels}
+                                completed={segment.review_stage_completed}
+                                stages={segment.review_stages}
+                                onStageClick={(stage) => openStageEdit(palace, segment, stage)}
+                              />
+                            </div>
+
+                            <div className="flex shrink-0 flex-col items-stretch gap-2 sm:min-w-[132px]">
+                              {isMultiSegment ? (
+                                <Button
+                                  variant={segment.has_due_review ? 'default' : 'outline'}
+                                  size="sm"
+                                  className={cn(
+                                    'h-8 text-xs',
+                                    segment.has_due_review && 'bg-emerald-600 text-white hover:bg-emerald-700',
+                                  )}
+                                  onClick={() =>
+                                    segment.is_virtual_default
+                                      ? void handleSegmentReviewAction(segment)
+                                      : void handleSegmentReviewAction(segment)
+                                  }
+                                  disabled={
+                                    segment.is_virtual_default
+                                      ? !segment.current_review_schedule_id || segmentReviewLoadingId === segment.id
+                                      : !segment.current_review_schedule_id || segmentReviewLoadingId === segment.id
+                                  }
+                                >
+                                  {segmentReviewLoadingId === segment.id
+                                    ? '加载中...'
+                                    : segment.has_due_review
+                                      ? '开始复习'
+                                      : formatRelativeReviewTime(segment.next_review_at)}
+                                </Button>
+                              ) : null}
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-8 w-full text-xs"
+                                disabled={
+                                  segment.is_virtual_default
+                                    ? !segment.has_due_review || !segment.current_review_schedule_id || markReviewedKey === `segment-${segment.id}`
+                                    : !segment.has_due_review || !segment.current_review_schedule_id || markReviewedKey === `segment-${segment.id}`
+                                }
+                                onClick={() =>
+                                  segment.is_virtual_default
+                                    ? void handleMarkPalaceReviewed(palace)
+                                    : void handleMarkSegmentReviewed(segment)
+                                }
+                              >
+                                {markReviewedKey === `segment-${segment.id}`
+                                  ? '提交中...'
+                                  : '标记已复习'}
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <PalaceStageProgress
+                      stageLabels={palace.stage_labels}
+                      completed={palace.review_stage_completed}
+                      stages={palace.review_stages}
+                    />
+                  )}
                   {palace.description ? (
                     <p className="mt-2 line-clamp-1 text-sm text-muted-foreground">{palace.description.slice(0, 150)}</p>
                   ) : null}
+                      </>
+                    )
+                  })()}
                 </div>
                 <div className="flex shrink-0 items-center gap-1">
                   {palace.mastered ? <Badge variant="secondary" className="text-[10px]">已掌握</Badge> : null}
@@ -375,6 +800,166 @@ export default function PalaceList() {
           </Card>
         )}
       </div>
+
+      <Dialog
+        open={batchReviewPalace !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setBatchReviewPalace(null)
+            setSelectedBatchSegmentIds([])
+          }
+        }}
+      >
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <div>
+              <DialogTitle>开始多块复习</DialogTitle>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {batchReviewPalace?.title || '当前宫殿'} 中当前到期的分块会合并成一张思维导图，一次完成复习。
+              </p>
+            </div>
+            <DialogClose
+              onClick={() => {
+                setBatchReviewPalace(null)
+                setSelectedBatchSegmentIds([])
+              }}
+            />
+          </DialogHeader>
+          <div className="space-y-3 p-1">
+            {batchReviewPalace?.segments
+              ?.filter(
+                (segment) =>
+                  !segment.is_virtual_default &&
+                  segment.has_due_review &&
+                  Boolean(segment.current_review_schedule_id),
+              )
+              .map((segment, index) => {
+                const checked = selectedBatchSegmentIds.includes(segment.id)
+                return (
+                  <label
+                    key={segment.id}
+                    className="flex cursor-pointer items-start gap-3 rounded-2xl border border-border/70 bg-background/80 px-4 py-3 transition-colors hover:border-primary/40 hover:bg-accent/30"
+                  >
+                    <input
+                      type="checkbox"
+                      className="mt-1 h-4 w-4 rounded border-input"
+                      checked={checked}
+                      onChange={(event) => handleToggleBatchSegment(segment.id, event.target.checked)}
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <span
+                          className="inline-block h-2.5 w-2.5 rounded-full"
+                          style={{ backgroundColor: segment.color }}
+                        />
+                        <span className="truncate text-sm font-medium">
+                          {getSegmentDisplayName(segment, index)}
+                        </span>
+                      </div>
+                      <div className="mt-1 flex flex-wrap gap-2 text-xs text-muted-foreground">
+                        <span>{segment.node_count} 节点</span>
+                        <span>预计 {formatRelativeReviewTime(segment.next_review_at)}</span>
+                        <span>{segment.estimated_review_seconds || 0} 秒</span>
+                      </div>
+                    </div>
+                  </label>
+                )
+              })}
+          </div>
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-xs text-muted-foreground">
+              已选择 {selectedBatchSegmentIds.length} 个分块
+            </span>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  setBatchReviewPalace(null)
+                  setSelectedBatchSegmentIds([])
+                }}
+              >
+                取消
+              </Button>
+              <Button onClick={handleStartBatchReview} disabled={selectedBatchSegmentIds.length === 0}>
+                开始复习
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={stageEdit !== null} onOpenChange={(open) => !open && setStageEdit(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <div>
+              <DialogTitle>
+                {stageEdit?.segment ? `${getSegmentDisplayName(stageEdit.segment, 0)} · ${stageEdit.stage.label}` : '复习节点'}
+              </DialogTitle>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {stageEdit?.stage.completed
+                  ? `完成于 ${formatStageDateTime(stageEdit.stage.completed_at)}`
+                  : `预计 ${formatStageDateTime(stageEdit?.stage.scheduled_at ?? null)}`}
+              </p>
+            </div>
+            <DialogClose onClick={() => setStageEdit(null)} />
+          </DialogHeader>
+
+          <div className="space-y-4 p-6">
+            <label className="space-y-2">
+              <span className="text-sm font-medium text-foreground">完成时间</span>
+              <Input
+                type="datetime-local"
+                value={stageCompletedAt}
+                onChange={(event) => setStageCompletedAt(event.target.value)}
+              />
+            </label>
+
+            {stageEditError ? (
+              <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                {stageEditError}
+              </div>
+            ) : null}
+
+            <div className="flex flex-wrap justify-end gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setStageEdit(null)}
+                disabled={stageEditSaving}
+              >
+                取消
+              </Button>
+              {stageEdit?.stage.completed ? (
+                <>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleRollbackBeforeStage}
+                    disabled={stageEditSaving}
+                  >
+                    退回到此节点前
+                  </Button>
+                  <Button
+                    type="button"
+                    onClick={handleSaveStageCompletedAt}
+                    disabled={stageEditSaving}
+                  >
+                    保存时间
+                  </Button>
+                </>
+              ) : (
+                <Button
+                  type="button"
+                  onClick={handleAdvanceToStage}
+                  disabled={stageEditSaving}
+                >
+                  前进到此节点
+                </Button>
+              )}
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={reviewPlan !== null} onOpenChange={(open) => !open && setReviewPlan(null)}>
         <DialogContent className="max-h-[80vh] overflow-hidden">

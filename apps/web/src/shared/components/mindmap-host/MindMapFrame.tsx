@@ -1,5 +1,9 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import type { MindMapEditorState } from '@/shared/api/client'
+import type {
+  MindMapHostSegmentRangeDraft,
+  MindMapHostSegmentSummary,
+} from '@/shared/api/contracts'
 
 export interface MindMapSelection {
   uid: string | null
@@ -17,10 +21,25 @@ interface MindMapFrameProps {
   syncOnPropChange?: boolean
   preserveViewOnSync?: boolean
   className?: string
+  segments?: MindMapHostSegmentSummary[]
+  activeSegmentId?: number | null
+  segmentColorMode?: 'all' | 'active-only' | 'all-with-active-emphasis'
+  segmentRangeDraft?: MindMapHostSegmentRangeDraft
   onEditorStateChange: (nextState: MindMapEditorState) => void
   onNodeActive?: (nodes: MindMapSelection[]) => void
   onNodeClick?: (nodes: MindMapSelection[]) => void
   onNodeContextMenu?: (nodes: MindMapSelection[]) => void
+  onSegmentSelect?: (segmentId: number | null) => void
+  onCreateSegmentFromSelection?: () => void
+  onSegmentRangeDraftChange?: (payload: {
+    selectedNodeUids: string[]
+    overriddenConflictNodeUids: string[]
+  }) => void
+  onSegmentRangeModeToggle?: (payload: {
+    active: boolean
+    targetSegmentId: number | 'new' | null
+  }) => void
+  onSegmentRangeConfirm?: () => void
   onFullscreenChange?: (active: boolean) => void
   onReady?: () => void
 }
@@ -59,10 +78,24 @@ export function MindMapFrame({
   syncOnPropChange = false,
   preserveViewOnSync = false,
   className,
+  segments = [],
+  activeSegmentId = null,
+  segmentColorMode = 'all',
+  segmentRangeDraft = {
+    active: false,
+    targetSegmentId: null,
+    selectedNodeUids: [],
+    overriddenConflictNodeUids: [],
+  },
   onEditorStateChange,
   onNodeActive,
   onNodeClick,
   onNodeContextMenu,
+  onSegmentSelect,
+  onCreateSegmentFromSelection,
+  onSegmentRangeDraftChange,
+  onSegmentRangeModeToggle,
+  onSegmentRangeConfirm,
   onFullscreenChange,
   onReady,
 }: MindMapFrameProps) {
@@ -72,6 +105,11 @@ export function MindMapFrame({
   const onNodeActiveRef = useRef(onNodeActive)
   const onNodeClickRef = useRef(onNodeClick)
   const onNodeContextMenuRef = useRef(onNodeContextMenu)
+  const onSegmentSelectRef = useRef(onSegmentSelect)
+  const onCreateSegmentFromSelectionRef = useRef(onCreateSegmentFromSelection)
+  const onSegmentRangeDraftChangeRef = useRef(onSegmentRangeDraftChange)
+  const onSegmentRangeModeToggleRef = useRef(onSegmentRangeModeToggle)
+  const onSegmentRangeConfirmRef = useRef(onSegmentRangeConfirm)
   const onFullscreenChangeRef = useRef(onFullscreenChange)
   const onReadyRef = useRef(onReady)
   const lastSyncedFingerprintRef = useRef('')
@@ -82,6 +120,11 @@ export function MindMapFrame({
   onNodeActiveRef.current = onNodeActive
   onNodeClickRef.current = onNodeClick
   onNodeContextMenuRef.current = onNodeContextMenu
+  onSegmentSelectRef.current = onSegmentSelect
+  onCreateSegmentFromSelectionRef.current = onCreateSegmentFromSelection
+  onSegmentRangeDraftChangeRef.current = onSegmentRangeDraftChange
+  onSegmentRangeModeToggleRef.current = onSegmentRangeModeToggle
+  onSegmentRangeConfirmRef.current = onSegmentRangeConfirm
   onFullscreenChangeRef.current = onFullscreenChange
   onReadyRef.current = onReady
 
@@ -109,15 +152,26 @@ export function MindMapFrame({
           applyHostState?: (state: {
             readonly: boolean
             showToolbarWhenReadonly: boolean
+            segments: MindMapHostSegmentSummary[]
+            activeSegmentId: number | null
+            segmentColorMode: 'all' | 'active-only' | 'all-with-active-emphasis'
+            segmentRangeDraft: MindMapHostSegmentRangeDraft
           }) => void
           resetReadonlyInteractionState?: () => void
         })
       | null
-    iframeWindow?.applyHostState?.({ readonly, showToolbarWhenReadonly })
+    iframeWindow?.applyHostState?.({
+      readonly,
+      showToolbarWhenReadonly,
+      segments: cloneValue(segments),
+      activeSegmentId,
+      segmentColorMode,
+      segmentRangeDraft: cloneValue(segmentRangeDraft),
+    })
     if (readonly) {
       iframeWindow?.resetReadonlyInteractionState?.()
     }
-  }, [readonly, showToolbarWhenReadonly])
+  }, [activeSegmentId, readonly, segmentColorMode, segmentRangeDraft, segments, showToolbarWhenReadonly])
 
   useEffect(() => {
     const registry = (window.__memoryAnkiMindMapHosts ??= {})
@@ -165,6 +219,57 @@ export function MindMapFrame({
         if (event === 'node_contextmenu') {
           onNodeContextMenuRef.current?.(Array.isArray(payload) ? (payload as MindMapSelection[]) : [])
         }
+        if (event === 'segment_select') {
+          onSegmentSelectRef.current?.(
+            typeof payload === 'number' ? payload : payload == null ? null : Number(payload),
+          )
+        }
+        if (event === 'segment_create_from_selection') {
+          onCreateSegmentFromSelectionRef.current?.()
+        }
+        if (event === 'segment_range_draft_change') {
+          const nextPayload =
+            payload && typeof payload === 'object'
+              ? (payload as {
+                  selectedNodeUids?: unknown
+                  overriddenConflictNodeUids?: unknown
+                })
+              : null
+          onSegmentRangeDraftChangeRef.current?.({
+            selectedNodeUids: Array.isArray(nextPayload?.selectedNodeUids)
+              ? nextPayload.selectedNodeUids
+                  .map((value) => (typeof value === 'string' ? value : null))
+                  .filter((value): value is string => Boolean(value))
+              : [],
+            overriddenConflictNodeUids: Array.isArray(nextPayload?.overriddenConflictNodeUids)
+              ? nextPayload.overriddenConflictNodeUids
+                  .map((value) => (typeof value === 'string' ? value : null))
+                  .filter((value): value is string => Boolean(value))
+              : [],
+          })
+        }
+        if (event === 'segment_range_mode_toggle') {
+          const nextPayload =
+            payload && typeof payload === 'object'
+              ? (payload as {
+                  active?: unknown
+                  targetSegmentId?: unknown
+                })
+              : null
+          const rawTarget = nextPayload?.targetSegmentId
+          onSegmentRangeModeToggleRef.current?.({
+            active: Boolean(nextPayload?.active),
+            targetSegmentId:
+              rawTarget === 'new'
+                ? 'new'
+                : rawTarget == null || rawTarget === ''
+                  ? null
+                  : Number(rawTarget),
+          })
+        }
+        if (event === 'segment_range_confirm') {
+          onSegmentRangeConfirmRef.current?.()
+        }
         if (event === 'fullscreen_change') {
           onFullscreenChangeRef.current?.(Boolean(payload))
         }
@@ -186,17 +291,21 @@ export function MindMapFrame({
 
   useEffect(() => {
     if (!syncOnPropChange || !isLoaded) return
-    const fingerprint = JSON.stringify({
-      editor_doc: normalizeEditorDoc(editorState.editor_doc),
-      editor_config: editorState.editor_config,
-      editor_local_config: editorState.editor_local_config,
-      lang: editorState.lang,
-      preserveViewOnSync,
-    })
+        const fingerprint = JSON.stringify({
+          editor_doc: normalizeEditorDoc(editorState.editor_doc),
+          editor_config: editorState.editor_config,
+          editor_local_config: editorState.editor_local_config,
+          lang: editorState.lang,
+          segments,
+          activeSegmentId,
+          segmentColorMode,
+          segmentRangeDraft,
+          preserveViewOnSync,
+        })
     if (lastSyncedFingerprintRef.current === fingerprint) return
     lastSyncedFingerprintRef.current = fingerprint
     syncHostEditorState()
-  }, [editorState, isLoaded, preserveViewOnSync, syncHostEditorState, syncOnPropChange])
+  }, [activeSegmentId, editorState, isLoaded, preserveViewOnSync, segmentColorMode, segmentRangeDraft, segments, syncHostEditorState, syncOnPropChange])
 
   return (
     <iframe

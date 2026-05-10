@@ -59,6 +59,173 @@
         .smm-node-shape {
         filter: none !important;
       }
+
+      .memory-anki-segment-toolbar {
+        position: relative;
+        display: inline-flex;
+        align-items: center;
+        margin-right: 8px;
+        gap: 8px;
+      }
+
+      .memory-anki-segment-button {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        height: 32px;
+        padding: 0 12px;
+        border: 1px solid #d8dee9;
+        border-radius: 6px;
+        background: #ffffff;
+        color: #111827;
+        font-size: 13px;
+        cursor: pointer;
+      }
+
+      .memory-anki-segment-button:hover {
+        background: #f8fafc;
+      }
+
+      .memory-anki-segment-range-panel {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 4px 8px;
+        border: 1px solid #cbd5e1;
+        border-radius: 8px;
+        background: rgba(248, 250, 252, 0.95);
+      }
+
+      .memory-anki-segment-range-panel[hidden] {
+        display: none !important;
+      }
+
+      .memory-anki-segment-range-panel label,
+      .memory-anki-segment-range-panel span {
+        font-size: 12px;
+        color: #334155;
+      }
+
+      .memory-anki-segment-range-select {
+        height: 30px;
+        min-width: 164px;
+        border: 1px solid #cbd5e1;
+        border-radius: 6px;
+        background: #ffffff;
+        color: #111827;
+        font-size: 12px;
+        padding: 0 8px;
+      }
+
+      .memory-anki-segment-range-action {
+        height: 30px;
+        padding: 0 10px;
+        border: 1px solid #cbd5e1;
+        border-radius: 6px;
+        background: #ffffff;
+        color: #111827;
+        font-size: 12px;
+        cursor: pointer;
+      }
+
+      .memory-anki-segment-range-action.is-primary {
+        background: #111827;
+        border-color: #111827;
+        color: #ffffff;
+      }
+
+      .memory-anki-segment-range-meta {
+        font-size: 12px;
+        color: #475569;
+      }
+
+      .memory-anki-segment-menu {
+        position: absolute;
+        top: calc(100% + 8px);
+        left: 0;
+        z-index: 9999;
+        width: 240px;
+        padding: 10px;
+        border: 1px solid #e2e8f0;
+        border-radius: 10px;
+        background: rgba(255, 255, 255, 0.98);
+        box-shadow: 0 14px 30px rgba(15, 23, 42, 0.16);
+      }
+
+      .memory-anki-segment-menu[hidden] {
+        display: none !important;
+      }
+
+      .memory-anki-segment-menu-title {
+        margin-bottom: 8px;
+        color: #475569;
+        font-size: 12px;
+        font-weight: 600;
+      }
+
+      .memory-anki-segment-menu-list {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        max-height: 260px;
+        overflow: auto;
+      }
+
+      .memory-anki-segment-menu-item {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        width: 100%;
+        padding: 8px 10px;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        background: #ffffff;
+        color: #111827;
+        font-size: 12px;
+        cursor: pointer;
+      }
+
+      .memory-anki-segment-menu-item.is-active {
+        border-color: #111827;
+        background: #f8fafc;
+      }
+
+      .memory-anki-segment-menu-actions {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        margin-top: 10px;
+        padding-top: 10px;
+        border-top: 1px solid #e2e8f0;
+      }
+
+      .memory-anki-segment-color {
+        width: 10px;
+        height: 10px;
+        border-radius: 9999px;
+        flex-shrink: 0;
+      }
+
+      .smm-node.memory-anki-segment-selected .smm-node-shape {
+        stroke: #0f172a !important;
+        stroke-width: 4 !important;
+        filter: drop-shadow(0 0 0 rgba(15, 23, 42, 0.12))
+          drop-shadow(0 0 12px rgba(15, 23, 42, 0.24)) !important;
+      }
+
+      .smm-node.memory-anki-segment-selected .smm-hover-node {
+        display: block !important;
+        opacity: 1 !important;
+        stroke: #0f172a !important;
+        stroke-width: 3 !important;
+      }
+
+      .smm-node.memory-anki-segment-conflict-selected .smm-node-shape {
+        stroke-dasharray: 8 4;
+        filter: drop-shadow(0 0 0 rgba(239, 68, 68, 0.08))
+          drop-shadow(0 0 12px rgba(239, 68, 68, 0.28)) !important;
+      }
     </style>
   </head>
   <body>
@@ -69,6 +236,12 @@
       const keyboardState = {
         activeNodeUid: null,
         mode: 'navigating',
+      }
+      const segmentState = {
+        toolbarReady: false,
+        menuOpen: false,
+        nodeUidToSegment: new Map(),
+        nodeParentToChildren: new Map(),
       }
 
       function cloneValue(value) {
@@ -136,6 +309,40 @@
         return typeof uid === 'string' ? uid : null
       }
 
+      function getHostSegments() {
+        const segments = window.__memoryAnkiHostState?.segments
+        return Array.isArray(segments) ? segments : []
+      }
+
+      function getActiveSegmentId() {
+        const raw = window.__memoryAnkiHostState?.activeSegmentId
+        return typeof raw === 'number' ? raw : raw == null ? null : Number(raw)
+      }
+
+      function getSegmentColorMode() {
+        return window.__memoryAnkiHostState?.segmentColorMode || 'all'
+      }
+
+      function getSegmentRangeDraft() {
+        const rawDraft = window.__memoryAnkiHostState?.segmentRangeDraft
+        const normalized = rawDraft && typeof rawDraft === 'object' ? rawDraft : {}
+        return {
+          active: Boolean(normalized.active),
+          targetSegmentId:
+            normalized.targetSegmentId === 'new'
+              ? 'new'
+              : normalized.targetSegmentId == null || normalized.targetSegmentId === ''
+                ? null
+                : Number(normalized.targetSegmentId),
+          selectedNodeUids: Array.isArray(normalized.selectedNodeUids)
+            ? normalized.selectedNodeUids.map(value => String(value))
+            : [],
+          overriddenConflictNodeUids: Array.isArray(normalized.overriddenConflictNodeUids)
+            ? normalized.overriddenConflictNodeUids.map(value => String(value))
+            : [],
+        }
+      }
+
       function getCachedNodes() {
         const renderer = getRenderer()
         if (!renderer?.nodeCache) return []
@@ -180,6 +387,66 @@
         getHostBridge()?.notify?.('node_active', [serializeNode(node)])
       }
 
+      function buildNodeTreeIndex() {
+        const parentToChildren = new Map()
+        const walk = node => {
+          const uid = getNodeUid(node)
+          if (!uid) return []
+          const children = Array.isArray(node.children) ? node.children : []
+          const nextChildUids = []
+          children.forEach(child => {
+            const childUid = getNodeUid(child)
+            if (childUid) {
+              nextChildUids.push(childUid)
+            }
+            walk(child)
+          })
+          parentToChildren.set(uid, nextChildUids)
+          return nextChildUids
+        }
+
+        const root = getMindMap()?.renderer?.renderTree
+        if (root) {
+          walk(root)
+        } else {
+          getCachedNodes().forEach(node => {
+            const uid = getNodeUid(node)
+            if (!uid) return
+            parentToChildren.set(
+              uid,
+              Array.isArray(node.children)
+                ? node.children.map(child => getNodeUid(child)).filter(Boolean)
+                : [],
+            )
+          })
+        }
+        segmentState.nodeParentToChildren = parentToChildren
+      }
+
+      function collectSubtreeUids(uid) {
+        const visited = new Set()
+        const walk = nextUid => {
+          if (!nextUid || visited.has(nextUid)) return
+          visited.add(nextUid)
+          const children = segmentState.nodeParentToChildren.get(nextUid) || []
+          children.forEach(walk)
+        }
+        walk(uid)
+        return Array.from(visited)
+      }
+
+      function buildSegmentIndex() {
+        const nextMap = new Map()
+        getHostSegments().forEach(segment => {
+          const nodeUids = Array.isArray(segment?.node_uids) ? segment.node_uids : []
+          nodeUids.forEach(uid => {
+            if (!uid || nextMap.has(uid)) return
+            nextMap.set(String(uid), segment)
+          })
+        })
+        segmentState.nodeUidToSegment = nextMap
+      }
+
       function updateKeyboardFocusClass() {
         getCachedNodes().forEach((node) => {
           const element = node?.group?.node
@@ -190,6 +457,287 @@
             element.classList.remove(KEYBOARD_FOCUS_CLASS)
           }
         })
+      }
+
+      function getSegmentForNode(node) {
+        const uid = getNodeUid(node)
+        if (!uid) return null
+        return segmentState.nodeUidToSegment.get(uid) || null
+      }
+
+      function applySegmentNodeStyles() {
+        buildSegmentIndex()
+        buildNodeTreeIndex()
+        const activeSegmentId = getActiveSegmentId()
+        const mode = getSegmentColorMode()
+        const rangeDraft = getSegmentRangeDraft()
+        const selectedNodeUids = new Set(rangeDraft.selectedNodeUids)
+        const overriddenConflictNodeUids = new Set(rangeDraft.overriddenConflictNodeUids)
+        getCachedNodes().forEach(node => {
+          const segment = getSegmentForNode(node)
+          const element = node?.group?.node
+          if (!element?.style) return
+          const uid = getNodeUid(node)
+          element.classList.remove('memory-anki-segment-selected', 'memory-anki-segment-conflict-selected')
+          if (!segment) {
+            element.classList.remove('memory-anki-segment-active')
+            element.style.removeProperty('--memory-anki-segment-color')
+          } else {
+            const shouldColor =
+              mode === 'all' ||
+              mode === 'all-with-active-emphasis' ||
+              (mode === 'active-only' && activeSegmentId === Number(segment.id))
+            if (!shouldColor) {
+              element.classList.remove('memory-anki-segment-active')
+              element.style.removeProperty('--memory-anki-segment-color')
+            } else {
+              element.style.setProperty('--memory-anki-segment-color', String(segment.color || '#14b8a6'))
+              if (activeSegmentId != null && Number(segment.id) === activeSegmentId) {
+                element.classList.add('memory-anki-segment-active')
+              } else {
+                element.classList.remove('memory-anki-segment-active')
+              }
+              const shape = element.querySelector('.smm-node-shape')
+              if (shape?.style) {
+                shape.style.stroke = String(segment.color || '#14b8a6')
+                shape.style.strokeWidth = Number(activeSegmentId != null && Number(segment.id) === activeSegmentId ? 3 : 2)
+                shape.style.filter =
+                  activeSegmentId != null && Number(segment.id) === activeSegmentId
+                    ? `drop-shadow(0 0 0 rgba(15, 23, 42, 0.12)) drop-shadow(0 0 10px ${String(segment.color || '#14b8a6')}55)`
+                    : 'none'
+              }
+            }
+          }
+          if (rangeDraft.active && uid && selectedNodeUids.has(uid)) {
+            element.classList.add('memory-anki-segment-selected')
+            if (overriddenConflictNodeUids.has(uid)) {
+              element.classList.add('memory-anki-segment-conflict-selected')
+            }
+          }
+        })
+      }
+
+      function closeSegmentMenu() {
+        const menu = document.querySelector('.memory-anki-segment-menu')
+        if (menu) menu.hidden = true
+        segmentState.menuOpen = false
+      }
+
+      function renderSegmentMenu() {
+        const menu = document.querySelector('.memory-anki-segment-menu')
+        if (!menu) return
+        const segments = getHostSegments()
+        const activeSegmentId = getActiveSegmentId()
+        menu.innerHTML = ''
+
+        const title = document.createElement('div')
+        title.className = 'memory-anki-segment-menu-title'
+        title.textContent = '切换当前分块'
+        menu.appendChild(title)
+
+        const list = document.createElement('div')
+        list.className = 'memory-anki-segment-menu-list'
+        segments.forEach(segment => {
+          const item = document.createElement('button')
+          item.type = 'button'
+          item.className = 'memory-anki-segment-menu-item'
+          if (activeSegmentId != null && Number(segment.id) === activeSegmentId) {
+            item.classList.add('is-active')
+          }
+          item.innerHTML = `
+            <span style="display:inline-flex;align-items:center;gap:8px;min-width:0;">
+              <span class="memory-anki-segment-color" style="background:${String(segment.color || '#14b8a6')}"></span>
+              <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${String(segment.name || '未命名分块')}</span>
+            </span>
+            <span style="color:#64748b;">${segment.created_at ? String(segment.created_at).replace('T', ' ').slice(0, 16) : '未设置'}</span>
+          `
+          item.addEventListener('click', () => {
+            getHostBridge()?.notify?.('segment_select', Number(segment.id))
+            closeSegmentMenu()
+          })
+          list.appendChild(item)
+        })
+        menu.appendChild(list)
+
+        const actions = document.createElement('div')
+        actions.className = 'memory-anki-segment-menu-actions'
+
+        const createButton = document.createElement('button')
+        createButton.type = 'button'
+        createButton.className = 'memory-anki-segment-menu-item'
+        createButton.textContent = '用当前选中创建分块'
+        createButton.addEventListener('click', () => {
+          getHostBridge()?.notify?.('segment_create_from_selection', null)
+          closeSegmentMenu()
+        })
+        actions.appendChild(createButton)
+
+        const clearButton = document.createElement('button')
+        clearButton.type = 'button'
+        clearButton.className = 'memory-anki-segment-menu-item'
+        clearButton.textContent = '清除当前分块聚焦'
+        clearButton.addEventListener('click', () => {
+          getHostBridge()?.notify?.('segment_select', null)
+          closeSegmentMenu()
+        })
+        actions.appendChild(clearButton)
+
+        menu.appendChild(actions)
+      }
+
+      function notifySegmentRangeMode(active, targetSegmentId) {
+        getHostBridge()?.notify?.('segment_range_mode_toggle', {
+          active,
+          targetSegmentId,
+        })
+      }
+
+      function notifySegmentRangeDraftChange(selectedNodeUids, overriddenConflictNodeUids) {
+        getHostBridge()?.notify?.('segment_range_draft_change', {
+          selectedNodeUids,
+          overriddenConflictNodeUids,
+        })
+      }
+
+      function isNodeConflictForCurrentDraft(uid) {
+        const rangeDraft = getSegmentRangeDraft()
+        if (!uid) return false
+        const owningSegment = segmentState.nodeUidToSegment.get(uid)
+        if (!owningSegment) return false
+        if (rangeDraft.targetSegmentId === 'new' || rangeDraft.targetSegmentId == null) return true
+        return Number(owningSegment.id) !== Number(rangeDraft.targetSegmentId)
+      }
+
+      function toggleNodeInRangeDraft(node) {
+        const rangeDraft = getSegmentRangeDraft()
+        if (!rangeDraft.active) return false
+        const uid = getNodeUid(node)
+        if (!uid) return false
+
+        const currentSelected = new Set(rangeDraft.selectedNodeUids)
+        const currentOverrides = new Set(rangeDraft.overriddenConflictNodeUids)
+        const subtreeUids = collectSubtreeUids(uid)
+        const isSelected = currentSelected.has(uid)
+
+        if (isSelected) {
+          currentSelected.delete(uid)
+          currentOverrides.delete(uid)
+          notifySegmentRangeDraftChange(Array.from(currentSelected), Array.from(currentOverrides))
+          return true
+        }
+
+        const subtreeSelection = []
+        subtreeUids.forEach(subtreeUid => {
+          if (subtreeUid === uid) {
+            subtreeSelection.push(subtreeUid)
+            return
+          }
+          if (!isNodeConflictForCurrentDraft(subtreeUid)) {
+            subtreeSelection.push(subtreeUid)
+          }
+        })
+
+        if (isNodeConflictForCurrentDraft(uid)) {
+          currentOverrides.add(uid)
+        }
+
+        subtreeSelection.forEach(selectedUid => currentSelected.add(selectedUid))
+        notifySegmentRangeDraftChange(Array.from(currentSelected), Array.from(currentOverrides))
+        return true
+      }
+
+      function ensureSegmentToolbar() {
+        const toolbarBlock = document.querySelector('.toolbarContainer .toolbar .toolbarBlock')
+        if (!toolbarBlock) return false
+        let host = toolbarBlock.querySelector('.memory-anki-segment-toolbar')
+        if (!host) {
+          host = document.createElement('div')
+          host.className = 'memory-anki-segment-toolbar'
+          host.innerHTML = `
+            <button type="button" class="memory-anki-segment-button">
+              <span>分块</span>
+            </button>
+            <div class="memory-anki-segment-range-panel" hidden>
+              <label>
+                <span>当前目标</span>
+              </label>
+              <select class="memory-anki-segment-range-select"></select>
+              <span class="memory-anki-segment-range-meta"></span>
+              <button type="button" class="memory-anki-segment-range-action is-primary">确认</button>
+              <button type="button" class="memory-anki-segment-range-action">取消</button>
+            </div>
+          `
+          toolbarBlock.insertBefore(host, toolbarBlock.firstChild)
+          const button = host.querySelector('.memory-anki-segment-button')
+          button?.addEventListener('click', event => {
+            event.preventDefault()
+            event.stopPropagation()
+            const draft = getSegmentRangeDraft()
+            notifySegmentRangeMode(!draft.active, draft.targetSegmentId || 'new')
+          })
+        }
+        const label = host.querySelector('.memory-anki-segment-button span')
+        const panel = host.querySelector('.memory-anki-segment-range-panel')
+        const targetSelect = host.querySelector('.memory-anki-segment-range-select')
+        const meta = host.querySelector('.memory-anki-segment-range-meta')
+        const confirmButton = host.querySelector('.memory-anki-segment-range-action.is-primary')
+        const cancelButton = host.querySelectorAll('.memory-anki-segment-range-action')[1]
+        const rangeDraft = getSegmentRangeDraft()
+        const currentTarget =
+          rangeDraft.targetSegmentId === 'new'
+            ? null
+            : getHostSegments().find(segment => Number(segment.id) === Number(rangeDraft.targetSegmentId)) || null
+        if (label) {
+          label.textContent = rangeDraft.active
+            ? `分块中 · ${currentTarget ? String(currentTarget.name) : '新分块'}`
+            : '分块'
+        }
+        if (panel) {
+          panel.hidden = !rangeDraft.active
+        }
+        if (targetSelect) {
+          targetSelect.innerHTML = ''
+          const newOption = document.createElement('option')
+          newOption.value = 'new'
+          newOption.textContent = '新建分块'
+          targetSelect.appendChild(newOption)
+          getHostSegments().forEach(segment => {
+            const option = document.createElement('option')
+            option.value = String(segment.id)
+            option.textContent = String(segment.name || '未命名分块')
+            targetSelect.appendChild(option)
+          })
+          targetSelect.value =
+            rangeDraft.targetSegmentId === 'new' || rangeDraft.targetSegmentId == null
+              ? 'new'
+              : String(rangeDraft.targetSegmentId)
+          if (!targetSelect.dataset.bound) {
+            targetSelect.addEventListener('change', event => {
+              const nextValue = event.target.value
+              notifySegmentRangeMode(true, nextValue === 'new' ? 'new' : Number(nextValue))
+            })
+            targetSelect.dataset.bound = '1'
+          }
+        }
+        if (meta) {
+          meta.textContent = rangeDraft.active
+            ? `已选 ${rangeDraft.selectedNodeUids.length} 个节点`
+            : ''
+        }
+        if (confirmButton && !confirmButton.dataset.bound) {
+          confirmButton.addEventListener('click', () => {
+            getHostBridge()?.notify?.('segment_range_confirm', null)
+          })
+          confirmButton.dataset.bound = '1'
+        }
+        if (cancelButton && !cancelButton.dataset.bound) {
+          cancelButton.addEventListener('click', () => {
+            notifySegmentRangeMode(false, null)
+          })
+          cancelButton.dataset.bound = '1'
+        }
+        segmentState.toolbarReady = true
+        return true
       }
 
       function getCurrentActiveNode() {
@@ -460,12 +1008,17 @@
         document.addEventListener(
           'click',
           event => {
-            if (!isReadonlyHost()) return
+            const rangeDraft = getSegmentRangeDraft()
+            if (!isReadonlyHost() && !rangeDraft.active) return
             if (typeof event.button === 'number' && event.button !== 0) return
             const node = getNodeByElement(event.target)
             if (!node) return
             event.preventDefault()
             event.stopPropagation()
+            if (rangeDraft.active) {
+              toggleNodeInRangeDraft(node)
+              return
+            }
             resetReadonlyInteractionState()
             getHostBridge()?.notify?.('node_click', [serializeNode(node)])
           },
@@ -528,6 +1081,11 @@
         if (isReadonly) {
           resetReadonlyInteractionState()
         }
+        ensureSegmentToolbar()
+        window.setTimeout(() => {
+          ensureSegmentToolbar()
+          applySegmentNodeStyles()
+        }, 0)
       }
 
       window.applyHostState = applyHostState
@@ -637,6 +1195,8 @@
           }
           syncKeyboardMode()
           updateKeyboardFocusClass()
+          ensureSegmentToolbar()
+          applySegmentNodeStyles()
           getHostBridge()?.notify?.('app_inited', null)
         })
         window.$bus.$on('node_active', (...args) => {
@@ -675,6 +1235,8 @@
             window.__memoryAnkiPendingTransformRestore = null
           }
           updateKeyboardFocusClass()
+          ensureSegmentToolbar()
+          applySegmentNodeStyles()
           getHostBridge()?.notify?.('node_tree_render_end', null)
         })
       }
