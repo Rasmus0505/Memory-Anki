@@ -33,6 +33,7 @@ export function ReviewFlowInfoPanel({
     <>
       <SessionTimerBar
         effectiveSeconds={timer.effectiveSeconds}
+        idleSeconds={timer.idleSeconds}
         pauseCount={timer.pauseCount}
         status={timer.status}
         onStart={() => timer.start({ source: 'manual' })}

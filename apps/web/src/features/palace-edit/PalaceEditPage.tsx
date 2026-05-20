@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { ArrowLeft, History } from 'lucide-react'
+import { ArrowLeft, History, ImagePlus } from 'lucide-react'
 import type { MindMapEditorState } from '@/shared/api/contracts'
 import { PageIntro } from '@/shared/components/layout/PageIntro'
 import { MindMapFrame } from '@/shared/components/mindmap-host'
@@ -9,7 +9,9 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui
 import { SessionTimerBar } from '@/shared/components/session/SessionTimerBar'
 import { cn } from '@/shared/lib/utils'
 import { PalaceAttachmentPanel } from '@/features/palace-edit/components/PalaceAttachmentPanel'
+import { PalaceBindingPanel } from '@/features/palace-edit/components/PalaceBindingPanel'
 import { PalaceChapterPanel } from '@/features/palace-edit/components/PalaceChapterPanel'
+import { PalaceMindMapImportDrawer } from '@/features/palace-edit/components/PalaceMindMapImportDrawer'
 import { PalaceMetaPanel } from '@/features/palace-edit/components/PalaceMetaPanel'
 import { PalaceSegmentsPanel } from '@/features/palace-edit/components/PalaceSegmentsPanel'
 import { PalaceVersionDialog } from '@/features/palace-edit/components/PalaceVersionDialog'
@@ -29,7 +31,7 @@ export default function PalaceEdit() {
   return (
     <div className="space-y-5">
       <PageIntro
-        title={page.palace?.title || '宫殿编辑器'}
+        title={page.palace?.resolved_title || page.palace?.title || '宫殿编辑器'}
         actions={
           <>
             <Link to="/palaces">
@@ -59,6 +61,7 @@ export default function PalaceEdit() {
         <div className="space-y-4">
           <SessionTimerBar
             effectiveSeconds={page.timer.effectiveSeconds}
+            idleSeconds={page.timer.idleSeconds}
             pauseCount={page.timer.pauseCount}
             status={page.timer.status}
             onStart={() => page.timer.start({ source: 'manual' })}
@@ -77,16 +80,35 @@ export default function PalaceEdit() {
             palace={page.palace}
             title={page.title}
             createdAt={page.createdAt}
+            isTitleSynced={page.isTitleSynced}
             onTitleChange={page.setTitle}
             onCreatedAtChange={page.setCreatedAt}
             onSave={page.handleSaveMeta}
             onEstablishCreatedAt={page.handleEstablishCreatedAt}
+            onDisconnectTitleSync={page.handleDisconnectTitleSync}
           />
 
           <PalaceChapterPanel
             chapterOptions={page.chapterOptions}
             selectedChapterIds={page.selectedChapterIds}
+            primaryChapterId={page.primaryChapterId}
             onToggleChapter={page.handleChapterToggle}
+            onSetPrimaryChapter={page.handleSetPrimaryChapter}
+          />
+
+          <PalaceBindingPanel
+            titleMode={page.titleMode}
+            manualTitle={page.manualTitle}
+            groupingMode={page.groupingMode}
+            manualGroupChapterId={page.manualGroupChapterId}
+            chapterOptions={page.chapterOptions}
+            primaryChapterName={page.palace?.primary_chapter?.name ?? null}
+            resolvedParentChapterName={page.palace?.resolved_parent_chapter?.name ?? null}
+            bindingStatus={page.palace?.binding_status ?? 'unbound'}
+            onTitleModeChange={page.setTitleMode}
+            onManualTitleChange={page.setManualTitle}
+            onGroupingModeChange={page.setGroupingMode}
+            onManualGroupChapterChange={page.setManualGroupChapterId}
           />
 
           <PalaceSegmentsPanel
@@ -133,12 +155,18 @@ export default function PalaceEdit() {
             <div>
               <CardTitle className="text-base">宫殿脑图</CardTitle>
             </div>
-            {page.selectedNode?.memoryAnkiId ? (
-              <Badge variant="secondary">
-                {page.selectedNode.memoryAnkiNodeType} #
-                {page.selectedNode.memoryAnkiId}
-              </Badge>
-            ) : null}
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" onClick={page.handleOpenMindMapImport}>
+                <ImagePlus className="mr-2 h-4 w-4" />
+                图片转脑图
+              </Button>
+              {page.selectedNode?.memoryAnkiId ? (
+                <Badge variant="secondary">
+                  {page.selectedNode.memoryAnkiNodeType} #
+                  {page.selectedNode.memoryAnkiId}
+                </Badge>
+              ) : null}
+            </div>
           </CardHeader>
           <CardContent
             className={cn(
@@ -148,17 +176,10 @@ export default function PalaceEdit() {
           >
             {page.editorState ? (
               <MindMapFrame
-                key={`${page.palaceId}-${page.frameVersion}`}
                 editorState={page.editorState}
-                segments={page.segments
-                  .filter((segment) => !segment.is_virtual_default)
-                  .map((segment) => ({
-                    id: segment.id,
-                    name: segment.name,
-                    color: segment.color,
-                    created_at: segment.created_at,
-                    node_uids: segment.node_uids,
-                  }))}
+                syncOnPropChange
+                preserveViewOnSync
+                segments={page.hostSegments}
                 activeSegmentId={page.activeSegmentId}
                 segmentColorMode="all-with-active-emphasis"
                 segmentRangeDraft={{
@@ -175,12 +196,19 @@ export default function PalaceEdit() {
                   page.timer.registerActivity({ source: 'node_active' })
                   page.setSelectedNodes(nodes)
                 }}
+                onEdgeContextMenu={(edge) => {
+                  page.handleEdgeInsertIntermediate(edge.sourceUid, edge.targetUid)
+                }}
+                onEdgeDoubleClick={(edge) => {
+                  page.handleEdgeInsertIntermediate(edge.sourceUid, edge.targetUid)
+                }}
                 onSegmentSelect={page.setActiveSegmentId}
                 onCreateSegmentFromSelection={page.handleOpenCreateSegment}
                 onSegmentRangeDraftChange={page.handleSegmentRangeDraftChange}
                 onSegmentRangeModeToggle={page.handleSegmentRangeModeToggle}
                 onSegmentRangeConfirm={page.handleConfirmSegmentRange}
                 onFullscreenChange={page.setMindMapFullscreen}
+                focusRequest={page.focusRequest}
                 className={cn(
                   'w-full rounded-2xl border border-border/70 bg-white',
                   page.mindMapFullscreen ? 'h-full' : 'h-[64vh]',
@@ -212,6 +240,25 @@ export default function PalaceEdit() {
         onPreviewVersion={page.handlePreviewVersion}
         onRestoreVersion={page.handleRestoreVersion}
         onBackToList={page.resetVersionPreview}
+      />
+
+      <PalaceMindMapImportDrawer
+        open={page.mindMapImportOpen}
+        onOpenChange={(open) => {
+          page.setMindMapImportOpen(open)
+          if (!open) page.resetMindMapImportState()
+        }}
+        loading={page.mindMapImportLoading}
+        applying={page.mindMapImportApplying}
+        error={page.mindMapImportError}
+        sourceTree={page.mindMapImportSourceTree}
+        imagePreviewUrl={page.mindMapImportImagePreviewUrl}
+        targetNodeLabel={page.selectedNode?.text || ''}
+        canAppend={Boolean(page.selectedNode?.uid)}
+        onPaste={(event) => void page.handleMindMapImportPaste(event)}
+        onFileChange={(event) => void page.handleMindMapImportFileChange(event)}
+        onApplyReplace={() => void page.handleApplyMindMapImport('replace')}
+        onApplyAppend={() => void page.handleApplyMindMapImport('append')}
       />
     </div>
   )
