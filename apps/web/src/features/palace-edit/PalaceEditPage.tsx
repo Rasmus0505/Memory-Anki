@@ -59,6 +59,7 @@ export default function PalaceEdit() {
         <div className="space-y-4">
           <SessionTimerBar
             effectiveSeconds={page.timer.effectiveSeconds}
+            idleSeconds={page.timer.idleSeconds}
             pauseCount={page.timer.pauseCount}
             status={page.timer.status}
             onStart={() => page.timer.start({ source: 'manual' })}

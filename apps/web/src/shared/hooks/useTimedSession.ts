@@ -25,6 +25,7 @@ type GlowState = 'idle' | 'running' | 'paused'
 
 export interface TimedSessionController {
   effectiveSeconds: number
+  idleSeconds: number
   pauseCount: number
   status: SessionStatus
   startedAt: string | null
@@ -59,6 +60,7 @@ export function useTimedSession({
   hiddenPauseMs = HIDDEN_PAUSE_MS,
 }: TimedSessionOptions): TimedSessionController {
   const [effectiveSeconds, setEffectiveSeconds] = React.useState(0)
+  const [idleSeconds, setIdleSeconds] = React.useState(0)
   const [pauseCount, setPauseCount] = React.useState(0)
   const [status, setStatus] = React.useState<SessionStatus>('idle')
   const [startedAt, setStartedAt] = React.useState<string | null>(null)
@@ -67,8 +69,10 @@ export function useTimedSession({
 
   const statusRef = React.useRef<SessionStatus>('idle')
   const lastTickAtRef = React.useRef<number | null>(null)
+  const lastActivityAtRef = React.useRef<number | null>(null)
   const eventsRef = React.useRef<SessionEventRecord[]>([])
   const effectiveSecondsRef = React.useRef(0)
+  const idleSecondsRef = React.useRef(0)
   const pauseCountRef = React.useRef(0)
   const startedAtRef = React.useRef<string | null>(null)
   const durationEditedRef = React.useRef(false)
@@ -103,10 +107,15 @@ export function useTimedSession({
       effectiveSecondsRef.current += diffSeconds
       setEffectiveSeconds(effectiveSecondsRef.current)
       lastTickAtRef.current += diffSeconds * 1000
-      return
-    }
-    if (elapsedMs > 0 && elapsedMs < 1000) {
+    } else if (elapsedMs > 0 && elapsedMs < 1000) {
       lastTickAtRef.current = currentMs - elapsedMs
+    }
+    if (lastActivityAtRef.current != null) {
+      const nextIdle = Math.floor((currentMs - lastActivityAtRef.current) / 1000)
+      if (nextIdle !== idleSecondsRef.current) {
+        idleSecondsRef.current = nextIdle
+        setIdleSeconds(nextIdle)
+      }
     }
   }, [])
 
@@ -121,6 +130,10 @@ export function useTimedSession({
       setStatus('paused')
       setGlowState('paused')
       syncTick()
+      effectiveSecondsRef.current = Math.max(0, effectiveSecondsRef.current - 60)
+      setEffectiveSeconds(effectiveSecondsRef.current)
+      idleSecondsRef.current = 0
+      setIdleSeconds(0)
       pushEvent('pause', { reason: 'inactive' })
     }, autoPauseMs)
   }, [autoPauseMs, clearTimer, pushEvent, syncTick])
@@ -143,6 +156,9 @@ export function useTimedSession({
     const nextStartedAt = startedAtRef.current ?? nowIso()
     setStartedAt(nextStartedAt)
     startedAtRef.current = nextStartedAt
+    lastActivityAtRef.current = Date.now()
+    idleSecondsRef.current = 0
+    setIdleSeconds(0)
     statusRef.current = 'running'
     setStatus('running')
     setGlowState('running')
@@ -189,6 +205,7 @@ export function useTimedSession({
       return
     }
     if (statusRef.current === 'running') {
+      lastActivityAtRef.current = Date.now()
       armAutoPause()
     }
   }, [armAutoPause, resume, start])
@@ -251,10 +268,13 @@ export function useTimedSession({
     clearTimer(hiddenPauseRef)
     eventsRef.current = []
     effectiveSecondsRef.current = 0
+    idleSecondsRef.current = 0
     pauseCountRef.current = 0
     startedAtRef.current = null
+    lastActivityAtRef.current = null
     durationEditedRef.current = false
     setEffectiveSeconds(0)
+    setIdleSeconds(0)
     setPauseCount(0)
     setStartedAt(null)
     setDurationEdited(false)
@@ -314,6 +334,7 @@ export function useTimedSession({
 
   return {
     effectiveSeconds,
+    idleSeconds,
     pauseCount,
     status,
     startedAt,

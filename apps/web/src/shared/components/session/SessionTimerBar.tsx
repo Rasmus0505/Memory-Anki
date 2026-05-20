@@ -6,6 +6,7 @@ import { Input } from '@/shared/components/ui/input'
 
 interface SessionTimerBarProps {
   effectiveSeconds: number
+  idleSeconds?: number
   pauseCount: number
   status: 'idle' | 'running' | 'paused' | 'completed'
   onStart: () => void
@@ -37,6 +38,7 @@ function inputValueToSeconds(value: string) {
 
 export function SessionTimerBar({
   effectiveSeconds,
+  idleSeconds = 0,
   pauseCount,
   status,
   onStart,
@@ -100,6 +102,9 @@ export function SessionTimerBar({
           <div>
             <div className="text-2xl font-semibold text-foreground">{formatDuration(effectiveSeconds)}</div>
             <div className="mt-1 text-xs text-muted-foreground">已暂停 {pauseCount} 次</div>
+            {isRunning && idleSeconds > 0 ? (
+              <div className="text-xs text-orange-500">闲置 {idleSeconds} 秒</div>
+            ) : null}
           </div>
           {showRestartAction && onRestart ? (
             <Button type="button" variant="ghost" size="sm" onClick={onRestart}>
