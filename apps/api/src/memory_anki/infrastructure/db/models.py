@@ -95,6 +95,20 @@ class Palace(Base):
         order_by="PalaceSegment.sort_order",
     )
 
+    primary_chapter_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("chapters.id"), nullable=True
+    )
+    group_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    group_sort_order: Mapped[int] = mapped_column(Integer, default=0)
+    title_mode: Mapped[str] = mapped_column(String(20), default="sync")
+    manual_title: Mapped[str] = mapped_column(String(200), default="")
+    grouping_mode: Mapped[str] = mapped_column(String(20), default="auto")
+    manual_group_chapter_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    primary_chapter: Mapped["Chapter | None"] = relationship(
+        "Chapter", foreign_keys=[primary_chapter_id], lazy="joined"
+    )
+
 
 class Peg(Base):
     __tablename__ = "pegs"
@@ -387,6 +401,16 @@ class PalaceVersion(Base):
     created_at: Mapped[datetime | None] = mapped_column(DateTime, default=utc_now_naive)
 
     palace: Mapped[Palace] = relationship("Palace", back_populates="versions")
+
+
+class PalaceGroup(Base):
+    __tablename__ = "palace_groups"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(200), nullable=False, default="")
+    color: Mapped[str] = mapped_column(String(24), nullable=False, default="#6366f1")
+    sort_order: Mapped[int] = mapped_column(Integer, default=0)
+    source_chapter_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
 
 class TimeRecord(Base):
