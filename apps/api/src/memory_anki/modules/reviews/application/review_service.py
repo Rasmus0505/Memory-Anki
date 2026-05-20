@@ -17,18 +17,19 @@ from memory_anki.infrastructure.db.models import (
 )
 from memory_anki.modules.palaces.application.palace_service import restore_archived_palaces
 from memory_anki.modules.palaces.application.segment_service import (
+    _rebuild_palace_review_schedules,
+    _rebuild_segment_review_schedules,
     build_segments_editor_doc,
     create_segment_review_log,
     ensure_segment_schedule_model,
     estimate_segment_review_seconds,
     is_segment_schedule_due,
     is_segment_schedule_overdue,
+    repair_all_review_stage_progress,
     segment_summary_json,
 )
 from memory_anki.modules.reviews.application.schedule_service import (
     create_initial_review_schedules,
-    create_review_schedule,
-    ensure_palace_review_schedule_model,
     get_algorithm_intervals,
     get_config_value,
     is_schedule_due,
@@ -390,10 +391,6 @@ def submit_review(
     schedule = session.query(ReviewSchedule).filter_by(id=schedule_id).first()
     if not schedule:
         return None, {}
-    ensure_palace_review_schedule_model(session, schedule.palace_id)
-    schedule = session.query(ReviewSchedule).filter_by(id=schedule_id).first()
-    if not schedule:
-        return None, {}
 
     if not schedule.palace or not is_schedule_due(schedule, schedule.palace, session):
         return None, {}
@@ -409,41 +406,20 @@ def submit_review(
         duration_seconds=duration_seconds,
     )
     session.add(log)
-    schedule.completed = True
-    schedule.completed_at = completed_at
     extra: dict[str, bool] = {}
     algorithm = normalize_algorithm(schedule.algorithm_used)
     intervals = get_algorithm_intervals(session, algorithm)
     next_review_number = schedule.review_number + 1
 
+    _rebuild_palace_review_schedules(
+        session,
+        palace,
+        completed_count=min(next_review_number, len(intervals)),
+        completed_review_number=schedule.review_number,
+        completed_at=completed_at,
+    )
     if next_review_number >= len(intervals):
-        palace.mastered = True
         extra["mastered"] = True
-    else:
-        existing_next_schedule = (
-            session.query(ReviewSchedule)
-            .filter(
-                ReviewSchedule.palace_id == schedule.palace_id,
-                ReviewSchedule.completed == False,
-                ReviewSchedule.review_number == next_review_number,
-            )
-            .order_by(ReviewSchedule.id.asc())
-            .first()
-        )
-        if existing_next_schedule is None:
-            next_schedule = create_review_schedule(
-                session=session,
-                palace_id=schedule.palace_id,
-                review_number=next_review_number,
-                algorithm=algorithm,
-                base_date=today,
-                anchor_date=schedule.anchor_date or today,
-                base_datetime=completed_at,
-                completed=False,
-            )
-            if next_schedule is None:
-                palace.mastered = True
-                extra["mastered"] = True
 
     session.flush()
     create_review_time_record(
@@ -480,58 +456,26 @@ def submit_segment_review(
         return None, {}
 
     completed_at = datetime.now().replace(second=0, microsecond=0)
-    today = completed_at.date()
     segment = schedule.segment
+    completed_review_number = schedule.review_number
     create_segment_review_log(
         session,
         segment=segment,
         duration_seconds=duration_seconds,
         completed_at=completed_at,
     )
-    schedule.completed = True
-    schedule.completed_at = completed_at
     extra: dict[str, bool] = {}
     algorithm = normalize_algorithm(schedule.algorithm_used)
     intervals = get_algorithm_intervals(session, algorithm)
     next_review_number = schedule.review_number + 1
 
-    if next_review_number < len(intervals):
-        existing_next_schedule = (
-            session.query(PalaceSegmentReviewSchedule)
-            .filter(
-                PalaceSegmentReviewSchedule.palace_segment_id == segment.id,
-                PalaceSegmentReviewSchedule.completed == False,
-                PalaceSegmentReviewSchedule.review_number == next_review_number,
-            )
-            .order_by(PalaceSegmentReviewSchedule.id.asc())
-            .first()
-        )
-        if existing_next_schedule is None:
-            next_schedule = create_review_schedule(
-                session=session,
-                palace_id=segment.palace_id,
-                review_number=next_review_number,
-                algorithm=algorithm,
-                base_date=today,
-                anchor_date=schedule.anchor_date or today,
-                base_datetime=completed_at,
-                completed=False,
-            )
-            if next_schedule is not None:
-                session.add(
-                    PalaceSegmentReviewSchedule(
-                        palace_segment_id=segment.id,
-                        scheduled_date=next_schedule.scheduled_date,
-                        scheduled_at=next_schedule.scheduled_at,
-                        interval_days=next_schedule.interval_days,
-                        algorithm_used=next_schedule.algorithm_used,
-                        completed=False,
-                        review_number=next_schedule.review_number,
-                        review_type=next_schedule.review_type,
-                        anchor_date=next_schedule.anchor_date,
-                    )
-                )
-                session.expunge(next_schedule)
+    _rebuild_segment_review_schedules(
+        session,
+        segment,
+        completed_count=min(next_review_number, len(intervals)),
+        completed_review_number=completed_review_number,
+        completed_at=completed_at,
+    )
 
     session.flush()
     create_review_time_record(
@@ -545,8 +489,21 @@ def submit_segment_review(
         completion_method=completion_mode or "manual_complete",
     )
     session.commit()
-    session.refresh(schedule)
-    return schedule, extra
+    completed_schedule = (
+        session.query(PalaceSegmentReviewSchedule)
+        .filter(
+            PalaceSegmentReviewSchedule.palace_segment_id == segment.id,
+            PalaceSegmentReviewSchedule.completed == True,
+            PalaceSegmentReviewSchedule.review_number == completed_review_number,
+        )
+        .order_by(PalaceSegmentReviewSchedule.id.desc())
+        .first()
+    )
+    return completed_schedule, extra
+
+
+def repair_review_stage_progress(session: Session) -> dict[str, Any]:
+    return repair_all_review_stage_progress(session)
 
 
 def build_batch_segment_review_session(
@@ -634,6 +591,7 @@ def submit_batch_segment_review(
             raise ValueError("存在不可用的分块复习任务。")
         if not is_segment_schedule_due(session, schedule.segment, schedule):
             raise ValueError("所选分块中包含未到期任务。")
+        segment_id = schedule.segment.id
         current_duration = per_segment_duration + (1 if index < duration_remainder else 0)
         submitted_schedule, _ = submit_segment_review(
             session,
@@ -643,7 +601,7 @@ def submit_batch_segment_review(
         )
         if not submitted_schedule:
             raise ValueError("提交多块复习失败。")
-        completed_segment_ids.append(schedule.segment.id)
+        completed_segment_ids.append(segment_id)
 
     return {
         "ok": True,

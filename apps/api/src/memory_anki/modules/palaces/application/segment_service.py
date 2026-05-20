@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import json
+from collections.abc import Callable
 from datetime import date, datetime, time, timedelta
 from typing import Any
 
@@ -12,16 +12,22 @@ from memory_anki.infrastructure.db.models import (
     PalaceSegment,
     PalaceSegmentReviewLog,
     PalaceSegmentReviewSchedule,
+    ReviewLog,
     ReviewSchedule,
 )
-from memory_anki.modules.mindmap.application.editor_state_service import (
-    NODE_UID_KEY,
-    _deserialize,
+from memory_anki.modules.palaces.application.segment_nodes import (
+    build_segments_editor_doc,
+    cleanup_segment_node_uids,
+    collect_doc_nodes_with_descendants,
+    normalize_segment_node_uids,
+    parse_segment_node_uids,
+    remaining_unclaimed_node_uids,
+    serialize_segment_node_uids,
 )
 from memory_anki.modules.reviews.application.schedule_service import (
     create_review_schedule,
-    get_algorithm_stage_labels,
     get_algorithm_intervals,
+    get_algorithm_stage_labels,
     get_config_value,
     get_initial_same_day_slot_count,
     is_schedule_due,
@@ -136,98 +142,6 @@ def ensure_segment_schema() -> None:
             "CREATE INDEX IF NOT EXISTS ix_segment_review_schedule_segment "
             "ON palace_segment_review_schedules (palace_segment_id, completed, review_number)"
         )
-
-
-def parse_segment_node_uids(raw: str | None) -> list[str]:
-    try:
-        data = json.loads(raw or "[]")
-    except Exception:
-        return []
-    if not isinstance(data, list):
-        return []
-    result: list[str] = []
-    for item in data:
-        text = str(item or "").strip()
-        if text and text not in result:
-            result.append(text)
-    return result
-
-
-def _serialize_node_uids(node_uids: list[str]) -> str:
-    return json.dumps(node_uids, ensure_ascii=False)
-
-
-def _collect_doc_nodes_with_descendants(editor_doc: Any) -> tuple[dict[str, set[str]], dict[str, str]]:
-    doc = _deserialize(editor_doc, {})
-    root = doc.get("root") if isinstance(doc, dict) else None
-    descendants: dict[str, set[str]] = {}
-    labels: dict[str, str] = {}
-
-    def walk(node: Any) -> set[str]:
-        if not isinstance(node, dict):
-            return set()
-        data = node.get("data") if isinstance(node.get("data"), dict) else {}
-        uid = str(data.get(NODE_UID_KEY) or "").strip()
-        text = str(data.get("text") or "").strip()
-        child_sets: set[str] = set()
-        children = node.get("children") if isinstance(node.get("children"), list) else []
-        for child in children:
-            child_sets.update(walk(child))
-        if uid:
-            labels[uid] = text or uid
-            child_sets.add(uid)
-            descendants[uid] = set(child_sets)
-        return child_sets
-
-    walk(root)
-    return descendants, labels
-
-
-def expand_segment_node_uids(palace: Palace, selected_node_uids: list[str]) -> list[str]:
-    descendants, _ = _collect_doc_nodes_with_descendants(palace.editor_doc)
-    expanded: list[str] = []
-    for uid in selected_node_uids:
-        for item in sorted(descendants.get(uid, {uid})):
-            if item not in expanded:
-                expanded.append(item)
-    return expanded
-
-
-def normalize_segment_node_uids(
-    session: Session,
-    palace: Palace,
-    selected_node_uids: list[str],
-    *,
-    exclude_segment_id: int | None = None,
-) -> list[str]:
-    expanded = expand_segment_node_uids(palace, selected_node_uids)
-    taken_uids: set[str] = set()
-    for segment in palace.segments:
-        if exclude_segment_id is not None and segment.id == exclude_segment_id:
-            continue
-        taken_uids.update(parse_segment_node_uids(segment.node_uids_json))
-    return [uid for uid in expanded if uid not in taken_uids]
-
-
-def cleanup_segment_node_uids(session: Session, palace: Palace) -> bool:
-    descendants, _ = _collect_doc_nodes_with_descendants(palace.editor_doc)
-    valid_uids = set(descendants.keys())
-    changed = False
-    claimed_uids: set[str] = set()
-    for segment in sorted(palace.segments, key=lambda item: (item.sort_order, item.id)):
-        next_uids: list[str] = []
-        for uid in parse_segment_node_uids(segment.node_uids_json):
-            if uid not in valid_uids or uid in claimed_uids:
-                changed = True
-                continue
-            next_uids.append(uid)
-            claimed_uids.add(uid)
-        if next_uids != parse_segment_node_uids(segment.node_uids_json):
-            segment.node_uids_json = _serialize_node_uids(next_uids)
-            changed = True
-    if changed:
-        session.flush()
-    return changed
 
 
 def _next_segment_name(palace: Palace) -> str:
@@ -451,14 +365,10 @@ def _segment_progress(
     total = len(intervals)
     if total <= 0:
         return 0, 0, 0.0
-    pending_schedules = sorted(
-        [schedule for schedule in (segment.review_schedules or []) if not schedule.completed],
-        key=lambda schedule: (schedule.review_number, schedule.id),
+    completed_count = _infer_completed_stage_count(
+        total=total,
+        schedules=segment.review_schedules or [],
     )
-    if pending_schedules:
-        completed_count = min(pending_schedules[0].review_number + 1, total)
-    else:
-        completed_count = min(len(segment.review_logs or []), total)
     return total, completed_count, completed_count / total
 
 
@@ -509,22 +419,48 @@ def _palace_anchor_date(palace: Palace) -> date:
 
 
 def _palace_stage_completed_count(session: Session, palace: Palace, total: int) -> int:
-    pending_schedules = sorted(
-        [schedule for schedule in (palace.review_schedules or []) if not schedule.completed],
-        key=lambda schedule: (schedule.review_number, schedule.id),
+    return _infer_completed_stage_count(
+        total=total,
+        schedules=palace.review_schedules or [],
+        mastered=palace.mastered,
     )
-    if pending_schedules:
-        completed = min(pending_schedules[0].review_number + 1, total)
-    else:
-        review_logs = [
-            log
-            for log in (palace.review_logs or [])
-            if getattr(log, "review_mode", "") == "review"
-        ]
-        completed = min(len(review_logs), total)
-    if palace.mastered and total > 0:
-        completed = total
-    return completed
+
+
+def palace_stage_progress(session: Session, palace: Palace) -> tuple[int, int, float]:
+    algorithm = _palace_algorithm(session, palace)
+    intervals = get_algorithm_intervals(session, algorithm)
+    if not intervals:
+        intervals = ["1", "2", "4", "7", "15", "30", "60"]
+    total = len(intervals)
+    if total <= 0:
+        return 0, 0, 0.0
+    completed = _palace_stage_completed_count(session, palace, total)
+    return total, completed, completed / total
+
+
+def _review_stages_json(
+    *,
+    stage_labels: list[str],
+    schedules: dict[int, Any],
+    completed_count: int,
+    scheduled_at_for: Callable[[Any | None], datetime | None],
+) -> list[dict[str, Any]]:
+    stages: list[dict[str, Any]] = []
+    for index, label in enumerate(stage_labels):
+        schedule = schedules.get(index)
+        completed = index < completed_count
+        stages.append(
+            {
+                "review_number": index,
+                "label": label,
+                "completed": completed,
+                "completed_at": _serialize_stage_datetime(
+                    schedule.completed_at if completed and schedule else None
+                ),
+                "scheduled_at": _serialize_stage_datetime(scheduled_at_for(schedule)),
+            }
+        )
+    return stages
 
 
 def segment_review_stages_json(
@@ -537,21 +473,16 @@ def segment_review_stages_json(
         for schedule in sorted(segment.review_schedules or [], key=lambda item: item.id)
     }
     _, completed_count, _ = _segment_progress(session, segment)
-    stages: list[dict[str, Any]] = []
-    for index, label in enumerate(stage_labels):
-        schedule = schedules.get(index)
-        due_at = get_segment_schedule_display_datetime(session, segment, schedule)
-        completed = index < completed_count
-        stages.append(
-            {
-                "review_number": index,
-                "label": label,
-                "completed": completed,
-                "completed_at": _serialize_stage_datetime(schedule.completed_at if completed and schedule else None),
-                "scheduled_at": _serialize_stage_datetime(due_at),
-            }
-        )
-    return stages
+    return _review_stages_json(
+        stage_labels=stage_labels,
+        schedules=schedules,
+        completed_count=completed_count,
+        scheduled_at_for=lambda schedule: get_segment_schedule_display_datetime(
+            session,
+            segment,
+            schedule,
+        ),
+    )
 
 
 def palace_review_stages_json(
@@ -564,21 +495,14 @@ def palace_review_stages_json(
         for schedule in sorted(palace.review_schedules or [], key=lambda item: item.id)
     }
     completed_count = _palace_stage_completed_count(session, palace, len(stage_labels))
-    stages: list[dict[str, Any]] = []
-    for index, label in enumerate(stage_labels):
-        schedule = schedules.get(index)
-        due_at = schedule_display_datetime(schedule, palace, session) if schedule else None
-        completed = index < completed_count
-        stages.append(
-            {
-                "review_number": index,
-                "label": label,
-                "completed": completed,
-                "completed_at": _serialize_stage_datetime(schedule.completed_at if completed and schedule else None),
-                "scheduled_at": _serialize_stage_datetime(due_at),
-            }
-        )
-    return stages
+    return _review_stages_json(
+        stage_labels=stage_labels,
+        schedules=schedules,
+        completed_count=completed_count,
+        scheduled_at_for=lambda schedule: (
+            schedule_display_datetime(schedule, palace, session) if schedule else None
+        ),
+    )
 
 
 def _copy_segment_schedule(
@@ -602,6 +526,200 @@ def _copy_segment_schedule(
     )
 
 
+def _coerce_stage_completed_at(
+    value: datetime | None,
+    *,
+    fallback: datetime | None = None,
+) -> datetime:
+    target = value or fallback or datetime.now()
+    return target.replace(second=0, microsecond=0)
+
+
+def _infer_completed_stage_count(
+    *,
+    total: int,
+    schedules: list[Any],
+    mastered: bool = False,
+    fallback_completed_count: int | None = None,
+) -> int:
+    if total <= 0:
+        return 0
+
+    completed_numbers = {
+        int(schedule.review_number)
+        for schedule in schedules
+        if getattr(schedule, "completed", False)
+    }
+    pending_numbers = sorted(
+        {
+            int(schedule.review_number)
+            for schedule in schedules
+            if not getattr(schedule, "completed", False)
+        }
+    )
+
+    completed_count = 0
+    while completed_count < total and completed_count in completed_numbers:
+        completed_count += 1
+
+    if pending_numbers:
+        completed_count = max(completed_count, min(pending_numbers[0], total))
+    if fallback_completed_count is not None:
+        completed_count = max(completed_count, min(fallback_completed_count, total))
+    if mastered and total > 0:
+        completed_count = total
+
+    return max(0, min(completed_count, total))
+
+
+def _schedule_display_or_completed_at(
+    schedule: Any,
+    *,
+    scheduled_at_for: Callable[[Any], datetime | None],
+) -> datetime | None:
+    return (
+        getattr(schedule, "completed_at", None)
+        or getattr(schedule, "scheduled_at", None)
+        or scheduled_at_for(schedule)
+    )
+
+
+def _collect_completed_stage_times(
+    *,
+    schedules: list[Any],
+    completed_count: int,
+) -> dict[int, datetime]:
+    completed_at_by_stage: dict[int, datetime] = {}
+    for review_number in range(completed_count):
+        matching = [
+            schedule
+            for schedule in schedules
+            if int(schedule.review_number) == review_number
+        ]
+        completed_schedule = next(
+            (schedule for schedule in matching if getattr(schedule, "completed", False)),
+            None,
+        )
+        if completed_schedule is None:
+            continue
+        completed_at_by_stage[review_number] = _coerce_stage_completed_at(
+            getattr(completed_schedule, "completed_at", None)
+        )
+    return completed_at_by_stage
+
+
+def _target_pending_review_numbers(
+    *,
+    completed_count: int,
+    total: int,
+    initial_slot_count: int,
+) -> list[int]:
+    if completed_count >= total:
+        return []
+    if completed_count < initial_slot_count:
+        return list(range(completed_count, min(initial_slot_count, total)))
+    return [completed_count]
+
+
+def _rebuild_palace_review_schedules(
+    session: Session,
+    palace: Palace,
+    *,
+    completed_count: int,
+    completed_review_number: int | None = None,
+    completed_at: datetime | None = None,
+    fallback_completed_count: int | None = None,
+    preserve_existing_progress: bool = True,
+) -> None:
+    algorithm = _palace_algorithm(session, palace)
+    intervals = get_algorithm_intervals(session, algorithm)
+    total = len(intervals)
+    safe_completed_count = max(0, min(completed_count, total))
+    anchor = _palace_anchor_date(palace)
+    initial_slot_count = max(1, get_initial_same_day_slot_count(session, algorithm))
+    existing_schedules = sorted(
+        list(palace.review_schedules or []),
+        key=lambda item: (item.review_number, item.id),
+    )
+
+    if preserve_existing_progress and fallback_completed_count is None:
+        fallback_completed_count = _infer_completed_stage_count(
+            total=total,
+            schedules=existing_schedules,
+            mastered=palace.mastered,
+        )
+
+    effective_completed_count = safe_completed_count
+    if preserve_existing_progress and fallback_completed_count is not None:
+        effective_completed_count = max(
+            safe_completed_count,
+            min(fallback_completed_count, total),
+        )
+    completed_at_by_stage = _collect_completed_stage_times(
+        schedules=existing_schedules,
+        completed_count=effective_completed_count,
+    )
+
+    if (
+        completed_review_number is not None
+        and 0 <= completed_review_number < effective_completed_count
+        and completed_at is not None
+    ):
+        completed_at_by_stage[completed_review_number] = _coerce_stage_completed_at(completed_at)
+    elif completed_at is not None and effective_completed_count > 0:
+        normalized_completed_at = _coerce_stage_completed_at(completed_at)
+        completed_at_by_stage[effective_completed_count - 1] = normalized_completed_at
+        for review_number in range(effective_completed_count):
+            completed_at_by_stage.setdefault(review_number, normalized_completed_at)
+
+    session.query(ReviewSchedule).filter_by(palace_id=palace.id).delete(
+        synchronize_session=False
+    )
+    session.flush()
+    session.expire(palace, ['review_schedules'])
+
+    previous_completed_at: datetime | None = None
+    for review_number in range(effective_completed_count):
+        stage_completed_at = _coerce_stage_completed_at(
+            completed_at_by_stage.get(review_number),
+            fallback=previous_completed_at,
+        )
+        base_datetime = previous_completed_at if review_number >= initial_slot_count else None
+        create_review_schedule(
+            session=session,
+            palace_id=palace.id,
+            review_number=review_number,
+            algorithm=algorithm,
+            base_date=anchor if base_datetime is None else base_datetime.date(),
+            anchor_date=anchor,
+            base_datetime=base_datetime,
+            completed=True,
+            completed_at=stage_completed_at,
+        )
+        previous_completed_at = stage_completed_at
+
+    palace.mastered = effective_completed_count >= total and total > 0
+    if not palace.mastered:
+        for review_number in _target_pending_review_numbers(
+            completed_count=effective_completed_count,
+            total=total,
+            initial_slot_count=initial_slot_count,
+        ):
+            base_datetime = previous_completed_at if review_number >= initial_slot_count else None
+            create_review_schedule(
+                session=session,
+                palace_id=palace.id,
+                review_number=review_number,
+                algorithm=algorithm,
+                base_date=anchor if base_datetime is None else base_datetime.date(),
+                anchor_date=anchor,
+                base_datetime=base_datetime,
+                completed=False,
+            )
+
+    session.flush()
+
+
 def _rebuild_segment_review_schedules(
     session: Session,
     segment: PalaceSegment,
@@ -615,30 +733,40 @@ def _rebuild_segment_review_schedules(
     total = len(intervals)
     safe_completed_count = max(0, min(completed_count, total))
     anchor = _get_segment_anchor_date(segment)
-    now = datetime.now().replace(second=0, microsecond=0)
     initial_slot_count = max(1, get_initial_same_day_slot_count(session, algorithm))
+    existing_schedules = sorted(
+        list(segment.review_schedules or []),
+        key=lambda item: (item.review_number, item.id),
+    )
+    completed_at_by_stage = _collect_completed_stage_times(
+        schedules=existing_schedules,
+        completed_count=safe_completed_count,
+    )
 
-    existing_completed_at = {
-        schedule.review_number: schedule.completed_at
-        for schedule in segment.review_schedules or []
-        if schedule.completed
-    }
     if (
         completed_review_number is not None
         and 0 <= completed_review_number < safe_completed_count
         and completed_at is not None
     ):
-        existing_completed_at[completed_review_number] = completed_at
-    for review_number in range(safe_completed_count):
-        if existing_completed_at.get(review_number) is None:
-            existing_completed_at[review_number] = completed_at or now
+        completed_at_by_stage[completed_review_number] = _coerce_stage_completed_at(completed_at)
+    elif completed_at is not None and safe_completed_count > 0:
+        normalized_completed_at = _coerce_stage_completed_at(completed_at)
+        completed_at_by_stage[safe_completed_count - 1] = normalized_completed_at
+        for review_number in range(safe_completed_count):
+            completed_at_by_stage.setdefault(review_number, normalized_completed_at)
 
-    for schedule in list(segment.review_schedules or []):
-        session.delete(schedule)
+    session.query(PalaceSegmentReviewSchedule).filter_by(
+        palace_segment_id=segment.id
+    ).delete(synchronize_session=False)
     session.flush()
+    session.expire(segment, ['review_schedules'])
 
     previous_completed_at: datetime | None = None
     for review_number in range(safe_completed_count):
+        stage_completed_at = _coerce_stage_completed_at(
+            completed_at_by_stage.get(review_number),
+            fallback=previous_completed_at,
+        )
         base_datetime = previous_completed_at if review_number >= initial_slot_count else None
         schedule = create_review_schedule(
             session=session,
@@ -649,7 +777,7 @@ def _rebuild_segment_review_schedules(
             anchor_date=anchor,
             base_datetime=base_datetime,
             completed=True,
-            completed_at=existing_completed_at[review_number],
+            completed_at=stage_completed_at,
         )
         if schedule is not None:
             session.add(
@@ -657,22 +785,17 @@ def _rebuild_segment_review_schedules(
                     segment,
                     schedule,
                     completed=True,
-                    completed_at=existing_completed_at[review_number],
+                    completed_at=stage_completed_at,
                 )
             )
             session.expunge(schedule)
-        previous_completed_at = existing_completed_at[review_number]
+        previous_completed_at = stage_completed_at
 
-    if safe_completed_count >= total:
-        session.flush()
-        return
-
-    if safe_completed_count < initial_slot_count:
-        pending_numbers = range(safe_completed_count, min(initial_slot_count, total))
-    else:
-        pending_numbers = range(safe_completed_count, safe_completed_count + 1)
-
-    for review_number in pending_numbers:
+    for review_number in _target_pending_review_numbers(
+        completed_count=safe_completed_count,
+        total=total,
+        initial_slot_count=initial_slot_count,
+    ):
         base_datetime = previous_completed_at if review_number >= initial_slot_count else None
         schedule = create_review_schedule(
             session=session,
@@ -731,67 +854,75 @@ def adjust_palace_default_segment_review_progress(
     completed_review_number = payload.get("completed_review_number")
     if completed_review_number is not None:
         completed_review_number = int(completed_review_number)
-    anchor = _palace_anchor_date(palace)
-    now = datetime.now().replace(second=0, microsecond=0)
-    initial_slot_count = max(1, get_initial_same_day_slot_count(session, algorithm))
-
-    existing_completed_at = {
-        schedule.review_number: schedule.completed_at
-        for schedule in palace.review_schedules or []
-        if schedule.completed
-    }
-    if (
-        completed_review_number is not None
-        and 0 <= completed_review_number < completed_count
-        and completed_at is not None
-    ):
-        existing_completed_at[completed_review_number] = completed_at
-    for review_number in range(completed_count):
-        if existing_completed_at.get(review_number) is None:
-            existing_completed_at[review_number] = completed_at or now
-
-    for schedule in list(palace.review_schedules or []):
-        session.delete(schedule)
-    session.flush()
-
-    previous_completed_at: datetime | None = None
-    for review_number in range(completed_count):
-        base_datetime = previous_completed_at if review_number >= initial_slot_count else None
-        create_review_schedule(
-            session=session,
-            palace_id=palace.id,
-            review_number=review_number,
-            algorithm=algorithm,
-            base_date=anchor if base_datetime is None else base_datetime.date(),
-            anchor_date=anchor,
-            base_datetime=base_datetime,
-            completed=True,
-            completed_at=existing_completed_at[review_number],
-        )
-        previous_completed_at = existing_completed_at[review_number]
-
-    palace.mastered = completed_count >= total and total > 0
-    if not palace.mastered:
-        if completed_count < initial_slot_count:
-            pending_numbers = range(completed_count, min(initial_slot_count, total))
-        else:
-            pending_numbers = range(completed_count, completed_count + 1)
-        for review_number in pending_numbers:
-            base_datetime = previous_completed_at if review_number >= initial_slot_count else None
-            create_review_schedule(
-                session=session,
-                palace_id=palace.id,
-                review_number=review_number,
-                algorithm=algorithm,
-                base_date=anchor if base_datetime is None else base_datetime.date(),
-                anchor_date=anchor,
-                base_datetime=base_datetime,
-                completed=False,
-            )
-
+    _rebuild_palace_review_schedules(
+        session,
+        palace,
+        completed_count=completed_count,
+        completed_review_number=completed_review_number,
+        completed_at=completed_at,
+        preserve_existing_progress=False,
+    )
     session.commit()
     session.refresh(palace)
     return palace
+
+
+def repair_all_review_stage_progress(session: Session) -> dict[str, Any]:
+    palace_count = 0
+    segment_count = 0
+
+    palaces = session.query(Palace).all()
+    for palace in palaces:
+        algorithm = _palace_algorithm(session, palace)
+        total = len(get_algorithm_intervals(session, algorithm))
+        review_logs = [
+            log
+            for log in (palace.review_logs or [])
+            if getattr(log, "review_mode", "") == "review"
+        ]
+        schedule_completed_count = _infer_completed_stage_count(
+            total=total,
+            schedules=palace.review_schedules or [],
+            mastered=palace.mastered,
+        )
+        fallback_completed_count = (
+            schedule_completed_count
+            if palace.review_schedules
+            else max(len(review_logs), schedule_completed_count)
+        )
+        _rebuild_palace_review_schedules(
+            session,
+            palace,
+            completed_count=fallback_completed_count,
+            fallback_completed_count=fallback_completed_count,
+        )
+        palace_count += 1
+
+    segments = session.query(PalaceSegment).all()
+    for segment in segments:
+        algorithm = _segment_algorithm(session, segment)
+        total = len(get_algorithm_intervals(session, algorithm))
+        schedule_completed_count = _infer_completed_stage_count(
+            total=total,
+            schedules=segment.review_schedules or [],
+        )
+        fallback_completed_count = (
+            schedule_completed_count
+            if segment.review_schedules
+            else max(len(segment.review_logs or []), schedule_completed_count)
+        )
+        _rebuild_segment_review_schedules(
+            session,
+            segment,
+            completed_count=fallback_completed_count,
+        )
+        segment_count += 1
+
+    session.commit()
+    return {
+        "palace_count": palace_count,
+        "segment_count": segment_count,
+    }
 
 
 def estimate_segment_review_seconds(segment: PalaceSegment) -> int:
@@ -814,7 +945,7 @@ def estimate_palace_review_seconds(palace: Palace) -> int:
     total_duration = sum(max(0, int(log.duration_seconds or 0)) for log in logs)
     if total_duration > 0 and logs:
         return max(60, round(total_duration / len(logs)))
-    descendants, _ = _collect_doc_nodes_with_descendants(palace.editor_doc)
+    descendants, _ = collect_doc_nodes_with_descendants(palace.editor_doc)
     node_count = len(descendants)
     if node_count > 0:
         return max(60, node_count * 45)
@@ -871,12 +1002,7 @@ def build_virtual_default_segment_summary(
     review_stage_progress: float,
     stage_labels: list[str],
 ) -> dict[str, Any] | None:
-    descendants, _ = _collect_doc_nodes_with_descendants(palace.editor_doc)
-    all_uids = set(descendants.keys())
-    claimed_uids: set[str] = set()
-    for segment in palace.segments:
-        claimed_uids.update(parse_segment_node_uids(segment.node_uids_json))
-    remaining_uids = sorted(uid for uid in all_uids if uid not in claimed_uids)
+    remaining_uids = remaining_unclaimed_node_uids(palace)
     if not remaining_uids:
         return None
 
@@ -911,6 +1037,24 @@ def build_virtual_default_segment_summary(
     }
 
 
+def build_palace_default_segment_summary(
+    session: Session,
+    palace: Palace,
+) -> dict[str, Any] | None:
+    total, completed, progress = palace_stage_progress(session, palace)
+    algorithm = _palace_algorithm(session, palace)
+    stage_labels = get_algorithm_stage_labels(session, algorithm)
+    return build_virtual_default_segment_summary(
+        palace,
+        session=session,
+        estimated_review_seconds=estimate_palace_review_seconds(palace),
+        review_stage_total=total,
+        review_stage_completed=completed,
+        review_stage_progress=progress,
+        stage_labels=stage_labels,
+    )
+
+
 def list_palace_segments(
     session: Session,
     palace: Palace,
@@ -926,12 +1070,7 @@ def list_palace_segments(
 
 
 def palace_has_virtual_default_segment(palace: Palace) -> bool:
-    descendants, _ = _collect_doc_nodes_with_descendants(palace.editor_doc)
-    all_uids = set(descendants.keys())
-    claimed_uids: set[str] = set()
-    for segment in palace.segments:
-        claimed_uids.update(parse_segment_node_uids(segment.node_uids_json))
-    return any(uid not in claimed_uids for uid in all_uids)
+    return bool(remaining_unclaimed_node_uids(palace))
 
 
 def get_segment_display_name(palace: Palace, segment: PalaceSegment) -> str:
@@ -956,7 +1095,7 @@ def create_palace_segment(
         palace_id=palace.id,
         name=str(payload.get("name") or "").strip() or _next_segment_name(palace),
         color=str(payload.get("color") or "").strip() or SEGMENT_COLOR_PALETTE[len(palace.segments) % len(SEGMENT_COLOR_PALETTE)],
-        node_uids_json=_serialize_node_uids(normalized_uids),
+        node_uids_json=serialize_segment_node_uids(normalized_uids),
         created_at=_parse_segment_datetime(payload.get("created_at")) or _default_segment_created_at(palace),
         sort_order=max([item.sort_order for item in palace.segments], default=-1) + 1,
     )
@@ -984,7 +1123,7 @@ def update_palace_segment(
     if "sort_order" in payload:
         segment.sort_order = max(0, int(payload.get("sort_order") or 0))
     if "node_uids" in payload:
-        segment.node_uids_json = _serialize_node_uids(
+        segment.node_uids_json = serialize_segment_node_uids(
             normalize_segment_node_uids(
                 session,
                 segment.palace,
@@ -1021,40 +1160,6 @@ def build_segment_editor_doc(palace: Palace, segment: PalaceSegment) -> dict[str
         palace,
         [parse_segment_node_uids(segment.node_uids_json)],
     )
-
-
-def build_segments_editor_doc(
-    palace: Palace,
-    segment_node_uid_lists: list[list[str]],
-) -> dict[str, Any]:
-    doc = _deserialize(palace.editor_doc, {})
-    if not isinstance(doc, dict):
-        fallback_title = palace.title or "未命名宫殿"
-        return {"root": {"data": {"text": fallback_title}, "children": []}}
-    selected_uids = {
-        uid
-        for node_uids in segment_node_uid_lists
-        for uid in node_uids
-    }
-    root = doc.get("root") if isinstance(doc.get("root"), dict) else {}
-
-    def keep(node: Any, is_root: bool = False) -> Any:
-        if not isinstance(node, dict):
-            return None
-        data = node.get("data") if isinstance(node.get("data"), dict) else {}
-        uid = str(data.get(NODE_UID_KEY) or "").strip()
-        children = node.get("children") if isinstance(node.get("children"), list) else []
-        next_children = [child for child in (keep(child) for child in children) if child]
-        if is_root or uid in selected_uids or next_children:
-            cloned = json.loads(json.dumps(node, ensure_ascii=False))
-            cloned["children"] = next_children
-            return cloned
-        return None
-
-    next_root = keep(root, True) or root
-    next_doc = json.loads(json.dumps(doc, ensure_ascii=False))
-    next_doc["root"] = next_root
-    return next_doc
 
 
 def create_segment_review_log(

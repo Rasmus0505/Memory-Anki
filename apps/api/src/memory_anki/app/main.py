@@ -19,10 +19,10 @@ from memory_anki.modules.backups.application.backup_service import (
 from memory_anki.modules.knowledge.presentation import router as knowledge_router
 from memory_anki.modules.mindmap.application.editor_state_service import ensure_editor_schema
 from memory_anki.modules.palaces.application.segment_service import ensure_segment_schema
+from memory_anki.modules.palaces.application.title_sync_service import ensure_palace_group_schema
 from memory_anki.modules.palaces.presentation import import_router
 from memory_anki.modules.palaces.presentation import router as palace_router
 from memory_anki.modules.reviews.application.schedule_service import (
-    ensure_current_review_schedule_model,
     ensure_review_schedule_schema,
     migrate_sm2_to_ebbinghaus,
     normalize_algorithm,
@@ -51,6 +51,7 @@ async def lifespan(app: FastAPI):
     init_db()
     ensure_editor_schema()
     ensure_segment_schema()
+    ensure_palace_group_schema()
     ensure_review_schedule_schema()
     ensure_session_progress_schema()
     session = get_session()
@@ -64,7 +65,6 @@ async def lifespan(app: FastAPI):
                 existing.value = normalize_algorithm(existing.value)
         session.commit()
         migrate_sm2_to_ebbinghaus(session)
-        ensure_current_review_schedule_model(session)
         ensure_review_log_time_records(session)
         normalize_time_record_event_timezones(session)
         ensure_daily_backup()

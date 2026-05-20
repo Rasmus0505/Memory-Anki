@@ -1,6 +1,7 @@
 """Review schedule policies."""
 
 from datetime import date, datetime, time, timedelta
+from typing import Any
 
 
 def normalize_algorithm(algorithm: str | None) -> str:
@@ -304,8 +305,94 @@ def infer_completed_stage_count(session, palace) -> int:
     return min(counted, len(intervals))
 
 
+def _infer_schedule_completed_stage_count(
+    *,
+    total: int,
+    schedules: list[Any],
+    mastered: bool = False,
+    fallback_completed_count: int | None = None,
+) -> int:
+    if total <= 0:
+        return 0
+
+    completed_numbers = {
+        int(schedule.review_number)
+        for schedule in schedules
+        if getattr(schedule, "completed", False)
+    }
+    pending_numbers = sorted(
+        {
+            int(schedule.review_number)
+            for schedule in schedules
+            if not getattr(schedule, "completed", False)
+        }
+    )
+
+    completed_count = 0
+    while completed_count < total and completed_count in completed_numbers:
+        completed_count += 1
+
+    # Legacy rows sometimes only stored the next pending review_number. Treat that
+    # as a lower-bound progress marker, but never let logs reduce schedule truth.
+    if pending_numbers:
+        completed_count = max(completed_count, min(pending_numbers[0], total))
+    if fallback_completed_count is not None:
+        completed_count = max(completed_count, min(fallback_completed_count, total))
+    if mastered and total > 0:
+        completed_count = total
+
+    return max(0, min(completed_count, total))
+
+
+def _review_log_completed_stage_count(session, palace, total: int) -> int:
+    if total <= 0:
+        return 0
+    return max(0, min(infer_completed_stage_count(session, palace), total))
+
+
+def _coerce_completed_at(value: datetime | None, fallback: datetime | None = None) -> datetime:
+    target = value or fallback or datetime.now()
+    return target.replace(second=0, microsecond=0)
+
+
+def _collect_completed_stage_times(
+    schedules: list[Any],
+    completed_count: int,
+) -> dict[int, datetime]:
+    completed_at_by_stage: dict[int, datetime] = {}
+    for review_number in range(completed_count):
+        matching = [
+            schedule
+            for schedule in schedules
+            if int(schedule.review_number) == review_number
+        ]
+        completed_schedule = next(
+            (schedule for schedule in matching if getattr(schedule, "completed", False)),
+            None,
+        )
+        if completed_schedule is None:
+            continue
+        completed_at_by_stage[review_number] = _coerce_completed_at(
+            getattr(completed_schedule, "completed_at", None)
+        )
+    return completed_at_by_stage
+
+
+def _target_pending_review_numbers(
+    *,
+    completed_count: int,
+    total: int,
+    initial_slot_count: int,
+) -> list[int]:
+    if completed_count >= total:
+        return []
+    if completed_count < initial_slot_count:
+        return list(range(completed_count, min(initial_slot_count, total)))
+    return [completed_count]
+
+
 def ensure_current_review_schedule_model(session) -> int:
-    from memory_anki.infrastructure.db.models import Palace, ReviewSchedule
+    from memory_anki.infrastructure.db.models import Palace
 
     palaces = session.query(Palace).all()
     changed = 0
@@ -355,6 +442,8 @@ def _select_preserved_schedule(schedules, palace, session):
 
 
 def _rebuild_palace_review_schedule_model(session, palace) -> int:
+    from memory_anki.infrastructure.db.models import ReviewSchedule
+
     schedules = sorted(
         list(palace.review_schedules or []),
         key=lambda schedule: (schedule.review_number, schedule.id),
@@ -371,58 +460,96 @@ def _rebuild_palace_review_schedule_model(session, palace) -> int:
     if not intervals:
         return 0
 
-    completed_stage_count = infer_completed_stage_count(session, palace)
+    completed_stage_count = _infer_schedule_completed_stage_count(
+        total=len(intervals),
+        schedules=schedules,
+        mastered=palace.mastered,
+        fallback_completed_count=_review_log_completed_stage_count(
+            session,
+            palace,
+            len(intervals),
+        )
+        if not schedules
+        else None,
+    )
     initial_slot_count = max(1, get_initial_same_day_slot_count(session, algorithm))
     anchor = _resolve_anchor_date(palace, schedules)
+    completed_at_by_stage = _collect_completed_stage_times(
+        schedules,
+        completed_stage_count,
+    )
 
-    existing_pending_by_stage: dict[int, list] = {}
-    for schedule in schedules:
-        if not schedule.completed:
-            existing_pending_by_stage.setdefault(schedule.review_number, []).append(schedule)
-
-    changed = len(schedules)
-    for schedule in schedules:
-        session.delete(schedule)
+    changed = 0
+    if schedules:
+        changed += len(schedules)
+    session.query(ReviewSchedule).filter_by(palace_id=palace.id).delete(
+        synchronize_session=False
+    )
+    session.flush()
+    session.expire(palace, ['review_schedules'])
 
     palace.mastered = completed_stage_count >= len(intervals)
-    if palace.mastered:
-        session.flush()
-        return changed
 
-    if completed_stage_count < initial_slot_count:
-        for review_number in range(completed_stage_count, initial_slot_count):
-            create_review_schedule(
+    previous_completed_at: datetime | None = None
+    for review_number in range(completed_stage_count):
+        stage_completed_at = _coerce_completed_at(
+            completed_at_by_stage.get(review_number),
+            previous_completed_at,
+        )
+        base_datetime = previous_completed_at if review_number >= initial_slot_count else None
+        if create_review_schedule(
+            session=session,
+            palace_id=palace.id,
+            review_number=review_number,
+            algorithm=algorithm,
+            base_date=anchor if base_datetime is None else base_datetime.date(),
+            anchor_date=anchor,
+            base_datetime=base_datetime,
+            completed=True,
+            completed_at=stage_completed_at,
+        ):
+            changed += 1
+        previous_completed_at = stage_completed_at
+
+    if not palace.mastered:
+        for review_number in _target_pending_review_numbers(
+            completed_count=completed_stage_count,
+            total=len(intervals),
+            initial_slot_count=initial_slot_count,
+        ):
+            preserved_schedule = _select_preserved_schedule(
+                [
+                    schedule
+                    for schedule in schedules
+                    if not schedule.completed and schedule.review_number == review_number
+                ],
+                palace,
                 session,
+            )
+            base_datetime = previous_completed_at if review_number >= initial_slot_count else None
+            created_schedule = create_review_schedule(
+                session=session,
                 palace_id=palace.id,
                 review_number=review_number,
                 algorithm=algorithm,
-                base_date=anchor,
+                base_date=anchor if base_datetime is None else base_datetime.date(),
                 anchor_date=anchor,
+                base_datetime=base_datetime,
                 completed=False,
             )
+            if created_schedule is None:
+                continue
+            if (
+                preserved_schedule is not None
+                and preserved_schedule.scheduled_date
+                and preserved_schedule.scheduled_date >= date.today()
+            ):
+                created_schedule.scheduled_date = preserved_schedule.scheduled_date
+                created_schedule.scheduled_at = getattr(preserved_schedule, "scheduled_at", None)
+                created_schedule.interval_days = preserved_schedule.interval_days
+                created_schedule.review_type = preserved_schedule.review_type
+                created_schedule.anchor_date = preserved_schedule.anchor_date or anchor
             changed += 1
-        session.flush()
-        return changed
-
-    preserved_schedule = _select_preserved_schedule(
-        existing_pending_by_stage.get(completed_stage_count, []),
-        palace,
-        session,
-    )
-    created_schedule = create_review_schedule(
-        session,
-        palace_id=palace.id,
-        review_number=completed_stage_count,
-        algorithm=algorithm,
-        base_date=date.today(),
-        anchor_date=anchor,
-        completed=False,
-    )
-    if created_schedule is not None:
-        if preserved_schedule is not None and preserved_schedule.scheduled_date and preserved_schedule.scheduled_date >= date.today():
-            created_schedule.scheduled_date = preserved_schedule.scheduled_date
-            created_schedule.scheduled_at = getattr(preserved_schedule, "scheduled_at", None)
-        changed += 1
 
     session.flush()
     return changed
