@@ -124,6 +124,22 @@ export function collectNodeIds(root: ReviewMindMapNode) {
   return ids
 }
 
+export function hideNodeAndDescendants(
+  nodeId: string,
+  nodeMap: Map<string, ReviewMindMapNode>,
+  revealMap: Record<string, RevealState>,
+): Record<string, RevealState> {
+  const next = { ...revealMap }
+  const root = nodeMap.get(nodeId)
+  if (!root) return next
+  const walk = (node: ReviewMindMapNode) => {
+    next[node.id] = 'hidden'
+    node.children.forEach(walk)
+  }
+  root.children.forEach(walk)
+  return next
+}
+
 export function sanitizeRedNodeIds(
   root: ReviewMindMapNode,
   previous: Iterable<string>,

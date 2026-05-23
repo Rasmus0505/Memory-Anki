@@ -118,7 +118,6 @@ export default function SegmentPracticePage() {
               await clearSegmentPracticeSessionProgressApi(segment.id)
               setHasResumeProgress(false)
               setInitialSnapshot(null)
-              setFlowKey((value) => value + 1)
             }}
             onComplete={async () => {
               await clearSegmentPracticeSessionProgressApi(segment.id)

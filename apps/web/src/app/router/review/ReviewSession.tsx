@@ -21,6 +21,7 @@ import {
   MindMapReviewFlow,
   type ReviewFlowSnapshot,
 } from '@/features/review/components/MindMapReviewFlow'
+import { StageSelectDialog } from '@/features/review/components/StageSelectDialog'
 
 function formatReviewStage(reviewType: string, reviewNumber: number) {
   if (reviewType === '1h') return '首日 1 小时'
@@ -42,6 +43,13 @@ export default function ReviewSession() {
   const [editorState, setEditorState] = useState<MindMapEditorState | null>(null)
   const [initialSnapshot, setInitialSnapshot] = useState<ReviewFlowSnapshot | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  const [stageDialogOpen, setStageDialogOpen] = useState(false)
+  const [pendingPayload, setPendingPayload] = useState<{
+    durationSeconds: number
+    completionMode: 'manual_complete' | 'auto_complete'
+    revealedRemaining: boolean
+    redNodeIds: string[]
+  } | null>(null)
 
   useEffect(() => {
     if (!id) return
@@ -83,28 +91,48 @@ export default function ReviewSession() {
     redNodeIds: string[]
   }) => {
     if (!session) return
+    await clearReviewSessionProgressApi(session.id)
+    if (payload.completionMode === 'auto_complete') {
+      setSubmitting(true)
+      try {
+        await submitReviewSessionApi(session.id, {
+          chapter_id: chapterId ?? undefined,
+          duration_seconds: payload.durationSeconds,
+          completion_mode: payload.completionMode,
+          revealed_remaining: payload.revealedRemaining,
+          red_marked_count: payload.redNodeIds.length,
+        })
+      } finally {
+        setSubmitting(false)
+      }
+      return
+    }
+    setPendingPayload(payload)
+    setStageDialogOpen(true)
+  }
+
+  const handleStageConfirm = async (targetReviewNumber: number) => {
+    if (!session || !pendingPayload) return
+    setStageDialogOpen(false)
     setSubmitting(true)
     try {
-      await clearReviewSessionProgressApi(session.id)
-      const result = await submitReviewSessionApi(session.id, {
+      await submitReviewSessionApi(session.id, {
         chapter_id: chapterId ?? undefined,
-        duration_seconds: payload.durationSeconds,
-        completion_mode: payload.completionMode,
-        revealed_remaining: payload.revealedRemaining,
-        red_marked_count: payload.redNodeIds.length,
+        duration_seconds: pendingPayload.durationSeconds,
+        completion_mode: pendingPayload.completionMode,
+        revealed_remaining: pendingPayload.revealedRemaining,
+        red_marked_count: pendingPayload.redNodeIds.length,
+        target_review_number: targetReviewNumber,
       })
-      if (result.next_id) {
-        const nextHref =
-          chapterId == null
-            ? `/review/session/${result.next_id}`
-            : `/review/session/${result.next_id}?chapterId=${chapterId}`
-        navigate(nextHref)
-      } else {
-        navigate(nextOverviewHref(chapterId))
-      }
     } finally {
       setSubmitting(false)
+      setPendingPayload(null)
     }
+  }
+
+  const handleStageCancel = () => {
+    setStageDialogOpen(false)
+    setPendingPayload(null)
   }
 
   if (!session || !palace || !editorState) {
@@ -198,6 +226,17 @@ export default function ReviewSession() {
           </Card>
         </div>
       </div>
+
+      {palace?.stage_labels && palace?.review_stages && (
+        <StageSelectDialog
+          open={stageDialogOpen}
+          stageLabels={palace.stage_labels}
+          stages={palace.review_stages}
+          currentReviewNumber={session.review_number}
+          onConfirm={handleStageConfirm}
+          onCancel={handleStageCancel}
+        />
+      )}
     </div>
   )
 }

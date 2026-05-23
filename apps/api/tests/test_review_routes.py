@@ -1,7 +1,7 @@
 import json
 import tempfile
 import unittest
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -10,6 +10,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
+import memory_anki.app.main as main_module
 from memory_anki.infrastructure.db.models import Base, Config, Palace, PalaceSegment, PalaceSegmentReviewSchedule, PalaceVersion, ReviewLog, ReviewSchedule, TimeRecord
 from memory_anki.modules.backups.application.backup_service import (
     ROLLING_EDIT_BACKUP_INTERVAL,
@@ -559,6 +560,90 @@ class ReviewRouteTests(unittest.TestCase):
             self.assertEqual(get_weekly_formal_review_duration_seconds(session), 0)
             self.assertEqual(get_today_total_review_duration_seconds(session), 180)
             self.assertEqual(get_weekly_total_review_duration_seconds(session), 180)
+
+    def test_dashboard_returns_today_learning_and_today_new_palaces(self):
+        original_main_get_session = main_module.get_session
+
+        def get_test_session():
+            return self.SessionLocal()
+
+        main_module.get_session = get_test_session
+        dashboard_client = TestClient(main_module.app)
+        try:
+            with self.SessionLocal() as session:
+                palace = session.query(Palace).filter_by(id=1).first()
+                self.assertIsNotNone(palace)
+                palace.created_at = datetime.combine(date.today(), time(hour=9))
+                palace.updated_at = palace.created_at
+
+                second_palace = Palace(
+                    title="Ungrouped Palace",
+                    description="",
+                    created_at=datetime.combine(date.today(), time(hour=10)),
+                    updated_at=datetime.combine(date.today(), time(hour=10)),
+                )
+                session.add(second_palace)
+                session.flush()
+
+                now = datetime.now().replace(microsecond=0)
+                session.add_all(
+                    [
+                        TimeRecord(
+                            id="review-dashboard",
+                            kind="review",
+                            palace_id=palace.id,
+                            title="Test Palace",
+                            started_at=now - timedelta(seconds=360),
+                            ended_at=now,
+                            effective_seconds=360,
+                            pause_count=0,
+                            completion_method="manual_complete",
+                            duration_edited=False,
+                            events_json="[]",
+                        ),
+                        TimeRecord(
+                            id="practice-dashboard",
+                            kind="practice",
+                            palace_id=palace.id,
+                            title="Test Palace",
+                            started_at=now - timedelta(seconds=180),
+                            ended_at=now,
+                            effective_seconds=180,
+                            pause_count=0,
+                            completion_method="manual_complete",
+                            duration_edited=False,
+                            events_json="[]",
+                        ),
+                        TimeRecord(
+                            id="edit-dashboard",
+                            kind="palace_edit",
+                            palace_id=second_palace.id,
+                            title="Ungrouped Palace",
+                            started_at=now - timedelta(seconds=240),
+                            ended_at=now,
+                            effective_seconds=240,
+                            pause_count=0,
+                            completion_method="saved",
+                            duration_edited=False,
+                            events_json="[]",
+                        ),
+                    ]
+                )
+                session.commit()
+
+            response = dashboard_client.get("/api/v1/dashboard")
+            self.assertEqual(response.status_code, 200)
+            payload = response.json()
+            self.assertEqual(payload["today_new_palace_count"], 2)
+            self.assertEqual(len(payload["today_learning_palaces"]), 2)
+            self.assertEqual(payload["today_learning_palaces"][0]["palace_title"], "Test Palace")
+            self.assertEqual(payload["today_learning_palaces"][0]["total_seconds"], 540)
+            self.assertEqual(payload["today_learning_palaces"][0]["review_seconds"], 360)
+            self.assertEqual(payload["today_learning_palaces"][0]["practice_seconds"], 180)
+            self.assertEqual(payload["today_learning_palaces"][0]["palace_edit_seconds"], 0)
+            self.assertTrue(any(subject["ungrouped_palaces"] for subject in payload["today_new_palaces"]))
+        finally:
+            main_module.get_session = original_main_get_session
 
     def test_create_review_time_record_respects_threshold(self):
         with self.SessionLocal() as session:

@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -m pytest apps/api/tests/test_review_routes.py -v)",
+      "Bash(python -c ' *)",
+      "Bash(sqlite3 *)",
+      "Bash(python -c \"from memory_anki.app.main import app; print\\('import ok'\\)\")",
+      "Bash(PYTHONPATH=src python -c \"from memory_anki.app.main import app; print\\('Server import OK'\\)\")",
+      "Bash(npx tsc *)",
+      "Bash(python -m pytest tests/test_review_routes.py -v)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)",
+      "mcp__Claude_Preview__preview_start"
+    ]
+  }
+}

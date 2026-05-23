@@ -1,4 +1,4 @@
-import { Maximize2, Minimize2, RotateCcw, Sparkles, SquareCheckBig } from 'lucide-react'
+import { RotateCcw, Sparkles, SquareCheckBig } from 'lucide-react'
 import { MindMapFrame, type MindMapSelection } from '@/shared/components/mindmap-host'
 import type { MindMapEditorState } from '@/shared/api/contracts'
 import { Badge } from '@/shared/components/ui/badge'
@@ -10,7 +10,7 @@ interface ReviewFlowMapPanelProps {
   visibleNonRootCount: number
   totalNodeCount: number
   fullscreen: boolean
-  onToggleFullscreen: () => void
+  onToggleFullscreen: (active?: boolean) => void
   onRestart?: () => void
   onComplete: () => void
   submitting: boolean
@@ -53,19 +53,6 @@ export function ReviewFlowMapPanel({
             已出现 {visibleNonRootCount} / {Math.max(totalNodeCount - 1, 0)}
           </Badge>
           <Badge variant="secondary">翻卡模式</Badge>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={onToggleFullscreen}
-          >
-            {fullscreen ? (
-              <Minimize2 className="mr-2 h-4 w-4" />
-            ) : (
-              <Maximize2 className="mr-2 h-4 w-4" />
-            )}
-            {fullscreen ? '退出全屏' : '全屏导图'}
-          </Button>
         </div>
       </div>
 
@@ -92,12 +79,19 @@ export function ReviewFlowMapPanel({
         <MindMapFrame
           editorState={visibleEditorState}
           readonly
-          showToolbarWhenReadonly={false}
+          showToolbarWhenReadonly
+          immersiveModeActive={fullscreen}
           syncOnPropChange
           preserveViewOnSync
           onEditorStateChange={() => {}}
           onNodeClick={onNodeClick}
           onNodeContextMenu={onNodeContextMenu}
+          onFullscreenToggle={onToggleFullscreen}
+          onFullscreenChange={(active) => {
+            if (!active) {
+              onToggleFullscreen(false)
+            }
+          }}
           className={cn(
             'w-full rounded-2xl border border-border/70 bg-white',
             fullscreen ? 'h-full' : 'h-[68vh]',

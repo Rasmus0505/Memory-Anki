@@ -7,6 +7,11 @@ import {
   type SessionKind,
   type TimeSessionRecord,
 } from '@/entities/session/model'
+import {
+  getTimerAutomationRule,
+  readTimerAutomationConfig,
+  type TimerAutomationConfig,
+} from '@/shared/components/session/timer-automation-config'
 import { formatLocalApiDateTime } from '@/shared/lib/dateTime'
 
 const AUTO_PAUSE_MS = 2 * 60 * 1000
@@ -18,6 +23,7 @@ export interface TimedSessionOptions {
   palaceId: number | null
   autoPauseMs?: number
   hiddenPauseMs?: number
+  persistKey?: string | null
 }
 
 type SessionStatus = 'idle' | 'running' | 'paused' | 'completed'
@@ -44,6 +50,26 @@ export interface TimedSessionController {
   reset: () => void
 }
 
+interface PersistedTimedSessionSnapshot {
+  version: 1
+  kind: SessionKind
+  palaceId: number | null
+  title: string
+  effectiveSeconds: number
+  pauseCount: number
+  status: SessionStatus
+  startedAt: string | null
+  durationEdited: boolean
+  events: SessionEventRecord[]
+  persistedAt: string
+}
+
+interface ResolvedTimedSessionAutomation {
+  autoPauseMs: number
+  hiddenPauseMs: number
+  autoPauseRollbackSeconds: number
+}
+
 function nowIso() {
   return formatLocalApiDateTime(new Date())
 }
@@ -56,8 +82,9 @@ export function useTimedSession({
   kind,
   title,
   palaceId,
-  autoPauseMs = AUTO_PAUSE_MS,
-  hiddenPauseMs = HIDDEN_PAUSE_MS,
+  autoPauseMs,
+  hiddenPauseMs,
+  persistKey = null,
 }: TimedSessionOptions): TimedSessionController {
   const [effectiveSeconds, setEffectiveSeconds] = React.useState(0)
   const [idleSeconds, setIdleSeconds] = React.useState(0)
@@ -79,6 +106,65 @@ export function useTimedSession({
   const tickerRef = React.useRef<number | null>(null)
   const autoPauseRef = React.useRef<number | null>(null)
   const hiddenPauseRef = React.useRef<number | null>(null)
+  const restoredRef = React.useRef(false)
+  const [automationConfig, setAutomationConfig] = React.useState<TimerAutomationConfig>(() =>
+    readTimerAutomationConfig(),
+  )
+
+  const resolvedAutomation = React.useMemo<ResolvedTimedSessionAutomation>(() => {
+    const sceneRule = getTimerAutomationRule(kind, automationConfig)
+    return {
+      autoPauseMs: Math.max(
+        0,
+        Math.round((autoPauseMs ?? sceneRule.inactiveAutoPauseSeconds) * 1000),
+      ),
+      hiddenPauseMs: Math.max(
+        0,
+        Math.round((hiddenPauseMs ?? sceneRule.hiddenAutoPauseSeconds) * 1000),
+      ),
+      autoPauseRollbackSeconds: Math.max(0, Math.round(sceneRule.autoPauseRollbackSeconds)),
+    }
+  }, [autoPauseMs, automationConfig, hiddenPauseMs, kind])
+
+  const storageKey = React.useMemo(
+    () => (persistKey ? `memory-anki-timed-session:${persistKey}` : null),
+    [persistKey],
+  )
+
+  const clearPersistedSnapshot = React.useCallback(() => {
+    if (!storageKey) return
+    try {
+      window.sessionStorage.removeItem(storageKey)
+    } catch {
+      // Ignore storage errors in private mode or restricted environments.
+    }
+  }, [storageKey])
+
+  const persistSnapshot = React.useCallback(() => {
+    if (!storageKey) return
+    if (!startedAtRef.current || statusRef.current === 'idle' || statusRef.current === 'completed') {
+      clearPersistedSnapshot()
+      return
+    }
+    const snapshot: PersistedTimedSessionSnapshot = {
+      version: 1,
+      kind,
+      palaceId,
+      title,
+      effectiveSeconds: effectiveSecondsRef.current,
+      pauseCount: pauseCountRef.current,
+      status: statusRef.current,
+      startedAt: startedAtRef.current,
+      durationEdited: durationEditedRef.current,
+      events: [...eventsRef.current],
+      persistedAt: nowIso(),
+    }
+    try {
+      window.sessionStorage.setItem(storageKey, JSON.stringify(snapshot))
+    } catch {
+      // Ignore storage errors in private mode or restricted environments.
+    }
+  }, [clearPersistedSnapshot, kind, palaceId, storageKey, title])
 
   const clearTimer = React.useCallback((ref: React.MutableRefObject<number | null>) => {
     if (ref.current != null) {
@@ -96,7 +182,8 @@ export function useTimedSession({
 
   const pushEvent = React.useCallback((type: SessionEventRecord['type'], meta?: Record<string, boolean | number | string | null>) => {
     eventsRef.current.push({ type, at: nowIso(), ...(meta ? { meta } : {}) })
-  }, [])
+    persistSnapshot()
+  }, [persistSnapshot])
 
   const syncTick = React.useCallback(() => {
     if (statusRef.current !== 'running' || lastTickAtRef.current == null) return
@@ -117,7 +204,8 @@ export function useTimedSession({
         setIdleSeconds(nextIdle)
       }
     }
-  }, [])
+    persistSnapshot()
+  }, [persistSnapshot])
 
   const armAutoPause = React.useCallback(() => {
     clearTimer(autoPauseRef)
@@ -130,13 +218,17 @@ export function useTimedSession({
       setStatus('paused')
       setGlowState('paused')
       syncTick()
-      effectiveSecondsRef.current = Math.max(0, effectiveSecondsRef.current - 60)
+      effectiveSecondsRef.current = Math.max(
+        0,
+        effectiveSecondsRef.current - resolvedAutomation.autoPauseRollbackSeconds,
+      )
       setEffectiveSeconds(effectiveSecondsRef.current)
       idleSecondsRef.current = 0
       setIdleSeconds(0)
       pushEvent('pause', { reason: 'inactive' })
-    }, autoPauseMs)
-  }, [autoPauseMs, clearTimer, pushEvent, syncTick])
+      persistSnapshot()
+    }, resolvedAutomation.autoPauseMs)
+  }, [clearTimer, persistSnapshot, pushEvent, resolvedAutomation, syncTick])
 
   const startTicker = React.useCallback(() => {
     clearIntervalTimer(tickerRef)
@@ -165,7 +257,8 @@ export function useTimedSession({
     startTicker()
     armAutoPause()
     pushEvent(eventType, meta)
-  }, [armAutoPause, pushEvent, startTicker])
+    persistSnapshot()
+  }, [armAutoPause, persistSnapshot, pushEvent, startTicker])
 
   const start = React.useCallback((meta?: Record<string, boolean | number | string | null>) => {
     if (statusRef.current === 'running' || statusRef.current === 'completed') return
@@ -182,7 +275,8 @@ export function useTimedSession({
     setStatus('paused')
     setGlowState('paused')
     pushEvent('pause', meta)
-  }, [clearTimer, pushEvent, stopTicker])
+    persistSnapshot()
+  }, [clearTimer, persistSnapshot, pushEvent, stopTicker])
 
   const resume = React.useCallback((meta?: Record<string, boolean | number | string | null>) => {
     if (statusRef.current === 'completed') return
@@ -220,7 +314,8 @@ export function useTimedSession({
     setDurationEdited(true)
     durationEditedRef.current = true
     pushEvent('adjust_duration', { seconds: effectiveSecondsRef.current })
-  }, [pushEvent])
+    persistSnapshot()
+  }, [persistSnapshot, pushEvent])
 
   const complete = React.useCallback(
     async (
@@ -257,9 +352,10 @@ export function useTimedSession({
         durationEdited: durationEditedRef.current,
         events: [...eventsRef.current],
       }
+      clearPersistedSnapshot()
       return appendTimeRecord(record)
     },
-    [autoPauseRef, clearTimer, hiddenPauseRef, kind, palaceId, pushEvent, stopTicker, title],
+    [autoPauseRef, clearPersistedSnapshot, clearTimer, hiddenPauseRef, kind, palaceId, pushEvent, stopTicker, title],
   )
 
   const reset = React.useCallback(() => {
@@ -281,7 +377,67 @@ export function useTimedSession({
     statusRef.current = 'idle'
     setStatus('idle')
     setGlowState('idle')
-  }, [autoPauseRef, clearTimer, hiddenPauseRef, stopTicker])
+    clearPersistedSnapshot()
+  }, [autoPauseRef, clearPersistedSnapshot, clearTimer, hiddenPauseRef, stopTicker])
+
+  React.useEffect(() => {
+    if (!storageKey || restoredRef.current) return
+    restoredRef.current = true
+    let parsed: PersistedTimedSessionSnapshot | null = null
+    try {
+      const raw = window.sessionStorage.getItem(storageKey)
+      parsed = raw ? (JSON.parse(raw) as PersistedTimedSessionSnapshot) : null
+    } catch {
+      parsed = null
+    }
+    if (!parsed || parsed.version !== 1 || parsed.kind !== kind || parsed.palaceId !== palaceId) {
+      clearPersistedSnapshot()
+      return
+    }
+    if (!parsed.startedAt || parsed.status === 'idle' || parsed.status === 'completed') {
+      clearPersistedSnapshot()
+      return
+    }
+
+    const persistedAtMs = new Date(parsed.persistedAt).getTime()
+    const restoreNowMs = Date.now()
+    const elapsedSincePersistSeconds =
+      parsed.status === 'running' && Number.isFinite(persistedAtMs)
+        ? Math.max(0, Math.floor((restoreNowMs - persistedAtMs) / 1000))
+        : 0
+    const restoredEffectiveSeconds = Math.max(
+      0,
+      Math.round(parsed.effectiveSeconds + elapsedSincePersistSeconds),
+    )
+
+    eventsRef.current = Array.isArray(parsed.events) ? parsed.events : []
+    effectiveSecondsRef.current = restoredEffectiveSeconds
+    idleSecondsRef.current = 0
+    pauseCountRef.current = Math.max(0, Math.round(parsed.pauseCount || 0))
+    startedAtRef.current = parsed.startedAt
+    durationEditedRef.current = Boolean(parsed.durationEdited)
+    lastActivityAtRef.current = Date.now()
+
+    setEffectiveSeconds(restoredEffectiveSeconds)
+    setIdleSeconds(0)
+    setPauseCount(pauseCountRef.current)
+    setStartedAt(parsed.startedAt)
+    setDurationEdited(Boolean(parsed.durationEdited))
+    setGlowState('idle')
+
+    if (parsed.status === 'paused') {
+      statusRef.current = 'paused'
+      setStatus('paused')
+      persistSnapshot()
+      return
+    }
+
+    statusRef.current = 'running'
+    setStatus('running')
+    startTicker()
+    armAutoPause()
+    persistSnapshot()
+  }, [armAutoPause, clearPersistedSnapshot, kind, palaceId, persistSnapshot, startTicker, storageKey])
 
   React.useEffect(() => {
     if (glowState === 'idle') return
@@ -295,7 +451,7 @@ export function useTimedSession({
         clearTimer(hiddenPauseRef)
         hiddenPauseRef.current = window.setTimeout(() => {
           pause({ reason: 'hidden' })
-        }, hiddenPauseMs)
+        }, resolvedAutomation.hiddenPauseMs)
         return
       }
       clearTimer(hiddenPauseRef)
@@ -308,7 +464,7 @@ export function useTimedSession({
       clearTimer(hiddenPauseRef)
       hiddenPauseRef.current = window.setTimeout(() => {
         pause({ reason: 'blur' })
-      }, hiddenPauseMs)
+      }, resolvedAutomation.hiddenPauseMs)
     }
 
     const handleFocus = () => {
@@ -330,7 +486,22 @@ export function useTimedSession({
       clearTimer(autoPauseRef)
       clearIntervalTimer(tickerRef)
     }
-  }, [autoPauseRef, clearIntervalTimer, clearTimer, hiddenPauseMs, pause, registerActivity])
+  }, [autoPauseRef, clearIntervalTimer, clearTimer, pause, registerActivity, resolvedAutomation.hiddenPauseMs])
+
+  React.useEffect(() => {
+    const handleAutomationChange = (event: Event) => {
+      const nextConfig =
+        event instanceof CustomEvent && event.detail
+          ? (event.detail as TimerAutomationConfig)
+          : readTimerAutomationConfig()
+      setAutomationConfig(nextConfig)
+    }
+
+    window.addEventListener('memory-anki-timer-automation-change', handleAutomationChange)
+    return () => {
+      window.removeEventListener('memory-anki-timer-automation-change', handleAutomationChange)
+    }
+  }, [])
 
   return {
     effectiveSeconds,

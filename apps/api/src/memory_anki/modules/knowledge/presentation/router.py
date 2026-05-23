@@ -20,6 +20,11 @@ from memory_anki.modules.mindmap.application.editor_state_service import (
     save_subject_editor_state,
     sync_subject_editor_root,
 )
+from memory_anki.modules.palaces.application.title_sync_service import (
+    get_palace_explicit_chapter_ids,
+    reconcile_palace_chapter_binding,
+    set_palace_chapter_links,
+)
 from memory_anki.modules.palaces.domain.schemas import ChapterCreate
 
 router = APIRouter(tags=["knowledge"])
@@ -266,32 +271,30 @@ def palace_chapters(palace_id: int, s: Session = Depends(session_dep)):
     p = s.query(Palace).filter_by(id=palace_id).first()
     if not p:
         return {"error": "not found"}
+    reconcile_palace_chapter_binding(s, p)
+    explicit_ids = get_palace_explicit_chapter_ids(s, p)
     return [{
         "id": c.id, "name": c.name, "subject_id": c.subject_id,
         "parent_id": c.parent_id,
+        "is_explicit": c.id in explicit_ids,
         "subject": {"id": c.subject.id, "name": c.subject.name} if c.subject else None,
     } for c in p.chapters]
 
 
 @router.put("/palaces/{palace_id}/chapters")
 def link_chapters(palace_id: int, data: dict, s: Session = Depends(session_dep)):
-    """设置宫殿关联的章节 (data: {chapter_ids: [1,2,3]})"""
+    """设置宫殿关联的章节 (data: {chapter_ids: [1,2,3], primary_chapter_id?: 3})"""
     p = s.query(Palace).filter_by(id=palace_id).first()
     if not p:
         return {"error": "not found"}
     ids = [int(chapter_id) for chapter_id in data.get("chapter_ids", [])]
-    expanded_ids: set[int] = set()
-
-    for chapter_id in ids:
-        current = s.query(Chapter).filter_by(id=chapter_id).first()
-        while current:
-            expanded_ids.add(current.id)
-            current = current.parent
-
-    p.chapters = s.query(Chapter).filter(Chapter.id.in_(expanded_ids)).all() if expanded_ids else []
+    primary_chapter_id = data.get("primary_chapter_id")
+    next_primary = int(primary_chapter_id) if primary_chapter_id is not None else None
+    _, expanded_ids = set_palace_chapter_links(s, p, ids)
+    reconcile_palace_chapter_binding(s, p, preferred_primary_chapter_id=next_primary)
     s.commit()
     maybe_create_rolling_backup("rolling-link-chapters")
-    return {"ok": True, "count": len(p.chapters)}
+    return {"ok": True, "count": len(expanded_ids), "primary_chapter_id": p.primary_chapter_id}
 
 
 # === 自定义连线 ===

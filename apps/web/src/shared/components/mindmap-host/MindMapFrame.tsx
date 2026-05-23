@@ -18,7 +18,13 @@ interface MindMapFrameProps {
   editorState: MindMapEditorState
   readonly?: boolean
   showToolbarWhenReadonly?: boolean
+  practiceModeActive?: boolean
+  practiceToggleLabel?: '练习' | '复习'
+  immersiveModeActive?: boolean
+  showImportButtons?: boolean
   syncOnPropChange?: boolean
+  externalSyncKey?: string | number | null
+  forceSyncKey?: string | number | null
   preserveViewOnSync?: boolean
   className?: string
   segments?: MindMapHostSegmentSummary[]
@@ -40,7 +46,11 @@ interface MindMapFrameProps {
     targetSegmentId: number | 'new' | null
   }) => void
   onSegmentRangeConfirm?: () => void
+  onPracticeToggle?: () => void
+  onMindMapImportOpen?: () => void
+  onImageTextImportOpen?: () => void
   onFullscreenChange?: (active: boolean) => void
+  onFullscreenToggle?: (active?: boolean) => void
   onReady?: () => void
 }
 
@@ -75,7 +85,13 @@ export function MindMapFrame({
   editorState,
   readonly = false,
   showToolbarWhenReadonly = false,
+  practiceModeActive = false,
+  practiceToggleLabel = '练习',
+  immersiveModeActive = false,
+  showImportButtons = false,
   syncOnPropChange = false,
+  externalSyncKey = null,
+  forceSyncKey = null,
   preserveViewOnSync = false,
   className,
   segments = [],
@@ -96,7 +112,11 @@ export function MindMapFrame({
   onSegmentRangeDraftChange,
   onSegmentRangeModeToggle,
   onSegmentRangeConfirm,
+  onPracticeToggle,
+  onMindMapImportOpen,
+  onImageTextImportOpen,
   onFullscreenChange,
+  onFullscreenToggle,
   onReady,
 }: MindMapFrameProps) {
   const iframeRef = useRef<HTMLIFrameElement | null>(null)
@@ -110,9 +130,15 @@ export function MindMapFrame({
   const onSegmentRangeDraftChangeRef = useRef(onSegmentRangeDraftChange)
   const onSegmentRangeModeToggleRef = useRef(onSegmentRangeModeToggle)
   const onSegmentRangeConfirmRef = useRef(onSegmentRangeConfirm)
+  const onPracticeToggleRef = useRef(onPracticeToggle)
+  const onMindMapImportOpenRef = useRef(onMindMapImportOpen)
+  const onImageTextImportOpenRef = useRef(onImageTextImportOpen)
   const onFullscreenChangeRef = useRef(onFullscreenChange)
+  const onFullscreenToggleRef = useRef(onFullscreenToggle)
   const onReadyRef = useRef(onReady)
   const lastSyncedFingerprintRef = useRef('')
+  const lastForcedSyncKeyRef = useRef<string | null>(null)
+  const suppressNextPropSyncRef = useRef(false)
   const [isLoaded, setIsLoaded] = useState(false)
 
   stateRef.current = editorState
@@ -125,7 +151,11 @@ export function MindMapFrame({
   onSegmentRangeDraftChangeRef.current = onSegmentRangeDraftChange
   onSegmentRangeModeToggleRef.current = onSegmentRangeModeToggle
   onSegmentRangeConfirmRef.current = onSegmentRangeConfirm
+  onPracticeToggleRef.current = onPracticeToggle
+  onMindMapImportOpenRef.current = onMindMapImportOpen
+  onImageTextImportOpenRef.current = onImageTextImportOpen
   onFullscreenChangeRef.current = onFullscreenChange
+  onFullscreenToggleRef.current = onFullscreenToggle
   onReadyRef.current = onReady
 
   const rawHostId = useId()
@@ -152,6 +182,11 @@ export function MindMapFrame({
           applyHostState?: (state: {
             readonly: boolean
             showToolbarWhenReadonly: boolean
+            showPracticeButton: boolean
+            practiceModeActive: boolean
+            practiceToggleLabel: '练习' | '复习'
+            immersiveModeActive: boolean
+            showImportButtons: boolean
             segments: MindMapHostSegmentSummary[]
             activeSegmentId: number | null
             segmentColorMode: 'all' | 'active-only' | 'all-with-active-emphasis'
@@ -163,6 +198,11 @@ export function MindMapFrame({
     iframeWindow?.applyHostState?.({
       readonly,
       showToolbarWhenReadonly,
+      showPracticeButton: Boolean(onPracticeToggleRef.current),
+      practiceModeActive,
+      practiceToggleLabel,
+      immersiveModeActive,
+      showImportButtons: Boolean(showImportButtons),
       segments: cloneValue(segments),
       activeSegmentId,
       segmentColorMode,
@@ -171,13 +211,25 @@ export function MindMapFrame({
     if (readonly) {
       iframeWindow?.resetReadonlyInteractionState?.()
     }
-  }, [activeSegmentId, readonly, segmentColorMode, segmentRangeDraft, segments, showToolbarWhenReadonly])
+  }, [
+    activeSegmentId,
+    practiceModeActive,
+    practiceToggleLabel,
+    immersiveModeActive,
+    readonly,
+    showImportButtons,
+    segmentColorMode,
+    segmentRangeDraft,
+    segments,
+    showToolbarWhenReadonly,
+  ])
 
   useEffect(() => {
     const registry = (window.__memoryAnkiMindMapHosts ??= {})
     registry[hostId] = {
       getMindMapData: () => normalizeEditorDoc(stateRef.current.editor_doc),
       saveMindMapData: (data) => {
+        suppressNextPropSyncRef.current = true
         onEditorStateChangeRef.current({
           ...stateRef.current,
           editor_doc: cloneValue(data),
@@ -185,6 +237,7 @@ export function MindMapFrame({
       },
       getMindMapConfig: () => cloneValue(stateRef.current.editor_config),
       saveMindMapConfig: (config) => {
+        suppressNextPropSyncRef.current = true
         onEditorStateChangeRef.current({
           ...stateRef.current,
           editor_config: cloneValue(config),
@@ -192,6 +245,7 @@ export function MindMapFrame({
       },
       getLanguage: () => stateRef.current.lang || 'zh',
       saveLanguage: (lang) => {
+        suppressNextPropSyncRef.current = true
         onEditorStateChangeRef.current({
           ...stateRef.current,
           lang: lang || 'zh',
@@ -199,6 +253,7 @@ export function MindMapFrame({
       },
       getLocalConfig: () => cloneValue(stateRef.current.editor_local_config),
       saveLocalConfig: (config) => {
+        suppressNextPropSyncRef.current = true
         onEditorStateChangeRef.current({
           ...stateRef.current,
           editor_local_config: cloneValue(config),
@@ -270,8 +325,22 @@ export function MindMapFrame({
         if (event === 'segment_range_confirm') {
           onSegmentRangeConfirmRef.current?.()
         }
+        if (event === 'practice_toggle') {
+          onPracticeToggleRef.current?.()
+        }
+        if (event === 'mindmap_import_open') {
+          onMindMapImportOpenRef.current?.()
+        }
+        if (event === 'image_text_import_open') {
+          onImageTextImportOpenRef.current?.()
+        }
         if (event === 'fullscreen_change') {
           onFullscreenChangeRef.current?.(Boolean(payload))
+        }
+        if (event === 'fullscreen_toggle') {
+          onFullscreenToggleRef.current?.(
+            typeof payload === 'boolean' ? payload : undefined,
+          )
         }
       },
     }
@@ -291,21 +360,70 @@ export function MindMapFrame({
 
   useEffect(() => {
     if (!syncOnPropChange || !isLoaded) return
-        const fingerprint = JSON.stringify({
-          editor_doc: normalizeEditorDoc(editorState.editor_doc),
-          editor_config: editorState.editor_config,
-          editor_local_config: editorState.editor_local_config,
-          lang: editorState.lang,
-          segments,
-          activeSegmentId,
-          segmentColorMode,
-          segmentRangeDraft,
-          preserveViewOnSync,
-        })
+    const fingerprint = JSON.stringify({
+      editor_doc: normalizeEditorDoc(editorState.editor_doc),
+      editor_config: editorState.editor_config,
+      editor_local_config: editorState.editor_local_config,
+      lang: editorState.lang,
+      segments,
+      activeSegmentId,
+      segmentColorMode,
+      segmentRangeDraft,
+      preserveViewOnSync,
+      externalSyncKey,
+    })
     if (lastSyncedFingerprintRef.current === fingerprint) return
+    if (suppressNextPropSyncRef.current) {
+      suppressNextPropSyncRef.current = false
+      lastSyncedFingerprintRef.current = fingerprint
+      return
+    }
     lastSyncedFingerprintRef.current = fingerprint
     syncHostEditorState()
-  }, [activeSegmentId, editorState, isLoaded, preserveViewOnSync, segmentColorMode, segmentRangeDraft, segments, syncHostEditorState, syncOnPropChange])
+  }, [
+    activeSegmentId,
+    editorState,
+    externalSyncKey,
+    isLoaded,
+    preserveViewOnSync,
+    segmentColorMode,
+    segmentRangeDraft,
+    segments,
+    syncHostEditorState,
+    syncOnPropChange,
+  ])
+
+  useEffect(() => {
+    if (!isLoaded || forceSyncKey == null) return
+    const syncKey = String(forceSyncKey)
+    if (lastForcedSyncKeyRef.current === syncKey) return
+    lastForcedSyncKeyRef.current = syncKey
+    lastSyncedFingerprintRef.current = JSON.stringify({
+      editor_doc: normalizeEditorDoc(editorState.editor_doc),
+      editor_config: editorState.editor_config,
+      editor_local_config: editorState.editor_local_config,
+      lang: editorState.lang,
+      segments,
+      activeSegmentId,
+      segmentColorMode,
+      segmentRangeDraft,
+      preserveViewOnSync,
+      externalSyncKey,
+    })
+    suppressNextPropSyncRef.current = false
+    syncHostEditorState()
+  }, [
+    activeSegmentId,
+    editorState,
+    externalSyncKey,
+    forceSyncKey,
+    isLoaded,
+    preserveViewOnSync,
+    segmentColorMode,
+    segmentRangeDraft,
+    segments,
+    syncHostEditorState,
+  ])
 
   return (
     <iframe

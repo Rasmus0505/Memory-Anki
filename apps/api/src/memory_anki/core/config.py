@@ -23,6 +23,10 @@ DB_PATH = DATA_DIR / "memory_palace.db"
 MIGRATION_STATE_PATH = APP_HOME / "migration-state.json"
 DATABASE_URL = f"sqlite:///{DB_PATH}"
 
+DASHSCOPE_API_KEY = os.environ.get("DASHSCOPE_API_KEY")
+DASHSCOPE_BASE_URL = os.environ.get("DASHSCOPE_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1")
+DASHSCOPE_VISION_MODEL = os.environ.get("DASHSCOPE_VISION_MODEL", "qwen3-vl-flash")
+
 DEFAULTS = {
     "default_algorithm": "ebbinghaus",
     "default_review_mode": "flashcard",

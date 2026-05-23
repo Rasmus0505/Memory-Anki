@@ -6,16 +6,28 @@ import { TimeRecordDialog } from '@/features/profile/components/TimeRecordDialog
 import { TimeRecordsBreakdownChart } from '@/features/profile/components/TimeRecordsBreakdownChart'
 import { TimeRecordsTable } from '@/features/profile/components/TimeRecordsTable'
 import { TimeRecordsTrendChart } from '@/features/profile/components/TimeRecordsTrendChart'
+import { getTimeRecordChartColor } from '@/features/profile/model/time-record-chart'
 import { useTimeRecordsDashboard } from '@/features/profile/hooks/useTimeRecordsDashboard'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card'
 import { Button } from '@/shared/components/ui/button'
 import { formatDuration } from '@/entities/session/model'
 import { getDashboardApi } from '@/shared/api/modules/dashboard'
+import { cn } from '@/shared/lib/utils'
 
 function formatReviewStage(reviewType: string, reviewNumber: number) {
   if (reviewType === '1h') return '首日 1 小时'
   if (reviewType === 'sleep') return '首日睡前'
   return `第 ${reviewNumber + 1} 次`
+}
+
+function formatLearningTooltip(item: DashboardResponse['today_learning_palaces'][number]) {
+  return [
+    `${item.palace_title || '未命名宫殿'}`,
+    `总时长：${formatDuration(item.total_seconds)}`,
+    `宫殿编辑：${formatDuration(item.palace_edit_seconds)}`,
+    `练习：${formatDuration(item.practice_seconds)}`,
+    `复习：${formatDuration(item.review_seconds)}`,
+  ].join('\n')
 }
 
 export default function Dashboard() {
@@ -104,43 +116,52 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle className="text-base">今日到期</CardTitle>
-            <Link to="/review" className="flex items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-primary">
-              查看全部
-              <ArrowRight className="h-3 w-3" />
-            </Link>
+            <CardTitle className="text-base">今日学习</CardTitle>
           </CardHeader>
           <CardContent>
-            {data.reviews.length > 0 ? (
-              <div className="space-y-1">
-                {data.reviews.slice(0, 8).map((review: any) => (
-                  <Link
-                    key={review.id}
-                    to={`/review/session/${review.id}`}
-                    className="group flex items-center justify-between rounded-lg px-3 py-2.5 transition-colors hover:bg-secondary active:scale-[0.98]"
-                  >
-                    <div className="min-w-0">
-                      <div className="truncate text-sm font-medium">{review.palace?.title || '未命名宫殿'}</div>
-                      <div className="mt-0.5 text-xs text-muted-foreground">
-                        间隔 {review.interval_days} 天 · {formatReviewStage(review.review_type, review.review_number)}
-                        {review.schedule_count > 1 ? ` · ${review.schedule_count} 次待复习` : ''}
+            {data.today_learning_palaces.length > 0 ? (
+              <div className="space-y-3">
+                {data.today_learning_palaces.map((item) => {
+                  const total = Math.max(1, item.total_seconds)
+                  const segments = [
+                    { key: 'palace_edit', seconds: item.palace_edit_seconds, color: getTimeRecordChartColor('palace_edit') },
+                    { key: 'practice', seconds: item.practice_seconds, color: getTimeRecordChartColor('practice') },
+                    { key: 'review', seconds: item.review_seconds, color: getTimeRecordChartColor('review') },
+                  ].filter((segment) => segment.seconds > 0)
+                  return (
+                    <div key={item.palace_id} className="rounded-xl border border-border/60 bg-background/70 px-3 py-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="min-w-0 truncate text-sm font-medium">{item.palace_title || '未命名宫殿'}</div>
+                        <div className="shrink-0 text-xs text-muted-foreground">{formatDuration(item.total_seconds)}</div>
+                      </div>
+                      <div
+                        className="mt-2 flex h-2.5 overflow-hidden rounded-full bg-secondary/80"
+                        title={formatLearningTooltip(item)}
+                      >
+                        {segments.map((segment) => (
+                          <div
+                            key={segment.key}
+                            className="h-full"
+                            style={{
+                              width: `${(segment.seconds / total) * 100}%`,
+                              backgroundColor: segment.color,
+                            }}
+                          />
+                        ))}
                       </div>
                     </div>
-                    <Button size="sm" variant="ghost" className="ml-2 shrink-0 opacity-0 transition-opacity group-hover:opacity-100">
-                      复习
-                    </Button>
-                  </Link>
-                ))}
+                  )
+                })}
               </div>
             ) : (
-              <p className="py-8 text-center text-sm text-muted-foreground">当前没有到期任务，进度不错。</p>
+              <p className="py-8 text-center text-sm text-muted-foreground">今天还没有产生学习时长记录。</p>
             )}
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle className="text-base">最近编辑</CardTitle>
+            <CardTitle className="text-base">{`新增章节数量：${data.today_new_palace_count}`}</CardTitle>
             <Link to="/palaces/new">
               <Button size="sm" variant="outline" className="h-8">
                 <Plus className="h-3.5 w-3.5" />
@@ -149,29 +170,63 @@ export default function Dashboard() {
             </Link>
           </CardHeader>
           <CardContent>
-            {data.recent_palaces.length > 0 ? (
-              <div className="space-y-1">
-                {data.recent_palaces.map((palace: any) => (
-                  <Link
-                    key={palace.id}
-                    to={`/palaces/${palace.id}/edit`}
-                    className="flex items-center justify-between rounded-lg px-3 py-2.5 transition-colors hover:bg-secondary active:scale-[0.98]"
-                  >
-                    <div className="min-w-0">
-                      <div className="truncate text-sm font-medium">{palace.title || '未命名宫殿'}</div>
-                      <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
-                        <span>{palace.peg_count} 个节点</span>
-                        <span>·</span>
-                        <span>{palace.created_at ? '最近更新' : '草稿'}</span>
-                      </div>
+            {data.today_new_palaces.some((subject) => subject.chapter_groups.length > 0 || subject.ungrouped_palaces.length > 0) ? (
+              <div className="space-y-4">
+                {data.today_new_palaces.map((subjectGroup, subjectIndex) => {
+                  const hasAny = subjectGroup.chapter_groups.length > 0 || subjectGroup.ungrouped_palaces.length > 0
+                  if (!hasAny) return null
+                  const showSubjectTitle = data.today_new_palaces.filter((item) => item.subject).length > 1
+                  return (
+                    <div key={`${subjectGroup.subject?.id ?? 'ungrouped'}-${subjectIndex}`} className="space-y-2">
+                      {showSubjectTitle && subjectGroup.subject ? (
+                        <div className="text-xs font-medium text-muted-foreground">{subjectGroup.subject.name}</div>
+                      ) : null}
+                      {subjectGroup.chapter_groups.map((group) => (
+                        <div key={group.source_chapter?.id ?? `group-${subjectIndex}`} className="space-y-1">
+                          <div className="text-sm font-semibold">{group.source_chapter?.name ?? '未关联章节'}</div>
+                          <div className="space-y-1.5 pl-4">
+                            {group.palaces.map((palace) => (
+                              <div key={palace.id} className="space-y-1">
+                                {palace.resolved_parent_chapter && palace.primary_chapter ? (
+                                  <div className="text-xs font-medium text-muted-foreground">{palace.primary_chapter.name}</div>
+                                ) : null}
+                                <Link
+                                  to={`/palaces/${palace.id}/edit`}
+                                  className={cn(
+                                    'block truncate rounded-lg px-2 py-1.5 text-sm transition-colors hover:bg-secondary active:scale-[0.98]',
+                                    (palace.resolved_parent_chapter || palace.primary_chapter) && 'ml-3',
+                                  )}
+                                >
+                                  {palace.title || '未命名宫殿'}
+                                </Link>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                      {subjectGroup.ungrouped_palaces.length > 0 ? (
+                        <div className="space-y-1">
+                          <div className="text-sm font-semibold text-muted-foreground">未关联章节</div>
+                          <div className="space-y-1.5 pl-4">
+                            {subjectGroup.ungrouped_palaces.map((palace) => (
+                              <Link
+                                key={palace.id}
+                                to={`/palaces/${palace.id}/edit`}
+                                className="block truncate rounded-lg px-2 py-1.5 text-sm transition-colors hover:bg-secondary active:scale-[0.98]"
+                              >
+                                {palace.title || '未命名宫殿'}
+                              </Link>
+                            ))}
+                          </div>
+                        </div>
+                      ) : null}
                     </div>
-                    <span className="ml-2 shrink-0 text-xs text-muted-foreground">编辑</span>
-                  </Link>
-                ))}
+                  )
+                })}
               </div>
             ) : (
               <div className="py-8 text-center text-sm text-muted-foreground">
-                还没有记忆宫殿。
+                今天还没有新增记忆宫殿。
                 <div className="mt-3">
                   <Link to="/palaces/new">
                     <Button variant="outline" size="sm">

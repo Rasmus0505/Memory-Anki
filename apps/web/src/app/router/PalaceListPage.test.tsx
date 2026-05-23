@@ -1,0 +1,156 @@
+import * as React from 'react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import PalaceListPage from '@/app/router/PalaceListPage'
+
+const navigate = vi.fn()
+const searchParams = new URLSearchParams()
+const setSearchParams = vi.fn()
+
+vi.mock('react-router-dom', () => ({
+  Link: ({ children, to }: { children: React.ReactNode; to: string }) => <a href={to}>{children}</a>,
+  useNavigate: () => navigate,
+  useSearchParams: () => [searchParams, setSearchParams],
+}))
+
+vi.mock('sonner', () => ({
+  toast: {
+    success: vi.fn(),
+    error: vi.fn(),
+  },
+}))
+
+vi.mock('@/app/router/palace-list/PalaceStageProgress', () => ({
+  PalaceStageProgress: () => <div data-testid="stage-progress" />,
+  formatStageDateTime: () => '',
+  toDateTimeLocalValue: () => '',
+}))
+
+const getPalacesGroupedApi = vi.fn()
+const submitSegmentReviewSessionApi = vi.fn()
+
+vi.mock('@/shared/api/modules/palaces', () => ({
+  deletePalaceApi: vi.fn(),
+  getPalaceReviewPlanApi: vi.fn(),
+  getPalacesGroupedApi: (...args: unknown[]) => getPalacesGroupedApi(...args),
+  updateDefaultSegmentReviewProgressApi: vi.fn(),
+  updatePalaceSegmentReviewProgressApi: vi.fn(),
+}))
+
+vi.mock('@/shared/api/modules/reviews', () => ({
+  submitSegmentReviewSessionApi: (...args: unknown[]) => submitSegmentReviewSessionApi(...args),
+}))
+
+const duePalace = {
+  id: 1,
+  title: '第四节 收回教育权运动与教会教育的变革',
+  resolved_title: '第四节 收回教育权运动与教会教育的变革',
+  description: '',
+  created_at: '2026-05-11T00:00:00',
+  chapters: [],
+  mastered: false,
+  has_due_review: false,
+  current_review_schedule_id: null,
+  next_review_at: null,
+  review_stage_completed: 0,
+  review_stage_total: 9,
+  review_stage_progress: 0,
+  review_stages: [],
+  stage_labels: [],
+  title_mode: 'sync',
+  manual_title: '',
+  grouping_mode: 'auto',
+  manual_group_chapter_id: null,
+  resolved_subject: { id: 1, name: '中国近代史', color: '#6366f1' },
+  resolved_parent_chapter: { id: 2, name: '第四节', subject_id: 1, parent_id: null },
+  binding_status: 'ok',
+  primary_chapter_id: 3,
+  primary_chapter: { id: 3, name: '收回教育权运动', subject_id: 1, parent_id: 2 },
+  group_id: null,
+  group: null,
+  group_sort_order: 0,
+  segments: [
+    {
+      id: 10,
+      palace_id: 1,
+      name: '第 1 部分',
+      display_name: '第 1 部分',
+      color: '#14b8a6',
+      node_count: 49,
+      sort_order: 0,
+      is_virtual_default: false,
+      has_due_review: true,
+      current_review_schedule_id: 88,
+      next_review_at: '2026-05-11T00:00:00',
+      estimated_review_seconds: 100,
+      review_stage_completed: 0,
+      review_stage_total: 9,
+      review_stage_progress: 0,
+      review_stages: [],
+      stage_labels: [],
+    },
+  ],
+}
+
+const reviewedPalace = {
+  ...duePalace,
+  segments: [
+    {
+      ...duePalace.segments[0],
+      has_due_review: false,
+      current_review_schedule_id: null,
+    },
+  ],
+}
+
+describe('PalaceListPage', () => {
+  beforeEach(() => {
+    navigate.mockReset()
+    getPalacesGroupedApi.mockReset()
+    submitSegmentReviewSessionApi.mockReset()
+    getPalacesGroupedApi
+      .mockResolvedValueOnce({
+        groups: [],
+        ungrouped: [],
+        subjects: [
+          {
+            subject: { id: 1, name: '中国近代史', color: '#6366f1' },
+            chapter_groups: [
+              {
+                source_chapter: { id: 2, name: '第四节', subject_id: 1, parent_id: null },
+                palaces: [duePalace],
+              },
+            ],
+            ungrouped_palaces: [],
+          },
+        ],
+      })
+      .mockResolvedValue({
+        groups: [],
+        ungrouped: [],
+        subjects: [
+          {
+            subject: { id: 1, name: '中国近代史', color: '#6366f1' },
+            chapter_groups: [
+              {
+                source_chapter: { id: 2, name: '第四节', subject_id: 1, parent_id: null },
+                palaces: [reviewedPalace],
+              },
+            ],
+            ungrouped_palaces: [],
+          },
+        ],
+      })
+    submitSegmentReviewSessionApi.mockResolvedValue({ ok: true, next_id: 89, score: 5 })
+  })
+
+  it('renders single-segment palaces in compact two-line mode without default segment label', async () => {
+    render(<PalaceListPage />)
+
+    expect(await screen.findByText('第四节 收回教育权运动与教会教育的变革')).toBeTruthy()
+    expect(screen.queryByText('第 1 部分')).toBeNull()
+    expect(screen.getByText('预计 1分 40秒')).toBeTruthy()
+    expect(screen.getByRole('button', { name: '开始复习' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: '练习' })).toBeTruthy()
+  })
+})

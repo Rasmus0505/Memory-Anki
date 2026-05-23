@@ -98,6 +98,7 @@ export function submitReviewSessionApi(
     completion_mode?: "manual_complete" | "auto_complete"
     revealed_remaining?: boolean
     red_marked_count?: number
+    target_review_number?: number
   },
 ) {
   return request<ReviewSessionSubmitResponse>(`/review/session/${id}/submit`, {
@@ -114,6 +115,7 @@ export function submitSegmentReviewSessionApi(
     completion_mode?: "manual_complete" | "auto_complete"
     revealed_remaining?: boolean
     red_marked_count?: number
+    target_review_number?: number
   },
 ) {
   return request<ReviewSessionSubmitResponse>(`/segment-review/session/${id}/submit`, {

@@ -48,3 +48,27 @@ export function formatLocalDateTimeInputValue(value: string) {
   const second = `${date.getSeconds()}`.padStart(2, '0')
   return `${year}-${month}-${day}T${hour}:${minute}:${second}`
 }
+
+export function formatApiDateTime(value: string | null): string {
+  if (!value) return '未记录具体时间'
+  const date = parseApiDateTime(value)
+  if (Number.isNaN(date.getTime())) return '未记录具体时间'
+  return new Intl.DateTimeFormat('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(date).replace(/\//g, '-')
+}
+
+export function formatDateTimeLocalValue(date: Date): string {
+  const safe = Number.isNaN(date.getTime()) ? new Date() : date
+  const year = safe.getFullYear()
+  const month = `${safe.getMonth() + 1}`.padStart(2, '0')
+  const day = `${safe.getDate()}`.padStart(2, '0')
+  const hours = `${safe.getHours()}`.padStart(2, '0')
+  const minutes = `${safe.getMinutes()}`.padStart(2, '0')
+  return `${year}-${month}-${day}T${hours}:${minutes}`
+}

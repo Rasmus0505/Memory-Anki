@@ -9,6 +9,11 @@ from memory_anki.modules.palaces.application.import_export_service import (
     import_json,
     import_markdown,
 )
+from memory_anki.modules.palaces.application.mindmap_import_service import (
+    MindMapImportError,
+    generate_import_preview,
+    generate_text_preview,
+)
 from memory_anki.modules.reviews.application.review_service import trigger_review_for_palace
 
 router = APIRouter(tags=["import-export"])
@@ -46,3 +51,42 @@ async def api_import(file: UploadFile = File(...), format: str = "json",
         return {"ok": True, "count": count}
     except Exception as e:
         return {"ok": False, "error": str(e)}
+
+
+@router.post("/import/preview-mindmap")
+async def api_preview_mindmap_import(
+    file: UploadFile = File(...),
+    fallback_title: str = "未命名宫殿",
+):
+    try:
+        image_bytes = await file.read()
+        result = generate_import_preview(
+            image_bytes=image_bytes,
+            filename=file.filename,
+            fallback_title=fallback_title,
+        )
+        return {
+            "ok": True,
+            "source_tree": result.source_tree,
+            "editor_doc": result.editor_doc,
+        }
+    except MindMapImportError as exc:
+        return {"ok": False, "error": str(exc)}
+
+
+@router.post("/import/preview-text")
+async def api_preview_text_import(
+    file: UploadFile = File(...),
+):
+    try:
+        image_bytes = await file.read()
+        result = generate_text_preview(
+            image_bytes=image_bytes,
+            filename=file.filename,
+        )
+        return {
+            "ok": True,
+            "extracted_text": result.extracted_text,
+        }
+    except MindMapImportError as exc:
+        return {"ok": False, "error": str(exc)}

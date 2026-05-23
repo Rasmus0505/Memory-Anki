@@ -330,6 +330,56 @@ def get_weekly_formal_review_duration_seconds(session: Session) -> int:
     )
 
 
+def get_today_palace_learning_breakdown(session: Session) -> list[dict[str, Any]]:
+    today = date.today()
+    start = datetime.combine(today, time.min)
+    end = start + timedelta(days=1)
+    threshold = get_threshold_seconds(session)
+    records = (
+        session.query(TimeRecord)
+        .filter(
+            TimeRecord.deleted_at.is_(None),
+            TimeRecord.kind.in_(TIME_RECORD_DASHBOARD_KINDS),
+            TimeRecord.effective_seconds > threshold,
+            TimeRecord.palace_id.is_not(None),
+            TimeRecord.started_at >= start,
+            TimeRecord.started_at < end,
+        )
+        .order_by(TimeRecord.started_at.asc(), TimeRecord.id.asc())
+        .all()
+    )
+
+    grouped: dict[int, dict[str, Any]] = {}
+    for record in records:
+        palace_id = int(record.palace_id)
+        payload = grouped.setdefault(
+            palace_id,
+            {
+                "palace_id": palace_id,
+                "palace_title": record.title or "未命名宫殿",
+                "total_seconds": 0,
+                "review_seconds": 0,
+                "practice_seconds": 0,
+                "palace_edit_seconds": 0,
+            },
+        )
+        seconds = max(0, int(record.effective_seconds or 0))
+        payload["total_seconds"] += seconds
+        if record.kind == "review":
+            payload["review_seconds"] += seconds
+        elif record.kind == "practice":
+            payload["practice_seconds"] += seconds
+        elif record.kind == "palace_edit":
+            payload["palace_edit_seconds"] += seconds
+        if not payload["palace_title"] and record.title:
+            payload["palace_title"] = record.title
+
+    return sorted(
+        grouped.values(),
+        key=lambda item: (-int(item["total_seconds"]), str(item["palace_title"]), int(item["palace_id"])),
+    )
+
+
 def get_time_record_duration_seconds(
     session: Session,
     *,

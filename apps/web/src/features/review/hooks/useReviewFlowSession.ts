@@ -4,7 +4,6 @@ import type { MindMapSelection } from '@/shared/components/mindmap-host'
 import { type RevealState } from '@/entities/session/model'
 import { useTimedSession } from '@/shared/hooks/useTimedSession'
 import {
-  allNodesRevealed,
   buildInitialRevealState,
   buildSelectionNodeId,
   buildVisibleEditorState,
@@ -12,6 +11,7 @@ import {
   countNodes,
   findNextHiddenChild,
   flattenNodes,
+  hideNodeAndDescendants,
   parseEditorDoc,
   revealRemainingNodes,
   sanitizeRedNodeIds,
@@ -187,13 +187,6 @@ export function useReviewFlowSession({
     [completed, onComplete, redNodeIds, revealMap, root, timer],
   )
 
-  React.useEffect(() => {
-    if (sessionKind !== 'review' || completed) return
-    if (userAdvancedReviewRef.current && allNodesRevealed(root, revealMap)) {
-      void finishFlow('auto_complete')
-    }
-  }, [completed, finishFlow, revealMap, root, sessionKind])
-
   const handleNodeClick = React.useCallback(
     (nodes: MindMapSelection[]) => {
       if (completed) return
@@ -224,17 +217,9 @@ export function useReviewFlowSession({
       const nodeId = buildSelectionNodeId(nodes[0] ?? null)
       if (!nodeId || nodeId === root.id) return
       timer.registerActivity({ source: 'right_click' })
-      setRedNodeIds((current) => {
-        const next = new Set(current)
-        if (next.has(nodeId)) {
-          next.delete(nodeId)
-        } else {
-          next.add(nodeId)
-        }
-        return next
-      })
+      setRevealMap((current) => hideNodeAndDescendants(nodeId, nodeMap, current))
     },
-    [completed, root.id, timer],
+    [completed, nodeMap, root.id, timer],
   )
 
   const handleRestart = React.useCallback(() => {
@@ -243,8 +228,7 @@ export function useReviewFlowSession({
     setRedNodeIds(new Set())
     setCompleted(false)
     userAdvancedReviewRef.current = false
-    void timer.complete('restart')
-    timer.reset()
+    timer.registerActivity({ source: 'restart' })
     onRestart?.()
   }, [onRestart, root, timer])
 

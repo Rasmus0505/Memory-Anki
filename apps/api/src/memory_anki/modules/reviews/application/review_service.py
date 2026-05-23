@@ -387,6 +387,7 @@ def submit_review(
     schedule_id: int,
     duration_seconds: int = 0,
     completion_mode: str = "manual_complete",
+    target_review_number: int | None = None,
 ) -> tuple[ReviewLog | None, dict]:
     schedule = session.query(ReviewSchedule).filter_by(id=schedule_id).first()
     if not schedule:
@@ -409,7 +410,7 @@ def submit_review(
     extra: dict[str, bool] = {}
     algorithm = normalize_algorithm(schedule.algorithm_used)
     intervals = get_algorithm_intervals(session, algorithm)
-    next_review_number = schedule.review_number + 1
+    next_review_number = target_review_number + 1 if target_review_number is not None else schedule.review_number + 1
 
     _rebuild_palace_review_schedules(
         session,
@@ -442,6 +443,7 @@ def submit_segment_review(
     schedule_id: int,
     duration_seconds: int = 0,
     completion_mode: str = "manual_complete",
+    target_review_number: int | None = None,
 ) -> tuple[PalaceSegmentReviewSchedule | None, dict]:
     schedule = session.query(PalaceSegmentReviewSchedule).filter_by(id=schedule_id).first()
     if not schedule or not schedule.segment:
@@ -467,7 +469,7 @@ def submit_segment_review(
     extra: dict[str, bool] = {}
     algorithm = normalize_algorithm(schedule.algorithm_used)
     intervals = get_algorithm_intervals(session, algorithm)
-    next_review_number = schedule.review_number + 1
+    next_review_number = target_review_number + 1 if target_review_number is not None else schedule.review_number + 1
 
     _rebuild_segment_review_schedules(
         session,

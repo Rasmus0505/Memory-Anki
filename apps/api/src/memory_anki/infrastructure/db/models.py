@@ -33,6 +33,7 @@ chapter_palace_table = Table(
     Column("id", Integer, primary_key=True, autoincrement=True),
     Column("chapter_id", Integer, ForeignKey("chapters.id", ondelete="CASCADE")),
     Column("palace_id", Integer, ForeignKey("palaces.id", ondelete="CASCADE")),
+    Column("is_explicit", Boolean, nullable=False, default=True),
 )
 
 

@@ -1,16 +1,30 @@
-import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react'
+import { useLocation, useNavigate, useParams } from 'react-router-dom'
+import { type RevealState } from '@/entities/session/model'
 import {
+  allNodesRevealed,
+  buildInitialRevealState,
+  buildReviewTree,
+  buildSelectionNodeId,
+  buildVisibleEditorState,
+  findNextHiddenChild,
+  flattenNodes,
+  hideNodeAndDescendants,
+} from '@/features/review/model/review-flow-tree'
+import {
+  clearPracticeSessionProgressApi,
   createPalaceApi,
   createPalaceSegmentApi,
   deletePalaceSegmentApi,
   deleteAttachmentApi,
   getPalaceEditorApi,
+  getPracticeSessionProgressApi,
   getPalaceSegmentsApi,
   getPalaceVersionDetailApi,
   getPalaceVersionsApi,
   linkPalaceChaptersApi,
   restorePalaceVersionApi,
+  savePracticeSessionProgressApi,
   savePalaceEditorApi,
   savePalaceEditorWithOptionsApi,
   updatePalaceSegmentApi,
@@ -21,9 +35,11 @@ import { getSubjectsApi, getSubjectTreeApi } from '@/shared/api/modules/knowledg
 import type {
   MindMapDoc,
   MindMapDocNode,
+  MindMapEditorState,
   PalaceSegmentSummary,
   PalaceVersionDetail,
   PalaceVersionSummary,
+  SessionProgressSnapshot,
 } from '@/shared/api/contracts'
 import type { MindMapSelection } from '@/shared/components/mindmap-host'
 import { usePersistedMindMapEditor } from '@/shared/hooks/usePersistedMindMapEditor'
@@ -42,13 +58,21 @@ export interface PalaceMeta {
   chapters: Array<{
     id: number
     name: string
+    parent_id?: number | null
+    is_explicit?: boolean
     subject?: { id: number; name: string } | null
   }>
+  primary_chapter_id?: number | null
 }
 
 export interface ChapterOption {
   id: number
-  label: string
+  name: string
+  depth: number
+  subjectId: number | null
+  subjectName: string
+  parentId: number | null
+  children: ChapterOption[]
 }
 
 type StatusBadgeState = {
@@ -57,6 +81,24 @@ type StatusBadgeState = {
 }
 
 type RangeTarget = number | 'new' | null
+type EditorMode = 'edit' | 'practice'
+
+const pendingDraftCreationByLocationKey = new Map<string, Promise<number>>()
+
+function requestDraftPalaceId(locationKey: string) {
+  const existing = pendingDraftCreationByLocationKey.get(locationKey)
+  if (existing) return existing
+
+  const pending = createPalaceApi({ title: '未命名宫殿', description: '', pegs: [] })
+    .then((created) => created.id as number)
+    .catch((error) => {
+      pendingDraftCreationByLocationKey.delete(locationKey)
+      throw error
+    })
+
+  pendingDraftCreationByLocationKey.set(locationKey, pending)
+  return pending
+}
 
 function parseMindMapDoc(value: unknown): MindMapDoc | null {
   if (!value) return null
@@ -105,6 +147,7 @@ function getEarlierDateTime(left: string | null, right: string | null) {
 export function usePalaceEditPage() {
   const { id } = useParams()
   const navigate = useNavigate()
+  const location = useLocation()
   const palaceId = id ? Number(id) : null
   const [isCreatingDraft, setIsCreatingDraft] = useState(false)
   const [frameVersion, setFrameVersion] = useState(0)
@@ -112,7 +155,9 @@ export function usePalaceEditPage() {
   const [title, setTitle] = useState('')
   const [createdAt, setCreatedAt] = useState('')
   const [chapterOptions, setChapterOptions] = useState<ChapterOption[]>([])
-  const [selectedChapterIds, setSelectedChapterIds] = useState<number[]>([])
+  const [explicitChapterIds, setExplicitChapterIds] = useState<number[]>([])
+  const [inheritedChapterIds, setInheritedChapterIds] = useState<number[]>([])
+  const [primaryChapterId, setPrimaryChapterId] = useState<number | null>(null)
   const [versionOpen, setVersionOpen] = useState(false)
   const [mindMapFullscreen, setMindMapFullscreen] = useState(false)
   const [versions, setVersions] = useState<PalaceVersionSummary[]>([])
@@ -138,6 +183,9 @@ export function usePalaceEditPage() {
   const [rangeTargetSegmentId, setRangeTargetSegmentId] = useState<RangeTarget>(null)
   const [selectedRangeNodeUids, setSelectedRangeNodeUids] = useState<string[]>([])
   const [overriddenConflictNodeUids, setOverriddenConflictNodeUids] = useState<string[]>([])
+  const [editorMode, setEditorMode] = useState<EditorMode>('edit')
+  const suppressNativeFullscreenExitUntilRef = useRef(0)
+  const hardUnloadRef = useRef(false)
 
   const {
     meta,
@@ -189,8 +237,123 @@ export function usePalaceEditPage() {
     kind: 'palace_edit',
     title: title || palace?.title || '未命名宫殿',
     palaceId,
+    autoPauseMs: 20 * 1000,
+    persistKey: palaceId ? `palace_edit:${palaceId}` : null,
   })
   const timerRef = useRef(timer)
+  const practiceTitle = title || palace?.title || '未命名宫殿'
+  const practiceRoot = useMemo(
+    () => buildReviewTree(parsedEditorDoc, practiceTitle),
+    [parsedEditorDoc, practiceTitle],
+  )
+  const practiceNodeMap = useMemo(() => flattenNodes(practiceRoot), [practiceRoot])
+  const practiceDocFingerprint = useMemo(
+    () => JSON.stringify(parsedEditorDoc ?? {}),
+    [parsedEditorDoc],
+  )
+  const [practiceRevealMap, setPracticeRevealMap] = useState<Record<string, RevealState>>(
+    () => buildInitialRevealState(practiceRoot),
+  )
+  const [practiceRedNodeIds, setPracticeRedNodeIds] = useState<Set<string>>(
+    () => new Set<string>(),
+  )
+  const [practiceSnapshotLoaded, setPracticeSnapshotLoaded] = useState(false)
+
+  useEffect(() => {
+    setPracticeSnapshotLoaded(false)
+  }, [practiceDocFingerprint])
+
+  useEffect(() => {
+    if (!palaceId || !editorState) return
+    let cancelled = false
+
+    const loadPracticeSnapshot = async () => {
+      try {
+        const response = await getPracticeSessionProgressApi(palaceId)
+        if (cancelled) return
+        const progress = response.progress
+        if (progress && !progress.completed) {
+          setPracticeRevealMap(
+            buildInitialRevealState(practiceRoot, progress.reveal_map),
+          )
+          setPracticeRedNodeIds(
+            new Set((progress.red_node_ids ?? []).filter(Boolean)),
+          )
+        } else {
+          setPracticeRevealMap(buildInitialRevealState(practiceRoot))
+          setPracticeRedNodeIds(new Set<string>())
+        }
+      } catch {
+        if (cancelled) return
+        setPracticeRevealMap(buildInitialRevealState(practiceRoot))
+        setPracticeRedNodeIds(new Set<string>())
+      } finally {
+        if (!cancelled) {
+          setPracticeSnapshotLoaded(true)
+        }
+      }
+    }
+
+    void loadPracticeSnapshot()
+
+    return () => {
+      cancelled = true
+    }
+  }, [editorState, palaceId, practiceDocFingerprint, practiceRoot])
+
+  const resetInlinePractice = useCallback(() => {
+    setPracticeRevealMap(buildInitialRevealState(practiceRoot))
+    setPracticeRedNodeIds(new Set<string>())
+  }, [practiceRoot])
+
+  const practiceVisibleEditorState = useMemo(() => {
+    if (!editorState) return null
+    return buildVisibleEditorState(
+      editorState,
+      parsedEditorDoc,
+      practiceRevealMap,
+      practiceNodeMap,
+      practiceTitle,
+      practiceRedNodeIds,
+    )
+  }, [
+    editorState,
+    parsedEditorDoc,
+    practiceNodeMap,
+    practiceRedNodeIds,
+    practiceRevealMap,
+    practiceTitle,
+  ])
+
+  useEffect(() => {
+    if (!palaceId || !practiceSnapshotLoaded) return
+
+    const persistSnapshot = async () => {
+      if (allNodesRevealed(practiceRoot, practiceRevealMap)) {
+        await clearPracticeSessionProgressApi(palaceId)
+        return
+      }
+
+      const snapshot = {
+        completed: false,
+        reveal_map: practiceRevealMap,
+        red_node_ids: [...practiceRedNodeIds],
+      } satisfies Pick<
+        SessionProgressSnapshot,
+        'completed' | 'reveal_map' | 'red_node_ids'
+      >
+
+      await savePracticeSessionProgressApi(palaceId, snapshot)
+    }
+
+    void persistSnapshot()
+  }, [
+    palaceId,
+    practiceRedNodeIds,
+    practiceRevealMap,
+    practiceRoot,
+    practiceSnapshotLoaded,
+  ])
 
   useEffect(() => {
     if (!palaceId || !editorState) return
@@ -203,8 +366,21 @@ export function usePalaceEditPage() {
   }, [timer, timerRef])
 
   useEffect(() => {
+    const handleBeforeUnload = () => {
+      hardUnloadRef.current = true
+    }
+    window.addEventListener('beforeunload', handleBeforeUnload)
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload)
+    }
+  }, [])
+
+  useEffect(() => {
     return () => {
       const currentTimer = timerRef.current
+      if (hardUnloadRef.current) {
+        return
+      }
       if (currentTimer.startedAt && currentTimer.status !== 'completed') {
         void currentTimer.complete('left_page')
       }
@@ -223,18 +399,22 @@ export function usePalaceEditPage() {
   useEffect(() => {
     if (palaceId || isCreatingDraft) return
     setIsCreatingDraft(true)
-    void createPalaceApi({ title: '未命名宫殿', description: '', pegs: [] }).then(
-      (created) => {
-        navigate(`/palaces/${created.id}/edit`, { replace: true })
-      },
-    )
-  }, [isCreatingDraft, navigate, palaceId])
+    void requestDraftPalaceId(location.key).then((createdId) => {
+      navigate(`/palaces/${createdId}/edit`, { replace: true })
+    })
+  }, [isCreatingDraft, location.key, navigate, palaceId])
 
   useEffect(() => {
     if (!palace) return
     setTitle(palace.title)
     setCreatedAt(formatDateTimeInputValue(palace.created_at))
-    setSelectedChapterIds(palace.chapters.map((chapter) => chapter.id))
+    setExplicitChapterIds(
+      palace.chapters.filter((chapter) => chapter.is_explicit !== false).map((chapter) => chapter.id),
+    )
+    setInheritedChapterIds(
+      palace.chapters.filter((chapter) => chapter.is_explicit === false).map((chapter) => chapter.id),
+    )
+    setPrimaryChapterId(palace.primary_chapter_id ?? null)
     const nextSegments = Array.isArray((palace as any).segments) ? (palace as any).segments : []
     setSegments(nextSegments)
     setActiveSegmentId((current) =>
@@ -266,21 +446,25 @@ export function usePalaceEditPage() {
       const trees = await Promise.all(
         subjects.map((subject) => getSubjectTreeApi(subject.id)),
       )
-      const options: ChapterOption[] = []
-
-      const walk = (nodes: any[], depth: number, subjectName: string) => {
-        for (const node of nodes) {
-          options.push({
-            id: node.id,
-            label: `${subjectName} / ${'· '.repeat(depth)}${node.name}`,
-          })
-          walk(node.children || [], depth + 1, subjectName)
-        }
-      }
-
-      trees.forEach((tree) => {
-        walk(tree.chapters || [], 0, tree.subject?.name || '未命名学科')
+      const toNode = (
+        node: any,
+        depth: number,
+        subjectName: string,
+      ): ChapterOption => ({
+        id: node.id,
+        name: node.name,
+        depth,
+        subjectId: node.subject_id ?? null,
+        subjectName,
+        parentId: node.parent_id ?? null,
+        children: Array.isArray(node.children)
+          ? node.children.map((child: any) => toNode(child, depth + 1, subjectName))
+          : [],
       })
+
+      const options = trees.flatMap((tree) =>
+        (tree.chapters || []).map((node: any) => toNode(node, 0, tree.subject?.name || '未命名学科')),
+      )
       setChapterOptions(options)
     }
 
@@ -327,13 +511,108 @@ export function usePalaceEditPage() {
   const handleChapterToggle = async (chapterId: number) => {
     if (!palace) return
     timer.registerActivity({ source: 'chapter_toggle' })
-    const nextIds = selectedChapterIds.includes(chapterId)
-      ? selectedChapterIds.filter((item) => item !== chapterId)
-      : [...selectedChapterIds, chapterId]
-    setSelectedChapterIds(nextIds)
-    await linkPalaceChaptersApi(palace.id, nextIds)
+    const wasSelected = explicitChapterIds.includes(chapterId)
+    const nextIds = wasSelected
+      ? explicitChapterIds.filter((item) => item !== chapterId)
+      : [...explicitChapterIds, chapterId]
+    const nextPrimaryChapterId = wasSelected
+      ? (primaryChapterId === chapterId ? null : primaryChapterId)
+      : chapterId
+    setExplicitChapterIds(nextIds)
+    setPrimaryChapterId(nextPrimaryChapterId)
+    await linkPalaceChaptersApi(palace.id, {
+      chapter_ids: nextIds,
+      primary_chapter_id: nextPrimaryChapterId,
+    })
     await reload()
   }
+
+  const enterInlinePractice = useCallback(() => {
+    timer.registerActivity({ source: 'inline_practice_enter' })
+    setEditorMode('practice')
+  }, [timer])
+
+  const exitInlinePractice = useCallback(() => {
+    timer.registerActivity({ source: 'inline_practice_exit' })
+    setEditorMode('edit')
+  }, [timer])
+
+  const toggleMindMapFullscreen = useCallback((active?: boolean) => {
+    timer.registerActivity({ source: 'mind_map_immersive_toggle' })
+    if (active === true) {
+      suppressNativeFullscreenExitUntilRef.current = Date.now() + 1500
+    }
+    setMindMapFullscreen((current) => (typeof active === 'boolean' ? active : !current))
+  }, [timer])
+
+  const handleMindMapNativeFullscreenChange = useCallback((active: boolean) => {
+    if (active) {
+      return
+    }
+    if (Date.now() < suppressNativeFullscreenExitUntilRef.current) {
+      return
+    }
+    setMindMapFullscreen(false)
+  }, [])
+
+  const toggleInlinePractice = useCallback(() => {
+    if (editorMode === 'practice') {
+      exitInlinePractice()
+      return
+    }
+    enterInlinePractice()
+  }, [editorMode, enterInlinePractice, exitInlinePractice])
+
+  const handleInlinePracticeNodeClick = useCallback(
+    (nodes: MindMapSelection[]) => {
+      if (editorMode !== 'practice') return
+      const nodeId = buildSelectionNodeId(nodes[0] ?? null)
+      if (!nodeId) return
+      const node = practiceNodeMap.get(nodeId)
+      if (!node) return
+      timer.registerActivity({ source: 'inline_practice_click' })
+      setPracticeRevealMap((current) => {
+        const state = current[nodeId] ?? 'hidden'
+        if (state === 'placeholder') {
+          return { ...current, [nodeId]: 'revealed' }
+        }
+        if (state !== 'revealed') return current
+        const nextChild = findNextHiddenChild(node, current)
+        if (!nextChild) return current
+        return { ...current, [nextChild.id]: 'placeholder' }
+      })
+    },
+    [editorMode, practiceNodeMap, timer],
+  )
+
+  const handleInlinePracticeNodeContextMenu = useCallback(
+    (nodes: MindMapSelection[]) => {
+      if (editorMode !== 'practice') return
+      const nodeId = buildSelectionNodeId(nodes[0] ?? null)
+      if (!nodeId || nodeId === practiceRoot.id) return
+      timer.registerActivity({ source: 'inline_practice_contextmenu' })
+      setPracticeRevealMap((current) =>
+        hideNodeAndDescendants(nodeId, practiceNodeMap, current),
+      )
+    },
+    [editorMode, practiceNodeMap, practiceRoot.id, timer],
+  )
+
+  const restartInlinePractice = useCallback(async () => {
+    resetInlinePractice()
+    if (palaceId) {
+      await clearPracticeSessionProgressApi(palaceId)
+    }
+    timer.registerActivity({ source: 'inline_practice_restart' })
+  }, [palaceId, resetInlinePractice, timer])
+
+  const activeMindMapEditorState = useMemo<MindMapEditorState | null>(
+    () =>
+      editorMode === 'practice'
+        ? (practiceVisibleEditorState ?? editorState ?? null)
+        : (editorState ?? null),
+    [editorMode, editorState, practiceVisibleEditorState],
+  )
 
   const handleOpenVersions = async () => {
     if (!palace) return
@@ -582,12 +861,17 @@ export function usePalaceEditPage() {
     setTitle: handleTitleChange,
     createdAt,
     setCreatedAt: handleCreatedAtChange,
+    editorMode,
     chapterOptions,
-    selectedChapterIds,
+    explicitChapterIds,
+    inheritedChapterIds,
+    primaryChapterId,
     versionOpen,
     setVersionOpen,
     mindMapFullscreen,
     setMindMapFullscreen,
+    toggleMindMapFullscreen,
+    handleMindMapNativeFullscreenChange,
     versions,
     removedDuplicateCount,
     previewingVersionId,
@@ -618,6 +902,7 @@ export function usePalaceEditPage() {
     currentRangeTargetSegment,
     subtreeUidMap,
     editorState,
+    activeMindMapEditorState,
     frameVersion,
     selectedNodes,
     selectedNode,
@@ -628,6 +913,12 @@ export function usePalaceEditPage() {
     handleAttachmentUpload,
     handleAttachmentDelete,
     handleChapterToggle,
+    enterInlinePractice,
+    exitInlinePractice,
+    toggleInlinePractice,
+    handleInlinePracticeNodeClick,
+    handleInlinePracticeNodeContextMenu,
+    restartInlinePractice,
     handleOpenVersions,
     handleOpenCreateSegment,
     handleOpenEditSegment,

@@ -11,6 +11,7 @@ from memory_anki.infrastructure.db.models import (
 from memory_anki.modules.palaces.application.segment_service import (
     build_segments_editor_doc,
     build_segment_editor_doc,
+    palace_review_stages_json,
     segment_summary_json,
 )
 from memory_anki.modules.palaces.presentation.router import palace_json as palace_detail_json
@@ -30,6 +31,11 @@ from memory_anki.modules.reviews.application.review_service import (
     submit_batch_segment_review,
     submit_review,
     submit_segment_review,
+)
+from memory_anki.modules.reviews.application.schedule_service import (
+    get_algorithm_stage_labels,
+    get_config_value,
+    normalize_algorithm,
 )
 from memory_anki.modules.sessions.application.session_progress_service import (
     clear_review_progress,
@@ -114,7 +120,20 @@ def chapter_json(chapter: Chapter | None) -> dict | None:
     }
 
 
-def schedule_json(schedule) -> dict:
+def schedule_json(schedule, session: Session | None = None) -> dict:
+    palace_data = palace_json(schedule.palace) if schedule.palace else None
+    if palace_data and session:
+        algorithm = next(
+            (
+                normalize_algorithm(s.algorithm_used)
+                for s in (schedule.palace.review_schedules or [])
+                if s.algorithm_used
+            ),
+            normalize_algorithm(get_config_value(session, "default_algorithm")),
+        )
+        stage_labels = get_algorithm_stage_labels(session, algorithm)
+        palace_data["stage_labels"] = stage_labels
+        palace_data["review_stages"] = palace_review_stages_json(session, schedule.palace, stage_labels)
     return {
         "id": schedule.id,
         "palace_id": schedule.palace_id,
@@ -125,14 +144,14 @@ def schedule_json(schedule) -> dict:
         "completed_at": schedule.completed_at.isoformat(timespec="minutes") if getattr(schedule, "completed_at", None) else None,
         "review_number": schedule.review_number,
         "review_type": schedule.review_type,
-        "palace": palace_json(schedule.palace) if schedule.palace else None,
+        "palace": palace_data,
     }
 
 
-def grouped_schedule_json(group: dict) -> dict:
+def grouped_schedule_json(group: dict, session: Session | None = None) -> dict:
     schedule = group["schedule"]
     return {
-        **schedule_json(schedule),
+        **schedule_json(schedule, session),
         "schedule_count": group["schedule_count"],
         "overdue_schedule_count": group["overdue_schedule_count"],
         "next_due_date": group["next_due_date"].isoformat(),
@@ -188,14 +207,14 @@ def build_virtual_default_segment_session_payload(
     }
 
 
-def queue_payload_json(payload: dict) -> dict:
+def queue_payload_json(payload: dict, session: Session | None = None) -> dict:
     return {
         "due_count": payload["due_count"],
         "overdue_count": payload["overdue_count"],
         "smoothed_count": payload["smoothed_count"],
         "stats": payload["stats"],
         "chapter": chapter_json(payload.get("chapter")),
-        "reviews": [grouped_schedule_json(group) for group in payload["reviews"]],
+        "reviews": [grouped_schedule_json(group, session) for group in payload["reviews"]],
     }
 
 
@@ -233,7 +252,7 @@ def api_spread(data: dict, session: Session = Depends(session_dep)):
 
 @router.get("/review/queue")
 def api_queue(session: Session = Depends(session_dep)):
-    return queue_payload_json(get_review_queue_payload(session))
+    return queue_payload_json(get_review_queue_payload(session), session)
 
 
 @router.get("/segment-review/queue")
@@ -244,7 +263,7 @@ def api_segment_queue(session: Session = Depends(session_dep)):
 @router.get("/review/chapter/{chapter_id}/queue")
 def api_chapter_queue(chapter_id: int, session: Session = Depends(session_dep)):
     payload = get_chapter_queue_payload(session, chapter_id)
-    return queue_payload_json(payload)
+    return queue_payload_json(payload, session)
 
 
 @router.get("/segment-review/chapter/{chapter_id}/queue")
@@ -258,7 +277,7 @@ def api_review_session(schedule_id: int, session: Session = Depends(session_dep)
     schedule = session.query(ReviewSchedule).filter_by(id=schedule_id).first()
     if not schedule:
         raise_not_found()
-    return schedule_json(schedule)
+    return schedule_json(schedule, session)
 
 
 @router.get("/segment-review/session/{schedule_id}")
@@ -376,6 +395,7 @@ def api_submit_session(schedule_id: int, data: dict, session: Session = Depends(
         schedule_id,
         int(data.get("duration_seconds", 0)),
         str(data.get("completion_mode", "manual_complete")),
+        target_review_number=data.get("target_review_number"),
     )
     if not log:
         raise_not_found()
@@ -404,6 +424,7 @@ def api_submit_segment_session(schedule_id: int, data: dict, session: Session = 
         schedule_id,
         int(data.get("duration_seconds", 0)),
         str(data.get("completion_mode", "manual_complete")),
+        target_review_number=data.get("target_review_number"),
     )
     if schedule:
         clear_segment_review_progress(session, schedule_id)
@@ -427,6 +448,7 @@ def api_submit_segment_session(schedule_id: int, data: dict, session: Session = 
         schedule_id,
         int(data.get("duration_seconds", 0)),
         str(data.get("completion_mode", "manual_complete")),
+        target_review_number=data.get("target_review_number"),
     )
     if not review_log:
         raise_not_found()
@@ -456,7 +478,7 @@ def api_submit_batch_segment_session(data: dict, session: Session = Depends(sess
 
 @router.get("/review")
 def api_reviews(session: Session = Depends(session_dep)):
-    return queue_payload_json(get_review_queue_payload(session))
+    return queue_payload_json(get_review_queue_payload(session), session)
 
 
 @router.get("/review/{schedule_id}")

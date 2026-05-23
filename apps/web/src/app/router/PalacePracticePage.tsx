@@ -135,7 +135,6 @@ export default function PalacePractice() {
               await clearPracticeSessionProgressApi(palace.id)
               setHasResumeProgress(false)
               setInitialSnapshot(null)
-              setFlowKey((value) => value + 1)
             }}
             onComplete={async () => {
               await clearPracticeSessionProgressApi(palace.id)

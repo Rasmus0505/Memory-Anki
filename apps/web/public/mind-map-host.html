@@ -26,6 +26,15 @@
         background: #f8fafc;
       }
 
+      body.memory-anki-ui-cleared .toolbarContainer {
+        display: none !important;
+      }
+
+      body.memory-anki-ui-cleared .navigatorContainer {
+        opacity: 0 !important;
+        pointer-events: none !important;
+      }
+
       body.is-host-readonly:not(.is-host-readonly-toolbar-visible) .toolbarContainer {
         display: none !important;
       }
@@ -84,6 +93,56 @@
 
       .memory-anki-segment-button:hover {
         background: #f8fafc;
+      }
+
+      .memory-anki-practice-button[hidden] {
+        display: none !important;
+      }
+
+      .memory-anki-layout-button {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        height: 32px;
+        padding: 0 12px;
+        border: 1px solid #d8dee9;
+        border-radius: 6px;
+        background: #ffffff;
+        color: #111827;
+        font-size: 13px;
+        cursor: pointer;
+      }
+
+      .memory-anki-layout-button:hover {
+        background: #f8fafc;
+      }
+
+      .memory-anki-layout-button.is-active {
+        border-color: #0f172a;
+        background: #0f172a;
+        color: #ffffff;
+      }
+
+      .memory-anki-restore-ui-button {
+        position: fixed;
+        top: 16px;
+        right: 16px;
+        z-index: 10020;
+        display: inline-flex;
+        align-items: center;
+        height: 34px;
+        padding: 0 12px;
+        border: 1px solid rgba(15, 23, 42, 0.18);
+        border-radius: 9999px;
+        background: rgba(255, 255, 255, 0.96);
+        color: #0f172a;
+        font-size: 13px;
+        box-shadow: 0 10px 24px rgba(15, 23, 42, 0.12);
+        cursor: pointer;
+      }
+
+      .memory-anki-restore-ui-button[hidden] {
+        display: none !important;
       }
 
       .memory-anki-segment-range-panel {
@@ -233,8 +292,10 @@
     <script>
       const hostId = new URLSearchParams(window.location.search).get('host')
       const KEYBOARD_FOCUS_CLASS = 'memory-anki-keyboard-focus'
-      const keyboardState = {
-        activeNodeUid: null,
+      const focusState = {
+        committedNodeUid: null,
+        visualFocusNodeUid: null,
+        editingNodeUid: null,
         mode: 'navigating',
       }
       const segmentState = {
@@ -242,6 +303,18 @@
         menuOpen: false,
         nodeUidToSegment: new Map(),
         nodeParentToChildren: new Map(),
+        nodeChildToParent: new Map(),
+      }
+      const immersiveToggleState = {
+        nativeFullscreenRegistered: false,
+      }
+      const interactionState = {
+        pointerDownNodeUid: null,
+        pointerDownWithModifier: false,
+        pointerIntentClearTimer: null,
+      }
+      const uiChromeState = {
+        cleared: false,
       }
 
       function cloneValue(value) {
@@ -267,6 +340,17 @@
         return Boolean(window.__memoryAnkiHostState?.readonly)
       }
 
+      function isToolbarReadonlyHost() {
+        return Boolean(
+          window.__memoryAnkiHostState?.readonly &&
+            window.__memoryAnkiHostState?.showToolbarWhenReadonly
+        )
+      }
+
+      function isVisualReadonlyHost() {
+        return Boolean(isReadonlyHost() && !isToolbarReadonlyHost())
+      }
+
       function isEditableElement(element) {
         if (!element) return false
         const tagName = element.tagName
@@ -280,7 +364,10 @@
       }
 
       function syncKeyboardMode() {
-        keyboardState.mode = isEditableElement(document.activeElement) ? 'editing' : 'navigating'
+        focusState.mode = isEditableElement(document.activeElement) ? 'editing' : 'navigating'
+        if (focusState.mode !== 'editing') {
+          focusState.editingNodeUid = null
+        }
       }
 
       function getNodeData(node) {
@@ -387,8 +474,16 @@
         getHostBridge()?.notify?.('node_active', [serializeNode(node)])
       }
 
+      function serializeNodes(nodes) {
+        if (!Array.isArray(nodes)) return []
+        return nodes
+          .filter(Boolean)
+          .map(node => serializeNode(node))
+      }
+
       function buildNodeTreeIndex() {
         const parentToChildren = new Map()
+        const childToParent = new Map()
         const walk = node => {
           const uid = getNodeUid(node)
           if (!uid) return []
@@ -398,6 +493,7 @@
             const childUid = getNodeUid(child)
             if (childUid) {
               nextChildUids.push(childUid)
+              childToParent.set(childUid, uid)
             }
             walk(child)
           })
@@ -421,6 +517,7 @@
           })
         }
         segmentState.nodeParentToChildren = parentToChildren
+        segmentState.nodeChildToParent = childToParent
       }
 
       function collectSubtreeUids(uid) {
@@ -447,11 +544,114 @@
         segmentState.nodeUidToSegment = nextMap
       }
 
+      function getStableFocusUid() {
+        return (
+          focusState.editingNodeUid ||
+          focusState.committedNodeUid ||
+          focusState.visualFocusNodeUid ||
+          null
+        )
+      }
+
+      function rememberFocusedNode(node, options = {}) {
+        const uid = getNodeUid(node)
+        if (!uid) return false
+
+        const previousCommittedUid = focusState.committedNodeUid
+        if (options.commit !== false) {
+          focusState.committedNodeUid = uid
+        }
+        if (options.visual !== false) {
+          focusState.visualFocusNodeUid = uid
+        }
+        if (options.lockEditing) {
+          focusState.editingNodeUid = uid
+        } else if (options.clearEditingLock) {
+          focusState.editingNodeUid = null
+        }
+
+        updateKeyboardFocusClass()
+        if (
+          options.notify !== false &&
+          (options.forceNotify || previousCommittedUid !== focusState.committedNodeUid)
+        ) {
+          notifyNodeActive(node)
+        }
+        return true
+      }
+
+      function resolveClosestExistingNode(uid) {
+        let currentUid = uid || null
+        const visited = new Set()
+        while (currentUid && !visited.has(currentUid)) {
+          visited.add(currentUid)
+          const node = getNodeByUid(currentUid)
+          if (node && !node.isHide) return node
+          currentUid = segmentState.nodeChildToParent.get(currentUid) || null
+        }
+        return null
+      }
+
+      function resolveStableFocusNode() {
+        if (focusState.editingNodeUid) {
+          const editingNode = getNodeByUid(focusState.editingNodeUid)
+          if (editingNode && !editingNode.isHide) return editingNode
+          focusState.editingNodeUid = null
+        }
+
+        if (focusState.committedNodeUid) {
+          const committedNode = resolveClosestExistingNode(focusState.committedNodeUid)
+          focusState.committedNodeUid = committedNode ? getNodeUid(committedNode) : null
+          if (committedNode) return committedNode
+        }
+
+        if (focusState.visualFocusNodeUid) {
+          const visualNode = resolveClosestExistingNode(focusState.visualFocusNodeUid)
+          focusState.visualFocusNodeUid = visualNode ? getNodeUid(visualNode) : null
+          if (visualNode) return visualNode
+        }
+
+        return null
+      }
+
+      function restoreStableFocusAfterRender() {
+        const activeNodes = Array.isArray(getRenderer()?.activeNodeList)
+          ? getRenderer().activeNodeList
+          : []
+        if (activeNodes.length > 1) {
+          updateKeyboardFocusClass()
+          return false
+        }
+        const targetNode = resolveStableFocusNode()
+        if (!targetNode) {
+          updateKeyboardFocusClass()
+          return false
+        }
+
+        const targetUid = getNodeUid(targetNode)
+        focusState.visualFocusNodeUid = targetUid
+        const activeNode = getRenderer()?.activeNodeList?.[0] || null
+        const activeUid = getNodeUid(activeNode)
+        if (!isReadonlyHost() && activeUid !== targetUid) {
+          activateNode(targetNode, {
+            notify: false,
+            commit: false,
+            visual: true,
+            lockEditing: focusState.editingNodeUid === targetUid,
+          })
+          return true
+        }
+
+        updateKeyboardFocusClass()
+        return false
+      }
+
       function updateKeyboardFocusClass() {
+        const targetUid = getStableFocusUid()
         getCachedNodes().forEach((node) => {
           const element = node?.group?.node
           if (!element?.classList) return
-          if (getNodeUid(node) === keyboardState.activeNodeUid) {
+          if (getNodeUid(node) === targetUid) {
             element.classList.add(KEYBOARD_FOCUS_CLASS)
           } else {
             element.classList.remove(KEYBOARD_FOCUS_CLASS)
@@ -646,6 +846,23 @@
         return true
       }
 
+      async function exitNativeFullscreenIfNeeded() {
+        if (!document.fullscreenElement) return
+        try {
+          await document.exitFullscreen?.()
+        } catch (error) {
+          console.warn(error)
+        }
+      }
+
+      async function enterNativeFullscreen() {
+        try {
+          await document.documentElement.requestFullscreen?.()
+        } catch (error) {
+          console.warn(error)
+        }
+      }
+
       function ensureSegmentToolbar() {
         const toolbarBlock = document.querySelector('.toolbarContainer .toolbar .toolbarBlock')
         if (!toolbarBlock) return false
@@ -656,6 +873,24 @@
           host.innerHTML = `
             <button type="button" class="memory-anki-segment-button">
               <span>分块</span>
+            </button>
+            <button type="button" class="memory-anki-segment-button memory-anki-mindmap-import-button" hidden>
+              <span>转脑图</span>
+            </button>
+            <button type="button" class="memory-anki-segment-button memory-anki-text-import-button" hidden>
+              <span>转文字</span>
+            </button>
+            <button type="button" class="memory-anki-segment-button memory-anki-practice-button" hidden>
+              <span>练习</span>
+            </button>
+            <button type="button" class="memory-anki-layout-button memory-anki-immersive-edit-button">
+              <span>半屏编辑</span>
+            </button>
+            <button type="button" class="memory-anki-layout-button memory-anki-native-fullscreen-button">
+              <span>全屏编辑</span>
+            </button>
+            <button type="button" class="memory-anki-layout-button memory-anki-clear-ui-button">
+              <span>清屏</span>
             </button>
             <div class="memory-anki-segment-range-panel" hidden>
               <label>
@@ -675,8 +910,63 @@
             const draft = getSegmentRangeDraft()
             notifySegmentRangeMode(!draft.active, draft.targetSegmentId || 'new')
           })
+          const practiceButton = host.querySelector('.memory-anki-practice-button')
+          const mindmapImportButton = host.querySelector('.memory-anki-mindmap-import-button')
+          const textImportButton = host.querySelector('.memory-anki-text-import-button')
+          const immersiveEditButton = host.querySelector('.memory-anki-immersive-edit-button')
+          const nativeFullscreenButton = host.querySelector('.memory-anki-native-fullscreen-button')
+          const clearUiButton = host.querySelector('.memory-anki-clear-ui-button')
+          practiceButton?.addEventListener('click', event => {
+            event.preventDefault()
+            event.stopPropagation()
+            getHostBridge()?.notify?.('practice_toggle', null)
+          })
+          mindmapImportButton?.addEventListener('click', event => {
+            event.preventDefault()
+            event.stopPropagation()
+            getHostBridge()?.notify?.('mindmap_import_open', null)
+          })
+          textImportButton?.addEventListener('click', event => {
+            event.preventDefault()
+            event.stopPropagation()
+            getHostBridge()?.notify?.('image_text_import_open', null)
+          })
+          immersiveEditButton?.addEventListener('click', async event => {
+            event.preventDefault()
+            event.stopPropagation()
+            if (document.fullscreenElement) {
+              await exitNativeFullscreenIfNeeded()
+              getHostBridge()?.notify?.('fullscreen_toggle', true)
+              return
+            }
+            getHostBridge()?.notify?.('fullscreen_toggle', !isImmersiveModeActive())
+          })
+          nativeFullscreenButton?.addEventListener('click', async event => {
+            event.preventDefault()
+            event.stopPropagation()
+            if (document.fullscreenElement) {
+              await exitNativeFullscreenIfNeeded()
+              return
+            }
+            if (isImmersiveModeActive()) {
+              getHostBridge()?.notify?.('fullscreen_toggle', false)
+            }
+            await enterNativeFullscreen()
+          })
+          clearUiButton?.addEventListener('click', event => {
+            event.preventDefault()
+            event.stopPropagation()
+            setUiCleared(true)
+          })
         }
         const label = host.querySelector('.memory-anki-segment-button span')
+        const practiceButton = host.querySelector('.memory-anki-practice-button')
+        const practiceLabel = practiceButton?.querySelector('span')
+        const mindmapImportButton = host.querySelector('.memory-anki-mindmap-import-button')
+        const textImportButton = host.querySelector('.memory-anki-text-import-button')
+        const immersiveEditButton = host.querySelector('.memory-anki-immersive-edit-button')
+        const nativeFullscreenButton = host.querySelector('.memory-anki-native-fullscreen-button')
+        const clearUiButton = host.querySelector('.memory-anki-clear-ui-button')
         const panel = host.querySelector('.memory-anki-segment-range-panel')
         const targetSelect = host.querySelector('.memory-anki-segment-range-select')
         const meta = host.querySelector('.memory-anki-segment-range-meta')
@@ -694,6 +984,42 @@
         }
         if (panel) {
           panel.hidden = !rangeDraft.active
+        }
+        if (practiceButton) {
+          practiceButton.hidden = !Boolean(window.__memoryAnkiHostState?.showPracticeButton)
+        }
+        if (mindmapImportButton) {
+          mindmapImportButton.hidden = !Boolean(window.__memoryAnkiHostState?.showImportButtons)
+        }
+        if (textImportButton) {
+          textImportButton.hidden = !Boolean(window.__memoryAnkiHostState?.showImportButtons)
+        }
+        if (practiceLabel) {
+          practiceLabel.textContent = window.__memoryAnkiHostState?.practiceToggleLabel || '练习'
+        }
+        if (immersiveEditButton) {
+          immersiveEditButton.hidden = false
+        }
+        if (nativeFullscreenButton) {
+          nativeFullscreenButton.hidden = false
+        }
+        if (clearUiButton) {
+          clearUiButton.hidden = false
+        }
+        if (immersiveEditButton) {
+          immersiveEditButton.classList.toggle('is-active', isImmersiveModeActive())
+          immersiveEditButton.setAttribute('title', '半屏编辑')
+          immersiveEditButton.setAttribute('aria-label', '半屏编辑')
+        }
+        if (nativeFullscreenButton) {
+          nativeFullscreenButton.classList.toggle('is-active', Boolean(document.fullscreenElement))
+          nativeFullscreenButton.setAttribute('title', '全屏编辑')
+          nativeFullscreenButton.setAttribute('aria-label', '全屏编辑')
+        }
+        if (clearUiButton) {
+          clearUiButton.classList.toggle('is-active', isUiCleared())
+          clearUiButton.setAttribute('title', '清屏')
+          clearUiButton.setAttribute('aria-label', '清屏')
         }
         if (targetSelect) {
           targetSelect.innerHTML = ''
@@ -740,48 +1066,114 @@
         return true
       }
 
+      function isUiCleared() {
+        return Boolean(uiChromeState.cleared)
+      }
+
+      function ensureRestoreUiButton() {
+        let button = document.querySelector('.memory-anki-restore-ui-button')
+        if (!button) {
+          button = document.createElement('button')
+          button.type = 'button'
+          button.className = 'memory-anki-restore-ui-button'
+          button.textContent = '显栏'
+          button.hidden = true
+          button.addEventListener('click', event => {
+            event.preventDefault()
+            event.stopPropagation()
+            setUiCleared(false)
+          })
+          document.body.appendChild(button)
+        }
+        button.hidden = !isUiCleared()
+        return button
+      }
+
+      function setUiCleared(nextValue) {
+        uiChromeState.cleared = Boolean(nextValue)
+        document.body.classList.toggle('memory-anki-ui-cleared', uiChromeState.cleared)
+        if (uiChromeState.cleared) {
+          closeSegmentMenu()
+        }
+        ensureRestoreUiButton()
+      }
+
+      function isImmersiveModeActive() {
+        return Boolean(window.__memoryAnkiHostState?.immersiveModeActive)
+      }
+
+      function updateNavigatorFullscreenPresentation() {
+        const buttonSelectors = [
+          '.navigatorContainer .iconquanping',
+          '.navigatorContainer .iconquanping1',
+        ]
+        buttonSelectors.forEach(selector => {
+          document.querySelectorAll(selector).forEach(button => {
+            if (!(button instanceof HTMLElement)) return
+            button.style.display = 'none'
+            const item = button.closest('.item')
+            if (item instanceof HTMLElement) {
+              item.style.display = 'none'
+            }
+          })
+        })
+        const host = document.querySelector('.memory-anki-segment-toolbar')
+        if (host) {
+          const immersiveButton = host.querySelector('.memory-anki-immersive-edit-button')
+          const nativeButton = host.querySelector('.memory-anki-native-fullscreen-button')
+          const clearButton = host.querySelector('.memory-anki-clear-ui-button')
+          immersiveButton?.classList.toggle('is-active', isImmersiveModeActive())
+          nativeButton?.classList.toggle('is-active', Boolean(document.fullscreenElement))
+          clearButton?.classList.toggle('is-active', isUiCleared())
+        }
+        ensureRestoreUiButton()
+      }
+
+      function registerNativeFullscreenButtonStateSync() {
+        if (immersiveToggleState.nativeFullscreenRegistered) return
+        immersiveToggleState.nativeFullscreenRegistered = true
+        document.addEventListener(
+          'fullscreenchange',
+          () => {
+            updateNavigatorFullscreenPresentation()
+            ensureSegmentToolbar()
+          },
+          true,
+        )
+      }
+
       function getCurrentActiveNode() {
         const renderer = getRenderer()
         const activeNode = renderer?.activeNodeList?.[0] || null
         if (activeNode) return activeNode
-        if (keyboardState.activeNodeUid) return getNodeByUid(keyboardState.activeNodeUid)
-
-        const nodes = getCachedNodes()
-          .filter((node) => !node.isHide)
-          .sort((left, right) => {
-            if (Number(left.layerIndex || 0) !== Number(right.layerIndex || 0)) {
-              return Number(left.layerIndex || 0) - Number(right.layerIndex || 0)
-            }
-            if (Number(left._top || 0) !== Number(right._top || 0)) {
-              return Number(left._top || 0) - Number(right._top || 0)
-            }
-            return Number(left._left || 0) - Number(right._left || 0)
-          })
-        return nodes[0] || null
+        if (focusState.editingNodeUid) return getNodeByUid(focusState.editingNodeUid)
+        if (focusState.committedNodeUid) return resolveClosestExistingNode(focusState.committedNodeUid)
+        if (focusState.visualFocusNodeUid) return resolveClosestExistingNode(focusState.visualFocusNodeUid)
+        return null
       }
 
       function activateNode(node, options = {}) {
         if (!node) return false
         const renderer = getRenderer()
         if (!renderer) return false
-
         try {
-          renderer.clearActiveNode?.()
-        } catch (error) {
-          console.warn(error)
-        }
-
-        try {
+          if (options.clearExistingSelection !== false) {
+            renderer.clearActiveNode?.()
+          }
           node.active?.()
-          renderer.render?.()
         } catch (error) {
           console.warn(error)
           return false
         }
 
-        keyboardState.activeNodeUid = getNodeUid(node)
-        updateKeyboardFocusClass()
-        if (options.notify !== false) notifyNodeActive(node)
+        rememberFocusedNode(node, {
+          notify: options.notify,
+          forceNotify: options.forceNotify,
+          commit: options.commit,
+          visual: options.visual,
+          lockEditing: options.lockEditing,
+          clearEditingLock: options.clearEditingLock,
+        })
         return true
       }
 
@@ -859,6 +1251,7 @@
         }, 0)
         window.setTimeout(() => {
           syncKeyboardMode()
+          restoreStableFocusAfterRender()
           updateKeyboardFocusClass()
         }, 120)
       }
@@ -868,7 +1261,9 @@
         const element = node?.group?.node
         if (!element) return false
 
-        activateNode(node)
+        activateNode(node, {
+          lockEditing: true,
+        })
         const rect = element.getBoundingClientRect()
         const eventInit = {
           bubbles: true,
@@ -894,7 +1289,10 @@
         if (!renderer || !activeNode) return false
 
         const parentUid = getNodeUid(activeNode)
-        activateNode(activeNode)
+        focusState.committedNodeUid = parentUid
+        focusState.visualFocusNodeUid = parentUid
+        focusState.editingNodeUid = null
+        updateKeyboardFocusClass()
 
         try {
           renderer.insertChildNode?.()
@@ -905,17 +1303,30 @@
 
         window.setTimeout(() => {
           const parentNode = getNodeByUid(parentUid)
-          if (parentNode) activateNode(parentNode)
-          if (isEditableElement(document.activeElement)) {
-            document.activeElement.blur()
+          if (parentNode) {
+            activateNode(parentNode, {
+              notify: false,
+              commit: true,
+              visual: true,
+              lockEditing: false,
+            })
           }
           syncKeyboardMode()
+          updateKeyboardFocusClass()
         }, 0)
 
         window.setTimeout(() => {
           const parentNode = getNodeByUid(parentUid)
-          if (parentNode) activateNode(parentNode)
+          if (parentNode) {
+            activateNode(parentNode, {
+              notify: false,
+              commit: true,
+              visual: true,
+              lockEditing: false,
+            })
+          }
           syncKeyboardMode()
+          updateKeyboardFocusClass()
         }, 120)
 
         return true
@@ -925,7 +1336,7 @@
         if (isReadonlyHost()) return
 
         syncKeyboardMode()
-        if (keyboardState.mode === 'editing') {
+        if (focusState.mode === 'editing') {
           if (event.key === 'Enter' && !event.shiftKey) {
             scheduleModeSync()
           }
@@ -983,6 +1394,40 @@
         document.addEventListener('focusout', scheduleModeSync, true)
       }
 
+      function registerPointerIntentListener() {
+        if (window.__memoryAnkiPointerIntentRegistered) return
+        window.__memoryAnkiPointerIntentRegistered = true
+        document.addEventListener(
+          'pointerdown',
+          event => {
+            if (interactionState.pointerIntentClearTimer != null) {
+              window.clearTimeout(interactionState.pointerIntentClearTimer)
+              interactionState.pointerIntentClearTimer = null
+            }
+            const node = getNodeByElement(event.target)
+            interactionState.pointerDownNodeUid = getNodeUid(node) || null
+            interactionState.pointerDownWithModifier = Boolean(
+              event.metaKey || event.ctrlKey || event.shiftKey || event.altKey,
+            )
+          },
+          true
+        )
+        document.addEventListener(
+          'pointerup',
+          () => {
+            if (interactionState.pointerIntentClearTimer != null) {
+              window.clearTimeout(interactionState.pointerIntentClearTimer)
+            }
+            interactionState.pointerIntentClearTimer = window.setTimeout(() => {
+              interactionState.pointerDownNodeUid = null
+              interactionState.pointerDownWithModifier = false
+              interactionState.pointerIntentClearTimer = null
+            }, 220)
+          },
+          true
+        )
+      }
+
       function registerContextMenuListener() {
         if (window.__memoryAnkiContextMenuRegistered) return
         window.__memoryAnkiContextMenuRegistered = true
@@ -994,9 +1439,28 @@
             if (!node) return
             event.preventDefault()
             event.stopPropagation()
-            keyboardState.activeNodeUid = getNodeUid(node) || null
+            focusState.visualFocusNodeUid = getNodeUid(node) || focusState.visualFocusNodeUid
             updateKeyboardFocusClass()
             getHostBridge()?.notify?.('node_contextmenu', [serializeNode(node)])
+          },
+          true
+        )
+      }
+
+      function registerEditableDoubleClickListener() {
+        if (window.__memoryAnkiEditableDoubleClickRegistered) return
+        window.__memoryAnkiEditableDoubleClickRegistered = true
+        document.addEventListener(
+          'dblclick',
+          event => {
+            if (isReadonlyHost()) return
+            const node = getNodeByElement(event.target)
+            if (!node) return
+            rememberFocusedNode(node, {
+              notify: true,
+              lockEditing: true,
+            })
+            scheduleModeSync()
           },
           true
         )
@@ -1057,7 +1521,8 @@
         }
         const isReadonly = Boolean(window.__memoryAnkiHostState.readonly)
         const showToolbarWhenReadonly = Boolean(window.__memoryAnkiHostState.showToolbarWhenReadonly)
-        document.body.classList.toggle('is-host-readonly', isReadonly)
+        const visualReadonly = isVisualReadonlyHost()
+        document.body.classList.toggle('is-host-readonly', visualReadonly)
         document.body.classList.toggle(
           'is-host-readonly-toolbar-visible',
           isReadonly && showToolbarWhenReadonly
@@ -1068,30 +1533,47 @@
           null
         const store = appRoot && appRoot.$store
         if (store) {
-          store.commit('setIsReadonly', isReadonly)
-          if (isReadonly) {
+          store.commit('setIsReadonly', visualReadonly)
+          if (visualReadonly) {
             store.commit('setActiveSidebar', null)
           }
         }
         const mindMap = window.__memoryAnkiMindMapInstance
         if (!mindMap) return
         if (typeof window.__memoryAnkiHostState.readonly === 'boolean') {
-          mindMap.setMode(isReadonly ? 'readonly' : 'edit')
+          const nextMode = visualReadonly ? 'readonly' : 'edit'
+          const currentMode =
+            typeof mindMap.opt?.mode === 'string'
+              ? mindMap.opt.mode
+              : typeof mindMap.mode === 'string'
+                ? mindMap.mode
+                : null
+          if (currentMode !== nextMode) {
+            mindMap.setMode(nextMode)
+          }
         }
         if (isReadonly) {
           resetReadonlyInteractionState()
+        } else {
+          window.setTimeout(() => {
+            restoreStableFocusAfterRender()
+          }, 0)
         }
         ensureSegmentToolbar()
         window.setTimeout(() => {
           ensureSegmentToolbar()
           applySegmentNodeStyles()
+          updateNavigatorFullscreenPresentation()
         }, 0)
+        ensureRestoreUiButton()
+        updateNavigatorFullscreenPresentation()
       }
 
       window.applyHostState = applyHostState
 
       function resetReadonlyInteractionState() {
-        keyboardState.activeNodeUid = null
+        focusState.editingNodeUid = null
+        focusState.visualFocusNodeUid = focusState.committedNodeUid
         syncKeyboardMode()
         try {
           getRenderer()?.clearActiveNode?.()
@@ -1186,9 +1668,12 @@
         window.$bus.$on('app_inited', mindMap => {
           window.__memoryAnkiMindMapInstance = mindMap
           registerKeyboardListeners()
+          registerPointerIntentListener()
           registerContextMenuListener()
           registerReadonlyClickListener()
+          registerEditableDoubleClickListener()
           registerFullscreenListener()
+          registerNativeFullscreenButtonStateSync()
           applyHostState(window.__memoryAnkiHostState || {})
           if (window.__memoryAnkiPendingEditorState) {
             syncHostEditorState(window.__memoryAnkiPendingEditorState)
@@ -1197,26 +1682,111 @@
           updateKeyboardFocusClass()
           ensureSegmentToolbar()
           applySegmentNodeStyles()
+          updateNavigatorFullscreenPresentation()
           getHostBridge()?.notify?.('app_inited', null)
         })
         window.$bus.$on('node_active', (...args) => {
           const activeNodes = Array.isArray(args[1]) ? args[1] : []
-          keyboardState.activeNodeUid = getNodeUid(activeNodes[0]) || null
           syncKeyboardMode()
-          updateKeyboardFocusClass()
-          getHostBridge()?.notify?.(
-            'node_active',
-            activeNodes.map(node => serializeNode(node))
-          )
+          if (activeNodes.length > 1) {
+            const preferredNode =
+              (interactionState.pointerDownNodeUid
+                ? activeNodes.find(node => getNodeUid(node) === interactionState.pointerDownNodeUid)
+                : null) ||
+              activeNodes.find(node => getNodeUid(node) === focusState.committedNodeUid) ||
+              activeNodes[activeNodes.length - 1] ||
+              activeNodes[0] ||
+              null
+            if (preferredNode) {
+              rememberFocusedNode(preferredNode, {
+                notify: false,
+                clearEditingLock: true,
+                commit: !interactionState.pointerDownWithModifier,
+                visual: true,
+              })
+            } else {
+              updateKeyboardFocusClass()
+            }
+            getHostBridge()?.notify?.('node_active', serializeNodes(activeNodes))
+            interactionState.pointerDownNodeUid = null
+            interactionState.pointerDownWithModifier = false
+            return
+          }
+          const activeNode = activeNodes[0] || null
+          const activeUid = getNodeUid(activeNode)
+
+          if (!activeUid) {
+            restoreStableFocusAfterRender()
+            return
+          }
+
+          if (focusState.editingNodeUid) {
+            if (activeUid !== focusState.editingNodeUid) {
+              restoreStableFocusAfterRender()
+              return
+            }
+            focusState.visualFocusNodeUid = activeUid
+            updateKeyboardFocusClass()
+            return
+          }
+
+          if (!focusState.committedNodeUid) {
+            rememberFocusedNode(activeNode, {
+              notify: false,
+            })
+            getHostBridge()?.notify?.('node_active', serializeNodes(activeNodes))
+            interactionState.pointerDownNodeUid = null
+            interactionState.pointerDownWithModifier = false
+            return
+          }
+
+          if (
+            interactionState.pointerDownNodeUid &&
+            activeUid === interactionState.pointerDownNodeUid
+          ) {
+            rememberFocusedNode(activeNode, {
+              notify: false,
+              clearEditingLock: true,
+              commit: !interactionState.pointerDownWithModifier,
+              visual: true,
+            })
+            getHostBridge()?.notify?.('node_active', serializeNodes(activeNodes))
+            interactionState.pointerDownNodeUid = null
+            interactionState.pointerDownWithModifier = false
+            return
+          }
+
+          if (activeUid === focusState.committedNodeUid) {
+            focusState.visualFocusNodeUid = activeUid
+            updateKeyboardFocusClass()
+            getHostBridge()?.notify?.('node_active', serializeNodes(activeNodes))
+            interactionState.pointerDownNodeUid = null
+            interactionState.pointerDownWithModifier = false
+            return
+          }
+
+          restoreStableFocusAfterRender()
         })
         window.$bus.$on('node_click', (...args) => {
           if (isReadonlyHost()) return
           const clickedNode = args[0]
           if (!clickedNode) return
-          keyboardState.activeNodeUid = getNodeUid(clickedNode) || null
+          const clickedNodes = Array.isArray(args[1]) && args[1].length > 0 ? args[1] : [clickedNode]
           syncKeyboardMode()
-          updateKeyboardFocusClass()
-          getHostBridge()?.notify?.('node_click', [serializeNode(clickedNode)])
+          if (clickedNodes.length <= 1 && !interactionState.pointerDownWithModifier) {
+            rememberFocusedNode(clickedNode, {
+              notify: false,
+              clearEditingLock: true,
+            })
+          } else if (interactionState.pointerDownWithModifier) {
+            focusState.visualFocusNodeUid =
+              getNodeUid(clickedNode) || focusState.visualFocusNodeUid
+            focusState.editingNodeUid = null
+            updateKeyboardFocusClass()
+          }
+          getHostBridge()?.notify?.('node_click', serializeNodes(clickedNodes))
+          interactionState.pointerDownNodeUid = null
+          interactionState.pointerDownWithModifier = false
         })
         window.$bus.$on('node_tree_render_end', () => {
           const mindMap = window.__memoryAnkiMindMapInstance
@@ -1234,9 +1804,11 @@
             }
             window.__memoryAnkiPendingTransformRestore = null
           }
+          restoreStableFocusAfterRender()
           updateKeyboardFocusClass()
           ensureSegmentToolbar()
           applySegmentNodeStyles()
+          updateNavigatorFullscreenPresentation()
           getHostBridge()?.notify?.('node_tree_render_end', null)
         })
       }

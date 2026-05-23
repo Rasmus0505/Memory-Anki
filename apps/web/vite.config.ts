@@ -4,9 +4,91 @@ import tailwindcss from '@tailwindcss/vite'
 import { fileURLToPath } from 'node:url'
 
 const srcDir = fileURLToPath(new URL('./src', import.meta.url))
+const manualRefreshGuardScript = String.raw`
+  (() => {
+    if (typeof window === 'undefined' || typeof window.WebSocket === 'undefined') return
+    if (window.__memoryAnkiManualRefreshGuardInstalled__) return
+
+    window.__memoryAnkiManualRefreshGuardInstalled__ = true
+
+    const OriginalWebSocket = window.WebSocket
+    const suppressedTypes = new Set(['update', 'full-reload'])
+
+    function isViteHmrSocket(protocols) {
+      if (Array.isArray(protocols)) return protocols.includes('vite-hmr')
+      return protocols === 'vite-hmr'
+    }
+
+    function shouldSuppressMessage(data) {
+      if (typeof data !== 'string') return false
+      try {
+        const payload = JSON.parse(data)
+        return payload && suppressedTypes.has(payload.type)
+      } catch {
+        return false
+      }
+    }
+
+    window.WebSocket = function MemoryAnkiWebSocket(url, protocols) {
+      const socket =
+        protocols === undefined
+          ? new OriginalWebSocket(url)
+          : new OriginalWebSocket(url, protocols)
+
+      if (!isViteHmrSocket(protocols)) return socket
+
+      const originalAddEventListener = socket.addEventListener.bind(socket)
+
+      socket.addEventListener = function patchedAddEventListener(type, listener, options) {
+        if (type !== 'message' || typeof listener !== 'function') {
+          return originalAddEventListener(type, listener, options)
+        }
+
+        return originalAddEventListener(
+          type,
+          (event) => {
+            if (shouldSuppressMessage(event?.data)) {
+              console.info('[memory-anki] Vite auto update suppressed. Refresh the page manually to load latest changes.')
+              return
+            }
+            return listener.call(this, event)
+          },
+          options,
+        )
+      }
+
+      return socket
+    }
+
+    window.WebSocket.prototype = OriginalWebSocket.prototype
+    Object.setPrototypeOf(window.WebSocket, OriginalWebSocket)
+  })()
+`
 
 export default defineConfig({
-  plugins: [react(), tailwindcss()],
+  plugins: [
+    {
+      name: 'memory-anki-manual-refresh-guard',
+      apply: 'serve',
+      transformIndexHtml: {
+        order: 'pre',
+        handler(html) {
+          return {
+            html,
+            tags: [
+              {
+                tag: 'script',
+                injectTo: 'head-prepend',
+                children: manualRefreshGuardScript,
+              },
+            ],
+          }
+        },
+      },
+    },
+    react(),
+    tailwindcss(),
+  ],
   build: {
     rollupOptions: {
       output: {
@@ -35,6 +117,7 @@ export default defineConfig({
     },
   },
   server: {
+    hmr: false,
     proxy: {
       '/api': {
         target: 'http://127.0.0.1:8012',

@@ -4,9 +4,11 @@ import { X } from 'lucide-react'
 interface DialogProps extends PropsWithChildren {
   open: boolean
   onOpenChange: (open: boolean) => void
+  modal?: boolean
+  className?: string
 }
 
-export function Dialog({ open, onOpenChange, children }: DialogProps) {
+export function Dialog({ open, onOpenChange, children, modal = true, className = '' }: DialogProps) {
   useEffect(() => {
     if (!open) return
 
@@ -21,13 +23,19 @@ export function Dialog({ open, onOpenChange, children }: DialogProps) {
   if (!open) return null
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <button
-        type="button"
-        className="absolute inset-0 bg-black/45"
-        aria-label="关闭弹窗"
-        onClick={() => onOpenChange(false)}
-      />
+    <div
+      className={`fixed inset-0 z-50 flex items-center justify-center p-4 ${
+        modal ? '' : 'pointer-events-none'
+      } ${className}`}
+    >
+      {modal ? (
+        <button
+          type="button"
+          className="absolute inset-0 bg-black/45"
+          aria-label="关闭弹窗"
+          onClick={() => onOpenChange(false)}
+        />
+      ) : null}
       {children}
     </div>
   )
@@ -35,7 +43,9 @@ export function Dialog({ open, onOpenChange, children }: DialogProps) {
 
 export function DialogContent({ children, className = '' }: PropsWithChildren<{ className?: string }>) {
   return (
-    <div className={`relative z-10 flex w-full max-w-3xl flex-col rounded-2xl border bg-background shadow-2xl ${className}`}>
+    <div
+      className={`pointer-events-auto relative z-10 flex w-full max-w-3xl flex-col rounded-2xl border bg-background shadow-2xl ${className}`}
+    >
       {children}
     </div>
   )

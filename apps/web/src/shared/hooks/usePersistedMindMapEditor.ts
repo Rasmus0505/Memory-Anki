@@ -79,7 +79,13 @@ export function usePersistedMindMapEditor<TResponse, TMeta>({
         retryCountRef.current = 0
         lastStateFingerprintRef.current = stableSerialize(nextEditorState)
         setMeta(selectMetaRef.current(response))
-        if (changeVersionRef.current === saveVersion) {
+        if (changeVersionRef.current !== saveVersion) {
+          return
+        }
+
+        const currentFingerprint = stableSerialize(editorStateRef.current)
+        const nextFingerprint = stableSerialize(nextEditorState)
+        if (currentFingerprint !== nextFingerprint) {
           setEditorState(nextEditorState)
         }
       } catch (err) {

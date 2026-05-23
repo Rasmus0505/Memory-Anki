@@ -49,6 +49,16 @@ from memory_anki.modules.palaces.application.segment_service import (
     segment_summary_json,
     update_palace_segment,
 )
+from memory_anki.modules.palaces.application.title_sync_service import (
+    build_chapter_grouped_palace_list,
+    build_grouped_palace_list,
+    ensure_palace_group_schema,
+    get_palace_explicit_chapter_ids,
+    reconcile_palace_chapter_binding,
+    resolve_palace_binding_status,
+    resolve_palace_subject,
+    resolve_palace_title,
+)
 from memory_anki.modules.palaces.domain.schemas import PalaceCreate, PalaceUpdate
 from memory_anki.modules.reviews.application.review_service import trigger_review_for_palace
 from memory_anki.modules.reviews.application.schedule_service import (
@@ -168,6 +178,10 @@ def get_palace_stage_progress(palace: Palace, session: Session | None) -> tuple[
 
 
 def palace_json(p, session: Session | None = None) -> dict:
+    explicit_chapter_ids: set[int] = set()
+    if session is not None:
+        reconcile_palace_chapter_binding(session, p)
+        explicit_chapter_ids = get_palace_explicit_chapter_ids(session, p)
     next_schedule = None
     pending_schedules = [schedule for schedule in (p.review_schedules or []) if not schedule.completed]
     if pending_schedules:
@@ -200,6 +214,10 @@ def palace_json(p, session: Session | None = None) -> dict:
         else None
     )
 
+    primary_chapter = getattr(p, "primary_chapter", None)
+    resolved_subject = resolve_palace_subject(p)
+    parent_chapter = primary_chapter.parent if primary_chapter and getattr(primary_chapter, "parent", None) else None
+
     return {
         "id": p.id, "title": p.title, "description": p.description,
         "archived": p.archived, "mastered": p.mastered,
@@ -219,15 +237,55 @@ def palace_json(p, session: Session | None = None) -> dict:
                          "original_name": a.original_name, "file_size": a.file_size}
                         for a in p.attachments],
         "chapters": [{"id": c.id, "name": c.name, "subject_id": c.subject_id,
+                      "parent_id": c.parent_id,
+                      "is_explicit": c.id in explicit_chapter_ids,
                       "subject": {"id": c.subject.id, "name": c.subject.name} if c.subject else None}
                       for c in p.chapters],
         "segments": list_palace_segments(session, p, default_segment_payload=default_segment) if session else [],
+        "title_mode": getattr(p, "title_mode", "sync") or "sync",
+        "manual_title": getattr(p, "manual_title", "") or "",
+        "resolved_title": resolve_palace_title(p),
+        "grouping_mode": getattr(p, "grouping_mode", "auto") or "auto",
+        "manual_group_chapter_id": getattr(p, "manual_group_chapter_id", None),
+        "binding_status": resolve_palace_binding_status(p),
+        "primary_chapter_id": getattr(p, "primary_chapter_id", None),
+        "primary_chapter": {
+            "id": primary_chapter.id,
+            "name": primary_chapter.name,
+            "subject_id": primary_chapter.subject_id,
+            "parent_id": primary_chapter.parent_id,
+        } if primary_chapter else None,
+        "resolved_subject": {
+            "id": resolved_subject.id,
+            "name": resolved_subject.name,
+            "color": getattr(resolved_subject, "color", "#6366f1"),
+        } if resolved_subject else None,
+        "resolved_parent_chapter": {
+            "id": parent_chapter.id,
+            "name": parent_chapter.name,
+            "subject_id": parent_chapter.subject_id,
+            "parent_id": parent_chapter.parent_id,
+        } if parent_chapter else None,
+        "group_id": getattr(p, "group_id", None),
+        "group_sort_order": getattr(p, "group_sort_order", 0),
     }
 
 
 @router.get("/palaces")
 def api_list(search: str = "", s: Session = Depends(session_dep)):
     return [palace_json(p, s) for p in list_palaces(s, search)]
+
+
+@router.get("/palaces/grouped")
+def api_list_grouped(search: str = "", s: Session = Depends(session_dep)):
+    palaces = list_palaces(s, search)
+    chapter_grouped = build_chapter_grouped_palace_list(s, palaces, lambda p, sess: palace_json(p, sess))
+    model_grouped = build_grouped_palace_list(s, palaces, lambda p, sess: palace_json(p, sess))
+    return {
+        "groups": model_grouped.get("groups", []),
+        "ungrouped": model_grouped.get("ungrouped", []),
+        "subjects": chapter_grouped.get("subjects", []),
+    }
 
 
 @router.get("/palaces/{palace_id}")

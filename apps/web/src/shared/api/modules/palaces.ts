@@ -1,6 +1,9 @@
 import { API_BASE, request } from "@/shared/api/http"
 import type {
+  ImageTextPreviewResponse,
   MindMapEditorState,
+  MindMapImportPreviewResponse,
+  PalaceGroupedListResponse,
   PalaceListItem,
   PalaceReviewPlanResponse,
   PalaceSegmentSummary,
@@ -16,6 +19,11 @@ export function buildAttachmentUrl(attachmentId: number) {
 export function getPalacesApi(params?: Record<string, string>) {
   const q = params ? `?${new URLSearchParams(params).toString()}` : ""
   return request<PalaceListItem[]>(`/palaces${q}`)
+}
+
+export function getPalacesGroupedApi(params?: Record<string, string>) {
+  const q = params ? `?${new URLSearchParams(params).toString()}` : ""
+  return request<PalaceGroupedListResponse>(`/palaces/grouped${q}`)
 }
 
 export function getPalaceApi(id: number) {
@@ -210,9 +218,34 @@ export function getPalaceChaptersApi(id: number) {
   return request<any[]>(`/palaces/${id}/chapters`)
 }
 
-export function linkPalaceChaptersApi(palaceId: number, chapterIds: number[]) {
+export function linkPalaceChaptersApi(
+  palaceId: number,
+  data: { chapter_ids: number[]; primary_chapter_id?: number | null },
+) {
   return request<any>(`/palaces/${palaceId}/chapters`, {
     method: "PUT",
-    body: JSON.stringify({ chapter_ids: chapterIds }),
+    body: JSON.stringify(data),
   })
+}
+
+export async function previewMindMapImportApi(file: File) {
+  const form = new FormData()
+  form.append("file", file)
+  const response = await fetch(`${API_BASE}/import/preview-mindmap`, {
+    method: "POST",
+    body: form,
+  })
+  const data = await response.json()
+  return data as MindMapImportPreviewResponse
+}
+
+export async function previewImageTextApi(file: File) {
+  const form = new FormData()
+  form.append("file", file)
+  const response = await fetch(`${API_BASE}/import/preview-text`, {
+    method: "POST",
+    body: form,
+  })
+  const data = await response.json()
+  return data as ImageTextPreviewResponse
 }

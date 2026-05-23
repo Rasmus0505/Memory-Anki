@@ -1,4 +1,5 @@
 from contextlib import asynccontextmanager
+from datetime import date, datetime, time, timedelta
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -19,7 +20,10 @@ from memory_anki.modules.backups.application.backup_service import (
 from memory_anki.modules.knowledge.presentation import router as knowledge_router
 from memory_anki.modules.mindmap.application.editor_state_service import ensure_editor_schema
 from memory_anki.modules.palaces.application.segment_service import ensure_segment_schema
-from memory_anki.modules.palaces.application.title_sync_service import ensure_palace_group_schema
+from memory_anki.modules.palaces.application.title_sync_service import (
+    build_today_new_palace_outline,
+    ensure_palace_group_schema,
+)
 from memory_anki.modules.palaces.presentation import import_router
 from memory_anki.modules.palaces.presentation import router as palace_router
 from memory_anki.modules.reviews.application.schedule_service import (
@@ -36,6 +40,7 @@ from memory_anki.modules.settings.presentation import router as settings_router
 from memory_anki.modules.time_records.application.time_records_service import (
     get_today_formal_review_duration_seconds,
     ensure_review_log_time_records,
+    get_today_palace_learning_breakdown,
     get_today_total_review_duration_seconds,
     normalize_time_record_event_timezones,
     get_weekly_formal_review_duration_seconds,
@@ -114,7 +119,19 @@ def api_dashboard():
         )
 
         reviews = get_today_review_groups(session)
+        today_start = datetime.combine(date.today(), time.min)
+        today_end = today_start + timedelta(days=1)
         recent = session.query(Palace).order_by(Palace.updated_at.desc()).limit(5).all()
+        today_new_palaces = (
+            session.query(Palace)
+            .filter(
+                Palace.created_at.is_not(None),
+                Palace.created_at >= today_start,
+                Palace.created_at < today_end,
+            )
+            .order_by(Palace.created_at.asc(), Palace.id.asc())
+            .all()
+        )
 
         def palace_out(palace):
             return {
@@ -155,6 +172,9 @@ def api_dashboard():
             "weekly_total_review_duration_seconds": weekly_total_review_duration_seconds,
             "weekly_formal_review_duration_seconds": weekly_formal_review_duration_seconds,
             "recent_palaces": [palace_out(palace) for palace in recent],
+            "today_learning_palaces": get_today_palace_learning_breakdown(session),
+            "today_new_palace_count": len(today_new_palaces),
+            "today_new_palaces": build_today_new_palace_outline(session, today_new_palaces),
         }
     finally:
         session.close()

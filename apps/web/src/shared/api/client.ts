@@ -269,10 +269,13 @@ export const api = {
       body: JSON.stringify(data),
     }),
   getPalaceChapters: (id: number) => request<any[]>(`/palaces/${id}/chapters`),
-  linkPalaceChapters: (palaceId: number, chapterIds: number[]) =>
+  linkPalaceChapters: (
+    palaceId: number,
+    data: { chapter_ids: number[]; primary_chapter_id?: number | null },
+  ) =>
     request<any>(`/palaces/${palaceId}/chapters`, {
       method: 'PUT',
-      body: JSON.stringify({ chapter_ids: chapterIds }),
+      body: JSON.stringify(data),
     }),
   getPalaceEditor: (id: number) =>
     request<{ palace: any } & MindMapEditorState>(`/palaces/${id}/editor`),

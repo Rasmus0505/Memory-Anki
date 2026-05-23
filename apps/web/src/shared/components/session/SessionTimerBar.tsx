@@ -1,8 +1,15 @@
-import { Pause, Play, SquareCheckBig, TimerReset } from 'lucide-react'
+import { Pause, Play, Settings2, SquareCheckBig, TimerReset } from 'lucide-react'
 import * as React from 'react'
 import { formatDuration } from '@/entities/session/model'
 import { Button } from '@/shared/components/ui/button'
 import { Input } from '@/shared/components/ui/input'
+import { TimerAutomationDialog } from '@/shared/components/session/TimerAutomationDialog'
+import {
+  readTimerAutomationConfig,
+  resetTimerAutomationConfig,
+  saveTimerAutomationConfig,
+  type TimerAutomationConfig,
+} from '@/shared/components/session/timer-automation-config'
 
 interface SessionTimerBarProps {
   effectiveSeconds: number
@@ -56,6 +63,10 @@ export function SessionTimerBar({
   const isPaused = status === 'paused'
   const [inputValue, setInputValue] = React.useState(() => secondsToInputValue(effectiveSeconds))
   const [isEditing, setIsEditing] = React.useState(false)
+  const [automationOpen, setAutomationOpen] = React.useState(false)
+  const [automationConfig, setAutomationConfig] = React.useState<TimerAutomationConfig>(() =>
+    readTimerAutomationConfig(),
+  )
 
   React.useEffect(() => {
     if (isEditing) return
@@ -71,6 +82,21 @@ export function SessionTimerBar({
     }
     setInputValue(secondsToInputValue(effectiveSeconds))
   }, [effectiveSeconds, inputValue, onAdjustDuration])
+
+  React.useEffect(() => {
+    const handleAutomationChange = (event: Event) => {
+      const nextConfig =
+        event instanceof CustomEvent && event.detail
+          ? (event.detail as TimerAutomationConfig)
+          : readTimerAutomationConfig()
+      setAutomationConfig(nextConfig)
+    }
+
+    window.addEventListener('memory-anki-timer-automation-change', handleAutomationChange)
+    return () => {
+      window.removeEventListener('memory-anki-timer-automation-change', handleAutomationChange)
+    }
+  }, [])
 
   const primaryAction = isIdle
     ? {
@@ -134,6 +160,10 @@ export function SessionTimerBar({
         </div>
 
         <div className="mt-4 flex flex-wrap gap-2">
+          <Button type="button" variant="outline" size="sm" onClick={() => setAutomationOpen(true)}>
+            <Settings2 className="mr-2 h-4 w-4" />
+            自动化配置
+          </Button>
           {primaryAction ? (
             <Button type="button" variant={primaryAction.variant} size="sm" onClick={primaryAction.onClick}>
               <primaryAction.icon className="mr-2 h-4 w-4" />
@@ -148,6 +178,19 @@ export function SessionTimerBar({
           ) : null}
         </div>
       </div>
+      <TimerAutomationDialog
+        open={automationOpen}
+        config={automationConfig}
+        onOpenChange={setAutomationOpen}
+        onSave={(nextConfig) => {
+          const saved = saveTimerAutomationConfig(nextConfig)
+          setAutomationConfig(saved)
+        }}
+        onReset={() => {
+          const reset = resetTimerAutomationConfig()
+          setAutomationConfig(reset)
+        }}
+      />
     </div>
   )
 }

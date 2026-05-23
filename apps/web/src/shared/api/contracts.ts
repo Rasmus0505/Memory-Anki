@@ -26,6 +26,30 @@ export interface MindMapDoc {
   [key: string]: unknown
 }
 
+export interface MindMapImportSourceNode {
+  text: string
+  children: MindMapImportSourceNode[]
+}
+
+export interface MindMapImportSourceTree {
+  title: string
+  children: MindMapImportSourceNode[]
+}
+
+export interface MindMapImportPreviewResponse {
+  ok: boolean
+  error?: string
+  source_tree?: MindMapImportSourceTree
+  editor_doc?: MindMapDoc | string | null
+  extracted_text?: string
+}
+
+export interface ImageTextPreviewResponse {
+  ok: boolean
+  error?: string
+  extracted_text?: string
+}
+
 export interface ReviewQueueChapter {
   id: number
   name: string
@@ -43,6 +67,8 @@ export interface ReviewPalaceSummary {
   pegs: Array<{ id: number; name: string; content: string; children: unknown[] }>
   attachments: Array<{ id: number; filename: string; original_name: string }>
   chapters: ReviewQueueChapter[]
+  stage_labels?: string[]
+  review_stages?: ReviewStageSummary[]
 }
 
 export interface ReviewScheduleSummary {
@@ -87,6 +113,35 @@ export interface DashboardResponse {
   today_total_review_duration_seconds: number
   weekly_total_review_duration_seconds: number
   weekly_formal_review_duration_seconds: number
+  today_learning_palaces: Array<{
+    palace_id: number
+    palace_title: string
+    total_seconds: number
+    review_seconds: number
+    practice_seconds: number
+    palace_edit_seconds: number
+  }>
+  today_new_palace_count: number
+  today_new_palaces: Array<{
+    subject: SubjectSummary | null
+    chapter_groups: Array<{
+      source_chapter: ChapterSummary | null
+      palaces: Array<{
+        id: number
+        title: string
+        created_at: string | null
+        primary_chapter: ChapterSummary | null
+        resolved_parent_chapter: ChapterSummary | null
+      }>
+    }>
+    ungrouped_palaces: Array<{
+      id: number
+      title: string
+      created_at: string | null
+      primary_chapter: ChapterSummary | null
+      resolved_parent_chapter: ChapterSummary | null
+    }>
+  }>
   recent_palaces: Array<{
     id: number
     title: string
@@ -176,6 +231,61 @@ export interface PalaceListItem {
   review_stages?: ReviewStageSummary[]
   segments: PalaceSegmentSummary[]
   chapters?: Array<unknown>
+}
+
+export interface ChapterSummary {
+  id: number
+  name: string
+  subject_id: number | null
+  parent_id: number | null
+  is_explicit?: boolean
+}
+
+export interface SubjectSummary {
+  id: number
+  name: string
+  color: string
+}
+
+export interface PalaceGroupedItem extends PalaceListItem {
+  resolved_title: string
+  title_mode: string
+  manual_title: string
+  grouping_mode: string
+  manual_group_chapter_id: number | null
+  binding_status: string
+  primary_chapter_id: number | null
+  primary_chapter: ChapterSummary | null
+  resolved_subject: SubjectSummary | null
+  resolved_parent_chapter: ChapterSummary | null
+  group_id: number | null
+  group_sort_order: number
+}
+
+export interface PalaceChapterGroup {
+  source_chapter: ChapterSummary
+  palaces: PalaceGroupedItem[]
+}
+
+export interface PalaceSubjectGroup {
+  subject: SubjectSummary | null
+  chapter_groups: PalaceChapterGroup[]
+  ungrouped_palaces: PalaceGroupedItem[]
+}
+
+export interface PalaceGroupSummary {
+  id: number
+  name: string
+  color: string
+  sort_order: number
+  source_chapter_id: number | null
+  palaces: PalaceGroupedItem[]
+}
+
+export interface PalaceGroupedListResponse {
+  groups: PalaceGroupSummary[]
+  ungrouped: PalaceGroupedItem[]
+  subjects: PalaceSubjectGroup[]
 }
 
 export interface PalaceVersionSummary {

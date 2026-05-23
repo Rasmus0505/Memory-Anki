@@ -13,6 +13,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui
 import { Input } from '@/shared/components/ui/input'
 import { Label } from '@/shared/components/ui/label'
 import { usePersistedMindMapEditor } from '@/shared/hooks/usePersistedMindMapEditor'
+import { PalaceMindMapImportDrawer } from '@/features/palace-edit/components/PalaceMindMapImportDrawer'
+import { useMindMapImport } from '@/features/palace-edit/hooks/useMindMapImport'
 import {
   createSubjectApi,
   deleteSubjectApi,
@@ -50,6 +52,13 @@ export default function Knowledge() {
   const [chapterDetail, setChapterDetail] = useState<ChapterDetail | null>(null)
   const [frameVersion, setFrameVersion] = useState(0)
 
+  const selectedNodeUid =
+    selectedNodes?.[0]?.uid ||
+    (selectedNodes?.[0]?.rawData?.uid as string | undefined) ||
+    (selectedNodes?.[0]?.rawData?.data as Record<string, unknown> | undefined)?.uid as string | undefined
+
+  const selectedNodeLabel = selectedNodes?.[0]?.text ?? ''
+
   const selectedNode = selectedNodes[0] ?? null
   const selectedChapterId = selectedNode?.memoryAnkiNodeType === 'chapter' ? selectedNode.memoryAnkiId : null
 
@@ -71,6 +80,16 @@ export default function Knowledge() {
       editor_local_config: response.editor_local_config,
       lang: response.lang,
     }),
+  })
+  const importEntityKey = useMemo(
+    () => (selectedSubjectId ? `subject_${selectedSubjectId}` : null),
+    [selectedSubjectId],
+  )
+  const mindMapImport = useMindMapImport({
+    entityKey: importEntityKey,
+    editorState,
+    setEditorState,
+    selectedNodeUid,
   })
 
   const activeSubject = (meta as Subject | null) ?? subjects.find((item) => item.id === selectedSubjectId) ?? null
@@ -148,7 +167,11 @@ export default function Knowledge() {
     <div className="space-y-5">
       <PageIntro
         title="知识树编辑器"
-        actions={renderStatus()}
+        actions={
+          <>
+            {renderStatus()}
+          </>
+        }
       />
 
       <div className="grid gap-4 xl:grid-cols-[320px_minmax(0,1fr)]">
@@ -297,10 +320,21 @@ export default function Knowledge() {
               <MindMapFrame
                 key={`${selectedSubjectId}-${frameVersion}`}
                 editorState={editorState}
+                showImportButtons
+                syncOnPropChange
+                externalSyncKey={mindMapImport.importExternalSyncKey}
                 onEditorStateChange={(nextState: MindMapEditorState) => {
                   setEditorState(nextState)
                 }}
                 onNodeActive={setSelectedNodes}
+                onMindMapImportOpen={() => {
+                  mindMapImport.setImportMode('mindmap')
+                  mindMapImport.setImportOpen(true)
+                }}
+                onImageTextImportOpen={() => {
+                  mindMapImport.setImportMode('text')
+                  mindMapImport.setImportOpen(true)
+                }}
                 className="h-[62vh] w-full rounded-2xl border border-border/70 bg-white"
               />
             ) : (
@@ -311,6 +345,31 @@ export default function Knowledge() {
           </CardContent>
         </Card>
       </div>
+
+      <PalaceMindMapImportDrawer
+        open={mindMapImport.importOpen}
+        onOpenChange={mindMapImport.setImportOpen}
+        mode={mindMapImport.importMode}
+        onModeChange={mindMapImport.setImportMode}
+        loading={mindMapImport.importLoading}
+        applying={mindMapImport.importApplying}
+        undoing={mindMapImport.importUndoing}
+        error={mindMapImport.importError}
+        sourceTree={mindMapImport.importSourceTree}
+        extractedText={mindMapImport.importExtractedText}
+        imagePreviewUrl={mindMapImport.importImagePreviewUrl}
+        targetNodeLabel={selectedNodeLabel}
+        canAppend={mindMapImport.importCanAppend}
+        canUndoLastImport={mindMapImport.importCanUndoLastImport}
+        onPaste={mindMapImport.handleImportPaste}
+        onFileChange={mindMapImport.handleImportFileChange}
+        onApplyReplace={mindMapImport.handleImportApplyReplace}
+        onApplyAppend={mindMapImport.handleImportApplyAppend}
+        onUndoLastImport={mindMapImport.handleUndoLastImport}
+        history={mindMapImport.importHistory}
+        onSelectHistory={mindMapImport.handleImportSelectHistory}
+        onDeleteHistory={mindMapImport.handleImportDeleteHistory}
+      />
 
     </div>
   )
