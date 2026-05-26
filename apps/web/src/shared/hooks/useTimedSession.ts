@@ -9,7 +9,9 @@ import {
 } from '@/entities/session/model'
 import {
   getTimerAutomationRule,
+  isActivityEnabled,
   readTimerAutomationConfig,
+  type TimerAutomationActivityKind,
   type TimerAutomationConfig,
 } from '@/shared/components/session/timer-automation-config'
 import { formatLocalApiDateTime } from '@/shared/lib/dateTime'
@@ -40,7 +42,10 @@ export interface TimedSessionController {
   start: (meta?: Record<string, boolean | number | string | null>) => void
   pause: (meta?: Record<string, boolean | number | string | null>) => void
   resume: (meta?: Record<string, boolean | number | string | null>) => void
-  registerActivity: (meta?: Record<string, boolean | number | string | null>) => void
+  registerActivity: (
+    activityKind: TimerAutomationActivityKind,
+    meta?: Record<string, boolean | number | string | null>,
+  ) => void
   logEvent: (type: SessionEventRecord['type'], meta?: Record<string, boolean | number | string | null>) => void
   adjustDuration: (seconds: number) => void
   complete: (
@@ -114,14 +119,8 @@ export function useTimedSession({
   const resolvedAutomation = React.useMemo<ResolvedTimedSessionAutomation>(() => {
     const sceneRule = getTimerAutomationRule(kind, automationConfig)
     return {
-      autoPauseMs: Math.max(
-        0,
-        Math.round((autoPauseMs ?? sceneRule.inactiveAutoPauseSeconds) * 1000),
-      ),
-      hiddenPauseMs: Math.max(
-        0,
-        Math.round((hiddenPauseMs ?? sceneRule.hiddenAutoPauseSeconds) * 1000),
-      ),
+      autoPauseMs: Math.max(0, Math.round(autoPauseMs ?? sceneRule.inactiveAutoPauseSeconds * 1000)),
+      hiddenPauseMs: Math.max(0, Math.round(hiddenPauseMs ?? sceneRule.hiddenAutoPauseSeconds * 1000)),
       autoPauseRollbackSeconds: Math.max(0, Math.round(sceneRule.autoPauseRollbackSeconds)),
     }
   }, [autoPauseMs, automationConfig, hiddenPauseMs, kind])
@@ -289,7 +288,13 @@ export function useTimedSession({
     }
   }, [beginRunning])
 
-  const registerActivity = React.useCallback((meta?: Record<string, boolean | number | string | null>) => {
+  const registerActivity = React.useCallback((
+    activityKind: TimerAutomationActivityKind,
+    meta?: Record<string, boolean | number | string | null>,
+  ) => {
+    if (!isActivityEnabled(activityKind, automationConfig)) {
+      return
+    }
     if (statusRef.current === 'idle') {
       start({ source: 'auto', ...(meta ?? {}) })
       return
@@ -302,7 +307,7 @@ export function useTimedSession({
       lastActivityAtRef.current = Date.now()
       armAutoPause()
     }
-  }, [armAutoPause, resume, start])
+  }, [armAutoPause, automationConfig, resume, start])
 
   const logEvent = React.useCallback((type: SessionEventRecord['type'], meta?: Record<string, boolean | number | string | null>) => {
     pushEvent(type, meta)
@@ -456,7 +461,7 @@ export function useTimedSession({
       }
       clearTimer(hiddenPauseRef)
       if (statusRef.current === 'paused') {
-        registerActivity({ reason: 'visible' })
+        registerActivity('window_return', { reason: 'visible' })
       }
     }
 
@@ -467,12 +472,12 @@ export function useTimedSession({
       }, resolvedAutomation.hiddenPauseMs)
     }
 
-    const handleFocus = () => {
-      clearTimer(hiddenPauseRef)
-      if (statusRef.current === 'paused') {
-        registerActivity({ reason: 'focus' })
+      const handleFocus = () => {
+        clearTimer(hiddenPauseRef)
+        if (statusRef.current === 'paused') {
+          registerActivity('window_return', { reason: 'focus' })
+        }
       }
-    }
 
     document.addEventListener('visibilitychange', handleVisibility)
     window.addEventListener('blur', handleBlur)
@@ -523,3 +528,4 @@ export function useTimedSession({
 }
 
 export { getWeeklyLocalSessionStats }
+export { shouldAutoStartOnPageEnter } from '@/shared/components/session/timer-automation-config'

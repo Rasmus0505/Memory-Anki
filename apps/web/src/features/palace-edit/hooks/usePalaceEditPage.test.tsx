@@ -5,24 +5,29 @@ import PalaceEditPage from '@/features/palace-edit/PalaceEditPage'
 import * as palaceApi from '@/shared/api/modules/palaces'
 import * as knowledgeApi from '@/shared/api/modules/knowledge'
 
+const timedSessionMock = {
+  effectiveSeconds: 0,
+  idleSeconds: 0,
+  pauseCount: 0,
+  status: 'idle',
+  startedAt: null,
+  durationEdited: false,
+  glowState: 'idle',
+  start: vi.fn(),
+  pause: vi.fn(),
+  resume: vi.fn(),
+  adjustDuration: vi.fn(),
+  registerActivity: vi.fn(),
+  logEvent: vi.fn(),
+  complete: vi.fn(),
+  reset: vi.fn(),
+}
+
+const shouldAutoStartOnPageEnterMock = vi.fn(() => false)
+
 vi.mock('@/shared/hooks/useTimedSession', () => ({
-  useTimedSession: () => ({
-    effectiveSeconds: 0,
-    idleSeconds: 0,
-    pauseCount: 0,
-    status: 'idle',
-    startedAt: null,
-    durationEdited: false,
-    glowState: 'idle',
-    start: vi.fn(),
-    pause: vi.fn(),
-    resume: vi.fn(),
-    adjustDuration: vi.fn(),
-    registerActivity: vi.fn(),
-    logEvent: vi.fn(),
-    complete: vi.fn(),
-    reset: vi.fn(),
-  }),
+  useTimedSession: () => timedSessionMock,
+  shouldAutoStartOnPageEnter: (...args: unknown[]) => shouldAutoStartOnPageEnterMock(...args),
 }))
 
 vi.mock('@/shared/components/mindmap-host', () => ({
@@ -133,6 +138,18 @@ vi.mock('@/features/palace-edit/components/PalaceKnowledgeOutlinePanel', () => (
 describe('usePalaceEditPage draft creation', () => {
   beforeEach(() => {
     vi.restoreAllMocks()
+    timedSessionMock.status = 'idle'
+    timedSessionMock.startedAt = null
+    timedSessionMock.start.mockReset()
+    timedSessionMock.pause.mockReset()
+    timedSessionMock.resume.mockReset()
+    timedSessionMock.adjustDuration.mockReset()
+    timedSessionMock.registerActivity.mockReset()
+    timedSessionMock.logEvent.mockReset()
+    timedSessionMock.complete.mockReset()
+    timedSessionMock.reset.mockReset()
+    shouldAutoStartOnPageEnterMock.mockReset()
+    shouldAutoStartOnPageEnterMock.mockReturnValue(false)
     vi.spyOn(knowledgeApi, 'getSubjectsApi').mockResolvedValue([])
     vi.spyOn(knowledgeApi, 'getSubjectTreeApi').mockResolvedValue({ chapters: [], subject: null } as never)
     vi.spyOn(palaceApi, 'getPracticeSessionProgressApi').mockResolvedValue({ progress: null } as never)
@@ -241,6 +258,70 @@ describe('usePalaceEditPage draft creation', () => {
     })
 
     expect(palaceApi.clearPracticeSessionProgressApi).not.toHaveBeenCalled()
+  })
+
+  it('does not auto start on page enter by default', async () => {
+    vi.spyOn(palaceApi, 'getPalaceEditorApi').mockResolvedValue({
+      palace: {
+        id: 101,
+        title: '测试宫殿',
+        description: '',
+        created_at: null,
+        attachments: [],
+        chapters: [],
+      },
+      editor_doc: { root: { data: { text: '测试宫殿', uid: 'root-1' }, children: [] } },
+      editor_config: {},
+      editor_local_config: {},
+      lang: 'zh',
+    } as never)
+
+    render(
+      <MemoryRouter initialEntries={['/palaces/101/edit']}>
+        <Routes>
+          <Route path="/palaces/:id/edit" element={<PalaceEditPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText('测试宫殿')).toBeTruthy()
+    })
+
+    expect(shouldAutoStartOnPageEnterMock).toHaveBeenCalled()
+    expect(timedSessionMock.start).not.toHaveBeenCalled()
+  })
+
+  it('auto starts on page enter when the action rule is enabled', async () => {
+    shouldAutoStartOnPageEnterMock.mockReturnValue(true)
+    vi.spyOn(palaceApi, 'getPalaceEditorApi').mockResolvedValue({
+      palace: {
+        id: 101,
+        title: '测试宫殿',
+        description: '',
+        created_at: null,
+        attachments: [],
+        chapters: [],
+      },
+      editor_doc: { root: { data: { text: '测试宫殿', uid: 'root-1' }, children: [] } },
+      editor_config: {},
+      editor_local_config: {},
+      lang: 'zh',
+    } as never)
+
+    render(
+      <MemoryRouter initialEntries={['/palaces/101/edit']}>
+        <Routes>
+          <Route path="/palaces/:id/edit" element={<PalaceEditPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText('测试宫殿')).toBeTruthy()
+    })
+
+    expect(timedSessionMock.start).toHaveBeenCalledWith({ source: 'page_enter' })
   })
 
   it('forces a preserve-view sync after import apply in edit mode', async () => {

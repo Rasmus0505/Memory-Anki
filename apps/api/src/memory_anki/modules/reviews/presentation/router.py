@@ -396,6 +396,7 @@ def api_submit_session(schedule_id: int, data: dict, session: Session = Depends(
         int(data.get("duration_seconds", 0)),
         str(data.get("completion_mode", "manual_complete")),
         target_review_number=data.get("target_review_number"),
+        needs_practice=bool(data.get("needs_practice", False)),
     )
     if not log:
         raise_not_found()
@@ -425,6 +426,7 @@ def api_submit_segment_session(schedule_id: int, data: dict, session: Session = 
         int(data.get("duration_seconds", 0)),
         str(data.get("completion_mode", "manual_complete")),
         target_review_number=data.get("target_review_number"),
+        needs_practice=bool(data.get("needs_practice", False)),
     )
     if schedule:
         clear_segment_review_progress(session, schedule_id)
@@ -449,6 +451,7 @@ def api_submit_segment_session(schedule_id: int, data: dict, session: Session = 
         int(data.get("duration_seconds", 0)),
         str(data.get("completion_mode", "manual_complete")),
         target_review_number=data.get("target_review_number"),
+        needs_practice=bool(data.get("needs_practice", False)),
     )
     if not review_log:
         raise_not_found()

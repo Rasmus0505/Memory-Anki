@@ -15,6 +15,7 @@ import {
   getPalaceEditorApi,
   getPracticeSessionProgressApi,
   savePracticeSessionProgressApi,
+  updatePalacePracticeFlagApi,
 } from '@/shared/api/modules/palaces'
 
 interface PalaceMeta {
@@ -138,6 +139,7 @@ export default function PalacePractice() {
             }}
             onComplete={async () => {
               await clearPracticeSessionProgressApi(palace.id)
+              await updatePalacePracticeFlagApi(palace.id, { needs_practice: false })
               setHasResumeProgress(false)
             }}
           />

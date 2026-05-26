@@ -125,5 +125,6 @@ describe('MindMapReviewFlow', () => {
     expect(latestCall?.readonly).toBe(true)
     expect(latestCall?.showToolbarWhenReadonly).toBe(true)
     expect(latestCall?.showImportButtons).not.toBe(true)
+    expect(latestCall?.showBilinkSearchButton).toBe(true)
   })
 })

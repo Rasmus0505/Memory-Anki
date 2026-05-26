@@ -37,11 +37,37 @@ function Harness() {
   }
 
   return (
-    <div>
-      <div data-testid="sync-version">{model.importAppliedSyncVersion}</div>
-      <button type="button" onClick={() => void handleLoadPreview()}>
-        load
-      </button>
+      <div>
+        <div data-testid="sync-version">{model.importAppliedSyncVersion}</div>
+        <div data-testid="batch-count">{model.importBatchImages.length}</div>
+        <div data-testid="batch-status">{model.importBatchStatus}</div>
+        <button type="button" onClick={() => void handleLoadPreview()}>
+          load
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            model.setMindMapImportWorkflow('batch')
+          }}
+        >
+          enable-batch
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            const fileOne = new File(['a'], 'one.png', { type: 'image/png' })
+            const fileTwo = new File(['b'], 'two.png', { type: 'image/png' })
+            const event = {
+              target: { files: [fileOne, fileTwo], value: '' },
+            } as unknown as React.ChangeEvent<HTMLInputElement>
+            void model.handleImportFileChange(event)
+          }}
+        >
+          queue-batch
+        </button>
+        <button type="button" onClick={() => void model.handleBatchImportStart()}>
+          start-batch
+        </button>
       <button type="button" onClick={model.handleImportApplyReplace}>
         replace
       </button>
@@ -55,6 +81,11 @@ function Harness() {
 describe('useMindMapImport', () => {
   beforeEach(() => {
     vi.restoreAllMocks()
+    vi.stubGlobal('URL', {
+      ...URL,
+      createObjectURL: vi.fn(() => 'blob:preview'),
+      revokeObjectURL: vi.fn(),
+    })
     vi.spyOn(palaceApi, 'previewMindMapImportApi').mockResolvedValue({
       ok: true,
       source_tree: {
@@ -67,6 +98,21 @@ describe('useMindMapImport', () => {
           children: [{ data: { text: 'B', uid: 'b-1' }, children: [] }],
         },
       },
+    } as never)
+    vi.spyOn(palaceApi, 'previewMindMapBatchImportApi').mockResolvedValue({
+      ok: true,
+      source_tree: {
+        title: '批量导入脑图',
+        children: [{ text: '章节一', children: [{ text: '补充点', children: [] }] }],
+      },
+      editor_doc: {
+        root: {
+          data: { text: 'Batch Imported', uid: 'batch-root' },
+          children: [{ data: { text: '章节一', uid: 'chapter-1' }, children: [] }],
+        },
+      },
+      structure_image_index: 0,
+      image_count: 2,
     } as never)
   })
 
@@ -86,6 +132,27 @@ describe('useMindMapImport', () => {
     fireEvent.click(screen.getByRole('button', { name: 'undo' }))
     await waitFor(() => {
       expect(screen.getByTestId('sync-version').textContent).toBe('2')
+    })
+  })
+
+  it('queues batch images without auto-starting recognition', async () => {
+    render(<Harness />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'enable-batch' }))
+    fireEvent.click(screen.getByRole('button', { name: 'queue-batch' }))
+
+    await waitFor(() => {
+      expect(screen.getByTestId('batch-count').textContent).toBe('2')
+      expect(screen.getByTestId('batch-status').textContent).toBe('ready')
+    })
+    expect(palaceApi.previewMindMapBatchImportApi).not.toHaveBeenCalled()
+
+    fireEvent.click(screen.getByRole('button', { name: 'start-batch' }))
+    await waitFor(() => {
+      expect(palaceApi.previewMindMapBatchImportApi).toHaveBeenCalledWith(
+        expect.any(Array),
+        expect.objectContaining({ structureImageIndex: 0 }),
+      )
     })
   })
 })

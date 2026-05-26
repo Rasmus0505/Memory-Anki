@@ -103,6 +103,24 @@ const reviewedPalace = {
   ],
 }
 
+const laterTodayPalace = {
+  ...duePalace,
+  id: 2,
+  title: '第五节 今日稍后复习',
+  resolved_title: '第五节 今日稍后复习',
+  needs_practice: true,
+  segments: [
+    {
+      ...duePalace.segments[0],
+      id: 20,
+      palace_id: 2,
+      has_due_review: false,
+      current_review_schedule_id: 188,
+      next_review_at: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(),
+    },
+  ],
+}
+
 describe('PalaceListPage', () => {
   beforeEach(() => {
     navigate.mockReset()
@@ -152,5 +170,32 @@ describe('PalaceListPage', () => {
     expect(screen.getByText('预计 1分 40秒')).toBeTruthy()
     expect(screen.getByRole('button', { name: '开始复习' })).toBeTruthy()
     expect(screen.getByRole('button', { name: '练习' })).toBeTruthy()
+  })
+
+  it('renders later-today review in yellow and highlights practice button when needs practice', async () => {
+    getPalacesGroupedApi.mockReset()
+    getPalacesGroupedApi.mockResolvedValue({
+      groups: [],
+      ungrouped: [],
+      subjects: [
+        {
+          subject: { id: 1, name: '中国近代史', color: '#6366f1' },
+          chapter_groups: [
+            {
+              source_chapter: { id: 2, name: '第五节', subject_id: 1, parent_id: null },
+              palaces: [laterTodayPalace],
+            },
+          ],
+          ungrouped_palaces: [],
+        },
+      ],
+    })
+
+    render(<PalaceListPage />)
+
+    const reviewButton = await screen.findByRole('button', { name: /小时|分钟/ })
+    expect(reviewButton.className).toContain('bg-amber-100')
+    const practiceButton = screen.getByRole('button', { name: '练习' })
+    expect(practiceButton.className).toContain('bg-emerald-600')
   })
 })

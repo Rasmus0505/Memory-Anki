@@ -883,6 +883,48 @@ class ReviewRouteTests(unittest.TestCase):
             self.assertEqual(response.status_code, 200)
             self.assertTrue(response.json()["ok"])
 
+    def test_review_session_allows_later_today_submission_and_sets_needs_practice(self):
+        with self.SessionLocal() as session:
+            schedule = session.query(ReviewSchedule).filter_by(id=1).first()
+            palace = session.query(Palace).filter_by(id=1).first()
+            self.assertIsNotNone(schedule)
+            self.assertIsNotNone(palace)
+            schedule.scheduled_date = date.today()
+            schedule.scheduled_at = datetime.now().replace(second=0, microsecond=0) + timedelta(hours=2)
+            palace.needs_practice = False
+            session.commit()
+
+        response = self.client.post(
+            "/api/v1/review/session/1/submit",
+            json={
+                "duration_seconds": 30,
+                "completion_mode": "manual_complete",
+                "needs_practice": True,
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()["ok"])
+        with self.SessionLocal() as session:
+            palace = session.query(Palace).filter_by(id=1).first()
+            self.assertIsNotNone(palace)
+            self.assertTrue(palace.needs_practice)
+
+    def test_review_session_rejects_future_day_submission(self):
+        with self.SessionLocal() as session:
+            schedule = session.query(ReviewSchedule).filter_by(id=1).first()
+            self.assertIsNotNone(schedule)
+            schedule.scheduled_date = date.today() + timedelta(days=1)
+            schedule.scheduled_at = datetime.combine(schedule.scheduled_date, time(hour=10))
+            session.commit()
+
+        response = self.client.post(
+            "/api/v1/review/session/1/submit",
+            json={"duration_seconds": 30, "completion_mode": "manual_complete"},
+        )
+
+        self.assertEqual(response.status_code, 404)
+
     def test_virtual_default_segment_review_session_payload_is_available(self):
         response = self.client.get("/api/v1/segment-review/session/1")
         self.assertEqual(response.status_code, 200)

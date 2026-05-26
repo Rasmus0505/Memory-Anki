@@ -55,15 +55,11 @@ function MindMapNodeCard({ data, id }: NodeProps) {
   }, [editText, id, nodeData])
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault()
-      commitEdit()
-    }
     if (e.key === 'Escape') {
       setLocalEdit(false)
       setEditText(nodeData.label)
     }
-  }, [commitEdit, nodeData.label])
+  }, [nodeData.label])
 
   const handleInput = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setEditText(e.target.value)
@@ -100,7 +96,7 @@ function MindMapNodeCard({ data, id }: NodeProps) {
             <button
               type="button"
               onClick={startEdit}
-              className="line-clamp-2 w-full break-words text-center text-[15px] font-semibold leading-5 text-white"
+              className="line-clamp-2 w-full break-words whitespace-pre-wrap text-center text-[15px] font-semibold leading-5 text-white"
             >
               {nodeData.label || '未命名主题'}
             </button>
@@ -110,7 +106,7 @@ function MindMapNodeCard({ data, id }: NodeProps) {
             <button
               type="button"
               onClick={startEdit}
-              className={`${nodeData.type === 'chapter' && nodeData.metadata?.palace_count !== undefined && !isLeaf ? 'line-clamp-1' : 'line-clamp-2'} w-full break-words text-left text-slate-700 ${isLeaf ? 'text-[12px] font-medium leading-4' : 'text-[13px] font-medium leading-4'}`}
+              className={`${nodeData.type === 'chapter' && nodeData.metadata?.palace_count !== undefined && !isLeaf ? 'line-clamp-1' : 'line-clamp-2'} w-full break-words whitespace-pre-wrap text-left text-slate-700 ${isLeaf ? 'text-[12px] font-medium leading-4' : 'text-[13px] font-medium leading-4'}`}
             >
               {nodeData.label || '未命名节点'}
             </button>

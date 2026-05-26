@@ -1,6 +1,6 @@
 import { RotateCcw, Sparkles, SquareCheckBig } from 'lucide-react'
 import { MindMapFrame, type MindMapSelection } from '@/shared/components/mindmap-host'
-import type { MindMapEditorState } from '@/shared/api/contracts'
+import type { BilinkItem, MindMapEditorState } from '@/shared/api/contracts'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
 import { cn } from '@/shared/lib/utils'
@@ -15,8 +15,25 @@ interface ReviewFlowMapPanelProps {
   onComplete: () => void
   submitting: boolean
   visibleEditorState: MindMapEditorState
+  bilinkCounts?: Record<string, number>
+  bilinkItems?: BilinkItem[]
+  currentPalaceId?: number | null
+  bilinkInsertionText?: string | null
+  bilinkInsertionNonce?: number
   onNodeClick: (nodes: MindMapSelection[]) => void
   onNodeContextMenu: (nodes: MindMapSelection[]) => void
+  onBilinkTrigger?: (payload: {
+    nodeUid: string | null
+    left: number
+    top: number
+    query: string
+  }) => void
+  onBilinkNodeClick?: (payload: {
+    palaceId: number | null
+    nodeUid: string | null
+    trigger: 'badge' | 'mark'
+  }) => void
+  onBilinkToolbarSearch?: () => void
 }
 
 export function ReviewFlowMapPanel({
@@ -29,11 +46,19 @@ export function ReviewFlowMapPanel({
   onComplete,
   submitting,
   visibleEditorState,
+  bilinkCounts = {},
+  bilinkItems = [],
+  currentPalaceId = null,
+  bilinkInsertionText = null,
+  bilinkInsertionNonce = 0,
   onNodeClick,
   onNodeContextMenu,
+  onBilinkTrigger,
+  onBilinkNodeClick,
+  onBilinkToolbarSearch,
 }: ReviewFlowMapPanelProps) {
   return (
-    <div className={cn('overflow-hidden rounded-2xl border border-border/70 bg-card', fullscreen ? 'h-full' : '')}>
+    <div className={cn('flex min-h-0 flex-col overflow-hidden rounded-2xl border border-border/70 bg-card', fullscreen && 'h-full')}>
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/70 px-4 py-3">
         <div className="flex items-center gap-3">
           <div>
@@ -75,7 +100,7 @@ export function ReviewFlowMapPanel({
         </div>
       </div>
 
-      <div className={cn('p-4', fullscreen ? 'h-[calc(100vh-235px)] min-h-0' : '')}>
+      <div className={cn('p-4', fullscreen && 'flex-1 min-h-0')}>
         <MindMapFrame
           editorState={visibleEditorState}
           readonly
@@ -83,9 +108,18 @@ export function ReviewFlowMapPanel({
           immersiveModeActive={fullscreen}
           syncOnPropChange
           preserveViewOnSync
+          bilinkCounts={bilinkCounts}
+          bilinkItems={bilinkItems}
+          bilinkCurrentPalaceId={currentPalaceId}
+          bilinkInsertionText={bilinkInsertionText}
+          bilinkInsertionNonce={bilinkInsertionNonce}
+          showBilinkSearchButton
           onEditorStateChange={() => {}}
           onNodeClick={onNodeClick}
           onNodeContextMenu={onNodeContextMenu}
+          onBilinkTrigger={onBilinkTrigger}
+          onBilinkNodeClick={onBilinkNodeClick}
+          onBilinkToolbarSearch={onBilinkToolbarSearch}
           onFullscreenToggle={onToggleFullscreen}
           onFullscreenChange={(active) => {
             if (!active) {
@@ -94,7 +128,7 @@ export function ReviewFlowMapPanel({
           }}
           className={cn(
             'w-full rounded-2xl border border-border/70 bg-white',
-            fullscreen ? 'h-full' : 'h-[68vh]',
+            fullscreen ? 'h-full' : 'h-[64vh]',
           )}
         />
       </div>

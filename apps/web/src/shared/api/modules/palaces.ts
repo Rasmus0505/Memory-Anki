@@ -1,6 +1,7 @@
 import { API_BASE, request } from "@/shared/api/http"
 import type {
   ImageTextPreviewResponse,
+  MindMapBatchImportPreviewResponse,
   MindMapEditorState,
   MindMapImportPreviewResponse,
   PalaceGroupedListResponse,
@@ -127,6 +128,18 @@ export function updateDefaultSegmentReviewProgressApi(
   })
 }
 
+export function updatePalacePracticeFlagApi(
+  palaceId: number,
+  data: {
+    needs_practice: boolean
+  },
+) {
+  return request<{ item: any }>(`/palaces/${palaceId}/practice-flag`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  })
+}
+
 export function deletePalaceSegmentApi(segmentId: number) {
   return request<{ ok: boolean }>(`/palace-segments/${segmentId}`, {
     method: "DELETE",
@@ -248,4 +261,27 @@ export async function previewImageTextApi(file: File) {
   })
   const data = await response.json()
   return data as ImageTextPreviewResponse
+}
+
+export async function previewMindMapBatchImportApi(
+  files: File[],
+  options?: {
+    structureImageIndex?: number
+    fallbackTitle?: string
+  },
+) {
+  const form = new FormData()
+  files.forEach((file) => form.append("files", file))
+  if (typeof options?.structureImageIndex === "number") {
+    form.append("structure_image_index", String(options.structureImageIndex))
+  }
+  if (options?.fallbackTitle) {
+    form.append("fallback_title", options.fallbackTitle)
+  }
+  const response = await fetch(`${API_BASE}/import/preview-mindmap-batch`, {
+    method: "POST",
+    body: form,
+  })
+  const data = await response.json()
+  return data as MindMapBatchImportPreviewResponse
 }

@@ -99,6 +99,7 @@ export function submitReviewSessionApi(
     revealed_remaining?: boolean
     red_marked_count?: number
     target_review_number?: number
+    needs_practice?: boolean
   },
 ) {
   return request<ReviewSessionSubmitResponse>(`/review/session/${id}/submit`, {
@@ -116,6 +117,7 @@ export function submitSegmentReviewSessionApi(
     revealed_remaining?: boolean
     red_marked_count?: number
     target_review_number?: number
+    needs_practice?: boolean
   },
 ) {
   return request<ReviewSessionSubmitResponse>(`/segment-review/session/${id}/submit`, {

@@ -163,6 +163,16 @@ def is_schedule_due(schedule, palace, session, now: datetime | None = None) -> b
     return due_at <= current
 
 
+def is_schedule_due_or_later_today(schedule, palace, session, now: datetime | None = None) -> bool:
+    if schedule.completed:
+        return False
+    due_at = schedule_display_datetime(schedule, palace, session)
+    if due_at is None:
+        return False
+    current = now or datetime.now()
+    return due_at <= current or due_at.date() == current.date()
+
+
 def is_schedule_overdue(schedule, palace, session, now: datetime | None = None) -> bool:
     if schedule.completed:
         return False

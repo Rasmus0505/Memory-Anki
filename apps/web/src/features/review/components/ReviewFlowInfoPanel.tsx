@@ -10,6 +10,7 @@ interface ReviewFlowInfoPanelProps {
   persistProgress: boolean
   timer: {
     effectiveSeconds: number
+    idleSeconds: number
     pauseCount: number
     status: 'idle' | 'running' | 'paused' | 'completed'
     start: (meta?: Record<string, boolean | number | string | null>) => void
@@ -42,7 +43,7 @@ export function ReviewFlowInfoPanel({
         onAdjustDuration={timer.adjustDuration}
         showCompleteAction={false}
         showRestartAction={false}
-        className={fullscreen ? 'fixed right-5 top-5 z-[90]' : 'sticky top-5 z-20'}
+        className="sticky top-5 z-20"
       />
 
       <div className="rounded-2xl border border-border/70 bg-card p-4">

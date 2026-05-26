@@ -285,10 +285,34 @@
         filter: drop-shadow(0 0 0 rgba(239, 68, 68, 0.08))
           drop-shadow(0 0 12px rgba(239, 68, 68, 0.28)) !important;
       }
+
+      .memory-anki-bilink-badge-layer {
+        position: fixed;
+        inset: 0;
+        z-index: 10010;
+        pointer-events: none;
+      }
+
+      .memory-anki-bilink-badge {
+        position: absolute;
+        min-width: 22px;
+        height: 22px;
+        padding: 0 6px;
+        border: 1px solid rgba(125, 211, 252, 0.85);
+        border-radius: 9999px;
+        background: rgba(240, 249, 255, 0.98);
+        color: #0369a1;
+        font-size: 11px;
+        font-weight: 700;
+        box-shadow: 0 10px 24px rgba(14, 116, 144, 0.18);
+        pointer-events: auto;
+        cursor: pointer;
+      }
     </style>
   </head>
   <body>
     <div id="app"></div>
+    <div class="memory-anki-bilink-badge-layer"></div>
     <script>
       const hostId = new URLSearchParams(window.location.search).get('host')
       const KEYBOARD_FOCUS_CLASS = 'memory-anki-keyboard-focus'
@@ -315,6 +339,10 @@
       }
       const uiChromeState = {
         cleared: false,
+      }
+      const bilinkState = {
+        listenerRegistered: false,
+        pendingInsertion: null,
       }
 
       function cloneValue(value) {
@@ -363,11 +391,147 @@
         return false
       }
 
+      function getSelectionEditableElement() {
+        const selection =
+          typeof window.getSelection === 'function' ? window.getSelection() : null
+        if (!selection || selection.rangeCount <= 0) return null
+
+        let node = selection.anchorNode || selection.focusNode || null
+        if (!node) return null
+        if (node.nodeType === Node.TEXT_NODE) {
+          node = node.parentElement
+        }
+
+        let element = node instanceof Element ? node : null
+        while (element) {
+          if (isEditableElement(element)) return element
+          element = element.parentElement
+        }
+        return null
+      }
+
+      function getActiveEditableElement() {
+        if (isEditableElement(document.activeElement)) {
+          return document.activeElement
+        }
+        return getSelectionEditableElement()
+      }
+
+      function focusKeyboardSurface() {
+        const surface = document.getElementById('app') || document.body
+        if (!(surface instanceof HTMLElement)) return
+        if (!surface.hasAttribute('tabindex')) {
+          surface.setAttribute('tabindex', '-1')
+        }
+        surface.focus({ preventScroll: true })
+      }
+
+      function releaseEditableFocus() {
+        const editableElement = getActiveEditableElement()
+        if (editableElement instanceof HTMLElement && typeof editableElement.blur === 'function') {
+          editableElement.blur()
+        }
+        const selection =
+          typeof window.getSelection === 'function' ? window.getSelection() : null
+        selection?.removeAllRanges?.()
+        focusState.mode = 'navigating'
+        focusState.editingNodeUid = null
+        focusKeyboardSurface()
+      }
+
+      function dispatchEditableInputEvent(element) {
+        if (!element) return
+        element.dispatchEvent(
+          new InputEvent('input', {
+            bubbles: true,
+            cancelable: false,
+            data: '\n',
+            inputType: 'insertLineBreak',
+          })
+        )
+      }
+
+      function insertLineBreakIntoEditable(element = getActiveEditableElement()) {
+        if (!element) return false
+
+        if (element.tagName === 'TEXTAREA') {
+          const start = typeof element.selectionStart === 'number' ? element.selectionStart : element.value.length
+          const end = typeof element.selectionEnd === 'number' ? element.selectionEnd : element.value.length
+          element.setRangeText('\n', start, end, 'end')
+          dispatchEditableInputEvent(element)
+          return true
+        }
+
+        if (typeof document.execCommand === 'function') {
+          if (document.execCommand('insertText', false, '\n')) {
+            dispatchEditableInputEvent(element)
+            return true
+          }
+          if (document.execCommand('insertLineBreak')) {
+            dispatchEditableInputEvent(element)
+            return true
+          }
+        }
+
+        const selection =
+          typeof window.getSelection === 'function' ? window.getSelection() : null
+        if (!selection || selection.rangeCount <= 0) return false
+
+        const range = selection.getRangeAt(0)
+        range.deleteContents()
+        const breakNode = document.createTextNode('\n')
+        range.insertNode(breakNode)
+        range.setStartAfter(breakNode)
+        range.collapse(true)
+        selection.removeAllRanges()
+        selection.addRange(range)
+        dispatchEditableInputEvent(element)
+        return true
+      }
+
       function syncKeyboardMode() {
-        focusState.mode = isEditableElement(document.activeElement) ? 'editing' : 'navigating'
+        focusState.mode = getActiveEditableElement() ? 'editing' : 'navigating'
         if (focusState.mode !== 'editing') {
           focusState.editingNodeUid = null
         }
+      }
+
+      function defaultMindMapShortcutTargetCheck(event, mindMap) {
+        const target = event?.target
+        if (target === document.body) return true
+        const editNodeClassList = Array.isArray(mindMap?.editNodeClassList)
+          ? mindMap.editNodeClassList
+          : []
+        if (!(target instanceof Element)) return false
+        return editNodeClassList.some(className => target.classList.contains(className))
+      }
+
+      function ensureMindMapShortcutGuard() {
+        const mindMap = window.__memoryAnkiMindMapInstance
+        if (!mindMap?.opt) return
+
+        if (mindMap.opt.customCheckEnableShortcut === mindMap.__memoryAnkiShortcutGuard) {
+          return
+        }
+
+        const existingCheck = mindMap.opt.customCheckEnableShortcut
+        mindMap.__memoryAnkiShortcutGuardBaseCheck =
+          typeof existingCheck === 'function' &&
+          existingCheck !== mindMap.__memoryAnkiShortcutGuard
+            ? existingCheck
+            : null
+
+        mindMap.__memoryAnkiShortcutGuard = event => {
+          if (getActiveEditableElement()) return false
+
+          if (typeof mindMap.__memoryAnkiShortcutGuardBaseCheck === 'function') {
+            return mindMap.__memoryAnkiShortcutGuardBaseCheck(event)
+          }
+
+          return defaultMindMapShortcutTargetCheck(event, mindMap)
+        }
+
+        mindMap.opt.customCheckEnableShortcut = mindMap.__memoryAnkiShortcutGuard
       }
 
       function getNodeData(node) {
@@ -430,6 +594,21 @@
         }
       }
 
+      function getBilinkCounts() {
+        const raw = window.__memoryAnkiHostState?.bilinkCounts
+        return raw && typeof raw === 'object' ? raw : {}
+      }
+
+      function getBilinkItems() {
+        const raw = window.__memoryAnkiHostState?.bilinkItems
+        return Array.isArray(raw) ? raw : []
+      }
+
+      function getCurrentPalaceId() {
+        const raw = window.__memoryAnkiHostState?.bilinkCurrentPalaceId
+        return typeof raw === 'number' ? raw : raw == null ? null : Number(raw)
+      }
+
       function getCachedNodes() {
         const renderer = getRenderer()
         if (!renderer?.nodeCache) return []
@@ -473,6 +652,171 @@
         if (!node) return
         getHostBridge()?.notify?.('node_active', [serializeNode(node)])
       }
+
+      function getEditableSelectionRect() {
+        const selection =
+          typeof window.getSelection === 'function' ? window.getSelection() : null
+        if (!selection || selection.rangeCount <= 0) return null
+        const rect = selection.getRangeAt(0).getBoundingClientRect?.()
+        if (rect && (rect.width || rect.height || rect.left || rect.top)) {
+          return rect
+        }
+        return getActiveEditableElement()?.getBoundingClientRect?.() || null
+      }
+
+      function getTextBeforeCaret(element) {
+        if (!element) return ''
+        if (element.tagName === 'TEXTAREA' || element.tagName === 'INPUT') {
+          const caret =
+            typeof element.selectionStart === 'number' ? element.selectionStart : element.value.length
+          return String(element.value || '').slice(0, caret)
+        }
+        const selection =
+          typeof window.getSelection === 'function' ? window.getSelection() : null
+        if (!selection || selection.rangeCount <= 0) return ''
+        const baseRange = selection.getRangeAt(0)
+        const range = baseRange.cloneRange()
+        range.selectNodeContents(element)
+        range.setEnd(baseRange.endContainer, baseRange.endOffset)
+        return range.toString()
+      }
+
+      function maybeTriggerBilinkSearchFromInput(event) {
+        if (isReadonlyHost()) return
+        const editableElement = getActiveEditableElement()
+        if (!editableElement) return
+        const insertedText = typeof event?.data === 'string' ? event.data : ''
+        if (insertedText !== '@') return
+        const beforeCaret = getTextBeforeCaret(editableElement)
+        const match = beforeCaret.match(/(?:^|\s)@([^\s@\[\]]*)$/)
+        if (!match) return
+        if (editableElement.tagName === 'TEXTAREA' || editableElement.tagName === 'INPUT') {
+          bilinkState.pendingInsertion = {
+            kind: 'text',
+            element: editableElement,
+            start:
+              typeof editableElement.selectionStart === 'number'
+                ? editableElement.selectionStart
+                : String(editableElement.value || '').length,
+            end:
+              typeof editableElement.selectionEnd === 'number'
+                ? editableElement.selectionEnd
+                : String(editableElement.value || '').length,
+            queryText: match[0],
+          }
+        } else {
+          const selection =
+            typeof window.getSelection === 'function' ? window.getSelection() : null
+          bilinkState.pendingInsertion =
+            selection && selection.rangeCount > 0
+              ? {
+                  kind: 'rich',
+                  element: editableElement,
+                  range: selection.getRangeAt(0).cloneRange(),
+                  queryText: match[0],
+                }
+              : null
+        }
+        const rect = getEditableSelectionRect()
+        const frameRect = window.frameElement?.getBoundingClientRect?.() || { left: 0, top: 0 }
+        getHostBridge()?.notify?.('bilink_trigger', {
+          nodeUid: focusState.editingNodeUid || focusState.committedNodeUid || null,
+          left: frameRect.left + (rect?.left || 0),
+          top: frameRect.top + (rect?.bottom || 0) + 8,
+          query: match[1] || '',
+        })
+      }
+
+      function insertBilinkMark(text) {
+        const pending = bilinkState.pendingInsertion
+        const editableElement =
+          pending?.element && document.contains(pending.element)
+            ? pending.element
+            : getActiveEditableElement()
+        if (!editableElement || !text) return false
+
+        if (
+          pending?.kind === 'text' &&
+          (editableElement.tagName === 'TEXTAREA' || editableElement.tagName === 'INPUT')
+        ) {
+          const start = typeof pending.start === 'number' ? pending.start : editableElement.value.length
+          const end = typeof pending.end === 'number' ? pending.end : editableElement.value.length
+          const value = String(editableElement.value || '')
+          const prefix = value.slice(0, start)
+          const suffix = value.slice(end)
+          const queryText = String(pending.queryText || '@')
+          const nextPrefix = prefix.endsWith(queryText)
+            ? prefix.slice(0, Math.max(0, prefix.length - queryText.length))
+            : prefix.replace(/@([^\s@\[\]]*)$/, '')
+          editableElement.value = `${nextPrefix}${text}${suffix}`
+          const caret = nextPrefix.length + text.length
+          editableElement.setSelectionRange?.(caret, caret)
+          editableElement.dispatchEvent(
+            new InputEvent('input', {
+              bubbles: true,
+              data: text,
+              inputType: 'insertText',
+            }),
+          )
+          bilinkState.pendingInsertion = null
+          return true
+        }
+
+        if (pending?.kind === 'rich' && pending.range) {
+          const selection =
+            typeof window.getSelection === 'function' ? window.getSelection() : null
+          if (!selection) return false
+          const range = pending.range.cloneRange()
+          try {
+            selection.removeAllRanges()
+            selection.addRange(range)
+            if (
+              range.startContainer &&
+              range.startContainer.nodeType === Node.TEXT_NODE &&
+              typeof pending.queryText === 'string'
+            ) {
+              const removeLength = pending.queryText.length
+              const endOffset = range.endOffset
+              const startOffset = Math.max(0, endOffset - removeLength)
+              range.setStart(range.startContainer, startOffset)
+              range.setEnd(range.endContainer, endOffset)
+              range.deleteContents()
+            }
+            range.insertNode(document.createTextNode(text))
+            range.collapse(false)
+            selection.removeAllRanges()
+            selection.addRange(range)
+            editableElement.dispatchEvent(
+              new InputEvent('input', {
+                bubbles: true,
+                data: text,
+                inputType: 'insertText',
+              }),
+            )
+            bilinkState.pendingInsertion = null
+            return true
+          } catch (error) {
+            console.warn(error)
+          }
+        }
+
+        if (typeof document.execCommand === 'function') {
+          editableElement.focus?.()
+          document.execCommand('insertText', false, text)
+          editableElement.dispatchEvent(
+            new InputEvent('input', {
+              bubbles: true,
+              data: text,
+              inputType: 'insertText',
+            }),
+          )
+          bilinkState.pendingInsertion = null
+          return true
+        }
+        return false
+      }
+
+      window.insertBilinkMark = insertBilinkMark
 
       function serializeNodes(nodes) {
         if (!Array.isArray(nodes)) return []
@@ -717,6 +1061,108 @@
         })
       }
 
+      function clearBilinkBadges() {
+        const layer = document.querySelector('.memory-anki-bilink-badge-layer')
+        if (layer) {
+          layer.innerHTML = ''
+        }
+      }
+
+      function resolveBilinkSourceForTargetUid(uid) {
+        const palaceId = getCurrentPalaceId()
+        const items = getBilinkItems()
+        return (
+          items.find(item => item.target_palace_id === palaceId && item.tgt_uid === uid) ||
+          items.find(item => item.direction === 'incoming' && item.tgt_uid === uid) ||
+          null
+        )
+      }
+
+      function resolveBilinkTargetForSourceUid(uid) {
+        const palaceId = getCurrentPalaceId()
+        const items = getBilinkItems()
+        return (
+          items.find(item => item.source_palace_id === palaceId && item.src_uid === uid) || null
+        )
+      }
+
+      function renderBilinkBadges() {
+        clearBilinkBadges()
+        const layer = document.querySelector('.memory-anki-bilink-badge-layer')
+        if (!layer) return
+        const counts = getBilinkCounts()
+        Object.entries(counts).forEach(([uid, count]) => {
+          if (!uid || !count) return
+          const node = getNodeByUid(uid)
+          const element = node?.group?.node
+          if (!element || typeof element.getBoundingClientRect !== 'function') return
+          const rect = element.getBoundingClientRect()
+          const badge = document.createElement('button')
+          badge.type = 'button'
+          badge.className = 'memory-anki-bilink-badge'
+          badge.textContent = String(count)
+          badge.style.left = `${Math.max(0, rect.right - 12)}px`
+          badge.style.top = `${Math.max(0, rect.top - 10)}px`
+          badge.addEventListener('click', event => {
+            event.preventDefault()
+            event.stopPropagation()
+            const target = resolveBilinkSourceForTargetUid(uid)
+            getHostBridge()?.notify?.('bilink_node_click', {
+              palaceId: target?.source_palace_id || getCurrentPalaceId(),
+              nodeUid: target?.src_uid || uid,
+              trigger: 'badge',
+            })
+          })
+          layer.appendChild(badge)
+        })
+      }
+
+      function findNearestBilinkMark(target) {
+        let current = target
+        while (current && current !== document.body) {
+          if (
+            current.nodeType === Node.TEXT_NODE &&
+            typeof current.textContent === 'string' &&
+            /\[\[[^\]]+\]\]/.test(current.textContent)
+          ) {
+            return current
+          }
+          current = current.parentNode
+        }
+        return null
+      }
+
+      function registerBilinkListeners() {
+        if (bilinkState.listenerRegistered) return
+        bilinkState.listenerRegistered = true
+        document.addEventListener(
+          'input',
+          event => {
+            maybeTriggerBilinkSearchFromInput(event)
+          },
+          true,
+        )
+        document.addEventListener(
+          'click',
+          event => {
+            if (isReadonlyHost()) return
+            const markNode = findNearestBilinkMark(event.target)
+            if (!markNode) return
+            const activeUid = focusState.editingNodeUid || focusState.committedNodeUid || null
+            if (!activeUid) return
+            const target = resolveBilinkTargetForSourceUid(activeUid)
+            getHostBridge()?.notify?.('bilink_node_click', {
+              palaceId: target?.target_palace_id || getCurrentPalaceId(),
+              nodeUid: target?.tgt_uid || activeUid,
+              trigger: 'mark',
+            })
+          },
+          true,
+        )
+        window.addEventListener('resize', renderBilinkBadges)
+        document.addEventListener('scroll', renderBilinkBadges, true)
+      }
+
       function closeSegmentMenu() {
         const menu = document.querySelector('.memory-anki-segment-menu')
         if (menu) menu.hidden = true
@@ -883,6 +1329,9 @@
             <button type="button" class="memory-anki-segment-button memory-anki-practice-button" hidden>
               <span>练习</span>
             </button>
+            <button type="button" class="memory-anki-segment-button memory-anki-bilink-search-button" hidden>
+              <span>搜索</span>
+            </button>
             <button type="button" class="memory-anki-layout-button memory-anki-immersive-edit-button">
               <span>半屏编辑</span>
             </button>
@@ -913,6 +1362,7 @@
           const practiceButton = host.querySelector('.memory-anki-practice-button')
           const mindmapImportButton = host.querySelector('.memory-anki-mindmap-import-button')
           const textImportButton = host.querySelector('.memory-anki-text-import-button')
+          const bilinkSearchButton = host.querySelector('.memory-anki-bilink-search-button')
           const immersiveEditButton = host.querySelector('.memory-anki-immersive-edit-button')
           const nativeFullscreenButton = host.querySelector('.memory-anki-native-fullscreen-button')
           const clearUiButton = host.querySelector('.memory-anki-clear-ui-button')
@@ -930,6 +1380,11 @@
             event.preventDefault()
             event.stopPropagation()
             getHostBridge()?.notify?.('image_text_import_open', null)
+          })
+          bilinkSearchButton?.addEventListener('click', event => {
+            event.preventDefault()
+            event.stopPropagation()
+            getHostBridge()?.notify?.('bilink_toolbar_search', null)
           })
           immersiveEditButton?.addEventListener('click', async event => {
             event.preventDefault()
@@ -964,6 +1419,7 @@
         const practiceLabel = practiceButton?.querySelector('span')
         const mindmapImportButton = host.querySelector('.memory-anki-mindmap-import-button')
         const textImportButton = host.querySelector('.memory-anki-text-import-button')
+        const bilinkSearchButton = host.querySelector('.memory-anki-bilink-search-button')
         const immersiveEditButton = host.querySelector('.memory-anki-immersive-edit-button')
         const nativeFullscreenButton = host.querySelector('.memory-anki-native-fullscreen-button')
         const clearUiButton = host.querySelector('.memory-anki-clear-ui-button')
@@ -993,6 +1449,9 @@
         }
         if (textImportButton) {
           textImportButton.hidden = !Boolean(window.__memoryAnkiHostState?.showImportButtons)
+        }
+        if (bilinkSearchButton) {
+          bilinkSearchButton.hidden = !Boolean(window.__memoryAnkiHostState?.showBilinkSearchButton)
         }
         if (practiceLabel) {
           practiceLabel.textContent = window.__memoryAnkiHostState?.practiceToggleLabel || '练习'
@@ -1292,6 +1751,7 @@
         focusState.committedNodeUid = parentUid
         focusState.visualFocusNodeUid = parentUid
         focusState.editingNodeUid = null
+        releaseEditableFocus()
         updateKeyboardFocusClass()
 
         try {
@@ -1301,7 +1761,7 @@
           return false
         }
 
-        window.setTimeout(() => {
+        const restoreParentKeyboardFocus = () => {
           const parentNode = getNodeByUid(parentUid)
           if (parentNode) {
             activateNode(parentNode, {
@@ -1311,23 +1771,14 @@
               lockEditing: false,
             })
           }
+          releaseEditableFocus()
           syncKeyboardMode()
           updateKeyboardFocusClass()
-        }, 0)
+        }
 
-        window.setTimeout(() => {
-          const parentNode = getNodeByUid(parentUid)
-          if (parentNode) {
-            activateNode(parentNode, {
-              notify: false,
-              commit: true,
-              visual: true,
-              lockEditing: false,
-            })
-          }
-          syncKeyboardMode()
-          updateKeyboardFocusClass()
-        }, 120)
+        window.setTimeout(restoreParentKeyboardFocus, 0)
+        window.setTimeout(restoreParentKeyboardFocus, 120)
+        window.setTimeout(restoreParentKeyboardFocus, 240)
 
         return true
       }
@@ -1335,10 +1786,15 @@
       function handleHostKeydown(event) {
         if (isReadonlyHost()) return
 
-        syncKeyboardMode()
+        const editableElement = getActiveEditableElement()
+        focusState.mode = editableElement ? 'editing' : 'navigating'
         if (focusState.mode === 'editing') {
-          if (event.key === 'Enter' && !event.shiftKey) {
+          if (event.key === 'Enter' && editableElement) {
+            event.preventDefault()
+            event.stopPropagation()
+            insertLineBreakIntoEditable(editableElement)
             scheduleModeSync()
+            return
           }
           return
         }
@@ -1564,9 +2020,11 @@
           ensureSegmentToolbar()
           applySegmentNodeStyles()
           updateNavigatorFullscreenPresentation()
+          renderBilinkBadges()
         }, 0)
         ensureRestoreUiButton()
         updateNavigatorFullscreenPresentation()
+        renderBilinkBadges()
       }
 
       window.applyHostState = applyHostState
@@ -1623,6 +2081,8 @@
           mindMap.updateConfig(cloneValue(nextEditorState.editor_config) || {})
         }
 
+        ensureMindMapShortcutGuard()
+
         if (currentTransform) {
           window.__memoryAnkiPendingTransformRestore = cloneValue(currentTransform)
         }
@@ -1667,12 +2127,14 @@
         if (!window.$bus) return
         window.$bus.$on('app_inited', mindMap => {
           window.__memoryAnkiMindMapInstance = mindMap
+          ensureMindMapShortcutGuard()
           registerKeyboardListeners()
           registerPointerIntentListener()
           registerContextMenuListener()
           registerReadonlyClickListener()
           registerEditableDoubleClickListener()
           registerFullscreenListener()
+          registerBilinkListeners()
           registerNativeFullscreenButtonStateSync()
           applyHostState(window.__memoryAnkiHostState || {})
           if (window.__memoryAnkiPendingEditorState) {
@@ -1683,6 +2145,7 @@
           ensureSegmentToolbar()
           applySegmentNodeStyles()
           updateNavigatorFullscreenPresentation()
+          renderBilinkBadges()
           getHostBridge()?.notify?.('app_inited', null)
         })
         window.$bus.$on('node_active', (...args) => {
@@ -1809,6 +2272,7 @@
           ensureSegmentToolbar()
           applySegmentNodeStyles()
           updateNavigatorFullscreenPresentation()
+          renderBilinkBadges()
           getHostBridge()?.notify?.('node_tree_render_end', null)
         })
       }

@@ -23,6 +23,7 @@ from memory_anki.modules.palaces.application.segment_service import (
     create_segment_review_log,
     ensure_segment_schedule_model,
     estimate_segment_review_seconds,
+    get_segment_schedule_display_datetime,
     is_segment_schedule_due,
     is_segment_schedule_overdue,
     repair_all_review_stage_progress,
@@ -32,6 +33,7 @@ from memory_anki.modules.reviews.application.schedule_service import (
     create_initial_review_schedules,
     get_algorithm_intervals,
     get_config_value,
+    is_schedule_due_or_later_today,
     is_schedule_due,
     is_schedule_overdue,
     normalize_algorithm,
@@ -388,12 +390,13 @@ def submit_review(
     duration_seconds: int = 0,
     completion_mode: str = "manual_complete",
     target_review_number: int | None = None,
+    needs_practice: bool = False,
 ) -> tuple[ReviewLog | None, dict]:
     schedule = session.query(ReviewSchedule).filter_by(id=schedule_id).first()
     if not schedule:
         return None, {}
 
-    if not schedule.palace or not is_schedule_due(schedule, schedule.palace, session):
+    if not schedule.palace or not is_schedule_due_or_later_today(schedule, schedule.palace, session):
         return None, {}
 
     completed_at = datetime.now().replace(second=0, microsecond=0)
@@ -419,6 +422,7 @@ def submit_review(
         completed_review_number=schedule.review_number,
         completed_at=completed_at,
     )
+    palace.needs_practice = bool(needs_practice)
     if next_review_number >= len(intervals):
         extra["mastered"] = True
 
@@ -444,6 +448,7 @@ def submit_segment_review(
     duration_seconds: int = 0,
     completion_mode: str = "manual_complete",
     target_review_number: int | None = None,
+    needs_practice: bool = False,
 ) -> tuple[PalaceSegmentReviewSchedule | None, dict]:
     schedule = session.query(PalaceSegmentReviewSchedule).filter_by(id=schedule_id).first()
     if not schedule or not schedule.segment:
@@ -454,7 +459,9 @@ def submit_segment_review(
     if not schedule or not schedule.segment or not schedule.segment.palace:
         return None, {}
 
-    if not is_segment_schedule_due(session, schedule.segment, schedule):
+    due_at = get_segment_schedule_display_datetime(session, schedule.segment, schedule)
+    now = datetime.now()
+    if due_at is None or (due_at > now and due_at.date() != now.date()):
         return None, {}
 
     completed_at = datetime.now().replace(second=0, microsecond=0)
@@ -478,6 +485,7 @@ def submit_segment_review(
         completed_review_number=completed_review_number,
         completed_at=completed_at,
     )
+    segment.palace.needs_practice = bool(needs_practice)
 
     session.flush()
     create_review_time_record(

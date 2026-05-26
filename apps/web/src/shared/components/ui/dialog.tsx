@@ -1,4 +1,5 @@
 import { type PropsWithChildren, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
 
 interface DialogProps extends PropsWithChildren {
@@ -22,7 +23,7 @@ export function Dialog({ open, onOpenChange, children, modal = true, className =
 
   if (!open) return null
 
-  return (
+  return createPortal(
     <div
       className={`fixed inset-0 z-50 flex items-center justify-center p-4 ${
         modal ? '' : 'pointer-events-none'
@@ -37,7 +38,8 @@ export function Dialog({ open, onOpenChange, children, modal = true, className =
         />
       ) : null}
       {children}
-    </div>
+    </div>,
+    document.body,
   )
 }
 

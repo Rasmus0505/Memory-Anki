@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import DashboardPage from '@/app/router/DashboardPage'
 
@@ -124,11 +124,50 @@ describe('DashboardPage', () => {
     render(<DashboardPage />)
 
     expect(await screen.findByText('今日学习')).toBeTruthy()
+    expect(screen.getByText('宫殿编辑')).toBeTruthy()
+    expect(screen.getByText('练习')).toBeTruthy()
+    expect(screen.getByText('复习')).toBeTruthy()
     expect(screen.getAllByText('第五节 陈鹤琴的“活教育”探索').length).toBeGreaterThan(0)
     expect(screen.getAllByText('1小时 0分').length).toBeGreaterThan(0)
     expect(screen.getByText('新增章节数量：2')).toBeTruthy()
     expect(screen.getByText('第五章 现代教育实验')).toBeTruthy()
-    expect(screen.getAllByText('第五节').length).toBeGreaterThan(0)
+    expect(screen.queryByText('第五节')).toBeNull()
+  })
+
+  it('shows learning tooltip immediately on hover', async () => {
+    getDashboardApi.mockResolvedValue({
+      due_count: 0,
+      reviews: [],
+      stats: { total: 0, review_count: 0, review_duration_seconds: 0 },
+      today_review_duration_seconds: 0,
+      weekly_review_duration_seconds: 0,
+      today_total_review_duration_seconds: 3600,
+      weekly_total_review_duration_seconds: 3600,
+      weekly_formal_review_duration_seconds: 1200,
+      recent_palaces: [],
+      today_learning_palaces: [
+        {
+          palace_id: 8,
+          palace_title: '第四节 梁漱溟的乡村教育建设',
+          total_seconds: 1800,
+          review_seconds: 600,
+          practice_seconds: 300,
+          palace_edit_seconds: 900,
+        },
+      ],
+      today_new_palace_count: 0,
+      today_new_palaces: [],
+    })
+
+    render(<DashboardPage />)
+
+    const progressBar = await screen.findByRole('img', { name: '第四节 梁漱溟的乡村教育建设 学习时长结构' })
+    fireEvent.mouseEnter(progressBar)
+
+    expect(screen.getByText('总时长：30分 0秒')).toBeTruthy()
+    expect(screen.getByText('宫殿编辑：15分 0秒')).toBeTruthy()
+    expect(screen.getByText('练习：5分 0秒')).toBeTruthy()
+    expect(screen.getByText('复习：10分 0秒')).toBeTruthy()
   })
 
   it('renders empty states for both middle cards', async () => {

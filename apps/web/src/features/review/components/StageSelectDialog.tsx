@@ -14,7 +14,7 @@ interface StageSelectDialogProps {
   stageLabels: string[]
   stages: ReviewStageSummary[]
   currentReviewNumber: number
-  onConfirm: (targetReviewNumber: number) => void
+  onConfirm: (targetReviewNumber: number, needsPractice: boolean) => void
   onCancel: () => void
 }
 
@@ -61,8 +61,8 @@ export function StageSelectDialog({
   const nextAfterDefault = normalizedStages[defaultTarget + 1]
   const nextAfterDefaultLabel = nextAfterDefault?.label ?? '完成全部'
 
-  const handleConfirm = () => {
-    onConfirm(selectedNumber)
+  const handleConfirm = (needsPractice: boolean) => {
+    onConfirm(selectedNumber, needsPractice)
   }
 
   const total = normalizedStages.length
@@ -133,7 +133,10 @@ export function StageSelectDialog({
           <Button variant="outline" size="sm" onClick={onCancel}>
             取消
           </Button>
-          <Button size="sm" onClick={handleConfirm}>
+          <Button variant="outline" size="sm" onClick={() => handleConfirm(true)}>
+            完成，但仍需练习
+          </Button>
+          <Button size="sm" onClick={() => handleConfirm(false)}>
             {selectedNumber === defaultTarget
               ? `默认（标记第 ${defaultTarget + 1} 次完成）`
               : `标记第 ${selectedNumber + 1} 次完成（${normalizedStages[selectedNumber]?.label ?? '?'}）`}

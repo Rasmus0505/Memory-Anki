@@ -36,6 +36,7 @@ interface UseReviewFlowSessionOptions {
   persistProgress?: boolean
   initialSnapshot?: ReviewFlowSnapshot | null
   onSnapshotChange?: (snapshot: ReviewFlowSnapshot) => void
+  onFullscreenChange?: (active: boolean) => void
 }
 
 export function useReviewFlowSession({
@@ -48,6 +49,7 @@ export function useReviewFlowSession({
   persistProgress = false,
   initialSnapshot = null,
   onSnapshotChange,
+  onFullscreenChange,
 }: UseReviewFlowSessionOptions) {
   const timer = useTimedSession({
     kind: sessionKind,
@@ -102,6 +104,10 @@ export function useReviewFlowSession({
       document.body.style.overflow = previousOverflow
     }
   }, [fullscreen])
+
+  React.useEffect(() => {
+    onFullscreenChange?.(fullscreen)
+  }, [fullscreen, onFullscreenChange])
 
   React.useEffect(() => {
     timerRef.current = timer
@@ -167,7 +173,7 @@ export function useReviewFlowSession({
       setRevealMap(finishState.revealMap)
       setRedNodeIds(finishState.redNodeIds)
       setCompleted(true)
-      timer.registerActivity({ source: 'complete' })
+      timer.registerActivity('practice_interaction', { source: 'complete' })
       const record = await timer.complete(modeName, {
         revealed_remaining: finishState.revealedRemaining,
         red_marked_count: finishState.redNodeIds.size,
@@ -194,7 +200,7 @@ export function useReviewFlowSession({
       if (!nodeId) return
       const node = nodeMap.get(nodeId)
       if (!node) return
-      timer.registerActivity({ source: 'left_click' })
+      timer.registerActivity('practice_interaction', { source: 'left_click' })
       setRevealMap((current) => {
         const state = current[nodeId] ?? 'hidden'
         if (state === 'placeholder') {
@@ -216,7 +222,7 @@ export function useReviewFlowSession({
       if (completed) return
       const nodeId = buildSelectionNodeId(nodes[0] ?? null)
       if (!nodeId || nodeId === root.id) return
-      timer.registerActivity({ source: 'right_click' })
+      timer.registerActivity('practice_interaction', { source: 'right_click' })
       setRevealMap((current) => hideNodeAndDescendants(nodeId, nodeMap, current))
     },
     [completed, nodeMap, root.id, timer],
@@ -228,7 +234,7 @@ export function useReviewFlowSession({
     setRedNodeIds(new Set())
     setCompleted(false)
     userAdvancedReviewRef.current = false
-    timer.registerActivity({ source: 'restart' })
+    timer.registerActivity('practice_interaction', { source: 'restart' })
     onRestart?.()
   }, [onRestart, root, timer])
 

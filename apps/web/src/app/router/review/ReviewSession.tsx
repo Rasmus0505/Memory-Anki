@@ -1,4 +1,4 @@
-import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { ArrowLeft, FileText } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import {
@@ -35,7 +35,6 @@ function nextOverviewHref(chapterId: number | null) {
 
 export default function ReviewSession() {
   const { id } = useParams()
-  const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const chapterIdParam = searchParams.get('chapterId')
   const chapterId = chapterIdParam ? Number(chapterIdParam) : null
@@ -43,6 +42,7 @@ export default function ReviewSession() {
   const [editorState, setEditorState] = useState<MindMapEditorState | null>(null)
   const [initialSnapshot, setInitialSnapshot] = useState<ReviewFlowSnapshot | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  const [mindMapFullscreen, setMindMapFullscreen] = useState(false)
   const [stageDialogOpen, setStageDialogOpen] = useState(false)
   const [pendingPayload, setPendingPayload] = useState<{
     durationSeconds: number
@@ -111,7 +111,7 @@ export default function ReviewSession() {
     setStageDialogOpen(true)
   }
 
-  const handleStageConfirm = async (targetReviewNumber: number) => {
+  const handleStageConfirmWithPractice = async (targetReviewNumber: number, needsPractice: boolean) => {
     if (!session || !pendingPayload) return
     setStageDialogOpen(false)
     setSubmitting(true)
@@ -123,6 +123,7 @@ export default function ReviewSession() {
         revealed_remaining: pendingPayload.revealedRemaining,
         red_marked_count: pendingPayload.redNodeIds.length,
         target_review_number: targetReviewNumber,
+        needs_practice: needsPractice,
       })
     } finally {
       setSubmitting(false)
@@ -141,90 +142,91 @@ export default function ReviewSession() {
 
   return (
     <div className="space-y-5">
-      <PageIntro
-        eyebrow="正式复习"
-        title={palace.title || '未命名宫殿'}
-        actions={
-          <>
-            <Link to={nextOverviewHref(chapterId)}>
-              <Button variant="outline" size="sm">
-                <ArrowLeft className="mr-2 h-4 w-4" />
-                返回复习队列
-              </Button>
-            </Link>
-            <Badge variant="secondary">{session.algorithm_used}</Badge>
-            <Badge variant="outline">{formatReviewStage(session.review_type, session.review_number)}</Badge>
-          </>
-        }
-      />
+      {!mindMapFullscreen ? (
+        <PageIntro
+          eyebrow="正式复习"
+          title={palace.title || '未命名宫殿'}
+          actions={
+            <>
+              <Link to={nextOverviewHref(chapterId)}>
+                <Button variant="outline" size="sm">
+                  <ArrowLeft className="mr-2 h-4 w-4" />
+                  返回复习队列
+                </Button>
+              </Link>
+              <Badge variant="secondary">{session.algorithm_used}</Badge>
+              <Badge variant="outline">{formatReviewStage(session.review_type, session.review_number)}</Badge>
+            </>
+          }
+        />
+      ) : null}
 
       <div className="space-y-4">
-        <Card className="border-border/70 bg-card/92">
-          <CardContent className="p-5">
-            <MindMapReviewFlow
-              title={palace.title || '未命名宫殿'}
-              palaceId={palace.id}
-              sessionKind="review"
-              editorState={editorState}
-              submitting={submitting}
-              persistProgress
-              initialSnapshot={initialSnapshot}
-              onSnapshotChange={async (snapshot) => {
-                if (snapshot.completed) {
-                  await clearReviewSessionProgressApi(session.id)
-                  return
-                }
-                await saveReviewSessionProgressApi(session.id, {
-                  completed: snapshot.completed,
-                  reveal_map: snapshot.revealMap,
-                  red_node_ids: snapshot.redNodeIds,
-                })
-              }}
-              onComplete={submitCompletion}
-            />
-          </CardContent>
-        </Card>
+        <MindMapReviewFlow
+          title={palace.title || '未命名宫殿'}
+          palaceId={palace.id}
+          sessionKind="review"
+          editorState={editorState}
+          submitting={submitting}
+          persistProgress
+          initialSnapshot={initialSnapshot}
+          onFullscreenChange={setMindMapFullscreen}
+          onSnapshotChange={async (snapshot) => {
+            if (snapshot.completed) {
+              await clearReviewSessionProgressApi(session.id)
+              return
+            }
+            await saveReviewSessionProgressApi(session.id, {
+              completed: snapshot.completed,
+              reveal_map: snapshot.revealMap,
+              red_node_ids: snapshot.redNodeIds,
+            })
+          }}
+          onComplete={submitCompletion}
+        />
 
-        <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
-          <Card className="border-border/70 bg-card/92">
-            <CardHeader>
-              <CardTitle className="text-base">复习信息</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3 text-sm text-muted-foreground">
-              <div>当前轮次：{formatReviewStage(session.review_type, session.review_number)}</div>
-              <div>计划间隔：{session.interval_days} 天</div>
-              <div>本轮不再按“忘记/模糊/记住”改变排程强弱，完成后会固定推进到下一轮。</div>
-              <div>如果你提前点击完成，剩余未出现节点会直接揭示并标红，然后立即结束本轮。</div>
-            </CardContent>
-          </Card>
+        {!mindMapFullscreen ? (
+          <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
+            <Card className="border-border/70 bg-card/92">
+              <CardHeader>
+                <CardTitle className="text-base">复习信息</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3 text-sm text-muted-foreground">
+                <div>当前轮次：{formatReviewStage(session.review_type, session.review_number)}</div>
+                <div>计划间隔：{session.interval_days} 天</div>
+                <div>本轮不再按“忘记/模糊/记住”改变排程强弱，完成后会固定推进到下一轮。</div>
+                <div>如果你提前点击完成，剩余未出现节点会直接揭示并标红，然后立即结束本轮。</div>
+              </CardContent>
+            </Card>
 
-          <Card className="border-border/70 bg-card/92">
-            <CardHeader>
-              <CardTitle className="text-base">附件</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2 text-sm">
-              {palace.attachments.length > 0 ? (
-                palace.attachments.map((attachment) => (
-                  <a
-                    key={attachment.id}
-                    href={buildAttachmentUrl(attachment.id)}
-                    target="_blank"
-                    className="block rounded-2xl border border-border/70 bg-background/70 px-3 py-3 transition-colors hover:text-foreground"
-                  >
-                    <span className="inline-flex items-center gap-2">
-                      <FileText className="h-4 w-4" />
-                      {attachment.original_name}
-                    </span>
-                  </a>
-                ))
-              ) : (
-                <div className="rounded-2xl border border-dashed border-border/80 px-3 py-4 text-muted-foreground">
-                  没有附件。
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </div>
+            <Card className="border-border/70 bg-card/92">
+              <CardHeader>
+                <CardTitle className="text-base">附件</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2 text-sm">
+                {palace.attachments.length > 0 ? (
+                  palace.attachments.map((attachment) => (
+                    <a
+                      key={attachment.id}
+                      href={buildAttachmentUrl(attachment.id)}
+                      target="_blank"
+                      className="block rounded-2xl border border-border/70 bg-background/70 px-3 py-3 transition-colors hover:text-foreground"
+                    >
+                      <span className="inline-flex items-center gap-2">
+                        <FileText className="h-4 w-4" />
+                        {attachment.original_name}
+                      </span>
+                    </a>
+                  ))
+                ) : (
+                  <div className="rounded-2xl border border-dashed border-border/80 px-3 py-4 text-muted-foreground">
+                    没有附件。
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        ) : null}
       </div>
 
       {palace?.stage_labels && palace?.review_stages && (
@@ -233,7 +235,7 @@ export default function ReviewSession() {
           stageLabels={palace.stage_labels}
           stages={palace.review_stages}
           currentReviewNumber={session.review_number}
-          onConfirm={handleStageConfirm}
+          onConfirm={handleStageConfirmWithPractice}
           onCancel={handleStageCancel}
         />
       )}

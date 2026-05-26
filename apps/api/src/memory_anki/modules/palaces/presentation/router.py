@@ -221,6 +221,7 @@ def palace_json(p, session: Session | None = None) -> dict:
     return {
         "id": p.id, "title": p.title, "description": p.description,
         "archived": p.archived, "mastered": p.mastered,
+        "needs_practice": bool(getattr(p, "needs_practice", False)),
         "created_at": p.created_at.isoformat() if p.created_at else None,
         "updated_at": p.updated_at.isoformat() if p.updated_at else None,
         "next_scheduled_date": next_schedule.scheduled_date.isoformat() if next_schedule and next_schedule.scheduled_date else None,
@@ -458,6 +459,17 @@ def api_update_default_segment_review_progress(palace_id: int, data: dict, s: Se
         None,
     )
     return {"item": default_segment, "palace": payload}
+
+
+@router.put("/palaces/{palace_id}/practice-flag")
+def api_update_palace_practice_flag(palace_id: int, data: dict, s: Session = Depends(session_dep)):
+    palace = get_palace(s, palace_id)
+    if not palace:
+        return {"error": "not found"}
+    palace.needs_practice = bool(data.get("needs_practice", False))
+    s.commit()
+    s.refresh(palace)
+    return {"item": palace_json(palace, s)}
 
 
 @router.delete("/palace-segments/{segment_id}")

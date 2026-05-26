@@ -41,6 +41,7 @@ export interface ReviewPalaceSummary {
   description: string
   archived: boolean
   mastered: boolean
+  needs_practice?: boolean
   editor_doc: MindMapDoc | string | null
   pegs: Array<{ id: number; name: string; content: string; children: unknown[] }>
   attachments: Array<{ id: number; filename: string; original_name: string }>
@@ -213,6 +214,7 @@ export const api = {
       completion_mode?: 'manual_complete' | 'auto_complete'
       revealed_remaining?: boolean
       red_marked_count?: number
+      needs_practice?: boolean
     },
   ) =>
     request<any>(`/review/session/${id}/submit`, {

@@ -44,6 +44,33 @@ PROMPT = """你是一个严格输出 JSON 的思维导图识别助手。
 7. 不要添加图片里不存在的内容。
 """
 
+BATCH_PROMPT = """你是一个严格输出 JSON 的教材转思维导图补全助手。
+
+任务：
+1. 第一张被指定为结构图的图片提供章节原始思维导图结构。
+2. 其余图片提供该章节教材正文。
+3. 你需要基于已提取出的原始导图结构，把正文内容补充到最匹配的节点下，输出增强后的完整树。
+
+强制要求：
+1. 只输出 JSON，不要输出 markdown，不要输出解释。
+2. 顶层 JSON 格式必须为：
+{
+  "title": "根节点标题",
+  "children": [
+    {
+      "text": "节点文字",
+      "children": []
+    }
+  ]
+}
+3. 结构图中原有节点标题尽量保留原文，不要随意改写。
+4. 正文内容必须补到最匹配的原节点下；允许新增多级子节点，不要求只补一层。
+5. 如果正文内容无法精确匹配到叶子节点，宁可补到更高层级的相关节点下，也不要挂错位置。
+6. 不要捏造图片里不存在的知识点。
+7. 每个节点即使没有子节点，也必须输出 children: []。
+8. 如果结构图没有明显标题，可以保留给定结构里的 title。
+"""
+
 TEXT_PROMPT = """你是一个严格输出纯文本的图片转文字助手。
 
 任务：读取用户给出的中文图片，把图中的文字尽量完整、逐行地转成纯文本。
@@ -72,6 +99,14 @@ class TextPreviewResult:
     extracted_text: str
 
 
+@dataclass
+class BatchImportPreviewResult:
+    source_tree: dict[str, Any]
+    editor_doc: dict[str, Any]
+    structure_image_index: int
+    image_count: int
+
+
 def generate_import_preview(
     *,
     image_bytes: bytes,
@@ -79,7 +114,7 @@ def generate_import_preview(
     fallback_title: str,
 ) -> ImportPreviewResult:
     if not DASHSCOPE_API_KEY:
-      raise MindMapImportError("未配置 DASHSCOPE_API_KEY，无法调用图片转脑图模型。")
+        raise MindMapImportError("未配置 DASHSCOPE_API_KEY，无法调用图片转脑图模型。")
     if not image_bytes:
         raise MindMapImportError("未读取到图片内容。")
     if len(image_bytes) > MAX_IMAGE_BYTES:
@@ -106,6 +141,52 @@ def generate_text_preview(
     return TextPreviewResult(extracted_text=extracted_text)
 
 
+def generate_batch_import_preview(
+    *,
+    image_items: list[tuple[bytes, str | None]],
+    fallback_title: str,
+    structure_image_index: int | None = None,
+) -> BatchImportPreviewResult:
+    if not DASHSCOPE_API_KEY:
+        raise MindMapImportError("未配置 DASHSCOPE_API_KEY，无法调用图片转脑图模型。")
+    if not image_items:
+        raise MindMapImportError("请至少上传一张图片。")
+
+    normalized_items: list[tuple[bytes, str | None]] = []
+    total_bytes = 0
+    for image_bytes, filename in image_items:
+        if not image_bytes:
+            raise MindMapImportError("存在未读取到内容的图片，请删除后重新上传。")
+        if len(image_bytes) > MAX_IMAGE_BYTES:
+            raise MindMapImportError("存在图片超过 8MB，请压缩后重试。")
+        total_bytes += len(image_bytes)
+        normalized_items.append((image_bytes, filename))
+
+    if total_bytes > MAX_IMAGE_BYTES * 6:
+        raise MindMapImportError("本次上传图片总大小过大，请减少图片数量或压缩后重试。")
+
+    resolved_structure_index = structure_image_index if structure_image_index is not None else 0
+    if resolved_structure_index < 0 or resolved_structure_index >= len(normalized_items):
+        raise MindMapImportError("结构图索引无效，请重新选择结构图后再试。")
+
+    structure_bytes, structure_filename = normalized_items[resolved_structure_index]
+    structure_tree = _call_dashscope_json(
+        image_bytes=structure_bytes,
+        filename=structure_filename,
+    )
+    enhanced_tree = _call_dashscope_batch_json(
+        image_items=normalized_items,
+        structure_tree=structure_tree,
+    )
+    editor_doc = _build_editor_doc(enhanced_tree, fallback_title=fallback_title)
+    return BatchImportPreviewResult(
+        source_tree=enhanced_tree,
+        editor_doc=editor_doc,
+        structure_image_index=resolved_structure_index,
+        image_count=len(normalized_items),
+    )
+
+
 def _call_dashscope_json(*, image_bytes: bytes, filename: str | None) -> dict[str, Any]:
     content_text = _call_dashscope(
         image_bytes=image_bytes,
@@ -127,6 +208,26 @@ def _call_dashscope_text(*, image_bytes: bytes, filename: str | None) -> str:
     return _normalize_extracted_text(content_text)
 
 
+def _call_dashscope_batch_json(
+    *,
+    image_items: list[tuple[bytes, str | None]],
+    structure_tree: dict[str, Any],
+) -> dict[str, Any]:
+    prompt = (
+        f"{BATCH_PROMPT}\n\n"
+        "下面是已经从结构图中提取出的原始脑图 JSON，请以它为主结构进行增强：\n"
+        f"{json.dumps(structure_tree, ensure_ascii=False)}\n\n"
+        "接下来会按顺序提供结构图和正文图片。请综合所有图片后输出增强后的完整脑图 JSON。"
+    )
+    content_text = _call_dashscope_with_images(
+        image_items=image_items,
+        prompt=prompt,
+        response_format={"type": "json_object"},
+    )
+    source_tree = _parse_source_tree_json(content_text)
+    return _normalize_source_tree(source_tree)
+
+
 def _call_dashscope(
     *,
     image_bytes: bytes,
@@ -134,19 +235,30 @@ def _call_dashscope(
     prompt: str,
     response_format: dict[str, Any] | None,
 ) -> str:
-    mime_type = mimetypes.guess_type(filename or "")[0] or "image/png"
-    image_base64 = base64.b64encode(image_bytes).decode("utf-8")
-    image_url = f"data:{mime_type};base64,{image_base64}"
+    return _call_dashscope_with_images(
+        image_items=[(image_bytes, filename)],
+        prompt=prompt,
+        response_format=response_format,
+    )
+
+
+def _call_dashscope_with_images(
+    *,
+    image_items: list[tuple[bytes, str | None]],
+    prompt: str,
+    response_format: dict[str, Any] | None,
+) -> str:
     request_url = f"{DASHSCOPE_BASE_URL.rstrip('/')}/chat/completions"
+    content: list[dict[str, Any]] = [{"type": "text", "text": prompt}]
+    for index, (image_bytes, filename) in enumerate(image_items, start=1):
+        content.append({"type": "text", "text": f"第 {index} 张图片："})
+        content.append(_build_image_content_part(image_bytes=image_bytes, filename=filename))
     payload = {
         "model": DASHSCOPE_VISION_MODEL,
         "messages": [
             {
                 "role": "user",
-                "content": [
-                    {"type": "text", "text": prompt},
-                    {"type": "image_url", "image_url": {"url": image_url}},
-                ],
+                "content": content,
             }
         ],
         "temperature": 0.1,
@@ -198,6 +310,13 @@ def _call_dashscope(
         raise MindMapImportError("模型返回内容格式异常。") from exc
 
     return content_text
+
+
+def _build_image_content_part(*, image_bytes: bytes, filename: str | None) -> dict[str, Any]:
+    mime_type = mimetypes.guess_type(filename or "")[0] or "image/png"
+    image_base64 = base64.b64encode(image_bytes).decode("utf-8")
+    image_url = f"data:{mime_type};base64,{image_base64}"
+    return {"type": "image_url", "image_url": {"url": image_url}}
 
 
 def _normalize_source_tree(value: Any) -> dict[str, Any]:

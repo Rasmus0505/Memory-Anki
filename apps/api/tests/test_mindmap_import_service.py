@@ -4,6 +4,7 @@ from unittest.mock import MagicMock, patch
 
 from memory_anki.modules.palaces.application.mindmap_import_service import (
     MindMapImportError,
+    generate_batch_import_preview,
     generate_import_preview,
     generate_text_preview,
 )
@@ -110,6 +111,101 @@ class MindMapImportServiceTests(unittest.TestCase):
         )
 
         self.assertEqual(result.extracted_text, "第一章\n第一节")
+
+    @patch("memory_anki.modules.palaces.application.mindmap_import_service.DASHSCOPE_API_KEY", "test-key")
+    @patch("memory_anki.modules.palaces.application.mindmap_import_service._call_dashscope_batch_json")
+    @patch("memory_anki.modules.palaces.application.mindmap_import_service._call_dashscope_json")
+    def test_generate_batch_import_preview_defaults_to_first_image_as_structure(
+        self,
+        mock_call_json,
+        mock_call_batch_json,
+    ):
+        mock_call_json.return_value = {
+            "title": "第一章",
+            "children": [{"text": "总论", "children": []}],
+        }
+        mock_call_batch_json.return_value = {
+            "title": "第一章",
+            "children": [{"text": "总论", "children": [{"text": "补充", "children": []}]}],
+        }
+
+        result = generate_batch_import_preview(
+            image_items=[
+                (b"struct", "structure.png"),
+                (b"body-1", "body1.png"),
+                (b"body-2", "body2.png"),
+            ],
+            fallback_title="未命名宫殿",
+        )
+
+        self.assertEqual(result.structure_image_index, 0)
+        self.assertEqual(result.image_count, 3)
+        mock_call_json.assert_called_once_with(image_bytes=b"struct", filename="structure.png")
+
+    @patch("memory_anki.modules.palaces.application.mindmap_import_service.DASHSCOPE_API_KEY", "test-key")
+    @patch("memory_anki.modules.palaces.application.mindmap_import_service._call_dashscope_batch_json")
+    @patch("memory_anki.modules.palaces.application.mindmap_import_service._call_dashscope_json")
+    def test_generate_batch_import_preview_uses_selected_structure_index(
+        self,
+        mock_call_json,
+        mock_call_batch_json,
+    ):
+        mock_call_json.return_value = {
+            "title": "第二章",
+            "children": [{"text": "概念", "children": []}],
+        }
+        mock_call_batch_json.return_value = {
+            "title": "第二章",
+            "children": [{"text": "概念", "children": [{"text": "补充说明", "children": []}]}],
+        }
+
+        result = generate_batch_import_preview(
+            image_items=[
+                (b"body-1", "body1.png"),
+                (b"struct", "structure.png"),
+            ],
+            fallback_title="未命名宫殿",
+            structure_image_index=1,
+        )
+
+        self.assertEqual(result.structure_image_index, 1)
+        mock_call_json.assert_called_once_with(image_bytes=b"struct", filename="structure.png")
+
+    @patch("memory_anki.modules.palaces.application.mindmap_import_service.DASHSCOPE_API_KEY", "test-key")
+    def test_generate_batch_import_preview_rejects_invalid_structure_index(self):
+        with self.assertRaises(MindMapImportError) as error:
+            generate_batch_import_preview(
+                image_items=[(b"struct", "structure.png")],
+                fallback_title="未命名宫殿",
+                structure_image_index=3,
+            )
+
+        self.assertIn("结构图索引无效", str(error.exception))
+
+    @patch("memory_anki.modules.palaces.application.mindmap_import_service.DASHSCOPE_API_KEY", "test-key")
+    @patch("memory_anki.modules.palaces.application.mindmap_import_service._call_dashscope_json")
+    @patch("memory_anki.modules.palaces.application.mindmap_import_service._call_dashscope_batch_json")
+    def test_generate_batch_import_preview_surfaces_batch_failure(
+        self,
+        mock_call_batch_json,
+        mock_call_json,
+    ):
+        mock_call_json.return_value = {
+            "title": "第一章",
+            "children": [{"text": "总论", "children": []}],
+        }
+        mock_call_batch_json.side_effect = MindMapImportError("模型返回内容不是有效的脑图 JSON。")
+
+        with self.assertRaises(MindMapImportError) as error:
+            generate_batch_import_preview(
+                image_items=[
+                    (b"struct", "structure.png"),
+                    (b"body", "body.png"),
+                ],
+                fallback_title="未命名宫殿",
+            )
+
+        self.assertIn("模型返回内容不是有效的脑图 JSON", str(error.exception))
 
 
 if __name__ == "__main__":

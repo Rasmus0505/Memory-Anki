@@ -43,6 +43,8 @@ interface StageEditState {
   stage: ReviewStageSummary
 }
 
+type ReviewButtonState = 'due_now' | 'due_later_today' | 'future' | 'unscheduled'
+
 function ensureSubmitSucceeded(result: ReviewSessionSubmitResponse) {
   if (!result?.ok) {
     throw new Error('复习提交失败')
@@ -81,6 +83,19 @@ function formatRelativeReviewTime(value: string | null): string {
   const months = Math.floor(totalDays / 30)
   const days = totalDays % 30
   return days > 0 ? `${months}月${days}天` : `${months}天`
+}
+
+function getReviewButtonState(value: string | null): ReviewButtonState {
+  if (!value) return 'unscheduled'
+  const target = new Date(value)
+  if (Number.isNaN(target.getTime())) return 'unscheduled'
+  const now = new Date()
+  if (target.getTime() <= now.getTime()) return 'due_now'
+  const sameDay =
+    target.getFullYear() === now.getFullYear() &&
+    target.getMonth() === now.getMonth() &&
+    target.getDate() === now.getDate()
+  return sameDay ? 'due_later_today' : 'future'
 }
 
 function formatCreatedAt(value: string | null): string {
@@ -395,6 +410,7 @@ export default function PalaceList() {
         Boolean(segment.current_review_schedule_id),
     )
     const canBatchReview = dueBatchSegments.length >= 2
+    const singleSegmentState = singleSegment ? getReviewButtonState(singleSegment.next_review_at) : 'unscheduled'
 
     return (
       <Card key={palace.id} className="transition-shadow hover:shadow-md">
@@ -421,18 +437,19 @@ export default function PalaceList() {
               </div>
               {!isMultiSegment && singleSegment ? (
                 <Button
-                  variant={singleSegment.has_due_review ? 'default' : 'outline'}
+                  variant={singleSegmentState === 'due_now' ? 'default' : 'outline'}
                   size="sm"
                   className={cn(
                     'h-8 shrink-0 text-xs',
-                    singleSegment.has_due_review && 'bg-emerald-600 text-white hover:bg-emerald-700',
+                    singleSegmentState === 'due_now' && 'bg-emerald-600 text-white hover:bg-emerald-700',
+                    singleSegmentState === 'due_later_today' && 'border-amber-300 bg-amber-100 text-amber-900 hover:bg-amber-200',
                   )}
                   onClick={() => void handleSegmentReviewAction(singleSegment)}
-                  disabled={!singleSegment.current_review_schedule_id || segmentReviewLoadingId === singleSegment.id}
+                  disabled={!singleSegment.current_review_schedule_id || singleSegmentState === 'future' || segmentReviewLoadingId === singleSegment.id}
                 >
                   {segmentReviewLoadingId === singleSegment.id
                     ? '加载中...'
-                    : singleSegment.has_due_review
+                    : singleSegmentState === 'due_now'
                       ? '开始复习'
                       : formatRelativeReviewTime(singleSegment.next_review_at)}
                 </Button>
@@ -454,75 +471,78 @@ export default function PalaceList() {
             ) : Array.isArray(palace.segments) && palace.segments.length > 0 ? (
               <div className="mt-3 space-y-2.5">
                 {palace.segments.map((segment, index) => (
-                  <div
-                    key={segment.id}
-                    className="rounded-2xl border border-border/60 bg-background/70 px-3 py-3"
-                  >
-                    <div className="flex flex-wrap items-start gap-3">
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2">
-                          <span
-                            className="inline-block h-2.5 w-2.5 rounded-full"
-                            style={{ backgroundColor: segment.color }}
-                          />
-                          <span className="truncate text-sm font-medium">
-                            {getSegmentDisplayName(segment, index)}
-                          </span>
+                  (() => {
+                    const segmentReviewState = getReviewButtonState(segment.next_review_at)
+                    const segmentReviewDisabled =
+                      !segment.current_review_schedule_id ||
+                      segmentReviewState === 'future' ||
+                      segmentReviewLoadingId === segment.id
+
+                    return (
+                      <div
+                        key={segment.id}
+                        className="rounded-2xl border border-border/60 bg-background/70 px-3 py-3"
+                      >
+                        <div className="flex flex-wrap items-start gap-3">
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2">
+                              <span
+                                className="inline-block h-2.5 w-2.5 rounded-full"
+                                style={{ backgroundColor: segment.color }}
+                              />
+                              <span className="truncate text-sm font-medium">
+                                {getSegmentDisplayName(segment, index)}
+                              </span>
+                            </div>
+                            <div className="mt-1 flex flex-wrap gap-2 text-[11px] text-muted-foreground">
+                              <span>{segment.node_count} 节点</span>
+                              <span>预计 {formatRelativeReviewTime(segment.next_review_at)}</span>
+                            </div>
+                            <PalaceStageProgress
+                              stageLabels={segment.stage_labels}
+                              completed={segment.review_stage_completed}
+                              stages={segment.review_stages}
+                              onStageClick={(stage) => openStageEdit(palace, segment, stage)}
+                            />
+                          </div>
+                          <div className="flex shrink-0 flex-col items-stretch gap-2 sm:min-w-[132px]">
+                            {isMultiSegment ? (
+                              <Button
+                                variant={segmentReviewState === 'due_now' ? 'default' : 'outline'}
+                                size="sm"
+                                className={cn(
+                                  'h-8 text-xs',
+                                  segmentReviewState === 'due_now' && 'bg-emerald-600 text-white hover:bg-emerald-700',
+                                  segmentReviewState === 'due_later_today' && 'border-amber-300 bg-amber-100 text-amber-900 hover:bg-amber-200',
+                                )}
+                                onClick={() => void handleSegmentReviewAction(segment)}
+                                disabled={segmentReviewDisabled}
+                              >
+                                {segmentReviewLoadingId === segment.id
+                                  ? '加载中...'
+                                  : segmentReviewState === 'due_now'
+                                    ? '开始复习'
+                                    : formatRelativeReviewTime(segment.next_review_at)}
+                              </Button>
+                            ) : null}
+                            {!segment.is_virtual_default ? (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-8 w-full text-xs"
+                                disabled={!segment.has_due_review || !segment.current_review_schedule_id || markReviewedKey === `segment-${segment.id}`}
+                                onClick={() => void handleMarkSegmentReviewed(segment)}
+                              >
+                                {markReviewedKey === `segment-${segment.id}`
+                                  ? '提交中...'
+                                  : '标记已复习'}
+                              </Button>
+                            ) : null}
+                          </div>
                         </div>
-                        <div className="mt-1 flex flex-wrap gap-2 text-[11px] text-muted-foreground">
-                          <span>{segment.node_count} 节点</span>
-                          <span>预计 {formatRelativeReviewTime(segment.next_review_at)}</span>
-                        </div>
-                        <PalaceStageProgress
-                          stageLabels={segment.stage_labels}
-                          completed={segment.review_stage_completed}
-                          stages={segment.review_stages}
-                          onStageClick={(stage) => openStageEdit(palace, segment, stage)}
-                        />
                       </div>
-                      <div className="flex shrink-0 flex-col items-stretch gap-2 sm:min-w-[132px]">
-                        {isMultiSegment ? (
-                          <Button
-                            variant={segment.has_due_review ? 'default' : 'outline'}
-                            size="sm"
-                            className={cn(
-                              'h-8 text-xs',
-                              segment.has_due_review && 'bg-emerald-600 text-white hover:bg-emerald-700',
-                            )}
-                            onClick={() =>
-                              segment.is_virtual_default
-                                ? void handleSegmentReviewAction(segment)
-                                : void handleSegmentReviewAction(segment)
-                            }
-                            disabled={
-                              segment.is_virtual_default
-                                ? !segment.current_review_schedule_id || segmentReviewLoadingId === segment.id
-                                : !segment.current_review_schedule_id || segmentReviewLoadingId === segment.id
-                            }
-                          >
-                            {segmentReviewLoadingId === segment.id
-                              ? '加载中...'
-                              : segment.has_due_review
-                                ? '开始复习'
-                              : formatRelativeReviewTime(segment.next_review_at)}
-                          </Button>
-                        ) : null}
-                        {!segment.is_virtual_default ? (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="h-8 w-full text-xs"
-                            disabled={!segment.has_due_review || !segment.current_review_schedule_id || markReviewedKey === `segment-${segment.id}`}
-                            onClick={() => void handleMarkSegmentReviewed(segment)}
-                          >
-                            {markReviewedKey === `segment-${segment.id}`
-                              ? '提交中...'
-                              : '标记已复习'}
-                          </Button>
-                        ) : null}
-                      </div>
-                    </div>
-                  </div>
+                    )
+                  })()
                 ))}
               </div>
             ) : (
@@ -539,7 +559,11 @@ export default function PalaceList() {
           <div className="flex shrink-0 items-center gap-1">
             {palace.mastered ? <Badge variant="secondary" className="text-[10px]">已掌握</Badge> : null}
             <Link to={`/palaces/${palace.id}/practice`}>
-              <Button variant="ghost" size="sm" className="h-8">
+              <Button
+                variant={palace.needs_practice ? 'default' : 'ghost'}
+                size="sm"
+                className={cn('h-8', palace.needs_practice && 'bg-emerald-600 text-white hover:bg-emerald-700')}
+              >
                 练习
               </Button>
             </Link>

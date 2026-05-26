@@ -62,6 +62,7 @@ describe('ReviewSession', () => {
   beforeEach(() => {
     mocks.navigate.mockReset()
     mocks.toastSuccess.mockReset()
+    mocks.submitReviewSessionApi.mockReset()
     mocks.getReviewSessionApi.mockResolvedValue({
       id: 309,
       palace_id: 1,
@@ -114,7 +115,26 @@ describe('ReviewSession', () => {
       revealed_remaining: true,
       red_marked_count: 1,
       target_review_number: 3,
+      needs_practice: false,
     })
     expect(mocks.navigate).not.toHaveBeenCalled()
+  })
+
+  it('submits completion with needs_practice when choosing still needs practice', async () => {
+    render(<ReviewSession />)
+
+    fireEvent.click(await screen.findByRole('button', { name: '完成' }))
+    fireEvent.click(await screen.findByRole('button', { name: '完成，但仍需练习' }))
+
+    await waitFor(() => expect(mocks.submitReviewSessionApi).toHaveBeenCalledTimes(1))
+    expect(mocks.submitReviewSessionApi).toHaveBeenCalledWith(309, {
+      chapter_id: undefined,
+      duration_seconds: 12,
+      completion_mode: 'manual_complete',
+      revealed_remaining: true,
+      red_marked_count: 1,
+      target_review_number: 3,
+      needs_practice: true,
+    })
   })
 })

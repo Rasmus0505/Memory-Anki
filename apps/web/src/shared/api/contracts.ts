@@ -42,6 +42,17 @@ export interface MindMapImportPreviewResponse {
   source_tree?: MindMapImportSourceTree
   editor_doc?: MindMapDoc | string | null
   extracted_text?: string
+  structure_image_index?: number
+  image_count?: number
+}
+
+export interface MindMapBatchImportPreviewResponse {
+  ok: boolean
+  error?: string
+  source_tree?: MindMapImportSourceTree
+  editor_doc?: MindMapDoc | string | null
+  structure_image_index?: number
+  image_count?: number
 }
 
 export interface ImageTextPreviewResponse {
@@ -63,6 +74,7 @@ export interface ReviewPalaceSummary {
   description: string
   archived: boolean
   mastered: boolean
+  needs_practice?: boolean
   editor_doc: MindMapDoc | string | null
   pegs: Array<{ id: number; name: string; content: string; children: unknown[] }>
   attachments: Array<{ id: number; filename: string; original_name: string }>
@@ -215,11 +227,66 @@ export interface MindMapHostSegmentRangeDraft {
   overriddenConflictNodeUids: string[]
 }
 
+export interface BilinkSearchResult {
+  type: 'node' | 'palace'
+  palace_id: number
+  palace_title: string
+  node_uid: string | null
+  node_text: string | null
+  node_path: string[] | null
+}
+
+export interface BilinkSearchResponse {
+  results: BilinkSearchResult[]
+}
+
+export interface BilinkItem {
+  id: number
+  direction: 'incoming' | 'outgoing' | null
+  source_palace_id: number
+  source_palace_title: string
+  target_palace_id: number
+  target_palace_title: string
+  src_uid: string | null
+  tgt_uid: string | null
+  text: string
+  source_node_text: string | null
+  target_node_text: string | null
+  source_node_path: string[] | null
+  target_node_path: string[] | null
+}
+
+export interface BilinkListResponse {
+  items: BilinkItem[]
+}
+
+export interface BilinkCountsResponse {
+  counts: Record<string, number>
+}
+
+export interface BilinkNodeSummary {
+  uid: string
+  text: string
+}
+
+export interface BilinkNodeContext {
+  palace_id: number
+  palace_title: string
+  node_uid: string | null
+  node_text: string
+  node_note: string
+  node_path: string[]
+  parent_text: string | null
+  children: BilinkNodeSummary[]
+  siblings: BilinkNodeSummary[]
+}
+
 export interface PalaceListItem {
   id: number
   title: string
   description: string
   mastered: boolean
+  needs_practice?: boolean
   created_at: string | null
   next_review_at: string | null
   has_due_review: boolean

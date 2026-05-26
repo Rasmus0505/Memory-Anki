@@ -10,7 +10,9 @@ from memory_anki.modules.palaces.application.import_export_service import (
     import_markdown,
 )
 from memory_anki.modules.palaces.application.mindmap_import_service import (
+    BatchImportPreviewResult,
     MindMapImportError,
+    generate_batch_import_preview,
     generate_import_preview,
     generate_text_preview,
 )
@@ -69,6 +71,32 @@ async def api_preview_mindmap_import(
             "ok": True,
             "source_tree": result.source_tree,
             "editor_doc": result.editor_doc,
+        }
+    except MindMapImportError as exc:
+        return {"ok": False, "error": str(exc)}
+
+
+@router.post("/import/preview-mindmap-batch")
+async def api_preview_batch_mindmap_import(
+    files: list[UploadFile] = File(...),
+    fallback_title: str = "未命名宫殿",
+    structure_image_index: int | None = None,
+):
+    try:
+        image_items: list[tuple[bytes, str | None]] = []
+        for file in files:
+            image_items.append((await file.read(), file.filename))
+        result: BatchImportPreviewResult = generate_batch_import_preview(
+            image_items=image_items,
+            fallback_title=fallback_title,
+            structure_image_index=structure_image_index,
+        )
+        return {
+            "ok": True,
+            "source_tree": result.source_tree,
+            "editor_doc": result.editor_doc,
+            "structure_image_index": result.structure_image_index,
+            "image_count": result.image_count,
         }
     except MindMapImportError as exc:
         return {"ok": False, "error": str(exc)}

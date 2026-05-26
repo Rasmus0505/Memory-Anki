@@ -1,11 +1,14 @@
 import { useEffect, useRef, useState, type ChangeEvent, type ClipboardEvent } from 'react'
 import { toast } from 'sonner'
 import type {
-  ImageTextPreviewResponse,
   MindMapEditorState,
   MindMapImportSourceTree,
 } from '@/shared/api/contracts'
-import { previewImageTextApi, previewMindMapImportApi } from '@/shared/api/modules/palaces'
+import {
+  previewImageTextApi,
+  previewMindMapBatchImportApi,
+  previewMindMapImportApi,
+} from '@/shared/api/modules/palaces'
 import {
   applyImportedEditorState,
   countSourceTreeNodes,
@@ -34,6 +37,15 @@ interface UseMindMapImportOptions {
 }
 
 type ImportMode = 'mindmap' | 'text'
+type MindMapImportWorkflow = 'single' | 'batch'
+type BatchImportStatus = 'idle' | 'ready' | 'loading' | 'success' | 'error'
+
+export interface BatchImportImageItem {
+  id: string
+  file: File
+  previewUrl: string
+  name: string
+}
 
 export function useMindMapImport({
   entityKey,
@@ -55,7 +67,13 @@ export function useMindMapImport({
   const [appliedSyncVersion, setAppliedSyncVersion] = useState(0)
   const [undoSnapshot, setUndoSnapshot] = useState<ImportUndoSnapshot | null>(null)
   const [mode, setMode] = useState<ImportMode>('mindmap')
+  const [mindMapWorkflow, setMindMapWorkflow] = useState<MindMapImportWorkflow>('single')
+  const [batchImages, setBatchImages] = useState<BatchImportImageItem[]>([])
+  const [structureImageId, setStructureImageId] = useState<string | null>(null)
+  const [batchStatus, setBatchStatus] = useState<BatchImportStatus>('idle')
+  const [lastBatchMeta, setLastBatchMeta] = useState<{ structureImageIndex: number; imageCount: number } | null>(null)
   const activeHistoryIdRef = useRef<string | null>(null)
+  const batchImagesRef = useRef<BatchImportImageItem[]>([])
 
   useEffect(() => {
     if (!entityKey) {
@@ -67,6 +85,16 @@ export function useMindMapImport({
     setHistory(loadImportHistory(entityKey))
   }, [entityKey])
 
+  useEffect(() => {
+    batchImagesRef.current = batchImages
+  }, [batchImages])
+
+  useEffect(() => {
+    return () => {
+      batchImagesRef.current.forEach((item) => URL.revokeObjectURL(item.previewUrl))
+    }
+  }, [])
+
   const handleOpenChange = (nextOpen: boolean) => {
     if (nextOpen && entityKey) {
       setHistory(loadImportHistory(entityKey))
@@ -77,9 +105,11 @@ export function useMindMapImport({
   const handleImportImage = async (file: File) => {
     setLoading(true)
     setError('')
+    setBatchStatus('idle')
     setSourceTree(null)
     setImportEditorDoc(null)
     setExtractedText('')
+    setLastBatchMeta(null)
     activeHistoryIdRef.current = null
     try {
       const url = await fileToDataUrl(file)
@@ -108,6 +138,8 @@ export function useMindMapImport({
           sourceTree: result.source_tree,
           editorDoc: result.editor_doc ?? null,
           imagePreviewUrl: url,
+          importMode: 'single',
+          imageCount: 1,
         })
         activeHistoryIdRef.current = saved.item.id
         setHistory(saved.history)
@@ -119,25 +151,127 @@ export function useMindMapImport({
     }
   }
 
+  const createBatchImageItem = (file: File): BatchImportImageItem => ({
+    id: `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`,
+    file,
+    previewUrl: URL.createObjectURL(file),
+    name: file.name,
+  })
+
+  const resetMindMapPreview = () => {
+    setSourceTree(null)
+    setImportEditorDoc(null)
+    setImagePreviewUrl('')
+    setLastBatchMeta(null)
+    activeHistoryIdRef.current = null
+  }
+
+  const appendBatchFiles = (files: File[]) => {
+    if (!files.length) return
+    setError('')
+    setExtractedText('')
+    resetMindMapPreview()
+    setBatchImages((current) => {
+      const next = [...current, ...files.map(createBatchImageItem)]
+      const currentStructureId = structureImageId || current[0]?.id || null
+      setStructureImageId(currentStructureId && next.some((item) => item.id === currentStructureId) ? currentStructureId : (next[0]?.id ?? null))
+      setBatchStatus(next.length > 0 ? 'ready' : 'idle')
+      return next
+    })
+  }
+
   const handlePaste = (event: ClipboardEvent<HTMLDivElement>) => {
     const items = event.clipboardData?.items
     if (!items) return
+    const imageFiles: File[] = []
     for (const item of items) {
       if (!item.type.startsWith('image/')) continue
       const file = item.getAsFile()
       if (file) {
-        void handleImportImage(file)
+        imageFiles.push(file)
       }
+    }
+    if (imageFiles.length === 0) return
+    if (mode === 'text' || mindMapWorkflow === 'single') {
+      void handleImportImage(imageFiles[0])
       return
     }
+    appendBatchFiles(imageFiles)
   }
 
   const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
-    if (file) {
-      void handleImportImage(file)
+    const files = Array.from(event.target.files || [])
+    if (files.length > 0) {
+      if (mode === 'text' || mindMapWorkflow === 'single') {
+        void handleImportImage(files[0])
+      } else {
+        appendBatchFiles(files)
+      }
     }
     event.target.value = ''
+  }
+
+  const handleBatchImportStart = async () => {
+    if (batchImages.length === 0) {
+      setError('请先上传至少一张图片。')
+      setBatchStatus('error')
+      return
+    }
+    setLoading(true)
+    setBatchStatus('loading')
+    setError('')
+    setSourceTree(null)
+    setImportEditorDoc(null)
+    setImagePreviewUrl('')
+    setLastBatchMeta(null)
+    activeHistoryIdRef.current = null
+
+    const activeStructureId = structureImageId || batchImages[0]?.id || null
+    const resolvedStructureIndex = Math.max(0, batchImages.findIndex((item) => item.id === activeStructureId))
+
+    try {
+      const result = await previewMindMapBatchImportApi(
+        batchImages.map((item) => item.file),
+        {
+          structureImageIndex: resolvedStructureIndex,
+        },
+      )
+      if (!result.ok || !result.source_tree) {
+        setError(formatMindMapImportError(result.error))
+        setBatchStatus('error')
+        return
+      }
+
+      const appliedStructureIndex = result.structure_image_index ?? resolvedStructureIndex
+      const structureItem = batchImages[appliedStructureIndex] ?? batchImages[0]
+      setSourceTree(result.source_tree)
+      setImportEditorDoc(result.editor_doc ?? null)
+      setImagePreviewUrl(structureItem?.previewUrl ?? '')
+      setLastBatchMeta({
+        structureImageIndex: appliedStructureIndex,
+        imageCount: result.image_count ?? batchImages.length,
+      })
+      setBatchStatus('success')
+
+      if (entityKey) {
+        const saved = saveImportHistory(entityKey, {
+          title: result.source_tree.title || '',
+          nodeCount: countSourceTreeNodes(result.source_tree.children || []),
+          sourceTree: result.source_tree,
+          editorDoc: result.editor_doc ?? null,
+          imagePreviewUrl: structureItem?.previewUrl ?? '',
+          importMode: 'batch',
+          imageCount: result.image_count ?? batchImages.length,
+        })
+        activeHistoryIdRef.current = saved.item.id
+        setHistory(saved.history)
+      }
+    } catch (nextError) {
+      setError(formatMindMapImportError(nextError instanceof Error ? nextError.message : '网络异常，请检查网络后重试。'))
+      setBatchStatus('error')
+    } finally {
+      setLoading(false)
+    }
   }
 
   const applyImport = (mode: 'replace' | 'append') => {
@@ -169,12 +303,22 @@ export function useMindMapImport({
 
   const handleSelectHistory = (item: ImportHistoryItem) => {
     setMode('mindmap')
+    setMindMapWorkflow(item.importMode === 'batch' ? 'batch' : 'single')
     activeHistoryIdRef.current = item.id
     setSourceTree(item.sourceTree)
     setImportEditorDoc(item.editorDoc)
     setExtractedText('')
     setImagePreviewUrl(item.imagePreviewUrl)
     setError('')
+    setLastBatchMeta(
+      item.importMode === 'batch'
+        ? {
+            structureImageIndex: 0,
+            imageCount: item.imageCount ?? 0,
+          }
+        : null,
+    )
+    setBatchStatus(item.importMode === 'batch' ? 'success' : 'idle')
   }
 
   const clearPreview = () => {
@@ -184,6 +328,70 @@ export function useMindMapImport({
     setExtractedText('')
     setImagePreviewUrl('')
     setError('')
+    setLastBatchMeta(null)
+    setBatchStatus(batchImages.length > 0 ? 'ready' : 'idle')
+  }
+
+  const clearBatchQueue = () => {
+    setBatchImages((current) => {
+      current.forEach((item) => URL.revokeObjectURL(item.previewUrl))
+      return []
+    })
+    setStructureImageId(null)
+    setBatchStatus('idle')
+  }
+
+  const handleDeleteBatchImage = (id: string) => {
+    setBatchImages((current) => {
+      const target = current.find((item) => item.id === id)
+      if (target) {
+        URL.revokeObjectURL(target.previewUrl)
+      }
+      const next = current.filter((item) => item.id !== id)
+      const nextStructureId = structureImageId === id ? next[0]?.id ?? null : structureImageId
+      setStructureImageId(nextStructureId)
+      setBatchStatus(next.length > 0 ? 'ready' : 'idle')
+      return next
+    })
+    setError('')
+    resetMindMapPreview()
+  }
+
+  const handleMoveBatchImage = (id: string, direction: 'up' | 'down') => {
+    setBatchImages((current) => {
+      const index = current.findIndex((item) => item.id === id)
+      if (index === -1) return current
+      const targetIndex = direction === 'up' ? index - 1 : index + 1
+      if (targetIndex < 0 || targetIndex >= current.length) return current
+      const next = [...current]
+      const [item] = next.splice(index, 1)
+      next.splice(targetIndex, 0, item)
+      return next
+    })
+    setError('')
+    resetMindMapPreview()
+    setBatchStatus('ready')
+  }
+
+  const handleSetStructureImage = (id: string) => {
+    setStructureImageId(id)
+    setError('')
+    resetMindMapPreview()
+    setBatchStatus(batchImages.length > 0 ? 'ready' : 'idle')
+  }
+
+  const handleMindMapWorkflowChange = (workflow: MindMapImportWorkflow) => {
+    setMindMapWorkflow(workflow)
+    setError('')
+    setSourceTree(null)
+    setImportEditorDoc(null)
+    setImagePreviewUrl('')
+    setLastBatchMeta(null)
+    if (workflow === 'single') {
+      setBatchStatus('idle')
+    } else {
+      setBatchStatus(batchImages.length > 0 ? 'ready' : 'idle')
+    }
   }
 
   const handleDeleteHistory = (id: string) => {
@@ -219,6 +427,8 @@ export function useMindMapImport({
     setImportOpen: handleOpenChange,
     importMode: mode,
     setImportMode: setMode,
+    mindMapImportWorkflow: mindMapWorkflow,
+    setMindMapImportWorkflow: handleMindMapWorkflowChange,
     importLoading: loading,
     importApplying: applying,
     importUndoing: undoing,
@@ -227,12 +437,21 @@ export function useMindMapImport({
     importExtractedText: extractedText,
     importImagePreviewUrl: imagePreviewUrl,
     importHistory: history,
+    importBatchImages: batchImages,
+    importStructureImageId: structureImageId || batchImages[0]?.id || null,
+    importBatchStatus: batchStatus,
+    importBatchMeta: lastBatchMeta,
     importCanAppend: Boolean(selectedNodeUid),
     importCanUndoLastImport: Boolean(undoSnapshot),
     importExternalSyncKey: externalSyncKey,
     importAppliedSyncVersion: appliedSyncVersion,
     handleImportPaste: handlePaste,
     handleImportFileChange: handleFileChange,
+    handleBatchImportStart,
+    handleDeleteBatchImage,
+    handleMoveBatchImage,
+    handleSetStructureImage,
+    clearBatchQueue,
     handleImportApplyReplace: handleApplyReplace,
     handleImportApplyAppend: handleApplyAppend,
     handleImportSelectHistory: handleSelectHistory,

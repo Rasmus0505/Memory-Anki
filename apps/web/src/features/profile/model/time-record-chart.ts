@@ -11,9 +11,9 @@ export function getTimeRecordChartColor(
   kind: 'review' | 'practice' | 'palace_edit',
 ) {
   const colorByKind = {
-    review: 'var(--color-review)',
-    practice: 'var(--color-practice)',
-    palace_edit: 'var(--color-palace_edit)',
+    review: '#0f172a',
+    practice: '#0f766e',
+    palace_edit: '#c2410c',
   }
 
   return colorByKind[kind]

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import type { MindMapEditorState } from '@/shared/api/client'
 import type {
+  BilinkItem,
   MindMapHostSegmentRangeDraft,
   MindMapHostSegmentSummary,
 } from '@/shared/api/contracts'
@@ -31,6 +32,12 @@ interface MindMapFrameProps {
   activeSegmentId?: number | null
   segmentColorMode?: 'all' | 'active-only' | 'all-with-active-emphasis'
   segmentRangeDraft?: MindMapHostSegmentRangeDraft
+  bilinkCounts?: Record<string, number>
+  bilinkItems?: BilinkItem[]
+  bilinkCurrentPalaceId?: number | null
+  bilinkInsertionText?: string | null
+  bilinkInsertionNonce?: number
+  showBilinkSearchButton?: boolean
   onEditorStateChange: (nextState: MindMapEditorState) => void
   onNodeActive?: (nodes: MindMapSelection[]) => void
   onNodeClick?: (nodes: MindMapSelection[]) => void
@@ -51,6 +58,18 @@ interface MindMapFrameProps {
   onImageTextImportOpen?: () => void
   onFullscreenChange?: (active: boolean) => void
   onFullscreenToggle?: (active?: boolean) => void
+  onBilinkTrigger?: (payload: {
+    nodeUid: string | null
+    left: number
+    top: number
+    query: string
+  }) => void
+  onBilinkNodeClick?: (payload: {
+    palaceId: number | null
+    nodeUid: string | null
+    trigger: 'badge' | 'mark'
+  }) => void
+  onBilinkToolbarSearch?: () => void
   onReady?: () => void
 }
 
@@ -103,6 +122,12 @@ export function MindMapFrame({
     selectedNodeUids: [],
     overriddenConflictNodeUids: [],
   },
+  bilinkCounts = {},
+  bilinkItems = [],
+  bilinkCurrentPalaceId = null,
+  bilinkInsertionText = null,
+  bilinkInsertionNonce = 0,
+  showBilinkSearchButton = false,
   onEditorStateChange,
   onNodeActive,
   onNodeClick,
@@ -117,6 +142,9 @@ export function MindMapFrame({
   onImageTextImportOpen,
   onFullscreenChange,
   onFullscreenToggle,
+  onBilinkTrigger,
+  onBilinkNodeClick,
+  onBilinkToolbarSearch,
   onReady,
 }: MindMapFrameProps) {
   const iframeRef = useRef<HTMLIFrameElement | null>(null)
@@ -135,9 +163,13 @@ export function MindMapFrame({
   const onImageTextImportOpenRef = useRef(onImageTextImportOpen)
   const onFullscreenChangeRef = useRef(onFullscreenChange)
   const onFullscreenToggleRef = useRef(onFullscreenToggle)
+  const onBilinkTriggerRef = useRef(onBilinkTrigger)
+  const onBilinkNodeClickRef = useRef(onBilinkNodeClick)
+  const onBilinkToolbarSearchRef = useRef(onBilinkToolbarSearch)
   const onReadyRef = useRef(onReady)
   const lastSyncedFingerprintRef = useRef('')
   const lastForcedSyncKeyRef = useRef<string | null>(null)
+  const lastBilinkInsertionNonceRef = useRef<number>(0)
   const suppressNextPropSyncRef = useRef(false)
   const [isLoaded, setIsLoaded] = useState(false)
 
@@ -156,6 +188,9 @@ export function MindMapFrame({
   onImageTextImportOpenRef.current = onImageTextImportOpen
   onFullscreenChangeRef.current = onFullscreenChange
   onFullscreenToggleRef.current = onFullscreenToggle
+  onBilinkTriggerRef.current = onBilinkTrigger
+  onBilinkNodeClickRef.current = onBilinkNodeClick
+  onBilinkToolbarSearchRef.current = onBilinkToolbarSearch
   onReadyRef.current = onReady
 
   const rawHostId = useId()
@@ -191,6 +226,10 @@ export function MindMapFrame({
             activeSegmentId: number | null
             segmentColorMode: 'all' | 'active-only' | 'all-with-active-emphasis'
             segmentRangeDraft: MindMapHostSegmentRangeDraft
+            bilinkCounts: Record<string, number>
+            bilinkItems: BilinkItem[]
+            bilinkCurrentPalaceId: number | null
+            showBilinkSearchButton: boolean
           }) => void
           resetReadonlyInteractionState?: () => void
         })
@@ -207,6 +246,10 @@ export function MindMapFrame({
       activeSegmentId,
       segmentColorMode,
       segmentRangeDraft: cloneValue(segmentRangeDraft),
+      bilinkCounts: cloneValue(bilinkCounts),
+      bilinkItems: cloneValue(bilinkItems),
+      bilinkCurrentPalaceId,
+      showBilinkSearchButton,
     })
     if (readonly) {
       iframeWindow?.resetReadonlyInteractionState?.()
@@ -220,9 +263,25 @@ export function MindMapFrame({
     showImportButtons,
     segmentColorMode,
     segmentRangeDraft,
+    bilinkCounts,
+    bilinkCurrentPalaceId,
+    bilinkItems,
+    showBilinkSearchButton,
     segments,
     showToolbarWhenReadonly,
   ])
+
+  useEffect(() => {
+    if (!isLoaded || !bilinkInsertionText) return
+    if (bilinkInsertionNonce === lastBilinkInsertionNonceRef.current) return
+    lastBilinkInsertionNonceRef.current = bilinkInsertionNonce
+    const iframeWindow = iframeRef.current?.contentWindow as
+      | (Window & {
+          insertBilinkMark?: (text: string) => boolean
+        })
+      | null
+    iframeWindow?.insertBilinkMark?.(bilinkInsertionText)
+  }, [bilinkInsertionNonce, bilinkInsertionText, isLoaded])
 
   useEffect(() => {
     const registry = (window.__memoryAnkiMindMapHosts ??= {})
@@ -342,6 +401,46 @@ export function MindMapFrame({
             typeof payload === 'boolean' ? payload : undefined,
           )
         }
+        if (event === 'bilink_trigger') {
+          const nextPayload =
+            payload && typeof payload === 'object'
+              ? (payload as {
+                  nodeUid?: unknown
+                  left?: unknown
+                  top?: unknown
+                  query?: unknown
+                })
+              : null
+          onBilinkTriggerRef.current?.({
+            nodeUid: typeof nextPayload?.nodeUid === 'string' ? nextPayload.nodeUid : null,
+            left: typeof nextPayload?.left === 'number' ? nextPayload.left : 0,
+            top: typeof nextPayload?.top === 'number' ? nextPayload.top : 0,
+            query: typeof nextPayload?.query === 'string' ? nextPayload.query : '',
+          })
+        }
+        if (event === 'bilink_node_click') {
+          const nextPayload =
+            payload && typeof payload === 'object'
+              ? (payload as {
+                  palaceId?: unknown
+                  nodeUid?: unknown
+                  trigger?: unknown
+                })
+              : null
+          onBilinkNodeClickRef.current?.({
+            palaceId:
+              typeof nextPayload?.palaceId === 'number'
+                ? nextPayload.palaceId
+                : nextPayload?.palaceId == null
+                  ? null
+                  : Number(nextPayload.palaceId),
+            nodeUid: typeof nextPayload?.nodeUid === 'string' ? nextPayload.nodeUid : null,
+            trigger: nextPayload?.trigger === 'mark' ? 'mark' : 'badge',
+          })
+        }
+        if (event === 'bilink_toolbar_search') {
+          onBilinkToolbarSearchRef.current?.()
+        }
       },
     }
 
@@ -369,6 +468,7 @@ export function MindMapFrame({
       activeSegmentId,
       segmentColorMode,
       segmentRangeDraft,
+      bilinkCounts,
       preserveViewOnSync,
       externalSyncKey,
     })
@@ -388,6 +488,7 @@ export function MindMapFrame({
     preserveViewOnSync,
     segmentColorMode,
     segmentRangeDraft,
+    bilinkCounts,
     segments,
     syncHostEditorState,
     syncOnPropChange,
@@ -407,6 +508,7 @@ export function MindMapFrame({
       activeSegmentId,
       segmentColorMode,
       segmentRangeDraft,
+      bilinkCounts,
       preserveViewOnSync,
       externalSyncKey,
     })
@@ -421,6 +523,7 @@ export function MindMapFrame({
     preserveViewOnSync,
     segmentColorMode,
     segmentRangeDraft,
+    bilinkCounts,
     segments,
     syncHostEditorState,
   ])

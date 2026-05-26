@@ -31,6 +31,7 @@ export default function BatchSegmentReviewSessionPage() {
   const [session, setSession] = useState<BatchSegmentReviewSessionResponse | null>(null)
   const [editorState, setEditorState] = useState<MindMapEditorState | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  const [mindMapFullscreen, setMindMapFullscreen] = useState(false)
   const [error, setError] = useState('')
 
   useEffect(() => {
@@ -120,21 +121,23 @@ export default function BatchSegmentReviewSessionPage() {
 
   return (
     <div className="space-y-5">
-      <PageIntro
-        eyebrow="分块正式复习"
-        title={`${session.palace?.title || '未命名宫殿'} / 多块复习`}
-        actions={
-          <>
-            <Link to="/review">
-              <Button variant="outline" size="sm">
-                <ArrowLeft className="mr-2 h-4 w-4" />
-                返回复习队列
-              </Button>
-            </Link>
-            <Badge variant="secondary">{session.segments.length} 个分块</Badge>
-          </>
-        }
-      />
+      {!mindMapFullscreen ? (
+        <PageIntro
+          eyebrow="分块正式复习"
+          title={`${session.palace?.title || '未命名宫殿'} / 多块复习`}
+          actions={
+            <>
+              <Link to="/review">
+                <Button variant="outline" size="sm">
+                  <ArrowLeft className="mr-2 h-4 w-4" />
+                  返回复习队列
+                </Button>
+              </Link>
+              <Badge variant="secondary">{session.segments.length} 个分块</Badge>
+            </>
+          }
+        />
+      ) : null}
 
       {error ? (
         <Card className="border-destructive/30 bg-destructive/5">
@@ -143,29 +146,28 @@ export default function BatchSegmentReviewSessionPage() {
       ) : null}
 
       <div className="space-y-4">
-        <Card className="border-border/70 bg-card/92">
-          <CardContent className="p-5">
-            <MindMapReviewFlow
-              title={`${session.palace?.title || '未命名宫殿'} / 多块复习`}
-              palaceId={session.palace?.id ?? null}
-              sessionKind="review"
-              editorState={editorState}
-              submitting={submitting}
-              onComplete={submitCompletion}
-            />
-          </CardContent>
-        </Card>
+        <MindMapReviewFlow
+          title={`${session.palace?.title || '未命名宫殿'} / 多块复习`}
+          palaceId={session.palace?.id ?? null}
+          sessionKind="review"
+          editorState={editorState}
+          submitting={submitting}
+          onFullscreenChange={setMindMapFullscreen}
+          onComplete={submitCompletion}
+        />
 
-        <Card className="border-border/70 bg-card/92">
-          <CardHeader>
-            <CardTitle className="text-base">复习信息</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3 text-sm text-muted-foreground">
-            <div>当前宫殿：{session.palace?.title || '未命名宫殿'}</div>
-            <div>选中分块：{segmentNameSummary}</div>
-            <div>预计复习时长：{session.estimated_review_seconds ?? 0} 秒</div>
-          </CardContent>
-        </Card>
+        {!mindMapFullscreen ? (
+          <Card className="border-border/70 bg-card/92">
+            <CardHeader>
+              <CardTitle className="text-base">复习信息</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3 text-sm text-muted-foreground">
+              <div>当前宫殿：{session.palace?.title || '未命名宫殿'}</div>
+              <div>选中分块：{segmentNameSummary}</div>
+              <div>预计复习时长：{session.estimated_review_seconds ?? 0} 秒</div>
+            </CardContent>
+          </Card>
+        ) : null}
       </div>
     </div>
   )

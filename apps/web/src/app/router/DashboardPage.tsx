@@ -30,8 +30,44 @@ function formatLearningTooltip(item: DashboardResponse['today_learning_palaces']
   ].join('\n')
 }
 
+const dashboardLearningLegend = [
+  { key: 'palace_edit', label: '宫殿编辑', color: getTimeRecordChartColor('palace_edit') },
+  { key: 'practice', label: '练习', color: getTimeRecordChartColor('practice') },
+  { key: 'review', label: '复习', color: getTimeRecordChartColor('review') },
+] as const
+
+function buildLearningSegments(item: DashboardResponse['today_learning_palaces'][number]) {
+  const rawSegments = [
+    { key: 'palace_edit', seconds: item.palace_edit_seconds, color: getTimeRecordChartColor('palace_edit') },
+    { key: 'practice', seconds: item.practice_seconds, color: getTimeRecordChartColor('practice') },
+    { key: 'review', seconds: item.review_seconds, color: getTimeRecordChartColor('review') },
+  ].filter((segment) => segment.seconds > 0)
+
+  const total = Math.max(1, item.total_seconds)
+  const minimalUnits = rawSegments.length
+  const minPercent = rawSegments.length > 1 ? 6 : 100
+  const baseWidths = rawSegments.map((segment) => (segment.seconds / total) * 100)
+  const promotedFlags = baseWidths.map((width) => width > 0 && width < minPercent)
+  const promotedTotal = promotedFlags.reduce((sum, flag) => sum + (flag ? minPercent : 0), 0)
+  const untouchedTotal = baseWidths.reduce((sum, width, index) => sum + (promotedFlags[index] ? 0 : width), 0)
+  const remainingPercent = Math.max(0, 100 - promotedTotal)
+
+  return rawSegments.map((segment, index) => {
+    const width = promotedFlags[index]
+      ? minPercent
+      : untouchedTotal > 0
+        ? (baseWidths[index] / untouchedTotal) * remainingPercent
+        : (100 - minimalUnits * minPercent) / Math.max(1, rawSegments.length)
+    return {
+      ...segment,
+      width,
+    }
+  })
+}
+
 export default function Dashboard() {
   const [data, setData] = useState<DashboardResponse | null>(null)
+  const [hoveredLearningPalaceId, setHoveredLearningPalaceId] = useState<number | null>(null)
   const loadDashboard = useCallback(async () => {
     const dashboard = await getDashboardApi()
     setData(dashboard)
@@ -116,38 +152,70 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle className="text-base">今日学习</CardTitle>
+            <div className="space-y-2">
+              <CardTitle className="text-base">今日学习</CardTitle>
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
+                {dashboardLearningLegend.map((legend) => (
+                  <span key={legend.key} className="inline-flex items-center gap-1.5">
+                    <span
+                      className="h-2.5 w-2.5 rounded-full"
+                      style={{ backgroundColor: legend.color }}
+                    />
+                    <span>{legend.label}</span>
+                  </span>
+                ))}
+              </div>
+            </div>
           </CardHeader>
           <CardContent>
             {data.today_learning_palaces.length > 0 ? (
               <div className="space-y-3">
                 {data.today_learning_palaces.map((item) => {
-                  const total = Math.max(1, item.total_seconds)
-                  const segments = [
-                    { key: 'palace_edit', seconds: item.palace_edit_seconds, color: getTimeRecordChartColor('palace_edit') },
-                    { key: 'practice', seconds: item.practice_seconds, color: getTimeRecordChartColor('practice') },
-                    { key: 'review', seconds: item.review_seconds, color: getTimeRecordChartColor('review') },
-                  ].filter((segment) => segment.seconds > 0)
+                  const segments = buildLearningSegments(item)
+                  const isTooltipVisible = hoveredLearningPalaceId === item.palace_id
                   return (
                     <div key={item.palace_id} className="rounded-xl border border-border/60 bg-background/70 px-3 py-3">
                       <div className="flex items-center justify-between gap-3">
                         <div className="min-w-0 truncate text-sm font-medium">{item.palace_title || '未命名宫殿'}</div>
                         <div className="shrink-0 text-xs text-muted-foreground">{formatDuration(item.total_seconds)}</div>
                       </div>
-                      <div
-                        className="mt-2 flex h-2.5 overflow-hidden rounded-full bg-secondary/80"
-                        title={formatLearningTooltip(item)}
-                      >
-                        {segments.map((segment) => (
-                          <div
-                            key={segment.key}
-                            className="h-full"
-                            style={{
-                              width: `${(segment.seconds / total) * 100}%`,
-                              backgroundColor: segment.color,
-                            }}
-                          />
-                        ))}
+                      <div className="relative mt-2">
+                        <div
+                          className="flex h-3 overflow-hidden rounded-full border border-border/60 bg-secondary/80 shadow-inner"
+                          onMouseEnter={() => setHoveredLearningPalaceId(item.palace_id)}
+                          onMouseLeave={() => setHoveredLearningPalaceId((current) => (current === item.palace_id ? null : current))}
+                          onFocus={() => setHoveredLearningPalaceId(item.palace_id)}
+                          onBlur={() => setHoveredLearningPalaceId((current) => (current === item.palace_id ? null : current))}
+                          tabIndex={0}
+                          role="img"
+                          aria-label={`${item.palace_title || '未命名宫殿'} 学习时长结构`}
+                        >
+                          {segments.map((segment) => (
+                            <div
+                              key={segment.key}
+                              className="h-full"
+                              style={{
+                                width: `${segment.width}%`,
+                                backgroundColor: segment.color,
+                              }}
+                            />
+                          ))}
+                        </div>
+                        {isTooltipVisible ? (
+                          <div className="pointer-events-none absolute left-0 top-full z-20 mt-2 min-w-[180px] rounded-2xl border border-border/70 bg-background/95 px-3 py-2 text-xs shadow-xl backdrop-blur">
+                            {formatLearningTooltip(item).split('\n').map((line, index) => (
+                              <div
+                                key={`${item.palace_id}-${index}`}
+                                className={cn(
+                                  'whitespace-nowrap',
+                                  index === 0 ? 'mb-1 font-medium text-foreground' : 'text-muted-foreground',
+                                )}
+                              >
+                                {line}
+                              </div>
+                            ))}
+                          </div>
+                        ) : null}
                       </div>
                     </div>
                   )
@@ -186,20 +254,13 @@ export default function Dashboard() {
                           <div className="text-sm font-semibold">{group.source_chapter?.name ?? '未关联章节'}</div>
                           <div className="space-y-1.5 pl-4">
                             {group.palaces.map((palace) => (
-                              <div key={palace.id} className="space-y-1">
-                                {palace.resolved_parent_chapter && palace.primary_chapter ? (
-                                  <div className="text-xs font-medium text-muted-foreground">{palace.primary_chapter.name}</div>
-                                ) : null}
-                                <Link
-                                  to={`/palaces/${palace.id}/edit`}
-                                  className={cn(
-                                    'block truncate rounded-lg px-2 py-1.5 text-sm transition-colors hover:bg-secondary active:scale-[0.98]',
-                                    (palace.resolved_parent_chapter || palace.primary_chapter) && 'ml-3',
-                                  )}
-                                >
-                                  {palace.title || '未命名宫殿'}
-                                </Link>
-                              </div>
+                              <Link
+                                key={palace.id}
+                                to={`/palaces/${palace.id}/edit`}
+                                className="block truncate rounded-lg px-2 py-1.5 text-sm transition-colors hover:bg-secondary active:scale-[0.98]"
+                              >
+                                {palace.title || '未命名宫殿'}
+                              </Link>
                             ))}
                           </div>
                         </div>
@@ -214,7 +275,7 @@ export default function Dashboard() {
                                 to={`/palaces/${palace.id}/edit`}
                                 className="block truncate rounded-lg px-2 py-1.5 text-sm transition-colors hover:bg-secondary active:scale-[0.98]"
                               >
-                                {palace.title || '未命名宫殿'}
+                                  {palace.title || '未命名宫殿'}
                               </Link>
                             ))}
                           </div>

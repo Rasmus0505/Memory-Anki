@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { type RevealState } from '@/entities/session/model'
+import { useBilinkOverlay } from '@/features/bilink'
+import { useBilinkCounts } from '@/features/bilink/hooks/useBilinkCounts'
+import { useBilinks } from '@/features/bilink/hooks/useBilinks'
 import {
   allNodesRevealed,
   buildInitialRevealState,
@@ -43,7 +46,8 @@ import type {
 } from '@/shared/api/contracts'
 import type { MindMapSelection } from '@/shared/components/mindmap-host'
 import { usePersistedMindMapEditor } from '@/shared/hooks/usePersistedMindMapEditor'
-import { useTimedSession } from '@/shared/hooks/useTimedSession'
+import { shouldAutoStartOnPageEnter, useTimedSession } from '@/shared/hooks/useTimedSession'
+import { readTimerAutomationConfig } from '@/shared/components/session/timer-automation-config'
 import {
   formatDateTimeInputValue,
   toLocalDateTimePayload,
@@ -184,6 +188,17 @@ export function usePalaceEditPage() {
   const [selectedRangeNodeUids, setSelectedRangeNodeUids] = useState<string[]>([])
   const [overriddenConflictNodeUids, setOverriddenConflictNodeUids] = useState<string[]>([])
   const [editorMode, setEditorMode] = useState<EditorMode>('edit')
+  const [bilinkSearchOpen, setBilinkSearchOpen] = useState(false)
+  const [bilinkSearchMode, setBilinkSearchMode] = useState<BilinkSearchMode>('inline')
+  const [bilinkSearchQuery, setBilinkSearchQuery] = useState('')
+  const [bilinkTriggerNodeUid, setBilinkTriggerNodeUid] = useState<string | null>(null)
+  const [bilinkSearchPosition, setBilinkSearchPosition] = useState<{ left: number; top: number } | null>(null)
+  const [bilinkPreviewOpen, setBilinkPreviewOpen] = useState(false)
+  const [bilinkPreviewLoading, setBilinkPreviewLoading] = useState(false)
+  const [bilinkPreviewError, setBilinkPreviewError] = useState('')
+  const [bilinkPreviewContext, setBilinkPreviewContext] = useState<BilinkNodeContext | null>(null)
+  const [bilinkInsertionText, setBilinkInsertionText] = useState<string | null>(null)
+  const [bilinkInsertionNonce, setBilinkInsertionNonce] = useState(0)
   const suppressNativeFullscreenExitUntilRef = useRef(0)
   const hardUnloadRef = useRef(false)
 
@@ -237,7 +252,6 @@ export function usePalaceEditPage() {
     kind: 'palace_edit',
     title: title || palace?.title || '未命名宫殿',
     palaceId,
-    autoPauseMs: 20 * 1000,
     persistKey: palaceId ? `palace_edit:${palaceId}` : null,
   })
   const timerRef = useRef(timer)
@@ -258,6 +272,8 @@ export function usePalaceEditPage() {
     () => new Set<string>(),
   )
   const [practiceSnapshotLoaded, setPracticeSnapshotLoaded] = useState(false)
+  const bilinks = useBilinks(palaceId)
+  const bilinkCounts = useBilinkCounts(palaceId)
 
   useEffect(() => {
     setPracticeSnapshotLoaded(false)
@@ -358,6 +374,7 @@ export function usePalaceEditPage() {
   useEffect(() => {
     if (!palaceId || !editorState) return
     if (timer.status !== 'idle') return
+    if (!shouldAutoStartOnPageEnter(readTimerAutomationConfig())) return
     timer.start({ source: 'page_enter' })
   }, [editorState, palaceId, timer])
 
@@ -431,12 +448,12 @@ export function usePalaceEditPage() {
   }, [palace])
 
   const handleTitleChange = (value: string) => {
-    timer.registerActivity({ source: 'title_input' })
+    timer.registerActivity('edit_operation', { source: 'title_input' })
     setTitle(value)
   }
 
   const handleCreatedAtChange = (value: string) => {
-    timer.registerActivity({ source: 'created_at_input' })
+    timer.registerActivity('edit_operation', { source: 'created_at_input' })
     setCreatedAt(value)
   }
 
@@ -473,7 +490,7 @@ export function usePalaceEditPage() {
 
   const handleSaveMeta = async () => {
     if (!palace) return
-    timer.registerActivity({ source: 'save_meta' })
+    timer.registerActivity('edit_operation', { source: 'save_meta' })
     await updatePalaceApi(palace.id, {
       title: title.trim() || '未命名宫殿',
       created_at: createdAt ? toLocalDateTimePayload(createdAt) : null,
@@ -484,7 +501,7 @@ export function usePalaceEditPage() {
 
   const handleEstablishCreatedAt = async () => {
     if (!palace) return
-    timer.registerActivity({ source: 'establish_created_at' })
+    timer.registerActivity('edit_operation', { source: 'establish_created_at' })
     await updatePalaceApi(palace.id, {
       created_at: new Date().toISOString(),
     })
@@ -496,21 +513,21 @@ export function usePalaceEditPage() {
   ) => {
     const file = event.target.files?.[0]
     if (!file || !palace) return
-    timer.registerActivity({ source: 'attachment_upload' })
+    timer.registerActivity('edit_operation', { source: 'attachment_upload' })
     await uploadAttachmentApi(palace.id, file)
     await reload()
     event.target.value = ''
   }
 
   const handleAttachmentDelete = async (attachmentId: number) => {
-    timer.registerActivity({ source: 'attachment_delete' })
+    timer.registerActivity('edit_operation', { source: 'attachment_delete' })
     await deleteAttachmentApi(attachmentId)
     await reload()
   }
 
   const handleChapterToggle = async (chapterId: number) => {
     if (!palace) return
-    timer.registerActivity({ source: 'chapter_toggle' })
+    timer.registerActivity('edit_operation', { source: 'chapter_toggle' })
     const wasSelected = explicitChapterIds.includes(chapterId)
     const nextIds = wasSelected
       ? explicitChapterIds.filter((item) => item !== chapterId)
@@ -528,17 +545,17 @@ export function usePalaceEditPage() {
   }
 
   const enterInlinePractice = useCallback(() => {
-    timer.registerActivity({ source: 'inline_practice_enter' })
+    timer.registerActivity('practice_interaction', { source: 'inline_practice_enter' })
     setEditorMode('practice')
   }, [timer])
 
   const exitInlinePractice = useCallback(() => {
-    timer.registerActivity({ source: 'inline_practice_exit' })
+    timer.registerActivity('practice_interaction', { source: 'inline_practice_exit' })
     setEditorMode('edit')
   }, [timer])
 
   const toggleMindMapFullscreen = useCallback((active?: boolean) => {
-    timer.registerActivity({ source: 'mind_map_immersive_toggle' })
+    timer.registerActivity('edit_operation', { source: 'mind_map_immersive_toggle' })
     if (active === true) {
       suppressNativeFullscreenExitUntilRef.current = Date.now() + 1500
     }
@@ -570,7 +587,7 @@ export function usePalaceEditPage() {
       if (!nodeId) return
       const node = practiceNodeMap.get(nodeId)
       if (!node) return
-      timer.registerActivity({ source: 'inline_practice_click' })
+      timer.registerActivity('practice_interaction', { source: 'inline_practice_click' })
       setPracticeRevealMap((current) => {
         const state = current[nodeId] ?? 'hidden'
         if (state === 'placeholder') {
@@ -590,7 +607,7 @@ export function usePalaceEditPage() {
       if (editorMode !== 'practice') return
       const nodeId = buildSelectionNodeId(nodes[0] ?? null)
       if (!nodeId || nodeId === practiceRoot.id) return
-      timer.registerActivity({ source: 'inline_practice_contextmenu' })
+      timer.registerActivity('practice_interaction', { source: 'inline_practice_contextmenu' })
       setPracticeRevealMap((current) =>
         hideNodeAndDescendants(nodeId, practiceNodeMap, current),
       )
@@ -603,7 +620,7 @@ export function usePalaceEditPage() {
     if (palaceId) {
       await clearPracticeSessionProgressApi(palaceId)
     }
-    timer.registerActivity({ source: 'inline_practice_restart' })
+    timer.registerActivity('practice_interaction', { source: 'inline_practice_restart' })
   }, [palaceId, resetInlinePractice, timer])
 
   const activeMindMapEditorState = useMemo<MindMapEditorState | null>(
@@ -625,6 +642,20 @@ export function usePalaceEditPage() {
     setPreviewLoading(false)
     setVersionOpen(true)
   }
+
+  const refreshBilinks = useCallback(() => {
+    bilinks.refresh()
+    bilinkCounts.refresh()
+  }, [bilinkCounts, bilinks])
+  const bilinkOverlay = useBilinkOverlay({
+    currentPalaceId: palaceId,
+    allowCreate: true,
+    onBilinkCreated: refreshBilinks,
+    onBilinkDeleted: refreshBilinks,
+    onJumpToContext: (context) => {
+      navigate(`/palaces/${context.palace_id}/edit`)
+    },
+  })
 
   const refreshSegments = async () => {
     if (!palaceId) return
@@ -719,6 +750,7 @@ export function usePalaceEditPage() {
       window.alert('先在脑图里选中至少一个节点，再确认分块范围。')
       return
     }
+    timer.registerActivity('edit_operation', { source: 'segment_range_confirm' })
     if (typeof rangeTargetSegmentId === 'number') {
       const segment = segments.find((item) => item.id === rangeTargetSegmentId)
       if (!segment) return
@@ -730,6 +762,7 @@ export function usePalaceEditPage() {
 
   const handleSaveSegment = async () => {
     if (!palaceId) return
+    timer.registerActivity('edit_operation', { source: 'segment_save' })
     setSegmentSaving(true)
     setSegmentError('')
     const selectedNodeUids = uniqueStrings(
@@ -769,6 +802,7 @@ export function usePalaceEditPage() {
   const handleDeleteSegment = async (segmentId: number) => {
     const confirmed = window.confirm('删除这个分块只会取消这组节点的分块划分，不会删除任何脑图内容。确定继续吗？')
     if (!confirmed) return
+    timer.registerActivity('edit_operation', { source: 'segment_delete' })
     await deletePalaceSegmentApi(segmentId)
     await refreshSegments()
   }
@@ -779,6 +813,7 @@ export function usePalaceEditPage() {
     const targetSegment = segments.find((segment) => segment.id === targetSegmentId)
     if (!sourceSegment || !targetSegment) return
 
+    timer.registerActivity('edit_operation', { source: 'segment_merge' })
     setSegmentMergingId(sourceSegmentId)
     try {
       await updatePalaceSegmentApi(targetSegmentId, {
@@ -916,6 +951,12 @@ export function usePalaceEditPage() {
     enterInlinePractice,
     exitInlinePractice,
     toggleInlinePractice,
+    bilinks: bilinks.items,
+    bilinksLoading: bilinks.loading,
+    bilinksError: bilinks.error,
+    bilinkCounts: bilinkCounts.counts,
+    bilinkCountsLoading: bilinkCounts.loading,
+    ...bilinkOverlay,
     handleInlinePracticeNodeClick,
     handleInlinePracticeNodeContextMenu,
     restartInlinePractice,

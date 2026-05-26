@@ -13,6 +13,8 @@ export interface ImportHistoryItem {
   sourceTree: MindMapImportSourceTree
   editorDoc: MindMapDoc | string | null
   imagePreviewUrl: string
+  importMode?: 'single' | 'batch'
+  imageCount?: number
   createdAt: string
 }
 

@@ -8,6 +8,7 @@ from sqlalchemy import (
     Date,
     DateTime,
     ForeignKey,
+    Index,
     Integer,
     String,
     Table,
@@ -47,6 +48,7 @@ class Palace(Base):
     review_mode: Mapped[str] = mapped_column(String(20), default="flashcard")
     archived: Mapped[bool] = mapped_column(Boolean, default=False)
     mastered: Mapped[bool] = mapped_column(Boolean, default=False)
+    needs_practice: Mapped[bool] = mapped_column(Boolean, default=False)
     editor_doc: Mapped[str] = mapped_column(Text, default="")
     editor_config: Mapped[str] = mapped_column(Text, default="")
     editor_local_config: Mapped[str] = mapped_column(Text, default="")
@@ -363,6 +365,20 @@ class Chapter(Base):
 
 class NodeConnection(Base):
     __tablename__ = "node_connections"
+    __table_args__ = (
+        Index(
+            "ix_node_connections_style_source",
+            "style",
+            "source_type",
+            "source_id",
+        ),
+        Index(
+            "ix_node_connections_style_target",
+            "style",
+            "target_type",
+            "target_id",
+        ),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     source_type: Mapped[str] = mapped_column(String(20), nullable=False)

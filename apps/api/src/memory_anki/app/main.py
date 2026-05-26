@@ -17,6 +17,8 @@ from memory_anki.modules.backups.application.backup_service import (
     start_periodic_backup_loop,
     stop_periodic_backup_loop,
 )
+from memory_anki.modules.knowledge.application.bilink_service import ensure_bilink_schema
+from memory_anki.modules.knowledge.presentation import bilink_router
 from memory_anki.modules.knowledge.presentation import router as knowledge_router
 from memory_anki.modules.mindmap.application.editor_state_service import ensure_editor_schema
 from memory_anki.modules.palaces.application.segment_service import ensure_segment_schema
@@ -55,6 +57,7 @@ async def lifespan(app: FastAPI):
     ensure_legacy_repo_data_migrated()
     init_db()
     ensure_editor_schema()
+    ensure_bilink_schema()
     ensure_segment_schema()
     ensure_palace_group_schema()
     ensure_review_schedule_schema()
@@ -105,6 +108,7 @@ app.include_router(sessions_router.router, prefix="/api/v1")
 app.include_router(settings_router.router, prefix="/api/v1")
 app.include_router(import_router.router, prefix="/api/v1")
 app.include_router(knowledge_router.router, prefix="/api/v1")
+app.include_router(bilink_router.router, prefix="/api/v1")
 app.include_router(time_records_router.router, prefix="/api/v1")
 
 

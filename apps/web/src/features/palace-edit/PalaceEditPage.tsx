@@ -1,6 +1,11 @@
 import { useMemo } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowLeft, History } from 'lucide-react'
+import { ArrowLeft, History, Search } from 'lucide-react'
+import {
+  BilinkPanel,
+  BilinkPreviewPopover,
+  BilinkSearchPopover,
+} from '@/features/bilink'
 import type { MindMapEditorState } from '@/shared/api/contracts'
 import { PageIntro } from '@/shared/components/layout/PageIntro'
 import { MindMapFrame } from '@/shared/components/mindmap-host'
@@ -60,6 +65,20 @@ export default function PalaceEdit() {
                   返回列表
                 </Button>
               </Link>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() =>
+                  page.openBilinkSearch({
+                    mode: 'toolbar',
+                    nodeUid: page.selectedNode?.uid ?? null,
+                    position: null,
+                  })
+                }
+              >
+                <Search className="mr-2 h-4 w-4" />
+                全局搜索
+              </Button>
               {page.palace ? (
                 <>
                   <Button
@@ -149,6 +168,14 @@ export default function PalaceEdit() {
             onUpload={page.handleAttachmentUpload}
             onDelete={page.handleAttachmentDelete}
           />
+
+          <BilinkPanel
+            items={page.bilinks}
+            loading={page.bilinksLoading}
+            error={page.bilinksError}
+            onPreview={page.handleBilinkPanelPreview}
+            onDelete={page.handleBilinkDelete}
+          />
         </div>
 
         <div className={cn('space-y-4', page.mindMapFullscreen && 'space-y-0')}>
@@ -209,12 +236,18 @@ export default function PalaceEdit() {
                     selectedNodeUids: page.selectedRangeNodeUids,
                     overriddenConflictNodeUids: page.overriddenConflictNodeUids,
                   }}
+                  bilinkCounts={page.bilinkCounts}
+                  bilinkItems={page.bilinks}
+                  bilinkCurrentPalaceId={page.palaceId}
+                  bilinkInsertionText={page.bilinkInsertionText}
+                  bilinkInsertionNonce={page.bilinkInsertionNonce}
+                  showBilinkSearchButton
                   onEditorStateChange={(nextState: MindMapEditorState) => {
-                    page.timer.registerActivity({ source: 'mind_map_edit' })
+                    page.timer.registerActivity('edit_operation', { source: 'mind_map_edit' })
                     page.setEditorState(nextState)
                   }}
                   onNodeActive={(nodes) => {
-                    page.timer.registerActivity({ source: 'node_active' })
+                    page.timer.registerActivity('node_switch', { source: 'node_active' })
                     page.setSelectedNodes(nodes)
                   }}
                   onNodeClick={page.handleInlinePracticeNodeClick}
@@ -235,6 +268,15 @@ export default function PalaceEdit() {
                   }}
                   onFullscreenChange={page.handleMindMapNativeFullscreenChange}
                   onFullscreenToggle={page.toggleMindMapFullscreen}
+                  onBilinkTrigger={page.handleBilinkTrigger}
+                  onBilinkNodeClick={page.handleBilinkNodeClick}
+                  onBilinkToolbarSearch={() =>
+                    page.openBilinkSearch({
+                      mode: 'toolbar',
+                      nodeUid: page.selectedNode?.uid ?? null,
+                      position: null,
+                    })
+                  }
                   className={cn(
                     'w-full rounded-2xl border border-border/70 bg-white',
                     page.mindMapFullscreen ? 'h-full' : 'h-[64vh]',
@@ -263,6 +305,8 @@ export default function PalaceEdit() {
         onOpenChange={mindMapImport.setImportOpen}
         mode={mindMapImport.importMode}
         onModeChange={mindMapImport.setImportMode}
+        workflow={mindMapImport.mindMapImportWorkflow}
+        onWorkflowChange={mindMapImport.setMindMapImportWorkflow}
         loading={mindMapImport.importLoading}
         applying={mindMapImport.importApplying}
         undoing={mindMapImport.importUndoing}
@@ -270,11 +314,19 @@ export default function PalaceEdit() {
         sourceTree={mindMapImport.importSourceTree}
         extractedText={mindMapImport.importExtractedText}
         imagePreviewUrl={mindMapImport.importImagePreviewUrl}
+        batchImages={mindMapImport.importBatchImages}
+        structureImageId={mindMapImport.importStructureImageId}
+        batchStatus={mindMapImport.importBatchStatus}
+        batchMeta={mindMapImport.importBatchMeta}
         targetNodeLabel={selectedNodeLabel}
         canAppend={mindMapImport.importCanAppend}
         canUndoLastImport={mindMapImport.importCanUndoLastImport}
         onPaste={mindMapImport.handleImportPaste}
         onFileChange={mindMapImport.handleImportFileChange}
+        onBatchStart={mindMapImport.handleBatchImportStart}
+        onBatchDeleteImage={mindMapImport.handleDeleteBatchImage}
+        onBatchMoveImage={mindMapImport.handleMoveBatchImage}
+        onBatchSetStructureImage={mindMapImport.handleSetStructureImage}
         onApplyReplace={mindMapImport.handleImportApplyReplace}
         onApplyAppend={mindMapImport.handleImportApplyAppend}
         onUndoLastImport={mindMapImport.handleUndoLastImport}
@@ -283,6 +335,30 @@ export default function PalaceEdit() {
         onDeleteHistory={mindMapImport.handleImportDeleteHistory}
         className={page.mindMapFullscreen ? 'z-[130]' : ''}
         overlayClassName={page.mindMapFullscreen ? 'z-[120]' : ''}
+      />
+
+      <BilinkSearchPopover
+        open={page.bilinkSearchOpen}
+        mode={page.bilinkSearchMode}
+        position={page.bilinkSearchPosition}
+        query={page.bilinkSearchQuery}
+        loading={page.bilinkSearchLoading}
+        error={page.bilinkSearchError}
+        results={page.bilinkSearchResults}
+        onQueryChange={page.setBilinkSearchQuery}
+        onClose={page.closeBilinkSearch}
+        onSelect={page.handleBilinkSearchSelect}
+        onPreview={page.handleBilinkResultPreview}
+      />
+
+      <BilinkPreviewPopover
+        open={page.bilinkPreviewOpen}
+        loading={page.bilinkPreviewLoading}
+        error={page.bilinkPreviewError}
+        context={page.bilinkPreviewContext}
+        editorState={page.bilinkPreviewEditorState}
+        onClose={() => page.setBilinkPreviewOpen(false)}
+        onJump={page.jumpToBilinkContext}
       />
 
       <PalaceVersionDialog

@@ -1,4 +1,4 @@
-import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { ArrowLeft } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import type { MindMapEditorState } from '@/shared/api/contracts'
@@ -31,7 +31,6 @@ function getSegmentDisplayName(session: any) {
 
 export default function SegmentReviewSessionPage() {
   const { id } = useParams()
-  const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const chapterIdParam = searchParams.get('chapterId')
   const chapterId = chapterIdParam ? Number(chapterIdParam) : null
@@ -39,6 +38,7 @@ export default function SegmentReviewSessionPage() {
   const [editorState, setEditorState] = useState<MindMapEditorState | null>(null)
   const [initialSnapshot, setInitialSnapshot] = useState<ReviewFlowSnapshot | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  const [mindMapFullscreen, setMindMapFullscreen] = useState(false)
   const [stageDialogOpen, setStageDialogOpen] = useState(false)
   const [pendingPayload, setPendingPayload] = useState<{
     durationSeconds: number
@@ -100,7 +100,7 @@ export default function SegmentReviewSessionPage() {
     setStageDialogOpen(true)
   }
 
-  const handleStageConfirm = async (targetReviewNumber: number) => {
+  const handleStageConfirm = async (targetReviewNumber: number, needsPractice: boolean) => {
     if (!session || !pendingPayload) return
     setStageDialogOpen(false)
     setSubmitting(true)
@@ -112,6 +112,7 @@ export default function SegmentReviewSessionPage() {
         revealed_remaining: pendingPayload.revealedRemaining,
         red_marked_count: pendingPayload.redNodeIds.length,
         target_review_number: targetReviewNumber,
+        needs_practice: needsPractice,
       })
     } finally {
       setSubmitting(false)
@@ -132,60 +133,61 @@ export default function SegmentReviewSessionPage() {
 
   return (
     <div className="space-y-5">
-      <PageIntro
-        eyebrow="分块正式复习"
-        title={`${session.palace?.title || '未命名宫殿'} / ${segmentDisplayName}`}
-        actions={
-          <>
-            <Link to="/review">
-              <Button variant="outline" size="sm">
-                <ArrowLeft className="mr-2 h-4 w-4" />
-                返回复习队列
-              </Button>
-            </Link>
-            <Badge variant="secondary">{session.algorithm_used}</Badge>
-            <Badge variant="outline">{formatReviewStage(session.review_type, session.review_number)}</Badge>
-          </>
-        }
-      />
+      {!mindMapFullscreen ? (
+        <PageIntro
+          eyebrow="分块正式复习"
+          title={`${session.palace?.title || '未命名宫殿'} / ${segmentDisplayName}`}
+          actions={
+            <>
+              <Link to="/review">
+                <Button variant="outline" size="sm">
+                  <ArrowLeft className="mr-2 h-4 w-4" />
+                  返回复习队列
+                </Button>
+              </Link>
+              <Badge variant="secondary">{session.algorithm_used}</Badge>
+              <Badge variant="outline">{formatReviewStage(session.review_type, session.review_number)}</Badge>
+            </>
+          }
+        />
+      ) : null}
 
       <div className="space-y-4">
-        <Card className="border-border/70 bg-card/92">
-          <CardContent className="p-5">
-            <MindMapReviewFlow
-              title={`${session.palace?.title || '未命名宫殿'} / ${segmentDisplayName}`}
-              palaceId={session.palace_id}
-              sessionKind="review"
-              editorState={editorState}
-              submitting={submitting}
-              persistProgress
-              initialSnapshot={initialSnapshot}
-              onSnapshotChange={async (snapshot) => {
-                if (snapshot.completed) {
-                  await clearSegmentReviewSessionProgressApi(session.id)
-                  return
-                }
-                await saveSegmentReviewSessionProgressApi(session.id, {
-                  completed: snapshot.completed,
-                  reveal_map: snapshot.revealMap,
-                  red_node_ids: snapshot.redNodeIds,
-                })
-              }}
-              onComplete={submitCompletion}
-            />
-          </CardContent>
-        </Card>
+        <MindMapReviewFlow
+          title={`${session.palace?.title || '未命名宫殿'} / ${segmentDisplayName}`}
+          palaceId={session.palace_id}
+          sessionKind="review"
+          editorState={editorState}
+          submitting={submitting}
+          persistProgress
+          initialSnapshot={initialSnapshot}
+          onFullscreenChange={setMindMapFullscreen}
+          onSnapshotChange={async (snapshot) => {
+            if (snapshot.completed) {
+              await clearSegmentReviewSessionProgressApi(session.id)
+              return
+            }
+            await saveSegmentReviewSessionProgressApi(session.id, {
+              completed: snapshot.completed,
+              reveal_map: snapshot.revealMap,
+              red_node_ids: snapshot.redNodeIds,
+            })
+          }}
+          onComplete={submitCompletion}
+        />
 
-        <Card className="border-border/70 bg-card/92">
-          <CardHeader>
-            <CardTitle className="text-base">复习信息</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3 text-sm text-muted-foreground">
-            <div>当前分块：{segmentDisplayName}</div>
-            <div>计划间隔：{session.interval_days} 天</div>
-            <div>预计复习时长：{session.estimated_review_seconds ?? 0} 秒</div>
-          </CardContent>
-        </Card>
+        {!mindMapFullscreen ? (
+          <Card className="border-border/70 bg-card/92">
+            <CardHeader>
+              <CardTitle className="text-base">复习信息</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3 text-sm text-muted-foreground">
+              <div>当前分块：{segmentDisplayName}</div>
+              <div>计划间隔：{session.interval_days} 天</div>
+              <div>预计复习时长：{session.estimated_review_seconds ?? 0} 秒</div>
+            </CardContent>
+          </Card>
+        ) : null}
       </div>
 
       {session.segment?.stage_labels && session.segment?.review_stages && (
