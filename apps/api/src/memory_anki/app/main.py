@@ -4,10 +4,15 @@ from datetime import date, datetime, time, timedelta
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from sqlalchemy.orm import Session
 
 from memory_anki.core.config import ATTACHMENTS_DIR, DEFAULTS
 from memory_anki.core.logging import configure_logging
-from memory_anki.core.migration import ensure_legacy_repo_data_migrated
+from memory_anki.core.migration import (
+    ensure_legacy_repo_data_migrated,
+    is_app_migration_completed,
+    mark_app_migration_completed,
+)
 from memory_anki.infrastructure.db.models import Config, get_session, init_db
 from memory_anki.modules.backups.application.backup_service import (
     create_shutdown_backup,
@@ -18,6 +23,9 @@ from memory_anki.modules.backups.application.backup_service import (
     stop_periodic_backup_loop,
 )
 from memory_anki.modules.knowledge.application.bilink_service import ensure_bilink_schema
+from memory_anki.modules.knowledge.application.subject_document_service import (
+    ensure_subject_document_schema,
+)
 from memory_anki.modules.knowledge.presentation import bilink_router
 from memory_anki.modules.knowledge.presentation import router as knowledge_router
 from memory_anki.modules.mindmap.application.editor_state_service import ensure_editor_schema
@@ -32,6 +40,9 @@ from memory_anki.modules.reviews.application.schedule_service import (
     ensure_review_schedule_schema,
     migrate_sm2_to_ebbinghaus,
     normalize_algorithm,
+)
+from memory_anki.modules.reviews.application.review_service import (
+    repair_review_stage_progress,
 )
 from memory_anki.modules.reviews.presentation import router as review_router
 from memory_anki.modules.sessions.application.session_progress_service import (
@@ -50,6 +61,21 @@ from memory_anki.modules.time_records.application.time_records_service import (
 )
 from memory_anki.modules.time_records.presentation import router as time_records_router
 
+REVIEW_SCHEDULE_REPAIR_MIGRATION_KEY = "review_schedule_anchor_repair_v1"
+
+
+def run_review_schedule_repair_migration(session: Session):
+    if is_app_migration_completed(REVIEW_SCHEDULE_REPAIR_MIGRATION_KEY):
+        return None
+    result = repair_review_stage_progress(session)
+    mark_app_migration_completed(
+        REVIEW_SCHEDULE_REPAIR_MIGRATION_KEY,
+        {
+            "result": result,
+        },
+    )
+    return result
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -58,6 +84,7 @@ async def lifespan(app: FastAPI):
     init_db()
     ensure_editor_schema()
     ensure_bilink_schema()
+    ensure_subject_document_schema()
     ensure_segment_schema()
     ensure_palace_group_schema()
     ensure_review_schedule_schema()
@@ -75,6 +102,7 @@ async def lifespan(app: FastAPI):
         migrate_sm2_to_ebbinghaus(session)
         ensure_review_log_time_records(session)
         normalize_time_record_event_timezones(session)
+        run_review_schedule_repair_migration(session)
         ensure_daily_backup()
         maybe_create_periodic_backup()
     finally:

@@ -11,6 +11,14 @@ from memory_anki.modules.reviews.application.schedule_service import (
 
 router = APIRouter(tags=["settings"])
 
+SCHEDULE_IMPACTING_KEYS = {
+    "default_algorithm",
+    "custom_intervals",
+    "ebbinghaus_intervals",
+    "sleep_review_time",
+    "early_review_anchor",
+}
+
 
 def session_dep():
     s = get_session()
@@ -28,10 +36,7 @@ def read_settings(session: Session) -> dict:
 
 
 def write_settings(data: dict, session: Session) -> dict:
-    old_algorithm = None
-    old_row = session.query(Config).filter_by(key="default_algorithm").first()
-    if old_row:
-        old_algorithm = old_row.value
+    before_settings = read_settings(session)
 
     for key, value in data.items():
         if key in DEFAULTS:
@@ -44,13 +49,21 @@ def write_settings(data: dict, session: Session) -> dict:
                 session.add(Config(key=key, value=str(nextValue)))
     session.commit()
 
-    # 如果算法变了且用户选择全部应用
-    new_algorithm = data.get("default_algorithm", "")
-    if (data.get("apply_to_pending") == "all" and
-            new_algorithm and new_algorithm != old_algorithm):
-        update_all_pending_schedules(session, new_algorithm)
+    next_settings = read_settings(session)
+    if data.get("apply_to_pending") == "all":
+        changed_keys = {
+            key
+            for key in SCHEDULE_IMPACTING_KEYS
+            if str(before_settings.get(key, "")) != str(next_settings.get(key, ""))
+        }
+        if changed_keys:
+            update_all_pending_schedules(
+                session,
+                next_settings.get("default_algorithm"),
+            )
+            next_settings = read_settings(session)
 
-    return read_settings(session)
+    return next_settings
 
 
 @router.get("/settings")

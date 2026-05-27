@@ -36,6 +36,26 @@ def _read_state() -> dict | None:
         return None
 
 
+def is_app_migration_completed(key: str) -> bool:
+    state = _read_state() or {}
+    app_migrations = state.get("app_migrations") or {}
+    entry = app_migrations.get(key) or {}
+    return bool(entry.get("completed"))
+
+
+def mark_app_migration_completed(key: str, payload: dict | None = None) -> None:
+    state = _read_state() or {}
+    app_migrations = state.setdefault("app_migrations", {})
+    entry = {
+        "completed": True,
+        "completed_at": iso_utc_now(),
+    }
+    if payload:
+        entry.update(payload)
+    app_migrations[key] = entry
+    _write_state(state)
+
+
 def _table_count(path: Path) -> int:
     if not path.exists():
         return 0

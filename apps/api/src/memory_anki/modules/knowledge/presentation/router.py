@@ -2,8 +2,8 @@
 import traceback
 from pathlib import Path
 
-from fastapi import APIRouter, Depends
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, Depends, File, Query, UploadFile
+from fastapi.responses import FileResponse, JSONResponse, Response
 from sqlalchemy.orm import Session
 
 from memory_anki.core.config import REPO_ROOT
@@ -15,6 +15,16 @@ from memory_anki.infrastructure.db.models import (
     get_session,
 )
 from memory_anki.modules.backups.application.backup_service import maybe_create_rolling_backup
+from memory_anki.modules.knowledge.application.subject_document_service import (
+    build_page_summaries,
+    delete_subject_document,
+    get_subject_document,
+    list_subject_documents,
+    render_subject_document_page,
+    save_subject_document,
+    subject_document_json,
+    subject_document_path,
+)
 from memory_anki.modules.mindmap.application.editor_state_service import (
     get_subject_editor_state,
     save_subject_editor_state,
@@ -60,6 +70,10 @@ def subject_json(s: Subject) -> dict:
         "color": s.color,
         "sort_order": s.sort_order,
     }
+
+
+def subject_document_response(subject_id: int, document) -> dict:
+    return subject_document_json(document, subject_id=subject_id)
 
 
 # === 学科 ===
@@ -162,6 +176,98 @@ def update_subject_editor(subject_id: int, data: dict, s: Session = Depends(sess
             )
         print(f"[DEBUG] update_subject_editor FAIL: {tb}", flush=True)
         return JSONResponse(status_code=500, content={"error": tb})
+
+
+@router.get("/subjects/{subject_id}/documents")
+def list_subject_documents_api(subject_id: int, s: Session = Depends(session_dep)):
+    subject = s.query(Subject).filter_by(id=subject_id).first()
+    if not subject:
+        return {"error": "not found"}
+    return {
+        "items": [
+            subject_document_response(subject_id, document)
+            for document in list_subject_documents(s, subject_id)
+        ]
+    }
+
+
+@router.post("/subjects/{subject_id}/documents")
+async def upload_subject_document_api(
+    subject_id: int,
+    file: UploadFile = File(...),
+    s: Session = Depends(session_dep),
+):
+    subject = s.query(Subject).filter_by(id=subject_id).first()
+    if not subject:
+        return {"error": "not found"}
+    try:
+        document = save_subject_document(
+            s,
+            subject=subject,
+            original_name=file.filename or "document.pdf",
+            mime_type=file.content_type or "application/pdf",
+            content=await file.read(),
+        )
+        maybe_create_rolling_backup("rolling-subject-document-upload")
+        return subject_document_response(subject_id, document)
+    except ValueError as exc:
+        return JSONResponse(status_code=400, content={"error": str(exc)})
+
+
+@router.get("/subjects/{subject_id}/documents/{document_id}")
+def get_subject_document_api(subject_id: int, document_id: int, s: Session = Depends(session_dep)):
+    document = get_subject_document(s, subject_id=subject_id, document_id=document_id)
+    if not document:
+        return {"error": "not found"}
+    path = subject_document_path(document)
+    if not path.exists():
+        return {"error": "file missing"}
+    return FileResponse(path, filename=document.original_name, media_type=document.mime_type)
+
+
+@router.delete("/subjects/{subject_id}/documents/{document_id}")
+def delete_subject_document_api(subject_id: int, document_id: int, s: Session = Depends(session_dep)):
+    document = get_subject_document(s, subject_id=subject_id, document_id=document_id)
+    if not document:
+        return {"error": "not found"}
+    delete_subject_document(s, document)
+    maybe_create_rolling_backup("rolling-subject-document-delete")
+    return {"ok": True}
+
+
+@router.get("/subjects/{subject_id}/documents/{document_id}/pages")
+def list_subject_document_pages_api(subject_id: int, document_id: int, s: Session = Depends(session_dep)):
+    document = get_subject_document(s, subject_id=subject_id, document_id=document_id)
+    if not document:
+        return {"error": "not found"}
+    return {
+        "page_count": document.page_count,
+        "pages": build_page_summaries(subject_id=subject_id, document=document),
+    }
+
+
+@router.get("/subjects/{subject_id}/documents/{document_id}/pages/{page_number}/image")
+def get_subject_document_page_image_api(
+    subject_id: int,
+    document_id: int,
+    page_number: int,
+    kind: str = Query(default="thumbnail"),
+    s: Session = Depends(session_dep),
+):
+    document = get_subject_document(s, subject_id=subject_id, document_id=document_id)
+    if not document:
+        return {"error": "not found"}
+    try:
+        image_bytes = render_subject_document_page(
+            document,
+            page_number=page_number,
+            kind="preview" if kind == "preview" else "thumbnail",
+        )
+    except FileNotFoundError:
+        return {"error": "file missing"}
+    except ValueError as exc:
+        return JSONResponse(status_code=400, content={"error": str(exc)})
+    return Response(content=image_bytes, media_type="image/png")
 
 
 @router.get("/chapters/{chapter_id}")

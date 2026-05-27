@@ -71,7 +71,7 @@ function MindMapNodeCard({ data, id }: NodeProps) {
   const previewShifted = Boolean(nodeData.previewShifted)
   const previewAdopt = Boolean(nodeData.previewAdopt)
   const previewGhost = Boolean(nodeData.previewGhost)
-  const widthClass = isRoot ? 'w-[174px]' : isLeaf ? 'w-[116px]' : 'w-[126px]'
+  const widthClass = isRoot ? 'w-[174px]' : isLeaf ? 'w-[132px]' : 'w-[156px]'
 
   return (
     <div
@@ -92,21 +92,21 @@ function MindMapNodeCard({ data, id }: NodeProps) {
         />
       ) : (
         isRoot ? (
-          <div className={`flex h-[54px] items-center rounded-[16px] px-4 shadow-[0_14px_36px_rgba(201,120,89,0.22)] transition-all ${nodeData.selected ? 'ring-4 ring-[#c97859]/15' : ''} ${previewAdopt ? 'ring-4 ring-blue-200' : ''}`} style={{ backgroundColor: '#c97859' }}>
+          <div className={`flex min-h-[54px] items-center rounded-[16px] px-4 py-2 shadow-[0_14px_36px_rgba(201,120,89,0.22)] transition-all ${nodeData.selected ? 'ring-4 ring-[#c97859]/15' : ''} ${previewAdopt ? 'ring-4 ring-blue-200' : ''}`} style={{ backgroundColor: '#c97859' }}>
             <button
               type="button"
               onClick={startEdit}
-              className="line-clamp-2 w-full break-words whitespace-pre-wrap text-center text-[15px] font-semibold leading-5 text-white"
+              className="w-full break-words whitespace-pre-wrap text-center text-[15px] font-semibold leading-5 text-white"
             >
               {nodeData.label || '未命名主题'}
             </button>
           </div>
         ) : (
-          <div className={`flex ${isLeaf ? 'h-[46px]' : 'h-[52px]'} flex-col justify-center overflow-hidden rounded-xl px-1.5 py-0.5 transition-colors ${nodeData.selected ? 'bg-slate-900/[0.04]' : 'hover:bg-slate-900/[0.025]'} ${previewAdopt ? 'bg-blue-50/80 ring-1 ring-blue-200' : ''}`}>
+          <div className={`flex min-h-[52px] flex-col justify-center rounded-xl px-2 py-1.5 transition-colors ${nodeData.selected ? 'bg-slate-900/[0.04]' : 'hover:bg-slate-900/[0.025]'} ${previewAdopt ? 'bg-blue-50/80 ring-1 ring-blue-200' : ''}`}>
             <button
               type="button"
               onClick={startEdit}
-              className={`${nodeData.type === 'chapter' && nodeData.metadata?.palace_count !== undefined && !isLeaf ? 'line-clamp-1' : 'line-clamp-2'} w-full break-words whitespace-pre-wrap text-left text-slate-700 ${isLeaf ? 'text-[12px] font-medium leading-4' : 'text-[13px] font-medium leading-4'}`}
+              className={`w-full break-words whitespace-pre-wrap text-left text-slate-700 ${isLeaf ? 'text-[12px] font-medium leading-4' : 'text-[13px] font-medium leading-4'}`}
             >
               {nodeData.label || '未命名节点'}
             </button>

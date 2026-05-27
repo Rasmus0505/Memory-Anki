@@ -452,7 +452,9 @@ def _select_preserved_schedule(schedules, palace, session):
 
 
 def _rebuild_palace_review_schedule_model(session, palace) -> int:
-    from memory_anki.infrastructure.db.models import ReviewSchedule
+    from memory_anki.modules.palaces.application.segment_service import (
+        _rebuild_palace_review_schedules,
+    )
 
     schedules = sorted(
         list(palace.review_schedules or []),
@@ -488,90 +490,35 @@ def _rebuild_palace_review_schedule_model(session, palace) -> int:
         schedules,
         completed_stage_count,
     )
-
-    changed = 0
-    if schedules:
-        changed += len(schedules)
-    session.query(ReviewSchedule).filter_by(palace_id=palace.id).delete(
-        synchronize_session=False
-    )
-    session.flush()
-    session.expire(palace, ['review_schedules'])
-
-    palace.mastered = completed_stage_count >= len(intervals)
-
-    previous_completed_at: datetime | None = None
-    for review_number in range(completed_stage_count):
-        stage_completed_at = _coerce_completed_at(
-            completed_at_by_stage.get(review_number),
-            previous_completed_at,
+    fallback_completed_count = completed_stage_count
+    if not schedules:
+        fallback_completed_count = _review_log_completed_stage_count(
+            session,
+            palace,
+            len(intervals),
         )
-        base_datetime = previous_completed_at if review_number >= initial_slot_count else None
-        if create_review_schedule(
-            session=session,
-            palace_id=palace.id,
-            review_number=review_number,
-            algorithm=algorithm,
-            base_date=anchor if base_datetime is None else base_datetime.date(),
-            anchor_date=anchor,
-            base_datetime=base_datetime,
-            completed=True,
-            completed_at=stage_completed_at,
-        ):
-            changed += 1
-        previous_completed_at = stage_completed_at
 
-    if not palace.mastered:
-        for review_number in _target_pending_review_numbers(
-            completed_count=completed_stage_count,
-            total=len(intervals),
-            initial_slot_count=initial_slot_count,
-        ):
-            preserved_schedule = _select_preserved_schedule(
-                [
-                    schedule
-                    for schedule in schedules
-                    if not schedule.completed and schedule.review_number == review_number
-                ],
-                palace,
-                session,
-            )
-            base_datetime = previous_completed_at if review_number >= initial_slot_count else None
-            created_schedule = create_review_schedule(
-                session=session,
-                palace_id=palace.id,
-                review_number=review_number,
-                algorithm=algorithm,
-                base_date=anchor if base_datetime is None else base_datetime.date(),
-                anchor_date=anchor,
-                base_datetime=base_datetime,
-                completed=False,
-            )
-            if created_schedule is None:
-                continue
-            if (
-                preserved_schedule is not None
-                and preserved_schedule.scheduled_date
-                and preserved_schedule.scheduled_date >= date.today()
-            ):
-                created_schedule.scheduled_date = preserved_schedule.scheduled_date
-                created_schedule.scheduled_at = getattr(preserved_schedule, "scheduled_at", None)
-                created_schedule.interval_days = preserved_schedule.interval_days
-                created_schedule.review_type = preserved_schedule.review_type
-                created_schedule.anchor_date = preserved_schedule.anchor_date or anchor
-            changed += 1
-
-    session.flush()
-    return changed
+    _rebuild_palace_review_schedules(
+        session,
+        palace,
+        completed_count=completed_stage_count,
+        fallback_completed_count=fallback_completed_count,
+        algorithm_override=algorithm,
+    )
+    if completed_at_by_stage:
+        return max(len(schedules), len(completed_at_by_stage), 1)
+    return max(len(schedules), completed_stage_count, 1)
 
 
-def update_all_pending_schedules(session, new_algorithm: str) -> None:
-    from memory_anki.infrastructure.db.models import Palace, ReviewSchedule
+def update_all_pending_schedules(session, new_algorithm: str | None = None) -> None:
+    from memory_anki.modules.palaces.application.segment_service import (
+        rebuild_all_pending_review_schedules,
+    )
 
-    session.query(ReviewSchedule).delete()
-    session.commit()
-    for palace in session.query(Palace).all():
-        generate_schedule_for_palace(session, palace.id, new_algorithm)
+    rebuild_all_pending_review_schedules(
+        session,
+        algorithm_override=normalize_algorithm(new_algorithm) if new_algorithm else None,
+    )
 
 
 def migrate_sm2_to_ebbinghaus(session) -> None:

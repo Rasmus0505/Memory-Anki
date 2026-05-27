@@ -26,6 +26,7 @@ SAFE_EDITOR_SOURCES = {"palace_edit", "version_restore", "backup_restore"}
 DANGEROUS_EDITOR_SOURCES = {"review_edit", "practice_edit", "unknown"}
 
 TAG_RE = re.compile(r"<[^>]+>")
+HTML_BLOCK_BREAK_RE = re.compile(r"</(?:div|p|li|h[1-6]|blockquote|pre|tr)>", re.IGNORECASE)
 
 
 def ensure_editor_schema() -> None:
@@ -201,6 +202,8 @@ def sync_subject_tree_from_doc(session: Session, subject: Subject, doc: dict[str
         for index, item in enumerate(items):
             data = _ensure_dict(item.get("data"))
             item["data"] = data
+            original_text = _stringify(data.get("text"))
+            original_note = _stringify(data.get("note"))
             chapter_name = _plain_text(data.get("text"), fallback="新章节")
             chapter_notes = _stringify(data.get("note"))
             chapter_id = _coerce_int(data.get(NODE_ID_KEY))
@@ -225,8 +228,8 @@ def sync_subject_tree_from_doc(session: Session, subject: Subject, doc: dict[str
             chapter.name = chapter_name
             chapter.notes = chapter_notes
 
-            data["text"] = chapter_name
-            data["note"] = chapter_notes
+            data["text"] = original_text or chapter_name
+            data["note"] = original_note or chapter_notes
             data[NODE_ID_KEY] = chapter.id
             data[NODE_TYPE_KEY] = "chapter"
             seen_ids.add(chapter.id)
@@ -259,6 +262,8 @@ def sync_palace_tree_from_doc(session: Session, palace: Palace, doc: dict[str, A
         for index, item in enumerate(items):
             data = _ensure_dict(item.get("data"))
             item["data"] = data
+            original_text = _stringify(data.get("text"))
+            original_note = _stringify(data.get("note"))
             peg_name = _plain_text(data.get("text"), fallback="新节点")
             peg_content = _stringify(data.get("note"))
             peg_id = _coerce_int(data.get(NODE_ID_KEY))
@@ -283,8 +288,8 @@ def sync_palace_tree_from_doc(session: Session, palace: Palace, doc: dict[str, A
             peg.name = peg_name
             peg.content = peg_content
 
-            data["text"] = peg_name
-            data["note"] = peg_content
+            data["text"] = original_text or peg_name
+            data["note"] = original_note or peg_content
             data[NODE_ID_KEY] = peg.id
             data[NODE_TYPE_KEY] = "peg"
             seen_ids.add(peg.id)
@@ -453,8 +458,9 @@ def _plain_text(value: Any, *, fallback: str) -> str:
         .replace("<br/>", "\n")
         .replace("<br />", "\n")
     )
+    text = HTML_BLOCK_BREAK_RE.sub("\n", text)
     text = TAG_RE.sub("", text)
     text = unescape(text).strip()
     if not text:
         text = fallback
-    return text[:200]
+    return text

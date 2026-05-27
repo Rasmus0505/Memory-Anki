@@ -16,6 +16,7 @@ LEGACY_DATA_DIR = REPO_ROOT / "data"
 APP_HOME = Path(os.environ.get("MEMORY_ANKI_HOME") or _default_app_home())
 DATA_DIR = APP_HOME / "data"
 ATTACHMENTS_DIR = DATA_DIR / "attachments"
+SUBJECT_DOCUMENTS_DIR = ATTACHMENTS_DIR / "subjects"
 BACKUPS_DIR = DATA_DIR / "backups"
 FULL_BACKUPS_DIR = BACKUPS_DIR / "full"
 RESCUE_BACKUPS_DIR = BACKUPS_DIR / "rescue"
@@ -41,9 +42,22 @@ DEFAULTS = {
     "overdue_smoothing_days": "7",
     "overdue_smoothing_threshold": "5",
     "time_recording_threshold_seconds": "0",
+    "import_pdf_strict_restore_default": "true",
+    "import_pdf_quote_original_default": "true",
+    "import_pdf_mount_leaf_only_default": "true",
+    "import_pdf_preserve_emphasis_default": "true",
+    "import_pdf_semantic_split_default": "true",
+    "import_pdf_preserve_line_breaks_default": "true",
 }
 
 
 def ensure_runtime_dirs() -> None:
-    for directory in (APP_HOME, DATA_DIR, ATTACHMENTS_DIR, FULL_BACKUPS_DIR, RESCUE_BACKUPS_DIR):
+    for directory in (
+        APP_HOME,
+        DATA_DIR,
+        ATTACHMENTS_DIR,
+        SUBJECT_DOCUMENTS_DIR,
+        FULL_BACKUPS_DIR,
+        RESCUE_BACKUPS_DIR,
+    ):
         directory.mkdir(parents=True, exist_ok=True)

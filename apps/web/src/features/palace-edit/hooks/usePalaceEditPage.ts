@@ -414,6 +414,21 @@ export function usePalaceEditPage() {
   }, [mindMapFullscreen])
 
   useEffect(() => {
+    if (!mindMapFullscreen) return
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return
+      if (document.fullscreenElement) return
+      event.preventDefault()
+      event.stopPropagation()
+      setMindMapFullscreen(false)
+    }
+    window.addEventListener('keydown', handleEscape, true)
+    return () => {
+      window.removeEventListener('keydown', handleEscape, true)
+    }
+  }, [mindMapFullscreen])
+
+  useEffect(() => {
     if (palaceId || isCreatingDraft) return
     setIsCreatingDraft(true)
     void requestDraftPalaceId(location.key).then((createdId) => {

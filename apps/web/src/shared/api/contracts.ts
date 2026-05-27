@@ -28,6 +28,11 @@ export interface MindMapDoc {
 
 export interface MindMapImportSourceNode {
   text: string
+  rich_text_html?: string
+  emphasis_marks?: Array<{
+    kind: 'underline' | 'wavy-underline'
+    text: string
+  }>
   children: MindMapImportSourceNode[]
 }
 
@@ -44,6 +49,11 @@ export interface MindMapImportPreviewResponse {
   extracted_text?: string
   structure_image_index?: number
   image_count?: number
+  selected_pages?: number[]
+  structure_page?: number
+  match_mode?: 'strict_match' | 'approximate_match'
+  can_apply?: boolean
+  warnings?: string[]
 }
 
 export interface MindMapBatchImportPreviewResponse {
@@ -59,6 +69,48 @@ export interface ImageTextPreviewResponse {
   ok: boolean
   error?: string
   extracted_text?: string
+  selected_pages?: number[]
+}
+
+export interface MindMapPdfImportPreviewRequest {
+  subject_document_id: number
+  page_selection: number[]
+  structure_page?: number | null
+  range_prompt?: string
+  fallback_title?: string
+  import_options?: PdfImportOptions
+}
+
+export interface TextPdfImportPreviewRequest {
+  subject_document_id: number
+  page_selection: number[]
+  range_prompt?: string
+}
+
+export interface PdfImportOptions {
+  strict_restore: boolean
+  quote_original_text_only: boolean
+  mount_on_original_leaf_only: boolean
+  preserve_emphasis_marks: boolean
+  semantic_split_long_paragraphs: boolean
+  preserve_line_breaks: boolean
+}
+
+export interface SubjectDocumentSummary {
+  id: number
+  subject_id: number
+  filename: string
+  original_name: string
+  mime_type: string
+  file_size: number
+  page_count: number
+  created_at: string | null
+}
+
+export interface PdfPageSummary {
+  page_number: number
+  thumbnail_url: string
+  preview_url: string
 }
 
 export interface ReviewQueueChapter {
@@ -340,6 +392,19 @@ export interface PalaceSubjectGroup {
   ungrouped_palaces: PalaceGroupedItem[]
 }
 
+export interface PalaceSubjectShelfItem {
+  subject: SubjectSummary | null
+  palace_count: number
+  chapter_count: number
+  review_status: 'due_now' | 'due_later_today' | 'idle'
+  has_due_review: boolean
+  has_due_later_today: boolean
+}
+
+export interface PalaceSubjectShelfResponse {
+  items: PalaceSubjectShelfItem[]
+}
+
 export interface PalaceGroupSummary {
   id: number
   name: string
@@ -474,6 +539,12 @@ export interface ReviewSettings {
   overdue_smoothing_days: string
   overdue_smoothing_threshold: string
   time_recording_threshold_seconds: string
+  import_pdf_strict_restore_default: string
+  import_pdf_quote_original_default: string
+  import_pdf_mount_leaf_only_default: string
+  import_pdf_preserve_emphasis_default: string
+  import_pdf_semantic_split_default: string
+  import_pdf_preserve_line_breaks_default: string
   [key: string]: string
 }
 

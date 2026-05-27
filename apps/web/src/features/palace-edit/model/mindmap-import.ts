@@ -13,7 +13,7 @@ export interface ImportHistoryItem {
   sourceTree: MindMapImportSourceTree
   editorDoc: MindMapDoc | string | null
   imagePreviewUrl: string
-  importMode?: 'single' | 'batch'
+  importMode?: 'single' | 'batch' | 'pdf'
   imageCount?: number
   createdAt: string
 }
@@ -28,6 +28,7 @@ export interface ImportUndoSnapshot {
 export interface SaveImportHistoryResult {
   history: ImportHistoryItem[]
   item: ImportHistoryItem
+  persisted: boolean
 }
 
 export interface ApplyImportedDocResult {
@@ -70,8 +71,13 @@ export function saveImportHistory(
     createdAt: new Date().toISOString(),
   }
   const updated = [newItem, ...history].slice(0, 20)
-  localStorage.setItem(historyKey(entityKey), JSON.stringify(updated))
-  return { history: updated, item: newItem }
+  let persisted = true
+  try {
+    localStorage.setItem(historyKey(entityKey), JSON.stringify(updated))
+  } catch {
+    persisted = false
+  }
+  return { history: updated, item: newItem, persisted }
 }
 
 export function deleteImportHistory(entityKey: string, id: string): ImportHistoryItem[] {

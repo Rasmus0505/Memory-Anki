@@ -1,5 +1,9 @@
 import { request } from "@/shared/api/http"
-import type { MindMapEditorState } from "@/shared/api/contracts"
+import type {
+  MindMapEditorState,
+  PdfPageSummary,
+  SubjectDocumentSummary,
+} from "@/shared/api/contracts"
 
 export function getSubjectsApi() {
   return request<any[]>("/subjects")
@@ -57,4 +61,34 @@ export function saveSubjectEditorApi(id: number, data: Partial<MindMapEditorStat
     method: "PUT",
     body: JSON.stringify(data),
   })
+}
+
+export async function uploadSubjectDocumentApi(subjectId: number, file: File) {
+  const form = new FormData()
+  form.append("file", file)
+  const response = await fetch(`/api/v1/subjects/${subjectId}/documents`, {
+    method: "POST",
+    body: form,
+  })
+  const data = await response.json()
+  if (!response.ok) {
+    throw new Error(data?.error || `HTTP ${response.status}`)
+  }
+  return data as SubjectDocumentSummary
+}
+
+export function getSubjectDocumentsApi(subjectId: number) {
+  return request<{ items: SubjectDocumentSummary[] }>(`/subjects/${subjectId}/documents`)
+}
+
+export function deleteSubjectDocumentApi(subjectId: number, documentId: number) {
+  return request<{ ok: boolean }>(`/subjects/${subjectId}/documents/${documentId}`, {
+    method: "DELETE",
+  })
+}
+
+export function getSubjectDocumentPagesApi(subjectId: number, documentId: number) {
+  return request<{ page_count: number; pages: PdfPageSummary[] }>(
+    `/subjects/${subjectId}/documents/${documentId}/pages`,
+  )
 }

@@ -1784,6 +1784,21 @@
       }
 
       function handleHostKeydown(event) {
+        if (event.key === 'Escape') {
+          if (document.fullscreenElement) {
+            event.preventDefault()
+            event.stopPropagation()
+            void exitNativeFullscreenIfNeeded()
+            return
+          }
+          if (isImmersiveModeActive()) {
+            event.preventDefault()
+            event.stopPropagation()
+            getHostBridge()?.notify?.('fullscreen_toggle', false)
+            return
+          }
+        }
+
         if (isReadonlyHost()) return
 
         const editableElement = getActiveEditableElement()
@@ -2043,6 +2058,58 @@
 
       window.resetReadonlyInteractionState = resetReadonlyInteractionState
 
+      const HOST_IMPORTED_NODE_AUTO_WIDTH_THRESHOLD = 20
+      const HOST_IMPORTED_NODE_WIDE_TEXT_WIDTH = 360
+      const HOST_IMPORTED_NODE_EXTRA_WIDE_TEXT_WIDTH = 420
+
+      function stripHtmlToText(value) {
+        const html = typeof value === 'string' ? value : ''
+        if (!html) return ''
+        const temp = document.createElement('div')
+        temp.innerHTML = html
+        return String(temp.textContent || temp.innerText || '')
+          .replace(/\s+/g, ' ')
+          .trim()
+      }
+
+      function resolveImportedNodeTextWidth(plainText) {
+        const textLength = typeof plainText === 'string' ? plainText.length : 0
+        if (textLength < HOST_IMPORTED_NODE_AUTO_WIDTH_THRESHOLD) return null
+        if (textLength >= 78) return HOST_IMPORTED_NODE_EXTRA_WIDE_TEXT_WIDTH
+        if (textLength >= 34) return HOST_IMPORTED_NODE_WIDE_TEXT_WIDTH
+        return null
+      }
+
+      function normalizeImportedNodePresentation(node, depth = 0) {
+        if (!node || typeof node !== 'object') return
+        const data = node.data && typeof node.data === 'object' ? node.data : null
+        if (data && depth > 0) {
+          const plainText = stripHtmlToText(data.text)
+          const isImportedRichText = Boolean(data.richText) && typeof data.text === 'string'
+          const looksVerbose =
+            plainText.length >= 18 ||
+            (typeof data.text === 'string' && data.text.includes('<br>'))
+          if (isImportedRichText || looksVerbose) {
+            const targetWidth = resolveImportedNodeTextWidth(plainText)
+            if (typeof targetWidth === 'number' && (
+              typeof data.customTextWidth !== 'number' ||
+              Number.isNaN(data.customTextWidth) ||
+              data.customTextWidth < targetWidth
+            )) {
+              data.customTextWidth = targetWidth
+            } else if (
+              targetWidth == null &&
+              typeof data.customTextWidth === 'number'
+            ) {
+              delete data.customTextWidth
+            }
+          }
+        }
+        if (Array.isArray(node.children)) {
+          node.children.forEach((child) => normalizeImportedNodePresentation(child, depth + 1))
+        }
+      }
+
       function syncHostEditorState(payload) {
         const nextEditorState = payload?.editorState
         if (!nextEditorState) return
@@ -2059,6 +2126,7 @@
         if (!mindMap) return
 
         const nextDoc = cloneValue(nextEditorState.editor_doc) || {}
+        normalizeImportedNodePresentation(nextDoc?.root, 0)
         let currentTransform = null
         if (window.__memoryAnkiPendingEditorState.preserveView) {
           try {

@@ -1,9 +1,11 @@
 import type { MindMapEditorState, MindMapImportPreviewResponse } from '@/shared/api/contracts'
+import { vi } from 'vitest'
 import {
   applyImportedEditorState,
   countSourceTreeNodes,
   formatMindMapImportError,
   restoreImportedEditorState,
+  saveImportHistory,
 } from '@/features/palace-edit/model/mindmap-import'
 
 function buildEditorState(): MindMapEditorState {
@@ -121,5 +123,26 @@ describe('mindmap import helpers', () => {
       editor_doc: null,
     }
     expect(payload.ok).toBe(true)
+  })
+
+  it('keeps current-session history even when localStorage persistence fails', () => {
+    const setItemSpy = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('QuotaExceededError')
+    })
+
+    const saved = saveImportHistory('palace_16', {
+      title: '第一页',
+      nodeCount: 1,
+      sourceTree: { title: '第一页', children: [] },
+      editorDoc: null,
+      imagePreviewUrl: '',
+      importMode: 'pdf',
+      imageCount: 6,
+    })
+
+    expect(saved.history).toHaveLength(1)
+    expect(saved.item.title).toBe('第一页')
+    expect(saved.persisted).toBe(false)
+    setItemSpy.mockRestore()
   })
 })

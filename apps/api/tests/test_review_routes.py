@@ -26,6 +26,7 @@ from memory_anki.modules.reviews.presentation import router as review_router
 from memory_anki.modules.sessions.application.session_progress_service import (
     ensure_session_progress_schema,
 )
+from memory_anki.modules.settings.presentation import router as settings_router
 from memory_anki.modules.time_records.presentation import router as time_records_router
 from memory_anki.modules.time_records.application.time_records_service import (
     create_review_time_record,
@@ -54,6 +55,7 @@ class ReviewRouteTests(unittest.TestCase):
         self.SessionLocal = sessionmaker(bind=self.engine)
         self.original_get_session = review_router.get_session
         self.original_palace_get_session = palace_router.get_session
+        self.original_settings_get_session = settings_router.get_session
         self.original_time_records_get_session = time_records_router.get_session
 
         def get_test_session():
@@ -61,6 +63,7 @@ class ReviewRouteTests(unittest.TestCase):
 
         review_router.get_session = get_test_session
         palace_router.get_session = get_test_session
+        settings_router.get_session = get_test_session
         time_records_router.get_session = get_test_session
 
         with self.SessionLocal() as session:
@@ -100,12 +103,14 @@ class ReviewRouteTests(unittest.TestCase):
         app = FastAPI()
         app.include_router(review_router.router, prefix="/api/v1")
         app.include_router(palace_router.router, prefix="/api/v1")
+        app.include_router(settings_router.router, prefix="/api/v1")
         app.include_router(time_records_router.router, prefix="/api/v1")
         self.client = TestClient(app)
 
     def tearDown(self):
         review_router.get_session = self.original_get_session
         palace_router.get_session = self.original_palace_get_session
+        settings_router.get_session = self.original_settings_get_session
         time_records_router.get_session = self.original_time_records_get_session
         Base.metadata.drop_all(self.engine)
         self.engine.dispose()
@@ -231,6 +236,130 @@ class ReviewRouteTests(unittest.TestCase):
             self.assertLessEqual(next_schedule.scheduled_at, after + timedelta(days=2))
             self.assertEqual(next_schedule.scheduled_date, next_schedule.scheduled_at.date())
 
+    def test_submit_review_rebuilds_stale_future_pending_schedule(self):
+        stale_due_at = datetime.now().replace(second=0, microsecond=0) + timedelta(days=5)
+        with self.SessionLocal() as session:
+            session.add(Config(key="ebbinghaus_intervals", value="1,2,4"))
+            palace = session.query(Palace).filter_by(id=1).first()
+            self.assertIsNotNone(palace)
+            palace.created_at = datetime.now().replace(second=0, microsecond=0) - timedelta(days=3)
+            current_schedule = session.query(ReviewSchedule).filter_by(id=1).first()
+            self.assertIsNotNone(current_schedule)
+            current_schedule.scheduled_date = date.today() - timedelta(days=1)
+            current_schedule.scheduled_at = datetime.now().replace(second=0, microsecond=0) - timedelta(hours=1)
+            session.add(
+                ReviewSchedule(
+                    palace_id=palace.id,
+                    scheduled_date=stale_due_at.date(),
+                    scheduled_at=stale_due_at,
+                    interval_days=2,
+                    algorithm_used="ebbinghaus",
+                    completed=False,
+                    review_number=1,
+                    review_type="standard",
+                    anchor_date=palace.created_at.date(),
+                )
+            )
+            session.commit()
+
+        before = datetime.now().replace(second=0, microsecond=0)
+        response = self.client.post(
+            "/api/v1/review/session/1/submit",
+            json={"duration_seconds": 12, "completion_mode": "manual_complete"},
+        )
+        after = datetime.now().replace(second=0, microsecond=0)
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()["ok"])
+
+        with self.SessionLocal() as session:
+            pending = (
+                session.query(ReviewSchedule)
+                .filter_by(palace_id=1, completed=False, review_number=1)
+                .all()
+            )
+            self.assertEqual(len(pending), 1)
+            self.assertIsNotNone(pending[0].scheduled_at)
+            self.assertNotEqual(pending[0].scheduled_at, stale_due_at)
+            self.assertGreaterEqual(pending[0].scheduled_at, before + timedelta(days=2))
+            self.assertLessEqual(pending[0].scheduled_at, after + timedelta(days=2))
+
+    def test_submit_review_uses_scheduled_time_as_anchor_when_enabled(self):
+        with self.SessionLocal() as session:
+            session.add_all(
+                [
+                    Config(key="ebbinghaus_intervals", value="1,2,4"),
+                    Config(key="early_review_anchor", value="true"),
+                ]
+            )
+            palace = session.query(Palace).filter_by(id=1).first()
+            self.assertIsNotNone(palace)
+            palace.created_at = datetime.now().replace(second=0, microsecond=0) - timedelta(days=2)
+            schedule = session.query(ReviewSchedule).filter_by(id=1).first()
+            self.assertIsNotNone(schedule)
+            due_at = datetime.now().replace(second=0, microsecond=0) + timedelta(hours=2)
+            schedule.scheduled_date = due_at.date()
+            schedule.scheduled_at = due_at
+            session.commit()
+
+        with self.SessionLocal() as session:
+            log, _ = submit_review(
+                session,
+                1,
+                duration_seconds=12,
+                completion_mode="manual_complete",
+            )
+            self.assertIsNotNone(log)
+
+        with self.SessionLocal() as session:
+            next_schedule = (
+                session.query(ReviewSchedule)
+                .filter_by(palace_id=1, completed=False, review_number=1)
+                .first()
+            )
+            self.assertIsNotNone(next_schedule)
+            self.assertEqual(next_schedule.scheduled_at, due_at + timedelta(days=2))
+
+    def test_submit_review_uses_completion_time_when_anchor_disabled(self):
+        with self.SessionLocal() as session:
+            session.add_all(
+                [
+                    Config(key="ebbinghaus_intervals", value="1,2,4"),
+                    Config(key="early_review_anchor", value="false"),
+                ]
+            )
+            palace = session.query(Palace).filter_by(id=1).first()
+            self.assertIsNotNone(palace)
+            palace.created_at = datetime.now().replace(second=0, microsecond=0) - timedelta(days=2)
+            schedule = session.query(ReviewSchedule).filter_by(id=1).first()
+            self.assertIsNotNone(schedule)
+            due_at = datetime.now().replace(second=0, microsecond=0) + timedelta(hours=2)
+            schedule.scheduled_date = due_at.date()
+            schedule.scheduled_at = due_at
+            session.commit()
+
+        before = datetime.now().replace(second=0, microsecond=0)
+        with self.SessionLocal() as session:
+            log, _ = submit_review(
+                session,
+                1,
+                duration_seconds=12,
+                completion_mode="manual_complete",
+            )
+            self.assertIsNotNone(log)
+        after = datetime.now().replace(second=0, microsecond=0)
+
+        with self.SessionLocal() as session:
+            next_schedule = (
+                session.query(ReviewSchedule)
+                .filter_by(palace_id=1, completed=False, review_number=1)
+                .first()
+            )
+            self.assertIsNotNone(next_schedule)
+            self.assertIsNotNone(next_schedule.scheduled_at)
+            self.assertGreaterEqual(next_schedule.scheduled_at, before + timedelta(days=2))
+            self.assertLessEqual(next_schedule.scheduled_at, after + timedelta(days=2))
+            self.assertNotEqual(next_schedule.scheduled_at, due_at + timedelta(days=2))
+
     def test_submit_segment_review_schedules_next_round_from_completion_time(self):
         with self.SessionLocal() as session:
             session.add(Config(key="ebbinghaus_intervals", value="1,2,4"))
@@ -289,6 +418,70 @@ class ReviewRouteTests(unittest.TestCase):
             self.assertIsNotNone(completed_schedule.completed_at)
             self.assertGreaterEqual(completed_schedule.completed_at, before)
             self.assertLessEqual(completed_schedule.completed_at, after)
+
+    def test_submit_segment_review_rebuilds_stale_future_pending_schedule(self):
+        stale_due_at = datetime.now().replace(second=0, microsecond=0) + timedelta(days=5)
+        with self.SessionLocal() as session:
+            session.add(Config(key="ebbinghaus_intervals", value="1,2,4"))
+            palace = session.query(Palace).filter_by(id=1).first()
+            self.assertIsNotNone(palace)
+            segment = PalaceSegment(
+                palace_id=palace.id,
+                name="第 1 部分",
+                color="#14b8a6",
+                node_uids_json=json.dumps(["branch-a"]),
+                sort_order=0,
+            )
+            session.add(segment)
+            session.flush()
+            schedule = PalaceSegmentReviewSchedule(
+                palace_segment_id=segment.id,
+                scheduled_date=date.today() - timedelta(days=1),
+                scheduled_at=datetime.now().replace(second=0, microsecond=0) - timedelta(hours=1),
+                interval_days=1,
+                algorithm_used="ebbinghaus",
+                completed=False,
+                review_number=0,
+                review_type="standard",
+                anchor_date=date.today() - timedelta(days=2),
+            )
+            stale_schedule = PalaceSegmentReviewSchedule(
+                palace_segment_id=segment.id,
+                scheduled_date=stale_due_at.date(),
+                scheduled_at=stale_due_at,
+                interval_days=2,
+                algorithm_used="ebbinghaus",
+                completed=False,
+                review_number=1,
+                review_type="standard",
+                anchor_date=date.today() - timedelta(days=2),
+            )
+            session.add_all([schedule, stale_schedule])
+            session.commit()
+            schedule_id = schedule.id
+
+        before = datetime.now().replace(second=0, microsecond=0)
+        with self.SessionLocal() as session:
+            submitted, _ = submit_segment_review(
+                session,
+                schedule_id,
+                duration_seconds=30,
+                completion_mode="manual_complete",
+            )
+            self.assertIsNotNone(submitted)
+        after = datetime.now().replace(second=0, microsecond=0)
+
+        with self.SessionLocal() as session:
+            pending = (
+                session.query(PalaceSegmentReviewSchedule)
+                .filter_by(palace_segment_id=1, completed=False, review_number=1)
+                .all()
+            )
+            self.assertEqual(len(pending), 1)
+            self.assertIsNotNone(pending[0].scheduled_at)
+            self.assertNotEqual(pending[0].scheduled_at, stale_due_at)
+            self.assertGreaterEqual(pending[0].scheduled_at, before + timedelta(days=2))
+            self.assertLessEqual(pending[0].scheduled_at, after + timedelta(days=2))
 
     def test_adjust_segment_review_progress_advances_and_reschedules_next_round(self):
         completed_at = datetime(2026, 5, 10, 10, 30)
@@ -474,6 +667,111 @@ class ReviewRouteTests(unittest.TestCase):
             )
             self.assertEqual(schedules[0].completed_at, new_completed_at)
             self.assertEqual(schedules[1].scheduled_at, new_completed_at + timedelta(days=2))
+
+    def test_default_segment_review_progress_rebuilds_stale_future_pending_schedule(self):
+        stale_due_at = datetime(2026, 5, 29, 10, 0)
+        completed_at = datetime(2026, 5, 24, 10, 0)
+        with self.SessionLocal() as session:
+            session.add(Config(key="ebbinghaus_intervals", value="1,2,4"))
+            palace = session.query(Palace).filter_by(id=1).first()
+            self.assertIsNotNone(palace)
+            palace.created_at = datetime(2026, 5, 20, 10, 0)
+            first_schedule = session.query(ReviewSchedule).filter_by(id=1).first()
+            self.assertIsNotNone(first_schedule)
+            first_schedule.completed = True
+            first_schedule.completed_at = datetime(2026, 5, 20, 10, 0)
+            first_schedule.scheduled_date = first_schedule.completed_at.date()
+            first_schedule.scheduled_at = first_schedule.completed_at
+            session.add(
+                ReviewSchedule(
+                    palace_id=palace.id,
+                    scheduled_date=stale_due_at.date(),
+                    scheduled_at=stale_due_at,
+                    interval_days=2,
+                    algorithm_used="ebbinghaus",
+                    completed=False,
+                    review_number=1,
+                    review_type="standard",
+                    anchor_date=palace.created_at.date(),
+                )
+            )
+            session.commit()
+
+        response = self.client.put(
+            "/api/v1/palaces/1/default-segment/review-progress",
+            json={
+                "completed_count": 1,
+                "completed_review_number": 0,
+                "completed_at": completed_at.isoformat(timespec="minutes"),
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+
+        with self.SessionLocal() as session:
+            pending = (
+                session.query(ReviewSchedule)
+                .filter_by(palace_id=1, completed=False, review_number=1)
+                .all()
+            )
+            self.assertEqual(len(pending), 1)
+            self.assertEqual(pending[0].scheduled_at, completed_at + timedelta(days=2))
+            self.assertNotEqual(pending[0].scheduled_at, stale_due_at)
+
+    def test_profile_review_settings_apply_to_pending_rebuilds_for_anchor_change(self):
+        early_completed_at = datetime(2026, 5, 20, 8, 0)
+        scheduled_due_at = datetime(2026, 5, 20, 10, 0)
+        stale_pending_at = early_completed_at + timedelta(days=2)
+        anchored_pending_at = scheduled_due_at + timedelta(days=2)
+        with self.SessionLocal() as session:
+            session.add_all(
+                [
+                    Config(key="ebbinghaus_intervals", value="1,2,4"),
+                    Config(key="early_review_anchor", value="false"),
+                ]
+            )
+            palace = session.query(Palace).filter_by(id=1).first()
+            self.assertIsNotNone(palace)
+            palace.created_at = datetime(2026, 5, 18, 10, 0)
+            first_schedule = session.query(ReviewSchedule).filter_by(id=1).first()
+            self.assertIsNotNone(first_schedule)
+            first_schedule.completed = True
+            first_schedule.completed_at = early_completed_at
+            first_schedule.scheduled_date = scheduled_due_at.date()
+            first_schedule.scheduled_at = scheduled_due_at
+            session.add(
+                ReviewSchedule(
+                    palace_id=palace.id,
+                    scheduled_date=stale_pending_at.date(),
+                    scheduled_at=stale_pending_at,
+                    interval_days=2,
+                    algorithm_used="ebbinghaus",
+                    completed=False,
+                    review_number=1,
+                    review_type="standard",
+                    anchor_date=palace.created_at.date(),
+                )
+            )
+            session.commit()
+
+        response = self.client.put(
+            "/api/v1/profile/review-settings",
+            json={
+                "early_review_anchor": "true",
+                "apply_to_pending": "all",
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["early_review_anchor"], "true")
+
+        with self.SessionLocal() as session:
+            pending = (
+                session.query(ReviewSchedule)
+                .filter_by(palace_id=1, completed=False, review_number=1)
+                .all()
+            )
+            self.assertEqual(len(pending), 1)
+            self.assertEqual(pending[0].scheduled_at, anchored_pending_at)
+            self.assertNotEqual(pending[0].scheduled_at, stale_pending_at)
 
     def test_ensure_review_log_time_records_backfills_once(self):
         with self.SessionLocal() as session:
@@ -1261,9 +1559,57 @@ class ReviewRouteTests(unittest.TestCase):
             self.assertGreater(changed, 0)
             schedules = session.query(ReviewSchedule).filter_by(palace_id=1).order_by(ReviewSchedule.review_number, ReviewSchedule.id).all()
 
-            self.assertEqual(len(schedules), 1)
-            self.assertFalse(schedules[0].completed)
-            self.assertEqual(schedules[0].review_number, 1)
+            self.assertEqual(len(schedules), 2)
+            self.assertTrue(schedules[0].completed)
+            self.assertEqual(schedules[0].review_number, 0)
+            self.assertFalse(schedules[1].completed)
+            self.assertEqual(schedules[1].review_number, 1)
+
+    def test_run_review_schedule_repair_migration_marks_completion_once(self):
+        original_is_completed = main_module.is_app_migration_completed
+        original_mark_completed = main_module.mark_app_migration_completed
+        original_repair = main_module.repair_review_stage_progress
+        calls: list[tuple[str, dict]] = []
+
+        try:
+            main_module.is_app_migration_completed = lambda key: False
+            main_module.repair_review_stage_progress = lambda session: {"palace_count": 1, "segment_count": 2}
+            main_module.mark_app_migration_completed = lambda key, payload: calls.append((key, payload))
+
+            with self.SessionLocal() as session:
+                result = main_module.run_review_schedule_repair_migration(session)
+
+            self.assertEqual(result, {"palace_count": 1, "segment_count": 2})
+            self.assertEqual(len(calls), 1)
+            self.assertEqual(calls[0][0], main_module.REVIEW_SCHEDULE_REPAIR_MIGRATION_KEY)
+            self.assertEqual(calls[0][1]["result"], {"palace_count": 1, "segment_count": 2})
+        finally:
+            main_module.is_app_migration_completed = original_is_completed
+            main_module.mark_app_migration_completed = original_mark_completed
+            main_module.repair_review_stage_progress = original_repair
+
+    def test_run_review_schedule_repair_migration_skips_when_already_completed(self):
+        original_is_completed = main_module.is_app_migration_completed
+        original_mark_completed = main_module.mark_app_migration_completed
+        original_repair = main_module.repair_review_stage_progress
+        repair_calls: list[int] = []
+        mark_calls: list[int] = []
+
+        try:
+            main_module.is_app_migration_completed = lambda key: True
+            main_module.repair_review_stage_progress = lambda session: repair_calls.append(1) or {"palace_count": 0, "segment_count": 0}
+            main_module.mark_app_migration_completed = lambda key, payload: mark_calls.append(1)
+
+            with self.SessionLocal() as session:
+                result = main_module.run_review_schedule_repair_migration(session)
+
+            self.assertIsNone(result)
+            self.assertEqual(repair_calls, [])
+            self.assertEqual(mark_calls, [])
+        finally:
+            main_module.is_app_migration_completed = original_is_completed
+            main_module.mark_app_migration_completed = original_mark_completed
+            main_module.repair_review_stage_progress = original_repair
 
     def test_palace_list_shows_mastered_palace_as_full_progress(self):
         with self.SessionLocal() as session:

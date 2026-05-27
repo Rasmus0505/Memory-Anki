@@ -35,11 +35,27 @@ export default function PalaceEdit() {
     () => (page.palaceId ? `palace_${page.palaceId}` : null),
     [page.palaceId],
   )
+  const importSubjectOptions = useMemo(() => {
+    const seen = new Set<number>()
+    return (page.palace?.chapters || [])
+      .map((chapter) => chapter.subject)
+      .filter((subject): subject is { id: number; name: string } => Boolean(subject?.id && subject?.name))
+      .filter((subject) => {
+        if (seen.has(subject.id)) return false
+        seen.add(subject.id)
+        return true
+      })
+  }, [page.palace?.chapters])
   const mindMapImport = useMindMapImport({
     entityKey: importEntityKey,
     editorState: page.editorState,
     setEditorState: page.setEditorState,
     selectedNodeUid,
+    subjectOptions: importSubjectOptions,
+    defaultSubjectId:
+      page.palace?.chapters.find((chapter) => chapter.id === page.primaryChapterId)?.subject?.id ??
+      page.palace?.chapters.find((chapter) => chapter.subject?.id)?.subject?.id ??
+      null,
   })
 
   const selectedNodeLabel = page.selectedNodes?.[0]?.text ?? ''
@@ -213,7 +229,7 @@ export default function PalaceEdit() {
                   practiceToggleLabel={page.editorMode === 'practice' ? '复习' : '练习'}
                   immersiveModeActive={page.mindMapFullscreen}
                   showImportButtons
-                  syncOnPropChange={page.editorMode === 'practice'}
+                  syncOnPropChange
                   preserveViewOnSync={
                     page.editorMode === 'practice' || mindMapImport.importAppliedSyncVersion > 0
                   }
@@ -305,7 +321,8 @@ export default function PalaceEdit() {
         onOpenChange={mindMapImport.setImportOpen}
         mode={mindMapImport.importMode}
         onModeChange={mindMapImport.setImportMode}
-        workflow={mindMapImport.mindMapImportWorkflow}
+        sourceKind={mindMapImport.importSourceKind}
+        onSourceKindChange={mindMapImport.setImportSourceKind}
         onWorkflowChange={mindMapImport.setMindMapImportWorkflow}
         loading={mindMapImport.importLoading}
         applying={mindMapImport.importApplying}
@@ -318,6 +335,33 @@ export default function PalaceEdit() {
         structureImageId={mindMapImport.importStructureImageId}
         batchStatus={mindMapImport.importBatchStatus}
         batchMeta={mindMapImport.importBatchMeta}
+        subjectOptions={mindMapImport.importSubjectOptions}
+        selectedSubjectId={mindMapImport.importSelectedSubjectId}
+        onSelectedSubjectIdChange={mindMapImport.setImportSelectedSubjectId}
+        subjectDocuments={mindMapImport.importSubjectDocuments}
+        subjectDocumentsLoading={mindMapImport.importSubjectDocumentsLoading}
+        selectedSubjectDocumentId={mindMapImport.importSelectedSubjectDocumentId}
+        onSelectedSubjectDocumentIdChange={mindMapImport.setImportSelectedSubjectDocumentId}
+        pdfPageMeta={mindMapImport.importPdfPageMeta}
+        pdfPagesLoading={mindMapImport.importPdfPagesLoading}
+        selectedPdfPages={mindMapImport.importPdfPages}
+        pdfPageInput={mindMapImport.importPdfPageInput}
+        onPdfPageInputChange={mindMapImport.setImportPdfPageInput}
+        pdfSelectionError={mindMapImport.importPdfSelectionError}
+        structurePage={mindMapImport.importStructurePage}
+        onStructurePageChange={mindMapImport.setImportStructurePage}
+        pdfPreviewPage={mindMapImport.importPdfPreviewPage}
+        onPdfPreviewPageChange={mindMapImport.setImportPdfPreviewPage}
+        analyzedPdfPages={mindMapImport.importAnalyzedPdfPages}
+        rangePrompt={mindMapImport.importRangePrompt}
+        onRangePromptChange={mindMapImport.setImportRangePrompt}
+        pdfImportOptions={mindMapImport.importPdfOptions}
+        onPdfImportOptionChange={mindMapImport.setImportPdfOption}
+        importWarnings={mindMapImport.importWarnings}
+        importCanApply={mindMapImport.importCanApply}
+        importMatchMode={mindMapImport.importMatchMode}
+        onTogglePdfPage={mindMapImport.toggleImportPdfPage}
+        onPdfStart={mindMapImport.handlePdfImportStart}
         targetNodeLabel={selectedNodeLabel}
         canAppend={mindMapImport.importCanAppend}
         canUndoLastImport={mindMapImport.importCanUndoLastImport}

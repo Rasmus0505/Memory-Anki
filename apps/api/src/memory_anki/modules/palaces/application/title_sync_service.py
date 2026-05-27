@@ -494,6 +494,57 @@ def build_grouped_palace_list(
     }
 
 
+def build_subject_shelf_summary(
+    session: Session,
+    palaces: list[Palace],
+) -> dict[str, Any]:
+    subject_buckets: dict[int, dict[str, Any]] = {}
+
+    for palace in palaces:
+        reconcile_palace_chapter_binding(session, palace)
+        subject = resolve_palace_subject(palace)
+        subject_key = subject.id if subject is not None else 0
+        bucket = subject_buckets.setdefault(
+            subject_key,
+            {
+                "_subject": subject,
+                "subject": subject_summary(subject),
+                "palace_ids": set(),
+                "chapter_ids": set(),
+                "has_due_review": False,
+                "has_due_later_today": False,
+            },
+        )
+        bucket["palace_ids"].add(palace.id)
+        for chapter in list(getattr(palace, "chapters", []) or []):
+            bucket["chapter_ids"].add(chapter.id)
+
+        if bool(getattr(palace, "has_due_review", False)):
+            bucket["has_due_review"] = True
+        elif _palace_has_due_later_today(palace):
+            bucket["has_due_later_today"] = True
+
+    items: list[dict[str, Any]] = []
+    for bucket in subject_buckets.values():
+        has_due_review = bool(bucket["has_due_review"])
+        has_due_later_today = bool(bucket["has_due_later_today"]) and not has_due_review
+        items.append(
+            {
+                "subject": bucket["subject"],
+                "palace_count": len(bucket["palace_ids"]),
+                "chapter_count": len(bucket["chapter_ids"]),
+                "review_status": (
+                    "due_now" if has_due_review else "due_later_today" if has_due_later_today else "idle"
+                ),
+                "has_due_review": has_due_review,
+                "has_due_later_today": has_due_later_today,
+            }
+        )
+
+    items.sort(key=lambda item: _subject_sort_key(subject_buckets[(item["subject"] or {}).get("id", 0)]["_subject"]))
+    return {"items": items}
+
+
 def build_today_new_palace_outline(session: Session, palaces: list[Palace]) -> list[dict[str, Any]]:
     chapter_cache: dict[int, Chapter | None] = {}
 
@@ -582,3 +633,27 @@ def palace_group_json(group: PalaceGroup) -> dict[str, Any]:
         "sort_order": group.sort_order,
         "source_chapter_id": group.source_chapter_id,
     }
+
+
+def _palace_has_due_later_today(palace: Palace) -> bool:
+    segments = list(getattr(palace, "segments", []) or [])
+    for segment in segments:
+        if _next_review_is_later_today(getattr(segment, "next_review_at", None)):
+            return True
+    return _next_review_is_later_today(getattr(palace, "next_review_at", None))
+
+
+def _next_review_is_later_today(value: Any) -> bool:
+    if not value:
+        return False
+    try:
+        text = str(value)
+        if text.endswith("Z"):
+            text = text.replace("Z", "+00:00")
+        dt = __import__("datetime").datetime.fromisoformat(text)
+    except Exception:
+        return False
+    now = __import__("datetime").datetime.now(dt.tzinfo)
+    if dt <= now:
+        return False
+    return dt.date() == now.date()

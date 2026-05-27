@@ -34,6 +34,7 @@ from memory_anki.modules.reviews.application.schedule_service import (
     normalize_algorithm,
     resolve_interval_from_base_date,
     schedule_display_datetime,
+    use_anchor,
 )
 
 SEGMENT_COLOR_PALETTE = [
@@ -621,6 +622,48 @@ def _target_pending_review_numbers(
     return [completed_count]
 
 
+def _resolve_effective_stage_anchor_at(
+    session: Session,
+    *,
+    actual_completed_at: datetime,
+    scheduled_display_at: datetime | None,
+) -> datetime:
+    normalized_completed_at = _coerce_stage_completed_at(actual_completed_at)
+    if (
+        use_anchor(session)
+        and scheduled_display_at is not None
+        and normalized_completed_at < scheduled_display_at
+        and normalized_completed_at.date() == scheduled_display_at.date()
+    ):
+        return scheduled_display_at.replace(second=0, microsecond=0)
+    return normalized_completed_at
+
+
+def _existing_schedule_display_at(
+    schedules: list[Any],
+    review_number: int,
+    *,
+    palace: Palace | None = None,
+    segment: PalaceSegment | None = None,
+    session: Session,
+) -> datetime | None:
+    existing_schedule = next(
+        (
+            schedule
+            for schedule in schedules
+            if int(getattr(schedule, "review_number", -1)) == review_number
+        ),
+        None,
+    )
+    if existing_schedule is None:
+        return None
+    if palace is not None:
+        return schedule_display_datetime(existing_schedule, palace, session)
+    if segment is not None:
+        return get_segment_schedule_display_datetime(session, segment, existing_schedule)
+    return None
+
+
 def _rebuild_palace_review_schedules(
     session: Session,
     palace: Palace,
@@ -630,8 +673,9 @@ def _rebuild_palace_review_schedules(
     completed_at: datetime | None = None,
     fallback_completed_count: int | None = None,
     preserve_existing_progress: bool = True,
+    algorithm_override: str | None = None,
 ) -> None:
-    algorithm = _palace_algorithm(session, palace)
+    algorithm = normalize_algorithm(algorithm_override or _palace_algorithm(session, palace))
     intervals = get_algorithm_intervals(session, algorithm)
     total = len(intervals)
     safe_completed_count = max(0, min(completed_count, total))
@@ -678,14 +722,14 @@ def _rebuild_palace_review_schedules(
     session.flush()
     session.expire(palace, ['review_schedules'])
 
-    previous_completed_at: datetime | None = None
+    previous_anchor_at: datetime | None = None
     for review_number in range(effective_completed_count):
         stage_completed_at = _coerce_stage_completed_at(
             completed_at_by_stage.get(review_number),
-            fallback=previous_completed_at,
+            fallback=previous_anchor_at,
         )
-        base_datetime = previous_completed_at if review_number >= initial_slot_count else None
-        create_review_schedule(
+        base_datetime = previous_anchor_at if review_number >= initial_slot_count else None
+        created_schedule = create_review_schedule(
             session=session,
             palace_id=palace.id,
             review_number=review_number,
@@ -696,7 +740,21 @@ def _rebuild_palace_review_schedules(
             completed=True,
             completed_at=stage_completed_at,
         )
-        previous_completed_at = stage_completed_at
+        scheduled_display_at = _existing_schedule_display_at(
+            existing_schedules,
+            review_number,
+            palace=palace,
+            session=session,
+        ) or (
+            schedule_display_datetime(created_schedule, palace, session)
+            if created_schedule is not None
+            else None
+        )
+        previous_anchor_at = _resolve_effective_stage_anchor_at(
+            session,
+            actual_completed_at=stage_completed_at,
+            scheduled_display_at=scheduled_display_at,
+        )
 
     palace.mastered = effective_completed_count >= total and total > 0
     if not palace.mastered:
@@ -705,7 +763,7 @@ def _rebuild_palace_review_schedules(
             total=total,
             initial_slot_count=initial_slot_count,
         ):
-            base_datetime = previous_completed_at if review_number >= initial_slot_count else None
+            base_datetime = previous_anchor_at if review_number >= initial_slot_count else None
             create_review_schedule(
                 session=session,
                 palace_id=palace.id,
@@ -727,8 +785,9 @@ def _rebuild_segment_review_schedules(
     completed_count: int,
     completed_review_number: int | None = None,
     completed_at: datetime | None = None,
+    algorithm_override: str | None = None,
 ) -> None:
-    algorithm = _segment_algorithm(session, segment)
+    algorithm = normalize_algorithm(algorithm_override or _segment_algorithm(session, segment))
     intervals = get_algorithm_intervals(session, algorithm)
     total = len(intervals)
     safe_completed_count = max(0, min(completed_count, total))
@@ -761,13 +820,13 @@ def _rebuild_segment_review_schedules(
     session.flush()
     session.expire(segment, ['review_schedules'])
 
-    previous_completed_at: datetime | None = None
+    previous_anchor_at: datetime | None = None
     for review_number in range(safe_completed_count):
         stage_completed_at = _coerce_stage_completed_at(
             completed_at_by_stage.get(review_number),
-            fallback=previous_completed_at,
+            fallback=previous_anchor_at,
         )
-        base_datetime = previous_completed_at if review_number >= initial_slot_count else None
+        base_datetime = previous_anchor_at if review_number >= initial_slot_count else None
         schedule = create_review_schedule(
             session=session,
             palace_id=segment.palace_id,
@@ -789,14 +848,37 @@ def _rebuild_segment_review_schedules(
                 )
             )
             session.expunge(schedule)
-        previous_completed_at = stage_completed_at
+        scheduled_display_at = _existing_schedule_display_at(
+            existing_schedules,
+            review_number,
+            segment=segment,
+            session=session,
+        ) or (
+            _schedule_display_datetime_for_anchor(
+                scheduled_date=schedule.scheduled_date,
+                scheduled_at=schedule.scheduled_at,
+                review_type=schedule.review_type,
+                anchor_datetime=(
+                    segment.created_at
+                    or (segment.palace.created_at if segment.palace else None)
+                ),
+                session=session,
+            )
+            if schedule is not None
+            else None
+        )
+        previous_anchor_at = _resolve_effective_stage_anchor_at(
+            session,
+            actual_completed_at=stage_completed_at,
+            scheduled_display_at=scheduled_display_at,
+        )
 
     for review_number in _target_pending_review_numbers(
         completed_count=safe_completed_count,
         total=total,
         initial_slot_count=initial_slot_count,
     ):
-        base_datetime = previous_completed_at if review_number >= initial_slot_count else None
+        base_datetime = previous_anchor_at if review_number >= initial_slot_count else None
         schedule = create_review_schedule(
             session=session,
             palace_id=segment.palace_id,
@@ -868,12 +950,20 @@ def adjust_palace_default_segment_review_progress(
 
 
 def repair_all_review_stage_progress(session: Session) -> dict[str, Any]:
+    return rebuild_all_pending_review_schedules(session)
+
+
+def rebuild_all_pending_review_schedules(
+    session: Session,
+    *,
+    algorithm_override: str | None = None,
+) -> dict[str, Any]:
     palace_count = 0
     segment_count = 0
 
     palaces = session.query(Palace).all()
     for palace in palaces:
-        algorithm = _palace_algorithm(session, palace)
+        algorithm = normalize_algorithm(algorithm_override or _palace_algorithm(session, palace))
         total = len(get_algorithm_intervals(session, algorithm))
         review_logs = [
             log
@@ -895,12 +985,13 @@ def repair_all_review_stage_progress(session: Session) -> dict[str, Any]:
             palace,
             completed_count=fallback_completed_count,
             fallback_completed_count=fallback_completed_count,
+            algorithm_override=algorithm,
         )
         palace_count += 1
 
     segments = session.query(PalaceSegment).all()
     for segment in segments:
-        algorithm = _segment_algorithm(session, segment)
+        algorithm = normalize_algorithm(algorithm_override or _segment_algorithm(session, segment))
         total = len(get_algorithm_intervals(session, algorithm))
         schedule_completed_count = _infer_completed_stage_count(
             total=total,
@@ -915,6 +1006,7 @@ def repair_all_review_stage_progress(session: Session) -> dict[str, Any]:
             session,
             segment,
             completed_count=fallback_completed_count,
+            algorithm_override=algorithm,
         )
         segment_count += 1
 

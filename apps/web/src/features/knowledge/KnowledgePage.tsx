@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type ChangeEvent } from 'react'
 import { Link } from 'react-router-dom'
-import { FolderTree, Plus, Save, Trash2 } from 'lucide-react'
+import { FileText, FolderTree, Plus, Save, Trash2, Upload } from 'lucide-react'
 import type { MindMapEditorState } from '@/shared/api/contracts'
 import { PageIntro } from '@/shared/components/layout/PageIntro'
 import {
@@ -85,14 +85,15 @@ export default function Knowledge() {
     () => (selectedSubjectId ? `subject_${selectedSubjectId}` : null),
     [selectedSubjectId],
   )
+  const activeSubject = (meta as Subject | null) ?? subjects.find((item) => item.id === selectedSubjectId) ?? null
   const mindMapImport = useMindMapImport({
     entityKey: importEntityKey,
     editorState,
     setEditorState,
     selectedNodeUid,
+    subjectOptions: activeSubject ? [{ id: activeSubject.id, name: activeSubject.name }] : [],
+    defaultSubjectId: selectedSubjectId,
   })
-
-  const activeSubject = (meta as Subject | null) ?? subjects.find((item) => item.id === selectedSubjectId) ?? null
 
   useEffect(() => {
     void getSubjectsApi().then((items) => {
@@ -161,6 +162,16 @@ export default function Knowledge() {
     if (!editorState) return <Badge variant="secondary">加载中</Badge>
     if (isSaving) return <Badge variant="secondary">自动保存中</Badge>
     return <Badge variant="secondary">已接入 mind-map 宿主模式</Badge>
+  }
+
+  const handleSubjectDocumentUpload = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+    try {
+      await mindMapImport.handleSubjectDocumentUpload(file)
+    } finally {
+      event.target.value = ''
+    }
   }
 
   return (
@@ -253,6 +264,53 @@ export default function Knowledge() {
                   删除
                 </Button>
               </div>
+            </div>
+
+            <div className="space-y-3 rounded-2xl border border-border/70 bg-background/60 p-3">
+              <div className="flex items-center gap-2 text-sm font-semibold">
+                <FileText className="h-4 w-4" />
+                学科 PDF 资料库
+              </div>
+              <label className="flex cursor-pointer items-center justify-center rounded-2xl border border-dashed border-border/80 px-3 py-4 text-sm text-muted-foreground transition-colors hover:text-foreground">
+                <Upload className="mr-2 h-4 w-4" />
+                上传 PDF
+                <input
+                  type="file"
+                  accept="application/pdf,.pdf"
+                  className="hidden"
+                  onChange={(event) => void handleSubjectDocumentUpload(event)}
+                  disabled={!activeSubject}
+                />
+              </label>
+              {mindMapImport.importSubjectDocumentsLoading ? (
+                <div className="text-sm text-muted-foreground">正在加载资料…</div>
+              ) : mindMapImport.importSubjectDocuments.length > 0 ? (
+                <div className="space-y-2">
+                  {mindMapImport.importSubjectDocuments.map((document) => (
+                    <div
+                      key={document.id}
+                      className="flex items-center justify-between gap-3 rounded-2xl border border-border/70 bg-background/70 px-3 py-3 text-sm"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate font-medium">{document.original_name}</div>
+                        <div className="mt-1 text-xs text-muted-foreground">{document.page_count} 页</div>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => void mindMapImport.handleSubjectDocumentDelete(document.id)}
+                      >
+                        删除
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="rounded-2xl border border-dashed border-border/80 px-3 py-4 text-sm text-muted-foreground">
+                  还没有上传 PDF 资料。
+                </div>
+              )}
             </div>
 
             <div className="space-y-4 rounded-2xl border border-border/70 bg-background/60 p-3">
@@ -351,6 +409,9 @@ export default function Knowledge() {
         onOpenChange={mindMapImport.setImportOpen}
         mode={mindMapImport.importMode}
         onModeChange={mindMapImport.setImportMode}
+        sourceKind={mindMapImport.importSourceKind}
+        onSourceKindChange={mindMapImport.setImportSourceKind}
+        onWorkflowChange={mindMapImport.setMindMapImportWorkflow}
         loading={mindMapImport.importLoading}
         applying={mindMapImport.importApplying}
         undoing={mindMapImport.importUndoing}
@@ -358,11 +419,46 @@ export default function Knowledge() {
         sourceTree={mindMapImport.importSourceTree}
         extractedText={mindMapImport.importExtractedText}
         imagePreviewUrl={mindMapImport.importImagePreviewUrl}
+        batchImages={mindMapImport.importBatchImages}
+        structureImageId={mindMapImport.importStructureImageId}
+        batchStatus={mindMapImport.importBatchStatus}
+        batchMeta={mindMapImport.importBatchMeta}
+        subjectOptions={mindMapImport.importSubjectOptions}
+        selectedSubjectId={mindMapImport.importSelectedSubjectId}
+        onSelectedSubjectIdChange={mindMapImport.setImportSelectedSubjectId}
+        subjectDocuments={mindMapImport.importSubjectDocuments}
+        subjectDocumentsLoading={mindMapImport.importSubjectDocumentsLoading}
+        selectedSubjectDocumentId={mindMapImport.importSelectedSubjectDocumentId}
+        onSelectedSubjectDocumentIdChange={mindMapImport.setImportSelectedSubjectDocumentId}
+        pdfPageMeta={mindMapImport.importPdfPageMeta}
+        pdfPagesLoading={mindMapImport.importPdfPagesLoading}
+        selectedPdfPages={mindMapImport.importPdfPages}
+        pdfPageInput={mindMapImport.importPdfPageInput}
+        onPdfPageInputChange={mindMapImport.setImportPdfPageInput}
+        pdfSelectionError={mindMapImport.importPdfSelectionError}
+        structurePage={mindMapImport.importStructurePage}
+        onStructurePageChange={mindMapImport.setImportStructurePage}
+        pdfPreviewPage={mindMapImport.importPdfPreviewPage}
+        onPdfPreviewPageChange={mindMapImport.setImportPdfPreviewPage}
+        analyzedPdfPages={mindMapImport.importAnalyzedPdfPages}
+        rangePrompt={mindMapImport.importRangePrompt}
+        onRangePromptChange={mindMapImport.setImportRangePrompt}
+        pdfImportOptions={mindMapImport.importPdfOptions}
+        onPdfImportOptionChange={mindMapImport.setImportPdfOption}
+        importWarnings={mindMapImport.importWarnings}
+        importCanApply={mindMapImport.importCanApply}
+        importMatchMode={mindMapImport.importMatchMode}
+        onTogglePdfPage={mindMapImport.toggleImportPdfPage}
+        onPdfStart={mindMapImport.handlePdfImportStart}
         targetNodeLabel={selectedNodeLabel}
         canAppend={mindMapImport.importCanAppend}
         canUndoLastImport={mindMapImport.importCanUndoLastImport}
         onPaste={mindMapImport.handleImportPaste}
         onFileChange={mindMapImport.handleImportFileChange}
+        onBatchStart={mindMapImport.handleBatchImportStart}
+        onBatchDeleteImage={mindMapImport.handleDeleteBatchImage}
+        onBatchMoveImage={mindMapImport.handleMoveBatchImage}
+        onBatchSetStructureImage={mindMapImport.handleSetStructureImage}
         onApplyReplace={mindMapImport.handleImportApplyReplace}
         onApplyAppend={mindMapImport.handleImportApplyAppend}
         onUndoLastImport={mindMapImport.handleUndoLastImport}

@@ -15,6 +15,19 @@ def list_palaces(session: Session, search: str = ""):
     return query.order_by(Palace.updated_at.desc()).all()
 
 
+def list_palaces_by_subject(session: Session, subject_id: int | None, search: str = ""):
+    palaces = list_palaces(session, search)
+    if subject_id is None:
+        return palaces
+
+    filtered: list[Palace] = []
+    for palace in palaces:
+        chapters = list(getattr(palace, "chapters", []) or [])
+        if any(getattr(chapter, "subject_id", None) == subject_id for chapter in chapters):
+            filtered.append(palace)
+    return filtered
+
+
 def restore_archived_palaces(session: Session) -> int:
     restored = (
         session.query(Palace)

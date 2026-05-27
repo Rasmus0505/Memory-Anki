@@ -2,6 +2,7 @@ import { Suspense, lazy } from 'react'
 import { Route, Routes } from 'react-router-dom'
 import DashboardPage from '@/app/router/DashboardPage'
 import PalaceListPage from '@/app/router/PalaceListPage'
+import PalaceShelfPage from '@/app/router/PalaceShelfPage'
 import PalacePracticePage from '@/app/router/PalacePracticePage'
 import PalaceViewPage from '@/app/router/PalaceViewPage'
 import SegmentPracticePage from '@/app/router/SegmentPracticePage'
@@ -36,7 +37,8 @@ export function AppRouter() {
     <Suspense fallback={<RouteFallback />}>
       <Routes>
         <Route path="/" element={<DashboardPage />} />
-        <Route path="/palaces" element={<PalaceListPage />} />
+        <Route path="/palaces" element={<PalaceShelfPage />} />
+        <Route path="/palaces/list" element={<PalaceListPage />} />
         <Route path="/palaces/new" element={<PalaceEditPage />} />
         <Route path="/palaces/:id" element={<PalaceViewPage />} />
         <Route path="/palaces/:id/practice" element={<PalacePracticePage />} />

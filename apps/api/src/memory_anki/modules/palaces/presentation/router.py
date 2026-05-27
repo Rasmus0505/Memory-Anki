@@ -32,6 +32,7 @@ from memory_anki.modules.palaces.application.palace_service import (
     delete_palace,
     get_palace,
     list_palaces,
+    list_palaces_by_subject,
     restore_archived_palaces,
     update_palace,
 )
@@ -50,6 +51,7 @@ from memory_anki.modules.palaces.application.segment_service import (
     update_palace_segment,
 )
 from memory_anki.modules.palaces.application.title_sync_service import (
+    build_subject_shelf_summary,
     build_chapter_grouped_palace_list,
     build_grouped_palace_list,
     ensure_palace_group_schema,
@@ -278,8 +280,8 @@ def api_list(search: str = "", s: Session = Depends(session_dep)):
 
 
 @router.get("/palaces/grouped")
-def api_list_grouped(search: str = "", s: Session = Depends(session_dep)):
-    palaces = list_palaces(s, search)
+def api_list_grouped(search: str = "", subject_id: int | None = None, s: Session = Depends(session_dep)):
+    palaces = list_palaces_by_subject(s, subject_id, search)
     chapter_grouped = build_chapter_grouped_palace_list(s, palaces, lambda p, sess: palace_json(p, sess))
     model_grouped = build_grouped_palace_list(s, palaces, lambda p, sess: palace_json(p, sess))
     return {
@@ -287,6 +289,14 @@ def api_list_grouped(search: str = "", s: Session = Depends(session_dep)):
         "ungrouped": model_grouped.get("ungrouped", []),
         "subjects": chapter_grouped.get("subjects", []),
     }
+
+
+@router.get("/palaces/subjects")
+def api_list_subject_shelf(search: str = "", s: Session = Depends(session_dep)):
+    palaces = list_palaces(s, search)
+    for palace in palaces:
+        palace_json(palace, s)
+    return build_subject_shelf_summary(s, palaces)
 
 
 @router.get("/palaces/{palace_id}")

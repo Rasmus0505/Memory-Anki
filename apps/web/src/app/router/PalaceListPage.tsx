@@ -1,8 +1,16 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
-import { BookOpen, ChevronDown, ChevronLeft, ChevronRight, Pencil, Plus, Search, Trash2 } from 'lucide-react'
+import { ArrowLeft, BookOpen, ChevronDown, ChevronLeft, ChevronRight, LayoutGrid, List, Pencil, Plus, Rows3, Search, Trash2, WrapText } from 'lucide-react'
 import { toast } from 'sonner'
 import { PalaceStageProgress, formatStageDateTime, toDateTimeLocalValue } from '@/app/router/palace-list/PalaceStageProgress'
+import {
+  DEFAULT_PALACE_LIST_VIEW_SETTINGS,
+  PALACE_LIST_VIEW_SETTINGS_KEY,
+  type PalaceListDensityMode,
+  type PalaceListLayoutMode,
+  type PalaceListViewSettings,
+  isPalaceListViewSettings,
+} from '@/app/router/palace-view-settings'
 import { WEEKDAY_LABELS, formatPlanDate, formatPlanSummary, parsePlanDate, getMonthStart, addMonths, getMonthLabel, getMonthGrid, formatDateKey, getDayGroup } from '@/app/router/palace-list/review-plan'
 import { formatDuration } from '@/entities/session/model'
 import type {
@@ -35,6 +43,7 @@ import {
   DialogTitle,
 } from '@/shared/components/ui/dialog'
 import { Input } from '@/shared/components/ui/input'
+import { useLocalStorageState } from '@/shared/lib/localStorage'
 import { cn } from '@/shared/lib/utils'
 
 interface StageEditState {
@@ -44,6 +53,83 @@ interface StageEditState {
 }
 
 type ReviewButtonState = 'due_now' | 'due_later_today' | 'future' | 'unscheduled'
+
+const listLayoutOptions: Array<{ value: PalaceListLayoutMode; label: string; icon: typeof List }> = [
+  { value: 'chapter-single', label: '单列章节流', icon: List },
+  { value: 'chapter-double', label: '章节内双列', icon: Rows3 },
+  { value: 'chapter-card-grid', label: '章节卡片双列', icon: LayoutGrid },
+  { value: 'flow', label: '卡片流', icon: WrapText },
+]
+
+const listDensityOptions: Array<{ value: PalaceListDensityMode; label: string }> = [
+  { value: 'comfortable', label: '舒展' },
+  { value: 'standard', label: '标准' },
+  { value: 'compact', label: '紧凑' },
+]
+
+function getListSectionWrapperClass(layoutMode: PalaceListLayoutMode) {
+  if (layoutMode === 'chapter-card-grid') return 'grid gap-4 xl:grid-cols-2'
+  return 'space-y-4'
+}
+
+function getChapterPalaceGridClass(layoutMode: PalaceListLayoutMode) {
+  if (layoutMode === 'chapter-double') return 'grid gap-3 xl:grid-cols-2'
+  if (layoutMode === 'flow') return 'grid gap-3 md:grid-cols-2 2xl:grid-cols-3'
+  return 'space-y-3'
+}
+
+function getUngroupedPalaceGridClass(layoutMode: PalaceListLayoutMode) {
+  if (layoutMode === 'chapter-double' || layoutMode === 'chapter-card-grid') return 'grid gap-3 xl:grid-cols-2'
+  if (layoutMode === 'flow') return 'grid gap-3 md:grid-cols-2 2xl:grid-cols-3'
+  return 'space-y-3'
+}
+
+function getChapterCardClass(layoutMode: PalaceListLayoutMode, densityMode: PalaceListDensityMode) {
+  const densityClass =
+    densityMode === 'comfortable'
+      ? 'rounded-3xl p-5'
+      : densityMode === 'compact'
+        ? 'rounded-2xl p-3'
+        : 'rounded-3xl p-4'
+
+  if (layoutMode === 'chapter-card-grid') {
+    return cn('border border-border/70 bg-card/90 shadow-sm', densityClass)
+  }
+  if (layoutMode === 'flow') {
+    return cn('border border-dashed border-border/60 bg-transparent', densityClass)
+  }
+  return 'mb-3'
+}
+
+function getPalaceCardClass(densityMode: PalaceListDensityMode) {
+  if (densityMode === 'comfortable') return 'transition-shadow hover:shadow-md'
+  if (densityMode === 'compact') return 'transition-shadow hover:shadow-sm'
+  return 'transition-shadow hover:shadow-md'
+}
+
+function getPalaceCardContentClass(densityMode: PalaceListDensityMode) {
+  if (densityMode === 'comfortable') return 'gap-4 p-5'
+  if (densityMode === 'compact') return 'gap-2 p-3'
+  return 'gap-3 p-4'
+}
+
+function getPalaceIconClass(densityMode: PalaceListDensityMode) {
+  if (densityMode === 'comfortable') return 'h-11 w-11 rounded-xl'
+  if (densityMode === 'compact') return 'h-9 w-9 rounded-lg'
+  return 'h-10 w-10 rounded-lg'
+}
+
+function getSegmentListClass(densityMode: PalaceListDensityMode) {
+  if (densityMode === 'comfortable') return 'mt-3.5 space-y-3'
+  if (densityMode === 'compact') return 'mt-2.5 space-y-2'
+  return 'mt-3 space-y-2.5'
+}
+
+function getSegmentCardClass(densityMode: PalaceListDensityMode) {
+  if (densityMode === 'comfortable') return 'rounded-2xl px-4 py-3.5'
+  if (densityMode === 'compact') return 'rounded-xl px-3 py-2'
+  return 'rounded-2xl px-3 py-3'
+}
 
 function ensureSubmitSucceeded(result: ReviewSessionSubmitResponse) {
   if (!result?.ok) {
@@ -135,7 +221,14 @@ export default function PalaceList() {
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
   const [searchParams, setSearchParams] = useSearchParams()
   const search = searchParams.get('search') || ''
+  const selectedSubjectId = searchParams.get('subjectId')
+  const showUncategorizedOnly = searchParams.get('uncategorized') === 'true'
   const [collapsedChapters, setCollapsedChapters] = useState<Set<number>>(new Set())
+  const [viewSettings, setViewSettings] = useLocalStorageState<PalaceListViewSettings>(
+    PALACE_LIST_VIEW_SETTINGS_KEY,
+    DEFAULT_PALACE_LIST_VIEW_SETTINGS,
+    isPalaceListViewSettings,
+  )
 
   const dayGroups = useMemo(() => getDayGroup(reviewPlan?.plan ?? []), [reviewPlan])
   const monthGrid = useMemo(() => getMonthGrid(visibleMonth), [visibleMonth])
@@ -144,10 +237,22 @@ export default function PalaceList() {
   const fetchData = useCallback(async () => {
     const params: Record<string, string> = {}
     if (search) params.search = search
+    if (selectedSubjectId) params.subject_id = selectedSubjectId
     const data = await getPalacesGroupedApi(params)
-    setGroupedData(data)
-    return data
-  }, [search])
+    const filteredData = showUncategorizedOnly
+      ? {
+          ...data,
+          subjects: data.subjects.filter((subject) => subject.subject == null),
+        }
+      : selectedSubjectId
+        ? {
+            ...data,
+            subjects: data.subjects.filter((subject) => String(subject.subject?.id ?? '') === selectedSubjectId),
+          }
+        : data
+    setGroupedData(filteredData)
+    return filteredData
+  }, [search, selectedSubjectId, showUncategorizedOnly])
 
   const flattenGroupedPalaces = useCallback((data: PalaceGroupedListResponse) => {
     const list: PalaceGroupedItem[] = []
@@ -163,6 +268,11 @@ export default function PalaceList() {
   const allPalaces = useMemo(() => {
     return flattenGroupedPalaces(groupedData)
   }, [flattenGroupedPalaces, groupedData])
+
+  const currentSubjectTitle = useMemo(() => {
+    if (showUncategorizedOnly) return '未分类'
+    return groupedData.subjects.find((subject) => String(subject.subject?.id ?? '') === selectedSubjectId)?.subject?.name ?? null
+  }, [groupedData.subjects, selectedSubjectId, showUncategorizedOnly])
 
   useEffect(() => {
     void fetchData()
@@ -413,9 +523,9 @@ export default function PalaceList() {
     const singleSegmentState = singleSegment ? getReviewButtonState(singleSegment.next_review_at) : 'unscheduled'
 
     return (
-      <Card key={palace.id} className="transition-shadow hover:shadow-md">
-        <CardContent className="flex items-start gap-3 p-4">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-secondary">
+      <Card key={palace.id} className={getPalaceCardClass(viewSettings.densityMode)}>
+        <CardContent className={cn('flex items-start', getPalaceCardContentClass(viewSettings.densityMode))}>
+          <div className={cn('flex shrink-0 items-center justify-center bg-secondary', getPalaceIconClass(viewSettings.densityMode))}>
             <BookOpen className="h-5 w-5 text-muted-foreground" />
           </div>
           <div className="min-w-0 flex-1">
@@ -469,7 +579,7 @@ export default function PalaceList() {
                 />
               </div>
             ) : Array.isArray(palace.segments) && palace.segments.length > 0 ? (
-              <div className="mt-3 space-y-2.5">
+              <div className={getSegmentListClass(viewSettings.densityMode)}>
                 {palace.segments.map((segment, index) => (
                   (() => {
                     const segmentReviewState = getReviewButtonState(segment.next_review_at)
@@ -481,7 +591,7 @@ export default function PalaceList() {
                     return (
                       <div
                         key={segment.id}
-                        className="rounded-2xl border border-border/60 bg-background/70 px-3 py-3"
+                        className={cn('border border-border/60 bg-background/70', getSegmentCardClass(viewSettings.densityMode))}
                       >
                         <div className="flex flex-wrap items-start gap-3">
                           <div className="min-w-0 flex-1">
@@ -590,7 +700,20 @@ export default function PalaceList() {
     <div className="space-y-8">
       <div className="flex items-center justify-between">
         <div>
+          <div className="mb-3">
+            <Link to="/palaces">
+              <Button variant="ghost" size="sm" className="-ml-3">
+                <ArrowLeft className="h-4 w-4" />
+                返回学科书架
+              </Button>
+            </Link>
+          </div>
           <h1 className="text-2xl font-semibold tracking-tight">记忆宫殿</h1>
+          {currentSubjectTitle ? (
+            <p className="mt-2 text-sm text-muted-foreground">
+              当前书架：{currentSubjectTitle}
+            </p>
+          ) : null}
         </div>
         <Link to="/palaces/new">
           <Button size="sm">
@@ -620,8 +743,59 @@ export default function PalaceList() {
                 />
               </div>
             </div>
+            <div className="flex flex-wrap items-center gap-2" data-testid="list-view-toolbar">
+              <div className="flex flex-wrap items-center gap-1 rounded-xl border border-border/70 bg-background/80 p-1">
+                {listLayoutOptions.map((option) => {
+                  const Icon = option.icon
+                  return (
+                    <Button
+                      key={option.value}
+                      type="button"
+                      variant={viewSettings.layoutMode === option.value ? 'secondary' : 'ghost'}
+                      size="sm"
+                      className="h-8"
+                      onClick={() => setViewSettings((current) => ({ ...current, layoutMode: option.value }))}
+                    >
+                      <Icon className="h-4 w-4" />
+                      {option.label}
+                    </Button>
+                  )
+                })}
+              </div>
+              <div className="flex flex-wrap items-center gap-1 rounded-xl border border-border/70 bg-background/80 p-1">
+                {listDensityOptions.map((option) => (
+                  <Button
+                    key={option.value}
+                    type="button"
+                    variant={viewSettings.densityMode === option.value ? 'secondary' : 'ghost'}
+                    size="sm"
+                    className="h-8"
+                    onClick={() => setViewSettings((current) => ({ ...current, densityMode: option.value }))}
+                  >
+                    {option.label}
+                  </Button>
+                ))}
+              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => setViewSettings(DEFAULT_PALACE_LIST_VIEW_SETTINGS)}
+              >
+                恢复默认
+              </Button>
+            </div>
             {search ? (
-              <Button variant="ghost" size="sm" onClick={() => setSearchParams({})}>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() =>
+                  setSearchParams((params) => {
+                    params.delete('search')
+                    return params
+                  })
+                }
+              >
                 清除搜索
               </Button>
             ) : null}
@@ -629,7 +803,12 @@ export default function PalaceList() {
         </CardContent>
       </Card>
 
-      <div className="space-y-3">
+      <div
+        className="space-y-3"
+        data-testid="list-layout-root"
+        data-layout-mode={viewSettings.layoutMode}
+        data-density-mode={viewSettings.densityMode}
+      >
         {allPalaces.length > 0 ? (
           groupedData.subjects.map((subject) => (
             <div key={subject.subject?.id ?? 'ungrouped'}>
@@ -642,11 +821,12 @@ export default function PalaceList() {
                   {subject.subject.name}
                 </h2>
               ) : null}
+              <div className={getListSectionWrapperClass(viewSettings.layoutMode)}>
               {subject.chapter_groups.map((group) => {
                 const chapterId = group.source_chapter?.id
                 const isCollapsed = chapterId != null && collapsedChapters.has(chapterId)
                 return (
-                <div key={chapterId ?? 'no-chapter'} className="mb-3">
+                <div key={chapterId ?? 'no-chapter'} className={getChapterCardClass(viewSettings.layoutMode, viewSettings.densityMode)}>
                   {group.source_chapter ? (
                     <button
                       type="button"
@@ -670,14 +850,15 @@ export default function PalaceList() {
                     </button>
                   ) : null}
                   {!isCollapsed ? (
-                    <div className="space-y-3">
+                    <div className={getChapterPalaceGridClass(viewSettings.layoutMode)}>
                       {group.palaces.map((palace) => renderPalaceCard(palace))}
                     </div>
                   ) : null}
                 </div>
               )})}
+              </div>
               {subject.ungrouped_palaces.length > 0 ? (
-                <div className="space-y-3">
+                <div className={getUngroupedPalaceGridClass(viewSettings.layoutMode)}>
                   {subject.ungrouped_palaces.map((palace) => renderPalaceCard(palace))}
                 </div>
               ) : null}

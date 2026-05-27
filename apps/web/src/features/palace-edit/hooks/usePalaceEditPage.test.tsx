@@ -42,6 +42,7 @@ vi.mock('@/shared/components/mindmap-host', () => ({
     showToolbarWhenReadonly = false,
     preserveViewOnSync = false,
     showImportButtons = false,
+    syncOnPropChange = false,
   }: {
     onPracticeToggle?: () => void
     onMindMapImportOpen?: () => void
@@ -52,10 +53,11 @@ vi.mock('@/shared/components/mindmap-host', () => ({
     showToolbarWhenReadonly?: boolean
     preserveViewOnSync?: boolean
     showImportButtons?: boolean
+    syncOnPropChange?: boolean
     onFullscreenToggle?: (active?: boolean) => void
   }) => (
     <div>
-      <div>{`mindmap-${practiceModeActive ? 'practice' : 'edit'}-${readonly ? 'readonly' : 'editable'}-${showToolbarWhenReadonly ? 'toolbar' : 'plain'}-${preserveViewOnSync ? 'preserve' : 'reset'}-${showImportButtons ? 'import' : 'noimport'}`}</div>
+      <div>{`mindmap-${practiceModeActive ? 'practice' : 'edit'}-${readonly ? 'readonly' : 'editable'}-${showToolbarWhenReadonly ? 'toolbar' : 'plain'}-${preserveViewOnSync ? 'preserve' : 'reset'}-${showImportButtons ? 'import' : 'noimport'}-${syncOnPropChange ? 'sync' : 'nosync'}`}</div>
       {onPracticeToggle ? (
         <button type="button" onClick={onPracticeToggle}>
           {practiceToggleLabel}
@@ -239,21 +241,21 @@ describe('usePalaceEditPage draft creation', () => {
     })
 
     expect(screen.getByText('outline')).toBeTruthy()
-    expect(screen.getByText('mindmap-edit-editable-plain-reset-import')).toBeTruthy()
+    expect(screen.getByText('mindmap-edit-editable-plain-reset-import-sync')).toBeTruthy()
     expect(screen.getByRole('button', { name: '转脑图' })).toBeTruthy()
     expect(screen.getByRole('button', { name: '转文字' })).toBeTruthy()
 
     fireEvent.click(screen.getByRole('button', { name: '练习' }))
     await waitFor(() => {
       expect(screen.getByText('outline')).toBeTruthy()
-      expect(screen.getByText('mindmap-practice-readonly-toolbar-preserve-import')).toBeTruthy()
+      expect(screen.getByText('mindmap-practice-readonly-toolbar-preserve-import-sync')).toBeTruthy()
       expect(screen.getByRole('button', { name: '复习' })).toBeTruthy()
     })
 
     fireEvent.click(screen.getByRole('button', { name: '复习' }))
     await waitFor(() => {
       expect(screen.getByText('outline')).toBeTruthy()
-      expect(screen.getByText('mindmap-edit-editable-plain-reset-import')).toBeTruthy()
+      expect(screen.getByText('mindmap-edit-editable-plain-reset-import-sync')).toBeTruthy()
       expect(screen.getByRole('button', { name: '练习' })).toBeTruthy()
     })
 
@@ -354,7 +356,7 @@ describe('usePalaceEditPage draft creation', () => {
     )
 
     await waitFor(() => {
-      expect(screen.getByText('mindmap-edit-editable-plain-reset-import')).toBeTruthy()
+      expect(screen.getByText('mindmap-edit-editable-plain-reset-import-sync')).toBeTruthy()
     })
 
     fireEvent.click(screen.getByRole('button', { name: '转脑图' }))
@@ -364,7 +366,7 @@ describe('usePalaceEditPage draft creation', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '覆盖当前脑图' }))
 
-    expect(screen.getByText('mindmap-edit-editable-plain-reset-import')).toBeTruthy()
+    expect(screen.getByText('mindmap-edit-editable-plain-reset-import-sync')).toBeTruthy()
   })
 
   it('raises the import drawer above the immersive card when fullscreen is active', async () => {
@@ -405,6 +407,52 @@ describe('usePalaceEditPage draft creation', () => {
 
     await waitFor(() => {
       expect(screen.getByText('drawer-z-[130]-z-[120]')).toBeTruthy()
+    })
+  })
+
+  it('exits immersive mode on Escape regardless of practice or edit mode shell state', async () => {
+    vi.spyOn(palaceApi, 'getPalaceEditorApi').mockResolvedValue({
+      palace: {
+        id: 101,
+        title: '测试宫殿',
+        description: '',
+        created_at: null,
+        attachments: [],
+        chapters: [],
+      },
+      editor_doc: {
+        root: {
+          data: { text: '测试宫殿', uid: 'root-1' },
+          children: [{ data: { text: '原节点', uid: 'node-1' }, children: [] }],
+        },
+      },
+      editor_config: {},
+      editor_local_config: {},
+      lang: 'zh',
+    } as never)
+
+    render(
+      <MemoryRouter initialEntries={['/palaces/101/edit']}>
+        <Routes>
+          <Route path="/palaces/:id/edit" element={<PalaceEditPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText('outline')).toBeTruthy()
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: '切换半屏' }))
+
+    await waitFor(() => {
+      expect(screen.queryByText('outline')).toBeNull()
+    })
+
+    fireEvent.keyDown(window, { key: 'Escape' })
+
+    await waitFor(() => {
+      expect(screen.getByText('outline')).toBeTruthy()
     })
   })
 })

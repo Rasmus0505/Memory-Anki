@@ -326,6 +326,31 @@ class Subject(Base):
         cascade="all, delete-orphan",
         order_by="Chapter.sort_order",
     )
+    documents: Mapped[list[SubjectDocument]] = relationship(
+        "SubjectDocument",
+        back_populates="subject",
+        cascade="all, delete-orphan",
+        order_by="SubjectDocument.created_at.desc()",
+    )
+
+
+class SubjectDocument(Base):
+    __tablename__ = "subject_documents"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    subject_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("subjects.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    filename: Mapped[str] = mapped_column(String(300), nullable=False)
+    original_name: Mapped[str] = mapped_column(String(300), nullable=False)
+    mime_type: Mapped[str] = mapped_column(String(120), nullable=False, default="application/pdf")
+    file_size: Mapped[int] = mapped_column(Integer, default=0)
+    page_count: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime | None] = mapped_column(DateTime, default=utc_now_naive)
+
+    subject: Mapped[Subject] = relationship("Subject", back_populates="documents")
 
 
 class Chapter(Base):

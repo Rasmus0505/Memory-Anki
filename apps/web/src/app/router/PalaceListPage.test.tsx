@@ -2,6 +2,7 @@ import * as React from 'react'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import PalaceListPage from '@/app/router/PalaceListPage'
+import { PALACE_LIST_VIEW_SETTINGS_KEY } from '@/app/router/palace-view-settings'
 
 const navigate = vi.fn()
 const searchParams = new URLSearchParams()
@@ -38,6 +39,7 @@ vi.mock('@/shared/api/modules/palaces', () => ({
 }))
 
 vi.mock('@/shared/api/modules/reviews', () => ({
+  submitReviewSessionApi: vi.fn(),
   submitSegmentReviewSessionApi: (...args: unknown[]) => submitSegmentReviewSessionApi(...args),
 }))
 
@@ -126,6 +128,10 @@ describe('PalaceListPage', () => {
     navigate.mockReset()
     getPalacesGroupedApi.mockReset()
     submitSegmentReviewSessionApi.mockReset()
+    searchParams.set('subjectId', '1')
+    searchParams.delete('search')
+    searchParams.delete('uncategorized')
+    window.localStorage.clear()
     getPalacesGroupedApi
       .mockResolvedValueOnce({
         groups: [],
@@ -166,6 +172,7 @@ describe('PalaceListPage', () => {
     render(<PalaceListPage />)
 
     expect(await screen.findByText('第四节 收回教育权运动与教会教育的变革')).toBeTruthy()
+    expect(screen.getByText('当前书架：中国近代史')).toBeTruthy()
     expect(screen.queryByText('第 1 部分')).toBeNull()
     expect(screen.getByText('预计 1分 40秒')).toBeTruthy()
     expect(screen.getByRole('button', { name: '开始复习' })).toBeTruthy()
@@ -197,5 +204,31 @@ describe('PalaceListPage', () => {
     expect(reviewButton.className).toContain('bg-amber-100')
     const practiceButton = screen.getByRole('button', { name: '练习' })
     expect(practiceButton.className).toContain('bg-emerald-600')
+  })
+
+  it('defaults to chapter-double and keeps local view settings after switching', async () => {
+    render(<PalaceListPage />)
+
+    await screen.findByText('第四节 收回教育权运动与教会教育的变革')
+    expect(screen.getByTestId('list-layout-root').dataset.layoutMode).toBe('chapter-double')
+
+    fireEvent.click(screen.getByRole('button', { name: '章节卡片双列' }))
+    fireEvent.click(screen.getByRole('button', { name: '紧凑' }))
+
+    expect(screen.getByTestId('list-layout-root').dataset.layoutMode).toBe('chapter-card-grid')
+    expect(screen.getByTestId('list-layout-root').dataset.densityMode).toBe('compact')
+    expect(window.localStorage.getItem(PALACE_LIST_VIEW_SETTINGS_KEY)).toContain('"layoutMode":"chapter-card-grid"')
+  })
+
+  it('clears search without dropping current subject context', async () => {
+    searchParams.set('search', '教育')
+    render(<PalaceListPage />)
+
+    await screen.findByText('第四节 收回教育权运动与教会教育的变革')
+    fireEvent.click(screen.getByRole('button', { name: '清除搜索' }))
+
+    await waitFor(() => {
+      expect(setSearchParams).toHaveBeenCalled()
+    })
   })
 })

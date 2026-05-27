@@ -4,13 +4,16 @@ import type {
   MindMapBatchImportPreviewResponse,
   MindMapEditorState,
   MindMapImportPreviewResponse,
+  MindMapPdfImportPreviewRequest,
   PalaceGroupedListResponse,
   PalaceListItem,
   PalaceReviewPlanResponse,
+  PalaceSubjectShelfResponse,
   PalaceSegmentSummary,
   PalaceVersionDetail,
   PalaceVersionListResponse,
   SessionProgressSnapshot,
+  TextPdfImportPreviewRequest,
 } from "@/shared/api/contracts"
 
 export function buildAttachmentUrl(attachmentId: number) {
@@ -25,6 +28,11 @@ export function getPalacesApi(params?: Record<string, string>) {
 export function getPalacesGroupedApi(params?: Record<string, string>) {
   const q = params ? `?${new URLSearchParams(params).toString()}` : ""
   return request<PalaceGroupedListResponse>(`/palaces/grouped${q}`)
+}
+
+export function getPalaceSubjectShelfApi(params?: Record<string, string>) {
+  const q = params ? `?${new URLSearchParams(params).toString()}` : ""
+  return request<PalaceSubjectShelfResponse>(`/palaces/subjects${q}`)
 }
 
 export function getPalaceApi(id: number) {
@@ -284,4 +292,24 @@ export async function previewMindMapBatchImportApi(
   })
   const data = await response.json()
   return data as MindMapBatchImportPreviewResponse
+}
+
+export async function previewMindMapPdfImportApi(data: MindMapPdfImportPreviewRequest) {
+  const response = await fetch(`${API_BASE}/import/preview-mindmap-pdf`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  })
+  const payload = await response.json()
+  return payload as MindMapImportPreviewResponse
+}
+
+export async function previewPdfTextApi(data: TextPdfImportPreviewRequest) {
+  const response = await fetch(`${API_BASE}/import/preview-text-pdf`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  })
+  const payload = await response.json()
+  return payload as ImageTextPreviewResponse
 }
