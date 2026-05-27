@@ -3,20 +3,12 @@ setlocal
 title Memory Anki
 cd /d "%~dp0"
 
-set "REPO_ROOT=%~dp0"
 set "API_DIR=%~dp0apps\api"
 set "WEB_DIR=%~dp0apps\web"
 set "API_PORT=8012"
 set "WEB_PORT=5173"
-set "APP_HOME=%~dp0repo-data"
+set "APP_HOME=%LOCALAPPDATA%\MemoryAnki"
 set "LEGACY_DATA_DIR=%~dp0data"
-
-if exist "%REPO_ROOT%memory-anki.env.bat" (
-    call "%REPO_ROOT%memory-anki.env.bat"
-)
-if not defined MEMORY_ANKI_HOME (
-    set "MEMORY_ANKI_HOME=%APP_HOME%"
-)
 
 echo.
 echo ============================================
@@ -63,8 +55,7 @@ echo   Ready
 echo   Web     : http://localhost:%WEB_PORT%
 echo   API     : http://127.0.0.1:%API_PORT%/api/v1
 echo   API Doc : http://127.0.0.1:%API_PORT%/docs
-echo   AppHome : %MEMORY_ANKI_HOME%
-echo   Data    : %MEMORY_ANKI_HOME%\data
+echo   Data    : %APP_HOME%\data
 echo ============================================
 echo.
 echo Windows:

@@ -17,8 +17,6 @@ D:\Memory Anki\
 │       └── src/
 ├── docs/                    # 架构与项目文档
 ├── doc/Phase/               # 需求记录
-├── memory-anki.env.bat      # 仓库内环境变量入口
-├── repo-data/               # 当前正式运行目录（Git 同步）
 ├── tools/                   # 架构检查与辅助脚本
 └── data/                    # 仅保留为 legacy migration source
 ```
@@ -27,9 +25,8 @@ D:\Memory Anki\
 
 - API 开发根：`apps/api`
 - Web 开发根：`apps/web`
-- 默认运行数据目录：`repo-data/data`
-- 仓库内环境变量入口：`memory-anki.env.bat`
-- 启动脚本默认把 `MEMORY_ANKI_HOME` 设为 `repo-data`
+- 默认运行数据目录：`%LOCALAPPDATA%/MemoryAnki/data`
+- 可通过环境变量 `MEMORY_ANKI_HOME` 覆盖运行目录
 - 仓库根 `data/` 不是正式运行目录，只作为旧版本数据导入来源
 
 ## 启动方式
@@ -41,7 +38,7 @@ D:\Memory Anki\
 ## 协作规则
 
 1. 修改前先理解 `apps/api/src/memory_anki` 与 `apps/web/src` 的模块边界，不要回退到旧式全局堆叠结构。
-2. 新运行数据、附件都应落在 `repo-data` 或 `MEMORY_ANKI_HOME` 指向的目录，并以 Git 同步为前提控制冲突。
-3. `repo-data/data/backups` 默认不提交；若仓库根存在旧 `data/`，应通过启动时迁移逻辑导入，不要把旧 `data/` 当作长期运行目录继续写入。
+2. 新运行数据、备份、附件都应落在 `%LOCALAPPDATA%/MemoryAnki` 或 `MEMORY_ANKI_HOME` 指向的目录。
+3. 若仓库根存在旧 `data/`，应通过启动时迁移逻辑导入，不要把仓库内 `data/` 当作长期运行目录继续写入。
 4. 需求记录写入 `D:\Memory Anki\doc\Phase\YYYY-MM-DD.md`。
 5. 前端共享类型优先来自生成契约与 feature wrapper，不要重新引入旧的全局 API 杂糅入口。
