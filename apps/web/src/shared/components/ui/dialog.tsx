@@ -1,4 +1,4 @@
-import { type PropsWithChildren, useEffect } from 'react'
+import { type HTMLAttributes, type PropsWithChildren, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
 
@@ -43,9 +43,14 @@ export function Dialog({ open, onOpenChange, children, modal = true, className =
   )
 }
 
-export function DialogContent({ children, className = '' }: PropsWithChildren<{ className?: string }>) {
+export function DialogContent({
+  children,
+  className = '',
+  ...props
+}: PropsWithChildren<HTMLAttributes<HTMLDivElement>>) {
   return (
     <div
+      {...props}
       className={`pointer-events-auto relative z-10 flex w-full max-w-3xl flex-col rounded-2xl border bg-background shadow-2xl ${className}`}
     >
       {children}

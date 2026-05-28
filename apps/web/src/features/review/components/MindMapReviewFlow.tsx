@@ -1,4 +1,5 @@
 import * as React from 'react'
+import { RotateCcw, SquareCheckBig } from 'lucide-react'
 import {
   BilinkPreviewPopover,
   BilinkSearchPopover,
@@ -8,9 +9,11 @@ import {
 } from '@/features/bilink'
 import type { MindMapEditorState } from '@/shared/api/contracts'
 import { cn } from '@/shared/lib/utils'
-import { ReviewFlowInfoPanel } from '@/features/review/components/ReviewFlowInfoPanel'
 import { ReviewFlowMapPanel } from '@/features/review/components/ReviewFlowMapPanel'
+import { Badge } from '@/shared/components/ui/badge'
+import { Button } from '@/shared/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card'
+import { SessionTimerBar } from '@/shared/components/session/SessionTimerBar'
 import {
   useReviewFlowSession,
 } from '@/features/review/hooks/useReviewFlowSession'
@@ -80,22 +83,26 @@ export function MindMapReviewFlow({
   }, [flow])
 
   return (
-    <div className={cn('space-y-6', flow.screenGlowClass)}>
+    <div className={cn('space-y-5', flow.screenGlowClass)}>
       <div
         className={cn(
-          'grid gap-4 xl:grid-cols-[360px_minmax(0,1fr)]',
+          'grid gap-4 xl:grid-cols-[320px_minmax(0,1fr)]',
           flow.fullscreen && 'grid-cols-1',
         )}
       >
         <div className={cn('space-y-4', flow.fullscreen && 'hidden')}>
-          <ReviewFlowInfoPanel
-            visibleNonRootCount={flow.visibleNonRootCount}
-            revealedNonRootCount={flow.revealedNonRootCount}
-            redNodeCount={flow.redNodeCount}
+          <SessionTimerBar
             effectiveSeconds={flow.timer.effectiveSeconds}
-            persistProgress={persistProgress}
-            timer={flow.timer}
-            fullscreen={flow.fullscreen}
+            idleSeconds={flow.timer.idleSeconds}
+            pauseCount={flow.timer.pauseCount}
+            status={flow.timer.status}
+            onStart={() => flow.timer.start({ source: 'manual' })}
+            onPause={() => flow.timer.pause({ source: 'manual' })}
+            onResume={() => flow.timer.resume({ source: 'manual' })}
+            onAdjustDuration={flow.timer.adjustDuration}
+            showCompleteAction={false}
+            showRestartAction={false}
+            className="sticky top-5 z-20"
           />
         </div>
 
@@ -107,9 +114,35 @@ export function MindMapReviewFlow({
                 'fixed inset-x-5 bottom-5 top-5 z-[90] min-h-0 bg-card/96 shadow-2xl',
             )}
           >
-            <CardHeader className="flex flex-row items-center justify-between gap-3">
-              <div>
-                <CardTitle className="text-base">复习脑图</CardTitle>
+            <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex flex-wrap items-center gap-2">
+                <CardTitle className="text-base">
+                  {sessionKind === 'practice' ? '练习脑图' : '复习脑图'}
+                </CardTitle>
+                <Badge variant="secondary">翻卡模式</Badge>
+                <Badge variant="outline">
+                  已出现 {flow.visibleNonRootCount} / {Math.max(flow.totalNodeCount - 1, 0)}
+                </Badge>
+                {flow.redNodeCount > 0 ? (
+                  <Badge variant="outline">红标 {flow.redNodeCount}</Badge>
+                ) : null}
+                {flow.completed ? (
+                  <Badge className="bg-emerald-600 text-white hover:bg-emerald-600">
+                    本次已完成
+                  </Badge>
+                ) : null}
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                {onRestart ? (
+                  <Button type="button" size="sm" variant="outline" onClick={flow.handleRestart}>
+                    <RotateCcw className="mr-2 h-4 w-4" />
+                    重新开始
+                  </Button>
+                ) : null}
+                <Button type="button" size="sm" disabled={submitting} onClick={() => void flow.finishFlow('manual_complete')}>
+                  <SquareCheckBig className="mr-2 h-4 w-4" />
+                  完成
+                </Button>
               </div>
             </CardHeader>
             <CardContent
@@ -120,14 +153,8 @@ export function MindMapReviewFlow({
             >
               <div className="h-full min-h-0">
                 <ReviewFlowMapPanel
-                  completed={flow.completed}
-                  visibleNonRootCount={flow.visibleNonRootCount}
-                  totalNodeCount={flow.totalNodeCount}
                   fullscreen={flow.fullscreen}
                   onToggleFullscreen={handleFullscreenToggle}
-                  onRestart={onRestart ? flow.handleRestart : undefined}
-                  onComplete={() => void flow.finishFlow('manual_complete')}
-                  submitting={submitting}
                   visibleEditorState={flow.visibleEditorState}
                   bilinkCounts={bilinkCounts.counts}
                   bilinkItems={bilinks.items}

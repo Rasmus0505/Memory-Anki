@@ -5,7 +5,6 @@ import type { MindMapEditorState, PalaceSegmentSummary } from '@/shared/api/cont
 import { PageIntro } from '@/shared/components/layout/PageIntro'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
-import { Card, CardContent } from '@/shared/components/ui/card'
 import {
   clearSegmentPracticeSessionProgressApi,
   getPalaceSegmentApi,
@@ -78,6 +77,7 @@ export default function SegmentPracticePage() {
       <PageIntro
         eyebrow="分块练习"
         title={title}
+        compact
         actions={
           <>
             <Link to="/palaces">
@@ -91,41 +91,37 @@ export default function SegmentPracticePage() {
         }
       />
 
-      <Card className="border-border/70 bg-card/92">
-        <CardContent className="p-5">
-          <MindMapReviewFlow
-            key={`${segment.id}-${flowKey}`}
-            title={title}
-            palaceId={segment.palace_id}
-            sessionKind="practice"
-            editorState={editorState}
-            initialSnapshot={initialSnapshot}
-            persistProgress
-            onSnapshotChange={async (snapshot) => {
-              if (snapshot.completed) {
-                setHasResumeProgress(false)
-                await clearSegmentPracticeSessionProgressApi(segment.id)
-                return
-              }
-              setHasResumeProgress(true)
-              await saveSegmentPracticeSessionProgressApi(segment.id, {
-                completed: snapshot.completed,
-                reveal_map: snapshot.revealMap,
-                red_node_ids: snapshot.redNodeIds,
-              })
-            }}
-            onRestart={async () => {
-              await clearSegmentPracticeSessionProgressApi(segment.id)
-              setHasResumeProgress(false)
-              setInitialSnapshot(null)
-            }}
-            onComplete={async () => {
-              await clearSegmentPracticeSessionProgressApi(segment.id)
-              setHasResumeProgress(false)
-            }}
-          />
-        </CardContent>
-      </Card>
+      <MindMapReviewFlow
+        key={`${segment.id}-${flowKey}`}
+        title={title}
+        palaceId={segment.palace_id}
+        sessionKind="practice"
+        editorState={editorState}
+        initialSnapshot={initialSnapshot}
+        persistProgress
+        onSnapshotChange={async (snapshot) => {
+          if (snapshot.completed) {
+            setHasResumeProgress(false)
+            await clearSegmentPracticeSessionProgressApi(segment.id)
+            return
+          }
+          setHasResumeProgress(true)
+          await saveSegmentPracticeSessionProgressApi(segment.id, {
+            completed: snapshot.completed,
+            reveal_map: snapshot.revealMap,
+            red_node_ids: snapshot.redNodeIds,
+          })
+        }}
+        onRestart={async () => {
+          await clearSegmentPracticeSessionProgressApi(segment.id)
+          setHasResumeProgress(false)
+          setInitialSnapshot(null)
+        }}
+        onComplete={async () => {
+          await clearSegmentPracticeSessionProgressApi(segment.id)
+          setHasResumeProgress(false)
+        }}
+      />
     </div>
   )
 }

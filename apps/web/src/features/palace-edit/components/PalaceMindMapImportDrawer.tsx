@@ -14,7 +14,7 @@ import {
   Trash2,
   Type,
 } from 'lucide-react'
-import { useEffect, useState, type ChangeEvent, type ClipboardEvent, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ChangeEvent, type ClipboardEvent, type ReactNode } from 'react'
 import type {
   BatchImportImageItem,
   ImportSourceKind,
@@ -22,13 +22,19 @@ import type {
   MindMapImportWorkflow,
 } from '@/features/palace-edit/hooks/useMindMapImport'
 import type { ImportHistoryItem } from '@/features/palace-edit/model/mindmap-import'
+import {
+  normalizePreviewConfig,
+  normalizePreviewEditorDoc,
+} from '@/features/palace-edit/model/palace-edit-format'
 import type {
+  MindMapEditorState,
   MindMapImportSourceNode,
   MindMapImportSourceTree,
   PdfImportOptions,
   PdfPageSummary,
   SubjectDocumentSummary,
 } from '@/shared/api/contracts'
+import { MindMapFrame } from '@/shared/components/mindmap-host'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
 import {
@@ -53,6 +59,7 @@ interface PalaceMindMapImportDrawerProps {
   undoing: boolean
   error: string
   sourceTree: MindMapImportSourceTree | null
+  previewEditorDoc: MindMapEditorState['editor_doc']
   extractedText: string
   imagePreviewUrl: string
   batchImages: BatchImportImageItem[]
@@ -151,6 +158,7 @@ export function PalaceMindMapImportDrawer({
   undoing,
   error,
   sourceTree,
+  previewEditorDoc,
   extractedText,
   imagePreviewUrl,
   batchImages,
@@ -206,10 +214,27 @@ export function PalaceMindMapImportDrawer({
   const [view, setView] = useState<'import' | 'history'>('import')
   const [copied, setCopied] = useState(false)
   const [layoutMode, setLayoutMode] = useState<'floating' | 'sidebar'>('floating')
+  const previewSectionRef = useRef<HTMLElement | null>(null)
+  const lastAutoScrollKeyRef = useRef('')
+  const [previewFrameVersion, setPreviewFrameVersion] = useState(0)
+
+  const hasPreviewEditorDoc = Boolean(previewEditorDoc)
+  const previewMindMapState = hasPreviewEditorDoc
+    ? ({
+        editor_doc: normalizePreviewEditorDoc(previewEditorDoc),
+        editor_config: {
+          ...normalizePreviewConfig(null),
+          layout: 'mindMap',
+        },
+        editor_local_config: {},
+        lang: 'zh',
+      } satisfies MindMapEditorState)
+    : null
 
   useEffect(() => {
     if (open) {
       setView('import')
+      lastAutoScrollKeyRef.current = ''
     }
   }, [open])
 
@@ -218,6 +243,25 @@ export function PalaceMindMapImportDrawer({
     const timer = window.setTimeout(() => setCopied(false), 1400)
     return () => window.clearTimeout(timer)
   }, [copied])
+
+  useEffect(() => {
+    if (!open || mode !== 'mindmap') return
+    if (!hasPreviewEditorDoc) return
+    setPreviewFrameVersion((current) => current + 1)
+  }, [open, mode, hasPreviewEditorDoc, previewEditorDoc])
+
+  useEffect(() => {
+    if (!open || view !== 'import' || loading) return
+    const hasResult = mode === 'mindmap' ? Boolean(sourceTree) : Boolean(extractedText)
+    if (!hasResult) return
+    const autoScrollKey =
+      mode === 'mindmap'
+        ? `mindmap:${sourceKind}:${sourceTree?.title ?? ''}:${nodeCount}`
+        : `text:${sourceKind}:${extractedText.length}`
+    if (autoScrollKey === lastAutoScrollKeyRef.current) return
+    lastAutoScrollKeyRef.current = autoScrollKey
+    previewSectionRef.current?.scrollIntoView({ block: 'start', behavior: 'smooth' })
+  }, [open, view, loading, mode, sourceKind, sourceTree, extractedText, nodeCount])
 
   const handleCopyText = async () => {
     if (!extractedText) return
@@ -254,11 +298,12 @@ export function PalaceMindMapImportDrawer({
   return (
     <Dialog open={open} onOpenChange={onOpenChange} modal={false} className={overlayClassName}>
       <DialogContent
+        data-testid="mindmap-import-dialog-content"
         className={cn(
           layoutMode === 'sidebar'
             ? 'ml-auto mr-0 h-[calc(100vh-32px)] max-w-[620px] rounded-none rounded-l-3xl border-l bg-card/98 p-0 shadow-[0_24px_80px_rgba(15,23,42,0.28)]'
             : 'h-[min(92vh,980px)] max-w-[min(92vw,1440px)] rounded-[28px] border bg-card/98 p-0 shadow-[0_24px_80px_rgba(15,23,42,0.28)]',
-          'overflow-y-auto overscroll-contain',
+          'overflow-hidden overscroll-contain',
           className,
         )}
       >
@@ -412,9 +457,10 @@ export function PalaceMindMapImportDrawer({
           ) : (
             <>
               <div className="min-h-0 flex flex-1">
-                <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-                  <div className="shrink-0 border-b px-6 py-4">
-                    <div className="grid gap-4">
+                <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+                  <div data-testid="mindmap-import-scroll-panel" className="min-h-0 flex-1 overflow-y-auto">
+                    <div className="border-b px-6 py-4">
+                      <div className="grid gap-4">
                   <div className="flex flex-wrap items-center gap-2">
                     <SourceKindButton
                       active={sourceKind === 'image-single'}
@@ -787,12 +833,12 @@ export function PalaceMindMapImportDrawer({
                       本次识别使用了 {batchMeta.imageCount} 张图片，结构图为第 {batchMeta.structureImageIndex + 1} 张。
                     </div>
                   ) : null}
+                      </div>
                     </div>
-                  </div>
 
-                  <div className="min-h-0 flex-1 px-6 py-5">
-                    <div className="grid gap-5">
-                      <section className="space-y-3">
+                    <div data-testid="mindmap-import-results" className="px-6 py-5">
+                      <div className="grid gap-5">
+                        <section ref={previewSectionRef} className="space-y-3">
                     <div className="text-sm font-medium">
                       {sourceKind === 'subject-pdf'
                         ? '当前识别页预览'
@@ -836,11 +882,24 @@ export function PalaceMindMapImportDrawer({
                         </div>
                         <div
                           className={cn(
-                            'rounded-2xl border border-border/70 bg-background/70 p-3',
+                            'rounded-2xl border border-border/70 bg-background/70',
                             !sourceTree && 'flex h-[260px] items-center justify-center text-sm text-muted-foreground',
                           )}
                         >
-                          {sourceTree ? (
+                          {previewMindMapState ? (
+                            <div className="h-[360px] overflow-hidden rounded-[inherit]" data-testid="mindmap-import-preview-frame">
+                              <MindMapFrame
+                                key={`mindmap-import-preview-${previewFrameVersion}`}
+                                editorState={previewMindMapState}
+                                readonly
+                                syncOnPropChange
+                                forceSyncKey={`preview:${previewFrameVersion}`}
+                                preserveViewOnSync={false}
+                                onEditorStateChange={() => {}}
+                                className="h-full w-full rounded-[inherit] bg-white"
+                              />
+                            </div>
+                          ) : sourceTree ? (
                             <div className="max-h-[320px] space-y-3 overflow-y-auto pr-1">
                               {sourceTree.children.length > 0 ? (
                                 sourceTree.children.map((node, index) => (
@@ -851,11 +910,11 @@ export function PalaceMindMapImportDrawer({
                               )}
                             </div>
                           ) : sourceKind === 'subject-pdf' ? (
-                            '完成 PDF 范围识别后，这里会显示轻量树形预览。'
+                            '完成 PDF 范围识别后，这里会显示脑图预览。'
                           ) : sourceKind === 'image-batch' ? (
-                            '点击开始识别后，这里会显示多图合成后的轻量树形预览。'
+                            '点击开始识别后，这里会显示多图合成后的脑图预览。'
                           ) : (
-                            '识别完成后，这里会显示轻量树形预览。'
+                            '识别完成后，这里会显示脑图预览。'
                           )}
                         </div>
                         {sourceTree && !importCanApply ? (
@@ -866,16 +925,10 @@ export function PalaceMindMapImportDrawer({
                       </>
                     ) : (
                       <>
-                        <div className="flex items-center justify-between gap-3">
-                          <div className="text-sm font-medium">文字结果</div>
-                          <Button variant="outline" size="sm" onClick={() => void handleCopyText()} disabled={!extractedText}>
-                            {copied ? <Check className="mr-2 h-4 w-4" /> : <Copy className="mr-2 h-4 w-4" />}
-                            {copied ? '已复制' : '复制全部'}
-                          </Button>
-                        </div>
+                        <div className="text-sm font-medium">文字结果</div>
                         <div
                           className={cn(
-                            'rounded-2xl border border-border/70 bg-background/70 p-3',
+                            'flex min-h-[320px] flex-col rounded-2xl border border-border/70 bg-background/70 p-3',
                             !extractedText && 'flex h-[260px] items-center justify-center text-sm text-muted-foreground',
                           )}
                         >
@@ -883,7 +936,7 @@ export function PalaceMindMapImportDrawer({
                             <textarea
                               value={extractedText}
                               readOnly
-                              className="min-h-[320px] w-full resize-y rounded-xl border border-border/70 bg-white px-3 py-3 text-sm leading-6 text-foreground outline-none"
+                              className="h-full min-h-[320px] w-full flex-1 resize-none overflow-y-auto rounded-xl border border-border/70 bg-white px-3 py-3 text-sm leading-6 text-foreground outline-none"
                             />
                           ) : (
                             '识别完成后，这里会保留纯文字结果，你可以反复复制不同片段到导图里。'
@@ -891,7 +944,8 @@ export function PalaceMindMapImportDrawer({
                         </div>
                       </>
                     )}
-                      </section>
+                        </section>
+                      </div>
                     </div>
                   </div>
 
@@ -927,15 +981,16 @@ export function PalaceMindMapImportDrawer({
                         </div>
                       </>
                     ) : (
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="text-xs text-muted-foreground">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="min-w-0 flex-1 text-xs text-muted-foreground">
                           文字会保留在这里，复制后可直接回到脑图里继续编辑，不会自动关闭。
                         </div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex shrink-0 items-center gap-2">
                           <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={loading}>
                             关闭窗口
                           </Button>
                           <Button variant="outline" onClick={() => void handleCopyText()} disabled={!extractedText}>
+                            {copied ? <Check className="mr-2 h-4 w-4" /> : <Copy className="mr-2 h-4 w-4" />}
                             {copied ? '已复制' : '复制全部'}
                           </Button>
                         </div>

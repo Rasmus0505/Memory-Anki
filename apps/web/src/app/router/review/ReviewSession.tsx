@@ -146,6 +146,7 @@ export default function ReviewSession() {
         <PageIntro
           eyebrow="正式复习"
           title={palace.title || '未命名宫殿'}
+          compact
           actions={
             <>
               <Link to={nextOverviewHref(chapterId)}>
@@ -185,47 +186,27 @@ export default function ReviewSession() {
           onComplete={submitCompletion}
         />
 
-        {!mindMapFullscreen ? (
-          <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
-            <Card className="border-border/70 bg-card/92">
-              <CardHeader>
-                <CardTitle className="text-base">复习信息</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3 text-sm text-muted-foreground">
-                <div>当前轮次：{formatReviewStage(session.review_type, session.review_number)}</div>
-                <div>计划间隔：{session.interval_days} 天</div>
-                <div>本轮不再按“忘记/模糊/记住”改变排程强弱，完成后会固定推进到下一轮。</div>
-                <div>如果你提前点击完成，剩余未出现节点会直接揭示并标红，然后立即结束本轮。</div>
-              </CardContent>
-            </Card>
-
-            <Card className="border-border/70 bg-card/92">
-              <CardHeader>
-                <CardTitle className="text-base">附件</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2 text-sm">
-                {palace.attachments.length > 0 ? (
-                  palace.attachments.map((attachment) => (
-                    <a
-                      key={attachment.id}
-                      href={buildAttachmentUrl(attachment.id)}
-                      target="_blank"
-                      className="block rounded-2xl border border-border/70 bg-background/70 px-3 py-3 transition-colors hover:text-foreground"
-                    >
-                      <span className="inline-flex items-center gap-2">
-                        <FileText className="h-4 w-4" />
-                        {attachment.original_name}
-                      </span>
-                    </a>
-                  ))
-                ) : (
-                  <div className="rounded-2xl border border-dashed border-border/80 px-3 py-4 text-muted-foreground">
-                    没有附件。
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </div>
+        {!mindMapFullscreen && palace.attachments.length > 0 ? (
+          <Card className="border-border/70 bg-card/92">
+            <CardHeader>
+              <CardTitle className="text-base">附件</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2 text-sm">
+              {palace.attachments.map((attachment) => (
+                <a
+                  key={attachment.id}
+                  href={buildAttachmentUrl(attachment.id)}
+                  target="_blank"
+                  className="block rounded-2xl border border-border/70 bg-background/70 px-3 py-3 transition-colors hover:text-foreground"
+                >
+                  <span className="inline-flex items-center gap-2">
+                    <FileText className="h-4 w-4" />
+                    {attachment.original_name}
+                  </span>
+                </a>
+              ))}
+            </CardContent>
+          </Card>
         ) : null}
       </div>
 

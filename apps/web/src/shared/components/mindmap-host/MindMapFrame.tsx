@@ -100,6 +100,41 @@ function normalizeEditorDoc(value: MindMapEditorState['editor_doc']): Record<str
   return cloneValue(value)
 }
 
+function buildSyncFingerprint(args: {
+  editorState: MindMapEditorState
+  activeSegmentId: number | null
+  segmentColorMode: 'all' | 'active-only' | 'all-with-active-emphasis'
+  segmentRangeDraft: MindMapHostSegmentRangeDraft
+  bilinkCounts: Record<string, number>
+  segments: MindMapHostSegmentSummary[]
+  preserveViewOnSync: boolean
+  externalSyncKey: string | number | null
+}) {
+  const {
+    editorState,
+    activeSegmentId,
+    segmentColorMode,
+    segmentRangeDraft,
+    bilinkCounts,
+    segments,
+    preserveViewOnSync,
+    externalSyncKey,
+  } = args
+  return JSON.stringify({
+    editor_doc: normalizeEditorDoc(editorState.editor_doc),
+    editor_config: editorState.editor_config,
+    editor_local_config: editorState.editor_local_config,
+    lang: editorState.lang,
+    segments,
+    activeSegmentId,
+    segmentColorMode,
+    segmentRangeDraft,
+    bilinkCounts,
+    preserveViewOnSync,
+    externalSyncKey,
+  })
+}
+
 export function MindMapFrame({
   editorState,
   readonly = false,
@@ -288,6 +323,7 @@ export function MindMapFrame({
     registry[hostId] = {
       getMindMapData: () => normalizeEditorDoc(stateRef.current.editor_doc),
       saveMindMapData: (data) => {
+        if (readonly) return
         suppressNextPropSyncRef.current = true
         onEditorStateChangeRef.current({
           ...stateRef.current,
@@ -296,6 +332,7 @@ export function MindMapFrame({
       },
       getMindMapConfig: () => cloneValue(stateRef.current.editor_config),
       saveMindMapConfig: (config) => {
+        if (readonly) return
         suppressNextPropSyncRef.current = true
         onEditorStateChangeRef.current({
           ...stateRef.current,
@@ -304,6 +341,7 @@ export function MindMapFrame({
       },
       getLanguage: () => stateRef.current.lang || 'zh',
       saveLanguage: (lang) => {
+        if (readonly) return
         suppressNextPropSyncRef.current = true
         onEditorStateChangeRef.current({
           ...stateRef.current,
@@ -312,6 +350,7 @@ export function MindMapFrame({
       },
       getLocalConfig: () => cloneValue(stateRef.current.editor_local_config),
       saveLocalConfig: (config) => {
+        if (readonly) return
         suppressNextPropSyncRef.current = true
         onEditorStateChangeRef.current({
           ...stateRef.current,
@@ -320,6 +359,16 @@ export function MindMapFrame({
       },
       notify: (event, payload) => {
         if (event === 'app_inited') {
+          lastSyncedFingerprintRef.current = buildSyncFingerprint({
+            editorState: stateRef.current,
+            activeSegmentId,
+            segmentColorMode,
+            segmentRangeDraft,
+            bilinkCounts,
+            segments,
+            preserveViewOnSync,
+            externalSyncKey,
+          })
           onReadyRef.current?.()
           syncHostState()
           return
@@ -449,7 +498,18 @@ export function MindMapFrame({
         delete window.__memoryAnkiMindMapHosts[hostId]
       }
     }
-  }, [hostId, syncHostState])
+  }, [
+    activeSegmentId,
+    bilinkCounts,
+    externalSyncKey,
+    hostId,
+    preserveViewOnSync,
+    readonly,
+    segmentColorMode,
+    segmentRangeDraft,
+    segments,
+    syncHostState,
+  ])
 
   useEffect(() => {
     if (isLoaded) {
@@ -459,21 +519,18 @@ export function MindMapFrame({
 
   useEffect(() => {
     if (!syncOnPropChange || !isLoaded) return
-    const fingerprint = JSON.stringify({
-      editor_doc: normalizeEditorDoc(editorState.editor_doc),
-      editor_config: editorState.editor_config,
-      editor_local_config: editorState.editor_local_config,
-      lang: editorState.lang,
-      segments,
+    const fingerprint = buildSyncFingerprint({
+      editorState,
       activeSegmentId,
       segmentColorMode,
       segmentRangeDraft,
       bilinkCounts,
+      segments,
       preserveViewOnSync,
       externalSyncKey,
     })
     if (lastSyncedFingerprintRef.current === fingerprint) return
-    if (suppressNextPropSyncRef.current) {
+    if (!readonly && suppressNextPropSyncRef.current) {
       suppressNextPropSyncRef.current = false
       lastSyncedFingerprintRef.current = fingerprint
       return
@@ -499,16 +556,13 @@ export function MindMapFrame({
     const syncKey = String(forceSyncKey)
     if (lastForcedSyncKeyRef.current === syncKey) return
     lastForcedSyncKeyRef.current = syncKey
-    lastSyncedFingerprintRef.current = JSON.stringify({
-      editor_doc: normalizeEditorDoc(editorState.editor_doc),
-      editor_config: editorState.editor_config,
-      editor_local_config: editorState.editor_local_config,
-      lang: editorState.lang,
-      segments,
+    lastSyncedFingerprintRef.current = buildSyncFingerprint({
+      editorState,
       activeSegmentId,
       segmentColorMode,
       segmentRangeDraft,
       bilinkCounts,
+      segments,
       preserveViewOnSync,
       externalSyncKey,
     })
@@ -535,6 +589,16 @@ export function MindMapFrame({
       src={`/mind-map-host.html?host=${encodeURIComponent(hostId)}`}
       className={className ?? 'h-full w-full border-0'}
       onLoad={() => {
+        lastSyncedFingerprintRef.current = buildSyncFingerprint({
+          editorState: stateRef.current,
+          activeSegmentId,
+          segmentColorMode,
+          segmentRangeDraft,
+          bilinkCounts,
+          segments,
+          preserveViewOnSync,
+          externalSyncKey,
+        })
         setIsLoaded(true)
         syncHostState()
       }}

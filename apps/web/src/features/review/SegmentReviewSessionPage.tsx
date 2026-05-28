@@ -12,7 +12,6 @@ import {
 import { PageIntro } from '@/shared/components/layout/PageIntro'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card'
 import {
   MindMapReviewFlow,
   type ReviewFlowSnapshot,
@@ -137,6 +136,7 @@ export default function SegmentReviewSessionPage() {
         <PageIntro
           eyebrow="分块正式复习"
           title={`${session.palace?.title || '未命名宫殿'} / ${segmentDisplayName}`}
+          compact
           actions={
             <>
               <Link to="/review">
@@ -175,19 +175,6 @@ export default function SegmentReviewSessionPage() {
           }}
           onComplete={submitCompletion}
         />
-
-        {!mindMapFullscreen ? (
-          <Card className="border-border/70 bg-card/92">
-            <CardHeader>
-              <CardTitle className="text-base">复习信息</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3 text-sm text-muted-foreground">
-              <div>当前分块：{segmentDisplayName}</div>
-              <div>计划间隔：{session.interval_days} 天</div>
-              <div>预计复习时长：{session.estimated_review_seconds ?? 0} 秒</div>
-            </CardContent>
-          </Card>
-        ) : null}
       </div>
 
       {session.segment?.stage_labels && session.segment?.review_stages && (

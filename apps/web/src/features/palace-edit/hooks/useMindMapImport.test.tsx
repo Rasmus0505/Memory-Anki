@@ -47,6 +47,22 @@ function Harness() {
         <div data-testid="batch-status">{model.importBatchStatus}</div>
         <div data-testid="pdf-pages">{model.importPdfPages.join(',')}</div>
         <div data-testid="pdf-doc-id">{model.importSelectedSubjectDocumentId ?? ''}</div>
+        <div data-testid="preview-doc-root">
+          {String(
+            (typeof model.importPreviewEditorDoc === 'object' &&
+              model.importPreviewEditorDoc &&
+              'root' in model.importPreviewEditorDoc &&
+              typeof model.importPreviewEditorDoc.root === 'object' &&
+              model.importPreviewEditorDoc.root &&
+              'data' in model.importPreviewEditorDoc.root &&
+              typeof model.importPreviewEditorDoc.root.data === 'object' &&
+              model.importPreviewEditorDoc.root.data &&
+              'text' in model.importPreviewEditorDoc.root.data &&
+              typeof model.importPreviewEditorDoc.root.data.text === 'string'
+              ? model.importPreviewEditorDoc.root.data.text
+              : '') ?? '',
+          )}
+        </div>
         <button type="button" onClick={() => void handleLoadPreview()}>
           load
         </button>
@@ -195,6 +211,8 @@ describe('useMindMapImport', () => {
       import_pdf_quote_original_default: 'true',
       import_pdf_mount_leaf_only_default: 'true',
       import_pdf_preserve_emphasis_default: 'true',
+      import_pdf_semantic_split_default: 'true',
+      import_pdf_preserve_line_breaks_default: 'true',
     } as never)
     vi.spyOn(profileApi, 'updateReviewSettingsApi').mockResolvedValue({
       default_algorithm: 'ebbinghaus',
@@ -214,6 +232,8 @@ describe('useMindMapImport', () => {
       import_pdf_quote_original_default: 'true',
       import_pdf_mount_leaf_only_default: 'true',
       import_pdf_preserve_emphasis_default: 'true',
+      import_pdf_semantic_split_default: 'true',
+      import_pdf_preserve_line_breaks_default: 'true',
     } as never)
     vi.spyOn(palaceApi, 'previewMindMapPdfImportApi').mockResolvedValue({
       ok: true,
@@ -251,6 +271,31 @@ describe('useMindMapImport', () => {
     fireEvent.click(screen.getByRole('button', { name: 'undo' }))
     await waitFor(() => {
       expect(screen.getByTestId('sync-version').textContent).toBe('2')
+    })
+  })
+
+  it('exposes preview editor docs for single image, batch, and pdf imports', async () => {
+    render(<Harness />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'load' }))
+    await waitFor(() => {
+      expect(screen.getByTestId('preview-doc-root').textContent).toBe('Imported')
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'enable-batch' }))
+    fireEvent.click(screen.getByRole('button', { name: 'queue-batch' }))
+    fireEvent.click(screen.getByRole('button', { name: 'start-batch' }))
+    await waitFor(() => {
+      expect(screen.getByTestId('preview-doc-root').textContent).toBe('Batch Imported')
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'enable-pdf' }))
+    fireEvent.click(screen.getByRole('button', { name: 'set-pdf-pages' }))
+    fireEvent.click(screen.getByRole('button', { name: 'set-structure-page' }))
+    fireEvent.click(screen.getByRole('button', { name: 'set-range-prompt' }))
+    fireEvent.click(screen.getByRole('button', { name: 'start-pdf' }))
+    await waitFor(() => {
+      expect(screen.getByTestId('preview-doc-root').textContent).toBe('PDF Imported')
     })
   })
 
@@ -304,6 +349,8 @@ describe('useMindMapImport', () => {
           quote_original_text_only: true,
           mount_on_original_leaf_only: true,
           preserve_emphasis_marks: true,
+          semantic_split_long_paragraphs: true,
+          preserve_line_breaks: true,
         },
       })
     })

@@ -329,6 +329,7 @@ export default function PalaceEdit() {
         undoing={mindMapImport.importUndoing}
         error={mindMapImport.importError}
         sourceTree={mindMapImport.importSourceTree}
+        previewEditorDoc={mindMapImport.importPreviewEditorDoc}
         extractedText={mindMapImport.importExtractedText}
         imagePreviewUrl={mindMapImport.importImagePreviewUrl}
         batchImages={mindMapImport.importBatchImages}

@@ -10,6 +10,19 @@ set "WEB_PORT=5173"
 set "APP_HOME=%LOCALAPPDATA%\MemoryAnki"
 set "LEGACY_DATA_DIR=%~dp0data"
 
+if not defined DASHSCOPE_API_KEY (
+    for /f "usebackq delims=" %%a in (`powershell -NoProfile -Command "[Environment]::GetEnvironmentVariable('DASHSCOPE_API_KEY','User')"`) do set "DASHSCOPE_API_KEY=%%a"
+)
+if not defined DASHSCOPE_BASE_URL (
+    for /f "usebackq delims=" %%a in (`powershell -NoProfile -Command "[Environment]::GetEnvironmentVariable('DASHSCOPE_BASE_URL','User')"`) do set "DASHSCOPE_BASE_URL=%%a"
+)
+
+if defined DASHSCOPE_API_KEY (
+    echo [i] Loaded DASHSCOPE_API_KEY into this startup session.
+) else (
+    echo [!] DASHSCOPE_API_KEY is not available in this startup session.
+)
+
 echo.
 echo ============================================
 echo   Memory Anki ^(apps/api + apps/web^)

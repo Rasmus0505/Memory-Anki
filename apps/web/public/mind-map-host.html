@@ -308,11 +308,115 @@
         pointer-events: auto;
         cursor: pointer;
       }
+
+      .richTextToolbar {
+        display: none !important;
+      }
+
+      .memory-anki-selection-drag-layer {
+        position: fixed;
+        inset: 0;
+        z-index: 10030;
+        pointer-events: none;
+      }
+
+      .memory-anki-selection-drag-layer[hidden] {
+        display: none !important;
+      }
+
+      .memory-anki-selection-drag-proxy {
+        position: fixed;
+        min-width: 132px;
+        max-width: 240px;
+        min-height: 48px;
+        padding: 10px 14px;
+        border: 1px solid rgba(94, 200, 248, 0.72);
+        border-radius: 12px;
+        background: rgba(255, 255, 255, 0.96);
+        color: #0f172a;
+        font-size: 14px;
+        line-height: 1.4;
+        font-weight: 600;
+        box-shadow: 0 20px 36px rgba(15, 23, 42, 0.22);
+        pointer-events: none;
+        overflow: hidden;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        line-clamp: 2;
+        -webkit-box-orient: vertical;
+        word-break: break-word;
+        transform: translate3d(0, 0, 0);
+        transition: opacity 120ms ease, transform 120ms ease;
+      }
+
+      .memory-anki-selection-drag-proxy[hidden] {
+        display: none !important;
+      }
+
+      .memory-anki-selection-drag-slot {
+        position: fixed;
+        height: 2px;
+        border-radius: 999px;
+        background: linear-gradient(
+          90deg,
+          rgba(94, 200, 248, 0.18),
+          rgba(94, 200, 248, 0.95),
+          rgba(94, 200, 248, 0.18)
+        );
+        box-shadow: 0 0 0 3px rgba(94, 200, 248, 0.12);
+        pointer-events: none;
+      }
+
+      .smm-node.memory-anki-selection-drag-source {
+        opacity: 1 !important;
+      }
+
+      .smm-node.memory-anki-selection-drag-source .smm-hover-node,
+      .smm-node.memory-anki-selection-drag-target .smm-hover-node {
+        display: block !important;
+        opacity: 1 !important;
+        stroke-width: 2.5 !important;
+      }
+
+      .smm-node.memory-anki-selection-drag-source .smm-node-shape,
+      .smm-node.memory-anki-selection-drag-target .smm-node-shape {
+        filter: drop-shadow(0 0 0 rgba(94, 200, 248, 0.12))
+          drop-shadow(0 0 12px rgba(94, 200, 248, 0.28));
+      }
+
+      .smm-node.memory-anki-selection-drag-dimmed {
+        opacity: 0.24 !important;
+        transition: opacity 120ms ease;
+      }
+
+      .memory-anki-selection-drag-dimmed-line {
+        opacity: 0.2 !important;
+        transition: opacity 120ms ease;
+      }
+
+      body.memory-anki-selection-dragging,
+      body.memory-anki-selection-dragging * {
+        user-select: none !important;
+        -webkit-user-select: none !important;
+      }
     </style>
   </head>
   <body>
     <div id="app"></div>
     <div class="memory-anki-bilink-badge-layer"></div>
+    <div class="memory-anki-selection-drag-layer" hidden>
+      <svg width="100%" height="100%" aria-hidden="true">
+        <path
+          class="memory-anki-selection-drag-line"
+          fill="none"
+          stroke="#5ec8f8"
+          stroke-width="2.5"
+          stroke-linecap="round"
+        ></path>
+      </svg>
+      <div class="memory-anki-selection-drag-slot" hidden></div>
+      <div class="memory-anki-selection-drag-proxy" hidden></div>
+    </div>
     <script>
       const hostId = new URLSearchParams(window.location.search).get('host')
       const KEYBOARD_FOCUS_CLASS = 'memory-anki-keyboard-focus'
@@ -344,10 +448,88 @@
         listenerRegistered: false,
         pendingInsertion: null,
       }
+      const SELECTION_DRAG_ROOT_PARENT_KEY = '__memory_anki_selection_drag_root__'
+      const SELECTION_DRAG_HOLD_DELAY = 280
+      const SELECTION_DRAG_ACTIVATION_DISTANCE = 10
+      const SELECTION_DRAG_PRE_HOLD_TOLERANCE = 8
+      const SELECTION_DRAG_SLOT_MIN_HEIGHT = 16
+      const SELECTION_DRAG_SLOT_Y_EXPANSION = 6
+      const SELECTION_DRAG_SLOT_X_EXPANSION = 24
+      const SELECTION_DRAG_HISTORY_LIMIT = 20
+      const selectionHistoryProbeState = {
+        token: 0,
+      }
+      const selectionDragHistoryState = {
+        undoStack: [],
+        redoStack: [],
+        pendingEntry: null,
+        nextEntryId: 1,
+        applyingSnapshot: false,
+        pendingFocusSnapshot: null,
+      }
+      const selectionDragState = {
+        pointerId: null,
+        pointerButton: null,
+        stage: 'idle',
+        holdTimer: null,
+        holdReady: false,
+        contextMenuBlockUntil: 0,
+        sourceNodeUid: null,
+        sourceParentUid: null,
+        sourceSiblingUids: [],
+        sourceElement: null,
+        sourceRange: null,
+        sourceText: '',
+        sourceRect: null,
+        sourceNodeRect: null,
+        startX: 0,
+        startY: 0,
+        currentX: 0,
+        currentY: 0,
+        previewTargetNodeUid: null,
+        previewTargetMode: 'cancel',
+        previewInsertionBarRect: null,
+        previewProxyRect: null,
+        dimmedNodeUids: [],
+        dimmedLineNodes: [],
+        dropIntent: {
+          mode: 'cancel',
+          anchorUid: null,
+          parentUid: null,
+          slotRect: null,
+          highlightUid: null,
+        },
+        pendingCreation: null,
+      }
 
       function cloneValue(value) {
         if (value == null) return value
         return JSON.parse(JSON.stringify(value))
+      }
+
+      function buildEmptySelectionDragIntent() {
+        return {
+          mode: 'cancel',
+          anchorUid: null,
+          parentUid: null,
+          slotRect: null,
+          highlightUid: null,
+        }
+      }
+
+      function hasMeaningfulSelectionDragText(text) {
+        return /\S/.test(String(text || '').replace(/\u00a0/g, ' '))
+      }
+
+      function buildEditorStateFingerprint(editorState, preserveView = false) {
+        if (!editorState || typeof editorState !== 'object') return ''
+        return JSON.stringify({
+          editor_doc: cloneValue(editorState.editor_doc) || {},
+          editor_config: cloneValue(editorState.editor_config) || {},
+          editor_local_config: cloneValue(editorState.editor_local_config) || {},
+          lang: editorState.lang || 'zh',
+          preserveView: Boolean(preserveView),
+        })
       }
 
       function getHostBridge() {
@@ -653,15 +835,1410 @@
         getHostBridge()?.notify?.('node_active', [serializeNode(node)])
       }
 
+      function isMeaningfulClientRect(rect) {
+        return Boolean(rect && (rect.width > 0 || rect.height > 0 || rect.left || rect.top))
+      }
+
+      function getEditableInteractionRect(editableElement = getActiveEditableElement()) {
+        const editableRect = editableElement?.getBoundingClientRect?.() || null
+        if (isMeaningfulClientRect(editableRect)) {
+          return editableRect
+        }
+        const activeNode =
+          (focusState.editingNodeUid ? getNodeByUid(focusState.editingNodeUid) : null) ||
+          getCurrentActiveNode()
+        const nodeRect = getNodeRect(activeNode)
+        if (isMeaningfulClientRect(nodeRect)) {
+          return nodeRect
+        }
+        return null
+      }
+
+      function getNodeEditableElement(nodeOrUid) {
+        const nodeElement = getNodeElement(nodeOrUid)
+        if (!nodeElement) return null
+        return (
+          nodeElement.querySelector?.('.ql-editor, [contenteditable="true"], textarea, input') || null
+        )
+      }
+
+      function getSelectionDragCandidateContext(eventTarget, clientX, clientY) {
+        const editingNode =
+          (focusState.editingNodeUid ? getNodeByUid(focusState.editingNodeUid) : null) ||
+          getCurrentActiveNode() ||
+          null
+        const editingNodeUid = getNodeUid(editingNode)
+        const editingEditable = editingNodeUid ? getNodeEditableElement(editingNodeUid) : null
+        const editingNodeRect = getNodeRect(editingNode)
+        const targetNode = getNodeByElement(eventTarget)
+        const targetNodeUid = getNodeUid(targetNode)
+        const targetEditable = targetNodeUid ? getNodeEditableElement(targetNodeUid) : null
+
+        const candidates = [
+          {
+            node: editingNode,
+            editableElement: editingEditable,
+            nodeRect: editingNodeRect,
+            priority: 0,
+          },
+          {
+            node: targetNode,
+            editableElement: targetEditable,
+            nodeRect: getNodeRect(targetNode),
+            priority: 1,
+          },
+          {
+            node: null,
+            editableElement: getActiveEditableElement(),
+            nodeRect: null,
+            priority: 2,
+          },
+        ]
+
+        for (const candidate of candidates) {
+          const editableElement = candidate.editableElement
+          if (!editableElement) continue
+          const selectionText = getEditableSelectionTextForElement(editableElement)
+          if (!selectionText || !hasMeaningfulSelectionDragText(selectionText)) continue
+          if (!isSelectionInsideEditable(editableElement)) continue
+          const selectionRange = getSelectionRangeSnapshotForElement(editableElement)
+          if (!selectionRange) continue
+          const selectionRect = getEditableSelectionRect(editableElement)
+          const editableRect = getEditableInteractionRect(editableElement)
+          const nodeRect = candidate.nodeRect || getNodeRect(candidate.node) || editableRect
+          const canStartFromCurrentPointer =
+            pointInRect(selectionRect, clientX, clientY) ||
+            pointInRect(editableRect, clientX, clientY) ||
+            pointInRect(nodeRect, clientX, clientY)
+          if (!canStartFromCurrentPointer) continue
+          return {
+            editableElement,
+            selectionText,
+            selectionRange,
+            selectionRect,
+            sourceNode: candidate.node || targetNode || editingNode || getCurrentActiveNode(),
+          }
+        }
+
+        return null
+      }
+
+      function resolveSelectionDragSourceElement() {
+        const currentSourceElement = selectionDragState.sourceElement
+        if (currentSourceElement && document.contains(currentSourceElement)) {
+          return currentSourceElement
+        }
+        const sourceElement =
+          getNodeEditableElement(selectionDragState.sourceNodeUid) ||
+          getActiveEditableElement() ||
+          null
+        if (sourceElement) {
+          selectionDragState.sourceElement = sourceElement
+        }
+        return sourceElement
+      }
+
       function getEditableSelectionRect() {
+        const editableElement = arguments.length > 0 ? arguments[0] : getActiveEditableElement()
+        if (editableElement && (editableElement.tagName === 'TEXTAREA' || editableElement.tagName === 'INPUT')) {
+          const start =
+            typeof editableElement.selectionStart === 'number' ? editableElement.selectionStart : 0
+          const end =
+            typeof editableElement.selectionEnd === 'number' ? editableElement.selectionEnd : start
+          if (end > start) {
+            return getEditableInteractionRect(editableElement)
+          }
+        }
         const selection =
           typeof window.getSelection === 'function' ? window.getSelection() : null
         if (!selection || selection.rangeCount <= 0) return null
         const rect = selection.getRangeAt(0).getBoundingClientRect?.()
-        if (rect && (rect.width || rect.height || rect.left || rect.top)) {
+        if (isMeaningfulClientRect(rect)) {
           return rect
         }
-        return getActiveEditableElement()?.getBoundingClientRect?.() || null
+        return getEditableInteractionRect(editableElement)
+      }
+
+      function getEditableSelectionTextForElement(editableElement) {
+        if (!editableElement) return ''
+        if (editableElement.tagName === 'TEXTAREA' || editableElement.tagName === 'INPUT') {
+          const value = String(editableElement.value || '')
+          const start =
+            typeof editableElement.selectionStart === 'number' ? editableElement.selectionStart : 0
+          const end =
+            typeof editableElement.selectionEnd === 'number' ? editableElement.selectionEnd : start
+          if (end > start) {
+            return value.slice(start, end)
+          }
+          return ''
+        }
+        const selection =
+          typeof window.getSelection === 'function' ? window.getSelection() : null
+        if (!selection || selection.rangeCount <= 0 || selection.isCollapsed) return ''
+        const anchorNode = selection.anchorNode
+        const focusNode = selection.focusNode
+        const containsAnchor = anchorNode ? editableElement.contains(anchorNode) : false
+        const containsFocus = focusNode ? editableElement.contains(focusNode) : false
+        if (!containsAnchor && !containsFocus) return ''
+        return String(selection.toString() || '')
+      }
+
+      function getEditableSelectionText() {
+        return getEditableSelectionTextForElement(getActiveEditableElement())
+      }
+
+      function getContentEditableSelectionOffsets(editableElement, range) {
+        if (!editableElement || !(range instanceof Range)) return null
+        try {
+          const startRange = document.createRange()
+          startRange.selectNodeContents(editableElement)
+          startRange.setEnd(range.startContainer, range.startOffset)
+          const endRange = document.createRange()
+          endRange.selectNodeContents(editableElement)
+          endRange.setEnd(range.endContainer, range.endOffset)
+          const start = startRange.toString().length
+          const end = endRange.toString().length
+          if (end <= start) return null
+          return { start, end }
+        } catch (error) {
+          console.warn(error)
+          return null
+        }
+      }
+
+      function getContentEditableTextPosition(editableElement, rawOffset) {
+        if (!editableElement) return null
+        const targetOffset = Math.max(0, Number(rawOffset) || 0)
+        const walker = document.createTreeWalker(editableElement, NodeFilter.SHOW_TEXT)
+        let currentNode = walker.nextNode()
+        let remaining = targetOffset
+        let lastTextNode = null
+        while (currentNode) {
+          const textLength = currentNode.textContent?.length || 0
+          lastTextNode = currentNode
+          if (remaining <= textLength) {
+            return {
+              container: currentNode,
+              offset: remaining,
+            }
+          }
+          remaining -= textLength
+          currentNode = walker.nextNode()
+        }
+        if (lastTextNode) {
+          return {
+            container: lastTextNode,
+            offset: lastTextNode.textContent?.length || 0,
+          }
+        }
+        return {
+          container: editableElement,
+          offset: 0,
+        }
+      }
+
+      function createContentEditableRangeFromOffsets(editableElement, snapshot) {
+        if (!editableElement || !snapshot) return null
+        const start = typeof snapshot.start === 'number' ? snapshot.start : null
+        const end = typeof snapshot.end === 'number' ? snapshot.end : null
+        if (start == null || end == null || end <= start) return null
+        const startPosition = getContentEditableTextPosition(editableElement, start)
+        const endPosition = getContentEditableTextPosition(editableElement, end)
+        if (!startPosition || !endPosition) return null
+        try {
+          const range = document.createRange()
+          range.setStart(startPosition.container, startPosition.offset)
+          range.setEnd(endPosition.container, endPosition.offset)
+          return range
+        } catch (error) {
+          console.warn(error)
+          return null
+        }
+      }
+
+      function getSelectionRangeSnapshotForElement(editableElement) {
+        if (!editableElement) return null
+        if (editableElement.tagName === 'TEXTAREA' || editableElement.tagName === 'INPUT') {
+          const start =
+            typeof editableElement.selectionStart === 'number' ? editableElement.selectionStart : 0
+          const end =
+            typeof editableElement.selectionEnd === 'number' ? editableElement.selectionEnd : start
+          if (end <= start) return null
+          return { start, end }
+        }
+        const selection =
+          typeof window.getSelection === 'function' ? window.getSelection() : null
+        if (!selection || selection.rangeCount <= 0 || selection.isCollapsed) return null
+        const anchorNode = selection.anchorNode
+        const focusNode = selection.focusNode
+        const containsAnchor = anchorNode ? editableElement.contains(anchorNode) : false
+        const containsFocus = focusNode ? editableElement.contains(focusNode) : false
+        if (!containsAnchor && !containsFocus) return null
+        try {
+          return getContentEditableSelectionOffsets(
+            editableElement,
+            selection.getRangeAt(0).cloneRange(),
+          )
+        } catch (error) {
+          console.warn(error)
+          return null
+        }
+      }
+
+      function getSelectionRangeSnapshot() {
+        return getSelectionRangeSnapshotForElement(getActiveEditableElement())
+      }
+
+      function areSelectionRangeSnapshotsEqual(leftRange, rightRange) {
+        if (!leftRange || !rightRange) return leftRange === rightRange
+        const leftIsOffsets =
+          typeof leftRange.start === 'number' && typeof leftRange.end === 'number'
+        const rightIsOffsets =
+          typeof rightRange.start === 'number' && typeof rightRange.end === 'number'
+        if (leftIsOffsets || rightIsOffsets) {
+          return (
+            leftIsOffsets &&
+            rightIsOffsets &&
+            leftRange.start === rightRange.start &&
+            leftRange.end === rightRange.end
+          )
+        }
+        if (!(leftRange instanceof Range) || !(rightRange instanceof Range)) return false
+        return (
+          leftRange.startContainer === rightRange.startContainer &&
+          leftRange.startOffset === rightRange.startOffset &&
+          leftRange.endContainer === rightRange.endContainer &&
+          leftRange.endOffset === rightRange.endOffset
+        )
+      }
+
+      function doesSelectionSnapshotStillResolve(editableElement, expectedRange, expectedText) {
+        if (!editableElement || !expectedRange) return false
+        const resolvedText = String(expectedText || '')
+        const start = typeof expectedRange.start === 'number' ? expectedRange.start : null
+        const end = typeof expectedRange.end === 'number' ? expectedRange.end : null
+        if (start == null || end == null || end <= start) return false
+        const sourceText =
+          editableElement.tagName === 'TEXTAREA' || editableElement.tagName === 'INPUT'
+            ? String(editableElement.value || '')
+            : String(editableElement.textContent || '')
+        try {
+          return sourceText.slice(start, end) === resolvedText
+        } catch (error) {
+          console.warn(error)
+          return false
+        }
+      }
+
+      function doesSelectionStillMatchSnapshot(editableElement, expectedRange, expectedText) {
+        if (!editableElement || !expectedRange) return false
+        const activeEditableElement = getActiveEditableElement()
+        if (activeEditableElement && activeEditableElement !== editableElement) return false
+        const currentRange = getSelectionRangeSnapshotForElement(editableElement)
+        if (!currentRange) {
+          return doesSelectionSnapshotStillResolve(
+            editableElement,
+            expectedRange,
+            expectedText,
+          )
+        }
+        if (!areSelectionRangeSnapshotsEqual(currentRange, expectedRange)) return false
+        return getEditableSelectionTextForElement(editableElement) === String(expectedText || '')
+      }
+
+      function canSelectionDragCandidateStillStart(editableElement, expectedRange, expectedText) {
+        if (!editableElement || !expectedRange) return false
+        const activeEditableElement = getActiveEditableElement()
+        if (activeEditableElement && activeEditableElement !== editableElement) return false
+        return doesSelectionSnapshotStillResolve(editableElement, expectedRange, expectedText)
+      }
+
+      function getEditableTextSnapshot(editableElement) {
+        if (!editableElement) return ''
+        if (editableElement.tagName === 'TEXTAREA' || editableElement.tagName === 'INPUT') {
+          return String(editableElement.value || '')
+        }
+        return String(editableElement.textContent || '')
+      }
+
+      function getRuntimeMindMapDocumentFingerprint() {
+        try {
+          const bridgeData = getHostBridge()?.getMindMapData?.()
+          if (typeof bridgeData !== 'undefined') {
+            return JSON.stringify(cloneValue(bridgeData) || null)
+          }
+        } catch (error) {
+          console.warn(error)
+        }
+
+        try {
+          const mindMap = getMindMap()
+          if (typeof mindMap?.getFullData === 'function') {
+            return JSON.stringify(cloneValue(mindMap.getFullData()) || null)
+          }
+          if (typeof mindMap?.getData === 'function') {
+            return JSON.stringify(cloneValue(mindMap.getData()) || null)
+          }
+        } catch (error) {
+          console.warn(error)
+        }
+
+        return JSON.stringify(
+          cloneValue(window.__memoryAnkiPendingEditorState?.editorState?.editor_doc) || null,
+        )
+      }
+
+      function getCurrentEditorDocSnapshot() {
+        try {
+          const bridgeData = getHostBridge()?.getMindMapData?.()
+          if (typeof bridgeData !== 'undefined') {
+            return cloneValue(bridgeData) || null
+          }
+        } catch (error) {
+          console.warn(error)
+        }
+
+        try {
+          const mindMap = getMindMap()
+          if (typeof mindMap?.getFullData === 'function') {
+            return cloneValue(mindMap.getFullData()) || null
+          }
+          if (typeof mindMap?.getData === 'function') {
+            return cloneValue(mindMap.getData()) || null
+          }
+        } catch (error) {
+          console.warn(error)
+        }
+
+        return cloneValue(window.__memoryAnkiPendingEditorState?.editorState?.editor_doc) || null
+      }
+
+      function clearSelectionDragHoldTimer() {
+        if (selectionDragState.holdTimer == null) return
+        window.clearTimeout(selectionDragState.holdTimer)
+        selectionDragState.holdTimer = null
+      }
+
+      function armSelectionDragHoldTimer() {
+        clearSelectionDragHoldTimer()
+        selectionDragState.holdReady = false
+        selectionDragState.holdTimer = window.setTimeout(() => {
+          selectionDragState.holdTimer = null
+          if (selectionDragState.stage !== 'pending') return
+          selectionDragState.holdReady = true
+        }, SELECTION_DRAG_HOLD_DELAY)
+      }
+
+      function shouldSuppressSelectionDragContextMenu() {
+        if (selectionDragState.stage === 'dragging') return true
+        const until = Number(selectionDragState.contextMenuBlockUntil || 0)
+        return until > Date.now()
+      }
+
+      function captureSelectionDragFocusSnapshot() {
+        return {
+          committedNodeUid: focusState.committedNodeUid || null,
+          visualFocusNodeUid: focusState.visualFocusNodeUid || null,
+          editingNodeUid: focusState.editingNodeUid || null,
+        }
+      }
+
+      function restoreSelectionDragFocusSnapshot(snapshot) {
+        if (!snapshot || typeof snapshot !== 'object') return false
+        focusState.committedNodeUid = snapshot.committedNodeUid || null
+        focusState.visualFocusNodeUid = snapshot.visualFocusNodeUid || snapshot.committedNodeUid || null
+        focusState.editingNodeUid = snapshot.editingNodeUid || null
+        syncKeyboardMode()
+        restoreStableFocusAfterRender()
+        updateKeyboardFocusClass()
+        return true
+      }
+
+      function pushSelectionDragHistoryEntry(entry) {
+        if (!entry) return
+        selectionDragHistoryState.undoStack.push(entry)
+        if (selectionDragHistoryState.undoStack.length > SELECTION_DRAG_HISTORY_LIMIT) {
+          selectionDragHistoryState.undoStack.splice(
+            0,
+            selectionDragHistoryState.undoStack.length - SELECTION_DRAG_HISTORY_LIMIT,
+          )
+        }
+        selectionDragHistoryState.redoStack = []
+      }
+
+      function beginSelectionDragHistoryEntry(selectedText) {
+        const beforeDoc = getCurrentEditorDocSnapshot()
+        if (!beforeDoc) {
+          selectionDragHistoryState.pendingEntry = null
+          return null
+        }
+        const pendingEntry = {
+          id: selectionDragHistoryState.nextEntryId++,
+          selectedText: String(selectedText || ''),
+          beforeDoc,
+          beforeFingerprint: JSON.stringify(beforeDoc),
+          afterDoc: null,
+          afterFingerprint: null,
+          focusBefore: captureSelectionDragFocusSnapshot(),
+          focusAfter: null,
+          committed: false,
+        }
+        selectionDragHistoryState.pendingEntry = pendingEntry
+        return pendingEntry
+      }
+
+      function finalizeSelectionDragHistoryEntry() {
+        const pendingEntry = selectionDragHistoryState.pendingEntry
+        if (!pendingEntry) return false
+        const afterDoc = getCurrentEditorDocSnapshot()
+        if (!afterDoc) return false
+        const afterFingerprint = JSON.stringify(afterDoc)
+        if (!afterFingerprint || afterFingerprint === pendingEntry.beforeFingerprint) {
+          return false
+        }
+        pendingEntry.afterDoc = afterDoc
+        pendingEntry.afterFingerprint = afterFingerprint
+        pendingEntry.focusAfter = captureSelectionDragFocusSnapshot()
+        pendingEntry.committed = true
+        pushSelectionDragHistoryEntry(pendingEntry)
+        selectionDragHistoryState.pendingEntry = null
+        return true
+      }
+
+      function discardPendingSelectionDragHistoryEntry() {
+        selectionDragHistoryState.pendingEntry = null
+      }
+
+      function applySelectionDragHistorySnapshot(entry, direction) {
+        if (!entry || selectionDragHistoryState.applyingSnapshot) return false
+        const snapshotDoc =
+          direction === 'forward' ? cloneValue(entry.afterDoc) : cloneValue(entry.beforeDoc)
+        const focusSnapshot =
+          direction === 'forward' ? entry.focusAfter || entry.focusBefore : entry.focusBefore
+        if (!snapshotDoc) return false
+        const pendingEditorState = window.__memoryAnkiPendingEditorState?.editorState
+        if (!pendingEditorState) return false
+        selectionDragHistoryState.applyingSnapshot = true
+        selectionDragHistoryState.pendingFocusSnapshot = focusSnapshot || null
+        try {
+          getHostBridge()?.saveMindMapData?.(cloneValue(snapshotDoc))
+          syncHostEditorState({
+            editorState: {
+              ...cloneValue(pendingEditorState),
+              editor_doc: snapshotDoc,
+            },
+            preserveView: true,
+          })
+          scheduleModeSync()
+          return true
+        } catch (error) {
+          selectionDragHistoryState.pendingFocusSnapshot = null
+          console.warn(error)
+          return false
+        } finally {
+          window.setTimeout(() => {
+            selectionDragHistoryState.applyingSnapshot = false
+          }, 0)
+        }
+      }
+
+      function tryConsumeSelectionDragHistory(direction) {
+        if (direction !== 'back' && direction !== 'forward') return false
+        const stack =
+          direction === 'back'
+            ? selectionDragHistoryState.undoStack
+            : selectionDragHistoryState.redoStack
+        if (!Array.isArray(stack) || stack.length === 0) return false
+        const currentFingerprint = getRuntimeMindMapDocumentFingerprint()
+        const candidate = stack[stack.length - 1]
+        const expectedFingerprint =
+          direction === 'back' ? candidate.afterFingerprint : candidate.beforeFingerprint
+        if (!candidate || !expectedFingerprint || currentFingerprint !== expectedFingerprint) {
+          return false
+        }
+        stack.pop()
+        const oppositeStack =
+          direction === 'back'
+            ? selectionDragHistoryState.redoStack
+            : selectionDragHistoryState.undoStack
+        oppositeStack.push(candidate)
+        return applySelectionDragHistorySnapshot(candidate, direction)
+      }
+
+      function pointInRect(rect, x, y) {
+        if (!rect) return false
+        return x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom
+      }
+
+      function isSelectionInsideEditable(editableElement) {
+        if (!editableElement) return false
+        if (editableElement.tagName === 'TEXTAREA' || editableElement.tagName === 'INPUT') {
+          const start =
+            typeof editableElement.selectionStart === 'number' ? editableElement.selectionStart : 0
+          const end =
+            typeof editableElement.selectionEnd === 'number' ? editableElement.selectionEnd : start
+          return end > start
+        }
+        const selection =
+          typeof window.getSelection === 'function' ? window.getSelection() : null
+        if (!selection || selection.rangeCount <= 0 || selection.isCollapsed) return false
+        const anchorNode = selection.anchorNode
+        const focusNode = selection.focusNode
+        const containsAnchor = anchorNode ? editableElement.contains(anchorNode) : false
+        const containsFocus = focusNode ? editableElement.contains(focusNode) : false
+        return containsAnchor || containsFocus
+      }
+
+      function getSelectionDragLayerElements() {
+        const layer = document.querySelector('.memory-anki-selection-drag-layer')
+        if (!layer) return null
+        return {
+          layer,
+          line: layer.querySelector('.memory-anki-selection-drag-line'),
+          slot: layer.querySelector('.memory-anki-selection-drag-slot'),
+          proxy: layer.querySelector('.memory-anki-selection-drag-proxy'),
+        }
+      }
+
+      function setSelectionDragInteractionActive(active) {
+        document.body.classList.toggle('memory-anki-selection-dragging', Boolean(active))
+      }
+
+      function getNodeElement(nodeOrUid) {
+        const node = typeof nodeOrUid === 'string' ? getNodeByUid(nodeOrUid) : nodeOrUid
+        return node?.group?.node || null
+      }
+
+      function getNodeHoverElement(nodeOrUid) {
+        const node = typeof nodeOrUid === 'string' ? getNodeByUid(nodeOrUid) : nodeOrUid
+        return node?.hoverNode?.node || node?.group?.node?.querySelector?.('.smm-hover-node') || null
+      }
+
+      function clearSelectionDragNodeClasses() {
+        getCachedNodes().forEach((node) => {
+          const element = getNodeElement(node)
+          element?.classList?.remove(
+            'memory-anki-selection-drag-source',
+            'memory-anki-selection-drag-target',
+            'memory-anki-selection-drag-dimmed',
+            'smm-node-highlight',
+            'smm-node-dragging',
+          )
+        })
+      }
+
+      function clearSelectionDragLineDimming() {
+        if (!Array.isArray(selectionDragState.dimmedLineNodes)) return
+        selectionDragState.dimmedLineNodes.forEach((lineNode) => {
+          lineNode?.classList?.remove?.('memory-anki-selection-drag-dimmed-line')
+          if (lineNode?.style) {
+            lineNode.style.removeProperty('opacity')
+          }
+        })
+        selectionDragState.dimmedLineNodes = []
+      }
+
+      function getNodeLineElements(node) {
+        if (!node || !Array.isArray(node._lines)) return []
+        return node._lines
+          .map((line) => line?.node || null)
+          .filter(Boolean)
+      }
+
+      function collectBranchNodeUids(rootUid) {
+        const visited = new Set()
+        const walk = (uid) => {
+          if (!uid || visited.has(uid)) return
+          visited.add(uid)
+          const node = getNodeByUid(uid)
+          const children = Array.isArray(node?.children) ? node.children : []
+          children.forEach((child) => walk(getNodeUid(child)))
+        }
+        walk(rootUid)
+        return visited
+      }
+
+      function updateSelectionDragDimmedBranch(targetRootUid) {
+        clearSelectionDragLineDimming()
+        const keepUids = new Set()
+        const sourceUid = selectionDragState.sourceNodeUid
+        const sourceParentUid = selectionDragState.sourceParentUid
+        const targetUid = selectionDragState.previewTargetNodeUid
+        const targetRootNode =
+          getNodeByUid(targetRootUid) ||
+          getNodeByUid(targetUid) ||
+          getNodeByUid(sourceUid) ||
+          getNodeByUid(sourceParentUid)
+        if (sourceParentUid) {
+          collectBranchNodeUids(sourceParentUid).forEach((uid) => keepUids.add(uid))
+        }
+        if (targetRootNode) {
+          collectBranchNodeUids(getNodeUid(targetRootNode)).forEach((uid) => keepUids.add(uid))
+          let current = targetRootNode
+          while (current) {
+            const uid = getNodeUid(current)
+            if (uid) keepUids.add(uid)
+            current = current.parent || null
+          }
+        }
+        if (sourceUid) keepUids.add(sourceUid)
+        if (targetUid) keepUids.add(targetUid)
+
+        const nextDimmedNodeUids = []
+        const nextDimmedLineNodes = []
+        getCachedNodes().forEach((node) => {
+          const uid = getNodeUid(node)
+          const element = getNodeElement(node)
+          if (!uid || !element?.classList) return
+          const shouldDim =
+            selectionDragState.stage === 'dragging' &&
+            selectionDragState.previewTargetMode !== 'cancel' &&
+            !keepUids.has(uid)
+          element.classList.toggle('memory-anki-selection-drag-dimmed', shouldDim)
+          if (shouldDim) {
+            nextDimmedNodeUids.push(uid)
+            getNodeLineElements(node).forEach((lineNode) => {
+              lineNode.classList?.add?.('memory-anki-selection-drag-dimmed-line')
+              nextDimmedLineNodes.push(lineNode)
+            })
+          }
+        })
+        selectionDragState.dimmedNodeUids = nextDimmedNodeUids
+        selectionDragState.dimmedLineNodes = nextDimmedLineNodes
+      }
+
+      function getSelectionDragProxyStyle(sourceNode) {
+        const element = getNodeElement(sourceNode)
+        const shapeNode = sourceNode?.shapeNode?.node || element?.querySelector?.('.smm-node-shape')
+        const textWrap =
+          element?.querySelector?.('.smm-richtext-node-wrap, .smm-text-node-wrap, .ql-editor') || element
+        const shapeStyle = shapeNode ? window.getComputedStyle(shapeNode) : null
+        const textStyle = textWrap ? window.getComputedStyle(textWrap) : null
+        const resolvedFill =
+          shapeNode?.getAttribute?.('fill') ||
+          shapeStyle?.fill ||
+          shapeStyle?.backgroundColor ||
+          shapeStyle?.background ||
+          ''
+        const resolvedStroke =
+          shapeNode?.getAttribute?.('stroke') ||
+          shapeStyle?.stroke ||
+          shapeStyle?.borderColor ||
+          ''
+        const isTransparent = (value) =>
+          !value ||
+          value === 'none' ||
+          value === 'transparent' ||
+          value === 'rgba(0, 0, 0, 0)' ||
+          value === 'rgb(0, 0, 0, 0)'
+        return {
+          borderRadius: shapeStyle?.borderRadius || '12px',
+          background: isTransparent(resolvedFill) ? 'rgba(255, 255, 255, 0.96)' : resolvedFill,
+          borderColor: isTransparent(resolvedStroke) ? 'rgba(94, 200, 248, 0.72)' : resolvedStroke,
+          color: textStyle?.color || '#0f172a',
+          fontSize: textStyle?.fontSize || '14px',
+          fontWeight: textStyle?.fontWeight || '600',
+          fontFamily: textStyle?.fontFamily || 'inherit',
+          lineHeight: textStyle?.lineHeight || '1.4',
+          minHeight: `${Math.max(48, Math.round(selectionDragState.sourceNodeRect?.height || 48))}px`,
+          width: `${Math.max(132, Math.min(240, Math.round(selectionDragState.sourceNodeRect?.width || 156)))}px`,
+        }
+      }
+
+      function applySelectionDragProxy(intent) {
+        const elements = getSelectionDragLayerElements()
+        const proxy = elements?.proxy
+        if (!proxy) return
+        const sourceNode = resolveSelectionDragSourceNode()
+        if (!sourceNode || selectionDragState.stage !== 'dragging') {
+          proxy.hidden = true
+          return
+        }
+        const metrics = getPlaceholderMetrics(selectionDragState.sourceText, selectionDragState.sourceNodeRect)
+        const pointerOffsetX = 26
+        const pointerOffsetY = 18
+        const left = selectionDragState.currentX + pointerOffsetX
+        const top = selectionDragState.currentY + pointerOffsetY
+        selectionDragState.previewProxyRect = makeRect(left, top, metrics.width, metrics.height)
+        const style = getSelectionDragProxyStyle(sourceNode)
+        proxy.hidden = false
+        proxy.style.left = `${left}px`
+        proxy.style.top = `${top}px`
+        proxy.style.width = style.width
+        proxy.style.minHeight = style.minHeight
+        proxy.style.borderRadius = style.borderRadius
+        proxy.style.background = style.background
+        proxy.style.borderColor = style.borderColor
+        proxy.style.color = style.color
+        proxy.style.fontSize = style.fontSize
+        proxy.style.fontWeight = style.fontWeight
+        proxy.style.fontFamily = style.fontFamily
+        proxy.style.lineHeight = style.lineHeight
+        proxy.style.opacity = intent?.mode === 'cancel' ? '0.88' : '1'
+        proxy.style.transform = intent?.mode === 'cancel' ? 'translate3d(0, 0, 0) scale(0.98)' : 'translate3d(0, 0, 0) scale(1)'
+        proxy.textContent = selectionDragState.sourceText
+      }
+
+      function clearSelectionDragLine() {
+        const elements = getSelectionDragLayerElements()
+        if (!elements?.line) return
+        elements.line.setAttribute('d', '')
+      }
+
+      function getNodeOutgoingAnchor(node, mode) {
+        const rect = getNodeRect(node)
+        if (!rect) return null
+        if (mode === 'child') {
+          return {
+            x: rect.right,
+            y: rect.top + rect.height / 2,
+          }
+        }
+        return {
+          x: rect.left,
+          y: rect.top + rect.height / 2,
+        }
+      }
+
+      function getIntentPreviewPoint(intent) {
+        if (!intent || intent.mode === 'cancel') return null
+        if (intent.slotRect) {
+          return {
+            x: intent.slotRect.left,
+            y: intent.slotRect.top + intent.slotRect.height / 2,
+          }
+        }
+        if (intent.previewAnchor) {
+          return intent.previewAnchor
+        }
+        return null
+      }
+
+      function renderSelectionDragConnection(intent) {
+        clearSelectionDragLine()
+      }
+
+      function applySelectionDragSlot(intent) {
+        const elements = getSelectionDragLayerElements()
+        const slot = elements?.slot
+        if (!slot) return
+        if (!intent?.slotRect || intent.mode === 'cancel') {
+          slot.hidden = true
+          selectionDragState.previewInsertionBarRect = null
+          return
+        }
+        slot.hidden = false
+        slot.style.left = `${intent.slotRect.left}px`
+        slot.style.top = `${intent.slotRect.top}px`
+        slot.style.width = `${intent.slotRect.width}px`
+        selectionDragState.previewInsertionBarRect = cloneValue(intent.slotRect)
+      }
+
+      function applyNativeLikeDropPreview(intent) {
+        clearSelectionDragNodeClasses()
+        const sourceNode = resolveSelectionDragSourceNode()
+        const sourceElement = getNodeElement(sourceNode)
+        sourceElement?.classList?.add('memory-anki-selection-drag-source', 'smm-node-dragging')
+
+        selectionDragState.previewTargetNodeUid =
+          intent?.highlightUid || intent?.anchorUid || null
+        selectionDragState.previewTargetMode = intent?.mode || 'cancel'
+        if (!intent || intent.mode === 'cancel') {
+          applySelectionDragSlot(null)
+          clearSelectionDragLine()
+          updateSelectionDragDimmedBranch(null)
+          return
+        }
+
+        const targetNode = getNodeByUid(intent.highlightUid || intent.anchorUid)
+        const targetElement = getNodeElement(targetNode)
+        targetElement?.classList?.add('memory-anki-selection-drag-target', 'smm-node-highlight')
+        applySelectionDragSlot(intent)
+        clearSelectionDragLine()
+        const dimRootUid =
+          intent.mode === 'child'
+            ? intent.parentUid || selectionDragState.sourceParentUid
+            : intent.parentUid || selectionDragState.sourceParentUid
+        updateSelectionDragDimmedBranch(dimRootUid)
+      }
+
+      function restoreSelectionDragSourceSelection() {
+        const sourceElement = resolveSelectionDragSourceElement()
+        const sourceRange = selectionDragState.sourceRange
+        if (!sourceElement || !sourceRange) return false
+        const start = typeof sourceRange.start === 'number' ? sourceRange.start : null
+        const end = typeof sourceRange.end === 'number' ? sourceRange.end : null
+        if (sourceElement.tagName === 'TEXTAREA' || sourceElement.tagName === 'INPUT') {
+          if (start == null || end == null) return false
+          sourceElement.focus?.({ preventScroll: true })
+          sourceElement.setSelectionRange?.(start, end)
+          return true
+        }
+        const restoredRange = createContentEditableRangeFromOffsets(sourceElement, sourceRange)
+        if (!restoredRange) return false
+        const selection =
+          typeof window.getSelection === 'function' ? window.getSelection() : null
+        if (!selection) return false
+        try {
+          sourceElement.focus?.({ preventScroll: true })
+          selection.removeAllRanges()
+          selection.addRange(restoredRange)
+          return true
+        } catch (error) {
+          console.warn(error)
+          return false
+        }
+      }
+
+      function getNodeRect(node) {
+        return node?.group?.node?.getBoundingClientRect?.() || null
+      }
+
+      function getNodeLayoutDirection(node) {
+        if (!node) return 'right'
+        const parentNode = node.parent || null
+        if (!parentNode) return 'right'
+        const nodeCenter = getNodeCenter(node)
+        const parentCenter = getNodeCenter(parentNode)
+        return nodeCenter.x >= parentCenter.x ? 'right' : 'left'
+      }
+
+      function clamp(value, min, max) {
+        return Math.min(Math.max(value, min), max)
+      }
+
+      function getPlaceholderMetrics(text, sourceRect) {
+        const baseWidth = sourceRect?.width || 156
+        const baseHeight = sourceRect?.height || 56
+        const measuredWidth = clamp(Math.max(baseWidth, Math.min(String(text || '').length * 12 + 48, 240)), 132, 240)
+        const measuredHeight = clamp(Math.max(baseHeight, 52), 52, 92)
+        return {
+          width: measuredWidth,
+          height: measuredHeight,
+        }
+      }
+
+      function makeRect(left, top, width, height) {
+        return {
+          left,
+          top,
+          width,
+          height,
+          right: left + width,
+          bottom: top + height,
+        }
+      }
+
+      function getSelectionDragParentKey(node) {
+        const uid = getNodeUid(node)
+        return uid || SELECTION_DRAG_ROOT_PARENT_KEY
+      }
+
+      function getSelectionDragChildrenByParentKey(parentKey) {
+        if (parentKey === SELECTION_DRAG_ROOT_PARENT_KEY) {
+          return getCachedNodes().filter(node => node && !node.isHide && !node.parent)
+        }
+        const parentNode = getNodeByUid(parentKey)
+        return (Array.isArray(parentNode?.children) ? parentNode.children : []).filter(
+          child => child && !child.isHide,
+        )
+      }
+
+      function getSelectionDragVisibleNodeLayouts() {
+        return getCachedNodes()
+          .filter(node => node && !node.isHide)
+          .map(node => {
+            const uid = getNodeUid(node)
+            const rect = getNodeRect(node)
+            if (!uid || !rect) return null
+            return {
+              node,
+              uid,
+              rect,
+              centerX: rect.left + rect.width / 2,
+              centerY: rect.top + rect.height / 2,
+              direction: node.parent ? getNodeLayoutDirection(node) : 'root',
+              parentUid: getSelectionDragParentKey(node.parent || null),
+            }
+          })
+          .filter(Boolean)
+      }
+
+      function buildSelectionDragSiblingSlotBands(layouts) {
+        const groups = new Map()
+        layouts.forEach(layout => {
+          const groupKey = `${layout.parentUid}::${layout.direction}`
+          const current = groups.get(groupKey) || []
+          current.push(layout)
+          groups.set(groupKey, current)
+        })
+
+        const bands = []
+        groups.forEach(group => {
+          if (!Array.isArray(group) || group.length < 2) return
+          const ordered = [...group].sort((left, right) => left.centerY - right.centerY)
+          for (let index = 0; index < ordered.length - 1; index += 1) {
+            const current = ordered[index]
+            const next = ordered[index + 1]
+            const gapTop = current.rect.bottom
+            const gapBottom = next.rect.top
+            const gapHeight = Math.max(0, gapBottom - gapTop)
+            const bandHeight = Math.max(SELECTION_DRAG_SLOT_MIN_HEIGHT, gapHeight)
+            const slotCenterY = gapTop + (gapBottom - gapTop) / 2
+            const pairLeft = Math.min(current.rect.left, next.rect.left)
+            const pairRight = Math.max(current.rect.right, next.rect.right)
+            const bandTop = slotCenterY - bandHeight / 2 - SELECTION_DRAG_SLOT_Y_EXPANSION
+            const bandBottom = slotCenterY + bandHeight / 2 + SELECTION_DRAG_SLOT_Y_EXPANSION
+            const lineInset = Math.min(18, Math.max(10, (pairRight - pairLeft) / 6))
+            bands.push({
+              current,
+              next,
+              centerY: slotCenterY,
+              bandRect: {
+                left: pairLeft - SELECTION_DRAG_SLOT_X_EXPANSION,
+                top: bandTop,
+                width: pairRight - pairLeft + SELECTION_DRAG_SLOT_X_EXPANSION * 2,
+                height: bandBottom - bandTop,
+                right: pairRight + SELECTION_DRAG_SLOT_X_EXPANSION,
+                bottom: bandBottom,
+              },
+              slotRect: {
+                left: pairLeft + lineInset,
+                top: slotCenterY - 1.5,
+                width: Math.max(48, pairRight - pairLeft - lineInset * 2),
+                height: 3,
+              },
+            })
+          }
+        })
+        return bands
+      }
+
+      function buildSelectionDragChildIntent(layouts, pointerX, pointerY) {
+        const hits = layouts
+          .map(layout => {
+            const horizontalInset = Math.min(10, Math.max(0, layout.rect.width / 2 - 18))
+            const verticalInset = Math.min(10, Math.max(0, layout.rect.height / 2 - 10))
+            return {
+              ...layout,
+              coreRect: makeRect(
+                layout.rect.left + horizontalInset,
+                layout.rect.top + verticalInset,
+                Math.max(12, layout.rect.width - horizontalInset * 2),
+                Math.max(12, layout.rect.height - verticalInset * 2),
+              ),
+            }
+          })
+          .filter(layout => pointInRect(layout.coreRect, pointerX, pointerY))
+          .sort((left, right) => {
+            const leftArea = left.rect.width * left.rect.height
+            const rightArea = right.rect.width * right.rect.height
+            if (leftArea !== rightArea) return leftArea - rightArea
+            const leftDistance = Math.hypot(pointerX - left.centerX, pointerY - left.centerY)
+            const rightDistance = Math.hypot(pointerX - right.centerX, pointerY - right.centerY)
+            return leftDistance - rightDistance
+          })
+        const bestHit = hits[0] || null
+        if (!bestHit) return null
+        return {
+          mode: 'child',
+          anchorUid: bestHit.uid,
+          parentUid: bestHit.uid,
+          slotRect: null,
+          highlightUid: bestHit.uid,
+        }
+      }
+
+      function buildSelectionDragSiblingSlotIntent(slotBands, pointerX, pointerY) {
+        let bestIntent = null
+        let bestDistance = Number.POSITIVE_INFINITY
+
+        slotBands.forEach(band => {
+          if (!pointInRect(band.bandRect, pointerX, pointerY)) return
+          const mode = pointerY <= band.centerY ? 'before' : 'after'
+          const anchorLayout = mode === 'before' ? band.next : band.current
+          const distance = Math.abs(pointerY - band.centerY)
+          if (distance >= bestDistance) return
+
+          bestDistance = distance
+          bestIntent = {
+            mode,
+            anchorUid: anchorLayout.uid,
+            parentUid: band.current.parentUid,
+            slotRect: cloneValue(band.slotRect),
+            highlightUid: anchorLayout.uid,
+          }
+        })
+
+        return bestIntent
+      }
+
+      function buildSelectionDragIntent() {
+        const layouts = getSelectionDragVisibleNodeLayouts()
+        if (!layouts.length) {
+          return buildEmptySelectionDragIntent()
+        }
+
+        const pointerX = selectionDragState.currentX
+        const pointerY = selectionDragState.currentY
+        const slotBands = buildSelectionDragSiblingSlotBands(layouts)
+        const siblingIntent = buildSelectionDragSiblingSlotIntent(slotBands, pointerX, pointerY)
+        if (siblingIntent) {
+          return siblingIntent
+        }
+
+        return buildSelectionDragChildIntent(layouts, pointerX, pointerY) || buildEmptySelectionDragIntent()
+      }
+
+      function updateSelectionDragPreview() {
+        const elements = getSelectionDragLayerElements()
+        if (!elements?.proxy) return
+        const sourceNode = resolveSelectionDragSourceNode()
+        selectionDragState.sourceNodeRect = getNodeRect(sourceNode) || selectionDragState.sourceNodeRect
+        const intent = buildSelectionDragIntent()
+        selectionDragState.dropIntent = intent
+        applySelectionDragProxy(intent)
+        applyNativeLikeDropPreview(intent)
+      }
+
+      function showSelectionDragPreview() {
+        const elements = getSelectionDragLayerElements()
+        if (!elements) return
+        elements.layer.hidden = false
+        updateSelectionDragPreview()
+      }
+
+      function hideSelectionDragPreview() {
+        const elements = getSelectionDragLayerElements()
+        if (!elements) return
+        elements.proxy.hidden = true
+        if (elements.slot) elements.slot.hidden = true
+        clearSelectionDragLine()
+        clearSelectionDragNodeClasses()
+        clearSelectionDragLineDimming()
+        elements.layer.hidden = true
+      }
+
+      function resetSelectionDragState() {
+        const shouldKeepContextMenuBlock =
+          selectionDragState.stage === 'dragging' &&
+          Number(selectionDragState.contextMenuBlockUntil || 0) > Date.now()
+        setSelectionDragInteractionActive(false)
+        clearSelectionDragHoldTimer()
+        selectionDragState.pointerId = null
+        selectionDragState.pointerButton = null
+        selectionDragState.stage = 'idle'
+        selectionDragState.holdReady = false
+        selectionDragState.contextMenuBlockUntil = shouldKeepContextMenuBlock
+          ? selectionDragState.contextMenuBlockUntil
+          : 0
+        selectionDragState.sourceNodeUid = null
+        selectionDragState.sourceParentUid = null
+        selectionDragState.sourceSiblingUids = []
+        selectionDragState.sourceElement = null
+        selectionDragState.sourceRange = null
+        selectionDragState.sourceText = ''
+        selectionDragState.sourceRect = null
+        selectionDragState.sourceNodeRect = null
+        selectionDragState.startX = 0
+        selectionDragState.startY = 0
+        selectionDragState.currentX = 0
+        selectionDragState.currentY = 0
+        selectionDragState.previewTargetNodeUid = null
+        selectionDragState.previewTargetMode = 'cancel'
+        selectionDragState.previewInsertionBarRect = null
+        selectionDragState.previewProxyRect = null
+        selectionDragState.dimmedNodeUids = []
+        selectionDragState.dimmedLineNodes = []
+        selectionDragState.dropIntent = buildEmptySelectionDragIntent()
+        hideSelectionDragPreview()
+      }
+
+      function setEditableElementText(element, text) {
+        if (!element) return false
+        const nextText = String(text || '')
+        if (element.tagName === 'TEXTAREA' || element.tagName === 'INPUT') {
+          element.focus?.({ preventScroll: true })
+          const currentValue = String(element.value || '')
+          element.setSelectionRange?.(0, currentValue.length)
+          if (typeof element.setRangeText === 'function') {
+            element.setRangeText(nextText, 0, currentValue.length, 'end')
+          } else {
+            element.value = nextText
+          }
+          const caret = nextText.length
+          element.setSelectionRange?.(caret, caret)
+        } else {
+          element.focus?.({ preventScroll: true })
+          const selection =
+            typeof window.getSelection === 'function' ? window.getSelection() : null
+          if (selection) {
+            const range = document.createRange()
+            range.selectNodeContents(element)
+            range.deleteContents()
+            range.collapse(true)
+            selection.removeAllRanges()
+            selection.addRange(range)
+          }
+          const inserted =
+            typeof document.execCommand === 'function' &&
+            document.execCommand('insertText', false, nextText)
+          if (!inserted) {
+            element.textContent = nextText
+          }
+          if (selection) {
+            const range = document.createRange()
+            range.selectNodeContents(element)
+            range.collapse(false)
+            selection.removeAllRanges()
+            selection.addRange(range)
+          }
+        }
+        element.dispatchEvent(
+          new InputEvent('input', {
+            bubbles: true,
+            data: nextText,
+            inputType: 'insertText',
+          }),
+        )
+        return true
+      }
+
+      function extractRangeTextFromEditable(element, range, text) {
+        if (!element || !range || !text) return false
+        const start = typeof range.start === 'number' ? range.start : null
+        const end = typeof range.end === 'number' ? range.end : null
+        if (element.tagName === 'TEXTAREA' || element.tagName === 'INPUT') {
+          const normalizedStart = start == null ? 0 : start
+          const normalizedEnd = end == null ? normalizedStart : end
+          const value = String(element.value || '')
+          const selectedText = value.slice(normalizedStart, normalizedEnd)
+          if (!selectedText) return false
+          element.focus?.({ preventScroll: true })
+          if (typeof element.setRangeText === 'function') {
+            element.setRangeText('', normalizedStart, normalizedEnd, 'start')
+          } else {
+            element.value = `${value.slice(0, normalizedStart)}${value.slice(normalizedEnd)}`
+          }
+          element.setSelectionRange?.(normalizedStart, normalizedStart)
+          element.dispatchEvent(
+            new InputEvent('input', {
+              bubbles: true,
+              data: '',
+              inputType: 'deleteContentBackward',
+            }),
+          )
+          return true
+        }
+        const restoredRange = createContentEditableRangeFromOffsets(element, range)
+        if (!restoredRange) return false
+        const selection =
+          typeof window.getSelection === 'function' ? window.getSelection() : null
+        try {
+          if (selection) {
+            selection.removeAllRanges()
+            selection.addRange(restoredRange)
+          }
+          restoredRange.deleteContents()
+          element.dispatchEvent(
+            new InputEvent('input', {
+              bubbles: true,
+              data: '',
+              inputType: 'deleteContentBackward',
+            }),
+          )
+          return true
+        } catch (error) {
+          console.warn(error)
+          return false
+        }
+      }
+
+      function resolveSelectionDragSourceNode() {
+        if (selectionDragState.sourceNodeUid) {
+          return getNodeByUid(selectionDragState.sourceNodeUid)
+        }
+        if (focusState.editingNodeUid) {
+          return getNodeByUid(focusState.editingNodeUid)
+        }
+        return getCurrentActiveNode()
+      }
+
+      function snapshotSiblingUids(parentNode) {
+        return new Set(
+          getSelectionDragChildrenByParentKey(getSelectionDragParentKey(parentNode || null))
+            .map(child => getNodeUid(child))
+            .filter(Boolean),
+        )
+      }
+
+      function findNewNodeFromParent(parentUid, previousChildUids) {
+        const currentChildren = getSelectionDragChildrenByParentKey(parentUid)
+        return (
+          currentChildren.find(child => {
+            const uid = getNodeUid(child)
+            return uid && !previousChildUids.has(uid)
+          }) ||
+          currentChildren[currentChildren.length - 1] ||
+          null
+        )
+      }
+
+      function populateSelectionDragCreatedNode(node, text) {
+        if (!node) return false
+
+        activateNode(node, {
+          notify: false,
+          commit: true,
+          visual: true,
+          lockEditing: true,
+        })
+        enterEditModeForNode(node)
+        window.setTimeout(() => {
+          const editableElement = getActiveEditableElement()
+          if (!editableElement) return
+          setEditableElementText(editableElement, text)
+          rememberFocusedNode(node, {
+            notify: true,
+            forceNotify: true,
+            lockEditing: true,
+          })
+          scheduleModeSync()
+        }, 24)
+        return true
+      }
+
+      function finalizePendingSelectionDragCreation(options = {}) {
+        const pendingCreation = selectionDragState.pendingCreation
+        if (!pendingCreation) return false
+        if (options.rendered) {
+          pendingCreation.renderObserved = true
+        }
+        if (!pendingCreation.renderObserved && !options.force) {
+          return false
+        }
+
+        const newNode = findNewNodeFromParent(
+          pendingCreation.parentUid,
+          new Set(pendingCreation.previousChildUids),
+        )
+        if (!newNode) return false
+
+        selectionDragState.pendingCreation = null
+        populateSelectionDragCreatedNode(newNode, pendingCreation.text)
+        window.setTimeout(() => {
+          populateSelectionDragCreatedNode(newNode, pendingCreation.text)
+        }, 120)
+        window.setTimeout(() => {
+          populateSelectionDragCreatedNode(newNode, pendingCreation.text)
+        }, 240)
+        window.setTimeout(() => {
+          finalizeSelectionDragHistoryEntry()
+        }, 0)
+        return true
+      }
+
+      function resolveSelectionDragCreationPlan(intent) {
+        const renderer = getRenderer()
+        if (!renderer || !intent || intent.mode === 'cancel') return null
+
+        let anchorNode = null
+        let command = null
+        let parentNode = null
+
+        if (intent.mode === 'child') {
+          anchorNode = getNodeByUid(intent.anchorUid)
+          parentNode = anchorNode
+          command = renderer.insertChildNode
+        } else if (intent.mode === 'before' || intent.mode === 'after') {
+          anchorNode = getNodeByUid(intent.anchorUid)
+          parentNode = anchorNode?.parent || null
+          command = intent.mode === 'before' ? renderer.insertBefore : renderer.insertAfter
+        }
+
+        if (!anchorNode || typeof command !== 'function') return null
+
+        const targetParentNode = intent.mode === 'child' ? anchorNode : parentNode
+        return {
+          renderer,
+          anchorNode,
+          command,
+          parentUid: getSelectionDragParentKey(targetParentNode || null),
+          previousChildUids: Array.from(snapshotSiblingUids(targetParentNode || null)),
+        }
+      }
+
+      function createNodeFromSelectionDragIntent(intent, text, creationPlan = null) {
+        const plan = creationPlan || resolveSelectionDragCreationPlan(intent)
+        if (!plan || !text) return false
+
+        activateNode(plan.anchorNode, {
+          notify: false,
+          commit: true,
+          visual: true,
+          clearEditingLock: true,
+        })
+        releaseEditableFocus()
+
+        try {
+          plan.command.call(plan.renderer)
+        } catch (error) {
+          console.warn(error)
+          return false
+        }
+
+        selectionDragState.pendingCreation = {
+          parentUid: plan.parentUid,
+          previousChildUids: plan.previousChildUids,
+          text,
+          renderObserved: false,
+        }
+
+        ;[24, 120, 240, 480].forEach(delay => {
+          window.setTimeout(() => {
+            finalizePendingSelectionDragCreation({ force: delay >= 480 })
+          }, delay)
+        })
+        return true
+      }
+
+      function commitSelectionDrag() {
+        const selectedText = selectionDragState.sourceText
+        const sourceElement = resolveSelectionDragSourceElement()
+        const sourceRange = selectionDragState.sourceRange
+        const intent = selectionDragState.dropIntent
+        if (
+          !selectedText ||
+          !sourceElement ||
+          !sourceRange ||
+          !intent ||
+          intent.mode === 'cancel' ||
+          !hasMeaningfulSelectionDragText(selectedText)
+        ) {
+          resetSelectionDragState()
+          return false
+        }
+
+        const creationPlan = resolveSelectionDragCreationPlan(intent)
+        if (!creationPlan) {
+          resetSelectionDragState()
+          return false
+        }
+
+        beginSelectionDragHistoryEntry(selectedText)
+        const extracted = extractRangeTextFromEditable(sourceElement, sourceRange, selectedText)
+        if (!extracted) {
+          discardPendingSelectionDragHistoryEntry()
+          resetSelectionDragState()
+          return false
+        }
+
+        const created = createNodeFromSelectionDragIntent(intent, selectedText, creationPlan)
+        if (!created) {
+          discardPendingSelectionDragHistoryEntry()
+        }
+        resetSelectionDragState()
+        return created
       }
 
       function getTextBeforeCaret(element) {
@@ -1715,6 +3292,53 @@
         }, 120)
       }
 
+      function getHistoryNavigationDirection(event) {
+        const isMetaUndo = (event.metaKey || event.ctrlKey) && !event.altKey
+        if (!isMetaUndo || event.repeat) return null
+        const lowerKey = String(event.key || '').toLowerCase()
+        if (lowerKey === 'z' && event.shiftKey) return 'forward'
+        if (lowerKey === 'z') return 'back'
+        if (lowerKey === 'y') return 'forward'
+        return null
+      }
+
+      function deferEditableHistoryFallback(direction, editableElement) {
+        const renderer = getRenderer()
+        if (!direction || !editableElement || !renderer) return
+        const beforeText = getEditableTextSnapshot(editableElement)
+        const beforeSelection = getSelectionRangeSnapshotForElement(editableElement)
+        const beforeFingerprint = getRuntimeMindMapDocumentFingerprint()
+        const probeToken = ++selectionHistoryProbeState.token
+        const probe = () => {
+          if (probeToken !== selectionHistoryProbeState.token) return
+          void beforeSelection
+          const afterText = getEditableTextSnapshot(editableElement)
+          const afterFingerprint = getRuntimeMindMapDocumentFingerprint()
+          if (afterText !== beforeText) return
+          if (afterFingerprint !== beforeFingerprint) return
+          if (tryConsumeSelectionDragHistory(direction)) {
+            scheduleModeSync()
+            return
+          }
+          const historyMethod = direction === 'forward' ? renderer.forward : renderer.back
+          if (typeof historyMethod !== 'function') return
+          try {
+            historyMethod.call(renderer)
+            scheduleModeSync()
+          } catch (error) {
+            console.warn(error)
+          }
+        }
+
+        window.setTimeout(() => {
+          if (typeof window.requestAnimationFrame === 'function') {
+            window.requestAnimationFrame(probe)
+            return
+          }
+          window.setTimeout(probe, 0)
+        }, 0)
+      }
+
       function enterEditModeForNode(node) {
         if (!node) return false
         const element = node?.group?.node
@@ -1744,8 +3368,20 @@
 
       function createChildAtActiveNode() {
         const renderer = getRenderer()
-        const activeNode = getCurrentActiveNode()
-        if (!renderer || !activeNode) return false
+        let activeNode = getCurrentActiveNode()
+        if (!renderer) return false
+        if (!activeNode && focusState.committedNodeUid) {
+          activeNode = resolveClosestExistingNode(focusState.committedNodeUid)
+          if (activeNode) {
+            activateNode(activeNode, {
+              notify: false,
+              commit: true,
+              visual: true,
+              clearEditingLock: true,
+            })
+          }
+        }
+        if (!activeNode) return false
 
         const parentUid = getNodeUid(activeNode)
         focusState.committedNodeUid = parentUid
@@ -1783,7 +3419,61 @@
         return true
       }
 
+      function deleteActiveNode() {
+        const renderer = getRenderer()
+        const activeNode = getCurrentActiveNode()
+        if (!renderer || !activeNode) return false
+        const activeUid = getNodeUid(activeNode)
+        if (!activeUid) return false
+
+        focusState.editingNodeUid = null
+        releaseEditableFocus()
+
+        const deleteMethods = [
+          renderer.deleteNode,
+          renderer.deleteCurrentNode,
+          renderer.removeNode,
+          renderer.removeCurrentNode,
+        ].filter(method => typeof method === 'function')
+
+        if (deleteMethods.length === 0) return false
+
+        try {
+          deleteMethods[0].call(renderer)
+        } catch (error) {
+          console.warn(error)
+          return false
+        }
+
+        const restoreKeyboardState = () => {
+          if (focusState.committedNodeUid === activeUid) {
+            focusState.committedNodeUid = null
+          }
+          if (focusState.visualFocusNodeUid === activeUid) {
+            focusState.visualFocusNodeUid = null
+          }
+          syncKeyboardMode()
+          restoreStableFocusAfterRender()
+          updateKeyboardFocusClass()
+        }
+
+        window.setTimeout(restoreKeyboardState, 0)
+        window.setTimeout(restoreKeyboardState, 120)
+        return true
+      }
+
       function handleHostKeydown(event) {
+        if (
+          event.key === 'Escape' &&
+          (selectionDragState.stage === 'pending' || selectionDragState.stage === 'dragging')
+        ) {
+          event.preventDefault()
+          event.stopPropagation()
+          event.stopImmediatePropagation?.()
+          resetSelectionDragState()
+          return
+        }
+
         if (event.key === 'Escape') {
           if (document.fullscreenElement) {
             event.preventDefault()
@@ -1801,8 +3491,30 @@
 
         if (isReadonlyHost()) return
 
+        const renderer = getRenderer()
         const editableElement = getActiveEditableElement()
         focusState.mode = editableElement ? 'editing' : 'navigating'
+        const historyDirection = getHistoryNavigationDirection(event)
+        if (historyDirection) {
+          if (focusState.mode === 'editing' && editableElement) {
+            deferEditableHistoryFallback(historyDirection, editableElement)
+            return
+          }
+          if (tryConsumeSelectionDragHistory(historyDirection)) {
+            event.preventDefault()
+            event.stopPropagation()
+            return
+          }
+          const historyMethod = historyDirection === 'forward' ? renderer?.forward : renderer?.back
+          if (typeof historyMethod === 'function') {
+            event.preventDefault()
+            event.stopPropagation()
+            historyMethod.call(renderer)
+            scheduleModeSync()
+          }
+          return
+        }
+
         if (focusState.mode === 'editing') {
           if (event.key === 'Enter' && editableElement) {
             event.preventDefault()
@@ -1854,6 +3566,14 @@
           event.preventDefault()
           event.stopPropagation()
           createChildAtActiveNode()
+          return
+        }
+        if (event.key === 'Delete' || event.key === 'Backspace') {
+          if (!getCurrentActiveNode()) return
+          event.preventDefault()
+          event.stopPropagation()
+          deleteActiveNode()
+          return
         }
       }
 
@@ -1865,12 +3585,193 @@
         document.addEventListener('focusout', scheduleModeSync, true)
       }
 
+      function beginSelectionDragFromCandidate(event) {
+        if (selectionDragState.stage !== 'pending') return false
+        const sourceElement = resolveSelectionDragSourceElement()
+        if (
+          !sourceElement ||
+          !selectionDragState.sourceRange ||
+          !hasMeaningfulSelectionDragText(selectionDragState.sourceText)
+        ) {
+          resetSelectionDragState()
+          return false
+        }
+        event.preventDefault()
+        event.stopPropagation()
+        event.stopImmediatePropagation?.()
+        if (!restoreSelectionDragSourceSelection()) {
+          resetSelectionDragState()
+          return false
+        }
+        selectionDragState.stage = 'dragging'
+        selectionDragState.contextMenuBlockUntil = Date.now() + 1200
+        setSelectionDragInteractionActive(true)
+        showSelectionDragPreview()
+        return true
+      }
+
+      function registerSelectionDragListeners() {
+        if (window.__memoryAnkiSelectionDragRegistered) return
+        window.__memoryAnkiSelectionDragRegistered = true
+
+        document.addEventListener(
+          'pointerdown',
+          (event) => {
+            if (isReadonlyHost()) return
+            if (event.button !== 2) return
+            if (getSegmentRangeDraft().active) return
+            const candidate = getSelectionDragCandidateContext(
+              event.target,
+              event.clientX,
+              event.clientY,
+            )
+            if (!candidate) return
+            const {
+              editableElement,
+              selectionText,
+              selectionRange,
+              selectionRect,
+              sourceNode,
+            } = candidate
+            const sourceParentNode = sourceNode?.parent || null
+            selectionDragState.pointerId = event.pointerId
+            selectionDragState.pointerButton = event.button
+            selectionDragState.stage = 'pending'
+            selectionDragState.holdReady = false
+            selectionDragState.sourceNodeUid = getNodeUid(sourceNode) || focusState.editingNodeUid || null
+            selectionDragState.sourceParentUid = getSelectionDragParentKey(sourceParentNode)
+            selectionDragState.sourceSiblingUids = (Array.isArray(sourceParentNode?.children) ? sourceParentNode.children : [])
+              .map(child => getNodeUid(child))
+              .filter(Boolean)
+            selectionDragState.sourceElement = editableElement
+            selectionDragState.sourceRange = selectionRange
+            selectionDragState.sourceText = selectionText
+            selectionDragState.sourceRect = selectionRect
+            selectionDragState.sourceNodeRect = getNodeRect(sourceNode)
+            selectionDragState.startX = event.clientX
+            selectionDragState.startY = event.clientY
+            selectionDragState.currentX = event.clientX
+            selectionDragState.currentY = event.clientY
+            armSelectionDragHoldTimer()
+          },
+          true,
+        )
+
+        document.addEventListener(
+          'pointermove',
+          (event) => {
+            if (selectionDragState.stage === 'idle') return
+            if (selectionDragState.pointerId != null && event.pointerId !== selectionDragState.pointerId) return
+            selectionDragState.currentX = event.clientX
+            selectionDragState.currentY = event.clientY
+            if (selectionDragState.stage === 'pending') {
+              const sourceElement = resolveSelectionDragSourceElement()
+              if (
+                !sourceElement ||
+                !selectionDragState.sourceRange ||
+                !document.contains(sourceElement)
+              ) {
+                resetSelectionDragState()
+                return
+              }
+              const distance = Math.hypot(
+                event.clientX - selectionDragState.startX,
+                event.clientY - selectionDragState.startY,
+              )
+              if (!selectionDragState.holdReady) {
+                if (distance > SELECTION_DRAG_PRE_HOLD_TOLERANCE) {
+                  resetSelectionDragState()
+                }
+                return
+              }
+              if (distance < SELECTION_DRAG_ACTIVATION_DISTANCE) return
+              if (!beginSelectionDragFromCandidate(event)) return
+            }
+            if (selectionDragState.stage === 'dragging') {
+              event.preventDefault()
+              event.stopPropagation()
+              event.stopImmediatePropagation?.()
+              restoreSelectionDragSourceSelection()
+              updateSelectionDragPreview()
+            }
+          },
+          true,
+        )
+
+        document.addEventListener(
+          'pointerup',
+          (event) => {
+            if (selectionDragState.stage === 'idle') return
+            if (selectionDragState.pointerId != null && event.pointerId !== selectionDragState.pointerId) return
+            if (selectionDragState.stage === 'dragging') {
+              event.preventDefault()
+              event.stopPropagation()
+              event.stopImmediatePropagation?.()
+              restoreSelectionDragSourceSelection()
+              commitSelectionDrag()
+              return
+            }
+            resetSelectionDragState()
+          },
+          true,
+        )
+
+        document.addEventListener(
+          'pointercancel',
+          () => {
+            resetSelectionDragState()
+          },
+          true,
+        )
+
+        document.addEventListener(
+          'selectstart',
+          (event) => {
+            if (selectionDragState.stage !== 'dragging') return
+            event.preventDefault()
+            event.stopPropagation()
+            event.stopImmediatePropagation?.()
+            restoreSelectionDragSourceSelection()
+          },
+          true,
+        )
+
+        document.addEventListener(
+          'dragstart',
+          (event) => {
+            if (selectionDragState.stage === 'pending') {
+              resetSelectionDragState()
+              return
+            }
+            if (selectionDragState.stage === 'dragging') {
+              event.preventDefault()
+              event.stopPropagation()
+              event.stopImmediatePropagation?.()
+              restoreSelectionDragSourceSelection()
+            }
+          },
+          true,
+        )
+
+        document.addEventListener(
+          'contextmenu',
+          (event) => {
+            if (!shouldSuppressSelectionDragContextMenu()) return
+            event.preventDefault()
+            event.stopPropagation()
+            event.stopImmediatePropagation?.()
+          },
+          true,
+        )
+      }
+
       function registerPointerIntentListener() {
         if (window.__memoryAnkiPointerIntentRegistered) return
         window.__memoryAnkiPointerIntentRegistered = true
         document.addEventListener(
           'pointerdown',
           event => {
+            if (isReadonlyHost()) return
             if (interactionState.pointerIntentClearTimer != null) {
               window.clearTimeout(interactionState.pointerIntentClearTimer)
               interactionState.pointerIntentClearTimer = null
@@ -1886,6 +3787,7 @@
         document.addEventListener(
           'pointerup',
           () => {
+            if (isReadonlyHost()) return
             if (interactionState.pointerIntentClearTimer != null) {
               window.clearTimeout(interactionState.pointerIntentClearTimer)
             }
@@ -1910,8 +3812,7 @@
             if (!node) return
             event.preventDefault()
             event.stopPropagation()
-            focusState.visualFocusNodeUid = getNodeUid(node) || focusState.visualFocusNodeUid
-            updateKeyboardFocusClass()
+            event.stopImmediatePropagation?.()
             getHostBridge()?.notify?.('node_contextmenu', [serializeNode(node)])
           },
           true
@@ -1926,7 +3827,12 @@
           event => {
             if (isReadonlyHost()) return
             const node = getNodeByElement(event.target)
-            if (!node) return
+            if (!node) {
+              event.preventDefault()
+              event.stopPropagation()
+              event.stopImmediatePropagation?.()
+              return
+            }
             rememberFocusedNode(node, {
               notify: true,
               lockEditing: true,
@@ -1950,11 +3856,11 @@
             if (!node) return
             event.preventDefault()
             event.stopPropagation()
+            event.stopImmediatePropagation?.()
             if (rangeDraft.active) {
               toggleNodeInRangeDraft(node)
               return
             }
-            resetReadonlyInteractionState()
             getHostBridge()?.notify?.('node_click', [serializeNode(node)])
           },
           true
@@ -2110,16 +4016,66 @@
         }
       }
 
+      function buildNodeDeduplicationKey(node, childKeys) {
+        if (!node || typeof node !== 'object') return '__empty__'
+        const data = node.data && typeof node.data === 'object' ? node.data : {}
+        const uid =
+          typeof data.uid === 'string' && data.uid.trim().length > 0 ? data.uid.trim() : null
+        if (uid) {
+          return `uid:${uid}`
+        }
+        return JSON.stringify({
+          text: typeof data.text === 'string' ? data.text : '',
+          note: typeof data.note === 'string' ? data.note : '',
+          richText: Boolean(data.richText),
+          memoryAnkiNodeType:
+            typeof data.memoryAnkiNodeType === 'string' ? data.memoryAnkiNodeType : '',
+          children: childKeys,
+        })
+      }
+
+      function dedupeImportedNodeTree(node) {
+        if (!node || typeof node !== 'object') {
+          return '__empty__'
+        }
+        if (!Array.isArray(node.children) || node.children.length === 0) {
+          node.children = Array.isArray(node.children) ? node.children : []
+          return buildNodeDeduplicationKey(node, [])
+        }
+
+        const seenChildKeys = new Set()
+        const dedupedChildren = []
+        const childKeys = []
+
+        node.children.forEach((child) => {
+          const childKey = dedupeImportedNodeTree(child)
+          if (seenChildKeys.has(childKey)) {
+            return
+          }
+          seenChildKeys.add(childKey)
+          dedupedChildren.push(child)
+          childKeys.push(childKey)
+        })
+
+        node.children = dedupedChildren
+        return buildNodeDeduplicationKey(node, childKeys)
+      }
+
       function syncHostEditorState(payload) {
         const nextEditorState = payload?.editorState
         if (!nextEditorState) return
 
+        const nextFingerprint = buildEditorStateFingerprint(
+          nextEditorState,
+          Boolean(payload?.preserveView),
+        )
         if (!window.__memoryAnkiPendingEditorState) {
           window.__memoryAnkiPendingEditorState = {}
         }
         window.__memoryAnkiPendingEditorState = {
           editorState: cloneValue(nextEditorState),
           preserveView: Boolean(payload?.preserveView),
+          fingerprint: nextFingerprint,
         }
 
         const mindMap = window.__memoryAnkiMindMapInstance
@@ -2127,6 +4083,14 @@
 
         const nextDoc = cloneValue(nextEditorState.editor_doc) || {}
         normalizeImportedNodePresentation(nextDoc?.root, 0)
+        dedupeImportedNodeTree(nextDoc?.root)
+        const nextConfig = cloneValue(nextEditorState.editor_config) || {}
+        if (
+          window.__memoryAnkiLastAppliedEditorFingerprint &&
+          window.__memoryAnkiLastAppliedEditorFingerprint === nextFingerprint
+        ) {
+          return
+        }
         let currentTransform = null
         if (window.__memoryAnkiPendingEditorState.preserveView) {
           try {
@@ -2146,10 +4110,11 @@
         }
 
         if (typeof mindMap.updateConfig === 'function') {
-          mindMap.updateConfig(cloneValue(nextEditorState.editor_config) || {})
+          mindMap.updateConfig(nextConfig)
         }
 
         ensureMindMapShortcutGuard()
+        window.__memoryAnkiLastAppliedEditorFingerprint = nextFingerprint
 
         if (currentTransform) {
           window.__memoryAnkiPendingTransformRestore = cloneValue(currentTransform)
@@ -2159,30 +4124,40 @@
       window.syncHostEditorState = syncHostEditorState
 
       function setupTakeOverMethods() {
+        const bootstrapEditorState = {
+          editor_doc: cloneValue(getHostBridge()?.getMindMapData?.()) || {},
+          editor_config: cloneValue(getHostBridge()?.getMindMapConfig?.()) || {},
+          editor_local_config: cloneValue(getHostBridge()?.getLocalConfig?.()) || {},
+          lang: getHostBridge()?.getLanguage?.() || 'zh',
+        }
+        window.__memoryAnkiBootstrapEditorFingerprint = buildEditorStateFingerprint(
+          bootstrapEditorState,
+          false,
+        )
         window.takeOverAppMethods = {
           getMindMapData() {
-            return cloneValue(getHostBridge()?.getMindMapData?.()) || null
+            return cloneValue(bootstrapEditorState.editor_doc) || null
           },
           saveMindMapData(data) {
             if (isReadonlyHost()) return
             getHostBridge()?.saveMindMapData?.(cloneValue(data))
           },
           getMindMapConfig() {
-            return cloneValue(getHostBridge()?.getMindMapConfig?.()) || {}
+            return cloneValue(bootstrapEditorState.editor_config) || {}
           },
           saveMindMapConfig(config) {
             if (isReadonlyHost()) return
             getHostBridge()?.saveMindMapConfig?.(cloneValue(config))
           },
           getLanguage() {
-            return getHostBridge()?.getLanguage?.() || 'zh'
+            return bootstrapEditorState.lang || 'zh'
           },
           saveLanguage(lang) {
             if (isReadonlyHost()) return
             getHostBridge()?.saveLanguage?.(lang)
           },
           getLocalConfig() {
-            return cloneValue(getHostBridge()?.getLocalConfig?.()) || {}
+            return cloneValue(bootstrapEditorState.editor_local_config) || {}
           },
           saveLocalConfig(config) {
             if (isReadonlyHost()) return
@@ -2193,10 +4168,13 @@
 
       function registerBusListeners() {
         if (!window.$bus) return
+        if (window.__memoryAnkiBusListenersRegistered) return
+        window.__memoryAnkiBusListenersRegistered = true
         window.$bus.$on('app_inited', mindMap => {
           window.__memoryAnkiMindMapInstance = mindMap
           ensureMindMapShortcutGuard()
           registerKeyboardListeners()
+          registerSelectionDragListeners()
           registerPointerIntentListener()
           registerContextMenuListener()
           registerReadonlyClickListener()
@@ -2206,7 +4184,17 @@
           registerNativeFullscreenButtonStateSync()
           applyHostState(window.__memoryAnkiHostState || {})
           if (window.__memoryAnkiPendingEditorState) {
-            syncHostEditorState(window.__memoryAnkiPendingEditorState)
+            const pendingFingerprint =
+              window.__memoryAnkiPendingEditorState.fingerprint ||
+              buildEditorStateFingerprint(
+                window.__memoryAnkiPendingEditorState.editorState,
+                window.__memoryAnkiPendingEditorState.preserveView,
+              )
+            if (pendingFingerprint !== window.__memoryAnkiBootstrapEditorFingerprint) {
+              syncHostEditorState(window.__memoryAnkiPendingEditorState)
+            } else {
+              window.__memoryAnkiLastAppliedEditorFingerprint = pendingFingerprint
+            }
           }
           syncKeyboardMode()
           updateKeyboardFocusClass()
@@ -2217,6 +4205,7 @@
           getHostBridge()?.notify?.('app_inited', null)
         })
         window.$bus.$on('node_active', (...args) => {
+          if (isReadonlyHost()) return
           const activeNodes = Array.isArray(args[1]) ? args[1] : []
           syncKeyboardMode()
           if (activeNodes.length > 1) {
@@ -2335,6 +4324,11 @@
             }
             window.__memoryAnkiPendingTransformRestore = null
           }
+          if (selectionDragHistoryState.pendingFocusSnapshot) {
+            restoreSelectionDragFocusSnapshot(selectionDragHistoryState.pendingFocusSnapshot)
+            selectionDragHistoryState.pendingFocusSnapshot = null
+          }
+          finalizePendingSelectionDragCreation({ rendered: true })
           restoreStableFocusAfterRender()
           updateKeyboardFocusClass()
           ensureSegmentToolbar()
@@ -2346,6 +4340,8 @@
       }
 
       function bootMindMapHost() {
+        if (window.__memoryAnkiHostBooted) return
+        window.__memoryAnkiHostBooted = true
         setupTakeOverMethods()
         registerBusListeners()
         if (typeof window.initApp === 'function') {

@@ -226,6 +226,9 @@ class PdfTextPreviewResult:
     selected_pages: list[int]
 
 
+PROMPT_TEXT_MAX_CHARS = 12000
+
+
 def generate_import_preview(
     *,
     image_bytes: bytes,
@@ -345,7 +348,11 @@ def generate_pdf_import_preview(
     if structure_payload is None:
         raise MindMapImportError("未找到指定的结构页，请重新选择后再试。")
 
-    structure_prompt = STRICT_STRUCTURE_PROMPT if resolved_options.strict_restore else PROMPT
+    warnings: list[str] = []
+    structure_prompt = _build_pdf_structure_prompt(
+        strict_restore=resolved_options.strict_restore,
+        preserve_emphasis_marks=resolved_options.preserve_emphasis_marks,
+    )
     structure_tree = _call_dashscope_json(
         image_bytes=structure_payload[1],
         filename=structure_payload[2],
@@ -365,6 +372,22 @@ def generate_pdf_import_preview(
         for page_number, image_bytes, filename in rendered_pages
         if page_number != resolved_structure_page
     ]
+    trimmed_text: str | None = None
+    if len(normalized_pages) > 1:
+        try:
+            extracted_text = _call_dashscope_text_with_images(
+                image_items=[(image_bytes, filename) for _, image_bytes, filename in rendered_pages],
+                page_numbers=normalized_pages,
+                range_prompt=range_prompt,
+            )
+            trimmed_text = _trim_pdf_extracted_text(
+                extracted_text,
+                structure_title=str(structure_tree.get("title") or fallback_title or ""),
+                range_prompt=range_prompt,
+            ) or None
+        except MindMapImportError:
+            warnings.append("未获得稳定的 OCR 正文，本次先按结构图和正文图片进行补全。")
+
     enhanced_tree = _call_dashscope_batch_json(
         image_items=ordered_items,
         structure_tree=structure_tree,
@@ -372,13 +395,15 @@ def generate_pdf_import_preview(
         page_numbers=normalized_pages,
         strict_restore=resolved_options.strict_restore,
         disable_rebalance=resolved_options.strict_restore or not resolved_options.semantic_split_long_paragraphs,
+        import_options=resolved_options,
+        extracted_text=trimmed_text,
     )
+
     editor_doc = _build_editor_doc(
         enhanced_tree,
         fallback_title=fallback_title,
         preserve_line_breaks=resolved_options.preserve_line_breaks,
     )
-    warnings: list[str] = []
     match_mode = "strict_match"
     can_apply = True
     if resolved_options.strict_restore and _contains_structure_drift(structure_tree, enhanced_tree):
@@ -476,19 +501,25 @@ def _call_dashscope_batch_json(
     page_numbers: list[int] | None = None,
     strict_restore: bool = False,
     disable_rebalance: bool = False,
+    import_options: PdfImportOptions | None = None,
+    extracted_text: str | None = None,
 ) -> dict[str, Any]:
-    prompt = (
-        f"{STRICT_BATCH_PROMPT if strict_restore else BATCH_PROMPT}\n\n"
-        f"{PDF_PAGE_CONTEXT_PROMPT}\n\n"
-        "下面是已经从结构图中提取出的原始脑图 JSON，请以它为主结构进行增强：\n"
-        f"{json.dumps(structure_tree, ensure_ascii=False)}\n\n"
-        "接下来会按顺序提供结构图和正文图片。请综合所有图片后输出增强后的完整脑图 JSON。"
-    )
-    if page_numbers:
-        prompt += f"\n本次只允许处理这些 PDF 页面：{_format_page_numbers(page_numbers)}。"
-    normalized_range_prompt = str(range_prompt or "").strip()
-    if normalized_range_prompt:
-        prompt += f"\n用户补充提示：{normalized_range_prompt}"
+    if page_numbers is not None or import_options is not None or extracted_text:
+        prompt = _build_pdf_batch_prompt(
+            structure_tree=structure_tree,
+            range_prompt=range_prompt,
+            page_numbers=page_numbers,
+            strict_restore=strict_restore,
+            import_options=import_options or PdfImportOptions(strict_restore=strict_restore),
+            extracted_text=extracted_text,
+        )
+    else:
+        prompt = (
+            f"{BATCH_PROMPT}\n\n"
+            f"下面是已经从结构图中提取出的原始脑图 JSON，请以它为主结构进行增强：\n"
+            f"{json.dumps(structure_tree, ensure_ascii=False)}\n\n"
+            "接下来会按顺序提供结构图和正文图片。请综合所有图片后输出增强后的完整脑图 JSON。"
+        )
     content_text = _call_dashscope_with_images(
         image_items=image_items,
         prompt=prompt,
@@ -1164,7 +1195,340 @@ def _ensure_rendered_page_size(rendered_pages: list[tuple[int, bytes, str]]) -> 
 def _contains_structure_drift(expected: dict[str, Any], actual: dict[str, Any]) -> bool:
     if _clean_inline_text(expected.get("title")) != _clean_inline_text(actual.get("title")):
         return True
-    return _children_signature(expected.get("children") or []) != _children_signature(actual.get("children") or [])
+    return not _structure_backbone_preserved(
+        expected.get("children") or [],
+        actual.get("children") or [],
+    )
+
+
+def _structure_backbone_preserved(
+    expected_children: list[dict[str, Any]],
+    actual_children: list[dict[str, Any]],
+) -> bool:
+    search_start = 0
+    for expected_child in expected_children:
+        match_index = _find_matching_child_index(expected_child, actual_children, start=search_start)
+        if match_index is None:
+            return False
+        actual_child = actual_children[match_index]
+        if not _structure_backbone_preserved(
+            expected_child.get("children") or [],
+            actual_child.get("children") or [],
+        ):
+            return False
+        search_start = match_index + 1
+    return True
+
+
+def _build_pdf_structure_prompt(*, strict_restore: bool, preserve_emphasis_marks: bool) -> str:
+    lines = [
+        "你是一个严格输出 JSON 的 PDF 脑图结构还原助手。",
+        "",
+        "任务：只读取用户指定的 PDF 结构页，把页面中原本就存在的脑图结构还原成树形结构。",
+        "",
+        "强制要求：",
+        "1. 只输出 JSON，不要输出 markdown，不要输出解释。",
+    ]
+    if strict_restore:
+        lines.extend(
+            [
+                "2. 必须保留 PDF 自带脑图的原文、原层级、原顺序、原节点粒度。",
+                "3. 禁止改写、概括、合并、拆分、重排原始脑图节点。",
+                "4. 禁止为了“更像脑图”而缩短文字或提炼标题。",
+            ]
+        )
+    else:
+        lines.extend(
+            [
+                "2. 优先保留原页的章节主干、层级和顺序。",
+                "3. 允许在不改变原意的前提下，把过长节点压成更适合脑图的短语。",
+            ]
+        )
+    lines.extend(
+        [
+            "5. 输出格式必须为：",
+            "{",
+            '  "title": "根节点标题",',
+            '  "children": [',
+            "    {",
+            '      "text": "节点文字",',
+            '      "rich_text_html": "<div>节点文字</div>",',
+            '      "emphasis_marks": [],',
+            '      "children": []',
+            "    }",
+            "  ]",
+            "}",
+            "6. 如果某个节点没有子节点，children 仍然输出空数组。",
+        ]
+    )
+    if preserve_emphasis_marks:
+        lines.append("7. 如果原节点带有下划线或波浪线强调，必须在结果里保留强调信息。")
+    else:
+        lines.append("7. 无需额外保留下划线或波浪线强调，只需正确识别节点文字即可。")
+    return "\n".join(lines)
+
+
+def _build_pdf_batch_prompt(
+    *,
+    structure_tree: dict[str, Any],
+    range_prompt: str,
+    page_numbers: list[int] | None,
+    strict_restore: bool,
+    import_options: PdfImportOptions,
+    extracted_text: str | None,
+) -> str:
+    lines = [
+        "你是一个严格输出 JSON 的 PDF 脑图正文补充助手。",
+        "",
+        "任务：",
+        "1. 第一张图片是已经指定的 PDF 结构页，对应的脑图结构 JSON 已给出。",
+        "2. 其余图片是正文页。",
+        "3. 你需要基于已给定的结构，把正文内容补充到最匹配的原始节点下。",
+        "",
+        "强制要求：",
+        "1. 只输出 JSON，不要输出 markdown，不要输出解释。",
+    ]
+    if strict_restore:
+        lines.append("2. 原 PDF 脑图节点的 text、层级、顺序、粒度都不能变化。")
+    else:
+        lines.append("2. 优先沿用给定结构主干；如确有必要，可做轻微调整让正文归位更自然。")
+    if import_options.mount_on_original_leaf_only:
+        lines.append("3. 默认只在最小原始节点下面新增 children；除非叶子节点实在无法承接，否则不要挂到更高层原节点。")
+    else:
+        lines.append("3. 如果正文无法精确匹配到叶子节点，可以挂到最近的相关原始父节点下。")
+    if import_options.quote_original_text_only:
+        lines.append("4. 补充内容必须尽量使用原话，不要概括或改写。")
+    else:
+        lines.append("4. 补充内容可以提炼成更适合脑图展示的短语，但必须忠实原文，不能捏造。")
+    if import_options.semantic_split_long_paragraphs:
+        lines.append("5. 如果正文本质上包含多个并列要点，请拆成多个并列 children，而不是塞进一个超长节点。")
+    else:
+        lines.append("5. 不要为了美化结构自动把长段正文拆成多个并列 children，除非原文本身就是明显列举。")
+    if import_options.preserve_emphasis_marks:
+        lines.append("6. 如果正文中存在下划线或波浪线强调，必须在对应补充节点保留强调信息。")
+    else:
+        lines.append("6. 无需额外保留下划线或波浪线强调，只需保证正文归位正确。")
+    lines.extend(
+        [
+            "7. 输出格式必须为：",
+            "{",
+            '  "title": "根节点标题",',
+            '  "children": [',
+            "    {",
+            '      "text": "节点文字",',
+            '      "rich_text_html": "<div>节点文字</div>",',
+            '      "emphasis_marks": [],',
+            '      "children": []',
+            "    }",
+            "  ]",
+            "}",
+            "8. 每个节点即使没有子节点，也必须输出 children: []。",
+        ]
+    )
+    if strict_restore:
+        lines.append("9. 如果你发现给定结构与结构页明显对不上，不要擅自修正结构；仍按最接近方式输出，并尽量保留原结构不动。")
+    lines.extend(
+        [
+            "",
+            PDF_PAGE_CONTEXT_PROMPT,
+            "",
+            "下面是已经从结构图中提取出的原始脑图 JSON，请以它为主结构进行增强：",
+            json.dumps(structure_tree, ensure_ascii=False),
+            "",
+        ]
+    )
+    if page_numbers:
+        lines.append(f"本次只允许处理这些 PDF 页面：{_format_page_numbers(page_numbers)}。")
+    normalized_range_prompt = str(range_prompt or "").strip()
+    if normalized_range_prompt:
+        lines.append(f"用户补充提示：{normalized_range_prompt}")
+    if extracted_text:
+        lines.extend(
+            [
+                "",
+                "下面是同一批 PDF 页面抽取出的 OCR 正文，请把它当作正文 grounding，优先根据这些文字补全节点，避免只停留在结构骨架上：",
+                _truncate_prompt_text(extracted_text),
+                "如果 OCR 正文里出现了比结构页更详细的解释、分点或例子，必须把这些新增信息补到对应原始节点下；除非 OCR 正文本身没有新增信息，否则不要只返回原结构骨架。",
+                "不要把结构页里已经存在的一级、二级节点原样重抄一遍当作补充结果；你需要继续往下补这些节点对应的正文细节。",
+                "如果 OCR 正文已经给出了某个结构节点的下一级或下两级展开，请至少下沉一级后再输出。",
+            ]
+        )
+    lines.extend(
+        [
+            "",
+            "接下来会按顺序提供结构图和正文图片。请综合结构 JSON、OCR 正文和图片内容后输出增强后的完整脑图 JSON。",
+        ]
+    )
+    return "\n".join(lines)
+
+
+def _truncate_prompt_text(text: str, limit: int = PROMPT_TEXT_MAX_CHARS) -> str:
+    normalized = str(text or "").strip()
+    if len(normalized) <= limit:
+        return normalized
+    return f"{normalized[:limit].rstrip()}\n\n[后续 OCR 文本已截断]"
+
+
+def _should_attempt_pdf_ocr_fallback(structure_tree: dict[str, Any], primary_tree: dict[str, Any]) -> bool:
+    return _count_enriched_original_leaves(structure_tree, primary_tree) == 0
+
+
+def _should_prefer_pdf_fallback(
+    *,
+    structure_tree: dict[str, Any],
+    primary_tree: dict[str, Any],
+    fallback_tree: dict[str, Any],
+    strict_restore: bool,
+) -> bool:
+    primary_enrichment = _count_enriched_original_leaves(structure_tree, primary_tree)
+    fallback_enrichment = _count_enriched_original_leaves(structure_tree, fallback_tree)
+    if fallback_enrichment <= primary_enrichment:
+        return False
+    if not strict_restore:
+        return True
+    primary_drift = _contains_structure_drift(structure_tree, primary_tree)
+    fallback_drift = _contains_structure_drift(structure_tree, fallback_tree)
+    primary_preserved, expected_total = _structure_backbone_score(structure_tree, primary_tree)
+    fallback_preserved, _ = _structure_backbone_score(structure_tree, fallback_tree)
+    primary_ratio = primary_preserved / expected_total if expected_total else 1.0
+    fallback_ratio = fallback_preserved / expected_total if expected_total else 1.0
+    if fallback_drift and not primary_drift:
+        return (
+            fallback_ratio >= 0.5
+            and fallback_enrichment >= max(1, primary_enrichment + 1)
+            and _count_total_nodes(fallback_tree) >= _count_total_nodes(primary_tree) + 2
+        )
+    if primary_drift and not fallback_drift:
+        return True
+    if fallback_ratio + 0.05 < primary_ratio:
+        return False
+    return _count_total_nodes(fallback_tree) >= _count_total_nodes(primary_tree)
+
+
+def _count_total_nodes(tree: dict[str, Any]) -> int:
+    return sum(_count_total_nodes_for_node(child) for child in tree.get("children") or [])
+
+
+def _count_total_nodes_for_node(node: dict[str, Any]) -> int:
+    return 1 + sum(_count_total_nodes_for_node(child) for child in node.get("children") or [])
+
+
+def _count_enriched_original_leaves(expected: dict[str, Any], actual: dict[str, Any]) -> int:
+    return _count_enriched_original_leaves_in_children(
+        expected.get("children") or [],
+        actual.get("children") or [],
+    )
+
+
+def _count_enriched_original_leaves_in_children(
+    expected_children: list[dict[str, Any]],
+    actual_children: list[dict[str, Any]],
+) -> int:
+    count = 0
+    search_start = 0
+    for expected_child in expected_children:
+        match_index = _find_matching_child_index(expected_child, actual_children, start=search_start)
+        if match_index is None:
+            continue
+        actual_child = actual_children[match_index]
+        search_start = match_index + 1
+        expected_grandchildren = expected_child.get("children") or []
+        actual_grandchildren = actual_child.get("children") or []
+        if expected_grandchildren:
+            count += _count_enriched_original_leaves_in_children(expected_grandchildren, actual_grandchildren)
+        elif actual_grandchildren:
+            count += 1
+    return count
+
+
+def _structure_backbone_score(expected: dict[str, Any], actual: dict[str, Any]) -> tuple[int, int]:
+    expected_children = expected.get("children") or []
+    actual_children = actual.get("children") or []
+    return (
+        _count_preserved_backbone_nodes(expected_children, actual_children),
+        _count_expected_nodes_in_children(expected_children),
+    )
+
+
+def _count_preserved_backbone_nodes(
+    expected_children: list[dict[str, Any]],
+    actual_children: list[dict[str, Any]],
+) -> int:
+    count = 0
+    search_start = 0
+    for expected_child in expected_children:
+        match_index = _find_matching_child_index(expected_child, actual_children, start=search_start)
+        if match_index is None:
+            continue
+        actual_child = actual_children[match_index]
+        search_start = match_index + 1
+        count += 1
+        count += _count_preserved_backbone_nodes(
+            expected_child.get("children") or [],
+            actual_child.get("children") or [],
+        )
+    return count
+
+
+def _count_expected_nodes_in_children(children: list[dict[str, Any]]) -> int:
+    count = 0
+    for child in children:
+        count += 1
+        count += _count_expected_nodes_in_children(child.get("children") or [])
+    return count
+
+
+def _find_matching_child_index(
+    expected_child: dict[str, Any],
+    actual_children: list[dict[str, Any]],
+    *,
+    start: int,
+) -> int | None:
+    expected_text = _clean_inline_text(expected_child.get("text"))
+    for index in range(start, len(actual_children)):
+        if _clean_inline_text(actual_children[index].get("text")) == expected_text:
+            return index
+    return None
+
+
+def _trim_pdf_extracted_text(text: str, *, structure_title: str, range_prompt: str) -> str:
+    normalized = str(text or "").replace("\r\n", "\n").replace("\r", "\n").strip()
+    if not normalized:
+        return ""
+    anchors = _build_pdf_text_anchors(structure_title=structure_title, range_prompt=range_prompt)
+    lines = normalized.split("\n")
+    for index, line in enumerate(lines):
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if any(anchor in stripped for anchor in anchors):
+            trimmed = "\n".join(lines[index:]).strip()
+            return trimmed or normalized
+    return normalized
+
+
+def _build_pdf_text_anchors(*, structure_title: str, range_prompt: str) -> list[str]:
+    candidates = [range_prompt, structure_title]
+    anchors: list[str] = []
+    seen: set[str] = set()
+    for candidate in candidates:
+        for part in _split_prompt_anchor_parts(candidate):
+            if part not in seen:
+                seen.add(part)
+                anchors.append(part)
+    return anchors
+
+
+def _split_prompt_anchor_parts(value: str) -> list[str]:
+    normalized = _clean_inline_text(value)
+    if not normalized:
+        return []
+    parts = [normalized]
+    for segment in re.split(r"[，,：:；;。/\\s]+", normalized):
+        clean_segment = _clean_inline_text(segment)
+        if len(clean_segment) >= 2:
+            parts.append(clean_segment)
+    return sorted({part for part in parts if len(part) >= 2}, key=len, reverse=True)
 
 
 def _children_signature(children: list[dict[str, Any]]) -> list[tuple[str, list[Any]]]:

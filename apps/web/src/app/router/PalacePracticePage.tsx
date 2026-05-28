@@ -4,7 +4,6 @@ import { ArrowLeft } from 'lucide-react'
 import { PageIntro } from '@/shared/components/layout/PageIntro'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
-import { Card, CardContent } from '@/shared/components/ui/card'
 import type { MindMapEditorState } from '@/shared/api/contracts'
 import {
   MindMapReviewFlow,
@@ -96,6 +95,7 @@ export default function PalacePractice() {
       <PageIntro
         eyebrow="练习"
         title={palace.title}
+        compact
         actions={
           <>
             <Link to="/palaces">
@@ -109,42 +109,38 @@ export default function PalacePractice() {
         }
       />
 
-      <Card className="border-border/70 bg-card/92">
-        <CardContent className="p-5">
-          <MindMapReviewFlow
-            key={`${palace.id}-${flowKey}`}
-            title={palace.title}
-            palaceId={palace.id}
-            sessionKind="practice"
-            editorState={editorState}
-            initialSnapshot={initialSnapshot}
-            persistProgress
-            onSnapshotChange={async (snapshot) => {
-              if (snapshot.completed) {
-                setHasResumeProgress(false)
-                await clearPracticeSessionProgressApi(palace.id)
-                return
-              }
-              setHasResumeProgress(true)
-              await savePracticeSessionProgressApi(palace.id, {
-                completed: snapshot.completed,
-                reveal_map: snapshot.revealMap,
-                red_node_ids: snapshot.redNodeIds,
-              })
-            }}
-            onRestart={async () => {
-              await clearPracticeSessionProgressApi(palace.id)
-              setHasResumeProgress(false)
-              setInitialSnapshot(null)
-            }}
-            onComplete={async () => {
-              await clearPracticeSessionProgressApi(palace.id)
-              await updatePalacePracticeFlagApi(palace.id, { needs_practice: false })
-              setHasResumeProgress(false)
-            }}
-          />
-        </CardContent>
-      </Card>
+      <MindMapReviewFlow
+        key={`${palace.id}-${flowKey}`}
+        title={palace.title}
+        palaceId={palace.id}
+        sessionKind="practice"
+        editorState={editorState}
+        initialSnapshot={initialSnapshot}
+        persistProgress
+        onSnapshotChange={async (snapshot) => {
+          if (snapshot.completed) {
+            setHasResumeProgress(false)
+            await clearPracticeSessionProgressApi(palace.id)
+            return
+          }
+          setHasResumeProgress(true)
+          await savePracticeSessionProgressApi(palace.id, {
+            completed: snapshot.completed,
+            reveal_map: snapshot.revealMap,
+            red_node_ids: snapshot.redNodeIds,
+          })
+        }}
+        onRestart={async () => {
+          await clearPracticeSessionProgressApi(palace.id)
+          setHasResumeProgress(false)
+          setInitialSnapshot(null)
+        }}
+        onComplete={async () => {
+          await clearPracticeSessionProgressApi(palace.id)
+          await updatePalacePracticeFlagApi(palace.id, { needs_practice: false })
+          setHasResumeProgress(false)
+        }}
+      />
     </div>
   )
 }

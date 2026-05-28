@@ -3,6 +3,7 @@ import urllib.error
 import json
 from unittest.mock import MagicMock, patch
 
+import memory_anki.modules.palaces.application.mindmap_import_service as service
 from memory_anki.infrastructure.db.models import SubjectDocument
 from memory_anki.modules.palaces.application.mindmap_import_service import (
     MindMapImportError,
@@ -483,12 +484,14 @@ class MindMapImportServiceTests(unittest.TestCase):
 
     @patch("memory_anki.modules.palaces.application.mindmap_import_service.DASHSCOPE_API_KEY", "test-key")
     @patch("memory_anki.modules.palaces.application.mindmap_import_service.render_selected_pdf_pages")
+    @patch("memory_anki.modules.palaces.application.mindmap_import_service._call_dashscope_text_with_images")
     @patch("memory_anki.modules.palaces.application.mindmap_import_service._call_dashscope_batch_json")
     @patch("memory_anki.modules.palaces.application.mindmap_import_service._call_dashscope_json")
     def test_generate_pdf_import_preview_only_uses_selected_pages_and_structure_first(
         self,
         mock_call_json,
         mock_call_batch_json,
+        mock_call_dashscope_text_with_images,
         mock_render_selected_pdf_pages,
     ):
         document = SubjectDocument(
@@ -509,6 +512,7 @@ class MindMapImportServiceTests(unittest.TestCase):
             "title": "结构",
             "children": [{"text": "节点", "children": []}],
         }
+        mock_call_dashscope_text_with_images.return_value = "无关前文\n第一节\n正文"
         mock_call_batch_json.return_value = {
             "title": "结构",
             "children": [{"text": "节点", "children": [{"text": "补充", "children": []}]}],
@@ -540,17 +544,28 @@ class MindMapImportServiceTests(unittest.TestCase):
                 (b"page-6", "page-6.png"),
             ],
         )
+        self.assertEqual(
+            mock_call_dashscope_text_with_images.call_args.kwargs["image_items"],
+            [
+                (b"page-2", "page-2.png"),
+                (b"page-4", "page-4.png"),
+                (b"page-6", "page-6.png"),
+            ],
+        )
         self.assertEqual(mock_call_batch_json.call_args.kwargs["page_numbers"], [2, 4, 6])
         self.assertEqual(mock_call_batch_json.call_args.kwargs["range_prompt"], "第一节")
+        self.assertEqual(mock_call_batch_json.call_args.kwargs["extracted_text"], "第一节\n正文")
 
     @patch("memory_anki.modules.palaces.application.mindmap_import_service.DASHSCOPE_API_KEY", "test-key")
     @patch("memory_anki.modules.palaces.application.mindmap_import_service.render_selected_pdf_pages")
+    @patch("memory_anki.modules.palaces.application.mindmap_import_service._call_dashscope_text_with_images")
     @patch("memory_anki.modules.palaces.application.mindmap_import_service._call_dashscope_batch_json")
     @patch("memory_anki.modules.palaces.application.mindmap_import_service._call_dashscope_json")
     def test_generate_pdf_import_preview_strict_restore_disables_rebalance_and_returns_approximate_preview(
         self,
         mock_call_json,
         mock_call_batch_json,
+        mock_call_dashscope_text_with_images,
         mock_render_selected_pdf_pages,
     ):
         document = SubjectDocument(
@@ -570,6 +585,7 @@ class MindMapImportServiceTests(unittest.TestCase):
             "title": "结构",
             "children": [{"text": "原节点", "children": []}],
         }
+        mock_call_dashscope_text_with_images.return_value = "结构\n原节点\n正文"
         mock_call_batch_json.return_value = {
             "title": "结构",
             "children": [{"text": "原节点（变化）", "children": []}],
@@ -658,6 +674,154 @@ class MindMapImportServiceTests(unittest.TestCase):
             mock_call_dashscope_text_with_images.call_args.kwargs["range_prompt"],
             "第一节 东方文明古国的教育",
         )
+
+    def test_build_pdf_batch_prompt_respects_import_options(self):
+        prompt = service._build_pdf_batch_prompt(
+            structure_tree={"title": "结构", "children": [{"text": "节点", "children": []}]},
+            range_prompt="古希腊",
+            page_numbers=[11, 12],
+            strict_restore=True,
+            import_options=PdfImportOptions(
+                strict_restore=True,
+                quote_original_text_only=False,
+                mount_on_original_leaf_only=False,
+                preserve_emphasis_marks=False,
+                semantic_split_long_paragraphs=False,
+                preserve_line_breaks=True,
+            ),
+            extracted_text="第二节 古希腊的教育阶段\n正文",
+        )
+
+        self.assertIn("可以挂到最近的相关原始父节点下", prompt)
+        self.assertIn("可以提炼成更适合脑图展示的短语", prompt)
+        self.assertIn("无需额外保留下划线或波浪线强调", prompt)
+        self.assertIn("不要为了美化结构自动把长段正文拆成多个并列 children", prompt)
+        self.assertIn("OCR 正文", prompt)
+
+    def test_trim_pdf_extracted_text_prefers_structure_title_or_prompt_anchor(self):
+        extracted_text = (
+            "知识点五 东方文明古国教育发展的特点\n"
+            "……前文省略……\n"
+            "第二节 古希腊的教育阶段\n"
+            "荷马时期\n"
+            "古风时期"
+        )
+
+        trimmed = service._trim_pdf_extracted_text(
+            extracted_text,
+            structure_title="第二节 古希腊的教育阶段",
+            range_prompt="古希腊",
+        )
+
+        self.assertTrue(trimmed.startswith("第二节 古希腊的教育阶段"))
+        self.assertNotIn("东方文明古国教育发展的特点", trimmed)
+
+    @patch("memory_anki.modules.palaces.application.mindmap_import_service.DASHSCOPE_API_KEY", "test-key")
+    @patch("memory_anki.modules.palaces.application.mindmap_import_service.render_selected_pdf_pages")
+    @patch("memory_anki.modules.palaces.application.mindmap_import_service._call_dashscope_text_with_images")
+    @patch("memory_anki.modules.palaces.application.mindmap_import_service._call_dashscope_batch_json")
+    @patch("memory_anki.modules.palaces.application.mindmap_import_service._call_dashscope_json")
+    def test_generate_pdf_import_preview_uses_trimmed_ocr_grounding_for_multi_page_pdf(
+        self,
+        mock_call_json,
+        mock_call_batch_json,
+        mock_call_dashscope_text_with_images,
+        mock_render_selected_pdf_pages,
+    ):
+        document = SubjectDocument(
+            id=3,
+            subject_id=2,
+            filename="subjects/2/demo.pdf",
+            original_name="demo.pdf",
+            mime_type="application/pdf",
+            file_size=123,
+            page_count=8,
+        )
+        mock_render_selected_pdf_pages.return_value = [
+            (4, b"page-4", "page-4.png"),
+            (5, b"page-5", "page-5.png"),
+        ]
+        mock_call_json.return_value = {
+            "title": "第二节 古希腊的教育阶段",
+            "children": [{"text": "荷马时期", "children": []}],
+        }
+        mock_call_batch_json.return_value = {
+            "title": "第二节 古希腊的教育阶段",
+            "children": [{"text": "荷马时期", "children": [{"text": "非制度化", "children": []}]}],
+        }
+        mock_call_dashscope_text_with_images.return_value = (
+            "知识点五 东方文明古国教育发展的特点\n"
+            "第二节 古希腊的教育阶段\n"
+            "荷马时期\n"
+            "非制度化"
+        )
+
+        result = generate_pdf_import_preview(
+            document=document,
+            page_selection=[4, 5],
+            structure_page=4,
+            range_prompt="古希腊",
+            fallback_title="未命名宫殿",
+            import_options=PdfImportOptions(strict_restore=True),
+        )
+
+        self.assertEqual(mock_call_batch_json.call_count, 1)
+        self.assertEqual(
+            mock_call_batch_json.call_args.kwargs["extracted_text"],
+            "第二节 古希腊的教育阶段\n荷马时期\n非制度化",
+        )
+        self.assertEqual(result.source_tree["children"][0]["children"][0]["text"], "非制度化")
+        self.assertFalse(result.warnings)
+
+    @patch("memory_anki.modules.palaces.application.mindmap_import_service.DASHSCOPE_API_KEY", "test-key")
+    @patch("memory_anki.modules.palaces.application.mindmap_import_service.render_selected_pdf_pages")
+    @patch("memory_anki.modules.palaces.application.mindmap_import_service._call_dashscope_text_with_images")
+    @patch("memory_anki.modules.palaces.application.mindmap_import_service._call_dashscope_batch_json")
+    @patch("memory_anki.modules.palaces.application.mindmap_import_service._call_dashscope_json")
+    def test_generate_pdf_import_preview_keeps_image_batch_when_ocr_text_unavailable(
+        self,
+        mock_call_json,
+        mock_call_batch_json,
+        mock_call_dashscope_text_with_images,
+        mock_render_selected_pdf_pages,
+    ):
+        document = SubjectDocument(
+            id=3,
+            subject_id=2,
+            filename="subjects/2/demo.pdf",
+            original_name="demo.pdf",
+            mime_type="application/pdf",
+            file_size=123,
+            page_count=8,
+        )
+        mock_render_selected_pdf_pages.return_value = [
+            (4, b"page-4", "page-4.png"),
+            (5, b"page-5", "page-5.png"),
+        ]
+        mock_call_json.return_value = {
+            "title": "结构",
+            "children": [{"text": "原节点", "children": []}],
+        }
+        primary_tree = {
+            "title": "结构",
+            "children": [{"text": "原节点", "children": []}],
+        }
+        mock_call_batch_json.return_value = primary_tree
+        mock_call_dashscope_text_with_images.side_effect = MindMapImportError("OCR unavailable")
+
+        result = generate_pdf_import_preview(
+            document=document,
+            page_selection=[4, 5],
+            structure_page=4,
+            range_prompt="原节点",
+            fallback_title="未命名宫殿",
+            import_options=PdfImportOptions(strict_restore=True),
+        )
+
+        self.assertEqual(result.source_tree, primary_tree)
+        self.assertTrue(result.warnings)
+        self.assertIn("未获得稳定的 OCR 正文", result.warnings[0])
+        self.assertIsNone(mock_call_batch_json.call_args.kwargs["extracted_text"])
 
 
 if __name__ == "__main__":

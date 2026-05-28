@@ -947,6 +947,7 @@ export function useMindMapImport({
     importUndoing: undoing,
     importError: error,
     importSourceTree: sourceTree,
+    importPreviewEditorDoc: importEditorDoc,
     importExtractedText: extractedText,
     importImagePreviewUrl: imagePreviewUrl,
     importHistory: history,
