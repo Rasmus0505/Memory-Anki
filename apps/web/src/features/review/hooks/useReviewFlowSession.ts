@@ -72,6 +72,7 @@ export function useReviewFlowSession({
   const [completed, setCompleted] = React.useState(
     Boolean(initialSnapshot?.completed),
   )
+  const [docVersion, setDocVersion] = React.useState(0)
   const submittingRef = React.useRef(false)
   const timerRef = React.useRef(timer)
   const userAdvancedReviewRef = React.useRef(Boolean(initialSnapshot?.completed))
@@ -95,6 +96,10 @@ export function useReviewFlowSession({
     }
     userAdvancedReviewRef.current = false
   }, [docFingerprint, root, sessionKind])
+
+  React.useEffect(() => {
+    setDocVersion((current) => current + 1)
+  }, [docFingerprint])
 
   React.useEffect(() => {
     if (!fullscreen) return
@@ -147,6 +152,15 @@ export function useReviewFlowSession({
         redNodeIds,
       ),
     [editorState, nodeMap, parsedDoc, redNodeIds, revealMap, title],
+  )
+  const visibleEditorSyncKey = React.useMemo(
+    () =>
+      JSON.stringify({
+        docVersion,
+        revealMap,
+        redNodeIds: [...redNodeIds].sort(),
+      }),
+    [docVersion, redNodeIds, revealMap],
   )
 
   const totalNodeCount = React.useMemo(() => countNodes(root), [root])
@@ -221,11 +235,11 @@ export function useReviewFlowSession({
     (nodes: MindMapSelection[]) => {
       if (completed) return
       const nodeId = buildSelectionNodeId(nodes[0] ?? null)
-      if (!nodeId || nodeId === root.id) return
+      if (!nodeId) return
       timer.registerActivity('practice_interaction', { source: 'right_click' })
       setRevealMap((current) => hideNodeAndDescendants(nodeId, nodeMap, current))
     },
-    [completed, nodeMap, root.id, timer],
+    [completed, nodeMap, timer],
   )
 
   const handleRestart = React.useCallback(() => {
@@ -252,6 +266,7 @@ export function useReviewFlowSession({
     totalNodeCount,
     visibleNonRootCount,
     revealedNonRootCount,
+    visibleEditorSyncKey,
     redNodeCount: redNodeIds.size,
     fullscreen,
     completed,

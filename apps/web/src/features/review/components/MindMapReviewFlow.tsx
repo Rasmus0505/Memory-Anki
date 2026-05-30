@@ -156,6 +156,7 @@ export function MindMapReviewFlow({
                   fullscreen={flow.fullscreen}
                   onToggleFullscreen={handleFullscreenToggle}
                   visibleEditorState={flow.visibleEditorState}
+                  visibleEditorSyncKey={flow.visibleEditorSyncKey}
                   bilinkCounts={bilinkCounts.counts}
                   bilinkItems={bilinks.items}
                   currentPalaceId={palaceId}

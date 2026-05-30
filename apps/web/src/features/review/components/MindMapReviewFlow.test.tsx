@@ -145,6 +145,7 @@ describe('MindMapReviewFlow', () => {
     const latestCall = getLatestMindMapFrameProps()
     expect(latestCall?.readonly).toBe(true)
     expect(latestCall?.showToolbarWhenReadonly).toBe(true)
+    expect(latestCall?.syncReason).toBe('review_flip')
     expect(latestCall?.showImportButtons).not.toBe(true)
     expect(latestCall?.showBilinkSearchButton).toBe(true)
   })
@@ -169,15 +170,52 @@ describe('MindMapReviewFlow', () => {
     await act(async () => {
       getLatestMindMapFrameProps()?.onNodeClick?.([{ uid: 'root', text: 'Root' }])
     })
-
-    await waitFor(() => {
-      expect(getVisibleTextsFromLatestFrame()).toEqual({
-        root: 'Root',
-        child: '待回忆',
-        grandchild: null,
-      })
+    expect(getVisibleTextsFromLatestFrame()).toEqual({
+      root: 'Root',
+      child: '待回忆',
+      grandchild: null,
     })
 
+    await act(async () => {
+      getLatestMindMapFrameProps()?.onNodeClick?.([{ uid: 'child', text: 'Child' }])
+    })
+    expect(getVisibleTextsFromLatestFrame()).toEqual({
+      root: 'Root',
+      child: 'Child',
+      grandchild: null,
+    })
+
+    await act(async () => {
+      getLatestMindMapFrameProps()?.onNodeClick?.([{ uid: 'child', text: 'Child' }])
+    })
+    expect(getVisibleTextsFromLatestFrame()).toEqual({
+      root: 'Root',
+      child: 'Child',
+      grandchild: '待回忆',
+    })
+
+    expect(timer.registerActivity).toHaveBeenCalledWith('practice_interaction', { source: 'left_click' })
+  })
+
+  it('keeps readonly left-click flip flow working after host fullscreen toggles', async () => {
+    render(
+      <MindMapReviewFlow
+        title="Root"
+        palaceId={1}
+        sessionKind="practice"
+        editorState={editorState}
+        onComplete={vi.fn()}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: '宿主半屏切换' }))
+    await waitFor(() => {
+      expect(screen.getByText('toolbar-shown-immersive')).toBeTruthy()
+    })
+
+    await act(async () => {
+      getLatestMindMapFrameProps()?.onNodeClick?.([{ uid: 'root', text: 'Root' }])
+    })
     await act(async () => {
       getLatestMindMapFrameProps()?.onNodeClick?.([{ uid: 'child', text: 'Child' }])
     })
@@ -188,6 +226,11 @@ describe('MindMapReviewFlow', () => {
         child: 'Child',
         grandchild: null,
       })
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: '退出原生全屏' }))
+    await waitFor(() => {
+      expect(screen.getByText('toolbar-shown-plain')).toBeTruthy()
     })
 
     await act(async () => {
@@ -201,8 +244,6 @@ describe('MindMapReviewFlow', () => {
         grandchild: '待回忆',
       })
     })
-
-    expect(timer.registerActivity).toHaveBeenCalledWith('practice_interaction', { source: 'left_click' })
   })
 
   it('keeps readonly right-click branch handling wired through the frame', async () => {
@@ -247,5 +288,47 @@ describe('MindMapReviewFlow', () => {
     })
 
     expect(timer.registerActivity).toHaveBeenCalledWith('practice_interaction', { source: 'right_click' })
+  })
+
+  it('lets root right-click hide revealed descendants while keeping the root visible', async () => {
+    render(
+      <MindMapReviewFlow
+        title="Root"
+        palaceId={1}
+        sessionKind="practice"
+        editorState={editorState}
+        onComplete={vi.fn()}
+      />,
+    )
+
+    await act(async () => {
+      getLatestMindMapFrameProps()?.onNodeClick?.([{ uid: 'root', text: 'Root' }])
+    })
+    await act(async () => {
+      getLatestMindMapFrameProps()?.onNodeClick?.([{ uid: 'child', text: 'Child' }])
+    })
+    await act(async () => {
+      getLatestMindMapFrameProps()?.onNodeClick?.([{ uid: 'child', text: 'Child' }])
+    })
+
+    await waitFor(() => {
+      expect(getVisibleTextsFromLatestFrame()).toEqual({
+        root: 'Root',
+        child: 'Child',
+        grandchild: '待回忆',
+      })
+    })
+
+    await act(async () => {
+      getLatestMindMapFrameProps()?.onNodeContextMenu?.([{ uid: 'root', text: 'Root' }])
+    })
+
+    await waitFor(() => {
+      expect(getVisibleTextsFromLatestFrame()).toEqual({
+        root: 'Root',
+        child: null,
+        grandchild: null,
+      })
+    })
   })
 })

@@ -24,8 +24,11 @@ interface MindMapFrameProps {
   immersiveModeActive?: boolean
   showImportButtons?: boolean
   syncOnPropChange?: boolean
+  syncIntent?: 'soft' | 'replace'
+  syncReason?: string | null
   externalSyncKey?: string | number | null
   forceSyncKey?: string | number | null
+  forceSyncIntent?: 'soft' | 'replace'
   preserveViewOnSync?: boolean
   className?: string
   segments?: MindMapHostSegmentSummary[]
@@ -121,7 +124,9 @@ function buildSyncFingerprint(args: {
     externalSyncKey,
   } = args
   return JSON.stringify({
-    editor_doc: normalizeEditorDoc(editorState.editor_doc),
+    editor_doc:
+      externalSyncKey == null ? normalizeEditorDoc(editorState.editor_doc) : undefined,
+    editor_doc_sync_key: externalSyncKey,
     editor_config: editorState.editor_config,
     editor_local_config: editorState.editor_local_config,
     lang: editorState.lang,
@@ -131,7 +136,6 @@ function buildSyncFingerprint(args: {
     segmentRangeDraft,
     bilinkCounts,
     preserveViewOnSync,
-    externalSyncKey,
   })
 }
 
@@ -144,8 +148,11 @@ export function MindMapFrame({
   immersiveModeActive = false,
   showImportButtons = false,
   syncOnPropChange = false,
+  syncIntent = 'soft',
+  syncReason = null,
   externalSyncKey = null,
   forceSyncKey = null,
+  forceSyncIntent = 'replace',
   preserveViewOnSync = false,
   className,
   segments = [],
@@ -231,20 +238,27 @@ export function MindMapFrame({
   const rawHostId = useId()
   const hostId = useMemo(() => rawHostId.replace(/[^a-zA-Z0-9_-]/g, '_'), [rawHostId])
 
-  const syncHostEditorState = useCallback(() => {
-    const iframeWindow = iframeRef.current?.contentWindow as
-      | (Window & {
-          syncHostEditorState?: (payload: {
-            editorState: MindMapEditorState
-            preserveView: boolean
-          }) => void
-        })
-      | null
-    iframeWindow?.syncHostEditorState?.({
-      editorState: cloneValue(stateRef.current),
-      preserveView: preserveViewOnSync,
-    })
-  }, [preserveViewOnSync])
+  const syncHostEditorStateWithIntent = useCallback(
+    (nextIntent: 'soft' | 'replace', nextReason: string | null = null) => {
+      const iframeWindow = iframeRef.current?.contentWindow as
+        | (Window & {
+            syncHostEditorState?: (payload: {
+              editorState: MindMapEditorState
+              preserveView: boolean
+              syncIntent: 'soft' | 'replace'
+              syncReason: string | null
+            }) => void
+          })
+        | null
+      return iframeWindow?.syncHostEditorState?.({
+        editorState: cloneValue(stateRef.current),
+        preserveView: preserveViewOnSync,
+        syncIntent: nextIntent,
+        syncReason: nextReason,
+      })
+    },
+    [preserveViewOnSync],
+  )
 
   const syncHostState = useCallback(() => {
     const iframeWindow = iframeRef.current?.contentWindow as
@@ -536,18 +550,20 @@ export function MindMapFrame({
       return
     }
     lastSyncedFingerprintRef.current = fingerprint
-    syncHostEditorState()
+    syncHostEditorStateWithIntent(syncIntent, syncReason)
   }, [
     activeSegmentId,
     editorState,
     externalSyncKey,
     isLoaded,
     preserveViewOnSync,
+    syncIntent,
+    syncReason,
     segmentColorMode,
     segmentRangeDraft,
     bilinkCounts,
     segments,
-    syncHostEditorState,
+    syncHostEditorStateWithIntent,
     syncOnPropChange,
   ])
 
@@ -567,19 +583,20 @@ export function MindMapFrame({
       externalSyncKey,
     })
     suppressNextPropSyncRef.current = false
-    syncHostEditorState()
+    syncHostEditorStateWithIntent(forceSyncIntent, null)
   }, [
     activeSegmentId,
     editorState,
     externalSyncKey,
     forceSyncKey,
+    forceSyncIntent,
     isLoaded,
     preserveViewOnSync,
     segmentColorMode,
     segmentRangeDraft,
     bilinkCounts,
     segments,
-    syncHostEditorState,
+    syncHostEditorStateWithIntent,
   ])
 
   return (

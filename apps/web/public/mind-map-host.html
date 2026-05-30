@@ -501,6 +501,15 @@
         },
         pendingCreation: null,
       }
+      const SOFT_SYNC_BUSY_WINDOW = 120
+      const SOFT_SYNC_MAX_DEFER_MS = 600
+      const syncState = {
+        lastInteractionAt: 0,
+        pendingSoftPayload: null,
+        flushTimer: null,
+        maxFlushTimer: null,
+        pendingFocusRestore: null,
+      }
 
       function cloneValue(value) {
         if (value == null) return value
@@ -532,6 +541,77 @@
         })
       }
 
+      function stableSerialize(value) {
+        try {
+          return JSON.stringify(value) || ''
+        } catch (error) {
+          console.warn(error)
+          return ''
+        }
+      }
+
+      function getEditorDocRoot(doc) {
+        return doc && typeof doc === 'object' && doc.root && typeof doc.root === 'object'
+          ? doc.root
+          : null
+      }
+
+      function getDocNodeData(node) {
+        return node && typeof node === 'object' && node.data && typeof node.data === 'object'
+          ? node.data
+          : {}
+      }
+
+      function getDocNodeIdentity(node) {
+        const data = getDocNodeData(node)
+        if (typeof data.uid === 'string' && data.uid.trim().length > 0) return `uid:${data.uid.trim()}`
+        if (data.memoryAnkiId != null && String(data.memoryAnkiId).trim().length > 0) {
+          return `memoryAnkiId:${String(data.memoryAnkiId).trim()}`
+        }
+        if (
+          typeof data.memoryAnkiNodeType === 'string' &&
+          data.memoryAnkiNodeType.trim().length > 0
+        ) {
+          return `nodeType:${data.memoryAnkiNodeType.trim()}`
+        }
+        return null
+      }
+
+      function getDocNodeChildren(node) {
+        return Array.isArray(node?.children) ? node.children : []
+      }
+
+      function areDocsEquivalentForSoftSync(currentNode, nextNode, isRoot = false) {
+        if (!currentNode || !nextNode) return false
+        if (!isRoot) {
+          if (getDocNodeIdentity(currentNode) !== getDocNodeIdentity(nextNode)) return false
+        }
+        const currentChildren = getDocNodeChildren(currentNode)
+        const nextChildren = getDocNodeChildren(nextNode)
+        if (currentChildren.length !== nextChildren.length) return false
+        for (let index = 0; index < currentChildren.length; index += 1) {
+          if (!areDocsEquivalentForSoftSync(currentChildren[index], nextChildren[index], false)) {
+            return false
+          }
+        }
+        return true
+      }
+
+      function canSoftMergeEditorState(nextEditorState) {
+        if (!nextEditorState || typeof nextEditorState !== 'object') return false
+        const currentDoc = getCurrentEditorDocSnapshot()
+        const currentRoot = getEditorDocRoot(currentDoc)
+        const nextRoot = getEditorDocRoot(nextEditorState.editor_doc)
+        if (!currentRoot || !nextRoot) return false
+        const currentConfig = getHostBridge()?.getMindMapConfig?.() || {}
+        const currentLocalConfig = getHostBridge()?.getLocalConfig?.() || {}
+        const currentLang = getHostBridge()?.getLanguage?.() || 'zh'
+        if (stableSerialize(currentConfig) !== stableSerialize(nextEditorState.editor_config || {})) return false
+        if (stableSerialize(currentLocalConfig) !== stableSerialize(nextEditorState.editor_local_config || {})) return false
+        if (String(currentLang || 'zh') !== String(nextEditorState.lang || 'zh')) return false
+        return areDocsEquivalentForSoftSync(currentRoot, nextRoot, true)
+      }
+
       function getHostBridge() {
         const registry = window.parent && window.parent.__memoryAnkiMindMapHosts
         if (!registry || !hostId) return null
@@ -551,10 +631,7 @@
       }
 
       function isToolbarReadonlyHost() {
-        return Boolean(
-          window.__memoryAnkiHostState?.readonly &&
-            window.__memoryAnkiHostState?.showToolbarWhenReadonly
-        )
+        return Boolean(window.__memoryAnkiHostState?.showToolbarWhenReadonly)
       }
 
       function isVisualReadonlyHost() {
@@ -599,6 +676,31 @@
         return getSelectionEditableElement()
       }
 
+      function markHostInteraction() {
+        syncState.lastInteractionAt = Date.now()
+      }
+
+      function clearPendingSoftSyncTimers() {
+        if (syncState.flushTimer != null) {
+          window.clearTimeout(syncState.flushTimer)
+          syncState.flushTimer = null
+        }
+        if (syncState.maxFlushTimer != null) {
+          window.clearTimeout(syncState.maxFlushTimer)
+          syncState.maxFlushTimer = null
+        }
+      }
+
+      function isSoftSyncBusy() {
+        if (selectionDragState.stage === 'pending' || selectionDragState.stage === 'dragging') {
+          return true
+        }
+        if (getActiveEditableElement()) {
+          return true
+        }
+        return Date.now() - Number(syncState.lastInteractionAt || 0) < SOFT_SYNC_BUSY_WINDOW
+      }
+
       function focusKeyboardSurface() {
         const surface = document.getElementById('app') || document.body
         if (!(surface instanceof HTMLElement)) return
@@ -619,6 +721,7 @@
         focusState.mode = 'navigating'
         focusState.editingNodeUid = null
         focusKeyboardSurface()
+        markHostInteraction()
       }
 
       function dispatchEditableInputEvent(element) {
@@ -676,6 +779,16 @@
         if (focusState.mode !== 'editing') {
           focusState.editingNodeUid = null
         }
+      }
+
+      function maybeFlushSoftSyncOnIdle() {
+        window.setTimeout(() => {
+          flushPendingSoftSync()
+        }, 0)
+      }
+
+      function isImmediateSoftSyncReason(reason) {
+        return reason === 'review_flip'
       }
 
       function defaultMindMapShortcutTargetCheck(event, mindMap) {
@@ -1163,15 +1276,6 @@
 
       function getRuntimeMindMapDocumentFingerprint() {
         try {
-          const bridgeData = getHostBridge()?.getMindMapData?.()
-          if (typeof bridgeData !== 'undefined') {
-            return JSON.stringify(cloneValue(bridgeData) || null)
-          }
-        } catch (error) {
-          console.warn(error)
-        }
-
-        try {
           const mindMap = getMindMap()
           if (typeof mindMap?.getFullData === 'function') {
             return JSON.stringify(cloneValue(mindMap.getFullData()) || null)
@@ -1188,16 +1292,7 @@
         )
       }
 
-      function getCurrentEditorDocSnapshot() {
-        try {
-          const bridgeData = getHostBridge()?.getMindMapData?.()
-          if (typeof bridgeData !== 'undefined') {
-            return cloneValue(bridgeData) || null
-          }
-        } catch (error) {
-          console.warn(error)
-        }
-
+      function getRuntimeEditorDocSnapshot() {
         try {
           const mindMap = getMindMap()
           if (typeof mindMap?.getFullData === 'function') {
@@ -1205,6 +1300,23 @@
           }
           if (typeof mindMap?.getData === 'function') {
             return cloneValue(mindMap.getData()) || null
+          }
+        } catch (error) {
+          console.warn(error)
+        }
+
+        return null
+      }
+
+      function getCurrentEditorDocSnapshot() {
+        const runtimeDoc = getRuntimeEditorDocSnapshot()
+        if (runtimeDoc) {
+          return runtimeDoc
+        }
+        try {
+          const bridgeData = getHostBridge()?.getMindMapData?.()
+          if (typeof bridgeData !== 'undefined') {
+            return cloneValue(bridgeData) || null
           }
         } catch (error) {
           console.warn(error)
@@ -1956,6 +2068,7 @@
 
       function setEditableElementText(element, text) {
         if (!element) return false
+        markHostInteraction()
         const nextText = String(text || '')
         if (element.tagName === 'TEXTAREA' || element.tagName === 'INPUT') {
           element.focus?.({ preventScroll: true })
@@ -2125,6 +2238,7 @@
         if (!newNode) return false
 
         selectionDragState.pendingCreation = null
+        markHostInteraction()
         populateSelectionDragCreatedNode(newNode, pendingCreation.text)
         window.setTimeout(() => {
           populateSelectionDragCreatedNode(newNode, pendingCreation.text)
@@ -2203,6 +2317,7 @@
       }
 
       function commitSelectionDrag() {
+        markHostInteraction()
         const selectedText = selectionDragState.sourceText
         const sourceElement = resolveSelectionDragSourceElement()
         const sourceRange = selectionDragState.sourceRange
@@ -2238,6 +2353,7 @@
           discardPendingSelectionDragHistoryEntry()
         }
         resetSelectionDragState()
+        maybeFlushSoftSyncOnIdle()
         return created
       }
 
@@ -2567,6 +2683,13 @@
         return false
       }
 
+      function restorePendingSyncFocusIfNeeded() {
+        if (!syncState.pendingFocusRestore) return false
+        const snapshot = syncState.pendingFocusRestore
+        syncState.pendingFocusRestore = null
+        return restoreHostSyncFocusSnapshot(snapshot)
+      }
+
       function updateKeyboardFocusClass() {
         const targetUid = getStableFocusUid()
         getCachedNodes().forEach((node) => {
@@ -2715,6 +2838,7 @@
         document.addEventListener(
           'input',
           event => {
+            markHostInteraction()
             maybeTriggerBilinkSearchFromInput(event)
           },
           true,
@@ -2725,6 +2849,7 @@
             if (isReadonlyHost()) return
             const markNode = findNearestBilinkMark(event.target)
             if (!markNode) return
+            markHostInteraction()
             const activeUid = focusState.editingNodeUid || focusState.committedNodeUid || null
             if (!activeUid) return
             const target = resolveBilinkTargetForSourceUid(activeUid)
@@ -3467,10 +3592,12 @@
           event.key === 'Escape' &&
           (selectionDragState.stage === 'pending' || selectionDragState.stage === 'dragging')
         ) {
+          markHostInteraction()
           event.preventDefault()
           event.stopPropagation()
           event.stopImmediatePropagation?.()
           resetSelectionDragState()
+          maybeFlushSoftSyncOnIdle()
           return
         }
 
@@ -3496,6 +3623,7 @@
         focusState.mode = editableElement ? 'editing' : 'navigating'
         const historyDirection = getHistoryNavigationDirection(event)
         if (historyDirection) {
+          markHostInteraction()
           if (focusState.mode === 'editing' && editableElement) {
             deferEditableHistoryFallback(historyDirection, editableElement)
             return
@@ -3517,6 +3645,7 @@
 
         if (focusState.mode === 'editing') {
           if (event.key === 'Enter' && editableElement) {
+            markHostInteraction()
             event.preventDefault()
             event.stopPropagation()
             insertLineBreakIntoEditable(editableElement)
@@ -3529,6 +3658,7 @@
         if (event.metaKey || event.ctrlKey || event.altKey) return
 
         if (event.key === 'ArrowLeft') {
+          markHostInteraction()
           event.preventDefault()
           event.stopPropagation()
           const target = findDirectionalTarget('left')
@@ -3536,6 +3666,7 @@
           return
         }
         if (event.key === 'ArrowRight') {
+          markHostInteraction()
           event.preventDefault()
           event.stopPropagation()
           const target = findDirectionalTarget('right')
@@ -3543,6 +3674,7 @@
           return
         }
         if (event.key === 'ArrowUp') {
+          markHostInteraction()
           event.preventDefault()
           event.stopPropagation()
           const target = findDirectionalTarget('up')
@@ -3550,6 +3682,7 @@
           return
         }
         if (event.key === 'ArrowDown') {
+          markHostInteraction()
           event.preventDefault()
           event.stopPropagation()
           const target = findDirectionalTarget('down')
@@ -3557,12 +3690,14 @@
           return
         }
         if (event.key === 'Enter') {
+          markHostInteraction()
           event.preventDefault()
           event.stopPropagation()
           enterEditModeForNode(getCurrentActiveNode())
           return
         }
         if (event.key === 'Tab' && !event.shiftKey) {
+          markHostInteraction()
           event.preventDefault()
           event.stopPropagation()
           createChildAtActiveNode()
@@ -3570,6 +3705,7 @@
         }
         if (event.key === 'Delete' || event.key === 'Backspace') {
           if (!getCurrentActiveNode()) return
+          markHostInteraction()
           event.preventDefault()
           event.stopPropagation()
           deleteActiveNode()
@@ -3581,8 +3717,23 @@
         if (window.__memoryAnkiKeyboardListenersRegistered) return
         window.__memoryAnkiKeyboardListenersRegistered = true
         document.addEventListener('keydown', handleHostKeydown, true)
-        document.addEventListener('focusin', syncKeyboardMode, true)
-        document.addEventListener('focusout', scheduleModeSync, true)
+        document.addEventListener(
+          'focusin',
+          () => {
+            markHostInteraction()
+            syncKeyboardMode()
+          },
+          true,
+        )
+        document.addEventListener(
+          'focusout',
+          () => {
+            markHostInteraction()
+            scheduleModeSync()
+            maybeFlushSoftSyncOnIdle()
+          },
+          true,
+        )
       }
 
       function beginSelectionDragFromCandidate(event) {
@@ -3652,6 +3803,7 @@
             selectionDragState.startY = event.clientY
             selectionDragState.currentX = event.clientX
             selectionDragState.currentY = event.clientY
+            markHostInteraction()
             armSelectionDragHoldTimer()
           },
           true,
@@ -3664,6 +3816,7 @@
             if (selectionDragState.pointerId != null && event.pointerId !== selectionDragState.pointerId) return
             selectionDragState.currentX = event.clientX
             selectionDragState.currentY = event.clientY
+            markHostInteraction()
             if (selectionDragState.stage === 'pending') {
               const sourceElement = resolveSelectionDragSourceElement()
               if (
@@ -3703,6 +3856,7 @@
           (event) => {
             if (selectionDragState.stage === 'idle') return
             if (selectionDragState.pointerId != null && event.pointerId !== selectionDragState.pointerId) return
+            markHostInteraction()
             if (selectionDragState.stage === 'dragging') {
               event.preventDefault()
               event.stopPropagation()
@@ -3719,7 +3873,9 @@
         document.addEventListener(
           'pointercancel',
           () => {
+            markHostInteraction()
             resetSelectionDragState()
+            maybeFlushSoftSyncOnIdle()
           },
           true,
         )
@@ -3740,6 +3896,7 @@
           'dragstart',
           (event) => {
             if (selectionDragState.stage === 'pending') {
+              markHostInteraction()
               resetSelectionDragState()
               return
             }
@@ -3757,6 +3914,7 @@
           'contextmenu',
           (event) => {
             if (!shouldSuppressSelectionDragContextMenu()) return
+            markHostInteraction()
             event.preventDefault()
             event.stopPropagation()
             event.stopImmediatePropagation?.()
@@ -3772,6 +3930,7 @@
           'pointerdown',
           event => {
             if (isReadonlyHost()) return
+            markHostInteraction()
             if (interactionState.pointerIntentClearTimer != null) {
               window.clearTimeout(interactionState.pointerIntentClearTimer)
               interactionState.pointerIntentClearTimer = null
@@ -3788,6 +3947,7 @@
           'pointerup',
           () => {
             if (isReadonlyHost()) return
+            markHostInteraction()
             if (interactionState.pointerIntentClearTimer != null) {
               window.clearTimeout(interactionState.pointerIntentClearTimer)
             }
@@ -3795,6 +3955,7 @@
               interactionState.pointerDownNodeUid = null
               interactionState.pointerDownWithModifier = false
               interactionState.pointerIntentClearTimer = null
+              maybeFlushSoftSyncOnIdle()
             }, 220)
           },
           true
@@ -3807,6 +3968,7 @@
         document.addEventListener(
           'contextmenu',
           event => {
+            markHostInteraction()
             if (!isReadonlyHost()) return
             const node = getNodeByElement(event.target)
             if (!node) return
@@ -3826,6 +3988,7 @@
           'dblclick',
           event => {
             if (isReadonlyHost()) return
+            markHostInteraction()
             const node = getNodeByElement(event.target)
             if (!node) {
               event.preventDefault()
@@ -3854,6 +4017,7 @@
             if (typeof event.button === 'number' && event.button !== 0) return
             const node = getNodeByElement(event.target)
             if (!node) return
+            markHostInteraction()
             event.preventDefault()
             event.stopPropagation()
             event.stopImmediatePropagation?.()
@@ -3892,14 +4056,16 @@
       }
 
       function applyHostState(nextState) {
+        const previousState = window.__memoryAnkiHostState || {}
+        const wasReadonly = Boolean(previousState.readonly)
         window.__memoryAnkiHostState = {
-          ...(window.__memoryAnkiHostState || {}),
+          ...previousState,
           ...(nextState || {}),
         }
         const isReadonly = Boolean(window.__memoryAnkiHostState.readonly)
         const showToolbarWhenReadonly = Boolean(window.__memoryAnkiHostState.showToolbarWhenReadonly)
-        const visualReadonly = isVisualReadonlyHost()
-        document.body.classList.toggle('is-host-readonly', visualReadonly)
+        const readonlyHost = isVisualReadonlyHost()
+        document.body.classList.toggle('is-host-readonly', readonlyHost)
         document.body.classList.toggle(
           'is-host-readonly-toolbar-visible',
           isReadonly && showToolbarWhenReadonly
@@ -3910,15 +4076,15 @@
           null
         const store = appRoot && appRoot.$store
         if (store) {
-          store.commit('setIsReadonly', visualReadonly)
-          if (visualReadonly) {
+          store.commit('setIsReadonly', readonlyHost)
+          if (readonlyHost) {
             store.commit('setActiveSidebar', null)
           }
         }
         const mindMap = window.__memoryAnkiMindMapInstance
         if (!mindMap) return
         if (typeof window.__memoryAnkiHostState.readonly === 'boolean') {
-          const nextMode = visualReadonly ? 'readonly' : 'edit'
+          const nextMode = readonlyHost ? 'readonly' : 'edit'
           const currentMode =
             typeof mindMap.opt?.mode === 'string'
               ? mindMap.opt.mode
@@ -3929,9 +4095,9 @@
             mindMap.setMode(nextMode)
           }
         }
-        if (isReadonly) {
+        if (isReadonly && !wasReadonly) {
           resetReadonlyInteractionState()
-        } else {
+        } else if (!isReadonly) {
           window.setTimeout(() => {
             restoreStableFocusAfterRender()
           }, 0)
@@ -4061,25 +4227,210 @@
         return buildNodeDeduplicationKey(node, childKeys)
       }
 
-      function syncHostEditorState(payload) {
-        const nextEditorState = payload?.editorState
-        if (!nextEditorState) return
-
-        const nextFingerprint = buildEditorStateFingerprint(
-          nextEditorState,
-          Boolean(payload?.preserveView),
-        )
-        if (!window.__memoryAnkiPendingEditorState) {
-          window.__memoryAnkiPendingEditorState = {}
+      function getRuntimeNodeDataContainer(node) {
+        if (!node) return null
+        try {
+          const whole = typeof node.getData === 'function' ? node.getData() : null
+          if (whole && typeof whole === 'object') {
+            return whole
+          }
+        } catch (error) {
+          console.warn(error)
         }
+        if (node.nodeData?.data && typeof node.nodeData.data === 'object') {
+          return node.nodeData.data
+        }
+        if (node.data && typeof node.data === 'object') {
+          return node.data
+        }
+        return null
+      }
+
+      function applyDocMetadataToRuntimeNode(runtimeNode, nextDocNode) {
+        if (!runtimeNode || !nextDocNode) return
+        const targetData = getRuntimeNodeDataContainer(runtimeNode)
+        const nextData = cloneValue(getDocNodeData(nextDocNode))
+        if (targetData && nextData) {
+          Object.assign(targetData, nextData)
+        }
+        if (runtimeNode.nodeData?.data && typeof runtimeNode.nodeData.data === 'object') {
+          Object.assign(runtimeNode.nodeData.data, nextData)
+        }
+        if (runtimeNode.data && typeof runtimeNode.data === 'object') {
+          Object.assign(runtimeNode.data, nextData)
+        }
+        const runtimeChildren = Array.isArray(runtimeNode.children) ? runtimeNode.children : []
+        const nextChildren = getDocNodeChildren(nextDocNode)
+        nextChildren.forEach((childNode, index) => {
+          applyDocMetadataToRuntimeNode(runtimeChildren[index], childNode)
+        })
+      }
+
+      function applySoftMergedEditorState(nextEditorState, nextFingerprint) {
+        if (!canSoftMergeEditorState(nextEditorState)) return false
+        const runtimeRoot = getMindMap()?.renderer?.renderTree || null
+        const nextRoot = getEditorDocRoot(nextEditorState.editor_doc)
+        if (!runtimeRoot || !nextRoot) return false
+        applyDocMetadataToRuntimeNode(runtimeRoot, nextRoot)
         window.__memoryAnkiPendingEditorState = {
           editorState: cloneValue(nextEditorState),
-          preserveView: Boolean(payload?.preserveView),
+          preserveView: true,
+          syncIntent: 'soft',
           fingerprint: nextFingerprint,
         }
+        window.__memoryAnkiLastAppliedEditorFingerprint = nextFingerprint
+        requestSoftSyncVisualRefresh()
+        updateKeyboardFocusClass()
+        return true
+      }
 
+      function requestSoftSyncVisualRefresh() {
+        const mindMap = getMindMap()
+        const renderer = getRenderer()
+        const refreshCalls = [
+          () => renderer?.render?.(),
+          () => renderer?.reRender?.(),
+          () => renderer?.refresh?.(),
+          () => renderer?.draw?.render?.(),
+          () => mindMap?.render?.(),
+          () => mindMap?.refresh?.(),
+          () => mindMap?.view?.render?.(),
+          () => mindMap?.view?.update?.(),
+        ]
+        for (const run of refreshCalls) {
+          try {
+            if (typeof run === 'function') {
+              const result = run()
+              if (typeof result !== 'undefined') {
+                break
+              }
+            }
+          } catch (error) {
+            console.warn(error)
+          }
+        }
+        window.setTimeout(() => {
+          updateKeyboardFocusClass()
+          applySegmentNodeStyles()
+          renderBilinkBadges()
+        }, 0)
+      }
+
+      function captureHostSyncFocusSnapshot() {
+        const activeNode = getCurrentActiveNode()
+        const editableElement = getActiveEditableElement()
+        return {
+          activeNodeUid: getNodeUid(activeNode) || null,
+          focusSnapshot: captureSelectionDragFocusSnapshot(),
+          selectionRange: editableElement ? getSelectionRangeSnapshotForElement(editableElement) : null,
+          selectionText: editableElement ? getEditableSelectionTextForElement(editableElement) : '',
+          wasEditing: Boolean(editableElement),
+        }
+      }
+
+      function restoreHostSyncFocusSnapshot(snapshot) {
+        if (!snapshot || typeof snapshot !== 'object') return false
+        const targetUid = snapshot.activeNodeUid || snapshot.focusSnapshot?.editingNodeUid || null
+        const targetNode = resolveClosestExistingNode(targetUid)
+        if (!targetNode) {
+          restoreSelectionDragFocusSnapshot(snapshot.focusSnapshot)
+          focusKeyboardSurface()
+          return false
+        }
+
+        activateNode(targetNode, {
+          notify: false,
+          commit: true,
+          visual: true,
+          lockEditing: Boolean(snapshot.wasEditing),
+          clearEditingLock: !snapshot.wasEditing,
+        })
+
+        if (!snapshot.wasEditing) {
+          updateKeyboardFocusClass()
+          focusKeyboardSurface()
+          return true
+        }
+
+        const restoreEditableSelection = () => {
+          const editableElement = getNodeEditableElement(targetNode) || getActiveEditableElement()
+          if (!editableElement) return false
+          const selectionRange = snapshot.selectionRange
+          if (selectionRange && restoreSelectionDragSourceSelectionForSnapshot(editableElement, selectionRange)) {
+            return true
+          }
+          return false
+        }
+
+        enterEditModeForNode(targetNode)
+        window.setTimeout(() => {
+          if (!restoreEditableSelection()) {
+            restoreSelectionDragFocusSnapshot(snapshot.focusSnapshot)
+          }
+        }, 24)
+        window.setTimeout(() => {
+          restoreEditableSelection()
+        }, 120)
+        return true
+      }
+
+      function restoreSelectionDragSourceSelectionForSnapshot(editableElement, selectionRange) {
+        if (!editableElement || !selectionRange) return false
+        if (editableElement.tagName === 'TEXTAREA' || editableElement.tagName === 'INPUT') {
+          const start = typeof selectionRange.start === 'number' ? selectionRange.start : null
+          const end = typeof selectionRange.end === 'number' ? selectionRange.end : null
+          if (start == null || end == null) return false
+          editableElement.focus?.({ preventScroll: true })
+          editableElement.setSelectionRange?.(start, end)
+          return true
+        }
+        const restoredRange = createContentEditableRangeFromOffsets(editableElement, selectionRange)
+        if (!restoredRange) return false
+        const selection =
+          typeof window.getSelection === 'function' ? window.getSelection() : null
+        if (!selection) return false
+        try {
+          editableElement.focus?.({ preventScroll: true })
+          selection.removeAllRanges()
+          selection.addRange(restoredRange)
+          return true
+        } catch (error) {
+          console.warn(error)
+          return false
+        }
+      }
+
+      function schedulePendingSoftSyncFlush() {
+        clearPendingSoftSyncTimers()
+        if (!syncState.pendingSoftPayload) return
+        syncState.flushTimer = window.setTimeout(() => {
+          flushPendingSoftSync()
+        }, SOFT_SYNC_BUSY_WINDOW + 24)
+        syncState.maxFlushTimer = window.setTimeout(() => {
+          flushPendingSoftSync(true)
+        }, SOFT_SYNC_MAX_DEFER_MS)
+      }
+
+      function flushPendingSoftSync(force = false) {
+        const pendingPayload = syncState.pendingSoftPayload
+        if (!pendingPayload) return false
+        if (!force && isSoftSyncBusy()) {
+          schedulePendingSoftSyncFlush()
+          return false
+        }
+        syncState.pendingSoftPayload = null
+        clearPendingSoftSyncTimers()
+        return performEditorStateSync(pendingPayload)
+      }
+
+      function performFullEditorSync(payload) {
+        const nextEditorState = payload?.editorState
+        if (!nextEditorState) return false
+        const nextFingerprint =
+          payload?.fingerprint ||
+          buildEditorStateFingerprint(nextEditorState, Boolean(payload?.preserveView))
         const mindMap = window.__memoryAnkiMindMapInstance
-        if (!mindMap) return
+        if (!mindMap) return false
 
         const nextDoc = cloneValue(nextEditorState.editor_doc) || {}
         normalizeImportedNodePresentation(nextDoc?.root, 0)
@@ -4089,10 +4440,11 @@
           window.__memoryAnkiLastAppliedEditorFingerprint &&
           window.__memoryAnkiLastAppliedEditorFingerprint === nextFingerprint
         ) {
-          return
+          return true
         }
         let currentTransform = null
-        if (window.__memoryAnkiPendingEditorState.preserveView) {
+        const focusSnapshot = captureHostSyncFocusSnapshot()
+        if (Boolean(payload?.preserveView)) {
           try {
             if (mindMap.view && typeof mindMap.view.getTransformData === 'function') {
               currentTransform = cloneValue(mindMap.view.getTransformData())
@@ -4115,10 +4467,79 @@
 
         ensureMindMapShortcutGuard()
         window.__memoryAnkiLastAppliedEditorFingerprint = nextFingerprint
+        syncState.pendingFocusRestore = focusSnapshot
 
         if (currentTransform) {
           window.__memoryAnkiPendingTransformRestore = cloneValue(currentTransform)
         }
+        return true
+      }
+
+      function performEditorStateSync(payload) {
+        const nextEditorState = payload?.editorState
+        if (!nextEditorState) return false
+        const nextFingerprint =
+          payload?.fingerprint ||
+          buildEditorStateFingerprint(nextEditorState, Boolean(payload?.preserveView))
+        const syncIntent = payload?.syncIntent === 'replace' ? 'replace' : 'soft'
+        if (syncIntent === 'soft' && applySoftMergedEditorState(nextEditorState, nextFingerprint)) {
+          return true
+        }
+        return performFullEditorSync({
+          ...payload,
+          fingerprint: nextFingerprint,
+          syncIntent,
+        })
+      }
+
+      function syncHostEditorState(payload) {
+        const nextEditorState = payload?.editorState
+        if (!nextEditorState) return
+
+        const syncReason = typeof payload?.syncReason === 'string' ? payload.syncReason : null
+        const nextFingerprint = buildEditorStateFingerprint(
+          nextEditorState,
+          Boolean(payload?.preserveView),
+        )
+        if (!window.__memoryAnkiPendingEditorState) {
+          window.__memoryAnkiPendingEditorState = {}
+        }
+        window.__memoryAnkiPendingEditorState = {
+          editorState: cloneValue(nextEditorState),
+          preserveView: Boolean(payload?.preserveView),
+          syncIntent: payload?.syncIntent === 'replace' ? 'replace' : 'soft',
+          syncReason,
+          fingerprint: nextFingerprint,
+        }
+
+        const mindMap = window.__memoryAnkiMindMapInstance
+        if (!mindMap) return
+        if ((payload?.syncIntent || 'soft') === 'replace') {
+          syncState.pendingSoftPayload = null
+          clearPendingSoftSyncTimers()
+        }
+        if ((payload?.syncIntent || 'soft') === 'soft' && applySoftMergedEditorState(nextEditorState, nextFingerprint)) {
+          return
+        }
+        if (
+          (payload?.syncIntent || 'soft') === 'soft' &&
+          !isImmediateSoftSyncReason(syncReason) &&
+          isSoftSyncBusy()
+        ) {
+          syncState.pendingSoftPayload = {
+            ...cloneValue(payload),
+            fingerprint: nextFingerprint,
+            syncIntent: 'soft',
+            syncReason,
+          }
+          schedulePendingSoftSyncFlush()
+          return
+        }
+        performEditorStateSync({
+          ...payload,
+          fingerprint: nextFingerprint,
+          syncIntent: payload?.syncIntent === 'replace' ? 'replace' : 'soft',
+        })
       }
 
       window.syncHostEditorState = syncHostEditorState
@@ -4206,6 +4627,7 @@
         })
         window.$bus.$on('node_active', (...args) => {
           if (isReadonlyHost()) return
+          markHostInteraction()
           const activeNodes = Array.isArray(args[1]) ? args[1] : []
           syncKeyboardMode()
           if (activeNodes.length > 1) {
@@ -4289,6 +4711,7 @@
         })
         window.$bus.$on('node_click', (...args) => {
           if (isReadonlyHost()) return
+          markHostInteraction()
           const clickedNode = args[0]
           if (!clickedNode) return
           const clickedNodes = Array.isArray(args[1]) && args[1].length > 0 ? args[1] : [clickedNode]
@@ -4328,6 +4751,7 @@
             restoreSelectionDragFocusSnapshot(selectionDragHistoryState.pendingFocusSnapshot)
             selectionDragHistoryState.pendingFocusSnapshot = null
           }
+          restorePendingSyncFocusIfNeeded()
           finalizePendingSelectionDragCreation({ rendered: true })
           restoreStableFocusAfterRender()
           updateKeyboardFocusClass()
@@ -4335,6 +4759,7 @@
           applySegmentNodeStyles()
           updateNavigatorFullscreenPresentation()
           renderBilinkBadges()
+          maybeFlushSoftSyncOnIdle()
           getHostBridge()?.notify?.('node_tree_render_end', null)
         })
       }

@@ -221,7 +221,6 @@ export default function PalaceEdit() {
             >
               {page.activeMindMapEditorState ? (
                 <MindMapFrame
-                  key={`${page.palaceId}-${page.frameVersion}`}
                   editorState={page.activeMindMapEditorState}
                   readonly={page.editorMode === 'practice'}
                   showToolbarWhenReadonly={page.editorMode === 'practice'}
@@ -230,11 +229,13 @@ export default function PalaceEdit() {
                   immersiveModeActive={page.mindMapFullscreen}
                   showImportButtons
                   syncOnPropChange
+                  syncIntent="soft"
                   preserveViewOnSync={
                     page.editorMode === 'practice' || mindMapImport.importAppliedSyncVersion > 0
                   }
                   externalSyncKey={mindMapImport.importExternalSyncKey}
-                  forceSyncKey={`${page.frameVersion}:${page.editorMode}:${mindMapImport.importAppliedSyncVersion}`}
+                  forceSyncKey={`${page.replaceSyncVersion}:${mindMapImport.importAppliedSyncVersion}`}
+                  forceSyncIntent="replace"
                   segments={page.segments
                     .filter((segment) => !segment.is_virtual_default)
                     .map((segment) => ({

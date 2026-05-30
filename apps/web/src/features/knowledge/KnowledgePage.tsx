@@ -50,7 +50,6 @@ export default function Knowledge() {
   const [newSubjectName, setNewSubjectName] = useState('')
   const [selectedNodes, setSelectedNodes] = useState<MindMapSelection[]>([])
   const [chapterDetail, setChapterDetail] = useState<ChapterDetail | null>(null)
-  const [frameVersion, setFrameVersion] = useState(0)
 
   const selectedNodeUid =
     selectedNodes?.[0]?.uid ||
@@ -135,7 +134,6 @@ export default function Knowledge() {
     const subject = await createSubjectApi({ name, color: '#6366f1' })
     setNewSubjectName('')
     await refreshSubjects(subject.id)
-    setFrameVersion((value) => value + 1)
   }
 
   const handleSaveSubject = async () => {
@@ -145,7 +143,6 @@ export default function Knowledge() {
     await updateSubjectApi(activeSubject.id, { name: nextName, color: subjectColor })
     await refreshSubjects(activeSubject.id)
     await reload()
-    setFrameVersion((value) => value + 1)
   }
 
   const handleDeleteSubject = async () => {
@@ -154,7 +151,6 @@ export default function Knowledge() {
     setSelectedNodes([])
     setChapterDetail(null)
     await refreshSubjects(null)
-    setFrameVersion((value) => value + 1)
   }
 
   const renderStatus = () => {
@@ -376,10 +372,10 @@ export default function Knowledge() {
           <CardContent className="min-h-[62vh]">
             {selectedSubjectId && editorState ? (
               <MindMapFrame
-                key={`${selectedSubjectId}-${frameVersion}`}
                 editorState={editorState}
                 showImportButtons
                 syncOnPropChange
+                syncIntent="soft"
                 externalSyncKey={mindMapImport.importExternalSyncKey}
                 onEditorStateChange={(nextState: MindMapEditorState) => {
                   setEditorState(nextState)

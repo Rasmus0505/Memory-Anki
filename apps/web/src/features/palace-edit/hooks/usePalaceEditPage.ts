@@ -4,6 +4,7 @@ import { type RevealState } from '@/entities/session/model'
 import { useBilinkOverlay } from '@/features/bilink'
 import { useBilinkCounts } from '@/features/bilink/hooks/useBilinkCounts'
 import { useBilinks } from '@/features/bilink/hooks/useBilinks'
+import type { BilinkNodeContext } from '@/shared/api/contracts'
 import {
   allNodesRevealed,
   buildInitialRevealState,
@@ -86,6 +87,7 @@ type StatusBadgeState = {
 
 type RangeTarget = number | 'new' | null
 type EditorMode = 'edit' | 'practice'
+type BilinkSearchMode = 'inline' | 'toolbar'
 
 const pendingDraftCreationByLocationKey = new Map<string, Promise<number>>()
 
@@ -154,7 +156,7 @@ export function usePalaceEditPage() {
   const location = useLocation()
   const palaceId = id ? Number(id) : null
   const [isCreatingDraft, setIsCreatingDraft] = useState(false)
-  const [frameVersion, setFrameVersion] = useState(0)
+  const [replaceSyncVersion, setReplaceSyncVersion] = useState(0)
   const [selectedNodes, setSelectedNodes] = useState<MindMapSelection[]>([])
   const [title, setTitle] = useState('')
   const [createdAt, setCreatedAt] = useState('')
@@ -232,7 +234,7 @@ export function usePalaceEditPage() {
         editor_source: 'palace_edit',
       })
       await reload()
-      setFrameVersion((value) => value + 1)
+      setReplaceSyncVersion((value) => value + 1)
       return true
     },
   })
@@ -511,7 +513,6 @@ export function usePalaceEditPage() {
       created_at: createdAt ? toLocalDateTimePayload(createdAt) : null,
     })
     await reload()
-    setFrameVersion((value) => value + 1)
   }
 
   const handleEstablishCreatedAt = async () => {
@@ -883,7 +884,7 @@ export function usePalaceEditPage() {
     if (!confirmed) return
     await restorePalaceVersionApi(palace.id, versionId)
     await reload()
-    setFrameVersion((value) => value + 1)
+    setReplaceSyncVersion((value) => value + 1)
     handleCloseVersions()
   }
 
@@ -953,7 +954,7 @@ export function usePalaceEditPage() {
     subtreeUidMap,
     editorState,
     activeMindMapEditorState,
-    frameVersion,
+    replaceSyncVersion,
     selectedNodes,
     selectedNode,
     setSelectedNodes,

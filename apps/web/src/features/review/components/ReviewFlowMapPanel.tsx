@@ -6,6 +6,7 @@ interface ReviewFlowMapPanelProps {
   fullscreen: boolean
   onToggleFullscreen: (active?: boolean) => void
   visibleEditorState: MindMapEditorState
+  visibleEditorSyncKey?: string | number | null
   bilinkCounts?: Record<string, number>
   bilinkItems?: BilinkItem[]
   currentPalaceId?: number | null
@@ -31,6 +32,7 @@ export function ReviewFlowMapPanel({
   fullscreen,
   onToggleFullscreen,
   visibleEditorState,
+  visibleEditorSyncKey = null,
   bilinkCounts = {},
   bilinkItems = [],
   currentPalaceId = null,
@@ -51,6 +53,8 @@ export function ReviewFlowMapPanel({
         immersiveModeActive={fullscreen}
         syncOnPropChange
         preserveViewOnSync
+        syncReason="review_flip"
+        externalSyncKey={visibleEditorSyncKey}
         bilinkCounts={bilinkCounts}
         bilinkItems={bilinkItems}
         bilinkCurrentPalaceId={currentPalaceId}

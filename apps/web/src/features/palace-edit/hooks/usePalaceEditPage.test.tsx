@@ -1,9 +1,14 @@
+import * as React from 'react'
 import { StrictMode } from 'react'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import PalaceEditPage from '@/features/palace-edit/PalaceEditPage'
 import * as palaceApi from '@/shared/api/modules/palaces'
 import * as knowledgeApi from '@/shared/api/modules/knowledge'
+
+const mindMapFrameMockState = vi.hoisted(() => ({
+  nextMountId: 1,
+}))
 
 const timedSessionMock = {
   effectiveSeconds: 0,
@@ -32,6 +37,9 @@ vi.mock('@/shared/hooks/useTimedSession', () => ({
 
 vi.mock('@/shared/components/mindmap-host', () => ({
   MindMapFrame: ({
+    syncIntent = 'soft',
+    forceSyncKey = null,
+    forceSyncIntent = 'replace',
     onPracticeToggle,
     onMindMapImportOpen,
     onImageTextImportOpen,
@@ -43,7 +51,11 @@ vi.mock('@/shared/components/mindmap-host', () => ({
     preserveViewOnSync = false,
     showImportButtons = false,
     syncOnPropChange = false,
+    externalSyncKey = null,
   }: {
+    syncIntent?: 'soft' | 'replace'
+    forceSyncKey?: string | number | null
+    forceSyncIntent?: 'soft' | 'replace'
     onPracticeToggle?: () => void
     onMindMapImportOpen?: () => void
     onImageTextImportOpen?: () => void
@@ -54,32 +66,41 @@ vi.mock('@/shared/components/mindmap-host', () => ({
     preserveViewOnSync?: boolean
     showImportButtons?: boolean
     syncOnPropChange?: boolean
+    externalSyncKey?: string | number | null
     onFullscreenToggle?: (active?: boolean) => void
-  }) => (
-    <div>
-      <div>{`mindmap-${practiceModeActive ? 'practice' : 'edit'}-${readonly ? 'readonly' : 'editable'}-${showToolbarWhenReadonly ? 'toolbar' : 'plain'}-${preserveViewOnSync ? 'preserve' : 'reset'}-${showImportButtons ? 'import' : 'noimport'}-${syncOnPropChange ? 'sync' : 'nosync'}`}</div>
-      {onPracticeToggle ? (
-        <button type="button" onClick={onPracticeToggle}>
-          {practiceToggleLabel}
-        </button>
-      ) : null}
-      {onMindMapImportOpen ? (
-        <button type="button" onClick={onMindMapImportOpen}>
-          转脑图
-        </button>
-      ) : null}
-      {onImageTextImportOpen ? (
-        <button type="button" onClick={onImageTextImportOpen}>
-          转文字
-        </button>
-      ) : null}
-      {onFullscreenToggle ? (
-        <button type="button" onClick={() => onFullscreenToggle()}>
-          切换半屏
-        </button>
-      ) : null}
-    </div>
-  ),
+  }) => {
+    const mountIdRef = React.useRef<number | null>(null)
+    if (mountIdRef.current == null) {
+      mountIdRef.current = mindMapFrameMockState.nextMountId++
+    }
+    return (
+      <div data-testid="mindmap-frame">
+        <div>{`mindmap-${practiceModeActive ? 'practice' : 'edit'}-${readonly ? 'readonly' : 'editable'}-${showToolbarWhenReadonly ? 'toolbar' : 'plain'}-${preserveViewOnSync ? 'preserve' : 'reset'}-${showImportButtons ? 'import' : 'noimport'}-${syncOnPropChange ? 'sync' : 'nosync'}`}</div>
+        <div>{`mindmap-mount-${mountIdRef.current}`}</div>
+        <div>{`sync-${syncIntent}-${forceSyncIntent}-${String(forceSyncKey ?? '')}-${String(externalSyncKey ?? '')}`}</div>
+        {onPracticeToggle ? (
+          <button type="button" onClick={onPracticeToggle}>
+            {practiceToggleLabel}
+          </button>
+        ) : null}
+        {onMindMapImportOpen ? (
+          <button type="button" onClick={onMindMapImportOpen}>
+            转脑图
+          </button>
+        ) : null}
+        {onImageTextImportOpen ? (
+          <button type="button" onClick={onImageTextImportOpen}>
+            转文字
+          </button>
+        ) : null}
+        {onFullscreenToggle ? (
+          <button type="button" onClick={() => onFullscreenToggle()}>
+            切换半屏
+          </button>
+        ) : null}
+      </div>
+    )
+  },
 }))
 
 vi.mock('@/features/palace-edit/components/PalaceAttachmentPanel', () => ({
@@ -91,7 +112,23 @@ vi.mock('@/features/palace-edit/components/PalaceChapterPanel', () => ({
 }))
 
 vi.mock('@/features/palace-edit/components/PalaceMetaPanel', () => ({
-  PalaceMetaPanel: () => <div>meta</div>,
+  PalaceMetaPanel: ({
+    onSave,
+    onEstablishCreatedAt,
+  }: {
+    onSave?: () => void
+    onEstablishCreatedAt?: () => void
+  }) => (
+    <div>
+      <div>meta</div>
+      <button type="button" onClick={onSave}>
+        保存元信息
+      </button>
+      <button type="button" onClick={onEstablishCreatedAt}>
+        建立创建时间
+      </button>
+    </div>
+  ),
 }))
 
 vi.mock('@/features/palace-edit/components/PalaceSegmentsPanel', () => ({
@@ -99,7 +136,20 @@ vi.mock('@/features/palace-edit/components/PalaceSegmentsPanel', () => ({
 }))
 
 vi.mock('@/features/palace-edit/components/PalaceVersionDialog', () => ({
-  PalaceVersionDialog: () => null,
+  PalaceVersionDialog: ({
+    open,
+    onRestoreVersion,
+  }: {
+    open: boolean
+    onRestoreVersion?: (versionId: number) => void
+  }) =>
+    open ? (
+      <div>
+        <button type="button" onClick={() => onRestoreVersion?.(1)}>
+          恢复版本1
+        </button>
+      </div>
+    ) : null,
 }))
 
 vi.mock('@/features/palace-edit/components/PalaceMindMapImportDrawer', () => ({
@@ -140,6 +190,8 @@ vi.mock('@/features/palace-edit/components/PalaceKnowledgeOutlinePanel', () => (
 describe('usePalaceEditPage draft creation', () => {
   beforeEach(() => {
     vi.restoreAllMocks()
+    mindMapFrameMockState.nextMountId = 1
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
     timedSessionMock.status = 'idle'
     timedSessionMock.startedAt = null
     timedSessionMock.start.mockReset()
@@ -170,6 +222,12 @@ describe('usePalaceEditPage draft creation', () => {
         },
       },
     } as never)
+    vi.spyOn(palaceApi, 'updatePalaceApi').mockResolvedValue({ ok: true } as never)
+    vi.spyOn(palaceApi, 'getPalaceVersionsApi').mockResolvedValue({
+      versions: [{ id: 1, created_at: '2026-05-29T10:00:00', snapshot_count: 1 }],
+      removed_duplicates: 0,
+    } as never)
+    vi.spyOn(palaceApi, 'restorePalaceVersionApi').mockResolvedValue({ ok: true } as never)
   })
 
   it('creates only one draft palace in StrictMode for /palaces/new', async () => {
@@ -367,6 +425,90 @@ describe('usePalaceEditPage draft creation', () => {
     fireEvent.click(screen.getByRole('button', { name: '覆盖当前脑图' }))
 
     expect(screen.getByText('mindmap-edit-editable-plain-reset-import-sync')).toBeTruthy()
+  })
+
+  it('keeps the same mind map host instance when saving meta and only uses soft sync props', async () => {
+    vi.spyOn(palaceApi, 'getPalaceEditorApi').mockResolvedValue({
+      palace: {
+        id: 101,
+        title: '测试宫殿',
+        description: '',
+        created_at: null,
+        attachments: [],
+        chapters: [],
+      },
+      editor_doc: { root: { data: { text: '测试宫殿', uid: 'root-1' }, children: [] } },
+      editor_config: {},
+      editor_local_config: {},
+      lang: 'zh',
+    } as never)
+
+    render(
+      <MemoryRouter initialEntries={['/palaces/101/edit']}>
+        <Routes>
+          <Route path="/palaces/:id/edit" element={<PalaceEditPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText('mindmap-mount-1')).toBeTruthy()
+    })
+    expect(screen.getByText('sync-soft-replace-0:0-0')).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: '保存元信息' }))
+
+    await waitFor(() => {
+      expect(palaceApi.updatePalaceApi).toHaveBeenCalledTimes(1)
+    })
+    await waitFor(() => {
+      expect(screen.getByText('mindmap-mount-1')).toBeTruthy()
+    })
+    expect(screen.getByText('sync-soft-replace-0:0-0')).toBeTruthy()
+  })
+
+  it('keeps the same mind map host instance and bumps replace sync key after restore version', async () => {
+    vi.spyOn(palaceApi, 'getPalaceEditorApi').mockResolvedValue({
+      palace: {
+        id: 101,
+        title: '测试宫殿',
+        description: '',
+        created_at: null,
+        attachments: [],
+        chapters: [],
+      },
+      editor_doc: { root: { data: { text: '测试宫殿', uid: 'root-1' }, children: [] } },
+      editor_config: {},
+      editor_local_config: {},
+      lang: 'zh',
+    } as never)
+
+    render(
+      <MemoryRouter initialEntries={['/palaces/101/edit']}>
+        <Routes>
+          <Route path="/palaces/:id/edit" element={<PalaceEditPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText('mindmap-mount-1')).toBeTruthy()
+    })
+    expect(screen.getByText('sync-soft-replace-0:0-0')).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: '恢复点' }))
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: '恢复版本1' })).toBeTruthy()
+    })
+    fireEvent.click(screen.getByRole('button', { name: '恢复版本1' }))
+
+    await waitFor(() => {
+      expect(palaceApi.restorePalaceVersionApi).toHaveBeenCalledWith(101, 1)
+    })
+    await waitFor(() => {
+      expect(screen.getByText('mindmap-mount-1')).toBeTruthy()
+    })
+    expect(screen.getByText('sync-soft-replace-1:0-0')).toBeTruthy()
   })
 
   it('raises the import drawer above the immersive card when fullscreen is active', async () => {
