@@ -1,0 +1,1 @@
+{"code": "import_failed", "details": {"job_id": "d5f07a06b3f34f09b5b767dc9e732874", "mode": "mindmap", "selected_pages": [2, 4], "source_kind": "subject-pdf", "stage": "merge", "structure_page": 4}, "message": "merge failed", "raw_snippet": "merge failed", "request_id": null, "retryable": true, "stage": "merge"}

@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { PalaceMindMapImportDrawer } from '@/features/palace-edit/components/PalaceMindMapImportDrawer'
 
@@ -21,6 +21,11 @@ function buildProps(
     onSourceKindChange: vi.fn(),
     onWorkflowChange: vi.fn(),
     loading: false,
+    streamPhase: '',
+    streamStatusMessage: '',
+    streamStep: null,
+    streamTotalSteps: null,
+    streamPreviewText: '',
     applying: false,
     undoing: false,
     error: '',
@@ -56,6 +61,8 @@ function buildProps(
     pdfPageInput: '1',
     onPdfPageInputChange: vi.fn(),
     pdfSelectionError: '',
+    pdfImportMode: 'direct_generation',
+    onPdfImportModeChange: vi.fn(),
     structurePage: 1,
     onStructurePageChange: vi.fn(),
     pdfPreviewPage: 1,
@@ -64,7 +71,6 @@ function buildProps(
     rangePrompt: '古希腊',
     onRangePromptChange: vi.fn(),
     pdfImportOptions: {
-      strict_restore: true,
       quote_original_text_only: true,
       mount_on_original_leaf_only: true,
       preserve_emphasis_marks: true,
@@ -73,8 +79,18 @@ function buildProps(
     },
     onPdfImportOptionChange: vi.fn(),
     importWarnings: [],
-    importCanApply: true,
-    importMatchMode: 'strict_match',
+    pdfOcrGroundingUsed: null,
+    pdfOcrTextChars: null,
+    currentJobId: null,
+    currentJobStatus: null,
+    currentJobStage: null,
+    currentJobUsage: null,
+    currentJobPauseRequested: false,
+    canResumeJob: false,
+    canPauseJob: false,
+    reusedExistingResult: false,
+    onResumeJob: vi.fn(),
+    onPauseJob: vi.fn(),
     onTogglePdfPage: vi.fn(),
     onPdfStart: vi.fn(),
     targetNodeLabel: '测试节点',
@@ -104,6 +120,18 @@ describe('PalaceMindMapImportDrawer', () => {
     Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
       configurable: true,
       value: scrollIntoView,
+    })
+    Object.defineProperty(HTMLElement.prototype, 'scrollHeight', {
+      configurable: true,
+      get() {
+        return 480
+      },
+    })
+    Object.defineProperty(HTMLElement.prototype, 'clientHeight', {
+      configurable: true,
+      get() {
+        return 120
+      },
     })
   })
 
@@ -175,5 +203,175 @@ describe('PalaceMindMapImportDrawer', () => {
 
     expect(screen.queryByTestId('mindmap-import-preview-frame')).toBeNull()
     expect(screen.getByText('荷马时期')).toBeTruthy()
+  })
+
+  it('shows streaming phase details while loading', () => {
+    render(
+      <PalaceMindMapImportDrawer
+        {...buildProps({
+          loading: true,
+          streamPhase: 'extracting_structure',
+          streamStatusMessage: '正在提取结构图',
+          streamStep: 2,
+          streamTotalSteps: 4,
+        })}
+      />,
+    )
+
+    expect(screen.getByTestId('mindmap-import-stream-status').textContent).toContain('正在提取结构图')
+    expect(screen.getByTestId('mindmap-import-stream-status').textContent).toContain('第 2/4 步')
+    expect(screen.getByTestId('mindmap-import-stream-status').textContent).toContain('extracting structure')
+  })
+
+  it('renders raw model preview without replacing the formal tree preview', () => {
+    render(
+      <PalaceMindMapImportDrawer
+        {...buildProps({
+          loading: true,
+          streamPreviewText: '{"title":"第二节 古希腊的教育阶段"',
+          sourceTree: {
+            title: '第二节 古希腊的教育阶段',
+            children: [{ text: '荷马时期', children: [] }],
+          },
+          previewEditorDoc: null,
+        })}
+      />,
+    )
+
+    expect(screen.getByTestId('mindmap-import-stream-preview').textContent).toContain('"title":"第二节 古希腊的教育阶段"')
+    expect(screen.getByText('荷马时期')).toBeTruthy()
+  })
+
+  it('auto-scrolls streaming preview to the latest output while loading', () => {
+    const { rerender } = render(
+      <PalaceMindMapImportDrawer
+        {...buildProps({
+          loading: true,
+          streamPreviewText: '{"title":"第一段"}',
+        })}
+      />,
+    )
+
+    const previewContent = screen.getByTestId('mindmap-import-stream-preview-content')
+    previewContent.scrollTop = 360
+
+    rerender(
+      <PalaceMindMapImportDrawer
+        {...buildProps({
+          loading: true,
+          streamPreviewText: '{"title":"第二节 古希腊的教育阶段","children":["荷马时期"]}',
+        })}
+      />,
+    )
+
+    expect(previewContent.scrollTop).toBe(480)
+  })
+
+  it('does not steal scroll when the user has scrolled up in the streaming preview', () => {
+    const { rerender } = render(
+      <PalaceMindMapImportDrawer
+        {...buildProps({
+          loading: true,
+          streamPreviewText: '{"title":"第一段"}',
+        })}
+      />,
+    )
+
+    const previewContent = screen.getByTestId('mindmap-import-stream-preview-content')
+    previewContent.scrollTop = 100
+    fireEvent.scroll(previewContent)
+
+    rerender(
+      <PalaceMindMapImportDrawer
+        {...buildProps({
+          loading: true,
+          streamPreviewText: '{"title":"第一段","children":["第二段"]}',
+        })}
+      />,
+    )
+
+    expect(previewContent.scrollTop).toBe(100)
+  })
+
+  it('renders pause controls for running jobs', () => {
+    render(
+      <PalaceMindMapImportDrawer
+        {...buildProps({
+          currentJobId: 'job-1',
+          currentJobStatus: 'running',
+          currentJobStage: 'merge',
+          canPauseJob: true,
+        })}
+      />,
+    )
+
+    expect(screen.getByRole('button', { name: '暂停识别' })).toBeTruthy()
+  })
+
+  it('shows direct-generation copy by default and toggles to structured mode', () => {
+    const onPdfImportModeChange = vi.fn()
+    render(
+      <PalaceMindMapImportDrawer
+        {...buildProps({
+          pdfImportMode: 'direct_generation',
+          onPdfImportModeChange,
+        })}
+      />,
+    )
+
+    expect(screen.getByText('按范围直接生成')).toBeTruthy()
+    expect(screen.getByText(/默认模式。会先综合所选页的正文与版面信息，再直接生成完整脑图/)).toBeTruthy()
+    expect(screen.queryByText('当前结构页')).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: /结构页补全模式/ }))
+    expect(onPdfImportModeChange).toHaveBeenCalledWith('structured_merge')
+  })
+
+  it('shows the pdf execution summary and OCR grounding status', () => {
+    render(
+      <PalaceMindMapImportDrawer
+        {...buildProps({
+          sourceTree: {
+            title: '第一节 古罗马的教育阶段',
+            children: [{ text: '共和时期的罗马教育', children: [] }],
+          },
+          selectedPdfPages: [26, 27, 28],
+          pdfImportMode: 'direct_generation',
+          importWarnings: ['未获得稳定的 OCR 正文，本次将继续根据页面图片直接生成脑图，正文补全可信度可能下降。'],
+          pdfOcrGroundingUsed: false,
+          pdfOcrTextChars: null,
+        })}
+      />,
+    )
+
+    expect(screen.getByTestId('mindmap-import-pdf-summary').textContent).toContain('页码：26, 27, 28')
+    expect(screen.getByTestId('mindmap-import-pdf-summary').textContent).toContain('模式：按范围直接生成')
+    expect(screen.getByTestId('mindmap-import-pdf-summary').textContent).toContain('结构页：无')
+    expect(screen.getByTestId('mindmap-import-pdf-summary').textContent).toContain('OCR grounding：未启用，本次仅按图片直读')
+    expect(screen.getByTestId('mindmap-import-pdf-summary').textContent).toContain('正文补全可信度可能下降')
+  })
+
+  it('shows a pending pause label while waiting for the current step to finish', () => {
+    render(
+      <PalaceMindMapImportDrawer
+        {...buildProps({
+          currentJobId: 'job-1',
+          currentJobStatus: 'running',
+          currentJobStage: 'merge',
+          currentJobPauseRequested: true,
+          canPauseJob: true,
+        })}
+      />,
+    )
+
+    const button = screen.getByRole('button', { name: '正在暂停…' }) as HTMLButtonElement
+    expect(button.disabled).toBe(true)
+  })
+
+  it('does not render the removed strict-restore copy', () => {
+    render(<PalaceMindMapImportDrawer {...buildProps()} />)
+
+    expect(screen.queryByText('严格还原 PDF 自带脑图结构')).toBeNull()
+    expect(screen.queryByText('当前结果仅供预览，不可直接覆盖或追加到正式脑图。')).toBeNull()
   })
 })

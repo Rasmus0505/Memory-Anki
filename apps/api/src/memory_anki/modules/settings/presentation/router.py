@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from memory_anki.core.config import DEFAULTS
+from memory_anki.core.runtime import build_runtime_info
 from memory_anki.core.time import utc_now_naive
 from memory_anki.infrastructure.db.models import Config, get_session
 from memory_anki.modules.reviews.application.schedule_service import (
@@ -94,3 +95,8 @@ def api_profile_review_settings(s: Session = Depends(session_dep)):
 @router.put("/profile/review-settings")
 def api_profile_review_settings_update(data: dict, s: Session = Depends(session_dep)):
     return write_settings(data, s)
+
+
+@router.get("/runtime-info")
+def api_runtime_info():
+    return build_runtime_info()

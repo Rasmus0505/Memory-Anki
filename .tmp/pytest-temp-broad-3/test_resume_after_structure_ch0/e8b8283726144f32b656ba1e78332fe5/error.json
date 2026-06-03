@@ -1,0 +1,1 @@
+{"code": "import_failed", "details": {"job_id": "e8b8283726144f32b656ba1e78332fe5", "mode": "mindmap", "source_kind": "image-batch", "stage": "structure"}, "message": "merge failed", "raw_snippet": "merge failed", "request_id": null, "retryable": true, "stage": "structure"}

@@ -1,0 +1,299 @@
+import { useEffect, useRef, useState } from 'react'
+import type {
+  MindMapEditorState,
+  MindMapImportJob,
+  MindMapImportJobStage,
+  MindMapImportJobStatus,
+  MindMapImportJobUsage,
+  MindMapImportSourceTree,
+} from '@/shared/api/contracts'
+import {
+  buildEditorDocFromSourceTree,
+  type ImportHistoryItem,
+} from '@/features/palace-edit/model/mindmap-import'
+import {
+  describeJobProgress,
+  normalizePdfImportMode,
+  persistLastJobId,
+} from '@/features/palace-edit/hooks/mindmap-import-utils'
+import type { ImportJobHydrateOptions, UseImportJobControllerOptions } from '@/features/palace-edit/hooks/import-job/types'
+
+export interface ImportJobStateController {
+  importOpen: boolean
+  setImportOpenState: (value: boolean) => void
+  importLoading: boolean
+  setImportLoading: (value: boolean) => void
+  importStreamPhase: string
+  importStreamStatusMessage: string
+  importStreamStep: number | null
+  importStreamTotalSteps: number | null
+  importStreamPreviewText: string
+  importError: string
+  setImportError: (value: string) => void
+  importSourceTree: MindMapImportSourceTree | null
+  importPreviewEditorDoc: MindMapEditorState['editor_doc']
+  importExtractedText: string
+  importImagePreviewUrl: string
+  setImportImagePreviewUrl: (value: string) => void
+  importHistory: ImportHistoryItem[]
+  setImportHistory: (value: ImportHistoryItem[]) => void
+  importWarnings: string[]
+  setImportWarnings: (value: string[]) => void
+  importPdfOcrGroundingUsed: boolean | null
+  setImportPdfOcrGroundingUsed: (value: boolean | null) => void
+  importPdfOcrTextChars: number | null
+  setImportPdfOcrTextChars: (value: number | null) => void
+  currentJobId: string | null
+  currentJobStatus: MindMapImportJobStatus | null
+  currentJobStage: MindMapImportJobStage | null
+  currentJobUsage: MindMapImportJobUsage | null
+  currentJobPauseRequested: boolean
+  importReusedExistingResult: boolean
+  reusedExistingResultRef: React.MutableRefObject<boolean>
+  setImportReusedExistingResult: (value: boolean) => void
+  resetStreamState: () => void
+  clearCurrentJobState: () => void
+  applyJobProgressState: (job: MindMapImportJob | null) => void
+  hydrateJobResult: (job: MindMapImportJob, options?: ImportJobHydrateOptions) => void
+  clearPreviewState: () => void
+}
+
+export function useImportJobState({
+  entityKey,
+  setModeState,
+  setSourceKindState,
+  setMindMapWorkflowState,
+  batchImagesRef,
+  setBatchStatus,
+  setLastBatchMeta,
+  selectedPdfPages,
+  setSelectedPdfPages,
+  selectedSubjectDocumentId,
+  setPdfImportModeState,
+  setStructurePage,
+  analyzedPdfPages,
+  setAnalyzedPdfPages,
+  persistAnalyzedPdfPages,
+}: UseImportJobControllerOptions): ImportJobStateController {
+  const [open, setOpen] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [streamPhase, setStreamPhase] = useState('')
+  const [streamStatusMessage, setStreamStatusMessage] = useState('')
+  const [streamStep, setStreamStep] = useState<number | null>(null)
+  const [streamTotalSteps, setStreamTotalSteps] = useState<number | null>(null)
+  const [streamPreviewText, setStreamPreviewText] = useState('')
+  const [error, setError] = useState('')
+  const [sourceTree, setSourceTree] = useState<MindMapImportSourceTree | null>(null)
+  const [importEditorDoc, setImportEditorDoc] = useState<MindMapEditorState['editor_doc']>(null)
+  const [extractedText, setExtractedText] = useState('')
+  const [imagePreviewUrl, setImagePreviewUrl] = useState('')
+  const [history, setHistory] = useState<ImportHistoryItem[]>([])
+  const [importWarnings, setImportWarnings] = useState<string[]>([])
+  const [pdfOcrGroundingUsed, setPdfOcrGroundingUsed] = useState<boolean | null>(null)
+  const [pdfOcrTextChars, setPdfOcrTextChars] = useState<number | null>(null)
+  const [currentJobId, setCurrentJobId] = useState<string | null>(null)
+  const [currentJobStatus, setCurrentJobStatus] = useState<MindMapImportJobStatus | null>(null)
+  const [currentJobStage, setCurrentJobStage] = useState<MindMapImportJobStage | null>(null)
+  const [currentJobUsage, setCurrentJobUsage] = useState<MindMapImportJobUsage | null>(null)
+  const [currentJobPauseRequested, setCurrentJobPauseRequested] = useState(false)
+  const [reusedExistingResult, setReusedExistingResultState] = useState(false)
+  const reusedExistingResultRef = useRef(false)
+  const imagePreviewUrlRef = useRef('')
+
+  useEffect(() => {
+    persistLastJobId(entityKey, currentJobId)
+  }, [currentJobId, entityKey])
+
+  useEffect(() => {
+    imagePreviewUrlRef.current = imagePreviewUrl
+  }, [imagePreviewUrl])
+
+  const setImportReusedExistingResult = (value: boolean) => {
+    reusedExistingResultRef.current = value
+    setReusedExistingResultState(value)
+  }
+
+  const resetStreamState = () => {
+    setStreamPhase('')
+    setStreamStatusMessage('')
+    setStreamStep(null)
+    setStreamTotalSteps(null)
+    setStreamPreviewText('')
+  }
+
+  const clearCurrentJobState = () => {
+    setCurrentJobId(null)
+    setCurrentJobStatus(null)
+    setCurrentJobStage(null)
+    setCurrentJobUsage(null)
+    setCurrentJobPauseRequested(false)
+  }
+
+  const applyJobProgressState = (job: MindMapImportJob | null) => {
+    const progress = describeJobProgress(job)
+    setStreamPhase(progress.phase)
+    setStreamStatusMessage(progress.message)
+    setStreamStep(progress.step)
+    setStreamTotalSteps(progress.total)
+    setStreamPreviewText(job?.progress?.preview_text || '')
+    setLoading(Boolean(job && (job.status === 'running' || job.pause_requested)))
+  }
+
+  const hydrateJobResult = (
+    job: MindMapImportJob,
+    options?: ImportJobHydrateOptions,
+  ) => {
+    const result = job.result || null
+    setCurrentJobId(job.id)
+    setCurrentJobStatus(job.status)
+    setCurrentJobStage(job.stage)
+    setCurrentJobUsage(job.usage ?? null)
+    setCurrentJobPauseRequested(Boolean(job.pause_requested))
+    setImportReusedExistingResult(Boolean(options?.reused))
+    setModeState(job.mode)
+    setSourceKindState(job.source_kind)
+    setMindMapWorkflowState(job.source_kind === 'image-batch' ? 'batch' : 'single')
+    setImportWarnings(result?.warnings || [])
+    setPdfOcrGroundingUsed(
+      typeof result?.ocr_grounding_used === 'boolean' ? result.ocr_grounding_used : null,
+    )
+    setPdfOcrTextChars(typeof result?.ocr_text_chars === 'number' ? result.ocr_text_chars : null)
+    setError(job.error?.message || '')
+    applyJobProgressState(job)
+
+    if (job.source_kind === 'image-batch') {
+      setBatchStatus(
+        job.status === 'running'
+          ? 'loading'
+          : result?.source_tree
+            ? 'success'
+            : batchImagesRef.current.length > 0
+              ? 'ready'
+              : 'idle',
+      )
+      setLastBatchMeta(
+        typeof result?.structure_image_index === 'number'
+          ? {
+              structureImageIndex: result.structure_image_index,
+              imageCount: result.image_count ?? batchImagesRef.current.length,
+            }
+          : null,
+      )
+      if (result?.source_tree) {
+        const structureIndex = result.structure_image_index ?? 0
+        const structureItem = batchImagesRef.current[structureIndex] ?? batchImagesRef.current[0]
+        if (structureItem?.previewUrl) {
+          setImagePreviewUrl(structureItem.previewUrl)
+        } else if (!options?.preservePreviewUrl) {
+          setImagePreviewUrl('')
+        }
+      }
+    } else if (job.source_kind === 'image-single' && !options?.preservePreviewUrl) {
+      if (!imagePreviewUrlRef.current) {
+        setImagePreviewUrl('')
+      }
+    }
+
+    if (result?.source_tree) {
+      setSourceTree(result.source_tree)
+      setImportEditorDoc(result.editor_doc ?? buildEditorDocFromSourceTree(result.source_tree))
+    } else if (job.mode === 'mindmap') {
+      setSourceTree(null)
+      setImportEditorDoc(null)
+    }
+
+    if (typeof result?.extracted_text === 'string') {
+      setExtractedText(result.extracted_text)
+    } else if (job.mode === 'text') {
+      setExtractedText('')
+    }
+
+    if (job.source_kind === 'subject-pdf') {
+      const nextPdfMode = normalizePdfImportMode(job.source_meta?.pdf_mode)
+      setPdfImportModeState(nextPdfMode)
+      const nextPages = Array.isArray(result?.selected_pages)
+        ? result.selected_pages.slice()
+        : selectedPdfPages
+      if (nextPages.length > 0) {
+        setSelectedPdfPages(nextPages)
+      }
+      if (nextPdfMode === 'structured_merge') {
+        const nextStructurePage =
+          typeof result?.structure_page === 'number'
+            ? result.structure_page
+            : typeof job.source_meta?.structure_page === 'number'
+              ? job.source_meta.structure_page
+              : nextPages[0] ?? null
+        setStructurePage(
+          nextStructurePage != null && nextPages.includes(nextStructurePage)
+            ? nextStructurePage
+            : nextPages[0] ?? null,
+        )
+      } else {
+        setStructurePage(null)
+      }
+      if (selectedSubjectDocumentId && nextPages.length > 0 && job.status === 'completed') {
+        const nextAnalyzedPages = Array.from(
+          new Set([...analyzedPdfPages, ...nextPages]),
+        ).sort((left, right) => left - right)
+        setAnalyzedPdfPages(nextAnalyzedPages)
+        persistAnalyzedPdfPages(selectedSubjectDocumentId, nextAnalyzedPages)
+      }
+    }
+  }
+
+  const clearPreviewState = () => {
+    clearCurrentJobState()
+    setSourceTree(null)
+    setImportEditorDoc(null)
+    setExtractedText('')
+    setImagePreviewUrl('')
+    setError('')
+    setImportWarnings([])
+    setPdfOcrGroundingUsed(null)
+    setPdfOcrTextChars(null)
+    setImportReusedExistingResult(false)
+    setLastBatchMeta(null)
+    resetStreamState()
+  }
+
+  return {
+    importOpen: open,
+    setImportOpenState: setOpen,
+    importLoading: loading,
+    setImportLoading: setLoading,
+    importStreamPhase: streamPhase,
+    importStreamStatusMessage: streamStatusMessage,
+    importStreamStep: streamStep,
+    importStreamTotalSteps: streamTotalSteps,
+    importStreamPreviewText: streamPreviewText,
+    importError: error,
+    setImportError: setError,
+    importSourceTree: sourceTree,
+    importPreviewEditorDoc: importEditorDoc,
+    importExtractedText: extractedText,
+    importImagePreviewUrl: imagePreviewUrl,
+    setImportImagePreviewUrl: setImagePreviewUrl,
+    importHistory: history,
+    setImportHistory: setHistory,
+    importWarnings,
+    setImportWarnings,
+    importPdfOcrGroundingUsed: pdfOcrGroundingUsed,
+    setImportPdfOcrGroundingUsed: setPdfOcrGroundingUsed,
+    importPdfOcrTextChars: pdfOcrTextChars,
+    setImportPdfOcrTextChars: setPdfOcrTextChars,
+    currentJobId,
+    currentJobStatus,
+    currentJobStage,
+    currentJobUsage,
+    currentJobPauseRequested,
+    importReusedExistingResult: reusedExistingResult,
+    reusedExistingResultRef,
+    setImportReusedExistingResult,
+    resetStreamState,
+    clearCurrentJobState,
+    applyJobProgressState,
+    hydrateJobResult,
+    clearPreviewState,
+  }
+}

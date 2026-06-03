@@ -1,0 +1,637 @@
+from __future__ import annotations
+
+import base64
+import json
+import mimetypes
+import re
+import uuid
+from html import escape, unescape
+from typing import Any
+
+from memory_anki.modules.mindmap.application.editor_state_service import normalize_editor_doc
+
+from .contracts import MindMapImportError
+
+MAX_IMAGE_BYTES = 8 * 1024 * 1024
+MAX_NODE_COUNT = 400
+ERROR_SNIPPET_LIMIT = 160
+NODE_WRAP_WIDTH = 38
+NODE_WRAP_MIN_WIDTH = 10
+LONG_NODE_SPLIT_THRESHOLD = 72
+MAX_SPLIT_CHILDREN = 8
+ABSTRACT_SPLIT_HEADINGS = (
+    "特点",
+    "内容",
+    "类型",
+    "分类",
+    "比较",
+    "对比",
+    "区别",
+    "联系",
+    "作用",
+    "意义",
+    "方法",
+    "形式",
+    "原则",
+    "制度",
+    "目标",
+)
+
+
+def build_image_content_part(*, image_bytes: bytes, filename: str | None) -> dict[str, Any]:
+    mime_type = mimetypes.guess_type(filename or "")[0] or "image/png"
+    image_base64 = base64.b64encode(image_bytes).decode("utf-8")
+    image_url = f"data:{mime_type};base64,{image_base64}"
+    return {"type": "image_url", "image_url": {"url": image_url}}
+
+
+def normalize_source_tree(value: Any, *, disable_rebalance: bool = False) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        raise MindMapImportError("模型返回的顶层结构不是对象。")
+    title = clean_inline_text(value.get("title"))
+    children = value.get("children")
+    if not isinstance(children, list):
+        raise MindMapImportError("模型返回缺少 children 数组。")
+
+    counter = {"count": 0}
+    normalized_children = [normalize_source_node(child, counter) for child in children]
+    if not disable_rebalance:
+        normalized_children = [rebalance_long_leaf_node(child) for child in normalized_children]
+    if counter["count"] > MAX_NODE_COUNT:
+        raise MindMapImportError("识别出的节点过多，请换一张更聚焦的图片后重试。")
+    return {
+        "title": title,
+        "children": normalized_children,
+    }
+
+
+def normalize_source_node(value: Any, counter: dict[str, int]) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        raise MindMapImportError("模型返回的节点结构非法。")
+    text = clean_multiline_text(value.get("text"))
+    if not text:
+        raise MindMapImportError("模型返回了空节点文本。")
+    counter["count"] += 1
+    raw_children = value.get("children")
+    if raw_children is None:
+        raw_children = []
+    if not isinstance(raw_children, list):
+        raise MindMapImportError("模型返回的 children 不是数组。")
+    return {
+        "text": text,
+        "rich_text_html": str(value.get("rich_text_html") or "").strip() or None,
+        "emphasis_marks": normalize_emphasis_marks(value.get("emphasis_marks")),
+        "children": [normalize_source_node(child, counter) for child in raw_children],
+    }
+
+
+def rebalance_long_leaf_node(source_node: dict[str, Any]) -> dict[str, Any]:
+    children = [rebalance_long_leaf_node(child) for child in source_node["children"]]
+    node = {
+        "text": source_node["text"],
+        "rich_text_html": source_node.get("rich_text_html"),
+        "emphasis_marks": source_node.get("emphasis_marks") or [],
+        "children": children,
+    }
+    if children:
+        promoted = promote_single_verbose_child(node)
+        return promoted or node
+    split_node = split_overlong_leaf_node(node["text"])
+    return split_node or node
+
+
+def normalize_emphasis_marks(value: Any) -> list[dict[str, str]]:
+    if not isinstance(value, list):
+        return []
+    normalized: list[dict[str, str]] = []
+    for item in value:
+        if not isinstance(item, dict):
+            continue
+        kind = str(item.get("kind") or "").strip()
+        if kind not in {"underline", "wavy-underline"}:
+            continue
+        text = clean_inline_text(item.get("text"))
+        if not text:
+            continue
+        normalized.append({"kind": kind, "text": text})
+    return normalized
+
+
+def build_editor_doc(
+    source_tree: dict[str, Any],
+    *,
+    fallback_title: str,
+    preserve_line_breaks: bool,
+) -> dict[str, Any]:
+    root_text = source_tree.get("title") or fallback_title or "未命名宫殿"
+    raw_doc = {
+        "root": {
+            "data": {
+                "text": root_text,
+            },
+            "children": [
+                source_node_to_editor_node(child, preserve_line_breaks=preserve_line_breaks)
+                for child in source_tree["children"]
+            ],
+        }
+    }
+    return normalize_editor_doc(raw_doc, root_text=root_text, root_kind="palace")
+
+
+def source_node_to_editor_node(source_node: dict[str, Any], *, preserve_line_breaks: bool) -> dict[str, Any]:
+    rich_text_html = normalize_rich_text_html(
+        source_node.get("rich_text_html"),
+        text=source_node["text"],
+        emphasis_marks=source_node.get("emphasis_marks"),
+        preserve_line_breaks=preserve_line_breaks,
+    )
+    formatted_text = format_node_text_for_card(
+        html_to_plain_text(rich_text_html or source_node["text"]),
+        preserve_line_breaks=preserve_line_breaks,
+    )
+    data: dict[str, Any] = {
+        "uid": uuid.uuid4().hex,
+        "text": rich_text_html or to_rich_text_html(formatted_text),
+        "richText": True,
+    }
+    return {
+        "data": data,
+        "children": [
+            source_node_to_editor_node(child, preserve_line_breaks=preserve_line_breaks)
+            for child in source_node["children"]
+        ],
+    }
+
+
+def clean_inline_text(value: Any) -> str:
+    return " ".join(str(value or "").replace("\u3000", " ").split()).strip()
+
+
+def clean_multiline_text(value: Any) -> str:
+    text = str(value or "").replace("\u3000", " ")
+    text = text.replace("\r\n", "\n").replace("\r", "\n")
+    lines = [clean_inline_text(line) for line in text.split("\n")]
+    return "\n".join(line for line in lines if line).strip()
+
+
+def format_node_text_for_card(value: Any, *, preserve_line_breaks: bool) -> str:
+    text = clean_multiline_text(value)
+    if not text:
+        return ""
+    if preserve_line_breaks:
+        preserved_lines: list[str] = []
+        for line in text.split("\n"):
+            preserved_lines.extend(wrap_node_line(line))
+        return "\n".join(part for part in preserved_lines if part).strip()
+    wrapped_lines: list[str] = []
+    wrapped_lines.extend(wrap_node_line(clean_inline_text(text.replace("\n", " "))))
+    return "\n".join(part for part in wrapped_lines if part).strip()
+
+
+def split_overlong_leaf_node(text: str) -> dict[str, Any] | None:
+    normalized_text = clean_multiline_text(text)
+    compact_text = clean_inline_text(normalized_text.replace("\n", " "))
+    heading, body = split_heading_and_body(compact_text)
+    if not heading or not body:
+        return None
+
+    items = extract_parallel_items(body)
+    if len(items) < 2:
+        return None
+    if (
+        len(compact_text) < LONG_NODE_SPLIT_THRESHOLD
+        and len(items) < 3
+        and max(len(item) for item in items) < 24
+        and not is_abstract_heading(heading)
+    ):
+        return None
+
+    trimmed_items = [clean_multiline_text(item) for item in items[:MAX_SPLIT_CHILDREN]]
+    trimmed_items = [item for item in trimmed_items if item]
+    if len(trimmed_items) < 2:
+        return None
+
+    return {
+        "text": heading,
+        "rich_text_html": None,
+        "emphasis_marks": [],
+        "children": [{"text": item, "children": []} for item in trimmed_items],
+    }
+
+
+def promote_single_verbose_child(node: dict[str, Any]) -> dict[str, Any] | None:
+    children = node.get("children") or []
+    if len(children) != 1:
+        return None
+    only_child = children[0]
+
+    parent_text = clean_inline_text(node.get("text"))
+    child_text = clean_multiline_text(only_child.get("text"))
+    if not parent_text or not child_text:
+        return None
+
+    child_children = only_child.get("children") or []
+    if child_children:
+        child_heading = clean_inline_text(only_child.get("text"))
+        if child_heading == parent_text or is_abstract_heading(parent_text):
+            return {
+                "text": parent_text,
+                "rich_text_html": None,
+                "emphasis_marks": [],
+                "children": child_children,
+            }
+        return None
+
+    split_child = split_overlong_leaf_node(child_text)
+    if split_child and split_child.get("children"):
+        return {
+            "text": parent_text,
+            "rich_text_html": None,
+            "emphasis_marks": [],
+            "children": split_child["children"],
+        }
+
+    direct_items = extract_parallel_items(child_text)
+    direct_items = [clean_multiline_text(item) for item in direct_items[:MAX_SPLIT_CHILDREN]]
+    direct_items = [item for item in direct_items if item]
+    if len(direct_items) >= 3:
+        return {
+            "text": parent_text,
+            "rich_text_html": None,
+            "emphasis_marks": [],
+            "children": [{"text": item, "children": []} for item in direct_items],
+        }
+
+    if not is_abstract_heading(parent_text):
+        return None
+
+    body = child_text
+    if "：" in child_text or ":" in child_text:
+        heading, tail = split_heading_and_body(child_text)
+        if heading and tail:
+            if clean_inline_text(heading) == parent_text:
+                body = tail
+            elif is_abstract_heading(heading):
+                body = tail
+    items = extract_parallel_items(body)
+    trimmed_items = [clean_multiline_text(item) for item in items[:MAX_SPLIT_CHILDREN]]
+    trimmed_items = [item for item in trimmed_items if item]
+    if len(trimmed_items) < 2:
+        return None
+    return {
+        "text": parent_text,
+        "rich_text_html": None,
+        "emphasis_marks": [],
+        "children": [{"text": item, "children": []} for item in trimmed_items],
+    }
+
+
+def wrap_node_line(line: str) -> list[str]:
+    text = clean_inline_text(line)
+    if not text:
+        return []
+    parts: list[str] = []
+    remaining = text
+    while len(remaining) > NODE_WRAP_WIDTH:
+        split_at = find_wrap_index(remaining)
+        parts.append(remaining[:split_at].rstrip())
+        remaining = remaining[split_at:].lstrip()
+    if remaining:
+        parts.append(remaining)
+    return parts
+
+
+def to_rich_text_html(text: str) -> str:
+    lines = [clean_inline_text(line) for line in str(text or "").split("\n")]
+    normalized_lines = [line for line in lines if line]
+    if not normalized_lines:
+        return ""
+    return "<div>" + "<br>".join(escape(line) for line in normalized_lines) + "</div>"
+
+
+def normalize_rich_text_html(
+    value: Any,
+    *,
+    text: str,
+    emphasis_marks: Any,
+    preserve_line_breaks: bool,
+) -> str:
+    raw_html = str(value or "").strip()
+    if raw_html:
+        return raw_html
+    return apply_emphasis_marks_to_html(text, emphasis_marks, preserve_line_breaks=preserve_line_breaks)
+
+
+def apply_emphasis_marks_to_html(text: str, emphasis_marks: Any, *, preserve_line_breaks: bool) -> str:
+    normalized_text = clean_multiline_text(text)
+    if not normalized_text:
+        return ""
+    html = (
+        escape(normalized_text).replace("\n", "<br>")
+        if preserve_line_breaks
+        else escape(clean_inline_text(normalized_text.replace("\n", " ")))
+    )
+    if not isinstance(emphasis_marks, list):
+        return f"<div>{html}</div>"
+    for mark in emphasis_marks:
+        if not isinstance(mark, dict):
+            continue
+        marked_text = clean_inline_text(mark.get("text"))
+        if not marked_text:
+            continue
+        escaped_marked_text = escape(marked_text)
+        if mark.get("kind") == "wavy-underline":
+            replacement = (
+                "<span style=\"text-decoration-line: underline;"
+                " text-decoration-style: wavy; text-decoration-color: currentColor;\">"
+                f"{escaped_marked_text}</span>"
+            )
+        else:
+            replacement = f"<u>{escaped_marked_text}</u>"
+        html = html.replace(escaped_marked_text, replacement, 1)
+    return f"<div>{html}</div>"
+
+
+def html_to_plain_text(value: Any) -> str:
+    text = str(value or "")
+    text = re.sub(r"<br\s*/?>", "\n", text, flags=re.IGNORECASE)
+    text = re.sub(r"</(?:div|p|li|h[1-6]|blockquote|pre|tr)>", "\n", text, flags=re.IGNORECASE)
+    text = re.sub(r"<[^>]+>", "", text)
+    return unescape(text).strip()
+
+
+def split_heading_and_body(text: str) -> tuple[str | None, str | None]:
+    normalized = clean_inline_text(text)
+    if not normalized:
+        return None, None
+
+    for delimiter in ("：", ":"):
+        if delimiter not in normalized:
+            continue
+        head, tail = normalized.split(delimiter, 1)
+        clean_head = clean_inline_text(head)
+        clean_tail = clean_inline_text(tail)
+        if 2 <= len(clean_head) <= 28 and clean_tail:
+            return clean_head, clean_tail
+
+    marker_positions = [
+        match.start()
+        for match in re.finditer(
+            r"(?:\d+[.、]|[（(][0-9一二三四五六七八九十]+[)）]|[一二三四五六七八九十]+、)",
+            normalized,
+        )
+        if match.start() >= 6
+    ]
+    if marker_positions:
+        first_marker = marker_positions[0]
+        head = clean_inline_text(normalized[:first_marker])
+        tail = clean_inline_text(normalized[first_marker:])
+        if 2 <= len(head) <= 28 and tail:
+            return head, tail
+    return None, None
+
+
+def extract_parallel_items(text: str) -> list[str]:
+    normalized = clean_inline_text(text)
+    if not normalized:
+        return []
+
+    numbered_items = split_numbered_items(normalized)
+    if len(numbered_items) >= 2:
+        return numbered_items
+
+    semicolon_items = [clean_inline_text(item) for item in re.split(r"[；;]", normalized) if item.strip()]
+    if len(semicolon_items) >= 2:
+        return semicolon_items
+
+    comma_items = split_comma_series(normalized)
+    if len(comma_items) >= 3:
+        return comma_items
+
+    sentence_items = [
+        clean_inline_text(item)
+        for item in re.split(r"(?<=[。！？!?])", normalized)
+        if item.strip()
+    ]
+    if len(sentence_items) >= 3 and all(len(item) <= 38 for item in sentence_items):
+        return sentence_items
+    return []
+
+
+def split_numbered_items(text: str) -> list[str]:
+    marker_pattern = re.compile(
+        r"(?:\d+[.、]|[（(][0-9一二三四五六七八九十]+[)）]|[一二三四五六七八九十]+、)"
+    )
+    matches = list(marker_pattern.finditer(text))
+    if len(matches) < 2:
+        return []
+
+    items: list[str] = []
+    for index, match in enumerate(matches):
+        start = match.start()
+        end = matches[index + 1].start() if index + 1 < len(matches) else len(text)
+        item = clean_inline_text(text[start:end])
+        if item:
+            items.append(item)
+    return items
+
+
+def split_comma_series(text: str) -> list[str]:
+    normalized = clean_inline_text(text)
+    if not normalized:
+        return []
+    if any(marker in normalized for marker in ("。", "；", ";", "！", "？", "?", "!")):
+        return []
+    parts = [clean_inline_text(item) for item in re.split(r"[，、]", normalized) if item.strip()]
+    if len(parts) < 3:
+        return []
+    if any(len(item) > 26 for item in parts):
+        return []
+    return parts
+
+
+def is_abstract_heading(text: str) -> bool:
+    normalized = clean_inline_text(text)
+    if not normalized:
+        return False
+    return any(keyword in normalized for keyword in ABSTRACT_SPLIT_HEADINGS)
+
+
+def find_wrap_index(text: str) -> int:
+    search_end = min(len(text), NODE_WRAP_WIDTH)
+    snippet = text[:search_end]
+    marker_match = None
+    for pattern in (
+        r"(?<!^)(?=第[一二三四五六七八九十百千万0-9]+[章节部分课])",
+        r"(?<!^)(?=[0-9]+[.、])",
+        r"(?<!^)(?=[（(][一二三四五六七八九十百千万0-9]+[)）])",
+        r"(?<!^)(?=[一二三四五六七八九十百千万]+、)",
+    ):
+        candidate = re.search(pattern, snippet)
+        if candidate and candidate.start() >= NODE_WRAP_MIN_WIDTH:
+            marker_match = candidate.start()
+    if marker_match:
+        return marker_match
+
+    for punctuation in ("；", "。", "：", "，", "、", ";", ":", ",", "!", "！", "?", "？"):
+        index = snippet.rfind(punctuation)
+        if index >= NODE_WRAP_MIN_WIDTH:
+            return index + 1
+
+    whitespace_index = snippet.rfind(" ")
+    if whitespace_index >= NODE_WRAP_MIN_WIDTH:
+        return whitespace_index + 1
+    return search_end
+
+
+def strip_code_fence(value: str) -> str:
+    text = str(value or "").replace("\r\n", "\n").replace("\r", "\n").strip()
+    if text.startswith("```"):
+        lines = text.splitlines()
+        if lines and lines[0].startswith("```"):
+            lines = lines[1:]
+        if lines and lines[-1].startswith("```"):
+            lines = lines[:-1]
+        text = "\n".join(lines).strip()
+    return text
+
+
+def parse_source_tree_json(content_text: str) -> dict[str, Any]:
+    candidates: list[str] = []
+    seen = set()
+
+    def push(candidate: str | None) -> None:
+        value = str(candidate or "").strip()
+        if not value or value in seen:
+            return
+        seen.add(value)
+        candidates.append(value)
+
+    push(content_text)
+    stripped = strip_code_fence(content_text)
+    push(stripped)
+    push(extract_first_json_object(content_text))
+    if stripped != content_text:
+        push(extract_first_json_object(stripped))
+
+    for candidate in candidates:
+        try:
+            parsed = json.loads(candidate)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(parsed, dict):
+            return parsed
+
+    raise MindMapImportError(
+        "模型返回内容不是有效的脑图 JSON。"
+        f" 返回摘要：{summarize_model_output(content_text)}"
+    )
+
+
+def extract_first_json_object(value: str) -> str | None:
+    text = str(value or "")
+    start = text.find("{")
+    while start != -1:
+        depth = 0
+        in_string = False
+        escape = False
+        for index in range(start, len(text)):
+            char = text[index]
+            if in_string:
+                if escape:
+                    escape = False
+                elif char == "\\":
+                    escape = True
+                elif char == '"':
+                    in_string = False
+                continue
+            if char == '"':
+                in_string = True
+                continue
+            if char == "{":
+                depth += 1
+            elif char == "}":
+                depth -= 1
+                if depth == 0:
+                    return text[start : index + 1]
+        start = text.find("{", start + 1)
+    return None
+
+
+def summarize_model_output(value: str) -> str:
+    normalized = clean_inline_text(strip_code_fence(value))
+    if not normalized:
+        return "模型没有返回可解析内容。"
+    if len(normalized) <= ERROR_SNIPPET_LIMIT:
+        return normalized
+    return f"{normalized[:ERROR_SNIPPET_LIMIT].rstrip()}..."
+
+
+def normalize_extracted_text(value: str) -> str:
+    text = strip_code_fence(value)
+    normalized_lines = [line.rstrip() for line in text.split("\n")]
+    normalized = "\n".join(normalized_lines).strip()
+    if not normalized:
+        raise MindMapImportError("模型没有识别出可用文字。")
+    return normalized
+
+
+def normalize_page_selection(page_selection: list[int], page_count: int) -> list[int]:
+    normalized = sorted({int(page) for page in page_selection if int(page) > 0})
+    if not normalized:
+        raise MindMapImportError("请至少选择一页 PDF。")
+    if page_count <= 0:
+        raise MindMapImportError("当前 PDF 没有可用页面。")
+    if any(page > page_count for page in normalized):
+        raise MindMapImportError("存在超出 PDF 总页数的页码，请重新选择。")
+    return normalized
+
+
+def ensure_rendered_page_size(rendered_pages: list[tuple[int, bytes, str]]) -> None:
+    total_bytes = 0
+    for _, image_bytes, _ in rendered_pages:
+        if len(image_bytes) > MAX_IMAGE_BYTES:
+            raise MindMapImportError("存在单页渲染结果过大，请缩小页码范围后重试。")
+        total_bytes += len(image_bytes)
+    if total_bytes > MAX_IMAGE_BYTES * 6:
+        raise MindMapImportError("本次所选 PDF 页面总大小过大，请减少页数后重试。")
+
+
+def trim_pdf_extracted_text(text: str, *, structure_title: str, range_prompt: str) -> str:
+    normalized = str(text or "").replace("\r\n", "\n").replace("\r", "\n").strip()
+    if not normalized:
+        return ""
+    anchors = build_pdf_text_anchors(structure_title=structure_title, range_prompt=range_prompt)
+    lines = normalized.split("\n")
+    for index, line in enumerate(lines):
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if any(anchor in stripped for anchor in anchors):
+            trimmed = "\n".join(lines[index:]).strip()
+            return trimmed or normalized
+    return normalized
+
+
+def build_pdf_text_anchors(*, structure_title: str, range_prompt: str) -> list[str]:
+    candidates = [range_prompt, structure_title]
+    anchors: list[str] = []
+    seen: set[str] = set()
+    for candidate in candidates:
+        for part in split_prompt_anchor_parts(candidate):
+            if part not in seen:
+                seen.add(part)
+                anchors.append(part)
+    return anchors
+
+
+def split_prompt_anchor_parts(value: str) -> list[str]:
+    normalized = clean_inline_text(value)
+    if not normalized:
+        return []
+    parts = [normalized]
+    for segment in re.split(r"[，,：:；;。/\\s]+", normalized):
+        clean_segment = clean_inline_text(segment)
+        if len(clean_segment) >= 2:
+            parts.append(clean_segment)
+    return sorted({part for part in parts if len(part) >= 2}, key=len, reverse=True)

@@ -492,6 +492,45 @@ class TimeRecord(Base):
     )
 
 
+class MindMapImportJob(Base):
+    __tablename__ = "mindmap_import_jobs"
+    __table_args__ = (
+        Index(
+            "ix_mindmap_import_jobs_entity_fingerprint",
+            "entity_key",
+            "fingerprint",
+        ),
+        Index(
+            "ix_mindmap_import_jobs_entity_created",
+            "entity_key",
+            "created_at",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    entity_key: Mapped[str] = mapped_column(String(200), nullable=False)
+    source_kind: Mapped[str] = mapped_column(String(40), nullable=False)
+    mode: Mapped[str] = mapped_column(String(20), nullable=False, default="mindmap")
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="draft")
+    stage: Mapped[str] = mapped_column(String(20), nullable=False, default="prepared")
+    fingerprint: Mapped[str] = mapped_column(String(128), nullable=False)
+    source_meta_json: Mapped[str] = mapped_column(Text, default="{}")
+    result_json: Mapped[str] = mapped_column(Text, default="{}")
+    error_json: Mapped[str] = mapped_column(Text, default="{}")
+    usage_json: Mapped[str] = mapped_column(Text, default="{}")
+    progress_json: Mapped[str] = mapped_column(Text, default="{}")
+    pause_requested: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    created_at: Mapped[datetime | None] = mapped_column(DateTime, default=utc_now_naive)
+    updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime,
+        default=utc_now_naive,
+        onupdate=utc_now_naive,
+    )
+    started_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
 def init_db() -> None:
     Base.metadata.create_all(engine)
 

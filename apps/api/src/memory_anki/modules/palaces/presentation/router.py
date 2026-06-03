@@ -1,15 +1,14 @@
 import os
 import uuid
 from collections import OrderedDict
-from datetime import datetime, time, timedelta
 
-from fastapi import APIRouter, Depends, File, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from memory_anki.core.config import ATTACHMENTS_DIR
 from memory_anki.infrastructure.db.models import Attachment as AttachmentModel
-from memory_anki.infrastructure.db.models import Palace, ReviewSchedule, get_session
+from memory_anki.infrastructure.db.models import ReviewSchedule, get_session
 from memory_anki.modules.backups.application.backup_service import (
     cleanup_duplicate_palace_versions,
     create_full_backup,
@@ -27,6 +26,10 @@ from memory_anki.modules.mindmap.application.editor_state_service import (
     save_palace_editor_state,
     sync_palace_editor_root,
 )
+from memory_anki.modules.palaces.application.mindmap_ai_split_service import (
+    MindMapAiSplitError,
+    split_palace_editor_doc_with_ai,
+)
 from memory_anki.modules.palaces.application.palace_service import (
     create_palace,
     delete_palace,
@@ -36,25 +39,26 @@ from memory_anki.modules.palaces.application.palace_service import (
     restore_archived_palaces,
     update_palace,
 )
+from memory_anki.modules.palaces.application.segment_review_service import (
+    build_palace_default_segment_summary,
+    build_segment_editor_doc,
+    list_palace_segments,
+    palace_review_stages_json,
+    palace_stage_progress,
+    segment_summary_json,
+)
 from memory_anki.modules.palaces.application.segment_service import (
     adjust_palace_default_segment_review_progress,
     adjust_segment_review_progress,
-    build_virtual_default_segment_summary,
-    build_segment_editor_doc,
     create_palace_segment,
     delete_palace_segment,
     get_palace_segment,
-    estimate_palace_review_seconds,
-    list_palace_segments,
-    palace_review_stages_json,
-    segment_summary_json,
     update_palace_segment,
 )
 from memory_anki.modules.palaces.application.title_sync_service import (
-    build_subject_shelf_summary,
     build_chapter_grouped_palace_list,
     build_grouped_palace_list,
-    ensure_palace_group_schema,
+    build_subject_shelf_summary,
     get_palace_explicit_chapter_ids,
     reconcile_palace_chapter_binding,
     resolve_palace_binding_status,
@@ -62,14 +66,17 @@ from memory_anki.modules.palaces.application.title_sync_service import (
     resolve_palace_title,
 )
 from memory_anki.modules.palaces.domain.schemas import PalaceCreate, PalaceUpdate
-from memory_anki.modules.reviews.application.review_service import trigger_review_for_palace
+from memory_anki.modules.reviews.application.review_execution_service import (
+    trigger_review_for_palace,
+)
 from memory_anki.modules.reviews.application.schedule_service import (
-    custom_intervals,
-    ebbinghaus_intervals,
     get_algorithm_stage_labels,
     get_config_value,
     is_schedule_due,
     normalize_algorithm,
+)
+from memory_anki.modules.reviews.application.schedule_service import (
+    schedule_display_datetime as review_schedule_display_datetime,
 )
 from memory_anki.modules.sessions.application.session_progress_service import (
     clear_practice_progress,
@@ -95,31 +102,6 @@ def peg_json(peg) -> dict:
         "children": [peg_json(c) for c in (peg.children or [])],
     }
 
-
-def schedule_display_datetime(schedule: ReviewSchedule, palace: Palace, session: Session) -> datetime | None:
-    if getattr(schedule, "scheduled_at", None):
-        return schedule.scheduled_at.replace(second=0, microsecond=0)
-    if not schedule.scheduled_date:
-        return None
-
-    created_at = palace.created_at or palace.updated_at
-    base_time = created_at.time().replace(second=0, microsecond=0) if created_at else time(0, 0)
-
-    if schedule.review_type == "sleep":
-        raw_sleep_time = get_config_value(session, "sleep_review_time") or "22:00"
-        try:
-            hour_str, minute_str = raw_sleep_time.split(":", 1)
-            display_time = time(int(hour_str), int(minute_str))
-        except (ValueError, TypeError):
-            display_time = time(22, 0)
-    elif schedule.review_type == "1h":
-        display_time = (datetime.combine(schedule.scheduled_date, base_time) + timedelta(hours=1)).time().replace(second=0, microsecond=0)
-    else:
-        display_time = base_time
-
-    return datetime.combine(schedule.scheduled_date, display_time)
-
-
 def review_plan_item_json(
     date_key: str | None,
     schedules: list[ReviewSchedule],
@@ -140,45 +122,6 @@ def review_plan_item_json(
         "review_type": representative_schedule.review_type,
     }
 
-
-def get_palace_stage_progress(palace: Palace, session: Session | None) -> tuple[int, int, float]:
-    if session is None:
-        return 0, 0, 0.0
-
-    schedules = palace.review_schedules or []
-    current_algorithm = next(
-        (
-            normalize_algorithm(schedule.algorithm_used)
-            for schedule in schedules
-            if schedule.algorithm_used
-        ),
-        normalize_algorithm(get_config_value(session, "default_algorithm")),
-    )
-    intervals = custom_intervals(session) if current_algorithm == "custom" else ebbinghaus_intervals(session)
-    if not intervals:
-        intervals = ["1", "2", "4", "7", "15", "30", "60"]
-
-    total = len(intervals)
-    pending_schedules = sorted(
-        [schedule for schedule in schedules if not schedule.completed],
-        key=lambda schedule: (schedule.review_number, schedule.id),
-    )
-    if pending_schedules:
-        completed = min(pending_schedules[0].review_number + 1, total)
-    else:
-        review_logs = [
-            log
-            for log in (palace.review_logs or [])
-            if log.review_mode == "review"
-        ]
-        completed = min(len(review_logs), total)
-    if palace.mastered and total > 0:
-        completed = total
-
-    progress = completed / total if total > 0 else 0.0
-    return total, completed, progress
-
-
 def palace_json(p, session: Session | None = None) -> dict:
     explicit_chapter_ids: set[int] = set()
     if session is not None:
@@ -188,9 +131,17 @@ def palace_json(p, session: Session | None = None) -> dict:
     pending_schedules = [schedule for schedule in (p.review_schedules or []) if not schedule.completed]
     if pending_schedules:
         next_schedule = min(pending_schedules, key=lambda schedule: (schedule.review_number, schedule.id))
-    next_review_at = schedule_display_datetime(next_schedule, p, session) if next_schedule and session else None
+    next_review_at = (
+        review_schedule_display_datetime(next_schedule, p, session)
+        if next_schedule and session
+        else None
+    )
     has_due_review = bool(next_schedule and session and is_schedule_due(next_schedule, p, session))
-    review_stage_total, review_stage_completed, review_stage_progress = get_palace_stage_progress(p, session)
+    review_stage_total, review_stage_completed, review_stage_progress = (
+        palace_stage_progress(session, p)
+        if session is not None
+        else (0, 0, 0.0)
+    )
     stage_labels: list[str] = []
     if session:
         current_algorithm = next(
@@ -203,16 +154,8 @@ def palace_json(p, session: Session | None = None) -> dict:
         )
         stage_labels = get_algorithm_stage_labels(session, current_algorithm)
     default_segment = (
-        build_virtual_default_segment_summary(
-            p,
-            session=session,
-            estimated_review_seconds=estimate_palace_review_seconds(p),
-            review_stage_total=review_stage_total,
-            review_stage_completed=review_stage_completed,
-            review_stage_progress=review_stage_progress,
-            stage_labels=stage_labels,
-        )
-        if session
+        build_palace_default_segment_summary(session, p)
+        if session is not None
         else None
     )
 
@@ -384,11 +327,37 @@ def api_update_editor(palace_id: int, data: dict, s: Session = Depends(session_d
     palace = get_palace(s, palace_id)
     if not palace:
         return {"error": "not found"}
-    state = save_palace_editor_state(s, palace, data)
+    try:
+        state = save_palace_editor_state(s, palace, data)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     maybe_create_rolling_backup("rolling-editor-save")
     return {
         "palace": palace_json(palace, s),
         **state,
+    }
+
+
+@router.post("/palaces/{palace_id}/editor/ai-split")
+def api_ai_split_editor_node(palace_id: int, data: dict, s: Session = Depends(session_dep)):
+    palace = get_palace(s, palace_id)
+    if not palace:
+        return {"error": "not found"}
+    try:
+        result = split_palace_editor_doc_with_ai(
+            s,
+            palace,
+            data.get("editor_doc"),
+            data.get("target_node_uid"),
+        )
+    except MindMapAiSplitError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {
+        "ok": True,
+        "editor_doc": result.editor_doc,
+        "generated_children_count": result.generated_children_count,
+        "reassigned_existing_children_count": result.reassigned_existing_children_count,
+        "model": result.model,
     }
 
 
@@ -397,32 +366,7 @@ def api_list_segments(palace_id: int, s: Session = Depends(session_dep)):
     palace = get_palace(s, palace_id)
     if not palace:
         return {"error": "not found"}
-    next_schedule = None
-    pending_schedules = [schedule for schedule in (palace.review_schedules or []) if not schedule.completed]
-    if pending_schedules:
-        next_schedule = min(pending_schedules, key=lambda schedule: (schedule.review_number, schedule.id))
-    next_review_at = schedule_display_datetime(next_schedule, palace, s) if next_schedule else None
-    has_due_review = bool(next_schedule and is_schedule_due(next_schedule, palace, s))
-    review_stage_total, review_stage_completed, review_stage_progress = get_palace_stage_progress(palace, s)
-    default_segment = build_virtual_default_segment_summary(
-        palace,
-        session=s,
-        estimated_review_seconds=estimate_palace_review_seconds(palace),
-        review_stage_total=review_stage_total,
-        review_stage_completed=review_stage_completed,
-        review_stage_progress=review_stage_progress,
-        stage_labels=get_algorithm_stage_labels(
-            s,
-            next(
-                (
-                    normalize_algorithm(schedule.algorithm_used)
-                    for schedule in (palace.review_schedules or [])
-                    if schedule.algorithm_used
-                ),
-                normalize_algorithm(get_config_value(s, "default_algorithm")),
-            ),
-        ),
-    )
+    default_segment = build_palace_default_segment_summary(s, palace)
     return {"items": list_palace_segments(s, palace, default_segment_payload=default_segment)}
 
 

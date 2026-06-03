@@ -50,7 +50,7 @@ describe('timer automation config', () => {
       DEFAULT_TIMER_AUTOMATION_CONFIG.practice.hiddenAutoPauseSeconds,
     )
     expect(saved.review.autoPauseRollbackSeconds).toBe(
-      DEFAULT_TIMER_AUTOMATION_CONFIG.review.autoPauseRollbackSeconds,
+      15,
     )
     expect(saved.actions.autoStartOnPageEnter).toBe(true)
     expect(saved.actions.autoResumeOnWindowReturn).toBe(
@@ -70,6 +70,20 @@ describe('timer automation config', () => {
     const config = readTimerAutomationConfig()
     expect(config.practice.inactiveAutoPauseSeconds).toBe(9)
     expect(config.actions).toEqual(DEFAULT_TIMER_AUTOMATION_CONFIG.actions)
+  })
+
+  it('caps rollback seconds to the inactive auto-pause window when saving', () => {
+    const saved = saveTimerAutomationConfig({
+      ...DEFAULT_TIMER_AUTOMATION_CONFIG,
+      palace_edit: {
+        inactiveAutoPauseSeconds: 20,
+        hiddenAutoPauseSeconds: 15,
+        autoPauseRollbackSeconds: 60,
+      },
+    })
+
+    expect(saved.palace_edit.autoPauseRollbackSeconds).toBe(20)
+    expect(window.localStorage.getItem(TIMER_AUTOMATION_STORAGE_KEY)).toContain('"autoPauseRollbackSeconds":20')
   })
 
   it('resets to defaults', () => {

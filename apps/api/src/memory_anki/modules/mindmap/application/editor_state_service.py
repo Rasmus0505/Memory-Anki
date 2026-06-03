@@ -24,6 +24,41 @@ ROOT_KIND_KEY = "memoryAnkiRootKind"
 NODE_UID_KEY = "uid"
 SAFE_EDITOR_SOURCES = {"palace_edit", "version_restore", "backup_restore"}
 DANGEROUS_EDITOR_SOURCES = {"review_edit", "practice_edit", "unknown"}
+REVIEW_PLACEHOLDER_TEXT = "待回忆"
+REVIEW_PLACEHOLDER_NODE_STYLE = {
+    "fillColor": "#eef2f7",
+    "borderColor": "#94a3b8",
+    "borderWidth": 2,
+    "color": "#475569",
+}
+REVIEW_REVEALED_NODE_STYLE = {
+    "fillColor": "#ecfdf5",
+    "borderColor": "#22c55e",
+    "borderWidth": 2,
+    "color": "#14532d",
+}
+REVIEW_ROOT_NODE_STYLE = {
+    "fillColor": "#111827",
+    "borderColor": "#0f172a",
+    "borderWidth": 2,
+    "color": "#f8fafc",
+    "fontWeight": "bold",
+}
+REVIEW_LINE_STYLES = (
+    {"lineColor": "#cbd5e1", "lineWidth": 2},
+    {"lineColor": "#22c55e", "lineWidth": 3},
+)
+REVIEW_TRANSIENT_FIELDS = (
+    "fillColor",
+    "borderColor",
+    "borderWidth",
+    "color",
+    "lineColor",
+    "lineWidth",
+    "fontWeight",
+    "hideNote",
+    "customTextWidth",
+)
 
 TAG_RE = re.compile(r"<[^>]+>")
 HTML_BLOCK_BREAK_RE = re.compile(r"</(?:div|p|li|h[1-6]|blockquote|pre|tr)>", re.IGNORECASE)
@@ -69,6 +104,7 @@ def get_palace_editor_state(palace: Palace) -> dict[str, Any]:
         doc = build_palace_editor_doc(palace)
     else:
         doc = normalize_editor_doc(doc, root_text=palace.title, root_kind="palace")
+        doc = sanitize_palace_editor_doc(palace, doc)
     return {
         "editor_doc": doc,
         "editor_config": _deserialize(palace.editor_config, DEFAULT_EDITOR_CONFIG),
@@ -120,6 +156,7 @@ def save_palace_editor_state(session: Session, palace: Palace, payload: dict[str
     if doc_input is not None:
         existing_node_count = count_editor_doc_nodes(palace.editor_doc)
         doc = normalize_editor_doc(doc_input, root_text=palace.title, root_kind="palace")
+        doc = sanitize_palace_editor_doc(palace, doc)
         next_node_count = count_editor_doc_nodes(doc)
         if editor_source in DANGEROUS_EDITOR_SOURCES and next_node_count < existing_node_count:
             raise ValueError("当前编辑内容来自复习/练习视图或未确认同步态，已拒绝写回宫殿，避免未显示节点被误删。")
@@ -167,6 +204,51 @@ def build_palace_editor_doc(palace: Palace) -> dict[str, Any]:
     return _default_editor_doc(palace.title, "palace", root_children)
 
 
+def sanitize_palace_editor_doc(palace: Palace, doc: dict[str, Any]) -> dict[str, Any]:
+    clone = _ensure_dict(doc)
+    if not _looks_like_review_overlay_doc(clone):
+        return clone
+
+    peg_map = _collect_palace_peg_map(palace)
+    version_recovery_map = _collect_palace_version_recovery_map(palace)
+
+    def visit(node: dict[str, Any], *, is_root: bool = False) -> None:
+        data = _ensure_dict(node.get("data"))
+        node["data"] = data
+        peg_id = _coerce_int(data.get(NODE_ID_KEY))
+        peg = peg_map.get(peg_id) if peg_id is not None else None
+        recovered = version_recovery_map.get(peg_id) if peg_id is not None else None
+        restore_text = _looks_like_review_placeholder_text(data.get("text"))
+        fallback_text = (
+            _stringify(recovered.get("text"))
+            if recovered and _stringify(recovered.get("text"))
+            else peg.name if peg is not None else "新节点"
+        )
+        fallback_note = (
+            _stringify(recovered.get("note"))
+            if recovered and _stringify(recovered.get("note"))
+            else peg.content if peg is not None else ""
+        )
+        if peg is not None and restore_text:
+            data["text"] = fallback_text or "新节点"
+            data["note"] = fallback_note
+        elif (peg is not None or recovered is not None) and bool(data.get("hideNote")) and not _stringify(data.get("note")):
+            data["note"] = fallback_note
+        _strip_review_overlay_fields(data, is_root=is_root)
+        children = node.get("children")
+        if not isinstance(children, list):
+            children = []
+            node["children"] = children
+        for child in children:
+            if isinstance(child, dict):
+                visit(child, is_root=False)
+
+    root = clone.get("root")
+    if isinstance(root, dict):
+        visit(root, is_root=True)
+    return clone
+
+
 def normalize_editor_doc(doc: Any, *, root_text: str, root_kind: str) -> dict[str, Any]:
     clone = _ensure_dict(doc)
     root = _ensure_dict(clone.get("root"))
@@ -176,6 +258,8 @@ def normalize_editor_doc(doc: Any, *, root_text: str, root_kind: str) -> dict[st
     root["data"] = root_data
     root_data["text"] = root_text or "Root"
     root_data[ROOT_KIND_KEY] = root_kind
+    if not _stringify(root_data.get(NODE_UID_KEY)).strip():
+        root_data[NODE_UID_KEY] = f"{root_kind}-root"
 
     root_children = root.get("children")
     if not isinstance(root_children, list):
@@ -209,6 +293,13 @@ def sync_subject_tree_from_doc(session: Session, subject: Subject, doc: dict[str
             chapter_id = _coerce_int(data.get(NODE_ID_KEY))
             if chapter_id is None:
                 chapter_id = uid_map.get(_stringify(data.get(NODE_UID_KEY)))
+            if chapter_id is None:
+                chapter_id = _match_existing_chapter_id(
+                    existing=existing,
+                    seen_ids=seen_ids,
+                    parent_id=parent_id,
+                    chapter_name=chapter_name,
+                )
             chapter = by_id.get(chapter_id) if chapter_id else None
             if chapter is None:
                 chapter = Chapter(
@@ -317,6 +408,7 @@ def _default_editor_doc(root_text: str, root_kind: str, children: list[dict[str,
             "data": {
                 "text": root_text or "Root",
                 ROOT_KIND_KEY: root_kind,
+                NODE_UID_KEY: f"{root_kind}-root",
             },
             "children": children,
         },
@@ -332,6 +424,7 @@ def _chapter_to_editor_node(chapter: Chapter) -> dict[str, Any]:
         "data": {
             "text": chapter.name or "",
             "note": chapter.notes or "",
+            NODE_UID_KEY: f"chapter-{chapter.id}",
             NODE_ID_KEY: chapter.id,
             NODE_TYPE_KEY: "chapter",
         },
@@ -344,6 +437,7 @@ def _peg_to_editor_node(peg: Peg) -> dict[str, Any]:
         "data": {
             "text": peg.name or "",
             "note": peg.content or "",
+            NODE_UID_KEY: f"peg-{peg.id}",
             NODE_ID_KEY: peg.id,
             NODE_TYPE_KEY: "peg",
         },
@@ -353,7 +447,16 @@ def _peg_to_editor_node(peg: Peg) -> dict[str, Any]:
 
 def _normalize_editor_node(node: Any) -> dict[str, Any]:
     clone = _ensure_dict(node)
-    clone["data"] = _ensure_dict(clone.get("data"))
+    data = _ensure_dict(clone.get("data"))
+    business_id = _coerce_int(data.get(NODE_ID_KEY))
+    node_type = _stringify(data.get(NODE_TYPE_KEY)).strip() or "node"
+    if not _stringify(data.get(NODE_UID_KEY)).strip():
+        data[NODE_UID_KEY] = (
+            f"{node_type}-{business_id}"
+            if business_id is not None
+            else f"{node_type}-{id(clone)}"
+        )
+    clone["data"] = data
     children = clone.get("children")
     if not isinstance(children, list):
         children = []
@@ -371,6 +474,119 @@ def _delete_peg_tree(session: Session, peg: Peg) -> None:
     for child in list(peg.children or []):
         _delete_peg_tree(session, child)
     session.delete(peg)
+
+
+def _collect_palace_peg_map(palace: Palace) -> dict[int, Peg]:
+    peg_map: dict[int, Peg] = {}
+
+    def visit(peg: Peg) -> None:
+        if peg.id in peg_map:
+            return
+        peg_map[peg.id] = peg
+        for child in peg.children or []:
+            visit(child)
+
+    for peg in palace.pegs or []:
+        visit(peg)
+    return peg_map
+
+
+def _collect_palace_version_recovery_map(palace: Palace) -> dict[int, dict[str, str]]:
+    version_map: dict[int, dict[str, str]] = {}
+    versions = sorted(
+        palace.versions or [],
+        key=lambda version: int(getattr(version, "id", 0) or 0),
+        reverse=True,
+    )
+    for version in versions:
+        doc = _deserialize(getattr(version, "editor_doc", None), None)
+        if not isinstance(doc, dict) or _looks_like_review_overlay_doc(doc):
+            continue
+
+        def visit(node: dict[str, Any]) -> None:
+            data = _ensure_dict(node.get("data"))
+            node_id = _coerce_int(data.get(NODE_ID_KEY))
+            text = _stringify(data.get("text"))
+            if (
+                node_id is not None
+                and node_id not in version_map
+                and text
+                and not _looks_like_review_placeholder_text(text)
+            ):
+                version_map[node_id] = {
+                    "text": text,
+                    "note": _stringify(data.get("note")),
+                }
+            children = node.get("children")
+            if not isinstance(children, list):
+                return
+            for child in children:
+                if isinstance(child, dict):
+                    visit(child)
+
+        root = doc.get("root")
+        if isinstance(root, dict):
+            visit(root)
+    return version_map
+
+
+def _matches_style_subset(data: dict[str, Any], expected: dict[str, Any]) -> bool:
+    return all(data.get(key) == value for key, value in expected.items())
+
+
+def _looks_like_review_placeholder_text(value: Any) -> bool:
+    return _plain_text(value, fallback="") == REVIEW_PLACEHOLDER_TEXT
+
+
+def _looks_like_review_overlay_doc(doc: dict[str, Any]) -> bool:
+    root = doc.get("root")
+    if not isinstance(root, dict):
+        return False
+
+    found_root_overlay = False
+    found_node_overlay = False
+    found_placeholder_overlay = False
+
+    def visit(node: dict[str, Any], *, is_root: bool = False) -> None:
+        nonlocal found_root_overlay, found_node_overlay, found_placeholder_overlay
+        data = _ensure_dict(node.get("data"))
+        if is_root:
+            found_root_overlay = _matches_style_subset(data, REVIEW_ROOT_NODE_STYLE)
+        else:
+            if _matches_style_subset(data, REVIEW_PLACEHOLDER_NODE_STYLE) or _matches_style_subset(
+                data,
+                REVIEW_REVEALED_NODE_STYLE,
+            ):
+                found_node_overlay = True
+            if _looks_like_review_placeholder_text(data.get("text")) and (
+                bool(data.get("hideNote"))
+                or data.get("customTextWidth") == 132
+                or _matches_style_subset(data, REVIEW_PLACEHOLDER_NODE_STYLE)
+            ):
+                found_placeholder_overlay = True
+        children = node.get("children")
+        if not isinstance(children, list):
+            return
+        for child in children:
+            if isinstance(child, dict):
+                visit(child, is_root=False)
+
+    visit(root, is_root=True)
+    return found_placeholder_overlay or (found_root_overlay and found_node_overlay)
+
+
+def _strip_review_overlay_fields(data: dict[str, Any], *, is_root: bool) -> None:
+    overlay_styles = [REVIEW_ROOT_NODE_STYLE] if is_root else [REVIEW_PLACEHOLDER_NODE_STYLE, REVIEW_REVEALED_NODE_STYLE]
+    overlay_styles.extend(REVIEW_LINE_STYLES)
+    for style in overlay_styles:
+        for key, value in style.items():
+            if data.get(key) == value:
+                data.pop(key, None)
+    for field in REVIEW_TRANSIENT_FIELDS:
+        if field == "fontWeight" and not is_root:
+            continue
+        if field in data and data.get(field) in (True, 132):
+            data.pop(field, None)
 
 
 def _collect_existing_id_map(doc: Any) -> dict[str, int]:
@@ -394,6 +610,26 @@ def _collect_existing_id_map(doc: Any) -> dict[str, int]:
 
     walk(doc.get("root"))
     return result
+
+
+def _match_existing_chapter_id(
+    *,
+    existing: list[Chapter],
+    seen_ids: set[int],
+    parent_id: int | None,
+    chapter_name: str,
+) -> int | None:
+    normalized_name = _normalize_lookup_text(chapter_name)
+    if not normalized_name:
+        return None
+    for chapter in existing:
+        if chapter.id in seen_ids:
+            continue
+        if chapter.parent_id != parent_id:
+            continue
+        if _normalize_lookup_text(chapter.name) == normalized_name:
+            return chapter.id
+    return None
 
 
 def _deserialize(raw: Any, default: Any) -> Any:
@@ -464,3 +700,7 @@ def _plain_text(value: Any, *, fallback: str) -> str:
     if not text:
         text = fallback
     return text
+
+
+def _normalize_lookup_text(value: Any) -> str:
+    return "".join(_plain_text(value, fallback="").split()).strip()

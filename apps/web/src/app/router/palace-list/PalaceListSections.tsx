@@ -1,0 +1,106 @@
+import { BookOpen, ChevronDown, ChevronRight, Plus } from 'lucide-react'
+import type { ReactNode } from 'react'
+import { Link } from 'react-router-dom'
+import type { PalaceGroupedItem, PalaceGroupedListResponse } from '@/shared/api/contracts'
+import { Button } from '@/shared/components/ui/button'
+import { Card, CardContent } from '@/shared/components/ui/card'
+import type { PalaceListViewSettings } from '@/app/router/palace-view-settings'
+import {
+  getChapterCardClass,
+  getChapterPalaceGridClass,
+  getListSectionWrapperClass,
+  getUngroupedPalaceGridClass,
+} from '@/app/router/palace-list/utils'
+
+interface PalaceListSectionsProps {
+  groupedData: PalaceGroupedListResponse
+  hasPalaces: boolean
+  viewSettings: PalaceListViewSettings
+  collapsedChapters: Set<number>
+  onToggleChapter: (chapterId: number) => void
+  renderPalaceCard: (palace: PalaceGroupedItem) => ReactNode
+}
+
+export function PalaceListSections({
+  groupedData,
+  hasPalaces,
+  viewSettings,
+  collapsedChapters,
+  onToggleChapter,
+  renderPalaceCard,
+}: PalaceListSectionsProps) {
+  return (
+    <div
+      className="space-y-3"
+      data-testid="list-layout-root"
+      data-layout-mode={viewSettings.layoutMode}
+      data-density-mode={viewSettings.densityMode}
+    >
+      {hasPalaces ? (
+        groupedData.subjects.map((subject) => (
+          <div key={subject.subject?.id ?? 'ungrouped'}>
+            {subject.subject ? (
+              <h2 className="mb-2 text-lg font-semibold text-foreground">
+                <span
+                  className="mr-2 inline-block h-3 w-3 rounded-full"
+                  style={{ backgroundColor: subject.subject.color }}
+                />
+                {subject.subject.name}
+              </h2>
+            ) : null}
+            <div className={getListSectionWrapperClass(viewSettings.layoutMode)}>
+              {subject.chapter_groups.map((group) => {
+                const chapterId = group.source_chapter?.id
+                const isCollapsed = chapterId != null && collapsedChapters.has(chapterId)
+                return (
+                  <div
+                    key={chapterId ?? 'no-chapter'}
+                    className={getChapterCardClass(viewSettings.layoutMode, viewSettings.densityMode)}
+                  >
+                    {group.source_chapter ? (
+                      <button
+                        type="button"
+                        className="mb-1 ml-2 flex items-center gap-1 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+                        onClick={() => chapterId != null && onToggleChapter(chapterId)}
+                      >
+                        {isCollapsed ? (
+                          <ChevronRight className="h-3.5 w-3.5" />
+                        ) : (
+                          <ChevronDown className="h-3.5 w-3.5" />
+                        )}
+                        {group.source_chapter.name}
+                      </button>
+                    ) : null}
+                    {!isCollapsed ? (
+                      <div className={getChapterPalaceGridClass(viewSettings.layoutMode)}>
+                        {group.palaces.map((palace) => renderPalaceCard(palace))}
+                      </div>
+                    ) : null}
+                  </div>
+                )
+              })}
+            </div>
+            {subject.ungrouped_palaces.length > 0 ? (
+              <div className={getUngroupedPalaceGridClass(viewSettings.layoutMode)}>
+                {subject.ungrouped_palaces.map((palace) => renderPalaceCard(palace))}
+              </div>
+            ) : null}
+          </div>
+        ))
+      ) : (
+        <Card>
+          <CardContent className="flex flex-col items-center p-12 text-center">
+            <BookOpen className="mb-4 h-12 w-12 text-muted-foreground/30" />
+            <p className="text-sm text-muted-foreground">还没有记忆宫殿。</p>
+            <Link to="/palaces/new" className="mt-2">
+              <Button variant="outline" size="sm">
+                <Plus className="h-4 w-4" />
+                创建第一个
+              </Button>
+            </Link>
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  )
+}

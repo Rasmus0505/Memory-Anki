@@ -1,0 +1,1 @@
+{"code": "provider_http_error", "details": {"job_id": "0a1d4cdde5e64b87b463bf293db33612", "mode": "mindmap", "source_kind": "image-single", "stage": "prepared"}, "message": "Internal Server Error", "raw_snippet": "Internal Server Error", "request_id": null, "retryable": true, "stage": "prepared"}

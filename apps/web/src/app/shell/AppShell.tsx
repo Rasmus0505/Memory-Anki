@@ -3,6 +3,7 @@ import {
   BookOpen,
   Brain,
   ChevronRight,
+  ClipboardList,
   FolderTree,
   LayoutDashboard,
   Menu,
@@ -12,7 +13,12 @@ import {
   X,
 } from 'lucide-react'
 import { NavLink, useLocation } from 'react-router-dom'
+import type { RuntimeInfo } from '@/shared/api/contracts'
+import { getRuntimeInfoApi } from '@/shared/api/modules/runtime'
 import { ShellProvider, useShellContext } from '@/shared/components/layout/ShellContext'
+import { Badge } from '@/shared/components/ui/badge'
+import { Button } from '@/shared/components/ui/button'
+import { AppLogDrawer } from '@/shared/logs/components/AppLogDrawer'
 import { cn } from '@/shared/lib/utils'
 
 const navItems = [
@@ -23,7 +29,36 @@ const navItems = [
   { to: '/profile', label: '个人中心', icon: User },
 ]
 
-function SidebarContent() {
+function RuntimeChannelBadge({
+  runtimeInfo,
+  compact = false,
+}: {
+  runtimeInfo: RuntimeInfo | null
+  compact?: boolean
+}) {
+  if (!runtimeInfo) return null
+  const isStable = runtimeInfo.channel === 'stable'
+  const label = isStable ? 'Stable' : 'Dev'
+  const commitText = runtimeInfo.short_commit ?? runtimeInfo.commit?.slice(0, 8) ?? null
+  return (
+    <Badge
+      variant="outline"
+      className={cn(
+        'border font-mono tracking-[0.08em]',
+        isStable
+          ? 'border-emerald-300 bg-emerald-50 text-emerald-700'
+          : 'border-sky-300 bg-sky-50 text-sky-700',
+        compact ? 'px-2 py-0 text-[10px]' : 'px-2.5 py-0.5 text-[11px]',
+      )}
+      aria-label={`当前版本 ${label}${commitText ? ` ${commitText}` : ''}`}
+    >
+      {label}
+      {commitText ? ` ${commitText}` : ''}
+    </Badge>
+  )
+}
+
+function SidebarContent({ runtimeInfo }: { runtimeInfo: RuntimeInfo | null }) {
   const { pathname } = useLocation()
   const shell = useShellContext()
   const compact = shell?.sidebarCollapsed ?? false
@@ -59,9 +94,17 @@ function SidebarContent() {
               <div className="truncate text-sm font-semibold">记忆宫殿</div>
               <div className="mt-1 text-xs text-muted-foreground">{currentDate}</div>
               <div className="text-xs font-medium text-foreground/80">{currentTime}</div>
+              <div className="mt-2">
+                <RuntimeChannelBadge runtimeInfo={runtimeInfo} />
+              </div>
             </div>
           ) : null}
         </NavLink>
+        {compact ? (
+          <div className="mt-2 flex justify-center">
+            <RuntimeChannelBadge runtimeInfo={runtimeInfo} compact />
+          </div>
+        ) : null}
       </div>
 
       <nav className={cn('flex flex-1 flex-col gap-1', compact ? 'px-2 py-3' : 'px-3 py-4')}>
@@ -101,10 +144,30 @@ function ShellFrame({ children }: PropsWithChildren) {
   const { pathname } = useLocation()
   const [mobileOpen, setMobileOpen] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const [runtimeInfo, setRuntimeInfo] = useState<RuntimeInfo | null>(null)
+  const [logDrawerOpen, setLogDrawerOpen] = useState(false)
 
   useEffect(() => {
     setMobileOpen(false)
   }, [pathname])
+
+  useEffect(() => {
+    let cancelled = false
+    void getRuntimeInfoApi()
+      .then((info) => {
+        if (!cancelled) {
+          setRuntimeInfo(info)
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setRuntimeInfo(null)
+        }
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   return (
     <ShellProvider value={{ sidebarCollapsed, setSidebarCollapsed }}>
@@ -119,8 +182,19 @@ function ShellFrame({ children }: PropsWithChildren) {
             >
               <Menu className="h-5 w-5" />
             </button>
-            <div className="text-sm font-semibold">记忆宫殿</div>
-            <div className="w-10" />
+            <div className="flex flex-col items-center gap-1">
+              <div className="text-sm font-semibold">记忆宫殿</div>
+              <RuntimeChannelBadge runtimeInfo={runtimeInfo} compact />
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              onClick={() => setLogDrawerOpen(true)}
+              aria-label="打开日志侧边栏"
+            >
+              <ClipboardList className="h-4 w-4" />
+            </Button>
           </div>
         </header>
 
@@ -144,7 +218,7 @@ function ShellFrame({ children }: PropsWithChildren) {
                   <X className="h-4 w-4" />
                 </button>
               </div>
-              <SidebarContent />
+              <SidebarContent runtimeInfo={runtimeInfo} />
             </aside>
           </div>
         ) : null}
@@ -156,21 +230,33 @@ function ShellFrame({ children }: PropsWithChildren) {
           )}
         >
           <div className={cn('flex justify-end px-3 pt-3', sidebarCollapsed ? 'pb-1' : 'pb-0')}>
-            <button
-              type="button"
-              onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-              className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-border/70 bg-background/80 text-muted-foreground transition-colors hover:text-foreground"
-              aria-label={sidebarCollapsed ? '展开导航' : '收起导航'}
-            >
-              {sidebarCollapsed ? (
-                <PanelLeftOpen className="h-4 w-4" />
-              ) : (
-                <PanelLeftClose className="h-4 w-4" />
-              )}
-            </button>
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                onClick={() => setLogDrawerOpen(true)}
+                aria-label="打开日志侧边栏"
+                title="打开日志侧边栏"
+              >
+                <ClipboardList className="h-4 w-4" />
+              </Button>
+              <button
+                type="button"
+                onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+                className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-border/70 bg-background/80 text-muted-foreground transition-colors hover:text-foreground"
+                aria-label={sidebarCollapsed ? '展开导航' : '收起导航'}
+              >
+                {sidebarCollapsed ? (
+                  <PanelLeftOpen className="h-4 w-4" />
+                ) : (
+                  <PanelLeftClose className="h-4 w-4" />
+                )}
+              </button>
+            </div>
           </div>
           <div className={sidebarCollapsed ? 'origin-top scale-[0.92]' : ''}>
-            <SidebarContent />
+            <SidebarContent runtimeInfo={runtimeInfo} />
           </div>
         </aside>
 
@@ -184,6 +270,7 @@ function ShellFrame({ children }: PropsWithChildren) {
             {children}
           </div>
         </main>
+        <AppLogDrawer open={logDrawerOpen} onOpenChange={setLogDrawerOpen} />
       </div>
     </ShellProvider>
   )

@@ -6,7 +6,6 @@ import {
   BilinkPreviewPopover,
   BilinkSearchPopover,
 } from '@/features/bilink'
-import type { MindMapEditorState } from '@/shared/api/contracts'
 import { PageIntro } from '@/shared/components/layout/PageIntro'
 import { MindMapFrame } from '@/shared/components/mindmap-host'
 import { Button } from '@/shared/components/ui/button'
@@ -50,6 +49,7 @@ export default function PalaceEdit() {
     entityKey: importEntityKey,
     editorState: page.editorState,
     setEditorState: page.setEditorState,
+    applyEditorState: page.applyImportedPalaceEditorState,
     selectedNodeUid,
     subjectOptions: importSubjectOptions,
     defaultSubjectId:
@@ -150,6 +150,7 @@ export default function PalaceEdit() {
             explicitChapterIds={page.explicitChapterIds}
             inheritedChapterIds={page.inheritedChapterIds}
             primaryChapterId={page.primaryChapterId}
+            selectionPending={page.chapterSelectionPending}
             onToggleChapter={page.handleChapterToggle}
           />
 
@@ -225,16 +226,29 @@ export default function PalaceEdit() {
                   readonly={page.editorMode === 'practice'}
                   showToolbarWhenReadonly={page.editorMode === 'practice'}
                   practiceModeActive={page.editorMode === 'practice'}
-                  practiceToggleLabel={page.editorMode === 'practice' ? '复习' : '练习'}
+                  practiceToggleLabel={page.editorMode === 'practice' ? '编辑' : '练习'}
+                  viewMemoryScope={
+                    page.palaceId ? `palace-edit:${page.palaceId}:${page.editorMode}` : null
+                  }
                   immersiveModeActive={page.mindMapFullscreen}
                   showImportButtons
+                  aiSplitBusy={page.editorMode === 'edit' ? page.aiSplitBusy : false}
                   syncOnPropChange
-                  syncIntent="soft"
+                  syncIntent={page.editorMode === 'practice' ? 'replace' : 'soft'}
+                  syncReason={page.editorMode === 'practice' ? 'review_flip' : null}
                   preserveViewOnSync={
-                    page.editorMode === 'practice' || mindMapImport.importAppliedSyncVersion > 0
+                    page.editorMode !== 'practice' &&
+                    (mindMapImport.importAppliedSyncVersion > 0 ||
+                    page.aiSplitAppliedSyncVersion > 0
+                    )
                   }
-                  externalSyncKey={mindMapImport.importExternalSyncKey}
-                  forceSyncKey={`${page.replaceSyncVersion}:${mindMapImport.importAppliedSyncVersion}`}
+                  initialViewPolicy={page.editorMode === 'practice' ? 'preserve' : 'reset'}
+                  externalSyncKey={
+                    page.editorMode === 'practice'
+                      ? page.practiceVisibleEditorSyncKey
+                      : mindMapImport.importExternalSyncKey
+                  }
+                  forceSyncKey={`${page.editorMode}:${page.replaceSyncVersion}:${mindMapImport.importAppliedSyncVersion}`}
                   forceSyncIntent="replace"
                   segments={page.segments
                     .filter((segment) => !segment.is_virtual_default)
@@ -259,10 +273,7 @@ export default function PalaceEdit() {
                   bilinkInsertionText={page.bilinkInsertionText}
                   bilinkInsertionNonce={page.bilinkInsertionNonce}
                   showBilinkSearchButton
-                  onEditorStateChange={(nextState: MindMapEditorState) => {
-                    page.timer.registerActivity('edit_operation', { source: 'mind_map_edit' })
-                    page.setEditorState(nextState)
-                  }}
+                  onEditorStateChange={page.handleMindMapEditorStateChange}
                   onNodeActive={(nodes) => {
                     page.timer.registerActivity('node_switch', { source: 'node_active' })
                     page.setSelectedNodes(nodes)
@@ -283,6 +294,7 @@ export default function PalaceEdit() {
                     mindMapImport.setImportMode('text')
                     mindMapImport.setImportOpen(true)
                   }}
+                  onAiSplitRequest={page.editorMode === 'edit' ? page.handleAiSplitRequest : undefined}
                   onFullscreenChange={page.handleMindMapNativeFullscreenChange}
                   onFullscreenToggle={page.toggleMindMapFullscreen}
                   onBilinkTrigger={page.handleBilinkTrigger}
@@ -326,6 +338,11 @@ export default function PalaceEdit() {
         onSourceKindChange={mindMapImport.setImportSourceKind}
         onWorkflowChange={mindMapImport.setMindMapImportWorkflow}
         loading={mindMapImport.importLoading}
+        streamPhase={mindMapImport.importStreamPhase}
+        streamStatusMessage={mindMapImport.importStreamStatusMessage}
+        streamStep={mindMapImport.importStreamStep}
+        streamTotalSteps={mindMapImport.importStreamTotalSteps}
+        streamPreviewText={mindMapImport.importStreamPreviewText}
         applying={mindMapImport.importApplying}
         undoing={mindMapImport.importUndoing}
         error={mindMapImport.importError}
@@ -350,6 +367,8 @@ export default function PalaceEdit() {
         pdfPageInput={mindMapImport.importPdfPageInput}
         onPdfPageInputChange={mindMapImport.setImportPdfPageInput}
         pdfSelectionError={mindMapImport.importPdfSelectionError}
+        pdfImportMode={mindMapImport.importPdfMode}
+        onPdfImportModeChange={mindMapImport.setImportPdfMode}
         structurePage={mindMapImport.importStructurePage}
         onStructurePageChange={mindMapImport.setImportStructurePage}
         pdfPreviewPage={mindMapImport.importPdfPreviewPage}
@@ -360,8 +379,18 @@ export default function PalaceEdit() {
         pdfImportOptions={mindMapImport.importPdfOptions}
         onPdfImportOptionChange={mindMapImport.setImportPdfOption}
         importWarnings={mindMapImport.importWarnings}
-        importCanApply={mindMapImport.importCanApply}
-        importMatchMode={mindMapImport.importMatchMode}
+        pdfOcrGroundingUsed={mindMapImport.importPdfOcrGroundingUsed}
+        pdfOcrTextChars={mindMapImport.importPdfOcrTextChars}
+        currentJobId={mindMapImport.currentJobId}
+        currentJobStatus={mindMapImport.currentJobStatus}
+        currentJobStage={mindMapImport.currentJobStage}
+        currentJobUsage={mindMapImport.currentJobUsage}
+        currentJobPauseRequested={mindMapImport.currentJobPauseRequested}
+        canResumeJob={mindMapImport.canResumeJob}
+        canPauseJob={mindMapImport.canPauseJob}
+        reusedExistingResult={mindMapImport.importReusedExistingResult}
+        onResumeJob={mindMapImport.handleResumeJob}
+        onPauseJob={mindMapImport.handlePauseJob}
         onTogglePdfPage={mindMapImport.toggleImportPdfPage}
         onPdfStart={mindMapImport.handlePdfImportStart}
         targetNodeLabel={selectedNodeLabel}
@@ -403,6 +432,7 @@ export default function PalaceEdit() {
         error={page.bilinkPreviewError}
         context={page.bilinkPreviewContext}
         editorState={page.bilinkPreviewEditorState}
+        highlightQuery={page.bilinkPreviewHighlightQuery}
         onClose={() => page.setBilinkPreviewOpen(false)}
         onJump={page.jumpToBilinkContext}
       />

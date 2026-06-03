@@ -1,0 +1,92 @@
+from __future__ import annotations
+
+from typing import Any
+
+from sqlalchemy.orm import Session
+
+from memory_anki.core.config import (
+    DASHSCOPE_API_KEY,
+    DASHSCOPE_BASE_URL,
+    DASHSCOPE_TEXT_MODEL,
+)
+from memory_anki.infrastructure.db.models import Palace
+from memory_anki.modules.mindmap.application.editor_state_service import normalize_editor_doc
+
+from .mindmap_ai_split import config_loader, gateway, tree_ops
+from .mindmap_ai_split import contracts as split_contracts
+from .mindmap_ai_split.primitives import ensure_dict
+
+AI_SPLIT_CONFIG_KEYS = split_contracts.AI_SPLIT_CONFIG_KEYS
+AI_SPLIT_DEFAULT_MAX_CHILDREN = split_contracts.AI_SPLIT_DEFAULT_MAX_CHILDREN
+AI_SPLIT_DEFAULT_TEMPERATURE = split_contracts.AI_SPLIT_DEFAULT_TEMPERATURE
+AI_SPLIT_FALLBACK_BUCKET = split_contracts.AI_SPLIT_FALLBACK_BUCKET
+AI_SPLIT_MAX_CHILDREN_LIMIT = split_contracts.AI_SPLIT_MAX_CHILDREN_LIMIT
+AI_SPLIT_SYSTEM_PROMPT = split_contracts.AI_SPLIT_SYSTEM_PROMPT
+MindMapAiSplitConfig = split_contracts.MindMapAiSplitConfig
+MindMapAiSplitError = split_contracts.MindMapAiSplitError
+MindMapAiSplitResult = split_contracts.MindMapAiSplitResult
+
+
+def split_palace_editor_doc_with_ai(
+    session: Session,
+    palace: Palace,
+    editor_doc: Any,
+    target_node_uid: str | None,
+) -> MindMapAiSplitResult:
+    config = resolve_mindmap_ai_split_config(session)
+    normalized_doc = normalize_editor_doc(editor_doc, root_text=palace.title, root_kind="palace")
+    root = ensure_dict(normalized_doc.get("root"))
+    normalized_doc["root"] = root
+    target_node = tree_ops.find_target_node(root, target_node_uid)
+    if target_node is None:
+        raise MindMapAiSplitError("未找到要分卡的目标节点，请重新选中节点后再试。")
+
+    existing_children = tree_ops.collect_first_level_children(target_node)
+    ai_payload = _call_mindmap_ai_split_model(
+        config=config,
+        target_node=target_node,
+        existing_children=existing_children,
+    )
+    generated_children = tree_ops.normalize_generated_children(
+        ai_payload.get("new_children"),
+        max_children=config.max_children,
+    )
+    if not generated_children:
+        raise MindMapAiSplitError("AI 没有返回可用的新分类节点，请调整提示词后重试。")
+
+    next_children, reassigned_count = tree_ops.build_split_children(
+        generated_children=generated_children,
+        existing_children=existing_children,
+        raw_assignments=ai_payload.get("child_assignments"),
+        fallback_bucket=AI_SPLIT_FALLBACK_BUCKET,
+    )
+    target_node["children"] = next_children
+    return MindMapAiSplitResult(
+        editor_doc=normalized_doc,
+        generated_children_count=len(next_children),
+        reassigned_existing_children_count=reassigned_count,
+        model=config.model,
+    )
+
+
+def resolve_mindmap_ai_split_config(session: Session) -> MindMapAiSplitConfig:
+    return config_loader.resolve_config(
+        session,
+        default_api_key=DASHSCOPE_API_KEY,
+        default_base_url=DASHSCOPE_BASE_URL,
+        default_model=DASHSCOPE_TEXT_MODEL,
+    )
+
+
+def _call_mindmap_ai_split_model(
+    *,
+    config: MindMapAiSplitConfig,
+    target_node: dict[str, Any],
+    existing_children: list[dict[str, Any]],
+) -> dict[str, Any]:
+    return gateway.call_model(
+        config=config,
+        target_node=target_node,
+        existing_children=existing_children,
+        build_model_input_fn=tree_ops.build_model_input,
+    )

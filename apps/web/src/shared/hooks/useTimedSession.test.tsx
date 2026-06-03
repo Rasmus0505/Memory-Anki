@@ -8,21 +8,32 @@ interface TestHarnessProps {
   kind: 'palace_edit' | 'practice' | 'review'
   autoPauseMs?: number
   hiddenPauseMs?: number
+  persistKey?: string | null
+  autoStart?: boolean
 }
 
-function TestHarness({ kind, autoPauseMs, hiddenPauseMs }: TestHarnessProps) {
+function TestHarness({
+  kind,
+  autoPauseMs,
+  hiddenPauseMs,
+  persistKey = null,
+  autoStart = true,
+}: TestHarnessProps) {
   const timer = useTimedSession({
     kind,
     title: '测试',
     palaceId: 1,
     autoPauseMs,
     hiddenPauseMs,
+    persistKey,
   })
 
   React.useEffect(() => {
+    if (!autoStart) return
     timer.start({ source: 'test' })
-  // Start once so later rerenders don't mask pause/resume behavior under test.
-  }, [])
+    // Start once so later rerenders don't mask pause/resume behavior under test.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoStart])
 
   return (
     <div>
@@ -46,6 +57,7 @@ describe('useTimedSession automation config', () => {
   beforeEach(() => {
     vi.useFakeTimers()
     window.localStorage.clear()
+    window.sessionStorage.clear()
   })
 
   afterEach(() => {
@@ -129,6 +141,66 @@ describe('useTimedSession automation config', () => {
     expect(screen.getByTestId('status').textContent).toBe('paused')
     expect(screen.getByTestId('pause-count').textContent).toBe('1')
     expect(screen.getByTestId('seconds').textContent).toBe('2')
+  })
+
+  it('caps inactivity rollback to the actual idle tail instead of wiping active time', () => {
+    window.localStorage.setItem(
+      TIMER_AUTOMATION_STORAGE_KEY,
+      JSON.stringify({
+        actions: {
+          autoStartOnPageEnter: false,
+          autoResumeOnWindowReturn: false,
+          countNodeSwitchAsActivity: false,
+          countEditOperationsAsActivity: true,
+          countPracticeInteractionsAsActivity: true,
+        },
+        palace_edit: {
+          inactiveAutoPauseSeconds: 5,
+          hiddenAutoPauseSeconds: 15,
+          autoPauseRollbackSeconds: 30,
+        },
+      }),
+    )
+
+    render(<TestHarness kind="palace_edit" />)
+
+    act(() => {
+      vi.advanceTimersByTime(4_000)
+      screen.getByRole('button', { name: 'edit-op' }).click()
+      vi.advanceTimersByTime(5_000)
+    })
+
+    expect(screen.getByTestId('status').textContent).toBe('paused')
+    expect(screen.getByTestId('seconds').textContent).toBe('4')
+  })
+
+  it('persists running sessions as paused snapshots on pagehide without counting time away', () => {
+    const { unmount } = render(
+      <TestHarness kind="practice" autoPauseMs={60_000} persistKey="practice:restore-test" />,
+    )
+
+    act(() => {
+      vi.advanceTimersByTime(3_200)
+      window.dispatchEvent(new Event('pagehide'))
+    })
+
+    unmount()
+
+    act(() => {
+      vi.advanceTimersByTime(30_000)
+    })
+
+    render(
+      <TestHarness
+        kind="practice"
+        autoPauseMs={60_000}
+        persistKey="practice:restore-test"
+        autoStart={false}
+      />,
+    )
+
+    expect(screen.getByTestId('status').textContent).toBe('paused')
+    expect(screen.getByTestId('seconds').textContent).toBe('3')
   })
 
   it('does not auto resume on focus when window return is disabled', () => {

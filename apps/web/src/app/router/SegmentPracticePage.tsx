@@ -96,6 +96,7 @@ export default function SegmentPracticePage() {
         title={title}
         palaceId={segment.palace_id}
         sessionKind="practice"
+        persistKey={`practice:segment:${segment.id}`}
         editorState={editorState}
         initialSnapshot={initialSnapshot}
         persistProgress

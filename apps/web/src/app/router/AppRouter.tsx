@@ -11,6 +11,9 @@ import ReviewOverviewPage from '@/features/review/ReviewOverviewPage'
 const KnowledgePage = lazy(() => import('@/features/knowledge/KnowledgePage'))
 const PalaceEditPage = lazy(() => import('@/features/palace-edit/PalaceEditPage'))
 const ProfilePage = lazy(() => import('@/features/profile/ProfilePage'))
+const ProfileAiSplitPage = lazy(
+  () => import('@/features/profile/ProfileAiSplitPage'),
+)
 const ProfileBackupsPage = lazy(
   () => import('@/features/profile/ProfileBackupsPage'),
 )
@@ -50,6 +53,7 @@ export function AppRouter() {
         <Route path="/segment-review/session/:id" element={<SegmentReviewSessionPage />} />
         <Route path="/segment-review/batch" element={<BatchSegmentReviewSessionPage />} />
         <Route path="/profile" element={<ProfilePage />} />
+        <Route path="/profile/ai-split" element={<ProfileAiSplitPage />} />
         <Route path="/profile/backups" element={<ProfileBackupsPage />} />
       </Routes>
     </Suspense>

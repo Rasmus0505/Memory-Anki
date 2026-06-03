@@ -1,28 +1,34 @@
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { MindMapEditorState } from '@/shared/api/client'
 import type {
   BilinkItem,
   MindMapHostSegmentRangeDraft,
   MindMapHostSegmentSummary,
 } from '@/shared/api/contracts'
-
-export interface MindMapSelection {
-  uid: string | null
-  text: string
-  note: string
-  memoryAnkiId: number | null
-  memoryAnkiNodeType: string | null
-  rawData: Record<string, unknown>
-}
+import { dispatchHostEvent } from '@/shared/components/mindmap-host/hostEventDispatcher'
+import {
+  buildHostBridgeHostState,
+  buildSyncFingerprint,
+  cloneValue,
+  type HostBridge,
+  type HostEditorStateSyncPayload,
+  type MindMapAiSplitRequestPayload,
+  type MindMapHostWindow,
+  type MindMapSelection,
+  normalizeEditorDoc,
+} from '@/shared/components/mindmap-host/hostBridgeUtils'
+import { useHostSyncController } from '@/shared/components/mindmap-host/useHostSyncController'
 
 interface MindMapFrameProps {
   editorState: MindMapEditorState
   readonly?: boolean
   showToolbarWhenReadonly?: boolean
   practiceModeActive?: boolean
-  practiceToggleLabel?: '练习' | '复习'
+  practiceToggleLabel?: '练习' | '编辑' | '复习'
+  viewMemoryScope?: string | null
   immersiveModeActive?: boolean
   showImportButtons?: boolean
+  aiSplitBusy?: boolean
   syncOnPropChange?: boolean
   syncIntent?: 'soft' | 'replace'
   syncReason?: string | null
@@ -30,6 +36,7 @@ interface MindMapFrameProps {
   forceSyncKey?: string | number | null
   forceSyncIntent?: 'soft' | 'replace'
   preserveViewOnSync?: boolean
+  initialViewPolicy?: 'preserve' | 'reset'
   className?: string
   segments?: MindMapHostSegmentSummary[]
   activeSegmentId?: number | null
@@ -59,6 +66,7 @@ interface MindMapFrameProps {
   onPracticeToggle?: () => void
   onMindMapImportOpen?: () => void
   onImageTextImportOpen?: () => void
+  onAiSplitRequest?: (payload: MindMapAiSplitRequestPayload) => void
   onFullscreenChange?: (active: boolean) => void
   onFullscreenToggle?: (active?: boolean) => void
   onBilinkTrigger?: (payload: {
@@ -76,77 +84,16 @@ interface MindMapFrameProps {
   onReady?: () => void
 }
 
-interface HostBridge {
-  getMindMapData: () => Record<string, unknown> | string
-  saveMindMapData: (data: Record<string, unknown> | string) => void
-  getMindMapConfig: () => Record<string, unknown>
-  saveMindMapConfig: (config: Record<string, unknown>) => void
-  getLanguage: () => string
-  saveLanguage: (lang: string) => void
-  getLocalConfig: () => Record<string, unknown>
-  saveLocalConfig: (config: Record<string, unknown>) => void
-  notify: (event: string, payload: unknown) => void
-}
-
-declare global {
-  interface Window {
-    __memoryAnkiMindMapHosts?: Record<string, HostBridge>
-  }
-}
-
-function cloneValue<T>(value: T): T {
-  return JSON.parse(JSON.stringify(value)) as T
-}
-
-function normalizeEditorDoc(value: MindMapEditorState['editor_doc']): Record<string, unknown> | string {
-  if (value == null) return {}
-  return cloneValue(value)
-}
-
-function buildSyncFingerprint(args: {
-  editorState: MindMapEditorState
-  activeSegmentId: number | null
-  segmentColorMode: 'all' | 'active-only' | 'all-with-active-emphasis'
-  segmentRangeDraft: MindMapHostSegmentRangeDraft
-  bilinkCounts: Record<string, number>
-  segments: MindMapHostSegmentSummary[]
-  preserveViewOnSync: boolean
-  externalSyncKey: string | number | null
-}) {
-  const {
-    editorState,
-    activeSegmentId,
-    segmentColorMode,
-    segmentRangeDraft,
-    bilinkCounts,
-    segments,
-    preserveViewOnSync,
-    externalSyncKey,
-  } = args
-  return JSON.stringify({
-    editor_doc:
-      externalSyncKey == null ? normalizeEditorDoc(editorState.editor_doc) : undefined,
-    editor_doc_sync_key: externalSyncKey,
-    editor_config: editorState.editor_config,
-    editor_local_config: editorState.editor_local_config,
-    lang: editorState.lang,
-    segments,
-    activeSegmentId,
-    segmentColorMode,
-    segmentRangeDraft,
-    bilinkCounts,
-    preserveViewOnSync,
-  })
-}
-
 export function MindMapFrame({
   editorState,
   readonly = false,
   showToolbarWhenReadonly = false,
   practiceModeActive = false,
   practiceToggleLabel = '练习',
+  viewMemoryScope = null,
   immersiveModeActive = false,
   showImportButtons = false,
+  aiSplitBusy = false,
   syncOnPropChange = false,
   syncIntent = 'soft',
   syncReason = null,
@@ -154,6 +101,7 @@ export function MindMapFrame({
   forceSyncKey = null,
   forceSyncIntent = 'replace',
   preserveViewOnSync = false,
+  initialViewPolicy = 'preserve',
   className,
   segments = [],
   activeSegmentId = null,
@@ -182,6 +130,7 @@ export function MindMapFrame({
   onPracticeToggle,
   onMindMapImportOpen,
   onImageTextImportOpen,
+  onAiSplitRequest,
   onFullscreenChange,
   onFullscreenToggle,
   onBilinkTrigger,
@@ -203,17 +152,17 @@ export function MindMapFrame({
   const onPracticeToggleRef = useRef(onPracticeToggle)
   const onMindMapImportOpenRef = useRef(onMindMapImportOpen)
   const onImageTextImportOpenRef = useRef(onImageTextImportOpen)
+  const onAiSplitRequestRef = useRef(onAiSplitRequest)
   const onFullscreenChangeRef = useRef(onFullscreenChange)
   const onFullscreenToggleRef = useRef(onFullscreenToggle)
   const onBilinkTriggerRef = useRef(onBilinkTrigger)
   const onBilinkNodeClickRef = useRef(onBilinkNodeClick)
   const onBilinkToolbarSearchRef = useRef(onBilinkToolbarSearch)
   const onReadyRef = useRef(onReady)
-  const lastSyncedFingerprintRef = useRef('')
   const lastForcedSyncKeyRef = useRef<string | null>(null)
   const lastBilinkInsertionNonceRef = useRef<number>(0)
   const suppressNextPropSyncRef = useRef(false)
-  const [isLoaded, setIsLoaded] = useState(false)
+  const [isIframeLoaded, setIsIframeLoaded] = useState(false)
 
   stateRef.current = editorState
   onEditorStateChangeRef.current = onEditorStateChange
@@ -228,6 +177,7 @@ export function MindMapFrame({
   onPracticeToggleRef.current = onPracticeToggle
   onMindMapImportOpenRef.current = onMindMapImportOpen
   onImageTextImportOpenRef.current = onImageTextImportOpen
+  onAiSplitRequestRef.current = onAiSplitRequest
   onFullscreenChangeRef.current = onFullscreenChange
   onFullscreenToggleRef.current = onFullscreenToggle
   onBilinkTriggerRef.current = onBilinkTrigger
@@ -237,91 +187,73 @@ export function MindMapFrame({
 
   const rawHostId = useId()
   const hostId = useMemo(() => rawHostId.replace(/[^a-zA-Z0-9_-]/g, '_'), [rawHostId])
-
-  const syncHostEditorStateWithIntent = useCallback(
-    (nextIntent: 'soft' | 'replace', nextReason: string | null = null) => {
-      const iframeWindow = iframeRef.current?.contentWindow as
-        | (Window & {
-            syncHostEditorState?: (payload: {
-              editorState: MindMapEditorState
-              preserveView: boolean
-              syncIntent: 'soft' | 'replace'
-              syncReason: string | null
-            }) => void
-          })
-        | null
-      return iframeWindow?.syncHostEditorState?.({
-        editorState: cloneValue(stateRef.current),
-        preserveView: preserveViewOnSync,
-        syncIntent: nextIntent,
-        syncReason: nextReason,
-      })
-    },
-    [preserveViewOnSync],
-  )
+  const {
+    buildHostEditorStateSyncPayload,
+    flushPendingHostEditorStateSync,
+    hostReadyRef,
+    lastSyncedFingerprintRef,
+    markHostReady,
+    resetHostReady,
+    syncOrQueueHostEditorState,
+  } = useHostSyncController({
+    iframeRef,
+    preserveViewOnSync,
+    initialViewPolicy,
+  })
 
   const syncHostState = useCallback(() => {
-    const iframeWindow = iframeRef.current?.contentWindow as
-      | (Window & {
-          applyHostState?: (state: {
-            readonly: boolean
-            showToolbarWhenReadonly: boolean
-            showPracticeButton: boolean
-            practiceModeActive: boolean
-            practiceToggleLabel: '练习' | '复习'
-            immersiveModeActive: boolean
-            showImportButtons: boolean
-            segments: MindMapHostSegmentSummary[]
-            activeSegmentId: number | null
-            segmentColorMode: 'all' | 'active-only' | 'all-with-active-emphasis'
-            segmentRangeDraft: MindMapHostSegmentRangeDraft
-            bilinkCounts: Record<string, number>
-            bilinkItems: BilinkItem[]
-            bilinkCurrentPalaceId: number | null
-            showBilinkSearchButton: boolean
-          }) => void
-          resetReadonlyInteractionState?: () => void
-        })
-      | null
-    iframeWindow?.applyHostState?.({
-      readonly,
-      showToolbarWhenReadonly,
-      showPracticeButton: Boolean(onPracticeToggleRef.current),
-      practiceModeActive,
-      practiceToggleLabel,
-      immersiveModeActive,
-      showImportButtons: Boolean(showImportButtons),
-      segments: cloneValue(segments),
-      activeSegmentId,
-      segmentColorMode,
-      segmentRangeDraft: cloneValue(segmentRangeDraft),
-      bilinkCounts: cloneValue(bilinkCounts),
-      bilinkItems: cloneValue(bilinkItems),
-      bilinkCurrentPalaceId,
-      showBilinkSearchButton,
-    })
-    if (readonly) {
-      iframeWindow?.resetReadonlyInteractionState?.()
-    }
+    const iframeWindow = iframeRef.current?.contentWindow as MindMapHostWindow | null
+    iframeWindow?.applyHostState?.(
+      buildHostBridgeHostState({
+        readonly,
+        showToolbarWhenReadonly,
+        practiceModeActive,
+        practiceToggleLabel,
+        viewMemoryScope,
+        immersiveModeActive,
+        showImportButtons: Boolean(showImportButtons),
+        aiSplitBusy,
+        segments,
+        activeSegmentId,
+        segmentColorMode,
+        segmentRangeDraft,
+        bilinkCounts,
+        bilinkItems,
+        bilinkCurrentPalaceId,
+        showBilinkSearchButton,
+        hasPracticeToggle: Boolean(onPracticeToggleRef.current),
+        hasAiSplitRequest: Boolean(onAiSplitRequestRef.current),
+      }),
+    )
   }, [
     activeSegmentId,
-    practiceModeActive,
-    practiceToggleLabel,
-    immersiveModeActive,
-    readonly,
-    showImportButtons,
-    segmentColorMode,
-    segmentRangeDraft,
+    aiSplitBusy,
     bilinkCounts,
     bilinkCurrentPalaceId,
     bilinkItems,
-    showBilinkSearchButton,
+    immersiveModeActive,
+    practiceModeActive,
+    practiceToggleLabel,
+    readonly,
+    segmentColorMode,
+    segmentRangeDraft,
     segments,
+    showBilinkSearchButton,
+    showImportButtons,
     showToolbarWhenReadonly,
+    viewMemoryScope,
   ])
 
+  const promoteHostReadyFromRuntimeEvent = useCallback(() => {
+    if (hostReadyRef.current) return
+    const iframeWindow = iframeRef.current?.contentWindow as MindMapHostWindow | null
+    if (typeof iframeWindow?.syncHostEditorState !== 'function') return
+    markHostReady()
+    flushPendingHostEditorStateSync()
+  }, [flushPendingHostEditorStateSync, hostReadyRef, markHostReady])
+
   useEffect(() => {
-    if (!isLoaded || !bilinkInsertionText) return
+    if (!isIframeLoaded || !bilinkInsertionText) return
     if (bilinkInsertionNonce === lastBilinkInsertionNonceRef.current) return
     lastBilinkInsertionNonceRef.current = bilinkInsertionNonce
     const iframeWindow = iframeRef.current?.contentWindow as
@@ -330,9 +262,9 @@ export function MindMapFrame({
         })
       | null
     iframeWindow?.insertBilinkMark?.(bilinkInsertionText)
-  }, [bilinkInsertionNonce, bilinkInsertionText, isLoaded])
+  }, [bilinkInsertionNonce, bilinkInsertionText, isIframeLoaded])
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const registry = (window.__memoryAnkiMindMapHosts ??= {})
     registry[hostId] = {
       getMindMapData: () => normalizeEditorDoc(stateRef.current.editor_doc),
@@ -372,137 +304,33 @@ export function MindMapFrame({
         })
       },
       notify: (event, payload) => {
-        if (event === 'app_inited') {
-          lastSyncedFingerprintRef.current = buildSyncFingerprint({
-            editorState: stateRef.current,
-            activeSegmentId,
-            segmentColorMode,
-            segmentRangeDraft,
-            bilinkCounts,
-            segments,
-            preserveViewOnSync,
-            externalSyncKey,
-          })
-          onReadyRef.current?.()
+        if (event !== 'app_inited') {
+          promoteHostReadyFromRuntimeEvent()
+        }
+        const result = dispatchHostEvent(event, payload, {
+          onNodeActive: onNodeActiveRef,
+          onNodeClick: onNodeClickRef,
+          onNodeContextMenu: onNodeContextMenuRef,
+          onSegmentSelect: onSegmentSelectRef,
+          onCreateSegmentFromSelection: onCreateSegmentFromSelectionRef,
+          onSegmentRangeDraftChange: onSegmentRangeDraftChangeRef,
+          onSegmentRangeModeToggle: onSegmentRangeModeToggleRef,
+          onSegmentRangeConfirm: onSegmentRangeConfirmRef,
+          onPracticeToggle: onPracticeToggleRef,
+          onMindMapImportOpen: onMindMapImportOpenRef,
+          onImageTextImportOpen: onImageTextImportOpenRef,
+          onAiSplitRequest: onAiSplitRequestRef,
+          onFullscreenChange: onFullscreenChangeRef,
+          onFullscreenToggle: onFullscreenToggleRef,
+          onBilinkTrigger: onBilinkTriggerRef,
+          onBilinkNodeClick: onBilinkNodeClickRef,
+          onBilinkToolbarSearch: onBilinkToolbarSearchRef,
+          onReady: onReadyRef,
+        })
+        if (result === 'app_inited') {
+          markHostReady()
           syncHostState()
-          return
-        }
-        if (event === 'node_active') {
-          onNodeActiveRef.current?.(Array.isArray(payload) ? (payload as MindMapSelection[]) : [])
-        }
-        if (event === 'node_click') {
-          onNodeClickRef.current?.(Array.isArray(payload) ? (payload as MindMapSelection[]) : [])
-        }
-        if (event === 'node_contextmenu') {
-          onNodeContextMenuRef.current?.(Array.isArray(payload) ? (payload as MindMapSelection[]) : [])
-        }
-        if (event === 'segment_select') {
-          onSegmentSelectRef.current?.(
-            typeof payload === 'number' ? payload : payload == null ? null : Number(payload),
-          )
-        }
-        if (event === 'segment_create_from_selection') {
-          onCreateSegmentFromSelectionRef.current?.()
-        }
-        if (event === 'segment_range_draft_change') {
-          const nextPayload =
-            payload && typeof payload === 'object'
-              ? (payload as {
-                  selectedNodeUids?: unknown
-                  overriddenConflictNodeUids?: unknown
-                })
-              : null
-          onSegmentRangeDraftChangeRef.current?.({
-            selectedNodeUids: Array.isArray(nextPayload?.selectedNodeUids)
-              ? nextPayload.selectedNodeUids
-                  .map((value) => (typeof value === 'string' ? value : null))
-                  .filter((value): value is string => Boolean(value))
-              : [],
-            overriddenConflictNodeUids: Array.isArray(nextPayload?.overriddenConflictNodeUids)
-              ? nextPayload.overriddenConflictNodeUids
-                  .map((value) => (typeof value === 'string' ? value : null))
-                  .filter((value): value is string => Boolean(value))
-              : [],
-          })
-        }
-        if (event === 'segment_range_mode_toggle') {
-          const nextPayload =
-            payload && typeof payload === 'object'
-              ? (payload as {
-                  active?: unknown
-                  targetSegmentId?: unknown
-                })
-              : null
-          const rawTarget = nextPayload?.targetSegmentId
-          onSegmentRangeModeToggleRef.current?.({
-            active: Boolean(nextPayload?.active),
-            targetSegmentId:
-              rawTarget === 'new'
-                ? 'new'
-                : rawTarget == null || rawTarget === ''
-                  ? null
-                  : Number(rawTarget),
-          })
-        }
-        if (event === 'segment_range_confirm') {
-          onSegmentRangeConfirmRef.current?.()
-        }
-        if (event === 'practice_toggle') {
-          onPracticeToggleRef.current?.()
-        }
-        if (event === 'mindmap_import_open') {
-          onMindMapImportOpenRef.current?.()
-        }
-        if (event === 'image_text_import_open') {
-          onImageTextImportOpenRef.current?.()
-        }
-        if (event === 'fullscreen_change') {
-          onFullscreenChangeRef.current?.(Boolean(payload))
-        }
-        if (event === 'fullscreen_toggle') {
-          onFullscreenToggleRef.current?.(
-            typeof payload === 'boolean' ? payload : undefined,
-          )
-        }
-        if (event === 'bilink_trigger') {
-          const nextPayload =
-            payload && typeof payload === 'object'
-              ? (payload as {
-                  nodeUid?: unknown
-                  left?: unknown
-                  top?: unknown
-                  query?: unknown
-                })
-              : null
-          onBilinkTriggerRef.current?.({
-            nodeUid: typeof nextPayload?.nodeUid === 'string' ? nextPayload.nodeUid : null,
-            left: typeof nextPayload?.left === 'number' ? nextPayload.left : 0,
-            top: typeof nextPayload?.top === 'number' ? nextPayload.top : 0,
-            query: typeof nextPayload?.query === 'string' ? nextPayload.query : '',
-          })
-        }
-        if (event === 'bilink_node_click') {
-          const nextPayload =
-            payload && typeof payload === 'object'
-              ? (payload as {
-                  palaceId?: unknown
-                  nodeUid?: unknown
-                  trigger?: unknown
-                })
-              : null
-          onBilinkNodeClickRef.current?.({
-            palaceId:
-              typeof nextPayload?.palaceId === 'number'
-                ? nextPayload.palaceId
-                : nextPayload?.palaceId == null
-                  ? null
-                  : Number(nextPayload.palaceId),
-            nodeUid: typeof nextPayload?.nodeUid === 'string' ? nextPayload.nodeUid : null,
-            trigger: nextPayload?.trigger === 'mark' ? 'mark' : 'badge',
-          })
-        }
-        if (event === 'bilink_toolbar_search') {
-          onBilinkToolbarSearchRef.current?.()
+          flushPendingHostEditorStateSync()
         }
       },
     }
@@ -516,7 +344,9 @@ export function MindMapFrame({
     activeSegmentId,
     bilinkCounts,
     externalSyncKey,
+    flushPendingHostEditorStateSync,
     hostId,
+    promoteHostReadyFromRuntimeEvent,
     preserveViewOnSync,
     readonly,
     segmentColorMode,
@@ -526,13 +356,13 @@ export function MindMapFrame({
   ])
 
   useEffect(() => {
-    if (isLoaded) {
+    if (isIframeLoaded) {
       syncHostState()
     }
-  }, [isLoaded, syncHostState])
+  }, [isIframeLoaded, syncHostState])
 
   useEffect(() => {
-    if (!syncOnPropChange || !isLoaded) return
+    if (!syncOnPropChange || !isIframeLoaded) return
     const fingerprint = buildSyncFingerprint({
       editorState,
       activeSegmentId,
@@ -549,30 +379,33 @@ export function MindMapFrame({
       lastSyncedFingerprintRef.current = fingerprint
       return
     }
-    lastSyncedFingerprintRef.current = fingerprint
-    syncHostEditorStateWithIntent(syncIntent, syncReason)
+    syncOrQueueHostEditorState(
+      buildHostEditorStateSyncPayload(editorState, fingerprint, syncIntent, syncReason, 'prop'),
+    )
   }, [
     activeSegmentId,
+    buildHostEditorStateSyncPayload,
     editorState,
     externalSyncKey,
-    isLoaded,
+    isIframeLoaded,
     preserveViewOnSync,
+    readonly,
     syncIntent,
     syncReason,
     segmentColorMode,
     segmentRangeDraft,
     bilinkCounts,
     segments,
-    syncHostEditorStateWithIntent,
+    syncOrQueueHostEditorState,
     syncOnPropChange,
   ])
 
   useEffect(() => {
-    if (!isLoaded || forceSyncKey == null) return
+    if (!isIframeLoaded || forceSyncKey == null) return
     const syncKey = String(forceSyncKey)
     if (lastForcedSyncKeyRef.current === syncKey) return
     lastForcedSyncKeyRef.current = syncKey
-    lastSyncedFingerprintRef.current = buildSyncFingerprint({
+    const fingerprint = buildSyncFingerprint({
       editorState,
       activeSegmentId,
       segmentColorMode,
@@ -583,20 +416,23 @@ export function MindMapFrame({
       externalSyncKey,
     })
     suppressNextPropSyncRef.current = false
-    syncHostEditorStateWithIntent(forceSyncIntent, null)
+    syncOrQueueHostEditorState(
+      buildHostEditorStateSyncPayload(editorState, fingerprint, forceSyncIntent, null, 'force'),
+    )
   }, [
     activeSegmentId,
+    buildHostEditorStateSyncPayload,
     editorState,
     externalSyncKey,
     forceSyncKey,
     forceSyncIntent,
-    isLoaded,
+    isIframeLoaded,
     preserveViewOnSync,
     segmentColorMode,
     segmentRangeDraft,
     bilinkCounts,
     segments,
-    syncHostEditorStateWithIntent,
+    syncOrQueueHostEditorState,
   ])
 
   return (
@@ -606,17 +442,8 @@ export function MindMapFrame({
       src={`/mind-map-host.html?host=${encodeURIComponent(hostId)}`}
       className={className ?? 'h-full w-full border-0'}
       onLoad={() => {
-        lastSyncedFingerprintRef.current = buildSyncFingerprint({
-          editorState: stateRef.current,
-          activeSegmentId,
-          segmentColorMode,
-          segmentRangeDraft,
-          bilinkCounts,
-          segments,
-          preserveViewOnSync,
-          externalSyncKey,
-        })
-        setIsLoaded(true)
+        resetHostReady()
+        setIsIframeLoaded(true)
         syncHostState()
       }}
     />

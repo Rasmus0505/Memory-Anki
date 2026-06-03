@@ -10,6 +10,16 @@ interface PersistedMindMapOptions<TResponse, TMeta> {
   onSaveError?: (error: Error, pendingState: MindMapEditorState) => Promise<boolean> | boolean
 }
 
+interface ExternalStateGuard {
+  expectedFingerprint: string
+  releaseAt: number
+}
+
+interface AdoptExternalStateOptions {
+  protectFromStaleLoads?: boolean
+  releaseAfterMs?: number
+}
+
 function stableSerialize(value: unknown) {
   try {
     return JSON.stringify(value) ?? ''
@@ -46,6 +56,10 @@ export function usePersistedMindMapEditor<TResponse, TMeta>({
   const isSavingRef = useRef(false)
   const previousEntityIdRef = useRef<number | null>(entityId)
   const retryCountRef = useRef(0)
+  const isMountedRef = useRef(false)
+  const loadRequestIdRef = useRef(0)
+  const queueRetryPersistRef = useRef<() => void>(() => {})
+  const externalStateGuardRef = useRef<ExternalStateGuard | null>(null)
 
   editorStateRef.current = editorState
   entityIdRef.current = entityId
@@ -56,12 +70,71 @@ export function usePersistedMindMapEditor<TResponse, TMeta>({
   onSaveErrorRef.current = onSaveError
   isSavingRef.current = isSaving
 
+  useEffect(() => {
+    isMountedRef.current = true
+    return () => {
+      isMountedRef.current = false
+    }
+  }, [])
+
+  const isCurrentLoadRequest = useCallback((requestId: number, requestEntityId: number) => {
+    return (
+      isMountedRef.current &&
+      loadRequestIdRef.current === requestId &&
+      entityIdRef.current === requestEntityId
+    )
+  }, [])
+
   const clearTimer = () => {
     if (timerRef.current != null) {
       window.clearTimeout(timerRef.current)
       timerRef.current = null
     }
   }
+
+  const releaseExternalStateGuard = useCallback(() => {
+    externalStateGuardRef.current = null
+  }, [])
+
+  const armExternalStateGuard = useCallback((nextState: MindMapEditorState, releaseAfterMs = 4000) => {
+    externalStateGuardRef.current = {
+      expectedFingerprint: stableSerialize(nextState),
+      releaseAt: Date.now() + releaseAfterMs,
+    }
+  }, [])
+
+  const shouldIgnoreIncomingState = useCallback((nextState: MindMapEditorState) => {
+    const guard = externalStateGuardRef.current
+    if (!guard) return false
+    if (Date.now() >= guard.releaseAt) {
+      externalStateGuardRef.current = null
+      return false
+    }
+    const nextFingerprint = stableSerialize(nextState)
+    if (nextFingerprint === guard.expectedFingerprint) {
+      externalStateGuardRef.current = null
+      return false
+    }
+    return true
+  }, [])
+
+  const adoptExternalState = useCallback(
+    (nextState: MindMapEditorState, options?: AdoptExternalStateOptions) => {
+      clearTimer()
+      dirtyRef.current = false
+      retryCountRef.current = 0
+      const nextFingerprint = stableSerialize(nextState)
+      lastStateFingerprintRef.current = nextFingerprint
+      if (options?.protectFromStaleLoads) {
+        armExternalStateGuard(nextState, options.releaseAfterMs)
+      }
+      if (isMountedRef.current) {
+        setError(null)
+        setEditorState(nextState)
+      }
+    },
+    [armExternalStateGuard],
+  )
 
   const persistSnapshot = useCallback(
     async (
@@ -70,12 +143,17 @@ export function usePersistedMindMapEditor<TResponse, TMeta>({
       saveVersion: number,
     ) => {
       dirtyRef.current = false
-      setIsSaving(true)
-      setError(null)
+      if (isMountedRef.current) {
+        setIsSaving(true)
+        setError(null)
+      }
       try {
         const response = await saverRef.current(saveEntityId, snapshot)
-        if (entityIdRef.current !== saveEntityId) return
+        if (!isMountedRef.current || entityIdRef.current !== saveEntityId) return
         const nextEditorState = selectEditorStateRef.current(response)
+        if (shouldIgnoreIncomingState(nextEditorState)) {
+          return
+        }
         retryCountRef.current = 0
         lastStateFingerprintRef.current = stableSerialize(nextEditorState)
         setMeta(selectMetaRef.current(response))
@@ -96,13 +174,17 @@ export function usePersistedMindMapEditor<TResponse, TMeta>({
         }
         retryCountRef.current += 1
         dirtyRef.current = !handled && retryCountRef.current < 3
-        setError(nextError.message)
+        if (isMountedRef.current) {
+          setError(nextError.message)
+        }
       } finally {
-        setIsSaving(false)
+        if (isMountedRef.current) {
+          setIsSaving(false)
+        }
         if (dirtyRef.current) {
           clearTimer()
           timerRef.current = window.setTimeout(() => {
-            void flushSave()
+            queueRetryPersistRef.current()
           }, 400)
         }
       }
@@ -110,18 +192,36 @@ export function usePersistedMindMapEditor<TResponse, TMeta>({
     [],
   )
 
+  queueRetryPersistRef.current = () => {
+    const retryEntityId = entityIdRef.current
+    const retryEditorState = editorStateRef.current
+    if (!retryEntityId || !retryEditorState || !dirtyRef.current || isSavingRef.current) {
+      return
+    }
+    void persistSnapshot(retryEntityId, retryEditorState, changeVersionRef.current)
+  }
+
   const load = useCallback(async () => {
+    const requestId = loadRequestIdRef.current + 1
+    loadRequestIdRef.current = requestId
     if (!entityId) {
+      if (!isMountedRef.current) return
       setMeta(null)
       setEditorState(null)
       lastStateFingerprintRef.current = ''
       return
     }
-    setIsLoading(true)
-    setError(null)
+    if (isMountedRef.current) {
+      setIsLoading(true)
+      setError(null)
+    }
     try {
       const response = await fetcherRef.current(entityId)
+      if (!isCurrentLoadRequest(requestId, entityId)) return
       const nextEditorState = selectEditorStateRef.current(response)
+      if (shouldIgnoreIncomingState(nextEditorState)) {
+        return
+      }
       changeVersionRef.current = 0
       retryCountRef.current = 0
       dirtyRef.current = false
@@ -129,11 +229,14 @@ export function usePersistedMindMapEditor<TResponse, TMeta>({
       setMeta(selectMetaRef.current(response))
       setEditorState(nextEditorState)
     } catch (err) {
+      if (!isCurrentLoadRequest(requestId, entityId)) return
       setError(err instanceof Error ? err.message : 'Failed to load editor')
     } finally {
-      setIsLoading(false)
+      if (isCurrentLoadRequest(requestId, entityId)) {
+        setIsLoading(false)
+      }
     }
-  }, [entityId])
+  }, [entityId, isCurrentLoadRequest])
 
   const flushSave = useCallback(async () => {
     if (!entityIdRef.current || !editorStateRef.current || !dirtyRef.current || isSavingRef.current) return
@@ -173,6 +276,10 @@ export function usePersistedMindMapEditor<TResponse, TMeta>({
       if (previousEntityId !== entityId) {
         await flushPendingForEntity(previousEntityId)
         if (disposed) return
+        setMeta(null)
+        setEditorState(null)
+        setError(null)
+        lastStateFingerprintRef.current = ''
         previousEntityIdRef.current = entityId
       }
       await load()
@@ -213,6 +320,9 @@ export function usePersistedMindMapEditor<TResponse, TMeta>({
     editorState,
     setEditorState: scheduleSave,
     replaceEditorState: setEditorState,
+    adoptExternalState,
+    armExternalStateGuard,
+    releaseExternalStateGuard,
     isLoading,
     isSaving,
     error,

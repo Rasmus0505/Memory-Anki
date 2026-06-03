@@ -163,6 +163,31 @@ export function findNextHiddenChild(
   )
 }
 
+export function advanceRevealStateForNodeClick(
+  nodeId: string,
+  nodeMap: Map<string, ReviewMindMapNode>,
+  revealMap: Record<string, RevealState>,
+): Record<string, RevealState> {
+  const node = nodeMap.get(nodeId)
+  if (!node) return revealMap
+  const state = revealMap[nodeId] ?? 'hidden'
+  if (state === 'placeholder') {
+    return { ...revealMap, [nodeId]: 'revealed' }
+  }
+  if (state !== 'revealed') return revealMap
+  const nextChild = findNextHiddenChild(node, revealMap)
+  if (!nextChild) return revealMap
+  return { ...revealMap, [nextChild.id]: 'placeholder' }
+}
+
+export function hideRevealStateBranch(
+  nodeId: string,
+  nodeMap: Map<string, ReviewMindMapNode>,
+  revealMap: Record<string, RevealState>,
+): Record<string, RevealState> {
+  return hideNodeAndDescendants(nodeId, nodeMap, revealMap)
+}
+
 export function buildSelectionNodeId(node: MindMapSelection | null): string | null {
   if (!node) return null
   if (node.uid) return String(node.uid)

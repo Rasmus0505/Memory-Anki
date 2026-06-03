@@ -10,7 +10,10 @@ const mocks = vi.hoisted(() => ({
   getReviewSessionProgressApi: vi.fn(),
   clearReviewSessionProgressApi: vi.fn(),
   submitReviewSessionApi: vi.fn(),
-  getPalaceEditorApi: vi.fn(),
+  usePersistedMindMapEditor: vi.fn(),
+  flushSave: vi.fn(),
+  setEditorState: vi.fn(),
+  latestFlowProps: null as Record<string, unknown> | null,
 }))
 
 vi.mock('react-router-dom', () => ({
@@ -28,21 +31,34 @@ vi.mock('sonner', () => ({
 }))
 
 vi.mock('@/features/review/components/MindMapReviewFlow', () => ({
-  MindMapReviewFlow: ({ onComplete }: { onComplete: (payload: any) => void }) => (
-    <button
-      type="button"
-      onClick={() =>
-        onComplete({
-          durationSeconds: 12,
-          completionMode: 'manual_complete',
-          revealedRemaining: true,
-          redNodeIds: ['node-1'],
-        })
-      }
-    >
-      完成
-    </button>
-  ),
+  MindMapReviewFlow: (props: Record<string, any>) => {
+    mocks.latestFlowProps = props
+    return (
+      <div>
+        <div data-testid="flow-mode">{props.displayMode}</div>
+        <div data-testid="flow-sync-version">{String(props.modeSyncVersion)}</div>
+        <div data-testid="flow-scope">{String(props.viewMemoryScope)}</div>
+        {props.onModeToggle ? (
+          <button type="button" onClick={() => void props.onModeToggle()}>
+            {props.displayMode === 'edit' ? '切回复习' : '切到编辑'}
+          </button>
+        ) : null}
+        <button
+          type="button"
+          onClick={() =>
+            props.onComplete({
+              durationSeconds: 12,
+              completionMode: 'manual_complete',
+              revealedRemaining: true,
+              redNodeIds: ['node-1'],
+            })
+          }
+        >
+          完成
+        </button>
+      </div>
+    )
+  },
 }))
 
 vi.mock('@/shared/api/modules/reviews', () => ({
@@ -55,7 +71,13 @@ vi.mock('@/shared/api/modules/reviews', () => ({
 
 vi.mock('@/shared/api/modules/palaces', () => ({
   buildAttachmentUrl: (id: number) => `/attachments/${id}`,
-  getPalaceEditorApi: (...args: unknown[]) => mocks.getPalaceEditorApi(...args),
+  getPalaceEditorApi: vi.fn(),
+  savePalaceEditorApi: vi.fn(),
+  savePalaceEditorWithOptionsApi: vi.fn(),
+}))
+
+vi.mock('@/shared/hooks/usePersistedMindMapEditor', () => ({
+  usePersistedMindMapEditor: (...args: unknown[]) => mocks.usePersistedMindMapEditor(...args),
 }))
 
 describe('ReviewSession', () => {
@@ -63,6 +85,12 @@ describe('ReviewSession', () => {
     mocks.navigate.mockReset()
     mocks.toastSuccess.mockReset()
     mocks.submitReviewSessionApi.mockReset()
+    mocks.clearReviewSessionProgressApi.mockReset()
+    mocks.flushSave.mockReset()
+    mocks.setEditorState.mockReset()
+    mocks.usePersistedMindMapEditor.mockReset()
+    mocks.latestFlowProps = null
+
     mocks.getReviewSessionApi.mockResolvedValue({
       id: 309,
       palace_id: 1,
@@ -91,23 +119,84 @@ describe('ReviewSession', () => {
     mocks.getReviewSessionProgressApi.mockResolvedValue({ progress: null })
     mocks.clearReviewSessionProgressApi.mockResolvedValue({ ok: true })
     mocks.submitReviewSessionApi.mockResolvedValue({ ok: true, next_id: null, score: 5 })
-    mocks.getPalaceEditorApi.mockResolvedValue({
-      editor_doc: { root: { data: { text: 'Root' }, children: [] } },
-      editor_config: {},
-      editor_local_config: {},
-      lang: 'zh',
+    mocks.flushSave.mockResolvedValue(undefined)
+    mocks.usePersistedMindMapEditor.mockReturnValue({
+      meta: {
+        id: 1,
+        title: '第四节 收回教育权运动与教会教育的变革',
+      },
+      editorState: {
+        editor_doc: { root: { data: { text: 'Root' }, children: [] } },
+        editor_config: {},
+        editor_local_config: {},
+        lang: 'zh',
+      },
+      setEditorState: mocks.setEditorState,
+      isLoading: false,
+      isSaving: false,
+      error: null,
+      reload: vi.fn(),
+      flushSave: mocks.flushSave,
     })
   })
 
-  it('submits completion without navigating to the next review session', async () => {
+  it('passes inline review editing props into MindMapReviewFlow', async () => {
     render(<ReviewSession />)
 
-    fireEvent.click(await screen.findByRole('button', { name: '完成' }))
+    await waitFor(() => {
+      expect(screen.getByTestId('flow-mode').textContent).toBe('review')
+    })
+
+    expect(screen.getByTestId('flow-sync-version').textContent).toBe('0')
+    expect(screen.getByTestId('flow-scope').textContent).toBe('review-session:309:review')
+    expect(mocks.latestFlowProps).toEqual(
+      expect.objectContaining({
+        sessionKind: 'review',
+        displayMode: 'review',
+        modeSyncVersion: 0,
+        viewMemoryScope: 'review-session:309:review',
+        onModeToggle: expect.any(Function),
+        onEditorStateChange: mocks.setEditorState,
+        editSaving: false,
+        editError: null,
+      }),
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: '切到编辑' }))
+
+    await waitFor(() => {
+      expect(screen.getByTestId('flow-mode').textContent).toBe('edit')
+    })
+    expect(screen.getByTestId('flow-sync-version').textContent).toBe('1')
+    expect(screen.getByTestId('flow-scope').textContent).toBe('review-session:309:edit')
+  })
+
+  it('flushes edits on mode exit and still submits only one review completion after switching back', async () => {
+    render(<ReviewSession />)
+
+    fireEvent.click(await screen.findByRole('button', { name: '切到编辑' }))
+
+    await waitFor(() => {
+      expect(screen.getByTestId('flow-mode').textContent).toBe('edit')
+    })
+    expect(mocks.submitReviewSessionApi).not.toHaveBeenCalled()
+
+    fireEvent.click(screen.getByRole('button', { name: '切回复习' }))
+
+    await waitFor(() => {
+      expect(screen.getByTestId('flow-mode').textContent).toBe('review')
+    })
+    await waitFor(() => {
+      expect(mocks.flushSave).toHaveBeenCalledTimes(1)
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: '完成' }))
 
     const confirmButton = await screen.findByRole('button', { name: /默认.*标记第 4 次完成/ })
     fireEvent.click(confirmButton)
 
     await waitFor(() => expect(mocks.submitReviewSessionApi).toHaveBeenCalledTimes(1))
+    expect(mocks.flushSave).toHaveBeenCalledTimes(3)
     expect(mocks.submitReviewSessionApi).toHaveBeenCalledWith(309, {
       chapter_id: undefined,
       duration_seconds: 12,
@@ -118,23 +207,5 @@ describe('ReviewSession', () => {
       needs_practice: false,
     })
     expect(mocks.navigate).not.toHaveBeenCalled()
-  })
-
-  it('submits completion with needs_practice when choosing still needs practice', async () => {
-    render(<ReviewSession />)
-
-    fireEvent.click(await screen.findByRole('button', { name: '完成' }))
-    fireEvent.click(await screen.findByRole('button', { name: '完成，但仍需练习' }))
-
-    await waitFor(() => expect(mocks.submitReviewSessionApi).toHaveBeenCalledTimes(1))
-    expect(mocks.submitReviewSessionApi).toHaveBeenCalledWith(309, {
-      chapter_id: undefined,
-      duration_seconds: 12,
-      completion_mode: 'manual_complete',
-      revealed_remaining: true,
-      red_marked_count: 1,
-      target_review_number: 3,
-      needs_practice: true,
-    })
   })
 })

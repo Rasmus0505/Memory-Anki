@@ -5,6 +5,7 @@ import { MindMapReviewFlow } from '@/features/review/components/MindMapReviewFlo
 
 const timer = {
   effectiveSeconds: 7,
+  idleSeconds: 0,
   pauseCount: 0,
   status: 'running' as const,
   startedAt: Date.now(),
@@ -28,9 +29,24 @@ vi.mock('@/shared/components/mindmap-host', () => ({
   MindMapFrame: (props: Record<string, unknown>) => {
     mindMapFrameMock(props)
     const fullscreen = Boolean(props.immersiveModeActive)
+    const nextEditorState = {
+      ...(props.editorState as Record<string, any>),
+      editor_doc: {
+        root: {
+          data: { text: 'Root', uid: 'root' },
+          children: [
+            {
+              data: { text: 'Child edited', uid: 'child' },
+              children: [{ data: { text: 'Grandchild', uid: 'grandchild' }, children: [] }],
+            },
+          ],
+        },
+      },
+    }
     return (
       <div data-testid="mind-map-frame">
         <div>{`toolbar-${props.showToolbarWhenReadonly ? 'shown' : 'hidden'}-${fullscreen ? 'immersive' : 'plain'}`}</div>
+        <div>{`frame-${props.readonly ? 'readonly' : 'editable'}-${String(props.practiceToggleLabel ?? 'none')}`}</div>
         <button
           type="button"
           onClick={() => (props.onFullscreenToggle as ((active?: boolean) => void) | undefined)?.()}
@@ -43,6 +59,26 @@ vi.mock('@/shared/components/mindmap-host', () => ({
         >
           退出原生全屏
         </button>
+        {(props.onPracticeToggle as (() => void) | undefined) ? (
+          <button
+            type="button"
+            onClick={() => (props.onPracticeToggle as (() => void) | undefined)?.()}
+          >
+            {String(props.practiceToggleLabel)}
+          </button>
+        ) : null}
+        {!props.readonly && (props.onEditorStateChange as ((nextState: unknown) => void) | undefined) ? (
+          <button
+            type="button"
+            onClick={() =>
+              (props.onEditorStateChange as ((nextState: unknown) => void) | undefined)?.(
+                nextEditorState,
+              )
+            }
+          >
+            宿主编辑保存
+          </button>
+        ) : null}
       </div>
     )
   },
@@ -85,6 +121,7 @@ describe('MindMapReviewFlow', () => {
   beforeEach(() => {
     timer.complete.mockClear()
     timer.registerActivity.mockClear()
+    timer.logEvent.mockClear()
     mindMapFrameMock.mockClear()
   })
 
@@ -145,9 +182,133 @@ describe('MindMapReviewFlow', () => {
     const latestCall = getLatestMindMapFrameProps()
     expect(latestCall?.readonly).toBe(true)
     expect(latestCall?.showToolbarWhenReadonly).toBe(true)
+    expect(latestCall?.syncIntent).toBe('replace')
     expect(latestCall?.syncReason).toBe('review_flip')
+    expect(latestCall?.preserveViewOnSync).toBe(false)
     expect(latestCall?.showImportButtons).not.toBe(true)
     expect(latestCall?.showBilinkSearchButton).toBe(true)
+  })
+
+  it('switches review flow into inline edit mode with a return-to-review label and hides completion', async () => {
+    function Harness() {
+      const [displayMode, setDisplayMode] = React.useState<'review' | 'edit'>('review')
+      const [modeSyncVersion, setModeSyncVersion] = React.useState(0)
+      const [nextEditorState, setNextEditorState] = React.useState(editorState)
+      return (
+        <MindMapReviewFlow
+          title="Root"
+          palaceId={1}
+          sessionKind="review"
+          displayMode={displayMode}
+          modeSyncVersion={modeSyncVersion}
+          viewMemoryScope={`review-session:1:${displayMode}`}
+          editorState={nextEditorState}
+          onModeToggle={() => {
+            setDisplayMode((current) => (current === 'review' ? 'edit' : 'review'))
+            setModeSyncVersion((current) => current + 1)
+          }}
+          onEditorStateChange={(nextState) =>
+            setNextEditorState(nextState as typeof editorState)
+          }
+          onComplete={vi.fn()}
+        />
+      )
+    }
+
+    render(<Harness />)
+
+    expect(screen.getByText('frame-readonly-编辑')).toBeTruthy()
+    expect(screen.getByRole('button', { name: /完成/ })).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: '编辑' }))
+
+    await waitFor(() => {
+      expect(screen.getByText('frame-editable-复习')).toBeTruthy()
+    })
+    expect(screen.queryByRole('button', { name: /完成/ })).toBeNull()
+    expect(timer.logEvent).toHaveBeenCalledWith('enter_edit_mode', {
+      source: 'review_inline_edit',
+    })
+    expect(timer.registerActivity).toHaveBeenCalledWith('edit_operation', {
+      source: 'review_inline_edit_enter',
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: '复习' }))
+
+    await waitFor(() => {
+      expect(screen.getByText('frame-readonly-编辑')).toBeTruthy()
+    })
+    expect(screen.getByRole('button', { name: /完成/ })).toBeTruthy()
+    expect(timer.logEvent).toHaveBeenCalledWith('exit_edit_mode', {
+      source: 'review_inline_edit',
+    })
+    expect(timer.registerActivity).toHaveBeenCalledWith('practice_interaction', {
+      source: 'review_inline_edit_exit',
+    })
+  })
+
+  it('keeps reveal progress by node uid after editing and switching back to review mode', async () => {
+    function Harness() {
+      const [displayMode, setDisplayMode] = React.useState<'review' | 'edit'>('review')
+      const [modeSyncVersion, setModeSyncVersion] = React.useState(0)
+      const [nextEditorState, setNextEditorState] = React.useState(editorState)
+      return (
+        <MindMapReviewFlow
+          title="Root"
+          palaceId={1}
+          sessionKind="review"
+          displayMode={displayMode}
+          modeSyncVersion={modeSyncVersion}
+          viewMemoryScope={`review-session:1:${displayMode}`}
+          editorState={nextEditorState}
+          onModeToggle={() => {
+            setDisplayMode((current) => (current === 'review' ? 'edit' : 'review'))
+            setModeSyncVersion((current) => current + 1)
+          }}
+          onEditorStateChange={(nextState) =>
+            setNextEditorState(nextState as typeof editorState)
+          }
+          onComplete={vi.fn()}
+        />
+      )
+    }
+
+    render(<Harness />)
+
+    await act(async () => {
+      getLatestMindMapFrameProps()?.onNodeClick?.([{ uid: 'root', text: 'Root' }])
+    })
+    await act(async () => {
+      getLatestMindMapFrameProps()?.onNodeClick?.([{ uid: 'child', text: 'Child' }])
+    })
+
+    expect(getVisibleTextsFromLatestFrame()).toEqual({
+      root: 'Root',
+      child: 'Child',
+      grandchild: null,
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: '编辑' }))
+    await waitFor(() => {
+      expect(screen.getByText('frame-editable-复习')).toBeTruthy()
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: '宿主编辑保存' }))
+    await waitFor(() => {
+      expect(timer.registerActivity).toHaveBeenCalledWith('edit_operation', {
+        source: 'review_inline_edit',
+      })
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: '复习' }))
+
+    await waitFor(() => {
+      expect(getVisibleTextsFromLatestFrame()).toEqual({
+        root: 'Root',
+        child: 'Child edited',
+        grandchild: null,
+      })
+    })
   })
 
   it('reveals placeholder and next hidden child through readonly left-click flow', async () => {

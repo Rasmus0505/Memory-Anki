@@ -99,6 +99,26 @@
         display: none !important;
       }
 
+      .memory-anki-practice-button.is-practice-label {
+        border-color: #15803d;
+        background: #16a34a;
+        color: #ffffff;
+      }
+
+      .memory-anki-practice-button.is-practice-label:hover {
+        background: #15803d;
+      }
+
+      .memory-anki-practice-button.is-edit-label {
+        border-color: #2563eb;
+        background: #2563eb;
+        color: #ffffff;
+      }
+
+      .memory-anki-practice-button.is-edit-label:hover {
+        background: #1d4ed8;
+      }
+
       .memory-anki-layout-button {
         display: inline-flex;
         align-items: center;
@@ -441,12 +461,23 @@
         pointerDownWithModifier: false,
         pointerIntentClearTimer: null,
       }
+      const readonlyNodeClickBridgeState = {
+        lastToken: '',
+        lastAt: 0,
+        lastSource: '',
+        lastDomToken: '',
+        lastDomAt: 0,
+      }
       const uiChromeState = {
         cleared: false,
       }
       const bilinkState = {
         listenerRegistered: false,
         pendingInsertion: null,
+      }
+      const aiSplitToolbarState = {
+        observerRegistered: false,
+        patchScheduled: false,
       }
       const SELECTION_DRAG_ROOT_PARENT_KEY = '__memory_anki_selection_drag_root__'
       const SELECTION_DRAG_HOLD_DELAY = 280
@@ -508,12 +539,84 @@
         pendingSoftPayload: null,
         flushTimer: null,
         maxFlushTimer: null,
+        pendingViewFitAfterRender: false,
         pendingFocusRestore: null,
+        pendingViewMemoryFocusRestore: null,
+      }
+      const viewMemoryState = {
+        snapshots: new Map(),
+        pendingRestore: null,
       }
 
       function cloneValue(value) {
         if (value == null) return value
         return JSON.parse(JSON.stringify(value))
+      }
+
+      function normalizeViewMemoryScope(value) {
+        if (typeof value !== 'string') return null
+        const normalized = value.trim()
+        return normalized.length > 0 ? normalized : null
+      }
+
+      function getCurrentViewMemoryScope() {
+        return normalizeViewMemoryScope(window.__memoryAnkiHostState?.viewMemoryScope)
+      }
+
+      function captureViewMemoryScopeSnapshot() {
+        const mindMap = window.__memoryAnkiMindMapInstance
+        if (!mindMap) return null
+        let transform = null
+        try {
+          if (mindMap.view && typeof mindMap.view.getTransformData === 'function') {
+            transform = cloneValue(mindMap.view.getTransformData())
+          }
+        } catch (error) {
+          console.warn(error)
+        }
+        const activeNode = getRenderer()?.activeNodeList?.[0] || null
+        const activeNodeUid = getNodeUid(activeNode)
+        const committedNodeUid = activeNodeUid || focusState.committedNodeUid || null
+        const visualFocusNodeUid =
+          focusState.visualFocusNodeUid || committedNodeUid || null
+        if (!transform && !committedNodeUid && !visualFocusNodeUid) {
+          return null
+        }
+        return {
+          transform,
+          committedNodeUid,
+          visualFocusNodeUid,
+        }
+      }
+
+      function saveViewMemoryScopeSnapshot(scope) {
+        const normalizedScope = normalizeViewMemoryScope(scope)
+        if (!normalizedScope) return false
+        const snapshot = captureViewMemoryScopeSnapshot()
+        if (!snapshot) return false
+        viewMemoryState.snapshots.set(normalizedScope, snapshot)
+        return true
+      }
+
+      function queueViewMemoryScopeRestore(scope) {
+        const normalizedScope = normalizeViewMemoryScope(scope)
+        if (!normalizedScope) {
+          viewMemoryState.pendingRestore = null
+          return false
+        }
+        const snapshot = viewMemoryState.snapshots.get(normalizedScope)
+        if (!snapshot) {
+          viewMemoryState.pendingRestore = null
+          return false
+        }
+        viewMemoryState.pendingRestore = cloneValue(snapshot)
+        return true
+      }
+
+      function consumePendingViewMemoryScopeRestore() {
+        const snapshot = viewMemoryState.pendingRestore
+        viewMemoryState.pendingRestore = null
+        return snapshot ? cloneValue(snapshot) : null
       }
 
       function buildEmptySelectionDragIntent() {
@@ -539,6 +642,14 @@
           lang: editorState.lang || 'zh',
           preserveView: Boolean(preserveView),
         })
+      }
+
+      function markLastAppliedEditorFingerprint(nextFingerprint, syncIntent = 'full') {
+        if (typeof nextFingerprint !== 'string' || nextFingerprint.length === 0) return
+        window.__memoryAnkiLastAppliedEditorFingerprint = nextFingerprint
+        if (syncIntent === 'replace' || syncIntent === 'full') {
+          window.__memoryAnkiLastAppliedFullEditorFingerprint = nextFingerprint
+        }
       }
 
       function stableSerialize(value) {
@@ -915,21 +1026,92 @@
         return getRenderer()?.nodeCache?.[uid] || null
       }
 
-      function getNodeByElement(target) {
-        if (!target || typeof target.closest !== 'function') return null
-        const nodeElement = target.closest('.smm-node')
+      function collectInteractionTargets(target, event) {
+        const targets = []
+        const seen = new Set()
+        function appendTargetWithAncestors(candidate) {
+          let current = candidate || null
+          while (current) {
+            if (!seen.has(current)) {
+              seen.add(current)
+              targets.push(current)
+            }
+            if (current.assignedSlot) {
+              current = current.assignedSlot
+              continue
+            }
+            if (current.parentNode) {
+              current = current.parentNode
+              continue
+            }
+            current = current.host || null
+          }
+        }
+        appendTargetWithAncestors(target)
+        const path =
+          event && typeof event.composedPath === 'function' ? event.composedPath() : []
+        path.forEach(candidate => {
+          appendTargetWithAncestors(candidate)
+        })
+        return targets
+      }
+
+      function getElementFromInteractionTarget(target) {
+        if (!target) return null
+        if (target instanceof Element) return target
+        if (target.nodeType === Node.TEXT_NODE) {
+          return target.parentElement || null
+        }
+        if (target.ownerSVGElement instanceof SVGElement) {
+          return target.ownerSVGElement
+        }
+        return null
+      }
+
+      function getNodeElementFromInteractionTarget(target, event) {
+        const candidates = collectInteractionTargets(target, event)
+        for (const candidate of candidates) {
+          const element = getElementFromInteractionTarget(candidate)
+          if (!element || typeof element.closest !== 'function') continue
+          const nodeElement = element.closest('.smm-node')
+          if (nodeElement) return nodeElement
+        }
+        return null
+      }
+
+      function getReadonlyFallbackNode(nodeElement) {
+        if (!nodeElement) return null
+        const activeNode = getCurrentActiveNode()
+        if (activeNode?.group?.node && activeNode.group.node === nodeElement) {
+          return activeNode
+        }
+        const visualFocusNode = resolveClosestExistingNode(focusState.visualFocusNodeUid)
+        if (visualFocusNode?.group?.node && visualFocusNode.group.node === nodeElement) {
+          return visualFocusNode
+        }
+        const committedNode = resolveClosestExistingNode(focusState.committedNodeUid)
+        if (committedNode?.group?.node && committedNode.group.node === nodeElement) {
+          return committedNode
+        }
+        return activeNode || visualFocusNode || committedNode || null
+      }
+
+      function getNodeByElement(target, options = {}) {
+        const nodeElement = getNodeElementFromInteractionTarget(target, options.event)
         if (!nodeElement) return null
         const nodes = getCachedNodes()
         const directMatch =
           nodes.find(node => node?.group?.node === nodeElement) ||
-          nodes.find(node => node?.group?.node?.contains?.(target)) ||
+          nodes.find(node => node?.group?.node?.contains?.(nodeElement)) ||
           null
         if (directMatch) return directMatch
-        if (typeof nodeElement.getBoundingClientRect !== 'function') return null
+        if (typeof nodeElement.getBoundingClientRect !== 'function') {
+          return options.allowReadonlyFallback ? getReadonlyFallbackNode(nodeElement) : null
+        }
         const rect = nodeElement.getBoundingClientRect()
         const centerX = rect.left + rect.width / 2
         const centerY = rect.top + rect.height / 2
-        return (
+        const rectMatch =
           nodes.find(node => {
             const nodeRect =
               typeof node?.group?.node?.getBoundingClientRect === 'function'
@@ -940,7 +1122,11 @@
             const deltaY = Math.abs(nodeRect.top + nodeRect.height / 2 - centerY)
             return deltaX <= 2 && deltaY <= 2
           }) || null
-        )
+        if (rectMatch) return rectMatch
+        if (options.allowReadonlyFallback) {
+          return getReadonlyFallbackNode(nodeElement)
+        }
+        return null
       }
 
       function notifyNodeActive(node) {
@@ -2518,6 +2704,59 @@
           .map(node => serializeNode(node))
       }
 
+      function buildSerializedNodeClickToken(serializedNodes) {
+        if (!Array.isArray(serializedNodes) || serializedNodes.length === 0) return ''
+        return serializedNodes
+          .map(node =>
+            node?.uid ||
+            (node?.memoryAnkiId != null ? `memoryAnkiId:${node.memoryAnkiId}` : null) ||
+            node?.text ||
+            '',
+          )
+          .join('|')
+      }
+
+      function shouldDeduplicateReadonlyNodeClick(token, source) {
+        if (!token) return false
+        const now = Date.now()
+        if (
+          source === 'bus' &&
+          readonlyNodeClickBridgeState.lastDomToken === token &&
+          now - readonlyNodeClickBridgeState.lastDomAt < 48
+        ) {
+          return true
+        }
+        const scopedToken = `${source}:${token}`
+        if (
+          readonlyNodeClickBridgeState.lastToken === scopedToken &&
+          readonlyNodeClickBridgeState.lastSource === source &&
+          now - readonlyNodeClickBridgeState.lastAt < 24
+        ) {
+          return true
+        }
+        readonlyNodeClickBridgeState.lastToken = scopedToken
+        readonlyNodeClickBridgeState.lastSource = source
+        readonlyNodeClickBridgeState.lastAt = now
+        if (source === 'dom') {
+          readonlyNodeClickBridgeState.lastDomToken = token
+          readonlyNodeClickBridgeState.lastDomAt = now
+        }
+        return false
+      }
+
+      function notifyHostNodeClick(serializedNodes, options = {}) {
+        if (!Array.isArray(serializedNodes) || serializedNodes.length === 0) return false
+        if (isReadonlyHost()) {
+          const source = options?.source === 'dom' ? 'dom' : 'bus'
+          const token = buildSerializedNodeClickToken(serializedNodes)
+          if (shouldDeduplicateReadonlyNodeClick(token, source)) {
+            return false
+          }
+        }
+        getHostBridge()?.notify?.('node_click', serializedNodes)
+        return true
+      }
+
       function buildNodeTreeIndex() {
         const parentToChildren = new Map()
         const childToParent = new Map()
@@ -2688,6 +2927,36 @@
         const snapshot = syncState.pendingFocusRestore
         syncState.pendingFocusRestore = null
         return restoreHostSyncFocusSnapshot(snapshot)
+      }
+
+      function restoreViewMemoryFocusSnapshot(snapshot) {
+        if (!snapshot || typeof snapshot !== 'object') return false
+        const targetUid = snapshot.committedNodeUid || snapshot.visualFocusNodeUid || null
+        const targetNode = resolveClosestExistingNode(targetUid)
+        focusState.editingNodeUid = null
+        if (!targetNode) {
+          focusState.committedNodeUid = snapshot.committedNodeUid || null
+          focusState.visualFocusNodeUid =
+            snapshot.visualFocusNodeUid || snapshot.committedNodeUid || null
+          updateKeyboardFocusClass()
+          focusKeyboardSurface()
+          return false
+        }
+        activateNode(targetNode, {
+          notify: false,
+          commit: true,
+          visual: true,
+          clearEditingLock: true,
+        })
+        focusKeyboardSurface()
+        return true
+      }
+
+      function restorePendingViewMemoryFocusIfNeeded() {
+        if (!syncState.pendingViewMemoryFocusRestore) return false
+        const snapshot = syncState.pendingViewMemoryFocusRestore
+        syncState.pendingViewMemoryFocusRestore = null
+        return restoreViewMemoryFocusSnapshot(snapshot)
       }
 
       function updateKeyboardFocusClass() {
@@ -3157,6 +3426,13 @@
         }
         if (practiceLabel) {
           practiceLabel.textContent = window.__memoryAnkiHostState?.practiceToggleLabel || '练习'
+        }
+        if (practiceButton) {
+          const nextPracticeToggleLabel =
+            window.__memoryAnkiHostState?.practiceToggleLabel || '练习'
+          const isEditLabel = nextPracticeToggleLabel === '编辑'
+          practiceButton.classList.toggle('is-practice-label', !isEditLabel)
+          practiceButton.classList.toggle('is-edit-label', isEditLabel)
         }
         if (immersiveEditButton) {
           immersiveEditButton.hidden = false
@@ -3970,7 +4246,10 @@
           event => {
             markHostInteraction()
             if (!isReadonlyHost()) return
-            const node = getNodeByElement(event.target)
+            const node = getNodeByElement(event.target, {
+              event,
+              allowReadonlyFallback: isReadonlyHost(),
+            })
             if (!node) return
             event.preventDefault()
             event.stopPropagation()
@@ -4009,23 +4288,36 @@
       function registerReadonlyClickListener() {
         if (window.__memoryAnkiReadonlyClickRegistered) return
         window.__memoryAnkiReadonlyClickRegistered = true
+        const handleReadonlyPrimaryActivate = event => {
+          const rangeDraft = getSegmentRangeDraft()
+          if (!isReadonlyHost() && !rangeDraft.active) return
+          if (typeof event.button === 'number' && event.button !== 0) return
+          const node = getNodeByElement(event.target, {
+            event,
+            allowReadonlyFallback: isReadonlyHost(),
+          })
+          if (!node) return
+          markHostInteraction()
+          event.preventDefault()
+          event.stopPropagation()
+          event.stopImmediatePropagation?.()
+          if (rangeDraft.active) {
+            toggleNodeInRangeDraft(node)
+            return
+          }
+          notifyHostNodeClick([serializeNode(node)], { source: 'dom' })
+        }
+        document.addEventListener(
+          'pointerup',
+          event => {
+            handleReadonlyPrimaryActivate(event)
+          },
+          true
+        )
         document.addEventListener(
           'click',
           event => {
-            const rangeDraft = getSegmentRangeDraft()
-            if (!isReadonlyHost() && !rangeDraft.active) return
-            if (typeof event.button === 'number' && event.button !== 0) return
-            const node = getNodeByElement(event.target)
-            if (!node) return
-            markHostInteraction()
-            event.preventDefault()
-            event.stopPropagation()
-            event.stopImmediatePropagation?.()
-            if (rangeDraft.active) {
-              toggleNodeInRangeDraft(node)
-              return
-            }
-            getHostBridge()?.notify?.('node_click', [serializeNode(node)])
+            handleReadonlyPrimaryActivate(event)
           },
           true
         )
@@ -4055,6 +4347,107 @@
         }
       }
 
+      function isAiSplitBusy() {
+        return Boolean(window.__memoryAnkiHostState?.aiSplitBusy)
+      }
+
+      function isAiSplitEnabled() {
+        return Boolean(window.__memoryAnkiHostState?.aiSplitEnabled)
+      }
+
+      function getAiSplitButtonLabel() {
+        return isAiSplitBusy() ? 'AI分卡中...' : 'AI分卡'
+      }
+
+      function getToolbarButtonPlainText(button) {
+        return String(button?.textContent || '').replace(/\s+/g, '').trim()
+      }
+
+      function buildAiSplitRequestPayload() {
+        const runtimeRoot = getMindMap()?.renderer?.renderTree || null
+        const targetNode = getCurrentActiveNode() || runtimeRoot
+        if (!targetNode) return null
+        const serialized = serializeNode(targetNode)
+        const isRoot = Boolean(runtimeRoot && targetNode === runtimeRoot)
+        if (!isRoot && !serialized.uid) {
+          return null
+        }
+        return {
+          target_node_uid: isRoot ? null : serialized.uid || null,
+          target_node_text: serialized.text || '',
+          target_node_note: serialized.note || '',
+          target_node_type: serialized.memoryAnkiNodeType || null,
+          is_root: isRoot,
+          selection_snapshot: {
+            target_node_uid: isRoot ? null : serialized.uid || null,
+            target_node_type: serialized.memoryAnkiNodeType || null,
+            is_root: isRoot,
+          },
+        }
+      }
+
+      function handleAiSplitToolbarClick(event) {
+        event.preventDefault()
+        event.stopPropagation()
+        event.stopImmediatePropagation?.()
+        if (isReadonlyHost() || !isAiSplitEnabled() || isAiSplitBusy()) return
+        const payload = buildAiSplitRequestPayload()
+        if (!payload) return
+        markHostInteraction()
+        getHostBridge()?.notify?.('ai_split_request', payload)
+      }
+
+      function syncAiSplitToolbarButtons() {
+        const buttons = Array.from(document.querySelectorAll('.toolbarNodeBtnList .toolbarBtn'))
+        buttons.forEach(button => {
+          if (!(button instanceof HTMLElement)) return
+          const plainText = getToolbarButtonPlainText(button)
+          if (button.dataset.memoryAnkiAiSplitButton === 'true') {
+            button.hidden = isReadonlyHost()
+            button.textContent = getAiSplitButtonLabel()
+            button.classList.toggle('is-disabled', isAiSplitBusy() || !isAiSplitEnabled())
+            button.style.opacity = isAiSplitBusy() || !isAiSplitEnabled() ? '0.58' : ''
+            button.setAttribute('aria-disabled', isAiSplitBusy() || !isAiSplitEnabled() ? 'true' : 'false')
+            button.title = isAiSplitEnabled() ? '' : '当前页面暂不支持 AI 分卡'
+            return
+          }
+          if (plainText !== 'AI续写') return
+          const replacement = button.cloneNode(true)
+          if (!(replacement instanceof HTMLElement)) return
+          replacement.dataset.memoryAnkiAiSplitButton = 'true'
+          replacement.textContent = getAiSplitButtonLabel()
+          replacement.hidden = isReadonlyHost()
+          replacement.classList.toggle('is-disabled', isAiSplitBusy() || !isAiSplitEnabled())
+          replacement.style.opacity = isAiSplitBusy() || !isAiSplitEnabled() ? '0.58' : ''
+          replacement.setAttribute('aria-disabled', isAiSplitBusy() || !isAiSplitEnabled() ? 'true' : 'false')
+          replacement.title = isAiSplitEnabled() ? '' : '当前页面暂不支持 AI 分卡'
+          replacement.addEventListener('click', handleAiSplitToolbarClick, true)
+          button.replaceWith(replacement)
+        })
+      }
+
+      function scheduleAiSplitToolbarPatch() {
+        if (aiSplitToolbarState.patchScheduled) return
+        aiSplitToolbarState.patchScheduled = true
+        window.requestAnimationFrame(() => {
+          aiSplitToolbarState.patchScheduled = false
+          syncAiSplitToolbarButtons()
+        })
+      }
+
+      function ensureAiSplitToolbarObserver() {
+        if (aiSplitToolbarState.observerRegistered) return
+        aiSplitToolbarState.observerRegistered = true
+        const observer = new MutationObserver(() => {
+          scheduleAiSplitToolbarPatch()
+        })
+        observer.observe(document.body, {
+          childList: true,
+          subtree: true,
+        })
+        scheduleAiSplitToolbarPatch()
+      }
+
       function applyHostState(nextState) {
         const previousState = window.__memoryAnkiHostState || {}
         const wasReadonly = Boolean(previousState.readonly)
@@ -4062,9 +4455,15 @@
           ...previousState,
           ...(nextState || {}),
         }
+        const previousViewMemoryScope = normalizeViewMemoryScope(previousState.viewMemoryScope)
+        const nextViewMemoryScope = getCurrentViewMemoryScope()
+        if (previousViewMemoryScope !== nextViewMemoryScope) {
+          saveViewMemoryScopeSnapshot(previousViewMemoryScope)
+          queueViewMemoryScopeRestore(nextViewMemoryScope)
+        }
         const isReadonly = Boolean(window.__memoryAnkiHostState.readonly)
         const showToolbarWhenReadonly = Boolean(window.__memoryAnkiHostState.showToolbarWhenReadonly)
-        const readonlyHost = isVisualReadonlyHost()
+        const readonlyHost = isReadonly
         document.body.classList.toggle('is-host-readonly', readonlyHost)
         document.body.classList.toggle(
           'is-host-readonly-toolbar-visible',
@@ -4112,6 +4511,7 @@
         ensureRestoreUiButton()
         updateNavigatorFullscreenPresentation()
         renderBilinkBadges()
+        scheduleAiSplitToolbarPatch()
       }
 
       window.applyHostState = applyHostState
@@ -4276,15 +4676,16 @@
           editorState: cloneValue(nextEditorState),
           preserveView: true,
           syncIntent: 'soft',
+          viewPolicy: 'preserve',
           fingerprint: nextFingerprint,
         }
-        window.__memoryAnkiLastAppliedEditorFingerprint = nextFingerprint
-        requestSoftSyncVisualRefresh()
+        markLastAppliedEditorFingerprint(nextFingerprint, 'soft')
+        requestHostVisualRefresh()
         updateKeyboardFocusClass()
         return true
       }
 
-      function requestSoftSyncVisualRefresh() {
+      function requestHostVisualRefresh() {
         const mindMap = getMindMap()
         const renderer = getRenderer()
         const refreshCalls = [
@@ -4436,15 +4837,24 @@
         normalizeImportedNodePresentation(nextDoc?.root, 0)
         dedupeImportedNodeTree(nextDoc?.root)
         const nextConfig = cloneValue(nextEditorState.editor_config) || {}
+        const viewPolicy = payload?.viewPolicy === 'reset' ? 'reset' : 'preserve'
         if (
-          window.__memoryAnkiLastAppliedEditorFingerprint &&
-          window.__memoryAnkiLastAppliedEditorFingerprint === nextFingerprint
+          viewPolicy !== 'reset' &&
+          window.__memoryAnkiLastAppliedFullEditorFingerprint &&
+          window.__memoryAnkiLastAppliedFullEditorFingerprint === nextFingerprint
         ) {
           return true
         }
+        const viewMemoryRestore = consumePendingViewMemoryScopeRestore()
         let currentTransform = null
-        const focusSnapshot = captureHostSyncFocusSnapshot()
-        if (Boolean(payload?.preserveView)) {
+        const focusSnapshot = viewMemoryRestore ? null : captureHostSyncFocusSnapshot()
+        if (viewPolicy === 'reset' && !viewMemoryRestore) {
+          delete nextDoc.view
+        }
+        if (viewMemoryRestore?.transform) {
+          currentTransform = cloneValue(viewMemoryRestore.transform)
+          delete nextDoc.view
+        } else if (Boolean(payload?.preserveView)) {
           try {
             if (mindMap.view && typeof mindMap.view.getTransformData === 'function') {
               currentTransform = cloneValue(mindMap.view.getTransformData())
@@ -4465,9 +4875,13 @@
           mindMap.updateConfig(nextConfig)
         }
 
+        requestHostVisualRefresh()
         ensureMindMapShortcutGuard()
-        window.__memoryAnkiLastAppliedEditorFingerprint = nextFingerprint
+        markLastAppliedEditorFingerprint(nextFingerprint, 'full')
+        syncState.pendingViewFitAfterRender =
+          viewPolicy === 'reset' && payload?.syncReason === 'review_flip'
         syncState.pendingFocusRestore = focusSnapshot
+        syncState.pendingViewMemoryFocusRestore = viewMemoryRestore
 
         if (currentTransform) {
           window.__memoryAnkiPendingTransformRestore = cloneValue(currentTransform)
@@ -4509,6 +4923,7 @@
           preserveView: Boolean(payload?.preserveView),
           syncIntent: payload?.syncIntent === 'replace' ? 'replace' : 'soft',
           syncReason,
+          viewPolicy: payload?.viewPolicy === 'reset' ? 'reset' : 'preserve',
           fingerprint: nextFingerprint,
         }
 
@@ -4603,6 +5018,7 @@
           registerFullscreenListener()
           registerBilinkListeners()
           registerNativeFullscreenButtonStateSync()
+          ensureAiSplitToolbarObserver()
           applyHostState(window.__memoryAnkiHostState || {})
           if (window.__memoryAnkiPendingEditorState) {
             const pendingFingerprint =
@@ -4611,10 +5027,13 @@
                 window.__memoryAnkiPendingEditorState.editorState,
                 window.__memoryAnkiPendingEditorState.preserveView,
               )
-            if (pendingFingerprint !== window.__memoryAnkiBootstrapEditorFingerprint) {
+            if (
+              pendingFingerprint !== window.__memoryAnkiBootstrapEditorFingerprint ||
+              window.__memoryAnkiPendingEditorState.viewPolicy === 'reset'
+            ) {
               syncHostEditorState(window.__memoryAnkiPendingEditorState)
             } else {
-              window.__memoryAnkiLastAppliedEditorFingerprint = pendingFingerprint
+              markLastAppliedEditorFingerprint(pendingFingerprint, 'full')
             }
           }
           syncKeyboardMode()
@@ -4710,11 +5129,22 @@
           restoreStableFocusAfterRender()
         })
         window.$bus.$on('node_click', (...args) => {
-          if (isReadonlyHost()) return
           markHostInteraction()
           const clickedNode = args[0]
           if (!clickedNode) return
           const clickedNodes = Array.isArray(args[1]) && args[1].length > 0 ? args[1] : [clickedNode]
+          if (isReadonlyHost()) {
+            rememberFocusedNode(clickedNode, {
+              notify: false,
+              clearEditingLock: true,
+              commit: !interactionState.pointerDownWithModifier,
+              visual: true,
+            })
+            notifyHostNodeClick(serializeNodes(clickedNodes), { source: 'bus' })
+            interactionState.pointerDownNodeUid = null
+            interactionState.pointerDownWithModifier = false
+            return
+          }
           syncKeyboardMode()
           if (clickedNodes.length <= 1 && !interactionState.pointerDownWithModifier) {
             rememberFocusedNode(clickedNode, {
@@ -4727,7 +5157,7 @@
             focusState.editingNodeUid = null
             updateKeyboardFocusClass()
           }
-          getHostBridge()?.notify?.('node_click', serializeNodes(clickedNodes))
+          notifyHostNodeClick(serializeNodes(clickedNodes))
           interactionState.pointerDownNodeUid = null
           interactionState.pointerDownWithModifier = false
         })
@@ -4747,10 +5177,24 @@
             }
             window.__memoryAnkiPendingTransformRestore = null
           }
+          if (
+            syncState.pendingViewFitAfterRender &&
+            mindMap &&
+            mindMap.view &&
+            typeof mindMap.view.fit === 'function'
+          ) {
+            syncState.pendingViewFitAfterRender = false
+            try {
+              mindMap.view.fit()
+            } catch (error) {
+              console.warn(error)
+            }
+          }
           if (selectionDragHistoryState.pendingFocusSnapshot) {
             restoreSelectionDragFocusSnapshot(selectionDragHistoryState.pendingFocusSnapshot)
             selectionDragHistoryState.pendingFocusSnapshot = null
           }
+          restorePendingViewMemoryFocusIfNeeded()
           restorePendingSyncFocusIfNeeded()
           finalizePendingSelectionDragCreation({ rendered: true })
           restoreStableFocusAfterRender()

@@ -50,10 +50,12 @@ export interface MindMapImportPreviewResponse {
   structure_image_index?: number
   image_count?: number
   selected_pages?: number[]
-  structure_page?: number
-  match_mode?: 'strict_match' | 'approximate_match'
+  structure_page?: number | null
+  match_mode?: 'strict_match' | 'approximate_match' | 'direct_generation'
   can_apply?: boolean
   warnings?: string[]
+  ocr_grounding_used?: boolean
+  ocr_text_chars?: number | null
 }
 
 export interface MindMapBatchImportPreviewResponse {
@@ -72,9 +74,109 @@ export interface ImageTextPreviewResponse {
   selected_pages?: number[]
 }
 
+export interface MindMapAiSplitRequest {
+  editor_doc: MindMapDoc | string | null
+  target_node_uid: string | null
+}
+
+export interface MindMapAiSplitResponse {
+  ok: boolean
+  editor_doc?: MindMapDoc | string | null
+  generated_children_count?: number
+  reassigned_existing_children_count?: number
+  model?: string
+  error?: string
+  request_id?: string
+}
+
+export type MindMapImportJobStatus = 'draft' | 'running' | 'paused' | 'completed' | 'failed' | 'interrupted'
+
+export type MindMapImportJobStage = 'prepared' | 'structure' | 'ocr' | 'merge' | 'text' | 'completed'
+
+export interface MindMapImportJobError {
+  code: string
+  stage: MindMapImportJobStage
+  message: string
+  retryable: boolean
+  raw_snippet?: string
+  request_id?: string
+  details?: Record<string, unknown>
+}
+
+export interface MindMapImportJobUsage {
+  structure: number
+  ocr: number
+  merge: number
+  text: number
+  total: number
+}
+
+export interface MindMapImportJobProgress {
+  phase: string
+  message: string
+  step: number | null
+  total_steps: number | null
+  preview_text: string
+}
+
+export interface MindMapImportJobResult {
+  source_tree?: MindMapImportSourceTree
+  editor_doc?: MindMapDoc | string | null
+  extracted_text?: string
+  structure_image_index?: number
+  image_count?: number
+  selected_pages?: number[]
+  structure_page?: number | null
+  match_mode?: 'strict_match' | 'approximate_match' | 'direct_generation'
+  can_apply?: boolean
+  warnings?: string[]
+  ocr_grounding_used?: boolean
+  ocr_text_chars?: number | null
+}
+
+export type PdfImportMode = 'direct_generation' | 'structured_merge'
+
+export interface MindMapImportJob {
+  id: string
+  entity_key?: string
+  status: MindMapImportJobStatus
+  stage: MindMapImportJobStage
+  resumable: boolean
+  pause_requested?: boolean
+  source_kind: 'image-single' | 'image-batch' | 'subject-pdf'
+  mode: 'mindmap' | 'text'
+  source_meta?: Record<string, unknown>
+  result?: MindMapImportJobResult | null
+  error?: MindMapImportJobError | null
+  usage?: MindMapImportJobUsage
+  progress?: MindMapImportJobProgress | null
+  created_at?: string | null
+  updated_at?: string | null
+  started_at?: string | null
+  completed_at?: string | null
+}
+
+export interface MindMapImportJobListResponse {
+  items: MindMapImportJob[]
+}
+
+export interface ImportStreamStatusEvent {
+  phase: string
+  message: string
+  step: number
+  total_steps: number
+}
+
+export interface ImportStreamDeltaEvent {
+  text: string
+  accumulated_text: string
+  channel: 'text' | 'raw_model'
+}
+
 export interface MindMapPdfImportPreviewRequest {
   subject_document_id: number
   page_selection: number[]
+  pdf_mode?: PdfImportMode
   structure_page?: number | null
   range_prompt?: string
   fallback_title?: string
@@ -88,7 +190,6 @@ export interface TextPdfImportPreviewRequest {
 }
 
 export interface PdfImportOptions {
-  strict_restore: boolean
   quote_original_text_only: boolean
   mount_on_original_leaf_only: boolean
   preserve_emphasis_marks: boolean
@@ -175,6 +276,8 @@ export interface DashboardResponse {
   today_review_duration_seconds: number
   weekly_review_duration_seconds: number
   today_total_review_duration_seconds: number
+  monthly_total_review_duration_seconds: number
+  selected_total_review_duration_seconds: number
   weekly_total_review_duration_seconds: number
   weekly_formal_review_duration_seconds: number
   today_learning_palaces: Array<{
@@ -213,6 +316,13 @@ export interface DashboardResponse {
     peg_count: number
     created_at: string | null
   }>
+}
+
+export interface DashboardQuery {
+  duration_mode?: 'month' | 'range' | 'all'
+  month?: string
+  start_date?: string
+  end_date?: string
 }
 
 export interface PalaceReviewPlanItem {
@@ -539,12 +649,18 @@ export interface ReviewSettings {
   overdue_smoothing_days: string
   overdue_smoothing_threshold: string
   time_recording_threshold_seconds: string
-  import_pdf_strict_restore_default: string
   import_pdf_quote_original_default: string
   import_pdf_mount_leaf_only_default: string
   import_pdf_preserve_emphasis_default: string
   import_pdf_semantic_split_default: string
   import_pdf_preserve_line_breaks_default: string
+  mindmap_ai_split_api_key: string
+  mindmap_ai_split_base_url: string
+  mindmap_ai_split_model: string
+  mindmap_ai_split_temperature: string
+  mindmap_ai_split_max_children: string
+  mindmap_ai_split_include_note: string
+  mindmap_ai_split_custom_instruction: string
   [key: string]: string
 }
 
@@ -562,6 +678,17 @@ export interface CreateBackupResponse {
 export interface RestoreBackupResponse {
   ok: boolean
   rescue_path: string
+}
+
+export interface RuntimeInfo {
+  channel: string
+  commit: string | null
+  short_commit: string | null
+  runtime_generation: number
+  declared_runtime_generation: number
+  min_supported_generation: number
+  max_supported_generation: number
+  last_started_at: string | null
 }
 
 export interface TimeRecordListResponse<TItem = Record<string, unknown>> {

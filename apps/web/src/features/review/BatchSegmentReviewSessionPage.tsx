@@ -150,6 +150,7 @@ export default function BatchSegmentReviewSessionPage() {
           title={`${session.palace?.title || '未命名宫殿'} / 多块复习`}
           palaceId={session.palace?.id ?? null}
           sessionKind="review"
+          persistKey={`batch-review:${segmentIds.join(',')}`}
           editorState={editorState}
           submitting={submitting}
           onFullscreenChange={setMindMapFullscreen}

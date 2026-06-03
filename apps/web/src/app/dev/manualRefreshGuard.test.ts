@@ -9,6 +9,8 @@ describe('manual refresh guard config', () => {
     expect(viteConfigSource).toContain("name: 'memory-anki-manual-refresh-guard'")
     expect(viteConfigSource).toContain("injectTo: 'head-prepend'")
     expect(viteConfigSource).toContain("suppressedTypes = new Set(['update', 'full-reload'])")
+    expect(viteConfigSource).toContain("suppressedCustomEvents = new Set(['vite:ws:disconnect'])")
+    expect(viteConfigSource).toContain("Object.defineProperty(socket, 'onmessage'")
     expect(viteConfigSource).toContain('server: {')
     expect(viteConfigSource).toContain('hmr: false')
   })

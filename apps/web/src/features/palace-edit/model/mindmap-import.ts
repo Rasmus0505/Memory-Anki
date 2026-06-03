@@ -8,6 +8,9 @@ import type {
 
 export interface ImportHistoryItem {
   id: string
+  jobId?: string
+  jobStatus?: 'draft' | 'running' | 'paused' | 'completed' | 'failed' | 'interrupted'
+  jobStage?: 'prepared' | 'structure' | 'ocr' | 'merge' | 'text' | 'completed'
   title: string
   nodeCount: number
   sourceTree: MindMapImportSourceTree
@@ -103,6 +106,63 @@ export function parseMindMapDoc(value: unknown): MindMapDoc | null {
   return typeof value === 'object' ? (value as MindMapDoc) : null
 }
 
+function createNodeUid() {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID()
+  }
+  return `node_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`
+}
+
+function buildDocNodeFromSourceNode(node: MindMapImportSourceNode): MindMapDocNode {
+  const data: MindMapDocNode['data'] = {
+    uid: createNodeUid(),
+    text: node.rich_text_html || node.text || '',
+  }
+  if (node.rich_text_html) {
+    data.richText = true
+  }
+  return {
+    data,
+    children: (node.children || []).map(buildDocNodeFromSourceNode),
+  }
+}
+
+export function buildEditorDocFromSourceTree(sourceTree: MindMapImportSourceTree): MindMapDoc {
+  return {
+    root: {
+      data: {
+        text: sourceTree.title || '未命名宫殿',
+        uid: 'palace-root',
+        memoryAnkiRootKind: 'palace',
+      },
+      children: (sourceTree.children || []).map(buildDocNodeFromSourceNode),
+    },
+    theme: {
+      template: 'avocado',
+      config: {},
+    },
+    layout: 'logicalStructure',
+    config: {},
+    view: null,
+  }
+}
+
+function buildAppendNodeFromImportedRoot(root: MindMapDocNode): MindMapDocNode {
+  return rebuildImportedSubtree(root)
+}
+
+function rebuildImportedSubtree(node: MindMapDocNode): MindMapDocNode {
+  const appendNode = cloneDoc(node)
+  const currentData = appendNode.data && typeof appendNode.data === 'object' ? appendNode.data : {}
+  appendNode.data = { ...currentData, uid: createNodeUid() }
+  delete appendNode.data.memoryAnkiRootKind
+  delete appendNode.data.memoryAnkiId
+  delete appendNode.data.memoryAnkiNodeType
+  const currentChildren = Array.isArray(appendNode.children) ? appendNode.children : []
+  appendNode.children = currentChildren.map(rebuildImportedSubtree)
+  return appendNode
+}
+
 export function applyImportedDoc(
   currentDoc: MindMapDoc | null,
   importedDoc: MindMapDoc | null,
@@ -116,11 +176,18 @@ export function applyImportedDoc(
       error: '还没有可用的导入草稿。',
     }
   }
-  if (mode === 'replace' || !targetUid) {
+  if (mode === 'replace') {
     return {
       applied: true,
       nextDoc: cloneDoc(importedDoc),
       error: '',
+    }
+  }
+  if (!targetUid) {
+    return {
+      applied: false,
+      nextDoc: currentDoc,
+      error: '请先在脑图中选中一个追加目标节点。',
     }
   }
   const baseDoc = cloneDoc(currentDoc)
@@ -132,7 +199,7 @@ export function applyImportedDoc(
       error: '当前脑图结构不可用，无法追加导入结果。',
     }
   }
-  const appendNodes = Array.isArray(incomingDoc.root.children) ? incomingDoc.root.children : []
+  const appendNodes = [buildAppendNodeFromImportedRoot(incomingDoc.root)]
   const didAppend = appendToTarget(baseDoc.root, targetUid, appendNodes)
   return didAppend
     ? {

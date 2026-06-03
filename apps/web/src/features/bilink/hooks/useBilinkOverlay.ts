@@ -47,6 +47,7 @@ export function useBilinkOverlay({
   const [bilinkPreviewError, setBilinkPreviewError] = useState('')
   const [bilinkPreviewContext, setBilinkPreviewContext] = useState<BilinkNodeContext | null>(null)
   const [bilinkPreviewEditorState, setBilinkPreviewEditorState] = useState<MindMapEditorState | null>(null)
+  const [bilinkPreviewHighlightQuery, setBilinkPreviewHighlightQuery] = useState('')
   const [bilinkInsertionText, setBilinkInsertionText] = useState<string | null>(null)
   const [bilinkInsertionNonce, setBilinkInsertionNonce] = useState(0)
   const bilinkSearch = useBilinkSearch(bilinkSearchQuery, bilinkSearchOpen)
@@ -71,10 +72,15 @@ export function useBilinkOverlay({
     setBilinkSearchPosition(null)
   }, [])
 
-  const loadBilinkPreview = useCallback(async (palaceIdForPreview: number, nodeUid?: string | null) => {
+  const loadBilinkPreview = useCallback(async (
+    palaceIdForPreview: number,
+    nodeUid?: string | null,
+    options?: { highlightQuery?: string | null },
+  ) => {
     setBilinkPreviewOpen(true)
     setBilinkPreviewLoading(true)
     setBilinkPreviewError('')
+    setBilinkPreviewHighlightQuery(options?.highlightQuery?.trim() ?? '')
     try {
       const [contextResponse, palaceEditorResponse] = await Promise.all([
         getBilinkNodeContextApi(palaceIdForPreview, nodeUid),
@@ -127,13 +133,16 @@ export function useBilinkOverlay({
   }) => {
     const targetPalaceId = payload.palaceId ?? currentPalaceId
     if (!targetPalaceId) return
-    void loadBilinkPreview(targetPalaceId, payload.nodeUid)
+    void loadBilinkPreview(targetPalaceId, payload.nodeUid, { highlightQuery: null })
   }, [currentPalaceId, loadBilinkPreview])
 
   const handleBilinkSearchSelect = useCallback(async (result: BilinkSearchResult) => {
     if (!currentPalaceId) return
+    const previewHighlightQuery = bilinkSearchQuery.trim()
     if (bilinkSearchMode === 'toolbar' || !allowCreate) {
-      await loadBilinkPreview(result.palace_id, result.node_uid)
+      await loadBilinkPreview(result.palace_id, result.node_uid, {
+        highlightQuery: previewHighlightQuery,
+      })
       closeBilinkSearch()
       return
     }
@@ -163,6 +172,7 @@ export function useBilinkOverlay({
   }, [
     allowCreate,
     bilinkSearchMode,
+    bilinkSearchQuery,
     bilinkTriggerNodeUid,
     closeBilinkSearch,
     currentPalaceId,
@@ -171,8 +181,10 @@ export function useBilinkOverlay({
   ])
 
   const handleBilinkResultPreview = useCallback((result: BilinkSearchResult) => {
-    void loadBilinkPreview(result.palace_id, result.node_uid)
-  }, [loadBilinkPreview])
+    void loadBilinkPreview(result.palace_id, result.node_uid, {
+      highlightQuery: bilinkSearchQuery.trim(),
+    })
+  }, [bilinkSearchQuery, loadBilinkPreview])
 
   const handleBilinkDelete = useCallback(async (item: BilinkItem) => {
     const confirmed = window.confirm('删除这条双向链接不会影响脑图节点内容，只会取消两端关联。确定继续吗？')
@@ -188,10 +200,10 @@ export function useBilinkOverlay({
 
   const handleBilinkPanelPreview = useCallback((item: BilinkItem) => {
     if (item.direction === 'incoming') {
-      void loadBilinkPreview(item.source_palace_id, item.src_uid)
+      void loadBilinkPreview(item.source_palace_id, item.src_uid, { highlightQuery: null })
       return
     }
-    void loadBilinkPreview(item.target_palace_id, item.tgt_uid)
+    void loadBilinkPreview(item.target_palace_id, item.tgt_uid, { highlightQuery: null })
   }, [loadBilinkPreview])
 
   const jumpToBilinkContext = useCallback((context: BilinkNodeContext) => {
@@ -214,6 +226,7 @@ export function useBilinkOverlay({
     bilinkPreviewError,
     bilinkPreviewContext,
     bilinkPreviewEditorState,
+    bilinkPreviewHighlightQuery,
     bilinkInsertionText,
     bilinkInsertionNonce,
     openBilinkSearch,

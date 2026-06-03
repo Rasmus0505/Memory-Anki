@@ -7,7 +7,7 @@ import {
   Upload,
 } from 'lucide-react'
 import { toast } from 'sonner'
-import { ProfileNav } from '@/features/profile/ProfileNav'
+import { ProfileLayout } from '@/features/profile/ProfileLayout'
 import type { ReviewSettings } from '@/shared/api/contracts'
 import {
   exportJsonUrl,
@@ -88,14 +88,10 @@ export default function ProfileSettingsPage() {
   }
 
   return (
-    <div className="space-y-8">
-      <div className="space-y-3">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">个人中心</h1>
-        </div>
-        <ProfileNav />
-      </div>
-
+    <ProfileLayout
+      title="个人中心"
+      description="这里继续管理复习排程、导入导出，以及新的 AI 分卡接入配置。"
+    >
       <div className="flex gap-1 border-b">
         {[
           { key: 'config', label: '复习配置', icon: Settings },
@@ -408,6 +404,6 @@ export default function ProfileSettingsPage() {
           </div>
         </div>
       )}
-    </div>
+    </ProfileLayout>
   )
 }

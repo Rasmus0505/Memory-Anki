@@ -32,10 +32,18 @@ interface MindMapReviewFlowProps {
   title: string
   palaceId: number | null
   sessionKind: 'practice' | 'review'
+  displayMode?: 'review' | 'edit'
+  modeSyncVersion?: number
+  viewMemoryScope?: string | null
+  persistKey?: string | null
   editorState: MindMapEditorState
   onComplete: (payload: CompleteFlowPayload) => void | Promise<void>
+  onModeToggle?: () => void | Promise<void>
+  onEditorStateChange?: (nextState: MindMapEditorState) => void
   onRestart?: () => void
   submitting?: boolean
+  editSaving?: boolean
+  editError?: string | null
   persistProgress?: boolean
   initialSnapshot?: ReviewFlowSnapshot | null
   onSnapshotChange?: (snapshot: ReviewFlowSnapshot) => void
@@ -46,10 +54,18 @@ export function MindMapReviewFlow({
   title,
   palaceId,
   sessionKind,
+  displayMode = 'review',
+  modeSyncVersion = 0,
+  viewMemoryScope = null,
+  persistKey = null,
   editorState,
   onComplete,
+  onModeToggle,
+  onEditorStateChange,
   onRestart,
   submitting = false,
+  editSaving = false,
+  editError = null,
   persistProgress = false,
   initialSnapshot = null,
   onSnapshotChange,
@@ -59,6 +75,7 @@ export function MindMapReviewFlow({
     title,
     palaceId,
     sessionKind,
+    persistKey,
     editorState,
     onComplete,
     onRestart,
@@ -73,6 +90,41 @@ export function MindMapReviewFlow({
     currentPalaceId: palaceId,
     allowCreate: false,
   })
+  const inlineEditEnabled =
+    sessionKind === 'review' &&
+    typeof onModeToggle === 'function' &&
+    typeof onEditorStateChange === 'function'
+  const resolvedDisplayMode =
+    inlineEditEnabled && displayMode === 'edit' ? 'edit' : 'review'
+  const isInlineEditMode = resolvedDisplayMode === 'edit'
+  const previousDisplayModeRef = React.useRef(resolvedDisplayMode)
+
+  React.useEffect(() => {
+    const previousDisplayMode = previousDisplayModeRef.current
+    if (previousDisplayMode === resolvedDisplayMode) return
+    if (resolvedDisplayMode === 'edit') {
+      flow.timer.logEvent('enter_edit_mode', { source: 'review_inline_edit' })
+      flow.timer.registerActivity('edit_operation', {
+        source: 'review_inline_edit_enter',
+      })
+    } else {
+      flow.timer.logEvent('exit_edit_mode', { source: 'review_inline_edit' })
+      flow.timer.registerActivity('practice_interaction', {
+        source: 'review_inline_edit_exit',
+      })
+    }
+    previousDisplayModeRef.current = resolvedDisplayMode
+  }, [flow.timer, resolvedDisplayMode])
+
+  const handleEditorStateChange = React.useCallback(
+    (nextState: MindMapEditorState) => {
+      flow.timer.registerActivity('edit_operation', {
+        source: 'review_inline_edit',
+      })
+      onEditorStateChange?.(nextState)
+    },
+    [flow.timer, onEditorStateChange],
+  )
 
   const handleFullscreenToggle = React.useCallback((active?: boolean) => {
     if (typeof active === 'boolean') {
@@ -119,7 +171,10 @@ export function MindMapReviewFlow({
                 <CardTitle className="text-base">
                   {sessionKind === 'practice' ? '练习脑图' : '复习脑图'}
                 </CardTitle>
-                <Badge variant="secondary">翻卡模式</Badge>
+                <Badge variant="secondary">
+                  {isInlineEditMode ? '正式编辑' : '翻卡模式'}
+                </Badge>
+                {isInlineEditMode ? <Badge variant="outline">编辑态</Badge> : null}
                 <Badge variant="outline">
                   已出现 {flow.visibleNonRootCount} / {Math.max(flow.totalNodeCount - 1, 0)}
                 </Badge>
@@ -133,16 +188,24 @@ export function MindMapReviewFlow({
                 ) : null}
               </div>
               <div className="flex flex-wrap items-center gap-2">
-                {onRestart ? (
+                {onRestart && !isInlineEditMode ? (
                   <Button type="button" size="sm" variant="outline" onClick={flow.handleRestart}>
                     <RotateCcw className="mr-2 h-4 w-4" />
                     重新开始
                   </Button>
                 ) : null}
-                <Button type="button" size="sm" disabled={submitting} onClick={() => void flow.finishFlow('manual_complete')}>
-                  <SquareCheckBig className="mr-2 h-4 w-4" />
-                  完成
-                </Button>
+                {isInlineEditMode && editSaving ? (
+                  <Badge variant="secondary">自动保存中</Badge>
+                ) : null}
+                {isInlineEditMode && editError ? (
+                  <Badge variant="destructive">保存异常</Badge>
+                ) : null}
+                {!isInlineEditMode ? (
+                  <Button type="button" size="sm" disabled={submitting} onClick={() => void flow.finishFlow('manual_complete')}>
+                    <SquareCheckBig className="mr-2 h-4 w-4" />
+                    完成
+                  </Button>
+                ) : null}
               </div>
             </CardHeader>
             <CardContent
@@ -154,14 +217,26 @@ export function MindMapReviewFlow({
               <div className="h-full min-h-0">
                 <ReviewFlowMapPanel
                   fullscreen={flow.fullscreen}
+                  displayMode={resolvedDisplayMode}
+                  modeSyncVersion={modeSyncVersion}
+                  viewMemoryScope={viewMemoryScope}
                   onToggleFullscreen={handleFullscreenToggle}
+                  onToggleMode={
+                    inlineEditEnabled && onModeToggle
+                      ? () => {
+                          void onModeToggle()
+                        }
+                      : undefined
+                  }
                   visibleEditorState={flow.visibleEditorState}
+                  editableEditorState={editorState}
                   visibleEditorSyncKey={flow.visibleEditorSyncKey}
                   bilinkCounts={bilinkCounts.counts}
                   bilinkItems={bilinks.items}
                   currentPalaceId={palaceId}
                   bilinkInsertionText={bilinkOverlay.bilinkInsertionText}
                   bilinkInsertionNonce={bilinkOverlay.bilinkInsertionNonce}
+                  onEditorStateChange={handleEditorStateChange}
                   onNodeClick={flow.handleNodeClick}
                   onNodeContextMenu={flow.handleNodeContextMenu}
                   onBilinkTrigger={bilinkOverlay.handleBilinkTrigger}
@@ -199,6 +274,7 @@ export function MindMapReviewFlow({
         error={bilinkOverlay.bilinkPreviewError}
         context={bilinkOverlay.bilinkPreviewContext}
         editorState={bilinkOverlay.bilinkPreviewEditorState}
+        highlightQuery={bilinkOverlay.bilinkPreviewHighlightQuery}
         onClose={() => bilinkOverlay.setBilinkPreviewOpen(false)}
         onJump={bilinkOverlay.jumpToBilinkContext}
       />

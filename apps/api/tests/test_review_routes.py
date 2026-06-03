@@ -3,6 +3,8 @@ import tempfile
 import unittest
 from datetime import UTC, date, datetime, time, timedelta
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -11,7 +13,18 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 import memory_anki.app.main as main_module
-from memory_anki.infrastructure.db.models import Base, Config, Palace, PalaceSegment, PalaceSegmentReviewSchedule, PalaceVersion, ReviewLog, ReviewSchedule, TimeRecord
+from memory_anki.infrastructure.db.models import (
+    Base,
+    Config,
+    Palace,
+    PalaceSegment,
+    PalaceSegmentReviewSchedule,
+    PalaceVersion,
+    Peg,
+    ReviewLog,
+    ReviewSchedule,
+    TimeRecord,
+)
 from memory_anki.modules.backups.application.backup_service import (
     ROLLING_EDIT_BACKUP_INTERVAL,
     create_palace_version,
@@ -19,24 +32,30 @@ from memory_anki.modules.backups.application.backup_service import (
     restore_palace_from_backup,
 )
 from memory_anki.modules.mindmap.application.editor_state_service import save_palace_editor_state
-from memory_anki.modules.reviews.application.review_service import submit_review, submit_segment_review
-from memory_anki.modules.reviews.application.schedule_service import ensure_current_review_schedule_model
 from memory_anki.modules.palaces.presentation import router as palace_router
+from memory_anki.modules.reviews.application.review_service import (
+    submit_review,
+    submit_segment_review,
+)
+from memory_anki.modules.reviews.application.schedule_service import (
+    ensure_current_review_schedule_model,
+)
 from memory_anki.modules.reviews.presentation import router as review_router
 from memory_anki.modules.sessions.application.session_progress_service import (
     ensure_session_progress_schema,
 )
 from memory_anki.modules.settings.presentation import router as settings_router
-from memory_anki.modules.time_records.presentation import router as time_records_router
 from memory_anki.modules.time_records.application.time_records_service import (
     create_review_time_record,
     ensure_review_log_time_records,
+    get_monthly_total_review_duration_seconds,
     get_today_formal_review_duration_seconds,
     get_today_total_review_duration_seconds,
     get_weekly_formal_review_duration_seconds,
     get_weekly_total_review_duration_seconds,
     normalize_time_record_event_timezones,
 )
+from memory_anki.modules.time_records.presentation import router as time_records_router
 
 
 def utc_now_naive() -> datetime:
@@ -145,6 +164,71 @@ class ReviewRouteTests(unittest.TestCase):
         self.assertEqual(len(payload["reviews"]), 1)
         self.assertEqual(payload["reviews"][0]["schedule_count"], 2)
         self.assertEqual(payload["reviews"][0]["overdue_schedule_count"], 2)
+
+    def test_review_queue_auto_smoothing_skips_unstarted_overdue_palace(self):
+        with self.SessionLocal() as session:
+            session.add_all(
+                [
+                    Config(key="auto_smooth_overdue", value="true"),
+                    Config(key="overdue_smoothing_threshold", value="1"),
+                    Config(key="overdue_smoothing_days", value="7"),
+                ]
+            )
+            original = session.query(ReviewSchedule).filter_by(id=1).first()
+            self.assertIsNotNone(original)
+            original_date = original.scheduled_date
+            session.commit()
+
+        response = self.client.get("/api/v1/review/queue")
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["smoothed_count"], 0)
+
+        with self.SessionLocal() as session:
+            updated = session.query(ReviewSchedule).filter_by(id=1).first()
+            self.assertIsNotNone(updated)
+            self.assertEqual(updated.scheduled_date, original_date)
+
+    def test_review_queue_auto_smoothing_still_spreads_started_overdue_palace(self):
+        with self.SessionLocal() as session:
+            schedule = session.query(ReviewSchedule).filter_by(id=1).first()
+            self.assertIsNotNone(schedule)
+            schedule.completed = True
+            schedule.completed_at = datetime.now().replace(second=0, microsecond=0) - timedelta(days=2)
+            session.add(
+                ReviewSchedule(
+                    palace_id=1,
+                    scheduled_date=date.today() - timedelta(days=1),
+                    scheduled_at=datetime.now().replace(second=0, microsecond=0) - timedelta(days=1),
+                    interval_days=2,
+                    algorithm_used="ebbinghaus",
+                    completed=False,
+                    review_number=1,
+                    review_type="standard",
+                )
+            )
+            session.add_all(
+                [
+                    Config(key="auto_smooth_overdue", value="true"),
+                    Config(key="overdue_smoothing_threshold", value="1"),
+                    Config(key="overdue_smoothing_days", value="7"),
+                ]
+            )
+            session.commit()
+
+        response = self.client.get("/api/v1/review/queue")
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["smoothed_count"], 1)
+
+        with self.SessionLocal() as session:
+            pending = (
+                session.query(ReviewSchedule)
+                .filter_by(palace_id=1, completed=False, review_number=1)
+                .first()
+            )
+            self.assertIsNotNone(pending)
+            self.assertEqual(pending.scheduled_date, date.today())
 
     def test_submit_review_only_advances_current_due_schedule(self):
         with self.SessionLocal() as session:
@@ -773,6 +857,39 @@ class ReviewRouteTests(unittest.TestCase):
             self.assertEqual(pending[0].scheduled_at, anchored_pending_at)
             self.assertNotEqual(pending[0].scheduled_at, stale_pending_at)
 
+    def test_review_settings_include_ai_split_defaults(self):
+        response = self.client.get("/api/v1/settings/review")
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["mindmap_ai_split_model"], "qwen3.6-flash")
+        self.assertEqual(payload["mindmap_ai_split_temperature"], "0.2")
+        self.assertEqual(payload["mindmap_ai_split_max_children"], "5")
+        self.assertEqual(payload["mindmap_ai_split_include_note"], "true")
+        self.assertIn("mindmap_ai_split_custom_instruction", payload)
+
+    def test_review_settings_can_persist_ai_split_config(self):
+        response = self.client.put(
+            "/api/v1/settings/review",
+            json={
+                "mindmap_ai_split_api_key": "demo-key",
+                "mindmap_ai_split_base_url": "https://example.test/v1",
+                "mindmap_ai_split_model": "qwen-custom",
+                "mindmap_ai_split_temperature": "0.6",
+                "mindmap_ai_split_max_children": "7",
+                "mindmap_ai_split_include_note": "false",
+                "mindmap_ai_split_custom_instruction": "优先按考试框架拆分。",
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["mindmap_ai_split_api_key"], "demo-key")
+        self.assertEqual(payload["mindmap_ai_split_base_url"], "https://example.test/v1")
+        self.assertEqual(payload["mindmap_ai_split_model"], "qwen-custom")
+        self.assertEqual(payload["mindmap_ai_split_temperature"], "0.6")
+        self.assertEqual(payload["mindmap_ai_split_max_children"], "7")
+        self.assertEqual(payload["mindmap_ai_split_include_note"], "false")
+        self.assertEqual(payload["mindmap_ai_split_custom_instruction"], "优先按考试框架拆分。")
+
     def test_ensure_review_log_time_records_backfills_once(self):
         with self.SessionLocal() as session:
             review_log = ReviewLog(
@@ -857,6 +974,7 @@ class ReviewRouteTests(unittest.TestCase):
             self.assertEqual(get_today_formal_review_duration_seconds(session), 0)
             self.assertEqual(get_weekly_formal_review_duration_seconds(session), 0)
             self.assertEqual(get_today_total_review_duration_seconds(session), 180)
+            self.assertEqual(get_monthly_total_review_duration_seconds(session), 180)
             self.assertEqual(get_weekly_total_review_duration_seconds(session), 180)
 
     def test_dashboard_returns_today_learning_and_today_new_palaces(self):
@@ -933,6 +1051,8 @@ class ReviewRouteTests(unittest.TestCase):
             self.assertEqual(response.status_code, 200)
             payload = response.json()
             self.assertEqual(payload["today_new_palace_count"], 2)
+            self.assertEqual(payload["monthly_total_review_duration_seconds"], 780)
+            self.assertEqual(payload["selected_total_review_duration_seconds"], 780)
             self.assertEqual(len(payload["today_learning_palaces"]), 2)
             self.assertEqual(payload["today_learning_palaces"][0]["palace_title"], "Test Palace")
             self.assertEqual(payload["today_learning_palaces"][0]["total_seconds"], 540)
@@ -940,6 +1060,346 @@ class ReviewRouteTests(unittest.TestCase):
             self.assertEqual(payload["today_learning_palaces"][0]["practice_seconds"], 180)
             self.assertEqual(payload["today_learning_palaces"][0]["palace_edit_seconds"], 0)
             self.assertTrue(any(subject["ungrouped_palaces"] for subject in payload["today_new_palaces"]))
+        finally:
+            main_module.get_session = original_main_get_session
+
+    def test_monthly_total_duration_helper_uses_current_month_total_learning_time(self):
+        with self.SessionLocal() as session:
+            session.add(Config(key="time_recording_threshold_seconds", value="120"))
+            now = datetime.now().replace(microsecond=0)
+            month_start = now.replace(day=1, hour=0, minute=0, second=0)
+            previous_month_day = month_start - timedelta(days=1)
+            previous_month_at_noon = previous_month_day.replace(hour=12, minute=0, second=0)
+            session.add_all(
+                [
+                    TimeRecord(
+                        id="review-month",
+                        kind="review",
+                        palace_id=1,
+                        title="Test Palace",
+                        started_at=now - timedelta(seconds=300),
+                        ended_at=now,
+                        effective_seconds=300,
+                        pause_count=0,
+                        completion_method="manual_complete",
+                        duration_edited=False,
+                        events_json="[]",
+                    ),
+                    TimeRecord(
+                        id="practice-month",
+                        kind="practice",
+                        palace_id=1,
+                        title="Test Palace",
+                        started_at=now - timedelta(minutes=30),
+                        ended_at=now - timedelta(minutes=25),
+                        effective_seconds=240,
+                        pause_count=0,
+                        completion_method="manual_complete",
+                        duration_edited=False,
+                        events_json="[]",
+                    ),
+                    TimeRecord(
+                        id="edit-month",
+                        kind="palace_edit",
+                        palace_id=1,
+                        title="Test Palace",
+                        started_at=now - timedelta(minutes=50),
+                        ended_at=now - timedelta(minutes=45),
+                        effective_seconds=180,
+                        pause_count=0,
+                        completion_method="saved",
+                        duration_edited=False,
+                        events_json="[]",
+                    ),
+                    TimeRecord(
+                        id="below-threshold",
+                        kind="review",
+                        palace_id=1,
+                        title="Test Palace",
+                        started_at=now - timedelta(minutes=10),
+                        ended_at=now - timedelta(minutes=9),
+                        effective_seconds=120,
+                        pause_count=0,
+                        completion_method="manual_complete",
+                        duration_edited=False,
+                        events_json="[]",
+                    ),
+                    TimeRecord(
+                        id="deleted-month",
+                        kind="practice",
+                        palace_id=1,
+                        title="Test Palace",
+                        started_at=now - timedelta(minutes=20),
+                        ended_at=now - timedelta(minutes=18),
+                        effective_seconds=600,
+                        pause_count=0,
+                        completion_method="manual_complete",
+                        duration_edited=False,
+                        deleted_at=now,
+                        deleted_reason="manual",
+                        events_json="[]",
+                    ),
+                    TimeRecord(
+                        id="previous-month",
+                        kind="review",
+                        palace_id=1,
+                        title="Test Palace",
+                        started_at=previous_month_at_noon,
+                        ended_at=previous_month_at_noon + timedelta(minutes=10),
+                        effective_seconds=600,
+                        pause_count=0,
+                        completion_method="manual_complete",
+                        duration_edited=False,
+                        events_json="[]",
+                    ),
+                ]
+            )
+            session.commit()
+
+            self.assertEqual(get_monthly_total_review_duration_seconds(session), 720)
+
+    def test_dashboard_returns_selected_total_duration_for_month_query(self):
+        original_main_get_session = main_module.get_session
+
+        def get_test_session():
+            return self.SessionLocal()
+
+        main_module.get_session = get_test_session
+        dashboard_client = TestClient(main_module.app)
+        try:
+            with self.SessionLocal() as session:
+                session.add(Config(key="time_recording_threshold_seconds", value="0"))
+                session.add_all(
+                    [
+                        TimeRecord(
+                            id="selected-june-review",
+                            kind="review",
+                            palace_id=1,
+                            title="Test Palace",
+                            started_at=datetime(2026, 6, 5, 10, 0, 0),
+                            ended_at=datetime(2026, 6, 5, 10, 10, 0),
+                            effective_seconds=600,
+                            pause_count=0,
+                            completion_method="manual_complete",
+                            duration_edited=False,
+                            events_json="[]",
+                        ),
+                        TimeRecord(
+                            id="selected-june-practice",
+                            kind="practice",
+                            palace_id=1,
+                            title="Test Palace",
+                            started_at=datetime(2026, 6, 10, 9, 0, 0),
+                            ended_at=datetime(2026, 6, 10, 9, 5, 0),
+                            effective_seconds=300,
+                            pause_count=0,
+                            completion_method="manual_complete",
+                            duration_edited=False,
+                            events_json="[]",
+                        ),
+                        TimeRecord(
+                            id="selected-may-edit",
+                            kind="palace_edit",
+                            palace_id=1,
+                            title="Test Palace",
+                            started_at=datetime(2026, 5, 20, 12, 0, 0),
+                            ended_at=datetime(2026, 5, 20, 12, 4, 0),
+                            effective_seconds=240,
+                            pause_count=0,
+                            completion_method="saved",
+                            duration_edited=False,
+                            events_json="[]",
+                        ),
+                    ]
+                )
+                session.commit()
+
+            response = dashboard_client.get("/api/v1/dashboard?duration_mode=month&month=2026-06")
+            self.assertEqual(response.status_code, 200)
+            payload = response.json()
+            self.assertEqual(payload["selected_total_review_duration_seconds"], 900)
+        finally:
+            main_module.get_session = original_main_get_session
+
+    def test_dashboard_returns_selected_total_duration_for_custom_range_query(self):
+        original_main_get_session = main_module.get_session
+
+        def get_test_session():
+            return self.SessionLocal()
+
+        main_module.get_session = get_test_session
+        dashboard_client = TestClient(main_module.app)
+        try:
+            with self.SessionLocal() as session:
+                session.add(Config(key="time_recording_threshold_seconds", value="120"))
+                session.add_all(
+                    [
+                        TimeRecord(
+                            id="range-review",
+                            kind="review",
+                            palace_id=1,
+                            title="Test Palace",
+                            started_at=datetime(2026, 6, 2, 10, 0, 0),
+                            ended_at=datetime(2026, 6, 2, 10, 10, 0),
+                            effective_seconds=600,
+                            pause_count=0,
+                            completion_method="manual_complete",
+                            duration_edited=False,
+                            events_json="[]",
+                        ),
+                        TimeRecord(
+                            id="range-practice",
+                            kind="practice",
+                            palace_id=1,
+                            title="Test Palace",
+                            started_at=datetime(2026, 6, 15, 8, 0, 0),
+                            ended_at=datetime(2026, 6, 15, 8, 3, 0),
+                            effective_seconds=180,
+                            pause_count=0,
+                            completion_method="manual_complete",
+                            duration_edited=False,
+                            events_json="[]",
+                        ),
+                        TimeRecord(
+                            id="range-below-threshold",
+                            kind="palace_edit",
+                            palace_id=1,
+                            title="Test Palace",
+                            started_at=datetime(2026, 6, 10, 7, 0, 0),
+                            ended_at=datetime(2026, 6, 10, 7, 1, 0),
+                            effective_seconds=120,
+                            pause_count=0,
+                            completion_method="saved",
+                            duration_edited=False,
+                            events_json="[]",
+                        ),
+                        TimeRecord(
+                            id="range-outside",
+                            kind="review",
+                            palace_id=1,
+                            title="Test Palace",
+                            started_at=datetime(2026, 6, 20, 9, 0, 0),
+                            ended_at=datetime(2026, 6, 20, 9, 5, 0),
+                            effective_seconds=300,
+                            pause_count=0,
+                            completion_method="manual_complete",
+                            duration_edited=False,
+                            events_json="[]",
+                        ),
+                    ]
+                )
+                session.commit()
+
+            response = dashboard_client.get("/api/v1/dashboard?duration_mode=range&start_date=2026-06-01&end_date=2026-06-15")
+            self.assertEqual(response.status_code, 200)
+            payload = response.json()
+            self.assertEqual(payload["selected_total_review_duration_seconds"], 780)
+        finally:
+            main_module.get_session = original_main_get_session
+
+    def test_dashboard_returns_selected_total_duration_for_all_query(self):
+        original_main_get_session = main_module.get_session
+
+        def get_test_session():
+            return self.SessionLocal()
+
+        main_module.get_session = get_test_session
+        dashboard_client = TestClient(main_module.app)
+        try:
+            with self.SessionLocal() as session:
+                session.add(Config(key="time_recording_threshold_seconds", value="120"))
+                session.add_all(
+                    [
+                        TimeRecord(
+                            id="all-review",
+                            kind="review",
+                            palace_id=1,
+                            title="Test Palace",
+                            started_at=datetime(2026, 5, 1, 10, 0, 0),
+                            ended_at=datetime(2026, 5, 1, 10, 10, 0),
+                            effective_seconds=600,
+                            pause_count=0,
+                            completion_method="manual_complete",
+                            duration_edited=False,
+                            events_json="[]",
+                        ),
+                        TimeRecord(
+                            id="all-practice",
+                            kind="practice",
+                            palace_id=1,
+                            title="Test Palace",
+                            started_at=datetime(2026, 5, 2, 8, 0, 0),
+                            ended_at=datetime(2026, 5, 2, 8, 5, 0),
+                            effective_seconds=300,
+                            pause_count=0,
+                            completion_method="manual_complete",
+                            duration_edited=False,
+                            events_json="[]",
+                        ),
+                        TimeRecord(
+                            id="all-edit",
+                            kind="palace_edit",
+                            palace_id=1,
+                            title="Test Palace",
+                            started_at=datetime(2026, 5, 3, 7, 0, 0),
+                            ended_at=datetime(2026, 5, 3, 7, 4, 0),
+                            effective_seconds=240,
+                            pause_count=0,
+                            completion_method="saved",
+                            duration_edited=False,
+                            events_json="[]",
+                        ),
+                        TimeRecord(
+                            id="all-below-threshold",
+                            kind="review",
+                            palace_id=1,
+                            title="Test Palace",
+                            started_at=datetime(2026, 5, 4, 7, 0, 0),
+                            ended_at=datetime(2026, 5, 4, 7, 2, 0),
+                            effective_seconds=120,
+                            pause_count=0,
+                            completion_method="manual_complete",
+                            duration_edited=False,
+                            events_json="[]",
+                        ),
+                        TimeRecord(
+                            id="all-deleted",
+                            kind="practice",
+                            palace_id=1,
+                            title="Test Palace",
+                            started_at=datetime(2026, 5, 5, 9, 0, 0),
+                            ended_at=datetime(2026, 5, 5, 9, 3, 0),
+                            effective_seconds=180,
+                            pause_count=0,
+                            completion_method="manual_complete",
+                            duration_edited=False,
+                            deleted_at=datetime(2026, 5, 5, 9, 5, 0),
+                            deleted_reason="manual",
+                            events_json="[]",
+                        ),
+                    ]
+                )
+                session.commit()
+
+            response = dashboard_client.get("/api/v1/dashboard?duration_mode=all")
+            self.assertEqual(response.status_code, 200)
+            payload = response.json()
+            self.assertEqual(payload["selected_total_review_duration_seconds"], 1140)
+        finally:
+            main_module.get_session = original_main_get_session
+
+    def test_dashboard_rejects_invalid_custom_range_query(self):
+        original_main_get_session = main_module.get_session
+
+        def get_test_session():
+            return self.SessionLocal()
+
+        main_module.get_session = get_test_session
+        dashboard_client = TestClient(main_module.app)
+        try:
+            response = dashboard_client.get("/api/v1/dashboard?duration_mode=range&start_date=2026-06-20&end_date=2026-06-10")
+            self.assertEqual(response.status_code, 400)
+            self.assertIn("开始日期不能晚于结束日期", response.json()["detail"])
         finally:
             main_module.get_session = original_main_get_session
 
@@ -1481,10 +1941,10 @@ class ReviewRouteTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         item = response.json()[0]
         self.assertEqual(item["review_stage_total"], 9)
-        self.assertEqual(item["review_stage_completed"], 2)
-        self.assertAlmostEqual(item["review_stage_progress"], 2 / 9)
+        self.assertEqual(item["review_stage_completed"], 1)
+        self.assertAlmostEqual(item["review_stage_progress"], 1 / 9)
 
-    def test_pending_review_number_two_displays_third_progress_node(self):
+    def test_pending_review_number_two_reports_two_completed_stages(self):
         with self.SessionLocal() as session:
             session.query(ReviewSchedule).filter_by(palace_id=1).delete()
             session.add(
@@ -1504,8 +1964,8 @@ class ReviewRouteTests(unittest.TestCase):
         response = self.client.get("/api/v1/palaces")
         self.assertEqual(response.status_code, 200)
         item = response.json()[0]
-        self.assertEqual(item["review_stage_completed"], 3)
-        self.assertEqual(item["segments"][0]["review_stage_completed"], 3)
+        self.assertEqual(item["review_stage_completed"], 2)
+        self.assertEqual(item["segments"][0]["review_stage_completed"], 2)
 
     def test_schedule_cleanup_collapses_legacy_future_chain(self):
         with self.SessionLocal() as session:
@@ -2240,22 +2700,371 @@ class ReviewRouteTests(unittest.TestCase):
             )
             session.commit()
 
-        with self.assertRaises(ValueError) as error:
-            self.client.put(
-                "/api/v1/palaces/1/editor",
-                json={
-                    "editor_source": "practice_edit",
+        response = self.client.put(
+            "/api/v1/palaces/1/editor",
+            json={
+                "editor_source": "practice_edit",
+                "editor_doc": {
+                    "root": {
+                        "data": {"text": "Test Palace"},
+                        "children": [
+                            {"data": {"text": "Branch A"}, "children": []},
+                        ],
+                    }
+                },
+            },
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("已拒绝写回宫殿", response.json()["detail"])
+
+    def test_save_palace_editor_allows_confirmed_dangerous_change_from_palace_edit(self):
+        with self.SessionLocal() as session:
+            palace = session.query(Palace).filter_by(id=1).first()
+            self.assertIsNotNone(palace)
+            palace.editor_doc = json.dumps(
+                {
+                    "root": {
+                        "data": {"text": "Test Palace"},
+                        "children": [
+                            {"data": {"text": "Branch A"}, "children": [{"data": {"text": "Leaf A1"}, "children": []}]},
+                            {"data": {"text": "Branch B"}, "children": []},
+                        ],
+                    }
+                }
+            )
+            session.commit()
+
+        response = self.client.put(
+            "/api/v1/palaces/1/editor",
+            json={
+                "editor_source": "palace_edit",
+                "confirm_dangerous_change": True,
+                "editor_doc": {
+                    "root": {
+                        "data": {"text": "导入脑图"},
+                        "children": [
+                            {"data": {"text": "新增节点"}, "children": []},
+                        ],
+                    }
+                },
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["editor_doc"]["root"]["data"]["text"], "Test Palace")
+        self.assertEqual(len(payload["editor_doc"]["root"]["children"]), 1)
+        saved_child = payload["editor_doc"]["root"]["children"][0]["data"]
+        self.assertEqual(saved_child["text"], "新增节点")
+        self.assertEqual(saved_child["memoryAnkiNodeType"], "peg")
+        self.assertIsInstance(saved_child["memoryAnkiId"], int)
+
+    def test_get_palace_editor_repairs_saved_review_overlay_doc(self):
+        with self.SessionLocal() as session:
+            palace = session.query(Palace).filter_by(id=1).first()
+            self.assertIsNotNone(palace)
+            branch_a = Peg(palace_id=palace.id, name="Branch A", content="Detail A", sort_order=0)
+            branch_b = Peg(palace_id=palace.id, name="Branch B", content="", sort_order=1)
+            session.add_all([branch_a, branch_b])
+            session.flush()
+            palace.editor_doc = json.dumps(
+                {
+                    "root": {
+                        "data": {
+                            "text": "Test Palace",
+                            "memoryAnkiRootKind": "palace",
+                            "fillColor": "#111827",
+                            "borderColor": "#0f172a",
+                            "borderWidth": 2,
+                            "color": "#f8fafc",
+                            "fontWeight": "bold",
+                        },
+                        "children": [
+                            {
+                                "data": {
+                                    "text": "<p>待回忆</p>",
+                                    "note": "",
+                                    "uid": "branch-a",
+                                    "memoryAnkiId": branch_a.id,
+                                    "memoryAnkiNodeType": "peg",
+                                    "fillColor": "#eef2f7",
+                                    "borderColor": "#94a3b8",
+                                    "borderWidth": 2,
+                                    "color": "#475569",
+                                    "lineColor": "#22c55e",
+                                    "lineWidth": 3,
+                                    "hideNote": True,
+                                    "customTextWidth": 132,
+                                },
+                                "children": [],
+                            },
+                            {
+                                "data": {
+                                    "text": "<p>Branch B</p>",
+                                    "uid": "branch-b",
+                                    "memoryAnkiId": branch_b.id,
+                                    "memoryAnkiNodeType": "peg",
+                                    "fillColor": "#ecfdf5",
+                                    "borderColor": "#22c55e",
+                                    "borderWidth": 2,
+                                    "color": "#14532d",
+                                    "lineColor": "#22c55e",
+                                    "lineWidth": 3,
+                                },
+                                "children": [],
+                            },
+                        ],
+                    }
+                },
+                ensure_ascii=False,
+            )
+            session.commit()
+
+        response = self.client.get("/api/v1/palaces/1/editor")
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        repaired_root = payload["editor_doc"]["root"]
+        repaired_a = repaired_root["children"][0]["data"]
+        repaired_b = repaired_root["children"][1]["data"]
+        self.assertEqual(repaired_a["text"], "Branch A")
+        self.assertEqual(repaired_a["note"], "Detail A")
+        self.assertNotIn("hideNote", repaired_a)
+        self.assertNotIn("customTextWidth", repaired_a)
+        self.assertNotIn("fillColor", repaired_a)
+        self.assertNotIn("fillColor", repaired_b)
+        self.assertNotIn("fillColor", repaired_root["data"])
+
+    def test_save_palace_editor_state_sanitizes_review_overlay_before_persisting(self):
+        with self.SessionLocal() as session:
+            palace = session.query(Palace).filter_by(id=1).first()
+            self.assertIsNotNone(palace)
+            branch_a = Peg(palace_id=palace.id, name="Branch A", content="Detail A", sort_order=0)
+            branch_b = Peg(palace_id=palace.id, name="Branch B", content="", sort_order=1)
+            session.add_all([branch_a, branch_b])
+            session.flush()
+            state = save_palace_editor_state(
+                session,
+                palace,
+                {
+                    "editor_source": "palace_edit",
                     "editor_doc": {
                         "root": {
-                            "data": {"text": "Test Palace"},
+                            "data": {
+                                "text": "Test Palace",
+                                "memoryAnkiRootKind": "palace",
+                                "fillColor": "#111827",
+                                "borderColor": "#0f172a",
+                                "borderWidth": 2,
+                                "color": "#f8fafc",
+                                "fontWeight": "bold",
+                            },
                             "children": [
-                                {"data": {"text": "Branch A"}, "children": []},
+                                {
+                                    "data": {
+                                        "text": "<p>待回忆</p>",
+                                        "note": "",
+                                        "uid": "branch-a",
+                                        "memoryAnkiId": branch_a.id,
+                                        "memoryAnkiNodeType": "peg",
+                                        "fillColor": "#eef2f7",
+                                        "borderColor": "#94a3b8",
+                                        "borderWidth": 2,
+                                        "color": "#475569",
+                                        "lineColor": "#22c55e",
+                                        "lineWidth": 3,
+                                        "hideNote": True,
+                                        "customTextWidth": 132,
+                                    },
+                                    "children": [],
+                                },
+                                {
+                                    "data": {
+                                        "text": "<p>Branch B</p>",
+                                        "uid": "branch-b",
+                                        "memoryAnkiId": branch_b.id,
+                                        "memoryAnkiNodeType": "peg",
+                                        "fillColor": "#ecfdf5",
+                                        "borderColor": "#22c55e",
+                                        "borderWidth": 2,
+                                        "color": "#14532d",
+                                        "lineColor": "#22c55e",
+                                        "lineWidth": 3,
+                                    },
+                                    "children": [],
+                                },
                             ],
                         }
                     },
                 },
             )
-        self.assertIn("已拒绝写回宫殿", str(error.exception))
+            stored_doc = json.loads(palace.editor_doc)
+
+        repaired_a = state["editor_doc"]["root"]["children"][0]["data"]
+        self.assertEqual(repaired_a["text"], "Branch A")
+        self.assertEqual(repaired_a["note"], "Detail A")
+        self.assertNotIn("fillColor", repaired_a)
+        self.assertNotIn("hideNote", repaired_a)
+        self.assertEqual(stored_doc["root"]["children"][0]["data"]["text"], "Branch A")
+        self.assertEqual(stored_doc["root"]["children"][0]["data"]["note"], "Detail A")
+        self.assertNotIn("fillColor", stored_doc["root"]["children"][0]["data"])
+
+    def test_get_palace_editor_recovers_placeholder_nodes_from_latest_clean_version(self):
+        with self.SessionLocal() as session:
+            palace = session.query(Palace).filter_by(id=1).first()
+            self.assertIsNotNone(palace)
+            branch_a = Peg(palace_id=palace.id, name="Branch A", content="Detail A", sort_order=0)
+            branch_b = Peg(palace_id=palace.id, name="Branch B", content="Detail B", sort_order=1)
+            session.add_all([branch_a, branch_b])
+            session.flush()
+            session.add(
+                PalaceVersion(
+                    palace_id=palace.id,
+                    trigger_reason="editor_save",
+                    title=palace.title,
+                    created_at_value=palace.created_at,
+                    editor_doc=json.dumps(
+                        {
+                            "root": {
+                                "data": {"text": "Test Palace", "memoryAnkiRootKind": "palace"},
+                                "children": [
+                                    {
+                                        "data": {
+                                            "text": "<p>Branch A</p>",
+                                            "note": "Detail A",
+                                            "memoryAnkiId": branch_a.id,
+                                            "memoryAnkiNodeType": "peg",
+                                        },
+                                        "children": [],
+                                    },
+                                    {
+                                        "data": {
+                                            "text": "<p>Branch B</p>",
+                                            "note": "Detail B",
+                                            "memoryAnkiId": branch_b.id,
+                                            "memoryAnkiNodeType": "peg",
+                                        },
+                                        "children": [],
+                                    },
+                                ],
+                            }
+                        },
+                        ensure_ascii=False,
+                    ),
+                    editor_config="{}",
+                    editor_local_config=json.dumps({"__lang": "zh"}, ensure_ascii=False),
+                    peg_snapshot="[]",
+                    chapter_snapshot="[]",
+                )
+            )
+            branch_a.name = "待回忆"
+            branch_a.content = ""
+            branch_b.name = "待回忆"
+            branch_b.content = ""
+            palace.editor_doc = json.dumps(
+                {
+                    "root": {
+                        "data": {
+                            "text": "Test Palace",
+                            "memoryAnkiRootKind": "palace",
+                            "fillColor": "#111827",
+                            "borderColor": "#0f172a",
+                            "borderWidth": 2,
+                            "color": "#f8fafc",
+                            "fontWeight": "bold",
+                        },
+                        "children": [
+                            {
+                                "data": {
+                                    "text": "<p>待回忆</p>",
+                                    "note": "",
+                                    "memoryAnkiId": branch_a.id,
+                                    "memoryAnkiNodeType": "peg",
+                                    "fillColor": "#eef2f7",
+                                    "borderColor": "#94a3b8",
+                                    "borderWidth": 2,
+                                    "color": "#475569",
+                                    "lineColor": "#22c55e",
+                                    "lineWidth": 3,
+                                    "hideNote": True,
+                                    "customTextWidth": 132,
+                                },
+                                "children": [],
+                            },
+                            {
+                                "data": {
+                                    "text": "<p>待回忆</p>",
+                                    "note": "",
+                                    "memoryAnkiId": branch_b.id,
+                                    "memoryAnkiNodeType": "peg",
+                                    "fillColor": "#eef2f7",
+                                    "borderColor": "#94a3b8",
+                                    "borderWidth": 2,
+                                    "color": "#475569",
+                                    "lineColor": "#22c55e",
+                                    "lineWidth": 3,
+                                    "hideNote": True,
+                                    "customTextWidth": 132,
+                                },
+                                "children": [],
+                            },
+                        ],
+                    }
+                },
+                ensure_ascii=False,
+            )
+            session.commit()
+
+        response = self.client.get("/api/v1/palaces/1/editor")
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        repaired_children = payload["editor_doc"]["root"]["children"]
+        self.assertEqual(repaired_children[0]["data"]["text"], "<p>Branch A</p>")
+        self.assertEqual(repaired_children[0]["data"]["note"], "Detail A")
+        self.assertEqual(repaired_children[1]["data"]["text"], "<p>Branch B</p>")
+        self.assertEqual(repaired_children[1]["data"]["note"], "Detail B")
+
+    def test_ai_split_editor_endpoint_returns_transformed_editor_doc(self):
+        mocked_doc = {
+            "root": {
+                "data": {"text": "Test Palace", "memoryAnkiRootKind": "palace"},
+                "children": [
+                    {
+                        "data": {"text": "AI分类", "uid": "split-1"},
+                        "children": [],
+                    }
+                ],
+            }
+        }
+
+        with patch(
+            "memory_anki.modules.palaces.presentation.router.split_palace_editor_doc_with_ai",
+            return_value=SimpleNamespace(
+                editor_doc=mocked_doc,
+                generated_children_count=1,
+                reassigned_existing_children_count=2,
+                model="qwen3.6-flash",
+            ),
+        ) as mock_split:
+            response = self.client.post(
+                "/api/v1/palaces/1/editor/ai-split",
+                json={
+                    "editor_doc": {
+                        "root": {
+                            "data": {"text": "Test Palace", "memoryAnkiRootKind": "palace"},
+                            "children": [],
+                        }
+                    },
+                    "target_node_uid": None,
+                },
+            )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["editor_doc"], mocked_doc)
+        self.assertEqual(payload["generated_children_count"], 1)
+        self.assertEqual(payload["reassigned_existing_children_count"], 2)
+        self.assertEqual(payload["model"], "qwen3.6-flash")
+        mock_split.assert_called_once()
 
     def test_restore_palace_from_backup_restores_full_snapshot(self):
         with tempfile.TemporaryDirectory() as temp_dir:

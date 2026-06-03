@@ -17,6 +17,33 @@ from memory_anki.modules.palaces.application.mindmap_import_service import (
 
 
 class MindMapImportServiceTests(unittest.TestCase):
+    def test_parse_dashscope_response_stream_accumulates_sse_delta_chunks(self):
+        class FakeResponse:
+            def __iter__(self):
+                return iter(
+                    [
+                        b'data: {"choices":[{"delta":{"content":"\xe7\xac\xac\xe4\xb8\x80"}}]}\n',
+                        b"\n",
+                        b'data: {"choices":[{"delta":{"content":"\xe7\xab\xa0"}}]}\n',
+                        b'data: [DONE]\n',
+                    ]
+                )
+
+            def read(self):
+                return b""
+
+        generator = service._parse_dashscope_response_stream(FakeResponse())
+        deltas: list[str] = []
+        while True:
+            try:
+                deltas.append(next(generator))
+            except StopIteration as stop:
+                final_text = stop.value
+                break
+
+        self.assertEqual(deltas, ["第一", "章"])
+        self.assertEqual(final_text, "第一章")
+
     @patch("memory_anki.modules.palaces.application.mindmap_import_service.DASHSCOPE_API_KEY", "test-key")
     @patch("memory_anki.modules.palaces.application.mindmap_import_service.urllib.request.urlopen")
     def test_generate_import_preview_strips_code_fence_json(self, mock_urlopen):
@@ -484,14 +511,10 @@ class MindMapImportServiceTests(unittest.TestCase):
 
     @patch("memory_anki.modules.palaces.application.mindmap_import_service.DASHSCOPE_API_KEY", "test-key")
     @patch("memory_anki.modules.palaces.application.mindmap_import_service.render_selected_pdf_pages")
-    @patch("memory_anki.modules.palaces.application.mindmap_import_service._call_dashscope_text_with_images")
-    @patch("memory_anki.modules.palaces.application.mindmap_import_service._call_dashscope_batch_json")
-    @patch("memory_anki.modules.palaces.application.mindmap_import_service._call_dashscope_json")
+    @patch("memory_anki.modules.palaces.application.mindmap_import_service._call_dashscope_pdf_json")
     def test_generate_pdf_import_preview_only_uses_selected_pages_and_structure_first(
         self,
-        mock_call_json,
-        mock_call_batch_json,
-        mock_call_dashscope_text_with_images,
+        mock_call_pdf_json,
         mock_render_selected_pdf_pages,
     ):
         document = SubjectDocument(
@@ -508,12 +531,7 @@ class MindMapImportServiceTests(unittest.TestCase):
             (4, b"page-4", "page-4.png"),
             (6, b"page-6", "page-6.png"),
         ]
-        mock_call_json.return_value = {
-            "title": "结构",
-            "children": [{"text": "节点", "children": []}],
-        }
-        mock_call_dashscope_text_with_images.return_value = "无关前文\n第一节\n正文"
-        mock_call_batch_json.return_value = {
+        mock_call_pdf_json.return_value = {
             "title": "结构",
             "children": [{"text": "节点", "children": [{"text": "补充", "children": []}]}],
         }
@@ -527,45 +545,32 @@ class MindMapImportServiceTests(unittest.TestCase):
         )
 
         self.assertEqual(result.selected_pages, [2, 4, 6])
-        self.assertEqual(result.structure_page, 4)
+        self.assertIsNone(result.structure_page)
         mock_render_selected_pdf_pages.assert_called_once_with(
             document,
             page_numbers=[2, 4, 6],
             kind="preview",
         )
-        mock_call_json.assert_called_once()
-        self.assertEqual(mock_call_json.call_args.kwargs["image_bytes"], b"page-4")
-        self.assertIn("第一节", mock_call_json.call_args.kwargs["prompt"])
+        mock_call_pdf_json.assert_called_once()
         self.assertEqual(
-            mock_call_batch_json.call_args.kwargs["image_items"],
-            [
-                (b"page-4", "page-4.png"),
-                (b"page-2", "page-2.png"),
-                (b"page-6", "page-6.png"),
-            ],
-        )
-        self.assertEqual(
-            mock_call_dashscope_text_with_images.call_args.kwargs["image_items"],
+            mock_call_pdf_json.call_args.kwargs["image_items"],
             [
                 (b"page-2", "page-2.png"),
                 (b"page-4", "page-4.png"),
                 (b"page-6", "page-6.png"),
             ],
         )
-        self.assertEqual(mock_call_batch_json.call_args.kwargs["page_numbers"], [2, 4, 6])
-        self.assertEqual(mock_call_batch_json.call_args.kwargs["range_prompt"], "第一节")
-        self.assertEqual(mock_call_batch_json.call_args.kwargs["extracted_text"], "第一节\n正文")
+        self.assertEqual(mock_call_pdf_json.call_args.kwargs["page_numbers"], [2, 4, 6])
+        self.assertEqual(mock_call_pdf_json.call_args.kwargs["range_prompt"], "第一节")
 
     @patch("memory_anki.modules.palaces.application.mindmap_import_service.DASHSCOPE_API_KEY", "test-key")
     @patch("memory_anki.modules.palaces.application.mindmap_import_service.render_selected_pdf_pages")
     @patch("memory_anki.modules.palaces.application.mindmap_import_service._call_dashscope_text_with_images")
-    @patch("memory_anki.modules.palaces.application.mindmap_import_service._call_dashscope_batch_json")
-    @patch("memory_anki.modules.palaces.application.mindmap_import_service._call_dashscope_json")
-    def test_generate_pdf_import_preview_strict_restore_disables_rebalance_and_returns_approximate_preview(
+    @patch("memory_anki.modules.palaces.application.mindmap_import_service._call_dashscope_pdf_json")
+    def test_generate_pdf_import_preview_allows_apply_even_when_structure_changes(
         self,
-        mock_call_json,
-        mock_call_batch_json,
-        mock_call_dashscope_text_with_images,
+        mock_call_pdf_json,
+        mock_call_text_with_images,
         mock_render_selected_pdf_pages,
     ):
         document = SubjectDocument(
@@ -581,12 +586,8 @@ class MindMapImportServiceTests(unittest.TestCase):
             (2, b"page-2", "page-2.png"),
             (4, b"page-4", "page-4.png"),
         ]
-        mock_call_json.return_value = {
-            "title": "结构",
-            "children": [{"text": "原节点", "children": []}],
-        }
-        mock_call_dashscope_text_with_images.return_value = "结构\n原节点\n正文"
-        mock_call_batch_json.return_value = {
+        mock_call_text_with_images.return_value = "第一节\n原节点（变化）\n正文细节"
+        mock_call_pdf_json.return_value = {
             "title": "结构",
             "children": [{"text": "原节点（变化）", "children": []}],
         }
@@ -597,18 +598,22 @@ class MindMapImportServiceTests(unittest.TestCase):
             structure_page=4,
             range_prompt="第一节",
             fallback_title="未命名宫殿",
-            import_options=PdfImportOptions(strict_restore=True),
+            import_options=PdfImportOptions(),
         )
 
-        self.assertEqual(mock_call_json.call_args.kwargs["disable_rebalance"], True)
-        self.assertEqual(mock_call_batch_json.call_args.kwargs["strict_restore"], True)
-        self.assertEqual(mock_call_batch_json.call_args.kwargs["disable_rebalance"], True)
-        self.assertEqual(result.match_mode, "approximate_match")
-        self.assertFalse(result.can_apply)
-        self.assertTrue(result.warnings)
+        self.assertEqual(mock_call_pdf_json.call_args.kwargs["disable_rebalance"], False)
+        self.assertEqual(result.match_mode, "direct_generation")
+        self.assertTrue(result.can_apply)
+        self.assertFalse(result.warnings)
 
     @patch("memory_anki.modules.palaces.application.mindmap_import_service.DASHSCOPE_API_KEY", "test-key")
-    def test_generate_pdf_import_preview_rejects_structure_page_outside_selection(self):
+    @patch("memory_anki.modules.palaces.application.mindmap_import_service.render_selected_pdf_pages")
+    @patch("memory_anki.modules.palaces.application.mindmap_import_service._call_dashscope_pdf_json")
+    def test_generate_pdf_import_preview_ignores_structure_page_outside_selection(
+        self,
+        mock_call_pdf_json,
+        mock_render_selected_pdf_pages,
+    ):
         document = SubjectDocument(
             id=3,
             subject_id=2,
@@ -616,19 +621,27 @@ class MindMapImportServiceTests(unittest.TestCase):
             original_name="demo.pdf",
             mime_type="application/pdf",
             file_size=123,
-            page_count=8,
+            page_count=40,
+        )
+        mock_render_selected_pdf_pages.return_value = [
+            (2, b"page-2", "page-2.png"),
+            (3, b"page-3", "page-3.png"),
+        ]
+        mock_call_pdf_json.return_value = {
+            "title": "结构",
+            "children": [{"text": "节点", "children": []}],
+        }
+
+        result = generate_pdf_import_preview(
+            document=document,
+            page_selection=[2, 3],
+            structure_page=4,
+            range_prompt="",
+            fallback_title="未命名宫殿",
         )
 
-        with self.assertRaises(MindMapImportError) as error:
-            generate_pdf_import_preview(
-                document=document,
-                page_selection=[2, 3],
-                structure_page=4,
-                range_prompt="",
-                fallback_title="未命名宫殿",
-            )
-
-        self.assertIn("结构页必须包含在当前选择的页码范围内", str(error.exception))
+        self.assertEqual(result.selected_pages, [2, 3])
+        self.assertIsNone(result.structure_page)
 
     @patch("memory_anki.modules.palaces.application.mindmap_import_service.DASHSCOPE_API_KEY", "test-key")
     @patch("memory_anki.modules.palaces.application.mindmap_import_service.render_selected_pdf_pages")
@@ -680,9 +693,7 @@ class MindMapImportServiceTests(unittest.TestCase):
             structure_tree={"title": "结构", "children": [{"text": "节点", "children": []}]},
             range_prompt="古希腊",
             page_numbers=[11, 12],
-            strict_restore=True,
             import_options=PdfImportOptions(
-                strict_restore=True,
                 quote_original_text_only=False,
                 mount_on_original_leaf_only=False,
                 preserve_emphasis_marks=False,
@@ -697,6 +708,19 @@ class MindMapImportServiceTests(unittest.TestCase):
         self.assertIn("无需额外保留下划线或波浪线强调", prompt)
         self.assertIn("不要为了美化结构自动把长段正文拆成多个并列 children", prompt)
         self.assertIn("OCR 正文", prompt)
+        self.assertNotIn("给定结构与结构页明显对不上", prompt)
+
+    def test_build_pdf_direct_prompt_uses_ocr_grounding_to_prevent_bone_only_results(self):
+        prompt = service._build_pdf_direct_prompt(
+            range_prompt="古罗马",
+            page_numbers=[26, 27, 28],
+            import_options=PdfImportOptions(),
+            extracted_text="第一节 古罗马的教育阶段\n正文细节\n例子",
+        )
+
+        self.assertIn("OCR 正文", prompt)
+        self.assertIn("不能只停留在脑图页自身的结构骨架", prompt)
+        self.assertIn("不要只复述第一页", prompt)
 
     def test_trim_pdf_extracted_text_prefers_structure_title_or_prompt_anchor(self):
         extracted_text = (
@@ -719,13 +743,11 @@ class MindMapImportServiceTests(unittest.TestCase):
     @patch("memory_anki.modules.palaces.application.mindmap_import_service.DASHSCOPE_API_KEY", "test-key")
     @patch("memory_anki.modules.palaces.application.mindmap_import_service.render_selected_pdf_pages")
     @patch("memory_anki.modules.palaces.application.mindmap_import_service._call_dashscope_text_with_images")
-    @patch("memory_anki.modules.palaces.application.mindmap_import_service._call_dashscope_batch_json")
-    @patch("memory_anki.modules.palaces.application.mindmap_import_service._call_dashscope_json")
-    def test_generate_pdf_import_preview_uses_trimmed_ocr_grounding_for_multi_page_pdf(
+    @patch("memory_anki.modules.palaces.application.mindmap_import_service._call_dashscope_pdf_json")
+    def test_generate_pdf_import_preview_passes_selected_pages_and_range_prompt_to_direct_call(
         self,
-        mock_call_json,
-        mock_call_batch_json,
-        mock_call_dashscope_text_with_images,
+        mock_call_pdf_json,
+        mock_call_text_with_images,
         mock_render_selected_pdf_pages,
     ):
         document = SubjectDocument(
@@ -735,26 +757,17 @@ class MindMapImportServiceTests(unittest.TestCase):
             original_name="demo.pdf",
             mime_type="application/pdf",
             file_size=123,
-            page_count=8,
+            page_count=40,
         )
         mock_render_selected_pdf_pages.return_value = [
             (4, b"page-4", "page-4.png"),
             (5, b"page-5", "page-5.png"),
         ]
-        mock_call_json.return_value = {
-            "title": "第二节 古希腊的教育阶段",
-            "children": [{"text": "荷马时期", "children": []}],
-        }
-        mock_call_batch_json.return_value = {
+        mock_call_text_with_images.return_value = "第二节 古希腊的教育阶段\n荷马时期\n正文细节"
+        mock_call_pdf_json.return_value = {
             "title": "第二节 古希腊的教育阶段",
             "children": [{"text": "荷马时期", "children": [{"text": "非制度化", "children": []}]}],
         }
-        mock_call_dashscope_text_with_images.return_value = (
-            "知识点五 东方文明古国教育发展的特点\n"
-            "第二节 古希腊的教育阶段\n"
-            "荷马时期\n"
-            "非制度化"
-        )
 
         result = generate_pdf_import_preview(
             document=document,
@@ -762,27 +775,197 @@ class MindMapImportServiceTests(unittest.TestCase):
             structure_page=4,
             range_prompt="古希腊",
             fallback_title="未命名宫殿",
-            import_options=PdfImportOptions(strict_restore=True),
+            import_options=PdfImportOptions(),
         )
 
-        self.assertEqual(mock_call_batch_json.call_count, 1)
-        self.assertEqual(
-            mock_call_batch_json.call_args.kwargs["extracted_text"],
-            "第二节 古希腊的教育阶段\n荷马时期\n非制度化",
-        )
+        self.assertEqual(mock_call_pdf_json.call_count, 1)
+        self.assertEqual(mock_call_pdf_json.call_args.kwargs["page_numbers"], [4, 5])
+        self.assertEqual(mock_call_pdf_json.call_args.kwargs["range_prompt"], "古希腊")
+        self.assertEqual(mock_call_pdf_json.call_args.kwargs["extracted_text"], "第二节 古希腊的教育阶段\n荷马时期\n正文细节")
         self.assertEqual(result.source_tree["children"][0]["children"][0]["text"], "非制度化")
         self.assertFalse(result.warnings)
+        self.assertTrue(result.ocr_grounding_used)
+        self.assertGreater(result.ocr_text_chars or 0, 0)
 
     @patch("memory_anki.modules.palaces.application.mindmap_import_service.DASHSCOPE_API_KEY", "test-key")
     @patch("memory_anki.modules.palaces.application.mindmap_import_service.render_selected_pdf_pages")
     @patch("memory_anki.modules.palaces.application.mindmap_import_service._call_dashscope_text_with_images")
-    @patch("memory_anki.modules.palaces.application.mindmap_import_service._call_dashscope_batch_json")
-    @patch("memory_anki.modules.palaces.application.mindmap_import_service._call_dashscope_json")
-    def test_generate_pdf_import_preview_keeps_image_batch_when_ocr_text_unavailable(
+    @patch("memory_anki.modules.palaces.application.mindmap_import_service._call_dashscope_pdf_json")
+    def test_generate_pdf_import_preview_returns_direct_generation_without_ocr_warning(
         self,
-        mock_call_json,
-        mock_call_batch_json,
-        mock_call_dashscope_text_with_images,
+        mock_call_pdf_json,
+        mock_call_text_with_images,
+        mock_render_selected_pdf_pages,
+    ):
+        document = SubjectDocument(
+            id=3,
+            subject_id=2,
+            filename="subjects/2/demo.pdf",
+            original_name="demo.pdf",
+            mime_type="application/pdf",
+            file_size=123,
+            page_count=40,
+        )
+        mock_render_selected_pdf_pages.return_value = [
+            (4, b"page-4", "page-4.png"),
+            (5, b"page-5", "page-5.png"),
+        ]
+        mock_call_text_with_images.return_value = "原节点\n正文细节"
+        primary_tree = {
+            "title": "结构",
+            "children": [{"text": "原节点", "children": []}],
+        }
+        mock_call_pdf_json.return_value = primary_tree
+
+        result = generate_pdf_import_preview(
+            document=document,
+            page_selection=[4, 5],
+            structure_page=4,
+            range_prompt="原节点",
+            fallback_title="未命名宫殿",
+            import_options=PdfImportOptions(),
+        )
+
+        self.assertEqual(result.source_tree, primary_tree)
+        self.assertFalse(result.warnings)
+        self.assertEqual(result.match_mode, "direct_generation")
+        self.assertTrue(result.ocr_grounding_used)
+
+    @patch("memory_anki.modules.palaces.application.mindmap_import_service.DASHSCOPE_API_KEY", "test-key")
+    @patch("memory_anki.modules.palaces.application.mindmap_import_service.render_selected_pdf_pages")
+    @patch("memory_anki.modules.palaces.application.mindmap_import_service._call_dashscope_text_with_images")
+    @patch("memory_anki.modules.palaces.application.mindmap_import_service._call_dashscope_pdf_json")
+    def test_generate_pdf_import_preview_direct_generation_warns_when_ocr_fails(
+        self,
+        mock_call_pdf_json,
+        mock_call_text_with_images,
+        mock_render_selected_pdf_pages,
+    ):
+        document = SubjectDocument(
+            id=3,
+            subject_id=2,
+            filename="subjects/2/demo.pdf",
+            original_name="demo.pdf",
+            mime_type="application/pdf",
+            file_size=123,
+            page_count=40,
+        )
+        mock_render_selected_pdf_pages.return_value = [
+            (26, b"page-26", "page-26.png"),
+            (27, b"page-27", "page-27.png"),
+        ]
+        mock_call_text_with_images.side_effect = MindMapImportError("模型没有识别出可用文字。")
+        mock_call_pdf_json.return_value = {
+            "title": "第一节 古罗马的教育阶段",
+            "children": [{"text": "共和时期", "children": []}],
+        }
+
+        result = generate_pdf_import_preview(
+            document=document,
+            page_selection=[26, 27],
+            structure_page=None,
+            range_prompt="古罗马",
+            fallback_title="未命名宫殿",
+            import_options=PdfImportOptions(),
+        )
+
+        self.assertEqual(mock_call_pdf_json.call_args.kwargs["extracted_text"], None)
+        self.assertIn("正文补全可信度可能下降", result.warnings[0])
+        self.assertFalse(result.ocr_grounding_used)
+
+    @patch("memory_anki.modules.palaces.application.mindmap_import_service.DASHSCOPE_API_KEY", "test-key")
+    @patch("memory_anki.modules.palaces.application.mindmap_import_service._stream_call_dashscope_text")
+    def test_stream_text_preview_emits_status_delta_and_result(self, mock_stream_text):
+        def fake_stream(**_kwargs):
+            yield service.build_delta_event(
+                text="第一章",
+                accumulated_text="第一章",
+                channel="text",
+            )
+            yield service.build_delta_event(
+                text="\n第一节",
+                accumulated_text="第一章\n第一节",
+                channel="text",
+            )
+            return "第一章\n第一节"
+
+        mock_stream_text.side_effect = fake_stream
+
+        events = list(
+            service.stream_text_preview(
+                image_bytes=b"fake-image",
+                filename="demo.png",
+            )
+        )
+
+        self.assertEqual(
+            [event["event"] for event in events],
+            ["status", "status", "delta", "delta", "status", "result"],
+        )
+        self.assertEqual(events[0]["data"]["phase"], "validating")
+        self.assertEqual(events[1]["data"]["phase"], "calling_model")
+        self.assertEqual(events[4]["data"]["phase"], "normalizing_text")
+        self.assertEqual(events[-1]["data"]["extracted_text"], "第一章\n第一节")
+
+    @patch("memory_anki.modules.palaces.application.mindmap_import_service.DASHSCOPE_API_KEY", "test-key")
+    @patch("memory_anki.modules.palaces.application.mindmap_import_service._stream_call_dashscope_batch_json")
+    @patch("memory_anki.modules.palaces.application.mindmap_import_service._stream_call_dashscope_json")
+    def test_stream_batch_import_preview_emits_expected_phase_order(
+        self,
+        mock_stream_json,
+        mock_stream_batch_json,
+    ):
+        def fake_structure_stream(**_kwargs):
+            yield service.build_delta_event(
+                text='{"title":"第一章"',
+                accumulated_text='{"title":"第一章"',
+                channel="raw_model",
+            )
+            return {
+                "title": "第一章",
+                "children": [{"text": "总论", "children": []}],
+            }
+
+        def fake_batch_stream(**_kwargs):
+            yield service.build_delta_event(
+                text='{"children":[{"text":"总论"}]}',
+                accumulated_text='{"title":"第一章","children":[{"text":"总论"}]}',
+                channel="raw_model",
+            )
+            return {
+                "title": "第一章",
+                "children": [{"text": "总论", "children": [{"text": "补充", "children": []}]}],
+            }
+
+        mock_stream_json.side_effect = fake_structure_stream
+        mock_stream_batch_json.side_effect = fake_batch_stream
+
+        events = list(
+            service.stream_batch_import_preview(
+                image_items=[
+                    (b"struct", "structure.png"),
+                    (b"body", "body.png"),
+                ],
+                fallback_title="未命名宫殿",
+            )
+        )
+
+        self.assertEqual(
+            [event["data"]["phase"] for event in events if event["event"] == "status"],
+            ["validating_images", "extracting_structure", "enhancing_with_body", "building_preview"],
+        )
+        self.assertEqual(events[-1]["event"], "result")
+        self.assertEqual(events[-1]["data"]["source_tree"]["title"], "第一章")
+        self.assertEqual(events[-1]["data"]["image_count"], 2)
+
+    @patch("memory_anki.modules.palaces.application.mindmap_import_service.DASHSCOPE_API_KEY", "test-key")
+    @patch("memory_anki.modules.palaces.application.mindmap_import_service.render_selected_pdf_pages")
+    @patch("memory_anki.modules.palaces.application.mindmap_import_service._stream_call_dashscope_text")
+    @patch("memory_anki.modules.palaces.application.mindmap_import_service._stream_call_dashscope_pdf_json")
+    def test_stream_pdf_import_preview_emits_direct_generation_phases(
+        self,
+        mock_stream_pdf_json,
+        mock_stream_text,
         mock_render_selected_pdf_pages,
     ):
         document = SubjectDocument(
@@ -798,30 +981,64 @@ class MindMapImportServiceTests(unittest.TestCase):
             (4, b"page-4", "page-4.png"),
             (5, b"page-5", "page-5.png"),
         ]
-        mock_call_json.return_value = {
-            "title": "结构",
-            "children": [{"text": "原节点", "children": []}],
-        }
-        primary_tree = {
-            "title": "结构",
-            "children": [{"text": "原节点", "children": []}],
-        }
-        mock_call_batch_json.return_value = primary_tree
-        mock_call_dashscope_text_with_images.side_effect = MindMapImportError("OCR unavailable")
 
-        result = generate_pdf_import_preview(
-            document=document,
-            page_selection=[4, 5],
-            structure_page=4,
-            range_prompt="原节点",
-            fallback_title="未命名宫殿",
-            import_options=PdfImportOptions(strict_restore=True),
+        def fake_text_stream(**_kwargs):
+            if False:
+                yield None
+            return "原节点\n正文细节"
+
+        mock_stream_text.return_value = fake_text_stream()
+
+        def fake_pdf_stream(**_kwargs):
+            yield service.build_delta_event(
+                text='{"children":[{"text":"原节点"}]}',
+                accumulated_text='{"title":"结构","children":[{"text":"原节点"}]}',
+                channel="raw_model",
+            )
+            return {
+                "title": "结构",
+                "children": [{"text": "原节点", "children": []}],
+            }
+
+        mock_stream_pdf_json.side_effect = fake_pdf_stream
+
+        events = list(
+            service.stream_pdf_import_preview(
+                document=document,
+                page_selection=[4, 5],
+                structure_page=4,
+                range_prompt="原节点",
+                fallback_title="未命名宫殿",
+                import_options=PdfImportOptions(),
+            )
         )
 
-        self.assertEqual(result.source_tree, primary_tree)
-        self.assertTrue(result.warnings)
-        self.assertIn("未获得稳定的 OCR 正文", result.warnings[0])
-        self.assertIsNone(mock_call_batch_json.call_args.kwargs["extracted_text"])
+        self.assertEqual(
+            [event["data"]["phase"] for event in events if event["event"] == "status"],
+            [
+                "rendering_pages",
+                "ocr",
+                "generating_mindmap",
+                "building_preview",
+            ],
+        )
+        self.assertEqual(events[-1]["event"], "result")
+        self.assertFalse(events[-1]["data"]["warnings"])
+
+    @patch("memory_anki.modules.palaces.application.mindmap_import_service.DASHSCOPE_API_KEY", "test-key")
+    @patch("memory_anki.modules.palaces.application.mindmap_import_service._stream_call_dashscope_json")
+    def test_stream_import_preview_emits_error_event_on_upstream_failure(self, mock_stream_json):
+        mock_stream_json.side_effect = MindMapImportError("模型返回内容格式异常。")
+
+        events = list(
+            service.stream_import_preview(
+                image_bytes=b"fake-image",
+                filename="demo.png",
+                fallback_title="未命名宫殿",
+            )
+        )
+
+        self.assertEqual(events[-1], {"event": "error", "data": {"error": "模型返回内容格式异常。"}})
 
 
 if __name__ == "__main__":

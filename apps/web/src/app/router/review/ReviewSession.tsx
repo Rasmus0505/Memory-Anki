@@ -1,9 +1,11 @@
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { ArrowLeft, FileText } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   buildAttachmentUrl,
   getPalaceEditorApi,
+  savePalaceEditorApi,
+  savePalaceEditorWithOptionsApi,
 } from '@/shared/api/modules/palaces'
 import {
   clearReviewSessionProgressApi,
@@ -12,7 +14,7 @@ import {
   saveReviewSessionProgressApi,
   submitReviewSessionApi,
 } from '@/shared/api/modules/reviews'
-import type { MindMapEditorState, ReviewScheduleSummary } from '@/shared/api/contracts'
+import type { ReviewScheduleSummary } from '@/shared/api/contracts'
 import { PageIntro } from '@/shared/components/layout/PageIntro'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
@@ -22,6 +24,9 @@ import {
   type ReviewFlowSnapshot,
 } from '@/features/review/components/MindMapReviewFlow'
 import { StageSelectDialog } from '@/features/review/components/StageSelectDialog'
+import { usePersistedMindMapEditor } from '@/shared/hooks/usePersistedMindMapEditor'
+
+type ReviewDisplayMode = 'review' | 'edit'
 
 function formatReviewStage(reviewType: string, reviewNumber: number) {
   if (reviewType === '1h') return '首日 1 小时'
@@ -39,10 +44,11 @@ export default function ReviewSession() {
   const chapterIdParam = searchParams.get('chapterId')
   const chapterId = chapterIdParam ? Number(chapterIdParam) : null
   const [session, setSession] = useState<ReviewScheduleSummary | null>(null)
-  const [editorState, setEditorState] = useState<MindMapEditorState | null>(null)
   const [initialSnapshot, setInitialSnapshot] = useState<ReviewFlowSnapshot | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [mindMapFullscreen, setMindMapFullscreen] = useState(false)
+  const [displayMode, setDisplayMode] = useState<ReviewDisplayMode>('review')
+  const [modeSyncVersion, setModeSyncVersion] = useState(0)
   const [stageDialogOpen, setStageDialogOpen] = useState(false)
   const [pendingPayload, setPendingPayload] = useState<{
     durationSeconds: number
@@ -50,39 +56,93 @@ export default function ReviewSession() {
     revealedRemaining: boolean
     redNodeIds: string[]
   } | null>(null)
+  const editorReloadRef = useRef<() => Promise<void>>(async () => {})
+  const modeTransitioningRef = useRef(false)
+  const activePalaceId = session?.palace_id ?? null
+
+  const {
+    meta: editorPalace,
+    editorState,
+    setEditorState,
+    isLoading: editorLoading,
+    isSaving: editorSaving,
+    error: editorError,
+    reload: reloadEditor,
+    flushSave,
+  } = usePersistedMindMapEditor({
+    entityId: activePalaceId,
+    fetcher: getPalaceEditorApi,
+    saver: savePalaceEditorApi,
+    selectMeta: (response) => response.palace as ReviewScheduleSummary['palace'],
+    selectEditorState: (response) => ({
+      editor_doc: response.editor_doc,
+      editor_config: response.editor_config,
+      editor_local_config: response.editor_local_config,
+      lang: response.lang,
+    }),
+    onSaveError: async (nextError, pendingState) => {
+      if (!activePalaceId || !nextError.message.includes('危险结构变更')) return false
+      const confirmed = window.confirm(
+        '这次保存会让宫殿节点数量骤减。只有在你确实要大幅删除宫殿结构时才继续。确定继续保存吗？',
+      )
+      if (!confirmed) return true
+      await savePalaceEditorWithOptionsApi(activePalaceId, {
+        ...pendingState,
+        confirm_dangerous_change: true,
+        editor_source: 'palace_edit',
+      })
+      await editorReloadRef.current()
+      setModeSyncVersion((value) => value + 1)
+      return true
+    },
+  })
+
+  useEffect(() => {
+    editorReloadRef.current = reloadEditor
+  }, [reloadEditor])
 
   useEffect(() => {
     if (!id) return
+    let active = true
     const load = async () => {
-      const data = await getReviewSessionApi(Number(id))
+      const [data, progressResponse] = await Promise.all([
+        getReviewSessionApi(Number(id)),
+        getReviewSessionProgressApi(Number(id)),
+      ])
+      if (!active) return
       setSession(data)
-      if (data.palace_id) {
-        const [editor, progressResponse] = await Promise.all([
-          getPalaceEditorApi(data.palace_id),
-          getReviewSessionProgressApi(Number(id)),
-        ])
-        setEditorState({
-          editor_doc: editor.editor_doc,
-          editor_config: editor.editor_config,
-          editor_local_config: editor.editor_local_config,
-          lang: editor.lang,
-        })
-        const progress = progressResponse.progress
-        setInitialSnapshot(
-          progress && !progress.completed
-            ? {
-                revealMap: progress.reveal_map,
-                redNodeIds: progress.red_node_ids,
-                completed: progress.completed,
-              }
-            : null,
-        )
-      }
+      const progress = progressResponse.progress
+      setInitialSnapshot(
+        progress && !progress.completed
+          ? {
+              revealMap: progress.reveal_map,
+              redNodeIds: progress.red_node_ids,
+              completed: progress.completed,
+            }
+          : null,
+      )
+      setDisplayMode('review')
+      setModeSyncVersion(0)
     }
     void load()
+    return () => {
+      active = false
+    }
   }, [id])
 
-  const palace = session?.palace ?? null
+  const handleModeToggle = useCallback(async () => {
+    if (modeTransitioningRef.current) return
+    modeTransitioningRef.current = true
+    try {
+      if (displayMode === 'edit') {
+        await flushSave()
+      }
+      setDisplayMode((current) => (current === 'edit' ? 'review' : 'edit'))
+      setModeSyncVersion((current) => current + 1)
+    } finally {
+      modeTransitioningRef.current = false
+    }
+  }, [displayMode, flushSave])
 
   const submitCompletion = async (payload: {
     durationSeconds: number
@@ -91,6 +151,7 @@ export default function ReviewSession() {
     redNodeIds: string[]
   }) => {
     if (!session) return
+    await flushSave()
     await clearReviewSessionProgressApi(session.id)
     if (payload.completionMode === 'auto_complete') {
       setSubmitting(true)
@@ -116,6 +177,7 @@ export default function ReviewSession() {
     setStageDialogOpen(false)
     setSubmitting(true)
     try {
+      await flushSave()
       await submitReviewSessionApi(session.id, {
         chapter_id: chapterId ?? undefined,
         duration_seconds: pendingPayload.durationSeconds,
@@ -136,8 +198,18 @@ export default function ReviewSession() {
     setPendingPayload(null)
   }
 
-  if (!session || !palace || !editorState) {
+  const palace = session?.palace ?? editorPalace ?? null
+  const palaceTitle = palace?.title || '未命名宫殿'
+  const displayLoadError = !editorState ? editorError : null
+  const waitingForEditorState =
+    activePalaceId != null && !editorState && !displayLoadError
+
+  if (!session || editorLoading || waitingForEditorState) {
     return <div className="flex items-center justify-center py-32 text-sm text-muted-foreground">正在加载复习会话...</div>
+  }
+
+  if (!palace || !editorState || displayLoadError) {
+    return <div className="flex items-center justify-center py-32 text-sm text-destructive">{displayLoadError || '未找到可复习的宫殿。'}</div>
   }
 
   return (
@@ -145,7 +217,7 @@ export default function ReviewSession() {
       {!mindMapFullscreen ? (
         <PageIntro
           eyebrow="正式复习"
-          title={palace.title || '未命名宫殿'}
+          title={palaceTitle}
           compact
           actions={
             <>
@@ -155,6 +227,9 @@ export default function ReviewSession() {
                   返回复习队列
                 </Button>
               </Link>
+              <Badge variant={displayMode === 'edit' ? 'secondary' : 'outline'}>
+                {displayMode === 'edit' ? '内联编辑中' : '翻卡复习中'}
+              </Badge>
               <Badge variant="secondary">{session.algorithm_used}</Badge>
               <Badge variant="outline">{formatReviewStage(session.review_type, session.review_number)}</Badge>
             </>
@@ -164,11 +239,19 @@ export default function ReviewSession() {
 
       <div className="space-y-4">
         <MindMapReviewFlow
-          title={palace.title || '未命名宫殿'}
+          title={palaceTitle}
           palaceId={palace.id}
           sessionKind="review"
+          displayMode={displayMode}
+          modeSyncVersion={modeSyncVersion}
+          viewMemoryScope={`review-session:${session.id}:${displayMode}`}
+          persistKey={`review:${session.id}`}
           editorState={editorState}
+          onModeToggle={handleModeToggle}
+          onEditorStateChange={setEditorState}
           submitting={submitting}
+          editSaving={editorSaving}
+          editError={editorError}
           persistProgress
           initialSnapshot={initialSnapshot}
           onFullscreenChange={setMindMapFullscreen}
@@ -186,13 +269,13 @@ export default function ReviewSession() {
           onComplete={submitCompletion}
         />
 
-        {!mindMapFullscreen && palace.attachments.length > 0 ? (
+        {!mindMapFullscreen && session.palace?.attachments.length ? (
           <Card className="border-border/70 bg-card/92">
             <CardHeader>
               <CardTitle className="text-base">附件</CardTitle>
             </CardHeader>
             <CardContent className="space-y-2 text-sm">
-              {palace.attachments.map((attachment) => (
+              {session.palace.attachments.map((attachment) => (
                 <a
                   key={attachment.id}
                   href={buildAttachmentUrl(attachment.id)}
@@ -210,11 +293,11 @@ export default function ReviewSession() {
         ) : null}
       </div>
 
-      {palace?.stage_labels && palace?.review_stages && (
+      {session.palace?.stage_labels && session.palace?.review_stages && (
         <StageSelectDialog
           open={stageDialogOpen}
-          stageLabels={palace.stage_labels}
-          stages={palace.review_stages}
+          stageLabels={session.palace.stage_labels}
+          stages={session.palace.review_stages}
           currentReviewNumber={session.review_number}
           onConfirm={handleStageConfirmWithPractice}
           onCancel={handleStageCancel}

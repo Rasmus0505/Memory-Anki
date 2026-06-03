@@ -3,20 +3,29 @@ from sqlalchemy.orm import Session
 
 from memory_anki.infrastructure.db.models import (
     Chapter,
-    PalaceSegment,
     PalaceSegmentReviewSchedule,
     ReviewSchedule,
     get_session,
 )
-from memory_anki.modules.palaces.application.segment_service import (
+from memory_anki.modules.palaces.application.segment_nodes import (
     build_segments_editor_doc,
+)
+from memory_anki.modules.palaces.application.segment_review_service import (
     build_segment_editor_doc,
     palace_review_stages_json,
     segment_summary_json,
 )
 from memory_anki.modules.palaces.presentation.router import palace_json as palace_detail_json
-from memory_anki.modules.reviews.application.review_service import (
+from memory_anki.modules.reviews.application.review_execution_service import (
     build_batch_segment_review_session,
+    submit_batch_segment_review,
+    submit_review,
+    submit_segment_review,
+)
+from memory_anki.modules.reviews.application.review_metrics_service import (
+    get_weekly_stats,
+)
+from memory_anki.modules.reviews.application.review_queue_service import (
     get_chapter_queue_payload,
     get_next_due_review,
     get_next_due_segment_review,
@@ -25,12 +34,8 @@ from memory_anki.modules.reviews.application.review_service import (
     get_segment_chapter_queue_payload,
     get_segment_overdue_count,
     get_segment_review_queue_payload,
-    get_weekly_stats,
     segment_schedule_json,
     spread_overdue,
-    submit_batch_segment_review,
-    submit_review,
-    submit_segment_review,
 )
 from memory_anki.modules.reviews.application.schedule_service import (
     get_algorithm_stage_labels,

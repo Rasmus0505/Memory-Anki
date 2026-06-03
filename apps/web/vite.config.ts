@@ -13,6 +13,7 @@ const manualRefreshGuardScript = String.raw`
 
     const OriginalWebSocket = window.WebSocket
     const suppressedTypes = new Set(['update', 'full-reload'])
+    const suppressedCustomEvents = new Set(['vite:ws:disconnect'])
 
     function isViteHmrSocket(protocols) {
       if (Array.isArray(protocols)) return protocols.includes('vite-hmr')
@@ -23,10 +24,18 @@ const manualRefreshGuardScript = String.raw`
       if (typeof data !== 'string') return false
       try {
         const payload = JSON.parse(data)
-        return payload && suppressedTypes.has(payload.type)
+        return Boolean(
+          payload &&
+            (suppressedTypes.has(payload.type) ||
+              (payload.type === 'custom' && suppressedCustomEvents.has(payload.event))),
+        )
       } catch {
         return false
       }
+    }
+
+    function logSuppressedUpdate() {
+      console.info('[memory-anki] Vite auto update suppressed. Refresh the page manually to load latest changes.')
     }
 
     window.WebSocket = function MemoryAnkiWebSocket(url, protocols) {
@@ -48,7 +57,7 @@ const manualRefreshGuardScript = String.raw`
           type,
           (event) => {
             if (shouldSuppressMessage(event?.data)) {
-              console.info('[memory-anki] Vite auto update suppressed. Refresh the page manually to load latest changes.')
+              logSuppressedUpdate()
               return
             }
             return listener.call(this, event)
@@ -56,6 +65,27 @@ const manualRefreshGuardScript = String.raw`
           options,
         )
       }
+
+      Object.defineProperty(socket, 'onmessage', {
+        configurable: true,
+        enumerable: true,
+        get() {
+          return this.__memoryAnkiOnMessage || null
+        },
+        set(listener) {
+          this.__memoryAnkiOnMessage = typeof listener === 'function' ? listener : null
+          if (typeof listener !== 'function') {
+            return
+          }
+          return originalAddEventListener('message', (event) => {
+            if (shouldSuppressMessage(event?.data)) {
+              logSuppressedUpdate()
+              return
+            }
+            return listener.call(this, event)
+          })
+        },
+      })
 
       return socket
     }

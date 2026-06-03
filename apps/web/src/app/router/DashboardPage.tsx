@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowRight, BookOpen, Clock3, Plus, Sparkles, Timer, TrendingUp } from 'lucide-react'
-import type { DashboardResponse } from '@/shared/api/contracts'
+import type { DashboardQuery, DashboardResponse } from '@/shared/api/contracts'
 import { TimeRecordDialog } from '@/features/profile/components/TimeRecordDialog'
 import { TimeRecordsBreakdownChart } from '@/features/profile/components/TimeRecordsBreakdownChart'
 import { TimeRecordsTable } from '@/features/profile/components/TimeRecordsTable'
@@ -12,6 +12,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui
 import { Button } from '@/shared/components/ui/button'
 import { formatDuration } from '@/entities/session/model'
 import { getDashboardApi } from '@/shared/api/modules/dashboard'
+import { useLocalStorageState } from '@/shared/lib/localStorage'
 import { cn } from '@/shared/lib/utils'
 
 function formatReviewStage(reviewType: string, reviewNumber: number) {
@@ -65,12 +66,86 @@ function buildLearningSegments(item: DashboardResponse['today_learning_palaces']
   })
 }
 
+type DurationFilterMode = 'month' | 'range' | 'all'
+
+interface DashboardDurationFilterState {
+  mode: DurationFilterMode
+  month: string
+  startDate: string
+  endDate: string
+}
+
+const DASHBOARD_TOTAL_DURATION_FILTER_STORAGE_KEY = 'memory_anki_dashboard_total_duration_filter'
+
+function getCurrentMonthValue(reference = new Date()) {
+  const year = reference.getFullYear()
+  const month = `${reference.getMonth() + 1}`.padStart(2, '0')
+  return `${year}-${month}`
+}
+
+function createDefaultDurationFilterState(reference = new Date()): DashboardDurationFilterState {
+  return {
+    mode: 'month',
+    month: getCurrentMonthValue(reference),
+    startDate: '',
+    endDate: '',
+  }
+}
+
+function isDashboardDurationFilterState(value: unknown): value is DashboardDurationFilterState {
+  if (!value || typeof value !== 'object') return false
+  const candidate = value as Partial<DashboardDurationFilterState>
+  if (candidate.mode !== 'month' && candidate.mode !== 'range' && candidate.mode !== 'all') return false
+  if (typeof candidate.month !== 'string') return false
+  if (typeof candidate.startDate !== 'string') return false
+  if (typeof candidate.endDate !== 'string') return false
+  return true
+}
+
+function isDefaultDurationFilterState(filter: DashboardDurationFilterState) {
+  return (
+    filter.mode === 'month' &&
+    filter.month === getCurrentMonthValue() &&
+    filter.startDate === '' &&
+    filter.endDate === ''
+  )
+}
+
+function formatSelectedDurationLabel(mode: DurationFilterMode, month: string, startDate: string, endDate: string) {
+  if (mode === 'month') return month || '当前月份'
+  if (mode === 'all') return '全部'
+  if (startDate && endDate) return `${startDate} 至 ${endDate}`
+  if (startDate) return `${startDate} 至`
+  if (endDate) return `至 ${endDate}`
+  return '请选择时间范围'
+}
+
 export default function Dashboard() {
   const [data, setData] = useState<DashboardResponse | null>(null)
   const [hoveredLearningPalaceId, setHoveredLearningPalaceId] = useState<number | null>(null)
+  const [durationFilter, setDurationFilter] = useLocalStorageState<DashboardDurationFilterState>(
+    DASHBOARD_TOTAL_DURATION_FILTER_STORAGE_KEY,
+    createDefaultDurationFilterState(),
+    isDashboardDurationFilterState,
+  )
+  const { mode: durationMode, month: selectedMonth, startDate: rangeStartDate, endDate: rangeEndDate } = durationFilter
+  const hasInitializedSelectedDurationRef = useRef(false)
+  const [hasLoadedDashboard, setHasLoadedDashboard] = useState(false)
   const loadDashboard = useCallback(async () => {
     const dashboard = await getDashboardApi()
     setData(dashboard)
+    setHasLoadedDashboard(true)
+  }, [])
+
+  const loadSelectedDuration = useCallback(async (query: DashboardQuery) => {
+    const dashboard = await getDashboardApi(query)
+    setData((current) => {
+      if (!current) return dashboard
+      return {
+        ...current,
+        selected_total_review_duration_seconds: dashboard.selected_total_review_duration_seconds,
+      }
+    })
   }, [])
   const timeRecordsDashboard = useTimeRecordsDashboard({
     onRecordsChanged: loadDashboard,
@@ -80,9 +155,43 @@ export default function Dashboard() {
     void loadDashboard()
   }, [loadDashboard])
 
+  useEffect(() => {
+    if (!hasLoadedDashboard) return
+    if (!hasInitializedSelectedDurationRef.current) {
+      hasInitializedSelectedDurationRef.current = true
+      if (isDefaultDurationFilterState(durationFilter)) {
+        return
+      }
+    }
+    if (durationMode === 'month') {
+      if (!selectedMonth) return
+      void loadSelectedDuration({
+        duration_mode: 'month',
+        month: selectedMonth,
+      })
+      return
+    }
+    if (durationMode === 'all') {
+      void loadSelectedDuration({
+        duration_mode: 'all',
+      })
+      return
+    }
+    if (!rangeStartDate || !rangeEndDate) return
+    if (rangeStartDate > rangeEndDate) return
+    void loadSelectedDuration({
+      duration_mode: 'range',
+      start_date: rangeStartDate,
+      end_date: rangeEndDate,
+    })
+  }, [durationMode, durationFilter, hasLoadedDashboard, loadSelectedDuration, rangeEndDate, rangeStartDate, selectedMonth])
+
   if (!data) {
     return <div className="flex items-center justify-center py-32 text-sm text-muted-foreground">正在加载仪表盘...</div>
   }
+
+  const selectedDurationLabel = formatSelectedDurationLabel(durationMode, selectedMonth, rangeStartDate, rangeEndDate)
+  const isRangeInvalid = Boolean(rangeStartDate && rangeEndDate && rangeStartDate > rangeEndDate)
 
   const statCards: Array<{
     label: string
@@ -92,6 +201,7 @@ export default function Dashboard() {
     link?: string
     linkText?: string
     subtitle?: string
+    extra?: React.ReactNode
   }> = [
     {
       label: '今日到期',
@@ -114,10 +224,70 @@ export default function Dashboard() {
       color: '',
     },
     {
-      label: '本周复习时长',
-      value: formatDuration(data.weekly_formal_review_duration_seconds),
+      label: '总时长',
+      value: formatDuration(data.selected_total_review_duration_seconds),
       icon: Timer,
       color: '',
+      subtitle: selectedDurationLabel,
+      extra: (
+          <div className="mt-3 space-y-2">
+            <div className="flex gap-2">
+              <Button
+                size="sm"
+                variant={durationMode === 'month' ? 'default' : 'outline'}
+              className="h-7 px-2"
+              onClick={() => setDurationFilter((current) => ({ ...current, mode: 'month' }))}
+            >
+              月份
+            </Button>
+            <Button
+              size="sm"
+              variant={durationMode === 'range' ? 'default' : 'outline'}
+              className="h-7 px-2"
+              onClick={() => setDurationFilter((current) => ({ ...current, mode: 'range' }))}
+              >
+                自定义范围
+              </Button>
+              <Button
+                size="sm"
+                variant={durationMode === 'all' ? 'default' : 'outline'}
+                className="h-7 px-2"
+                onClick={() => setDurationFilter((current) => ({ ...current, mode: 'all' }))}
+              >
+                显示全部
+              </Button>
+            </div>
+          {durationMode === 'month' ? (
+            <input
+              aria-label="选择月份"
+              className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs"
+              type="month"
+              value={selectedMonth}
+              onChange={(event) => setDurationFilter((current) => ({ ...current, month: event.target.value }))}
+            />
+          ) : durationMode === 'range' ? (
+            <div className="space-y-2">
+              <input
+                aria-label="开始日期"
+                className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs"
+                type="date"
+                value={rangeStartDate}
+                onChange={(event) => setDurationFilter((current) => ({ ...current, startDate: event.target.value }))}
+              />
+              <input
+                aria-label="结束日期"
+                className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs"
+                type="date"
+                value={rangeEndDate}
+                onChange={(event) => setDurationFilter((current) => ({ ...current, endDate: event.target.value }))}
+              />
+              {isRangeInvalid ? (
+                <p className="text-[11px] text-destructive">开始日期不能晚于结束日期。</p>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
+      ),
     },
   ]
 
@@ -128,7 +298,7 @@ export default function Dashboard() {
       </div>
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-        {statCards.map(({ label, value, icon: Icon, color, link, linkText, subtitle }) => (
+        {statCards.map(({ label, value, icon: Icon, color, link, linkText, subtitle, extra }) => (
           <Card key={label}>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">{label}</CardTitle>
@@ -144,6 +314,7 @@ export default function Dashboard() {
               ) : subtitle ? (
                 <p className="mt-2 text-xs text-muted-foreground">{subtitle}</p>
               ) : null}
+              {extra}
             </CardContent>
           </Card>
         ))}

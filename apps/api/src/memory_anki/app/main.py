@@ -1,7 +1,8 @@
+import os
 from contextlib import asynccontextmanager
 from datetime import date, datetime, time, timedelta
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
@@ -12,6 +13,13 @@ from memory_anki.core.migration import (
     ensure_legacy_repo_data_migrated,
     is_app_migration_completed,
     mark_app_migration_completed,
+)
+from memory_anki.core.request_logging import RequestLoggingMiddleware
+from memory_anki.core.runtime import (
+    assert_runtime_compatible,
+    build_runtime_info,
+    load_runtime_contract,
+    record_runtime_start,
 )
 from memory_anki.infrastructure.db.models import Config, get_session, init_db
 from memory_anki.modules.backups.application.backup_service import (
@@ -29,6 +37,9 @@ from memory_anki.modules.knowledge.application.subject_document_service import (
 from memory_anki.modules.knowledge.presentation import bilink_router
 from memory_anki.modules.knowledge.presentation import router as knowledge_router
 from memory_anki.modules.mindmap.application.editor_state_service import ensure_editor_schema
+from memory_anki.modules.palaces.application.mindmap_import_job_service import (
+    ensure_mindmap_import_job_schema,
+)
 from memory_anki.modules.palaces.application.segment_service import ensure_segment_schema
 from memory_anki.modules.palaces.application.title_sync_service import (
     build_today_new_palace_outline,
@@ -36,13 +47,19 @@ from memory_anki.modules.palaces.application.title_sync_service import (
 )
 from memory_anki.modules.palaces.presentation import import_router
 from memory_anki.modules.palaces.presentation import router as palace_router
+from memory_anki.modules.reviews.application.review_execution_service import (
+    repair_review_stage_progress,
+)
+from memory_anki.modules.reviews.application.review_metrics_service import (
+    get_weekly_stats,
+)
+from memory_anki.modules.reviews.application.review_queue_service import (
+    get_today_review_groups,
+)
 from memory_anki.modules.reviews.application.schedule_service import (
     ensure_review_schedule_schema,
     migrate_sm2_to_ebbinghaus,
     normalize_algorithm,
-)
-from memory_anki.modules.reviews.application.review_service import (
-    repair_review_stage_progress,
 )
 from memory_anki.modules.reviews.presentation import router as review_router
 from memory_anki.modules.sessions.application.session_progress_service import (
@@ -51,13 +68,18 @@ from memory_anki.modules.sessions.application.session_progress_service import (
 from memory_anki.modules.sessions.presentation import router as sessions_router
 from memory_anki.modules.settings.presentation import router as settings_router
 from memory_anki.modules.time_records.application.time_records_service import (
-    get_today_formal_review_duration_seconds,
+    date_range_bounds,
     ensure_review_log_time_records,
+    get_all_time_total_review_duration_seconds,
+    get_monthly_total_review_duration_seconds,
+    get_selected_total_review_duration_seconds,
+    get_today_formal_review_duration_seconds,
     get_today_palace_learning_breakdown,
     get_today_total_review_duration_seconds,
-    normalize_time_record_event_timezones,
     get_weekly_formal_review_duration_seconds,
     get_weekly_total_review_duration_seconds,
+    month_bounds,
+    normalize_time_record_event_timezones,
 )
 from memory_anki.modules.time_records.presentation import router as time_records_router
 
@@ -80,12 +102,17 @@ def run_review_schedule_repair_migration(session: Session):
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     configure_logging()
+    runtime_contract = load_runtime_contract()
+    shared_state = assert_runtime_compatible(runtime_contract)
+    app.state.runtime_contract = runtime_contract
+    app.state.runtime_info = build_runtime_info(runtime_contract, shared_state)
     ensure_legacy_repo_data_migrated()
     init_db()
     ensure_editor_schema()
     ensure_bilink_schema()
     ensure_subject_document_schema()
     ensure_segment_schema()
+    ensure_mindmap_import_job_schema()
     ensure_palace_group_schema()
     ensure_review_schedule_schema()
     ensure_session_progress_schema()
@@ -105,6 +132,12 @@ async def lifespan(app: FastAPI):
         run_review_schedule_repair_migration(session)
         ensure_daily_backup()
         maybe_create_periodic_backup()
+        started_state = record_runtime_start(
+            runtime_contract,
+            channel=os.environ.get("MEMORY_ANKI_CHANNEL") or "dev",
+            commit=os.environ.get("MEMORY_ANKI_GIT_COMMIT"),
+        )
+        app.state.runtime_info = build_runtime_info(runtime_contract, started_state)
     finally:
         session.close()
     start_periodic_backup_loop()
@@ -127,6 +160,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.add_middleware(RequestLoggingMiddleware)
 
 app.mount("/api/attachments", StaticFiles(directory=str(ATTACHMENTS_DIR)), name="attachments")
 
@@ -141,14 +175,15 @@ app.include_router(time_records_router.router, prefix="/api/v1")
 
 
 @app.get("/api/v1/dashboard")
-def api_dashboard():
+def api_dashboard(
+    duration_mode: str | None = Query(default=None),
+    month: str | None = Query(default=None),
+    start_date: str | None = Query(default=None),
+    end_date: str | None = Query(default=None),
+):
     session = get_session()
     try:
         from memory_anki.infrastructure.db.models import Palace
-        from memory_anki.modules.reviews.application.review_service import (
-            get_today_review_groups,
-            get_weekly_stats,
-        )
 
         reviews = get_today_review_groups(session)
         today_start = datetime.combine(date.today(), time.min)
@@ -176,8 +211,45 @@ def api_dashboard():
 
         today_total_review_duration_seconds = get_today_total_review_duration_seconds(session)
         today_review_duration_seconds = get_today_formal_review_duration_seconds(session)
+        monthly_total_review_duration_seconds = get_monthly_total_review_duration_seconds(session)
         weekly_formal_review_duration_seconds = get_weekly_formal_review_duration_seconds(session)
         weekly_total_review_duration_seconds = get_weekly_total_review_duration_seconds(session)
+        selected_total_review_duration_seconds = monthly_total_review_duration_seconds
+
+        if duration_mode is not None:
+            if duration_mode == "month":
+                if not month:
+                    raise HTTPException(status_code=400, detail="month 为必填，格式必须是 YYYY-MM。")
+                try:
+                    selected_month = date.fromisoformat(f"{month}-01")
+                except ValueError as error:
+                    raise HTTPException(status_code=400, detail="month 格式必须是 YYYY-MM。") from error
+                selected_start, selected_end = month_bounds(selected_month)
+                selected_total_review_duration_seconds = get_selected_total_review_duration_seconds(
+                    session,
+                    start=selected_start,
+                    end=selected_end,
+                )
+            elif duration_mode == "range":
+                if not start_date or not end_date:
+                    raise HTTPException(status_code=400, detail="start_date 和 end_date 为必填，格式必须是 YYYY-MM-DD。")
+                try:
+                    selected_start_date = date.fromisoformat(start_date)
+                    selected_end_date = date.fromisoformat(end_date)
+                except ValueError as error:
+                    raise HTTPException(status_code=400, detail="start_date 和 end_date 格式必须是 YYYY-MM-DD。") from error
+                if selected_start_date > selected_end_date:
+                    raise HTTPException(status_code=400, detail="开始日期不能晚于结束日期。")
+                selected_start, selected_end = date_range_bounds(selected_start_date, selected_end_date)
+                selected_total_review_duration_seconds = get_selected_total_review_duration_seconds(
+                    session,
+                    start=selected_start,
+                    end=selected_end,
+                )
+            elif duration_mode == "all":
+                selected_total_review_duration_seconds = get_all_time_total_review_duration_seconds(session)
+            else:
+                raise HTTPException(status_code=400, detail="duration_mode 仅支持 month、range 或 all。")
 
         return {
             "due_count": len(reviews),
@@ -201,6 +273,8 @@ def api_dashboard():
             "today_review_duration_seconds": today_review_duration_seconds,
             "weekly_review_duration_seconds": weekly_formal_review_duration_seconds,
             "today_total_review_duration_seconds": today_total_review_duration_seconds,
+            "monthly_total_review_duration_seconds": monthly_total_review_duration_seconds,
+            "selected_total_review_duration_seconds": selected_total_review_duration_seconds,
             "weekly_total_review_duration_seconds": weekly_total_review_duration_seconds,
             "weekly_formal_review_duration_seconds": weekly_formal_review_duration_seconds,
             "recent_palaces": [palace_out(palace) for palace in recent],

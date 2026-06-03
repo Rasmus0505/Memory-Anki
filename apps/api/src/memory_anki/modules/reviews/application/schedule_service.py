@@ -1,20 +1,31 @@
 """Review schedule policies."""
 
-from datetime import date, datetime, time, timedelta
+from datetime import date, datetime
 from typing import Any
 
-
-def normalize_algorithm(algorithm: str | None) -> str:
-    if algorithm == "custom":
-        return "custom"
-    return "ebbinghaus"
+from .schedule_policy import (
+    build_review_schedule_draft,
+    create_review_schedule_from_draft,
+    get_algorithm_intervals_for_policy,
+    get_initial_same_day_slot_count_for_policy,
+    load_review_schedule_policy,
+    normalize_algorithm,
+    resolve_interval,
+    resolve_interval_from_base_datetime_for_policy,
+    schedule_display_datetime_for_policy,
+)
+from .schedule_rebuild_service import (
+    rebuild_all_pending_review_schedules,
+    rebuild_palace_review_schedules,
+)
 
 
 def get_config_value(session, key: str) -> str:
     from memory_anki.core.config import DEFAULTS
     from memory_anki.infrastructure.db.models import Config
 
-    row = session.query(Config).filter_by(key=key).first()
+    with session.no_autoflush:
+        row = session.query(Config).filter_by(key=key).first()
     if row:
         if key == "default_algorithm":
             return normalize_algorithm(row.value)
@@ -23,48 +34,21 @@ def get_config_value(session, key: str) -> str:
 
 
 def ebbinghaus_intervals(session) -> list[str]:
-    raw = get_config_value(session, "ebbinghaus_intervals")
-    return [item.strip() for item in raw.split(",") if item.strip()]
+    return get_algorithm_intervals_for_policy(
+        load_review_schedule_policy(session),
+        "ebbinghaus",
+    )
 
 
 def custom_intervals(session) -> list[str]:
-    raw = get_config_value(session, "custom_intervals")
-    return [item.strip() for item in raw.split(",") if item.strip() and item.strip().isdigit()]
+    return get_algorithm_intervals_for_policy(
+        load_review_schedule_policy(session),
+        "custom",
+    )
 
 
 def use_anchor(session) -> bool:
-    return get_config_value(session, "early_review_anchor") == "true"
-
-
-def resolve_interval(value: str, anchor_date: date | None, algorithm: str) -> tuple[int, date, str, str]:
-    today = date.today()
-    if value == "1h":
-        return 0, today, "1h", algorithm
-    if value == "sleep":
-        return 0, today, "sleep", algorithm
-
-    days = int(value)
-    base = anchor_date or today
-    return days, base + timedelta(days=days), "standard", algorithm
-
-
-def resolve_interval_from_base_date(value: str, base_date: date, algorithm: str) -> tuple[int, date, str, str]:
-    normalized_algorithm = normalize_algorithm(algorithm)
-    if value == "1h":
-        return 0, base_date, "1h", normalized_algorithm
-    if value == "sleep":
-        return 0, base_date, "sleep", normalized_algorithm
-    days = int(value)
-    return days, base_date + timedelta(days=days), "standard", normalized_algorithm
-
-
-def _sleep_review_time(session) -> time:
-    raw_sleep_time = get_config_value(session, "sleep_review_time") or "22:00"
-    try:
-        hour_str, minute_str = raw_sleep_time.split(":", 1)
-        return time(int(hour_str), int(minute_str))
-    except (ValueError, TypeError):
-        return time(22, 0)
+    return load_review_schedule_policy(session).early_review_anchor
 
 
 def resolve_interval_from_base_datetime(
@@ -73,25 +57,19 @@ def resolve_interval_from_base_datetime(
     base_datetime: datetime,
     algorithm: str,
 ) -> tuple[int, datetime, str, str]:
-    normalized_algorithm = normalize_algorithm(algorithm)
-    clean_value = str(value or "").strip()
-    if clean_value == "1h":
-        return 0, base_datetime + timedelta(hours=1), "1h", normalized_algorithm
-    if clean_value == "sleep":
-        sleep_at = datetime.combine(base_datetime.date(), _sleep_review_time(session))
-        if base_datetime >= sleep_at:
-            sleep_at += timedelta(days=1)
-        return 0, sleep_at, "sleep", normalized_algorithm
-    days = int(clean_value)
-    return days, base_datetime + timedelta(days=days), "standard", normalized_algorithm
+    return resolve_interval_from_base_datetime_for_policy(
+        load_review_schedule_policy(session),
+        value,
+        base_datetime,
+        algorithm,
+    )
 
 
 def get_algorithm_intervals(session, algorithm: str) -> list[str]:
-    normalized_algorithm = normalize_algorithm(algorithm)
-    intervals = custom_intervals(session) if normalized_algorithm == "custom" else ebbinghaus_intervals(session)
-    if not intervals:
-        intervals = ["1", "2", "4", "7", "15", "30", "60"]
-    return intervals
+    return get_algorithm_intervals_for_policy(
+        load_review_schedule_policy(session),
+        algorithm,
+    )
 
 
 def format_interval_label(value: str) -> str:
@@ -111,14 +89,10 @@ def get_algorithm_stage_labels(session, algorithm: str) -> list[str]:
 
 
 def get_initial_same_day_slot_count(session, algorithm: str) -> int:
-    intervals = get_algorithm_intervals(session, algorithm)
-    count = 0
-    for value in intervals:
-        if value in {"1h", "sleep"}:
-            count += 1
-            continue
-        break
-    return count
+    return get_initial_same_day_slot_count_for_policy(
+        load_review_schedule_policy(session),
+        algorithm,
+    )
 
 
 def compute_next_review(
@@ -135,22 +109,13 @@ def compute_next_review(
 
 
 def schedule_display_datetime(schedule, palace, session) -> datetime | None:
-    if getattr(schedule, "scheduled_at", None):
-        return schedule.scheduled_at.replace(second=0, microsecond=0)
-    if not schedule.scheduled_date:
-        return None
-
-    created_at = palace.created_at or palace.updated_at
-    base_time = created_at.time().replace(second=0, microsecond=0) if created_at else time(0, 0)
-
-    if schedule.review_type == "sleep":
-        display_time = _sleep_review_time(session)
-    elif schedule.review_type == "1h":
-        display_time = (datetime.combine(schedule.scheduled_date, base_time) + timedelta(hours=1)).time().replace(second=0, microsecond=0)
-    else:
-        display_time = base_time
-
-    return datetime.combine(schedule.scheduled_date, display_time)
+    return schedule_display_datetime_for_policy(
+        load_review_schedule_policy(session),
+        scheduled_date=schedule.scheduled_date,
+        scheduled_at=getattr(schedule, "scheduled_at", None),
+        review_type=getattr(schedule, "review_type", None),
+        anchor_datetime=palace.created_at or palace.updated_at,
+    )
 
 
 def is_schedule_due(schedule, palace, session, now: datetime | None = None) -> bool:
@@ -195,43 +160,23 @@ def create_review_schedule(
     completed: bool = False,
     completed_at: datetime | None = None,
 ):
-    from memory_anki.infrastructure.db.models import ReviewSchedule
-
-    intervals = get_algorithm_intervals(session, algorithm)
-    normalized_algorithm = normalize_algorithm(algorithm)
-    if review_number >= len(intervals):
-        return None
-
-    value = intervals[review_number]
-    scheduled_at = None
-    if base_datetime is not None:
-        interval_days, scheduled_at, review_type, algorithm_used = resolve_interval_from_base_datetime(
-            session,
-            value,
-            base_datetime,
-            normalized_algorithm,
-        )
-        scheduled_date = scheduled_at.date()
-    else:
-        interval_days, scheduled_date, review_type, algorithm_used = resolve_interval_from_base_date(
-            value,
-            base_date,
-            normalized_algorithm,
-        )
-    schedule = ReviewSchedule(
-        palace_id=palace_id,
-        scheduled_date=scheduled_date,
-        scheduled_at=scheduled_at,
-        interval_days=interval_days,
-        algorithm_used=algorithm_used,
+    draft = build_review_schedule_draft(
+        load_review_schedule_policy(session),
+        review_number=review_number,
+        algorithm=algorithm,
+        base_date=base_date,
+        anchor_date=anchor_date,
+        base_datetime=base_datetime,
         completed=completed,
         completed_at=completed_at,
-        review_number=review_number,
-        review_type=review_type,
-        anchor_date=anchor_date,
     )
-    session.add(schedule)
-    return schedule
+    if draft is None:
+        return None
+    return create_review_schedule_from_draft(
+        session,
+        palace_id=palace_id,
+        draft=draft,
+    )
 
 
 def ensure_review_schedule_schema() -> None:
@@ -360,47 +305,6 @@ def _review_log_completed_stage_count(session, palace, total: int) -> int:
     return max(0, min(infer_completed_stage_count(session, palace), total))
 
 
-def _coerce_completed_at(value: datetime | None, fallback: datetime | None = None) -> datetime:
-    target = value or fallback or datetime.now()
-    return target.replace(second=0, microsecond=0)
-
-
-def _collect_completed_stage_times(
-    schedules: list[Any],
-    completed_count: int,
-) -> dict[int, datetime]:
-    completed_at_by_stage: dict[int, datetime] = {}
-    for review_number in range(completed_count):
-        matching = [
-            schedule
-            for schedule in schedules
-            if int(schedule.review_number) == review_number
-        ]
-        completed_schedule = next(
-            (schedule for schedule in matching if getattr(schedule, "completed", False)),
-            None,
-        )
-        if completed_schedule is None:
-            continue
-        completed_at_by_stage[review_number] = _coerce_completed_at(
-            getattr(completed_schedule, "completed_at", None)
-        )
-    return completed_at_by_stage
-
-
-def _target_pending_review_numbers(
-    *,
-    completed_count: int,
-    total: int,
-    initial_slot_count: int,
-) -> list[int]:
-    if completed_count >= total:
-        return []
-    if completed_count < initial_slot_count:
-        return list(range(completed_count, min(initial_slot_count, total)))
-    return [completed_count]
-
-
 def ensure_current_review_schedule_model(session) -> int:
     from memory_anki.infrastructure.db.models import Palace
 
@@ -432,30 +336,7 @@ def _resolve_anchor_date(palace, schedules: list | None = None) -> date:
     return date.today()
 
 
-def _select_preserved_schedule(schedules, palace, session):
-    today = date.today()
-    future_schedules = [
-        schedule
-        for schedule in schedules
-        if schedule.scheduled_date and schedule.scheduled_date >= today
-    ]
-    if not future_schedules:
-        return None
-    return min(
-        future_schedules,
-        key=lambda schedule: (
-            schedule.scheduled_date,
-            0 if is_schedule_due(schedule, palace, session) else 1,
-            schedule.id,
-        ),
-    )
-
-
 def _rebuild_palace_review_schedule_model(session, palace) -> int:
-    from memory_anki.modules.palaces.application.segment_service import (
-        _rebuild_palace_review_schedules,
-    )
-
     schedules = sorted(
         list(palace.review_schedules or []),
         key=lambda schedule: (schedule.review_number, schedule.id),
@@ -484,12 +365,6 @@ def _rebuild_palace_review_schedule_model(session, palace) -> int:
         if not schedules
         else None,
     )
-    initial_slot_count = max(1, get_initial_same_day_slot_count(session, algorithm))
-    anchor = _resolve_anchor_date(palace, schedules)
-    completed_at_by_stage = _collect_completed_stage_times(
-        schedules,
-        completed_stage_count,
-    )
     fallback_completed_count = completed_stage_count
     if not schedules:
         fallback_completed_count = _review_log_completed_stage_count(
@@ -498,23 +373,17 @@ def _rebuild_palace_review_schedule_model(session, palace) -> int:
             len(intervals),
         )
 
-    _rebuild_palace_review_schedules(
+    rebuild_palace_review_schedules(
         session,
         palace,
         completed_count=completed_stage_count,
         fallback_completed_count=fallback_completed_count,
         algorithm_override=algorithm,
     )
-    if completed_at_by_stage:
-        return max(len(schedules), len(completed_at_by_stage), 1)
-    return max(len(schedules), completed_stage_count, 1)
+    return max(len(schedules), completed_stage_count, fallback_completed_count, 1)
 
 
 def update_all_pending_schedules(session, new_algorithm: str | None = None) -> None:
-    from memory_anki.modules.palaces.application.segment_service import (
-        rebuild_all_pending_review_schedules,
-    )
-
     rebuild_all_pending_review_schedules(
         session,
         algorithm_override=normalize_algorithm(new_algorithm) if new_algorithm else None,

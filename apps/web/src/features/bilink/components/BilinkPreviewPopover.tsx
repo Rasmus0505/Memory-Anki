@@ -1,8 +1,13 @@
+import { useMemo } from 'react'
 import { Link2, MoveRight } from 'lucide-react'
 import type { BilinkNodeContext, MindMapEditorState } from '@/shared/api/contracts'
 import { MindMapFrame } from '@/shared/components/mindmap-host'
 import { Button } from '@/shared/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card'
+import {
+  buildBilinkPreviewEditorState,
+  sanitizeBilinkText,
+} from '@/features/bilink/model/bilink-text'
 
 interface BilinkPreviewPopoverProps {
   open: boolean
@@ -10,6 +15,7 @@ interface BilinkPreviewPopoverProps {
   error: string
   context: BilinkNodeContext | null
   editorState: MindMapEditorState | null
+  highlightQuery?: string | null
   onClose: () => void
   onJump: (context: BilinkNodeContext) => void
 }
@@ -31,7 +37,7 @@ function NodePills({
             key={item.uid}
             className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs text-slate-700"
           >
-            {item.text}
+            {sanitizeBilinkText(item.text) || '未命名节点'}
           </span>
         ))}
       </div>
@@ -45,10 +51,23 @@ export function BilinkPreviewPopover({
   error,
   context,
   editorState,
+  highlightQuery = null,
   onClose,
   onJump,
 }: BilinkPreviewPopoverProps) {
   if (!open) return null
+
+  const previewEditorState = useMemo(
+    () => buildBilinkPreviewEditorState(editorState, highlightQuery),
+    [editorState, highlightQuery],
+  )
+  const sanitizedNodeText = sanitizeBilinkText(context?.node_text) || '未命名节点'
+  const sanitizedNodePath = (context?.node_path ?? [])
+    .map((segment) => sanitizeBilinkText(segment))
+    .filter(Boolean)
+  const sanitizedNodeNote = sanitizeBilinkText(context?.node_note)
+  const sanitizedParentText = sanitizeBilinkText(context?.parent_text)
+  const sanitizedPalaceTitle = sanitizeBilinkText(context?.palace_title) || '未命名宫殿'
 
   return (
     <div className="pointer-events-auto fixed inset-0 z-[125] flex items-center justify-center bg-black/20 p-4">
@@ -57,7 +76,7 @@ export function BilinkPreviewPopover({
           <div>
             <CardTitle className="text-base">宫殿预览</CardTitle>
             {context ? (
-              <div className="mt-1 text-xs text-muted-foreground">{context.palace_title}</div>
+              <div className="mt-1 text-xs text-muted-foreground">{sanitizedPalaceTitle}</div>
             ) : null}
           </div>
           <Button type="button" variant="ghost" size="sm" onClick={onClose}>
@@ -72,25 +91,25 @@ export function BilinkPreviewPopover({
               {error}
             </div>
           ) : null}
-          {!loading && !error && context && editorState ? (
+          {!loading && !error && context && previewEditorState ? (
             <>
               <div className="min-h-0 space-y-4 overflow-y-auto pr-1">
                 <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
-                  <div className="text-lg font-semibold text-slate-900">{context.node_text}</div>
-                  {context.node_path.length > 0 ? (
+                  <div className="text-lg font-semibold text-slate-900">{sanitizedNodeText}</div>
+                  {sanitizedNodePath.length > 0 ? (
                     <div className="mt-2 text-xs text-slate-500">
-                      {context.node_path.join(' / ')}
+                      {sanitizedNodePath.join(' / ')}
                     </div>
                   ) : null}
-                  {context.node_note ? (
-                    <div className="mt-3 whitespace-pre-wrap text-sm text-slate-700">{context.node_note}</div>
+                  {sanitizedNodeNote ? (
+                    <div className="mt-3 whitespace-pre-wrap text-sm text-slate-700">{sanitizedNodeNote}</div>
                   ) : null}
                 </div>
 
-                {context.parent_text ? (
+                {sanitizedParentText ? (
                   <div className="flex items-center gap-2 text-sm text-slate-600">
                     <MoveRight className="h-4 w-4" />
-                    父节点：{context.parent_text}
+                    父节点：{sanitizedParentText}
                   </div>
                 ) : null}
 
@@ -107,8 +126,8 @@ export function BilinkPreviewPopover({
 
               <div className="min-h-0">
                 <MindMapFrame
-                  key={`bilink-preview-${context.palace_id}-${context.node_uid ?? 'palace'}`}
-                  editorState={editorState}
+                  key={`bilink-preview-${context.palace_id}-${context.node_uid ?? 'palace'}-${highlightQuery?.trim() || 'plain'}`}
+                  editorState={previewEditorState}
                   readonly
                   showToolbarWhenReadonly
                   onEditorStateChange={() => {}}

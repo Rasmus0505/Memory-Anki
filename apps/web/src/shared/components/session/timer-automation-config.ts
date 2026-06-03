@@ -42,7 +42,7 @@ export const DEFAULT_TIMER_AUTOMATION_CONFIG: TimerAutomationConfig = {
   palace_edit: {
     inactiveAutoPauseSeconds: 20,
     hiddenAutoPauseSeconds: 15,
-    autoPauseRollbackSeconds: 60,
+    autoPauseRollbackSeconds: 20,
   },
   practice: {
     inactiveAutoPauseSeconds: 120,
@@ -69,19 +69,22 @@ function sanitizeBoolean(value: unknown, fallback: boolean) {
 
 function sanitizeRule(value: unknown, fallback: TimerAutomationRule): TimerAutomationRule {
   const raw = value && typeof value === 'object' ? (value as Record<string, unknown>) : {}
+  const inactiveAutoPauseSeconds = sanitizeNonNegativeNumber(
+    raw.inactiveAutoPauseSeconds,
+    fallback.inactiveAutoPauseSeconds,
+  )
+  const hiddenAutoPauseSeconds = sanitizeNonNegativeNumber(
+    raw.hiddenAutoPauseSeconds,
+    fallback.hiddenAutoPauseSeconds,
+  )
+  const autoPauseRollbackSeconds = Math.min(
+    sanitizeNonNegativeNumber(raw.autoPauseRollbackSeconds, fallback.autoPauseRollbackSeconds),
+    inactiveAutoPauseSeconds,
+  )
   return {
-    inactiveAutoPauseSeconds: sanitizeNonNegativeNumber(
-      raw.inactiveAutoPauseSeconds,
-      fallback.inactiveAutoPauseSeconds,
-    ),
-    hiddenAutoPauseSeconds: sanitizeNonNegativeNumber(
-      raw.hiddenAutoPauseSeconds,
-      fallback.hiddenAutoPauseSeconds,
-    ),
-    autoPauseRollbackSeconds: sanitizeNonNegativeNumber(
-      raw.autoPauseRollbackSeconds,
-      fallback.autoPauseRollbackSeconds,
-    ),
+    inactiveAutoPauseSeconds,
+    hiddenAutoPauseSeconds,
+    autoPauseRollbackSeconds,
   }
 }
 

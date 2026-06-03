@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ChangeEvent } from 'react'
+import { useCallback, useEffect, useMemo, useState, type ChangeEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { FileText, FolderTree, Plus, Save, Trash2, Upload } from 'lucide-react'
 import type { MindMapEditorState } from '@/shared/api/contracts'
@@ -13,8 +13,10 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui
 import { Input } from '@/shared/components/ui/input'
 import { Label } from '@/shared/components/ui/label'
 import { usePersistedMindMapEditor } from '@/shared/hooks/usePersistedMindMapEditor'
+import { useProgrammaticEditorStateGuard } from '@/shared/hooks/useProgrammaticEditorStateGuard'
+import { applyProgrammaticEditorState } from '@/shared/lib/applyProgrammaticEditorState'
 import { PalaceMindMapImportDrawer } from '@/features/palace-edit/components/PalaceMindMapImportDrawer'
-import { useMindMapImport } from '@/features/palace-edit/hooks/useMindMapImport'
+import { useMindMapImport, type ImportApplyContext } from '@/features/palace-edit/hooks/useMindMapImport'
 import {
   createSubjectApi,
   deleteSubjectApi,
@@ -63,11 +65,16 @@ export default function Knowledge() {
 
   const {
     meta,
+    setMeta,
     editorState,
     setEditorState,
+    replaceEditorState,
+    adoptExternalState,
+    isLoading,
     isSaving,
     error,
     reload,
+    flushSave,
   } = usePersistedMindMapEditor({
     entityId: selectedSubjectId,
     fetcher: getSubjectEditorApi,
@@ -80,15 +87,59 @@ export default function Knowledge() {
       lang: response.lang,
     }),
   })
+  const programmaticGuard = useProgrammaticEditorStateGuard()
   const importEntityKey = useMemo(
     () => (selectedSubjectId ? `subject_${selectedSubjectId}` : null),
     [selectedSubjectId],
   )
-  const activeSubject = (meta as Subject | null) ?? subjects.find((item) => item.id === selectedSubjectId) ?? null
+  const selectedSubjectMeta =
+    (meta as Subject | null)?.id === selectedSubjectId ? (meta as Subject | null) : null
+  const activeSubject = selectedSubjectMeta ?? subjects.find((item) => item.id === selectedSubjectId) ?? null
+  const isSubjectEditorReady = Boolean(
+    selectedSubjectId &&
+      selectedSubjectMeta?.id === selectedSubjectId &&
+      editorState &&
+      !isLoading,
+  )
+  const applyImportedSubjectEditorState = useCallback(
+    async (nextState: MindMapEditorState, context?: ImportApplyContext) => {
+      if (!selectedSubjectId) {
+        throw new Error('当前还没有选中学科，暂时无法应用导入结果。')
+      }
+      await applyProgrammaticEditorState({
+        previousState: editorState,
+        nextState,
+        context,
+        flushPendingSaves: flushSave,
+        beginProtectedWrite: (protectedState) => {
+          programmaticGuard.beginGuard(protectedState, 2500)
+        },
+        releaseProtectedWrite: programmaticGuard.releaseGuard,
+        optimisticApply: replaceEditorState,
+        rollback: replaceEditorState,
+        adoptSavedState: (savedState) => {
+          adoptExternalState(savedState, { protectFromStaleLoads: true, releaseAfterMs: 4000 })
+        },
+        save: () => saveSubjectEditorApi(selectedSubjectId, nextState),
+        selectSavedEditorState: (response) => ({
+          editor_doc: response.editor_doc,
+          editor_config: response.editor_config,
+          editor_local_config: response.editor_local_config,
+          lang: response.lang,
+        }),
+        afterSave: (response) => {
+          setMeta(response.subject as Subject)
+        },
+        reload,
+      })
+    },
+    [adoptExternalState, editorState, flushSave, programmaticGuard, reload, replaceEditorState, selectedSubjectId, setMeta],
+  )
   const mindMapImport = useMindMapImport({
     entityKey: importEntityKey,
     editorState,
     setEditorState,
+    applyEditorState: applyImportedSubjectEditorState,
     selectedNodeUid,
     subjectOptions: activeSubject ? [{ id: activeSubject.id, name: activeSubject.name }] : [],
     defaultSubjectId: selectedSubjectId,
@@ -155,6 +206,7 @@ export default function Knowledge() {
 
   const renderStatus = () => {
     if (error) return <Badge variant="destructive">保存异常</Badge>
+    if (selectedSubjectId && !isSubjectEditorReady) return <Badge variant="secondary">加载中</Badge>
     if (!editorState) return <Badge variant="secondary">加载中</Badge>
     if (isSaving) return <Badge variant="secondary">自动保存中</Badge>
     return <Badge variant="secondary">已接入 mind-map 宿主模式</Badge>
@@ -370,14 +422,18 @@ export default function Knowledge() {
             {selectedChapterId ? <Badge variant="secondary">章节 #{selectedChapterId}</Badge> : null}
           </CardHeader>
           <CardContent className="min-h-[62vh]">
-            {selectedSubjectId && editorState ? (
+            {isSubjectEditorReady && editorState ? (
               <MindMapFrame
+                key={`subject-frame:${selectedSubjectId}:${mindMapImport.importAppliedSyncVersion}`}
                 editorState={editorState}
                 showImportButtons
                 syncOnPropChange
                 syncIntent="soft"
                 externalSyncKey={mindMapImport.importExternalSyncKey}
+                forceSyncKey={`subject:${selectedSubjectId}:${mindMapImport.importAppliedSyncVersion}`}
+                forceSyncIntent="replace"
                 onEditorStateChange={(nextState: MindMapEditorState) => {
+                  if (programmaticGuard.shouldBlockIncomingState(nextState)) return
                   setEditorState(nextState)
                 }}
                 onNodeActive={setSelectedNodes}
@@ -393,7 +449,7 @@ export default function Knowledge() {
               />
             ) : (
               <div className="flex h-[62vh] items-center justify-center rounded-2xl border border-dashed border-border/80 bg-background/60 text-sm text-muted-foreground">
-                先创建或选择一个学科，宿主编辑器才会加载。
+                {selectedSubjectId ? '正在加载当前学科的脑图…' : '先创建或选择一个学科，宿主编辑器才会加载。'}
               </div>
             )}
           </CardContent>
@@ -409,6 +465,11 @@ export default function Knowledge() {
         onSourceKindChange={mindMapImport.setImportSourceKind}
         onWorkflowChange={mindMapImport.setMindMapImportWorkflow}
         loading={mindMapImport.importLoading}
+        streamPhase={mindMapImport.importStreamPhase}
+        streamStatusMessage={mindMapImport.importStreamStatusMessage}
+        streamStep={mindMapImport.importStreamStep}
+        streamTotalSteps={mindMapImport.importStreamTotalSteps}
+        streamPreviewText={mindMapImport.importStreamPreviewText}
         applying={mindMapImport.importApplying}
         undoing={mindMapImport.importUndoing}
         error={mindMapImport.importError}
@@ -433,6 +494,8 @@ export default function Knowledge() {
         pdfPageInput={mindMapImport.importPdfPageInput}
         onPdfPageInputChange={mindMapImport.setImportPdfPageInput}
         pdfSelectionError={mindMapImport.importPdfSelectionError}
+        pdfImportMode={mindMapImport.importPdfMode}
+        onPdfImportModeChange={mindMapImport.setImportPdfMode}
         structurePage={mindMapImport.importStructurePage}
         onStructurePageChange={mindMapImport.setImportStructurePage}
         pdfPreviewPage={mindMapImport.importPdfPreviewPage}
@@ -443,8 +506,18 @@ export default function Knowledge() {
         pdfImportOptions={mindMapImport.importPdfOptions}
         onPdfImportOptionChange={mindMapImport.setImportPdfOption}
         importWarnings={mindMapImport.importWarnings}
-        importCanApply={mindMapImport.importCanApply}
-        importMatchMode={mindMapImport.importMatchMode}
+        pdfOcrGroundingUsed={mindMapImport.importPdfOcrGroundingUsed}
+        pdfOcrTextChars={mindMapImport.importPdfOcrTextChars}
+        currentJobId={mindMapImport.currentJobId}
+        currentJobStatus={mindMapImport.currentJobStatus}
+        currentJobStage={mindMapImport.currentJobStage}
+        currentJobUsage={mindMapImport.currentJobUsage}
+        currentJobPauseRequested={mindMapImport.currentJobPauseRequested}
+        canResumeJob={mindMapImport.canResumeJob}
+        canPauseJob={mindMapImport.canPauseJob}
+        reusedExistingResult={mindMapImport.importReusedExistingResult}
+        onResumeJob={mindMapImport.handleResumeJob}
+        onPauseJob={mindMapImport.handlePauseJob}
         onTogglePdfPage={mindMapImport.toggleImportPdfPage}
         onPdfStart={mindMapImport.handlePdfImportStart}
         targetNodeLabel={selectedNodeLabel}

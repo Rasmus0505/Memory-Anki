@@ -4,6 +4,7 @@ import { Button } from '@/shared/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card'
 import { Input } from '@/shared/components/ui/input'
 import { cn } from '@/shared/lib/utils'
+import { sanitizeBilinkText } from '@/features/bilink/model/bilink-text'
 
 interface BilinkSearchPopoverProps {
   open: boolean
@@ -25,24 +26,11 @@ function resultLabel(result: BilinkSearchResult) {
     : result.palace_title
 }
 
-interface GroupedNodeBranch {
-  key: string
-  title: string
-  path: string[]
-  children: GroupedNodeBranch[]
-  results: BilinkSearchResult[]
-}
-
 interface GroupedPalaceResults {
   palaceId: number
   palaceTitle: string
   palaceResult: BilinkSearchResult | null
-  topLevelNodes: BilinkSearchResult[]
-  nestedBranches: GroupedNodeBranch[]
-}
-
-function resultLevel(result: BilinkSearchResult) {
-  return Math.max(1, (result.node_path?.length ?? 2) - 1)
+  nodeResults: BilinkSearchResult[]
 }
 
 function sortResults(results: BilinkSearchResult[]) {
@@ -50,87 +38,37 @@ function sortResults(results: BilinkSearchResult[]) {
     const leftDepth = left.node_path?.length ?? 0
     const rightDepth = right.node_path?.length ?? 0
     if (leftDepth !== rightDepth) return leftDepth - rightDepth
-    return (left.node_path?.join('/') ?? resultLabel(left)).localeCompare(
-      right.node_path?.join('/') ?? resultLabel(right),
+    return sanitizeBilinkText(left.node_path?.join('/') ?? resultLabel(left)).localeCompare(
+      sanitizeBilinkText(right.node_path?.join('/') ?? resultLabel(right)),
       'zh-CN',
     )
   })
 }
 
-function sortBranches(branches: GroupedNodeBranch[]): GroupedNodeBranch[] {
-  return [...branches]
-    .map((branch) => ({
-      ...branch,
-      children: sortBranches(branch.children),
-      results: sortResults(branch.results),
-    }))
-    .sort((left, right) => left.title.localeCompare(right.title, 'zh-CN'))
-}
-
-function countBranchResults(branches: GroupedNodeBranch[]): number {
-  return branches.reduce(
-    (count, branch) => count + branch.results.length + countBranchResults(branch.children),
-    0,
-  )
-}
-
 function buildGroupedResults(results: BilinkSearchResult[]) {
-  const groups = new Map<
-    number,
-    GroupedPalaceResults & {
-      nestedBranchMap: Map<string, GroupedNodeBranch>
-    }
-  >()
+  const groups = new Map<number, GroupedPalaceResults>()
 
   results.forEach((result) => {
     const existing = groups.get(result.palace_id) ?? {
       palaceId: result.palace_id,
       palaceTitle: result.palace_title,
       palaceResult: null,
-      topLevelNodes: [],
-      nestedBranches: [],
-      nestedBranchMap: new Map<string, GroupedNodeBranch>(),
+      nodeResults: [],
     }
 
     if (result.type === 'palace') {
       existing.palaceResult = result
     } else {
-      const ancestorPath = result.node_path?.slice(1, -1) ?? []
-      if (ancestorPath.length === 0) {
-        existing.topLevelNodes.push(result)
-      } else {
-        let branchKey = ''
-        let branchChildren = existing.nestedBranches
-        ancestorPath.forEach((segment, index) => {
-          branchKey = branchKey ? `${branchKey}/${segment}` : segment
-          let branch = existing.nestedBranchMap.get(branchKey)
-          if (!branch) {
-            branch = {
-              key: branchKey,
-              title: segment,
-              path: ancestorPath.slice(0, index + 1),
-              children: [],
-              results: [],
-            }
-            existing.nestedBranchMap.set(branchKey, branch)
-            branchChildren.push(branch)
-          }
-          branchChildren = branch.children
-          if (index === ancestorPath.length - 1) {
-            branch.results.push(result)
-          }
-        })
-      }
+      existing.nodeResults.push(result)
     }
 
     groups.set(result.palace_id, existing)
   })
 
   return Array.from(groups.values())
-    .map(({ nestedBranchMap: _nestedBranchMap, ...group }) => ({
+    .map((group) => ({
       ...group,
-      topLevelNodes: sortResults(group.topLevelNodes),
-      nestedBranches: sortBranches(group.nestedBranches),
+      nodeResults: sortResults(group.nodeResults),
     }))
     .sort((left, right) => left.palaceTitle.localeCompare(right.palaceTitle, 'zh-CN'))
 }
@@ -153,28 +91,17 @@ export function BilinkSearchPopover({
   const groupedResults = buildGroupedResults(results)
 
   const renderNodeResult = (result: BilinkSearchResult) => {
-    const level = resultLevel(result)
-    const shortPath = result.node_path?.slice(1, -1) ?? []
+    const displayText = sanitizeBilinkText(resultLabel(result)) || '未命名节点'
     return (
       <div
         key={`${result.type}-${result.palace_id}-${result.node_uid ?? 'palace'}`}
-        className="rounded-xl border border-slate-200 bg-white/80 px-3 py-2.5"
+        className="rounded-xl border border-slate-200 bg-white/90 px-3 py-3"
       >
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2 text-sm font-medium text-slate-900">
-              <span className="inline-flex rounded-full bg-amber-50 px-2 py-0.5 text-[11px] text-amber-700">
-                L{level}
-              </span>
-              <span className="truncate">{resultLabel(result)}</span>
+            <div className="whitespace-pre-wrap break-words text-sm leading-6 text-slate-800">
+              {displayText}
             </div>
-            {shortPath.length > 0 ? (
-              <div className="mt-1 text-xs text-slate-500">
-                {shortPath.join(' / ')}
-              </div>
-            ) : (
-              <div className="mt-1 text-xs text-slate-400">顶层节点</div>
-            )}
           </div>
 
           <div className="flex shrink-0 gap-2">
@@ -192,26 +119,6 @@ export function BilinkSearchPopover({
       </div>
     )
   }
-
-  const renderBranch = (branch: GroupedNodeBranch, depth: number) => (
-    <div
-      key={branch.key}
-      className="rounded-2xl border border-dashed border-slate-200/90 bg-slate-50/60 p-3"
-      style={{ marginLeft: `${Math.min(depth, 4) * 14}px` }}
-    >
-      <div className="flex items-center gap-2 text-xs font-semibold text-slate-600">
-        <span className="inline-flex rounded-full bg-slate-200 px-2 py-0.5 text-[10px] text-slate-700">
-          路径
-        </span>
-        <span>{branch.title}</span>
-      </div>
-
-      <div className="mt-2 space-y-2">
-        {branch.results.map((result) => renderNodeResult(result))}
-        {branch.children.map((child) => renderBranch(child, depth + 1))}
-      </div>
-    </div>
-  )
 
   const style =
     mode === 'inline' && position
@@ -284,11 +191,11 @@ export function BilinkSearchPopover({
                         <span className="inline-flex rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] text-emerald-700">
                           宫殿
                         </span>
-                        <span className="truncate">{group.palaceTitle}</span>
+                        <span className="truncate">{sanitizeBilinkText(group.palaceTitle) || '未命名宫殿'}</span>
                       </div>
                       <div className="mt-1 text-xs text-muted-foreground">
-                        {group.topLevelNodes.length + group.nestedBranches.length > 0
-                          ? `${group.topLevelNodes.length + countBranchResults(group.nestedBranches)} 个层级命中`
+                        {group.nodeResults.length > 0
+                          ? `${group.nodeResults.length} 条内容命中`
                           : '宫殿标题匹配'}
                       </div>
                     </div>
@@ -317,10 +224,9 @@ export function BilinkSearchPopover({
                     ) : null}
                   </div>
 
-                  {group.topLevelNodes.length > 0 || group.nestedBranches.length > 0 ? (
+                  {group.nodeResults.length > 0 ? (
                     <div className="mt-3 space-y-2">
-                      {group.topLevelNodes.map((result) => renderNodeResult(result))}
-                      {group.nestedBranches.map((branch) => renderBranch(branch, 0))}
+                      {group.nodeResults.map((result) => renderNodeResult(result))}
                     </div>
                   ) : null}
                 </div>

@@ -17,6 +17,7 @@ APP_HOME = Path(os.environ.get("MEMORY_ANKI_HOME") or _default_app_home())
 DATA_DIR = APP_HOME / "data"
 ATTACHMENTS_DIR = DATA_DIR / "attachments"
 SUBJECT_DOCUMENTS_DIR = ATTACHMENTS_DIR / "subjects"
+IMPORT_JOBS_DIR = APP_HOME / "import_jobs"
 BACKUPS_DIR = DATA_DIR / "backups"
 FULL_BACKUPS_DIR = BACKUPS_DIR / "full"
 RESCUE_BACKUPS_DIR = BACKUPS_DIR / "rescue"
@@ -27,6 +28,7 @@ DATABASE_URL = f"sqlite:///{DB_PATH}"
 DASHSCOPE_API_KEY = os.environ.get("DASHSCOPE_API_KEY")
 DASHSCOPE_BASE_URL = os.environ.get("DASHSCOPE_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1")
 DASHSCOPE_VISION_MODEL = os.environ.get("DASHSCOPE_VISION_MODEL", "qwen3-vl-flash")
+DASHSCOPE_TEXT_MODEL = os.environ.get("DASHSCOPE_TEXT_MODEL", "qwen3.6-flash")
 
 DEFAULTS = {
     "default_algorithm": "ebbinghaus",
@@ -42,12 +44,18 @@ DEFAULTS = {
     "overdue_smoothing_days": "7",
     "overdue_smoothing_threshold": "5",
     "time_recording_threshold_seconds": "0",
-    "import_pdf_strict_restore_default": "true",
     "import_pdf_quote_original_default": "true",
     "import_pdf_mount_leaf_only_default": "true",
     "import_pdf_preserve_emphasis_default": "true",
     "import_pdf_semantic_split_default": "true",
     "import_pdf_preserve_line_breaks_default": "true",
+    "mindmap_ai_split_api_key": "",
+    "mindmap_ai_split_base_url": "",
+    "mindmap_ai_split_model": DASHSCOPE_TEXT_MODEL,
+    "mindmap_ai_split_temperature": "0.2",
+    "mindmap_ai_split_max_children": "5",
+    "mindmap_ai_split_include_note": "true",
+    "mindmap_ai_split_custom_instruction": "",
 }
 
 
@@ -57,6 +65,7 @@ def ensure_runtime_dirs() -> None:
         DATA_DIR,
         ATTACHMENTS_DIR,
         SUBJECT_DOCUMENTS_DIR,
+        IMPORT_JOBS_DIR,
         FULL_BACKUPS_DIR,
         RESCUE_BACKUPS_DIR,
     ):

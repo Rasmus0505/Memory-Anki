@@ -157,6 +157,7 @@ export default function SegmentReviewSessionPage() {
           title={`${session.palace?.title || '未命名宫殿'} / ${segmentDisplayName}`}
           palaceId={session.palace_id}
           sessionKind="review"
+          persistKey={`segment-review:${session.id}`}
           editorState={editorState}
           submitting={submitting}
           persistProgress

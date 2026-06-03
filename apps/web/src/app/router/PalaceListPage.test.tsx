@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import PalaceListPage from '@/app/router/PalaceListPage'
 import { PALACE_LIST_VIEW_SETTINGS_KEY } from '@/app/router/palace-view-settings'
 
@@ -105,26 +105,42 @@ const reviewedPalace = {
   ],
 }
 
-const laterTodayPalace = {
-  ...duePalace,
-  id: 2,
-  title: '第五节 今日稍后复习',
-  resolved_title: '第五节 今日稍后复习',
-  needs_practice: true,
-  segments: [
-    {
-      ...duePalace.segments[0],
-      id: 20,
-      palace_id: 2,
-      has_due_review: false,
-      current_review_schedule_id: 188,
-      next_review_at: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(),
-    },
-  ],
+const RealDate = Date
+
+function buildLaterTodayPalace() {
+  return {
+    ...duePalace,
+    id: 2,
+    title: '第五节 今日稍后复习',
+    resolved_title: '第五节 今日稍后复习',
+    needs_practice: true,
+    segments: [
+      {
+        ...duePalace.segments[0],
+        id: 20,
+        palace_id: 2,
+        has_due_review: false,
+        current_review_schedule_id: 188,
+        next_review_at: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(),
+      },
+    ],
+  }
 }
 
 describe('PalaceListPage', () => {
   beforeEach(() => {
+    const fixedNow = new RealDate('2026-05-11T10:00:00Z')
+    class MockDate extends RealDate {
+      constructor(value?: string | number | Date) {
+        super(value ?? fixedNow)
+      }
+
+      static now() {
+        return fixedNow.getTime()
+      }
+    }
+
+    vi.stubGlobal('Date', MockDate as unknown as DateConstructor)
     navigate.mockReset()
     getPalacesGroupedApi.mockReset()
     submitSegmentReviewSessionApi.mockReset()
@@ -164,8 +180,12 @@ describe('PalaceListPage', () => {
             ungrouped_palaces: [],
           },
         ],
-      })
+    })
     submitSegmentReviewSessionApi.mockResolvedValue({ ok: true, next_id: 89, score: 5 })
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
   })
 
   it('renders single-segment palaces in compact two-line mode without default segment label', async () => {
@@ -180,6 +200,7 @@ describe('PalaceListPage', () => {
   })
 
   it('renders later-today review in yellow and highlights practice button when needs practice', async () => {
+    const laterTodayPalace = buildLaterTodayPalace()
     getPalacesGroupedApi.mockReset()
     getPalacesGroupedApi.mockResolvedValue({
       groups: [],

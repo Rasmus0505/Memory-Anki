@@ -5,13 +5,19 @@ import KnowledgePage from '@/features/knowledge/KnowledgePage'
 import * as knowledgeApi from '@/shared/api/modules/knowledge'
 
 const knowledgeReloadMock = vi.hoisted(() => vi.fn())
+const knowledgeReplaceEditorStateMock = vi.hoisted(() => vi.fn())
 const knowledgeMindMapMockState = vi.hoisted(() => ({
   nextMountId: 1,
 }))
+const knowledgeImportMockState = vi.hoisted(() => ({
+  importAppliedSyncVersion: 0,
+}))
+const knowledgeUseMindMapImportMock = vi.hoisted(() => vi.fn())
 
 vi.mock('@/shared/hooks/usePersistedMindMapEditor', () => ({
   usePersistedMindMapEditor: () => ({
     meta: { id: 7, name: '历史', color: '#334155', sort_order: 1 },
+    setMeta: vi.fn(),
     editorState: {
       editor_doc: {
         root: {
@@ -24,17 +30,23 @@ vi.mock('@/shared/hooks/usePersistedMindMapEditor', () => ({
       lang: 'zh',
     },
     setEditorState: vi.fn(),
+    replaceEditorState: knowledgeReplaceEditorStateMock,
+    adoptExternalState: vi.fn(),
+    isLoading: false,
     isSaving: false,
     error: null,
     reload: knowledgeReloadMock,
+    flushSave: vi.fn(),
   }),
 }))
 
 vi.mock('@/shared/components/mindmap-host', () => ({
   MindMapFrame: ({
     syncIntent = 'soft',
+    forceSyncKey = null,
   }: {
     syncIntent?: 'soft' | 'replace'
+    forceSyncKey?: string | number | null
   }) => {
     const mountIdRef = React.useRef<number | null>(null)
     if (mountIdRef.current == null) {
@@ -44,76 +56,14 @@ vi.mock('@/shared/components/mindmap-host', () => ({
       <div data-testid="knowledge-mindmap-frame">
         <div>{`knowledge-mount-${mountIdRef.current}`}</div>
         <div>{`knowledge-sync-${syncIntent}`}</div>
+        <div>{`knowledge-force-${String(forceSyncKey ?? '')}`}</div>
       </div>
     )
   },
 }))
 
 vi.mock('@/features/palace-edit/hooks/useMindMapImport', () => ({
-  useMindMapImport: () => ({
-    importExternalSyncKey: null,
-    importOpen: false,
-    setImportOpen: vi.fn(),
-    importMode: 'mindmap',
-    setImportMode: vi.fn(),
-    importSourceKind: 'file',
-    setImportSourceKind: vi.fn(),
-    setMindMapImportWorkflow: vi.fn(),
-    importLoading: false,
-    importApplying: false,
-    importUndoing: false,
-    importError: '',
-    importSourceTree: null,
-    importPreviewEditorDoc: null,
-    importExtractedText: '',
-    importImagePreviewUrl: '',
-    importBatchImages: [],
-    importStructureImageId: null,
-    importBatchStatus: 'idle',
-    importBatchMeta: null,
-    importSubjectOptions: [],
-    importSelectedSubjectId: null,
-    setImportSelectedSubjectId: vi.fn(),
-    importSubjectDocuments: [],
-    importSubjectDocumentsLoading: false,
-    importSelectedSubjectDocumentId: null,
-    setImportSelectedSubjectDocumentId: vi.fn(),
-    importPdfPageMeta: [],
-    importPdfPagesLoading: false,
-    importPdfPages: [],
-    importPdfPageInput: '',
-    setImportPdfPageInput: vi.fn(),
-    importPdfSelectionError: '',
-    importStructurePage: 1,
-    setImportStructurePage: vi.fn(),
-    importPdfPreviewPage: 1,
-    setImportPdfPreviewPage: vi.fn(),
-    importAnalyzedPdfPages: [],
-    importRangePrompt: '',
-    setImportRangePrompt: vi.fn(),
-    importPdfOptions: {},
-    setImportPdfOption: vi.fn(),
-    importWarnings: [],
-    importCanApply: false,
-    importMatchMode: 'strict_match',
-    toggleImportPdfPage: vi.fn(),
-    handlePdfImportStart: vi.fn(),
-    importCanAppend: false,
-    importCanUndoLastImport: false,
-    handleImportPaste: vi.fn(),
-    handleImportFileChange: vi.fn(),
-    handleBatchImportStart: vi.fn(),
-    handleDeleteBatchImage: vi.fn(),
-    handleMoveBatchImage: vi.fn(),
-    handleSetStructureImage: vi.fn(),
-    handleImportApplyReplace: vi.fn(),
-    handleImportApplyAppend: vi.fn(),
-    handleUndoLastImport: vi.fn(),
-    importHistory: [],
-    handleImportSelectHistory: vi.fn(),
-    handleImportDeleteHistory: vi.fn(),
-    handleSubjectDocumentUpload: vi.fn(),
-  }),
+  useMindMapImport: knowledgeUseMindMapImportMock,
 }))
 
 vi.mock('@/features/palace-edit/components/PalaceMindMapImportDrawer', () => ({
@@ -122,9 +72,76 @@ vi.mock('@/features/palace-edit/components/PalaceMindMapImportDrawer', () => ({
 
 describe('KnowledgePage mind map host refresh behavior', () => {
   beforeEach(() => {
-    knowledgeReloadMock.mockReset()
-    knowledgeMindMapMockState.nextMountId = 1
     vi.restoreAllMocks()
+    knowledgeReloadMock.mockReset()
+    knowledgeReplaceEditorStateMock.mockReset()
+    knowledgeMindMapMockState.nextMountId = 1
+    knowledgeImportMockState.importAppliedSyncVersion = 0
+    knowledgeUseMindMapImportMock.mockImplementation(() => ({
+      importExternalSyncKey: null,
+      importAppliedSyncVersion: knowledgeImportMockState.importAppliedSyncVersion,
+      importOpen: false,
+      setImportOpen: vi.fn(),
+      importMode: 'mindmap',
+      setImportMode: vi.fn(),
+      importSourceKind: 'file',
+      setImportSourceKind: vi.fn(),
+      setMindMapImportWorkflow: vi.fn(),
+      importLoading: false,
+      importApplying: false,
+      importUndoing: false,
+      importError: '',
+      importSourceTree: null,
+      importPreviewEditorDoc: null,
+      importExtractedText: '',
+      importImagePreviewUrl: '',
+      importBatchImages: [],
+      importStructureImageId: null,
+      importBatchStatus: 'idle',
+      importBatchMeta: null,
+      importSubjectOptions: [],
+      importSelectedSubjectId: null,
+      setImportSelectedSubjectId: vi.fn(),
+      importSubjectDocuments: [],
+      importSubjectDocumentsLoading: false,
+      importSelectedSubjectDocumentId: null,
+      setImportSelectedSubjectDocumentId: vi.fn(),
+      importPdfPageMeta: [],
+      importPdfPagesLoading: false,
+      importPdfPages: [],
+      importPdfPageInput: '',
+      setImportPdfPageInput: vi.fn(),
+      importPdfSelectionError: '',
+      importStructurePage: 1,
+      setImportStructurePage: vi.fn(),
+      importPdfPreviewPage: 1,
+      setImportPdfPreviewPage: vi.fn(),
+      importAnalyzedPdfPages: [],
+      importRangePrompt: '',
+      setImportRangePrompt: vi.fn(),
+      importPdfOptions: {},
+      setImportPdfOption: vi.fn(),
+      importWarnings: [],
+      importPdfOcrGroundingUsed: null,
+      importPdfOcrTextChars: null,
+      toggleImportPdfPage: vi.fn(),
+      handlePdfImportStart: vi.fn(),
+      importCanAppend: false,
+      importCanUndoLastImport: false,
+      handleImportPaste: vi.fn(),
+      handleImportFileChange: vi.fn(),
+      handleBatchImportStart: vi.fn(),
+      handleDeleteBatchImage: vi.fn(),
+      handleMoveBatchImage: vi.fn(),
+      handleSetStructureImage: vi.fn(),
+      handleImportApplyReplace: vi.fn(),
+      handleImportApplyAppend: vi.fn(),
+      handleUndoLastImport: vi.fn(),
+      importHistory: [],
+      handleImportSelectHistory: vi.fn(),
+      handleImportDeleteHistory: vi.fn(),
+      handleSubjectDocumentUpload: vi.fn(),
+    }))
     vi.spyOn(knowledgeApi, 'getSubjectsApi').mockResolvedValue([
       { id: 7, name: '历史', color: '#334155', sort_order: 1 },
     ] as never)
@@ -141,7 +158,11 @@ describe('KnowledgePage mind map host refresh behavior', () => {
     await waitFor(() => {
       expect(screen.getByText('knowledge-mount-1')).toBeTruthy()
     })
+    await waitFor(() => {
+      expect((screen.getByLabelText('名称') as HTMLInputElement).value).toBe('历史')
+    })
     expect(screen.getByText('knowledge-sync-soft')).toBeTruthy()
+    expect(screen.getByText('knowledge-force-subject:7:0')).toBeTruthy()
 
     fireEvent.click(screen.getByRole('button', { name: '保存学科信息' }))
 
@@ -156,5 +177,54 @@ describe('KnowledgePage mind map host refresh behavior', () => {
     })
     expect(screen.getByText('knowledge-mount-1')).toBeTruthy()
     expect(screen.getByText('knowledge-sync-soft')).toBeTruthy()
+  })
+
+  it('passes import applied sync version into forceSyncKey for replace sync after import', async () => {
+    knowledgeImportMockState.importAppliedSyncVersion = 2
+
+    render(<KnowledgePage />)
+
+    await waitFor(() => {
+      expect(screen.getByText('knowledge-force-subject:7:2')).toBeTruthy()
+    })
+  })
+
+  it('passes an explicit applyEditorState callback into useMindMapImport', async () => {
+    render(<KnowledgePage />)
+
+    await waitFor(() => {
+      expect(knowledgeUseMindMapImportMock).toHaveBeenCalled()
+      expect(screen.getByText('knowledge-force-subject:7:0')).toBeTruthy()
+    })
+
+    const lastCall =
+      knowledgeUseMindMapImportMock.mock.calls[
+        knowledgeUseMindMapImportMock.mock.calls.length - 1
+      ]?.[0] as {
+      applyEditorState?: (nextState: unknown) => Promise<void>
+    }
+    expect(typeof lastCall?.applyEditorState).toBe('function')
+
+    const nextState = {
+      editor_doc: {
+        root: {
+          data: { text: '导入结果', uid: 'subject-root-1' },
+          children: [{ data: { text: '第一部分', uid: 'chapter-1' }, children: [] }],
+        },
+      },
+      editor_config: {},
+      editor_local_config: {},
+      lang: 'zh',
+    }
+    vi.spyOn(knowledgeApi, 'saveSubjectEditorApi').mockResolvedValue({
+      subject: { id: 7, name: '历史', color: '#334155', sort_order: 1 },
+      ...nextState,
+    } as never)
+
+    await lastCall.applyEditorState?.(nextState)
+
+    expect(knowledgeReplaceEditorStateMock).toHaveBeenCalledWith(nextState)
+    expect(knowledgeApi.saveSubjectEditorApi).toHaveBeenCalledWith(7, nextState)
+    expect(knowledgeReloadMock).toHaveBeenCalled()
   })
 })

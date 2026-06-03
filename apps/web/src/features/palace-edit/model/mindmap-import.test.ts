@@ -2,6 +2,7 @@ import type { MindMapEditorState, MindMapImportPreviewResponse } from '@/shared/
 import { vi } from 'vitest'
 import {
   applyImportedEditorState,
+  buildEditorDocFromSourceTree,
   countSourceTreeNodes,
   formatMindMapImportError,
   restoreImportedEditorState,
@@ -42,6 +43,31 @@ describe('mindmap import helpers', () => {
     ).toBe(4)
   })
 
+  it('builds a fallback editor doc from source tree data', () => {
+    const doc = buildEditorDocFromSourceTree({
+      title: '导入标题',
+      children: [
+        {
+          text: '第一节',
+          rich_text_html: '<div>第一节</div>',
+          children: [{ text: '知识点', children: [] }],
+        },
+      ],
+    })
+
+    expect(doc.root?.data).toMatchObject({
+      text: '导入标题',
+      uid: 'palace-root',
+      memoryAnkiRootKind: 'palace',
+    })
+    expect(doc.root?.children?.[0]?.data).toMatchObject({
+      text: '<div>第一节</div>',
+      richText: true,
+    })
+    expect(typeof doc.root?.children?.[0]?.data?.uid).toBe('string')
+    expect(doc.root?.children?.[0]?.children?.[0]?.data?.text).toBe('知识点')
+  })
+
   it('applies replace and creates undo snapshot', () => {
     const editorState = buildEditorState()
     const result = applyImportedEditorState({
@@ -66,7 +92,196 @@ describe('mindmap import helpers', () => {
     expect(result.undoSnapshot?.sourceTitle).toBe('导入标题')
   })
 
+  it('appends the imported root as a child subtree instead of flattening its children', () => {
+    const editorState = buildEditorState()
+    const result = applyImportedEditorState({
+      editorState,
+      importedDoc: {
+        root: {
+          data: { text: 'Imported Root', uid: 'import-root', memoryAnkiRootKind: 'palace' },
+          children: [
+            { data: { text: 'B1', uid: 'b-1' }, children: [] },
+            { data: { text: 'B2', uid: 'b-2' }, children: [] },
+            { data: { text: 'B3', uid: 'b-3' }, children: [] },
+            { data: { text: 'B4', uid: 'b-4' }, children: [] },
+          ],
+        },
+      },
+      mode: 'append',
+      targetUid: 'a-1',
+    })
+
+    expect(result.applied).toBe(true)
+    const targetChildren =
+      (
+        ((result.nextEditorState?.editor_doc as { root?: { children?: Array<{ data?: { uid?: string }; children?: unknown[] }> } })
+          ?.root?.children || []) as Array<{ data?: { uid?: string }; children?: Array<{ data?: { text?: string } }> }>
+      )[0]?.children || []
+    expect(targetChildren).toHaveLength(1)
+    expect(targetChildren[0]?.data?.text).toBe('Imported Root')
+    expect(targetChildren[0]?.data?.memoryAnkiRootKind).toBeUndefined()
+    expect(typeof targetChildren[0]?.data?.uid).toBe('string')
+    expect(targetChildren[0]?.data?.uid).not.toBe('import-root')
+    expect(targetChildren[0]?.children?.map((child) => child.data?.text)).toEqual(['B1', 'B2', 'B3', 'B4'])
+  })
+
+  it('rekeys every appended descendant to avoid duplicate subtree identities', () => {
+    const editorState: MindMapEditorState = {
+      ...buildEditorState(),
+      editor_doc: {
+        root: {
+          data: { text: 'Root', uid: 'root-1' },
+          children: [
+            {
+              data: { text: 'A', uid: 'a-1', memoryAnkiId: 1, memoryAnkiNodeType: 'chapter' },
+              children: [
+                {
+                  data: { text: 'Existing Child', uid: 'dup-child', memoryAnkiId: 2 },
+                  children: [],
+                },
+              ],
+            },
+          ],
+        },
+      },
+    }
+
+    const result = applyImportedEditorState({
+      editorState,
+      importedDoc: {
+        root: {
+          data: {
+            text: 'Imported Root',
+            uid: 'a-1',
+            memoryAnkiRootKind: 'palace',
+            memoryAnkiId: 88,
+            memoryAnkiNodeType: 'chapter',
+          },
+          children: [
+            {
+              data: { text: 'Imported Child', uid: 'dup-child', memoryAnkiId: 99, memoryAnkiNodeType: 'point' },
+              children: [
+                {
+                  data: { text: 'Imported Grandchild', uid: 'root-1', memoryAnkiId: 100 },
+                  children: [],
+                },
+              ],
+            },
+          ],
+        },
+      },
+      mode: 'append',
+      targetUid: 'a-1',
+    })
+
+    expect(result.applied).toBe(true)
+    const appendedNode =
+      (
+        ((result.nextEditorState?.editor_doc as { root?: { children?: Array<{ children?: unknown[] }> } })?.root
+          ?.children || []) as Array<{ children?: Array<{ data?: Record<string, unknown>; children?: unknown[] }> }>
+      )[0]?.children?.[1]
+
+    expect(appendedNode?.data?.text).toBe('Imported Root')
+    expect(appendedNode?.data?.uid).not.toBe('a-1')
+    expect(appendedNode?.data?.memoryAnkiRootKind).toBeUndefined()
+    expect(appendedNode?.data?.memoryAnkiId).toBeUndefined()
+    expect(appendedNode?.data?.memoryAnkiNodeType).toBeUndefined()
+
+    const appendedChild = appendedNode?.children?.[0] as
+      | { data?: Record<string, unknown>; children?: Array<{ data?: Record<string, unknown> }> }
+      | undefined
+    expect(appendedChild?.data?.text).toBe('Imported Child')
+    expect(appendedChild?.data?.uid).not.toBe('dup-child')
+    expect(appendedChild?.data?.memoryAnkiId).toBeUndefined()
+    expect(appendedChild?.data?.memoryAnkiNodeType).toBeUndefined()
+
+    const appendedGrandchild = appendedChild?.children?.[0]
+    expect(appendedGrandchild?.data?.text).toBe('Imported Grandchild')
+    expect(appendedGrandchild?.data?.uid).not.toBe('root-1')
+    expect(appendedGrandchild?.data?.memoryAnkiId).toBeUndefined()
+  })
+
+  it('keeps existing target children and appends the imported subtree after them', () => {
+    const editorState: MindMapEditorState = {
+      ...buildEditorState(),
+      editor_doc: {
+        root: {
+          data: { text: 'Root', uid: 'root-1' },
+          children: [
+            {
+              data: { text: 'A', uid: 'a-1' },
+              children: [{ data: { text: 'Existing', uid: 'existing-1' }, children: [] }],
+            },
+          ],
+        },
+      },
+    }
+
+    const result = applyImportedEditorState({
+      editorState,
+      importedDoc: {
+        root: {
+          data: { text: 'Imported Root', uid: 'import-root' },
+          children: [{ data: { text: 'B', uid: 'b-1' }, children: [] }],
+        },
+      },
+      mode: 'append',
+      targetUid: 'a-1',
+    })
+
+    expect(result.applied).toBe(true)
+    const targetChildren =
+      (
+        ((result.nextEditorState?.editor_doc as { root?: { children?: Array<{ children?: unknown[] }> } })?.root
+          ?.children || []) as Array<{ children?: Array<{ data?: { text?: string } }> }>
+      )[0]?.children || []
+    expect(targetChildren.map((child) => child.data?.text)).toEqual(['Existing', 'Imported Root'])
+  })
+
+  it('appends a leaf node when the imported root has no children', () => {
+    const editorState = buildEditorState()
+    const result = applyImportedEditorState({
+      editorState,
+      importedDoc: {
+        root: {
+          data: { text: 'Imported Leaf', uid: 'import-root' },
+          children: [],
+        },
+      },
+      mode: 'append',
+      targetUid: 'a-1',
+    })
+
+    expect(result.applied).toBe(true)
+    const targetChildren =
+      (
+        ((result.nextEditorState?.editor_doc as { root?: { children?: Array<{ children?: unknown[] }> } })?.root
+          ?.children || []) as Array<{ children?: Array<{ data?: { text?: string }; children?: unknown[] }> }>
+      )[0]?.children || []
+    expect(targetChildren).toHaveLength(1)
+    expect(targetChildren[0]?.data?.text).toBe('Imported Leaf')
+    expect(targetChildren[0]?.children).toEqual([])
+  })
+
   it('returns append error when target uid is missing', () => {
+    const editorState = buildEditorState()
+    const result = applyImportedEditorState({
+      editorState,
+      importedDoc: {
+        root: {
+          data: { text: 'Imported', uid: 'root-2' },
+          children: [{ data: { text: 'B', uid: 'b-1' }, children: [] }],
+        },
+      },
+      mode: 'append',
+      targetUid: null,
+    })
+
+    expect(result.applied).toBe(false)
+    expect(result.error).toContain('请先在脑图中选中一个追加目标节点')
+  })
+
+  it('returns append error when target uid does not exist', () => {
     const editorState = buildEditorState()
     const result = applyImportedEditorState({
       editorState,

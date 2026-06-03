@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { HardDriveDownload, RotateCcw } from 'lucide-react'
 import { toast } from 'sonner'
-import { ProfileNav } from '@/features/profile/ProfileNav'
+import { ProfileLayout } from '@/features/profile/ProfileLayout'
 import type { BackupSummary } from '@/shared/api/contracts'
 import {
   createBackupApi,
@@ -47,14 +47,10 @@ export default function ProfileBackupsPage() {
   }
 
   return (
-    <div className="space-y-8">
-      <div className="space-y-3">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">备份与恢复</h1>
-        </div>
-        <ProfileNav />
-      </div>
-
+    <ProfileLayout
+      title="备份与恢复"
+      description="这里保留 SQLite 主库和附件的整库快照，适合做高风险改动前后的快速回滚。"
+    >
       <Card>
         <CardHeader>
           <CardTitle className="text-base">整库备份</CardTitle>
@@ -118,6 +114,6 @@ export default function ProfileBackupsPage() {
           )}
         </CardContent>
       </Card>
-    </div>
+    </ProfileLayout>
   )
 }

@@ -1,6 +1,6 @@
-import { HardDriveDownload, Settings } from 'lucide-react'
+import { HardDriveDownload, Settings, Sparkles } from 'lucide-react'
 import { Link, useLocation } from 'react-router-dom'
-import { Button } from '@/shared/components/ui/button'
+import { cn } from '@/shared/lib/utils'
 
 export function ProfileNav() {
   const location = useLocation()
@@ -8,22 +8,30 @@ export function ProfileNav() {
 
   const items = [
     { href: '/profile', label: '复习配置与导入导出', icon: Settings },
+    { href: '/profile/ai-split', label: 'AI分卡配置', icon: Sparkles },
     { href: '/profile/backups', label: '备份与恢复', icon: HardDriveDownload },
   ]
 
   return (
-    <div className="flex flex-wrap gap-2">
+    <nav className="flex flex-wrap gap-2 rounded-2xl border border-border/70 bg-card/70 p-2 lg:flex-col">
       {items.map(({ href, label, icon: Icon }) => {
         const active = currentPath === href
         return (
-          <Link key={href} to={href}>
-            <Button variant={active ? 'default' : 'outline'} size="sm">
-              <Icon className="mr-2 h-4 w-4" />
-              {label}
-            </Button>
+          <Link
+            key={href}
+            to={href}
+            className={cn(
+              'inline-flex min-h-11 flex-1 items-center gap-3 rounded-xl px-3 py-2 text-sm transition-colors lg:w-full',
+              active
+                ? 'bg-primary text-primary-foreground shadow-sm'
+                : 'text-muted-foreground hover:bg-accent hover:text-foreground',
+            )}
+          >
+            <Icon className="h-4 w-4 shrink-0" />
+            <span className="truncate">{label}</span>
           </Link>
         )
       })}
-    </div>
+    </nav>
   )
 }

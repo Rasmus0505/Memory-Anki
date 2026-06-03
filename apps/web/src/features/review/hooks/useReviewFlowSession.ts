@@ -1,21 +1,11 @@
 import * as React from 'react'
 import type { MindMapEditorState } from '@/shared/api/contracts'
 import type { MindMapSelection } from '@/shared/components/mindmap-host'
-import { type RevealState } from '@/entities/session/model'
+import { useRevealSession } from '@/entities/review/model/useRevealSession'
 import { useTimedSession } from '@/shared/hooks/useTimedSession'
 import {
-  buildInitialRevealState,
-  buildSelectionNodeId,
-  buildVisibleEditorState,
   collectNodeIds,
-  countNodes,
-  findNextHiddenChild,
-  flattenNodes,
-  hideNodeAndDescendants,
-  parseEditorDoc,
   revealRemainingNodes,
-  sanitizeRedNodeIds,
-  buildReviewTree,
   type ReviewFlowSnapshot,
 } from '@/features/review/model/review-flow-tree'
 
@@ -30,6 +20,7 @@ interface UseReviewFlowSessionOptions {
   title: string
   palaceId: number | null
   sessionKind: 'practice' | 'review'
+  persistKey?: string | null
   editorState: MindMapEditorState
   onComplete: (payload: CompleteFlowPayload) => void | Promise<void>
   onRestart?: () => void
@@ -43,6 +34,7 @@ export function useReviewFlowSession({
   title,
   palaceId,
   sessionKind,
+  persistKey = null,
   editorState,
   onComplete,
   onRestart,
@@ -55,51 +47,19 @@ export function useReviewFlowSession({
     kind: sessionKind,
     title,
     palaceId,
+    persistKey,
   })
-  const parsedDoc = React.useMemo(
-    () => parseEditorDoc(editorState.editor_doc),
-    [editorState.editor_doc],
-  )
-  const root = React.useMemo(() => buildReviewTree(parsedDoc, title), [parsedDoc, title])
-  const nodeMap = React.useMemo(() => flattenNodes(root), [root])
-  const [revealMap, setRevealMap] = React.useState<Record<string, RevealState>>(
-    () => buildInitialRevealState(root, initialSnapshot?.revealMap ?? null),
-  )
-  const [redNodeIds, setRedNodeIds] = React.useState<Set<string>>(
-    () => new Set((initialSnapshot?.redNodeIds ?? []).filter(Boolean)),
-  )
+  const reveal = useRevealSession({
+    title,
+    editorState,
+    initialSnapshot,
+    resetCompletedOnDocChange: sessionKind === 'review',
+  })
   const [fullscreen, setFullscreen] = React.useState(false)
-  const [completed, setCompleted] = React.useState(
-    Boolean(initialSnapshot?.completed),
-  )
-  const [docVersion, setDocVersion] = React.useState(0)
   const submittingRef = React.useRef(false)
   const timerRef = React.useRef(timer)
-  const userAdvancedReviewRef = React.useRef(Boolean(initialSnapshot?.completed))
-  const revealMapRef = React.useRef(revealMap)
-  const docFingerprint = React.useMemo(
-    () => JSON.stringify(parsedDoc ?? {}),
-    [parsedDoc],
-  )
+  const hardUnloadRef = React.useRef(false)
   const lastSnapshotPayloadRef = React.useRef('')
-
-  React.useEffect(() => {
-    revealMapRef.current = revealMap
-  }, [revealMap])
-
-  React.useEffect(() => {
-    const nextRevealMap = buildInitialRevealState(root, revealMapRef.current)
-    setRevealMap(nextRevealMap)
-    setRedNodeIds((current) => sanitizeRedNodeIds(root, current))
-    if (sessionKind === 'review') {
-      setCompleted(false)
-    }
-    userAdvancedReviewRef.current = false
-  }, [docFingerprint, root, sessionKind])
-
-  React.useEffect(() => {
-    setDocVersion((current) => current + 1)
-  }, [docFingerprint])
 
   React.useEffect(() => {
     if (!fullscreen) return
@@ -120,19 +80,36 @@ export function useReviewFlowSession({
 
   React.useEffect(() => {
     const payload = {
-      revealMap,
-      redNodeIds: [...redNodeIds],
-      completed,
+      revealMap: reveal.revealMap,
+      redNodeIds: [...reveal.redNodeIds],
+      completed: reveal.completed,
     }
     const fingerprint = JSON.stringify(payload)
     if (fingerprint === lastSnapshotPayloadRef.current) return
     lastSnapshotPayloadRef.current = fingerprint
     onSnapshotChange?.(payload)
-  }, [completed, onSnapshotChange, redNodeIds, revealMap])
+  }, [onSnapshotChange, reveal.completed, reveal.redNodeIds, reveal.revealMap])
+
+  React.useEffect(() => {
+    const markHardUnload = () => {
+      hardUnloadRef.current = true
+    }
+
+    window.addEventListener('beforeunload', markHardUnload)
+    window.addEventListener('pagehide', markHardUnload)
+
+    return () => {
+      window.removeEventListener('beforeunload', markHardUnload)
+      window.removeEventListener('pagehide', markHardUnload)
+    }
+  }, [])
 
   React.useEffect(() => {
     return () => {
       const currentTimer = timerRef.current
+      if (hardUnloadRef.current) {
+        return
+      }
       if (currentTimer.startedAt && currentTimer.status !== 'completed') {
         void currentTimer.complete('left_page', {
           persist_progress: persistProgress,
@@ -141,52 +118,14 @@ export function useReviewFlowSession({
     }
   }, [persistProgress])
 
-  const visibleEditorState = React.useMemo(
-    () =>
-      buildVisibleEditorState(
-        editorState,
-        parsedDoc,
-        revealMap,
-        nodeMap,
-        title,
-        redNodeIds,
-      ),
-    [editorState, nodeMap, parsedDoc, redNodeIds, revealMap, title],
-  )
-  const visibleEditorSyncKey = React.useMemo(
-    () =>
-      JSON.stringify({
-        docVersion,
-        revealMap,
-        redNodeIds: [...redNodeIds].sort(),
-      }),
-    [docVersion, redNodeIds, revealMap],
-  )
-
-  const totalNodeCount = React.useMemo(() => countNodes(root), [root])
-  const visibleNonRootCount = React.useMemo(
-    () =>
-      collectNodeIds(root).filter(
-        (id) => id !== root.id && (revealMap[id] ?? 'hidden') !== 'hidden',
-      ).length,
-    [revealMap, root],
-  )
-  const revealedNonRootCount = React.useMemo(
-    () =>
-      collectNodeIds(root).filter(
-        (id) => id !== root.id && (revealMap[id] ?? 'hidden') === 'revealed',
-      ).length,
-    [revealMap, root],
-  )
-
   const finishFlow = React.useCallback(
     async (modeName: 'manual_complete' | 'auto_complete') => {
-      if (completed || submittingRef.current) return
+      if (reveal.completed || submittingRef.current) return
 
-      const finishState = revealRemainingNodes(root, revealMap, redNodeIds)
-      setRevealMap(finishState.revealMap)
-      setRedNodeIds(finishState.redNodeIds)
-      setCompleted(true)
+      const finishState = revealRemainingNodes(reveal.root, reveal.revealMap, reveal.redNodeIds)
+      reveal.setRevealMap(finishState.revealMap)
+      reveal.setRedNodeIds(finishState.redNodeIds)
+      reveal.setCompleted(true)
       timer.registerActivity('practice_interaction', { source: 'complete' })
       const record = await timer.complete(modeName, {
         revealed_remaining: finishState.revealedRemaining,
@@ -204,53 +143,32 @@ export function useReviewFlowSession({
         submittingRef.current = false
       }
     },
-    [completed, onComplete, redNodeIds, revealMap, root, timer],
+    [onComplete, reveal, timer],
   )
 
   const handleNodeClick = React.useCallback(
     (nodes: MindMapSelection[]) => {
-      if (completed) return
-      const nodeId = buildSelectionNodeId(nodes[0] ?? null)
-      if (!nodeId) return
-      const node = nodeMap.get(nodeId)
-      if (!node) return
+      if (reveal.completed) return
       timer.registerActivity('practice_interaction', { source: 'left_click' })
-      setRevealMap((current) => {
-        const state = current[nodeId] ?? 'hidden'
-        if (state === 'placeholder') {
-          userAdvancedReviewRef.current = true
-          return { ...current, [nodeId]: 'revealed' }
-        }
-        if (state !== 'revealed') return current
-        const nextChild = findNextHiddenChild(node, current)
-        if (!nextChild) return current
-        userAdvancedReviewRef.current = true
-        return { ...current, [nextChild.id]: 'placeholder' }
-      })
+      reveal.handleNodeClick(nodes)
     },
-    [completed, nodeMap, timer],
+    [reveal, timer],
   )
 
   const handleNodeContextMenu = React.useCallback(
     (nodes: MindMapSelection[]) => {
-      if (completed) return
-      const nodeId = buildSelectionNodeId(nodes[0] ?? null)
-      if (!nodeId) return
+      if (reveal.completed) return
       timer.registerActivity('practice_interaction', { source: 'right_click' })
-      setRevealMap((current) => hideNodeAndDescendants(nodeId, nodeMap, current))
+      reveal.handleNodeContextMenu(nodes)
     },
-    [completed, nodeMap, timer],
+    [reveal, timer],
   )
 
   const handleRestart = React.useCallback(() => {
-    const initialRevealMap = buildInitialRevealState(root)
-    setRevealMap(initialRevealMap)
-    setRedNodeIds(new Set())
-    setCompleted(false)
-    userAdvancedReviewRef.current = false
+    reveal.reset()
     timer.registerActivity('practice_interaction', { source: 'restart' })
     onRestart?.()
-  }, [onRestart, root, timer])
+  }, [onRestart, reveal, timer])
 
   const screenGlowClass =
     timer.glowState === 'running'
@@ -261,15 +179,15 @@ export function useReviewFlowSession({
 
   return {
     timer,
-    root,
-    visibleEditorState,
-    totalNodeCount,
-    visibleNonRootCount,
-    revealedNonRootCount,
-    visibleEditorSyncKey,
-    redNodeCount: redNodeIds.size,
+    root: reveal.root,
+    visibleEditorState: reveal.visibleEditorState,
+    totalNodeCount: reveal.totalNodeCount,
+    visibleNonRootCount: reveal.visibleNonRootCount,
+    revealedNonRootCount: reveal.revealedNonRootCount,
+    visibleEditorSyncKey: reveal.visibleEditorSyncKey,
+    redNodeCount: reveal.redNodeIds.size,
     fullscreen,
-    completed,
+    completed: reveal.completed,
     setFullscreen,
     handleNodeClick,
     handleNodeContextMenu,

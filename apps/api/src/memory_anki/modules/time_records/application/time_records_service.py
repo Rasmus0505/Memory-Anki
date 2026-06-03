@@ -320,6 +320,44 @@ def get_weekly_total_review_duration_seconds(session: Session) -> int:
     )
 
 
+def get_monthly_total_review_duration_seconds(session: Session) -> int:
+    start, end = _current_month_bounds()
+    return get_time_record_duration_seconds(
+        session,
+        kinds=TIME_RECORD_DASHBOARD_KINDS,
+        start=start,
+        end=end,
+    )
+
+
+def get_selected_total_review_duration_seconds(
+    session: Session,
+    *,
+    start: datetime,
+    end: datetime,
+) -> int:
+    return get_time_record_duration_seconds(
+        session,
+        kinds=TIME_RECORD_DASHBOARD_KINDS,
+        start=start,
+        end=end,
+    )
+
+
+def get_all_time_total_review_duration_seconds(session: Session) -> int:
+    threshold = get_threshold_seconds(session)
+    records = (
+        session.query(TimeRecord)
+        .filter(
+            TimeRecord.deleted_at.is_(None),
+            TimeRecord.kind.in_(TIME_RECORD_DASHBOARD_KINDS),
+            TimeRecord.effective_seconds > threshold,
+        )
+        .all()
+    )
+    return sum(record.effective_seconds for record in records)
+
+
 def get_weekly_formal_review_duration_seconds(session: Session) -> int:
     start, end = _current_week_bounds()
     return get_time_record_duration_seconds(
@@ -431,6 +469,35 @@ def _current_week_bounds() -> tuple[datetime, datetime]:
     start = datetime.combine(start_of_week, time.min)
     end = datetime.combine(today + timedelta(days=1), time.min)
     return start, end
+
+
+def _current_month_bounds() -> tuple[datetime, datetime]:
+    today = date.today()
+    start_of_month = today.replace(day=1)
+    start = datetime.combine(start_of_month, time.min)
+    end = _start_of_next_month(start_of_month)
+    return start, end
+
+
+def month_bounds(target: date) -> tuple[datetime, datetime]:
+    start_of_month = target.replace(day=1)
+    start = datetime.combine(start_of_month, time.min)
+    end = _start_of_next_month(start_of_month)
+    return start, end
+
+
+def date_range_bounds(start_date: date, end_date: date) -> tuple[datetime, datetime]:
+    start = datetime.combine(start_date, time.min)
+    end = datetime.combine(end_date + timedelta(days=1), time.min)
+    return start, end
+
+
+def _start_of_next_month(start_of_month: date) -> datetime:
+    if start_of_month.month == 12:
+        next_month = date(start_of_month.year + 1, 1, 1)
+    else:
+        next_month = date(start_of_month.year, start_of_month.month + 1, 1)
+    return datetime.combine(next_month, time.min)
 
 
 def _parse_events(raw: str | None) -> list[dict[str, Any]]:
