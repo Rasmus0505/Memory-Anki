@@ -8,7 +8,13 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from memory_anki.infrastructure.db.models import Config, ReviewLog, TimeRecord
+from memory_anki.infrastructure.db.models import (
+    Config,
+    EnglishCourse,
+    EnglishCourseProgress,
+    ReviewLog,
+    TimeRecord,
+)
 
 TIME_RECORD_DASHBOARD_KINDS = ("review", "practice", "palace_edit")
 
@@ -19,6 +25,8 @@ def _normalize_record(record: TimeRecord) -> dict:
         "kind": record.kind,
         "palaceId": record.palace_id,
         "palaceSegmentId": getattr(record, "palace_segment_id", None),
+        "sourceKind": _resolve_source_kind(record),
+        "englishCourseId": getattr(record, "english_course_id", None),
         "title": record.title,
         "startedAt": serialize_storage_datetime(record.started_at),
         "endedAt": serialize_storage_datetime(record.ended_at),
@@ -76,11 +84,18 @@ def create_time_record(session: Session, payload: dict) -> dict | None:
         raise ValueError("开始时间和结束时间不能为空。")
     if started_at > ended_at:
         raise ValueError("开始时间不能晚于结束时间。")
+    source_kind = _normalize_source_kind(
+        payload.get("sourceKind"),
+        palace_id=payload.get("palaceId"),
+        english_course_id=payload.get("englishCourseId"),
+    )
     record = TimeRecord(
         id=str(payload["id"]),
         kind=str(payload["kind"]),
         palace_id=payload.get("palaceId"),
         palace_segment_id=payload.get("palaceSegmentId"),
+        source_kind=source_kind,
+        english_course_id=payload.get("englishCourseId"),
         title=str(payload.get("title", "")),
         started_at=started_at,
         ended_at=ended_at,
@@ -107,6 +122,7 @@ def update_time_record(session: Session, record_id: str, updater: dict) -> dict 
         "kind": ("kind", str),
         "palaceId": ("palace_id", lambda value: value),
         "palaceSegmentId": ("palace_segment_id", lambda value: value),
+        "englishCourseId": ("english_course_id", lambda value: value),
         "title": ("title", str),
         "startedAt": ("started_at", parse_storage_datetime),
         "endedAt": ("ended_at", parse_storage_datetime),
@@ -121,6 +137,12 @@ def update_time_record(session: Session, record_id: str, updater: dict) -> dict 
     for key, (field, transform) in mapping.items():
         if key in updater:
             setattr(record, field, transform(updater[key]))
+    if "sourceKind" in updater:
+        record.source_kind = _normalize_source_kind(
+            updater.get("sourceKind"),
+            palace_id=record.palace_id,
+            english_course_id=getattr(record, "english_course_id", None),
+        )
 
     if record.started_at is None or record.ended_at is None:
         raise ValueError("开始时间和结束时间不能为空。")
@@ -186,7 +208,7 @@ def ensure_review_log_time_records(session: Session) -> int:
     for group_key, group_logs in logs_by_group.items():
         candidate_records = sorted(
             records_by_group.get(group_key, []),
-            key=_review_record_sort_key,
+            key=_review_record_preference_key,
         )
         desired_count = len(group_logs)
         kept_records = candidate_records[:desired_count]
@@ -270,6 +292,7 @@ def create_review_time_record(
         kind="review",
         palace_id=palace_id,
         palace_segment_id=palace_segment_id,
+        source_kind="palace" if palace_id is not None else None,
         title=title,
         started_at=started_at,
         ended_at=normalized_ended_at,
@@ -418,25 +441,82 @@ def get_today_palace_learning_breakdown(session: Session) -> list[dict[str, Any]
     )
 
 
+def get_today_english_practice_duration_seconds(session: Session) -> int:
+    today = date.today()
+    start = datetime.combine(today, time.min)
+    end = start + timedelta(days=1)
+    return get_time_record_duration_seconds(
+        session,
+        kinds=("practice",),
+        start=start,
+        end=end,
+        source_kind="english",
+    )
+
+
+def get_weekly_english_practice_duration_seconds(session: Session) -> int:
+    start, end = _current_week_bounds()
+    return get_time_record_duration_seconds(
+        session,
+        kinds=("practice",),
+        start=start,
+        end=end,
+        source_kind="english",
+    )
+
+
+def get_all_time_english_practice_duration_seconds(session: Session) -> int:
+    threshold = get_threshold_seconds(session)
+    records = (
+        session.query(TimeRecord)
+        .filter(
+            TimeRecord.deleted_at.is_(None),
+            TimeRecord.kind == "practice",
+            TimeRecord.effective_seconds > threshold,
+            TimeRecord.source_kind == "english",
+        )
+        .all()
+    )
+    return sum(record.effective_seconds for record in records)
+
+
+def get_english_course_stats(session: Session) -> dict[str, int]:
+    total_courses = session.query(EnglishCourse).count()
+    completed_courses = (
+        session.query(EnglishCourseProgress)
+        .filter(EnglishCourseProgress.is_completed.is_(True))
+        .count()
+    )
+    unfinished_courses = max(0, total_courses - completed_courses)
+    return {
+        "total_courses": total_courses,
+        "unfinished_courses": unfinished_courses,
+        "completed_courses": completed_courses,
+        "today_practice_seconds": get_today_english_practice_duration_seconds(session),
+        "weekly_practice_seconds": get_weekly_english_practice_duration_seconds(session),
+        "total_practice_seconds": get_all_time_english_practice_duration_seconds(session),
+    }
+
+
 def get_time_record_duration_seconds(
     session: Session,
     *,
     kinds: tuple[str, ...],
     start: datetime,
     end: datetime,
+    source_kind: str | None = None,
 ) -> int:
     threshold = get_threshold_seconds(session)
-    records = (
-        session.query(TimeRecord)
-        .filter(
-            TimeRecord.deleted_at.is_(None),
-            TimeRecord.kind.in_(kinds),
-            TimeRecord.effective_seconds > threshold,
-            TimeRecord.started_at >= start,
-            TimeRecord.started_at < end,
-        )
-        .all()
+    query = session.query(TimeRecord).filter(
+        TimeRecord.deleted_at.is_(None),
+        TimeRecord.kind.in_(kinds),
+        TimeRecord.effective_seconds > threshold,
+        TimeRecord.started_at >= start,
+        TimeRecord.started_at < end,
     )
+    if source_kind is not None:
+        query = query.filter(TimeRecord.source_kind == source_kind)
+    records = query.all()
     return sum(record.effective_seconds for record in records)
 
 
@@ -643,3 +723,44 @@ def _review_record_group_key(record: TimeRecord) -> tuple[int | None, date, int]
 
 def _review_record_sort_key(record: TimeRecord) -> tuple[int, datetime]:
     return (1 if record.id.startswith("review-log-") else 0, record.started_at)
+
+
+def _review_record_preference_key(record: TimeRecord) -> tuple[int, datetime]:
+    if not _is_generated_review_time_record_id(record.id) and not _has_session_events(record):
+        return (0, record.started_at)
+    if _is_generated_review_time_record_id(record.id):
+        return (1, record.started_at)
+    return (2, record.started_at)
+
+
+def _is_generated_review_time_record_id(record_id: str) -> bool:
+    return record_id.startswith("review-log-") or record_id.startswith("segment-review-log-")
+
+
+def _has_session_events(record: TimeRecord) -> bool:
+    events = _parse_events(record.events_json)
+    return len(events) > 0
+
+
+def _normalize_source_kind(
+    value: Any,
+    *,
+    palace_id: int | None,
+    english_course_id: int | None,
+) -> str | None:
+    raw = str(value or "").strip().lower()
+    if raw in {"palace", "english"}:
+        return raw
+    if english_course_id is not None:
+        return "english"
+    if palace_id is not None:
+        return "palace"
+    return None
+
+
+def _resolve_source_kind(record: TimeRecord) -> str | None:
+    return _normalize_source_kind(
+        getattr(record, "source_kind", None),
+        palace_id=record.palace_id,
+        english_course_id=getattr(record, "english_course_id", None),
+    )

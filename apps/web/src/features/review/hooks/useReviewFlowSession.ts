@@ -48,6 +48,7 @@ export function useReviewFlowSession({
     title,
     palaceId,
     persistKey,
+    persistCompletionRecord: sessionKind !== 'review',
   })
   const reveal = useRevealSession({
     title,

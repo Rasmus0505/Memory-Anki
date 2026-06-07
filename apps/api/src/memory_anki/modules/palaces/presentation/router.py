@@ -12,6 +12,7 @@ from memory_anki.infrastructure.db.models import ReviewSchedule, get_session
 from memory_anki.modules.backups.application.backup_service import (
     cleanup_duplicate_palace_versions,
     create_full_backup,
+    export_palace_snapshot_comparison,
     get_palace_version_detail,
     list_backups,
     list_palace_versions,
@@ -358,6 +359,7 @@ def api_ai_split_editor_node(palace_id: int, data: dict, s: Session = Depends(se
         "generated_children_count": result.generated_children_count,
         "reassigned_existing_children_count": result.reassigned_existing_children_count,
         "model": result.model,
+        "ai_call_log_id": getattr(result, "ai_call_log_id", None),
     }
 
 
@@ -553,6 +555,26 @@ def api_restore_palace_from_backup(data: dict, s: Session = Depends(session_dep)
         return {"error": "missing path or palace_id"}
     result = restore_palace_from_backup(s, backup_db_path=backup_path, palace_id=palace_id)
     return {"ok": True, "restored": result}
+
+
+@router.post("/backups/compare-palace-snapshots")
+def api_compare_palace_snapshots(data: dict, s: Session = Depends(session_dep)):
+    palace_id = int(data.get("palace_id") or 0)
+    version_id_raw = data.get("version_id")
+    backup_path = str(data.get("backup_db_path") or data.get("path") or "").strip() or None
+    version_id = int(version_id_raw) if version_id_raw not in (None, "", 0, "0") else None
+    if palace_id <= 0:
+        return {"error": "missing palace_id"}
+    try:
+        result = export_palace_snapshot_comparison(
+            s,
+            palace_id=palace_id,
+            version_id=version_id,
+            backup_db_path=backup_path,
+        )
+    except (ValueError, FileNotFoundError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"ok": True, **result}
 
 
 @router.post("/palaces/{palace_id}/upload")

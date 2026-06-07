@@ -15,7 +15,9 @@ from sqlalchemy.pool import StaticPool
 import memory_anki.app.main as main_module
 from memory_anki.infrastructure.db.models import (
     Base,
+    Chapter,
     Config,
+    ExternalAiCallLog,
     Palace,
     PalaceSegment,
     PalaceSegmentReviewSchedule,
@@ -23,11 +25,13 @@ from memory_anki.infrastructure.db.models import (
     Peg,
     ReviewLog,
     ReviewSchedule,
+    Subject,
     TimeRecord,
 )
 from memory_anki.modules.backups.application.backup_service import (
     ROLLING_EDIT_BACKUP_INTERVAL,
     create_palace_version,
+    export_palace_snapshot_comparison,
     maybe_create_interval_backup,
     restore_palace_from_backup,
 )
@@ -890,6 +894,90 @@ class ReviewRouteTests(unittest.TestCase):
         self.assertEqual(payload["mindmap_ai_split_include_note"], "false")
         self.assertEqual(payload["mindmap_ai_split_custom_instruction"], "优先按考试框架拆分。")
 
+    def test_ai_prompt_settings_can_list_save_and_reset_templates(self):
+        list_response = self.client.get("/api/v1/settings/ai-prompts")
+        self.assertEqual(list_response.status_code, 200)
+        items = list_response.json()["items"]
+        target = next(item for item in items if item["key"] == "ai_prompt_import_batch_mindmap")
+        self.assertIn("{{structure_tree_json}}", target["template"])
+
+        custom_template = (
+            "自定义批量提示词\n"
+            "{{structure_tree_json}}\n"
+            "请严格输出 JSON。"
+        )
+        save_response = self.client.put(
+            "/api/v1/settings/ai-prompts",
+            json={"templates": {"ai_prompt_import_batch_mindmap": custom_template}},
+        )
+        self.assertEqual(save_response.status_code, 200)
+        saved_target = next(
+            item
+            for item in save_response.json()["items"]
+            if item["key"] == "ai_prompt_import_batch_mindmap"
+        )
+        self.assertEqual(saved_target["template"], custom_template)
+        self.assertTrue(saved_target["is_customized"])
+
+        reset_response = self.client.post(
+            "/api/v1/settings/ai-prompts/reset",
+            json={"keys": ["ai_prompt_import_batch_mindmap"]},
+        )
+        self.assertEqual(reset_response.status_code, 200)
+        reset_target = next(
+            item
+            for item in reset_response.json()["items"]
+            if item["key"] == "ai_prompt_import_batch_mindmap"
+        )
+        self.assertEqual(reset_target["template"], reset_target["default_template"])
+        self.assertFalse(reset_target["is_customized"])
+
+    def test_ai_prompt_settings_reject_unknown_placeholder(self):
+        response = self.client.put(
+            "/api/v1/settings/ai-prompts",
+            json={
+                "templates": {
+                    "ai_prompt_import_batch_mindmap": "坏模板 {{structure_tree_json}} {{unknown_var}}"
+                }
+            },
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("未知占位符", response.json()["detail"])
+
+    def test_ai_call_log_endpoints_return_summary_and_detail(self):
+        with self.SessionLocal() as session:
+            session.add(
+                ExternalAiCallLog(
+                    id="log-1",
+                    feature="AI 分卡",
+                    operation="mindmap_ai_split",
+                    job_id="job-1",
+                    palace_id=1,
+                    status="success",
+                    provider="openai_compatible",
+                    base_url="https://example.test/v1",
+                    model="qwen3.6-flash",
+                    request_id="req-1",
+                    request_json=json.dumps({"prompt": "系统提示词", "input_artifacts": []}, ensure_ascii=False),
+                    response_json=json.dumps({"response_text": "{\"ok\":true}"}, ensure_ascii=False),
+                    error_json="{}",
+                )
+            )
+            session.commit()
+
+        list_response = self.client.get("/api/v1/ai-call-logs?job_id=job-1")
+        self.assertEqual(list_response.status_code, 200)
+        items = list_response.json()["items"]
+        self.assertEqual(len(items), 1)
+        self.assertEqual(items[0]["id"], "log-1")
+
+        detail_response = self.client.get("/api/v1/ai-call-logs/log-1")
+        self.assertEqual(detail_response.status_code, 200)
+        payload = detail_response.json()
+        self.assertEqual(payload["prompt_text"], "系统提示词")
+        self.assertEqual(payload["response_text"], "{\"ok\":true}")
+        self.assertEqual(payload["job_id"], "job-1")
+
     def test_ensure_review_log_time_records_backfills_once(self):
         with self.SessionLocal() as session:
             review_log = ReviewLog(
@@ -1062,6 +1150,120 @@ class ReviewRouteTests(unittest.TestCase):
             self.assertTrue(any(subject["ungrouped_palaces"] for subject in payload["today_new_palaces"]))
         finally:
             main_module.get_session = original_main_get_session
+
+    def test_dashboard_returns_due_later_today_and_practice_counts(self):
+        original_main_get_session = main_module.get_session
+
+        def get_test_session():
+            return self.SessionLocal()
+
+        main_module.get_session = get_test_session
+        dashboard_client = TestClient(main_module.app)
+        try:
+            with self.SessionLocal() as session:
+                primary_palace = session.query(Palace).filter_by(id=1).first()
+                self.assertIsNotNone(primary_palace)
+                primary_palace.needs_practice = True
+
+                later_palace = Palace(
+                    title="Later Today Palace",
+                    description="",
+                    created_at=datetime.combine(date.today(), time(hour=8)),
+                    updated_at=datetime.combine(date.today(), time(hour=8)),
+                )
+                practice_palace = Palace(
+                    title="Practice Palace",
+                    description="",
+                    created_at=datetime.combine(date.today(), time(hour=7)),
+                    updated_at=datetime.combine(date.today(), time(hour=7)),
+                    needs_practice=True,
+                )
+                session.add_all([later_palace, practice_palace])
+                session.flush()
+
+                later_due_at = datetime.now().replace(microsecond=0) + timedelta(hours=2)
+                session.add(
+                    ReviewSchedule(
+                        palace_id=later_palace.id,
+                        scheduled_date=later_due_at.date(),
+                        scheduled_at=later_due_at,
+                        interval_days=1,
+                        algorithm_used="ebbinghaus",
+                        completed=False,
+                        review_number=0,
+                        review_type="standard",
+                    )
+                )
+                session.commit()
+
+            response = dashboard_client.get("/api/v1/dashboard")
+            self.assertEqual(response.status_code, 200)
+            payload = response.json()
+            self.assertEqual(payload["due_count"], 1)
+            self.assertEqual(payload["due_later_today_count"], 1)
+            self.assertEqual(payload["needs_practice_count"], 2)
+        finally:
+            main_module.get_session = original_main_get_session
+
+    def test_subject_shelf_summary_returns_triage_counts(self):
+        with self.SessionLocal() as session:
+            subject = Subject(name="中国近代史", color="#6366f1")
+            session.add(subject)
+            session.flush()
+
+            chapter = Chapter(subject_id=subject.id, name="第一章", sort_order=0)
+            session.add(chapter)
+            session.flush()
+
+            due_palace = session.query(Palace).filter_by(id=1).first()
+            self.assertIsNotNone(due_palace)
+            due_palace.chapters.append(chapter)
+            due_palace.needs_practice = True
+
+            later_palace = Palace(
+                title="Later Shelf Palace",
+                description="",
+                created_at=datetime.combine(date.today(), time(hour=8)),
+                updated_at=datetime.combine(date.today(), time(hour=8)),
+                needs_practice=False,
+            )
+            practice_palace = Palace(
+                title="Practice Shelf Palace",
+                description="",
+                created_at=datetime.combine(date.today(), time(hour=9)),
+                updated_at=datetime.combine(date.today(), time(hour=9)),
+                needs_practice=True,
+            )
+            session.add_all([later_palace, practice_palace])
+            session.flush()
+            later_palace.chapters.append(chapter)
+            practice_palace.chapters.append(chapter)
+
+            later_due_at = datetime.now().replace(microsecond=0) + timedelta(hours=2)
+            session.add(
+                ReviewSchedule(
+                    palace_id=later_palace.id,
+                    scheduled_date=later_due_at.date(),
+                    scheduled_at=later_due_at,
+                    interval_days=1,
+                    algorithm_used="ebbinghaus",
+                    completed=False,
+                    review_number=0,
+                    review_type="standard",
+                )
+            )
+            session.commit()
+
+        response = self.client.get("/api/v1/palaces/subjects")
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(len(payload["items"]), 1)
+        item = payload["items"][0]
+        self.assertEqual(item["subject"]["name"], "中国近代史")
+        self.assertEqual(item["due_now_count"], 1)
+        self.assertEqual(item["due_later_today_count"], 1)
+        self.assertEqual(item["needs_practice_count"], 2)
+        self.assertEqual(item["review_status"], "due_now")
 
     def test_monthly_total_duration_helper_uses_current_month_total_learning_time(self):
         with self.SessionLocal() as session:
@@ -1843,6 +2045,73 @@ class ReviewRouteTests(unittest.TestCase):
             self.assertEqual(created, 0)
             self.assertEqual(len(active_records), 1)
             self.assertEqual(active_records[0].id, "existing-review-record")
+
+    def test_ensure_review_log_time_records_prefers_generated_review_log_record_over_client_duplicate(self):
+        with self.SessionLocal() as session:
+            review_log = ReviewLog(
+                palace_id=1,
+                review_date=date.today(),
+                score=5,
+                review_mode="review",
+                duration_seconds=876,
+            )
+            session.add(review_log)
+            session.flush()
+            session.add_all(
+                [
+                    TimeRecord(
+                        id=f"review-log-{review_log.id}",
+                        kind="review",
+                        palace_id=1,
+                        source_kind="palace",
+                        title="第一节古罗马的教育阶段",
+                        started_at=datetime.combine(date.today(), time(16, 10, 24)),
+                        ended_at=datetime.combine(date.today(), time(16, 25, 0)),
+                        effective_seconds=876,
+                        pause_count=0,
+                        completion_method="manual_complete",
+                        duration_edited=False,
+                        events_json="[]",
+                    ),
+                    TimeRecord(
+                        id="frontend-duplicate-review-record",
+                        kind="review",
+                        palace_id=1,
+                        source_kind="palace",
+                        title="第一节古罗马的教育阶段 / 第 1 部分",
+                        started_at=datetime.combine(date.today(), time(16, 4, 53)),
+                        ended_at=datetime.combine(date.today(), time(16, 25, 8)),
+                        effective_seconds=876,
+                        pause_count=0,
+                        completion_method="manual_complete",
+                        duration_edited=False,
+                        events_json=json.dumps(
+                            [
+                                {"type": "start", "at": "2026-06-05T16:04:53+08:00"},
+                                {"type": "manual_complete", "at": "2026-06-05T16:25:08+08:00"},
+                            ],
+                            ensure_ascii=False,
+                        ),
+                    ),
+                ]
+            )
+            session.commit()
+
+            created = ensure_review_log_time_records(session)
+            active_records = (
+                session.query(TimeRecord)
+                .filter(TimeRecord.kind == "review", TimeRecord.deleted_at.is_(None))
+                .order_by(TimeRecord.id.asc())
+                .all()
+            )
+            duplicate_record = session.query(TimeRecord).filter_by(id="frontend-duplicate-review-record").first()
+
+            self.assertEqual(created, 0)
+            self.assertEqual(len(active_records), 1)
+            self.assertEqual(active_records[0].id, f"review-log-{review_log.id}")
+            self.assertIsNotNone(duplicate_record)
+            self.assertIsNotNone(duplicate_record.deleted_at)
+            self.assertEqual(duplicate_record.deleted_reason, "migration_dedup")
 
     def test_review_session_includes_editor_doc(self):
         response = self.client.get("/api/v1/review/session/1")
@@ -3124,6 +3393,75 @@ class ReviewRouteTests(unittest.TestCase):
             payload = palace_response.json()
             self.assertEqual(payload["palace"]["title"], "Recovered Palace")
             self.assertEqual(len(payload["editor_doc"]["root"]["children"]), 3)
+
+    def test_export_palace_snapshot_comparison_summarizes_current_and_backup_differences(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            backup_db_path = Path(temp_dir) / "backup.db"
+            backup_engine = create_engine(f"sqlite:///{backup_db_path}")
+            Base.metadata.create_all(backup_engine)
+            BackupSession = sessionmaker(bind=backup_engine)
+            with BackupSession() as backup_session:
+                backup_palace = Palace(
+                    id=1,
+                    title="Recovered Palace",
+                    description="Recovered Description",
+                    difficulty=0,
+                    review_mode="review",
+                    created_at=None,
+                    editor_doc=json.dumps(
+                        {
+                            "root": {
+                                "data": {"text": "Recovered Palace", "memoryAnkiRootKind": "palace"},
+                                "children": [
+                                    {"data": {"text": "A", "memoryAnkiId": 10}, "children": []},
+                                    {"data": {"text": "B", "memoryAnkiId": 11}, "children": []},
+                                    {"data": {"text": "C", "memoryAnkiId": 12}, "children": []},
+                                ],
+                            }
+                        },
+                        ensure_ascii=False,
+                    ),
+                    editor_config=json.dumps({"theme": {"template": "avocado"}}),
+                    editor_local_config=json.dumps({"__lang": "zh"}),
+                )
+                backup_session.add(backup_palace)
+                backup_session.commit()
+            backup_engine.dispose()
+
+            with self.SessionLocal() as session:
+                palace = session.query(Palace).filter_by(id=1).first()
+                self.assertIsNotNone(palace)
+                palace.editor_doc = json.dumps(
+                    {
+                        "root": {
+                            "data": {"text": "Test Palace"},
+                            "children": [
+                                {"data": {"text": "A"}, "children": []},
+                                {"data": {"text": "Only One"}, "children": []},
+                            ],
+                        }
+                    }
+                )
+                session.commit()
+
+                comparison = export_palace_snapshot_comparison(
+                    session,
+                    palace_id=1,
+                    backup_db_path=str(backup_db_path),
+                )
+
+            self.assertEqual(comparison["palace_id"], 1)
+            self.assertEqual(len(comparison["snapshots"]), 2)
+            current_snapshot = next(item for item in comparison["snapshots"] if item["source_kind"] == "current_db")
+            backup_snapshot = next(item for item in comparison["snapshots"] if item["source_kind"] == "backup_db")
+            self.assertEqual(current_snapshot["node_count"], 2)
+            self.assertEqual(backup_snapshot["node_count"], 3)
+            current_vs_backup = next(
+                item for item in comparison["comparisons"] if item["compare_key"] == "current_vs_backup"
+            )
+            self.assertEqual(current_vs_backup["node_count_delta"], -1)
+            self.assertIn("B", current_vs_backup["missing_top_level_texts"])
+            self.assertIn("C", current_vs_backup["missing_top_level_texts"])
 
 
 if __name__ == "__main__":

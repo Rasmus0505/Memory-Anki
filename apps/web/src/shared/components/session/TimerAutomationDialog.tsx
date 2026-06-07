@@ -35,26 +35,34 @@ type ActionFieldKey = keyof TimerAutomationActivityConfig
 function toDraft(config: TimerAutomationConfig) {
   return {
     actions: {
-      autoStartOnPageEnter: config.actions.autoStartOnPageEnter,
       autoResumeOnWindowReturn: config.actions.autoResumeOnWindowReturn,
       countNodeSwitchAsActivity: config.actions.countNodeSwitchAsActivity,
       countEditOperationsAsActivity: config.actions.countEditOperationsAsActivity,
       countPracticeInteractionsAsActivity: config.actions.countPracticeInteractionsAsActivity,
     },
     palace_edit: {
+      autoStartOnPageEnter: config.palace_edit.autoStartOnPageEnter,
       inactiveAutoPauseSeconds: String(config.palace_edit.inactiveAutoPauseSeconds),
       hiddenAutoPauseSeconds: String(config.palace_edit.hiddenAutoPauseSeconds),
       autoPauseRollbackSeconds: String(config.palace_edit.autoPauseRollbackSeconds),
     },
     practice: {
+      autoStartOnPageEnter: config.practice.autoStartOnPageEnter,
       inactiveAutoPauseSeconds: String(config.practice.inactiveAutoPauseSeconds),
       hiddenAutoPauseSeconds: String(config.practice.hiddenAutoPauseSeconds),
       autoPauseRollbackSeconds: String(config.practice.autoPauseRollbackSeconds),
     },
     review: {
+      autoStartOnPageEnter: config.review.autoStartOnPageEnter,
       inactiveAutoPauseSeconds: String(config.review.inactiveAutoPauseSeconds),
       hiddenAutoPauseSeconds: String(config.review.hiddenAutoPauseSeconds),
       autoPauseRollbackSeconds: String(config.review.autoPauseRollbackSeconds),
+    },
+    english: {
+      autoStartOnPageEnter: config.english.autoStartOnPageEnter,
+      inactiveAutoPauseSeconds: String(config.english.inactiveAutoPauseSeconds),
+      hiddenAutoPauseSeconds: String(config.english.hiddenAutoPauseSeconds),
+      autoPauseRollbackSeconds: String(config.english.autoPauseRollbackSeconds),
     },
   }
 }
@@ -100,26 +108,34 @@ export function TimerAutomationDialog({
     () =>
       sanitizeTimerAutomationConfig({
         actions: {
-          autoStartOnPageEnter: draft.actions.autoStartOnPageEnter,
           autoResumeOnWindowReturn: draft.actions.autoResumeOnWindowReturn,
           countNodeSwitchAsActivity: draft.actions.countNodeSwitchAsActivity,
           countEditOperationsAsActivity: draft.actions.countEditOperationsAsActivity,
           countPracticeInteractionsAsActivity: draft.actions.countPracticeInteractionsAsActivity,
         },
         palace_edit: {
+          autoStartOnPageEnter: draft.palace_edit.autoStartOnPageEnter,
           inactiveAutoPauseSeconds: draft.palace_edit.inactiveAutoPauseSeconds,
           hiddenAutoPauseSeconds: draft.palace_edit.hiddenAutoPauseSeconds,
           autoPauseRollbackSeconds: draft.palace_edit.autoPauseRollbackSeconds,
         },
         practice: {
+          autoStartOnPageEnter: draft.practice.autoStartOnPageEnter,
           inactiveAutoPauseSeconds: draft.practice.inactiveAutoPauseSeconds,
           hiddenAutoPauseSeconds: draft.practice.hiddenAutoPauseSeconds,
           autoPauseRollbackSeconds: draft.practice.autoPauseRollbackSeconds,
         },
         review: {
+          autoStartOnPageEnter: draft.review.autoStartOnPageEnter,
           inactiveAutoPauseSeconds: draft.review.inactiveAutoPauseSeconds,
           hiddenAutoPauseSeconds: draft.review.hiddenAutoPauseSeconds,
           autoPauseRollbackSeconds: draft.review.autoPauseRollbackSeconds,
+        },
+        english: {
+          autoStartOnPageEnter: draft.english.autoStartOnPageEnter,
+          inactiveAutoPauseSeconds: draft.english.inactiveAutoPauseSeconds,
+          hiddenAutoPauseSeconds: draft.english.hiddenAutoPauseSeconds,
+          autoPauseRollbackSeconds: draft.english.autoPauseRollbackSeconds,
         },
       }),
     [draft],
@@ -152,21 +168,9 @@ export function TimerAutomationDialog({
           <div className="rounded-2xl border border-border/70 bg-card/70 p-4">
             <div className="mb-1 text-sm font-semibold text-foreground">全局动作规则</div>
             <p className="mb-3 text-xs text-muted-foreground">
-              控制哪些动作会自动开始、自动恢复或在运行中延续计时。
+              控制哪些动作会在暂停后自动恢复，或在运行中延续计时。
             </p>
-            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
-              <label className="flex min-h-[112px] items-start gap-3 rounded-xl border border-border/60 bg-background/50 px-3 py-3 text-sm">
-                <input
-                  type="checkbox"
-                  className="mt-0.5 h-4 w-4"
-                  checked={draft.actions.autoStartOnPageEnter}
-                  onChange={(event) => handleActionChange('autoStartOnPageEnter', event.target.checked)}
-                />
-                <span>
-                  <span className="block font-medium text-foreground">进入编辑页自动开始</span>
-                  <span className="text-xs text-muted-foreground">仅影响宫殿编辑页的自动开表。</span>
-                </span>
-              </label>
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
               <label className="flex min-h-[112px] items-start gap-3 rounded-xl border border-border/60 bg-background/50 px-3 py-3 text-sm">
                 <input
                   type="checkbox"
@@ -218,16 +222,36 @@ export function TimerAutomationDialog({
             </div>
             <div className="mt-3 text-xs text-muted-foreground">
               默认值：
-              {` 页面进入自动开始 关，切回窗口自动恢复 关，节点切换 关，实际编辑 开，练习交互 开`}
+              {` 切回窗口自动恢复 关，节点切换 关，实际编辑 开，练习交互 开`}
             </div>
           </div>
-          <div className="grid gap-4 xl:grid-cols-3">
+          <div className="grid gap-4 xl:grid-cols-2">
             {scenes.map((scene) => (
               <div key={scene} className="rounded-2xl border border-border/70 bg-card/70 p-4">
                 <div className="mb-3 text-sm font-semibold text-foreground">
                   {TIMER_AUTOMATION_SCENE_LABELS[scene]}
                 </div>
                 <div className="grid gap-3">
+                  <label className="flex items-start gap-3 rounded-xl border border-border/60 bg-background/50 px-3 py-3 text-sm">
+                    <input
+                      type="checkbox"
+                      className="mt-0.5 h-4 w-4"
+                      checked={draft[scene].autoStartOnPageEnter}
+                      onChange={(event) =>
+                        setDraft((current) => ({
+                          ...current,
+                          [scene]: {
+                            ...current[scene],
+                            autoStartOnPageEnter: event.target.checked,
+                          },
+                        }))
+                      }
+                    />
+                    <span>
+                      <span className="block font-medium text-foreground">{`${TIMER_AUTOMATION_SCENE_LABELS[scene]}进入页面自动开始`}</span>
+                      <span className="text-xs text-muted-foreground">只影响当前场景首次进入页面时是否自动开表。</span>
+                    </span>
+                  </label>
                   <label className="space-y-2 text-sm">
                     <span className="text-muted-foreground">无操作自动暂停（秒）</span>
                     <Input
@@ -261,7 +285,7 @@ export function TimerAutomationDialog({
                 </div>
                 <div className="mt-3 text-xs text-muted-foreground">
                   默认值：
-                  {` 无操作 ${DEFAULT_TIMER_AUTOMATION_CONFIG[scene].inactiveAutoPauseSeconds}s，后台 ${DEFAULT_TIMER_AUTOMATION_CONFIG[scene].hiddenAutoPauseSeconds}s，回退 ${DEFAULT_TIMER_AUTOMATION_CONFIG[scene].autoPauseRollbackSeconds}s`}
+                  {` 进入页面 ${DEFAULT_TIMER_AUTOMATION_CONFIG[scene].autoStartOnPageEnter ? '开' : '关'}，无操作 ${DEFAULT_TIMER_AUTOMATION_CONFIG[scene].inactiveAutoPauseSeconds}s，后台 ${DEFAULT_TIMER_AUTOMATION_CONFIG[scene].hiddenAutoPauseSeconds}s，回退 ${DEFAULT_TIMER_AUTOMATION_CONFIG[scene].autoPauseRollbackSeconds}s`}
                 </div>
               </div>
             ))}

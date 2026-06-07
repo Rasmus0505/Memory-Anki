@@ -7,7 +7,7 @@ import { useBilinks } from '@/features/bilink/hooks/useBilinks'
 import type { MindMapAiSplitRequestPayload, MindMapSelection } from '@/shared/components/mindmap-host'
 import { readTimerAutomationConfig } from '@/shared/components/session/timer-automation-config'
 import { shouldAutoStartOnPageEnter, useTimedSession } from '@/shared/hooks/useTimedSession'
-import { logAiCall } from '@/shared/logs/model/appLogs'
+import { logAiCall, requestOpenAiLogDetail } from '@/shared/logs/model/appLogs'
 import { parseMindMapDoc } from '@/features/palace-edit/model/mindmap-editor'
 import { usePalaceEditorDocument } from '@/features/palace-edit/hooks/usePalaceEditorDocument'
 import { usePalaceMetaController } from '@/features/palace-edit/hooks/usePalaceMetaController'
@@ -17,6 +17,7 @@ import { usePalaceVersionsController } from '@/features/palace-edit/hooks/usePal
 import type { StatusBadgeState } from '@/features/palace-edit/model/palace-edit-types'
 import type { ImportApplyContext } from '@/features/palace-edit/model/mindmap-import-types'
 import { splitMindMapNodeApi } from '@/shared/api/modules/palaces'
+import { getEnglishContinueCourseApi } from '@/shared/api/modules/english'
 import type { MindMapEditorState } from '@/shared/api/contracts'
 
 export function usePalaceEditPage() {
@@ -122,7 +123,7 @@ export function usePalaceEditPage() {
   useEffect(() => {
     if (!palaceId || !documentState.editorState) return
     if (timer.status !== 'idle') return
-    if (!shouldAutoStartOnPageEnter(readTimerAutomationConfig())) return
+    if (!shouldAutoStartOnPageEnter(readTimerAutomationConfig(), 'palace_edit')) return
     timer.start({ source: 'page_enter' })
   }, [documentState.editorState, palaceId, timer])
 
@@ -193,6 +194,19 @@ export function usePalaceEditPage() {
     setMindMapFullscreen(false)
   }, [])
 
+  const handleOpenEnglishArea = useCallback(async () => {
+    try {
+      const result = await getEnglishContinueCourseApi()
+      if (result.course?.id) {
+        navigate(`/english/courses/${result.course.id}`)
+        return
+      }
+      navigate('/english')
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '打开英语区失败，请稍后再试。')
+    }
+  }, [navigate])
+
   const handleAiSplitRequest = useCallback(
     async (payload: MindMapAiSplitRequestPayload) => {
       if (practice.editorMode !== 'edit' || !palaceId || !documentState.editorState) return
@@ -229,6 +243,7 @@ export function usePalaceEditPage() {
             palaceId,
             targetNodeUid: payload.target_node_uid,
             model: result.model ?? '',
+            aiCallLogId: result.ai_call_log_id ?? '',
             requestId:
               typeof (result as { request_id?: unknown }).request_id === 'string'
                 ? (result as { request_id?: string }).request_id
@@ -246,6 +261,18 @@ export function usePalaceEditPage() {
           movedCount > 0
             ? `AI 分卡完成，新增 ${generatedCount} 个分类并重新归类了 ${movedCount} 个旧节点。`
             : `AI 分卡完成，新增 ${generatedCount} 个分类节点。`,
+          result.ai_call_log_id
+            ? {
+                action: {
+                  label: '查看AI详情',
+                  onClick: () =>
+                    requestOpenAiLogDetail({
+                      aiCallLogId: result.ai_call_log_id,
+                      title: 'AI 分卡',
+                    }),
+                },
+              }
+            : undefined,
         )
       } catch (error) {
         const message = error instanceof Error ? error.message : 'AI 分卡失败，请稍后重试。'
@@ -295,6 +322,7 @@ export function usePalaceEditPage() {
     setMindMapFullscreen,
     toggleMindMapFullscreen,
     handleMindMapNativeFullscreenChange,
+    handleOpenEnglishArea,
     versions: versions.versions,
     removedDuplicateCount: versions.removedDuplicateCount,
     previewingVersionId: versions.previewingVersionId,

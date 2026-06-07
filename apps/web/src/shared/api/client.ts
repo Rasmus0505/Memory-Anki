@@ -7,6 +7,22 @@ export interface MindMapEditorState {
   lang: string
 }
 
+export interface PalaceEditorSavePayload extends Partial<MindMapEditorState> {
+  editor_source?:
+    | 'palace_edit'
+    | 'palace_edit_autosave'
+    | 'host_bootstrap_sync'
+    | 'version_restore'
+    | 'backup_restore'
+    | 'import_apply'
+    | 'review_edit'
+    | 'practice_edit'
+    | 'unknown'
+  sync_reason?: string | null
+  allow_stale_overwrite?: boolean
+  confirm_dangerous_change?: boolean
+}
+
 export interface MindMapNodeData {
   text?: string
   note?: string
@@ -281,10 +297,10 @@ export const api = {
     }),
   getPalaceEditor: (id: number) =>
     request<{ palace: any } & MindMapEditorState>(`/palaces/${id}/editor`),
-  savePalaceEditor: (id: number, data: Partial<MindMapEditorState>) =>
+  savePalaceEditor: (id: number, data: PalaceEditorSavePayload) =>
     request<{ palace: any } & MindMapEditorState>(`/palaces/${id}/editor`, {
       method: 'PUT',
-      body: JSON.stringify({ ...data, editor_source: 'palace_edit' }),
+      body: JSON.stringify({ editor_source: 'palace_edit_autosave', ...data }),
     }),
   savePalaceEditorWithOptions: (id: number, data: Record<string, unknown>) =>
     request<{ palace: any } & MindMapEditorState>(`/palaces/${id}/editor`, {

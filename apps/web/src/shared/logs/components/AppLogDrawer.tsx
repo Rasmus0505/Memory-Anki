@@ -1,17 +1,27 @@
 import { useEffect, useMemo, useState } from 'react'
 import { ClipboardList, Copy, Trash2, X } from 'lucide-react'
+import { getAiCallLogApi, listAiCallLogsApi } from '@/shared/api/modules/aiLogs'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/shared/components/ui/dialog'
 import {
   clearAppLogs,
   formatAppLogEntry,
   formatAppLogs,
   readAppLogs,
   removeAppLog,
+  subscribeOpenAiLogDetail,
   subscribeAppLogs,
   type AppLogEntry,
 } from '@/shared/logs/model/appLogs'
 import { cn } from '@/shared/lib/utils'
+import type { AiCallLogDetail } from '@/shared/api/contracts'
 
 interface AppLogDrawerProps {
   open: boolean
@@ -30,7 +40,7 @@ function buildDiagnosticsText(log: AppLogEntry) {
   if (log.requestId) lines.push(`request_id=${log.requestId}`)
   if (log.jobId) lines.push(`job_id=${log.jobId}`)
   const meta = log.meta || {}
-  for (const key of ['errorCode', 'palaceId', 'entityKey', 'applyMode', 'sourceKind', 'mode', 'selectedPages', 'structurePage', 'beforeNodeCount', 'afterNodeCount']) {
+  for (const key of ['errorCode', 'palaceId', 'entityKey', 'applyMode', 'sourceKind', 'mode', 'selectedPages', 'structurePage', 'beforeNodeCount', 'afterNodeCount', 'aiCallLogId']) {
     if (key in meta) {
       lines.push(`${key}=${JSON.stringify(meta[key])}`)
     }
@@ -39,12 +49,73 @@ function buildDiagnosticsText(log: AppLogEntry) {
   return lines.join('\n')
 }
 
+function getAiLogRequest(log: AppLogEntry): { aiCallLogId?: string; jobId?: string } | null {
+  const meta = log.meta || {}
+  const aiCallLogId =
+    typeof meta.aiCallLogId === 'string' && meta.aiCallLogId.trim() ? meta.aiCallLogId : ''
+  if (aiCallLogId) {
+    return { aiCallLogId }
+  }
+  if (log.jobId) {
+    return { jobId: log.jobId }
+  }
+  return null
+}
+
+async function loadAiLogDetails(log: AppLogEntry): Promise<AiCallLogDetail[]> {
+  const request = getAiLogRequest(log)
+  if (!request) return []
+  if (request.aiCallLogId) {
+    return [await getAiCallLogApi(request.aiCallLogId)]
+  }
+  if (!request.jobId) return []
+  const list = await listAiCallLogsApi({ jobId: request.jobId, limit: 20 })
+  return await Promise.all(list.items.map((item) => getAiCallLogApi(item.id)))
+}
+
 export function AppLogDrawer({ open, onOpenChange }: AppLogDrawerProps) {
   const [logs, setLogs] = useState<AppLogEntry[]>(() => readAppLogs())
   const [copiedId, setCopiedId] = useState<string>('')
   const [copiedAll, setCopiedAll] = useState(false)
+  const [detailOpen, setDetailOpen] = useState(false)
+  const [detailLoading, setDetailLoading] = useState(false)
+  const [detailError, setDetailError] = useState('')
+  const [detailTitle, setDetailTitle] = useState('AI 调用详情')
+  const [detailItems, setDetailItems] = useState<AiCallLogDetail[]>([])
 
   useEffect(() => subscribeAppLogs(() => setLogs(readAppLogs())), [])
+
+  useEffect(
+    () =>
+      subscribeOpenAiLogDetail((payload) => {
+        if (!payload.aiCallLogId && !payload.jobId) return
+        onOpenChange(true)
+        setDetailOpen(true)
+        setDetailTitle(payload.title || 'AI 调用详情')
+        setDetailLoading(true)
+        setDetailError('')
+        const load = async () => {
+          try {
+            const items = payload.aiCallLogId
+              ? [await getAiCallLogApi(payload.aiCallLogId)]
+              : payload.jobId
+                ? await Promise.all(
+                    (await listAiCallLogsApi({ jobId: payload.jobId, limit: 20 })).items.map((item) =>
+                      getAiCallLogApi(item.id),
+                    ),
+                  )
+                : []
+            setDetailItems(items)
+          } catch (error) {
+            setDetailError(error instanceof Error ? error.message : '加载 AI 详情失败。')
+          } finally {
+            setDetailLoading(false)
+          }
+        }
+        void load()
+      }),
+    [onOpenChange],
+  )
 
   useEffect(() => {
     if (!copiedId && !copiedAll) return
@@ -150,6 +221,30 @@ export function AppLogDrawer({ open, onOpenChange }: AppLogDrawerProps) {
                       </div>
                     </div>
                     <div className="flex shrink-0 items-center gap-1">
+                      {log.kind === 'ai_call' && getAiLogRequest(log) ? (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          title="查看服务端 AI 请求详情"
+                          onClick={async () => {
+                            setDetailOpen(true)
+                            setDetailTitle(log.feature || 'AI 调用详情')
+                            setDetailLoading(true)
+                            setDetailError('')
+                            try {
+                              const items = await loadAiLogDetails(log)
+                              setDetailItems(items)
+                            } catch (error) {
+                              setDetailError(error instanceof Error ? error.message : '加载 AI 详情失败。')
+                            } finally {
+                              setDetailLoading(false)
+                            }
+                          }}
+                        >
+                          AI详情
+                        </Button>
+                      ) : null}
                       <Button
                         type="button"
                         variant="ghost"
@@ -205,6 +300,103 @@ export function AppLogDrawer({ open, onOpenChange }: AppLogDrawerProps) {
           )}
         </div>
       </aside>
+      <Dialog open={detailOpen} onOpenChange={setDetailOpen}>
+        <DialogContent className="h-[min(88vh,920px)] max-w-[min(92vw,1180px)] overflow-hidden">
+          <DialogHeader>
+            <div className="flex items-center justify-between gap-3">
+              <DialogTitle>{detailTitle}</DialogTitle>
+              <DialogClose />
+            </div>
+          </DialogHeader>
+          <div className="min-h-0 flex-1 overflow-y-auto pr-1">
+            {detailLoading ? (
+              <div className="py-12 text-sm text-muted-foreground">正在加载 AI 详情...</div>
+            ) : detailError ? (
+              <div className="py-12 text-sm text-destructive">{detailError}</div>
+            ) : detailItems.length === 0 ? (
+              <div className="py-12 text-sm text-muted-foreground">没有找到对应的服务端 AI 日志。</div>
+            ) : (
+              <div className="space-y-4">
+                {detailItems.map((item) => (
+                  <div key={item.id} className="rounded-2xl border border-border/70 p-4">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge variant="secondary">{item.status}</Badge>
+                      <div className="text-sm font-medium">{item.feature}</div>
+                      <div className="text-xs text-muted-foreground">{item.operation}</div>
+                    </div>
+                    <div className="mt-2 text-xs text-muted-foreground">
+                      {item.created_at ? new Date(item.created_at).toLocaleString() : ''}
+                      {item.model ? ` · ${item.model}` : ''}
+                      {item.base_url ? ` · ${item.base_url}` : ''}
+                    </div>
+                    {item.prompt_text ? (
+                      <div className="mt-4 space-y-2">
+                        <div className="text-sm font-medium">最终 Prompt</div>
+                        <pre className="overflow-x-auto rounded-xl bg-slate-950 px-3 py-2 text-xs text-slate-100">
+                          {item.prompt_text}
+                        </pre>
+                      </div>
+                    ) : null}
+                    {item.input_artifacts.length > 0 ? (
+                      <div className="mt-4 space-y-2">
+                        <div className="text-sm font-medium">输入图片 / 页面</div>
+                        <div className="grid gap-3 md:grid-cols-2">
+                          {item.input_artifacts.map((artifact) => (
+                            <div key={artifact.name} className="rounded-xl border border-border/70 p-3">
+                              <div className="mb-2 text-xs text-muted-foreground">{artifact.label}</div>
+                              {artifact.mime_type.startsWith('image/') ? (
+                                <img
+                                  src={artifact.url}
+                                  alt={artifact.label}
+                                  className="max-h-80 w-full rounded-lg object-contain"
+                                />
+                              ) : (
+                                <a href={artifact.url} target="_blank" rel="noreferrer" className="text-sm underline">
+                                  查看工件
+                                </a>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
+                    {item.response_text ? (
+                      <div className="mt-4 space-y-2">
+                        <div className="text-sm font-medium">模型返回摘要</div>
+                        <pre className="overflow-x-auto rounded-xl bg-slate-950 px-3 py-2 text-xs text-slate-100">
+                          {item.response_text}
+                        </pre>
+                      </div>
+                    ) : null}
+                    {Object.keys(item.error_payload || {}).length > 0 ? (
+                      <div className="mt-4 space-y-2">
+                        <div className="text-sm font-medium text-destructive">错误信息</div>
+                        <pre className="overflow-x-auto rounded-xl bg-rose-950 px-3 py-2 text-xs text-rose-100">
+                          {JSON.stringify(item.error_payload, null, 2)}
+                        </pre>
+                      </div>
+                    ) : null}
+                    <div className="mt-4 grid gap-4 lg:grid-cols-2">
+                      <div className="space-y-2">
+                        <div className="text-sm font-medium">请求 JSON</div>
+                        <pre className="overflow-x-auto rounded-xl bg-slate-950 px-3 py-2 text-xs text-slate-100">
+                          {JSON.stringify(item.request_payload, null, 2)}
+                        </pre>
+                      </div>
+                      <div className="space-y-2">
+                        <div className="text-sm font-medium">返回 JSON</div>
+                        <pre className="overflow-x-auto rounded-xl bg-slate-950 px-3 py-2 text-xs text-slate-100">
+                          {JSON.stringify(item.response_payload, null, 2)}
+                        </pre>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

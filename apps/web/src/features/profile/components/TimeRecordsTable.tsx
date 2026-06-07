@@ -3,6 +3,7 @@ import {
   formatCompletionMethod,
   formatDuration,
   formatSessionKind,
+  formatSessionSource,
   type SessionKind,
   type TimeSessionRecord,
 } from '@/entities/session/model'
@@ -234,6 +235,9 @@ export function TimeRecordsTable({
                             }`}
                           >
                             {record.title}
+                          </div>
+                          <div className="mt-1 text-xs text-muted-foreground">
+                            来源：{formatSessionSource(record)}
                           </div>
                           {record.deletedAt ? (
                             <div className="mt-1 text-xs">

@@ -1,10 +1,24 @@
-from fastapi import APIRouter, Depends
+from pathlib import Path
+
+from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from memory_anki.core.config import DEFAULTS
 from memory_anki.core.runtime import build_runtime_info
 from memory_anki.core.time import utc_now_naive
 from memory_anki.infrastructure.db.models import Config, get_session
+from memory_anki.infrastructure.llm.external_ai_call_logs import (
+    get_external_ai_call_log,
+    list_external_ai_call_logs,
+    resolve_external_ai_call_log_artifact,
+)
+from memory_anki.modules.settings.application.ai_prompts import (
+    AiPromptValidationError,
+    list_prompt_templates,
+    reset_prompt_templates,
+    save_prompt_templates,
+)
 from memory_anki.modules.reviews.application.schedule_service import (
     normalize_algorithm,
     update_all_pending_schedules,
@@ -100,3 +114,73 @@ def api_profile_review_settings_update(data: dict, s: Session = Depends(session_
 @router.get("/runtime-info")
 def api_runtime_info():
     return build_runtime_info()
+
+
+@router.get("/settings/ai-prompts")
+def api_ai_prompt_settings(s: Session = Depends(session_dep)):
+    return {"items": list_prompt_templates(s)}
+
+
+@router.put("/settings/ai-prompts")
+def api_ai_prompt_settings_update(data: dict, s: Session = Depends(session_dep)):
+    try:
+        templates = data.get("templates") if isinstance(data.get("templates"), dict) else data
+        normalized_templates = {
+            str(key): str(value)
+            for key, value in dict(templates or {}).items()
+        }
+        return {"items": save_prompt_templates(s, normalized_templates)}
+    except AiPromptValidationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/settings/ai-prompts/reset")
+def api_ai_prompt_settings_reset(data: dict, s: Session = Depends(session_dep)):
+    try:
+        keys = data.get("keys")
+        if keys is not None and not isinstance(keys, list):
+            raise AiPromptValidationError("keys 必须是字符串数组。")
+        return {
+            "items": reset_prompt_templates(
+                s,
+                keys=[str(key) for key in keys] if keys else None,
+            )
+        }
+    except AiPromptValidationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.get("/ai-call-logs")
+def api_list_ai_call_logs(
+    job_id: str | None = None,
+    palace_id: int | None = None,
+    limit: int = 50,
+    s: Session = Depends(session_dep),
+):
+    return {
+        "items": list_external_ai_call_logs(
+            s,
+            job_id=job_id,
+            palace_id=palace_id,
+            limit=limit,
+        )
+    }
+
+
+@router.get("/ai-call-logs/{log_id}")
+def api_get_ai_call_log(log_id: str, s: Session = Depends(session_dep)):
+    payload = get_external_ai_call_log(s, log_id)
+    if not payload:
+        raise HTTPException(status_code=404, detail="AI 调用日志不存在。")
+    return payload
+
+
+@router.get("/ai-call-logs/{log_id}/artifacts/{artifact_name}")
+def api_get_ai_call_log_artifact(log_id: str, artifact_name: str):
+    if Path(artifact_name).name != artifact_name:
+        raise HTTPException(status_code=400, detail="工件名无效。")
+    resolved = resolve_external_ai_call_log_artifact(log_id, artifact_name)
+    if not resolved:
+        raise HTTPException(status_code=404, detail="AI 调用日志工件不存在。")
+    path, mime_type = resolved
+    return FileResponse(path, media_type=mime_type, filename=path.name)

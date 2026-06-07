@@ -72,7 +72,7 @@ export function ReviewFlowMapPanel({
         immersiveModeActive={fullscreen}
         syncOnPropChange
         syncIntent={frameSyncIntent}
-        preserveViewOnSync={isEditMode}
+        preserveViewOnSync
         syncReason={isEditMode ? null : 'review_flip'}
         externalSyncKey={isEditMode ? null : visibleEditorSyncKey}
         forceSyncKey={`${displayMode}:${modeSyncVersion}`}

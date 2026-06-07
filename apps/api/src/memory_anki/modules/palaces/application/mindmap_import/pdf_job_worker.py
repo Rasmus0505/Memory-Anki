@@ -1,12 +1,16 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import mimetypes
 from pathlib import Path
 from typing import Any
 
 from sqlalchemy.orm import Session
 
 from memory_anki.infrastructure.db.models import MindMapImportJob
+from memory_anki.modules.settings.application.ai_prompts import (
+    build_import_pdf_structure_prompt,
+)
 
 from . import (
     PDF_DIRECT_OCR_FALLBACK_WARNING,
@@ -14,8 +18,6 @@ from . import (
     PDF_OCR_FALLBACK_WARNING,
     SINGLE_PAGE_PDF_WARNING,
     MindMapImportError,
-    build_pdf_structure_prompt,
-    extend_prompt_for_pdf,
     pdf_model_workflows,
     step_protocol,
 )
@@ -39,6 +41,26 @@ from .workflow import (
     resolve_pdf_structure_page,
     split_rendered_pdf_pages,
 )
+
+
+def _build_pdf_artifact_refs(
+    artifact_dir: Path,
+    rendered_pages: list[tuple[int, bytes, str]],
+    *,
+    labels: dict[int, str] | None = None,
+) -> list[dict[str, Any]]:
+    refs: list[dict[str, Any]] = []
+    for page_number, _, filename in rendered_pages:
+        refs.append(
+            {
+                "name": filename,
+                "label": labels.get(page_number, f"PDF 第 {page_number} 页") if labels else f"PDF 第 {page_number} 页",
+                "mime_type": mimetypes.guess_type(filename)[0] or "image/png",
+                "source_kind": "import_job",
+                "source_path": str(artifact_dir / filename),
+            }
+        )
+    return refs
 
 
 @dataclass(frozen=True)
@@ -89,6 +111,7 @@ def run_subject_pdf_job(
         ensure_rendered_page_size_fn=deps.ensure_rendered_page_size_fn,
         import_error_cls=MindMapImportError,
     )
+    artifact_refs = _build_pdf_artifact_refs(artifact_dir, rendered_pages)
     if pause_if_requested(session, job.id, import_jobs_dir=deps.import_jobs_dir):
         return
 
@@ -100,6 +123,7 @@ def run_subject_pdf_job(
             page_selection=page_selection,
             range_prompt=range_prompt,
             rendered_pages=rendered_pages,
+            artifact_refs=artifact_refs,
             deps=deps,
         )
         return
@@ -114,6 +138,7 @@ def run_subject_pdf_job(
             fallback_title=fallback_title,
             import_options=import_options,
             rendered_pages=rendered_pages,
+            artifact_refs=artifact_refs,
             deps=deps,
         )
         return
@@ -140,6 +165,7 @@ def _run_pdf_text_job(
     page_selection: list[int],
     range_prompt: str,
     rendered_pages: list[tuple[int, bytes, str]],
+    artifact_refs: list[dict[str, Any]],
     deps: PdfJobDependencies,
 ) -> None:
     text_path = artifact_dir / "extracted_text.txt"
@@ -163,6 +189,12 @@ def _run_pdf_text_job(
                 range_prompt=range_prompt,
                 total_steps=step_protocol.PDF_TEXT_TOTAL_STEPS,
                 stream_call_dashscope_text_fn=deps.stream_call_dashscope_text,
+                external_log_context={
+                    "feature": "学科 PDF 转文字",
+                    "operation": "pdf_text_extraction",
+                    "job_id": job.id,
+                    "artifact_refs": artifact_refs,
+                },
             ),
             allow_preview_text=True,
             import_jobs_dir=deps.import_jobs_dir,
@@ -196,6 +228,7 @@ def _run_pdf_direct_generation_job(
     fallback_title: str,
     import_options: Any,
     rendered_pages: list[tuple[int, bytes, str]],
+    artifact_refs: list[dict[str, Any]],
     deps: PdfJobDependencies,
 ) -> None:
     result_path = artifact_dir / "result.json"
@@ -226,6 +259,12 @@ def _run_pdf_direct_generation_job(
                         range_prompt=range_prompt,
                         prepare_pdf_ocr_grounding_fn=prepare_pdf_ocr_grounding,
                         stream_call_dashscope_text_fn=deps.stream_call_dashscope_text,
+                        external_log_context={
+                            "feature": "学科 PDF 转脑图",
+                            "operation": "pdf_selected_pages_ocr",
+                            "job_id": job.id,
+                            "artifact_refs": artifact_refs,
+                        },
                     ),
                     allow_preview_text=False,
                     import_jobs_dir=deps.import_jobs_dir,
@@ -256,6 +295,12 @@ def _run_pdf_direct_generation_job(
                 import_options=import_options,
                 extracted_text=trimmed_text,
                 stream_call_dashscope_pdf_json_fn=deps.stream_call_dashscope_pdf_json,
+                external_log_context={
+                    "feature": "学科 PDF 转脑图",
+                    "operation": "pdf_direct_generation",
+                    "job_id": job.id,
+                    "artifact_refs": artifact_refs,
+                },
             ),
             allow_preview_text=True,
             import_jobs_dir=deps.import_jobs_dir,
@@ -310,6 +355,20 @@ def _run_pdf_structured_merge_job(
         rendered_pages,
         structure_page=resolved_structure_page,
     )
+    structure_artifact_refs = _build_pdf_artifact_refs(
+        artifact_dir,
+        [structure_payload],
+        labels={resolved_structure_page: f"结构页 {resolved_structure_page}"},
+    )
+    body_artifact_refs = _build_pdf_artifact_refs(
+        artifact_dir,
+        body_payloads,
+    )
+    ordered_merge_artifact_refs = _build_pdf_artifact_refs(
+        artifact_dir,
+        [structure_payload, *body_payloads],
+        labels={resolved_structure_page: f"结构页 {resolved_structure_page}"},
+    )
     structure_path = artifact_dir / "structure_tree.json"
     if not structure_path.exists():
         set_progress_step(
@@ -330,9 +389,14 @@ def _run_pdf_structured_merge_job(
                 structure_page=resolved_structure_page,
                 range_prompt=range_prompt,
                 preserve_emphasis_marks=import_options.preserve_emphasis_marks,
-                build_pdf_structure_prompt_fn=build_pdf_structure_prompt,
-                extend_prompt_for_pdf_fn=extend_prompt_for_pdf,
+                build_pdf_structure_prompt_fn=build_import_pdf_structure_prompt,
                 stream_call_dashscope_json_fn=deps.stream_call_dashscope_json,
+                external_log_context={
+                    "feature": "学科 PDF 转脑图",
+                    "operation": "pdf_structure_recognition",
+                    "job_id": job.id,
+                    "artifact_refs": structure_artifact_refs,
+                },
             ),
             allow_preview_text=True,
             import_jobs_dir=deps.import_jobs_dir,
@@ -374,6 +438,12 @@ def _run_pdf_structured_merge_job(
                             ),
                             prepare_pdf_ocr_grounding_fn=prepare_pdf_ocr_grounding,
                             stream_call_dashscope_text_fn=deps.stream_call_dashscope_text,
+                            external_log_context={
+                                "feature": "学科 PDF 转脑图",
+                                "operation": "pdf_body_ocr",
+                                "job_id": job.id,
+                                "artifact_refs": body_artifact_refs,
+                            },
                         ),
                         allow_preview_text=False,
                         import_jobs_dir=deps.import_jobs_dir,
@@ -407,6 +477,12 @@ def _run_pdf_structured_merge_job(
                     extracted_text=trimmed_text,
                     order_pdf_image_items_fn=order_pdf_image_items,
                     stream_call_dashscope_batch_json_fn=deps.stream_call_dashscope_batch_json,
+                    external_log_context={
+                        "feature": "学科 PDF 转脑图",
+                        "operation": "pdf_body_merge",
+                        "job_id": job.id,
+                        "artifact_refs": ordered_merge_artifact_refs,
+                    },
                 ),
                 allow_preview_text=True,
                 import_jobs_dir=deps.import_jobs_dir,

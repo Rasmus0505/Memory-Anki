@@ -1,15 +1,15 @@
 import type { SessionKind } from '@/entities/session/model'
 
-export type TimerAutomationScene = SessionKind
+export type TimerAutomationScene = SessionKind | 'english'
 
 export interface TimerAutomationRule {
+  autoStartOnPageEnter: boolean
   inactiveAutoPauseSeconds: number
   hiddenAutoPauseSeconds: number
   autoPauseRollbackSeconds: number
 }
 
 export interface TimerAutomationActivityConfig {
-  autoStartOnPageEnter: boolean
   autoResumeOnWindowReturn: boolean
   countNodeSwitchAsActivity: boolean
   countEditOperationsAsActivity: boolean
@@ -21,6 +21,7 @@ export interface TimerAutomationConfig {
   palace_edit: TimerAutomationRule
   practice: TimerAutomationRule
   review: TimerAutomationRule
+  english: TimerAutomationRule
 }
 
 export type TimerAutomationActivityKind =
@@ -33,23 +34,31 @@ export const TIMER_AUTOMATION_STORAGE_KEY = 'memory-anki-timer-automation-config
 
 export const DEFAULT_TIMER_AUTOMATION_CONFIG: TimerAutomationConfig = {
   actions: {
-    autoStartOnPageEnter: false,
     autoResumeOnWindowReturn: false,
     countNodeSwitchAsActivity: false,
     countEditOperationsAsActivity: true,
     countPracticeInteractionsAsActivity: true,
   },
   palace_edit: {
+    autoStartOnPageEnter: false,
     inactiveAutoPauseSeconds: 20,
     hiddenAutoPauseSeconds: 15,
     autoPauseRollbackSeconds: 20,
   },
   practice: {
+    autoStartOnPageEnter: false,
     inactiveAutoPauseSeconds: 120,
     hiddenAutoPauseSeconds: 15,
     autoPauseRollbackSeconds: 60,
   },
   review: {
+    autoStartOnPageEnter: false,
+    inactiveAutoPauseSeconds: 120,
+    hiddenAutoPauseSeconds: 15,
+    autoPauseRollbackSeconds: 60,
+  },
+  english: {
+    autoStartOnPageEnter: true,
     inactiveAutoPauseSeconds: 120,
     hiddenAutoPauseSeconds: 15,
     autoPauseRollbackSeconds: 60,
@@ -67,7 +76,11 @@ function sanitizeBoolean(value: unknown, fallback: boolean) {
   return fallback
 }
 
-function sanitizeRule(value: unknown, fallback: TimerAutomationRule): TimerAutomationRule {
+function sanitizeRule(
+  value: unknown,
+  fallback: TimerAutomationRule,
+  legacyAutoStartOnPageEnter?: boolean,
+): TimerAutomationRule {
   const raw = value && typeof value === 'object' ? (value as Record<string, unknown>) : {}
   const inactiveAutoPauseSeconds = sanitizeNonNegativeNumber(
     raw.inactiveAutoPauseSeconds,
@@ -82,6 +95,10 @@ function sanitizeRule(value: unknown, fallback: TimerAutomationRule): TimerAutom
     inactiveAutoPauseSeconds,
   )
   return {
+    autoStartOnPageEnter: sanitizeBoolean(
+      raw.autoStartOnPageEnter,
+      legacyAutoStartOnPageEnter ?? fallback.autoStartOnPageEnter,
+    ),
     inactiveAutoPauseSeconds,
     hiddenAutoPauseSeconds,
     autoPauseRollbackSeconds,
@@ -94,7 +111,6 @@ function sanitizeActivityConfig(
 ): TimerAutomationActivityConfig {
   const raw = value && typeof value === 'object' ? (value as Record<string, unknown>) : {}
   return {
-    autoStartOnPageEnter: sanitizeBoolean(raw.autoStartOnPageEnter, fallback.autoStartOnPageEnter),
     autoResumeOnWindowReturn: sanitizeBoolean(raw.autoResumeOnWindowReturn, fallback.autoResumeOnWindowReturn),
     countNodeSwitchAsActivity: sanitizeBoolean(raw.countNodeSwitchAsActivity, fallback.countNodeSwitchAsActivity),
     countEditOperationsAsActivity: sanitizeBoolean(raw.countEditOperationsAsActivity, fallback.countEditOperationsAsActivity),
@@ -107,11 +123,29 @@ function sanitizeActivityConfig(
 
 export function sanitizeTimerAutomationConfig(value: unknown): TimerAutomationConfig {
   const raw = value && typeof value === 'object' ? (value as Record<string, unknown>) : {}
+  const rawActions = raw.actions && typeof raw.actions === 'object' ? (raw.actions as Record<string, unknown>) : {}
+  const legacyAutoStartOnPageEnter =
+    typeof rawActions.autoStartOnPageEnter === 'boolean' ? rawActions.autoStartOnPageEnter : undefined
+  const practice = sanitizeRule(
+    raw.practice,
+    DEFAULT_TIMER_AUTOMATION_CONFIG.practice,
+    legacyAutoStartOnPageEnter,
+  )
   return {
     actions: sanitizeActivityConfig(raw.actions, DEFAULT_TIMER_AUTOMATION_CONFIG.actions),
-    palace_edit: sanitizeRule(raw.palace_edit, DEFAULT_TIMER_AUTOMATION_CONFIG.palace_edit),
-    practice: sanitizeRule(raw.practice, DEFAULT_TIMER_AUTOMATION_CONFIG.practice),
-    review: sanitizeRule(raw.review, DEFAULT_TIMER_AUTOMATION_CONFIG.review),
+    palace_edit: sanitizeRule(
+      raw.palace_edit,
+      DEFAULT_TIMER_AUTOMATION_CONFIG.palace_edit,
+      legacyAutoStartOnPageEnter,
+    ),
+    practice,
+    review: sanitizeRule(raw.review, DEFAULT_TIMER_AUTOMATION_CONFIG.review, legacyAutoStartOnPageEnter),
+    english:
+      raw.english === undefined
+        ? {
+            ...practice,
+          }
+        : sanitizeRule(raw.english, DEFAULT_TIMER_AUTOMATION_CONFIG.english, legacyAutoStartOnPageEnter),
   }
 }
 
@@ -169,12 +203,16 @@ export function isActivityEnabled(
   }
 }
 
-export function shouldAutoStartOnPageEnter(config: TimerAutomationConfig) {
-  return getTimerAutomationActivityConfig(config).autoStartOnPageEnter
+export function shouldAutoStartOnPageEnter(
+  config: TimerAutomationConfig,
+  scene: TimerAutomationScene,
+) {
+  return getTimerAutomationRule(scene, config).autoStartOnPageEnter
 }
 
 export const TIMER_AUTOMATION_SCENE_LABELS: Record<TimerAutomationScene, string> = {
   palace_edit: '宫殿编辑',
   practice: '练习',
   review: '复习',
+  english: '英语区',
 }

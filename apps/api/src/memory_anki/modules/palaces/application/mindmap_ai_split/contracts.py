@@ -63,3 +63,4 @@ class MindMapAiSplitResult:
     generated_children_count: int
     reassigned_existing_children_count: int
     model: str
+    ai_call_log_id: str | None = None

@@ -7,8 +7,17 @@ interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   asChild?: boolean
 }
 
+function assignRef<T>(ref: React.Ref<T> | undefined, value: T | null) {
+  if (!ref) return
+  if (typeof ref === 'function') {
+    ref(value)
+    return
+  }
+  ;(ref as React.MutableRefObject<T | null>).current = value
+}
+
 const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ className, variant = 'default', size = 'default', ...props }, ref) => {
+  ({ className, variant = 'default', size = 'default', asChild = false, children, ...props }, ref) => {
     const base =
       'inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0'
     const variants: Record<string, string> = {
@@ -25,7 +34,31 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
       lg: 'h-10 rounded-md px-8',
       icon: 'h-9 w-9',
     }
-    return <button ref={ref} className={cn(base, variants[variant], sizes[size], className)} {...props} />
+    const buttonClassName = cn(base, variants[variant], sizes[size], className)
+
+    if (asChild) {
+      const child = React.Children.only(children)
+      if (!React.isValidElement<{ className?: string }>(child)) return null
+
+      const childElement = child as React.ReactElement<{ className?: string }> & {
+        ref?: React.Ref<HTMLButtonElement>
+      }
+
+      return React.cloneElement(childElement, {
+        ...props,
+        className: cn(buttonClassName, childElement.props.className),
+        ref: (value: HTMLButtonElement | null) => {
+          assignRef(ref, value)
+          assignRef(childElement.ref, value)
+        },
+      })
+    }
+
+    return (
+      <button ref={ref} className={buttonClassName} {...props}>
+        {children}
+      </button>
+    )
   },
 )
 Button.displayName = 'Button'

@@ -296,6 +296,16 @@ export function formatSessionKind(kind: SessionKind) {
   return '正式复习'
 }
 
+export function formatSessionSource(record: Pick<TimeSessionRecord, 'sourceKind' | 'englishCourseId' | 'palaceId'>) {
+  if (record.sourceKind === 'english' || record.englishCourseId != null) {
+    return '英语练习'
+  }
+  if (record.sourceKind === 'palace' || record.palaceId != null) {
+    return '宫殿学习'
+  }
+  return '未分类'
+}
+
 export function formatCompletionMethod(method: SessionCompletionMethod) {
   if (method === 'manual_complete') return '手动完成'
   if (method === 'auto_complete') return '自动完成'

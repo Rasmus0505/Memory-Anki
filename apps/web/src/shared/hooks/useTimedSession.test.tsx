@@ -3,29 +3,36 @@ import { act, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useTimedSession } from '@/shared/hooks/useTimedSession'
 import { TIMER_AUTOMATION_STORAGE_KEY } from '@/shared/components/session/timer-automation-config'
+import * as sessionRecordModel from '@/entities/session/model'
 
 interface TestHarnessProps {
   kind: 'palace_edit' | 'practice' | 'review'
+  automationScene?: 'palace_edit' | 'practice' | 'review' | 'english'
   autoPauseMs?: number
   hiddenPauseMs?: number
   persistKey?: string | null
   autoStart?: boolean
+  persistCompletionRecord?: boolean
 }
 
 function TestHarness({
   kind,
+  automationScene,
   autoPauseMs,
   hiddenPauseMs,
   persistKey = null,
   autoStart = true,
+  persistCompletionRecord = true,
 }: TestHarnessProps) {
   const timer = useTimedSession({
     kind,
     title: '测试',
     palaceId: 1,
+    automationScene,
     autoPauseMs,
     hiddenPauseMs,
     persistKey,
+    persistCompletionRecord,
   })
 
   React.useEffect(() => {
@@ -49,15 +56,22 @@ function TestHarness({
       <button type="button" onClick={() => timer.registerActivity('practice_interaction', { source: 'test_practice_interaction' })}>
         practice-op
       </button>
+      <button type="button" onClick={() => void timer.complete('manual_complete', { source: 'test_complete' })}>
+        complete
+      </button>
     </div>
   )
 }
 
 describe('useTimedSession automation config', () => {
+  const appendTimeRecordSpy = vi.spyOn(sessionRecordModel, 'appendTimeRecord')
+
   beforeEach(() => {
     vi.useFakeTimers()
     window.localStorage.clear()
     window.sessionStorage.clear()
+    appendTimeRecordSpy.mockReset()
+    appendTimeRecordSpy.mockResolvedValue(null)
   })
 
   afterEach(() => {
@@ -89,13 +103,13 @@ describe('useTimedSession automation config', () => {
       TIMER_AUTOMATION_STORAGE_KEY,
       JSON.stringify({
         actions: {
-          autoStartOnPageEnter: false,
           autoResumeOnWindowReturn: false,
           countNodeSwitchAsActivity: false,
           countEditOperationsAsActivity: true,
           countPracticeInteractionsAsActivity: true,
         },
         practice: {
+          autoStartOnPageEnter: false,
           inactiveAutoPauseSeconds: 5,
           hiddenAutoPauseSeconds: 7,
           autoPauseRollbackSeconds: 8,
@@ -118,13 +132,13 @@ describe('useTimedSession automation config', () => {
       TIMER_AUTOMATION_STORAGE_KEY,
       JSON.stringify({
         actions: {
-          autoStartOnPageEnter: false,
           autoResumeOnWindowReturn: false,
           countNodeSwitchAsActivity: false,
           countEditOperationsAsActivity: true,
           countPracticeInteractionsAsActivity: true,
         },
         palace_edit: {
+          autoStartOnPageEnter: false,
           inactiveAutoPauseSeconds: 5,
           hiddenAutoPauseSeconds: 15,
           autoPauseRollbackSeconds: 3,
@@ -148,13 +162,13 @@ describe('useTimedSession automation config', () => {
       TIMER_AUTOMATION_STORAGE_KEY,
       JSON.stringify({
         actions: {
-          autoStartOnPageEnter: false,
           autoResumeOnWindowReturn: false,
           countNodeSwitchAsActivity: false,
           countEditOperationsAsActivity: true,
           countPracticeInteractionsAsActivity: true,
         },
         palace_edit: {
+          autoStartOnPageEnter: false,
           inactiveAutoPauseSeconds: 5,
           hiddenAutoPauseSeconds: 15,
           autoPauseRollbackSeconds: 30,
@@ -208,7 +222,6 @@ describe('useTimedSession automation config', () => {
       TIMER_AUTOMATION_STORAGE_KEY,
       JSON.stringify({
         actions: {
-          autoStartOnPageEnter: false,
           autoResumeOnWindowReturn: false,
           countNodeSwitchAsActivity: false,
           countEditOperationsAsActivity: true,
@@ -238,7 +251,6 @@ describe('useTimedSession automation config', () => {
       TIMER_AUTOMATION_STORAGE_KEY,
       JSON.stringify({
         actions: {
-          autoStartOnPageEnter: false,
           autoResumeOnWindowReturn: true,
           countNodeSwitchAsActivity: false,
           countEditOperationsAsActivity: true,
@@ -268,7 +280,6 @@ describe('useTimedSession automation config', () => {
       TIMER_AUTOMATION_STORAGE_KEY,
       JSON.stringify({
         actions: {
-          autoStartOnPageEnter: false,
           autoResumeOnWindowReturn: false,
           countNodeSwitchAsActivity: false,
           countEditOperationsAsActivity: false,
@@ -298,7 +309,6 @@ describe('useTimedSession automation config', () => {
       TIMER_AUTOMATION_STORAGE_KEY,
       JSON.stringify({
         actions: {
-          autoStartOnPageEnter: false,
           autoResumeOnWindowReturn: false,
           countNodeSwitchAsActivity: false,
           countEditOperationsAsActivity: true,
@@ -336,5 +346,56 @@ describe('useTimedSession automation config', () => {
     })
 
     expect(screen.getByTestId('status').textContent).toBe('running')
+  })
+
+  it('uses english automation rules while keeping practice session kind', () => {
+    const timeoutSpy = vi.spyOn(window, 'setTimeout')
+
+    window.localStorage.setItem(
+      TIMER_AUTOMATION_STORAGE_KEY,
+      JSON.stringify({
+        actions: {
+          autoResumeOnWindowReturn: false,
+          countNodeSwitchAsActivity: false,
+          countEditOperationsAsActivity: true,
+          countPracticeInteractionsAsActivity: true,
+        },
+        english: {
+          autoStartOnPageEnter: true,
+          inactiveAutoPauseSeconds: 5,
+          hiddenAutoPauseSeconds: 9,
+          autoPauseRollbackSeconds: 4,
+        },
+      }),
+    )
+
+    render(<TestHarness kind="practice" automationScene="english" />)
+
+    act(() => {
+      window.dispatchEvent(new Event('blur'))
+    })
+
+    expect(timeoutSpy.mock.calls.some(([, delay]) => delay === 9_000)).toBe(true)
+  })
+
+  it('can skip persisting completion records while still returning a finished session payload', async () => {
+    render(
+      <TestHarness
+        kind="review"
+        autoPauseMs={60_000}
+        persistCompletionRecord={false}
+      />,
+    )
+
+    act(() => {
+      vi.advanceTimersByTime(3_000)
+    })
+
+    await act(async () => {
+      screen.getByRole('button', { name: 'complete' }).click()
+    })
+
+    expect(appendTimeRecordSpy).not.toHaveBeenCalled()
+    expect(screen.getByTestId('status').textContent).toBe('completed')
   })
 })

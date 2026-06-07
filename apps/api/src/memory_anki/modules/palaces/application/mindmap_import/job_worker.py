@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import mimetypes
 from pathlib import Path
 from typing import Any
 
@@ -30,6 +31,21 @@ from .workflow import (
 )
 
 
+def _build_input_artifact_refs(paths: list[Path], *, labels: list[str] | None = None) -> list[dict[str, Any]]:
+    refs: list[dict[str, Any]] = []
+    for index, path in enumerate(paths, start=1):
+        refs.append(
+            {
+                "name": path.name,
+                "label": labels[index - 1] if labels and index - 1 < len(labels) else f"第 {index} 张图片",
+                "mime_type": mimetypes.guess_type(path.name)[0] or "application/octet-stream",
+                "source_kind": "import_job",
+                "source_path": str(path),
+            }
+        )
+    return refs
+
+
 def run_image_single_job(
     session: Session,
     job: MindMapImportJob,
@@ -47,6 +63,7 @@ def run_image_single_job(
     image_bytes = input_path.read_bytes()
     filename = str(source_meta.get("filename") or input_path.name)
     fallback_title = str(source_meta.get("fallback_title") or "未命名宫殿")
+    artifact_refs = _build_input_artifact_refs([input_path], labels=["原始图片"])
 
     if job.mode == MODE_TEXT:
         _set_progress_step(
@@ -78,6 +95,12 @@ def run_image_single_job(
                     page_numbers=None,
                     range_prompt="",
                     channel="text",
+                    external_log_context={
+                        "feature": "图片转文字",
+                        "operation": "single_image_text",
+                        "job_id": job.id,
+                        "artifact_refs": artifact_refs,
+                    },
                 ),
                 allow_preview_text=True,
                 import_jobs_dir=import_jobs_dir,
@@ -131,6 +154,12 @@ def run_image_single_job(
                 image_bytes=image_bytes,
                 filename=filename,
                 channel="raw_model",
+                external_log_context={
+                    "feature": "图片转脑图",
+                    "operation": "single_image_structure",
+                    "job_id": job.id,
+                    "artifact_refs": artifact_refs,
+                },
             ),
             allow_preview_text=True,
             import_jobs_dir=import_jobs_dir,
@@ -189,6 +218,12 @@ def run_image_batch_job(
         source_meta,
         import_error_cls=MindMapImportError,
     )
+    input_paths = [
+        path
+        for path in sorted(artifact_dir.glob("input-*.*"))
+        if path.is_file()
+    ]
+    artifact_refs = _build_input_artifact_refs(input_paths)
     structure_index = int(source_meta.get("structure_image_index") or 0)
     fallback_title = str(source_meta.get("fallback_title") or "未命名宫殿")
 
@@ -218,6 +253,12 @@ def run_image_batch_job(
                 image_bytes=structure_bytes,
                 filename=structure_filename,
                 channel="raw_model",
+                external_log_context={
+                    "feature": "多图合成脑图",
+                    "operation": "batch_structure",
+                    "job_id": job.id,
+                    "artifact_refs": artifact_refs,
+                },
             ),
             allow_preview_text=True,
             import_jobs_dir=import_jobs_dir,
@@ -247,6 +288,12 @@ def run_image_batch_job(
                 image_items=image_items,
                 structure_tree=structure_tree,
                 channel="raw_model",
+                external_log_context={
+                    "feature": "多图合成脑图",
+                    "operation": "batch_merge",
+                    "job_id": job.id,
+                    "artifact_refs": artifact_refs,
+                },
             ),
             allow_preview_text=True,
             import_jobs_dir=import_jobs_dir,

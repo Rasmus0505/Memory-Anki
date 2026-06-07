@@ -343,6 +343,52 @@ def test_pdf_direct_generation_job_keeps_running_when_ocr_fails():
     assert mock_pdf_call.call_args.kwargs["extracted_text"] is None
 
 
+def test_pdf_text_job_completes_and_returns_extracted_text():
+    document = SubjectDocument(
+        id=99,
+        subject_id=4,
+        filename="subjects/4/test.pdf",
+        original_name="test.pdf",
+        mime_type="application/pdf",
+        file_size=256,
+        page_count=40,
+    )
+    with Session(engine) as session:
+        job = job_service.create_pdf_import_job(
+            session,
+            entity_key="palace_1",
+            document=document,
+            mode=job_service.MODE_TEXT,
+            page_selection=[29, 30, 31],
+            structure_page=None,
+            pdf_mode=job_service.PDF_IMPORT_MODE_DIRECT_GENERATION,
+            range_prompt="昆体良的",
+            fallback_title="test.pdf",
+            import_options=PdfImportOptions(),
+        )
+
+    with patch.object(job_service, "get_subject_document_by_id", return_value=document), patch.object(
+        job_service,
+        "render_selected_pdf_pages",
+        return_value=[
+            (29, b"page-29", "page-29.png"),
+            (30, b"page-30", "page-30.png"),
+            (31, b"page-31", "page-31.png"),
+        ],
+    ), patch.object(
+        job_service,
+        "_stream_call_dashscope_text",
+        return_value=_stream_return("昆体良的教育思想\n第二部分"),
+    ):
+        job_service._run_job_worker(job.id)
+
+    payload = _load_job(job.id)
+    assert payload["status"] == job_service.JOB_STATUS_COMPLETED
+    assert payload["result"]["extracted_text"] == "昆体良的教育思想\n第二部分"
+    assert payload["result"]["selected_pages"] == [29, 30, 31]
+    assert payload["usage"]["text"] == 1
+
+
 def test_source_meta_to_pdf_options_ignores_legacy_strict_restore_flag():
     options = job_service._source_meta_to_pdf_options(
         {

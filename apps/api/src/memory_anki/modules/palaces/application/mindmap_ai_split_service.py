@@ -66,6 +66,7 @@ def split_palace_editor_doc_with_ai(
         generated_children_count=len(next_children),
         reassigned_existing_children_count=reassigned_count,
         model=config.model,
+        ai_call_log_id=str(ai_payload.get("_ai_call_log_id") or "") or None,
     )
 
 

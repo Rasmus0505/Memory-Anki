@@ -234,7 +234,7 @@ export function PalaceListCard({
             </Button>
           </Link>
           <Link to={`/palaces/${palace.id}/edit`}>
-            <Button variant="ghost" size="icon" className="h-8 w-8">
+            <Button variant="ghost" size="icon" className="h-8 w-8" aria-label={`编辑宫殿 ${palace.resolved_title || palace.title}`}>
               <Pencil className="h-4 w-4" />
             </Button>
           </Link>
@@ -242,6 +242,7 @@ export function PalaceListCard({
             variant="ghost"
             size="icon"
             className="h-8 w-8 text-destructive hover:text-destructive"
+            aria-label={`删除宫殿 ${palace.resolved_title || palace.title}`}
             onClick={() => onDelete(palace.id, palace.title)}
           >
             <Trash2 className="h-4 w-4" />

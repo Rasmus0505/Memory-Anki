@@ -165,6 +165,23 @@ describe('PalaceMindMapImportDrawer', () => {
     expect(scrollIntoView).toHaveBeenCalledWith({ block: 'start', behavior: 'smooth' })
   })
 
+  it('does not auto-scroll again when reopening with the same existing result', () => {
+    const props = buildProps({
+      sourceTree: {
+        title: '第二节 古希腊的教育阶段',
+        children: [{ text: '荷马时期', children: [] }],
+      },
+    })
+    const { rerender } = render(<PalaceMindMapImportDrawer {...props} />)
+
+    expect(scrollIntoView).toHaveBeenCalledTimes(1)
+
+    rerender(<PalaceMindMapImportDrawer {...props} open={false} />)
+    rerender(<PalaceMindMapImportDrawer {...props} open />)
+
+    expect(scrollIntoView).toHaveBeenCalledTimes(1)
+  })
+
   it('prefers readonly mind map preview when editor_doc is available', () => {
     render(
       <PalaceMindMapImportDrawer
@@ -320,11 +337,17 @@ describe('PalaceMindMapImportDrawer', () => {
     )
 
     expect(screen.getByText('按范围直接生成')).toBeTruthy()
-    expect(screen.getByText(/默认模式。会先综合所选页的正文与版面信息，再直接生成完整脑图/)).toBeTruthy()
+    expect(screen.getByText(/默认模式。会综合所选页的正文与版面关系，主动挖出父子\/并列结构/)).toBeTruthy()
     expect(screen.queryByText('当前结构页')).toBeNull()
 
     fireEvent.click(screen.getByRole('button', { name: /结构页补全模式/ }))
     expect(onPdfImportModeChange).toHaveBeenCalledWith('structured_merge')
+  })
+
+  it('keeps the pdf sidebar visible in compact layouts', () => {
+    render(<PalaceMindMapImportDrawer {...buildProps()} />)
+
+    expect(screen.getByTestId('mindmap-import-pdf-sidebar')).toBeTruthy()
   })
 
   it('shows the pdf execution summary and OCR grounding status', () => {

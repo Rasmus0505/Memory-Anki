@@ -8,6 +8,8 @@ const navigate = vi.fn()
 const searchParams = new URLSearchParams()
 const setSearchParams = vi.fn()
 const getPalaceSubjectShelfApi = vi.fn()
+const getPalacesGroupedApi = vi.fn()
+const submitSegmentReviewSessionApi = vi.fn()
 
 vi.mock('react-router-dom', () => ({
   Link: ({ children, to }: { children: React.ReactNode; to: string }) => <a href={to}>{children}</a>,
@@ -15,51 +17,158 @@ vi.mock('react-router-dom', () => ({
   useSearchParams: () => [searchParams, setSearchParams],
 }))
 
+vi.mock('sonner', () => ({
+  toast: {
+    success: vi.fn(),
+    error: vi.fn(),
+  },
+}))
+
+vi.mock('@/app/router/palace-list/PalaceStageProgress', () => ({
+  PalaceStageProgress: () => <div data-testid="stage-progress" />,
+  formatStageDateTime: () => '',
+  toDateTimeLocalValue: () => '',
+}))
+
 vi.mock('@/shared/api/modules/palaces', () => ({
   getPalaceSubjectShelfApi: (...args: unknown[]) => getPalaceSubjectShelfApi(...args),
+  getPalacesGroupedApi: (...args: unknown[]) => getPalacesGroupedApi(...args),
+  deletePalaceApi: vi.fn(),
+  updateDefaultSegmentReviewProgressApi: vi.fn(),
+  updatePalaceSegmentReviewProgressApi: vi.fn(),
 }))
+
+vi.mock('@/shared/api/modules/reviews', () => ({
+  submitSegmentReviewSessionApi: (...args: unknown[]) => submitSegmentReviewSessionApi(...args),
+}))
+
+function buildShelfItem(overrides: Record<string, unknown> = {}) {
+  return {
+    subject: { id: 1, name: '中国近代史', color: '#6366f1' },
+    palace_count: 3,
+    chapter_count: 5,
+    review_status: 'due_now',
+    has_due_review: true,
+    has_due_later_today: false,
+    due_now_count: 1,
+    due_later_today_count: 0,
+    needs_practice_count: 0,
+    ...overrides,
+  }
+}
+
+function buildGroupedResponse() {
+  const dueIso = new Date(Date.now() - 60 * 60 * 1000).toISOString()
+  return {
+    groups: [],
+    ungrouped: [],
+    subjects: [
+      {
+        subject: { id: 1, name: '中国近代史', color: '#6366f1' },
+        chapter_groups: [
+          {
+            source_chapter: { id: 11, name: '第一章', subject_id: 1, parent_id: null },
+            palaces: [
+              {
+                id: 101,
+                title: '中国教育史宫殿',
+                resolved_title: '中国教育史宫殿',
+                manual_title: '',
+                title_mode: 'sync',
+                grouping_mode: 'auto',
+                manual_group_chapter_id: null,
+                binding_status: 'bound',
+                primary_chapter_id: 11,
+                primary_chapter: { id: 11, name: '第一章', subject_id: 1, parent_id: null },
+                resolved_subject: { id: 1, name: '中国近代史', color: '#6366f1' },
+                resolved_parent_chapter: null,
+                group_id: null,
+                group_sort_order: 0,
+                created_at: '2026-06-03T09:00:00',
+                description: '',
+                archived: false,
+                mastered: false,
+                needs_practice: true,
+                next_scheduled_date: '2026-06-03',
+                next_review_at: dueIso,
+                has_due_review: false,
+                current_review_schedule_id: null,
+                review_stage_total: 9,
+                review_stage_completed: 0,
+                review_stage_progress: 0,
+                stage_labels: [],
+                review_stages: [],
+                pegs: [],
+                attachments: [],
+                chapters: [{ id: 11, name: '第一章', subject_id: 1, parent_id: null }],
+                segments: [
+                  {
+                    id: 201,
+                    palace_id: 101,
+                    name: '第 1 部分',
+                    display_name: '第 1 部分',
+                    color: '#14b8a6',
+                    node_count: 49,
+                    sort_order: 0,
+                    is_virtual_default: false,
+                    has_due_review: true,
+                    current_review_schedule_id: 501,
+                    next_review_at: dueIso,
+                    estimated_review_seconds: 100,
+                    review_stage_completed: 0,
+                    review_stage_total: 9,
+                    review_stage_progress: 0,
+                    review_stages: [],
+                    stage_labels: [],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+        ungrouped_palaces: [],
+      },
+    ],
+  }
+}
 
 describe('PalaceShelfPage', () => {
   beforeEach(() => {
     navigate.mockReset()
+    setSearchParams.mockReset()
     getPalaceSubjectShelfApi.mockReset()
+    getPalacesGroupedApi.mockReset()
+    submitSegmentReviewSessionApi.mockReset()
+    getPalaceSubjectShelfApi.mockResolvedValue({ items: [buildShelfItem()] })
+    getPalacesGroupedApi.mockResolvedValue(buildGroupedResponse())
+    submitSegmentReviewSessionApi.mockResolvedValue({ ok: true, next_id: 502, score: 5 })
     searchParams.delete('search')
     window.localStorage.clear()
   })
 
   it('renders subject shelf cards and navigates by subject id', async () => {
-    getPalaceSubjectShelfApi.mockResolvedValue({
-      items: [
-        {
-          subject: { id: 1, name: '中国近代史', color: '#6366f1' },
-          palace_count: 3,
-          chapter_count: 5,
-          review_status: 'due_now',
-          has_due_review: true,
-          has_due_later_today: false,
-        },
-      ],
-    })
-
     render(<PalaceShelfPage />)
 
     const title = await screen.findByText('中国近代史')
-    expect(title).toBeTruthy()
     fireEvent.click(title.closest('button') as HTMLButtonElement)
     expect(navigate).toHaveBeenCalledWith('/palaces/list?subjectId=1')
+    expect(screen.getByText('立即复习')).toBeTruthy()
   })
 
   it('renders uncategorized shelf and navigates to uncategorized list', async () => {
     getPalaceSubjectShelfApi.mockResolvedValue({
       items: [
-        {
+        buildShelfItem({
           subject: null,
           palace_count: 2,
           chapter_count: 0,
           review_status: 'idle',
           has_due_review: false,
           has_due_later_today: false,
-        },
+          due_now_count: 0,
+          due_later_today_count: 0,
+          needs_practice_count: 0,
+        }),
       ],
     })
 
@@ -68,10 +177,12 @@ describe('PalaceShelfPage', () => {
     const title = await screen.findByText('未分类')
     fireEvent.click(title.closest('button') as HTMLButtonElement)
     expect(navigate).toHaveBeenCalledWith('/palaces/list?uncategorized=true')
+    expect(screen.getByText('当前没有紧急复习')).toBeTruthy()
   })
 
-  it('passes search text to shelf api', async () => {
+  it('passes search text to both shelf apis', async () => {
     getPalaceSubjectShelfApi.mockResolvedValue({ items: [] })
+    getPalacesGroupedApi.mockResolvedValue({ groups: [], ungrouped: [], subjects: [] })
 
     render(<PalaceShelfPage />)
 
@@ -82,19 +193,6 @@ describe('PalaceShelfPage', () => {
   })
 
   it('uses double layout by default and persists custom shelf view settings', async () => {
-    getPalaceSubjectShelfApi.mockResolvedValue({
-      items: [
-        {
-          subject: { id: 1, name: '中国近代史', color: '#6366f1' },
-          palace_count: 3,
-          chapter_count: 5,
-          review_status: 'due_now',
-          has_due_review: true,
-          has_due_later_today: false,
-        },
-      ],
-    })
-
     render(<PalaceShelfPage />)
 
     await screen.findByText('中国近代史')
@@ -105,5 +203,27 @@ describe('PalaceShelfPage', () => {
     expect(screen.getByTestId('shelf-grid').dataset.layoutMode).toBe('single')
     expect(screen.getByTestId('shelf-grid').dataset.densityMode).toBe('compact')
     expect(window.localStorage.getItem(PALACE_SHELF_VIEW_SETTINGS_KEY)).toContain('"layoutMode":"single"')
+  })
+
+  it('switches to expanded mode and persists expanded layout settings', async () => {
+    render(<PalaceShelfPage />)
+
+    await screen.findByText('中国近代史')
+    fireEvent.click(screen.getByRole('button', { name: '展开' }))
+    await screen.findByText('中国教育史宫殿')
+
+    expect(screen.getByTestId('list-layout-root').dataset.layoutMode).toBe('chapter-double')
+    expect(screen.getByRole('button', { name: '开始复习' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: '练习' })).toBeTruthy()
+    expect(screen.getByLabelText(/编辑宫殿/)).toBeTruthy()
+    expect(screen.getByLabelText(/删除宫殿/)).toBeTruthy()
+    expect(screen.getByTestId('stage-progress')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: '开始复习' }))
+    expect(navigate).toHaveBeenCalledWith('/segment-review/session/501')
+    fireEvent.click(screen.getByRole('button', { name: '卡片流' }))
+
+    expect(screen.getByTestId('list-layout-root').dataset.layoutMode).toBe('flow')
+    expect(window.localStorage.getItem(PALACE_SHELF_VIEW_SETTINGS_KEY)).toContain('"displayMode":"expanded"')
+    expect(window.localStorage.getItem(PALACE_SHELF_VIEW_SETTINGS_KEY)).toContain('"expandedLayoutMode":"flow"')
   })
 })

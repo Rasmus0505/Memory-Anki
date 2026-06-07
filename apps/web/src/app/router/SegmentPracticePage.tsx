@@ -97,7 +97,7 @@ export default function SegmentPracticePage() {
         palaceId={segment.palace_id}
         sessionKind="practice"
         persistKey={`practice:segment:${segment.id}`}
-        editorState={editorState}
+        reviewEditorState={editorState}
         initialSnapshot={initialSnapshot}
         persistProgress
         onSnapshotChange={async (snapshot) => {

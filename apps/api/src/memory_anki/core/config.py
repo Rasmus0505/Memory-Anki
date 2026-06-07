@@ -18,6 +18,10 @@ DATA_DIR = APP_HOME / "data"
 ATTACHMENTS_DIR = DATA_DIR / "attachments"
 SUBJECT_DOCUMENTS_DIR = ATTACHMENTS_DIR / "subjects"
 IMPORT_JOBS_DIR = APP_HOME / "import_jobs"
+AI_CALL_LOGS_DIR = APP_HOME / "ai_call_logs"
+ENGLISH_DIR = APP_HOME / "english"
+ENGLISH_MEDIA_DIR = ENGLISH_DIR / "media"
+ENGLISH_TASKS_DIR = ENGLISH_DIR / "tasks"
 BACKUPS_DIR = DATA_DIR / "backups"
 FULL_BACKUPS_DIR = BACKUPS_DIR / "full"
 RESCUE_BACKUPS_DIR = BACKUPS_DIR / "rescue"
@@ -27,8 +31,10 @@ DATABASE_URL = f"sqlite:///{DB_PATH}"
 
 DASHSCOPE_API_KEY = os.environ.get("DASHSCOPE_API_KEY")
 DASHSCOPE_BASE_URL = os.environ.get("DASHSCOPE_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1")
+DASHSCOPE_ASR_MODEL = os.environ.get("DASHSCOPE_ASR_MODEL", "qwen3-asr-flash-filetrans")
 DASHSCOPE_VISION_MODEL = os.environ.get("DASHSCOPE_VISION_MODEL", "qwen3-vl-flash")
 DASHSCOPE_TEXT_MODEL = os.environ.get("DASHSCOPE_TEXT_MODEL", "qwen3.6-flash")
+ENGLISH_TRANSLATION_MODEL = os.environ.get("ENGLISH_TRANSLATION_MODEL", "qwen-mt-flash")
 
 DEFAULTS = {
     "default_algorithm": "ebbinghaus",
@@ -66,6 +72,10 @@ def ensure_runtime_dirs() -> None:
         ATTACHMENTS_DIR,
         SUBJECT_DOCUMENTS_DIR,
         IMPORT_JOBS_DIR,
+        AI_CALL_LOGS_DIR,
+        ENGLISH_DIR,
+        ENGLISH_MEDIA_DIR,
+        ENGLISH_TASKS_DIR,
         FULL_BACKUPS_DIR,
         RESCUE_BACKUPS_DIR,
     ):

@@ -40,16 +40,12 @@ export function useHostSyncController(args: {
       const iframeWindow = iframeRef.current?.contentWindow as MindMapHostWindow | null
       const syncHostEditorState = iframeWindow?.syncHostEditorState
       if (typeof syncHostEditorState !== 'function') return false
-      const reviewFlipViewPolicy =
-        payload.syncIntent === 'replace' && payload.syncReason === 'review_flip'
-          ? 'reset'
-          : 'preserve'
       const viewPolicy =
         payload.syncIntent === 'replace' &&
         payload.source === 'force' &&
         !initialForceSyncAppliedRef.current
           ? initialViewPolicy
-          : reviewFlipViewPolicy
+          : 'preserve'
       syncHostEditorState({
         editorState: cloneValue(payload.editorState),
         preserveView: payload.preserveView,

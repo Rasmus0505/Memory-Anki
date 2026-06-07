@@ -132,7 +132,7 @@ export default function PalaceEdit() {
             onResume={() => page.timer.resume({ source: 'manual' })}
             onAdjustDuration={page.timer.adjustDuration}
             showCompleteAction={false}
-            className="sticky top-5 z-20"
+            layout="compact"
           />
 
           <PalaceMetaPanel
@@ -237,7 +237,7 @@ export default function PalaceEdit() {
                   syncIntent={page.editorMode === 'practice' ? 'replace' : 'soft'}
                   syncReason={page.editorMode === 'practice' ? 'review_flip' : null}
                   preserveViewOnSync={
-                    page.editorMode !== 'practice' &&
+                    page.editorMode === 'practice' ||
                     (mindMapImport.importAppliedSyncVersion > 0 ||
                     page.aiSplitAppliedSyncVersion > 0
                     )
@@ -286,6 +286,9 @@ export default function PalaceEdit() {
                   onSegmentRangeModeToggle={page.handleSegmentRangeModeToggle}
                   onSegmentRangeConfirm={page.handleConfirmSegmentRange}
                   onPracticeToggle={page.toggleInlinePractice}
+                  onEnglishOpen={() => {
+                    void page.handleOpenEnglishArea()
+                  }}
                   onMindMapImportOpen={() => {
                     mindMapImport.setImportMode('mindmap')
                     mindMapImport.setImportOpen(true)
@@ -408,8 +411,8 @@ export default function PalaceEdit() {
         history={mindMapImport.importHistory}
         onSelectHistory={mindMapImport.handleImportSelectHistory}
         onDeleteHistory={mindMapImport.handleImportDeleteHistory}
-        className={page.mindMapFullscreen ? 'z-[130]' : ''}
-        overlayClassName={page.mindMapFullscreen ? 'z-[120]' : ''}
+        className={page.mindMapFullscreen ? 'z-[130]' : 'z-[120]'}
+        overlayClassName={page.mindMapFullscreen ? 'z-[120]' : 'z-[110]'}
       />
 
       <BilinkSearchPopover

@@ -151,7 +151,7 @@ export default function BatchSegmentReviewSessionPage() {
           palaceId={session.palace?.id ?? null}
           sessionKind="review"
           persistKey={`batch-review:${segmentIds.join(',')}`}
-          editorState={editorState}
+          reviewEditorState={editorState}
           submitting={submitting}
           onFullscreenChange={setMindMapFullscreen}
           onComplete={submitCompletion}

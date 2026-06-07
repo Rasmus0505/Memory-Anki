@@ -9,10 +9,15 @@ import SegmentPracticePage from '@/app/router/SegmentPracticePage'
 import ReviewOverviewPage from '@/features/review/ReviewOverviewPage'
 
 const KnowledgePage = lazy(() => import('@/features/knowledge/KnowledgePage'))
+const EnglishWorkspacePage = lazy(() => import('@/features/english/EnglishWorkspacePage'))
+const EnglishCoursePage = lazy(() => import('@/features/english/EnglishCoursePage'))
 const PalaceEditPage = lazy(() => import('@/features/palace-edit/PalaceEditPage'))
 const ProfilePage = lazy(() => import('@/features/profile/ProfilePage'))
 const ProfileAiSplitPage = lazy(
   () => import('@/features/profile/ProfileAiSplitPage'),
+)
+const ProfileAiPromptsPage = lazy(
+  () => import('@/features/profile/ProfileAiPromptsPage'),
 )
 const ProfileBackupsPage = lazy(
   () => import('@/features/profile/ProfileBackupsPage'),
@@ -41,6 +46,8 @@ export function AppRouter() {
       <Routes>
         <Route path="/" element={<DashboardPage />} />
         <Route path="/palaces" element={<PalaceShelfPage />} />
+        <Route path="/english" element={<EnglishWorkspacePage />} />
+        <Route path="/english/courses/:id" element={<EnglishCoursePage />} />
         <Route path="/palaces/list" element={<PalaceListPage />} />
         <Route path="/palaces/new" element={<PalaceEditPage />} />
         <Route path="/palaces/:id" element={<PalaceViewPage />} />
@@ -53,6 +60,7 @@ export function AppRouter() {
         <Route path="/segment-review/session/:id" element={<SegmentReviewSessionPage />} />
         <Route path="/segment-review/batch" element={<BatchSegmentReviewSessionPage />} />
         <Route path="/profile" element={<ProfilePage />} />
+        <Route path="/profile/ai-prompts" element={<ProfileAiPromptsPage />} />
         <Route path="/profile/ai-split" element={<ProfileAiSplitPage />} />
         <Route path="/profile/backups" element={<ProfileBackupsPage />} />
       </Routes>

@@ -36,10 +36,11 @@ interface MindMapReviewFlowProps {
   modeSyncVersion?: number
   viewMemoryScope?: string | null
   persistKey?: string | null
-  editorState: MindMapEditorState
+  reviewEditorState: MindMapEditorState
+  editEditorState?: MindMapEditorState | null
   onComplete: (payload: CompleteFlowPayload) => void | Promise<void>
   onModeToggle?: () => void | Promise<void>
-  onEditorStateChange?: (nextState: MindMapEditorState) => void
+  onEditEditorStateChange?: (nextState: MindMapEditorState) => void
   onRestart?: () => void
   submitting?: boolean
   editSaving?: boolean
@@ -58,10 +59,11 @@ export function MindMapReviewFlow({
   modeSyncVersion = 0,
   viewMemoryScope = null,
   persistKey = null,
-  editorState,
+  reviewEditorState,
+  editEditorState = null,
   onComplete,
   onModeToggle,
-  onEditorStateChange,
+  onEditEditorStateChange,
   onRestart,
   submitting = false,
   editSaving = false,
@@ -76,7 +78,7 @@ export function MindMapReviewFlow({
     palaceId,
     sessionKind,
     persistKey,
-    editorState,
+    editorState: reviewEditorState,
     onComplete,
     onRestart,
     persistProgress,
@@ -93,7 +95,8 @@ export function MindMapReviewFlow({
   const inlineEditEnabled =
     sessionKind === 'review' &&
     typeof onModeToggle === 'function' &&
-    typeof onEditorStateChange === 'function'
+    typeof onEditEditorStateChange === 'function' &&
+    Boolean(editEditorState)
   const resolvedDisplayMode =
     inlineEditEnabled && displayMode === 'edit' ? 'edit' : 'review'
   const isInlineEditMode = resolvedDisplayMode === 'edit'
@@ -121,9 +124,9 @@ export function MindMapReviewFlow({
       flow.timer.registerActivity('edit_operation', {
         source: 'review_inline_edit',
       })
-      onEditorStateChange?.(nextState)
+      onEditEditorStateChange?.(nextState)
     },
-    [flow.timer, onEditorStateChange],
+    [flow.timer, onEditEditorStateChange],
   )
 
   const handleFullscreenToggle = React.useCallback((active?: boolean) => {
@@ -229,7 +232,7 @@ export function MindMapReviewFlow({
                       : undefined
                   }
                   visibleEditorState={flow.visibleEditorState}
-                  editableEditorState={editorState}
+                  editableEditorState={editEditorState}
                   visibleEditorSyncKey={flow.visibleEditorSyncKey}
                   bilinkCounts={bilinkCounts.counts}
                   bilinkItems={bilinks.items}

@@ -1,4 +1,4 @@
-import { HardDriveDownload, Settings, Sparkles } from 'lucide-react'
+import { HardDriveDownload, Settings, Sparkles, WandSparkles } from 'lucide-react'
 import { Link, useLocation } from 'react-router-dom'
 import { cn } from '@/shared/lib/utils'
 
@@ -8,6 +8,7 @@ export function ProfileNav() {
 
   const items = [
     { href: '/profile', label: '复习配置与导入导出', icon: Settings },
+    { href: '/profile/ai-prompts', label: 'AI提示词', icon: WandSparkles },
     { href: '/profile/ai-split', label: 'AI分卡配置', icon: Sparkles },
     { href: '/profile/backups', label: '备份与恢复', icon: HardDriveDownload },
   ]

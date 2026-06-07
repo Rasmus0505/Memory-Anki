@@ -71,10 +71,30 @@
 
       .memory-anki-segment-toolbar {
         position: relative;
-        display: inline-flex;
-        align-items: center;
-        margin-right: 8px;
+        display: flex;
+        flex-wrap: wrap;
+        align-items: flex-start;
         gap: 8px;
+        width: min(100%, 920px);
+        max-width: 100%;
+        min-width: 0;
+        margin-right: 8px;
+        margin-left: 0;
+        overflow: hidden;
+      }
+
+      .memory-anki-segment-toolbar > * {
+        flex: 0 1 auto;
+        min-width: 0;
+      }
+
+      .toolbarContainer .toolbar .toolbarBlock {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: flex-start;
+        gap: 8px;
+        min-width: 0;
+        overflow: visible;
       }
 
       .memory-anki-segment-button {
@@ -542,6 +562,8 @@
         pendingViewFitAfterRender: false,
         pendingFocusRestore: null,
         pendingViewMemoryFocusRestore: null,
+        initialHydrationComplete: false,
+        lastServerSyncedFingerprint: '',
       }
       const viewMemoryState = {
         snapshots: new Map(),
@@ -650,6 +672,44 @@
         if (syncIntent === 'replace' || syncIntent === 'full') {
           window.__memoryAnkiLastAppliedFullEditorFingerprint = nextFingerprint
         }
+      }
+
+      function markInitialHydrationComplete(nextFingerprint) {
+        syncState.initialHydrationComplete = true
+        if (typeof nextFingerprint === 'string' && nextFingerprint.length > 0) {
+          syncState.lastServerSyncedFingerprint = nextFingerprint
+        }
+        try {
+          getHostBridge()?.notify?.('initial_hydration_complete', {
+            fingerprint: typeof nextFingerprint === 'string' ? nextFingerprint : '',
+          })
+        } catch (error) {
+          console.warn(error)
+        }
+      }
+
+      function getPreferredHostEditorStateSnapshot() {
+        const pendingEditorState = window.__memoryAnkiPendingEditorState?.editorState
+        if (pendingEditorState && typeof pendingEditorState === 'object') {
+          return {
+            editor_doc: cloneValue(pendingEditorState.editor_doc) || {},
+            editor_config: cloneValue(pendingEditorState.editor_config) || {},
+            editor_local_config: cloneValue(pendingEditorState.editor_local_config) || {},
+            lang: pendingEditorState.lang || 'zh',
+          }
+        }
+        return {
+          editor_doc: cloneValue(getHostBridge()?.getMindMapData?.()) || {},
+          editor_config: cloneValue(getHostBridge()?.getMindMapConfig?.()) || {},
+          editor_local_config: cloneValue(getHostBridge()?.getLocalConfig?.()) || {},
+          lang: getHostBridge()?.getLanguage?.() || 'zh',
+        }
+      }
+
+      function canWriteBackToHost() {
+        if (isReadonlyHost()) return false
+        if (syncState.initialHydrationComplete) return true
+        return Boolean(getHostBridge()?.isHydrated?.())
       }
 
       function stableSerialize(value) {
@@ -3300,6 +3360,9 @@
             <button type="button" class="memory-anki-segment-button memory-anki-practice-button" hidden>
               <span>练习</span>
             </button>
+            <button type="button" class="memory-anki-segment-button memory-anki-english-button" hidden>
+              <span>英语区</span>
+            </button>
             <button type="button" class="memory-anki-segment-button memory-anki-bilink-search-button" hidden>
               <span>搜索</span>
             </button>
@@ -3331,6 +3394,7 @@
             notifySegmentRangeMode(!draft.active, draft.targetSegmentId || 'new')
           })
           const practiceButton = host.querySelector('.memory-anki-practice-button')
+          const englishButton = host.querySelector('.memory-anki-english-button')
           const mindmapImportButton = host.querySelector('.memory-anki-mindmap-import-button')
           const textImportButton = host.querySelector('.memory-anki-text-import-button')
           const bilinkSearchButton = host.querySelector('.memory-anki-bilink-search-button')
@@ -3341,6 +3405,11 @@
             event.preventDefault()
             event.stopPropagation()
             getHostBridge()?.notify?.('practice_toggle', null)
+          })
+          englishButton?.addEventListener('click', event => {
+            event.preventDefault()
+            event.stopPropagation()
+            getHostBridge()?.notify?.('english_open', null)
           })
           mindmapImportButton?.addEventListener('click', event => {
             event.preventDefault()
@@ -3388,6 +3457,7 @@
         const label = host.querySelector('.memory-anki-segment-button span')
         const practiceButton = host.querySelector('.memory-anki-practice-button')
         const practiceLabel = practiceButton?.querySelector('span')
+        const englishButton = host.querySelector('.memory-anki-english-button')
         const mindmapImportButton = host.querySelector('.memory-anki-mindmap-import-button')
         const textImportButton = host.querySelector('.memory-anki-text-import-button')
         const bilinkSearchButton = host.querySelector('.memory-anki-bilink-search-button')
@@ -3414,6 +3484,9 @@
         }
         if (practiceButton) {
           practiceButton.hidden = !Boolean(window.__memoryAnkiHostState?.showPracticeButton)
+        }
+        if (englishButton) {
+          englishButton.hidden = !Boolean(window.__memoryAnkiHostState?.showEnglishButton)
         }
         if (mindmapImportButton) {
           mindmapImportButton.hidden = !Boolean(window.__memoryAnkiHostState?.showImportButtons)
@@ -3566,6 +3639,35 @@
         ensureRestoreUiButton()
       }
 
+      function scheduleMindMapResizeSync() {
+        const runResize = () => {
+          const mindMap = getMindMap()
+          if (!mindMap) return
+          let resized = false
+          try {
+            if (typeof mindMap.resize === 'function') {
+              mindMap.resize()
+              resized = true
+            }
+          } catch (error) {
+            console.warn(error)
+          }
+          if (!resized) {
+            requestHostVisualRefresh()
+            return
+          }
+          window.setTimeout(() => {
+            updateKeyboardFocusClass()
+            applySegmentNodeStyles()
+            renderBilinkBadges()
+          }, 0)
+        }
+
+        runResize()
+        window.setTimeout(runResize, 32)
+        window.setTimeout(runResize, 160)
+      }
+
       function registerNativeFullscreenButtonStateSync() {
         if (immersiveToggleState.nativeFullscreenRegistered) return
         immersiveToggleState.nativeFullscreenRegistered = true
@@ -3574,6 +3676,7 @@
           () => {
             updateNavigatorFullscreenPresentation()
             ensureSegmentToolbar()
+            scheduleMindMapResizeSync()
           },
           true,
         )
@@ -4451,6 +4554,7 @@
       function applyHostState(nextState) {
         const previousState = window.__memoryAnkiHostState || {}
         const wasReadonly = Boolean(previousState.readonly)
+        const wasImmersiveModeActive = Boolean(previousState.immersiveModeActive)
         window.__memoryAnkiHostState = {
           ...previousState,
           ...(nextState || {}),
@@ -4512,6 +4616,9 @@
         updateNavigatorFullscreenPresentation()
         renderBilinkBadges()
         scheduleAiSplitToolbarPatch()
+        if (wasImmersiveModeActive !== isImmersiveModeActive()) {
+          scheduleMindMapResizeSync()
+        }
       }
 
       window.applyHostState = applyHostState
@@ -4878,6 +4985,7 @@
         requestHostVisualRefresh()
         ensureMindMapShortcutGuard()
         markLastAppliedEditorFingerprint(nextFingerprint, 'full')
+        markInitialHydrationComplete(nextFingerprint)
         syncState.pendingViewFitAfterRender =
           viewPolicy === 'reset' && payload?.syncReason === 'review_flip'
         syncState.pendingFocusRestore = focusSnapshot
@@ -4960,43 +5068,56 @@
       window.syncHostEditorState = syncHostEditorState
 
       function setupTakeOverMethods() {
-        const bootstrapEditorState = {
-          editor_doc: cloneValue(getHostBridge()?.getMindMapData?.()) || {},
-          editor_config: cloneValue(getHostBridge()?.getMindMapConfig?.()) || {},
-          editor_local_config: cloneValue(getHostBridge()?.getLocalConfig?.()) || {},
-          lang: getHostBridge()?.getLanguage?.() || 'zh',
-        }
+        const bootstrapEditorState = getPreferredHostEditorStateSnapshot()
         window.__memoryAnkiBootstrapEditorFingerprint = buildEditorStateFingerprint(
           bootstrapEditorState,
           false,
         )
         window.takeOverAppMethods = {
           getMindMapData() {
-            return cloneValue(bootstrapEditorState.editor_doc) || null
+            return cloneValue(getPreferredHostEditorStateSnapshot().editor_doc) || null
           },
           saveMindMapData(data) {
-            if (isReadonlyHost()) return
+            if (!canWriteBackToHost()) return
+            const nextFingerprint = buildEditorStateFingerprint(
+              {
+                editor_doc: cloneValue(data) || {},
+                editor_config: cloneValue(getPreferredHostEditorStateSnapshot().editor_config) || {},
+                editor_local_config:
+                  cloneValue(getPreferredHostEditorStateSnapshot().editor_local_config) || {},
+                lang: getPreferredHostEditorStateSnapshot().lang || 'zh',
+              },
+              false,
+            )
+            if (
+              !syncState.initialHydrationComplete &&
+              syncState.lastServerSyncedFingerprint &&
+              nextFingerprint === window.__memoryAnkiBootstrapEditorFingerprint &&
+              nextFingerprint !== syncState.lastServerSyncedFingerprint
+            ) {
+              return
+            }
             getHostBridge()?.saveMindMapData?.(cloneValue(data))
           },
           getMindMapConfig() {
-            return cloneValue(bootstrapEditorState.editor_config) || {}
+            return cloneValue(getPreferredHostEditorStateSnapshot().editor_config) || {}
           },
           saveMindMapConfig(config) {
-            if (isReadonlyHost()) return
+            if (!canWriteBackToHost()) return
             getHostBridge()?.saveMindMapConfig?.(cloneValue(config))
           },
           getLanguage() {
-            return bootstrapEditorState.lang || 'zh'
+            return getPreferredHostEditorStateSnapshot().lang || 'zh'
           },
           saveLanguage(lang) {
-            if (isReadonlyHost()) return
+            if (!canWriteBackToHost()) return
             getHostBridge()?.saveLanguage?.(lang)
           },
           getLocalConfig() {
-            return cloneValue(bootstrapEditorState.editor_local_config) || {}
+            return cloneValue(getPreferredHostEditorStateSnapshot().editor_local_config) || {}
           },
           saveLocalConfig(config) {
-            if (isReadonlyHost()) return
+            if (!canWriteBackToHost()) return
             getHostBridge()?.saveLocalConfig?.(cloneValue(config))
           },
         }
@@ -5034,6 +5155,7 @@
               syncHostEditorState(window.__memoryAnkiPendingEditorState)
             } else {
               markLastAppliedEditorFingerprint(pendingFingerprint, 'full')
+              markInitialHydrationComplete(pendingFingerprint)
             }
           }
           syncKeyboardMode()

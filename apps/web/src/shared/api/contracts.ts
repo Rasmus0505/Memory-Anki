@@ -5,6 +5,24 @@ export interface MindMapEditorState {
   lang: string
 }
 
+export type PalaceEditorSource =
+  | 'palace_edit'
+  | 'palace_edit_autosave'
+  | 'host_bootstrap_sync'
+  | 'version_restore'
+  | 'backup_restore'
+  | 'import_apply'
+  | 'review_edit'
+  | 'practice_edit'
+  | 'unknown'
+
+export interface PalaceEditorSavePayload extends Partial<MindMapEditorState> {
+  editor_source?: PalaceEditorSource
+  sync_reason?: string | null
+  allow_stale_overwrite?: boolean
+  confirm_dangerous_change?: boolean
+}
+
 export interface MindMapNodeData {
   text?: string
   note?: string
@@ -85,6 +103,7 @@ export interface MindMapAiSplitResponse {
   generated_children_count?: number
   reassigned_existing_children_count?: number
   model?: string
+  ai_call_log_id?: string | null
   error?: string
   request_id?: string
 }
@@ -267,6 +286,8 @@ export interface ReviewQueueResponse {
 
 export interface DashboardResponse {
   due_count: number
+  due_later_today_count: number
+  needs_practice_count: number
   reviews: ReviewScheduleSummary[]
   stats: {
     total: number
@@ -280,6 +301,14 @@ export interface DashboardResponse {
   selected_total_review_duration_seconds: number
   weekly_total_review_duration_seconds: number
   weekly_formal_review_duration_seconds: number
+  english_stats: {
+    total_courses: number
+    unfinished_courses: number
+    completed_courses: number
+    today_practice_seconds: number
+    weekly_practice_seconds: number
+    total_practice_seconds: number
+  }
   today_learning_palaces: Array<{
     palace_id: number
     palace_title: string
@@ -323,6 +352,91 @@ export interface DashboardQuery {
   month?: string
   start_date?: string
   end_date?: string
+}
+
+export interface EnglishGenerationTask {
+  id: string
+  status: 'queued' | 'running' | 'failed' | 'completed'
+  stage: string
+  progressPercent: number
+  message: string
+  sourceFilename: string
+  fileSize: number
+  errorMessage: string
+  courseId: number | null
+  createdAt: string | null
+  updatedAt: string | null
+  startedAt: string | null
+  completedAt: string | null
+}
+
+export interface EnglishCourseSummary {
+  id: number
+  title: string
+  originalFilename: string
+  sentenceCount: number
+  durationSeconds: number
+  status: 'unfinished' | 'completed'
+  currentSentenceIndex: number
+  updatedAt: string | null
+  createdAt: string | null
+}
+
+export interface EnglishCourseProgress {
+  currentSentenceIndex: number
+  completedSentenceIndexes: number[]
+  completed: boolean
+  updatedAt: string | null
+}
+
+export interface EnglishCourseSentence {
+  id: number
+  index: number
+  textEn: string
+  textZh: string
+  startMs: number
+  endMs: number
+  tokens: string[]
+}
+
+export interface EnglishCourseDetail extends EnglishCourseSummary {
+  mediaUrl: string
+  sentences: EnglishCourseSentence[]
+  progress: EnglishCourseProgress
+}
+
+export interface EnglishWorkspaceResponse {
+  currentTask: EnglishGenerationTask | null
+  continueCourse: EnglishCourseSummary | null
+  recentCourses: EnglishCourseSummary[]
+  stats: DashboardResponse['english_stats']
+}
+
+export interface EnglishSentenceCheckResponse {
+  passed: boolean
+  tokenResults: Array<{
+    input: string
+    correct: boolean
+    missing: boolean
+    unexpected: boolean
+  }>
+  normalizedInput: string[]
+  tokenCount: number
+}
+
+export interface EnglishGenerationLogEvent {
+  id: string
+  timestamp: string
+  stage: string
+  kind: string
+  message: string
+  data: Record<string, unknown>
+}
+
+export interface EnglishGenerationLogResponse {
+  task: EnglishGenerationTask | null
+  events: EnglishGenerationLogEvent[]
+  aiLogs: AiCallLogDetail[]
 }
 
 export interface PalaceReviewPlanItem {
@@ -509,6 +623,9 @@ export interface PalaceSubjectShelfItem {
   review_status: 'due_now' | 'due_later_today' | 'idle'
   has_due_review: boolean
   has_due_later_today: boolean
+  due_now_count: number
+  due_later_today_count: number
+  needs_practice_count: number
 }
 
 export interface PalaceSubjectShelfResponse {
@@ -662,6 +779,62 @@ export interface ReviewSettings {
   mindmap_ai_split_include_note: string
   mindmap_ai_split_custom_instruction: string
   [key: string]: string
+}
+
+export interface AiPromptPlaceholder {
+  name: string
+  description: string
+}
+
+export interface AiPromptTemplate {
+  key: string
+  label: string
+  description: string
+  template: string
+  default_template: string
+  is_customized: boolean
+  required_placeholders: string[]
+  available_placeholders: AiPromptPlaceholder[]
+}
+
+export interface AiPromptTemplateListResponse {
+  items: AiPromptTemplate[]
+}
+
+export interface AiCallLogArtifact {
+  name: string
+  label: string
+  mime_type: string
+  source_kind: string
+  url: string
+}
+
+export interface AiCallLogSummary {
+  id: string
+  feature: string
+  operation: string
+  job_id?: string | null
+  palace_id?: number | null
+  status: string
+  provider: string
+  base_url: string
+  model: string
+  request_id: string
+  created_at?: string | null
+  updated_at?: string | null
+}
+
+export interface AiCallLogDetail extends AiCallLogSummary {
+  request_payload: Record<string, unknown>
+  response_payload: Record<string, unknown>
+  error_payload: Record<string, unknown>
+  prompt_text: string
+  response_text: string
+  input_artifacts: AiCallLogArtifact[]
+}
+
+export interface AiCallLogListResponse {
+  items: AiCallLogSummary[]
 }
 
 export interface ImportPalacesResponse {

@@ -11,10 +11,20 @@ from memory_anki.infrastructure.db.models import (
     Chapter,
     Palace,
     PalaceGroup,
+    PalaceSegmentReviewSchedule,
+    ReviewSchedule,
     engine,
 )
 from memory_anki.modules.mindmap.application.editor_state_service import (
     sync_palace_editor_root,
+)
+from memory_anki.modules.palaces.application.segment_review_service import (
+    get_segment_schedule_display_datetime,
+    is_segment_schedule_due,
+)
+from memory_anki.modules.reviews.application.schedule_service import (
+    is_schedule_due,
+    schedule_display_datetime,
 )
 
 
@@ -499,6 +509,7 @@ def build_subject_shelf_summary(
     palaces: list[Palace],
 ) -> dict[str, Any]:
     subject_buckets: dict[int, dict[str, Any]] = {}
+    now = __import__("datetime").datetime.now()
 
     for palace in palaces:
         reconcile_palace_chapter_binding(session, palace)
@@ -513,16 +524,23 @@ def build_subject_shelf_summary(
                 "chapter_ids": set(),
                 "has_due_review": False,
                 "has_due_later_today": False,
+                "due_now_count": 0,
+                "due_later_today_count": 0,
+                "needs_practice_count": 0,
             },
         )
         bucket["palace_ids"].add(palace.id)
         for chapter in list(getattr(palace, "chapters", []) or []):
             bucket["chapter_ids"].add(chapter.id)
 
-        if bool(getattr(palace, "has_due_review", False)):
+        if palace_has_due_review(session, palace, now=now):
             bucket["has_due_review"] = True
-        elif _palace_has_due_later_today(palace):
+            bucket["due_now_count"] += 1
+        elif palace_has_due_later_today(session, palace, now=now):
             bucket["has_due_later_today"] = True
+            bucket["due_later_today_count"] += 1
+        if bool(getattr(palace, "needs_practice", False)):
+            bucket["needs_practice_count"] += 1
 
     items: list[dict[str, Any]] = []
     for bucket in subject_buckets.values():
@@ -538,6 +556,9 @@ def build_subject_shelf_summary(
                 ),
                 "has_due_review": has_due_review,
                 "has_due_later_today": has_due_later_today,
+                "due_now_count": bucket["due_now_count"],
+                "due_later_today_count": bucket["due_later_today_count"],
+                "needs_practice_count": bucket["needs_practice_count"],
             }
         )
 
@@ -635,25 +656,75 @@ def palace_group_json(group: PalaceGroup) -> dict[str, Any]:
     }
 
 
-def _palace_has_due_later_today(palace: Palace) -> bool:
-    segments = list(getattr(palace, "segments", []) or [])
-    for segment in segments:
-        if _next_review_is_later_today(getattr(segment, "next_review_at", None)):
-            return True
-    return _next_review_is_later_today(getattr(palace, "next_review_at", None))
+def _next_pending_palace_schedule(palace: Palace) -> ReviewSchedule | None:
+    pending_schedules = [schedule for schedule in (palace.review_schedules or []) if not schedule.completed]
+    if not pending_schedules:
+        return None
+    return min(pending_schedules, key=lambda schedule: (schedule.review_number, schedule.id))
 
 
-def _next_review_is_later_today(value: Any) -> bool:
-    if not value:
+def _next_pending_segment_schedule(palace: Palace) -> tuple[Any, PalaceSegmentReviewSchedule] | None:
+    candidates: list[tuple[Any, PalaceSegmentReviewSchedule]] = []
+    for segment in list(getattr(palace, "segments", []) or []):
+        next_schedule = next(
+            (
+                schedule
+                for schedule in sorted(
+                    getattr(segment, "review_schedules", None) or [],
+                    key=lambda schedule: (schedule.review_number, schedule.id),
+                )
+                if not schedule.completed
+            ),
+            None,
+        )
+        if next_schedule is not None:
+            candidates.append((segment, next_schedule))
+    if not candidates:
+        return None
+    return min(candidates, key=lambda item: (item[1].review_number, item[1].id))
+
+
+def _review_datetime_is_later_today(dt: Any, now: Any) -> bool:
+    if not dt:
         return False
-    try:
-        text = str(value)
-        if text.endswith("Z"):
-            text = text.replace("Z", "+00:00")
-        dt = __import__("datetime").datetime.fromisoformat(text)
-    except Exception:
-        return False
-    now = __import__("datetime").datetime.now(dt.tzinfo)
     if dt <= now:
         return False
     return dt.date() == now.date()
+
+
+def palace_has_due_review(
+    session: Session,
+    palace: Palace,
+    *,
+    now: Any | None = None,
+) -> bool:
+    current = now or __import__("datetime").datetime.now()
+    next_schedule = _next_pending_palace_schedule(palace)
+    if next_schedule and is_schedule_due(next_schedule, palace, session, now=current):
+        return True
+
+    next_segment = _next_pending_segment_schedule(palace)
+    if next_segment is None:
+        return False
+    segment, schedule = next_segment
+    return is_segment_schedule_due(session, segment, schedule, now=current)
+
+
+def palace_has_due_later_today(
+    session: Session,
+    palace: Palace,
+    *,
+    now: Any | None = None,
+) -> bool:
+    current = now or __import__("datetime").datetime.now()
+    next_schedule = _next_pending_palace_schedule(palace)
+    due_at = schedule_display_datetime(next_schedule, palace, session) if next_schedule else None
+    if _review_datetime_is_later_today(due_at, current):
+        return True
+
+    next_segment = _next_pending_segment_schedule(palace)
+    if next_segment is None:
+        return False
+    segment, schedule = next_segment
+    due_at = get_segment_schedule_display_datetime(session, segment, schedule)
+    return _review_datetime_is_later_today(due_at, current)

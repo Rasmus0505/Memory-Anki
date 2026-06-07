@@ -26,6 +26,7 @@ export interface MindMapFrameHostState {
   readonly: boolean
   showToolbarWhenReadonly: boolean
   showPracticeButton: boolean
+  showEnglishButton: boolean
   practiceModeActive: boolean
   practiceToggleLabel: '练习' | '编辑' | '复习'
   viewMemoryScope: string | null
@@ -61,6 +62,7 @@ export interface HostBridge {
   saveLanguage: (lang: string) => void
   getLocalConfig: () => Record<string, unknown>
   saveLocalConfig: (config: Record<string, unknown>) => void
+  isHydrated?: () => boolean
   notify: (event: string, payload: unknown) => void
 }
 
@@ -152,12 +154,14 @@ export function buildHostBridgeHostState(args: {
   bilinkCurrentPalaceId: number | null
   showBilinkSearchButton: boolean
   hasPracticeToggle: boolean
+  hasEnglishOpen: boolean
   hasAiSplitRequest: boolean
 }): MindMapFrameHostState {
   return {
     readonly: args.readonly,
     showToolbarWhenReadonly: args.showToolbarWhenReadonly,
     showPracticeButton: args.hasPracticeToggle,
+    showEnglishButton: args.hasEnglishOpen,
     practiceModeActive: args.practiceModeActive,
     practiceToggleLabel: args.practiceToggleLabel,
     viewMemoryScope: args.viewMemoryScope,

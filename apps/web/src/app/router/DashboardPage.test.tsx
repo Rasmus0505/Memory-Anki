@@ -2,6 +2,7 @@ import * as React from 'react'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import DashboardPage from '@/app/router/DashboardPage'
+import type { DashboardResponse } from '@/shared/api/contracts'
 
 vi.mock('react-router-dom', () => ({
   Link: ({ children, to }: { children: React.ReactNode; to: string }) => <a href={to}>{children}</a>,
@@ -9,8 +10,50 @@ vi.mock('react-router-dom', () => ({
 
 const getDashboardApi = vi.fn()
 
+function buildDashboardResponse(
+  payload: Partial<DashboardResponse> & {
+    stats?: Partial<DashboardResponse['stats']>
+    english_stats?: Partial<DashboardResponse['english_stats']>
+  },
+): DashboardResponse {
+  const { stats, english_stats, ...rest } = payload
+  return {
+    due_count: 0,
+    due_later_today_count: 0,
+    needs_practice_count: 0,
+    reviews: [],
+    stats: {
+      total: 0,
+      review_count: 0,
+      review_duration_seconds: 0,
+      ...stats,
+    },
+    today_review_duration_seconds: 0,
+    weekly_review_duration_seconds: 0,
+    today_total_review_duration_seconds: 0,
+    monthly_total_review_duration_seconds: 0,
+    selected_total_review_duration_seconds: 0,
+    weekly_total_review_duration_seconds: 0,
+    weekly_formal_review_duration_seconds: 0,
+    english_stats: {
+      total_courses: 0,
+      unfinished_courses: 0,
+      completed_courses: 0,
+      today_practice_seconds: 0,
+      weekly_practice_seconds: 0,
+      total_practice_seconds: 0,
+      ...english_stats,
+    },
+    today_learning_palaces: [],
+    today_new_palace_count: 0,
+    today_new_palaces: [],
+    recent_palaces: [],
+    ...rest,
+  }
+}
+
 vi.mock('@/shared/api/modules/dashboard', () => ({
-  getDashboardApi: (...args: unknown[]) => getDashboardApi(...args),
+  getDashboardApi: async (...args: unknown[]) => buildDashboardResponse(await getDashboardApi(...args)),
 }))
 
 vi.mock('@/features/profile/hooks/useTimeRecordsDashboard', () => ({
@@ -81,6 +124,8 @@ describe('DashboardPage', () => {
   it('renders learning breakdown and today new palace hierarchy', async () => {
     getDashboardApi.mockResolvedValue({
       due_count: 2,
+      due_later_today_count: 1,
+      needs_practice_count: 3,
       reviews: [],
       stats: { total: 0, review_count: 0, review_duration_seconds: 0 },
       today_review_duration_seconds: 0,
@@ -127,6 +172,7 @@ describe('DashboardPage', () => {
     render(<DashboardPage />)
 
     expect(await screen.findByText('今日学习')).toBeTruthy()
+    expect(screen.getByText('英语练习')).toBeTruthy()
     expect(screen.getByText('宫殿编辑')).toBeTruthy()
     expect(screen.getByText('练习')).toBeTruthy()
     expect(screen.getByText('复习')).toBeTruthy()
@@ -141,9 +187,40 @@ describe('DashboardPage', () => {
     expect(screen.getByDisplayValue(/\d{4}-\d{2}/)).toBeTruthy()
   })
 
+  it('renders dashboard triage counts and review link gating', async () => {
+    getDashboardApi.mockResolvedValue({
+      due_count: 2,
+      due_later_today_count: 1,
+      needs_practice_count: 4,
+      reviews: [],
+      stats: { total: 0, review_count: 0, review_duration_seconds: 0 },
+      today_review_duration_seconds: 0,
+      weekly_review_duration_seconds: 0,
+      today_total_review_duration_seconds: 5400,
+      monthly_total_review_duration_seconds: 14400,
+      selected_total_review_duration_seconds: 14400,
+      weekly_total_review_duration_seconds: 7200,
+      weekly_formal_review_duration_seconds: 3600,
+      recent_palaces: [],
+      today_learning_palaces: [],
+      today_new_palace_count: 0,
+      today_new_palaces: [],
+    })
+
+    render(<DashboardPage />)
+
+    expect(await screen.findByText('今日待处理')).toBeTruthy()
+    expect(screen.getByText('立即复习')).toBeTruthy()
+    expect(screen.getByText('今日稍后')).toBeTruthy()
+    expect(screen.getByText('要练习')).toBeTruthy()
+    expect(screen.getByRole('link', { name: /开始复习/i })).toBeTruthy()
+  })
+
   it('shows learning tooltip immediately on hover', async () => {
     getDashboardApi.mockResolvedValue({
       due_count: 0,
+      due_later_today_count: 0,
+      needs_practice_count: 0,
       reviews: [],
       stats: { total: 0, review_count: 0, review_duration_seconds: 0 },
       today_review_duration_seconds: 0,

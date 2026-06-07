@@ -51,7 +51,7 @@ describe('usePalaceEditPage inline practice mode', () => {
     fireEvent.click(screen.getByRole('button', { name: '练习' }))
     await waitFor(() => {
       expect(screen.getByText('outline')).toBeTruthy()
-      expect(screen.getByText('mindmap-practice-readonly-toolbar-reset-import-sync')).toBeTruthy()
+      expect(screen.getByText('mindmap-practice-readonly-toolbar-preserve-import-sync')).toBeTruthy()
       expect(
         screen.getByText((content) =>
           content.startsWith('sync-replace-replace-practice:0:0-{"docFingerprint":'),
@@ -108,7 +108,7 @@ describe('usePalaceEditPage inline practice mode', () => {
     fireEvent.click(screen.getByRole('button', { name: '练习' }))
 
     await waitFor(() => {
-      expect(screen.getByText('mindmap-practice-readonly-toolbar-reset-import-sync')).toBeTruthy()
+      expect(screen.getByText('mindmap-practice-readonly-toolbar-preserve-import-sync')).toBeTruthy()
     })
     expect(
       screen.getByText((content) =>
@@ -188,7 +188,7 @@ describe('usePalaceEditPage inline practice mode', () => {
     fireEvent.click(screen.getByRole('button', { name: '练习' }))
 
     await waitFor(() => {
-      expect(screen.getByText('mindmap-practice-readonly-toolbar-reset-import-sync')).toBeTruthy()
+      expect(screen.getByText('mindmap-practice-readonly-toolbar-preserve-import-sync')).toBeTruthy()
     })
     expect(
       screen.getByText((content) =>

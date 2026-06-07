@@ -706,7 +706,7 @@ class MindMapImportServiceTests(unittest.TestCase):
         self.assertIn("可以挂到最近的相关原始父节点下", prompt)
         self.assertIn("可以提炼成更适合脑图展示的短语", prompt)
         self.assertIn("无需额外保留下划线或波浪线强调", prompt)
-        self.assertIn("不要为了美化结构自动把长段正文拆成多个并列 children", prompt)
+        self.assertIn("不要为了美化结构自动改写正文", prompt)
         self.assertIn("OCR 正文", prompt)
         self.assertNotIn("给定结构与结构页明显对不上", prompt)
 
@@ -721,6 +721,96 @@ class MindMapImportServiceTests(unittest.TestCase):
         self.assertIn("OCR 正文", prompt)
         self.assertIn("不能只停留在脑图页自身的结构骨架", prompt)
         self.assertIn("不要只复述第一页", prompt)
+        self.assertIn("默认要主动识别并拆开的句型包括", prompt)
+        self.assertIn("不要额外生成教材里没有的新总结语", prompt)
+
+    def test_normalize_pdf_source_tree_splits_dash_relation_into_parent_and_child(self):
+        normalized = service.normalize_pdf_source_tree(
+            {
+                "title": "修道院教育",
+                "children": [{"text": "性质和目的——为主效力", "children": []}],
+            }
+        )
+
+        top_node = normalized["children"][0]
+        self.assertEqual(top_node["text"], "性质和目的")
+        self.assertEqual([child["text"] for child in top_node["children"]], ["为主效力"])
+
+    def test_normalize_pdf_source_tree_splits_parallel_items_under_dash_parent(self):
+        normalized = service.normalize_pdf_source_tree(
+            {
+                "title": "教会教育",
+                "children": [{"text": "人员构成——内学/外学", "children": []}],
+            }
+        )
+
+        top_node = normalized["children"][0]
+        self.assertEqual(top_node["text"], "人员构成")
+        self.assertEqual([child["text"] for child in top_node["children"]], ["内学", "外学"])
+
+    def test_normalize_pdf_source_tree_splits_heading_and_semicolon_series(self):
+        normalized = service.normalize_pdf_source_tree(
+            {
+                "title": "中世纪教育",
+                "children": [{"text": "教育内容：早期重宗教信仰；后期以七艺为主", "children": []}],
+            }
+        )
+
+        top_node = normalized["children"][0]
+        self.assertEqual(top_node["text"], "教育内容")
+        self.assertEqual([child["text"] for child in top_node["children"]], ["早期重宗教信仰", "后期以七艺为主"])
+
+    def test_normalize_pdf_source_tree_splits_age_range_and_children(self):
+        normalized = service.normalize_pdf_source_tree(
+            {
+                "title": "骑士教育",
+                "children": [{"text": "14~21岁：侍从教育；跟随贵族领主学习骑士七技", "children": []}],
+            }
+        )
+
+        top_node = normalized["children"][0]
+        self.assertEqual(top_node["text"], "14~21岁")
+        self.assertEqual(
+            [child["text"] for child in top_node["children"]],
+            ["侍从教育", "跟随贵族领主学习骑士七技"],
+        )
+
+    def test_normalize_pdf_source_tree_splits_definition_sentence(self):
+        normalized = service.normalize_pdf_source_tree(
+            {
+                "title": "修道院教育",
+                "children": [{"text": "修道院的性质和目的是为主效力", "children": []}],
+            }
+        )
+
+        top_node = normalized["children"][0]
+        self.assertEqual(top_node["text"], "性质和目的")
+        self.assertEqual([child["text"] for child in top_node["children"]], ["为主效力"])
+
+    def test_normalize_pdf_source_tree_splits_include_and_divide_sentences(self):
+        include_tree = service.normalize_pdf_source_tree(
+            {
+                "title": "骑士教育",
+                "children": [{"text": "骑士教育包括宗教、道德、文化", "children": []}],
+            }
+        )
+        divide_tree = service.normalize_pdf_source_tree(
+            {
+                "title": "学校教育",
+                "children": [{"text": "学校教育分为初等、中等", "children": []}],
+            }
+        )
+
+        self.assertEqual(include_tree["children"][0]["text"], "骑士教育")
+        self.assertEqual(
+            [child["text"] for child in include_tree["children"][0]["children"]],
+            ["宗教", "道德", "文化"],
+        )
+        self.assertEqual(divide_tree["children"][0]["text"], "学校教育")
+        self.assertEqual(
+            [child["text"] for child in divide_tree["children"][0]["children"]],
+            ["初等", "中等"],
+        )
 
     def test_trim_pdf_extracted_text_prefers_structure_title_or_prompt_anchor(self):
         extracted_text = (

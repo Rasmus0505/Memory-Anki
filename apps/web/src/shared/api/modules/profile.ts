@@ -1,5 +1,6 @@
 import { API_BASE, request } from '@/shared/api/http'
 import type {
+  AiPromptTemplateListResponse,
   BackupListResponse,
   CreateBackupResponse,
   ImportPalacesResponse,
@@ -16,6 +17,24 @@ export function updateReviewSettingsApi(data: Record<string, string>) {
   return request<ReviewSettings>('/settings/review', {
     method: 'PUT',
     body: JSON.stringify(data),
+  })
+}
+
+export function getAiPromptTemplatesApi() {
+  return request<AiPromptTemplateListResponse>('/settings/ai-prompts')
+}
+
+export function updateAiPromptTemplatesApi(templates: Record<string, string>) {
+  return request<AiPromptTemplateListResponse>('/settings/ai-prompts', {
+    method: 'PUT',
+    body: JSON.stringify({ templates }),
+  })
+}
+
+export function resetAiPromptTemplatesApi(keys?: string[]) {
+  return request<AiPromptTemplateListResponse>('/settings/ai-prompts/reset', {
+    method: 'POST',
+    body: JSON.stringify(keys && keys.length > 0 ? { keys } : {}),
   })
 }
 

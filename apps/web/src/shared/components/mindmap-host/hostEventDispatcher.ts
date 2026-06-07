@@ -17,6 +17,7 @@ interface HostEventHandlerRefs {
   }) => void) | undefined>
   onSegmentRangeConfirm: MutableRefObject<(() => void) | undefined>
   onPracticeToggle: MutableRefObject<(() => void) | undefined>
+  onEnglishOpen: MutableRefObject<(() => void) | undefined>
   onMindMapImportOpen: MutableRefObject<(() => void) | undefined>
   onImageTextImportOpen: MutableRefObject<(() => void) | undefined>
   onAiSplitRequest: MutableRefObject<((payload: MindMapAiSplitRequestPayload) => void) | undefined>
@@ -102,6 +103,9 @@ export function dispatchHostEvent(
   }
   if (event === 'practice_toggle') {
     handlers.onPracticeToggle.current?.()
+  }
+  if (event === 'english_open') {
+    handlers.onEnglishOpen.current?.()
   }
   if (event === 'mindmap_import_open') {
     handlers.onMindMapImportOpen.current?.()

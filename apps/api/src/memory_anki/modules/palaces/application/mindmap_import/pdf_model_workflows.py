@@ -25,6 +25,7 @@ def stream_pdf_text_extraction(
     range_prompt: str,
     total_steps: int,
     stream_call_dashscope_text_fn,
+    external_log_context: dict[str, Any] | None = None,
 ) -> Generator[ImportStreamEvent, None, str]:
     yield _status_event(step_protocol.extract_pdf_text_step(total_steps=total_steps))
     return (
@@ -33,6 +34,7 @@ def stream_pdf_text_extraction(
             page_numbers=page_numbers,
             range_prompt=range_prompt,
             channel="text",
+            external_log_context=external_log_context,
         )
     )
 
@@ -44,6 +46,7 @@ def stream_selected_pdf_ocr(
     range_prompt: str,
     prepare_pdf_ocr_grounding_fn,
     stream_call_dashscope_text_fn,
+    external_log_context: dict[str, Any] | None = None,
 ) -> Generator[ImportStreamEvent, None, tuple[str | None, int]]:
     yield _status_event(step_protocol.extract_selected_pdf_ocr_step())
     extracted_text = yield from stream_call_dashscope_text_fn(
@@ -51,6 +54,7 @@ def stream_selected_pdf_ocr(
         page_numbers=page_numbers,
         range_prompt=range_prompt,
         channel="text",
+        external_log_context=external_log_context,
     )
     return prepare_pdf_ocr_grounding_fn(
         extracted_text,
@@ -67,6 +71,7 @@ def stream_pdf_direct_generation(
     import_options: Any,
     extracted_text: str | None,
     stream_call_dashscope_pdf_json_fn,
+    external_log_context: dict[str, Any] | None = None,
 ) -> Generator[ImportStreamEvent, None, dict[str, Any]]:
     yield _status_event(step_protocol.generate_pdf_mindmap_direct_step())
     return (
@@ -78,6 +83,7 @@ def stream_pdf_direct_generation(
             disable_rebalance=False,
             import_options=import_options,
             extracted_text=extracted_text,
+            external_log_context=external_log_context,
         )
     )
 
@@ -89,8 +95,8 @@ def stream_pdf_structure_recognition(
     range_prompt: str,
     preserve_emphasis_marks: bool,
     build_pdf_structure_prompt_fn,
-    extend_prompt_for_pdf_fn,
     stream_call_dashscope_json_fn,
+    external_log_context: dict[str, Any] | None = None,
 ) -> Generator[ImportStreamEvent, None, dict[str, Any]]:
     yield _status_event(
         step_protocol.recognize_pdf_structure_step(structure_page=structure_page)
@@ -99,15 +105,14 @@ def stream_pdf_structure_recognition(
         yield from stream_call_dashscope_json_fn(
             image_bytes=structure_payload[1],
             filename=structure_payload[2],
-            prompt=extend_prompt_for_pdf_fn(
-                build_pdf_structure_prompt_fn(
-                    preserve_emphasis_marks=preserve_emphasis_marks,
-                ),
+            prompt=build_pdf_structure_prompt_fn(
+                preserve_emphasis_marks=preserve_emphasis_marks,
                 page_numbers=[structure_page],
                 range_prompt=range_prompt,
             ),
             disable_rebalance=True,
             channel="raw_model",
+            external_log_context=external_log_context,
         )
     )
 
@@ -119,6 +124,7 @@ def stream_pdf_body_ocr(
     structure_title: str,
     prepare_pdf_ocr_grounding_fn,
     stream_call_dashscope_text_fn,
+    external_log_context: dict[str, Any] | None = None,
 ) -> Generator[ImportStreamEvent, None, str | None]:
     yield _status_event(step_protocol.extract_pdf_body_ocr_step())
     body_page_numbers = [page_number for page_number, _, _ in body_payloads]
@@ -127,6 +133,7 @@ def stream_pdf_body_ocr(
         page_numbers=body_page_numbers,
         range_prompt=range_prompt,
         channel="text",
+        external_log_context=external_log_context,
     )
     trimmed_text, _ = prepare_pdf_ocr_grounding_fn(
         extracted_text,
@@ -147,6 +154,7 @@ def stream_pdf_body_merge(
     extracted_text: str | None,
     order_pdf_image_items_fn,
     stream_call_dashscope_batch_json_fn,
+    external_log_context: dict[str, Any] | None = None,
 ) -> Generator[ImportStreamEvent, None, dict[str, Any]]:
     yield _status_event(step_protocol.merge_pdf_body_step())
     return (
@@ -159,6 +167,7 @@ def stream_pdf_body_merge(
             disable_rebalance=True,
             import_options=import_options,
             extracted_text=extracted_text,
+            external_log_context=external_log_context,
         )
     )
 

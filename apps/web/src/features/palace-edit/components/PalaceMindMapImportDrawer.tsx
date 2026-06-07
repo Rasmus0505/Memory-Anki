@@ -46,6 +46,7 @@ import {
   DialogTitle,
 } from '@/shared/components/ui/dialog'
 import { cn } from '@/shared/lib/utils'
+import { requestOpenAiLogDetail } from '@/shared/logs/model/appLogs'
 
 export function PalaceMindMapImportDrawer(props: PalaceMindMapImportDrawerProps) {
   const {
@@ -86,6 +87,7 @@ export function PalaceMindMapImportDrawer(props: PalaceMindMapImportDrawerProps)
   const previewSectionRef = useRef<HTMLElement | null>(null)
   const streamPreviewContentRef = useRef<HTMLPreElement | null>(null)
   const lastAutoScrollKeyRef = useRef('')
+  const previousAutoScrollKeyRef = useRef('')
   const shouldAutoFollowStreamRef = useRef(true)
 
   const nodeCount = sourceTree ? countSourceTreeNodes(sourceTree.children) : 0
@@ -262,7 +264,6 @@ export function PalaceMindMapImportDrawer(props: PalaceMindMapImportDrawerProps)
   useEffect(() => {
     if (!open) return
     setView('import')
-    lastAutoScrollKeyRef.current = ''
     shouldAutoFollowStreamRef.current = true
   }, [open])
 
@@ -285,6 +286,9 @@ export function PalaceMindMapImportDrawer(props: PalaceMindMapImportDrawerProps)
       mode === 'mindmap'
         ? `mindmap:${sourceKind}:${sourceTree?.title ?? ''}:${nodeCount}`
         : `text:${sourceKind}:${extractedText.length}`
+    const previousKey = previousAutoScrollKeyRef.current
+    previousAutoScrollKeyRef.current = autoScrollKey
+    if (previousKey === autoScrollKey) return
     if (autoScrollKey === lastAutoScrollKeyRef.current) return
     lastAutoScrollKeyRef.current = autoScrollKey
     previewSectionRef.current?.scrollIntoView({ block: 'start', behavior: 'smooth' })
@@ -394,6 +398,20 @@ export function PalaceMindMapImportDrawer(props: PalaceMindMapImportDrawerProps)
                   >
                     <Clock className="mr-2 h-4 w-4" />
                     历史记录
+                    </Button>
+                  ) : null}
+                {currentJobId ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() =>
+                      requestOpenAiLogDetail({
+                        jobId: currentJobId,
+                        title: sourceTitle,
+                      })
+                    }
+                  >
+                    查看AI详情
                   </Button>
                 ) : null}
               </div>
@@ -417,7 +435,7 @@ export function PalaceMindMapImportDrawer(props: PalaceMindMapImportDrawerProps)
           {view === 'history' ? (
             <PalaceImportHistoryView model={historyViewModel} onBackToImport={() => setView('import')} />
           ) : (
-            <div className="min-h-0 flex flex-1">
+            <div className="min-h-0 flex flex-1 flex-col xl:flex-row">
               <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
                 <div data-testid="mindmap-import-scroll-panel" className="min-h-0 flex-1 overflow-y-auto">
                   <PalaceImportSourceConfigPanel model={sourceConfigModel} />

@@ -19,6 +19,7 @@ type AppLogListener = () => void
 
 const STORAGE_KEY = 'memory_anki_app_logs'
 const CHANGE_EVENT = 'memory-anki-app-logs:changed'
+const OPEN_AI_LOG_DETAIL_EVENT = 'memory-anki-open-ai-log-detail'
 const RETENTION_MS = 7 * 24 * 60 * 60 * 1000
 
 const listeners = new Set<AppLogListener>()
@@ -278,4 +279,31 @@ export function logAiCall(input: {
     requestId: input.requestId,
     meta: input.meta,
   })
+}
+
+export interface OpenAiLogDetailRequest {
+  aiCallLogId?: string | null
+  jobId?: string | null
+  title?: string
+}
+
+export function requestOpenAiLogDetail(payload: OpenAiLogDetailRequest) {
+  if (typeof window === 'undefined') return
+  window.dispatchEvent(new CustomEvent(OPEN_AI_LOG_DETAIL_EVENT, { detail: payload }))
+}
+
+export function subscribeOpenAiLogDetail(
+  listener: (payload: OpenAiLogDetailRequest) => void,
+) {
+  if (typeof window === 'undefined') {
+    return () => {}
+  }
+  const handler = (event: Event) => {
+    const detail = event instanceof CustomEvent ? (event.detail as OpenAiLogDetailRequest) : null
+    listener(detail || {})
+  }
+  window.addEventListener(OPEN_AI_LOG_DETAIL_EVENT, handler as EventListener)
+  return () => {
+    window.removeEventListener(OPEN_AI_LOG_DETAIL_EVENT, handler as EventListener)
+  }
 }

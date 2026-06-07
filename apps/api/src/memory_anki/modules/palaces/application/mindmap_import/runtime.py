@@ -1,6 +1,4 @@
 from __future__ import annotations
-
-import json
 from dataclasses import dataclass
 from typing import Any, Generator
 
@@ -16,22 +14,24 @@ from memory_anki.infrastructure.llm import (
     parse_chat_completion_stream,
     stream_chat_completion_text,
 )
+from memory_anki.infrastructure.llm.external_ai_call_logs import (
+    begin_external_ai_call_log,
+    complete_external_ai_call_log,
+    fail_external_ai_call_log,
+)
+from memory_anki.modules.settings.application import ai_prompts
 
 from .contracts import MindMapImportError, PdfImportOptions
 from .normalization import (
     MAX_IMAGE_BYTES,
     build_image_content_part,
     normalize_extracted_text,
+    normalize_pdf_source_tree,
     normalize_source_tree,
     parse_source_tree_json,
 )
 from .prompts import (
-    BATCH_PROMPT,
     PROMPT,
-    TEXT_PROMPT,
-    build_pdf_batch_prompt,
-    build_pdf_direct_prompt,
-    extend_prompt_for_pdf,
 )
 
 
@@ -93,15 +93,18 @@ def call_dashscope_json(
     runtime: DashscopeImportRuntime,
     image_bytes: bytes,
     filename: str | None,
-    prompt: str = PROMPT,
+    prompt: str | None = PROMPT,
     disable_rebalance: bool = False,
+    external_log_context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    resolved_prompt = prompt or ai_prompts.render_prompt("ai_prompt_import_image_mindmap", {})
     content_text = call_dashscope(
         runtime=runtime,
         image_bytes=image_bytes,
         filename=filename,
-        prompt=prompt,
+        prompt=resolved_prompt,
         response_format={"type": "json_object"},
+        external_log_context=external_log_context,
     )
     source_tree = parse_source_tree_json(content_text)
     return normalize_source_tree(source_tree, disable_rebalance=disable_rebalance)
@@ -112,12 +115,14 @@ def call_dashscope_text(
     runtime: DashscopeImportRuntime,
     image_bytes: bytes,
     filename: str | None,
+    external_log_context: dict[str, Any] | None = None,
 ) -> str:
     return call_dashscope_text_with_images(
         runtime=runtime,
         image_items=[(image_bytes, filename)],
         page_numbers=None,
         range_prompt="",
+        external_log_context=external_log_context,
     )
 
 
@@ -127,18 +132,21 @@ def call_dashscope_text_with_images(
     image_items: list[tuple[bytes, str | None]],
     page_numbers: list[int] | None,
     range_prompt: str,
+    external_log_context: dict[str, Any] | None = None,
 ) -> str:
+    resolved_prompt = ai_prompts.extend_pdf_prompt(
+        ai_prompts.render_prompt("ai_prompt_import_image_text", {}),
+        page_numbers=page_numbers,
+        range_prompt=range_prompt,
+    )
     content_text = call_dashscope(
         runtime=runtime,
         image_bytes=image_items[0][0],
         filename=image_items[0][1],
-        prompt=extend_prompt_for_pdf(
-            TEXT_PROMPT,
-            page_numbers=page_numbers,
-            range_prompt=range_prompt,
-        ),
+        prompt=resolved_prompt,
         response_format=None,
         image_items=image_items,
+        external_log_context=external_log_context,
     )
     return normalize_extracted_text(content_text)
 
@@ -153,6 +161,7 @@ def call_dashscope_batch_json(
     disable_rebalance: bool = False,
     import_options: PdfImportOptions | None = None,
     extracted_text: str | None = None,
+    external_log_context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     prompt = _build_batch_prompt(
         structure_tree=structure_tree,
@@ -166,9 +175,15 @@ def call_dashscope_batch_json(
         image_items=image_items,
         prompt=prompt,
         response_format={"type": "json_object"},
+        external_log_context=external_log_context,
     )
     source_tree = parse_source_tree_json(content_text)
-    return normalize_source_tree(source_tree, disable_rebalance=disable_rebalance)
+    is_pdf_merge = page_numbers is not None or import_options is not None or extracted_text is not None
+    if is_pdf_merge:
+        return normalize_pdf_source_tree(source_tree)
+    if disable_rebalance:
+        return normalize_source_tree(source_tree, disable_rebalance=True)
+    return normalize_source_tree(source_tree, disable_rebalance=False)
 
 
 def call_dashscope_pdf_json(
@@ -180,20 +195,22 @@ def call_dashscope_pdf_json(
     disable_rebalance: bool = False,
     import_options: PdfImportOptions | None = None,
     extracted_text: str | None = None,
+    external_log_context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     content_text = call_dashscope_with_images(
         runtime=runtime,
         image_items=image_items,
-        prompt=build_pdf_direct_prompt(
+        prompt=ai_prompts.build_import_pdf_direct_prompt(
             range_prompt=range_prompt,
             page_numbers=page_numbers,
             import_options=import_options or PdfImportOptions(),
             extracted_text=extracted_text,
         ),
         response_format={"type": "json_object"},
+        external_log_context=external_log_context,
     )
     source_tree = parse_source_tree_json(content_text)
-    return normalize_source_tree(source_tree, disable_rebalance=disable_rebalance)
+    return normalize_pdf_source_tree(source_tree)
 
 
 def stream_call_dashscope_json(
@@ -201,15 +218,18 @@ def stream_call_dashscope_json(
     runtime: DashscopeImportRuntime,
     image_bytes: bytes,
     filename: str | None,
-    prompt: str = PROMPT,
+    prompt: str | None = PROMPT,
     disable_rebalance: bool = False,
+    external_log_context: dict[str, Any] | None = None,
 ) -> Generator[str, None, dict[str, Any]]:
+    resolved_prompt = prompt or ai_prompts.render_prompt("ai_prompt_import_image_mindmap", {})
     content_text = yield from stream_call_dashscope(
         runtime=runtime,
         image_bytes=image_bytes,
         filename=filename,
-        prompt=prompt,
+        prompt=resolved_prompt,
         response_format={"type": "json_object"},
+        external_log_context=external_log_context,
     )
     source_tree = parse_source_tree_json(content_text)
     return normalize_source_tree(source_tree, disable_rebalance=disable_rebalance)
@@ -221,18 +241,21 @@ def stream_call_dashscope_text(
     image_items: list[tuple[bytes, str | None]],
     page_numbers: list[int] | None,
     range_prompt: str,
+    external_log_context: dict[str, Any] | None = None,
 ) -> Generator[str, None, str]:
+    resolved_prompt = ai_prompts.extend_pdf_prompt(
+        ai_prompts.render_prompt("ai_prompt_import_image_text", {}),
+        page_numbers=page_numbers,
+        range_prompt=range_prompt,
+    )
     content_text = yield from stream_call_dashscope(
         runtime=runtime,
         image_bytes=image_items[0][0],
         filename=image_items[0][1],
-        prompt=extend_prompt_for_pdf(
-            TEXT_PROMPT,
-            page_numbers=page_numbers,
-            range_prompt=range_prompt,
-        ),
+        prompt=resolved_prompt,
         response_format=None,
         image_items=image_items,
+        external_log_context=external_log_context,
     )
     return normalize_extracted_text(content_text)
 
@@ -247,6 +270,7 @@ def stream_call_dashscope_batch_json(
     disable_rebalance: bool = False,
     import_options: PdfImportOptions | None = None,
     extracted_text: str | None = None,
+    external_log_context: dict[str, Any] | None = None,
 ) -> Generator[str, None, dict[str, Any]]:
     prompt = _build_batch_prompt(
         structure_tree=structure_tree,
@@ -260,9 +284,15 @@ def stream_call_dashscope_batch_json(
         image_items=image_items,
         prompt=prompt,
         response_format={"type": "json_object"},
+        external_log_context=external_log_context,
     )
     source_tree = parse_source_tree_json(content_text)
-    return normalize_source_tree(source_tree, disable_rebalance=disable_rebalance)
+    is_pdf_merge = page_numbers is not None or import_options is not None or extracted_text is not None
+    if is_pdf_merge:
+        return normalize_pdf_source_tree(source_tree)
+    if disable_rebalance:
+        return normalize_source_tree(source_tree, disable_rebalance=True)
+    return normalize_source_tree(source_tree, disable_rebalance=False)
 
 
 def stream_call_dashscope_pdf_json(
@@ -274,20 +304,22 @@ def stream_call_dashscope_pdf_json(
     disable_rebalance: bool = False,
     import_options: PdfImportOptions | None = None,
     extracted_text: str | None = None,
+    external_log_context: dict[str, Any] | None = None,
 ) -> Generator[str, None, dict[str, Any]]:
     content_text = yield from stream_call_dashscope_with_images(
         runtime=runtime,
         image_items=image_items,
-        prompt=build_pdf_direct_prompt(
+        prompt=ai_prompts.build_import_pdf_direct_prompt(
             range_prompt=range_prompt,
             page_numbers=page_numbers,
             import_options=import_options or PdfImportOptions(),
             extracted_text=extracted_text,
         ),
         response_format={"type": "json_object"},
+        external_log_context=external_log_context,
     )
     source_tree = parse_source_tree_json(content_text)
-    return normalize_source_tree(source_tree, disable_rebalance=disable_rebalance)
+    return normalize_pdf_source_tree(source_tree)
 
 
 def call_dashscope(
@@ -298,12 +330,14 @@ def call_dashscope(
     prompt: str,
     response_format: dict[str, Any] | None,
     image_items: list[tuple[bytes, str | None]] | None = None,
+    external_log_context: dict[str, Any] | None = None,
 ) -> str:
     return call_dashscope_with_images(
         runtime=runtime,
         image_items=image_items or [(image_bytes, filename)],
         prompt=prompt,
         response_format=response_format,
+        external_log_context=external_log_context,
     )
 
 
@@ -315,6 +349,7 @@ def stream_call_dashscope(
     prompt: str,
     response_format: dict[str, Any] | None,
     image_items: list[tuple[bytes, str | None]] | None = None,
+    external_log_context: dict[str, Any] | None = None,
 ) -> Generator[str, None, str]:
     return (
         yield from stream_call_dashscope_with_images(
@@ -322,6 +357,7 @@ def stream_call_dashscope(
             image_items=image_items or [(image_bytes, filename)],
             prompt=prompt,
             response_format=response_format,
+            external_log_context=external_log_context,
         )
     )
 
@@ -332,12 +368,14 @@ def call_dashscope_with_images(
     image_items: list[tuple[bytes, str | None]],
     prompt: str,
     response_format: dict[str, Any] | None,
+    external_log_context: dict[str, Any] | None = None,
 ) -> str:
     generator = iter_dashscope_with_images_stream(
         runtime=runtime,
         image_items=image_items,
         prompt=prompt,
         response_format=response_format,
+        external_log_context=external_log_context,
     )
     while True:
         try:
@@ -352,6 +390,7 @@ def stream_call_dashscope_with_images(
     image_items: list[tuple[bytes, str | None]],
     prompt: str,
     response_format: dict[str, Any] | None,
+    external_log_context: dict[str, Any] | None = None,
 ) -> Generator[str, None, str]:
     return (
         yield from iter_dashscope_with_images_stream(
@@ -359,6 +398,7 @@ def stream_call_dashscope_with_images(
             image_items=image_items,
             prompt=prompt,
             response_format=response_format,
+            external_log_context=external_log_context,
         )
     )
 
@@ -369,33 +409,77 @@ def iter_dashscope_with_images_stream(
     image_items: list[tuple[bytes, str | None]],
     prompt: str,
     response_format: dict[str, Any] | None,
+    external_log_context: dict[str, Any] | None = None,
 ) -> Generator[str, None, str]:
     content: list[dict[str, Any]] = [{"type": "text", "text": prompt}]
     for index, (image_bytes, filename) in enumerate(image_items, start=1):
         content.append({"type": "text", "text": f"第 {index} 张图片："})
         content.append(build_image_content_part(image_bytes=image_bytes, filename=filename))
+    log_context = external_log_context or {}
+    log_id = begin_external_ai_call_log(
+        feature=str(log_context.get("feature") or "外部 AI 调用"),
+        operation=str(log_context.get("operation") or "vision_chat_completion"),
+        provider=str(log_context.get("provider") or "dashscope"),
+        base_url=runtime.base_url,
+        model=runtime.model,
+        job_id=str(log_context.get("job_id") or "") or None,
+        palace_id=int(log_context["palace_id"]) if log_context.get("palace_id") is not None else None,
+        artifact_refs=(
+            list(log_context.get("artifact_refs") or [])
+            if isinstance(log_context.get("artifact_refs"), list)
+            else None
+        ),
+        image_items=image_items,
+        request_payload={
+            "prompt": prompt,
+            "channel": str(log_context.get("channel") or ""),
+            "response_format": response_format,
+            "messages": [{"role": "user", "content": content}],
+        },
+    )
     try:
-        return (
-            yield from stream_chat_completion_text(
-                config=OpenAICompatibleChatConfig(
-                    api_key=runtime.api_key,
-                    base_url=runtime.base_url,
-                    model=runtime.model,
-                    temperature=runtime.temperature,
-                    timeout_seconds=runtime.timeout_seconds,
-                ),
-                messages=[
-                    {
-                        "role": "user",
-                        "content": content,
-                    }
-                ],
-                response_format=response_format,
-            )
+        final_text = yield from stream_chat_completion_text(
+            config=OpenAICompatibleChatConfig(
+                api_key=runtime.api_key,
+                base_url=runtime.base_url,
+                model=runtime.model,
+                temperature=runtime.temperature,
+                timeout_seconds=runtime.timeout_seconds,
+            ),
+            messages=[
+                {
+                    "role": "user",
+                    "content": content,
+                }
+            ],
+            response_format=response_format,
         )
+        complete_external_ai_call_log(
+            log_id,
+            response_payload={
+                "response_text": final_text,
+            },
+        )
+        return final_text
     except OpenAICompatibleProtocolError as exc:
+        fail_external_ai_call_log(
+            log_id,
+            error_payload={
+                "type": "protocol_error",
+                "message": str(exc),
+            },
+        )
         raise MindMapImportError(str(exc)) from exc
     except OpenAICompatibleHttpError as exc:
+        fail_external_ai_call_log(
+            log_id,
+            error_payload={
+                "type": "http_error",
+                "status_code": exc.status_code,
+                "message": str(exc),
+                "response_body": exc.response_body,
+            },
+        )
         detail = exc.response_body.strip()
         if exc.is_auth_error:
             raise MindMapImportError(
@@ -409,6 +493,14 @@ def iter_dashscope_with_images_stream(
             f"百炼接口调用失败：HTTP {exc.status_code} {detail}".strip()
         ) from exc
     except OpenAICompatibleNetworkError as exc:
+        fail_external_ai_call_log(
+            log_id,
+            error_payload={
+                "type": "network_error",
+                "message": str(exc),
+                "reason": exc.reason,
+            },
+        )
         if "10061" in exc.reason:
             raise MindMapImportError(
                 "百炼接口连接被拒绝："
@@ -469,16 +561,11 @@ def _build_batch_prompt(
     extracted_text: str | None,
 ) -> str:
     if page_numbers is not None or import_options is not None or extracted_text:
-        return build_pdf_batch_prompt(
+        return ai_prompts.build_import_pdf_merge_prompt(
             structure_tree=structure_tree,
             range_prompt=range_prompt,
             page_numbers=page_numbers,
             import_options=import_options or PdfImportOptions(),
             extracted_text=extracted_text,
         )
-    return (
-        f"{BATCH_PROMPT}\n\n"
-        f"下面是已经从结构图中提取出的原始脑图 JSON，请以它为主结构进行增强：\n"
-        f"{json.dumps(structure_tree, ensure_ascii=False)}\n\n"
-        "接下来会按顺序提供结构图和正文图片。请综合所有图片后输出增强后的完整脑图 JSON。"
-    )
+    return ai_prompts.build_import_batch_prompt(structure_tree=structure_tree)

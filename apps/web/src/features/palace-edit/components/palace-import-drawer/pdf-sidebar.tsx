@@ -32,11 +32,12 @@ export function PalaceImportPdfSidebar({
 
   return (
     <aside
+      data-testid="mindmap-import-pdf-sidebar"
       className={cn(
-        'shrink-0 border-l bg-background/55',
+        'shrink-0 border-t bg-background/55 xl:border-t-0',
         layoutMode === 'sidebar'
-          ? 'hidden w-[300px] lg:flex lg:flex-col'
-          : 'hidden w-[360px] xl:flex xl:flex-col',
+          ? 'flex max-h-[42vh] w-full flex-col xl:max-h-none xl:w-[300px] xl:border-l'
+          : 'flex max-h-[36vh] w-full flex-col border-t xl:max-h-none xl:w-[360px] xl:border-l xl:border-t-0',
       )}
     >
       <div className="border-b px-5 py-4">
@@ -55,7 +56,7 @@ export function PalaceImportPdfSidebar({
             正在加载页面…
           </div>
         ) : pdfPageMeta.length > 0 ? (
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-2">
             {pdfPageMeta.map((page) => {
               const selected = selectedPdfPages.includes(page.page_number)
               const isPreview = pdfPreviewPage === page.page_number
@@ -94,7 +95,7 @@ export function PalaceImportPdfSidebar({
                     <img
                       src={page.thumbnail_url}
                       alt={`PDF 第 ${page.page_number} 页`}
-                      className="h-40 w-full rounded-xl border border-border/60 bg-white object-cover"
+                      className="h-28 w-full rounded-xl border border-border/60 bg-white object-cover sm:h-32 xl:h-40"
                     />
                   </div>
                   <div className="mt-2 flex items-start justify-between gap-2">

@@ -19,8 +19,10 @@ const timer = {
   complete: vi.fn(async () => ({ effectiveSeconds: 7 })),
 }
 
+const useTimedSessionMock = vi.fn(() => timer)
+
 vi.mock('@/shared/hooks/useTimedSession', () => ({
-  useTimedSession: () => timer,
+  useTimedSession: (args: unknown) => useTimedSessionMock(args),
 }))
 
 const mindMapFrameMock = vi.fn()
@@ -101,6 +103,21 @@ const editorState = {
   lang: 'zh',
 }
 
+const editEditorState = {
+  ...editorState,
+  editor_doc: {
+    root: {
+      data: { text: 'Root edit', uid: 'root' },
+      children: [
+        {
+          data: { text: 'Child edit', uid: 'child' },
+          children: [{ data: { text: 'Grandchild edit', uid: 'grandchild' }, children: [] }],
+        },
+      ],
+    },
+  },
+}
+
 function getLatestMindMapFrameProps() {
   return mindMapFrameMock.mock.calls.at(-1)?.[0] as Record<string, any> | undefined
 }
@@ -123,6 +140,8 @@ describe('MindMapReviewFlow', () => {
     timer.registerActivity.mockClear()
     timer.logEvent.mockClear()
     mindMapFrameMock.mockClear()
+    useTimedSessionMock.mockClear()
+    useTimedSessionMock.mockImplementation(() => timer)
   })
 
   it('submits only once when completion is clicked rapidly', async () => {
@@ -139,7 +158,7 @@ describe('MindMapReviewFlow', () => {
         title="Root"
         palaceId={1}
         sessionKind="review"
-        editorState={editorState}
+        reviewEditorState={editorState}
         onComplete={onComplete}
       />,
     )
@@ -155,13 +174,32 @@ describe('MindMapReviewFlow', () => {
     await waitFor(() => expect(onComplete).toHaveBeenCalledTimes(1))
   })
 
+  it('disables local completion persistence for formal review sessions', () => {
+    render(
+      <MindMapReviewFlow
+        title="Root"
+        palaceId={1}
+        sessionKind="review"
+        reviewEditorState={editorState}
+        onComplete={vi.fn()}
+      />,
+    )
+
+    expect(useTimedSessionMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'review',
+        persistCompletionRecord: false,
+      }),
+    )
+  })
+
   it('shows readonly host toolbar and uses host fullscreen controls instead of outer button', async () => {
     render(
       <MindMapReviewFlow
         title="Root"
         palaceId={1}
         sessionKind="review"
-        editorState={editorState}
+        reviewEditorState={editorState}
         onComplete={vi.fn()}
       />,
     )
@@ -184,7 +222,7 @@ describe('MindMapReviewFlow', () => {
     expect(latestCall?.showToolbarWhenReadonly).toBe(true)
     expect(latestCall?.syncIntent).toBe('replace')
     expect(latestCall?.syncReason).toBe('review_flip')
-    expect(latestCall?.preserveViewOnSync).toBe(false)
+    expect(latestCall?.preserveViewOnSync).toBe(true)
     expect(latestCall?.showImportButtons).not.toBe(true)
     expect(latestCall?.showBilinkSearchButton).toBe(true)
   })
@@ -202,12 +240,13 @@ describe('MindMapReviewFlow', () => {
           displayMode={displayMode}
           modeSyncVersion={modeSyncVersion}
           viewMemoryScope={`review-session:1:${displayMode}`}
-          editorState={nextEditorState}
+          reviewEditorState={nextEditorState}
+          editEditorState={editEditorState}
           onModeToggle={() => {
             setDisplayMode((current) => (current === 'review' ? 'edit' : 'review'))
             setModeSyncVersion((current) => current + 1)
           }}
-          onEditorStateChange={(nextState) =>
+          onEditEditorStateChange={(nextState) =>
             setNextEditorState(nextState as typeof editorState)
           }
           onComplete={vi.fn()}
@@ -260,12 +299,13 @@ describe('MindMapReviewFlow', () => {
           displayMode={displayMode}
           modeSyncVersion={modeSyncVersion}
           viewMemoryScope={`review-session:1:${displayMode}`}
-          editorState={nextEditorState}
+          reviewEditorState={nextEditorState}
+          editEditorState={nextEditorState}
           onModeToggle={() => {
             setDisplayMode((current) => (current === 'review' ? 'edit' : 'review'))
             setModeSyncVersion((current) => current + 1)
           }}
-          onEditorStateChange={(nextState) =>
+          onEditEditorStateChange={(nextState) =>
             setNextEditorState(nextState as typeof editorState)
           }
           onComplete={vi.fn()}
@@ -317,7 +357,7 @@ describe('MindMapReviewFlow', () => {
         title="Root"
         palaceId={1}
         sessionKind="practice"
-        editorState={editorState}
+        reviewEditorState={editorState}
         onComplete={vi.fn()}
       />,
     )
@@ -364,7 +404,7 @@ describe('MindMapReviewFlow', () => {
         title="Root"
         palaceId={1}
         sessionKind="practice"
-        editorState={editorState}
+        reviewEditorState={editorState}
         onComplete={vi.fn()}
       />,
     )
@@ -413,7 +453,7 @@ describe('MindMapReviewFlow', () => {
         title="Root"
         palaceId={1}
         sessionKind="practice"
-        editorState={editorState}
+        reviewEditorState={editorState}
         onComplete={vi.fn()}
       />,
     )
@@ -457,7 +497,7 @@ describe('MindMapReviewFlow', () => {
         title="Root"
         palaceId={1}
         sessionKind="practice"
-        editorState={editorState}
+        reviewEditorState={editorState}
         onComplete={vi.fn()}
       />,
     )

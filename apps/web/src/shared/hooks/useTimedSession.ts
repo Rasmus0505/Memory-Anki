@@ -13,6 +13,7 @@ import {
   readTimerAutomationConfig,
   type TimerAutomationActivityKind,
   type TimerAutomationConfig,
+  type TimerAutomationScene,
 } from '@/shared/components/session/timer-automation-config'
 import { formatLocalApiDateTime } from '@/shared/lib/dateTime'
 
@@ -23,9 +24,13 @@ export interface TimedSessionOptions {
   kind: SessionKind
   title: string
   palaceId: number | null
+  automationScene?: TimerAutomationScene
+  sourceKind?: 'palace' | 'english' | null
+  englishCourseId?: number | null
   autoPauseMs?: number
   hiddenPauseMs?: number
   persistKey?: string | null
+  persistCompletionRecord?: boolean
 }
 
 type SessionStatus = 'idle' | 'running' | 'paused' | 'completed'
@@ -59,6 +64,8 @@ interface PersistedTimedSessionSnapshot {
   version: 1
   kind: SessionKind
   palaceId: number | null
+  sourceKind: 'palace' | 'english' | null
+  englishCourseId: number | null
   title: string
   effectiveSeconds: number
   pauseCount: number
@@ -87,9 +94,13 @@ export function useTimedSession({
   kind,
   title,
   palaceId,
+  automationScene = kind,
+  sourceKind = null,
+  englishCourseId = null,
   autoPauseMs,
   hiddenPauseMs,
   persistKey = null,
+  persistCompletionRecord = true,
 }: TimedSessionOptions): TimedSessionController {
   const [effectiveSeconds, setEffectiveSeconds] = React.useState(0)
   const [idleSeconds, setIdleSeconds] = React.useState(0)
@@ -117,7 +128,7 @@ export function useTimedSession({
   )
 
   const resolvedAutomation = React.useMemo<ResolvedTimedSessionAutomation>(() => {
-    const sceneRule = getTimerAutomationRule(kind, automationConfig)
+    const sceneRule = getTimerAutomationRule(automationScene, automationConfig)
     return {
       autoPauseMs: Math.max(0, Math.round(autoPauseMs ?? sceneRule.inactiveAutoPauseSeconds * 1000)),
       hiddenPauseMs: Math.max(0, Math.round(hiddenPauseMs ?? sceneRule.hiddenAutoPauseSeconds * 1000)),
@@ -129,7 +140,7 @@ export function useTimedSession({
         ),
       ),
     }
-  }, [autoPauseMs, automationConfig, hiddenPauseMs, kind])
+  }, [autoPauseMs, automationConfig, automationScene, hiddenPauseMs])
 
   const storageKey = React.useMemo(
     () => (persistKey ? `memory-anki-timed-session:${persistKey}` : null),
@@ -156,6 +167,8 @@ export function useTimedSession({
       version: 1,
       kind,
       palaceId,
+      sourceKind,
+      englishCourseId,
       title,
       effectiveSeconds: effectiveSecondsRef.current,
       pauseCount: pauseCountRef.current,
@@ -170,7 +183,7 @@ export function useTimedSession({
     } catch {
       // Ignore storage errors in private mode or restricted environments.
     }
-  }, [clearPersistedSnapshot, kind, palaceId, storageKey, title])
+  }, [clearPersistedSnapshot, englishCourseId, kind, palaceId, sourceKind, storageKey, title])
 
   const clearTimer = React.useCallback((ref: React.MutableRefObject<number | null>) => {
     if (ref.current != null) {
@@ -378,6 +391,8 @@ export function useTimedSession({
         id: randomId(),
         kind,
         palaceId,
+        sourceKind,
+        englishCourseId,
         title,
         startedAt: startedAtRef.current,
         endedAt: nowIso(),
@@ -388,9 +403,25 @@ export function useTimedSession({
         events: [...eventsRef.current],
       }
       clearPersistedSnapshot()
+      if (!persistCompletionRecord) {
+        return record
+      }
       return appendTimeRecord(record)
     },
-    [autoPauseRef, clearPersistedSnapshot, clearTimer, hiddenPauseRef, kind, palaceId, pushEvent, stopTicker, title],
+    [
+      autoPauseRef,
+      clearPersistedSnapshot,
+      clearTimer,
+      englishCourseId,
+      hiddenPauseRef,
+      kind,
+      palaceId,
+      persistCompletionRecord,
+      pushEvent,
+      sourceKind,
+      stopTicker,
+      title,
+    ],
   )
 
   const reset = React.useCallback(() => {
@@ -425,7 +456,14 @@ export function useTimedSession({
     } catch {
       parsed = null
     }
-    if (!parsed || parsed.version !== 1 || parsed.kind !== kind || parsed.palaceId !== palaceId) {
+    if (
+      !parsed ||
+      parsed.version !== 1 ||
+      parsed.kind !== kind ||
+      parsed.palaceId !== palaceId ||
+      parsed.sourceKind !== sourceKind ||
+      parsed.englishCourseId !== englishCourseId
+    ) {
       clearPersistedSnapshot()
       return
     }
@@ -472,7 +510,17 @@ export function useTimedSession({
     startTicker()
     armAutoPause()
     persistSnapshot()
-  }, [armAutoPause, clearPersistedSnapshot, kind, palaceId, persistSnapshot, startTicker, storageKey])
+  }, [
+    armAutoPause,
+    clearPersistedSnapshot,
+    englishCourseId,
+    kind,
+    palaceId,
+    persistSnapshot,
+    sourceKind,
+    startTicker,
+    storageKey,
+  ])
 
   React.useEffect(() => {
     if (glowState === 'idle') return

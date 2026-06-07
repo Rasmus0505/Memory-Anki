@@ -35,6 +35,24 @@ function buildResponse(id: number, title: string): TestResponse {
   }
 }
 
+function buildResponseWithChildren(id: number, title: string, childCount: number): TestResponse {
+  return {
+    entity: { id, title },
+    editor_doc: {
+      root: {
+        data: { text: title, uid: `uid-${id}` },
+        children: Array.from({ length: childCount }, (_, index) => ({
+          data: { text: `节点${index + 1}`, uid: `uid-${id}-${index + 1}` },
+          children: [],
+        })),
+      },
+    },
+    editor_config: {},
+    editor_local_config: {},
+    lang: 'zh',
+  }
+}
+
 function renderPersistedEditorHook(
   entityId: number | null,
   fetcher: (id: number) => Promise<TestResponse>,
@@ -190,5 +208,47 @@ describe('usePersistedMindMapEditor', () => {
     expect((result.current.editorState?.editor_doc as { root?: { data?: { text?: string } } })?.root?.data?.text).toBe(
       '最新版本',
     )
+  })
+
+  it('blocks autosave when beforeAutoSave detects a stale smaller writeback', async () => {
+    vi.useFakeTimers()
+    const saver = vi.fn(async (id: number, data: MindMapEditorState) => ({
+      entity: { id, title: `saved-${id}` },
+      ...data,
+    }))
+
+    const { result } = renderHook(() =>
+      usePersistedMindMapEditor<TestResponse, TestMeta>({
+        entityId: 7,
+        fetcher: vi.fn(async () => buildResponseWithChildren(7, '最新版本', 8)),
+        saver,
+        selectMeta: (response) => response.entity,
+        selectEditorState: (response) => ({
+          editor_doc: response.editor_doc,
+          editor_config: response.editor_config,
+          editor_local_config: response.editor_local_config,
+          lang: response.lang,
+        }),
+        beforeAutoSave: (nextState, currentState) => {
+          const nextChildren =
+            ((nextState.editor_doc as { root?: { children?: unknown[] } })?.root?.children?.length ?? 0)
+          const currentChildren =
+            ((currentState?.editor_doc as { root?: { children?: unknown[] } })?.root?.children?.length ?? 0)
+          return currentChildren >= 8 && nextChildren <= 3 ? 'blocked stale writeback' : null
+        },
+      }),
+    )
+
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    act(() => {
+      result.current.setEditorState(buildResponseWithChildren(7, '旧版本', 3))
+    })
+
+    expect(result.current.error).toBe('blocked stale writeback')
+    expect(saver).not.toHaveBeenCalled()
+    vi.useRealTimers()
   })
 })

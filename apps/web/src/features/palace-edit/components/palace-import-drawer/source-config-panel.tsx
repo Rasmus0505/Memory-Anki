@@ -313,8 +313,7 @@ export function PalaceImportSourceConfigPanel({
                     >
                       <div className="text-sm font-medium">按范围直接生成</div>
                       <div className="mt-1 text-xs text-muted-foreground">
-                        默认模式。会先综合所选页的正文与版面信息，再直接生成完整脑图，更适合 26、27、28
-                        这种连续页内容。
+                        默认模式。会综合所选页的正文与版面关系，主动挖出父子/并列结构，并尽量贴原文短语生成脑图草稿。
                       </div>
                     </button>
                     <button
@@ -329,7 +328,7 @@ export function PalaceImportSourceConfigPanel({
                     >
                       <div className="text-sm font-medium">结构页补全模式</div>
                       <div className="mt-1 text-xs text-muted-foreground">
-                        高级模式。先识别一页结构，再用其他页补全文本内容，适合原 PDF 已有清晰目录骨架时使用。
+                        高级模式。先识别一页结构，再用其他页补全文本内容，同样会主动拆层级，但不会额外总结教材。
                       </div>
                     </button>
                   </div>
@@ -363,7 +362,7 @@ export function PalaceImportSourceConfigPanel({
                           onPdfImportOptionChange('semantic_split_long_paragraphs', event.target.checked)
                         }
                       />
-                      <span>超长段落按语义拆成并列卡片</span>
+                      <span>按原文关系自动拆成父子/并列卡片</span>
                     </label>
                     <label className="flex items-center gap-2">
                       <input
@@ -378,8 +377,8 @@ export function PalaceImportSourceConfigPanel({
                   </div>
                   <div className="mt-2 text-xs text-muted-foreground">
                     {isStructuredPdfMode
-                      ? '将先识别结构页，再根据正文页补全脑图草稿；“语义拆分”适合把教材里过长的自然段拆成多个并列知识卡片。'
-                      : '将直接围绕所选页范围生成脑图草稿；“语义拆分”适合把教材里过长的自然段拆成多个并列知识卡片。'}
+                      ? '将先识别结构页，再根据正文页补全脑图草稿；默认会主动识别定义句、分类句、目的句里的层级关系。'
+                      : '将直接围绕所选页范围生成脑图草稿；默认会主动识别定义句、分类句、目的句里的层级关系。'}
                   </div>
                 </div>
               ) : null}

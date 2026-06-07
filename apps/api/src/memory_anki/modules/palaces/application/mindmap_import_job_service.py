@@ -107,6 +107,7 @@ def _stream_call_dashscope_json(
     channel: str,
     prompt: str = PROMPT,
     disable_rebalance: bool = False,
+    external_log_context: dict[str, Any] | None = None,
 ):
     return (
         yield from llm_gateway.stream_json(
@@ -116,6 +117,7 @@ def _stream_call_dashscope_json(
             channel=channel,
             prompt=prompt,
             disable_rebalance=disable_rebalance,
+            external_log_context=external_log_context,
         )
     )
 
@@ -126,6 +128,7 @@ def _stream_call_dashscope_text(
     page_numbers: list[int] | None,
     range_prompt: str,
     channel: str,
+    external_log_context: dict[str, Any] | None = None,
 ):
     return (
         yield from llm_gateway.stream_text(
@@ -134,6 +137,7 @@ def _stream_call_dashscope_text(
             page_numbers=page_numbers,
             range_prompt=range_prompt,
             channel=channel,
+            external_log_context=external_log_context,
         )
     )
 
@@ -148,6 +152,7 @@ def _stream_call_dashscope_batch_json(
     disable_rebalance: bool = False,
     import_options: PdfImportOptions | None = None,
     extracted_text: str | None = None,
+    external_log_context: dict[str, Any] | None = None,
 ):
     return (
         yield from llm_gateway.stream_batch_json(
@@ -160,6 +165,7 @@ def _stream_call_dashscope_batch_json(
             disable_rebalance=disable_rebalance,
             import_options=import_options,
             extracted_text=extracted_text,
+            external_log_context=external_log_context,
         )
     )
 
@@ -173,6 +179,7 @@ def _stream_call_dashscope_pdf_json(
     disable_rebalance: bool = False,
     import_options: PdfImportOptions | None = None,
     extracted_text: str | None = None,
+    external_log_context: dict[str, Any] | None = None,
 ):
     return (
         yield from llm_gateway.stream_pdf_json(
@@ -184,6 +191,7 @@ def _stream_call_dashscope_pdf_json(
             disable_rebalance=disable_rebalance,
             import_options=import_options,
             extracted_text=extracted_text,
+            external_log_context=external_log_context,
         )
     )
 

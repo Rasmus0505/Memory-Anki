@@ -1,20 +1,25 @@
-import { BookOpen, ChevronRight, LayoutGrid, LibraryBig, List, Plus, Rows3, Search } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { BookOpen, ChevronRight, LayoutGrid, LibraryBig, List, Plus, Rows3, Search, WrapText } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { PalaceListCard } from '@/app/router/palace-list/PalaceListCard'
 import {
   DEFAULT_PALACE_SHELF_VIEW_SETTINGS,
   PALACE_SHELF_VIEW_SETTINGS_KEY,
+  type PalaceListLayoutMode,
+  type PalaceListViewSettings,
   type PalaceShelfDensityMode,
   type PalaceShelfLayoutMode,
   type PalaceShelfViewSettings,
   isPalaceShelfViewSettings,
 } from '@/app/router/palace-view-settings'
-import type { PalaceSubjectShelfItem } from '@/shared/api/contracts'
-import { getPalaceSubjectShelfApi } from '@/shared/api/modules/palaces'
+import { PalaceListSections } from '@/app/router/palace-list/PalaceListSections'
+import type { PalaceGroupedItem, PalaceGroupedListResponse, PalaceSubjectShelfItem } from '@/shared/api/contracts'
+import { getPalacesGroupedApi, getPalaceSubjectShelfApi } from '@/shared/api/modules/palaces'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
 import { Card, CardContent } from '@/shared/components/ui/card'
 import { Input } from '@/shared/components/ui/input'
+import { usePalaceListCardActions } from '@/app/router/palace-list/usePalaceListCardActions'
 import { useLocalStorageState } from '@/shared/lib/localStorage'
 import { cn } from '@/shared/lib/utils'
 
@@ -24,6 +29,13 @@ const shelfLayoutOptions: Array<{ value: PalaceShelfLayoutMode; label: string; i
   { value: 'grid', label: '多列网格', icon: LayoutGrid },
 ]
 
+const expandedLayoutOptions: Array<{ value: PalaceListLayoutMode; label: string; icon: typeof List }> = [
+  { value: 'chapter-single', label: '单列章节流', icon: List },
+  { value: 'chapter-double', label: '章节内双列', icon: Rows3 },
+  { value: 'chapter-card-grid', label: '章节卡片双列', icon: LayoutGrid },
+  { value: 'flow', label: '卡片流', icon: WrapText },
+]
+
 const shelfDensityOptions: Array<{ value: PalaceShelfDensityMode; label: string }> = [
   { value: 'comfortable', label: '舒展' },
   { value: 'standard', label: '标准' },
@@ -31,11 +43,14 @@ const shelfDensityOptions: Array<{ value: PalaceShelfDensityMode; label: string 
 ]
 
 function statusBadge(item: PalaceSubjectShelfItem) {
-  if (item.review_status === 'due_now') {
-    return <span className="inline-block h-3 w-3 rounded-full bg-emerald-500" title="现在可复习" />
+  if ((item.due_now_count ?? 0) > 0) {
+    return <span className="inline-block h-3 w-3 rounded-full bg-destructive" title="当前可立即复习" />
   }
-  if (item.review_status === 'due_later_today') {
+  if ((item.due_later_today_count ?? 0) > 0) {
     return <span className="inline-block h-3 w-3 rounded-full bg-amber-400" title="今天稍后可复习" />
+  }
+  if ((item.needs_practice_count ?? 0) > 0) {
+    return <span className="inline-block h-3 w-3 rounded-full bg-emerald-500" title="需要练习" />
   }
   return null
 }
@@ -70,28 +85,106 @@ function getShelfTitleClass(densityMode: PalaceShelfDensityMode) {
   return 'text-lg'
 }
 
+function renderShelfStatusSummary(item: PalaceSubjectShelfItem) {
+  const entries = [
+    { label: '立即复习', count: item.due_now_count ?? 0, color: 'text-destructive' },
+    { label: '今日稍后', count: item.due_later_today_count ?? 0, color: 'text-amber-500' },
+    { label: '要练习', count: item.needs_practice_count ?? 0, color: 'text-emerald-600' },
+  ]
+  const hasAny = entries.some((entry) => entry.count > 0)
+
+  if (!hasAny) {
+    return <span className="text-muted-foreground">当前没有紧急复习</span>
+  }
+
+  return (
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+      {entries.map((entry) => (
+        <span key={entry.label} className="inline-flex items-center gap-1 text-xs">
+          <span className={cn('font-semibold', entry.color)}>{entry.count}</span>
+          <span className="text-muted-foreground">{entry.label}</span>
+        </span>
+      ))}
+    </div>
+  )
+}
+
+function flattenGroupedPalaces(data: PalaceGroupedListResponse) {
+  const list: PalaceGroupedItem[] = []
+  for (const subject of data.subjects) {
+    for (const group of subject.chapter_groups) {
+      list.push(...group.palaces)
+    }
+    list.push(...subject.ungrouped_palaces)
+  }
+  return list
+}
+
 export default function PalaceShelfPage() {
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const search = searchParams.get('search') || ''
   const [items, setItems] = useState<PalaceSubjectShelfItem[]>([])
+  const [groupedData, setGroupedData] = useState<PalaceGroupedListResponse>({
+    groups: [],
+    ungrouped: [],
+    subjects: [],
+  })
+  const [collapsedChapters, setCollapsedChapters] = useState<Set<number>>(new Set())
   const [viewSettings, setViewSettings] = useLocalStorageState<PalaceShelfViewSettings>(
     PALACE_SHELF_VIEW_SETTINGS_KEY,
     DEFAULT_PALACE_SHELF_VIEW_SETTINGS,
     isPalaceShelfViewSettings,
   )
 
-  useEffect(() => {
-    const load = async () => {
-      const params: Record<string, string> = {}
-      if (search) params.search = search
-      const response = await getPalaceSubjectShelfApi(params)
-      setItems(response.items || [])
-    }
-    void load()
+  const fetchData = useCallback(async () => {
+    const params: Record<string, string> = {}
+    if (search) params.search = search
+    const [shelfResponse, groupedResponse] = await Promise.all([
+      getPalaceSubjectShelfApi(params),
+      getPalacesGroupedApi(params),
+    ])
+    setItems(shelfResponse.items || [])
+    setGroupedData(groupedResponse)
+    return groupedResponse
   }, [search])
 
+  useEffect(() => {
+    void fetchData()
+  }, [fetchData])
+
   const categorizedCount = useMemo(() => items.filter((item) => item.subject).length, [items])
+  const allPalaces = useMemo(() => flattenGroupedPalaces(groupedData), [groupedData])
+  const hasExpandedPalaces = allPalaces.length > 0
+  const expandedViewSettings: PalaceListViewSettings = useMemo(
+    () => ({
+      layoutMode: viewSettings.expandedLayoutMode,
+      densityMode: viewSettings.densityMode,
+    }),
+    [viewSettings.densityMode, viewSettings.expandedLayoutMode],
+  )
+  const cardActions = usePalaceListCardActions({
+    allPalaces,
+    fetchData,
+    navigate,
+  })
+  const renderExpandedPalaceCard = useCallback(
+    (palace: PalaceGroupedItem) => (
+      <PalaceListCard
+        key={palace.id}
+        palace={palace}
+        viewSettings={expandedViewSettings}
+        segmentReviewLoadingId={cardActions.segmentReviewLoadingId}
+        markReviewedKey={cardActions.markReviewedKey}
+        onOpenBatchReview={cardActions.onOpenBatchReview}
+        onSegmentReviewAction={cardActions.onSegmentReviewAction}
+        onOpenStageEdit={cardActions.onOpenStageEdit}
+        onMarkSegmentReviewed={cardActions.onMarkSegmentReviewed}
+        onDelete={cardActions.onDelete}
+      />
+    ),
+    [cardActions, expandedViewSettings],
+  )
 
   return (
     <div className="space-y-8">
@@ -130,18 +223,52 @@ export default function PalaceShelfPage() {
                 />
               </div>
             </div>
-            <div className="flex flex-wrap items-center gap-2" data-testid="shelf-view-toolbar">
+            <div
+              className="flex flex-wrap items-center gap-2"
+              data-testid="shelf-view-toolbar"
+              data-display-mode={viewSettings.displayMode}
+            >
               <div className="flex flex-wrap items-center gap-1 rounded-xl border border-border/70 bg-background/80 p-1">
-                {shelfLayoutOptions.map((option) => {
+                <Button
+                  type="button"
+                  variant={viewSettings.displayMode === 'shelf' ? 'secondary' : 'ghost'}
+                  size="sm"
+                  className="h-8"
+                  onClick={() => setViewSettings((current) => ({ ...current, displayMode: 'shelf' }))}
+                >
+                  收纳
+                </Button>
+                <Button
+                  type="button"
+                  variant={viewSettings.displayMode === 'expanded' ? 'secondary' : 'ghost'}
+                  size="sm"
+                  className="h-8"
+                  onClick={() => setViewSettings((current) => ({ ...current, displayMode: 'expanded' }))}
+                >
+                  展开
+                </Button>
+              </div>
+              <div className="flex flex-wrap items-center gap-1 rounded-xl border border-border/70 bg-background/80 p-1">
+                {(viewSettings.displayMode === 'expanded' ? expandedLayoutOptions : shelfLayoutOptions).map((option) => {
                   const Icon = option.icon
+                  const isActive =
+                    viewSettings.displayMode === 'expanded'
+                      ? viewSettings.expandedLayoutMode === option.value
+                      : viewSettings.layoutMode === option.value
                   return (
                     <Button
                       key={option.value}
                       type="button"
-                      variant={viewSettings.layoutMode === option.value ? 'secondary' : 'ghost'}
+                      variant={isActive ? 'secondary' : 'ghost'}
                       size="sm"
                       className="h-8"
-                      onClick={() => setViewSettings((current) => ({ ...current, layoutMode: option.value }))}
+                      onClick={() =>
+                        setViewSettings((current) =>
+                          current.displayMode === 'expanded'
+                            ? { ...current, expandedLayoutMode: option.value as PalaceListLayoutMode }
+                            : { ...current, layoutMode: option.value as PalaceShelfLayoutMode },
+                        )
+                      }
                     >
                       <Icon className="h-4 w-4" />
                       {option.label}
@@ -186,7 +313,23 @@ export default function PalaceShelfPage() {
         <Badge variant="outline">{items.find((item) => item.subject == null) ? '含未分类' : '全部已分类'}</Badge>
       </div>
 
-      {items.length > 0 ? (
+      {viewSettings.displayMode === 'expanded' ? (
+        <PalaceListSections
+          groupedData={groupedData}
+          hasPalaces={hasExpandedPalaces}
+          viewSettings={expandedViewSettings}
+          collapsedChapters={collapsedChapters}
+          onToggleChapter={(chapterId) =>
+            setCollapsedChapters((current) => {
+              const next = new Set(current)
+              if (next.has(chapterId)) next.delete(chapterId)
+              else next.add(chapterId)
+              return next
+            })
+          }
+          renderPalaceCard={renderExpandedPalaceCard}
+        />
+      ) : items.length > 0 ? (
         <div
           className={cn('grid gap-5', getShelfGridClass(viewSettings.layoutMode))}
           data-testid="shelf-grid"
@@ -201,7 +344,11 @@ export default function PalaceShelfPage() {
               <button
                 key={item.subject?.id ?? `uncategorized-${index}`}
                 type="button"
-                onClick={() => navigate(isUncategorized ? '/palaces/list?uncategorized=true' : `/palaces/list?subjectId=${item.subject?.id}`)}
+                onClick={() =>
+                  navigate(
+                    isUncategorized ? '/palaces/list?uncategorized=true' : `/palaces/list?subjectId=${item.subject?.id}`,
+                  )
+                }
                 className="text-left"
               >
                 <Card className="group relative h-full overflow-hidden border-border/70 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.96))] transition-all hover:-translate-y-1 hover:shadow-xl">
@@ -241,14 +388,8 @@ export default function PalaceShelfPage() {
                       </div>
                     </div>
 
-                    <div className="mt-6 flex items-center justify-between text-sm">
-                      <span className="text-muted-foreground">
-                        {item.review_status === 'due_now'
-                          ? '当前有到点复习'
-                          : item.review_status === 'due_later_today'
-                            ? '今天稍后有复习'
-                            : '当前没有紧急复习'}
-                      </span>
+                    <div className="mt-6 flex items-center justify-between gap-3 text-sm">
+                      {renderShelfStatusSummary(item)}
                       <span className="inline-flex items-center font-medium text-foreground">
                         打开
                         <ChevronRight className="ml-1 h-4 w-4 transition-transform group-hover:translate-x-1" />
@@ -274,6 +415,7 @@ export default function PalaceShelfPage() {
           </CardContent>
         </Card>
       )}
+      {cardActions.dialogs}
     </div>
   )
 }

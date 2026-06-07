@@ -4,6 +4,7 @@ import { formatDuration } from '@/entities/session/model'
 import { Button } from '@/shared/components/ui/button'
 import { Input } from '@/shared/components/ui/input'
 import { TimerAutomationDialog } from '@/shared/components/session/TimerAutomationDialog'
+import { cn } from '@/shared/lib/utils'
 import {
   readTimerAutomationConfig,
   resetTimerAutomationConfig,
@@ -24,6 +25,7 @@ interface SessionTimerBarProps {
   onAdjustDuration: (seconds: number) => void
   showCompleteAction?: boolean
   showRestartAction?: boolean
+  layout?: 'card' | 'compact'
   className?: string
 }
 
@@ -56,6 +58,7 @@ export function SessionTimerBar({
   onAdjustDuration,
   showCompleteAction = true,
   showRestartAction = true,
+  layout = 'card',
   className,
 }: SessionTimerBarProps) {
   const isIdle = status === 'idle'
@@ -121,8 +124,95 @@ export function SessionTimerBar({
           }
         : null
 
+  const automationDialog = (
+    <TimerAutomationDialog
+      open={automationOpen}
+      config={automationConfig}
+      onOpenChange={setAutomationOpen}
+      onSave={(nextConfig) => {
+        const saved = saveTimerAutomationConfig(nextConfig)
+        setAutomationConfig(saved)
+      }}
+      onReset={() => {
+        const reset = resetTimerAutomationConfig()
+        setAutomationConfig(reset)
+      }}
+    />
+  )
+
+  if (layout === 'compact') {
+    return (
+      <>
+        <div
+          className={cn(
+            'rounded-2xl border border-border/70 bg-background/95 px-4 py-3 shadow-[0_14px_40px_rgba(15,23,42,0.12)] backdrop-blur',
+            className,
+          )}
+          data-testid="session-timer-bar"
+          data-layout="compact"
+        >
+          <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:gap-4">
+              <div className="min-w-[120px]">
+                <div className="text-xl font-semibold text-foreground">{formatDuration(effectiveSeconds)}</div>
+                <div className="mt-1 text-xs text-muted-foreground">已暂停 {pauseCount} 次</div>
+                {isRunning && idleSeconds > 0 ? (
+                  <div className="text-xs text-orange-500">闲置 {idleSeconds} 秒</div>
+                ) : null}
+              </div>
+
+              <label className="w-full lg:max-w-[180px]">
+                <Input
+                  aria-label="调整总时长"
+                  value={inputValue}
+                  className="h-8"
+                  onFocus={() => setIsEditing(true)}
+                  onBlur={() => {
+                    setIsEditing(false)
+                    commitInputValue()
+                  }}
+                  onChange={(event) => setInputValue(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') {
+                      event.currentTarget.blur()
+                    }
+                  }}
+                />
+              </label>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              {showRestartAction && onRestart ? (
+                <Button type="button" variant="ghost" size="sm" onClick={onRestart}>
+                  <TimerReset className="h-4 w-4" />
+                </Button>
+              ) : null}
+              <Button type="button" variant="outline" size="sm" onClick={() => setAutomationOpen(true)}>
+                <Settings2 className="mr-2 h-4 w-4" />
+                自动化配置
+              </Button>
+              {primaryAction ? (
+                <Button type="button" variant={primaryAction.variant} size="sm" onClick={primaryAction.onClick}>
+                  <primaryAction.icon className="mr-2 h-4 w-4" />
+                  {primaryAction.label}
+                </Button>
+              ) : null}
+              {showCompleteAction && onComplete ? (
+                <Button type="button" variant="secondary" size="sm" onClick={onComplete}>
+                  <SquareCheckBig className="mr-2 h-4 w-4" />
+                  完成
+                </Button>
+              ) : null}
+            </div>
+          </div>
+        </div>
+        {automationDialog}
+      </>
+    )
+  }
+
   return (
-    <div className={className ?? 'fixed right-5 top-5 z-40'}>
+    <div className={className ?? 'fixed right-5 top-5 z-40'} data-testid="session-timer-bar" data-layout="card">
       <div className="w-[320px] rounded-2xl border border-border/70 bg-background/95 p-4 shadow-[0_18px_60px_rgba(15,23,42,0.18)] backdrop-blur">
         <div className="flex items-start justify-between gap-3">
           <div>
@@ -178,19 +268,7 @@ export function SessionTimerBar({
           ) : null}
         </div>
       </div>
-      <TimerAutomationDialog
-        open={automationOpen}
-        config={automationConfig}
-        onOpenChange={setAutomationOpen}
-        onSave={(nextConfig) => {
-          const saved = saveTimerAutomationConfig(nextConfig)
-          setAutomationConfig(saved)
-        }}
-        onReset={() => {
-          const reset = resetTimerAutomationConfig()
-          setAutomationConfig(reset)
-        }}
-      />
+      {automationDialog}
     </div>
   )
 }

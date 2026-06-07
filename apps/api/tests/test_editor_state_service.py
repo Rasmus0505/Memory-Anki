@@ -8,6 +8,7 @@ from memory_anki.infrastructure.db.models import Base, Chapter, Palace, Subject
 from memory_anki.modules.mindmap.application.editor_state_service import (
     _plain_text,
     normalize_editor_doc,
+    save_palace_editor_state,
     save_subject_editor_state,
 )
 from memory_anki.modules.palaces.application.title_sync_service import set_palace_chapter_links
@@ -125,6 +126,84 @@ class SubjectEditorStateSyncTests(unittest.TestCase):
 
             self.assertEqual([chapter.id for chapter in chapters], [parent.id, child.id])
             self.assertEqual(sorted(linked_ids), [parent.id, child.id])
+
+    def test_save_palace_editor_state_blocks_stale_bootstrap_autosave_overwrite(self):
+        with self.SessionLocal() as session:
+            palace = Palace(title="古罗马教育", description="")
+            session.add(palace)
+            session.flush()
+
+            fresh_doc = {
+                "root": {
+                    "data": {"text": "古罗马教育", "memoryAnkiRootKind": "palace"},
+                    "children": [
+                        {"data": {"text": f"节点{i}", "uid": f"node-{i}"}, "children": []}
+                        for i in range(1, 9)
+                    ],
+                }
+            }
+            stale_doc = {
+                "root": {
+                    "data": {"text": "古罗马教育", "memoryAnkiRootKind": "palace"},
+                    "children": [
+                        {"data": {"text": f"节点{i}", "uid": f"node-{i}"}, "children": []}
+                        for i in range(1, 4)
+                    ],
+                }
+            }
+            palace.editor_doc = str(fresh_doc).replace("'", '"')
+            session.commit()
+
+            with self.assertRaisesRegex(ValueError, "已阻止旧态覆盖当前宫殿"):
+                save_palace_editor_state(
+                    session,
+                    palace,
+                    {
+                        "editor_doc": stale_doc,
+                        "editor_source": "host_bootstrap_sync",
+                        "sync_reason": "initial_hydration",
+                    },
+                )
+
+    def test_save_palace_editor_state_allows_import_apply_explicit_overwrite(self):
+        with self.SessionLocal() as session:
+            palace = Palace(title="古罗马教育", description="")
+            session.add(palace)
+            session.flush()
+
+            fresh_doc = {
+                "root": {
+                    "data": {"text": "古罗马教育", "memoryAnkiRootKind": "palace"},
+                    "children": [
+                        {"data": {"text": f"节点{i}", "uid": f"node-{i}"}, "children": []}
+                        for i in range(1, 9)
+                    ],
+                }
+            }
+            imported_doc = {
+                "root": {
+                    "data": {"text": "古罗马教育", "memoryAnkiRootKind": "palace"},
+                    "children": [
+                        {"data": {"text": "导入节点1", "uid": "import-1"}, "children": []},
+                        {"data": {"text": "导入节点2", "uid": "import-2"}, "children": []},
+                    ],
+                }
+            }
+            palace.editor_doc = str(fresh_doc).replace("'", '"')
+            session.commit()
+
+            result = save_palace_editor_state(
+                session,
+                palace,
+                {
+                    "editor_doc": imported_doc,
+                    "editor_source": "import_apply",
+                    "sync_reason": "import_apply",
+                    "allow_stale_overwrite": True,
+                },
+            )
+
+            self.assertEqual(result["editor_doc"]["root"]["children"][0]["data"]["text"], "导入节点1")
 
 
 if __name__ == "__main__":

@@ -14,6 +14,11 @@ from memory_anki.infrastructure.db.models import SubjectDocument
 from memory_anki.modules.knowledge.application.subject_document_service import (
     render_selected_pdf_pages,
 )
+from memory_anki.modules.settings.application.ai_prompts import (
+    build_import_pdf_direct_prompt,
+    build_import_pdf_merge_prompt,
+    build_import_pdf_structure_prompt,
+)
 
 from .mindmap_import import (
     PDF_DIRECT_OCR_FALLBACK_WARNING,
@@ -38,9 +43,9 @@ from .mindmap_import import (
     build_pdf_text_anchors,
     clean_inline_text,
     ensure_rendered_page_size,
-    extend_prompt_for_pdf,
     llm_gateway,
     normalize_extracted_text,
+    normalize_pdf_source_tree,
     normalize_page_selection,
     normalize_source_tree,
     parse_source_tree_json,
@@ -222,7 +227,6 @@ def stream_pdf_import_preview(
             order_pdf_image_items_fn=_order_pdf_image_items,
             build_pdf_import_result_payload_fn=_build_pdf_import_result_payload,
             build_pdf_structure_prompt_fn=_build_pdf_structure_prompt,
-            extend_prompt_for_pdf_fn=_extend_prompt_for_pdf,
             prepare_pdf_ocr_grounding_fn=_prepare_pdf_ocr_grounding,
             stream_call_dashscope_text_fn=_stream_call_dashscope_text,
             stream_call_dashscope_json_fn=_stream_call_dashscope_json,
@@ -461,7 +465,6 @@ def generate_pdf_import_preview(
         order_pdf_image_items_fn=_order_pdf_image_items,
         build_pdf_import_result_payload_fn=_build_pdf_import_result_payload,
         build_pdf_structure_prompt_fn=_build_pdf_structure_prompt,
-        extend_prompt_for_pdf_fn=_extend_prompt_for_pdf,
         prepare_pdf_ocr_grounding_fn=_prepare_pdf_ocr_grounding,
         call_dashscope_json_fn=_call_dashscope_json,
         call_dashscope_text_with_images_fn=_call_dashscope_text_with_images,
@@ -581,6 +584,7 @@ def _stream_call_dashscope_json(
     channel: str,
     prompt: str = PROMPT,
     disable_rebalance: bool = False,
+    external_log_context: dict[str, Any] | None = None,
 ) -> Generator[ImportStreamEvent, None, dict[str, Any]]:
     return (
         yield from llm_gateway.stream_json(
@@ -590,6 +594,7 @@ def _stream_call_dashscope_json(
             prompt=prompt,
             disable_rebalance=disable_rebalance,
             channel=channel,
+            external_log_context=external_log_context,
         )
     )
 
@@ -600,6 +605,7 @@ def _stream_call_dashscope_text(
     page_numbers: list[int] | None,
     range_prompt: str,
     channel: str,
+    external_log_context: dict[str, Any] | None = None,
 ) -> Generator[ImportStreamEvent, None, str]:
     return (
         yield from llm_gateway.stream_text(
@@ -608,6 +614,7 @@ def _stream_call_dashscope_text(
             page_numbers=page_numbers,
             range_prompt=range_prompt,
             channel=channel,
+            external_log_context=external_log_context,
         )
     )
 
@@ -622,6 +629,7 @@ def _stream_call_dashscope_batch_json(
     disable_rebalance: bool = False,
     import_options: PdfImportOptions | None = None,
     extracted_text: str | None = None,
+    external_log_context: dict[str, Any] | None = None,
 ) -> Generator[ImportStreamEvent, None, dict[str, Any]]:
     return (
         yield from llm_gateway.stream_batch_json(
@@ -634,6 +642,7 @@ def _stream_call_dashscope_batch_json(
             disable_rebalance=disable_rebalance,
             import_options=import_options,
             extracted_text=extracted_text,
+            external_log_context=external_log_context,
         )
     )
 
@@ -647,6 +656,7 @@ def _stream_call_dashscope_pdf_json(
     disable_rebalance: bool = False,
     import_options: PdfImportOptions | None = None,
     extracted_text: str | None = None,
+    external_log_context: dict[str, Any] | None = None,
 ) -> Generator[ImportStreamEvent, None, dict[str, Any]]:
     return (
         yield from llm_gateway.stream_pdf_json(
@@ -658,6 +668,7 @@ def _stream_call_dashscope_pdf_json(
             disable_rebalance=disable_rebalance,
             import_options=import_options,
             extracted_text=extracted_text,
+            external_log_context=external_log_context,
         )
     )
 
@@ -685,11 +696,10 @@ _parse_source_tree_json = parse_source_tree_json
 _summarize_model_output = summarize_model_output
 _normalize_extracted_text = normalize_extracted_text
 _normalize_page_selection = normalize_page_selection
-_extend_prompt_for_pdf = extend_prompt_for_pdf
 _ensure_rendered_page_size = ensure_rendered_page_size
-_build_pdf_structure_prompt = build_pdf_structure_prompt
-_build_pdf_batch_prompt = build_pdf_batch_prompt
-_build_pdf_direct_prompt = build_pdf_direct_prompt
+_build_pdf_structure_prompt = build_import_pdf_structure_prompt
+_build_pdf_batch_prompt = build_import_pdf_merge_prompt
+_build_pdf_direct_prompt = build_import_pdf_direct_prompt
 _truncate_prompt_text = truncate_prompt_text
 _trim_pdf_extracted_text = trim_pdf_extracted_text
 _build_pdf_text_anchors = build_pdf_text_anchors

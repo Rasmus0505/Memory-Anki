@@ -1,6 +1,7 @@
 import { useEffect, useState, type PropsWithChildren } from 'react'
 import {
   BookOpen,
+  Captions,
   Brain,
   ChevronRight,
   ClipboardList,
@@ -24,6 +25,7 @@ import { cn } from '@/shared/lib/utils'
 const navItems = [
   { to: '/', label: '仪表盘', icon: LayoutDashboard },
   { to: '/palaces', label: '记忆宫殿', icon: BookOpen },
+  { to: '/english', label: '英语区', icon: Captions },
   { to: '/knowledge', label: '知识大纲', icon: FolderTree },
   { to: '/review', label: '复习', icon: Brain },
   { to: '/profile', label: '个人中心', icon: User },

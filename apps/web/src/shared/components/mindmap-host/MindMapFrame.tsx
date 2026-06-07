@@ -19,6 +19,8 @@ import {
 } from '@/shared/components/mindmap-host/hostBridgeUtils'
 import { useHostSyncController } from '@/shared/components/mindmap-host/useHostSyncController'
 
+const HOST_FRAME_RUNTIME_VERSION = '2026-06-04-english-toolbar'
+
 interface MindMapFrameProps {
   editorState: MindMapEditorState
   readonly?: boolean
@@ -64,6 +66,7 @@ interface MindMapFrameProps {
   }) => void
   onSegmentRangeConfirm?: () => void
   onPracticeToggle?: () => void
+  onEnglishOpen?: () => void
   onMindMapImportOpen?: () => void
   onImageTextImportOpen?: () => void
   onAiSplitRequest?: (payload: MindMapAiSplitRequestPayload) => void
@@ -128,6 +131,7 @@ export function MindMapFrame({
   onSegmentRangeModeToggle,
   onSegmentRangeConfirm,
   onPracticeToggle,
+  onEnglishOpen,
   onMindMapImportOpen,
   onImageTextImportOpen,
   onAiSplitRequest,
@@ -150,6 +154,7 @@ export function MindMapFrame({
   const onSegmentRangeModeToggleRef = useRef(onSegmentRangeModeToggle)
   const onSegmentRangeConfirmRef = useRef(onSegmentRangeConfirm)
   const onPracticeToggleRef = useRef(onPracticeToggle)
+  const onEnglishOpenRef = useRef(onEnglishOpen)
   const onMindMapImportOpenRef = useRef(onMindMapImportOpen)
   const onImageTextImportOpenRef = useRef(onImageTextImportOpen)
   const onAiSplitRequestRef = useRef(onAiSplitRequest)
@@ -162,6 +167,7 @@ export function MindMapFrame({
   const lastForcedSyncKeyRef = useRef<string | null>(null)
   const lastBilinkInsertionNonceRef = useRef<number>(0)
   const suppressNextPropSyncRef = useRef(false)
+  const hostHydratedRef = useRef(false)
   const [isIframeLoaded, setIsIframeLoaded] = useState(false)
 
   stateRef.current = editorState
@@ -175,6 +181,7 @@ export function MindMapFrame({
   onSegmentRangeModeToggleRef.current = onSegmentRangeModeToggle
   onSegmentRangeConfirmRef.current = onSegmentRangeConfirm
   onPracticeToggleRef.current = onPracticeToggle
+  onEnglishOpenRef.current = onEnglishOpen
   onMindMapImportOpenRef.current = onMindMapImportOpen
   onImageTextImportOpenRef.current = onImageTextImportOpen
   onAiSplitRequestRef.current = onAiSplitRequest
@@ -222,6 +229,7 @@ export function MindMapFrame({
         bilinkCurrentPalaceId,
         showBilinkSearchButton,
         hasPracticeToggle: Boolean(onPracticeToggleRef.current),
+        hasEnglishOpen: Boolean(onEnglishOpenRef.current),
         hasAiSplitRequest: Boolean(onAiSplitRequestRef.current),
       }),
     )
@@ -249,8 +257,9 @@ export function MindMapFrame({
     const iframeWindow = iframeRef.current?.contentWindow as MindMapHostWindow | null
     if (typeof iframeWindow?.syncHostEditorState !== 'function') return
     markHostReady()
+    syncHostState()
     flushPendingHostEditorStateSync()
-  }, [flushPendingHostEditorStateSync, hostReadyRef, markHostReady])
+  }, [flushPendingHostEditorStateSync, hostReadyRef, markHostReady, syncHostState])
 
   useEffect(() => {
     if (!isIframeLoaded || !bilinkInsertionText) return
@@ -269,7 +278,7 @@ export function MindMapFrame({
     registry[hostId] = {
       getMindMapData: () => normalizeEditorDoc(stateRef.current.editor_doc),
       saveMindMapData: (data) => {
-        if (readonly) return
+        if (readonly || !hostHydratedRef.current) return
         suppressNextPropSyncRef.current = true
         onEditorStateChangeRef.current({
           ...stateRef.current,
@@ -278,7 +287,7 @@ export function MindMapFrame({
       },
       getMindMapConfig: () => cloneValue(stateRef.current.editor_config),
       saveMindMapConfig: (config) => {
-        if (readonly) return
+        if (readonly || !hostHydratedRef.current) return
         suppressNextPropSyncRef.current = true
         onEditorStateChangeRef.current({
           ...stateRef.current,
@@ -287,7 +296,7 @@ export function MindMapFrame({
       },
       getLanguage: () => stateRef.current.lang || 'zh',
       saveLanguage: (lang) => {
-        if (readonly) return
+        if (readonly || !hostHydratedRef.current) return
         suppressNextPropSyncRef.current = true
         onEditorStateChangeRef.current({
           ...stateRef.current,
@@ -296,16 +305,20 @@ export function MindMapFrame({
       },
       getLocalConfig: () => cloneValue(stateRef.current.editor_local_config),
       saveLocalConfig: (config) => {
-        if (readonly) return
+        if (readonly || !hostHydratedRef.current) return
         suppressNextPropSyncRef.current = true
         onEditorStateChangeRef.current({
           ...stateRef.current,
           editor_local_config: cloneValue(config),
         })
       },
+      isHydrated: () => hostHydratedRef.current,
       notify: (event, payload) => {
         if (event !== 'app_inited') {
           promoteHostReadyFromRuntimeEvent()
+        }
+        if (event === 'initial_hydration_complete') {
+          hostHydratedRef.current = true
         }
         const result = dispatchHostEvent(event, payload, {
           onNodeActive: onNodeActiveRef,
@@ -317,6 +330,7 @@ export function MindMapFrame({
           onSegmentRangeModeToggle: onSegmentRangeModeToggleRef,
           onSegmentRangeConfirm: onSegmentRangeConfirmRef,
           onPracticeToggle: onPracticeToggleRef,
+          onEnglishOpen: onEnglishOpenRef,
           onMindMapImportOpen: onMindMapImportOpenRef,
           onImageTextImportOpen: onImageTextImportOpenRef,
           onAiSplitRequest: onAiSplitRequestRef,
@@ -328,6 +342,7 @@ export function MindMapFrame({
           onReady: onReadyRef,
         })
         if (result === 'app_inited') {
+          hostHydratedRef.current = readonly
           markHostReady()
           syncHostState()
           flushPendingHostEditorStateSync()
@@ -439,9 +454,10 @@ export function MindMapFrame({
     <iframe
       ref={iframeRef}
       title="mind-map-editor"
-      src={`/mind-map-host.html?host=${encodeURIComponent(hostId)}`}
+      src={`/mind-map-host.html?host=${encodeURIComponent(hostId)}&v=${HOST_FRAME_RUNTIME_VERSION}`}
       className={className ?? 'h-full w-full border-0'}
       onLoad={() => {
+        hostHydratedRef.current = readonly
         resetHostReady()
         setIsIframeLoaded(true)
         syncHostState()

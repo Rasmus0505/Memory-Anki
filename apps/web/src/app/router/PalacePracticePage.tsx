@@ -115,7 +115,7 @@ export default function PalacePractice() {
         palaceId={palace.id}
         sessionKind="practice"
         persistKey={`practice:palace:${palace.id}`}
-        editorState={editorState}
+        reviewEditorState={editorState}
         initialSnapshot={initialSnapshot}
         persistProgress
         onSnapshotChange={async (snapshot) => {

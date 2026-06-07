@@ -22,6 +22,9 @@ from memory_anki.core.runtime import (
     record_runtime_start,
 )
 from memory_anki.infrastructure.db.models import Config, get_session, init_db
+from memory_anki.infrastructure.llm.external_ai_call_logs import (
+    ensure_external_ai_call_log_schema,
+)
 from memory_anki.modules.backups.application.backup_service import (
     create_shutdown_backup,
     ensure_backup_schema,
@@ -30,6 +33,8 @@ from memory_anki.modules.backups.application.backup_service import (
     start_periodic_backup_loop,
     stop_periodic_backup_loop,
 )
+from memory_anki.modules.english.application.service import ensure_english_schema
+from memory_anki.modules.english.presentation import router as english_router
 from memory_anki.modules.knowledge.application.bilink_service import ensure_bilink_schema
 from memory_anki.modules.knowledge.application.subject_document_service import (
     ensure_subject_document_schema,
@@ -44,6 +49,7 @@ from memory_anki.modules.palaces.application.segment_service import ensure_segme
 from memory_anki.modules.palaces.application.title_sync_service import (
     build_today_new_palace_outline,
     ensure_palace_group_schema,
+    palace_has_due_later_today,
 )
 from memory_anki.modules.palaces.presentation import import_router
 from memory_anki.modules.palaces.presentation import router as palace_router
@@ -71,6 +77,7 @@ from memory_anki.modules.time_records.application.time_records_service import (
     date_range_bounds,
     ensure_review_log_time_records,
     get_all_time_total_review_duration_seconds,
+    get_english_course_stats,
     get_monthly_total_review_duration_seconds,
     get_selected_total_review_duration_seconds,
     get_today_formal_review_duration_seconds,
@@ -113,6 +120,8 @@ async def lifespan(app: FastAPI):
     ensure_subject_document_schema()
     ensure_segment_schema()
     ensure_mindmap_import_job_schema()
+    ensure_external_ai_call_log_schema()
+    ensure_english_schema()
     ensure_palace_group_schema()
     ensure_review_schedule_schema()
     ensure_session_progress_schema()
@@ -172,6 +181,7 @@ app.include_router(import_router.router, prefix="/api/v1")
 app.include_router(knowledge_router.router, prefix="/api/v1")
 app.include_router(bilink_router.router, prefix="/api/v1")
 app.include_router(time_records_router.router, prefix="/api/v1")
+app.include_router(english_router.router, prefix="/api/v1")
 
 
 @app.get("/api/v1/dashboard")
@@ -199,6 +209,14 @@ def api_dashboard(
             .order_by(Palace.created_at.asc(), Palace.id.asc())
             .all()
         )
+        all_palaces = session.query(Palace).all()
+        due_palace_ids = {review["schedule"].palace_id for review in reviews}
+        due_later_today_count = sum(
+            1
+            for palace in all_palaces
+            if palace.id not in due_palace_ids and palace_has_due_later_today(session, palace)
+        )
+        needs_practice_count = sum(1 for palace in all_palaces if bool(getattr(palace, "needs_practice", False)))
 
         def palace_out(palace):
             return {
@@ -215,6 +233,7 @@ def api_dashboard(
         weekly_formal_review_duration_seconds = get_weekly_formal_review_duration_seconds(session)
         weekly_total_review_duration_seconds = get_weekly_total_review_duration_seconds(session)
         selected_total_review_duration_seconds = monthly_total_review_duration_seconds
+        english_stats = get_english_course_stats(session)
 
         if duration_mode is not None:
             if duration_mode == "month":
@@ -253,6 +272,8 @@ def api_dashboard(
 
         return {
             "due_count": len(reviews),
+            "due_later_today_count": due_later_today_count,
+            "needs_practice_count": needs_practice_count,
             "reviews": [
                 {
                     "id": review["schedule"].id,
@@ -277,6 +298,7 @@ def api_dashboard(
             "selected_total_review_duration_seconds": selected_total_review_duration_seconds,
             "weekly_total_review_duration_seconds": weekly_total_review_duration_seconds,
             "weekly_formal_review_duration_seconds": weekly_formal_review_duration_seconds,
+            "english_stats": english_stats,
             "recent_palaces": [palace_out(palace) for palace in recent],
             "today_learning_palaces": get_today_palace_learning_breakdown(session),
             "today_new_palace_count": len(today_new_palaces),

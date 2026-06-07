@@ -8,6 +8,7 @@ interface PersistedMindMapOptions<TResponse, TMeta> {
   selectMeta: (response: TResponse) => TMeta
   selectEditorState: (response: TResponse) => MindMapEditorState
   onSaveError?: (error: Error, pendingState: MindMapEditorState) => Promise<boolean> | boolean
+  beforeAutoSave?: (nextState: MindMapEditorState, currentState: MindMapEditorState | null) => string | null
 }
 
 interface ExternalStateGuard {
@@ -35,6 +36,7 @@ export function usePersistedMindMapEditor<TResponse, TMeta>({
   selectMeta,
   selectEditorState,
   onSaveError,
+  beforeAutoSave,
 }: PersistedMindMapOptions<TResponse, TMeta>) {
   const [meta, setMeta] = useState<TMeta | null>(null)
   const [editorState, setEditorState] = useState<MindMapEditorState | null>(null)
@@ -52,6 +54,7 @@ export function usePersistedMindMapEditor<TResponse, TMeta>({
   const selectMetaRef = useRef(selectMeta)
   const selectEditorStateRef = useRef(selectEditorState)
   const onSaveErrorRef = useRef(onSaveError)
+  const beforeAutoSaveRef = useRef(beforeAutoSave)
   const lastStateFingerprintRef = useRef('')
   const isSavingRef = useRef(false)
   const previousEntityIdRef = useRef<number | null>(entityId)
@@ -68,6 +71,7 @@ export function usePersistedMindMapEditor<TResponse, TMeta>({
   selectMetaRef.current = selectMeta
   selectEditorStateRef.current = selectEditorState
   onSaveErrorRef.current = onSaveError
+  beforeAutoSaveRef.current = beforeAutoSave
   isSavingRef.current = isSaving
 
   useEffect(() => {
@@ -255,6 +259,13 @@ export function usePersistedMindMapEditor<TResponse, TMeta>({
   const scheduleSave = useCallback((nextState: MindMapEditorState) => {
     const nextFingerprint = stableSerialize(nextState)
     if (nextFingerprint === lastStateFingerprintRef.current) {
+      return
+    }
+    const autoSaveBlockReason = beforeAutoSaveRef.current?.(nextState, editorStateRef.current) || null
+    if (autoSaveBlockReason) {
+      if (isMountedRef.current) {
+        setError(autoSaveBlockReason)
+      }
       return
     }
     changeVersionRef.current += 1

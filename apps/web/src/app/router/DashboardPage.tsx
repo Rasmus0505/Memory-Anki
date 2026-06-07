@@ -192,10 +192,14 @@ export default function Dashboard() {
 
   const selectedDurationLabel = formatSelectedDurationLabel(durationMode, selectedMonth, rangeStartDate, rangeEndDate)
   const isRangeInvalid = Boolean(rangeStartDate && rangeEndDate && rangeStartDate > rangeEndDate)
+  const dueNowCount = data.due_count ?? 0
+  const dueLaterTodayCount = data.due_later_today_count ?? 0
+  const needsPracticeCount = data.needs_practice_count ?? 0
 
   const statCards: Array<{
     label: string
-    value: string | number
+    value?: string | number
+    valueNode?: React.ReactNode
     icon: typeof BookOpen
     color: string
     link?: string
@@ -204,12 +208,27 @@ export default function Dashboard() {
     extra?: React.ReactNode
   }> = [
     {
-      label: '今日到期',
-      value: data.due_count,
+      label: '今日待处理',
       icon: BookOpen,
-      color: data.due_count > 0 ? 'text-destructive' : 'text-emerald-500',
+      color: '',
       link: '/review',
       linkText: '开始复习',
+      valueNode: (
+        <div className="grid grid-cols-3 gap-3" aria-label="今日待处理状态计数">
+            <div className="space-y-1">
+            <div className="text-3xl font-bold text-destructive">{dueNowCount}</div>
+            <div className="text-xs text-muted-foreground">立即复习</div>
+          </div>
+          <div className="space-y-1">
+            <div className="text-3xl font-bold text-amber-500">{dueLaterTodayCount}</div>
+            <div className="text-xs text-muted-foreground">今日稍后</div>
+          </div>
+          <div className="space-y-1">
+            <div className="text-3xl font-bold text-emerald-600">{needsPracticeCount}</div>
+            <div className="text-xs text-muted-foreground">要练习</div>
+          </div>
+        </div>
+      ),
     },
     {
       label: '今日时长',
@@ -222,6 +241,18 @@ export default function Dashboard() {
       value: formatDuration(data.weekly_total_review_duration_seconds),
       icon: Clock3,
       color: '',
+    },
+    {
+      label: '英语练习',
+      value: formatDuration(data.english_stats.today_practice_seconds),
+      icon: BookOpen,
+      color: '',
+      subtitle: `未完成 ${data.english_stats.unfinished_courses} 门 · 累计 ${formatDuration(data.english_stats.total_practice_seconds)}`,
+      extra: (
+        <div className="mt-3 text-xs text-muted-foreground">
+          本周英语时长 {formatDuration(data.english_stats.weekly_practice_seconds)}
+        </div>
+      ),
     },
     {
       label: '总时长',
@@ -297,16 +328,16 @@ export default function Dashboard() {
         <h1 className="text-2xl font-semibold tracking-tight">仪表盘</h1>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-        {statCards.map(({ label, value, icon: Icon, color, link, linkText, subtitle, extra }) => (
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
+        {statCards.map(({ label, value, valueNode, icon: Icon, color, link, linkText, subtitle, extra }) => (
           <Card key={label}>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">{label}</CardTitle>
               <Icon className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className={`text-3xl font-bold ${color}`}>{value}</div>
-              {link && data.due_count > 0 ? (
+              {valueNode ?? <div className={`text-3xl font-bold ${color}`}>{value}</div>}
+              {link && dueNowCount > 0 ? (
                 <Link to={link} className="mt-1 inline-flex items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-primary">
                   {linkText}
                   <ArrowRight className="h-3 w-3" />

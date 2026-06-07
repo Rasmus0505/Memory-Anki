@@ -12,16 +12,15 @@ import {
   getSegmentChapterReviewQueueApi,
   getSegmentReviewQueueApi,
 } from '@/shared/api/modules/reviews'
+import {
+  buildReviewSessionPath,
+  buildSegmentReviewSessionPath,
+} from '@/features/review/reviewSessionRoutes'
 
 function formatReviewStage(reviewType: string, reviewNumber: number) {
   if (reviewType === '1h') return '首日 1 小时'
   if (reviewType === 'sleep') return '首日睡前'
   return `第 ${reviewNumber + 1} 次`
-}
-
-function formatSessionHref(reviewId: number, chapterId: number | null) {
-  if (chapterId == null) return `/review/session/${reviewId}`
-  return `/review/session/${reviewId}?chapterId=${chapterId}`
 }
 
 export default function ReviewOverview() {
@@ -89,7 +88,7 @@ export default function ReviewOverview() {
         <CardContent className="space-y-3">
           {queue.reviews.length > 0 ? (
             queue.reviews.map((review) => (
-              <Link key={review.id} to={formatSessionHref(review.id, chapterId)}>
+              <Link key={review.id} to={buildReviewSessionPath(review.id, chapterId)}>
                 <div className="flex items-center justify-between rounded-2xl border border-border/70 bg-background/70 px-4 py-4 transition-colors hover:bg-secondary/70">
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
@@ -135,7 +134,7 @@ export default function ReviewOverview() {
         <CardContent className="space-y-3">
           {segmentQueue?.reviews?.length > 0 ? (
             segmentQueue.reviews.map((review: any) => (
-              <Link key={review.id} to={`/segment-review/session/${review.id}`}>
+              <Link key={review.id} to={buildSegmentReviewSessionPath(review.id, chapterId)}>
                 <div className="flex items-center justify-between rounded-2xl border border-border/70 bg-background/70 px-4 py-4 transition-colors hover:bg-secondary/70">
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">

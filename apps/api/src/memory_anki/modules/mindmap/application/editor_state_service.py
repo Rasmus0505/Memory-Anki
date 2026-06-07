@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from memory_anki.infrastructure.db.models import Chapter, Palace, Peg, Subject, engine
 from memory_anki.modules.backups.application.backup_service import (
+    MIN_DANGEROUS_NODE_COUNT,
     count_editor_doc_nodes,
     create_effective_palace_version,
     is_dangerous_structure_change,
@@ -23,6 +24,8 @@ NODE_TYPE_KEY = "memoryAnkiNodeType"
 ROOT_KIND_KEY = "memoryAnkiRootKind"
 NODE_UID_KEY = "uid"
 SAFE_EDITOR_SOURCES = {"palace_edit", "version_restore", "backup_restore"}
+SAFE_EXPLICIT_OVERWRITE_SOURCES = {"palace_edit", "version_restore", "backup_restore", "import_apply"}
+DANGEROUS_AUTOSAVE_SOURCES = {"palace_edit_autosave", "host_bootstrap_sync"}
 DANGEROUS_EDITOR_SOURCES = {"review_edit", "practice_edit", "unknown"}
 REVIEW_PLACEHOLDER_TEXT = "待回忆"
 REVIEW_PLACEHOLDER_NODE_STYLE = {
@@ -146,6 +149,8 @@ def save_palace_editor_state(session: Session, palace: Palace, payload: dict[str
     lang_input = payload.get("lang")
     allow_dangerous_delete = bool(payload.get("confirm_dangerous_change"))
     editor_source = str(payload.get("editor_source") or "unknown").strip() or "unknown"
+    sync_reason = str(payload.get("sync_reason") or "").strip() or None
+    allow_stale_overwrite = bool(payload.get("allow_stale_overwrite"))
 
     local_config = (
         _coerce_local_config(local_input, lang_input)
@@ -158,11 +163,34 @@ def save_palace_editor_state(session: Session, palace: Palace, payload: dict[str
         doc = normalize_editor_doc(doc_input, root_text=palace.title, root_kind="palace")
         doc = sanitize_palace_editor_doc(palace, doc)
         next_node_count = count_editor_doc_nodes(doc)
+        node_drop = existing_node_count - next_node_count
+        stale_bootstrap_like_write = (
+            editor_source in DANGEROUS_AUTOSAVE_SOURCES
+            and existing_node_count >= MIN_DANGEROUS_NODE_COUNT
+            and next_node_count < existing_node_count
+            and node_drop >= max(3, existing_node_count // 4)
+            and not allow_stale_overwrite
+        )
+        if stale_bootstrap_like_write:
+            raise ValueError(
+                "已阻止旧态覆盖当前宫殿：启动同步/自动保存写回的节点数明显少于当前库，请先完成恢复或显式确认覆盖。"
+            )
         if editor_source in DANGEROUS_EDITOR_SOURCES and next_node_count < existing_node_count:
             raise ValueError("当前编辑内容来自复习/练习视图或未确认同步态，已拒绝写回宫殿，避免未显示节点被误删。")
-        if editor_source not in SAFE_EDITOR_SOURCES and allow_dangerous_delete:
+        if editor_source not in SAFE_EXPLICIT_OVERWRITE_SOURCES and allow_dangerous_delete:
             raise ValueError("只有正式宫殿编辑器或受控恢复流程才能确认危险删除。")
-        if is_dangerous_structure_change(existing_node_count, next_node_count) and not allow_dangerous_delete:
+        if (
+            editor_source == "palace_edit_autosave"
+            and sync_reason in {"host_bootstrap_sync", "initial_hydration"}
+            and next_node_count < existing_node_count
+            and not allow_stale_overwrite
+        ):
+            raise ValueError("已阻止旧态覆盖当前宫殿：首屏同步期间的自动保存仍在回放旧态。")
+        if (
+            is_dangerous_structure_change(existing_node_count, next_node_count)
+            and not allow_dangerous_delete
+            and not (allow_stale_overwrite and editor_source in SAFE_EXPLICIT_OVERWRITE_SOURCES)
+        ):
             raise ValueError("检测到危险结构变更：新导图节点数骤减，已拒绝保存。请在正式编辑中确认后再执行。")
         sync_palace_tree_from_doc(session, palace, doc)
         palace.editor_doc = _serialize(doc)

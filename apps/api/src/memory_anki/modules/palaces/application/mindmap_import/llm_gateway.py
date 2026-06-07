@@ -72,6 +72,7 @@ def call_json(
     filename: str | None,
     prompt: str = PROMPT,
     disable_rebalance: bool = False,
+    external_log_context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     return call_dashscope_json(
         runtime=runtime,
@@ -79,14 +80,22 @@ def call_json(
         filename=filename,
         prompt=prompt,
         disable_rebalance=disable_rebalance,
+        external_log_context=external_log_context,
     )
 
 
-def call_text(*, runtime: DashscopeImportRuntime, image_bytes: bytes, filename: str | None) -> str:
+def call_text(
+    *,
+    runtime: DashscopeImportRuntime,
+    image_bytes: bytes,
+    filename: str | None,
+    external_log_context: dict[str, Any] | None = None,
+) -> str:
     return call_dashscope_text(
         runtime=runtime,
         image_bytes=image_bytes,
         filename=filename,
+        external_log_context=external_log_context,
     )
 
 
@@ -96,12 +105,14 @@ def call_text_with_images(
     image_items: list[tuple[bytes, str | None]],
     page_numbers: list[int] | None,
     range_prompt: str,
+    external_log_context: dict[str, Any] | None = None,
 ) -> str:
     return call_dashscope_text_with_images(
         runtime=runtime,
         image_items=image_items,
         page_numbers=page_numbers,
         range_prompt=range_prompt,
+        external_log_context=external_log_context,
     )
 
 
@@ -115,6 +126,7 @@ def call_batch_json(
     disable_rebalance: bool = False,
     import_options: PdfImportOptions | None = None,
     extracted_text: str | None = None,
+    external_log_context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     return call_dashscope_batch_json(
         runtime=runtime,
@@ -125,6 +137,7 @@ def call_batch_json(
         disable_rebalance=disable_rebalance,
         import_options=import_options,
         extracted_text=extracted_text,
+        external_log_context=external_log_context,
     )
 
 
@@ -137,6 +150,7 @@ def call_pdf_json(
     disable_rebalance: bool = False,
     import_options: PdfImportOptions | None = None,
     extracted_text: str | None = None,
+    external_log_context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     return call_dashscope_pdf_json(
         runtime=runtime,
@@ -146,6 +160,7 @@ def call_pdf_json(
         disable_rebalance=disable_rebalance,
         import_options=import_options,
         extracted_text=extracted_text,
+        external_log_context=external_log_context,
     )
 
 
@@ -157,6 +172,7 @@ def stream_json(
     channel: str,
     prompt: str = PROMPT,
     disable_rebalance: bool = False,
+    external_log_context: dict[str, Any] | None = None,
 ) -> Generator[ImportStreamEvent, None, dict[str, Any]]:
     return (
         yield from stream_text_deltas_as_events(
@@ -166,6 +182,7 @@ def stream_json(
                 filename=filename,
                 prompt=prompt,
                 disable_rebalance=disable_rebalance,
+                external_log_context=external_log_context,
             ),
             channel=channel,
         )
@@ -179,6 +196,7 @@ def stream_text(
     page_numbers: list[int] | None,
     range_prompt: str,
     channel: str,
+    external_log_context: dict[str, Any] | None = None,
 ) -> Generator[ImportStreamEvent, None, str]:
     return (
         yield from stream_text_deltas_as_events(
@@ -187,6 +205,7 @@ def stream_text(
                 image_items=image_items,
                 page_numbers=page_numbers,
                 range_prompt=range_prompt,
+                external_log_context=external_log_context,
             ),
             channel=channel,
         )
@@ -204,6 +223,7 @@ def stream_batch_json(
     disable_rebalance: bool = False,
     import_options: PdfImportOptions | None = None,
     extracted_text: str | None = None,
+    external_log_context: dict[str, Any] | None = None,
 ) -> Generator[ImportStreamEvent, None, dict[str, Any]]:
     return (
         yield from stream_text_deltas_as_events(
@@ -216,6 +236,7 @@ def stream_batch_json(
                 disable_rebalance=disable_rebalance,
                 import_options=import_options,
                 extracted_text=extracted_text,
+                external_log_context=external_log_context,
             ),
             channel=channel,
         )
@@ -232,6 +253,7 @@ def stream_pdf_json(
     disable_rebalance: bool = False,
     import_options: PdfImportOptions | None = None,
     extracted_text: str | None = None,
+    external_log_context: dict[str, Any] | None = None,
 ) -> Generator[ImportStreamEvent, None, dict[str, Any]]:
     return (
         yield from stream_text_deltas_as_events(
@@ -243,6 +265,7 @@ def stream_pdf_json(
                 disable_rebalance=disable_rebalance,
                 import_options=import_options,
                 extracted_text=extracted_text,
+                external_log_context=external_log_context,
             ),
             channel=channel,
         )

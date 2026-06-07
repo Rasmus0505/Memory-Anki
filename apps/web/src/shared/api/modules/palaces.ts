@@ -8,6 +8,7 @@ import type {
   MindMapAiSplitResponse,
   MindMapBatchImportPreviewResponse,
   MindMapEditorState,
+  PalaceEditorSavePayload,
   MindMapImportJob,
   MindMapImportJobListResponse,
   MindMapImportPreviewResponse,
@@ -417,14 +418,14 @@ export function getPalaceSegmentApi(segmentId: number) {
   }>(`/palace-segments/${segmentId}`)
 }
 
-export function savePalaceEditorApi(id: number, data: Partial<MindMapEditorState>) {
+export function savePalaceEditorApi(id: number, data: PalaceEditorSavePayload) {
   return request<{ palace: any } & MindMapEditorState>(`/palaces/${id}/editor`, {
     method: "PUT",
-    body: JSON.stringify({ ...data, editor_source: "palace_edit" }),
+    body: JSON.stringify({ editor_source: "palace_edit_autosave", ...data }),
   })
 }
 
-export function savePalaceEditorWithOptionsApi(id: number, data: Record<string, unknown>) {
+export function savePalaceEditorWithOptionsApi(id: number, data: PalaceEditorSavePayload | Record<string, unknown>) {
   return request<{ palace: any } & MindMapEditorState>(`/palaces/${id}/editor`, {
     method: "PUT",
     body: JSON.stringify(data),

@@ -71,6 +71,10 @@ describe('MindMapFrame sync behavior', () => {
 
     const hostBridge = getHostBridge()
     await act(async () => {
+      hostBridge?.notify?.('initial_hydration_complete', { fingerprint: 'ready' })
+    })
+    const syncCallCountBeforeLocalSave = bridgeMocks.syncHostEditorState.mock.calls.length
+    await act(async () => {
       hostBridge?.saveMindMapData?.({
         root: {
           data: { text: '本地修改', uid: 'root-1' },
@@ -87,7 +91,63 @@ describe('MindMapFrame sync behavior', () => {
         },
       })
     })
-    expect(bridgeMocks.syncHostEditorState).not.toHaveBeenCalled()
+    expect(bridgeMocks.syncHostEditorState).toHaveBeenCalledTimes(syncCallCountBeforeLocalSave)
+  })
+
+  it('blocks host save callbacks until initial hydration completes', async () => {
+    const onEditorStateChange = vi.fn()
+
+    render(
+      <MindMapFrame
+        editorState={buildEditorState()}
+        syncOnPropChange
+        onEditorStateChange={onEditorStateChange}
+      />,
+    )
+    const iframe = screen.getByTitle('mind-map-editor') as HTMLIFrameElement
+    const bridgeMocks = attachIframeBridge(iframe)
+
+    await waitFor(() => {
+      expect(bridgeMocks.applyHostState).toHaveBeenCalled()
+    })
+
+    const hostBridge = getHostBridge()
+
+    await act(async () => {
+      hostBridge?.saveMindMapData?.({
+        root: {
+          data: { text: '旧 bootstrap', uid: 'root-1' },
+          children: [],
+        },
+      })
+    })
+
+    expect(onEditorStateChange).not.toHaveBeenCalled()
+
+    await act(async () => {
+      hostBridge?.notify?.('initial_hydration_complete', { fingerprint: 'fresh-sync' })
+    })
+
+    await act(async () => {
+      hostBridge?.saveMindMapData?.({
+        root: {
+          data: { text: '真正编辑', uid: 'root-1' },
+          children: [],
+        },
+      })
+    })
+
+    expect(onEditorStateChange).toHaveBeenCalledTimes(1)
+    expect(onEditorStateChange).toHaveBeenCalledWith(
+      expect.objectContaining({
+        editor_doc: {
+          root: {
+            data: { text: '真正编辑', uid: 'root-1' },
+            children: [],
+          },
+        },
+      }),
+    )
   })
 
   it('uses soft sync for prop updates and replace sync for forceSyncKey updates without remounting the iframe', async () => {
@@ -159,7 +219,7 @@ describe('MindMapFrame sync behavior', () => {
     expect(screen.getByTitle('mind-map-editor')).toBe(iframe)
   })
 
-  it('uses replace sync for readonly review flip prop updates so structural card reveals apply immediately', async () => {
+  it('uses replace sync for readonly review flip prop updates while preserving the current viewport', async () => {
     const initialState = buildEditorState()
     const nextState = {
       ...buildEditorState('Root'),
@@ -177,6 +237,7 @@ describe('MindMapFrame sync behavior', () => {
         syncOnPropChange
         syncIntent="replace"
         syncReason="review_flip"
+        preserveViewOnSync
         externalSyncKey="review-sync:0"
         onEditorStateChange={vi.fn()}
       />,
@@ -201,6 +262,7 @@ describe('MindMapFrame sync behavior', () => {
         syncOnPropChange
         syncIntent="replace"
         syncReason="review_flip"
+        preserveViewOnSync
         externalSyncKey="review-sync:1"
         onEditorStateChange={vi.fn()}
       />,
@@ -212,8 +274,8 @@ describe('MindMapFrame sync behavior', () => {
           syncIntent: 'replace',
           syncReason: 'review_flip',
           editorState: nextState,
-          preserveView: false,
-          viewPolicy: 'reset',
+          preserveView: true,
+          viewPolicy: 'preserve',
         }),
       )
     })
@@ -609,6 +671,71 @@ describe('MindMapFrame sync behavior', () => {
     })
   })
 
+  it('shows the English toolbar button and forwards english open requests', async () => {
+    const onEnglishOpen = vi.fn()
+
+    render(
+      <MindMapFrame
+        editorState={buildEditorState()}
+        onEnglishOpen={onEnglishOpen}
+        onEditorStateChange={vi.fn()}
+      />,
+    )
+    const iframe = screen.getByTitle('mind-map-editor') as HTMLIFrameElement
+    const bridgeMocks = attachIframeBridge(iframe)
+
+    await waitFor(() => {
+      expect(bridgeMocks.applyHostState).toHaveBeenCalledWith(
+        expect.objectContaining({
+          showEnglishButton: true,
+        }),
+      )
+    })
+
+    await act(async () => {
+      getHostBridge()?.notify?.('english_open', null)
+    })
+
+    expect(onEnglishOpen).toHaveBeenCalledTimes(1)
+  })
+
+  it('reapplies host toolbar state when a runtime event promotes a host that missed app_inited', async () => {
+    render(
+      <MindMapFrame
+        editorState={buildEditorState()}
+        readonly
+        showToolbarWhenReadonly
+        practiceToggleLabel="编辑"
+        onPracticeToggle={vi.fn()}
+        onEditorStateChange={vi.fn()}
+      />,
+    )
+    const iframe = screen.getByTitle('mind-map-editor') as HTMLIFrameElement
+    const bridgeMocks = attachIframeBridge(iframe)
+
+    await waitFor(() => {
+      expect(bridgeMocks.applyHostState).toHaveBeenCalledWith(
+        expect.objectContaining({
+          showPracticeButton: true,
+          practiceToggleLabel: '编辑',
+        }),
+      )
+    })
+
+    bridgeMocks.applyHostState.mockClear()
+
+    await act(async () => {
+      getHostBridge()?.notify?.('node_click', [{ uid: 'root-1', text: '根节点' }])
+    })
+
+    expect(bridgeMocks.applyHostState).toHaveBeenCalledWith(
+      expect.objectContaining({
+        showPracticeButton: true,
+        practiceToggleLabel: '编辑',
+      }),
+    )
+  })
+
   it('forwards ai split requests and pushes ai split host state into the iframe', async () => {
     const onAiSplitRequest = vi.fn()
 
@@ -673,6 +800,9 @@ describe('MindMapFrame sync behavior', () => {
       return new URL(src, 'http://localhost').searchParams.get('host')
     })
     expect(new Set(iframeHostIds).size).toBe(2)
+    expect(
+      new URL(iframes[0]?.getAttribute('src') || '', 'http://localhost').searchParams.get('v'),
+    ).toBe('2026-06-04-english-toolbar')
     expect(new Set(hostEntries.map(([hostId]) => hostId)).size).toBe(2)
 
     await act(async () => {

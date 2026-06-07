@@ -140,7 +140,6 @@ def run_pdf_import_preview(
     order_pdf_image_items_fn,
     build_pdf_import_result_payload_fn,
     build_pdf_structure_prompt_fn,
-    extend_prompt_for_pdf_fn,
     prepare_pdf_ocr_grounding_fn,
     stream_call_dashscope_text_fn,
     stream_call_dashscope_json_fn,
@@ -209,7 +208,6 @@ def run_pdf_import_preview(
         range_prompt=range_prompt,
         preserve_emphasis_marks=resolved_options.preserve_emphasis_marks,
         build_pdf_structure_prompt_fn=build_pdf_structure_prompt_fn,
-        extend_prompt_for_pdf_fn=extend_prompt_for_pdf_fn,
         stream_call_dashscope_json_fn=stream_call_dashscope_json_fn,
     )
     if body_payloads:
