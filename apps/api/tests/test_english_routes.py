@@ -1,4 +1,5 @@
 import io
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -10,8 +11,34 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from memory_anki.infrastructure.db.models import Base, EnglishCourse, EnglishGenerationTask
-from memory_anki.modules.english.application import service as english_service
+from memory_anki.modules.english.application import course_service, task_service
+from memory_anki.modules.english.application.asr_normalization import prepare_sentences_from_asr
+from memory_anki.modules.english.domain.text import (
+    check_sentence_tokens,
+    tokenize_learning_sentence,
+)
+from memory_anki.modules.english.infrastructure import dashscope_gateway, paths
 from memory_anki.modules.english.presentation import router as english_router
+
+TOKEN_VECTOR_PATH = Path(__file__).resolve().parents[2] / "shared" / "english-token-vectors.json"
+
+
+class CallbackRunner:
+    def __init__(self, callback):
+        self.callback = callback
+
+    def launch(self, task_id: str, target):
+        self.callback(task_id)
+
+
+class NoopAsrGateway:
+    def transcribe(self, audio_path, *, task_id, progress_callback=None):
+        return {"transcripts": []}
+
+
+class NoopTranslator:
+    def translate_sentences(self, sentences, *, task_id):
+        return sentences
 
 
 class EnglishRouteTests(unittest.TestCase):
@@ -24,27 +51,31 @@ class EnglishRouteTests(unittest.TestCase):
         Base.metadata.create_all(self.engine)
         self.SessionLocal = sessionmaker(bind=self.engine)
         self.original_router_get_session = english_router.get_session
-        self.original_service_get_session = english_service.get_session
-        self.original_launch = english_service.launch_generation_task
-        self.original_call_chat_completion_text = english_service.call_chat_completion_text
-        self.original_api_key = english_service.DASHSCOPE_API_KEY
-        self.original_translation_model = english_service.ENGLISH_TRANSLATION_MODEL
-        self.original_probe_media_duration_seconds = english_service._probe_media_duration_seconds
+        self.original_task_get_session = task_service.get_session
+        self.original_runtime = task_service.get_english_runtime()
+        self.original_call_chat_completion_text = dashscope_gateway.call_chat_completion_text
+        self.original_api_key = dashscope_gateway.DASHSCOPE_API_KEY
+        self.original_translation_model = dashscope_gateway.ENGLISH_TRANSLATION_MODEL
+        self.original_course_media_dir = course_service.ENGLISH_MEDIA_DIR
+        self.original_paths_media_dir = paths.ENGLISH_MEDIA_DIR
+        self.original_paths_tasks_dir = paths.ENGLISH_TASKS_DIR
+        self.original_probe_media_duration_seconds = course_service.probe_media_duration_seconds
         self.temp_dir = tempfile.TemporaryDirectory()
         self.media_dir = Path(self.temp_dir.name) / "english_media"
         self.tasks_dir = Path(self.temp_dir.name) / "english_tasks"
         self.media_dir.mkdir(parents=True, exist_ok=True)
         self.tasks_dir.mkdir(parents=True, exist_ok=True)
-        english_service.ENGLISH_MEDIA_DIR = self.media_dir
-        english_service.ENGLISH_TASKS_DIR = self.tasks_dir
-        english_service.DASHSCOPE_API_KEY = "test-key"
-        english_service.ENGLISH_TRANSLATION_MODEL = "qwen-mt-flash"
+        course_service.ENGLISH_MEDIA_DIR = self.media_dir
+        paths.ENGLISH_MEDIA_DIR = self.media_dir
+        paths.ENGLISH_TASKS_DIR = self.tasks_dir
+        dashscope_gateway.DASHSCOPE_API_KEY = "test-key"
+        dashscope_gateway.ENGLISH_TRANSLATION_MODEL = "qwen-mt-flash"
 
         def get_test_session():
             return self.SessionLocal()
 
         english_router.get_session = get_test_session
-        english_service.get_session = get_test_session
+        task_service.get_session = get_test_session
 
         app = FastAPI()
         app.include_router(english_router.router, prefix="/api/v1")
@@ -52,12 +83,15 @@ class EnglishRouteTests(unittest.TestCase):
 
     def tearDown(self):
         english_router.get_session = self.original_router_get_session
-        english_service.get_session = self.original_service_get_session
-        english_service.launch_generation_task = self.original_launch
-        english_service.call_chat_completion_text = self.original_call_chat_completion_text
-        english_service.DASHSCOPE_API_KEY = self.original_api_key
-        english_service.ENGLISH_TRANSLATION_MODEL = self.original_translation_model
-        english_service._probe_media_duration_seconds = self.original_probe_media_duration_seconds
+        task_service.get_session = self.original_task_get_session
+        task_service.configure_english_runtime(self.original_runtime)
+        dashscope_gateway.call_chat_completion_text = self.original_call_chat_completion_text
+        dashscope_gateway.DASHSCOPE_API_KEY = self.original_api_key
+        dashscope_gateway.ENGLISH_TRANSLATION_MODEL = self.original_translation_model
+        course_service.ENGLISH_MEDIA_DIR = self.original_course_media_dir
+        paths.ENGLISH_MEDIA_DIR = self.original_paths_media_dir
+        paths.ENGLISH_TASKS_DIR = self.original_paths_tasks_dir
+        course_service.probe_media_duration_seconds = self.original_probe_media_duration_seconds
         Base.metadata.drop_all(self.engine)
         self.engine.dispose()
         self.temp_dir.cleanup()
@@ -66,7 +100,7 @@ class EnglishRouteTests(unittest.TestCase):
         def fake_launch(task_id: str):
             with self.SessionLocal() as session:
                 task = session.query(EnglishGenerationTask).filter_by(id=task_id).one()
-                english_service._finalize_course_from_task(
+                task_service.finalize_generation_task(
                     task_id=task_id,
                     source_path=Path(task.source_media_path),
                     source_mime_type="video/mp4",
@@ -92,7 +126,13 @@ class EnglishRouteTests(unittest.TestCase):
                     ],
                 )
 
-        english_service.launch_generation_task = fake_launch
+        task_service.configure_english_runtime(
+            task_service.EnglishRuntime(
+                runner=CallbackRunner(fake_launch),
+                asr_gateway=NoopAsrGateway(),
+                translator=NoopTranslator(),
+            )
+        )
 
         upload = self.client.post(
             "/api/v1/english/upload",
@@ -157,7 +197,7 @@ class EnglishRouteTests(unittest.TestCase):
 
     def test_failed_task_can_be_cleared(self):
         def failing_launch(task_id: str):
-            english_service._update_task_fields(
+            task_service.update_task_fields(
                 None,
                 task_id,
                 status="failed",
@@ -167,7 +207,13 @@ class EnglishRouteTests(unittest.TestCase):
                 error_message="mock failure",
             )
 
-        english_service.launch_generation_task = failing_launch
+        task_service.configure_english_runtime(
+            task_service.EnglishRuntime(
+                runner=CallbackRunner(failing_launch),
+                asr_gateway=NoopAsrGateway(),
+                translator=NoopTranslator(),
+            )
+        )
 
         upload = self.client.post(
             "/api/v1/english/upload",
@@ -194,12 +240,12 @@ class EnglishRouteTests(unittest.TestCase):
         def fake_launch(task_id: str):
             with self.SessionLocal() as session:
                 task = session.query(EnglishGenerationTask).filter_by(id=task_id).one()
-                english_service._finalize_course_from_task(
+                task_service.finalize_generation_task(
                     task_id=task_id,
                     source_path=Path(task.source_media_path),
                     source_mime_type="video/mp4",
                     file_size=task.file_size,
-                    duration_seconds=english_service.MAX_REASONABLE_MEDIA_DURATION_SECONDS + 120,
+                    duration_seconds=course_service.MAX_REASONABLE_MEDIA_DURATION_SECONDS + 120,
                     sentences=[
                         {
                             "index": 0,
@@ -212,8 +258,14 @@ class EnglishRouteTests(unittest.TestCase):
                     ],
                 )
 
-        english_service.launch_generation_task = fake_launch
-        english_service._probe_media_duration_seconds = lambda _path: 187
+        task_service.configure_english_runtime(
+            task_service.EnglishRuntime(
+                runner=CallbackRunner(fake_launch),
+                asr_gateway=NoopAsrGateway(),
+                translator=NoopTranslator(),
+            )
+        )
+        course_service.probe_media_duration_seconds = lambda _path: 187
 
         upload = self.client.post(
             "/api/v1/english/upload",
@@ -250,9 +302,47 @@ class EnglishRouteTests(unittest.TestCase):
                 }
             ]
         }
-        prepared = english_service._prepare_sentences_from_asr(payload, task_id="demo-task")
+        prepared = prepare_sentences_from_asr(payload).sentences
         self.assertEqual(len(prepared), 1)
         self.assertEqual(prepared[0]["text_en"], "Hello world. This should stay one sentence.")
+
+    def test_tokenization_matches_shared_vectors(self):
+        vectors = json.loads(TOKEN_VECTOR_PATH.read_text(encoding="utf-8"))
+        for vector in vectors:
+            with self.subTest(vector["name"]):
+                tokens = tokenize_learning_sentence(vector["text"])
+                self.assertEqual(tokens, vector["tokens"])
+                result = check_sentence_tokens(vector["tokens"], vector["checkInput"])
+                self.assertEqual(result.passed, vector["checkPassed"])
+
+    def test_startup_cleanup_marks_non_completed_tasks_cleared_and_removes_task_dirs(self):
+        with self.SessionLocal() as session:
+            completed = EnglishGenerationTask(id="completed-task", status="completed", stage="completed")
+            already_cleared = EnglishGenerationTask(id="cleared-task", status="cleared", stage="cleared")
+            failed = EnglishGenerationTask(id="failed-task", status="failed", stage="failed")
+            running = EnglishGenerationTask(id="running-task", status="running", stage="transcribe")
+            queued = EnglishGenerationTask(id="queued-task", status="queued", stage="queued")
+            session.add_all([completed, already_cleared, failed, running, queued])
+            session.commit()
+
+            for task_id in ["failed-task", "running-task", "queued-task", "completed-task", "cleared-task"]:
+                task_path = paths.task_dir(task_id)
+                task_path.mkdir(parents=True, exist_ok=True)
+                (task_path / "temp.txt").write_text("temporary", encoding="utf-8")
+
+            result = task_service.cleanup_incomplete_generation_tasks(session)
+
+            self.assertEqual(result, {"cleared": 3})
+            self.assertEqual(session.get(EnglishGenerationTask, "completed-task").status, "completed")
+            self.assertEqual(session.get(EnglishGenerationTask, "cleared-task").status, "cleared")
+            self.assertEqual(session.get(EnglishGenerationTask, "failed-task").status, "cleared")
+            self.assertEqual(session.get(EnglishGenerationTask, "running-task").status, "cleared")
+            self.assertEqual(session.get(EnglishGenerationTask, "queued-task").status, "cleared")
+            self.assertTrue(paths.task_dir("completed-task").exists())
+            self.assertTrue(paths.task_dir("cleared-task").exists())
+            self.assertFalse(paths.task_dir("failed-task").exists())
+            self.assertFalse(paths.task_dir("running-task").exists())
+            self.assertFalse(paths.task_dir("queued-task").exists())
 
     def test_translate_sentences_uses_translation_options_and_falls_back_to_single(self):
         recorded_calls: list[dict] = []
@@ -274,16 +364,16 @@ class EnglishRouteTests(unittest.TestCase):
                 return "我们继续前进。"
             return "未知"
 
-        english_service.call_chat_completion_text = fake_call_chat_completion_text
+        dashscope_gateway.call_chat_completion_text = fake_call_chat_completion_text
         with self.SessionLocal() as session:
-            created = english_service._create_task_row(
+            created = task_service.create_task_row(
                 session,
                 filename="demo.mp4",
                 content_type="video/mp4",
                 file_bytes=b"demo",
             )
 
-        translated = english_service._translate_sentences(
+        translated = dashscope_gateway.DashscopeEnglishTranslator().translate_sentences(
             [
                 {
                     "index": 0,

@@ -2,55 +2,14 @@ import * as React from 'react'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import DashboardPage from '@/app/router/DashboardPage'
-import type { DashboardResponse } from '@/shared/api/contracts'
+import { buildDashboardResponse } from '@/app/router/DashboardPage.test-utils'
+import { resetClientPreferenceCacheForTest } from '@/shared/preferences/clientPreferences'
 
 vi.mock('react-router-dom', () => ({
   Link: ({ children, to }: { children: React.ReactNode; to: string }) => <a href={to}>{children}</a>,
 }))
 
 const getDashboardApi = vi.fn()
-
-function buildDashboardResponse(
-  payload: Partial<DashboardResponse> & {
-    stats?: Partial<DashboardResponse['stats']>
-    english_stats?: Partial<DashboardResponse['english_stats']>
-  },
-): DashboardResponse {
-  const { stats, english_stats, ...rest } = payload
-  return {
-    due_count: 0,
-    due_later_today_count: 0,
-    needs_practice_count: 0,
-    reviews: [],
-    stats: {
-      total: 0,
-      review_count: 0,
-      review_duration_seconds: 0,
-      ...stats,
-    },
-    today_review_duration_seconds: 0,
-    weekly_review_duration_seconds: 0,
-    today_total_review_duration_seconds: 0,
-    monthly_total_review_duration_seconds: 0,
-    selected_total_review_duration_seconds: 0,
-    weekly_total_review_duration_seconds: 0,
-    weekly_formal_review_duration_seconds: 0,
-    english_stats: {
-      total_courses: 0,
-      unfinished_courses: 0,
-      completed_courses: 0,
-      today_practice_seconds: 0,
-      weekly_practice_seconds: 0,
-      total_practice_seconds: 0,
-      ...english_stats,
-    },
-    today_learning_palaces: [],
-    today_new_palace_count: 0,
-    today_new_palaces: [],
-    recent_palaces: [],
-    ...rest,
-  }
-}
 
 vi.mock('@/shared/api/modules/dashboard', () => ({
   getDashboardApi: async (...args: unknown[]) => buildDashboardResponse(await getDashboardApi(...args)),
@@ -118,6 +77,7 @@ vi.mock('@/features/profile/components/TimeRecordDialog', () => ({
 describe('DashboardPage', () => {
   beforeEach(() => {
     getDashboardApi.mockReset()
+    resetClientPreferenceCacheForTest()
     window.localStorage.clear()
   })
 

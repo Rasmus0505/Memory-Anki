@@ -1,3 +1,8 @@
+import {
+  getCachedClientPreference,
+  setClientPreference,
+} from '@/shared/preferences/clientPreferences'
+
 export type ShortcutActionId =
   | 'replay_sentence'
   | 'previous_sentence'
@@ -31,9 +36,6 @@ export interface EnglishPracticeSettings {
     autoReplayOnPass: boolean
     singleSentenceLoopEnabled: boolean
   }
-  ui: {
-    translationTiming: 'after_answer'
-  }
 }
 
 export interface ShortcutActionDefinition {
@@ -41,7 +43,7 @@ export interface ShortcutActionDefinition {
   label: string
 }
 
-export const ENGLISH_PRACTICE_SETTINGS_STORAGE_KEY = 'memory-anki-english-practice-settings-v1'
+export const ENGLISH_PRACTICE_SETTINGS_STORAGE_KEY = 'memory-anki-english-practice-settings-v2'
 export const ENGLISH_PRACTICE_SETTINGS_UPDATED_EVENT = 'memory-anki-english-practice-settings-change'
 
 const RESERVED_SHORTCUT_KEYS = new Set(['escape', 'tab', 'backspace', 'delete'])
@@ -106,9 +108,6 @@ export const DEFAULT_ENGLISH_PRACTICE_SETTINGS: EnglishPracticeSettings = {
   replay: {
     autoReplayOnPass: true,
     singleSentenceLoopEnabled: false,
-  },
-  ui: {
-    translationTiming: 'after_answer',
   },
 }
 
@@ -308,30 +307,39 @@ export function sanitizeEnglishPracticeSettings(value: unknown): EnglishPractice
         DEFAULT_ENGLISH_PRACTICE_SETTINGS.replay.singleSentenceLoopEnabled,
       ),
     },
-    ui: {
-      translationTiming: 'after_answer',
-    },
   }
 }
 
 export function readEnglishPracticeSettings() {
-  if (typeof window === 'undefined') {
-    return DEFAULT_ENGLISH_PRACTICE_SETTINGS
+  if (typeof window !== 'undefined') {
+    try {
+      const raw = window.localStorage.getItem(ENGLISH_PRACTICE_SETTINGS_STORAGE_KEY)
+      if (raw) {
+        return sanitizeEnglishPracticeSettings(JSON.parse(raw))
+      }
+    } catch {
+      return DEFAULT_ENGLISH_PRACTICE_SETTINGS
+    }
   }
-  try {
-    const raw = window.localStorage.getItem(ENGLISH_PRACTICE_SETTINGS_STORAGE_KEY)
-    if (!raw) return DEFAULT_ENGLISH_PRACTICE_SETTINGS
-    return sanitizeEnglishPracticeSettings(JSON.parse(raw))
-  } catch {
-    return DEFAULT_ENGLISH_PRACTICE_SETTINGS
+
+  const cached = getCachedClientPreference(
+    'english_practice_settings',
+    DEFAULT_ENGLISH_PRACTICE_SETTINGS,
+    (value): value is EnglishPracticeSettings => Boolean(value && typeof value === 'object'),
+  )
+  if (cached !== DEFAULT_ENGLISH_PRACTICE_SETTINGS) {
+    return sanitizeEnglishPracticeSettings(cached)
   }
+  return DEFAULT_ENGLISH_PRACTICE_SETTINGS
 }
 
 export function writeEnglishPracticeSettings(settings: EnglishPracticeSettings) {
   const sanitized = sanitizeEnglishPracticeSettings(settings)
   if (typeof window !== 'undefined') {
     window.localStorage.setItem(ENGLISH_PRACTICE_SETTINGS_STORAGE_KEY, JSON.stringify(sanitized))
-    window.dispatchEvent(new CustomEvent(ENGLISH_PRACTICE_SETTINGS_UPDATED_EVENT, { detail: sanitized }))
+    void setClientPreference('english_practice_settings', sanitized).then((saved) => {
+      window.dispatchEvent(new CustomEvent(ENGLISH_PRACTICE_SETTINGS_UPDATED_EVENT, { detail: saved }))
+    })
   }
   return sanitized
 }
@@ -339,11 +347,13 @@ export function writeEnglishPracticeSettings(settings: EnglishPracticeSettings) 
 export function resetEnglishPracticeSettings() {
   if (typeof window !== 'undefined') {
     window.localStorage.removeItem(ENGLISH_PRACTICE_SETTINGS_STORAGE_KEY)
-    window.dispatchEvent(
-      new CustomEvent(ENGLISH_PRACTICE_SETTINGS_UPDATED_EVENT, {
-        detail: DEFAULT_ENGLISH_PRACTICE_SETTINGS,
-      }),
-    )
+    void setClientPreference('english_practice_settings', DEFAULT_ENGLISH_PRACTICE_SETTINGS).then((saved) => {
+      window.dispatchEvent(
+        new CustomEvent(ENGLISH_PRACTICE_SETTINGS_UPDATED_EVENT, {
+          detail: saved,
+        }),
+      )
+    })
   }
   return DEFAULT_ENGLISH_PRACTICE_SETTINGS
 }

@@ -1,6 +1,6 @@
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { MindMapEditorState } from '@/shared/api/client'
+import type { MindMapEditorState } from '@/shared/api/contracts'
 import { usePersistedMindMapEditor } from './usePersistedMindMapEditor'
 
 interface TestMeta {

@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import {
   buildLetterSlots,
@@ -7,13 +8,30 @@ import {
   countTokenInputErrors,
   createWordState,
   normalizeComparableToken,
+  tokenizeEnglishLearningSentence,
   revealLetterInState,
 } from '@/features/english/englishTypingHelpers'
+
+interface EnglishTokenVector {
+  name: string
+  text: string
+  tokens: string[]
+}
+
+const tokenVectors = JSON.parse(
+  readFileSync('../shared/english-token-vectors.json', 'utf-8'),
+) as EnglishTokenVector[]
 
 describe('englishTypingHelpers', () => {
   it('normalizes typing comparisons without apostrophes and hyphens', () => {
     expect(normalizeComparableToken("Don't")).toBe('dont')
     expect(normalizeComparableToken('well-known')).toBe('wellknown')
+  })
+
+  it('matches the shared English tokenization vectors', () => {
+    for (const vector of tokenVectors) {
+      expect(tokenizeEnglishLearningSentence(vector.text), vector.name).toEqual(vector.tokens)
+    }
   })
 
   it('counts token input mismatches with extra typed characters', () => {

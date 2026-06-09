@@ -1,9 +1,6 @@
 import copy
 import json
-import shutil
 import sqlite3
-import subprocess
-import threading
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from hashlib import sha1
@@ -12,38 +9,44 @@ from pathlib import Path
 from sqlalchemy.orm import Session
 
 from memory_anki.core.config import (
-    ATTACHMENTS_DIR,
-    DB_PATH,
-    ENGLISH_DIR,
     FULL_BACKUPS_DIR,
-    REPO_ROOT,
-    RESCUE_BACKUPS_DIR,
 )
 from memory_anki.core.time import utc_now_naive
 from memory_anki.infrastructure.db.models import Chapter, Palace, PalaceVersion, Peg
+from memory_anki.modules.backups.application.backup_lifecycle import (
+    ROLLING_EDIT_BACKUP_INTERVAL as ROLLING_EDIT_BACKUP_INTERVAL,
+    create_full_backup as create_full_backup,
+    create_rescue_snapshot as create_rescue_snapshot,
+    create_shutdown_backup as create_shutdown_backup,
+    ensure_daily_backup as ensure_daily_backup,
+    list_backups as list_backups,
+    maybe_create_interval_backup as maybe_create_interval_backup,
+    maybe_create_periodic_backup as maybe_create_periodic_backup,
+    maybe_create_rolling_backup as maybe_create_rolling_backup,
+    restore_database_backup as restore_database_backup,
+    start_periodic_backup_loop as start_periodic_backup_loop,
+    stop_periodic_backup_loop as stop_periodic_backup_loop,
+    timestamp_slug as timestamp_slug,
+)
+from memory_anki.modules.backups.application.editor_safety import (
+    MAX_SAFE_REMAINING_NODES as MAX_SAFE_REMAINING_NODES,
+    MIN_DANGEROUS_NODE_COUNT as MIN_DANGEROUS_NODE_COUNT,
+    count_editor_doc_nodes as count_editor_doc_nodes,
+    is_dangerous_structure_change as is_dangerous_structure_change,
+)
+from memory_anki.modules.backups.application.snapshot_sources import (
+    export_git_snapshot_db as export_git_snapshot_db,
+    fetch_snapshot_from_sqlite,
+)
 
 MAX_VERSION_COUNT = 50
-MIN_DANGEROUS_NODE_COUNT = 5
-MAX_SAFE_REMAINING_NODES = 2
 EDITOR_SNAPSHOT_INTERVAL = timedelta(minutes=5)
-AUTO_FULL_BACKUP_INTERVAL = timedelta(hours=4)
-ROLLING_EDIT_BACKUP_INTERVAL = timedelta(minutes=30)
 MILESTONE_TRIGGER_REASONS = {
     "before-version-restore",
     "before-git-recovery",
     "before-backup-restore",
     "before-db-restore",
 }
-_BACKUP_LOCK = threading.Lock()
-_BACKUP_LOOP_THREAD: threading.Thread | None = None
-_BACKUP_LOOP_STOP = threading.Event()
-
-
-@dataclass
-class PalaceSnapshot:
-    palace_row: dict
-    pegs: list[dict]
-    chapter_ids: list[int]
 
 
 @dataclass
@@ -93,11 +96,6 @@ def ensure_backup_schema(session: Session) -> None:
     session.commit()
 
 
-def timestamp_slug(now: datetime | None = None) -> str:
-    current = now or datetime.now()
-    return current.strftime("%Y%m%d-%H%M%S")
-
-
 def _deserialize_version_json(raw: str | None, fallback):
     if raw in (None, ""):
         return copy.deepcopy(fallback)
@@ -109,189 +107,6 @@ def _deserialize_version_json(raw: str | None, fallback):
     if isinstance(fallback, dict) and not isinstance(value, dict):
         return copy.deepcopy(fallback)
     return value
-
-
-def _copy_attachments(destination: Path) -> None:
-    target = destination / "attachments"
-    if ATTACHMENTS_DIR.exists():
-        shutil.copytree(ATTACHMENTS_DIR, target, dirs_exist_ok=True)
-    else:
-        target.mkdir(parents=True, exist_ok=True)
-
-
-def _copy_english_data(destination: Path) -> None:
-    target = destination / "english"
-    if ENGLISH_DIR.exists():
-        shutil.copytree(ENGLISH_DIR, target, dirs_exist_ok=True)
-    else:
-        target.mkdir(parents=True, exist_ok=True)
-
-
-def create_rescue_snapshot(reason: str) -> Path:
-    folder = RESCUE_BACKUPS_DIR / f"{timestamp_slug()}-{reason}"
-    folder.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(DB_PATH, folder / DB_PATH.name)
-    _copy_attachments(folder)
-    _copy_english_data(folder)
-    return folder
-
-
-def _daily_backup_exists() -> bool:
-    prefix = datetime.now().strftime("%Y%m%d")
-    return any(child.is_dir() and child.name.startswith(prefix) for child in FULL_BACKUPS_DIR.iterdir())
-
-
-def ensure_daily_backup() -> Path | None:
-    if _daily_backup_exists():
-        return None
-    return create_full_backup("startup")
-
-
-def create_full_backup(reason: str) -> Path:
-    with _BACKUP_LOCK:
-        folder = FULL_BACKUPS_DIR / f"{timestamp_slug()}-{reason}"
-        folder.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(DB_PATH, folder / DB_PATH.name)
-        _copy_attachments(folder)
-        _copy_english_data(folder)
-        manifest = {
-            "reason": reason,
-            "created_at": datetime.now().isoformat(timespec="seconds"),
-            "db_file": DB_PATH.name,
-            "attachments_dir": "attachments",
-            "english_dir": "english",
-        }
-        (folder / "manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
-        return folder
-
-
-def list_backups() -> list[dict]:
-    results: list[dict] = []
-    for kind, root in (("full", FULL_BACKUPS_DIR), ("rescue", RESCUE_BACKUPS_DIR)):
-        if not root.exists():
-            continue
-        for folder in sorted(root.iterdir(), reverse=True):
-            if not folder.is_dir():
-                continue
-            db_file = folder / DB_PATH.name
-            manifest_file = folder / "manifest.json"
-            manifest = {}
-            if manifest_file.exists():
-                try:
-                    manifest = json.loads(manifest_file.read_text(encoding="utf-8"))
-                except Exception:
-                    manifest = {}
-            results.append(
-                {
-                    "kind": kind,
-                    "name": folder.name,
-                    "path": str(folder),
-                    "created_at": manifest.get("created_at") or datetime.fromtimestamp(folder.stat().st_mtime).isoformat(timespec="seconds"),
-                    "reason": manifest.get("reason") or "",
-                    "has_database": db_file.exists(),
-                    "has_attachments": (folder / "attachments").exists(),
-                    "has_english_data": (folder / "english").exists(),
-                }
-            )
-    return results
-
-
-def restore_database_backup(backup_folder: str) -> Path:
-    source_dir = Path(backup_folder)
-    source_db = source_dir / DB_PATH.name
-    source_attachments = source_dir / "attachments"
-    source_english = source_dir / "english"
-    if not source_db.exists():
-        raise FileNotFoundError("备份中缺少数据库快照。")
-    rescue = create_rescue_snapshot("before-db-restore")
-    shutil.copy2(source_db, DB_PATH)
-    if source_attachments.exists():
-        if ATTACHMENTS_DIR.exists():
-            shutil.rmtree(ATTACHMENTS_DIR)
-        shutil.copytree(source_attachments, ATTACHMENTS_DIR)
-    if source_english.exists():
-        if ENGLISH_DIR.exists():
-            shutil.rmtree(ENGLISH_DIR)
-        shutil.copytree(source_english, ENGLISH_DIR)
-    return rescue
-
-
-def maybe_create_interval_backup(reason: str, minimum_interval: timedelta) -> Path | None:
-    latest = _latest_full_backup()
-    if latest and _backup_age(latest) < minimum_interval:
-        return None
-    return create_full_backup(reason)
-
-
-def maybe_create_rolling_backup(reason: str = "rolling-edit") -> Path | None:
-    return maybe_create_interval_backup(reason, ROLLING_EDIT_BACKUP_INTERVAL)
-
-
-def maybe_create_periodic_backup() -> Path | None:
-    return maybe_create_interval_backup("periodic", AUTO_FULL_BACKUP_INTERVAL)
-
-
-def create_shutdown_backup() -> Path | None:
-    return create_full_backup("shutdown")
-
-
-def start_periodic_backup_loop() -> None:
-    global _BACKUP_LOOP_THREAD
-    if _BACKUP_LOOP_THREAD and _BACKUP_LOOP_THREAD.is_alive():
-        return
-    _BACKUP_LOOP_STOP.clear()
-
-    def run_loop() -> None:
-        while not _BACKUP_LOOP_STOP.wait(timeout=300):
-            try:
-                maybe_create_periodic_backup()
-            except Exception:
-                continue
-
-    _BACKUP_LOOP_THREAD = threading.Thread(target=run_loop, name="memory-anki-backup-loop", daemon=True)
-    _BACKUP_LOOP_THREAD.start()
-
-
-def stop_periodic_backup_loop() -> None:
-    _BACKUP_LOOP_STOP.set()
-
-
-def _latest_full_backup() -> Path | None:
-    folders = [child for child in FULL_BACKUPS_DIR.iterdir() if child.is_dir()]
-    if not folders:
-        return None
-    return max(folders, key=lambda item: item.stat().st_mtime)
-
-
-def _backup_age(folder: Path) -> timedelta:
-    modified_at = datetime.fromtimestamp(folder.stat().st_mtime)
-    return datetime.now() - modified_at
-
-
-def _fetch_snapshot_from_sqlite(db_path: Path, palace_id: int) -> PalaceSnapshot | None:
-    connection = sqlite3.connect(str(db_path))
-    connection.row_factory = sqlite3.Row
-    try:
-        palace_row = connection.execute("SELECT * FROM palaces WHERE id = ?", (palace_id,)).fetchone()
-        if palace_row is None:
-            return None
-        pegs = [
-            dict(row)
-            for row in connection.execute(
-                "SELECT id, palace_id, parent_id, name, content, sort_order FROM pegs WHERE palace_id = ? ORDER BY parent_id IS NOT NULL, sort_order, id",
-                (palace_id,),
-            ).fetchall()
-        ]
-        chapter_ids = [
-            int(row["chapter_id"])
-            for row in connection.execute(
-                "SELECT chapter_id FROM chapter_palaces WHERE palace_id = ? ORDER BY id",
-                (palace_id,),
-            ).fetchall()
-        ]
-        return PalaceSnapshot(palace_row=dict(palace_row), pegs=pegs, chapter_ids=chapter_ids)
-    finally:
-        connection.close()
 
 
 def _load_json_document(value: dict | str | None) -> dict | str | None:
@@ -360,22 +175,6 @@ def _build_palace_editor_snapshot_summary(
         editor_config=_load_json_document(editor_config),
         editor_local_config=_load_json_document(editor_local_config),
     )
-
-
-def export_git_snapshot_db(commit: str, destination: Path) -> Path:
-    try:
-        db_bytes = subprocess.check_output(
-            ["git", "show", f"{commit}:data/memory_palace.db"],
-            cwd=REPO_ROOT,
-            stderr=subprocess.PIPE,
-        )
-    except subprocess.CalledProcessError as exc:
-        raise FileNotFoundError(
-            "指定提交中不存在 legacy 仓库数据库快照。当前版本已停止把运行数据提交到 Git，请改用本地 full/rescue 备份恢复。"
-        ) from exc
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    destination.write_bytes(db_bytes)
-    return destination
 
 
 def create_palace_version(
@@ -829,7 +628,7 @@ def restore_palace_from_backup(
     if not source_path.exists() or not source_path.is_file():
         raise FileNotFoundError("指定的备份数据库不存在。")
 
-    snapshot = _fetch_snapshot_from_sqlite(source_path, palace_id)
+    snapshot = fetch_snapshot_from_sqlite(source_path, palace_id)
     if snapshot is None:
         raise ValueError("备份里未找到这个宫殿。")
 
@@ -874,7 +673,7 @@ def recover_palaces_from_git_snapshot(
     recovered: dict[int, dict] = {}
     try:
         for palace_id in palace_ids:
-            snapshot = _fetch_snapshot_from_sqlite(temp_snapshot, palace_id)
+            snapshot = fetch_snapshot_from_sqlite(temp_snapshot, palace_id)
             palace = session.query(Palace).filter_by(id=palace_id).first()
             if snapshot is None or palace is None:
                 continue
@@ -999,28 +798,3 @@ def _remap_editor_doc_ids(editor_doc: dict | str | None, id_map: dict[int, int])
     return json.dumps(parsed, ensure_ascii=False)
 
 
-def count_editor_doc_nodes(doc: dict | str | None) -> int:
-    if doc in (None, ""):
-        return 0
-    if isinstance(doc, str):
-        try:
-            doc = json.loads(doc)
-        except Exception:
-            return 0
-    if not isinstance(doc, dict):
-        return 0
-    root = doc.get("root")
-    if not isinstance(root, dict):
-        return 0
-
-    def walk(node: dict) -> int:
-        children = node.get("children")
-        if not isinstance(children, list):
-            children = []
-        return 1 + sum(walk(child) for child in children if isinstance(child, dict))
-
-    return max(0, walk(root) - 1)
-
-
-def is_dangerous_structure_change(existing_node_count: int, next_node_count: int) -> bool:
-    return existing_node_count >= MIN_DANGEROUS_NODE_COUNT and next_node_count <= MAX_SAFE_REMAINING_NODES and next_node_count < existing_node_count

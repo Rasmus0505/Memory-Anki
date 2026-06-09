@@ -2,6 +2,10 @@ import * as React from 'react'
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { MindMapReviewFlow } from '@/features/review/components/MindMapReviewFlow'
+import {
+  DEFAULT_REVIEW_FEEDBACK_SETTINGS,
+  REVIEW_FEEDBACK_SETTINGS_STORAGE_KEY,
+} from '@/features/review/reviewFeedbackSettings'
 
 const timer = {
   effectiveSeconds: 7,
@@ -19,7 +23,7 @@ const timer = {
   complete: vi.fn(async () => ({ effectiveSeconds: 7 })),
 }
 
-const useTimedSessionMock = vi.fn(() => timer)
+const useTimedSessionMock = vi.fn()
 
 vi.mock('@/shared/hooks/useTimedSession', () => ({
   useTimedSession: (args: unknown) => useTimedSessionMock(args),
@@ -136,12 +140,28 @@ function getVisibleTextsFromLatestFrame() {
 
 describe('MindMapReviewFlow', () => {
   beforeEach(() => {
+    vi.useRealTimers()
     timer.complete.mockClear()
     timer.registerActivity.mockClear()
     timer.logEvent.mockClear()
     mindMapFrameMock.mockClear()
     useTimedSessionMock.mockClear()
     useTimedSessionMock.mockImplementation(() => timer)
+    window.localStorage.clear()
+    window.localStorage.setItem(
+      REVIEW_FEEDBACK_SETTINGS_STORAGE_KEY,
+      JSON.stringify(DEFAULT_REVIEW_FEEDBACK_SETTINGS),
+    )
+    Object.defineProperty(window, 'matchMedia', {
+      writable: true,
+      value: vi.fn().mockImplementation(() => ({
+        matches: false,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+      })),
+    })
   })
 
   it('submits only once when completion is clicked rapidly', async () => {
@@ -371,24 +391,47 @@ describe('MindMapReviewFlow', () => {
     await act(async () => {
       getLatestMindMapFrameProps()?.onNodeClick?.([{ uid: 'root', text: 'Root' }])
     })
+    expect(getLatestMindMapFrameProps()?.reviewFxSignal).toEqual(
+      expect.objectContaining({
+        type: 'category_expand',
+        nodeUid: 'child',
+        lineMode: 'spawn',
+      }),
+    )
     expect(getVisibleTextsFromLatestFrame()).toEqual({
       root: 'Root',
       child: '待回忆',
       grandchild: null,
     })
+    expect(screen.getByText('连击 0')).toBeTruthy()
 
     await act(async () => {
       getLatestMindMapFrameProps()?.onNodeClick?.([{ uid: 'child', text: 'Child' }])
     })
+    expect(getLatestMindMapFrameProps()?.reviewFxSignal).toEqual(
+      expect.objectContaining({
+        type: 'card_reveal',
+        nodeUid: 'child',
+        lineMode: 'confirm',
+      }),
+    )
     expect(getVisibleTextsFromLatestFrame()).toEqual({
       root: 'Root',
       child: 'Child',
       grandchild: null,
     })
+    expect(screen.getByText('连击 1')).toBeTruthy()
 
     await act(async () => {
       getLatestMindMapFrameProps()?.onNodeClick?.([{ uid: 'child', text: 'Child' }])
     })
+    expect(getLatestMindMapFrameProps()?.reviewFxSignal).toEqual(
+      expect.objectContaining({
+        type: 'next_level_expand',
+        nodeUid: 'child',
+        lineMode: 'spawn',
+      }),
+    )
     expect(getVisibleTextsFromLatestFrame()).toEqual({
       root: 'Root',
       child: 'Child',
@@ -491,6 +534,34 @@ describe('MindMapReviewFlow', () => {
     expect(timer.registerActivity).toHaveBeenCalledWith('practice_interaction', { source: 'right_click' })
   })
 
+  it('saves feedback volume from the feedback settings dialog', async () => {
+    render(
+      <MindMapReviewFlow
+        title="Root"
+        palaceId={1}
+        sessionKind="practice"
+        reviewEditorState={editorState}
+        onComplete={vi.fn()}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: '反馈设置' }))
+
+    const volumeInput = screen.getByLabelText('音量') as HTMLInputElement
+    expect(volumeInput.value).toBe('1.5')
+    expect(screen.getByText('150%')).toBeTruthy()
+
+    fireEvent.change(volumeInput, { target: { value: '1.8' } })
+
+    await waitFor(() => {
+      const saved = JSON.parse(
+        window.localStorage.getItem(REVIEW_FEEDBACK_SETTINGS_STORAGE_KEY) || '{}',
+      ) as Record<string, unknown>
+      expect(saved.volume).toBe(1.8)
+    })
+    expect(screen.getByText('180%')).toBeTruthy()
+  })
+
   it('lets root right-click hide revealed descendants while keeping the root visible', async () => {
     render(
       <MindMapReviewFlow
@@ -531,5 +602,62 @@ describe('MindMapReviewFlow', () => {
         grandchild: null,
       })
     })
+  })
+
+  it('highlights completion readiness when all non-root nodes are revealed', async () => {
+    render(
+      <MindMapReviewFlow
+        title="Root"
+        palaceId={1}
+        sessionKind="practice"
+        reviewEditorState={editorState}
+        onComplete={vi.fn()}
+      />,
+    )
+
+    await act(async () => {
+      getLatestMindMapFrameProps()?.onNodeClick?.([{ uid: 'root', text: 'Root' }])
+    })
+    await act(async () => {
+      getLatestMindMapFrameProps()?.onNodeClick?.([{ uid: 'child', text: 'Child' }])
+    })
+    await act(async () => {
+      getLatestMindMapFrameProps()?.onNodeClick?.([{ uid: 'child', text: 'Child' }])
+    })
+    await act(async () => {
+      getLatestMindMapFrameProps()?.onNodeClick?.([{ uid: 'grandchild', text: 'Grandchild' }])
+    })
+
+    expect(screen.getByText('可结算')).toBeTruthy()
+    expect(screen.getByRole('button', { name: '完成结算' })).toBeTruthy()
+  })
+
+  it('shows a short completion ceremony before invoking onComplete', async () => {
+    vi.useFakeTimers()
+    const onComplete = vi.fn().mockResolvedValue(undefined)
+
+    render(
+      <MindMapReviewFlow
+        title="Root"
+        palaceId={1}
+        sessionKind="practice"
+        reviewEditorState={editorState}
+        onComplete={onComplete}
+      />,
+    )
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /完成/ }))
+    })
+
+    expect(screen.getByText('通关结算中')).toBeTruthy()
+    expect(onComplete).not.toHaveBeenCalled()
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(850)
+    })
+
+    expect(onComplete).toHaveBeenCalledTimes(1)
+    vi.useRealTimers()
   })
 })

@@ -5,7 +5,8 @@ import {
   getPalaceSegmentsApi,
   updatePalaceSegmentApi,
 } from '@/shared/api/modules/palaces'
-import type { MindMapSelection, PalaceSegmentSummary } from '@/shared/api/contracts'
+import type { PalaceSegmentSummary } from '@/shared/api/contracts'
+import type { MindMapSelection } from '@/shared/components/mindmap-host'
 import {
   buildSubtreeUidMap,
   getEarlierDateTime,

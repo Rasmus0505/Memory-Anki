@@ -1,5 +1,5 @@
 import { useCallback, useRef } from 'react'
-import type { MindMapEditorState } from '@/shared/api/client'
+import type { MindMapEditorState } from '@/shared/api/contracts'
 import type {
   HostEditorStateSyncPayload,
   MindMapHostWindow,

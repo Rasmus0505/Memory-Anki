@@ -40,6 +40,7 @@ import {
   type PreviewState,
   TOOLBAR_HEIGHT,
 } from './layout'
+import { dispatchGlobalFeedback } from '@/shared/feedback/globalFeedbackModel'
 import type { MindMapCanvasProps } from './MindMapCanvas'
 
 export interface UseMindMapCanvasStateResult {
@@ -71,6 +72,14 @@ export interface UseMindMapCanvasStateResult {
   handleEdgeClick: EdgeMouseHandler
   handleEdgeDoubleClick: EdgeMouseHandler
   handlePaneClick: () => void
+}
+
+function getEventFeedbackPoint(event: unknown) {
+  if (!event || typeof event !== 'object') return undefined
+  const candidate = event as { clientX?: unknown; clientY?: unknown }
+  return typeof candidate.clientX === 'number' && typeof candidate.clientY === 'number'
+    ? { x: candidate.clientX, y: candidate.clientY }
+    : undefined
 }
 
 export function useMindMapCanvasState(
@@ -119,6 +128,7 @@ export function useMindMapCanvasState(
   const [previewState, setPreviewState] = useState<PreviewState | null>(null)
   const previewStateRef = useRef<PreviewState | null>(null)
   const draggingNodeIdRef = useRef<string | null>(null)
+  const lastPreviewFeedbackRef = useRef('')
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null)
   const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 })
   const frameRef = useRef<HTMLDivElement>(null)
@@ -167,7 +177,7 @@ export function useMindMapCanvasState(
   }, [])
 
   const checkOverlap = useCallback(
-    (dragId: string, draggedNode?: Node) => {
+    (dragId: string, draggedNode?: Node, event?: unknown) => {
       const dragNode = nodes.find((node) => node.id === dragId)
       const activeNode = draggedNode ?? dragNode
       if (!activeNode) return
@@ -206,11 +216,15 @@ export function useMindMapCanvasState(
         }
       }
 
-      setPreviewState(
-        closest
-          ? { sourceId: dragId, targetId: closest.id, mode: closest.mode }
-          : null,
-      )
+      const nextSignature = closest ? `${dragId}:${closest.id}:${closest.mode}` : ''
+      if (nextSignature && nextSignature !== lastPreviewFeedbackRef.current) {
+        dispatchGlobalFeedback('node_move', {
+          point: getEventFeedbackPoint(event),
+          origin: 'node',
+        })
+      }
+      lastPreviewFeedbackRef.current = nextSignature
+      setPreviewState(closest ? { sourceId: dragId, targetId: closest.id, mode: closest.mode } : null)
     },
     [graphData.nodes, nodes],
   )
@@ -218,17 +232,22 @@ export function useMindMapCanvasState(
   const handleNodeDragStart = useCallback(
     (_event: unknown, node: Node) => {
       draggingNodeIdRef.current = node.id
+      lastPreviewFeedbackRef.current = ''
       setPreviewState(null)
       setEdgeMenu(null)
       setSelectedEdgeId(null)
       onNodeSelect(node.id)
+      dispatchGlobalFeedback('drag_start', {
+        point: getEventFeedbackPoint(_event),
+        origin: 'pointer',
+      })
     },
     [onNodeSelect],
   )
 
   const handleNodeDrag = useCallback(
     (_event: unknown, node: Node) => {
-      checkOverlap(node.id, node)
+      checkOverlap(node.id, node, _event)
     },
     [checkOverlap],
   )
@@ -237,6 +256,10 @@ export function useMindMapCanvasState(
     (_event: unknown, node: Node) => {
       const activePreview = previewStateRef.current
       if (activePreview && activePreview.sourceId === node.id) {
+        dispatchGlobalFeedback('drag_drop', {
+          point: getEventFeedbackPoint(_event),
+          origin: 'pointer',
+        })
         if (
           (activePreview.mode === 'before' ||
             activePreview.mode === 'after') &&
@@ -255,6 +278,7 @@ export function useMindMapCanvasState(
       setEdges(nextLayout.edges)
       setPreviewState(null)
       draggingNodeIdRef.current = null
+      lastPreviewFeedbackRef.current = ''
     },
     [graphData, onReorderSibling, onReparent, setEdges, setNodes],
   )
@@ -299,6 +323,10 @@ export function useMindMapCanvasState(
     const baseEdges = previewLayout?.edges ?? edges
     return baseEdges.map((edge) => ({
       ...edge,
+      className:
+        edge.id === selectedEdgeId
+          ? `${edge.className ?? ''} memory-anki-reactflow-edge-selected`.trim()
+          : edge.className,
       style: {
         ...(edge.style ?? {}),
         stroke:
@@ -333,6 +361,10 @@ export function useMindMapCanvasState(
       setEdgeMenu(null)
       setSelectedEdgeId(null)
       onNodeSelect(node.id)
+      dispatchGlobalFeedback('context_menu', {
+        point: { x: event.clientX, y: event.clientY },
+        origin: 'node',
+      })
     },
     [onNodeSelect],
   )
@@ -344,10 +376,14 @@ export function useMindMapCanvasState(
   }, [onNodeSelect])
 
   const handleNodeClick = useCallback(
-    (_event: MouseEvent, node: Node) => {
+    (event: MouseEvent, node: Node) => {
       setSelectedEdgeId(null)
       setEdgeMenu(null)
       onNodeSelect(node.id)
+      dispatchGlobalFeedback('node_select', {
+        point: { x: event.clientX, y: event.clientY },
+        origin: 'node',
+      })
     },
     [onNodeSelect],
   )
@@ -356,6 +392,10 @@ export function useMindMapCanvasState(
     (edgeId: string, sourceId: string, targetId: string) => {
       setEdgeMenu(null)
       setSelectedEdgeId(null)
+      dispatchGlobalFeedback('node_delete', {
+        origin: 'edge',
+        label: 'EDGE',
+      })
       onEdgeDelete?.(edgeId, sourceId, targetId)
     },
     [onEdgeDelete],
@@ -365,6 +405,10 @@ export function useMindMapCanvasState(
     (edgeId: string, sourceId: string, targetId: string) => {
       setEdgeMenu(null)
       setSelectedEdgeId(null)
+      dispatchGlobalFeedback('node_create', {
+        origin: 'edge',
+        label: 'CARD',
+      })
       onEdgeInsert?.(edgeId, sourceId, targetId)
     },
     [onEdgeInsert],
@@ -384,6 +428,11 @@ export function useMindMapCanvasState(
         targetId: edge.target,
       })
       onNodeSelect(null)
+      dispatchGlobalFeedback('node_select', {
+        point: { x: event.clientX, y: event.clientY },
+        origin: 'edge',
+        label: 'EDGE',
+      })
     },
     [onNodeSelect],
   )
@@ -392,6 +441,11 @@ export function useMindMapCanvasState(
     (event, edge) => {
       event.preventDefault()
       event.stopPropagation()
+      dispatchGlobalFeedback('node_delete', {
+        point: { x: event.clientX, y: event.clientY },
+        origin: 'edge',
+        label: 'EDGE',
+      })
       handleEdgeDelete(edge.id, edge.source, edge.target)
     },
     [handleEdgeDelete],
@@ -401,25 +455,70 @@ export function useMindMapCanvasState(
     if (!ctxMenu) return []
     const nodeId = ctxMenu.nodeId
     return [
-      { label: '添加子节点 (Tab)', icon: Plus, onClick: () => onAddChild(nodeId) },
-      { label: '添加同级节点 (Enter)', icon: Plus, onClick: () => onAddSibling(nodeId) },
+      {
+        label: '添加子节点 (Tab)',
+        icon: Plus,
+        onClick: () => {
+          dispatchGlobalFeedback('node_create', {
+            point: { x: ctxMenu.x, y: ctxMenu.y },
+            origin: 'node',
+          })
+          onAddChild(nodeId)
+        },
+      },
+      {
+        label: '添加同级节点 (Enter)',
+        icon: Plus,
+        onClick: () => {
+          dispatchGlobalFeedback('node_create', {
+            point: { x: ctxMenu.x, y: ctxMenu.y },
+            origin: 'node',
+          })
+          onAddSibling(nodeId)
+        },
+      },
       {
         label: '上移',
         icon: ArrowUp,
-        onClick: () => onMoveUp?.(nodeId),
+        onClick: () => {
+          dispatchGlobalFeedback('node_move', {
+            point: { x: ctxMenu.x, y: ctxMenu.y },
+            origin: 'node',
+          })
+          onMoveUp?.(nodeId)
+        },
         disabled: canMoveUp ? !canMoveUp(nodeId) : true,
       },
       {
         label: '下移',
         icon: ArrowDown,
-        onClick: () => onMoveDown?.(nodeId),
+        onClick: () => {
+          dispatchGlobalFeedback('node_move', {
+            point: { x: ctxMenu.x, y: ctxMenu.y },
+            origin: 'node',
+          })
+          onMoveDown?.(nodeId)
+        },
         disabled: canMoveDown ? !canMoveDown(nodeId) : true,
       },
-      { label: '重命名', icon: Pencil, onClick: () => {} },
+      {
+        label: '重命名',
+        icon: Pencil,
+        onClick: () => dispatchGlobalFeedback('node_edit_start', {
+          point: { x: ctxMenu.x, y: ctxMenu.y },
+          origin: 'node',
+        }),
+      },
       {
         label: '删除 (Delete)',
         icon: Trash2,
-        onClick: () => onDelete(nodeId),
+        onClick: () => {
+          dispatchGlobalFeedback('node_delete', {
+            point: { x: ctxMenu.x, y: ctxMenu.y },
+            origin: 'node',
+          })
+          onDelete(nodeId)
+        },
         variant: 'danger' as const,
       },
     ]
@@ -431,28 +530,44 @@ export function useMindMapCanvasState(
       {
         label: '插入卡片',
         icon: BetweenHorizontalStart,
-        onClick: () =>
+        onClick: () => {
+          dispatchGlobalFeedback('node_create', {
+            point: { x: edgeMenu.x, y: edgeMenu.y },
+            origin: 'edge',
+            label: 'CARD',
+          })
           handleEdgeInsert(
             edgeMenu.edgeId,
             edgeMenu.sourceId,
             edgeMenu.targetId,
-          ),
+          )
+        },
       },
       {
         label: '删除关系',
         icon: Unlink,
-        onClick: () =>
+        onClick: () => {
+          dispatchGlobalFeedback('node_delete', {
+            point: { x: edgeMenu.x, y: edgeMenu.y },
+            origin: 'edge',
+            label: 'EDGE',
+          })
           handleEdgeDelete(
             edgeMenu.edgeId,
             edgeMenu.sourceId,
             edgeMenu.targetId,
-          ),
+          )
+        },
         variant: 'danger' as const,
       },
     ]
   }, [edgeMenu, handleEdgeDelete, handleEdgeInsert])
 
   const resetLayout = useCallback(() => {
+    dispatchGlobalFeedback('toolbar_action', {
+      origin: 'toolbar',
+      label: 'LAYOUT',
+    })
     const { nodes: newNodes, edges: newEdges } = applyMindMapLayout(graphData)
     setNodes(newNodes)
     setEdges(newEdges)
@@ -461,6 +576,22 @@ export function useMindMapCanvasState(
     setPreviewState(null)
     runFitView()
   }, [graphData, runFitView, setEdges, setNodes])
+
+  const zoomInCanvas = useCallback(() => {
+    dispatchGlobalFeedback('toolbar_action', {
+      origin: 'toolbar',
+      label: 'ZOOM',
+    })
+    zoomIn({ duration: 180 })
+  }, [zoomIn])
+
+  const zoomOutCanvas = useCallback(() => {
+    dispatchGlobalFeedback('toolbar_action', {
+      origin: 'toolbar',
+      label: 'ZOOM',
+    })
+    zoomOut({ duration: 180 })
+  }, [zoomOut])
 
   return {
     frameRef,
@@ -476,8 +607,8 @@ export function useMindMapCanvasState(
     canUndo,
     canRedo,
     runFitView,
-    zoomInCanvas: () => zoomIn({ duration: 180 }),
-    zoomOutCanvas: () => zoomOut({ duration: 180 }),
+    zoomInCanvas,
+    zoomOutCanvas,
     resetLayout,
     closeNodeMenu: () => setCtxMenu(null),
     closeEdgeMenu: () => setEdgeMenu(null),

@@ -1,5 +1,5 @@
 import type { PalaceSegmentSummary } from '@/shared/api/contracts'
-import { formatApiDate, formatApiDateTime, parseApiDateTime } from '@/shared/lib/dateTime'
+import { formatApiDateTime, parseApiDateTime } from '@/shared/lib/dateTime'
 
 export function formatSegmentDateTime(value: string | null) {
   return value ? formatApiDateTime(value).slice(0, 16) : '未设置'
@@ -39,7 +39,7 @@ export function formatRelativeReviewTime(value: string | null): string {
 }
 
 export function formatCreatedAt(value: string | null): string {
-  return formatApiDate(value)
+  return value ? formatApiDateTime(value).split(' ')[0] || '未记录具体时间' : '未记录具体时间'
 }
 
 export function getSegmentDisplayName(

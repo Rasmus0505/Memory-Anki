@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { MindMapEditorState } from '@/shared/api/client'
+import type { MindMapEditorState } from '@/shared/api/contracts'
 
 interface PersistedMindMapOptions<TResponse, TMeta> {
   entityId: number | null

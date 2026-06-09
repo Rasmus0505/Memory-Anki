@@ -42,6 +42,9 @@ class RuntimeInfoTests(unittest.TestCase):
         self.assertEqual(info["short_commit"], "abcdef12")
         self.assertEqual(info["runtime_generation"], 2)
         self.assertEqual(info["last_started_at"], "2026-06-01T00:00:00+00:00")
+        self.assertIn("app_home", info)
+        self.assertIn("managed_storage_items", info)
+        self.assertIn("backup_covered_items", info)
 
     def test_assert_runtime_compatible_rejects_newer_shared_generation(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -114,6 +117,10 @@ class RuntimeInfoTests(unittest.TestCase):
                 "min_supported_generation": 1,
                 "max_supported_generation": 1,
                 "last_started_at": "2026-06-01T12:00:00+08:00",
+                "app_home": "C:/Users/test/AppData/Local/MemoryAnki",
+                "storage_mode": "user_app_home",
+                "managed_storage_items": [],
+                "backup_covered_items": [],
             },
         ):
             response = client.get("/api/v1/runtime-info")
@@ -121,6 +128,78 @@ class RuntimeInfoTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["channel"], "stable")
         self.assertEqual(response.json()["short_commit"], "abcdef12")
+
+    def test_client_preferences_route_reads_and_writes_grouped_preferences(self):
+        app = FastAPI()
+        app.include_router(settings_router.router, prefix="/api/v1")
+        client = TestClient(app)
+
+        session_values: dict[str, str] = {}
+
+        class FakeConfig:
+            def __init__(self, key: str, value: str):
+                self.key = key
+                self.value = value
+                self.updated_at = None
+
+        class FakeQuery:
+            def __init__(self, session):
+                self.session = session
+                self.key = None
+
+            def filter_by(self, **kwargs):
+                self.key = kwargs.get("key")
+                return self
+
+            def first(self):
+                if self.key not in self.session.values:
+                    return None
+                return FakeConfig(self.key, self.session.values[self.key])
+
+        class FakeSession:
+            def __init__(self):
+                self.values = session_values
+
+            def query(self, _model):
+                return FakeQuery(self)
+
+            def add(self, row):
+                self.values[row.key] = row.value
+
+            def commit(self):
+                return None
+
+            def close(self):
+                return None
+
+        def override_session_dep():
+            session = FakeSession()
+            try:
+                yield session
+            finally:
+                session.close()
+
+        app.dependency_overrides[settings_router.session_dep] = override_session_dep
+
+        response = client.put(
+            "/api/v1/profile/client-preferences",
+            json={
+                "review_feedback_settings": {
+                    "mode": "quiet",
+                    "soundEnabled": False,
+                    "animationEnabled": True,
+                    "surpriseEnabled": False,
+                }
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        get_response = client.get("/api/v1/profile/client-preferences")
+        self.assertEqual(get_response.status_code, 200)
+        self.assertEqual(
+            get_response.json()["items"]["review_feedback_settings"]["mode"],
+            "quiet",
+        )
 
 
 if __name__ == "__main__":

@@ -31,6 +31,11 @@ from memory_anki.modules.palaces.application.mindmap_ai_split_service import (
     MindMapAiSplitError,
     split_palace_editor_doc_with_ai,
 )
+from memory_anki.modules.palaces.application.focus_service import (
+    build_focus_editor_doc,
+    parse_focus_node_uids,
+    toggle_focus_node_uid,
+)
 from memory_anki.modules.palaces.application.palace_service import (
     create_palace,
     delete_palace,
@@ -163,11 +168,14 @@ def palace_json(p, session: Session | None = None) -> dict:
     primary_chapter = getattr(p, "primary_chapter", None)
     resolved_subject = resolve_palace_subject(p)
     parent_chapter = primary_chapter.parent if primary_chapter and getattr(primary_chapter, "parent", None) else None
+    focus_node_uids = parse_focus_node_uids(p)
 
     return {
         "id": p.id, "title": p.title, "description": p.description,
         "archived": p.archived, "mastered": p.mastered,
         "needs_practice": bool(getattr(p, "needs_practice", False)),
+        "focus_node_uids": focus_node_uids,
+        "focus_count": len(focus_node_uids),
         "created_at": p.created_at.isoformat() if p.created_at else None,
         "updated_at": p.updated_at.isoformat() if p.updated_at else None,
         "next_scheduled_date": next_schedule.scheduled_date.isoformat() if next_schedule and next_schedule.scheduled_date else None,
@@ -339,6 +347,20 @@ def api_update_editor(palace_id: int, data: dict, s: Session = Depends(session_d
     }
 
 
+@router.get("/palaces/{palace_id}/focus-session")
+def api_get_focus_session(palace_id: int, s: Session = Depends(session_dep)):
+    palace = get_palace(s, palace_id)
+    if not palace:
+        return {"error": "not found"}
+    focus_node_uids = parse_focus_node_uids(palace)
+    return {
+        "palace": palace_json(palace, s),
+        "editor_doc": build_focus_editor_doc(palace),
+        "focus_node_uids": focus_node_uids,
+        "focus_count": len(focus_node_uids),
+    }
+
+
 @router.post("/palaces/{palace_id}/editor/ai-split")
 def api_ai_split_editor_node(palace_id: int, data: dict, s: Session = Depends(session_dep)):
     palace = get_palace(s, palace_id)
@@ -426,6 +448,25 @@ def api_update_palace_practice_flag(palace_id: int, data: dict, s: Session = Dep
     s.commit()
     s.refresh(palace)
     return {"item": palace_json(palace, s)}
+
+
+@router.put("/palaces/{palace_id}/focus-nodes/{node_uid}")
+def api_toggle_palace_focus_node(palace_id: int, node_uid: str, s: Session = Depends(session_dep)):
+    palace = get_palace(s, palace_id)
+    if not palace:
+        return {"error": "not found"}
+    focus_node_uids, focused = toggle_focus_node_uid(palace, node_uid)
+    s.commit()
+    s.refresh(palace)
+    return {
+        "ok": True,
+        "palace_id": palace.id,
+        "node_uid": node_uid,
+        "focused": focused,
+        "focus_node_uids": focus_node_uids,
+        "focus_count": len(focus_node_uids),
+        "item": palace_json(palace, s),
+    }
 
 
 @router.delete("/palace-segments/{segment_id}")

@@ -1,6 +1,30 @@
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+function Get-StorageLayout {
+    param([Parameter(Mandatory = $true)][string]$RepoRoot)
+
+    $layoutPath = Join-Path $RepoRoot 'apps\api\storage-layout.json'
+    $payload = Get-JsonObject -Path $layoutPath
+    $managedItems = @()
+    foreach ($item in (Get-HashtableValueOrDefault -Table $payload -Key 'managed_items' @())) {
+        if ($item -isnot [hashtable]) {
+            continue
+        }
+        $managedItems += @{
+            key = [string](Get-HashtableValueOrDefault -Table $item -Key 'key' '')
+            relative_path = [string](Get-HashtableValueOrDefault -Table $item -Key 'relative_path' '')
+            kind = [string](Get-HashtableValueOrDefault -Table $item -Key 'kind' '')
+            required = [bool](Get-HashtableValueOrDefault -Table $item -Key 'required' $false)
+            backup = [bool](Get-HashtableValueOrDefault -Table $item -Key 'backup' $false)
+        }
+    }
+    return @{
+        storage_mode = [string](Get-HashtableValueOrDefault -Table $payload -Key 'storage_mode' 'user_app_home')
+        managed_items = $managedItems
+    }
+}
+
 function Get-OptionalEnvValue {
     param(
         [Parameter(Mandatory = $true)][string]$Name,
@@ -130,6 +154,7 @@ function Get-VersionSwitcherConfig {
     $dashscopeBaseUrl = Get-OptionalEnvValueOrNull -Name 'DASHSCOPE_BASE_URL'
     $dashscopeVisionModel = Get-OptionalEnvValueOrNull -Name 'DASHSCOPE_VISION_MODEL'
     $dashscopeTextModel = Get-OptionalEnvValueOrNull -Name 'DASHSCOPE_TEXT_MODEL'
+    $storageLayout = Get-StorageLayout -RepoRoot $resolvedRepoRoot
 
     return [ordered]@{
         RepoRoot = $resolvedRepoRoot
@@ -151,6 +176,7 @@ function Get-VersionSwitcherConfig {
         DashscopeBaseUrl = $dashscopeBaseUrl
         DashscopeVisionModel = $dashscopeVisionModel
         DashscopeTextModel = $dashscopeTextModel
+        StorageLayout = $storageLayout
     }
 }
 
@@ -397,24 +423,51 @@ function New-SharedDataBackup {
     Ensure-Directory -Path $Config.FullBackupsDir
     $timestamp = Get-Date -Format 'yyyyMMdd-HHmmss'
     $folder = Join-Path $Config.FullBackupsDir "$timestamp-$Reason"
-    $dbPath = Join-Path $Config.DataDir 'memory_palace.db'
-    $attachmentsDir = $Config.AttachmentsDir
 
     Ensure-Directory -Path $folder
-    if (Test-Path $dbPath) {
-        Copy-Item -LiteralPath $dbPath -Destination (Join-Path $folder 'memory_palace.db') -Force
-    }
-    if (Test-Path $attachmentsDir) {
-        Copy-Item -LiteralPath $attachmentsDir -Destination (Join-Path $folder 'attachments') -Recurse -Force
-    } else {
-        Ensure-Directory -Path (Join-Path $folder 'attachments')
+    $includedItems = @()
+    foreach ($item in $Config.StorageLayout.managed_items) {
+        if (-not $item.backup) {
+            continue
+        }
+        $relativePath = [string]$item.relative_path
+        if ([string]::IsNullOrWhiteSpace($relativePath)) {
+            continue
+        }
+        $sourcePath = Join-Path $Config.AppHome $relativePath
+        $destinationPath = Join-Path $folder $relativePath
+        $destinationParent = Split-Path $destinationPath -Parent
+        if (-not [string]::IsNullOrWhiteSpace($destinationParent)) {
+            Ensure-Directory -Path $destinationParent
+        }
+        $sourceExists = Test-Path $sourcePath
+        if ($sourceExists) {
+            if ($item.kind -eq 'directory') {
+                Copy-Item -LiteralPath $sourcePath -Destination $destinationPath -Recurse -Force
+            } else {
+                Copy-Item -LiteralPath $sourcePath -Destination $destinationPath -Force
+            }
+        } elseif ($item.kind -eq 'directory' -and $item.required) {
+            Ensure-Directory -Path $destinationPath
+        }
+
+        $includedItems += [ordered]@{
+            key = $item.key
+            relative_path = $relativePath
+            kind = $item.kind
+            required = [bool]$item.required
+            source_exists = [bool]$sourceExists
+            included = [bool]($sourceExists -or ($item.kind -eq 'directory' -and $item.required))
+        }
     }
 
     $manifest = [ordered]@{
+        version = 2
         reason = $Reason
         created_at = (Get-Date).ToString('s')
-        db_file = 'memory_palace.db'
-        attachments_dir = 'attachments'
+        storage_mode = $Config.StorageLayout.storage_mode
+        app_home = $Config.AppHome
+        included_items = $includedItems
     }
     Set-Content -LiteralPath (Join-Path $folder 'manifest.json') -Value ($manifest | ConvertTo-Json -Depth 5) -Encoding UTF8
     return $folder

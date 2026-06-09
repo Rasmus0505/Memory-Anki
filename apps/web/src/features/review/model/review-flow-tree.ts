@@ -196,17 +196,17 @@ export function buildSelectionNodeId(node: MindMapSelection | null): string | nu
 }
 
 const PLACEHOLDER_NODE_STYLE = {
-  fillColor: '#eef2f7',
-  borderColor: '#94a3b8',
+  fillColor: '#fff7ed',
+  borderColor: '#f59e0b',
   borderWidth: 2,
-  color: '#475569',
+  color: '#9a3412',
 }
 
 const REVEALED_NODE_STYLE = {
   fillColor: '#ecfdf5',
-  borderColor: '#22c55e',
+  borderColor: '#10b981',
   borderWidth: 2,
-  color: '#14532d',
+  color: '#065f46',
 }
 
 const RED_NODE_STYLE = {
@@ -230,7 +230,7 @@ const DEFAULT_LINE_STYLE = {
 }
 
 const COMPLETED_LINE_STYLE = {
-  lineColor: '#22c55e',
+  lineColor: '#10b981',
   lineWidth: 3,
 }
 
@@ -424,4 +424,47 @@ export function buildVisibleEditorState(
     editor_local_config: cloneValue(editorState.editor_local_config ?? {}),
     lang: editorState.lang || 'zh',
   }
+}
+
+function collectAncestorIds(
+  focusIds: Set<string>,
+  nodeMap: Map<string, ReviewMindMapNode>,
+): Set<string> {
+  const visibleIds = new Set<string>()
+  focusIds.forEach((id) => {
+    let current = nodeMap.get(id) ?? null
+    while (current) {
+      visibleIds.add(current.id)
+      current = current.parentId ? (nodeMap.get(current.parentId) ?? null) : null
+    }
+  })
+  return visibleIds
+}
+
+export function buildFocusRevealState(
+  root: ReviewMindMapNode,
+  focusNodeIds: Iterable<string>,
+  nodeMap: Map<string, ReviewMindMapNode>,
+  previous: Record<string, RevealState> | null = null,
+) {
+  const focusIds = sanitizeRedNodeIds(root, focusNodeIds)
+  const visibleIds = collectAncestorIds(focusIds, nodeMap)
+  const next = buildInitialRevealState(root)
+  collectNodeIds(root).forEach((id) => {
+    if (id === root.id) {
+      next[id] = 'revealed'
+      return
+    }
+    if (!visibleIds.has(id)) {
+      next[id] = 'hidden'
+      return
+    }
+    if (!focusIds.has(id)) {
+      next[id] = 'revealed'
+      return
+    }
+    const previousState = previous?.[id]
+    next[id] = previousState === 'revealed' ? 'revealed' : 'placeholder'
+  })
+  return next
 }

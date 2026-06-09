@@ -55,6 +55,19 @@
           drop-shadow(0 0 14px rgba(37, 99, 235, 0.28));
       }
 
+      .smm-node.memory-anki-focus-card .smm-node-shape {
+        filter:
+          drop-shadow(0 0 0 rgba(239, 68, 68, 0.16))
+          drop-shadow(0 0 16px rgba(239, 68, 68, 0.34)) !important;
+      }
+
+      .smm-node.memory-anki-focus-card .smm-hover-node {
+        display: block !important;
+        opacity: 1 !important;
+        stroke: rgba(239, 68, 68, 0.9) !important;
+        stroke-width: 4 !important;
+      }
+
       body.is-host-readonly:not(.is-host-readonly-toolbar-visible)
         .smm-node.memory-anki-keyboard-focus
         .smm-hover-node {
@@ -360,6 +373,108 @@
         pointer-events: none;
       }
 
+      .memory-anki-feedback-ripple-layer {
+        position: fixed;
+        inset: 0;
+        z-index: 10035;
+        pointer-events: none;
+      }
+
+      .memory-anki-feedback-ripple {
+        position: fixed;
+        width: 14px;
+        height: 14px;
+        margin-left: -7px;
+        margin-top: -7px;
+        border-radius: 9999px;
+        border: 1px solid rgba(34, 197, 94, 0.58);
+        background: radial-gradient(circle, rgba(34, 197, 94, 0.14), rgba(34, 197, 94, 0));
+        box-shadow: 0 0 12px rgba(34, 197, 94, 0.14);
+        animation: memory-anki-feedback-ripple 300ms ease-out forwards;
+      }
+
+      .memory-anki-feedback-ripple.is-feedback-edit {
+        border-color: rgba(14, 165, 233, 0.58);
+        background: radial-gradient(circle, rgba(14, 165, 233, 0.13), rgba(14, 165, 233, 0));
+        box-shadow: 0 0 13px rgba(14, 165, 233, 0.14);
+      }
+
+      .memory-anki-feedback-ripple.is-feedback-touch {
+        border-color: rgba(148, 163, 184, 0.52);
+        background: radial-gradient(circle, rgba(148, 163, 184, 0.1), rgba(148, 163, 184, 0));
+        box-shadow: 0 0 9px rgba(148, 163, 184, 0.12);
+        animation-duration: 220ms;
+      }
+
+      .memory-anki-feedback-ripple.is-feedback-create,
+      .memory-anki-feedback-ripple.is-feedback-reward {
+        width: 18px;
+        height: 18px;
+        margin-left: -9px;
+        margin-top: -9px;
+        border-color: rgba(251, 191, 36, 0.66);
+        background: radial-gradient(circle, rgba(251, 191, 36, 0.18), rgba(16, 185, 129, 0.04), rgba(251, 191, 36, 0));
+        box-shadow: 0 0 18px rgba(251, 191, 36, 0.18);
+        animation-duration: 420ms;
+      }
+
+      .memory-anki-feedback-ripple.is-feedback-move {
+        border-color: rgba(99, 102, 241, 0.58);
+        background: radial-gradient(circle, rgba(99, 102, 241, 0.14), rgba(56, 189, 248, 0));
+        box-shadow: 0 0 14px rgba(99, 102, 241, 0.14);
+        animation-duration: 340ms;
+      }
+
+      .memory-anki-feedback-ripple.is-feedback-link {
+        border-color: rgba(168, 85, 247, 0.56);
+        background: radial-gradient(circle, rgba(168, 85, 247, 0.13), rgba(168, 85, 247, 0));
+        box-shadow: 0 0 14px rgba(168, 85, 247, 0.14);
+      }
+
+      .memory-anki-feedback-ripple.is-feedback-segment {
+        border-color: rgba(245, 158, 11, 0.58);
+        background: radial-gradient(circle, rgba(245, 158, 11, 0.13), rgba(245, 158, 11, 0));
+        box-shadow: 0 0 14px rgba(245, 158, 11, 0.14);
+      }
+
+      .memory-anki-feedback-ripple.is-feedback-mode {
+        border-color: rgba(245, 158, 11, 0.56);
+        background: radial-gradient(circle, rgba(245, 158, 11, 0.13), rgba(245, 158, 11, 0));
+        box-shadow: 0 0 14px rgba(245, 158, 11, 0.14);
+      }
+
+      .memory-anki-feedback-ripple.is-feedback-danger {
+        border-color: rgba(239, 68, 68, 0.62);
+        background: radial-gradient(circle, rgba(239, 68, 68, 0.14), rgba(239, 68, 68, 0));
+        box-shadow: 0 0 15px rgba(239, 68, 68, 0.16);
+      }
+
+      .memory-anki-feedback-ripple.is-feedback-level-micro {
+        width: 10px;
+        height: 10px;
+        margin-left: -5px;
+        margin-top: -5px;
+        opacity: 0.72;
+        box-shadow: none;
+      }
+
+      .memory-anki-feedback-ripple.is-feedback-level-milestone {
+        box-shadow: 0 0 20px rgba(251, 191, 36, 0.2);
+      }
+
+      .memory-anki-feedback-particle {
+        position: fixed;
+        width: 3px;
+        height: 3px;
+        margin-left: -1.5px;
+        margin-top: -1.5px;
+        border-radius: 999px;
+        background: var(--memory-anki-feedback-particle-color, rgba(16, 185, 129, 0.92));
+        box-shadow: 0 0 7px var(--memory-anki-feedback-particle-color, rgba(16, 185, 129, 0.22));
+        transform: translate3d(0, 0, 0);
+        animation: memory-anki-feedback-particle 420ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+      }
+
       .memory-anki-selection-drag-layer[hidden] {
         display: none !important;
       }
@@ -429,9 +544,545 @@
         transition: opacity 120ms ease;
       }
 
+      .smm-node.memory-anki-feedback-touch .smm-hover-node,
+      .smm-node.memory-anki-feedback-select .smm-hover-node,
+      .smm-node.memory-anki-feedback-edit .smm-hover-node,
+      .smm-node.memory-anki-feedback-confirm .smm-hover-node,
+      .smm-node.memory-anki-feedback-create .smm-hover-node,
+      .smm-node.memory-anki-feedback-link .smm-hover-node,
+      .smm-node.memory-anki-feedback-segment .smm-hover-node,
+      .smm-node.memory-anki-feedback-move .smm-hover-node,
+      .smm-node.memory-anki-feedback-mode .smm-hover-node,
+      .smm-node.memory-anki-feedback-reward .smm-hover-node,
+      .smm-node.memory-anki-feedback-danger .smm-hover-node {
+        display: block !important;
+        opacity: 1 !important;
+        stroke-width: 2.4 !important;
+      }
+
+      .smm-node.memory-anki-feedback-touch .smm-hover-node {
+        stroke: rgba(148, 163, 184, 0.82) !important;
+      }
+
+      .smm-node.memory-anki-feedback-select .smm-hover-node {
+        stroke: rgba(59, 130, 246, 0.84) !important;
+      }
+
+      .smm-node.memory-anki-feedback-edit .smm-hover-node {
+        stroke: rgba(14, 165, 233, 0.84) !important;
+      }
+
+      .smm-node.memory-anki-feedback-confirm .smm-hover-node {
+        stroke: rgba(16, 185, 129, 0.9) !important;
+      }
+
+      .smm-node.memory-anki-feedback-create .smm-hover-node,
+      .smm-node.memory-anki-feedback-reward .smm-hover-node {
+        stroke: rgba(251, 191, 36, 0.94) !important;
+        stroke-width: 3 !important;
+      }
+
+      .smm-node.memory-anki-feedback-link .smm-hover-node {
+        stroke: rgba(168, 85, 247, 0.86) !important;
+      }
+
+      .smm-node.memory-anki-feedback-segment .smm-hover-node {
+        stroke: rgba(245, 158, 11, 0.86) !important;
+      }
+
+      .smm-node.memory-anki-feedback-move .smm-hover-node {
+        stroke: rgba(99, 102, 241, 0.9) !important;
+      }
+
+      .smm-node.memory-anki-feedback-mode .smm-hover-node {
+        stroke: rgba(245, 158, 11, 0.9) !important;
+      }
+
+      .smm-node.memory-anki-feedback-danger .smm-hover-node {
+        stroke: rgba(239, 68, 68, 0.92) !important;
+      }
+
+      .smm-node.memory-anki-feedback-touch .smm-node-shape {
+        animation: memory-anki-feedback-node-touch 180ms ease-out;
+        filter: drop-shadow(0 0 6px rgba(148, 163, 184, 0.14));
+      }
+
+      .smm-node.memory-anki-feedback-select .smm-node-shape {
+        animation: memory-anki-feedback-node-tap 260ms ease-out;
+        filter: drop-shadow(0 0 9px rgba(59, 130, 246, 0.16));
+      }
+
+      .smm-node.memory-anki-feedback-edit .smm-node-shape {
+        animation: memory-anki-feedback-node-edit 320ms ease-out;
+        filter: drop-shadow(0 0 10px rgba(14, 165, 233, 0.17));
+      }
+
+      .smm-node.memory-anki-feedback-confirm .smm-node-shape {
+        animation: memory-anki-feedback-node-confirm 340ms ease-out;
+        filter: drop-shadow(0 0 12px rgba(16, 185, 129, 0.18));
+      }
+
+      .smm-node.memory-anki-feedback-create .smm-node-shape,
+      .smm-node.memory-anki-feedback-reward .smm-node-shape {
+        animation: memory-anki-feedback-node-bloom 520ms cubic-bezier(0.16, 1, 0.3, 1);
+        filter:
+          drop-shadow(0 0 12px rgba(251, 191, 36, 0.22))
+          drop-shadow(0 0 20px rgba(16, 185, 129, 0.1));
+      }
+
+      .smm-node.memory-anki-feedback-link .smm-node-shape {
+        animation: memory-anki-feedback-node-link 440ms ease-out;
+        filter: drop-shadow(0 0 12px rgba(168, 85, 247, 0.16));
+      }
+
+      .smm-node.memory-anki-feedback-segment .smm-node-shape {
+        animation: memory-anki-feedback-node-segment 440ms ease-out;
+        filter: drop-shadow(0 0 12px rgba(245, 158, 11, 0.18));
+      }
+
+      .smm-node.memory-anki-feedback-move .smm-node-shape {
+        animation: memory-anki-feedback-node-move 460ms cubic-bezier(0.16, 1, 0.3, 1);
+        filter: drop-shadow(0 0 12px rgba(99, 102, 241, 0.18));
+      }
+
+      .smm-node.memory-anki-feedback-mode .smm-node-shape {
+        animation: memory-anki-feedback-node-mode 520ms ease-out;
+        filter: drop-shadow(0 0 12px rgba(245, 158, 11, 0.18));
+      }
+
+      .smm-node.memory-anki-feedback-danger .smm-node-shape {
+        animation: memory-anki-feedback-node-danger 340ms ease-out;
+        filter: drop-shadow(0 0 11px rgba(239, 68, 68, 0.18));
+      }
+
+      .memory-anki-review-line-trace {
+        stroke: rgba(59, 130, 246, 0.88) !important;
+        stroke-width: 2.8 !important;
+        filter: drop-shadow(0 0 7px rgba(59, 130, 246, 0.14));
+        animation: memory-anki-review-line-trace 360ms ease-out;
+      }
+
+      .memory-anki-review-line-clear {
+        stroke: rgba(239, 68, 68, 0.9) !important;
+        stroke-width: 3.2 !important;
+        filter: drop-shadow(0 0 7px rgba(239, 68, 68, 0.15));
+        animation: memory-anki-review-line-clear 420ms ease-out;
+      }
+
+      .memory-anki-review-line-spawn {
+        stroke: rgba(14, 165, 233, 0.94) !important;
+        stroke-width: 3.2 !important;
+        filter: drop-shadow(0 0 7px rgba(14, 165, 233, 0.15));
+        animation: memory-anki-review-line-spawn 420ms ease-out;
+      }
+
+      .memory-anki-review-line-confirm {
+        stroke: rgba(16, 185, 129, 0.94) !important;
+        stroke-width: 3.2 !important;
+        filter: drop-shadow(0 0 7px rgba(16, 185, 129, 0.16));
+        animation: memory-anki-review-line-confirm 380ms ease-out;
+      }
+
+      .memory-anki-review-line-soft {
+        stroke-width: 2.4 !important;
+        opacity: 0.7 !important;
+      }
+
+      .memory-anki-feedback-line-create,
+      .memory-anki-feedback-line-reward {
+        stroke: rgba(251, 191, 36, 0.96) !important;
+        stroke-width: 3.6 !important;
+        filter:
+          drop-shadow(0 0 8px rgba(251, 191, 36, 0.18))
+          drop-shadow(0 0 14px rgba(16, 185, 129, 0.08));
+        animation: memory-anki-feedback-line-bloom 560ms cubic-bezier(0.16, 1, 0.3, 1);
+      }
+
+      .memory-anki-feedback-line-link {
+        stroke: rgba(168, 85, 247, 0.92) !important;
+        stroke-width: 3.3 !important;
+        filter: drop-shadow(0 0 8px rgba(168, 85, 247, 0.15));
+        animation: memory-anki-feedback-line-link 520ms ease-out;
+      }
+
+      .memory-anki-feedback-line-segment {
+        stroke: rgba(245, 158, 11, 0.94) !important;
+        stroke-width: 3.3 !important;
+        filter: drop-shadow(0 0 8px rgba(245, 158, 11, 0.16));
+        animation: memory-anki-feedback-line-segment 520ms ease-out;
+      }
+
+      .memory-anki-feedback-line-move {
+        stroke: rgba(99, 102, 241, 0.96) !important;
+        stroke-width: 3.3 !important;
+        filter: drop-shadow(0 0 8px rgba(99, 102, 241, 0.16));
+        animation: memory-anki-feedback-line-move 520ms ease-out;
+      }
+
       .memory-anki-selection-drag-dimmed-line {
         opacity: 0.2 !important;
         transition: opacity 120ms ease;
+      }
+
+      body.is-host-readonly.memory-anki-review-fx-enabled .smm-node {
+        isolation: isolate;
+      }
+
+      body.is-host-readonly.memory-anki-review-fx-enabled .smm-node .smm-node-shape,
+      body.is-host-readonly.memory-anki-review-fx-enabled .smm-node .smm-hover-node {
+        transition:
+          filter 180ms ease,
+          opacity 180ms ease,
+          stroke 180ms ease,
+          stroke-width 180ms ease;
+        transform-origin: center center;
+      }
+
+      body.is-host-readonly.memory-anki-review-fx-enabled .smm-node .smm-node-shape,
+      body.is-host-readonly.memory-anki-review-fx-enabled .smm-node .smm-hover-node {
+        will-change: transform, filter, opacity;
+      }
+
+      body.is-host-readonly.memory-anki-review-fx-enabled .smm-node .smm-richtext-node-wrap,
+      body.is-host-readonly.memory-anki-review-fx-enabled .smm-node .smm-text-node-wrap,
+      body.is-host-readonly.memory-anki-review-fx-enabled .smm-node .ql-editor {
+        will-change: auto;
+        filter: none !important;
+        transform: none !important;
+        text-rendering: optimizeLegibility;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      body.is-host-readonly.memory-anki-review-fx-enabled .smm-node.memory-anki-review-expand-hit .smm-node-shape {
+        animation: memory-anki-review-node-tease 300ms cubic-bezier(0.22, 1, 0.36, 1);
+      }
+
+      body.is-host-readonly.memory-anki-review-fx-enabled .smm-node.memory-anki-review-expand-hit .smm-node-shape {
+        filter:
+          drop-shadow(0 0 0 rgba(250, 204, 21, 0.08))
+          drop-shadow(0 0 14px rgba(250, 204, 21, 0.18));
+      }
+
+      body.is-host-readonly.memory-anki-review-fx-enabled .smm-node.memory-anki-review-reveal-hit .smm-node-shape {
+        animation: memory-anki-review-node-hit 320ms cubic-bezier(0.22, 1, 0.36, 1);
+        filter:
+          drop-shadow(0 0 0 rgba(251, 191, 36, 0.08))
+          drop-shadow(0 0 15px rgba(245, 158, 11, 0.22));
+      }
+
+      body.is-host-readonly.memory-anki-review-fx-enabled .smm-node.memory-anki-review-reveal-hit .smm-hover-node,
+      body.is-host-readonly.memory-anki-review-fx-enabled .smm-node.memory-anki-review-expand-hit .smm-hover-node {
+        display: block !important;
+        opacity: 1 !important;
+        stroke: rgba(250, 204, 21, 0.82) !important;
+        stroke-width: 3.2 !important;
+      }
+
+      body.is-host-readonly.memory-anki-review-fx-enabled .smm-node.memory-anki-review-reveal-hit .smm-node-shape::after,
+      body.is-host-readonly.memory-anki-review-fx-enabled .smm-node.memory-anki-review-branch-clear .smm-node-shape::after,
+      body.is-host-readonly.memory-anki-review-fx-enabled .smm-node.memory-anki-review-pulse-source .smm-node-shape::after,
+      body.is-host-readonly.memory-anki-review-fx-enabled .smm-node.memory-anki-review-expand-hit .smm-node-shape::after {
+        content: "";
+        position: absolute;
+        inset: -6px;
+        border-radius: 22px;
+        pointer-events: none;
+        background: linear-gradient(115deg, transparent 12%, rgba(251, 191, 36, 0.1) 42%, rgba(253, 224, 71, 0.36) 50%, rgba(251, 191, 36, 0.08) 58%, transparent 88%);
+        mix-blend-mode: normal;
+        animation: memory-anki-review-node-sweep 300ms ease-out;
+      }
+
+      body.is-host-readonly.memory-anki-review-fx-enabled .smm-node.memory-anki-review-branch-clear .smm-node-shape {
+        filter:
+          drop-shadow(0 0 0 rgba(16, 185, 129, 0.08))
+          drop-shadow(0 0 15px rgba(16, 185, 129, 0.2));
+      }
+
+      body.is-host-readonly.memory-anki-review-fx-enabled .smm-node.memory-anki-review-pulse-source .smm-node-shape {
+        animation: memory-anki-review-node-pulse 520ms ease-out;
+      }
+
+      body.is-host-readonly.memory-anki-review-fx-enabled .smm-node.memory-anki-review-soft .smm-node-shape {
+        filter: drop-shadow(0 0 9px rgba(245, 158, 11, 0.12));
+      }
+
+      body.is-host-readonly.memory-anki-review-fx-enabled .smm-node.memory-anki-review-ring-strong .smm-hover-node {
+        display: block !important;
+        opacity: 1 !important;
+        stroke: rgba(251, 191, 36, 0.86) !important;
+        stroke-width: 2.8 !important;
+      }
+
+      body.is-host-readonly.memory-anki-review-fx-enabled .memory-anki-review-line-trace {
+        stroke: rgba(245, 158, 11, 0.94) !important;
+        stroke-width: 3.2 !important;
+        filter:
+          drop-shadow(0 0 7px rgba(251, 191, 36, 0.18));
+        animation: memory-anki-review-line-trace 360ms ease-out;
+      }
+
+      body.is-host-readonly.memory-anki-review-fx-enabled .memory-anki-review-line-clear {
+        stroke: rgba(16, 185, 129, 0.92) !important;
+        stroke-width: 3.5 !important;
+        filter:
+          drop-shadow(0 0 8px rgba(16, 185, 129, 0.18));
+        animation: memory-anki-review-line-clear 420ms ease-out;
+      }
+
+      body.is-host-readonly.memory-anki-review-fx-enabled .memory-anki-review-line-spawn {
+        stroke: rgba(250, 204, 21, 0.96) !important;
+        stroke-width: 3.6 !important;
+        filter:
+          drop-shadow(0 0 8px rgba(250, 204, 21, 0.18));
+        animation: memory-anki-review-line-spawn 420ms cubic-bezier(0.16, 1, 0.3, 1);
+      }
+
+      body.is-host-readonly.memory-anki-review-fx-enabled .memory-anki-review-line-confirm {
+        stroke: rgba(16, 185, 129, 0.98) !important;
+        stroke-width: 3.6 !important;
+        filter:
+          drop-shadow(0 0 8px rgba(16, 185, 129, 0.18));
+        animation: memory-anki-review-line-confirm 360ms cubic-bezier(0.22, 1, 0.36, 1);
+      }
+
+      body.is-host-readonly.memory-anki-review-fx-enabled .memory-anki-review-line-soft {
+        stroke-width: 2.5 !important;
+        opacity: 0.72 !important;
+      }
+
+      @keyframes memory-anki-review-node-tease {
+        0% { transform: scale(1); }
+        28% { transform: scale(1.025); }
+        100% { transform: scale(1); }
+      }
+
+      @keyframes memory-anki-review-node-hit {
+        0% { transform: scale(1); }
+        34% { transform: scale(1.04); }
+        100% { transform: scale(1); }
+      }
+
+      @keyframes memory-anki-review-node-pulse {
+        0% { transform: scale(1); }
+        24% { transform: scale(1.025); }
+        100% { transform: scale(1); }
+      }
+
+      @keyframes memory-anki-review-node-sweep {
+        0% {
+          opacity: 0;
+          transform: translateX(-24%) skewX(-14deg);
+        }
+        20% {
+          opacity: 1;
+        }
+        100% {
+          opacity: 0;
+          transform: translateX(24%) skewX(-14deg);
+        }
+      }
+
+      @keyframes memory-anki-review-line-trace {
+        0% {
+          opacity: 0.12;
+          stroke-dasharray: 10 14;
+          stroke-dashoffset: 36;
+        }
+        100% {
+          opacity: 1;
+          stroke-dasharray: none;
+          stroke-dashoffset: 0;
+        }
+      }
+
+      @keyframes memory-anki-review-line-clear {
+        0% {
+          opacity: 0.16;
+          stroke-dasharray: 10 10;
+          stroke-dashoffset: 32;
+        }
+        100% {
+          opacity: 1;
+          stroke-dasharray: none;
+          stroke-dashoffset: 0;
+        }
+      }
+
+      @keyframes memory-anki-review-line-spawn {
+        0% {
+          opacity: 0.08;
+          stroke-dasharray: 8 22;
+          stroke-dashoffset: 48;
+        }
+        55% {
+          opacity: 1;
+        }
+        100% {
+          opacity: 1;
+          stroke-dasharray: none;
+          stroke-dashoffset: 0;
+        }
+      }
+
+      @keyframes memory-anki-review-line-confirm {
+        0% {
+          opacity: 0.16;
+          stroke-dasharray: 20 14;
+          stroke-dashoffset: -36;
+        }
+        100% {
+          opacity: 1;
+          stroke-dasharray: none;
+          stroke-dashoffset: 0;
+        }
+      }
+
+      @keyframes memory-anki-feedback-ripple {
+        0% {
+          opacity: 0.58;
+          transform: scale(0.56);
+        }
+        100% {
+          opacity: 0;
+          transform: scale(2.3);
+        }
+      }
+
+      @keyframes memory-anki-feedback-particle {
+        0% {
+          opacity: 0;
+          transform: translate3d(0, 0, 0) scale(0.6);
+        }
+        18% {
+          opacity: 1;
+        }
+        100% {
+          opacity: 0;
+          transform:
+            translate3d(
+              var(--memory-anki-feedback-particle-x, 0px),
+              var(--memory-anki-feedback-particle-y, 0px),
+              0
+            )
+            scale(0.2);
+        }
+      }
+
+      @keyframes memory-anki-feedback-node-touch {
+        0% { transform: scale(1); }
+        45% { transform: scale(0.985); }
+        100% { transform: scale(1); }
+      }
+
+      @keyframes memory-anki-feedback-node-tap {
+        0% { transform: scale(1); }
+        42% { transform: scale(1.018); }
+        100% { transform: scale(1); }
+      }
+
+      @keyframes memory-anki-feedback-node-edit {
+        0% { transform: scale(1); }
+        35% { transform: scale(1.025); }
+        100% { transform: scale(1); }
+      }
+
+      @keyframes memory-anki-feedback-node-confirm {
+        0% { transform: scale(1); }
+        38% { transform: scale(1.03); }
+        100% { transform: scale(1); }
+      }
+
+      @keyframes memory-anki-feedback-node-bloom {
+        0% { transform: scale(0.98); }
+        34% { transform: scale(1.045); }
+        68% { transform: scale(1.01); }
+        100% { transform: scale(1); }
+      }
+
+      @keyframes memory-anki-feedback-node-link {
+        0% { transform: translateX(0) scale(1); }
+        30% { transform: translateX(-1px) scale(1.018); }
+        62% { transform: translateX(1px) scale(1.012); }
+        100% { transform: translateX(0) scale(1); }
+      }
+
+      @keyframes memory-anki-feedback-node-segment {
+        0% { transform: scale(1); }
+        35% { transform: scale(1.022) rotate(-0.25deg); }
+        70% { transform: scale(1.008) rotate(0.25deg); }
+        100% { transform: scale(1) rotate(0); }
+      }
+
+      @keyframes memory-anki-feedback-node-move {
+        0% { transform: translateY(0) scale(1); }
+        34% { transform: translateY(-1.5px) scale(1.02); }
+        100% { transform: translateY(0) scale(1); }
+      }
+
+      @keyframes memory-anki-feedback-node-mode {
+        0% { transform: scale(1); filter: saturate(1); }
+        42% { transform: scale(1.02); filter: saturate(1.12); }
+        100% { transform: scale(1); filter: saturate(1); }
+      }
+
+      @keyframes memory-anki-feedback-node-danger {
+        0% { transform: translateX(0); }
+        24% { transform: translateX(-2px); }
+        48% { transform: translateX(2px); }
+        100% { transform: translateX(0); }
+      }
+
+      @keyframes memory-anki-feedback-line-bloom {
+        0% {
+          opacity: 0.12;
+          stroke-dasharray: 4 20;
+          stroke-dashoffset: 42;
+        }
+        55% { opacity: 1; }
+        100% {
+          opacity: 1;
+          stroke-dasharray: none;
+          stroke-dashoffset: 0;
+        }
+      }
+
+      @keyframes memory-anki-feedback-line-link {
+        0% {
+          opacity: 0.18;
+          stroke-dasharray: 2 12;
+          stroke-dashoffset: -32;
+        }
+        100% {
+          opacity: 1;
+          stroke-dasharray: none;
+          stroke-dashoffset: 0;
+        }
+      }
+
+      @keyframes memory-anki-feedback-line-segment {
+        0% {
+          opacity: 0.18;
+          stroke-dasharray: 14 8;
+          stroke-dashoffset: 32;
+        }
+        100% {
+          opacity: 1;
+          stroke-dasharray: none;
+          stroke-dashoffset: 0;
+        }
+      }
+
+      @keyframes memory-anki-feedback-line-move {
+        0% {
+          opacity: 0.14;
+          stroke-dasharray: 24 10;
+          stroke-dashoffset: 46;
+        }
+        100% {
+          opacity: 1;
+          stroke-dasharray: none;
+          stroke-dashoffset: 0;
+        }
       }
 
       body.memory-anki-selection-dragging,
@@ -457,6 +1108,7 @@
       <div class="memory-anki-selection-drag-slot" hidden></div>
       <div class="memory-anki-selection-drag-proxy" hidden></div>
     </div>
+    <div class="memory-anki-feedback-ripple-layer" aria-hidden="true"></div>
     <script>
       const hostId = new URLSearchParams(window.location.search).get('host')
       const KEYBOARD_FOCUS_CLASS = 'memory-anki-keyboard-focus'
@@ -472,6 +1124,14 @@
         nodeUidToSegment: new Map(),
         nodeParentToChildren: new Map(),
         nodeChildToParent: new Map(),
+      }
+      const reviewFxState = {
+        activeTimers: new Set(),
+        activeNodeClasses: new Map(),
+        activeLineClasses: new Map(),
+      }
+      const feedbackState = {
+        lastEventAtByKey: new Map(),
       }
       const immersiveToggleState = {
         nativeFullscreenRegistered: false,
@@ -562,8 +1222,14 @@
         pendingViewFitAfterRender: false,
         pendingFocusRestore: null,
         pendingViewMemoryFocusRestore: null,
+        pendingFocusRequest: null,
         initialHydrationComplete: false,
         lastServerSyncedFingerprint: '',
+      }
+      const viewportRefreshState = {
+        lastSizeSignature: '',
+        scheduled: false,
+        fitRequested: false,
       }
       const viewMemoryState = {
         snapshots: new Map(),
@@ -704,6 +1370,42 @@
           editor_local_config: cloneValue(getHostBridge()?.getLocalConfig?.()) || {},
           lang: getHostBridge()?.getLanguage?.() || 'zh',
         }
+      }
+
+      function updatePendingEditorStateBaseline(overrides = {}) {
+        const currentPendingState = window.__memoryAnkiPendingEditorState || {}
+        const baselineState =
+          currentPendingState.editorState && typeof currentPendingState.editorState === 'object'
+            ? cloneValue(currentPendingState.editorState)
+            : getPreferredHostEditorStateSnapshot()
+        const nextEditorState = {
+          editor_doc:
+            Object.prototype.hasOwnProperty.call(overrides, 'editor_doc')
+              ? cloneValue(overrides.editor_doc) || {}
+              : cloneValue(baselineState.editor_doc) || {},
+          editor_config:
+            Object.prototype.hasOwnProperty.call(overrides, 'editor_config')
+              ? cloneValue(overrides.editor_config) || {}
+              : cloneValue(baselineState.editor_config) || {},
+          editor_local_config:
+            Object.prototype.hasOwnProperty.call(overrides, 'editor_local_config')
+              ? cloneValue(overrides.editor_local_config) || {}
+              : cloneValue(baselineState.editor_local_config) || {},
+          lang:
+            Object.prototype.hasOwnProperty.call(overrides, 'lang')
+              ? overrides.lang || 'zh'
+              : baselineState.lang || 'zh',
+        }
+        const preserveView = Boolean(currentPendingState.preserveView)
+        window.__memoryAnkiPendingEditorState = {
+          ...currentPendingState,
+          editorState: nextEditorState,
+          preserveView,
+          syncIntent: currentPendingState.syncIntent === 'replace' ? 'replace' : 'soft',
+          viewPolicy: currentPendingState.viewPolicy === 'reset' ? 'reset' : 'preserve',
+          fingerprint: buildEditorStateFingerprint(nextEditorState, preserveView),
+        }
+        return nextEditorState
       }
 
       function canWriteBackToHost() {
@@ -958,6 +1660,46 @@
         }, 0)
       }
 
+      function buildCurrentLocalEditorStateSnapshot() {
+        const pendingEditorState = window.__memoryAnkiPendingEditorState?.editorState
+        return {
+          editor_doc:
+            cloneValue(getCurrentEditorDocSnapshot()) ||
+            cloneValue(pendingEditorState?.editor_doc) ||
+            {},
+          editor_config:
+            cloneValue(getHostBridge()?.getMindMapConfig?.()) ||
+            cloneValue(pendingEditorState?.editor_config) ||
+            {},
+          editor_local_config:
+            cloneValue(getHostBridge()?.getLocalConfig?.()) ||
+            cloneValue(pendingEditorState?.editor_local_config) ||
+            {},
+          lang:
+            getHostBridge()?.getLanguage?.() ||
+            pendingEditorState?.lang ||
+            'zh',
+        }
+      }
+
+      function shouldDiscardStalePendingSoftPayload(payload) {
+        if (!payload || (payload.syncIntent || 'soft') !== 'soft') return false
+        const nextEditorState = payload.editorState
+        if (!nextEditorState || typeof nextEditorState !== 'object') return false
+        const payloadFingerprint =
+          payload.fingerprint ||
+          buildEditorStateFingerprint(nextEditorState, Boolean(payload.preserveView))
+        const currentLocalFingerprint = buildEditorStateFingerprint(
+          buildCurrentLocalEditorStateSnapshot(),
+          Boolean(payload.preserveView),
+        )
+        return (
+          currentLocalFingerprint.length > 0 &&
+          payloadFingerprint.length > 0 &&
+          currentLocalFingerprint !== payloadFingerprint
+        )
+      }
+
       function isImmediateSoftSyncReason(reason) {
         return reason === 'review_flip'
       }
@@ -1068,6 +1810,11 @@
       function getBilinkItems() {
         const raw = window.__memoryAnkiHostState?.bilinkItems
         return Array.isArray(raw) ? raw : []
+      }
+
+      function getFocusNodeUids() {
+        const raw = window.__memoryAnkiHostState?.focusNodeUids
+        return Array.isArray(raw) ? raw.map(value => String(value)).filter(Boolean) : []
       }
 
       function getCurrentPalaceId() {
@@ -1803,6 +2550,410 @@
           .filter(Boolean)
       }
 
+      function clearReviewFxState() {
+        reviewFxState.activeTimers.forEach((timer) => {
+          window.clearTimeout(timer)
+        })
+        reviewFxState.activeTimers.clear()
+        reviewFxState.activeNodeClasses.forEach((classNames, uid) => {
+          const element = getNodeElement(uid)
+          if (element?.classList && Array.isArray(classNames)) {
+            element.classList.remove(...classNames)
+          }
+        })
+        reviewFxState.activeLineClasses.forEach((classNames, key) => {
+          const [uid, indexValue] = String(key).split(':')
+          const node = getNodeByUid(uid)
+          const line = getNodeLineElements(node)[Number(indexValue)] || null
+          if (line?.classList && Array.isArray(classNames)) {
+            line.classList.remove(...classNames)
+          }
+        })
+        reviewFxState.activeNodeClasses.clear()
+        reviewFxState.activeLineClasses.clear()
+      }
+
+      function isReviewFxAllowed(intensity) {
+        const hostState = window.__memoryAnkiHostState || {}
+        if (!hostState.readonly || !hostState.practiceModeActive) return false
+        return intensity !== 'none'
+      }
+
+      function registerReviewFxCleanup(timer) {
+        reviewFxState.activeTimers.add(timer)
+      }
+
+      function markNodeReviewFx(uid, classNames, durationMs) {
+        const element = getNodeElement(uid)
+        if (!element?.classList || !Array.isArray(classNames) || classNames.length === 0) return
+        const previous = reviewFxState.activeNodeClasses.get(uid) || []
+        if (previous.length > 0) {
+          element.classList.remove(...previous)
+        }
+        element.classList.add(...classNames)
+        reviewFxState.activeNodeClasses.set(uid, classNames)
+        const timer = window.setTimeout(() => {
+          reviewFxState.activeTimers.delete(timer)
+          element.classList.remove(...classNames)
+          if (reviewFxState.activeNodeClasses.get(uid) === classNames) {
+            reviewFxState.activeNodeClasses.delete(uid)
+          }
+        }, durationMs)
+        registerReviewFxCleanup(timer)
+      }
+
+      function markLineReviewFx(uid, lineClassName, durationMs, options = {}) {
+        const node = getNodeByUid(uid)
+        const lines = getNodeLineElements(node)
+        lines.forEach((line, index) => {
+          if (!line?.classList) return
+          const classNames = [lineClassName]
+          if (options.soft) classNames.push('memory-anki-review-line-soft')
+          const key = `${uid}:${index}`
+          const previous = reviewFxState.activeLineClasses.get(key) || []
+          if (previous.length > 0) {
+            line.classList.remove(...previous)
+          }
+          line.classList.add(...classNames)
+          reviewFxState.activeLineClasses.set(key, classNames)
+          const timer = window.setTimeout(() => {
+            reviewFxState.activeTimers.delete(timer)
+            line.classList.remove(...classNames)
+            if (reviewFxState.activeLineClasses.get(key) === classNames) {
+              reviewFxState.activeLineClasses.delete(key)
+            }
+          }, durationMs)
+          registerReviewFxCleanup(timer)
+        })
+      }
+
+      function collectReviewFxPath(uid, depthLimit = 3) {
+        const path = []
+        let current = getNodeByUid(uid)
+        let steps = 0
+        while (current && steps < depthLimit) {
+          const currentUid = getNodeUid(current)
+          if (!currentUid) break
+          path.push(currentUid)
+          current = current.parent || null
+          steps += 1
+        }
+        return path
+      }
+
+      function buildReviewFxNodeClasses(baseClassName, soft, extraClassNames = []) {
+        return [baseClassName].concat(extraClassNames).concat(soft ? ['memory-anki-review-soft'] : [])
+      }
+
+      function isFeedbackFxAllowed(intensity) {
+        return intensity !== 'none'
+      }
+
+      function getFeedbackLevel(type) {
+        if (
+          type === 'key_press' ||
+          type === 'pointer_down' ||
+          type === 'pointer_click' ||
+          type === 'hover_pulse' ||
+          type === 'node_select' ||
+          type === 'drag_start' ||
+          type === 'node_move' ||
+          type === 'toolbar_action'
+        ) return 'micro'
+        if (
+          type === 'branch_clear' ||
+          type === 'all_clear_ready' ||
+          type === 'session_complete' ||
+          type === 'import_apply'
+        ) return 'milestone'
+        return 'action'
+      }
+
+      function getFeedbackOrigin(type, source) {
+        if (source === 'keydown' || type === 'key_press' || type === 'text_commit') return 'keyboard'
+        if (source === 'clickable' || source === 'fullscreen' || type === 'toolbar_action' || type === 'mode_switch') return 'toolbar'
+        if (type === 'category_expand' || type === 'next_level_expand' || type === 'card_reveal' || type === 'branch_clear' || type === 'all_clear_ready' || type === 'session_complete') return 'review'
+        if (type === 'pointer_down' || type === 'pointer_click' || type === 'context_menu' || type === 'drag_start' || type === 'drag_drop') return 'pointer'
+        if (type === 'save_success' || type === 'save_error' || type === 'import_apply') return 'system'
+        return 'node'
+      }
+
+      function getFeedbackVisualKind(type) {
+        if (type === 'node_delete' || type === 'save_error') return 'danger'
+        if (type === 'node_create' || type === 'import_apply') return 'create'
+        if (type === 'card_reveal' || type === 'branch_clear' || type === 'all_clear_ready' || type === 'session_complete') return 'reward'
+        if (type === 'bilink_action') return 'link'
+        if (type === 'segment_action') return 'segment'
+        if (type === 'drag_start' || type === 'drag_drop' || type === 'node_move') return 'move'
+        if (type === 'mode_switch' || type === 'toolbar_action') return 'mode'
+        if (type === 'node_edit_start' || type === 'key_press' || type === 'text_commit' || type === 'save_success') return 'edit'
+        if (type === 'pointer_down') return 'touch'
+        return 'select'
+      }
+
+      function getFeedbackParticleColor(kind) {
+        if (kind === 'danger') return 'rgba(239, 68, 68, 0.95)'
+        if (kind === 'create' || kind === 'reward') return 'rgba(251, 191, 36, 0.95)'
+        if (kind === 'link') return 'rgba(168, 85, 247, 0.9)'
+        if (kind === 'segment') return 'rgba(245, 158, 11, 0.9)'
+        if (kind === 'move') return 'rgba(99, 102, 241, 0.92)'
+        if (kind === 'mode') return 'rgba(245, 158, 11, 0.92)'
+        if (kind === 'edit') return 'rgba(14, 165, 233, 0.92)'
+        return 'rgba(59, 130, 246, 0.9)'
+      }
+
+      function getFeedbackNodeClassName(type) {
+        return `memory-anki-feedback-${getFeedbackVisualKind(type)}`
+      }
+
+      function getFeedbackLineClassName(type) {
+        if (type === 'node_delete' || type === 'save_error') return 'memory-anki-review-line-clear'
+        const kind = getFeedbackVisualKind(type)
+        if (kind === 'create' || kind === 'reward') return 'memory-anki-feedback-line-create'
+        if (kind === 'link') return 'memory-anki-feedback-line-link'
+        if (kind === 'segment') return 'memory-anki-feedback-line-segment'
+        if (kind === 'move') return 'memory-anki-feedback-line-move'
+        if (type === 'text_commit' || type === 'save_success') {
+          return 'memory-anki-review-line-confirm'
+        }
+        if (type === 'node_edit_start' || type === 'key_press') return 'memory-anki-review-line-spawn'
+        return 'memory-anki-review-line-trace'
+      }
+
+      function createFeedbackRipple(x, y, type = 'pointer_click', level = getFeedbackLevel(type)) {
+        if (typeof x !== 'number' || typeof y !== 'number') return
+        const layer = document.querySelector('.memory-anki-feedback-ripple-layer')
+        if (!layer) return
+        const kind = getFeedbackVisualKind(type)
+        const ripple = document.createElement('span')
+        ripple.className = `memory-anki-feedback-ripple is-feedback-${kind} is-feedback-level-${level}`
+        ripple.style.left = `${Math.round(x)}px`
+        ripple.style.top = `${Math.round(y)}px`
+        layer.appendChild(ripple)
+        if (level !== 'micro' && (kind === 'create' || kind === 'reward' || kind === 'link' || kind === 'segment' || kind === 'danger')) {
+          createFeedbackParticles(x, y, type, kind, level)
+        }
+        window.setTimeout(() => {
+          ripple.remove()
+        }, level === 'milestone' ? 520 : level === 'action' ? 380 : 260)
+      }
+
+      function createFeedbackParticles(x, y, type, kind = getFeedbackVisualKind(type), level = getFeedbackLevel(type)) {
+        const layer = document.querySelector('.memory-anki-feedback-ripple-layer')
+        if (!layer) return
+        if (level === 'micro') return
+        const count =
+          level === 'milestone'
+            ? 4
+            : kind === 'create'
+              ? 3
+              : kind === 'danger'
+                ? 2
+                : 2
+        const color = getFeedbackParticleColor(kind)
+        for (let index = 0; index < count; index += 1) {
+          const particle = document.createElement('span')
+          particle.className = 'memory-anki-feedback-particle'
+          particle.style.left = `${Math.round(x)}px`
+          particle.style.top = `${Math.round(y)}px`
+          particle.style.setProperty('--memory-anki-feedback-particle-color', color)
+          const angle = (Math.PI * 2 * index) / count + (kind === 'danger' ? Math.PI / 8 : 0)
+          const distance = level === 'milestone' ? 26 + (index % 2) * 6 : kind === 'danger' ? 16 + index * 2 : 20 + (index % 2) * 4
+          particle.style.setProperty('--memory-anki-feedback-particle-x', `${Math.round(Math.cos(angle) * distance)}px`)
+          particle.style.setProperty('--memory-anki-feedback-particle-y', `${Math.round(Math.sin(angle) * distance)}px`)
+          layer.appendChild(particle)
+          window.setTimeout(() => {
+            particle.remove()
+          }, 460)
+        }
+      }
+
+      function emitHostFeedback(type, options = {}) {
+        if (!type) return
+        const now = Date.now()
+        const throttleKey = options.throttleKey || type
+        const throttleMs = typeof options.throttleMs === 'number' ? options.throttleMs : 0
+        if (throttleMs > 0) {
+          const lastAt = feedbackState.lastEventAtByKey.get(throttleKey) || 0
+          if (now - lastAt < throttleMs) return
+          feedbackState.lastEventAtByKey.set(throttleKey, now)
+        }
+        getHostBridge()?.notify?.('feedback_event', {
+          type,
+          source: options.source || null,
+          level: options.level || getFeedbackLevel(type),
+          origin: options.origin || getFeedbackOrigin(type, options.source),
+          nodeUid: options.nodeUid || null,
+          x: typeof options.x === 'number' ? options.x : null,
+          y: typeof options.y === 'number' ? options.y : null,
+        })
+      }
+
+      function emitFeedbackFx(payload) {
+        const type = payload && typeof payload.type === 'string' ? payload.type : ''
+        const intensity = payload && typeof payload.intensity === 'string' ? payload.intensity : 'full'
+        if (!isFeedbackFxAllowed(intensity)) return
+        const soft = intensity === 'soft'
+        const level = payload && typeof payload.level === 'string' ? payload.level : getFeedbackLevel(type)
+        const nodeUid = payload && typeof payload.nodeUid === 'string' ? payload.nodeUid : null
+        const relatedNodeUids = Array.isArray(payload?.relatedNodeUids)
+          ? payload.relatedNodeUids.filter((value) => typeof value === 'string')
+          : []
+        if (typeof payload?.x === 'number' && typeof payload?.y === 'number') {
+          createFeedbackRipple(payload.x, payload.y, type, level)
+        }
+        const visualKind = getFeedbackVisualKind(type)
+        const targetUids = nodeUid
+          ? [nodeUid]
+          : relatedNodeUids.length > 0
+            ? relatedNodeUids.slice(-4)
+            : []
+        if (
+          !(typeof payload?.x === 'number' && typeof payload?.y === 'number') &&
+          targetUids.length > 0 &&
+          (visualKind === 'create' || visualKind === 'reward' || visualKind === 'danger')
+        ) {
+          const rect = getNodeElement(targetUids[0])?.getBoundingClientRect?.()
+          if (rect) {
+            createFeedbackRipple(rect.left + rect.width / 2, rect.top + rect.height / 2, type, level)
+          }
+        }
+        targetUids.forEach((uid, index) => {
+          const timer = window.setTimeout(() => {
+            reviewFxState.activeTimers.delete(timer)
+            markNodeReviewFx(
+              uid,
+              buildReviewFxNodeClasses(getFeedbackNodeClassName(type), soft),
+              level === 'micro' ? 180 : level === 'milestone' ? 520 : 360,
+            )
+            markLineReviewFx(uid, getFeedbackLineClassName(type), level === 'micro' ? 180 : 360, { soft })
+          }, index * 40)
+          registerReviewFxCleanup(timer)
+        })
+      }
+
+      function emitReviewFx(payload) {
+        const type = payload && typeof payload.type === 'string' ? payload.type : ''
+        const intensity = payload && typeof payload.intensity === 'string' ? payload.intensity : 'none'
+        const lineMode = payload && typeof payload.lineMode === 'string' ? payload.lineMode : 'trace'
+        if (!isReviewFxAllowed(intensity)) {
+          clearReviewFxState()
+          document.body.classList.remove('memory-anki-review-fx-enabled')
+          return
+        }
+
+        document.body.classList.add('memory-anki-review-fx-enabled')
+        const soft = intensity === 'soft'
+        const nodeUid = payload && typeof payload.nodeUid === 'string' ? payload.nodeUid : null
+        const relatedNodeUids = Array.isArray(payload?.relatedNodeUids)
+          ? payload.relatedNodeUids.filter((value) => typeof value === 'string')
+          : []
+
+        if (type === 'session_reset') {
+          clearReviewFxState()
+          return
+        }
+
+        if ((type === 'category_expand' || type === 'next_level_expand') && nodeUid) {
+          const rect = getNodeElement(nodeUid)?.getBoundingClientRect?.()
+          if (rect) {
+            createFeedbackRipple(rect.left + rect.width / 2, rect.top + rect.height / 2, 'node_create')
+          }
+          markNodeReviewFx(
+            nodeUid,
+            buildReviewFxNodeClasses('memory-anki-review-expand-hit', soft, ['memory-anki-review-ring-strong']),
+            520,
+          )
+          const path = collectReviewFxPath(nodeUid, type === 'category_expand' ? 2 : 3)
+          path.forEach((uid, index) => {
+            const timer = window.setTimeout(() => {
+              reviewFxState.activeTimers.delete(timer)
+              markLineReviewFx(uid, lineMode === 'spawn' ? 'memory-anki-review-line-spawn' : 'memory-anki-review-line-trace', 540, { soft })
+            }, index * 70)
+            registerReviewFxCleanup(timer)
+          })
+          return
+        }
+
+        if (type === 'card_reveal' && nodeUid) {
+          const rect = getNodeElement(nodeUid)?.getBoundingClientRect?.()
+          if (rect) {
+            createFeedbackRipple(rect.left + rect.width / 2, rect.top + rect.height / 2, 'card_reveal')
+          }
+          markNodeReviewFx(
+            nodeUid,
+            buildReviewFxNodeClasses('memory-anki-review-reveal-hit', soft, ['memory-anki-review-ring-strong']),
+            560,
+          )
+          const path = collectReviewFxPath(nodeUid, 3)
+          path.forEach((uid, index) => {
+            const timer = window.setTimeout(() => {
+              reviewFxState.activeTimers.delete(timer)
+              markLineReviewFx(uid, lineMode === 'confirm' ? 'memory-anki-review-line-confirm' : 'memory-anki-review-line-trace', 440, { soft })
+            }, index * 55)
+            registerReviewFxCleanup(timer)
+          })
+          return
+        }
+
+        if (type === 'branch_clear' && nodeUid) {
+          const rect = getNodeElement(nodeUid)?.getBoundingClientRect?.()
+          if (rect) {
+            createFeedbackRipple(rect.left + rect.width / 2, rect.top + rect.height / 2, 'branch_clear')
+          }
+          const path = collectReviewFxPath(nodeUid, 3)
+          path.forEach((uid, index) => {
+            const timer = window.setTimeout(() => {
+              reviewFxState.activeTimers.delete(timer)
+              markNodeReviewFx(
+                uid,
+                buildReviewFxNodeClasses(
+                  index === 0 ? 'memory-anki-review-branch-clear' : 'memory-anki-review-pulse-source',
+                  soft,
+                ),
+                520,
+              )
+              markLineReviewFx(
+                uid,
+                index === 0 || lineMode === 'clear' ? 'memory-anki-review-line-clear' : 'memory-anki-review-line-trace',
+                500,
+                { soft },
+              )
+            }, index * 90)
+            registerReviewFxCleanup(timer)
+          })
+          return
+        }
+
+        if (type === 'all_clear_ready' || type === 'session_complete') {
+          const targetUids = relatedNodeUids.length > 0 ? relatedNodeUids.slice(-6) : []
+          const firstRect = getNodeElement(targetUids.at(-1))?.getBoundingClientRect?.()
+          if (firstRect) {
+            createFeedbackRipple(firstRect.left + firstRect.width / 2, firstRect.top + firstRect.height / 2, type)
+          }
+          targetUids.forEach((uid, index) => {
+            const timer = window.setTimeout(() => {
+              reviewFxState.activeTimers.delete(timer)
+              markNodeReviewFx(
+                uid,
+                [
+                  'memory-anki-review-pulse-source',
+                  'memory-anki-review-ring-strong',
+                ].concat(soft ? ['memory-anki-review-soft'] : []),
+                type === 'session_complete' ? 620 : 440,
+              )
+              markLineReviewFx(
+                uid,
+                type === 'session_complete' ? 'memory-anki-review-line-clear' : 'memory-anki-review-line-trace',
+                type === 'session_complete' ? 560 : 420,
+                { soft },
+              )
+            }, index * 60)
+            registerReviewFxCleanup(timer)
+          })
+        }
+      }
+
       function collectBranchNodeUids(rootUid) {
         const visited = new Set()
         const walk = (uid) => {
@@ -2050,6 +3201,82 @@
 
       function getNodeRect(node) {
         return node?.group?.node?.getBoundingClientRect?.() || null
+      }
+
+      function getHostViewportRect() {
+        const appRect = document.getElementById('app')?.getBoundingClientRect?.() || null
+        if (isMeaningfulClientRect(appRect)) return appRect
+        const width = window.innerWidth || document.documentElement?.clientWidth || 0
+        const height = window.innerHeight || document.documentElement?.clientHeight || 0
+        return {
+          left: 0,
+          top: 0,
+          right: width,
+          bottom: height,
+          width,
+          height,
+        }
+      }
+
+      function centerNodeInViewport(node) {
+        const rect = getNodeRect(node)
+        const viewport = getHostViewportRect()
+        if (!isMeaningfulClientRect(rect) || !viewport?.width || !viewport?.height) {
+          return false
+        }
+        const deltaX = viewport.left + viewport.width / 2 - (rect.left + rect.width / 2)
+        const deltaY = viewport.top + viewport.height / 2 - (rect.top + rect.height / 2)
+        if (Math.abs(deltaX) < 1 && Math.abs(deltaY) < 1) return true
+        const mindMap = getMindMap()
+        try {
+          if (mindMap?.view && typeof mindMap.view.translateXY === 'function') {
+            mindMap.view.translateXY(deltaX, deltaY)
+            requestHostVisualRefresh()
+            return true
+          }
+          if (
+            mindMap?.view &&
+            typeof mindMap.view.getTransformData === 'function' &&
+            typeof mindMap.view.setTransformData === 'function'
+          ) {
+            const transformData = cloneValue(mindMap.view.getTransformData())
+            if (transformData?.state) {
+              transformData.state.x = Number(transformData.state.x || 0) + deltaX
+              transformData.state.y = Number(transformData.state.y || 0) + deltaY
+              transformData.state.sx = Number(transformData.state.sx || 0) + deltaX
+              transformData.state.sy = Number(transformData.state.sy || 0) + deltaY
+            }
+            if (transformData?.transform) {
+              if (typeof transformData.transform.translateX === 'number') {
+                transformData.transform.translateX += deltaX
+              }
+              if (typeof transformData.transform.translateY === 'number') {
+                transformData.transform.translateY += deltaY
+              }
+              if (Array.isArray(transformData.transform.translate)) {
+                transformData.transform.translate[0] =
+                  Number(transformData.transform.translate[0] || 0) + deltaX
+                transformData.transform.translate[1] =
+                  Number(transformData.transform.translate[1] || 0) + deltaY
+              }
+            }
+            mindMap.view.setTransformData(transformData)
+            requestHostVisualRefresh()
+            return true
+          }
+        } catch (error) {
+          console.warn(error)
+        }
+        if (mindMap?.view && typeof mindMap.view.fit === 'function') {
+          try {
+            mindMap.view.fit()
+            requestHostVisualRefresh()
+            return true
+          } catch (error) {
+            console.warn(error)
+          }
+        }
+        return false
       }
 
       function getNodeLayoutDirection(node) {
@@ -3019,6 +4246,42 @@
         return restoreViewMemoryFocusSnapshot(snapshot)
       }
 
+      function restoreFocusRequest(request) {
+        if (!request || typeof request !== 'object') return false
+        const targetUid =
+          typeof request.nodeUid === 'string' && request.nodeUid.trim()
+            ? request.nodeUid.trim()
+            : null
+        if (!targetUid) return false
+        const targetNode = resolveClosestExistingNode(targetUid)
+        if (!targetNode) return false
+        activateNode(targetNode, {
+          notify: false,
+          commit: true,
+          visual: true,
+          clearEditingLock: true,
+        })
+        focusKeyboardSurface()
+        centerNodeInViewport(targetNode)
+        updateKeyboardFocusClass()
+        return true
+      }
+
+      function restorePendingFocusRequestIfNeeded() {
+        const request = syncState.pendingFocusRequest
+        if (!request) return false
+        const restored = restoreFocusRequest(request)
+        if (restored || Number(request.attempts || 0) >= 4) {
+          syncState.pendingFocusRequest = null
+        } else {
+          syncState.pendingFocusRequest = {
+            ...request,
+            attempts: Number(request.attempts || 0) + 1,
+          }
+        }
+        return restored
+      }
+
       function updateKeyboardFocusClass() {
         const targetUid = getStableFocusUid()
         getCachedNodes().forEach((node) => {
@@ -3652,15 +4915,9 @@
           } catch (error) {
             console.warn(error)
           }
-          if (!resized) {
-            requestHostVisualRefresh()
-            return
-          }
-          window.setTimeout(() => {
-            updateKeyboardFocusClass()
-            applySegmentNodeStyles()
-            renderBilinkBadges()
-          }, 0)
+          requestResizeAwareHostVisualRefresh({
+            fitChangedSize: resized,
+          })
         }
 
         runResize()
@@ -4137,6 +5394,22 @@
         selectionDragState.contextMenuBlockUntil = Date.now() + 1200
         setSelectionDragInteractionActive(true)
         showSelectionDragPreview()
+        emitHostFeedback('drag_start', {
+          source: 'selection_drag',
+          nodeUid: selectionDragState.sourceNodeUid || null,
+          x: event.clientX,
+          y: event.clientY,
+        })
+        emitFeedbackFx({
+          type: 'drag_start',
+          nodeUid: selectionDragState.sourceNodeUid || null,
+          relatedNodeUids: selectionDragState.sourceNodeUid ? [selectionDragState.sourceNodeUid] : [],
+          intensity: 'full',
+          lineMode: 'spawn',
+          nonce: Date.now(),
+          x: event.clientX,
+          y: event.clientY,
+        })
         return true
       }
 
@@ -4241,6 +5514,25 @@
               event.stopPropagation()
               event.stopImmediatePropagation?.()
               restoreSelectionDragSourceSelection()
+              emitHostFeedback('drag_drop', {
+                source: 'selection_drag',
+                nodeUid: selectionDragState.previewTargetNodeUid || selectionDragState.sourceNodeUid || null,
+                x: event.clientX,
+                y: event.clientY,
+              })
+              emitFeedbackFx({
+                type: 'drag_drop',
+                nodeUid: selectionDragState.previewTargetNodeUid || selectionDragState.sourceNodeUid || null,
+                relatedNodeUids: [
+                  selectionDragState.sourceNodeUid,
+                  selectionDragState.previewTargetNodeUid,
+                ].filter(Boolean),
+                intensity: 'full',
+                lineMode: 'confirm',
+                nonce: Date.now(),
+                x: event.clientX,
+                y: event.clientY,
+              })
               commitSelectionDrag()
               return
             }
@@ -4308,13 +5600,35 @@
         document.addEventListener(
           'pointerdown',
           event => {
-            if (isReadonlyHost()) return
             markHostInteraction()
             if (interactionState.pointerIntentClearTimer != null) {
               window.clearTimeout(interactionState.pointerIntentClearTimer)
               interactionState.pointerIntentClearTimer = null
             }
             const node = getNodeByElement(event.target)
+            const nodeUid = getNodeUid(node) || null
+            emitHostFeedback('pointer_down', {
+              source: 'pointerdown',
+              nodeUid,
+              x: event.clientX,
+              y: event.clientY,
+              throttleKey: `pointer_down:${event.pointerId || 'mouse'}`,
+              throttleMs: 24,
+            })
+            createFeedbackRipple(event.clientX, event.clientY, event.button === 2 ? 'context_menu' : 'pointer_down')
+            if (nodeUid) {
+              emitFeedbackFx({
+                type: 'pointer_down',
+                nodeUid,
+                relatedNodeUids: [nodeUid],
+                intensity: 'soft',
+                lineMode: 'trace',
+                nonce: Date.now(),
+                x: event.clientX,
+                y: event.clientY,
+              })
+            }
+            if (isReadonlyHost()) return
             interactionState.pointerDownNodeUid = getNodeUid(node) || null
             interactionState.pointerDownWithModifier = Boolean(
               event.metaKey || event.ctrlKey || event.shiftKey || event.altKey,
@@ -4324,9 +5638,16 @@
         )
         document.addEventListener(
           'pointerup',
-          () => {
-            if (isReadonlyHost()) return
+          event => {
             markHostInteraction()
+            emitHostFeedback('pointer_click', {
+              source: 'pointerup',
+              x: event.clientX,
+              y: event.clientY,
+              throttleKey: `pointer_click:${event.pointerId || 'mouse'}`,
+              throttleMs: 36,
+            })
+            if (isReadonlyHost()) return
             if (interactionState.pointerIntentClearTimer != null) {
               window.clearTimeout(interactionState.pointerIntentClearTimer)
             }
@@ -4348,6 +5669,32 @@
           'contextmenu',
           event => {
             markHostInteraction()
+            const feedbackNode = getNodeByElement(event.target, {
+              event,
+              allowReadonlyFallback: true,
+            })
+            const feedbackNodeUid = getNodeUid(feedbackNode) || null
+            emitHostFeedback('context_menu', {
+              source: 'contextmenu',
+              nodeUid: feedbackNodeUid,
+              x: event.clientX,
+              y: event.clientY,
+              throttleKey: `context_menu:${feedbackNodeUid || 'canvas'}`,
+              throttleMs: 80,
+            })
+            createFeedbackRipple(event.clientX, event.clientY, 'context_menu')
+            if (feedbackNodeUid) {
+              emitFeedbackFx({
+                type: 'context_menu',
+                nodeUid: feedbackNodeUid,
+                relatedNodeUids: [feedbackNodeUid],
+                intensity: 'full',
+                lineMode: 'trace',
+                nonce: Date.now(),
+                x: event.clientX,
+                y: event.clientY,
+              })
+            }
             if (!isReadonlyHost()) return
             const node = getNodeByElement(event.target, {
               event,
@@ -4382,9 +5729,119 @@
               notify: true,
               lockEditing: true,
             })
+            const nodeUid = getNodeUid(node) || null
+            emitHostFeedback('node_edit_start', {
+              source: 'dblclick',
+              nodeUid,
+              x: event.clientX,
+              y: event.clientY,
+            })
+            if (nodeUid) {
+              emitFeedbackFx({
+                type: 'node_edit_start',
+                nodeUid,
+                relatedNodeUids: [nodeUid],
+                intensity: 'full',
+                lineMode: 'spawn',
+                nonce: Date.now(),
+                x: event.clientX,
+                y: event.clientY,
+              })
+            }
             scheduleModeSync()
           },
           true
+        )
+      }
+
+      function getKeydownFeedbackType(event) {
+        if (event.repeat) return null
+        if (event.metaKey || event.ctrlKey || event.altKey) return null
+        const editing = Boolean(getActiveEditableElement() || focusState.editingNodeUid)
+        if (editing) {
+          if (
+            event.key.length === 1 ||
+            event.key === 'Enter' ||
+            event.key === 'Backspace' ||
+            event.key === 'Delete' ||
+            event.key === 'Process' ||
+            event.key === 'Unidentified'
+          ) {
+            return 'key_press'
+          }
+          return null
+        }
+        if (!getCurrentActiveNode()) return null
+        if (event.key === 'Enter') return 'node_edit_start'
+        if (event.key === 'Tab' && !event.shiftKey) return 'node_create'
+        if (event.key === 'Delete' || event.key === 'Backspace') return 'node_delete'
+        return null
+      }
+
+      function registerFeedbackInputListeners() {
+        if (window.__memoryAnkiFeedbackInputRegistered) return
+        window.__memoryAnkiFeedbackInputRegistered = true
+        document.addEventListener(
+          'keydown',
+          event => {
+            markHostInteraction()
+            const type = getKeydownFeedbackType(event)
+            if (!type) return
+            const activeNodeUid = focusState.editingNodeUid || focusState.committedNodeUid || focusState.visualFocusNodeUid || null
+            emitHostFeedback(type, {
+              source: 'keydown',
+              nodeUid: activeNodeUid,
+              throttleKey: `key:${type}:${event.key}:${activeNodeUid || 'canvas'}`,
+              throttleMs: type === 'key_press' ? 64 : 120,
+            })
+            if (activeNodeUid) {
+              emitFeedbackFx({
+                type,
+                nodeUid: activeNodeUid,
+                relatedNodeUids: [activeNodeUid],
+                intensity: type === 'key_press' ? 'soft' : 'full',
+                lineMode:
+                  type === 'key_press'
+                    ? 'trace'
+                    : type === 'node_delete'
+                      ? 'clear'
+                      : type === 'node_edit_start'
+                        ? 'spawn'
+                        : 'confirm',
+                nonce: Date.now(),
+              })
+            }
+          },
+          true,
+        )
+        document.addEventListener(
+          'click',
+          event => {
+            const target = event.target
+            const element = target instanceof Element ? target.closest('button,[role="button"],.toolbarBtn,.el-button,.item') : null
+            if (!element) return
+            const node = getNodeByElement(target)
+            const nodeUid = getNodeUid(node) || focusState.committedNodeUid || null
+            emitHostFeedback('toolbar_action', {
+              source: 'clickable',
+              nodeUid,
+              x: event.clientX,
+              y: event.clientY,
+              throttleKey: `toolbar:${String(element.textContent || element.className || 'button').slice(0, 32)}`,
+              throttleMs: 80,
+            })
+            emitFeedbackFx({
+              type: 'toolbar_action',
+              nodeUid,
+              relatedNodeUids: nodeUid ? [nodeUid] : [],
+              intensity: 'soft',
+              lineMode: 'trace',
+              nonce: Date.now(),
+              x: event.clientX,
+              y: event.clientY,
+            })
+          },
+          true,
         )
       }
 
@@ -4404,10 +5861,35 @@
           event.preventDefault()
           event.stopPropagation()
           event.stopImmediatePropagation?.()
+          const nodeUid = getNodeUid(node) || null
           if (rangeDraft.active) {
+            emitHostFeedback('segment_action', {
+              source: 'segment_range_toggle',
+              nodeUid,
+              x: event.clientX,
+              y: event.clientY,
+            })
+            emitFeedbackFx({
+              type: 'segment_action',
+              nodeUid,
+              relatedNodeUids: nodeUid ? [nodeUid] : [],
+              intensity: 'full',
+              lineMode: 'confirm',
+              nonce: Date.now(),
+              x: event.clientX,
+              y: event.clientY,
+            })
             toggleNodeInRangeDraft(node)
             return
           }
+          emitHostFeedback('pointer_click', {
+            source: 'readonly_node_activate',
+            nodeUid,
+            x: event.clientX,
+            y: event.clientY,
+            throttleKey: `readonly_click:${nodeUid || 'node'}`,
+            throttleMs: 60,
+          })
           notifyHostNodeClick([serializeNode(node)], { source: 'dom' })
         }
         document.addEventListener(
@@ -4430,6 +5912,11 @@
         if (window.__memoryAnkiFullscreenListenerRegistered) return
         window.__memoryAnkiFullscreenListenerRegistered = true
         document.addEventListener('fullscreenchange', () => {
+          emitHostFeedback('mode_switch', {
+            source: 'native_fullscreen',
+            throttleKey: 'native_fullscreen',
+            throttleMs: 120,
+          })
           getHostBridge()?.notify?.('fullscreen_change', Boolean(document.fullscreenElement))
         })
       }
@@ -4497,6 +5984,22 @@
         const payload = buildAiSplitRequestPayload()
         if (!payload) return
         markHostInteraction()
+        emitHostFeedback('toolbar_action', {
+          source: 'ai_split_toolbar',
+          nodeUid: payload.target_node_uid || null,
+          x: event.clientX,
+          y: event.clientY,
+        })
+        emitFeedbackFx({
+          type: 'toolbar_action',
+          nodeUid: payload.target_node_uid || null,
+          relatedNodeUids: payload.target_node_uid ? [payload.target_node_uid] : [],
+          intensity: 'full',
+          lineMode: 'spawn',
+          nonce: Date.now(),
+          x: event.clientX,
+          y: event.clientY,
+        })
         getHostBridge()?.notify?.('ai_split_request', payload)
       }
 
@@ -4529,6 +6032,16 @@
         })
       }
 
+      function applyFocusNodeStyles() {
+        const focusNodeUids = new Set(getFocusNodeUids())
+        getCachedNodes().forEach(node => {
+          const element = node?.group?.node
+          if (!element?.classList) return
+          const uid = getNodeUid(node)
+          element.classList.toggle('memory-anki-focus-card', Boolean(uid && focusNodeUids.has(uid)))
+        })
+      }
+
       function scheduleAiSplitToolbarPatch() {
         if (aiSplitToolbarState.patchScheduled) return
         aiSplitToolbarState.patchScheduled = true
@@ -4555,6 +6068,7 @@
         const previousState = window.__memoryAnkiHostState || {}
         const wasReadonly = Boolean(previousState.readonly)
         const wasImmersiveModeActive = Boolean(previousState.immersiveModeActive)
+        const wasPracticeModeActive = Boolean(previousState.practiceModeActive)
         window.__memoryAnkiHostState = {
           ...previousState,
           ...(nextState || {}),
@@ -4565,6 +6079,22 @@
           saveViewMemoryScopeSnapshot(previousViewMemoryScope)
           queueViewMemoryScopeRestore(nextViewMemoryScope)
         }
+        const previousFocusRequestNonce = Number(previousState.focusRequestNonce || 0)
+        const nextFocusRequestNonce = Number(window.__memoryAnkiHostState.focusRequestNonce || 0)
+        const nextFocusRequestNodeUid =
+          typeof window.__memoryAnkiHostState.focusRequestNodeUid === 'string' &&
+          window.__memoryAnkiHostState.focusRequestNodeUid.trim()
+            ? window.__memoryAnkiHostState.focusRequestNodeUid.trim()
+            : null
+        if (nextFocusRequestNonce !== previousFocusRequestNonce) {
+          syncState.pendingFocusRequest = nextFocusRequestNodeUid
+            ? {
+                nodeUid: nextFocusRequestNodeUid,
+                nonce: nextFocusRequestNonce,
+                attempts: 0,
+              }
+            : null
+        }
         const isReadonly = Boolean(window.__memoryAnkiHostState.readonly)
         const showToolbarWhenReadonly = Boolean(window.__memoryAnkiHostState.showToolbarWhenReadonly)
         const readonlyHost = isReadonly
@@ -4572,6 +6102,10 @@
         document.body.classList.toggle(
           'is-host-readonly-toolbar-visible',
           isReadonly && showToolbarWhenReadonly
+        )
+        document.body.classList.toggle(
+          'memory-anki-review-fx-enabled',
+          isReadonly && Boolean(window.__memoryAnkiHostState.practiceModeActive)
         )
         const appRoot =
           document.getElementById('app')?.__vue__ ||
@@ -4601,29 +6135,55 @@
         if (isReadonly && !wasReadonly) {
           resetReadonlyInteractionState()
         } else if (!isReadonly) {
+          clearReviewFxState()
           window.setTimeout(() => {
             restoreStableFocusAfterRender()
           }, 0)
+        }
+        if (
+          !Boolean(window.__memoryAnkiHostState.practiceModeActive) &&
+          wasPracticeModeActive
+        ) {
+          clearReviewFxState()
         }
         ensureSegmentToolbar()
         window.setTimeout(() => {
           ensureSegmentToolbar()
           applySegmentNodeStyles()
+          applyFocusNodeStyles()
           updateNavigatorFullscreenPresentation()
           renderBilinkBadges()
+          restorePendingFocusRequestIfNeeded()
         }, 0)
         ensureRestoreUiButton()
         updateNavigatorFullscreenPresentation()
+        applyFocusNodeStyles()
         renderBilinkBadges()
         scheduleAiSplitToolbarPatch()
         if (wasImmersiveModeActive !== isImmersiveModeActive()) {
+          emitHostFeedback('mode_switch', {
+            source: 'immersive_mode',
+            throttleKey: 'immersive_mode',
+            throttleMs: 150,
+          })
           scheduleMindMapResizeSync()
+        }
+        if (wasReadonly !== isReadonly || wasPracticeModeActive !== Boolean(window.__memoryAnkiHostState.practiceModeActive)) {
+          emitHostFeedback('mode_switch', {
+            source: 'host_state_mode',
+            throttleKey: 'host_state_mode',
+            throttleMs: 150,
+          })
         }
       }
 
       window.applyHostState = applyHostState
+      window.emitReviewFx = emitReviewFx
+      window.emitFeedbackFx = emitFeedbackFx
+      window.clearReviewFx = clearReviewFxState
 
       function resetReadonlyInteractionState() {
+        clearReviewFxState()
         focusState.editingNodeUid = null
         focusState.visualFocusNodeUid = focusState.committedNodeUid
         syncKeyboardMode()
@@ -4824,6 +6384,48 @@
         }, 0)
       }
 
+      function getHostViewportSizeSignature() {
+        const app = document.getElementById('app')
+        const rect = app?.getBoundingClientRect?.()
+        const width = Math.round(rect?.width || window.innerWidth || 0)
+        const height = Math.round(rect?.height || window.innerHeight || 0)
+        return `${width}x${height}`
+      }
+
+      function requestResizeAwareHostVisualRefresh(options = {}) {
+        const nextSizeSignature = getHostViewportSizeSignature()
+        const sizeChanged =
+          !viewportRefreshState.lastSizeSignature ||
+          viewportRefreshState.lastSizeSignature !== nextSizeSignature
+        viewportRefreshState.lastSizeSignature = nextSizeSignature
+        viewportRefreshState.fitRequested =
+          viewportRefreshState.fitRequested ||
+          Boolean(options.fitChangedSize && sizeChanged)
+        if (viewportRefreshState.scheduled) return
+        viewportRefreshState.scheduled = true
+        const run = () => {
+          viewportRefreshState.scheduled = false
+          const shouldFit = viewportRefreshState.fitRequested
+          viewportRefreshState.fitRequested = false
+          requestHostVisualRefresh()
+          if (!shouldFit) return
+          window.setTimeout(() => {
+            const mindMap = getMindMap()
+            if (!mindMap?.view || typeof mindMap.view.fit !== 'function') return
+            try {
+              mindMap.view.fit()
+            } catch (error) {
+              console.warn(error)
+            }
+            requestHostVisualRefresh()
+          }, 0)
+        }
+        window.requestAnimationFrame(() => {
+          run()
+          window.requestAnimationFrame(run)
+        })
+      }
+
       function captureHostSyncFocusSnapshot() {
         const activeNode = getCurrentActiveNode()
         const editableElement = getActiveEditableElement()
@@ -4924,6 +6526,11 @@
         if (!pendingPayload) return false
         if (!force && isSoftSyncBusy()) {
           schedulePendingSoftSyncFlush()
+          return false
+        }
+        if (shouldDiscardStalePendingSoftPayload(pendingPayload)) {
+          syncState.pendingSoftPayload = null
+          clearPendingSoftSyncTimers()
           return false
         }
         syncState.pendingSoftPayload = null
@@ -5098,6 +6705,23 @@
               return
             }
             getHostBridge()?.saveMindMapData?.(cloneValue(data))
+            emitHostFeedback('save_success', {
+              source: 'save_mindmap_data',
+              nodeUid: focusState.editingNodeUid || focusState.committedNodeUid || null,
+              throttleKey: 'save_mindmap_data',
+              throttleMs: 180,
+            })
+            emitFeedbackFx({
+              type: 'save_success',
+              nodeUid: focusState.editingNodeUid || focusState.committedNodeUid || null,
+              relatedNodeUids: [focusState.editingNodeUid || focusState.committedNodeUid].filter(Boolean),
+              intensity: 'soft',
+              lineMode: 'confirm',
+              nonce: Date.now(),
+            })
+            updatePendingEditorStateBaseline({
+              editor_doc: cloneValue(data) || {},
+            })
           },
           getMindMapConfig() {
             return cloneValue(getPreferredHostEditorStateSnapshot().editor_config) || {}
@@ -5105,6 +6729,14 @@
           saveMindMapConfig(config) {
             if (!canWriteBackToHost()) return
             getHostBridge()?.saveMindMapConfig?.(cloneValue(config))
+            emitHostFeedback('save_success', {
+              source: 'save_mindmap_config',
+              throttleKey: 'save_mindmap_config',
+              throttleMs: 220,
+            })
+            updatePendingEditorStateBaseline({
+              editor_config: cloneValue(config) || {},
+            })
           },
           getLanguage() {
             return getPreferredHostEditorStateSnapshot().lang || 'zh'
@@ -5112,6 +6744,14 @@
           saveLanguage(lang) {
             if (!canWriteBackToHost()) return
             getHostBridge()?.saveLanguage?.(lang)
+            emitHostFeedback('save_success', {
+              source: 'save_language',
+              throttleKey: 'save_language',
+              throttleMs: 220,
+            })
+            updatePendingEditorStateBaseline({
+              lang: lang || 'zh',
+            })
           },
           getLocalConfig() {
             return cloneValue(getPreferredHostEditorStateSnapshot().editor_local_config) || {}
@@ -5119,6 +6759,14 @@
           saveLocalConfig(config) {
             if (!canWriteBackToHost()) return
             getHostBridge()?.saveLocalConfig?.(cloneValue(config))
+            emitHostFeedback('save_success', {
+              source: 'save_local_config',
+              throttleKey: 'save_local_config',
+              throttleMs: 220,
+            })
+            updatePendingEditorStateBaseline({
+              editor_local_config: cloneValue(config) || {},
+            })
           },
         }
       }
@@ -5133,6 +6781,7 @@
           registerKeyboardListeners()
           registerSelectionDragListeners()
           registerPointerIntentListener()
+          registerFeedbackInputListeners()
           registerContextMenuListener()
           registerReadonlyClickListener()
           registerEditableDoubleClickListener()
@@ -5170,6 +6819,30 @@
           if (isReadonlyHost()) return
           markHostInteraction()
           const activeNodes = Array.isArray(args[1]) ? args[1] : []
+          const activeFeedbackUid = getNodeUid(activeNodes[0] || null)
+          if (activeFeedbackUid) {
+            const shouldEmitNodeSelectFeedback =
+              !focusState.committedNodeUid ||
+              activeFeedbackUid === interactionState.pointerDownNodeUid ||
+              activeFeedbackUid === focusState.committedNodeUid ||
+              activeFeedbackUid === focusState.editingNodeUid
+            if (shouldEmitNodeSelectFeedback) {
+              emitHostFeedback('node_select', {
+                source: 'node_active',
+                nodeUid: activeFeedbackUid,
+                throttleKey: `node_select:${activeFeedbackUid}`,
+                throttleMs: 90,
+              })
+              emitFeedbackFx({
+                type: 'node_select',
+                nodeUid: activeFeedbackUid,
+                relatedNodeUids: [activeFeedbackUid],
+                intensity: 'soft',
+                lineMode: 'trace',
+                nonce: Date.now(),
+              })
+            }
+          }
           syncKeyboardMode()
           if (activeNodes.length > 1) {
             const preferredNode =
@@ -5255,6 +6928,23 @@
           const clickedNode = args[0]
           if (!clickedNode) return
           const clickedNodes = Array.isArray(args[1]) && args[1].length > 0 ? args[1] : [clickedNode]
+          const clickedUid = getNodeUid(clickedNode)
+          if (clickedUid) {
+            emitHostFeedback('pointer_click', {
+              source: 'node_click',
+              nodeUid: clickedUid,
+              throttleKey: `node_click:${clickedUid}`,
+              throttleMs: 50,
+            })
+            emitFeedbackFx({
+              type: 'pointer_click',
+              nodeUid: clickedUid,
+              relatedNodeUids: [clickedUid],
+              intensity: 'soft',
+              lineMode: 'trace',
+              nonce: Date.now(),
+            })
+          }
           if (isReadonlyHost()) {
             rememberFocusedNode(clickedNode, {
               notify: false,
@@ -5318,6 +7008,7 @@
           }
           restorePendingViewMemoryFocusIfNeeded()
           restorePendingSyncFocusIfNeeded()
+          restorePendingFocusRequestIfNeeded()
           finalizePendingSelectionDragCreation({ rendered: true })
           restoreStableFocusAfterRender()
           updateKeyboardFocusClass()

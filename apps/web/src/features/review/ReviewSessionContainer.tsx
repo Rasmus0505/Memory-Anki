@@ -6,6 +6,7 @@ import {
   getPalaceEditorApi,
   savePalaceEditorApi,
   savePalaceEditorWithOptionsApi,
+  togglePalaceFocusNodeApi,
 } from '@/shared/api/modules/palaces'
 import type {
   MindMapEditorState,
@@ -359,6 +360,7 @@ export function ReviewSessionContainer({
           editError={editorError}
           persistProgress
           initialSnapshot={initialSnapshot}
+          focusNodeUids={palace.focus_node_uids ?? []}
           onFullscreenChange={setMindMapFullscreen}
           onSnapshotChange={async (snapshot) => {
             if (snapshot.completed) {
@@ -370,6 +372,9 @@ export function ReviewSessionContainer({
               reveal_map: snapshot.revealMap,
               red_node_ids: snapshot.redNodeIds,
             })
+          }}
+          onToggleFocusNode={async (nodeUid) => {
+            await togglePalaceFocusNodeApi(palace.id, nodeUid)
           }}
           onComplete={submitCompletion}
         />

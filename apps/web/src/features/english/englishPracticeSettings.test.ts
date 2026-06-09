@@ -9,12 +9,27 @@ import {
   writeEnglishPracticeSettings,
 } from '@/features/english/englishPracticeSettings'
 
+const LEGACY_V1_STORAGE_KEY = 'memory-anki-english-practice-settings-v1'
+
 describe('englishPracticeSettings', () => {
   beforeEach(() => {
     window.localStorage.clear()
   })
 
   it('returns defaults when storage is empty', () => {
+    expect(readEnglishPracticeSettings()).toEqual(DEFAULT_ENGLISH_PRACTICE_SETTINGS)
+  })
+
+  it('uses the v2 storage key and ignores legacy v1 local settings', () => {
+    window.localStorage.setItem(
+      LEGACY_V1_STORAGE_KEY,
+      JSON.stringify({
+        ...DEFAULT_ENGLISH_PRACTICE_SETTINGS,
+        sound: { enabled: false },
+      }),
+    )
+
+    expect(ENGLISH_PRACTICE_SETTINGS_STORAGE_KEY).toBe('memory-anki-english-practice-settings-v2')
     expect(readEnglishPracticeSettings()).toEqual(DEFAULT_ENGLISH_PRACTICE_SETTINGS)
   })
 
@@ -38,15 +53,6 @@ describe('englishPracticeSettings', () => {
     expect(saved.sound.enabled).toBe(false)
     expect(saved.flow.autoAdvanceOnPass).toBe(true)
     expect(window.localStorage.getItem(ENGLISH_PRACTICE_SETTINGS_STORAGE_KEY)).toContain('"enabled":false')
-  })
-
-  it('forces translation timing back to after_answer', () => {
-    const sanitized = sanitizeEnglishPracticeSettings({
-      ...DEFAULT_ENGLISH_PRACTICE_SETTINGS,
-      ui: { translationTiming: 'always' },
-    })
-
-    expect(sanitized.ui.translationTiming).toBe('after_answer')
   })
 
   it('falls back to the default auto advance preference when the saved value is invalid', () => {

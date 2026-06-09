@@ -1,5 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import {
   ArrowRight,
   BookAudio,
@@ -11,22 +10,7 @@ import {
   Upload,
   Waves,
 } from 'lucide-react'
-import { toast } from 'sonner'
-import type {
-  EnglishGenerationTask,
-  EnglishGenerationLogEvent,
-  EnglishGenerationLogResponse,
-  EnglishWorkspaceResponse,
-} from '@/shared/api/contracts'
-import {
-  clearEnglishCurrentTaskApi,
-  deleteEnglishCourseApi,
-  getEnglishTaskGenerationLogApi,
-  getEnglishWorkspaceApi,
-  retryEnglishCurrentTaskApi,
-  subscribeEnglishTaskStream,
-  uploadEnglishVideoApi,
-} from '@/shared/api/modules/english'
+import type { EnglishGenerationTask } from '@/shared/api/contracts'
 import { formatDuration } from '@/entities/session/model'
 import { PageIntro } from '@/shared/components/layout/PageIntro'
 import { Badge } from '@/shared/components/ui/badge'
@@ -34,6 +18,7 @@ import { Button } from '@/shared/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card'
 import { Input } from '@/shared/components/ui/input'
 import { EnglishGenerationLogDialog } from '@/features/english/components/EnglishGenerationLogDialog'
+import { useEnglishWorkspaceController } from '@/features/english/hooks/useEnglishWorkspaceController'
 
 function formatFileSize(bytes: number) {
   const safe = Math.max(0, bytes)
@@ -41,10 +26,6 @@ function formatFileSize(bytes: number) {
   if (safe >= 1024 * 1024) return `${(safe / (1024 * 1024)).toFixed(1)} MB`
   if (safe >= 1024) return `${(safe / 1024).toFixed(1)} KB`
   return `${safe} B`
-}
-
-function summarizeTaskEvents(events: EnglishGenerationLogEvent[]) {
-  return events.slice(-5).reverse()
 }
 
 function getTaskStatusLabel(status: EnglishGenerationTask['status']) {
@@ -70,201 +51,28 @@ function getTaskStageLabel(stage: string) {
 }
 
 export default function EnglishWorkspacePage() {
-  const navigate = useNavigate()
-  const [workspace, setWorkspace] = useState<EnglishWorkspaceResponse | null>(null)
-  const [selectedFile, setSelectedFile] = useState<File | null>(null)
-  const [uploading, setUploading] = useState(false)
-  const [actionLoading, setActionLoading] = useState<'retry' | 'clear' | number | null>(null)
-  const [taskEvents, setTaskEvents] = useState<EnglishGenerationLogEvent[]>([])
-  const [streamConnected, setStreamConnected] = useState(false)
-  const [logDialogOpen, setLogDialogOpen] = useState(false)
-  const [logLoading, setLogLoading] = useState(false)
-  const [logError, setLogError] = useState('')
-  const [logData, setLogData] = useState<EnglishGenerationLogResponse | null>(null)
-  const [pendingNavigationCourseId, setPendingNavigationCourseId] = useState<number | null>(null)
-
-  const loadWorkspace = useCallback(async () => {
-    const nextWorkspace = await getEnglishWorkspaceApi()
-    setWorkspace(nextWorkspace)
-  }, [])
-
-  const loadTaskLog = useCallback(async (taskId: string) => {
-    const response = await getEnglishTaskGenerationLogApi(taskId)
-    setLogData(response)
-    setTaskEvents(response.events)
-    return response
-  }, [])
-
-  useEffect(() => {
-    void loadWorkspace()
-  }, [loadWorkspace])
-
-  const currentTask = workspace?.currentTask ?? null
-  const activeTaskId = currentTask?.id ?? ''
-  const activeTaskRunning = Boolean(currentTask && ['queued', 'running'].includes(currentTask.status))
-
-  useEffect(() => {
-    if (!activeTaskId) {
-      setTaskEvents([])
-      setStreamConnected(false)
-      return
-    }
-    let cancelled = false
-    void loadTaskLog(activeTaskId).catch((error) => {
-      if (cancelled) return
-      console.error(error)
-    })
-    return () => {
-      cancelled = true
-    }
-  }, [activeTaskId, loadTaskLog])
-
-  useEffect(() => {
-    if (!activeTaskId || !activeTaskRunning) {
-      setStreamConnected(false)
-      return
-    }
-    let closed = false
-    const unsubscribe = subscribeEnglishTaskStream(activeTaskId, {
-      onStatus: ({ task }) => {
-        if (closed) return
-        setStreamConnected(true)
-        setWorkspace((current) => (current ? { ...current, currentTask: task } : current))
-        setLogData((current) => (current ? { ...current, task } : current))
-      },
-      onLog: ({ event }) => {
-        if (closed) return
-        setTaskEvents((current) => {
-          if (current.some((item) => item.id === event.id)) return current
-          return [...current, event]
-        })
-        setLogData((current) => {
-          if (!current) return current
-          if (current.events.some((item) => item.id === event.id)) return current
-          return { ...current, events: [...current.events, event] }
-        })
-      },
-      onDone: ({ task }) => {
-        if (closed) return
-        setWorkspace((current) => (current ? { ...current, currentTask: task } : current))
-        setLogData((current) => (current ? { ...current, task } : current))
-        setStreamConnected(false)
-        if (typeof task.courseId === 'number' && task.courseId > 0) {
-          setPendingNavigationCourseId(task.courseId)
-        } else {
-          toast.success('英语课程已生成。')
-        }
-        void loadWorkspace()
-      },
-      onError: ({ task, error }) => {
-        if (closed) return
-        if (task) {
-          setWorkspace((current) => (current ? { ...current, currentTask: task } : current))
-          setLogData((current) => (current ? { ...current, task } : current))
-        }
-        setStreamConnected(false)
-        if (error && error !== '英语任务实时连接已断开。') {
-          toast.error(error)
-        }
-      },
-    })
-    return () => {
-      closed = true
-      unsubscribe()
-    }
-  }, [activeTaskId, activeTaskRunning, loadWorkspace])
-
-  useEffect(() => {
-    if (!currentTask || !activeTaskRunning || streamConnected) return
-    const timer = window.setTimeout(() => {
-      void loadWorkspace()
-    }, 2000)
-    return () => window.clearTimeout(timer)
-  }, [activeTaskRunning, currentTask, loadWorkspace, streamConnected])
-
-  useEffect(() => {
-    if (!pendingNavigationCourseId) return
-    toast.success('英语课程已生成，正在进入课程。')
-    navigate(`/english/courses/${pendingNavigationCourseId}`)
-    setPendingNavigationCourseId(null)
-  }, [navigate, pendingNavigationCourseId])
-
-  const canUpload = useMemo(() => {
-    return !uploading && !workspace?.currentTask
-  }, [uploading, workspace?.currentTask])
-
-  const handleOpenLog = useCallback(async () => {
-    const taskId = workspace?.currentTask?.id
-    if (!taskId) return
-    setLogDialogOpen(true)
-    setLogLoading(true)
-    setLogError('')
-    try {
-      await loadTaskLog(taskId)
-    } catch (error) {
-      setLogError(error instanceof Error ? error.message : '加载生成日志失败。')
-    } finally {
-      setLogLoading(false)
-    }
-  }, [loadTaskLog, workspace?.currentTask?.id])
-
-  const handleUpload = async () => {
-    if (!selectedFile || !canUpload) return
-    setUploading(true)
-    try {
-      await uploadEnglishVideoApi(selectedFile)
-      toast.success('视频已上传，正在生成英语课程。')
-      setSelectedFile(null)
-      await loadWorkspace()
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : '上传失败，请重试。')
-    } finally {
-      setUploading(false)
-    }
-  }
-
-  const handleRetry = async () => {
-    setActionLoading('retry')
-    try {
-      await retryEnglishCurrentTaskApi()
-      toast.success('已重新开始生成。')
-      await loadWorkspace()
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : '重试失败，请稍后再试。')
-    } finally {
-      setActionLoading(null)
-    }
-  }
-
-  const handleClearTask = async () => {
-    setActionLoading('clear')
-    try {
-      await clearEnglishCurrentTaskApi()
-      toast.success('当前任务已清除。')
-      setTaskEvents([])
-      setLogData(null)
-      await loadWorkspace()
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : '清除失败，请稍后再试。')
-    } finally {
-      setActionLoading(null)
-    }
-  }
-
-  const handleDeleteCourse = async (courseId: number, title: string) => {
-    const confirmed = window.confirm(`确定删除英语课程“${title}”吗？原始视频也会一起删除。`)
-    if (!confirmed) return
-    setActionLoading(courseId)
-    try {
-      await deleteEnglishCourseApi(courseId)
-      toast.success('英语课程已删除。')
-      await loadWorkspace()
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : '删除失败，请稍后再试。')
-    } finally {
-      setActionLoading(null)
-    }
-  }
+  const {
+    actionLoading,
+    canUpload,
+    currentTask,
+    handleClearTask,
+    handleDeleteCourse,
+    handleOpenLog,
+    handleRetry,
+    handleUpload,
+    logData,
+    logDialogOpen,
+    logError,
+    logLoading,
+    navigateToCourse,
+    selectedFile,
+    setLogDialogOpen,
+    setSelectedFile,
+    streamConnected,
+    uploading,
+    visibleTaskEvents,
+    workspace,
+  } = useEnglishWorkspaceController()
 
   if (!workspace) {
     return (
@@ -273,8 +81,6 @@ export default function EnglishWorkspacePage() {
       </div>
     )
   }
-
-  const visibleTaskEvents = summarizeTaskEvents(taskEvents)
 
   return (
     <div className="space-y-6">
@@ -467,7 +273,7 @@ export default function EnglishWorkspacePage() {
                     <Badge variant="secondary">未完成</Badge>
                   </div>
                   <div className="mt-4 flex flex-wrap gap-2">
-                    <Button onClick={() => navigate(`/english/courses/${workspace.continueCourse?.id}`)}>
+                    <Button onClick={() => navigateToCourse(workspace.continueCourse?.id)}>
                       <BookAudio className="mr-2 h-4 w-4" />
                       继续练习
                     </Button>

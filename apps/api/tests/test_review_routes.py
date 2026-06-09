@@ -35,6 +35,7 @@ from memory_anki.modules.backups.application.backup_service import (
     maybe_create_interval_backup,
     restore_palace_from_backup,
 )
+from memory_anki.modules.dashboard.presentation import router as dashboard_router
 from memory_anki.modules.mindmap.application.editor_state_service import save_palace_editor_state
 from memory_anki.modules.palaces.presentation import router as palace_router
 from memory_anki.modules.reviews.application.review_service import (
@@ -77,6 +78,7 @@ class ReviewRouteTests(unittest.TestCase):
         ensure_session_progress_schema()
         self.SessionLocal = sessionmaker(bind=self.engine)
         self.original_get_session = review_router.get_session
+        self.original_dashboard_get_session = dashboard_router.get_session
         self.original_palace_get_session = palace_router.get_session
         self.original_settings_get_session = settings_router.get_session
         self.original_time_records_get_session = time_records_router.get_session
@@ -85,6 +87,7 @@ class ReviewRouteTests(unittest.TestCase):
             return self.SessionLocal()
 
         review_router.get_session = get_test_session
+        dashboard_router.get_session = get_test_session
         palace_router.get_session = get_test_session
         settings_router.get_session = get_test_session
         time_records_router.get_session = get_test_session
@@ -132,6 +135,7 @@ class ReviewRouteTests(unittest.TestCase):
 
     def tearDown(self):
         review_router.get_session = self.original_get_session
+        dashboard_router.get_session = self.original_dashboard_get_session
         palace_router.get_session = self.original_palace_get_session
         settings_router.get_session = self.original_settings_get_session
         time_records_router.get_session = self.original_time_records_get_session

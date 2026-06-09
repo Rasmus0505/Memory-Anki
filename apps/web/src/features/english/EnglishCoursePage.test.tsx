@@ -32,7 +32,7 @@ const mocks = vi.hoisted(() => ({
   },
 }))
 
-vi.mock('@/shared/api/modules/english', () => ({
+vi.mock('@/features/english/api/englishApi', () => ({
   buildEnglishCourseMediaUrl: (courseId: number) => `/media/${courseId}.mp4`,
   checkEnglishSentenceApi: mocks.checkEnglishSentenceApiMock,
   getEnglishCourseApi: mocks.getEnglishCourseApiMock,

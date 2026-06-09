@@ -1,4 +1,4 @@
-import { BookOpen, Pencil, Trash2 } from 'lucide-react'
+import { BookOpen, Pencil, Target, Trash2 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { PalaceStageProgress } from '@/app/router/palace-list/PalaceStageProgress'
 import type { PalaceListViewSettings } from '@/app/router/palace-view-settings'
@@ -119,6 +119,12 @@ export function PalaceListCard({
             ) : (
               <span>{palace.chapters?.length || 0} 章节</span>
             )}
+            {(palace.focus_count ?? 0) > 0 ? (
+              <span className="inline-flex items-center gap-1 text-amber-700">
+                <Target className="h-3.5 w-3.5" />
+                专项 {(palace.focus_count ?? 0)} 张
+              </span>
+            ) : null}
           </div>
           {!isMultiSegment && singleSegment ? (
             <div className="mt-2">
@@ -233,6 +239,17 @@ export function PalaceListCard({
               练习
             </Button>
           </Link>
+          {(palace.focus_count ?? 0) > 0 ? (
+            <Link to={`/palaces/${palace.id}/focus-practice`}>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 border-amber-300 bg-amber-50 text-amber-900 hover:bg-amber-100"
+              >
+                专项练习
+              </Button>
+            </Link>
+          ) : null}
           <Link to={`/palaces/${palace.id}/edit`}>
             <Button variant="ghost" size="icon" className="h-8 w-8" aria-label={`编辑宫殿 ${palace.resolved_title || palace.title}`}>
               <Pencil className="h-4 w-4" />

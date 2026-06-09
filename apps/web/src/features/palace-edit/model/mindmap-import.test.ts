@@ -64,7 +64,9 @@ describe('mindmap import helpers', () => {
       text: '<div>第一节</div>',
       richText: true,
     })
-    expect(typeof doc.root?.children?.[0]?.data?.uid).toBe('string')
+    expect(
+      typeof ((doc.root?.children?.[0]?.data as Record<string, unknown> | undefined)?.uid),
+    ).toBe('string')
     expect(doc.root?.children?.[0]?.children?.[0]?.data?.text).toBe('知识点')
   })
 
@@ -117,12 +119,18 @@ describe('mindmap import helpers', () => {
         ((result.nextEditorState?.editor_doc as { root?: { children?: Array<{ data?: { uid?: string }; children?: unknown[] }> } })
           ?.root?.children || []) as Array<{ data?: { uid?: string }; children?: Array<{ data?: { text?: string } }> }>
       )[0]?.children || []
+    const appendedRoot = targetChildren[0] as
+      | {
+          data?: Record<string, unknown>
+          children?: Array<{ data?: { text?: string } }>
+        }
+      | undefined
     expect(targetChildren).toHaveLength(1)
-    expect(targetChildren[0]?.data?.text).toBe('Imported Root')
-    expect(targetChildren[0]?.data?.memoryAnkiRootKind).toBeUndefined()
-    expect(typeof targetChildren[0]?.data?.uid).toBe('string')
-    expect(targetChildren[0]?.data?.uid).not.toBe('import-root')
-    expect(targetChildren[0]?.children?.map((child) => child.data?.text)).toEqual(['B1', 'B2', 'B3', 'B4'])
+    expect(appendedRoot?.data?.text).toBe('Imported Root')
+    expect(appendedRoot?.data?.memoryAnkiRootKind).toBeUndefined()
+    expect(typeof appendedRoot?.data?.uid).toBe('string')
+    expect(appendedRoot?.data?.uid).not.toBe('import-root')
+    expect(appendedRoot?.children?.map((child) => child.data?.text)).toEqual(['B1', 'B2', 'B3', 'B4'])
   })
 
   it('rekeys every appended descendant to avoid duplicate subtree identities', () => {

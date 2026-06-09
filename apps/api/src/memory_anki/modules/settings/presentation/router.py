@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -13,15 +14,15 @@ from memory_anki.infrastructure.llm.external_ai_call_logs import (
     list_external_ai_call_logs,
     resolve_external_ai_call_log_artifact,
 )
+from memory_anki.modules.reviews.application.schedule_service import (
+    normalize_algorithm,
+    update_all_pending_schedules,
+)
 from memory_anki.modules.settings.application.ai_prompts import (
     AiPromptValidationError,
     list_prompt_templates,
     reset_prompt_templates,
     save_prompt_templates,
-)
-from memory_anki.modules.reviews.application.schedule_service import (
-    normalize_algorithm,
-    update_all_pending_schedules,
 )
 
 router = APIRouter(tags=["settings"])
@@ -33,6 +34,19 @@ SCHEDULE_IMPACTING_KEYS = {
     "sleep_review_time",
     "early_review_anchor",
 }
+
+CLIENT_PREFERENCE_GROUPS = {
+    "memory_anki_shortcuts",
+    "review_feedback_settings",
+    "english_practice_settings",
+    "timer_automation_config",
+    "dashboard_duration_filter",
+    "palace_list_view_settings",
+    "palace_shelf_view_settings",
+    "voice_coach_settings",
+}
+
+CLIENT_PREFERENCE_KEY_PREFIX = "client_preferences."
 
 
 def session_dep():
@@ -81,6 +95,42 @@ def write_settings(data: dict, session: Session) -> dict:
     return next_settings
 
 
+def _client_preference_key(group: str) -> str:
+    return f"{CLIENT_PREFERENCE_KEY_PREFIX}{group}"
+
+
+def read_client_preferences(session: Session) -> dict:
+    result: dict[str, object | None] = {}
+    for group in CLIENT_PREFERENCE_GROUPS:
+        row = session.query(Config).filter_by(key=_client_preference_key(group)).first()
+        if not row or not row.value:
+            result[group] = None
+            continue
+        try:
+            result[group] = json.loads(row.value)
+        except Exception:
+            result[group] = None
+    return result
+
+
+def write_client_preferences(data: dict, session: Session) -> dict:
+    next_preferences = read_client_preferences(session)
+    for group in CLIENT_PREFERENCE_GROUPS:
+        if group not in data:
+            continue
+        value = data.get(group)
+        payload = "" if value is None else json.dumps(value, ensure_ascii=False)
+        row = session.query(Config).filter_by(key=_client_preference_key(group)).first()
+        if row:
+            row.value = payload
+            row.updated_at = utc_now_naive()
+        else:
+            session.add(Config(key=_client_preference_key(group), value=payload))
+        next_preferences[group] = value
+    session.commit()
+    return next_preferences
+
+
 @router.get("/settings")
 def api_settings(s: Session = Depends(session_dep)):
     return read_settings(s)
@@ -114,6 +164,16 @@ def api_profile_review_settings_update(data: dict, s: Session = Depends(session_
 @router.get("/runtime-info")
 def api_runtime_info():
     return build_runtime_info()
+
+
+@router.get("/profile/client-preferences")
+def api_get_client_preferences(s: Session = Depends(session_dep)):
+    return {"items": read_client_preferences(s)}
+
+
+@router.put("/profile/client-preferences")
+def api_update_client_preferences(data: dict, s: Session = Depends(session_dep)):
+    return {"items": write_client_preferences(data if isinstance(data, dict) else {}, s)}
 
 
 @router.get("/settings/ai-prompts")

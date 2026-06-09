@@ -62,6 +62,7 @@ def ensure_palace_group_schema() -> None:
             ("grouping_mode", "VARCHAR(20) DEFAULT 'auto'"),
             ("manual_group_chapter_id", "INTEGER"),
             ("needs_practice", "BOOLEAN NOT NULL DEFAULT 0"),
+            ("focus_node_uids_json", "TEXT NOT NULL DEFAULT '[]'"),
         ):
             if column_name not in palace_columns:
                 conn.exec_driver_sql(

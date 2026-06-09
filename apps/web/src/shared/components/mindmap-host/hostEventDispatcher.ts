@@ -47,6 +47,9 @@ export function dispatchHostEvent(
     handlers.onReady.current?.()
     return 'app_inited'
   }
+  if (event === 'feedback_event') {
+    return 'other'
+  }
   if (event === 'node_active') {
     handlers.onNodeActive.current?.(Array.isArray(payload) ? (payload as MindMapSelection[]) : [])
   }

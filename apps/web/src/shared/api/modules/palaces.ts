@@ -13,6 +13,7 @@ import type {
   MindMapImportJobListResponse,
   MindMapImportPreviewResponse,
   MindMapPdfImportPreviewRequest,
+  PalaceFocusSessionResponse,
   PalaceGroupedListResponse,
   PalaceListItem,
   PalaceReviewPlanResponse,
@@ -295,6 +296,18 @@ export function getPalaceApi(id: number) {
   return request<any>(`/palaces/${id}`)
 }
 
+export function togglePalaceFocusNodeApi(id: number, nodeUid: string) {
+  return request<{
+    ok: boolean
+    palace_id: number
+    node_uid: string
+    focused: boolean
+    focus_node_uids: string[]
+    focus_count: number
+    item: PalaceListItem
+  }>(`/palaces/${id}/focus-nodes/${encodeURIComponent(nodeUid)}`, { method: 'PUT' })
+}
+
 export function getPalaceReviewPlanApi(id: number) {
   return request<PalaceReviewPlanResponse>(`/palaces/${id}/review-plan`)
 }
@@ -327,6 +340,10 @@ export function deleteAttachmentApi(id: number) {
 
 export function getPalaceEditorApi(id: number) {
   return request<{ palace: any } & MindMapEditorState>(`/palaces/${id}/editor`)
+}
+
+export function getPalaceFocusSessionApi(id: number) {
+  return request<PalaceFocusSessionResponse>(`/palaces/${id}/focus-session`)
 }
 
 export function getPalaceSegmentsApi(id: number) {
@@ -460,6 +477,10 @@ export function getPracticeSessionProgressApi(id: number) {
   return request<{ progress: SessionProgressSnapshot | null }>(`/sessions/practice/${id}/progress`)
 }
 
+export function getFocusPracticeSessionProgressApi(id: number) {
+  return request<{ progress: SessionProgressSnapshot | null }>(`/sessions/focus-practice/${id}/progress`)
+}
+
 export function getSegmentPracticeSessionProgressApi(id: number) {
   return request<{ progress: SessionProgressSnapshot | null }>(`/sessions/segment-practice/${id}/progress`)
 }
@@ -478,8 +499,26 @@ export function savePracticeSessionProgressApi(
   })
 }
 
+export function saveFocusPracticeSessionProgressApi(
+  id: number,
+  data: {
+    reveal_map: Record<string, "hidden" | "placeholder" | "revealed">
+    red_node_ids: string[]
+    completed: boolean
+  },
+) {
+  return request<{ progress: SessionProgressSnapshot }>(`/sessions/focus-practice/${id}/progress`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  })
+}
+
 export function clearPracticeSessionProgressApi(id: number) {
   return request<{ ok: boolean }>(`/sessions/practice/${id}/progress`, { method: "DELETE" })
+}
+
+export function clearFocusPracticeSessionProgressApi(id: number) {
+  return request<{ ok: boolean }>(`/sessions/focus-practice/${id}/progress`, { method: 'DELETE' })
 }
 
 export function saveSegmentPracticeSessionProgressApi(

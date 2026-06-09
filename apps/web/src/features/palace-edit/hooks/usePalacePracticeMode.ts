@@ -14,6 +14,7 @@ import {
 import type { MindMapSelection } from '@/shared/components/mindmap-host'
 import type { MindMapEditorState, SessionProgressSnapshot } from '@/shared/api/contracts'
 import type { EditorMode } from '@/features/palace-edit/model/mindmap-editor'
+import { useReviewFeedback } from '@/features/review/hooks/useReviewFeedback'
 
 interface PalacePracticeModeOptions {
   palaceId: number | null
@@ -49,6 +50,14 @@ export function usePalacePracticeMode({
     visibleEditorState,
   } = reveal
   const [practiceSnapshotLoaded, setPracticeSnapshotLoaded] = useState(false)
+  const feedback = useReviewFeedback({
+    root,
+    revealMap,
+    revealedNonRootCount: Object.entries(revealMap).filter(
+      ([nodeId, state]) => nodeId !== root.id && state === 'revealed',
+    ).length,
+    totalNodeCount: Object.keys(revealMap).length,
+  })
 
   useEffect(() => {
     setPracticeSnapshotLoaded(false)
@@ -139,11 +148,12 @@ export function usePalacePracticeMode({
 
   const restartInlinePractice = useCallback(async () => {
     reset()
+    feedback.emitManualEvent('session_reset')
     if (palaceId) {
       await clearPracticeSessionProgressApi(palaceId)
     }
     timer.registerActivity('practice_interaction', { source: 'inline_practice_restart' })
-  }, [palaceId, reset, timer])
+  }, [feedback, palaceId, reset, timer])
 
   const activeMindMapEditorState = useMemo<MindMapEditorState | null>(
     () => (editorMode === 'practice' ? (visibleEditorState ?? editorState ?? null) : (editorState ?? null)),
@@ -171,6 +181,7 @@ export function usePalacePracticeMode({
     practiceRevealMap: revealMap,
     practiceRedNodeIds: redNodeIds,
     practiceRoot: root,
+    feedback,
     restartInlinePractice,
     setEditorMode,
     toggleInlinePractice,

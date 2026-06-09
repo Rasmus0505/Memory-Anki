@@ -39,13 +39,13 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
     if (asChild) {
       const child = React.Children.only(children)
       if (!React.isValidElement<{ className?: string }>(child)) return null
-
       const childElement = child as React.ReactElement<{ className?: string }> & {
         ref?: React.Ref<HTMLButtonElement>
       }
 
       return React.cloneElement(childElement, {
         ...props,
+        'data-feedback': 'button',
         className: cn(buttonClassName, childElement.props.className),
         ref: (value: HTMLButtonElement | null) => {
           assignRef(ref, value)
@@ -55,7 +55,7 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
     }
 
     return (
-      <button ref={ref} className={buttonClassName} {...props}>
+      <button ref={ref} className={buttonClassName} data-feedback="button" {...props}>
         {children}
       </button>
     )

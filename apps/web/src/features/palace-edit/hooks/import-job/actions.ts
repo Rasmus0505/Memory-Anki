@@ -89,10 +89,15 @@ export function buildImportJobActions({
       await runtime.resumeJob(job.id)
     } catch (nextError) {
       state.setImportLoading(false)
-      logImportFailure(feature, requestSummary, nextError, {
+      logImportFailure({
         entityKey: options.entityKey,
-        fileName: file.name,
-        mode: options.mode,
+        feature,
+        requestSummary,
+        error: nextError,
+        meta: {
+          fileName: file.name,
+          mode: options.mode,
+        },
       })
       state.setImportError(
         formatMindMapImportError(
@@ -166,10 +171,15 @@ export function buildImportJobActions({
     } catch (nextError) {
       options.setBatchStatus('error')
       state.setImportLoading(false)
-      logImportFailure(feature, requestSummary, nextError, {
+      logImportFailure({
         entityKey: options.entityKey,
-        imageCount: options.batchImagesRef.current.length,
-        structureImageIndex: resolvedStructureIndex,
+        feature,
+        requestSummary,
+        error: nextError,
+        meta: {
+          imageCount: options.batchImagesRef.current.length,
+          structureImageIndex: resolvedStructureIndex,
+        },
       })
       state.setImportError(
         formatMindMapImportError(
@@ -261,12 +271,18 @@ export function buildImportJobActions({
     } catch (nextError) {
       state.setImportLoading(false)
       state.clearCurrentJobState()
-      logImportFailure(feature, requestSummary, nextError, {
+      logImportFailure({
         entityKey: options.entityKey,
-        subjectDocumentId: options.selectedSubjectDocumentId,
-        pdfMode: options.pdfImportMode,
-        selectedPages: options.selectedPdfPages,
-        structurePage: options.pdfImportMode === 'structured_merge' ? options.structurePage : null,
+        feature,
+        requestSummary,
+        error: nextError,
+        meta: {
+          subjectDocumentId: options.selectedSubjectDocumentId,
+          pdfMode: options.pdfImportMode,
+          selectedPages: options.selectedPdfPages,
+          structurePage:
+            options.pdfImportMode === 'structured_merge' ? options.structurePage : null,
+        },
       })
       state.setImportError(
         formatMindMapImportError(

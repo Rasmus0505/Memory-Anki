@@ -52,6 +52,11 @@ def ensure_session_progress_schema() -> None:
                 "ON session_progress (session_kind, palace_segment_review_schedule_id) "
                 "WHERE session_kind = 'segment_review' AND palace_segment_review_schedule_id IS NOT NULL"
             )
+            conn.exec_driver_sql(
+                "CREATE UNIQUE INDEX IF NOT EXISTS ix_session_progress_focus_practice "
+                "ON session_progress (session_kind, palace_id) "
+                "WHERE session_kind = 'focus_practice' AND palace_id IS NOT NULL"
+            )
             return
 
         existing_columns = {
@@ -144,6 +149,11 @@ def ensure_session_progress_schema() -> None:
             "ON session_progress (session_kind, palace_segment_review_schedule_id) "
             "WHERE session_kind = 'segment_review' AND palace_segment_review_schedule_id IS NOT NULL"
         )
+        conn.exec_driver_sql(
+            "CREATE UNIQUE INDEX IF NOT EXISTS ix_session_progress_focus_practice "
+            "ON session_progress (session_kind, palace_id) "
+            "WHERE session_kind = 'focus_practice' AND palace_id IS NOT NULL"
+        )
 
 
 def _serialize_json(value: Any, fallback: str) -> str:
@@ -192,6 +202,15 @@ def get_review_progress(session: Session, schedule_id: int) -> dict | None:
     progress = (
         session.query(SessionProgress)
         .filter_by(session_kind="review", review_schedule_id=schedule_id)
+        .first()
+    )
+    return _progress_json(progress)
+
+
+def get_focus_practice_progress(session: Session, palace_id: int) -> dict | None:
+    progress = (
+        session.query(SessionProgress)
+        .filter_by(session_kind="focus_practice", palace_id=palace_id)
         .first()
     )
     return _progress_json(progress)
@@ -254,6 +273,28 @@ def upsert_review_progress(session: Session, schedule_id: int, palace_id: int | 
         session.add(progress)
 
     progress.palace_id = palace_id
+    progress.palace_segment_id = None
+    progress.palace_segment_review_schedule_id = None
+    progress.reveal_map = _serialize_json(payload.get("reveal_map") or {}, "{}")
+    progress.red_node_ids = _serialize_json(payload.get("red_node_ids") or [], "[]")
+    progress.completed = bool(payload.get("completed", False))
+    progress.updated_at = utc_now_naive()
+    session.commit()
+    session.refresh(progress)
+    return _progress_json(progress) or {}
+
+
+def upsert_focus_practice_progress(session: Session, palace_id: int, payload: dict) -> dict:
+    progress = (
+        session.query(SessionProgress)
+        .filter_by(session_kind="focus_practice", palace_id=palace_id)
+        .first()
+    )
+    if progress is None:
+        progress = SessionProgress(session_kind="focus_practice", palace_id=palace_id)
+        session.add(progress)
+
+    progress.review_schedule_id = None
     progress.palace_segment_id = None
     progress.palace_segment_review_schedule_id = None
     progress.reveal_map = _serialize_json(payload.get("reveal_map") or {}, "{}")
@@ -342,6 +383,15 @@ def clear_review_progress(session: Session, schedule_id: int) -> None:
     (
         session.query(SessionProgress)
         .filter_by(session_kind="review", review_schedule_id=schedule_id)
+        .delete()
+    )
+    session.commit()
+
+
+def clear_focus_practice_progress(session: Session, palace_id: int) -> None:
+    (
+        session.query(SessionProgress)
+        .filter_by(session_kind="focus_practice", palace_id=palace_id)
         .delete()
     )
     session.commit()

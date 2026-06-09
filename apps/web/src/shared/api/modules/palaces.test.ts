@@ -70,6 +70,7 @@ describe('palaces api stream parsing', () => {
       responseSummary: '',
       errorMessage: '',
       jobId: '',
+      requestId: '',
       meta: {},
     }))
     vi.stubGlobal(

@@ -3,6 +3,8 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+from memory_anki.core.storage_layout import get_managed_storage_items
+
 
 def _default_app_home() -> Path:
     local_app_data = os.environ.get("LOCALAPPDATA")
@@ -19,6 +21,7 @@ ATTACHMENTS_DIR = DATA_DIR / "attachments"
 SUBJECT_DOCUMENTS_DIR = ATTACHMENTS_DIR / "subjects"
 IMPORT_JOBS_DIR = APP_HOME / "import_jobs"
 AI_CALL_LOGS_DIR = APP_HOME / "ai_call_logs"
+VOICE_COACH_CACHE_DIR = APP_HOME / "voice_coach"
 ENGLISH_DIR = APP_HOME / "english"
 ENGLISH_MEDIA_DIR = ENGLISH_DIR / "media"
 ENGLISH_TASKS_DIR = ENGLISH_DIR / "tasks"
@@ -27,10 +30,12 @@ FULL_BACKUPS_DIR = BACKUPS_DIR / "full"
 RESCUE_BACKUPS_DIR = BACKUPS_DIR / "rescue"
 DB_PATH = DATA_DIR / "memory_palace.db"
 MIGRATION_STATE_PATH = APP_HOME / "migration-state.json"
+SWITCHER_STATE_PATH = APP_HOME / "switcher-state.json"
 DATABASE_URL = f"sqlite:///{DB_PATH}"
 
 DASHSCOPE_API_KEY = os.environ.get("DASHSCOPE_API_KEY")
 DASHSCOPE_BASE_URL = os.environ.get("DASHSCOPE_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1")
+DASHSCOPE_TTS_BASE_URL = os.environ.get("DASHSCOPE_TTS_BASE_URL", "https://dashscope.aliyuncs.com/api/v1")
 DASHSCOPE_ASR_MODEL = os.environ.get("DASHSCOPE_ASR_MODEL", "qwen3-asr-flash-filetrans")
 DASHSCOPE_VISION_MODEL = os.environ.get("DASHSCOPE_VISION_MODEL", "qwen3-vl-flash")
 DASHSCOPE_TEXT_MODEL = os.environ.get("DASHSCOPE_TEXT_MODEL", "qwen3.6-flash")
@@ -62,21 +67,35 @@ DEFAULTS = {
     "mindmap_ai_split_max_children": "5",
     "mindmap_ai_split_include_note": "true",
     "mindmap_ai_split_custom_instruction": "",
+    "flow_voice_api_key": "",
+    "flow_voice_base_url": "",
+    "flow_voice_model": "cosyvoice-v3-flash",
+    "flow_voice_voice": "longanyang",
+    "flow_voice_format": "mp3",
+    "flow_voice_sample_rate": "24000",
+    "flow_voice_instruction": "",
 }
 
 
 def ensure_runtime_dirs() -> None:
-    for directory in (
+    directories = {
         APP_HOME,
         DATA_DIR,
         ATTACHMENTS_DIR,
         SUBJECT_DOCUMENTS_DIR,
         IMPORT_JOBS_DIR,
         AI_CALL_LOGS_DIR,
+        VOICE_COACH_CACHE_DIR,
         ENGLISH_DIR,
         ENGLISH_MEDIA_DIR,
         ENGLISH_TASKS_DIR,
         FULL_BACKUPS_DIR,
         RESCUE_BACKUPS_DIR,
-    ):
+    }
+    for item in get_managed_storage_items():
+        if item.kind == "directory":
+            directories.add(item.absolute_path(APP_HOME))
+        else:
+            directories.add(item.absolute_path(APP_HOME).parent)
+    for directory in directories:
         directory.mkdir(parents=True, exist_ok=True)

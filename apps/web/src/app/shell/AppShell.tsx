@@ -17,6 +17,7 @@ import { NavLink, useLocation } from 'react-router-dom'
 import type { RuntimeInfo } from '@/shared/api/contracts'
 import { getRuntimeInfoApi } from '@/shared/api/modules/runtime'
 import { ShellProvider, useShellContext } from '@/shared/components/layout/ShellContext'
+import { useClientPreferenceBootstrap } from '@/shared/preferences/useClientPreferenceBootstrap'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
 import { AppLogDrawer } from '@/shared/logs/components/AppLogDrawer'
@@ -99,6 +100,14 @@ function SidebarContent({ runtimeInfo }: { runtimeInfo: RuntimeInfo | null }) {
               <div className="mt-2">
                 <RuntimeChannelBadge runtimeInfo={runtimeInfo} />
               </div>
+              {runtimeInfo ? (
+                <div className="mt-2 space-y-1 text-[11px] text-muted-foreground">
+                  <div>数据代际 {runtimeInfo.runtime_generation}</div>
+                  <div className="truncate" title={runtimeInfo.app_home}>
+                    {runtimeInfo.app_home}
+                  </div>
+                </div>
+              ) : null}
             </div>
           ) : null}
         </NavLink>
@@ -148,6 +157,8 @@ function ShellFrame({ children }: PropsWithChildren) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [runtimeInfo, setRuntimeInfo] = useState<RuntimeInfo | null>(null)
   const [logDrawerOpen, setLogDrawerOpen] = useState(false)
+
+  useClientPreferenceBootstrap()
 
   useEffect(() => {
     setMobileOpen(false)

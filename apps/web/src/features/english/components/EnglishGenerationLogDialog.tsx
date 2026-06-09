@@ -31,7 +31,7 @@ export function EnglishGenerationLogDialog({
         <DialogHeader>
           <div className="flex items-center justify-between gap-3">
             <DialogTitle>{title}</DialogTitle>
-            <DialogClose />
+            <DialogClose onClick={() => onOpenChange(false)} />
           </div>
         </DialogHeader>
         <div className="min-h-0 flex-1 overflow-y-auto pr-1">

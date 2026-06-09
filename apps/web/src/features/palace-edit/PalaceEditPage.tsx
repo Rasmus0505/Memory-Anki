@@ -1,6 +1,6 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowLeft, History, Search } from 'lucide-react'
+import { ArrowLeft, History, Search, Volume2 } from 'lucide-react'
 import {
   BilinkPanel,
   BilinkPreviewPopover,
@@ -22,9 +22,18 @@ import { PalaceMindMapImportDrawer } from '@/features/palace-edit/components/Pal
 import { useMindMapImport } from '@/features/palace-edit/hooks/useMindMapImport'
 import { usePalaceEditPage } from '@/features/palace-edit/hooks/usePalaceEditPage'
 import { PalaceKnowledgeOutlinePanel } from '@/features/palace-edit/components/PalaceKnowledgeOutlinePanel'
+import {
+  useVoiceCoachController,
+  VoiceCoachSettingsDialog,
+} from '@/features/voice-coach'
 
 export default function PalaceEdit() {
   const page = usePalaceEditPage()
+  const [voiceCoachDialogOpen, setVoiceCoachDialogOpen] = useState(false)
+  const voiceCoach = useVoiceCoachController({
+    scene: page.editorMode === 'practice' ? 'practice' : 'edit',
+    timer: page.timer,
+  })
 
   const selectedNodeUid =
     page.selectedNodes?.[0]?.uid ||
@@ -94,6 +103,14 @@ export default function PalaceEdit() {
               >
                 <Search className="mr-2 h-4 w-4" />
                 全局搜索
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setVoiceCoachDialogOpen(true)}
+              >
+                <Volume2 className="mr-2 h-4 w-4" />
+                {voiceCoach.enabled ? '语音教练' : '开启语音'}
               </Button>
               {page.palace ? (
                 <>
@@ -270,16 +287,25 @@ export default function PalaceEdit() {
                   bilinkCounts={page.bilinkCounts}
                   bilinkItems={page.bilinks}
                   bilinkCurrentPalaceId={page.palaceId}
+                  focusNodeUids={page.focusNodeUids}
+                  focusRequestNodeUid={page.modeFocusRequestNodeUid}
+                  focusRequestNonce={page.modeFocusRequestNonce}
                   bilinkInsertionText={page.bilinkInsertionText}
                   bilinkInsertionNonce={page.bilinkInsertionNonce}
+                  reviewFxSignal={page.editorMode === 'practice' ? page.reviewFxSignal : null}
+                  feedbackFxSignal={page.feedbackFxSignal}
                   showBilinkSearchButton
                   onEditorStateChange={page.handleMindMapEditorStateChange}
                   onNodeActive={(nodes) => {
                     page.timer.registerActivity('node_switch', { source: 'node_active' })
-                    page.setSelectedNodes(nodes)
+                    page.handleMindMapNodeActive(nodes)
                   }}
                   onNodeClick={page.handleInlinePracticeNodeClick}
-                  onNodeContextMenu={page.handleInlinePracticeNodeContextMenu}
+                  onNodeContextMenu={
+                    page.editorMode === 'edit'
+                      ? page.handleEditNodeContextMenu
+                      : page.handleInlinePracticeNodeContextMenu
+                  }
                   onSegmentSelect={page.setActiveSegmentId}
                   onCreateSegmentFromSelection={page.handleOpenCreateSegment}
                   onSegmentRangeDraftChange={page.handleSegmentRangeDraftChange}
@@ -457,6 +483,12 @@ export default function PalaceEdit() {
         onPreviewVersion={page.handlePreviewVersion}
         onRestoreVersion={page.handleRestoreVersion}
         onBackToList={page.resetVersionPreview}
+      />
+
+      <VoiceCoachSettingsDialog
+        open={voiceCoachDialogOpen}
+        onOpenChange={setVoiceCoachDialogOpen}
+        onTest={voiceCoach.playTestEvent}
       />
     </div>
   )

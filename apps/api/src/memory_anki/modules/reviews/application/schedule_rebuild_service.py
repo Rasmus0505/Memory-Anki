@@ -204,7 +204,7 @@ def rebuild_palace_review_schedules(
                 review_type=draft.review_type,
                 anchor_datetime=palace.created_at or palace.updated_at,
             )
-            if draft is not None
+            if draft is not None and draft.scheduled_at is not None
             else None
         )
         previous_anchor_at = _resolve_effective_stage_anchor_at(
@@ -328,7 +328,7 @@ def rebuild_segment_review_schedules(
                     or (segment.palace.created_at if segment.palace else None)
                 ),
             )
-            if draft is not None
+            if draft is not None and draft.scheduled_at is not None
             else None
         )
         previous_anchor_at = _resolve_effective_stage_anchor_at(
@@ -446,8 +446,13 @@ def _default_algorithm(session: Session) -> str:
 
 
 def _segment_anchor_date(segment: PalaceSegment) -> date:
+    for schedule in segment.review_schedules or []:
+        if schedule.anchor_date:
+            return schedule.anchor_date
     if segment.created_at:
         return segment.created_at.date()
+    if segment.palace and segment.palace.created_at:
+        return segment.palace.created_at.date()
     return date.today()
 
 
@@ -552,6 +557,8 @@ def _existing_schedule_display_at(
         None,
     )
     if existing_schedule is None:
+        return None
+    if getattr(existing_schedule, "scheduled_at", None) is None:
         return None
     if palace is not None:
         return schedule_display_datetime_for_policy(

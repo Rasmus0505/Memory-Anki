@@ -49,6 +49,7 @@ class Palace(Base):
     archived: Mapped[bool] = mapped_column(Boolean, default=False)
     mastered: Mapped[bool] = mapped_column(Boolean, default=False)
     needs_practice: Mapped[bool] = mapped_column(Boolean, default=False)
+    focus_node_uids_json: Mapped[str] = mapped_column(Text, default="[]")
     editor_doc: Mapped[str] = mapped_column(Text, default="")
     editor_config: Mapped[str] = mapped_column(Text, default="")
     editor_local_config: Mapped[str] = mapped_column(Text, default="")

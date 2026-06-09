@@ -96,7 +96,7 @@ export function PalaceBindingPanel({
               <option value="">未指定收纳章节</option>
               {chapterOptions.map((option) => (
                 <option key={option.id} value={option.id}>
-                  {option.label}
+                  {`${'　'.repeat(option.depth)}${option.name}`}
                 </option>
               ))}
             </select>

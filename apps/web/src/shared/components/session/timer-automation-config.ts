@@ -1,5 +1,10 @@
 import type { SessionKind } from '@/entities/session/model'
 
+import {
+  getCachedClientPreference,
+  setClientPreference,
+} from '@/shared/preferences/clientPreferences'
+
 export type TimerAutomationScene = SessionKind | 'english'
 
 export interface TimerAutomationRule {
@@ -152,24 +157,39 @@ export function sanitizeTimerAutomationConfig(value: unknown): TimerAutomationCo
 export function readTimerAutomationConfig(): TimerAutomationConfig {
   try {
     const raw = window.localStorage.getItem(TIMER_AUTOMATION_STORAGE_KEY)
-    if (!raw) return DEFAULT_TIMER_AUTOMATION_CONFIG
-    return sanitizeTimerAutomationConfig(JSON.parse(raw))
+    if (raw) {
+      return sanitizeTimerAutomationConfig(JSON.parse(raw))
+    }
   } catch {
     return DEFAULT_TIMER_AUTOMATION_CONFIG
   }
+
+  const cached = getCachedClientPreference(
+    'timer_automation_config',
+    DEFAULT_TIMER_AUTOMATION_CONFIG,
+    (value): value is TimerAutomationConfig => Boolean(value && typeof value === 'object'),
+  )
+  if (cached !== DEFAULT_TIMER_AUTOMATION_CONFIG) {
+    return sanitizeTimerAutomationConfig(cached)
+  }
+  return DEFAULT_TIMER_AUTOMATION_CONFIG
 }
 
 export function saveTimerAutomationConfig(config: TimerAutomationConfig) {
   const sanitized = sanitizeTimerAutomationConfig(config)
   window.localStorage.setItem(TIMER_AUTOMATION_STORAGE_KEY, JSON.stringify(sanitized))
-  window.dispatchEvent(new CustomEvent('memory-anki-timer-automation-change', { detail: sanitized }))
+  void setClientPreference('timer_automation_config', sanitized).then((saved) => {
+    window.dispatchEvent(new CustomEvent('memory-anki-timer-automation-change', { detail: saved }))
+  })
   return sanitized
 }
 
 export function resetTimerAutomationConfig() {
-  window.localStorage.removeItem(TIMER_AUTOMATION_STORAGE_KEY)
   const nextConfig = DEFAULT_TIMER_AUTOMATION_CONFIG
-  window.dispatchEvent(new CustomEvent('memory-anki-timer-automation-change', { detail: nextConfig }))
+  window.localStorage.removeItem(TIMER_AUTOMATION_STORAGE_KEY)
+  void setClientPreference('timer_automation_config', nextConfig).then((saved) => {
+    window.dispatchEvent(new CustomEvent('memory-anki-timer-automation-change', { detail: saved }))
+  })
   return nextConfig
 }
 

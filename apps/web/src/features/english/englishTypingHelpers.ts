@@ -15,7 +15,37 @@ export interface EnglishLetterSlot {
 }
 
 const PUNCT_EDGE_RE = /^[\s\.,!?;:"'`~\-\(\)\[\]\{\}]+|[\s\.,!?;:"'`~\-\(\)\[\]\{\}]+$/g
+const USD_AMOUNT_RE = /(?<![A-Za-z0-9])\$(\d[\d,]*)(?:\.(\d{1,2}))?(?![A-Za-z0-9])/g
 const FIXED_TOKEN_CHARS = new Set(["'", '’', '-'])
+const NUMBER_WORDS_LT_20 = [
+  'zero',
+  'one',
+  'two',
+  'three',
+  'four',
+  'five',
+  'six',
+  'seven',
+  'eight',
+  'nine',
+  'ten',
+  'eleven',
+  'twelve',
+  'thirteen',
+  'fourteen',
+  'fifteen',
+  'sixteen',
+  'seventeen',
+  'eighteen',
+  'nineteen',
+]
+const NUMBER_WORDS_TENS = ['', '', 'twenty', 'thirty', 'forty', 'fifty', 'sixty', 'seventy', 'eighty', 'ninety']
+const NUMBER_WORDS_SCALES: Array<[number, string]> = [
+  [1_000_000_000_000, 'trillion'],
+  [1_000_000_000, 'billion'],
+  [1_000_000, 'million'],
+  [1_000, 'thousand'],
+]
 
 export function normalizeEnglishLearningToken(token: string) {
   return String(token || '')
@@ -25,8 +55,70 @@ export function normalizeEnglishLearningToken(token: string) {
     .replace(PUNCT_EDGE_RE, '')
 }
 
+export function normalizeEnglishLearningText(text: string) {
+  const source = String(text || '').trim()
+  if (!source) return ''
+  return source.replace(USD_AMOUNT_RE, (_match, dollarText: string, centText?: string) =>
+    usdAmountToSpokenText(dollarText, centText),
+  )
+}
+
+export function tokenizeEnglishLearningSentence(sentence: string) {
+  return normalizeEnglishLearningText(sentence)
+    .split(/\s+/)
+    .map((item) => normalizeEnglishLearningToken(item))
+    .filter(Boolean)
+}
+
+export function normalizeEnglishLearningTokenList(tokens: string[]) {
+  const output: string[] = []
+  for (const item of Array.isArray(tokens) ? tokens : []) {
+    output.push(...tokenizeEnglishLearningSentence(String(item || '')))
+  }
+  return output
+}
+
 export function normalizeComparableToken(token: string) {
   return normalizeEnglishLearningToken(token).replaceAll("'", '').replaceAll('-', '')
+}
+
+function usdAmountToSpokenText(dollarText: string, centText?: string) {
+  const dollars = Number.parseInt(String(dollarText || '0').replaceAll(',', '') || '0', 10)
+  const cents = centText ? Number.parseInt(String(centText).padEnd(2, '0').slice(0, 2), 10) : 0
+  let dollarWords = ''
+  if (dollars > 0 || cents === 0) {
+    dollarWords = `${integerToEnglish(dollars)} ${dollars === 1 ? 'dollar' : 'dollars'}`
+  }
+  if (cents <= 0) return dollarWords
+  const centWords = `${integerToEnglish(cents)} ${cents === 1 ? 'cent' : 'cents'}`
+  if (dollars <= 0) return centWords
+  return `${dollarWords} and ${centWords}`
+}
+
+function integerToEnglish(value: number): string {
+  const safeValue = Math.max(0, Math.trunc(value))
+  if (safeValue < 20) return NUMBER_WORDS_LT_20[safeValue] || String(safeValue)
+  if (safeValue < 100) {
+    const tens = Math.trunc(safeValue / 10)
+    const remainder = safeValue % 10
+    const head = NUMBER_WORDS_TENS[tens] || ''
+    return remainder === 0 ? head : `${head}-${integerToEnglish(remainder)}`
+  }
+  if (safeValue < 1000) {
+    const hundreds = Math.trunc(safeValue / 100)
+    const remainder = safeValue % 100
+    const head = `${integerToEnglish(hundreds)} hundred`
+    return remainder === 0 ? head : `${head} ${integerToEnglish(remainder)}`
+  }
+  for (const [scaleValue, scaleName] of NUMBER_WORDS_SCALES) {
+    if (safeValue >= scaleValue) {
+      const major = Math.trunc(safeValue / scaleValue)
+      const remainder = safeValue % scaleValue
+      const head = `${integerToEnglish(major)} ${scaleName}`
+      return remainder === 0 ? head : `${head} ${integerToEnglish(remainder)}`
+    }
+  }
+  return String(safeValue)
 }
 
 export function countTokenInputErrors(inputValue: string, expectedToken: string) {

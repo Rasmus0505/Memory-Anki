@@ -14,6 +14,7 @@ import {
   getPalaceEditorApi,
   getPracticeSessionProgressApi,
   savePracticeSessionProgressApi,
+  togglePalaceFocusNodeApi,
   updatePalacePracticeFlagApi,
 } from '@/shared/api/modules/palaces'
 
@@ -23,6 +24,8 @@ interface PalaceMeta {
   description: string
   archived: boolean
   mastered: boolean
+  focus_node_uids?: string[]
+  focus_count?: number
   attachments: Array<{ id: number; original_name: string }>
   chapters: Array<{ id: number; name: string; subject?: { id: number; name: string } | null }>
 }
@@ -117,6 +120,7 @@ export default function PalacePractice() {
         persistKey={`practice:palace:${palace.id}`}
         reviewEditorState={editorState}
         initialSnapshot={initialSnapshot}
+        focusNodeUids={palace.focus_node_uids ?? []}
         persistProgress
         onSnapshotChange={async (snapshot) => {
           if (snapshot.completed) {
@@ -140,6 +144,9 @@ export default function PalacePractice() {
           await clearPracticeSessionProgressApi(palace.id)
           await updatePalacePracticeFlagApi(palace.id, { needs_practice: false })
           setHasResumeProgress(false)
+        }}
+        onToggleFocusNode={async (nodeUid) => {
+          await togglePalaceFocusNodeApi(palace.id, nodeUid)
         }}
       />
     </div>

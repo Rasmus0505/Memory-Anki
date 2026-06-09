@@ -2,29 +2,42 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from memory_anki.infrastructure.db.models import EnglishCourse, get_session
-from memory_anki.modules.english.application.service import (
-    EnglishCourseError,
+from memory_anki.infrastructure.db.models import get_session
+from memory_anki.modules.english.application.course_service import (
     check_sentence_input,
-    clear_current_task,
-    create_generation_task,
     delete_course,
     get_course_detail,
-    get_course_generation_log,
+    get_course_media_file,
     get_course_progress,
-    get_current_task_payload,
     get_recent_unfinished_course_payload,
-    get_task_generation_log,
-    get_workspace_summary,
-    resolve_course_media_path,
-    retry_current_task,
-    stream_task_events,
     update_course_progress,
 )
+from memory_anki.modules.english.application.task_service import (
+    clear_current_task,
+    create_generation_task,
+    get_course_generation_log,
+    get_current_task_payload,
+    get_task_generation_log,
+    get_workspace_summary,
+    retry_current_task,
+    stream_task_events,
+)
+from memory_anki.modules.english.domain.errors import EnglishCourseError
 
 router = APIRouter(tags=["english"])
+
+
+class EnglishProgressUpdateRequest(BaseModel):
+    currentSentenceIndex: int
+    completedSentenceIndexes: list[int] = Field(default_factory=list)
+
+
+class EnglishSentenceCheckRequest(BaseModel):
+    sentenceIndex: int
+    inputText: str = ""
 
 
 def session_dep():
@@ -138,15 +151,15 @@ def api_get_english_course_progress(course_id: int, session: Session = Depends(s
 @router.put("/english/courses/{course_id}/progress")
 def api_update_english_course_progress(
     course_id: int,
-    data: dict,
+    data: EnglishProgressUpdateRequest,
     session: Session = Depends(session_dep),
 ):
     try:
         return update_course_progress(
             session,
             course_id=course_id,
-            current_sentence_index=int(data.get("currentSentenceIndex", 0)),
-            completed_sentence_indexes=list(data.get("completedSentenceIndexes") or []),
+            current_sentence_index=data.currentSentenceIndex,
+            completed_sentence_indexes=data.completedSentenceIndexes,
         )
     except EnglishCourseError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -155,15 +168,15 @@ def api_update_english_course_progress(
 @router.post("/english/courses/{course_id}/check")
 def api_check_english_course_sentence(
     course_id: int,
-    data: dict,
+    data: EnglishSentenceCheckRequest,
     session: Session = Depends(session_dep),
 ):
     try:
         return check_sentence_input(
             session,
             course_id=course_id,
-            sentence_index=int(data.get("sentenceIndex", 0)),
-            input_text=str(data.get("inputText") or ""),
+            sentence_index=data.sentenceIndex,
+            input_text=data.inputText,
         )
     except EnglishCourseError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -172,14 +185,11 @@ def api_check_english_course_sentence(
 @router.get("/english/courses/{course_id}/media")
 def api_get_english_course_media(course_id: int, session: Session = Depends(session_dep)):
     try:
-        course = session.query(EnglishCourse).filter_by(id=course_id).first()
-        if course is None:
-            raise EnglishCourseError("英语课程不存在。")
-        media_path = resolve_course_media_path(course)
+        media_file = get_course_media_file(session, course_id)
         return FileResponse(
-            media_path,
-            media_type=course.media_mime_type or "video/mp4",
-            filename=course.original_filename or media_path.name,
+            media_file["path"],
+            media_type=media_file["media_type"],
+            filename=media_file["filename"],
         )
     except EnglishCourseError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc

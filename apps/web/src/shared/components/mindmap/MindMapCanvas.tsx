@@ -7,6 +7,7 @@ import type { GraphData } from './adapter'
 import { MindMapCanvasToolbar } from './MindMapCanvasToolbar'
 import { MindMapCanvasViewport } from './MindMapCanvasViewport'
 import { useMindMapCanvasState } from './useMindMapCanvasState'
+import { dispatchGlobalFeedback } from '@/shared/feedback/globalFeedbackModel'
 
 export interface MindMapCanvasProps {
   graphData: GraphData
@@ -40,6 +41,14 @@ function MindMapCanvasInner({
   ...props
 }: MindMapCanvasProps) {
   const state = useMindMapCanvasState({ ...props, focusMode })
+  const handleToggleFocusMode = () => {
+    dispatchGlobalFeedback('mode_switch', {
+      origin: 'toolbar',
+      label: focusMode ? 'EXIT' : 'FOCUS',
+    })
+    onToggleFocusMode?.()
+  }
+
   return (
     <div
       ref={state.frameRef}
@@ -53,7 +62,7 @@ function MindMapCanvasInner({
         onReflow={state.resetLayout}
         onZoomOut={state.zoomOutCanvas}
         onZoomIn={state.zoomInCanvas}
-        onToggleFocusMode={onToggleFocusMode}
+        onToggleFocusMode={handleToggleFocusMode}
         onUndo={props.onUndo}
         onRedo={props.onRedo}
       />

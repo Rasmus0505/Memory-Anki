@@ -1,8 +1,7 @@
 import os
 from contextlib import asynccontextmanager
-from datetime import date, datetime, time, timedelta
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
@@ -33,7 +32,11 @@ from memory_anki.modules.backups.application.backup_service import (
     start_periodic_backup_loop,
     stop_periodic_backup_loop,
 )
-from memory_anki.modules.english.application.service import ensure_english_schema
+from memory_anki.modules.dashboard.presentation import router as dashboard_router
+from memory_anki.modules.english.application.startup import (
+    ensure_english_storage_schema,
+    prepare_english_runtime,
+)
 from memory_anki.modules.english.presentation import router as english_router
 from memory_anki.modules.knowledge.application.bilink_service import ensure_bilink_schema
 from memory_anki.modules.knowledge.application.subject_document_service import (
@@ -47,20 +50,12 @@ from memory_anki.modules.palaces.application.mindmap_import_job_service import (
 )
 from memory_anki.modules.palaces.application.segment_service import ensure_segment_schema
 from memory_anki.modules.palaces.application.title_sync_service import (
-    build_today_new_palace_outline,
     ensure_palace_group_schema,
-    palace_has_due_later_today,
 )
 from memory_anki.modules.palaces.presentation import import_router
 from memory_anki.modules.palaces.presentation import router as palace_router
 from memory_anki.modules.reviews.application.review_execution_service import (
     repair_review_stage_progress,
-)
-from memory_anki.modules.reviews.application.review_metrics_service import (
-    get_weekly_stats,
-)
-from memory_anki.modules.reviews.application.review_queue_service import (
-    get_today_review_groups,
 )
 from memory_anki.modules.reviews.application.schedule_service import (
     ensure_review_schedule_schema,
@@ -74,21 +69,11 @@ from memory_anki.modules.sessions.application.session_progress_service import (
 from memory_anki.modules.sessions.presentation import router as sessions_router
 from memory_anki.modules.settings.presentation import router as settings_router
 from memory_anki.modules.time_records.application.time_records_service import (
-    date_range_bounds,
     ensure_review_log_time_records,
-    get_all_time_total_review_duration_seconds,
-    get_english_course_stats,
-    get_monthly_total_review_duration_seconds,
-    get_selected_total_review_duration_seconds,
-    get_today_formal_review_duration_seconds,
-    get_today_palace_learning_breakdown,
-    get_today_total_review_duration_seconds,
-    get_weekly_formal_review_duration_seconds,
-    get_weekly_total_review_duration_seconds,
-    month_bounds,
     normalize_time_record_event_timezones,
 )
 from memory_anki.modules.time_records.presentation import router as time_records_router
+from memory_anki.modules.voice_coach import presentation as voice_coach_router
 
 REVIEW_SCHEDULE_REPAIR_MIGRATION_KEY = "review_schedule_anchor_repair_v1"
 
@@ -121,13 +106,14 @@ async def lifespan(app: FastAPI):
     ensure_segment_schema()
     ensure_mindmap_import_job_schema()
     ensure_external_ai_call_log_schema()
-    ensure_english_schema()
+    ensure_english_storage_schema()
     ensure_palace_group_schema()
     ensure_review_schedule_schema()
     ensure_session_progress_schema()
     session = get_session()
     try:
         ensure_backup_schema(session)
+        prepare_english_runtime(session)
         for key, value in DEFAULTS.items():
             existing = session.query(Config).filter_by(key=key).first()
             if not existing:
@@ -182,130 +168,8 @@ app.include_router(knowledge_router.router, prefix="/api/v1")
 app.include_router(bilink_router.router, prefix="/api/v1")
 app.include_router(time_records_router.router, prefix="/api/v1")
 app.include_router(english_router.router, prefix="/api/v1")
-
-
-@app.get("/api/v1/dashboard")
-def api_dashboard(
-    duration_mode: str | None = Query(default=None),
-    month: str | None = Query(default=None),
-    start_date: str | None = Query(default=None),
-    end_date: str | None = Query(default=None),
-):
-    session = get_session()
-    try:
-        from memory_anki.infrastructure.db.models import Palace
-
-        reviews = get_today_review_groups(session)
-        today_start = datetime.combine(date.today(), time.min)
-        today_end = today_start + timedelta(days=1)
-        recent = session.query(Palace).order_by(Palace.updated_at.desc()).limit(5).all()
-        today_new_palaces = (
-            session.query(Palace)
-            .filter(
-                Palace.created_at.is_not(None),
-                Palace.created_at >= today_start,
-                Palace.created_at < today_end,
-            )
-            .order_by(Palace.created_at.asc(), Palace.id.asc())
-            .all()
-        )
-        all_palaces = session.query(Palace).all()
-        due_palace_ids = {review["schedule"].palace_id for review in reviews}
-        due_later_today_count = sum(
-            1
-            for palace in all_palaces
-            if palace.id not in due_palace_ids and palace_has_due_later_today(session, palace)
-        )
-        needs_practice_count = sum(1 for palace in all_palaces if bool(getattr(palace, "needs_practice", False)))
-
-        def palace_out(palace):
-            return {
-                "id": palace.id,
-                "title": palace.title,
-                "description": palace.description,
-                "peg_count": len(palace.pegs),
-                "created_at": palace.created_at.isoformat() if palace.created_at else None,
-            }
-
-        today_total_review_duration_seconds = get_today_total_review_duration_seconds(session)
-        today_review_duration_seconds = get_today_formal_review_duration_seconds(session)
-        monthly_total_review_duration_seconds = get_monthly_total_review_duration_seconds(session)
-        weekly_formal_review_duration_seconds = get_weekly_formal_review_duration_seconds(session)
-        weekly_total_review_duration_seconds = get_weekly_total_review_duration_seconds(session)
-        selected_total_review_duration_seconds = monthly_total_review_duration_seconds
-        english_stats = get_english_course_stats(session)
-
-        if duration_mode is not None:
-            if duration_mode == "month":
-                if not month:
-                    raise HTTPException(status_code=400, detail="month 为必填，格式必须是 YYYY-MM。")
-                try:
-                    selected_month = date.fromisoformat(f"{month}-01")
-                except ValueError as error:
-                    raise HTTPException(status_code=400, detail="month 格式必须是 YYYY-MM。") from error
-                selected_start, selected_end = month_bounds(selected_month)
-                selected_total_review_duration_seconds = get_selected_total_review_duration_seconds(
-                    session,
-                    start=selected_start,
-                    end=selected_end,
-                )
-            elif duration_mode == "range":
-                if not start_date or not end_date:
-                    raise HTTPException(status_code=400, detail="start_date 和 end_date 为必填，格式必须是 YYYY-MM-DD。")
-                try:
-                    selected_start_date = date.fromisoformat(start_date)
-                    selected_end_date = date.fromisoformat(end_date)
-                except ValueError as error:
-                    raise HTTPException(status_code=400, detail="start_date 和 end_date 格式必须是 YYYY-MM-DD。") from error
-                if selected_start_date > selected_end_date:
-                    raise HTTPException(status_code=400, detail="开始日期不能晚于结束日期。")
-                selected_start, selected_end = date_range_bounds(selected_start_date, selected_end_date)
-                selected_total_review_duration_seconds = get_selected_total_review_duration_seconds(
-                    session,
-                    start=selected_start,
-                    end=selected_end,
-                )
-            elif duration_mode == "all":
-                selected_total_review_duration_seconds = get_all_time_total_review_duration_seconds(session)
-            else:
-                raise HTTPException(status_code=400, detail="duration_mode 仅支持 month、range 或 all。")
-
-        return {
-            "due_count": len(reviews),
-            "due_later_today_count": due_later_today_count,
-            "needs_practice_count": needs_practice_count,
-            "reviews": [
-                {
-                    "id": review["schedule"].id,
-                    "palace_id": review["schedule"].palace_id,
-                    "palace": palace_out(review["schedule"].palace) if review["schedule"].palace else None,
-                    "scheduled_date": review["schedule"].scheduled_date.isoformat(),
-                    "interval_days": review["schedule"].interval_days,
-                    "algorithm_used": review["schedule"].algorithm_used,
-                    "review_number": review["schedule"].review_number,
-                    "completed": review["schedule"].completed,
-                    "schedule_count": review["schedule_count"],
-                    "overdue_schedule_count": review["overdue_schedule_count"],
-                    "next_due_date": review["next_due_date"].isoformat(),
-                }
-                for review in reviews
-            ],
-            "stats": get_weekly_stats(session),
-            "today_review_duration_seconds": today_review_duration_seconds,
-            "weekly_review_duration_seconds": weekly_formal_review_duration_seconds,
-            "today_total_review_duration_seconds": today_total_review_duration_seconds,
-            "monthly_total_review_duration_seconds": monthly_total_review_duration_seconds,
-            "selected_total_review_duration_seconds": selected_total_review_duration_seconds,
-            "weekly_total_review_duration_seconds": weekly_total_review_duration_seconds,
-            "weekly_formal_review_duration_seconds": weekly_formal_review_duration_seconds,
-            "english_stats": english_stats,
-            "recent_palaces": [palace_out(palace) for palace in recent],
-            "today_learning_palaces": get_today_palace_learning_breakdown(session),
-            "today_new_palace_count": len(today_new_palaces),
-            "today_new_palaces": build_today_new_palace_outline(session, today_new_palaces),
-        }
-    finally:
-        session.close()
+app.include_router(voice_coach_router.router, prefix="/api/v1")
+app.include_router(dashboard_router.router, prefix="/api/v1")
 
 
 if __name__ == "__main__":

@@ -16,12 +16,15 @@ function renderNodeCard(overrides?: Record<string, unknown>) {
   render(
     <NodeCard
       id="peg-1"
+      draggable
       selected={false}
       dragging={false}
+      selectable
+      deletable
       zIndex={1}
       isConnectable
-      xPos={0}
-      yPos={0}
+      positionAbsoluteX={0}
+      positionAbsoluteY={0}
       type="mindmapNode"
       data={{
         id: 'peg-1',

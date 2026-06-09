@@ -4,6 +4,7 @@ import DashboardPage from '@/app/router/DashboardPage'
 import PalaceListPage from '@/app/router/PalaceListPage'
 import PalaceShelfPage from '@/app/router/PalaceShelfPage'
 import PalacePracticePage from '@/app/router/PalacePracticePage'
+import PalaceFocusPracticePage from '@/app/router/PalaceFocusPracticePage'
 import PalaceViewPage from '@/app/router/PalaceViewPage'
 import SegmentPracticePage from '@/app/router/SegmentPracticePage'
 import ReviewOverviewPage from '@/features/review/ReviewOverviewPage'
@@ -18,6 +19,9 @@ const ProfileAiSplitPage = lazy(
 )
 const ProfileAiPromptsPage = lazy(
   () => import('@/features/profile/ProfileAiPromptsPage'),
+)
+const ProfileVoiceCoachPage = lazy(
+  () => import('@/features/profile/ProfileVoiceCoachPage'),
 )
 const ProfileBackupsPage = lazy(
   () => import('@/features/profile/ProfileBackupsPage'),
@@ -52,6 +56,7 @@ export function AppRouter() {
         <Route path="/palaces/new" element={<PalaceEditPage />} />
         <Route path="/palaces/:id" element={<PalaceViewPage />} />
         <Route path="/palaces/:id/practice" element={<PalacePracticePage />} />
+        <Route path="/palaces/:id/focus-practice" element={<PalaceFocusPracticePage />} />
         <Route path="/segments/:id/practice" element={<SegmentPracticePage />} />
         <Route path="/palaces/:id/edit" element={<PalaceEditPage />} />
         <Route path="/knowledge" element={<KnowledgePage />} />
@@ -62,6 +67,7 @@ export function AppRouter() {
         <Route path="/profile" element={<ProfilePage />} />
         <Route path="/profile/ai-prompts" element={<ProfileAiPromptsPage />} />
         <Route path="/profile/ai-split" element={<ProfileAiSplitPage />} />
+        <Route path="/profile/voice-coach" element={<ProfileVoiceCoachPage />} />
         <Route path="/profile/backups" element={<ProfileBackupsPage />} />
       </Routes>
     </Suspense>

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
-import { subscribeEnglishTaskStream } from '@/shared/api/modules/english'
+import { subscribeEnglishTaskStream } from '@/features/english/api/englishApi'
 
 class FakeEventSource {
   static instances: FakeEventSource[] = []
@@ -7,8 +7,10 @@ class FakeEventSource {
   listeners = new Map<string, Array<(event: Event) => void>>()
   closed = false
   onerror: ((event: Event) => void) | null = null
+  url: string
 
-  constructor(public url: string) {
+  constructor(url: string) {
+    this.url = url
     FakeEventSource.instances.push(this)
   }
 

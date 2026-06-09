@@ -1,5 +1,6 @@
 import { MindMapFrame, type MindMapSelection } from '@/shared/components/mindmap-host'
 import type { BilinkItem, MindMapEditorState } from '@/shared/api/contracts'
+import type { MindMapReviewFxPayload } from '@/shared/components/mindmap-host/hostBridgeUtils'
 import { cn } from '@/shared/lib/utils'
 
 interface ReviewFlowMapPanelProps {
@@ -15,11 +16,15 @@ interface ReviewFlowMapPanelProps {
   bilinkCounts?: Record<string, number>
   bilinkItems?: BilinkItem[]
   currentPalaceId?: number | null
+  focusNodeUids?: string[]
   bilinkInsertionText?: string | null
   bilinkInsertionNonce?: number
+  reviewFxSignal?: MindMapReviewFxPayload | null
   onEditorStateChange?: (nextState: MindMapEditorState) => void
   onNodeClick: (nodes: MindMapSelection[]) => void
   onNodeContextMenu: (nodes: MindMapSelection[]) => void
+  onEditNodeContextMenu?: (nodes: MindMapSelection[]) => void
+  onNodeActive?: (nodes: MindMapSelection[]) => void
   onBilinkTrigger?: (payload: {
     nodeUid: string | null
     left: number
@@ -47,11 +52,15 @@ export function ReviewFlowMapPanel({
   bilinkCounts = {},
   bilinkItems = [],
   currentPalaceId = null,
+  focusNodeUids = [],
   bilinkInsertionText = null,
   bilinkInsertionNonce = 0,
+  reviewFxSignal = null,
   onEditorStateChange,
   onNodeClick,
   onNodeContextMenu,
+  onEditNodeContextMenu,
+  onNodeActive,
   onBilinkTrigger,
   onBilinkNodeClick,
   onBilinkToolbarSearch,
@@ -81,12 +90,15 @@ export function ReviewFlowMapPanel({
         bilinkCounts={bilinkCounts}
         bilinkItems={bilinkItems}
         bilinkCurrentPalaceId={currentPalaceId}
+        focusNodeUids={focusNodeUids}
         bilinkInsertionText={bilinkInsertionText}
         bilinkInsertionNonce={bilinkInsertionNonce}
+        reviewFxSignal={reviewFxSignal}
         showBilinkSearchButton
         onEditorStateChange={isEditMode && onEditorStateChange ? onEditorStateChange : () => {}}
+        onNodeActive={onNodeActive}
         onNodeClick={isEditMode ? undefined : onNodeClick}
-        onNodeContextMenu={isEditMode ? undefined : onNodeContextMenu}
+        onNodeContextMenu={isEditMode ? onEditNodeContextMenu : onNodeContextMenu}
         onPracticeToggle={onToggleMode}
         onBilinkTrigger={onBilinkTrigger}
         onBilinkNodeClick={onBilinkNodeClick}

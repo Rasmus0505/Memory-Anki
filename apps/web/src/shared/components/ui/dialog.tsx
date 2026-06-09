@@ -25,7 +25,7 @@ export function Dialog({ open, onOpenChange, children, modal = true, className =
 
   return createPortal(
     <div
-      className={`fixed inset-0 z-50 flex items-center justify-center p-4 ${
+      className={`fixed inset-0 z-[140] flex items-center justify-center p-4 ${
         modal ? '' : 'pointer-events-none'
       } ${className}`}
     >
@@ -70,7 +70,7 @@ export function DialogTitle({ children }: PropsWithChildren) {
   return <h2 className="text-lg font-semibold">{children}</h2>
 }
 
-export function DialogClose({ onClick }: { onClick: () => void }) {
+export function DialogClose({ onClick }: { onClick?: () => void }) {
   return (
     <button
       type="button"

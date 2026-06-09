@@ -2,6 +2,7 @@ import { API_BASE, request } from '@/shared/api/http'
 import type {
   AiPromptTemplateListResponse,
   BackupListResponse,
+  ClientPreferencesResponse,
   CreateBackupResponse,
   ImportPalacesResponse,
   PdfImportOptions,
@@ -79,5 +80,16 @@ export function restoreBackupApi(path: string) {
   return request<RestoreBackupResponse>('/backups/restore-database', {
     method: 'POST',
     body: JSON.stringify({ path }),
+  })
+}
+
+export function getClientPreferencesApi() {
+  return request<ClientPreferencesResponse>('/profile/client-preferences')
+}
+
+export function updateClientPreferencesApi(data: Record<string, unknown>) {
+  return request<ClientPreferencesResponse>('/profile/client-preferences', {
+    method: 'PUT',
+    body: JSON.stringify(data),
   })
 }

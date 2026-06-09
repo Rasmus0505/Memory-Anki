@@ -36,7 +36,7 @@ export function NodeContextMenu({ x, y, onClose, actions, children }: NodeContex
 
   return (
     <div
-      className="fixed z-50 min-w-[160px] rounded-lg border bg-popover p-1 shadow-md"
+      className="fixed z-[140] min-w-[160px] rounded-lg border bg-popover p-1 shadow-md"
       style={{ left: x, top: y }}
       onClick={(e) => e.stopPropagation()}
       onContextMenu={(e) => e.preventDefault()}

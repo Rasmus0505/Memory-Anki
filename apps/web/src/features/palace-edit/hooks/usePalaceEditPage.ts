@@ -5,6 +5,7 @@ import { useBilinkOverlay } from '@/features/bilink'
 import { useBilinkCounts } from '@/features/bilink/hooks/useBilinkCounts'
 import { useBilinks } from '@/features/bilink/hooks/useBilinks'
 import type { MindMapAiSplitRequestPayload, MindMapSelection } from '@/shared/components/mindmap-host'
+import type { MindMapFeedbackEvent, MindMapFeedbackFxPayload } from '@/shared/components/mindmap-host/hostBridgeUtils'
 import { readTimerAutomationConfig } from '@/shared/components/session/timer-automation-config'
 import { shouldAutoStartOnPageEnter, useTimedSession } from '@/shared/hooks/useTimedSession'
 import { logAiCall, requestOpenAiLogDetail } from '@/shared/logs/model/appLogs'
@@ -16,9 +17,16 @@ import { usePalaceSegmentsController } from '@/features/palace-edit/hooks/usePal
 import { usePalaceVersionsController } from '@/features/palace-edit/hooks/usePalaceVersionsController'
 import type { StatusBadgeState } from '@/features/palace-edit/model/palace-edit-types'
 import type { ImportApplyContext } from '@/features/palace-edit/model/mindmap-import-types'
-import { splitMindMapNodeApi } from '@/shared/api/modules/palaces'
-import { getEnglishContinueCourseApi } from '@/shared/api/modules/english'
+import { splitMindMapNodeApi, togglePalaceFocusNodeApi } from '@/shared/api/modules/palaces'
+import { getEnglishContinueCourseApi } from '@/features/english/api/englishApi'
 import type { MindMapEditorState } from '@/shared/api/contracts'
+import { useMemoryAnkiShortcuts } from '@/features/shortcuts/memoryAnkiShortcuts'
+export type { ChapterOption, PalaceMeta } from '@/features/palace-edit/model/palace-edit-types'
+
+function readSelectionNodeUid(nodes: MindMapSelection[]) {
+  const node = nodes[0] ?? null
+  return node?.uid ? String(node.uid) : null
+}
 
 export function usePalaceEditPage() {
   const { id } = useParams()
@@ -27,11 +35,19 @@ export function usePalaceEditPage() {
   const palaceId = id ? Number(id) : null
   const [replaceSyncVersion, setReplaceSyncVersion] = useState(0)
   const [selectedNodes, setSelectedNodes] = useState<MindMapSelection[]>([])
+  const [modeFocusRequest, setModeFocusRequest] = useState<{
+    nodeUid: string | null
+    nonce: number
+  }>({ nodeUid: null, nonce: 0 })
   const [mindMapFullscreen, setMindMapFullscreen] = useState(false)
   const [aiSplitBusy, setAiSplitBusy] = useState(false)
   const [aiSplitAppliedSyncVersion, setAiSplitAppliedSyncVersion] = useState(0)
+  const [focusNodeUids, setFocusNodeUids] = useState<string[]>([])
+  const [feedbackFxSignal, setFeedbackFxSignal] = useState<MindMapFeedbackFxPayload | null>(null)
   const suppressNativeFullscreenExitUntilRef = useRef(0)
   const hardUnloadRef = useRef(false)
+  const feedbackFxNonceRef = useRef(0)
+  const selectedNodeUidRef = useRef<string | null>(null)
 
   const timer = useTimedSession({
     kind: 'palace_edit',
@@ -101,6 +117,88 @@ export function usePalaceEditPage() {
   })
 
   const selectedNode = selectedNodes[0] ?? null
+  const selectedNodeUid = selectedNode?.uid ? String(selectedNode.uid) : null
+
+  useEffect(() => {
+    selectedNodeUidRef.current = selectedNodeUid
+  }, [selectedNodeUid])
+
+  const queueModeFocusRequest = useCallback((nodeUid: string | null = selectedNodeUidRef.current) => {
+    setModeFocusRequest((current) => ({
+      nodeUid,
+      nonce: current.nonce + 1,
+    }))
+  }, [])
+
+  const enterInlinePractice = useCallback(() => {
+    queueModeFocusRequest()
+    practice.enterInlinePractice()
+  }, [practice, queueModeFocusRequest])
+
+  const exitInlinePractice = useCallback(() => {
+    queueModeFocusRequest()
+    practice.exitInlinePractice()
+  }, [practice, queueModeFocusRequest])
+
+  const toggleInlinePractice = useCallback(() => {
+    queueModeFocusRequest()
+    practice.toggleInlinePractice()
+  }, [practice, queueModeFocusRequest])
+
+  const handleMindMapNodeActive = useCallback((nodes: MindMapSelection[]) => {
+    selectedNodeUidRef.current = readSelectionNodeUid(nodes)
+    setSelectedNodes(nodes)
+  }, [])
+
+  const handleInlinePracticeNodeClick = useCallback((nodes: MindMapSelection[]) => {
+    if (practice.editorMode === 'practice') {
+      selectedNodeUidRef.current = readSelectionNodeUid(nodes)
+      setSelectedNodes(nodes)
+    }
+    practice.handleInlinePracticeNodeClick(nodes)
+  }, [practice])
+
+  const handleInlinePracticeNodeContextMenu = useCallback((nodes: MindMapSelection[]) => {
+    if (practice.editorMode === 'practice') {
+      selectedNodeUidRef.current = readSelectionNodeUid(nodes)
+      setSelectedNodes(nodes)
+    }
+    practice.handleInlinePracticeNodeContextMenu(nodes)
+  }, [practice])
+
+  const emitFeedbackFx = useCallback(
+    (
+      type: MindMapFeedbackEvent,
+      options: {
+        nodeUid?: string | null
+        relatedNodeUids?: string[]
+        lineMode?: MindMapFeedbackFxPayload['lineMode']
+        intensity?: MindMapFeedbackFxPayload['intensity']
+        source?: string
+      } = {},
+    ) => {
+      feedbackFxNonceRef.current += 1
+      setFeedbackFxSignal({
+        type,
+        nodeUid: options.nodeUid ?? selectedNode?.uid ?? null,
+        relatedNodeUids:
+          options.relatedNodeUids ??
+          (selectedNode?.uid ? [String(selectedNode.uid)] : []),
+        intensity: options.intensity ?? 'full',
+        lineMode: options.lineMode ?? 'confirm',
+        source: options.source,
+        nonce: feedbackFxNonceRef.current,
+      })
+    },
+    [selectedNode?.uid],
+  )
+
+  useEffect(() => {
+    const nextFocusNodeUids = Array.isArray(palace?.focus_node_uids)
+      ? palace.focus_node_uids.map((value) => String(value)).filter(Boolean)
+      : []
+    setFocusNodeUids(nextFocusNodeUids)
+  }, [palace?.focus_node_uids])
 
   const handleMindMapEditorStateChange = useCallback(
     (nextState: MindMapEditorState) => {
@@ -109,6 +207,82 @@ export function usePalaceEditPage() {
       })
     },
     [documentState],
+  )
+
+  const toggleFocusNodeUid = useCallback(
+    async (nodeUid: string, source: string) => {
+      if (!palaceId || !nodeUid) return
+      const previousFocusNodeUids = focusNodeUids
+      const wasFocused = previousFocusNodeUids.includes(nodeUid)
+      const optimisticFocusNodeUids = wasFocused
+        ? previousFocusNodeUids.filter((uid) => uid !== nodeUid)
+        : [...previousFocusNodeUids, nodeUid]
+      setFocusNodeUids(optimisticFocusNodeUids)
+      timer.registerActivity('edit_operation', { source })
+      try {
+        const response = await togglePalaceFocusNodeApi(palaceId, nodeUid)
+        setFocusNodeUids(response.focus_node_uids ?? optimisticFocusNodeUids)
+        emitFeedbackFx(response.focused ? 'node_create' : 'node_delete', {
+          nodeUid,
+          relatedNodeUids: [nodeUid],
+          source: 'toggle_focus_node',
+        })
+        toast.success(response.focused ? '已标记为专项卡' : '已取消专项卡标记')
+      } catch (error) {
+        setFocusNodeUids(previousFocusNodeUids)
+        emitFeedbackFx('save_error', {
+          nodeUid,
+          relatedNodeUids: [nodeUid],
+          source: 'toggle_focus_node_error',
+        })
+        toast.error(error instanceof Error ? error.message : '专项卡标记失败，请稍后重试。')
+      }
+    },
+    [emitFeedbackFx, focusNodeUids, palaceId, timer],
+  )
+
+  const handleEditNodeContextMenu = useCallback(
+    (nodes: MindMapSelection[]) => {
+      if (practice.editorMode !== 'edit') return
+      const nodeUid = nodes[0]?.uid ? String(nodes[0].uid) : ''
+      if (!nodeUid) return
+      void toggleFocusNodeUid(nodeUid, 'mindmap_focus_contextmenu')
+    },
+    [practice.editorMode, toggleFocusNodeUid],
+  )
+
+  const handleShortcutToggleFocusNode = useCallback(() => {
+    if (practice.editorMode !== 'edit') return
+    const nodeUid = selectedNode?.uid ? String(selectedNode.uid) : ''
+    if (!nodeUid) {
+      toast.info('请先选中一个节点，再标记专项卡。')
+      return
+    }
+    void toggleFocusNodeUid(nodeUid, 'shortcut_toggle_focus_node')
+  }, [practice.editorMode, selectedNode?.uid, toggleFocusNodeUid])
+
+  const handleShortcutHideChildCards = useCallback(() => {
+    if (practice.editorMode !== 'practice') return
+    const node = selectedNode
+    if (!node?.uid) {
+      toast.info('请先选中一个节点，再隐藏子级卡片。')
+      return
+    }
+    practice.handleInlinePracticeNodeContextMenu([node])
+  }, [practice, selectedNode])
+
+  const shortcutHandlers = useMemo(
+    () => ({
+      toggle_focus_node: handleShortcutToggleFocusNode,
+      hide_child_cards_practice: handleShortcutHideChildCards,
+    }),
+    [handleShortcutHideChildCards, handleShortcutToggleFocusNode],
+  )
+
+  useMemoryAnkiShortcuts(
+    practice.editorMode === 'edit' ? 'edit' : 'practice',
+    shortcutHandlers,
+    Boolean(documentState.editorState),
   )
 
   useEffect(() => {
@@ -180,12 +354,13 @@ export function usePalaceEditPage() {
   const toggleMindMapFullscreen = useCallback(
     (active?: boolean) => {
       timer.registerActivity('edit_operation', { source: 'mind_map_immersive_toggle' })
+      emitFeedbackFx('mode_switch', { source: 'mind_map_immersive_toggle' })
       if (active === true) {
         suppressNativeFullscreenExitUntilRef.current = Date.now() + 1500
       }
       setMindMapFullscreen((current) => (typeof active === 'boolean' ? active : !current))
     },
-    [timer],
+    [emitFeedbackFx, timer],
   )
 
   const handleMindMapNativeFullscreenChange = useCallback((active: boolean) => {
@@ -255,6 +430,11 @@ export function usePalaceEditPage() {
           ...documentState.editorState,
           editor_doc: result.editor_doc,
         })
+        emitFeedbackFx('node_create', {
+          nodeUid: payload.target_node_uid,
+          relatedNodeUids: payload.target_node_uid ? [payload.target_node_uid] : [],
+          source: 'mindmap_ai_split_success',
+        })
         const generatedCount = result.generated_children_count ?? 0
         const movedCount = result.reassigned_existing_children_count ?? 0
         toast.success(
@@ -292,12 +472,17 @@ export function usePalaceEditPage() {
             requestId,
           },
         })
+        emitFeedbackFx('save_error', {
+          nodeUid: payload.target_node_uid,
+          relatedNodeUids: payload.target_node_uid ? [payload.target_node_uid] : [],
+          source: 'mindmap_ai_split_failure',
+        })
         toast.error(message)
       } finally {
         setAiSplitBusy(false)
       }
     },
-    [documentState, palaceId, practice.editorMode, timer],
+    [documentState, emitFeedbackFx, palaceId, practice.editorMode, timer],
   )
 
   const statusBadge: StatusBadgeState = versions.statusBadge
@@ -359,10 +544,16 @@ export function usePalaceEditPage() {
     ) => Promise<void>,
     activeMindMapEditorState: practice.activeMindMapEditorState,
     practiceVisibleEditorSyncKey: practice.practiceVisibleEditorSyncKey,
+    modeFocusRequestNodeUid: modeFocusRequest.nodeUid,
+    modeFocusRequestNonce: modeFocusRequest.nonce,
     replaceSyncVersion,
     selectedNodes,
     selectedNode,
+    focusNodeUids,
+    feedbackFxSignal,
+    reviewFxSignal: practice.feedback.reviewFxSignal,
     setSelectedNodes,
+    handleMindMapNodeActive,
     setEditorState: documentState.setEditorState,
     handleMindMapEditorStateChange,
     aiSplitBusy,
@@ -372,17 +563,18 @@ export function usePalaceEditPage() {
     handleAttachmentUpload: meta.handleAttachmentUpload,
     handleAttachmentDelete: meta.handleAttachmentDelete,
     handleChapterToggle: meta.handleChapterToggle,
-    enterInlinePractice: practice.enterInlinePractice,
-    exitInlinePractice: practice.exitInlinePractice,
-    toggleInlinePractice: practice.toggleInlinePractice,
+    enterInlinePractice,
+    exitInlinePractice,
+    toggleInlinePractice,
     bilinks: bilinks.items,
     bilinksLoading: bilinks.loading,
     bilinksError: bilinks.error,
     bilinkCounts: bilinkCounts.counts,
     bilinkCountsLoading: bilinkCounts.loading,
     ...bilinkOverlay,
-    handleInlinePracticeNodeClick: practice.handleInlinePracticeNodeClick,
-    handleInlinePracticeNodeContextMenu: practice.handleInlinePracticeNodeContextMenu,
+    handleInlinePracticeNodeClick,
+    handleInlinePracticeNodeContextMenu,
+    handleEditNodeContextMenu,
     handleAiSplitRequest,
     restartInlinePractice: practice.restartInlinePractice,
     handleOpenVersions: versions.handleOpenVersions,

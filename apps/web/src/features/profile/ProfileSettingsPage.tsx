@@ -3,6 +3,7 @@ import {
   Download,
   FileJson,
   FileText,
+  Keyboard,
   Settings,
   Upload,
 } from 'lucide-react'
@@ -11,6 +12,7 @@ import { ProfileLayout } from '@/features/profile/ProfileLayout'
 import type { ReviewSettings } from '@/shared/api/contracts'
 import {
   exportJsonUrl,
+  getClientPreferencesApi,
   exportMarkdownUrl,
   getReviewSettingsApi,
   importFileApi,
@@ -20,16 +22,21 @@ import { Button } from '@/shared/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card'
 import { Input } from '@/shared/components/ui/input'
 import { Label } from '@/shared/components/ui/label'
+import { MemoryAnkiShortcutsSettings } from '@/features/shortcuts/MemoryAnkiShortcutsSettings'
 
 export default function ProfileSettingsPage() {
-  const [tab, setTab] = useState<'config' | 'io'>('config')
+  const [tab, setTab] = useState<'config' | 'io' | 'shortcuts'>('config')
   const [config, setConfig] = useState<ReviewSettings | null>(null)
+  const [clientPreferencesReady, setClientPreferencesReady] = useState(false)
   const [algorithm, setAlgorithm] = useState('ebbinghaus')
   const [importResult, setImportResult] = useState<string | null>(null)
 
   useEffect(() => {
     const loadSettings = async () => {
-      const settings = await getReviewSettingsApi()
+      const [settings] = await Promise.all([
+        getReviewSettingsApi(),
+        getClientPreferencesApi().then(() => setClientPreferencesReady(true)).catch(() => setClientPreferencesReady(false)),
+      ])
       setConfig(settings)
       setAlgorithm(settings.default_algorithm)
     }
@@ -92,14 +99,20 @@ export default function ProfileSettingsPage() {
       title="个人中心"
       description="这里继续管理复习排程、导入导出，以及新的 AI 分卡接入配置。"
     >
+      {clientPreferencesReady ? (
+        <div className="rounded-2xl border border-emerald-200 bg-emerald-50/70 px-4 py-3 text-sm text-emerald-800">
+          快捷键、英语练习设置、复习反馈、计时自动化和部分视图偏好现在已经由后端托管保存。
+        </div>
+      ) : null}
       <div className="flex gap-1 border-b">
         {[
           { key: 'config', label: '复习配置', icon: Settings },
           { key: 'io', label: '导入导出', icon: Download },
+          { key: 'shortcuts', label: '快捷键', icon: Keyboard },
         ].map(({ key, label, icon: Icon }) => (
           <button
             key={key}
-            onClick={() => setTab(key as 'config' | 'io')}
+            onClick={() => setTab(key as 'config' | 'io' | 'shortcuts')}
             className={`-mb-px flex items-center gap-2 border-b-2 px-4 py-2.5 text-sm font-medium transition-colors ${
               tab === key
                 ? 'border-primary text-primary'
@@ -112,7 +125,9 @@ export default function ProfileSettingsPage() {
         ))}
       </div>
 
-      {tab === 'config' ? (
+      {tab === 'shortcuts' ? (
+        <MemoryAnkiShortcutsSettings />
+      ) : tab === 'config' ? (
         <form onSubmit={handleSaveConfig} className="space-y-6">
           <Card>
             <CardHeader>

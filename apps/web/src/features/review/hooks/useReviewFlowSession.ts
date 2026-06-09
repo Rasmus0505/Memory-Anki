@@ -3,11 +3,8 @@ import type { MindMapEditorState } from '@/shared/api/contracts'
 import type { MindMapSelection } from '@/shared/components/mindmap-host'
 import { useRevealSession } from '@/entities/review/model/useRevealSession'
 import { useTimedSession } from '@/shared/hooks/useTimedSession'
-import {
-  collectNodeIds,
-  revealRemainingNodes,
-  type ReviewFlowSnapshot,
-} from '@/features/review/model/review-flow-tree'
+import { revealRemainingNodes, type ReviewFlowSnapshot } from '@/features/review/model/review-flow-tree'
+import { useReviewFeedback } from '@/features/review/hooks/useReviewFeedback'
 
 interface CompleteFlowPayload {
   durationSeconds: number
@@ -55,6 +52,12 @@ export function useReviewFlowSession({
     editorState,
     initialSnapshot,
     resetCompletedOnDocChange: sessionKind === 'review',
+  })
+  const feedback = useReviewFeedback({
+    root: reveal.root,
+    revealMap: reveal.revealMap,
+    revealedNonRootCount: reveal.revealedNonRootCount,
+    totalNodeCount: reveal.totalNodeCount,
   })
   const [fullscreen, setFullscreen] = React.useState(false)
   const submittingRef = React.useRef(false)
@@ -127,6 +130,7 @@ export function useReviewFlowSession({
       reveal.setRevealMap(finishState.revealMap)
       reveal.setRedNodeIds(finishState.redNodeIds)
       reveal.setCompleted(true)
+      await feedback.runCompletionCeremony()
       timer.registerActivity('practice_interaction', { source: 'complete' })
       const record = await timer.complete(modeName, {
         revealed_remaining: finishState.revealedRemaining,
@@ -144,7 +148,7 @@ export function useReviewFlowSession({
         submittingRef.current = false
       }
     },
-    [onComplete, reveal, timer],
+    [feedback, onComplete, reveal, timer],
   )
 
   const handleNodeClick = React.useCallback(
@@ -167,9 +171,10 @@ export function useReviewFlowSession({
 
   const handleRestart = React.useCallback(() => {
     reveal.reset()
+    feedback.emitManualEvent('session_reset')
     timer.registerActivity('practice_interaction', { source: 'restart' })
     onRestart?.()
-  }, [onRestart, reveal, timer])
+  }, [feedback, onRestart, reveal, timer])
 
   const screenGlowClass =
     timer.glowState === 'running'
@@ -180,6 +185,7 @@ export function useReviewFlowSession({
 
   return {
     timer,
+    feedback,
     root: reveal.root,
     visibleEditorState: reveal.visibleEditorState,
     totalNodeCount: reveal.totalNodeCount,

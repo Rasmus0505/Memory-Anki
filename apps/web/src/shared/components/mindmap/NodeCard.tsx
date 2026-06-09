@@ -1,6 +1,7 @@
 import { memo, useState, useCallback, useRef, useEffect } from 'react'
 import { Handle, Position, type NodeProps } from '@xyflow/react'
 import { Plus, X } from 'lucide-react'
+import { dispatchGlobalFeedback } from '@/shared/feedback/globalFeedbackModel'
 import type { MindMapNode } from './adapter'
 
 type NodeCardData = MindMapNode & {
@@ -15,6 +16,24 @@ type NodeCardData = MindMapNode & {
   onFinishEdit?: (nodeId: string, text: string) => void
   onAddChild?: (nodeId: string) => void
   onDelete?: (nodeId: string) => void
+}
+
+function getMouseFeedbackPoint(event?: React.MouseEvent) {
+  return event
+    ? {
+        x: event.clientX,
+        y: event.clientY,
+      }
+    : undefined
+}
+
+function getElementFeedbackPoint(element: HTMLElement | null) {
+  if (!element) return undefined
+  const rect = element.getBoundingClientRect()
+  return {
+    x: rect.left + rect.width / 2,
+    y: rect.top + rect.height / 2,
+  }
 }
 
 function MindMapNodeCard({ data, id }: NodeProps) {
@@ -39,6 +58,10 @@ function MindMapNodeCard({ data, id }: NodeProps) {
 
   const startEdit = useCallback((e?: React.MouseEvent) => {
     e?.stopPropagation()
+    dispatchGlobalFeedback('node_edit_start', {
+      point: getMouseFeedbackPoint(e),
+      origin: 'node',
+    })
     setLocalEdit(true)
     setEditText(nodeData.label)
     nodeData.onStartEdit?.(id)
@@ -46,11 +69,17 @@ function MindMapNodeCard({ data, id }: NodeProps) {
 
   const handleDoubleClick = useCallback((e: React.MouseEvent) => {
     e.stopPropagation()
-    startEdit()
+    startEdit(e)
   }, [startEdit])
 
   const commitEdit = useCallback(() => {
-    if (editText.trim()) nodeData.onFinishEdit?.(id, editText.trim())
+    if (editText.trim()) {
+      dispatchGlobalFeedback('text_commit', {
+        point: getElementFeedbackPoint(inputRef.current),
+        origin: 'keyboard',
+      })
+      nodeData.onFinishEdit?.(id, editText.trim())
+    }
     setLocalEdit(false)
   }, [editText, id, nodeData])
 
@@ -128,6 +157,10 @@ function MindMapNodeCard({ data, id }: NodeProps) {
           type="button"
           onClick={(e) => {
             e.stopPropagation()
+            dispatchGlobalFeedback('node_create', {
+              point: getMouseFeedbackPoint(e),
+              origin: 'node',
+            })
             nodeData.onAddChild?.(id)
           }}
           className={btnClass}
@@ -139,6 +172,10 @@ function MindMapNodeCard({ data, id }: NodeProps) {
           type="button"
           onClick={(e) => {
             e.stopPropagation()
+            dispatchGlobalFeedback('node_delete', {
+              point: getMouseFeedbackPoint(e),
+              origin: 'node',
+            })
             nodeData.onDelete?.(id)
           }}
           className={`${btnClass} hover:bg-rose-50 hover:text-rose-600`}

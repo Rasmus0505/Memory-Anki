@@ -1,4 +1,4 @@
-import type { MindMapEditorState } from '@/shared/api/client'
+import type { MindMapEditorState } from '@/shared/api/contracts'
 import type {
   BilinkItem,
   MindMapHostSegmentRangeDraft,
@@ -22,6 +22,77 @@ export interface MindMapAiSplitRequestPayload {
   is_root: boolean
 }
 
+export type MindMapReviewFxType =
+  | 'category_expand'
+  | 'next_level_expand'
+  | 'card_reveal'
+  | 'branch_clear'
+  | 'all_clear_ready'
+  | 'session_complete'
+  | 'session_reset'
+
+export type MindMapFeedbackEvent =
+  | MindMapReviewFxType
+  | 'pointer_down'
+  | 'pointer_click'
+  | 'hover_pulse'
+  | 'key_press'
+  | 'shortcut_trigger'
+  | 'navigation'
+  | 'field_focus'
+  | 'field_commit'
+  | 'toggle_on'
+  | 'toggle_off'
+  | 'text_commit'
+  | 'node_select'
+  | 'node_edit_start'
+  | 'node_create'
+  | 'node_delete'
+  | 'node_move'
+  | 'drag_start'
+  | 'drag_drop'
+  | 'context_menu'
+  | 'toolbar_action'
+  | 'mode_switch'
+  | 'save_success'
+  | 'save_error'
+  | 'import_apply'
+  | 'bilink_action'
+  | 'segment_action'
+
+export type MindMapFeedbackLevel = 'micro' | 'action' | 'milestone'
+
+export type MindMapFeedbackOrigin =
+  | 'keyboard'
+  | 'pointer'
+  | 'node'
+  | 'edge'
+  | 'toolbar'
+  | 'review'
+  | 'system'
+
+export interface MindMapReviewFxPayload {
+  type: MindMapReviewFxType
+  nodeUid: string | null
+  relatedNodeUids: string[]
+  intensity: 'full' | 'soft' | 'none'
+  lineMode?: 'spawn' | 'trace' | 'confirm' | 'clear'
+  depthHint?: 0 | 1 | 2
+  targetRole?: 'parent' | 'placeholder' | 'revealed'
+  isBranchCompletion?: boolean
+  nonce: number
+}
+
+export interface MindMapFeedbackFxPayload
+  extends Omit<MindMapReviewFxPayload, 'type'> {
+  type: MindMapFeedbackEvent
+  level?: MindMapFeedbackLevel
+  origin?: MindMapFeedbackOrigin
+  x?: number
+  y?: number
+  source?: string
+}
+
 export interface MindMapFrameHostState {
   readonly: boolean
   showToolbarWhenReadonly: boolean
@@ -41,6 +112,9 @@ export interface MindMapFrameHostState {
   bilinkCounts: Record<string, number>
   bilinkItems: BilinkItem[]
   bilinkCurrentPalaceId: number | null
+  focusNodeUids: string[]
+  focusRequestNodeUid: string | null
+  focusRequestNonce: number
   showBilinkSearchButton: boolean
 }
 
@@ -76,6 +150,9 @@ export interface MindMapHostWindow extends Window {
   }) => void
   applyHostState?: (state: MindMapFrameHostState) => void
   insertBilinkMark?: (text: string) => boolean
+  emitReviewFx?: (payload: MindMapReviewFxPayload) => void
+  emitFeedbackFx?: (payload: MindMapFeedbackFxPayload) => void
+  clearReviewFx?: () => void
 }
 
 declare global {
@@ -152,6 +229,9 @@ export function buildHostBridgeHostState(args: {
   bilinkCounts: Record<string, number>
   bilinkItems: BilinkItem[]
   bilinkCurrentPalaceId: number | null
+  focusNodeUids: string[]
+  focusRequestNodeUid: string | null
+  focusRequestNonce: number
   showBilinkSearchButton: boolean
   hasPracticeToggle: boolean
   hasEnglishOpen: boolean
@@ -176,6 +256,9 @@ export function buildHostBridgeHostState(args: {
     bilinkCounts: cloneValue(args.bilinkCounts),
     bilinkItems: cloneValue(args.bilinkItems),
     bilinkCurrentPalaceId: args.bilinkCurrentPalaceId,
+    focusNodeUids: cloneValue(args.focusNodeUids),
+    focusRequestNodeUid: args.focusRequestNodeUid,
+    focusRequestNonce: args.focusRequestNonce,
     showBilinkSearchButton: args.showBilinkSearchButton,
   }
 }
