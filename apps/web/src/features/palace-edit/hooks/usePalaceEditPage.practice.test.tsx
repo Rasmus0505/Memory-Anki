@@ -44,7 +44,7 @@ describe('usePalaceEditPage inline practice mode', () => {
     expect(screen.getByText('outline')).toBeTruthy()
     expect(screen.getByText('mindmap-edit-editable-plain-reset-import-sync')).toBeTruthy()
     expect(screen.getByText('sync-soft-replace-edit:0:0-0-')).toBeTruthy()
-    expect(screen.getByText('scope-palace-edit:101:edit')).toBeTruthy()
+    expect(screen.getByText('scope-palace-edit:101')).toBeTruthy()
     expect(screen.getByRole('button', { name: '转脑图' })).toBeTruthy()
     expect(screen.getByRole('button', { name: '转文字' })).toBeTruthy()
 
@@ -57,7 +57,7 @@ describe('usePalaceEditPage inline practice mode', () => {
           content.startsWith('sync-replace-replace-practice:0:0-{"docFingerprint":'),
         ),
       ).toBeTruthy()
-      expect(screen.getByText('scope-palace-edit:101:practice')).toBeTruthy()
+      expect(screen.getByText('scope-palace-edit:101')).toBeTruthy()
       expect(screen.getByRole('button', { name: '编辑' })).toBeTruthy()
     })
 
@@ -66,10 +66,11 @@ describe('usePalaceEditPage inline practice mode', () => {
       expect(screen.getByText('outline')).toBeTruthy()
       expect(screen.getByText('mindmap-edit-editable-plain-reset-import-sync')).toBeTruthy()
       expect(screen.getByText('sync-soft-replace-edit:0:0-0-')).toBeTruthy()
-      expect(screen.getByText('scope-palace-edit:101:edit')).toBeTruthy()
+      expect(screen.getByText('scope-palace-edit:101')).toBeTruthy()
       expect(screen.getByRole('button', { name: '练习' })).toBeTruthy()
     })
 
+    expect(palaceApi.getPracticeSessionProgressApi).toHaveBeenCalledTimes(1)
     expect(palaceApi.clearPracticeSessionProgressApi).not.toHaveBeenCalled()
   })
 
@@ -148,8 +149,75 @@ describe('usePalaceEditPage inline practice mode', () => {
       })
     })
 
+    fireEvent.click(screen.getByRole('button', { name: '编辑' }))
+    await waitFor(() => {
+      expect(screen.getByText('mindmap-edit-editable-plain-reset-import-sync')).toBeTruthy()
+    })
+    fireEvent.click(screen.getByRole('button', { name: '练习' }))
+    await waitFor(() => {
+      expect(getMindMapTexts()).toEqual({
+        root: 'root-测试宫殿',
+        child: 'child-子节点',
+        grandchild: 'grandchild-待回忆',
+      })
+    })
+
     expect(timedSessionMock.registerActivity).toHaveBeenCalledWith('practice_interaction', {
       source: 'inline_practice_click',
+    })
+  })
+
+  it('carries the current node focus across edit and practice mode switches', async () => {
+    vi.spyOn(palaceApi, 'getPalaceEditorApi').mockResolvedValue({
+      palace: {
+        id: 101,
+        title: '测试宫殿',
+        description: '',
+        created_at: null,
+        attachments: [],
+        chapters: [],
+      },
+      editor_doc: {
+        root: {
+          data: { text: '测试宫殿', uid: 'root-1' },
+          children: [
+            {
+              data: { text: '教育目的', uid: 'education-purpose' },
+              children: [],
+            },
+          ],
+        },
+      },
+      editor_config: {},
+      editor_local_config: {},
+      lang: 'zh',
+    } as never)
+
+    renderPalaceEditPage()
+
+    await waitFor(() => {
+      expect(screen.getByText('mindmap-edit-editable-plain-reset-import-sync')).toBeTruthy()
+    })
+    expect(screen.getByText('focus-:0')).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: '选中首子节点' }))
+    fireEvent.click(screen.getByRole('button', { name: '练习' }))
+
+    await waitFor(() => {
+      expect(screen.getByText('mindmap-practice-readonly-toolbar-preserve-import-sync')).toBeTruthy()
+      expect(screen.getByText('focus-education-purpose:1')).toBeTruthy()
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: '点击根节点' }))
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: '点击首子节点' })).toBeTruthy()
+    })
+    fireEvent.click(screen.getByRole('button', { name: '点击首子节点' }))
+    fireEvent.click(screen.getByRole('button', { name: '编辑' }))
+
+    await waitFor(() => {
+      expect(screen.getByText('mindmap-edit-editable-plain-reset-import-sync')).toBeTruthy()
+      expect(screen.getByText('focus-education-purpose:2')).toBeTruthy()
     })
   })
 

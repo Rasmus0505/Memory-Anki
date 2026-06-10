@@ -36,8 +36,20 @@ export interface PalaceSegmentSummary {
   next_review_at: string | null
   has_due_review: boolean
   current_review_schedule_id: number | null
+  current_review_type?: string | null
   is_empty: boolean
   is_virtual_default?: boolean
+}
+export interface MiniPalaceSummary {
+  id: number
+  palace_id: number
+  name: string
+  node_uids: string[]
+  node_count: number
+  sort_order: number
+  created_at: string | null
+  updated_at: string | null
+  is_empty: boolean
 }
 export interface PalaceListItem {
   id: number

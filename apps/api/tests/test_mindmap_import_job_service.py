@@ -129,6 +129,49 @@ def test_resume_after_structure_checkpoint_only_reruns_merge_stage():
     assert mock_merge.call_count == 1
 
 
+def test_batch_job_without_structure_image_uses_direct_generation_flow():
+    with patch.object(
+        job_service,
+        "_prepare_batch_image_items",
+        return_value=([(b"page-1", "page-1.png"), (b"page-2", "page-2.png")], None),
+    ):
+        with Session(engine) as session:
+            job = job_service.create_batch_import_job(
+                session,
+                entity_key="palace_1",
+                image_items=[(b"page-1", "page-1.png"), (b"page-2", "page-2.png")],
+                fallback_title="批量导入",
+                structure_image_index=None,
+            )
+
+    with patch.object(job_service, "_stream_call_dashscope_json") as mock_structure, patch.object(
+        job_service, "_stream_call_dashscope_batch_json"
+    ) as mock_merge, patch.object(
+        job_service,
+        "_stream_call_dashscope_pdf_json",
+        return_value=_stream_return(
+            {
+                "title": "第一章",
+                "children": [
+                    {"text": "知识点一", "children": []},
+                    {"text": "知识点二", "children": []},
+                ],
+            }
+        ),
+    ) as mock_direct:
+        job_service._run_job_worker(job.id)
+
+    payload = _load_job(job.id)
+    assert payload["status"] == job_service.JOB_STATUS_COMPLETED
+    assert payload["result"]["structure_image_index"] is None
+    assert payload["result"]["image_count"] == 2
+    assert payload["usage"]["structure"] == 0
+    assert payload["usage"]["merge"] == 1
+    assert mock_structure.call_count == 0
+    assert mock_merge.call_count == 0
+    assert mock_direct.call_count == 1
+
+
 def test_pdf_resume_reuses_cached_render_and_ocr_outputs():
     document = _make_subject_document()
     with patch.object(
@@ -163,7 +206,7 @@ def test_pdf_resume_reuses_cached_render_and_ocr_outputs():
     ), patch.object(
         job_service,
         "_stream_call_dashscope_text",
-        return_value=_stream_return("第一节\n补充正文"),
+        return_value=_stream_return("  第一节\n补充正文  \n"),
     ), patch.object(
         job_service,
         "_stream_call_dashscope_batch_json",
@@ -192,6 +235,7 @@ def test_pdf_resume_reuses_cached_render_and_ocr_outputs():
     assert completed_job["result"]["source_tree"]["children"][0]["children"][0]["text"] == "补充正文"
     assert mock_render_again.call_count == 0
     assert mock_pdf_call.call_count == 1
+    assert mock_pdf_call.call_args.kwargs["extracted_text"] == "  第一节\n补充正文  \n"
 
 
 def test_create_pdf_import_job_defaults_to_direct_generation_without_structure_page():
@@ -286,6 +330,125 @@ def test_pdf_direct_generation_job_uses_pdf_json_flow_and_returns_no_structure_p
     assert payload["usage"]["merge"] == 1
     assert mock_pdf_call.call_count == 1
     assert mock_pdf_call.call_args.kwargs["extracted_text"] == "第一节 古罗马的教育阶段\n正文细节"
+
+
+def test_pdf_direct_generation_keeps_model_tree_without_local_restructure():
+    document = SubjectDocument(
+        id=99,
+        subject_id=4,
+        filename="subjects/4/test.pdf",
+        original_name="test.pdf",
+        mime_type="application/pdf",
+        file_size=256,
+        page_count=40,
+    )
+    with Session(engine) as session:
+        job = job_service.create_pdf_import_job(
+            session,
+            entity_key="palace_1",
+            document=document,
+            mode=job_service.MODE_MINDMAP,
+            page_selection=[26],
+            structure_page=None,
+            pdf_mode=job_service.PDF_IMPORT_MODE_DIRECT_GENERATION,
+            range_prompt="",
+            fallback_title="test.pdf",
+            import_options=PdfImportOptions(),
+        )
+
+    with patch.object(job_service, "get_subject_document_by_id", return_value=document), patch.object(
+        job_service,
+        "render_selected_pdf_pages",
+        return_value=[(26, b"page-26", "page-26.png")],
+    ), patch.object(
+        job_service,
+        "_stream_call_dashscope_text",
+        return_value=_stream_return("特点包括甲、乙"),
+    ), patch.object(
+        job_service,
+        "_stream_call_dashscope_pdf_json",
+        return_value=_stream_return(
+            {
+                "title": "第一节",
+                "children": [{"text": "特点包括甲、乙", "children": []}],
+            }
+        ),
+    ):
+        job_service._run_job_worker(job.id)
+
+    payload = _load_job(job.id)
+    assert payload["status"] == job_service.JOB_STATUS_COMPLETED
+    assert payload["result"]["source_tree"]["children"] == [{"text": "特点包括甲、乙", "children": []}]
+
+
+def test_pdf_direct_resume_preserves_cached_ocr_text_verbatim():
+    document = SubjectDocument(
+        id=99,
+        subject_id=4,
+        filename="subjects/4/test.pdf",
+        original_name="test.pdf",
+        mime_type="application/pdf",
+        file_size=256,
+        page_count=40,
+    )
+    with Session(engine) as session:
+        job = job_service.create_pdf_import_job(
+            session,
+            entity_key="palace_1",
+            document=document,
+            mode=job_service.MODE_MINDMAP,
+            page_selection=[26, 27],
+            structure_page=None,
+            pdf_mode=job_service.PDF_IMPORT_MODE_DIRECT_GENERATION,
+            range_prompt="第一节",
+            fallback_title="test.pdf",
+            import_options=PdfImportOptions(),
+        )
+
+    with patch.object(job_service, "get_subject_document_by_id", return_value=document), patch.object(
+        job_service,
+        "render_selected_pdf_pages",
+        return_value=[
+            (26, b"page-26", "page-26.png"),
+            (27, b"page-27", "page-27.png"),
+        ],
+    ), patch.object(
+        job_service,
+        "_stream_call_dashscope_text",
+        return_value=_stream_return("  第一节 古罗马的教育阶段\n正文细节  \n"),
+    ), patch.object(
+        job_service,
+        "_stream_call_dashscope_pdf_json",
+        side_effect=MindMapImportError("merge failed"),
+    ):
+        job_service._run_job_worker(job.id)
+
+    failed_job = _load_job(job.id)
+    assert failed_job["status"] == job_service.JOB_STATUS_FAILED
+    assert failed_job["stage"] == job_service.JOB_STAGE_MERGE
+
+    with patch.object(job_service, "get_subject_document_by_id", return_value=document), patch.object(
+        job_service, "render_selected_pdf_pages"
+    ) as mock_render_again, patch.object(
+        job_service,
+        "_stream_call_dashscope_text",
+    ) as mock_text_again, patch.object(
+        job_service,
+        "_stream_call_dashscope_pdf_json",
+        return_value=_stream_return(
+            {
+                "title": "第一节",
+                "children": [{"text": "背景", "children": []}],
+            }
+        ),
+    ) as mock_pdf_call:
+        job_service._run_job_worker(job.id)
+
+    completed_job = _load_job(job.id)
+    assert completed_job["status"] == job_service.JOB_STATUS_COMPLETED
+    assert mock_render_again.call_count == 0
+    assert mock_text_again.call_count == 0
+    assert mock_pdf_call.call_args.kwargs["extracted_text"] == "  第一节 古罗马的教育阶段\n正文细节  \n"
 
 
 def test_pdf_direct_generation_job_keeps_running_when_ocr_fails():

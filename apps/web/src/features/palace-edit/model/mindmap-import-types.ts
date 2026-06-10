@@ -10,6 +10,11 @@ export interface BatchImportImageItem {
   name: string
 }
 
+export interface BatchImportMeta {
+  structureImageIndex: number | null
+  imageCount: number
+}
+
 export interface ImportSubjectOption {
   id: number
   name: string

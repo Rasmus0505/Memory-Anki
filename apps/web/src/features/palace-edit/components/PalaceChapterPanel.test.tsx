@@ -91,6 +91,30 @@ describe('PalaceChapterPanel', () => {
     expect(within(dialogContent as HTMLElement).getByText('命名来源')).toBeTruthy()
   })
 
+  it('marks linked child chapters green and completed parent chapters deeper green', () => {
+    render(
+      <PalaceChapterPanel
+        chapterOptions={options}
+        explicitChapterIds={[11]}
+        inheritedChapterIds={[10]}
+        primaryChapterId={11}
+        onToggleChapter={vi.fn()}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: '选择章节' }))
+
+    const dialogHeading = screen.getByRole('heading', { name: '选择章节关联' })
+    const dialogContent = dialogHeading.closest('.max-w-5xl')
+    const parentCard = within(dialogContent as HTMLElement).getByText('第十章').closest('label')
+    const childCard = within(dialogContent as HTMLElement).getByText('第一节 第十章小节').closest('label')
+
+    expect(parentCard?.className).toContain('bg-emerald-100')
+    expect(parentCard?.className).toContain('border-emerald-500')
+    expect(childCard?.className).toContain('bg-emerald-50')
+    expect(childCard?.className).toContain('border-emerald-300')
+  })
+
   it('toggles chapters from the dialog and disables controls while pending', () => {
     const onToggleChapter = vi.fn()
     const { rerender } = render(

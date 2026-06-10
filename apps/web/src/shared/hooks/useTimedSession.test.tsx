@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { act, render, screen } from '@testing-library/react'
+import { act, render, renderHook, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useTimedSession } from '@/shared/hooks/useTimedSession'
 import { TIMER_AUTOMATION_STORAGE_KEY } from '@/shared/components/session/timer-automation-config'
@@ -397,5 +397,36 @@ describe('useTimedSession automation config', () => {
 
     expect(appendTimeRecordSpy).not.toHaveBeenCalled()
     expect(screen.getByTestId('status').textContent).toBe('completed')
+  })
+
+  it('returns the completed record when persistence fails after the API layer queues it', async () => {
+    appendTimeRecordSpy.mockRejectedValueOnce(new Error('network down'))
+    const { result } = renderHook(() =>
+      useTimedSession({
+        kind: 'review',
+        title: '测试',
+        palaceId: 1,
+        autoPauseMs: 60_000,
+      }),
+    )
+
+    act(() => {
+      result.current.start({ source: 'test' })
+      vi.advanceTimersByTime(3_000)
+    })
+
+    let record: Awaited<ReturnType<typeof result.current.complete>> | null = null
+    await act(async () => {
+      record = await result.current.complete('manual_complete', { source: 'test_complete' })
+    })
+
+    expect(appendTimeRecordSpy).toHaveBeenCalledTimes(1)
+    expect(record).toMatchObject({
+      kind: 'review',
+      palaceId: 1,
+      title: '测试',
+      completionMethod: 'manual_complete',
+    })
+    expect(record?.id).toBeTruthy()
   })
 })

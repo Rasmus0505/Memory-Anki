@@ -1,6 +1,7 @@
 import type { RefObject } from 'react'
 import type { MindMapEditorState, PdfImportOptions } from '@/shared/api/contracts'
 import type {
+  BatchImportMeta,
   BatchImportImageItem,
   ImportMode,
   ImportSourceKind,
@@ -16,7 +17,7 @@ export interface UseImportJobControllerOptions {
   setMindMapWorkflowState: (workflow: MindMapImportWorkflow) => void
   batchImagesRef: RefObject<BatchImportImageItem[]>
   setBatchStatus: (status: 'idle' | 'ready' | 'loading' | 'success' | 'error') => void
-  setLastBatchMeta: (value: { structureImageIndex: number; imageCount: number } | null) => void
+  setLastBatchMeta: (value: BatchImportMeta | null) => void
   selectedPdfPages: number[]
   setSelectedPdfPages: (value: number[]) => void
   selectedSubjectDocumentId: number | null

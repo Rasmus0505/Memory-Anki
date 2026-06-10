@@ -20,7 +20,7 @@ class RuntimeInfoTests(unittest.TestCase):
                 json.dumps(
                     {
                         "runtime_generation": 2,
-                        "last_started_channel": "stable",
+                        "last_started_channel": "production",
                         "last_started_at": "2026-06-01T00:00:00+00:00",
                     }
                 ),
@@ -30,14 +30,14 @@ class RuntimeInfoTests(unittest.TestCase):
             with patch.dict(
                 os.environ,
                 {
-                    "MEMORY_ANKI_CHANNEL": "dev",
+                    "MEMORY_ANKI_CHANNEL": "production",
                     "MEMORY_ANKI_GIT_COMMIT": "abcdef1234567890",
                 },
                 clear=False,
             ):
                 info = runtime_module.build_runtime_info(path=state_path)
 
-        self.assertEqual(info["channel"], "dev")
+        self.assertEqual(info["channel"], "production")
         self.assertEqual(info["commit"], "abcdef1234567890")
         self.assertEqual(info["short_commit"], "abcdef12")
         self.assertEqual(info["runtime_generation"], 2)
@@ -88,7 +88,7 @@ class RuntimeInfoTests(unittest.TestCase):
             contract = runtime_module.load_runtime_contract(contract_path)
             persisted = runtime_module.record_runtime_start(
                 contract,
-                channel="stable",
+                channel="production",
                 commit="fedcba9876543210",
                 path=state_path,
             )
@@ -96,7 +96,7 @@ class RuntimeInfoTests(unittest.TestCase):
 
         self.assertEqual(persisted["runtime_generation"], 3)
         self.assertEqual(reloaded["runtime_generation"], 3)
-        self.assertEqual(reloaded["last_started_channel"], "stable")
+        self.assertEqual(reloaded["last_started_channel"], "production")
         self.assertEqual(reloaded["last_started_commit"], "fedcba9876543210")
         self.assertIn("last_started_at", reloaded)
 
@@ -109,7 +109,7 @@ class RuntimeInfoTests(unittest.TestCase):
             settings_router,
             "build_runtime_info",
             return_value={
-                "channel": "stable",
+                "channel": "production",
                 "commit": "abcdef1234567890",
                 "short_commit": "abcdef12",
                 "runtime_generation": 1,
@@ -126,7 +126,7 @@ class RuntimeInfoTests(unittest.TestCase):
             response = client.get("/api/v1/runtime-info")
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json()["channel"], "stable")
+        self.assertEqual(response.json()["channel"], "production")
         self.assertEqual(response.json()["short_commit"], "abcdef12")
 
     def test_client_preferences_route_reads_and_writes_grouped_preferences(self):

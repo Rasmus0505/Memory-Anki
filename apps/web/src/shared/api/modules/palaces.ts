@@ -1,4 +1,4 @@
-import { API_BASE, request } from "@/shared/api/http"
+import { API_BASE, fetchWithMutationQueue, request } from "@/shared/api/http"
 import { logAppError } from '@/shared/logs/model/appLogs'
 import type {
   ImageTextPreviewResponse,
@@ -13,6 +13,7 @@ import type {
   MindMapImportJobListResponse,
   MindMapImportPreviewResponse,
   MindMapPdfImportPreviewRequest,
+  MiniPalaceSummary,
   PalaceFocusSessionResponse,
   PalaceGroupedListResponse,
   PalaceListItem,
@@ -296,7 +297,7 @@ export function getPalaceApi(id: number) {
   return request<any>(`/palaces/${id}`)
 }
 
-export function togglePalaceFocusNodeApi(id: number, nodeUid: string) {
+export function togglePalaceFocusNodeApi(id: number, nodeUid: string, focused?: boolean) {
   return request<{
     ok: boolean
     palace_id: number
@@ -305,7 +306,16 @@ export function togglePalaceFocusNodeApi(id: number, nodeUid: string) {
     focus_node_uids: string[]
     focus_count: number
     item: PalaceListItem
-  }>(`/palaces/${id}/focus-nodes/${encodeURIComponent(nodeUid)}`, { method: 'PUT' })
+  }>(`/palaces/${id}/focus-nodes/${encodeURIComponent(nodeUid)}`, {
+    method: 'PUT',
+    body: focused === undefined ? undefined : JSON.stringify({ focused }),
+    persistence: {
+      resourceKey: `palace:${id}:focus-node:${nodeUid}`,
+      coalesceKey: `palace:${id}:focus-node:${nodeUid}`,
+      description: focused === false ? '取消专项卡标记' : '标记专项卡',
+      replayMode: focused === undefined ? 'manual' : 'auto',
+    },
+  })
 }
 
 export function getPalaceReviewPlanApi(id: number) {
@@ -313,29 +323,68 @@ export function getPalaceReviewPlanApi(id: number) {
 }
 
 export function createPalaceApi(data: any) {
-  return request<any>("/palaces", { method: "POST", body: JSON.stringify(data) })
+  return request<any>("/palaces", {
+    method: "POST",
+    body: JSON.stringify(data),
+    persistence: {
+      resourceKey: `palace:create:${data?.title ?? 'untitled'}`,
+      description: '创建宫殿',
+      replayMode: 'manual',
+    },
+  })
 }
 
 export function updatePalaceApi(id: number, data: any) {
-  return request<any>(`/palaces/${id}`, { method: "PUT", body: JSON.stringify(data) })
+  return request<any>(`/palaces/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+    persistence: {
+      resourceKey: `palace:${id}:meta`,
+      coalesceKey: `palace:${id}:meta`,
+      description: '保存宫殿信息',
+      replayMode: 'auto',
+    },
+  })
 }
 
 export function deletePalaceApi(id: number) {
-  return request<any>(`/palaces/${id}`, { method: "DELETE" })
+  return request<any>(`/palaces/${id}`, {
+    method: "DELETE",
+    persistence: {
+      resourceKey: `palace:${id}:delete`,
+      description: '删除宫殿',
+      replayMode: 'manual',
+    },
+  })
 }
 
 export async function uploadAttachmentApi(palaceId: number, file: File) {
   const form = new FormData()
   form.append("file", file)
-  const response = await fetch(`${API_BASE}/palaces/${palaceId}/upload`, {
-    method: "POST",
-    body: form,
-  })
+  const response = await fetchWithMutationQueue(
+    `${API_BASE}/palaces/${palaceId}/upload`,
+    {
+      method: "POST",
+      body: form,
+    },
+    {
+      resourceKey: `palace:${palaceId}:attachment:${file.name}`,
+      description: `上传附件：${file.name}`,
+      replayMode: 'manual',
+    },
+  )
   return response.json()
 }
 
 export function deleteAttachmentApi(id: number) {
-  return request<any>(`/attachments/${id}`, { method: "DELETE" })
+  return request<any>(`/attachments/${id}`, {
+    method: "DELETE",
+    persistence: {
+      resourceKey: `attachment:${id}:delete`,
+      description: '删除附件',
+      replayMode: 'manual',
+    },
+  })
 }
 
 export function getPalaceEditorApi(id: number) {
@@ -350,6 +399,59 @@ export function getPalaceSegmentsApi(id: number) {
   return request<{ items: PalaceSegmentSummary[] }>(`/palaces/${id}/segments`)
 }
 
+export function getMiniPalacesApi(id: number) {
+  return request<{ items: MiniPalaceSummary[] }>(`/palaces/${id}/mini-palaces`)
+}
+
+export function createMiniPalaceApi(
+  palaceId: number,
+  data: {
+    name?: string
+    node_uids: string[]
+  },
+) {
+  return request<{ item: MiniPalaceSummary }>(`/palaces/${palaceId}/mini-palaces`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+    persistence: {
+      resourceKey: `palace:${palaceId}:mini-palaces:create`,
+      description: `创建小宫殿：${data.name || '默认命名'}`,
+      replayMode: 'manual',
+    },
+  })
+}
+
+export function updateMiniPalaceApi(
+  miniPalaceId: number,
+  data: Partial<{
+    name: string
+    node_uids: string[]
+    sort_order: number
+  }>,
+) {
+  return request<{ item: MiniPalaceSummary }>(`/palace-mini-palaces/${miniPalaceId}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+    persistence: {
+      resourceKey: `palace-mini-palace:${miniPalaceId}`,
+      coalesceKey: `palace-mini-palace:${miniPalaceId}`,
+      description: '保存小宫殿',
+      replayMode: 'auto',
+    },
+  })
+}
+
+export function deleteMiniPalaceApi(miniPalaceId: number) {
+  return request<{ ok: boolean }>(`/palace-mini-palaces/${miniPalaceId}`, {
+    method: 'DELETE',
+    persistence: {
+      resourceKey: `palace-mini-palace:${miniPalaceId}:delete`,
+      description: '删除小宫殿',
+      replayMode: 'manual',
+    },
+  })
+}
+
 export function createPalaceSegmentApi(
   palaceId: number,
   data: {
@@ -362,6 +464,11 @@ export function createPalaceSegmentApi(
   return request<{ item: PalaceSegmentSummary }>(`/palaces/${palaceId}/segments`, {
     method: "POST",
     body: JSON.stringify(data),
+    persistence: {
+      resourceKey: `palace:${palaceId}:segments:create`,
+      description: `创建分块：${data.name || '未命名分块'}`,
+      replayMode: 'manual',
+    },
   })
 }
 
@@ -378,6 +485,12 @@ export function updatePalaceSegmentApi(
   return request<{ item: PalaceSegmentSummary }>(`/palace-segments/${segmentId}`, {
     method: "PUT",
     body: JSON.stringify(data),
+    persistence: {
+      resourceKey: `palace-segment:${segmentId}`,
+      coalesceKey: `palace-segment:${segmentId}`,
+      description: '保存分块',
+      replayMode: 'auto',
+    },
   })
 }
 
@@ -392,6 +505,12 @@ export function updatePalaceSegmentReviewProgressApi(
   return request<{ item: PalaceSegmentSummary }>(`/palace-segments/${segmentId}/review-progress`, {
     method: "PUT",
     body: JSON.stringify(data),
+    persistence: {
+      resourceKey: `palace-segment:${segmentId}:review-progress`,
+      coalesceKey: `palace-segment:${segmentId}:review-progress`,
+      description: '保存分块复习进度',
+      replayMode: 'auto',
+    },
   })
 }
 
@@ -406,6 +525,12 @@ export function updateDefaultSegmentReviewProgressApi(
   return request<{ item: PalaceSegmentSummary | null }>(`/palaces/${palaceId}/default-segment/review-progress`, {
     method: "PUT",
     body: JSON.stringify(data),
+    persistence: {
+      resourceKey: `palace:${palaceId}:default-segment-review-progress`,
+      coalesceKey: `palace:${palaceId}:default-segment-review-progress`,
+      description: '保存默认分块复习进度',
+      replayMode: 'auto',
+    },
   })
 }
 
@@ -418,12 +543,23 @@ export function updatePalacePracticeFlagApi(
   return request<{ item: any }>(`/palaces/${palaceId}/practice-flag`, {
     method: "PUT",
     body: JSON.stringify(data),
+    persistence: {
+      resourceKey: `palace:${palaceId}:practice-flag`,
+      coalesceKey: `palace:${palaceId}:practice-flag`,
+      description: '保存宫殿练习标记',
+      replayMode: 'auto',
+    },
   })
 }
 
 export function deletePalaceSegmentApi(segmentId: number) {
   return request<{ ok: boolean }>(`/palace-segments/${segmentId}`, {
     method: "DELETE",
+    persistence: {
+      resourceKey: `palace-segment:${segmentId}:delete`,
+      description: '删除分块',
+      replayMode: 'manual',
+    },
   })
 }
 
@@ -439,6 +575,12 @@ export function savePalaceEditorApi(id: number, data: PalaceEditorSavePayload) {
   return request<{ palace: any } & MindMapEditorState>(`/palaces/${id}/editor`, {
     method: "PUT",
     body: JSON.stringify({ editor_source: "palace_edit_autosave", ...data }),
+    persistence: {
+      resourceKey: `palace:${id}:editor`,
+      coalesceKey: `palace:${id}:editor`,
+      description: '保存宫殿脑图',
+      replayMode: 'auto',
+    },
   })
 }
 
@@ -446,6 +588,12 @@ export function savePalaceEditorWithOptionsApi(id: number, data: PalaceEditorSav
   return request<{ palace: any } & MindMapEditorState>(`/palaces/${id}/editor`, {
     method: "PUT",
     body: JSON.stringify(data),
+    persistence: {
+      resourceKey: `palace:${id}:editor`,
+      coalesceKey: `palace:${id}:editor`,
+      description: '保存宫殿脑图',
+      replayMode: 'auto',
+    },
   })
 }
 
@@ -496,6 +644,12 @@ export function savePracticeSessionProgressApi(
   return request<{ progress: SessionProgressSnapshot }>(`/sessions/practice/${id}/progress`, {
     method: "PUT",
     body: JSON.stringify(data),
+    persistence: {
+      resourceKey: `session-progress:practice:${id}`,
+      coalesceKey: `session-progress:practice:${id}`,
+      description: '保存练习进度',
+      replayMode: 'auto',
+    },
   })
 }
 
@@ -510,15 +664,35 @@ export function saveFocusPracticeSessionProgressApi(
   return request<{ progress: SessionProgressSnapshot }>(`/sessions/focus-practice/${id}/progress`, {
     method: 'PUT',
     body: JSON.stringify(data),
+    persistence: {
+      resourceKey: `session-progress:focus-practice:${id}`,
+      coalesceKey: `session-progress:focus-practice:${id}`,
+      description: '保存专项练习进度',
+      replayMode: 'auto',
+    },
   })
 }
 
 export function clearPracticeSessionProgressApi(id: number) {
-  return request<{ ok: boolean }>(`/sessions/practice/${id}/progress`, { method: "DELETE" })
+  return request<{ ok: boolean }>(`/sessions/practice/${id}/progress`, {
+    method: "DELETE",
+    persistence: {
+      resourceKey: `session-progress:practice:${id}:clear`,
+      description: '清除练习进度',
+      replayMode: 'manual',
+    },
+  })
 }
 
 export function clearFocusPracticeSessionProgressApi(id: number) {
-  return request<{ ok: boolean }>(`/sessions/focus-practice/${id}/progress`, { method: 'DELETE' })
+  return request<{ ok: boolean }>(`/sessions/focus-practice/${id}/progress`, {
+    method: 'DELETE',
+    persistence: {
+      resourceKey: `session-progress:focus-practice:${id}:clear`,
+      description: '清除专项练习进度',
+      replayMode: 'manual',
+    },
+  })
 }
 
 export function saveSegmentPracticeSessionProgressApi(
@@ -532,11 +706,24 @@ export function saveSegmentPracticeSessionProgressApi(
   return request<{ progress: SessionProgressSnapshot }>(`/sessions/segment-practice/${id}/progress`, {
     method: "PUT",
     body: JSON.stringify(data),
+    persistence: {
+      resourceKey: `session-progress:segment-practice:${id}`,
+      coalesceKey: `session-progress:segment-practice:${id}`,
+      description: '保存分块练习进度',
+      replayMode: 'auto',
+    },
   })
 }
 
 export function clearSegmentPracticeSessionProgressApi(id: number) {
-  return request<{ ok: boolean }>(`/sessions/segment-practice/${id}/progress`, { method: "DELETE" })
+  return request<{ ok: boolean }>(`/sessions/segment-practice/${id}/progress`, {
+    method: "DELETE",
+    persistence: {
+      resourceKey: `session-progress:segment-practice:${id}:clear`,
+      description: '清除分块练习进度',
+      replayMode: 'manual',
+    },
+  })
 }
 
 export function getPalaceVersionsApi(id: number) {
@@ -551,6 +738,11 @@ export function restorePalaceVersionApi(id: number, versionId: number) {
   return request<any>(`/palaces/${id}/restore-version`, {
     method: "POST",
     body: JSON.stringify({ version_id: versionId }),
+    persistence: {
+      resourceKey: `palace:${id}:restore-version:${versionId}`,
+      description: '恢复宫殿版本',
+      replayMode: 'manual',
+    },
   })
 }
 
@@ -650,10 +842,18 @@ export async function createImageImportJobApi(
     form.append('fallback_title', options.fallbackTitle)
   }
   form.append('file', file)
-  const response = await fetch(`${API_BASE}/import/jobs/image`, {
-    method: 'POST',
-    body: form,
-  })
+  const response = await fetchWithMutationQueue(
+    `${API_BASE}/import/jobs/image`,
+    {
+      method: 'POST',
+      body: form,
+    },
+    {
+      resourceKey: `import-job:image:${options.entityKey}:${file.name}`,
+      description: `创建图片导入任务：${file.name}`,
+      replayMode: 'manual',
+    },
+  )
   return readImportJson<MindMapImportJob>(response)
 }
 
@@ -674,10 +874,18 @@ export async function createBatchImportJobApi(
     form.append('structure_image_index', String(options.structureImageIndex))
   }
   files.forEach((file) => form.append('files', file))
-  const response = await fetch(`${API_BASE}/import/jobs/batch`, {
-    method: 'POST',
-    body: form,
-  })
+  const response = await fetchWithMutationQueue(
+    `${API_BASE}/import/jobs/batch`,
+    {
+      method: 'POST',
+      body: form,
+    },
+    {
+      resourceKey: `import-job:batch:${options.entityKey}:${files.map((file) => file.name).join(',')}`,
+      description: '创建批量导入任务',
+      replayMode: 'manual',
+    },
+  )
   return readImportJson<MindMapImportJob>(response)
 }
 
@@ -687,11 +895,19 @@ export async function createPdfImportJobApi(
     mode: 'mindmap' | 'text'
   },
 ) {
-  const response = await fetch(`${API_BASE}/import/jobs/pdf`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data),
-  })
+  const response = await fetchWithMutationQueue(
+    `${API_BASE}/import/jobs/pdf`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    },
+    {
+      resourceKey: `import-job:pdf:${data.entity_key}`,
+      description: '创建 PDF 导入任务',
+      replayMode: 'manual',
+    },
+  )
   return readImportJson<MindMapImportJob>(response)
 }
 
@@ -702,25 +918,49 @@ export async function completeImportJobFromPreviewApi(
     usage?: Record<string, number>
   },
 ) {
-  const response = await fetch(`${API_BASE}/import/jobs/${jobId}/complete-from-preview`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data),
-  })
+  const response = await fetchWithMutationQueue(
+    `${API_BASE}/import/jobs/${jobId}/complete-from-preview`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    },
+    {
+      resourceKey: `import-job:${jobId}:complete-from-preview`,
+      description: '完成导入预览任务',
+      replayMode: 'manual',
+    },
+  )
   return readImportJson<MindMapImportJob>(response)
 }
 
 export async function runImportJobApi(jobId: string) {
-  const response = await fetch(`${API_BASE}/import/jobs/${jobId}/run`, {
-    method: 'POST',
-  })
+  const response = await fetchWithMutationQueue(
+    `${API_BASE}/import/jobs/${jobId}/run`,
+    {
+      method: 'POST',
+    },
+    {
+      resourceKey: `import-job:${jobId}:run`,
+      description: '运行导入任务',
+      replayMode: 'manual',
+    },
+  )
   return readImportJson<MindMapImportJob>(response)
 }
 
 export async function pauseImportJobApi(jobId: string) {
-  const response = await fetch(`${API_BASE}/import/jobs/${jobId}/pause`, {
-    method: 'POST',
-  })
+  const response = await fetchWithMutationQueue(
+    `${API_BASE}/import/jobs/${jobId}/pause`,
+    {
+      method: 'POST',
+    },
+    {
+      resourceKey: `import-job:${jobId}:pause`,
+      description: '暂停导入任务',
+      replayMode: 'manual',
+    },
+  )
   return readImportJson<MindMapImportJob>(response)
 }
 
@@ -735,8 +975,16 @@ export async function listImportJobsApi(entityKey: string) {
 }
 
 export async function deleteImportJobApi(jobId: string) {
-  const response = await fetch(`${API_BASE}/import/jobs/${jobId}`, {
-    method: 'DELETE',
-  })
+  const response = await fetchWithMutationQueue(
+    `${API_BASE}/import/jobs/${jobId}`,
+    {
+      method: 'DELETE',
+    },
+    {
+      resourceKey: `import-job:${jobId}:delete`,
+      description: '删除导入任务',
+      replayMode: 'manual',
+    },
+  )
   return readImportJson<{ ok: boolean; job: MindMapImportJob }>(response)
 }

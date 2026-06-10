@@ -26,6 +26,7 @@ from memory_anki.modules.knowledge.application.subject_document_service import (
     subject_document_path,
 )
 from memory_anki.modules.mindmap.application.editor_state_service import (
+    EditorStateConflictError,
     get_subject_editor_state,
     save_subject_editor_state,
     sync_subject_editor_root,
@@ -163,6 +164,9 @@ def update_subject_editor(subject_id: int, data: dict, s: Session = Depends(sess
         }
         maybe_create_rolling_backup("rolling-subject-editor-save")
         return result
+    except EditorStateConflictError as exc:
+        s.rollback()
+        return JSONResponse(status_code=409, content={"detail": str(exc)})
     except Exception:
         s.rollback()
         tb = traceback.format_exc()

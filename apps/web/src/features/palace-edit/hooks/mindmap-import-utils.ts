@@ -34,7 +34,7 @@ export function describeImportFeature(sourceKind: ImportSourceKind, mode: Import
     return mode === 'mindmap' ? '学科 PDF 转脑图' : '学科 PDF 转文字'
   }
   if (sourceKind === 'image-batch') {
-    return '多图合成脑图'
+    return '多图转脑图'
   }
   return mode === 'mindmap' ? '图片转脑图' : '图片转文字'
 }

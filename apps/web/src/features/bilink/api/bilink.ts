@@ -25,6 +25,11 @@ export function createBilinkApi(data: {
   return request<{ item: BilinkItem }>('/bilinks', {
     method: 'POST',
     body: JSON.stringify(data),
+    persistence: {
+      resourceKey: `bilink:create:${data.source_palace_id}:${data.src_uid ?? ''}:${data.target_palace_id}:${data.tgt_uid ?? ''}`,
+      description: '创建双链',
+      replayMode: 'manual',
+    },
   })
 }
 
@@ -39,6 +44,11 @@ export function getBilinkCountsApi(palaceId: number) {
 export function deleteBilinkApi(bilinkId: number) {
   return request<{ ok: boolean; error?: string }>(`/bilinks/${bilinkId}`, {
     method: 'DELETE',
+    persistence: {
+      resourceKey: `bilink:${bilinkId}:delete`,
+      description: '删除双链',
+      replayMode: 'manual',
+    },
   })
 }
 

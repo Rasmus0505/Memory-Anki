@@ -22,6 +22,7 @@ import {
   getSegmentCardClass,
   getSegmentDisplayName,
   getSegmentListClass,
+  isSleepReviewSegment,
 } from '@/app/router/palace-list/utils'
 
 interface PalaceListCardProps {
@@ -63,6 +64,7 @@ export function PalaceListCard({
   )
   const canBatchReview = dueBatchSegments.length >= 2
   const singleSegmentState = singleSegment ? getReviewButtonState(singleSegment.next_review_at) : 'unscheduled'
+  const isSingleSegmentSleepReview = singleSegment ? isSleepReviewSegment(singleSegment) : false
 
   return (
     <Card key={palace.id} className={getPalaceCardClass(viewSettings.densityMode)}>
@@ -89,13 +91,15 @@ export function PalaceListCard({
             </div>
             {!isMultiSegment && singleSegment ? (
               <Button
-                variant={singleSegmentState === 'due_now' ? 'default' : 'outline'}
+                variant={singleSegmentState === 'due_now' || isSingleSegmentSleepReview ? 'default' : 'outline'}
                 size="sm"
                 className={cn(
                   'h-8 shrink-0 text-xs',
                   singleSegmentState === 'due_now' && 'bg-emerald-600 text-white hover:bg-emerald-700',
                   singleSegmentState === 'due_later_today' &&
                     'border-amber-300 bg-amber-100 text-amber-900 hover:bg-amber-200',
+                  isSingleSegmentSleepReview &&
+                    'border-blue-600 bg-blue-600 text-white hover:bg-blue-700',
                 )}
                 onClick={() => onSegmentReviewAction(singleSegment)}
                 disabled={
@@ -104,7 +108,9 @@ export function PalaceListCard({
                   segmentReviewLoadingId === singleSegment.id
                 }
               >
-                {segmentReviewLoadingId === singleSegment.id
+                {isSingleSegmentSleepReview
+                  ? '睡前复习'
+                  : segmentReviewLoadingId === singleSegment.id
                   ? '加载中...'
                   : singleSegmentState === 'due_now'
                     ? '开始复习'
@@ -139,6 +145,7 @@ export function PalaceListCard({
             <div className={getSegmentListClass(viewSettings.densityMode)}>
               {palace.segments.map((segment, index) => {
                 const segmentReviewState = getReviewButtonState(segment.next_review_at)
+                const isSegmentSleepReview = isSleepReviewSegment(segment)
                 const segmentReviewDisabled =
                   !segment.current_review_schedule_id ||
                   segmentReviewState === 'future' ||
@@ -174,18 +181,22 @@ export function PalaceListCard({
                       <div className="flex shrink-0 flex-col items-stretch gap-2 sm:min-w-[132px]">
                         {isMultiSegment ? (
                           <Button
-                            variant={segmentReviewState === 'due_now' ? 'default' : 'outline'}
+                            variant={segmentReviewState === 'due_now' || isSegmentSleepReview ? 'default' : 'outline'}
                             size="sm"
                             className={cn(
                               'h-8 text-xs',
                               segmentReviewState === 'due_now' && 'bg-emerald-600 text-white hover:bg-emerald-700',
                               segmentReviewState === 'due_later_today' &&
                                 'border-amber-300 bg-amber-100 text-amber-900 hover:bg-amber-200',
+                              isSegmentSleepReview &&
+                                'border-blue-600 bg-blue-600 text-white hover:bg-blue-700',
                             )}
                             onClick={() => onSegmentReviewAction(segment)}
                             disabled={segmentReviewDisabled}
                           >
-                            {segmentReviewLoadingId === segment.id
+                            {isSegmentSleepReview
+                              ? '睡前复习'
+                              : segmentReviewLoadingId === segment.id
                               ? '加载中...'
                               : segmentReviewState === 'due_now'
                                 ? '开始复习'

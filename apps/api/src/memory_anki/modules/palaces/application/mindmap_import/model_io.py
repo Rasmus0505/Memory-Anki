@@ -104,12 +104,10 @@ def summarize_model_output(value: str) -> str:
 
 
 def normalize_extracted_text(value: str) -> str:
-    text = strip_code_fence(value)
-    normalized_lines = [line.rstrip() for line in text.split("\n")]
-    normalized = "\n".join(normalized_lines).strip()
-    if not normalized:
+    text = str(value or "")
+    if not text.strip():
         raise MindMapImportError("模型没有识别出可用文字。")
-    return normalized
+    return text
 
 
 def normalize_page_selection(page_selection: list[int], page_count: int) -> list[int]:
@@ -134,22 +132,7 @@ def ensure_rendered_page_size(rendered_pages: list[tuple[int, bytes, str]]) -> N
 
 
 def trim_pdf_extracted_text(text: str, *, structure_title: str, range_prompt: str) -> str:
-    normalized = str(text or "").replace("\r\n", "\n").replace("\r", "\n").strip()
-    if not normalized:
-        return ""
-    anchors = build_pdf_text_anchors(
-        structure_title=structure_title,
-        range_prompt=range_prompt,
-    )
-    lines = normalized.split("\n")
-    for index, line in enumerate(lines):
-        stripped = line.strip()
-        if not stripped:
-            continue
-        if any(anchor in stripped for anchor in anchors):
-            trimmed = "\n".join(lines[index:]).strip()
-            return trimmed or normalized
-    return normalized
+    return str(text or "")
 
 
 def build_pdf_text_anchors(*, structure_title: str, range_prompt: str) -> list[str]:

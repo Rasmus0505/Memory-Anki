@@ -123,10 +123,11 @@ class MindMapImportServiceTests(unittest.TestCase):
 
         node_data = result.editor_doc["root"]["children"][0]["data"]
         self.assertNotIn("note", node_data)
-        self.assertTrue(node_data["richText"])
-        self.assertIn("重伦理教化", node_data["text"])
-        self.assertNotIn("note", node_data)
-        self.assertIn("重社会等级。", node_data["text"])
+        self.assertNotIn("richText", node_data)
+        self.assertEqual(
+            node_data["text"],
+            "东方教育的特点：重伦理教化，重政治秩序，重宗教传统，重社会等级。",
+        )
 
     @patch("memory_anki.modules.palaces.application.mindmap_import_service.DASHSCOPE_API_KEY", "test-key")
     @patch("memory_anki.modules.palaces.application.mindmap_import_service.urllib.request.urlopen")
@@ -166,11 +167,11 @@ class MindMapImportServiceTests(unittest.TestCase):
         )
 
         node_text = result.editor_doc["root"]["children"][0]["data"]["text"]
-        self.assertEqual(node_text, "<div>总述<br>1. 教育目标<br>2. 教育内容</div>")
+        self.assertEqual(node_text, "总述\n1. 教育目标\n2. 教育内容")
 
     @patch("memory_anki.modules.palaces.application.mindmap_import_service.DASHSCOPE_API_KEY", "test-key")
     @patch("memory_anki.modules.palaces.application.mindmap_import_service.urllib.request.urlopen")
-    def test_generate_import_preview_splits_overlong_parallel_leaf_into_children(self, mock_urlopen):
+    def test_generate_import_preview_keeps_overlong_parallel_leaf_as_model_returned(self, mock_urlopen):
         response = MagicMock()
         response.read.return_value = json.dumps(
             {
@@ -206,15 +207,18 @@ class MindMapImportServiceTests(unittest.TestCase):
         )
 
         top_node = result.source_tree["children"][0]
-        self.assertEqual(top_node["text"], "特点")
-        self.assertEqual(len(top_node["children"]), 4)
+        self.assertEqual(
+            top_node["text"],
+            "特点：1. 教育具有强烈的等级性。2. 教育内容丰富。3. 教师地位较高。4. 教学方法简单且体罚盛行。",
+        )
+        self.assertEqual(top_node["children"], [])
         editor_node = result.editor_doc["root"]["children"][0]
-        self.assertIn("特点", editor_node["data"]["text"])
-        self.assertEqual(len(editor_node["children"]), 4)
+        self.assertEqual(editor_node["data"]["text"], top_node["text"])
+        self.assertEqual(editor_node["children"], [])
 
     @patch("memory_anki.modules.palaces.application.mindmap_import_service.DASHSCOPE_API_KEY", "test-key")
     @patch("memory_anki.modules.palaces.application.mindmap_import_service.urllib.request.urlopen")
-    def test_generate_import_preview_promotes_single_verbose_child_into_parallel_children(self, mock_urlopen):
+    def test_generate_import_preview_keeps_single_verbose_child_as_model_returned(self, mock_urlopen):
         response = MagicMock()
         response.read.return_value = json.dumps(
             {
@@ -256,17 +260,17 @@ class MindMapImportServiceTests(unittest.TestCase):
 
         top_node = result.source_tree["children"][0]
         self.assertEqual(top_node["text"], "特点")
-        self.assertEqual(len(top_node["children"]), 4)
+        self.assertEqual(len(top_node["children"]), 1)
         self.assertEqual(
             [child["text"] for child in top_node["children"]],
-            ["重伦理教化", "重政治秩序", "重宗教传统", "重社会等级"],
+            ["特点：重伦理教化，重政治秩序，重宗教传统，重社会等级"],
         )
         editor_node = result.editor_doc["root"]["children"][0]
-        self.assertEqual(len(editor_node["children"]), 4)
+        self.assertEqual(len(editor_node["children"]), 1)
 
     @patch("memory_anki.modules.palaces.application.mindmap_import_service.DASHSCOPE_API_KEY", "test-key")
     @patch("memory_anki.modules.palaces.application.mindmap_import_service.urllib.request.urlopen")
-    def test_generate_import_preview_promotes_semicolon_series_under_short_parent(self, mock_urlopen):
+    def test_generate_import_preview_keeps_semicolon_series_under_short_parent(self, mock_urlopen):
         response = MagicMock()
         response.read.return_value = json.dumps(
             {
@@ -308,9 +312,11 @@ class MindMapImportServiceTests(unittest.TestCase):
 
         top_node = result.source_tree["children"][0]
         self.assertEqual(top_node["text"], "三好两坏")
-        self.assertEqual(len(top_node["children"]), 5)
-        self.assertEqual(top_node["children"][0]["text"], "教育内容丰富")
-        self.assertEqual(top_node["children"][-1]["text"], "教育方法简单，体罚盛行。")
+        self.assertEqual(len(top_node["children"]), 1)
+        self.assertEqual(
+            top_node["children"][0]["text"],
+            "教育内容丰富；教育机构繁多；教师地位高；教育具有等级性；教育方法简单，体罚盛行。",
+        )
 
     @patch("memory_anki.modules.palaces.application.mindmap_import_service.DASHSCOPE_API_KEY", "test-key")
     @patch("memory_anki.modules.palaces.application.mindmap_import_service.urllib.request.urlopen")
@@ -398,7 +404,7 @@ class MindMapImportServiceTests(unittest.TestCase):
 
     @patch("memory_anki.modules.palaces.application.mindmap_import_service.DASHSCOPE_API_KEY", "test-key")
     @patch("memory_anki.modules.palaces.application.mindmap_import_service.urllib.request.urlopen")
-    def test_generate_text_preview_strips_code_fence(self, mock_urlopen):
+    def test_generate_text_preview_preserves_model_text_verbatim(self, mock_urlopen):
         response = MagicMock()
         response.read.return_value = (
             '{"choices":[{"message":{"content":"```\\n第一章\\n第一节\\n```"}}]}'.encode("utf-8")
@@ -412,21 +418,19 @@ class MindMapImportServiceTests(unittest.TestCase):
             filename="demo.png",
         )
 
-        self.assertEqual(result.extracted_text, "第一章\n第一节")
+        self.assertEqual(result.extracted_text, "```\n第一章\n第一节\n```")
 
     @patch("memory_anki.modules.palaces.application.mindmap_import_service.DASHSCOPE_API_KEY", "test-key")
+    @patch("memory_anki.modules.palaces.application.mindmap_import_service._call_dashscope_pdf_json")
     @patch("memory_anki.modules.palaces.application.mindmap_import_service._call_dashscope_batch_json")
     @patch("memory_anki.modules.palaces.application.mindmap_import_service._call_dashscope_json")
-    def test_generate_batch_import_preview_defaults_to_first_image_as_structure(
+    def test_generate_batch_import_preview_without_structure_uses_direct_generation(
         self,
         mock_call_json,
         mock_call_batch_json,
+        mock_call_pdf_json,
     ):
-        mock_call_json.return_value = {
-            "title": "第一章",
-            "children": [{"text": "总论", "children": []}],
-        }
-        mock_call_batch_json.return_value = {
+        mock_call_pdf_json.return_value = {
             "title": "第一章",
             "children": [{"text": "总论", "children": [{"text": "补充", "children": []}]}],
         }
@@ -440,9 +444,11 @@ class MindMapImportServiceTests(unittest.TestCase):
             fallback_title="未命名宫殿",
         )
 
-        self.assertEqual(result.structure_image_index, 0)
+        self.assertIsNone(result.structure_image_index)
         self.assertEqual(result.image_count, 3)
-        mock_call_json.assert_called_once_with(image_bytes=b"struct", filename="structure.png")
+        mock_call_json.assert_not_called()
+        mock_call_batch_json.assert_not_called()
+        mock_call_pdf_json.assert_called_once()
 
     @patch("memory_anki.modules.palaces.application.mindmap_import_service.DASHSCOPE_API_KEY", "test-key")
     @patch("memory_anki.modules.palaces.application.mindmap_import_service._call_dashscope_batch_json")
@@ -505,6 +511,7 @@ class MindMapImportServiceTests(unittest.TestCase):
                     (b"body", "body.png"),
                 ],
                 fallback_title="未命名宫殿",
+                structure_image_index=0,
             )
 
         self.assertIn("模型返回内容不是有效的脑图 JSON", str(error.exception))
@@ -706,7 +713,7 @@ class MindMapImportServiceTests(unittest.TestCase):
         self.assertIn("可以挂到最近的相关原始父节点下", prompt)
         self.assertIn("可以提炼成更适合脑图展示的短语", prompt)
         self.assertIn("无需额外保留下划线或波浪线强调", prompt)
-        self.assertIn("不要为了美化结构自动改写正文", prompt)
+        self.assertIn("不要为了美化结构自动拆分正文", prompt)
         self.assertIn("OCR 正文", prompt)
         self.assertNotIn("给定结构与结构页明显对不上", prompt)
 
@@ -721,10 +728,11 @@ class MindMapImportServiceTests(unittest.TestCase):
         self.assertIn("OCR 正文", prompt)
         self.assertIn("不能只停留在脑图页自身的结构骨架", prompt)
         self.assertIn("不要只复述第一页", prompt)
-        self.assertIn("默认要主动识别并拆开的句型包括", prompt)
+        self.assertIn("短定义和一两行节点不要拆", prompt)
+        self.assertNotIn("默认要主动识别并拆开的句型包括", prompt)
         self.assertIn("不要额外生成教材里没有的新总结语", prompt)
 
-    def test_normalize_pdf_source_tree_splits_dash_relation_into_parent_and_child(self):
+    def test_normalize_pdf_source_tree_keeps_dash_relation_as_model_returned(self):
         normalized = service.normalize_pdf_source_tree(
             {
                 "title": "修道院教育",
@@ -733,10 +741,10 @@ class MindMapImportServiceTests(unittest.TestCase):
         )
 
         top_node = normalized["children"][0]
-        self.assertEqual(top_node["text"], "性质和目的")
-        self.assertEqual([child["text"] for child in top_node["children"]], ["为主效力"])
+        self.assertEqual(top_node["text"], "性质和目的——为主效力")
+        self.assertEqual(top_node["children"], [])
 
-    def test_normalize_pdf_source_tree_splits_parallel_items_under_dash_parent(self):
+    def test_normalize_pdf_source_tree_keeps_parallel_items_under_dash_parent(self):
         normalized = service.normalize_pdf_source_tree(
             {
                 "title": "教会教育",
@@ -745,10 +753,10 @@ class MindMapImportServiceTests(unittest.TestCase):
         )
 
         top_node = normalized["children"][0]
-        self.assertEqual(top_node["text"], "人员构成")
-        self.assertEqual([child["text"] for child in top_node["children"]], ["内学", "外学"])
+        self.assertEqual(top_node["text"], "人员构成——内学/外学")
+        self.assertEqual(top_node["children"], [])
 
-    def test_normalize_pdf_source_tree_splits_heading_and_semicolon_series(self):
+    def test_normalize_pdf_source_tree_keeps_heading_and_semicolon_series(self):
         normalized = service.normalize_pdf_source_tree(
             {
                 "title": "中世纪教育",
@@ -757,10 +765,10 @@ class MindMapImportServiceTests(unittest.TestCase):
         )
 
         top_node = normalized["children"][0]
-        self.assertEqual(top_node["text"], "教育内容")
-        self.assertEqual([child["text"] for child in top_node["children"]], ["早期重宗教信仰", "后期以七艺为主"])
+        self.assertEqual(top_node["text"], "教育内容：早期重宗教信仰；后期以七艺为主")
+        self.assertEqual(top_node["children"], [])
 
-    def test_normalize_pdf_source_tree_splits_age_range_and_children(self):
+    def test_normalize_pdf_source_tree_keeps_age_range_and_children_text(self):
         normalized = service.normalize_pdf_source_tree(
             {
                 "title": "骑士教育",
@@ -769,13 +777,10 @@ class MindMapImportServiceTests(unittest.TestCase):
         )
 
         top_node = normalized["children"][0]
-        self.assertEqual(top_node["text"], "14~21岁")
-        self.assertEqual(
-            [child["text"] for child in top_node["children"]],
-            ["侍从教育", "跟随贵族领主学习骑士七技"],
-        )
+        self.assertEqual(top_node["text"], "14~21岁：侍从教育；跟随贵族领主学习骑士七技")
+        self.assertEqual(top_node["children"], [])
 
-    def test_normalize_pdf_source_tree_splits_definition_sentence(self):
+    def test_normalize_pdf_source_tree_keeps_definition_sentence(self):
         normalized = service.normalize_pdf_source_tree(
             {
                 "title": "修道院教育",
@@ -784,10 +789,10 @@ class MindMapImportServiceTests(unittest.TestCase):
         )
 
         top_node = normalized["children"][0]
-        self.assertEqual(top_node["text"], "性质和目的")
-        self.assertEqual([child["text"] for child in top_node["children"]], ["为主效力"])
+        self.assertEqual(top_node["text"], "修道院的性质和目的是为主效力")
+        self.assertEqual(top_node["children"], [])
 
-    def test_normalize_pdf_source_tree_splits_include_and_divide_sentences(self):
+    def test_normalize_pdf_source_tree_keeps_include_and_divide_sentences(self):
         include_tree = service.normalize_pdf_source_tree(
             {
                 "title": "骑士教育",
@@ -801,18 +806,12 @@ class MindMapImportServiceTests(unittest.TestCase):
             }
         )
 
-        self.assertEqual(include_tree["children"][0]["text"], "骑士教育")
-        self.assertEqual(
-            [child["text"] for child in include_tree["children"][0]["children"]],
-            ["宗教", "道德", "文化"],
-        )
-        self.assertEqual(divide_tree["children"][0]["text"], "学校教育")
-        self.assertEqual(
-            [child["text"] for child in divide_tree["children"][0]["children"]],
-            ["初等", "中等"],
-        )
+        self.assertEqual(include_tree["children"][0]["text"], "骑士教育包括宗教、道德、文化")
+        self.assertEqual(include_tree["children"][0]["children"], [])
+        self.assertEqual(divide_tree["children"][0]["text"], "学校教育分为初等、中等")
+        self.assertEqual(divide_tree["children"][0]["children"], [])
 
-    def test_trim_pdf_extracted_text_prefers_structure_title_or_prompt_anchor(self):
+    def test_trim_pdf_extracted_text_returns_model_text_without_cropping(self):
         extracted_text = (
             "知识点五 东方文明古国教育发展的特点\n"
             "……前文省略……\n"
@@ -827,8 +826,7 @@ class MindMapImportServiceTests(unittest.TestCase):
             range_prompt="古希腊",
         )
 
-        self.assertTrue(trimmed.startswith("第二节 古希腊的教育阶段"))
-        self.assertNotIn("东方文明古国教育发展的特点", trimmed)
+        self.assertEqual(trimmed, extracted_text)
 
     @patch("memory_anki.modules.palaces.application.mindmap_import_service.DASHSCOPE_API_KEY", "test-key")
     @patch("memory_anki.modules.palaces.application.mindmap_import_service.render_selected_pdf_pages")
@@ -1037,6 +1035,7 @@ class MindMapImportServiceTests(unittest.TestCase):
                     (b"body", "body.png"),
                 ],
                 fallback_title="未命名宫殿",
+                structure_image_index=0,
             )
         )
 

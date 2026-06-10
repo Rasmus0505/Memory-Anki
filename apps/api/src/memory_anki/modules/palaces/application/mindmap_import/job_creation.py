@@ -58,7 +58,7 @@ def create_batch_job(
     *,
     entity_key: str,
     normalized_items: list[tuple[bytes, str | None]],
-    resolved_structure_index: int,
+    resolved_structure_index: int | None,
     fallback_title: str,
     import_jobs_dir: Path,
     import_error_cls: type[Exception],

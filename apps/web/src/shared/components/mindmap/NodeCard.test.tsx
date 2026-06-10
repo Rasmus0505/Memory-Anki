@@ -48,6 +48,20 @@ describe('NodeCard', () => {
     expect(button.className).toContain('whitespace-pre-wrap')
   })
 
+  it('renders long Chinese labels as wrapped, non-truncated content', () => {
+    const longLabel =
+      '路德提出应由国家普及义务教育，实施强迫义务教育。加尔文要求国家开办公立学校，实行免费教育；使所有儿童都有机会受到教育，学习其督教教义和日常生活所必需的知识技能。'
+    renderNodeCard({
+      label: longLabel,
+      metadata: { depth: 1, layoutRole: 'branch', branchColor: '#2563eb' },
+    })
+
+    const button = screen.getByRole('button', { name: longLabel })
+    expect(button.className).toContain('whitespace-pre-wrap')
+    expect(button.className).toContain('break-words')
+    expect(button.className).not.toContain('truncate')
+  })
+
   it('lets Enter and Ctrl+Enter insert newline, and commits on blur', () => {
     const { onFinishEdit } = renderNodeCard({ label: '原始内容' })
 

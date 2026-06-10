@@ -192,6 +192,7 @@ def stream_batch_import_preview(
             prepare_batch_image_items_fn=_prepare_batch_image_items,
             stream_call_dashscope_json_fn=_stream_call_dashscope_json,
             stream_call_dashscope_batch_json_fn=_stream_call_dashscope_batch_json,
+            stream_call_dashscope_pdf_json_fn=_stream_call_dashscope_pdf_json,
             build_batch_import_result_payload_fn=_build_batch_import_result_payload,
         )
     )
@@ -282,7 +283,7 @@ def _prepare_batch_image_items(
     *,
     image_items: list[tuple[bytes, str | None]],
     structure_image_index: int | None,
-) -> tuple[list[tuple[bytes, str | None]], int]:
+) -> tuple[list[tuple[bytes, str | None]], int | None]:
     return llm_gateway.prepare_batch_items(
         runtime=_dashscope_runtime(),
         image_items=image_items,
@@ -432,6 +433,7 @@ def generate_batch_import_preview(
         prepare_batch_image_items_fn=_prepare_batch_image_items,
         call_dashscope_json_fn=_call_dashscope_json,
         call_dashscope_batch_json_fn=_call_dashscope_batch_json,
+        call_dashscope_pdf_json_fn=_call_dashscope_pdf_json,
         build_batch_import_result_payload_fn=_build_batch_import_result_payload,
     )
 

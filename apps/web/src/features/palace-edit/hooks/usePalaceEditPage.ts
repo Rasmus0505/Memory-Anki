@@ -21,6 +21,7 @@ import { splitMindMapNodeApi, togglePalaceFocusNodeApi } from '@/shared/api/modu
 import { getEnglishContinueCourseApi } from '@/features/english/api/englishApi'
 import type { MindMapEditorState } from '@/shared/api/contracts'
 import { useMemoryAnkiShortcuts } from '@/features/shortcuts/memoryAnkiShortcuts'
+import { useMiniPalaceController } from '@/features/mini-palace'
 export type { ChapterOption, PalaceMeta } from '@/features/palace-edit/model/palace-edit-types'
 
 function readSelectionNodeUid(nodes: MindMapSelection[]) {
@@ -78,6 +79,13 @@ export function usePalaceEditPage() {
     palaceId,
     editorState: documentState.editorState,
     title: meta.title || palaceTitle,
+    timer,
+  })
+
+  const miniPalace = useMiniPalaceController({
+    palaceId,
+    title: meta.title || palaceTitle,
+    editorState: documentState.editorState,
     timer,
   })
 
@@ -220,7 +228,7 @@ export function usePalaceEditPage() {
       setFocusNodeUids(optimisticFocusNodeUids)
       timer.registerActivity('edit_operation', { source })
       try {
-        const response = await togglePalaceFocusNodeApi(palaceId, nodeUid)
+        const response = await togglePalaceFocusNodeApi(palaceId, nodeUid, !wasFocused)
         setFocusNodeUids(response.focus_node_uids ?? optimisticFocusNodeUids)
         emitFeedbackFx(response.focused ? 'node_create' : 'node_delete', {
           nodeUid,
@@ -543,6 +551,7 @@ export function usePalaceEditPage() {
       context?: ImportApplyContext,
     ) => Promise<void>,
     activeMindMapEditorState: practice.activeMindMapEditorState,
+    miniPalace,
     practiceVisibleEditorSyncKey: practice.practiceVisibleEditorSyncKey,
     modeFocusRequestNodeUid: modeFocusRequest.nodeUid,
     modeFocusRequestNonce: modeFocusRequest.nonce,

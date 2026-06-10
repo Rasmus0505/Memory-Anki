@@ -16,7 +16,7 @@ describe('ProfileAiPromptsPage', () => {
       items: [
         {
           key: 'ai_prompt_import_batch_mindmap',
-          label: '多图合成脑图',
+          label: '多图转脑图（兼容）',
           description: '测试模板',
           template: '默认模板 {{structure_tree_json}}',
           default_template: '默认模板 {{structure_tree_json}}',
@@ -32,7 +32,7 @@ describe('ProfileAiPromptsPage', () => {
       items: [
         {
           key: 'ai_prompt_import_batch_mindmap',
-          label: '多图合成脑图',
+          label: '多图转脑图（兼容）',
           description: '测试模板',
           template: '自定义模板 {{structure_tree_json}}',
           default_template: '默认模板 {{structure_tree_json}}',

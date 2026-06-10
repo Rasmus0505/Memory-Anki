@@ -68,6 +68,7 @@ export function PalaceKnowledgeOutlinePanel({
       editor_config: response.editor_config,
       editor_local_config: response.editor_local_config,
       lang: response.lang,
+      editor_fingerprint: response.editor_fingerprint,
     }),
   })
 

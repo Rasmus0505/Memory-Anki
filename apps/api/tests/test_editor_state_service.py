@@ -6,6 +6,8 @@ from sqlalchemy.pool import StaticPool
 
 from memory_anki.infrastructure.db.models import Base, Chapter, Palace, Subject
 from memory_anki.modules.mindmap.application.editor_state_service import (
+    EditorStateConflictError,
+    get_palace_editor_state,
     _plain_text,
     normalize_editor_doc,
     save_palace_editor_state,
@@ -204,6 +206,51 @@ class SubjectEditorStateSyncTests(unittest.TestCase):
             )
 
             self.assertEqual(result["editor_doc"]["root"]["children"][0]["data"]["text"], "导入节点1")
+
+    def test_save_palace_editor_state_rejects_stale_expected_fingerprint(self):
+        with self.SessionLocal() as session:
+            palace = Palace(title="古罗马教育", description="")
+            session.add(palace)
+            session.flush()
+
+            initial_doc = {
+                "root": {
+                    "data": {"text": "古罗马教育", "memoryAnkiRootKind": "palace"},
+                    "children": [
+                        {"data": {"text": "旧节点", "uid": "node-old"}, "children": []}
+                    ],
+                }
+            }
+            newer_doc = {
+                "root": {
+                    "data": {"text": "古罗马教育", "memoryAnkiRootKind": "palace"},
+                    "children": [
+                        {"data": {"text": "服务端新节点", "uid": "node-server"}, "children": []}
+                    ],
+                }
+            }
+            local_doc = {
+                "root": {
+                    "data": {"text": "古罗马教育", "memoryAnkiRootKind": "palace"},
+                    "children": [
+                        {"data": {"text": "本地离线节点", "uid": "node-local"}, "children": []}
+                    ],
+                }
+            }
+
+            save_palace_editor_state(session, palace, {"editor_doc": initial_doc})
+            stale_fingerprint = get_palace_editor_state(palace)["editor_fingerprint"]
+            save_palace_editor_state(session, palace, {"editor_doc": newer_doc})
+
+            with self.assertRaisesRegex(EditorStateConflictError, "脑图保存冲突"):
+                save_palace_editor_state(
+                    session,
+                    palace,
+                    {
+                        "editor_doc": local_doc,
+                        "expected_editor_fingerprint": stale_fingerprint,
+                    },
+                )
 
 
 if __name__ == "__main__":

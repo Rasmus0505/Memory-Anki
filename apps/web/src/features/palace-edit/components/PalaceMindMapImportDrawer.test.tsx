@@ -337,7 +337,9 @@ describe('PalaceMindMapImportDrawer', () => {
     )
 
     expect(screen.getByText('按范围直接生成')).toBeTruthy()
-    expect(screen.getByText(/默认模式。会综合所选页的正文与版面关系，主动挖出父子\/并列结构/)).toBeTruthy()
+    expect(screen.getByText(/默认模式。会综合所选页的正文与版面关系，生成完整脑图草稿/)).toBeTruthy()
+    expect(screen.getByText('长段和明显列表才自动分点')).toBeTruthy()
+    expect(screen.getByText(/短定义和一两行节点保持原文粒度/)).toBeTruthy()
     expect(screen.queryByText('当前结构页')).toBeNull()
 
     fireEvent.click(screen.getByRole('button', { name: /结构页补全模式/ }))

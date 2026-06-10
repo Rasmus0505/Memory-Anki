@@ -35,6 +35,7 @@ interface HostEventHandlerRefs {
     trigger: 'badge' | 'mark'
   }) => void) | undefined>
   onBilinkToolbarSearch: MutableRefObject<(() => void) | undefined>
+  onMiniPalaceOpen: MutableRefObject<(() => void) | undefined>
   onReady: MutableRefObject<(() => void) | undefined>
 }
 
@@ -179,6 +180,9 @@ export function dispatchHostEvent(
   }
   if (event === 'bilink_toolbar_search') {
     handlers.onBilinkToolbarSearch.current?.()
+  }
+  if (event === 'mini_palace_open') {
+    handlers.onMiniPalaceOpen.current?.()
   }
   return 'other'
 }

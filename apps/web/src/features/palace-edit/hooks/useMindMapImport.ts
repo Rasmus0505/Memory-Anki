@@ -5,6 +5,7 @@ import { useImportBatchState } from '@/features/palace-edit/hooks/useImportBatch
 import { useImportJobController } from '@/features/palace-edit/hooks/useImportJobController'
 import { usePdfImportController } from '@/features/palace-edit/hooks/usePdfImportController'
 import type {
+  BatchImportMeta,
   ImportApplyContext,
   ImportMode,
   ImportSourceKind,
@@ -183,9 +184,9 @@ export function useMindMapImport({
     importHistory: jobs.importHistory,
     importHistoryJobs: jobs.importHistory,
     importBatchImages: batch.batchImages,
-    importStructureImageId: batch.structureImageId || batch.batchImages[0]?.id || null,
+    importStructureImageId: batch.structureImageId,
     importBatchStatus: batch.batchStatus,
-    importBatchMeta: batch.lastBatchMeta,
+    importBatchMeta: batch.lastBatchMeta as BatchImportMeta | null,
     importCanAppend: Boolean(selectedNodeUid),
     importCanUndoLastImport: apply.canUndoLastImport,
     importExternalSyncKey: apply.externalSyncKey,
@@ -233,7 +234,7 @@ export function useMindMapImport({
     toggleImportPdfPage: pdf.togglePdfPage,
     handleImportPaste,
     handleImportFileChange,
-    handleBatchImportStart: () => void jobs.handleBatchImportStart(batch.structureImageId || batch.batchImages[0]?.id || null),
+    handleBatchImportStart: () => void jobs.handleBatchImportStart(batch.structureImageId),
     handlePdfImportStart: jobs.handlePdfImportStart,
     handleDeleteBatchImage: batch.handleDeleteBatchImage,
     handleMoveBatchImage: batch.handleMoveBatchImage,

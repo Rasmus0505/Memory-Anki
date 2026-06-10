@@ -34,6 +34,10 @@ import {
   useVoiceCoachController,
   VoiceCoachSettingsDialog,
 } from '@/features/voice-coach'
+import {
+  MiniPalacePanel,
+  useMiniPalaceController,
+} from '@/features/mini-palace'
 
 export type { ReviewFlowSnapshot } from '@/features/review/model/review-flow-tree'
 
@@ -248,6 +252,19 @@ export function MindMapReviewFlow({
     onSnapshotChange,
     onFullscreenChange,
   })
+  const inlineEditEnabled =
+    sessionKind === 'review' &&
+    typeof onModeToggle === 'function' &&
+    typeof onEditEditorStateChange === 'function' &&
+    Boolean(editEditorState)
+  const miniPalaceSourceEditorState =
+    inlineEditEnabled && editEditorState ? editEditorState : reviewEditorState
+  const miniPalace = useMiniPalaceController({
+    palaceId,
+    title,
+    editorState: miniPalaceSourceEditorState,
+    timer: flow.timer,
+  })
   const voiceCoach = useVoiceCoachController({
     scene: sessionKind,
     timer: flow.timer,
@@ -262,15 +279,17 @@ export function MindMapReviewFlow({
     currentPalaceId: palaceId,
     allowCreate: false,
   })
-  const inlineEditEnabled =
-    sessionKind === 'review' &&
-    typeof onModeToggle === 'function' &&
-    typeof onEditEditorStateChange === 'function' &&
-    Boolean(editEditorState)
   const resolvedDisplayMode =
     inlineEditEnabled && displayMode === 'edit' ? 'edit' : 'review'
   const isInlineEditMode = resolvedDisplayMode === 'edit'
   const previousDisplayModeRef = React.useRef(resolvedDisplayMode)
+  const mapDisplayMode = miniPalace.isActive ? 'review' : resolvedDisplayMode
+  const mapEditorState =
+    miniPalace.visibleEditorState ??
+    (miniPalace.isActive ? miniPalaceSourceEditorState : flow.visibleEditorState)
+  const mapVisibleSyncKey = miniPalace.isActive
+    ? miniPalace.visibleSyncKey
+    : flow.visibleEditorSyncKey
 
   React.useEffect(() => {
     setFocusNodeUids(JSON.parse(initialFocusNodeUidsKey) as string[])
@@ -530,7 +549,13 @@ export function MindMapReviewFlow({
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 {onRestart && !isInlineEditMode ? (
-                  <Button type="button" size="sm" variant="outline" onClick={flow.handleRestart}>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={miniPalace.isActive}
+                    onClick={flow.handleRestart}
+                  >
                     <RotateCcw className="mr-2 h-4 w-4" />
                     重新开始
                   </Button>
@@ -545,7 +570,7 @@ export function MindMapReviewFlow({
                   <Button
                     type="button"
                     size="sm"
-                    disabled={submitting || flow.feedback.completionCeremonyActive}
+                    disabled={submitting || flow.feedback.completionCeremonyActive || miniPalace.isActive}
                     className={completeButtonClassName}
                     onClick={() => void flow.finishFlow('manual_complete')}
                   >
@@ -564,20 +589,20 @@ export function MindMapReviewFlow({
               <div className="h-full min-h-0">
                 <ReviewFlowMapPanel
                   fullscreen={flow.fullscreen}
-                  displayMode={resolvedDisplayMode}
+                  displayMode={mapDisplayMode}
                   modeSyncVersion={modeSyncVersion}
                   viewMemoryScope={viewMemoryScope}
                   onToggleFullscreen={handleFullscreenToggle}
                   onToggleMode={
-                    inlineEditEnabled && onModeToggle
+                    inlineEditEnabled && onModeToggle && !miniPalace.isActive
                       ? () => {
                           void onModeToggle()
                         }
                       : undefined
                   }
-                  visibleEditorState={flow.visibleEditorState}
+                  visibleEditorState={mapEditorState ?? flow.visibleEditorState}
                   editableEditorState={editEditorState}
-                  visibleEditorSyncKey={flow.visibleEditorSyncKey}
+                  visibleEditorSyncKey={mapVisibleSyncKey}
                   bilinkCounts={bilinkCounts.counts}
                   bilinkItems={bilinks.items}
                   currentPalaceId={palaceId}
@@ -585,10 +610,14 @@ export function MindMapReviewFlow({
                   bilinkInsertionText={bilinkOverlay.bilinkInsertionText}
                   bilinkInsertionNonce={bilinkOverlay.bilinkInsertionNonce}
                   reviewFxSignal={flow.feedback.reviewFxSignal}
+                  showMiniPalaceButton={Boolean(palaceId)}
+                  miniPalaceDraft={miniPalace.hostDraft}
                   onEditorStateChange={handleEditorStateChange}
                   onNodeActive={setActiveNodes}
-                  onNodeClick={flow.handleNodeClick}
-                  onNodeContextMenu={flow.handleNodeContextMenu}
+                  onNodeClick={miniPalace.isActive ? miniPalace.handleNodeClick : flow.handleNodeClick}
+                  onNodeContextMenu={
+                    miniPalace.isActive ? miniPalace.handleNodeContextMenu : flow.handleNodeContextMenu
+                  }
                   onEditNodeContextMenu={handleEditNodeContextMenu}
                   onBilinkTrigger={bilinkOverlay.handleBilinkTrigger}
                   onBilinkNodeClick={bilinkOverlay.handleBilinkNodeClick}
@@ -598,6 +627,7 @@ export function MindMapReviewFlow({
                       position: null,
                     })
                   }
+                  onMiniPalaceOpen={miniPalace.openPanel}
                 />
               </div>
             </CardContent>
@@ -670,6 +700,8 @@ export function MindMapReviewFlow({
         onOpenChange={setVoiceCoachDialogOpen}
         onTest={voiceCoach.playTestEvent}
       />
+
+      <MiniPalacePanel controller={miniPalace} />
     </div>
   )
 }

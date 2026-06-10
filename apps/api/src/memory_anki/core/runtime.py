@@ -123,7 +123,7 @@ def record_runtime_start(
     resolved_contract = contract or load_runtime_contract()
     next_state = dict(state) if state is not None else read_migration_state(path)
     current_generation = current_runtime_generation(next_state)
-    resolved_channel = channel or os.environ.get("MEMORY_ANKI_CHANNEL") or "dev"
+    resolved_channel = channel or os.environ.get("MEMORY_ANKI_CHANNEL") or "production"
     resolved_commit = commit or os.environ.get("MEMORY_ANKI_GIT_COMMIT") or detect_git_commit()
     next_state["runtime_generation"] = max(
         current_generation,
@@ -154,7 +154,7 @@ def build_runtime_info(
     resolved_channel = (
         channel
         or os.environ.get("MEMORY_ANKI_CHANNEL")
-        or str(shared_state.get("last_started_channel") or "dev")
+        or str(shared_state.get("last_started_channel") or "production")
     )
     resolved_commit = commit or os.environ.get("MEMORY_ANKI_GIT_COMMIT") or detect_git_commit()
     storage_layout = load_storage_layout()

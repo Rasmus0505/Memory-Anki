@@ -31,9 +31,10 @@ D:\Memory Anki\
 
 ## 启动方式
 
-- Windows：运行 [start.bat](/D:/Memory%20Anki/start.bat)
-- API 本地启动：在 `apps/api` 下运行 `python -m uvicorn --app-dir src memory_anki.app.main:app --host 127.0.0.1 --port 8000 --reload`
-- Web 本地启动：在 `apps/web` 下运行 `npm run dev -- --host 127.0.0.1 --port 5173`
+- Windows：运行 [start.bat](/D:/我的网站/Memory%20Anki/start.bat)
+- `start.bat` 会构建前端、创建运行快照，并从 `%LOCALAPPDATA%/MemoryAnki/runtime/current` 以生产模式启动。
+- 默认访问地址：`http://127.0.0.1:8012/`
+- 日常使用只维护这一种启动方式；运行期间修改仓库代码不会影响已经启动的网站。
 
 ## 协作规则
 

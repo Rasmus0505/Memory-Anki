@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
 from memory_anki.infrastructure.db.models import (
@@ -6,6 +6,10 @@ from memory_anki.infrastructure.db.models import (
     PalaceSegmentReviewSchedule,
     ReviewSchedule,
     get_session,
+)
+from memory_anki.modules.persistence.application.idempotency import (
+    get_idempotent_response,
+    save_idempotent_response,
 )
 from memory_anki.modules.palaces.application.segment_nodes import (
     build_segments_editor_doc,
@@ -394,7 +398,16 @@ def api_delete_segment_review_progress(schedule_id: int, session: Session = Depe
 
 
 @router.post("/review/session/{schedule_id}/submit")
-def api_submit_session(schedule_id: int, data: dict, session: Session = Depends(session_dep)):
+def api_submit_session(
+    schedule_id: int,
+    data: dict,
+    request: Request,
+    session: Session = Depends(session_dep),
+):
+    existing_response = get_idempotent_response(session, request)
+    if existing_response is not None:
+        return existing_response
+
     log, extra = submit_review(
         session,
         schedule_id,
@@ -414,17 +427,28 @@ def api_submit_session(schedule_id: int, data: dict, session: Session = Depends(
         exclude_schedule_id=schedule_id,
         chapter_id=int(chapter_id) if chapter_id is not None else None,
     )
-    return {
+    response = {
         "ok": True,
         "completion_mode": data.get("completion_mode"),
         "score": log.score,
         "next_id": next_schedule.id if next_schedule else None,
         "mastered": extra.get("mastered", False),
     }
+    save_idempotent_response(session, request, response)
+    return response
 
 
 @router.post("/segment-review/session/{schedule_id}/submit")
-def api_submit_segment_session(schedule_id: int, data: dict, session: Session = Depends(session_dep)):
+def api_submit_segment_session(
+    schedule_id: int,
+    data: dict,
+    request: Request,
+    session: Session = Depends(session_dep),
+):
+    existing_response = get_idempotent_response(session, request)
+    if existing_response is not None:
+        return existing_response
+
     schedule, extra = submit_segment_review(
         session,
         schedule_id,
@@ -442,13 +466,15 @@ def api_submit_segment_session(schedule_id: int, data: dict, session: Session = 
             exclude_schedule_id=schedule_id,
             chapter_id=int(chapter_id) if chapter_id is not None else None,
         )
-        return {
+        response = {
             "ok": True,
             "completion_mode": data.get("completion_mode"),
             "score": 5,
             "next_id": next_schedule.id if next_schedule else None,
             "mastered": extra.get("mastered", False),
         }
+        save_idempotent_response(session, request, response)
+        return response
 
     review_log, review_extra = submit_review(
         session,
@@ -462,24 +488,36 @@ def api_submit_segment_session(schedule_id: int, data: dict, session: Session = 
         raise_not_found()
 
     clear_review_progress(session, schedule_id)
-    return {
+    response = {
         "ok": True,
         "completion_mode": data.get("completion_mode"),
         "score": 5,
         "next_id": None,
         "mastered": review_extra.get("mastered", False) if review_log else False,
     }
+    save_idempotent_response(session, request, response)
+    return response
 
 
 @router.post("/segment-review/batch-session/submit")
-def api_submit_batch_segment_session(data: dict, session: Session = Depends(session_dep)):
+def api_submit_batch_segment_session(
+    data: dict,
+    request: Request,
+    session: Session = Depends(session_dep),
+):
+    existing_response = get_idempotent_response(session, request)
+    if existing_response is not None:
+        return existing_response
+
     try:
-        return submit_batch_segment_review(
+        response = submit_batch_segment_review(
             session,
             list(data.get("segment_ids") or []),
             duration_seconds=int(data.get("duration_seconds", 0)),
             completion_mode=str(data.get("completion_mode", "manual_complete")),
         )
+        save_idempotent_response(session, request, response)
+        return response
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -495,5 +533,10 @@ def api_review_item(schedule_id: int, session: Session = Depends(session_dep)):
 
 
 @router.post("/review/{schedule_id}/submit")
-def api_submit(schedule_id: int, data: dict, session: Session = Depends(session_dep)):
-    return api_submit_session(schedule_id, data, session)
+def api_submit(
+    schedule_id: int,
+    data: dict,
+    request: Request,
+    session: Session = Depends(session_dep),
+):
+    return api_submit_session(schedule_id, data, request, session)

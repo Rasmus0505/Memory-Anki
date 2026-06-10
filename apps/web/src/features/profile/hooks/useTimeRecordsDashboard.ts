@@ -16,8 +16,8 @@ import {
   updateTimeRecord,
 } from '@/entities/session/model'
 import {
+  applyTimeRecordFormPatch,
   buildTimeRecordFormState,
-  calculateTimeRangeSeconds,
   isTimeRecordAboveThreshold,
   parseTimeRecordFormState,
   type TimeRecordFormState,
@@ -389,41 +389,7 @@ export function useTimeRecordsDashboard(
       if (!open) setFormError(null)
     },
     onFormChange: (patch) =>
-      setFormState((current) => {
-        const next = { ...current, ...patch }
-        const timeChanged =
-          patch.startedAt !== undefined || patch.endedAt !== undefined
-        const durationEdited = patch.durationEdited ?? (
-          current.durationEdited || patch.effectiveSeconds !== undefined
-        )
-
-        if (timeChanged && !durationEdited) {
-          const seconds = calculateTimeRangeSeconds(
-            next.startedAt,
-            next.endedAt,
-          )
-          if (seconds !== null) {
-            next.effectiveSeconds = String(seconds)
-          }
-        }
-
-        if (patch.effectiveSeconds !== undefined) {
-          next.durationEdited = true
-        } else if (patch.durationEdited !== undefined) {
-          next.durationEdited = patch.durationEdited
-          if (!patch.durationEdited) {
-            const seconds = calculateTimeRangeSeconds(
-              next.startedAt,
-              next.endedAt,
-            )
-            if (seconds !== null) {
-              next.effectiveSeconds = String(seconds)
-            }
-          }
-        }
-
-        return next
-      }),
+      setFormState((current) => applyTimeRecordFormPatch(current, patch)),
     handleSubmitRecord,
   }
 }

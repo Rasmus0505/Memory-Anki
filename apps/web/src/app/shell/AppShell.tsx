@@ -5,6 +5,8 @@ import {
   Brain,
   ChevronRight,
   ClipboardList,
+  Cloud,
+  CloudAlert,
   FolderTree,
   LayoutDashboard,
   Menu,
@@ -21,6 +23,8 @@ import { useClientPreferenceBootstrap } from '@/shared/preferences/useClientPref
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
 import { AppLogDrawer } from '@/shared/logs/components/AppLogDrawer'
+import { MutationQueueDrawer } from '@/shared/persistence/components/MutationQueueDrawer'
+import { useMutationQueueState } from '@/shared/persistence/useMutationQueue'
 import { cn } from '@/shared/lib/utils'
 
 const navItems = [
@@ -157,6 +161,10 @@ function ShellFrame({ children }: PropsWithChildren) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [runtimeInfo, setRuntimeInfo] = useState<RuntimeInfo | null>(null)
   const [logDrawerOpen, setLogDrawerOpen] = useState(false)
+  const [syncDrawerOpen, setSyncDrawerOpen] = useState(false)
+  const { summary: mutationSummary } = useMutationQueueState()
+  const syncHasAttention = mutationSummary.conflict > 0 || mutationSummary.failed > 0 || mutationSummary.manual > 0
+  const syncCount = mutationSummary.total
 
   useClientPreferenceBootstrap()
 
@@ -199,15 +207,28 @@ function ShellFrame({ children }: PropsWithChildren) {
               <div className="text-sm font-semibold">记忆宫殿</div>
               <RuntimeChannelBadge runtimeInfo={runtimeInfo} compact />
             </div>
-            <Button
-              type="button"
-              variant="outline"
-              size="icon"
-              onClick={() => setLogDrawerOpen(true)}
-              aria-label="打开日志侧边栏"
-            >
-              <ClipboardList className="h-4 w-4" />
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                onClick={() => setLogDrawerOpen(true)}
+                aria-label="打开日志侧边栏"
+                title="打开日志侧边栏"
+              >
+                <ClipboardList className="h-4 w-4" />
+              </Button>
+              <Button
+                type="button"
+                variant={syncHasAttention ? 'default' : 'outline'}
+                size="icon"
+                onClick={() => setSyncDrawerOpen(true)}
+                aria-label="打开数据同步侧边栏"
+                title="打开数据同步侧边栏"
+              >
+                {syncHasAttention ? <CloudAlert className="h-4 w-4" /> : <Cloud className="h-4 w-4" />}
+              </Button>
+            </div>
           </div>
         </header>
 
@@ -244,6 +265,16 @@ function ShellFrame({ children }: PropsWithChildren) {
         >
           <div className={cn('flex justify-end px-3 pt-3', sidebarCollapsed ? 'pb-1' : 'pb-0')}>
             <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant={syncHasAttention ? 'default' : 'outline'}
+                size="icon"
+                onClick={() => setSyncDrawerOpen(true)}
+                aria-label="打开数据同步侧边栏"
+                title={syncCount > 0 ? `待同步 ${syncCount} 项` : '数据已同步'}
+              >
+                {syncHasAttention ? <CloudAlert className="h-4 w-4" /> : <Cloud className="h-4 w-4" />}
+              </Button>
               <Button
                 type="button"
                 variant="outline"
@@ -284,6 +315,7 @@ function ShellFrame({ children }: PropsWithChildren) {
           </div>
         </main>
         <AppLogDrawer open={logDrawerOpen} onOpenChange={setLogDrawerOpen} />
+        <MutationQueueDrawer open={syncDrawerOpen} onOpenChange={setSyncDrawerOpen} />
       </div>
     </ShellProvider>
   )

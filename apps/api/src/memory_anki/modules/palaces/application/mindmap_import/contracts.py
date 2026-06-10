@@ -27,7 +27,7 @@ class TextPreviewResult:
 class BatchImportPreviewResult:
     source_tree: dict[str, Any]
     editor_doc: dict[str, Any]
-    structure_image_index: int
+    structure_image_index: int | None
     image_count: int
 
 

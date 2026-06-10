@@ -96,7 +96,7 @@ describe('useMindMapImport apply flows', () => {
     await waitFor(() => {
       expect(palaceApi.createBatchImportJobApi).toHaveBeenCalledWith(
         expect.any(Array),
-        expect.objectContaining({ entityKey: 'palace_1', structureImageIndex: 0 }),
+        expect.objectContaining({ entityKey: 'palace_1' }),
       )
     })
   })

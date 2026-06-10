@@ -26,6 +26,7 @@ import {
   useVoiceCoachController,
   VoiceCoachSettingsDialog,
 } from '@/features/voice-coach'
+import { MiniPalacePanel } from '@/features/mini-palace'
 
 export default function PalaceEdit() {
   const page = usePalaceEditPage()
@@ -68,6 +69,13 @@ export default function PalaceEdit() {
   })
 
   const selectedNodeLabel = page.selectedNodes?.[0]?.text ?? ''
+  const miniPalaceFrameEditorState =
+    page.miniPalace.visibleEditorState ??
+    (page.miniPalace.isActive ? page.editorState : null)
+  const activeFrameEditorState =
+    miniPalaceFrameEditorState ?? page.activeMindMapEditorState
+  const miniPalaceFrameActive = page.miniPalace.isActive
+  const readonlyMindMap = page.editorMode === 'practice' || miniPalaceFrameActive
 
   if (!page.palaceId) {
     return (
@@ -237,35 +245,44 @@ export default function PalaceEdit() {
                 page.mindMapFullscreen && 'h-[calc(100vh-108px)] min-h-0',
               )}
             >
-              {page.activeMindMapEditorState ? (
+              {activeFrameEditorState ? (
                 <MindMapFrame
-                  editorState={page.activeMindMapEditorState}
-                  readonly={page.editorMode === 'practice'}
-                  showToolbarWhenReadonly={page.editorMode === 'practice'}
-                  practiceModeActive={page.editorMode === 'practice'}
+                  editorState={activeFrameEditorState}
+                  readonly={readonlyMindMap}
+                  showToolbarWhenReadonly={readonlyMindMap}
+                  practiceModeActive={page.editorMode === 'practice' || page.miniPalace.isPracticing}
                   practiceToggleLabel={page.editorMode === 'practice' ? '编辑' : '练习'}
                   viewMemoryScope={
-                    page.palaceId ? `palace-edit:${page.palaceId}:${page.editorMode}` : null
+                    page.palaceId ? `palace-edit:${page.palaceId}` : null
                   }
                   immersiveModeActive={page.mindMapFullscreen}
                   showImportButtons
-                  aiSplitBusy={page.editorMode === 'edit' ? page.aiSplitBusy : false}
+                  aiSplitBusy={page.editorMode === 'edit' && !miniPalaceFrameActive ? page.aiSplitBusy : false}
                   syncOnPropChange
-                  syncIntent={page.editorMode === 'practice' ? 'replace' : 'soft'}
-                  syncReason={page.editorMode === 'practice' ? 'review_flip' : null}
+                  syncIntent={page.editorMode === 'practice' || miniPalaceFrameActive ? 'replace' : 'soft'}
+                  syncReason={
+                    miniPalaceFrameActive
+                      ? 'mini_palace'
+                      : page.editorMode === 'practice'
+                        ? 'review_flip'
+                        : null
+                  }
                   preserveViewOnSync={
+                    miniPalaceFrameActive ||
                     page.editorMode === 'practice' ||
                     (mindMapImport.importAppliedSyncVersion > 0 ||
                     page.aiSplitAppliedSyncVersion > 0
                     )
                   }
-                  initialViewPolicy={page.editorMode === 'practice' ? 'preserve' : 'reset'}
+                  initialViewPolicy={page.editorMode === 'practice' || miniPalaceFrameActive ? 'preserve' : 'reset'}
                   externalSyncKey={
-                    page.editorMode === 'practice'
+                    miniPalaceFrameActive
+                      ? page.miniPalace.visibleSyncKey
+                      : page.editorMode === 'practice'
                       ? page.practiceVisibleEditorSyncKey
                       : mindMapImport.importExternalSyncKey
                   }
-                  forceSyncKey={`${page.editorMode}:${page.replaceSyncVersion}:${mindMapImport.importAppliedSyncVersion}`}
+                  forceSyncKey={`${page.editorMode}:${page.replaceSyncVersion}:${mindMapImport.importAppliedSyncVersion}${miniPalaceFrameActive ? `:${page.miniPalace.visibleSyncKey}` : ''}`}
                   forceSyncIntent="replace"
                   segments={page.segments
                     .filter((segment) => !segment.is_virtual_default)
@@ -290,6 +307,8 @@ export default function PalaceEdit() {
                   focusNodeUids={page.focusNodeUids}
                   focusRequestNodeUid={page.modeFocusRequestNodeUid}
                   focusRequestNonce={page.modeFocusRequestNonce}
+                  showMiniPalaceButton={Boolean(page.palaceId)}
+                  miniPalaceDraft={page.miniPalace.hostDraft}
                   bilinkInsertionText={page.bilinkInsertionText}
                   bilinkInsertionNonce={page.bilinkInsertionNonce}
                   reviewFxSignal={page.editorMode === 'practice' ? page.reviewFxSignal : null}
@@ -300,9 +319,15 @@ export default function PalaceEdit() {
                     page.timer.registerActivity('node_switch', { source: 'node_active' })
                     page.handleMindMapNodeActive(nodes)
                   }}
-                  onNodeClick={page.handleInlinePracticeNodeClick}
+                  onNodeClick={
+                    miniPalaceFrameActive
+                      ? page.miniPalace.handleNodeClick
+                      : page.handleInlinePracticeNodeClick
+                  }
                   onNodeContextMenu={
-                    page.editorMode === 'edit'
+                    miniPalaceFrameActive
+                      ? page.miniPalace.handleNodeContextMenu
+                      : page.editorMode === 'edit'
                       ? page.handleEditNodeContextMenu
                       : page.handleInlinePracticeNodeContextMenu
                   }
@@ -311,7 +336,7 @@ export default function PalaceEdit() {
                   onSegmentRangeDraftChange={page.handleSegmentRangeDraftChange}
                   onSegmentRangeModeToggle={page.handleSegmentRangeModeToggle}
                   onSegmentRangeConfirm={page.handleConfirmSegmentRange}
-                  onPracticeToggle={page.toggleInlinePractice}
+                  onPracticeToggle={miniPalaceFrameActive ? undefined : page.toggleInlinePractice}
                   onEnglishOpen={() => {
                     void page.handleOpenEnglishArea()
                   }}
@@ -323,7 +348,7 @@ export default function PalaceEdit() {
                     mindMapImport.setImportMode('text')
                     mindMapImport.setImportOpen(true)
                   }}
-                  onAiSplitRequest={page.editorMode === 'edit' ? page.handleAiSplitRequest : undefined}
+                  onAiSplitRequest={page.editorMode === 'edit' && !miniPalaceFrameActive ? page.handleAiSplitRequest : undefined}
                   onFullscreenChange={page.handleMindMapNativeFullscreenChange}
                   onFullscreenToggle={page.toggleMindMapFullscreen}
                   onBilinkTrigger={page.handleBilinkTrigger}
@@ -335,6 +360,7 @@ export default function PalaceEdit() {
                       position: null,
                     })
                   }
+                  onMiniPalaceOpen={page.miniPalace.openPanel}
                   className={cn(
                     'w-full rounded-2xl border border-border/70 bg-white',
                     page.mindMapFullscreen ? 'h-full' : 'h-[64vh]',
@@ -357,6 +383,8 @@ export default function PalaceEdit() {
           ) : null}
         </div>
       </div>
+
+      <MiniPalacePanel controller={page.miniPalace} />
 
       <PalaceMindMapImportDrawer
         open={mindMapImport.importOpen}

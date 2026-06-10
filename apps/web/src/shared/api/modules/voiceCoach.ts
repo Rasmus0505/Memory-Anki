@@ -26,5 +26,6 @@ export function synthesizeVoiceCoachApi(event: VoiceCoachEvent) {
   return request<VoiceCoachSynthesizeResponse>('/voice-coach/synthesize', {
     method: 'POST',
     body: JSON.stringify({ event }),
+    persistence: false,
   })
 }

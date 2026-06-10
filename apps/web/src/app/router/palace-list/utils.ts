@@ -130,6 +130,13 @@ export function getReviewButtonState(value: string | null): ReviewButtonState {
   return sameDay ? 'due_later_today' : 'future'
 }
 
+export function isSleepReviewSegment(
+  segment: Pick<PalaceSegmentSummary, 'current_review_type' | 'review_stage_completed' | 'stage_labels'>,
+): boolean {
+  if (segment.current_review_type === 'sleep') return true
+  return segment.stage_labels?.[segment.review_stage_completed] === '睡前'
+}
+
 export function formatCreatedAt(value: string | null): string {
   if (!value) return '未知'
   const date = parseApiDateTime(value)

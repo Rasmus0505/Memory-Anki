@@ -1,4 +1,5 @@
 import copy
+import hashlib
 import json
 import re
 from html import unescape
@@ -18,6 +19,7 @@ DEFAULT_LAYOUT = "logicalStructure"
 DEFAULT_THEME = {"template": "avocado", "config": {}}
 DEFAULT_EDITOR_CONFIG: dict[str, Any] = {}
 DEFAULT_EDITOR_LOCAL_CONFIG: dict[str, Any] = {}
+EDITOR_FINGERPRINT_KEY = "editor_fingerprint"
 LANG_KEY = "__lang"
 NODE_ID_KEY = "memoryAnkiId"
 NODE_TYPE_KEY = "memoryAnkiNodeType"
@@ -29,25 +31,111 @@ DANGEROUS_AUTOSAVE_SOURCES = {"palace_edit_autosave", "host_bootstrap_sync"}
 DANGEROUS_EDITOR_SOURCES = {"review_edit", "practice_edit", "unknown"}
 REVIEW_PLACEHOLDER_TEXT = "待回忆"
 REVIEW_PLACEHOLDER_NODE_STYLE = {
-    "fillColor": "#eef2f7",
-    "borderColor": "#94a3b8",
+    "fillColor": "#fffbeb",
+    "borderColor": "#f59e0b",
     "borderWidth": 2,
-    "color": "#475569",
+    "color": "#92400e",
 }
 REVIEW_REVEALED_NODE_STYLE = {
     "fillColor": "#ecfdf5",
-    "borderColor": "#22c55e",
+    "borderColor": "#10b981",
     "borderWidth": 2,
-    "color": "#14532d",
+    "color": "#065f46",
+}
+REVIEW_RED_NODE_STYLE = {
+    "fillColor": "#fff1f2",
+    "borderColor": "#e11d48",
+    "borderWidth": 2,
+    "color": "#881337",
 }
 REVIEW_ROOT_NODE_STYLE = {
-    "fillColor": "#111827",
-    "borderColor": "#0f172a",
+    "fillColor": "#18181b",
+    "borderColor": "#09090b",
     "borderWidth": 2,
-    "color": "#f8fafc",
+    "color": "#fafafa",
     "fontWeight": "bold",
 }
+LEGACY_REVIEW_NODE_STYLES = (
+    {
+        "fillColor": "#eef2f7",
+        "borderColor": "#94a3b8",
+        "borderWidth": 2,
+        "color": "#475569",
+    },
+    {
+        "fillColor": "#fff8e7",
+        "borderColor": "#d7a84d",
+        "borderWidth": 2,
+        "color": "#7a5423",
+    },
+    {
+        "fillColor": "#fff7ed",
+        "borderColor": "#f59e0b",
+        "borderWidth": 2,
+        "color": "#9a3412",
+    },
+    {
+        "fillColor": "#eef8ef",
+        "borderColor": "#86ad86",
+        "borderWidth": 2,
+        "color": "#2e5d49",
+    },
+    {
+        "fillColor": "#ecfdf5",
+        "borderColor": "#22c55e",
+        "borderWidth": 2,
+        "color": "#14532d",
+    },
+    {
+        "fillColor": "#ecfdf5",
+        "borderColor": "#10b981",
+        "borderWidth": 2,
+        "color": "#065f46",
+    },
+    {
+        "fillColor": "#fff3f3",
+        "borderColor": "#c77882",
+        "borderWidth": 2,
+        "color": "#7c3840",
+    },
+    {
+        "fillColor": "#fef2f2",
+        "borderColor": "#ef4444",
+        "borderWidth": 2,
+        "color": "#7f1d1d",
+    },
+)
+LEGACY_REVIEW_ROOT_NODE_STYLES = (
+    {
+        "fillColor": "#315b4f",
+        "borderColor": "#284c42",
+        "borderWidth": 2,
+        "color": "#f8fbf6",
+        "fontWeight": "bold",
+    },
+    {
+        "fillColor": "#111827",
+        "borderColor": "#0f172a",
+        "borderWidth": 2,
+        "color": "#f8fafc",
+        "fontWeight": "bold",
+    },
+)
+REVIEW_NODE_STYLE_VARIANTS = (
+    REVIEW_PLACEHOLDER_NODE_STYLE,
+    REVIEW_REVEALED_NODE_STYLE,
+    REVIEW_RED_NODE_STYLE,
+    *LEGACY_REVIEW_NODE_STYLES,
+)
+REVIEW_ROOT_STYLE_VARIANTS = (
+    REVIEW_ROOT_NODE_STYLE,
+    *LEGACY_REVIEW_ROOT_NODE_STYLES,
+)
 REVIEW_LINE_STYLES = (
+    {"lineColor": "#d4d4d8", "lineWidth": 2},
+    {"lineColor": "#10b981", "lineWidth": 3},
+    {"lineColor": "#b8c9bf", "lineWidth": 2},
+    {"lineColor": "#86ad86", "lineWidth": 3},
     {"lineColor": "#cbd5e1", "lineWidth": 2},
     {"lineColor": "#22c55e", "lineWidth": 3},
 )
@@ -62,6 +150,10 @@ REVIEW_TRANSIENT_FIELDS = (
     "hideNote",
     "customTextWidth",
 )
+
+
+class EditorStateConflictError(ValueError):
+    pass
 
 TAG_RE = re.compile(r"<[^>]+>")
 HTML_BLOCK_BREAK_RE = re.compile(r"</(?:div|p|li|h[1-6]|blockquote|pre|tr)>", re.IGNORECASE)
@@ -91,12 +183,14 @@ def get_subject_editor_state(subject: Subject) -> dict[str, Any]:
         doc = build_subject_editor_doc(subject)
     else:
         doc = normalize_editor_doc(doc, root_text=subject.name, root_kind="subject")
-    return {
+    state = {
         "editor_doc": doc,
         "editor_config": _deserialize(subject.editor_config, DEFAULT_EDITOR_CONFIG),
         "editor_local_config": local_config,
         "lang": lang,
     }
+    state[EDITOR_FINGERPRINT_KEY] = build_editor_state_fingerprint(state)
+    return state
 
 
 def get_palace_editor_state(palace: Palace) -> dict[str, Any]:
@@ -108,12 +202,14 @@ def get_palace_editor_state(palace: Palace) -> dict[str, Any]:
     else:
         doc = normalize_editor_doc(doc, root_text=palace.title, root_kind="palace")
         doc = sanitize_palace_editor_doc(palace, doc)
-    return {
+    state = {
         "editor_doc": doc,
         "editor_config": _deserialize(palace.editor_config, DEFAULT_EDITOR_CONFIG),
         "editor_local_config": local_config,
         "lang": lang,
     }
+    state[EDITOR_FINGERPRINT_KEY] = build_editor_state_fingerprint(state)
+    return state
 
 
 def save_subject_editor_state(session: Session, subject: Subject, payload: dict[str, Any]) -> dict[str, Any]:
@@ -121,6 +217,13 @@ def save_subject_editor_state(session: Session, subject: Subject, payload: dict[
     config_input = payload.get("editor_config")
     local_input = payload.get("editor_local_config")
     lang_input = payload.get("lang")
+    expected_fingerprint = str(payload.get("expected_editor_fingerprint") or "").strip()
+    allow_stale_overwrite = bool(payload.get("allow_stale_overwrite"))
+
+    if expected_fingerprint and not allow_stale_overwrite:
+        current_fingerprint = get_subject_editor_state(subject).get(EDITOR_FINGERPRINT_KEY)
+        if current_fingerprint != expected_fingerprint:
+            raise EditorStateConflictError("脑图保存冲突：服务端已有更新，本地待同步内容已保留，请确认后再覆盖。")
 
     local_config = (
         _coerce_local_config(local_input, lang_input)
@@ -151,6 +254,12 @@ def save_palace_editor_state(session: Session, palace: Palace, payload: dict[str
     editor_source = str(payload.get("editor_source") or "unknown").strip() or "unknown"
     sync_reason = str(payload.get("sync_reason") or "").strip() or None
     allow_stale_overwrite = bool(payload.get("allow_stale_overwrite"))
+    expected_fingerprint = str(payload.get("expected_editor_fingerprint") or "").strip()
+
+    if expected_fingerprint and not allow_stale_overwrite:
+        current_fingerprint = get_palace_editor_state(palace).get(EDITOR_FINGERPRINT_KEY)
+        if current_fingerprint != expected_fingerprint:
+            raise EditorStateConflictError("脑图保存冲突：服务端已有更新，本地待同步内容已保留，请确认后再覆盖。")
 
     local_config = (
         _coerce_local_config(local_input, lang_input)
@@ -460,6 +569,23 @@ def _chapter_to_editor_node(chapter: Chapter) -> dict[str, Any]:
     }
 
 
+def build_editor_state_fingerprint(state: dict[str, Any]) -> str:
+    payload = {
+        "editor_doc": state.get("editor_doc"),
+        "editor_config": state.get("editor_config"),
+        "editor_local_config": state.get("editor_local_config"),
+        "lang": state.get("lang") or "zh",
+    }
+    encoded = json.dumps(
+        payload,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+        default=str,
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
 def _peg_to_editor_node(peg: Peg) -> dict[str, Any]:
     return {
         "data": {
@@ -579,12 +705,11 @@ def _looks_like_review_overlay_doc(doc: dict[str, Any]) -> bool:
         nonlocal found_root_overlay, found_node_overlay, found_placeholder_overlay
         data = _ensure_dict(node.get("data"))
         if is_root:
-            found_root_overlay = _matches_style_subset(data, REVIEW_ROOT_NODE_STYLE)
+            found_root_overlay = any(
+                _matches_style_subset(data, style) for style in REVIEW_ROOT_STYLE_VARIANTS
+            )
         else:
-            if _matches_style_subset(data, REVIEW_PLACEHOLDER_NODE_STYLE) or _matches_style_subset(
-                data,
-                REVIEW_REVEALED_NODE_STYLE,
-            ):
+            if any(_matches_style_subset(data, style) for style in REVIEW_NODE_STYLE_VARIANTS):
                 found_node_overlay = True
             if _looks_like_review_placeholder_text(data.get("text")) and (
                 bool(data.get("hideNote"))
@@ -604,7 +729,7 @@ def _looks_like_review_overlay_doc(doc: dict[str, Any]) -> bool:
 
 
 def _strip_review_overlay_fields(data: dict[str, Any], *, is_root: bool) -> None:
-    overlay_styles = [REVIEW_ROOT_NODE_STYLE] if is_root else [REVIEW_PLACEHOLDER_NODE_STYLE, REVIEW_REVEALED_NODE_STYLE]
+    overlay_styles = list(REVIEW_ROOT_STYLE_VARIANTS if is_root else REVIEW_NODE_STYLE_VARIANTS)
     overlay_styles.extend(REVIEW_LINE_STYLES)
     for style in overlay_styles:
         for key, value in style.items():

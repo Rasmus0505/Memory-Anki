@@ -8,6 +8,7 @@ export const CLIENT_PREFERENCES_UPDATED_EVENT = 'memory-anki-client-preferences-
 
 type PreferenceKey = keyof ClientPreferences
 type PreferenceValidator<T> = (value: unknown) => value is T
+type PreferenceNormalizer<T> = PreferenceValidator<T> | ((value: unknown) => T)
 
 const cache: Partial<ClientPreferences> = {}
 let initialized = false
@@ -74,18 +75,27 @@ export async function migrateLocalPreferenceToBackend<T>(
   key: PreferenceKey,
   localStorageKey: string,
   fallback: T,
-  isValid: PreferenceValidator<T>,
+  normalizeValue: PreferenceNormalizer<T>,
 ) {
   await initializeClientPreferences()
 
+  const normalizePreference = (value: unknown) => {
+    const normalized = normalizeValue(value)
+    if (typeof normalized === 'boolean') {
+      return normalized ? (value as T) : null
+    }
+    return normalized
+  }
+
   const existing = cache[key]
-  if (isValid(existing)) {
+  const normalizedExisting = normalizePreference(existing)
+  if (normalizedExisting) {
     try {
       window.localStorage.removeItem(localStorageKey)
     } catch {
       // Ignore storage cleanup failures.
     }
-    return existing
+    return normalizedExisting
   }
 
   let nextValue = fallback
@@ -93,8 +103,9 @@ export async function migrateLocalPreferenceToBackend<T>(
     const raw = window.localStorage.getItem(localStorageKey)
     if (raw) {
       const parsed = JSON.parse(raw) as unknown
-      if (isValid(parsed)) {
-        nextValue = parsed
+      const normalizedParsed = normalizePreference(parsed)
+      if (normalizedParsed) {
+        nextValue = normalizedParsed
       }
     }
   } catch {

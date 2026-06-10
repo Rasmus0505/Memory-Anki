@@ -33,7 +33,6 @@ import {
   buildPreviewGraph,
   DROP_HIT_PADDING_X,
   DROP_HIT_PADDING_Y,
-  getNodeRole,
   getNodeSize,
   isDescendant,
   type DropMode,
@@ -51,6 +50,7 @@ export interface UseMindMapCanvasStateResult {
   isCanvasReady: boolean
   displayNodes: Node[]
   displayEdges: Edge[]
+  isDraggingNode: boolean
   nodeActions: ContextMenuAction[]
   edgeActions: ContextMenuAction[]
   canShowHistoryControls: boolean
@@ -126,8 +126,11 @@ export function useMindMapCanvasState(
     targetId: string
   } | null>(null)
   const [previewState, setPreviewState] = useState<PreviewState | null>(null)
+  const [isDraggingNode, setIsDraggingNode] = useState(false)
   const previewStateRef = useRef<PreviewState | null>(null)
   const draggingNodeIdRef = useRef<string | null>(null)
+  const pendingDragRef = useRef<{ event: unknown; node: Node } | null>(null)
+  const dragFrameRef = useRef<number | null>(null)
   const lastPreviewFeedbackRef = useRef('')
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null)
   const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 })
@@ -142,6 +145,14 @@ export function useMindMapCanvasState(
   useEffect(() => {
     previewStateRef.current = previewState
   }, [previewState])
+
+  useEffect(() => {
+    return () => {
+      if (dragFrameRef.current !== null) {
+        cancelAnimationFrame(dragFrameRef.current)
+      }
+    }
+  }, [])
 
   const runFitView = useCallback(
     (duration = 300) => {
@@ -182,7 +193,7 @@ export function useMindMapCanvasState(
       const activeNode = draggedNode ?? dragNode
       if (!activeNode) return
 
-      const activeSize = getNodeSize(getNodeRole(activeNode))
+      const activeSize = getNodeSize(activeNode)
       const cx = activeNode.position.x + activeSize.width / 2
       const cy = activeNode.position.y + activeSize.height / 2
       let closest: { id: string; dist: number; mode: DropMode } | null = null
@@ -190,9 +201,7 @@ export function useMindMapCanvasState(
       for (const node of nodes) {
         if (node.id === dragId) continue
         if (isDescendant(graphData.nodes, dragId, node.id)) continue
-        const role = getNodeRole(node)
-        const width = getNodeSize(role).width
-        const height = getNodeSize(role).height
+        const { width, height } = getNodeSize(node)
         const nx = node.position.x + width / 2
         const ny = node.position.y + height / 2
         const dist = Math.sqrt((cx - nx) ** 2 + (cy - ny) ** 2)
@@ -217,6 +226,7 @@ export function useMindMapCanvasState(
       }
 
       const nextSignature = closest ? `${dragId}:${closest.id}:${closest.mode}` : ''
+      if (nextSignature === lastPreviewFeedbackRef.current) return
       if (nextSignature && nextSignature !== lastPreviewFeedbackRef.current) {
         dispatchGlobalFeedback('node_move', {
           point: getEventFeedbackPoint(event),
@@ -232,6 +242,7 @@ export function useMindMapCanvasState(
   const handleNodeDragStart = useCallback(
     (_event: unknown, node: Node) => {
       draggingNodeIdRef.current = node.id
+      setIsDraggingNode(true)
       lastPreviewFeedbackRef.current = ''
       setPreviewState(null)
       setEdgeMenu(null)
@@ -247,7 +258,17 @@ export function useMindMapCanvasState(
 
   const handleNodeDrag = useCallback(
     (_event: unknown, node: Node) => {
-      checkOverlap(node.id, node, _event)
+      pendingDragRef.current = { event: _event, node }
+      if (dragFrameRef.current !== null) return
+
+      dragFrameRef.current = requestAnimationFrame(() => {
+        dragFrameRef.current = null
+        const pending = pendingDragRef.current
+        pendingDragRef.current = null
+        if (pending) {
+          checkOverlap(pending.node.id, pending.node, pending.event)
+        }
+      })
     },
     [checkOverlap],
   )
@@ -255,6 +276,11 @@ export function useMindMapCanvasState(
   const handleNodeDragStop = useCallback(
     (_event: unknown, node: Node) => {
       const activePreview = previewStateRef.current
+      if (dragFrameRef.current !== null) {
+        cancelAnimationFrame(dragFrameRef.current)
+        dragFrameRef.current = null
+      }
+      pendingDragRef.current = null
       if (activePreview && activePreview.sourceId === node.id) {
         dispatchGlobalFeedback('drag_drop', {
           point: getEventFeedbackPoint(_event),
@@ -277,10 +303,16 @@ export function useMindMapCanvasState(
       setNodes(nextLayout.nodes)
       setEdges(nextLayout.edges)
       setPreviewState(null)
+      setIsDraggingNode(false)
       draggingNodeIdRef.current = null
       lastPreviewFeedbackRef.current = ''
     },
     [graphData, onReorderSibling, onReparent, setEdges, setNodes],
+  )
+
+  const handleFinishEdit = useCallback(
+    (nodeId: string, text: string) => onEdit?.(nodeId, text),
+    [onEdit],
   )
 
   const displayNodes = useMemo(() => {
@@ -311,13 +343,13 @@ export function useMindMapCanvasState(
           previewShifted: shifted && !isSource,
           previewAdopt: preview?.mode === 'inside',
           previewGhost: isSource,
-          onAddChild: () => onAddChild(node.id),
-          onDelete: () => onDelete(node.id),
-          onFinishEdit: (_id: string, text: string) => onEdit?.(node.id, text),
+          onAddChild,
+          onDelete,
+          onFinishEdit: handleFinishEdit,
         },
       }
     })
-  }, [nodes, onAddChild, onDelete, onEdit, previewLayout, previewState, selectedNodeId])
+  }, [handleFinishEdit, nodes, onAddChild, onDelete, previewLayout, previewState, selectedNodeId])
 
   const displayEdges = useMemo(() => {
     const baseEdges = previewLayout?.edges ?? edges
@@ -352,6 +384,7 @@ export function useMindMapCanvasState(
     setSelectedEdgeId(null)
     setEdgeMenu(null)
     setPreviewState(null)
+    setIsDraggingNode(false)
   }, [graphData, setEdges, setNodes])
 
   const handleNodeContextMenu = useCallback(
@@ -574,6 +607,7 @@ export function useMindMapCanvasState(
     setSelectedEdgeId(null)
     setEdgeMenu(null)
     setPreviewState(null)
+    setIsDraggingNode(false)
     runFitView()
   }, [graphData, runFitView, setEdges, setNodes])
 
@@ -601,6 +635,7 @@ export function useMindMapCanvasState(
     isCanvasReady,
     displayNodes,
     displayEdges,
+    isDraggingNode,
     nodeActions,
     edgeActions,
     canShowHistoryControls: Boolean(onUndo || onRedo),

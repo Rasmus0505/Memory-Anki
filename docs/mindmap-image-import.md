@@ -17,7 +17,7 @@ $env:DASHSCOPE_VISION_MODEL="qwen3-vl-flash"
 
 然后启动后端与前端，进入宫殿编辑页，点击“图片转脑图”或直接在抽屉中粘贴图片。
 
-如果使用 `run-dev.bat` / `run-stable.bat` 启动，版本切换脚本会优先读取当前进程环境变量；若当前终端未设置，也会回退读取 Windows 用户级或系统级环境变量中的 `DASHSCOPE_API_KEY`、`DASHSCOPE_BASE_URL`、`DASHSCOPE_VISION_MODEL`、`DASHSCOPE_TEXT_MODEL`。
+如果使用 `start.bat` 启动，生产启动脚本会优先读取当前进程环境变量；若当前终端未设置，也会回退读取 Windows 用户级或系统级环境变量中的 `DASHSCOPE_API_KEY`、`DASHSCOPE_BASE_URL`、`DASHSCOPE_VISION_MODEL`、`DASHSCOPE_TEXT_MODEL`。
 
 ## 连接被拒绝排查
 - 默认基址是 `https://dashscope.aliyuncs.com/compatible-mode/v1`

@@ -23,7 +23,12 @@ import {
 import { useHostSyncController } from '@/shared/components/mindmap-host/useHostSyncController'
 import { useMindMapFeedbackAudioFromSettings } from '@/shared/components/mindmap-host/useMindMapFeedback'
 
-const HOST_FRAME_RUNTIME_VERSION = '2026-06-09-mode-focus'
+const HOST_FRAME_RUNTIME_VERSION = '2026-06-10-card-width-drag-fix'
+const MIND_MAP_FRAME_BASE_CLASS = 'memory-anki-mindmap-frame'
+
+function buildMindMapFrameClassName(className?: string) {
+  return `${MIND_MAP_FRAME_BASE_CLASS} ${className ?? 'h-full w-full border-0'}`
+}
 
 function buildLocalEditorStateFingerprint(editorState: MindMapEditorState) {
   return JSON.stringify({
@@ -63,6 +68,11 @@ interface MindMapFrameProps {
   focusNodeUids?: string[]
   focusRequestNodeUid?: string | null
   focusRequestNonce?: number
+  showMiniPalaceButton?: boolean
+  miniPalaceDraft?: {
+    active: boolean
+    selectedNodeUids: string[]
+  }
   bilinkInsertionText?: string | null
   bilinkInsertionNonce?: number
   reviewFxSignal?: MindMapReviewFxPayload | null
@@ -102,6 +112,7 @@ interface MindMapFrameProps {
     trigger: 'badge' | 'mark'
   }) => void
   onBilinkToolbarSearch?: () => void
+  onMiniPalaceOpen?: () => void
   onReady?: () => void
 }
 
@@ -280,6 +291,11 @@ export function MindMapFrame({
   focusNodeUids = [],
   focusRequestNodeUid = null,
   focusRequestNonce = 0,
+  showMiniPalaceButton = false,
+  miniPalaceDraft = {
+    active: false,
+    selectedNodeUids: [],
+  },
   bilinkInsertionText = null,
   bilinkInsertionNonce = 0,
   reviewFxSignal = null,
@@ -304,6 +320,7 @@ export function MindMapFrame({
   onBilinkTrigger,
   onBilinkNodeClick,
   onBilinkToolbarSearch,
+  onMiniPalaceOpen,
   onReady,
 }: MindMapFrameProps) {
   const iframeRef = useRef<HTMLIFrameElement | null>(null)
@@ -327,6 +344,7 @@ export function MindMapFrame({
   const onBilinkTriggerRef = useRef(onBilinkTrigger)
   const onBilinkNodeClickRef = useRef(onBilinkNodeClick)
   const onBilinkToolbarSearchRef = useRef(onBilinkToolbarSearch)
+  const onMiniPalaceOpenRef = useRef(onMiniPalaceOpen)
   const onReadyRef = useRef(onReady)
   const lastForcedSyncKeyRef = useRef<string | null>(null)
   const lastBilinkInsertionNonceRef = useRef<number>(0)
@@ -368,6 +386,7 @@ export function MindMapFrame({
   onBilinkTriggerRef.current = onBilinkTrigger
   onBilinkNodeClickRef.current = onBilinkNodeClick
   onBilinkToolbarSearchRef.current = onBilinkToolbarSearch
+  onMiniPalaceOpenRef.current = onMiniPalaceOpen
   onReadyRef.current = onReady
 
   const rawHostId = useId()
@@ -408,6 +427,8 @@ export function MindMapFrame({
         focusNodeUids,
         focusRequestNodeUid,
         focusRequestNonce,
+        showMiniPalaceButton,
+        miniPalaceDraft,
         showBilinkSearchButton,
         hasPracticeToggle: Boolean(onPracticeToggleRef.current),
         hasEnglishOpen: Boolean(onEnglishOpenRef.current),
@@ -422,6 +443,7 @@ export function MindMapFrame({
     bilinkItems,
     focusRequestNodeUid,
     focusRequestNonce,
+    miniPalaceDraft,
     focusNodeUids,
     immersiveModeActive,
     practiceModeActive,
@@ -431,6 +453,7 @@ export function MindMapFrame({
     segmentRangeDraft,
     segments,
     showBilinkSearchButton,
+    showMiniPalaceButton,
     showImportButtons,
     showToolbarWhenReadonly,
     viewMemoryScope,
@@ -615,6 +638,7 @@ export function MindMapFrame({
           onBilinkTrigger: onBilinkTriggerRef,
           onBilinkNodeClick: onBilinkNodeClickRef,
           onBilinkToolbarSearch: onBilinkToolbarSearchRef,
+          onMiniPalaceOpen: onMiniPalaceOpenRef,
           onReady: onReadyRef,
         })
         if (result === 'app_inited') {
@@ -644,6 +668,7 @@ export function MindMapFrame({
     readonly,
     segmentColorMode,
     segmentRangeDraft,
+    miniPalaceDraft,
     segments,
     syncHostState,
   ])
@@ -746,7 +771,7 @@ export function MindMapFrame({
       ref={iframeRef}
       title="mind-map-editor"
       src={`/mind-map-host.html?host=${encodeURIComponent(hostId)}&v=${HOST_FRAME_RUNTIME_VERSION}`}
-      className={className ?? 'h-full w-full border-0'}
+      className={buildMindMapFrameClassName(className)}
       onLoad={() => {
         hostHydratedRef.current = readonly
         resetHostReady()

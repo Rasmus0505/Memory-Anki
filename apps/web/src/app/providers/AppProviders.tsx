@@ -5,6 +5,7 @@ import { Toaster } from 'sonner'
 import { migrateLegacyTimeRecordsToBackend } from '@/entities/session/model'
 import { GlobalFeedbackProvider } from '@/shared/feedback/GlobalFeedbackProvider'
 import { cleanupExpiredAppLogs, logAppError } from '@/shared/logs/model/appLogs'
+import { useMutationQueueAutoSync } from '@/shared/persistence/useMutationQueue'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -13,6 +14,8 @@ const queryClient = new QueryClient({
 })
 
 export function AppProviders({ children }: PropsWithChildren) {
+  useMutationQueueAutoSync()
+
   useEffect(() => {
     void migrateLegacyTimeRecordsToBackend().catch(() => undefined)
     cleanupExpiredAppLogs()

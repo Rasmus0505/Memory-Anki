@@ -116,6 +116,11 @@ export interface MindMapFrameHostState {
   focusRequestNodeUid: string | null
   focusRequestNonce: number
   showBilinkSearchButton: boolean
+  showMiniPalaceButton: boolean
+  miniPalaceDraft: {
+    active: boolean
+    selectedNodeUids: string[]
+  }
 }
 
 export interface HostEditorStateSyncPayload {
@@ -233,6 +238,11 @@ export function buildHostBridgeHostState(args: {
   focusRequestNodeUid: string | null
   focusRequestNonce: number
   showBilinkSearchButton: boolean
+  showMiniPalaceButton: boolean
+  miniPalaceDraft: {
+    active: boolean
+    selectedNodeUids: string[]
+  }
   hasPracticeToggle: boolean
   hasEnglishOpen: boolean
   hasAiSplitRequest: boolean
@@ -260,5 +270,7 @@ export function buildHostBridgeHostState(args: {
     focusRequestNodeUid: args.focusRequestNodeUid,
     focusRequestNonce: args.focusRequestNonce,
     showBilinkSearchButton: args.showBilinkSearchButton,
+    showMiniPalaceButton: args.showMiniPalaceButton,
+    miniPalaceDraft: cloneValue(args.miniPalaceDraft),
   }
 }

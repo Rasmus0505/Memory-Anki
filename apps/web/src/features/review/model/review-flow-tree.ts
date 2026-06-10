@@ -195,11 +195,14 @@ export function buildSelectionNodeId(node: MindMapSelection | null): string | nu
   return null
 }
 
+const REVIEW_NODE_PADDING_Y = 9
+
 const PLACEHOLDER_NODE_STYLE = {
-  fillColor: '#fff7ed',
+  fillColor: '#fffbeb',
   borderColor: '#f59e0b',
   borderWidth: 2,
-  color: '#9a3412',
+  color: '#92400e',
+  paddingY: REVIEW_NODE_PADDING_Y,
 }
 
 const REVEALED_NODE_STYLE = {
@@ -207,25 +210,27 @@ const REVEALED_NODE_STYLE = {
   borderColor: '#10b981',
   borderWidth: 2,
   color: '#065f46',
+  paddingY: REVIEW_NODE_PADDING_Y,
 }
 
 const RED_NODE_STYLE = {
-  fillColor: '#fef2f2',
-  borderColor: '#ef4444',
+  fillColor: '#fff1f2',
+  borderColor: '#e11d48',
   borderWidth: 2,
-  color: '#7f1d1d',
+  color: '#881337',
+  paddingY: REVIEW_NODE_PADDING_Y,
 }
 
 const ROOT_NODE_STYLE = {
-  fillColor: '#111827',
-  borderColor: '#0f172a',
+  fillColor: '#18181b',
+  borderColor: '#09090b',
   borderWidth: 2,
-  color: '#f8fafc',
+  color: '#fafafa',
   fontWeight: 'bold',
 }
 
 const DEFAULT_LINE_STYLE = {
-  lineColor: '#cbd5e1',
+  lineColor: '#d4d4d8',
   lineWidth: 2,
 }
 

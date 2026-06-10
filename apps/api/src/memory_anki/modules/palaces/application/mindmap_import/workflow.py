@@ -101,7 +101,7 @@ def build_batch_import_result_payload(
     *,
     source_tree: dict[str, Any],
     fallback_title: str,
-    structure_image_index: int,
+    structure_image_index: int | None,
     image_count: int,
 ) -> dict[str, Any]:
     return {

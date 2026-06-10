@@ -406,7 +406,11 @@ export function useTimedSession({
       if (!persistCompletionRecord) {
         return record
       }
-      return appendTimeRecord(record)
+      try {
+        return await appendTimeRecord(record)
+      } catch {
+        return record
+      }
     },
     [
       autoPauseRef,

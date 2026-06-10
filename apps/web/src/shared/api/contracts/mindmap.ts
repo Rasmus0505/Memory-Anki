@@ -3,6 +3,7 @@ export interface MindMapEditorState {
   editor_config: Record<string, unknown>
   editor_local_config: Record<string, unknown>
   lang: string
+  editor_fingerprint?: string
 }
 export type PalaceEditorSource =
   | 'palace_edit'
@@ -19,6 +20,7 @@ export interface PalaceEditorSavePayload extends Partial<MindMapEditorState> {
   sync_reason?: string | null
   allow_stale_overwrite?: boolean
   confirm_dangerous_change?: boolean
+  expected_editor_fingerprint?: string | null
 }
 export interface MindMapNodeData {
   text?: string

@@ -98,6 +98,12 @@ class Palace(Base):
         cascade="all, delete-orphan",
         order_by="PalaceSegment.sort_order",
     )
+    mini_palaces: Mapped[list[PalaceMiniPalace]] = relationship(
+        "PalaceMiniPalace",
+        back_populates="palace",
+        cascade="all, delete-orphan",
+        order_by="PalaceMiniPalace.sort_order",
+    )
 
     primary_chapter_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("chapters.id"), nullable=True
@@ -191,6 +197,28 @@ class PalaceSegment(Base):
         back_populates="segment",
         cascade="all, delete-orphan",
     )
+
+
+class PalaceMiniPalace(Base):
+    __tablename__ = "palace_mini_palaces"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    palace_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("palaces.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    name: Mapped[str] = mapped_column(String(200), nullable=False, default="")
+    node_uids_json: Mapped[str] = mapped_column(Text, default="[]")
+    sort_order: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime | None] = mapped_column(DateTime, default=utc_now_naive)
+    updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime,
+        default=utc_now_naive,
+        onupdate=utc_now_naive,
+    )
+
+    palace: Mapped[Palace] = relationship("Palace", back_populates="mini_palaces")
 
 
 class ReviewSchedule(Base):

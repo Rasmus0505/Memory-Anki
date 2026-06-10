@@ -1,12 +1,12 @@
 import os
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
 
-from memory_anki.core.config import ATTACHMENTS_DIR, DEFAULTS
+from memory_anki.core.config import ATTACHMENTS_DIR, DEFAULTS, WEB_DIST_DIR
 from memory_anki.core.logging import configure_logging
 from memory_anki.core.migration import (
     ensure_legacy_repo_data_migrated,
@@ -48,6 +48,9 @@ from memory_anki.modules.mindmap.application.editor_state_service import ensure_
 from memory_anki.modules.palaces.application.mindmap_import_job_service import (
     ensure_mindmap_import_job_schema,
 )
+from memory_anki.modules.palaces.application.mini_palace_service import (
+    ensure_mini_palace_schema,
+)
 from memory_anki.modules.palaces.application.segment_service import ensure_segment_schema
 from memory_anki.modules.palaces.application.title_sync_service import (
     ensure_palace_group_schema,
@@ -78,6 +81,15 @@ from memory_anki.modules.voice_coach import presentation as voice_coach_router
 REVIEW_SCHEDULE_REPAIR_MIGRATION_KEY = "review_schedule_anchor_repair_v1"
 
 
+def install_web_cache_headers(app: FastAPI) -> None:
+    @app.middleware("http")
+    async def disable_web_static_cache(request: Request, call_next):
+        response = await call_next(request)
+        if not request.url.path.startswith("/api"):
+            response.headers["Cache-Control"] = "no-cache"
+        return response
+
+
 def run_review_schedule_repair_migration(session: Session):
     if is_app_migration_completed(REVIEW_SCHEDULE_REPAIR_MIGRATION_KEY):
         return None
@@ -104,6 +116,7 @@ async def lifespan(app: FastAPI):
     ensure_bilink_schema()
     ensure_subject_document_schema()
     ensure_segment_schema()
+    ensure_mini_palace_schema()
     ensure_mindmap_import_job_schema()
     ensure_external_ai_call_log_schema()
     ensure_english_storage_schema()
@@ -156,6 +169,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.add_middleware(RequestLoggingMiddleware)
+install_web_cache_headers(app)
 
 app.mount("/api/attachments", StaticFiles(directory=str(ATTACHMENTS_DIR)), name="attachments")
 
@@ -171,8 +185,11 @@ app.include_router(english_router.router, prefix="/api/v1")
 app.include_router(voice_coach_router.router, prefix="/api/v1")
 app.include_router(dashboard_router.router, prefix="/api/v1")
 
+if WEB_DIST_DIR and WEB_DIST_DIR.exists():
+    app.mount("/", StaticFiles(directory=str(WEB_DIST_DIR), html=True), name="web")
+
 
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run("memory_anki.app.main:app", host="127.0.0.1", port=8000, reload=True)
+    uvicorn.run("memory_anki.app.main:app", host="127.0.0.1", port=8012)

@@ -238,7 +238,8 @@ def _run_pdf_direct_generation_job(
         trimmed_text: str | None = None
         ocr_text_chars = 0
         if text_path.exists():
-            trimmed_text = read_text(text_path).strip() or None
+            cached_text = read_text(text_path)
+            trimmed_text = cached_text if cached_text.strip() else None
             ocr_text_chars = len(trimmed_text or "")
         else:
             try:
@@ -417,7 +418,8 @@ def _run_pdf_structured_merge_job(
             text_path = artifact_dir / "extracted_text.txt"
             trimmed_text: str | None = None
             if text_path.exists():
-                trimmed_text = read_text(text_path).strip() or None
+                cached_text = read_text(text_path)
+                trimmed_text = cached_text if cached_text.strip() else None
             else:
                 try:
                     set_progress_step(

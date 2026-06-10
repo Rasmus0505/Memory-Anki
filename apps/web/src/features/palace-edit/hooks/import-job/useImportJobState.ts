@@ -177,11 +177,16 @@ export function useImportJobState({
               structureImageIndex: result.structure_image_index,
               imageCount: result.image_count ?? batchImagesRef.current.length,
             }
-          : null,
+          : result?.image_count
+            ? {
+                structureImageIndex: null,
+                imageCount: result.image_count,
+              }
+            : null,
       )
       if (result?.source_tree) {
-        const structureIndex = result.structure_image_index ?? 0
-        const structureItem = batchImagesRef.current[structureIndex] ?? batchImagesRef.current[0]
+        const previewIndex = typeof result.structure_image_index === 'number' ? result.structure_image_index : 0
+        const structureItem = batchImagesRef.current[previewIndex] ?? batchImagesRef.current[0]
         if (structureItem?.previewUrl) {
           setImagePreviewUrl(structureItem.previewUrl)
         } else if (!options?.preservePreviewUrl) {

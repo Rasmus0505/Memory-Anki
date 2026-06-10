@@ -19,7 +19,7 @@ export interface MindMapImportPreviewResponse {
   source_tree?: MindMapImportSourceTree
   editor_doc?: MindMapDoc | string | null
   extracted_text?: string
-  structure_image_index?: number
+  structure_image_index?: number | null
   image_count?: number
   selected_pages?: number[]
   structure_page?: number | null
@@ -34,7 +34,7 @@ export interface MindMapBatchImportPreviewResponse {
   error?: string
   source_tree?: MindMapImportSourceTree
   editor_doc?: MindMapDoc | string | null
-  structure_image_index?: number
+  structure_image_index?: number | null
   image_count?: number
 }
 export interface ImageTextPreviewResponse {
@@ -86,7 +86,7 @@ export interface MindMapImportJobResult {
   source_tree?: MindMapImportSourceTree
   editor_doc?: MindMapDoc | string | null
   extracted_text?: string
-  structure_image_index?: number
+  structure_image_index?: number | null
   image_count?: number
   selected_pages?: number[]
   structure_page?: number | null

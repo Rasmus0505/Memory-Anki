@@ -71,6 +71,18 @@ describe('MindMapFrame sync behavior', () => {
     vi.restoreAllMocks()
   })
 
+  it('always includes the unified mind map frame surface class', () => {
+    render(
+      <MindMapFrame
+        editorState={buildEditorState()}
+        className="h-[320px] w-full rounded-2xl bg-white"
+        onEditorStateChange={vi.fn()}
+      />,
+    )
+
+    expect(screen.getByTitle('mind-map-editor').className).toContain('memory-anki-mindmap-frame')
+  })
+
   it('does not immediately sync back into the host after a local edit save callback updates props', async () => {
     function Harness() {
       const [editorState, setEditorState] = useState(buildEditorState())

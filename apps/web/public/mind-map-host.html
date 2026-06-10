@@ -26,6 +26,205 @@
         background: #f8fafc;
       }
 
+      body.memory-anki-paper-map {
+        color: #18181b;
+        background:
+          radial-gradient(circle at 18% 12%, rgba(37, 99, 235, 0.08), transparent 28%),
+          radial-gradient(circle at 78% 18%, rgba(124, 58, 237, 0.07), transparent 26%),
+          linear-gradient(rgba(24, 24, 27, 0.045) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(24, 24, 27, 0.04) 1px, transparent 1px),
+          #fafafa;
+        background-size: auto, auto, 32px 32px, 32px 32px, auto;
+      }
+
+      body.memory-anki-paper-map #app {
+        background: transparent;
+      }
+
+      body.memory-anki-paper-map .smm-node.memory-anki-paper-node {
+        --memory-anki-paper-branch-color: #2563eb;
+        --memory-anki-paper-node-fill: #ffffff;
+        --memory-anki-paper-node-stroke: #e4e4e7;
+        --memory-anki-paper-node-text: #18181b;
+        --memory-anki-paper-node-shadow: rgba(24, 24, 27, 0.1);
+        --memory-anki-paper-node-weight: 560;
+        isolation: isolate;
+        overflow: visible;
+      }
+
+      body.memory-anki-paper-map .smm-node.memory-anki-paper-node foreignObject {
+        overflow: visible;
+      }
+
+      body.memory-anki-paper-map .smm-node.memory-anki-paper-node .smm-node-shape {
+        fill: var(--memory-anki-paper-node-fill);
+        stroke: var(--memory-anki-paper-node-stroke);
+        stroke-width: 1.25;
+        filter:
+          drop-shadow(0 1px 0 rgba(255, 255, 255, 0.82))
+          drop-shadow(0 12px 22px var(--memory-anki-paper-node-shadow));
+        transition:
+          fill 160ms ease,
+          stroke 160ms ease,
+          stroke-width 160ms ease,
+          filter 180ms ease,
+          opacity 160ms ease;
+      }
+
+      body.memory-anki-paper-map .smm-node.memory-anki-paper-root .smm-node-shape {
+        fill: #18181b;
+        stroke: #09090b;
+        stroke-width: 1.5;
+        filter:
+          drop-shadow(0 1px 0 rgba(255, 255, 255, 0.1))
+          drop-shadow(0 18px 34px rgba(24, 24, 27, 0.28));
+      }
+
+      body.memory-anki-paper-map .smm-node.memory-anki-paper-primary .smm-node-shape {
+        fill: var(--memory-anki-paper-branch-color);
+        stroke: var(--memory-anki-paper-branch-color);
+        stroke-width: 1.5;
+        filter:
+          drop-shadow(0 1px 0 rgba(255, 255, 255, 0.16))
+          drop-shadow(0 16px 30px var(--memory-anki-paper-node-shadow));
+      }
+
+      body.memory-anki-paper-map .smm-node.memory-anki-paper-node .smm-text-node-wrap,
+      body.memory-anki-paper-map .smm-node.memory-anki-paper-node .smm-richtext-node-wrap,
+      body.memory-anki-paper-map .smm-node.memory-anki-paper-node .smm-desctext-node-wrap,
+      body.memory-anki-paper-map .smm-node.memory-anki-paper-node .ql-editor {
+        box-sizing: border-box;
+        color: var(--memory-anki-paper-node-text);
+        font-weight: var(--memory-anki-paper-node-weight);
+        line-height: 1.2;
+        max-width: 100%;
+        min-width: 0;
+        overflow: visible !important;
+        overflow-wrap: break-word;
+        text-rendering: optimizeLegibility;
+        white-space: normal;
+        width: 100%;
+        word-break: normal;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      body.memory-anki-paper-map .smm-node.memory-anki-paper-node .smm-richtext-node-wrap *,
+      body.memory-anki-paper-map .smm-node.memory-anki-paper-node .smm-desctext-node-wrap *,
+      body.memory-anki-paper-map .smm-node.memory-anki-paper-node .ql-editor * {
+        box-sizing: border-box;
+        color: inherit;
+        max-width: 100%;
+        min-width: 0;
+        overflow-wrap: break-word;
+        width: 100%;
+        word-break: normal;
+      }
+
+      body.memory-anki-paper-map .smm-node.memory-anki-paper-node .smm-richtext-node-wrap p,
+      body.memory-anki-paper-map .smm-node.memory-anki-paper-node .smm-desctext-node-wrap p,
+      body.memory-anki-paper-map .smm-node.memory-anki-paper-node .ql-editor p {
+        box-sizing: border-box;
+        margin: 0;
+        max-width: 100%;
+        min-width: 0;
+        width: 100%;
+      }
+
+      body.memory-anki-paper-map .smm-node.memory-anki-paper-node text,
+      body.memory-anki-paper-map .smm-node.memory-anki-paper-node tspan {
+        fill: var(--memory-anki-paper-node-text);
+      }
+
+      body.memory-anki-paper-map .smm-node.memory-anki-paper-root .smm-text-node-wrap,
+      body.memory-anki-paper-map .smm-node.memory-anki-paper-root .smm-richtext-node-wrap,
+      body.memory-anki-paper-map .smm-node.memory-anki-paper-root .ql-editor,
+      body.memory-anki-paper-map .smm-node.memory-anki-paper-primary .smm-text-node-wrap,
+      body.memory-anki-paper-map .smm-node.memory-anki-paper-primary .smm-richtext-node-wrap,
+      body.memory-anki-paper-map .smm-node.memory-anki-paper-primary .ql-editor,
+      body.memory-anki-paper-map .smm-node.memory-anki-paper-root text,
+      body.memory-anki-paper-map .smm-node.memory-anki-paper-root tspan,
+      body.memory-anki-paper-map .smm-node.memory-anki-paper-primary text,
+      body.memory-anki-paper-map .smm-node.memory-anki-paper-primary tspan {
+        color: #fafafa;
+        fill: #fafafa;
+        font-weight: 700;
+      }
+
+      body.memory-anki-paper-map .smm-node.memory-anki-paper-node .smm-hover-node {
+        stroke: var(--memory-anki-paper-branch-color);
+        stroke-width: 2.8;
+        opacity: 0.82;
+      }
+
+      body.memory-anki-paper-map .smm-node.memory-anki-paper-node.active .smm-hover-node,
+      body.memory-anki-paper-map .smm-node.memory-anki-paper-node.smm-node-highlight .smm-hover-node {
+        display: block;
+        opacity: 1;
+        stroke-width: 3.4;
+      }
+
+      body.memory-anki-paper-map .memory-anki-paper-line {
+        stroke: var(--memory-anki-paper-line-color, rgba(37, 99, 235, 0.68));
+        stroke-width: 2.55;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        opacity: 0.72;
+        filter: drop-shadow(0 1px 0 rgba(255, 255, 255, 0.75));
+        transition:
+          stroke 160ms ease,
+          stroke-width 160ms ease,
+          opacity 160ms ease,
+          filter 180ms ease;
+      }
+
+      body.memory-anki-paper-map .smm-node.memory-anki-paper-review-placeholder .smm-node-shape {
+        fill: #fffbeb;
+        stroke: #f59e0b;
+      }
+
+      body.memory-anki-paper-map .smm-node.memory-anki-paper-review-placeholder .smm-text-node-wrap,
+      body.memory-anki-paper-map .smm-node.memory-anki-paper-review-placeholder .smm-richtext-node-wrap,
+      body.memory-anki-paper-map .smm-node.memory-anki-paper-review-placeholder .ql-editor,
+      body.memory-anki-paper-map .smm-node.memory-anki-paper-review-placeholder text,
+      body.memory-anki-paper-map .smm-node.memory-anki-paper-review-placeholder tspan {
+        color: #92400e;
+        fill: #92400e;
+      }
+
+      body.memory-anki-paper-map .smm-node.memory-anki-paper-review-revealed .smm-node-shape {
+        fill: #ecfdf5;
+        stroke: #10b981;
+      }
+
+      body.memory-anki-paper-map .smm-node.memory-anki-paper-review-revealed .smm-text-node-wrap,
+      body.memory-anki-paper-map .smm-node.memory-anki-paper-review-revealed .smm-richtext-node-wrap,
+      body.memory-anki-paper-map .smm-node.memory-anki-paper-review-revealed .ql-editor,
+      body.memory-anki-paper-map .smm-node.memory-anki-paper-review-revealed text,
+      body.memory-anki-paper-map .smm-node.memory-anki-paper-review-revealed tspan {
+        color: #065f46;
+        fill: #065f46;
+      }
+
+      body.memory-anki-paper-map .smm-node.memory-anki-paper-review-red .smm-node-shape {
+        fill: #fff1f2;
+        stroke: #e11d48;
+      }
+
+      body.memory-anki-paper-map .smm-node.memory-anki-paper-review-red .smm-text-node-wrap,
+      body.memory-anki-paper-map .smm-node.memory-anki-paper-review-red .smm-richtext-node-wrap,
+      body.memory-anki-paper-map .smm-node.memory-anki-paper-review-red .ql-editor,
+      body.memory-anki-paper-map .smm-node.memory-anki-paper-review-red text,
+      body.memory-anki-paper-map .smm-node.memory-anki-paper-review-red tspan {
+        color: #881337;
+        fill: #881337;
+      }
+
+      body.memory-anki-paper-map .memory-anki-paper-line.memory-anki-paper-review-complete-line {
+        stroke: #10b981;
+        stroke-width: 3;
+        opacity: 0.88;
+      }
+
       body.memory-anki-ui-cleared .toolbarContainer {
         display: none !important;
       }
@@ -46,26 +245,27 @@
       .smm-node.memory-anki-keyboard-focus .smm-hover-node {
         display: block !important;
         opacity: 1 !important;
-        stroke: #2563eb !important;
-        stroke-width: 3 !important;
+        stroke: #18181b !important;
+        stroke-width: 3.4 !important;
       }
 
       .smm-node.memory-anki-keyboard-focus .smm-node-shape {
-        filter: drop-shadow(0 0 0 rgba(37, 99, 235, 0.16))
-          drop-shadow(0 0 14px rgba(37, 99, 235, 0.28));
+        filter:
+          drop-shadow(0 0 0 rgba(24, 24, 27, 0.16))
+          drop-shadow(0 0 18px rgba(24, 24, 27, 0.22)) !important;
       }
 
       .smm-node.memory-anki-focus-card .smm-node-shape {
         filter:
-          drop-shadow(0 0 0 rgba(239, 68, 68, 0.16))
-          drop-shadow(0 0 16px rgba(239, 68, 68, 0.34)) !important;
+          drop-shadow(0 0 0 rgba(225, 29, 72, 0.14))
+          drop-shadow(0 0 18px rgba(225, 29, 72, 0.26)) !important;
       }
 
       .smm-node.memory-anki-focus-card .smm-hover-node {
         display: block !important;
         opacity: 1 !important;
-        stroke: rgba(239, 68, 68, 0.9) !important;
-        stroke-width: 4 !important;
+        stroke: rgba(225, 29, 72, 0.9) !important;
+        stroke-width: 3.5 !important;
       }
 
       body.is-host-readonly:not(.is-host-readonly-toolbar-visible)
@@ -110,6 +310,30 @@
         overflow: visible;
       }
 
+      .toolbarContainer.memory-anki-custom-toolbar-only
+        .toolbar
+        .toolbarBlock:not(.memory-anki-primary-toolbar-block) {
+        display: none !important;
+      }
+
+      .toolbarContainer.memory-anki-custom-toolbar-only
+        .toolbar
+        .memory-anki-primary-toolbar-block {
+        margin-right: 0 !important;
+      }
+
+      .toolbarContainer.memory-anki-custom-toolbar-only
+        .toolbar
+        .memory-anki-primary-toolbar-block
+        > :not(.memory-anki-segment-toolbar) {
+        display: none !important;
+      }
+
+      .sidebarTriggerContainer,
+      .navigatorContainer {
+        display: none !important;
+      }
+
       .memory-anki-segment-button {
         display: inline-flex;
         align-items: center;
@@ -129,6 +353,10 @@
       }
 
       .memory-anki-practice-button[hidden] {
+        display: none !important;
+      }
+
+      .memory-anki-mini-palace-button[hidden] {
         display: none !important;
       }
 
@@ -320,16 +548,16 @@
       }
 
       .smm-node.memory-anki-segment-selected .smm-node-shape {
-        stroke: #0f172a !important;
+        stroke: #18181b !important;
         stroke-width: 4 !important;
-        filter: drop-shadow(0 0 0 rgba(15, 23, 42, 0.12))
-          drop-shadow(0 0 12px rgba(15, 23, 42, 0.24)) !important;
+        filter: drop-shadow(0 0 0 rgba(24, 24, 27, 0.12))
+          drop-shadow(0 0 14px rgba(24, 24, 27, 0.22)) !important;
       }
 
       .smm-node.memory-anki-segment-selected .smm-hover-node {
         display: block !important;
         opacity: 1 !important;
-        stroke: #0f172a !important;
+        stroke: #18181b !important;
         stroke-width: 3 !important;
       }
 
@@ -337,6 +565,20 @@
         stroke-dasharray: 8 4;
         filter: drop-shadow(0 0 0 rgba(239, 68, 68, 0.08))
           drop-shadow(0 0 12px rgba(239, 68, 68, 0.28)) !important;
+      }
+
+      .smm-node.memory-anki-mini-palace-selected .smm-node-shape {
+        stroke: #7c3aed !important;
+        stroke-width: 4 !important;
+        filter: drop-shadow(0 0 0 rgba(124, 58, 237, 0.12))
+          drop-shadow(0 0 16px rgba(124, 58, 237, 0.28)) !important;
+      }
+
+      .smm-node.memory-anki-mini-palace-selected .smm-hover-node {
+        display: block !important;
+        opacity: 1 !important;
+        stroke: #7c3aed !important;
+        stroke-width: 3 !important;
       }
 
       .memory-anki-bilink-badge-layer {
@@ -536,7 +778,7 @@
       .smm-node.memory-anki-selection-drag-source .smm-node-shape,
       .smm-node.memory-anki-selection-drag-target .smm-node-shape {
         filter: drop-shadow(0 0 0 rgba(94, 200, 248, 0.12))
-          drop-shadow(0 0 12px rgba(94, 200, 248, 0.28));
+          drop-shadow(0 0 12px rgba(94, 200, 248, 0.28)) !important;
       }
 
       .smm-node.memory-anki-selection-drag-dimmed {
@@ -604,22 +846,22 @@
 
       .smm-node.memory-anki-feedback-touch .smm-node-shape {
         animation: memory-anki-feedback-node-touch 180ms ease-out;
-        filter: drop-shadow(0 0 6px rgba(148, 163, 184, 0.14));
+        filter: drop-shadow(0 0 6px rgba(148, 163, 184, 0.14)) !important;
       }
 
       .smm-node.memory-anki-feedback-select .smm-node-shape {
         animation: memory-anki-feedback-node-tap 260ms ease-out;
-        filter: drop-shadow(0 0 9px rgba(59, 130, 246, 0.16));
+        filter: drop-shadow(0 0 9px rgba(59, 130, 246, 0.16)) !important;
       }
 
       .smm-node.memory-anki-feedback-edit .smm-node-shape {
         animation: memory-anki-feedback-node-edit 320ms ease-out;
-        filter: drop-shadow(0 0 10px rgba(14, 165, 233, 0.17));
+        filter: drop-shadow(0 0 10px rgba(14, 165, 233, 0.17)) !important;
       }
 
       .smm-node.memory-anki-feedback-confirm .smm-node-shape {
         animation: memory-anki-feedback-node-confirm 340ms ease-out;
-        filter: drop-shadow(0 0 12px rgba(16, 185, 129, 0.18));
+        filter: drop-shadow(0 0 12px rgba(16, 185, 129, 0.18)) !important;
       }
 
       .smm-node.memory-anki-feedback-create .smm-node-shape,
@@ -627,59 +869,59 @@
         animation: memory-anki-feedback-node-bloom 520ms cubic-bezier(0.16, 1, 0.3, 1);
         filter:
           drop-shadow(0 0 12px rgba(251, 191, 36, 0.22))
-          drop-shadow(0 0 20px rgba(16, 185, 129, 0.1));
+          drop-shadow(0 0 20px rgba(16, 185, 129, 0.1)) !important;
       }
 
       .smm-node.memory-anki-feedback-link .smm-node-shape {
         animation: memory-anki-feedback-node-link 440ms ease-out;
-        filter: drop-shadow(0 0 12px rgba(168, 85, 247, 0.16));
+        filter: drop-shadow(0 0 12px rgba(168, 85, 247, 0.16)) !important;
       }
 
       .smm-node.memory-anki-feedback-segment .smm-node-shape {
         animation: memory-anki-feedback-node-segment 440ms ease-out;
-        filter: drop-shadow(0 0 12px rgba(245, 158, 11, 0.18));
+        filter: drop-shadow(0 0 12px rgba(245, 158, 11, 0.18)) !important;
       }
 
       .smm-node.memory-anki-feedback-move .smm-node-shape {
         animation: memory-anki-feedback-node-move 460ms cubic-bezier(0.16, 1, 0.3, 1);
-        filter: drop-shadow(0 0 12px rgba(99, 102, 241, 0.18));
+        filter: drop-shadow(0 0 12px rgba(99, 102, 241, 0.18)) !important;
       }
 
       .smm-node.memory-anki-feedback-mode .smm-node-shape {
         animation: memory-anki-feedback-node-mode 520ms ease-out;
-        filter: drop-shadow(0 0 12px rgba(245, 158, 11, 0.18));
+        filter: drop-shadow(0 0 12px rgba(245, 158, 11, 0.18)) !important;
       }
 
       .smm-node.memory-anki-feedback-danger .smm-node-shape {
         animation: memory-anki-feedback-node-danger 340ms ease-out;
-        filter: drop-shadow(0 0 11px rgba(239, 68, 68, 0.18));
+        filter: drop-shadow(0 0 11px rgba(239, 68, 68, 0.18)) !important;
       }
 
       .memory-anki-review-line-trace {
         stroke: rgba(59, 130, 246, 0.88) !important;
         stroke-width: 2.8 !important;
-        filter: drop-shadow(0 0 7px rgba(59, 130, 246, 0.14));
+        filter: drop-shadow(0 0 7px rgba(59, 130, 246, 0.14)) !important;
         animation: memory-anki-review-line-trace 360ms ease-out;
       }
 
       .memory-anki-review-line-clear {
         stroke: rgba(239, 68, 68, 0.9) !important;
         stroke-width: 3.2 !important;
-        filter: drop-shadow(0 0 7px rgba(239, 68, 68, 0.15));
+        filter: drop-shadow(0 0 7px rgba(239, 68, 68, 0.15)) !important;
         animation: memory-anki-review-line-clear 420ms ease-out;
       }
 
       .memory-anki-review-line-spawn {
         stroke: rgba(14, 165, 233, 0.94) !important;
         stroke-width: 3.2 !important;
-        filter: drop-shadow(0 0 7px rgba(14, 165, 233, 0.15));
+        filter: drop-shadow(0 0 7px rgba(14, 165, 233, 0.15)) !important;
         animation: memory-anki-review-line-spawn 420ms ease-out;
       }
 
       .memory-anki-review-line-confirm {
         stroke: rgba(16, 185, 129, 0.94) !important;
         stroke-width: 3.2 !important;
-        filter: drop-shadow(0 0 7px rgba(16, 185, 129, 0.16));
+        filter: drop-shadow(0 0 7px rgba(16, 185, 129, 0.16)) !important;
         animation: memory-anki-review-line-confirm 380ms ease-out;
       }
 
@@ -694,28 +936,28 @@
         stroke-width: 3.6 !important;
         filter:
           drop-shadow(0 0 8px rgba(251, 191, 36, 0.18))
-          drop-shadow(0 0 14px rgba(16, 185, 129, 0.08));
+          drop-shadow(0 0 14px rgba(16, 185, 129, 0.08)) !important;
         animation: memory-anki-feedback-line-bloom 560ms cubic-bezier(0.16, 1, 0.3, 1);
       }
 
       .memory-anki-feedback-line-link {
         stroke: rgba(168, 85, 247, 0.92) !important;
         stroke-width: 3.3 !important;
-        filter: drop-shadow(0 0 8px rgba(168, 85, 247, 0.15));
+        filter: drop-shadow(0 0 8px rgba(168, 85, 247, 0.15)) !important;
         animation: memory-anki-feedback-line-link 520ms ease-out;
       }
 
       .memory-anki-feedback-line-segment {
         stroke: rgba(245, 158, 11, 0.94) !important;
         stroke-width: 3.3 !important;
-        filter: drop-shadow(0 0 8px rgba(245, 158, 11, 0.16));
+        filter: drop-shadow(0 0 8px rgba(245, 158, 11, 0.16)) !important;
         animation: memory-anki-feedback-line-segment 520ms ease-out;
       }
 
       .memory-anki-feedback-line-move {
         stroke: rgba(99, 102, 241, 0.96) !important;
         stroke-width: 3.3 !important;
-        filter: drop-shadow(0 0 8px rgba(99, 102, 241, 0.16));
+        filter: drop-shadow(0 0 8px rgba(99, 102, 241, 0.16)) !important;
         animation: memory-anki-feedback-line-move 520ms ease-out;
       }
 
@@ -760,14 +1002,14 @@
       body.is-host-readonly.memory-anki-review-fx-enabled .smm-node.memory-anki-review-expand-hit .smm-node-shape {
         filter:
           drop-shadow(0 0 0 rgba(250, 204, 21, 0.08))
-          drop-shadow(0 0 14px rgba(250, 204, 21, 0.18));
+          drop-shadow(0 0 14px rgba(250, 204, 21, 0.18)) !important;
       }
 
       body.is-host-readonly.memory-anki-review-fx-enabled .smm-node.memory-anki-review-reveal-hit .smm-node-shape {
         animation: memory-anki-review-node-hit 320ms cubic-bezier(0.22, 1, 0.36, 1);
         filter:
           drop-shadow(0 0 0 rgba(251, 191, 36, 0.08))
-          drop-shadow(0 0 15px rgba(245, 158, 11, 0.22));
+          drop-shadow(0 0 15px rgba(245, 158, 11, 0.22)) !important;
       }
 
       body.is-host-readonly.memory-anki-review-fx-enabled .smm-node.memory-anki-review-reveal-hit .smm-hover-node,
@@ -795,7 +1037,7 @@
       body.is-host-readonly.memory-anki-review-fx-enabled .smm-node.memory-anki-review-branch-clear .smm-node-shape {
         filter:
           drop-shadow(0 0 0 rgba(16, 185, 129, 0.08))
-          drop-shadow(0 0 15px rgba(16, 185, 129, 0.2));
+          drop-shadow(0 0 15px rgba(16, 185, 129, 0.2)) !important;
       }
 
       body.is-host-readonly.memory-anki-review-fx-enabled .smm-node.memory-anki-review-pulse-source .smm-node-shape {
@@ -803,7 +1045,7 @@
       }
 
       body.is-host-readonly.memory-anki-review-fx-enabled .smm-node.memory-anki-review-soft .smm-node-shape {
-        filter: drop-shadow(0 0 9px rgba(245, 158, 11, 0.12));
+        filter: drop-shadow(0 0 9px rgba(245, 158, 11, 0.12)) !important;
       }
 
       body.is-host-readonly.memory-anki-review-fx-enabled .smm-node.memory-anki-review-ring-strong .smm-hover-node {
@@ -817,7 +1059,7 @@
         stroke: rgba(245, 158, 11, 0.94) !important;
         stroke-width: 3.2 !important;
         filter:
-          drop-shadow(0 0 7px rgba(251, 191, 36, 0.18));
+          drop-shadow(0 0 7px rgba(251, 191, 36, 0.18)) !important;
         animation: memory-anki-review-line-trace 360ms ease-out;
       }
 
@@ -825,7 +1067,7 @@
         stroke: rgba(16, 185, 129, 0.92) !important;
         stroke-width: 3.5 !important;
         filter:
-          drop-shadow(0 0 8px rgba(16, 185, 129, 0.18));
+          drop-shadow(0 0 8px rgba(16, 185, 129, 0.18)) !important;
         animation: memory-anki-review-line-clear 420ms ease-out;
       }
 
@@ -833,7 +1075,7 @@
         stroke: rgba(250, 204, 21, 0.96) !important;
         stroke-width: 3.6 !important;
         filter:
-          drop-shadow(0 0 8px rgba(250, 204, 21, 0.18));
+          drop-shadow(0 0 8px rgba(250, 204, 21, 0.18)) !important;
         animation: memory-anki-review-line-spawn 420ms cubic-bezier(0.16, 1, 0.3, 1);
       }
 
@@ -841,7 +1083,7 @@
         stroke: rgba(16, 185, 129, 0.98) !important;
         stroke-width: 3.6 !important;
         filter:
-          drop-shadow(0 0 8px rgba(16, 185, 129, 0.18));
+          drop-shadow(0 0 8px rgba(16, 185, 129, 0.18)) !important;
         animation: memory-anki-review-line-confirm 360ms cubic-bezier(0.22, 1, 0.36, 1);
       }
 
@@ -1181,6 +1423,8 @@
       const selectionDragState = {
         pointerId: null,
         pointerButton: null,
+        pointerCaptureElement: null,
+        ownsPointerSequence: false,
         stage: 'idle',
         holdTimer: null,
         holdReady: false,
@@ -1230,6 +1474,13 @@
         lastSizeSignature: '',
         scheduled: false,
         fitRequested: false,
+      }
+      const paperLayoutReflowState = {
+        scheduled: false,
+        inFlight: false,
+        queuedFingerprint: '',
+        requestedFingerprint: '',
+        completedFingerprint: '',
       }
       const viewMemoryState = {
         snapshots: new Map(),
@@ -1802,6 +2053,17 @@
         }
       }
 
+      function getMiniPalaceDraft() {
+        const rawDraft = window.__memoryAnkiHostState?.miniPalaceDraft
+        const normalized = rawDraft && typeof rawDraft === 'object' ? rawDraft : {}
+        return {
+          active: Boolean(normalized.active),
+          selectedNodeUids: Array.isArray(normalized.selectedNodeUids)
+            ? normalized.selectedNodeUids.map(value => String(value)).filter(Boolean)
+            : [],
+        }
+      }
+
       function getBilinkCounts() {
         const raw = window.__memoryAnkiHostState?.bilinkCounts
         return raw && typeof raw === 'object' ? raw : {}
@@ -1939,6 +2201,13 @@
       function notifyNodeActive(node) {
         if (!node) return
         getHostBridge()?.notify?.('node_active', [serializeNode(node)])
+      }
+
+      function notifyCurrentFocusNodeActive() {
+        const node = getCurrentActiveNode()
+        if (!node) return false
+        notifyNodeActive(node)
+        return true
       }
 
       function isMeaningfulClientRect(rect) {
@@ -2318,6 +2587,41 @@
         return cloneValue(window.__memoryAnkiPendingEditorState?.editorState?.editor_doc) || null
       }
 
+      function getPaperLayoutReflowFingerprint() {
+        const fingerprint = getRuntimeMindMapDocumentFingerprint()
+        return typeof fingerprint === 'string' ? fingerprint : ''
+      }
+
+      function markPaperLayoutReflowComplete() {
+        const fingerprint = getPaperLayoutReflowFingerprint()
+        if (
+          paperLayoutReflowState.requestedFingerprint &&
+          paperLayoutReflowState.requestedFingerprint === fingerprint
+        ) {
+          paperLayoutReflowState.completedFingerprint = fingerprint
+        }
+        paperLayoutReflowState.inFlight = false
+        paperLayoutReflowState.requestedFingerprint = ''
+      }
+
+      function runPaperLayoutReflow() {
+        const fingerprint = getPaperLayoutReflowFingerprint()
+        paperLayoutReflowState.scheduled = false
+        paperLayoutReflowState.queuedFingerprint = ''
+        if (!fingerprint || paperLayoutReflowState.completedFingerprint === fingerprint) {
+          paperLayoutReflowState.inFlight = false
+          paperLayoutReflowState.requestedFingerprint = ''
+          return false
+        }
+        paperLayoutReflowState.requestedFingerprint = fingerprint
+        markPaperLayoutReflowComplete()
+        return false
+      }
+
+      function requestPaperLayoutReflow() {
+        return runPaperLayoutReflow()
+      }
+
       function clearSelectionDragHoldTimer() {
         if (selectionDragState.holdTimer == null) return
         window.clearTimeout(selectionDragState.holdTimer)
@@ -2335,9 +2639,73 @@
       }
 
       function shouldSuppressSelectionDragContextMenu() {
-        if (selectionDragState.stage === 'dragging') return true
+        if (selectionDragState.stage === 'pending' || selectionDragState.stage === 'dragging') {
+          return true
+        }
         const until = Number(selectionDragState.contextMenuBlockUntil || 0)
         return until > Date.now()
+      }
+
+      function ownsSelectionDragPointer(event) {
+        if (!selectionDragState.ownsPointerSequence) return false
+        if (!event) return true
+        if (
+          selectionDragState.pointerId != null &&
+          typeof event.pointerId === 'number' &&
+          event.pointerId !== selectionDragState.pointerId
+        ) {
+          return false
+        }
+        return true
+      }
+
+      function tryCaptureSelectionDragPointer(event) {
+        const target = event?.target
+        if (!(target instanceof Element)) return false
+        if (typeof target.setPointerCapture !== 'function') return false
+        if (typeof event?.pointerId !== 'number') return false
+        try {
+          target.setPointerCapture(event.pointerId)
+          selectionDragState.pointerCaptureElement = target
+          return true
+        } catch (error) {
+          console.warn(error)
+          return false
+        }
+      }
+
+      function releaseSelectionDragPointerCapture() {
+        const captureElement = selectionDragState.pointerCaptureElement
+        const pointerId = selectionDragState.pointerId
+        if (!(captureElement instanceof Element)) {
+          selectionDragState.pointerCaptureElement = null
+          return
+        }
+        if (typeof captureElement.releasePointerCapture !== 'function') {
+          selectionDragState.pointerCaptureElement = null
+          return
+        }
+        try {
+          if (
+            typeof pointerId === 'number' &&
+            (typeof captureElement.hasPointerCapture !== 'function' ||
+              captureElement.hasPointerCapture(pointerId))
+          ) {
+            captureElement.releasePointerCapture(pointerId)
+          }
+        } catch (error) {
+          console.warn(error)
+        }
+        selectionDragState.pointerCaptureElement = null
+      }
+
+      function suppressSelectionDragNativePointerEvent(event, options = {}) {
+        event?.preventDefault?.()
+        event?.stopPropagation?.()
+        event?.stopImmediatePropagation?.()
+        if (options.capturePointer) {
+          tryCaptureSelectionDragPointer(event)
+        }
       }
 
       function captureSelectionDragFocusSnapshot() {
@@ -2548,6 +2916,314 @@
         return node._lines
           .map((line) => line?.node || null)
           .filter(Boolean)
+      }
+
+      const PAPER_MAP_BRANCH_COLORS = [
+        '#2563eb',
+        '#059669',
+        '#d97706',
+        '#7c3aed',
+        '#e11d48',
+        '#0891b2',
+        '#4f46e5',
+        '#be123c',
+      ]
+
+      const PAPER_MAP_NODE_CLASSES = [
+        'memory-anki-paper-node',
+        'memory-anki-paper-root',
+        'memory-anki-paper-primary',
+        'memory-anki-paper-branch',
+        'memory-anki-paper-leaf',
+        'memory-anki-paper-review-placeholder',
+        'memory-anki-paper-review-revealed',
+        'memory-anki-paper-review-red',
+      ]
+
+      function getRuntimeNodeDepth(node) {
+        let depth = 0
+        let current = node
+        while (current?.parent) {
+          depth += 1
+          current = current.parent
+        }
+        return depth
+      }
+
+      function getRuntimeBranchIndex(node) {
+        let current = node
+        let parent = current?.parent || null
+        if (!parent) return 0
+        while (parent?.parent) {
+          current = parent
+          parent = parent.parent
+        }
+        const siblings = Array.isArray(parent?.children) ? parent.children : []
+        const index = siblings.indexOf(current)
+        return index >= 0 ? index : 0
+      }
+
+      function getPaperBranchColor(node) {
+        const branchIndex = getRuntimeBranchIndex(node)
+        return PAPER_MAP_BRANCH_COLORS[branchIndex % PAPER_MAP_BRANCH_COLORS.length]
+      }
+
+      function normalizePaperColor(value) {
+        return typeof value === 'string' ? value.trim().toLowerCase() : ''
+      }
+
+      function hexToRgbParts(hex) {
+        const value = normalizePaperColor(hex).replace('#', '')
+        if (!/^[0-9a-f]{6}$/.test(value)) return null
+        return {
+          r: parseInt(value.slice(0, 2), 16),
+          g: parseInt(value.slice(2, 4), 16),
+          b: parseInt(value.slice(4, 6), 16),
+        }
+      }
+
+      function hexToRgba(hex, alpha) {
+        const rgb = hexToRgbParts(hex)
+        if (!rgb) return `rgba(24, 24, 27, ${alpha})`
+        return `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${alpha})`
+      }
+
+      function tintHexColor(hex, amount) {
+        const rgb = hexToRgbParts(hex)
+        if (!rgb) return '#ffffff'
+        const mix = Math.max(0, Math.min(1, Number(amount)))
+        const toChannel = (value) => Math.round(value + (255 - value) * mix)
+        const toHex = (value) => toChannel(value).toString(16).padStart(2, '0')
+        return `#${toHex(rgb.r)}${toHex(rgb.g)}${toHex(rgb.b)}`
+      }
+
+      function getPaperReviewRole(data, isRoot) {
+        if (isRoot) return 'root'
+        const fillColor = normalizePaperColor(data?.fillColor)
+        const borderColor = normalizePaperColor(data?.borderColor)
+        const text = stripHtmlToText(data?.text || '').trim()
+        if (
+          text === '待回忆' ||
+          data?.hideNote === true ||
+          fillColor === '#fff8e7' ||
+          borderColor === '#d7a84d' ||
+          fillColor === '#fffbeb' ||
+          borderColor === '#f59e0b' ||
+          fillColor === '#fff7ed' ||
+          borderColor === '#f59e0b'
+        ) {
+          return 'placeholder'
+        }
+        if (
+          fillColor === '#fff3f3' ||
+          borderColor === '#c77882' ||
+          fillColor === '#fff1f2' ||
+          borderColor === '#e11d48' ||
+          fillColor === '#fef2f2' ||
+          borderColor === '#ef4444'
+        ) {
+          return 'red'
+        }
+        if (
+          fillColor === '#eef8ef' ||
+          borderColor === '#86ad86' ||
+          fillColor === '#ecfdf5' ||
+          borderColor === '#10b981' ||
+          borderColor === '#22c55e'
+        ) {
+          return 'revealed'
+        }
+        return 'default'
+      }
+
+      function buildPaperNodeStyle(node) {
+        const data = getRuntimeNodeDataContainer(node) || {}
+        const isRoot = !node?.parent || data.memoryAnkiRootKind === 'palace' || data.memoryAnkiRootKind === 'subject'
+        const depth = getRuntimeNodeDepth(node)
+        const branchColor = isRoot ? '#18181b' : getPaperBranchColor(node)
+        const reviewRole = getPaperReviewRole(data, isRoot)
+        if (reviewRole === 'root') {
+          return {
+            branchColor,
+            fill: '#18181b',
+            stroke: '#09090b',
+            text: '#fafafa',
+            shadow: 'rgba(24, 24, 27, 0.28)',
+            fontWeight: '760',
+            shapeStrokeWidth: '1.5',
+            reviewRole,
+          }
+        }
+        if (reviewRole === 'placeholder') {
+          return {
+            branchColor: '#d97706',
+            fill: '#fffbeb',
+            stroke: '#f59e0b',
+            text: '#92400e',
+            shadow: 'rgba(217, 119, 6, 0.18)',
+            fontWeight: '650',
+            shapeStrokeWidth: '1.6',
+            reviewRole,
+          }
+        }
+        if (reviewRole === 'revealed') {
+          return {
+            branchColor: '#059669',
+            fill: '#ecfdf5',
+            stroke: '#10b981',
+            text: '#065f46',
+            shadow: 'rgba(5, 150, 105, 0.16)',
+            fontWeight: '650',
+            shapeStrokeWidth: '1.6',
+            reviewRole,
+          }
+        }
+        if (reviewRole === 'red') {
+          return {
+            branchColor: '#e11d48',
+            fill: '#fff1f2',
+            stroke: '#e11d48',
+            text: '#881337',
+            shadow: 'rgba(225, 29, 72, 0.16)',
+            fontWeight: '680',
+            shapeStrokeWidth: '1.7',
+            reviewRole,
+          }
+        }
+        if (depth === 1) {
+          return {
+            branchColor,
+            fill: branchColor,
+            stroke: branchColor,
+            text: '#ffffff',
+            shadow: hexToRgba(branchColor, 0.24),
+            fontWeight: '720',
+            shapeStrokeWidth: '1.5',
+            reviewRole,
+          }
+        }
+        return {
+          branchColor,
+          fill: depth === 2 ? tintHexColor(branchColor, 0.93) : '#ffffff',
+          stroke: depth === 2 ? tintHexColor(branchColor, 0.55) : '#e4e4e7',
+          text: '#18181b',
+          shadow: depth <= 2 ? hexToRgba(branchColor, 0.12) : 'rgba(24, 24, 27, 0.09)',
+          fontWeight: depth === 2 ? '640' : '560',
+          shapeStrokeWidth: depth === 2 ? '1.35' : '1.1',
+          reviewRole,
+        }
+      }
+
+      function applyPaperNodeTextStyle(node, style) {
+        const element = getNodeElement(node)
+        if (!element?.querySelectorAll) return
+        element
+          .querySelectorAll('.smm-text-node-wrap, .smm-richtext-node-wrap, .smm-desctext-node-wrap, .ql-editor')
+          .forEach((textWrap) => {
+            if (!textWrap?.style) return
+            textWrap.style.setProperty('box-sizing', 'border-box')
+            textWrap.style.setProperty('color', style.text)
+            textWrap.style.setProperty('font-weight', style.fontWeight || '560')
+            textWrap.style.setProperty('line-height', '1.2')
+            textWrap.style.setProperty('max-width', '100%')
+            textWrap.style.setProperty('min-width', '0')
+            textWrap.style.setProperty('overflow', 'visible', 'important')
+            textWrap.style.setProperty('overflow-wrap', 'break-word')
+            textWrap.style.setProperty('white-space', 'normal')
+            textWrap.style.setProperty('width', '100%')
+            textWrap.style.setProperty('word-break', 'normal')
+          })
+        element
+          .querySelectorAll('.smm-richtext-node-wrap *, .smm-desctext-node-wrap *, .ql-editor *')
+          .forEach((child) => {
+            if (!child?.style) return
+            child.style.setProperty('box-sizing', 'border-box')
+            child.style.setProperty('color', 'inherit')
+            child.style.setProperty('max-width', '100%')
+            child.style.setProperty('min-width', '0')
+            child.style.setProperty('overflow-wrap', 'break-word')
+            child.style.setProperty('width', '100%')
+            child.style.setProperty('word-break', 'normal')
+            if (child.tagName === 'P') {
+              child.style.setProperty('box-sizing', 'border-box')
+              child.style.setProperty('margin', '0')
+              child.style.setProperty('max-width', '100%')
+              child.style.setProperty('min-width', '0')
+              child.style.setProperty('width', '100%')
+            }
+          })
+      }
+
+      function applyPaperNodeStyle(node) {
+        const element = getNodeElement(node)
+        if (!element?.classList || !element.style) return
+        const isRoot = !node?.parent
+        const depth = getRuntimeNodeDepth(node)
+        const isLeaf = !Array.isArray(node?.children) || node.children.length === 0
+        const style = buildPaperNodeStyle(node)
+        const shape = element.querySelector?.('.smm-node-shape')
+        element.classList.remove(...PAPER_MAP_NODE_CLASSES)
+        element.classList.add('memory-anki-paper-node')
+        element.classList.add(
+          isRoot
+            ? 'memory-anki-paper-root'
+            : depth === 1 && style.reviewRole === 'default'
+              ? 'memory-anki-paper-primary'
+              : isLeaf
+                ? 'memory-anki-paper-leaf'
+                : 'memory-anki-paper-branch',
+        )
+        if (style.reviewRole === 'placeholder') element.classList.add('memory-anki-paper-review-placeholder')
+        if (style.reviewRole === 'revealed') element.classList.add('memory-anki-paper-review-revealed')
+        if (style.reviewRole === 'red') element.classList.add('memory-anki-paper-review-red')
+        element.style.setProperty('--memory-anki-paper-branch-color', style.branchColor)
+        element.style.setProperty('--memory-anki-paper-node-fill', style.fill)
+        element.style.setProperty('--memory-anki-paper-node-stroke', style.stroke)
+        element.style.setProperty('--memory-anki-paper-node-text', style.text)
+        element.style.setProperty('--memory-anki-paper-node-shadow', style.shadow)
+        element.style.setProperty('--memory-anki-paper-node-weight', style.fontWeight || '560')
+        if (shape?.style) {
+          shape.style.fill = style.fill
+          shape.style.stroke = style.stroke
+          shape.style.strokeWidth = style.shapeStrokeWidth || (isRoot ? '1.5' : '1.25')
+          shape.style.filter = isRoot
+            ? 'drop-shadow(0 1px 0 rgba(255, 255, 255, 0.1)) drop-shadow(0 18px 34px rgba(24, 24, 27, 0.28))'
+            : `drop-shadow(0 1px 0 rgba(255, 255, 255, 0.82)) drop-shadow(0 12px 22px ${style.shadow})`
+          shape.setAttribute?.('rx', depth <= 1 ? '10' : '8')
+          shape.setAttribute?.('ry', depth <= 1 ? '10' : '8')
+        }
+        applyPaperNodeTextStyle(node, style)
+      }
+
+      function applyPaperLineStyle(node) {
+        if (!node?.parent) return
+        const style = buildPaperNodeStyle(node)
+        const data = getRuntimeNodeDataContainer(node) || {}
+        const completedLine =
+          normalizePaperColor(data.lineColor) === '#10b981' ||
+          normalizePaperColor(data.lineColor) === '#86ad86' ||
+          normalizePaperColor(data.lineColor) === '#22c55e'
+        const lineColor = completedLine ? '#10b981' : style.branchColor
+        getNodeLineElements(node).forEach((lineNode) => {
+          if (!lineNode?.classList || !lineNode.style) return
+          lineNode.classList.add('memory-anki-paper-line')
+          lineNode.classList.toggle('memory-anki-paper-review-complete-line', completedLine)
+          lineNode.style.setProperty('--memory-anki-paper-line-color', lineColor)
+          lineNode.style.stroke = lineColor
+          lineNode.style.strokeWidth = completedLine ? '3' : getRuntimeNodeDepth(node) === 1 ? '2.9' : '2.45'
+          lineNode.style.strokeLinecap = 'round'
+          lineNode.style.strokeLinejoin = 'round'
+          lineNode.style.opacity = completedLine ? '0.88' : '0.72'
+          lineNode.style.filter = 'drop-shadow(0 1px 0 rgba(255, 255, 255, 0.75))'
+        })
+      }
+
+      function applyUnifiedMindMapAppearance() {
+        document.body.classList.add('memory-anki-paper-map')
+        getCachedNodes().forEach((node) => {
+          applyPaperNodeStyle(node)
+          applyPaperLineStyle(node)
+        })
       }
 
       function clearReviewFxState() {
@@ -3203,6 +3879,26 @@
         return node?.group?.node?.getBoundingClientRect?.() || null
       }
 
+      function getNodeBodyRect(nodeOrUid) {
+        const element = getNodeElement(nodeOrUid)
+        if (!element) return null
+        const bodyCandidateSelectors = [
+          '.smm-node-shape',
+          '.smm-hover-node',
+          'foreignObject',
+          '.smm-text-node-wrap',
+          '.smm-richtext-node-wrap',
+          '.smm-desctext-node-wrap',
+        ]
+        for (const selector of bodyCandidateSelectors) {
+          const candidate = element.querySelector?.(selector)
+          const rect = candidate?.getBoundingClientRect?.() || null
+          if (isMeaningfulClientRect(rect)) return rect
+        }
+        const fallbackRect = element.getBoundingClientRect?.() || null
+        return isMeaningfulClientRect(fallbackRect) ? fallbackRect : null
+      }
+
       function getHostViewportRect() {
         const appRect = document.getElementById('app')?.getBoundingClientRect?.() || null
         if (isMeaningfulClientRect(appRect)) return appRect
@@ -3335,11 +4031,13 @@
           .map(node => {
             const uid = getNodeUid(node)
             const rect = getNodeRect(node)
+            const bodyRect = getNodeBodyRect(node)
             if (!uid || !rect) return null
             return {
               node,
               uid,
               rect,
+              bodyRect: isMeaningfulClientRect(bodyRect) ? bodyRect : rect,
               centerX: rect.left + rect.width / 2,
               centerY: rect.top + rect.height / 2,
               direction: node.parent ? getNodeLayoutDirection(node) : 'root',
@@ -3347,6 +4045,18 @@
             }
           })
           .filter(Boolean)
+      }
+
+      function collectSelectionDragExcludedNodeUids(node, excluded = new Set(), includeSelf = false) {
+        if (!node) return excluded
+        const uid = getNodeUid(node)
+        if (uid && includeSelf) {
+          excluded.add(uid)
+        }
+        if (Array.isArray(node.children)) {
+          node.children.forEach(child => collectSelectionDragExcludedNodeUids(child, excluded, true))
+        }
+        return excluded
       }
 
       function buildSelectionDragSiblingSlotBands(layouts) {
@@ -3399,28 +4109,24 @@
         return bands
       }
 
-      function buildSelectionDragChildIntent(layouts, pointerX, pointerY) {
+      function buildSelectionDragChildIntent(layouts, pointerX, pointerY, excludedNodeUids = null) {
         const hits = layouts
-          .map(layout => {
-            const horizontalInset = Math.min(10, Math.max(0, layout.rect.width / 2 - 18))
-            const verticalInset = Math.min(10, Math.max(0, layout.rect.height / 2 - 10))
-            return {
-              ...layout,
-              coreRect: makeRect(
-                layout.rect.left + horizontalInset,
-                layout.rect.top + verticalInset,
-                Math.max(12, layout.rect.width - horizontalInset * 2),
-                Math.max(12, layout.rect.height - verticalInset * 2),
-              ),
-            }
+          .filter(layout => {
+            if (excludedNodeUids?.has(layout.uid)) return false
+            return pointInRect(layout.bodyRect || layout.rect, pointerX, pointerY)
           })
-          .filter(layout => pointInRect(layout.coreRect, pointerX, pointerY))
           .sort((left, right) => {
-            const leftArea = left.rect.width * left.rect.height
-            const rightArea = right.rect.width * right.rect.height
+            const leftBodyRect = left.bodyRect || left.rect
+            const rightBodyRect = right.bodyRect || right.rect
+            const leftArea = leftBodyRect.width * leftBodyRect.height
+            const rightArea = rightBodyRect.width * rightBodyRect.height
             if (leftArea !== rightArea) return leftArea - rightArea
-            const leftDistance = Math.hypot(pointerX - left.centerX, pointerY - left.centerY)
-            const rightDistance = Math.hypot(pointerX - right.centerX, pointerY - right.centerY)
+            const leftCenterX = leftBodyRect.left + leftBodyRect.width / 2
+            const leftCenterY = leftBodyRect.top + leftBodyRect.height / 2
+            const rightCenterX = rightBodyRect.left + rightBodyRect.width / 2
+            const rightCenterY = rightBodyRect.top + rightBodyRect.height / 2
+            const leftDistance = Math.hypot(pointerX - leftCenterX, pointerY - leftCenterY)
+            const rightDistance = Math.hypot(pointerX - rightCenterX, pointerY - rightCenterY)
             return leftDistance - rightDistance
           })
         const bestHit = hits[0] || null
@@ -3466,13 +4172,24 @@
 
         const pointerX = selectionDragState.currentX
         const pointerY = selectionDragState.currentY
+        const sourceNode = resolveSelectionDragSourceNode()
+        const excludedNodeUids = collectSelectionDragExcludedNodeUids(sourceNode)
+        const childIntent = buildSelectionDragChildIntent(
+          layouts,
+          pointerX,
+          pointerY,
+          excludedNodeUids,
+        )
+        if (childIntent) {
+          return childIntent
+        }
         const slotBands = buildSelectionDragSiblingSlotBands(layouts)
         const siblingIntent = buildSelectionDragSiblingSlotIntent(slotBands, pointerX, pointerY)
         if (siblingIntent) {
           return siblingIntent
         }
 
-        return buildSelectionDragChildIntent(layouts, pointerX, pointerY) || buildEmptySelectionDragIntent()
+        return buildEmptySelectionDragIntent()
       }
 
       function updateSelectionDragPreview() {
@@ -3506,12 +4223,15 @@
 
       function resetSelectionDragState() {
         const shouldKeepContextMenuBlock =
-          selectionDragState.stage === 'dragging' &&
+          (selectionDragState.stage === 'dragging' || selectionDragState.stage === 'pending') &&
           Number(selectionDragState.contextMenuBlockUntil || 0) > Date.now()
         setSelectionDragInteractionActive(false)
         clearSelectionDragHoldTimer()
+        releaseSelectionDragPointerCapture()
         selectionDragState.pointerId = null
         selectionDragState.pointerButton = null
+        selectionDragState.pointerCaptureElement = null
+        selectionDragState.ownsPointerSequence = false
         selectionDragState.stage = 'idle'
         selectionDragState.holdReady = false
         selectionDragState.contextMenuBlockUntil = shouldKeepContextMenuBlock
@@ -4267,11 +4987,11 @@
         return true
       }
 
-      function restorePendingFocusRequestIfNeeded() {
+      function restorePendingFocusRequestIfNeeded(options = {}) {
         const request = syncState.pendingFocusRequest
         if (!request) return false
         const restored = restoreFocusRequest(request)
-        if (restored || Number(request.attempts || 0) >= 4) {
+        if ((restored && options.clearOnSuccess !== false) || Number(request.attempts || 0) >= 4) {
           syncState.pendingFocusRequest = null
         } else {
           syncState.pendingFocusRequest = {
@@ -4339,7 +5059,7 @@
                 shape.style.strokeWidth = Number(activeSegmentId != null && Number(segment.id) === activeSegmentId ? 3 : 2)
                 shape.style.filter =
                   activeSegmentId != null && Number(segment.id) === activeSegmentId
-                    ? `drop-shadow(0 0 0 rgba(15, 23, 42, 0.12)) drop-shadow(0 0 10px ${String(segment.color || '#14b8a6')}55)`
+                    ? `drop-shadow(0 0 0 rgba(24, 24, 27, 0.12)) drop-shadow(0 0 10px ${String(segment.color || '#2563eb')}55)`
                     : 'none'
               }
             }
@@ -4350,6 +5070,20 @@
               element.classList.add('memory-anki-segment-conflict-selected')
             }
           }
+        })
+      }
+
+      function applyMiniPalaceNodeStyles() {
+        const draft = getMiniPalaceDraft()
+        const selectedNodeUids = new Set(draft.selectedNodeUids)
+        getCachedNodes().forEach(node => {
+          const element = node?.group?.node
+          if (!element?.classList) return
+          const uid = getNodeUid(node)
+          element.classList.toggle(
+            'memory-anki-mini-palace-selected',
+            draft.active && Boolean(uid) && selectedNodeUids.has(uid)
+          )
         })
       }
 
@@ -4507,7 +5241,7 @@
         createButton.className = 'memory-anki-segment-menu-item'
         createButton.textContent = '用当前选中创建分块'
         createButton.addEventListener('click', () => {
-          getHostBridge()?.notify?.('segment_create_from_selection', null)
+          void notifyParentUiAfterNativeFullscreenExit('segment_create_from_selection')
           closeSegmentMenu()
         })
         actions.appendChild(createButton)
@@ -4603,9 +5337,17 @@
         }
       }
 
+      async function notifyParentUiAfterNativeFullscreenExit(eventName, payload = null) {
+        await exitNativeFullscreenIfNeeded()
+        getHostBridge()?.notify?.(eventName, payload)
+      }
+
       function ensureSegmentToolbar() {
         const toolbarBlock = document.querySelector('.toolbarContainer .toolbar .toolbarBlock')
         if (!toolbarBlock) return false
+        const toolbarContainer = toolbarBlock.closest('.toolbarContainer')
+        toolbarContainer?.classList.add('memory-anki-custom-toolbar-only')
+        toolbarBlock.classList.add('memory-anki-primary-toolbar-block')
         let host = toolbarBlock.querySelector('.memory-anki-segment-toolbar')
         if (!host) {
           host = document.createElement('div')
@@ -4628,6 +5370,9 @@
             </button>
             <button type="button" class="memory-anki-segment-button memory-anki-bilink-search-button" hidden>
               <span>搜索</span>
+            </button>
+            <button type="button" class="memory-anki-segment-button memory-anki-mini-palace-button" hidden>
+              <span>小宫殿</span>
             </button>
             <button type="button" class="memory-anki-layout-button memory-anki-immersive-edit-button">
               <span>半屏编辑</span>
@@ -4661,33 +5406,40 @@
           const mindmapImportButton = host.querySelector('.memory-anki-mindmap-import-button')
           const textImportButton = host.querySelector('.memory-anki-text-import-button')
           const bilinkSearchButton = host.querySelector('.memory-anki-bilink-search-button')
+          const miniPalaceButton = host.querySelector('.memory-anki-mini-palace-button')
           const immersiveEditButton = host.querySelector('.memory-anki-immersive-edit-button')
           const nativeFullscreenButton = host.querySelector('.memory-anki-native-fullscreen-button')
           const clearUiButton = host.querySelector('.memory-anki-clear-ui-button')
           practiceButton?.addEventListener('click', event => {
             event.preventDefault()
             event.stopPropagation()
+            notifyCurrentFocusNodeActive()
             getHostBridge()?.notify?.('practice_toggle', null)
           })
           englishButton?.addEventListener('click', event => {
             event.preventDefault()
             event.stopPropagation()
-            getHostBridge()?.notify?.('english_open', null)
+            void notifyParentUiAfterNativeFullscreenExit('english_open')
           })
           mindmapImportButton?.addEventListener('click', event => {
             event.preventDefault()
             event.stopPropagation()
-            getHostBridge()?.notify?.('mindmap_import_open', null)
+            void notifyParentUiAfterNativeFullscreenExit('mindmap_import_open')
           })
           textImportButton?.addEventListener('click', event => {
             event.preventDefault()
             event.stopPropagation()
-            getHostBridge()?.notify?.('image_text_import_open', null)
+            void notifyParentUiAfterNativeFullscreenExit('image_text_import_open')
           })
           bilinkSearchButton?.addEventListener('click', event => {
             event.preventDefault()
             event.stopPropagation()
-            getHostBridge()?.notify?.('bilink_toolbar_search', null)
+            void notifyParentUiAfterNativeFullscreenExit('bilink_toolbar_search')
+          })
+          miniPalaceButton?.addEventListener('click', event => {
+            event.preventDefault()
+            event.stopPropagation()
+            void notifyParentUiAfterNativeFullscreenExit('mini_palace_open')
           })
           immersiveEditButton?.addEventListener('click', async event => {
             event.preventDefault()
@@ -4724,6 +5476,7 @@
         const mindmapImportButton = host.querySelector('.memory-anki-mindmap-import-button')
         const textImportButton = host.querySelector('.memory-anki-text-import-button')
         const bilinkSearchButton = host.querySelector('.memory-anki-bilink-search-button')
+        const miniPalaceButton = host.querySelector('.memory-anki-mini-palace-button')
         const immersiveEditButton = host.querySelector('.memory-anki-immersive-edit-button')
         const nativeFullscreenButton = host.querySelector('.memory-anki-native-fullscreen-button')
         const clearUiButton = host.querySelector('.memory-anki-clear-ui-button')
@@ -4759,6 +5512,9 @@
         }
         if (bilinkSearchButton) {
           bilinkSearchButton.hidden = !Boolean(window.__memoryAnkiHostState?.showBilinkSearchButton)
+        }
+        if (miniPalaceButton) {
+          miniPalaceButton.hidden = !Boolean(window.__memoryAnkiHostState?.showMiniPalaceButton)
         }
         if (practiceLabel) {
           practiceLabel.textContent = window.__memoryAnkiHostState?.practiceToggleLabel || '练习'
@@ -5437,10 +6193,13 @@
               sourceNode,
             } = candidate
             const sourceParentNode = sourceNode?.parent || null
+            suppressSelectionDragNativePointerEvent(event, { capturePointer: true })
             selectionDragState.pointerId = event.pointerId
             selectionDragState.pointerButton = event.button
+            selectionDragState.ownsPointerSequence = true
             selectionDragState.stage = 'pending'
             selectionDragState.holdReady = false
+            selectionDragState.contextMenuBlockUntil = Date.now() + SELECTION_DRAG_HOLD_DELAY + 1200
             selectionDragState.sourceNodeUid = getNodeUid(sourceNode) || focusState.editingNodeUid || null
             selectionDragState.sourceParentUid = getSelectionDragParentKey(sourceParentNode)
             selectionDragState.sourceSiblingUids = (Array.isArray(sourceParentNode?.children) ? sourceParentNode.children : [])
@@ -5464,8 +6223,8 @@
         document.addEventListener(
           'pointermove',
           (event) => {
-            if (selectionDragState.stage === 'idle') return
-            if (selectionDragState.pointerId != null && event.pointerId !== selectionDragState.pointerId) return
+            if (!ownsSelectionDragPointer(event) || selectionDragState.stage === 'idle') return
+            suppressSelectionDragNativePointerEvent(event)
             selectionDragState.currentX = event.clientX
             selectionDragState.currentY = event.clientY
             markHostInteraction()
@@ -5493,9 +6252,6 @@
               if (!beginSelectionDragFromCandidate(event)) return
             }
             if (selectionDragState.stage === 'dragging') {
-              event.preventDefault()
-              event.stopPropagation()
-              event.stopImmediatePropagation?.()
               restoreSelectionDragSourceSelection()
               updateSelectionDragPreview()
             }
@@ -5506,13 +6262,10 @@
         document.addEventListener(
           'pointerup',
           (event) => {
-            if (selectionDragState.stage === 'idle') return
-            if (selectionDragState.pointerId != null && event.pointerId !== selectionDragState.pointerId) return
+            if (!ownsSelectionDragPointer(event) || selectionDragState.stage === 'idle') return
+            suppressSelectionDragNativePointerEvent(event)
             markHostInteraction()
             if (selectionDragState.stage === 'dragging') {
-              event.preventDefault()
-              event.stopPropagation()
-              event.stopImmediatePropagation?.()
               restoreSelectionDragSourceSelection()
               emitHostFeedback('drag_drop', {
                 source: 'selection_drag',
@@ -5543,13 +6296,40 @@
 
         document.addEventListener(
           'pointercancel',
-          () => {
+          (event) => {
+            if (!ownsSelectionDragPointer(event) && selectionDragState.stage === 'idle') return
             markHostInteraction()
             resetSelectionDragState()
             maybeFlushSoftSyncOnIdle()
           },
           true,
         )
+
+        document.addEventListener(
+          'lostpointercapture',
+          (event) => {
+            if (!ownsSelectionDragPointer(event)) return
+            markHostInteraction()
+            resetSelectionDragState()
+            maybeFlushSoftSyncOnIdle()
+          },
+          true,
+        )
+
+        window.addEventListener('blur', () => {
+          if (!selectionDragState.ownsPointerSequence) return
+          markHostInteraction()
+          resetSelectionDragState()
+          maybeFlushSoftSyncOnIdle()
+        })
+
+        document.addEventListener('visibilitychange', () => {
+          if (document.visibilityState === 'visible') return
+          if (!selectionDragState.ownsPointerSequence) return
+          markHostInteraction()
+          resetSelectionDragState()
+          maybeFlushSoftSyncOnIdle()
+        })
 
         document.addEventListener(
           'selectstart',
@@ -5695,10 +6475,11 @@
                 y: event.clientY,
               })
             }
-            if (!isReadonlyHost()) return
+            const miniPalaceDraft = getMiniPalaceDraft()
+            if (!isReadonlyHost() && !miniPalaceDraft.active) return
             const node = getNodeByElement(event.target, {
               event,
-              allowReadonlyFallback: isReadonlyHost(),
+              allowReadonlyFallback: isReadonlyHost() || miniPalaceDraft.active,
             })
             if (!node) return
             event.preventDefault()
@@ -5850,7 +6631,8 @@
         window.__memoryAnkiReadonlyClickRegistered = true
         const handleReadonlyPrimaryActivate = event => {
           const rangeDraft = getSegmentRangeDraft()
-          if (!isReadonlyHost() && !rangeDraft.active) return
+          const miniPalaceDraft = getMiniPalaceDraft()
+          if (!isReadonlyHost() && !rangeDraft.active && !miniPalaceDraft.active) return
           if (typeof event.button === 'number' && event.button !== 0) return
           const node = getNodeByElement(event.target, {
             event,
@@ -5880,6 +6662,16 @@
               y: event.clientY,
             })
             toggleNodeInRangeDraft(node)
+            return
+          }
+          if (miniPalaceDraft.active) {
+            emitHostFeedback('segment_action', {
+              source: 'mini_palace_select_toggle',
+              nodeUid,
+              x: event.clientX,
+              y: event.clientY,
+            })
+            notifyHostNodeClick([serializeNode(node)], { source: 'dom' })
             return
           }
           emitHostFeedback('pointer_click', {
@@ -6149,15 +6941,22 @@
         ensureSegmentToolbar()
         window.setTimeout(() => {
           ensureSegmentToolbar()
-          applySegmentNodeStyles()
+          applyUnifiedMindMapAppearance()
+          updateKeyboardFocusClass()
           applyFocusNodeStyles()
+          applySegmentNodeStyles()
+          applyMiniPalaceNodeStyles()
           updateNavigatorFullscreenPresentation()
           renderBilinkBadges()
-          restorePendingFocusRequestIfNeeded()
+          restorePendingFocusRequestIfNeeded({ clearOnSuccess: false })
         }, 0)
         ensureRestoreUiButton()
-        updateNavigatorFullscreenPresentation()
+        applyUnifiedMindMapAppearance()
+        updateKeyboardFocusClass()
         applyFocusNodeStyles()
+        applySegmentNodeStyles()
+        applyMiniPalaceNodeStyles()
+        updateNavigatorFullscreenPresentation()
         renderBilinkBadges()
         scheduleAiSplitToolbarPatch()
         if (wasImmersiveModeActive !== isImmersiveModeActive()) {
@@ -6197,9 +6996,12 @@
 
       window.resetReadonlyInteractionState = resetReadonlyInteractionState
 
-      const HOST_IMPORTED_NODE_AUTO_WIDTH_THRESHOLD = 20
-      const HOST_IMPORTED_NODE_WIDE_TEXT_WIDTH = 360
-      const HOST_IMPORTED_NODE_EXTRA_WIDE_TEXT_WIDTH = 420
+      const HOST_IMPORTED_NODE_AUTO_WIDTH_THRESHOLD = 12
+      const HOST_IMPORTED_NODE_LEGACY_MEDIUM_TEXT_WIDTH = 132
+      const HOST_IMPORTED_NODE_WIDE_TEXT_WIDTH = 220
+      const HOST_IMPORTED_NODE_EXTRA_WIDE_TEXT_WIDTH = 320
+      const HOST_IMPORTED_NODE_MEASURE_PADDING = 28
+      let importedNodeMeasureContext = null
 
       function stripHtmlToText(value) {
         const html = typeof value === 'string' ? value : ''
@@ -6211,12 +7013,43 @@
           .trim()
       }
 
+      function getImportedNodeMeasureContext() {
+        if (importedNodeMeasureContext) return importedNodeMeasureContext
+        if (typeof document === 'undefined' || typeof document.createElement !== 'function') return null
+        const canvas = document.createElement('canvas')
+        const context = typeof canvas.getContext === 'function' ? canvas.getContext('2d') : null
+        if (!context) return null
+        context.font = '560 13px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif'
+        importedNodeMeasureContext = context
+        return importedNodeMeasureContext
+      }
+
+      function measureImportedNodeTextWidth(plainText) {
+        const normalizedText = typeof plainText === 'string' ? plainText.trim() : ''
+        if (!normalizedText) return 0
+        const context = getImportedNodeMeasureContext()
+        if (context?.measureText) {
+          return Math.ceil(context.measureText(normalizedText).width)
+        }
+        return normalizedText.length * 13
+      }
+
       function resolveImportedNodeTextWidth(plainText) {
         const textLength = typeof plainText === 'string' ? plainText.length : 0
         if (textLength < HOST_IMPORTED_NODE_AUTO_WIDTH_THRESHOLD) return null
-        if (textLength >= 78) return HOST_IMPORTED_NODE_EXTRA_WIDE_TEXT_WIDTH
-        if (textLength >= 34) return HOST_IMPORTED_NODE_WIDE_TEXT_WIDTH
+        const measuredTextWidth = measureImportedNodeTextWidth(plainText)
+        const desiredWidth = measuredTextWidth + HOST_IMPORTED_NODE_MEASURE_PADDING
+        if (textLength >= 78 || desiredWidth > HOST_IMPORTED_NODE_WIDE_TEXT_WIDTH) {
+          return HOST_IMPORTED_NODE_EXTRA_WIDE_TEXT_WIDTH
+        }
+        if (textLength >= 34 || desiredWidth > HOST_IMPORTED_NODE_LEGACY_MEDIUM_TEXT_WIDTH) {
+          return HOST_IMPORTED_NODE_WIDE_TEXT_WIDTH
+        }
         return null
+      }
+
+      function hasLegacyImportedMediumTextWidth(value) {
+        return Number(value) === HOST_IMPORTED_NODE_LEGACY_MEDIUM_TEXT_WIDTH
       }
 
       function normalizeImportedNodePresentation(node, depth = 0) {
@@ -6224,24 +7057,19 @@
         const data = node.data && typeof node.data === 'object' ? node.data : null
         if (data && depth > 0) {
           const plainText = stripHtmlToText(data.text)
-          const isImportedRichText = Boolean(data.richText) && typeof data.text === 'string'
-          const looksVerbose =
-            plainText.length >= 18 ||
-            (typeof data.text === 'string' && data.text.includes('<br>'))
-          if (isImportedRichText || looksVerbose) {
-            const targetWidth = resolveImportedNodeTextWidth(plainText)
-            if (typeof targetWidth === 'number' && (
-              typeof data.customTextWidth !== 'number' ||
-              Number.isNaN(data.customTextWidth) ||
-              data.customTextWidth < targetWidth
-            )) {
-              data.customTextWidth = targetWidth
-            } else if (
-              targetWidth == null &&
-              typeof data.customTextWidth === 'number'
+          const targetWidth = resolveImportedNodeTextWidth(plainText)
+          const currentCustomTextWidth = Number(data.customTextWidth)
+          const hasLegacyMediumTextWidth = hasLegacyImportedMediumTextWidth(data.customTextWidth)
+          if (typeof targetWidth === 'number') {
+            if (
+              hasLegacyMediumTextWidth ||
+              !Number.isFinite(currentCustomTextWidth) ||
+              currentCustomTextWidth !== targetWidth
             ) {
-              delete data.customTextWidth
+              data.customTextWidth = targetWidth
             }
+          } else if (hasLegacyMediumTextWidth || Number.isFinite(currentCustomTextWidth)) {
+            delete data.customTextWidth
           }
         }
         if (Array.isArray(node.children)) {
@@ -6378,8 +7206,10 @@
           }
         }
         window.setTimeout(() => {
+          applyUnifiedMindMapAppearance()
           updateKeyboardFocusClass()
           applySegmentNodeStyles()
+          applyMiniPalaceNodeStyles()
           renderBilinkBadges()
         }, 0)
       }
@@ -6808,9 +7638,11 @@
             }
           }
           syncKeyboardMode()
+          applyUnifiedMindMapAppearance()
           updateKeyboardFocusClass()
           ensureSegmentToolbar()
           applySegmentNodeStyles()
+          applyMiniPalaceNodeStyles()
           updateNavigatorFullscreenPresentation()
           renderBilinkBadges()
           getHostBridge()?.notify?.('app_inited', null)
@@ -7011,9 +7843,12 @@
           restorePendingFocusRequestIfNeeded()
           finalizePendingSelectionDragCreation({ rendered: true })
           restoreStableFocusAfterRender()
+          markPaperLayoutReflowComplete()
+          applyUnifiedMindMapAppearance()
           updateKeyboardFocusClass()
           ensureSegmentToolbar()
           applySegmentNodeStyles()
+          applyMiniPalaceNodeStyles()
           updateNavigatorFullscreenPresentation()
           renderBilinkBadges()
           maybeFlushSoftSyncOnIdle()

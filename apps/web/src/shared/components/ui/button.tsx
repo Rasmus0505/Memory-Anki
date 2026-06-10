@@ -38,8 +38,11 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
 
     if (asChild) {
       const child = React.Children.only(children)
-      if (!React.isValidElement<{ className?: string }>(child)) return null
-      const childElement = child as React.ReactElement<{ className?: string }> & {
+      type ButtonChildProps = React.HTMLAttributes<HTMLElement> & {
+        'data-feedback'?: string
+      }
+      if (!React.isValidElement<ButtonChildProps>(child)) return null
+      const childElement = child as React.ReactElement<ButtonChildProps> & {
         ref?: React.Ref<HTMLButtonElement>
       }
 
@@ -51,7 +54,7 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
           assignRef(ref, value)
           assignRef(childElement.ref, value)
         },
-      })
+      } as Partial<ButtonChildProps> & React.RefAttributes<HTMLButtonElement>)
     }
 
     return (

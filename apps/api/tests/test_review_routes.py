@@ -299,6 +299,26 @@ class ReviewRouteTests(unittest.TestCase):
             self.assertEqual(records[0].effective_seconds, 120)
             self.assertEqual(records[0].title, "Test Palace")
 
+    def test_submit_review_reuses_response_for_duplicate_mutation_id(self):
+        headers = {"X-Memory-Anki-Mutation-ID": "review-submit-mutation-1"}
+        first = self.client.post(
+            "/api/v1/review/session/1/submit",
+            headers=headers,
+            json={"duration_seconds": 12, "completion_mode": "manual_complete"},
+        )
+        second = self.client.post(
+            "/api/v1/review/session/1/submit",
+            headers=headers,
+            json={"duration_seconds": 999, "completion_mode": "manual_complete"},
+        )
+
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(second.status_code, 200)
+        self.assertEqual(second.json(), first.json())
+        with self.SessionLocal() as session:
+            self.assertEqual(session.query(ReviewLog).count(), 1)
+            self.assertEqual(session.query(TimeRecord).filter_by(kind="review").count(), 1)
+
     def test_submit_review_schedules_next_round_from_completion_time(self):
         with self.SessionLocal() as session:
             session.add(Config(key="ebbinghaus_intervals", value="1,2,4"))
@@ -1695,6 +1715,56 @@ class ReviewRouteTests(unittest.TestCase):
             self.assertEqual(record.started_at, expected_start)
             self.assertEqual(record.ended_at, expected_end)
 
+    def test_create_time_record_reuses_response_for_duplicate_mutation_id(self):
+        headers = {"X-Memory-Anki-Mutation-ID": "time-record-mutation-1"}
+        first = self.client.post(
+            "/api/v1/time-records",
+            headers=headers,
+            json={
+                "id": "time-mutation-record-1",
+                "kind": "practice",
+                "palaceId": 1,
+                "palaceSegmentId": None,
+                "title": "Test Palace",
+                "startedAt": "2026-05-11T00:18:09.648",
+                "endedAt": "2026-05-11T00:31:24.463",
+                "effectiveSeconds": 628,
+                "pauseCount": 2,
+                "completionMethod": "manual_complete",
+                "durationEdited": False,
+                "deletedAt": None,
+                "deletedReason": None,
+                "events": [],
+            },
+        )
+        second = self.client.post(
+            "/api/v1/time-records",
+            headers=headers,
+            json={
+                "id": "time-mutation-record-2",
+                "kind": "practice",
+                "palaceId": 1,
+                "palaceSegmentId": None,
+                "title": "Should Not Be Created",
+                "startedAt": "2026-05-11T01:18:09.648",
+                "endedAt": "2026-05-11T01:31:24.463",
+                "effectiveSeconds": 628,
+                "pauseCount": 2,
+                "completionMethod": "manual_complete",
+                "durationEdited": False,
+                "deletedAt": None,
+                "deletedReason": None,
+                "events": [],
+            },
+        )
+
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(second.status_code, 200)
+        self.assertEqual(second.json(), first.json())
+        with self.SessionLocal() as session:
+            self.assertIsNotNone(session.query(TimeRecord).filter_by(id="time-mutation-record-1").first())
+            self.assertIsNone(session.query(TimeRecord).filter_by(id="time-mutation-record-2").first())
+
     def test_update_time_record_rejects_start_after_end(self):
         response = self.client.post(
             "/api/v1/time-records",
@@ -1846,6 +1916,52 @@ class ReviewRouteTests(unittest.TestCase):
 
             self.assertEqual(response.status_code, 200)
             self.assertTrue(response.json()["ok"])
+
+    def test_segment_review_submit_reuses_response_for_duplicate_mutation_id(self):
+        with self.SessionLocal() as session:
+            palace = session.query(Palace).filter_by(id=1).first()
+            self.assertIsNotNone(palace)
+            segment = PalaceSegment(
+                palace_id=palace.id,
+                name="第 1 部分",
+                color="#14b8a6",
+                node_uids_json="[]",
+                sort_order=0,
+            )
+            session.add(segment)
+            session.flush()
+            schedule = PalaceSegmentReviewSchedule(
+                palace_segment_id=segment.id,
+                scheduled_date=date.today() - timedelta(days=1),
+                interval_days=1,
+                algorithm_used="ebbinghaus",
+                completed=False,
+                review_number=0,
+                review_type="standard",
+            )
+            session.add(schedule)
+            session.commit()
+            schedule_id = schedule.id
+            segment_id = segment.id
+
+        headers = {"X-Memory-Anki-Mutation-ID": "segment-submit-mutation-1"}
+        first = self.client.post(
+            f"/api/v1/segment-review/session/{schedule_id}/submit",
+            headers=headers,
+            json={"duration_seconds": 30, "completion_mode": "manual_complete"},
+        )
+        second = self.client.post(
+            f"/api/v1/segment-review/session/{schedule_id}/submit",
+            headers=headers,
+            json={"duration_seconds": 999, "completion_mode": "manual_complete"},
+        )
+
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(second.status_code, 200)
+        self.assertEqual(second.json(), first.json())
+        with self.SessionLocal() as session:
+            records = session.query(TimeRecord).filter_by(kind="review", palace_segment_id=segment_id).all()
+            self.assertEqual(len(records), 1)
 
     def test_review_session_allows_later_today_submission_and_sets_needs_practice(self):
         with self.SessionLocal() as session:
@@ -3030,6 +3146,76 @@ class ReviewRouteTests(unittest.TestCase):
         self.assertEqual(saved_child["text"], "新增节点")
         self.assertEqual(saved_child["memoryAnkiNodeType"], "peg")
         self.assertIsInstance(saved_child["memoryAnkiId"], int)
+
+    def test_save_palace_editor_rejects_stale_expected_fingerprint(self):
+        initial = self.client.get("/api/v1/palaces/1/editor")
+        self.assertEqual(initial.status_code, 200)
+        stale_fingerprint = initial.json()["editor_fingerprint"]
+        self.assertTrue(stale_fingerprint)
+
+        server_update = self.client.put(
+            "/api/v1/palaces/1/editor",
+            json={
+                "editor_source": "palace_edit",
+                "editor_doc": {
+                    "root": {
+                        "data": {"text": "Test Palace"},
+                        "children": [
+                            {"data": {"text": "Server A", "uid": "server-a"}, "children": []},
+                            {"data": {"text": "Server B", "uid": "server-b"}, "children": []},
+                        ],
+                    }
+                },
+            },
+        )
+        self.assertEqual(server_update.status_code, 200)
+
+        stale_save = self.client.put(
+            "/api/v1/palaces/1/editor",
+            json={
+                "editor_source": "palace_edit_autosave",
+                "expected_editor_fingerprint": stale_fingerprint,
+                "editor_doc": {
+                    "root": {
+                        "data": {"text": "Test Palace"},
+                        "children": [
+                            {"data": {"text": "Local A", "uid": "local-a"}, "children": []},
+                            {"data": {"text": "Local B", "uid": "local-b"}, "children": []},
+                        ],
+                    }
+                },
+            },
+        )
+
+        self.assertEqual(stale_save.status_code, 409)
+        self.assertIn("脑图保存冲突", stale_save.json()["detail"])
+
+    def test_focus_node_endpoint_sets_target_state_idempotently(self):
+        first_focus = self.client.put(
+            "/api/v1/palaces/1/focus-nodes/branch-a",
+            json={"focused": True},
+        )
+        second_focus = self.client.put(
+            "/api/v1/palaces/1/focus-nodes/branch-a",
+            json={"focused": True},
+        )
+        self.assertEqual(first_focus.status_code, 200)
+        self.assertEqual(second_focus.status_code, 200)
+        self.assertTrue(second_focus.json()["focused"])
+        self.assertEqual(second_focus.json()["focus_node_uids"], ["branch-a"])
+
+        first_unfocus = self.client.put(
+            "/api/v1/palaces/1/focus-nodes/branch-a",
+            json={"focused": False},
+        )
+        second_unfocus = self.client.put(
+            "/api/v1/palaces/1/focus-nodes/branch-a",
+            json={"focused": False},
+        )
+        self.assertEqual(first_unfocus.status_code, 200)
+        self.assertEqual(second_unfocus.status_code, 200)
+        self.assertFalse(second_unfocus.json()["focused"])
+        self.assertEqual(second_unfocus.json()["focus_node_uids"], [])
 
     def test_get_palace_editor_repairs_saved_review_overlay_doc(self):
         with self.SessionLocal() as session:

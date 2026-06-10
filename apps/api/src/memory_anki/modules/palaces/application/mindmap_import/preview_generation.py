@@ -97,6 +97,7 @@ def generate_batch_import_preview(
     prepare_batch_image_items_fn,
     call_dashscope_json_fn,
     call_dashscope_batch_json_fn,
+    call_dashscope_pdf_json_fn,
     build_batch_import_result_payload_fn,
 ) -> BatchImportPreviewResult:
     def _stream_call_dashscope_json_fn(**kwargs):
@@ -113,6 +114,23 @@ def generate_batch_import_preview(
         return call_dashscope_batch_json_fn(
             image_items=kwargs["image_items"],
             structure_tree=kwargs["structure_tree"],
+            range_prompt=kwargs.get("range_prompt", ""),
+            page_numbers=kwargs.get("page_numbers"),
+            disable_rebalance=bool(kwargs.get("disable_rebalance")),
+            import_options=kwargs.get("import_options"),
+            extracted_text=kwargs.get("extracted_text"),
+        )
+
+    def _stream_call_dashscope_pdf_json_fn(**kwargs):
+        if False:
+            yield {}
+        return call_dashscope_pdf_json_fn(
+            image_items=kwargs["image_items"],
+            range_prompt=kwargs.get("range_prompt", ""),
+            page_numbers=kwargs.get("page_numbers"),
+            disable_rebalance=bool(kwargs.get("disable_rebalance")),
+            import_options=kwargs.get("import_options"),
+            extracted_text=kwargs.get("extracted_text"),
         )
 
     result_payload = _consume_preview_workflow(
@@ -123,6 +141,7 @@ def generate_batch_import_preview(
             prepare_batch_image_items_fn=prepare_batch_image_items_fn,
             stream_call_dashscope_json_fn=_stream_call_dashscope_json_fn,
             stream_call_dashscope_batch_json_fn=_stream_call_dashscope_batch_json_fn,
+            stream_call_dashscope_pdf_json_fn=_stream_call_dashscope_pdf_json_fn,
             build_batch_import_result_payload_fn=build_batch_import_result_payload_fn,
         )
     )

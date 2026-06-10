@@ -125,7 +125,9 @@ export function PalaceImportResultsPanel({
                 </div>
                 <div className="flex items-center gap-2">
                   {sourceKind === 'image-batch' && batchMeta ? (
-                    <Badge variant="secondary">{batchMeta.imageCount} 张图</Badge>
+                    <Badge variant="secondary">
+                      {batchMeta.imageCount} 张图{batchMeta.structureImageIndex != null ? ' / 结构补全' : ' / 直接生成'}
+                    </Badge>
                   ) : null}
                   {sourceKind === 'subject-pdf' && selectedPdfPages.length > 0 ? (
                     <Badge variant="secondary">{selectedPdfPages.length} 页 PDF</Badge>
@@ -165,7 +167,7 @@ export function PalaceImportResultsPanel({
                 ) : sourceKind === 'subject-pdf' ? (
                   '完成 PDF 范围识别后，这里会显示脑图预览。'
                 ) : sourceKind === 'image-batch' ? (
-                  '点击开始识别后，这里会显示多图合成后的脑图预览。'
+                  '点击开始识别后，这里会显示多图转脑图结果。'
                 ) : (
                   '识别完成后，这里会显示脑图预览。'
                 )}

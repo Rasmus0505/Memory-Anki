@@ -1,4 +1,4 @@
-import { API_BASE, request } from '@/shared/api/http'
+import { API_BASE, fetchWithMutationQueue, request } from '@/shared/api/http'
 import { logAppError } from '@/shared/logs/model/appLogs'
 import type {
   EnglishCourseDetail,
@@ -10,10 +10,19 @@ import type {
 } from '@/shared/api/contracts'
 
 async function uploadWithFormData<T>(url: string, formData: FormData): Promise<T> {
-  const response = await fetch(`${API_BASE}${url}`, {
-    method: 'POST',
-    body: formData,
-  })
+  const fileName = formData.get('video_file')
+  const response = await fetchWithMutationQueue(
+    `${API_BASE}${url}`,
+    {
+      method: 'POST',
+      body: formData,
+    },
+    {
+      resourceKey: `english:upload:${typeof fileName === 'string' ? fileName : 'video'}`,
+      description: '上传英语视频',
+      replayMode: 'manual',
+    },
+  )
   if (!response.ok) {
     const body = await response.text().catch(() => '')
     let message = body || `HTTP ${response.status}`
@@ -134,6 +143,11 @@ export function retryEnglishCurrentTaskApi() {
     '/english/current-task/retry',
     {
       method: 'POST',
+      persistence: {
+        resourceKey: 'english:current-task:retry',
+        description: '重试英语任务',
+        replayMode: 'manual',
+      },
     },
   )
 }
@@ -141,6 +155,11 @@ export function retryEnglishCurrentTaskApi() {
 export function clearEnglishCurrentTaskApi() {
   return request<{ ok: boolean }>('/english/current-task', {
     method: 'DELETE',
+    persistence: {
+      resourceKey: 'english:current-task:clear',
+      description: '清除英语任务',
+      replayMode: 'manual',
+    },
   })
 }
 
@@ -166,6 +185,12 @@ export function updateEnglishCourseProgressApi(
   return request<EnglishCourseProgress>(`/english/courses/${courseId}/progress`, {
     method: 'PUT',
     body: JSON.stringify(payload),
+    persistence: {
+      resourceKey: `english-course:${courseId}:progress`,
+      coalesceKey: `english-course:${courseId}:progress`,
+      description: '保存英语课程进度',
+      replayMode: 'auto',
+    },
   })
 }
 
@@ -179,12 +204,22 @@ export function checkEnglishSentenceApi(
   return request<EnglishSentenceCheckResponse>(`/english/courses/${courseId}/check`, {
     method: 'POST',
     body: JSON.stringify(payload),
+    persistence: {
+      resourceKey: `english-course:${courseId}:check:${payload.sentenceIndex}`,
+      description: '保存英语句子练习结果',
+      replayMode: 'auto',
+    },
   })
 }
 
 export function deleteEnglishCourseApi(courseId: number) {
   return request<{ ok: boolean }>(`/english/courses/${courseId}`, {
     method: 'DELETE',
+    persistence: {
+      resourceKey: `english-course:${courseId}:delete`,
+      description: '删除英语课程',
+      replayMode: 'manual',
+    },
   })
 }
 

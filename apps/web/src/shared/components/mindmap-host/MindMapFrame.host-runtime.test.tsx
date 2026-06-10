@@ -48,6 +48,196 @@ describe('MindMapFrame host runtime behavior', () => {
     expect(hostSource).toContain("typeof mindMap.view.fit === 'function'")
   })
 
+  it('applies unified paper map appearance before interaction overlays after host renders', () => {
+    const hostSource = readFileSync(resolve(process.cwd(), 'public/mind-map-host.html'), 'utf8')
+    const applyUnifiedSection =
+      hostSource.match(/function applyUnifiedMindMapAppearance\(\)[\s\S]*?function clearReviewFxState/)?.[0] ?? ''
+    const paperReflowSection =
+      hostSource.match(/function runPaperLayoutReflow\(\)[\s\S]*?function requestPaperLayoutReflow/)?.[0] ?? ''
+
+    expect(hostSource).toContain('const paperLayoutReflowState =')
+    expect(hostSource).toContain('function requestPaperLayoutReflow()')
+    expect(hostSource).toContain('function runPaperLayoutReflow()')
+    expect(hostSource).toContain('function markPaperLayoutReflowComplete()')
+    expect(hostSource).toContain('function applyUnifiedMindMapAppearance()')
+    expect(hostSource).toContain("document.body.classList.add('memory-anki-paper-map')")
+    expect(hostSource).toContain('line-height: 1.2;')
+    expect(hostSource).toContain('overflow-wrap: break-word;')
+    expect(hostSource).toContain('min-width: 0;')
+    expect(hostSource).toContain('white-space: normal;')
+    expect(hostSource).toContain('width: 100%;')
+    expect(hostSource).toContain('function applyPaperNodeTextStyle(node, style)')
+    expect(hostSource).toMatch(
+      /body\.memory-anki-paper-map \.smm-node\.memory-anki-paper-node \{[\s\S]*overflow: visible;/,
+    )
+    expect(hostSource).toMatch(
+      /body\.memory-anki-paper-map \.smm-node\.memory-anki-paper-node foreignObject \{[\s\S]*overflow: visible;/,
+    )
+    expect(applyUnifiedSection).not.toContain('requestPaperLayoutReflow(')
+    expect(paperReflowSection).toContain('markPaperLayoutReflowComplete()')
+    expect(paperReflowSection).not.toContain('captureHostSyncFocusSnapshot(')
+    expect(paperReflowSection).not.toContain('setFullData(')
+    expect(paperReflowSection).not.toContain('setData(')
+    expect(paperReflowSection).not.toContain('window.__memoryAnkiPendingTransformRestore')
+    expect(hostSource).toMatch(
+      /function requestHostVisualRefresh[\s\S]*applyUnifiedMindMapAppearance\(\)[\s\S]*updateKeyboardFocusClass\(\)[\s\S]*applySegmentNodeStyles\(\)[\s\S]*renderBilinkBadges\(\)/,
+    )
+    expect(hostSource).toMatch(
+      /window\.\$bus\.\$on\('node_tree_render_end'[\s\S]*markPaperLayoutReflowComplete\(\)[\s\S]*applyUnifiedMindMapAppearance\(\)[\s\S]*updateKeyboardFocusClass\(\)[\s\S]*applySegmentNodeStyles\(\)[\s\S]*renderBilinkBadges\(\)/,
+    )
+    expect(hostSource).toMatch(
+      /window\.\$bus\.\$on\('app_inited'[\s\S]*applyUnifiedMindMapAppearance\(\)[\s\S]*updateKeyboardFocusClass\(\)[\s\S]*applySegmentNodeStyles\(\)[\s\S]*renderBilinkBadges\(\)/,
+    )
+    expect(hostSource).toMatch(
+      /function applyPaperNodeStyle\(node\)[\s\S]*applyPaperNodeTextStyle\(node, style\)/,
+    )
+  })
+
+  it('keeps medium-length imported Chinese cards on the wider default width path', () => {
+    const hostSource = readFileSync(resolve(process.cwd(), 'public/mind-map-host.html'), 'utf8')
+
+    expect(hostSource).toContain('const HOST_IMPORTED_NODE_AUTO_WIDTH_THRESHOLD = 12')
+    expect(hostSource).toContain('const HOST_IMPORTED_NODE_LEGACY_MEDIUM_TEXT_WIDTH = 132')
+    expect(hostSource).toContain('const HOST_IMPORTED_NODE_MEASURE_PADDING = 28')
+    expect(hostSource).toContain('function getImportedNodeMeasureContext()')
+    expect(hostSource).toContain('function measureImportedNodeTextWidth(plainText)')
+    expect(hostSource).toContain('function hasLegacyImportedMediumTextWidth(value)')
+    expect(hostSource).toMatch(
+      /function resolveImportedNodeTextWidth\(plainText\)[\s\S]*if \(textLength < HOST_IMPORTED_NODE_AUTO_WIDTH_THRESHOLD\) return null[\s\S]*const measuredTextWidth = measureImportedNodeTextWidth\(plainText\)[\s\S]*const desiredWidth = measuredTextWidth \+ HOST_IMPORTED_NODE_MEASURE_PADDING[\s\S]*if \(textLength >= 78 \|\| desiredWidth > HOST_IMPORTED_NODE_WIDE_TEXT_WIDTH\) \{[\s\S]*return HOST_IMPORTED_NODE_EXTRA_WIDE_TEXT_WIDTH[\s\S]*if \(textLength >= 34 \|\| desiredWidth > HOST_IMPORTED_NODE_LEGACY_MEDIUM_TEXT_WIDTH\) \{[\s\S]*return HOST_IMPORTED_NODE_WIDE_TEXT_WIDTH[\s\S]*return null/,
+    )
+    expect(hostSource).toMatch(
+      /function normalizeImportedNodePresentation\(node, depth = 0\)[\s\S]*const targetWidth = resolveImportedNodeTextWidth\(plainText\)[\s\S]*currentCustomTextWidth !== targetWidth[\s\S]*hasLegacyMediumTextWidth \|\| Number\.isFinite\(currentCustomTextWidth\)[\s\S]*delete data\.customTextWidth/,
+    )
+  })
+
+  it('does not infer review placeholder colors from legacy text-width metadata', () => {
+    const hostSource = readFileSync(resolve(process.cwd(), 'public/mind-map-host.html'), 'utf8')
+    const reviewRoleSection =
+      hostSource.match(/function getPaperReviewRole\(data, isRoot\)[\s\S]*?function buildPaperNodeStyle/)?.[0] ?? ''
+
+    expect(reviewRoleSection).not.toContain('customTextWidth')
+  })
+
+  it('suppresses native pan during right-button selection drag and prefers node bodies over slot gaps', () => {
+    const hostSource = readFileSync(resolve(process.cwd(), 'public/mind-map-host.html'), 'utf8')
+    const dragIntentSection =
+      hostSource.match(/function buildSelectionDragIntent\(\)[\s\S]*?function updateSelectionDragPreview/)?.[0] ?? ''
+
+    expect(hostSource).toContain('ownsPointerSequence: false')
+    expect(hostSource).toContain('pointerCaptureElement: null')
+    expect(hostSource).toContain('function ownsSelectionDragPointer(event)')
+    expect(hostSource).toContain('function tryCaptureSelectionDragPointer(event)')
+    expect(hostSource).toContain('function suppressSelectionDragNativePointerEvent(event, options = {})')
+    expect(hostSource).toMatch(
+      /document\.addEventListener\(\s*'lostpointercapture'[\s\S]*resetSelectionDragState\(\)/,
+    )
+    expect(hostSource).toMatch(
+      /window\.addEventListener\('blur'[\s\S]*selectionDragState\.ownsPointerSequence[\s\S]*resetSelectionDragState\(\)/,
+    )
+    expect(hostSource).toMatch(
+      /document\.addEventListener\('visibilitychange'[\s\S]*selectionDragState\.ownsPointerSequence[\s\S]*resetSelectionDragState\(\)/,
+    )
+    expect(hostSource).toMatch(
+      /function shouldSuppressSelectionDragContextMenu\(\)[\s\S]*selectionDragState\.stage === 'pending' \|\| selectionDragState\.stage === 'dragging'/,
+    )
+    expect(hostSource).toMatch(
+      /document\.addEventListener\(\s*'pointerdown'[\s\S]*suppressSelectionDragNativePointerEvent\(event, \{ capturePointer: true \}\)/,
+    )
+    expect(hostSource).toMatch(
+      /document\.addEventListener\(\s*'pointermove'[\s\S]*suppressSelectionDragNativePointerEvent\(event\)/,
+    )
+    expect(hostSource).toMatch(
+      /document\.addEventListener\(\s*'pointerup'[\s\S]*suppressSelectionDragNativePointerEvent\(event\)/,
+    )
+    expect(hostSource).toContain(
+      'function buildSelectionDragChildIntent(layouts, pointerX, pointerY, excludedNodeUids = null)',
+    )
+    expect(hostSource).toContain('function getNodeBodyRect(nodeOrUid)')
+    expect(hostSource).toContain('bodyRect: isMeaningfulClientRect(bodyRect) ? bodyRect : rect')
+    expect(hostSource).toContain('excludedNodeUids?.has(layout.uid)')
+    expect(hostSource).toContain('return pointInRect(layout.bodyRect || layout.rect, pointerX, pointerY)')
+    expect(hostSource).toContain(
+      'function collectSelectionDragExcludedNodeUids(node, excluded = new Set(), includeSelf = false)',
+    )
+    expect(hostSource).toContain('if (uid && includeSelf)')
+    expect(hostSource).toContain('node.children.forEach(child => collectSelectionDragExcludedNodeUids(child, excluded, true))')
+    expect(dragIntentSection.indexOf('const childIntent = buildSelectionDragChildIntent(')).toBeGreaterThan(-1)
+    expect(dragIntentSection.indexOf('const slotBands = buildSelectionDragSiblingSlotBands(layouts)')).toBeGreaterThan(-1)
+    expect(
+      dragIntentSection.indexOf('const childIntent = buildSelectionDragChildIntent('),
+    ).toBeLessThan(dragIntentSection.indexOf('const slotBands = buildSelectionDragSiblingSlotBands(layouts)'))
+  })
+
+  it('keeps source node eligible as a child target while excluding descendants in host runtime source', () => {
+    const hostSource = readFileSync(resolve(process.cwd(), 'public/mind-map-host.html'), 'utf8')
+
+    expect(hostSource).toContain('const excludedNodeUids = collectSelectionDragExcludedNodeUids(sourceNode)')
+    expect(hostSource).not.toContain('excluded.add(uid)\n        }\n        if (Array.isArray(node.children)) {\n          node.children.forEach(child => collectSelectionDragExcludedNodeUids(child, excluded))')
+    expect(hostSource).toMatch(
+      /function collectSelectionDragExcludedNodeUids\(node, excluded = new Set\(\), includeSelf = false\)[\s\S]*if \(uid && includeSelf\) \{[\s\S]*node\.children\.forEach\(child => collectSelectionDragExcludedNodeUids\(child, excluded, true\)\)/,
+    )
+  })
+
+  it('keeps only the Memory Anki toolbar chrome visible in the hosted mind map runtime', () => {
+    const hostSource = readFileSync(resolve(process.cwd(), 'public/mind-map-host.html'), 'utf8')
+
+    expect(hostSource).toContain('memory-anki-custom-toolbar-only')
+    expect(hostSource).toContain('memory-anki-primary-toolbar-block')
+    expect(hostSource).toMatch(
+      /\.toolbarContainer\.memory-anki-custom-toolbar-only[\s\S]*\.toolbarBlock:not\(\.memory-anki-primary-toolbar-block\)[\s\S]*display: none !important/,
+    )
+    expect(hostSource).toMatch(
+      /\.memory-anki-primary-toolbar-block[\s\S]*> :not\(\.memory-anki-segment-toolbar\)[\s\S]*display: none !important/,
+    )
+    expect(hostSource).toMatch(
+      /\.sidebarTriggerContainer,[\s\S]*\.navigatorContainer[\s\S]*display: none !important/,
+    )
+    expect(hostSource).toMatch(
+      /function ensureSegmentToolbar\(\)[\s\S]*toolbarContainer\?\.classList\.add\('memory-anki-custom-toolbar-only'\)[\s\S]*toolbarBlock\.classList\.add\('memory-anki-primary-toolbar-block'\)/,
+    )
+  })
+
+  it('contains mini palace toolbar runtime support', () => {
+    const hostSource = readFileSync(resolve(process.cwd(), 'public/mind-map-host.html'), 'utf8')
+
+    expect(hostSource).toContain('memory-anki-mini-palace-button')
+    expect(hostSource).toContain("notifyParentUiAfterNativeFullscreenExit('mini_palace_open')")
+    expect(hostSource).toContain('function getMiniPalaceDraft()')
+    expect(hostSource).toContain('function applyMiniPalaceNodeStyles()')
+    expect(hostSource).toMatch(
+      /function registerReadonlyClickListener[\s\S]*getMiniPalaceDraft\(\)[\s\S]*mini_palace_select_toggle/,
+    )
+    expect(hostSource).toMatch(
+      /function registerContextMenuListener[\s\S]*getMiniPalaceDraft\(\)/,
+    )
+  })
+
+  it('exits native fullscreen before opening parent-owned toolbar UI', () => {
+    const hostSource = readFileSync(resolve(process.cwd(), 'public/mind-map-host.html'), 'utf8')
+
+    expect(hostSource).toMatch(
+      /async function notifyParentUiAfterNativeFullscreenExit\(eventName, payload = null\)[\s\S]*await exitNativeFullscreenIfNeeded\(\)[\s\S]*getHostBridge\(\)\?\.notify\?\.\(eventName, payload\)/,
+    )
+    expect(hostSource).toMatch(
+      /englishButton\?\.addEventListener\('click'[\s\S]*notifyParentUiAfterNativeFullscreenExit\('english_open'\)/,
+    )
+    expect(hostSource).toMatch(
+      /mindmapImportButton\?\.addEventListener\('click'[\s\S]*notifyParentUiAfterNativeFullscreenExit\('mindmap_import_open'\)/,
+    )
+    expect(hostSource).toMatch(
+      /createButton\.addEventListener\('click'[\s\S]*notifyParentUiAfterNativeFullscreenExit\('segment_create_from_selection'\)/,
+    )
+    expect(hostSource).toMatch(
+      /textImportButton\?\.addEventListener\('click'[\s\S]*notifyParentUiAfterNativeFullscreenExit\('image_text_import_open'\)/,
+    )
+    expect(hostSource).toMatch(
+      /bilinkSearchButton\?\.addEventListener\('click'[\s\S]*notifyParentUiAfterNativeFullscreenExit\('bilink_toolbar_search'\)/,
+    )
+    expect(hostSource).toMatch(
+      /miniPalaceButton\?\.addEventListener\('click'[\s\S]*notifyParentUiAfterNativeFullscreenExit\('mini_palace_open'\)/,
+    )
+  })
+
   it('runs a resize-aware redraw and fit when the host viewport changes', () => {
     const hostSource = readFileSync(resolve(process.cwd(), 'public/mind-map-host.html'), 'utf8')
 
@@ -252,6 +442,16 @@ describe('MindMapFrame host runtime behavior', () => {
     expect(hostSource).toContain('pendingFocusRequest')
     expect(hostSource).toContain('function centerNodeInViewport(node)')
     expect(hostSource).toContain('mindMap.view.translateXY(deltaX, deltaY)')
+    expect(hostSource).toContain('function notifyCurrentFocusNodeActive()')
+    expect(hostSource).toMatch(
+      /practiceButton\?\.addEventListener\('click'[\s\S]*notifyCurrentFocusNodeActive\(\)[\s\S]*getHostBridge\(\)\?\.notify\?\.\('practice_toggle', null\)/,
+    )
+    expect(hostSource).toMatch(
+      /function restorePendingFocusRequestIfNeeded\(options = {}\)[\s\S]*options\.clearOnSuccess !== false/,
+    )
+    expect(hostSource).toContain(
+      'restorePendingFocusRequestIfNeeded({ clearOnSuccess: false })',
+    )
     expect(hostSource).toMatch(
       /restorePendingViewMemoryFocusIfNeeded\(\)[\s\S]*restorePendingSyncFocusIfNeeded\(\)[\s\S]*restorePendingFocusRequestIfNeeded\(\)/,
     )
@@ -305,6 +505,40 @@ describe('MindMapFrame host runtime behavior', () => {
     })
 
     expect(onEnglishOpen).toHaveBeenCalledTimes(1)
+  })
+
+  it('shows the mini palace toolbar button and forwards open requests', async () => {
+    const onMiniPalaceOpen = vi.fn()
+
+    render(
+      <MindMapFrame
+        editorState={buildEditorState()}
+        showMiniPalaceButton
+        miniPalaceDraft={{ active: true, selectedNodeUids: ['node-1'] }}
+        onMiniPalaceOpen={onMiniPalaceOpen}
+        onEditorStateChange={vi.fn()}
+      />,
+    )
+    const iframe = screen.getByTitle('mind-map-editor') as HTMLIFrameElement
+    const bridgeMocks = attachIframeBridge(iframe)
+
+    await waitFor(() => {
+      expect(bridgeMocks.applyHostState).toHaveBeenCalledWith(
+        expect.objectContaining({
+          showMiniPalaceButton: true,
+          miniPalaceDraft: {
+            active: true,
+            selectedNodeUids: ['node-1'],
+          },
+        }),
+      )
+    })
+
+    await act(async () => {
+      getHostBridge()?.notify?.('mini_palace_open', null)
+    })
+
+    expect(onMiniPalaceOpen).toHaveBeenCalledTimes(1)
   })
 
   it('reapplies host toolbar state when a runtime event promotes a host that missed app_inited', async () => {
@@ -410,7 +644,7 @@ describe('MindMapFrame host runtime behavior', () => {
     expect(new Set(iframeHostIds).size).toBe(2)
     expect(
       new URL(iframes[0]?.getAttribute('src') || '', 'http://localhost').searchParams.get('v'),
-    ).toBe('2026-06-09-mode-focus')
+    ).toBe('2026-06-10-card-width-drag-fix')
     expect(new Set(hostEntries.map(([hostId]) => hostId)).size).toBe(2)
 
     await act(async () => {

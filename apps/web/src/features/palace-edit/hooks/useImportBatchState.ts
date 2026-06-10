@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type {
+  BatchImportMeta,
   BatchImportImageItem,
   BatchImportStatus,
 } from '@/features/palace-edit/model/mindmap-import-types'
@@ -17,10 +18,7 @@ export function useImportBatchState(setError: (value: string) => void) {
   const [batchImages, setBatchImages] = useState<BatchImportImageItem[]>([])
   const [structureImageId, setStructureImageId] = useState<string | null>(null)
   const [batchStatus, setBatchStatus] = useState<BatchImportStatus>('idle')
-  const [lastBatchMeta, setLastBatchMeta] = useState<{
-    structureImageIndex: number
-    imageCount: number
-  } | null>(null)
+  const [lastBatchMeta, setLastBatchMeta] = useState<BatchImportMeta | null>(null)
   const batchImagesRef = useRef<BatchImportImageItem[]>([])
 
   const syncBatchImagesRef = (nextImages: BatchImportImageItem[]) => {
@@ -40,11 +38,8 @@ export function useImportBatchState(setError: (value: string) => void) {
     setLastBatchMeta(null)
     setBatchImages((current) => {
       const next = syncBatchImagesRef([...current, ...files.map(createBatchImageItem)])
-      const currentStructureId = structureImageId || current[0]?.id || null
       setStructureImageId(
-        currentStructureId && next.some((item) => item.id === currentStructureId)
-          ? currentStructureId
-          : (next[0]?.id ?? null),
+        structureImageId && next.some((item) => item.id === structureImageId) ? structureImageId : null,
       )
       setBatchStatus(next.length > 0 ? 'ready' : 'idle')
       return next
@@ -67,7 +62,7 @@ export function useImportBatchState(setError: (value: string) => void) {
         URL.revokeObjectURL(target.previewUrl)
       }
       const next = syncBatchImagesRef(current.filter((item) => item.id !== id))
-      const nextStructureId = structureImageId === id ? next[0]?.id ?? null : structureImageId
+      const nextStructureId = structureImageId === id ? null : structureImageId
       setStructureImageId(nextStructureId)
       setBatchStatus(next.length > 0 ? 'ready' : 'idle')
       return next
@@ -93,7 +88,7 @@ export function useImportBatchState(setError: (value: string) => void) {
   }
 
   const handleSetStructureImage = (id: string) => {
-    setStructureImageId(id)
+    setStructureImageId((current) => (current === id ? null : id))
     setError('')
     setLastBatchMeta(null)
     setBatchStatus(batchImagesRef.current.length > 0 ? 'ready' : 'idle')

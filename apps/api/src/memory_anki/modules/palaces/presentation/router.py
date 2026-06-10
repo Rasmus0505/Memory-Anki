@@ -23,6 +23,7 @@ from memory_anki.modules.backups.application.backup_service import (
     restore_palace_version,
 )
 from memory_anki.modules.mindmap.application.editor_state_service import (
+    EditorStateConflictError,
     get_palace_editor_state,
     save_palace_editor_state,
     sync_palace_editor_root,
@@ -31,9 +32,18 @@ from memory_anki.modules.palaces.application.mindmap_ai_split_service import (
     MindMapAiSplitError,
     split_palace_editor_doc_with_ai,
 )
+from memory_anki.modules.palaces.application.mini_palace_service import (
+    create_palace_mini_palace,
+    delete_palace_mini_palace,
+    get_palace_mini_palace,
+    list_palace_mini_palaces,
+    mini_palace_summary_json,
+    update_palace_mini_palace,
+)
 from memory_anki.modules.palaces.application.focus_service import (
     build_focus_editor_doc,
     parse_focus_node_uids,
+    set_focus_node_uids,
     toggle_focus_node_uid,
 )
 from memory_anki.modules.palaces.application.palace_service import (
@@ -338,6 +348,8 @@ def api_update_editor(palace_id: int, data: dict, s: Session = Depends(session_d
         return {"error": "not found"}
     try:
         state = save_palace_editor_state(s, palace, data)
+    except EditorStateConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     maybe_create_rolling_backup("rolling-editor-save")
@@ -451,11 +463,33 @@ def api_update_palace_practice_flag(palace_id: int, data: dict, s: Session = Dep
 
 
 @router.put("/palaces/{palace_id}/focus-nodes/{node_uid}")
-def api_toggle_palace_focus_node(palace_id: int, node_uid: str, s: Session = Depends(session_dep)):
+def api_toggle_palace_focus_node(
+    palace_id: int,
+    node_uid: str,
+    data: dict | None = None,
+    s: Session = Depends(session_dep),
+):
     palace = get_palace(s, palace_id)
     if not palace:
         return {"error": "not found"}
-    focus_node_uids, focused = toggle_focus_node_uid(palace, node_uid)
+    normalized_uid = str(node_uid or "").strip()
+    if data is not None and "focused" in data:
+        current_uids = parse_focus_node_uids(palace)
+        target_focused = bool(data.get("focused"))
+        if not normalized_uid:
+            focus_node_uids = current_uids
+            focused = False
+        elif target_focused:
+            focus_node_uids = set_focus_node_uids(palace, [*current_uids, normalized_uid])
+            focused = True
+        else:
+            focus_node_uids = set_focus_node_uids(
+                palace,
+                [uid for uid in current_uids if uid != normalized_uid],
+            )
+            focused = False
+    else:
+        focus_node_uids, focused = toggle_focus_node_uid(palace, node_uid)
     s.commit()
     s.refresh(palace)
     return {
@@ -467,6 +501,44 @@ def api_toggle_palace_focus_node(palace_id: int, node_uid: str, s: Session = Dep
         "focus_count": len(focus_node_uids),
         "item": palace_json(palace, s),
     }
+
+
+@router.get("/palaces/{palace_id}/mini-palaces")
+def api_list_mini_palaces(palace_id: int, s: Session = Depends(session_dep)):
+    palace = get_palace(s, palace_id)
+    if not palace:
+        return {"error": "not found"}
+    return {"items": list_palace_mini_palaces(s, palace)}
+
+
+@router.post("/palaces/{palace_id}/mini-palaces")
+def api_create_mini_palace(palace_id: int, data: dict, s: Session = Depends(session_dep)):
+    palace = get_palace(s, palace_id)
+    if not palace:
+        return {"error": "not found"}
+    mini_palace = create_palace_mini_palace(s, palace, data)
+    maybe_create_rolling_backup("rolling-create-mini-palace")
+    return {"item": mini_palace_summary_json(mini_palace)}
+
+
+@router.put("/palace-mini-palaces/{mini_palace_id}")
+def api_update_mini_palace(mini_palace_id: int, data: dict, s: Session = Depends(session_dep)):
+    mini_palace = get_palace_mini_palace(s, mini_palace_id)
+    if not mini_palace:
+        return {"error": "not found"}
+    updated = update_palace_mini_palace(s, mini_palace, data)
+    maybe_create_rolling_backup("rolling-update-mini-palace")
+    return {"item": mini_palace_summary_json(updated)}
+
+
+@router.delete("/palace-mini-palaces/{mini_palace_id}")
+def api_delete_mini_palace(mini_palace_id: int, s: Session = Depends(session_dep)):
+    mini_palace = get_palace_mini_palace(s, mini_palace_id)
+    if not mini_palace:
+        return {"error": "not found"}
+    delete_palace_mini_palace(s, mini_palace)
+    maybe_create_rolling_backup("rolling-delete-mini-palace")
+    return {"ok": True}
 
 
 @router.delete("/palace-segments/{segment_id}")

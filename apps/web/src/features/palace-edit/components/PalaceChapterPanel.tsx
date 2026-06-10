@@ -38,6 +38,11 @@ function countExplicitDescendants(option: ChapterOption, explicitIds: Set<number
   return flattenChapterOptions([option]).filter((item) => explicitIds.has(item.id)).length
 }
 
+function hasAllExplicitChildChapters(option: ChapterOption, explicitIds: Set<number>): boolean {
+  const childChapters = flattenChapterOptions(option.children)
+  return childChapters.length > 0 && childChapters.every((item) => explicitIds.has(item.id))
+}
+
 export function PalaceChapterPanel({
   chapterOptions,
   explicitChapterIds,
@@ -93,17 +98,19 @@ export function PalaceChapterPanel({
     const isExplicit = explicitIdSet.has(option.id)
     const isInherited = inheritedIdSet.has(option.id)
     const isPrimary = primaryChapterId === option.id
+    const hasCompletedChildren = hasAllExplicitChildChapters(option, explicitIdSet)
 
     return (
       <div key={option.id} className="space-y-2">
         <label
           className={cn(
             'flex items-start gap-3 rounded-2xl border px-3 py-3 text-sm transition-colors',
-            isPrimary
-              ? 'border-amber-300 bg-amber-50/80'
+            hasCompletedChildren
+              ? 'border-emerald-500 bg-emerald-100/90 text-emerald-950 shadow-sm'
               : isExplicit
-                ? 'border-primary/35 bg-primary/5'
+                ? 'border-emerald-300 bg-emerald-50/90 text-emerald-950'
                 : 'border-border/70 bg-background/70',
+            isPrimary && 'ring-1 ring-amber-300',
             selectionPending && 'opacity-75',
           )}
           style={{ marginLeft: `${option.depth * 18}px` }}

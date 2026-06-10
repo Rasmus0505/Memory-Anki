@@ -42,13 +42,6 @@
       "kind": "file",
       "required": false,
       "backup": true
-    },
-    {
-      "key": "switcher_state",
-      "relative_path": "switcher-state.json",
-      "kind": "file",
-      "required": false,
-      "backup": true
     }
   ]
 }

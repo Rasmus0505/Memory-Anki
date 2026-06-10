@@ -1,7 +1,11 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
 from memory_anki.infrastructure.db.models import get_session
+from memory_anki.modules.persistence.application.idempotency import (
+    get_idempotent_response,
+    save_idempotent_response,
+)
 from memory_anki.modules.time_records.application.time_records_service import (
     create_time_record,
     get_threshold_seconds,
@@ -41,9 +45,14 @@ def api_list_time_records(
 
 
 @router.post("/time-records")
-def api_create_time_record(data: dict, session: Session = Depends(session_dep)):
+def api_create_time_record(data: dict, request: Request, session: Session = Depends(session_dep)):
+    existing_response = get_idempotent_response(session, request)
+    if existing_response is not None:
+        return existing_response
     try:
-        return {"item": create_time_record(session, data)}
+        response = {"item": create_time_record(session, data)}
+        save_idempotent_response(session, request, response)
+        return response
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 

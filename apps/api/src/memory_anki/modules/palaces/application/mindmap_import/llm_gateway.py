@@ -57,7 +57,7 @@ def prepare_batch_items(
     runtime: DashscopeImportRuntime,
     image_items: list[tuple[bytes, str | None]],
     structure_image_index: int | None,
-) -> tuple[list[tuple[bytes, str | None]], int]:
+) -> tuple[list[tuple[bytes, str | None]], int | None]:
     return prepare_batch_image_items(
         runtime=runtime,
         image_items=image_items,

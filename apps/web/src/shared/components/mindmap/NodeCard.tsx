@@ -3,6 +3,7 @@ import { Handle, Position, type NodeProps } from '@xyflow/react'
 import { Plus, X } from 'lucide-react'
 import { dispatchGlobalFeedback } from '@/shared/feedback/globalFeedbackModel'
 import type { MindMapNode } from './adapter'
+import { getNodeSize, type LayoutRole } from './layout'
 
 type NodeCardData = MindMapNode & {
   depth?: number
@@ -17,6 +18,8 @@ type NodeCardData = MindMapNode & {
   onAddChild?: (nodeId: string) => void
   onDelete?: (nodeId: string) => void
 }
+
+const PAPER_BRANCH_COLORS = ['#2563eb', '#059669', '#d97706', '#7c3aed', '#e11d48', '#0891b2', '#4f46e5', '#be123c']
 
 function getMouseFeedbackPoint(event?: React.MouseEvent) {
   return event
@@ -39,10 +42,11 @@ function getElementFeedbackPoint(element: HTMLElement | null) {
 function MindMapNodeCard({ data, id }: NodeProps) {
   const nodeData = data as unknown as NodeCardData
   const depth = Number(nodeData.metadata?.depth ?? 0)
-  const branchColor = String(nodeData.metadata?.branchColor ?? '#89a89e')
-  const layoutRole = String(nodeData.metadata?.layoutRole ?? (depth === 0 ? 'root' : 'branch'))
+  const branchColor = String(nodeData.metadata?.branchColor ?? PAPER_BRANCH_COLORS[depth % PAPER_BRANCH_COLORS.length])
+  const layoutRole = String(nodeData.metadata?.layoutRole ?? (depth === 0 ? 'root' : 'branch')) as LayoutRole
   const isRoot = layoutRole === 'root'
   const isLeaf = layoutRole === 'leaf'
+  const nodeSize = getNodeSize(layoutRole, nodeData.label)
   const [localEdit, setLocalEdit] = useState(false)
   const [editText, setEditText] = useState(nodeData.label)
   const inputRef = useRef<HTMLTextAreaElement>(null)
@@ -96,16 +100,17 @@ function MindMapNodeCard({ data, id }: NodeProps) {
     e.target.style.height = `${e.target.scrollHeight}px`
   }, [])
 
-  const btnClass = 'flex h-7 w-7 items-center justify-center rounded-xl border border-white/85 bg-white/95 text-slate-500 shadow-sm transition-colors hover:text-slate-900'
+  const btnClass = 'flex h-7 w-7 items-center justify-center rounded-lg border border-zinc-200 bg-white/95 text-zinc-500 shadow-sm transition-colors hover:text-zinc-950'
   const previewShifted = Boolean(nodeData.previewShifted)
   const previewAdopt = Boolean(nodeData.previewAdopt)
   const previewGhost = Boolean(nodeData.previewGhost)
-  const widthClass = isRoot ? 'w-[174px]' : isLeaf ? 'w-[132px]' : 'w-[156px]'
+  const isPrimaryBranch = !isRoot && depth === 1
 
   return (
     <div
       onDoubleClick={handleDoubleClick}
-      className={`group relative ${widthClass} transition-all duration-150 ${nodeData.dropHighlight ? 'scale-[1.02]' : ''} ${previewShifted ? 'translate-y-1' : ''} ${previewGhost ? 'opacity-82' : ''}`}
+      className={`group relative transition-[opacity,transform] duration-100 ${nodeData.dropHighlight ? 'scale-[1.01]' : ''} ${previewShifted ? 'translate-y-1' : ''} ${previewGhost ? 'opacity-82' : ''}`}
+      style={{ width: nodeSize.width }}
     >
       <Handle type="target" position={Position.Left} className="!h-2 !w-2 !border-0 !bg-transparent !opacity-0" />
 
@@ -116,43 +121,65 @@ function MindMapNodeCard({ data, id }: NodeProps) {
           onChange={handleInput}
           onKeyDown={handleKeyDown}
           onBlur={commitEdit}
-          className="min-h-[42px] w-full resize-none rounded-xl border border-primary/30 bg-white px-2.5 py-2 text-sm text-slate-900 outline-none ring-0"
+          className="min-h-[42px] w-full resize-none rounded-lg border border-zinc-300 bg-white px-2.5 py-2 text-sm text-zinc-950 outline-none ring-0"
+          style={{ minHeight: nodeSize.height }}
           rows={1}
         />
       ) : (
         isRoot ? (
-          <div className={`flex min-h-[54px] items-center rounded-[16px] px-4 py-2 shadow-[0_14px_36px_rgba(201,120,89,0.22)] transition-all ${nodeData.selected ? 'ring-4 ring-[#c97859]/15' : ''} ${previewAdopt ? 'ring-4 ring-blue-200' : ''}`} style={{ backgroundColor: '#c97859' }}>
+          <div
+            className={`flex items-center rounded-lg px-4 py-2 shadow-[0_18px_34px_rgba(24,24,27,0.28)] transition-[box-shadow] ${nodeData.selected ? 'ring-4 ring-zinc-950/15' : ''} ${previewAdopt ? 'ring-4 ring-[#2563eb]/20' : ''}`}
+            style={{ backgroundColor: '#18181b', minHeight: nodeSize.height }}
+          >
             <button
               type="button"
               onClick={startEdit}
-              className="w-full break-words whitespace-pre-wrap text-center text-[15px] font-semibold leading-5 text-white"
+              className="w-full break-words whitespace-pre-wrap pr-8 text-center text-[15px] font-semibold leading-5 text-white"
             >
               {nodeData.label || '未命名主题'}
             </button>
           </div>
         ) : (
-          <div className={`flex min-h-[52px] flex-col justify-center rounded-xl px-2 py-1.5 transition-colors ${nodeData.selected ? 'bg-slate-900/[0.04]' : 'hover:bg-slate-900/[0.025]'} ${previewAdopt ? 'bg-blue-50/80 ring-1 ring-blue-200' : ''}`}>
+          <div
+            className={`flex flex-col justify-center rounded-lg border px-2 py-1.5 transition-colors ${
+              isPrimaryBranch
+                ? 'shadow-[0_16px_30px_rgba(24,24,27,0.18)]'
+                : 'border-zinc-200 bg-white shadow-[0_12px_22px_rgba(24,24,27,0.08)]'
+            } ${nodeData.selected ? 'ring-2 ring-zinc-950/15' : isPrimaryBranch ? '' : 'hover:bg-zinc-50'} ${previewAdopt ? 'ring-1 ring-[#2563eb]/30' : ''}`}
+            style={{
+              minHeight: nodeSize.height,
+              ...(isPrimaryBranch ? { backgroundColor: branchColor, borderColor: branchColor } : {}),
+            }}
+          >
             <button
               type="button"
               onClick={startEdit}
-              className={`w-full break-words whitespace-pre-wrap text-left text-slate-700 ${isLeaf ? 'text-[12px] font-medium leading-4' : 'text-[13px] font-medium leading-4'}`}
+              className={`w-full break-words whitespace-pre-wrap text-left ${
+                isPrimaryBranch ? 'text-white' : 'text-zinc-950'
+              } ${isLeaf ? 'text-[12px] font-medium leading-4' : 'text-[13px] font-semibold leading-4'} pr-8`}
             >
               {nodeData.label || '未命名节点'}
             </button>
-            <div className="mt-1 h-[2px] rounded-full" style={{ backgroundColor: branchColor, width: isLeaf ? '48px' : '68px' }} />
+            <div
+              className="mt-1 h-[2px] rounded-full"
+              style={{
+                backgroundColor: isPrimaryBranch ? 'rgba(255,255,255,0.72)' : branchColor,
+                width: isLeaf ? '48px' : '68px',
+              }}
+            />
             {nodeData.type === 'chapter' && nodeData.metadata?.palace_count !== undefined && !isLeaf ? (
-              <div className="mt-0.5 text-[10px] leading-3 text-slate-400">
+              <div className={`mt-0.5 text-[10px] leading-3 ${isPrimaryBranch ? 'text-white/80' : 'text-zinc-500'}`}>
                 {Number(nodeData.metadata.palace_count)} 宫殿
               </div>
             ) : null}
-            <div className="pointer-events-none mt-0.5 truncate text-[9px] uppercase tracking-[0.16em] text-slate-300">
+            <div className={`pointer-events-none mt-0.5 truncate text-[9px] uppercase tracking-[0.16em] ${isPrimaryBranch ? 'text-white/55' : 'text-zinc-400'}`}>
               L{depth + 1}
             </div>
           </div>
         )
       )}
 
-      <div className={`absolute flex gap-1 opacity-0 transition-opacity group-hover:opacity-100 ${isRoot ? '-right-2 -top-2' : '-right-2 -top-1'}`}>
+      <div className="absolute right-1 top-1 z-10 flex gap-1 opacity-0 transition-opacity group-hover:opacity-100">
         <button
           type="button"
           onClick={(e) => {

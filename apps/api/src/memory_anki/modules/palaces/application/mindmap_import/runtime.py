@@ -63,7 +63,7 @@ def prepare_batch_image_items(
     runtime: DashscopeImportRuntime,
     image_items: list[tuple[bytes, str | None]],
     structure_image_index: int | None,
-) -> tuple[list[tuple[bytes, str | None]], int]:
+) -> tuple[list[tuple[bytes, str | None]], int | None]:
     if not runtime.api_key:
         raise MindMapImportError("未配置 DASHSCOPE_API_KEY，无法调用图片转脑图模型。")
     if not image_items:
@@ -82,7 +82,9 @@ def prepare_batch_image_items(
     if total_bytes > MAX_IMAGE_BYTES * 6:
         raise MindMapImportError("本次上传图片总大小过大，请减少图片数量或压缩后重试。")
 
-    resolved_structure_index = structure_image_index if structure_image_index is not None else 0
+    resolved_structure_index = structure_image_index if structure_image_index is not None else None
+    if resolved_structure_index is None:
+        return normalized_items, None
     if resolved_structure_index < 0 or resolved_structure_index >= len(normalized_items):
         raise MindMapImportError("结构图索引无效，请重新选择结构图后再试。")
     return normalized_items, resolved_structure_index
@@ -97,7 +99,12 @@ def call_dashscope_json(
     disable_rebalance: bool = False,
     external_log_context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    resolved_prompt = prompt or ai_prompts.render_prompt("ai_prompt_import_image_mindmap", {})
+    resolved_prompt = prompt or ai_prompts.build_import_pdf_direct_prompt(
+        range_prompt="",
+        page_numbers=None,
+        import_options=PdfImportOptions(),
+        extracted_text=None,
+    )
     content_text = call_dashscope(
         runtime=runtime,
         image_bytes=image_bytes,
@@ -178,9 +185,9 @@ def call_dashscope_batch_json(
         external_log_context=external_log_context,
     )
     source_tree = parse_source_tree_json(content_text)
-    is_pdf_merge = page_numbers is not None or import_options is not None or extracted_text is not None
-    if is_pdf_merge:
-        return normalize_pdf_source_tree(source_tree)
+    is_structured_merge = structure_tree is not None
+    if is_structured_merge:
+        return normalize_source_tree(source_tree, disable_rebalance=True)
     if disable_rebalance:
         return normalize_source_tree(source_tree, disable_rebalance=True)
     return normalize_source_tree(source_tree, disable_rebalance=False)
@@ -210,7 +217,7 @@ def call_dashscope_pdf_json(
         external_log_context=external_log_context,
     )
     source_tree = parse_source_tree_json(content_text)
-    return normalize_pdf_source_tree(source_tree)
+    return normalize_source_tree(source_tree, disable_rebalance=True)
 
 
 def stream_call_dashscope_json(
@@ -222,7 +229,12 @@ def stream_call_dashscope_json(
     disable_rebalance: bool = False,
     external_log_context: dict[str, Any] | None = None,
 ) -> Generator[str, None, dict[str, Any]]:
-    resolved_prompt = prompt or ai_prompts.render_prompt("ai_prompt_import_image_mindmap", {})
+    resolved_prompt = prompt or ai_prompts.build_import_pdf_direct_prompt(
+        range_prompt="",
+        page_numbers=None,
+        import_options=PdfImportOptions(),
+        extracted_text=None,
+    )
     content_text = yield from stream_call_dashscope(
         runtime=runtime,
         image_bytes=image_bytes,
@@ -287,9 +299,9 @@ def stream_call_dashscope_batch_json(
         external_log_context=external_log_context,
     )
     source_tree = parse_source_tree_json(content_text)
-    is_pdf_merge = page_numbers is not None or import_options is not None or extracted_text is not None
-    if is_pdf_merge:
-        return normalize_pdf_source_tree(source_tree)
+    is_structured_merge = structure_tree is not None
+    if is_structured_merge:
+        return normalize_source_tree(source_tree, disable_rebalance=True)
     if disable_rebalance:
         return normalize_source_tree(source_tree, disable_rebalance=True)
     return normalize_source_tree(source_tree, disable_rebalance=False)
@@ -319,7 +331,7 @@ def stream_call_dashscope_pdf_json(
         external_log_context=external_log_context,
     )
     source_tree = parse_source_tree_json(content_text)
-    return normalize_pdf_source_tree(source_tree)
+    return normalize_source_tree(source_tree, disable_rebalance=True)
 
 
 def call_dashscope(
@@ -560,12 +572,10 @@ def _build_batch_prompt(
     import_options: PdfImportOptions | None,
     extracted_text: str | None,
 ) -> str:
-    if page_numbers is not None or import_options is not None or extracted_text:
-        return ai_prompts.build_import_pdf_merge_prompt(
-            structure_tree=structure_tree,
-            range_prompt=range_prompt,
-            page_numbers=page_numbers,
-            import_options=import_options or PdfImportOptions(),
-            extracted_text=extracted_text,
-        )
-    return ai_prompts.build_import_batch_prompt(structure_tree=structure_tree)
+    return ai_prompts.build_import_pdf_merge_prompt(
+        structure_tree=structure_tree,
+        range_prompt=range_prompt,
+        page_numbers=page_numbers,
+        import_options=import_options or PdfImportOptions(),
+        extracted_text=extracted_text,
+    )

@@ -1,10 +1,9 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { RevealState } from '@/entities/session/model'
 import { useRevealSession } from '@/entities/review/model/useRevealSession'
 import {
   allNodesRevealed,
   buildInitialRevealState,
-  type ReviewFlowSnapshot,
 } from '@/features/review/model/review-flow-tree'
 import {
   clearPracticeSessionProgressApi,
@@ -50,6 +49,11 @@ export function usePalacePracticeMode({
     visibleEditorState,
   } = reveal
   const [practiceSnapshotLoaded, setPracticeSnapshotLoaded] = useState(false)
+  const loadedPracticeSnapshotKeyRef = useRef<string | null>(null)
+  const practiceSnapshotKey = useMemo(
+    () => (palaceId && editorState ? `${palaceId}:${docFingerprint}` : null),
+    [docFingerprint, editorState, palaceId],
+  )
   const feedback = useReviewFeedback({
     root,
     revealMap,
@@ -60,11 +64,13 @@ export function usePalacePracticeMode({
   })
 
   useEffect(() => {
+    loadedPracticeSnapshotKeyRef.current = null
     setPracticeSnapshotLoaded(false)
-  }, [docFingerprint])
+  }, [practiceSnapshotKey])
 
   useEffect(() => {
-    if (!palaceId || !editorState) return
+    if (!palaceId || !editorState || !practiceSnapshotKey) return
+    if (loadedPracticeSnapshotKeyRef.current === practiceSnapshotKey) return
     let cancelled = false
 
     const loadPracticeSnapshot = async () => {
@@ -84,6 +90,7 @@ export function usePalacePracticeMode({
         }
       } finally {
         if (!cancelled) {
+          loadedPracticeSnapshotKeyRef.current = practiceSnapshotKey
           setPracticeSnapshotLoaded(true)
         }
       }
@@ -93,7 +100,7 @@ export function usePalacePracticeMode({
     return () => {
       cancelled = true
     }
-  }, [editorState, palaceId, reset, root, setRedNodeIds, setRevealMap])
+  }, [editorState, palaceId, practiceSnapshotKey, reset, root, setRedNodeIds, setRevealMap])
 
   useEffect(() => {
     if (!palaceId || !practiceSnapshotLoaded) return

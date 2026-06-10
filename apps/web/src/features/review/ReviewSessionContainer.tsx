@@ -187,6 +187,7 @@ export function ReviewSessionContainer({
       editor_config: response.editor_config,
       editor_local_config: response.editor_local_config,
       lang: response.lang,
+      editor_fingerprint: response.editor_fingerprint,
     }),
     onSaveError: async (nextError, pendingState) => {
       if (!activePalaceId || !nextError.message.includes('危险结构变更')) return false
@@ -374,7 +375,11 @@ export function ReviewSessionContainer({
             })
           }}
           onToggleFocusNode={async (nodeUid) => {
-            await togglePalaceFocusNodeApi(palace.id, nodeUid)
+            await togglePalaceFocusNodeApi(
+              palace.id,
+              nodeUid,
+              !(palace.focus_node_uids ?? []).includes(nodeUid),
+            )
           }}
           onComplete={submitCompletion}
         />

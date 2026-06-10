@@ -135,7 +135,7 @@ export function PalaceImportSourceConfigPanel({
                   <div>
                     <div className="text-sm font-medium">图片队列</div>
                     <div className="text-xs text-muted-foreground">
-                      默认第 1 张为结构图，你也可以手动切换。删除或排序后需要重新点开始识别。
+                      可选指定 1 张结构图走“结构补全”；不指定时会把全部图片按“直接生成”处理。删除或排序后需要重新点开始识别。
                     </div>
                   </div>
                   <Button
@@ -151,7 +151,7 @@ export function PalaceImportSourceConfigPanel({
                   <div className="max-h-[280px] overflow-y-auto pr-1">
                     <div className="space-y-2">
                       {batchImages.map((item, index) => {
-                        const isStructure = (structureImageId || batchImages[0]?.id || null) === item.id
+                        const isStructure = structureImageId === item.id
                         return (
                           <div
                             key={item.id}
@@ -182,7 +182,7 @@ export function PalaceImportSourceConfigPanel({
                                 onClick={() => onBatchSetStructureImage(item.id)}
                                 disabled={loading || applying || undoing}
                               >
-                                {isStructure ? '当前结构图' : '设为结构图'}
+                                {isStructure ? '取消结构图' : '设为结构图'}
                               </Button>
                               <Button
                                 type="button"
@@ -222,7 +222,7 @@ export function PalaceImportSourceConfigPanel({
                   </div>
                 ) : (
                   <div className="flex h-24 items-center justify-center rounded-2xl border border-dashed border-border/80 bg-background/50 text-sm text-muted-foreground">
-                    还没有图片，先上传结构图和正文图。
+                    还没有图片，先上传要识别的图片。
                   </div>
                 )}
               </div>
@@ -313,7 +313,7 @@ export function PalaceImportSourceConfigPanel({
                     >
                       <div className="text-sm font-medium">按范围直接生成</div>
                       <div className="mt-1 text-xs text-muted-foreground">
-                        默认模式。会综合所选页的正文与版面关系，主动挖出父子/并列结构，并尽量贴原文短语生成脑图草稿。
+                        默认模式。会综合所选页的正文与版面关系，生成完整脑图草稿，并优先保持 PDF 原文节点粒度。
                       </div>
                     </button>
                     <button
@@ -328,7 +328,7 @@ export function PalaceImportSourceConfigPanel({
                     >
                       <div className="text-sm font-medium">结构页补全模式</div>
                       <div className="mt-1 text-xs text-muted-foreground">
-                        高级模式。先识别一页结构，再用其他页补全文本内容，同样会主动拆层级，但不会额外总结教材。
+                        高级模式。先识别一页结构，再用其他页补全文本内容，优先保持 PDF 原文已有层级。
                       </div>
                     </button>
                   </div>
@@ -362,7 +362,7 @@ export function PalaceImportSourceConfigPanel({
                           onPdfImportOptionChange('semantic_split_long_paragraphs', event.target.checked)
                         }
                       />
-                      <span>按原文关系自动拆成父子/并列卡片</span>
+                      <span>长段和明显列表才自动分点</span>
                     </label>
                     <label className="flex items-center gap-2">
                       <input
@@ -377,8 +377,8 @@ export function PalaceImportSourceConfigPanel({
                   </div>
                   <div className="mt-2 text-xs text-muted-foreground">
                     {isStructuredPdfMode
-                      ? '将先识别结构页，再根据正文页补全脑图草稿；默认会主动识别定义句、分类句、目的句里的层级关系。'
-                      : '将直接围绕所选页范围生成脑图草稿；默认会主动识别定义句、分类句、目的句里的层级关系。'}
+                      ? '将先识别结构页，再根据正文页补全脑图草稿；短定义和一两行节点保持原文粒度。'
+                      : '将直接围绕所选页范围生成脑图草稿；短定义和一两行节点保持原文粒度。'}
                   </div>
                 </div>
               ) : null}
@@ -457,7 +457,7 @@ export function PalaceImportSourceConfigPanel({
               ? '适合先指定结构页，再基于 PDF 正文页补全脑图草稿，可搭配自然语言提示聚焦本次内容。'
               : '默认按所选页范围直接生成脑图草稿，会综合全部选中页的正文与版面信息，不只是识别第一页脑图。'
           ) : sourceKind === 'image-batch' ? (
-            '适合 1 张章节结构图 + 多张教材正文图，先整理顺序，再手动开始识别。'
+            '适合多张教材图统一转脑图；可选指定 1 张结构图走结构补全，不指定则直接生成。'
           ) : (
             '支持教材结构图、手写整理图、打印版脑图截图。'
           )}
@@ -494,7 +494,10 @@ export function PalaceImportSourceConfigPanel({
 
         {sourceKind === 'image-batch' && batchStatus === 'success' && batchMeta ? (
           <div className="text-xs text-muted-foreground">
-            本次识别使用了 {batchMeta.imageCount} 张图片，结构图为第 {batchMeta.structureImageIndex + 1} 张。
+            本次识别使用了 {batchMeta.imageCount} 张图片，
+            {batchMeta.structureImageIndex != null
+              ? `按结构补全处理，结构图为第 ${batchMeta.structureImageIndex + 1} 张。`
+              : '按直接生成处理。'}
           </div>
         ) : null}
 

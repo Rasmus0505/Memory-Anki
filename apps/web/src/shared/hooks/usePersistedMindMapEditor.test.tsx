@@ -20,6 +20,11 @@ function createDeferred<T>() {
   return { promise, resolve }
 }
 
+async function flushAsyncWork() {
+  await Promise.resolve()
+  await Promise.resolve()
+}
+
 function buildResponse(id: number, title: string): TestResponse {
   return {
     entity: { id, title },
@@ -32,6 +37,7 @@ function buildResponse(id: number, title: string): TestResponse {
     editor_config: {},
     editor_local_config: {},
     lang: 'zh',
+    editor_fingerprint: `fingerprint-${id}-${title}`,
   }
 }
 
@@ -50,6 +56,7 @@ function buildResponseWithChildren(id: number, title: string, childCount: number
     editor_config: {},
     editor_local_config: {},
     lang: 'zh',
+    editor_fingerprint: `fingerprint-${id}-${title}-${childCount}`,
   }
 }
 
@@ -72,6 +79,7 @@ function renderPersistedEditorHook(
           editor_config: response.editor_config,
           editor_local_config: response.editor_local_config,
           lang: response.lang,
+          editor_fingerprint: response.editor_fingerprint,
         }),
       }),
     {
@@ -82,6 +90,7 @@ function renderPersistedEditorHook(
 
 describe('usePersistedMindMapEditor', () => {
   afterEach(() => {
+    vi.useRealTimers()
     vi.restoreAllMocks()
   })
 
@@ -228,6 +237,7 @@ describe('usePersistedMindMapEditor', () => {
           editor_config: response.editor_config,
           editor_local_config: response.editor_local_config,
           lang: response.lang,
+          editor_fingerprint: response.editor_fingerprint,
         }),
         beforeAutoSave: (nextState, currentState) => {
           const nextChildren =
@@ -249,6 +259,126 @@ describe('usePersistedMindMapEditor', () => {
 
     expect(result.current.error).toBe('blocked stale writeback')
     expect(saver).not.toHaveBeenCalled()
+    vi.useRealTimers()
+  })
+
+  it('sends the last server editor fingerprint with autosave payloads', async () => {
+    const saver = vi.fn(async (id: number, data: MindMapEditorState & { expected_editor_fingerprint?: string | null }) => ({
+      entity: { id, title: `saved-${id}` },
+      ...data,
+      editor_fingerprint: data.editor_doc && (data.editor_doc as { root?: { data?: { text?: string } } }).root?.data?.text === '第二次'
+        ? 'fingerprint-after-second-save'
+        : 'fingerprint-after-first-save',
+    }))
+
+    const { result } = renderHook(() =>
+      usePersistedMindMapEditor<TestResponse, TestMeta>({
+        entityId: 7,
+        fetcher: vi.fn(async () => ({
+          ...buildResponse(7, '初始版本'),
+          editor_fingerprint: 'fingerprint-initial',
+        })),
+        saver,
+        selectMeta: (response) => response.entity,
+        selectEditorState: (response) => ({
+          editor_doc: response.editor_doc,
+          editor_config: response.editor_config,
+          editor_local_config: response.editor_local_config,
+          lang: response.lang,
+          editor_fingerprint: response.editor_fingerprint,
+        }),
+      }),
+    )
+
+    await waitFor(() => {
+      expect(result.current.editorState?.editor_fingerprint).toBe('fingerprint-initial')
+    })
+
+    vi.useFakeTimers()
+    act(() => {
+      result.current.setEditorState(buildResponse(7, '第一次'))
+      vi.advanceTimersByTime(450)
+    })
+
+    await act(async () => {
+      await flushAsyncWork()
+    })
+    expect(saver).toHaveBeenCalledTimes(1)
+    expect(saver.mock.calls[0]?.[1].expected_editor_fingerprint).toBe('fingerprint-initial')
+
+    act(() => {
+      result.current.setEditorState(buildResponse(7, '第二次'))
+      vi.advanceTimersByTime(450)
+    })
+
+    await act(async () => {
+      await flushAsyncWork()
+    })
+    expect(saver).toHaveBeenCalledTimes(2)
+    expect(saver.mock.calls[1]?.[1].expected_editor_fingerprint).toBe('fingerprint-after-first-save')
+    vi.useRealTimers()
+  })
+
+  it('keeps failed autosave dirty so a later flush can still persist it', async () => {
+    const saver = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('network down'))
+      .mockRejectedValueOnce(new Error('network down'))
+      .mockRejectedValueOnce(new Error('network down'))
+      .mockImplementation(async (id: number, data: MindMapEditorState) => ({
+        entity: { id, title: `saved-${id}` },
+        ...data,
+        editor_fingerprint: 'fingerprint-after-recovery',
+      }))
+
+    const { result } = renderHook(() =>
+      usePersistedMindMapEditor<TestResponse, TestMeta>({
+        entityId: 7,
+        fetcher: vi.fn(async () => buildResponse(7, '初始版本')),
+        saver,
+        selectMeta: (response) => response.entity,
+        selectEditorState: (response) => ({
+          editor_doc: response.editor_doc,
+          editor_config: response.editor_config,
+          editor_local_config: response.editor_local_config,
+          lang: response.lang,
+          editor_fingerprint: response.editor_fingerprint,
+        }),
+      }),
+    )
+
+    await waitFor(() => {
+      expect(result.current.editorState).not.toBeNull()
+    })
+
+    vi.useFakeTimers()
+    act(() => {
+      result.current.setEditorState(buildResponse(7, '离线编辑'))
+      vi.advanceTimersByTime(450)
+    })
+    await act(async () => {
+      await flushAsyncWork()
+    })
+    expect(saver).toHaveBeenCalledTimes(1)
+
+    await act(async () => {
+      vi.advanceTimersByTime(500)
+      await flushAsyncWork()
+    })
+    expect(saver).toHaveBeenCalledTimes(2)
+
+    await act(async () => {
+      vi.advanceTimersByTime(1000)
+      await flushAsyncWork()
+    })
+    expect(saver).toHaveBeenCalledTimes(3)
+
+    await act(async () => {
+      await result.current.flushSave()
+    })
+
+    expect(saver).toHaveBeenCalledTimes(4)
+    expect(result.current.error).toBeNull()
     vi.useRealTimers()
   })
 })

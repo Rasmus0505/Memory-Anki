@@ -30,8 +30,8 @@ FULL_BACKUPS_DIR = BACKUPS_DIR / "full"
 RESCUE_BACKUPS_DIR = BACKUPS_DIR / "rescue"
 DB_PATH = DATA_DIR / "memory_palace.db"
 MIGRATION_STATE_PATH = APP_HOME / "migration-state.json"
-SWITCHER_STATE_PATH = APP_HOME / "switcher-state.json"
 DATABASE_URL = f"sqlite:///{DB_PATH}"
+WEB_DIST_DIR = Path(os.environ["MEMORY_ANKI_WEB_DIST"]) if os.environ.get("MEMORY_ANKI_WEB_DIST") else None
 
 DASHSCOPE_API_KEY = os.environ.get("DASHSCOPE_API_KEY")
 DASHSCOPE_BASE_URL = os.environ.get("DASHSCOPE_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1")

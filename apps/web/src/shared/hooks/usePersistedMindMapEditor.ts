@@ -4,11 +4,15 @@ import type { MindMapEditorState } from '@/shared/api/contracts'
 interface PersistedMindMapOptions<TResponse, TMeta> {
   entityId: number | null
   fetcher: (id: number) => Promise<TResponse>
-  saver: (id: number, data: MindMapEditorState) => Promise<TResponse>
+  saver: (id: number, data: PersistedMindMapSavePayload) => Promise<TResponse>
   selectMeta: (response: TResponse) => TMeta
   selectEditorState: (response: TResponse) => MindMapEditorState
   onSaveError?: (error: Error, pendingState: MindMapEditorState) => Promise<boolean> | boolean
   beforeAutoSave?: (nextState: MindMapEditorState, currentState: MindMapEditorState | null) => string | null
+}
+
+type PersistedMindMapSavePayload = MindMapEditorState & {
+  expected_editor_fingerprint?: string | null
 }
 
 interface ExternalStateGuard {
@@ -27,6 +31,16 @@ function stableSerialize(value: unknown) {
   } catch {
     return ''
   }
+}
+
+function getEditorFingerprint(state: MindMapEditorState | null | undefined) {
+  return typeof state?.editor_fingerprint === 'string' && state.editor_fingerprint.trim()
+    ? state.editor_fingerprint.trim()
+    : ''
+}
+
+function isConflictError(error: Error) {
+  return /冲突|fingerprint|stale|服务端已有更新/.test(error.message)
 }
 
 export function usePersistedMindMapEditor<TResponse, TMeta>({
@@ -59,6 +73,7 @@ export function usePersistedMindMapEditor<TResponse, TMeta>({
   const isSavingRef = useRef(false)
   const previousEntityIdRef = useRef<number | null>(entityId)
   const retryCountRef = useRef(0)
+  const lastSavedEditorFingerprintRef = useRef('')
   const isMountedRef = useRef(false)
   const loadRequestIdRef = useRef(0)
   const queueRetryPersistRef = useRef<() => void>(() => {})
@@ -129,6 +144,7 @@ export function usePersistedMindMapEditor<TResponse, TMeta>({
       retryCountRef.current = 0
       const nextFingerprint = stableSerialize(nextState)
       lastStateFingerprintRef.current = nextFingerprint
+      lastSavedEditorFingerprintRef.current = getEditorFingerprint(nextState)
       if (options?.protectFromStaleLoads) {
         armExternalStateGuard(nextState, options.releaseAfterMs)
       }
@@ -152,13 +168,18 @@ export function usePersistedMindMapEditor<TResponse, TMeta>({
         setError(null)
       }
       try {
-        const response = await saverRef.current(saveEntityId, snapshot)
+        const savePayload: PersistedMindMapSavePayload = {
+          ...snapshot,
+          expected_editor_fingerprint: lastSavedEditorFingerprintRef.current || null,
+        }
+        const response = await saverRef.current(saveEntityId, savePayload)
         if (!isMountedRef.current || entityIdRef.current !== saveEntityId) return
         const nextEditorState = selectEditorStateRef.current(response)
         if (shouldIgnoreIncomingState(nextEditorState)) {
           return
         }
         retryCountRef.current = 0
+        lastSavedEditorFingerprintRef.current = getEditorFingerprint(nextEditorState)
         lastStateFingerprintRef.current = stableSerialize(nextEditorState)
         setMeta(selectMetaRef.current(response))
         if (changeVersionRef.current !== saveVersion) {
@@ -177,19 +198,25 @@ export function usePersistedMindMapEditor<TResponse, TMeta>({
           handled = await onSaveErrorRef.current(nextError, snapshot)
         }
         retryCountRef.current += 1
-        dirtyRef.current = !handled && retryCountRef.current < 3
+        dirtyRef.current = !handled
         if (isMountedRef.current) {
-          setError(nextError.message)
+          setError(
+            handled
+              ? null
+              : isConflictError(nextError)
+                ? nextError.message
+                : `本地已保存，待同步：${nextError.message}`,
+          )
         }
       } finally {
         if (isMountedRef.current) {
           setIsSaving(false)
         }
-        if (dirtyRef.current) {
+        if (dirtyRef.current && retryCountRef.current < 3) {
           clearTimer()
           timerRef.current = window.setTimeout(() => {
             queueRetryPersistRef.current()
-          }, 400)
+          }, 500 * retryCountRef.current)
         }
       }
     },
@@ -213,6 +240,7 @@ export function usePersistedMindMapEditor<TResponse, TMeta>({
       setMeta(null)
       setEditorState(null)
       lastStateFingerprintRef.current = ''
+      lastSavedEditorFingerprintRef.current = ''
       return
     }
     if (isMountedRef.current) {
@@ -229,6 +257,7 @@ export function usePersistedMindMapEditor<TResponse, TMeta>({
       changeVersionRef.current = 0
       retryCountRef.current = 0
       dirtyRef.current = false
+      lastSavedEditorFingerprintRef.current = getEditorFingerprint(nextEditorState)
       lastStateFingerprintRef.current = stableSerialize(nextEditorState)
       setMeta(selectMetaRef.current(response))
       setEditorState(nextEditorState)

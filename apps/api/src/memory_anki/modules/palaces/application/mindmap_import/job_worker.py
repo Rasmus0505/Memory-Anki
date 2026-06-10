@@ -212,6 +212,7 @@ def run_image_batch_job(
     import_jobs_dir: Path,
     stream_call_dashscope_json,
     stream_call_dashscope_batch_json,
+    stream_call_dashscope_pdf_json,
 ) -> None:
     image_items = load_batch_image_items(
         artifact_dir,
@@ -224,11 +225,12 @@ def run_image_batch_job(
         if path.is_file()
     ]
     artifact_refs = _build_input_artifact_refs(input_paths)
-    structure_index = int(source_meta.get("structure_image_index") or 0)
+    raw_structure_index = source_meta.get("structure_image_index")
+    structure_index = int(raw_structure_index) if raw_structure_index is not None else None
     fallback_title = str(source_meta.get("fallback_title") or "未命名宫殿")
 
-    structure_path = artifact_dir / "structure_tree.json"
-    if not structure_path.exists():
+    result_path = artifact_dir / "result.json"
+    if not result_path.exists():
         _set_progress_step(
             session,
             job_id=job.id,
@@ -237,69 +239,108 @@ def run_image_batch_job(
         )
         if pause_if_requested(session, job.id, import_jobs_dir=import_jobs_dir):
             return
-        _set_progress_step(
-            session,
-            job_id=job.id,
-            import_jobs_dir=import_jobs_dir,
-            step=step_protocol.extract_batch_structure_step(),
-            preview_text="",
-        )
-        structure_bytes, structure_filename = image_items[structure_index]
-        structure_tree = consume_stream_result(
-            session,
-            job_id=job.id,
-            artifact_dir=artifact_dir,
-            generator=stream_call_dashscope_json(
-                image_bytes=structure_bytes,
-                filename=structure_filename,
-                channel="raw_model",
-                external_log_context={
-                    "feature": "多图合成脑图",
-                    "operation": "batch_structure",
-                    "job_id": job.id,
-                    "artifact_refs": artifact_refs,
-                },
-            ),
-            allow_preview_text=True,
-            import_jobs_dir=import_jobs_dir,
-        )
-        write_json(structure_path, structure_tree)
-        update_job_usage(session, job.id, stage_key="structure", increment=1)
-        set_job_stage(session, job.id, stage=JOB_STAGE_STRUCTURE)
-        if pause_if_requested(session, job.id, import_jobs_dir=import_jobs_dir):
-            return
-    else:
-        structure_tree = read_json(structure_path)
 
-    result_path = artifact_dir / "result.json"
-    if not result_path.exists():
-        _set_progress_step(
-            session,
-            job_id=job.id,
-            import_jobs_dir=import_jobs_dir,
-            step=step_protocol.enhance_batch_with_body_step(),
-            preview_text="",
-        )
-        final_tree = consume_stream_result(
-            session,
-            job_id=job.id,
-            artifact_dir=artifact_dir,
-            generator=stream_call_dashscope_batch_json(
-                image_items=image_items,
-                structure_tree=structure_tree,
-                channel="raw_model",
-                external_log_context={
-                    "feature": "多图合成脑图",
-                    "operation": "batch_merge",
-                    "job_id": job.id,
-                    "artifact_refs": artifact_refs,
-                },
-            ),
-            allow_preview_text=True,
-            import_jobs_dir=import_jobs_dir,
-        )
-        update_job_usage(session, job.id, stage_key="merge", increment=1)
-        set_job_stage(session, job.id, stage=JOB_STAGE_MERGE)
+        structure_path = artifact_dir / "structure_tree.json"
+        if structure_index is None:
+            _set_progress_step(
+                session,
+                job_id=job.id,
+                import_jobs_dir=import_jobs_dir,
+                step=step_protocol.generate_pdf_mindmap_direct_step(),
+                preview_text="",
+            )
+            final_tree = consume_stream_result(
+                session,
+                job_id=job.id,
+                artifact_dir=artifact_dir,
+                generator=stream_call_dashscope_pdf_json(
+                    image_items=image_items,
+                    channel="raw_model",
+                    range_prompt="",
+                    page_numbers=None,
+                    disable_rebalance=True,
+                    import_options=None,
+                    extracted_text=None,
+                    external_log_context={
+                        "feature": "多图转脑图",
+                        "operation": "batch_direct_generation",
+                        "job_id": job.id,
+                        "artifact_refs": artifact_refs,
+                    },
+                ),
+                allow_preview_text=True,
+                import_jobs_dir=import_jobs_dir,
+            )
+            update_job_usage(session, job.id, stage_key="merge", increment=1)
+            set_job_stage(session, job.id, stage=JOB_STAGE_MERGE)
+        else:
+            if not structure_path.exists():
+                _set_progress_step(
+                    session,
+                    job_id=job.id,
+                    import_jobs_dir=import_jobs_dir,
+                    step=step_protocol.extract_batch_structure_step(),
+                    preview_text="",
+                )
+                structure_bytes, structure_filename = image_items[structure_index]
+                structure_tree = consume_stream_result(
+                    session,
+                    job_id=job.id,
+                    artifact_dir=artifact_dir,
+                    generator=stream_call_dashscope_json(
+                        image_bytes=structure_bytes,
+                        filename=structure_filename,
+                        channel="raw_model",
+                        disable_rebalance=True,
+                        external_log_context={
+                            "feature": "多图转脑图",
+                            "operation": "batch_structure",
+                            "job_id": job.id,
+                            "artifact_refs": artifact_refs,
+                        },
+                    ),
+                    allow_preview_text=True,
+                    import_jobs_dir=import_jobs_dir,
+                )
+                write_json(structure_path, structure_tree)
+                update_job_usage(session, job.id, stage_key="structure", increment=1)
+                set_job_stage(session, job.id, stage=JOB_STAGE_STRUCTURE)
+                if pause_if_requested(session, job.id, import_jobs_dir=import_jobs_dir):
+                    return
+            else:
+                structure_tree = read_json(structure_path)
+
+            _set_progress_step(
+                session,
+                job_id=job.id,
+                import_jobs_dir=import_jobs_dir,
+                step=step_protocol.enhance_batch_with_body_step(),
+                preview_text="",
+            )
+            final_tree = consume_stream_result(
+                session,
+                job_id=job.id,
+                artifact_dir=artifact_dir,
+                generator=stream_call_dashscope_batch_json(
+                    image_items=image_items,
+                    structure_tree=structure_tree,
+                    channel="raw_model",
+                    range_prompt="",
+                    page_numbers=None,
+                    disable_rebalance=True,
+                    external_log_context={
+                        "feature": "多图转脑图",
+                        "operation": "batch_structured_merge",
+                        "job_id": job.id,
+                        "artifact_refs": artifact_refs,
+                    },
+                ),
+                allow_preview_text=True,
+                import_jobs_dir=import_jobs_dir,
+            )
+            update_job_usage(session, job.id, stage_key="merge", increment=1)
+            set_job_stage(session, job.id, stage=JOB_STAGE_MERGE)
+
         if pause_if_requested(session, job.id, import_jobs_dir=import_jobs_dir):
             return
         _set_progress_step(

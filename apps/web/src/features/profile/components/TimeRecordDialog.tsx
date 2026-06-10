@@ -132,14 +132,15 @@ export function TimeRecordDialog({
             </label>
 
             <label className="space-y-2">
-              <Label>有效时长（秒）</Label>
+              <Label>有效时长（分钟）</Label>
               <Input
                 type="number"
                 min="0"
-                value={form.effectiveSeconds}
+                step="0.01"
+                value={form.effectiveMinutes}
                 disabled={isSubmitting}
                 onChange={(event) =>
-                  onChange({ effectiveSeconds: event.target.value })
+                  onChange({ effectiveMinutes: event.target.value })
                 }
               />
             </label>

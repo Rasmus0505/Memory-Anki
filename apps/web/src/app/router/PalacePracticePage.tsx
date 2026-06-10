@@ -146,7 +146,11 @@ export default function PalacePractice() {
           setHasResumeProgress(false)
         }}
         onToggleFocusNode={async (nodeUid) => {
-          await togglePalaceFocusNodeApi(palace.id, nodeUid)
+          await togglePalaceFocusNodeApi(
+            palace.id,
+            nodeUid,
+            !(palace.focus_node_uids ?? []).includes(nodeUid),
+          )
         }}
       />
     </div>

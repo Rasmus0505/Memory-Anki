@@ -18,6 +18,7 @@ interface MindMapCanvasViewportProps {
   height: number
   nodes: Node[]
   edges: Edge[]
+  isDraggingNode: boolean
   onNodesChange: OnNodesChange<Node>
   onEdgesChange: OnEdgesChange<Edge>
   onNodeClick: (event: React.MouseEvent, node: Node) => void
@@ -35,6 +36,7 @@ export function MindMapCanvasViewport({
   height,
   nodes,
   edges,
+  isDraggingNode,
   onNodesChange,
   onEdgesChange,
   onNodeClick,
@@ -73,26 +75,28 @@ export function MindMapCanvasViewport({
         <Controls
           showZoom={false}
           showInteractive={false}
-          className="!left-4 !top-4 !bottom-auto !border !border-slate-200/80 !bg-white/92 !shadow-lg"
+          className="!left-4 !top-4 !bottom-auto !rounded-lg !border !border-zinc-200 !bg-white/92 !shadow-lg"
         />
-        <MiniMap
-          pannable
-          zoomable
-          nodeStrokeWidth={2.5}
-          nodeColor={(node) => {
-            const data = node.data as {
-              metadata?: { branchColor?: string; layoutRole?: LayoutRole }
-            }
-            if (data?.metadata?.layoutRole === 'root') return '#c97859'
-            return data?.metadata?.branchColor ?? '#89a89e'
-          }}
-          className="!bottom-4 !right-4 !h-[116px] !w-[190px] !overflow-hidden !rounded-2xl !border !border-slate-200/80 !bg-white/92 !shadow-lg"
-        />
+        {!isDraggingNode ? (
+          <MiniMap
+            pannable
+            zoomable
+            nodeStrokeWidth={2.5}
+            nodeColor={(node) => {
+              const data = node.data as {
+                metadata?: { branchColor?: string; layoutRole?: LayoutRole }
+              }
+              if (data?.metadata?.layoutRole === 'root') return '#18181b'
+              return data?.metadata?.branchColor ?? '#2563eb'
+            }}
+            className="!bottom-4 !right-4 !h-[116px] !w-[190px] !overflow-hidden !rounded-lg !border !border-zinc-200 !bg-white/92 !shadow-lg"
+          />
+        ) : null}
         <Background
           variant={BackgroundVariant.Dots}
           gap={20}
           size={1}
-          color="#edf1ef"
+          color="#e4e4e7"
         />
       </ReactFlow>
     </div>

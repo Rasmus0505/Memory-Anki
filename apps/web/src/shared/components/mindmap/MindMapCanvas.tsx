@@ -52,7 +52,7 @@ function MindMapCanvasInner({
   return (
     <div
       ref={state.frameRef}
-      className={`relative flex h-full min-h-[520px] min-w-0 flex-col overflow-hidden rounded-[20px] border border-slate-200/80 bg-white shadow-[0_16px_48px_rgba(15,23,42,0.06)] ${className ?? ''}`}
+      className={`relative flex h-full min-h-[520px] min-w-0 flex-col overflow-hidden rounded-[14px] border border-zinc-200 bg-zinc-50 shadow-[0_18px_44px_rgba(24,24,27,0.08)] ${className ?? ''}`}
     >
       <MindMapCanvasToolbar
         focusMode={focusMode}
@@ -74,6 +74,7 @@ function MindMapCanvasInner({
             height={state.canvasSize.height}
             nodes={state.displayNodes}
             edges={state.displayEdges}
+            isDraggingNode={state.isDraggingNode}
             onNodesChange={state.onNodesChange}
             onEdgesChange={state.onEdgesChange}
             onNodeClick={state.handleNodeClick}

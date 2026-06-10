@@ -119,16 +119,18 @@ export function buildImportJobActions({
       options.setBatchStatus('error')
       return
     }
-    const activeStructureId = structureImageId || options.batchImagesRef.current[0]?.id || null
-    const resolvedStructureIndex = Math.max(
-      0,
-      options.batchImagesRef.current.findIndex((item) => item.id === activeStructureId),
-    )
+    const resolvedStructureIndex =
+      structureImageId != null
+        ? options.batchImagesRef.current.findIndex((item) => item.id === structureImageId)
+        : -1
+    const hasStructureImage = resolvedStructureIndex >= 0
     options.setBatchStatus('loading')
     state.setImportError('')
     state.setImportReusedExistingResult(false)
     const feature = describeImportFeature('image-batch', 'mindmap')
-    const requestSummary = `鍏?${options.batchImagesRef.current.length} 寮狅紱缁撴瀯鍥惧簭鍙凤細${resolvedStructureIndex + 1}`
+    const requestSummary = hasStructureImage
+      ? `共 ${options.batchImagesRef.current.length} 张；模式：结构补全；结构图序号：${resolvedStructureIndex + 1}`
+      : `共 ${options.batchImagesRef.current.length} 张；模式：直接生成`
 
     try {
       logAiCall({
@@ -138,14 +140,14 @@ export function buildImportJobActions({
         meta: {
           entityKey: options.entityKey,
           imageCount: options.batchImagesRef.current.length,
-          structureImageIndex: resolvedStructureIndex,
+          structureImageIndex: hasStructureImage ? resolvedStructureIndex : null,
         },
       })
       const job = await createBatchImportJobApi(
         options.batchImagesRef.current.map((item) => item.file),
         {
           entityKey: options.entityKey,
-          structureImageIndex: resolvedStructureIndex,
+          structureImageIndex: hasStructureImage ? resolvedStructureIndex : undefined,
         },
       )
       state.hydrateJobResult(job, { reused: job.status === 'completed', preservePreviewUrl: true })
@@ -178,7 +180,7 @@ export function buildImportJobActions({
         error: nextError,
         meta: {
           imageCount: options.batchImagesRef.current.length,
-          structureImageIndex: resolvedStructureIndex,
+          structureImageIndex: hasStructureImage ? resolvedStructureIndex : null,
         },
       })
       state.setImportError(

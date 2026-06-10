@@ -43,6 +43,11 @@ export function createBatchSegmentReviewSessionApi(data: {
   return request<BatchSegmentReviewSessionResponse>("/segment-review/batch-session", {
     method: "POST",
     body: JSON.stringify(data),
+    persistence: {
+      resourceKey: `segment-review:batch-session:${data.segment_ids.join(',')}`,
+      description: '创建多分块复习会话',
+      replayMode: 'manual',
+    },
   })
 }
 
@@ -61,11 +66,24 @@ export function saveReviewSessionProgressApi(
   return request<{ progress: SessionProgressSnapshot }>(`/sessions/review/${id}/progress`, {
     method: "PUT",
     body: JSON.stringify(data),
+    persistence: {
+      resourceKey: `session-progress:review:${id}`,
+      coalesceKey: `session-progress:review:${id}`,
+      description: '保存复习进度',
+      replayMode: 'auto',
+    },
   })
 }
 
 export function clearReviewSessionProgressApi(id: number) {
-  return request<{ ok: boolean }>(`/sessions/review/${id}/progress`, { method: "DELETE" })
+  return request<{ ok: boolean }>(`/sessions/review/${id}/progress`, {
+    method: "DELETE",
+    persistence: {
+      resourceKey: `session-progress:review:${id}:clear`,
+      description: '清除复习进度',
+      replayMode: 'manual',
+    },
+  })
 }
 
 export function getSegmentReviewSessionProgressApi(id: number) {
@@ -83,11 +101,24 @@ export function saveSegmentReviewSessionProgressApi(
   return request<{ progress: SessionProgressSnapshot }>(`/sessions/segment-review/${id}/progress`, {
     method: "PUT",
     body: JSON.stringify(data),
+    persistence: {
+      resourceKey: `session-progress:segment-review:${id}`,
+      coalesceKey: `session-progress:segment-review:${id}`,
+      description: '保存分块复习进度',
+      replayMode: 'auto',
+    },
   })
 }
 
 export function clearSegmentReviewSessionProgressApi(id: number) {
-  return request<{ ok: boolean }>(`/sessions/segment-review/${id}/progress`, { method: "DELETE" })
+  return request<{ ok: boolean }>(`/sessions/segment-review/${id}/progress`, {
+    method: "DELETE",
+    persistence: {
+      resourceKey: `session-progress:segment-review:${id}:clear`,
+      description: '清除分块复习进度',
+      replayMode: 'manual',
+    },
+  })
 }
 
 export function submitReviewSessionApi(
@@ -105,6 +136,11 @@ export function submitReviewSessionApi(
   return request<ReviewSessionSubmitResponse>(`/review/session/${id}/submit`, {
     method: "POST",
     body: JSON.stringify(data),
+    persistence: {
+      resourceKey: `review-submit:${id}`,
+      description: '提交正式复习',
+      replayMode: 'auto',
+    },
   })
 }
 
@@ -123,6 +159,11 @@ export function submitSegmentReviewSessionApi(
   return request<ReviewSessionSubmitResponse>(`/segment-review/session/${id}/submit`, {
     method: "POST",
     body: JSON.stringify(data),
+    persistence: {
+      resourceKey: `segment-review-submit:${id}`,
+      description: '提交分块复习',
+      replayMode: 'auto',
+    },
   })
 }
 
@@ -138,5 +179,10 @@ export function submitBatchSegmentReviewSessionApi(
   return request<BatchSegmentReviewSubmitResponse>("/segment-review/batch-session/submit", {
     method: "POST",
     body: JSON.stringify(data),
+    persistence: {
+      resourceKey: `segment-review-batch-submit:${data.segment_ids.join(',')}`,
+      description: '提交多分块复习',
+      replayMode: 'auto',
+    },
   })
 }

@@ -17,6 +17,7 @@ import * as palaceApi from '@/shared/api/modules/palaces'
 vi.mock('sonner', () => ({
   toast: {
     success: vi.fn(),
+    info: vi.fn(),
     error: vi.fn(),
   },
 }))
@@ -69,8 +70,14 @@ vi.mock('@/shared/components/mindmap-host', () => ({
     aiSplitBusy = false,
     syncOnPropChange = false,
     externalSyncKey = null,
+    showMiniPalaceButton = false,
+    miniPalaceDraft = { active: false, selectedNodeUids: [] },
     viewMemoryScope = null,
+    focusRequestNodeUid = null,
+    focusRequestNonce = 0,
     onAiSplitRequest,
+    onMiniPalaceOpen,
+    onNodeActive,
     onNodeClick,
     onNodeContextMenu,
     editorState,
@@ -91,7 +98,14 @@ vi.mock('@/shared/components/mindmap-host', () => ({
     aiSplitBusy?: boolean
     syncOnPropChange?: boolean
     externalSyncKey?: string | number | null
+    showMiniPalaceButton?: boolean
+    miniPalaceDraft?: {
+      active: boolean
+      selectedNodeUids: string[]
+    }
     viewMemoryScope?: string | null
+    focusRequestNodeUid?: string | null
+    focusRequestNonce?: number
     onFullscreenToggle?: (active?: boolean) => void
     editorState?: {
       editor_doc?: {
@@ -114,6 +128,8 @@ vi.mock('@/shared/components/mindmap-host', () => ({
       target_node_type: string | null
       is_root: boolean
     }) => void
+    onMiniPalaceOpen?: () => void
+    onNodeActive?: (nodes: Array<{ uid: string | null; text: string }>) => void
     onNodeClick?: (nodes: Array<{ uid: string | null; text: string }>) => void
     onNodeContextMenu?: (nodes: Array<{ uid: string | null; text: string }>) => void
   }) => {
@@ -130,10 +146,17 @@ vi.mock('@/shared/components/mindmap-host', () => ({
         <div>{`mindmap-mount-${mountIdRef.current}`}</div>
         <div>{`sync-${syncIntent}-${forceSyncIntent}-${String(forceSyncKey ?? '')}-${String(externalSyncKey ?? '')}-${String(syncReason ?? '')}`}</div>
         <div>{`scope-${String(viewMemoryScope ?? '')}`}</div>
+        <div>{`focus-${String(focusRequestNodeUid ?? '')}:${String(focusRequestNonce)}`}</div>
         <div>{`aisplit-${aiSplitBusy ? 'busy' : 'idle'}`}</div>
+        <div>{`mini-palace-${showMiniPalaceButton ? 'shown' : 'hidden'}-${miniPalaceDraft.active ? 'selecting' : 'idle'}-${miniPalaceDraft.selectedNodeUids.join(',')}`}</div>
         <div>{`root-${String(root?.data?.text ?? '')}`}</div>
         <div>{`child-${String(child?.data?.text ?? '')}`}</div>
         <div>{`grandchild-${String(grandchild?.data?.text ?? '')}`}</div>
+        {showMiniPalaceButton && onMiniPalaceOpen ? (
+          <button type="button" onClick={onMiniPalaceOpen}>
+            小宫殿
+          </button>
+        ) : null}
         {onPracticeToggle ? (
           <button type="button" onClick={onPracticeToggle}>
             {practiceToggleLabel}
@@ -172,6 +195,16 @@ vi.mock('@/shared/components/mindmap-host', () => ({
             }
           >
             点击首子节点
+          </button>
+        ) : null}
+        {onNodeActive && child?.data?.uid ? (
+          <button
+            type="button"
+            onClick={() =>
+              onNodeActive([{ uid: child.data?.uid ?? null, text: String(child.data?.text ?? '') }])
+            }
+          >
+            选中首子节点
           </button>
         ) : null}
         {onNodeContextMenu && child?.data?.uid ? (
@@ -348,6 +381,34 @@ export function setupPalaceEditPageTestDefaults() {
   vi.spyOn(palaceApi, 'getPracticeSessionProgressApi').mockResolvedValue({ progress: null } as never)
   vi.spyOn(palaceApi, 'savePracticeSessionProgressApi').mockResolvedValue({ progress: {} } as never)
   vi.spyOn(palaceApi, 'clearPracticeSessionProgressApi').mockResolvedValue({ ok: true } as never)
+  vi.spyOn(palaceApi, 'getMiniPalacesApi').mockResolvedValue({ items: [] } as never)
+  vi.spyOn(palaceApi, 'createMiniPalaceApi').mockResolvedValue({
+    item: {
+      id: 1,
+      palace_id: 101,
+      name: '小宫殿 1',
+      node_uids: ['child-1'],
+      node_count: 1,
+      sort_order: 0,
+      created_at: null,
+      updated_at: null,
+      is_empty: false,
+    },
+  } as never)
+  vi.spyOn(palaceApi, 'updateMiniPalaceApi').mockResolvedValue({
+    item: {
+      id: 1,
+      palace_id: 101,
+      name: '小宫殿 1',
+      node_uids: ['child-1'],
+      node_count: 1,
+      sort_order: 0,
+      created_at: null,
+      updated_at: null,
+      is_empty: false,
+    },
+  } as never)
+  vi.spyOn(palaceApi, 'deleteMiniPalaceApi').mockResolvedValue({ ok: true } as never)
   vi.spyOn(palaceApi, 'previewMindMapImportApi').mockResolvedValue({
     ok: true,
     source_tree: {

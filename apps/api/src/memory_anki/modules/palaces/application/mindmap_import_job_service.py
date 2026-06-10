@@ -92,7 +92,7 @@ def _prepare_batch_image_items(
     *,
     image_items: list[tuple[bytes, str | None]],
     structure_image_index: int | None,
-) -> tuple[list[tuple[bytes, str | None]], int]:
+) -> tuple[list[tuple[bytes, str | None]], int | None]:
     return llm_gateway.prepare_batch_items(
         runtime=_dashscope_runtime(),
         image_items=image_items,
@@ -498,6 +498,7 @@ def _run_image_batch_job(
         import_jobs_dir=IMPORT_JOBS_DIR,
         stream_call_dashscope_json=_stream_call_dashscope_json,
         stream_call_dashscope_batch_json=_stream_call_dashscope_batch_json,
+        stream_call_dashscope_pdf_json=_stream_call_dashscope_pdf_json,
     )
 
 

@@ -5,15 +5,15 @@ export const TOOLBAR_HEIGHT = 54
 const ROOT_X = 52
 const ROOT_Y = 280
 const ROOT_NODE_WIDTH = 174
-const ROOT_NODE_HEIGHT = 54
-const BRANCH_NODE_WIDTH = 126
-const BRANCH_NODE_HEIGHT = 52
-const LEAF_NODE_WIDTH = 116
-const LEAF_NODE_HEIGHT = 46
+const ROOT_NODE_MIN_HEIGHT = 54
+const BRANCH_NODE_WIDTH = 156
+const BRANCH_NODE_MIN_HEIGHT = 52
+const LEAF_NODE_WIDTH = 132
+const LEAF_NODE_MIN_HEIGHT = 46
 const ROOT_GAP_X = 56
 const CHILD_GAP_X = 38
 const ROOT_STACK_GAP = 18
-const CHILD_GAP_Y = 6
+const CHILD_GAP_Y = 10
 export const DROP_HIT_PADDING_X = 16
 export const DROP_HIT_PADDING_Y = 12
 const BRANCH_COLORS = ['#5f9e90', '#e4c25d', '#d98b63', '#c7d4c0', '#7ca7a1']
@@ -46,24 +46,117 @@ export interface PreviewState {
   mode: DropMode
 }
 
-export function getNodeSize(
-  role: LayoutRole,
-): { width: number; height: number } {
+type NodeSizeSource =
+  | LayoutRole
+  | MindMapNode
+  | Node
+  | {
+      label?: unknown
+      data?: unknown
+      metadata?: Record<string, unknown>
+    }
+  | undefined
+
+function isLayoutRole(value: unknown): value is LayoutRole {
+  return value === 'root' || value === 'branch' || value === 'leaf'
+}
+
+function getNodeLabel(source: NodeSizeSource): string {
+  if (!source || typeof source === 'string') return ''
+  const directLabel = 'label' in source ? source.label : undefined
+  if (typeof directLabel === 'string') return directLabel
+
+  const data = 'data' in source ? source.data : undefined
+  if (data && typeof data === 'object' && 'label' in data) {
+    const dataLabel = (data as { label?: unknown }).label
+    return typeof dataLabel === 'string' ? dataLabel : ''
+  }
+
+  return ''
+}
+
+export function getNodeRole(node?: NodeSizeSource): LayoutRole {
+  if (isLayoutRole(node)) return node
+
+  const metadata =
+    node && typeof node === 'object' && 'data' in node
+      ? ((node.data as { metadata?: Record<string, unknown> } | undefined)?.metadata)
+      : node && typeof node === 'object' && 'metadata' in node
+        ? node.metadata
+        : undefined
+  const role = metadata?.layoutRole
+  return isLayoutRole(role) ? role : 'branch'
+}
+
+function getBaseNodeSize(role: LayoutRole): {
+  width: number
+  minHeight: number
+  horizontalPadding: number
+  verticalPadding: number
+  lineHeight: number
+  averageCharWidth: number
+  metaHeight: number
+} {
   switch (role) {
     case 'root':
-      return { width: ROOT_NODE_WIDTH, height: ROOT_NODE_HEIGHT }
+      return {
+        width: ROOT_NODE_WIDTH,
+        minHeight: ROOT_NODE_MIN_HEIGHT,
+        horizontalPadding: 32,
+        verticalPadding: 16,
+        lineHeight: 20,
+        averageCharWidth: 15,
+        metaHeight: 0,
+      }
     case 'branch':
-      return { width: BRANCH_NODE_WIDTH, height: BRANCH_NODE_HEIGHT }
+      return {
+        width: BRANCH_NODE_WIDTH,
+        minHeight: BRANCH_NODE_MIN_HEIGHT,
+        horizontalPadding: 16,
+        verticalPadding: 12,
+        lineHeight: 16,
+        averageCharWidth: 13,
+        metaHeight: 19,
+      }
     default:
-      return { width: LEAF_NODE_WIDTH, height: LEAF_NODE_HEIGHT }
+      return {
+        width: LEAF_NODE_WIDTH,
+        minHeight: LEAF_NODE_MIN_HEIGHT,
+        horizontalPadding: 16,
+        verticalPadding: 12,
+        lineHeight: 16,
+        averageCharWidth: 12,
+        metaHeight: 18,
+      }
   }
 }
 
-export function getNodeRole(node?: Node): LayoutRole {
-  const metadata = (
-    node?.data as { metadata?: Record<string, unknown> } | undefined
-  )?.metadata
-  return String(metadata?.layoutRole ?? 'branch') as LayoutRole
+function getWeightedTextLength(text: string): number {
+  return Array.from(text).reduce((sum, char) => {
+    if (/\s/.test(char)) return sum + 0.35
+    return sum + (char.charCodeAt(0) > 255 ? 1 : 0.58)
+  }, 0)
+}
+
+export function getNodeSize(
+  source?: NodeSizeSource,
+  labelOverride?: string,
+): { width: number; height: number } {
+  const role = getNodeRole(source)
+  const base = getBaseNodeSize(role)
+  const label = ((labelOverride ?? getNodeLabel(source)) || '').trim() || '未命名节点'
+  const contentWidth = Math.max(base.width - base.horizontalPadding, base.averageCharWidth)
+  const charsPerLine = Math.max(1, Math.floor(contentWidth / base.averageCharWidth))
+  const textLineCount = label
+    .split(/\r?\n/)
+    .reduce((total, line) => total + Math.max(1, Math.ceil(getWeightedTextLength(line) / charsPerLine)), 0)
+  const textHeight = textLineCount * base.lineHeight
+  const height = Math.max(
+    base.minHeight,
+    Math.ceil(base.verticalPadding + textHeight + base.metaHeight),
+  )
+
+  return { width: base.width, height }
 }
 
 export function isDescendant(
@@ -122,7 +215,7 @@ function buildLayoutForest(graphData: GraphData): LayoutTreeNode[] {
 }
 
 function measureTree(node: LayoutTreeNode): LayoutBounds {
-  const size = getNodeSize(node.layoutRole)
+  const size = getNodeSize(node.layoutRole, node.node.label)
 
   if (node.children.length === 0) {
     return { width: size.width, height: size.height, subtreeHeight: size.height }
@@ -131,7 +224,7 @@ function measureTree(node: LayoutTreeNode): LayoutBounds {
   const childBounds = node.children.map(measureTree)
   const childrenHeight =
     childBounds.reduce((sum, bound) => sum + bound.subtreeHeight, 0) +
-    CHILD_GAP_Y * (node.children.length + 1)
+    CHILD_GAP_Y * Math.max(0, node.children.length - 1)
   const tallestChildWidth = Math.max(...childBounds.map((bound) => bound.width))
   const subtreeHeight = Math.max(size.height, childrenHeight)
   const gapX = node.depth === 0 ? ROOT_GAP_X : CHILD_GAP_X
@@ -150,7 +243,7 @@ function layoutTreeNodes(
   positions: Map<string, Node>,
   edgeColors: Map<string, string>,
 ): LayoutBounds {
-  const size = getNodeSize(node.layoutRole)
+  const size = getNodeSize(node.layoutRole, node.node.label)
   const ownBounds = measureTree(node)
   const y = top + ownBounds.subtreeHeight / 2 - size.height / 2
 
@@ -177,9 +270,9 @@ function layoutTreeNodes(
   const childBounds = node.children.map(measureTree)
   const childrenHeight =
     childBounds.reduce((sum, bound) => sum + bound.subtreeHeight, 0) +
-    CHILD_GAP_Y * (node.children.length + 1)
+    CHILD_GAP_Y * Math.max(0, node.children.length - 1)
   const childrenTop =
-    top + (ownBounds.subtreeHeight - childrenHeight) / 2 + CHILD_GAP_Y
+    top + (ownBounds.subtreeHeight - childrenHeight) / 2
   const gapX = node.depth === 0 ? ROOT_GAP_X : CHILD_GAP_X
   let currentTop = childrenTop
 

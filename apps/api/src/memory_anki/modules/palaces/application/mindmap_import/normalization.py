@@ -65,49 +65,42 @@ ABSTRACT_SPLIT_HEADINGS = (
 def normalize_source_tree(value: Any, *, disable_rebalance: bool = False) -> dict[str, Any]:
     if not isinstance(value, dict):
         raise MindMapImportError("模型返回的顶层结构不是对象。")
-    title = clean_inline_text(value.get("title"))
+    title = value.get("title")
+    if not isinstance(title, str):
+        raise MindMapImportError("模型返回缺少 title 字符串。")
     children = value.get("children")
     if not isinstance(children, list):
         raise MindMapImportError("模型返回缺少 children 数组。")
 
     counter = {"count": 0}
-    normalized_children = [normalize_source_node(child, counter) for child in children]
-    if not disable_rebalance:
-        normalized_children = [rebalance_long_leaf_node(child) for child in normalized_children]
+    for child in children:
+        validate_source_node(child, counter)
     if counter["count"] > MAX_NODE_COUNT:
         raise MindMapImportError("识别出的节点过多，请换一张更聚焦的图片后重试。")
-    return {
-        "title": title,
-        "children": normalized_children,
-    }
+    return value
 
 
 def normalize_pdf_source_tree(value: Any) -> dict[str, Any]:
-    base_tree = normalize_source_tree(value, disable_rebalance=True)
-    return {
-        "title": base_tree["title"],
-        "children": [normalize_pdf_source_node(child) for child in base_tree["children"]],
-    }
+    return normalize_source_tree(value, disable_rebalance=True)
 
 
 def normalize_source_node(value: Any, counter: dict[str, int]) -> dict[str, Any]:
+    validate_source_node(value, counter)
+    return value
+
+
+def validate_source_node(value: Any, counter: dict[str, int]) -> None:
     if not isinstance(value, dict):
         raise MindMapImportError("模型返回的节点结构非法。")
-    text = clean_multiline_text(value.get("text"))
-    if not text:
+    text = value.get("text")
+    if not isinstance(text, str) or not text.strip():
         raise MindMapImportError("模型返回了空节点文本。")
     counter["count"] += 1
     raw_children = value.get("children")
-    if raw_children is None:
-        raw_children = []
     if not isinstance(raw_children, list):
         raise MindMapImportError("模型返回的 children 不是数组。")
-    return {
-        "text": text,
-        "rich_text_html": str(value.get("rich_text_html") or "").strip() or None,
-        "emphasis_marks": normalize_emphasis_marks(value.get("emphasis_marks")),
-        "children": [normalize_source_node(child, counter) for child in raw_children],
-    }
+    for child in raw_children:
+        validate_source_node(child, counter)
 
 
 def rebalance_long_leaf_node(source_node: dict[str, Any]) -> dict[str, Any]:
@@ -405,21 +398,14 @@ def build_editor_doc(
 
 
 def source_node_to_editor_node(source_node: dict[str, Any], *, preserve_line_breaks: bool) -> dict[str, Any]:
-    rich_text_html = normalize_rich_text_html(
-        source_node.get("rich_text_html"),
-        text=source_node["text"],
-        emphasis_marks=source_node.get("emphasis_marks"),
-        preserve_line_breaks=preserve_line_breaks,
-    )
-    formatted_text = format_node_text_for_card(
-        html_to_plain_text(rich_text_html or source_node["text"]),
-        preserve_line_breaks=preserve_line_breaks,
-    )
+    rich_text_html = source_node.get("rich_text_html")
+    has_rich_text = isinstance(rich_text_html, str) and rich_text_html != ""
     data: dict[str, Any] = {
         "uid": uuid.uuid4().hex,
-        "text": rich_text_html or to_rich_text_html(formatted_text),
-        "richText": True,
+        "text": rich_text_html if has_rich_text else source_node["text"],
     }
+    if has_rich_text:
+        data["richText"] = True
     return {
         "data": data,
         "children": [
@@ -744,4 +730,3 @@ def find_wrap_index(text: str) -> int:
     if whitespace_index >= NODE_WRAP_MIN_WIDTH:
         return whitespace_index + 1
     return search_end
-

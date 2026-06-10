@@ -161,6 +161,7 @@ def build_virtual_default_segment_timing(
             "next_review_at": next_review_at.isoformat(timespec="minutes") if next_review_at else None,
             "has_due_review": has_due_review,
             "current_review_schedule_id": next_schedule.id,
+            "current_review_type": next_schedule.review_type,
         }
 
     current_algorithm = _palace_algorithm(session, palace)
@@ -175,6 +176,7 @@ def build_virtual_default_segment_timing(
             "next_review_at": None,
             "has_due_review": False,
             "current_review_schedule_id": None,
+            "current_review_type": None,
         }
 
     next_interval_value = intervals[completed]
@@ -195,6 +197,7 @@ def build_virtual_default_segment_timing(
         "next_review_at": next_review_at.isoformat(timespec="minutes") if next_review_at else None,
         "has_due_review": has_due_review,
         "current_review_schedule_id": None,
+        "current_review_type": review_type,
     }
 
 
@@ -464,6 +467,7 @@ def segment_summary_json(session: Session, segment: PalaceSegment) -> dict[str, 
         "next_review_at": next_review_at.isoformat(timespec="minutes") if next_review_at else None,
         "has_due_review": is_segment_schedule_due(session, segment, next_schedule),
         "current_review_schedule_id": next_schedule.id if next_schedule else None,
+        "current_review_type": next_schedule.review_type if next_schedule else None,
         "is_empty": len(node_uids) == 0,
     }
 
@@ -508,6 +512,7 @@ def build_virtual_default_segment_summary(
         "next_review_at": timing["next_review_at"],
         "has_due_review": timing["has_due_review"],
         "current_review_schedule_id": timing["current_review_schedule_id"],
+        "current_review_type": timing["current_review_type"],
         "is_empty": len(remaining_uids) == 0,
         "is_virtual_default": True,
     }

@@ -20,6 +20,11 @@ interface ReviewFlowMapPanelProps {
   bilinkInsertionText?: string | null
   bilinkInsertionNonce?: number
   reviewFxSignal?: MindMapReviewFxPayload | null
+  showMiniPalaceButton?: boolean
+  miniPalaceDraft?: {
+    active: boolean
+    selectedNodeUids: string[]
+  }
   onEditorStateChange?: (nextState: MindMapEditorState) => void
   onNodeClick: (nodes: MindMapSelection[]) => void
   onNodeContextMenu: (nodes: MindMapSelection[]) => void
@@ -37,6 +42,7 @@ interface ReviewFlowMapPanelProps {
     trigger: 'badge' | 'mark'
   }) => void
   onBilinkToolbarSearch?: () => void
+  onMiniPalaceOpen?: () => void
 }
 
 export function ReviewFlowMapPanel({
@@ -56,6 +62,11 @@ export function ReviewFlowMapPanel({
   bilinkInsertionText = null,
   bilinkInsertionNonce = 0,
   reviewFxSignal = null,
+  showMiniPalaceButton = false,
+  miniPalaceDraft = {
+    active: false,
+    selectedNodeUids: [],
+  },
   onEditorStateChange,
   onNodeClick,
   onNodeContextMenu,
@@ -64,6 +75,7 @@ export function ReviewFlowMapPanel({
   onBilinkTrigger,
   onBilinkNodeClick,
   onBilinkToolbarSearch,
+  onMiniPalaceOpen,
 }: ReviewFlowMapPanelProps) {
   const isEditMode = displayMode === 'edit'
   const frameEditorState = isEditMode && editableEditorState ? editableEditorState : visibleEditorState
@@ -91,6 +103,8 @@ export function ReviewFlowMapPanel({
         bilinkItems={bilinkItems}
         bilinkCurrentPalaceId={currentPalaceId}
         focusNodeUids={focusNodeUids}
+        showMiniPalaceButton={showMiniPalaceButton}
+        miniPalaceDraft={miniPalaceDraft}
         bilinkInsertionText={bilinkInsertionText}
         bilinkInsertionNonce={bilinkInsertionNonce}
         reviewFxSignal={reviewFxSignal}
@@ -103,6 +117,7 @@ export function ReviewFlowMapPanel({
         onBilinkTrigger={onBilinkTrigger}
         onBilinkNodeClick={onBilinkNodeClick}
         onBilinkToolbarSearch={onBilinkToolbarSearch}
+        onMiniPalaceOpen={onMiniPalaceOpen}
         onFullscreenToggle={onToggleFullscreen}
         onFullscreenChange={(active) => {
           if (!active) {

@@ -127,6 +127,26 @@ function buildLaterTodayPalace() {
   }
 }
 
+function buildSleepReviewPalace() {
+  return {
+    ...duePalace,
+    id: 3,
+    title: '第二节 新教教育',
+    resolved_title: '第二节 新教教育',
+    segments: [
+      {
+        ...duePalace.segments[0],
+        id: 30,
+        palace_id: 3,
+        current_review_type: 'sleep',
+        next_review_at: '2026-05-11T09:00:00Z',
+        review_stage_completed: 1,
+        stage_labels: ['1小时', '睡前', '1天'],
+      },
+    ],
+  }
+}
+
 describe('PalaceListPage', () => {
   beforeEach(() => {
     const fixedNow = new RealDate('2026-05-11T10:00:00Z')
@@ -225,6 +245,33 @@ describe('PalaceListPage', () => {
     expect(reviewButton.className).toContain('bg-amber-100')
     const practiceButton = screen.getByRole('button', { name: '练习' })
     expect(practiceButton.className).toContain('bg-emerald-600')
+  })
+
+  it('renders sleep review action with fixed blue sleep copy', async () => {
+    const sleepReviewPalace = buildSleepReviewPalace()
+    getPalacesGroupedApi.mockReset()
+    getPalacesGroupedApi.mockResolvedValue({
+      groups: [],
+      ungrouped: [],
+      subjects: [
+        {
+          subject: { id: 1, name: '中国近代史', color: '#6366f1' },
+          chapter_groups: [
+            {
+              source_chapter: { id: 2, name: '第二节', subject_id: 1, parent_id: null },
+              palaces: [sleepReviewPalace],
+            },
+          ],
+          ungrouped_palaces: [],
+        },
+      ],
+    })
+
+    render(<PalaceListPage />)
+
+    const reviewButton = await screen.findByRole('button', { name: '睡前复习' })
+    expect(reviewButton.className).toContain('bg-blue-600')
+    expect(screen.queryByRole('button', { name: '开始复习' })).toBeNull()
   })
 
   it('defaults to chapter-double and keeps local view settings after switching', async () => {

@@ -89,6 +89,7 @@ def run_batch_import_preview(
     prepare_batch_image_items_fn,
     stream_call_dashscope_json_fn,
     stream_call_dashscope_batch_json_fn,
+    stream_call_dashscope_pdf_json_fn,
     build_batch_import_result_payload_fn,
 ) -> Generator[ImportStreamEvent, None, dict[str, Any]]:
     yield _status_event(step_protocol.validate_image_batch_step())
@@ -96,19 +97,37 @@ def run_batch_import_preview(
         image_items=image_items,
         structure_image_index=structure_image_index,
     )
-    yield _status_event(step_protocol.extract_batch_structure_step())
-    structure_bytes, structure_filename = normalized_items[resolved_structure_index]
-    structure_tree = yield from stream_call_dashscope_json_fn(
-        image_bytes=structure_bytes,
-        filename=structure_filename,
-        channel="raw_model",
-    )
-    yield _status_event(step_protocol.enhance_batch_with_body_step())
-    enhanced_tree = yield from stream_call_dashscope_batch_json_fn(
-        image_items=normalized_items,
-        structure_tree=structure_tree,
-        channel="raw_model",
-    )
+    if resolved_structure_index is None:
+        yield _status_event(step_protocol.generate_pdf_mindmap_direct_step())
+        enhanced_tree = yield from stream_call_dashscope_pdf_json_fn(
+            image_items=normalized_items,
+            channel="raw_model",
+            range_prompt="",
+            page_numbers=None,
+            disable_rebalance=True,
+            import_options=PdfImportOptions(),
+            extracted_text=None,
+        )
+    else:
+        yield _status_event(step_protocol.extract_batch_structure_step())
+        structure_bytes, structure_filename = normalized_items[resolved_structure_index]
+        structure_tree = yield from stream_call_dashscope_json_fn(
+            image_bytes=structure_bytes,
+            filename=structure_filename,
+            channel="raw_model",
+            disable_rebalance=True,
+        )
+        yield _status_event(step_protocol.enhance_batch_with_body_step())
+        enhanced_tree = yield from stream_call_dashscope_batch_json_fn(
+            image_items=normalized_items,
+            structure_tree=structure_tree,
+            channel="raw_model",
+            range_prompt="",
+            page_numbers=None,
+            disable_rebalance=True,
+            import_options=PdfImportOptions(),
+            extracted_text=None,
+        )
     yield _status_event(
         step_protocol.build_preview_step(total_steps=step_protocol.BATCH_MINDMAP_TOTAL_STEPS)
     )

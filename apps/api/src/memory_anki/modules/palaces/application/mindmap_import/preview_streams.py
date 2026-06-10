@@ -71,6 +71,7 @@ def stream_batch_import_preview(
     prepare_batch_image_items_fn,
     stream_call_dashscope_json_fn,
     stream_call_dashscope_batch_json_fn,
+    stream_call_dashscope_pdf_json_fn,
     build_batch_import_result_payload_fn,
 ) -> Generator[ImportStreamEvent, None, None]:
     try:
@@ -81,6 +82,7 @@ def stream_batch_import_preview(
             prepare_batch_image_items_fn=prepare_batch_image_items_fn,
             stream_call_dashscope_json_fn=stream_call_dashscope_json_fn,
             stream_call_dashscope_batch_json_fn=stream_call_dashscope_batch_json_fn,
+            stream_call_dashscope_pdf_json_fn=stream_call_dashscope_pdf_json_fn,
             build_batch_import_result_payload_fn=build_batch_import_result_payload_fn,
         )
         yield build_result_event({"ok": True, **result_payload})

@@ -1,5 +1,6 @@
 import type { ChangeEvent, ClipboardEvent, RefObject } from 'react'
 import type {
+  BatchImportMeta,
   BatchImportImageItem,
   ImportSourceKind,
   ImportSubjectOption,
@@ -42,7 +43,7 @@ export interface PalaceMindMapImportDrawerProps {
   batchImages: BatchImportImageItem[]
   structureImageId: string | null
   batchStatus: 'idle' | 'ready' | 'loading' | 'success' | 'error'
-  batchMeta: { structureImageIndex: number; imageCount: number } | null
+  batchMeta: BatchImportMeta | null
   subjectOptions: ImportSubjectOption[]
   selectedSubjectId: number | null
   onSelectedSubjectIdChange: (subjectId: number | null) => void

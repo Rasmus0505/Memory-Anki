@@ -30,7 +30,7 @@ export interface TimeRecordFormState {
   palaceId: string
   startedAt: string
   endedAt: string
-  effectiveSeconds: string
+  effectiveMinutes: string
   pauseCount: string
   completionMethod: SessionCompletionMethod
   durationEdited: boolean
@@ -57,6 +57,19 @@ export function isTimeRecordAboveThreshold(
 
 export function toLocalDateTimeInputValue(value: string) {
   return formatLocalDateTimeInputValue(value)
+}
+
+export function formatEffectiveSecondsAsMinutes(seconds: number) {
+  if (!Number.isFinite(seconds) || seconds <= 0) return '0'
+  const minutes = seconds / 60
+  if (Number.isInteger(minutes)) return String(minutes)
+  return String(Number(minutes.toFixed(2)))
+}
+
+export function parseEffectiveMinutesToSeconds(value: string) {
+  const minutes = Number(value)
+  if (!Number.isFinite(minutes) || minutes < 0) return null
+  return Math.round(minutes * 60)
 }
 
 export function formatTableDate(dateString: string) {
@@ -98,7 +111,9 @@ export function buildTimeRecordFormState(
     palaceId: record?.palaceId == null ? '' : String(record.palaceId),
     startedAt: record ? toLocalDateTimeInputValue(record.startedAt) : '',
     endedAt: record ? toLocalDateTimeInputValue(record.endedAt) : '',
-    effectiveSeconds: record ? String(record.effectiveSeconds) : '0',
+    effectiveMinutes: record
+      ? formatEffectiveSecondsAsMinutes(record.effectiveSeconds)
+      : '0',
     pauseCount: record ? String(record.pauseCount) : '0',
     completionMethod: record?.completionMethod ?? 'manual_complete',
     durationEdited: record?.durationEdited ?? false,
@@ -119,6 +134,82 @@ export function calculateTimeRangeSeconds(
   return Math.round((endedAt.getTime() - startedAt.getTime()) / 1000)
 }
 
+export function calculateEndedAtFromEffectiveMinutes(
+  startedAtValue: string,
+  effectiveMinutesValue: string,
+) {
+  const startedAt = startedAtValue ? new Date(startedAtValue) : null
+  const effectiveSeconds = parseEffectiveMinutesToSeconds(
+    effectiveMinutesValue,
+  )
+  if (!startedAt || Number.isNaN(startedAt.getTime())) return null
+  if (effectiveSeconds === null) return null
+
+  const endedAt = new Date(startedAt.getTime() + effectiveSeconds * 1000)
+  return formatLocalDateTimeInputValue(formatLocalApiDateTime(endedAt))
+}
+
+export function applyTimeRecordFormPatch(
+  current: TimeRecordFormState,
+  patch: Partial<TimeRecordFormState>,
+): TimeRecordFormState {
+  const next = { ...current, ...patch }
+  const durationChanged = patch.effectiveMinutes !== undefined
+  const startedAtChanged = patch.startedAt !== undefined
+  const endedAtChanged = patch.endedAt !== undefined
+
+  if (durationChanged) {
+    next.durationEdited = true
+    const endedAt = calculateEndedAtFromEffectiveMinutes(
+      next.startedAt,
+      next.effectiveMinutes,
+    )
+    if (endedAt !== null) next.endedAt = endedAt
+    return next
+  }
+
+  if (patch.durationEdited !== undefined) {
+    next.durationEdited = patch.durationEdited
+    if (patch.durationEdited) {
+      const endedAt = calculateEndedAtFromEffectiveMinutes(
+        next.startedAt,
+        next.effectiveMinutes,
+      )
+      if (endedAt !== null) next.endedAt = endedAt
+      return next
+    }
+
+    const seconds = calculateTimeRangeSeconds(next.startedAt, next.endedAt)
+    if (seconds !== null) {
+      next.effectiveMinutes = formatEffectiveSecondsAsMinutes(seconds)
+    }
+    return next
+  }
+
+  if (startedAtChanged) {
+    const effectiveSeconds = parseEffectiveMinutesToSeconds(
+      next.effectiveMinutes,
+    )
+    if (effectiveSeconds !== null && effectiveSeconds > 0) {
+      const endedAt = calculateEndedAtFromEffectiveMinutes(
+        next.startedAt,
+        next.effectiveMinutes,
+      )
+      if (endedAt !== null) next.endedAt = endedAt
+      return next
+    }
+  }
+
+  if (endedAtChanged && !next.durationEdited) {
+    const seconds = calculateTimeRangeSeconds(next.startedAt, next.endedAt)
+    if (seconds !== null) {
+      next.effectiveMinutes = formatEffectiveSecondsAsMinutes(seconds)
+    }
+  }
+
+  return next
+}
+
 export function parseTimeRecordFormState(
   form: TimeRecordFormState,
   sourceRecord?: TimeSessionRecord | null,
@@ -126,7 +217,9 @@ export function parseTimeRecordFormState(
   const title = form.title.trim()
   const startedAt = form.startedAt ? new Date(form.startedAt) : null
   const endedAt = form.endedAt ? new Date(form.endedAt) : null
-  const effectiveSeconds = Number(form.effectiveSeconds)
+  const effectiveSeconds = parseEffectiveMinutesToSeconds(
+    form.effectiveMinutes,
+  )
   const pauseCount = Number(form.pauseCount)
   const palaceId = form.palaceId.trim() === '' ? null : Number(form.palaceId)
 
@@ -138,8 +231,8 @@ export function parseTimeRecordFormState(
     return { error: '结束时间不能为空。' }
   }
   if (endedAt < startedAt) return { error: '结束时间不能早于开始时间。' }
-  if (Number.isNaN(effectiveSeconds) || effectiveSeconds < 0) {
-    return { error: '有效时长必须是大于等于 0 的数字。' }
+  if (effectiveSeconds === null) {
+    return { error: '有效时长必须是大于等于 0 的分钟数。' }
   }
   if (Number.isNaN(pauseCount) || pauseCount < 0) {
     return { error: '暂停次数必须是大于等于 0 的数字。' }

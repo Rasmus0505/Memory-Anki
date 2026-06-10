@@ -73,6 +73,7 @@ export function usePalaceEditorDocument({
       editor_config: response.editor_config,
       editor_local_config: response.editor_local_config,
       lang: response.lang,
+      editor_fingerprint: response.editor_fingerprint,
     }),
     onSaveError: async (nextError, pendingState) => {
       if (!nextError.message.includes('危险结构变更')) return false
@@ -197,6 +198,7 @@ export function usePalaceEditorDocument({
       editor_config: response.editor_config,
       editor_local_config: response.editor_local_config,
       lang: response.lang,
+      editor_fingerprint: response.editor_fingerprint,
     }),
     [],
   )
