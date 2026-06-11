@@ -10,7 +10,10 @@ import {
   getPalaceSegmentApi,
   getSegmentPracticeSessionProgressApi,
   saveSegmentPracticeSessionProgressApi,
+  updatePalaceSegmentReviewProgressApi,
 } from '@/shared/api/modules/palaces'
+import { submitSegmentReviewSessionApi } from '@/shared/api/modules/reviews'
+import { StageSelectDialog } from '@/features/review/components/StageSelectDialog'
 import {
   MindMapReviewFlow,
   type ReviewFlowSnapshot,
@@ -22,11 +25,21 @@ export default function SegmentPracticePage() {
   const [segment, setSegment] = useState<PalaceSegmentSummary | null>(null)
   const [title, setTitle] = useState('')
   const [editorState, setEditorState] = useState<MindMapEditorState | null>(null)
+  const [editEditorState, setEditEditorState] = useState<MindMapEditorState | null>(null)
+  const [displayMode, setDisplayMode] = useState<'review' | 'edit'>('review')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [initialSnapshot, setInitialSnapshot] = useState<ReviewFlowSnapshot | null>(null)
   const [flowKey, setFlowKey] = useState(0)
   const [hasResumeProgress, setHasResumeProgress] = useState(false)
+  const [stageDialogOpen, setStageDialogOpen] = useState(false)
+  const [pendingPayload, setPendingPayload] = useState<{
+    durationSeconds: number
+    completionMode: 'manual_complete' | 'auto_complete'
+    revealedRemaining: boolean
+    redNodeIds: string[]
+  } | null>(null)
+  const [submitting, setSubmitting] = useState(false)
 
   useEffect(() => {
     if (!segmentId) return
@@ -124,11 +137,70 @@ export default function SegmentPracticePage() {
           setHasResumeProgress(false)
           setInitialSnapshot(null)
         }}
-        onComplete={async () => {
-          await clearSegmentPracticeSessionProgressApi(segment.id)
-          setHasResumeProgress(false)
+        submitting={submitting}
+        onComplete={async (payload) => {
+          const scheduleId = segment.current_review_schedule_id
+          const hasStages = Boolean(
+            segment.stage_labels?.length && segment.review_stages?.length
+          )
+          if (scheduleId && hasStages) {
+            setPendingPayload(payload)
+            setStageDialogOpen(true)
+            return
+          }
+          setSubmitting(true)
+          try {
+            if (segment.review_stage_total != null && segment.review_stage_total > 0) {
+              const nextCompleted = (segment.review_stage_completed ?? 0) + 1
+              const targetReviewNumber = Math.min(nextCompleted, segment.review_stage_total - 1)
+              await updatePalaceSegmentReviewProgressApi(segment.id, {
+                completed_count: nextCompleted,
+                completed_review_number: targetReviewNumber,
+              })
+            }
+            await clearSegmentPracticeSessionProgressApi(segment.id)
+            setHasResumeProgress(false)
+          } finally {
+            setSubmitting(false)
+          }
         }}
       />
+
+      {segment.stage_labels?.length && segment.review_stages?.length && pendingPayload ? (
+        <StageSelectDialog
+          open={stageDialogOpen}
+          stageLabels={segment.stage_labels}
+          stages={segment.review_stages}
+          currentReviewNumber={Math.max(0, (segment.review_stage_completed ?? 0) - 1)}
+          onConfirm={async (targetReviewNumber, needsPractice) => {
+            setStageDialogOpen(false)
+            if (!pendingPayload) return
+            setSubmitting(true)
+            try {
+              const scheduleId = segment.current_review_schedule_id
+              if (scheduleId) {
+                await submitSegmentReviewSessionApi(scheduleId, {
+                  duration_seconds: pendingPayload.durationSeconds,
+                  completion_mode: pendingPayload.completionMode,
+                  revealed_remaining: pendingPayload.revealedRemaining,
+                  red_marked_count: pendingPayload.redNodeIds.length,
+                  target_review_number: targetReviewNumber,
+                  needs_practice: needsPractice,
+                })
+              }
+              await clearSegmentPracticeSessionProgressApi(segment.id)
+              setHasResumeProgress(false)
+            } finally {
+              setSubmitting(false)
+              setPendingPayload(null)
+            }
+          }}
+          onCancel={() => {
+            setStageDialogOpen(false)
+            setPendingPayload(null)
+          }}
+        />
+      ) : null}
     </div>
   )
 }

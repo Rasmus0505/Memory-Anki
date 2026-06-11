@@ -14,7 +14,10 @@ import {
   getMiniPracticeSessionProgressApi,
   getPalaceMiniPalaceApi,
   saveMiniPracticeSessionProgressApi,
+  updateMiniPalaceReviewProgressApi,
 } from '@/shared/api/modules/palaces'
+import { submitMiniReviewSessionApi } from '@/shared/api/modules/reviews'
+import { StageSelectDialog } from '@/features/review/components/StageSelectDialog'
 
 export default function MiniPalacePracticePage() {
   const { id } = useParams()
@@ -29,6 +32,14 @@ export default function MiniPalacePracticePage() {
   const [initialSnapshot, setInitialSnapshot] = useState<ReviewFlowSnapshot | null>(null)
   const [flowKey, setFlowKey] = useState(0)
   const [hasResumeProgress, setHasResumeProgress] = useState(false)
+  const [stageDialogOpen, setStageDialogOpen] = useState(false)
+  const [pendingPayload, setPendingPayload] = useState<{
+    durationSeconds: number
+    completionMode: 'manual_complete' | 'auto_complete'
+    revealedRemaining: boolean
+    redNodeIds: string[]
+  } | null>(null)
+  const [submitting, setSubmitting] = useState(false)
 
   useEffect(() => {
     if (!miniPalaceId) return
@@ -146,11 +157,70 @@ export default function MiniPalacePracticePage() {
           setHasResumeProgress(false)
           setInitialSnapshot(null)
         }}
-        onComplete={async () => {
-          await clearMiniPracticeSessionProgressApi(miniPalace.id)
-          setHasResumeProgress(false)
+        submitting={submitting}
+        onComplete={async (payload) => {
+          const scheduleId = miniPalace.current_review_schedule_id
+          const hasStages = Boolean(
+            miniPalace.stage_labels?.length && miniPalace.review_stages?.length
+          )
+          if (scheduleId && hasStages) {
+            setPendingPayload(payload)
+            setStageDialogOpen(true)
+            return
+          }
+          setSubmitting(true)
+          try {
+            if (miniPalace.review_stage_total != null && miniPalace.review_stage_total > 0) {
+              const nextCompleted = (miniPalace.review_stage_completed ?? 0) + 1
+              const targetReviewNumber = Math.min(nextCompleted, miniPalace.review_stage_total - 1)
+              await updateMiniPalaceReviewProgressApi(miniPalace.id, {
+                completed_count: nextCompleted,
+                completed_review_number: targetReviewNumber,
+              })
+            }
+            await clearMiniPracticeSessionProgressApi(miniPalace.id)
+            setHasResumeProgress(false)
+          } finally {
+            setSubmitting(false)
+          }
         }}
       />
+
+      {miniPalace.stage_labels?.length && miniPalace.review_stages?.length && pendingPayload ? (
+        <StageSelectDialog
+          open={stageDialogOpen}
+          stageLabels={miniPalace.stage_labels}
+          stages={miniPalace.review_stages}
+          currentReviewNumber={Math.max(0, (miniPalace.review_stage_completed ?? 0) - 1)}
+          onConfirm={async (targetReviewNumber, needsPractice) => {
+            setStageDialogOpen(false)
+            if (!pendingPayload) return
+            setSubmitting(true)
+            try {
+              const scheduleId = miniPalace.current_review_schedule_id
+              if (scheduleId) {
+                await submitMiniReviewSessionApi(scheduleId, {
+                  duration_seconds: pendingPayload.durationSeconds,
+                  completion_mode: pendingPayload.completionMode,
+                  revealed_remaining: pendingPayload.revealedRemaining,
+                  red_marked_count: pendingPayload.redNodeIds.length,
+                  target_review_number: targetReviewNumber,
+                  needs_practice: needsPractice,
+                })
+              }
+              await clearMiniPracticeSessionProgressApi(miniPalace.id)
+              setHasResumeProgress(false)
+            } finally {
+              setSubmitting(false)
+              setPendingPayload(null)
+            }
+          }}
+          onCancel={() => {
+            setStageDialogOpen(false)
+            setPendingPayload(null)
+          }}
+        />
+      ) : null}
     </div>
   )
 }

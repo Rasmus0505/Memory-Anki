@@ -28,6 +28,10 @@ export interface ReviewPalaceSummary {
   chapters: ReviewQueueChapter[]
   stage_labels?: string[]
   review_stages?: ReviewStageSummary[]
+  current_review_schedule_id?: number | null
+  review_stage_total?: number
+  review_stage_completed?: number
+  review_stage_progress?: number
 }
 export interface ReviewScheduleSummary {
   id: number

@@ -81,10 +81,11 @@ _UNSET = job_state.UNSET
 
 
 def _dashscope_runtime() -> DashscopeImportRuntime:
+    from memory_anki.modules.settings.application.ai_model_registry import resolve_current_model
     return llm_gateway.build_runtime(
         api_key=DASHSCOPE_API_KEY or "",
         base_url=DASHSCOPE_BASE_URL,
-        model=DASHSCOPE_VISION_MODEL,
+        model=resolve_current_model(None, "ai_model_vision", DASHSCOPE_VISION_MODEL),
     )
 
 

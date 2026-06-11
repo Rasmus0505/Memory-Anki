@@ -15,8 +15,12 @@ import {
   getPracticeSessionProgressApi,
   savePracticeSessionProgressApi,
   togglePalaceFocusNodeApi,
+  updateDefaultSegmentReviewProgressApi,
   updatePalacePracticeFlagApi,
 } from '@/shared/api/modules/palaces'
+import { submitReviewSessionApi } from '@/shared/api/modules/reviews'
+import { StageSelectDialog } from '@/features/review/components/StageSelectDialog'
+import type { ReviewStageSummary } from '@/shared/api/contracts'
 
 interface PalaceMeta {
   id: number
@@ -28,6 +32,17 @@ interface PalaceMeta {
   focus_count?: number
   attachments: Array<{ id: number; original_name: string }>
   chapters: Array<{ id: number; name: string; subject?: { id: number; name: string } | null }>
+  current_review_schedule_id?: number | null
+  review_stage_total?: number
+  review_stage_completed?: number
+  review_stage_progress?: number
+  stage_labels?: string[]
+  review_stages?: ReviewStageSummary[]
+  segments?: Array<{
+    id: number; name: string; review_stage_completed: number; review_stage_total: number
+    stage_labels: string[]; review_stages?: ReviewStageSummary[]
+    current_review_schedule_id: number | null
+  }>
 }
 
 export default function PalacePractice() {
@@ -35,11 +50,21 @@ export default function PalacePractice() {
   const palaceId = id ? Number(id) : null
   const [palace, setPalace] = useState<PalaceMeta | null>(null)
   const [editorState, setEditorState] = useState<MindMapEditorState | null>(null)
+  const [editEditorState, setEditEditorState] = useState<MindMapEditorState | null>(null)
+  const [displayMode, setDisplayMode] = useState<'review' | 'edit'>('review')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [initialSnapshot, setInitialSnapshot] = useState<ReviewFlowSnapshot | null>(null)
   const [flowKey, setFlowKey] = useState(0)
   const [hasResumeProgress, setHasResumeProgress] = useState(false)
+  const [stageDialogOpen, setStageDialogOpen] = useState(false)
+  const [pendingPayload, setPendingPayload] = useState<{
+    durationSeconds: number
+    completionMode: 'manual_complete' | 'auto_complete'
+    revealedRemaining: boolean
+    redNodeIds: string[]
+  } | null>(null)
+  const [submitting, setSubmitting] = useState(false)
 
   useEffect(() => {
     if (!palaceId) return
@@ -146,10 +171,36 @@ export default function PalacePractice() {
           setHasResumeProgress(false)
           setInitialSnapshot(null)
         }}
-        onComplete={async () => {
-          await clearPracticeSessionProgressApi(palace.id)
-          await updatePalacePracticeFlagApi(palace.id, { needs_practice: false })
-          setHasResumeProgress(false)
+        submitting={submitting}
+        onComplete={async (payload) => {
+          // Check if palace has active review schedule with stage info
+          const scheduleId = palace.current_review_schedule_id
+          const hasStages = Boolean(
+            palace.stage_labels?.length && palace.review_stages?.length
+          )
+          if (scheduleId && hasStages) {
+            // Has active schedule: show stage select dialog
+            setPendingPayload(payload)
+            setStageDialogOpen(true)
+            return
+          }
+          // No active schedule: use manual progress adjust or just clear
+          setSubmitting(true)
+          try {
+            if (palace.review_stage_total != null && palace.review_stage_total > 0) {
+              const nextCompleted = (palace.review_stage_completed ?? 0) + 1
+              const targetReviewNumber = Math.min(nextCompleted, palace.review_stage_total - 1)
+              await updateDefaultSegmentReviewProgressApi(palace.id, {
+                completed_count: nextCompleted,
+                completed_review_number: targetReviewNumber,
+              })
+            }
+            await clearPracticeSessionProgressApi(palace.id)
+            await updatePalacePracticeFlagApi(palace.id, { needs_practice: false })
+            setHasResumeProgress(false)
+          } finally {
+            setSubmitting(false)
+          }
         }}
         onToggleFocusNode={async (nodeUid) => {
           await togglePalaceFocusNodeApi(
@@ -159,6 +210,45 @@ export default function PalacePractice() {
           )
         }}
       />
+
+      {palace.stage_labels?.length && palace.review_stages?.length && pendingPayload ? (
+        <StageSelectDialog
+          open={stageDialogOpen}
+          stageLabels={palace.stage_labels}
+          stages={palace.review_stages}
+          currentReviewNumber={Math.max(0, (palace.review_stage_completed ?? 0) - 1)}
+          onConfirm={async (targetReviewNumber, needsPractice) => {
+            setStageDialogOpen(false)
+            if (!pendingPayload) return
+            setSubmitting(true)
+            try {
+              const scheduleId = palace.current_review_schedule_id
+              if (scheduleId) {
+                await submitReviewSessionApi(scheduleId, {
+                  duration_seconds: pendingPayload.durationSeconds,
+                  completion_mode: pendingPayload.completionMode,
+                  revealed_remaining: pendingPayload.revealedRemaining,
+                  red_marked_count: pendingPayload.redNodeIds.length,
+                  target_review_number: targetReviewNumber,
+                  needs_practice: needsPractice,
+                })
+              }
+              await clearPracticeSessionProgressApi(palace.id)
+              if (!needsPractice) {
+                await updatePalacePracticeFlagApi(palace.id, { needs_practice: false })
+              }
+              setHasResumeProgress(false)
+            } finally {
+              setSubmitting(false)
+              setPendingPayload(null)
+            }
+          }}
+          onCancel={() => {
+            setStageDialogOpen(false)
+            setPendingPayload(null)
+          }}
+        />
+      ) : null}
     </div>
   )
 }

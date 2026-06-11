@@ -21,6 +21,7 @@ describe('ProfileAiPromptsPage', () => {
           template: '默认模板 {{structure_tree_json}}',
           default_template: '默认模板 {{structure_tree_json}}',
           is_customized: false,
+          source_location: 'apps/api/src/memory_anki/modules/palaces/application/mindmap_import/prompts.py',
           required_placeholders: ['structure_tree_json'],
           available_placeholders: [
             { name: 'structure_tree_json', description: '结构 JSON' },
@@ -37,6 +38,7 @@ describe('ProfileAiPromptsPage', () => {
           template: '自定义模板 {{structure_tree_json}}',
           default_template: '默认模板 {{structure_tree_json}}',
           is_customized: true,
+          source_location: 'apps/api/src/memory_anki/modules/palaces/application/mindmap_import/prompts.py',
           required_placeholders: ['structure_tree_json'],
           available_placeholders: [
             { name: 'structure_tree_json', description: '结构 JSON' },
@@ -47,7 +49,7 @@ describe('ProfileAiPromptsPage', () => {
 
     render(
       <MemoryRouter initialEntries={['/profile/ai-prompts']}>
-        <ProfileAiPromptsPage />
+        <ProfileAiPromptsPage standalone />
       </MemoryRouter>,
     )
 

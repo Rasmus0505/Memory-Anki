@@ -33,12 +33,9 @@ from .normalization import (
 )
 from .prompts import (
     BATCH_PROMPT,
+    PDF_PAGE_CONTEXT_PROMPT,
     PROMPT,
     TEXT_PROMPT,
-    build_pdf_batch_prompt,
-    build_pdf_direct_prompt,
-    build_pdf_structure_prompt,
-    extend_prompt_for_pdf,
     truncate_prompt_text,
 )
 from .step_protocol import ImportStep
@@ -55,6 +52,7 @@ __all__ = [
     "PDF_IMPORT_MODE_DIRECT_GENERATION",
     "PDF_IMPORT_MODE_STRUCTURED_MERGE",
     "PDF_OCR_FALLBACK_WARNING",
+    "PDF_PAGE_CONTEXT_PROMPT",
     "PROMPT",
     "PROMPT_TEXT_MAX_CHARS",
     "PdfImportOptions",
@@ -66,13 +64,9 @@ __all__ = [
     "BatchImportPreviewResult",
     "build_editor_doc",
     "build_image_content_part",
-    "build_pdf_batch_prompt",
-    "build_pdf_direct_prompt",
-    "build_pdf_structure_prompt",
     "build_pdf_text_anchors",
     "clean_inline_text",
     "ensure_rendered_page_size",
-    "extend_prompt_for_pdf",
     "normalize_extracted_text",
     "normalize_pdf_source_tree",
     "normalize_page_selection",

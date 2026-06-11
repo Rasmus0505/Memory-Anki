@@ -1,5 +1,6 @@
 import { API_BASE, fetchWithMutationQueue, request } from '@/shared/api/http'
 import type {
+  AiModelScenariosResponse,
   AiPromptTemplateListResponse,
   BackupListResponse,
   ClientPreferencesResponse,
@@ -52,6 +53,23 @@ export function resetAiPromptTemplatesApi(keys?: string[]) {
       resourceKey: 'settings:ai-prompts:reset',
       description: '重置 AI Prompt 模板',
       replayMode: 'manual',
+    },
+  })
+}
+
+export function getAiModelScenariosApi() {
+  return request<AiModelScenariosResponse>('/settings/ai-models')
+}
+
+export function updateAiModelScenariosApi(updates: Record<string, string>) {
+  return request<AiModelScenariosResponse>('/settings/ai-models', {
+    method: 'PUT',
+    body: JSON.stringify({ updates }),
+    persistence: {
+      resourceKey: 'settings:ai-models',
+      coalesceKey: 'settings:ai-models',
+      description: '保存 AI 模型配置',
+      replayMode: 'auto',
     },
   })
 }

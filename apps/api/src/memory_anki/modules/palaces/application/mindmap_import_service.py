@@ -5,6 +5,8 @@ import urllib.request
 from collections.abc import Generator
 from typing import Any
 
+from sqlalchemy.orm import Session
+
 from memory_anki.core.config import (
     DASHSCOPE_API_KEY,
     DASHSCOPE_BASE_URL,
@@ -37,9 +39,6 @@ from .mindmap_import import (
     TextPreviewResult,
     build_editor_doc,
     build_image_content_part,
-    build_pdf_batch_prompt,
-    build_pdf_direct_prompt,
-    build_pdf_structure_prompt,
     build_pdf_text_anchors,
     clean_inline_text,
     ensure_rendered_page_size,
@@ -259,11 +258,12 @@ def stream_pdf_text_preview(
     )
 
 
-def _dashscope_runtime() -> DashscopeImportRuntime:
+def _dashscope_runtime(session: Session | None = None) -> DashscopeImportRuntime:
+    from memory_anki.modules.settings.application.ai_model_registry import resolve_current_model
     return llm_gateway.build_runtime(
         api_key=DASHSCOPE_API_KEY or "",
         base_url=DASHSCOPE_BASE_URL,
-        model=DASHSCOPE_VISION_MODEL,
+        model=resolve_current_model(session, "ai_model_vision", DASHSCOPE_VISION_MODEL),
     )
 
 

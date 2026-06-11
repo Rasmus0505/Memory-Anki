@@ -34,6 +34,8 @@ from memory_anki.infrastructure.llm.openai_compatible import (
     call_chat_completion_text,
 )
 from memory_anki.modules.english_reading.domain.errors import EnglishReadingError
+from memory_anki.modules.settings.application.ai_model_registry import resolve_current_model
+from memory_anki.modules.settings.application.ai_prompts import get_prompt_template
 from memory_anki.modules.time_records.application.time_records_service import get_threshold_seconds
 
 CEFR_LEVELS = ("A1", "A2", "B1", "B2", "C1", "C2")
@@ -710,6 +712,7 @@ def build_reading_version_payload(
                 rendered = None
                 if should_try_ai_adaptation:
                     rendered = adapt_sentence_with_ai(
+                        session,
                         state.text,
                         green_spans=green_spans,
                         yellow_spans=yellow_spans,
@@ -905,6 +908,7 @@ def render_sentence_locally(
 
 
 def adapt_sentence_with_ai(
+    session: Session,
     sentence_text: str,
     *,
     green_spans: list[SentenceSpan],
@@ -919,7 +923,7 @@ def adapt_sentence_with_ai(
     config = OpenAICompatibleChatConfig(
         api_key=str(DASHSCOPE_API_KEY or "").strip(),
         base_url=str(DASHSCOPE_BASE_URL or "").strip(),
-        model=str(DASHSCOPE_TEXT_MODEL or "").strip() or "qwen3.6-flash",
+        model=resolve_current_model(session, "ai_model_text", DASHSCOPE_TEXT_MODEL),
         temperature=0.1,
         timeout_seconds=90,
     )
@@ -932,21 +936,8 @@ def adapt_sentence_with_ai(
         "yellow_candidates": [serialize_span_for_prompt(span) for span in yellow_spans],
         "red_candidates": [serialize_span_for_prompt(span) for span in red_spans],
     }
-    prompt = (
-        "你正在把一条英文句子改造成 i+1 阅读材料。"
-        "输入中可以包含中文提示，但你的最终输出必须是英文结果。"
-        "必须严格保持原意，不要额外扩写，不要输出中文，不要输出 Markdown。"
-        "只输出一个 JSON 对象，结构必须是："
-        '{"parts":[{"text":"..."},{"text":"...","kind":"yellow","originalText":"...","displayText":"...","sourceCefr":"A1","targetCefr":"B1","explainZh":"..."}],'
-        '"sentenceAnnotation":{"kind":"unchanged|syntax_simplified","originalText":"...","displayText":"...","skeletonHints":["subject","verb"]}}。'
-        "parts 需要按顺序拼接成最终展示句。"
-        "green 表示原文天然 i+1 且尽量原样保留；yellow 表示把太简单的表达升级到更地道的 i+1；"
-        "red 表示把太难的表达降到可顺读版本。"
-        "explainZh 字段虽然沿用旧名字，但内容必须是英文简短说明，绝对不能出现中文。"
-        "如果句法过难，请适度拆解结构，并把 sentenceAnnotation.kind 设为 syntax_simplified，"
-        "同时提供 2 到 4 个英文骨架标签。"
-        f"\n\n输入数据：{json.dumps(prompt_payload, ensure_ascii=False)}"
-    )
+    base_prompt = get_prompt_template(session, "ai_prompt_english_reading_adapt_sentence")
+    prompt = f"{base_prompt}\n\n输入数据：{json.dumps(prompt_payload, ensure_ascii=False)}"
     try:
         payload = call_json_completion(config=config, prompt=prompt)
         return validate_ai_sentence_payload(payload, sentence_text=sentence_text)
@@ -1104,17 +1095,8 @@ def classify_unknown_surfaces_with_ai(
     resolved: dict[str, SurfaceResolution] = {}
     for batch_start in range(0, len(ordered_surfaces), 48):
         batch = ordered_surfaces[batch_start : batch_start + 48]
-        prompt = (
-            "请为英文学习网站补全词形信息。"
-            "你会收到一组本地词典暂未识别的英文表面形式。"
-            "输入里可以有中文说明，但输出字段内容必须用英文，不要输出中文。"
-            "请输出 JSON："
-            '{"items":[{"surface":"cheated","lemma":"cheat","basePhrase":"cheat","cefr":"A2","confidence":0.92,"explainZh":"Past tense form of cheat."}]}。'
-            "cefr 只能是 A1/A2/B1/B2/C1/C2。confidence 取 0 到 1 之间。"
-            "explainZh 字段虽然名字保留，但值必须是英文。"
-            "如果是固定短语，请把 basePhrase 设为最自然的短语原型。"
-            f"\n\n待处理词：{json.dumps(batch, ensure_ascii=False)}"
-        )
+        base_prompt = get_prompt_template(session, "ai_prompt_english_reading_classify_words")
+        prompt = f"{base_prompt}\n\n待处理词：{json.dumps(batch, ensure_ascii=False)}"
         payload = call_json_completion(config=config, prompt=prompt)
         items = payload.get("items")
         if not isinstance(items, list):

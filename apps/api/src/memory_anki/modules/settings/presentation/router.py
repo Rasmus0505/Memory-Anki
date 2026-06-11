@@ -24,6 +24,10 @@ from memory_anki.modules.settings.application.ai_prompts import (
     reset_prompt_templates,
     save_prompt_templates,
 )
+from memory_anki.modules.settings.application.ai_model_registry import (
+    list_model_scenarios,
+    save_model_selection,
+)
 
 router = APIRouter(tags=["settings"])
 
@@ -208,6 +212,21 @@ def api_ai_prompt_settings_reset(data: dict, s: Session = Depends(session_dep)):
         }
     except AiPromptValidationError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.get("/settings/ai-models")
+def api_ai_model_scenarios(s: Session = Depends(session_dep)):
+    return {"scenarios": list_model_scenarios(s)}
+
+
+@router.put("/settings/ai-models")
+def api_ai_model_scenarios_update(data: dict, s: Session = Depends(session_dep)):
+    updates = data.get("updates") if isinstance(data.get("updates"), dict) else data
+    normalized_updates = {
+        str(key): str(value)
+        for key, value in dict(updates or {}).items()
+    }
+    return {"scenarios": save_model_selection(s, normalized_updates)}
 
 
 @router.get("/ai-call-logs")

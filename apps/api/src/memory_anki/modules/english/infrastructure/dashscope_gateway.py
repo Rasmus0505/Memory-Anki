@@ -32,6 +32,7 @@ from memory_anki.modules.english.domain.errors import (
     EnglishCourseError,
     EnglishTranslationBatchMismatchError,
 )
+from memory_anki.modules.settings.application.ai_model_registry import resolve_current_model
 
 from .generation_log_store import append_generation_log_event
 
@@ -93,7 +94,7 @@ class DashscopeEnglishAsrGateway:
         )
         try:
             task_response = QwenTranscription.async_call(
-                model=DASHSCOPE_ASR_MODEL,
+                model=resolve_current_model(None, "ai_model_asr", DASHSCOPE_ASR_MODEL),
                 file_url=signed_url,
                 enable_words=True,
                 enable_itn=False,
@@ -187,7 +188,7 @@ class DashscopeEnglishTranslator:
         config = OpenAICompatibleChatConfig(
             api_key=str(DASHSCOPE_API_KEY or "").strip(),
             base_url=str(DASHSCOPE_BASE_URL or "").strip(),
-            model=str(ENGLISH_TRANSLATION_MODEL or "").strip() or "qwen-mt-flash",
+            model=resolve_current_model(None, "ai_model_translation", ENGLISH_TRANSLATION_MODEL),
             temperature=0.0,
             timeout_seconds=120,
         )

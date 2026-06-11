@@ -1,5 +1,5 @@
 ﻿import { Suspense, lazy } from 'react'
-import { Route, Routes } from 'react-router-dom'
+import { Navigate, Route, Routes } from 'react-router-dom'
 import DashboardPage from '@/app/router/DashboardPage'
 import PalaceListPage from '@/app/router/PalaceListPage'
 import PalaceShelfPage from '@/app/router/PalaceShelfPage'
@@ -7,6 +7,7 @@ import PalacePracticePage from '@/app/router/PalacePracticePage'
 import PalaceFocusPracticePage from '@/app/router/PalaceFocusPracticePage'
 import PalaceViewPage from '@/app/router/PalaceViewPage'
 import SegmentPracticePage from '@/app/router/SegmentPracticePage'
+import MiniPalacePracticePage from '@/app/router/MiniPalacePracticePage'
 import ReviewOverviewPage from '@/features/review/ReviewOverviewPage'
 
 const KnowledgePage = lazy(() => import('@/features/knowledge/KnowledgePage'))
@@ -15,15 +16,7 @@ const EnglishCoursePage = lazy(() => import('@/features/english/EnglishCoursePag
 const EnglishReadingPage = lazy(() => import('@/features/english-reading/EnglishReadingPage'))
 const PalaceEditPage = lazy(() => import('@/features/palace-edit/PalaceEditPage'))
 const ProfilePage = lazy(() => import('@/features/profile/ProfilePage'))
-const ProfileAiSplitPage = lazy(
-  () => import('@/features/profile/ProfileAiSplitPage'),
-)
-const ProfileAiPromptsPage = lazy(
-  () => import('@/features/profile/ProfileAiPromptsPage'),
-)
-const ProfileVoiceCoachPage = lazy(
-  () => import('@/features/profile/ProfileVoiceCoachPage'),
-)
+const ProfileAiPage = lazy(() => import('@/features/profile/ProfileAiPage'))
 const ProfileBackupsPage = lazy(
   () => import('@/features/profile/ProfileBackupsPage'),
 )
@@ -35,6 +28,10 @@ const SegmentReviewSessionPage = lazy(
 )
 const BatchSegmentReviewSessionPage = lazy(
   () => import('@/features/review/BatchSegmentReviewSessionPage'),
+)
+
+const MiniReviewSessionPage = lazy(
+  () => import('@/features/review/MiniReviewSessionPage'),
 )
 
 function RouteFallback() {
@@ -69,9 +66,10 @@ export function AppRouter() {
         <Route path="/segment-review/session/:id" element={<SegmentReviewSessionPage />} />
         <Route path="/segment-review/batch" element={<BatchSegmentReviewSessionPage />} />
         <Route path="/profile" element={<ProfilePage />} />
-        <Route path="/profile/ai-prompts" element={<ProfileAiPromptsPage />} />
-        <Route path="/profile/ai-split" element={<ProfileAiSplitPage />} />
-        <Route path="/profile/voice-coach" element={<ProfileVoiceCoachPage />} />
+        <Route path="/profile/ai" element={<ProfileAiPage />} />
+        <Route path="/profile/ai-prompts" element={<Navigate to="/profile/ai?tab=prompts" replace />} />
+        <Route path="/profile/ai-split" element={<Navigate to="/profile/ai?tab=config" replace />} />
+        <Route path="/profile/voice-coach" element={<Navigate to="/profile/ai?tab=config" replace />} />
         <Route path="/profile/backups" element={<ProfileBackupsPage />} />
       </Routes>
     </Suspense>

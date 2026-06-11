@@ -58,11 +58,25 @@ export interface AiPromptTemplate {
   template: string
   default_template: string
   is_customized: boolean
+  source_location: string
   required_placeholders: string[]
   available_placeholders: AiPromptPlaceholder[]
 }
 export interface AiPromptTemplateListResponse {
   items: AiPromptTemplate[]
+}
+export interface AiModelScenario {
+  key: string
+  label: string
+  description: string
+  category: string
+  config_key: string
+  current_model: string
+  available_models: string[]
+  source_location: string
+}
+export interface AiModelScenariosResponse {
+  scenarios: AiModelScenario[]
 }
 export interface ImportPalacesResponse {
   ok: boolean

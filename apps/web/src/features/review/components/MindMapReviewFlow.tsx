@@ -735,7 +735,7 @@ export function MindMapReviewFlow({
         }}
         onMarkUncompleted={() => {
           setCompletionDialogOpen(false)
-          flow.feedback.timer?.registerActivity('practice_interaction', { source: 'complete_unfinished' })
+          flow.timer.registerActivity('practice_interaction', { source: 'complete_unfinished' })
           toast.success('已保存进度，下次可继续')
         }}
         submitting={submitting}

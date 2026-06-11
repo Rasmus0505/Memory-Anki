@@ -1,4 +1,4 @@
-import { HardDriveDownload, Settings, Sparkles, Volume2, WandSparkles } from 'lucide-react'
+import { Bot, HardDriveDownload, Settings } from 'lucide-react'
 import { Link, useLocation } from 'react-router-dom'
 import { cn } from '@/shared/lib/utils'
 
@@ -8,16 +8,14 @@ export function ProfileNav() {
 
   const items = [
     { href: '/profile', label: '复习配置与导入导出', icon: Settings },
-    { href: '/profile/ai-prompts', label: 'AI提示词', icon: WandSparkles },
-    { href: '/profile/ai-split', label: 'AI分卡配置', icon: Sparkles },
-    { href: '/profile/voice-coach', label: '语音教练配置', icon: Volume2 },
+    { href: '/profile/ai', label: 'AI管理', icon: Bot },
     { href: '/profile/backups', label: '备份与恢复', icon: HardDriveDownload },
   ]
 
   return (
     <nav className="flex flex-wrap gap-2 rounded-2xl border border-border/70 bg-card/70 p-2 lg:flex-col">
       {items.map(({ href, label, icon: Icon }) => {
-        const active = currentPath === href
+        const active = currentPath === href || (href === '/profile/ai' && currentPath.startsWith('/profile/ai'))
         return (
           <Link
             key={href}

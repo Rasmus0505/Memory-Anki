@@ -592,6 +592,13 @@ def normalize_storage_datetime(value: datetime) -> datetime:
     return value.astimezone().replace(tzinfo=None)
 
 
+def _today_bounds() -> tuple[datetime, datetime]:
+    today = date.today()
+    start = datetime.combine(today, time.min)
+    end = datetime.combine(today + timedelta(days=1), time.min)
+    return start, end
+
+
 def _current_week_bounds() -> tuple[datetime, datetime]:
     today = date.today()
     start_of_week = today - timedelta(days=today.weekday())

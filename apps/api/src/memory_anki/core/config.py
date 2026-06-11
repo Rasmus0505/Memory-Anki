@@ -81,6 +81,10 @@ DEFAULTS = {
     "flow_voice_format": "mp3",
     "flow_voice_sample_rate": "24000",
     "flow_voice_instruction": "",
+    "ai_model_vision": DASHSCOPE_VISION_MODEL,
+    "ai_model_text": DASHSCOPE_TEXT_MODEL,
+    "ai_model_translation": ENGLISH_TRANSLATION_MODEL,
+    "ai_model_asr": DASHSCOPE_ASR_MODEL,
 }
 
 

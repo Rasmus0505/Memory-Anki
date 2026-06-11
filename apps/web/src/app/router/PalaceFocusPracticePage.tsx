@@ -21,7 +21,11 @@ import {
   getPalaceFocusSessionApi,
   saveFocusPracticeSessionProgressApi,
   togglePalaceFocusNodeApi,
+  updateDefaultSegmentReviewProgressApi,
+  updatePalacePracticeFlagApi,
 } from '@/shared/api/modules/palaces'
+import { submitReviewSessionApi } from '@/shared/api/modules/reviews'
+import { StageSelectDialog } from '@/features/review/components/StageSelectDialog'
 
 export default function PalaceFocusPracticePage() {
   const { id } = useParams()
@@ -35,6 +39,14 @@ export default function PalaceFocusPracticePage() {
   const [initialSnapshot, setInitialSnapshot] = useState<ReviewFlowSnapshot | null>(null)
   const [flowKey, setFlowKey] = useState(0)
   const [hasResumeProgress, setHasResumeProgress] = useState(false)
+  const [stageDialogOpen, setStageDialogOpen] = useState(false)
+  const [pendingPayload, setPendingPayload] = useState<{
+    durationSeconds: number
+    completionMode: 'manual_complete' | 'auto_complete'
+    revealedRemaining: boolean
+    redNodeIds: string[]
+  } | null>(null)
+  const [submitting, setSubmitting] = useState(false)
 
   useEffect(() => {
     if (!palaceId) return
@@ -167,9 +179,32 @@ export default function PalaceFocusPracticePage() {
           setInitialSnapshot(null)
           setFlowKey((current) => current + 1)
         }}
-        onComplete={async () => {
-          await clearFocusPracticeSessionProgressApi(palace.id)
-          setHasResumeProgress(false)
+        submitting={submitting}
+        onComplete={async (payload) => {
+          const scheduleId = palace.current_review_schedule_id
+          const hasStages = Boolean(
+            palace.stage_labels?.length && palace.review_stages?.length
+          )
+          if (scheduleId && hasStages) {
+            setPendingPayload(payload)
+            setStageDialogOpen(true)
+            return
+          }
+          setSubmitting(true)
+          try {
+            if (palace.review_stage_total != null && palace.review_stage_total > 0) {
+              const nextCompleted = (palace.review_stage_completed ?? 0) + 1
+              const targetReviewNumber = Math.min(nextCompleted, palace.review_stage_total - 1)
+              await updateDefaultSegmentReviewProgressApi(palace.id, {
+                completed_count: nextCompleted,
+                completed_review_number: targetReviewNumber,
+              })
+            }
+            await clearFocusPracticeSessionProgressApi(palace.id)
+            setHasResumeProgress(false)
+          } finally {
+            setSubmitting(false)
+          }
         }}
         onToggleFocusNode={async (nodeUid) => {
           await togglePalaceFocusNodeApi(
@@ -188,6 +223,45 @@ export default function PalaceFocusPracticePage() {
           </span>
           <span className="ml-2">完成一次专项练习不会自动移出，仍需手动取消专项标记。</span>
         </div>
+      ) : null}
+
+      {palace.stage_labels?.length && palace.review_stages?.length && pendingPayload ? (
+        <StageSelectDialog
+          open={stageDialogOpen}
+          stageLabels={palace.stage_labels}
+          stages={palace.review_stages}
+          currentReviewNumber={Math.max(0, (palace.review_stage_completed ?? 0) - 1)}
+          onConfirm={async (targetReviewNumber, needsPractice) => {
+            setStageDialogOpen(false)
+            if (!pendingPayload) return
+            setSubmitting(true)
+            try {
+              const scheduleId = palace.current_review_schedule_id
+              if (scheduleId) {
+                await submitReviewSessionApi(scheduleId, {
+                  duration_seconds: pendingPayload.durationSeconds,
+                  completion_mode: pendingPayload.completionMode,
+                  revealed_remaining: pendingPayload.revealedRemaining,
+                  red_marked_count: pendingPayload.redNodeIds.length,
+                  target_review_number: targetReviewNumber,
+                  needs_practice: needsPractice,
+                })
+              }
+              await clearFocusPracticeSessionProgressApi(palace.id)
+              if (!needsPractice) {
+                await updatePalacePracticeFlagApi(palace.id, { needs_practice: false })
+              }
+              setHasResumeProgress(false)
+            } finally {
+              setSubmitting(false)
+              setPendingPayload(null)
+            }
+          }}
+          onCancel={() => {
+            setStageDialogOpen(false)
+            setPendingPayload(null)
+          }}
+        />
       ) : null}
     </div>
   )

@@ -31,6 +31,8 @@ PROMPT_CONFIG_KEYS = (
     "ai_prompt_import_pdf_direct",
     "ai_prompt_import_pdf_page_context",
     "ai_prompt_mindmap_ai_split_system",
+    "ai_prompt_english_reading_adapt_sentence",
+    "ai_prompt_english_reading_classify_words",
 )
 
 PROMPT_KEY_ALIASES = {
@@ -55,6 +57,7 @@ class PromptTemplateDefinition:
     label: str
     description: str
     default_template: str
+    source_location: str = ""
     available_placeholders: tuple[PromptPlaceholder, ...] = ()
     required_placeholders: tuple[str, ...] = ()
 
@@ -177,18 +180,21 @@ PROMPT_DEFINITIONS: dict[str, PromptTemplateDefinition] = {
         label="图片转脑图（兼容）",
         description="旧版单图脑图提示词键。当前推荐使用 PDF 直接生成语义，保留此键仅用于兼容。",
         default_template=PROMPT,
+        source_location="apps/api/src/memory_anki/modules/palaces/application/mindmap_import/prompts.py",
     ),
     "ai_prompt_import_image_text": PromptTemplateDefinition(
         key="ai_prompt_import_image_text",
         label="图片转文字",
         description="图片/PDF OCR 的基础纯文本提示词。PDF 页码范围提示会在运行时追加。",
         default_template=TEXT_PROMPT,
+        source_location="apps/api/src/memory_anki/modules/palaces/application/mindmap_import/prompts.py",
     ),
     "ai_prompt_import_batch_mindmap": PromptTemplateDefinition(
         key="ai_prompt_import_batch_mindmap",
         label="多图转脑图（兼容）",
         description="旧版多图脑图提示词键。当前多图与 PDF 结构补全共用同一识别语义，保留此键仅用于兼容。",
         default_template=_DEFAULT_BATCH_PROMPT_TEMPLATE,
+        source_location="apps/api/src/memory_anki/modules/palaces/application/mindmap_import/prompts.py",
         available_placeholders=(
             _placeholder("structure_tree_json", "结构图提取出的原始脑图 JSON。"),
         ),
@@ -199,6 +205,7 @@ PROMPT_DEFINITIONS: dict[str, PromptTemplateDefinition] = {
         label="PDF 结构页识别",
         description="PDF 结构页转脑图骨架时的完整提示词模板。",
         default_template=_DEFAULT_PDF_STRUCTURE_TEMPLATE,
+        source_location="apps/api/src/memory_anki/modules/settings/application/ai_prompts.py",
         available_placeholders=(
             _placeholder("emphasis_rule", "是否保留下划线/波浪线强调的约束语句。"),
         ),
@@ -209,6 +216,7 @@ PROMPT_DEFINITIONS: dict[str, PromptTemplateDefinition] = {
         label="PDF 结构补全",
         description="PDF 结构页 + 正文页合并生成脑图时的完整提示词模板。",
         default_template=_DEFAULT_PDF_MERGE_TEMPLATE,
+        source_location="apps/api/src/memory_anki/modules/settings/application/ai_prompts.py",
         available_placeholders=(
             _placeholder("leaf_mount_rule", "正文优先挂载到叶子节点或允许挂到父节点的约束语句。"),
             _placeholder("quote_rule", "是否要求尽量保留原文措辞的约束语句。"),
@@ -237,6 +245,7 @@ PROMPT_DEFINITIONS: dict[str, PromptTemplateDefinition] = {
         label="PDF 直接生成",
         description="PDF 选中页面直接生成脑图时的完整提示词模板。",
         default_template=_DEFAULT_PDF_DIRECT_TEMPLATE,
+        source_location="apps/api/src/memory_anki/modules/settings/application/ai_prompts.py",
         available_placeholders=(
             _placeholder("quote_rule", "是否要求尽量保留原文措辞的约束语句。"),
             _placeholder("semantic_split_rule", "是否鼓励按语义拆分长段正文的约束语句。"),
@@ -255,12 +264,50 @@ PROMPT_DEFINITIONS: dict[str, PromptTemplateDefinition] = {
         label="PDF 页码上下文",
         description="追加到 PDF 相关识别请求中的页码范围限制说明。",
         default_template=PDF_PAGE_CONTEXT_PROMPT,
+        source_location="apps/api/src/memory_anki/modules/palaces/application/mindmap_import/prompts.py",
     ),
     "ai_prompt_mindmap_ai_split_system": PromptTemplateDefinition(
         key="ai_prompt_mindmap_ai_split_system",
         label="AI 分卡系统提示词",
         description="脑图 AI 分卡发送给文本模型的系统提示词。",
         default_template=AI_SPLIT_SYSTEM_PROMPT,
+        source_location="apps/api/src/memory_anki/modules/palaces/application/mindmap_ai_split/contracts.py",
+    ),
+    "ai_prompt_english_reading_adapt_sentence": PromptTemplateDefinition(
+        key="ai_prompt_english_reading_adapt_sentence",
+        label="英语阅读句子改编",
+        description="把英文句子改造成 i+1 阅读材料。运行时会在末尾追加输入数据 JSON。",
+        default_template=(
+            "你正在把一条英文句子改造成 i+1 阅读材料。"
+            "输入中可以包含中文提示，但你的最终输出必须是英文结果。"
+            "必须严格保持原意，不要额外扩写，不要输出中文，不要输出 Markdown。"
+            "只输出一个 JSON 对象，结构必须是："
+            '{"parts":[{"text":"..."},{"text":"...","kind":"yellow","originalText":"...","displayText":"...","sourceCefr":"A1","targetCefr":"B1","explainZh":"..."}],'
+            '"sentenceAnnotation":{"kind":"unchanged|syntax_simplified","originalText":"...","displayText":"...","skeletonHints":["subject","verb"]}}。'
+            "parts 需要按顺序拼接成最终展示句。"
+            "green 表示原文天然 i+1 且尽量原样保留；yellow 表示把太简单的表达升级到更地道的 i+1；"
+            "red 表示把太难的表达降到可顺读版本。"
+            "explainZh 字段虽然沿用旧名字，但内容必须是英文简短说明，绝对不能出现中文。"
+            "如果句法过难，请适度拆解结构，并把 sentenceAnnotation.kind 设为 syntax_simplified，"
+            "同时提供 2 到 4 个英文骨架标签。"
+        ),
+        source_location="apps/api/src/memory_anki/modules/english_reading/application/service.py",
+    ),
+    "ai_prompt_english_reading_classify_words": PromptTemplateDefinition(
+        key="ai_prompt_english_reading_classify_words",
+        label="英语阅读词形分类",
+        description="为本地词典未识别的英文表面形式补全 CEFR 分级信息。运行时会在末尾追加待处理词列表。",
+        default_template=(
+            "请为英文学习网站补全词形信息。"
+            "你会收到一组本地词典暂未识别的英文表面形式。"
+            "输入里可以有中文说明，但输出字段内容必须用英文，不要输出中文。"
+            "请输出 JSON："
+            '{"items":[{"surface":"cheated","lemma":"cheat","basePhrase":"cheat","cefr":"A2","confidence":0.92,"explainZh":"Past tense form of cheat."}]}。'
+            "cefr 只能是 A1/A2/B1/B2/C1/C2。confidence 取 0 到 1 之间。"
+            "explainZh 字段虽然名字保留，但值必须是英文。"
+            "如果是固定短语，请把 basePhrase 设为最自然的短语原型。"
+        ),
+        source_location="apps/api/src/memory_anki/modules/english_reading/application/service.py",
     ),
 }
 
@@ -332,6 +379,7 @@ def list_prompt_templates(session: Session) -> list[dict[str, Any]]:
                 "template": current_template,
                 "default_template": definition.default_template,
                 "is_customized": key in overrides and _normalize_template(overrides[key]) != _normalize_template(definition.default_template),
+                "source_location": definition.source_location,
                 "required_placeholders": list(definition.required_placeholders),
                 "available_placeholders": [
                     {"name": item.name, "description": item.description}

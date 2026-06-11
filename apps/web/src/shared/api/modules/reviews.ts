@@ -2,6 +2,7 @@
 import type {
   BatchSegmentReviewSessionResponse,
   BatchSegmentReviewSubmitResponse,
+  MiniPalaceSummary,
   ReviewSessionSubmitResponse,
   ReviewQueueResponse,
   ReviewScheduleSummary,
