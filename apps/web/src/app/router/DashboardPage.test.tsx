@@ -132,7 +132,7 @@ describe('DashboardPage', () => {
     render(<DashboardPage />)
 
     expect(await screen.findByText('今日学习')).toBeTruthy()
-    expect(screen.getByText('英语练习')).toBeTruthy()
+    expect(screen.getByText('英语')).toBeTruthy()
     expect(screen.getByText('宫殿编辑')).toBeTruthy()
     expect(screen.getByText('练习')).toBeTruthy()
     expect(screen.getByText('复习')).toBeTruthy()

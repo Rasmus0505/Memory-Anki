@@ -107,4 +107,33 @@ describe('AppShell', () => {
     expect(await screen.findByText('1 项待同步')).toBeTruthy()
     expect(screen.getByText('保存学习时长')).toBeTruthy()
   })
+
+  it('keeps only the reading nav item active on the english reading route', async () => {
+    getRuntimeInfoApi.mockResolvedValue({
+      channel: 'stable',
+      commit: 'abcdef1234567890',
+      short_commit: 'abcdef12',
+      runtime_generation: 1,
+      declared_runtime_generation: 1,
+      min_supported_generation: 1,
+      max_supported_generation: 1,
+      last_started_at: '2026-06-01T12:00:00+08:00',
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/english-reading']}>
+        <AppShell>
+          <div>content</div>
+        </AppShell>
+      </MemoryRouter>,
+    )
+
+    await screen.findAllByText(/Stable abcdef12/)
+
+    const readingLink = screen.getAllByRole('link', { name: '英语阅读' })[0]
+    const englishLink = screen.getAllByRole('link', { name: '英语听力' })[0]
+
+    expect(readingLink.className).toContain('bg-primary')
+    expect(englishLink.className).not.toContain('bg-primary')
+  })
 })

@@ -192,7 +192,7 @@ export function EnglishCoursePageView(props: EnglishCoursePageViewProps) {
               <Button variant="outline" size="sm" asChild>
                 <Link to="/english">
                   <ArrowLeft className="mr-2 h-4 w-4" />
-                  返回英语区
+                  返回英语听力
                 </Link>
               </Button>
               <Badge variant={course.progress.completed ? 'outline' : 'secondary'}>
@@ -263,13 +263,13 @@ export function EnglishCoursePageView(props: EnglishCoursePageViewProps) {
                   <CheckCircle2 className="h-10 w-10 text-emerald-600" />
                 </div>
                 <div className="mt-3 text-lg font-semibold text-emerald-700">这门英语课程已经完成</div>
-                <div className="mt-2 text-sm text-emerald-700/80">可以回到英语区选择别的课程，或者再次打开重练。</div>
+                <div className="mt-2 text-sm text-emerald-700/80">可以回到英语听力选择别的课程，或者再次打开重练。</div>
                 <div className="mt-4 flex justify-center gap-2">
                   <Button variant="outline" onClick={() => setDisplaySentenceIndex(Math.max(0, course.sentences.length - 1))}>
                     回看最后一句
                   </Button>
                   <Button onClick={() => navigate('/english')}>
-                    返回英语区
+                    返回英语听力
                   </Button>
                 </div>
               </div>
@@ -502,7 +502,7 @@ export function EnglishCoursePageView(props: EnglishCoursePageViewProps) {
                       练累了可以随时暂停，回来会从上次课程进度继续。
                     </div>
                     <div className="rounded-2xl border border-border/70 bg-background/70 px-4 py-3 text-sm text-muted-foreground">
-                      本页学习时长会计入总练习时长，同时标记为英语练习来源。
+                      本页学习时长会计入总听力时长，同时标记为英语听力来源。
                     </div>
                   </>
                 ) : null}

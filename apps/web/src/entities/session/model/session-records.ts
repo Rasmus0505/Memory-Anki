@@ -31,7 +31,7 @@ export interface TimeSessionRecord {
   id: string
   kind: SessionKind
   palaceId: number | null
-  sourceKind?: 'palace' | 'english' | null
+  sourceKind?: 'palace' | 'english' | 'english_reading' | null
   englishCourseId?: number | null
   title: string
   startedAt: string

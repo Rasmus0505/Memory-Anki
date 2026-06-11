@@ -1,4 +1,4 @@
-import { BookOpen, ChevronRight, LayoutGrid, LibraryBig, List, Plus, Rows3, Search, WrapText } from 'lucide-react'
+﻿import { BookOpen, ChevronRight, LayoutGrid, LibraryBig, List, Plus, Rows3, Search, WrapText } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { PalaceListCard } from '@/app/router/palace-list/PalaceListCard'
@@ -180,6 +180,8 @@ export default function PalaceShelfPage() {
         onSegmentReviewAction={cardActions.onSegmentReviewAction}
         onOpenStageEdit={cardActions.onOpenStageEdit}
         onMarkSegmentReviewed={cardActions.onMarkSegmentReviewed}
+        onMiniPalacePractice={cardActions.onMiniPalacePractice}
+        onMiniPalaceReview={cardActions.onMiniPalaceReview}
         onDelete={cardActions.onDelete}
       />
     ),

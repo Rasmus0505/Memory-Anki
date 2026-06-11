@@ -23,7 +23,7 @@ describe('SessionTimerBar', () => {
     fireEvent.click(screen.getByRole('button', { name: '自动化配置' }))
     const dialogContent = screen.getByTestId('timer-automation-dialog-content')
     expect(dialogContent.className).toContain('overflow-y-auto')
-    expect(dialogContent.className).toContain('xl:overflow-visible')
+    expect(dialogContent.className).toContain('overscroll-contain')
     fireEvent.click(screen.getByRole('checkbox', { name: /宫殿编辑进入页面自动开始/ }))
     fireEvent.change(screen.getAllByDisplayValue('20')[0], { target: { value: '30' } })
     fireEvent.click(screen.getByRole('button', { name: '保存' }))
@@ -51,8 +51,8 @@ describe('SessionTimerBar', () => {
 
     const dialogContent = screen.getByTestId('timer-automation-dialog-content').parentElement
     expect(dialogContent).not.toBeNull()
-    expect(dialogContent?.className).toContain('max-w-[1120px]')
-    expect(dialogContent?.className).toContain('w-[min(1120px,calc(100vw-32px))]')
+    expect(dialogContent?.className).toContain('max-w-[1100px]')
+    expect(dialogContent?.className).toContain('w-[min(1100px,calc(100vw-24px))]')
   })
 
   it('keeps local input editing isolated from live seconds updates', () => {

@@ -1,6 +1,7 @@
 import { useEffect, useState, type PropsWithChildren } from 'react'
 import {
   BookOpen,
+  BookOpenText,
   Captions,
   Brain,
   ChevronRight,
@@ -30,7 +31,8 @@ import { cn } from '@/shared/lib/utils'
 const navItems = [
   { to: '/', label: '仪表盘', icon: LayoutDashboard },
   { to: '/palaces', label: '记忆宫殿', icon: BookOpen },
-  { to: '/english', label: '英语区', icon: Captions },
+  { to: '/english', label: '英语听力', icon: Captions },
+  { to: '/english-reading', label: '英语阅读', icon: BookOpenText },
   { to: '/knowledge', label: '知识大纲', icon: FolderTree },
   { to: '/review', label: '复习', icon: Brain },
   { to: '/profile', label: '个人中心', icon: User },
@@ -69,7 +71,7 @@ function SidebarContent({ runtimeInfo }: { runtimeInfo: RuntimeInfo | null }) {
   const { pathname } = useLocation()
   const shell = useShellContext()
   const compact = shell?.sidebarCollapsed ?? false
-  const active = (to: string) => (to === '/' ? pathname === '/' : pathname.startsWith(to))
+  const active = (to: string) => (to === '/' ? pathname === '/' : pathname === to || pathname.startsWith(`${to}/`))
   const [now, setNow] = useState(() => new Date())
 
   useEffect(() => {

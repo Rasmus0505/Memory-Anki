@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+﻿import { useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { ArrowLeft, Target } from 'lucide-react'
 import { PageIntro } from '@/shared/components/layout/PageIntro'
@@ -28,6 +28,8 @@ export default function PalaceFocusPracticePage() {
   const palaceId = id ? Number(id) : null
   const [palace, setPalace] = useState<ReviewPalaceSummary | null>(null)
   const [editorState, setEditorState] = useState<MindMapEditorState | null>(null)
+  const [editEditorState, setEditEditorState] = useState<MindMapEditorState | null>(null)
+  const [displayMode, setDisplayMode] = useState<'review' | 'edit'>('review')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [initialSnapshot, setInitialSnapshot] = useState<ReviewFlowSnapshot | null>(null)
@@ -47,6 +49,12 @@ export default function PalaceFocusPracticePage() {
         setPalace(focusSession.palace)
         setEditorState({
           editor_doc: focusSession.editor_doc,
+          editor_config: {},
+          editor_local_config: {},
+          lang: 'zh',
+        })
+        setEditEditorState({
+          editor_doc: focusSession.palace?.editor_doc ?? focusSession.editor_doc,
           editor_config: {},
           editor_local_config: {},
           lang: 'zh',
@@ -129,8 +137,14 @@ export default function PalaceFocusPracticePage() {
         title={`${palace.title} / 专项练习`}
         palaceId={palace.id}
         sessionKind="practice"
+        displayMode={displayMode}
         persistKey={`practice:focus:${palace.id}`}
         reviewEditorState={editorState}
+        editEditorState={editEditorState}
+        onModeToggle={() =>
+          setDisplayMode((current) => (current === 'edit' ? 'review' : 'edit'))
+        }
+        onEditEditorStateChange={setEditEditorState}
         initialSnapshot={computedInitialSnapshot}
         focusNodeUids={palace.focus_node_uids ?? []}
         persistProgress

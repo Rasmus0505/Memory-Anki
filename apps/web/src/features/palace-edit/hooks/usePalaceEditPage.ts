@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useLocation, useNavigate, useParams } from 'react-router-dom'
+﻿import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import { useBilinkOverlay } from '@/features/bilink'
 import { useBilinkCounts } from '@/features/bilink/hooks/useBilinkCounts'
@@ -33,7 +33,10 @@ export function usePalaceEditPage() {
   const { id } = useParams()
   const navigate = useNavigate()
   const location = useLocation()
+  const [searchParams, setSearchParams] = useSearchParams()
   const palaceId = id ? Number(id) : null
+  const miniPalaceIdFromQuery = searchParams.get('miniPalaceId')
+  const miniPalaceModeFromQuery = searchParams.get('miniPalaceMode')
   const [replaceSyncVersion, setReplaceSyncVersion] = useState(0)
   const [selectedNodes, setSelectedNodes] = useState<MindMapSelection[]>([])
   const [modeFocusRequest, setModeFocusRequest] = useState<{
@@ -309,6 +312,44 @@ export function usePalaceEditPage() {
     timer.start({ source: 'page_enter' })
   }, [documentState.editorState, palaceId, timer])
 
+  const miniPalaceEditInitializedRef = useRef(false)
+  useEffect(() => {
+    if (!palaceId || !documentState.editorState) return
+    if (!miniPalaceIdFromQuery || miniPalaceModeFromQuery !== 'edit') return
+    if (miniPalaceEditInitializedRef.current) return
+    if (miniPalace.items.length === 0) return
+    const targetMini = miniPalace.items.find(
+      (item) => String(item.id) === miniPalaceIdFromQuery,
+    )
+    if (!targetMini || targetMini.node_uids.length === 0) return
+    miniPalaceEditInitializedRef.current = true
+    miniPalace.startEdit(targetMini)
+  }, [
+    palaceId,
+    documentState.editorState,
+    miniPalaceIdFromQuery,
+    miniPalaceModeFromQuery,
+    miniPalace.items,
+    miniPalace.startEdit,
+  ])
+
+  const clearMiniPalaceQueryParams = useCallback(() => {
+    const next = new URLSearchParams(searchParams)
+    next.delete('miniPalaceId')
+    next.delete('miniPalaceMode')
+    setSearchParams(next, { replace: true })
+  }, [searchParams, setSearchParams])
+
+  const handleMiniPalaceEditSave = useCallback(async () => {
+    await miniPalace.confirmCreate()
+    clearMiniPalaceQueryParams()
+  }, [clearMiniPalaceQueryParams, miniPalace.confirmCreate])
+
+  const handleMiniPalaceEditCancel = useCallback(() => {
+    miniPalace.cancelCreate()
+    clearMiniPalaceQueryParams()
+  }, [clearMiniPalaceQueryParams, miniPalace.cancelCreate])
+
   useEffect(() => {
     timerRef.current = timer
   }, [timer])
@@ -386,7 +427,7 @@ export function usePalaceEditPage() {
       }
       navigate('/english')
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : '打开英语区失败，请稍后再试。')
+      toast.error(error instanceof Error ? error.message : '打开英语听力失败，请稍后再试。')
     }
   }, [navigate])
 
@@ -552,6 +593,8 @@ export function usePalaceEditPage() {
     ) => Promise<void>,
     activeMindMapEditorState: practice.activeMindMapEditorState,
     miniPalace,
+    handleMiniPalaceEditSave,
+    handleMiniPalaceEditCancel,
     practiceVisibleEditorSyncKey: practice.practiceVisibleEditorSyncKey,
     modeFocusRequestNodeUid: modeFocusRequest.nodeUid,
     modeFocusRequestNonce: modeFocusRequest.nonce,

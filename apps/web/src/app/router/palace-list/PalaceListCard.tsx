@@ -1,9 +1,10 @@
-import { BookOpen, Pencil, Target, Trash2 } from 'lucide-react'
+﻿import { BookOpen, Building2, Pencil, Target, Trash2 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { PalaceStageProgress } from '@/app/router/palace-list/PalaceStageProgress'
 import type { PalaceListViewSettings } from '@/app/router/palace-view-settings'
 import { formatDuration } from '@/entities/session/model'
 import type {
+  MiniPalaceSummary,
   PalaceGroupedItem,
   PalaceSegmentSummary,
   ReviewStageSummary,
@@ -38,6 +39,8 @@ interface PalaceListCardProps {
     stage: ReviewStageSummary,
   ) => void
   onMarkSegmentReviewed: (segment: PalaceSegmentSummary) => void
+  onMiniPalacePractice: (miniPalace: MiniPalaceSummary) => void
+  onMiniPalaceReview: (miniPalace: MiniPalaceSummary) => void
   onDelete: (id: number, title: string) => void
 }
 
@@ -50,6 +53,8 @@ export function PalaceListCard({
   onSegmentReviewAction,
   onOpenStageEdit,
   onMarkSegmentReviewed,
+  onMiniPalacePractice,
+  onMiniPalaceReview,
   onDelete,
 }: PalaceListCardProps) {
   const segmentCount = Array.isArray(palace.segments) ? palace.segments.length : 0
@@ -90,32 +95,32 @@ export function PalaceListCard({
               ) : null}
             </div>
             {!isMultiSegment && singleSegment ? (
-              <Button
-                variant={singleSegmentState === 'due_now' || isSingleSegmentSleepReview ? 'default' : 'outline'}
-                size="sm"
+              <button
+                type="button"
                 className={cn(
-                  'h-8 shrink-0 text-xs',
-                  singleSegmentState === 'due_now' && 'bg-emerald-600 text-white hover:bg-emerald-700',
-                  singleSegmentState === 'due_later_today' &&
-                    'border-amber-300 bg-amber-100 text-amber-900 hover:bg-amber-200',
-                  isSingleSegmentSleepReview &&
-                    'border-blue-600 bg-blue-600 text-white hover:bg-blue-700',
+                  'h-8 shrink-0 w-[140px] rounded-md border text-xs font-medium transition-colors',
+                  singleSegmentState === 'due_now' && 'border-emerald-300 bg-emerald-50 text-emerald-900 hover:bg-emerald-100',
+                  singleSegmentState === 'due_later_today' && 'border-amber-300 bg-amber-50 text-amber-900 hover:bg-amber-100',
+                  isSingleSegmentSleepReview && 'border-blue-300 bg-blue-50 text-blue-900 hover:bg-blue-100',
+                  (!singleSegment.current_review_schedule_id || singleSegmentState === 'future') && 'border-border bg-muted/30 text-muted-foreground',
                 )}
-                onClick={() => onSegmentReviewAction(singleSegment)}
                 disabled={
                   !singleSegment.current_review_schedule_id ||
                   singleSegmentState === 'future' ||
                   segmentReviewLoadingId === singleSegment.id
                 }
+                onClick={() => onSegmentReviewAction(singleSegment)}
               >
-                {isSingleSegmentSleepReview
-                  ? '睡前复习'
-                  : segmentReviewLoadingId === singleSegment.id
+                {segmentReviewLoadingId === singleSegment.id
                   ? '加载中...'
+                  : isSingleSegmentSleepReview
+                  ? '睡前复习'
                   : singleSegmentState === 'due_now'
-                    ? '开始复习'
-                    : formatRelativeReviewTime(singleSegment.next_review_at)}
-              </Button>
+                  ? '开始复习'
+                  : singleSegmentState === 'unscheduled'
+                  ? '未排入复习'
+                  : formatRelativeReviewTime(singleSegment.next_review_at)}
+              </button>
             ) : null}
           </div>
           <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
@@ -180,28 +185,28 @@ export function PalaceListCard({
                       </div>
                       <div className="flex shrink-0 flex-col items-stretch gap-2 sm:min-w-[132px]">
                         {isMultiSegment ? (
-                          <Button
-                            variant={segmentReviewState === 'due_now' || isSegmentSleepReview ? 'default' : 'outline'}
-                            size="sm"
+                          <button
+                            type="button"
                             className={cn(
-                              'h-8 text-xs',
-                              segmentReviewState === 'due_now' && 'bg-emerald-600 text-white hover:bg-emerald-700',
-                              segmentReviewState === 'due_later_today' &&
-                                'border-amber-300 bg-amber-100 text-amber-900 hover:bg-amber-200',
-                              isSegmentSleepReview &&
-                                'border-blue-600 bg-blue-600 text-white hover:bg-blue-700',
+                              'h-8 w-full rounded-md border text-xs font-medium transition-colors',
+                              segmentReviewState === 'due_now' && 'border-emerald-300 bg-emerald-50 text-emerald-900 hover:bg-emerald-100',
+                              segmentReviewState === 'due_later_today' && 'border-amber-300 bg-amber-50 text-amber-900 hover:bg-amber-100',
+                              isSegmentSleepReview && 'border-blue-300 bg-blue-50 text-blue-900 hover:bg-blue-100',
+                              segmentReviewDisabled && 'border-border bg-muted/30 text-muted-foreground',
                             )}
-                            onClick={() => onSegmentReviewAction(segment)}
                             disabled={segmentReviewDisabled}
+                            onClick={() => onSegmentReviewAction(segment)}
                           >
-                            {isSegmentSleepReview
-                              ? '睡前复习'
-                              : segmentReviewLoadingId === segment.id
+                            {segmentReviewLoadingId === segment.id
                               ? '加载中...'
+                              : isSegmentSleepReview
+                              ? '睡前复习'
                               : segmentReviewState === 'due_now'
-                                ? '开始复习'
-                                : formatRelativeReviewTime(segment.next_review_at)}
-                          </Button>
+                              ? '开始复习'
+                              : segmentReviewState === 'unscheduled'
+                              ? '未排入复习'
+                              : formatRelativeReviewTime(segment.next_review_at)}
+                          </button>
                         ) : null}
                         {!segment.is_virtual_default ? (
                           <Button
@@ -233,6 +238,101 @@ export function PalaceListCard({
           )}
           {palace.description ? (
             <p className="mt-2 line-clamp-1 text-sm text-muted-foreground">{palace.description.slice(0, 150)}</p>
+          ) : null}
+
+          {Array.isArray(palace.mini_palaces) && palace.mini_palaces.length > 0 ? (
+            <div className="mt-3 border-t border-border/50 pt-3">
+              <div className="mb-2 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                <Building2 className="h-3.5 w-3.5" />
+                小宫殿
+              </div>
+              <div className="space-y-2">
+                {palace.mini_palaces.map((mini) => {
+                  const miniState = mini.has_due_review
+                    ? 'due_now'
+                    : mini.next_review_at
+                    ? getReviewButtonState(mini.next_review_at)
+                    : 'unscheduled'
+                  const isSleepMini = mini.current_review_type === 'sleep'
+
+                  return (
+                    <div
+                      key={mini.id}
+                      className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border/60 bg-background/60 px-3 py-2"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <Building2 className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                          <span className="truncate text-sm font-medium">
+                            {mini.name}
+                          </span>
+                          {mini.is_empty ? (
+                            <Badge variant="destructive" className="text-[10px]">空</Badge>
+                          ) : (
+                            <Badge variant="outline" className="text-[10px]">
+                              {mini.node_count} 张
+                            </Badge>
+                          )}
+                          {mini.needs_practice ? (
+                            <Badge className="bg-emerald-600 text-white text-[10px] hover:bg-emerald-600">
+                              需练习
+                            </Badge>
+                          ) : null}
+                        </div>
+                        <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
+                          <span>预计 {formatDuration(mini.estimated_review_seconds || 0)}</span>
+                          {mini.next_review_at ? (
+                            <span>{formatRelativeReviewTime(mini.next_review_at)}</span>
+                          ) : (
+                            <span>未排入复习</span>
+                          )}
+                        </div>
+                        {mini.stage_labels?.length > 0 && !mini.is_empty ? (
+                          <PalaceStageProgress
+                            stageLabels={mini.stage_labels}
+                            completed={mini.review_stage_completed}
+                            stages={mini.review_stages}
+                          />
+                        ) : null}
+                      </div>
+                      <div className="flex shrink-0 items-center gap-1.5">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 text-[11px]"
+                          onClick={() => onMiniPalacePractice(mini)}
+                          disabled={mini.is_empty}
+                        >
+                          练习
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant={miniState === 'due_now' ? 'default' : 'outline'}
+                          className={cn(
+                            'h-7 text-[11px]',
+                            miniState === 'due_now' && 'bg-emerald-600 text-white hover:bg-emerald-700',
+                          )}
+                          onClick={() => onMiniPalaceReview(mini)}
+                          disabled={!mini.current_review_schedule_id || miniState === 'future' || mini.is_empty}
+                        >
+                          {miniState === 'due_now' ? '复习' : mini.next_review_at ? formatRelativeReviewTime(mini.next_review_at) : '未排'}
+                        </Button>
+                        <Link to={`/palaces/${mini.palace_id}/edit?miniPalaceId=${mini.id}&miniPalaceMode=edit`}>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7"
+                            aria-label={`编辑 ${mini.name}`}
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                          </Button>
+                        </Link>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
           ) : null}
         </div>
         <div className="flex shrink-0 items-center gap-1">

@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 
 from memory_anki.infrastructure.db.models import (
     Chapter,
+    PalaceMiniPalaceReviewSchedule,
     PalaceSegmentReviewSchedule,
     ReviewSchedule,
     get_session,
@@ -14,6 +15,10 @@ from memory_anki.modules.persistence.application.idempotency import (
 from memory_anki.modules.palaces.application.segment_nodes import (
     build_segments_editor_doc,
 )
+from memory_anki.modules.palaces.application.mini_palace_service import (
+    build_mini_palace_editor_doc,
+    mini_palace_summary_json,
+)
 from memory_anki.modules.palaces.application.segment_review_service import (
     build_segment_editor_doc,
     palace_review_stages_json,
@@ -22,6 +27,7 @@ from memory_anki.modules.palaces.application.segment_review_service import (
 from memory_anki.modules.palaces.presentation.router import palace_json as palace_detail_json
 from memory_anki.modules.reviews.application.review_execution_service import (
     build_batch_segment_review_session,
+    submit_mini_review,
     submit_batch_segment_review,
     submit_review,
     submit_segment_review,
@@ -47,10 +53,13 @@ from memory_anki.modules.reviews.application.schedule_service import (
     normalize_algorithm,
 )
 from memory_anki.modules.sessions.application.session_progress_service import (
+    clear_mini_review_progress,
     clear_review_progress,
     clear_segment_review_progress,
+    get_mini_review_progress,
     get_review_progress,
     get_segment_review_progress,
+    upsert_mini_review_progress,
     upsert_review_progress,
     upsert_segment_review_progress,
 )
@@ -308,6 +317,33 @@ def api_segment_review_session(schedule_id: int, session: Session = Depends(sess
     return payload
 
 
+@router.get("/mini-review/session/{schedule_id}")
+def api_mini_review_session(schedule_id: int, session: Session = Depends(session_dep)):
+    schedule = (
+        session.query(PalaceMiniPalaceReviewSchedule).filter_by(id=schedule_id).first()
+    )
+    if not schedule or not schedule.mini_palace or not schedule.mini_palace.palace:
+        raise_not_found()
+    mini_palace = schedule.mini_palace
+    mini_summary = mini_palace_summary_json(mini_palace, session)
+    return {
+        "id": schedule.id,
+        "palace_mini_palace_id": mini_palace.id,
+        "palace_id": mini_palace.palace_id,
+        "scheduled_date": schedule.scheduled_date.isoformat(),
+        "interval_days": schedule.interval_days,
+        "algorithm_used": schedule.algorithm_used,
+        "completed": schedule.completed,
+        "completed_at": schedule.completed_at.isoformat(timespec="minutes") if schedule.completed_at else None,
+        "review_number": schedule.review_number,
+        "review_type": schedule.review_type,
+        "mini_palace": mini_summary,
+        "estimated_review_seconds": mini_summary.get("estimated_review_seconds", 0),
+        "palace": palace_detail_json(mini_palace.palace, session),
+        "editor_doc": build_mini_palace_editor_doc(mini_palace.palace, mini_palace),
+    }
+
+
 @router.post("/segment-review/batch-session")
 def api_batch_segment_review_session(data: dict, session: Session = Depends(session_dep)):
     try:
@@ -335,6 +371,16 @@ def api_segment_review_progress(schedule_id: int, session: Session = Depends(ses
     if not payload:
         raise_not_found()
     return {"progress": get_review_progress(session, schedule_id)}
+
+
+@router.get("/mini-review/session/{schedule_id}/progress")
+def api_mini_review_progress(schedule_id: int, session: Session = Depends(session_dep)):
+    schedule = (
+        session.query(PalaceMiniPalaceReviewSchedule).filter_by(id=schedule_id).first()
+    )
+    if not schedule or not schedule.mini_palace:
+        raise_not_found()
+    return {"progress": get_mini_review_progress(session, schedule_id)}
 
 
 @router.put("/review/session/{schedule_id}/progress")
@@ -380,6 +426,28 @@ def api_upsert_segment_review_progress(schedule_id: int, data: dict, session: Se
     }
 
 
+@router.put("/mini-review/session/{schedule_id}/progress")
+def api_upsert_mini_review_progress(
+    schedule_id: int,
+    data: dict,
+    session: Session = Depends(session_dep),
+):
+    schedule = (
+        session.query(PalaceMiniPalaceReviewSchedule).filter_by(id=schedule_id).first()
+    )
+    if not schedule or not schedule.mini_palace:
+        raise_not_found()
+    return {
+        "progress": upsert_mini_review_progress(
+            session,
+            schedule_id,
+            schedule.palace_mini_palace_id,
+            schedule.mini_palace.palace_id,
+            data,
+        )
+    }
+
+
 @router.delete("/review/session/{schedule_id}/progress")
 def api_delete_review_progress(schedule_id: int, session: Session = Depends(session_dep)):
     clear_review_progress(session, schedule_id)
@@ -394,6 +462,12 @@ def api_delete_segment_review_progress(schedule_id: int, session: Session = Depe
     if session.query(ReviewSchedule).filter_by(id=schedule_id).first():
         clear_review_progress(session, schedule_id)
         return {"ok": True}
+    return {"ok": True}
+
+
+@router.delete("/mini-review/session/{schedule_id}/progress")
+def api_delete_mini_review_progress(schedule_id: int, session: Session = Depends(session_dep)):
+    clear_mini_review_progress(session, schedule_id)
     return {"ok": True}
 
 
@@ -494,6 +568,40 @@ def api_submit_segment_session(
         "score": 5,
         "next_id": None,
         "mastered": review_extra.get("mastered", False) if review_log else False,
+    }
+    save_idempotent_response(session, request, response)
+    return response
+
+
+@router.post("/mini-review/session/{schedule_id}/submit")
+def api_submit_mini_session(
+    schedule_id: int,
+    data: dict,
+    request: Request,
+    session: Session = Depends(session_dep),
+):
+    existing_response = get_idempotent_response(session, request)
+    if existing_response is not None:
+        return existing_response
+
+    schedule, extra = submit_mini_review(
+        session,
+        schedule_id,
+        int(data.get("duration_seconds", 0)),
+        str(data.get("completion_mode", "manual_complete")),
+        target_review_number=data.get("target_review_number"),
+        needs_practice=bool(data.get("needs_practice", False)),
+    )
+    if not schedule:
+        raise_not_found()
+
+    clear_mini_review_progress(session, schedule_id)
+    response = {
+        "ok": True,
+        "completion_mode": data.get("completion_mode"),
+        "score": 5,
+        "next_id": None,
+        "mastered": extra.get("mastered", False),
     }
     save_idempotent_response(session, request, response)
     return response

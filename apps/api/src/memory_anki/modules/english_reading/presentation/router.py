@@ -1,0 +1,172 @@
+from __future__ import annotations
+
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from pydantic import BaseModel
+from sqlalchemy.orm import Session
+
+from memory_anki.infrastructure.db.models import get_session
+from memory_anki.modules.english_reading.application.service import (
+    complete_material,
+    create_material,
+    delete_material,
+    generate_material_version,
+    get_material,
+    get_material_version,
+    get_profile,
+    get_workspace,
+    update_material,
+    update_profile,
+)
+from memory_anki.modules.english_reading.domain.errors import EnglishReadingError
+
+router = APIRouter(tags=["english-reading"])
+
+
+class ReadingProfileUpdateRequest(BaseModel):
+    declaredCefr: str
+
+
+class ReadingGenerateRequest(BaseModel):
+    mode: str = "initial"
+    difficultyDirection: str | None = None
+    difficultyDelta: float | None = None
+
+
+class ReadingMaterialUpdateRequest(BaseModel):
+    title: str
+
+
+class ReadingCompleteRequest(BaseModel):
+    versionId: int | None = None
+    feedback: str
+    durationSeconds: int
+    hoverCount: int = 0
+    expandCount: int = 0
+
+
+def session_dep():
+    session = get_session()
+    try:
+        yield session
+    finally:
+        session.close()
+
+
+@router.get("/english-reading/profile")
+def api_get_english_reading_profile(session: Session = Depends(session_dep)):
+    return get_profile(session)
+
+
+@router.get("/english-reading")
+def api_get_english_reading_workspace(session: Session = Depends(session_dep)):
+    return get_workspace(session)
+
+
+@router.put("/english-reading/profile")
+def api_update_english_reading_profile(
+    data: ReadingProfileUpdateRequest,
+    session: Session = Depends(session_dep),
+):
+    try:
+        return update_profile(session, declared_cefr=data.declaredCefr)
+    except EnglishReadingError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/english-reading/materials")
+async def api_create_english_reading_material(
+    text: str = Form(""),
+    reading_file: UploadFile | None = File(None),
+    session: Session = Depends(session_dep),
+):
+    file_bytes: bytes | None = None
+    original_filename = ""
+    if reading_file is not None:
+        file_bytes = await reading_file.read()
+        original_filename = str(reading_file.filename or "")
+    try:
+        return create_material(
+            session,
+            pasted_text=text,
+            file_bytes=file_bytes,
+            original_filename=original_filename,
+        )
+    except EnglishReadingError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    finally:
+        if reading_file is not None:
+            await reading_file.close()
+
+
+@router.post("/english-reading/materials/{material_id}/generate")
+def api_generate_english_reading_material(
+    material_id: int,
+    data: ReadingGenerateRequest,
+    session: Session = Depends(session_dep),
+):
+    try:
+        return generate_material_version(
+            session,
+            material_id=material_id,
+            mode=data.mode,
+            difficulty_direction=data.difficultyDirection,
+            difficulty_delta=data.difficultyDelta,
+        )
+    except EnglishReadingError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.get("/english-reading/materials/{material_id}")
+def api_get_english_reading_material(material_id: int, session: Session = Depends(session_dep)):
+    try:
+        return get_material(session, material_id)
+    except EnglishReadingError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.patch("/english-reading/materials/{material_id}")
+def api_update_english_reading_material(
+    material_id: int,
+    data: ReadingMaterialUpdateRequest,
+    session: Session = Depends(session_dep),
+):
+    try:
+        return update_material(session, material_id=material_id, title=data.title)
+    except EnglishReadingError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.delete("/english-reading/materials/{material_id}")
+def api_delete_english_reading_material(material_id: int, session: Session = Depends(session_dep)):
+    try:
+        return delete_material(session, material_id)
+    except EnglishReadingError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.get("/english-reading/materials/{material_id}/version")
+def api_get_english_reading_version(material_id: int, session: Session = Depends(session_dep)):
+    try:
+        return get_material_version(session, material_id)
+    except EnglishReadingError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.post("/english-reading/materials/{material_id}/complete")
+def api_complete_english_reading_material(
+    material_id: int,
+    data: ReadingCompleteRequest,
+    session: Session = Depends(session_dep),
+):
+    try:
+        return complete_material(
+            session,
+            material_id=material_id,
+            version_id=data.versionId,
+            feedback=data.feedback,
+            duration_seconds=data.durationSeconds,
+            hover_count=data.hoverCount,
+            expand_count=data.expandCount,
+        )
+    except EnglishReadingError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc

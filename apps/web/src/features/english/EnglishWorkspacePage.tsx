@@ -75,17 +75,17 @@ export default function EnglishWorkspacePage() {
   } = useEnglishWorkspaceController()
 
   if (!workspace) {
-    return (
-      <div className="flex min-h-[55vh] items-center justify-center text-sm text-muted-foreground">
-        正在加载英语区...
-      </div>
-    )
+      return (
+        <div className="flex min-h-[55vh] items-center justify-center text-sm text-muted-foreground">
+          正在加载英语听力...
+        </div>
+      )
   }
 
   return (
     <div className="space-y-6">
       <PageIntro
-        title="英语区"
+        title="英语听力"
         description="把英语视频做成沉浸式拼写练习，生成过程现在也能实时追踪。"
       />
 
@@ -238,7 +238,7 @@ export default function EnglishWorkspacePage() {
         <div className="space-y-4">
           <Card className="border-border/70 bg-card/95">
             <CardHeader>
-              <CardTitle className="text-base">英语练习统计</CardTitle>
+              <CardTitle className="text-base">英语听力统计</CardTitle>
             </CardHeader>
             <CardContent className="grid gap-3 sm:grid-cols-3 xl:grid-cols-1">
               <div className="rounded-2xl border border-border/70 bg-background/70 px-4 py-4">
@@ -250,7 +250,7 @@ export default function EnglishWorkspacePage() {
                 <div className="mt-2 text-2xl font-semibold">{workspace.stats.unfinished_courses}</div>
               </div>
               <div className="rounded-2xl border border-border/70 bg-background/70 px-4 py-4">
-                <div className="text-xs text-muted-foreground">英语总练习时长</div>
+                <div className="text-xs text-muted-foreground">英语听力总时长</div>
                 <div className="mt-2 text-lg font-semibold">{formatDuration(workspace.stats.total_practice_seconds)}</div>
               </div>
             </CardContent>
@@ -298,7 +298,7 @@ export default function EnglishWorkspacePage() {
         <CardHeader className="flex flex-row items-center justify-between gap-3">
           <CardTitle className="text-base">最近课程</CardTitle>
           <div className="text-xs text-muted-foreground">
-            今日英语练习 {formatDuration(workspace.stats.today_practice_seconds)} · 本周 {formatDuration(workspace.stats.weekly_practice_seconds)}
+            今日英语听力 {formatDuration(workspace.stats.today_practice_seconds)} · 本周 {formatDuration(workspace.stats.weekly_practice_seconds)}
           </div>
         </CardHeader>
         <CardContent>

@@ -270,7 +270,7 @@ describe('PalaceListPage', () => {
     render(<PalaceListPage />)
 
     const reviewButton = await screen.findByRole('button', { name: '睡前复习' })
-    expect(reviewButton.className).toContain('bg-blue-600')
+    expect(reviewButton.className).toContain('bg-blue-50')
     expect(screen.queryByRole('button', { name: '开始复习' })).toBeNull()
   })
 

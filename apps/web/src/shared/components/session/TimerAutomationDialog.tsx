@@ -9,9 +9,11 @@ import {
   DialogTitle,
 } from '@/shared/components/ui/dialog'
 import { Input } from '@/shared/components/ui/input'
+import { cn } from '@/shared/lib/utils'
 import type {
   TimerAutomationActivityConfig,
   TimerAutomationConfig,
+  TimerAutomationMode,
   TimerAutomationRule,
   TimerAutomationScene,
 } from '@/shared/components/session/timer-automation-config'
@@ -34,11 +36,18 @@ type ActionFieldKey = keyof TimerAutomationActivityConfig
 
 function toDraft(config: TimerAutomationConfig) {
   return {
+    mode: config.mode,
     actions: {
       autoResumeOnWindowReturn: config.actions.autoResumeOnWindowReturn,
       countNodeSwitchAsActivity: config.actions.countNodeSwitchAsActivity,
       countEditOperationsAsActivity: config.actions.countEditOperationsAsActivity,
       countPracticeInteractionsAsActivity: config.actions.countPracticeInteractionsAsActivity,
+    },
+    shared: {
+      autoStartOnPageEnter: config.shared.autoStartOnPageEnter,
+      inactiveAutoPauseSeconds: String(config.shared.inactiveAutoPauseSeconds),
+      hiddenAutoPauseSeconds: String(config.shared.hiddenAutoPauseSeconds),
+      autoPauseRollbackSeconds: String(config.shared.autoPauseRollbackSeconds),
     },
     palace_edit: {
       autoStartOnPageEnter: config.palace_edit.autoStartOnPageEnter,
@@ -64,7 +73,88 @@ function toDraft(config: TimerAutomationConfig) {
       hiddenAutoPauseSeconds: String(config.english.hiddenAutoPauseSeconds),
       autoPauseRollbackSeconds: String(config.english.autoPauseRollbackSeconds),
     },
+    english_reading: {
+      autoStartOnPageEnter: config.english_reading.autoStartOnPageEnter,
+      inactiveAutoPauseSeconds: String(config.english_reading.inactiveAutoPauseSeconds),
+      hiddenAutoPauseSeconds: String(config.english_reading.hiddenAutoPauseSeconds),
+      autoPauseRollbackSeconds: String(config.english_reading.autoPauseRollbackSeconds),
+    },
   }
+}
+
+function RuleEditor({
+  label,
+  description,
+  value,
+  onFieldChange,
+  onAutoStartChange,
+  defaults,
+  compact = false,
+}: {
+  label: string
+  description: string
+  value: {
+    autoStartOnPageEnter: boolean
+    inactiveAutoPauseSeconds: string
+    hiddenAutoPauseSeconds: string
+    autoPauseRollbackSeconds: string
+  }
+  onFieldChange: (field: FieldKey, value: string) => void
+  onAutoStartChange: (checked: boolean) => void
+  defaults: TimerAutomationRule
+  compact?: boolean
+}) {
+  return (
+    <div className={cn('rounded-2xl border border-border/70 bg-card/70', compact ? 'p-3.5' : 'p-4')}>
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <div className="text-sm font-semibold text-foreground">{label}</div>
+          <p className="mt-1 text-xs leading-5 text-muted-foreground">{description}</p>
+        </div>
+        <label className="inline-flex items-center gap-2 rounded-full border border-border/60 bg-background/60 px-3 py-1.5 text-xs">
+          <input
+            type="checkbox"
+            className="h-4 w-4"
+            checked={value.autoStartOnPageEnter}
+            onChange={(event) => onAutoStartChange(event.target.checked)}
+          />
+          <span>{`${label}进入页面自动开始`}</span>
+        </label>
+      </div>
+
+      <div className={cn('mt-3 grid gap-3', compact ? 'md:grid-cols-3' : 'lg:grid-cols-3')}>
+        <label className="space-y-1.5 text-sm">
+          <span className="text-xs text-muted-foreground">无操作自动暂停（秒）</span>
+          <Input
+            inputMode="numeric"
+            value={value.inactiveAutoPauseSeconds}
+            onChange={(event) => onFieldChange('inactiveAutoPauseSeconds', event.target.value)}
+          />
+        </label>
+        <label className="space-y-1.5 text-sm">
+          <span className="text-xs text-muted-foreground">后台/失焦自动暂停（秒）</span>
+          <Input
+            inputMode="numeric"
+            value={value.hiddenAutoPauseSeconds}
+            onChange={(event) => onFieldChange('hiddenAutoPauseSeconds', event.target.value)}
+          />
+        </label>
+        <label className="space-y-1.5 text-sm">
+          <span className="text-xs text-muted-foreground">自动暂停回退时长（秒）</span>
+          <Input
+            inputMode="numeric"
+            value={value.autoPauseRollbackSeconds}
+            onChange={(event) => onFieldChange('autoPauseRollbackSeconds', event.target.value)}
+          />
+        </label>
+      </div>
+
+      <div className="mt-3 text-xs text-muted-foreground">
+        默认值：
+        {` 自动开始 ${defaults.autoStartOnPageEnter ? '开' : '关'}，无操作 ${defaults.inactiveAutoPauseSeconds}s，后台 ${defaults.hiddenAutoPauseSeconds}s，回退 ${defaults.autoPauseRollbackSeconds}s`}
+      </div>
+    </div>
+  )
 }
 
 export function TimerAutomationDialog({
@@ -81,13 +171,30 @@ export function TimerAutomationDialog({
     setDraft(toDraft(config))
   }, [config, open])
 
+  const handleModeChange = React.useCallback((mode: TimerAutomationMode) => {
+    setDraft((current) => ({ ...current, mode }))
+  }, [])
+
   const handleFieldChange = React.useCallback(
-    (scene: TimerAutomationScene, field: FieldKey, value: string) => {
+    (scene: 'shared' | TimerAutomationScene, field: FieldKey, value: string) => {
       setDraft((current) => ({
         ...current,
         [scene]: {
           ...current[scene],
           [field]: value,
+        },
+      }))
+    },
+    [],
+  )
+
+  const handleAutoStartChange = React.useCallback(
+    (scene: 'shared' | TimerAutomationScene, checked: boolean) => {
+      setDraft((current) => ({
+        ...current,
+        [scene]: {
+          ...current[scene],
+          autoStartOnPageEnter: checked,
         },
       }))
     },
@@ -107,11 +214,18 @@ export function TimerAutomationDialog({
   const parsedConfig = React.useMemo(
     () =>
       sanitizeTimerAutomationConfig({
+        mode: draft.mode,
         actions: {
           autoResumeOnWindowReturn: draft.actions.autoResumeOnWindowReturn,
           countNodeSwitchAsActivity: draft.actions.countNodeSwitchAsActivity,
           countEditOperationsAsActivity: draft.actions.countEditOperationsAsActivity,
           countPracticeInteractionsAsActivity: draft.actions.countPracticeInteractionsAsActivity,
+        },
+        shared: {
+          autoStartOnPageEnter: draft.shared.autoStartOnPageEnter,
+          inactiveAutoPauseSeconds: draft.shared.inactiveAutoPauseSeconds,
+          hiddenAutoPauseSeconds: draft.shared.hiddenAutoPauseSeconds,
+          autoPauseRollbackSeconds: draft.shared.autoPauseRollbackSeconds,
         },
         palace_edit: {
           autoStartOnPageEnter: draft.palace_edit.autoStartOnPageEnter,
@@ -137,17 +251,33 @@ export function TimerAutomationDialog({
           hiddenAutoPauseSeconds: draft.english.hiddenAutoPauseSeconds,
           autoPauseRollbackSeconds: draft.english.autoPauseRollbackSeconds,
         },
+        english_reading: {
+          autoStartOnPageEnter: draft.english_reading.autoStartOnPageEnter,
+          inactiveAutoPauseSeconds: draft.english_reading.inactiveAutoPauseSeconds,
+          hiddenAutoPauseSeconds: draft.english_reading.hiddenAutoPauseSeconds,
+          autoPauseRollbackSeconds: draft.english_reading.autoPauseRollbackSeconds,
+        },
       }),
     [draft],
   )
 
   const scenes = Object.keys(TIMER_AUTOMATION_SCENE_LABELS) as TimerAutomationScene[]
+  const sceneRuleEditors = scenes.map((scene) =>
+    React.createElement(RuleEditor, {
+      key: scene,
+      label: TIMER_AUTOMATION_SCENE_LABELS[scene],
+      description: `${TIMER_AUTOMATION_SCENE_LABELS[scene]}页面的专属自动化规则。`,
+      value: draft[scene],
+      onFieldChange: (field: FieldKey, value: string) => handleFieldChange(scene, field, value),
+      onAutoStartChange: (checked: boolean) => handleAutoStartChange(scene, checked),
+      defaults: DEFAULT_TIMER_AUTOMATION_CONFIG[scene],
+      compact: true,
+    }),
+  )
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent
-        className="h-[min(92vh,840px)] w-[min(1120px,calc(100vw-32px))] max-w-[1120px] overflow-hidden rounded-[28px] border-border/70 bg-background/98 p-0"
-      >
+      <DialogContent className="flex h-[min(88vh,820px)] w-[min(1100px,calc(100vw-24px))] max-w-[1100px] flex-col overflow-hidden rounded-[28px] border-border/70 bg-background/98 p-0">
         <DialogHeader>
           <div className="flex min-w-0 items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-secondary text-foreground">
@@ -155,7 +285,7 @@ export function TimerAutomationDialog({
             </div>
             <div>
               <DialogTitle>自动化配置</DialogTitle>
-              <p className="text-sm text-muted-foreground">配置哪些动作算活动，以及各场景的自动暂停与回退秒数。</p>
+              <p className="text-sm text-muted-foreground">配置哪些动作算活动，并决定各场景何时自动暂停与回退。</p>
             </div>
           </div>
           <DialogClose onClick={() => onOpenChange(false)} />
@@ -163,15 +293,38 @@ export function TimerAutomationDialog({
 
         <div
           data-testid="timer-automation-dialog-content"
-          className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4 xl:overflow-visible"
+          className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain px-4 py-4 sm:px-6"
         >
           <div className="rounded-2xl border border-border/70 bg-card/70 p-4">
-            <div className="mb-1 text-sm font-semibold text-foreground">全局动作规则</div>
-            <p className="mb-3 text-xs text-muted-foreground">
-              控制哪些动作会在暂停后自动恢复，或在运行中延续计时。
-            </p>
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <div className="text-sm font-semibold text-foreground">配置模式</div>
+                <p className="mt-1 text-xs text-muted-foreground">全局模式共用一套阈值，单独模式则为每个场景分别配置。</p>
+              </div>
+              <div className="inline-flex rounded-full border border-border/70 bg-background/80 p-1">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={draft.mode === 'global' ? 'default' : 'ghost'}
+                  className="rounded-full px-4"
+                  onClick={() => handleModeChange('global')}
+                >
+                  全局配置
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={draft.mode === 'scene' ? 'default' : 'ghost'}
+                  className="rounded-full px-4"
+                  onClick={() => handleModeChange('scene')}
+                >
+                  单独配置
+                </Button>
+              </div>
+            </div>
+
             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-              <label className="flex min-h-[112px] items-start gap-3 rounded-xl border border-border/60 bg-background/50 px-3 py-3 text-sm">
+              <label className="flex items-start gap-3 rounded-xl border border-border/60 bg-background/50 px-3 py-3 text-sm">
                 <input
                   type="checkbox"
                   className="mt-0.5 h-4 w-4"
@@ -180,10 +333,10 @@ export function TimerAutomationDialog({
                 />
                 <span>
                   <span className="block font-medium text-foreground">切回窗口自动恢复</span>
-                  <span className="text-xs text-muted-foreground">影响页面重新可见和窗口重新聚焦时是否自动恢复。</span>
+                  <span className="text-xs text-muted-foreground">页面重新可见或窗口重新聚焦时，是否自动恢复计时。</span>
                 </span>
               </label>
-              <label className="flex min-h-[112px] items-start gap-3 rounded-xl border border-border/60 bg-background/50 px-3 py-3 text-sm">
+              <label className="flex items-start gap-3 rounded-xl border border-border/60 bg-background/50 px-3 py-3 text-sm">
                 <input
                   type="checkbox"
                   className="mt-0.5 h-4 w-4"
@@ -192,10 +345,10 @@ export function TimerAutomationDialog({
                 />
                 <span>
                   <span className="block font-medium text-foreground">节点切换算活动</span>
-                  <span className="text-xs text-muted-foreground">影响脑图节点激活、焦点切换这类弱信号。</span>
+                  <span className="text-xs text-muted-foreground">把脑图节点激活、焦点切换等弱信号记为活动。</span>
                 </span>
               </label>
-              <label className="flex min-h-[112px] items-start gap-3 rounded-xl border border-border/60 bg-background/50 px-3 py-3 text-sm">
+              <label className="flex items-start gap-3 rounded-xl border border-border/60 bg-background/50 px-3 py-3 text-sm">
                 <input
                   type="checkbox"
                   className="mt-0.5 h-4 w-4"
@@ -204,10 +357,10 @@ export function TimerAutomationDialog({
                 />
                 <span>
                   <span className="block font-medium text-foreground">实际编辑动作算活动</span>
-                  <span className="text-xs text-muted-foreground">包括改脑图、标题、附件、章节、分块、全屏切换。</span>
+                  <span className="text-xs text-muted-foreground">包括脑图编辑、标题修改、附件与分块操作等。</span>
                 </span>
               </label>
-              <label className="flex min-h-[112px] items-start gap-3 rounded-xl border border-border/60 bg-background/50 px-3 py-3 text-sm md:col-span-2 xl:col-span-1">
+              <label className="flex items-start gap-3 rounded-xl border border-border/60 bg-background/50 px-3 py-3 text-sm">
                 <input
                   type="checkbox"
                   className="mt-0.5 h-4 w-4"
@@ -216,83 +369,29 @@ export function TimerAutomationDialog({
                 />
                 <span>
                   <span className="block font-medium text-foreground">练习交互算活动</span>
-                  <span className="text-xs text-muted-foreground">包括左右键翻卡、重开、页内练习切换、正式练习交互。</span>
+                  <span className="text-xs text-muted-foreground">包括翻卡、重开、页内练习切换和正式练习交互。</span>
                 </span>
               </label>
             </div>
-            <div className="mt-3 text-xs text-muted-foreground">
-              默认值：
-              {` 切回窗口自动恢复 关，节点切换 关，实际编辑 开，练习交互 开`}
+          </div>
+
+          {draft.mode === 'global' ? (
+            <RuleEditor
+              label="全局阈值"
+              description="这套设置会统一应用到宫殿编辑、练习、复习、英语听力和英语阅读。"
+              value={draft.shared}
+              onFieldChange={(field, value) => handleFieldChange('shared', field, value)}
+              onAutoStartChange={(checked) => handleAutoStartChange('shared', checked)}
+              defaults={DEFAULT_TIMER_AUTOMATION_CONFIG.shared}
+            />
+          ) : (
+            <div className="grid gap-3 lg:grid-cols-2">
+              {sceneRuleEditors}
             </div>
-          </div>
-          <div className="grid gap-4 xl:grid-cols-2">
-            {scenes.map((scene) => (
-              <div key={scene} className="rounded-2xl border border-border/70 bg-card/70 p-4">
-                <div className="mb-3 text-sm font-semibold text-foreground">
-                  {TIMER_AUTOMATION_SCENE_LABELS[scene]}
-                </div>
-                <div className="grid gap-3">
-                  <label className="flex items-start gap-3 rounded-xl border border-border/60 bg-background/50 px-3 py-3 text-sm">
-                    <input
-                      type="checkbox"
-                      className="mt-0.5 h-4 w-4"
-                      checked={draft[scene].autoStartOnPageEnter}
-                      onChange={(event) =>
-                        setDraft((current) => ({
-                          ...current,
-                          [scene]: {
-                            ...current[scene],
-                            autoStartOnPageEnter: event.target.checked,
-                          },
-                        }))
-                      }
-                    />
-                    <span>
-                      <span className="block font-medium text-foreground">{`${TIMER_AUTOMATION_SCENE_LABELS[scene]}进入页面自动开始`}</span>
-                      <span className="text-xs text-muted-foreground">只影响当前场景首次进入页面时是否自动开表。</span>
-                    </span>
-                  </label>
-                  <label className="space-y-2 text-sm">
-                    <span className="text-muted-foreground">无操作自动暂停（秒）</span>
-                    <Input
-                      inputMode="numeric"
-                      value={draft[scene].inactiveAutoPauseSeconds}
-                      onChange={(event) =>
-                        handleFieldChange(scene, 'inactiveAutoPauseSeconds', event.target.value)
-                      }
-                    />
-                  </label>
-                  <label className="space-y-2 text-sm">
-                    <span className="text-muted-foreground">后台/失焦自动暂停（秒）</span>
-                    <Input
-                      inputMode="numeric"
-                      value={draft[scene].hiddenAutoPauseSeconds}
-                      onChange={(event) =>
-                        handleFieldChange(scene, 'hiddenAutoPauseSeconds', event.target.value)
-                      }
-                    />
-                  </label>
-                  <label className="space-y-2 text-sm">
-                    <span className="text-muted-foreground">自动暂停回退时长（秒）</span>
-                    <Input
-                      inputMode="numeric"
-                      value={draft[scene].autoPauseRollbackSeconds}
-                      onChange={(event) =>
-                        handleFieldChange(scene, 'autoPauseRollbackSeconds', event.target.value)
-                      }
-                    />
-                  </label>
-                </div>
-                <div className="mt-3 text-xs text-muted-foreground">
-                  默认值：
-                  {` 进入页面 ${DEFAULT_TIMER_AUTOMATION_CONFIG[scene].autoStartOnPageEnter ? '开' : '关'}，无操作 ${DEFAULT_TIMER_AUTOMATION_CONFIG[scene].inactiveAutoPauseSeconds}s，后台 ${DEFAULT_TIMER_AUTOMATION_CONFIG[scene].hiddenAutoPauseSeconds}s，回退 ${DEFAULT_TIMER_AUTOMATION_CONFIG[scene].autoPauseRollbackSeconds}s`}
-                </div>
-              </div>
-            ))}
-          </div>
+          )}
         </div>
 
-        <div className="flex flex-wrap items-center justify-between gap-3 border-t px-6 py-4">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t px-5 py-4 sm:px-6">
           <Button type="button" variant="ghost" size="sm" onClick={onReset}>
             <RotateCcw className="mr-2 h-4 w-4" />
             恢复默认

@@ -210,6 +210,7 @@ class PalaceMiniPalace(Base):
     )
     name: Mapped[str] = mapped_column(String(200), nullable=False, default="")
     node_uids_json: Mapped[str] = mapped_column(Text, default="[]")
+    needs_practice: Mapped[bool] = mapped_column(Boolean, default=False)
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime | None] = mapped_column(DateTime, default=utc_now_naive)
     updated_at: Mapped[datetime | None] = mapped_column(
@@ -219,6 +220,16 @@ class PalaceMiniPalace(Base):
     )
 
     palace: Mapped[Palace] = relationship("Palace", back_populates="mini_palaces")
+    review_schedules: Mapped[list[PalaceMiniPalaceReviewSchedule]] = relationship(
+        "PalaceMiniPalaceReviewSchedule",
+        back_populates="mini_palace",
+        cascade="all, delete-orphan",
+    )
+    review_logs: Mapped[list[PalaceMiniPalaceReviewLog]] = relationship(
+        "PalaceMiniPalaceReviewLog",
+        back_populates="mini_palace",
+        cascade="all, delete-orphan",
+    )
 
 
 class ReviewSchedule(Base):
@@ -303,6 +314,51 @@ class PalaceSegmentReviewLog(Base):
     )
 
 
+class PalaceMiniPalaceReviewSchedule(Base):
+    __tablename__ = "palace_mini_palace_review_schedules"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    palace_mini_palace_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("palace_mini_palaces.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    scheduled_date: Mapped[date] = mapped_column(Date, nullable=False)
+    scheduled_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    interval_days: Mapped[int] = mapped_column(Integer, default=0)
+    algorithm_used: Mapped[str] = mapped_column(String(30), default="ebbinghaus")
+    completed: Mapped[bool] = mapped_column(Boolean, default=False)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    review_number: Mapped[int] = mapped_column(Integer, default=0)
+    review_type: Mapped[str] = mapped_column(String(20), default="standard")
+    anchor_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+
+    mini_palace: Mapped[PalaceMiniPalace] = relationship(
+        "PalaceMiniPalace",
+        back_populates="review_schedules",
+    )
+
+
+class PalaceMiniPalaceReviewLog(Base):
+    __tablename__ = "palace_mini_palace_review_logs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    palace_mini_palace_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("palace_mini_palaces.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    review_date: Mapped[date | None] = mapped_column(Date, default=date.today)
+    score: Mapped[int] = mapped_column(Integer, default=0)
+    review_mode: Mapped[str] = mapped_column(String(20), default="flashcard")
+    duration_seconds: Mapped[int] = mapped_column(Integer, default=0)
+
+    mini_palace: Mapped[PalaceMiniPalace] = relationship(
+        "PalaceMiniPalace",
+        back_populates="review_logs",
+    )
+
+
 class SessionProgress(Base):
     __tablename__ = "session_progress"
 
@@ -323,9 +379,19 @@ class SessionProgress(Base):
         ForeignKey("palace_segments.id", ondelete="CASCADE"),
         nullable=True,
     )
+    mini_palace_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("palace_mini_palaces.id", ondelete="CASCADE"),
+        nullable=True,
+    )
     palace_segment_review_schedule_id: Mapped[int | None] = mapped_column(
         Integer,
         ForeignKey("palace_segment_review_schedules.id", ondelete="CASCADE"),
+        nullable=True,
+    )
+    mini_palace_review_schedule_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("palace_mini_palace_review_schedules.id", ondelete="CASCADE"),
         nullable=True,
     )
     reveal_map: Mapped[str] = mapped_column(Text, default="{}")
@@ -595,6 +661,159 @@ class EnglishGenerationTask(Base):
     )
     started_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
+class EnglishReadingProfile(Base):
+    __tablename__ = "english_reading_profiles"
+    __table_args__ = (
+        Index("ix_english_reading_profiles_updated_at", "updated_at"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    declared_cefr: Mapped[str] = mapped_column(String(8), nullable=False, default="B1")
+    working_lexical_i: Mapped[str] = mapped_column(String(32), nullable=False, default="2.4")
+    working_syntactic_i: Mapped[str] = mapped_column(String(32), nullable=False, default="2.2")
+    xp: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    confidence: Mapped[str] = mapped_column(String(32), nullable=False, default="0.35")
+    easy_streak: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    hard_streak: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_at: Mapped[datetime | None] = mapped_column(DateTime, default=utc_now_naive)
+    updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime,
+        default=utc_now_naive,
+        onupdate=utc_now_naive,
+    )
+
+
+class EnglishReadingMaterial(Base):
+    __tablename__ = "english_reading_materials"
+    __table_args__ = (
+        Index("ix_english_reading_materials_updated_at", "updated_at"),
+        Index("ix_english_reading_materials_created_at", "created_at"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    title: Mapped[str] = mapped_column(String(240), nullable=False, default="")
+    source_type: Mapped[str] = mapped_column(String(16), nullable=False, default="paste")
+    original_filename: Mapped[str] = mapped_column(String(320), nullable=False, default="")
+    original_text: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    cleaned_text: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    word_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_at: Mapped[datetime | None] = mapped_column(DateTime, default=utc_now_naive)
+    updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime,
+        default=utc_now_naive,
+        onupdate=utc_now_naive,
+    )
+
+    versions: Mapped[list["EnglishReadingVersion"]] = relationship(
+        "EnglishReadingVersion",
+        back_populates="material",
+        cascade="all, delete-orphan",
+        order_by="EnglishReadingVersion.created_at",
+    )
+    sessions: Mapped[list["EnglishReadingSession"]] = relationship(
+        "EnglishReadingSession",
+        back_populates="material",
+        cascade="all, delete-orphan",
+        order_by="EnglishReadingSession.completed_at",
+    )
+
+
+class EnglishReadingVersion(Base):
+    __tablename__ = "english_reading_versions"
+    __table_args__ = (
+        Index("ix_english_reading_versions_material_created", "material_id", "created_at"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    material_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("english_reading_materials.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    declared_cefr: Mapped[str] = mapped_column(String(8), nullable=False, default="B1")
+    working_lexical_i: Mapped[str] = mapped_column(String(32), nullable=False, default="2.4")
+    working_syntactic_i: Mapped[str] = mapped_column(String(32), nullable=False, default="2.2")
+    target_cefr: Mapped[str] = mapped_column(String(8), nullable=False, default="B2")
+    target_lexical_i: Mapped[str] = mapped_column(String(32), nullable=False, default="3.0")
+    target_syntactic_i: Mapped[str] = mapped_column(String(32), nullable=False, default="2.8")
+    render_blocks_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    span_annotations_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    sentence_annotations_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    summary_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    created_at: Mapped[datetime | None] = mapped_column(DateTime, default=utc_now_naive)
+
+    material: Mapped["EnglishReadingMaterial"] = relationship(
+        "EnglishReadingMaterial",
+        back_populates="versions",
+    )
+    sessions: Mapped[list["EnglishReadingSession"]] = relationship(
+        "EnglishReadingSession",
+        back_populates="version",
+        cascade="all, delete-orphan",
+        order_by="EnglishReadingSession.completed_at",
+    )
+
+
+class EnglishReadingSession(Base):
+    __tablename__ = "english_reading_sessions"
+    __table_args__ = (
+        Index("ix_english_reading_sessions_material_completed", "material_id", "completed_at"),
+        Index("ix_english_reading_sessions_completed_at", "completed_at"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    material_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("english_reading_materials.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    version_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("english_reading_versions.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    feedback: Mapped[str] = mapped_column(String(24), nullable=False, default="just_right")
+    duration_seconds: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    words_per_minute: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    hover_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    expand_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    xp_awarded: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    calibration_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime, default=utc_now_naive)
+    created_at: Mapped[datetime | None] = mapped_column(DateTime, default=utc_now_naive)
+
+    material: Mapped["EnglishReadingMaterial"] = relationship(
+        "EnglishReadingMaterial",
+        back_populates="sessions",
+    )
+    version: Mapped["EnglishReadingVersion | None"] = relationship(
+        "EnglishReadingVersion",
+        back_populates="sessions",
+    )
+
+
+class EnglishReadingLexiconCache(Base):
+    __tablename__ = "english_reading_lexicon_cache"
+    __table_args__ = (
+        Index("ix_english_reading_lexicon_cache_updated", "updated_at"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    normalized_surface: Mapped[str] = mapped_column(String(320), nullable=False, unique=True)
+    lemma: Mapped[str] = mapped_column(String(240), nullable=False, default="")
+    base_phrase: Mapped[str] = mapped_column(String(240), nullable=False, default="")
+    cefr: Mapped[str] = mapped_column(String(8), nullable=False, default="B2")
+    confidence: Mapped[str] = mapped_column(String(32), nullable=False, default="0.6")
+    explain_zh: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    source: Mapped[str] = mapped_column(String(32), nullable=False, default="llm")
+    created_at: Mapped[datetime | None] = mapped_column(DateTime, default=utc_now_naive)
+    updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime,
+        default=utc_now_naive,
+        onupdate=utc_now_naive,
+    )
 
 
 class TimeRecord(Base):

@@ -50,6 +50,17 @@ export interface MiniPalaceSummary {
   created_at: string | null
   updated_at: string | null
   is_empty: boolean
+  needs_practice?: boolean
+  estimated_review_seconds: number
+  review_stage_total: number
+  review_stage_completed: number
+  review_stage_progress: number
+  stage_labels: string[]
+  review_stages: ReviewStageSummary[]
+  next_review_at: string | null
+  has_due_review: boolean
+  current_review_schedule_id: number | null
+  current_review_type?: string | null
 }
 export interface PalaceListItem {
   id: number
@@ -69,6 +80,7 @@ export interface PalaceListItem {
   stage_labels: string[]
   review_stages?: ReviewStageSummary[]
   segments: PalaceSegmentSummary[]
+  mini_palaces?: MiniPalaceSummary[]
   chapters?: Array<unknown>
 }
 export interface ChapterSummary {
@@ -206,11 +218,20 @@ export interface BatchSegmentReviewSubmitResponse {
 }
 export interface SessionProgressSnapshot {
   id: number
-  session_kind: "practice" | "review" | "segment_practice" | "segment_review" | "focus_practice"
+  session_kind:
+    | "practice"
+    | "review"
+    | "segment_practice"
+    | "segment_review"
+    | "focus_practice"
+    | "mini_practice"
+    | "mini_review"
   palace_id: number | null
   review_schedule_id: number | null
   palace_segment_id: number | null
+  mini_palace_id?: number | null
   palace_segment_review_schedule_id: number | null
+  mini_palace_review_schedule_id?: number | null
   reveal_map: Record<string, "hidden" | "placeholder" | "revealed">
   red_node_ids: string[]
   completed: boolean

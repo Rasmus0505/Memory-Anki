@@ -1,4 +1,4 @@
-import { ArrowLeft, Plus } from 'lucide-react'
+﻿import { ArrowLeft, Plus } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import {
@@ -108,6 +108,8 @@ export default function PalaceList() {
         onSegmentReviewAction={cardActions.onSegmentReviewAction}
         onOpenStageEdit={cardActions.onOpenStageEdit}
         onMarkSegmentReviewed={cardActions.onMarkSegmentReviewed}
+        onMiniPalacePractice={cardActions.onMiniPalacePractice}
+        onMiniPalaceReview={cardActions.onMiniPalaceReview}
         onDelete={cardActions.onDelete}
       />
     ),

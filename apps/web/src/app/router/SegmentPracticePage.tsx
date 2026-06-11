@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+﻿import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { ArrowLeft } from 'lucide-react'
 import type { MindMapEditorState, PalaceSegmentSummary } from '@/shared/api/contracts'
@@ -96,8 +96,14 @@ export default function SegmentPracticePage() {
         title={title}
         palaceId={segment.palace_id}
         sessionKind="practice"
+        displayMode={displayMode}
         persistKey={`practice:segment:${segment.id}`}
         reviewEditorState={editorState}
+        editEditorState={editEditorState}
+        onModeToggle={() =>
+          setDisplayMode((current) => (current === 'edit' ? 'review' : 'edit'))
+        }
+        onEditEditorStateChange={setEditEditorState}
         initialSnapshot={initialSnapshot}
         persistProgress
         onSnapshotChange={async (snapshot) => {

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+﻿import { useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { ArrowLeft } from 'lucide-react'
 import { PageIntro } from '@/shared/components/layout/PageIntro'
@@ -117,8 +117,14 @@ export default function PalacePractice() {
         title={palace.title}
         palaceId={palace.id}
         sessionKind="practice"
+        displayMode={displayMode}
         persistKey={`practice:palace:${palace.id}`}
         reviewEditorState={editorState}
+        editEditorState={editEditorState}
+        onModeToggle={() =>
+          setDisplayMode((current) => (current === 'edit' ? 'review' : 'edit'))
+        }
+        onEditEditorStateChange={setEditEditorState}
         initialSnapshot={initialSnapshot}
         focusNodeUids={palace.focus_node_uids ?? []}
         persistProgress

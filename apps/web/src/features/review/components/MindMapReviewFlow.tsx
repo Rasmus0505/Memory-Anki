@@ -1,4 +1,7 @@
+﻿
+import { CompletionDecisionDialog } from '@/features/review/components/CompletionDecisionDialog'
 import * as React from 'react'
+import { toast } from 'sonner'
 import {
   RotateCcw,
   Settings2,
@@ -235,6 +238,7 @@ export function MindMapReviewFlow({
   )
   const [feedbackDialogOpen, setFeedbackDialogOpen] = React.useState(false)
   const [voiceCoachDialogOpen, setVoiceCoachDialogOpen] = React.useState(false)
+  const [completionDialogOpen, setCompletionDialogOpen] = React.useState(false)
   const [activeNodes, setActiveNodes] = React.useState<MindMapSelection[]>([])
   const [focusNodeUids, setFocusNodeUids] = React.useState<string[]>(() =>
     initialFocusNodeUids.map((uid) => String(uid)).filter(Boolean),
@@ -253,7 +257,6 @@ export function MindMapReviewFlow({
     onFullscreenChange,
   })
   const inlineEditEnabled =
-    sessionKind === 'review' &&
     typeof onModeToggle === 'function' &&
     typeof onEditEditorStateChange === 'function' &&
     Boolean(editEditorState)
@@ -452,10 +455,32 @@ export function MindMapReviewFlow({
                   <CardTitle className="text-base">
                     {sessionKind === 'practice' ? '练习脑图' : '复习脑图'}
                   </CardTitle>
-                  <Badge variant="secondary">
-                    {isInlineEditMode ? '正式编辑' : '翻卡模式'}
-                  </Badge>
-                  {isInlineEditMode ? <Badge variant="outline">编辑态</Badge> : null}
+                  {inlineEditEnabled && !miniPalace.isActive ? (
+                    <>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant={displayMode === 'edit' ? 'secondary' : 'outline'}
+                        onClick={() => void onModeToggle!()}
+                      >
+                        {displayMode === 'edit' ? '编辑中' : '编辑'}
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant={displayMode === 'review' ? 'secondary' : 'outline'}
+                        onClick={() => void onModeToggle!()}
+                      >
+                        {displayMode === 'review' ? '练习/复习中' : '练习/复习'}
+                      </Button>
+                    </>
+                  ) : null}
+                  {!inlineEditEnabled && !isInlineEditMode ? (
+                    <Badge variant="secondary">翻卡模式</Badge>
+                  ) : null}
+                  {!inlineEditEnabled && isInlineEditMode ? (
+                    <Badge variant="secondary">正式编辑</Badge>
+                  ) : null}
                   <Badge variant="outline">
                     已出现 {flow.visibleNonRootCount} / {Math.max(flow.totalNodeCount - 1, 0)}
                   </Badge>
@@ -572,7 +597,7 @@ export function MindMapReviewFlow({
                     size="sm"
                     disabled={submitting || flow.feedback.completionCeremonyActive || miniPalace.isActive}
                     className={completeButtonClassName}
-                    onClick={() => void flow.finishFlow('manual_complete')}
+                    onClick={() => setCompletionDialogOpen(true)}
                   >
                     <SquareCheckBig className="mr-2 h-4 w-4" />
                     {flow.feedback.allClearReady ? '完成结算' : '完成'}
@@ -699,6 +724,21 @@ export function MindMapReviewFlow({
         open={voiceCoachDialogOpen}
         onOpenChange={setVoiceCoachDialogOpen}
         onTest={voiceCoach.playTestEvent}
+      />
+
+      <CompletionDecisionDialog
+        open={completionDialogOpen}
+        onOpenChange={setCompletionDialogOpen}
+        onMarkCompleted={() => {
+          setCompletionDialogOpen(false)
+          void flow.finishFlow('manual_complete')
+        }}
+        onMarkUncompleted={() => {
+          setCompletionDialogOpen(false)
+          flow.feedback.timer?.registerActivity('practice_interaction', { source: 'complete_unfinished' })
+          toast.success('已保存进度，下次可继续')
+        }}
+        submitting={submitting}
       />
 
       <MiniPalacePanel controller={miniPalace} />

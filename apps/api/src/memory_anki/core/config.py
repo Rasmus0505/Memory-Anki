@@ -25,6 +25,13 @@ VOICE_COACH_CACHE_DIR = APP_HOME / "voice_coach"
 ENGLISH_DIR = APP_HOME / "english"
 ENGLISH_MEDIA_DIR = ENGLISH_DIR / "media"
 ENGLISH_TASKS_DIR = ENGLISH_DIR / "tasks"
+ENGLISH_READING_DIR = APP_HOME / "english_reading"
+ENGLISH_READING_LEXICON_DIR = ENGLISH_READING_DIR / "lexicon"
+ENGLISH_READING_CEFR_PATH = ENGLISH_READING_LEXICON_DIR / "cefr.json"
+ENGLISH_READING_DEFAULT_CEFR_SOURCE = Path(
+    os.environ.get("MEMORY_ANKI_CEFR_SOURCE")
+    or r"D:\英语词典\多邻国单词PDF文件可导入百词斩\多邻国单词PDF文件可导入百词斩\cefr.json"
+)
 BACKUPS_DIR = DATA_DIR / "backups"
 FULL_BACKUPS_DIR = BACKUPS_DIR / "full"
 RESCUE_BACKUPS_DIR = BACKUPS_DIR / "rescue"
@@ -89,6 +96,8 @@ def ensure_runtime_dirs() -> None:
         ENGLISH_DIR,
         ENGLISH_MEDIA_DIR,
         ENGLISH_TASKS_DIR,
+        ENGLISH_READING_DIR,
+        ENGLISH_READING_LEXICON_DIR,
         FULL_BACKUPS_DIR,
         RESCUE_BACKUPS_DIR,
     }

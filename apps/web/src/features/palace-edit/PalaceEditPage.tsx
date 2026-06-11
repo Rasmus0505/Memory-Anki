@@ -384,7 +384,7 @@ export default function PalaceEdit() {
         </div>
       </div>
 
-      <MiniPalacePanel controller={page.miniPalace} />
+      <MiniPalacePanel controller={page.miniPalace} onEditSave={page.handleMiniPalaceEditSave} onEditCancel={page.handleMiniPalaceEditCancel} />
 
       <PalaceMindMapImportDrawer
         open={mindMapImport.importOpen}

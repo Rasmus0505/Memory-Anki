@@ -1,9 +1,10 @@
-import { useState } from 'react'
+﻿import { useState } from 'react'
 import { toast } from 'sonner'
 import { PalaceBatchReviewDialog } from '@/app/router/palace-list/PalaceBatchReviewDialog'
 import { toDateTimeLocalValue } from '@/app/router/palace-list/PalaceStageProgress'
 import { PalaceStageEditDialog } from '@/app/router/palace-list/PalaceStageEditDialog'
 import type {
+  MiniPalaceSummary,
   PalaceGroupedItem,
   PalaceGroupedListResponse,
   PalaceSegmentSummary,
@@ -15,6 +16,7 @@ import {
   updateDefaultSegmentReviewProgressApi,
   updatePalaceSegmentReviewProgressApi,
 } from '@/shared/api/modules/palaces'
+import { submitMiniReviewSessionApi } from '@/shared/api/modules/reviews'
 import { submitSegmentReviewSessionApi } from '@/shared/api/modules/reviews'
 import type { StageEditState } from '@/app/router/palace-list/utils'
 import {
@@ -215,6 +217,15 @@ export function usePalaceListCardActions({
     </>
   )
 
+  const handleMiniPalacePractice = (mini: MiniPalaceSummary) => {
+    navigate(`/mini-palaces/${mini.id}/practice`)
+  }
+
+  const handleMiniPalaceReview = (mini: MiniPalaceSummary) => {
+    if (!mini.current_review_schedule_id) return
+    navigate(`/mini-review/session/${mini.current_review_schedule_id}`)
+  }
+
   return {
     segmentReviewLoadingId,
     markReviewedKey,
@@ -222,6 +233,8 @@ export function usePalaceListCardActions({
     onSegmentReviewAction: (segment: PalaceSegmentSummary) => void handleSegmentReviewAction(segment),
     onOpenStageEdit: openStageEdit,
     onMarkSegmentReviewed: (segment: PalaceSegmentSummary) => void handleMarkSegmentReviewed(segment),
+    onMiniPalacePractice: (mini: MiniPalaceSummary) => void handleMiniPalacePractice(mini),
+    onMiniPalaceReview: (mini: MiniPalaceSummary) => void handleMiniPalaceReview(mini),
     onDelete: (id: number, title: string) => void handleDelete(id, title),
     dialogs,
   }

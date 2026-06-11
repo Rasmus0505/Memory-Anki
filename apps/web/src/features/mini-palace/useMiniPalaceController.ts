@@ -1,4 +1,4 @@
-import * as React from 'react'
+﻿import * as React from 'react'
 import { toast } from 'sonner'
 import type { RevealState } from '@/entities/session/model'
 import type { MindMapDoc, MindMapEditorState, MiniPalaceSummary } from '@/shared/api/contracts'
@@ -172,6 +172,17 @@ export function useMiniPalaceController({
     setCompleted(false)
   }, [editorState, root, timer])
 
+  const startEdit = React.useCallback((item: MiniPalaceSummary) => {
+    if (!editorState) return
+    timer.registerActivity('practice_interaction', { source: 'mini_palace_edit_start' })
+    setPanelOpen(false)
+    setMode('selecting')
+    setActiveMiniPalace(item)
+    setDraftName(item.name)
+    setDraftNodeUids([...item.node_uids])
+    setCompleted(false)
+  }, [editorState, timer])
+
   const confirmCreate = React.useCallback(async () => {
     if (!palaceId) return
     const checkpoints = draftNodeUids.filter((uid) => validCheckpointIds.has(uid))
@@ -183,16 +194,28 @@ export function useMiniPalaceController({
     setError('')
     timer.registerActivity('practice_interaction', { source: 'mini_palace_create_confirm' })
     try {
-      const response = await createMiniPalaceApi(palaceId, {
-        name: draftName,
-        node_uids: checkpoints,
-      })
-      const nextItems = await refresh()
-      const created =
-        nextItems.find((item) => item.id === response.item.id) ?? response.item
-      setDraftName('')
-      setDraftNodeUids([])
-      startPractice(created)
+      if (activeMiniPalace) {
+        // Edit existing mini-palace
+        const response = await updateMiniPalaceApi(activeMiniPalace.id, { name: draftName, node_uids: checkpoints })
+        await refresh()
+        setDraftName('')
+        setDraftNodeUids([])
+        setMode('idle')
+        setActiveMiniPalace(null)
+        toast.success('小宫殿已更新')
+      } else {
+        // Create new mini-palace
+        const response = await createMiniPalaceApi(palaceId, {
+          name: draftName,
+          node_uids: checkpoints,
+        })
+        const nextItems = await refresh()
+        const created =
+          nextItems.find((item) => item.id === response.item.id) ?? response.item
+        setDraftName('')
+        setDraftNodeUids([])
+        startPractice(created)
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : '保存小宫殿失败。'
       setError(message)
@@ -200,7 +223,7 @@ export function useMiniPalaceController({
     } finally {
       setSaving(false)
     }
-  }, [draftName, draftNodeUids, palaceId, refresh, startPractice, timer, validCheckpointIds])
+  }, [activeMiniPalace, draftName, draftNodeUids, palaceId, refresh, startPractice, timer, validCheckpointIds])
 
   const renameMiniPalace = React.useCallback(async (item: MiniPalaceSummary, name: string) => {
     setSaving(true)
@@ -374,6 +397,7 @@ export function useMiniPalaceController({
     setDraftName,
     setPanelOpen,
     startCreate,
+    startEdit,
     startPractice,
     visibleEditorState,
     visibleSyncKey,

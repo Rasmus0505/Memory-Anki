@@ -138,7 +138,7 @@ export function EnglishPracticeSettingsDialog({
       >
         <DialogHeader>
           <div className="space-y-1">
-            <DialogTitle>英语练习设置</DialogTitle>
+            <DialogTitle>英语听力设置</DialogTitle>
             <p className="text-sm text-muted-foreground">
               快捷键会保存在当前浏览器。本页默认保留沉浸输入，避免与答题按键冲突。
             </p>

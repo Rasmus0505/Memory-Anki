@@ -22,9 +22,15 @@ export interface DashboardResponse {
     total_courses: number
     unfinished_courses: number
     completed_courses: number
+    today_reading_seconds: number
+    weekly_reading_seconds: number
+    total_reading_seconds: number
     today_practice_seconds: number
     weekly_practice_seconds: number
     total_practice_seconds: number
+    today_total_seconds: number
+    weekly_total_seconds: number
+    total_seconds: number
   }
   today_learning_palaces: Array<{
     palace_id: number

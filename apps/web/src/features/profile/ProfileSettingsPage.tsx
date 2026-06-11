@@ -101,7 +101,7 @@ export default function ProfileSettingsPage() {
     >
       {clientPreferencesReady ? (
         <div className="rounded-2xl border border-emerald-200 bg-emerald-50/70 px-4 py-3 text-sm text-emerald-800">
-          快捷键、英语练习设置、复习反馈、计时自动化和部分视图偏好现在已经由后端托管保存。
+          快捷键、英语听力设置、复习反馈、计时自动化和部分视图偏好现在已经由后端托管保存。
         </div>
       ) : null}
       <div className="flex gap-1 border-b">

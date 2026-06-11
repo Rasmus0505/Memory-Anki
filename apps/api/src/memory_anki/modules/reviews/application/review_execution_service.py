@@ -8,10 +8,16 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from memory_anki.infrastructure.db.models import (
+    PalaceMiniPalaceReviewSchedule,
     PalaceSegment,
     PalaceSegmentReviewSchedule,
     ReviewLog,
     ReviewSchedule,
+)
+from memory_anki.modules.palaces.application.mini_palace_service import (
+    create_mini_palace_review_log,
+    get_mini_palace_schedule_display_datetime,
+    rebuild_mini_palace_review_progress,
 )
 from memory_anki.modules.palaces.application.segment_nodes import (
     build_segments_editor_doc,
@@ -175,6 +181,79 @@ def submit_segment_review(
             PalaceSegmentReviewSchedule.review_number == completed_review_number,
         )
         .order_by(PalaceSegmentReviewSchedule.id.desc())
+        .first()
+    )
+    return completed_schedule, extra
+
+
+def submit_mini_review(
+    session: Session,
+    schedule_id: int,
+    duration_seconds: int = 0,
+    completion_mode: str = "manual_complete",
+    target_review_number: int | None = None,
+    needs_practice: bool = False,
+) -> tuple[PalaceMiniPalaceReviewSchedule | None, dict]:
+    schedule = (
+        session.query(PalaceMiniPalaceReviewSchedule).filter_by(id=schedule_id).first()
+    )
+    if not schedule or not schedule.mini_palace or not schedule.mini_palace.palace:
+        return None, {}
+
+    mini_palace = schedule.mini_palace
+    due_at = get_mini_palace_schedule_display_datetime(session, mini_palace, schedule)
+    now = datetime.now()
+    if due_at is None or (due_at > now and due_at.date() != now.date()):
+        return None, {}
+
+    completed_at = datetime.now().replace(second=0, microsecond=0)
+    completed_review_number = schedule.review_number
+    create_mini_palace_review_log(
+        session,
+        mini_palace=mini_palace,
+        duration_seconds=duration_seconds,
+        completed_at=completed_at,
+    )
+    extra: dict[str, bool] = {}
+    algorithm = normalize_algorithm(schedule.algorithm_used)
+    intervals = get_algorithm_intervals(session, algorithm)
+    next_review_number = (
+        target_review_number + 1
+        if target_review_number is not None
+        else schedule.review_number + 1
+    )
+
+    rebuild_mini_palace_review_progress(
+        session,
+        mini_palace,
+        completed_count=min(next_review_number, len(intervals)),
+        completed_review_number=completed_review_number,
+        completed_at=completed_at,
+    )
+    mini_palace.needs_practice = bool(needs_practice)
+    if next_review_number >= len(intervals):
+        extra["mastered"] = True
+
+    session.flush()
+    create_review_time_record(
+        session,
+        record_id=f"mini-review-log-{schedule.id}-{int(completed_at.timestamp())}",
+        palace_id=mini_palace.palace_id,
+        palace_segment_id=None,
+        title=f"{mini_palace.palace.title} / {mini_palace.name}",
+        duration_seconds=duration_seconds,
+        ended_at=completed_at,
+        completion_method=completion_mode or "manual_complete",
+    )
+    session.commit()
+    completed_schedule = (
+        session.query(PalaceMiniPalaceReviewSchedule)
+        .filter(
+            PalaceMiniPalaceReviewSchedule.palace_mini_palace_id == mini_palace.id,
+            PalaceMiniPalaceReviewSchedule.completed == True,
+            PalaceMiniPalaceReviewSchedule.review_number == completed_review_number,
+        )
+        .order_by(PalaceMiniPalaceReviewSchedule.id.desc())
         .first()
     )
     return completed_schedule, extra

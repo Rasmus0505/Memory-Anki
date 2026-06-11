@@ -243,14 +243,14 @@ export default function Dashboard() {
       color: '',
     },
     {
-      label: '英语练习',
-      value: formatDuration(data.english_stats.today_practice_seconds),
+      label: '英语',
+      value: formatDuration(data.english_stats.today_total_seconds),
       icon: BookOpen,
       color: '',
-      subtitle: `未完成 ${data.english_stats.unfinished_courses} 门 · 累计 ${formatDuration(data.english_stats.total_practice_seconds)}`,
+      subtitle: `英语听力未完成 ${data.english_stats.unfinished_courses} 门 · 累计 ${formatDuration(data.english_stats.total_seconds)}`,
       extra: (
         <div className="mt-3 text-xs text-muted-foreground">
-          本周英语时长 {formatDuration(data.english_stats.weekly_practice_seconds)}
+          本周英语时长 {formatDuration(data.english_stats.weekly_total_seconds)}
         </div>
       ),
     },

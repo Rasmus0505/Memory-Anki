@@ -1,4 +1,4 @@
-import * as React from 'react'
+﻿import * as React from 'react'
 import { Play, Plus, Save, Trash2, X } from 'lucide-react'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
@@ -10,9 +10,11 @@ import type { MiniPalaceController } from './useMiniPalaceController'
 interface MiniPalacePanelProps {
   controller: MiniPalaceController
   className?: string
+  onEditSave?: () => void | Promise<void>
+  onEditCancel?: () => void
 }
 
-export function MiniPalacePanel({ controller, className }: MiniPalacePanelProps) {
+export function MiniPalacePanel({ controller, className, onEditSave, onEditCancel }: MiniPalacePanelProps) {
   const [namesById, setNamesById] = React.useState<Record<number, string>>({})
 
   React.useEffect(() => {
@@ -123,7 +125,7 @@ export function MiniPalacePanel({ controller, className }: MiniPalacePanelProps)
           )}
         >
           <div className="mb-3 flex items-center justify-between gap-3">
-            <div className="text-sm font-semibold">新建小宫殿</div>
+            <div className="text-sm font-semibold">{controller.activeMiniPalace ? "编辑小宫殿" : "新建小宫殿"}</div>
             <Button type="button" size="icon" variant="ghost" onClick={controller.cancelCreate}>
               <X className="h-4 w-4" />
             </Button>
@@ -142,7 +144,10 @@ export function MiniPalacePanel({ controller, className }: MiniPalacePanelProps)
                   size="sm"
                   variant="outline"
                   disabled={controller.saving}
-                  onClick={controller.cancelCreate}
+                  onClick={() => {
+                    if (onEditCancel) onEditCancel()
+                    else controller.cancelCreate()
+                  }}
                 >
                   取消
                 </Button>
@@ -150,9 +155,15 @@ export function MiniPalacePanel({ controller, className }: MiniPalacePanelProps)
                   type="button"
                   size="sm"
                   disabled={controller.saving || controller.draftNodeUids.length === 0}
-                  onClick={() => void controller.confirmCreate()}
+                  onClick={() => {
+                    if (controller.activeMiniPalace && onEditSave) {
+                      void (async () => { await onEditSave() })()
+                    } else {
+                      void controller.confirmCreate()
+                    }
+                  }}
                 >
-                  保存并进入
+                  确认新建小宫殿
                 </Button>
               </div>
             </div>

@@ -1,4 +1,4 @@
-import { Suspense, lazy } from 'react'
+﻿import { Suspense, lazy } from 'react'
 import { Route, Routes } from 'react-router-dom'
 import DashboardPage from '@/app/router/DashboardPage'
 import PalaceListPage from '@/app/router/PalaceListPage'
@@ -12,6 +12,7 @@ import ReviewOverviewPage from '@/features/review/ReviewOverviewPage'
 const KnowledgePage = lazy(() => import('@/features/knowledge/KnowledgePage'))
 const EnglishWorkspacePage = lazy(() => import('@/features/english/EnglishWorkspacePage'))
 const EnglishCoursePage = lazy(() => import('@/features/english/EnglishCoursePage'))
+const EnglishReadingPage = lazy(() => import('@/features/english-reading/EnglishReadingPage'))
 const PalaceEditPage = lazy(() => import('@/features/palace-edit/PalaceEditPage'))
 const ProfilePage = lazy(() => import('@/features/profile/ProfilePage'))
 const ProfileAiSplitPage = lazy(
@@ -51,6 +52,7 @@ export function AppRouter() {
         <Route path="/" element={<DashboardPage />} />
         <Route path="/palaces" element={<PalaceShelfPage />} />
         <Route path="/english" element={<EnglishWorkspacePage />} />
+        <Route path="/english-reading" element={<EnglishReadingPage />} />
         <Route path="/english/courses/:id" element={<EnglishCoursePage />} />
         <Route path="/palaces/list" element={<PalaceListPage />} />
         <Route path="/palaces/new" element={<PalaceEditPage />} />
@@ -58,6 +60,8 @@ export function AppRouter() {
         <Route path="/palaces/:id/practice" element={<PalacePracticePage />} />
         <Route path="/palaces/:id/focus-practice" element={<PalaceFocusPracticePage />} />
         <Route path="/segments/:id/practice" element={<SegmentPracticePage />} />
+        <Route path="/mini-palaces/:id/practice" element={<MiniPalacePracticePage />} />
+        <Route path="/mini-review/session/:id" element={<MiniReviewSessionPage />} />
         <Route path="/palaces/:id/edit" element={<PalaceEditPage />} />
         <Route path="/knowledge" element={<KnowledgePage />} />
         <Route path="/review" element={<ReviewOverviewPage />} />

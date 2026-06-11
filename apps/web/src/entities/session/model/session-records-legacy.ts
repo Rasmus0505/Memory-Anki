@@ -297,8 +297,11 @@ export function formatSessionKind(kind: SessionKind) {
 }
 
 export function formatSessionSource(record: Pick<TimeSessionRecord, 'sourceKind' | 'englishCourseId' | 'palaceId'>) {
+  if (record.sourceKind === 'english_reading') {
+    return '英语阅读'
+  }
   if (record.sourceKind === 'english' || record.englishCourseId != null) {
-    return '英语练习'
+    return '英语听力'
   }
   if (record.sourceKind === 'palace' || record.palaceId != null) {
     return '宫殿学习'

@@ -187,6 +187,11 @@ describe('MindMapReviewFlow', () => {
     fireEvent.click(completeButton)
     fireEvent.click(completeButton)
 
+    // Dialog opened - click "已完成" to trigger completion
+    const completedButton = screen.getByRole('button', { name: /已完成/ })
+    fireEvent.click(completedButton)
+    fireEvent.click(completedButton)
+
     await waitFor(() => expect(onComplete).toHaveBeenCalledTimes(1))
     expect(timer.complete).toHaveBeenCalledTimes(1)
 
@@ -279,7 +284,9 @@ describe('MindMapReviewFlow', () => {
     expect(screen.getByText('frame-readonly-编辑')).toBeTruthy()
     expect(screen.getByRole('button', { name: /完成/ })).toBeTruthy()
 
-    fireEvent.click(screen.getByRole('button', { name: '编辑' }))
+    const editButtons = screen.getAllByRole('button', { name: '编辑' })
+    // The mock mindmap frame renders "frame-readonly-编辑" text; the edit toggle is the first button
+    fireEvent.click(editButtons[0])
 
     await waitFor(() => {
       expect(screen.getByText('frame-editable-复习')).toBeTruthy()
@@ -348,7 +355,8 @@ describe('MindMapReviewFlow', () => {
       grandchild: null,
     })
 
-    fireEvent.click(screen.getByRole('button', { name: '编辑' }))
+    const editBtns = screen.getAllByRole('button', { name: '编辑' })
+    fireEvent.click(editBtns[0])
     await waitFor(() => {
       expect(screen.getByText('frame-editable-复习')).toBeTruthy()
     })
@@ -648,6 +656,11 @@ describe('MindMapReviewFlow', () => {
 
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: /完成/ }))
+    })
+
+    // Dialog opened - click "已完成"
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /已完成/ }))
     })
 
     expect(screen.getByText('通关结算中')).toBeTruthy()

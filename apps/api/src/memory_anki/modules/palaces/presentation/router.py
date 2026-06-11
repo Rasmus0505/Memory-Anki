@@ -33,6 +33,8 @@ from memory_anki.modules.palaces.application.mindmap_ai_split_service import (
     split_palace_editor_doc_with_ai,
 )
 from memory_anki.modules.palaces.application.mini_palace_service import (
+    adjust_mini_palace_review_progress,
+    build_mini_palace_editor_doc,
     create_palace_mini_palace,
     delete_palace_mini_palace,
     get_palace_mini_palace,
@@ -207,6 +209,7 @@ def palace_json(p, session: Session | None = None) -> dict:
                       "subject": {"id": c.subject.id, "name": c.subject.name} if c.subject else None}
                       for c in p.chapters],
         "segments": list_palace_segments(session, p, default_segment_payload=default_segment) if session else [],
+        "mini_palaces": list_palace_mini_palaces(session, p) if session else [],
         "title_mode": getattr(p, "title_mode", "sync") or "sync",
         "manual_title": getattr(p, "manual_title", "") or "",
         "resolved_title": resolve_palace_title(p),
@@ -518,7 +521,19 @@ def api_create_mini_palace(palace_id: int, data: dict, s: Session = Depends(sess
         return {"error": "not found"}
     mini_palace = create_palace_mini_palace(s, palace, data)
     maybe_create_rolling_backup("rolling-create-mini-palace")
-    return {"item": mini_palace_summary_json(mini_palace)}
+    return {"item": mini_palace_summary_json(mini_palace, s)}
+
+
+@router.get("/palace-mini-palaces/{mini_palace_id}")
+def api_get_mini_palace(mini_palace_id: int, s: Session = Depends(session_dep)):
+    mini_palace = get_palace_mini_palace(s, mini_palace_id)
+    if not mini_palace or not mini_palace.palace:
+        return {"error": "not found"}
+    return {
+        "item": mini_palace_summary_json(mini_palace, s),
+        "palace": palace_json(mini_palace.palace, s),
+        "editor_doc": build_mini_palace_editor_doc(mini_palace.palace, mini_palace),
+    }
 
 
 @router.put("/palace-mini-palaces/{mini_palace_id}")
@@ -528,7 +543,24 @@ def api_update_mini_palace(mini_palace_id: int, data: dict, s: Session = Depends
         return {"error": "not found"}
     updated = update_palace_mini_palace(s, mini_palace, data)
     maybe_create_rolling_backup("rolling-update-mini-palace")
-    return {"item": mini_palace_summary_json(updated)}
+    return {"item": mini_palace_summary_json(updated, s)}
+
+
+@router.put("/palace-mini-palaces/{mini_palace_id}/review-progress")
+def api_update_mini_palace_review_progress(
+    mini_palace_id: int,
+    data: dict,
+    s: Session = Depends(session_dep),
+):
+    mini_palace = get_palace_mini_palace(s, mini_palace_id)
+    if not mini_palace:
+        return {"error": "not found"}
+    updated = adjust_mini_palace_review_progress(s, mini_palace, data)
+    maybe_create_rolling_backup("rolling-update-mini-palace-review-progress")
+    return {
+        "item": mini_palace_summary_json(updated, s),
+        "palace": palace_json(updated.palace, s) if updated.palace else None,
+    }
 
 
 @router.delete("/palace-mini-palaces/{mini_palace_id}")

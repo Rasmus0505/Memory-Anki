@@ -20,11 +20,18 @@ describe('timer automation config', () => {
 
   it('sanitizes invalid values when saving', () => {
     const saved = saveTimerAutomationConfig({
+      mode: 'scene',
       actions: {
         autoResumeOnWindowReturn: 'bad' as unknown as boolean,
         countNodeSwitchAsActivity: false,
         countEditOperationsAsActivity: true,
         countPracticeInteractionsAsActivity: true,
+      },
+      shared: {
+        autoStartOnPageEnter: false,
+        inactiveAutoPauseSeconds: 120,
+        hiddenAutoPauseSeconds: 15,
+        autoPauseRollbackSeconds: 60,
       },
       palace_edit: {
         autoStartOnPageEnter: true,
@@ -49,6 +56,12 @@ describe('timer automation config', () => {
         inactiveAutoPauseSeconds: 10,
         hiddenAutoPauseSeconds: 15,
         autoPauseRollbackSeconds: 20,
+      },
+      english_reading: {
+        autoStartOnPageEnter: true,
+        inactiveAutoPauseSeconds: 25,
+        hiddenAutoPauseSeconds: 20,
+        autoPauseRollbackSeconds: 15,
       },
     })
 
@@ -85,10 +98,15 @@ describe('timer automation config', () => {
     expect(config.english.inactiveAutoPauseSeconds).toBe(9)
     expect(config.english.hiddenAutoPauseSeconds).toBe(config.practice.hiddenAutoPauseSeconds)
     expect(config.english.autoPauseRollbackSeconds).toBe(config.practice.autoPauseRollbackSeconds)
+    expect(config.english_reading).toEqual(DEFAULT_TIMER_AUTOMATION_CONFIG.english_reading)
     expect(config.actions).toEqual(DEFAULT_TIMER_AUTOMATION_CONFIG.actions)
     expect(config.practice.autoStartOnPageEnter).toBe(true)
     expect(config.review.autoStartOnPageEnter).toBe(true)
     expect(config.english.autoStartOnPageEnter).toBe(true)
+    expect(config.english_reading.autoStartOnPageEnter).toBe(true)
+    expect(config.mode).toBe('scene')
+    expect(config.shared.autoStartOnPageEnter).toBe(true)
+    expect(config.shared.inactiveAutoPauseSeconds).toBe(DEFAULT_TIMER_AUTOMATION_CONFIG.shared.inactiveAutoPauseSeconds)
   })
 
   it('caps rollback seconds to the inactive auto-pause window when saving', () => {
@@ -114,6 +132,23 @@ describe('timer automation config', () => {
 
   it('reads page-enter auto-start by scene', () => {
     expect(shouldAutoStartOnPageEnter(DEFAULT_TIMER_AUTOMATION_CONFIG, 'english')).toBe(true)
+    expect(shouldAutoStartOnPageEnter(DEFAULT_TIMER_AUTOMATION_CONFIG, 'english_reading')).toBe(true)
     expect(shouldAutoStartOnPageEnter(DEFAULT_TIMER_AUTOMATION_CONFIG, 'palace_edit')).toBe(false)
+  })
+
+  it('uses shared thresholds when global mode is enabled', () => {
+    const config = saveTimerAutomationConfig({
+      ...DEFAULT_TIMER_AUTOMATION_CONFIG,
+      mode: 'global',
+      shared: {
+        autoStartOnPageEnter: true,
+        inactiveAutoPauseSeconds: 45,
+        hiddenAutoPauseSeconds: 12,
+        autoPauseRollbackSeconds: 10,
+      },
+    })
+
+    expect(shouldAutoStartOnPageEnter(config, 'palace_edit')).toBe(true)
+    expect(shouldAutoStartOnPageEnter(config, 'english')).toBe(true)
   })
 })

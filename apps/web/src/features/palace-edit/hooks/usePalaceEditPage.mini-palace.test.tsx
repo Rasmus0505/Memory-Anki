@@ -63,7 +63,7 @@ describe('usePalaceEditPage mini palace mode', () => {
       expect(screen.getByText('已选 1 张')).toBeTruthy()
     })
 
-    fireEvent.click(screen.getByRole('button', { name: '保存并进入' }))
+    fireEvent.click(screen.getByRole('button', { name: '确认新建小宫殿' }))
 
     await waitFor(() => {
       expect(palaceApi.createMiniPalaceApi).toHaveBeenCalledWith(101, {

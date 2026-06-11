@@ -3,6 +3,8 @@ from sqlalchemy.orm import Session
 
 from memory_anki.infrastructure.db.models import (
     Palace,
+    PalaceMiniPalace,
+    PalaceMiniPalaceReviewSchedule,
     PalaceSegment,
     PalaceSegmentReviewSchedule,
     ReviewSchedule,
@@ -10,16 +12,22 @@ from memory_anki.infrastructure.db.models import (
 )
 from memory_anki.modules.sessions.application.session_progress_service import (
     clear_focus_practice_progress,
+    clear_mini_practice_progress,
+    clear_mini_review_progress,
     clear_practice_progress,
     clear_review_progress,
     clear_segment_practice_progress,
     clear_segment_review_progress,
     get_focus_practice_progress,
+    get_mini_practice_progress,
+    get_mini_review_progress,
     get_practice_progress,
     get_review_progress,
     get_segment_practice_progress,
     get_segment_review_progress,
     upsert_focus_practice_progress,
+    upsert_mini_practice_progress,
+    upsert_mini_review_progress,
     upsert_practice_progress,
     upsert_review_progress,
     upsert_segment_practice_progress,
@@ -122,6 +130,45 @@ def api_delete_segment_practice_progress(segment_id: int, session: Session = Dep
     return {"ok": True}
 
 
+@router.get("/sessions/mini-practice/{mini_palace_id}/progress")
+def api_get_mini_practice_progress(
+    mini_palace_id: int,
+    session: Session = Depends(session_dep),
+):
+    mini_palace = session.query(PalaceMiniPalace).filter_by(id=mini_palace_id).first()
+    if not mini_palace:
+        return {"error": "not found"}
+    return {"progress": get_mini_practice_progress(session, mini_palace_id)}
+
+
+@router.put("/sessions/mini-practice/{mini_palace_id}/progress")
+def api_upsert_mini_practice_progress(
+    mini_palace_id: int,
+    data: dict,
+    session: Session = Depends(session_dep),
+):
+    mini_palace = session.query(PalaceMiniPalace).filter_by(id=mini_palace_id).first()
+    if not mini_palace:
+        return {"error": "not found"}
+    return {
+        "progress": upsert_mini_practice_progress(
+            session,
+            mini_palace_id,
+            mini_palace.palace_id,
+            data,
+        )
+    }
+
+
+@router.delete("/sessions/mini-practice/{mini_palace_id}/progress")
+def api_delete_mini_practice_progress(
+    mini_palace_id: int,
+    session: Session = Depends(session_dep),
+):
+    clear_mini_practice_progress(session, mini_palace_id)
+    return {"ok": True}
+
+
 @router.get("/sessions/review/{schedule_id}/progress")
 def api_get_review_progress(schedule_id: int, session: Session = Depends(session_dep)):
     schedule = session.query(ReviewSchedule).filter_by(id=schedule_id).first()
@@ -186,4 +233,48 @@ def api_upsert_segment_review_progress(
 @router.delete("/sessions/segment-review/{schedule_id}/progress")
 def api_delete_segment_review_progress(schedule_id: int, session: Session = Depends(session_dep)):
     clear_segment_review_progress(session, schedule_id)
+    return {"ok": True}
+
+
+@router.get("/sessions/mini-review/{schedule_id}/progress")
+def api_get_mini_review_progress(
+    schedule_id: int,
+    session: Session = Depends(session_dep),
+):
+    schedule = (
+        session.query(PalaceMiniPalaceReviewSchedule).filter_by(id=schedule_id).first()
+    )
+    if not schedule or not schedule.mini_palace:
+        return {"error": "not found"}
+    return {"progress": get_mini_review_progress(session, schedule_id)}
+
+
+@router.put("/sessions/mini-review/{schedule_id}/progress")
+def api_upsert_mini_review_progress(
+    schedule_id: int,
+    data: dict,
+    session: Session = Depends(session_dep),
+):
+    schedule = (
+        session.query(PalaceMiniPalaceReviewSchedule).filter_by(id=schedule_id).first()
+    )
+    if not schedule or not schedule.mini_palace:
+        return {"error": "not found"}
+    return {
+        "progress": upsert_mini_review_progress(
+            session,
+            schedule_id,
+            schedule.palace_mini_palace_id,
+            schedule.mini_palace.palace_id,
+            data,
+        )
+    }
+
+
+@router.delete("/sessions/mini-review/{schedule_id}/progress")
+def api_delete_mini_review_progress(
+    schedule_id: int,
+    session: Session = Depends(session_dep),
+):
+    clear_mini_review_progress(session, schedule_id)
     return {"ok": True}

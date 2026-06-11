@@ -480,6 +480,43 @@ def get_all_time_english_practice_duration_seconds(session: Session) -> int:
     return sum(record.effective_seconds for record in records)
 
 
+def get_today_english_reading_duration_seconds(session: Session) -> int:
+    start, end = _today_bounds()
+    return get_time_record_duration_seconds(
+        session,
+        kinds=("practice",),
+        start=start,
+        end=end,
+        source_kind="english_reading",
+    )
+
+
+def get_weekly_english_reading_duration_seconds(session: Session) -> int:
+    start, end = _current_week_bounds()
+    return get_time_record_duration_seconds(
+        session,
+        kinds=("practice",),
+        start=start,
+        end=end,
+        source_kind="english_reading",
+    )
+
+
+def get_all_time_english_reading_duration_seconds(session: Session) -> int:
+    threshold = get_threshold_seconds(session)
+    records = (
+        session.query(TimeRecord)
+        .filter(
+            TimeRecord.deleted_at.is_(None),
+            TimeRecord.kind == "practice",
+            TimeRecord.effective_seconds > threshold,
+            TimeRecord.source_kind == "english_reading",
+        )
+        .all()
+    )
+    return sum(record.effective_seconds for record in records)
+
+
 def get_english_course_stats(session: Session) -> dict[str, int]:
     total_courses = session.query(EnglishCourse).count()
     completed_courses = (
@@ -488,13 +525,25 @@ def get_english_course_stats(session: Session) -> dict[str, int]:
         .count()
     )
     unfinished_courses = max(0, total_courses - completed_courses)
+    today_practice_seconds = get_today_english_practice_duration_seconds(session)
+    weekly_practice_seconds = get_weekly_english_practice_duration_seconds(session)
+    total_practice_seconds = get_all_time_english_practice_duration_seconds(session)
+    today_reading_seconds = get_today_english_reading_duration_seconds(session)
+    weekly_reading_seconds = get_weekly_english_reading_duration_seconds(session)
+    total_reading_seconds = get_all_time_english_reading_duration_seconds(session)
     return {
         "total_courses": total_courses,
         "unfinished_courses": unfinished_courses,
         "completed_courses": completed_courses,
-        "today_practice_seconds": get_today_english_practice_duration_seconds(session),
-        "weekly_practice_seconds": get_weekly_english_practice_duration_seconds(session),
-        "total_practice_seconds": get_all_time_english_practice_duration_seconds(session),
+        "today_practice_seconds": today_practice_seconds,
+        "weekly_practice_seconds": weekly_practice_seconds,
+        "total_practice_seconds": total_practice_seconds,
+        "today_reading_seconds": today_reading_seconds,
+        "weekly_reading_seconds": weekly_reading_seconds,
+        "total_reading_seconds": total_reading_seconds,
+        "today_total_seconds": today_practice_seconds + today_reading_seconds,
+        "weekly_total_seconds": weekly_practice_seconds + weekly_reading_seconds,
+        "total_seconds": total_practice_seconds + total_reading_seconds,
     }
 
 
@@ -749,7 +798,7 @@ def _normalize_source_kind(
     english_course_id: int | None,
 ) -> str | None:
     raw = str(value or "").strip().lower()
-    if raw in {"palace", "english"}:
+    if raw in {"palace", "english", "english_reading"}:
         return raw
     if english_course_id is not None:
         return "english"

@@ -1,4 +1,4 @@
-import { request } from "@/shared/api/http"
+﻿import { request } from "@/shared/api/http"
 import type {
   BatchSegmentReviewSessionResponse,
   BatchSegmentReviewSubmitResponse,
@@ -167,6 +167,83 @@ export function submitSegmentReviewSessionApi(
   })
 }
 
+
+export function getMiniReviewSessionApi(id: number) {
+  return request<{
+    id: number
+    palace_mini_palace_id: number
+    palace_id: number
+    scheduled_date: string
+    interval_days: number
+    algorithm_used: string
+    completed: boolean
+    completed_at: string | null
+    review_number: number
+    review_type: string
+    mini_palace: MiniPalaceSummary
+    estimated_review_seconds: number
+    palace: any
+    editor_doc: Record<string, unknown> | string | null
+  }>(`/mini-review/session/${id}`)
+}
+
+export function getMiniReviewSessionProgressApi(id: number) {
+  return request<{ progress: SessionProgressSnapshot | null }>(
+    `/sessions/mini-review/${id}/progress`,
+  )
+}
+
+export function saveMiniReviewSessionProgressApi(
+  id: number,
+  data: {
+    reveal_map: Record<string, 'hidden' | 'placeholder' | 'revealed'>
+    red_node_ids: string[]
+    completed: boolean
+  },
+) {
+  return request<{ progress: SessionProgressSnapshot }>(
+    `/sessions/mini-review/${id}/progress`,
+    {
+      method: 'PUT',
+      body: JSON.stringify(data),
+      persistence: {
+        resourceKey: `session-progress:mini-review:${id}`,
+        coalesceKey: `session-progress:mini-review:${id}`,
+        description: '保存小宫殿复习进度',
+        replayMode: 'auto',
+      },
+    },
+  )
+}
+
+export function clearMiniReviewSessionProgressApi(id: number) {
+  return request<{ ok: boolean }>(`/sessions/mini-review/${id}/progress`, {
+    method: 'DELETE',
+  })
+}
+
+export function submitMiniReviewSessionApi(
+  id: number,
+  data: {
+    chapter_id?: number
+    duration_seconds?: number
+    completion_mode?: "manual_complete" | "auto_complete"
+    revealed_remaining?: boolean
+    red_marked_count?: number
+    target_review_number?: number
+    needs_practice?: boolean
+  },
+) {
+  return request<ReviewSessionSubmitResponse>(`/mini-review/session/${id}/submit`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+    persistence: {
+      resourceKey: `mini-review-submit:${id}`,
+      description: '提交小宫殿正式复习',
+      replayMode: 'auto',
+    },
+  })
+}
 export function submitBatchSegmentReviewSessionApi(
   data: {
     segment_ids: number[]

@@ -5,7 +5,8 @@ import {
   setClientPreference,
 } from '@/shared/preferences/clientPreferences'
 
-export type TimerAutomationScene = SessionKind | 'english'
+export type TimerAutomationScene = SessionKind | 'english' | 'english_reading'
+export type TimerAutomationMode = 'scene' | 'global'
 
 export interface TimerAutomationRule {
   autoStartOnPageEnter: boolean
@@ -22,11 +23,14 @@ export interface TimerAutomationActivityConfig {
 }
 
 export interface TimerAutomationConfig {
+  mode: TimerAutomationMode
   actions: TimerAutomationActivityConfig
+  shared: TimerAutomationRule
   palace_edit: TimerAutomationRule
   practice: TimerAutomationRule
   review: TimerAutomationRule
   english: TimerAutomationRule
+  english_reading: TimerAutomationRule
 }
 
 export type TimerAutomationActivityKind =
@@ -38,11 +42,18 @@ export type TimerAutomationActivityKind =
 export const TIMER_AUTOMATION_STORAGE_KEY = 'memory-anki-timer-automation-config'
 
 export const DEFAULT_TIMER_AUTOMATION_CONFIG: TimerAutomationConfig = {
+  mode: 'scene',
   actions: {
     autoResumeOnWindowReturn: false,
     countNodeSwitchAsActivity: false,
     countEditOperationsAsActivity: true,
     countPracticeInteractionsAsActivity: true,
+  },
+  shared: {
+    autoStartOnPageEnter: false,
+    inactiveAutoPauseSeconds: 120,
+    hiddenAutoPauseSeconds: 15,
+    autoPauseRollbackSeconds: 60,
   },
   palace_edit: {
     autoStartOnPageEnter: false,
@@ -67,6 +78,12 @@ export const DEFAULT_TIMER_AUTOMATION_CONFIG: TimerAutomationConfig = {
     inactiveAutoPauseSeconds: 120,
     hiddenAutoPauseSeconds: 15,
     autoPauseRollbackSeconds: 60,
+  },
+  english_reading: {
+    autoStartOnPageEnter: true,
+    inactiveAutoPauseSeconds: 180,
+    hiddenAutoPauseSeconds: 20,
+    autoPauseRollbackSeconds: 90,
   },
 }
 
@@ -137,7 +154,9 @@ export function sanitizeTimerAutomationConfig(value: unknown): TimerAutomationCo
     legacyAutoStartOnPageEnter,
   )
   return {
+    mode: raw.mode === 'global' ? 'global' : DEFAULT_TIMER_AUTOMATION_CONFIG.mode,
     actions: sanitizeActivityConfig(raw.actions, DEFAULT_TIMER_AUTOMATION_CONFIG.actions),
+    shared: sanitizeRule(raw.shared, DEFAULT_TIMER_AUTOMATION_CONFIG.shared, legacyAutoStartOnPageEnter),
     palace_edit: sanitizeRule(
       raw.palace_edit,
       DEFAULT_TIMER_AUTOMATION_CONFIG.palace_edit,
@@ -151,6 +170,18 @@ export function sanitizeTimerAutomationConfig(value: unknown): TimerAutomationCo
             ...practice,
           }
         : sanitizeRule(raw.english, DEFAULT_TIMER_AUTOMATION_CONFIG.english, legacyAutoStartOnPageEnter),
+    english_reading:
+      raw.english_reading === undefined
+        ? raw.english === undefined
+          ? {
+              ...DEFAULT_TIMER_AUTOMATION_CONFIG.english_reading,
+            }
+          : sanitizeRule(raw.english, DEFAULT_TIMER_AUTOMATION_CONFIG.english_reading, legacyAutoStartOnPageEnter)
+        : sanitizeRule(
+            raw.english_reading,
+            DEFAULT_TIMER_AUTOMATION_CONFIG.english_reading,
+            legacyAutoStartOnPageEnter,
+          ),
   }
 }
 
@@ -197,6 +228,9 @@ export function getTimerAutomationRule(
   scene: TimerAutomationScene,
   config: TimerAutomationConfig,
 ) {
+  if (config.mode === 'global') {
+    return config.shared ?? DEFAULT_TIMER_AUTOMATION_CONFIG.shared
+  }
   return config[scene] ?? DEFAULT_TIMER_AUTOMATION_CONFIG[scene]
 }
 
@@ -234,5 +268,6 @@ export const TIMER_AUTOMATION_SCENE_LABELS: Record<TimerAutomationScene, string>
   palace_edit: '宫殿编辑',
   practice: '练习',
   review: '复习',
-  english: '英语区',
+  english: '英语听力',
+  english_reading: '英语阅读',
 }

@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from memory_anki.infrastructure.db.models import Palace
 from memory_anki.modules.palaces.application.title_sync_service import (
     build_today_new_palace_outline,
-    palace_has_due_later_today,
+    count_palace_review_units,
 )
 from memory_anki.modules.reviews.application.review_metrics_service import (
     get_weekly_stats,
@@ -57,15 +57,14 @@ def build_dashboard_payload(
         .all()
     )
     all_palaces = session.query(Palace).all()
-    due_palace_ids = {review["schedule"].palace_id for review in reviews}
-    due_later_today_count = sum(
-        1
-        for palace in all_palaces
-        if palace.id not in due_palace_ids and palace_has_due_later_today(session, palace)
-    )
-    needs_practice_count = sum(
-        1 for palace in all_palaces if bool(getattr(palace, "needs_practice", False))
-    )
+    due_count = 0
+    due_later_today_count = 0
+    needs_practice_count = 0
+    for palace in all_palaces:
+        counts = count_palace_review_units(session, palace)
+        due_count += counts["due_now_count"]
+        due_later_today_count += counts["due_later_today_count"]
+        needs_practice_count += counts["needs_practice_count"]
 
     monthly_total_review_duration_seconds = get_monthly_total_review_duration_seconds(session)
     selected_total_review_duration_seconds = _resolve_selected_duration_seconds(
@@ -79,7 +78,7 @@ def build_dashboard_payload(
     weekly_formal_review_duration_seconds = get_weekly_formal_review_duration_seconds(session)
 
     return {
-        "due_count": len(reviews),
+        "due_count": due_count,
         "due_later_today_count": due_later_today_count,
         "needs_practice_count": needs_practice_count,
         "reviews": [

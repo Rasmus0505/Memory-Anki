@@ -38,6 +38,11 @@ from memory_anki.modules.english.application.startup import (
     prepare_english_runtime,
 )
 from memory_anki.modules.english.presentation import router as english_router
+from memory_anki.modules.english_reading.application.startup import (
+    ensure_english_reading_storage_schema,
+    prepare_english_reading,
+)
+from memory_anki.modules.english_reading.presentation import router as english_reading_router
 from memory_anki.modules.knowledge.application.bilink_service import ensure_bilink_schema
 from memory_anki.modules.knowledge.application.subject_document_service import (
     ensure_subject_document_schema,
@@ -120,6 +125,7 @@ async def lifespan(app: FastAPI):
     ensure_mindmap_import_job_schema()
     ensure_external_ai_call_log_schema()
     ensure_english_storage_schema()
+    ensure_english_reading_storage_schema()
     ensure_palace_group_schema()
     ensure_review_schedule_schema()
     ensure_session_progress_schema()
@@ -127,6 +133,7 @@ async def lifespan(app: FastAPI):
     try:
         ensure_backup_schema(session)
         prepare_english_runtime(session)
+        prepare_english_reading(session)
         for key, value in DEFAULTS.items():
             existing = session.query(Config).filter_by(key=key).first()
             if not existing:
@@ -182,6 +189,7 @@ app.include_router(knowledge_router.router, prefix="/api/v1")
 app.include_router(bilink_router.router, prefix="/api/v1")
 app.include_router(time_records_router.router, prefix="/api/v1")
 app.include_router(english_router.router, prefix="/api/v1")
+app.include_router(english_reading_router.router, prefix="/api/v1")
 app.include_router(voice_coach_router.router, prefix="/api/v1")
 app.include_router(dashboard_router.router, prefix="/api/v1")
 

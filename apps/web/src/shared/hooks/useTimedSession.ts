@@ -25,7 +25,7 @@ export interface TimedSessionOptions {
   title: string
   palaceId: number | null
   automationScene?: TimerAutomationScene
-  sourceKind?: 'palace' | 'english' | null
+  sourceKind?: 'palace' | 'english' | 'english_reading' | null
   englishCourseId?: number | null
   autoPauseMs?: number
   hiddenPauseMs?: number
@@ -64,7 +64,7 @@ interface PersistedTimedSessionSnapshot {
   version: 1
   kind: SessionKind
   palaceId: number | null
-  sourceKind: 'palace' | 'english' | null
+  sourceKind: 'palace' | 'english' | 'english_reading' | null
   englishCourseId: number | null
   title: string
   effectiveSeconds: number

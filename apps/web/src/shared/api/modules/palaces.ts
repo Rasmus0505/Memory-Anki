@@ -1,4 +1,4 @@
-import { API_BASE, fetchWithMutationQueue, request } from "@/shared/api/http"
+﻿import { API_BASE, fetchWithMutationQueue, request } from "@/shared/api/http"
 import { logAppError } from '@/shared/logs/model/appLogs'
 import type {
   ImageTextPreviewResponse,
@@ -452,6 +452,73 @@ export function deleteMiniPalaceApi(miniPalaceId: number) {
   })
 }
 
+
+export function getPalaceMiniPalaceApi(miniPalaceId: number) {
+  return request<{
+    item: MiniPalaceSummary
+    palace: any
+    editor_doc: Record<string, unknown> | string | null
+  }>(`/palace-mini-palaces/${miniPalaceId}`)
+}
+
+export function updateMiniPalaceReviewProgressApi(
+  miniPalaceId: number,
+  data: {
+    completed_count: number
+    completed_review_number?: number | null
+    completed_at?: string | null
+  },
+) {
+  return request<{ item: MiniPalaceSummary; palace: any }>(
+    `/palace-mini-palaces/${miniPalaceId}/review-progress`,
+    {
+      method: 'PUT',
+      body: JSON.stringify(data),
+      persistence: {
+        resourceKey: `palace-mini-palace:${miniPalaceId}:review-progress`,
+        coalesceKey: `palace-mini-palace:${miniPalaceId}:review-progress`,
+        description: '保存小宫殿复习进度',
+        replayMode: 'auto',
+      },
+    },
+  )
+}
+
+export function getMiniPracticeSessionProgressApi(miniPalaceId: number) {
+  return request<{ progress: SessionProgressSnapshot | null }>(
+    `/sessions/mini-practice/${miniPalaceId}/progress`,
+  )
+}
+
+export function saveMiniPracticeSessionProgressApi(
+  miniPalaceId: number,
+  data: {
+    reveal_map: Record<string, 'hidden' | 'placeholder' | 'revealed'>
+    red_node_ids: string[]
+    completed: boolean
+  },
+) {
+  return request<{ progress: SessionProgressSnapshot }>(
+    `/sessions/mini-practice/${miniPalaceId}/progress`,
+    {
+      method: 'PUT',
+      body: JSON.stringify(data),
+      persistence: {
+        resourceKey: `session-progress:mini-practice:${miniPalaceId}`,
+        coalesceKey: `session-progress:mini-practice:${miniPalaceId}`,
+        description: '保存小宫殿练习进度',
+        replayMode: 'auto',
+      },
+    },
+  )
+}
+
+export function clearMiniPracticeSessionProgressApi(miniPalaceId: number) {
+  return request<{ ok: boolean }>(
+    `/sessions/mini-practice/${miniPalaceId}/progress`,
+    { method: 'DELETE' },
+  )
+}
 export function createPalaceSegmentApi(
   palaceId: number,
   data: {
