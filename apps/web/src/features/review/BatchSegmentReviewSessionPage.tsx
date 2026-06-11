@@ -1,6 +1,6 @@
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { ArrowLeft } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import type {
   BatchSegmentReviewSessionResponse,
   MindMapEditorState,
@@ -13,7 +13,7 @@ import { PageIntro } from '@/shared/components/layout/PageIntro'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card'
-import { MindMapReviewFlow } from '@/features/review/components/MindMapReviewFlow'
+import { MindMapReviewFlow, type ReviewFlowSnapshot } from '@/features/review/components/MindMapReviewFlow'
 
 function parseSegmentIds(searchParams: URLSearchParams): number[] {
   const raw = searchParams.get('segmentIds') || ''
@@ -70,6 +70,47 @@ export default function BatchSegmentReviewSessionPage() {
     return session.segments.map((segment) => segment.display_name || segment.name || `分块 ${segment.id}`).join('、')
   }, [session])
 
+  const progressStorageKey = useMemo(
+    () => (segmentIds.length > 0 ? `batch-review:${segmentIds.join(',')}` : null),
+    [segmentIds],
+  )
+
+  const initialSnapshot = useMemo<ReviewFlowSnapshot | null>(() => {
+    if (!progressStorageKey) return null
+    try {
+      const raw = localStorage.getItem(progressStorageKey)
+      if (!raw) return null
+      const parsed = JSON.parse(raw)
+      if (parsed.completed) return null
+      return {
+        revealMap: parsed.reveal_map ?? {},
+        redNodeIds: parsed.red_node_ids ?? [],
+        completed: parsed.completed ?? false,
+      }
+    } catch {
+      return null
+    }
+  }, [progressStorageKey])
+
+  const handleSnapshotChange = useCallback(
+    (snapshot: ReviewFlowSnapshot) => {
+      if (!progressStorageKey) return
+      try {
+        localStorage.setItem(
+          progressStorageKey,
+          JSON.stringify({
+            reveal_map: snapshot.revealMap,
+            red_node_ids: snapshot.redNodeIds,
+            completed: snapshot.completed,
+          }),
+        )
+      } catch {
+        // localStorage full, silently ignore
+      }
+    },
+    [progressStorageKey],
+  )
+
   const submitCompletion = async (payload: {
     durationSeconds: number
     completionMode: 'manual_complete' | 'auto_complete'
@@ -85,6 +126,9 @@ export default function BatchSegmentReviewSessionPage() {
         revealed_remaining: payload.revealedRemaining,
         red_marked_count: payload.redNodeIds.length,
       })
+      if (progressStorageKey) {
+        try { localStorage.removeItem(progressStorageKey) } catch { /* ignore */ }
+      }
       navigate('/review')
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : '提交多块复习失败')
@@ -155,6 +199,8 @@ export default function BatchSegmentReviewSessionPage() {
           focusNodeUids={session.palace?.focus_node_uids ?? []}
           submitting={submitting}
           onFullscreenChange={setMindMapFullscreen}
+          initialSnapshot={initialSnapshot}
+          onSnapshotChange={handleSnapshotChange}
           onComplete={submitCompletion}
         />
 
