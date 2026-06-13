@@ -1,9 +1,11 @@
 ﻿import { useState } from 'react'
 import { toast } from 'sonner'
 import { PalaceBatchReviewDialog } from '@/app/router/palace-list/PalaceBatchReviewDialog'
+import { PalaceMiniReviewModeDialog } from '@/app/router/palace-list/PalaceMiniReviewModeDialog'
 import { toDateTimeLocalValue } from '@/app/router/palace-list/PalaceStageProgress'
 import { PalaceStageEditDialog } from '@/app/router/palace-list/PalaceStageEditDialog'
 import type {
+  MiniReviewMode,
   MiniPalaceSummary,
   PalaceGroupedItem,
   PalaceGroupedListResponse,
@@ -14,6 +16,7 @@ import type {
 import {
   deletePalaceApi,
   updateDefaultSegmentReviewProgressApi,
+  updatePalaceMiniReviewModeApi,
   updatePalaceSegmentReviewProgressApi,
 } from '@/shared/api/modules/palaces'
 import { submitMiniReviewSessionApi } from '@/shared/api/modules/reviews'
@@ -50,6 +53,8 @@ export function usePalaceListCardActions({
   const [stageCompletedAt, setStageCompletedAt] = useState('')
   const [stageEditError, setStageEditError] = useState<string | null>(null)
   const [stageEditSaving, setStageEditSaving] = useState(false)
+  const [miniReviewModePalace, setMiniReviewModePalace] = useState<PalaceGroupedItem | null>(null)
+  const [miniReviewModeSaving, setMiniReviewModeSaving] = useState(false)
 
   const markSegmentReviewedUntilNotDue = async (palaceId: number, segmentId: number) => {
     let latestPalaces = allPalaces
@@ -76,6 +81,21 @@ export function usePalaceListCardActions({
     await deletePalaceApi(id)
     toast.success('已删除')
     await fetchData()
+  }
+
+  const handleSaveMiniReviewMode = async (palaceId: number, mode: MiniReviewMode) => {
+    setMiniReviewModeSaving(true)
+    try {
+      await updatePalaceMiniReviewModeApi(palaceId, { mini_review_mode: mode })
+      await fetchData()
+      toast.success(mode === 'mini_only' ? '已切换为小宫殿接管复习' : '已切换为独立复习')
+      setMiniReviewModePalace(null)
+    } catch (error) {
+      console.error(error)
+      toast.error('保存小宫殿复习归属失败，请稍后重试')
+    } finally {
+      setMiniReviewModeSaving(false)
+    }
   }
 
   const handleSegmentReviewAction = async (segment: PalaceSegmentSummary) => {
@@ -214,6 +234,13 @@ export function usePalaceListCardActions({
         }
         onRollbackBeforeStage={() => void submitStageProgress(stageEdit?.stage.review_number ?? 0, null, null, '复习进度已回退')}
       />
+
+      <PalaceMiniReviewModeDialog
+        palace={miniReviewModePalace}
+        saving={miniReviewModeSaving}
+        onClose={() => setMiniReviewModePalace(null)}
+        onSave={(palaceId, mode) => void handleSaveMiniReviewMode(palaceId, mode)}
+      />
     </>
   )
 
@@ -235,6 +262,7 @@ export function usePalaceListCardActions({
     onMarkSegmentReviewed: (segment: PalaceSegmentSummary) => void handleMarkSegmentReviewed(segment),
     onMiniPalacePractice: (mini: MiniPalaceSummary) => void handleMiniPalacePractice(mini),
     onMiniPalaceReview: (mini: MiniPalaceSummary) => void handleMiniPalaceReview(mini),
+    onOpenConfig: (palace: PalaceGroupedItem) => setMiniReviewModePalace(palace),
     onDelete: (id: number, title: string) => void handleDelete(id, title),
     dialogs,
   }

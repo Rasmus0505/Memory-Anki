@@ -83,6 +83,23 @@ describe('MindMapFrame sync behavior', () => {
     expect(screen.getByTitle('mind-map-editor').className).toContain('memory-anki-mindmap-frame')
   })
 
+  it('dispatches a resize signal into the iframe host after load', async () => {
+    render(
+      <MindMapFrame
+        editorState={buildEditorState()}
+        className="h-[320px] w-full rounded-2xl bg-white"
+        onEditorStateChange={vi.fn()}
+      />,
+    )
+
+    const iframe = screen.getByTitle('mind-map-editor') as HTMLIFrameElement
+    const bridgeMocks = attachIframeBridge(iframe)
+
+    await waitFor(() => {
+      expect(bridgeMocks.dispatchEvent).toHaveBeenCalledWith(expect.objectContaining({ type: 'resize' }))
+    })
+  })
+
   it('does not immediately sync back into the host after a local edit save callback updates props', async () => {
     function Harness() {
       const [editorState, setEditorState] = useState(buildEditorState())

@@ -231,6 +231,7 @@ export default function PalaceFocusPracticePage() {
           stageLabels={palace.stage_labels}
           stages={palace.review_stages}
           currentReviewNumber={Math.max(0, (palace.review_stage_completed ?? 0) - 1)}
+          durationSeconds={pendingPayload?.durationSeconds}
           onConfirm={async (targetReviewNumber, needsPractice) => {
             setStageDialogOpen(false)
             if (!pendingPayload) return

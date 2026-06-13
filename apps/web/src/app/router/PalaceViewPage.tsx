@@ -1,12 +1,18 @@
-import { Link, useParams } from 'react-router-dom'
+import { useRef, useState } from 'react'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, FileText, Target } from 'lucide-react'
 import { buildAttachmentUrl, getPalaceEditorApi, savePalaceEditorApi } from '@/shared/api/modules/palaces'
 import { PageIntro } from '@/shared/components/layout/PageIntro'
-import { MindMapFrame } from '@/shared/components/mindmap-host'
+import {
+  MindMapFrame,
+  MindMapPageToolbar,
+  type MindMapFrameHandle,
+} from '@/shared/components/mindmap-host'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card'
 import { usePersistedMindMapEditor } from '@/shared/hooks/usePersistedMindMapEditor'
+import { cn } from '@/shared/lib/utils'
 
 interface PalaceMeta {
   id: number
@@ -20,7 +26,12 @@ interface PalaceMeta {
 
 export default function PalaceView() {
   const { id } = useParams()
+  const navigate = useNavigate()
   const palaceId = id ? Number(id) : null
+  const mindMapFrameRef = useRef<MindMapFrameHandle | null>(null)
+  const [mindMapFullscreen, setMindMapFullscreen] = useState(false)
+  const [mindMapNativeFullscreen, setMindMapNativeFullscreen] = useState(false)
+  const [mindMapUiCleared, setMindMapUiCleared] = useState(false)
 
   const { meta, editorState, isLoading, error } = usePersistedMindMapEditor({
     entityId: palaceId,
@@ -46,51 +57,116 @@ export default function PalaceView() {
     return <div className="flex min-h-[60vh] items-center justify-center text-sm text-destructive">{error || '未找到该宫殿。'}</div>
   }
 
+  const handleImmersiveToolbarToggle = async () => {
+    if (mindMapNativeFullscreen) {
+      await mindMapFrameRef.current?.exitNativeFullscreen()
+      setMindMapFullscreen(true)
+      return
+    }
+    setMindMapFullscreen((current) => !current)
+  }
+
+  const handleNativeFullscreenToolbarToggle = async () => {
+    if (mindMapNativeFullscreen) {
+      await mindMapFrameRef.current?.exitNativeFullscreen()
+      return
+    }
+    if (mindMapFullscreen) {
+      setMindMapFullscreen(false)
+    }
+    await mindMapFrameRef.current?.enterNativeFullscreen()
+  }
+
+  const handleOpenQuizPage = () => {
+    navigate(`/palaces/${palace.id}/quiz`)
+  }
+
   return (
     <div className="space-y-5">
-      <PageIntro
-        eyebrow="宫殿详情"
-        title={palace.title}
-        description="这是只读脑图视图。难度与旧的 review mode 已从产品界面移除。"
-        actions={
-          <>
-            <Link to="/palaces">
-              <Button variant="outline" size="sm">
-                <ArrowLeft className="mr-2 h-4 w-4" />
-                返回列表
-              </Button>
-            </Link>
-            {(palace.focus_count ?? 0) > 0 ? (
-              <Link to={`/palaces/${palace.id}/focus-practice`}>
-                <Button variant="outline" size="sm" className="border-amber-300 bg-amber-50 text-amber-900 hover:bg-amber-100">
-                  <Target className="mr-2 h-4 w-4" />
-                  专项练习 {palace.focus_count}
+      {!mindMapFullscreen ? (
+        <PageIntro
+          eyebrow="宫殿详情"
+          title={palace.title}
+          description="这是只读脑图视图。难度与旧的 review mode 已从产品界面移除。"
+          actions={
+            <>
+              <Link to="/palaces">
+                <Button variant="outline" size="sm">
+                  <ArrowLeft className="mr-2 h-4 w-4" />
+                  返回列表
                 </Button>
               </Link>
-            ) : null}
-            <Badge variant="secondary">只读脑图</Badge>
-          </>
-        }
-      />
+              {(palace.focus_count ?? 0) > 0 ? (
+                <Link to={`/palaces/${palace.id}/focus-practice`}>
+                  <Button variant="outline" size="sm" className="border-amber-300 bg-amber-50 text-amber-900 hover:bg-amber-100">
+                    <Target className="mr-2 h-4 w-4" />
+                    专项练习 {palace.focus_count}
+                  </Button>
+                </Link>
+              ) : null}
+              <Badge variant="secondary">只读脑图</Badge>
+            </>
+          }
+        />
+      ) : null}
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
-        <Card className="min-h-[72vh] border-border/70 bg-card/92">
+        <Card
+          className={cn(
+            'min-h-[72vh] border-border/70 bg-card/92',
+            mindMapFullscreen && 'fixed inset-x-5 bottom-5 top-5 z-[90] min-h-0 bg-card/96 shadow-2xl',
+          )}
+        >
           <CardHeader>
             <CardTitle className="text-base">宫殿脑图</CardTitle>
           </CardHeader>
-          <CardContent className="min-h-[62vh]">
-            <MindMapFrame
-              key={`readonly-${palace.id}`}
-              editorState={editorState}
-              readonly
-              showToolbarWhenReadonly
-              onEditorStateChange={() => {}}
-              className="h-[62vh] w-full rounded-2xl border border-border/70 bg-white"
-            />
+          <CardContent className={cn('min-h-[62vh]', mindMapFullscreen && 'h-[calc(100vh-108px)] min-h-0')}>
+            <div className="flex h-full min-h-0 flex-col gap-3">
+              <MindMapPageToolbar
+                quizAction={{
+                  label: '做题',
+                  onClick: handleOpenQuizPage,
+                }}
+                immersiveAction={{
+                  label: '半屏编辑',
+                  active: mindMapFullscreen,
+                  onClick: () => {
+                    void handleImmersiveToolbarToggle()
+                  },
+                }}
+                nativeFullscreenAction={{
+                  label: '全屏编辑',
+                  active: mindMapNativeFullscreen,
+                  onClick: () => {
+                    void handleNativeFullscreenToolbarToggle()
+                  },
+                }}
+                clearUiAction={{
+                  label: '清屏',
+                  active: mindMapUiCleared,
+                  onClick: () => mindMapFrameRef.current?.toggleUiCleared(),
+                }}
+              />
+              <MindMapFrame
+                ref={mindMapFrameRef}
+                key={`readonly-${palace.id}`}
+                editorState={editorState}
+                readonly
+                immersiveModeActive={mindMapFullscreen}
+                onEditorStateChange={() => {}}
+                onFullscreenToggle={setMindMapFullscreen}
+                onFullscreenChange={setMindMapNativeFullscreen}
+                onUiClearedChange={setMindMapUiCleared}
+                className={cn(
+                  'w-full flex-1 rounded-2xl border border-border/70 bg-white',
+                  mindMapFullscreen ? 'h-full' : 'h-[62vh]',
+                )}
+              />
+            </div>
           </CardContent>
         </Card>
 
-        <div className="space-y-4">
+        <div className={cn('space-y-4', mindMapFullscreen && 'hidden')}>
           <Card className="border-border/70 bg-card/92">
             <CardHeader>
               <CardTitle className="text-base">概要</CardTitle>

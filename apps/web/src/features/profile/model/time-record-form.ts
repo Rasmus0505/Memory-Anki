@@ -12,6 +12,7 @@ import {
 export const sessionKindOptions: SessionKind[] = [
   'review',
   'practice',
+  'quiz',
   'palace_edit',
 ]
 
@@ -59,6 +60,16 @@ export function toLocalDateTimeInputValue(value: string) {
   return formatLocalDateTimeInputValue(value)
 }
 
+function formatDefaultTimeRecordTitle(date: Date) {
+  const year = date.getFullYear()
+  const month = `${date.getMonth() + 1}`.padStart(2, '0')
+  const day = `${date.getDate()}`.padStart(2, '0')
+  const hour = `${date.getHours()}`.padStart(2, '0')
+  const minute = `${date.getMinutes()}`.padStart(2, '0')
+  const second = `${date.getSeconds()}`.padStart(2, '0')
+  return `${year}-${month}-${day} ${hour}:${minute}:${second}`
+}
+
 export function formatEffectiveSecondsAsMinutes(seconds: number) {
   if (!Number.isFinite(seconds) || seconds <= 0) return '0'
   const minutes = seconds / 60
@@ -104,13 +115,20 @@ export function formatTableDateTime(dateString: string) {
 export function buildTimeRecordFormState(
   record?: TimeSessionRecord | null,
 ): TimeRecordFormState {
+  const defaultDate = new Date()
+  const defaultDateTime = formatLocalApiDateTime(defaultDate)
+
   return {
     id: record?.id,
-    title: record?.title ?? '',
+    title: record?.title ?? formatDefaultTimeRecordTitle(defaultDate),
     kind: record?.kind ?? 'review',
     palaceId: record?.palaceId == null ? '' : String(record.palaceId),
-    startedAt: record ? toLocalDateTimeInputValue(record.startedAt) : '',
-    endedAt: record ? toLocalDateTimeInputValue(record.endedAt) : '',
+    startedAt: record
+      ? toLocalDateTimeInputValue(record.startedAt)
+      : toLocalDateTimeInputValue(defaultDateTime),
+    endedAt: record
+      ? toLocalDateTimeInputValue(record.endedAt)
+      : toLocalDateTimeInputValue(defaultDateTime),
     effectiveMinutes: record
       ? formatEffectiveSecondsAsMinutes(record.effectiveSeconds)
       : '0',

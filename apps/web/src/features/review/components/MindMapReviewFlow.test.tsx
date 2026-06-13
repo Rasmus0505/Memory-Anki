@@ -1,5 +1,6 @@
 import * as React from 'react'
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { MindMapReviewFlow } from '@/features/review/components/MindMapReviewFlow'
 import {
@@ -7,20 +8,35 @@ import {
   REVIEW_FEEDBACK_SETTINGS_STORAGE_KEY,
 } from '@/features/review/reviewFeedbackSettings'
 
+const appendTimeRecordMock = vi.fn()
+
+vi.mock('@/entities/session/model', async () => {
+  const actual = await vi.importActual<typeof import('@/entities/session/model')>(
+    '@/entities/session/model',
+  )
+  return {
+    ...actual,
+    appendTimeRecord: (...args: unknown[]) => appendTimeRecordMock(...args),
+  }
+})
+
 const timer = {
   effectiveSeconds: 7,
   idleSeconds: 0,
   pauseCount: 0,
   status: 'running' as const,
   startedAt: Date.now(),
+  durationEdited: false,
   glowState: 'running' as const,
   start: vi.fn(),
   pause: vi.fn(),
   resume: vi.fn(),
+  leaveScene: vi.fn(),
   adjustDuration: vi.fn(),
   registerActivity: vi.fn(),
   logEvent: vi.fn(),
   complete: vi.fn(async () => ({ effectiveSeconds: 7 })),
+  reset: vi.fn(),
 }
 
 const useTimedSessionMock = vi.fn()
@@ -32,7 +48,21 @@ vi.mock('@/shared/hooks/useTimedSession', () => ({
 const mindMapFrameMock = vi.fn()
 
 vi.mock('@/shared/components/mindmap-host', () => ({
-  MindMapFrame: (props: Record<string, unknown>) => {
+  MindMapFrame: React.forwardRef((props: Record<string, unknown>, ref) => {
+    React.useImperativeHandle(ref, () => ({
+      setUiCleared: vi.fn((next: boolean) => {
+        ;(props.onUiClearedChange as ((active: boolean) => void) | undefined)?.(next)
+      }),
+      toggleUiCleared: vi.fn(() => {
+        ;(props.onUiClearedChange as ((active: boolean) => void) | undefined)?.(true)
+      }),
+      enterNativeFullscreen: vi.fn(async () => {
+        ;(props.onFullscreenChange as ((active: boolean) => void) | undefined)?.(true)
+      }),
+      exitNativeFullscreen: vi.fn(async () => {
+        ;(props.onFullscreenChange as ((active: boolean) => void) | undefined)?.(false)
+      }),
+    }))
     mindMapFrameMock(props)
     const fullscreen = Boolean(props.immersiveModeActive)
     const nextEditorState = {
@@ -51,8 +81,7 @@ vi.mock('@/shared/components/mindmap-host', () => ({
     }
     return (
       <div data-testid="mind-map-frame">
-        <div>{`toolbar-${props.showToolbarWhenReadonly ? 'shown' : 'hidden'}-${fullscreen ? 'immersive' : 'plain'}`}</div>
-        <div>{`frame-${props.readonly ? 'readonly' : 'editable'}-${String(props.practiceToggleLabel ?? 'none')}`}</div>
+        <div>{`frame-${props.readonly ? 'readonly' : 'editable'}-${fullscreen ? 'immersive' : 'plain'}`}</div>
         <button
           type="button"
           onClick={() => (props.onFullscreenToggle as ((active?: boolean) => void) | undefined)?.()}
@@ -65,14 +94,6 @@ vi.mock('@/shared/components/mindmap-host', () => ({
         >
           退出原生全屏
         </button>
-        {(props.onPracticeToggle as (() => void) | undefined) ? (
-          <button
-            type="button"
-            onClick={() => (props.onPracticeToggle as (() => void) | undefined)?.()}
-          >
-            {String(props.practiceToggleLabel)}
-          </button>
-        ) : null}
         {!props.readonly && (props.onEditorStateChange as ((nextState: unknown) => void) | undefined) ? (
           <button
             type="button"
@@ -87,7 +108,26 @@ vi.mock('@/shared/components/mindmap-host', () => ({
         ) : null}
       </div>
     )
-  },
+  }),
+  MindMapPageToolbar: ({
+    modeToggle,
+    bilinkSearchAction,
+    quizAction,
+    miniPalaceAction,
+    immersiveAction,
+    nativeFullscreenAction,
+    clearUiAction,
+  }: Record<string, any>) => (
+    <div data-testid="mind-map-toolbar">
+      {modeToggle ? <button type="button" onClick={modeToggle.onClick}>{modeToggle.label}</button> : null}
+      {bilinkSearchAction ? <button type="button" onClick={bilinkSearchAction.onClick}>{bilinkSearchAction.label}</button> : null}
+      {quizAction ? <button type="button" onClick={quizAction.onClick}>{quizAction.label}</button> : null}
+      {miniPalaceAction ? <button type="button" onClick={miniPalaceAction.onClick}>{miniPalaceAction.label}</button> : null}
+      {immersiveAction ? <button type="button" onClick={immersiveAction.onClick}>{immersiveAction.label}</button> : null}
+      {nativeFullscreenAction ? <button type="button" onClick={nativeFullscreenAction.onClick}>{nativeFullscreenAction.label}</button> : null}
+      {clearUiAction ? <button type="button" onClick={clearUiAction.onClick}>{clearUiAction.label}</button> : null}
+    </div>
+  ),
 }))
 
 const editorState = {
@@ -138,12 +178,19 @@ function getVisibleTextsFromLatestFrame() {
   }
 }
 
+function renderInRouter(node: React.ReactNode) {
+  return render(<MemoryRouter>{node}</MemoryRouter>)
+}
+
 describe('MindMapReviewFlow', () => {
   beforeEach(() => {
     vi.useRealTimers()
+    appendTimeRecordMock.mockReset()
+    appendTimeRecordMock.mockResolvedValue(null)
     timer.complete.mockClear()
     timer.registerActivity.mockClear()
     timer.logEvent.mockClear()
+    timer.reset.mockClear()
     mindMapFrameMock.mockClear()
     useTimedSessionMock.mockClear()
     useTimedSessionMock.mockImplementation(() => timer)
@@ -173,7 +220,7 @@ describe('MindMapReviewFlow', () => {
         }),
     )
 
-    render(
+    renderInRouter(
       <MindMapReviewFlow
         title="Root"
         palaceId={1}
@@ -200,7 +247,7 @@ describe('MindMapReviewFlow', () => {
   })
 
   it('disables local completion persistence for formal review sessions', () => {
-    render(
+    renderInRouter(
       <MindMapReviewFlow
         title="Root"
         palaceId={1}
@@ -218,8 +265,35 @@ describe('MindMapReviewFlow', () => {
     )
   })
 
-  it('shows readonly host toolbar and uses host fullscreen controls instead of outer button', async () => {
-    render(
+  it('records time when a formal review session is marked unfinished', async () => {
+    renderInRouter(
+      <MindMapReviewFlow
+        title="Root"
+        palaceId={1}
+        sessionKind="review"
+        reviewEditorState={editorState}
+        onComplete={vi.fn()}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: /完成/ }))
+    fireEvent.click(screen.getByRole('button', { name: /未完成/ }))
+
+    await waitFor(() => {
+      expect(timer.complete).toHaveBeenCalledWith(
+        'saved',
+        expect.objectContaining({
+          revealed_remaining: false,
+          red_marked_count: 0,
+        }),
+      )
+    })
+    expect(appendTimeRecordMock).toHaveBeenCalledTimes(1)
+    expect(timer.reset).toHaveBeenCalledTimes(1)
+  })
+
+  it('uses shared toolbar controls while keeping the host frame readonly in review mode', async () => {
+    renderInRouter(
       <MindMapReviewFlow
         title="Root"
         palaceId={1}
@@ -230,26 +304,25 @@ describe('MindMapReviewFlow', () => {
     )
 
     expect(screen.queryByRole('button', { name: '全屏导图' })).toBeNull()
-    expect(screen.getByText('toolbar-shown-plain')).toBeTruthy()
+    expect(screen.getByText('frame-readonly-plain')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: '编辑' })).toBeNull()
+    expect(screen.getByRole('button', { name: '搜索' })).toBeTruthy()
 
     fireEvent.click(screen.getByRole('button', { name: '宿主半屏切换' }))
     await waitFor(() => {
-      expect(screen.getByText('toolbar-shown-immersive')).toBeTruthy()
+      expect(screen.getByText('frame-readonly-immersive')).toBeTruthy()
     })
 
     fireEvent.click(screen.getByRole('button', { name: '退出原生全屏' }))
     await waitFor(() => {
-      expect(screen.getByText('toolbar-shown-plain')).toBeTruthy()
+      expect(screen.getByText('frame-readonly-immersive')).toBeTruthy()
     })
 
     const latestCall = getLatestMindMapFrameProps()
     expect(latestCall?.readonly).toBe(true)
-    expect(latestCall?.showToolbarWhenReadonly).toBe(true)
     expect(latestCall?.syncIntent).toBe('replace')
     expect(latestCall?.syncReason).toBe('review_flip')
     expect(latestCall?.preserveViewOnSync).toBe(true)
-    expect(latestCall?.showImportButtons).not.toBe(true)
-    expect(latestCall?.showBilinkSearchButton).toBe(true)
   })
 
   it('switches review flow into inline edit mode with a return-to-review label and hides completion', async () => {
@@ -279,17 +352,16 @@ describe('MindMapReviewFlow', () => {
       )
     }
 
-    render(<Harness />)
+    renderInRouter(<Harness />)
 
-    expect(screen.getByText('frame-readonly-编辑')).toBeTruthy()
+    expect(screen.getByText('frame-readonly-plain')).toBeTruthy()
     expect(screen.getByRole('button', { name: /完成/ })).toBeTruthy()
 
-    const editButtons = screen.getAllByRole('button', { name: '编辑' })
-    // The mock mindmap frame renders "frame-readonly-编辑" text; the edit toggle is the first button
-    fireEvent.click(editButtons[0])
+    fireEvent.click(screen.getByRole('button', { name: '编辑' }))
 
     await waitFor(() => {
-      expect(screen.getByText('frame-editable-复习')).toBeTruthy()
+      expect(screen.getByText('frame-editable-plain')).toBeTruthy()
+      expect(screen.getByRole('button', { name: '复习' })).toBeTruthy()
     })
     expect(screen.queryByRole('button', { name: /完成/ })).toBeNull()
     expect(timer.logEvent).toHaveBeenCalledWith('enter_edit_mode', {
@@ -302,7 +374,8 @@ describe('MindMapReviewFlow', () => {
     fireEvent.click(screen.getByRole('button', { name: '复习' }))
 
     await waitFor(() => {
-      expect(screen.getByText('frame-readonly-编辑')).toBeTruthy()
+      expect(screen.getByText('frame-readonly-plain')).toBeTruthy()
+      expect(screen.getByRole('button', { name: '编辑' })).toBeTruthy()
     })
     expect(screen.getByRole('button', { name: /完成/ })).toBeTruthy()
     expect(timer.logEvent).toHaveBeenCalledWith('exit_edit_mode', {
@@ -340,7 +413,7 @@ describe('MindMapReviewFlow', () => {
       )
     }
 
-    render(<Harness />)
+    renderInRouter(<Harness />)
 
     await act(async () => {
       getLatestMindMapFrameProps()?.onNodeClick?.([{ uid: 'root', text: 'Root' }])
@@ -355,10 +428,9 @@ describe('MindMapReviewFlow', () => {
       grandchild: null,
     })
 
-    const editBtns = screen.getAllByRole('button', { name: '编辑' })
-    fireEvent.click(editBtns[0])
+    fireEvent.click(screen.getByRole('button', { name: '编辑' }))
     await waitFor(() => {
-      expect(screen.getByText('frame-editable-复习')).toBeTruthy()
+      expect(screen.getByText('frame-editable-plain')).toBeTruthy()
     })
 
     fireEvent.click(screen.getByRole('button', { name: '宿主编辑保存' }))
@@ -380,7 +452,7 @@ describe('MindMapReviewFlow', () => {
   })
 
   it('reveals placeholder and next hidden child through readonly left-click flow', async () => {
-    render(
+    renderInRouter(
       <MindMapReviewFlow
         title="Root"
         palaceId={1}
@@ -450,7 +522,7 @@ describe('MindMapReviewFlow', () => {
   })
 
   it('keeps readonly left-click flip flow working after host fullscreen toggles', async () => {
-    render(
+    renderInRouter(
       <MindMapReviewFlow
         title="Root"
         palaceId={1}
@@ -462,7 +534,7 @@ describe('MindMapReviewFlow', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '宿主半屏切换' }))
     await waitFor(() => {
-      expect(screen.getByText('toolbar-shown-immersive')).toBeTruthy()
+      expect(screen.getByText('frame-readonly-immersive')).toBeTruthy()
     })
 
     await act(async () => {
@@ -480,9 +552,9 @@ describe('MindMapReviewFlow', () => {
       })
     })
 
-    fireEvent.click(screen.getByRole('button', { name: '退出原生全屏' }))
+    fireEvent.click(screen.getByRole('button', { name: '宿主半屏切换' }))
     await waitFor(() => {
-      expect(screen.getByText('toolbar-shown-plain')).toBeTruthy()
+      expect(screen.getByText('frame-readonly-plain')).toBeTruthy()
     })
 
     await act(async () => {
@@ -498,8 +570,82 @@ describe('MindMapReviewFlow', () => {
     })
   })
 
+  it('runs dedicated mini-checkpoint mode through the shared flow and requires hover before space pour', async () => {
+    const miniEditorState = {
+      editor_doc: {
+        root: {
+          data: { text: 'Root', uid: 'root' },
+          children: [
+            {
+              data: { text: 'Child', uid: 'child' },
+              children: [{ data: { text: 'Grandchild', uid: 'grandchild' }, children: [] }],
+            },
+          ],
+        },
+      },
+      editor_config: {},
+      editor_local_config: {},
+      lang: 'zh',
+    }
+
+    renderInRouter(
+      <MindMapReviewFlow
+        title="Root"
+        palaceId={1}
+        sessionKind="practice"
+        revealMode="mini-checkpoint"
+        checkpointNodeUids={['child']}
+        reviewEditorState={miniEditorState}
+        onComplete={vi.fn()}
+      />,
+    )
+
+    expect(getLatestMindMapFrameProps()?.miniPalacePracticeActive).toBe(true)
+    expect(getVisibleTextsFromLatestFrame()).toEqual({
+      root: 'Root',
+      child: '待回忆',
+      grandchild: null,
+    })
+
+    await act(async () => {
+      getLatestMindMapFrameProps()?.onMiniPalacePour?.()
+    })
+
+    expect(getVisibleTextsFromLatestFrame()).toEqual({
+      root: 'Root',
+      child: '待回忆',
+      grandchild: null,
+    })
+
+    await act(async () => {
+      getLatestMindMapFrameProps()?.onNodeClick?.([{ uid: 'child', text: 'Child' }])
+    })
+    expect(getVisibleTextsFromLatestFrame()).toEqual({
+      root: 'Root',
+      child: 'Child',
+      grandchild: null,
+    })
+
+    await act(async () => {
+      getLatestMindMapFrameProps()?.onNodeHover?.([{ uid: 'child', text: 'Child' }])
+      getLatestMindMapFrameProps()?.onMiniPalacePour?.()
+    })
+
+    expect(getLatestMindMapFrameProps()?.reviewFxSignal).toEqual(
+      expect.objectContaining({
+        type: 'card_reveal',
+        relatedNodeUids: ['grandchild'],
+      }),
+    )
+    expect(getVisibleTextsFromLatestFrame()).toEqual({
+      root: 'Root',
+      child: 'Child',
+      grandchild: 'Grandchild',
+    })
+  })
+
   it('keeps readonly right-click branch handling wired through the frame', async () => {
-    render(
+    renderInRouter(
       <MindMapReviewFlow
         title="Root"
         palaceId={1}
@@ -543,7 +689,7 @@ describe('MindMapReviewFlow', () => {
   })
 
   it('saves feedback volume from the feedback settings dialog', async () => {
-    render(
+    renderInRouter(
       <MindMapReviewFlow
         title="Root"
         palaceId={1}
@@ -571,7 +717,7 @@ describe('MindMapReviewFlow', () => {
   })
 
   it('lets root right-click hide revealed descendants while keeping the root visible', async () => {
-    render(
+    renderInRouter(
       <MindMapReviewFlow
         title="Root"
         palaceId={1}
@@ -613,7 +759,7 @@ describe('MindMapReviewFlow', () => {
   })
 
   it('highlights completion readiness when all non-root nodes are revealed', async () => {
-    render(
+    renderInRouter(
       <MindMapReviewFlow
         title="Root"
         palaceId={1}
@@ -644,7 +790,7 @@ describe('MindMapReviewFlow', () => {
     vi.useFakeTimers()
     const onComplete = vi.fn().mockResolvedValue(undefined)
 
-    render(
+    renderInRouter(
       <MindMapReviewFlow
         title="Root"
         palaceId={1}

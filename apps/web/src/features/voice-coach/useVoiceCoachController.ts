@@ -1,5 +1,6 @@
 import * as React from 'react'
 import type { TimedSessionController } from '@/shared/hooks/useTimedSession'
+import type { AiRuntimeOptions } from '@/shared/api/contracts'
 import {
   synthesizeVoiceCoachApi,
   type VoiceCoachEvent,
@@ -19,6 +20,12 @@ interface UseVoiceCoachControllerOptions {
   progressPercent?: number
   allClearReady?: boolean
   completed?: boolean
+  resolveAiOptions?: (request: {
+    scenarioKey: string
+    entrypointKey: string
+    title: string
+    description?: string
+  }) => Promise<AiRuntimeOptions | undefined>
 }
 
 interface PlayOptions {
@@ -43,17 +50,20 @@ export function useVoiceCoachController({
   progressPercent = 0,
   allClearReady = false,
   completed = false,
+  resolveAiOptions,
 }: UseVoiceCoachControllerOptions) {
   const [settings, setSettings] = React.useState<VoiceCoachSettings>(() =>
     readVoiceCoachSettings(),
   )
   const [activationTick, setActivationTick] = React.useState(0)
   const audioRef = React.useRef<HTMLAudioElement | null>(null)
-  const urlCacheRef = React.useRef<Partial<Record<VoiceCoachEvent, string>>>({})
-  const inFlightRef = React.useRef<Partial<Record<VoiceCoachEvent, Promise<string>>>>({})
+  const urlCacheRef = React.useRef<Record<string, string>>({})
+  const inFlightRef = React.useRef<Record<string, Promise<string>>>({})
   const onceKeysRef = React.useRef(new Set<string>())
   const lastEventAtRef = React.useRef<Partial<Record<VoiceCoachEvent, number>>>({})
   const userInteractedRef = React.useRef(false)
+  const sessionAiOptionsRef = React.useRef<AiRuntimeOptions | undefined>(undefined)
+  const sessionAiOptionsKeyRef = React.useRef('')
 
   React.useEffect(() => {
     const sync = () => setSettings(readVoiceCoachSettings())
@@ -83,6 +93,13 @@ export function useVoiceCoachController({
     }
   }, [])
 
+  React.useEffect(() => {
+    sessionAiOptionsRef.current = undefined
+    sessionAiOptionsKeyRef.current = ''
+    urlCacheRef.current = {}
+    inFlightRef.current = {}
+  }, [scene, timer.startedAt])
+
   const canPlay = React.useCallback(
     (options: PlayOptions) => {
       if (!options.ignoreEnabled) {
@@ -96,23 +113,49 @@ export function useVoiceCoachController({
     [scene, settings.enabled, settings.scenes, timer.status],
   )
 
-  const resolveAudioUrl = React.useCallback(async (event: VoiceCoachEvent) => {
-    const cachedUrl = urlCacheRef.current[event]
+  const resolveAudioUrl = React.useCallback(async (event: VoiceCoachEvent, aiOptions?: AiRuntimeOptions) => {
+    const cacheKey = `${event}:${JSON.stringify(aiOptions ?? {})}`
+    const cachedUrl = urlCacheRef.current[cacheKey]
     if (cachedUrl) return cachedUrl
-    const inFlight = inFlightRef.current[event]
+    const inFlight = inFlightRef.current[cacheKey]
     if (inFlight) return inFlight
 
-    const request = synthesizeVoiceCoachApi(event).then((response) => {
-      urlCacheRef.current[event] = response.audio_url
-      delete inFlightRef.current[event]
+    const request = (aiOptions
+      ? synthesizeVoiceCoachApi(event, aiOptions)
+      : synthesizeVoiceCoachApi(event)
+    ).then((response) => {
+      urlCacheRef.current[cacheKey] = response.audio_url
+      delete inFlightRef.current[cacheKey]
       return response.audio_url
     }).catch((error) => {
-      delete inFlightRef.current[event]
+      delete inFlightRef.current[cacheKey]
       throw error
     })
-    inFlightRef.current[event] = request
+    inFlightRef.current[cacheKey] = request
     return request
   }, [])
+
+  const ensureSessionAiOptions = React.useCallback(async () => {
+    if (!resolveAiOptions) return undefined
+    const sessionKey = `${scene}:${timer.startedAt ?? 'manual'}`
+    if (sessionAiOptionsKeyRef.current === sessionKey) {
+      return sessionAiOptionsRef.current
+    }
+    const aiOptions = await resolveAiOptions({
+      scenarioKey: 'tts',
+      entrypointKey: `voice-coach:${scene}`,
+      title: '语音教练配置',
+      description: '本次会话会沿用这里的语音合成模型配置，后续自动触发不再重复询问。',
+    })
+    if (!aiOptions) {
+      return null
+    }
+    sessionAiOptionsRef.current = aiOptions
+    sessionAiOptionsKeyRef.current = sessionKey
+    urlCacheRef.current = {}
+    inFlightRef.current = {}
+    return aiOptions
+  }, [resolveAiOptions, scene, timer.startedAt])
 
   const playEvent = React.useCallback(
     async (event: VoiceCoachEvent, options: PlayOptions = {}) => {
@@ -129,7 +172,14 @@ export function useVoiceCoachController({
       }
       lastEventAtRef.current[event] = now
 
-      const audioUrl = await resolveAudioUrl(event)
+      let aiOptions = sessionAiOptionsRef.current
+      if (resolveAiOptions) {
+        aiOptions = await ensureSessionAiOptions()
+        if (aiOptions === null) {
+          return false
+        }
+      }
+      const audioUrl = await resolveAudioUrl(event, aiOptions)
       audioRef.current?.pause()
       const audio = new Audio(audioUrl)
       audio.volume = settings.volume
@@ -137,7 +187,7 @@ export function useVoiceCoachController({
       await audio.play()
       return true
     },
-    [canPlay, resolveAudioUrl, settings.cooldownSeconds, settings.volume],
+    [canPlay, ensureSessionAiOptions, resolveAiOptions, resolveAudioUrl, settings.cooldownSeconds, settings.volume],
   )
 
   const playTestEvent = React.useCallback(

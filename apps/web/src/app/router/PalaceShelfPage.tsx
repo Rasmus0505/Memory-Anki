@@ -125,36 +125,55 @@ export default function PalaceShelfPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const search = searchParams.get('search') || ''
   const [items, setItems] = useState<PalaceSubjectShelfItem[]>([])
-  const [groupedData, setGroupedData] = useState<PalaceGroupedListResponse>({
-    groups: [],
-    ungrouped: [],
-    subjects: [],
-  })
+  const [groupedData, setGroupedData] = useState<PalaceGroupedListResponse | null>(null)
+  const [groupedDataSearch, setGroupedDataSearch] = useState<string | null>(null)
   const [collapsedChapters, setCollapsedChapters] = useState<Set<number>>(new Set())
   const [viewSettings, setViewSettings] = useLocalStorageState<PalaceShelfViewSettings>(
     PALACE_SHELF_VIEW_SETTINGS_KEY,
     DEFAULT_PALACE_SHELF_VIEW_SETTINGS,
     isPalaceShelfViewSettings,
   )
+  const isExpandedMode = viewSettings.displayMode === 'expanded'
 
-  const fetchData = useCallback(async () => {
+  const fetchShelfData = useCallback(async () => {
     const params: Record<string, string> = {}
     if (search) params.search = search
-    const [shelfResponse, groupedResponse] = await Promise.all([
-      getPalaceSubjectShelfApi(params),
-      getPalacesGroupedApi(params),
-    ])
+    const shelfResponse = await getPalaceSubjectShelfApi(params)
     setItems(shelfResponse.items || [])
+  }, [search])
+
+  const fetchGroupedData = useCallback(async () => {
+    const params: Record<string, string> = {}
+    if (search) params.search = search
+    const groupedResponse = await getPalacesGroupedApi(params)
     setGroupedData(groupedResponse)
+    setGroupedDataSearch(search)
     return groupedResponse
   }, [search])
 
   useEffect(() => {
-    void fetchData()
-  }, [fetchData])
+    void fetchShelfData()
+  }, [fetchShelfData])
+
+  useEffect(() => {
+    if (!isExpandedMode) return
+    if (groupedDataSearch === search && groupedData) return
+    void fetchGroupedData()
+  }, [fetchGroupedData, groupedData, groupedDataSearch, isExpandedMode, search])
+
+  const fetchData = useCallback(async () => {
+    await fetchShelfData()
+    if (isExpandedMode) {
+      return fetchGroupedData()
+    }
+    return groupedData
+  }, [fetchGroupedData, fetchShelfData, groupedData, isExpandedMode])
 
   const categorizedCount = useMemo(() => items.filter((item) => item.subject).length, [items])
-  const allPalaces = useMemo(() => flattenGroupedPalaces(groupedData), [groupedData])
+  const allPalaces = useMemo(
+    () => flattenGroupedPalaces(groupedData ?? { groups: [], ungrouped: [], subjects: [] }),
+    [groupedData],
+  )
   const hasExpandedPalaces = allPalaces.length > 0
   const expandedViewSettings: PalaceListViewSettings = useMemo(
     () => ({
@@ -182,6 +201,7 @@ export default function PalaceShelfPage() {
         onMarkSegmentReviewed={cardActions.onMarkSegmentReviewed}
         onMiniPalacePractice={cardActions.onMiniPalacePractice}
         onMiniPalaceReview={cardActions.onMiniPalaceReview}
+        onOpenConfig={cardActions.onOpenConfig}
         onDelete={cardActions.onDelete}
       />
     ),
@@ -316,21 +336,29 @@ export default function PalaceShelfPage() {
       </div>
 
       {viewSettings.displayMode === 'expanded' ? (
-        <PalaceListSections
-          groupedData={groupedData}
-          hasPalaces={hasExpandedPalaces}
-          viewSettings={expandedViewSettings}
-          collapsedChapters={collapsedChapters}
-          onToggleChapter={(chapterId) =>
-            setCollapsedChapters((current) => {
-              const next = new Set(current)
-              if (next.has(chapterId)) next.delete(chapterId)
-              else next.add(chapterId)
-              return next
-            })
-          }
-          renderPalaceCard={renderExpandedPalaceCard}
-        />
+        groupedData ? (
+          <PalaceListSections
+            groupedData={groupedData}
+            hasPalaces={hasExpandedPalaces}
+            viewSettings={expandedViewSettings}
+            collapsedChapters={collapsedChapters}
+            onToggleChapter={(chapterId) =>
+              setCollapsedChapters((current) => {
+                const next = new Set(current)
+                if (next.has(chapterId)) next.delete(chapterId)
+                else next.add(chapterId)
+                return next
+              })
+            }
+            renderPalaceCard={renderExpandedPalaceCard}
+          />
+        ) : (
+          <Card>
+            <CardContent className="flex items-center justify-center p-12 text-sm text-muted-foreground">
+              正在加载宫殿详情...
+            </CardContent>
+          </Card>
+        )
       ) : items.length > 0 ? (
         <div
           className={cn('grid gap-5', getShelfGridClass(viewSettings.layoutMode))}

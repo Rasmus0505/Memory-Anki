@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { TimeSessionRecord } from '@/entities/session/model'
 import {
   applyTimeRecordFormPatch,
@@ -7,6 +7,7 @@ import {
   formatEffectiveSecondsAsMinutes,
   parseEffectiveMinutesToSeconds,
   parseTimeRecordFormState,
+  sessionKindOptions,
 } from '@/features/profile/model/time-record-form'
 
 const baseRecord: TimeSessionRecord = {
@@ -24,6 +25,14 @@ const baseRecord: TimeSessionRecord = {
 }
 
 describe('time-record-form', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
   it('displays effective duration in minutes while preserving seconds precision', () => {
     expect(formatEffectiveSecondsAsMinutes(537)).toBe('8.95')
     expect(formatEffectiveSecondsAsMinutes(3600)).toBe('60')
@@ -36,6 +45,17 @@ describe('time-record-form', () => {
     expect(form.effectiveMinutes).toBe('8.95')
     expect(form.startedAt).toBe('2026-06-09T13:00:00')
     expect(form.endedAt).toBe('2026-06-09T13:08:57')
+  })
+
+  it('builds create form state with current time defaults', () => {
+    vi.setSystemTime(new Date('2026-06-12T12:53:41'))
+
+    const form = buildTimeRecordFormState()
+
+    expect(form.title).toBe('2026-06-12 12:53:41')
+    expect(form.startedAt).toBe('2026-06-12T12:53:41')
+    expect(form.endedAt).toBe('2026-06-12T12:53:41')
+    expect(form.effectiveMinutes).toBe('0')
   })
 
   it('parses minute input back to effective seconds for persistence', () => {
@@ -72,5 +92,9 @@ describe('time-record-form', () => {
     })
 
     expect(next.effectiveMinutes).toBe('30')
+  })
+
+  it('offers quiz as a manual time record kind', () => {
+    expect(sessionKindOptions).toContain('quiz')
   })
 })

@@ -60,8 +60,12 @@ from memory_anki.modules.palaces.application.segment_service import ensure_segme
 from memory_anki.modules.palaces.application.title_sync_service import (
     ensure_palace_group_schema,
 )
+from memory_anki.modules.palace_quiz.application.service import (
+    ensure_palace_quiz_schema,
+)
 from memory_anki.modules.palaces.presentation import import_router
 from memory_anki.modules.palaces.presentation import router as palace_router
+from memory_anki.modules.palace_quiz.presentation import router as palace_quiz_router
 from memory_anki.modules.reviews.application.review_execution_service import (
     repair_review_stage_progress,
 )
@@ -123,6 +127,7 @@ async def lifespan(app: FastAPI):
     ensure_segment_schema()
     ensure_mini_palace_schema()
     ensure_mindmap_import_job_schema()
+    ensure_palace_quiz_schema()
     ensure_external_ai_call_log_schema()
     ensure_english_storage_schema()
     ensure_english_reading_storage_schema()
@@ -181,6 +186,7 @@ install_web_cache_headers(app)
 app.mount("/api/attachments", StaticFiles(directory=str(ATTACHMENTS_DIR)), name="attachments")
 
 app.include_router(palace_router.router, prefix="/api/v1")
+app.include_router(palace_quiz_router.router, prefix="/api/v1")
 app.include_router(review_router.router, prefix="/api/v1")
 app.include_router(sessions_router.router, prefix="/api/v1")
 app.include_router(settings_router.router, prefix="/api/v1")

@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import type { MindMapDoc, MindMapEditorState } from '@/shared/api/contracts'
 import {
+  advanceRevealStateForNodeClick,
+  buildInitialRevealState,
   buildReviewTree,
   buildVisibleEditorState,
   flattenNodes,
@@ -76,5 +78,39 @@ describe('review-flow-tree visible editor state', () => {
     expect(sourceDoc.root?.children?.[0]?.data?.text).toBe('Hidden child')
     expect(sourceDoc.root?.children?.[0]?.data?.fillColor).toBeUndefined()
     expect(sourceDoc.root?.children?.[0]?.data?.paddingY).toBeUndefined()
+  })
+
+  it('keeps standard click semantics when mini-checkpoint mode is enabled', () => {
+    const sourceDoc: MindMapDoc = {
+      root: {
+        data: { text: 'Root', uid: 'root' },
+        children: [
+          {
+            data: { text: 'A', uid: 'a' },
+            children: [{ data: { text: 'A1', uid: 'a1' }, children: [] }],
+          },
+          { data: { text: 'B', uid: 'b' }, children: [] },
+        ],
+      },
+    }
+    const root = buildReviewTree(sourceDoc, 'Root')
+    const nodeMap = flattenNodes(root)
+
+    const initial = buildInitialRevealState(root, null, {
+      mode: 'mini-checkpoint',
+      checkpointIds: ['a1', 'b'],
+    })
+    expect(initial).toEqual({
+      root: 'revealed',
+      a: 'revealed',
+      a1: 'placeholder',
+      b: 'placeholder',
+    })
+
+    const afterRootClick = advanceRevealStateForNodeClick('root', nodeMap, initial)
+    expect(afterRootClick).toEqual(initial)
+
+    const afterCheckpointReveal = advanceRevealStateForNodeClick('a1', nodeMap, initial)
+    expect(afterCheckpointReveal.a1).toBe('revealed')
   })
 })

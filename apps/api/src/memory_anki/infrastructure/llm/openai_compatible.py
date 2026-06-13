@@ -15,7 +15,7 @@ class OpenAICompatibleChatConfig:
     api_key: str
     base_url: str
     model: str
-    temperature: float = 0.0
+    temperature: float | None = 0.0
     timeout_seconds: float = 90.0
 
 
@@ -263,8 +263,9 @@ def _build_payload(
     payload: dict[str, Any] = {
         "model": config.model,
         "messages": messages,
-        "temperature": config.temperature,
     }
+    if config.temperature is not None:
+        payload["temperature"] = config.temperature
     if stream:
         payload["stream"] = True
     if response_format is not None:

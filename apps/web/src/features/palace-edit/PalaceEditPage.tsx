@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useMemo, useRef, useState } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
 import { ArrowLeft, History, Search, Volume2 } from 'lucide-react'
 import {
   BilinkPanel,
@@ -7,7 +7,11 @@ import {
   BilinkSearchPopover,
 } from '@/features/bilink'
 import { PageIntro } from '@/shared/components/layout/PageIntro'
-import { MindMapFrame } from '@/shared/components/mindmap-host'
+import {
+  MindMapFrame,
+  MindMapPageToolbar,
+  type MindMapFrameHandle,
+} from '@/shared/components/mindmap-host'
 import { Button } from '@/shared/components/ui/button'
 import { Badge } from '@/shared/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card'
@@ -29,8 +33,12 @@ import {
 import { MiniPalacePanel } from '@/features/mini-palace'
 
 export default function PalaceEdit() {
+  const navigate = useNavigate()
   const page = usePalaceEditPage()
+  const mindMapFrameRef = useRef<MindMapFrameHandle | null>(null)
   const [voiceCoachDialogOpen, setVoiceCoachDialogOpen] = useState(false)
+  const [mindMapUiCleared, setMindMapUiCleared] = useState(false)
+  const [mindMapNativeFullscreen, setMindMapNativeFullscreen] = useState(false)
   const voiceCoach = useVoiceCoachController({
     scene: page.editorMode === 'practice' ? 'practice' : 'edit',
     timer: page.timer,
@@ -76,6 +84,41 @@ export default function PalaceEdit() {
     miniPalaceFrameEditorState ?? page.activeMindMapEditorState
   const miniPalaceFrameActive = page.miniPalace.isActive
   const readonlyMindMap = page.editorMode === 'practice' || miniPalaceFrameActive
+  const segmentToolbarOptions = useMemo(
+    () =>
+      page.segments
+        .filter((segment) => !segment.is_virtual_default)
+        .map((segment) => ({
+          id: segment.id,
+          name: segment.name,
+        })),
+    [page.segments],
+  )
+
+  const handleImmersiveToolbarToggle = async () => {
+    if (mindMapNativeFullscreen) {
+      await mindMapFrameRef.current?.exitNativeFullscreen()
+      page.toggleMindMapFullscreen(true)
+      return
+    }
+    page.toggleMindMapFullscreen()
+  }
+
+  const handleNativeFullscreenToolbarToggle = async () => {
+    if (mindMapNativeFullscreen) {
+      await mindMapFrameRef.current?.exitNativeFullscreen()
+      return
+    }
+    if (page.mindMapFullscreen) {
+      page.toggleMindMapFullscreen(false)
+    }
+    await mindMapFrameRef.current?.enterNativeFullscreen()
+  }
+
+  const handleOpenQuizPage = () => {
+    if (!page.palaceId) return
+    navigate(`/palaces/${page.palaceId}/quiz`)
+  }
 
   if (!page.palaceId) {
     return (
@@ -150,6 +193,7 @@ export default function PalaceEdit() {
           <SessionTimerBar
             effectiveSeconds={page.timer.effectiveSeconds}
             idleSeconds={page.timer.idleSeconds}
+            automationScene="palace_edit"
             pauseCount={page.timer.pauseCount}
             status={page.timer.status}
             onStart={() => page.timer.start({ source: 'manual' })}
@@ -246,126 +290,204 @@ export default function PalaceEdit() {
               )}
             >
               {activeFrameEditorState ? (
-                <MindMapFrame
-                  editorState={activeFrameEditorState}
-                  readonly={readonlyMindMap}
-                  showToolbarWhenReadonly={readonlyMindMap}
-                  practiceModeActive={page.editorMode === 'practice' || page.miniPalace.isPracticing}
-                  practiceToggleLabel={page.editorMode === 'practice' ? '编辑' : '练习'}
-                  viewMemoryScope={
-                    page.palaceId ? `palace-edit:${page.palaceId}` : null
-                  }
-                  immersiveModeActive={page.mindMapFullscreen}
-                  showImportButtons
-                  aiSplitBusy={page.editorMode === 'edit' && !miniPalaceFrameActive ? page.aiSplitBusy : false}
-                  syncOnPropChange
-                  syncIntent={page.editorMode === 'practice' || miniPalaceFrameActive ? 'replace' : 'soft'}
-                  syncReason={
-                    miniPalaceFrameActive
-                      ? 'mini_palace'
-                      : page.editorMode === 'practice'
-                        ? 'review_flip'
+                <div className="flex h-full min-h-0 flex-col gap-3">
+                  <MindMapPageToolbar
+                    segmentControl={{
+                      active: page.isSegmentRangeMode,
+                      targetSegmentId: page.rangeTargetSegmentId,
+                      options: segmentToolbarOptions,
+                      onToggle: () =>
+                        page.handleSegmentRangeModeToggle({
+                          active: !page.isSegmentRangeMode,
+                          targetSegmentId: page.rangeTargetSegmentId || 'new',
+                        }),
+                      onTargetChange: (targetSegmentId) =>
+                        page.handleSegmentRangeModeToggle({
+                          active: true,
+                          targetSegmentId,
+                        }),
+                      onConfirm: page.handleConfirmSegmentRange,
+                      onCancel: () =>
+                        page.handleSegmentRangeModeToggle({
+                          active: false,
+                          targetSegmentId: null,
+                        }),
+                    }}
+                    modeToggle={
+                      miniPalaceFrameActive
+                        ? null
+                        : {
+                            label: page.editorMode === 'practice' ? '编辑' : '练习',
+                            onClick: page.toggleInlinePractice,
+                          }
+                    }
+                    importMindMapAction={{
+                      label: '转脑图',
+                      onClick: () => {
+                        mindMapImport.setImportMode('mindmap')
+                        mindMapImport.setImportOpen(true)
+                      },
+                    }}
+                    importTextAction={{
+                      label: '转文字',
+                      onClick: () => {
+                        mindMapImport.setImportMode('text')
+                        mindMapImport.setImportOpen(true)
+                      },
+                    }}
+                    englishAction={{
+                      label: '英语区',
+                      onClick: () => {
+                        void page.handleOpenEnglishArea()
+                      },
+                    }}
+                    bilinkSearchAction={{
+                      label: '搜索',
+                      onClick: () =>
+                        page.openBilinkSearch({
+                          mode: 'toolbar',
+                          nodeUid: page.selectedNode?.uid ?? null,
+                          position: null,
+                        }),
+                    }}
+                    quizAction={
+                      page.palaceId
+                        ? {
+                            label: '做题',
+                            onClick: handleOpenQuizPage,
+                          }
                         : null
-                  }
-                  preserveViewOnSync={
-                    miniPalaceFrameActive ||
-                    page.editorMode === 'practice' ||
-                    (mindMapImport.importAppliedSyncVersion > 0 ||
-                    page.aiSplitAppliedSyncVersion > 0
-                    )
-                  }
-                  initialViewPolicy={page.editorMode === 'practice' || miniPalaceFrameActive ? 'preserve' : 'reset'}
-                  externalSyncKey={
-                    miniPalaceFrameActive
-                      ? page.miniPalace.visibleSyncKey
-                      : page.editorMode === 'practice'
-                      ? page.practiceVisibleEditorSyncKey
-                      : mindMapImport.importExternalSyncKey
-                  }
-                  forceSyncKey={`${page.editorMode}:${page.replaceSyncVersion}:${mindMapImport.importAppliedSyncVersion}${miniPalaceFrameActive ? `:${page.miniPalace.visibleSyncKey}` : ''}`}
-                  forceSyncIntent="replace"
-                  segments={page.segments
-                    .filter((segment) => !segment.is_virtual_default)
-                    .map((segment) => ({
-                      id: segment.id,
-                      name: segment.name,
-                      color: segment.color,
-                      created_at: segment.created_at,
-                      node_uids: segment.node_uids,
-                    }))}
-                  activeSegmentId={page.activeSegmentId}
-                  segmentColorMode="all-with-active-emphasis"
-                  segmentRangeDraft={{
-                    active: page.isSegmentRangeMode,
-                    targetSegmentId: page.rangeTargetSegmentId,
-                    selectedNodeUids: page.selectedRangeNodeUids,
-                    overriddenConflictNodeUids: page.overriddenConflictNodeUids,
-                  }}
-                  bilinkCounts={page.bilinkCounts}
-                  bilinkItems={page.bilinks}
-                  bilinkCurrentPalaceId={page.palaceId}
-                  focusNodeUids={page.focusNodeUids}
-                  focusRequestNodeUid={page.modeFocusRequestNodeUid}
-                  focusRequestNonce={page.modeFocusRequestNonce}
-                  showMiniPalaceButton={Boolean(page.palaceId)}
-                  miniPalaceDraft={page.miniPalace.hostDraft}
-                  bilinkInsertionText={page.bilinkInsertionText}
-                  bilinkInsertionNonce={page.bilinkInsertionNonce}
-                  reviewFxSignal={page.editorMode === 'practice' ? page.reviewFxSignal : null}
-                  feedbackFxSignal={page.feedbackFxSignal}
-                  showBilinkSearchButton
-                  onEditorStateChange={page.handleMindMapEditorStateChange}
-                  onNodeActive={(nodes) => {
-                    page.timer.registerActivity('node_switch', { source: 'node_active' })
-                    page.handleMindMapNodeActive(nodes)
-                  }}
-                  onNodeClick={
-                    miniPalaceFrameActive
-                      ? page.miniPalace.handleNodeClick
-                      : page.handleInlinePracticeNodeClick
-                  }
-                  onNodeContextMenu={
-                    miniPalaceFrameActive
-                      ? page.miniPalace.handleNodeContextMenu
-                      : page.editorMode === 'edit'
-                      ? page.handleEditNodeContextMenu
-                      : page.handleInlinePracticeNodeContextMenu
-                  }
-                  onSegmentSelect={page.setActiveSegmentId}
-                  onCreateSegmentFromSelection={page.handleOpenCreateSegment}
-                  onSegmentRangeDraftChange={page.handleSegmentRangeDraftChange}
-                  onSegmentRangeModeToggle={page.handleSegmentRangeModeToggle}
-                  onSegmentRangeConfirm={page.handleConfirmSegmentRange}
-                  onPracticeToggle={miniPalaceFrameActive ? undefined : page.toggleInlinePractice}
-                  onEnglishOpen={() => {
-                    void page.handleOpenEnglishArea()
-                  }}
-                  onMindMapImportOpen={() => {
-                    mindMapImport.setImportMode('mindmap')
-                    mindMapImport.setImportOpen(true)
-                  }}
-                  onImageTextImportOpen={() => {
-                    mindMapImport.setImportMode('text')
-                    mindMapImport.setImportOpen(true)
-                  }}
-                  onAiSplitRequest={page.editorMode === 'edit' && !miniPalaceFrameActive ? page.handleAiSplitRequest : undefined}
-                  onFullscreenChange={page.handleMindMapNativeFullscreenChange}
-                  onFullscreenToggle={page.toggleMindMapFullscreen}
-                  onBilinkTrigger={page.handleBilinkTrigger}
-                  onBilinkNodeClick={page.handleBilinkNodeClick}
-                  onBilinkToolbarSearch={() =>
-                    page.openBilinkSearch({
-                      mode: 'toolbar',
-                      nodeUid: page.selectedNode?.uid ?? null,
-                      position: null,
-                    })
-                  }
-                  onMiniPalaceOpen={page.miniPalace.openPanel}
-                  className={cn(
-                    'w-full rounded-2xl border border-border/70 bg-white',
-                    page.mindMapFullscreen ? 'h-full' : 'h-[64vh]',
-                  )}
-                />
+                    }
+                    miniPalaceAction={
+                      page.palaceId
+                        ? {
+                            label: '小宫殿',
+                            onClick: page.miniPalace.openPanel,
+                          }
+                        : null
+                    }
+                    immersiveAction={{
+                      label: '半屏编辑',
+                      active: page.mindMapFullscreen,
+                      onClick: () => {
+                        void handleImmersiveToolbarToggle()
+                      },
+                    }}
+                    nativeFullscreenAction={{
+                      label: '全屏编辑',
+                      active: mindMapNativeFullscreen,
+                      onClick: () => {
+                        void handleNativeFullscreenToolbarToggle()
+                      },
+                    }}
+                    clearUiAction={{
+                      label: '清屏',
+                      active: mindMapUiCleared,
+                      onClick: () => mindMapFrameRef.current?.toggleUiCleared(),
+                    }}
+                  />
+
+                  <MindMapFrame
+                    ref={mindMapFrameRef}
+                    editorState={activeFrameEditorState}
+                    readonly={readonlyMindMap}
+                    practiceModeActive={page.editorMode === 'practice' || page.miniPalace.isPracticing}
+                    viewMemoryScope={
+                      page.palaceId ? `palace-edit:${page.palaceId}` : null
+                    }
+                    immersiveModeActive={page.mindMapFullscreen}
+                    aiSplitBusy={page.editorMode === 'edit' && !miniPalaceFrameActive ? page.aiSplitBusy : false}
+                    syncOnPropChange
+                    syncIntent={page.editorMode === 'practice' || miniPalaceFrameActive ? 'replace' : 'soft'}
+                    syncReason={
+                      miniPalaceFrameActive
+                        ? 'mini_palace'
+                        : page.editorMode === 'practice'
+                          ? 'review_flip'
+                          : null
+                    }
+                    preserveViewOnSync={
+                      miniPalaceFrameActive ||
+                      page.editorMode === 'practice' ||
+                      mindMapImport.importAppliedSyncVersion > 0 ||
+                      page.aiSplitAppliedSyncVersion > 0
+                    }
+                    initialViewPolicy={page.editorMode === 'practice' || miniPalaceFrameActive ? 'preserve' : 'reset'}
+                    externalSyncKey={
+                      miniPalaceFrameActive
+                        ? page.miniPalace.visibleSyncKey
+                        : page.editorMode === 'practice'
+                          ? page.practiceVisibleEditorSyncKey
+                          : mindMapImport.importExternalSyncKey
+                    }
+                    forceSyncKey={`${page.editorMode}:${page.replaceSyncVersion}:${mindMapImport.importAppliedSyncVersion}${miniPalaceFrameActive ? `:${page.miniPalace.visibleSyncKey}` : ''}`}
+                    forceSyncIntent="replace"
+                    segments={page.segments
+                      .filter((segment) => !segment.is_virtual_default)
+                      .map((segment) => ({
+                        id: segment.id,
+                        name: segment.name,
+                        color: segment.color,
+                        created_at: segment.created_at,
+                        node_uids: segment.node_uids,
+                      }))}
+                    activeSegmentId={page.activeSegmentId}
+                    segmentColorMode="all-with-active-emphasis"
+                    segmentRangeDraft={{
+                      active: page.isSegmentRangeMode,
+                      targetSegmentId: page.rangeTargetSegmentId,
+                      selectedNodeUids: page.selectedRangeNodeUids,
+                      overriddenConflictNodeUids: page.overriddenConflictNodeUids,
+                    }}
+                    bilinkCounts={page.bilinkCounts}
+                    bilinkItems={page.bilinks}
+                    bilinkCurrentPalaceId={page.palaceId}
+                    focusNodeUids={page.focusNodeUids}
+                    focusRequestNodeUid={page.modeFocusRequestNodeUid}
+                    focusRequestNonce={page.modeFocusRequestNonce}
+                    miniPalaceDraft={page.miniPalace.hostDraft}
+                    bilinkInsertionText={page.bilinkInsertionText}
+                    bilinkInsertionNonce={page.bilinkInsertionNonce}
+                    reviewFxSignal={page.editorMode === 'practice' ? page.reviewFxSignal : null}
+                    feedbackFxSignal={page.feedbackFxSignal}
+                    onEditorStateChange={page.handleMindMapEditorStateChange}
+                    onNodeActive={(nodes) => {
+                      page.timer.registerActivity('node_switch', { source: 'node_active' })
+                      page.handleMindMapNodeActive(nodes)
+                    }}
+                    onNodeClick={
+                      miniPalaceFrameActive
+                        ? page.miniPalace.handleNodeClick
+                        : page.handleInlinePracticeNodeClick
+                    }
+                    onNodeContextMenu={
+                      miniPalaceFrameActive
+                        ? page.miniPalace.handleNodeContextMenu
+                        : page.editorMode === 'edit'
+                          ? page.handleEditNodeContextMenu
+                          : page.handleInlinePracticeNodeContextMenu
+                    }
+                    onSegmentSelect={page.setActiveSegmentId}
+                    onCreateSegmentFromSelection={page.handleOpenCreateSegment}
+                    onSegmentRangeDraftChange={page.handleSegmentRangeDraftChange}
+                    onSegmentRangeModeToggle={page.handleSegmentRangeModeToggle}
+                    onSegmentRangeConfirm={page.handleConfirmSegmentRange}
+                    onAiSplitRequest={page.editorMode === 'edit' && !miniPalaceFrameActive ? page.handleAiSplitRequest : undefined}
+                    onFullscreenChange={(active) => {
+                      setMindMapNativeFullscreen(active)
+                      page.handleMindMapNativeFullscreenChange(active)
+                    }}
+                    onFullscreenToggle={page.toggleMindMapFullscreen}
+                    onUiClearedChange={setMindMapUiCleared}
+                    onBilinkTrigger={page.handleBilinkTrigger}
+                    onBilinkNodeClick={page.handleBilinkNodeClick}
+                    onMiniPalacePour={page.miniPalace.isPracticing ? page.miniPalace.handleSpacePour : undefined}
+                    className={cn(
+                      'w-full flex-1 rounded-2xl border border-border/70 bg-white',
+                      page.mindMapFullscreen ? 'h-full' : 'h-[64vh]',
+                    )}
+                  />
+                </div>
               ) : (
                 <div className="flex h-[64vh] items-center justify-center rounded-2xl border border-dashed border-border/80 bg-background/60 text-sm text-muted-foreground">
                   正在加载宫殿编辑器…
@@ -468,6 +590,8 @@ export default function PalaceEdit() {
         className={page.mindMapFullscreen ? 'z-[130]' : 'z-[120]'}
         overlayClassName={page.mindMapFullscreen ? 'z-[120]' : 'z-[110]'}
       />
+      {mindMapImport.aiRunConfigDialog}
+      {page.aiRunConfigDialog}
 
       <BilinkSearchPopover
         open={page.bilinkSearchOpen}

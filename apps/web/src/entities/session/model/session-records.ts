@@ -1,6 +1,6 @@
 export type RevealState = 'hidden' | 'placeholder' | 'revealed'
 
-export type SessionKind = 'palace_edit' | 'practice' | 'review'
+export type SessionKind = 'palace_edit' | 'practice' | 'quiz' | 'review'
 
 export type SessionCompletionMethod =
   | 'manual_complete'
@@ -13,6 +13,7 @@ export type SessionEventType =
   | 'start'
   | 'pause'
   | 'resume'
+  | 'leave_scene'
   | 'complete'
   | 'adjust_duration'
   | 'enter_edit_mode'
@@ -59,6 +60,8 @@ export interface DailyTrendPoint {
   label: string
   seconds: number
 }
+
+export type TimeRecordChartRange = 7 | 30 | 90 | 'all'
 
 export interface SessionKindBreakdownItem {
   kind: SessionKind

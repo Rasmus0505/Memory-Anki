@@ -59,6 +59,15 @@ def collect_doc_nodes_with_descendants(
     return descendants, labels
 
 
+def get_reviewable_doc_node_uids(editor_doc: Any) -> set[str]:
+    descendants, _ = collect_doc_nodes_with_descendants(editor_doc)
+    doc = _deserialize(editor_doc, {})
+    root = doc.get("root") if isinstance(doc, dict) else None
+    root_data = root.get("data") if isinstance(root, dict) and isinstance(root.get("data"), dict) else {}
+    root_uid = str(root_data.get(NODE_UID_KEY) or "").strip()
+    return {uid for uid in descendants if uid and uid != root_uid}
+
+
 def expand_segment_node_uids(palace: Palace, selected_node_uids: list[str]) -> list[str]:
     descendants, _ = collect_doc_nodes_with_descendants(palace.editor_doc)
     expanded: list[str] = []

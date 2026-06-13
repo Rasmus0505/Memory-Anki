@@ -74,14 +74,20 @@ from memory_anki.modules.palaces.application.segment_service import (
     update_palace_segment,
 )
 from memory_anki.modules.palaces.application.title_sync_service import (
+    MINI_REVIEW_MODE_INDEPENDENT,
+    MINI_REVIEW_MODE_MINI_ONLY,
     build_chapter_grouped_palace_list,
     build_grouped_palace_list,
     build_subject_shelf_summary,
     get_palace_explicit_chapter_ids,
     reconcile_palace_chapter_binding,
     resolve_palace_binding_status,
+    resolve_palace_mini_review_mode,
     resolve_palace_subject,
     resolve_palace_title,
+)
+from memory_anki.modules.settings.application.ai_model_registry import (
+    normalize_ai_runtime_options,
 )
 from memory_anki.modules.palaces.domain.schemas import PalaceCreate, PalaceUpdate
 from memory_anki.modules.reviews.application.review_execution_service import (
@@ -215,6 +221,7 @@ def palace_json(p, session: Session | None = None) -> dict:
         "resolved_title": resolve_palace_title(p),
         "grouping_mode": getattr(p, "grouping_mode", "auto") or "auto",
         "manual_group_chapter_id": getattr(p, "manual_group_chapter_id", None),
+        "mini_review_mode": resolve_palace_mini_review_mode(p),
         "binding_status": resolve_palace_binding_status(p),
         "primary_chapter_id": getattr(p, "primary_chapter_id", None),
         "primary_chapter": {
@@ -387,6 +394,7 @@ def api_ai_split_editor_node(palace_id: int, data: dict, s: Session = Depends(se
             palace,
             data.get("editor_doc"),
             data.get("target_node_uid"),
+            normalize_ai_runtime_options(data.get("ai_options")),
         )
     except MindMapAiSplitError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -462,6 +470,21 @@ def api_update_palace_practice_flag(palace_id: int, data: dict, s: Session = Dep
     palace.needs_practice = bool(data.get("needs_practice", False))
     s.commit()
     s.refresh(palace)
+    return {"item": palace_json(palace, s)}
+
+
+@router.put("/palaces/{palace_id}/mini-review-mode")
+def api_update_palace_mini_review_mode(palace_id: int, data: dict, s: Session = Depends(session_dep)):
+    palace = get_palace(s, palace_id)
+    if not palace:
+        return {"error": "not found"}
+    next_mode = str(data.get("mini_review_mode") or MINI_REVIEW_MODE_INDEPENDENT).strip()
+    if next_mode not in {MINI_REVIEW_MODE_INDEPENDENT, MINI_REVIEW_MODE_MINI_ONLY}:
+        raise HTTPException(status_code=400, detail="invalid mini_review_mode")
+    palace.mini_review_mode = next_mode
+    s.commit()
+    s.refresh(palace)
+    maybe_create_rolling_backup("rolling-update-palace-mini-review-mode")
     return {"item": palace_json(palace, s)}
 
 

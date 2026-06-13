@@ -5,6 +5,7 @@ import { useRevealSession } from '@/entities/review/model/useRevealSession'
 import { useTimedSession } from '@/shared/hooks/useTimedSession'
 import { revealRemainingNodes, type ReviewFlowSnapshot } from '@/features/review/model/review-flow-tree'
 import { useReviewFeedback } from '@/features/review/hooks/useReviewFeedback'
+import type { RevealFlowMode } from '@/features/review/model/review-flow-tree'
 
 interface CompleteFlowPayload {
   durationSeconds: number
@@ -17,6 +18,8 @@ interface UseReviewFlowSessionOptions {
   title: string
   palaceId: number | null
   sessionKind: 'practice' | 'review'
+  revealMode?: RevealFlowMode
+  checkpointNodeUids?: Iterable<string>
   persistKey?: string | null
   editorState: MindMapEditorState
   onComplete: (payload: CompleteFlowPayload) => void | Promise<void>
@@ -27,10 +30,14 @@ interface UseReviewFlowSessionOptions {
   onFullscreenChange?: (active: boolean) => void
 }
 
+const EMPTY_CHECKPOINT_NODE_UIDS: string[] = []
+
 export function useReviewFlowSession({
   title,
   palaceId,
   sessionKind,
+  revealMode = 'standard',
+  checkpointNodeUids = EMPTY_CHECKPOINT_NODE_UIDS,
   persistKey = null,
   editorState,
   onComplete,
@@ -44,6 +51,7 @@ export function useReviewFlowSession({
     kind: sessionKind,
     title,
     palaceId,
+    sourceKind: palaceId != null ? 'palace' : null,
     persistKey,
     persistCompletionRecord: sessionKind !== 'review',
   })
@@ -52,12 +60,15 @@ export function useReviewFlowSession({
     editorState,
     initialSnapshot,
     resetCompletedOnDocChange: sessionKind === 'review',
+    mode: revealMode,
+    checkpointIds: checkpointNodeUids,
   })
   const feedback = useReviewFeedback({
     root: reveal.root,
     revealMap: reveal.revealMap,
     revealedNonRootCount: reveal.revealedNonRootCount,
     totalNodeCount: reveal.totalNodeCount,
+    revealMode,
   })
   const [fullscreen, setFullscreen] = React.useState(false)
   const submittingRef = React.useRef(false)
@@ -115,7 +126,7 @@ export function useReviewFlowSession({
         return
       }
       if (currentTimer.startedAt && currentTimer.status !== 'completed') {
-        void currentTimer.complete('left_page', {
+        void currentTimer.leaveScene({
           persist_progress: persistProgress,
         })
       }
@@ -169,6 +180,20 @@ export function useReviewFlowSession({
     [reveal, timer],
   )
 
+  const handleNodeHover = React.useCallback(
+    (nodes: MindMapSelection[]) => {
+      if (reveal.completed) return
+      reveal.handleNodeHover(nodes)
+    },
+    [reveal],
+  )
+
+  const handleSpacePour = React.useCallback(() => {
+    if (reveal.completed || revealMode !== 'mini-checkpoint') return
+    timer.registerActivity('practice_interaction', { source: 'mini_palace_space_pour' })
+    reveal.handleSpacePour()
+  }, [reveal, revealMode, timer])
+
   const handleRestart = React.useCallback(() => {
     reveal.reset()
     feedback.emitManualEvent('session_reset')
@@ -198,7 +223,9 @@ export function useReviewFlowSession({
     setFullscreen,
     handleNodeClick,
     handleNodeContextMenu,
+    handleNodeHover,
     handleRestart,
+    handleSpacePour,
     finishFlow,
     screenGlowClass,
   }

@@ -10,14 +10,19 @@ from memory_anki.modules.english_reading.application.service import (
     create_material,
     delete_material,
     generate_material_version,
+    get_dictionary_entry,
     get_material,
     get_material_version,
     get_profile,
     get_workspace,
+    translate_sentence_text,
     update_material,
     update_profile,
 )
 from memory_anki.modules.english_reading.domain.errors import EnglishReadingError
+from memory_anki.modules.settings.application.ai_model_registry import (
+    normalize_ai_runtime_options,
+)
 
 router = APIRouter(tags=["english-reading"])
 
@@ -30,6 +35,7 @@ class ReadingGenerateRequest(BaseModel):
     mode: str = "initial"
     difficultyDirection: str | None = None
     difficultyDelta: float | None = None
+    ai_options: dict | None = None
 
 
 class ReadingMaterialUpdateRequest(BaseModel):
@@ -42,6 +48,11 @@ class ReadingCompleteRequest(BaseModel):
     durationSeconds: int
     hoverCount: int = 0
     expandCount: int = 0
+
+
+class ReadingSentenceTranslationRequest(BaseModel):
+    text: str
+    ai_options: dict | None = None
 
 
 def session_dep():
@@ -111,6 +122,7 @@ def api_generate_english_reading_material(
             mode=data.mode,
             difficulty_direction=data.difficultyDirection,
             difficulty_delta=data.difficultyDelta,
+            ai_options=normalize_ai_runtime_options(data.ai_options),
         )
     except EnglishReadingError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -150,6 +162,42 @@ def api_get_english_reading_version(material_id: int, session: Session = Depends
         return get_material_version(session, material_id)
     except EnglishReadingError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.get("/english-reading/dictionary")
+def api_get_english_reading_dictionary(
+    word: str,
+    session: Session = Depends(session_dep),
+):
+    try:
+        return get_dictionary_entry(session, word=word)
+    except EnglishReadingError as exc:
+        message = str(exc)
+        status_code = 400
+        if "未找到单词" in message:
+            status_code = 404
+        elif "词典服务暂时不可用" in message:
+            status_code = 502
+        raise HTTPException(status_code=status_code, detail=message) from exc
+
+
+@router.post("/english-reading/sentence-translation")
+def api_translate_english_reading_sentence(
+    data: ReadingSentenceTranslationRequest,
+    session: Session = Depends(session_dep),
+):
+    try:
+        return translate_sentence_text(
+            session,
+            text=data.text,
+            ai_options=normalize_ai_runtime_options(data.ai_options),
+        )
+    except EnglishReadingError as exc:
+        message = str(exc)
+        status_code = 400
+        if "翻译失败" in message:
+            status_code = 502
+        raise HTTPException(status_code=status_code, detail=message) from exc
 
 
 @router.post("/english-reading/materials/{material_id}/complete")

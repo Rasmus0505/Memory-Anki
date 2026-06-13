@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse
@@ -26,7 +27,7 @@ from memory_anki.modules.settings.application.ai_prompts import (
 )
 from memory_anki.modules.settings.application.ai_model_registry import (
     list_model_scenarios,
-    save_model_selection,
+    save_ai_model_settings,
 )
 
 router = APIRouter(tags=["settings"])
@@ -216,17 +217,28 @@ def api_ai_prompt_settings_reset(data: dict, s: Session = Depends(session_dep)):
 
 @router.get("/settings/ai-models")
 def api_ai_model_scenarios(s: Session = Depends(session_dep)):
-    return {"scenarios": list_model_scenarios(s)}
+    return list_model_scenarios(s)
 
 
 @router.put("/settings/ai-models")
 def api_ai_model_scenarios_update(data: dict, s: Session = Depends(session_dep)):
-    updates = data.get("updates") if isinstance(data.get("updates"), dict) else data
-    normalized_updates = {
-        str(key): str(value)
-        for key, value in dict(updates or {}).items()
-    }
-    return {"scenarios": save_model_selection(s, normalized_updates)}
+    scenario_updates = data.get("scenario_updates") if isinstance(data.get("scenario_updates"), dict) else None
+    provider_updates = data.get("provider_updates") if isinstance(data.get("provider_updates"), dict) else None
+    if scenario_updates is None and provider_updates is None:
+        legacy_updates = data.get("updates") if isinstance(data.get("updates"), dict) else data
+        normalized_legacy_updates: dict[str, dict[str, Any]] = {}
+        for key, value in dict(legacy_updates or {}).items():
+            scenario_key = str(key)
+            if isinstance(value, dict):
+                normalized_legacy_updates[scenario_key] = value
+            else:
+                normalized_legacy_updates[scenario_key] = {"default_model": str(value)}
+        scenario_updates = normalized_legacy_updates
+    return save_ai_model_settings(
+        s,
+        scenario_updates=scenario_updates,
+        provider_updates=provider_updates,
+    )
 
 
 @router.get("/ai-call-logs")

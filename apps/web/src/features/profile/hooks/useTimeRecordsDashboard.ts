@@ -6,12 +6,14 @@ import {
   getDailyTrend,
   getSessionKindBreakdown,
   getTimeRecordSummary,
+  getTrendByRange,
   getTimeRecordingThresholdSeconds,
   listTimeRecords,
   restoreTimeRecord,
   setTimeRecordingThresholdSeconds,
   softDeleteTimeRecord,
   type SessionKind,
+  type TimeRecordChartRange,
   type TimeSessionRecord,
   updateTimeRecord,
 } from '@/entities/session/model'
@@ -47,6 +49,12 @@ export interface UseTimeRecordsDashboardResult {
   summary: ReturnType<typeof getTimeRecordSummary>
   trend: ReturnType<typeof getDailyTrend>
   breakdown: ReturnType<typeof getSessionKindBreakdown>
+  getTrendForRange: (
+    range: TimeRecordChartRange,
+  ) => ReturnType<typeof getDailyTrend>
+  getBreakdownForRange: (
+    range: TimeRecordChartRange,
+  ) => ReturnType<typeof getSessionKindBreakdown>
   visibleRecords: TimeSessionRecord[]
   hasSelectableRecords: boolean
   allSelectableChecked: boolean
@@ -135,6 +143,16 @@ export function useTimeRecordsDashboard(
   const summary = useMemo(() => getTimeRecordSummary(records), [records])
   const trend = useMemo(() => getDailyTrend(records, 7), [records])
   const breakdown = useMemo(() => getSessionKindBreakdown(records), [records])
+  const trend30 = useMemo(() => getTrendByRange(records, 30), [records])
+  const trend90 = useMemo(() => getTrendByRange(records, 90), [records])
+  const trendAll = useMemo(() => getTrendByRange(records, 'all'), [records])
+  const breakdown7 = useMemo(() => getSessionKindBreakdown(records, 7), [records])
+  const breakdown30 = useMemo(() => getSessionKindBreakdown(records, 30), [records])
+  const breakdown90 = useMemo(() => getSessionKindBreakdown(records, 90), [records])
+  const breakdownAll = useMemo(
+    () => getSessionKindBreakdown(records, 'all'),
+    [records],
+  )
 
   const visibleRecords = useMemo(() => {
     return records.filter((record) => {
@@ -371,6 +389,18 @@ export function useTimeRecordsDashboard(
     summary,
     trend,
     breakdown,
+    getTrendForRange: (range) => {
+      if (range === 30) return trend30
+      if (range === 90) return trend90
+      if (range === 'all') return trendAll
+      return trend
+    },
+    getBreakdownForRange: (range) => {
+      if (range === 30) return breakdown30
+      if (range === 90) return breakdown90
+      if (range === 'all') return breakdownAll
+      return breakdown7
+    },
     visibleRecords,
     hasSelectableRecords,
     allSelectableChecked,

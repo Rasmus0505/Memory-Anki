@@ -32,6 +32,9 @@ from memory_anki.modules.reviews.application.schedule_service import (
     schedule_display_datetime,
 )
 
+MINI_REVIEW_MODE_INDEPENDENT = "independent"
+MINI_REVIEW_MODE_MINI_ONLY = "mini_only"
+
 
 def ensure_palace_group_schema() -> None:
     with engine.begin() as conn:
@@ -66,6 +69,7 @@ def ensure_palace_group_schema() -> None:
             ("manual_title", "VARCHAR(200) DEFAULT ''"),
             ("grouping_mode", "VARCHAR(20) DEFAULT 'auto'"),
             ("manual_group_chapter_id", "INTEGER"),
+            ("mini_review_mode", "VARCHAR(20) DEFAULT 'independent'"),
             ("needs_practice", "BOOLEAN NOT NULL DEFAULT 0"),
             ("focus_node_uids_json", "TEXT NOT NULL DEFAULT '[]'"),
         ):
@@ -343,6 +347,19 @@ def resolve_palace_title(palace: Palace) -> str:
     if chapter is not None and chapter.name:
         return chapter.name
     return manual_title or palace.title or "未命名宫殿"
+
+
+def resolve_palace_mini_review_mode(palace: Palace) -> str:
+    value = str(getattr(palace, "mini_review_mode", MINI_REVIEW_MODE_INDEPENDENT) or MINI_REVIEW_MODE_INDEPENDENT)
+    if value == MINI_REVIEW_MODE_MINI_ONLY:
+        return MINI_REVIEW_MODE_MINI_ONLY
+    return MINI_REVIEW_MODE_INDEPENDENT
+
+
+def palace_uses_mini_only_review(palace: Palace) -> bool:
+    return resolve_palace_mini_review_mode(palace) == MINI_REVIEW_MODE_MINI_ONLY and bool(
+        list(getattr(palace, "mini_palaces", []) or [])
+    )
 
 
 def resolve_palace_group_source_chapter(session: Session, palace: Palace) -> Chapter | None:
@@ -731,11 +748,13 @@ def count_palace_review_units(
     due_now_count = 0
     due_later_today_count = 0
     needs_practice_count = 1 if bool(getattr(palace, "needs_practice", False)) else 0
+    suppress_main_review = palace_uses_mini_only_review(palace)
 
-    if palace_has_due_review(session, palace, now=current, include_mini_palaces=False):
-        due_now_count += 1
-    elif palace_has_due_later_today(session, palace, now=current, include_mini_palaces=False):
-        due_later_today_count += 1
+    if not suppress_main_review:
+        if palace_has_due_review(session, palace, now=current, include_mini_palaces=False):
+            due_now_count += 1
+        elif palace_has_due_later_today(session, palace, now=current, include_mini_palaces=False):
+            due_later_today_count += 1
 
     for mini_palace in list(getattr(palace, "mini_palaces", []) or []):
         ensure_mini_palace_schedule_model(session, mini_palace)
@@ -765,15 +784,16 @@ def palace_has_due_review(
     include_mini_palaces: bool = True,
 ) -> bool:
     current = now or __import__("datetime").datetime.now()
-    next_schedule = _next_pending_palace_schedule(palace)
-    if next_schedule and is_schedule_due(next_schedule, palace, session, now=current):
-        return True
-
-    next_segment = _next_pending_segment_schedule(palace)
-    if next_segment is not None:
-        segment, schedule = next_segment
-        if is_segment_schedule_due(session, segment, schedule, now=current):
+    if not palace_uses_mini_only_review(palace):
+        next_schedule = _next_pending_palace_schedule(palace)
+        if next_schedule and is_schedule_due(next_schedule, palace, session, now=current):
             return True
+
+        next_segment = _next_pending_segment_schedule(palace)
+        if next_segment is not None:
+            segment, schedule = next_segment
+            if is_segment_schedule_due(session, segment, schedule, now=current):
+                return True
 
     if not include_mini_palaces:
         return False
@@ -794,17 +814,18 @@ def palace_has_due_later_today(
     include_mini_palaces: bool = True,
 ) -> bool:
     current = now or __import__("datetime").datetime.now()
-    next_schedule = _next_pending_palace_schedule(palace)
-    due_at = schedule_display_datetime(next_schedule, palace, session) if next_schedule else None
-    if _review_datetime_is_later_today(due_at, current):
-        return True
-
-    next_segment = _next_pending_segment_schedule(palace)
-    if next_segment is not None:
-        segment, schedule = next_segment
-        due_at = get_segment_schedule_display_datetime(session, segment, schedule)
+    if not palace_uses_mini_only_review(palace):
+        next_schedule = _next_pending_palace_schedule(palace)
+        due_at = schedule_display_datetime(next_schedule, palace, session) if next_schedule else None
         if _review_datetime_is_later_today(due_at, current):
             return True
+
+        next_segment = _next_pending_segment_schedule(palace)
+        if next_segment is not None:
+            segment, schedule = next_segment
+            due_at = get_segment_schedule_display_datetime(session, segment, schedule)
+            if _review_datetime_is_later_today(due_at, current):
+                return True
 
     if not include_mini_palaces:
         return False

@@ -22,10 +22,17 @@ export interface VoiceCoachSynthesizeResponse {
   request_id: string
 }
 
-export function synthesizeVoiceCoachApi(event: VoiceCoachEvent) {
+export function synthesizeVoiceCoachApi(
+  event: VoiceCoachEvent,
+  aiOptions?: import('@/shared/api/contracts').AiRuntimeOptions,
+) {
+  const payload: Record<string, unknown> = { event }
+  if (aiOptions) {
+    payload.ai_options = aiOptions
+  }
   return request<VoiceCoachSynthesizeResponse>('/voice-coach/synthesize', {
     method: 'POST',
-    body: JSON.stringify({ event }),
+    body: JSON.stringify(payload),
     persistence: false,
   })
 }

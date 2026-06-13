@@ -41,6 +41,9 @@ from memory_anki.modules.english.infrastructure.task_runner import (
 from memory_anki.modules.time_records.application.time_records_service import (
     get_english_course_stats,
 )
+from memory_anki.modules.settings.application.ai_model_registry import (
+    AiRuntimeOptions,
+)
 
 from .asr_normalization import prepare_sentences_from_asr
 from .course_service import (
@@ -102,6 +105,7 @@ def create_generation_task(
     filename: str,
     content_type: str,
     file_bytes: bytes,
+    asr_ai_options: AiRuntimeOptions | None = None,
 ) -> dict[str, Any]:
     current_task = get_current_task(session)
     if current_task is not None:
@@ -120,6 +124,7 @@ def create_generation_task(
         filename=filename,
         content_type=content_type,
         file_bytes=file_bytes,
+        asr_ai_options=asr_ai_options,
     )
     get_english_runtime().runner.launch(task["id"], run_generation_task)
     return task
@@ -258,6 +263,7 @@ def create_task_row(
     filename: str,
     content_type: str,
     file_bytes: bytes,
+    asr_ai_options: AiRuntimeOptions | None = None,
 ) -> dict[str, Any]:
     suffix = Path(filename).suffix or ".mp4"
     task_id = uuid.uuid4().hex
@@ -265,6 +271,20 @@ def create_task_row(
     task_path.mkdir(parents=True, exist_ok=True)
     source_path = task_path / f"source{suffix}"
     source_path.write_bytes(file_bytes)
+    (task_path / "runtime_options.json").write_text(
+        json.dumps(
+            {
+                "asr": {
+                    "model": asr_ai_options.model if asr_ai_options else None,
+                    "thinking_enabled": (
+                        asr_ai_options.thinking_enabled if asr_ai_options else None
+                    ),
+                }
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
 
     task = EnglishGenerationTask(
         id=task_id,
@@ -365,6 +385,7 @@ def run_generation_task(task_id: str) -> None:
         asr_payload = runtime.asr_gateway.transcribe(
             audio_path,
             task_id=task_id,
+            ai_options=load_task_asr_ai_options(source_path.parent),
             progress_callback=asr_progress,
         )
 
@@ -549,6 +570,27 @@ def get_current_task(session: Session) -> EnglishGenerationTask | None:
         .filter(EnglishGenerationTask.status.in_(tuple(VISIBLE_TASK_STATUSES)))
         .order_by(EnglishGenerationTask.created_at.desc(), EnglishGenerationTask.id.desc())
         .first()
+    )
+
+
+def load_task_asr_ai_options(task_path: Path) -> AiRuntimeOptions:
+    options_path = task_path / "runtime_options.json"
+    if not options_path.exists():
+        return AiRuntimeOptions()
+    try:
+        payload = json.loads(options_path.read_text(encoding="utf-8"))
+    except Exception:
+        return AiRuntimeOptions()
+    asr_payload = payload.get("asr") if isinstance(payload, dict) else None
+    if not isinstance(asr_payload, dict):
+        return AiRuntimeOptions()
+    return AiRuntimeOptions(
+        model=str(asr_payload.get("model") or "").strip() or None,
+        thinking_enabled=(
+            None
+            if asr_payload.get("thinking_enabled") is None
+            else bool(asr_payload.get("thinking_enabled"))
+        ),
     )
 
 

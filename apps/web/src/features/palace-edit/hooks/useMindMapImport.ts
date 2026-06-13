@@ -4,6 +4,7 @@ import { useImportApplyController } from '@/features/palace-edit/hooks/useImport
 import { useImportBatchState } from '@/features/palace-edit/hooks/useImportBatchState'
 import { useImportJobController } from '@/features/palace-edit/hooks/useImportJobController'
 import { usePdfImportController } from '@/features/palace-edit/hooks/usePdfImportController'
+import { useAiRunConfigDialog } from '@/features/ai-config/useAiRunConfigDialog'
 import type {
   BatchImportMeta,
   ImportApplyContext,
@@ -47,6 +48,7 @@ export function useMindMapImport({
   const [mindMapWorkflow, setMindMapWorkflowState] = useState<MindMapImportWorkflow>('single')
 
   const batch = useImportBatchState(setControllerError)
+  const { promptForAiOptions, aiRunConfigDialog } = useAiRunConfigDialog()
   const pdf = usePdfImportController({
     entityKey,
     subjectOptions,
@@ -78,6 +80,7 @@ export function useMindMapImport({
     persistAnalyzedPdfPages: pdf.persistAnalyzedPdfPages,
     rangePrompt: pdf.rangePrompt,
     pdfImportOptions: pdf.pdfImportOptions,
+    promptForAiOptions,
   })
 
   const apply = useImportApplyController({
@@ -245,5 +248,6 @@ export function useMindMapImport({
     handleImportSelectHistory: jobs.handleImportSelectHistory,
     handleImportDeleteHistory: jobs.handleImportDeleteHistory,
     handleUndoLastImport: apply.handleUndoLastImport,
+    aiRunConfigDialog,
   }
 }

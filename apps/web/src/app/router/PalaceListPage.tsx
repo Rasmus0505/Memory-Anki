@@ -110,6 +110,7 @@ export default function PalaceList() {
         onMarkSegmentReviewed={cardActions.onMarkSegmentReviewed}
         onMiniPalacePractice={cardActions.onMiniPalacePractice}
         onMiniPalaceReview={cardActions.onMiniPalaceReview}
+        onOpenConfig={cardActions.onOpenConfig}
         onDelete={cardActions.onDelete}
       />
     ),

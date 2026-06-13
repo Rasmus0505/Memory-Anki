@@ -63,6 +63,11 @@ function TestHarness({
   )
 }
 
+function readPersistedSnapshot(persistKey: string) {
+  const raw = window.sessionStorage.getItem(`memory-anki-timed-session:${persistKey}`)
+  return raw ? JSON.parse(raw) as { recordId?: string | null; resumeDeadlineAt?: string | null } : null
+}
+
 describe('useTimedSession automation config', () => {
   const appendTimeRecordSpy = vi.spyOn(sessionRecordModel, 'appendTimeRecord')
 
@@ -188,7 +193,8 @@ describe('useTimedSession automation config', () => {
     expect(screen.getByTestId('seconds').textContent).toBe('4')
   })
 
-  it('persists running sessions as paused snapshots on pagehide without counting time away', () => {
+  it('persists running sessions as resumable snapshots on pagehide without counting time away', () => {
+    appendTimeRecordSpy.mockImplementation(async (record) => record)
     const { unmount } = render(
       <TestHarness kind="practice" autoPauseMs={60_000} persistKey="practice:restore-test" />,
     )
@@ -196,6 +202,12 @@ describe('useTimedSession automation config', () => {
     act(() => {
       vi.advanceTimersByTime(3_200)
       window.dispatchEvent(new Event('pagehide'))
+    })
+
+    expect(appendTimeRecordSpy).toHaveBeenCalledTimes(1)
+    expect(appendTimeRecordSpy.mock.calls[0]?.[0]).toMatchObject({
+      completionMethod: 'left_page',
+      effectiveSeconds: 3,
     })
 
     unmount()
@@ -213,8 +225,154 @@ describe('useTimedSession automation config', () => {
       />,
     )
 
-    expect(screen.getByTestId('status').textContent).toBe('paused')
+    expect(screen.getByTestId('status').textContent).toBe('running')
     expect(screen.getByTestId('seconds').textContent).toBe('3')
+  })
+
+  it('resumes the same record id within the resume window and overwrites the final completion method', async () => {
+    appendTimeRecordSpy.mockImplementation(async (record) => record)
+
+    const { result, unmount } = renderHook(() =>
+      useTimedSession({
+        kind: 'practice',
+        title: '测试',
+        palaceId: 1,
+        autoPauseMs: 60_000,
+        persistKey: 'practice:resume-window',
+      }),
+    )
+
+    act(() => {
+      result.current.start({ source: 'test' })
+      vi.advanceTimersByTime(2_400)
+    })
+
+    await act(async () => {
+      await result.current.leaveScene({ source: 'route_leave' })
+    })
+
+    const snapshot = readPersistedSnapshot('practice:resume-window')
+    const firstRecord = appendTimeRecordSpy.mock.calls[0]?.[0]
+
+    expect(firstRecord).toMatchObject({
+      completionMethod: 'left_page',
+      effectiveSeconds: 2,
+    })
+    expect(snapshot?.recordId).toBe(firstRecord?.id)
+    expect(snapshot?.resumeDeadlineAt).toBeTruthy()
+
+    unmount()
+
+    act(() => {
+      vi.advanceTimersByTime(15_000)
+    })
+
+    const { result: resumedResult } = renderHook(() =>
+      useTimedSession({
+        kind: 'practice',
+        title: '测试',
+        palaceId: 1,
+        autoPauseMs: 60_000,
+        persistKey: 'practice:resume-window',
+      }),
+    )
+
+    expect(resumedResult.current.status).toBe('running')
+    expect(resumedResult.current.effectiveSeconds).toBe(2)
+
+    await act(async () => {
+      await resumedResult.current.complete('manual_complete', { source: 'test_complete' })
+    })
+
+    expect(appendTimeRecordSpy).toHaveBeenCalledTimes(2)
+    expect(appendTimeRecordSpy.mock.calls[1]?.[0]).toMatchObject({
+      id: firstRecord?.id,
+      startedAt: firstRecord?.startedAt,
+      completionMethod: 'manual_complete',
+      effectiveSeconds: 2,
+    })
+  })
+
+  it('drops expired suspended snapshots instead of resuming them', async () => {
+    appendTimeRecordSpy.mockImplementation(async (record) => record)
+
+    const { result, unmount } = renderHook(() =>
+      useTimedSession({
+        kind: 'practice',
+        title: '测试',
+        palaceId: 1,
+        autoPauseMs: 5_000,
+        persistKey: 'practice:expired-window',
+      }),
+    )
+
+    act(() => {
+      result.current.start({ source: 'test' })
+      vi.advanceTimersByTime(2_000)
+    })
+
+    await act(async () => {
+      await result.current.leaveScene({ source: 'route_leave' })
+    })
+
+    unmount()
+
+    act(() => {
+      vi.advanceTimersByTime(6_000)
+    })
+
+    const { result: resumedResult } = renderHook(() =>
+      useTimedSession({
+        kind: 'practice',
+        title: '测试',
+        palaceId: 1,
+        autoPauseMs: 5_000,
+        persistKey: 'practice:expired-window',
+      }),
+    )
+
+    expect(resumedResult.current.status).toBe('idle')
+    expect(window.sessionStorage.getItem('memory-anki-timed-session:practice:expired-window')).toBeNull()
+    expect(appendTimeRecordSpy).toHaveBeenCalledTimes(1)
+  })
+
+  it('clears another scene suspended snapshot when a new scene enters', async () => {
+    appendTimeRecordSpy.mockImplementation(async (record) => record)
+
+    const { result, unmount } = renderHook(() =>
+      useTimedSession({
+        kind: 'practice',
+        title: '场景 A',
+        palaceId: 1,
+        autoPauseMs: 60_000,
+        persistKey: 'practice:scene-a',
+      }),
+    )
+
+    act(() => {
+      result.current.start({ source: 'test' })
+      vi.advanceTimersByTime(1_000)
+    })
+
+    await act(async () => {
+      await result.current.leaveScene({ source: 'route_leave' })
+    })
+
+    unmount()
+
+    expect(window.sessionStorage.getItem('memory-anki-timed-session:practice:scene-a')).toBeTruthy()
+
+    renderHook(() =>
+      useTimedSession({
+        kind: 'review',
+        title: '场景 B',
+        palaceId: 2,
+        autoPauseMs: 60_000,
+        persistKey: 'review:scene-b',
+      }),
+    )
+
+    expect(window.sessionStorage.getItem('memory-anki-timed-session:practice:scene-a')).toBeNull()
   })
 
   it('does not auto resume on focus when window return is disabled', () => {

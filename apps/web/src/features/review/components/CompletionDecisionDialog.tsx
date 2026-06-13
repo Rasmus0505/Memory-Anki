@@ -1,4 +1,5 @@
-﻿import * as React from 'react'
+import * as React from 'react'
+import { formatDuration } from '@/entities/session/model'
 import { Button } from '@/shared/components/ui/button'
 import {
   Dialog,
@@ -14,6 +15,7 @@ interface CompletionDecisionDialogProps {
   onMarkCompleted: () => void
   onMarkUncompleted: () => void
   submitting?: boolean
+  durationSeconds?: number
 }
 
 export function CompletionDecisionDialog({
@@ -22,6 +24,7 @@ export function CompletionDecisionDialog({
   onMarkCompleted,
   onMarkUncompleted,
   submitting = false,
+  durationSeconds,
 }: CompletionDecisionDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -31,6 +34,11 @@ export function CompletionDecisionDialog({
           <DialogClose onClick={() => onOpenChange(false)} />
         </DialogHeader>
         <div className="space-y-3 px-6 py-5">
+          {typeof durationSeconds === 'number' ? (
+            <div className="rounded-2xl border border-border/70 bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
+              本次耗时：<span className="font-medium text-foreground">{formatDuration(durationSeconds)}</span>
+            </div>
+          ) : null}
           <Button
             type="button"
             className="h-auto w-full flex-col items-center justify-center gap-1 px-4 py-4"

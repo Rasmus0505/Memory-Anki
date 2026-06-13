@@ -104,6 +104,12 @@ class Palace(Base):
         cascade="all, delete-orphan",
         order_by="PalaceMiniPalace.sort_order",
     )
+    quiz_questions: Mapped[list["PalaceQuizQuestion"]] = relationship(
+        "PalaceQuizQuestion",
+        back_populates="palace",
+        cascade="all, delete-orphan",
+        order_by="PalaceQuizQuestion.sort_order",
+    )
 
     primary_chapter_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("chapters.id"), nullable=True
@@ -114,6 +120,7 @@ class Palace(Base):
     manual_title: Mapped[str] = mapped_column(String(200), default="")
     grouping_mode: Mapped[str] = mapped_column(String(20), default="auto")
     manual_group_chapter_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    mini_review_mode: Mapped[str] = mapped_column(String(20), default="independent")
 
     primary_chapter: Mapped["Chapter | None"] = relationship(
         "Chapter", foreign_keys=[primary_chapter_id], lazy="joined"
@@ -229,6 +236,10 @@ class PalaceMiniPalace(Base):
         "PalaceMiniPalaceReviewLog",
         back_populates="mini_palace",
         cascade="all, delete-orphan",
+    )
+    quiz_questions: Mapped[list["PalaceQuizQuestion"]] = relationship(
+        "PalaceQuizQuestion",
+        back_populates="mini_palace",
     )
 
 
@@ -550,6 +561,51 @@ class PalaceGroup(Base):
     source_chapter_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
 
+class PalaceQuizQuestion(Base):
+    __tablename__ = "palace_quiz_questions"
+    __table_args__ = (
+        Index("ix_palace_quiz_questions_palace_sort", "palace_id", "sort_order"),
+        Index("ix_palace_quiz_questions_updated_at", "updated_at"),
+        Index("ix_palace_quiz_questions_mini_palace", "mini_palace_id"),
+        Index("ix_palace_quiz_questions_origin_mini", "origin_question_id", "mini_palace_id"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    palace_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("palaces.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    mini_palace_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("palace_mini_palaces.id", ondelete="CASCADE"),
+        nullable=True,
+    )
+    origin_question_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    question_type: Mapped[str] = mapped_column(String(32), nullable=False, default="multiple_choice")
+    stem: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    options_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    answer_payload_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    analysis: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    source_meta_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    correct_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    incorrect_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_at: Mapped[datetime | None] = mapped_column(DateTime, default=utc_now_naive)
+    updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime,
+        default=utc_now_naive,
+        onupdate=utc_now_naive,
+    )
+
+    palace: Mapped[Palace] = relationship("Palace", back_populates="quiz_questions")
+    mini_palace: Mapped[PalaceMiniPalace | None] = relationship(
+        "PalaceMiniPalace",
+        back_populates="quiz_questions",
+    )
+
+
 class EnglishCourse(Base):
     __tablename__ = "english_courses"
     __table_args__ = (
@@ -808,6 +864,30 @@ class EnglishReadingLexiconCache(Base):
     confidence: Mapped[str] = mapped_column(String(32), nullable=False, default="0.6")
     explain_zh: Mapped[str] = mapped_column(Text, nullable=False, default="")
     source: Mapped[str] = mapped_column(String(32), nullable=False, default="llm")
+    created_at: Mapped[datetime | None] = mapped_column(DateTime, default=utc_now_naive)
+    updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime,
+        default=utc_now_naive,
+        onupdate=utc_now_naive,
+    )
+
+
+class EnglishReadingDictionaryCache(Base):
+    __tablename__ = "english_reading_dictionary_cache"
+    __table_args__ = (
+        Index("ix_english_reading_dictionary_cache_updated", "updated_at"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    normalized_surface: Mapped[str] = mapped_column(String(320), nullable=False, unique=True)
+    entry_word: Mapped[str] = mapped_column(String(240), nullable=False, default="")
+    lemma: Mapped[str] = mapped_column(String(240), nullable=False, default="")
+    phonetic_us: Mapped[str] = mapped_column(String(240), nullable=False, default="")
+    audio_us_url: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    summary_zh_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    parts_of_speech_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    senses_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    source: Mapped[str] = mapped_column(String(32), nullable=False, default="xxapi")
     created_at: Mapped[datetime | None] = mapped_column(DateTime, default=utc_now_naive)
     updated_at: Mapped[datetime | None] = mapped_column(
         DateTime,

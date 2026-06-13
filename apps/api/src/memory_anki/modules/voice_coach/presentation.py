@@ -18,6 +18,9 @@ from memory_anki.modules.voice_coach.application import (
     resolve_cached_audio,
     synthesize_voice_coach_event,
 )
+from memory_anki.modules.settings.application.ai_model_registry import (
+    normalize_ai_runtime_options,
+)
 
 router = APIRouter(tags=["voice-coach"])
 
@@ -31,6 +34,7 @@ class VoiceCoachSynthesizeRequest(BaseModel):
         "all_clear_ready",
         "session_complete",
     ]
+    ai_options: dict | None = None
 
 
 def session_dep():
@@ -47,7 +51,11 @@ def api_synthesize_voice_coach(
     s: Session = Depends(session_dep),
 ):
     try:
-        result = synthesize_voice_coach_event(s, data.event)
+        result = synthesize_voice_coach_event(
+            s,
+            data.event,
+            ai_options=normalize_ai_runtime_options(data.ai_options),
+        )
     except VoiceCoachConfigError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except VoiceCoachProtocolError as exc:

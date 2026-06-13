@@ -1,6 +1,7 @@
 import { cn } from '@/shared/lib/utils'
 import { parseApiDateTime } from '@/shared/lib/dateTime'
 import type {
+  MiniReviewMode,
   PalaceSegmentSummary,
   ReviewStageSummary,
 } from '@/shared/api/contracts'
@@ -84,6 +85,25 @@ export function getSegmentCardClass(densityMode: PalaceListDensityMode) {
   return 'rounded-2xl px-3 py-3'
 }
 
+export function getReviewActionButtonClass(options: {
+  state: ReviewButtonState
+  disabled?: boolean
+  isSleepReview?: boolean
+  className?: string
+}) {
+  const { state, disabled = false, isSleepReview = false, className } = options
+  return cn(
+    'h-8 w-full rounded-md border text-xs font-medium transition-colors',
+    state === 'due_now' &&
+      'border-emerald-700 bg-emerald-600 text-white hover:bg-emerald-700',
+    state === 'due_later_today' &&
+      'border-amber-400 bg-amber-200 text-amber-950 hover:bg-amber-300',
+    isSleepReview && 'border-blue-700 bg-blue-600 text-white hover:bg-blue-700',
+    disabled && 'border-border bg-muted/30 text-muted-foreground',
+    className,
+  )
+}
+
 export function formatRelativeReviewTime(value: string | null): string {
   if (!value) return '未排入正式复习'
   const target = parseApiDateTime(value)
@@ -130,6 +150,29 @@ export function getReviewButtonState(value: string | null): ReviewButtonState {
   return sameDay ? 'due_later_today' : 'future'
 }
 
+export function getReviewActionLabel(
+  value: string | null,
+  options: {
+    state?: ReviewButtonState
+    loading?: boolean
+    isSleepReview?: boolean
+    unscheduledLabel?: string
+  } = {},
+): string {
+  const {
+    state = getReviewButtonState(value),
+    loading = false,
+    isSleepReview = false,
+    unscheduledLabel = '未排入复习',
+  } = options
+
+  if (loading) return '加载中...'
+  if (isSleepReview) return '睡前复习'
+  if (state === 'due_now') return '开始复习'
+  if (state === 'unscheduled') return unscheduledLabel
+  return formatRelativeReviewTime(value)
+}
+
 export function isSleepReviewSegment(
   segment: Pick<PalaceSegmentSummary, 'current_review_type' | 'review_stage_completed' | 'stage_labels'>,
 ): boolean {
@@ -157,4 +200,13 @@ export function getSegmentDisplayName(segment: PalaceSegmentSummary, index: numb
     return `第 ${index + 1} 部分`
   }
   return segment.name
+}
+
+export function palaceUsesMiniOnlyReview(
+  palace: {
+    mini_review_mode?: MiniReviewMode
+    mini_palaces?: Array<unknown>
+  },
+): boolean {
+  return palace.mini_review_mode === 'mini_only' && (palace.mini_palaces?.length ?? 0) > 0
 }

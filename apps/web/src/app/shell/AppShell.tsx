@@ -13,6 +13,7 @@ import {
   Menu,
   PanelLeftClose,
   PanelLeftOpen,
+  Pencil,
   User,
   X,
 } from 'lucide-react'
@@ -31,12 +32,27 @@ import { cn } from '@/shared/lib/utils'
 const navItems = [
   { to: '/', label: '仪表盘', icon: LayoutDashboard },
   { to: '/palaces', label: '记忆宫殿', icon: BookOpen },
+  { to: '/palaces/quiz', label: '做题区', icon: Pencil },
   { to: '/english', label: '英语听力', icon: Captions },
   { to: '/english-reading', label: '英语阅读', icon: BookOpenText },
   { to: '/knowledge', label: '知识大纲', icon: FolderTree },
   { to: '/review', label: '复习', icon: Brain },
   { to: '/profile', label: '个人中心', icon: User },
 ]
+
+function isPalaceNavActive(pathname: string) {
+  if (pathname === '/palaces' || pathname === '/palaces/list' || pathname === '/palaces/new') {
+    return true
+  }
+  return /^\/palaces\/\d+(?:\/(edit|practice|focus-practice))?$/.test(pathname)
+}
+
+function isPalaceQuizNavActive(pathname: string) {
+  if (pathname === '/palaces/quiz') {
+    return true
+  }
+  return /^\/palaces\/\d+\/quiz$/.test(pathname)
+}
 
 function RuntimeChannelBadge({
   runtimeInfo,
@@ -71,7 +87,12 @@ function SidebarContent({ runtimeInfo }: { runtimeInfo: RuntimeInfo | null }) {
   const { pathname } = useLocation()
   const shell = useShellContext()
   const compact = shell?.sidebarCollapsed ?? false
-  const active = (to: string) => (to === '/' ? pathname === '/' : pathname === to || pathname.startsWith(`${to}/`))
+  const active = (to: string) => {
+    if (to === '/') return pathname === '/'
+    if (to === '/palaces') return isPalaceNavActive(pathname)
+    if (to === '/palaces/quiz') return isPalaceQuizNavActive(pathname)
+    return pathname === to || pathname.startsWith(`${to}/`)
+  }
   const [now, setNow] = useState(() => new Date())
 
   useEffect(() => {

@@ -35,6 +35,7 @@ vi.mock('@/shared/api/modules/palaces', () => ({
   getPalacesGroupedApi: (...args: unknown[]) => getPalacesGroupedApi(...args),
   deletePalaceApi: vi.fn(),
   updateDefaultSegmentReviewProgressApi: vi.fn(),
+  updatePalaceMiniReviewModeApi: vi.fn(),
   updatePalaceSegmentReviewProgressApi: vi.fn(),
 }))
 
@@ -59,6 +60,7 @@ function buildShelfItem(overrides: Record<string, unknown> = {}) {
 
 function buildGroupedResponse() {
   const dueIso = new Date(Date.now() - 60 * 60 * 1000).toISOString()
+  const laterTodayIso = new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString()
   return {
     groups: [],
     ungrouped: [],
@@ -77,6 +79,7 @@ function buildGroupedResponse() {
                 title_mode: 'sync',
                 grouping_mode: 'auto',
                 manual_group_chapter_id: null,
+                mini_review_mode: 'independent',
                 binding_status: 'bound',
                 primary_chapter_id: 11,
                 primary_chapter: { id: 11, name: '第一章', subject_id: 1, parent_id: null },
@@ -122,6 +125,52 @@ function buildGroupedResponse() {
                     stage_labels: [],
                   },
                 ],
+                mini_palaces: [
+                  {
+                    id: 301,
+                    palace_id: 101,
+                    name: '小宫殿 A',
+                    node_uids: ['mini-a-1'],
+                    node_count: 12,
+                    sort_order: 0,
+                    created_at: '2026-06-03T09:00:00',
+                    updated_at: '2026-06-03T10:00:00',
+                    is_empty: false,
+                    needs_practice: true,
+                    estimated_review_seconds: 90,
+                    review_stage_total: 9,
+                    review_stage_completed: 0,
+                    review_stage_progress: 0,
+                    stage_labels: [],
+                    review_stages: [],
+                    next_review_at: dueIso,
+                    has_due_review: true,
+                    current_review_schedule_id: 701,
+                    current_review_type: null,
+                  },
+                  {
+                    id: 302,
+                    palace_id: 101,
+                    name: '小宫殿 B',
+                    node_uids: ['mini-b-1'],
+                    node_count: 8,
+                    sort_order: 1,
+                    created_at: '2026-06-03T09:00:00',
+                    updated_at: '2026-06-03T10:00:00',
+                    is_empty: false,
+                    needs_practice: false,
+                    estimated_review_seconds: 80,
+                    review_stage_total: 9,
+                    review_stage_completed: 1,
+                    review_stage_progress: 0.1,
+                    stage_labels: ['1小时', '睡前', '1天'],
+                    review_stages: [],
+                    next_review_at: laterTodayIso,
+                    has_due_review: false,
+                    current_review_schedule_id: 702,
+                    current_review_type: 'sleep',
+                  },
+                ],
               },
             ],
           },
@@ -150,6 +199,7 @@ describe('PalaceShelfPage', () => {
     render(<PalaceShelfPage />)
 
     const title = await screen.findByText('中国近代史')
+    expect(getPalacesGroupedApi).not.toHaveBeenCalled()
     fireEvent.click(title.closest('button') as HTMLButtonElement)
     expect(navigate).toHaveBeenCalledWith('/palaces/list?subjectId=1')
     expect(screen.getByText('立即复习')).toBeTruthy()
@@ -209,21 +259,48 @@ describe('PalaceShelfPage', () => {
     render(<PalaceShelfPage />)
 
     await screen.findByText('中国近代史')
+    expect(getPalacesGroupedApi).not.toHaveBeenCalled()
     fireEvent.click(screen.getByRole('button', { name: '展开' }))
     await screen.findByText('中国教育史宫殿')
 
+    expect(getPalacesGroupedApi).toHaveBeenCalledTimes(1)
     expect(screen.getByTestId('list-layout-root').dataset.layoutMode).toBe('chapter-double')
-    expect(screen.getByRole('button', { name: '开始复习' })).toBeTruthy()
-    expect(screen.getByRole('button', { name: '练习' })).toBeTruthy()
+    expect(screen.getAllByRole('button', { name: '开始复习' }).length).toBeGreaterThan(0)
+    expect(screen.getAllByRole('button', { name: '练习' }).length).toBeGreaterThan(0)
     expect(screen.getByLabelText(/编辑宫殿/)).toBeTruthy()
-    expect(screen.getByLabelText(/删除宫殿/)).toBeTruthy()
-    expect(screen.getByTestId('stage-progress')).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: '开始复习' }))
+    expect(screen.getByLabelText(/更多操作/)).toBeTruthy()
+    expect(screen.getAllByTestId('stage-progress').length).toBeGreaterThan(0)
+    fireEvent.click(screen.getAllByRole('button', { name: '开始复习' })[0])
     expect(navigate).toHaveBeenCalledWith('/segment-review/session/501')
     fireEvent.click(screen.getByRole('button', { name: '卡片流' }))
 
     expect(screen.getByTestId('list-layout-root').dataset.layoutMode).toBe('flow')
     expect(window.localStorage.getItem(PALACE_SHELF_VIEW_SETTINGS_KEY)).toContain('"displayMode":"expanded"')
     expect(window.localStorage.getItem(PALACE_SHELF_VIEW_SETTINGS_KEY)).toContain('"expandedLayoutMode":"flow"')
+  })
+
+  it('renders mini palaces with the same action copy as regular palace cards', async () => {
+    render(<PalaceShelfPage />)
+
+    await screen.findByText('中国近代史')
+    fireEvent.click(screen.getByRole('button', { name: '展开' }))
+
+    await screen.findByText('小宫殿 A')
+    expect(screen.getByText('小宫殿')).toBeTruthy()
+    expect(screen.getAllByRole('button', { name: '开始复习' }).length).toBeGreaterThan(1)
+    expect(screen.getByRole('button', { name: '睡前复习' })).toBeTruthy()
+    expect(screen.getAllByRole('button', { name: '练习' }).length).toBeGreaterThan(1)
+  })
+
+  it('reveals delete inside the overflow menu in expanded mode', async () => {
+    render(<PalaceShelfPage />)
+
+    await screen.findByText('中国近代史')
+    fireEvent.click(screen.getByRole('button', { name: '展开' }))
+    await screen.findByText('中国教育史宫殿')
+
+    fireEvent.click(screen.getByLabelText(/更多操作/))
+    expect(screen.getByRole('button', { name: '删除' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: '配置' })).toBeTruthy()
   })
 })

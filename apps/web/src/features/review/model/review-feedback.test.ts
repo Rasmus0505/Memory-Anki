@@ -58,6 +58,27 @@ describe('deriveReviewFeedbackTransition', () => {
     expect(transition.primaryNodeId).toBe('child-a')
   })
 
+  it('treats hidden to revealed as card reveal in mini-checkpoint mode', () => {
+    const transition = deriveReviewFeedbackTransition({
+      previousRevealMap: {
+        root: 'revealed',
+        parent: 'revealed',
+        'child-a': 'hidden',
+      },
+      nextRevealMap: {
+        root: 'revealed',
+        parent: 'revealed',
+        'child-a': 'revealed',
+      },
+      root,
+      revealMode: 'mini-checkpoint',
+    })
+
+    expect(transition.events).toContain('card_reveal')
+    expect(transition.revealedNodeIds).toEqual(['child-a'])
+    expect(transition.primaryNodeId).toBe('child-a')
+  })
+
   it('prefers cleared branch node id as primaryNodeId for branch clear', () => {
     const transition = deriveReviewFeedbackTransition({
       previousRevealMap: {

@@ -37,6 +37,7 @@ export const timedSessionMock = {
   start: vi.fn(),
   pause: vi.fn(),
   resume: vi.fn(),
+  leaveScene: vi.fn(),
   adjustDuration: vi.fn(),
   registerActivity: vi.fn(),
   logEvent: vi.fn(),
@@ -52,31 +53,23 @@ vi.mock('@/shared/hooks/useTimedSession', () => ({
 }))
 
 vi.mock('@/shared/components/mindmap-host', () => ({
-  MindMapFrame: ({
+  MindMapFrame: React.forwardRef(({
     syncIntent = 'soft',
     forceSyncKey = null,
     forceSyncIntent = 'replace',
     syncReason = null,
-    onPracticeToggle,
-    onMindMapImportOpen,
-    onImageTextImportOpen,
     onFullscreenToggle,
-    practiceToggleLabel = '练习',
     practiceModeActive = false,
     readonly = false,
-    showToolbarWhenReadonly = false,
     preserveViewOnSync = false,
-    showImportButtons = false,
     aiSplitBusy = false,
     syncOnPropChange = false,
     externalSyncKey = null,
-    showMiniPalaceButton = false,
     miniPalaceDraft = { active: false, selectedNodeUids: [] },
     viewMemoryScope = null,
     focusRequestNodeUid = null,
     focusRequestNonce = 0,
     onAiSplitRequest,
-    onMiniPalaceOpen,
     onNodeActive,
     onNodeClick,
     onNodeContextMenu,
@@ -86,19 +79,12 @@ vi.mock('@/shared/components/mindmap-host', () => ({
     forceSyncKey?: string | number | null
     forceSyncIntent?: 'soft' | 'replace'
     syncReason?: string | null
-    onPracticeToggle?: () => void
-    onMindMapImportOpen?: () => void
-    onImageTextImportOpen?: () => void
-    practiceToggleLabel?: '练习' | '编辑' | '复习'
     practiceModeActive?: boolean
     readonly?: boolean
-    showToolbarWhenReadonly?: boolean
     preserveViewOnSync?: boolean
-    showImportButtons?: boolean
     aiSplitBusy?: boolean
     syncOnPropChange?: boolean
     externalSyncKey?: string | number | null
-    showMiniPalaceButton?: boolean
     miniPalaceDraft?: {
       active: boolean
       selectedNodeUids: string[]
@@ -128,11 +114,16 @@ vi.mock('@/shared/components/mindmap-host', () => ({
       target_node_type: string | null
       is_root: boolean
     }) => void
-    onMiniPalaceOpen?: () => void
     onNodeActive?: (nodes: Array<{ uid: string | null; text: string }>) => void
     onNodeClick?: (nodes: Array<{ uid: string | null; text: string }>) => void
     onNodeContextMenu?: (nodes: Array<{ uid: string | null; text: string }>) => void
-  }) => {
+  }, ref) => {
+    React.useImperativeHandle(ref, () => ({
+      setUiCleared: vi.fn(),
+      toggleUiCleared: vi.fn(),
+      enterNativeFullscreen: vi.fn(async () => {}),
+      exitNativeFullscreen: vi.fn(async () => {}),
+    }))
     const mountIdRef = React.useRef<number | null>(null)
     if (mountIdRef.current == null) {
       mountIdRef.current = mindMapFrameMockState.nextMountId++
@@ -142,36 +133,16 @@ vi.mock('@/shared/components/mindmap-host', () => ({
     const grandchild = child?.children?.[0]
     return (
       <div data-testid="mindmap-frame">
-        <div>{`mindmap-${practiceModeActive ? 'practice' : 'edit'}-${readonly ? 'readonly' : 'editable'}-${showToolbarWhenReadonly ? 'toolbar' : 'plain'}-${preserveViewOnSync ? 'preserve' : 'reset'}-${showImportButtons ? 'import' : 'noimport'}-${syncOnPropChange ? 'sync' : 'nosync'}`}</div>
+        <div>{`mindmap-${practiceModeActive ? 'practice' : 'edit'}-${readonly ? 'readonly' : 'editable'}-${preserveViewOnSync ? 'preserve' : 'reset'}-${syncOnPropChange ? 'sync' : 'nosync'}`}</div>
         <div>{`mindmap-mount-${mountIdRef.current}`}</div>
         <div>{`sync-${syncIntent}-${forceSyncIntent}-${String(forceSyncKey ?? '')}-${String(externalSyncKey ?? '')}-${String(syncReason ?? '')}`}</div>
         <div>{`scope-${String(viewMemoryScope ?? '')}`}</div>
         <div>{`focus-${String(focusRequestNodeUid ?? '')}:${String(focusRequestNonce)}`}</div>
         <div>{`aisplit-${aiSplitBusy ? 'busy' : 'idle'}`}</div>
-        <div>{`mini-palace-${showMiniPalaceButton ? 'shown' : 'hidden'}-${miniPalaceDraft.active ? 'selecting' : 'idle'}-${miniPalaceDraft.selectedNodeUids.join(',')}`}</div>
+        <div>{`mini-palace-${miniPalaceDraft.active ? 'selecting' : 'idle'}-${miniPalaceDraft.selectedNodeUids.join(',')}`}</div>
         <div>{`root-${String(root?.data?.text ?? '')}`}</div>
         <div>{`child-${String(child?.data?.text ?? '')}`}</div>
         <div>{`grandchild-${String(grandchild?.data?.text ?? '')}`}</div>
-        {showMiniPalaceButton && onMiniPalaceOpen ? (
-          <button type="button" onClick={onMiniPalaceOpen}>
-            小宫殿
-          </button>
-        ) : null}
-        {onPracticeToggle ? (
-          <button type="button" onClick={onPracticeToggle}>
-            {practiceToggleLabel}
-          </button>
-        ) : null}
-        {onMindMapImportOpen ? (
-          <button type="button" onClick={onMindMapImportOpen}>
-            转脑图
-          </button>
-        ) : null}
-        {onImageTextImportOpen ? (
-          <button type="button" onClick={onImageTextImportOpen}>
-            转文字
-          </button>
-        ) : null}
         {onFullscreenToggle ? (
           <button type="button" onClick={() => onFullscreenToggle()}>
             切换半屏
@@ -195,6 +166,28 @@ vi.mock('@/shared/components/mindmap-host', () => ({
             }
           >
             点击首子节点
+          </button>
+        ) : null}
+        {onNodeClick && grandchild?.data?.uid ? (
+          <button
+            type="button"
+            onClick={() =>
+              onNodeClick([
+                { uid: grandchild.data?.uid ?? null, text: String(grandchild.data?.text ?? '') },
+              ])
+            }
+          >
+            点击首孙节点
+          </button>
+        ) : null}
+        {onNodeActive && root?.data?.uid ? (
+          <button
+            type="button"
+            onClick={() =>
+              onNodeActive([{ uid: root.data?.uid ?? null, text: String(root.data?.text ?? '') }])
+            }
+          >
+            选中根节点
           </button>
         ) : null}
         {onNodeActive && child?.data?.uid ? (
@@ -235,7 +228,64 @@ vi.mock('@/shared/components/mindmap-host', () => ({
         ) : null}
       </div>
     )
-  },
+  }),
+  MindMapPageToolbar: ({
+    segmentControl,
+    modeToggle,
+    importMindMapAction,
+    importTextAction,
+    englishAction,
+    bilinkSearchAction,
+    miniPalaceAction,
+    immersiveAction,
+    nativeFullscreenAction,
+    clearUiAction,
+  }: Record<string, any>) => (
+    <div data-testid="mindmap-toolbar">
+      {segmentControl ? (
+        <>
+          <button type="button" onClick={segmentControl.onToggle}>
+            分块
+          </button>
+          {segmentControl.active ? (
+            <>
+              <select
+                aria-label="分块目标"
+                value={segmentControl.targetSegmentId == null ? 'new' : String(segmentControl.targetSegmentId)}
+                onChange={(event) =>
+                  segmentControl.onTargetChange(
+                    event.currentTarget.value === 'new' ? 'new' : Number(event.currentTarget.value),
+                  )
+                }
+              >
+                <option value="new">新建分块</option>
+                {(segmentControl.options ?? []).map((option: { id: number; name: string }) => (
+                  <option key={option.id} value={String(option.id)}>
+                    {option.name}
+                  </option>
+                ))}
+              </select>
+              <button type="button" onClick={segmentControl.onConfirm}>
+                确认
+              </button>
+              <button type="button" onClick={segmentControl.onCancel}>
+                取消
+              </button>
+            </>
+          ) : null}
+        </>
+      ) : null}
+      {modeToggle ? <button type="button" onClick={modeToggle.onClick}>{modeToggle.label}</button> : null}
+      {importMindMapAction ? <button type="button" onClick={importMindMapAction.onClick}>{importMindMapAction.label}</button> : null}
+      {importTextAction ? <button type="button" onClick={importTextAction.onClick}>{importTextAction.label}</button> : null}
+      {englishAction ? <button type="button" onClick={englishAction.onClick}>{englishAction.label}</button> : null}
+      {bilinkSearchAction ? <button type="button" onClick={bilinkSearchAction.onClick}>{bilinkSearchAction.label}</button> : null}
+      {miniPalaceAction ? <button type="button" onClick={miniPalaceAction.onClick}>{miniPalaceAction.label}</button> : null}
+      {immersiveAction ? <button type="button" onClick={immersiveAction.onClick}>{immersiveAction.label}</button> : null}
+      {nativeFullscreenAction ? <button type="button" onClick={nativeFullscreenAction.onClick}>{nativeFullscreenAction.label}</button> : null}
+      {clearUiAction ? <button type="button" onClick={clearUiAction.onClick}>{clearUiAction.label}</button> : null}
+    </div>
+  ),
 }))
 
 vi.mock('@/features/palace-edit/components/PalaceAttachmentPanel', () => ({

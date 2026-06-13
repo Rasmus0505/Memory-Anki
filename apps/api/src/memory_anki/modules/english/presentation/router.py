@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+import json
+
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
@@ -26,6 +28,9 @@ from memory_anki.modules.english.application.task_service import (
     stream_task_events,
 )
 from memory_anki.modules.english.domain.errors import EnglishCourseError
+from memory_anki.modules.settings.application.ai_model_registry import (
+    normalize_ai_runtime_options,
+)
 
 router = APIRouter(tags=["english"])
 
@@ -77,6 +82,7 @@ def api_get_english_task_generation_log(task_id: str, session: Session = Depends
 
 @router.post("/english/upload")
 async def api_upload_english_video(
+    ai_options: str = Form(default=""),
     video_file: UploadFile = File(...),
     session: Session = Depends(session_dep),
 ):
@@ -87,6 +93,9 @@ async def api_upload_english_video(
             filename=str(video_file.filename or ""),
             content_type=str(video_file.content_type or "video/mp4"),
             file_bytes=file_bytes,
+            asr_ai_options=normalize_ai_runtime_options(
+                json.loads(ai_options) if ai_options else None
+            ),
         )
         return {"task": task}
     except EnglishCourseError as exc:

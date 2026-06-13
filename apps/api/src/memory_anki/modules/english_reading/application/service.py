@@ -4,8 +4,11 @@ import json
 import math
 import re
 import shutil
+import urllib.error
+import urllib.parse
+import urllib.request
 from collections import Counter
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import timedelta
 from pathlib import Path
 from typing import Any
@@ -19,9 +22,12 @@ from memory_anki.core.config import (
     DASHSCOPE_TEXT_MODEL,
     ENGLISH_READING_CEFR_PATH,
     ENGLISH_READING_DEFAULT_CEFR_SOURCE,
+    ENGLISH_TRANSLATION_MODEL,
 )
 from memory_anki.core.time import utc_now_naive
 from memory_anki.infrastructure.db.models import (
+    Config,
+    EnglishReadingDictionaryCache,
     EnglishReadingLexiconCache,
     EnglishReadingMaterial,
     EnglishReadingProfile,
@@ -34,7 +40,10 @@ from memory_anki.infrastructure.llm.openai_compatible import (
     call_chat_completion_text,
 )
 from memory_anki.modules.english_reading.domain.errors import EnglishReadingError
-from memory_anki.modules.settings.application.ai_model_registry import resolve_current_model
+from memory_anki.modules.settings.application.ai_model_registry import (
+    AiRuntimeOptions,
+    resolve_scenario_runtime,
+)
 from memory_anki.modules.settings.application.ai_prompts import get_prompt_template
 from memory_anki.modules.time_records.application.time_records_service import get_threshold_seconds
 
@@ -46,6 +55,7 @@ TOKEN_CONNECTOR_RE = re.compile(r"\s*-\s*")
 WHITESPACE_RE = re.compile(r"\s+")
 JSON_BLOCK_RE = re.compile(r"\{.*\}", re.DOTALL)
 CJK_RE = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]")
+ASCII_LETTER_RE = re.compile(r"[A-Za-z]")
 STOPWORDS = {
     "a",
     "an",
@@ -101,6 +111,9 @@ READING_DIFFICULTY_BASE_DELTA = {
 }
 READING_ALLOWED_DIFFICULTY_DELTAS = (0.5, 1.0, 1.5, 2.0)
 READING_ALLOWED_DIFFICULTY_DIRECTIONS = {"easier", "same", "harder"}
+XXAPI_DICTIONARY_API_URL = "https://v2.xxapi.cn/api/englishwords"
+XXAPI_DICTIONARY_TIMEOUT_SECONDS = 4
+SENTENCE_TRANSLATION_MAX_CHARS = 400
 
 
 @dataclass(slots=True)
@@ -201,6 +214,156 @@ def get_workspace(session: Session) -> dict[str, Any]:
         "profile": get_profile(session),
         "stats": get_reading_stats(session),
         "recentMaterials": list_recent_materials(session),
+    }
+
+
+def get_dictionary_entry(session: Session, *, word: str) -> dict[str, Any]:
+    safe_word = normalize_dictionary_query_word(word)
+    if not safe_word:
+        raise EnglishReadingError("请提供要查询的英文单词。")
+    cached_entry = load_cached_dictionary_entry(session, safe_word)
+    if cached_entry is not None:
+        return cached_entry
+
+    candidate_words: list[str] = []
+    seen_words: set[str] = set()
+    for candidate in [safe_word, *basic_lemma_candidates(safe_word)]:
+        normalized_candidate = normalize_dictionary_query_word(candidate)
+        if not normalized_candidate or normalized_candidate in seen_words:
+            continue
+        seen_words.add(normalized_candidate)
+        candidate_words.append(normalized_candidate)
+
+    last_upstream_error: EnglishReadingError | None = None
+    for candidate_word in candidate_words:
+        try:
+            payload = fetch_xxapi_dictionary_payload(candidate_word)
+            entry_payload = build_xxapi_dictionary_entry_payload(
+                payload,
+                query_word=safe_word,
+                requested_word=candidate_word,
+            )
+        except EnglishReadingError as exc:
+            if "未找到单词" in str(exc):
+                continue
+            last_upstream_error = exc
+            break
+
+        if entry_payload is None:
+            continue
+
+        cache_keys = {safe_word}
+        lemma_key = normalize_dictionary_query_word(str(entry_payload["lemma"] or ""))
+        if lemma_key:
+            cache_keys.add(lemma_key)
+        upsert_dictionary_cache(
+            session,
+            normalized_surfaces=cache_keys,
+            payload=entry_payload,
+        )
+        cached = load_cached_dictionary_entry(session, safe_word)
+        if cached is not None:
+            return cached
+        return {
+            **entry_payload,
+            "cachedAt": utc_now_naive().isoformat(),
+        }
+
+    if last_upstream_error is not None:
+        raise last_upstream_error
+    raise EnglishReadingError(f"未找到单词“{safe_word}”的词典结果。")
+
+
+def _has_non_empty_config(session: Session, key: str) -> bool:
+    row = session.query(Config).filter_by(key=key).first()
+    return bool(row and str(row.value or "").strip())
+
+
+def _resolve_legacy_dashscope_runtime(
+    session: Session,
+    *,
+    scenario_key: str,
+    ai_options: AiRuntimeOptions | None,
+    legacy_default_model: str,
+):
+    runtime = resolve_scenario_runtime(session, scenario_key, ai_options=ai_options)
+    if runtime.provider != "dashscope":
+        return runtime
+    model = runtime.model
+    if not (ai_options and ai_options.model) and not _has_non_empty_config(
+        session, runtime.scenario.config_key
+    ):
+        model = str(legacy_default_model or runtime.model or "").strip()
+    api_key = (
+        runtime.api_key
+        if _has_non_empty_config(session, "dashscope_api_key")
+        else str(DASHSCOPE_API_KEY or "").strip()
+    )
+    base_url = (
+        runtime.base_url
+        if _has_non_empty_config(session, "dashscope_base_url")
+        else str(DASHSCOPE_BASE_URL or runtime.base_url or "").strip()
+    )
+    return replace(
+        runtime,
+        model=model,
+        api_key=api_key,
+        base_url=base_url,
+    )
+
+
+def translate_sentence_text(
+    session: Session,
+    *,
+    text: str,
+    ai_options: AiRuntimeOptions | None = None,
+) -> dict[str, str]:
+    normalized_text = normalize_sentence_translation_text(text)
+    if not normalized_text:
+        raise EnglishReadingError("请先选中要翻译的英文句子。")
+    if len(normalized_text) > SENTENCE_TRANSLATION_MAX_CHARS:
+        raise EnglishReadingError(
+            f"句子长度不能超过 {SENTENCE_TRANSLATION_MAX_CHARS} 个字符。"
+        )
+    if ASCII_LETTER_RE.search(normalized_text) is None:
+        raise EnglishReadingError("请选择包含英文内容的句子。")
+    runtime = _resolve_legacy_dashscope_runtime(
+        session,
+        scenario_key="translation",
+        ai_options=ai_options,
+        legacy_default_model=ENGLISH_TRANSLATION_MODEL,
+    )
+    if not runtime.api_key:
+        raise EnglishReadingError("未配置翻译模型对应的 Provider API Key，无法翻译句子。")
+
+    config = OpenAICompatibleChatConfig(
+        api_key=runtime.api_key,
+        base_url=runtime.base_url,
+        model=runtime.model,
+        temperature=0.0 if runtime.supports_temperature else None,
+        timeout_seconds=60,
+    )
+    try:
+        translated_text = call_chat_completion_text(
+            config=config,
+            messages=[{"role": "user", "content": normalized_text}],
+            extra_payload={
+                **(runtime.extra_payload or {}),
+                "translation_options": {
+                    "source_lang": "English",
+                    "target_lang": "Chinese",
+                }
+            },
+        )
+    except Exception as exc:
+        raise EnglishReadingError("句子翻译失败，请稍后重试。") from exc
+
+    normalized_translation = normalize_sentence_translation_text(translated_text)
+    if not normalized_translation:
+        raise EnglishReadingError("句子翻译失败，请稍后重试。")
+    return {
+        "originalText": normalized_text,
+        "translatedText": normalized_translation,
     }
 
 
@@ -305,11 +468,7 @@ def list_recent_materials(session: Session, limit: int = 12) -> list[dict[str, A
 
 def get_reading_stats(session: Session) -> dict[str, int]:
     total_materials = session.query(EnglishReadingMaterial).count()
-    generated_materials = (
-        session.query(EnglishReadingVersion.material_id)
-        .distinct()
-        .count()
-    )
+    generated_materials = session.query(EnglishReadingVersion.material_id).distinct().count()
     completed_sessions = session.query(EnglishReadingSession).count()
     today_start = utc_now_naive().replace(hour=0, minute=0, second=0, microsecond=0)
     tomorrow_start = today_start.replace(day=today_start.day) + timedelta(days=1)
@@ -376,6 +535,7 @@ def generate_material_version(
     mode: str = "initial",
     difficulty_direction: str | None = None,
     difficulty_delta: float | None = None,
+    ai_options: AiRuntimeOptions | None = None,
 ) -> dict[str, Any]:
     material = get_material_row(session, material_id)
     profile = ensure_profile_row(session)
@@ -383,7 +543,9 @@ def generate_material_version(
     if not reading_text.strip():
         raise EnglishReadingError("当前材料没有可生成阅读结果的英文正文。")
     declared_cefr = normalize_cefr_level(profile.declared_cefr)
-    working_lexical_i = parse_float(profile.working_lexical_i, default_lexical_value_for_level(declared_cefr))
+    working_lexical_i = parse_float(
+        profile.working_lexical_i, default_lexical_value_for_level(declared_cefr)
+    )
     working_syntactic_i = parse_float(
         profile.working_syntactic_i,
         default_syntactic_value_for_level(declared_cefr),
@@ -407,6 +569,7 @@ def generate_material_version(
         target_lexical_i=target_lexical_i,
         target_syntactic_i=target_syntactic_i,
         total_word_count=max(1, count_words(reading_text)),
+        ai_options=ai_options,
     )
     version = EnglishReadingVersion(
         material=material,
@@ -418,7 +581,9 @@ def generate_material_version(
         target_syntactic_i=serialize_float(target_syntactic_i),
         render_blocks_json=json.dumps(render_payload["renderBlocks"], ensure_ascii=False),
         span_annotations_json=json.dumps(render_payload["spanAnnotations"], ensure_ascii=False),
-        sentence_annotations_json=json.dumps(render_payload["sentenceAnnotations"], ensure_ascii=False),
+        sentence_annotations_json=json.dumps(
+            render_payload["sentenceAnnotations"], ensure_ascii=False
+        ),
         summary_json=json.dumps(render_payload["summary"], ensure_ascii=False),
     )
     material.updated_at = utc_now_naive()
@@ -504,7 +669,9 @@ def complete_material(
         xp_awarded += 3
 
     declared_cefr = normalize_cefr_level(profile.declared_cefr)
-    working_lexical_i = parse_float(profile.working_lexical_i, default_lexical_value_for_level(declared_cefr))
+    working_lexical_i = parse_float(
+        profile.working_lexical_i, default_lexical_value_for_level(declared_cefr)
+    )
     working_syntactic_i = parse_float(
         profile.working_syntactic_i,
         default_syntactic_value_for_level(declared_cefr),
@@ -589,6 +756,104 @@ def complete_material(
     }
 
 
+def fetch_xxapi_dictionary_payload(word: str) -> dict[str, Any]:
+    query = urllib.parse.urlencode({"word": word})
+    request = urllib.request.Request(
+        f"{XXAPI_DICTIONARY_API_URL}?{query}",
+        method="GET",
+        headers={
+            "Accept": "application/json",
+            "User-Agent": "MemoryAnki/1.0",
+        },
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=XXAPI_DICTIONARY_TIMEOUT_SECONDS) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        if exc.code == 404:
+            raise EnglishReadingError(f"未找到单词“{word}”的词典结果。") from exc
+        raise EnglishReadingError("词典服务暂时不可用，请稍后重试。") from exc
+    except urllib.error.URLError as exc:
+        raise EnglishReadingError("词典服务暂时不可用，请稍后重试。") from exc
+    except json.JSONDecodeError as exc:
+        raise EnglishReadingError("词典服务返回了无法解析的数据。") from exc
+
+    if not isinstance(payload, dict):
+        raise EnglishReadingError("词典服务返回结构无效。")
+    code = int(payload.get("code") or 0)
+    if code != 200:
+        message = str(payload.get("msg") or "").strip()
+        if "未找到" in message:
+            raise EnglishReadingError(f"未找到单词“{word}”的词典结果。")
+        raise EnglishReadingError(message or "词典服务暂时不可用，请稍后重试。")
+    data = payload.get("data")
+    if not isinstance(data, dict):
+        raise EnglishReadingError("词典服务返回结构无效。")
+    return data
+
+
+def build_xxapi_dictionary_entry_payload(
+    payload: dict[str, Any],
+    *,
+    query_word: str,
+    requested_word: str,
+) -> dict[str, Any] | None:
+    word = normalize_dictionary_query_word(str(payload.get("word") or requested_word or query_word))
+    lemma = word or query_word
+    translations = payload.get("translations")
+    translation_items = translations if isinstance(translations, list) else []
+
+    parts_of_speech: list[str] = []
+    summary_zh: list[str] = []
+    seen_summary_zh: set[str] = set()
+    senses: list[dict[str, Any]] = []
+
+    for item in translation_items:
+        if not isinstance(item, dict):
+            continue
+        part_of_speech = str(item.get("pos") or "").strip() or "unknown"
+        if part_of_speech not in parts_of_speech:
+            parts_of_speech.append(part_of_speech)
+        definition_zh = str(item.get("tran_cn") or "").strip()
+        if definition_zh and definition_zh not in seen_summary_zh and len(summary_zh) < 3:
+            seen_summary_zh.add(definition_zh)
+            summary_zh.append(definition_zh)
+        if not definition_zh:
+            continue
+        senses.append(
+            {
+                "partOfSpeech": part_of_speech,
+                "definitionZh": definition_zh,
+                "definition": "",
+                "exampleZh": None,
+                "example": None,
+            }
+        )
+
+    if not lemma and not senses:
+        return None
+
+    return {
+        "word": query_word,
+        "lemma": lemma or query_word,
+        "phoneticUs": normalize_dictionary_phonetic(str(payload.get("usphone") or "").strip()),
+        "audioUsUrl": str(payload.get("usspeech") or "").strip() or None,
+        "summaryZh": summary_zh,
+        "partsOfSpeech": parts_of_speech,
+        "senses": senses,
+        "source": "xxapi",
+    }
+
+
+def normalize_dictionary_phonetic(value: str) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    if text.startswith("/") and text.endswith("/"):
+        return text
+    return f"/{text.strip('/')}/"
+
+
 def build_reading_version_payload(
     session: Session,
     *,
@@ -599,6 +864,7 @@ def build_reading_version_payload(
     target_lexical_i: float,
     target_syntactic_i: float,
     total_word_count: int,
+    ai_options: AiRuntimeOptions | None = None,
 ) -> dict[str, Any]:
     lexicon_state = load_lexicon_state()
     paragraph_sentences = [
@@ -607,6 +873,7 @@ def build_reading_version_payload(
     ]
     sentence_states: list[SentenceState] = []
     unresolved_surfaces: set[str] = set()
+    still_unresolved: set[str] = set()
     pending_spans_by_surface: dict[str, list[SentenceSpan]] = {}
     for paragraph in paragraph_sentences:
         for sentence in paragraph:
@@ -622,50 +889,55 @@ def build_reading_version_payload(
         cached_resolutions = load_cached_surface_resolutions(session, unresolved_surfaces)
         still_unresolved = set(unresolved_surfaces)
         for normalized_surface, resolution in cached_resolutions.items():
-            apply_surface_resolution(pending_spans_by_surface.get(normalized_surface, []), resolution)
+            apply_surface_resolution(
+                pending_spans_by_surface.get(normalized_surface, []), resolution
+            )
             still_unresolved.discard(normalized_surface)
-        if still_unresolved:
-            if should_skip_ai_surface_resolution(still_unresolved):
-                fallback_resolutions = build_default_surface_resolutions(
-                    still_unresolved,
-                    message="Default level used because this material has many unresolved surfaces.",
-                )
-                upsert_lexicon_cache(session, fallback_resolutions)
-                for normalized_surface, resolution in fallback_resolutions.items():
-                    apply_surface_resolution(pending_spans_by_surface.get(normalized_surface, []), resolution)
-            else:
-                ai_resolutions = classify_unknown_surfaces_with_ai(session, lexicon_state, still_unresolved)
-                for normalized_surface, resolution in ai_resolutions.items():
-                    apply_surface_resolution(pending_spans_by_surface.get(normalized_surface, []), resolution)
-
-    natural_green_count = 0
-    yellow_candidates: list[tuple[int, SentenceSpan]] = []
-    seen_yellow_surfaces: set[str] = set()
-    for sentence_index, state in enumerate(sentence_states):
-        for span in state.spans:
-            if span.cefr_value is None:
-                continue
-            if working_lexical_i < span.cefr_value <= target_lexical_i:
-                natural_green_count += max(1, span.token_count)
-            if (
-                span.cefr_value <= max(0.0, working_lexical_i - 0.75)
-                and span.normalized_surface not in seen_yellow_surfaces
-                and should_upgrade_span(span)
-            ):
-                yellow_candidates.append((sentence_index, span))
-                seen_yellow_surfaces.add(span.normalized_surface)
-
-    target_growth_count = max(3, min(24, round(total_word_count * 0.12)))
-    yellow_budget = max(0, min(12, target_growth_count - natural_green_count))
-    yellow_allocations: dict[int, list[SentenceSpan]] = {}
-    for sentence_index, span in yellow_candidates[:yellow_budget]:
-        yellow_allocations.setdefault(sentence_index, []).append(span)
+    _, provisional_yellow_allocations = plan_yellow_allocations(
+        sentence_states,
+        total_word_count=total_word_count,
+        working_lexical_i=working_lexical_i,
+        target_lexical_i=target_lexical_i,
+    )
     ai_adaptation_indices = choose_sentence_ai_adaptations(
         sentence_states,
-        yellow_allocations=yellow_allocations,
+        yellow_allocations=provisional_yellow_allocations,
+        target_lexical_i=target_lexical_i,
+        target_syntactic_i=target_syntactic_i,
+    )
+    sentence_tasks = build_ai_sentence_tasks(
+        sentence_states,
+        ai_indices=ai_adaptation_indices,
+        yellow_allocations=provisional_yellow_allocations,
         working_lexical_i=working_lexical_i,
         target_lexical_i=target_lexical_i,
         target_syntactic_i=target_syntactic_i,
+    )
+    sentence_task_map = {task["sentenceId"]: task for task in sentence_tasks}
+    ai_sentence_renders: dict[str, dict[str, Any]] = {}
+    if sentence_tasks or still_unresolved:
+        ai_result = generate_reading_assists_with_ai(
+            session,
+            lexicon_state=lexicon_state,
+            unresolved_surfaces=still_unresolved,
+            sentence_tasks=sentence_tasks,
+            declared_cefr=declared_cefr,
+            target_cefr=numeric_to_target_cefr(target_lexical_i),
+            ai_options=ai_options,
+        )
+        ai_surface_resolutions = ai_result["surfaceResolutions"]
+        if ai_surface_resolutions:
+            for normalized_surface, resolution in ai_surface_resolutions.items():
+                apply_surface_resolution(
+                    pending_spans_by_surface.get(normalized_surface, []), resolution
+                )
+        ai_sentence_renders = ai_result["sentenceRenders"]
+
+    _, yellow_allocations = plan_yellow_allocations(
+        sentence_states,
+        total_word_count=total_word_count,
+        working_lexical_i=working_lexical_i,
+        target_lexical_i=target_lexical_i,
     )
 
     render_blocks: list[dict[str, Any]] = []
@@ -697,30 +969,23 @@ def build_reading_version_payload(
             state = sentence_states[sentence_cursor]
             sentence_cursor += 1
             green_spans = [
-                span for span in state.spans if span.cefr_value is not None and working_lexical_i < span.cefr_value <= target_lexical_i
+                span
+                for span in state.spans
+                if span.cefr_value is not None
+                and working_lexical_i < span.cefr_value <= target_lexical_i
             ]
             red_spans = [
-                span for span in state.spans if span.cefr_value is not None and span.cefr_value > target_lexical_i
+                span
+                for span in state.spans
+                if span.cefr_value is not None and span.cefr_value > target_lexical_i
             ]
             yellow_spans = yellow_allocations.get(sentence_cursor - 1, [])
             needs_syntax_simplification = state.estimated_syntax_value > target_syntactic_i + 0.2
             sentence_counter += 1
             sentence_id = f"sentence-{sentence_counter}"
 
-            should_try_ai_adaptation = (sentence_cursor - 1) in ai_adaptation_indices
             if red_spans or yellow_spans or needs_syntax_simplification:
-                rendered = None
-                if should_try_ai_adaptation:
-                    rendered = adapt_sentence_with_ai(
-                        session,
-                        state.text,
-                        green_spans=green_spans,
-                        yellow_spans=yellow_spans,
-                        red_spans=red_spans,
-                        declared_cefr=declared_cefr,
-                        target_cefr=version_target_cefr,
-                        needs_syntax_simplification=needs_syntax_simplification,
-                    )
+                rendered = ai_sentence_renders.get(sentence_id)
                 if rendered is None:
                     rendered = render_sentence_locally(
                         state.text,
@@ -738,9 +1003,14 @@ def build_reading_version_payload(
                     sentence_kind="unchanged",
                 )
 
+            candidate_spans = sentence_task_map.get(sentence_id, {}).get("candidateSpans", {})
+            rendered_parts = rendered["parts"]
+            if rendered.get("source") == "ai":
+                rendered_parts = materialize_ai_rendered_parts(rendered_parts, candidate_spans)
+
             parts_payload: list[dict[str, Any]] = []
-            for part in rendered["parts"]:
-                annotation = build_annotation_from_rendered_part(part, default_target_cefr=version_target_cefr)
+            for part in rendered_parts:
+                annotation = build_annotation_from_rendered_part(part)
                 if annotation is None:
                     parts_payload.append({"text": str(part.get("text") or "")})
                     continue
@@ -754,7 +1024,9 @@ def build_reading_version_payload(
                         "spanAnnotationId": annotation_id,
                     }
                 )
-                summary[f"{annotation['kind']}Count"] += max(1, count_words(annotation["displayText"]))
+                summary[f"{annotation['kind']}Count"] += max(
+                    1, count_words(annotation["displayText"])
+                )
 
             sentence_annotation = rendered["sentenceAnnotation"]
             sentence_annotation_id = f"{sentence_id}-annotation"
@@ -779,7 +1051,9 @@ def build_reading_version_payload(
             )
         render_blocks.append(paragraph_payload)
 
-    comfort_count = max(0, total_word_count - summary["greenCount"] - summary["yellowCount"] - summary["redCount"])
+    comfort_count = max(
+        0, total_word_count - summary["greenCount"] - summary["yellowCount"] - summary["redCount"]
+    )
     summary["comfortCount"] = comfort_count
     summary["growthCount"] = summary["greenCount"] + summary["yellowCount"]
     return {
@@ -788,6 +1062,97 @@ def build_reading_version_payload(
         "sentenceAnnotations": sentence_annotations,
         "summary": summary,
     }
+
+
+def plan_yellow_allocations(
+    sentence_states: list[SentenceState],
+    *,
+    total_word_count: int,
+    working_lexical_i: float,
+    target_lexical_i: float,
+) -> tuple[int, dict[int, list[SentenceSpan]]]:
+    natural_green_count = 0
+    yellow_candidates: list[tuple[int, SentenceSpan]] = []
+    seen_yellow_surfaces: set[str] = set()
+    for sentence_index, state in enumerate(sentence_states):
+        for span in state.spans:
+            if span.cefr_value is None:
+                continue
+            if working_lexical_i < span.cefr_value <= target_lexical_i:
+                natural_green_count += max(1, span.token_count)
+            if (
+                span.cefr_value <= max(0.0, working_lexical_i - 0.75)
+                and span.normalized_surface not in seen_yellow_surfaces
+                and should_upgrade_span(span)
+            ):
+                yellow_candidates.append((sentence_index, span))
+                seen_yellow_surfaces.add(span.normalized_surface)
+    target_growth_count = max(3, min(24, round(total_word_count * 0.12)))
+    yellow_budget = max(0, min(12, target_growth_count - natural_green_count))
+    yellow_allocations: dict[int, list[SentenceSpan]] = {}
+    for sentence_index, span in yellow_candidates[:yellow_budget]:
+        yellow_allocations.setdefault(sentence_index, []).append(span)
+    return natural_green_count, yellow_allocations
+
+
+def build_ai_sentence_tasks(
+    sentence_states: list[SentenceState],
+    *,
+    ai_indices: set[int],
+    yellow_allocations: dict[int, list[SentenceSpan]],
+    working_lexical_i: float,
+    target_lexical_i: float,
+    target_syntactic_i: float,
+) -> list[dict[str, Any]]:
+    tasks: list[dict[str, Any]] = []
+    for sentence_index in sorted(ai_indices):
+        state = sentence_states[sentence_index]
+        green_spans = [
+            span
+            for span in state.spans
+            if span.cefr_value is not None
+            and working_lexical_i < span.cefr_value <= target_lexical_i
+        ]
+        red_spans = [
+            span
+            for span in state.spans
+            if span.cefr_value is not None and span.cefr_value > target_lexical_i
+        ]
+        yellow_spans = yellow_allocations.get(sentence_index, [])
+        unresolved_spans = [span for span in state.spans if span.cefr_value is None]
+        needs_syntax_simplification = state.estimated_syntax_value > target_syntactic_i + 0.2
+        candidate_counter = 0
+        candidate_payloads: list[dict[str, Any]] = []
+        candidate_spans: dict[str, SentenceSpan] = {}
+        for kind, spans in (
+            ("green", green_spans),
+            ("yellow", yellow_spans),
+            ("red", red_spans),
+            ("unknown", unresolved_spans),
+        ):
+            for span in spans:
+                candidate_counter += 1
+                candidate_id = f"{kind[0]}{candidate_counter}"
+                candidate_spans[candidate_id] = span
+                candidate_payloads.append(
+                    {
+                        "candidateId": candidate_id,
+                        "kind": kind,
+                        "text": span.surface,
+                        "cefr": span.cefr or "",
+                        "resolvedLemma": span.lemma or span.base_phrase or "",
+                    }
+                )
+        tasks.append(
+            {
+                "sentenceId": f"sentence-{sentence_index + 1}",
+                "sentence": state.text,
+                "needsSyntaxSimplification": needs_syntax_simplification,
+                "candidates": candidate_payloads,
+                "candidateSpans": candidate_spans,
+            }
+        )
+    return tasks
 
 
 def build_sentence_state(text: str, lexicon_state: LexiconState) -> SentenceState:
@@ -889,9 +1254,9 @@ def render_sentence_locally(
                 "kind": "green",
                 "originalText": span.surface,
                 "displayText": span.surface,
-                "sourceCefr": span.cefr or "",
-                "targetCefr": span.cefr or "",
-                "explainZh": "Already sits naturally in your i+1 range.",
+                "cefr": span.cefr or "",
+                "resolvedLemma": resolve_span_lemma(span),
+                "resolutionSource": normalize_resolution_source(span.source),
             }
         )
     del yellow_spans, red_spans
@@ -907,128 +1272,287 @@ def render_sentence_locally(
     }
 
 
-def adapt_sentence_with_ai(
+def resolve_span_lemma(span: SentenceSpan) -> str:
+    return str(span.lemma or span.base_phrase or "").strip()
+
+
+def normalize_resolution_source(value: str) -> str:
+    source = str(value or "").strip().lower()
+    if source in {"dictionary", "exact", "lemma", "phrase_exact"}:
+        return "dictionary"
+    return "ai"
+
+
+def materialize_ai_rendered_parts(
+    parts: list[dict[str, Any]],
+    candidate_spans: dict[str, SentenceSpan],
+) -> list[dict[str, Any]]:
+    materialized: list[dict[str, Any]] = []
+    for part in parts:
+        text = str(part.get("text") or "")
+        if not text:
+            continue
+        kind = str(part.get("kind") or "").strip()
+        candidate_id = str(part.get("candidateId") or "").strip()
+        candidate_span = candidate_spans.get(candidate_id)
+        if (
+            kind not in {"green", "yellow", "red"}
+            or candidate_span is None
+            or candidate_span.cefr is None
+        ):
+            materialized.append({"text": text})
+            continue
+        if kind == "green" and not texts_match_for_annotation(text, candidate_span.surface):
+            materialized.append({"text": text})
+            continue
+        if kind in {"yellow", "red"} and texts_match_for_annotation(text, candidate_span.surface):
+            materialized.append({"text": text})
+            continue
+        materialized.append(
+            {
+                "text": text,
+                "kind": kind,
+                "originalText": candidate_span.surface,
+                "displayText": text,
+                "cefr": candidate_span.cefr or "",
+                "resolvedLemma": resolve_span_lemma(candidate_span),
+                "resolutionSource": normalize_resolution_source(candidate_span.source),
+            }
+        )
+    return materialized
+
+
+def generate_reading_assists_with_ai(
     session: Session,
-    sentence_text: str,
     *,
-    green_spans: list[SentenceSpan],
-    yellow_spans: list[SentenceSpan],
-    red_spans: list[SentenceSpan],
+    lexicon_state: LexiconState,
+    unresolved_surfaces: set[str],
+    sentence_tasks: list[dict[str, Any]],
     declared_cefr: str,
     target_cefr: str,
-    needs_syntax_simplification: bool,
-) -> dict[str, Any] | None:
-    if not str(DASHSCOPE_API_KEY or "").strip():
-        return None
+    ai_options: AiRuntimeOptions | None = None,
+) -> dict[str, Any]:
+    runtime = _resolve_legacy_dashscope_runtime(
+        session,
+        scenario_key="english_reading",
+        ai_options=ai_options,
+        legacy_default_model=DASHSCOPE_TEXT_MODEL,
+    )
+    if not runtime.api_key:
+        return {"surfaceResolutions": {}, "sentenceRenders": {}}
+    requested_surfaces = sorted(surface for surface in unresolved_surfaces if surface)
+    if should_skip_ai_surface_resolution(set(requested_surfaces)):
+        requested_surfaces = []
+    if not requested_surfaces and not sentence_tasks:
+        return {"surfaceResolutions": {}, "sentenceRenders": {}}
     config = OpenAICompatibleChatConfig(
-        api_key=str(DASHSCOPE_API_KEY or "").strip(),
-        base_url=str(DASHSCOPE_BASE_URL or "").strip(),
-        model=resolve_current_model(session, "ai_model_text", DASHSCOPE_TEXT_MODEL),
-        temperature=0.1,
+        api_key=runtime.api_key,
+        base_url=runtime.base_url,
+        model=runtime.model,
+        temperature=0.1 if runtime.supports_temperature else None,
         timeout_seconds=90,
     )
     prompt_payload = {
         "declared_cefr": declared_cefr,
         "target_cefr": target_cefr,
-        "sentence": sentence_text,
-        "needs_syntax_simplification": needs_syntax_simplification,
-        "green_candidates": [serialize_span_for_prompt(span) for span in green_spans],
-        "yellow_candidates": [serialize_span_for_prompt(span) for span in yellow_spans],
-        "red_candidates": [serialize_span_for_prompt(span) for span in red_spans],
+        "unknown_surfaces": requested_surfaces,
+        "sentence_tasks": [
+            {
+                "sentenceId": task["sentenceId"],
+                "sentence": task["sentence"],
+                "needsSyntaxSimplification": bool(task["needsSyntaxSimplification"]),
+                "candidates": task["candidates"],
+            }
+            for task in sentence_tasks
+        ],
     }
-    base_prompt = get_prompt_template(session, "ai_prompt_english_reading_adapt_sentence")
+    base_prompt = get_prompt_template(session, "ai_prompt_english_reading_generate")
     prompt = f"{base_prompt}\n\n输入数据：{json.dumps(prompt_payload, ensure_ascii=False)}"
     try:
-        payload = call_json_completion(config=config, prompt=prompt)
-        return validate_ai_sentence_payload(payload, sentence_text=sentence_text)
+        payload = call_json_completion(
+            config=config,
+            prompt=prompt,
+            extra_payload=runtime.extra_payload,
+        )
     except Exception:
+        return {"surfaceResolutions": {}, "sentenceRenders": {}}
+    surface_resolutions = parse_ai_surface_items(
+        payload.get("surfaceItems"),
+        requested_surfaces=requested_surfaces,
+        lexicon_state=lexicon_state,
+    )
+    if surface_resolutions:
+        upsert_lexicon_cache(session, surface_resolutions)
+    sentence_renders: dict[str, dict[str, Any]] = {}
+    requested_sentence_ids = {str(task["sentenceId"]) for task in sentence_tasks}
+    raw_sentence_items = payload.get("sentenceItems")
+    if isinstance(raw_sentence_items, list):
+        for item in raw_sentence_items:
+            rendered = validate_ai_sentence_item(item)
+            if rendered is None:
+                continue
+            sentence_id = str(rendered.get("sentenceId") or "")
+            if sentence_id not in requested_sentence_ids:
+                continue
+            sentence_renders[sentence_id] = rendered
+    return {
+        "surfaceResolutions": surface_resolutions,
+        "sentenceRenders": sentence_renders,
+    }
+
+
+def validate_ai_sentence_item(item: Any) -> dict[str, Any] | None:
+    if not isinstance(item, dict):
         return None
-
-
-def validate_ai_sentence_payload(payload: dict[str, Any], *, sentence_text: str) -> dict[str, Any]:
-    raw_parts = payload.get("parts")
+    sentence_id = str(item.get("sentenceId") or "").strip()
+    if not sentence_id:
+        return None
+    raw_parts = item.get("parts")
     if not isinstance(raw_parts, list) or not raw_parts:
-        raise EnglishReadingError("模型返回的 parts 为空。")
+        return None
     parts: list[dict[str, Any]] = []
-    for item in raw_parts:
-        if not isinstance(item, dict):
+    for raw_part in raw_parts:
+        if not isinstance(raw_part, dict):
             continue
-        text = str(item.get("text") or "")
+        text = str(raw_part.get("text") or "")
         if not text:
             continue
-        kind = str(item.get("kind") or "").strip()
+        kind = str(raw_part.get("kind") or "").strip()
+        candidate_id = str(raw_part.get("candidateId") or "").strip()
         if kind not in {"green", "yellow", "red"}:
             parts.append({"text": text})
             continue
-        parts.append(
-            {
-                "text": text,
-                "kind": kind,
-                "originalText": str(item.get("originalText") or ""),
-                "displayText": text,
-                "sourceCefr": str(item.get("sourceCefr") or ""),
-                "targetCefr": str(item.get("targetCefr") or ""),
-                "explainZh": str(item.get("explainZh") or ""),
-            }
-        )
+        part: dict[str, Any] = {
+            "text": text,
+            "kind": kind,
+        }
+        if candidate_id:
+            part["candidateId"] = candidate_id
+        parts.append(part)
     if not parts:
-        raise EnglishReadingError("模型没有返回有效片段。")
-    display_text = "".join(item["text"] for item in parts).strip()
-    sentence_annotation = payload.get("sentenceAnnotation")
+        return None
+    display_text = "".join(part["text"] for part in parts).strip()
+    sentence_annotation = item.get("sentenceAnnotation")
     if not isinstance(sentence_annotation, dict):
         sentence_annotation = {}
     kind = str(sentence_annotation.get("kind") or "unchanged").strip()
     if kind not in {"unchanged", "syntax_simplified"}:
         kind = "unchanged"
     raw_hints = sentence_annotation.get("skeletonHints")
-    skeleton_hints = [
-        str(item).strip()
-        for item in raw_hints
-        if str(item).strip()
-    ][:4] if isinstance(raw_hints, list) else []
+    skeleton_hints = (
+        [str(hint).strip() for hint in raw_hints if str(hint).strip()][:4]
+        if isinstance(raw_hints, list)
+        else []
+    )
     return {
+        "source": "ai",
+        "sentenceId": sentence_id,
         "parts": parts,
         "sentenceAnnotation": {
             "kind": kind,
-            "originalText": str(sentence_annotation.get("originalText") or sentence_text),
-            "displayText": str(sentence_annotation.get("displayText") or display_text or sentence_text),
+            "originalText": str(
+                sentence_annotation.get("originalText") or item.get("sentence") or ""
+            ),
+            "displayText": str(sentence_annotation.get("displayText") or display_text),
             "skeletonHints": skeleton_hints,
         },
     }
 
 
+def parse_ai_surface_items(
+    raw_items: Any,
+    *,
+    requested_surfaces: list[str],
+    lexicon_state: LexiconState,
+) -> dict[str, SurfaceResolution]:
+    if not isinstance(raw_items, list) or not requested_surfaces:
+        return {}
+    requested_set = set(requested_surfaces)
+    resolved: dict[str, SurfaceResolution] = {}
+    for item in raw_items:
+        if not isinstance(item, dict):
+            continue
+        surface = normalize_lookup_key(str(item.get("surface") or ""))
+        if surface not in requested_set or not surface:
+            continue
+        raw_candidates = item.get("candidates")
+        candidates: list[str] = []
+        if isinstance(raw_candidates, list):
+            for candidate in raw_candidates:
+                normalized_candidate = normalize_lookup_key(str(candidate or ""))
+                if normalized_candidate and normalized_candidate not in candidates:
+                    candidates.append(normalized_candidate)
+                if len(candidates) >= 3:
+                    break
+        local_match = find_local_candidate_match(candidates, lexicon_state)
+        confidence = max(0.0, min(1.0, parse_float(item.get("confidence"), 0.75)))
+        note = str(item.get("note") or "").strip()
+        if local_match is not None:
+            resolved[surface] = SurfaceResolution(
+                normalized_surface=surface,
+                cefr=local_match["cefr"],
+                source="dictionary",
+                lemma=local_match["candidate"],
+                base_phrase=local_match["candidate"],
+                explain_zh=note or "Matched local dictionary after AI candidate expansion.",
+                confidence=confidence,
+            )
+            continue
+        raw_cefr = str(item.get("cefr") or "").strip()
+        try:
+            safe_cefr = normalize_cefr_level(raw_cefr)
+        except EnglishReadingError:
+            continue
+        best_candidate = candidates[0] if candidates else surface
+        resolved[surface] = SurfaceResolution(
+            normalized_surface=surface,
+            cefr=safe_cefr,
+            source="ai",
+            lemma=best_candidate,
+            base_phrase=best_candidate,
+            explain_zh=note or "Used AI CEFR because no local dictionary match was found.",
+            confidence=confidence,
+        )
+    return resolved
+
+
+def find_local_candidate_match(
+    candidates: list[str],
+    lexicon_state: LexiconState,
+) -> dict[str, str] | None:
+    for candidate in candidates:
+        cefr = resolve_key_in_lexicon(candidate, lexicon_state)
+        if cefr is not None:
+            return {
+                "candidate": candidate,
+                "cefr": cefr,
+            }
+    return None
+
+
 def build_annotation_from_rendered_part(
     part: dict[str, Any],
-    *,
-    default_target_cefr: str,
 ) -> dict[str, Any] | None:
     kind = str(part.get("kind") or "").strip()
     if kind not in {"green", "yellow", "red"}:
         return None
     text = str(part.get("text") or "")
     original_text = str(part.get("originalText") or "")
-    display_text = text
-    if kind == "green":
-        if texts_match_for_annotation(display_text, original_text or display_text):
-            safe_original = original_text or display_text
-            return {
-                "kind": "green",
-                "originalText": safe_original,
-                "displayText": display_text,
-                "sourceCefr": str(part.get("sourceCefr") or ""),
-                "targetCefr": str(part.get("targetCefr") or part.get("sourceCefr") or ""),
-                "explainZh": str(part.get("explainZh") or "Already sits naturally in your i+1 range."),
-            }
+    display_text = str(part.get("displayText") or text)
+    cefr = str(part.get("cefr") or "")
+    if not original_text or not display_text or not cefr:
         return None
-    if not original_text or texts_match_for_annotation(display_text, original_text):
+    if kind == "green" and not texts_match_for_annotation(display_text, original_text):
+        return None
+    if kind in {"yellow", "red"} and texts_match_for_annotation(display_text, original_text):
         return None
     return {
         "kind": kind,
         "originalText": original_text,
         "displayText": display_text,
-        "sourceCefr": str(part.get("sourceCefr") or ""),
-        "targetCefr": str(part.get("targetCefr") or default_target_cefr),
-        "explainZh": str(part.get("explainZh") or ""),
+        "cefr": cefr,
+        "resolvedLemma": str(part.get("resolvedLemma") or ""),
+        "resolutionSource": normalize_resolution_source(str(part.get("resolutionSource") or "")),
     }
 
 
@@ -1044,12 +1568,16 @@ def call_json_completion(
     *,
     config: OpenAICompatibleChatConfig,
     prompt: str,
+    extra_payload: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    response_text = call_chat_completion_text(
-        config=config,
-        messages=[{"role": "user", "content": prompt}],
-        response_format={"type": "json_object"},
-    )
+    kwargs: dict[str, Any] = {
+        "config": config,
+        "messages": [{"role": "user", "content": prompt}],
+        "response_format": {"type": "json_object"},
+    }
+    if extra_payload is not None:
+        kwargs["extra_payload"] = extra_payload
+    response_text = call_chat_completion_text(**kwargs)
     try:
         parsed = json.loads(response_text)
     except json.JSONDecodeError:
@@ -1062,124 +1590,33 @@ def call_json_completion(
     return parsed
 
 
-def classify_unknown_surfaces_with_ai(
-    session: Session,
-    lexicon_state: LexiconState,
-    surfaces: set[str],
-) -> dict[str, SurfaceResolution]:
-    if not surfaces:
-        return {}
-    if not str(DASHSCOPE_API_KEY or "").strip():
-        fallback_level = "B2"
-        fallback_payload = {
-            surface: SurfaceResolution(
-                normalized_surface=surface,
-                cefr=fallback_level,
-                source="fallback",
-                base_phrase=surface,
-                explain_zh="Default CEFR used because no model is configured.",
-                confidence=0.4,
-            )
-            for surface in surfaces
-        }
-        upsert_lexicon_cache(session, fallback_payload)
-        return fallback_payload
-    config = OpenAICompatibleChatConfig(
-        api_key=str(DASHSCOPE_API_KEY or "").strip(),
-        base_url=str(DASHSCOPE_BASE_URL or "").strip(),
-        model=str(DASHSCOPE_TEXT_MODEL or "").strip() or "qwen3.6-flash",
-        temperature=0.0,
-        timeout_seconds=90,
-    )
-    ordered_surfaces = sorted(surface for surface in surfaces if surface)
-    resolved: dict[str, SurfaceResolution] = {}
-    for batch_start in range(0, len(ordered_surfaces), 48):
-        batch = ordered_surfaces[batch_start : batch_start + 48]
-        base_prompt = get_prompt_template(session, "ai_prompt_english_reading_classify_words")
-        prompt = f"{base_prompt}\n\n待处理词：{json.dumps(batch, ensure_ascii=False)}"
-        payload = call_json_completion(config=config, prompt=prompt)
-        items = payload.get("items")
-        if not isinstance(items, list):
-            raise EnglishReadingError("模型没有返回 items 列表。")
-        for item in items:
-            if not isinstance(item, dict):
-                continue
-            surface = normalize_lookup_key(str(item.get("surface") or ""))
-            if surface not in batch or not surface:
-                continue
-            lemma = normalize_lookup_key(str(item.get("lemma") or ""))
-            base_phrase = normalize_lookup_key(str(item.get("basePhrase") or lemma or surface))
-            local_match = (
-                resolve_key_in_lexicon(base_phrase, lexicon_state)
-                or resolve_key_in_lexicon(lemma, lexicon_state)
-                or resolve_key_in_lexicon(surface, lexicon_state)
-            )
-            cefr = normalize_cefr_level(str(item.get("cefr") or local_match or "B2"))
-            if local_match is not None:
-                cefr = local_match
-            resolved[surface] = SurfaceResolution(
-                normalized_surface=surface,
-                cefr=cefr,
-                source="llm",
-                lemma=lemma,
-                base_phrase=base_phrase,
-                explain_zh=str(item.get("explainZh") or "Model-supplied morphology note."),
-                confidence=max(0.0, min(1.0, parse_float(item.get("confidence"), 0.75))),
-            )
-    for surface in ordered_surfaces:
-        if surface in resolved:
-            continue
-        resolved[surface] = SurfaceResolution(
-            normalized_surface=surface,
-            cefr="B2",
-            source="fallback",
-            base_phrase=surface,
-            explain_zh="Default level used because the model returned no result.",
-            confidence=0.4,
-        )
-    upsert_lexicon_cache(session, resolved)
-    return resolved
-
-
 def should_skip_ai_surface_resolution(surfaces: set[str]) -> bool:
     return len(surfaces) > MAX_UNKNOWN_SURFACES_FOR_AI_CLASSIFICATION
-
-
-def build_default_surface_resolutions(
-    surfaces: set[str],
-    *,
-    message: str,
-) -> dict[str, SurfaceResolution]:
-    return {
-        surface: SurfaceResolution(
-            normalized_surface=surface,
-            cefr="B2",
-            source="fallback",
-            base_phrase=surface,
-            explain_zh=message,
-            confidence=0.4,
-        )
-        for surface in surfaces
-        if surface
-    }
 
 
 def choose_sentence_ai_adaptations(
     sentence_states: list[SentenceState],
     *,
     yellow_allocations: dict[int, list[SentenceSpan]],
-    working_lexical_i: float,
     target_lexical_i: float,
     target_syntactic_i: float,
 ) -> set[int]:
     ranked_candidates: list[tuple[float, int]] = []
     for sentence_index, state in enumerate(sentence_states):
         red_spans = [
-            span for span in state.spans if span.cefr_value is not None and span.cefr_value > target_lexical_i
+            span
+            for span in state.spans
+            if span.cefr_value is not None and span.cefr_value > target_lexical_i
         ]
         yellow_spans = yellow_allocations.get(sentence_index, [])
+        unresolved_spans = [span for span in state.spans if span.cefr_value is None]
         needs_syntax_simplification = state.estimated_syntax_value > target_syntactic_i + 0.2
-        if not red_spans and not yellow_spans and not needs_syntax_simplification:
+        if (
+            not red_spans
+            and not yellow_spans
+            and not needs_syntax_simplification
+            and not unresolved_spans
+        ):
             continue
         score = 0.0
         if needs_syntax_simplification:
@@ -1187,6 +1624,7 @@ def choose_sentence_ai_adaptations(
         score += sum((span.cefr_value or target_lexical_i) - target_lexical_i for span in red_spans)
         score += len(red_spans) * 3.0
         score += len(yellow_spans) * 1.5
+        score += len(unresolved_spans) * 1.25
         score += min(2.0, max(0.0, count_words(state.text) - 12) * 0.08)
         ranked_candidates.append((score, sentence_index))
     ranked_candidates.sort(reverse=True)
@@ -1218,6 +1656,51 @@ def upsert_lexicon_cache(
         row.source = resolution.source
         row.updated_at = utc_now_naive()
     session.commit()
+
+
+def upsert_dictionary_cache(
+    session: Session,
+    *,
+    normalized_surfaces: set[str],
+    payload: dict[str, Any],
+) -> None:
+    if not normalized_surfaces:
+        return
+    existing_rows = (
+        session.query(EnglishReadingDictionaryCache)
+        .filter(EnglishReadingDictionaryCache.normalized_surface.in_(tuple(normalized_surfaces)))
+        .all()
+    )
+    existing_by_surface = {row.normalized_surface: row for row in existing_rows}
+    for normalized_surface in normalized_surfaces:
+        row = existing_by_surface.get(normalized_surface)
+        if row is None:
+            row = EnglishReadingDictionaryCache(normalized_surface=normalized_surface)
+            session.add(row)
+        row.entry_word = str(payload.get("word") or normalized_surface)
+        row.lemma = str(payload.get("lemma") or normalized_surface)
+        row.phonetic_us = str(payload.get("phoneticUs") or "")
+        row.audio_us_url = str(payload.get("audioUsUrl") or "")
+        row.summary_zh_json = json.dumps(payload.get("summaryZh") or [], ensure_ascii=False)
+        row.parts_of_speech_json = json.dumps(payload.get("partsOfSpeech") or [], ensure_ascii=False)
+        row.senses_json = json.dumps(payload.get("senses") or [], ensure_ascii=False)
+        row.source = str(payload.get("source") or "xxapi")
+        row.updated_at = utc_now_naive()
+    session.commit()
+
+
+def load_cached_dictionary_entry(session: Session, word: str) -> dict[str, Any] | None:
+    normalized_surface = normalize_dictionary_query_word(word)
+    if not normalized_surface:
+        return None
+    row = (
+        session.query(EnglishReadingDictionaryCache)
+        .filter_by(normalized_surface=normalized_surface)
+        .first()
+    )
+    if row is None:
+        return None
+    return serialize_dictionary_cache_row(row)
 
 
 def load_cached_surface_resolutions(
@@ -1293,7 +1776,10 @@ def load_lexicon_state() -> LexiconState:
             continue
         existing_level = exact_map.get(normalized_key)
         selected_level = safe_levels[0]
-        if existing_level is None or LEVEL_TO_INDEX[selected_level] < LEVEL_TO_INDEX[existing_level]:
+        if (
+            existing_level is None
+            or LEVEL_TO_INDEX[selected_level] < LEVEL_TO_INDEX[existing_level]
+        ):
             exact_map[normalized_key] = selected_level
         max_phrase_words = max(max_phrase_words, len(normalized_key.split(" ")))
     _lexicon_state = LexiconState(
@@ -1312,7 +1798,7 @@ def resolve_surface_locally(surface: str, lexicon_state: LexiconState) -> Surfac
         return SurfaceResolution(
             normalized_surface=normalized_surface,
             cefr=direct_cefr,
-            source="exact",
+            source="dictionary",
             lemma=normalized_surface,
             base_phrase=normalized_surface,
             explain_zh="本地词典直接命中。",
@@ -1325,7 +1811,7 @@ def resolve_surface_locally(surface: str, lexicon_state: LexiconState) -> Surfac
         return SurfaceResolution(
             normalized_surface=normalized_surface,
             cefr=cefr,
-            source="lemma",
+            source="dictionary",
             lemma=lemma,
             base_phrase=lemma,
             explain_zh="本地词典通过基础词形还原命中。",
@@ -1336,15 +1822,6 @@ def resolve_surface_locally(surface: str, lexicon_state: LexiconState) -> Surfac
 
 def resolve_key_in_lexicon(key: str, lexicon_state: LexiconState) -> str | None:
     return lexicon_state.exact_map.get(normalize_lookup_key(key))
-
-
-def serialize_span_for_prompt(span: SentenceSpan) -> dict[str, Any]:
-    return {
-        "text": span.surface,
-        "cefr": span.cefr,
-        "start": span.start,
-        "end": span.end,
-    }
 
 
 def build_parts_from_annotations(
@@ -1372,9 +1849,9 @@ def build_parts_from_annotations(
                 "kind": annotation["kind"],
                 "originalText": annotation["originalText"],
                 "displayText": annotation["displayText"],
-                "sourceCefr": annotation["sourceCefr"],
-                "targetCefr": annotation["targetCefr"],
-                "explainZh": annotation["explainZh"],
+                "cefr": annotation["cefr"],
+                "resolvedLemma": annotation["resolvedLemma"],
+                "resolutionSource": annotation["resolutionSource"],
             }
         )
         cursor = end
@@ -1425,10 +1902,17 @@ def estimate_sentence_syntax_value(text: str) -> float:
     subordinate_hits = sum(1 for word in words if word in SUBORDINATE_MARKERS)
     score += min(1.5, subordinate_hits * 0.45)
     nominalization_hits = sum(
-        1 for word in words if any(word.endswith(suffix) and len(word) >= len(suffix) + 3 for suffix in NOMINALIZATION_SUFFIXES)
+        1
+        for word in words
+        if any(
+            word.endswith(suffix) and len(word) >= len(suffix) + 3
+            for suffix in NOMINALIZATION_SUFFIXES
+        )
     )
     score += min(1.0, nominalization_hits * 0.25)
-    passive_hits = len(re.findall(r"\b(?:is|are|was|were|be|been|being)\s+[a-z]+ed\b", text.lower()))
+    passive_hits = len(
+        re.findall(r"\b(?:is|are|was|were|be|been|being)\s+[a-z]+ed\b", text.lower())
+    )
     score += min(0.8, passive_hits * 0.4)
     return clamp_numeric(score)
 
@@ -1473,11 +1957,25 @@ def basic_lemma_candidates(surface: str) -> list[str]:
         candidates.add(normalized[:-4])
     if normalized.endswith("ness") and len(normalized) > 6:
         candidates.add(normalized[:-4])
+    if normalized.endswith("quisition") and len(normalized) > 10:
+        candidates.add(normalized[:-9] + "quire")
     if normalized.endswith("ation") and len(normalized) > 8:
+        stem = normalized[:-5]
+        candidates.add(stem)
+        candidates.add(stem + "e")
+        candidates.add(stem + "ate")
+    if normalized.endswith("ition") and len(normalized) > 8:
         candidates.add(normalized[:-5] + "e")
-        candidates.add(normalized[:-5])
+    if normalized.endswith("sion") and len(normalized) > 7:
+        stem = normalized[:-4]
+        candidates.add(stem)
+        candidates.add(stem + "e")
+        candidates.add(stem + "de")
+        candidates.add(stem + "se")
     if normalized.endswith("tion") and len(normalized) > 7:
-        candidates.add(normalized[:-4] + "e")
+        stem = normalized[:-4]
+        candidates.add(stem + "e")
+        candidates.add(stem + "te")
     if normalized.endswith("ity") and len(normalized) > 6:
         candidates.add(normalized[:-3])
         candidates.add(normalized[:-3] + "e")
@@ -1615,7 +2113,8 @@ def extract_visible_english_text(text: str) -> str:
     normalized = text.replace("\r\n", "\n").replace("\r", "\n")
     mixed_chunks = [normalize_english_candidate(chunk) for chunk in CJK_RE.split(normalized)]
     chunk_paragraphs = [
-        chunk for chunk in mixed_chunks
+        chunk
+        for chunk in mixed_chunks
         if is_visible_english_paragraph(chunk) and len(WORD_RE.findall(chunk)) >= 4
     ]
     if chunk_paragraphs:
@@ -1720,8 +2219,16 @@ def serialize_profile(profile: EnglishReadingProfile) -> dict[str, Any]:
     declared_cefr = normalize_cefr_level(profile.declared_cefr)
     return {
         "declaredCefr": declared_cefr,
-        "workingLexicalI": round(parse_float(profile.working_lexical_i, default_lexical_value_for_level(declared_cefr)), 3),
-        "workingSyntacticI": round(parse_float(profile.working_syntactic_i, default_syntactic_value_for_level(declared_cefr)), 3),
+        "workingLexicalI": round(
+            parse_float(profile.working_lexical_i, default_lexical_value_for_level(declared_cefr)),
+            3,
+        ),
+        "workingSyntacticI": round(
+            parse_float(
+                profile.working_syntactic_i, default_syntactic_value_for_level(declared_cefr)
+            ),
+            3,
+        ),
         "xp": int(profile.xp or 0),
         "levelProgress": max(0, min(100, int(profile.xp or 0))),
         "confidence": round(parse_float(profile.confidence, 0.35), 3),
@@ -1800,6 +2307,19 @@ def clamp_numeric(value: float) -> float:
     return min(float(len(CEFR_LEVELS) - 1), max(0.0, float(value)))
 
 
+def normalize_dictionary_query_word(value: str) -> str:
+    normalized = normalize_lookup_key(value)
+    if not normalized:
+        return ""
+    if re.fullmatch(r"[A-Za-z]+(?:[-'][A-Za-z]+)*", normalized) is None:
+        return ""
+    return normalized
+
+
+def normalize_sentence_translation_text(value: str) -> str:
+    return WHITESPACE_RE.sub(" ", str(value or "").strip())
+
+
 def normalize_lookup_key(value: str) -> str:
     normalized = TOKEN_CONNECTOR_RE.sub("-", str(value or "").strip().lower())
     normalized = normalized.replace("’", "'").replace("–", "-").replace("—", "-")
@@ -1823,3 +2343,29 @@ def normalize_feedback(value: str) -> str:
     if candidate not in {"too_easy", "just_right", "too_hard"}:
         raise EnglishReadingError("阅读反馈无效。")
     return candidate
+
+
+def serialize_dictionary_cache_row(row: EnglishReadingDictionaryCache) -> dict[str, Any]:
+    try:
+        summary_zh = json.loads(row.summary_zh_json or "[]")
+    except json.JSONDecodeError:
+        summary_zh = []
+    try:
+        parts_of_speech = json.loads(row.parts_of_speech_json or "[]")
+    except json.JSONDecodeError:
+        parts_of_speech = []
+    try:
+        senses = json.loads(row.senses_json or "[]")
+    except json.JSONDecodeError:
+        senses = []
+    return {
+        "word": row.entry_word or row.normalized_surface,
+        "lemma": row.lemma or row.normalized_surface,
+        "phoneticUs": row.phonetic_us or "",
+        "audioUsUrl": row.audio_us_url or None,
+        "summaryZh": summary_zh if isinstance(summary_zh, list) else [],
+        "partsOfSpeech": parts_of_speech if isinstance(parts_of_speech, list) else [],
+        "senses": senses if isinstance(senses, list) else [],
+        "source": row.source or "xxapi",
+        "cachedAt": row.updated_at.isoformat() if row.updated_at else None,
+    }

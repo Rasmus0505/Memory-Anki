@@ -45,6 +45,14 @@ export function buildImportJobActions({
     resetSharedRequestState()
     options.setBatchStatus('idle')
     options.setLastBatchMeta(null)
+    const aiOptions = await options.promptForAiOptions({
+      scenarioKey: 'vision',
+      entrypointKey: options.mode === 'mindmap' ? 'import-image-mindmap' : 'import-image-text',
+      title: options.mode === 'mindmap' ? '图片转脑图配置' : '图片转文字配置',
+    })
+    if (!aiOptions) {
+      return
+    }
     const previewUrl = await fileToDataUrl(file)
     state.setImportImagePreviewUrl(previewUrl)
     const feature = describeImportFeature('image-single', options.mode)
@@ -64,6 +72,7 @@ export function buildImportJobActions({
       const job = await createImageImportJobApi(file, {
         entityKey: options.entityKey,
         mode: options.mode,
+        ai_options: aiOptions,
       })
       state.hydrateJobResult(job, { reused: job.status === 'completed', preservePreviewUrl: true })
       logAiCall({
@@ -127,6 +136,15 @@ export function buildImportJobActions({
     options.setBatchStatus('loading')
     state.setImportError('')
     state.setImportReusedExistingResult(false)
+    const aiOptions = await options.promptForAiOptions({
+      scenarioKey: 'vision',
+      entrypointKey: 'import-image-batch-mindmap',
+      title: '多图转脑图配置',
+    })
+    if (!aiOptions) {
+      options.setBatchStatus('ready')
+      return
+    }
     const feature = describeImportFeature('image-batch', 'mindmap')
     const requestSummary = hasStructureImage
       ? `共 ${options.batchImagesRef.current.length} 张；模式：结构补全；结构图序号：${resolvedStructureIndex + 1}`
@@ -148,6 +166,7 @@ export function buildImportJobActions({
         {
           entityKey: options.entityKey,
           structureImageIndex: hasStructureImage ? resolvedStructureIndex : undefined,
+          ai_options: aiOptions,
         },
       )
       state.hydrateJobResult(job, { reused: job.status === 'completed', preservePreviewUrl: true })
@@ -208,6 +227,14 @@ export function buildImportJobActions({
     }
 
     resetSharedRequestState()
+    const aiOptions = await options.promptForAiOptions({
+      scenarioKey: 'vision',
+      entrypointKey: options.mode === 'mindmap' ? 'import-pdf-mindmap' : 'import-pdf-text',
+      title: options.mode === 'mindmap' ? 'PDF 转脑图配置' : 'PDF 转文字配置',
+    })
+    if (!aiOptions) {
+      return
+    }
 
     const selectedDocument =
       options.subjectDocuments.find((item) => item.id === options.selectedSubjectDocumentId) ?? null
@@ -248,6 +275,7 @@ export function buildImportJobActions({
         range_prompt: options.rangePrompt.trim(),
         fallback_title: selectedDocument?.original_name || '鏈懡鍚嶅娈?',
         import_options: options.pdfImportOptions,
+        ai_options: aiOptions,
       })
       state.hydrateJobResult(job, { reused: job.status === 'completed', preservePreviewUrl: true })
       logAiCall({

@@ -404,7 +404,8 @@
         color: #ffffff;
       }
 
-      .memory-anki-restore-ui-button {
+      .memory-anki-restore-ui-button,
+      .memory-anki-exit-fullscreen-button {
         position: fixed;
         top: 16px;
         right: 16px;
@@ -422,7 +423,12 @@
         cursor: pointer;
       }
 
-      .memory-anki-restore-ui-button[hidden] {
+      .memory-anki-exit-fullscreen-button {
+        top: 58px;
+      }
+
+      .memory-anki-restore-ui-button[hidden],
+      .memory-anki-exit-fullscreen-button[hidden] {
         display: none !important;
       }
 
@@ -1382,6 +1388,7 @@
         pointerDownNodeUid: null,
         pointerDownWithModifier: false,
         pointerIntentClearTimer: null,
+        lastHoveredNodeUid: null,
       }
       const readonlyNodeClickBridgeState = {
         lastToken: '',
@@ -1752,14 +1759,6 @@
 
       function isReadonlyHost() {
         return Boolean(window.__memoryAnkiHostState?.readonly)
-      }
-
-      function isToolbarReadonlyHost() {
-        return Boolean(window.__memoryAnkiHostState?.showToolbarWhenReadonly)
-      }
-
-      function isVisualReadonlyHost() {
-        return Boolean(isReadonlyHost() && !isToolbarReadonlyHost())
       }
 
       function isEditableElement(element) {
@@ -5187,7 +5186,10 @@
           },
           true,
         )
-        window.addEventListener('resize', renderBilinkBadges)
+        window.addEventListener('resize', () => {
+          renderBilinkBadges()
+          scheduleMindMapResizeSync()
+        })
         document.addEventListener('scroll', renderBilinkBadges, true)
       }
 
@@ -5342,259 +5344,6 @@
         getHostBridge()?.notify?.(eventName, payload)
       }
 
-      function ensureSegmentToolbar() {
-        const toolbarBlock = document.querySelector('.toolbarContainer .toolbar .toolbarBlock')
-        if (!toolbarBlock) return false
-        const toolbarContainer = toolbarBlock.closest('.toolbarContainer')
-        toolbarContainer?.classList.add('memory-anki-custom-toolbar-only')
-        toolbarBlock.classList.add('memory-anki-primary-toolbar-block')
-        let host = toolbarBlock.querySelector('.memory-anki-segment-toolbar')
-        if (!host) {
-          host = document.createElement('div')
-          host.className = 'memory-anki-segment-toolbar'
-          host.innerHTML = `
-            <button type="button" class="memory-anki-segment-button">
-              <span>分块</span>
-            </button>
-            <button type="button" class="memory-anki-segment-button memory-anki-mindmap-import-button" hidden>
-              <span>转脑图</span>
-            </button>
-            <button type="button" class="memory-anki-segment-button memory-anki-text-import-button" hidden>
-              <span>转文字</span>
-            </button>
-            <button type="button" class="memory-anki-segment-button memory-anki-practice-button" hidden>
-              <span>练习</span>
-            </button>
-            <button type="button" class="memory-anki-segment-button memory-anki-english-button" hidden>
-              <span>英语区</span>
-            </button>
-            <button type="button" class="memory-anki-segment-button memory-anki-bilink-search-button" hidden>
-              <span>搜索</span>
-            </button>
-            <button type="button" class="memory-anki-segment-button memory-anki-mini-palace-button" hidden>
-              <span>小宫殿</span>
-            </button>
-            <button type="button" class="memory-anki-layout-button memory-anki-immersive-edit-button">
-              <span>半屏编辑</span>
-            </button>
-            <button type="button" class="memory-anki-layout-button memory-anki-native-fullscreen-button">
-              <span>全屏编辑</span>
-            </button>
-            <button type="button" class="memory-anki-layout-button memory-anki-clear-ui-button">
-              <span>清屏</span>
-            </button>
-            <div class="memory-anki-segment-range-panel" hidden>
-              <label>
-                <span>当前目标</span>
-              </label>
-              <select class="memory-anki-segment-range-select"></select>
-              <span class="memory-anki-segment-range-meta"></span>
-              <button type="button" class="memory-anki-segment-range-action is-primary">确认</button>
-              <button type="button" class="memory-anki-segment-range-action">取消</button>
-            </div>
-          `
-          toolbarBlock.insertBefore(host, toolbarBlock.firstChild)
-          const button = host.querySelector('.memory-anki-segment-button')
-          button?.addEventListener('click', event => {
-            event.preventDefault()
-            event.stopPropagation()
-            const draft = getSegmentRangeDraft()
-            notifySegmentRangeMode(!draft.active, draft.targetSegmentId || 'new')
-          })
-          const practiceButton = host.querySelector('.memory-anki-practice-button')
-          const englishButton = host.querySelector('.memory-anki-english-button')
-          const mindmapImportButton = host.querySelector('.memory-anki-mindmap-import-button')
-          const textImportButton = host.querySelector('.memory-anki-text-import-button')
-          const bilinkSearchButton = host.querySelector('.memory-anki-bilink-search-button')
-          const miniPalaceButton = host.querySelector('.memory-anki-mini-palace-button')
-          const immersiveEditButton = host.querySelector('.memory-anki-immersive-edit-button')
-          const nativeFullscreenButton = host.querySelector('.memory-anki-native-fullscreen-button')
-          const clearUiButton = host.querySelector('.memory-anki-clear-ui-button')
-          practiceButton?.addEventListener('click', event => {
-            event.preventDefault()
-            event.stopPropagation()
-            notifyCurrentFocusNodeActive()
-            getHostBridge()?.notify?.('practice_toggle', null)
-          })
-          englishButton?.addEventListener('click', event => {
-            event.preventDefault()
-            event.stopPropagation()
-            void notifyParentUiAfterNativeFullscreenExit('english_open')
-          })
-          mindmapImportButton?.addEventListener('click', event => {
-            event.preventDefault()
-            event.stopPropagation()
-            void notifyParentUiAfterNativeFullscreenExit('mindmap_import_open')
-          })
-          textImportButton?.addEventListener('click', event => {
-            event.preventDefault()
-            event.stopPropagation()
-            void notifyParentUiAfterNativeFullscreenExit('image_text_import_open')
-          })
-          bilinkSearchButton?.addEventListener('click', event => {
-            event.preventDefault()
-            event.stopPropagation()
-            void notifyParentUiAfterNativeFullscreenExit('bilink_toolbar_search')
-          })
-          miniPalaceButton?.addEventListener('click', event => {
-            event.preventDefault()
-            event.stopPropagation()
-            void notifyParentUiAfterNativeFullscreenExit('mini_palace_open')
-          })
-          immersiveEditButton?.addEventListener('click', async event => {
-            event.preventDefault()
-            event.stopPropagation()
-            if (document.fullscreenElement) {
-              await exitNativeFullscreenIfNeeded()
-              getHostBridge()?.notify?.('fullscreen_toggle', true)
-              return
-            }
-            getHostBridge()?.notify?.('fullscreen_toggle', !isImmersiveModeActive())
-          })
-          nativeFullscreenButton?.addEventListener('click', async event => {
-            event.preventDefault()
-            event.stopPropagation()
-            if (document.fullscreenElement) {
-              await exitNativeFullscreenIfNeeded()
-              return
-            }
-            if (isImmersiveModeActive()) {
-              getHostBridge()?.notify?.('fullscreen_toggle', false)
-            }
-            await enterNativeFullscreen()
-          })
-          clearUiButton?.addEventListener('click', event => {
-            event.preventDefault()
-            event.stopPropagation()
-            setUiCleared(true)
-          })
-        }
-        const label = host.querySelector('.memory-anki-segment-button span')
-        const practiceButton = host.querySelector('.memory-anki-practice-button')
-        const practiceLabel = practiceButton?.querySelector('span')
-        const englishButton = host.querySelector('.memory-anki-english-button')
-        const mindmapImportButton = host.querySelector('.memory-anki-mindmap-import-button')
-        const textImportButton = host.querySelector('.memory-anki-text-import-button')
-        const bilinkSearchButton = host.querySelector('.memory-anki-bilink-search-button')
-        const miniPalaceButton = host.querySelector('.memory-anki-mini-palace-button')
-        const immersiveEditButton = host.querySelector('.memory-anki-immersive-edit-button')
-        const nativeFullscreenButton = host.querySelector('.memory-anki-native-fullscreen-button')
-        const clearUiButton = host.querySelector('.memory-anki-clear-ui-button')
-        const panel = host.querySelector('.memory-anki-segment-range-panel')
-        const targetSelect = host.querySelector('.memory-anki-segment-range-select')
-        const meta = host.querySelector('.memory-anki-segment-range-meta')
-        const confirmButton = host.querySelector('.memory-anki-segment-range-action.is-primary')
-        const cancelButton = host.querySelectorAll('.memory-anki-segment-range-action')[1]
-        const rangeDraft = getSegmentRangeDraft()
-        const currentTarget =
-          rangeDraft.targetSegmentId === 'new'
-            ? null
-            : getHostSegments().find(segment => Number(segment.id) === Number(rangeDraft.targetSegmentId)) || null
-        if (label) {
-          label.textContent = rangeDraft.active
-            ? `分块中 · ${currentTarget ? String(currentTarget.name) : '新分块'}`
-            : '分块'
-        }
-        if (panel) {
-          panel.hidden = !rangeDraft.active
-        }
-        if (practiceButton) {
-          practiceButton.hidden = !Boolean(window.__memoryAnkiHostState?.showPracticeButton)
-        }
-        if (englishButton) {
-          englishButton.hidden = !Boolean(window.__memoryAnkiHostState?.showEnglishButton)
-        }
-        if (mindmapImportButton) {
-          mindmapImportButton.hidden = !Boolean(window.__memoryAnkiHostState?.showImportButtons)
-        }
-        if (textImportButton) {
-          textImportButton.hidden = !Boolean(window.__memoryAnkiHostState?.showImportButtons)
-        }
-        if (bilinkSearchButton) {
-          bilinkSearchButton.hidden = !Boolean(window.__memoryAnkiHostState?.showBilinkSearchButton)
-        }
-        if (miniPalaceButton) {
-          miniPalaceButton.hidden = !Boolean(window.__memoryAnkiHostState?.showMiniPalaceButton)
-        }
-        if (practiceLabel) {
-          practiceLabel.textContent = window.__memoryAnkiHostState?.practiceToggleLabel || '练习'
-        }
-        if (practiceButton) {
-          const nextPracticeToggleLabel =
-            window.__memoryAnkiHostState?.practiceToggleLabel || '练习'
-          const isEditLabel = nextPracticeToggleLabel === '编辑'
-          practiceButton.classList.toggle('is-practice-label', !isEditLabel)
-          practiceButton.classList.toggle('is-edit-label', isEditLabel)
-        }
-        if (immersiveEditButton) {
-          immersiveEditButton.hidden = false
-        }
-        if (nativeFullscreenButton) {
-          nativeFullscreenButton.hidden = false
-        }
-        if (clearUiButton) {
-          clearUiButton.hidden = false
-        }
-        if (immersiveEditButton) {
-          immersiveEditButton.classList.toggle('is-active', isImmersiveModeActive())
-          immersiveEditButton.setAttribute('title', '半屏编辑')
-          immersiveEditButton.setAttribute('aria-label', '半屏编辑')
-        }
-        if (nativeFullscreenButton) {
-          nativeFullscreenButton.classList.toggle('is-active', Boolean(document.fullscreenElement))
-          nativeFullscreenButton.setAttribute('title', '全屏编辑')
-          nativeFullscreenButton.setAttribute('aria-label', '全屏编辑')
-        }
-        if (clearUiButton) {
-          clearUiButton.classList.toggle('is-active', isUiCleared())
-          clearUiButton.setAttribute('title', '清屏')
-          clearUiButton.setAttribute('aria-label', '清屏')
-        }
-        if (targetSelect) {
-          targetSelect.innerHTML = ''
-          const newOption = document.createElement('option')
-          newOption.value = 'new'
-          newOption.textContent = '新建分块'
-          targetSelect.appendChild(newOption)
-          getHostSegments().forEach(segment => {
-            const option = document.createElement('option')
-            option.value = String(segment.id)
-            option.textContent = String(segment.name || '未命名分块')
-            targetSelect.appendChild(option)
-          })
-          targetSelect.value =
-            rangeDraft.targetSegmentId === 'new' || rangeDraft.targetSegmentId == null
-              ? 'new'
-              : String(rangeDraft.targetSegmentId)
-          if (!targetSelect.dataset.bound) {
-            targetSelect.addEventListener('change', event => {
-              const nextValue = event.target.value
-              notifySegmentRangeMode(true, nextValue === 'new' ? 'new' : Number(nextValue))
-            })
-            targetSelect.dataset.bound = '1'
-          }
-        }
-        if (meta) {
-          meta.textContent = rangeDraft.active
-            ? `已选 ${rangeDraft.selectedNodeUids.length} 个节点`
-            : ''
-        }
-        if (confirmButton && !confirmButton.dataset.bound) {
-          confirmButton.addEventListener('click', () => {
-            getHostBridge()?.notify?.('segment_range_confirm', null)
-          })
-          confirmButton.dataset.bound = '1'
-        }
-        if (cancelButton && !cancelButton.dataset.bound) {
-          cancelButton.addEventListener('click', () => {
-            notifySegmentRangeMode(false, null)
-          })
-          cancelButton.dataset.bound = '1'
-        }
-        segmentState.toolbarReady = true
-        return true
-      }
-
       function isUiCleared() {
         return Boolean(uiChromeState.cleared)
       }
@@ -5618,6 +5367,25 @@
         return button
       }
 
+      function ensureExitFullscreenButton() {
+        let button = document.querySelector('.memory-anki-exit-fullscreen-button')
+        if (!button) {
+          button = document.createElement('button')
+          button.type = 'button'
+          button.className = 'memory-anki-exit-fullscreen-button'
+          button.textContent = '退全屏'
+          button.hidden = true
+          button.addEventListener('click', event => {
+            event.preventDefault()
+            event.stopPropagation()
+            void exitNativeFullscreenIfNeeded()
+          })
+          document.body.appendChild(button)
+        }
+        button.hidden = !Boolean(document.fullscreenElement)
+        return button
+      }
+
       function setUiCleared(nextValue) {
         uiChromeState.cleared = Boolean(nextValue)
         document.body.classList.toggle('memory-anki-ui-cleared', uiChromeState.cleared)
@@ -5625,6 +5393,7 @@
           closeSegmentMenu()
         }
         ensureRestoreUiButton()
+        getHostBridge()?.notify?.('ui_cleared_change', uiChromeState.cleared)
       }
 
       function isImmersiveModeActive() {
@@ -5646,16 +5415,8 @@
             }
           })
         })
-        const host = document.querySelector('.memory-anki-segment-toolbar')
-        if (host) {
-          const immersiveButton = host.querySelector('.memory-anki-immersive-edit-button')
-          const nativeButton = host.querySelector('.memory-anki-native-fullscreen-button')
-          const clearButton = host.querySelector('.memory-anki-clear-ui-button')
-          immersiveButton?.classList.toggle('is-active', isImmersiveModeActive())
-          nativeButton?.classList.toggle('is-active', Boolean(document.fullscreenElement))
-          clearButton?.classList.toggle('is-active', isUiCleared())
-        }
         ensureRestoreUiButton()
+        ensureExitFullscreenButton()
       }
 
       function scheduleMindMapResizeSync() {
@@ -5688,7 +5449,6 @@
           'fullscreenchange',
           () => {
             updateNavigatorFullscreenPresentation()
-            ensureSegmentToolbar()
             scheduleMindMapResizeSync()
           },
           true,
@@ -6008,7 +5768,7 @@
           }
         }
 
-        if (isReadonlyHost()) return
+        if (isReadonlyHost() && !window.__memoryAnkiHostState?.miniPalacePracticeActive) return
 
         const renderer = getRenderer()
         const editableElement = getActiveEditableElement()
@@ -6093,6 +5853,15 @@
           event.preventDefault()
           event.stopPropagation()
           createChildAtActiveNode()
+          return
+        }
+        if (event.key === ' ' || event.code === 'Space') {
+          if (!window.__memoryAnkiHostState?.miniPalacePracticeActive) return
+          if (!interactionState.lastHoveredNodeUid) return
+          markHostInteraction()
+          event.preventDefault()
+          event.stopPropagation()
+          getHostBridge()?.notify?.('mini_palace_pour', null)
           return
         }
         if (event.key === 'Delete' || event.key === 'Backspace') {
@@ -6700,6 +6469,28 @@
         )
       }
 
+      function registerReadonlyHoverListener() {
+        if (window.__memoryAnkiReadonlyHoverRegistered) return
+        window.__memoryAnkiReadonlyHoverRegistered = true
+        document.addEventListener(
+          'pointermove',
+          event => {
+            if (!isReadonlyHost() && !window.__memoryAnkiHostState?.miniPalacePracticeActive) return
+            const node = getNodeByElement(event.target, {
+              event,
+              allowReadonlyFallback: true,
+            })
+            const nodeUid = node ? (getNodeUid(node) || null) : null
+            if (nodeUid === interactionState.lastHoveredNodeUid) return
+            interactionState.lastHoveredNodeUid = nodeUid
+            if (nodeUid) {
+              getHostBridge()?.notify?.('node_hover', [serializeNode(node)])
+            }
+          },
+          true
+        )
+      }
+
       function registerFullscreenListener() {
         if (window.__memoryAnkiFullscreenListenerRegistered) return
         window.__memoryAnkiFullscreenListenerRegistered = true
@@ -6888,13 +6679,9 @@
             : null
         }
         const isReadonly = Boolean(window.__memoryAnkiHostState.readonly)
-        const showToolbarWhenReadonly = Boolean(window.__memoryAnkiHostState.showToolbarWhenReadonly)
         const readonlyHost = isReadonly
         document.body.classList.toggle('is-host-readonly', readonlyHost)
-        document.body.classList.toggle(
-          'is-host-readonly-toolbar-visible',
-          isReadonly && showToolbarWhenReadonly
-        )
+        document.body.classList.remove('is-host-readonly-toolbar-visible')
         document.body.classList.toggle(
           'memory-anki-review-fx-enabled',
           isReadonly && Boolean(window.__memoryAnkiHostState.practiceModeActive)
@@ -6938,9 +6725,7 @@
         ) {
           clearReviewFxState()
         }
-        ensureSegmentToolbar()
         window.setTimeout(() => {
-          ensureSegmentToolbar()
           applyUnifiedMindMapAppearance()
           updateKeyboardFocusClass()
           applyFocusNodeStyles()
@@ -6980,6 +6765,10 @@
       window.emitReviewFx = emitReviewFx
       window.emitFeedbackFx = emitFeedbackFx
       window.clearReviewFx = clearReviewFxState
+      window.setUiCleared = setUiCleared
+      window.toggleUiCleared = () => setUiCleared(!isUiCleared())
+      window.enterNativeFullscreen = enterNativeFullscreen
+      window.exitNativeFullscreen = exitNativeFullscreenIfNeeded
 
       function resetReadonlyInteractionState() {
         clearReviewFxState()
@@ -7614,6 +7403,7 @@
           registerFeedbackInputListeners()
           registerContextMenuListener()
           registerReadonlyClickListener()
+          registerReadonlyHoverListener()
           registerEditableDoubleClickListener()
           registerFullscreenListener()
           registerBilinkListeners()
@@ -7640,7 +7430,6 @@
           syncKeyboardMode()
           applyUnifiedMindMapAppearance()
           updateKeyboardFocusClass()
-          ensureSegmentToolbar()
           applySegmentNodeStyles()
           applyMiniPalaceNodeStyles()
           updateNavigatorFullscreenPresentation()
@@ -7846,7 +7635,6 @@
           markPaperLayoutReflowComplete()
           applyUnifiedMindMapAppearance()
           updateKeyboardFocusClass()
-          ensureSegmentToolbar()
           applySegmentNodeStyles()
           applyMiniPalaceNodeStyles()
           updateNavigatorFullscreenPresentation()

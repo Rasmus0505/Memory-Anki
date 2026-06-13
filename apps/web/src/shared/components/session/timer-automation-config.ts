@@ -28,6 +28,7 @@ export interface TimerAutomationConfig {
   shared: TimerAutomationRule
   palace_edit: TimerAutomationRule
   practice: TimerAutomationRule
+  quiz: TimerAutomationRule
   review: TimerAutomationRule
   english: TimerAutomationRule
   english_reading: TimerAutomationRule
@@ -63,6 +64,12 @@ export const DEFAULT_TIMER_AUTOMATION_CONFIG: TimerAutomationConfig = {
   },
   practice: {
     autoStartOnPageEnter: false,
+    inactiveAutoPauseSeconds: 120,
+    hiddenAutoPauseSeconds: 15,
+    autoPauseRollbackSeconds: 60,
+  },
+  quiz: {
+    autoStartOnPageEnter: true,
     inactiveAutoPauseSeconds: 120,
     hiddenAutoPauseSeconds: 15,
     autoPauseRollbackSeconds: 60,
@@ -153,6 +160,13 @@ export function sanitizeTimerAutomationConfig(value: unknown): TimerAutomationCo
     DEFAULT_TIMER_AUTOMATION_CONFIG.practice,
     legacyAutoStartOnPageEnter,
   )
+  const quiz =
+    raw.quiz === undefined
+      ? {
+          ...practice,
+          autoStartOnPageEnter: DEFAULT_TIMER_AUTOMATION_CONFIG.quiz.autoStartOnPageEnter,
+        }
+      : sanitizeRule(raw.quiz, DEFAULT_TIMER_AUTOMATION_CONFIG.quiz, legacyAutoStartOnPageEnter)
   return {
     mode: raw.mode === 'global' ? 'global' : DEFAULT_TIMER_AUTOMATION_CONFIG.mode,
     actions: sanitizeActivityConfig(raw.actions, DEFAULT_TIMER_AUTOMATION_CONFIG.actions),
@@ -163,6 +177,7 @@ export function sanitizeTimerAutomationConfig(value: unknown): TimerAutomationCo
       legacyAutoStartOnPageEnter,
     ),
     practice,
+    quiz,
     review: sanitizeRule(raw.review, DEFAULT_TIMER_AUTOMATION_CONFIG.review, legacyAutoStartOnPageEnter),
     english:
       raw.english === undefined
@@ -267,6 +282,7 @@ export function shouldAutoStartOnPageEnter(
 export const TIMER_AUTOMATION_SCENE_LABELS: Record<TimerAutomationScene, string> = {
   palace_edit: '宫殿编辑',
   practice: '练习',
+  quiz: '做题',
   review: '复习',
   english: '英语听力',
   english_reading: '英语阅读',

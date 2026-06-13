@@ -129,9 +129,15 @@ export function subscribeEnglishTaskStream(taskId: string, handlers: EnglishTask
   }
 }
 
-export async function uploadEnglishVideoApi(file: File) {
+export async function uploadEnglishVideoApi(
+  file: File,
+  aiOptions?: import('@/shared/api/contracts').AiRuntimeOptions,
+) {
   const formData = new FormData()
   formData.append('video_file', file)
+  if (aiOptions) {
+    formData.append('ai_options', JSON.stringify(aiOptions))
+  }
   return uploadWithFormData<{ task: NonNullable<EnglishWorkspaceResponse['currentTask']> }>(
     '/english/upload',
     formData,

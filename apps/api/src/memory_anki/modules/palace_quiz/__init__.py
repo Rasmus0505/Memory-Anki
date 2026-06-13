@@ -1,0 +1,1 @@
+# Palace quiz module.

@@ -1,138 +1,165 @@
-export type CefrLevel = 'A1' | 'A2' | 'B1' | 'B2' | 'C1' | 'C2'
-export type ReadingGenerationMode = 'initial' | 'regenerate'
-export type ReadingDifficultyDirection = 'easier' | 'same' | 'harder'
-export type ReadingDifficultyDelta = 0.5 | 1 | 1.5 | 2
+export type CefrLevel = "A1" | "A2" | "B1" | "B2" | "C1" | "C2";
+export type ReadingGenerationMode = "initial" | "regenerate";
+export type ReadingDifficultyDirection = "easier" | "same" | "harder";
+export type ReadingDifficultyDelta = 0.5 | 1 | 1.5 | 2;
 
 export interface ReadingProfile {
-  declaredCefr: CefrLevel
-  workingLexicalI: number
-  workingSyntacticI: number
-  xp: number
-  levelProgress: number
-  confidence: number
+  declaredCefr: CefrLevel;
+  workingLexicalI: number;
+  workingSyntacticI: number;
+  xp: number;
+  levelProgress: number;
+  confidence: number;
 }
 
 export interface ReadingWorkspaceStats {
-  totalMaterials: number
-  generatedMaterials: number
-  completedSessions: number
-  todayReadingSeconds: number
-  weeklyReadingSeconds: number
-  totalReadingSeconds: number
+  totalMaterials: number;
+  generatedMaterials: number;
+  completedSessions: number;
+  todayReadingSeconds: number;
+  weeklyReadingSeconds: number;
+  totalReadingSeconds: number;
 }
 
 export interface ReadingMaterial {
-  id: number
-  title: string
-  sourceType: 'paste' | 'txt' | 'md' | 'pdf'
-  originalFilename: string
-  wordCount: number
-  latestVersionId: number | null
-  createdAt: string | null
-  updatedAt: string | null
+  id: number;
+  title: string;
+  sourceType: "paste" | "txt" | "md" | "pdf";
+  originalFilename: string;
+  wordCount: number;
+  latestVersionId: number | null;
+  createdAt: string | null;
+  updatedAt: string | null;
 }
 
 export interface SpanAnnotation {
-  id: string
-  kind: 'green' | 'yellow' | 'red'
-  originalText: string
-  displayText: string
-  sourceCefr: string
-  targetCefr: string
-  explainZh: string
+  id: string;
+  kind: "green" | "yellow" | "red";
+  originalText: string;
+  displayText: string;
+  cefr: string;
+  resolvedLemma: string;
+  resolutionSource: "dictionary" | "ai";
 }
 
 export interface SentenceAnnotation {
-  id: string
-  kind: 'unchanged' | 'syntax_simplified'
-  originalText: string
-  displayText: string
-  skeletonHints: string[]
+  id: string;
+  kind: "unchanged" | "syntax_simplified";
+  originalText: string;
+  displayText: string;
+  skeletonHints: string[];
 }
 
 export interface ReadingRenderSentencePart {
-  text: string
-  spanAnnotationId?: string
+  text: string;
+  spanAnnotationId?: string;
 }
 
 export interface ReadingRenderSentence {
-  id: string
-  parts: ReadingRenderSentencePart[]
-  sentenceAnnotationId: string
-  displayText: string
+  id: string;
+  parts: ReadingRenderSentencePart[];
+  sentenceAnnotationId: string;
+  displayText: string;
 }
 
 export interface ReadingRenderBlock {
-  id: string
-  sentences: ReadingRenderSentence[]
+  id: string;
+  sentences: ReadingRenderSentence[];
 }
 
 export interface ReadingVersionSummary {
-  wordCount: number
-  comfortCount: number
-  growthCount: number
-  greenCount: number
-  yellowCount: number
-  redCount: number
-  sentenceSimplifiedCount: number
-  workingLexicalI: number
-  workingSyntacticI: number
-  targetLexicalI: number
-  targetSyntacticI: number
-  targetCefr: CefrLevel
+  wordCount: number;
+  comfortCount: number;
+  growthCount: number;
+  greenCount: number;
+  yellowCount: number;
+  redCount: number;
+  sentenceSimplifiedCount: number;
+  workingLexicalI: number;
+  workingSyntacticI: number;
+  targetLexicalI: number;
+  targetSyntacticI: number;
+  targetCefr: CefrLevel;
 }
 
 export interface ReadingVersion {
-  id: number
-  materialId: number
-  declaredCefr: CefrLevel
-  workingLexicalI: number
-  workingSyntacticI: number
-  targetCefr: CefrLevel
-  targetLexicalI: number
-  targetSyntacticI: number
-  renderBlocks: ReadingRenderBlock[]
-  spanAnnotations: SpanAnnotation[]
-  sentenceAnnotations: SentenceAnnotation[]
-  summary: ReadingVersionSummary
-  createdAt: string | null
+  id: number;
+  materialId: number;
+  declaredCefr: CefrLevel;
+  workingLexicalI: number;
+  workingSyntacticI: number;
+  targetCefr: CefrLevel;
+  targetLexicalI: number;
+  targetSyntacticI: number;
+  renderBlocks: ReadingRenderBlock[];
+  spanAnnotations: SpanAnnotation[];
+  sentenceAnnotations: SentenceAnnotation[];
+  summary: ReadingVersionSummary;
+  createdAt: string | null;
+}
+
+export interface ReadingDictionarySense {
+  partOfSpeech: string;
+  definitionZh: string | null;
+  definition: string;
+  exampleZh?: string | null;
+  example: string | null;
+}
+
+export interface ReadingDictionaryEntry {
+  word: string;
+  lemma: string;
+  phoneticUs: string;
+  audioUsUrl: string | null;
+  summaryZh: string[];
+  partsOfSpeech: string[];
+  senses: ReadingDictionarySense[];
+  source: string;
+  cachedAt: string | null;
+}
+
+export interface ReadingSentenceTranslationResponse {
+  originalText: string;
+  translatedText: string;
 }
 
 export interface ReadingSessionResult {
-  id: number
-  materialId: number
-  versionId: number | null
-  feedback: 'too_easy' | 'just_right' | 'too_hard'
-  durationSeconds: number
-  wordsPerMinute: number
-  hoverCount: number
-  expandCount: number
-  xpAwarded: number
+  id: number;
+  materialId: number;
+  versionId: number | null;
+  feedback: "too_easy" | "just_right" | "too_hard";
+  durationSeconds: number;
+  wordsPerMinute: number;
+  hoverCount: number;
+  expandCount: number;
+  xpAwarded: number;
   calibration: {
-    feedback: string
-    lexicalDelta: number
-    syntacticDelta: number
-    confidenceDelta: number
-    leveledUp: boolean
-    nextDeclaredCefr: CefrLevel
-  }
-  completedAt: string | null
+    feedback: string;
+    lexicalDelta: number;
+    syntacticDelta: number;
+    confidenceDelta: number;
+    leveledUp: boolean;
+    nextDeclaredCefr: CefrLevel;
+  };
+  completedAt: string | null;
 }
 
 export interface ReadingCompletionResponse {
-  material: ReadingMaterial
-  profile: ReadingProfile
-  session: ReadingSessionResult
+  material: ReadingMaterial;
+  profile: ReadingProfile;
+  session: ReadingSessionResult;
 }
 
 export interface ReadingWorkspaceResponse {
-  profile: ReadingProfile
-  stats: ReadingWorkspaceStats
-  recentMaterials: ReadingMaterial[]
+  profile: ReadingProfile;
+  stats: ReadingWorkspaceStats;
+  recentMaterials: ReadingMaterial[];
 }
 
 export interface ReadingGenerateRequest {
-  mode: ReadingGenerationMode
-  difficultyDirection?: ReadingDifficultyDirection
-  difficultyDelta?: ReadingDifficultyDelta
+  mode: ReadingGenerationMode;
+  difficultyDirection?: ReadingDifficultyDirection;
+  difficultyDelta?: ReadingDifficultyDelta;
+  ai_options?: AiRuntimeOptions;
 }
+import type { AiRuntimeOptions } from './profile';

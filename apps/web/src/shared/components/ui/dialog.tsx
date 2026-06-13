@@ -1,4 +1,4 @@
-import { type HTMLAttributes, type PropsWithChildren, useEffect } from 'react'
+import { forwardRef, type HTMLAttributes, type PropsWithChildren, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
 
@@ -43,20 +43,19 @@ export function Dialog({ open, onOpenChange, children, modal = true, className =
   )
 }
 
-export function DialogContent({
-  children,
-  className = '',
-  ...props
-}: PropsWithChildren<HTMLAttributes<HTMLDivElement>>) {
-  return (
-    <div
-      {...props}
-      className={`pointer-events-auto relative z-10 flex w-full max-w-3xl flex-col rounded-2xl border bg-background shadow-2xl ${className}`}
-    >
-      {children}
-    </div>
-  )
-}
+export const DialogContent = forwardRef<HTMLDivElement, PropsWithChildren<HTMLAttributes<HTMLDivElement>>>(
+  function DialogContent({ children, className = '', ...props }, ref) {
+    return (
+      <div
+        ref={ref}
+        {...props}
+        className={`pointer-events-auto relative z-10 flex w-full max-w-3xl flex-col rounded-2xl border bg-background shadow-2xl ${className}`}
+      >
+        {children}
+      </div>
+    )
+  },
+)
 
 export function DialogHeader({ children }: PropsWithChildren) {
   return (
@@ -66,16 +65,40 @@ export function DialogHeader({ children }: PropsWithChildren) {
   )
 }
 
-export function DialogTitle({ children }: PropsWithChildren) {
-  return <h2 className="text-lg font-semibold">{children}</h2>
+export function DialogTitle({ children, className = '' }: PropsWithChildren<{ className?: string }>) {
+  return <h2 className={`text-lg font-semibold ${className}`}>{children}</h2>
 }
 
-export function DialogClose({ onClick }: { onClick?: () => void }) {
+export function DialogDescription({
+  children,
+  className = '',
+}: PropsWithChildren<{ className?: string }>) {
+  return <p className={`text-sm text-muted-foreground ${className}`}>{children}</p>
+}
+
+export function DialogFooter({
+  children,
+  className = '',
+}: PropsWithChildren<{ className?: string }>) {
+  return (
+    <div className={`flex items-center justify-end gap-3 border-t px-6 py-4 ${className}`}>
+      {children}
+    </div>
+  )
+}
+
+export function DialogClose({
+  onClick,
+  className = '',
+}: {
+  onClick?: () => void
+  className?: string
+}) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className="rounded-md p-2 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+      className={`rounded-md p-2 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground ${className}`}
       aria-label="关闭"
     >
       <X className="h-4 w-4" />

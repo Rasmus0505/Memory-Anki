@@ -28,6 +28,7 @@ export interface EnglishPracticeSettings {
   shortcuts: EnglishPracticeShortcutMap
   sound: {
     enabled: boolean
+    masterVolume: number
   }
   flow: {
     autoAdvanceOnPass: boolean
@@ -101,6 +102,7 @@ export const DEFAULT_ENGLISH_PRACTICE_SETTINGS: EnglishPracticeSettings = {
   shortcuts: DEFAULT_SHORTCUTS,
   sound: {
     enabled: true,
+    masterVolume: 0.5,
   },
   flow: {
     autoAdvanceOnPass: true,
@@ -281,6 +283,13 @@ function sanitizeBoolean(value: unknown, fallback: boolean) {
   return fallback
 }
 
+function sanitizeNumber(value: unknown, fallback: number, min: number, max: number) {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return Math.min(max, Math.max(min, value))
+  }
+  return fallback
+}
+
 export function sanitizeEnglishPracticeSettings(value: unknown): EnglishPracticeSettings {
   const raw = value && typeof value === 'object' ? (value as Record<string, unknown>) : {}
   const rawSound = raw.sound && typeof raw.sound === 'object' ? (raw.sound as Record<string, unknown>) : {}
@@ -290,6 +299,12 @@ export function sanitizeEnglishPracticeSettings(value: unknown): EnglishPractice
     shortcuts: sanitizeShortcutMap(raw.shortcuts),
     sound: {
       enabled: sanitizeBoolean(rawSound.enabled, DEFAULT_ENGLISH_PRACTICE_SETTINGS.sound.enabled),
+      masterVolume: sanitizeNumber(
+        rawSound.masterVolume,
+        DEFAULT_ENGLISH_PRACTICE_SETTINGS.sound.masterVolume,
+        0,
+        1,
+      ),
     },
     flow: {
       autoAdvanceOnPass: sanitizeBoolean(

@@ -1,5 +1,5 @@
 ﻿import * as React from 'react'
-import { Play, Plus, Save, Trash2, X } from 'lucide-react'
+import { Play, Plus, Save, Trash2, X, Pencil } from 'lucide-react'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
 import { Dialog, DialogClose, DialogContent, DialogHeader, DialogTitle } from '@/shared/components/ui/dialog'
@@ -93,6 +93,16 @@ export function MiniPalacePanel({ controller, className, onEditSave, onEditCance
                     <Button
                       type="button"
                       size="sm"
+                      variant="outline"
+                      disabled={controller.saving}
+                      onClick={() => controller.startEdit(item)}
+                    >
+                      <Pencil className="mr-2 h-4 w-4" />
+                      编辑
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
                       disabled={controller.saving || item.is_empty}
                       onClick={() => controller.startPractice(item)}
                     >
@@ -163,7 +173,7 @@ export function MiniPalacePanel({ controller, className, onEditSave, onEditCance
                     }
                   }}
                 >
-                  确认新建小宫殿
+                  {controller.activeMiniPalace ? '保存小宫殿' : '确认新建小宫殿'}
                 </Button>
               </div>
             </div>

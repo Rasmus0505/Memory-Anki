@@ -18,6 +18,7 @@ def create_image_job(
     image_bytes: bytes,
     filename: str | None,
     fallback_title: str,
+    ai_runtime: dict[str, object] | None,
     import_jobs_dir: Path,
     max_image_bytes: int,
     import_error_cls: type[Exception],
@@ -34,6 +35,7 @@ def create_image_job(
         "fallback_title": str(fallback_title or "未命名宫殿"),
         "filename": filename or "image.png",
         "image_sha256": job_creation_support.hash_bytes(image_bytes),
+        "ai_runtime": dict(ai_runtime or {}),
     }
     job, created = _create_draft_job_record(
         session,
@@ -60,6 +62,7 @@ def create_batch_job(
     normalized_items: list[tuple[bytes, str | None]],
     resolved_structure_index: int | None,
     fallback_title: str,
+    ai_runtime: dict[str, object] | None,
     import_jobs_dir: Path,
     import_error_cls: type[Exception],
 ) -> MindMapImportJob:
@@ -67,6 +70,7 @@ def create_batch_job(
     source_meta = {
         "fallback_title": str(fallback_title or "未命名宫殿"),
         "structure_image_index": resolved_structure_index,
+        "ai_runtime": dict(ai_runtime or {}),
         "images": [
             {
                 "filename": filename or f"image-{index + 1}.png",
@@ -106,6 +110,7 @@ def create_pdf_job(
     range_prompt: str,
     fallback_title: str,
     resolved_options,
+    ai_runtime: dict[str, object] | None,
     import_jobs_dir: Path,
     import_error_cls: type[Exception],
 ) -> MindMapImportJob:
@@ -123,6 +128,7 @@ def create_pdf_job(
         "structure_page": resolved_structure_page,
         "range_prompt": str(range_prompt or ""),
         "fallback_title": str(fallback_title or document.original_name or "未命名宫殿"),
+        "ai_runtime": dict(ai_runtime or {}),
         "import_options": {
             "quote_original_text_only": bool(resolved_options.quote_original_text_only),
             "mount_on_original_leaf_only": bool(resolved_options.mount_on_original_leaf_only),

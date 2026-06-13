@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import DashboardPage from '@/app/router/DashboardPage'
 import { buildDashboardResponse } from '@/app/router/DashboardPage.test-utils'
@@ -11,59 +11,71 @@ vi.mock('react-router-dom', () => ({
 
 const getDashboardApi = vi.fn()
 
+const timeRecordsDashboardMock = {
+  thresholdInput: '0',
+  setThresholdInput: vi.fn(),
+  showBelowThreshold: false,
+  setShowBelowThreshold: vi.fn(),
+  showDeleted: false,
+  setShowDeleted: vi.fn(),
+  kindFilter: 'all' as const,
+  setKindFilter: vi.fn(),
+  keyword: '',
+  setKeyword: vi.fn(),
+  selectedRecordIds: [],
+  dialogMode: 'create' as const,
+  dialogOpen: false,
+  formState: {},
+  formError: null,
+  isSubmittingRecord: false,
+  deletingRecordId: null,
+  restoringRecordId: null,
+  isBulkDeleting: false,
+  summary: {},
+  trend: [],
+  breakdown: [],
+  getTrendForRange: vi.fn((range: 7 | 30 | 90 | 'all') => [
+    { dateKey: `trend-${range}`, label: `trend-${range}`, seconds: 1 },
+  ]),
+  getBreakdownForRange: vi.fn((range: 7 | 30 | 90 | 'all') => [
+    { kind: 'review', label: `breakdown-${range}`, seconds: 1, sessions: 1 },
+  ]),
+  visibleRecords: [],
+  hasSelectableRecords: false,
+  allSelectableChecked: false,
+  hasSelectedRecords: false,
+  refreshRecords: vi.fn(),
+  applyThreshold: vi.fn(),
+  openCreateDialog: vi.fn(),
+  openEditDialog: vi.fn(),
+  handleDeleteRecord: vi.fn(),
+  handleRestoreRecord: vi.fn(),
+  toggleRecordSelection: vi.fn(),
+  toggleSelectAllVisible: vi.fn(),
+  handleBulkDelete: vi.fn(),
+  onDialogOpenChange: vi.fn(),
+  onFormChange: vi.fn(),
+  handleSubmitRecord: vi.fn(),
+}
+
 vi.mock('@/shared/api/modules/dashboard', () => ({
   getDashboardApi: async (...args: unknown[]) => buildDashboardResponse(await getDashboardApi(...args)),
 }))
 
 vi.mock('@/features/profile/hooks/useTimeRecordsDashboard', () => ({
-  useTimeRecordsDashboard: () => ({
-    thresholdInput: '0',
-    setThresholdInput: vi.fn(),
-    showBelowThreshold: false,
-    setShowBelowThreshold: vi.fn(),
-    showDeleted: false,
-    setShowDeleted: vi.fn(),
-    kindFilter: 'all',
-    setKindFilter: vi.fn(),
-    keyword: '',
-    setKeyword: vi.fn(),
-    selectedRecordIds: [],
-    dialogMode: 'create',
-    dialogOpen: false,
-    formState: {},
-    formError: null,
-    isSubmittingRecord: false,
-    deletingRecordId: null,
-    restoringRecordId: null,
-    isBulkDeleting: false,
-    summary: {},
-    trend: [],
-    breakdown: [],
-    visibleRecords: [],
-    hasSelectableRecords: false,
-    allSelectableChecked: false,
-    hasSelectedRecords: false,
-    refreshRecords: vi.fn(),
-    applyThreshold: vi.fn(),
-    openCreateDialog: vi.fn(),
-    openEditDialog: vi.fn(),
-    handleDeleteRecord: vi.fn(),
-    handleRestoreRecord: vi.fn(),
-    toggleRecordSelection: vi.fn(),
-    toggleSelectAllVisible: vi.fn(),
-    handleBulkDelete: vi.fn(),
-    onDialogOpenChange: vi.fn(),
-    onFormChange: vi.fn(),
-    handleSubmitRecord: vi.fn(),
-  }),
+  useTimeRecordsDashboard: () => timeRecordsDashboardMock,
 }))
 
 vi.mock('@/features/profile/components/TimeRecordsTrendChart', () => ({
-  TimeRecordsTrendChart: () => <div data-testid="trend-chart" />,
+  TimeRecordsTrendChart: ({ trend }: { trend: Array<{ label: string }> }) => (
+    <div data-testid="trend-chart">{trend[0]?.label ?? ''}</div>
+  ),
 }))
 
 vi.mock('@/features/profile/components/TimeRecordsBreakdownChart', () => ({
-  TimeRecordsBreakdownChart: () => <div data-testid="breakdown-chart" />,
+  TimeRecordsBreakdownChart: ({ breakdown }: { breakdown: Array<{ label: string }> }) => (
+    <div data-testid="breakdown-chart">{breakdown[0]?.label ?? ''}</div>
+  ),
 }))
 
 vi.mock('@/features/profile/components/TimeRecordsTable', () => ({
@@ -79,6 +91,7 @@ describe('DashboardPage', () => {
     getDashboardApi.mockReset()
     resetClientPreferenceCacheForTest()
     window.localStorage.clear()
+    vi.clearAllMocks()
   })
 
   it('renders learning breakdown and today new palace hierarchy', async () => {
@@ -208,7 +221,9 @@ describe('DashboardPage', () => {
     render(<DashboardPage />)
 
     const progressBar = await screen.findByRole('img', { name: '第四节 梁漱溟的乡村教育建设 学习时长结构' })
-    fireEvent.mouseEnter(progressBar)
+    act(() => {
+      fireEvent.mouseEnter(progressBar)
+    })
 
     expect(screen.getByText('总时长：30分 0秒')).toBeTruthy()
     expect(screen.getByText('宫殿编辑：15分 0秒')).toBeTruthy()
@@ -444,7 +459,7 @@ describe('DashboardPage', () => {
         duration_mode: 'all',
       })
     })
-    expect(screen.getByText('全部')).toBeTruthy()
+    expect(screen.getByRole('button', { name: '显示全部' })).toBeTruthy()
     expect(screen.queryByLabelText('选择月份')).toBeNull()
     expect(screen.queryByLabelText('开始日期')).toBeNull()
     expect(screen.queryByLabelText('结束日期')).toBeNull()
@@ -637,7 +652,7 @@ describe('DashboardPage', () => {
       })
     })
     expect(await screen.findByText('2小时 40分')).toBeTruthy()
-    expect(screen.getByText('全部')).toBeTruthy()
+    expect(screen.getByRole('button', { name: '显示全部' })).toBeTruthy()
     expect(screen.queryByLabelText('选择月份')).toBeNull()
     expect(screen.queryByLabelText('开始日期')).toBeNull()
     expect(screen.queryByLabelText('结束日期')).toBeNull()
@@ -710,5 +725,80 @@ describe('DashboardPage', () => {
 
     expect(screen.getByText('开始日期不能晚于结束日期。')).toBeTruthy()
     expect(getDashboardApi).toHaveBeenCalledTimes(1)
+  })
+
+  it('restores independent chart ranges from persisted client preferences', async () => {
+    window.localStorage.setItem(
+      'memory_anki_dashboard_total_duration_filter',
+      JSON.stringify({
+        mode: 'month',
+        month: '2026-06',
+        startDate: '',
+        endDate: '',
+        trendRangeDays: 'all',
+        breakdownRangeDays: 90,
+      }),
+    )
+
+    getDashboardApi.mockResolvedValue({
+      due_count: 0,
+      reviews: [],
+      stats: { total: 0, review_count: 0, review_duration_seconds: 0 },
+      today_review_duration_seconds: 0,
+      weekly_review_duration_seconds: 0,
+      today_total_review_duration_seconds: 1200,
+      monthly_total_review_duration_seconds: 7200,
+      selected_total_review_duration_seconds: 7200,
+      weekly_total_review_duration_seconds: 3600,
+      weekly_formal_review_duration_seconds: 1800,
+      recent_palaces: [],
+      today_learning_palaces: [],
+      today_new_palace_count: 0,
+      today_new_palaces: [],
+    })
+
+    render(<DashboardPage />)
+
+    expect(await screen.findByText('全部趋势')).toBeTruthy()
+    expect(screen.getByTestId('trend-chart').textContent).toBe('trend-all')
+    expect(screen.getByTestId('breakdown-chart').textContent).toBe('breakdown-90')
+  })
+
+  it('switches chart ranges independently inside each card', async () => {
+    getDashboardApi.mockResolvedValue({
+      due_count: 0,
+      reviews: [],
+      stats: { total: 0, review_count: 0, review_duration_seconds: 0 },
+      today_review_duration_seconds: 0,
+      weekly_review_duration_seconds: 0,
+      today_total_review_duration_seconds: 1200,
+      monthly_total_review_duration_seconds: 7200,
+      selected_total_review_duration_seconds: 7200,
+      weekly_total_review_duration_seconds: 3600,
+      weekly_formal_review_duration_seconds: 1800,
+      recent_palaces: [],
+      today_learning_palaces: [],
+      today_new_palace_count: 0,
+      today_new_palaces: [],
+    })
+
+    render(<DashboardPage />)
+
+    expect((await screen.findByTestId('trend-chart')).textContent).toBe('trend-7')
+    expect(screen.getByTestId('breakdown-chart').textContent).toBe('breakdown-7')
+
+    act(() => {
+      fireEvent.click(screen.getAllByRole('button', { name: '30 天' })[0])
+    })
+
+    expect(screen.getByTestId('trend-chart').textContent).toBe('trend-30')
+    expect(screen.getByTestId('breakdown-chart').textContent).toBe('breakdown-7')
+
+    act(() => {
+      fireEvent.click(screen.getAllByRole('button', { name: '90 天' })[1])
+    })
+
+    expect(screen.getByTestId('trend-chart').textContent).toBe('trend-30')
+    expect(screen.getByTestId('breakdown-chart').textContent).toBe('breakdown-90')
   })
 })

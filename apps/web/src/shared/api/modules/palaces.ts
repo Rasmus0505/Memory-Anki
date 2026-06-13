@@ -17,6 +17,7 @@ import type {
   PalaceFocusSessionResponse,
   PalaceGroupedListResponse,
   PalaceListItem,
+  MiniReviewMode,
   PalaceReviewPlanResponse,
   PalaceSubjectShelfResponse,
   PalaceSegmentSummary,
@@ -619,6 +620,24 @@ export function updatePalacePracticeFlagApi(
   })
 }
 
+export function updatePalaceMiniReviewModeApi(
+  palaceId: number,
+  data: {
+    mini_review_mode: MiniReviewMode
+  },
+) {
+  return request<{ item: PalaceListItem }>(`/palaces/${palaceId}/mini-review-mode`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+    persistence: {
+      resourceKey: `palace:${palaceId}:mini-review-mode`,
+      coalesceKey: `palace:${palaceId}:mini-review-mode`,
+      description: '保存小宫殿复习归属',
+      replayMode: 'auto',
+    },
+  })
+}
+
 export function deletePalaceSegmentApi(segmentId: number) {
   return request<{ ok: boolean }>(`/palace-segments/${segmentId}`, {
     method: "DELETE",
@@ -900,6 +919,7 @@ export async function createImageImportJobApi(
     entityKey: string
     mode: 'mindmap' | 'text'
     fallbackTitle?: string
+    ai_options?: import('@/shared/api/contracts').AiRuntimeOptions
   },
 ) {
   const form = new FormData()
@@ -907,6 +927,9 @@ export async function createImageImportJobApi(
   form.append('mode', options.mode)
   if (options.fallbackTitle) {
     form.append('fallback_title', options.fallbackTitle)
+  }
+  if (options.ai_options) {
+    form.append('ai_options', JSON.stringify(options.ai_options))
   }
   form.append('file', file)
   const response = await fetchWithMutationQueue(
@@ -930,6 +953,7 @@ export async function createBatchImportJobApi(
     entityKey: string
     fallbackTitle?: string
     structureImageIndex?: number
+    ai_options?: import('@/shared/api/contracts').AiRuntimeOptions
   },
 ) {
   const form = new FormData()
@@ -939,6 +963,9 @@ export async function createBatchImportJobApi(
   }
   if (typeof options.structureImageIndex === 'number') {
     form.append('structure_image_index', String(options.structureImageIndex))
+  }
+  if (options.ai_options) {
+    form.append('ai_options', JSON.stringify(options.ai_options))
   }
   files.forEach((file) => form.append('files', file))
   const response = await fetchWithMutationQueue(

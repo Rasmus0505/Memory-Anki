@@ -40,8 +40,10 @@ class DashscopeImportRuntime:
     api_key: str
     base_url: str
     model: str
+    provider: str = "dashscope"
     temperature: float = 0.1
     timeout_seconds: float = 90.0
+    extra_payload: dict[str, Any] | None = None
 
 
 def ensure_dashscope_image_ready(
@@ -431,7 +433,7 @@ def iter_dashscope_with_images_stream(
     log_id = begin_external_ai_call_log(
         feature=str(log_context.get("feature") or "外部 AI 调用"),
         operation=str(log_context.get("operation") or "vision_chat_completion"),
-        provider=str(log_context.get("provider") or "dashscope"),
+        provider=str(log_context.get("provider") or runtime.provider),
         base_url=runtime.base_url,
         model=runtime.model,
         job_id=str(log_context.get("job_id") or "") or None,
@@ -465,6 +467,7 @@ def iter_dashscope_with_images_stream(
                 }
             ],
             response_format=response_format,
+            extra_payload=runtime.extra_payload,
         )
         complete_external_ai_call_log(
             log_id,

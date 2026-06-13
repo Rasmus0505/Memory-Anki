@@ -299,6 +299,49 @@ class ReviewRouteTests(unittest.TestCase):
             self.assertEqual(records[0].effective_seconds, 120)
             self.assertEqual(records[0].title, "Test Palace")
 
+    def test_palace_list_exposes_incomplete_segment_review_progress(self):
+        with self.SessionLocal() as session:
+            segment = PalaceSegment(
+                palace_id=1,
+                name="第 1 部分",
+                color="#14b8a6",
+                node_uids_json=json.dumps(["branch-a", "branch-b"]),
+                sort_order=0,
+            )
+            session.add(segment)
+            session.flush()
+            schedule = PalaceSegmentReviewSchedule(
+                palace_segment_id=segment.id,
+                scheduled_date=date.today(),
+                interval_days=1,
+                algorithm_used="ebbinghaus",
+                completed=False,
+                review_number=0,
+                review_type="standard",
+            )
+            session.add(schedule)
+            session.commit()
+            schedule_id = schedule.id
+
+        save_response = self.client.put(
+            f"/api/v1/segment-review/session/{schedule_id}/progress",
+            json={
+                "reveal_map": {
+                    "branch-a": "revealed",
+                    "branch-b": "hidden",
+                },
+                "red_node_ids": [],
+                "completed": False,
+            },
+        )
+        self.assertEqual(save_response.status_code, 200)
+
+        response = self.client.get("/api/v1/palaces")
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()[0]
+        self.assertEqual(len(payload["segments"]), 1)
+        self.assertAlmostEqual(payload["segments"][0]["active_review_progress"], 0.5)
+
     def test_submit_review_reuses_response_for_duplicate_mutation_id(self):
         headers = {"X-Memory-Anki-Mutation-ID": "review-submit-mutation-1"}
         first = self.client.post(
@@ -1133,7 +1176,7 @@ class ReviewRouteTests(unittest.TestCase):
                             id="practice-dashboard",
                             kind="practice",
                             palace_id=palace.id,
-                            title="Test Palace",
+                            title="Test Palace / 小宫殿 A",
                             started_at=now - timedelta(seconds=180),
                             ended_at=now,
                             effective_seconds=180,

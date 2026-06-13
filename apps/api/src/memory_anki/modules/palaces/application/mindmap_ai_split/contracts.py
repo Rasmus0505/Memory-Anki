@@ -51,10 +51,13 @@ class MindMapAiSplitConfig:
     api_key: str
     base_url: str
     model: str
+    provider: str
     temperature: float
     max_children: int
     include_note: bool
     custom_instruction: str
+    extra_payload: dict[str, Any] | None
+    supports_temperature: bool
 
 
 @dataclass

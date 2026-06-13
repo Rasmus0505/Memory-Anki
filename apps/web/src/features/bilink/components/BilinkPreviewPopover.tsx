@@ -129,7 +129,6 @@ export function BilinkPreviewPopover({
                   key={`bilink-preview-${context.palace_id}-${context.node_uid ?? 'palace'}-${highlightQuery?.trim() || 'plain'}`}
                   editorState={previewEditorState}
                   readonly
-                  showToolbarWhenReadonly
                   onEditorStateChange={() => {}}
                   className="h-[min(68vh,760px)] w-full rounded-2xl border border-border/70 bg-white"
                 />

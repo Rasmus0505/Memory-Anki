@@ -30,7 +30,7 @@ import { SessionTimerBar } from '@/shared/components/session/SessionTimerBar'
 import {
   useReviewFlowSession,
 } from '@/features/review/hooks/useReviewFlowSession'
-import type { ReviewFlowSnapshot } from '@/features/review/model/review-flow-tree'
+import type { RevealFlowMode, ReviewFlowSnapshot } from '@/features/review/model/review-flow-tree'
 import type { MindMapSelection } from '@/shared/components/mindmap-host'
 import { useMemoryAnkiShortcuts } from '@/features/shortcuts/memoryAnkiShortcuts'
 import {
@@ -41,8 +41,11 @@ import {
   MiniPalacePanel,
   useMiniPalaceController,
 } from '@/features/mini-palace'
+import { appendTimeRecord } from '@/entities/session/model'
 
 export type { ReviewFlowSnapshot } from '@/features/review/model/review-flow-tree'
+
+const EMPTY_CHECKPOINT_NODE_UIDS: string[] = []
 
 interface CompleteFlowPayload {
   durationSeconds: number
@@ -55,6 +58,8 @@ interface MindMapReviewFlowProps {
   title: string
   palaceId: number | null
   sessionKind: 'practice' | 'review'
+  revealMode?: RevealFlowMode
+  checkpointNodeUids?: string[]
   displayMode?: 'review' | 'edit'
   modeSyncVersion?: number
   viewMemoryScope?: string | null
@@ -212,6 +217,8 @@ export function MindMapReviewFlow({
   title,
   palaceId,
   sessionKind,
+  revealMode = 'standard',
+  checkpointNodeUids = EMPTY_CHECKPOINT_NODE_UIDS,
   displayMode = 'review',
   modeSyncVersion = 0,
   viewMemoryScope = null,
@@ -239,14 +246,20 @@ export function MindMapReviewFlow({
   const [feedbackDialogOpen, setFeedbackDialogOpen] = React.useState(false)
   const [voiceCoachDialogOpen, setVoiceCoachDialogOpen] = React.useState(false)
   const [completionDialogOpen, setCompletionDialogOpen] = React.useState(false)
+  const [savingIncomplete, setSavingIncomplete] = React.useState(false)
   const [activeNodes, setActiveNodes] = React.useState<MindMapSelection[]>([])
   const [focusNodeUids, setFocusNodeUids] = React.useState<string[]>(() =>
     initialFocusNodeUids.map((uid) => String(uid)).filter(Boolean),
   )
+  const selectedNode = activeNodes[0] ?? null
+  const selectedNodeUid = selectedNode?.uid ? String(selectedNode.uid) : null
+  const selectedNodeText = selectedNode?.text ? String(selectedNode.text) : ''
   const flow = useReviewFlowSession({
     title,
     palaceId,
     sessionKind,
+    revealMode,
+    checkpointNodeUids,
     persistKey,
     editorState: reviewEditorState,
     onComplete,
@@ -266,6 +279,8 @@ export function MindMapReviewFlow({
     palaceId,
     title,
     editorState: miniPalaceSourceEditorState,
+    selectedNodeUid,
+    selectedNodeText,
     timer: flow.timer,
   })
   const voiceCoach = useVoiceCoachController({
@@ -285,6 +300,7 @@ export function MindMapReviewFlow({
   const resolvedDisplayMode =
     inlineEditEnabled && displayMode === 'edit' ? 'edit' : 'review'
   const isInlineEditMode = resolvedDisplayMode === 'edit'
+  const isDedicatedMiniMode = revealMode === 'mini-checkpoint'
   const previousDisplayModeRef = React.useRef(resolvedDisplayMode)
   const mapDisplayMode = miniPalace.isActive ? 'review' : resolvedDisplayMode
   const mapEditorState =
@@ -363,10 +379,11 @@ export function MindMapReviewFlow({
 
   const handleShortcutHideChildCards = React.useCallback(() => {
     if (isInlineEditMode) return
+    if (miniPalace.isPracticing) return
     const node = activeNodes[0]
     if (!node?.uid) return
     flow.handleNodeContextMenu([node])
-  }, [activeNodes, flow, isInlineEditMode])
+  }, [activeNodes, flow, isInlineEditMode, miniPalace.isPracticing])
 
   const shortcutHandlers = React.useMemo(
     () => ({
@@ -382,6 +399,29 @@ export function MindMapReviewFlow({
     true,
   )
 
+  const handleSpacePourRef = React.useRef(miniPalace.handleSpacePour)
+  handleSpacePourRef.current = miniPalace.isPracticing
+    ? miniPalace.handleSpacePour
+    : flow.handleSpacePour
+
+  // Fallback: primary space handling is in mind-map-host.html (iframe) which sends node_click to React.
+  // This listener only fires when the top window has focus (rare during practice mode).
+  React.useEffect(() => {
+    if (!miniPalace.isPracticing && !isDedicatedMiniMode) return
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented) return
+      if (event.key === ' ' || event.code === 'Space') {
+        const target = event.target as HTMLElement | null
+        if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) return
+        event.preventDefault()
+        event.stopPropagation()
+        handleSpacePourRef.current()
+      }
+    }
+    window.addEventListener('keydown', onKeyDown, true)
+    return () => window.removeEventListener('keydown', onKeyDown, true)
+  }, [flow.handleSpacePour, isDedicatedMiniMode, miniPalace.isPracticing])
+
   const handleFullscreenToggle = React.useCallback((active?: boolean) => {
     if (typeof active === 'boolean') {
       flow.setFullscreen(active)
@@ -389,6 +429,28 @@ export function MindMapReviewFlow({
     }
     flow.setFullscreen((current: boolean) => !current)
   }, [flow])
+
+  const handleMarkUncompleted = React.useCallback(async () => {
+    if (savingIncomplete) return
+    setCompletionDialogOpen(false)
+    setSavingIncomplete(true)
+    try {
+      flow.timer.registerActivity('practice_interaction', { source: 'complete_unfinished' })
+      const record = await flow.timer.complete('saved', {
+        revealed_remaining: false,
+        red_marked_count: flow.redNodeCount,
+      })
+      if (record && sessionKind === 'review') {
+        await appendTimeRecord(record)
+      }
+      toast.success('已保存进度和本段时长，下次可继续')
+    } catch {
+      toast.error('进度已保留，但本段时长保存失败，请稍后重试')
+    } finally {
+      flow.timer.reset()
+      setSavingIncomplete(false)
+    }
+  }, [flow.redNodeCount, flow.timer, savingIncomplete, sessionKind])
 
   const progressToneClassName =
     flow.feedback.progressTone === 'all-clear'
@@ -420,6 +482,7 @@ export function MindMapReviewFlow({
           <SessionTimerBar
             effectiveSeconds={flow.timer.effectiveSeconds}
             idleSeconds={flow.timer.idleSeconds}
+            automationScene={sessionKind === 'review' ? 'review' : 'practice'}
             pauseCount={flow.timer.pauseCount}
             status={flow.timer.status}
             onStart={() => flow.timer.start({ source: 'manual' })}
@@ -455,31 +518,8 @@ export function MindMapReviewFlow({
                   <CardTitle className="text-base">
                     {sessionKind === 'practice' ? '练习脑图' : '复习脑图'}
                   </CardTitle>
-                  {inlineEditEnabled && !miniPalace.isActive ? (
-                    <>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant={displayMode === 'edit' ? 'secondary' : 'outline'}
-                        onClick={() => void onModeToggle!()}
-                      >
-                        {displayMode === 'edit' ? '编辑中' : '编辑'}
-                      </Button>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant={displayMode === 'review' ? 'secondary' : 'outline'}
-                        onClick={() => void onModeToggle!()}
-                      >
-                        {displayMode === 'review' ? '练习/复习中' : '练习/复习'}
-                      </Button>
-                    </>
-                  ) : null}
                   {!inlineEditEnabled && !isInlineEditMode ? (
                     <Badge variant="secondary">翻卡模式</Badge>
-                  ) : null}
-                  {!inlineEditEnabled && isInlineEditMode ? (
-                    <Badge variant="secondary">正式编辑</Badge>
                   ) : null}
                   <Badge variant="outline">
                     已出现 {flow.visibleNonRootCount} / {Math.max(flow.totalNodeCount - 1, 0)}
@@ -637,11 +677,19 @@ export function MindMapReviewFlow({
                   reviewFxSignal={flow.feedback.reviewFxSignal}
                   showMiniPalaceButton={Boolean(palaceId)}
                   miniPalaceDraft={miniPalace.hostDraft}
+                  miniPalacePracticeActive={miniPalace.isPracticing || isDedicatedMiniMode}
                   onEditorStateChange={handleEditorStateChange}
                   onNodeActive={setActiveNodes}
                   onNodeClick={miniPalace.isActive ? miniPalace.handleNodeClick : flow.handleNodeClick}
                   onNodeContextMenu={
                     miniPalace.isActive ? miniPalace.handleNodeContextMenu : flow.handleNodeContextMenu
+                  }
+                  onNodeHover={
+                    miniPalace.isPracticing
+                      ? miniPalace.handleNodeHover
+                      : isDedicatedMiniMode
+                        ? flow.handleNodeHover
+                        : undefined
                   }
                   onEditNodeContextMenu={handleEditNodeContextMenu}
                   onBilinkTrigger={bilinkOverlay.handleBilinkTrigger}
@@ -653,6 +701,7 @@ export function MindMapReviewFlow({
                     })
                   }
                   onMiniPalaceOpen={miniPalace.openPanel}
+                  onMiniPalacePour={miniPalace.isPracticing ? miniPalace.handleSpacePour : flow.handleSpacePour}
                 />
               </div>
             </CardContent>
@@ -729,16 +778,15 @@ export function MindMapReviewFlow({
       <CompletionDecisionDialog
         open={completionDialogOpen}
         onOpenChange={setCompletionDialogOpen}
+        durationSeconds={Math.max(1, flow.timer.effectiveSeconds)}
         onMarkCompleted={() => {
           setCompletionDialogOpen(false)
           void flow.finishFlow('manual_complete')
         }}
         onMarkUncompleted={() => {
-          setCompletionDialogOpen(false)
-          flow.timer.registerActivity('practice_interaction', { source: 'complete_unfinished' })
-          toast.success('已保存进度，下次可继续')
+          void handleMarkUncompleted()
         }}
-        submitting={submitting}
+        submitting={submitting || savingIncomplete}
       />
 
       <MiniPalacePanel controller={miniPalace} />

@@ -1,3 +1,4 @@
+import type { AiRuntimeOptions } from './profile'
 import type { MindMapDoc } from './mindmap'
 
 export interface MindMapImportSourceNode {
@@ -46,6 +47,7 @@ export interface ImageTextPreviewResponse {
 export interface MindMapAiSplitRequest {
   editor_doc: MindMapDoc | string | null
   target_node_uid: string | null
+  ai_options?: AiRuntimeOptions
 }
 export interface MindMapAiSplitResponse {
   ok: boolean
@@ -138,11 +140,13 @@ export interface MindMapPdfImportPreviewRequest {
   range_prompt?: string
   fallback_title?: string
   import_options?: PdfImportOptions
+  ai_options?: AiRuntimeOptions
 }
 export interface TextPdfImportPreviewRequest {
   subject_document_id: number
   page_selection: number[]
   range_prompt?: string
+  ai_options?: AiRuntimeOptions
 }
 export interface PdfImportOptions {
   quote_original_text_only: boolean

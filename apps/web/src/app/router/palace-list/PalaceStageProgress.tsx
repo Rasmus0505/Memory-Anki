@@ -129,7 +129,7 @@ export function PalaceStageProgress({
       <div className="relative h-4">
         <div className="absolute left-0 right-0 top-1/2 h-1.5 -translate-y-1/2 rounded-full bg-slate-200" data-testid="stage-track" />
         <div
-          className="absolute left-0 top-1/2 h-1.5 -translate-y-1/2 rounded-full bg-emerald-500 transition-[width]"
+          className="absolute left-0 top-1/2 h-1.5 -translate-y-1/2 rounded-full bg-sky-500 transition-[width]"
           data-testid="stage-track-fill"
           style={{ width: `${stageMetrics.fillPercent}%` }}
         />
@@ -147,7 +147,7 @@ export function PalaceStageProgress({
                 className={cn(
                   'h-3.5 w-3.5 rounded-full border-2 border-white shadow-sm transition-colors',
                   onStageClick && 'cursor-pointer hover:scale-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-                  active ? 'bg-emerald-500' : 'bg-slate-300',
+                  active ? 'bg-sky-500' : 'bg-slate-300',
                 )}
               />
             )

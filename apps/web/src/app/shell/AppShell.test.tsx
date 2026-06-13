@@ -136,4 +136,33 @@ describe('AppShell', () => {
     expect(readingLink.className).toContain('bg-primary')
     expect(englishLink.className).not.toContain('bg-primary')
   })
+
+  it('activates only the quiz nav item on the palace quiz hub route', async () => {
+    getRuntimeInfoApi.mockResolvedValue({
+      channel: 'stable',
+      commit: 'abcdef1234567890',
+      short_commit: 'abcdef12',
+      runtime_generation: 1,
+      declared_runtime_generation: 1,
+      min_supported_generation: 1,
+      max_supported_generation: 1,
+      last_started_at: '2026-06-01T12:00:00+08:00',
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/palaces/quiz']}>
+        <AppShell>
+          <div>content</div>
+        </AppShell>
+      </MemoryRouter>,
+    )
+
+    await screen.findAllByText(/Stable abcdef12/)
+
+    const palaceLink = screen.getAllByRole('link', { name: '记忆宫殿' })[0]
+    const quizLink = screen.getAllByRole('link', { name: '做题区' })[0]
+
+    expect(quizLink.className).toContain('bg-primary')
+    expect(palaceLink.className).not.toContain('bg-primary')
+  })
 })

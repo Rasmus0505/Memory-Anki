@@ -31,11 +31,15 @@ def build_runtime(
     api_key: str,
     base_url: str,
     model: str,
+    provider: str = "dashscope",
+    extra_payload: dict[str, Any] | None = None,
 ) -> DashscopeImportRuntime:
     return DashscopeImportRuntime(
         api_key=api_key or "",
         base_url=base_url,
         model=model,
+        provider=provider,
+        extra_payload=extra_payload,
     )
 
 

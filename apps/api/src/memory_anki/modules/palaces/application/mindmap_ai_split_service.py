@@ -2,15 +2,16 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlalchemy.orm import Session
-
 from memory_anki.core.config import (
     DASHSCOPE_API_KEY,
     DASHSCOPE_BASE_URL,
     DASHSCOPE_TEXT_MODEL,
 )
+from sqlalchemy.orm import Session
+
 from memory_anki.infrastructure.db.models import Palace
 from memory_anki.modules.mindmap.application.editor_state_service import normalize_editor_doc
+from memory_anki.modules.settings.application.ai_model_registry import AiRuntimeOptions
 
 from .mindmap_ai_split import config_loader, gateway, tree_ops
 from .mindmap_ai_split import contracts as split_contracts
@@ -32,8 +33,9 @@ def split_palace_editor_doc_with_ai(
     palace: Palace,
     editor_doc: Any,
     target_node_uid: str | None,
+    ai_options: AiRuntimeOptions | None = None,
 ) -> MindMapAiSplitResult:
-    config = resolve_mindmap_ai_split_config(session)
+    config = resolve_mindmap_ai_split_config(session, ai_options=ai_options)
     normalized_doc = normalize_editor_doc(editor_doc, root_text=palace.title, root_kind="palace")
     root = ensure_dict(normalized_doc.get("root"))
     normalized_doc["root"] = root
@@ -70,12 +72,19 @@ def split_palace_editor_doc_with_ai(
     )
 
 
-def resolve_mindmap_ai_split_config(session: Session) -> MindMapAiSplitConfig:
+def resolve_mindmap_ai_split_config(
+    session: Session,
+    *,
+    ai_options: AiRuntimeOptions | None = None,
+) -> MindMapAiSplitConfig:
     return config_loader.resolve_config(
         session,
-        default_api_key=DASHSCOPE_API_KEY,
-        default_base_url=DASHSCOPE_BASE_URL,
-        default_model=DASHSCOPE_TEXT_MODEL,
+        ai_options=ai_options,
+        legacy_defaults={
+            "api_key": DASHSCOPE_API_KEY,
+            "base_url": DASHSCOPE_BASE_URL,
+            "model": DASHSCOPE_TEXT_MODEL,
+        },
     )
 
 

@@ -20,6 +20,13 @@ export interface ReviewFlowSnapshot {
   completed: boolean
 }
 
+export type RevealFlowMode = 'standard' | 'mini-checkpoint'
+
+export interface RevealFlowOptions {
+  mode?: RevealFlowMode
+  checkpointIds?: Iterable<string>
+}
+
 function cloneValue<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T
 }
@@ -36,6 +43,8 @@ export function parseEditorDoc(raw: unknown): MindMapDoc | null {
   if (typeof raw === 'object') return raw as MindMapDoc
   return null
 }
+
+const DEFAULT_THEME = { template: 'default' as const, config: {} as const }
 
 function plainText(value: unknown): string {
   if (typeof value !== 'string') return ''
@@ -99,10 +108,61 @@ export function flattenNodes(
   return map
 }
 
+export function sanitizeCheckpointNodeIds(
+  root: ReviewMindMapNode,
+  checkpointIds: Iterable<string>,
+) {
+  const validIds = new Set(collectNodeIds(root))
+  validIds.delete(root.id)
+  const result: string[] = []
+  for (const value of checkpointIds) {
+    const id = String(value || '').trim()
+    if (id && validIds.has(id) && !result.includes(id)) {
+      result.push(id)
+    }
+  }
+  return result
+}
+
+function buildCheckpointRevealState(
+  root: ReviewMindMapNode,
+  checkpointIds: Iterable<string>,
+  previous: Record<string, RevealState> | null = null,
+) {
+  const checkpoints = new Set(sanitizeCheckpointNodeIds(root, checkpointIds))
+  const next: Record<string, RevealState> = {}
+
+  function walk(node: ReviewMindMapNode, blocked: boolean): void {
+    if (node.id === root.id) {
+      next[node.id] = 'revealed'
+    } else if (blocked) {
+      next[node.id] = 'hidden'
+    } else if (!checkpoints.has(node.id)) {
+      next[node.id] = 'revealed'
+    } else {
+      const previousState = previous?.[node.id]
+      next[node.id] = previousState === 'revealed' ? 'revealed' : 'placeholder'
+      if (next[node.id] !== 'revealed') {
+        blocked = true
+      }
+    }
+    for (const child of node.children) {
+      walk(child, blocked)
+    }
+  }
+
+  walk(root, false)
+  return next
+}
+
 export function buildInitialRevealState(
   root: ReviewMindMapNode,
   previous: Record<string, RevealState> | null = null,
+  options: RevealFlowOptions = {},
 ) {
+  if (options.mode === 'mini-checkpoint') {
+    return buildCheckpointRevealState(root, options.checkpointIds ?? [], previous)
+  }
   const next: Record<string, RevealState> = {}
   const walk = (node: ReviewMindMapNode) => {
     const previousState = previous?.[node.id]
@@ -186,6 +246,46 @@ export function hideRevealStateBranch(
   revealMap: Record<string, RevealState>,
 ): Record<string, RevealState> {
   return hideNodeAndDescendants(nodeId, nodeMap, revealMap)
+}
+
+export function pourCheckpointRevealState(
+  startNodeId: string,
+  root: ReviewMindMapNode,
+  nodeMap: Map<string, ReviewMindMapNode>,
+  checkpointIds: Iterable<string>,
+  revealMap: Record<string, RevealState>,
+): Record<string, RevealState> {
+  const startNode = nodeMap.get(startNodeId)
+  if (!startNode) return revealMap
+
+  const checkpoints = new Set(sanitizeCheckpointNodeIds(root, checkpointIds))
+  const next = { ...revealMap }
+  let frontier = [...startNode.children]
+
+  while (frontier.length > 0) {
+    const nextFrontier: ReviewMindMapNode[] = []
+
+    for (const node of frontier) {
+      const state = next[node.id] ?? 'hidden'
+
+      if (state === 'revealed') {
+        nextFrontier.push(...node.children)
+        continue
+      }
+
+      if (checkpoints.has(node.id)) {
+        next[node.id] = 'placeholder'
+        continue
+      }
+
+      next[node.id] = 'revealed'
+      nextFrontier.push(...node.children)
+    }
+
+    frontier = nextFrontier
+  }
+
+  return next
 }
 
 export function buildSelectionNodeId(node: MindMapSelection | null): string | null {
@@ -308,6 +408,8 @@ export function buildVisibleEditorDoc(
         data: { text: fallbackTitle || '未命名导图' },
         children: [],
       },
+      layout: 'mindMap',
+      theme: DEFAULT_THEME,
     }
   }
 
@@ -362,6 +464,8 @@ export function buildVisibleEditorDoc(
   }
 
   return {
+    layout: 'mindMap',
+    theme: DEFAULT_THEME,
     ...cloneValue(source),
     root: walk(source.root, 'root', true) ?? {
       data: { text: fallbackTitle || '未命名导图' },
@@ -406,6 +510,18 @@ export function allNodesRevealed(
   return (
     ids.length > 0 &&
     ids.every((id) => (revealMap[id] ?? 'hidden') === 'revealed')
+  )
+}
+
+export function checkpointNodesRevealed(
+  root: ReviewMindMapNode,
+  checkpointIds: Iterable<string>,
+  revealMap: Record<string, RevealState>,
+) {
+  const checkpoints = sanitizeCheckpointNodeIds(root, checkpointIds)
+  return (
+    checkpoints.length > 0 &&
+    checkpoints.every((id) => (revealMap[id] ?? 'hidden') === 'revealed')
   )
 }
 

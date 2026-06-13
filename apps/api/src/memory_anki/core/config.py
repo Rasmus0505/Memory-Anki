@@ -47,6 +47,8 @@ DASHSCOPE_ASR_MODEL = os.environ.get("DASHSCOPE_ASR_MODEL", "qwen3-asr-flash-fil
 DASHSCOPE_VISION_MODEL = os.environ.get("DASHSCOPE_VISION_MODEL", "qwen3-vl-flash")
 DASHSCOPE_TEXT_MODEL = os.environ.get("DASHSCOPE_TEXT_MODEL", "qwen3.6-flash")
 ENGLISH_TRANSLATION_MODEL = os.environ.get("ENGLISH_TRANSLATION_MODEL", "qwen-mt-flash")
+ZHIPU_API_KEY = os.environ.get("ZHIPU_API_KEY")
+ZHIPU_BASE_URL = os.environ.get("ZHIPU_BASE_URL", "https://open.bigmodel.cn/api/paas/v4")
 
 DEFAULTS = {
     "default_algorithm": "ebbinghaus",
@@ -74,6 +76,7 @@ DEFAULTS = {
     "mindmap_ai_split_max_children": "5",
     "mindmap_ai_split_include_note": "true",
     "mindmap_ai_split_custom_instruction": "",
+    "mindmap_ai_split_thinking_enabled": "false",
     "flow_voice_api_key": "",
     "flow_voice_base_url": "",
     "flow_voice_model": "cosyvoice-v3-flash",
@@ -81,10 +84,19 @@ DEFAULTS = {
     "flow_voice_format": "mp3",
     "flow_voice_sample_rate": "24000",
     "flow_voice_instruction": "",
+    "flow_voice_thinking_enabled": "false",
     "ai_model_vision": DASHSCOPE_VISION_MODEL,
+    "ai_model_vision_thinking_enabled": "false",
     "ai_model_text": DASHSCOPE_TEXT_MODEL,
+    "ai_model_text_thinking_enabled": "false",
+    "ai_model_quiz_text": DASHSCOPE_TEXT_MODEL,
+    "ai_model_quiz_text_thinking_enabled": "false",
+    "ai_model_quiz_mini_palace": "qwen-turbo",
+    "ai_model_quiz_mini_palace_thinking_enabled": "false",
     "ai_model_translation": ENGLISH_TRANSLATION_MODEL,
+    "ai_model_translation_thinking_enabled": "false",
     "ai_model_asr": DASHSCOPE_ASR_MODEL,
+    "ai_model_asr_thinking_enabled": "false",
 }
 
 

@@ -5,6 +5,7 @@ interface HostEventHandlerRefs {
   onNodeActive: MutableRefObject<((nodes: MindMapSelection[]) => void) | undefined>
   onNodeClick: MutableRefObject<((nodes: MindMapSelection[]) => void) | undefined>
   onNodeContextMenu: MutableRefObject<((nodes: MindMapSelection[]) => void) | undefined>
+  onNodeHover: MutableRefObject<((nodes: MindMapSelection[]) => void) | undefined>
   onSegmentSelect: MutableRefObject<((segmentId: number | null) => void) | undefined>
   onCreateSegmentFromSelection: MutableRefObject<(() => void) | undefined>
   onSegmentRangeDraftChange: MutableRefObject<((payload: {
@@ -16,13 +17,10 @@ interface HostEventHandlerRefs {
     targetSegmentId: number | 'new' | null
   }) => void) | undefined>
   onSegmentRangeConfirm: MutableRefObject<(() => void) | undefined>
-  onPracticeToggle: MutableRefObject<(() => void) | undefined>
-  onEnglishOpen: MutableRefObject<(() => void) | undefined>
-  onMindMapImportOpen: MutableRefObject<(() => void) | undefined>
-  onImageTextImportOpen: MutableRefObject<(() => void) | undefined>
   onAiSplitRequest: MutableRefObject<((payload: MindMapAiSplitRequestPayload) => void) | undefined>
   onFullscreenChange: MutableRefObject<((active: boolean) => void) | undefined>
   onFullscreenToggle: MutableRefObject<((active?: boolean) => void) | undefined>
+  onUiClearedChange: MutableRefObject<((active: boolean) => void) | undefined>
   onBilinkTrigger: MutableRefObject<((payload: {
     nodeUid: string | null
     left: number
@@ -34,8 +32,7 @@ interface HostEventHandlerRefs {
     nodeUid: string | null
     trigger: 'badge' | 'mark'
   }) => void) | undefined>
-  onBilinkToolbarSearch: MutableRefObject<(() => void) | undefined>
-  onMiniPalaceOpen: MutableRefObject<(() => void) | undefined>
+  onMiniPalacePour: MutableRefObject<(() => void) | undefined>
   onReady: MutableRefObject<(() => void) | undefined>
 }
 
@@ -59,6 +56,9 @@ export function dispatchHostEvent(
   }
   if (event === 'node_contextmenu') {
     handlers.onNodeContextMenu.current?.(Array.isArray(payload) ? (payload as MindMapSelection[]) : [])
+  }
+  if (event === 'node_hover') {
+    handlers.onNodeHover.current?.(Array.isArray(payload) ? (payload as MindMapSelection[]) : [])
   }
   if (event === 'segment_select') {
     handlers.onSegmentSelect.current?.(
@@ -105,18 +105,6 @@ export function dispatchHostEvent(
   if (event === 'segment_range_confirm') {
     handlers.onSegmentRangeConfirm.current?.()
   }
-  if (event === 'practice_toggle') {
-    handlers.onPracticeToggle.current?.()
-  }
-  if (event === 'english_open') {
-    handlers.onEnglishOpen.current?.()
-  }
-  if (event === 'mindmap_import_open') {
-    handlers.onMindMapImportOpen.current?.()
-  }
-  if (event === 'image_text_import_open') {
-    handlers.onImageTextImportOpen.current?.()
-  }
   if (event === 'ai_split_request') {
     const nextPayload =
       payload && typeof payload === 'object'
@@ -150,6 +138,9 @@ export function dispatchHostEvent(
   if (event === 'fullscreen_toggle') {
     handlers.onFullscreenToggle.current?.(typeof payload === 'boolean' ? payload : undefined)
   }
+  if (event === 'ui_cleared_change') {
+    handlers.onUiClearedChange.current?.(Boolean(payload))
+  }
   if (event === 'bilink_trigger') {
     const nextPayload =
       payload && typeof payload === 'object'
@@ -178,11 +169,8 @@ export function dispatchHostEvent(
       trigger: nextPayload?.trigger === 'mark' ? 'mark' : 'badge',
     })
   }
-  if (event === 'bilink_toolbar_search') {
-    handlers.onBilinkToolbarSearch.current?.()
-  }
-  if (event === 'mini_palace_open') {
-    handlers.onMiniPalaceOpen.current?.()
+  if (event === 'mini_palace_pour') {
+    handlers.onMiniPalacePour.current?.()
   }
   return 'other'
 }

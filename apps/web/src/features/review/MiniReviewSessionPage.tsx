@@ -41,7 +41,11 @@ function toContainerSession(session: MiniReviewSessionResponse): ReviewSessionCo
     review_number: session.review_number,
     palace: session.palace,
     stageLabels: session.mini_palace?.stage_labels ?? null,
+    revealMode: 'mini-checkpoint',
+    checkpointNodeUids: session.mini_palace?.node_uids ?? [],
     reviewStages: session.mini_palace?.review_stages ?? null,
+    mini_palace: session.mini_palace,
+    editor_doc: session.editor_doc,
   }
 }
 
@@ -50,10 +54,10 @@ export default function MiniReviewSessionPage() {
     <ReviewSessionContainer
       eyebrow="小宫殿正式复习"
       buildTitle={(session) =>
-        `${session.palace?.title || '未命名宫殿'} / ${(session as ReviewSessionContainerSession & { mini_palace?: MiniPalaceSummary }).mini_palace?.name || '小宫殿'}`
+        `${session.palace?.title || '未命名宫殿'} / ${session.mini_palace?.name || '小宫殿'}`
       }
       buildReviewEditorState={(session) => ({
-        editor_doc: (session as ReviewSessionContainerSession & { editor_doc?: any }).editor_doc ?? null,
+        editor_doc: session.editor_doc ?? null,
         editor_config: {},
         editor_local_config: {},
         lang: 'zh',

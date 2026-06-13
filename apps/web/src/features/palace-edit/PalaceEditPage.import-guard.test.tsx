@@ -48,6 +48,7 @@ const timedSessionMock = {
   start: vi.fn(),
   pause: vi.fn(),
   resume: vi.fn(),
+  leaveScene: vi.fn(),
   adjustDuration: vi.fn(),
   registerActivity: vi.fn(),
   logEvent: vi.fn(),
@@ -175,36 +176,53 @@ vi.mock('@/features/palace-edit/hooks/useMindMapImport', () => ({
 }))
 
 vi.mock('@/shared/components/mindmap-host', () => ({
-  MindMapFrame: ({
+  MindMapFrame: React.forwardRef(({
     editorState,
     onEditorStateChange,
   }: {
     editorState: typeof importedEditorState
     onEditorStateChange?: (nextState: typeof importedEditorState) => void
-  }) => (
+  }, ref) => {
+    React.useImperativeHandle(ref, () => ({
+      setUiCleared: vi.fn(),
+      toggleUiCleared: vi.fn(),
+      enterNativeFullscreen: vi.fn(async () => {}),
+      exitNativeFullscreen: vi.fn(async () => {}),
+    }))
+    return (
+      <div>
+        <div data-testid="mindmap-root-text">
+          {String((editorState.editor_doc as { root?: { data?: { text?: string } } })?.root?.data?.text ?? '')}
+        </div>
+        <div data-testid="mindmap-first-child-text">
+          {String(
+            (
+              (editorState.editor_doc as {
+                root?: { children?: Array<{ data?: { text?: string } }> }
+              })?.root?.children?.[0]?.data?.text ?? ''
+            ),
+          )}
+        </div>
+        <button
+          type="button"
+          onClick={() =>
+            onEditorStateChange?.({
+              ...emptyEditorState,
+            })
+          }
+        >
+          trigger-empty-sync
+        </button>
+      </div>
+    )
+  }),
+  MindMapPageToolbar: ({
+    importMindMapAction,
+    importTextAction,
+  }: Record<string, any>) => (
     <div>
-      <div data-testid="mindmap-root-text">
-        {String((editorState.editor_doc as { root?: { data?: { text?: string } } })?.root?.data?.text ?? '')}
-      </div>
-      <div data-testid="mindmap-first-child-text">
-        {String(
-          (
-            (editorState.editor_doc as {
-              root?: { children?: Array<{ data?: { text?: string } }> }
-            })?.root?.children?.[0]?.data?.text ?? ''
-          ),
-        )}
-      </div>
-      <button
-        type="button"
-        onClick={() =>
-          onEditorStateChange?.({
-            ...emptyEditorState,
-          })
-        }
-      >
-        trigger-empty-sync
-      </button>
+      {importMindMapAction ? <button type="button" onClick={importMindMapAction.onClick}>{importMindMapAction.label}</button> : null}
+      {importTextAction ? <button type="button" onClick={importTextAction.onClick}>{importTextAction.label}</button> : null}
     </div>
   ),
 }))

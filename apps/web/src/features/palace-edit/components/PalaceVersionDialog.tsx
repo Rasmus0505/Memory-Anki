@@ -195,7 +195,6 @@ export function PalaceVersionDialog({
                           lang: editorStateLang || 'zh',
                         }}
                         readonly
-                        showToolbarWhenReadonly
                         onEditorStateChange={() => {}}
                         className="h-[56vh] w-full rounded-2xl border border-border/70 bg-white"
                       />

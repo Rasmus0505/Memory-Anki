@@ -6,7 +6,7 @@ import mimetypes
 import re
 import urllib.error
 import urllib.request
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, Literal
 
@@ -18,6 +18,10 @@ from memory_anki.core.config import (
     VOICE_COACH_CACHE_DIR,
 )
 from memory_anki.infrastructure.db.models import Config
+from memory_anki.modules.settings.application.ai_model_registry import (
+    AiRuntimeOptions,
+    resolve_scenario_runtime,
+)
 
 VoiceCoachEvent = Literal[
     "session_start",
@@ -111,19 +115,54 @@ class VoiceCoachSynthesisResult:
     request_id: str
 
 
-def resolve_voice_coach_config(session: Session) -> VoiceCoachConfig:
+def _has_non_empty_config(session: Session, key: str) -> bool:
+    row = session.query(Config).filter_by(key=key).first()
+    return bool(row and str(row.value or "").strip())
+
+
+def _resolve_legacy_tts_runtime(
+    session: Session,
+    *,
+    ai_options: AiRuntimeOptions | None = None,
+):
+    runtime = resolve_scenario_runtime(session, "tts", ai_options=ai_options)
+    if runtime.provider != "dashscope":
+        return runtime
+    api_key = (
+        runtime.api_key
+        if _has_non_empty_config(session, "dashscope_api_key")
+        else str(DASHSCOPE_API_KEY or "").strip()
+    )
+    base_url = (
+        runtime.base_url
+        if _has_non_empty_config(session, "dashscope_base_url")
+        else str(DASHSCOPE_TTS_BASE_URL or runtime.base_url or "").strip()
+    )
+    return replace(runtime, api_key=api_key, base_url=base_url)
+
+
+def resolve_voice_coach_config(
+    session: Session,
+    *,
+    ai_options: AiRuntimeOptions | None = None,
+) -> VoiceCoachConfig:
     rows = session.query(Config).filter(Config.key.in_(VOICE_COACH_CONFIG_KEYS)).all()
     values = {row.key: row.value for row in rows}
+    runtime = _resolve_legacy_tts_runtime(session, ai_options=ai_options)
 
-    api_key = _first_non_empty(values.get("flow_voice_api_key"), DASHSCOPE_API_KEY)
+    api_key = _first_non_empty(values.get("flow_voice_api_key"), runtime.api_key)
     if not api_key:
         raise VoiceCoachConfigError("未配置语音教练 API Key。请在个人中心填写，或设置 DASHSCOPE_API_KEY。")
 
     audio_format = _sanitize_audio_format(values.get("flow_voice_format"))
     return VoiceCoachConfig(
         api_key=api_key,
-        base_url=_first_non_empty(values.get("flow_voice_base_url"), DASHSCOPE_TTS_BASE_URL),
-        model=_first_non_empty(values.get("flow_voice_model"), DEFAULT_MODEL),
+        base_url=_first_non_empty(
+            values.get("flow_voice_base_url"),
+            runtime.base_url,
+            DASHSCOPE_TTS_BASE_URL,
+        ),
+        model=_first_non_empty(values.get("flow_voice_model"), runtime.model, DEFAULT_MODEL),
         voice=_first_non_empty(values.get("flow_voice_voice"), DEFAULT_VOICE),
         audio_format=audio_format,
         sample_rate=_coerce_sample_rate(values.get("flow_voice_sample_rate")),
@@ -134,9 +173,11 @@ def resolve_voice_coach_config(session: Session) -> VoiceCoachConfig:
 def synthesize_voice_coach_event(
     session: Session,
     event: VoiceCoachEvent,
+    *,
+    ai_options: AiRuntimeOptions | None = None,
 ) -> VoiceCoachSynthesisResult:
     text = VOICE_COACH_TEMPLATES[event]
-    config = resolve_voice_coach_config(session)
+    config = resolve_voice_coach_config(session, ai_options=ai_options)
     cache_key = build_voice_coach_cache_key(config=config, text=text)
     cached_path = cache_path_for(cache_key, config.audio_format)
     if cached_path.exists() and cached_path.stat().st_size > 0:

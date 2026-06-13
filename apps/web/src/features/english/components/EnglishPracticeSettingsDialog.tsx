@@ -159,10 +159,34 @@ export function EnglishPracticeSettingsDialog({
                 onClick={() =>
                   setDraftSettings((current) => ({
                     ...current,
-                    sound: { enabled: !current.sound.enabled },
+                    sound: { ...current.sound, enabled: !current.sound.enabled },
                   }))
                 }
               />
+              <div className="flex w-full max-w-xs items-center gap-3 pl-1">
+                <label htmlFor="master-volume" className="text-xs text-muted-foreground">
+                  总音量
+                </label>
+                <input
+                  id="master-volume"
+                  type="range"
+                  min="0"
+                  max="1"
+                  step="0.05"
+                  value={draftSettings.sound.masterVolume}
+                  onChange={(event) =>
+                    setDraftSettings((current) => ({
+                      ...current,
+                      sound: { ...current.sound, masterVolume: Number(event.target.value) },
+                    }))
+                  }
+                  data-english-control-focus="true"
+                  className="h-1.5 w-28 cursor-pointer appearance-none rounded-full bg-border accent-emerald-500 [&::-webkit-slider-thumb]:h-3.5 [&::-webkit-slider-thumb]:w-3.5 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-emerald-500"
+                />
+                <span className="w-8 text-right text-xs tabular-nums text-muted-foreground">
+                  {Math.round(draftSettings.sound.masterVolume * 100)}%
+                </span>
+              </div>
               <ToggleButton
                 active={draftSettings.flow.autoAdvanceOnPass}
                 label={draftSettings.flow.autoAdvanceOnPass ? '自动下一句开启' : '自动下一句关闭'}

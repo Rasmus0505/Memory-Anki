@@ -41,13 +41,19 @@ vi.mock('@/shared/hooks/usePersistedMindMapEditor', () => ({
 }))
 
 vi.mock('@/shared/components/mindmap-host', () => ({
-  MindMapFrame: ({
+  MindMapFrame: React.forwardRef(({
     syncIntent = 'soft',
     forceSyncKey = null,
   }: {
     syncIntent?: 'soft' | 'replace'
     forceSyncKey?: string | number | null
-  }) => {
+  }, ref) => {
+    React.useImperativeHandle(ref, () => ({
+      setUiCleared: vi.fn(),
+      toggleUiCleared: vi.fn(),
+      enterNativeFullscreen: vi.fn(async () => {}),
+      exitNativeFullscreen: vi.fn(async () => {}),
+    }))
     const mountIdRef = React.useRef<number | null>(null)
     if (mountIdRef.current == null) {
       mountIdRef.current = knowledgeMindMapMockState.nextMountId++
@@ -59,7 +65,22 @@ vi.mock('@/shared/components/mindmap-host', () => ({
         <div>{`knowledge-force-${String(forceSyncKey ?? '')}`}</div>
       </div>
     )
-  },
+  }),
+  MindMapPageToolbar: ({
+    importMindMapAction,
+    importTextAction,
+    immersiveAction,
+    nativeFullscreenAction,
+    clearUiAction,
+  }: Record<string, any>) => (
+    <div data-testid="knowledge-mindmap-toolbar">
+      {importMindMapAction ? <button type="button" onClick={importMindMapAction.onClick}>{importMindMapAction.label}</button> : null}
+      {importTextAction ? <button type="button" onClick={importTextAction.onClick}>{importTextAction.label}</button> : null}
+      {immersiveAction ? <button type="button" onClick={immersiveAction.onClick}>{immersiveAction.label}</button> : null}
+      {nativeFullscreenAction ? <button type="button" onClick={nativeFullscreenAction.onClick}>{nativeFullscreenAction.label}</button> : null}
+      {clearUiAction ? <button type="button" onClick={clearUiAction.onClick}>{clearUiAction.label}</button> : null}
+    </div>
+  ),
 }))
 
 vi.mock('@/features/palace-edit/hooks/useMindMapImport', () => ({

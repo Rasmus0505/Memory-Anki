@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import re
 from collections.abc import Callable
+from dataclasses import replace
 from pathlib import Path
 from time import monotonic
 from typing import Any
@@ -15,7 +16,6 @@ from dashscope.files import Files
 
 from memory_anki.core.config import (
     DASHSCOPE_API_KEY,
-    DASHSCOPE_ASR_MODEL,
     DASHSCOPE_BASE_URL,
     ENGLISH_TRANSLATION_MODEL,
 )
@@ -32,7 +32,10 @@ from memory_anki.modules.english.domain.errors import (
     EnglishCourseError,
     EnglishTranslationBatchMismatchError,
 )
-from memory_anki.modules.settings.application.ai_model_registry import resolve_current_model
+from memory_anki.modules.settings.application.ai_model_registry import (
+    AiRuntimeOptions,
+    resolve_scenario_runtime,
+)
 
 from .generation_log_store import append_generation_log_event
 
@@ -43,19 +46,41 @@ TRANSLATION_BATCH_SIZE = 40
 TRANSLATION_LINE_RE = re.compile(r"^\[S(?P<index>\d+)\]\s*(?P<text>.*)$")
 
 
+def _resolve_legacy_dashscope_runtime(
+    scenario_key: str,
+    *,
+    ai_options: AiRuntimeOptions | None = None,
+    legacy_default_model: str | None = None,
+):
+    runtime = resolve_scenario_runtime(None, scenario_key, ai_options=ai_options)
+    if runtime.provider != "dashscope":
+        return runtime
+    model = runtime.model
+    if not (ai_options and ai_options.model) and legacy_default_model:
+        model = str(legacy_default_model or runtime.model or "").strip()
+    return replace(
+        runtime,
+        model=model,
+        api_key=str(DASHSCOPE_API_KEY or runtime.api_key or "").strip(),
+        base_url=str(DASHSCOPE_BASE_URL or runtime.base_url or "").strip(),
+    )
+
+
 class DashscopeEnglishAsrGateway:
     def transcribe(
         self,
         audio_path: Path,
         *,
         task_id: str,
+        ai_options: AiRuntimeOptions | None = None,
         progress_callback: Callable[[dict[str, Any]], None] | None = None,
     ) -> dict[str, Any]:
-        api_key = str(DASHSCOPE_API_KEY or "").strip()
+        runtime = _resolve_legacy_dashscope_runtime("asr", ai_options=ai_options)
+        api_key = str(runtime.api_key or "").strip()
         if not api_key:
-            raise EnglishCourseError("未配置 DASHSCOPE_API_KEY，无法生成英语课程。")
+            raise EnglishCourseError("未配置 ASR 模型对应的 Provider API Key，无法生成英语课程。")
         dashscope.api_key = api_key
-        dashscope.base_http_api_url = resolve_dashscope_sdk_base_url(DASHSCOPE_BASE_URL)
+        dashscope.base_http_api_url = resolve_dashscope_sdk_base_url(runtime.base_url)
         try:
             upload_response = Files.upload(file_path=str(audio_path), purpose="inference")
         except Exception as exc:
@@ -94,7 +119,7 @@ class DashscopeEnglishAsrGateway:
         )
         try:
             task_response = QwenTranscription.async_call(
-                model=resolve_current_model(None, "ai_model_asr", DASHSCOPE_ASR_MODEL),
+                model=runtime.model,
                 file_url=signed_url,
                 enable_words=True,
                 enable_itn=False,
@@ -111,7 +136,8 @@ class DashscopeEnglishAsrGateway:
             kind="request",
             message="已创建 ASR 任务。",
             data={
-                "model": DASHSCOPE_ASR_MODEL,
+                "model": runtime.model,
+                "provider": runtime.provider,
                 "remote_task_id": remote_task_id,
                 "task_output": task_output,
             },
@@ -183,13 +209,17 @@ class DashscopeEnglishAsrGateway:
 
 class DashscopeEnglishTranslator:
     def translate_sentences(self, sentences: list[dict[str, Any]], *, task_id: str) -> list[dict[str, Any]]:
-        if not str(DASHSCOPE_API_KEY or "").strip():
-            raise EnglishCourseError("未配置 DASHSCOPE_API_KEY，无法生成中文译文。")
+        runtime = _resolve_legacy_dashscope_runtime(
+            "translation",
+            legacy_default_model=ENGLISH_TRANSLATION_MODEL,
+        )
+        if not str(runtime.api_key or "").strip():
+            raise EnglishCourseError("未配置翻译模型对应的 Provider API Key，无法生成中文译文。")
         config = OpenAICompatibleChatConfig(
-            api_key=str(DASHSCOPE_API_KEY or "").strip(),
-            base_url=str(DASHSCOPE_BASE_URL or "").strip(),
-            model=resolve_current_model(None, "ai_model_translation", ENGLISH_TRANSLATION_MODEL),
-            temperature=0.0,
+            api_key=str(runtime.api_key or "").strip(),
+            base_url=str(runtime.base_url or "").strip(),
+            model=runtime.model,
+            temperature=0.0 if runtime.supports_temperature else None,
             timeout_seconds=120,
         )
         translated_by_index: dict[int, str] = {}
@@ -199,6 +229,7 @@ class DashscopeEnglishTranslator:
             translated_by_index.update(
                 self.translate_sentence_batch_with_fallback(
                     config=config,
+                    runtime_extra_payload=runtime.extra_payload,
                     batch=batch,
                     task_id=task_id,
                 )
@@ -229,6 +260,7 @@ class DashscopeEnglishTranslator:
         self,
         *,
         config: OpenAICompatibleChatConfig,
+        runtime_extra_payload: dict[str, Any] | None,
         batch: list[dict[str, Any]],
         task_id: str,
     ) -> dict[int, str]:
@@ -239,12 +271,18 @@ class DashscopeEnglishTranslator:
             return {
                 int(item["index"]): self.translate_single_sentence(
                     config=config,
+                    runtime_extra_payload=runtime_extra_payload,
                     sentence=item,
                     task_id=task_id,
                 )
             }
         try:
-            return self.translate_sentence_batch(config=config, batch=batch, task_id=task_id)
+            return self.translate_sentence_batch(
+                config=config,
+                runtime_extra_payload=runtime_extra_payload,
+                batch=batch,
+                task_id=task_id,
+            )
         except EnglishTranslationBatchMismatchError as exc:
             append_generation_log_event(
                 task_id=task_id,
@@ -260,11 +298,13 @@ class DashscopeEnglishTranslator:
             midpoint = max(1, len(batch) // 2)
             left = self.translate_sentence_batch_with_fallback(
                 config=config,
+                runtime_extra_payload=runtime_extra_payload,
                 batch=batch[:midpoint],
                 task_id=task_id,
             )
             right = self.translate_sentence_batch_with_fallback(
                 config=config,
+                runtime_extra_payload=runtime_extra_payload,
                 batch=batch[midpoint:],
                 task_id=task_id,
             )
@@ -274,6 +314,7 @@ class DashscopeEnglishTranslator:
         self,
         *,
         config: OpenAICompatibleChatConfig,
+        runtime_extra_payload: dict[str, Any] | None,
         batch: list[dict[str, Any]],
         task_id: str,
     ) -> dict[int, str]:
@@ -315,7 +356,10 @@ class DashscopeEnglishTranslator:
             response_text = call_chat_completion_text(
                 config=config,
                 messages=[{"role": "user", "content": source_text}],
-                extra_payload={"translation_options": translation_options},
+                extra_payload={
+                    **(runtime_extra_payload or {}),
+                    "translation_options": translation_options,
+                },
             )
             parsed = parse_translation_batch_response(response_text, batch=batch)
             complete_external_ai_call_log(
@@ -353,6 +397,7 @@ class DashscopeEnglishTranslator:
         self,
         *,
         config: OpenAICompatibleChatConfig,
+        runtime_extra_payload: dict[str, Any] | None,
         sentence: dict[str, Any],
         task_id: str,
     ) -> str:
@@ -391,7 +436,10 @@ class DashscopeEnglishTranslator:
             response_text = call_chat_completion_text(
                 config=config,
                 messages=[{"role": "user", "content": source_text}],
-                extra_payload={"translation_options": translation_options},
+                extra_payload={
+                    **(runtime_extra_payload or {}),
+                    "translation_options": translation_options,
+                },
             ).strip()
             if not response_text:
                 raise EnglishCourseError("单句翻译结果为空。")

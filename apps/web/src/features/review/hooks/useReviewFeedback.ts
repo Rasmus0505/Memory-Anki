@@ -18,7 +18,10 @@ import {
   type ReviewFeedbackSettings,
 } from '@/features/review/reviewFeedbackSettings'
 import type { MindMapReviewFxPayload } from '@/shared/components/mindmap-host/hostBridgeUtils'
-import type { ReviewMindMapNode } from '@/features/review/model/review-flow-tree'
+import type {
+  RevealFlowMode,
+  ReviewMindMapNode,
+} from '@/features/review/model/review-flow-tree'
 import type { RevealState } from '@/entities/session/model'
 import { useMindMapFeedbackAudio } from '@/shared/components/mindmap-host/useMindMapFeedback'
 
@@ -29,6 +32,7 @@ interface UseReviewFeedbackOptions {
   revealMap: Record<string, RevealState>
   revealedNonRootCount: number
   totalNodeCount: number
+  revealMode?: RevealFlowMode
 }
 
 function deriveFxIntensity(args: {
@@ -65,6 +69,7 @@ export function useReviewFeedback({
   revealMap,
   revealedNonRootCount,
   totalNodeCount,
+  revealMode = 'standard',
 }: UseReviewFeedbackOptions) {
   const [settings, setSettings] = React.useState<ReviewFeedbackSettings>(() =>
     readReviewFeedbackSettings(),
@@ -116,6 +121,7 @@ export function useReviewFeedback({
       previousRevealMap,
       nextRevealMap: revealMap,
       root,
+      revealMode,
     })
     if (transition.events.length === 0) {
       setAllClearReady(transition.allClearReady)
@@ -215,7 +221,7 @@ export function useReviewFeedback({
         nonce: reviewFxNonceRef.current,
       })
     }
-  }, [audio, reducedMotion, revealMap, root, settings.animationEnabled, settings.mode, settings.surpriseEnabled])
+  }, [audio, reducedMotion, revealMap, revealMode, root, settings.animationEnabled, settings.mode, settings.surpriseEnabled])
 
   const updateSettings = React.useCallback(
     (

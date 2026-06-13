@@ -73,7 +73,7 @@ describe('PalaceStageProgress', () => {
     )
 
     expect(getWidthPercent()).toBeCloseTo((3 / 12) * 50, 4)
-    expect(screen.getByTestId('stage-node-0').className).toContain('bg-emerald-500')
+    expect(screen.getByTestId('stage-node-0').className).toContain('bg-sky-500')
     expect(screen.getByTestId('stage-node-1').className).toContain('bg-slate-300')
   })
 
@@ -104,7 +104,7 @@ describe('PalaceStageProgress', () => {
     )
 
     expect(getWidthPercent()).toBe(0)
-    expect(screen.getByTestId('stage-node-0').className).toContain('bg-emerald-500')
+    expect(screen.getByTestId('stage-node-0').className).toContain('bg-sky-500')
     expect(screen.getByTestId('stage-node-1').className).toContain('bg-slate-300')
   })
 
@@ -238,8 +238,8 @@ describe('PalaceStageProgress', () => {
       />,
     )
 
-    expect(screen.getByTestId('stage-node-0').className).toContain('bg-emerald-500')
-    expect(screen.getByTestId('stage-node-1').className).toContain('bg-emerald-500')
+    expect(screen.getByTestId('stage-node-0').className).toContain('bg-sky-500')
+    expect(screen.getByTestId('stage-node-1').className).toContain('bg-sky-500')
     expect(screen.getByTestId('stage-node-2').className).toContain('bg-slate-300')
   })
 
@@ -252,7 +252,7 @@ describe('PalaceStageProgress', () => {
       />,
     )
 
-    expect(screen.getByTestId('stage-node-0').className).toContain('bg-emerald-500')
+    expect(screen.getByTestId('stage-node-0').className).toContain('bg-sky-500')
     expect(screen.getByTestId('stage-node-1').className).toContain('bg-slate-300')
     expect(screen.getByTestId('stage-node-2').className).toContain('bg-slate-300')
   })

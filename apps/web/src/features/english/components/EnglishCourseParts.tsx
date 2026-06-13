@@ -14,6 +14,8 @@ export interface StatusNotice {
   text: string
 }
 
+export type WordRailDensity = 'regular' | 'compact' | 'dense'
+
 export function StatusBanner({ notice }: { notice: StatusNotice | null }) {
   if (!notice) return null
 
@@ -45,11 +47,13 @@ export function WordRail({
   wordInputs,
   wordStatuses,
   wordRevealComparableIndices,
+  density = 'regular',
 }: {
   expectedTokens: string[]
   wordInputs: string[]
   wordStatuses: string[]
   wordRevealComparableIndices: number[][]
+  density?: WordRailDensity
 }) {
   if (!expectedTokens.length) {
     return (
@@ -59,53 +63,71 @@ export function WordRail({
     )
   }
 
+  const densityClassName =
+    density === 'dense'
+      ? {
+          rail: 'gap-x-2 gap-y-1',
+          token: 'px-1 py-0.5 text-lg tracking-[0.08em]',
+        }
+      : density === 'compact'
+        ? {
+            rail: 'gap-x-3 gap-y-1.5',
+            token: 'px-1 py-0.5 text-xl tracking-[0.11em]',
+          }
+        : {
+            rail: 'gap-x-5 gap-y-2',
+            token: 'px-1.5 py-1 text-2xl tracking-[0.15em]',
+          }
+
   return (
-    <div className="flex flex-wrap gap-3" data-testid="english-word-rail">
+    <div
+      className={`flex flex-wrap items-center ${densityClassName.rail}`}
+      data-testid="english-word-rail"
+      data-density={density}
+    >
       {expectedTokens.map((token, index) => {
         const status = wordStatuses[index] || 'pending'
         const slots = buildLetterSlots(token, wordInputs[index] || '', wordRevealComparableIndices[index] || [])
-        const wordShellClassName =
-          status === 'correct'
-            ? 'border-emerald-300 bg-emerald-50 text-emerald-800'
+
+        const containerStyle =
+          status === 'active'
+            ? 'ring-1 ring-sky-300 bg-sky-50 dark:bg-sky-950/30 dark:ring-sky-700'
             : status === 'wrong'
-              ? 'border-rose-300 bg-rose-50 text-rose-800'
-              : status === 'active'
-                ? 'border-sky-300 bg-sky-50 text-sky-800 shadow-[0_0_0_1px_rgba(14,165,233,0.08)]'
-                : 'border-border/70 bg-background/80 text-muted-foreground'
+              ? 'ring-1 ring-rose-300 bg-rose-50 dark:bg-rose-950/30'
+              : ''
+
+        const wordOpacity = status === 'pending' ? 'opacity-40' : status === 'correct' ? 'opacity-75' : ''
 
         return (
-          <div
+          <span
             key={`${token}-${index}`}
             data-testid={`english-word-${index}`}
             data-status={status}
-            className={`min-w-[120px] rounded-2xl border px-3 py-3 transition-colors ${wordShellClassName}`}
+            className={`inline-flex items-center gap-0.5 rounded-xl font-mono transition-colors ${densityClassName.token} ${containerStyle} ${wordOpacity}`}
           >
-            <div className="flex flex-wrap justify-center gap-1">
-              {slots.map((slot) => {
-                const slotClassName =
-                  slot.state === 'correct'
-                    ? 'border-emerald-300 bg-emerald-100 text-emerald-800'
-                    : slot.state === 'wrong'
-                      ? 'border-rose-300 bg-rose-100 text-rose-800'
-                      : slot.state === 'revealed'
-                        ? 'border-amber-300 bg-amber-100 text-amber-800'
-                        : slot.state === 'fixed'
-                          ? 'border-transparent bg-transparent text-muted-foreground'
-                          : 'border-border/70 bg-background text-transparent'
-                return (
-                  <span
-                    key={slot.key}
-                    data-slot-state={slot.state}
-                    className={`inline-flex h-10 min-w-8 items-center justify-center rounded-xl border px-2 font-mono text-base font-semibold ${
-                      slot.extra ? 'min-w-7' : ''
-                    } ${slotClassName}`}
-                  >
-                    {slot.char}
-                  </span>
-                )
-              })}
-            </div>
-          </div>
+            {slots.map((slot) => {
+              const slotColor =
+                slot.state === 'empty'
+                  ? 'text-gray-300 dark:text-gray-600'
+                  : slot.state === 'correct'
+                    ? 'text-emerald-500'
+                    : slot.state === 'revealed'
+                      ? 'text-amber-500 dark:text-amber-400'
+                      : slot.state === 'wrong' && slot.extra
+                        ? 'text-rose-400 line-through decoration-1'
+                        : slot.state === 'wrong'
+                          ? 'text-rose-500'
+                          : slot.state === 'fixed'
+                            ? 'font-semibold text-gray-700 dark:text-gray-300'
+                            : 'text-gray-300'
+
+              return (
+                <span key={slot.key} data-slot-state={slot.state} className={slotColor}>
+                  {slot.state === 'empty' ? '_' : slot.char}
+                </span>
+              )
+            })}
+          </span>
         )
       })}
     </div>

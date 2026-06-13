@@ -172,6 +172,7 @@ export default function SegmentPracticePage() {
           stageLabels={segment.stage_labels}
           stages={segment.review_stages}
           currentReviewNumber={Math.max(0, (segment.review_stage_completed ?? 0) - 1)}
+          durationSeconds={pendingPayload?.durationSeconds}
           onConfirm={async (targetReviewNumber, needsPractice) => {
             setStageDialogOpen(false)
             if (!pendingPayload) return

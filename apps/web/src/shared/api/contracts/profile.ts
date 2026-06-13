@@ -65,18 +65,43 @@ export interface AiPromptTemplate {
 export interface AiPromptTemplateListResponse {
   items: AiPromptTemplate[]
 }
+export interface AiRuntimeOptions {
+  model?: string
+  thinking_enabled?: boolean | null
+}
+export interface AiModelMetadata {
+  key: string
+  label: string
+  provider: 'dashscope' | 'zhipu'
+  modality: 'text' | 'vision' | 'translation' | 'tts' | 'asr'
+  supports_thinking: boolean
+  supports_temperature: boolean
+  default_base_url: string
+}
+export interface AiProviderSettings {
+  key: 'dashscope' | 'zhipu'
+  label: string
+  api_key_masked: string
+  has_api_key: boolean
+  base_url: string
+  api_key_config_key: string
+  base_url_config_key: string
+}
 export interface AiModelScenario {
   key: string
   label: string
   description: string
   category: string
   config_key: string
-  current_model: string
-  available_models: string[]
+  thinking_config_key: string
+  default_model: string
+  default_thinking_enabled: boolean
+  available_models: AiModelMetadata[]
   source_location: string
 }
 export interface AiModelScenariosResponse {
   scenarios: AiModelScenario[]
+  providers: AiProviderSettings[]
 }
 export interface ImportPalacesResponse {
   ok: boolean

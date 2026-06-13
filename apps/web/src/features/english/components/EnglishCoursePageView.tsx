@@ -1,108 +1,83 @@
-import type {
-  Dispatch,
-  KeyboardEvent as ReactKeyboardEvent,
-  RefObject,
-  SetStateAction,
-} from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import {
-  ArrowLeft,
-  CheckCircle2,
-  ChevronLeft,
-  ChevronRight,
-  LoaderCircle,
-  RotateCcw,
-  ScrollText,
-  Settings2,
-  Sparkles,
-  Volume2,
-  VolumeX,
-  Wand2,
-} from 'lucide-react'
-import type {
-  EnglishCourseDetail,
-  EnglishGenerationLogResponse,
-  EnglishSentenceCheckResponse,
-} from '@/shared/api/contracts'
-import { formatDuration } from '@/entities/session/model'
-import type { useTimedSession } from '@/shared/hooks/useTimedSession'
+import { ArrowLeft, ChevronLeft, ChevronRight, Settings2, Sparkles, Volume2 } from 'lucide-react'
+import type { EnglishCourseDetail, EnglishSentenceCheckResponse } from '@/shared/api/contracts'
 import { SessionTimerBar } from '@/shared/components/session/SessionTimerBar'
-import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card'
-import { EnglishGenerationLogDialog } from '@/features/english/components/EnglishGenerationLogDialog'
 import { EnglishPracticeSettingsDialog } from '@/features/english/components/EnglishPracticeSettingsDialog'
 import {
   FinalCheckRail,
   ShortcutSummary,
   SidePanelTabButton,
   StatusBanner,
-  type StatusNotice,
   WordRail,
+  type StatusNotice,
+  type WordRailDensity,
 } from '@/features/english/components/EnglishCourseParts'
 import type { EnglishPracticeSettings } from '@/features/english/englishPracticeSettings'
 import { shouldKeepEnglishPracticeControlFocus } from '@/features/english/englishTypingHelpers'
 import type { useEnglishWordTyping } from '@/features/english/useEnglishWordTyping'
+import type { useTimedSession } from '@/shared/hooks/useTimedSession'
 
 type EnglishCourseSentence = EnglishCourseDetail['sentences'][number]
-type EnglishCourseTimer = ReturnType<typeof useTimedSession>
 type EnglishTypingState = ReturnType<typeof useEnglishWordTyping>['typingState']
+type EnglishCourseTimer = ReturnType<typeof useTimedSession>
+type TranslationMode = 'placeholder' | 'previous' | 'current'
 type SidePanelTab = 'info' | 'shortcuts' | 'rhythm'
 
 interface EnglishCoursePageViewProps {
   courseId: number
   loading: boolean
   course: EnglishCourseDetail | null
-  videoRef: RefObject<HTMLVideoElement | null>
-  typingInputRef: RefObject<HTMLInputElement | null>
+  videoRef: React.RefObject<HTMLVideoElement | null>
+  typingInputRef: React.RefObject<HTMLInputElement | null>
   timer: EnglishCourseTimer
-  setSettingsOpen: Dispatch<SetStateAction<boolean>>
-  setDisplaySentenceIndex: Dispatch<SetStateAction<number>>
-  handleOpenGenerationLog: () => Promise<void>
-  completedSentenceIndexes: number[]
-  completionRatio: number
   mediaUrl: string
   isCourseDisplayCompleted: boolean
   activeSentence: EnglishCourseSentence | null
+  translationSentence: EnglishCourseSentence | null
+  translationMode: TranslationMode
   practiceSettings: EnglishPracticeSettings
-  activeSentenceCompleted: boolean
-  sentenceResolved: boolean
   statusNotice: StatusNotice | null
   feedback: EnglishSentenceCheckResponse | null
   activeSentenceTokens: string[]
   typingState: EnglishTypingState
   wordRevealComparableIndices: number[][]
-  sentenceReplayCount: number
-  handleTypingInputKeyDown: (event: ReactKeyboardEvent<HTMLInputElement>) => void
+  wordRailDensity: WordRailDensity
+  handleTypingInputKeyDown: (event: React.KeyboardEvent<HTMLInputElement>) => void
   typingEnabled: boolean
   settingsOpen: boolean
+  setSettingsOpen: React.Dispatch<React.SetStateAction<boolean>>
   focusTypingInput: (restoreKeyboard?: boolean) => void
   isTouchDevice: boolean
   replayCurrentSentence: (source?: string, nextTargetIndexOverride?: number | null) => boolean
-  setStatusNotice: Dispatch<SetStateAction<StatusNotice | null>>
-  setSubmissionFailed: Dispatch<SetStateAction<boolean>>
-  resetCurrentWord: () => void
-  resetTypingState: () => void
   revealLetter: () => void
-  revealWord: () => void
-  showRetryButton: boolean
-  handleRetrySubmission: () => void
-  submitting: boolean
   handleNavigateSentence: (delta: number) => void
-  toggleAutoAdvanceOnPass: () => void
-  toggleSingleSentenceLoop: () => void
-  toggleAutoReplayOnPass: () => void
-  toggleSound: () => void
   helperPanelOpen: boolean
-  setHelperPanelOpen: Dispatch<SetStateAction<boolean>>
+  setHelperPanelOpen: React.Dispatch<React.SetStateAction<boolean>>
   sidePanelTab: SidePanelTab
-  setSidePanelTab: Dispatch<SetStateAction<SidePanelTab>>
+  setSidePanelTab: React.Dispatch<React.SetStateAction<SidePanelTab>>
   handleSavePracticeSettings: (nextSettings: EnglishPracticeSettings) => void
-  logDialogOpen: boolean
-  setLogDialogOpen: Dispatch<SetStateAction<boolean>>
-  logLoading: boolean
-  logError: string
-  logData: EnglishGenerationLogResponse | null
+}
+
+function getWorkbenchDensityClasses(density: WordRailDensity) {
+  if (density === 'dense') {
+    return {
+      panel: 'grid-rows-[minmax(0,24vh)_minmax(0,1fr)] lg:grid-rows-[minmax(0,28vh)_minmax(0,1fr)]',
+      translation: 'px-3 py-2.5 text-xs leading-5',
+    }
+  }
+
+  if (density === 'compact') {
+    return {
+      panel: 'grid-rows-[minmax(0,26vh)_minmax(0,1fr)] lg:grid-rows-[minmax(0,31vh)_minmax(0,1fr)]',
+      translation: 'px-4 py-3 text-sm leading-5',
+    }
+  }
+
+  return {
+    panel: 'grid-rows-[minmax(0,28vh)_minmax(0,1fr)] lg:grid-rows-[minmax(0,34vh)_minmax(0,1fr)]',
+    translation: 'px-4 py-3 text-sm leading-6',
+  }
 }
 
 export function EnglishCoursePageView(props: EnglishCoursePageViewProps) {
@@ -113,53 +88,32 @@ export function EnglishCoursePageView(props: EnglishCoursePageViewProps) {
     videoRef,
     typingInputRef,
     timer,
-    setSettingsOpen,
-    setDisplaySentenceIndex,
-    handleOpenGenerationLog,
-    completedSentenceIndexes,
-    completionRatio,
     mediaUrl,
     isCourseDisplayCompleted,
     activeSentence,
+    translationSentence,
+    translationMode,
     practiceSettings,
-    activeSentenceCompleted,
-    sentenceResolved,
     statusNotice,
     feedback,
     activeSentenceTokens,
     typingState,
     wordRevealComparableIndices,
-    sentenceReplayCount,
+    wordRailDensity,
     handleTypingInputKeyDown,
     typingEnabled,
     settingsOpen,
+    setSettingsOpen,
     focusTypingInput,
     isTouchDevice,
     replayCurrentSentence,
-    setStatusNotice,
-    setSubmissionFailed,
-    resetCurrentWord,
-    resetTypingState,
     revealLetter,
-    revealWord,
-    showRetryButton,
-    handleRetrySubmission,
-    submitting,
     handleNavigateSentence,
-    toggleAutoAdvanceOnPass,
-    toggleSingleSentenceLoop,
-    toggleAutoReplayOnPass,
-    toggleSound,
     helperPanelOpen,
     setHelperPanelOpen,
     sidePanelTab,
     setSidePanelTab,
     handleSavePracticeSettings,
-    logDialogOpen,
-    setLogDialogOpen,
-    logLoading,
-    logError,
-    logData,
   } = props
   const navigate = useNavigate()
 
@@ -180,47 +134,38 @@ export function EnglishCoursePageView(props: EnglishCoursePageViewProps) {
   }
 
   const sentenceCount = course.sentences.length
-  const shouldShowTranslation = Boolean(activeSentence && (activeSentenceCompleted || sentenceResolved))
-  const currentSentenceCompletedNotice = activeSentenceCompleted && !sentenceResolved
+  const densityClasses = getWorkbenchDensityClasses(wordRailDensity)
+  const translationTitle =
+    translationMode === 'current' ? '当前句译文' : translationMode === 'previous' ? '上一句译文' : '翻译区'
+  const translationBody =
+    translationMode === 'placeholder'
+      ? '本句单词全部显示后，这里会立刻切到当前句译文。'
+      : translationSentence?.textZh || '本句暂未生成译文。'
 
   return (
-    <div className="space-y-4 lg:flex lg:min-h-[calc(100vh-3rem)] lg:flex-col" data-testid="english-course-workbench">
-      <div className="flex flex-col gap-4 lg:shrink-0">
-        <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
-          <div>
-            <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" asChild>
-                <Link to="/english">
-                  <ArrowLeft className="mr-2 h-4 w-4" />
-                  返回英语听力
-                </Link>
-              </Button>
-              <Badge variant={course.progress.completed ? 'outline' : 'secondary'}>
-                {course.progress.completed ? '课程已完成' : '沉浸拼写'}
-              </Badge>
-            </div>
-            <h1 className="mt-3 text-2xl font-semibold tracking-tight">{course.title}</h1>
-            <div className="mt-2 flex flex-wrap gap-4 text-sm text-muted-foreground">
-              <span>{course.sentences.length} 句</span>
-              <span>{formatDuration(course.durationSeconds)}</span>
-              <span>已完成 {completedSentenceIndexes.length} / {course.sentences.length}</span>
-            </div>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <Button variant="outline" onClick={() => setSettingsOpen(true)}>
-              <Settings2 className="mr-2 h-4 w-4" />
-              练习设置
-            </Button>
-            <Button variant="outline" onClick={() => void handleOpenGenerationLog()}>
-              <ScrollText className="mr-2 h-4 w-4" />
-              生成日志
-            </Button>
-          </div>
-        </div>
+    <div
+      className="flex h-[calc(100dvh-3rem)] min-h-[calc(100dvh-3rem)] flex-col overflow-hidden"
+      data-testid="english-course-workbench"
+    >
+      <div className="flex shrink-0 items-center gap-2 border-b border-border/50 px-4 py-2">
+        <Button variant="ghost" size="icon" asChild>
+          <Link to="/english">
+            <ArrowLeft className="h-4 w-4" />
+          </Link>
+        </Button>
+        <span className="truncate text-sm font-medium">{course.title}</span>
+        {activeSentence ? (
+          <span className="ml-auto shrink-0 text-xs text-muted-foreground">
+            Sentence {activeSentence.index + 1} / {sentenceCount}
+          </span>
+        ) : null}
+      </div>
 
+      <div className="shrink-0 px-3 pt-3">
         <SessionTimerBar
           effectiveSeconds={timer.effectiveSeconds}
           idleSeconds={timer.idleSeconds}
+          automationScene="english"
           pauseCount={timer.pauseCount}
           status={timer.status}
           onStart={() => timer.start({ source: 'manual_start', scene: 'english_course' })}
@@ -232,110 +177,55 @@ export function EnglishCoursePageView(props: EnglishCoursePageViewProps) {
         />
       </div>
 
-      <div className="flex min-h-0 flex-1 flex-col gap-4">
-        <Card className="flex min-h-0 flex-1 flex-col overflow-hidden border-border/70 bg-card/95" data-testid="english-course-main-panel">
-          <CardHeader className="space-y-3 lg:shrink-0">
-            <div className="flex items-center justify-between gap-3">
-              <CardTitle className="text-base">沉浸式逐词拼写</CardTitle>
-              <div className="text-xs text-muted-foreground">{completionRatio}%</div>
-            </div>
-            <div className="h-2 overflow-hidden rounded-full bg-secondary">
+      <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden p-3">
+        {isCourseDisplayCompleted ? (
+          <div className="flex flex-1 flex-col items-center justify-center gap-3 text-center">
+            <div className="text-lg font-semibold text-muted-foreground">课程已完成</div>
+            <Button variant="outline" size="sm" onClick={() => navigate('/english')}>
+              返回英语听力
+            </Button>
+          </div>
+        ) : activeSentence ? (
+          <>
+            <div
+              data-testid="english-course-main-panel"
+              data-density={wordRailDensity}
+              className={`grid min-h-0 flex-1 gap-3 overflow-hidden ${densityClasses.panel}`}
+            >
               <div
-                className="h-full rounded-full bg-primary transition-all"
-                style={{ width: `${completionRatio}%` }}
-              />
-            </div>
-          </CardHeader>
-          <CardContent className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden">
-            <div className="overflow-hidden rounded-3xl border border-border/70 bg-slate-950 lg:shrink-0">
-              <video
-                ref={videoRef}
-                controls
-                preload="metadata"
-                src={mediaUrl}
-                className="aspect-video w-full bg-black object-contain lg:max-h-[34vh]"
-              />
-            </div>
-
-            {isCourseDisplayCompleted ? (
-              <div className="rounded-3xl border border-emerald-200 bg-emerald-50 px-5 py-8 text-center">
-                <div className="flex justify-center">
-                  <CheckCircle2 className="h-10 w-10 text-emerald-600" />
-                </div>
-                <div className="mt-3 text-lg font-semibold text-emerald-700">这门英语课程已经完成</div>
-                <div className="mt-2 text-sm text-emerald-700/80">可以回到英语听力选择别的课程，或者再次打开重练。</div>
-                <div className="mt-4 flex justify-center gap-2">
-                  <Button variant="outline" onClick={() => setDisplaySentenceIndex(Math.max(0, course.sentences.length - 1))}>
-                    回看最后一句
-                  </Button>
-                  <Button onClick={() => navigate('/english')}>
-                    返回英语听力
-                  </Button>
-                </div>
+                data-testid="english-course-video-panel"
+                className="overflow-hidden rounded-2xl bg-black"
+              >
+                <video
+                  ref={videoRef}
+                  controls
+                  preload="metadata"
+                  src={mediaUrl}
+                  className="h-full w-full object-contain"
+                />
               </div>
-            ) : activeSentence ? (
-              <>
-                <div className="rounded-3xl border border-border/70 bg-background/70 px-5 py-5 lg:shrink-0">
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                      <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
-                        Sentence {activeSentence.index + 1} / {sentenceCount}
-                      </div>
-                      <div className="mt-2 text-sm text-muted-foreground">
-                        直接开始输入当前词；点击页面空白处会自动把焦点拉回拼写输入。当前句中文译文会在答对后显示。
-                      </div>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      <Badge variant={practiceSettings.flow.autoAdvanceOnPass ? 'secondary' : 'outline'}>
-                        {practiceSettings.flow.autoAdvanceOnPass ? '自动下一句开启' : '自动下一句关闭'}
-                      </Badge>
-                      <Badge variant={practiceSettings.replay.singleSentenceLoopEnabled ? 'default' : 'outline'}>
-                        {practiceSettings.replay.singleSentenceLoopEnabled ? '单句循环中' : '单句循环关闭'}
-                      </Badge>
-                      <Badge variant={practiceSettings.replay.autoReplayOnPass ? 'secondary' : 'outline'}>
-                        {practiceSettings.replay.autoReplayOnPass ? '答后重播开启' : '答后重播关闭'}
-                      </Badge>
-                    </div>
+
+              <div
+                data-testid="english-course-spelling-panel"
+                className="flex min-h-0 flex-col overflow-hidden rounded-2xl border border-border/70 p-4"
+              >
+                <div className="flex shrink-0 items-center justify-between gap-3">
+                  <div>
+                    <h3 className="text-sm font-semibold">当前句拼写</h3>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      本句播完会暂停等待输入；单词全部显示后会立刻重播本句并连播下一句。
+                    </p>
                   </div>
                 </div>
 
-                {currentSentenceCompletedNotice ? (
-                  <StatusBanner
-                    notice={{
-                      kind: 'info',
-                      text: '这句之前已经通过。你可以重写它，也可以直接切到上一句或下一句。',
-                    }}
+                <div className="mt-3 flex min-h-0 flex-1 items-start overflow-hidden">
+                  <WordRail
+                    expectedTokens={activeSentenceTokens}
+                    wordInputs={typingState.wordInputs}
+                    wordStatuses={typingState.wordStatuses}
+                    wordRevealComparableIndices={wordRevealComparableIndices}
+                    density={wordRailDensity}
                   />
-                ) : null}
-
-                <StatusBanner notice={statusNotice} />
-
-                <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden rounded-3xl border border-border/70 bg-background/70 p-4">
-                  <div className="flex items-center justify-between gap-3 lg:shrink-0">
-                    <div>
-                      <div className="text-base font-semibold">当前句拼写</div>
-                      <div className="mt-1 text-sm text-muted-foreground">当前词会实时判定；错误累计过多时会短暂红色闪烁并清空当前词。</div>
-                    </div>
-                    <Badge variant="outline">重播 {sentenceReplayCount} 次</Badge>
-                  </div>
-
-                  <div className="min-h-0 flex-1 overflow-y-auto pr-2" data-testid="english-course-wordrail-scroller">
-                    <WordRail
-                      expectedTokens={activeSentenceTokens}
-                      wordInputs={typingState.wordInputs}
-                      wordStatuses={typingState.wordStatuses}
-                      wordRevealComparableIndices={wordRevealComparableIndices}
-                    />
-                  </div>
-
-                  <div className="rounded-2xl border border-border/70 bg-card/80 px-4 py-4 lg:shrink-0" data-testid="english-course-inline-translation">
-                    <div className="text-xs text-muted-foreground">本句译文</div>
-                    <div className="mt-2 text-sm leading-6 text-foreground">
-                      {shouldShowTranslation ? activeSentence.textZh || '本句暂未生成译文。' : '答对当前句后这里会显示本句译文。'}
-                    </div>
-                  </div>
-
-                  <FinalCheckRail feedback={feedback} />
                 </div>
 
                 <input
@@ -358,158 +248,113 @@ export function EnglishCoursePageView(props: EnglishCoursePageViewProps) {
                   readOnly={!typingEnabled}
                   aria-label="英语拼写隐藏输入"
                   data-testid="english-typing-input"
-                  className={
-                    isTouchDevice
-                      ? 'h-11 w-full rounded-2xl border border-border/70 bg-background px-4 text-base shadow-sm'
-                      : 'pointer-events-none absolute h-0 w-0 opacity-0'
-                  }
+                  className="pointer-events-none absolute h-0 w-0 opacity-0"
                 />
 
-                <div className="flex flex-wrap gap-2 lg:shrink-0">
-                  <Button variant="outline" onClick={() => replayCurrentSentence('english_button_replay')}>
-                    <Volume2 className="mr-2 h-4 w-4" />
-                    重播当前句
+                <div data-testid="english-course-inline-translation" className="mt-3 shrink-0">
+                  <div className="mb-1 text-xs text-muted-foreground">{translationTitle}</div>
+                  <p
+                    className={`rounded-xl ${
+                      translationMode === 'current'
+                        ? 'border border-emerald-200 bg-emerald-50 text-emerald-800'
+                        : translationMode === 'previous'
+                          ? 'border border-sky-200 bg-sky-50/70 text-sky-900'
+                          : 'bg-muted/40 text-muted-foreground'
+                    } ${densityClasses.translation}`}
+                  >
+                    {translationBody}
+                  </p>
+                </div>
+
+                {statusNotice ? (
+                  <div className="mt-3 shrink-0">
+                    <StatusBanner notice={statusNotice} />
+                  </div>
+                ) : null}
+
+                {feedback && !feedback.passed && feedback.tokenResults.length > 0 ? (
+                  <div className="mt-3 shrink-0">
+                    <FinalCheckRail feedback={feedback} />
+                  </div>
+                ) : null}
+
+                <div className="mt-3 flex shrink-0 items-center justify-center gap-1">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => replayCurrentSentence('english_button_replay')}
+                    title="重播"
+                  >
+                    <Volume2 className="h-4 w-4" />
                   </Button>
                   <Button
-                    variant="outline"
+                    variant="ghost"
+                    size="icon"
                     disabled={!typingEnabled}
-                    onClick={() => {
-                      setStatusNotice(null)
-                      setSubmissionFailed(false)
-                      resetCurrentWord()
-                    }}
+                    onClick={() => revealLetter()}
+                    title="揭示字母"
                   >
-                    <RotateCcw className="mr-2 h-4 w-4" />
-                    重置当前词
+                    <Sparkles className="h-4 w-4" />
                   </Button>
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      setStatusNotice(null)
-                      setSubmissionFailed(false)
-                      resetTypingState()
-                    }}
-                  >
-                    <RotateCcw className="mr-2 h-4 w-4" />
-                    重置本句
+                  <div className="mx-1 h-5 w-px bg-border" />
+                  <Button variant="ghost" size="icon" onClick={() => handleNavigateSentence(-1)} title="上一句">
+                    <ChevronLeft className="h-4 w-4" />
                   </Button>
-                  <Button variant="outline" disabled={!typingEnabled} onClick={() => revealLetter()}>
-                    <Sparkles className="mr-2 h-4 w-4" />
-                    揭示一个字母
+                  <Button variant="ghost" size="icon" onClick={() => handleNavigateSentence(1)} title="下一句">
+                    <ChevronRight className="h-4 w-4" />
                   </Button>
-                  <Button variant="outline" disabled={!typingEnabled} onClick={() => revealWord()}>
-                    <Wand2 className="mr-2 h-4 w-4" />
-                    揭示当前词
-                  </Button>
-                  {showRetryButton ? (
-                    <Button onClick={() => handleRetrySubmission()} disabled={submitting}>
-                      {submitting ? <LoaderCircle className="mr-2 h-4 w-4 animate-spin" /> : null}
-                      再次校验
-                    </Button>
-                  ) : null}
-                </div>
-
-                <div className="flex flex-wrap gap-2 lg:shrink-0">
-                  <Button variant="outline" onClick={() => handleNavigateSentence(-1)}>
-                    <ChevronLeft className="mr-2 h-4 w-4" />
-                    上一句
-                  </Button>
-                  <Button variant="outline" onClick={() => handleNavigateSentence(1)}>
-                    <ChevronRight className="mr-2 h-4 w-4" />
-                    下一句
-                  </Button>
-                  <Button variant="outline" onClick={toggleAutoAdvanceOnPass}>
-                    <ChevronRight className="mr-2 h-4 w-4" />
-                    {practiceSettings.flow.autoAdvanceOnPass ? '关闭自动下一句' : '开启自动下一句'}
-                  </Button>
-                  <Button variant="outline" onClick={toggleSingleSentenceLoop}>
-                    <Volume2 className="mr-2 h-4 w-4" />
-                    {practiceSettings.replay.singleSentenceLoopEnabled ? '关闭单句循环' : '开启单句循环'}
-                  </Button>
-                  <Button variant="outline" onClick={toggleAutoReplayOnPass}>
-                    <Sparkles className="mr-2 h-4 w-4" />
-                    {practiceSettings.replay.autoReplayOnPass ? '关闭答后重播' : '开启答后重播'}
-                  </Button>
-                  <Button variant="outline" onClick={toggleSound}>
-                    {practiceSettings.sound.enabled ? (
-                      <Volume2 className="mr-2 h-4 w-4" />
-                    ) : (
-                      <VolumeX className="mr-2 h-4 w-4" />
-                    )}
-                    {practiceSettings.sound.enabled ? '关闭声音' : '开启声音'}
+                  <div className="mx-1 h-5 w-px bg-border" />
+                  <Button variant="ghost" size="icon" onClick={() => setSettingsOpen(true)} title="设置">
+                    <Settings2 className="h-4 w-4" />
                   </Button>
                 </div>
-              </>
-            ) : null}
-          </CardContent>
-        </Card>
-
-        <Card className="overflow-hidden border-border/70 bg-card/95 lg:shrink-0" data-testid="english-course-helper-panel">
-          <button
-            type="button"
-            data-english-control-focus="true"
-            aria-expanded={helperPanelOpen}
-            onClick={() => setHelperPanelOpen((current) => !current)}
-            className="flex w-full items-center justify-between gap-3 px-5 py-4 text-left transition-colors hover:bg-background/60"
-          >
-            <div>
-              <div className="text-base font-semibold">辅助面板</div>
-              <div className="mt-1 text-sm text-muted-foreground">快捷键、课程节奏和补充说明默认收起，不占主练习区空间。</div>
+              </div>
             </div>
-            <Badge variant={helperPanelOpen ? 'default' : 'outline'}>
-              {helperPanelOpen ? '收起' : '展开'}
-            </Badge>
-          </button>
 
-          {helperPanelOpen ? (
-            <CardContent className="space-y-4 border-t px-5 py-5" data-testid="english-course-helper-content">
-              <div className="flex flex-wrap gap-2">
-                <SidePanelTabButton active={sidePanelTab === 'info'} label="辅助信息" onClick={() => setSidePanelTab('info')} />
-                <SidePanelTabButton active={sidePanelTab === 'shortcuts'} label="快捷键" onClick={() => setSidePanelTab('shortcuts')} />
-                <SidePanelTabButton active={sidePanelTab === 'rhythm'} label="课程节奏" onClick={() => setSidePanelTab('rhythm')} />
+            <div data-testid="english-course-helper-panel" className="shrink-0">
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setHelperPanelOpen(!helperPanelOpen)}
+                  aria-label="辅助面板"
+                >
+                  {helperPanelOpen ? '收起辅助面板' : '辅助面板'}
+                </Button>
               </div>
-
-              <div className="max-h-[280px] space-y-4 overflow-y-auto pr-1">
-                {sidePanelTab === 'info' ? (
-                  activeSentence ? (
-                    <>
-                      <div className="rounded-2xl border border-border/70 bg-background/70 px-4 py-4 text-sm text-muted-foreground">
-                        当前词会实时判定；错误超过阈值或整词不匹配时会短暂红色闪烁并清空当前词。
+              {helperPanelOpen ? (
+                <div
+                  data-testid="english-course-helper-content"
+                  className="mt-2 max-h-[22vh] space-y-3 overflow-y-auto rounded-2xl border border-border/70 p-4"
+                >
+                  <div className="flex items-center gap-2">
+                    <SidePanelTabButton active={sidePanelTab === 'info'} label="信息" onClick={() => setSidePanelTab('info')} />
+                    <SidePanelTabButton active={sidePanelTab === 'shortcuts'} label="快捷键" onClick={() => setSidePanelTab('shortcuts')} />
+                    <SidePanelTabButton active={sidePanelTab === 'rhythm'} label="节奏" onClick={() => setSidePanelTab('rhythm')} />
+                  </div>
+                  {sidePanelTab === 'shortcuts' ? (
+                    <div className="space-y-3">
+                      <ShortcutSummary settings={practiceSettings} />
+                      <div className="rounded-2xl border border-sky-200 bg-sky-50/80 px-4 py-3 text-sm text-sky-800">
+                        点击“练习设置”可以重新录制快捷键。默认全部使用带修饰键组合，避免和拼写输入冲突。
                       </div>
-                      <div className="rounded-2xl border border-border/70 bg-background/70 px-4 py-4 text-sm text-muted-foreground">
-                        当前句重播次数：{sentenceReplayCount}
-                      </div>
-                    </>
+                    </div>
+                  ) : sidePanelTab === 'rhythm' ? (
+                    <div className="space-y-2 text-sm text-muted-foreground">
+                      <p>默认节奏是“听一句停一句”，本句完整显示后会自动连播“本句 + 下一句”。</p>
+                      <p>视频区域只会在少量固定档位里轻微收紧，避免每句都明显跳动。</p>
+                    </div>
                   ) : (
-                    <div className="rounded-2xl border border-dashed border-border/70 py-10 text-center text-sm text-muted-foreground">
-                      当前没有可显示的句子辅助信息。
+                    <div className="space-y-2 text-sm text-muted-foreground">
+                      <p>当前句输入时，翻译区默认保留上一句译文；本句完整显示后会立即切到本句译文。</p>
+                      <p>如果最终校验和本地显示不一致，系统会回退到该句重新拼写。</p>
                     </div>
-                  )
-                ) : null}
-
-                {sidePanelTab === 'shortcuts' ? (
-                  <>
-                    <ShortcutSummary settings={practiceSettings} />
-                    <div className="rounded-2xl border border-border/70 bg-background/70 px-4 py-4 text-sm text-muted-foreground">
-                      点击“练习设置”可以重新录制快捷键。默认全部使用带修饰键组合，避免和拼写输入冲突。
-                    </div>
-                  </>
-                ) : null}
-
-                {sidePanelTab === 'rhythm' ? (
-                  <>
-                    <div className="rounded-2xl border border-border/70 bg-background/70 px-4 py-3 text-sm text-muted-foreground">
-                      练累了可以随时暂停，回来会从上次课程进度继续。
-                    </div>
-                    <div className="rounded-2xl border border-border/70 bg-background/70 px-4 py-3 text-sm text-muted-foreground">
-                      本页学习时长会计入总听力时长，同时标记为英语听力来源。
-                    </div>
-                  </>
-                ) : null}
-              </div>
-            </CardContent>
-          ) : null}
-        </Card>
+                  )}
+                </div>
+              ) : null}
+            </div>
+          </>
+        ) : null}
       </div>
 
       <EnglishPracticeSettingsDialog
@@ -517,15 +362,6 @@ export function EnglishCoursePageView(props: EnglishCoursePageViewProps) {
         settings={practiceSettings}
         onOpenChange={setSettingsOpen}
         onSave={handleSavePracticeSettings}
-      />
-
-      <EnglishGenerationLogDialog
-        open={logDialogOpen}
-        onOpenChange={setLogDialogOpen}
-        title="英语课程生成日志"
-        loading={logLoading}
-        error={logError}
-        log={logData}
       />
     </div>
   )

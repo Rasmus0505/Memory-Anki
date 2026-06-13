@@ -10,7 +10,7 @@ import { getTimeRecordChartColor } from '@/features/profile/model/time-record-ch
 import { useTimeRecordsDashboard } from '@/features/profile/hooks/useTimeRecordsDashboard'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card'
 import { Button } from '@/shared/components/ui/button'
-import { formatDuration } from '@/entities/session/model'
+import { formatDuration, type TimeRecordChartRange } from '@/entities/session/model'
 import { getDashboardApi } from '@/shared/api/modules/dashboard'
 import { useLocalStorageState } from '@/shared/lib/localStorage'
 import { cn } from '@/shared/lib/utils'
@@ -22,18 +22,23 @@ function formatReviewStage(reviewType: string, reviewNumber: number) {
 }
 
 function formatLearningTooltip(item: DashboardResponse['today_learning_palaces'][number]) {
-  return [
+  const lines = [
     `${item.palace_title || '未命名宫殿'}`,
     `总时长：${formatDuration(item.total_seconds)}`,
     `宫殿编辑：${formatDuration(item.palace_edit_seconds)}`,
     `练习：${formatDuration(item.practice_seconds)}`,
     `复习：${formatDuration(item.review_seconds)}`,
-  ].join('\n')
+  ]
+  if (item.quiz_seconds > 0) {
+    lines.splice(4, 0, `做题：${formatDuration(item.quiz_seconds)}`)
+  }
+  return lines.join('\n')
 }
 
 const dashboardLearningLegend = [
   { key: 'palace_edit', label: '宫殿编辑', color: getTimeRecordChartColor('palace_edit') },
   { key: 'practice', label: '练习', color: getTimeRecordChartColor('practice') },
+  { key: 'quiz', label: '做题', color: getTimeRecordChartColor('quiz') },
   { key: 'review', label: '复习', color: getTimeRecordChartColor('review') },
 ] as const
 
@@ -41,6 +46,7 @@ function buildLearningSegments(item: DashboardResponse['today_learning_palaces']
   const rawSegments = [
     { key: 'palace_edit', seconds: item.palace_edit_seconds, color: getTimeRecordChartColor('palace_edit') },
     { key: 'practice', seconds: item.practice_seconds, color: getTimeRecordChartColor('practice') },
+    { key: 'quiz', seconds: item.quiz_seconds, color: getTimeRecordChartColor('quiz') },
     { key: 'review', seconds: item.review_seconds, color: getTimeRecordChartColor('review') },
   ].filter((segment) => segment.seconds > 0)
 
@@ -73,9 +79,34 @@ interface DashboardDurationFilterState {
   month: string
   startDate: string
   endDate: string
+  trendRangeDays?: TimeRecordChartRange
+  breakdownRangeDays?: TimeRecordChartRange
+}
+
+interface NormalizedDashboardDurationFilterState
+  extends Omit<
+    DashboardDurationFilterState,
+    'trendRangeDays' | 'breakdownRangeDays'
+  > {
+  trendRangeDays: TimeRecordChartRange
+  breakdownRangeDays: TimeRecordChartRange
 }
 
 const DASHBOARD_TOTAL_DURATION_FILTER_STORAGE_KEY = 'memory_anki_dashboard_total_duration_filter'
+const DEFAULT_TIME_RECORD_CHART_RANGE: TimeRecordChartRange = 7
+const TIME_RECORD_CHART_RANGE_OPTIONS: Array<{
+  label: string
+  value: TimeRecordChartRange
+}> = [
+  { label: '7 天', value: 7 },
+  { label: '30 天', value: 30 },
+  { label: '90 天', value: 90 },
+  { label: '全部', value: 'all' },
+]
+
+function isTimeRecordChartRange(value: unknown): value is TimeRecordChartRange {
+  return value === 7 || value === 30 || value === 90 || value === 'all'
+}
 
 function getCurrentMonthValue(reference = new Date()) {
   const year = reference.getFullYear()
@@ -89,6 +120,8 @@ function createDefaultDurationFilterState(reference = new Date()): DashboardDura
     month: getCurrentMonthValue(reference),
     startDate: '',
     endDate: '',
+    trendRangeDays: DEFAULT_TIME_RECORD_CHART_RANGE,
+    breakdownRangeDays: DEFAULT_TIME_RECORD_CHART_RANGE,
   }
 }
 
@@ -99,7 +132,38 @@ function isDashboardDurationFilterState(value: unknown): value is DashboardDurat
   if (typeof candidate.month !== 'string') return false
   if (typeof candidate.startDate !== 'string') return false
   if (typeof candidate.endDate !== 'string') return false
+  if (
+    typeof candidate.trendRangeDays !== 'undefined' &&
+    !isTimeRecordChartRange(candidate.trendRangeDays)
+  ) {
+    return false
+  }
+  if (
+    typeof candidate.breakdownRangeDays !== 'undefined' &&
+    !isTimeRecordChartRange(candidate.breakdownRangeDays)
+  ) {
+    return false
+  }
   return true
+}
+
+function normalizeDashboardDurationFilterState(
+  value: DashboardDurationFilterState,
+  reference = new Date(),
+): NormalizedDashboardDurationFilterState {
+  const defaults = createDefaultDurationFilterState(reference)
+  return {
+    mode: value.mode,
+    month: value.month,
+    startDate: value.startDate,
+    endDate: value.endDate,
+    trendRangeDays: isTimeRecordChartRange(value.trendRangeDays)
+      ? value.trendRangeDays
+      : defaults.trendRangeDays ?? DEFAULT_TIME_RECORD_CHART_RANGE,
+    breakdownRangeDays: isTimeRecordChartRange(value.breakdownRangeDays)
+      ? value.breakdownRangeDays
+      : defaults.breakdownRangeDays ?? DEFAULT_TIME_RECORD_CHART_RANGE,
+  }
 }
 
 function isDefaultDurationFilterState(filter: DashboardDurationFilterState) {
@@ -120,6 +184,61 @@ function formatSelectedDurationLabel(mode: DurationFilterMode, month: string, st
   return '请选择时间范围'
 }
 
+function formatTrendCardTitle(range: TimeRecordChartRange) {
+  if (range === 'all') return '全部趋势'
+  return `最近 ${range} 天趋势`
+}
+
+function hasDurationFilterStateChanged(
+  current: DashboardDurationFilterState,
+  normalized: NormalizedDashboardDurationFilterState,
+) {
+  return (
+    current.mode !== normalized.mode ||
+    current.month !== normalized.month ||
+    current.startDate !== normalized.startDate ||
+    current.endDate !== normalized.endDate ||
+    current.trendRangeDays !== normalized.trendRangeDays ||
+    current.breakdownRangeDays !== normalized.breakdownRangeDays
+  )
+}
+
+interface TimeRecordChartCardProps {
+  title: string
+  selectedRange: TimeRecordChartRange
+  onRangeChange: (range: TimeRecordChartRange) => void
+  children: React.ReactNode
+}
+
+function TimeRecordChartCard({
+  title,
+  selectedRange,
+  onRangeChange,
+  children,
+}: TimeRecordChartCardProps) {
+  return (
+    <Card className="min-w-0 rounded-[28px] border-border/70">
+      <CardHeader className="flex flex-row items-start justify-between gap-4 pb-2">
+        <CardTitle className="text-lg">{title}</CardTitle>
+        <div className="flex flex-wrap justify-end gap-2">
+          {TIME_RECORD_CHART_RANGE_OPTIONS.map((option) => (
+            <Button
+              key={option.label}
+              size="sm"
+              variant={selectedRange === option.value ? 'default' : 'outline'}
+              className="h-7 px-2"
+              onClick={() => onRangeChange(option.value)}
+            >
+              {option.label}
+            </Button>
+          ))}
+        </div>
+      </CardHeader>
+      <CardContent className="min-w-0 pt-2">{children}</CardContent>
+    </Card>
+  )
+}
+
 export default function Dashboard() {
   const [data, setData] = useState<DashboardResponse | null>(null)
   const [hoveredLearningPalaceId, setHoveredLearningPalaceId] = useState<number | null>(null)
@@ -128,9 +247,41 @@ export default function Dashboard() {
     createDefaultDurationFilterState(),
     isDashboardDurationFilterState,
   )
-  const { mode: durationMode, month: selectedMonth, startDate: rangeStartDate, endDate: rangeEndDate } = durationFilter
+  const normalizedDurationFilter = normalizeDashboardDurationFilterState(
+    durationFilter,
+  )
+  const {
+    mode: durationMode,
+    month: selectedMonth,
+    startDate: rangeStartDate,
+    endDate: rangeEndDate,
+    trendRangeDays,
+    breakdownRangeDays,
+  } = normalizedDurationFilter
   const hasInitializedSelectedDurationRef = useRef(false)
   const [hasLoadedDashboard, setHasLoadedDashboard] = useState(false)
+
+  const updateDurationFilter = useCallback(
+    (
+      updater:
+        | Partial<DashboardDurationFilterState>
+        | ((
+            current: NormalizedDashboardDurationFilterState,
+          ) => Partial<DashboardDurationFilterState>),
+    ) => {
+      setDurationFilter((current) => {
+        const normalizedCurrent = normalizeDashboardDurationFilterState(current)
+        const patch =
+          typeof updater === 'function' ? updater(normalizedCurrent) : updater
+        return normalizeDashboardDurationFilterState({
+          ...normalizedCurrent,
+          ...patch,
+        })
+      })
+    },
+    [setDurationFilter],
+  )
+
   const loadDashboard = useCallback(async () => {
     const dashboard = await getDashboardApi()
     setData(dashboard)
@@ -156,10 +307,18 @@ export default function Dashboard() {
   }, [loadDashboard])
 
   useEffect(() => {
+    if (
+      hasDurationFilterStateChanged(durationFilter, normalizedDurationFilter)
+    ) {
+      setDurationFilter(normalizedDurationFilter)
+    }
+  }, [durationFilter, normalizedDurationFilter, setDurationFilter])
+
+  useEffect(() => {
     if (!hasLoadedDashboard) return
     if (!hasInitializedSelectedDurationRef.current) {
       hasInitializedSelectedDurationRef.current = true
-      if (isDefaultDurationFilterState(durationFilter)) {
+      if (isDefaultDurationFilterState(normalizedDurationFilter)) {
         return
       }
     }
@@ -184,7 +343,7 @@ export default function Dashboard() {
       start_date: rangeStartDate,
       end_date: rangeEndDate,
     })
-  }, [durationMode, durationFilter, hasLoadedDashboard, loadSelectedDuration, rangeEndDate, rangeStartDate, selectedMonth])
+  }, [durationMode, hasLoadedDashboard, loadSelectedDuration, normalizedDurationFilter, rangeEndDate, rangeStartDate, selectedMonth])
 
   if (!data) {
     return <div className="flex items-center justify-center py-32 text-sm text-muted-foreground">正在加载仪表盘...</div>
@@ -267,7 +426,7 @@ export default function Dashboard() {
                 size="sm"
                 variant={durationMode === 'month' ? 'default' : 'outline'}
               className="h-7 px-2"
-              onClick={() => setDurationFilter((current) => ({ ...current, mode: 'month' }))}
+              onClick={() => updateDurationFilter({ mode: 'month' })}
             >
               月份
             </Button>
@@ -275,7 +434,7 @@ export default function Dashboard() {
               size="sm"
               variant={durationMode === 'range' ? 'default' : 'outline'}
               className="h-7 px-2"
-              onClick={() => setDurationFilter((current) => ({ ...current, mode: 'range' }))}
+              onClick={() => updateDurationFilter({ mode: 'range' })}
               >
                 自定义范围
               </Button>
@@ -283,7 +442,7 @@ export default function Dashboard() {
                 size="sm"
                 variant={durationMode === 'all' ? 'default' : 'outline'}
                 className="h-7 px-2"
-                onClick={() => setDurationFilter((current) => ({ ...current, mode: 'all' }))}
+                onClick={() => updateDurationFilter({ mode: 'all' })}
               >
                 显示全部
               </Button>
@@ -294,7 +453,9 @@ export default function Dashboard() {
               className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs"
               type="month"
               value={selectedMonth}
-              onChange={(event) => setDurationFilter((current) => ({ ...current, month: event.target.value }))}
+              onChange={(event) =>
+                updateDurationFilter({ month: event.target.value })
+              }
             />
           ) : durationMode === 'range' ? (
             <div className="space-y-2">
@@ -303,14 +464,18 @@ export default function Dashboard() {
                 className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs"
                 type="date"
                 value={rangeStartDate}
-                onChange={(event) => setDurationFilter((current) => ({ ...current, startDate: event.target.value }))}
+                onChange={(event) =>
+                  updateDurationFilter({ startDate: event.target.value })
+                }
               />
               <input
                 aria-label="结束日期"
                 className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs"
                 type="date"
                 value={rangeEndDate}
-                onChange={(event) => setDurationFilter((current) => ({ ...current, endDate: event.target.value }))}
+                onChange={(event) =>
+                  updateDurationFilter({ endDate: event.target.value })
+                }
               />
               {isRangeInvalid ? (
                 <p className="text-[11px] text-destructive">开始日期不能晚于结束日期。</p>
@@ -506,10 +671,30 @@ export default function Dashboard() {
 
       <div className="space-y-6">
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-          <TimeRecordsTrendChart trend={timeRecordsDashboard.trend} />
-          <TimeRecordsBreakdownChart
-            breakdown={timeRecordsDashboard.breakdown}
-          />
+          <TimeRecordChartCard
+            title={formatTrendCardTitle(trendRangeDays)}
+            selectedRange={trendRangeDays}
+            onRangeChange={(range) =>
+              updateDurationFilter({ trendRangeDays: range })
+            }
+          >
+            <TimeRecordsTrendChart
+              trend={timeRecordsDashboard.getTrendForRange(trendRangeDays)}
+            />
+          </TimeRecordChartCard>
+          <TimeRecordChartCard
+            title="会话类型分布"
+            selectedRange={breakdownRangeDays}
+            onRangeChange={(range) =>
+              updateDurationFilter({ breakdownRangeDays: range })
+            }
+          >
+            <TimeRecordsBreakdownChart
+              breakdown={timeRecordsDashboard.getBreakdownForRange(
+                breakdownRangeDays,
+              )}
+            />
+          </TimeRecordChartCard>
         </div>
 
         <TimeRecordsTable

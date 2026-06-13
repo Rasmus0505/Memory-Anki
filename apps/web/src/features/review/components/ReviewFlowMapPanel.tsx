@@ -1,4 +1,11 @@
-import { MindMapFrame, type MindMapSelection } from '@/shared/components/mindmap-host'
+import { useCallback, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import {
+  MindMapFrame,
+  MindMapPageToolbar,
+  type MindMapFrameHandle,
+  type MindMapSelection,
+} from '@/shared/components/mindmap-host'
 import type { BilinkItem, MindMapEditorState } from '@/shared/api/contracts'
 import type { MindMapReviewFxPayload } from '@/shared/components/mindmap-host/hostBridgeUtils'
 import { cn } from '@/shared/lib/utils'
@@ -25,11 +32,13 @@ interface ReviewFlowMapPanelProps {
     active: boolean
     selectedNodeUids: string[]
   }
+  miniPalacePracticeActive?: boolean
   onEditorStateChange?: (nextState: MindMapEditorState) => void
   onNodeClick: (nodes: MindMapSelection[]) => void
   onNodeContextMenu: (nodes: MindMapSelection[]) => void
   onEditNodeContextMenu?: (nodes: MindMapSelection[]) => void
   onNodeActive?: (nodes: MindMapSelection[]) => void
+  onNodeHover?: (nodes: MindMapSelection[]) => void
   onBilinkTrigger?: (payload: {
     nodeUid: string | null
     left: number
@@ -43,6 +52,7 @@ interface ReviewFlowMapPanelProps {
   }) => void
   onBilinkToolbarSearch?: () => void
   onMiniPalaceOpen?: () => void
+  onMiniPalacePour?: () => void
 }
 
 export function ReviewFlowMapPanel({
@@ -67,28 +77,112 @@ export function ReviewFlowMapPanel({
     active: false,
     selectedNodeUids: [],
   },
+  miniPalacePracticeActive = false,
   onEditorStateChange,
   onNodeClick,
   onNodeContextMenu,
   onEditNodeContextMenu,
   onNodeActive,
+  onNodeHover,
   onBilinkTrigger,
   onBilinkNodeClick,
   onBilinkToolbarSearch,
   onMiniPalaceOpen,
+  onMiniPalacePour,
 }: ReviewFlowMapPanelProps) {
+  const navigate = useNavigate()
+  const frameRef = useRef<MindMapFrameHandle | null>(null)
+  const [nativeFullscreenActive, setNativeFullscreenActive] = useState(false)
+  const [uiCleared, setUiCleared] = useState(false)
   const isEditMode = displayMode === 'edit'
   const frameEditorState = isEditMode && editableEditorState ? editableEditorState : visibleEditorState
   const frameSyncIntent = isEditMode ? 'soft' : 'replace'
+  const handleImmersiveToggle = useCallback(async () => {
+    if (nativeFullscreenActive) {
+      await frameRef.current?.exitNativeFullscreen()
+      onToggleFullscreen(true)
+      return
+    }
+    onToggleFullscreen()
+  }, [nativeFullscreenActive, onToggleFullscreen])
+
+  const handleNativeFullscreenToggle = useCallback(async () => {
+    if (nativeFullscreenActive) {
+      await frameRef.current?.exitNativeFullscreen()
+      return
+    }
+    if (fullscreen) {
+      onToggleFullscreen(false)
+    }
+    await frameRef.current?.enterNativeFullscreen()
+  }, [fullscreen, nativeFullscreenActive, onToggleFullscreen])
+
+  const handleOpenQuizPage = useCallback(() => {
+    if (!currentPalaceId) return
+    navigate(`/palaces/${currentPalaceId}/quiz`)
+  }, [currentPalaceId, navigate])
 
   return (
     <div className={cn('h-full min-h-0', fullscreen && 'flex h-full flex-col')}>
+      <MindMapPageToolbar
+        className="mb-3"
+        modeToggle={
+          onToggleMode
+            ? {
+                label: isEditMode ? '复习' : '编辑',
+                onClick: onToggleMode,
+              }
+            : null
+        }
+        bilinkSearchAction={
+          onBilinkToolbarSearch
+            ? {
+                label: '搜索',
+                onClick: onBilinkToolbarSearch,
+              }
+            : null
+        }
+        quizAction={
+          currentPalaceId
+            ? {
+                label: '做题',
+                onClick: handleOpenQuizPage,
+              }
+            : null
+        }
+        miniPalaceAction={
+          showMiniPalaceButton && onMiniPalaceOpen
+            ? {
+                label: '小宫殿',
+                onClick: onMiniPalaceOpen,
+              }
+            : null
+        }
+        immersiveAction={{
+          label: '半屏编辑',
+          active: fullscreen,
+          onClick: () => {
+            void handleImmersiveToggle()
+          },
+        }}
+        nativeFullscreenAction={{
+          label: '全屏编辑',
+          active: nativeFullscreenActive,
+          onClick: () => {
+            void handleNativeFullscreenToggle()
+          },
+        }}
+        clearUiAction={{
+          label: '清屏',
+          active: uiCleared,
+          onClick: () => frameRef.current?.toggleUiCleared(),
+        }}
+      />
       <MindMapFrame
+        ref={frameRef}
         editorState={frameEditorState}
         readonly={!isEditMode}
-        showToolbarWhenReadonly={!isEditMode}
         practiceModeActive={!isEditMode}
-        practiceToggleLabel={isEditMode ? '复习' : '编辑'}
         viewMemoryScope={viewMemoryScope}
         immersiveModeActive={fullscreen}
         syncOnPropChange
@@ -103,27 +197,22 @@ export function ReviewFlowMapPanel({
         bilinkItems={bilinkItems}
         bilinkCurrentPalaceId={currentPalaceId}
         focusNodeUids={focusNodeUids}
-        showMiniPalaceButton={showMiniPalaceButton}
         miniPalaceDraft={miniPalaceDraft}
+        miniPalacePracticeActive={miniPalacePracticeActive}
         bilinkInsertionText={bilinkInsertionText}
         bilinkInsertionNonce={bilinkInsertionNonce}
         reviewFxSignal={reviewFxSignal}
-        showBilinkSearchButton
         onEditorStateChange={isEditMode && onEditorStateChange ? onEditorStateChange : () => {}}
         onNodeActive={onNodeActive}
         onNodeClick={isEditMode ? undefined : onNodeClick}
         onNodeContextMenu={isEditMode ? onEditNodeContextMenu : onNodeContextMenu}
-        onPracticeToggle={onToggleMode}
+        onNodeHover={isEditMode ? undefined : onNodeHover}
         onBilinkTrigger={onBilinkTrigger}
         onBilinkNodeClick={onBilinkNodeClick}
-        onBilinkToolbarSearch={onBilinkToolbarSearch}
-        onMiniPalaceOpen={onMiniPalaceOpen}
+        onMiniPalacePour={onMiniPalacePour}
         onFullscreenToggle={onToggleFullscreen}
-        onFullscreenChange={(active) => {
-          if (!active) {
-            onToggleFullscreen(false)
-          }
-        }}
+        onFullscreenChange={setNativeFullscreenActive}
+        onUiClearedChange={setUiCleared}
         className={cn(
           'w-full rounded-2xl border border-border/70 bg-white',
           fullscreen ? 'h-full' : 'h-[64vh]',

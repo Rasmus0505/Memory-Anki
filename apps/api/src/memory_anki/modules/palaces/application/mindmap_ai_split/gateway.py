@@ -56,7 +56,7 @@ def call_model(
     log_id = begin_external_ai_call_log(
         feature="AI 分卡",
         operation="mindmap_ai_split",
-        provider="openai_compatible",
+        provider=config.provider,
         base_url=config.base_url,
         model=config.model,
         request_payload={
@@ -72,11 +72,12 @@ def call_model(
                 api_key=config.api_key,
                 base_url=config.base_url,
                 model=config.model,
-                temperature=config.temperature,
+                temperature=(config.temperature if config.supports_temperature else None),
                 timeout_seconds=90,
             ),
             messages=messages,
             response_format={"type": "json_object"},
+            extra_payload=config.extra_payload,
         )
     except OpenAICompatibleProtocolError as exc:
         fail_external_ai_call_log(

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Literal, TypedDict
 
-SessionKind = Literal["palace_edit", "practice", "review"]
+SessionKind = Literal["palace_edit", "practice", "quiz", "review"]
 SessionCompletionMethod = Literal[
     "manual_complete",
     "auto_complete",
@@ -14,6 +14,7 @@ SessionEventType = Literal[
     "start",
     "pause",
     "resume",
+    "leave_scene",
     "complete",
     "adjust_duration",
     "enter_edit_mode",

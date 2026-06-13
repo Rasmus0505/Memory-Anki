@@ -1,5 +1,8 @@
 import type { RevealState } from '@/entities/session/model'
-import type { ReviewMindMapNode } from '@/features/review/model/review-flow-tree'
+import type {
+  RevealFlowMode,
+  ReviewMindMapNode,
+} from '@/features/review/model/review-flow-tree'
 
 export type ReviewFeedbackEvent =
   | 'category_expand'
@@ -24,6 +27,7 @@ export interface ReviewFeedbackTransitionInput {
   previousRevealMap: Record<string, RevealState>
   nextRevealMap: Record<string, RevealState>
   root: ReviewMindMapNode
+  revealMode?: RevealFlowMode
 }
 
 export interface ReviewFeedbackTransitionResult {
@@ -85,6 +89,7 @@ export function deriveReviewFeedbackTransition({
   previousRevealMap,
   nextRevealMap,
   root,
+  revealMode = 'standard',
 }: ReviewFeedbackTransitionInput): ReviewFeedbackTransitionResult {
   const { ids, parents } = collectNodes(root)
   const nonRootIds = ids.filter((id) => id !== root.id)
@@ -95,7 +100,12 @@ export function deriveReviewFeedbackTransition({
     return previousState === 'hidden' && nextState === 'placeholder'
   })
   const revealedNodeIds = nonRootIds.filter((id) =>
-    transitionedToRevealed(previousRevealMap, nextRevealMap, id),
+    transitionedToRevealed(previousRevealMap, nextRevealMap, id) ||
+    (
+      revealMode === 'mini-checkpoint' &&
+      (previousRevealMap[id] ?? 'hidden') === 'hidden' &&
+      (nextRevealMap[id] ?? 'hidden') === 'revealed'
+    ),
   )
 
   const branchClearNodeIds = parents

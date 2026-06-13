@@ -61,10 +61,19 @@ export function getAiModelScenariosApi() {
   return request<AiModelScenariosResponse>('/settings/ai-models')
 }
 
-export function updateAiModelScenariosApi(updates: Record<string, string>) {
+export function updateAiModelScenariosApi(data: {
+  scenario_updates?: Record<string, {
+    default_model?: string
+    default_thinking_enabled?: boolean
+  }>
+  provider_updates?: Record<string, {
+    api_key?: string
+    base_url?: string
+  }>
+}) {
   return request<AiModelScenariosResponse>('/settings/ai-models', {
     method: 'PUT',
-    body: JSON.stringify({ updates }),
+    body: JSON.stringify(data),
     persistence: {
       resourceKey: 'settings:ai-models',
       coalesceKey: 'settings:ai-models',

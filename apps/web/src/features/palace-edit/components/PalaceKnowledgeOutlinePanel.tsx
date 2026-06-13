@@ -1,11 +1,16 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ChapterOption, PalaceMeta } from '@/features/palace-edit/hooks/usePalaceEditPage'
 import type { MindMapEditorState } from '@/shared/api/contracts'
 import { getSubjectEditorApi, saveSubjectEditorApi } from '@/shared/api/modules/knowledge'
-import { MindMapFrame } from '@/shared/components/mindmap-host'
+import {
+  MindMapFrame,
+  MindMapPageToolbar,
+  type MindMapFrameHandle,
+} from '@/shared/components/mindmap-host'
 import { Badge } from '@/shared/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card'
 import { usePersistedMindMapEditor } from '@/shared/hooks/usePersistedMindMapEditor'
+import { cn } from '@/shared/lib/utils'
 
 interface PalaceKnowledgeOutlinePanelProps {
   palace: PalaceMeta | null
@@ -28,6 +33,7 @@ export function PalaceKnowledgeOutlinePanel({
   explicitChapterIds,
   chapterOptions,
 }: PalaceKnowledgeOutlinePanelProps) {
+  const mindMapFrameRef = useRef<MindMapFrameHandle | null>(null)
   const flatOptions = useMemo(() => flattenChapterOptions(chapterOptions), [chapterOptions])
   const availableSubjects = useMemo(() => {
     const seen = new Map<number, { id: number; name: string }>()
@@ -39,6 +45,9 @@ export function PalaceKnowledgeOutlinePanel({
     return Array.from(seen.values())
   }, [explicitChapterIds, flatOptions])
   const [selectedSubjectId, setSelectedSubjectId] = useState<number | null>(null)
+  const [mindMapFullscreen, setMindMapFullscreen] = useState(false)
+  const [mindMapNativeFullscreen, setMindMapNativeFullscreen] = useState(false)
+  const [mindMapUiCleared, setMindMapUiCleared] = useState(false)
 
   useEffect(() => {
     if (availableSubjects.length === 0) {
@@ -79,8 +88,33 @@ export function PalaceKnowledgeOutlinePanel({
     return <Badge variant="secondary">与知识树同步</Badge>
   }, [editorState, error, isSaving])
 
+  const handleImmersiveToolbarToggle = async () => {
+    if (mindMapNativeFullscreen) {
+      await mindMapFrameRef.current?.exitNativeFullscreen()
+      setMindMapFullscreen(true)
+      return
+    }
+    setMindMapFullscreen((current) => !current)
+  }
+
+  const handleNativeFullscreenToolbarToggle = async () => {
+    if (mindMapNativeFullscreen) {
+      await mindMapFrameRef.current?.exitNativeFullscreen()
+      return
+    }
+    if (mindMapFullscreen) {
+      setMindMapFullscreen(false)
+    }
+    await mindMapFrameRef.current?.enterNativeFullscreen()
+  }
+
   return (
-    <Card className="border-border/70 bg-card/92">
+    <Card
+      className={cn(
+        'border-border/70 bg-card/92',
+        mindMapFullscreen && 'fixed inset-x-5 bottom-5 top-5 z-[90] bg-card/96 shadow-2xl',
+      )}
+    >
       <CardHeader className="flex flex-row items-center justify-between gap-3">
         <div className="space-y-1">
           <CardTitle className="text-base">知识大纲</CardTitle>
@@ -90,7 +124,7 @@ export function PalaceKnowledgeOutlinePanel({
         </div>
         {statusLabel}
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className={cn('space-y-4', mindMapFullscreen && 'h-[calc(100vh-108px)] min-h-0')}>
         {availableSubjects.length > 0 ? (
           <>
             <div className="flex flex-wrap items-center gap-2">
@@ -112,15 +146,47 @@ export function PalaceKnowledgeOutlinePanel({
             </div>
 
             {editorState ? (
-              <MindMapFrame
-                key={`subject-outline-${selectedSubjectId}`}
-                editorState={editorState}
-                syncOnPropChange
-                onEditorStateChange={(nextState: MindMapEditorState) => {
-                  setEditorState(nextState)
-                }}
-                className="h-[52vh] w-full rounded-2xl border border-border/70 bg-white"
-              />
+              <div className="flex h-full min-h-0 flex-col gap-3">
+                <MindMapPageToolbar
+                  compact
+                  immersiveAction={{
+                    label: '半屏编辑',
+                    active: mindMapFullscreen,
+                    onClick: () => {
+                      void handleImmersiveToolbarToggle()
+                    },
+                  }}
+                  nativeFullscreenAction={{
+                    label: '全屏编辑',
+                    active: mindMapNativeFullscreen,
+                    onClick: () => {
+                      void handleNativeFullscreenToolbarToggle()
+                    },
+                  }}
+                  clearUiAction={{
+                    label: '清屏',
+                    active: mindMapUiCleared,
+                    onClick: () => mindMapFrameRef.current?.toggleUiCleared(),
+                  }}
+                />
+                <MindMapFrame
+                  ref={mindMapFrameRef}
+                  key={`subject-outline-${selectedSubjectId}`}
+                  editorState={editorState}
+                  immersiveModeActive={mindMapFullscreen}
+                  syncOnPropChange
+                  onEditorStateChange={(nextState: MindMapEditorState) => {
+                    setEditorState(nextState)
+                  }}
+                  onFullscreenToggle={setMindMapFullscreen}
+                  onFullscreenChange={setMindMapNativeFullscreen}
+                  onUiClearedChange={setMindMapUiCleared}
+                  className={cn(
+                    'w-full flex-1 rounded-2xl border border-border/70 bg-white',
+                    mindMapFullscreen ? 'h-full' : 'h-[52vh]',
+                  )}
+                />
+              </div>
             ) : (
               <div className="flex h-[52vh] items-center justify-center rounded-2xl border border-dashed border-border/80 bg-background/60 text-sm text-muted-foreground">
                 正在加载知识大纲编辑器…

@@ -116,4 +116,72 @@ describe('SessionTimerBar', () => {
     expect(onAdjustDuration).not.toHaveBeenCalled()
     expect(input.value).toBe('00:00:05')
   })
+
+  it('shows idle seconds against the active scene threshold', () => {
+    window.localStorage.setItem(
+      TIMER_AUTOMATION_STORAGE_KEY,
+      JSON.stringify({
+        mode: 'scene',
+        actions: {},
+        palace_edit: {
+          autoStartOnPageEnter: false,
+          inactiveAutoPauseSeconds: 300,
+          hiddenAutoPauseSeconds: 15,
+          autoPauseRollbackSeconds: 20,
+        },
+      }),
+    )
+
+    render(
+      <SessionTimerBar
+        effectiveSeconds={30}
+        idleSeconds={3}
+        automationScene="palace_edit"
+        pauseCount={0}
+        status="running"
+        onStart={() => {}}
+        onPause={() => {}}
+        onResume={() => {}}
+        onAdjustDuration={() => {}}
+      />,
+    )
+
+    expect(screen.getByText('闲置3/300秒')).toBeTruthy()
+  })
+
+  it('keeps the idle row visible and only highlights it after idle starts', () => {
+    const { rerender } = render(
+      <SessionTimerBar
+        effectiveSeconds={30}
+        idleSeconds={0}
+        automationScene="palace_edit"
+        pauseCount={0}
+        status="running"
+        onStart={() => {}}
+        onPause={() => {}}
+        onResume={() => {}}
+        onAdjustDuration={() => {}}
+      />,
+    )
+
+    const idleText = screen.getByText('闲置0/300秒')
+    expect(idleText.className).toContain('text-foreground')
+    expect(idleText.className).not.toContain('text-orange-500')
+
+    rerender(
+      <SessionTimerBar
+        effectiveSeconds={30}
+        idleSeconds={12}
+        automationScene="palace_edit"
+        pauseCount={0}
+        status="running"
+        onStart={() => {}}
+        onPause={() => {}}
+        onResume={() => {}}
+        onAdjustDuration={() => {}}
+      />,
+    )
+
+    expect(screen.getByText('闲置12/300秒').className).toContain('text-orange-500')
+  })
 })

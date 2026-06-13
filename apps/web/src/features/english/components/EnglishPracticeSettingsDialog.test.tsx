@@ -67,4 +67,28 @@ describe('EnglishPracticeSettingsDialog', () => {
     expect(screen.getByRole('button', { name: '取消录制' })).toBeTruthy()
     expect(screen.getByText('按键录制中…')).toBeTruthy()
   })
+
+  it('persists masterVolume changes through save', () => {
+    const onSave = vi.fn()
+
+    render(
+      <EnglishPracticeSettingsDialog
+        open
+        settings={DEFAULT_ENGLISH_PRACTICE_SETTINGS}
+        onOpenChange={vi.fn()}
+        onSave={onSave}
+      />,
+    )
+
+    const slider = screen.getByLabelText('总音量') as HTMLInputElement
+    expect(slider).toBeTruthy()
+    expect(slider.value).toBe('0.5')
+
+    fireEvent.change(slider, { target: { value: '0.75' } })
+    fireEvent.click(screen.getByRole('button', { name: '保存设置' }))
+
+    expect(onSave).toHaveBeenCalledTimes(1)
+    expect(onSave.mock.calls[0][0].sound.masterVolume).toBe(0.75)
+    expect(onSave.mock.calls[0][0].sound.enabled).toBe(true)
+  })
 })

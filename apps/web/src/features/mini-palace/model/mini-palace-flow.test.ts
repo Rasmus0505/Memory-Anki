@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import type { ReviewMindMapNode } from '@/features/review/model/review-flow-tree'
 import {
-  advanceMiniPalaceRevealStateForNodeClick,
   buildMiniPalaceRevealState,
   isMiniPalaceRevealComplete,
+  pourMiniPalaceRevealState,
   sanitizeMiniPalaceCheckpointIds,
 } from './mini-palace-flow'
+import { flattenNodes } from '@/features/review/model/review-flow-tree'
 
 function node(
   id: string,
@@ -24,7 +25,7 @@ function node(
 }
 
 describe('mini palace reveal flow', () => {
-  it('stops at checkpoints and auto-reveals intermediate nodes after a checkpoint is flipped', () => {
+  it('stops each branch at the nearest checkpoint when building the initial reveal map', () => {
     const root = node('1', [node('2', [node('3', [node('4', [node('5')])])])])
 
     const initial = buildMiniPalaceRevealState(root, ['2', '5'])
@@ -35,58 +36,80 @@ describe('mini palace reveal flow', () => {
       '4': 'hidden',
       '5': 'hidden',
     })
-
-    const afterTwo = advanceMiniPalaceRevealStateForNodeClick('2', root, ['2', '5'], initial)
-    expect(afterTwo).toEqual({
-      '1': 'revealed',
-      '2': 'revealed',
-      '3': 'revealed',
-      '4': 'revealed',
-      '5': 'placeholder',
-    })
-
-    const afterFive = advanceMiniPalaceRevealStateForNodeClick('5', root, ['2', '5'], afterTwo)
-    expect(afterFive['5']).toBe('revealed')
-    expect(isMiniPalaceRevealComplete(root, ['2', '5'], afterFive)).toBe(true)
   })
 
-  it('uses pre-order traversal for branched trees', () => {
+  it('builds checkpoint blockers per branch instead of blocking later siblings globally', () => {
     const root = node('root', [
-      node('a', [node('a1')]),
-      node('b'),
+      node('a', [node('a1', [node('a2')])]),
+      node('b', [node('b1')]),
+      node('c'),
     ])
 
-    const initial = buildMiniPalaceRevealState(root, ['a1', 'b'])
+    const initial = buildMiniPalaceRevealState(root, ['a1'])
     expect(initial).toEqual({
       root: 'revealed',
       a: 'revealed',
       a1: 'placeholder',
-      b: 'hidden',
-    })
-
-    const afterA1 = advanceMiniPalaceRevealStateForNodeClick('a1', root, ['a1', 'b'], initial)
-    expect(afterA1).toEqual({
-      root: 'revealed',
-      a: 'revealed',
-      a1: 'revealed',
-      b: 'placeholder',
+      a2: 'hidden',
+      b: 'revealed',
+      b1: 'revealed',
+      c: 'revealed',
     })
   })
 
-  it('handles parent and child checkpoints one at a time', () => {
-    const root = node('root', [node('a', [node('a1'), node('a2')])])
-    const initial = buildMiniPalaceRevealState(root, ['a', 'a1'])
-    expect(initial.a).toBe('placeholder')
-    expect(initial.a1).toBe('hidden')
+  it('pours in parallel across sibling branches until each branch hits its checkpoint', () => {
+    const root = node('root', [
+      node('a', [node('a1', [node('a2')])]),
+      node('b', [node('b1', [node('b2')])]),
+      node('c', [node('c1')]),
+    ])
+    const nodeMap = flattenNodes(root)
+    const revealMap = {
+      root: 'revealed',
+      a: 'revealed',
+      a1: 'revealed',
+      a2: 'hidden',
+      b: 'revealed',
+      b1: 'hidden',
+      b2: 'hidden',
+      c: 'revealed',
+      c1: 'hidden',
+    } as const
 
-    const afterParent = advanceMiniPalaceRevealStateForNodeClick('a', root, ['a', 'a1'], initial)
-    expect(afterParent.a).toBe('revealed')
-    expect(afterParent.a1).toBe('placeholder')
-    expect(afterParent.a2).toBe('hidden')
+    const next = pourMiniPalaceRevealState('root', root, nodeMap, ['a2', 'b2'], revealMap)
+    expect(next).toEqual({
+      root: 'revealed',
+      a: 'revealed',
+      a1: 'revealed',
+      a2: 'placeholder',
+      b: 'revealed',
+      b1: 'revealed',
+      b2: 'placeholder',
+      c: 'revealed',
+      c1: 'revealed',
+    })
   })
 
   it('sanitizes invalid and duplicate checkpoint ids', () => {
     const root = node('root', [node('a'), node('b')])
     expect(sanitizeMiniPalaceCheckpointIds(root, ['a', 'missing', 'a', 'b'])).toEqual(['a', 'b'])
+  })
+
+  it('marks completion only when every checkpoint is revealed', () => {
+    const root = node('root', [node('a'), node('b')])
+    expect(
+      isMiniPalaceRevealComplete(root, ['a', 'b'], {
+        root: 'revealed',
+        a: 'revealed',
+        b: 'placeholder',
+      }),
+    ).toBe(false)
+    expect(
+      isMiniPalaceRevealComplete(root, ['a', 'b'], {
+        root: 'revealed',
+        a: 'revealed',
+        b: 'revealed',
+      }),
+    ).toBe(true)
   })
 })

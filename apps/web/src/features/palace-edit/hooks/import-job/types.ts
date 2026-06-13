@@ -1,5 +1,9 @@
 import type { RefObject } from 'react'
-import type { MindMapEditorState, PdfImportOptions } from '@/shared/api/contracts'
+import type {
+  AiRuntimeOptions,
+  MindMapEditorState,
+  PdfImportOptions,
+} from '@/shared/api/contracts'
 import type {
   BatchImportMeta,
   BatchImportImageItem,
@@ -32,6 +36,12 @@ export interface UseImportJobControllerOptions {
   persistAnalyzedPdfPages: (documentId: number, pages: number[]) => void
   rangePrompt: string
   pdfImportOptions: PdfImportOptions
+  promptForAiOptions: (request: {
+    scenarioKey: string
+    entrypointKey: string
+    title: string
+    description?: string
+  }) => Promise<AiRuntimeOptions | undefined>
 }
 
 export interface ImportJobHydrateOptions {

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
+import { useAiRunConfigDialog } from '@/features/ai-config/useAiRunConfigDialog'
 import type {
   EnglishGenerationLogEvent,
   EnglishGenerationLogResponse,
@@ -22,6 +23,7 @@ function summarizeTaskEvents(events: EnglishGenerationLogEvent[]) {
 
 export function useEnglishWorkspaceController() {
   const navigate = useNavigate()
+  const { promptForAiOptions, aiRunConfigDialog } = useAiRunConfigDialog()
   const [workspace, setWorkspace] = useState<EnglishWorkspaceResponse | null>(null)
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [uploading, setUploading] = useState(false)
@@ -163,7 +165,17 @@ export function useEnglishWorkspaceController() {
     if (!selectedFile || !canUpload) return
     setUploading(true)
     try {
-      await uploadEnglishVideoApi(selectedFile)
+      const aiOptions = await promptForAiOptions({
+        scenarioKey: 'asr',
+        entrypointKey: 'english-course-upload-asr',
+        title: '英语课程 ASR 配置',
+        description: '这次上传会沿用这里的 ASR 模型配置完成整条转写链路。',
+      })
+      if (!aiOptions) {
+        setUploading(false)
+        return
+      }
+      await uploadEnglishVideoApi(selectedFile, aiOptions)
       toast.success('视频已上传，正在生成英语课程。')
       setSelectedFile(null)
       await loadWorkspace()
@@ -172,7 +184,7 @@ export function useEnglishWorkspaceController() {
     } finally {
       setUploading(false)
     }
-  }, [canUpload, loadWorkspace, selectedFile])
+  }, [canUpload, loadWorkspace, promptForAiOptions, selectedFile])
 
   const handleRetry = useCallback(async () => {
     setActionLoading('retry')
@@ -230,6 +242,7 @@ export function useEnglishWorkspaceController() {
 
   return {
     actionLoading,
+    aiRunConfigDialog,
     canUpload,
     currentTask,
     handleClearTask,

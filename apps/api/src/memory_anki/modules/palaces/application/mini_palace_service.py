@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from datetime import date, datetime
 from typing import Any
 
@@ -18,7 +19,9 @@ from memory_anki.infrastructure.db.models import (
 from memory_anki.modules.palaces.application.segment_nodes import (
     build_segments_editor_doc,
     collect_doc_nodes_with_descendants,
+    get_reviewable_doc_node_uids,
 )
+from memory_anki.modules.mindmap.application.editor_state_service import _deserialize
 from memory_anki.modules.reviews.application.schedule_policy import (
     ReviewScheduleDraft,
     ReviewSchedulePolicy,
@@ -36,6 +39,10 @@ from memory_anki.modules.reviews.application.schedule_service import (
     get_algorithm_intervals,
     get_algorithm_stage_labels,
     get_config_value,
+)
+from memory_anki.modules.sessions.application.session_progress_service import (
+    calculate_reveal_progress,
+    get_mini_review_progress,
 )
 
 
@@ -202,6 +209,17 @@ def mini_palace_summary_json(
         current_review_schedule_id = timing["current_review_schedule_id"]
         current_review_type = timing["current_review_type"]
         estimated_review_seconds = estimate_mini_review_seconds(mini_palace)
+        active_review_progress = None
+        if current_review_schedule_id is not None:
+            review_progress = get_mini_review_progress(session, current_review_schedule_id)
+            if review_progress:
+                review_doc = build_segments_editor_doc(mini_palace.palace, [node_uids])
+                active_review_progress = calculate_reveal_progress(
+                    review_progress,
+                    get_reviewable_doc_node_uids(review_doc),
+                )
+    if session is None:
+        active_review_progress = None
     return {
         "id": mini_palace.id,
         "palace_id": mini_palace.palace_id,
@@ -223,6 +241,7 @@ def mini_palace_summary_json(
         "has_due_review": has_due_review,
         "current_review_schedule_id": current_review_schedule_id,
         "current_review_type": current_review_type,
+        "active_review_progress": active_review_progress,
     }
 
 
@@ -241,12 +260,11 @@ def create_palace_mini_palace(
     palace: Palace,
     payload: dict[str, Any],
 ) -> PalaceMiniPalace:
+    normalized_node_uids = _normalize_node_uids(palace, payload.get("node_uids", []))
     mini_palace = PalaceMiniPalace(
         palace_id=palace.id,
-        name=_resolve_name(palace, payload.get("name")),
-        node_uids_json=serialize_mini_palace_node_uids(
-            _normalize_node_uids(palace, payload.get("node_uids", []))
-        ),
+        name=_resolve_name(palace, payload.get("name"), node_uids=normalized_node_uids),
+        node_uids_json=serialize_mini_palace_node_uids(normalized_node_uids),
         needs_practice=bool(payload.get("needs_practice", False)),
         sort_order=max([item.sort_order for item in palace.mini_palaces], default=-1) + 1,
         created_at=utc_now_naive(),
@@ -265,16 +283,20 @@ def update_palace_mini_palace(
     mini_palace: PalaceMiniPalace,
     payload: dict[str, Any],
 ) -> PalaceMiniPalace:
+    normalized_node_uids = None
+    if "node_uids" in payload:
+        normalized_node_uids = _normalize_node_uids(
+            mini_palace.palace, payload.get("node_uids", [])
+        )
     if "name" in payload:
         mini_palace.name = _resolve_name(
             mini_palace.palace,
             payload.get("name"),
+            node_uids=normalized_node_uids,
             exclude_id=mini_palace.id,
         )
-    if "node_uids" in payload:
-        mini_palace.node_uids_json = serialize_mini_palace_node_uids(
-            _normalize_node_uids(mini_palace.palace, payload.get("node_uids", []))
-        )
+    if normalized_node_uids is not None:
+        mini_palace.node_uids_json = serialize_mini_palace_node_uids(normalized_node_uids)
     if "sort_order" in payload:
         mini_palace.sort_order = max(0, int(payload.get("sort_order") or 0))
     if "needs_practice" in payload:
@@ -916,15 +938,71 @@ def _unique_strings(values: Any) -> list[str]:
     return result
 
 
+def _default_mini_palace_name_from_first_child(palace: Palace) -> str:
+    doc = _deserialize(getattr(palace, "editor_doc", None), {})
+    root = doc.get("root") if isinstance(doc, dict) else None
+    children = root.get("children") if isinstance(root, dict) else None
+    first_child = children[0] if isinstance(children, list) and children else None
+    data = first_child.get("data") if isinstance(first_child, dict) else None
+    raw_text = str(data.get("text") or "").strip() if isinstance(data, dict) else ""
+    if not raw_text:
+        return ""
+    return re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", raw_text).replace("&nbsp;", " ")).strip()
+
+
+def _node_text_by_uid(palace: Palace) -> dict[str, str]:
+    doc = _deserialize(getattr(palace, "editor_doc", None), {})
+    root = doc.get("root") if isinstance(doc, dict) else None
+    result: dict[str, str] = {}
+
+    def visit(node: Any) -> None:
+        if not isinstance(node, dict):
+            return
+        data = node.get("data")
+        if isinstance(data, dict):
+            uid = str(data.get("uid") or "").strip()
+            raw_text = str(data.get("text") or "").strip()
+            normalized_text = re.sub(
+                r"\s+", " ", re.sub(r"<[^>]+>", " ", raw_text).replace("&nbsp;", " ")
+            ).strip()
+            if uid and normalized_text:
+                result[uid] = normalized_text
+        children = node.get("children")
+        if isinstance(children, list):
+            for child in children:
+                visit(child)
+
+    visit(root)
+    return result
+
+
+def _default_mini_palace_name_from_node_uids(palace: Palace, node_uids: list[str] | None) -> str:
+    if not node_uids:
+        return ""
+    text_by_uid = _node_text_by_uid(palace)
+    for uid in node_uids:
+        text = text_by_uid.get(uid, "").strip()
+        if text:
+            return text
+    return ""
+
+
 def _resolve_name(
     palace: Palace,
     value: Any,
     *,
+    node_uids: list[str] | None = None,
     exclude_id: int | None = None,
 ) -> str:
     raw = str(value or "").strip()
     if raw:
         return raw
+    preferred = _default_mini_palace_name_from_node_uids(palace, node_uids)
+    if preferred:
+        return preferred
+    preferred = _default_mini_palace_name_from_first_child(palace)
+    if preferred:
+        return preferred
     existing_names = {
         str(item.name or "").strip()
         for item in palace.mini_palaces

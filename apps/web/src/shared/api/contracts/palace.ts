@@ -1,6 +1,8 @@
 import type { MindMapDoc } from './mindmap'
 import type { ReviewPalaceSummary, ReviewQueueChapter, ReviewStageSummary } from './review'
 
+export type MiniReviewMode = 'independent' | 'mini_only'
+
 export interface PalaceReviewPlanItem {
   date: string | null
   representative_schedule_id: number
@@ -37,6 +39,7 @@ export interface PalaceSegmentSummary {
   has_due_review: boolean
   current_review_schedule_id: number | null
   current_review_type?: string | null
+  active_review_progress?: number | null
   is_empty: boolean
   is_virtual_default?: boolean
 }
@@ -61,6 +64,7 @@ export interface MiniPalaceSummary {
   has_due_review: boolean
   current_review_schedule_id: number | null
   current_review_type?: string | null
+  active_review_progress?: number | null
 }
 export interface PalaceListItem {
   id: number
@@ -79,8 +83,10 @@ export interface PalaceListItem {
   review_stage_progress: number
   stage_labels: string[]
   review_stages?: ReviewStageSummary[]
+  active_review_progress?: number | null
   segments: PalaceSegmentSummary[]
   mini_palaces?: MiniPalaceSummary[]
+  mini_review_mode?: MiniReviewMode
   chapters?: Array<unknown>
 }
 export interface ChapterSummary {

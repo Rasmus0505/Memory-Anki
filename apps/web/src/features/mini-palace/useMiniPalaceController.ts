@@ -1,4 +1,4 @@
-﻿import * as React from 'react'
+import * as React from 'react'
 import { toast } from 'sonner'
 import type { RevealState } from '@/entities/session/model'
 import type { MindMapDoc, MindMapEditorState, MiniPalaceSummary } from '@/shared/api/contracts'
@@ -11,16 +11,18 @@ import {
 } from '@/shared/api/modules/palaces'
 import { buildSubtreeUidMap } from '@/features/palace-edit/model/mindmap-editor'
 import {
+  advanceRevealStateForNodeClick,
   buildReviewTree,
   buildSelectionNodeId,
   flattenNodes,
+  hideRevealStateBranch,
   parseEditorDoc,
 } from '@/features/review/model/review-flow-tree'
 import {
-  advanceMiniPalaceRevealStateForNodeClick,
   buildMiniPalaceRevealState,
   buildMiniPalaceVisibleEditorState,
   isMiniPalaceRevealComplete,
+  pourMiniPalaceRevealState,
   sanitizeMiniPalaceCheckpointIds,
 } from '@/features/mini-palace/model/mini-palace-flow'
 
@@ -41,6 +43,8 @@ interface MiniPalaceControllerOptions {
   palaceId: number | null
   title: string
   editorState: MindMapEditorState | null
+  selectedNodeUid: string | null
+  selectedNodeText: string
   timer: TimerLike
 }
 
@@ -53,6 +57,8 @@ export function useMiniPalaceController({
   palaceId,
   title,
   editorState,
+  selectedNodeUid,
+  selectedNodeText,
   timer,
 }: MiniPalaceControllerOptions) {
   const [items, setItems] = React.useState<MiniPalaceSummary[]>([])
@@ -65,7 +71,8 @@ export function useMiniPalaceController({
   const [draftNodeUids, setDraftNodeUids] = React.useState<string[]>([])
   const [activeMiniPalace, setActiveMiniPalace] = React.useState<MiniPalaceSummary | null>(null)
   const [revealMap, setRevealMap] = React.useState<Record<string, RevealState>>({})
-  const [completed, setCompleted] = React.useState(false)
+  const [hoveredNodeId, setHoveredNodeId] = React.useState<string | null>(null)
+  const hoveredNodeIdRef = React.useRef<string | null>(null)
 
   const parsedDoc = React.useMemo(
     () => parseEditorDoc(editorState?.editor_doc ?? null),
@@ -81,11 +88,19 @@ export function useMiniPalaceController({
     next.delete(root.id)
     return next
   }, [root.id, validNodeIds])
-  const revealMapRef = React.useRef(revealMap)
+
+  const completed = React.useMemo(() => {
+    if (mode !== 'practicing' || !activeMiniPalace) return false
+    return isMiniPalaceRevealComplete(root, activeMiniPalace.node_uids, revealMap)
+  }, [activeMiniPalace, mode, revealMap, root])
 
   React.useEffect(() => {
-    revealMapRef.current = revealMap
-  }, [revealMap])
+    setDraftNodeUids((current) => current.filter((uid) => validCheckpointIds.has(uid)))
+    if (mode !== 'practicing' || !activeMiniPalace) return
+    setRevealMap((current): Record<string, RevealState> =>
+      buildMiniPalaceRevealState(root, activeMiniPalace.node_uids, current),
+    )
+  }, [activeMiniPalace, docFingerprint, mode, root, validCheckpointIds])
 
   const refresh = React.useCallback(async () => {
     if (!palaceId) {
@@ -115,17 +130,8 @@ export function useMiniPalaceController({
     setDraftNodeUids([])
     setActiveMiniPalace(null)
     setRevealMap({})
-    setCompleted(false)
+    setHoveredNodeId(null)
   }, [palaceId])
-
-  React.useEffect(() => {
-    setDraftNodeUids((current) => current.filter((uid) => validCheckpointIds.has(uid)))
-    if (mode !== 'practicing' || !activeMiniPalace) return
-    setRevealMap((current) =>
-      buildMiniPalaceRevealState(root, activeMiniPalace.node_uids, current),
-    )
-    setCompleted(false)
-  }, [activeMiniPalace, docFingerprint, mode, root, validCheckpointIds])
 
   const openPanel = React.useCallback(() => {
     if (!palaceId) return
@@ -141,13 +147,14 @@ export function useMiniPalaceController({
   const startCreate = React.useCallback(() => {
     if (!editorState) return
     timer.registerActivity('practice_interaction', { source: 'mini_palace_create_start' })
+    const selectedNodeName =
+      selectedNodeUid && selectedNodeUid !== root.id ? selectedNodeText.trim() : ''
     setPanelOpen(false)
     setMode('selecting')
-    setDraftName('')
+    setDraftName(selectedNodeName)
     setDraftNodeUids([])
     setActiveMiniPalace(null)
-    setCompleted(false)
-  }, [editorState, timer])
+  }, [editorState, root.id, selectedNodeText, selectedNodeUid, timer])
 
   const cancelCreate = React.useCallback(() => {
     timer.registerActivity('practice_interaction', { source: 'mini_palace_create_cancel' })
@@ -169,7 +176,7 @@ export function useMiniPalaceController({
     setMode('practicing')
     setActiveMiniPalace({ ...item, node_uids: checkpoints, node_count: checkpoints.length })
     setRevealMap(buildMiniPalaceRevealState(root, checkpoints))
-    setCompleted(false)
+    setHoveredNodeId(null)
   }, [editorState, root, timer])
 
   const startEdit = React.useCallback((item: MiniPalaceSummary) => {
@@ -180,7 +187,6 @@ export function useMiniPalaceController({
     setActiveMiniPalace(item)
     setDraftName(item.name)
     setDraftNodeUids([...item.node_uids])
-    setCompleted(false)
   }, [editorState, timer])
 
   const confirmCreate = React.useCallback(async () => {
@@ -195,7 +201,6 @@ export function useMiniPalaceController({
     timer.registerActivity('practice_interaction', { source: 'mini_palace_create_confirm' })
     try {
       if (activeMiniPalace) {
-        // Edit existing mini-palace
         const response = await updateMiniPalaceApi(activeMiniPalace.id, { name: draftName, node_uids: checkpoints })
         await refresh()
         setDraftName('')
@@ -204,7 +209,6 @@ export function useMiniPalaceController({
         setActiveMiniPalace(null)
         toast.success('小宫殿已更新')
       } else {
-        // Create new mini-palace
         const response = await createMiniPalaceApi(palaceId, {
           name: draftName,
           node_uids: checkpoints,
@@ -261,7 +265,6 @@ export function useMiniPalaceController({
         setMode('idle')
         setActiveMiniPalace(null)
         setRevealMap({})
-        setCompleted(false)
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : '删除小宫殿失败。'
@@ -278,7 +281,7 @@ export function useMiniPalaceController({
     setMode('idle')
     setActiveMiniPalace(null)
     setRevealMap({})
-    setCompleted(false)
+    setHoveredNodeId(null)
   }, [timer])
 
   const toggleSingleDraftNode = React.useCallback((nodeUid: string) => {
@@ -311,6 +314,24 @@ export function useMiniPalaceController({
     })
   }, [subtreeUidMap, validCheckpointIds])
 
+  const handleNodeHover = React.useCallback((nodes: MindMapSelection[]) => {
+    const nodeId = buildSelectionNodeId(nodes[0] ?? null)
+    hoveredNodeIdRef.current = nodeId
+    setHoveredNodeId(nodeId)
+  }, [])
+
+  const handleSpacePour = React.useCallback(() => {
+    if (mode !== 'practicing' || !activeMiniPalace) return
+    const targetId = hoveredNodeIdRef.current
+    if (!targetId) return
+    timer.registerActivity('practice_interaction', { source: 'mini_palace_space_pour' })
+    setRevealMap((current) => {
+      const currentNode = nodeMap.get(targetId)
+      if (!currentNode) return current
+      return pourMiniPalaceRevealState(targetId, root, nodeMap, activeMiniPalace.node_uids, current)
+    })
+  }, [activeMiniPalace, mode, nodeMap, root, timer])
+
   const handleNodeClick = React.useCallback((nodes: MindMapSelection[]) => {
     const nodeId = buildSelectionNodeId(nodes[0] ?? null)
     if (!nodeId) return
@@ -319,20 +340,10 @@ export function useMiniPalaceController({
       toggleSingleDraftNode(nodeId)
       return
     }
-    if (mode !== 'practicing' || !activeMiniPalace || completed) return
+    if (mode !== 'practicing' || !activeMiniPalace) return
     timer.registerActivity('practice_interaction', { source: 'mini_palace_flip_click' })
-    setRevealMap((current) => {
-      const next = advanceMiniPalaceRevealStateForNodeClick(
-        nodeId,
-        root,
-        activeMiniPalace.node_uids,
-        current,
-      )
-      const nextCompleted = isMiniPalaceRevealComplete(root, activeMiniPalace.node_uids, next)
-      setCompleted(nextCompleted)
-      return next
-    })
-  }, [activeMiniPalace, completed, mode, root, timer, toggleSingleDraftNode])
+    setRevealMap((current) => advanceRevealStateForNodeClick(nodeId, nodeMap, current))
+  }, [activeMiniPalace, mode, nodeMap, timer, toggleSingleDraftNode])
 
   const handleNodeContextMenu = React.useCallback((nodes: MindMapSelection[]) => {
     const nodeId = buildSelectionNodeId(nodes[0] ?? null)
@@ -340,8 +351,13 @@ export function useMiniPalaceController({
     if (mode === 'selecting') {
       timer.registerActivity('practice_interaction', { source: 'mini_palace_select_contextmenu' })
       toggleSubtreeDraftNodes(nodeId)
+      return
     }
-  }, [mode, timer, toggleSubtreeDraftNodes])
+    if (mode === 'practicing') {
+      timer.registerActivity('practice_interaction', { source: 'mini_palace_hide_contextmenu' })
+      setRevealMap((current) => hideRevealStateBranch(nodeId, nodeMap, current))
+    }
+  }, [mode, timer, toggleSubtreeDraftNodes, nodeMap])
 
   const visibleEditorState = React.useMemo(() => {
     if (!editorState || mode !== 'practicing') return null
@@ -379,6 +395,9 @@ export function useMiniPalaceController({
     exitPractice,
     handleNodeClick,
     handleNodeContextMenu,
+    handleNodeHover,
+    handleSpacePour,
+    hoveredNodeId,
     hostDraft: {
       active: mode === 'selecting',
       selectedNodeUids: draftNodeUids,

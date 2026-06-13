@@ -61,6 +61,12 @@ function toDraft(config: TimerAutomationConfig) {
       hiddenAutoPauseSeconds: String(config.practice.hiddenAutoPauseSeconds),
       autoPauseRollbackSeconds: String(config.practice.autoPauseRollbackSeconds),
     },
+    quiz: {
+      autoStartOnPageEnter: config.quiz.autoStartOnPageEnter,
+      inactiveAutoPauseSeconds: String(config.quiz.inactiveAutoPauseSeconds),
+      hiddenAutoPauseSeconds: String(config.quiz.hiddenAutoPauseSeconds),
+      autoPauseRollbackSeconds: String(config.quiz.autoPauseRollbackSeconds),
+    },
     review: {
       autoStartOnPageEnter: config.review.autoStartOnPageEnter,
       inactiveAutoPauseSeconds: String(config.review.inactiveAutoPauseSeconds),
@@ -238,6 +244,12 @@ export function TimerAutomationDialog({
           inactiveAutoPauseSeconds: draft.practice.inactiveAutoPauseSeconds,
           hiddenAutoPauseSeconds: draft.practice.hiddenAutoPauseSeconds,
           autoPauseRollbackSeconds: draft.practice.autoPauseRollbackSeconds,
+        },
+        quiz: {
+          autoStartOnPageEnter: draft.quiz.autoStartOnPageEnter,
+          inactiveAutoPauseSeconds: draft.quiz.inactiveAutoPauseSeconds,
+          hiddenAutoPauseSeconds: draft.quiz.hiddenAutoPauseSeconds,
+          autoPauseRollbackSeconds: draft.quiz.autoPauseRollbackSeconds,
         },
         review: {
           autoStartOnPageEnter: draft.review.autoStartOnPageEnter,

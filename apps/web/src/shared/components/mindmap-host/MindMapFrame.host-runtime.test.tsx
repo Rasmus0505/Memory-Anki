@@ -178,30 +178,23 @@ describe('MindMapFrame host runtime behavior', () => {
     )
   })
 
-  it('keeps only the Memory Anki toolbar chrome visible in the hosted mind map runtime', () => {
+  it('keeps only minimal utility controls inside the hosted mind map runtime', () => {
     const hostSource = readFileSync(resolve(process.cwd(), 'public/mind-map-host.html'), 'utf8')
 
-    expect(hostSource).toContain('memory-anki-custom-toolbar-only')
-    expect(hostSource).toContain('memory-anki-primary-toolbar-block')
-    expect(hostSource).toMatch(
-      /\.toolbarContainer\.memory-anki-custom-toolbar-only[\s\S]*\.toolbarBlock:not\(\.memory-anki-primary-toolbar-block\)[\s\S]*display: none !important/,
-    )
-    expect(hostSource).toMatch(
-      /\.memory-anki-primary-toolbar-block[\s\S]*> :not\(\.memory-anki-segment-toolbar\)[\s\S]*display: none !important/,
-    )
+    expect(hostSource).toContain('.memory-anki-restore-ui-button')
+    expect(hostSource).toContain('.memory-anki-exit-fullscreen-button')
     expect(hostSource).toMatch(
       /\.sidebarTriggerContainer,[\s\S]*\.navigatorContainer[\s\S]*display: none !important/,
     )
-    expect(hostSource).toMatch(
-      /function ensureSegmentToolbar\(\)[\s\S]*toolbarContainer\?\.classList\.add\('memory-anki-custom-toolbar-only'\)[\s\S]*toolbarBlock\.classList\.add\('memory-anki-primary-toolbar-block'\)/,
-    )
+    expect(hostSource).not.toContain('function ensureSegmentToolbar()')
+    expect(hostSource).toContain('window.setUiCleared = setUiCleared')
+    expect(hostSource).toContain('window.exitNativeFullscreen = exitNativeFullscreenIfNeeded')
   })
 
-  it('contains mini palace toolbar runtime support', () => {
+  it('keeps mini palace runtime support inside the host interaction layer', () => {
     const hostSource = readFileSync(resolve(process.cwd(), 'public/mind-map-host.html'), 'utf8')
 
-    expect(hostSource).toContain('memory-anki-mini-palace-button')
-    expect(hostSource).toContain("notifyParentUiAfterNativeFullscreenExit('mini_palace_open')")
+    expect(hostSource).toContain('lastHoveredNodeUid')
     expect(hostSource).toContain('function getMiniPalaceDraft()')
     expect(hostSource).toContain('function applyMiniPalaceNodeStyles()')
     expect(hostSource).toMatch(
@@ -210,32 +203,22 @@ describe('MindMapFrame host runtime behavior', () => {
     expect(hostSource).toMatch(
       /function registerContextMenuListener[\s\S]*getMiniPalaceDraft\(\)/,
     )
+    expect(hostSource).toMatch(
+      /function registerReadonlyHoverListener\(\)[\s\S]*notify\?\.\('node_hover', \[serializeNode\(node\)\]\)/,
+    )
+    expect(hostSource).toMatch(
+      /if \(event\.key === ' ' \|\| event\.code === 'Space'\) \{[\s\S]*if \(!interactionState\.lastHoveredNodeUid\) return[\s\S]*notify\?\.\('mini_palace_pour', null\)/,
+    )
   })
 
-  it('exits native fullscreen before opening parent-owned toolbar UI', () => {
+  it('keeps host utility buttons wired to fullscreen exit and ui clear notifications', () => {
     const hostSource = readFileSync(resolve(process.cwd(), 'public/mind-map-host.html'), 'utf8')
 
-    expect(hostSource).toMatch(
-      /async function notifyParentUiAfterNativeFullscreenExit\(eventName, payload = null\)[\s\S]*await exitNativeFullscreenIfNeeded\(\)[\s\S]*getHostBridge\(\)\?\.notify\?\.\(eventName, payload\)/,
-    )
-    expect(hostSource).toMatch(
-      /englishButton\?\.addEventListener\('click'[\s\S]*notifyParentUiAfterNativeFullscreenExit\('english_open'\)/,
-    )
-    expect(hostSource).toMatch(
-      /mindmapImportButton\?\.addEventListener\('click'[\s\S]*notifyParentUiAfterNativeFullscreenExit\('mindmap_import_open'\)/,
-    )
-    expect(hostSource).toMatch(
-      /createButton\.addEventListener\('click'[\s\S]*notifyParentUiAfterNativeFullscreenExit\('segment_create_from_selection'\)/,
-    )
-    expect(hostSource).toMatch(
-      /textImportButton\?\.addEventListener\('click'[\s\S]*notifyParentUiAfterNativeFullscreenExit\('image_text_import_open'\)/,
-    )
-    expect(hostSource).toMatch(
-      /bilinkSearchButton\?\.addEventListener\('click'[\s\S]*notifyParentUiAfterNativeFullscreenExit\('bilink_toolbar_search'\)/,
-    )
-    expect(hostSource).toMatch(
-      /miniPalaceButton\?\.addEventListener\('click'[\s\S]*notifyParentUiAfterNativeFullscreenExit\('mini_palace_open'\)/,
-    )
+    expect(hostSource).toContain("button.className = 'memory-anki-restore-ui-button'")
+    expect(hostSource).toContain("button.className = 'memory-anki-exit-fullscreen-button'")
+    expect(hostSource).toContain("button.textContent = '退全屏'")
+    expect(hostSource).toContain("getHostBridge()?.notify?.('ui_cleared_change', uiChromeState.cleared)")
+    expect(hostSource).toContain('button.hidden = !Boolean(document.fullscreenElement)')
   })
 
   it('runs a resize-aware redraw and fit when the host viewport changes', () => {
@@ -317,7 +300,6 @@ describe('MindMapFrame host runtime behavior', () => {
       <MindMapFrame
         editorState={buildEditorState()}
         readonly
-        showToolbarWhenReadonly
         immersiveModeActive={false}
         bilinkCounts={{ root: 1 }}
         syncOnPropChange
@@ -342,7 +324,6 @@ describe('MindMapFrame host runtime behavior', () => {
       <MindMapFrame
         editorState={buildEditorState()}
         readonly
-        showToolbarWhenReadonly
         immersiveModeActive
         bilinkCounts={{ root: 2 }}
         syncOnPropChange
@@ -442,10 +423,6 @@ describe('MindMapFrame host runtime behavior', () => {
     expect(hostSource).toContain('pendingFocusRequest')
     expect(hostSource).toContain('function centerNodeInViewport(node)')
     expect(hostSource).toContain('mindMap.view.translateXY(deltaX, deltaY)')
-    expect(hostSource).toContain('function notifyCurrentFocusNodeActive()')
-    expect(hostSource).toMatch(
-      /practiceButton\?\.addEventListener\('click'[\s\S]*notifyCurrentFocusNodeActive\(\)[\s\S]*getHostBridge\(\)\?\.notify\?\.\('practice_toggle', null\)/,
-    )
     expect(hostSource).toMatch(
       /function restorePendingFocusRequestIfNeeded\(options = {}\)[\s\S]*options\.clearOnSuccess !== false/,
     )
@@ -457,65 +434,11 @@ describe('MindMapFrame host runtime behavior', () => {
     )
   })
 
-  it('forwards a review return label into host state for the shared toolbar toggle', async () => {
+  it('forwards mini palace draft state without toolbar-only visibility flags', async () => {
     render(
       <MindMapFrame
         editorState={buildEditorState()}
-        practiceToggleLabel="复习"
-        onPracticeToggle={vi.fn()}
-        onEditorStateChange={vi.fn()}
-      />,
-    )
-    const iframe = screen.getByTitle('mind-map-editor') as HTMLIFrameElement
-    const bridgeMocks = attachIframeBridge(iframe)
-
-    await waitFor(() => {
-      expect(bridgeMocks.applyHostState).toHaveBeenCalledWith(
-        expect.objectContaining({
-          showPracticeButton: true,
-          practiceToggleLabel: '复习',
-        }),
-      )
-    })
-  })
-
-  it('shows the English toolbar button and forwards english open requests', async () => {
-    const onEnglishOpen = vi.fn()
-
-    render(
-      <MindMapFrame
-        editorState={buildEditorState()}
-        onEnglishOpen={onEnglishOpen}
-        onEditorStateChange={vi.fn()}
-      />,
-    )
-    const iframe = screen.getByTitle('mind-map-editor') as HTMLIFrameElement
-    const bridgeMocks = attachIframeBridge(iframe)
-
-    await waitFor(() => {
-      expect(bridgeMocks.applyHostState).toHaveBeenCalledWith(
-        expect.objectContaining({
-          showEnglishButton: true,
-        }),
-      )
-    })
-
-    await act(async () => {
-      getHostBridge()?.notify?.('english_open', null)
-    })
-
-    expect(onEnglishOpen).toHaveBeenCalledTimes(1)
-  })
-
-  it('shows the mini palace toolbar button and forwards open requests', async () => {
-    const onMiniPalaceOpen = vi.fn()
-
-    render(
-      <MindMapFrame
-        editorState={buildEditorState()}
-        showMiniPalaceButton
         miniPalaceDraft={{ active: true, selectedNodeUids: ['node-1'] }}
-        onMiniPalaceOpen={onMiniPalaceOpen}
         onEditorStateChange={vi.fn()}
       />,
     )
@@ -525,7 +448,6 @@ describe('MindMapFrame host runtime behavior', () => {
     await waitFor(() => {
       expect(bridgeMocks.applyHostState).toHaveBeenCalledWith(
         expect.objectContaining({
-          showMiniPalaceButton: true,
           miniPalaceDraft: {
             active: true,
             selectedNodeUids: ['node-1'],
@@ -533,22 +455,44 @@ describe('MindMapFrame host runtime behavior', () => {
         }),
       )
     })
-
-    await act(async () => {
-      getHostBridge()?.notify?.('mini_palace_open', null)
-    })
-
-    expect(onMiniPalaceOpen).toHaveBeenCalledTimes(1)
   })
 
-  it('reapplies host toolbar state when a runtime event promotes a host that missed app_inited', async () => {
+  it('exposes host utility commands through the frame ref', async () => {
+    const ref = { current: null as import('./MindMapFrame').MindMapFrameHandle | null }
+
+    render(
+      <MindMapFrame
+        ref={ref}
+        editorState={buildEditorState()}
+        onEditorStateChange={vi.fn()}
+      />,
+    )
+    const iframe = screen.getByTitle('mind-map-editor') as HTMLIFrameElement
+    const bridgeMocks = attachIframeBridge(iframe)
+
+    await waitFor(() => {
+      expect(bridgeMocks.applyHostState).toHaveBeenCalled()
+    })
+
+    await act(async () => {
+      ref.current?.setUiCleared(true)
+      ref.current?.toggleUiCleared()
+      await ref.current?.enterNativeFullscreen()
+      await ref.current?.exitNativeFullscreen()
+    })
+
+    expect(bridgeMocks.setUiCleared).toHaveBeenCalledWith(true)
+    expect(bridgeMocks.toggleUiCleared).toHaveBeenCalledTimes(1)
+    expect(bridgeMocks.enterNativeFullscreen).toHaveBeenCalledTimes(1)
+    expect(bridgeMocks.exitNativeFullscreen).toHaveBeenCalledTimes(1)
+  })
+
+  it('reapplies current host state when a runtime event promotes a host that missed app_inited', async () => {
     render(
       <MindMapFrame
         editorState={buildEditorState()}
         readonly
-        showToolbarWhenReadonly
-        practiceToggleLabel="编辑"
-        onPracticeToggle={vi.fn()}
+        practiceModeActive
         onEditorStateChange={vi.fn()}
       />,
     )
@@ -558,8 +502,8 @@ describe('MindMapFrame host runtime behavior', () => {
     await waitFor(() => {
       expect(bridgeMocks.applyHostState).toHaveBeenCalledWith(
         expect.objectContaining({
-          showPracticeButton: true,
-          practiceToggleLabel: '编辑',
+          readonly: true,
+          practiceModeActive: true,
         }),
       )
     })
@@ -572,8 +516,8 @@ describe('MindMapFrame host runtime behavior', () => {
 
     expect(bridgeMocks.applyHostState).toHaveBeenCalledWith(
       expect.objectContaining({
-        showPracticeButton: true,
-        practiceToggleLabel: '编辑',
+        readonly: true,
+        practiceModeActive: true,
       }),
     )
   })

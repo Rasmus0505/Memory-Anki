@@ -1,10 +1,12 @@
-import { useCallback, useEffect, useMemo, useState, type ChangeEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { FileText, FolderTree, Plus, Save, Trash2, Upload } from 'lucide-react'
 import type { MindMapEditorState } from '@/shared/api/contracts'
 import { PageIntro } from '@/shared/components/layout/PageIntro'
 import {
   MindMapFrame,
+  MindMapPageToolbar,
+  type MindMapFrameHandle,
   type MindMapSelection,
 } from '@/shared/components/mindmap-host'
 import { Badge } from '@/shared/components/ui/badge'
@@ -15,6 +17,7 @@ import { Label } from '@/shared/components/ui/label'
 import { usePersistedMindMapEditor } from '@/shared/hooks/usePersistedMindMapEditor'
 import { useProgrammaticEditorStateGuard } from '@/shared/hooks/useProgrammaticEditorStateGuard'
 import { applyProgrammaticEditorState } from '@/shared/lib/applyProgrammaticEditorState'
+import { cn } from '@/shared/lib/utils'
 import { PalaceMindMapImportDrawer } from '@/features/palace-edit/components/PalaceMindMapImportDrawer'
 import { useMindMapImport, type ImportApplyContext } from '@/features/palace-edit/hooks/useMindMapImport'
 import {
@@ -45,6 +48,7 @@ interface ChapterDetail {
 }
 
 export default function Knowledge() {
+  const mindMapFrameRef = useRef<MindMapFrameHandle | null>(null)
   const [subjects, setSubjects] = useState<Subject[]>([])
   const [selectedSubjectId, setSelectedSubjectId] = useState<number | null>(null)
   const [subjectName, setSubjectName] = useState('')
@@ -52,6 +56,9 @@ export default function Knowledge() {
   const [newSubjectName, setNewSubjectName] = useState('')
   const [selectedNodes, setSelectedNodes] = useState<MindMapSelection[]>([])
   const [chapterDetail, setChapterDetail] = useState<ChapterDetail | null>(null)
+  const [mindMapFullscreen, setMindMapFullscreen] = useState(false)
+  const [mindMapNativeFullscreen, setMindMapNativeFullscreen] = useState(false)
+  const [mindMapUiCleared, setMindMapUiCleared] = useState(false)
 
   const selectedNodeUid =
     selectedNodes?.[0]?.uid ||
@@ -224,16 +231,38 @@ export default function Knowledge() {
     }
   }
 
+  const handleImmersiveToolbarToggle = async () => {
+    if (mindMapNativeFullscreen) {
+      await mindMapFrameRef.current?.exitNativeFullscreen()
+      setMindMapFullscreen(true)
+      return
+    }
+    setMindMapFullscreen((current) => !current)
+  }
+
+  const handleNativeFullscreenToolbarToggle = async () => {
+    if (mindMapNativeFullscreen) {
+      await mindMapFrameRef.current?.exitNativeFullscreen()
+      return
+    }
+    if (mindMapFullscreen) {
+      setMindMapFullscreen(false)
+    }
+    await mindMapFrameRef.current?.enterNativeFullscreen()
+  }
+
   return (
     <div className="space-y-5">
-      <PageIntro
-        title="知识树编辑器"
-        actions={
-          <>
-            {renderStatus()}
-          </>
-        }
-      />
+      {!mindMapFullscreen ? (
+        <PageIntro
+          title="知识树编辑器"
+          actions={
+            <>
+              {renderStatus()}
+            </>
+          }
+        />
+      ) : null}
 
       <div className="grid gap-4 xl:grid-cols-[320px_minmax(0,1fr)]">
         <Card className="border-border/70 bg-card/92">
@@ -416,39 +445,80 @@ export default function Knowledge() {
           </CardContent>
         </Card>
 
-        <Card className="min-h-[72vh] border-border/70 bg-card/92">
+        <Card
+          className={cn(
+            'min-h-[72vh] border-border/70 bg-card/92',
+            mindMapFullscreen && 'fixed inset-x-5 bottom-5 top-5 z-[90] min-h-0 bg-card/96 shadow-2xl',
+          )}
+        >
           <CardHeader className="flex flex-row items-center justify-between gap-3">
             <div>
               <CardTitle className="text-base">{activeSubject?.name ?? '选择一个学科'}</CardTitle>
             </div>
             {selectedChapterId ? <Badge variant="secondary">章节 #{selectedChapterId}</Badge> : null}
           </CardHeader>
-          <CardContent className="min-h-[62vh]">
+          <CardContent className={cn('min-h-[62vh]', mindMapFullscreen && 'h-[calc(100vh-108px)] min-h-0')}>
             {isSubjectEditorReady && editorState ? (
-              <MindMapFrame
-                key={`subject-frame:${selectedSubjectId}:${mindMapImport.importAppliedSyncVersion}`}
-                editorState={editorState}
-                showImportButtons
-                syncOnPropChange
-                syncIntent="soft"
-                externalSyncKey={mindMapImport.importExternalSyncKey}
-                forceSyncKey={`subject:${selectedSubjectId}:${mindMapImport.importAppliedSyncVersion}`}
-                forceSyncIntent="replace"
-                onEditorStateChange={(nextState: MindMapEditorState) => {
-                  if (programmaticGuard.shouldBlockIncomingState(nextState)) return
-                  setEditorState(nextState)
-                }}
-                onNodeActive={setSelectedNodes}
-                onMindMapImportOpen={() => {
-                  mindMapImport.setImportMode('mindmap')
-                  mindMapImport.setImportOpen(true)
-                }}
-                onImageTextImportOpen={() => {
-                  mindMapImport.setImportMode('text')
-                  mindMapImport.setImportOpen(true)
-                }}
-                className="h-[62vh] w-full rounded-2xl border border-border/70 bg-white"
-              />
+              <div className="flex h-full min-h-0 flex-col gap-3">
+                <MindMapPageToolbar
+                  importMindMapAction={{
+                    label: '转脑图',
+                    onClick: () => {
+                      mindMapImport.setImportMode('mindmap')
+                      mindMapImport.setImportOpen(true)
+                    },
+                  }}
+                  importTextAction={{
+                    label: '转文字',
+                    onClick: () => {
+                      mindMapImport.setImportMode('text')
+                      mindMapImport.setImportOpen(true)
+                    },
+                  }}
+                  immersiveAction={{
+                    label: '半屏编辑',
+                    active: mindMapFullscreen,
+                    onClick: () => {
+                      void handleImmersiveToolbarToggle()
+                    },
+                  }}
+                  nativeFullscreenAction={{
+                    label: '全屏编辑',
+                    active: mindMapNativeFullscreen,
+                    onClick: () => {
+                      void handleNativeFullscreenToolbarToggle()
+                    },
+                  }}
+                  clearUiAction={{
+                    label: '清屏',
+                    active: mindMapUiCleared,
+                    onClick: () => mindMapFrameRef.current?.toggleUiCleared(),
+                  }}
+                />
+                <MindMapFrame
+                  ref={mindMapFrameRef}
+                  key={`subject-frame:${selectedSubjectId}:${mindMapImport.importAppliedSyncVersion}`}
+                  editorState={editorState}
+                  immersiveModeActive={mindMapFullscreen}
+                  syncOnPropChange
+                  syncIntent="soft"
+                  externalSyncKey={mindMapImport.importExternalSyncKey}
+                  forceSyncKey={`subject:${selectedSubjectId}:${mindMapImport.importAppliedSyncVersion}`}
+                  forceSyncIntent="replace"
+                  onEditorStateChange={(nextState: MindMapEditorState) => {
+                    if (programmaticGuard.shouldBlockIncomingState(nextState)) return
+                    setEditorState(nextState)
+                  }}
+                  onNodeActive={setSelectedNodes}
+                  onFullscreenToggle={setMindMapFullscreen}
+                  onFullscreenChange={setMindMapNativeFullscreen}
+                  onUiClearedChange={setMindMapUiCleared}
+                  className={cn(
+                    'w-full flex-1 rounded-2xl border border-border/70 bg-white',
+                    mindMapFullscreen ? 'h-full' : 'h-[62vh]',
+                  )}
+                />
+              </div>
             ) : (
               <div className="flex h-[62vh] items-center justify-center rounded-2xl border border-dashed border-border/80 bg-background/60 text-sm text-muted-foreground">
                 {selectedSubjectId ? '正在加载当前学科的脑图…' : '先创建或选择一个学科，宿主编辑器才会加载。'}

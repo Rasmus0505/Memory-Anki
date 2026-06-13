@@ -1,4 +1,5 @@
 import json
+from collections.abc import Collection
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -219,6 +220,27 @@ def _progress_json(progress: SessionProgress | None) -> dict | None:
         "completed": bool(progress.completed),
         "updated_at": progress.updated_at.isoformat() if progress.updated_at else None,
     }
+
+
+def calculate_reveal_progress(
+    progress: dict | None,
+    valid_node_uids: Collection[str],
+) -> float | None:
+    if progress is None or progress.get("completed"):
+        return None
+    reveal_map = progress.get("reveal_map")
+    if not isinstance(reveal_map, dict):
+        return None
+    valid_ids = {
+        str(uid).strip()
+        for uid in valid_node_uids
+        if str(uid).strip()
+    }
+    total = len(valid_ids)
+    if total <= 0:
+        return None
+    revealed = sum(1 for uid in valid_ids if reveal_map.get(uid) == "revealed")
+    return max(0.0, min(revealed / total, 1.0))
 
 
 def get_practice_progress(session: Session, palace_id: int) -> dict | None:

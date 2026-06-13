@@ -16,6 +16,7 @@ from memory_anki.modules.palaces.application.segment_nodes import (
     build_segments_editor_doc,
     cleanup_segment_node_uids,
     collect_doc_nodes_with_descendants,
+    get_reviewable_doc_node_uids,
     parse_segment_node_uids,
     remaining_unclaimed_node_uids,
 )
@@ -42,6 +43,11 @@ from memory_anki.modules.reviews.application.schedule_service import (
     is_schedule_due,
     normalize_algorithm,
     schedule_display_datetime,
+)
+from memory_anki.modules.sessions.application.session_progress_service import (
+    calculate_reveal_progress,
+    get_review_progress,
+    get_segment_review_progress,
 )
 
 
@@ -448,6 +454,15 @@ def segment_summary_json(session: Session, segment: PalaceSegment) -> dict[str, 
     display_name = get_segment_display_name(segment.palace, segment)
     stage_labels = get_algorithm_stage_labels(session, algorithm)
     node_uids = parse_segment_node_uids(segment.node_uids_json)
+    active_review_progress = None
+    if next_schedule is not None:
+        review_progress = get_segment_review_progress(session, next_schedule.id)
+        if review_progress:
+            review_doc = build_segment_editor_doc(segment.palace, segment)
+            active_review_progress = calculate_reveal_progress(
+                review_progress,
+                get_reviewable_doc_node_uids(review_doc),
+            )
     return {
         "id": segment.id,
         "palace_id": segment.palace_id,
@@ -468,6 +483,7 @@ def segment_summary_json(session: Session, segment: PalaceSegment) -> dict[str, 
         "has_due_review": is_segment_schedule_due(session, segment, next_schedule),
         "current_review_schedule_id": next_schedule.id if next_schedule else None,
         "current_review_type": next_schedule.review_type if next_schedule else None,
+        "active_review_progress": active_review_progress,
         "is_empty": len(node_uids) == 0,
     }
 
@@ -481,8 +497,10 @@ def build_virtual_default_segment_summary(
     review_stage_completed: int,
     review_stage_progress: float,
     stage_labels: list[str],
+    remaining_uids: list[str] | None = None,
+    active_review_progress: float | None = None,
 ) -> dict[str, Any] | None:
-    remaining_uids = remaining_unclaimed_node_uids(palace)
+    remaining_uids = remaining_uids if remaining_uids is not None else remaining_unclaimed_node_uids(palace)
     if not remaining_uids:
         return None
 
@@ -513,6 +531,7 @@ def build_virtual_default_segment_summary(
         "has_due_review": timing["has_due_review"],
         "current_review_schedule_id": timing["current_review_schedule_id"],
         "current_review_type": timing["current_review_type"],
+        "active_review_progress": active_review_progress,
         "is_empty": len(remaining_uids) == 0,
         "is_virtual_default": True,
     }
@@ -525,6 +544,23 @@ def build_palace_default_segment_summary(
     total, completed, progress = palace_stage_progress(session, palace)
     algorithm = _palace_algorithm(session, palace)
     stage_labels = get_algorithm_stage_labels(session, algorithm)
+    remaining_uids = remaining_unclaimed_node_uids(palace)
+    if not remaining_uids:
+        return None
+    pending_schedules = sorted(
+        [schedule for schedule in (palace.review_schedules or []) if not schedule.completed],
+        key=lambda schedule: (schedule.review_number, schedule.id),
+    )
+    next_schedule = pending_schedules[0] if pending_schedules else None
+    active_review_progress = None
+    if next_schedule is not None:
+        review_progress = get_review_progress(session, next_schedule.id)
+        if review_progress:
+            review_doc = build_segments_editor_doc(palace, [remaining_uids])
+            active_review_progress = calculate_reveal_progress(
+                review_progress,
+                get_reviewable_doc_node_uids(review_doc),
+            )
     return build_virtual_default_segment_summary(
         palace,
         session=session,
@@ -533,6 +569,8 @@ def build_palace_default_segment_summary(
         review_stage_completed=completed,
         review_stage_progress=progress,
         stage_labels=stage_labels,
+        remaining_uids=remaining_uids,
+        active_review_progress=active_review_progress,
     )
 
 

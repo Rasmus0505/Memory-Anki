@@ -6,15 +6,18 @@ import { Input } from '@/shared/components/ui/input'
 import { TimerAutomationDialog } from '@/shared/components/session/TimerAutomationDialog'
 import { cn } from '@/shared/lib/utils'
 import {
+  getTimerAutomationRule,
   readTimerAutomationConfig,
   resetTimerAutomationConfig,
   saveTimerAutomationConfig,
   type TimerAutomationConfig,
+  type TimerAutomationScene,
 } from '@/shared/components/session/timer-automation-config'
 
 interface SessionTimerBarProps {
   effectiveSeconds: number
   idleSeconds?: number
+  automationScene?: TimerAutomationScene
   pauseCount: number
   status: 'idle' | 'running' | 'paused' | 'completed'
   onStart: () => void
@@ -48,6 +51,7 @@ function inputValueToSeconds(value: string) {
 export function SessionTimerBar({
   effectiveSeconds,
   idleSeconds = 0,
+  automationScene = 'practice',
   pauseCount,
   status,
   onStart,
@@ -64,11 +68,16 @@ export function SessionTimerBar({
   const isIdle = status === 'idle'
   const isRunning = status === 'running'
   const isPaused = status === 'paused'
+  const safeIdleSeconds = Math.max(0, Math.round(idleSeconds))
   const [inputValue, setInputValue] = React.useState(() => secondsToInputValue(effectiveSeconds))
   const [isEditing, setIsEditing] = React.useState(false)
   const [automationOpen, setAutomationOpen] = React.useState(false)
   const [automationConfig, setAutomationConfig] = React.useState<TimerAutomationConfig>(() =>
     readTimerAutomationConfig(),
+  )
+  const inactiveAutoPauseSeconds = React.useMemo(
+    () => getTimerAutomationRule(automationScene, automationConfig).inactiveAutoPauseSeconds,
+    [automationConfig, automationScene],
   )
 
   React.useEffect(() => {
@@ -140,6 +149,9 @@ export function SessionTimerBar({
     />
   )
 
+  const idleStatusClassName = safeIdleSeconds > 0 ? 'text-orange-500' : 'text-foreground'
+  const idleStatusText = `闲置${safeIdleSeconds}/${inactiveAutoPauseSeconds}秒`
+
   if (layout === 'compact') {
     return (
       <>
@@ -156,9 +168,7 @@ export function SessionTimerBar({
               <div className="min-w-[120px]">
                 <div className="text-xl font-semibold text-foreground">{formatDuration(effectiveSeconds)}</div>
                 <div className="mt-1 text-xs text-muted-foreground">已暂停 {pauseCount} 次</div>
-                {isRunning && idleSeconds > 0 ? (
-                  <div className="text-xs text-orange-500">闲置 {idleSeconds} 秒</div>
-                ) : null}
+                <div className={cn('text-xs transition-colors', idleStatusClassName)}>{idleStatusText}</div>
               </div>
 
               <label className="w-full lg:max-w-[180px]">
@@ -218,9 +228,7 @@ export function SessionTimerBar({
           <div>
             <div className="text-2xl font-semibold text-foreground">{formatDuration(effectiveSeconds)}</div>
             <div className="mt-1 text-xs text-muted-foreground">已暂停 {pauseCount} 次</div>
-            {isRunning && idleSeconds > 0 ? (
-              <div className="text-xs text-orange-500">闲置 {idleSeconds} 秒</div>
-            ) : null}
+            <div className={cn('text-xs transition-colors', idleStatusClassName)}>{idleStatusText}</div>
           </div>
           {showRestartAction && onRestart ? (
             <Button type="button" variant="ghost" size="sm" onClick={onRestart}>

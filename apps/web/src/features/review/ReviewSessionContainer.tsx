@@ -10,6 +10,7 @@ import {
 } from '@/shared/api/modules/palaces'
 import type {
   MindMapEditorState,
+  MiniPalaceSummary,
   ReviewPalaceSummary,
 } from '@/shared/api/contracts'
 import { usePersistedMindMapEditor } from '@/shared/hooks/usePersistedMindMapEditor'
@@ -22,6 +23,7 @@ import {
   type ReviewFlowSnapshot,
 } from '@/features/review/components/MindMapReviewFlow'
 import { StageSelectDialog } from '@/features/review/components/StageSelectDialog'
+import type { RevealFlowMode } from '@/features/review/model/review-flow-tree'
 
 type ReviewDisplayMode = 'review' | 'edit'
 
@@ -33,6 +35,10 @@ export interface ReviewSessionContainerSession {
   review_number: number
   palace: ReviewPalaceSummary | null
   stageLabels: string[] | null
+  revealMode?: RevealFlowMode
+  checkpointNodeUids?: string[]
+  mini_palace?: MiniPalaceSummary | null
+  editor_doc?: Record<string, unknown> | string | null
   reviewStages: Array<{
     review_number: number
     label: string
@@ -348,6 +354,8 @@ export function ReviewSessionContainer({
           title={title}
           palaceId={palace.id}
           sessionKind="review"
+          revealMode={session.revealMode ?? 'standard'}
+          checkpointNodeUids={session.checkpointNodeUids ?? []}
           displayMode={displayMode}
           modeSyncVersion={modeSyncVersion}
           viewMemoryScope={resolvedViewMemoryScope}
@@ -394,6 +402,7 @@ export function ReviewSessionContainer({
           stageLabels={session.stageLabels}
           stages={session.reviewStages}
           currentReviewNumber={session.review_number}
+          durationSeconds={pendingPayload?.durationSeconds}
           onConfirm={handleStageConfirm}
           onCancel={handleStageCancel}
         />

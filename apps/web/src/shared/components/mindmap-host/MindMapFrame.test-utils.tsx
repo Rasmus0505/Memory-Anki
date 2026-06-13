@@ -22,6 +22,11 @@ export function attachIframeBridge(iframe: HTMLIFrameElement) {
   const emitReviewFx = vi.fn()
   const emitFeedbackFx = vi.fn()
   const clearReviewFx = vi.fn()
+  const setUiCleared = vi.fn()
+  const toggleUiCleared = vi.fn()
+  const enterNativeFullscreen = vi.fn(async () => {})
+  const exitNativeFullscreen = vi.fn(async () => {})
+  const dispatchEvent = vi.fn(() => true)
   Object.defineProperty(iframe, 'contentWindow', {
     configurable: true,
     value: {
@@ -31,6 +36,11 @@ export function attachIframeBridge(iframe: HTMLIFrameElement) {
       emitReviewFx,
       emitFeedbackFx,
       clearReviewFx,
+      setUiCleared,
+      toggleUiCleared,
+      enterNativeFullscreen,
+      exitNativeFullscreen,
+      dispatchEvent,
     },
   })
   fireEvent.load(iframe)
@@ -41,6 +51,11 @@ export function attachIframeBridge(iframe: HTMLIFrameElement) {
     emitReviewFx,
     emitFeedbackFx,
     clearReviewFx,
+    setUiCleared,
+    toggleUiCleared,
+    enterNativeFullscreen,
+    exitNativeFullscreen,
+    dispatchEvent,
   }
 }
 

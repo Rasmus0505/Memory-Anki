@@ -15,6 +15,8 @@ const EnglishWorkspacePage = lazy(() => import('@/features/english/EnglishWorksp
 const EnglishCoursePage = lazy(() => import('@/features/english/EnglishCoursePage'))
 const EnglishReadingPage = lazy(() => import('@/features/english-reading/EnglishReadingPage'))
 const PalaceEditPage = lazy(() => import('@/features/palace-edit/PalaceEditPage'))
+const PalaceQuizHubPage = lazy(() => import('@/app/router/PalaceQuizHubPage'))
+const PalaceQuizPage = lazy(() => import('@/features/palace-quiz/PalaceQuizPage'))
 const ProfilePage = lazy(() => import('@/features/profile/ProfilePage'))
 const ProfileAiPage = lazy(() => import('@/features/profile/ProfileAiPage'))
 const ProfileBackupsPage = lazy(
@@ -53,7 +55,9 @@ export function AppRouter() {
         <Route path="/english/courses/:id" element={<EnglishCoursePage />} />
         <Route path="/palaces/list" element={<PalaceListPage />} />
         <Route path="/palaces/new" element={<PalaceEditPage />} />
+        <Route path="/palaces/quiz" element={<PalaceQuizHubPage />} />
         <Route path="/palaces/:id" element={<PalaceViewPage />} />
+        <Route path="/palaces/:id/quiz" element={<PalaceQuizPage />} />
         <Route path="/palaces/:id/practice" element={<PalacePracticePage />} />
         <Route path="/palaces/:id/focus-practice" element={<PalaceFocusPracticePage />} />
         <Route path="/segments/:id/practice" element={<SegmentPracticePage />} />

@@ -53,6 +53,7 @@ function getTaskStageLabel(stage: string) {
 export default function EnglishWorkspacePage() {
   const {
     actionLoading,
+    aiRunConfigDialog,
     canUpload,
     currentTask,
     handleClearTask,
@@ -84,6 +85,7 @@ export default function EnglishWorkspacePage() {
 
   return (
     <div className="space-y-6">
+      {aiRunConfigDialog}
       <PageIntro
         title="英语听力"
         description="把英语视频做成沉浸式拼写练习，生成过程现在也能实时追踪。"

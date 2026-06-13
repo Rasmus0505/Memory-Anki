@@ -95,14 +95,9 @@ export interface MindMapFeedbackFxPayload
 
 export interface MindMapFrameHostState {
   readonly: boolean
-  showToolbarWhenReadonly: boolean
-  showPracticeButton: boolean
-  showEnglishButton: boolean
   practiceModeActive: boolean
-  practiceToggleLabel: '练习' | '编辑' | '复习'
   viewMemoryScope: string | null
   immersiveModeActive: boolean
-  showImportButtons: boolean
   aiSplitBusy: boolean
   aiSplitEnabled: boolean
   segments: MindMapHostSegmentSummary[]
@@ -115,12 +110,11 @@ export interface MindMapFrameHostState {
   focusNodeUids: string[]
   focusRequestNodeUid: string | null
   focusRequestNonce: number
-  showBilinkSearchButton: boolean
-  showMiniPalaceButton: boolean
   miniPalaceDraft: {
     active: boolean
     selectedNodeUids: string[]
   }
+  miniPalacePracticeActive: boolean
 }
 
 export interface HostEditorStateSyncPayload {
@@ -158,6 +152,10 @@ export interface MindMapHostWindow extends Window {
   emitReviewFx?: (payload: MindMapReviewFxPayload) => void
   emitFeedbackFx?: (payload: MindMapFeedbackFxPayload) => void
   clearReviewFx?: () => void
+  setUiCleared?: (nextValue: boolean) => void
+  toggleUiCleared?: () => void
+  enterNativeFullscreen?: () => Promise<void> | void
+  exitNativeFullscreen?: () => Promise<void> | void
 }
 
 declare global {
@@ -220,12 +218,9 @@ export function buildSyncFingerprint(args: {
 
 export function buildHostBridgeHostState(args: {
   readonly: boolean
-  showToolbarWhenReadonly: boolean
   practiceModeActive: boolean
-  practiceToggleLabel: '练习' | '编辑' | '复习'
   viewMemoryScope: string | null
   immersiveModeActive: boolean
-  showImportButtons: boolean
   aiSplitBusy: boolean
   segments: MindMapHostSegmentSummary[]
   activeSegmentId: number | null
@@ -237,26 +232,18 @@ export function buildHostBridgeHostState(args: {
   focusNodeUids: string[]
   focusRequestNodeUid: string | null
   focusRequestNonce: number
-  showBilinkSearchButton: boolean
-  showMiniPalaceButton: boolean
   miniPalaceDraft: {
     active: boolean
     selectedNodeUids: string[]
   }
-  hasPracticeToggle: boolean
-  hasEnglishOpen: boolean
+  miniPalacePracticeActive: boolean
   hasAiSplitRequest: boolean
 }): MindMapFrameHostState {
   return {
     readonly: args.readonly,
-    showToolbarWhenReadonly: args.showToolbarWhenReadonly,
-    showPracticeButton: args.hasPracticeToggle,
-    showEnglishButton: args.hasEnglishOpen,
     practiceModeActive: args.practiceModeActive,
-    practiceToggleLabel: args.practiceToggleLabel,
     viewMemoryScope: args.viewMemoryScope,
     immersiveModeActive: args.immersiveModeActive,
-    showImportButtons: args.showImportButtons,
     aiSplitBusy: args.aiSplitBusy,
     aiSplitEnabled: args.hasAiSplitRequest,
     segments: cloneValue(args.segments),
@@ -269,8 +256,7 @@ export function buildHostBridgeHostState(args: {
     focusNodeUids: cloneValue(args.focusNodeUids),
     focusRequestNodeUid: args.focusRequestNodeUid,
     focusRequestNonce: args.focusRequestNonce,
-    showBilinkSearchButton: args.showBilinkSearchButton,
-    showMiniPalaceButton: args.showMiniPalaceButton,
     miniPalaceDraft: cloneValue(args.miniPalaceDraft),
+    miniPalacePracticeActive: args.miniPalacePracticeActive,
   }
 }

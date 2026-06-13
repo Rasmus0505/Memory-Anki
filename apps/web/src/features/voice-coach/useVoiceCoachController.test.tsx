@@ -36,6 +36,7 @@ function buildTimer(overrides: Partial<TimedSessionController> = {}): TimedSessi
     start: vi.fn(),
     pause: vi.fn(),
     resume: vi.fn(),
+    leaveScene: vi.fn(),
     registerActivity: vi.fn(),
     logEvent: vi.fn(),
     adjustDuration: vi.fn(),

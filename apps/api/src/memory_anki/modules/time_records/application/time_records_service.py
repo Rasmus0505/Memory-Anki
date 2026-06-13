@@ -12,11 +12,12 @@ from memory_anki.infrastructure.db.models import (
     Config,
     EnglishCourse,
     EnglishCourseProgress,
+    Palace,
     ReviewLog,
     TimeRecord,
 )
 
-TIME_RECORD_DASHBOARD_KINDS = ("review", "practice", "palace_edit")
+TIME_RECORD_DASHBOARD_KINDS = ("review", "practice", "quiz", "palace_edit")
 
 
 def _normalize_record(record: TimeRecord) -> dict:
@@ -409,6 +410,17 @@ def get_today_palace_learning_breakdown(session: Session) -> list[dict[str, Any]
         .order_by(TimeRecord.started_at.asc(), TimeRecord.id.asc())
         .all()
     )
+    palace_ids = sorted(
+        {
+            int(record.palace_id)
+            for record in records
+            if record.palace_id is not None
+        }
+    )
+    palace_titles = {
+        palace.id: palace.title or "未命名宫殿"
+        for palace in session.query(Palace).filter(Palace.id.in_(palace_ids)).all()
+    } if palace_ids else {}
 
     grouped: dict[int, dict[str, Any]] = {}
     for record in records:
@@ -417,10 +429,11 @@ def get_today_palace_learning_breakdown(session: Session) -> list[dict[str, Any]
             palace_id,
             {
                 "palace_id": palace_id,
-                "palace_title": record.title or "未命名宫殿",
+                "palace_title": palace_titles.get(palace_id) or record.title or "未命名宫殿",
                 "total_seconds": 0,
                 "review_seconds": 0,
                 "practice_seconds": 0,
+                "quiz_seconds": 0,
                 "palace_edit_seconds": 0,
             },
         )
@@ -430,9 +443,13 @@ def get_today_palace_learning_breakdown(session: Session) -> list[dict[str, Any]
             payload["review_seconds"] += seconds
         elif record.kind == "practice":
             payload["practice_seconds"] += seconds
+        elif record.kind == "quiz":
+            payload["quiz_seconds"] += seconds
         elif record.kind == "palace_edit":
             payload["palace_edit_seconds"] += seconds
-        if not payload["palace_title"] and record.title:
+        if palace_titles.get(palace_id):
+            payload["palace_title"] = palace_titles[palace_id]
+        elif not payload["palace_title"] and record.title:
             payload["palace_title"] = record.title
 
     return sorted(

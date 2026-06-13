@@ -38,6 +38,7 @@ export interface DashboardResponse {
     total_seconds: number
     review_seconds: number
     practice_seconds: number
+    quiz_seconds: number
     palace_edit_seconds: number
   }>
   today_new_palace_count: number

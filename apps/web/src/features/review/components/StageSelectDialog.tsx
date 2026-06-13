@@ -1,4 +1,5 @@
 import * as React from 'react'
+import { formatDuration } from '@/entities/session/model'
 import type { ReviewStageSummary } from '@/shared/api/contracts'
 import {
   Dialog,
@@ -14,6 +15,7 @@ interface StageSelectDialogProps {
   stageLabels: string[]
   stages: ReviewStageSummary[]
   currentReviewNumber: number
+  durationSeconds?: number
   onConfirm: (targetReviewNumber: number, needsPractice: boolean) => void
   onCancel: () => void
 }
@@ -33,6 +35,7 @@ export function StageSelectDialog({
   stageLabels,
   stages,
   currentReviewNumber,
+  durationSeconds,
   onConfirm,
   onCancel,
 }: StageSelectDialogProps) {
@@ -76,6 +79,11 @@ export function StageSelectDialog({
         </DialogHeader>
 
         <div className="space-y-5 px-6 py-4">
+          {typeof durationSeconds === 'number' ? (
+            <div className="rounded-2xl border border-border/70 bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
+              本次耗时：<span className="font-medium text-foreground">{formatDuration(durationSeconds)}</span>
+            </div>
+          ) : null}
           <p className="text-sm text-muted-foreground">
             当前正在复习{' '}
             <span className="font-medium text-foreground">

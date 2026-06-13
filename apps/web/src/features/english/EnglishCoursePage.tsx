@@ -1,22 +1,20 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { toast } from 'sonner'
-import type {
-  EnglishCourseDetail,
-  EnglishGenerationLogResponse,
-  EnglishSentenceCheckResponse,
-} from '@/shared/api/contracts'
+import type { EnglishCourseDetail, EnglishSentenceCheckResponse } from '@/shared/api/contracts'
 import {
   buildEnglishCourseMediaUrl,
   checkEnglishSentenceApi,
   getEnglishCourseApi,
-  getEnglishCourseGenerationLogApi,
   updateEnglishCourseProgressApi,
 } from '@/features/english/api/englishApi'
 import { shouldAutoStartOnPageEnter, useTimedSession } from '@/shared/hooks/useTimedSession'
 import { useLatestRef } from '@/shared/hooks/useLatestRef'
 import { readTimerAutomationConfig } from '@/shared/components/session/timer-automation-config'
-import { type StatusNotice } from '@/features/english/components/EnglishCourseParts'
+import {
+  type StatusNotice,
+  type WordRailDensity,
+} from '@/features/english/components/EnglishCourseParts'
 import { EnglishCoursePageView } from '@/features/english/components/EnglishCoursePageView'
 import {
   ENGLISH_PRACTICE_SETTINGS_UPDATED_EVENT,
@@ -33,45 +31,71 @@ import { resolveDisplaySentenceIndex } from '@/features/english/model/english-co
 import { useEnglishTypingFeedbackSounds } from '@/features/english/useEnglishTypingFeedbackSounds'
 import { useEnglishWordTyping } from '@/features/english/useEnglishWordTyping'
 
-const POST_PASS_ADVANCE_DELAY_MS = 1200
-const POST_REPLAY_ADVANCE_DELAY_MS = 0
-const LOOP_REPLAY_DELAY_MS = 110
 const FOCUS_RESTORE_DELAY_MS = 180
 const EMPTY_TOKENS: string[] = []
-const EMPTY_COMPLETED_SENTENCE_INDEXES: number[] = []
+
+type SentencePhase = 'listening_wait_input' | 'locally_completed' | 'chain_playing' | 'server_rejected'
+
+interface PlaybackState {
+  token: number
+  endSec: number
+  onEnded: (() => void) | null
+  nextSentenceSwitchSec: number | null
+  onNextSentenceStart: (() => void) | null
+  didSwitchToNextSentence: boolean
+}
+
+function findLastCompletedSentenceIndex(course: EnglishCourseDetail, beforeIndexExclusive: number) {
+  const completedSet = new Set(course.progress.completedSentenceIndexes)
+  for (let index = Math.min(beforeIndexExclusive - 1, course.sentences.length - 1); index >= 0; index -= 1) {
+    if (completedSet.has(course.sentences[index]?.index ?? -1)) {
+      return index
+    }
+  }
+  return null
+}
+
+function resolveWordRailDensity(
+  sentence: EnglishCourseDetail['sentences'][number] | null,
+): WordRailDensity {
+  if (!sentence) return 'regular'
+  const tokenCount = sentence.tokens.length
+  const characterCount = sentence.tokens.reduce((total, token) => total + token.length, 0)
+  const longestToken = sentence.tokens.reduce((max, token) => Math.max(max, token.length), 0)
+
+  if (tokenCount >= 14 || characterCount >= 72 || longestToken >= 14) {
+    return 'dense'
+  }
+
+  if (tokenCount >= 10 || characterCount >= 48 || longestToken >= 10) {
+    return 'compact'
+  }
+
+  return 'regular'
+}
 
 export default function EnglishCoursePage() {
   const { id } = useParams()
   const courseId = Number(id)
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const typingInputRef = useRef<HTMLInputElement | null>(null)
-  const autoAdvanceTimerRef = useRef<number | null>(null)
   const focusRestoreTimerRef = useRef<number | null>(null)
   const hardUnloadRef = useRef(false)
   const playbackTokenRef = useRef(0)
-  const handlePlaybackEndedRef = useRef<(sentenceIndex: number, nextTargetIndex: number | null) => void>(() => undefined)
-  const playbackStateRef = useRef<{
-    token: number
-    sentenceIndex: number
-    endSec: number
-    onEnded: (() => void) | null
-  } | null>(null)
+  const playbackStateRef = useRef<PlaybackState | null>(null)
+  const autoPreviewKeyRef = useRef('')
+  const pendingSubmissionIndexesRef = useRef<Set<number>>(new Set())
+
   const [course, setCourse] = useState<EnglishCourseDetail | null>(null)
   const [loading, setLoading] = useState(true)
   const [settingsOpen, setSettingsOpen] = useState(false)
-  const [displaySentenceIndex, setDisplaySentenceIndex] = useState(0)
-  const [sentenceResolved, setSentenceResolved] = useState(false)
-  const [submissionFailed, setSubmissionFailed] = useState(false)
-  const [submitting, setSubmitting] = useState(false)
+  const [typingSentenceIndex, setTypingSentenceIndex] = useState(0)
+  const [translationSentenceIndex, setTranslationSentenceIndex] = useState<number | null>(null)
+  const [sentencePhase, setSentencePhase] = useState<SentencePhase>('listening_wait_input')
   const [isSegmentPlaying, setIsSegmentPlaying] = useState(false)
   const [feedback, setFeedback] = useState<EnglishSentenceCheckResponse | null>(null)
   const [statusNotice, setStatusNotice] = useState<StatusNotice | null>(null)
-  const [sentenceReplayCount, setSentenceReplayCount] = useState(0)
   const [practiceSettings, setPracticeSettings] = useState<EnglishPracticeSettings>(() => readEnglishPracticeSettings())
-  const [logDialogOpen, setLogDialogOpen] = useState(false)
-  const [logLoading, setLogLoading] = useState(false)
-  const [logError, setLogError] = useState('')
-  const [logData, setLogData] = useState<EnglishGenerationLogResponse | null>(null)
   const [helperPanelOpen, setHelperPanelOpen] = useState(false)
   const [sidePanelTab, setSidePanelTab] = useState<'info' | 'shortcuts' | 'rhythm'>('info')
   const isTouchDevice = useMemo(() => isTouchPrimaryInputDevice(), [])
@@ -85,21 +109,30 @@ export default function EnglishCoursePage() {
     englishCourseId: Number.isFinite(courseId) ? courseId : null,
     persistKey: Number.isFinite(courseId) ? `english-course:${courseId}` : null,
   })
+
   const timerRef = useLatestRef(timer)
   const courseRef = useLatestRef<EnglishCourseDetail | null>(course)
-  const displaySentenceIndexRef = useLatestRef(displaySentenceIndex)
-  const sentenceResolvedRef = useLatestRef(sentenceResolved)
+  const typingSentenceIndexRef = useLatestRef(typingSentenceIndex)
+  const sentencePhaseRef = useLatestRef(sentencePhase)
   const practiceSettingsRef = useLatestRef(practiceSettings)
   const isSegmentPlayingRef = useLatestRef(isSegmentPlaying)
-  const submissionFailedRef = useLatestRef(submissionFailed)
+  const sentenceResolvedRef = useLatestRef(
+    sentencePhase === 'locally_completed' || sentencePhase === 'chain_playing',
+  )
 
   const loadCourse = useCallback(async () => {
     if (!Number.isFinite(courseId)) return
     setLoading(true)
     try {
       const nextCourse = await getEnglishCourseApi(courseId)
-      setDisplaySentenceIndex(resolveDisplaySentenceIndex(nextCourse))
+      const nextTypingIndex = resolveDisplaySentenceIndex(nextCourse)
+      autoPreviewKeyRef.current = ''
+      setTypingSentenceIndex(nextTypingIndex)
+      setTranslationSentenceIndex(findLastCompletedSentenceIndex(nextCourse, nextTypingIndex))
+      setSentencePhase(nextTypingIndex >= nextCourse.sentences.length ? 'locally_completed' : 'listening_wait_input')
       setCourse(nextCourse)
+      setFeedback(null)
+      setStatusNotice(null)
     } catch (error) {
       toast.error(error instanceof Error ? error.message : '课程加载失败。')
     } finally {
@@ -135,16 +168,13 @@ export default function EnglishCoursePage() {
 
   useEffect(() => {
     return () => {
-      if (autoAdvanceTimerRef.current != null) {
-        window.clearTimeout(autoAdvanceTimerRef.current)
-      }
       if (focusRestoreTimerRef.current != null) {
         window.clearTimeout(focusRestoreTimerRef.current)
       }
       const currentTimer = timerRef.current
       if (hardUnloadRef.current) return
       if (currentTimer.startedAt && currentTimer.status !== 'completed') {
-        void currentTimer.complete('left_page', { source: 'english_course_leave' })
+        void currentTimer.leaveScene({ source: 'english_course_leave' })
       }
     }
   }, [])
@@ -156,24 +186,31 @@ export default function EnglishCoursePage() {
     timer.start({ source: 'page_enter', scene: 'english_course' })
   }, [course, timer])
 
-  const completedSentenceIndexes = course?.progress.completedSentenceIndexes ?? EMPTY_COMPLETED_SENTENCE_INDEXES
-  const completedSentenceSet = useMemo(() => new Set(completedSentenceIndexes), [completedSentenceIndexes])
-  const activeSentence = course?.sentences[displaySentenceIndex] ?? null
+  const activeSentence = course?.sentences[typingSentenceIndex] ?? null
+  const translationSentence =
+    translationSentenceIndex != null ? course?.sentences[translationSentenceIndex] ?? null : null
   const activeSentenceTokens = activeSentence?.tokens ?? EMPTY_TOKENS
-  const activeSentenceCompleted = Boolean(activeSentence && completedSentenceSet.has(activeSentence.index))
-  const isCourseDisplayCompleted = Boolean(course && displaySentenceIndex >= course.sentences.length)
-  const completionRatio =
-    course && course.sentences.length > 0
-      ? Math.min(100, Math.round((completedSentenceIndexes.length / course.sentences.length) * 100))
-      : 0
+  const isCourseDisplayCompleted = Boolean(course && typingSentenceIndex >= course.sentences.length)
   const mediaUrl = useMemo(() => {
     if (!course) return ''
     return course.mediaUrl || buildEnglishCourseMediaUrl(course.id)
   }, [course])
+  const wordRailDensity = useMemo(() => resolveWordRailDensity(activeSentence), [activeSentence])
+  const typingEnabled =
+    Boolean(activeSentence) &&
+    !settingsOpen &&
+    !isSegmentPlaying &&
+    sentencePhase !== 'locally_completed' &&
+    sentencePhase !== 'chain_playing'
+  const translationMode =
+    translationSentenceIndex == null
+      ? 'placeholder'
+      : activeSentence && translationSentenceIndex === activeSentence.index
+        ? 'current'
+        : 'previous'
 
-  const { playKeySound, playWrongSound, playCorrectSound } = useEnglishTypingFeedbackSounds(practiceSettings.sound.enabled)
-
-  const typingEnabled = Boolean(activeSentence) && !settingsOpen && !submitting && !sentenceResolved
+  const { playKeySound, playWrongSound, playCorrectSound, playSentenceComplete } =
+    useEnglishTypingFeedbackSounds(practiceSettings.sound)
 
   const {
     typingState,
@@ -181,7 +218,6 @@ export default function EnglishCoursePage() {
     sentenceInputText,
     isSentenceLocallyComplete,
     resetTypingState,
-    resetCurrentWord,
     handleBackspace,
     handleCharacterInput,
     revealLetter,
@@ -193,13 +229,6 @@ export default function EnglishCoursePage() {
     playWrongSound,
     playCorrectSound,
   })
-
-  const clearAutoAdvanceTimer = useCallback(() => {
-    if (autoAdvanceTimerRef.current != null) {
-      window.clearTimeout(autoAdvanceTimerRef.current)
-      autoAdvanceTimerRef.current = null
-    }
-  }, [])
 
   const clearFocusRestoreTimer = useCallback(() => {
     if (focusRestoreTimerRef.current != null) {
@@ -273,43 +302,44 @@ export default function EnglishCoursePage() {
     [],
   )
 
-  const scheduleDisplayAdvance = useCallback(
-    (targetIndex: number, delayMs = POST_PASS_ADVANCE_DELAY_MS) => {
-      clearAutoAdvanceTimer()
-      autoAdvanceTimerRef.current = window.setTimeout(() => {
-        autoAdvanceTimerRef.current = null
-        stopSegmentPlayback()
-        setDisplaySentenceIndex(targetIndex)
-      }, delayMs)
-    },
-    [clearAutoAdvanceTimer, stopSegmentPlayback],
-  )
-
-  const startSentenceSegmentPlayback = useCallback(
-    (
-      sentence: NonNullable<EnglishCourseDetail['sentences'][number]>,
-      options: {
-        source: string
-        countReplay?: boolean
-        onEnded?: (() => void) | null
-      },
-    ) => {
+  const startPlaybackWindow = useCallback(
+    ({
+      startSentence,
+      endSentence,
+      source,
+      countReplay = true,
+      nextSentenceSwitchSec = null,
+      onNextSentenceStart = null,
+      onEnded = null,
+    }: {
+      startSentence: NonNullable<EnglishCourseDetail['sentences'][number]>
+      endSentence: NonNullable<EnglishCourseDetail['sentences'][number]>
+      source: string
+      countReplay?: boolean
+      nextSentenceSwitchSec?: number | null
+      onNextSentenceStart?: (() => void) | null
+      onEnded?: (() => void) | null
+    }) => {
       const element = videoRef.current
       if (!element) return false
+
       const token = playbackTokenRef.current + 1
       playbackTokenRef.current = token
       playbackStateRef.current = {
         token,
-        sentenceIndex: sentence.index,
-        endSec: Math.max(0.1, sentence.endMs / 1000),
-        onEnded: options.onEnded || null,
+        endSec: Math.max(0.1, endSentence.endMs / 1000),
+        onEnded,
+        nextSentenceSwitchSec,
+        onNextSentenceStart,
+        didSwitchToNextSentence: false,
       }
-      element.currentTime = Math.max(0, sentence.startMs / 1000)
-      if (options.countReplay !== false) {
-        setSentenceReplayCount((current) => current + 1)
+
+      element.currentTime = Math.max(0, startSentence.startMs / 1000)
+      if (countReplay) {
+        timer.registerActivity('practice_interaction', { source })
       }
       setIsSegmentPlaying(true)
-      timer.registerActivity('practice_interaction', { source: options.source })
+
       void element.play().catch(() => {
         if (playbackStateRef.current?.token !== token) return
         playbackStateRef.current = null
@@ -319,149 +349,149 @@ export default function EnglishCoursePage() {
           text: '当前浏览器阻止了媒体播放，请先与页面交互后再试。',
         })
       })
+
       return true
     },
     [timer],
   )
 
-  const handlePlaybackEnded = useCallback(
-    (sentenceIndex: number, nextTargetIndex: number | null) => {
-      if (displaySentenceIndexRef.current !== sentenceIndex) return
-
-      if (practiceSettingsRef.current.replay.singleSentenceLoopEnabled) {
-        window.setTimeout(() => {
-          if (displaySentenceIndexRef.current !== sentenceIndex) return
-          if (!practiceSettingsRef.current.replay.singleSentenceLoopEnabled) {
-            if (sentenceResolvedRef.current && nextTargetIndex != null) {
-              scheduleDisplayAdvance(nextTargetIndex, POST_REPLAY_ADVANCE_DELAY_MS)
-            }
-            return
-          }
-          const sentence = courseRef.current?.sentences[sentenceIndex]
-          if (!sentence) return
-          void startSentenceSegmentPlayback(sentence, {
-            source: sentenceResolvedRef.current ? 'english_pass_loop' : 'english_manual_loop',
-            onEnded: () => handlePlaybackEndedRef.current(sentenceIndex, nextTargetIndex),
-          })
-        }, LOOP_REPLAY_DELAY_MS)
-        return
-      }
-
-      if (
-        sentenceResolvedRef.current &&
-        practiceSettingsRef.current.flow.autoAdvanceOnPass &&
-        nextTargetIndex != null
-      ) {
-        scheduleDisplayAdvance(nextTargetIndex, POST_REPLAY_ADVANCE_DELAY_MS)
-      }
-    },
-    [scheduleDisplayAdvance, startSentenceSegmentPlayback],
-  )
-
-  useEffect(() => {
-    handlePlaybackEndedRef.current = handlePlaybackEnded
-  }, [handlePlaybackEnded])
-
-  const replayCurrentSentence = useCallback(
-    (source = 'english_replay', nextTargetIndexOverride?: number | null) => {
-      const sentence = courseRef.current?.sentences[displaySentenceIndexRef.current] ?? null
-      if (!sentence) return false
-      clearAutoAdvanceTimer()
-      setStatusNotice(null)
-      const nextTargetIndex =
-        nextTargetIndexOverride !== undefined
-          ? nextTargetIndexOverride
-          : sentenceResolvedRef.current && courseRef.current
-            ? Math.min(courseRef.current.progress.currentSentenceIndex, courseRef.current.sentences.length)
-            : null
-      return startSentenceSegmentPlayback(sentence, {
-        source,
-        onEnded: () => handlePlaybackEnded(sentence.index, nextTargetIndex),
+  const rollbackToSentence = useCallback(
+    (sentenceIndex: number, message: string) => {
+      const currentCourse = courseRef.current
+      stopSegmentPlayback()
+      autoPreviewKeyRef.current = ''
+      setTypingSentenceIndex(sentenceIndex)
+      setTranslationSentenceIndex(
+        currentCourse ? findLastCompletedSentenceIndex(currentCourse, sentenceIndex) : null,
+      )
+      setSentencePhase('server_rejected')
+      setStatusNotice({
+        kind: 'error',
+        text: message,
       })
+      resetTypingState()
     },
-    [clearAutoAdvanceTimer, handlePlaybackEnded, startSentenceSegmentPlayback],
+    [courseRef, resetTypingState, stopSegmentPlayback],
   )
 
   const submitCurrentSentence = useCallback(
-    async (inputText: string) => {
-      if (!courseRef.current || !activeSentence || submitting) return
-      setSubmitting(true)
-      setSubmissionFailed(false)
-      setFeedback(null)
-      setStatusNotice({
-        kind: 'info',
-        text: '正在校验当前句并保存进度...',
-      })
+    async (sentenceIndex: number, inputText: string) => {
+      if (!courseRef.current) return
+      if (pendingSubmissionIndexesRef.current.has(sentenceIndex)) return
+
+      pendingSubmissionIndexesRef.current.add(sentenceIndex)
+
       try {
         const result = await checkEnglishSentenceApi(courseRef.current.id, {
-          sentenceIndex: activeSentence.index,
+          sentenceIndex,
           inputText,
         })
         setFeedback(result)
 
         if (!result.passed) {
           playWrongSound()
-          setSubmissionFailed(true)
-          setStatusNotice({
-            kind: 'error',
-            text: '本地拼写与最终校验不同步，请重置本句后再试。',
-          })
+          rollbackToSentence(sentenceIndex, '本句本地已完整显示，但最终校验未通过，请重新拼写这一句。')
           return
         }
 
+        const latestCourse = courseRef.current
+        if (!latestCourse) return
         const nextCompletedIndexes = Array.from(
-          new Set([...courseRef.current.progress.completedSentenceIndexes, activeSentence.index]),
+          new Set([...latestCourse.progress.completedSentenceIndexes, sentenceIndex]),
         ).sort((left, right) => left - right)
-        const nextSentenceIndex = Math.min(activeSentence.index + 1, courseRef.current.sentences.length)
-        const shouldAutoAdvance = practiceSettingsRef.current.flow.autoAdvanceOnPass
+        const nextSentenceIndex = Math.min(sentenceIndex + 1, latestCourse.sentences.length)
 
         await handlePersistProgress(nextSentenceIndex, nextCompletedIndexes)
-        setSentenceResolved(true)
-        setStatusNotice({
-          kind: 'success',
-          text:
-            nextSentenceIndex >= courseRef.current.sentences.length
-              ? shouldAutoAdvance
-                ? '最后一句已通过，正在结束本轮练习。'
-                : '最后一句已通过。'
-              : '本句已通过。',
-        })
 
-        const shouldReplayOnPass =
-          practiceSettingsRef.current.replay.singleSentenceLoopEnabled ||
-          practiceSettingsRef.current.replay.autoReplayOnPass
-
-        if (shouldReplayOnPass) {
-          const replayStarted = replayCurrentSentence('english_pass_replay', nextSentenceIndex)
-          if (
-            shouldAutoAdvance &&
-            !replayStarted &&
-            !practiceSettingsRef.current.replay.singleSentenceLoopEnabled
-          ) {
-            scheduleDisplayAdvance(nextSentenceIndex)
-          }
-        } else if (shouldAutoAdvance) {
-          scheduleDisplayAdvance(nextSentenceIndex)
+        if (
+          nextSentenceIndex >= latestCourse.sentences.length &&
+          !isSegmentPlayingRef.current &&
+          sentencePhaseRef.current !== 'server_rejected'
+        ) {
+          setTypingSentenceIndex(latestCourse.sentences.length)
         }
       } catch (error) {
-        setSubmissionFailed(true)
-        setStatusNotice({
-          kind: 'error',
-          text: error instanceof Error ? error.message : '校验失败，请稍后再试。',
-        })
-        toast.error(error instanceof Error ? error.message : '校验失败，请稍后再试。')
+        const message = error instanceof Error ? error.message : '校验失败，请重新拼写这一句。'
+        rollbackToSentence(sentenceIndex, message)
+        toast.error(message)
       } finally {
-        setSubmitting(false)
+        pendingSubmissionIndexesRef.current.delete(sentenceIndex)
       }
     },
-    [
-      activeSentence,
-      handlePersistProgress,
-      playWrongSound,
-      replayCurrentSentence,
-      scheduleDisplayAdvance,
-      submitting,
-    ],
+    [handlePersistProgress, isSegmentPlayingRef, playWrongSound, rollbackToSentence, sentencePhaseRef],
+  )
+
+  const replayCurrentSentence = useCallback(
+    (source = 'english_replay') => {
+      const sentence = courseRef.current?.sentences[typingSentenceIndexRef.current] ?? null
+      if (!sentence) return false
+      setSentencePhase('listening_wait_input')
+      setStatusNotice(null)
+      return startPlaybackWindow({
+        startSentence: sentence,
+        endSentence: sentence,
+        source,
+      })
+    },
+    [startPlaybackWindow, typingSentenceIndexRef],
+  )
+
+  const handleLocalSentenceCompletion = useCallback(
+    (sentenceIndex: number, inputText: string) => {
+      const currentCourse = courseRef.current
+      const sentence = currentCourse?.sentences[sentenceIndex] ?? null
+      if (!currentCourse || !sentence) return
+
+      const nextSentence = currentCourse.sentences[sentenceIndex + 1] ?? null
+      setFeedback(null)
+      playSentenceComplete()
+      setTranslationSentenceIndex(sentenceIndex)
+      setStatusNotice({
+        kind: 'success',
+        text: nextSentence ? '本句已完整显示，正在重播本句并衔接下一句。' : '本句已完整显示，正在重播本句。',
+      })
+
+      if (nextSentence) {
+        autoPreviewKeyRef.current = `${currentCourse.id}:${nextSentence.index}`
+        setSentencePhase('chain_playing')
+        startPlaybackWindow({
+          startSentence: sentence,
+          endSentence: nextSentence,
+          source: 'english_completion_chain',
+          nextSentenceSwitchSec: nextSentence.startMs / 1000,
+          onNextSentenceStart: () => {
+            setTypingSentenceIndex(nextSentence.index)
+            setTranslationSentenceIndex(sentenceIndex)
+            setSentencePhase('chain_playing')
+          },
+          onEnded: () => {
+            setTypingSentenceIndex(nextSentence.index)
+            setSentencePhase('listening_wait_input')
+            setStatusNotice(null)
+          },
+        })
+      } else {
+        setSentencePhase('chain_playing')
+        startPlaybackWindow({
+          startSentence: sentence,
+          endSentence: sentence,
+          source: 'english_final_sentence_replay',
+          onEnded: () => {
+            setSentencePhase('locally_completed')
+            setStatusNotice(null)
+            if (
+              courseRef.current &&
+              courseRef.current.progress.currentSentenceIndex >= courseRef.current.sentences.length
+            ) {
+              setTypingSentenceIndex(courseRef.current.sentences.length)
+            }
+          },
+        })
+      }
+
+      void submitCurrentSentence(sentenceIndex, inputText)
+    },
+    [courseRef, playSentenceComplete, startPlaybackWindow, submitCurrentSentence],
   )
 
   const handleNavigateSentence = useCallback(
@@ -469,11 +499,13 @@ export default function EnglishCoursePage() {
       const currentCourse = courseRef.current
       if (!currentCourse) return
 
-      const currentIndex = displaySentenceIndexRef.current
+      const currentIndex = typingSentenceIndexRef.current
       const currentSentence = currentCourse.sentences[currentIndex] ?? null
-      const currentCompleted =
-        (currentSentence ? currentCourse.progress.completedSentenceIndexes.includes(currentSentence.index) : false) ||
-        sentenceResolvedRef.current
+      const currentCompleted = Boolean(
+        currentSentence &&
+          (currentCourse.progress.completedSentenceIndexes.includes(currentSentence.index) ||
+            sentencePhaseRef.current === 'locally_completed'),
+      )
 
       let targetIndex = currentIndex + delta
       if (delta > 0 && currentIndex === currentCourse.sentences.length - 1) {
@@ -484,12 +516,20 @@ export default function EnglishCoursePage() {
       targetIndex = Math.max(0, Math.min(currentCourse.sentences.length, targetIndex))
       if (targetIndex === currentIndex) return
 
-      clearAutoAdvanceTimer()
+      autoPreviewKeyRef.current = ''
       stopSegmentPlayback()
       timer.registerActivity('practice_interaction', {
         source: delta > 0 ? 'english_next_sentence' : 'english_previous_sentence',
       })
-      setDisplaySentenceIndex(targetIndex)
+      setTypingSentenceIndex(targetIndex)
+      setTranslationSentenceIndex(
+        targetIndex >= currentCourse.sentences.length
+          ? findLastCompletedSentenceIndex(currentCourse, currentCourse.sentences.length)
+          : findLastCompletedSentenceIndex(currentCourse, targetIndex),
+      )
+      setSentencePhase(targetIndex >= currentCourse.sentences.length ? 'locally_completed' : 'listening_wait_input')
+      setStatusNotice(null)
+      setFeedback(null)
 
       if (
         targetIndex < currentCourse.sentences.length &&
@@ -498,25 +538,18 @@ export default function EnglishCoursePage() {
         void handlePersistProgress(targetIndex, currentCourse.progress.completedSentenceIndexes)
       }
     },
-    [clearAutoAdvanceTimer, handlePersistProgress, stopSegmentPlayback, timer],
+    [courseRef, handlePersistProgress, sentencePhaseRef, stopSegmentPlayback, timer, typingSentenceIndexRef],
   )
 
   const toggleSingleSentenceLoop = useCallback(() => {
-    const nextEnabled = !practiceSettingsRef.current.replay.singleSentenceLoopEnabled
     updatePracticeSettings((current) => ({
       ...current,
       replay: {
         ...current.replay,
-        singleSentenceLoopEnabled: nextEnabled,
+        singleSentenceLoopEnabled: !current.replay.singleSentenceLoopEnabled,
       },
     }))
-    if (!nextEnabled && sentenceResolvedRef.current && practiceSettingsRef.current.flow.autoAdvanceOnPass) {
-      const nextTargetIndex = courseRef.current?.progress.currentSentenceIndex ?? displaySentenceIndexRef.current
-      if (nextTargetIndex > displaySentenceIndexRef.current && !isSegmentPlayingRef.current) {
-        scheduleDisplayAdvance(nextTargetIndex, POST_REPLAY_ADVANCE_DELAY_MS)
-      }
-    }
-  }, [scheduleDisplayAdvance, updatePracticeSettings])
+  }, [updatePracticeSettings])
 
   const toggleAutoReplayOnPass = useCallback(() => {
     updatePracticeSettings((current) => ({
@@ -528,32 +561,11 @@ export default function EnglishCoursePage() {
     }))
   }, [updatePracticeSettings])
 
-  const toggleAutoAdvanceOnPass = useCallback(() => {
-    const nextEnabled = !practiceSettingsRef.current.flow.autoAdvanceOnPass
-    updatePracticeSettings((current) => ({
-      ...current,
-      flow: {
-        ...current.flow,
-        autoAdvanceOnPass: nextEnabled,
-      },
-    }))
-
-    if (!sentenceResolvedRef.current) return
-    if (!nextEnabled) {
-      clearAutoAdvanceTimer()
-      return
-    }
-    if (practiceSettingsRef.current.replay.singleSentenceLoopEnabled || isSegmentPlayingRef.current) return
-    const nextTargetIndex = courseRef.current?.progress.currentSentenceIndex ?? displaySentenceIndexRef.current
-    if (nextTargetIndex > displaySentenceIndexRef.current) {
-      scheduleDisplayAdvance(nextTargetIndex, POST_REPLAY_ADVANCE_DELAY_MS)
-    }
-  }, [clearAutoAdvanceTimer, scheduleDisplayAdvance, updatePracticeSettings])
-
   const toggleSound = useCallback(() => {
     updatePracticeSettings((current) => ({
       ...current,
       sound: {
+        ...current.sound,
         enabled: !current.sound.enabled,
       },
     }))
@@ -577,16 +589,20 @@ export default function EnglishCoursePage() {
   })
 
   useEffect(() => {
-    if (!activeSentence || !isSentenceLocallyComplete || sentenceResolved || submitting || submissionFailed) return
-    void submitCurrentSentence(sentenceInputText)
+    if (!activeSentence) return
+    resetTypingState()
+  }, [activeSentence?.id, resetTypingState])
+
+  useEffect(() => {
+    if (!activeSentence || !isSentenceLocallyComplete) return
+    if (sentencePhase !== 'listening_wait_input' && sentencePhase !== 'server_rejected') return
+    handleLocalSentenceCompletion(activeSentence.index, sentenceInputText)
   }, [
     activeSentence,
+    handleLocalSentenceCompletion,
     isSentenceLocallyComplete,
     sentenceInputText,
-    sentenceResolved,
-    submissionFailed,
-    submitCurrentSentence,
-    submitting,
+    sentencePhase,
   ])
 
   useEffect(() => {
@@ -611,12 +627,35 @@ export default function EnglishCoursePage() {
   }, [focusTypingInput, isTouchDevice, settingsOpen, typingEnabled])
 
   useEffect(() => {
+    if (!activeSentence || sentencePhase !== 'listening_wait_input') return
+    const previewKey = `${course?.id}:${activeSentence.index}`
+    if (autoPreviewKeyRef.current === previewKey) return
+    autoPreviewKeyRef.current = previewKey
+    void startPlaybackWindow({
+      startSentence: activeSentence,
+      endSentence: activeSentence,
+      source: 'english_sentence_preview',
+      countReplay: false,
+    })
+  }, [activeSentence, course?.id, sentencePhase, startPlaybackWindow])
+
+  useEffect(() => {
     const element = videoRef.current
     if (!element) return
 
     const handlePlaybackBoundary = (event: Event) => {
       const playbackState = playbackStateRef.current
       if (!playbackState) return
+
+      if (
+        playbackState.nextSentenceSwitchSec != null &&
+        !playbackState.didSwitchToNextSentence &&
+        element.currentTime + 0.01 >= playbackState.nextSentenceSwitchSec
+      ) {
+        playbackState.didSwitchToNextSentence = true
+        playbackState.onNextSentenceStart?.()
+      }
+
       if (event.type !== 'ended' && element.currentTime + 0.01 < playbackState.endSec) return
       const onEnded = playbackState.onEnded
       playbackStateRef.current = null
@@ -633,38 +672,6 @@ export default function EnglishCoursePage() {
     }
   }, [mediaUrl])
 
-  useEffect(() => {
-    clearAutoAdvanceTimer()
-    stopSegmentPlayback()
-    resetTypingState()
-    setSentenceResolved(false)
-    setSubmissionFailed(false)
-    setSubmitting(false)
-    setFeedback(null)
-    setStatusNotice(null)
-    setSentenceReplayCount(0)
-  }, [clearAutoAdvanceTimer, displaySentenceIndex, resetTypingState, stopSegmentPlayback])
-
-  const handleRetrySubmission = useCallback(() => {
-    setSubmissionFailed(false)
-    void submitCurrentSentence(sentenceInputText)
-  }, [sentenceInputText, submitCurrentSentence])
-
-  const handleOpenGenerationLog = useCallback(async () => {
-    if (!Number.isFinite(courseId)) return
-    setLogDialogOpen(true)
-    setLogLoading(true)
-    setLogError('')
-    try {
-      const response = await getEnglishCourseGenerationLogApi(courseId)
-      setLogData(response)
-    } catch (error) {
-      setLogError(error instanceof Error ? error.message : '加载生成日志失败。')
-    } finally {
-      setLogLoading(false)
-    }
-  }, [courseId])
-
   const handleSavePracticeSettings = useCallback(
     (nextSettings: EnglishPracticeSettings) => {
       updatePracticeSettings(nextSettings)
@@ -672,21 +679,9 @@ export default function EnglishCoursePage() {
         kind: 'info',
         text: '练习设置已更新。',
       })
-      if (!sentenceResolvedRef.current) return
-      if (!nextSettings.flow.autoAdvanceOnPass) {
-        clearAutoAdvanceTimer()
-        return
-      }
-      if (nextSettings.replay.singleSentenceLoopEnabled || isSegmentPlayingRef.current) return
-      const nextTargetIndex = courseRef.current?.progress.currentSentenceIndex ?? displaySentenceIndexRef.current
-      if (nextTargetIndex > displaySentenceIndexRef.current) {
-        scheduleDisplayAdvance(nextTargetIndex, POST_REPLAY_ADVANCE_DELAY_MS)
-      }
     },
-    [clearAutoAdvanceTimer, scheduleDisplayAdvance, updatePracticeSettings],
+    [updatePracticeSettings],
   )
-
-  const showRetryButton = Boolean(activeSentence && isSentenceLocallyComplete && !sentenceResolved && !submitting)
 
   return (
     <EnglishCoursePageView
@@ -696,53 +691,32 @@ export default function EnglishCoursePage() {
       videoRef={videoRef}
       typingInputRef={typingInputRef}
       timer={timer}
-      setSettingsOpen={setSettingsOpen}
-      setDisplaySentenceIndex={setDisplaySentenceIndex}
-      handleOpenGenerationLog={handleOpenGenerationLog}
-      completedSentenceIndexes={completedSentenceIndexes}
-      completionRatio={completionRatio}
       mediaUrl={mediaUrl}
       isCourseDisplayCompleted={isCourseDisplayCompleted}
       activeSentence={activeSentence}
+      translationSentence={translationSentence}
+      translationMode={translationMode}
       practiceSettings={practiceSettings}
-      activeSentenceCompleted={activeSentenceCompleted}
-      sentenceResolved={sentenceResolved}
       statusNotice={statusNotice}
       feedback={feedback}
       activeSentenceTokens={activeSentenceTokens}
       typingState={typingState}
       wordRevealComparableIndices={wordRevealComparableIndices}
-      sentenceReplayCount={sentenceReplayCount}
+      wordRailDensity={wordRailDensity}
       handleTypingInputKeyDown={handleTypingInputKeyDown}
       typingEnabled={typingEnabled}
       settingsOpen={settingsOpen}
+      setSettingsOpen={setSettingsOpen}
       focusTypingInput={focusTypingInput}
       isTouchDevice={isTouchDevice}
       replayCurrentSentence={replayCurrentSentence}
-      setStatusNotice={setStatusNotice}
-      setSubmissionFailed={setSubmissionFailed}
-      resetCurrentWord={resetCurrentWord}
-      resetTypingState={resetTypingState}
       revealLetter={revealLetter}
-      revealWord={revealWord}
-      showRetryButton={showRetryButton}
-      handleRetrySubmission={handleRetrySubmission}
-      submitting={submitting}
       handleNavigateSentence={handleNavigateSentence}
-      toggleAutoAdvanceOnPass={toggleAutoAdvanceOnPass}
-      toggleSingleSentenceLoop={toggleSingleSentenceLoop}
-      toggleAutoReplayOnPass={toggleAutoReplayOnPass}
-      toggleSound={toggleSound}
       helperPanelOpen={helperPanelOpen}
       setHelperPanelOpen={setHelperPanelOpen}
       sidePanelTab={sidePanelTab}
       setSidePanelTab={setSidePanelTab}
       handleSavePracticeSettings={handleSavePracticeSettings}
-      logDialogOpen={logDialogOpen}
-      setLogDialogOpen={setLogDialogOpen}
-      logLoading={logLoading}
-      logError={logError}
-      logData={logData}
     />
   )
 }

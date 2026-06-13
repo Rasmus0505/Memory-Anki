@@ -1,4 +1,14 @@
-import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import {
+  forwardRef,
+  useCallback,
+  useEffect,
+  useId,
+  useImperativeHandle,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
 import type { MindMapEditorState } from '@/shared/api/contracts'
 import type {
   BilinkItem,
@@ -42,12 +52,9 @@ function buildLocalEditorStateFingerprint(editorState: MindMapEditorState) {
 interface MindMapFrameProps {
   editorState: MindMapEditorState
   readonly?: boolean
-  showToolbarWhenReadonly?: boolean
   practiceModeActive?: boolean
-  practiceToggleLabel?: '练习' | '编辑' | '复习'
   viewMemoryScope?: string | null
   immersiveModeActive?: boolean
-  showImportButtons?: boolean
   aiSplitBusy?: boolean
   syncOnPropChange?: boolean
   syncIntent?: 'soft' | 'replace'
@@ -68,20 +75,20 @@ interface MindMapFrameProps {
   focusNodeUids?: string[]
   focusRequestNodeUid?: string | null
   focusRequestNonce?: number
-  showMiniPalaceButton?: boolean
   miniPalaceDraft?: {
     active: boolean
     selectedNodeUids: string[]
   }
+  miniPalacePracticeActive?: boolean
   bilinkInsertionText?: string | null
   bilinkInsertionNonce?: number
   reviewFxSignal?: MindMapReviewFxPayload | null
   feedbackFxSignal?: MindMapFeedbackFxPayload | null
-  showBilinkSearchButton?: boolean
   onEditorStateChange: (nextState: MindMapEditorState) => void
   onNodeActive?: (nodes: MindMapSelection[]) => void
   onNodeClick?: (nodes: MindMapSelection[]) => void
   onNodeContextMenu?: (nodes: MindMapSelection[]) => void
+  onNodeHover?: (nodes: MindMapSelection[]) => void
   onSegmentSelect?: (segmentId: number | null) => void
   onCreateSegmentFromSelection?: () => void
   onSegmentRangeDraftChange?: (payload: {
@@ -93,13 +100,10 @@ interface MindMapFrameProps {
     targetSegmentId: number | 'new' | null
   }) => void
   onSegmentRangeConfirm?: () => void
-  onPracticeToggle?: () => void
-  onEnglishOpen?: () => void
-  onMindMapImportOpen?: () => void
-  onImageTextImportOpen?: () => void
   onAiSplitRequest?: (payload: MindMapAiSplitRequestPayload) => void
   onFullscreenChange?: (active: boolean) => void
   onFullscreenToggle?: (active?: boolean) => void
+  onUiClearedChange?: (active: boolean) => void
   onBilinkTrigger?: (payload: {
     nodeUid: string | null
     left: number
@@ -111,9 +115,15 @@ interface MindMapFrameProps {
     nodeUid: string | null
     trigger: 'badge' | 'mark'
   }) => void
-  onBilinkToolbarSearch?: () => void
-  onMiniPalaceOpen?: () => void
+  onMiniPalacePour?: () => void
   onReady?: () => void
+}
+
+export interface MindMapFrameHandle {
+  setUiCleared: (nextValue: boolean) => void
+  toggleUiCleared: () => void
+  enterNativeFullscreen: () => Promise<void>
+  exitNativeFullscreen: () => Promise<void>
 }
 
 function isMindMapFeedbackEvent(value: unknown): value is MindMapFeedbackEvent {
@@ -257,15 +267,12 @@ function readMindMapFeedbackAudioEvent(payload: unknown): MindMapFeedbackAudioEv
   return null
 }
 
-export function MindMapFrame({
+export const MindMapFrame = forwardRef<MindMapFrameHandle, MindMapFrameProps>(function MindMapFrame({
   editorState,
   readonly = false,
-  showToolbarWhenReadonly = false,
   practiceModeActive = false,
-  practiceToggleLabel = '练习',
   viewMemoryScope = null,
   immersiveModeActive = false,
-  showImportButtons = false,
   aiSplitBusy = false,
   syncOnPropChange = false,
   syncIntent = 'soft',
@@ -291,60 +298,53 @@ export function MindMapFrame({
   focusNodeUids = [],
   focusRequestNodeUid = null,
   focusRequestNonce = 0,
-  showMiniPalaceButton = false,
   miniPalaceDraft = {
     active: false,
     selectedNodeUids: [],
   },
+  miniPalacePracticeActive = false,
   bilinkInsertionText = null,
   bilinkInsertionNonce = 0,
   reviewFxSignal = null,
   feedbackFxSignal = null,
-  showBilinkSearchButton = false,
   onEditorStateChange,
   onNodeActive,
   onNodeClick,
   onNodeContextMenu,
+  onNodeHover,
   onSegmentSelect,
   onCreateSegmentFromSelection,
   onSegmentRangeDraftChange,
   onSegmentRangeModeToggle,
   onSegmentRangeConfirm,
-  onPracticeToggle,
-  onEnglishOpen,
-  onMindMapImportOpen,
-  onImageTextImportOpen,
   onAiSplitRequest,
   onFullscreenChange,
   onFullscreenToggle,
+  onUiClearedChange,
   onBilinkTrigger,
   onBilinkNodeClick,
-  onBilinkToolbarSearch,
-  onMiniPalaceOpen,
+  onMiniPalacePour,
   onReady,
-}: MindMapFrameProps) {
+}: MindMapFrameProps, ref) {
   const iframeRef = useRef<HTMLIFrameElement | null>(null)
   const stateRef = useRef(editorState)
   const onEditorStateChangeRef = useRef(onEditorStateChange)
   const onNodeActiveRef = useRef(onNodeActive)
   const onNodeClickRef = useRef(onNodeClick)
   const onNodeContextMenuRef = useRef(onNodeContextMenu)
+  const onNodeHoverRef = useRef(onNodeHover)
   const onSegmentSelectRef = useRef(onSegmentSelect)
   const onCreateSegmentFromSelectionRef = useRef(onCreateSegmentFromSelection)
   const onSegmentRangeDraftChangeRef = useRef(onSegmentRangeDraftChange)
   const onSegmentRangeModeToggleRef = useRef(onSegmentRangeModeToggle)
   const onSegmentRangeConfirmRef = useRef(onSegmentRangeConfirm)
-  const onPracticeToggleRef = useRef(onPracticeToggle)
-  const onEnglishOpenRef = useRef(onEnglishOpen)
-  const onMindMapImportOpenRef = useRef(onMindMapImportOpen)
-  const onImageTextImportOpenRef = useRef(onImageTextImportOpen)
   const onAiSplitRequestRef = useRef(onAiSplitRequest)
   const onFullscreenChangeRef = useRef(onFullscreenChange)
   const onFullscreenToggleRef = useRef(onFullscreenToggle)
+  const onUiClearedChangeRef = useRef(onUiClearedChange)
   const onBilinkTriggerRef = useRef(onBilinkTrigger)
   const onBilinkNodeClickRef = useRef(onBilinkNodeClick)
-  const onBilinkToolbarSearchRef = useRef(onBilinkToolbarSearch)
-  const onMiniPalaceOpenRef = useRef(onMiniPalaceOpen)
+  const onMiniPalacePourRef = useRef(onMiniPalacePour)
   const onReadyRef = useRef(onReady)
   const lastForcedSyncKeyRef = useRef<string | null>(null)
   const lastBilinkInsertionNonceRef = useRef<number>(0)
@@ -371,22 +371,19 @@ export function MindMapFrame({
   onNodeActiveRef.current = onNodeActive
   onNodeClickRef.current = onNodeClick
   onNodeContextMenuRef.current = onNodeContextMenu
+  onNodeHoverRef.current = onNodeHover
   onSegmentSelectRef.current = onSegmentSelect
   onCreateSegmentFromSelectionRef.current = onCreateSegmentFromSelection
   onSegmentRangeDraftChangeRef.current = onSegmentRangeDraftChange
   onSegmentRangeModeToggleRef.current = onSegmentRangeModeToggle
   onSegmentRangeConfirmRef.current = onSegmentRangeConfirm
-  onPracticeToggleRef.current = onPracticeToggle
-  onEnglishOpenRef.current = onEnglishOpen
-  onMindMapImportOpenRef.current = onMindMapImportOpen
-  onImageTextImportOpenRef.current = onImageTextImportOpen
   onAiSplitRequestRef.current = onAiSplitRequest
   onFullscreenChangeRef.current = onFullscreenChange
   onFullscreenToggleRef.current = onFullscreenToggle
+  onUiClearedChangeRef.current = onUiClearedChange
   onBilinkTriggerRef.current = onBilinkTrigger
   onBilinkNodeClickRef.current = onBilinkNodeClick
-  onBilinkToolbarSearchRef.current = onBilinkToolbarSearch
-  onMiniPalaceOpenRef.current = onMiniPalaceOpen
+  onMiniPalacePourRef.current = onMiniPalacePour
   onReadyRef.current = onReady
 
   const rawHostId = useId()
@@ -410,12 +407,9 @@ export function MindMapFrame({
     iframeWindow?.applyHostState?.(
       buildHostBridgeHostState({
         readonly,
-        showToolbarWhenReadonly,
         practiceModeActive,
-        practiceToggleLabel,
         viewMemoryScope,
         immersiveModeActive,
-        showImportButtons: Boolean(showImportButtons),
         aiSplitBusy,
         segments,
         activeSegmentId,
@@ -427,11 +421,8 @@ export function MindMapFrame({
         focusNodeUids,
         focusRequestNodeUid,
         focusRequestNonce,
-        showMiniPalaceButton,
         miniPalaceDraft,
-        showBilinkSearchButton,
-        hasPracticeToggle: Boolean(onPracticeToggleRef.current),
-        hasEnglishOpen: Boolean(onEnglishOpenRef.current),
+        miniPalacePracticeActive,
         hasAiSplitRequest: Boolean(onAiSplitRequestRef.current),
       }),
     )
@@ -444,20 +435,89 @@ export function MindMapFrame({
     focusRequestNodeUid,
     focusRequestNonce,
     miniPalaceDraft,
+    miniPalacePracticeActive,
     focusNodeUids,
     immersiveModeActive,
     practiceModeActive,
-    practiceToggleLabel,
     readonly,
     segmentColorMode,
     segmentRangeDraft,
     segments,
-    showBilinkSearchButton,
-    showMiniPalaceButton,
-    showImportButtons,
-    showToolbarWhenReadonly,
     viewMemoryScope,
   ])
+
+  const dispatchIframeResizeSignal = useCallback(() => {
+    const iframeWindow = iframeRef.current?.contentWindow as
+      | (Window & {
+          dispatchEvent?: (event: Event) => boolean
+        })
+      | null
+    iframeWindow?.dispatchEvent?.(new Event('resize'))
+  }, [])
+
+  useLayoutEffect(() => {
+    const iframeElement = iframeRef.current
+    if (!iframeElement || typeof ResizeObserver === 'undefined') return
+
+    let frameId: number | null = null
+    const scheduleResizeSignal = () => {
+      if (frameId != null) {
+        window.cancelAnimationFrame(frameId)
+      }
+      frameId = window.requestAnimationFrame(() => {
+        frameId = null
+        dispatchIframeResizeSignal()
+      })
+    }
+
+    const observer = new ResizeObserver(() => {
+      scheduleResizeSignal()
+    })
+    observer.observe(iframeElement)
+
+    return () => {
+      observer.disconnect()
+      if (frameId != null) {
+        window.cancelAnimationFrame(frameId)
+      }
+    }
+  }, [dispatchIframeResizeSignal])
+
+  const setIframeUiCleared = useCallback((nextValue: boolean) => {
+    const iframeWindow = iframeRef.current?.contentWindow as MindMapHostWindow | null
+    iframeWindow?.setUiCleared?.(nextValue)
+  }, [])
+
+  const toggleIframeUiCleared = useCallback(() => {
+    const iframeWindow = iframeRef.current?.contentWindow as MindMapHostWindow | null
+    iframeWindow?.toggleUiCleared?.()
+  }, [])
+
+  const enterIframeNativeFullscreen = useCallback(async () => {
+    const iframeWindow = iframeRef.current?.contentWindow as MindMapHostWindow | null
+    await iframeWindow?.enterNativeFullscreen?.()
+  }, [])
+
+  const exitIframeNativeFullscreen = useCallback(async () => {
+    const iframeWindow = iframeRef.current?.contentWindow as MindMapHostWindow | null
+    await iframeWindow?.exitNativeFullscreen?.()
+  }, [])
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      setUiCleared: setIframeUiCleared,
+      toggleUiCleared: toggleIframeUiCleared,
+      enterNativeFullscreen: enterIframeNativeFullscreen,
+      exitNativeFullscreen: exitIframeNativeFullscreen,
+    }),
+    [
+      enterIframeNativeFullscreen,
+      exitIframeNativeFullscreen,
+      setIframeUiCleared,
+      toggleIframeUiCleared,
+    ],
+  )
 
   const forwardLocalEditorStateChange = useCallback((nextState: MindMapEditorState) => {
     pendingLocalCommitFingerprintRef.current = buildLocalEditorStateFingerprint(nextState)
@@ -623,22 +683,19 @@ export function MindMapFrame({
           onNodeActive: onNodeActiveRef,
           onNodeClick: onNodeClickRef,
           onNodeContextMenu: onNodeContextMenuRef,
+          onNodeHover: onNodeHoverRef,
           onSegmentSelect: onSegmentSelectRef,
           onCreateSegmentFromSelection: onCreateSegmentFromSelectionRef,
           onSegmentRangeDraftChange: onSegmentRangeDraftChangeRef,
           onSegmentRangeModeToggle: onSegmentRangeModeToggleRef,
           onSegmentRangeConfirm: onSegmentRangeConfirmRef,
-          onPracticeToggle: onPracticeToggleRef,
-          onEnglishOpen: onEnglishOpenRef,
-          onMindMapImportOpen: onMindMapImportOpenRef,
-          onImageTextImportOpen: onImageTextImportOpenRef,
           onAiSplitRequest: onAiSplitRequestRef,
           onFullscreenChange: onFullscreenChangeRef,
           onFullscreenToggle: onFullscreenToggleRef,
+          onUiClearedChange: onUiClearedChangeRef,
           onBilinkTrigger: onBilinkTriggerRef,
           onBilinkNodeClick: onBilinkNodeClickRef,
-          onBilinkToolbarSearch: onBilinkToolbarSearchRef,
-          onMiniPalaceOpen: onMiniPalaceOpenRef,
+          onMiniPalacePour: onMiniPalacePourRef,
           onReady: onReadyRef,
         })
         if (result === 'app_inited') {
@@ -777,7 +834,10 @@ export function MindMapFrame({
         resetHostReady()
         setIsIframeLoaded(true)
         syncHostState()
+        dispatchIframeResizeSignal()
       }}
     />
   )
-}
+})
+
+MindMapFrame.displayName = 'MindMapFrame'

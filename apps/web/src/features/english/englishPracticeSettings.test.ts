@@ -25,7 +25,7 @@ describe('englishPracticeSettings', () => {
       LEGACY_V1_STORAGE_KEY,
       JSON.stringify({
         ...DEFAULT_ENGLISH_PRACTICE_SETTINGS,
-        sound: { enabled: false },
+        sound: { enabled: false, masterVolume: 0 },
       }),
     )
 
@@ -44,6 +44,7 @@ describe('englishPracticeSettings', () => {
       },
       sound: {
         enabled: false,
+        masterVolume: 0.5,
       },
     })
 
@@ -87,5 +88,44 @@ describe('englishPracticeSettings', () => {
       alt: false,
       meta: false,
     })
+  })
+
+  it('returns default masterVolume when storage is empty', () => {
+    const settings = readEnglishPracticeSettings()
+    expect(settings.sound.masterVolume).toBe(0.5)
+  })
+
+  it('sanitizes masterVolume to be within 0-1 range', () => {
+    const sanitized = sanitizeEnglishPracticeSettings({
+      ...DEFAULT_ENGLISH_PRACTICE_SETTINGS,
+      sound: { enabled: true, masterVolume: 2.5 },
+    })
+    expect(sanitized.sound.masterVolume).toBe(1)
+
+    const sanitizedLow = sanitizeEnglishPracticeSettings({
+      ...DEFAULT_ENGLISH_PRACTICE_SETTINGS,
+      sound: { enabled: true, masterVolume: -1 },
+    })
+    expect(sanitizedLow.sound.masterVolume).toBe(0)
+  })
+
+  it('preserves masterVolume when saving settings', () => {
+    const saved = writeEnglishPracticeSettings({
+      ...DEFAULT_ENGLISH_PRACTICE_SETTINGS,
+      sound: { enabled: true, masterVolume: 0.3 },
+    })
+    expect(saved.sound.masterVolume).toBe(0.3)
+    expect(window.localStorage.getItem(ENGLISH_PRACTICE_SETTINGS_STORAGE_KEY)).toContain('"masterVolume":0.3')
+  })
+
+  it('fills in default masterVolume for legacy settings that lack it', () => {
+    const sanitized = sanitizeEnglishPracticeSettings({
+      shortcuts: DEFAULT_ENGLISH_PRACTICE_SETTINGS.shortcuts,
+      sound: { enabled: false },
+      flow: { autoAdvanceOnPass: true },
+      replay: { autoReplayOnPass: false, singleSentenceLoopEnabled: false },
+    })
+    expect(sanitized.sound.masterVolume).toBe(0.5)
+    expect(sanitized.sound.enabled).toBe(false)
   })
 })

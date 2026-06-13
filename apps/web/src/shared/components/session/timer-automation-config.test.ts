@@ -45,6 +45,12 @@ describe('timer automation config', () => {
         hiddenAutoPauseSeconds: Number.NaN,
         autoPauseRollbackSeconds: 20,
       },
+      quiz: {
+        autoStartOnPageEnter: true,
+        inactiveAutoPauseSeconds: 9,
+        hiddenAutoPauseSeconds: 11,
+        autoPauseRollbackSeconds: 5,
+      },
       review: {
         autoStartOnPageEnter: false,
         inactiveAutoPauseSeconds: 15,
@@ -71,6 +77,8 @@ describe('timer automation config', () => {
     expect(saved.practice.hiddenAutoPauseSeconds).toBe(
       DEFAULT_TIMER_AUTOMATION_CONFIG.practice.hiddenAutoPauseSeconds,
     )
+    expect(saved.quiz.inactiveAutoPauseSeconds).toBe(9)
+    expect(saved.quiz.autoStartOnPageEnter).toBe(true)
     expect(saved.review.autoPauseRollbackSeconds).toBe(
       15,
     )
@@ -95,6 +103,10 @@ describe('timer automation config', () => {
 
     const config = readTimerAutomationConfig()
     expect(config.practice.inactiveAutoPauseSeconds).toBe(9)
+    expect(config.quiz.inactiveAutoPauseSeconds).toBe(9)
+    expect(config.quiz.hiddenAutoPauseSeconds).toBe(config.practice.hiddenAutoPauseSeconds)
+    expect(config.quiz.autoPauseRollbackSeconds).toBe(config.practice.autoPauseRollbackSeconds)
+    expect(config.quiz.autoStartOnPageEnter).toBe(true)
     expect(config.english.inactiveAutoPauseSeconds).toBe(9)
     expect(config.english.hiddenAutoPauseSeconds).toBe(config.practice.hiddenAutoPauseSeconds)
     expect(config.english.autoPauseRollbackSeconds).toBe(config.practice.autoPauseRollbackSeconds)
@@ -133,6 +145,7 @@ describe('timer automation config', () => {
   it('reads page-enter auto-start by scene', () => {
     expect(shouldAutoStartOnPageEnter(DEFAULT_TIMER_AUTOMATION_CONFIG, 'english')).toBe(true)
     expect(shouldAutoStartOnPageEnter(DEFAULT_TIMER_AUTOMATION_CONFIG, 'english_reading')).toBe(true)
+    expect(shouldAutoStartOnPageEnter(DEFAULT_TIMER_AUTOMATION_CONFIG, 'quiz')).toBe(true)
     expect(shouldAutoStartOnPageEnter(DEFAULT_TIMER_AUTOMATION_CONFIG, 'palace_edit')).toBe(false)
   })
 

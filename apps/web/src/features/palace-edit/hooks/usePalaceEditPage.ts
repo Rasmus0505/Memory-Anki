@@ -2,6 +2,7 @@
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import { useBilinkOverlay } from '@/features/bilink'
+import { useAiRunConfigDialog } from '@/features/ai-config/useAiRunConfigDialog'
 import { useBilinkCounts } from '@/features/bilink/hooks/useBilinkCounts'
 import { useBilinks } from '@/features/bilink/hooks/useBilinks'
 import type { MindMapAiSplitRequestPayload, MindMapSelection } from '@/shared/components/mindmap-host'
@@ -52,6 +53,7 @@ export function usePalaceEditPage() {
   const hardUnloadRef = useRef(false)
   const feedbackFxNonceRef = useRef(0)
   const selectedNodeUidRef = useRef<string | null>(null)
+  const { promptForAiOptions, aiRunConfigDialog } = useAiRunConfigDialog()
 
   const timer = useTimedSession({
     kind: 'palace_edit',
@@ -67,6 +69,9 @@ export function usePalaceEditPage() {
   })
   const palace = documentState.meta
   const palaceTitle = palace?.title || '未命名宫殿'
+  const selectedNode = selectedNodes[0] ?? null
+  const selectedNodeUid = selectedNode?.uid ? String(selectedNode.uid) : null
+  const selectedNodeText = selectedNode?.text ? String(selectedNode.text) : ''
   const parsedEditorDoc = useMemo(
     () => parseMindMapDoc(documentState.editorState?.editor_doc ?? null),
     [documentState.editorState?.editor_doc],
@@ -89,6 +94,8 @@ export function usePalaceEditPage() {
     palaceId,
     title: meta.title || palaceTitle,
     editorState: documentState.editorState,
+    selectedNodeUid,
+    selectedNodeText,
     timer,
   })
 
@@ -126,9 +133,6 @@ export function usePalaceEditPage() {
       navigate(`/palaces/${context.palace_id}/edit`)
     },
   })
-
-  const selectedNode = selectedNodes[0] ?? null
-  const selectedNodeUid = selectedNode?.uid ? String(selectedNode.uid) : null
 
   useEffect(() => {
     selectedNodeUidRef.current = selectedNodeUid
@@ -371,7 +375,7 @@ export function usePalaceEditPage() {
       const currentTimer = timerRef.current
       if (hardUnloadRef.current) return
       if (currentTimer.startedAt && currentTimer.status !== 'completed') {
-        void currentTimer.complete('left_page')
+        void currentTimer.leaveScene({ source: 'route_leave' })
       }
     }
   }, [])
@@ -447,9 +451,18 @@ export function usePalaceEditPage() {
         },
       })
       try {
+        const aiOptions = await promptForAiOptions({
+          scenarioKey: 'ai_split',
+          entrypointKey: 'mindmap-ai-split',
+          title: 'AI 分卡配置',
+        })
+        if (!aiOptions) {
+          return
+        }
         const result = await splitMindMapNodeApi(palaceId, {
           editor_doc: documentState.editorState.editor_doc,
           target_node_uid: payload.target_node_uid,
+          ai_options: aiOptions,
         })
         if (!result.ok || !result.editor_doc) {
           throw new Error(result.error || 'AI 分卡失败，请稍后重试。')
@@ -537,6 +550,7 @@ export function usePalaceEditPage() {
   const statusBadge: StatusBadgeState = versions.statusBadge
 
   return {
+    aiRunConfigDialog,
     palaceId,
     palace,
     timer,

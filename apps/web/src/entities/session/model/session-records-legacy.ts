@@ -4,6 +4,7 @@ import type {
   SessionCompletionMethod,
   SessionKind,
   SessionKindBreakdownItem,
+  TimeRecordChartRange,
   TimeRecordSummary,
   TimeSessionRecord,
 } from '@/entities/session/model/session-records'
@@ -222,24 +223,80 @@ export function getDailyTrend(records: TimeSessionRecord[], days = 7, reference 
   })
 }
 
-export function getSessionKindBreakdown(records: TimeSessionRecord[]): SessionKindBreakdownItem[] {
+export function getTimeRecordsInRange(
+  records: TimeSessionRecord[],
+  range: TimeRecordChartRange,
+  reference = new Date(),
+) {
+  if (range === 'all') {
+    return records.filter((record) => !record.deletedAt)
+  }
+
+  const end = addDays(startOfDay(reference), 1)
+  const start = addDays(startOfDay(reference), -(range - 1))
+
+  return records.filter((record) => {
+    if (record.deletedAt) return false
+    const startedAt = parseApiDateTime(record.startedAt)
+    if (Number.isNaN(startedAt.getTime())) return false
+    return startedAt >= start && startedAt < end
+  })
+}
+
+export function getAllDailyTrend(records: TimeSessionRecord[], reference = new Date()): DailyTrendPoint[] {
+  const validRecords = records
+    .filter((record) => !record.deletedAt)
+    .map((record) => ({
+      record,
+      startedAt: parseApiDateTime(record.startedAt),
+    }))
+    .filter(({ startedAt }) => !Number.isNaN(startedAt.getTime()))
+
+  if (validRecords.length === 0) {
+    return getDailyTrend([], 1, reference)
+  }
+
+  const today = startOfDay(reference)
+  const earliest = validRecords.reduce(
+    (minimum, current) => (current.startedAt < minimum ? current.startedAt : minimum),
+    validRecords[0].startedAt,
+  )
+  const start = startOfDay(earliest)
+  const safeDays = Math.max(1, Math.floor((today.getTime() - start.getTime()) / 86_400_000) + 1)
+  return getDailyTrend(records, safeDays, reference)
+}
+
+export function getTrendByRange(
+  records: TimeSessionRecord[],
+  range: TimeRecordChartRange,
+  reference = new Date(),
+) {
+  if (range === 'all') {
+    return getAllDailyTrend(records, reference)
+  }
+  return getDailyTrend(records, range, reference)
+}
+
+export function getSessionKindBreakdown(
+  records: TimeSessionRecord[],
+  range: TimeRecordChartRange = 'all',
+  reference = new Date(),
+): SessionKindBreakdownItem[] {
   const accumulator = new Map<SessionKind, SessionKindBreakdownItem>()
 
-  records
-    .filter((record) => !record.deletedAt)
-    .forEach((record) => {
-      const current = accumulator.get(record.kind) ?? {
-        kind: record.kind,
-        label: formatSessionKind(record.kind),
-        seconds: 0,
-        sessions: 0,
-      }
-      current.seconds += record.effectiveSeconds
-      current.sessions += 1
-      accumulator.set(record.kind, current)
-    })
+  getTimeRecordsInRange(records, range, reference).forEach((record) => {
+    const current = accumulator.get(record.kind) ?? {
+      kind: record.kind,
+      label: formatSessionKind(record.kind),
+      seconds: 0,
+      sessions: 0,
+    }
+    current.seconds += record.effectiveSeconds
+    current.sessions += 1
+    accumulator.set(record.kind, current)
+  })
 
-  return ['review', 'practice', 'palace_edit'].map((kind) =>
+  return ['review', 'practice', 'quiz', 'palace_edit'].map((kind) =>
     accumulator.get(kind as SessionKind) ?? {
       kind: kind as SessionKind,
       label: formatSessionKind(kind as SessionKind),
@@ -265,6 +322,9 @@ export function getWeeklyLocalSessionStats(records: TimeSessionRecord[], referen
       if (record.kind === 'practice') {
         accumulator.practiceDurationSeconds += record.effectiveSeconds
       }
+      if (record.kind === 'quiz') {
+        accumulator.quizDurationSeconds += record.effectiveSeconds
+      }
       if (record.kind === 'palace_edit') {
         accumulator.editDurationSeconds += record.effectiveSeconds
       }
@@ -274,6 +334,7 @@ export function getWeeklyLocalSessionStats(records: TimeSessionRecord[], referen
       reviewCount: 0,
       reviewDurationSeconds: 0,
       practiceDurationSeconds: 0,
+      quizDurationSeconds: 0,
       editDurationSeconds: 0,
     },
   )
@@ -293,6 +354,7 @@ export function formatDuration(totalSeconds: number) {
 export function formatSessionKind(kind: SessionKind) {
   if (kind === 'palace_edit') return '宫殿编辑'
   if (kind === 'practice') return '练习'
+  if (kind === 'quiz') return '做题'
   return '正式复习'
 }
 

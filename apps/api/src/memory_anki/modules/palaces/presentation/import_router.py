@@ -33,6 +33,9 @@ from memory_anki.modules.palaces.application.mindmap_import_service import (
     PdfImportOptions,
     stream_pdf_import_preview,
 )
+from memory_anki.modules.settings.application.ai_model_registry import (
+    normalize_ai_runtime_options,
+)
 from memory_anki.modules.reviews.application.review_execution_service import (
     trigger_review_for_palace,
 )
@@ -70,6 +73,16 @@ def _stream_import_events(events):
         yield f"event: {event['event']}\ndata: {json.dumps(event['data'], ensure_ascii=False)}\n\n"
 
 
+def _parse_form_ai_options(value: str | None):
+    if not value:
+        return normalize_ai_runtime_options(None)
+    try:
+        payload = json.loads(value)
+    except json.JSONDecodeError:
+        payload = {}
+    return normalize_ai_runtime_options(payload)
+
+
 @router.get("/export/json")
 def api_export_json(s: Session = Depends(session_dep)):
     return PlainTextResponse(export_json(s), media_type="application/json",
@@ -101,6 +114,7 @@ async def api_create_image_import_job(
     entity_key: str = Form(...),
     mode: str = Form("mindmap"),
     fallback_title: str = Form("未命名宫殿"),
+    ai_options: str = Form(default=""),
     file: UploadFile = File(...),
     s: Session = Depends(session_dep),
 ):
@@ -112,6 +126,7 @@ async def api_create_image_import_job(
             image_bytes=await file.read(),
             filename=file.filename,
             fallback_title=fallback_title,
+            ai_options=_parse_form_ai_options(ai_options),
         )
     except MindMapImportError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -123,6 +138,7 @@ async def api_create_batch_import_job(
     entity_key: str = Form(...),
     fallback_title: str = Form("未命名宫殿"),
     structure_image_index: int | None = Form(None),
+    ai_options: str = Form(default=""),
     files: list[UploadFile] = File(...),
     s: Session = Depends(session_dep),
 ):
@@ -136,6 +152,7 @@ async def api_create_batch_import_job(
             image_items=image_items,
             fallback_title=fallback_title,
             structure_image_index=structure_image_index,
+            ai_options=_parse_form_ai_options(ai_options),
         )
     except MindMapImportError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -175,6 +192,7 @@ def api_create_pdf_import_job(data: dict, s: Session = Depends(session_dep)):
             range_prompt=range_prompt,
             fallback_title=fallback_title,
             import_options=import_options,
+            ai_options=normalize_ai_runtime_options(data.get("ai_options")),
         )
     except MindMapImportError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -239,6 +257,7 @@ def api_delete_import_job(job_id: str, s: Session = Depends(session_dep)):
 async def api_preview_mindmap_import(
     file: UploadFile = File(...),
     fallback_title: str = "未命名宫殿",
+    ai_options: str = Form(default=""),
     s: Session = Depends(session_dep),
 ):
     image_bytes = await file.read()
@@ -250,6 +269,7 @@ async def api_preview_mindmap_import(
             image_bytes=image_bytes,
             filename=file.filename,
             fallback_title=fallback_title,
+            ai_options=_parse_form_ai_options(ai_options),
         )
     except MindMapImportError as exc:
         return {"ok": False, "error": str(exc)}
@@ -262,6 +282,7 @@ async def api_preview_batch_mindmap_import(
     files: list[UploadFile] = File(...),
     fallback_title: str = "未命名宫殿",
     structure_image_index: int | None = None,
+    ai_options: str = Form(default=""),
     s: Session = Depends(session_dep),
 ):
     image_items: list[tuple[bytes, str | None]] = []
@@ -274,6 +295,7 @@ async def api_preview_batch_mindmap_import(
             image_items=image_items,
             fallback_title=fallback_title,
             structure_image_index=structure_image_index,
+            ai_options=_parse_form_ai_options(ai_options),
         )
     except MindMapImportError as exc:
         return {"ok": False, "error": str(exc)}
@@ -284,6 +306,7 @@ async def api_preview_batch_mindmap_import(
 @router.post("/import/preview-text")
 async def api_preview_text_import(
     file: UploadFile = File(...),
+    ai_options: str = Form(default=""),
     s: Session = Depends(session_dep),
 ):
     image_bytes = await file.read()
@@ -295,6 +318,7 @@ async def api_preview_text_import(
             image_bytes=image_bytes,
             filename=file.filename,
             fallback_title="未命名宫殿",
+            ai_options=_parse_form_ai_options(ai_options),
         )
     except MindMapImportError as exc:
         return {"ok": False, "error": str(exc)}
@@ -331,6 +355,8 @@ def api_preview_pdf_mindmap_import(data: dict, s: Session = Depends(session_dep)
                 range_prompt=range_prompt,
                 fallback_title=fallback_title,
                 import_options=import_options,
+                session=s,
+                ai_options=normalize_ai_runtime_options(data.get("ai_options")),
             )
         ),
         media_type="text/event-stream",
@@ -358,6 +384,7 @@ def api_preview_pdf_text_import(data: dict, s: Session = Depends(session_dep)):
             range_prompt=range_prompt,
             fallback_title=document.original_name or "未命名宫殿",
             import_options=None,
+            ai_options=normalize_ai_runtime_options(data.get("ai_options")),
         )
     except MindMapImportError as exc:
         return {"ok": False, "error": str(exc)}

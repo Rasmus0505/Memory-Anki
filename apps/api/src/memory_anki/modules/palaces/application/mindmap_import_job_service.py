@@ -18,6 +18,11 @@ from memory_anki.modules.knowledge.application.subject_document_service import (
     get_subject_document_by_id,
     render_selected_pdf_pages,
 )
+from memory_anki.modules.settings.application.ai_model_registry import (
+    AiRuntimeOptions,
+    resolve_provider_setting,
+    resolve_scenario_runtime,
+)
 
 from .mindmap_import import (
     ERROR_SNIPPET_LIMIT,
@@ -80,13 +85,46 @@ _RUNNING_JOB_LOCK = threading.Lock()
 _UNSET = job_state.UNSET
 
 
-def _dashscope_runtime() -> DashscopeImportRuntime:
-    from memory_anki.modules.settings.application.ai_model_registry import resolve_current_model
+def _serialize_runtime_payload(runtime) -> dict[str, Any]:
+    return {
+        "model": runtime.model,
+        "provider": runtime.provider,
+        "base_url": runtime.base_url,
+        "thinking_enabled": runtime.thinking_enabled,
+        "supports_thinking": runtime.supports_thinking,
+        "extra_payload": runtime.extra_payload,
+    }
+
+
+def _dashscope_runtime(source_meta: dict[str, Any] | None = None) -> DashscopeImportRuntime:
+    runtime_meta = source_meta.get("ai_runtime") if isinstance(source_meta, dict) else None
+    if isinstance(runtime_meta, dict):
+        return llm_gateway.build_runtime(
+            api_key=str(_resolve_provider_api_key_for_runtime(runtime_meta) or ""),
+            base_url=str(runtime_meta.get("base_url") or DASHSCOPE_BASE_URL),
+            model=str(runtime_meta.get("model") or DASHSCOPE_VISION_MODEL),
+            provider=str(runtime_meta.get("provider") or "dashscope"),
+            extra_payload=(
+                dict(runtime_meta.get("extra_payload"))
+                if isinstance(runtime_meta.get("extra_payload"), dict)
+                else None
+            ),
+        )
+    runtime = resolve_scenario_runtime(None, "vision", ai_options=AiRuntimeOptions())
     return llm_gateway.build_runtime(
-        api_key=DASHSCOPE_API_KEY or "",
-        base_url=DASHSCOPE_BASE_URL,
-        model=resolve_current_model(None, "ai_model_vision", DASHSCOPE_VISION_MODEL),
+        api_key=runtime.api_key,
+        base_url=runtime.base_url,
+        model=runtime.model,
+        provider=runtime.provider,
+        extra_payload=runtime.extra_payload,
     )
+
+
+def _resolve_provider_api_key_for_runtime(runtime_meta: dict[str, Any]) -> str:
+    provider = str(runtime_meta.get("provider") or "dashscope").strip().lower()
+    if provider == "zhipu":
+        return resolve_provider_setting(None, "zhipu", kind="api_key")
+    return resolve_provider_setting(None, "dashscope", kind="api_key")
 
 
 def _prepare_batch_image_items(
@@ -103,6 +141,7 @@ def _prepare_batch_image_items(
 
 def _stream_call_dashscope_json(
     *,
+    source_meta: dict[str, Any] | None = None,
     image_bytes: bytes,
     filename: str | None,
     channel: str,
@@ -112,7 +151,7 @@ def _stream_call_dashscope_json(
 ):
     return (
         yield from llm_gateway.stream_json(
-            runtime=_dashscope_runtime(),
+            runtime=_dashscope_runtime(source_meta),
             image_bytes=image_bytes,
             filename=filename,
             channel=channel,
@@ -125,6 +164,7 @@ def _stream_call_dashscope_json(
 
 def _stream_call_dashscope_text(
     *,
+    source_meta: dict[str, Any] | None = None,
     image_items: list[tuple[bytes, str | None]],
     page_numbers: list[int] | None,
     range_prompt: str,
@@ -133,7 +173,7 @@ def _stream_call_dashscope_text(
 ):
     return (
         yield from llm_gateway.stream_text(
-            runtime=_dashscope_runtime(),
+            runtime=_dashscope_runtime(source_meta),
             image_items=image_items,
             page_numbers=page_numbers,
             range_prompt=range_prompt,
@@ -145,6 +185,7 @@ def _stream_call_dashscope_text(
 
 def _stream_call_dashscope_batch_json(
     *,
+    source_meta: dict[str, Any] | None = None,
     image_items: list[tuple[bytes, str | None]],
     structure_tree: dict[str, Any],
     channel: str,
@@ -157,7 +198,7 @@ def _stream_call_dashscope_batch_json(
 ):
     return (
         yield from llm_gateway.stream_batch_json(
-            runtime=_dashscope_runtime(),
+            runtime=_dashscope_runtime(source_meta),
             image_items=image_items,
             structure_tree=structure_tree,
             channel=channel,
@@ -173,6 +214,7 @@ def _stream_call_dashscope_batch_json(
 
 def _stream_call_dashscope_pdf_json(
     *,
+    source_meta: dict[str, Any] | None = None,
     image_items: list[tuple[bytes, str | None]],
     channel: str,
     range_prompt: str = "",
@@ -184,7 +226,7 @@ def _stream_call_dashscope_pdf_json(
 ):
     return (
         yield from llm_gateway.stream_pdf_json(
-            runtime=_dashscope_runtime(),
+            runtime=_dashscope_runtime(source_meta),
             image_items=image_items,
             channel=channel,
             range_prompt=range_prompt,
@@ -257,7 +299,9 @@ def create_image_import_job(
     image_bytes: bytes,
     filename: str | None,
     fallback_title: str,
+    ai_options: AiRuntimeOptions | None = None,
 ) -> MindMapImportJob:
+    runtime = resolve_scenario_runtime(session, "vision", ai_options=ai_options)
     return job_creation.create_image_job(
         session,
         entity_key=entity_key,
@@ -265,6 +309,7 @@ def create_image_import_job(
         image_bytes=image_bytes,
         filename=filename,
         fallback_title=fallback_title,
+        ai_runtime=_serialize_runtime_payload(runtime),
         import_jobs_dir=IMPORT_JOBS_DIR,
         max_image_bytes=MAX_IMAGE_BYTES,
         import_error_cls=MindMapImportError,
@@ -278,8 +323,17 @@ def create_batch_import_job(
     image_items: list[tuple[bytes, str | None]],
     fallback_title: str,
     structure_image_index: int | None,
+    ai_options: AiRuntimeOptions | None = None,
 ) -> MindMapImportJob:
-    normalized_items, resolved_structure_index = _prepare_batch_image_items(
+    runtime = resolve_scenario_runtime(session, "vision", ai_options=ai_options)
+    normalized_items, resolved_structure_index = llm_gateway.prepare_batch_items(
+        runtime=llm_gateway.build_runtime(
+            api_key=runtime.api_key,
+            base_url=runtime.base_url,
+            model=runtime.model,
+            provider=runtime.provider,
+            extra_payload=runtime.extra_payload,
+        ),
         image_items=image_items,
         structure_image_index=structure_image_index,
     )
@@ -289,6 +343,7 @@ def create_batch_import_job(
         normalized_items=normalized_items,
         resolved_structure_index=resolved_structure_index,
         fallback_title=fallback_title,
+        ai_runtime=_serialize_runtime_payload(runtime),
         import_jobs_dir=IMPORT_JOBS_DIR,
         import_error_cls=MindMapImportError,
     )
@@ -306,7 +361,9 @@ def create_pdf_import_job(
     range_prompt: str,
     fallback_title: str,
     import_options: PdfImportOptions | None,
+    ai_options: AiRuntimeOptions | None = None,
 ) -> MindMapImportJob:
+    runtime = resolve_scenario_runtime(session, "vision", ai_options=ai_options)
     normalized_pages = _normalize_page_selection(page_selection, document.page_count)
     resolved_pdf_mode = _normalize_pdf_import_mode(pdf_mode)
     resolved_structure_page = (
@@ -326,6 +383,7 @@ def create_pdf_import_job(
         range_prompt=range_prompt,
         fallback_title=fallback_title,
         resolved_options=resolved_options,
+        ai_runtime=_serialize_runtime_payload(runtime),
         import_jobs_dir=IMPORT_JOBS_DIR,
         import_error_cls=MindMapImportError,
     )
@@ -480,8 +538,14 @@ def _run_image_single_job(
         artifact_dir,
         import_jobs_dir=IMPORT_JOBS_DIR,
         find_first_input_file_fn=_find_first_input_file,
-        stream_call_dashscope_json=_stream_call_dashscope_json,
-        stream_call_dashscope_text=_stream_call_dashscope_text,
+        stream_call_dashscope_json=lambda **kwargs: _stream_call_dashscope_json(
+            source_meta=source_meta,
+            **kwargs,
+        ),
+        stream_call_dashscope_text=lambda **kwargs: _stream_call_dashscope_text(
+            source_meta=source_meta,
+            **kwargs,
+        ),
     )
 
 
@@ -497,9 +561,18 @@ def _run_image_batch_job(
         source_meta,
         artifact_dir,
         import_jobs_dir=IMPORT_JOBS_DIR,
-        stream_call_dashscope_json=_stream_call_dashscope_json,
-        stream_call_dashscope_batch_json=_stream_call_dashscope_batch_json,
-        stream_call_dashscope_pdf_json=_stream_call_dashscope_pdf_json,
+        stream_call_dashscope_json=lambda **kwargs: _stream_call_dashscope_json(
+            source_meta=source_meta,
+            **kwargs,
+        ),
+        stream_call_dashscope_batch_json=lambda **kwargs: _stream_call_dashscope_batch_json(
+            source_meta=source_meta,
+            **kwargs,
+        ),
+        stream_call_dashscope_pdf_json=lambda **kwargs: _stream_call_dashscope_pdf_json(
+            source_meta=source_meta,
+            **kwargs,
+        ),
     )
 
 
@@ -519,10 +592,22 @@ def _run_subject_pdf_job(
         get_subject_document_by_id_fn=get_subject_document_by_id,
         render_selected_pdf_pages_fn=render_selected_pdf_pages,
         ensure_rendered_page_size_fn=_ensure_rendered_page_size,
-        stream_call_dashscope_json=_stream_call_dashscope_json,
-        stream_call_dashscope_text=_stream_call_dashscope_text,
-        stream_call_dashscope_batch_json=_stream_call_dashscope_batch_json,
-        stream_call_dashscope_pdf_json=_stream_call_dashscope_pdf_json,
+        stream_call_dashscope_json=lambda **kwargs: _stream_call_dashscope_json(
+            source_meta=source_meta,
+            **kwargs,
+        ),
+        stream_call_dashscope_text=lambda **kwargs: _stream_call_dashscope_text(
+            source_meta=source_meta,
+            **kwargs,
+        ),
+        stream_call_dashscope_batch_json=lambda **kwargs: _stream_call_dashscope_batch_json(
+            source_meta=source_meta,
+            **kwargs,
+        ),
+        stream_call_dashscope_pdf_json=lambda **kwargs: _stream_call_dashscope_pdf_json(
+            source_meta=source_meta,
+            **kwargs,
+        ),
         source_meta_to_pdf_options_fn=job_creation_support.source_meta_to_pdf_options,
     )
 
