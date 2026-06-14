@@ -6,7 +6,7 @@ import PalaceQuizPage from '@/features/palace-quiz/PalaceQuizPage'
 const getPalaceApiMock = vi.fn()
 const getPalaceQuizQuestionsApiMock = vi.fn()
 const batchCreatePalaceQuizQuestionsApiMock = vi.fn()
-const previewPalaceQuizGenerationFromPdfApiMock = vi.fn()
+const previewPalaceQuizGenerationFromPdfStreamApiMock = vi.fn()
 const classifyPalaceQuizQuestionsToMiniPalacesApiMock = vi.fn()
 const recordPalaceQuizChoiceAttemptApiMock = vi.fn()
 const requestPalaceShortAnswerFeedbackApiMock = vi.fn()
@@ -33,8 +33,8 @@ vi.mock('@/shared/api/modules/quizzes', () => ({
   updatePalaceQuizQuestionApi: vi.fn(),
   deletePalaceQuizQuestionApi: vi.fn(),
   previewPalaceQuizGenerationFromImagesApi: vi.fn(),
-  previewPalaceQuizGenerationFromPdfApi: (...args: unknown[]) =>
-    previewPalaceQuizGenerationFromPdfApiMock(...args),
+  previewPalaceQuizGenerationFromPdfStreamApi: (...args: unknown[]) =>
+    previewPalaceQuizGenerationFromPdfStreamApiMock(...args),
   classifyPalaceQuizQuestionsToMiniPalacesApi: (...args: unknown[]) =>
     classifyPalaceQuizQuestionsToMiniPalacesApiMock(...args),
   recordPalaceQuizChoiceAttemptApi: (...args: unknown[]) =>
@@ -55,7 +55,28 @@ vi.mock('@/shared/hooks/useTimedSession', () => ({
 
 vi.mock('@/features/palace-edit/hooks/usePdfImportController', () => ({
   usePdfImportController: () => ({
-    subjectDocuments: [],
+    subjectDocuments: [
+      {
+        id: 9,
+        subject_id: 2,
+        filename: 'subjects/2/questions.pdf',
+        original_name: 'questions.pdf',
+        mime_type: 'application/pdf',
+        file_size: 123,
+        page_count: 10,
+        created_at: '2026-06-12T00:00:00',
+      },
+      {
+        id: 10,
+        subject_id: 2,
+        filename: 'subjects/2/answers.pdf',
+        original_name: 'answers.pdf',
+        mime_type: 'application/pdf',
+        file_size: 123,
+        page_count: 10,
+        created_at: '2026-06-12T00:00:00',
+      },
+    ],
     subjectDocumentsLoading: false,
     selectedSubjectId: 2,
     setSelectedSubjectId: vi.fn(),
@@ -120,14 +141,28 @@ const baseQuestions = [
     origin_question_id: null,
     mini_palace: null,
     source_meta: {
-      source_kind: 'manual',
-      subject_document_id: null,
-      page_numbers: null,
-      image_names: null,
-      extra_prompt: '',
-      ai_call_log_id: null,
+      source_kind: 'subject_pdf',
+      subject_document_id: 9,
+      page_numbers: [3],
+      image_names: ['page-3.png'],
+      pdf_sources: [
+        {
+          subject_document_id: 9,
+          document_name: 'questions.pdf',
+          page_numbers: [3],
+          role_hint: 'question',
+        },
+        {
+          subject_document_id: 10,
+          document_name: 'answers.pdf',
+          page_numbers: [3],
+          role_hint: 'answer',
+        },
+      ],
+      extra_prompt: '只要英国的',
+      ai_call_log_id: 'log-pdf-source',
       generated_at: '2026-06-12T00:00:00',
-      generation_mode: 'manual',
+      generation_mode: 'subject_pdf_multi',
     },
     sort_order: 1,
     correct_count: 2,
@@ -232,47 +267,92 @@ describe('PalaceQuizPage', () => {
     getPalaceApiMock.mockResolvedValue(palaceResponse)
     getPalaceQuizQuestionsApiMock.mockResolvedValue({ items: baseQuestions })
     batchCreatePalaceQuizQuestionsApiMock.mockResolvedValue({ items: [] })
-    previewPalaceQuizGenerationFromPdfApiMock.mockResolvedValue({
-      palace_id: 1,
-      questions: [
-        {
-          question_type: 'multiple_choice',
-          stem: '细胞的控制中心是？',
-          options: [
-            { id: 'A', text: '细胞膜' },
-            { id: 'B', text: '细胞核' },
-          ],
-          answer_payload: { correct_option_id: 'B' },
-          analysis: '细胞核控制细胞活动。',
-          source_meta: baseQuestions[0].source_meta,
-        },
-      ],
-      source_meta: baseQuestions[0].source_meta,
-      ai_call_log_id: 'log-preview',
-      grouped_questions: {
-        mini_palace_groups: [
-          {
-            mini_palace_id: 21,
-            mini_palace_name: '细胞核小宫殿',
-            questions: [
-              {
-                question_type: 'multiple_choice',
-                stem: '细胞的控制中心是？',
-                options: [
-                  { id: 'A', text: '细胞膜' },
-                  { id: 'B', text: '细胞核' },
+    previewPalaceQuizGenerationFromPdfStreamApiMock.mockImplementation(
+      async (_palaceId, _data, handlers) => {
+        handlers?.onStatus?.({ phase: 'generating', message: '正在调用模型生成题目', step: 2, total: 3 })
+        handlers?.onDelta?.({ text: '{"questions":[' })
+        return {
+          palace_id: 1,
+          questions: [
+            {
+              question_type: 'multiple_choice',
+              stem: '细胞的控制中心是？',
+              options: [
+                { id: 'A', text: '细胞膜' },
+                { id: 'B', text: '细胞核' },
+              ],
+              answer_payload: { correct_option_id: 'B' },
+              analysis: '细胞核控制细胞活动。',
+              source_meta: {
+                ...baseQuestions[0].source_meta,
+                generation_mode: 'subject_pdf_multi',
+                pdf_sources: [
+                  {
+                    subject_document_id: 9,
+                    document_name: 'questions.pdf',
+                    page_numbers: [3],
+                    role_hint: 'question',
+                  },
                 ],
-                answer_payload: { correct_option_id: 'B' },
-                analysis: '细胞核控制细胞活动。',
-                mini_palace_id: 21,
-                source_meta: baseQuestions[0].source_meta,
+              },
+            },
+          ],
+          source_meta: {
+            ...baseQuestions[0].source_meta,
+            generation_mode: 'subject_pdf_multi',
+            pdf_sources: [
+              {
+                subject_document_id: 9,
+                document_name: 'questions.pdf',
+                page_numbers: [3],
+                role_hint: 'question',
               },
             ],
           },
-        ],
-        unassigned_questions: [],
+          ai_call_log_id: 'log-preview',
+          warnings: ['第 2 题正确答案不在选项列表中，已跳过；请重试或补充提示词要求选项完整。'],
+          generation_stats: {
+            returned_count: 2,
+            savable_count: 1,
+            skipped_count: 1,
+          },
+          grouped_questions: {
+            mini_palace_groups: [
+              {
+                mini_palace_id: 21,
+                mini_palace_name: '细胞核小宫殿',
+                questions: [
+                  {
+                    question_type: 'multiple_choice',
+                    stem: '细胞的控制中心是？',
+                    options: [
+                      { id: 'A', text: '细胞膜' },
+                      { id: 'B', text: '细胞核' },
+                    ],
+                    answer_payload: { correct_option_id: 'B' },
+                    analysis: '细胞核控制细胞活动。',
+                    mini_palace_id: 21,
+                    source_meta: {
+                      ...baseQuestions[0].source_meta,
+                      generation_mode: 'subject_pdf_multi',
+                      pdf_sources: [
+                        {
+                          subject_document_id: 9,
+                          document_name: 'questions.pdf',
+                          page_numbers: [3],
+                          role_hint: 'question',
+                        },
+                      ],
+                    },
+                  },
+                ],
+              },
+            ],
+            unassigned_questions: [],
+          },
+        }
       },
-    })
+    )
     classifyPalaceQuizQuestionsToMiniPalacesApiMock.mockResolvedValue({
       palace_id: 1,
       mini_palace_groups: [
@@ -305,6 +385,9 @@ describe('PalaceQuizPage', () => {
     renderPage()
 
     expect(await screen.findByText('细胞生物学宫殿 · 配套习题')).toBeTruthy()
+    expect(screen.getByText('PDF生成')).toBeTruthy()
+    expect(screen.getByText(/questions\.pdf/)).toBeTruthy()
+    expect(screen.getByText(/answers\.pdf/)).toBeTruthy()
     expect(useTimedSessionMock).toHaveBeenCalledWith(
       expect.objectContaining({
         kind: 'quiz',
@@ -322,6 +405,7 @@ describe('PalaceQuizPage', () => {
     fireEvent.click(screen.getByRole('button', { name: '管理' }))
     expect(await screen.findByText('题库列表')).toBeTruthy()
     expect(screen.getByRole('button', { name: /新增题目/ })).toBeTruthy()
+    expect(screen.getAllByText('PDF生成').length).toBeGreaterThan(0)
 
     fireEvent.click(screen.getByRole('button', { name: 'AI生成' }))
     expect(await screen.findByText('来源设置')).toBeTruthy()
@@ -399,17 +483,22 @@ describe('PalaceQuizPage', () => {
     fireEvent.change(screen.getByPlaceholderText('例如：3,4,8-10'), {
       target: { value: '3' },
     })
+    fireEvent.click(screen.getByRole('button', { name: '加入本次资料集' }))
     fireEvent.click(screen.getByRole('checkbox'))
     fireEvent.click(screen.getByRole('button', { name: '生成预览' }))
 
     await waitFor(() => {
-      expect(previewPalaceQuizGenerationFromPdfApiMock).toHaveBeenCalledWith(
+      expect(previewPalaceQuizGenerationFromPdfStreamApiMock).toHaveBeenCalledWith(
         1,
         expect.objectContaining({ classify_by_mini_palace: true }),
+        expect.any(Object),
       )
     })
 
     expect(await screen.findByText('细胞核小宫殿')).toBeTruthy()
+    expect(screen.getByText(/AI返回 2 题，可保存\s*1 题，跳过\s*1 题/)).toBeTruthy()
+    expect(screen.getByText(/正确答案不在选项列表中/)).toBeTruthy()
+    expect(screen.getByText('将保存 1 题')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: '保存到题库' }))
 
     await waitFor(() => {
@@ -420,5 +509,44 @@ describe('PalaceQuizPage', () => {
         ]),
       )
     })
+  })
+
+  it('collects multiple pdf sources before generating preview', async () => {
+    renderPage()
+
+    fireEvent.click(await screen.findByRole('button', { name: 'AI生成' }))
+    expect(await screen.findByText('本次已加入的 PDF 资料')).toBeTruthy()
+
+    fireEvent.change(screen.getByPlaceholderText('例如：3,4,8-10'), {
+      target: { value: '3' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '加入本次资料集' }))
+
+    expect(await screen.findAllByText('questions.pdf')).toHaveLength(2)
+    const roleSelect = screen.getByDisplayValue('题目') as HTMLSelectElement
+    expect(Array.from(roleSelect.options).map((option) => option.textContent)).toEqual([
+      '题目',
+      '答案',
+    ])
+    fireEvent.change(roleSelect, { target: { value: 'answer' } })
+
+    fireEvent.click(screen.getByRole('button', { name: '生成预览' }))
+
+    await waitFor(() => {
+      expect(previewPalaceQuizGenerationFromPdfStreamApiMock).toHaveBeenCalledWith(
+        1,
+        expect.objectContaining({
+          pdf_sources: [
+            expect.objectContaining({
+              subject_document_id: 9,
+              page_selection: [3],
+              role_hint: 'answer',
+            }),
+          ],
+        }),
+        expect.any(Object),
+      )
+    })
+    expect(await screen.findByTestId('palace-quiz-generation-stream-preview')).toBeTruthy()
   })
 })

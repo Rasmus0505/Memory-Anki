@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import json
+
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -10,6 +13,7 @@ from memory_anki.modules.english_reading.application.service import (
     create_material,
     delete_material,
     generate_material_version,
+    generate_material_version_events,
     get_dictionary_entry,
     get_material,
     get_material_version,
@@ -25,6 +29,10 @@ from memory_anki.modules.settings.application.ai_model_registry import (
 )
 
 router = APIRouter(tags=["english-reading"])
+
+
+def _reading_sse(event: str, payload: dict) -> str:
+    return f"event: {event}\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n"
 
 
 class ReadingProfileUpdateRequest(BaseModel):
@@ -126,6 +134,41 @@ def api_generate_english_reading_material(
         )
     except EnglishReadingError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/english-reading/materials/{material_id}/generate/stream")
+def api_stream_generate_english_reading_material(
+    material_id: int,
+    data: ReadingGenerateRequest,
+    session: Session = Depends(session_dep),
+):
+    def event_stream():
+        try:
+            generator = generate_material_version_events(
+                session,
+                material_id=material_id,
+                mode=data.mode,
+                difficulty_direction=data.difficultyDirection,
+                difficulty_delta=data.difficultyDelta,
+                ai_options=normalize_ai_runtime_options(data.ai_options),
+            )
+            while True:
+                try:
+                    event_name, payload = next(generator)
+                except StopIteration as exc:
+                    yield _reading_sse("result", {"version": exc.value})
+                    break
+                yield _reading_sse(event_name, payload)
+        except EnglishReadingError as exc:
+            yield _reading_sse("error", {"detail": str(exc)})
+        except Exception as exc:
+            yield _reading_sse("error", {"detail": str(exc) or "生成阅读材料失败。"})
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 @router.get("/english-reading/materials/{material_id}")

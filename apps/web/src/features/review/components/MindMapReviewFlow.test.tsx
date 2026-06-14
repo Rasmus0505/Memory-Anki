@@ -307,6 +307,10 @@ describe('MindMapReviewFlow', () => {
     expect(screen.getByText('frame-readonly-plain')).toBeTruthy()
     expect(screen.queryByRole('button', { name: '编辑' })).toBeNull()
     expect(screen.getByRole('button', { name: '搜索' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: '做题休息' })).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: '做题休息' }))
+    expect(screen.getByRole('heading', { name: '做题休息' })).toBeTruthy()
 
     fireEvent.click(screen.getByRole('button', { name: '宿主半屏切换' }))
     await waitFor(() => {

@@ -14,9 +14,6 @@ import {
   PalaceImportHistoryView,
 } from '@/features/palace-edit/components/palace-import-drawer/history-view'
 import {
-  PalaceImportPdfSidebar,
-} from '@/features/palace-edit/components/palace-import-drawer/pdf-sidebar'
-import {
   PalaceImportResultsPanel,
 } from '@/features/palace-edit/components/palace-import-drawer/results-panel'
 import {
@@ -26,7 +23,6 @@ import { countSourceTreeNodes } from '@/features/palace-edit/components/palace-i
 import type {
   PalaceImportFooterModel,
   PalaceImportHistoryViewModel,
-  PalaceImportPdfSidebarModel,
   PalaceImportResultsModel,
   PalaceImportSourceConfigModel,
   PalaceMindMapImportDrawerProps,
@@ -58,8 +54,6 @@ export function PalaceMindMapImportDrawer(props: PalaceMindMapImportDrawerProps)
     previewEditorDoc,
     extractedText,
     imagePreviewUrl,
-    pdfPageMeta,
-    pdfPreviewPage,
     selectedPdfPages,
     selectedSubjectDocumentId,
     streamPhase,
@@ -130,13 +124,7 @@ export function PalaceMindMapImportDrawer(props: PalaceMindMapImportDrawerProps)
     selectedPdfPageCount > 0 &&
     !pdfSelectionError
 
-  const previewPage =
-    pdfPageMeta.find((page) => page.page_number === pdfPreviewPage) ??
-    pdfPageMeta.find((page) => selectedPdfPages.includes(page.page_number)) ??
-    pdfPageMeta[0] ??
-    null
-  const resolvedPreviewImageUrl =
-    sourceKind === 'subject-pdf' ? previewPage?.preview_url || '' : imagePreviewUrl
+  const resolvedPreviewImageUrl = sourceKind === 'subject-pdf' ? '' : imagePreviewUrl
   const sourceTitle =
     sourceKind === 'subject-pdf'
       ? mode === 'mindmap'
@@ -247,20 +235,6 @@ export function PalaceMindMapImportDrawer(props: PalaceMindMapImportDrawerProps)
     targetNodeLabel: props.targetNodeLabel,
     undoing: props.undoing,
   }
-  const pdfSidebarModel: PalaceImportPdfSidebarModel = {
-    analyzedPdfPages: props.analyzedPdfPages,
-    onPdfPreviewPageChange: props.onPdfPreviewPageChange,
-    onStructurePageChange: props.onStructurePageChange,
-    onTogglePdfPage: props.onTogglePdfPage,
-    pdfImportMode: props.pdfImportMode,
-    pdfPageMeta: props.pdfPageMeta,
-    pdfPagesLoading: props.pdfPagesLoading,
-    pdfPreviewPage: props.pdfPreviewPage,
-    selectedPdfPages: props.selectedPdfPages,
-    sourceKind: props.sourceKind,
-    structurePage: props.structurePage,
-  }
-
   useEffect(() => {
     if (!open) return
     setView('import')
@@ -445,7 +419,6 @@ export function PalaceMindMapImportDrawer(props: PalaceMindMapImportDrawerProps)
                 <PalaceImportFooter model={footerModel} copied={copied} onCopyText={handleCopyText} />
               </div>
 
-              <PalaceImportPdfSidebar model={pdfSidebarModel} layoutMode={layoutMode} />
             </div>
           )}
         </div>

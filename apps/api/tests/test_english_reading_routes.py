@@ -199,7 +199,8 @@ class EnglishReadingRouteTests(unittest.TestCase):
                             {
                                 "text": "acquision",
                                 "kind": "green",
-                                "candidateId": candidates.get(("unknown", "acquision")),
+                                "candidateId": candidates.get(("green", "acquision"))
+                                or candidates.get(("unknown", "acquision")),
                             },
                             {"text": " was "},
                             {
@@ -336,6 +337,8 @@ class EnglishReadingRouteTests(unittest.TestCase):
         self.assertGreaterEqual(payload["summary"]["yellowCount"], 1)
         self.assertEqual(payload["summary"]["redCount"], 1)
         self.assertEqual(payload["summary"]["sentenceSimplifiedCount"], 1)
+        self.assertGreaterEqual(len(payload["generationTrace"]), 1)
+        self.assertGreaterEqual(len(payload["aiLogIds"]), 1)
         self.assertEqual(len(payload["spanAnnotations"]), 3)
         self.assertEqual(
             [item["kind"] for item in payload["spanAnnotations"]], ["yellow", "green", "red"]
@@ -373,7 +376,7 @@ class EnglishReadingRouteTests(unittest.TestCase):
         self.assertEqual(second_version.status_code, 200)
         second_payload = second_version.json()
         self.assertGreaterEqual(second_payload["summary"]["greenCount"], 1)
-        self.assertEqual(self.generation_calls, 1)
+        self.assertEqual(self.generation_calls, 2)
 
     def test_regenerate_supports_same_easier_harder_and_legacy_ease(self):
         reading_service.call_chat_completion_text = self.mock_llm
@@ -420,6 +423,23 @@ class EnglishReadingRouteTests(unittest.TestCase):
         self.assertEqual(legacy_ease_payload["workingLexicalI"], 1.95)
         self.assertEqual(legacy_ease_payload["workingSyntacticI"], 1.9)
 
+    def test_generate_stream_returns_status_and_result_events(self):
+        reading_service.call_chat_completion_text = self.mock_llm
+        material = self.client.post(
+            "/api/v1/english-reading/materials",
+            data={"text": "Important acquisition was recalcitrant."},
+        )
+        self.assertEqual(material.status_code, 200)
+
+        response = self.client.post(
+            f"/api/v1/english-reading/materials/{material.json()['id']}/generate/stream",
+            json={"mode": "initial"},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("text/event-stream", response.headers["content-type"])
+        self.assertIn("event: status", response.text)
+        self.assertIn("event: result", response.text)
+
     def test_regenerate_rejects_invalid_direction_and_delta(self):
         material = self.client.post(
             "/api/v1/english-reading/materials",
@@ -461,12 +481,19 @@ class EnglishReadingRouteTests(unittest.TestCase):
         self.assertEqual(payload["summary"]["yellowCount"], 0)
         self.assertEqual(payload["summary"]["redCount"], 0)
         self.assertEqual(payload["summary"]["sentenceSimplifiedCount"], 0)
-        self.assertEqual(len(payload["spanAnnotations"]), 1)
-        self.assertEqual(payload["spanAnnotations"][0]["kind"], "green")
-        self.assertEqual(payload["spanAnnotations"][0]["originalText"], "acquisition")
-        self.assertEqual(payload["spanAnnotations"][0]["displayText"], "acquisition")
-        self.assertEqual(payload["spanAnnotations"][0]["resolvedLemma"], "acquire")
-        self.assertEqual(payload["spanAnnotations"][0]["resolutionSource"], "dictionary")
+        self.assertEqual(len(payload["spanAnnotations"]), 4)
+        acquisition_annotation = next(
+            item for item in payload["spanAnnotations"] if item["originalText"] == "acquisition"
+        )
+        self.assertEqual(acquisition_annotation["kind"], "green")
+        self.assertEqual(acquisition_annotation["displayText"], "acquisition")
+        self.assertEqual(acquisition_annotation["resolvedLemma"], "acquire")
+        self.assertEqual(acquisition_annotation["resolutionSource"], "dictionary")
+        recalcitrant_annotation = next(
+            item for item in payload["spanAnnotations"] if item["originalText"] == "recalcitrant"
+        )
+        self.assertEqual(recalcitrant_annotation["kind"], "black")
+        self.assertTrue(recalcitrant_annotation["rewriteNeeded"])
 
     def test_basic_lemma_candidates_cover_common_inflections_and_nominalizations(self):
         self.assertIn("cheat", reading_service.basic_lemma_candidates("cheated"))
@@ -495,7 +522,13 @@ class EnglishReadingRouteTests(unittest.TestCase):
         self.assertEqual(version.status_code, 200)
         payload = version.json()
         self.assertEqual(payload["summary"]["greenCount"], 0)
-        self.assertEqual(payload["spanAnnotations"], [])
+        self.assertFalse(
+            any(item["originalText"].lower() == "acquision" for item in payload["spanAnnotations"])
+        )
+        changed_annotation = next(
+            item for item in payload["spanAnnotations"] if item["originalText"] == "changed"
+        )
+        self.assertEqual(changed_annotation["kind"], "black")
 
     def test_sentence_simplification_without_word_rewrites_stays_uncolored(self):
         def sentence_only_mock(*, config, messages, response_format=None):

@@ -346,10 +346,11 @@ describe('PalaceMindMapImportDrawer', () => {
     expect(onPdfImportModeChange).toHaveBeenCalledWith('structured_merge')
   })
 
-  it('keeps the pdf sidebar visible in compact layouts', () => {
+  it('does not render the removed pdf preview sidebar', () => {
     render(<PalaceMindMapImportDrawer {...buildProps()} />)
 
-    expect(screen.getByTestId('mindmap-import-pdf-sidebar')).toBeTruthy()
+    expect(screen.queryByTestId('mindmap-import-pdf-sidebar')).toBeNull()
+    expect(screen.queryByText('当前识别页预览')).toBeNull()
   })
 
   it('shows the pdf execution summary and OCR grounding status', () => {

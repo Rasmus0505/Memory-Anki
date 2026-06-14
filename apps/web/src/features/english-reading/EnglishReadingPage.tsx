@@ -35,6 +35,7 @@ import type {
   ReadingDifficultyDelta,
   ReadingDifficultyDirection,
   ReadingGenerateRequest,
+  ReadingGenerateStreamStatusEvent,
   ReadingMaterial,
   ReadingProfile,
   ReadingRenderSentence,
@@ -78,7 +79,7 @@ import {
   completeEnglishReadingMaterialApi,
   createEnglishReadingMaterialApi,
   deleteEnglishReadingMaterialApi,
-  generateEnglishReadingVersionApi,
+  generateEnglishReadingVersionStreamApi,
   getEnglishReadingDictionaryApi,
   getEnglishReadingMaterialApi,
   getEnglishReadingWorkspaceApi,
@@ -89,14 +90,6 @@ import {
 } from "@/features/english-reading/api/englishReadingApi";
 
 const CEFR_LEVELS: CefrLevel[] = ["A1", "A2", "B1", "B2", "C1", "C2"];
-const GENERATION_STAGES = [
-  "正在清理段落结构……",
-  "正在比对本地词典……",
-  "正在补全未识别词形……",
-  "正在计算你的 i+1 预算……",
-  "正在重构长难句……",
-  "正在编排沉浸式阅读稿……",
-];
 const READING_FILE_ACCEPT =
   ".txt,.md,.pdf,text/plain,text/markdown,application/pdf";
 const READING_FILE_SUFFIXES = [".txt", ".md", ".pdf"] as const;
@@ -576,7 +569,9 @@ function AnnotationMark({
       ? "text-emerald-700 bg-emerald-100/80 ring-emerald-200"
       : annotation.kind === "yellow"
         ? "text-amber-800 bg-amber-100/90 ring-amber-200"
-        : "text-rose-700 bg-rose-100/90 ring-rose-200";
+        : annotation.kind === "red"
+          ? "text-rose-700 bg-rose-100/90 ring-rose-200"
+          : "text-slate-900 bg-slate-100/65 ring-slate-200";
   const resolvedLemma = annotation.resolvedLemma.trim();
   const showResolvedLemma =
     resolvedLemma.length > 0 &&
@@ -597,10 +592,17 @@ function AnnotationMark({
         <span className="block font-medium text-slate-900">
           {annotation.cefr}:{annotation.originalText || annotation.displayText}
         </span>
+        <span className="mt-1 block">
+          原始/最终：{annotation.originalCefr || annotation.cefr}/
+          {annotation.finalCefr || annotation.cefr}
+        </span>
         {showResolvedLemma ? (
           <span className="mt-1 block">还原：{resolvedLemma}</span>
         ) : null}
         <span className="mt-1 block">标记：{resolutionSourceLabel}</span>
+        {annotation.rewriteDecision ? (
+          <span className="mt-1 block">改写：{annotation.rewriteDecision}</span>
+        ) : null}
       </span>
     </span>
   );
@@ -713,7 +715,8 @@ export default function EnglishReadingPage() {
   const [versionLoading, setVersionLoading] = useState(false);
   const [profileSaving, setProfileSaving] = useState<CefrLevel | null>(null);
   const [generating, setGenerating] = useState(false);
-  const [generationStageIndex, setGenerationStageIndex] = useState(0);
+  const [generationStatus, setGenerationStatus] =
+    useState<ReadingGenerateStreamStatusEvent | null>(null);
   const [completionPanelOpen, setCompletionPanelOpen] = useState(false);
   const [completionSubmitting, setCompletionSubmitting] = useState<
     ReadingSessionResult["feedback"] | null
@@ -752,7 +755,6 @@ export default function EnglishReadingPage() {
   const { promptForAiOptions, aiRunConfigDialog } = useAiRunConfigDialog();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const dragDepthRef = useRef(0);
-  const generationTimerRef = useRef<number | null>(null);
   const readingPanelRef = useRef<HTMLDivElement | null>(null);
   const readingContentRef = useRef<HTMLDivElement | null>(null);
   const hardUnloadRef = useRef(false);
@@ -883,28 +885,6 @@ export default function EnglishReadingPage() {
       cancelled = true;
     };
   }, [loadMaterialAndVersion, loadWorkspace, resolvedMaterialId]);
-
-  useEffect(() => {
-    if (!generating) {
-      if (generationTimerRef.current != null) {
-        window.clearInterval(generationTimerRef.current);
-        generationTimerRef.current = null;
-      }
-      return;
-    }
-    setGenerationStageIndex(0);
-    generationTimerRef.current = window.setInterval(() => {
-      setGenerationStageIndex((current) =>
-        Math.min(GENERATION_STAGES.length - 1, current + 1),
-      );
-    }, 1200);
-    return () => {
-      if (generationTimerRef.current != null) {
-        window.clearInterval(generationTimerRef.current);
-        generationTimerRef.current = null;
-      }
-    };
-  }, [generating]);
 
   useEffect(() => {
     timerRef.current = timer;
@@ -1341,6 +1321,12 @@ export default function EnglishReadingPage() {
   const runGeneration = useCallback(
     async (request: GenerationRequest) => {
       setGenerating(true);
+      setGenerationStatus({
+        stage: "queued",
+        step: 1,
+        totalSteps: 8,
+        message: "正在准备生成阅读稿……",
+      });
       try {
         const aiOptions = await promptForAiOptions({
           scenarioKey: "english_reading",
@@ -1390,9 +1376,14 @@ export default function EnglishReadingPage() {
                   difficultyDelta: request.delta,
                   ...(runtimeAiOptions ? { ai_options: runtimeAiOptions } : {}),
                 };
-        const nextVersion = await generateEnglishReadingVersionApi(
+        const nextVersion = await generateEnglishReadingVersionStreamApi(
           activeMaterial.id,
           generationPayload,
+          {
+            onStatus: (event) => {
+              setGenerationStatus(event);
+            },
+          },
         );
         const nextMaterial = await getEnglishReadingMaterialApi(
           activeMaterial.id,
@@ -1410,6 +1401,7 @@ export default function EnglishReadingPage() {
           error instanceof Error ? error.message : "生成阅读材料失败。",
         );
       } finally {
+        setGenerationStatus(null);
         setGenerating(false);
       }
     },
@@ -2152,8 +2144,17 @@ export default function EnglishReadingPage() {
     );
   }
 
-  const visibleStage =
-    GENERATION_STAGES[generationStageIndex] || GENERATION_STAGES[0];
+  const visibleStage = generationStatus?.message || "正在准备生成阅读稿……";
+  const generationProgress =
+    generationStatus && generationStatus.totalSteps > 0
+      ? Math.min(
+          100,
+          Math.max(
+            8,
+            (generationStatus.step / generationStatus.totalSteps) * 100,
+          ),
+        )
+      : 8;
 
   return (
     <div className="space-y-6">
@@ -2351,7 +2352,7 @@ export default function EnglishReadingPage() {
                   <div
                     className="h-full rounded-full bg-[linear-gradient(90deg,#38bdf8,#2563eb)] transition-all"
                     style={{
-                      width: `${((generationStageIndex + 1) / GENERATION_STAGES.length) * 100}%`,
+                      width: `${generationProgress}%`,
                     }}
                   />
                 </div>

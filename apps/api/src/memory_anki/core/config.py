@@ -28,9 +28,9 @@ ENGLISH_TASKS_DIR = ENGLISH_DIR / "tasks"
 ENGLISH_READING_DIR = APP_HOME / "english_reading"
 ENGLISH_READING_LEXICON_DIR = ENGLISH_READING_DIR / "lexicon"
 ENGLISH_READING_CEFR_PATH = ENGLISH_READING_LEXICON_DIR / "cefr.json"
+REPO_ENGLISH_READING_CEFR_SOURCE = REPO_ROOT / "apps" / "shared" / "english-reading-cefr.json"
 ENGLISH_READING_DEFAULT_CEFR_SOURCE = Path(
-    os.environ.get("MEMORY_ANKI_CEFR_SOURCE")
-    or r"D:\英语词典\多邻国单词PDF文件可导入百词斩\多邻国单词PDF文件可导入百词斩\cefr.json"
+    os.environ.get("MEMORY_ANKI_CEFR_SOURCE") or REPO_ENGLISH_READING_CEFR_SOURCE
 )
 BACKUPS_DIR = DATA_DIR / "backups"
 FULL_BACKUPS_DIR = BACKUPS_DIR / "full"

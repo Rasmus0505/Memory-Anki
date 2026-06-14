@@ -51,6 +51,7 @@ interface ReviewFlowMapPanelProps {
     trigger: 'badge' | 'mark'
   }) => void
   onBilinkToolbarSearch?: () => void
+  onQuizBreakOpen?: () => void
   onMiniPalaceOpen?: () => void
   onMiniPalacePour?: () => void
 }
@@ -87,6 +88,7 @@ export function ReviewFlowMapPanel({
   onBilinkTrigger,
   onBilinkNodeClick,
   onBilinkToolbarSearch,
+  onQuizBreakOpen,
   onMiniPalaceOpen,
   onMiniPalacePour,
 }: ReviewFlowMapPanelProps) {
@@ -118,9 +120,13 @@ export function ReviewFlowMapPanel({
   }, [fullscreen, nativeFullscreenActive, onToggleFullscreen])
 
   const handleOpenQuizPage = useCallback(() => {
+    if (onQuizBreakOpen) {
+      onQuizBreakOpen()
+      return
+    }
     if (!currentPalaceId) return
     navigate(`/palaces/${currentPalaceId}/quiz`)
-  }, [currentPalaceId, navigate])
+  }, [currentPalaceId, navigate, onQuizBreakOpen])
 
   return (
     <div className={cn('h-full min-h-0', fullscreen && 'flex h-full flex-col')}>
@@ -145,7 +151,7 @@ export function ReviewFlowMapPanel({
         quizAction={
           currentPalaceId
             ? {
-                label: '做题',
+                label: onQuizBreakOpen ? '做题休息' : '做题',
                 onClick: handleOpenQuizPage,
               }
             : null

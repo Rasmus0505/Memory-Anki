@@ -16,9 +16,19 @@ from memory_anki.infrastructure.db.models import (
 
 QUESTION_TYPE_MULTIPLE_CHOICE = "multiple_choice"
 QUESTION_TYPE_SHORT_ANSWER = "short_answer"
+QUESTION_TYPE_TRUE_FALSE = "true_false"
+QUESTION_TYPE_FILL_BLANK = "fill_blank"
+QUESTION_TYPE_MATCHING = "matching"
+QUESTION_TYPE_ORDERING = "ordering"
+QUESTION_TYPE_CATEGORIZATION = "categorization"
 QUESTION_TYPES = {
     QUESTION_TYPE_MULTIPLE_CHOICE,
     QUESTION_TYPE_SHORT_ANSWER,
+    QUESTION_TYPE_TRUE_FALSE,
+    QUESTION_TYPE_FILL_BLANK,
+    QUESTION_TYPE_MATCHING,
+    QUESTION_TYPE_ORDERING,
+    QUESTION_TYPE_CATEGORIZATION,
 }
 
 
@@ -107,7 +117,9 @@ def _json_load(value: str | None, default: Any) -> Any:
 def _normalize_question_type(value: Any) -> str:
     normalized = str(value or "").strip()
     if normalized not in QUESTION_TYPES:
-        raise PalaceQuizValidationError("题型必须是 multiple_choice 或 short_answer。")
+        raise PalaceQuizValidationError(
+            "题型必须是 multiple_choice、short_answer、true_false、fill_blank、matching、ordering 或 categorization。"
+        )
     return normalized
 
 
@@ -163,15 +175,132 @@ def _normalize_source_meta(raw_source_meta: Any) -> dict[str, Any]:
         if subject_document_id_raw not in (None, "", 0, "0")
         else None
     )
+    raw_pdf_sources = source_meta.get("pdf_sources")
+    pdf_sources: list[dict[str, Any]] | None = None
+    if isinstance(raw_pdf_sources, list):
+        normalized_pdf_sources: list[dict[str, Any]] = []
+        for item in raw_pdf_sources:
+            if not isinstance(item, dict):
+                continue
+            subject_document_id_value = item.get("subject_document_id")
+            try:
+                subject_document_id_item = (
+                    int(subject_document_id_value)
+                    if subject_document_id_value not in (None, "", 0, "0")
+                    else None
+                )
+            except (TypeError, ValueError):
+                subject_document_id_item = None
+            page_numbers_raw = item.get("page_numbers")
+            page_numbers_item = (
+                sorted({int(page) for page in page_numbers_raw if int(page) > 0})
+                if isinstance(page_numbers_raw, list)
+                else None
+            )
+            image_names_raw = item.get("image_names")
+            image_names_item = (
+                [str(name).strip() for name in image_names_raw if str(name).strip()]
+                if isinstance(image_names_raw, list)
+                else None
+            )
+            document_name = str(item.get("document_name") or "").strip() or None
+            role_hint = str(item.get("role_hint") or "").strip() or None
+            if (
+                subject_document_id_item is None
+                and not page_numbers_item
+                and not image_names_item
+                and not document_name
+            ):
+                continue
+            normalized_pdf_sources.append(
+                {
+                    "subject_document_id": subject_document_id_item,
+                    "document_name": document_name,
+                    "page_numbers": page_numbers_item,
+                    "image_names": image_names_item,
+                    "role_hint": role_hint,
+                }
+            )
+        if normalized_pdf_sources:
+            pdf_sources = normalized_pdf_sources
+    if pdf_sources is None and subject_document_id is not None:
+        pdf_sources = [
+            {
+                "subject_document_id": subject_document_id,
+                "document_name": str(source_meta.get("document_name") or "").strip() or None,
+                "page_numbers": page_numbers,
+                "image_names": image_names,
+                "role_hint": str(source_meta.get("role_hint") or "").strip() or None,
+            }
+        ]
+    flattened_page_numbers = page_numbers
+    flattened_image_names = image_names
+    primary_subject_document_id = subject_document_id
+    if pdf_sources:
+        flattened_page_numbers = sorted(
+            {
+                page
+                for item in pdf_sources
+                for page in (item.get("page_numbers") or [])
+                if isinstance(page, int) and page > 0
+            }
+        ) or None
+        flattened_image_names_list = [
+            str(name).strip()
+            for item in pdf_sources
+            for name in (item.get("image_names") or [])
+            if str(name).strip()
+        ]
+        flattened_image_names = flattened_image_names_list or None
+        primary_subject_document_id = next(
+            (
+                int(item["subject_document_id"])
+                for item in pdf_sources
+                if item.get("subject_document_id") not in (None, "", 0, "0")
+            ),
+            subject_document_id,
+        )
+    related_palace_ids_raw = source_meta.get("related_palace_ids")
+    related_palace_ids = (
+        sorted({int(item) for item in related_palace_ids_raw if int(item) > 0})
+        if isinstance(related_palace_ids_raw, list)
+        else None
+    )
+    question_types_raw = source_meta.get("question_types")
+    question_types = (
+        [str(item).strip() for item in question_types_raw if str(item).strip()]
+        if isinstance(question_types_raw, list)
+        else None
+    )
+    question_count_raw = source_meta.get("question_count")
+    try:
+        question_count = (
+            int(question_count_raw)
+            if question_count_raw not in (None, "", 0, "0")
+            else None
+        )
+    except (TypeError, ValueError):
+        question_count = None
+    related_palace_summaries = (
+        [item for item in source_meta.get("related_palace_summaries") if isinstance(item, dict)]
+        if isinstance(source_meta.get("related_palace_summaries"), list)
+        else None
+    )
     return {
         "source_kind": source_kind,
-        "subject_document_id": subject_document_id,
-        "page_numbers": page_numbers,
-        "image_names": image_names,
+        "subject_document_id": primary_subject_document_id,
+        "page_numbers": flattened_page_numbers,
+        "image_names": flattened_image_names,
         "extra_prompt": str(source_meta.get("extra_prompt") or "").strip(),
         "ai_call_log_id": str(source_meta.get("ai_call_log_id") or "").strip() or None,
         "generated_at": str(source_meta.get("generated_at") or now_iso),
         "generation_mode": generation_mode,
+        "pdf_sources": pdf_sources,
+        "review_mode": str(source_meta.get("review_mode") or "").strip() or None,
+        "related_palace_ids": related_palace_ids,
+        "related_palace_summaries": related_palace_summaries,
+        "question_types": question_types,
+        "question_count": question_count,
     }
 
 
@@ -250,10 +379,132 @@ def _normalize_answer_payload(
             raise PalaceQuizValidationError("选择题正确选项必须出现在选项列表中。")
         return {"correct_option_id": correct_option_id}
 
-    reference_answer = str(payload.get("reference_answer") or "").strip()
-    if not reference_answer:
-        raise PalaceQuizValidationError("简答题必须填写参考答案。")
-    return {"reference_answer": reference_answer}
+    if question_type == QUESTION_TYPE_SHORT_ANSWER:
+        reference_answer = str(payload.get("reference_answer") or "").strip()
+        if not reference_answer:
+            raise PalaceQuizValidationError("简答题必须填写参考答案。")
+        return {"reference_answer": reference_answer}
+
+    if question_type == QUESTION_TYPE_TRUE_FALSE:
+        if "correct_answer" not in payload:
+            raise PalaceQuizValidationError("判断题必须给出 correct_answer。")
+        correct_answer = payload.get("correct_answer")
+        if not isinstance(correct_answer, bool):
+            raise PalaceQuizValidationError("判断题 correct_answer 必须是布尔值。")
+        false_explanation = str(
+            payload.get("false_explanation") or payload.get("error_explanation") or ""
+        ).strip()
+        return {
+            "correct_answer": correct_answer,
+            "false_explanation": false_explanation,
+        }
+
+    if question_type == QUESTION_TYPE_FILL_BLANK:
+        blanks_raw = payload.get("blanks")
+        if not isinstance(blanks_raw, list) or len(blanks_raw) == 0:
+            raise PalaceQuizValidationError("填空题必须提供 blanks。")
+        if len(blanks_raw) > 3:
+            raise PalaceQuizValidationError("填空题最多支持 3 个空。")
+        blanks: list[dict[str, Any]] = []
+        seen_ids: set[str] = set()
+        for index, item in enumerate(blanks_raw):
+            if not isinstance(item, dict):
+                raise PalaceQuizValidationError("填空题 blanks 格式不正确。")
+            blank_id = str(item.get("id") or f"blank_{index + 1}").strip()
+            answer = str(item.get("answer") or "").strip()
+            if not blank_id or blank_id in seen_ids or not answer:
+                raise PalaceQuizValidationError("填空题每个空都必须有唯一 id 和答案。")
+            aliases_raw = item.get("aliases")
+            aliases = (
+                [str(alias).strip() for alias in aliases_raw if str(alias).strip()]
+                if isinstance(aliases_raw, list)
+                else []
+            )
+            seen_ids.add(blank_id)
+            blanks.append({"id": blank_id, "answer": answer, "aliases": aliases})
+        return {"blanks": blanks}
+
+    if question_type == QUESTION_TYPE_MATCHING:
+        pairs_raw = payload.get("pairs")
+        if not isinstance(pairs_raw, list) or len(pairs_raw) < 2:
+            raise PalaceQuizValidationError("连线题至少需要 2 组配对。")
+        pairs: list[dict[str, str]] = []
+        seen_left: set[str] = set()
+        seen_right: set[str] = set()
+        for index, item in enumerate(pairs_raw):
+            if not isinstance(item, dict):
+                raise PalaceQuizValidationError("连线题 pairs 格式不正确。")
+            left_id = str(item.get("left_id") or f"L{index + 1}").strip()
+            right_id = str(item.get("right_id") or f"R{index + 1}").strip()
+            left = str(item.get("left") or "").strip()
+            right = str(item.get("right") or "").strip()
+            if not left_id or not right_id or not left or not right:
+                raise PalaceQuizValidationError("连线题每组配对都必须有左右文本。")
+            if left_id in seen_left or right_id in seen_right:
+                raise PalaceQuizValidationError("连线题左右 id 不能重复。")
+            seen_left.add(left_id)
+            seen_right.add(right_id)
+            pairs.append(
+                {"left_id": left_id, "left": left, "right_id": right_id, "right": right}
+            )
+        return {"pairs": pairs}
+
+    if question_type == QUESTION_TYPE_ORDERING:
+        items_raw = payload.get("items")
+        correct_order_raw = payload.get("correct_order_ids") or payload.get("correct_order")
+        if not isinstance(items_raw, list) or len(items_raw) < 2:
+            raise PalaceQuizValidationError("排序题至少需要 2 个项目。")
+        items: list[dict[str, str]] = []
+        for index, item in enumerate(items_raw):
+            if isinstance(item, dict):
+                item_id = str(item.get("id") or f"item_{index + 1}").strip()
+                text = str(item.get("text") or "").strip()
+            else:
+                item_id = f"item_{index + 1}"
+                text = str(item or "").strip()
+            if not item_id or not text:
+                raise PalaceQuizValidationError("排序题每个项目都必须有文本。")
+            items.append({"id": item_id, "text": text})
+        item_ids = [item["id"] for item in items]
+        correct_order_ids = (
+            [str(item).strip() for item in correct_order_raw if str(item).strip()]
+            if isinstance(correct_order_raw, list)
+            else item_ids
+        )
+        if set(correct_order_ids) != set(item_ids) or len(correct_order_ids) != len(item_ids):
+            raise PalaceQuizValidationError("排序题正确顺序必须包含全部项目 id。")
+        return {"items": items, "correct_order_ids": correct_order_ids}
+
+    categories_raw = payload.get("categories")
+    items_raw = payload.get("items")
+    if not isinstance(categories_raw, list) or len(categories_raw) < 2:
+        raise PalaceQuizValidationError("归类题至少需要 2 个分类。")
+    if not isinstance(items_raw, list) or len(items_raw) < 2:
+        raise PalaceQuizValidationError("归类题至少需要 2 个待分类项目。")
+    categories: list[dict[str, str]] = []
+    category_ids: set[str] = set()
+    for index, item in enumerate(categories_raw):
+        if isinstance(item, dict):
+            category_id = str(item.get("id") or f"category_{index + 1}").strip()
+            name = str(item.get("name") or item.get("text") or "").strip()
+        else:
+            category_id = f"category_{index + 1}"
+            name = str(item or "").strip()
+        if not category_id or not name or category_id in category_ids:
+            raise PalaceQuizValidationError("归类题分类必须有唯一 id 和名称。")
+        category_ids.add(category_id)
+        categories.append({"id": category_id, "name": name})
+    items: list[dict[str, str]] = []
+    for index, item in enumerate(items_raw):
+        if not isinstance(item, dict):
+            raise PalaceQuizValidationError("归类题项目格式不正确。")
+        item_id = str(item.get("id") or f"item_{index + 1}").strip()
+        text = str(item.get("text") or "").strip()
+        category_id = str(item.get("category_id") or "").strip()
+        if not item_id or not text or category_id not in category_ids:
+            raise PalaceQuizValidationError("归类题每个项目都必须指向已有分类。")
+        items.append({"id": item_id, "text": text, "category_id": category_id})
+    return {"categories": categories, "items": items}
 
 
 def normalize_question_payload(
@@ -275,12 +526,25 @@ def normalize_question_payload(
         answer_payload_input["correct_option_id"] = payload.get("correct_option_id")
     if "reference_answer" in payload and "reference_answer" not in answer_payload_input:
         answer_payload_input["reference_answer"] = payload.get("reference_answer")
+    for key in (
+        "correct_answer",
+        "false_explanation",
+        "error_explanation",
+        "blanks",
+        "pairs",
+        "items",
+        "correct_order_ids",
+        "correct_order",
+        "categories",
+    ):
+        if key in payload and key not in answer_payload_input:
+            answer_payload_input[key] = payload.get(key)
     answer_payload = _normalize_answer_payload(
         question_type,
         answer_payload_input,
         options=options,
     )
-    if question_type == QUESTION_TYPE_SHORT_ANSWER:
+    if question_type != QUESTION_TYPE_MULTIPLE_CHOICE:
         options = []
     analysis = str(payload.get("analysis") or "").strip()
     source_meta_input = payload.get("source_meta")

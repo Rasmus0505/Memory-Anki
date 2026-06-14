@@ -34,10 +34,14 @@ export interface ReadingMaterial {
 
 export interface SpanAnnotation {
   id: string;
-  kind: "green" | "yellow" | "red";
+  kind: "green" | "yellow" | "red" | "black";
   originalText: string;
   displayText: string;
   cefr: string;
+  originalCefr: string;
+  finalCefr: string;
+  rewriteNeeded: boolean;
+  rewriteDecision: string;
   resolvedLemma: string;
   resolutionSource: "dictionary" | "ai";
 }
@@ -82,6 +86,14 @@ export interface ReadingVersionSummary {
   targetCefr: CefrLevel;
 }
 
+export interface ReadingGenerationTraceItem {
+  stage: string;
+  step: number;
+  totalSteps: number;
+  message: string;
+  stats?: Record<string, unknown>;
+}
+
 export interface ReadingVersion {
   id: number;
   materialId: number;
@@ -95,6 +107,8 @@ export interface ReadingVersion {
   spanAnnotations: SpanAnnotation[];
   sentenceAnnotations: SentenceAnnotation[];
   summary: ReadingVersionSummary;
+  generationTrace: ReadingGenerationTraceItem[];
+  aiLogIds: string[];
   createdAt: string | null;
 }
 
@@ -162,4 +176,7 @@ export interface ReadingGenerateRequest {
   difficultyDelta?: ReadingDifficultyDelta;
   ai_options?: AiRuntimeOptions;
 }
+
+export interface ReadingGenerateStreamStatusEvent
+  extends ReadingGenerationTraceItem {}
 import type { AiRuntimeOptions } from './profile';

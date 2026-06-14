@@ -15,7 +15,7 @@ const mocks = vi.hoisted(() => ({
   completeEnglishReadingMaterialApiMock: vi.fn(),
   createEnglishReadingMaterialApiMock: vi.fn(),
   deleteEnglishReadingMaterialApiMock: vi.fn(),
-  generateEnglishReadingVersionApiMock: vi.fn(),
+  generateEnglishReadingVersionStreamApiMock: vi.fn(),
   getEnglishReadingDictionaryApiMock: vi.fn(),
   getEnglishReadingMaterialApiMock: vi.fn(),
   translateEnglishReadingSentenceApiMock: vi.fn(),
@@ -51,7 +51,8 @@ vi.mock("@/features/english-reading/api/englishReadingApi", () => ({
     mocks.completeEnglishReadingMaterialApiMock,
   createEnglishReadingMaterialApi: mocks.createEnglishReadingMaterialApiMock,
   deleteEnglishReadingMaterialApi: mocks.deleteEnglishReadingMaterialApiMock,
-  generateEnglishReadingVersionApi: mocks.generateEnglishReadingVersionApiMock,
+  generateEnglishReadingVersionStreamApi:
+    mocks.generateEnglishReadingVersionStreamApiMock,
   getEnglishReadingDictionaryApi: mocks.getEnglishReadingDictionaryApiMock,
   getEnglishReadingMaterialApi: mocks.getEnglishReadingMaterialApiMock,
   translateEnglishReadingSentenceApi:
@@ -176,6 +177,10 @@ function buildVersion(overrides: Partial<ReadingVersion> = {}): ReadingVersion {
         originalText: "Important",
         displayText: "Crucial",
         cefr: "A1",
+        originalCefr: "A1",
+        finalCefr: "B1",
+        rewriteNeeded: true,
+        rewriteDecision: "upgraded_to_i_plus_1",
         resolvedLemma: "important",
         resolutionSource: "dictionary",
       },
@@ -185,6 +190,10 @@ function buildVersion(overrides: Partial<ReadingVersion> = {}): ReadingVersion {
         originalText: "acquisition",
         displayText: "acquisition",
         cefr: "B2",
+        originalCefr: "B2",
+        finalCefr: "B2",
+        rewriteNeeded: false,
+        rewriteDecision: "kept_original_i_plus_1",
         resolvedLemma: "acquire",
         resolutionSource: "dictionary",
       },
@@ -194,6 +203,10 @@ function buildVersion(overrides: Partial<ReadingVersion> = {}): ReadingVersion {
         originalText: "recalcitrant",
         displayText: "stubborn",
         cefr: "C1",
+        originalCefr: "C1",
+        finalCefr: "A2",
+        rewriteNeeded: true,
+        rewriteDecision: "downgraded_to_i_plus_1",
         resolvedLemma: "recalcitrant",
         resolutionSource: "ai",
       },
@@ -221,6 +234,8 @@ function buildVersion(overrides: Partial<ReadingVersion> = {}): ReadingVersion {
       targetSyntacticI: 2.9,
       targetCefr: "B2",
     },
+    generationTrace: [],
+    aiLogIds: [],
     createdAt: "2026-06-10T08:00:01",
     ...overrides,
   };
@@ -316,7 +331,7 @@ beforeEach(() => {
     mocks.completeEnglishReadingMaterialApiMock.mockReset();
     mocks.createEnglishReadingMaterialApiMock.mockReset();
     mocks.deleteEnglishReadingMaterialApiMock.mockReset();
-    mocks.generateEnglishReadingVersionApiMock.mockReset();
+    mocks.generateEnglishReadingVersionStreamApiMock.mockReset();
     mocks.getEnglishReadingDictionaryApiMock.mockReset();
     mocks.getEnglishReadingMaterialApiMock.mockReset();
     mocks.translateEnglishReadingSentenceApiMock.mockReset();
@@ -341,7 +356,7 @@ beforeEach(() => {
     mocks.createEnglishReadingMaterialApiMock.mockResolvedValue(
       buildMaterial(),
     );
-    mocks.generateEnglishReadingVersionApiMock.mockResolvedValue(
+    mocks.generateEnglishReadingVersionStreamApiMock.mockResolvedValue(
       buildVersion(),
     );
     mocks.getEnglishReadingDictionaryApiMock.mockResolvedValue(
@@ -417,9 +432,10 @@ beforeEach(() => {
         file: null,
       });
     });
-    expect(mocks.generateEnglishReadingVersionApiMock).toHaveBeenCalledWith(
+    expect(mocks.generateEnglishReadingVersionStreamApiMock).toHaveBeenCalledWith(
       42,
       { mode: "initial" },
+      expect.any(Object),
     );
 
     expect(await screen.findByText("Crucial")).toBeTruthy();
@@ -785,11 +801,11 @@ beforeEach(() => {
 
     await waitFor(() => {
       expect(
-        mocks.generateEnglishReadingVersionApiMock,
+        mocks.generateEnglishReadingVersionStreamApiMock,
       ).toHaveBeenLastCalledWith(42, {
         mode: "regenerate",
         difficultyDirection: "same",
-      });
+      }, expect.any(Object));
     });
     expect(mocks.toastSuccessMock).toHaveBeenLastCalledWith(
       "已重新生成当前内容。",
@@ -817,12 +833,12 @@ beforeEach(() => {
 
     await waitFor(() => {
       expect(
-        mocks.generateEnglishReadingVersionApiMock,
+        mocks.generateEnglishReadingVersionStreamApiMock,
       ).toHaveBeenLastCalledWith(42, {
         mode: "regenerate",
         difficultyDirection: "easier",
         difficultyDelta: 1.5,
-      });
+      }, expect.any(Object));
     });
     expect(mocks.toastSuccessMock).toHaveBeenLastCalledWith(
       "已按更简单的难度重新生成。",
@@ -844,12 +860,12 @@ beforeEach(() => {
 
     await waitFor(() => {
       expect(
-        mocks.generateEnglishReadingVersionApiMock,
+        mocks.generateEnglishReadingVersionStreamApiMock,
       ).toHaveBeenLastCalledWith(42, {
         mode: "regenerate",
         difficultyDirection: "harder",
         difficultyDelta: 0.5,
-      });
+      }, expect.any(Object));
     });
     expect(mocks.toastSuccessMock).toHaveBeenLastCalledWith(
       "已按更高的难度重新生成。",
@@ -857,7 +873,7 @@ beforeEach(() => {
   });
 
   it("keeps regenerate dialog open when regeneration fails", async () => {
-    mocks.generateEnglishReadingVersionApiMock.mockRejectedValueOnce(
+    mocks.generateEnglishReadingVersionStreamApiMock.mockRejectedValueOnce(
       new Error("生成失败"),
     );
 
@@ -1019,7 +1035,7 @@ beforeEach(() => {
   });
 
   it("renders the final sentence part text instead of stale annotation display text", async () => {
-    mocks.generateEnglishReadingVersionApiMock.mockResolvedValue(
+    mocks.generateEnglishReadingVersionStreamApiMock.mockResolvedValue(
       buildVersion({
         renderBlocks: [
           {
@@ -1048,6 +1064,10 @@ beforeEach(() => {
             originalText: "Important",
             displayText: "Important",
             cefr: "A1",
+            originalCefr: "A1",
+            finalCefr: "A1",
+            rewriteNeeded: false,
+            rewriteDecision: "kept_original",
             resolvedLemma: "important",
             resolutionSource: "dictionary",
           },

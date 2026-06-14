@@ -26,6 +26,8 @@ import { readTimerAutomationConfig } from '@/shared/components/session/timer-aut
 import { shouldAutoStartOnPageEnter, useTimedSession } from '@/shared/hooks/useTimedSession'
 import type {
   MiniPalaceSummary,
+  PalaceQuizPdfSourceMeta,
+  PalaceQuizPdfSourceRole,
   PalaceQuizGenerationPreview,
   PalaceQuizQuestion,
   PalaceQuizQuestionDraft,
@@ -43,7 +45,7 @@ import {
   deletePalaceQuizQuestionApi,
   getPalaceQuizQuestionsApi,
   previewPalaceQuizGenerationFromImagesApi,
-  previewPalaceQuizGenerationFromPdfApi,
+  previewPalaceQuizGenerationFromPdfStreamApi,
   recordPalaceQuizChoiceAttemptApi,
   requestPalaceShortAnswerFeedbackApi,
   updatePalaceQuizQuestionApi,
@@ -55,6 +57,13 @@ type PalaceQuizTabKey = 'practice' | 'manage' | 'generate'
 type PalaceQuizViewMode = 'single' | 'list'
 type QuizGenerationSourceKind = 'subject-pdf' | 'image-single' | 'image-batch'
 type PalaceQuizScopeKey = 'all' | 'palace' | `mini:${number}`
+
+interface QuizPdfSourceDraft {
+  subject_document_id: number
+  document_name: string
+  page_selection: number[]
+  role_hint: PalaceQuizPdfSourceRole
+}
 
 interface PalaceQuizPageMeta {
   id: number
@@ -94,6 +103,7 @@ function buildManualSourceMeta(): PalaceQuizSourceMeta {
     subject_document_id: null,
     page_numbers: null,
     image_names: null,
+    pdf_sources: null,
     extra_prompt: '',
     ai_call_log_id: null,
     generated_at: new Date().toISOString(),
@@ -201,6 +211,67 @@ function getQuestionOwnershipLabel(question: PalaceQuizQuestion) {
   return question.mini_palace?.name ? `小宫殿：${question.mini_palace.name}` : '主宫殿题'
 }
 
+function getQuestionSourceLabel(sourceMeta?: PalaceQuizSourceMeta | null) {
+  const sourceKind = sourceMeta?.source_kind || 'manual'
+  if (sourceKind === 'manual') return '手动'
+  if (sourceKind === 'subject_pdf') return 'PDF生成'
+  if (sourceKind === 'image' || sourceKind === 'images' || sourceKind === 'image_upload') {
+    return '图片AI生成'
+  }
+  return 'AI生成'
+}
+
+function getGenerationPreviewSaveCount(preview: PalaceQuizGenerationPreview | null) {
+  if (!preview) return 0
+  if (!preview.grouped_questions) return preview.questions.length
+  return (
+    preview.grouped_questions.mini_palace_groups.reduce(
+      (total, group) => total + group.questions.length,
+      0,
+    ) + preview.grouped_questions.unassigned_questions.length
+  )
+}
+
+function getPdfSourceRoleLabel(roleHint?: string | null) {
+  return roleHint === 'answer' ? '答案' : '题目'
+}
+
+function QuestionSourceBadge({
+  sourceMeta,
+  compact = false,
+}: {
+  sourceMeta?: PalaceQuizSourceMeta | null
+  compact?: boolean
+}) {
+  const label = getQuestionSourceLabel(sourceMeta)
+  const pdfSources = sourceMeta?.pdf_sources || []
+  const hasDetails = pdfSources.length > 0 || Boolean(sourceMeta?.ai_call_log_id)
+
+  if (!hasDetails) {
+    return <Badge variant="outline">{label}</Badge>
+  }
+
+  return (
+    <details className={cn('group text-xs text-muted-foreground', compact ? 'w-full' : '')}>
+      <summary className="inline-flex cursor-pointer list-none items-center gap-2">
+        <Badge variant="outline">{label}</Badge>
+        <span className="text-[11px] text-muted-foreground group-open:hidden">展开来源</span>
+        <span className="hidden text-[11px] text-muted-foreground group-open:inline">收起来源</span>
+      </summary>
+      <div className="mt-2 space-y-1 rounded-xl border border-border/70 bg-background/70 px-3 py-2">
+        {pdfSources.map((source, index) => (
+          <div key={`${source.subject_document_id ?? 'pdf'}_${index}`}>
+            {source.document_name || `PDF ${index + 1}`}
+            {source.page_numbers?.length ? ` · 页码 ${source.page_numbers.join(', ')}` : ''}
+            {source.role_hint ? ` · ${getPdfSourceRoleLabel(source.role_hint)}` : ''}
+          </div>
+        ))}
+        {sourceMeta?.ai_call_log_id ? <div>AI日志 {sourceMeta.ai_call_log_id}</div> : null}
+      </div>
+    </details>
+  )
+}
+
 export default function PalaceQuizPage() {
   const { id } = useParams()
   const palaceId = id ? Number(id) : null
@@ -223,9 +294,13 @@ export default function PalaceQuizPage() {
   const [generationPreview, setGenerationPreview] = useState<PalaceQuizGenerationPreview | null>(
     null,
   )
+  const [generationPdfSources, setGenerationPdfSources] = useState<QuizPdfSourceDraft[]>([])
   const [generationLoading, setGenerationLoading] = useState(false)
   const [generationSaving, setGenerationSaving] = useState(false)
   const [generationError, setGenerationError] = useState('')
+  const [generationStreamStatus, setGenerationStreamStatus] = useState('')
+  const [generationStreamStepLabel, setGenerationStreamStepLabel] = useState('')
+  const [generationStreamPreviewText, setGenerationStreamPreviewText] = useState('')
   const [generationClassifyByMiniPalace, setGenerationClassifyByMiniPalace] = useState(false)
   const [classificationLoading, setClassificationLoading] = useState(false)
   const [classificationResult, setClassificationResult] = useState<{
@@ -251,6 +326,8 @@ export default function PalaceQuizPage() {
   })
   const timerRef = useRef(timer)
   const hardUnloadRef = useRef(false)
+  const generationStreamContentRef = useRef<HTMLPreElement | null>(null)
+  const generationStreamAutoFollowRef = useRef(true)
 
   const subjectOptions = useMemo<ImportSubjectOption[]>(
     () => subjects.map((subject) => ({ id: subject.id, name: subject.name })),
@@ -284,6 +361,14 @@ export default function PalaceQuizPage() {
     [questions],
   )
   const hasMiniPalaces = miniPalaces.length > 0
+  const selectedSubjectDocument = useMemo(
+    () =>
+      pdfController.subjectDocuments.find(
+        (document: SubjectDocumentSummary) =>
+          document.id === pdfController.selectedSubjectDocumentId,
+      ) || null,
+    [pdfController.selectedSubjectDocumentId, pdfController.subjectDocuments],
+  )
 
   const registerQuizActivity = (source: string) => {
     timer.registerActivity('practice_interaction', { source })
@@ -298,6 +383,14 @@ export default function PalaceQuizPage() {
   useEffect(() => {
     timerRef.current = timer
   }, [timer])
+
+  useEffect(() => {
+    if (!generationLoading || !generationStreamPreviewText) return
+    const content = generationStreamContentRef.current
+    if (content && generationStreamAutoFollowRef.current) {
+      content.scrollTop = content.scrollHeight
+    }
+  }, [generationLoading, generationStreamPreviewText])
 
   useEffect(() => {
     const markHardUnload = () => {
@@ -562,12 +655,73 @@ export default function PalaceQuizPage() {
     setGenerationError('')
   }
 
+  const handleAddCurrentPdfSource = () => {
+    registerQuizActivity('generation_add_pdf_source')
+    if (!pdfController.selectedSubjectDocumentId || !selectedSubjectDocument) {
+      setGenerationError('请先选择一份 PDF 资料。')
+      return
+    }
+    if (pdfController.selectedPdfPages.length === 0) {
+      setGenerationError('请先为当前 PDF 选择至少一页。')
+      return
+    }
+    const nextSource: QuizPdfSourceDraft = {
+      subject_document_id: pdfController.selectedSubjectDocumentId,
+      document_name: selectedSubjectDocument.original_name,
+      page_selection: [...pdfController.selectedPdfPages],
+      role_hint: 'question',
+    }
+    setGenerationPdfSources((current) => {
+      const next = [...current]
+      const existingIndex = next.findIndex(
+        (item) => item.subject_document_id === nextSource.subject_document_id,
+      )
+      if (existingIndex >= 0) {
+        next[existingIndex] = nextSource
+      } else {
+        next.push(nextSource)
+      }
+      return next
+    })
+    setGenerationError('')
+  }
+
+  const handleRemovePdfSource = (subjectDocumentId: number) => {
+    registerQuizActivity('generation_remove_pdf_source')
+    setGenerationPdfSources((current) =>
+      current.filter((item) => item.subject_document_id !== subjectDocumentId),
+    )
+    setGenerationError('')
+  }
+
+  const handlePdfSourceRoleHintChange = (
+    subjectDocumentId: number,
+    value: PalaceQuizPdfSourceRole,
+  ) => {
+    setGenerationPdfSources((current) =>
+      current.map((item) =>
+        item.subject_document_id === subjectDocumentId ? { ...item, role_hint: value } : item,
+      ),
+    )
+  }
+
+  const handleGenerationStreamScroll = () => {
+    const content = generationStreamContentRef.current
+    if (!content) return
+    const remaining = content.scrollHeight - content.scrollTop - content.clientHeight
+    generationStreamAutoFollowRef.current = remaining <= 32
+  }
+
   const handleGeneratePreview = async () => {
     if (!palaceId) return
     registerQuizActivity('generation_preview')
     setGenerationLoading(true)
     setGenerationError('')
     setGenerationPreview(null)
+    setGenerationStreamStatus('')
+    setGenerationStreamStepLabel('')
+    setGenerationStreamPreviewText('')
+    generationStreamAutoFollowRef.current = true
     try {
       if (generationClassifyByMiniPalace && miniPalaces.length === 0) {
         throw new Error('当前宫殿还没有小宫殿，无法按小宫殿分类保存。')
@@ -590,24 +744,36 @@ export default function PalaceQuizPage() {
         return
       }
       if (generationSourceKind === 'subject-pdf') {
-        if (!pdfController.selectedSubjectDocumentId) {
-          throw new Error('请先选择 PDF 资料。')
+        if (generationPdfSources.length === 0) {
+          throw new Error('请先把至少一份 PDF 加入资料列表。')
         }
-        if (pdfController.selectedPdfPages.length === 0) {
-          throw new Error('请至少选择一页 PDF。')
-        }
-        const preview = await previewPalaceQuizGenerationFromPdfApi(palaceId, {
-          subject_document_id: pdfController.selectedSubjectDocumentId,
-          page_selection: pdfController.selectedPdfPages,
+        const preview = await previewPalaceQuizGenerationFromPdfStreamApi(palaceId, {
+          subject_document_id: generationPdfSources[0]?.subject_document_id,
+          page_selection: generationPdfSources[0]?.page_selection || [],
+          pdf_sources: generationPdfSources.map((item) => ({
+            subject_document_id: item.subject_document_id,
+            page_selection: item.page_selection,
+            role_hint: item.role_hint,
+          })),
           extra_prompt: pdfController.rangePrompt,
           classify_by_mini_palace: generationClassifyByMiniPalace,
           ai_options: aiOptions,
+        }, {
+          onStatus: (event) => {
+            setGenerationStreamStatus(event.message || '正在生成题目')
+            setGenerationStreamStepLabel(
+              event.step != null && event.total != null ? `第 ${event.step}/${event.total} 步` : '',
+            )
+          },
+          onDelta: (event) => {
+            setGenerationStreamPreviewText((current) => `${current}${event.text || ''}`)
+          },
         })
         setGenerationPreview(preview)
-        pdfController.persistAnalyzedPdfPages(
-          pdfController.selectedSubjectDocumentId,
-          pdfController.selectedPdfPages,
-        )
+        setGenerationStreamStatus('题目预览已生成')
+        generationPdfSources.forEach((item) => {
+          pdfController.persistAnalyzedPdfPages(item.subject_document_id, item.page_selection)
+        })
       } else {
         if (generationFiles.length === 0) {
           throw new Error('请先上传图片。')
@@ -970,6 +1136,7 @@ export default function PalaceQuizPage() {
                           <Badge variant={question.mini_palace_id == null ? 'secondary' : 'outline'}>
                             {getQuestionOwnershipLabel(question)}
                           </Badge>
+                          <QuestionSourceBadge sourceMeta={question.source_meta} />
                           {question.question_type === 'multiple_choice' ? (
                             <span className="text-xs text-muted-foreground">
                               答对 {question.correct_count} 次 / 答错 {question.incorrect_count} 次
@@ -1375,6 +1542,10 @@ export default function PalaceQuizPage() {
                           disabled={!pdfController.selectedSubjectId}
                         />
                       </label>
+                      <Button type="button" variant="outline" onClick={handleAddCurrentPdfSource}>
+                        <Plus className="h-4 w-4" />
+                        加入本次资料集
+                      </Button>
                     </div>
 
                     <div className="grid gap-2">
@@ -1393,39 +1564,68 @@ export default function PalaceQuizPage() {
                       )}
                     </div>
 
-                    {pdfController.pdfPageMeta.length > 0 ? (
-                      <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-4">
-                        {pdfController.pdfPageMeta.map((page) => {
-                          const selected = pdfController.selectedPdfPages.includes(page.page_number)
-                          return (
-                            <button
-                              key={page.page_number}
-                              type="button"
-                              className={cn(
-                                'overflow-hidden rounded-2xl border text-left transition-colors',
-                                selected
-                                  ? 'border-primary bg-primary/5'
-                                  : 'border-border/70 bg-background/70',
-                              )}
-                              onClick={() => pdfController.togglePdfPage(page.page_number)}
+                    <div className="rounded-2xl border border-border/70 bg-background/70 px-4 py-3 text-sm text-muted-foreground">
+                      PDF 页面预览已关闭。请直接输入页码范围，例如 15,16,17 或 15-17。
+                    </div>
+
+                    <div className="space-y-3 rounded-2xl border border-border/70 bg-background/60 p-4">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="text-sm font-medium">本次已加入的 PDF 资料</div>
+                        <div className="text-xs text-muted-foreground">
+                          共 {generationPdfSources.length} 份
+                        </div>
+                      </div>
+                      {generationPdfSources.length === 0 ? (
+                        <div className="text-sm text-muted-foreground">
+                          先选中一份 PDF 和页码，再点“加入本次资料集”。可以把题目、答案、解析分开加入。
+                        </div>
+                      ) : (
+                        <div className="space-y-3">
+                          {generationPdfSources.map((source) => (
+                            <div
+                              key={source.subject_document_id}
+                              className="rounded-2xl border border-border/70 bg-background/80 px-4 py-3"
                             >
-                              <img
-                                src={page.thumbnail_url}
-                                alt={`PDF 第 ${page.page_number} 页`}
-                                className="h-36 w-full bg-white object-cover"
-                              />
-                              <div className="px-3 py-2 text-xs">
-                                第 {page.page_number} 页
+                              <div className="flex flex-wrap items-start justify-between gap-3">
+                                <div className="space-y-1">
+                                  <div className="text-sm font-medium">{source.document_name}</div>
+                                  <div className="text-xs text-muted-foreground">
+                                    页码：{source.page_selection.join(', ')}
+                                  </div>
+                                </div>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => handleRemovePdfSource(source.subject_document_id)}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                  移除
+                                </Button>
                               </div>
-                            </button>
-                          )
-                        })}
-                      </div>
-                    ) : (
-                      <div className="rounded-2xl border border-dashed border-border/80 px-4 py-5 text-sm text-muted-foreground">
-                        选择 PDF 后，这里会显示页面缩略图，点选即可加入页码范围。
-                      </div>
-                    )}
+                              <div className="mt-3 grid gap-2">
+                                <span className="text-xs font-medium text-muted-foreground">
+                                  资料角色
+                                </span>
+                                <select
+                                  className="h-9 rounded-md border border-input bg-background px-3 text-sm"
+                                  value={source.role_hint}
+                                  onChange={(event) =>
+                                    handlePdfSourceRoleHintChange(
+                                      source.subject_document_id,
+                                      event.target.value as PalaceQuizPdfSourceRole,
+                                    )
+                                  }
+                                >
+                                  <option value="question">题目</option>
+                                  <option value="answer">答案</option>
+                                </select>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 ) : (
                   <div className="space-y-4 rounded-2xl border border-border/70 bg-background/60 p-4">
@@ -1514,20 +1714,61 @@ export default function PalaceQuizPage() {
           <Card className="border-border/70 bg-card/92">
             <CardHeader className="flex flex-row items-center justify-between gap-3">
               <CardTitle className="text-base">预览后保存</CardTitle>
-              <Button
-                type="button"
-                disabled={!generationPreview || generationSaving}
-                onClick={() => void handleSaveGenerationPreview()}
-              >
-                {generationSaving ? (
-                  <LoaderCircle className="h-4 w-4 animate-spin" />
-                ) : (
-                  <CheckCircle2 className="h-4 w-4" />
-                )}
-                保存到题库
-              </Button>
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                {generationPreview ? (
+                  <span className="text-xs text-muted-foreground">
+                    将保存 {getGenerationPreviewSaveCount(generationPreview)} 题
+                  </span>
+                ) : null}
+                <Button
+                  type="button"
+                  disabled={!generationPreview || generationSaving}
+                  onClick={() => void handleSaveGenerationPreview()}
+                >
+                  {generationSaving ? (
+                    <LoaderCircle className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <CheckCircle2 className="h-4 w-4" />
+                  )}
+                  保存到题库
+                </Button>
+              </div>
             </CardHeader>
             <CardContent className="space-y-4">
+              {generationLoading || generationStreamStatus || generationStreamPreviewText ? (
+                <div className="space-y-3 rounded-2xl border border-border/70 bg-background/70 p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="text-sm font-medium">实时模型输出</div>
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      {generationStreamStepLabel ? (
+                        <Badge variant="outline">{generationStreamStepLabel}</Badge>
+                      ) : null}
+                      <span>{generationStreamStatus || '等待生成'}</span>
+                    </div>
+                  </div>
+                  <div
+                    className={cn(
+                      'rounded-2xl border border-border/70 bg-background p-3',
+                      !generationStreamPreviewText &&
+                        'flex min-h-[160px] items-center justify-center text-sm text-muted-foreground',
+                    )}
+                  >
+                    {generationStreamPreviewText ? (
+                      <pre
+                        ref={generationStreamContentRef}
+                        onScroll={handleGenerationStreamScroll}
+                        data-testid="palace-quiz-generation-stream-preview"
+                        className="max-h-[240px] overflow-y-auto whitespace-pre-wrap break-words font-sans text-sm leading-6 text-foreground"
+                      >
+                        {generationStreamPreviewText}
+                      </pre>
+                    ) : (
+                      '点击生成后，这里会持续显示模型原始输出。'
+                    )}
+                  </div>
+                </div>
+              ) : null}
+
               {!generationPreview ? (
                 <div className="rounded-2xl border border-dashed border-border/80 px-4 py-6 text-sm text-muted-foreground">
                   先生成预览，这里会显示 AI 返回的题目草稿。确认后再批量写入题库。
@@ -1537,10 +1778,42 @@ export default function PalaceQuizPage() {
                   <div className="rounded-2xl border border-border/70 bg-background/70 px-4 py-3 text-xs text-muted-foreground">
                     来源：{generationPreview.source_meta.source_kind} · 模式：
                     {generationPreview.source_meta.generation_mode}
+                    {generationPreview.generation_stats ? (
+                      <span>
+                        {' '}
+                        · AI返回 {generationPreview.generation_stats.returned_count} 题，可保存{' '}
+                        {generationPreview.generation_stats.savable_count} 题，跳过{' '}
+                        {generationPreview.generation_stats.skipped_count} 题
+                      </span>
+                    ) : (
+                      <span> · 可保存 {getGenerationPreviewSaveCount(generationPreview)} 题</span>
+                    )}
                     {generationPreview.ai_call_log_id ? (
                       <span> · AI日志 {generationPreview.ai_call_log_id}</span>
                     ) : null}
+                    {generationPreview.source_meta.pdf_sources?.length ? (
+                      <div className="mt-2 space-y-1">
+                        {generationPreview.source_meta.pdf_sources.map(
+                          (source: PalaceQuizPdfSourceMeta, index: number) => (
+                            <div key={`${source.subject_document_id ?? 'pdf'}_${index}`}>
+                              {index + 1}. {source.document_name || `PDF ${index + 1}`}
+                              {source.page_numbers?.length
+                                ? ` · 页码 ${source.page_numbers.join(', ')}`
+                                : ''}
+                              {source.role_hint
+                                ? ` · 角色 ${source.role_hint === 'answer' ? '答案' : '题目'}`
+                                : ''}
+                            </div>
+                          ),
+                        )}
+                      </div>
+                    ) : null}
                   </div>
+                  {generationPreview.warnings?.length ? (
+                    <div className="rounded-2xl border border-amber-300/60 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                      {generationPreview.warnings.join('；')}
+                    </div>
+                  ) : null}
 
                   {generationPreview.grouped_questions ? (
                     <div className="space-y-4">
@@ -1681,6 +1954,7 @@ function QuizQuestionCard({
             <Badge variant={question.mini_palace_id == null ? 'secondary' : 'outline'}>
               {getQuestionOwnershipLabel(question)}
             </Badge>
+            <QuestionSourceBadge sourceMeta={question.source_meta} />
             {question.question_type === 'multiple_choice' ? (
               <span className="text-xs text-muted-foreground">
                 答对 {question.correct_count} 次 / 答错 {question.incorrect_count} 次

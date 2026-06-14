@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from memory_anki.infrastructure.db.models import get_session
@@ -12,6 +13,8 @@ from memory_anki.modules.palace_quiz.application.ai_service import (
     classify_existing_quiz_questions_to_mini_palaces,
     generate_quiz_preview_from_images,
     generate_quiz_preview_from_pdf,
+    generate_quiz_preview_from_pdf_events,
+    generate_quiz_preview_from_review_mindmap,
     generate_short_answer_feedback,
 )
 from memory_anki.modules.palace_quiz.application.service import (
@@ -29,6 +32,10 @@ from memory_anki.modules.settings.application.ai_model_registry import (
 )
 
 router = APIRouter(tags=["palace_quiz"])
+
+
+def _quiz_sse(event: str, payload: dict) -> str:
+    return f"event: {event}\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n"
 
 
 def session_dep():
@@ -176,13 +183,70 @@ def api_generate_palace_quiz_from_pdf(
 ):
     try:
         page_selection = data.get("page_selection")
+        pdf_sources = data.get("pdf_sources")
         return generate_quiz_preview_from_pdf(
             s,
             palace_id=palace_id,
             subject_document_id=int(data.get("subject_document_id") or 0),
             page_selection=list(page_selection or []),
             extra_prompt=str(data.get("extra_prompt") or ""),
+            pdf_sources=list(pdf_sources or []) if isinstance(pdf_sources, list) else None,
             classify_by_mini_palace=bool(data.get("classify_by_mini_palace", False)),
+            ai_options=normalize_ai_runtime_options(data.get("ai_options")),
+        )
+    except Exception as exc:  # pragma: no cover - centralized HTTP mapping
+        _raise_http_error(exc)
+
+
+@router.post("/palaces/{palace_id}/quiz-generation/pdf/stream")
+def api_stream_generate_palace_quiz_from_pdf(
+    palace_id: int,
+    data: dict,
+    s: Session = Depends(session_dep),
+):
+    def event_stream():
+        try:
+            page_selection = data.get("page_selection")
+            pdf_sources = data.get("pdf_sources")
+            for event_name, payload in generate_quiz_preview_from_pdf_events(
+                s,
+                palace_id=palace_id,
+                subject_document_id=int(data.get("subject_document_id") or 0),
+                page_selection=list(page_selection or []),
+                extra_prompt=str(data.get("extra_prompt") or ""),
+                pdf_sources=list(pdf_sources or []) if isinstance(pdf_sources, list) else None,
+                classify_by_mini_palace=bool(data.get("classify_by_mini_palace", False)),
+                ai_options=normalize_ai_runtime_options(data.get("ai_options")),
+            ):
+                yield _quiz_sse(event_name, payload)
+        except Exception as exc:
+            if isinstance(exc, (PalaceQuizNotFoundError, PalaceQuizValidationError, PalaceQuizAiError)):
+                yield _quiz_sse("error", {"detail": str(exc)})
+                return
+            yield _quiz_sse("error", {"detail": str(exc) or "生成题目预览失败。"})
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+@router.post("/palaces/{palace_id}/quiz-generation/review-mindmap")
+def api_generate_palace_quiz_from_review_mindmap(
+    palace_id: int,
+    data: dict,
+    s: Session = Depends(session_dep),
+):
+    try:
+        return generate_quiz_preview_from_review_mindmap(
+            s,
+            palace_id=palace_id,
+            mode=str(data.get("mode") or "chapter"),
+            question_types=list(data.get("question_types") or []),
+            question_count=int(data.get("question_count") or 5),
+            review_editor_doc=data.get("review_editor_doc"),
+            related_palace_ids=list(data.get("related_palace_ids") or []),
             ai_options=normalize_ai_runtime_options(data.get("ai_options")),
         )
     except Exception as exc:  # pragma: no cover - centralized HTTP mapping

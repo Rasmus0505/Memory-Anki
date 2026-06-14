@@ -210,10 +210,11 @@ _DEFAULT_PALACE_QUIZ_GENERATE_TEMPLATE = """你是一个严格输出 JSON 的做
     }
   ]
 }
-3. multiple_choice 必须至少有 2 个选项，并明确给出 correct_option_id。
-4. short_answer 必须给出 reference_answer。
-5. analysis 必须尽量结合当前资料内容，不要只写“略”或空字符串。
-6. 不要生成资料无关的知识点，不要输出页面之外的背景扩写。"""
+3. multiple_choice 至少 2 个选项；每个选项只能是 {"id":"A","text":"..."} 这种结构，id 按 A/B/C/D 顺序编号，禁止把 id、text、答案正文或序号当作 id。
+4. correct_option_id 必须严格等于 options 数组中某个 id，例如只能输出 "A" 或 "B"，不能输出选项正文、序号、中文答案或不存在的 id。
+5. short_answer 必须给出 reference_answer。
+6. analysis 必须尽量结合当前资料内容，不要只写“略”或空字符串。
+7. 不要生成资料无关的知识点，不要输出页面之外的背景扩写。"""
 
 _DEFAULT_PALACE_QUIZ_SHORT_ANSWER_FEEDBACK_TEMPLATE = (
     "你是一个简答题点评助手。"

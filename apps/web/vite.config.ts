@@ -144,6 +144,39 @@ function stableChunkCompatPlugin() {
   }
 }
 
+function manualOutDirCleanupPlugin() {
+  let outDir = ''
+
+  return {
+    name: 'memory-anki-manual-out-dir-cleanup',
+    apply: 'build' as const,
+    configResolved(config) {
+      outDir = path.resolve(config.root, config.build.outDir)
+    },
+    async buildStart() {
+      if (!outDir) return
+      try {
+        const entries = await fs.readdir(outDir, { withFileTypes: true })
+        await Promise.all(
+          entries.map((entry) =>
+            fs.rm(path.join(outDir, entry.name), {
+              recursive: true,
+              force: true,
+              maxRetries: 3,
+              retryDelay: 150,
+            }),
+          ),
+        )
+      } catch (error) {
+        const nodeError = error as NodeJS.ErrnoException
+        if (nodeError.code !== 'ENOENT') {
+          throw error
+        }
+      }
+    },
+  }
+}
+
 export default defineConfig({
   plugins: [
     {
@@ -168,8 +201,10 @@ export default defineConfig({
     react(),
     tailwindcss(),
     stableChunkCompatPlugin(),
+    manualOutDirCleanupPlugin(),
   ],
   build: {
+    emptyOutDir: false,
     rollupOptions: {
       output: {
         chunkFileNames(chunkInfo) {

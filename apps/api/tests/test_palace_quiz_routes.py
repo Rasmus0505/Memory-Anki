@@ -62,7 +62,38 @@ class PalaceQuizRouteTests(unittest.TestCase):
                     ensure_ascii=False,
                 ),
             )
-            other_palace = Palace(title="Other Palace", description="other")
+            other_palace = Palace(
+                title="Other Palace",
+                description="other",
+                editor_doc=json.dumps(
+                    {
+                        "root": {
+                            "data": {"text": "Other Palace", "uid": "other-root"},
+                            "children": [
+                                {
+                                    "data": {"text": "单链入口", "uid": "single-1"},
+                                    "children": [
+                                        {
+                                            "data": {"text": "继续单链", "uid": "single-2"},
+                                            "children": [
+                                                {
+                                                    "data": {"text": "分支A", "uid": "branch-a"},
+                                                    "children": [],
+                                                },
+                                                {
+                                                    "data": {"text": "分支B", "uid": "branch-b"},
+                                                    "children": [],
+                                                },
+                                            ],
+                                        }
+                                    ],
+                                }
+                            ],
+                        }
+                    },
+                    ensure_ascii=False,
+                ),
+            )
             subject = Subject(name="生物", color="#22c55e")
             session.add_all([palace, other_palace, subject])
             session.flush()
@@ -250,6 +281,90 @@ class PalaceQuizRouteTests(unittest.TestCase):
         self.assertEqual(invalid_response.status_code, 400)
         self.assertIn("至少需要 2 个选项", invalid_response.json()["detail"])
 
+    def test_batch_create_accepts_game_question_types(self):
+        response = self.client.post(
+            "/api/v1/palaces/1/quiz-questions/batch",
+            json={
+                "questions": [
+                    {
+                        "question_type": "true_false",
+                        "stem": "细胞核控制细胞活动。",
+                        "answer_payload": {
+                            "correct_answer": True,
+                            "false_explanation": "细胞核是控制中心。",
+                        },
+                        "analysis": "判断核心概念。",
+                    },
+                    {
+                        "question_type": "fill_blank",
+                        "stem": "细胞的控制中心是 {{blank_1}}。",
+                        "answer_payload": {
+                            "blanks": [
+                                {"id": "blank_1", "answer": "细胞核", "aliases": ["核"]}
+                            ]
+                        },
+                        "analysis": "填核心术语。",
+                    },
+                    {
+                        "question_type": "matching",
+                        "stem": "完成结构与功能连线。",
+                        "answer_payload": {
+                            "pairs": [
+                                {
+                                    "left_id": "L1",
+                                    "left": "细胞核",
+                                    "right_id": "R1",
+                                    "right": "控制细胞活动",
+                                },
+                                {
+                                    "left_id": "L2",
+                                    "left": "细胞膜",
+                                    "right_id": "R2",
+                                    "right": "控制物质进出",
+                                },
+                            ]
+                        },
+                        "analysis": "结构功能对应。",
+                    },
+                    {
+                        "question_type": "ordering",
+                        "stem": "按有丝分裂阶段排序。",
+                        "answer_payload": {
+                            "items": [
+                                {"id": "I1", "text": "前期"},
+                                {"id": "I2", "text": "中期"},
+                            ],
+                            "correct_order_ids": ["I1", "I2"],
+                        },
+                        "analysis": "考查顺序。",
+                    },
+                    {
+                        "question_type": "categorization",
+                        "stem": "把概念归类。",
+                        "answer_payload": {
+                            "categories": [
+                                {"id": "C1", "name": "结构"},
+                                {"id": "C2", "name": "过程"},
+                            ],
+                            "items": [
+                                {"id": "T1", "text": "细胞核", "category_id": "C1"},
+                                {"id": "T2", "text": "有丝分裂", "category_id": "C2"},
+                            ],
+                        },
+                        "analysis": "考查归类。",
+                    },
+                ]
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        items = response.json()["items"]
+        self.assertEqual(
+            [item["question_type"] for item in items],
+            ["true_false", "fill_blank", "matching", "ordering", "categorization"],
+        )
+        self.assertTrue(items[0]["answer_payload"]["correct_answer"])
+
     def test_choice_attempts_only_update_multiple_choice_statistics(self):
         correct_response = self.client.post(
             "/api/v1/palace-quiz-questions/1/choice-attempts",
@@ -375,6 +490,323 @@ class PalaceQuizRouteTests(unittest.TestCase):
             captured["request_payload"]["source_meta"]["page_numbers"],
             [3, 4],
         )
+
+    def test_pdf_generation_endpoint_accepts_multiple_pdf_sources(self):
+        calls: list[dict[str, object]] = []
+
+        def fake_call_logged_chat_completion(**kwargs):
+            calls.append(kwargs)
+            return (
+                json.dumps(
+                    {
+                        "questions": [
+                            {
+                                "question_type": "short_answer",
+                                "stem": "根据两份资料整合本题答案。",
+                                "reference_answer": "整合后的参考答案。",
+                                "analysis": "综合题目册与答案册内容。",
+                            }
+                        ]
+                    },
+                    ensure_ascii=False,
+                ),
+                "log-multi-pdf",
+            )
+
+        with (
+            patch.object(palace_quiz_ai_service, "DASHSCOPE_API_KEY", "test-key"),
+            patch.object(
+                palace_quiz_ai_service,
+                "render_selected_pdf_pages",
+                side_effect=[
+                    [(1, b"question-1", "question-1.png")],
+                    [(2, b"answer-2", "answer-2.png")],
+                ],
+            ),
+            patch.object(
+                palace_quiz_ai_service,
+                "_call_logged_chat_completion",
+                side_effect=fake_call_logged_chat_completion,
+            ),
+        ):
+            response = self.client.post(
+                "/api/v1/palaces/1/quiz-generation/pdf",
+                json={
+                    "pdf_sources": [
+                        {
+                            "subject_document_id": 1,
+                            "page_selection": [1],
+                            "role_hint": "题目册",
+                        },
+                        {
+                            "subject_document_id": 1,
+                            "page_selection": [2],
+                            "role_hint": "答案册",
+                        },
+                    ],
+                    "extra_prompt": "自动整合题目与答案",
+                },
+            )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["ai_call_log_id"], "log-multi-pdf")
+        self.assertEqual(payload["source_meta"]["generation_mode"], "subject_pdf_multi")
+        self.assertEqual(len(payload["source_meta"]["pdf_sources"]), 2)
+        self.assertEqual(payload["source_meta"]["pdf_sources"][0]["role_hint"], "question")
+        self.assertEqual(payload["source_meta"]["pdf_sources"][1]["role_hint"], "answer")
+        self.assertIn("资料来源清单", calls[0]["request_payload"]["source_context"])
+        self.assertEqual(len(calls[0]["image_items"]), 2)
+        self.assertEqual(calls[1]["operation"], "palace_quiz_pair_pdf_with_turbo")
+        self.assertEqual(payload["generation_stats"]["returned_count"], 1)
+
+    def test_pdf_generation_skips_invalid_correct_option_and_returns_warning(self):
+        def fake_call_logged_chat_completion(**kwargs):
+            return (
+                json.dumps(
+                    {
+                        "questions": [
+                            {
+                                "question_type": "multiple_choice",
+                                "stem": "蛋白质的基本单位是什么？",
+                                "options": [
+                                    {"id": "A", "text": "葡萄糖"},
+                                    {"id": "B", "text": "氨基酸"},
+                                ],
+                                "correct_option_id": "B",
+                                "analysis": "蛋白质由氨基酸组成。",
+                            },
+                            {
+                                "question_type": "multiple_choice",
+                                "stem": "无效题",
+                                "options": [
+                                    {"id": "A", "text": "甲"},
+                                    {"id": "B", "text": "乙"},
+                                ],
+                                "correct_option_id": "不存在的答案",
+                                "analysis": "无法匹配。",
+                            },
+                        ]
+                    },
+                    ensure_ascii=False,
+                ),
+                "log-invalid",
+            )
+
+        with (
+            patch.object(palace_quiz_ai_service, "DASHSCOPE_API_KEY", "test-key"),
+            patch.object(
+                palace_quiz_ai_service,
+                "render_selected_pdf_pages",
+                return_value=[(3, b"page-3", "page-3.png")],
+            ),
+            patch.object(
+                palace_quiz_ai_service,
+                "_call_logged_chat_completion",
+                side_effect=fake_call_logged_chat_completion,
+            ),
+        ):
+            response = self.client.post(
+                "/api/v1/palaces/1/quiz-generation/pdf",
+                json={"subject_document_id": 1, "page_selection": [3]},
+            )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(len(payload["questions"]), 1)
+        self.assertEqual(payload["questions"][0]["answer_payload"]["correct_option_id"], "B")
+        self.assertGreaterEqual(len(payload["warnings"]), 1)
+        self.assertTrue(any("已跳过" in warning for warning in payload["warnings"]))
+
+    def test_pdf_generation_skips_suspicious_option_ids_without_rewriting_ai_content(self):
+        def fake_call_logged_chat_completion(**kwargs):
+            return (
+                json.dumps(
+                    {
+                        "questions": [
+                            {
+                                "question_type": "multiple_choice",
+                                "stem": "洛克强调哪种教育？",
+                                "options": [
+                                    {"id": "A", "text": "神学教育"},
+                                    {"id": "B", "text": "家庭教育"},
+                                ],
+                                "correct_option_id": "B",
+                                "analysis": "洛克重视家庭教育。",
+                            },
+                            {
+                                "question_type": "multiple_choice",
+                                "stem": "异常选项编号题",
+                                "options": [
+                                    {"id": "A", "text": "神学教育"},
+                                    {"id": "text", "text": "家庭教育"},
+                                    {"id": "id", "text": "骑士教育"},
+                                ],
+                                "correct_option_id": "B",
+                                "analysis": "洛克重视家庭教育。",
+                            }
+                        ]
+                    },
+                    ensure_ascii=False,
+                ),
+                "log-option-normalize",
+            )
+
+        with (
+            patch.object(palace_quiz_ai_service, "DASHSCOPE_API_KEY", "test-key"),
+            patch.object(
+                palace_quiz_ai_service,
+                "render_selected_pdf_pages",
+                return_value=[(3, b"page-3", "page-3.png")],
+            ),
+            patch.object(
+                palace_quiz_ai_service,
+                "_call_logged_chat_completion",
+                side_effect=fake_call_logged_chat_completion,
+            ),
+        ):
+            response = self.client.post(
+                "/api/v1/palaces/1/quiz-generation/pdf",
+                json={"subject_document_id": 1, "page_selection": [3]},
+            )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(len(payload["questions"]), 1)
+        self.assertTrue(any("已跳过" in warning for warning in payload["warnings"]))
+
+    def test_review_mindmap_generation_uses_cross_palace_first_multi_node_summary(self):
+        captured: dict[str, object] = {}
+
+        def fake_call_logged_chat_completion(**kwargs):
+            captured.update(kwargs)
+            return (
+                json.dumps(
+                    {
+                        "questions": [
+                            {
+                                "question_type": "true_false",
+                                "stem": "细胞核和分支A存在可用于联想的结构关系。",
+                                "correct_answer": True,
+                                "false_explanation": "本题为正确判断。",
+                                "analysis": "用于验证跨宫殿关联题。",
+                            },
+                            {
+                                "question_type": "fill_blank",
+                                "stem": "当前章节的核心节点是 {{blank_1}}。",
+                                "blanks": [
+                                    {
+                                        "id": "blank_1",
+                                        "answer": "细胞核",
+                                        "aliases": [],
+                                    }
+                                ],
+                                "analysis": "用于验证填空题归一化。",
+                            },
+                        ]
+                    },
+                    ensure_ascii=False,
+                ),
+                "log-review-mindmap",
+            )
+
+        with (
+            patch.object(palace_quiz_ai_service, "DASHSCOPE_API_KEY", "test-key"),
+            patch.object(
+                palace_quiz_ai_service,
+                "_call_logged_chat_completion",
+                side_effect=fake_call_logged_chat_completion,
+            ),
+        ):
+            response = self.client.post(
+                "/api/v1/palaces/1/quiz-generation/review-mindmap",
+                json={
+                    "mode": "cross_palace",
+                    "question_types": ["true_false", "fill_blank"],
+                    "question_count": 2,
+                    "review_editor_doc": {
+                        "root": {
+                            "data": {"text": "当前复习", "uid": "review-root"},
+                            "children": [
+                                {
+                                    "data": {"text": "细胞核", "uid": "cell-core"},
+                                    "children": [],
+                                }
+                            ],
+                        }
+                    },
+                    "related_palace_ids": [2],
+                },
+            )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["ai_call_log_id"], "log-review-mindmap")
+        self.assertEqual(payload["source_meta"]["source_kind"], "review_mindmap")
+        self.assertEqual(payload["source_meta"]["generation_mode"], "review_cross_palace")
+        self.assertEqual(payload["source_meta"]["question_types"], ["true_false", "fill_blank"])
+        self.assertEqual(payload["source_meta"]["related_palace_ids"], [2])
+        self.assertEqual(
+            captured["request_payload"]["model_input"]["related_palaces"][0]["first_multi_nodes"],
+            ["分支A", "分支B"],
+        )
+        self.assertEqual(
+            [item["question_type"] for item in payload["questions"]],
+            ["true_false", "fill_blank"],
+        )
+
+    def test_pdf_generation_stream_emits_status_delta_and_result(self):
+        def fake_stream_chat_completion_text(**kwargs):
+            yield '{"questions":'
+            yield '[{"question_type":"short_answer","stem":"概括英国教育特点。","reference_answer":"英国教育具有渐进改革特点。","analysis":"结合题目册和解析册整理。"}]}'
+            return '{"questions":[{"question_type":"short_answer","stem":"概括英国教育特点。","reference_answer":"英国教育具有渐进改革特点。","analysis":"结合题目册和解析册整理。"}]}'
+
+        def fake_pairing_chat_completion(**kwargs):
+            return (
+                '{"questions":[{"question_type":"short_answer","stem":"概括英国教育特点。","reference_answer":"英国教育具有渐进改革特点。","analysis":"Turbo 已配对题目册和解析册。"}]}',
+                "log-pair",
+            )
+
+        with (
+            patch.object(palace_quiz_ai_service, "DASHSCOPE_API_KEY", "test-key"),
+            patch.object(
+                palace_quiz_ai_service,
+                "render_selected_pdf_pages",
+                side_effect=[
+                    [(15, b"question-15", "question-15.png")],
+                    [(15, b"answer-15", "answer-15.png")],
+                ],
+            ),
+            patch.object(
+                palace_quiz_ai_service,
+                "stream_chat_completion_text",
+                side_effect=fake_stream_chat_completion_text,
+            ),
+            patch.object(
+                palace_quiz_ai_service,
+                "_call_logged_chat_completion",
+                side_effect=fake_pairing_chat_completion,
+            ),
+        ):
+            response = self.client.post(
+                "/api/v1/palaces/1/quiz-generation/pdf/stream",
+                json={
+                    "pdf_sources": [
+                        {"subject_document_id": 1, "page_selection": [15], "role_hint": "question"},
+                        {"subject_document_id": 1, "page_selection": [15], "role_hint": "answer"},
+                    ],
+                    "extra_prompt": "只要英国的",
+                },
+            )
+
+        self.assertEqual(response.status_code, 200)
+        body = response.text
+        self.assertIn("event: status", body)
+        self.assertIn("event: delta", body)
+        self.assertIn("event: result", body)
+        self.assertIn("正在用 Turbo 配对题目与答案", body)
+        self.assertIn("概括英国教育特点", body)
+        self.assertIn("log-pair", body)
 
     def test_image_generation_endpoint_handles_single_and_multi_upload(self):
         calls: list[dict[str, object]] = []

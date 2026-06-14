@@ -60,34 +60,30 @@ export function PalaceImportResultsPanel({
           </section>
         ) : null}
 
-        <section ref={previewSectionRef} className="space-y-3">
-          <div className="text-sm font-medium">
-            {sourceKind === 'subject-pdf'
-              ? '当前识别页预览'
-              : sourceKind === 'image-batch'
-                ? '结构图预览'
-                : '原图预览'}
-          </div>
-          <div className="overflow-hidden rounded-2xl border border-border/70 bg-background/70">
-            {resolvedPreviewImageUrl ? (
-              <img
-                src={resolvedPreviewImageUrl}
-                alt="待识别内容预览"
-                className="max-h-[340px] w-full object-contain bg-white"
-              />
-            ) : (
-              <div className="flex h-[180px] items-center justify-center text-sm text-muted-foreground">
-                {sourceKind === 'subject-pdf'
-                  ? '识别完成后，这里会显示当前识别页预览。'
-                  : sourceKind === 'image-batch'
+        {sourceKind !== 'subject-pdf' ? (
+          <section ref={previewSectionRef} className="space-y-3">
+            <div className="text-sm font-medium">
+              {sourceKind === 'image-batch' ? '结构图预览' : '原图预览'}
+            </div>
+            <div className="overflow-hidden rounded-2xl border border-border/70 bg-background/70">
+              {resolvedPreviewImageUrl ? (
+                <img
+                  src={resolvedPreviewImageUrl}
+                  alt="待识别内容预览"
+                  className="max-h-[340px] w-full object-contain bg-white"
+                />
+              ) : (
+                <div className="flex h-[180px] items-center justify-center text-sm text-muted-foreground">
+                  {sourceKind === 'image-batch'
                     ? '识别完成后，这里会显示本次使用的结构图。'
                     : '还没有图片，先粘贴或选择一张图片。'}
-              </div>
-            )}
-          </div>
-        </section>
+                </div>
+              )}
+            </div>
+          </section>
+        ) : null}
 
-        <section className="space-y-3">
+        <section ref={sourceKind === 'subject-pdf' ? previewSectionRef : undefined} className="space-y-3">
           {mode === 'mindmap' ? (
             <>
               <div className="space-y-3">

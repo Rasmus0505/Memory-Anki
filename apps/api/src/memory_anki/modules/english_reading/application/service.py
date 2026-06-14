@@ -7,6 +7,7 @@ import shutil
 import urllib.error
 import urllib.parse
 import urllib.request
+import uuid
 from collections import Counter
 from dataclasses import dataclass, replace
 from datetime import timedelta
@@ -38,6 +39,11 @@ from memory_anki.infrastructure.db.models import (
 from memory_anki.infrastructure.llm.openai_compatible import (
     OpenAICompatibleChatConfig,
     call_chat_completion_text,
+)
+from memory_anki.infrastructure.llm.external_ai_call_logs import (
+    begin_external_ai_call_log,
+    complete_external_ai_call_log,
+    fail_external_ai_call_log,
 )
 from memory_anki.modules.english_reading.domain.errors import EnglishReadingError
 from memory_anki.modules.settings.application.ai_model_registry import (
@@ -104,7 +110,9 @@ SUBORDINATE_MARKERS = {
 }
 NOMINALIZATION_SUFFIXES = ("tion", "sion", "ment", "ness", "ity", "ance", "ence")
 MAX_UNKNOWN_SURFACES_FOR_AI_CLASSIFICATION = 24
-MAX_SENTENCE_AI_ADAPTATIONS = 1
+MAX_SENTENCE_AI_BATCH_ITEMS = 8
+MAX_SENTENCE_AI_BATCH_CHARS = 4000
+READING_GENERATION_TOTAL_STEPS = 8
 READING_DIFFICULTY_BASE_DELTA = {
     "lexical": 0.45,
     "syntactic": 0.35,
@@ -537,11 +545,42 @@ def generate_material_version(
     difficulty_delta: float | None = None,
     ai_options: AiRuntimeOptions | None = None,
 ) -> dict[str, Any]:
+    return _consume_status_stream(
+        generate_material_version_events(
+            session,
+            material_id=material_id,
+            mode=mode,
+            difficulty_direction=difficulty_direction,
+            difficulty_delta=difficulty_delta,
+            ai_options=ai_options,
+        )
+    )
+
+
+def generate_material_version_events(
+    session: Session,
+    *,
+    material_id: int,
+    mode: str = "initial",
+    difficulty_direction: str | None = None,
+    difficulty_delta: float | None = None,
+    ai_options: AiRuntimeOptions | None = None,
+):
     material = get_material_row(session, material_id)
     profile = ensure_profile_row(session)
     reading_text = extract_visible_english_text(material.cleaned_text)
     if not reading_text.strip():
         raise EnglishReadingError("当前材料没有可生成阅读结果的英文正文。")
+    generation_trace: list[dict[str, Any]] = []
+    generation_job_id = f"english-reading:{material.id}:{uuid.uuid4().hex}"
+    status = _build_generation_status(
+        "clean_text",
+        1,
+        "正在清理段落结构……",
+        stats={"materialId": material.id},
+    )
+    generation_trace.append(status)
+    yield ("status", status)
     declared_cefr = normalize_cefr_level(profile.declared_cefr)
     working_lexical_i = parse_float(
         profile.working_lexical_i, default_lexical_value_for_level(declared_cefr)
@@ -560,17 +599,32 @@ def generate_material_version(
     target_lexical_i = clamp_numeric(working_lexical_i + 0.75)
     target_syntactic_i = clamp_numeric(working_syntactic_i + 0.65)
     target_cefr = numeric_to_target_cefr(target_lexical_i)
-    render_payload = build_reading_version_payload(
+    render_payload = yield from build_reading_version_payload_stream(
         session,
         text=reading_text,
+        material_id=material.id,
         declared_cefr=declared_cefr,
         working_lexical_i=working_lexical_i,
         working_syntactic_i=working_syntactic_i,
         target_lexical_i=target_lexical_i,
         target_syntactic_i=target_syntactic_i,
         total_word_count=max(1, count_words(reading_text)),
+        generation_job_id=generation_job_id,
+        generation_trace=generation_trace,
         ai_options=ai_options,
     )
+    summary_payload = {
+        **render_payload["summary"],
+        "_generationTrace": generation_trace,
+        "_aiLogIds": render_payload.get("aiLogIds") or [],
+    }
+    status = _build_generation_status(
+        "save_version",
+        8,
+        "正在保存阅读版本……",
+    )
+    generation_trace.append(status)
+    yield ("status", status)
     version = EnglishReadingVersion(
         material=material,
         declared_cefr=declared_cefr,
@@ -584,7 +638,7 @@ def generate_material_version(
         sentence_annotations_json=json.dumps(
             render_payload["sentenceAnnotations"], ensure_ascii=False
         ),
-        summary_json=json.dumps(render_payload["summary"], ensure_ascii=False),
+        summary_json=json.dumps(summary_payload, ensure_ascii=False),
     )
     material.updated_at = utc_now_naive()
     session.add(version)
@@ -854,19 +908,88 @@ def normalize_dictionary_phonetic(value: str) -> str:
     return f"/{text.strip('/')}/"
 
 
+def _build_generation_status(
+    stage: str,
+    step: int,
+    message: str,
+    *,
+    stats: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    payload = {
+        "stage": stage,
+        "step": step,
+        "totalSteps": READING_GENERATION_TOTAL_STEPS,
+        "message": message,
+    }
+    if stats:
+        payload["stats"] = stats
+    return payload
+
+
+def _consume_status_stream(stream):
+    while True:
+        try:
+            next(stream)
+        except StopIteration as exc:
+            return exc.value
+
+
 def build_reading_version_payload(
     session: Session,
     *,
     text: str,
+    material_id: int,
     declared_cefr: str,
     working_lexical_i: float,
     working_syntactic_i: float,
     target_lexical_i: float,
     target_syntactic_i: float,
     total_word_count: int,
+    generation_job_id: str,
+    generation_trace: list[dict[str, Any]],
     ai_options: AiRuntimeOptions | None = None,
 ) -> dict[str, Any]:
+    return _consume_status_stream(
+        build_reading_version_payload_stream(
+            session,
+            text=text,
+            material_id=material_id,
+            declared_cefr=declared_cefr,
+            working_lexical_i=working_lexical_i,
+            working_syntactic_i=working_syntactic_i,
+            target_lexical_i=target_lexical_i,
+            target_syntactic_i=target_syntactic_i,
+            total_word_count=total_word_count,
+            generation_job_id=generation_job_id,
+            generation_trace=generation_trace,
+            ai_options=ai_options,
+        )
+    )
+
+
+def build_reading_version_payload_stream(
+    session: Session,
+    *,
+    text: str,
+    material_id: int,
+    declared_cefr: str,
+    working_lexical_i: float,
+    working_syntactic_i: float,
+    target_lexical_i: float,
+    target_syntactic_i: float,
+    total_word_count: int,
+    generation_job_id: str,
+    generation_trace: list[dict[str, Any]],
+    ai_options: AiRuntimeOptions | None = None,
+):
     lexicon_state = load_lexicon_state()
+    status = _build_generation_status(
+        "local_dictionary",
+        2,
+        "正在比对本地词典……",
+    )
+    generation_trace.append(status)
+    yield ("status", status)
     paragraph_sentences = [
         [sentence for sentence in split_paragraph_into_sentences(paragraph) if sentence.strip()]
         for paragraph in split_into_paragraphs(text)
@@ -893,52 +1016,98 @@ def build_reading_version_payload(
                 pending_spans_by_surface.get(normalized_surface, []), resolution
             )
             still_unresolved.discard(normalized_surface)
-    _, provisional_yellow_allocations = plan_yellow_allocations(
-        sentence_states,
-        total_word_count=total_word_count,
-        working_lexical_i=working_lexical_i,
-        target_lexical_i=target_lexical_i,
-    )
-    ai_adaptation_indices = choose_sentence_ai_adaptations(
-        sentence_states,
-        yellow_allocations=provisional_yellow_allocations,
-        target_lexical_i=target_lexical_i,
-        target_syntactic_i=target_syntactic_i,
-    )
-    sentence_tasks = build_ai_sentence_tasks(
-        sentence_states,
-        ai_indices=ai_adaptation_indices,
-        yellow_allocations=provisional_yellow_allocations,
-        working_lexical_i=working_lexical_i,
-        target_lexical_i=target_lexical_i,
-        target_syntactic_i=target_syntactic_i,
-    )
-    sentence_task_map = {task["sentenceId"]: task for task in sentence_tasks}
-    ai_sentence_renders: dict[str, dict[str, Any]] = {}
-    if sentence_tasks or still_unresolved:
-        ai_result = generate_reading_assists_with_ai(
+    if still_unresolved:
+        status = _build_generation_status(
+            "ai_lexical_resolution",
+            3,
+            "正在补全未识别词形……",
+            stats={"unknownSurfaceCount": len(still_unresolved)},
+        )
+        generation_trace.append(status)
+        yield ("status", status)
+        ai_surface_resolutions, ai_log_ids = generate_surface_resolutions_with_ai(
             session,
             lexicon_state=lexicon_state,
             unresolved_surfaces=still_unresolved,
-            sentence_tasks=sentence_tasks,
             declared_cefr=declared_cefr,
             target_cefr=numeric_to_target_cefr(target_lexical_i),
+            material_id=material_id,
+            generation_job_id=generation_job_id,
             ai_options=ai_options,
         )
-        ai_surface_resolutions = ai_result["surfaceResolutions"]
         if ai_surface_resolutions:
             for normalized_surface, resolution in ai_surface_resolutions.items():
                 apply_surface_resolution(
                     pending_spans_by_surface.get(normalized_surface, []), resolution
                 )
-        ai_sentence_renders = ai_result["sentenceRenders"]
+            still_unresolved.difference_update(ai_surface_resolutions.keys())
+    else:
+        ai_log_ids = []
 
+    status = _build_generation_status(
+        "lexical_recheck",
+        4,
+        "正在重新匹配本地词典……",
+        stats={"remainingUnknownCount": len(still_unresolved)},
+    )
+    generation_trace.append(status)
+    yield ("status", status)
+
+    status = _build_generation_status(
+        "difficulty_budget",
+        5,
+        "正在计算你的 i+1 预算……",
+    )
+    generation_trace.append(status)
+    yield ("status", status)
     _, yellow_allocations = plan_yellow_allocations(
         sentence_states,
         total_word_count=total_word_count,
         working_lexical_i=working_lexical_i,
         target_lexical_i=target_lexical_i,
     )
+    sentence_tasks = build_ai_sentence_tasks(
+        sentence_states,
+        ai_indices=choose_sentence_ai_adaptations(
+            sentence_states,
+            yellow_allocations=yellow_allocations,
+            target_lexical_i=target_lexical_i,
+            target_syntactic_i=target_syntactic_i,
+        ),
+        yellow_allocations=yellow_allocations,
+        working_lexical_i=working_lexical_i,
+        target_lexical_i=target_lexical_i,
+        target_syntactic_i=target_syntactic_i,
+    )
+    sentence_task_map = {task["sentenceId"]: task for task in sentence_tasks}
+    ai_sentence_renders: dict[str, dict[str, Any]] = {}
+    if sentence_tasks:
+        status = _build_generation_status(
+            "sentence_rewrite",
+            6,
+            "正在重构长难句……",
+            stats={"sentenceTaskCount": len(sentence_tasks)},
+        )
+        generation_trace.append(status)
+        yield ("status", status)
+        ai_sentence_renders, sentence_log_ids = generate_sentence_renders_with_ai(
+            session,
+            sentence_tasks=sentence_tasks,
+            declared_cefr=declared_cefr,
+            target_cefr=numeric_to_target_cefr(target_lexical_i),
+            material_id=material_id,
+            generation_job_id=generation_job_id,
+            ai_options=ai_options,
+        )
+        ai_log_ids.extend(sentence_log_ids)
+
+    status = _build_generation_status(
+        "assemble_render",
+        7,
+        "正在编排沉浸式阅读稿……",
+    )
+    generation_trace.append(status)
+    yield ("status", status)
 
     render_blocks: list[dict[str, Any]] = []
     span_annotations: list[dict[str, Any]] = []
@@ -989,24 +1158,36 @@ def build_reading_version_payload(
                 if rendered is None:
                     rendered = render_sentence_locally(
                         state.text,
+                        lexicon_state=lexicon_state,
+                        all_spans=state.spans,
                         green_spans=green_spans,
                         yellow_spans=yellow_spans,
                         red_spans=red_spans,
+                        working_lexical_i=working_lexical_i,
+                        target_lexical_i=target_lexical_i,
                         sentence_kind="unchanged",
                     )
             else:
                 rendered = render_sentence_locally(
                     state.text,
+                    lexicon_state=lexicon_state,
+                    all_spans=state.spans,
                     green_spans=green_spans,
                     yellow_spans=[],
                     red_spans=[],
+                    working_lexical_i=working_lexical_i,
+                    target_lexical_i=target_lexical_i,
                     sentence_kind="unchanged",
                 )
 
             candidate_spans = sentence_task_map.get(sentence_id, {}).get("candidateSpans", {})
             rendered_parts = rendered["parts"]
             if rendered.get("source") == "ai":
-                rendered_parts = materialize_ai_rendered_parts(rendered_parts, candidate_spans)
+                rendered_parts = materialize_ai_rendered_parts(
+                    rendered_parts,
+                    candidate_spans,
+                    lexicon_state=lexicon_state,
+                )
 
             parts_payload: list[dict[str, Any]] = []
             for part in rendered_parts:
@@ -1024,9 +1205,10 @@ def build_reading_version_payload(
                         "spanAnnotationId": annotation_id,
                     }
                 )
-                summary[f"{annotation['kind']}Count"] += max(
-                    1, count_words(annotation["displayText"])
-                )
+                if annotation["kind"] in {"green", "yellow", "red"}:
+                    summary[f"{annotation['kind']}Count"] += max(
+                        1, count_words(annotation["displayText"])
+                    )
 
             sentence_annotation = rendered["sentenceAnnotation"]
             sentence_annotation_id = f"{sentence_id}-annotation"
@@ -1061,6 +1243,7 @@ def build_reading_version_payload(
         "spanAnnotations": span_annotations,
         "sentenceAnnotations": sentence_annotations,
         "summary": summary,
+        "aiLogIds": ai_log_ids,
     }
 
 
@@ -1240,26 +1423,48 @@ def match_phrase_span(
 def render_sentence_locally(
     sentence_text: str,
     *,
+    lexicon_state: LexiconState,
+    all_spans: list[SentenceSpan],
     green_spans: list[SentenceSpan],
     yellow_spans: list[SentenceSpan],
     red_spans: list[SentenceSpan],
+    working_lexical_i: float,
+    target_lexical_i: float,
     sentence_kind: str,
 ) -> dict[str, Any]:
+    del lexicon_state
+    yellow_surfaces = {span.normalized_surface for span in yellow_spans}
+    red_surfaces = {span.normalized_surface for span in red_spans}
     annotations: list[dict[str, Any]] = []
-    for span in green_spans:
+    seen_spans: set[tuple[int, int, str]] = set()
+    for span in sorted(all_spans, key=lambda item: (item.start, item.end, item.surface)):
+        span_key = (span.start, span.end, span.normalized_surface)
+        if span_key in seen_spans or span.cefr is None:
+            continue
+        seen_spans.add(span_key)
+        kind, rewrite_needed, rewrite_decision = classify_original_span_render(
+            span,
+            working_lexical_i=working_lexical_i,
+            target_lexical_i=target_lexical_i,
+            yellow_surfaces=yellow_surfaces,
+            red_surfaces=red_surfaces,
+        )
         annotations.append(
             {
                 "start": span.start,
                 "end": span.end,
-                "kind": "green",
+                "kind": kind,
                 "originalText": span.surface,
                 "displayText": span.surface,
                 "cefr": span.cefr or "",
+                "originalCefr": span.cefr or "",
+                "finalCefr": span.cefr or "",
+                "rewriteNeeded": rewrite_needed,
+                "rewriteDecision": rewrite_decision,
                 "resolvedLemma": resolve_span_lemma(span),
                 "resolutionSource": normalize_resolution_source(span.source),
             }
         )
-    del yellow_spans, red_spans
     parts = build_parts_from_annotations(sentence_text, annotations)
     return {
         "parts": parts,
@@ -1286,6 +1491,8 @@ def normalize_resolution_source(value: str) -> str:
 def materialize_ai_rendered_parts(
     parts: list[dict[str, Any]],
     candidate_spans: dict[str, SentenceSpan],
+    *,
+    lexicon_state: LexiconState,
 ) -> list[dict[str, Any]]:
     materialized: list[dict[str, Any]] = []
     for part in parts:
@@ -1302,36 +1509,80 @@ def materialize_ai_rendered_parts(
         ):
             materialized.append({"text": text})
             continue
-        if kind == "green" and not texts_match_for_annotation(text, candidate_span.surface):
-            materialized.append({"text": text})
-            continue
-        if kind in {"yellow", "red"} and texts_match_for_annotation(text, candidate_span.surface):
-            materialized.append({"text": text})
-            continue
+        text_matches_original = texts_match_for_annotation(text, candidate_span.surface)
+        final_resolution = resolve_surface_locally(text, lexicon_state)
+        final_cefr = final_resolution.cefr if final_resolution is not None else (candidate_span.cefr or "")
+        final_lemma = (
+            final_resolution.lemma
+            if final_resolution is not None and final_resolution.lemma
+            else resolve_span_lemma(candidate_span)
+        )
+        resolved_kind = kind
+        rewrite_needed = kind in {"yellow", "red"}
+        if kind == "green" and not text_matches_original:
+            resolved_kind = "black"
+            rewrite_needed = False
+            rewrite_decision = "unexpected_green_rewrite"
+        elif kind == "green":
+            rewrite_decision = "kept_original_i_plus_1"
+        elif kind == "yellow" and text_matches_original:
+            resolved_kind = "black"
+            rewrite_decision = "kept_original_below_i_plus_1"
+        elif kind == "yellow":
+            rewrite_decision = "upgraded_to_i_plus_1"
+        elif kind == "red" and text_matches_original:
+            resolved_kind = "black"
+            rewrite_decision = "kept_original_above_i_plus_1"
+        else:
+            rewrite_decision = "downgraded_to_i_plus_1"
         materialized.append(
             {
                 "text": text,
-                "kind": kind,
+                "kind": resolved_kind,
                 "originalText": candidate_span.surface,
                 "displayText": text,
                 "cefr": candidate_span.cefr or "",
-                "resolvedLemma": resolve_span_lemma(candidate_span),
+                "originalCefr": candidate_span.cefr or "",
+                "finalCefr": final_cefr,
+                "rewriteNeeded": rewrite_needed,
+                "rewriteDecision": rewrite_decision,
+                "resolvedLemma": final_lemma,
                 "resolutionSource": normalize_resolution_source(candidate_span.source),
             }
         )
     return materialized
 
 
-def generate_reading_assists_with_ai(
+def classify_original_span_render(
+    span: SentenceSpan,
+    *,
+    working_lexical_i: float,
+    target_lexical_i: float,
+    yellow_surfaces: set[str],
+    red_surfaces: set[str],
+) -> tuple[str, bool, str]:
+    if span.cefr_value is None:
+        return ("black", False, "unresolved")
+    if working_lexical_i < span.cefr_value <= target_lexical_i:
+        return ("green", False, "kept_original_i_plus_1")
+    if span.normalized_surface in red_surfaces:
+        return ("black", True, "kept_original_above_i_plus_1")
+    if span.normalized_surface in yellow_surfaces:
+        return ("black", True, "kept_original_below_i_plus_1")
+    return ("black", False, "kept_original_black")
+
+
+def generate_surface_resolutions_with_ai(
     session: Session,
     *,
     lexicon_state: LexiconState,
     unresolved_surfaces: set[str],
-    sentence_tasks: list[dict[str, Any]],
     declared_cefr: str,
     target_cefr: str,
+    material_id: int,
+    generation_job_id: str,
     ai_options: AiRuntimeOptions | None = None,
-) -> dict[str, Any]:
+) -> tuple[dict[str, SurfaceResolution], list[str]]:
     runtime = _resolve_legacy_dashscope_runtime(
         session,
         scenario_key="english_reading",
@@ -1339,12 +1590,12 @@ def generate_reading_assists_with_ai(
         legacy_default_model=DASHSCOPE_TEXT_MODEL,
     )
     if not runtime.api_key:
-        return {"surfaceResolutions": {}, "sentenceRenders": {}}
+        return ({}, [])
     requested_surfaces = sorted(surface for surface in unresolved_surfaces if surface)
     if should_skip_ai_surface_resolution(set(requested_surfaces)):
         requested_surfaces = []
-    if not requested_surfaces and not sentence_tasks:
-        return {"surfaceResolutions": {}, "sentenceRenders": {}}
+    if not requested_surfaces:
+        return ({}, [])
     config = OpenAICompatibleChatConfig(
         api_key=runtime.api_key,
         base_url=runtime.base_url,
@@ -1356,26 +1607,27 @@ def generate_reading_assists_with_ai(
         "declared_cefr": declared_cefr,
         "target_cefr": target_cefr,
         "unknown_surfaces": requested_surfaces,
-        "sentence_tasks": [
-            {
-                "sentenceId": task["sentenceId"],
-                "sentence": task["sentence"],
-                "needsSyntaxSimplification": bool(task["needsSyntaxSimplification"]),
-                "candidates": task["candidates"],
-            }
-            for task in sentence_tasks
-        ],
+        "sentence_tasks": [],
     }
-    base_prompt = get_prompt_template(session, "ai_prompt_english_reading_generate")
+    base_prompt = get_prompt_template(session, "ai_prompt_english_reading_classify_words")
     prompt = f"{base_prompt}\n\n输入数据：{json.dumps(prompt_payload, ensure_ascii=False)}"
     try:
-        payload = call_json_completion(
+        payload, log_id = call_json_completion_with_log(
             config=config,
             prompt=prompt,
             extra_payload=runtime.extra_payload,
+            log_context={
+                "feature": "英语阅读",
+                "operation": "lexical_resolution",
+                "job_id": generation_job_id,
+                "request_payload": {
+                    "material_id": material_id,
+                    "unknown_surfaces": requested_surfaces,
+                },
+            },
         )
     except Exception:
-        return {"surfaceResolutions": {}, "sentenceRenders": {}}
+        return ({}, [])
     surface_resolutions = parse_ai_surface_items(
         payload.get("surfaceItems"),
         requested_surfaces=requested_surfaces,
@@ -1383,10 +1635,101 @@ def generate_reading_assists_with_ai(
     )
     if surface_resolutions:
         upsert_lexicon_cache(session, surface_resolutions)
+    return (surface_resolutions, [log_id] if log_id else [])
+
+
+def chunk_sentence_tasks(sentence_tasks: list[dict[str, Any]]) -> list[list[dict[str, Any]]]:
+    batches: list[list[dict[str, Any]]] = []
+    current_batch: list[dict[str, Any]] = []
+    current_chars = 0
+    for task in sentence_tasks:
+        task_chars = len(str(task.get("sentence") or "")) + sum(
+            len(str(item.get("text") or "")) for item in task.get("candidates") or []
+        )
+        if current_batch and (
+            len(current_batch) >= MAX_SENTENCE_AI_BATCH_ITEMS
+            or current_chars + task_chars > MAX_SENTENCE_AI_BATCH_CHARS
+        ):
+            batches.append(current_batch)
+            current_batch = []
+            current_chars = 0
+        current_batch.append(task)
+        current_chars += task_chars
+    if current_batch:
+        batches.append(current_batch)
+    return batches
+
+
+def generate_sentence_renders_with_ai(
+    session: Session,
+    *,
+    sentence_tasks: list[dict[str, Any]],
+    declared_cefr: str,
+    target_cefr: str,
+    material_id: int,
+    generation_job_id: str,
+    ai_options: AiRuntimeOptions | None = None,
+) -> tuple[dict[str, dict[str, Any]], list[str]]:
+    runtime = _resolve_legacy_dashscope_runtime(
+        session,
+        scenario_key="english_reading",
+        ai_options=ai_options,
+        legacy_default_model=DASHSCOPE_TEXT_MODEL,
+    )
+    if not runtime.api_key or not sentence_tasks:
+        return ({}, [])
+    config = OpenAICompatibleChatConfig(
+        api_key=runtime.api_key,
+        base_url=runtime.base_url,
+        model=runtime.model,
+        temperature=0.1 if runtime.supports_temperature else None,
+        timeout_seconds=90,
+    )
+    batches = chunk_sentence_tasks(sentence_tasks)
     sentence_renders: dict[str, dict[str, Any]] = {}
-    requested_sentence_ids = {str(task["sentenceId"]) for task in sentence_tasks}
-    raw_sentence_items = payload.get("sentenceItems")
-    if isinstance(raw_sentence_items, list):
+    ai_log_ids: list[str] = []
+    for batch_index, batch in enumerate(batches, start=1):
+        prompt_payload = {
+            "declared_cefr": declared_cefr,
+            "target_cefr": target_cefr,
+            "unknown_surfaces": [],
+            "sentence_tasks": [
+                {
+                    "sentenceId": task["sentenceId"],
+                    "sentence": task["sentence"],
+                    "needsSyntaxSimplification": bool(task["needsSyntaxSimplification"]),
+                    "candidates": task["candidates"],
+                }
+                for task in batch
+            ],
+        }
+        base_prompt = get_prompt_template(session, "ai_prompt_english_reading_adapt_sentence")
+        prompt = f"{base_prompt}\n\n输入数据：{json.dumps(prompt_payload, ensure_ascii=False)}"
+        try:
+            payload, log_id = call_json_completion_with_log(
+                config=config,
+                prompt=prompt,
+                extra_payload=runtime.extra_payload,
+                log_context={
+                    "feature": "英语阅读",
+                    "operation": "sentence_rewrite",
+                    "job_id": generation_job_id,
+                    "request_payload": {
+                        "material_id": material_id,
+                        "batch_index": batch_index,
+                        "batch_size": len(batch),
+                        "sentence_ids": [task["sentenceId"] for task in batch],
+                    },
+                },
+            )
+        except Exception:
+            continue
+        if log_id:
+            ai_log_ids.append(log_id)
+        requested_sentence_ids = {str(task["sentenceId"]) for task in batch}
+        raw_sentence_items = payload.get("sentenceItems")
+        if not isinstance(raw_sentence_items, list):
+            continue
         for item in raw_sentence_items:
             rendered = validate_ai_sentence_item(item)
             if rendered is None:
@@ -1395,10 +1738,7 @@ def generate_reading_assists_with_ai(
             if sentence_id not in requested_sentence_ids:
                 continue
             sentence_renders[sentence_id] = rendered
-    return {
-        "surfaceResolutions": surface_resolutions,
-        "sentenceRenders": sentence_renders,
-    }
+    return (sentence_renders, ai_log_ids)
 
 
 def validate_ai_sentence_item(item: Any) -> dict[str, Any] | None:
@@ -1534,7 +1874,7 @@ def build_annotation_from_rendered_part(
     part: dict[str, Any],
 ) -> dict[str, Any] | None:
     kind = str(part.get("kind") or "").strip()
-    if kind not in {"green", "yellow", "red"}:
+    if kind not in {"green", "yellow", "red", "black"}:
         return None
     text = str(part.get("text") or "")
     original_text = str(part.get("originalText") or "")
@@ -1542,15 +1882,15 @@ def build_annotation_from_rendered_part(
     cefr = str(part.get("cefr") or "")
     if not original_text or not display_text or not cefr:
         return None
-    if kind == "green" and not texts_match_for_annotation(display_text, original_text):
-        return None
-    if kind in {"yellow", "red"} and texts_match_for_annotation(display_text, original_text):
-        return None
     return {
         "kind": kind,
         "originalText": original_text,
         "displayText": display_text,
         "cefr": cefr,
+        "originalCefr": str(part.get("originalCefr") or cefr),
+        "finalCefr": str(part.get("finalCefr") or cefr),
+        "rewriteNeeded": bool(part.get("rewriteNeeded")),
+        "rewriteDecision": str(part.get("rewriteDecision") or ""),
         "resolvedLemma": str(part.get("resolvedLemma") or ""),
         "resolutionSource": normalize_resolution_source(str(part.get("resolutionSource") or "")),
     }
@@ -1590,6 +1930,68 @@ def call_json_completion(
     return parsed
 
 
+def call_json_completion_with_log(
+    *,
+    config: OpenAICompatibleChatConfig,
+    prompt: str,
+    extra_payload: dict[str, Any] | None = None,
+    log_context: dict[str, Any] | None = None,
+) -> tuple[dict[str, Any], str]:
+    kwargs: dict[str, Any] = {
+        "config": config,
+        "messages": [{"role": "user", "content": prompt}],
+        "response_format": {"type": "json_object"},
+    }
+    if extra_payload is not None:
+        kwargs["extra_payload"] = extra_payload
+    log_id = ""
+    if log_context is not None:
+        log_id = begin_external_ai_call_log(
+            feature=str(log_context.get("feature") or "英语阅读"),
+            operation=str(log_context.get("operation") or "json_completion"),
+            provider="openai_compatible",
+            base_url=config.base_url,
+            model=config.model,
+            request_payload={
+                **(log_context.get("request_payload") or {}),
+                "prompt": prompt,
+                "response_format": {"type": "json_object"},
+                "extra_payload": extra_payload or {},
+            },
+            job_id=str(log_context.get("job_id") or "") or None,
+        )
+    try:
+        response_text = call_chat_completion_text(**kwargs)
+        try:
+            parsed = json.loads(response_text)
+        except json.JSONDecodeError:
+            match = JSON_BLOCK_RE.search(response_text)
+            if not match:
+                raise
+            parsed = json.loads(match.group(0))
+        if not isinstance(parsed, dict):
+            raise EnglishReadingError("模型 JSON 返回结构无效。")
+        if log_id:
+            complete_external_ai_call_log(
+                log_id,
+                response_payload={
+                    "response_text": response_text,
+                    "parsed_json": parsed,
+                },
+            )
+        return parsed, log_id
+    except Exception as exc:
+        if log_id:
+            fail_external_ai_call_log(
+                log_id,
+                error_payload={
+                    "error": str(exc),
+                    "error_type": exc.__class__.__name__,
+                },
+            )
+        raise
+
+
 def should_skip_ai_surface_resolution(surfaces: set[str]) -> bool:
     return len(surfaces) > MAX_UNKNOWN_SURFACES_FOR_AI_CLASSIFICATION
 
@@ -1601,7 +2003,7 @@ def choose_sentence_ai_adaptations(
     target_lexical_i: float,
     target_syntactic_i: float,
 ) -> set[int]:
-    ranked_candidates: list[tuple[float, int]] = []
+    candidate_indices: set[int] = set()
     for sentence_index, state in enumerate(sentence_states):
         red_spans = [
             span
@@ -1618,17 +2020,8 @@ def choose_sentence_ai_adaptations(
             and not unresolved_spans
         ):
             continue
-        score = 0.0
-        if needs_syntax_simplification:
-            score += 100.0
-        score += sum((span.cefr_value or target_lexical_i) - target_lexical_i for span in red_spans)
-        score += len(red_spans) * 3.0
-        score += len(yellow_spans) * 1.5
-        score += len(unresolved_spans) * 1.25
-        score += min(2.0, max(0.0, count_words(state.text) - 12) * 0.08)
-        ranked_candidates.append((score, sentence_index))
-    ranked_candidates.sort(reverse=True)
-    return {sentence_index for _, sentence_index in ranked_candidates[:MAX_SENTENCE_AI_ADAPTATIONS]}
+        candidate_indices.add(sentence_index)
+    return candidate_indices
 
 
 def upsert_lexicon_cache(
@@ -1850,6 +2243,10 @@ def build_parts_from_annotations(
                 "originalText": annotation["originalText"],
                 "displayText": annotation["displayText"],
                 "cefr": annotation["cefr"],
+                "originalCefr": annotation.get("originalCefr", annotation["cefr"]),
+                "finalCefr": annotation.get("finalCefr", annotation["cefr"]),
+                "rewriteNeeded": bool(annotation.get("rewriteNeeded")),
+                "rewriteDecision": annotation.get("rewriteDecision", ""),
                 "resolvedLemma": annotation["resolvedLemma"],
                 "resolutionSource": annotation["resolutionSource"],
             }
@@ -2250,6 +2647,9 @@ def serialize_material(material: EnglishReadingMaterial) -> dict[str, Any]:
 
 
 def serialize_version(version: EnglishReadingVersion) -> dict[str, Any]:
+    raw_summary = json.loads(version.summary_json or "{}")
+    generation_trace = raw_summary.pop("_generationTrace", [])
+    ai_log_ids = raw_summary.pop("_aiLogIds", [])
     return {
         "id": version.id,
         "materialId": version.material_id,
@@ -2262,7 +2662,9 @@ def serialize_version(version: EnglishReadingVersion) -> dict[str, Any]:
         "renderBlocks": json.loads(version.render_blocks_json or "[]"),
         "spanAnnotations": json.loads(version.span_annotations_json or "[]"),
         "sentenceAnnotations": json.loads(version.sentence_annotations_json or "[]"),
-        "summary": json.loads(version.summary_json or "{}"),
+        "summary": raw_summary,
+        "generationTrace": generation_trace if isinstance(generation_trace, list) else [],
+        "aiLogIds": ai_log_ids if isinstance(ai_log_ids, list) else [],
         "createdAt": version.created_at.isoformat() if version.created_at else None,
     }
 
