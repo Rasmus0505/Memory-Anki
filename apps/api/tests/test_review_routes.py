@@ -46,6 +46,7 @@ from memory_anki.modules.reviews.application.schedule_service import (
     ensure_current_review_schedule_model,
 )
 from memory_anki.modules.reviews.presentation import router as review_router
+from memory_anki.modules.settings.application.ai_model_registry import resolve_scenario_runtime
 from memory_anki.modules.sessions.application.session_progress_service import (
     ensure_session_progress_schema,
 )
@@ -1010,6 +1011,82 @@ class ReviewRouteTests(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 400)
         self.assertIn("未知占位符", response.json()["detail"])
+
+    def test_ai_model_settings_list_qwen_provider_and_shared_category_fields(self):
+        response = self.client.get("/api/v1/settings/ai-models")
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+
+        qwen_flash = next(item for item in payload["models"] if item["key"] == "qwen3.5-flash")
+        self.assertEqual(qwen_flash["provider"], "qwen")
+        self.assertEqual(qwen_flash["provider_label"], "Qwen")
+
+        llm_category = next(item for item in payload["categories"] if item["key"] == "llm")
+        self.assertIn("shared_model", llm_category)
+        self.assertIn("available_models", llm_category)
+        self.assertFalse(llm_category["has_shared_config"])
+
+    def test_ai_model_settings_can_save_category_shared_model_and_scene_override(self):
+        first_response = self.client.put(
+            "/api/v1/settings/ai-models",
+            json={
+                "category_updates": {
+                    "llm": {
+                        "default_model": "qwen3.5-flash",
+                        "default_thinking_enabled": False,
+                        "apply_to_scenes": True,
+                    }
+                }
+            },
+        )
+        self.assertEqual(first_response.status_code, 200)
+        payload = first_response.json()
+        llm_category = next(item for item in payload["categories"] if item["key"] == "llm")
+        self.assertTrue(llm_category["has_shared_config"])
+        self.assertEqual(llm_category["shared_model"], "qwen3.5-flash")
+
+        ai_split_scene = next(item for item in payload["scenes"] if item["key"] == "ai_split")
+        self.assertTrue(ai_split_scene["inherits_category_default"])
+        self.assertEqual(ai_split_scene["effective_model"], "qwen3.5-flash")
+
+        second_response = self.client.put(
+            "/api/v1/settings/ai-models",
+            json={
+                "scene_updates": {
+                    "ai_split": {
+                        "default_model": "glm-4.7-flash",
+                        "default_thinking_enabled": True,
+                    }
+                }
+            },
+        )
+        self.assertEqual(second_response.status_code, 200)
+        payload = second_response.json()
+        ai_split_scene = next(item for item in payload["scenes"] if item["key"] == "ai_split")
+        self.assertFalse(ai_split_scene["inherits_category_default"])
+        self.assertEqual(ai_split_scene["effective_model"], "glm-4.7-flash")
+        self.assertTrue(ai_split_scene["effective_thinking_enabled"])
+
+        with self.SessionLocal() as session:
+            runtime = resolve_scenario_runtime(session, "ai_split")
+            self.assertEqual(runtime.model_key, "glm-4.7-flash")
+            self.assertEqual(runtime.provider, "zhipu")
+
+    def test_qwen_runtime_reuses_dashscope_provider_credentials(self):
+        with self.SessionLocal() as session:
+            session.add_all(
+                [
+                    Config(key="category_model_llm", value="qwen3.5-flash"),
+                    Config(key="dashscope_api_key", value="dashscope-test-key"),
+                    Config(key="dashscope_base_url", value="https://dashscope.example/v1"),
+                ]
+            )
+            session.commit()
+            runtime = resolve_scenario_runtime(session, "ai_split")
+
+        self.assertEqual(runtime.provider, "qwen")
+        self.assertEqual(runtime.api_key, "dashscope-test-key")
+        self.assertEqual(runtime.base_url, "https://dashscope.example/v1")
 
     def test_ai_call_log_endpoints_return_summary_and_detail(self):
         with self.SessionLocal() as session:

@@ -1,0 +1,148 @@
+"""Cross-cutting ORM tables: time records, mindmap import jobs, AI call logs, config, AI model catalog."""
+
+from __future__ import annotations
+
+from datetime import datetime
+
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, String, Text
+from sqlalchemy.orm import Mapped, mapped_column
+
+from memory_anki.core.time import utc_now_naive
+
+from ._base import Base
+
+
+class TimeRecord(Base):
+    __tablename__ = "time_records"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    kind: Mapped[str] = mapped_column(String(20), nullable=False)
+    palace_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("palaces.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    palace_segment_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("palace_segments.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    source_kind: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    english_course_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    title: Mapped[str] = mapped_column(String(300), nullable=False, default="")
+    started_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    ended_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    effective_seconds: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    pause_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    completion_method: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        default="manual_complete",
+    )
+    duration_edited: Mapped[bool] = mapped_column(Boolean, default=False)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    deleted_reason: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    events_json: Mapped[str] = mapped_column(Text, default="[]")
+    created_at: Mapped[datetime | None] = mapped_column(DateTime, default=utc_now_naive)
+    updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime,
+        default=utc_now_naive,
+        onupdate=utc_now_naive,
+    )
+
+
+class MindMapImportJob(Base):
+    __tablename__ = "mindmap_import_jobs"
+    __table_args__ = (
+        Index(
+            "ix_mindmap_import_jobs_entity_fingerprint",
+            "entity_key",
+            "fingerprint",
+        ),
+        Index(
+            "ix_mindmap_import_jobs_entity_created",
+            "entity_key",
+            "created_at",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    entity_key: Mapped[str] = mapped_column(String(200), nullable=False)
+    source_kind: Mapped[str] = mapped_column(String(40), nullable=False)
+    mode: Mapped[str] = mapped_column(String(20), nullable=False, default="mindmap")
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="draft")
+    stage: Mapped[str] = mapped_column(String(20), nullable=False, default="prepared")
+    fingerprint: Mapped[str] = mapped_column(String(128), nullable=False)
+    source_meta_json: Mapped[str] = mapped_column(Text, default="{}")
+    result_json: Mapped[str] = mapped_column(Text, default="{}")
+    error_json: Mapped[str] = mapped_column(Text, default="{}")
+    usage_json: Mapped[str] = mapped_column(Text, default="{}")
+    progress_json: Mapped[str] = mapped_column(Text, default="{}")
+    pause_requested: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    created_at: Mapped[datetime | None] = mapped_column(DateTime, default=utc_now_naive)
+    updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime,
+        default=utc_now_naive,
+        onupdate=utc_now_naive,
+    )
+    started_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
+class ExternalAiCallLog(Base):
+    __tablename__ = "external_ai_call_logs"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    feature: Mapped[str] = mapped_column(String(120), nullable=False, default="")
+    operation: Mapped[str] = mapped_column(String(120), nullable=False, default="")
+    job_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    palace_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    status: Mapped[str] = mapped_column(String(24), nullable=False, default="started")
+    provider: Mapped[str] = mapped_column(String(80), nullable=False, default="")
+    base_url: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    model: Mapped[str] = mapped_column(String(120), nullable=False, default="")
+    request_id: Mapped[str] = mapped_column(String(64), nullable=False, default="")
+    request_json: Mapped[str] = mapped_column(Text, default="{}")
+    response_json: Mapped[str] = mapped_column(Text, default="{}")
+    error_json: Mapped[str] = mapped_column(Text, default="{}")
+    created_at: Mapped[datetime | None] = mapped_column(DateTime, default=utc_now_naive)
+    updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime,
+        default=utc_now_naive,
+        onupdate=utc_now_naive,
+    )
+
+
+class Config(Base):
+    __tablename__ = "config"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    key: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
+    value: Mapped[str] = mapped_column(Text, default="")
+    updated_at: Mapped[datetime | None] = mapped_column(DateTime, default=utc_now_naive)
+
+
+class AiModelCatalog(Base):
+    __tablename__ = "ai_model_catalog"
+    __table_args__ = (
+        Index("ix_ai_model_catalog_type_active", "model_type", "is_active"),
+        Index("ix_ai_model_catalog_provider_active", "provider", "is_active"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    key: Mapped[str] = mapped_column(String(120), nullable=False, unique=True)
+    display_name: Mapped[str] = mapped_column(String(240), nullable=False, default="")
+    provider: Mapped[str] = mapped_column(String(40), nullable=False, default="dashscope")
+    model_type: Mapped[str] = mapped_column(String(24), nullable=False, default="llm")
+    has_vision: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    supports_thinking: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    supports_temperature: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    is_builtin: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_at: Mapped[datetime | None] = mapped_column(DateTime, default=utc_now_naive)
+    updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime,
+        default=utc_now_naive,
+        onupdate=utc_now_naive,
+    )

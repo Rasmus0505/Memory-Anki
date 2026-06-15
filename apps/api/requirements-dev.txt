@@ -1,0 +1,7 @@
+# Development / test dependencies for apps/api.
+# Runtime + lint/type tooling stay in requirements.txt; this file adds the
+# test runner and HTTP client used by apps/api/tests (TestClient requires httpx).
+-r requirements.txt
+
+pytest==8.3.4
+httpx==0.27.2

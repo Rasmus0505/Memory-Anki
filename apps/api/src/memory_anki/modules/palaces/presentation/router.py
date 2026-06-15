@@ -61,8 +61,6 @@ from memory_anki.modules.palaces.application.segment_review_service import (
     build_palace_default_segment_summary,
     build_segment_editor_doc,
     list_palace_segments,
-    palace_review_stages_json,
-    palace_stage_progress,
     segment_summary_json,
 )
 from memory_anki.modules.palaces.application.segment_service import (
@@ -79,12 +77,6 @@ from memory_anki.modules.palaces.application.title_sync_service import (
     build_chapter_grouped_palace_list,
     build_grouped_palace_list,
     build_subject_shelf_summary,
-    get_palace_explicit_chapter_ids,
-    reconcile_palace_chapter_binding,
-    resolve_palace_binding_status,
-    resolve_palace_mini_review_mode,
-    resolve_palace_subject,
-    resolve_palace_title,
 )
 from memory_anki.modules.settings.application.ai_model_registry import (
     normalize_ai_runtime_options,
@@ -93,21 +85,16 @@ from memory_anki.modules.palaces.domain.schemas import PalaceCreate, PalaceUpdat
 from memory_anki.modules.reviews.application.review_execution_service import (
     trigger_review_for_palace,
 )
-from memory_anki.modules.reviews.application.schedule_service import (
-    get_algorithm_stage_labels,
-    get_config_value,
-    is_schedule_due,
-    normalize_algorithm,
-)
-from memory_anki.modules.reviews.application.schedule_service import (
-    schedule_display_datetime as review_schedule_display_datetime,
-)
 from memory_anki.modules.sessions.application.session_progress_service import (
     clear_practice_progress,
     get_practice_progress,
     upsert_practice_progress,
 )
 
+from memory_anki.modules.palaces.application.palace_serializer import (
+    palace_json,
+    review_plan_item_json,
+)
 router = APIRouter(tags=["palaces"])
 
 
@@ -117,133 +104,6 @@ def session_dep():
         yield s
     finally:
         s.close()
-
-
-def peg_json(peg) -> dict:
-    return {
-        "id": peg.id, "name": peg.name, "content": peg.content,
-        "sort_order": peg.sort_order, "parent_id": peg.parent_id,
-        "children": [peg_json(c) for c in (peg.children or [])],
-    }
-
-def review_plan_item_json(
-    date_key: str | None,
-    schedules: list[ReviewSchedule],
-) -> dict:
-    representative_schedule = min(schedules, key=lambda item: (item.id, item.review_number))
-    latest_schedule = max(schedules, key=lambda item: (item.review_number, item.id))
-    pending_count = sum(0 if schedule.completed else 1 for schedule in schedules)
-    completed_count = sum(1 if schedule.completed else 0 for schedule in schedules)
-    return {
-        "date": date_key,
-        "representative_schedule_id": representative_schedule.id,
-        "schedule_count": len(schedules),
-        "pending_count": pending_count,
-        "completed_count": completed_count,
-        "completed": pending_count == 0,
-        "review_number": latest_schedule.review_number,
-        "interval_days": representative_schedule.interval_days,
-        "review_type": representative_schedule.review_type,
-    }
-
-def palace_json(p, session: Session | None = None) -> dict:
-    explicit_chapter_ids: set[int] = set()
-    if session is not None:
-        reconcile_palace_chapter_binding(session, p)
-        explicit_chapter_ids = get_palace_explicit_chapter_ids(session, p)
-    next_schedule = None
-    pending_schedules = [schedule for schedule in (p.review_schedules or []) if not schedule.completed]
-    if pending_schedules:
-        next_schedule = min(pending_schedules, key=lambda schedule: (schedule.review_number, schedule.id))
-    next_review_at = (
-        review_schedule_display_datetime(next_schedule, p, session)
-        if next_schedule and session
-        else None
-    )
-    has_due_review = bool(next_schedule and session and is_schedule_due(next_schedule, p, session))
-    review_stage_total, review_stage_completed, review_stage_progress = (
-        palace_stage_progress(session, p)
-        if session is not None
-        else (0, 0, 0.0)
-    )
-    stage_labels: list[str] = []
-    if session:
-        current_algorithm = next(
-            (
-                normalize_algorithm(schedule.algorithm_used)
-                for schedule in (p.review_schedules or [])
-                if schedule.algorithm_used
-            ),
-            normalize_algorithm(get_config_value(session, "default_algorithm")),
-        )
-        stage_labels = get_algorithm_stage_labels(session, current_algorithm)
-    default_segment = (
-        build_palace_default_segment_summary(session, p)
-        if session is not None
-        else None
-    )
-
-    primary_chapter = getattr(p, "primary_chapter", None)
-    resolved_subject = resolve_palace_subject(p)
-    parent_chapter = primary_chapter.parent if primary_chapter and getattr(primary_chapter, "parent", None) else None
-    focus_node_uids = parse_focus_node_uids(p)
-
-    return {
-        "id": p.id, "title": p.title, "description": p.description,
-        "archived": p.archived, "mastered": p.mastered,
-        "needs_practice": bool(getattr(p, "needs_practice", False)),
-        "focus_node_uids": focus_node_uids,
-        "focus_count": len(focus_node_uids),
-        "created_at": p.created_at.isoformat() if p.created_at else None,
-        "updated_at": p.updated_at.isoformat() if p.updated_at else None,
-        "next_scheduled_date": next_schedule.scheduled_date.isoformat() if next_schedule and next_schedule.scheduled_date else None,
-        "next_review_at": next_review_at.isoformat(timespec="minutes") if next_review_at else None,
-        "has_due_review": has_due_review,
-        "current_review_schedule_id": next_schedule.id if has_due_review and next_schedule else None,
-        "review_stage_total": review_stage_total,
-        "review_stage_completed": review_stage_completed,
-        "review_stage_progress": review_stage_progress,
-        "stage_labels": stage_labels,
-        "review_stages": palace_review_stages_json(session, p, stage_labels) if session else [],
-        "pegs": [peg_json(peg) for peg in p.pegs],
-        "attachments": [{"id": a.id, "filename": a.filename,
-                         "original_name": a.original_name, "file_size": a.file_size}
-                        for a in p.attachments],
-        "chapters": [{"id": c.id, "name": c.name, "subject_id": c.subject_id,
-                      "parent_id": c.parent_id,
-                      "is_explicit": c.id in explicit_chapter_ids,
-                      "subject": {"id": c.subject.id, "name": c.subject.name} if c.subject else None}
-                      for c in p.chapters],
-        "segments": list_palace_segments(session, p, default_segment_payload=default_segment) if session else [],
-        "mini_palaces": list_palace_mini_palaces(session, p) if session else [],
-        "title_mode": getattr(p, "title_mode", "sync") or "sync",
-        "manual_title": getattr(p, "manual_title", "") or "",
-        "resolved_title": resolve_palace_title(p),
-        "grouping_mode": getattr(p, "grouping_mode", "auto") or "auto",
-        "manual_group_chapter_id": getattr(p, "manual_group_chapter_id", None),
-        "mini_review_mode": resolve_palace_mini_review_mode(p),
-        "binding_status": resolve_palace_binding_status(p),
-        "primary_chapter_id": getattr(p, "primary_chapter_id", None),
-        "primary_chapter": {
-            "id": primary_chapter.id,
-            "name": primary_chapter.name,
-            "subject_id": primary_chapter.subject_id,
-            "parent_id": primary_chapter.parent_id,
-        } if primary_chapter else None,
-        "resolved_subject": {
-            "id": resolved_subject.id,
-            "name": resolved_subject.name,
-            "color": getattr(resolved_subject, "color", "#6366f1"),
-        } if resolved_subject else None,
-        "resolved_parent_chapter": {
-            "id": parent_chapter.id,
-            "name": parent_chapter.name,
-            "subject_id": parent_chapter.subject_id,
-            "parent_id": parent_chapter.parent_id,
-        } if parent_chapter else None,
-        "group_id": getattr(p, "group_id", None),
-        "group_sort_order": getattr(p, "group_sort_order", 0),
-    }
 
 
 @router.get("/palaces")
@@ -405,6 +265,7 @@ def api_ai_split_editor_node(palace_id: int, data: dict, s: Session = Depends(se
         "reassigned_existing_children_count": result.reassigned_existing_children_count,
         "model": result.model,
         "ai_call_log_id": getattr(result, "ai_call_log_id", None),
+        "resolved_ai": getattr(result, "resolved_ai", None),
     }
 
 

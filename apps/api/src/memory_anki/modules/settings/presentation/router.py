@@ -26,8 +26,11 @@ from memory_anki.modules.settings.application.ai_prompts import (
     save_prompt_templates,
 )
 from memory_anki.modules.settings.application.ai_model_registry import (
+    AiModelRegistryError,
+    delete_ai_model_catalog_item,
     list_model_scenarios,
     save_ai_model_settings,
+    upsert_ai_model_catalog_item,
 )
 
 router = APIRouter(tags=["settings"])
@@ -222,9 +225,11 @@ def api_ai_model_scenarios(s: Session = Depends(session_dep)):
 
 @router.put("/settings/ai-models")
 def api_ai_model_scenarios_update(data: dict, s: Session = Depends(session_dep)):
+    scene_updates = data.get("scene_updates") if isinstance(data.get("scene_updates"), dict) else None
     scenario_updates = data.get("scenario_updates") if isinstance(data.get("scenario_updates"), dict) else None
+    category_updates = data.get("category_updates") if isinstance(data.get("category_updates"), dict) else None
     provider_updates = data.get("provider_updates") if isinstance(data.get("provider_updates"), dict) else None
-    if scenario_updates is None and provider_updates is None:
+    if scene_updates is None and scenario_updates is None and category_updates is None and provider_updates is None:
         legacy_updates = data.get("updates") if isinstance(data.get("updates"), dict) else data
         normalized_legacy_updates: dict[str, dict[str, Any]] = {}
         for key, value in dict(legacy_updates or {}).items():
@@ -233,12 +238,29 @@ def api_ai_model_scenarios_update(data: dict, s: Session = Depends(session_dep))
                 normalized_legacy_updates[scenario_key] = value
             else:
                 normalized_legacy_updates[scenario_key] = {"default_model": str(value)}
-        scenario_updates = normalized_legacy_updates
+        scene_updates = normalized_legacy_updates
     return save_ai_model_settings(
         s,
-        scenario_updates=scenario_updates,
+        scene_updates=scene_updates or scenario_updates,
+        category_updates=category_updates,
         provider_updates=provider_updates,
     )
+
+
+@router.post("/settings/ai-models/models")
+def api_ai_model_catalog_upsert(data: dict, s: Session = Depends(session_dep)):
+    try:
+        return upsert_ai_model_catalog_item(s, data if isinstance(data, dict) else {})
+    except AiModelRegistryError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.delete("/settings/ai-models/models/{model_key}")
+def api_ai_model_catalog_delete(model_key: str, s: Session = Depends(session_dep)):
+    try:
+        return delete_ai_model_catalog_item(s, model_key)
+    except AiModelRegistryError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.get("/ai-call-logs")

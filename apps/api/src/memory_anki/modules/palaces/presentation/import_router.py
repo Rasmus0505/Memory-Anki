@@ -57,6 +57,7 @@ def _wait_for_job_result(job_id: str) -> dict:
         }
     result = dict(payload.get("result") or {})
     result["ok"] = True
+    result["resolved_ai"] = payload.get("resolved_ai")
     return result
 
 

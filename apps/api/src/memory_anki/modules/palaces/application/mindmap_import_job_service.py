@@ -20,8 +20,10 @@ from memory_anki.modules.knowledge.application.subject_document_service import (
 )
 from memory_anki.modules.settings.application.ai_model_registry import (
     AiRuntimeOptions,
+    is_dashscope_compatible_provider,
     resolve_provider_setting,
     resolve_scenario_runtime,
+    serialize_resolved_ai_runtime,
 )
 
 from .mindmap_import import (
@@ -93,6 +95,7 @@ def _serialize_runtime_payload(runtime) -> dict[str, Any]:
         "thinking_enabled": runtime.thinking_enabled,
         "supports_thinking": runtime.supports_thinking,
         "extra_payload": runtime.extra_payload,
+        "resolved_ai": serialize_resolved_ai_runtime(runtime),
     }
 
 
@@ -110,7 +113,17 @@ def _dashscope_runtime(source_meta: dict[str, Any] | None = None) -> DashscopeIm
                 else None
             ),
         )
-    runtime = resolve_scenario_runtime(None, "vision", ai_options=AiRuntimeOptions())
+    fallback_scenario_key = "vision_image_mindmap"
+    if isinstance(source_meta, dict):
+        source_kind = str(source_meta.get("source_kind") or "").strip()
+        mode = str(source_meta.get("mode") or "").strip()
+        if source_kind == SOURCE_KIND_SUBJECT_PDF:
+            fallback_scenario_key = "vision_pdf_mindmap" if mode == MODE_MINDMAP else "vision_pdf_text"
+        elif source_kind == SOURCE_KIND_IMAGE_BATCH:
+            fallback_scenario_key = "vision_batch_mindmap"
+        elif mode == MODE_TEXT:
+            fallback_scenario_key = "vision_image_text"
+    runtime = resolve_scenario_runtime(None, fallback_scenario_key, ai_options=AiRuntimeOptions())
     return llm_gateway.build_runtime(
         api_key=runtime.api_key,
         base_url=runtime.base_url,
@@ -124,6 +137,10 @@ def _resolve_provider_api_key_for_runtime(runtime_meta: dict[str, Any]) -> str:
     provider = str(runtime_meta.get("provider") or "dashscope").strip().lower()
     if provider == "zhipu":
         return resolve_provider_setting(None, "zhipu", kind="api_key")
+    if provider == "siliconflow":
+        return resolve_provider_setting(None, "siliconflow", kind="api_key")
+    if is_dashscope_compatible_provider(provider):
+        return resolve_provider_setting(None, "dashscope", kind="api_key")
     return resolve_provider_setting(None, "dashscope", kind="api_key")
 
 
@@ -301,7 +318,11 @@ def create_image_import_job(
     fallback_title: str,
     ai_options: AiRuntimeOptions | None = None,
 ) -> MindMapImportJob:
-    runtime = resolve_scenario_runtime(session, "vision", ai_options=ai_options)
+    runtime = resolve_scenario_runtime(
+        session,
+        "vision_image_mindmap" if mode == MODE_MINDMAP else "vision_image_text",
+        ai_options=ai_options,
+    )
     return job_creation.create_image_job(
         session,
         entity_key=entity_key,
@@ -325,7 +346,7 @@ def create_batch_import_job(
     structure_image_index: int | None,
     ai_options: AiRuntimeOptions | None = None,
 ) -> MindMapImportJob:
-    runtime = resolve_scenario_runtime(session, "vision", ai_options=ai_options)
+    runtime = resolve_scenario_runtime(session, "vision_batch_mindmap", ai_options=ai_options)
     normalized_items, resolved_structure_index = llm_gateway.prepare_batch_items(
         runtime=llm_gateway.build_runtime(
             api_key=runtime.api_key,
@@ -363,7 +384,11 @@ def create_pdf_import_job(
     import_options: PdfImportOptions | None,
     ai_options: AiRuntimeOptions | None = None,
 ) -> MindMapImportJob:
-    runtime = resolve_scenario_runtime(session, "vision", ai_options=ai_options)
+    runtime = resolve_scenario_runtime(
+        session,
+        "vision_pdf_mindmap" if mode == MODE_MINDMAP else "vision_pdf_text",
+        ai_options=ai_options,
+    )
     normalized_pages = _normalize_page_selection(page_selection, document.page_count)
     resolved_pdf_mode = _normalize_pdf_import_mode(pdf_mode)
     resolved_structure_page = (

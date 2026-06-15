@@ -43,6 +43,8 @@ from memory_anki.modules.time_records.application.time_records_service import (
 )
 from memory_anki.modules.settings.application.ai_model_registry import (
     AiRuntimeOptions,
+    resolve_scenario_runtime,
+    serialize_resolved_ai_runtime,
 )
 
 from .asr_normalization import prepare_sentences_from_asr
@@ -547,6 +549,17 @@ def update_task_fields(
 def serialize_task(task: EnglishGenerationTask | None) -> dict[str, Any] | None:
     if task is None:
         return None
+    resolved_ai = None
+    try:
+        resolved_ai = serialize_resolved_ai_runtime(
+            resolve_scenario_runtime(
+                None,
+                "asr_course_transcription",
+                ai_options=load_task_asr_ai_options(task_dir(task.id)),
+            )
+        )
+    except Exception:
+        resolved_ai = None
     return {
         "id": task.id,
         "status": task.status,
@@ -561,6 +574,7 @@ def serialize_task(task: EnglishGenerationTask | None) -> dict[str, Any] | None:
         "updatedAt": task.updated_at.isoformat() if task.updated_at else None,
         "startedAt": task.started_at.isoformat() if task.started_at else None,
         "completedAt": task.completed_at.isoformat() if task.completed_at else None,
+        "resolved_ai": resolved_ai,
     }
 
 

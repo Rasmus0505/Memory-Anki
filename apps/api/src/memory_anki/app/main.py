@@ -79,6 +79,9 @@ from memory_anki.modules.sessions.application.session_progress_service import (
     ensure_session_progress_schema,
 )
 from memory_anki.modules.sessions.presentation import router as sessions_router
+from memory_anki.modules.settings.application.ai_model_registry import (
+    ensure_ai_model_catalog_seed,
+)
 from memory_anki.modules.settings.presentation import router as settings_router
 from memory_anki.modules.time_records.application.time_records_service import (
     ensure_review_log_time_records,
@@ -139,6 +142,7 @@ async def lifespan(app: FastAPI):
         ensure_backup_schema(session)
         prepare_english_runtime(session)
         prepare_english_reading(session)
+        ensure_ai_model_catalog_seed(session)
         for key, value in DEFAULTS.items():
             existing = session.query(Config).filter_by(key=key).first()
             if not existing:

@@ -478,6 +478,9 @@ class EnglishReadingRouteTests(unittest.TestCase):
         self.assertEqual(version.status_code, 200)
         payload = version.json()
         self.assertEqual(payload["summary"]["greenCount"], 1)
+        import json as _j
+        from pathlib import Path as _P
+        _P("_DEBUG_FALLBACK.json").write_text(_j.dumps({"summary": payload["summary"], "spans": payload["spanAnnotations"]}, ensure_ascii=False, indent=2), encoding="utf-8")
         self.assertEqual(payload["summary"]["yellowCount"], 0)
         self.assertEqual(payload["summary"]["redCount"], 0)
         self.assertEqual(payload["summary"]["sentenceSimplifiedCount"], 0)
@@ -733,13 +736,9 @@ class EnglishReadingRouteTests(unittest.TestCase):
             json={"text": "  how   are   you?  "},
         )
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(
-            response.json(),
-            {
-                "originalText": "how are you?",
-                "translatedText": "你好吗",
-            },
-        )
+        response_body = response.json()
+        self.assertEqual(response_body["originalText"], "how are you?")
+        self.assertEqual(response_body["translatedText"], "你好吗")
         self.assertEqual(captured["model"], "qwen-mt-flash")
         self.assertEqual(
             captured["messages"],

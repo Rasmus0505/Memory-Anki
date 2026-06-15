@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from memory_anki.infrastructure.db.models import Palace
 from memory_anki.modules.mindmap.application.editor_state_service import normalize_editor_doc
 from memory_anki.modules.settings.application.ai_model_registry import AiRuntimeOptions
+from memory_anki.modules.settings.application.ai_model_registry import serialize_resolved_ai_runtime
 
 from .mindmap_ai_split import config_loader, gateway, tree_ops
 from .mindmap_ai_split import contracts as split_contracts
@@ -36,6 +37,7 @@ def split_palace_editor_doc_with_ai(
     ai_options: AiRuntimeOptions | None = None,
 ) -> MindMapAiSplitResult:
     config = resolve_mindmap_ai_split_config(session, ai_options=ai_options)
+    resolved_runtime = config_loader.resolve_runtime(session, ai_options=ai_options)
     normalized_doc = normalize_editor_doc(editor_doc, root_text=palace.title, root_kind="palace")
     root = ensure_dict(normalized_doc.get("root"))
     normalized_doc["root"] = root
@@ -69,6 +71,7 @@ def split_palace_editor_doc_with_ai(
         reassigned_existing_children_count=reassigned_count,
         model=config.model,
         ai_call_log_id=str(ai_payload.get("_ai_call_log_id") or "") or None,
+        resolved_ai=serialize_resolved_ai_runtime(resolved_runtime),
     )
 
 

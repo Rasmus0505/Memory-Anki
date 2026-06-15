@@ -137,6 +137,12 @@ def serialize_job(job: MindMapImportJob) -> dict[str, Any]:
     error = json_load(job.error_json, {})
     usage = json_load(job.usage_json, empty_usage())
     progress = json_load(job.progress_json, empty_progress())
+    runtime_meta = source_meta.get("ai_runtime") if isinstance(source_meta, dict) else None
+    resolved_ai = (
+        dict(runtime_meta.get("resolved_ai"))
+        if isinstance(runtime_meta, dict) and isinstance(runtime_meta.get("resolved_ai"), dict)
+        else None
+    )
     return {
         "id": job.id,
         "entity_key": job.entity_key,
@@ -149,6 +155,7 @@ def serialize_job(job: MindMapImportJob) -> dict[str, Any]:
         "mode": job.mode,
         "source_meta": source_meta,
         "result": result or None,
+        "resolved_ai": resolved_ai,
         "error": error or None,
         "usage": usage,
         "progress": progress,

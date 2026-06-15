@@ -3,7 +3,62 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+from dotenv import load_dotenv
+from pydantic_settings import BaseSettings
+
 from memory_anki.core.storage_layout import get_managed_storage_items
+
+load_dotenv()
+
+
+# ---------------------------------------------------------------------------
+# Environment-based settings (API keys, base URLs, model names)
+# ---------------------------------------------------------------------------
+
+class EnvSettings(BaseSettings):
+    """All settings that come from environment variables or .env files."""
+
+    model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
+
+    # --- DashScope ---
+    DASHSCOPE_API_KEY: str | None = None
+    DASHSCOPE_BASE_URL: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    DASHSCOPE_TTS_BASE_URL: str = "https://dashscope.aliyuncs.com/api/v1"
+    DASHSCOPE_ASR_MODEL: str = "qwen3-asr-flash-filetrans"
+    DASHSCOPE_VISION_MODEL: str = "qwen3-vl-flash"
+    DASHSCOPE_TEXT_MODEL: str = "qwen3.6-flash"
+    ENGLISH_TRANSLATION_MODEL: str = "qwen-mt-flash"
+
+    # --- Zhipu ---
+    ZHIPU_API_KEY: str | None = None
+    ZHIPU_BASE_URL: str = "https://open.bigmodel.cn/api/paas/v4"
+
+    # --- SiliconFlow ---
+    SILICONFLOW_API_KEY: str | None = None
+    SILICONFLOW_BASE_URL: str = "https://api.siliconflow.cn/v1"
+
+
+# Singleton – created once at import time.
+_env = EnvSettings()
+
+# Re-export each setting as a module-level constant so existing imports work
+# unchanged (e.g. `from memory_anki.core.config import DASHSCOPE_API_KEY`).
+DASHSCOPE_API_KEY = _env.DASHSCOPE_API_KEY
+DASHSCOPE_BASE_URL = _env.DASHSCOPE_BASE_URL
+DASHSCOPE_TTS_BASE_URL = _env.DASHSCOPE_TTS_BASE_URL
+DASHSCOPE_ASR_MODEL = _env.DASHSCOPE_ASR_MODEL
+DASHSCOPE_VISION_MODEL = _env.DASHSCOPE_VISION_MODEL
+DASHSCOPE_TEXT_MODEL = _env.DASHSCOPE_TEXT_MODEL
+ENGLISH_TRANSLATION_MODEL = _env.ENGLISH_TRANSLATION_MODEL
+ZHIPU_API_KEY = _env.ZHIPU_API_KEY
+ZHIPU_BASE_URL = _env.ZHIPU_BASE_URL
+SILICONFLOW_API_KEY = _env.SILICONFLOW_API_KEY
+SILICONFLOW_BASE_URL = _env.SILICONFLOW_BASE_URL
+
+
+# ---------------------------------------------------------------------------
+# Path / directory constants (computed from APP_HOME, not from env vars)
+# ---------------------------------------------------------------------------
 
 
 def _default_app_home() -> Path:
@@ -40,15 +95,10 @@ MIGRATION_STATE_PATH = APP_HOME / "migration-state.json"
 DATABASE_URL = f"sqlite:///{DB_PATH}"
 WEB_DIST_DIR = Path(os.environ["MEMORY_ANKI_WEB_DIST"]) if os.environ.get("MEMORY_ANKI_WEB_DIST") else None
 
-DASHSCOPE_API_KEY = os.environ.get("DASHSCOPE_API_KEY")
-DASHSCOPE_BASE_URL = os.environ.get("DASHSCOPE_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1")
-DASHSCOPE_TTS_BASE_URL = os.environ.get("DASHSCOPE_TTS_BASE_URL", "https://dashscope.aliyuncs.com/api/v1")
-DASHSCOPE_ASR_MODEL = os.environ.get("DASHSCOPE_ASR_MODEL", "qwen3-asr-flash-filetrans")
-DASHSCOPE_VISION_MODEL = os.environ.get("DASHSCOPE_VISION_MODEL", "qwen3-vl-flash")
-DASHSCOPE_TEXT_MODEL = os.environ.get("DASHSCOPE_TEXT_MODEL", "qwen3.6-flash")
-ENGLISH_TRANSLATION_MODEL = os.environ.get("ENGLISH_TRANSLATION_MODEL", "qwen-mt-flash")
-ZHIPU_API_KEY = os.environ.get("ZHIPU_API_KEY")
-ZHIPU_BASE_URL = os.environ.get("ZHIPU_BASE_URL", "https://open.bigmodel.cn/api/paas/v4")
+
+# ---------------------------------------------------------------------------
+# Application defaults (string dict used as runtime settings seed)
+# ---------------------------------------------------------------------------
 
 DEFAULTS = {
     "default_algorithm": "ebbinghaus",
@@ -97,7 +147,48 @@ DEFAULTS = {
     "ai_model_translation_thinking_enabled": "false",
     "ai_model_asr": DASHSCOPE_ASR_MODEL,
     "ai_model_asr_thinking_enabled": "false",
+    "scene_model_ai_split": DASHSCOPE_TEXT_MODEL,
+    "scene_model_ai_split_thinking_enabled": "false",
+    "scene_model_reading_lexical": DASHSCOPE_TEXT_MODEL,
+    "scene_model_reading_lexical_thinking_enabled": "false",
+    "scene_model_reading_sentence": DASHSCOPE_TEXT_MODEL,
+    "scene_model_reading_sentence_thinking_enabled": "false",
+    "scene_model_quiz_short_answer": DASHSCOPE_TEXT_MODEL,
+    "scene_model_quiz_short_answer_thinking_enabled": "false",
+    "scene_model_quiz_mini_palace": "qwen-turbo",
+    "scene_model_quiz_mini_palace_thinking_enabled": "false",
+    "scene_model_quiz_pdf_pairing": "qwen-plus",
+    "scene_model_quiz_pdf_pairing_thinking_enabled": "false",
+    "scene_model_quiz_pdf_review": "qwen-turbo",
+    "scene_model_quiz_pdf_review_thinking_enabled": "false",
+    "scene_model_vision_image_mindmap": DASHSCOPE_VISION_MODEL,
+    "scene_model_vision_image_mindmap_thinking_enabled": "false",
+    "scene_model_vision_image_text": DASHSCOPE_VISION_MODEL,
+    "scene_model_vision_image_text_thinking_enabled": "false",
+    "scene_model_vision_batch_mindmap": DASHSCOPE_VISION_MODEL,
+    "scene_model_vision_batch_mindmap_thinking_enabled": "false",
+    "scene_model_vision_pdf_mindmap": DASHSCOPE_VISION_MODEL,
+    "scene_model_vision_pdf_mindmap_thinking_enabled": "false",
+    "scene_model_vision_pdf_text": DASHSCOPE_VISION_MODEL,
+    "scene_model_vision_pdf_text_thinking_enabled": "false",
+    "scene_model_quiz_image_generation": DASHSCOPE_VISION_MODEL,
+    "scene_model_quiz_image_generation_thinking_enabled": "false",
+    "scene_model_quiz_pdf_generation": DASHSCOPE_VISION_MODEL,
+    "scene_model_quiz_pdf_generation_thinking_enabled": "false",
+    "scene_model_translation_course": ENGLISH_TRANSLATION_MODEL,
+    "scene_model_translation_course_thinking_enabled": "false",
+    "scene_model_translation_reading_sentence": ENGLISH_TRANSLATION_MODEL,
+    "scene_model_translation_reading_sentence_thinking_enabled": "false",
+    "scene_model_asr_course": DASHSCOPE_ASR_MODEL,
+    "scene_model_asr_course_thinking_enabled": "false",
+    "scene_model_tts_voice_coach": "cosyvoice-v3-flash",
+    "scene_model_tts_voice_coach_thinking_enabled": "false",
 }
+
+
+# ---------------------------------------------------------------------------
+# Runtime directory bootstrap
+# ---------------------------------------------------------------------------
 
 
 def ensure_runtime_dirs() -> None:

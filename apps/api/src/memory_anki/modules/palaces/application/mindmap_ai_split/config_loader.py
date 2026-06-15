@@ -97,3 +97,11 @@ def resolve_config(
         extra_payload=runtime.extra_payload,
         supports_temperature=runtime.supports_temperature,
     )
+
+
+def resolve_runtime(
+    session: Session,
+    *,
+    ai_options: AiRuntimeOptions | None = None,
+):
+    return resolve_scenario_runtime(session, "ai_split", ai_options=ai_options)

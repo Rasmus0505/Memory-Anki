@@ -15,7 +15,10 @@ from memory_anki.core.storage_layout import (
 )
 
 BACKUP_MANIFEST_NAME = "manifest.json"
-BACKUP_MANIFEST_VERSION = 2
+BACKUP_MANIFEST_VERSION = 3
+
+# 滚动（轻量）备份时只复制的存储项 key，避免把大媒体目录反复整库复制。
+ROLLING_BACKUP_ITEM_KEYS = ("database", "migration_state")
 
 
 def _copy_item_to_backup(item: ManagedStorageItem, destination_root: Path) -> dict[str, Any]:
@@ -42,11 +45,28 @@ def _copy_item_to_backup(item: ManagedStorageItem, destination_root: Path) -> di
     }
 
 
-def create_storage_backup_manifest(*, reason: str, included_items: list[dict[str, Any]]) -> dict[str, Any]:
+def _select_backup_items(*, full: bool) -> list[ManagedStorageItem]:
+    """根据备份范围挑选需要复制的存储项。
+
+    full=True 复制全部 backup_items；full=False（滚动/轻量）只复制
+    ROLLING_BACKUP_ITEM_KEYS 中的项（通常是数据库 + 迁移状态）。
+    """
+    all_items = get_backup_storage_items()
+    if full:
+        return list(all_items)
+    rolling_keys = set(ROLLING_BACKUP_ITEM_KEYS)
+    return [item for item in all_items if item.key in rolling_keys]
+
+
+def create_storage_backup_manifest(
+    *, reason: str, included_items: list[dict[str, Any]], full: bool
+) -> dict[str, Any]:
     runtime_info = build_runtime_info()
     return {
         "version": BACKUP_MANIFEST_VERSION,
         "reason": reason,
+        "scope": "full" if full else "rolling",
+        "full": full,
         "created_at": datetime.now().isoformat(timespec="seconds"),
         "storage_mode": load_storage_layout().storage_mode,
         "app_home": str(APP_HOME),
@@ -62,14 +82,16 @@ def create_storage_backup_manifest(*, reason: str, included_items: list[dict[str
     }
 
 
-def write_storage_backup(destination_root: Path, *, reason: str) -> dict[str, Any]:
+def write_storage_backup(destination_root: Path, *, reason: str, full: bool = True) -> dict[str, Any]:
     ensure_runtime_dirs()
     destination_root.mkdir(parents=True, exist_ok=True)
     included_items = [
         _copy_item_to_backup(item, destination_root)
-        for item in get_backup_storage_items()
+        for item in _select_backup_items(full=full)
     ]
-    manifest = create_storage_backup_manifest(reason=reason, included_items=included_items)
+    manifest = create_storage_backup_manifest(
+        reason=reason, included_items=included_items, full=full
+    )
     (destination_root / BACKUP_MANIFEST_NAME).write_text(
         json.dumps(manifest, ensure_ascii=False, indent=2),
         encoding="utf-8",

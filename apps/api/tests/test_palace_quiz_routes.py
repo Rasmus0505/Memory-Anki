@@ -281,6 +281,55 @@ class PalaceQuizRouteTests(unittest.TestCase):
         self.assertEqual(invalid_response.status_code, 400)
         self.assertIn("至少需要 2 个选项", invalid_response.json()["detail"])
 
+    def test_batch_create_auto_deduplicates_questions(self):
+        response = self.client.post(
+            "/api/v1/palaces/1/quiz-questions/batch",
+            json={
+                "questions": [
+                    {
+                        "question_type": "multiple_choice",
+                        "stem": " 细胞的控制中心是？ ",
+                        "options": [
+                            {"id": "A", "text": "细胞膜"},
+                            {"id": "B", "text": "细胞核"},
+                        ],
+                        "answer_payload": {"correct_option_id": "B"},
+                        "analysis": "细胞核控制细胞活动。",
+                    },
+                    {
+                        "question_type": "multiple_choice",
+                        "stem": "光合作用场所是？",
+                        "options": [
+                            {"id": "A", "text": "叶绿体"},
+                            {"id": "B", "text": "液泡"},
+                        ],
+                        "answer_payload": {"correct_option_id": "A"},
+                        "analysis": "叶绿体是光合作用的场所。",
+                    },
+                    {
+                        "question_type": "multiple_choice",
+                        "stem": "光合作用场所是？",
+                        "options": [
+                            {"id": "A", "text": "叶绿体"},
+                            {"id": "B", "text": "液泡"},
+                        ],
+                        "answer_payload": {"correct_option_id": "A"},
+                        "analysis": "叶绿体是光合作用的场所。",
+                    },
+                ]
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        items = response.json()["items"]
+        self.assertEqual(len(items), 1)
+        self.assertEqual(items[0]["stem"], "光合作用场所是？")
+
+        list_response = self.client.get("/api/v1/palaces/1/quiz-questions")
+        self.assertEqual(list_response.status_code, 200)
+        stems = [item["stem"] for item in list_response.json()["items"]]
+        self.assertEqual(stems.count("细胞的控制中心是？"), 1)
+        self.assertEqual(stems.count("光合作用场所是？"), 1)
+
     def test_batch_create_accepts_game_question_types(self):
         response = self.client.post(
             "/api/v1/palaces/1/quiz-questions/batch",
@@ -1005,7 +1054,7 @@ class PalaceQuizRouteTests(unittest.TestCase):
         )
         self.assertEqual(calls[1]["operation"], "ai_prompt_palace_quiz_group_by_mini_palace")
 
-    def test_settings_list_new_prompt_keys_and_quiz_text_model_scenario(self):
+    def test_settings_list_new_prompt_keys_and_quiz_scene_bindings(self):
         prompt_response = self.client.get("/api/v1/settings/ai-prompts")
         self.assertEqual(prompt_response.status_code, 200)
         prompt_keys = {item["key"] for item in prompt_response.json()["items"]}
@@ -1016,13 +1065,16 @@ class PalaceQuizRouteTests(unittest.TestCase):
 
         model_response = self.client.get("/api/v1/settings/ai-models")
         self.assertEqual(model_response.status_code, 200)
-        scenarios = {item["key"]: item for item in model_response.json()["scenarios"]}
-        self.assertIn("quiz_text", scenarios)
-        self.assertIn("quiz_mini_palace", scenarios)
-        self.assertEqual(scenarios["quiz_text"]["config_key"], "ai_model_quiz_text")
+        scenarios = {item["key"]: item for item in model_response.json()["scenes"]}
+        self.assertIn("quiz_short_answer_feedback", scenarios)
+        self.assertIn("quiz_mini_palace_grouping", scenarios)
         self.assertEqual(
-            scenarios["quiz_mini_palace"]["config_key"],
-            "ai_model_quiz_mini_palace",
+            scenarios["quiz_short_answer_feedback"]["config_key"],
+            "scene_model_quiz_short_answer",
+        )
+        self.assertEqual(
+            scenarios["quiz_mini_palace_grouping"]["config_key"],
+            "scene_model_quiz_mini_palace",
         )
 
 

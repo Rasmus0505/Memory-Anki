@@ -34,6 +34,7 @@ from memory_anki.modules.english.domain.errors import (
 )
 from memory_anki.modules.settings.application.ai_model_registry import (
     AiRuntimeOptions,
+    is_dashscope_compatible_provider,
     resolve_scenario_runtime,
 )
 
@@ -53,14 +54,14 @@ def _resolve_legacy_dashscope_runtime(
     legacy_default_model: str | None = None,
 ):
     runtime = resolve_scenario_runtime(None, scenario_key, ai_options=ai_options)
-    if runtime.provider != "dashscope":
+    if not is_dashscope_compatible_provider(runtime.provider):
         return runtime
     model = runtime.model
     if not (ai_options and ai_options.model) and legacy_default_model:
         model = str(legacy_default_model or runtime.model or "").strip()
     return replace(
         runtime,
-        model=model,
+        api_model=model,
         api_key=str(DASHSCOPE_API_KEY or runtime.api_key or "").strip(),
         base_url=str(DASHSCOPE_BASE_URL or runtime.base_url or "").strip(),
     )
@@ -75,7 +76,7 @@ class DashscopeEnglishAsrGateway:
         ai_options: AiRuntimeOptions | None = None,
         progress_callback: Callable[[dict[str, Any]], None] | None = None,
     ) -> dict[str, Any]:
-        runtime = _resolve_legacy_dashscope_runtime("asr", ai_options=ai_options)
+        runtime = _resolve_legacy_dashscope_runtime("asr_course_transcription", ai_options=ai_options)
         api_key = str(runtime.api_key or "").strip()
         if not api_key:
             raise EnglishCourseError("未配置 ASR 模型对应的 Provider API Key，无法生成英语课程。")
@@ -210,7 +211,7 @@ class DashscopeEnglishAsrGateway:
 class DashscopeEnglishTranslator:
     def translate_sentences(self, sentences: list[dict[str, Any]], *, task_id: str) -> list[dict[str, Any]]:
         runtime = _resolve_legacy_dashscope_runtime(
-            "translation",
+            "translation_course_batch",
             legacy_default_model=ENGLISH_TRANSLATION_MODEL,
         )
         if not str(runtime.api_key or "").strip():

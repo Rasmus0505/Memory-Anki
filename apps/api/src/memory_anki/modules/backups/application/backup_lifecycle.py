@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+import shutil
 import threading
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -11,8 +13,14 @@ from memory_anki.modules.backups.application.storage_backup import (
     write_storage_backup,
 )
 
+logger = logging.getLogger(__name__)
+
 AUTO_FULL_BACKUP_INTERVAL = timedelta(hours=4)
 ROLLING_EDIT_BACKUP_INTERVAL = timedelta(minutes=30)
+
+# 保留策略：每次新建备份后自动清理超出上限的旧备份，避免磁盘无限增长。
+MAX_FULL_BACKUPS = 8
+MAX_RESCUE_BACKUPS = 5
 
 _BACKUP_LOCK = threading.Lock()
 _BACKUP_LOOP_THREAD: threading.Thread | None = None
@@ -25,9 +33,11 @@ def timestamp_slug(now: datetime | None = None) -> str:
 
 
 def create_rescue_snapshot(reason: str) -> Path:
-    folder = RESCUE_BACKUPS_DIR / f"{timestamp_slug()}-{reason}"
-    write_storage_backup(folder, reason=reason)
-    return folder
+    with _BACKUP_LOCK:
+        folder = RESCUE_BACKUPS_DIR / f"{timestamp_slug()}-{reason}"
+        write_storage_backup(folder, reason=reason, full=True)
+        prune_old_backups(RESCUE_BACKUPS_DIR, MAX_RESCUE_BACKUPS)
+        return folder
 
 
 def ensure_daily_backup() -> Path | None:
@@ -39,7 +49,17 @@ def ensure_daily_backup() -> Path | None:
 def create_full_backup(reason: str) -> Path:
     with _BACKUP_LOCK:
         folder = FULL_BACKUPS_DIR / f"{timestamp_slug()}-{reason}"
-        write_storage_backup(folder, reason=reason)
+        write_storage_backup(folder, reason=reason, full=True)
+        prune_old_backups(FULL_BACKUPS_DIR, MAX_FULL_BACKUPS)
+        return folder
+
+
+def create_rolling_backup(reason: str) -> Path:
+    """轻量备份：只复制数据库 + 迁移状态，不含大媒体目录。"""
+    with _BACKUP_LOCK:
+        folder = FULL_BACKUPS_DIR / f"{timestamp_slug()}-{reason}"
+        write_storage_backup(folder, reason=reason, full=False)
+        prune_old_backups(FULL_BACKUPS_DIR, MAX_FULL_BACKUPS)
         return folder
 
 
@@ -63,9 +83,16 @@ def list_backups() -> list[dict]:
                 for item in included_items
                 if isinstance(item, dict) and item.get("included")
             }
+            is_full = manifest.get("full")
+            # 旧版 manifest 没有 full 字段，默认按全量处理（向后兼容）。
+            if is_full is None:
+                is_full = True
+            scope = manifest.get("scope") or ("full" if is_full else "rolling")
             results.append(
                 {
                     "kind": kind,
+                    "scope": scope,
+                    "full": bool(is_full),
                     "name": folder.name,
                     "path": str(folder),
                     "created_at": manifest.get("created_at")
@@ -103,7 +130,11 @@ def maybe_create_interval_backup(reason: str, minimum_interval: timedelta) -> Pa
 
 
 def maybe_create_rolling_backup(reason: str = "rolling-edit") -> Path | None:
-    return maybe_create_interval_backup(reason, ROLLING_EDIT_BACKUP_INTERVAL)
+    """编辑触发的滚动备份，走轻量分支（仅 DB + migration-state）。"""
+    latest = _latest_full_backup()
+    if latest and _backup_age(latest) < ROLLING_EDIT_BACKUP_INTERVAL:
+        return None
+    return create_rolling_backup(reason)
 
 
 def maybe_create_periodic_backup() -> Path | None:
@@ -125,6 +156,7 @@ def start_periodic_backup_loop() -> None:
             try:
                 maybe_create_periodic_backup()
             except Exception:
+                logger.exception("periodic backup loop iteration failed")
                 continue
 
     _BACKUP_LOOP_THREAD = threading.Thread(
@@ -137,6 +169,30 @@ def start_periodic_backup_loop() -> None:
 
 def stop_periodic_backup_loop() -> None:
     _BACKUP_LOOP_STOP.set()
+
+
+def prune_old_backups(root: Path, keep: int) -> int:
+    """按 mtime 倒序保留最近 keep 份备份目录，删除其余。
+
+    返回被删除的备份数量。出错时记录日志但不抛出，避免影响主备份流程。
+    """
+    if keep <= 0 or not root.exists():
+        return 0
+    try:
+        folders = [child for child in root.iterdir() if child.is_dir()]
+    except OSError:
+        return 0
+    if len(folders) <= keep:
+        return 0
+    folders.sort(key=lambda item: item.stat().st_mtime, reverse=True)
+    removed = 0
+    for folder in folders[keep:]:
+        try:
+            shutil.rmtree(folder)
+            removed += 1
+        except OSError:
+            logger.warning("failed to prune old backup: %s", folder, exc_info=True)
+    return removed
 
 
 def _daily_backup_exists() -> bool:

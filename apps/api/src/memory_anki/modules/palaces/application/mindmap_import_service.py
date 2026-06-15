@@ -210,7 +210,11 @@ def stream_pdf_import_preview(
     session: Session | None = None,
     ai_options=None,
 ) -> Generator[ImportStreamEvent, None, None]:
-    runtime = _dashscope_runtime(session=session, ai_options=ai_options)
+    runtime = _dashscope_runtime(
+        session=session,
+        ai_options=ai_options,
+        scenario_key="vision_pdf_mindmap",
+    )
     return (
         yield from preview_streams.stream_pdf_import_preview(
             document=document,
@@ -274,7 +278,12 @@ def stream_pdf_text_preview(
     )
 
 
-def _dashscope_runtime(session: Session | None = None, ai_options=None) -> DashscopeImportRuntime:
+def _dashscope_runtime(
+    session: Session | None = None,
+    ai_options=None,
+    *,
+    scenario_key: str = "vision_image_mindmap",
+) -> DashscopeImportRuntime:
     if session is None and ai_options is None:
         from memory_anki.modules.settings.application.ai_model_registry import resolve_current_model
 
@@ -288,7 +297,7 @@ def _dashscope_runtime(session: Session | None = None, ai_options=None) -> Dashs
         resolve_scenario_runtime,
     )
 
-    resolved_runtime = resolve_scenario_runtime(session, "vision", ai_options=ai_options)
+    resolved_runtime = resolve_scenario_runtime(session, scenario_key, ai_options=ai_options)
     return llm_gateway.build_runtime(
         api_key=resolved_runtime.api_key,
         base_url=resolved_runtime.base_url,

@@ -114,6 +114,40 @@ def _json_load(value: str | None, default: Any) -> Any:
     return default if parsed is None else parsed
 
 
+def _normalize_text_key(value: Any) -> str:
+    return " ".join(str(value or "").split())
+
+
+def _normalize_key_value(value: Any) -> Any:
+    if isinstance(value, str):
+        return _normalize_text_key(value)
+    if isinstance(value, list):
+        return [_normalize_key_value(item) for item in value]
+    if isinstance(value, dict):
+        return {
+            str(key): _normalize_key_value(item)
+            for key, item in sorted(value.items(), key=lambda item: str(item[0]))
+        }
+    return value
+
+
+def build_question_dedup_key(payload: dict[str, Any]) -> str:
+    normalized_key_payload = {
+        "mini_palace_id": payload.get("mini_palace_id"),
+        "question_type": payload.get("question_type"),
+        "stem": _normalize_text_key(payload.get("stem")),
+        "options": _normalize_key_value(payload.get("options") or []),
+        "answer_payload": _normalize_key_value(payload.get("answer_payload") or {}),
+        "analysis": _normalize_text_key(payload.get("analysis")),
+    }
+    return json.dumps(
+        normalized_key_payload,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+
+
 def _normalize_question_type(value: Any) -> str:
     normalized = str(value or "").strip()
     if normalized not in QUESTION_TYPES:
@@ -600,6 +634,72 @@ def serialize_question(question: PalaceQuizQuestion) -> dict[str, Any]:
     }
 
 
+def _question_to_dedup_payload(question: PalaceQuizQuestion) -> dict[str, Any]:
+    return {
+        "mini_palace_id": question.mini_palace_id,
+        "question_type": question.question_type,
+        "stem": question.stem,
+        "options": _json_load(question.options_json, []),
+        "answer_payload": _json_load(question.answer_payload_json, {}),
+        "analysis": question.analysis,
+    }
+
+
+def _find_duplicate_question(
+    session: Session,
+    palace_id: int,
+    normalized_payload: dict[str, Any],
+    *,
+    exclude_question_id: int | None = None,
+) -> PalaceQuizQuestion | None:
+    duplicate_key = build_question_dedup_key(normalized_payload)
+    candidates = (
+        session.query(PalaceQuizQuestion)
+        .filter_by(
+            palace_id=palace_id,
+            mini_palace_id=normalized_payload["mini_palace_id"],
+        )
+        .order_by(PalaceQuizQuestion.sort_order.asc(), PalaceQuizQuestion.id.asc())
+        .all()
+    )
+    for candidate in candidates:
+        if exclude_question_id is not None and candidate.id == exclude_question_id:
+            continue
+        if build_question_dedup_key(_question_to_dedup_payload(candidate)) == duplicate_key:
+            return candidate
+    return None
+
+
+def dedupe_palace_questions(session: Session, palace_id: int) -> int:
+    rows = (
+        session.query(PalaceQuizQuestion)
+        .filter_by(palace_id=palace_id)
+        .order_by(
+            PalaceQuizQuestion.mini_palace_id.asc(),
+            PalaceQuizQuestion.sort_order.asc(),
+            PalaceQuizQuestion.id.asc(),
+        )
+        .all()
+    )
+    kept_by_key: dict[str, PalaceQuizQuestion] = {}
+    removed_count = 0
+    for row in rows:
+        dedup_key = build_question_dedup_key(_question_to_dedup_payload(row))
+        existing = kept_by_key.get(dedup_key)
+        if existing is None:
+            kept_by_key[dedup_key] = row
+            continue
+        existing.correct_count += row.correct_count
+        existing.incorrect_count += row.incorrect_count
+        existing.attempt_count += row.attempt_count
+        existing.updated_at = utc_now_naive()
+        session.delete(row)
+        removed_count += 1
+    if removed_count:
+        session.commit()
+    return removed_count
+
+
 def get_palace_or_raise(session: Session, palace_id: int) -> Palace:
     palace = session.query(Palace).filter_by(id=palace_id).first()
     if not palace:
@@ -616,6 +716,7 @@ def get_question_or_raise(session: Session, question_id: int) -> PalaceQuizQuest
 
 def list_questions(session: Session, palace_id: int) -> list[dict[str, Any]]:
     get_palace_or_raise(session, palace_id)
+    dedupe_palace_questions(session, palace_id)
     rows = (
         session.query(PalaceQuizQuestion)
         .filter_by(palace_id=palace_id)
@@ -651,6 +752,9 @@ def create_question(
 ) -> dict[str, Any]:
     get_palace_or_raise(session, palace_id)
     normalized = normalize_question_payload(payload, session=session, palace_id=palace_id)
+    duplicate = _find_duplicate_question(session, palace_id, normalized)
+    if duplicate is not None:
+        return serialize_question(duplicate)
     next_sort_order = _next_sort_order(session, palace_id) + 1
     row = PalaceQuizQuestion(
         palace_id=palace_id,
@@ -678,6 +782,15 @@ def batch_create_questions(
     get_palace_or_raise(session, palace_id)
     if not isinstance(payloads, list) or len(payloads) == 0:
         raise PalaceQuizValidationError("批量保存时至少需要一题。")
+    existing_keys = {
+        build_question_dedup_key(_question_to_dedup_payload(question))
+        for question in (
+            session.query(PalaceQuizQuestion)
+            .filter_by(palace_id=palace_id)
+            .all()
+        )
+    }
+    payload_keys: set[str] = set()
     next_sort_order = _next_sort_order(session, palace_id)
     rows: list[PalaceQuizQuestion] = []
     for payload in payloads:
@@ -686,6 +799,10 @@ def batch_create_questions(
             session=session,
             palace_id=palace_id,
         )
+        dedup_key = build_question_dedup_key(normalized)
+        if dedup_key in existing_keys or dedup_key in payload_keys:
+            continue
+        payload_keys.add(dedup_key)
         next_sort_order += 1
         row = PalaceQuizQuestion(
             palace_id=palace_id,
@@ -727,6 +844,21 @@ def update_question(
         session=session,
         palace_id=question.palace_id,
     )
+    duplicate = _find_duplicate_question(
+        session,
+        question.palace_id,
+        normalized,
+        exclude_question_id=question.id,
+    )
+    if duplicate is not None:
+        duplicate.correct_count += question.correct_count
+        duplicate.incorrect_count += question.incorrect_count
+        duplicate.attempt_count += question.attempt_count
+        duplicate.updated_at = utc_now_naive()
+        session.delete(question)
+        session.commit()
+        session.refresh(duplicate)
+        return serialize_question(duplicate)
     question.mini_palace_id = normalized["mini_palace_id"]
     question.origin_question_id = normalized["origin_question_id"]
     question.question_type = normalized["question_type"]

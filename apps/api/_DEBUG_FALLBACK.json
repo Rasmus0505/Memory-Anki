@@ -1,0 +1,70 @@
+{
+  "summary": {
+    "wordCount": 4,
+    "greenCount": 1,
+    "yellowCount": 0,
+    "redCount": 0,
+    "sentenceSimplifiedCount": 0,
+    "workingLexicalI": 2.4,
+    "workingSyntacticI": 2.25,
+    "targetLexicalI": 3.15,
+    "targetSyntacticI": 2.9,
+    "targetCefr": "C1",
+    "comfortCount": 3,
+    "growthCount": 1
+  },
+  "spans": [
+    {
+      "kind": "black",
+      "originalText": "Important",
+      "displayText": "Important",
+      "cefr": "A1",
+      "originalCefr": "A1",
+      "finalCefr": "A1",
+      "rewriteNeeded": true,
+      "rewriteDecision": "kept_original_below_i_plus_1",
+      "resolvedLemma": "important",
+      "resolutionSource": "dictionary",
+      "id": "span-1"
+    },
+    {
+      "kind": "green",
+      "originalText": "acquisition",
+      "displayText": "acquisition",
+      "cefr": "B2",
+      "originalCefr": "B2",
+      "finalCefr": "B2",
+      "rewriteNeeded": false,
+      "rewriteDecision": "kept_original_i_plus_1",
+      "resolvedLemma": "acquire",
+      "resolutionSource": "dictionary",
+      "id": "span-2"
+    },
+    {
+      "kind": "black",
+      "originalText": "was",
+      "displayText": "was",
+      "cefr": "A1",
+      "originalCefr": "A1",
+      "finalCefr": "A1",
+      "rewriteNeeded": false,
+      "rewriteDecision": "kept_original_black",
+      "resolvedLemma": "was",
+      "resolutionSource": "dictionary",
+      "id": "span-3"
+    },
+    {
+      "kind": "black",
+      "originalText": "recalcitrant",
+      "displayText": "recalcitrant",
+      "cefr": "C1",
+      "originalCefr": "C1",
+      "finalCefr": "C1",
+      "rewriteNeeded": true,
+      "rewriteDecision": "kept_original_above_i_plus_1",
+      "resolvedLemma": "recalcitrant",
+      "resolutionSource": "dictionary",
+      "id": "span-4"
+    }
+  ]
+}
