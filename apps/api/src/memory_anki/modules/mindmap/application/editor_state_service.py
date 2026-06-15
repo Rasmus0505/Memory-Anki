@@ -7,7 +7,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from memory_anki.infrastructure.db.models import Chapter, Palace, Peg, Subject, engine
+from memory_anki.infrastructure.db.models import Chapter, Palace, Peg, Subject
 from memory_anki.modules.backups.application.backup_service import (
     MIN_DANGEROUS_NODE_COUNT,
     count_editor_doc_nodes,
@@ -157,22 +157,6 @@ class EditorStateConflictError(ValueError):
 
 TAG_RE = re.compile(r"<[^>]+>")
 HTML_BLOCK_BREAK_RE = re.compile(r"</(?:div|p|li|h[1-6]|blockquote|pre|tr)>", re.IGNORECASE)
-
-
-def ensure_editor_schema() -> None:
-    table_columns = {
-        "subjects": ("editor_doc", "editor_config", "editor_local_config"),
-        "palaces": ("editor_doc", "editor_config", "editor_local_config"),
-    }
-    with engine.begin() as conn:
-        for table_name, columns in table_columns.items():
-            existing = {
-                row[1]
-                for row in conn.exec_driver_sql(f"PRAGMA table_info({table_name})").fetchall()
-            }
-            for column in columns:
-                if column not in existing:
-                    conn.exec_driver_sql(f"ALTER TABLE {table_name} ADD COLUMN {column} TEXT")
 
 
 def get_subject_editor_state(subject: Subject) -> dict[str, Any]:

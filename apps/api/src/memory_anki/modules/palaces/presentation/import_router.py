@@ -33,11 +33,11 @@ from memory_anki.modules.palaces.application.mindmap_import_service import (
     PdfImportOptions,
     stream_pdf_import_preview,
 )
-from memory_anki.modules.settings.application.ai_model_registry import (
-    normalize_ai_runtime_options,
-)
 from memory_anki.modules.reviews.application.review_execution_service import (
     trigger_review_for_palace,
+)
+from memory_anki.modules.settings.application.ai_model_registry import (
+    normalize_ai_runtime_options,
 )
 
 router = APIRouter(tags=["import-export"])

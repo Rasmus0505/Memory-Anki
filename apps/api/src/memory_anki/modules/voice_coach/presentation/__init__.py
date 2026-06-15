@@ -9,6 +9,9 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from memory_anki.infrastructure.db.models import get_session
+from memory_anki.modules.settings.application.ai_model_registry import (
+    normalize_ai_runtime_options,
+)
 from memory_anki.modules.voice_coach.application import (
     VOICE_COACH_TEMPLATES,
     VoiceCoachConfigError,
@@ -17,9 +20,6 @@ from memory_anki.modules.voice_coach.application import (
     VoiceCoachProtocolError,
     resolve_cached_audio,
     synthesize_voice_coach_event,
-)
-from memory_anki.modules.settings.application.ai_model_registry import (
-    normalize_ai_runtime_options,
 )
 
 router = APIRouter(tags=["voice-coach"])

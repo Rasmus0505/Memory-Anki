@@ -44,9 +44,13 @@ vi.mock('@/shared/components/mindmap-host', () => ({
   MindMapFrame: React.forwardRef(({
     syncIntent = 'soft',
     forceSyncKey = null,
+    initialViewPolicy = 'preserve',
+    viewMemoryScope = null,
   }: {
     syncIntent?: 'soft' | 'replace'
     forceSyncKey?: string | number | null
+    initialViewPolicy?: 'preserve' | 'reset'
+    viewMemoryScope?: string | null
   }, ref) => {
     React.useImperativeHandle(ref, () => ({
       setUiCleared: vi.fn(),
@@ -63,6 +67,8 @@ vi.mock('@/shared/components/mindmap-host', () => ({
         <div>{`knowledge-mount-${mountIdRef.current}`}</div>
         <div>{`knowledge-sync-${syncIntent}`}</div>
         <div>{`knowledge-force-${String(forceSyncKey ?? '')}`}</div>
+        <div>{`knowledge-view-policy-${initialViewPolicy}`}</div>
+        <div>{`knowledge-view-scope-${String(viewMemoryScope ?? '')}`}</div>
       </div>
     )
   }),
@@ -184,6 +190,8 @@ describe('KnowledgePage mind map host refresh behavior', () => {
     })
     expect(screen.getByText('knowledge-sync-soft')).toBeTruthy()
     expect(screen.getByText('knowledge-force-subject:7:0')).toBeTruthy()
+    expect(screen.getByText('knowledge-view-policy-reset')).toBeTruthy()
+    expect(screen.getByText('knowledge-view-scope-knowledge-subject:7')).toBeTruthy()
 
     fireEvent.click(screen.getByRole('button', { name: '保存学科信息' }))
 
@@ -198,6 +206,8 @@ describe('KnowledgePage mind map host refresh behavior', () => {
     })
     expect(screen.getByText('knowledge-mount-1')).toBeTruthy()
     expect(screen.getByText('knowledge-sync-soft')).toBeTruthy()
+    expect(screen.getByText('knowledge-view-policy-reset')).toBeTruthy()
+    expect(screen.getByText('knowledge-view-scope-knowledge-subject:7')).toBeTruthy()
   })
 
   it('passes import applied sync version into forceSyncKey for replace sync after import', async () => {
@@ -208,6 +218,8 @@ describe('KnowledgePage mind map host refresh behavior', () => {
     await waitFor(() => {
       expect(screen.getByText('knowledge-force-subject:7:2')).toBeTruthy()
     })
+    expect(screen.getByText('knowledge-view-policy-reset')).toBeTruthy()
+    expect(screen.getByText('knowledge-view-scope-knowledge-subject:7')).toBeTruthy()
   })
 
   it('passes an explicit applyEditorState callback into useMindMapImport', async () => {

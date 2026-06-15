@@ -13,15 +13,14 @@ from memory_anki.infrastructure.db.models import (
     PalaceGroup,
     PalaceSegmentReviewSchedule,
     ReviewSchedule,
-    engine,
+)
+from memory_anki.modules.mindmap.application.editor_state_service import (
+    sync_palace_editor_root,
 )
 from memory_anki.modules.palaces.application.mini_palace_service import (
     ensure_mini_palace_schedule_model,
     get_mini_palace_schedule_display_datetime,
     is_mini_palace_schedule_due,
-)
-from memory_anki.modules.mindmap.application.editor_state_service import (
-    sync_palace_editor_root,
 )
 from memory_anki.modules.palaces.application.segment_review_service import (
     get_segment_schedule_display_datetime,
@@ -34,60 +33,6 @@ from memory_anki.modules.reviews.application.schedule_service import (
 
 MINI_REVIEW_MODE_INDEPENDENT = "independent"
 MINI_REVIEW_MODE_MINI_ONLY = "mini_only"
-
-
-def ensure_palace_group_schema() -> None:
-    with engine.begin() as conn:
-        existing_tables = {
-            row[0]
-            for row in conn.exec_driver_sql(
-                "SELECT name FROM sqlite_master WHERE type='table'"
-            ).fetchall()
-        }
-        if "palace_groups" not in existing_tables:
-            conn.exec_driver_sql(
-                """
-                CREATE TABLE palace_groups (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    name VARCHAR(200) NOT NULL DEFAULT '',
-                    color VARCHAR(24) NOT NULL DEFAULT '#6366f1',
-                    sort_order INTEGER DEFAULT 0,
-                    source_chapter_id INTEGER NULL
-                )
-                """
-            )
-
-        palace_columns = {
-            row[1]
-            for row in conn.exec_driver_sql("PRAGMA table_info(palaces)").fetchall()
-        }
-        for column_name, column_type in (
-            ("primary_chapter_id", "INTEGER"),
-            ("group_id", "INTEGER"),
-            ("group_sort_order", "INTEGER DEFAULT 0"),
-            ("title_mode", "VARCHAR(20) DEFAULT 'sync'"),
-            ("manual_title", "VARCHAR(200) DEFAULT ''"),
-            ("grouping_mode", "VARCHAR(20) DEFAULT 'auto'"),
-            ("manual_group_chapter_id", "INTEGER"),
-            ("mini_review_mode", "VARCHAR(20) DEFAULT 'independent'"),
-            ("needs_practice", "BOOLEAN NOT NULL DEFAULT 0"),
-            ("focus_node_uids_json", "TEXT NOT NULL DEFAULT '[]'"),
-        ):
-            if column_name not in palace_columns:
-                conn.exec_driver_sql(
-                    f"ALTER TABLE palaces ADD COLUMN {column_name} {column_type}"
-                )
-
-        chapter_palace_columns = {
-            row[1]
-            for row in conn.exec_driver_sql("PRAGMA table_info(chapter_palaces)").fetchall()
-        }
-        if "is_explicit" not in chapter_palace_columns:
-            conn.exec_driver_sql(
-                "ALTER TABLE chapter_palaces ADD COLUMN is_explicit BOOLEAN NOT NULL DEFAULT 1"
-            )
-
-
 def get_palace_explicit_chapter_ids(session: Session, palace: Palace) -> set[int]:
     rows = session.execute(
         text(

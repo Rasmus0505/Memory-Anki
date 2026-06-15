@@ -45,8 +45,8 @@ from .mindmap_import import (
     ensure_rendered_page_size,
     llm_gateway,
     normalize_extracted_text,
-    normalize_pdf_source_tree,
     normalize_page_selection,
+    normalize_pdf_source_tree,
     normalize_source_tree,
     parse_source_tree_json,
     preview_events,
@@ -736,6 +736,7 @@ def _extract_message_content_text(content: Any) -> str:
 
 
 _build_image_content_part = build_image_content_part
+_normalize_pdf_source_tree = normalize_pdf_source_tree
 _normalize_source_tree = normalize_source_tree
 _build_editor_doc = build_editor_doc
 _parse_source_tree_json = parse_source_tree_json
@@ -751,3 +752,6 @@ _trim_pdf_extracted_text = trim_pdf_extracted_text
 _build_pdf_text_anchors = build_pdf_text_anchors
 _split_prompt_anchor_parts = split_prompt_anchor_parts
 _clean_inline_text = clean_inline_text
+
+# Backward-compatible re-export for tests and older call sites.
+normalize_pdf_source_tree = _normalize_pdf_source_tree

@@ -170,3 +170,93 @@ def palace_json(p, session: Session | None = None) -> dict:
         "group_id": getattr(p, "group_id", None),
         "group_sort_order": getattr(p, "group_sort_order", 0),
     }
+
+
+def palace_summary_json(p, session: Session | None = None) -> dict:
+    explicit_chapter_ids: set[int] = set()
+    if session is not None:
+        reconcile_palace_chapter_binding(session, p)
+        explicit_chapter_ids = get_palace_explicit_chapter_ids(session, p)
+    next_schedule = None
+    pending_schedules = [schedule for schedule in (p.review_schedules or []) if not schedule.completed]
+    if pending_schedules:
+        next_schedule = min(pending_schedules, key=lambda schedule: (schedule.review_number, schedule.id))
+    next_review_at = (
+        review_schedule_display_datetime(next_schedule, p, session)
+        if next_schedule and session
+        else None
+    )
+    has_due_review = bool(next_schedule and session and is_schedule_due(next_schedule, p, session))
+    review_stage_total, review_stage_completed, review_stage_progress = (
+        palace_stage_progress(session, p)
+        if session is not None
+        else (0, 0, 0.0)
+    )
+    stage_labels: list[str] = []
+    if session:
+        current_algorithm = next(
+            (
+                normalize_algorithm(schedule.algorithm_used)
+                for schedule in (p.review_schedules or [])
+                if schedule.algorithm_used
+            ),
+            normalize_algorithm(get_config_value(session, "default_algorithm")),
+        )
+        stage_labels = get_algorithm_stage_labels(session, current_algorithm)
+
+    primary_chapter = getattr(p, "primary_chapter", None)
+    resolved_subject = resolve_palace_subject(p)
+    parent_chapter = primary_chapter.parent if primary_chapter and getattr(primary_chapter, "parent", None) else None
+    focus_node_uids = parse_focus_node_uids(p)
+    chapters = list(getattr(p, "chapters", []) or [])
+
+    return {
+        "id": p.id,
+        "title": p.title,
+        "description": p.description,
+        "archived": p.archived,
+        "mastered": p.mastered,
+        "needs_practice": bool(getattr(p, "needs_practice", False)),
+        "focus_node_uids": focus_node_uids,
+        "focus_count": len(focus_node_uids),
+        "created_at": p.created_at.isoformat() if p.created_at else None,
+        "updated_at": p.updated_at.isoformat() if p.updated_at else None,
+        "next_scheduled_date": next_schedule.scheduled_date.isoformat() if next_schedule and next_schedule.scheduled_date else None,
+        "next_review_at": next_review_at.isoformat(timespec="minutes") if next_review_at else None,
+        "has_due_review": has_due_review,
+        "current_review_schedule_id": next_schedule.id if has_due_review and next_schedule else None,
+        "review_stage_total": review_stage_total,
+        "review_stage_completed": review_stage_completed,
+        "review_stage_progress": review_stage_progress,
+        "stage_labels": stage_labels,
+        "title_mode": getattr(p, "title_mode", "sync") or "sync",
+        "manual_title": getattr(p, "manual_title", "") or "",
+        "resolved_title": resolve_palace_title(p),
+        "grouping_mode": getattr(p, "grouping_mode", "auto") or "auto",
+        "manual_group_chapter_id": getattr(p, "manual_group_chapter_id", None),
+        "mini_review_mode": resolve_palace_mini_review_mode(p),
+        "binding_status": resolve_palace_binding_status(p),
+        "primary_chapter_id": getattr(p, "primary_chapter_id", None),
+        "primary_chapter": {
+            "id": primary_chapter.id,
+            "name": primary_chapter.name,
+            "subject_id": primary_chapter.subject_id,
+            "parent_id": primary_chapter.parent_id,
+            "is_explicit": primary_chapter.id in explicit_chapter_ids,
+        } if primary_chapter else None,
+        "resolved_subject": {
+            "id": resolved_subject.id,
+            "name": resolved_subject.name,
+            "color": getattr(resolved_subject, "color", "#6366f1"),
+        } if resolved_subject else None,
+        "resolved_parent_chapter": {
+            "id": parent_chapter.id,
+            "name": parent_chapter.name,
+            "subject_id": parent_chapter.subject_id,
+            "parent_id": parent_chapter.parent_id,
+        } if parent_chapter else None,
+        "group_id": getattr(p, "group_id", None),
+        "group_sort_order": getattr(p, "group_sort_order", 0),
+        "chapter_count": len(chapters),
+        "segment_count": len(getattr(p, "segments", []) or []),
+    }

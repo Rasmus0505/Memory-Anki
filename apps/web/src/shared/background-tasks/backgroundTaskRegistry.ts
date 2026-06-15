@@ -15,6 +15,7 @@ import { useSyncExternalStore } from 'react'
  */
 
 export type BackgroundTaskStatus = 'running' | 'completed' | 'failed'
+export type BackgroundTaskKind = 'default' | 'quiz-generation'
 
 export type BackgroundTaskSection =
   | 'dashboard'
@@ -43,6 +44,8 @@ export interface BackgroundTask {
   createdAt: number
   /** 最近一次状态更新时间。 */
   updatedAt: number
+  kind?: BackgroundTaskKind
+  bubble?: { x: number; y: number } | null
 }
 
 interface StoreState {
@@ -112,6 +115,8 @@ export function registerTask(input: {
   detail?: string
   progress?: number
   navigateTarget?: string
+  kind?: BackgroundTaskKind
+  bubble?: { x: number; y: number } | null
 }): void {
   const now = Date.now()
   const existing = state.tasks[input.id]
@@ -123,6 +128,8 @@ export function registerTask(input: {
     detail: input.detail,
     progress: input.progress,
     navigateTarget: input.navigateTarget,
+    kind: input.kind ?? existing?.kind ?? 'default',
+    bubble: input.bubble ?? existing?.bubble ?? null,
     createdAt: existing?.createdAt ?? now,
     updatedAt: now,
   }
@@ -132,17 +139,22 @@ export function registerTask(input: {
 /** 更新运行中任务的进度/详情（不会改变 status）。 */
 export function updateTask(
   id: string,
-  patch: { progress?: number; detail?: string; title?: string },
+  patch: {
+    progress?: number
+    detail?: string
+    title?: string
+    bubble?: { x: number; y: number } | null
+  },
 ): void {
   const current = state.tasks[id]
   if (!current) return
-  if (current.status !== 'running') return
   setState(
     bumpTask({
       ...current,
       title: patch.title ?? current.title,
       detail: patch.detail ?? current.detail,
       progress: patch.progress ?? current.progress,
+      bubble: patch.bubble ?? current.bubble ?? null,
       updatedAt: Date.now(),
     }),
   )
@@ -196,6 +208,18 @@ export function failTask(id: string, detail?: string): void {
 export function dismissTask(id: string): void {
   if (!state.tasks[id]) return
   setState(removeTask(id))
+}
+
+export function setTaskBubblePosition(id: string, bubble: { x: number; y: number }): void {
+  const current = state.tasks[id]
+  if (!current) return
+  setState(
+    bumpTask({
+      ...current,
+      bubble,
+      updatedAt: Date.now(),
+    }),
+  )
 }
 
 /** 仅供测试：重置整个 store。 */

@@ -7,6 +7,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 WEB_SRC = REPO_ROOT / "apps" / "web" / "src"
 API_SRC = REPO_ROOT / "apps" / "api" / "src" / "memory_anki"
+ALEMBIC_VERSIONS = REPO_ROOT / "apps" / "api" / "alembic" / "versions"
 WEB_LAYER_DIRS = ("app", "features", "entities")
 
 FORBIDDEN_WEB_IMPORTS = {
@@ -15,6 +16,18 @@ FORBIDDEN_WEB_IMPORTS = {
 
 MAX_WEB_FILE_LINES = 750
 MAX_API_FILE_LINES = 800
+DESTRUCTIVE_MIGRATION_ALLOW_MARKER = "memory-anki: allow-destructive-migration"
+DESTRUCTIVE_MIGRATION_PATTERNS = {
+    "op.drop_column(": "drop columns",
+    "drop column ": "drop columns",
+    "op.drop_table(": "drop tables",
+    "drop table ": "drop tables",
+    "op.alter_column(": "alter existing columns",
+    "alter column ": "alter existing columns",
+    "rename column ": "rename columns",
+    "op.rename_table(": "rename tables",
+    "rename table ": "rename tables",
+}
 
 
 def iter_files(root: Path, suffixes: tuple[str, ...]):
@@ -61,11 +74,28 @@ def check_runtime_data_ignored(errors: list[str]) -> None:
             errors.append(f".gitignore: missing runtime-data ignore entry `{entry}`")
 
 
+def check_forward_compatible_migrations(errors: list[str]) -> None:
+    for path in ALEMBIC_VERSIONS.glob("*.py"):
+        content = path.read_text(encoding="utf-8")
+        normalized = content.casefold()
+        if DESTRUCTIVE_MIGRATION_ALLOW_MARKER in normalized:
+            continue
+        for pattern, description in DESTRUCTIVE_MIGRATION_PATTERNS.items():
+            if pattern in normalized:
+                relative = path.relative_to(REPO_ROOT)
+                errors.append(
+                    f"{relative}: destructive migration pattern `{pattern}` is not allowed by default; "
+                    f"prefer additive migrations for shared-runtime compatibility, or add `{DESTRUCTIVE_MIGRATION_ALLOW_MARKER}` with a justification."
+                )
+                break
+
+
 def main() -> int:
     errors: list[str] = []
     check_forbidden_imports(errors)
     check_file_sizes(errors)
     check_runtime_data_ignored(errors)
+    check_forward_compatible_migrations(errors)
 
     if errors:
         print("Architecture check failed:")

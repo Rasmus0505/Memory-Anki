@@ -14,6 +14,10 @@ from ._base import Base
 
 class TimeRecord(Base):
     __tablename__ = "time_records"
+    __table_args__ = (
+        Index("ix_time_records_source_kind_started", "source_kind", "started_at"),
+        Index("ix_time_records_english_course_started", "english_course_id", "started_at"),
+    )
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     kind: Mapped[str] = mapped_column(String(20), nullable=False)
@@ -92,6 +96,11 @@ class MindMapImportJob(Base):
 
 class ExternalAiCallLog(Base):
     __tablename__ = "external_ai_call_logs"
+    __table_args__ = (
+        Index("ix_external_ai_call_logs_job_created", "job_id", "created_at"),
+        Index("ix_external_ai_call_logs_palace_created", "palace_id", "created_at"),
+        Index("ix_external_ai_call_logs_created", "created_at"),
+    )
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     feature: Mapped[str] = mapped_column(String(120), nullable=False, default="")

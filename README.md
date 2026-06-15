@@ -4,12 +4,11 @@ A single-machine, locally-deployed **memory palace + spaced-repetition** applica
 
 ```
 ┌──────────────────────────────────────────────────────────┐
-│ start.bat → tools/start-production.ps1                    │
-│   • build web (npm run build)                             │
-│   • snapshot src + dist into runtime-data/current/         │
-│   • launch uvicorn memory_anki.app.main:app (port 8012)   │
-│        └─ /api/v1/*  → FastAPI routers                    │
-│           /          → StaticFiles(dist)                  │
+│ start.bat → tools/start_supervisor.py                     │
+│   • ensure runtime supervisor is running on port 8012     │
+│   • proxy requests to active hidden release               │
+│   • build/promote candidate release after source edits    │
+│   • switch to new release on manual page refresh          │
 └──────────────────────────────────────────────────────────┘
 ```
 
@@ -42,7 +41,24 @@ API keys for the AI providers (DashScope / Zhipu / SiliconFlow) are supplied via
 start.bat
 ```
 
-This runs `tools/start-production.ps1`, which builds the web client, snapshots the code into `runtime-data/current/<timestamp>/` (the previous snapshot is kept for rollback), validates the runtime contract, and starts the API on `127.0.0.1:8012`. Runtime data (DB, attachments, backups, logs) lives under `%LOCALAPPDATA%\MemoryAnki` (override with the `MEMORY_ANKI_HOME` env var).
+This runs `tools/start_supervisor.py` (with `tools/start-production.ps1` retained as a compatibility wrapper). Runtime data (DB, attachments, backups, logs) lives under `%LOCALAPPDATA%\MemoryAnki` (override with the `MEMORY_ANKI_HOME` env var).
+
+If you use multiple Git worktrees and want them to share one writable runtime home:
+
+```
+powershell -ExecutionPolicy Bypass -File .\tools\configure-shared-home.ps1 -Path D:\MemoryAnki-runtime
+```
+
+That writes `%LOCALAPPDATA%\MemoryAnki\shared-home.txt`, so every worktree on the same machine will use the same custom runtime home unless `MEMORY_ANKI_HOME` is explicitly set. If you do nothing, worktrees already share the default `%LOCALAPPDATA%\MemoryAnki`.
+
+The current launcher now starts a stable runtime supervisor. The supervisor keeps a single external URL on `127.0.0.1:8012`, runs the active backend from an immutable release directory, and prepares a candidate release in the background after code edits. Users stay on the old release until they manually refresh the page, at which point the supervisor switches them to the ready candidate.
+
+Shared-runtime rules:
+
+- Share the whole runtime home, not only the SQLite file
+- Normal lightweight read/write usage can happen from two versions at once
+- Database restore now requires exclusive access to the shared runtime home
+- Prefer additive schema migrations so a slightly older stable worktree can continue using the shared data
 
 ## Development (two terminals)
 

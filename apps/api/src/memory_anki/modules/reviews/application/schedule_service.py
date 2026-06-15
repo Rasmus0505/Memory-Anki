@@ -177,30 +177,6 @@ def create_review_schedule(
         palace_id=palace_id,
         draft=draft,
     )
-
-
-def ensure_review_schedule_schema() -> None:
-    from memory_anki.infrastructure.db.models import engine
-
-    table_columns = {
-        "review_schedules": (("scheduled_at", "DATETIME"), ("completed_at", "DATETIME")),
-        "palace_segment_review_schedules": (("scheduled_at", "DATETIME"), ("completed_at", "DATETIME")),
-    }
-    with engine.begin() as conn:
-        for table_name, columns in table_columns.items():
-            existing = {
-                row[1]
-                for row in conn.exec_driver_sql(f"PRAGMA table_info({table_name})").fetchall()
-            }
-            if not existing:
-                continue
-            for column_name, column_type in columns:
-                if column_name not in existing:
-                    conn.exec_driver_sql(
-                        f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_type}"
-                    )
-
-
 def create_initial_review_schedules(session, palace_id: int, algorithm: str, anchor_date: date | None = None) -> None:
     anchor = anchor_date or date.today()
     intervals = get_algorithm_intervals(session, algorithm)

@@ -1,6 +1,8 @@
 from __future__ import annotations
+
+from collections.abc import Generator
 from dataclasses import dataclass
-from typing import Any, Generator
+from typing import Any
 
 from memory_anki.infrastructure.llm import (
     OpenAICompatibleChatConfig,
@@ -10,9 +12,11 @@ from memory_anki.infrastructure.llm import (
     build_chat_completions_url,
     extract_chat_completion_stream_delta,
     extract_chat_completion_text_from_body,
-    extract_message_content_text as extract_openai_compatible_message_content_text,
     parse_chat_completion_stream,
     stream_chat_completion_text,
+)
+from memory_anki.infrastructure.llm import (
+    extract_message_content_text as extract_openai_compatible_message_content_text,
 )
 from memory_anki.infrastructure.llm.external_ai_call_logs import (
     begin_external_ai_call_log,
@@ -26,7 +30,6 @@ from .normalization import (
     MAX_IMAGE_BYTES,
     build_image_content_part,
     normalize_extracted_text,
-    normalize_pdf_source_tree,
     normalize_source_tree,
     parse_source_tree_json,
 )

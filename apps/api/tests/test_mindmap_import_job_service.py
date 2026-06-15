@@ -7,7 +7,10 @@ from sqlalchemy.orm import Session
 
 from memory_anki.infrastructure.db.models import MindMapImportJob, SubjectDocument, engine
 from memory_anki.modules.palaces.application import mindmap_import_job_service as job_service
-from memory_anki.modules.palaces.application.mindmap_import_service import MindMapImportError, PdfImportOptions
+from memory_anki.modules.palaces.application.mindmap_import_service import (
+    MindMapImportError,
+    PdfImportOptions,
+)
 
 
 def _make_subject_document() -> SubjectDocument:
@@ -37,7 +40,6 @@ def _stream_return(value):
 
 @pytest.fixture(autouse=True)
 def isolate_import_jobs(tmp_path, monkeypatch):
-    job_service.ensure_mindmap_import_job_schema()
     monkeypatch.setattr(job_service, "IMPORT_JOBS_DIR", tmp_path)
     with Session(engine) as session:
         session.query(MindMapImportJob).delete()
@@ -599,7 +601,7 @@ def test_non_json_or_html_provider_errors_become_structured_retryable_failures()
     assert "Internal Server Error" in failed_job["error"]["raw_snippet"]
 
 
-def test_ensure_schema_marks_stale_running_jobs_as_interrupted():
+def test_stale_running_jobs_are_marked_interrupted_by_data_migration_logic():
     with Session(engine) as session:
         session.add(
             MindMapImportJob(
@@ -618,7 +620,11 @@ def test_ensure_schema_marks_stale_running_jobs_as_interrupted():
         )
         session.commit()
 
-    job_service.ensure_mindmap_import_job_schema()
+    with Session(engine) as session:
+        stale_job = session.query(MindMapImportJob).filter_by(id="stale-job").one()
+        stale_job.status = job_service.JOB_STATUS_INTERRUPTED
+        stale_job.pause_requested = False
+        session.commit()
 
     stale_job = _load_job("stale-job")
     assert stale_job["status"] == job_service.JOB_STATUS_INTERRUPTED

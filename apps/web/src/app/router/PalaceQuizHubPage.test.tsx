@@ -3,16 +3,16 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { MemoryRouter } from 'react-router-dom'
 import PalaceQuizHubPage from '@/app/router/PalaceQuizHubPage'
 
-const getPalacesGroupedApiMock = vi.fn()
+const getPalacesGroupedSummaryApiMock = vi.fn()
 
 vi.mock('@/shared/api/modules/palaces', () => ({
-  getPalacesGroupedApi: (...args: unknown[]) => getPalacesGroupedApiMock(...args),
+  getPalacesGroupedSummaryApi: (...args: unknown[]) => getPalacesGroupedSummaryApiMock(...args),
 }))
 
 describe('PalaceQuizHubPage', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    getPalacesGroupedApiMock.mockResolvedValue({
+    getPalacesGroupedSummaryApiMock.mockResolvedValue({
       groups: [],
       ungrouped: [],
       subjects: [
@@ -36,9 +36,6 @@ describe('PalaceQuizHubPage', () => {
                   review_stage_completed: 0,
                   review_stage_progress: 0,
                   stage_labels: [],
-                  review_stages: [],
-                  segments: [],
-                  mini_palaces: [],
                   title_mode: 'manual',
                   manual_title: '细胞宫殿',
                   grouping_mode: 'chapter',
@@ -50,7 +47,8 @@ describe('PalaceQuizHubPage', () => {
                   resolved_parent_chapter: null,
                   group_id: null,
                   group_sort_order: 0,
-                  chapters: [],
+                  chapter_count: 1,
+                  segment_count: 3,
                 },
               ],
             },
@@ -70,6 +68,7 @@ describe('PalaceQuizHubPage', () => {
 
     expect(await screen.findByText('做题区')).toBeTruthy()
     expect(screen.getByText('细胞宫殿')).toBeTruthy()
+    expect(screen.getByText('3 个分段')).toBeTruthy()
     expect(screen.getByRole('link', { name: '开始做题' }).getAttribute('href')).toBe('/palaces/7/quiz')
     expect(screen.getByRole('link', { name: '查看脑图' }).getAttribute('href')).toBe('/palaces/7')
   })

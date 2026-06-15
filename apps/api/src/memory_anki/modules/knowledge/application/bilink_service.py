@@ -6,7 +6,7 @@ from typing import Any
 from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
 
-from memory_anki.infrastructure.db.models import NodeConnection, Palace, engine
+from memory_anki.infrastructure.db.models import NodeConnection, Palace
 from memory_anki.modules.mindmap.application.editor_state_service import (
     NODE_UID_KEY,
     _deserialize,
@@ -18,18 +18,6 @@ BILINK_STYLE = "bilink"
 PALACE_NODE_TYPE = "palace"
 LABEL_MAX_LENGTH = 200
 DISPLAY_TEXT_MAX_LENGTH = 80
-
-
-def ensure_bilink_schema() -> None:
-    with engine.begin() as conn:
-        conn.exec_driver_sql(
-            "CREATE INDEX IF NOT EXISTS ix_node_connections_style_source "
-            "ON node_connections (style, source_type, source_id)"
-        )
-        conn.exec_driver_sql(
-            "CREATE INDEX IF NOT EXISTS ix_node_connections_style_target "
-            "ON node_connections (style, target_type, target_id)"
-        )
 
 
 def parse_bilink_label(raw: str | None) -> dict[str, str | None]:

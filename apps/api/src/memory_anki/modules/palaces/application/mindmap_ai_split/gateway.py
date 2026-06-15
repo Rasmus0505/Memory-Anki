@@ -17,7 +17,7 @@ from memory_anki.infrastructure.llm.external_ai_call_logs import (
 )
 from memory_anki.modules.settings.application.ai_prompts import render_prompt
 
-from .contracts import AI_SPLIT_SYSTEM_PROMPT, MindMapAiSplitConfig, MindMapAiSplitError
+from .contracts import MindMapAiSplitConfig, MindMapAiSplitError
 from .primitives import extract_json_object
 
 

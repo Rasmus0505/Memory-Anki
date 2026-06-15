@@ -295,6 +295,7 @@ export function PalaceMindMapImportDrawer(props: PalaceMindMapImportDrawerProps)
     <Dialog open={open} onOpenChange={onOpenChange} modal={false} className={overlayClassName}>
       <DialogContent
         data-testid="mindmap-import-dialog-content"
+        layout={layoutMode === 'sidebar' ? 'unstyled' : 'centered'}
         className={cn(
           layoutMode === 'sidebar'
             ? 'ml-auto mr-0 h-[calc(100vh-32px)] max-w-[620px] rounded-none rounded-l-3xl border-l bg-card/98 p-0 shadow-floating'

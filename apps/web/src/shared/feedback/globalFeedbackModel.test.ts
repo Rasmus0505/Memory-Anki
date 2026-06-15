@@ -128,5 +128,15 @@ describe('globalFeedbackModel', () => {
       visualKind: 'reward',
       screenPulse: 'celebration',
     })
+    expect(getMindMapFeedbackProfile('quiz_generate_save')).toMatchObject({
+      level: 'milestone',
+      origin: 'system',
+      audioScope: 'global',
+    })
+    expect(createMindMapFeedbackDescriptor('quiz_answer_select')).toMatchObject({
+      visualKind: 'focus',
+      audioScope: 'local',
+      label: 'PICK',
+    })
   })
 })

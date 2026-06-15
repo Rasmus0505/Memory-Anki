@@ -17,10 +17,10 @@ import {
   useBilinkOverlay,
   useBilinks,
 } from '@/features/bilink'
+import { useQuizLauncher } from '@/features/palace-quiz/QuizLauncherProvider'
 import type { MindMapEditorState } from '@/shared/api/contracts'
 import { cn } from '@/shared/lib/utils'
 import { ReviewFlowMapPanel } from '@/features/review/components/ReviewFlowMapPanel'
-import { ReviewMindmapQuizBreakDialog } from '@/features/review/components/ReviewMindmapQuizBreakDialog'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card'
@@ -268,7 +268,6 @@ export function MindMapReviewFlow({
   )
   const [feedbackDialogOpen, setFeedbackDialogOpen] = React.useState(false)
   const [voiceCoachDialogOpen, setVoiceCoachDialogOpen] = React.useState(false)
-  const [quizBreakDialogOpen, setQuizBreakDialogOpen] = React.useState(false)
   const [completionDialogOpen, setCompletionDialogOpen] = React.useState(false)
   const [savingIncomplete, setSavingIncomplete] = React.useState(false)
   const [activeNodes, setActiveNodes] = React.useState<MindMapSelection[]>([])
@@ -347,6 +346,7 @@ export function MindMapReviewFlow({
     currentPalaceId: palaceId,
     allowCreate: false,
   })
+  const { openQuizLauncher } = useQuizLauncher()
   const resolvedDisplayMode =
     inlineEditEnabled && displayMode === 'edit' ? 'edit' : 'review'
   const isInlineEditMode = resolvedDisplayMode === 'edit'
@@ -771,9 +771,14 @@ export function MindMapReviewFlow({
                   }
                   onQuizBreakOpen={() => {
                     flow.timer.registerActivity('practice_interaction', {
-                      source: 'quiz_break_open',
+                      source: 'quiz_launcher_open',
                     })
-                    setQuizBreakDialogOpen(true)
+                    if (!palaceId) return
+                    openQuizLauncher({
+                      palaceId,
+                      scene: sessionKind,
+                      reviewEditorDoc: reviewEditorState.editor_doc,
+                    })
                   }}
                   onMiniPalaceOpen={miniPalace.openPanel}
                   onMiniPalacePour={miniPalace.isPracticing ? miniPalace.handleSpacePour : flow.handleSpacePour}
@@ -860,13 +865,6 @@ export function MindMapReviewFlow({
         open={voiceCoachDialogOpen}
         onOpenChange={setVoiceCoachDialogOpen}
         onTest={voiceCoach.playTestEvent}
-      />
-
-      <ReviewMindmapQuizBreakDialog
-        open={quizBreakDialogOpen}
-        onOpenChange={setQuizBreakDialogOpen}
-        palaceId={palaceId}
-        reviewEditorDoc={reviewEditorState.editor_doc}
       />
 
       <CompletionDecisionDialog

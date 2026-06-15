@@ -3,8 +3,9 @@ from __future__ import annotations
 import json
 import urllib.error
 import urllib.request
+from collections.abc import Generator
 from dataclasses import dataclass
-from typing import Any, Generator
+from typing import Any
 
 DEFAULT_PROTOCOL_ERROR_MESSAGE = "模型返回内容格式异常。"
 DEFAULT_EMPTY_RESPONSE_MESSAGE = "模型返回内容为空。"

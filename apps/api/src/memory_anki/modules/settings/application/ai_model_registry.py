@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import time
 from dataclasses import dataclass
 from typing import Any, Literal
 
@@ -19,6 +20,11 @@ from memory_anki.core.config import (
     ZHIPU_BASE_URL,
 )
 from memory_anki.infrastructure.db.models import AiModelCatalog, Config, ExternalAiCallLog
+from memory_anki.infrastructure.llm.openai_compatible import (
+    OpenAICompatibleChatConfig,
+    OpenAICompatibleError,
+    call_chat_completion_text,
+)
 
 AiProviderKey = Literal["dashscope", "qwen", "zhipu", "siliconflow"]
 AiModelType = Literal["llm", "vl", "translation", "asr", "tts"]
@@ -59,6 +65,24 @@ PROVIDER_ENV_DEFAULTS: dict[AiProviderKey, dict[str, str]] = {
         "base_url": str(SILICONFLOW_BASE_URL or "").strip(),
     },
 }
+PROVIDER_HARDCODED_DEFAULTS: dict[AiProviderKey, dict[str, str]] = {
+    "dashscope": {
+        "api_key": "",
+        "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+    },
+    "qwen": {
+        "api_key": "",
+        "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+    },
+    "zhipu": {
+        "api_key": "",
+        "base_url": "https://open.bigmodel.cn/api/paas/v4",
+    },
+    "siliconflow": {
+        "api_key": "",
+        "base_url": "https://api.siliconflow.cn/v1",
+    },
+}
 MODEL_TYPE_LABELS: dict[AiModelType, str] = {
     "llm": "大语言",
     "vl": "VL",
@@ -85,7 +109,16 @@ PROVIDER_MODEL_ALIASES: dict[AiProviderKey, dict[str, str]] = {
 
 
 class AiModelRegistryError(ValueError):
-    pass
+    def __init__(
+        self,
+        message: str,
+        *,
+        details: dict[str, Any] | None = None,
+        code: str | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.details = details or {}
+        self.code = code or "ai_model_registry_error"
 
 
 @dataclass(frozen=True, slots=True)
@@ -262,6 +295,18 @@ SCENES: tuple[AiSceneDefinition, ...] = (
         legacy_config_keys=("ai_model_quiz_text",),
         legacy_thinking_config_keys=("ai_model_quiz_text_thinking_enabled",),
         source_location="apps/api/src/memory_anki/modules/palace_quiz/application/ai_service.py",
+    ),
+    AiSceneDefinition(
+        key="quiz_review_mindmap_generation",
+        label="复习脑图出题",
+        description="基于当前复习脑图与关联宫殿上下文生成一组综合题，并自动写入题库。",
+        category_key="llm",
+        config_key="scene_model_quiz_review_mindmap_generation",
+        thinking_config_key="scene_model_quiz_review_mindmap_generation_thinking_enabled",
+        default_model=DASHSCOPE_TEXT_MODEL,
+        legacy_config_keys=("ai_model_quiz_text",),
+        legacy_thinking_config_keys=("ai_model_quiz_text_thinking_enabled",),
+        source_location="apps/api/src/memory_anki/modules/palace_quiz/application/quiz_generation_service.py",
     ),
     AiSceneDefinition(
         key="quiz_mini_palace_grouping",
@@ -658,6 +703,30 @@ def resolve_provider_setting(
     return str(env_default or "").strip()
 
 
+def resolve_provider_setting_source(
+    session: Session | None,
+    provider: AiProviderKey,
+    *,
+    kind: Literal["api_key", "base_url"],
+) -> Literal["db", "env", "default"]:
+    config_key = (
+        PROVIDER_API_KEY_CONFIG_KEYS[provider]
+        if kind == "api_key"
+        else PROVIDER_BASE_URL_CONFIG_KEYS[provider]
+    )
+    if session is not None:
+        row = session.query(Config).filter_by(key=config_key).first()
+        if row is not None and str(row.value or "").strip():
+            return "db"
+    env_default = str(PROVIDER_ENV_DEFAULTS[provider][kind] or "").strip()
+    hardcoded_default = str(PROVIDER_HARDCODED_DEFAULTS[provider][kind] or "").strip()
+    if env_default and env_default != hardcoded_default:
+        return "env"
+    if kind == "api_key" and env_default:
+        return "env"
+    return "default"
+
+
 def normalize_ai_runtime_options(value: Any) -> AiRuntimeOptions:
     if not isinstance(value, dict):
         return AiRuntimeOptions()
@@ -792,12 +861,98 @@ def serialize_resolved_ai_runtime(runtime: ResolvedAiModelRuntime) -> dict[str, 
     }
 
 
-def list_provider_settings(session: Session) -> list[dict[str, Any]]:
+def _load_ai_log_insights(session: Session, *, limit: int = 800) -> dict[str, Any]:
+    rows = (
+        session.query(ExternalAiCallLog)
+        .order_by(ExternalAiCallLog.created_at.desc(), ExternalAiCallLog.id.desc())
+        .limit(max(1, min(limit, 5000)))
+        .all()
+    )
+    latest_scene_success_runtime: dict[str, dict[str, Any]] = {}
+    latest_scene_activity: dict[str, dict[str, Any]] = {}
+    latest_provider_activity: dict[str, dict[str, Any]] = {}
+    latest_model_activity: dict[str, dict[str, Any]] = {}
+    recent_success_count = 0
+
+    for row in rows:
+        if row.status == "success":
+            recent_success_count += 1
+        created_at = row.created_at.isoformat() if row.created_at else None
+        provider_entry = latest_provider_activity.setdefault(
+            row.provider,
+            {
+                "last_called_at": created_at,
+                "last_status": row.status,
+                "last_model": row.model,
+                "last_success_at": None,
+                "last_error_at": None,
+            },
+        )
+        if row.status == "success" and provider_entry["last_success_at"] is None:
+            provider_entry["last_success_at"] = created_at
+        if row.status == "error" and provider_entry["last_error_at"] is None:
+            provider_entry["last_error_at"] = created_at
+
+        model_entry = latest_model_activity.setdefault(
+            row.model,
+            {
+                "last_used_at": created_at,
+                "last_status": row.status,
+            },
+        )
+        if model_entry["last_used_at"] is None:
+            model_entry["last_used_at"] = created_at
+            model_entry["last_status"] = row.status
+
+        try:
+            request_payload = json.loads(row.request_json or "{}")
+        except json.JSONDecodeError:
+            continue
+        resolved_ai = request_payload.get("resolved_ai")
+        if not isinstance(resolved_ai, dict):
+            continue
+        scene_key = str(resolved_ai.get("scene_key") or "").strip()
+        if not scene_key:
+            continue
+        latest_scene_activity.setdefault(
+            scene_key,
+            {
+                "last_called_at": created_at,
+                "last_status": row.status,
+                "resolved_provider": resolved_ai.get("provider"),
+                "resolved_model_label": resolved_ai.get("model_label"),
+                "latest_resolved_model": resolved_ai,
+            },
+        )
+        if row.status == "success" and scene_key not in latest_scene_success_runtime:
+            latest_scene_success_runtime[scene_key] = resolved_ai
+
+    return {
+        "recent_success_count": recent_success_count,
+        "providers": latest_provider_activity,
+        "models": latest_model_activity,
+        "scenes": latest_scene_activity,
+        "latest_scene_success_runtime": latest_scene_success_runtime,
+    }
+
+
+def list_provider_settings(
+    session: Session,
+    *,
+    active_models: list[AiModelCatalog] | None = None,
+    ai_log_insights: dict[str, Any] | None = None,
+) -> list[dict[str, Any]]:
+    model_rows = active_models or []
+    provider_model_counts: dict[str, int] = {}
+    for row in model_rows:
+        provider_model_counts[str(row.provider)] = provider_model_counts.get(str(row.provider), 0) + 1
+    provider_insights = dict((ai_log_insights or {}).get("providers") or {})
     providers: list[dict[str, Any]] = []
     for provider in ("dashscope", "zhipu", "siliconflow"):
         normalized_provider = provider  # type: ignore[assignment]
         api_key = resolve_provider_setting(session, normalized_provider, kind="api_key")
         base_url = resolve_provider_setting(session, normalized_provider, kind="base_url")
+        provider_activity = provider_insights.get(normalized_provider, {})
         providers.append(
             {
                 "key": normalized_provider,
@@ -807,6 +962,14 @@ def list_provider_settings(session: Session) -> list[dict[str, Any]]:
                 "base_url": base_url,
                 "api_key_config_key": PROVIDER_API_KEY_CONFIG_KEYS[normalized_provider],
                 "base_url_config_key": PROVIDER_BASE_URL_CONFIG_KEYS[normalized_provider],
+                "api_key_source": resolve_provider_setting_source(session, normalized_provider, kind="api_key"),
+                "base_url_source": resolve_provider_setting_source(session, normalized_provider, kind="base_url"),
+                "model_count": provider_model_counts.get(normalized_provider, 0),
+                "last_called_at": provider_activity.get("last_called_at"),
+                "last_status": provider_activity.get("last_status"),
+                "last_success_at": provider_activity.get("last_success_at"),
+                "last_error_at": provider_activity.get("last_error_at"),
+                "last_model": provider_activity.get("last_model"),
             }
         )
     return providers
@@ -836,40 +999,17 @@ def _query_category_candidate_rows(session: Session, category_key: AiModelType) 
     return query.order_by(AiModelCatalog.is_builtin.desc(), AiModelCatalog.display_name.asc()).all()
 
 
-def _load_latest_scene_runtime_meta(session: Session) -> dict[str, dict[str, Any]]:
-    rows = (
-        session.query(ExternalAiCallLog)
-        .order_by(ExternalAiCallLog.created_at.desc(), ExternalAiCallLog.id.desc())
-        .limit(400)
-        .all()
-    )
-    latest: dict[str, dict[str, Any]] = {}
-    for row in rows:
-        if row.status != "success":
-            continue
-        try:
-            request_payload = json.loads(row.request_json or "{}")
-        except json.JSONDecodeError:
-            continue
-        resolved_ai = request_payload.get("resolved_ai")
-        if not isinstance(resolved_ai, dict):
-            continue
-        scene_key = str(resolved_ai.get("scene_key") or "").strip()
-        if not scene_key or scene_key in latest:
-            continue
-        latest[scene_key] = resolved_ai
-    return latest
-
-
 def list_model_scenarios(session: Session) -> dict[str, Any]:
     ensure_ai_model_catalog_seed(session)
-    latest_scene_runtime = _load_latest_scene_runtime_meta(session)
     active_models = (
         session.query(AiModelCatalog)
         .filter(AiModelCatalog.is_active.is_(True))
         .order_by(AiModelCatalog.model_type.asc(), AiModelCatalog.display_name.asc())
         .all()
     )
+    ai_log_insights = _load_ai_log_insights(session)
+    latest_scene_runtime = dict(ai_log_insights.get("latest_scene_success_runtime") or {})
+    latest_scene_activity = dict(ai_log_insights.get("scenes") or {})
     scenes: list[dict[str, Any]] = []
     category_configs = {
         category.key: resolve_category_config(session, category.key)
@@ -899,6 +1039,7 @@ def list_model_scenarios(session: Session) -> dict[str, Any]:
         effective_thinking_enabled = (
             category_config.thinking_enabled if inherits_category_default else scene_thinking_enabled
         )
+        scene_activity = latest_scene_activity.get(scene.key, {})
         available_models = [_serialize_model_row(row) for row in _query_scene_candidate_rows(session, scene)]
         if scene_model and not any(item["key"] == scene_model for item in available_models):
             available_models.append(
@@ -928,19 +1069,26 @@ def list_model_scenarios(session: Session) -> dict[str, Any]:
                 "available_models": available_models,
                 "source_location": scene.source_location,
                 "latest_resolved_model": latest_scene_runtime.get(scene.key),
+                "last_called_at": scene_activity.get("last_called_at"),
+                "last_status": scene_activity.get("last_status"),
+                "resolved_provider": scene_activity.get("resolved_provider"),
+                "resolved_model_label": scene_activity.get("resolved_model_label"),
             }
         )
+    scene_usage_by_model: dict[str, list[str]] = {}
+    for scene in scenes:
+        scene_usage_by_model.setdefault(str(scene["effective_model"]), []).append(str(scene["label"]))
     categories = [
         {
             "key": category.key,
             "label": category.label,
             "description": category.description,
-                "shared_model": category_configs[category.key].model,
-                "shared_thinking_enabled": category_configs[category.key].thinking_enabled,
-                "has_shared_config": category_configs[category.key].has_shared_config,
-                "available_models": [
-                    _serialize_model_row(row) for row in _query_category_candidate_rows(session, category.key)
-                ],
+            "shared_model": category_configs[category.key].model,
+            "shared_thinking_enabled": category_configs[category.key].thinking_enabled,
+            "has_shared_config": category_configs[category.key].has_shared_config,
+            "available_models": [
+                _serialize_model_row(row) for row in _query_category_candidate_rows(session, category.key)
+            ],
             "scene_keys": [scene.key for scene in SCENES if scene.category_key == category.key],
             "scene_details": [
                 {
@@ -951,15 +1099,46 @@ def list_model_scenarios(session: Session) -> dict[str, Any]:
                 for scene in SCENES
                 if scene.category_key == category.key
             ],
+            "scene_count": sum(1 for scene in scenes if scene["category_key"] == category.key),
+            "custom_scene_count": sum(
+                1
+                for scene in scenes
+                if scene["category_key"] == category.key and not bool(scene["inherits_category_default"])
+            ),
         }
         for category in CATEGORIES
     ]
+    model_activity = dict(ai_log_insights.get("models") or {})
+    serialized_models: list[dict[str, Any]] = []
+    for row in active_models:
+        serialized = _serialize_model_row(row)
+        usage_labels = scene_usage_by_model.get(row.key, [])
+        latest_activity = model_activity.get(row.key, {})
+        serialized.update(
+            {
+                "usage_count": len(usage_labels),
+                "bound_scene_labels": usage_labels[:5],
+                "last_used_at": latest_activity.get("last_used_at"),
+                "last_status": latest_activity.get("last_status") or "never_used",
+            }
+        )
+        serialized_models.append(serialized)
     return {
-        "providers": list_provider_settings(session),
+        "providers": list_provider_settings(
+            session,
+            active_models=active_models,
+            ai_log_insights=ai_log_insights,
+        ),
         "categories": categories,
-        "models": [_serialize_model_row(row) for row in active_models],
+        "models": serialized_models,
         "scenes": scenes,
         "scenarios": scenes,
+        "summary": {
+            "provider_count": 3,
+            "active_model_count": len(active_models),
+            "scene_count": len(scenes),
+            "recent_success_call_count": int(ai_log_insights.get("recent_success_count") or 0),
+        },
     }
 
 
@@ -1033,6 +1212,148 @@ def save_ai_model_settings(
     return list_model_scenarios(session)
 
 
+def get_ai_model_impact(session: Session, model_key: str) -> dict[str, Any]:
+    ensure_ai_model_catalog_seed(session)
+    normalized_key = _normalize_model_name(model_key)
+    row = session.query(AiModelCatalog).filter_by(key=normalized_key).first()
+    scene_impacts: list[dict[str, Any]] = []
+    category_impacts: list[dict[str, Any]] = []
+    for category in CATEGORIES:
+        category_config = resolve_category_config(session, category.key)
+        if category_config.has_shared_config and category_config.model == normalized_key:
+            category_impacts.append(
+                {
+                    "key": category.key,
+                    "label": category.label,
+                }
+            )
+    for scene in SCENES:
+        scene_model = resolve_current_model(
+            session,
+            scene.config_key,
+            scene.default_model,
+            fallback_config_keys=scene.legacy_config_keys,
+        )
+        if scene_model != normalized_key:
+            continue
+        scene_impacts.append(
+            {
+                "key": scene.key,
+                "label": scene.label,
+                "category_key": scene.category_key,
+                "category_label": CATEGORY_BY_KEY[scene.category_key].label,
+                "config_key": scene.config_key,
+            }
+        )
+    return {
+        "model_key": normalized_key,
+        "model_label": row.display_name if row is not None else normalized_key,
+        "exists": row is not None,
+        "can_delete": len(scene_impacts) == 0 and len(category_impacts) == 0,
+        "usage_count": len(scene_impacts),
+        "bound_scene_labels": [item["label"] for item in scene_impacts],
+        "scene_impacts": scene_impacts,
+        "category_impacts": category_impacts,
+    }
+
+
+def _pick_provider_test_model(
+    session: Session,
+    provider: AiProviderKey,
+    *,
+    model_key: str | None = None,
+) -> dict[str, Any]:
+    ensure_ai_model_catalog_seed(session)
+    normalized_model_key = _normalize_model_name(model_key)
+    if normalized_model_key:
+        row = session.query(AiModelCatalog).filter_by(key=normalized_model_key).first()
+        if row is None:
+            raise AiModelRegistryError("要测试的模型不存在。", code="model_not_found")
+        return _serialize_model_row(row)
+
+    ordered_model_types: tuple[AiModelType, ...] = ("llm", "translation", "vl", "asr", "tts")
+    for model_type in ordered_model_types:
+        row = (
+            session.query(AiModelCatalog)
+            .filter(
+                AiModelCatalog.is_active.is_(True),
+                AiModelCatalog.provider == provider,
+                AiModelCatalog.model_type == model_type,
+            )
+            .order_by(AiModelCatalog.is_builtin.desc(), AiModelCatalog.display_name.asc())
+            .first()
+        )
+        if row is not None:
+            return _serialize_model_row(row)
+    raise AiModelRegistryError("当前 Provider 下没有可用于测试的活跃模型。", code="model_not_found")
+
+
+def test_provider_connection(
+    session: Session,
+    provider: AiProviderKey,
+    *,
+    model_key: str | None = None,
+) -> dict[str, Any]:
+    candidate = _pick_provider_test_model(session, provider, model_key=model_key)
+    api_key = resolve_provider_setting(session, provider, kind="api_key")
+    source = resolve_provider_setting_source(session, provider, kind="api_key")
+    base_url = resolve_provider_setting(session, provider, kind="base_url") or str(candidate["default_base_url"] or "")
+    if not api_key:
+        return {
+            "ok": False,
+            "provider": provider,
+            "provider_label": PROVIDER_LABELS.get(provider, provider),
+            "model": candidate["key"],
+            "latency_ms": 0,
+            "error": "未配置对应 Provider 的 API Key。",
+            "source": source,
+        }
+    config = OpenAICompatibleChatConfig(
+        api_key=api_key,
+        base_url=base_url,
+        model=_resolve_provider_model_id(provider, str(candidate["key"])),
+        temperature=(0.0 if bool(candidate["supports_temperature"]) else None),
+        timeout_seconds=15.0,
+    )
+    started = time.perf_counter()
+    try:
+        call_chat_completion_text(
+            config=config,
+            messages=[{"role": "user", "content": "Reply with OK."}],
+            extra_payload={"max_tokens": 8},
+        )
+        latency_ms = int((time.perf_counter() - started) * 1000)
+        return {
+            "ok": True,
+            "provider": provider,
+            "provider_label": PROVIDER_LABELS.get(provider, provider),
+            "model": candidate["key"],
+            "latency_ms": latency_ms,
+            "error": None,
+            "source": source,
+        }
+    except OpenAICompatibleError as exc:
+        latency_ms = int((time.perf_counter() - started) * 1000)
+        return {
+            "ok": False,
+            "provider": provider,
+            "provider_label": PROVIDER_LABELS.get(provider, provider),
+            "model": candidate["key"],
+            "latency_ms": latency_ms,
+            "error": str(exc),
+            "source": source,
+        }
+
+
+def test_model_connection(session: Session, model_key: str) -> dict[str, Any]:
+    ensure_ai_model_catalog_seed(session)
+    normalized_key = _normalize_model_name(model_key)
+    row = session.query(AiModelCatalog).filter_by(key=normalized_key).first()
+    if row is None:
+        raise AiModelRegistryError("要测试的模型不存在。", code="model_not_found")
+    return test_provider_connection(session, row.provider, model_key=normalized_key)
+
+
 def upsert_ai_model_catalog_item(session: Session, payload: dict[str, Any]) -> dict[str, Any]:
     ensure_ai_model_catalog_seed(session)
     model_key = _normalize_model_name(payload.get("key"))
@@ -1066,20 +1387,14 @@ def delete_ai_model_catalog_item(session: Session, model_key: str) -> dict[str, 
     normalized_key = _normalize_model_name(model_key)
     row = session.query(AiModelCatalog).filter_by(key=normalized_key).first()
     if row is None:
-        raise AiModelRegistryError("要删除的模型不存在。")
-    blocking_scenes = [
-        scene.label
-        for scene in SCENES
-        if resolve_current_model(
-            session,
-            scene.config_key,
-            scene.default_model,
-            fallback_config_keys=scene.legacy_config_keys,
+        raise AiModelRegistryError("要删除的模型不存在。", code="model_not_found")
+    impact = get_ai_model_impact(session, normalized_key)
+    if not bool(impact.get("can_delete")):
+        raise AiModelRegistryError(
+            "该模型仍被场景或分类配置使用，暂时不能删除。",
+            details=impact,
+            code="model_in_use",
         )
-        == normalized_key
-    ]
-    if blocking_scenes:
-        raise AiModelRegistryError("该模型仍被以下场景使用：" + "、".join(blocking_scenes))
     row.is_active = False
     session.commit()
     return list_model_scenarios(session)

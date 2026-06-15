@@ -1,6 +1,7 @@
-import { useRef, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { useEffect, useRef, useState } from 'react'
+import { Link, useParams } from 'react-router-dom'
 import { ArrowLeft, FileText, Target } from 'lucide-react'
+import { useQuizLauncher } from '@/features/palace-quiz/QuizLauncherProvider'
 import { buildAttachmentUrl, getPalaceEditorApi, savePalaceEditorApi } from '@/shared/api/modules/palaces'
 import { PageIntro } from '@/shared/components/layout/PageIntro'
 import { LoadingState } from '@/shared/components/state-placeholders'
@@ -27,12 +28,13 @@ interface PalaceMeta {
 
 export default function PalaceView() {
   const { id } = useParams()
-  const navigate = useNavigate()
+  const { openQuizLauncher } = useQuizLauncher()
   const palaceId = id ? Number(id) : null
   const mindMapFrameRef = useRef<MindMapFrameHandle | null>(null)
   const [mindMapFullscreen, setMindMapFullscreen] = useState(false)
   const [mindMapNativeFullscreen, setMindMapNativeFullscreen] = useState(false)
   const [mindMapUiCleared, setMindMapUiCleared] = useState(false)
+  const [shouldMountMindMap, setShouldMountMindMap] = useState(false)
 
   const { meta, editorState, isLoading, error } = usePersistedMindMapEditor({
     entityId: palaceId,
@@ -49,6 +51,33 @@ export default function PalaceView() {
   })
 
   const palace = meta as PalaceMeta | null
+
+  useEffect(() => {
+    if (!palace || !editorState) {
+      setShouldMountMindMap(false)
+      return
+    }
+    let cancelled = false
+    const scheduleMount = () => {
+      if (!cancelled) {
+        setShouldMountMindMap(true)
+      }
+    }
+    if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
+      const frameId = window.requestAnimationFrame(() => {
+        window.setTimeout(scheduleMount, 0)
+      })
+      return () => {
+        cancelled = true
+        window.cancelAnimationFrame(frameId)
+      }
+    }
+    const timeoutId = window.setTimeout(scheduleMount, 0)
+    return () => {
+      cancelled = true
+      window.clearTimeout(timeoutId)
+    }
+  }, [editorState, palace])
 
   if (!palaceId || (!palace && isLoading)) {
     return <LoadingState text="正在加载宫殿详情…" />
@@ -79,7 +108,10 @@ export default function PalaceView() {
   }
 
   const handleOpenQuizPage = () => {
-    navigate(`/palaces/${palace.id}/quiz`)
+    openQuizLauncher({
+      palaceId: palace.id,
+      scene: 'practice',
+    })
   }
 
   return (
@@ -148,21 +180,31 @@ export default function PalaceView() {
                   onClick: () => mindMapFrameRef.current?.toggleUiCleared(),
                 }}
               />
-              <MindMapFrame
-                ref={mindMapFrameRef}
-                key={`readonly-${palace.id}`}
-                editorState={editorState}
-                readonly
-                immersiveModeActive={mindMapFullscreen}
-                onEditorStateChange={() => {}}
-                onFullscreenToggle={setMindMapFullscreen}
-                onFullscreenChange={setMindMapNativeFullscreen}
-                onUiClearedChange={setMindMapUiCleared}
-                className={cn(
-                  'w-full flex-1 rounded-2xl border border-border/70 bg-background',
-                  mindMapFullscreen ? 'h-full' : 'h-[62vh]',
-                )}
-              />
+              {shouldMountMindMap ? (
+                <MindMapFrame
+                  ref={mindMapFrameRef}
+                  key={`readonly-${palace.id}`}
+                  editorState={editorState}
+                  readonly
+                  immersiveModeActive={mindMapFullscreen}
+                  onEditorStateChange={() => {}}
+                  onFullscreenToggle={setMindMapFullscreen}
+                  onFullscreenChange={setMindMapNativeFullscreen}
+                  onUiClearedChange={setMindMapUiCleared}
+                  className={cn(
+                    'w-full flex-1 rounded-2xl border border-border/70 bg-background',
+                    mindMapFullscreen ? 'h-full' : 'h-[62vh]',
+                  )}
+                />
+              ) : (
+                <LoadingState
+                  text="正在准备脑图视图…"
+                  className={cn(
+                    'w-full flex-1 rounded-2xl border border-border/70 bg-background px-4',
+                    mindMapFullscreen ? 'h-full' : 'h-[62vh]',
+                  )}
+                />
+              )}
             </div>
           </CardContent>
         </Card>

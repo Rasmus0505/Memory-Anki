@@ -8,27 +8,45 @@ describe('Dialog', () => {
       <>
         <div className="fixed inset-0 z-[90]">immersive-shell</div>
         <Dialog open onOpenChange={vi.fn()}>
-          <DialogContent>dialog body</DialogContent>
+          <DialogContent showCloseButton>dialog body</DialogContent>
         </Dialog>
       </>,
     )
 
-    const portalRoot = screen.getByLabelText('关闭弹窗').parentElement
+    const overlay = Array.from(document.querySelectorAll('[data-state="open"]')).find((element) =>
+      element.className.includes('z-[140]'),
+    )
 
-    expect(portalRoot).not.toBeNull()
-    expect(portalRoot?.className).toContain('z-[140]')
+    expect(overlay).not.toBeNull()
+    expect(overlay?.className).toContain('z-[140]')
   })
 
-  it('closes when clicking the overlay', () => {
+  it('closes when clicking the close button', () => {
     const onOpenChange = vi.fn()
 
     render(
       <Dialog open onOpenChange={onOpenChange}>
-        <DialogContent>dialog body</DialogContent>
+        <DialogContent showCloseButton>dialog body</DialogContent>
       </Dialog>,
     )
 
     fireEvent.click(screen.getByLabelText('关闭弹窗'))
     expect(onOpenChange).toHaveBeenCalledWith(false)
+  })
+
+  it('supports unstyled non-modal floating panels without overlay', () => {
+    render(
+      <Dialog open onOpenChange={vi.fn()} modal={false}>
+        <DialogContent layout="unstyled" className="fixed left-[120px] top-[80px] w-40">
+          floating
+        </DialogContent>
+      </Dialog>,
+    )
+
+    expect(screen.getByText('floating').className).toContain('fixed')
+    const overlay = Array.from(document.querySelectorAll('[data-state="open"]')).find((element) =>
+      element.className.includes('z-[140]'),
+    )
+    expect(overlay).toBeUndefined()
   })
 })

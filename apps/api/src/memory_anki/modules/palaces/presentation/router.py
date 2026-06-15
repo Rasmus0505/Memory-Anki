@@ -28,6 +28,12 @@ from memory_anki.modules.mindmap.application.editor_state_service import (
     save_palace_editor_state,
     sync_palace_editor_root,
 )
+from memory_anki.modules.palaces.application.focus_service import (
+    build_focus_editor_doc,
+    parse_focus_node_uids,
+    set_focus_node_uids,
+    toggle_focus_node_uid,
+)
 from memory_anki.modules.palaces.application.mindmap_ai_split_service import (
     MindMapAiSplitError,
     split_palace_editor_doc_with_ai,
@@ -42,11 +48,10 @@ from memory_anki.modules.palaces.application.mini_palace_service import (
     mini_palace_summary_json,
     update_palace_mini_palace,
 )
-from memory_anki.modules.palaces.application.focus_service import (
-    build_focus_editor_doc,
-    parse_focus_node_uids,
-    set_focus_node_uids,
-    toggle_focus_node_uid,
+from memory_anki.modules.palaces.application.palace_serializer import (
+    palace_json,
+    palace_summary_json,
+    review_plan_item_json,
 )
 from memory_anki.modules.palaces.application.palace_service import (
     create_palace,
@@ -78,9 +83,6 @@ from memory_anki.modules.palaces.application.title_sync_service import (
     build_grouped_palace_list,
     build_subject_shelf_summary,
 )
-from memory_anki.modules.settings.application.ai_model_registry import (
-    normalize_ai_runtime_options,
-)
 from memory_anki.modules.palaces.domain.schemas import PalaceCreate, PalaceUpdate
 from memory_anki.modules.reviews.application.review_execution_service import (
     trigger_review_for_palace,
@@ -90,11 +92,10 @@ from memory_anki.modules.sessions.application.session_progress_service import (
     get_practice_progress,
     upsert_practice_progress,
 )
-
-from memory_anki.modules.palaces.application.palace_serializer import (
-    palace_json,
-    review_plan_item_json,
+from memory_anki.modules.settings.application.ai_model_registry import (
+    normalize_ai_runtime_options,
 )
+
 router = APIRouter(tags=["palaces"])
 
 
@@ -116,6 +117,18 @@ def api_list_grouped(search: str = "", subject_id: int | None = None, s: Session
     palaces = list_palaces_by_subject(s, subject_id, search)
     chapter_grouped = build_chapter_grouped_palace_list(s, palaces, lambda p, sess: palace_json(p, sess))
     model_grouped = build_grouped_palace_list(s, palaces, lambda p, sess: palace_json(p, sess))
+    return {
+        "groups": model_grouped.get("groups", []),
+        "ungrouped": model_grouped.get("ungrouped", []),
+        "subjects": chapter_grouped.get("subjects", []),
+    }
+
+
+@router.get("/palaces/grouped-summary")
+def api_list_grouped_summary(search: str = "", subject_id: int | None = None, s: Session = Depends(session_dep)):
+    palaces = list_palaces_by_subject(s, subject_id, search)
+    chapter_grouped = build_chapter_grouped_palace_list(s, palaces, lambda p, sess: palace_summary_json(p, sess))
+    model_grouped = build_grouped_palace_list(s, palaces, lambda p, sess: palace_summary_json(p, sess))
     return {
         "groups": model_grouped.get("groups", []),
         "ungrouped": model_grouped.get("ungrouped", []),
@@ -562,7 +575,10 @@ def api_restore_backup(data: dict, s: Session = Depends(session_dep)):
     backup_path = str(data.get("path") or "")
     if not backup_path:
         return {"error": "missing backup path"}
-    rescue = restore_database_backup(backup_path)
+    try:
+        rescue = restore_database_backup(backup_path)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     return {"ok": True, "rescue_path": str(rescue)}
 
 

@@ -91,6 +91,9 @@ describe('MindMapFrame host runtime behavior', () => {
       /window\.\$bus\.\$on\('app_inited'[\s\S]*applyUnifiedMindMapAppearance\(\)[\s\S]*updateKeyboardFocusClass\(\)[\s\S]*applySegmentNodeStyles\(\)[\s\S]*renderBilinkBadges\(\)/,
     )
     expect(hostSource).toMatch(
+      /window\.\$bus\.\$on\('app_inited'[\s\S]*renderBilinkBadges\(\)[\s\S]*scheduleMindMapResizeSync\(\)[\s\S]*getHostBridge\(\)\?\.notify\?\.\('app_inited', null\)/,
+    )
+    expect(hostSource).toMatch(
       /function applyPaperNodeStyle\(node\)[\s\S]*applyPaperNodeTextStyle\(node, style\)/,
     )
   })
@@ -220,7 +223,8 @@ describe('MindMapFrame host runtime behavior', () => {
     expect(hostSource).toContain("button.className = 'memory-anki-exit-fullscreen-button'")
     expect(hostSource).toContain("button.textContent = '退全屏'")
     expect(hostSource).toContain("getHostBridge()?.notify?.('ui_cleared_change', uiChromeState.cleared)")
-    expect(hostSource).toContain('button.hidden = !Boolean(document.fullscreenElement)')
+    expect(hostSource).toContain('const fullscreenActive = Boolean(document.fullscreenElement) || immersiveToggleState.parentFullscreenActive')
+    expect(hostSource).toContain('button.hidden = !fullscreenActive')
   })
 
   it('runs a resize-aware redraw and fit when the host viewport changes', () => {
@@ -475,18 +479,22 @@ describe('MindMapFrame host runtime behavior', () => {
     await waitFor(() => {
       expect(bridgeMocks.applyHostState).toHaveBeenCalled()
     })
+    const resizeDispatchCountBeforeFullscreen = bridgeMocks.dispatchEvent.mock.calls.length
 
     await act(async () => {
       ref.current?.setUiCleared(true)
       ref.current?.toggleUiCleared()
       await ref.current?.enterNativeFullscreen()
+      expect(iframe.classList.contains('memory-anki-mindmap-native-fullscreen')).toBe(true)
       await ref.current?.exitNativeFullscreen()
     })
 
     expect(bridgeMocks.setUiCleared).toHaveBeenCalledWith(true)
     expect(bridgeMocks.toggleUiCleared).toHaveBeenCalledTimes(1)
-    expect(bridgeMocks.enterNativeFullscreen).toHaveBeenCalledTimes(1)
-    expect(bridgeMocks.exitNativeFullscreen).toHaveBeenCalledTimes(1)
+    expect(iframe.classList.contains('memory-anki-mindmap-native-fullscreen')).toBe(false)
+    expect(bridgeMocks.dispatchEvent.mock.calls.length).toBeGreaterThanOrEqual(
+      resizeDispatchCountBeforeFullscreen + 2,
+    )
   })
 
   it('reapplies current host state when a runtime event promotes a host that missed app_inited', async () => {

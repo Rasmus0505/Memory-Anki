@@ -2,6 +2,7 @@ import io
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 import fitz
 from fastapi import FastAPI
@@ -111,3 +112,20 @@ class SubjectDocumentRouteTests(unittest.TestCase):
         )
         self.assertEqual(upload.status_code, 400)
         self.assertIn("仅支持上传 PDF", upload.json()["error"])
+
+    def test_upload_returns_json_when_backup_fails(self):
+        pdf_bytes = build_pdf_bytes(page_count=1)
+
+        with patch.object(
+            knowledge_router,
+            "maybe_create_rolling_backup",
+            side_effect=RuntimeError("backup failed"),
+        ):
+            upload = self.client.post(
+                "/api/v1/subjects/1/documents",
+                files={"file": ("history.pdf", io.BytesIO(pdf_bytes), "application/pdf")},
+            )
+
+        self.assertEqual(upload.status_code, 500)
+        self.assertEqual(upload.headers["content-type"].split(";")[0], "application/json")
+        self.assertIn("PDF 上传失败", upload.json()["error"])

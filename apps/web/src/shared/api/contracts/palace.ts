@@ -115,14 +115,58 @@ export interface PalaceGroupedItem extends PalaceListItem {
   group_id: number | null
   group_sort_order: number
 }
+export interface PalaceGroupedSummaryItem {
+  id: number
+  title: string
+  description: string
+  mastered: boolean
+  archived?: boolean
+  needs_practice?: boolean
+  focus_node_uids?: string[]
+  focus_count?: number
+  created_at: string | null
+  updated_at?: string | null
+  next_scheduled_date?: string | null
+  next_review_at: string | null
+  has_due_review: boolean
+  current_review_schedule_id: number | null
+  review_stage_total: number
+  review_stage_completed: number
+  review_stage_progress: number
+  stage_labels: string[]
+  title_mode: string
+  manual_title: string
+  resolved_title: string
+  grouping_mode: string
+  manual_group_chapter_id: number | null
+  mini_review_mode?: MiniReviewMode
+  binding_status: string
+  primary_chapter_id: number | null
+  primary_chapter: ChapterSummary | null
+  resolved_subject: SubjectSummary | null
+  resolved_parent_chapter: ChapterSummary | null
+  group_id: number | null
+  group_sort_order: number
+  chapter_count: number
+  segment_count: number
+}
 export interface PalaceChapterGroup {
   source_chapter: ChapterSummary
   palaces: PalaceGroupedItem[]
+}
+export interface PalaceSummaryChapterGroup {
+  source_chapter: ChapterSummary
+  palaces: PalaceGroupedSummaryItem[]
 }
 export interface PalaceSubjectGroup {
   subject: SubjectSummary | null
   chapter_groups: PalaceChapterGroup[]
   ungrouped_palaces: PalaceGroupedItem[]
+}
+export interface PalaceSummarySubjectGroup {
+  subject: SubjectSummary | null
+  chapter_groups: PalaceSummaryChapterGroup[]
+  ungrouped_palaces: PalaceGroupedSummaryItem[]
 }
 export interface PalaceSubjectShelfItem {
   subject: SubjectSummary | null
@@ -146,10 +190,23 @@ export interface PalaceGroupSummary {
   source_chapter_id: number | null
   palaces: PalaceGroupedItem[]
 }
+export interface PalaceGroupedSummaryGroup {
+  id: number
+  name: string
+  color: string
+  sort_order: number
+  source_chapter_id: number | null
+  palaces: PalaceGroupedSummaryItem[]
+}
 export interface PalaceGroupedListResponse {
   groups: PalaceGroupSummary[]
   ungrouped: PalaceGroupedItem[]
   subjects: PalaceSubjectGroup[]
+}
+export interface PalaceGroupedSummaryListResponse {
+  groups: PalaceGroupedSummaryGroup[]
+  ungrouped: PalaceGroupedSummaryItem[]
+  subjects: PalaceSummarySubjectGroup[]
 }
 export interface PalaceVersionSummary {
   id: number

@@ -17,6 +17,7 @@ import type {
   MiniPalaceSummary,
   PalaceFocusSessionResponse,
   PalaceGroupedListResponse,
+  PalaceGroupedSummaryListResponse,
   PalaceListItem,
   MiniReviewMode,
   PalaceReviewPlanResponse,
@@ -27,6 +28,31 @@ import type {
   SessionProgressSnapshot,
   TextPdfImportPreviewRequest,
 } from "@/shared/api/contracts"
+
+const warmedPalaceGetCache = new Map<string, Promise<unknown>>()
+
+function buildQueryString(params?: Record<string, string>) {
+  return params ? `?${new URLSearchParams(params).toString()}` : ""
+}
+
+function consumeWarmedPalaceGet<T>(cacheKey: string, loader: () => Promise<T>) {
+  const warmed = warmedPalaceGetCache.get(cacheKey) as Promise<T> | undefined
+  if (warmed) {
+    warmedPalaceGetCache.delete(cacheKey)
+    return warmed
+  }
+  return loader()
+}
+
+function prefetchPalaceGet<T>(cacheKey: string, loader: () => Promise<T>) {
+  if (warmedPalaceGetCache.has(cacheKey)) return
+  const pending = loader().catch((error) => {
+    warmedPalaceGetCache.delete(cacheKey)
+    throw error
+  })
+  warmedPalaceGetCache.set(cacheKey, pending)
+  void pending.catch(() => {})
+}
 
 interface ImportStreamHandlers {
   onStatus?: (event: ImportStreamStatusEvent) => void
@@ -260,18 +286,45 @@ export function buildAttachmentUrl(attachmentId: number) {
 }
 
 export function getPalacesApi(params?: Record<string, string>) {
-  const q = params ? `?${new URLSearchParams(params).toString()}` : ""
+  const q = buildQueryString(params)
   return request<PalaceListItem[]>(`/palaces${q}`)
 }
 
 export function getPalacesGroupedApi(params?: Record<string, string>) {
-  const q = params ? `?${new URLSearchParams(params).toString()}` : ""
+  const q = buildQueryString(params)
   return request<PalaceGroupedListResponse>(`/palaces/grouped${q}`)
 }
 
+export function getPalacesGroupedSummaryApi(params?: Record<string, string>) {
+  const q = buildQueryString(params)
+  const cacheKey = `grouped-summary:${q}`
+  return consumeWarmedPalaceGet(cacheKey, () =>
+    request<PalaceGroupedSummaryListResponse>(`/palaces/grouped-summary${q}`),
+  )
+}
+
+export function prefetchPalacesGroupedSummaryApi(params?: Record<string, string>) {
+  const q = buildQueryString(params)
+  const cacheKey = `grouped-summary:${q}`
+  prefetchPalaceGet(cacheKey, () =>
+    request<PalaceGroupedSummaryListResponse>(`/palaces/grouped-summary${q}`),
+  )
+}
+
 export function getPalaceSubjectShelfApi(params?: Record<string, string>) {
-  const q = params ? `?${new URLSearchParams(params).toString()}` : ""
-  return request<PalaceSubjectShelfResponse>(`/palaces/subjects${q}`)
+  const q = buildQueryString(params)
+  const cacheKey = `subjects:${q}`
+  return consumeWarmedPalaceGet(cacheKey, () =>
+    request<PalaceSubjectShelfResponse>(`/palaces/subjects${q}`),
+  )
+}
+
+export function prefetchPalaceSubjectShelfApi(params?: Record<string, string>) {
+  const q = buildQueryString(params)
+  const cacheKey = `subjects:${q}`
+  prefetchPalaceGet(cacheKey, () =>
+    request<PalaceSubjectShelfResponse>(`/palaces/subjects${q}`),
+  )
 }
 
 export function getPalaceApi(id: number) {

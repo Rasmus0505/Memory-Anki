@@ -1,4 +1,5 @@
 import json
+import os
 from pathlib import Path
 from typing import Any
 
@@ -19,18 +20,21 @@ from memory_anki.modules.reviews.application.schedule_service import (
     normalize_algorithm,
     update_all_pending_schedules,
 )
+from memory_anki.modules.settings.application.ai_model_registry import (
+    AiModelRegistryError,
+    delete_ai_model_catalog_item,
+    get_ai_model_impact,
+    list_model_scenarios,
+    save_ai_model_settings,
+    test_model_connection,
+    test_provider_connection,
+    upsert_ai_model_catalog_item,
+)
 from memory_anki.modules.settings.application.ai_prompts import (
     AiPromptValidationError,
     list_prompt_templates,
     reset_prompt_templates,
     save_prompt_templates,
-)
-from memory_anki.modules.settings.application.ai_model_registry import (
-    AiModelRegistryError,
-    delete_ai_model_catalog_item,
-    list_model_scenarios,
-    save_ai_model_settings,
-    upsert_ai_model_catalog_item,
 )
 
 router = APIRouter(tags=["settings"])
@@ -174,6 +178,15 @@ def api_runtime_info():
     return build_runtime_info()
 
 
+@router.get("/runtime-health")
+def api_runtime_health():
+    return {
+        "ok": True,
+        "startup_mode": str(os.environ.get("MEMORY_ANKI_STARTUP_MODE") or "serve"),
+        "runtime": build_runtime_info(),
+    }
+
+
 @router.get("/profile/client-preferences")
 def api_get_client_preferences(s: Session = Depends(session_dep)):
     return {"items": read_client_preferences(s)}
@@ -252,7 +265,43 @@ def api_ai_model_catalog_upsert(data: dict, s: Session = Depends(session_dep)):
     try:
         return upsert_ai_model_catalog_item(s, data if isinstance(data, dict) else {})
     except AiModelRegistryError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=400,
+            detail={"message": str(exc), "code": exc.code, **(exc.details or {})},
+        ) from exc
+
+
+@router.get("/settings/ai-models/models/{model_key}/impact")
+def api_ai_model_catalog_impact(model_key: str, s: Session = Depends(session_dep)):
+    return get_ai_model_impact(s, model_key)
+
+
+@router.post("/settings/ai-models/models/{model_key}/test")
+def api_ai_model_catalog_test(model_key: str, s: Session = Depends(session_dep)):
+    try:
+        return test_model_connection(s, model_key)
+    except AiModelRegistryError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail={"message": str(exc), "code": exc.code, **(exc.details or {})},
+        ) from exc
+
+
+@router.post("/settings/ai-models/providers/{provider_key}/test")
+def api_ai_provider_test(provider_key: str, data: dict | None = None, s: Session = Depends(session_dep)):
+    normalized_provider = str(provider_key or "").strip().lower()
+    if normalized_provider not in {"dashscope", "qwen", "zhipu", "siliconflow"}:
+        raise HTTPException(status_code=400, detail={"message": "Provider 无效。", "code": "provider_invalid"})
+    model_key = None
+    if isinstance(data, dict):
+        model_key = data.get("model_key")
+    try:
+        return test_provider_connection(s, normalized_provider, model_key=model_key)  # type: ignore[arg-type]
+    except AiModelRegistryError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail={"message": str(exc), "code": exc.code, **(exc.details or {})},
+        ) from exc
 
 
 @router.delete("/settings/ai-models/models/{model_key}")
@@ -260,13 +309,20 @@ def api_ai_model_catalog_delete(model_key: str, s: Session = Depends(session_dep
     try:
         return delete_ai_model_catalog_item(s, model_key)
     except AiModelRegistryError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=400,
+            detail={"message": str(exc), "code": exc.code, **(exc.details or {})},
+        ) from exc
 
 
 @router.get("/ai-call-logs")
 def api_list_ai_call_logs(
     job_id: str | None = None,
     palace_id: int | None = None,
+    provider: str | None = None,
+    model: str | None = None,
+    feature: str | None = None,
+    status: str | None = None,
     limit: int = 50,
     s: Session = Depends(session_dep),
 ):
@@ -275,6 +331,10 @@ def api_list_ai_call_logs(
             s,
             job_id=job_id,
             palace_id=palace_id,
+            provider=provider,
+            model=model,
+            feature=feature,
+            status=status,
             limit=limit,
         )
     }

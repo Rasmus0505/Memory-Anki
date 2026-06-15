@@ -46,9 +46,8 @@ from memory_anki.modules.reviews.application.schedule_service import (
     ensure_current_review_schedule_model,
 )
 from memory_anki.modules.reviews.presentation import router as review_router
-from memory_anki.modules.settings.application.ai_model_registry import resolve_scenario_runtime
-from memory_anki.modules.sessions.application.session_progress_service import (
-    ensure_session_progress_schema,
+from memory_anki.modules.settings.application.ai_model_registry import (
+    resolve_scenario_runtime,
 )
 from memory_anki.modules.settings.presentation import router as settings_router
 from memory_anki.modules.time_records.application.time_records_service import (
@@ -76,7 +75,6 @@ class ReviewRouteTests(unittest.TestCase):
             poolclass=StaticPool,
         )
         Base.metadata.create_all(self.engine)
-        ensure_session_progress_schema()
         self.SessionLocal = sessionmaker(bind=self.engine)
         self.original_get_session = review_router.get_session
         self.original_dashboard_get_session = dashboard_router.get_session
@@ -1013,6 +1011,41 @@ class ReviewRouteTests(unittest.TestCase):
         self.assertIn("未知占位符", response.json()["detail"])
 
     def test_ai_model_settings_list_qwen_provider_and_shared_category_fields(self):
+        with self.SessionLocal() as session:
+            session.add(
+                ExternalAiCallLog(
+                    id="scene-log-1",
+                    feature="AI 分卡",
+                    operation="mindmap_ai_split",
+                    job_id="job-scene-1",
+                    palace_id=1,
+                    status="success",
+                    provider="qwen",
+                    base_url="https://dashscope.example/v1",
+                    model="qwen3.5-flash",
+                    request_id="req-scene-1",
+                    request_json=json.dumps(
+                        {
+                            "resolved_ai": {
+                                "scene_key": "ai_split",
+                                "scene_label": "AI 分卡",
+                                "model_key": "qwen3.5-flash",
+                                "model_label": "qwen3.5-flash（无视觉）",
+                                "provider": "qwen",
+                                "provider_label": "Qwen",
+                                "model_type": "llm",
+                                "model_type_label": "大语言",
+                                "has_vision": False,
+                                "thinking_enabled": False,
+                            }
+                        },
+                        ensure_ascii=False,
+                    ),
+                    response_json="{}",
+                    error_json="{}",
+                )
+            )
+            session.commit()
         response = self.client.get("/api/v1/settings/ai-models")
         self.assertEqual(response.status_code, 200)
         payload = response.json()
@@ -1025,6 +1058,20 @@ class ReviewRouteTests(unittest.TestCase):
         self.assertIn("shared_model", llm_category)
         self.assertIn("available_models", llm_category)
         self.assertFalse(llm_category["has_shared_config"])
+        self.assertIn("scene_count", llm_category)
+        self.assertIn("custom_scene_count", llm_category)
+
+        qwen_provider = next(item for item in payload["providers"] if item["key"] == "dashscope")
+        self.assertIn("model_count", qwen_provider)
+        self.assertIn("api_key_source", qwen_provider)
+
+        ai_split_scene = next(item for item in payload["scenes"] if item["key"] == "ai_split")
+        self.assertEqual(ai_split_scene["last_status"], "success")
+        self.assertEqual(ai_split_scene["resolved_provider"], "qwen")
+        self.assertEqual(ai_split_scene["resolved_model_label"], "qwen3.5-flash（无视觉）")
+
+        summary = payload["summary"]
+        self.assertIn("recent_success_call_count", summary)
 
     def test_ai_model_settings_can_save_category_shared_model_and_scene_override(self):
         first_response = self.client.put(
@@ -1087,6 +1134,70 @@ class ReviewRouteTests(unittest.TestCase):
         self.assertEqual(runtime.provider, "qwen")
         self.assertEqual(runtime.api_key, "dashscope-test-key")
         self.assertEqual(runtime.base_url, "https://dashscope.example/v1")
+
+    def test_ai_model_impact_endpoint_and_delete_error_are_structured(self):
+        self.client.put(
+            "/api/v1/settings/ai-models",
+            json={
+                "scene_updates": {
+                    "ai_split": {
+                        "default_model": "glm-4.7-flash",
+                        "default_thinking_enabled": True,
+                    }
+                }
+            },
+        )
+        impact_response = self.client.get("/api/v1/settings/ai-models/models/glm-4.7-flash/impact")
+        self.assertEqual(impact_response.status_code, 200)
+        impact_payload = impact_response.json()
+        self.assertFalse(impact_payload["can_delete"])
+        self.assertGreaterEqual(impact_payload["usage_count"], 1)
+        self.assertIn("AI 分卡", impact_payload["bound_scene_labels"])
+
+        delete_response = self.client.delete("/api/v1/settings/ai-models/models/glm-4.7-flash")
+        self.assertEqual(delete_response.status_code, 400)
+        detail = delete_response.json()["detail"]
+        self.assertEqual(detail["code"], "model_in_use")
+        self.assertFalse(detail["can_delete"])
+        self.assertIn("scene_impacts", detail)
+
+    @patch("memory_anki.modules.settings.application.ai_model_registry.call_chat_completion_text")
+    def test_provider_and_model_test_endpoints(self, call_chat_completion_text_mock):
+        call_chat_completion_text_mock.return_value = "OK"
+        with self.SessionLocal() as session:
+            session.add_all(
+                [
+                    Config(key="dashscope_api_key", value="dashscope-test-key"),
+                    Config(key="dashscope_base_url", value="https://dashscope.example/v1"),
+                ]
+            )
+            session.commit()
+
+        provider_response = self.client.post("/api/v1/settings/ai-models/providers/qwen/test")
+        self.assertEqual(provider_response.status_code, 200)
+        self.assertTrue(provider_response.json()["ok"])
+        self.assertEqual(provider_response.json()["source"], "db")
+
+        model_response = self.client.post("/api/v1/settings/ai-models/models/qwen3.5-flash/test")
+        self.assertEqual(model_response.status_code, 200)
+        self.assertTrue(model_response.json()["ok"])
+        self.assertEqual(model_response.json()["model"], "qwen3.5-flash")
+
+    def test_provider_test_endpoint_handles_missing_api_key(self):
+        with patch.dict(
+            "memory_anki.modules.settings.application.ai_model_registry.PROVIDER_ENV_DEFAULTS",
+            {
+                "dashscope": {"api_key": "", "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1"},
+                "qwen": {"api_key": "", "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1"},
+                "zhipu": {"api_key": "", "base_url": "https://open.bigmodel.cn/api/paas/v4"},
+                "siliconflow": {"api_key": "", "base_url": "https://api.siliconflow.cn/v1"},
+            },
+        ):
+            response = self.client.post("/api/v1/settings/ai-models/providers/qwen/test")
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertFalse(payload["ok"])
+        self.assertIn("API Key", payload["error"])
 
     def test_ai_call_log_endpoints_return_summary_and_detail(self):
         with self.SessionLocal() as session:

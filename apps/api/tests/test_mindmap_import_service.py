@@ -1,6 +1,6 @@
+import json
 import unittest
 import urllib.error
-import json
 from unittest.mock import MagicMock, patch
 
 import memory_anki.modules.palaces.application.mindmap_import_service as service
@@ -49,7 +49,7 @@ class MindMapImportServiceTests(unittest.TestCase):
     def test_generate_import_preview_strips_code_fence_json(self, mock_urlopen):
         response = MagicMock()
         response.read.return_value = (
-            '{"choices":[{"message":{"content":"```json\\n{\\"title\\":\\"第一章\\",\\"children\\":[{\\"text\\":\\"第一节\\",\\"children\\":[]}]}\\n```"}}]}'.encode("utf-8")
+            '{"choices":[{"message":{"content":"```json\\n{\\"title\\":\\"第一章\\",\\"children\\":[{\\"text\\":\\"第一节\\",\\"children\\":[]}]}\\n```"}}]}'.encode()
         )
         response.__enter__.return_value = response
         response.__exit__.return_value = None
@@ -69,7 +69,7 @@ class MindMapImportServiceTests(unittest.TestCase):
     def test_generate_import_preview_extracts_json_from_wrapped_text(self, mock_urlopen):
         response = MagicMock()
         response.read.return_value = (
-            '{"choices":[{"message":{"content":"这是识别结果：{\\"title\\":\\"第二章\\",\\"children\\":[{\\"text\\":\\"重点\\",\\"children\\":[]}]} 请查收"}}]}'.encode("utf-8")
+            '{"choices":[{"message":{"content":"这是识别结果：{\\"title\\":\\"第二章\\",\\"children\\":[{\\"text\\":\\"重点\\",\\"children\\":[]}]} 请查收"}}]}'.encode()
         )
         response.__enter__.return_value = response
         response.__exit__.return_value = None
@@ -364,7 +364,7 @@ class MindMapImportServiceTests(unittest.TestCase):
     def test_generate_import_preview_includes_short_model_snippet_on_invalid_json(self, mock_urlopen):
         response = MagicMock()
         response.read.return_value = (
-            '{"choices":[{"message":{"content":"抱歉，我无法直接输出标准 JSON，但我看到图片里像是章节和小节的层级结构。"}}]}'.encode("utf-8")
+            '{"choices":[{"message":{"content":"抱歉，我无法直接输出标准 JSON，但我看到图片里像是章节和小节的层级结构。"}}]}'.encode()
         )
         response.__enter__.return_value = response
         response.__exit__.return_value = None
@@ -407,7 +407,7 @@ class MindMapImportServiceTests(unittest.TestCase):
     def test_generate_text_preview_preserves_model_text_verbatim(self, mock_urlopen):
         response = MagicMock()
         response.read.return_value = (
-            '{"choices":[{"message":{"content":"```\\n第一章\\n第一节\\n```"}}]}'.encode("utf-8")
+            '{"choices":[{"message":{"content":"```\\n第一章\\n第一节\\n```"}}]}'.encode()
         )
         response.__enter__.return_value = response
         response.__exit__.return_value = None

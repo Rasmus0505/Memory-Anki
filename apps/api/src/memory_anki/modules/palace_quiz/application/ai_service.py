@@ -332,11 +332,14 @@ from .quiz_grouping_service import (  # noqa: E402,F401,I001
 # internal router imports `from .ai_service import generate_quiz_preview_from_*`
 # keep resolving. Imported at module tail to avoid circular import.
 from .quiz_generation_service import (  # noqa: E402,F401,I001
+    generate_quiz_preview_from_chapter_outline,
     generate_quiz_preview_from_images,
     generate_quiz_preview_from_pdf,
     generate_quiz_preview_from_pdf_events,
     generate_quiz_preview_from_review_mindmap,
     generate_short_answer_feedback,
+    recover_quiz_questions_from_ai_call_log_and_save,
+    recover_quiz_preview_from_ai_call_log,
 )
 from .quiz_grouping_service import (  # noqa: E402,F401,I001
     classify_existing_quiz_questions_to_mini_palaces,

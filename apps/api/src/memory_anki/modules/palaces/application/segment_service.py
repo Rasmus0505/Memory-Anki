@@ -33,7 +33,6 @@ from .segment_review_service import (
     segment_review_stages_json,
     segment_summary_json,
 )
-from .segment_schema_service import ensure_segment_schema
 
 __all__ = [
     "SEGMENT_COLOR_PALETTE",
@@ -46,7 +45,6 @@ __all__ = [
     "create_palace_segment",
     "create_segment_review_log",
     "delete_palace_segment",
-    "ensure_segment_schema",
     "ensure_segment_schedule_model",
     "estimate_palace_review_seconds",
     "estimate_segment_review_seconds",

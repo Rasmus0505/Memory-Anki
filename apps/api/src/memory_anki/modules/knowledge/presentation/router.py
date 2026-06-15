@@ -1,6 +1,5 @@
 """知识体系路由：学科 + 章节 + 双向关联 + 自定义连线"""
 import traceback
-from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, Query, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, Response
@@ -215,7 +214,22 @@ async def upload_subject_document_api(
         maybe_create_rolling_backup("rolling-subject-document-upload")
         return subject_document_response(subject_id, document)
     except ValueError as exc:
+        s.rollback()
         return JSONResponse(status_code=400, content={"error": str(exc)})
+    except Exception:
+        s.rollback()
+        tb = traceback.format_exc()
+        DEBUG_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+        with DEBUG_LOG_PATH.open("a", encoding="utf-8") as handle:
+            handle.write(
+                "[upload_subject_document FAIL]\n"
+                f"subject_id={subject_id}\n"
+                f"filename={file.filename!r}\n"
+                f"content_type={file.content_type!r}\n"
+                f"traceback=\n{tb}\n"
+            )
+        print(f"[DEBUG] upload_subject_document FAIL: {tb}", flush=True)
+        return JSONResponse(status_code=500, content={"error": "PDF 上传失败，请稍后重试。"})
 
 
 @router.get("/subjects/{subject_id}/documents/{document_id}")

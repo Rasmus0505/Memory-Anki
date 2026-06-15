@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import { ArrowLeft, History, Search, Volume2 } from 'lucide-react'
 import {
   BilinkPanel,
@@ -26,6 +26,7 @@ import { PalaceMindMapImportDrawer } from '@/features/palace-edit/components/Pal
 import { useMindMapImport } from '@/features/palace-edit/hooks/useMindMapImport'
 import { usePalaceEditPage } from '@/features/palace-edit/hooks/usePalaceEditPage'
 import { PalaceKnowledgeOutlinePanel } from '@/features/palace-edit/components/PalaceKnowledgeOutlinePanel'
+import { useQuizLauncher } from '@/features/palace-quiz/QuizLauncherProvider'
 import {
   useVoiceCoachController,
   VoiceCoachSettingsDialog,
@@ -35,8 +36,8 @@ import { useRouteResidency } from '@/app/router/RouteResidency'
 
 export default function PalaceEdit() {
   const { isActive } = useRouteResidency()
-  const navigate = useNavigate()
   const page = usePalaceEditPage()
+  const { openQuizLauncher } = useQuizLauncher()
   const mindMapFrameRef = useRef<MindMapFrameHandle | null>(null)
   const [voiceCoachDialogOpen, setVoiceCoachDialogOpen] = useState(false)
   const [mindMapUiCleared, setMindMapUiCleared] = useState(false)
@@ -119,7 +120,10 @@ export default function PalaceEdit() {
 
   const handleOpenQuizPage = () => {
     if (!page.palaceId) return
-    navigate(`/palaces/${page.palaceId}/quiz`)
+    openQuizLauncher({
+      palaceId: page.palaceId,
+      scene: page.editorMode === 'practice' ? 'practice' : 'edit',
+    })
   }
 
   useEffect(() => {

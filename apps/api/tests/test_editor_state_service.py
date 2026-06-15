@@ -7,8 +7,8 @@ from sqlalchemy.pool import StaticPool
 from memory_anki.infrastructure.db.models import Base, Chapter, Palace, Subject
 from memory_anki.modules.mindmap.application.editor_state_service import (
     EditorStateConflictError,
-    get_palace_editor_state,
     _plain_text,
+    get_palace_editor_state,
     normalize_editor_doc,
     save_palace_editor_state,
     save_subject_editor_state,

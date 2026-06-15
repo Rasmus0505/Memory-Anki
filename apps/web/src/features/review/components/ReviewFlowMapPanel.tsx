@@ -151,7 +151,7 @@ export function ReviewFlowMapPanel({
         quizAction={
           currentPalaceId
             ? {
-                label: onQuizBreakOpen ? '做题休息' : '做题',
+                label: '做题',
                 onClick: handleOpenQuizPage,
               }
             : null

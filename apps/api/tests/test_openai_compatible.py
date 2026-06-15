@@ -54,7 +54,7 @@ def test_parse_chat_completion_stream_accumulates_delta_chunks() -> None:
 def test_parse_chat_completion_stream_falls_back_to_non_stream_body() -> None:
     class FakeResponse:
         def __iter__(self):
-            return iter(['{"choices":[{"message":{"content":"直接返回"}}]}'.encode("utf-8")])
+            return iter(['{"choices":[{"message":{"content":"直接返回"}}]}'.encode()])
 
         def read(self):
             return b""

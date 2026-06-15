@@ -7,6 +7,10 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 from memory_anki.core.config import DB_PATH, FULL_BACKUPS_DIR, RESCUE_BACKUPS_DIR
+from memory_anki.core.runtime_activity import (
+    assert_exclusive_runtime_operation,
+    current_runtime_instance_id,
+)
 from memory_anki.modules.backups.application.storage_backup import (
     read_storage_backup_manifest,
     restore_storage_backup,
@@ -117,6 +121,10 @@ def restore_database_backup(backup_folder: str) -> Path:
     manifest = read_storage_backup_manifest(source_dir)
     if not source_db.exists() and not manifest:
         raise FileNotFoundError("备份中缺少数据库快照。")
+    assert_exclusive_runtime_operation(
+        "Database restore",
+        current_instance_id=current_runtime_instance_id(),
+    )
     rescue = create_rescue_snapshot("before-db-restore")
     restore_storage_backup(source_dir)
     return rescue

@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING
 
 from sqlalchemy import (
     Boolean,
+    CheckConstraint,
     Column,
     Date,
     DateTime,
@@ -22,6 +23,7 @@ from sqlalchemy import (
     String,
     Table,
     Text,
+    text,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -181,6 +183,9 @@ class Attachment(Base):
 
 class PalaceSegment(Base):
     __tablename__ = "palace_segments"
+    __table_args__ = (
+        Index("ix_palace_segments_palace_sort", "palace_id", "sort_order"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     palace_id: Mapped[int] = mapped_column(
@@ -214,6 +219,9 @@ class PalaceSegment(Base):
 
 class PalaceMiniPalace(Base):
     __tablename__ = "palace_mini_palaces"
+    __table_args__ = (
+        Index("ix_palace_mini_palaces_palace_sort", "palace_id", "sort_order"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     palace_id: Mapped[int] = mapped_column(
@@ -288,6 +296,14 @@ class ReviewLog(Base):
 
 class PalaceSegmentReviewSchedule(Base):
     __tablename__ = "palace_segment_review_schedules"
+    __table_args__ = (
+        Index(
+            "ix_segment_review_schedule_segment",
+            "palace_segment_id",
+            "completed",
+            "review_number",
+        ),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     palace_segment_id: Mapped[int] = mapped_column(
@@ -333,6 +349,14 @@ class PalaceSegmentReviewLog(Base):
 
 class PalaceMiniPalaceReviewSchedule(Base):
     __tablename__ = "palace_mini_palace_review_schedules"
+    __table_args__ = (
+        Index(
+            "ix_mini_review_schedule_mini",
+            "palace_mini_palace_id",
+            "completed",
+            "review_number",
+        ),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     palace_mini_palace_id: Mapped[int] = mapped_column(
@@ -378,6 +402,65 @@ class PalaceMiniPalaceReviewLog(Base):
 
 class SessionProgress(Base):
     __tablename__ = "session_progress"
+    __table_args__ = (
+        Index(
+            "ix_session_progress_practice",
+            "session_kind",
+            "palace_id",
+            unique=True,
+            sqlite_where=text("session_kind = 'practice' AND palace_id IS NOT NULL"),
+        ),
+        Index(
+            "ix_session_progress_review",
+            "session_kind",
+            "review_schedule_id",
+            unique=True,
+            sqlite_where=text("session_kind = 'review' AND review_schedule_id IS NOT NULL"),
+        ),
+        Index(
+            "ix_session_progress_segment_practice",
+            "session_kind",
+            "palace_segment_id",
+            unique=True,
+            sqlite_where=text(
+                "session_kind = 'segment_practice' AND palace_segment_id IS NOT NULL"
+            ),
+        ),
+        Index(
+            "ix_session_progress_segment_review",
+            "session_kind",
+            "palace_segment_review_schedule_id",
+            unique=True,
+            sqlite_where=text(
+                "session_kind = 'segment_review' "
+                "AND palace_segment_review_schedule_id IS NOT NULL"
+            ),
+        ),
+        Index(
+            "ix_session_progress_mini_practice",
+            "session_kind",
+            "mini_palace_id",
+            unique=True,
+            sqlite_where=text("session_kind = 'mini_practice' AND mini_palace_id IS NOT NULL"),
+        ),
+        Index(
+            "ix_session_progress_mini_review",
+            "session_kind",
+            "mini_palace_review_schedule_id",
+            unique=True,
+            sqlite_where=text(
+                "session_kind = 'mini_review' "
+                "AND mini_palace_review_schedule_id IS NOT NULL"
+            ),
+        ),
+        Index(
+            "ix_session_progress_focus_practice",
+            "session_kind",
+            "palace_id",
+            unique=True,
+            sqlite_where=text("session_kind = 'focus_practice' AND palace_id IS NOT NULL"),
+        ),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     session_kind: Mapped[str] = mapped_column(String(20), nullable=False)
@@ -423,6 +506,9 @@ class SessionProgress(Base):
 
 class PalaceVersion(Base):
     __tablename__ = "palace_versions"
+    __table_args__ = (
+        Index("ix_palace_versions_palace_id_created_at", "palace_id", "created_at"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     palace_id: Mapped[int] = mapped_column(
@@ -456,21 +542,37 @@ class PalaceGroup(Base):
 class PalaceQuizQuestion(Base):
     __tablename__ = "palace_quiz_questions"
     __table_args__ = (
+        CheckConstraint(
+            "palace_id IS NOT NULL OR source_chapter_id IS NOT NULL",
+            name="ck_palace_quiz_questions_owner",
+        ),
         Index("ix_palace_quiz_questions_palace_sort", "palace_id", "sort_order"),
         Index("ix_palace_quiz_questions_updated_at", "updated_at"),
         Index("ix_palace_quiz_questions_mini_palace", "mini_palace_id"),
         Index("ix_palace_quiz_questions_origin_mini", "origin_question_id", "mini_palace_id"),
+        Index("ix_palace_quiz_questions_source_chapter", "source_chapter_id"),
+        Index("ix_palace_quiz_questions_classified_chapter", "classified_chapter_id"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    palace_id: Mapped[int] = mapped_column(
+    palace_id: Mapped[int | None] = mapped_column(
         Integer,
         ForeignKey("palaces.id", ondelete="CASCADE"),
-        nullable=False,
+        nullable=True,
     )
     mini_palace_id: Mapped[int | None] = mapped_column(
         Integer,
         ForeignKey("palace_mini_palaces.id", ondelete="CASCADE"),
+        nullable=True,
+    )
+    source_chapter_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("chapters.id", ondelete="CASCADE"),
+        nullable=True,
+    )
+    classified_chapter_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("chapters.id", ondelete="SET NULL"),
         nullable=True,
     )
     origin_question_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
@@ -495,4 +597,14 @@ class PalaceQuizQuestion(Base):
     mini_palace: Mapped[PalaceMiniPalace | None] = relationship(
         "PalaceMiniPalace",
         back_populates="quiz_questions",
+    )
+    source_chapter: Mapped[Chapter | None] = relationship(
+        "Chapter",
+        foreign_keys=[source_chapter_id],
+        lazy="joined",
+    )
+    classified_chapter: Mapped[Chapter | None] = relationship(
+        "Chapter",
+        foreign_keys=[classified_chapter_id],
+        lazy="joined",
     )

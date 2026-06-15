@@ -14,14 +14,13 @@ from memory_anki.infrastructure.db.models import (
     PalaceMiniPalace,
     PalaceMiniPalaceReviewLog,
     PalaceMiniPalaceReviewSchedule,
-    engine,
 )
+from memory_anki.modules.mindmap.application.editor_state_service import _deserialize
 from memory_anki.modules.palaces.application.segment_nodes import (
     build_segments_editor_doc,
     collect_doc_nodes_with_descendants,
     get_reviewable_doc_node_uids,
 )
-from memory_anki.modules.mindmap.application.editor_state_service import _deserialize
 from memory_anki.modules.reviews.application.schedule_policy import (
     ReviewScheduleDraft,
     ReviewSchedulePolicy,
@@ -44,113 +43,6 @@ from memory_anki.modules.sessions.application.session_progress_service import (
     calculate_reveal_progress,
     get_mini_review_progress,
 )
-
-
-def ensure_mini_palace_schema() -> None:
-    with engine.begin() as conn:
-        existing_tables = {
-            row[0]
-            for row in conn.exec_driver_sql(
-                "SELECT name FROM sqlite_master WHERE type='table'"
-            ).fetchall()
-        }
-        if "palace_mini_palaces" not in existing_tables:
-            conn.exec_driver_sql(
-                """
-                CREATE TABLE palace_mini_palaces (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    palace_id INTEGER NOT NULL,
-                    name VARCHAR(200) NOT NULL DEFAULT '',
-                    node_uids_json TEXT DEFAULT '[]',
-                    needs_practice BOOLEAN NOT NULL DEFAULT 0,
-                    sort_order INTEGER DEFAULT 0,
-                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                    FOREIGN KEY(palace_id) REFERENCES palaces(id) ON DELETE CASCADE
-                )
-                """
-            )
-        else:
-            existing_columns = {
-                row[1]
-                for row in conn.exec_driver_sql(
-                    "PRAGMA table_info(palace_mini_palaces)"
-                ).fetchall()
-            }
-            columns = (
-                ("name", "VARCHAR(200) NOT NULL DEFAULT ''"),
-                ("node_uids_json", "TEXT DEFAULT '[]'"),
-                ("needs_practice", "BOOLEAN NOT NULL DEFAULT 0"),
-                ("sort_order", "INTEGER DEFAULT 0"),
-                ("created_at", "DATETIME DEFAULT CURRENT_TIMESTAMP"),
-                ("updated_at", "DATETIME DEFAULT CURRENT_TIMESTAMP"),
-            )
-            for column_name, column_type in columns:
-                if column_name not in existing_columns:
-                    conn.exec_driver_sql(
-                        f"ALTER TABLE palace_mini_palaces ADD COLUMN {column_name} {column_type}"
-                    )
-
-        if "palace_mini_palace_review_schedules" not in existing_tables:
-            conn.exec_driver_sql(
-                """
-                CREATE TABLE palace_mini_palace_review_schedules (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    palace_mini_palace_id INTEGER NOT NULL,
-                    scheduled_date DATE NOT NULL,
-                    scheduled_at DATETIME NULL,
-                    interval_days INTEGER DEFAULT 0,
-                    algorithm_used VARCHAR(30) DEFAULT 'ebbinghaus',
-                    completed BOOLEAN DEFAULT 0,
-                    completed_at DATETIME NULL,
-                    review_number INTEGER DEFAULT 0,
-                    review_type VARCHAR(20) DEFAULT 'standard',
-                    anchor_date DATE NULL,
-                    FOREIGN KEY(palace_mini_palace_id) REFERENCES palace_mini_palaces(id) ON DELETE CASCADE
-                )
-                """
-            )
-        if "palace_mini_palace_review_logs" not in existing_tables:
-            conn.exec_driver_sql(
-                """
-                CREATE TABLE palace_mini_palace_review_logs (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    palace_mini_palace_id INTEGER NOT NULL,
-                    review_date DATE DEFAULT CURRENT_DATE,
-                    score INTEGER DEFAULT 0,
-                    review_mode VARCHAR(20) DEFAULT 'flashcard',
-                    duration_seconds INTEGER DEFAULT 0,
-                    FOREIGN KEY(palace_mini_palace_id) REFERENCES palace_mini_palaces(id) ON DELETE CASCADE
-                )
-                """
-            )
-
-        for table_name, columns in {
-            "palace_mini_palace_review_schedules": (
-                ("scheduled_at", "DATETIME"),
-                ("completed_at", "DATETIME"),
-            ),
-        }.items():
-            existing_columns = {
-                row[1]
-                for row in conn.exec_driver_sql(
-                    f"PRAGMA table_info({table_name})"
-                ).fetchall()
-            }
-            for column_name, column_type in columns:
-                if column_name not in existing_columns:
-                    conn.exec_driver_sql(
-                        f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_type}"
-                    )
-
-        conn.exec_driver_sql(
-            "CREATE INDEX IF NOT EXISTS ix_palace_mini_palaces_palace_sort "
-            "ON palace_mini_palaces (palace_id, sort_order)"
-        )
-        conn.exec_driver_sql(
-            "CREATE INDEX IF NOT EXISTS ix_mini_review_schedule_mini "
-            "ON palace_mini_palace_review_schedules (palace_mini_palace_id, completed, review_number)"
-        )
 
 
 def parse_mini_palace_node_uids(raw: str | None) -> list[str]:

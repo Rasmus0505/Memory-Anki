@@ -1,13 +1,11 @@
 from __future__ import annotations
 
-from typing import Generator, TypeVar
+from collections.abc import Generator
 
 from .contracts import ImportStreamEvent
 
-T = TypeVar("T")
 
-
-def stream_text_deltas_as_events(
+def stream_text_deltas_as_events[T](
     *,
     generator: Generator[str, None, T],
     channel: str,

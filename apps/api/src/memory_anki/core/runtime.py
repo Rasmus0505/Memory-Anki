@@ -7,7 +7,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from memory_anki.core.config import APP_HOME, MIGRATION_STATE_PATH, REPO_ROOT
+from memory_anki.core.config import APP_HOME, APP_HOME_SOURCE, MIGRATION_STATE_PATH, REPO_ROOT
+from memory_anki.core.runtime_activity import describe_active_runtime_instances
 from memory_anki.core.storage_layout import load_storage_layout
 from memory_anki.core.time import iso_utc_now
 
@@ -158,6 +159,7 @@ def build_runtime_info(
     )
     resolved_commit = commit or os.environ.get("MEMORY_ANKI_GIT_COMMIT") or detect_git_commit()
     storage_layout = load_storage_layout()
+    active_runtime_instances = describe_active_runtime_instances()
     return {
         "channel": resolved_channel,
         "commit": resolved_commit,
@@ -168,6 +170,7 @@ def build_runtime_info(
         "max_supported_generation": resolved_contract.max_supported_generation,
         "last_started_at": shared_state.get("last_started_at"),
         "app_home": str(APP_HOME),
+        "app_home_source": APP_HOME_SOURCE,
         "storage_mode": storage_layout.storage_mode,
         "managed_storage_items": [
             {
@@ -180,4 +183,5 @@ def build_runtime_info(
             for item in storage_layout.managed_items
         ],
         "backup_covered_items": [item.key for item in storage_layout.backup_items],
+        "active_runtime_instances": active_runtime_instances,
     }

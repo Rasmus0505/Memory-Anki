@@ -1,4 +1,4 @@
-import { fetchWithMutationQueue, request } from "@/shared/api/http"
+import { request, uploadWithFormData } from "@/shared/api/http"
 import type {
   MindMapEditorState,
   PdfPageSummary,
@@ -96,23 +96,14 @@ export function saveSubjectEditorApi(id: number, data: Partial<MindMapEditorStat
 export async function uploadSubjectDocumentApi(subjectId: number, file: File) {
   const form = new FormData()
   form.append("file", file)
-  const response = await fetchWithMutationQueue(
-    `/api/v1/subjects/${subjectId}/documents`,
-    {
-      method: "POST",
-      body: form,
-    },
+  return uploadWithFormData<SubjectDocumentSummary>(
+    `/subjects/${subjectId}/documents`,
+    form,
     {
       resourceKey: `subject:${subjectId}:document:${file.name}`,
       description: `上传学科 PDF：${file.name}`,
-      replayMode: 'manual',
     },
   )
-  const data = await response.json()
-  if (!response.ok) {
-    throw new Error(data?.error || `HTTP ${response.status}`)
-  }
-  return data as SubjectDocumentSummary
 }
 
 export function getSubjectDocumentsApi(subjectId: number) {

@@ -8,6 +8,7 @@ import {
   getBackgroundTasks,
   getRunningTaskCountBySection,
   registerTask,
+  setTaskBubblePosition,
   updateTask,
 } from '@/shared/background-tasks/backgroundTaskRegistry'
 
@@ -100,14 +101,15 @@ describe('backgroundTaskRegistry store', () => {
     }
   })
 
-  it('updateTask on a non-running task is a no-op', () => {
+  it('updateTask can refresh detail for completed tasks without restoring running state', () => {
     registerTask({ id: 't1', section: 'palaces', title: 'task', progress: 10 })
     completeTask('t1')
-    updateTask('t1', { progress: 90, detail: 'should be ignored' })
+    updateTask('t1', { progress: 90, detail: 'ready' })
 
     const [task] = getBackgroundTasks()
-    expect(task.progress).toBe(100)
-    expect(task.detail).toBeUndefined()
+    expect(task.progress).toBe(90)
+    expect(task.detail).toBe('ready')
+    expect(task.status).toBe('completed')
   })
 
   it('dismissTask removes a task immediately', () => {
@@ -141,5 +143,20 @@ describe('backgroundTaskRegistry store', () => {
     const tasks = getBackgroundTasks()
     expect(tasks[0].id).toBe('new')
     expect(tasks[1].id).toBe('old')
+  })
+
+  it('stores bubble metadata for quiz generation tasks', () => {
+    registerTask({
+      id: 'quiz-1',
+      section: 'palaceQuiz',
+      title: 'quiz',
+      kind: 'quiz-generation',
+      bubble: { x: 100, y: 120 },
+    })
+    setTaskBubblePosition('quiz-1', { x: 180, y: 220 })
+
+    const [task] = getBackgroundTasks()
+    expect(task.kind).toBe('quiz-generation')
+    expect(task.bubble).toEqual({ x: 180, y: 220 })
   })
 })

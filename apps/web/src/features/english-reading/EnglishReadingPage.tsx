@@ -2929,6 +2929,7 @@ export default function EnglishReadingPage() {
       >
         {dictionaryPanel ? (
           <DialogContent
+            layout="unstyled"
             ref={dictionaryPanelRef}
             data-testid="dictionary-popup-panel"
             style={{
@@ -3132,6 +3133,7 @@ export default function EnglishReadingPage() {
       >
         {sentenceTranslationPanel ? (
           <DialogContent
+            layout="unstyled"
             ref={sentenceTranslationPanelRef}
             data-testid="sentence-translation-panel"
             style={{

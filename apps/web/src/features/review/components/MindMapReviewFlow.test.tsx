@@ -40,9 +40,16 @@ const timer = {
 }
 
 const useTimedSessionMock = vi.fn()
+const openQuizLauncherMock = vi.fn()
 
 vi.mock('@/shared/hooks/useTimedSession', () => ({
   useTimedSession: (args: unknown) => useTimedSessionMock(args),
+}))
+
+vi.mock('@/features/palace-quiz/QuizLauncherProvider', () => ({
+  useQuizLauncher: () => ({
+    openQuizLauncher: (...args: unknown[]) => openQuizLauncherMock(...args),
+  }),
 }))
 
 const mindMapFrameMock = vi.fn()
@@ -193,6 +200,7 @@ describe('MindMapReviewFlow', () => {
     timer.reset.mockClear()
     mindMapFrameMock.mockClear()
     useTimedSessionMock.mockClear()
+    openQuizLauncherMock.mockClear()
     useTimedSessionMock.mockImplementation(() => timer)
     window.localStorage.clear()
     window.localStorage.setItem(
@@ -307,10 +315,15 @@ describe('MindMapReviewFlow', () => {
     expect(screen.getByText('frame-readonly-plain')).toBeTruthy()
     expect(screen.queryByRole('button', { name: '编辑' })).toBeNull()
     expect(screen.getByRole('button', { name: '搜索' })).toBeTruthy()
-    expect(screen.getByRole('button', { name: '做题休息' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: '做题' })).toBeTruthy()
 
-    fireEvent.click(screen.getByRole('button', { name: '做题休息' }))
-    expect(screen.getByRole('heading', { name: '做题休息' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: '做题' }))
+    expect(openQuizLauncherMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        palaceId: 1,
+        scene: 'review',
+      }),
+    )
 
     fireEvent.click(screen.getByRole('button', { name: '宿主半屏切换' }))
     await waitFor(() => {
@@ -821,6 +834,76 @@ describe('MindMapReviewFlow', () => {
     })
 
     expect(onComplete).toHaveBeenCalledTimes(1)
+    vi.useRealTimers()
+  })
+
+  it('dismisses the combo milestone burst on time even if the parent rerenders repeatedly', async () => {
+    vi.useFakeTimers()
+    const comboEditorState = {
+      editor_doc: {
+        root: {
+          data: { text: 'Root', uid: 'root' },
+          children: [
+            { data: { text: 'Child A', uid: 'child-a' }, children: [] },
+            { data: { text: 'Child B', uid: 'child-b' }, children: [] },
+            { data: { text: 'Child C', uid: 'child-c' }, children: [] },
+          ],
+        },
+      },
+      editor_config: {},
+      editor_local_config: {},
+      lang: 'zh',
+    }
+
+    renderInRouter(
+      <MindMapReviewFlow
+        title="Root"
+        palaceId={1}
+        sessionKind="practice"
+        reviewEditorState={comboEditorState}
+        onComplete={vi.fn()}
+      />,
+    )
+
+    await act(async () => {
+      getLatestMindMapFrameProps()?.onNodeClick?.([{ uid: 'root', text: 'Root' }])
+    })
+    await act(async () => {
+      getLatestMindMapFrameProps()?.onNodeClick?.([{ uid: 'child-a', text: 'Child A' }])
+    })
+    await act(async () => {
+      getLatestMindMapFrameProps()?.onNodeClick?.([{ uid: 'root', text: 'Root' }])
+    })
+    await act(async () => {
+      getLatestMindMapFrameProps()?.onNodeClick?.([{ uid: 'child-b', text: 'Child B' }])
+    })
+    await act(async () => {
+      getLatestMindMapFrameProps()?.onNodeClick?.([{ uid: 'root', text: 'Root' }])
+    })
+    await act(async () => {
+      getLatestMindMapFrameProps()?.onNodeClick?.([{ uid: 'child-c', text: 'Child C' }])
+    })
+
+    expect(screen.getByRole('status', { name: '连击 3' })).toBeTruthy()
+    expect(screen.getAllByText('手感到了，继续揭晓。').length).toBeGreaterThan(0)
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(600)
+    })
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: '反馈设置' }))
+    })
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: '关闭弹窗' }))
+    })
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(700)
+    })
+
+    expect(screen.queryByRole('status', { name: '连击 3' })).toBeNull()
+    expect(screen.getByText('连击 3')).toBeTruthy()
     vi.useRealTimers()
   })
 })

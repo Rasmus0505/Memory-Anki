@@ -47,6 +47,123 @@ export const CARD_REVEAL_SURPRISE_TONES: ToneSpec[] = [
 ]
 
 const TONE_PROFILES: Record<MindMapFeedbackEvent, ToneSpec[]> = {
+  quiz_nav_open_practice: [
+    { frequency: 330, endFrequency: 440, durationMs: 84, gain: 0.026, type: 'triangle', offsetMs: 0, pan: -0.16 },
+    { frequency: 660, durationMs: 100, gain: 0.024, type: 'sine', offsetMs: 50, pan: 0.16 },
+  ],
+  quiz_nav_question_prev: [
+    { frequency: 280, endFrequency: 350, durationMs: 46, gain: 0.018, type: 'triangle', offsetMs: 0, pan: -0.08 },
+    { frequency: 420, durationMs: 42, gain: 0.012, type: 'sine', offsetMs: 28, pan: 0.08 },
+  ],
+  quiz_nav_question_next: [
+    { frequency: 320, endFrequency: 420, durationMs: 48, gain: 0.019, type: 'triangle', offsetMs: 0, pan: -0.08 },
+    { frequency: 520, durationMs: 44, gain: 0.013, type: 'sine', offsetMs: 30, pan: 0.08 },
+  ],
+  quiz_nav_scope_change: [
+    { frequency: 294, durationMs: 62, gain: 0.024, type: 'triangle', offsetMs: 0, pan: -0.16 },
+    { frequency: 440, durationMs: 74, gain: 0.02, type: 'sine', offsetMs: 42, pan: 0 },
+    { frequency: 554, durationMs: 86, gain: 0.016, type: 'triangle', offsetMs: 90, pan: 0.16 },
+  ],
+  quiz_nav_view_switch: [
+    { frequency: 262, endFrequency: 370, durationMs: 92, gain: 0.024, type: 'triangle', offsetMs: 0, pan: -0.14 },
+    { frequency: 494, durationMs: 96, gain: 0.018, type: 'sine', offsetMs: 54, pan: 0.14 },
+  ],
+  quiz_nav_tab_switch: [
+    { frequency: 300, endFrequency: 392, durationMs: 88, gain: 0.025, type: 'triangle', offsetMs: 0, pan: -0.16 },
+    { frequency: 587, durationMs: 102, gain: 0.02, type: 'sine', offsetMs: 56, pan: 0.16 },
+  ],
+  quiz_answer_select: [
+    { frequency: 460, endFrequency: 520, durationMs: 24, gain: 0.01, type: 'sine', offsetMs: 0, pan: 0.04, attackMs: 3 },
+  ],
+  quiz_answer_submit: [
+    { frequency: 392, durationMs: 58, gain: 0.022, type: 'triangle', offsetMs: 0, pan: -0.06 },
+    { frequency: 554, durationMs: 78, gain: 0.017, type: 'sine', offsetMs: 36, pan: 0.06 },
+  ],
+  quiz_answer_reset: [
+    { frequency: 340, endFrequency: 250, durationMs: 76, gain: 0.02, type: 'triangle', offsetMs: 0, pan: 0 },
+  ],
+  quiz_result_correct: [
+    { frequency: 440, durationMs: 46, gain: 0.022, type: 'triangle', offsetMs: 0, pan: -0.08 },
+    { frequency: 659, durationMs: 62, gain: 0.02, type: 'sine', offsetMs: 26, pan: 0 },
+    { frequency: 880, durationMs: 88, gain: 0.014, type: 'triangle', offsetMs: 70, pan: 0.08 },
+  ],
+  quiz_result_incorrect: [
+    { frequency: 310, endFrequency: 180, durationMs: 88, gain: 0.03, type: 'sawtooth', offsetMs: 0, pan: 0.08 },
+    { frequency: 150, durationMs: 104, gain: 0.022, type: 'triangle', offsetMs: 56, pan: -0.08 },
+  ],
+  quiz_result_reveal: [
+    { frequency: 520, durationMs: 84, gain: 0.03, type: 'triangle', offsetMs: 0, pan: -0.1 },
+    { frequency: 780, durationMs: 72, gain: 0.018, type: 'sine', offsetMs: 52, pan: 0.1 },
+  ],
+  quiz_result_ai_feedback_ready: [
+    { frequency: 494, durationMs: 68, gain: 0.022, type: 'triangle', offsetMs: 0, pan: -0.16 },
+    { frequency: 622, durationMs: 74, gain: 0.02, type: 'sine', offsetMs: 42, pan: 0 },
+    { frequency: 831, durationMs: 102, gain: 0.015, type: 'triangle', offsetMs: 96, pan: 0.16 },
+  ],
+  quiz_manage_create_start: [
+    { frequency: 360, endFrequency: 480, durationMs: 58, gain: 0.02, type: 'triangle', offsetMs: 0, pan: -0.1 },
+    { frequency: 620, durationMs: 70, gain: 0.014, type: 'sine', offsetMs: 42, pan: 0.1 },
+  ],
+  quiz_manage_edit_start: [
+    { frequency: 320, endFrequency: 410, durationMs: 56, gain: 0.018, type: 'triangle', offsetMs: 0, pan: -0.1 },
+    { frequency: 560, durationMs: 68, gain: 0.012, type: 'sine', offsetMs: 34, pan: 0.1 },
+  ],
+  quiz_manage_save: [
+    { frequency: 392, durationMs: 64, gain: 0.024, type: 'triangle', offsetMs: 0, pan: -0.1 },
+    { frequency: 523, durationMs: 74, gain: 0.02, type: 'sine', offsetMs: 38, pan: 0 },
+    { frequency: 698, durationMs: 94, gain: 0.014, type: 'triangle', offsetMs: 88, pan: 0.1 },
+  ],
+  quiz_manage_delete: [
+    { frequency: 300, endFrequency: 190, durationMs: 84, gain: 0.028, type: 'sawtooth', offsetMs: 0, pan: 0.1 },
+    { frequency: 170, durationMs: 96, gain: 0.02, type: 'triangle', offsetMs: 50, pan: -0.1 },
+  ],
+  quiz_manage_batch_delete: [
+    { frequency: 280, endFrequency: 180, durationMs: 120, gain: 0.034, type: 'sawtooth', offsetMs: 0, pan: -0.2 },
+    { frequency: 180, durationMs: 132, gain: 0.026, type: 'triangle', offsetMs: 72, pan: 0 },
+    { frequency: 120, durationMs: 150, gain: 0.02, type: 'triangle', offsetMs: 144, pan: 0.2 },
+  ],
+  quiz_generate_start: [
+    { frequency: 392, durationMs: 56, gain: 0.022, type: 'triangle', offsetMs: 0, pan: -0.12 },
+    { frequency: 587, durationMs: 72, gain: 0.02, type: 'sine', offsetMs: 40, pan: 0 },
+    { frequency: 784, durationMs: 96, gain: 0.018, type: 'triangle', offsetMs: 92, pan: 0.12 },
+  ],
+  quiz_generate_attach_source: [
+    { frequency: 349, durationMs: 56, gain: 0.02, type: 'triangle', offsetMs: 0, pan: -0.08 },
+    { frequency: 466, durationMs: 62, gain: 0.015, type: 'sine', offsetMs: 34, pan: 0.08 },
+  ],
+  quiz_generate_preview_ready: [
+    { frequency: 420, durationMs: 86, gain: 0.026, type: 'triangle', offsetMs: 0, pan: -0.16 },
+    { frequency: 630, durationMs: 102, gain: 0.02, type: 'sine', offsetMs: 52, pan: 0 },
+    { frequency: 940, durationMs: 118, gain: 0.014, type: 'triangle', offsetMs: 120, pan: 0.16 },
+  ],
+  quiz_generate_save: [
+    { frequency: 294, endFrequency: 392, durationMs: 110, gain: 0.032, type: 'triangle', offsetMs: 0, pan: -0.22 },
+    { frequency: 587, durationMs: 128, gain: 0.028, type: 'sine', offsetMs: 76, pan: 0 },
+    { frequency: 880, durationMs: 150, gain: 0.022, type: 'triangle', offsetMs: 148, pan: 0.22 },
+  ],
+  quiz_generate_classify_complete: [
+    { frequency: 392, durationMs: 146, gain: 0.044, type: 'triangle', offsetMs: 0, pan: -0.24 },
+    { frequency: 587, durationMs: 170, gain: 0.04, type: 'sine', offsetMs: 80, pan: 0 },
+    { frequency: 988, durationMs: 214, gain: 0.03, type: 'triangle', offsetMs: 176, pan: 0.24 },
+  ],
+  quiz_generate_cancel: [
+    { frequency: 380, durationMs: 44, gain: 0.018, type: 'triangle', offsetMs: 0, pan: 0.08 },
+    { frequency: 250, durationMs: 70, gain: 0.014, type: 'sine', offsetMs: 24, pan: -0.08 },
+  ],
+  quiz_error_missing_input: [
+    { frequency: 360, endFrequency: 250, durationMs: 54, gain: 0.018, type: 'triangle', offsetMs: 0, pan: 0.04 },
+  ],
+  quiz_error_ai_failed: [
+    { frequency: 280, endFrequency: 170, durationMs: 96, gain: 0.03, type: 'sawtooth', offsetMs: 0, pan: 0.14 },
+    { frequency: 150, durationMs: 112, gain: 0.022, type: 'triangle', offsetMs: 60, pan: -0.14 },
+  ],
+  quiz_error_persist_failed: [
+    { frequency: 260, endFrequency: 160, durationMs: 108, gain: 0.032, type: 'sawtooth', offsetMs: 0, pan: 0.16 },
+    { frequency: 140, durationMs: 124, gain: 0.024, type: 'triangle', offsetMs: 68, pan: -0.16 },
+  ],
+  quiz_error_stat_failed: [
+    { frequency: 330, endFrequency: 220, durationMs: 66, gain: 0.02, type: 'triangle', offsetMs: 0, pan: 0.04 },
+  ],
   hover_pulse: [
     { frequency: 420, endFrequency: 520, durationMs: 28, gain: 0.008, type: 'sine', offsetMs: 0, pan: 0.12, attackMs: 3 },
   ],

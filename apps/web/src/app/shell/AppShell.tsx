@@ -18,8 +18,13 @@ import {
   X,
 } from 'lucide-react'
 import { NavLink, useLocation } from 'react-router-dom'
+import { preloadPalaceQuizHubPage } from '@/app/router/appRoutes'
 import type { RuntimeInfo } from '@/shared/api/contracts'
 import { getRuntimeInfoApi } from '@/shared/api/modules/runtime'
+import {
+  prefetchPalacesGroupedSummaryApi,
+  prefetchPalaceSubjectShelfApi,
+} from '@/shared/api/modules/palaces'
 import { ShellProvider, useShellContext } from '@/shared/components/layout/ShellContext'
 import { useClientPreferenceBootstrap } from '@/shared/preferences/useClientPreferenceBootstrap'
 import { Badge } from '@/shared/components/ui/badge'
@@ -29,6 +34,7 @@ import { MutationQueueDrawer } from '@/shared/persistence/components/MutationQue
 import { useMutationQueueState } from '@/shared/persistence/useMutationQueue'
 import { useRunningTaskCountBySection, type BackgroundTaskSection } from '@/shared/background-tasks/backgroundTaskRegistry'
 import { BackgroundTaskBar } from '@/shared/background-tasks/BackgroundTaskBar'
+import { QuizGenerationBubbleLayer } from '@/shared/background-tasks/QuizGenerationBubbleLayer'
 import { cn } from '@/shared/lib/utils'
 
 type NavSectionKey =
@@ -51,6 +57,7 @@ interface NavSectionDefinition {
 }
 
 const navSectionLastUrls: Partial<Record<NavSectionKey, string>> = {}
+const warmedNavSections = new Set<NavSectionKey>()
 
 const navSections: NavSectionDefinition[] = [
   {
@@ -143,6 +150,20 @@ export function resetNavSectionHistoryForTest() {
   for (const key of Object.keys(navSectionLastUrls) as NavSectionKey[]) {
     delete navSectionLastUrls[key]
   }
+  warmedNavSections.clear()
+}
+
+function warmNavSection(section: NavSectionDefinition) {
+  if (warmedNavSections.has(section.key)) return
+  warmedNavSections.add(section.key)
+  if (section.key === 'palaces') {
+    prefetchPalaceSubjectShelfApi()
+    return
+  }
+  if (section.key === 'palaceQuiz') {
+    preloadPalaceQuizHubPage().catch(() => {})
+    prefetchPalacesGroupedSummaryApi()
+  }
 }
 
 function RuntimeChannelBadge({
@@ -200,6 +221,8 @@ function NavSectionLink({
           : 'text-muted-foreground hover:bg-secondary/80 hover:text-foreground',
         compact ? 'justify-center px-2.5 py-2.5' : 'gap-3 px-3.5 py-3',
       )}
+      onMouseEnter={() => warmNavSection(section)}
+      onFocus={() => warmNavSection(section)}
     >
       <Icon className="h-4 w-4" />
       {!compact ? <span>{label}</span> : null}
@@ -467,6 +490,7 @@ function ShellFrame({ children }: PropsWithChildren) {
             {children}
           </div>
         </main>
+        <QuizGenerationBubbleLayer />
         <AppLogDrawer open={logDrawerOpen} onOpenChange={setLogDrawerOpen} />
         <MutationQueueDrawer open={syncDrawerOpen} onOpenChange={setSyncDrawerOpen} />
       </div>

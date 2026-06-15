@@ -1,7 +1,12 @@
 import { BookOpen, ChevronDown, ChevronRight, Plus } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
-import type { PalaceGroupedItem, PalaceGroupedListResponse } from '@/shared/api/contracts'
+import type {
+  PalaceGroupedItem,
+  PalaceGroupedListResponse,
+  PalaceGroupedSummaryItem,
+  PalaceGroupedSummaryListResponse,
+} from '@/shared/api/contracts'
 import { Button } from '@/shared/components/ui/button'
 import { Card, CardContent } from '@/shared/components/ui/card'
 import { EmptyState } from '@/shared/components/state-placeholders'
@@ -13,23 +18,23 @@ import {
   getUngroupedPalaceGridClass,
 } from '@/app/router/palace-list/utils'
 
-interface PalaceListSectionsProps {
-  groupedData: PalaceGroupedListResponse
+interface PalaceListSectionsProps<TPalace extends PalaceGroupedItem | PalaceGroupedSummaryItem> {
+  groupedData: PalaceGroupedListResponse | PalaceGroupedSummaryListResponse
   hasPalaces: boolean
   viewSettings: PalaceListViewSettings
   collapsedChapters: Set<number>
   onToggleChapter: (chapterId: number) => void
-  renderPalaceCard: (palace: PalaceGroupedItem) => ReactNode
+  renderPalaceCard: (palace: TPalace) => ReactNode
 }
 
-export function PalaceListSections({
+export function PalaceListSections<TPalace extends PalaceGroupedItem | PalaceGroupedSummaryItem>({
   groupedData,
   hasPalaces,
   viewSettings,
   collapsedChapters,
   onToggleChapter,
   renderPalaceCard,
-}: PalaceListSectionsProps) {
+}: PalaceListSectionsProps<TPalace>) {
   return (
     <div
       className="space-y-3"
@@ -74,7 +79,7 @@ export function PalaceListSections({
                     ) : null}
                     {!isCollapsed ? (
                       <div className={getChapterPalaceGridClass(viewSettings.layoutMode)}>
-                        {group.palaces.map((palace) => renderPalaceCard(palace))}
+                        {group.palaces.map((palace) => renderPalaceCard(palace as TPalace))}
                       </div>
                     ) : null}
                   </div>
@@ -83,7 +88,7 @@ export function PalaceListSections({
             </div>
             {subject.ungrouped_palaces.length > 0 ? (
               <div className={getUngroupedPalaceGridClass(viewSettings.layoutMode)}>
-                {subject.ungrouped_palaces.map((palace) => renderPalaceCard(palace))}
+                {subject.ungrouped_palaces.map((palace) => renderPalaceCard(palace as TPalace))}
               </div>
             ) : null}
           </div>

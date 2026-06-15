@@ -72,6 +72,7 @@ export interface AiRuntimeOptions {
   model?: string
   thinking_enabled?: boolean | null
 }
+export type AiScenarioRuntimeOptionsMap = Record<string, AiRuntimeOptions>
 export type AiProviderKey = 'dashscope' | 'qwen' | 'zhipu' | 'siliconflow'
 export type AiModelType = 'llm' | 'vl' | 'translation' | 'asr' | 'tts'
 
@@ -102,6 +103,10 @@ export interface AiModelCatalogItem {
   is_builtin: boolean
   is_active: boolean
   default_base_url: string
+  usage_count?: number
+  bound_scene_labels?: string[]
+  last_used_at?: string | null
+  last_status?: string | null
 }
 export interface AiProviderSettings {
   key: AiProviderKey
@@ -111,6 +116,14 @@ export interface AiProviderSettings {
   base_url: string
   api_key_config_key: string
   base_url_config_key: string
+  api_key_source?: 'db' | 'env' | 'default'
+  base_url_source?: 'db' | 'env' | 'default'
+  model_count?: number
+  last_called_at?: string | null
+  last_status?: string | null
+  last_success_at?: string | null
+  last_error_at?: string | null
+  last_model?: string | null
 }
 export interface AiModelCategory {
   key: AiModelType
@@ -121,6 +134,8 @@ export interface AiModelCategory {
   has_shared_config?: boolean
   available_models: AiModelCatalogItem[]
   scene_keys: string[]
+  scene_count?: number
+  custom_scene_count?: number
   scene_details: Array<{
     key: string
     label: string
@@ -145,6 +160,44 @@ export interface AiSceneBinding {
   available_models: AiModelCatalogItem[]
   source_location: string
   latest_resolved_model?: ResolvedAiRuntimeMeta | null
+  last_called_at?: string | null
+  last_status?: string | null
+  resolved_provider?: string | null
+  resolved_model_label?: string | null
+}
+export interface AiModelImpactResponse {
+  model_key: string
+  model_label: string
+  exists: boolean
+  can_delete: boolean
+  usage_count: number
+  bound_scene_labels: string[]
+  scene_impacts: Array<{
+    key: string
+    label: string
+    category_key: AiModelType
+    category_label: string
+    config_key: string
+  }>
+  category_impacts: Array<{
+    key: AiModelType
+    label: string
+  }>
+}
+export interface AiConnectionTestResponse {
+  ok: boolean
+  provider: AiProviderKey
+  provider_label?: string
+  model: string
+  latency_ms: number
+  error?: string | null
+  source?: 'db' | 'env' | 'default'
+}
+export interface AiModelSettingsSummary {
+  provider_count: number
+  active_model_count: number
+  scene_count: number
+  recent_success_call_count: number
 }
 export interface AiModelSettingsResponse {
   providers: AiProviderSettings[]
@@ -152,6 +205,7 @@ export interface AiModelSettingsResponse {
   models: AiModelCatalogItem[]
   scenes: AiSceneBinding[]
   scenarios?: AiSceneBinding[]
+  summary?: AiModelSettingsSummary
 }
 export type AiModelMetadata = AiModelCatalogItem
 export type AiModelScenario = AiSceneBinding

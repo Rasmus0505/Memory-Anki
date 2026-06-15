@@ -14,22 +14,6 @@ from memory_anki.core.time import utc_now_naive
 from memory_anki.infrastructure.db.models import ExternalAiCallLog, engine
 
 
-def ensure_external_ai_call_log_schema() -> None:
-    with engine.begin() as conn:
-        conn.exec_driver_sql(
-            "CREATE INDEX IF NOT EXISTS ix_external_ai_call_logs_job_created "
-            "ON external_ai_call_logs (job_id, created_at)"
-        )
-        conn.exec_driver_sql(
-            "CREATE INDEX IF NOT EXISTS ix_external_ai_call_logs_palace_created "
-            "ON external_ai_call_logs (palace_id, created_at)"
-        )
-        conn.exec_driver_sql(
-            "CREATE INDEX IF NOT EXISTS ix_external_ai_call_logs_created "
-            "ON external_ai_call_logs (created_at)"
-        )
-
-
 def _json_dump(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, sort_keys=True)
 
@@ -196,6 +180,10 @@ def list_external_ai_call_logs(
     *,
     job_id: str | None = None,
     palace_id: int | None = None,
+    provider: str | None = None,
+    model: str | None = None,
+    feature: str | None = None,
+    status: str | None = None,
     limit: int = 50,
 ) -> list[dict[str, Any]]:
     query = session.query(ExternalAiCallLog)
@@ -203,6 +191,14 @@ def list_external_ai_call_logs(
         query = query.filter(ExternalAiCallLog.job_id == job_id)
     if palace_id is not None:
         query = query.filter(ExternalAiCallLog.palace_id == palace_id)
+    if provider:
+        query = query.filter(ExternalAiCallLog.provider == str(provider))
+    if model:
+        query = query.filter(ExternalAiCallLog.model == str(model))
+    if feature:
+        query = query.filter(ExternalAiCallLog.feature == str(feature))
+    if status:
+        query = query.filter(ExternalAiCallLog.status == str(status))
     rows = (
         query.order_by(ExternalAiCallLog.created_at.desc(), ExternalAiCallLog.id.desc())
         .limit(max(1, min(limit, 200)))

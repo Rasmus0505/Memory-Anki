@@ -3,15 +3,18 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from memory_anki.core.time import utc_now_naive
 from memory_anki.infrastructure.db.models import (
+    Chapter,
     Palace,
     PalaceMiniPalace,
     PalaceQuizQuestion,
-    engine,
+)
+from memory_anki.modules.palaces.application.title_sync_service import (
+    get_palace_explicit_chapter_ids,
 )
 
 QUESTION_TYPE_MULTIPLE_CHOICE = "multiple_choice"
@@ -38,67 +41,6 @@ class PalaceQuizValidationError(ValueError):
 
 class PalaceQuizNotFoundError(LookupError):
     pass
-
-
-def ensure_palace_quiz_schema() -> None:
-    with engine.begin() as conn:
-        conn.exec_driver_sql(
-            """
-            CREATE TABLE IF NOT EXISTS palace_quiz_questions (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                palace_id INTEGER NOT NULL,
-                mini_palace_id INTEGER NULL,
-                origin_question_id INTEGER NULL,
-                question_type VARCHAR(32) NOT NULL DEFAULT 'multiple_choice',
-                stem TEXT NOT NULL DEFAULT '',
-                options_json TEXT NOT NULL DEFAULT '[]',
-                answer_payload_json TEXT NOT NULL DEFAULT '{}',
-                analysis TEXT NOT NULL DEFAULT '',
-                source_meta_json TEXT NOT NULL DEFAULT '{}',
-                sort_order INTEGER NOT NULL DEFAULT 0,
-                correct_count INTEGER NOT NULL DEFAULT 0,
-                incorrect_count INTEGER NOT NULL DEFAULT 0,
-                attempt_count INTEGER NOT NULL DEFAULT 0,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY(palace_id) REFERENCES palaces(id) ON DELETE CASCADE,
-                FOREIGN KEY(mini_palace_id) REFERENCES palace_mini_palaces(id) ON DELETE CASCADE
-            )
-            """
-        )
-        existing_columns = {
-            row[1]
-            for row in conn.exec_driver_sql(
-                "PRAGMA table_info(palace_quiz_questions)"
-            ).fetchall()
-        }
-        if "mini_palace_id" not in existing_columns:
-            conn.exec_driver_sql(
-                "ALTER TABLE palace_quiz_questions ADD COLUMN mini_palace_id INTEGER NULL "
-                "REFERENCES palace_mini_palaces(id) ON DELETE CASCADE"
-            )
-        if "origin_question_id" not in existing_columns:
-            conn.exec_driver_sql(
-                "ALTER TABLE palace_quiz_questions ADD COLUMN origin_question_id INTEGER NULL"
-            )
-        conn.exec_driver_sql(
-            "CREATE INDEX IF NOT EXISTS ix_palace_quiz_questions_palace_sort "
-            "ON palace_quiz_questions (palace_id, sort_order)"
-        )
-        conn.exec_driver_sql(
-            "CREATE INDEX IF NOT EXISTS ix_palace_quiz_questions_updated_at "
-            "ON palace_quiz_questions (updated_at)"
-        )
-        conn.exec_driver_sql(
-            "CREATE INDEX IF NOT EXISTS ix_palace_quiz_questions_mini_palace "
-            "ON palace_quiz_questions (mini_palace_id)"
-        )
-        conn.exec_driver_sql(
-            "CREATE INDEX IF NOT EXISTS ix_palace_quiz_questions_origin_mini "
-            "ON palace_quiz_questions (origin_question_id, mini_palace_id)"
-        )
-
-
 def _json_dump(value: Any, *, default: Any) -> str:
     payload = default if value is None else value
     return json.dumps(payload, ensure_ascii=False)
@@ -134,6 +76,7 @@ def _normalize_key_value(value: Any) -> Any:
 def build_question_dedup_key(payload: dict[str, Any]) -> str:
     normalized_key_payload = {
         "mini_palace_id": payload.get("mini_palace_id"),
+        "classified_chapter_id": payload.get("classified_chapter_id"),
         "question_type": payload.get("question_type"),
         "stem": _normalize_text_key(payload.get("stem")),
         "options": _normalize_key_value(payload.get("options") or []),
@@ -326,10 +269,12 @@ def _normalize_source_meta(raw_source_meta: Any) -> dict[str, Any]:
         "page_numbers": flattened_page_numbers,
         "image_names": flattened_image_names,
         "extra_prompt": str(source_meta.get("extra_prompt") or "").strip(),
+        "secondary_review_enabled": bool(source_meta.get("secondary_review_enabled", False)),
         "ai_call_log_id": str(source_meta.get("ai_call_log_id") or "").strip() or None,
         "generated_at": str(source_meta.get("generated_at") or now_iso),
         "generation_mode": generation_mode,
         "pdf_sources": pdf_sources,
+        "recovered_from_ai_call_log_id": str(source_meta.get("recovered_from_ai_call_log_id") or "").strip() or None,
         "review_mode": str(source_meta.get("review_mode") or "").strip() or None,
         "related_palace_ids": related_palace_ids,
         "related_palace_summaries": related_palace_summaries,
@@ -345,6 +290,13 @@ def _normalize_optional_int(raw_value: Any) -> int | None:
         return int(raw_value)
     except (TypeError, ValueError) as exc:
         raise PalaceQuizValidationError("题目归属标识格式不正确。") from exc
+
+
+def get_chapter_or_raise(session: Session, chapter_id: int) -> Chapter:
+    chapter = session.query(Chapter).filter_by(id=chapter_id).first()
+    if not chapter:
+        raise PalaceQuizNotFoundError("章节不存在。")
+    return chapter
 
 
 def _get_mini_palace_or_raise(
@@ -394,6 +346,39 @@ def _normalize_origin_question_id(
     if not origin_question:
         raise PalaceQuizValidationError("原始题目不存在，无法建立小宫殿归类副本。")
     return origin_question_id
+
+
+def _normalize_source_chapter_id(
+    session: Session | None,
+    raw_value: Any,
+) -> int | None:
+    source_chapter_id = _normalize_optional_int(raw_value)
+    if source_chapter_id is None or session is None:
+        return source_chapter_id
+    get_chapter_or_raise(session, source_chapter_id)
+    return source_chapter_id
+
+
+def _normalize_classified_chapter_id(
+    session: Session | None,
+    source_chapter_id: int | None,
+    raw_value: Any,
+) -> int | None:
+    classified_chapter_id = _normalize_optional_int(raw_value)
+    if classified_chapter_id is None or session is None:
+        return classified_chapter_id
+    chapter = get_chapter_or_raise(session, classified_chapter_id)
+    if source_chapter_id is not None:
+        current: Chapter | None = chapter
+        within_scope = False
+        while current is not None:
+            if current.id == source_chapter_id:
+                within_scope = True
+                break
+            current = current.parent
+        if not within_scope:
+            raise PalaceQuizValidationError("章节分类节点必须位于当前章节范围内。")
+    return classified_chapter_id
 
 
 def _normalize_answer_payload(
@@ -547,6 +532,7 @@ def normalize_question_payload(
     default_source_meta: dict[str, Any] | None = None,
     session: Session | None = None,
     palace_id: int | None = None,
+    source_chapter_id: int | None = None,
 ) -> dict[str, Any]:
     question_type = _normalize_question_type(payload.get("question_type"))
     stem = str(payload.get("stem") or "").strip()
@@ -590,11 +576,24 @@ def normalize_question_payload(
         palace_id,
         payload.get("mini_palace_id"),
     )
+    resolved_source_chapter_id = _normalize_source_chapter_id(
+        session,
+        payload.get("source_chapter_id", source_chapter_id),
+    )
+    classified_chapter_id = _normalize_classified_chapter_id(
+        session,
+        resolved_source_chapter_id,
+        payload.get("classified_chapter_id"),
+    )
     origin_question_id = _normalize_origin_question_id(
         session,
         palace_id,
         payload.get("origin_question_id"),
     )
+    if session is not None and palace_id is None and resolved_source_chapter_id is None:
+        raise PalaceQuizValidationError("题目必须至少归属于一个宫殿或章节。")
+    if resolved_source_chapter_id is not None and mini_palace_id is not None:
+        raise PalaceQuizValidationError("章节题暂不支持绑定小宫殿。")
     return {
         "question_type": question_type,
         "stem": stem,
@@ -603,16 +602,22 @@ def normalize_question_payload(
         "analysis": analysis,
         "source_meta": source_meta,
         "mini_palace_id": mini_palace_id,
+        "source_chapter_id": resolved_source_chapter_id,
+        "classified_chapter_id": classified_chapter_id,
         "origin_question_id": origin_question_id,
     }
 
 
 def serialize_question(question: PalaceQuizQuestion) -> dict[str, Any]:
     mini_palace = getattr(question, "mini_palace", None)
+    source_chapter = getattr(question, "source_chapter", None)
+    classified_chapter = getattr(question, "classified_chapter", None)
     return {
         "id": question.id,
         "palace_id": question.palace_id,
         "mini_palace_id": question.mini_palace_id,
+        "source_chapter_id": question.source_chapter_id,
+        "classified_chapter_id": question.classified_chapter_id,
         "origin_question_id": question.origin_question_id,
         "question_type": question.question_type,
         "stem": question.stem,
@@ -623,6 +628,25 @@ def serialize_question(question: PalaceQuizQuestion) -> dict[str, Any]:
         "mini_palace": (
             {"id": mini_palace.id, "name": mini_palace.name}
             if mini_palace
+            else None
+        ),
+        "source_chapter": (
+            {
+                "id": source_chapter.id,
+                "name": source_chapter.name,
+                "subject_id": source_chapter.subject_id,
+            }
+            if source_chapter
+            else None
+        ),
+        "classified_chapter": (
+            {
+                "id": classified_chapter.id,
+                "name": classified_chapter.name,
+                "subject_id": classified_chapter.subject_id,
+                "parent_id": classified_chapter.parent_id,
+            }
+            if classified_chapter
             else None
         ),
         "sort_order": question.sort_order,
@@ -637,6 +661,7 @@ def serialize_question(question: PalaceQuizQuestion) -> dict[str, Any]:
 def _question_to_dedup_payload(question: PalaceQuizQuestion) -> dict[str, Any]:
     return {
         "mini_palace_id": question.mini_palace_id,
+        "classified_chapter_id": question.classified_chapter_id,
         "question_type": question.question_type,
         "stem": question.stem,
         "options": _json_load(question.options_json, []),
@@ -647,21 +672,25 @@ def _question_to_dedup_payload(question: PalaceQuizQuestion) -> dict[str, Any]:
 
 def _find_duplicate_question(
     session: Session,
-    palace_id: int,
+    palace_id: int | None,
+    source_chapter_id: int | None,
     normalized_payload: dict[str, Any],
     *,
     exclude_question_id: int | None = None,
 ) -> PalaceQuizQuestion | None:
     duplicate_key = build_question_dedup_key(normalized_payload)
-    candidates = (
-        session.query(PalaceQuizQuestion)
-        .filter_by(
+    query = session.query(PalaceQuizQuestion)
+    if palace_id is not None:
+        query = query.filter_by(
             palace_id=palace_id,
             mini_palace_id=normalized_payload["mini_palace_id"],
         )
-        .order_by(PalaceQuizQuestion.sort_order.asc(), PalaceQuizQuestion.id.asc())
-        .all()
-    )
+    else:
+        query = query.filter_by(
+            source_chapter_id=source_chapter_id,
+            classified_chapter_id=normalized_payload["classified_chapter_id"],
+        )
+    candidates = query.order_by(PalaceQuizQuestion.sort_order.asc(), PalaceQuizQuestion.id.asc()).all()
     for candidate in candidates:
         if exclude_question_id is not None and candidate.id == exclude_question_id:
             continue
@@ -700,6 +729,36 @@ def dedupe_palace_questions(session: Session, palace_id: int) -> int:
     return removed_count
 
 
+def dedupe_chapter_questions(session: Session, chapter_id: int) -> int:
+    rows = (
+        session.query(PalaceQuizQuestion)
+        .filter_by(source_chapter_id=chapter_id)
+        .order_by(
+            PalaceQuizQuestion.classified_chapter_id.asc(),
+            PalaceQuizQuestion.sort_order.asc(),
+            PalaceQuizQuestion.id.asc(),
+        )
+        .all()
+    )
+    kept_by_key: dict[str, PalaceQuizQuestion] = {}
+    removed_count = 0
+    for row in rows:
+        dedup_key = build_question_dedup_key(_question_to_dedup_payload(row))
+        existing = kept_by_key.get(dedup_key)
+        if existing is None:
+            kept_by_key[dedup_key] = row
+            continue
+        existing.correct_count += row.correct_count
+        existing.incorrect_count += row.incorrect_count
+        existing.attempt_count += row.attempt_count
+        existing.updated_at = utc_now_naive()
+        session.delete(row)
+        removed_count += 1
+    if removed_count:
+        session.commit()
+    return removed_count
+
+
 def get_palace_or_raise(session: Session, palace_id: int) -> Palace:
     palace = session.query(Palace).filter_by(id=palace_id).first()
     if not palace:
@@ -714,6 +773,30 @@ def get_question_or_raise(session: Session, question_id: int) -> PalaceQuizQuest
     return question
 
 
+def _resolve_minimal_explicit_chapter_ids(session: Session, palace: Palace) -> list[int]:
+    explicit_ids = get_palace_explicit_chapter_ids(session, palace)
+    if not explicit_ids:
+        return []
+    chapters = session.query(Chapter).filter(Chapter.id.in_(explicit_ids)).all()
+    minimal_ids: list[int] = []
+    for chapter in chapters:
+        has_explicit_descendant = False
+        for other in chapters:
+            if other.id == chapter.id:
+                continue
+            current = other.parent
+            while current is not None:
+                if current.id == chapter.id:
+                    has_explicit_descendant = True
+                    break
+                current = current.parent
+            if has_explicit_descendant:
+                break
+        if not has_explicit_descendant:
+            minimal_ids.append(chapter.id)
+    return sorted(set(minimal_ids))
+
+
 def list_questions(session: Session, palace_id: int) -> list[dict[str, Any]]:
     get_palace_or_raise(session, palace_id)
     dedupe_palace_questions(session, palace_id)
@@ -724,6 +807,34 @@ def list_questions(session: Session, palace_id: int) -> list[dict[str, Any]]:
         .all()
     )
     return [serialize_question(row) for row in rows]
+
+
+def list_aggregated_questions(session: Session, palace_id: int) -> list[dict[str, Any]]:
+    palace = get_palace_or_raise(session, palace_id)
+    dedupe_palace_questions(session, palace_id)
+    minimal_chapter_ids = _resolve_minimal_explicit_chapter_ids(session, palace)
+    for chapter_id in minimal_chapter_ids:
+        dedupe_chapter_questions(session, chapter_id)
+    palace_rows = (
+        session.query(PalaceQuizQuestion)
+        .filter_by(palace_id=palace_id)
+        .order_by(PalaceQuizQuestion.sort_order.asc(), PalaceQuizQuestion.id.asc())
+        .all()
+    )
+    chapter_rows: list[PalaceQuizQuestion] = []
+    if minimal_chapter_ids:
+        chapter_rows = (
+            session.query(PalaceQuizQuestion)
+            .filter(
+                or_(
+                    PalaceQuizQuestion.source_chapter_id.in_(minimal_chapter_ids),
+                    PalaceQuizQuestion.classified_chapter_id.in_(minimal_chapter_ids),
+                )
+            )
+            .order_by(PalaceQuizQuestion.sort_order.asc(), PalaceQuizQuestion.id.asc())
+            .all()
+        )
+    return [serialize_question(row) for row in [*palace_rows, *chapter_rows]]
 
 
 def list_root_questions(session: Session, palace_id: int) -> list[PalaceQuizQuestion]:
@@ -745,6 +856,15 @@ def _next_sort_order(session: Session, palace_id: int) -> int:
     return int(current or 0)
 
 
+def _next_chapter_sort_order(session: Session, chapter_id: int) -> int:
+    current = (
+        session.query(func.max(PalaceQuizQuestion.sort_order))
+        .filter(PalaceQuizQuestion.source_chapter_id == chapter_id)
+        .scalar()
+    )
+    return int(current or 0)
+
+
 def create_question(
     session: Session,
     palace_id: int,
@@ -752,13 +872,15 @@ def create_question(
 ) -> dict[str, Any]:
     get_palace_or_raise(session, palace_id)
     normalized = normalize_question_payload(payload, session=session, palace_id=palace_id)
-    duplicate = _find_duplicate_question(session, palace_id, normalized)
+    duplicate = _find_duplicate_question(session, palace_id, None, normalized)
     if duplicate is not None:
         return serialize_question(duplicate)
     next_sort_order = _next_sort_order(session, palace_id) + 1
     row = PalaceQuizQuestion(
         palace_id=palace_id,
         mini_palace_id=normalized["mini_palace_id"],
+        source_chapter_id=normalized["source_chapter_id"],
+        classified_chapter_id=normalized["classified_chapter_id"],
         origin_question_id=normalized["origin_question_id"],
         question_type=normalized["question_type"],
         stem=normalized["stem"],
@@ -794,11 +916,7 @@ def batch_create_questions(
     next_sort_order = _next_sort_order(session, palace_id)
     rows: list[PalaceQuizQuestion] = []
     for payload in payloads:
-        normalized = normalize_question_payload(
-            payload,
-            session=session,
-            palace_id=palace_id,
-        )
+        normalized = normalize_question_payload(payload, session=session, palace_id=palace_id)
         dedup_key = build_question_dedup_key(normalized)
         if dedup_key in existing_keys or dedup_key in payload_keys:
             continue
@@ -807,6 +925,8 @@ def batch_create_questions(
         row = PalaceQuizQuestion(
             palace_id=palace_id,
             mini_palace_id=normalized["mini_palace_id"],
+            source_chapter_id=normalized["source_chapter_id"],
+            classified_chapter_id=normalized["classified_chapter_id"],
             origin_question_id=normalized["origin_question_id"],
             question_type=normalized["question_type"],
             stem=normalized["stem"],
@@ -833,6 +953,8 @@ def update_question(
     normalized = normalize_question_payload(
         {
             "mini_palace_id": payload.get("mini_palace_id", question.mini_palace_id),
+            "source_chapter_id": payload.get("source_chapter_id", question.source_chapter_id),
+            "classified_chapter_id": payload.get("classified_chapter_id", question.classified_chapter_id),
             "origin_question_id": payload.get("origin_question_id", question.origin_question_id),
             "question_type": payload.get("question_type", question.question_type),
             "stem": payload.get("stem", question.stem),
@@ -843,10 +965,12 @@ def update_question(
         },
         session=session,
         palace_id=question.palace_id,
+        source_chapter_id=question.source_chapter_id,
     )
     duplicate = _find_duplicate_question(
         session,
         question.palace_id,
+        question.source_chapter_id,
         normalized,
         exclude_question_id=question.id,
     )
@@ -860,6 +984,8 @@ def update_question(
         session.refresh(duplicate)
         return serialize_question(duplicate)
     question.mini_palace_id = normalized["mini_palace_id"]
+    question.source_chapter_id = normalized["source_chapter_id"]
+    question.classified_chapter_id = normalized["classified_chapter_id"]
     question.origin_question_id = normalized["origin_question_id"]
     question.question_type = normalized["question_type"]
     question.stem = normalized["stem"]
@@ -877,6 +1003,33 @@ def delete_question(session: Session, question_id: int) -> None:
     question = get_question_or_raise(session, question_id)
     session.delete(question)
     session.commit()
+
+
+def batch_delete_questions(session: Session, question_ids: list[int]) -> int:
+    if not isinstance(question_ids, list) or len(question_ids) == 0:
+        raise PalaceQuizValidationError("批量删除时至少需要选择一题。")
+    normalized_ids: list[int] = []
+    seen_ids: set[int] = set()
+    for raw_id in question_ids:
+        try:
+            question_id = int(raw_id)
+        except (TypeError, ValueError) as exc:
+            raise PalaceQuizValidationError("批量删除的题目 id 不合法。") from exc
+        if question_id <= 0 or question_id in seen_ids:
+            continue
+        seen_ids.add(question_id)
+        normalized_ids.append(question_id)
+    if len(normalized_ids) == 0:
+        raise PalaceQuizValidationError("批量删除时至少需要选择一题。")
+    rows = (
+        session.query(PalaceQuizQuestion)
+        .filter(PalaceQuizQuestion.id.in_(normalized_ids))
+        .all()
+    )
+    for row in rows:
+        session.delete(row)
+    session.commit()
+    return len(rows)
 
 
 def record_choice_attempt(
@@ -943,3 +1096,70 @@ def upsert_classified_question_copy(
     row.updated_at = utc_now_naive()
     session.flush()
     return row
+
+
+def list_chapter_questions(session: Session, chapter_id: int) -> list[dict[str, Any]]:
+    get_chapter_or_raise(session, chapter_id)
+    dedupe_chapter_questions(session, chapter_id)
+    rows = (
+        session.query(PalaceQuizQuestion)
+        .filter_by(source_chapter_id=chapter_id)
+        .order_by(PalaceQuizQuestion.sort_order.asc(), PalaceQuizQuestion.id.asc())
+        .all()
+    )
+    return [serialize_question(row) for row in rows]
+
+
+def batch_create_chapter_questions(
+    session: Session,
+    chapter_id: int,
+    payloads: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    get_chapter_or_raise(session, chapter_id)
+    if not isinstance(payloads, list) or len(payloads) == 0:
+        raise PalaceQuizValidationError("批量保存时至少需要一题。")
+    existing_keys = {
+        build_question_dedup_key(_question_to_dedup_payload(question))
+        for question in (
+            session.query(PalaceQuizQuestion)
+            .filter_by(source_chapter_id=chapter_id)
+            .all()
+        )
+    }
+    payload_keys: set[str] = set()
+    next_sort_order = _next_chapter_sort_order(session, chapter_id)
+    rows: list[PalaceQuizQuestion] = []
+    for payload in payloads:
+        normalized = normalize_question_payload(
+            {
+                **payload,
+                "source_chapter_id": payload.get("source_chapter_id", chapter_id),
+            },
+            session=session,
+            source_chapter_id=chapter_id,
+        )
+        dedup_key = build_question_dedup_key(normalized)
+        if dedup_key in existing_keys or dedup_key in payload_keys:
+            continue
+        payload_keys.add(dedup_key)
+        next_sort_order += 1
+        row = PalaceQuizQuestion(
+            palace_id=None,
+            mini_palace_id=None,
+            source_chapter_id=chapter_id,
+            classified_chapter_id=normalized["classified_chapter_id"],
+            origin_question_id=normalized["origin_question_id"],
+            question_type=normalized["question_type"],
+            stem=normalized["stem"],
+            options_json=_json_dump(normalized["options"], default=[]),
+            answer_payload_json=_json_dump(normalized["answer_payload"], default={}),
+            analysis=normalized["analysis"],
+            source_meta_json=_json_dump(normalized["source_meta"], default={}),
+            sort_order=next_sort_order,
+        )
+        session.add(row)
+        rows.append(row)
+    session.commit()
+    for row in rows:
+        session.refresh(row)
+    return [serialize_question(row) for row in rows]

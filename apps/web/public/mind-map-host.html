@@ -7451,6 +7451,7 @@
           applyMiniPalaceNodeStyles()
           updateNavigatorFullscreenPresentation()
           renderBilinkBadges()
+          scheduleMindMapResizeSync()
           getHostBridge()?.notify?.('app_inited', null)
         })
         window.$bus.$on('node_active', (...args) => {

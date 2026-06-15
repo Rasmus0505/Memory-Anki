@@ -13,7 +13,14 @@ import {
 } from '@/shared/components/mindmap-host/toneProfiles'
 
 interface MindMapFeedbackAudioController {
-  playEvent: (event: MindMapFeedbackEvent, options?: { surprise?: boolean; origin?: MindMapFeedbackOrigin }) => void
+  playEvent: (
+    event: MindMapFeedbackEvent,
+    options?: {
+      surprise?: boolean
+      origin?: MindMapFeedbackOrigin
+      audioScope?: 'local' | 'global'
+    },
+  ) => void
   playComboMilestone: (milestoneStep: number) => void
 }
 
@@ -24,7 +31,12 @@ interface MindMapFeedbackAudioController {
  * - system: 完整保留原始 profile → "系统级"听感
  * - 其他（keyboard/pointer/edge/toolbar）: 保持原值
  */
-function tuneToneSpec(event: MindMapFeedbackEvent, tone: ToneSpec, origin?: MindMapFeedbackOrigin): ToneSpec {
+export function tuneToneSpec(
+  event: MindMapFeedbackEvent,
+  tone: ToneSpec,
+  origin?: MindMapFeedbackOrigin,
+  audioScope?: 'local' | 'global',
+): ToneSpec {
   const level = getMindMapFeedbackProfile(event).level
   const gainScale = level === 'micro' ? 0.52 : level === 'action' ? 0.68 : 0.76
   const durationScale = level === 'micro' ? 0.72 : level === 'action' ? 0.82 : 0.9
@@ -33,6 +45,16 @@ function tuneToneSpec(event: MindMapFeedbackEvent, tone: ToneSpec, origin?: Mind
   let pan = tone.pan ?? 0
   let durationMul = 1
   let gainMul = 1
+
+  if (audioScope === 'local') {
+    pan = pan * 0.72
+    durationMul *= 0.9
+    gainMul *= 0.96
+  } else if (audioScope === 'global') {
+    pan = pan * 1.35
+    durationMul *= 1.12
+    gainMul *= 1.08
+  }
 
   if (origin === 'node') {
     // 局部操作：pan 收窄 60%，duration 缩短 10%
@@ -58,8 +80,16 @@ function shouldPlayNoiseBurst(event: MindMapFeedbackEvent) {
     event === 'node_delete' ||
     event === 'save_error' ||
     event === 'import_apply' ||
+    event === 'quiz_result_incorrect' ||
     event === 'card_reveal' ||
+    event === 'quiz_result_reveal' ||
     event === 'branch_clear' ||
+    event === 'quiz_manage_batch_delete' ||
+    event === 'quiz_generate_preview_ready' ||
+    event === 'quiz_generate_save' ||
+    event === 'quiz_generate_classify_complete' ||
+    event === 'quiz_error_ai_failed' ||
+    event === 'quiz_error_persist_failed' ||
     event === 'all_clear_ready' ||
     event === 'session_complete'
   )
@@ -89,7 +119,14 @@ export function useMindMapFeedbackAudio(
   }, [])
 
   const playEvent = React.useCallback(
-    (event: MindMapFeedbackEvent, options?: { surprise?: boolean; origin?: MindMapFeedbackOrigin }) => {
+    (
+      event: MindMapFeedbackEvent,
+      options?: {
+        surprise?: boolean
+        origin?: MindMapFeedbackOrigin
+        audioScope?: 'local' | 'global'
+      },
+    ) => {
       if (!enabled || feedbackVolume <= 0 || typeof window === 'undefined') return
       if (
         'userActivation' in window.navigator &&
@@ -116,9 +153,10 @@ export function useMindMapFeedbackAudio(
         }
 
         const origin = options?.origin
+        const audioScope = options?.audioScope
         const now = audioContext.currentTime
         for (const tone of getToneSpec(event, Boolean(options?.surprise)).map((item) =>
-          tuneToneSpec(event, item, origin),
+          tuneToneSpec(event, item, origin, audioScope),
         )) {
           const oscillator = audioContext.createOscillator()
           const gainNode = audioContext.createGain()

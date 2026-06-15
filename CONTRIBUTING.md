@@ -21,6 +21,8 @@ The project enforces module boundaries with automated tooling. Do not work aroun
 - `domain` **must not** import `application` or `presentation`.
 - Presentation talks to application services; it should not reach into another module's infrastructure internals.
 - New persisted data: add the model in the owning module, register its schema migration, and cover the read/write path with tests.
+- Shared-runtime compatibility is part of the backend contract. Default to additive migrations (new tables, new nullable columns, new indexes, backfilled defaults) so a short-lived stable worktree can keep using the same runtime data.
+- Destructive migrations (drop/rename/alter existing columns or tables) are blocked by `tools/check_architecture.py` unless the migration file explicitly documents an override with `memory-anki: allow-destructive-migration`.
 - Run `lint-imports` before pushing — it fails the build on boundary violations.
 
 ### Frontend — `apps/web`
@@ -50,5 +52,6 @@ A change is ready to merge when, for the part of the codebase it touches:
 ## Where things live
 
 - Runtime data is **never** committed. It lives under `MEMORY_ANKI_HOME` (default `%LOCALAPPDATA%\MemoryAnki`) and is gitignored.
+- Two worktrees may share one runtime home for day-to-day use, but high-risk operations such as database restore require exclusive access to that shared runtime.
 - AI/agent tooling artifacts (`.specstory/`, `.claude/`, `.reasonix/`, `.codegraph/`) are gitignored — do not stage them.
 - Architecture intent lives in `docs/architecture/`; that README is the authoritative source for layering rules.

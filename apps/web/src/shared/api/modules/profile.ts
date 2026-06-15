@@ -1,5 +1,7 @@
 import { API_BASE, fetchWithMutationQueue, request } from '@/shared/api/http'
 import type {
+  AiConnectionTestResponse,
+  AiModelImpactResponse,
   AiModelSettingsResponse,
   AiPromptTemplateListResponse,
   BackupListResponse,
@@ -124,6 +126,23 @@ export function deleteAiModelApi(modelKey: string) {
       description: '删除 AI 模型目录',
       replayMode: 'manual',
     },
+  })
+}
+
+export function getAiModelImpactApi(modelKey: string) {
+  return request<AiModelImpactResponse>(`/settings/ai-models/models/${encodeURIComponent(modelKey)}/impact`)
+}
+
+export function testAiModelApi(modelKey: string) {
+  return request<AiConnectionTestResponse>(`/settings/ai-models/models/${encodeURIComponent(modelKey)}/test`, {
+    method: 'POST',
+  })
+}
+
+export function testAiProviderApi(providerKey: string, modelKey?: string) {
+  return request<AiConnectionTestResponse>(`/settings/ai-models/providers/${encodeURIComponent(providerKey)}/test`, {
+    method: 'POST',
+    body: JSON.stringify(modelKey ? { model_key: modelKey } : {}),
   })
 }
 

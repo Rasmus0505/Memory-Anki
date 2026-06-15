@@ -6,42 +6,12 @@ from pathlib import Path
 import fitz
 from sqlalchemy.orm import Session
 
-from memory_anki.core.config import ATTACHMENTS_DIR, SUBJECT_DOCUMENTS_DIR
-from memory_anki.infrastructure.db.models import Subject, SubjectDocument, engine
+from memory_anki.core.config import ATTACHMENTS_DIR
+from memory_anki.infrastructure.db.models import Subject, SubjectDocument
 
 PDF_MIME_TYPES = {"application/pdf", "application/x-pdf"}
 THUMBNAIL_WIDTH = 220
 PREVIEW_WIDTH = 1100
-
-
-def ensure_subject_document_schema() -> None:
-    with engine.begin() as conn:
-        existing_tables = {
-            row[0]
-            for row in conn.exec_driver_sql(
-                "SELECT name FROM sqlite_master WHERE type='table'"
-            ).fetchall()
-        }
-        if "subject_documents" not in existing_tables:
-            conn.exec_driver_sql(
-                """
-                CREATE TABLE subject_documents (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    subject_id INTEGER NOT NULL,
-                    filename VARCHAR(300) NOT NULL,
-                    original_name VARCHAR(300) NOT NULL,
-                    mime_type VARCHAR(120) NOT NULL DEFAULT 'application/pdf',
-                    file_size INTEGER DEFAULT 0,
-                    page_count INTEGER DEFAULT 0,
-                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                    FOREIGN KEY(subject_id) REFERENCES subjects(id) ON DELETE CASCADE
-                )
-                """
-            )
-        conn.exec_driver_sql(
-            "CREATE INDEX IF NOT EXISTS ix_subject_documents_subject_created "
-            "ON subject_documents (subject_id, created_at DESC)"
-        )
 
 
 def subject_document_json(document: SubjectDocument, *, subject_id: int | None = None) -> dict:

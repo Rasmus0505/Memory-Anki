@@ -43,8 +43,10 @@ class RuntimeInfoTests(unittest.TestCase):
         self.assertEqual(info["runtime_generation"], 2)
         self.assertEqual(info["last_started_at"], "2026-06-01T00:00:00+00:00")
         self.assertIn("app_home", info)
+        self.assertIn("app_home_source", info)
         self.assertIn("managed_storage_items", info)
         self.assertIn("backup_covered_items", info)
+        self.assertIn("active_runtime_instances", info)
 
     def test_assert_runtime_compatible_rejects_newer_shared_generation(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -118,9 +120,11 @@ class RuntimeInfoTests(unittest.TestCase):
                 "max_supported_generation": 1,
                 "last_started_at": "2026-06-01T12:00:00+08:00",
                 "app_home": "C:/Users/test/AppData/Local/MemoryAnki",
+                "app_home_source": "default",
                 "storage_mode": "user_app_home",
                 "managed_storage_items": [],
                 "backup_covered_items": [],
+                "active_runtime_instances": [],
             },
         ):
             response = client.get("/api/v1/runtime-info")

@@ -2,17 +2,19 @@ from __future__ import annotations
 
 from typing import Any
 
+from sqlalchemy.orm import Session
+
 from memory_anki.core.config import (
     DASHSCOPE_API_KEY,
     DASHSCOPE_BASE_URL,
     DASHSCOPE_TEXT_MODEL,
 )
-from sqlalchemy.orm import Session
-
 from memory_anki.infrastructure.db.models import Palace
 from memory_anki.modules.mindmap.application.editor_state_service import normalize_editor_doc
-from memory_anki.modules.settings.application.ai_model_registry import AiRuntimeOptions
-from memory_anki.modules.settings.application.ai_model_registry import serialize_resolved_ai_runtime
+from memory_anki.modules.settings.application.ai_model_registry import (
+    AiRuntimeOptions,
+    serialize_resolved_ai_runtime,
+)
 
 from .mindmap_ai_split import config_loader, gateway, tree_ops
 from .mindmap_ai_split import contracts as split_contracts

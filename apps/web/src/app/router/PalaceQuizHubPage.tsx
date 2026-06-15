@@ -3,16 +3,16 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { DEFAULT_PALACE_LIST_VIEW_SETTINGS } from '@/app/router/palace-view-settings'
 import { PalaceListSections } from '@/app/router/palace-list/PalaceListSections'
-import type { PalaceGroupedItem, PalaceGroupedListResponse } from '@/shared/api/contracts'
-import { getPalacesGroupedApi } from '@/shared/api/modules/palaces'
+import type { PalaceGroupedSummaryItem, PalaceGroupedSummaryListResponse } from '@/shared/api/contracts'
+import { getPalacesGroupedSummaryApi } from '@/shared/api/modules/palaces'
 import { PageIntro } from '@/shared/components/layout/PageIntro'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
 import { Card, CardContent } from '@/shared/components/ui/card'
 import { Input } from '@/shared/components/ui/input'
 
-function flattenGroupedPalaces(data: PalaceGroupedListResponse) {
-  const list: PalaceGroupedItem[] = []
+function flattenGroupedPalaces(data: PalaceGroupedSummaryListResponse) {
+  const list: PalaceGroupedSummaryItem[] = []
   for (const subject of data.subjects) {
     for (const group of subject.chapter_groups) {
       list.push(...group.palaces)
@@ -22,7 +22,7 @@ function flattenGroupedPalaces(data: PalaceGroupedListResponse) {
   return list
 }
 
-function QuizPalaceCard({ palace }: { palace: PalaceGroupedItem }) {
+function QuizPalaceCard({ palace }: { palace: PalaceGroupedSummaryItem }) {
   return (
     <Card className="transition-shadow hover:shadow-md">
       <CardContent className="flex items-start gap-3 p-4">
@@ -40,7 +40,7 @@ function QuizPalaceCard({ palace }: { palace: PalaceGroupedItem }) {
                 {palace.primary_chapter?.name ? (
                   <Badge variant="outline">{palace.primary_chapter.name}</Badge>
                 ) : null}
-                <span>{palace.segments?.length ?? 0} 个分段</span>
+                <span>{palace.segment_count ?? 0} 个分段</span>
                 {(palace.focus_count ?? 0) > 0 ? (
                   <span className="inline-flex items-center gap-1 text-warning">
                     <Target className="h-3.5 w-3.5" />
@@ -81,21 +81,23 @@ function QuizPalaceCard({ palace }: { palace: PalaceGroupedItem }) {
 export default function PalaceQuizHubPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const search = searchParams.get('search') || ''
-  const [groupedData, setGroupedData] = useState<PalaceGroupedListResponse>({
+  const [groupedData, setGroupedData] = useState<PalaceGroupedSummaryListResponse>({
     groups: [],
     ungrouped: [],
     subjects: [],
   })
   const [collapsedChapters, setCollapsedChapters] = useState<Set<number>>(new Set())
   const [loading, setLoading] = useState(true)
+  const [hasLoadedOnce, setHasLoadedOnce] = useState(false)
 
   const fetchData = useCallback(async () => {
     setLoading(true)
     try {
       const params: Record<string, string> = {}
       if (search) params.search = search
-      const data = await getPalacesGroupedApi(params)
+      const data = await getPalacesGroupedSummaryApi(params)
       setGroupedData(data)
+      setHasLoadedOnce(true)
     } finally {
       setLoading(false)
     }
@@ -140,21 +142,37 @@ export default function PalaceQuizHubPage() {
         </CardContent>
       </Card>
 
-      <PalaceListSections
-        groupedData={groupedData}
-        hasPalaces={allPalaces.length > 0}
-        viewSettings={DEFAULT_PALACE_LIST_VIEW_SETTINGS}
-        collapsedChapters={collapsedChapters}
-        onToggleChapter={(chapterId) =>
-          setCollapsedChapters((current) => {
-            const next = new Set(current)
-            if (next.has(chapterId)) next.delete(chapterId)
-            else next.add(chapterId)
-            return next
-          })
-        }
-        renderPalaceCard={(palace) => <QuizPalaceCard key={palace.id} palace={palace} />}
-      />
+      {loading && !hasLoadedOnce ? (
+        <div className="grid gap-3">
+          {Array.from({ length: 3 }).map((_, index) => (
+            <Card key={index} className="border-border/70 bg-card/92">
+              <CardContent className="space-y-3 p-4">
+                <div className="h-5 w-40 animate-pulse rounded bg-secondary/70" />
+                <div className="h-4 w-56 animate-pulse rounded bg-secondary/50" />
+                <div className="h-9 w-32 animate-pulse rounded bg-secondary/60" />
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      ) : null}
+
+      {!loading || hasLoadedOnce ? (
+        <PalaceListSections<PalaceGroupedSummaryItem>
+          groupedData={groupedData}
+          hasPalaces={allPalaces.length > 0}
+          viewSettings={DEFAULT_PALACE_LIST_VIEW_SETTINGS}
+          collapsedChapters={collapsedChapters}
+          onToggleChapter={(chapterId) =>
+            setCollapsedChapters((current) => {
+              const next = new Set(current)
+              if (next.has(chapterId)) next.delete(chapterId)
+              else next.add(chapterId)
+              return next
+            })
+          }
+          renderPalaceCard={(palace) => <QuizPalaceCard key={palace.id} palace={palace} />}
+        />
+      ) : null}
     </div>
   )
 }

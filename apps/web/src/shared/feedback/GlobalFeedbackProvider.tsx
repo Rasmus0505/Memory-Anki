@@ -118,7 +118,10 @@ export function GlobalFeedbackProvider({
       }
 
       if (playAudio) {
-        playEvent(descriptor.audioEvent)
+        playEvent(descriptor.audioEvent, {
+          origin: descriptor.origin,
+          audioScope: descriptor.audioScope,
+        })
       }
 
       if (showVisual) {

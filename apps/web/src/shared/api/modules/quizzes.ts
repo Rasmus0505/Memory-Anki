@@ -1,5 +1,6 @@
 import { API_BASE, fetchWithMutationQueue, request } from '@/shared/api/http'
 import type {
+  AiScenarioRuntimeOptionsMap,
   MindMapEditorState,
   PalaceQuizMiniPalaceClassificationResult,
   PalaceQuizStreamDeltaEvent,
@@ -100,7 +101,11 @@ async function readQuizStreamResponse<T>(
 }
 
 export function getPalaceQuizQuestionsApi(palaceId: number) {
-  return request<{ items: PalaceQuizQuestion[] }>(`/palaces/${palaceId}/quiz-questions`)
+  return request<{ items: PalaceQuizQuestion[] }>(`/palaces/${palaceId}/aggregated-quiz-questions`)
+}
+
+export function getChapterQuizQuestionsApi(chapterId: number) {
+  return request<{ items: PalaceQuizQuestion[] }>(`/chapters/${chapterId}/quiz-questions`)
 }
 
 export function createPalaceQuizQuestionApi(
@@ -133,6 +138,21 @@ export function batchCreatePalaceQuizQuestionsApi(
   })
 }
 
+export function batchCreateChapterQuizQuestionsApi(
+  chapterId: number,
+  questions: PalaceQuizQuestionDraft[],
+) {
+  return request<{ items: PalaceQuizQuestion[] }>(`/chapters/${chapterId}/quiz-questions/batch`, {
+    method: 'POST',
+    body: JSON.stringify({ questions }),
+    persistence: {
+      resourceKey: `chapter:${chapterId}:quiz-question:batch-create`,
+      description: '批量保存章节题目',
+      replayMode: 'manual',
+    },
+  })
+}
+
 export function updatePalaceQuizQuestionApi(
   questionId: number,
   data: PalaceQuizQuestionDraft,
@@ -155,6 +175,18 @@ export function deletePalaceQuizQuestionApi(questionId: number) {
     persistence: {
       resourceKey: `palace-quiz-question:${questionId}:delete`,
       description: '删除宫殿题目',
+      replayMode: 'manual',
+    },
+  })
+}
+
+export function batchDeletePalaceQuizQuestionsApi(questionIds: number[]) {
+  return request<{ ok: boolean; deleted_count: number }>(`/palace-quiz-questions/batch-delete`, {
+    method: 'POST',
+    body: JSON.stringify({ question_ids: questionIds }),
+    persistence: {
+      resourceKey: `palace-quiz-question:batch-delete:${questionIds.join(',')}`,
+      description: '批量删除宫殿题目',
       replayMode: 'manual',
     },
   })
@@ -203,12 +235,16 @@ export async function previewPalaceQuizGenerationFromImagesApi(
   files: File[],
   extraPrompt: string,
   classifyByMiniPalace = false,
+  selectedChapterId?: number | null,
   aiOptions?: import('@/shared/api/contracts').AiRuntimeOptions,
 ) {
   const form = new FormData()
   files.forEach((file) => form.append('files', file))
   form.append('extra_prompt', extraPrompt)
   form.append('classify_by_mini_palace', classifyByMiniPalace ? 'true' : 'false')
+  if (selectedChapterId) {
+    form.append('selected_chapter_id', String(selectedChapterId))
+  }
   if (aiOptions) {
     form.append('ai_options', JSON.stringify(aiOptions))
   }
@@ -227,6 +263,27 @@ export async function previewPalaceQuizGenerationFromImagesApi(
   return readQuizJson<PalaceQuizGenerationPreview>(response)
 }
 
+export function previewChapterQuizGenerationFromOutlineApi(
+  chapterId: number,
+  data: {
+    question_types?: PalaceQuizQuestionType[]
+    question_count?: number
+    extra_prompt: string
+    classify_by_child_chapter?: boolean
+    ai_options?: import('@/shared/api/contracts').AiRuntimeOptions
+  },
+) {
+  return request<PalaceQuizGenerationPreview>(`/chapters/${chapterId}/quiz-generation/outline`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+    persistence: {
+      resourceKey: `chapter:${chapterId}:quiz-generation:outline:${data.question_types?.join(',') || 'default'}:${data.question_count || 5}`,
+      description: 'AI 生成章节题目',
+      replayMode: 'manual',
+    },
+  })
+}
+
 export function previewPalaceQuizGenerationFromPdfApi(
   palaceId: number,
   data: {
@@ -238,8 +295,11 @@ export function previewPalaceQuizGenerationFromPdfApi(
       role_hint?: string
     }>
     extra_prompt: string
+    enable_secondary_review?: boolean
     classify_by_mini_palace?: boolean
+    selected_chapter_id?: number | null
     ai_options?: import('@/shared/api/contracts').AiRuntimeOptions
+    ai_options_by_scenario?: AiScenarioRuntimeOptionsMap
   },
 ) {
   const resourceId =
@@ -267,8 +327,11 @@ export async function previewPalaceQuizGenerationFromPdfStreamApi(
       role_hint?: string
     }>
     extra_prompt: string
+    enable_secondary_review?: boolean
     classify_by_mini_palace?: boolean
+    selected_chapter_id?: number | null
     ai_options?: import('@/shared/api/contracts').AiRuntimeOptions
+    ai_options_by_scenario?: AiScenarioRuntimeOptionsMap
   },
   handlers?: {
     onStatus?: (event: PalaceQuizStreamStatusEvent) => void
@@ -292,6 +355,41 @@ export async function previewPalaceQuizGenerationFromPdfStreamApi(
     },
   )
   return readQuizStreamResponse<PalaceQuizGenerationPreview>(response, handlers)
+}
+
+export function recoverPalaceQuizGenerationFromAiLogApi(
+  palaceId: number,
+  data: import('@/shared/api/contracts').RecoverPalaceQuizFromAiLogRequest & {
+    selected_chapter_id?: number | null
+  },
+) {
+  return request<PalaceQuizGenerationPreview>(`/palaces/${palaceId}/quiz-generation/pdf/recover`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+    persistence: {
+      resourceKey: `palace:${palaceId}:quiz-generation:pdf-recover:${data.ai_call_log_id}`,
+      description: '从 AI 日志恢复宫殿题目（PDF）',
+      replayMode: 'manual',
+    },
+  })
+}
+
+export function recoverAndSavePalaceQuizGenerationFromAiLogApi(
+  palaceId: number,
+  data: import('@/shared/api/contracts').RecoverAndSavePalaceQuizFromAiLogRequest,
+) {
+  return request<import('@/shared/api/contracts').RecoverAndSavePalaceQuizFromAiLogResult>(
+    `/palaces/${palaceId}/quiz-generation/pdf/recover-and-save`,
+    {
+      method: 'POST',
+      body: JSON.stringify(data),
+      persistence: {
+        resourceKey: `palace:${palaceId}:quiz-generation:pdf-recover-save:${data.ai_call_log_id}`,
+        description: '从 AI 日志恢复并写入章节题库（PDF）',
+        replayMode: 'manual',
+      },
+    },
+  )
 }
 
 export function classifyPalaceQuizQuestionsToMiniPalacesApi(
@@ -330,7 +428,7 @@ export function previewPalaceQuizGenerationFromReviewMindmapApi(
       body: JSON.stringify(data),
       persistence: {
         resourceKey: `palace:${palaceId}:quiz-generation:review-mindmap:${data.mode}:${data.question_types.join(',')}:${data.question_count}`,
-        description: 'AI 生成做题休息题目',
+        description: 'AI 生成做题题目',
         replayMode: 'manual',
       },
     },

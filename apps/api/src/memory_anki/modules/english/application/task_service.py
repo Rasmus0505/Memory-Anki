@@ -38,13 +38,13 @@ from memory_anki.modules.english.infrastructure.task_runner import (
     EnglishTaskRunner,
     LocalThreadEnglishTaskRunner,
 )
-from memory_anki.modules.time_records.application.time_records_service import (
-    get_english_course_stats,
-)
 from memory_anki.modules.settings.application.ai_model_registry import (
     AiRuntimeOptions,
     resolve_scenario_runtime,
     serialize_resolved_ai_runtime,
+)
+from memory_anki.modules.time_records.application.time_records_service import (
+    get_english_course_stats,
 )
 
 from .asr_normalization import prepare_sentences_from_asr

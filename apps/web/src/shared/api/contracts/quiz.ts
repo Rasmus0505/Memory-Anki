@@ -1,4 +1,8 @@
-import type { ResolvedAiRuntimeMeta } from './profile'
+import type {
+  AiRuntimeOptions,
+  AiScenarioRuntimeOptionsMap,
+  ResolvedAiRuntimeMeta,
+} from './profile'
 
 export type PalaceQuizQuestionType =
   | 'multiple_choice'
@@ -22,9 +26,11 @@ export interface PalaceQuizSourceMeta {
   image_names: string[] | null
   pdf_sources?: PalaceQuizPdfSourceMeta[] | null
   extra_prompt: string
+  secondary_review_enabled?: boolean
   ai_call_log_id: string | null
   generated_at: string
   generation_mode: string
+  recovered_from_ai_call_log_id?: string | null
   review_mode?: 'chapter' | 'cross_palace' | string | null
   related_palace_ids?: number[] | null
   related_palace_summaries?: Array<{
@@ -80,6 +86,8 @@ export interface PalaceQuizAnswerPayload {
 
 export interface PalaceQuizQuestionDraft {
   mini_palace_id?: number | null
+  source_chapter_id?: number | null
+  classified_chapter_id?: number | null
   origin_question_id?: number | null
   question_type: PalaceQuizQuestionType
   stem: string
@@ -91,8 +99,10 @@ export interface PalaceQuizQuestionDraft {
 
 export interface PalaceQuizQuestion extends PalaceQuizQuestionDraft {
   id: number
-  palace_id: number
+  palace_id: number | null
   mini_palace: PalaceQuizMiniPalaceRef | null
+  source_chapter?: { id: number; name: string; subject_id: number } | null
+  classified_chapter?: { id: number; name: string; subject_id: number; parent_id: number | null } | null
   sort_order: number
   correct_count: number
   incorrect_count: number
@@ -108,16 +118,27 @@ export interface PalaceQuizMiniPalaceGroupPreview {
 }
 
 export interface PalaceQuizGroupedPreview {
-  mini_palace_groups: PalaceQuizMiniPalaceGroupPreview[]
+  mini_palace_groups?: PalaceQuizMiniPalaceGroupPreview[]
+  child_chapter_groups?: Array<{
+    classified_chapter_id: number
+    classified_chapter_name: string
+    questions: PalaceQuizQuestionDraft[]
+  }>
   unassigned_questions: PalaceQuizQuestionDraft[]
 }
 
 export interface PalaceQuizGenerationPreview {
-  palace_id: number
+  palace_id?: number | null
+  chapter_id?: number
   questions: PalaceQuizQuestionDraft[]
   source_meta: PalaceQuizSourceMeta
   ai_call_log_id: string | null
   resolved_ai?: ResolvedAiRuntimeMeta | null
+  resolved_ai_steps?: {
+    generation?: ResolvedAiRuntimeMeta | null
+    pairing?: ResolvedAiRuntimeMeta | null
+    review?: ResolvedAiRuntimeMeta | null
+  } | null
   warnings?: string[]
   generation_stats?: {
     returned_count: number
@@ -130,6 +151,42 @@ export interface PalaceQuizGenerationPreview {
     title: string
     subject?: { id: number; name: string } | null
     first_multi_nodes: string[]
+  }>
+}
+
+export interface RecoverPalaceQuizFromAiLogRequest {
+  ai_call_log_id: string
+  classify_by_mini_palace?: boolean
+  ai_options?: AiRuntimeOptions
+  ai_options_by_scenario?: AiScenarioRuntimeOptionsMap
+}
+
+export interface RecoverAndSavePalaceQuizFromAiLogRequest
+  extends RecoverPalaceQuizFromAiLogRequest {
+  selected_chapter_id: number
+}
+
+export interface RecoverAndSavePalaceQuizFromAiLogResult {
+  items: PalaceQuizQuestion[]
+  recovered_count: number
+  saved_count: number
+  deduped_count: number
+  ai_call_log_id: string
+  grouped_summary: Array<{
+    classified_chapter_id: number
+    classified_chapter_name: string
+    question_count: number
+  }>
+  generation_stats?: {
+    returned_count: number
+    savable_count: number
+    skipped_count: number
+  }
+  warnings?: string[]
+  skipped_reasons?: Array<{
+    code: string
+    count: number
+    question_indexes?: number[]
   }>
 }
 

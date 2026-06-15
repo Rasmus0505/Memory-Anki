@@ -7,7 +7,6 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from memory_anki.core.config import (
-    DASHSCOPE_API_KEY,
     DASHSCOPE_BASE_URL,
     DASHSCOPE_VISION_MODEL,
     IMPORT_JOBS_DIR,
@@ -254,58 +253,6 @@ def _stream_call_dashscope_pdf_json(
             external_log_context=external_log_context,
         )
     )
-
-def ensure_mindmap_import_job_schema() -> None:
-    with engine.begin() as conn:
-        conn.exec_driver_sql(
-            """
-            CREATE TABLE IF NOT EXISTS mindmap_import_jobs (
-                id VARCHAR(64) PRIMARY KEY,
-                entity_key VARCHAR(200) NOT NULL,
-                source_kind VARCHAR(40) NOT NULL,
-                mode VARCHAR(20) NOT NULL DEFAULT 'mindmap',
-                status VARCHAR(20) NOT NULL DEFAULT 'draft',
-                stage VARCHAR(20) NOT NULL DEFAULT 'prepared',
-                fingerprint VARCHAR(128) NOT NULL,
-                source_meta_json TEXT DEFAULT '{}',
-                result_json TEXT DEFAULT '{}',
-                error_json TEXT DEFAULT '{}',
-                usage_json TEXT DEFAULT '{}',
-                progress_json TEXT DEFAULT '{}',
-                pause_requested BOOLEAN NOT NULL DEFAULT 0,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                started_at DATETIME,
-                completed_at DATETIME,
-                deleted_at DATETIME
-            )
-            """
-        )
-        conn.exec_driver_sql(
-            "CREATE INDEX IF NOT EXISTS ix_mindmap_import_jobs_entity_fingerprint "
-            "ON mindmap_import_jobs (entity_key, fingerprint)"
-        )
-        conn.exec_driver_sql(
-            "CREATE INDEX IF NOT EXISTS ix_mindmap_import_jobs_entity_created "
-            "ON mindmap_import_jobs (entity_key, created_at)"
-        )
-        existing_columns = {
-            str(row[1])
-            for row in conn.exec_driver_sql("PRAGMA table_info(mindmap_import_jobs)").fetchall()
-        }
-        if "progress_json" not in existing_columns:
-            conn.exec_driver_sql(
-                "ALTER TABLE mindmap_import_jobs ADD COLUMN progress_json TEXT DEFAULT '{}'"
-            )
-        if "pause_requested" not in existing_columns:
-            conn.exec_driver_sql(
-                "ALTER TABLE mindmap_import_jobs ADD COLUMN pause_requested BOOLEAN NOT NULL DEFAULT 0"
-            )
-        conn.exec_driver_sql(
-            "UPDATE mindmap_import_jobs "
-            "SET status = 'interrupted', pause_requested = 0, updated_at = CURRENT_TIMESTAMP "
-            "WHERE status = 'running' AND deleted_at IS NULL"
-        )
 
 
 def create_image_import_job(

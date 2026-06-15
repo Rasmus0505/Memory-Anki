@@ -15,27 +15,59 @@ from memory_anki.core.time import utc_now_naive
 from memory_anki.infrastructure.db.models import Chapter, Palace, PalaceVersion, Peg
 from memory_anki.modules.backups.application.backup_lifecycle import (
     ROLLING_EDIT_BACKUP_INTERVAL as ROLLING_EDIT_BACKUP_INTERVAL,
+)
+from memory_anki.modules.backups.application.backup_lifecycle import (
     create_full_backup as create_full_backup,
+)
+from memory_anki.modules.backups.application.backup_lifecycle import (
     create_rescue_snapshot as create_rescue_snapshot,
+)
+from memory_anki.modules.backups.application.backup_lifecycle import (
     create_shutdown_backup as create_shutdown_backup,
+)
+from memory_anki.modules.backups.application.backup_lifecycle import (
     ensure_daily_backup as ensure_daily_backup,
+)
+from memory_anki.modules.backups.application.backup_lifecycle import (
     list_backups as list_backups,
+)
+from memory_anki.modules.backups.application.backup_lifecycle import (
     maybe_create_interval_backup as maybe_create_interval_backup,
+)
+from memory_anki.modules.backups.application.backup_lifecycle import (
     maybe_create_periodic_backup as maybe_create_periodic_backup,
+)
+from memory_anki.modules.backups.application.backup_lifecycle import (
     maybe_create_rolling_backup as maybe_create_rolling_backup,
+)
+from memory_anki.modules.backups.application.backup_lifecycle import (
     restore_database_backup as restore_database_backup,
+)
+from memory_anki.modules.backups.application.backup_lifecycle import (
     start_periodic_backup_loop as start_periodic_backup_loop,
+)
+from memory_anki.modules.backups.application.backup_lifecycle import (
     stop_periodic_backup_loop as stop_periodic_backup_loop,
+)
+from memory_anki.modules.backups.application.backup_lifecycle import (
     timestamp_slug as timestamp_slug,
 )
 from memory_anki.modules.backups.application.editor_safety import (
     MAX_SAFE_REMAINING_NODES as MAX_SAFE_REMAINING_NODES,
+)
+from memory_anki.modules.backups.application.editor_safety import (
     MIN_DANGEROUS_NODE_COUNT as MIN_DANGEROUS_NODE_COUNT,
+)
+from memory_anki.modules.backups.application.editor_safety import (
     count_editor_doc_nodes as count_editor_doc_nodes,
+)
+from memory_anki.modules.backups.application.editor_safety import (
     is_dangerous_structure_change as is_dangerous_structure_change,
 )
 from memory_anki.modules.backups.application.snapshot_sources import (
     export_git_snapshot_db as export_git_snapshot_db,
+)
+from memory_anki.modules.backups.application.snapshot_sources import (
     fetch_snapshot_from_sqlite,
 )
 
@@ -61,39 +93,6 @@ class PalaceEditorSnapshotSummary:
     editor_doc: dict | str | None
     editor_config: dict | str | None
     editor_local_config: dict | str | None
-
-
-def ensure_backup_schema(session: Session) -> None:
-    connection = session.connection()
-    connection.exec_driver_sql(
-        """
-        CREATE TABLE IF NOT EXISTS palace_versions (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            palace_id INTEGER NOT NULL,
-            trigger_reason VARCHAR(50) DEFAULT 'manual_save',
-            title VARCHAR(200) NOT NULL DEFAULT '',
-            created_at_value DATETIME NULL,
-            editor_doc TEXT DEFAULT '',
-            editor_config TEXT DEFAULT '',
-            editor_local_config TEXT DEFAULT '',
-            peg_snapshot TEXT DEFAULT '',
-            chapter_snapshot TEXT DEFAULT '',
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY(palace_id) REFERENCES palaces(id) ON DELETE CASCADE
-        )
-        """
-    )
-    existing_columns = {
-        row[1]
-        for row in connection.exec_driver_sql("PRAGMA table_info(palace_versions)").fetchall()
-    }
-    for column in ("editor_config", "editor_local_config"):
-        if column not in existing_columns:
-            connection.exec_driver_sql(f"ALTER TABLE palace_versions ADD COLUMN {column} TEXT DEFAULT ''")
-    connection.exec_driver_sql(
-        "CREATE INDEX IF NOT EXISTS ix_palace_versions_palace_id_created_at ON palace_versions (palace_id, created_at DESC)"
-    )
-    session.commit()
 
 
 def _deserialize_version_json(raw: str | None, fallback):

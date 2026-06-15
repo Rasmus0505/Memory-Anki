@@ -1,7 +1,17 @@
-import { forwardRef, type HTMLAttributes, type PropsWithChildren } from 'react'
+import {
+  createContext,
+  forwardRef,
+  useContext,
+  type HTMLAttributes,
+  type PropsWithChildren,
+} from 'react'
 import * as DialogPrimitive from '@radix-ui/react-dialog'
 import { X } from 'lucide-react'
 import { cn } from '@/shared/lib/utils'
+
+type DialogLayout = 'centered' | 'unstyled'
+
+const DialogModalContext = createContext<{ modal: boolean }>({ modal: true })
 
 /**
  * 基于 Radix UI 的 Dialog 实现。
@@ -26,52 +36,68 @@ function Dialog({
   className?: string
 }>) {
   return (
-    <DialogPrimitive.Root open={open} onOpenChange={onOpenChange} modal={modal}>
-      {children}
-    </DialogPrimitive.Root>
+    <DialogModalContext.Provider value={{ modal }}>
+      <DialogPrimitive.Root open={open} onOpenChange={onOpenChange} modal={modal}>
+        {children}
+      </DialogPrimitive.Root>
+    </DialogModalContext.Provider>
   )
 }
 
 const DialogContent = forwardRef<
   HTMLDivElement,
-  PropsWithChildren<HTMLAttributes<HTMLDivElement>> & { showCloseButton?: boolean }
->(function DialogContent({ children, className, showCloseButton = false, ...props }, ref) {
+  PropsWithChildren<HTMLAttributes<HTMLDivElement>> & {
+    layout?: DialogLayout
+    showCloseButton?: boolean
+  }
+>(function DialogContent(
+  { children, className, layout, showCloseButton = false, ...props },
+  ref,
+) {
+  const { modal } = useContext(DialogModalContext)
+  const resolvedLayout = layout ?? (modal ? 'centered' : 'unstyled')
+  const panelClassName = cn(
+    'pointer-events-auto relative flex flex-col overflow-hidden',
+    resolvedLayout === 'unstyled' && 'z-[141]',
+    resolvedLayout === 'centered' &&
+      'max-h-[92vh] w-full max-w-3xl rounded-2xl border bg-background shadow-2xl',
+    'data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95',
+    'data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95',
+    className,
+  )
+
+  const content = (
+    <DialogPrimitive.Content ref={ref} {...props} className={panelClassName}>
+      {children}
+      {showCloseButton ? (
+        <DialogPrimitive.Close
+          className="absolute right-4 top-4 rounded-md p-2 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+          aria-label="关闭弹窗"
+        >
+          <X className="h-4 w-4" />
+        </DialogPrimitive.Close>
+      ) : null}
+    </DialogPrimitive.Content>
+  )
+
   return (
     <DialogPrimitive.Portal>
-      <DialogPrimitive.Overlay
-        className={cn(
-          'fixed inset-0 z-[140] bg-black/45',
-          'data-[state=open]:animate-in data-[state=open]:fade-in-0',
-          'data-[state=closed]:animate-out data-[state=closed]:fade-out-0',
-        )}
-      />
-      <DialogPrimitive.Content
-        ref={ref}
-        {...props}
-        className={cn(
-          // 居中容器：用 fixed + flex 实现旧版的 items-center justify-center 行为
-          'fixed inset-0 z-[141] flex items-center justify-center p-4',
-          className,
-        )}
-      >
-        <div
+      {modal ? (
+        <DialogPrimitive.Overlay
           className={cn(
-            'pointer-events-auto relative flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border bg-background shadow-2xl',
-            'data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95',
-            'data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95',
+            'fixed inset-0 z-[140] bg-black/45',
+            'data-[state=open]:animate-in data-[state=open]:fade-in-0',
+            'data-[state=closed]:animate-out data-[state=closed]:fade-out-0',
           )}
-        >
-          {children}
-          {showCloseButton ? (
-            <DialogPrimitive.Close
-              className="absolute right-4 top-4 rounded-md p-2 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
-              aria-label="关闭"
-            >
-              <X className="h-4 w-4" />
-            </DialogPrimitive.Close>
-          ) : null}
+        />
+      ) : null}
+      {resolvedLayout === 'centered' ? (
+        <div className="fixed inset-0 z-[141] flex items-center justify-center p-4 pointer-events-none">
+          {content}
         </div>
-      </DialogPrimitive.Content>
+      ) : (
+        content
+      )}
     </DialogPrimitive.Portal>
   )
 })
@@ -128,7 +154,7 @@ function DialogClose({
         'rounded-md p-2 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground',
         className,
       )}
-      aria-label="关闭"
+      aria-label="关闭弹窗"
     >
       <X className="h-4 w-4" />
     </DialogPrimitive.Close>

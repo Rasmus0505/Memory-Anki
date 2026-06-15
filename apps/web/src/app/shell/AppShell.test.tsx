@@ -2,23 +2,46 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter, useLocation } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AppShell, resetNavSectionHistoryForTest } from '@/app/shell/AppShell'
+import {
+  __resetBackgroundTaskStoreForTest,
+  completeTask,
+  getBackgroundTasks,
+  registerTask,
+} from '@/shared/background-tasks/backgroundTaskRegistry'
 import { enqueueMutation, resetMutationQueueForTest } from '@/shared/persistence/mutationQueue'
 
 const getRuntimeInfoApi = vi.fn()
+const preloadPalaceQuizHubPage = vi.fn(() => Promise.resolve({}))
+const prefetchPalaceSubjectShelfApi = vi.fn()
+const prefetchPalacesGroupedSummaryApi = vi.fn()
 
 vi.mock('@/shared/api/modules/runtime', () => ({
   getRuntimeInfoApi: () => getRuntimeInfoApi(),
 }))
 
+vi.mock('@/app/router/appRoutes', () => ({
+  preloadPalaceQuizHubPage: () => preloadPalaceQuizHubPage(),
+}))
+
+vi.mock('@/shared/api/modules/palaces', () => ({
+  prefetchPalaceSubjectShelfApi: () => prefetchPalaceSubjectShelfApi(),
+  prefetchPalacesGroupedSummaryApi: () => prefetchPalacesGroupedSummaryApi(),
+}))
+
 describe('AppShell', () => {
   beforeEach(async () => {
     await resetMutationQueueForTest()
+    __resetBackgroundTaskStoreForTest()
     getRuntimeInfoApi.mockReset()
+    preloadPalaceQuizHubPage.mockClear()
+    prefetchPalaceSubjectShelfApi.mockClear()
+    prefetchPalacesGroupedSummaryApi.mockClear()
     resetNavSectionHistoryForTest()
   })
 
   afterEach(async () => {
     await resetMutationQueueForTest()
+    __resetBackgroundTaskStoreForTest()
     resetNavSectionHistoryForTest()
     vi.restoreAllMocks()
   })
@@ -173,6 +196,36 @@ describe('AppShell', () => {
     expect(palaceLink.className).not.toContain('bg-primary')
   })
 
+  it('warms palace and quiz navigation targets on hover', async () => {
+    getRuntimeInfoApi.mockResolvedValue({
+      channel: 'stable',
+      commit: 'abcdef1234567890',
+      short_commit: 'abcdef12',
+      runtime_generation: 1,
+      declared_runtime_generation: 1,
+      min_supported_generation: 1,
+      max_supported_generation: 1,
+      last_started_at: '2026-06-01T12:00:00+08:00',
+    })
+
+    render(
+      <MemoryRouter>
+        <AppShell>
+          <div>content</div>
+        </AppShell>
+      </MemoryRouter>,
+    )
+
+    await screen.findAllByText(/Stable abcdef12/)
+
+    fireEvent.mouseEnter(screen.getAllByRole('link', { name: '记忆宫殿' })[0]!)
+    fireEvent.mouseEnter(screen.getAllByRole('link', { name: '做题区' })[0]!)
+
+    expect(prefetchPalaceSubjectShelfApi).toHaveBeenCalledTimes(1)
+    expect(prefetchPalacesGroupedSummaryApi).toHaveBeenCalledTimes(1)
+    expect(preloadPalaceQuizHubPage).toHaveBeenCalledTimes(1)
+  })
+
   it('returns palace navigation to the last visited palace child route instead of the shelf root', async () => {
     getRuntimeInfoApi.mockResolvedValue({
       channel: 'stable',
@@ -236,6 +289,48 @@ describe('AppShell', () => {
     fireEvent.click(screen.getAllByRole('link', { name: '复习' })[0]!)
     await waitFor(() => {
       expect(screen.getByText('/review/session/9')).toBeTruthy()
+    })
+  })
+
+  it('renders quiz-generation bubbles and navigates to practice mode', async () => {
+    getRuntimeInfoApi.mockResolvedValue({
+      channel: 'stable',
+      commit: 'abcdef1234567890',
+      short_commit: 'abcdef12',
+      runtime_generation: 1,
+      declared_runtime_generation: 1,
+      min_supported_generation: 1,
+      max_supported_generation: 1,
+      last_started_at: '2026-06-01T12:00:00+08:00',
+    })
+    registerTask({
+      id: 'quiz-1',
+      section: 'palaceQuiz',
+      kind: 'quiz-generation',
+      title: '细胞生物学宫殿 · 做题生成中',
+      detail: '已保存 4 题，点击去做题。',
+      progress: 92,
+      navigateTarget: '/palaces/1/quiz?tab=practice',
+      bubble: { x: 100, y: 120 },
+    })
+    completeTask('quiz-1', { detail: '已保存 4 题，点击去做题。' })
+
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <AppShell>
+          <LocationEcho />
+        </AppShell>
+      </MemoryRouter>,
+    )
+
+    await screen.findAllByText('细胞生物学宫殿 · 做题生成中')
+    expect(screen.getByRole('button', { name: '去做题' })).toBeTruthy()
+    expect(getBackgroundTasks()[0]?.bubble).toEqual({ x: 100, y: 120 })
+
+    fireEvent.click(screen.getByRole('button', { name: '去做题' }))
+
+    await waitFor(() => {
+      expect(screen.getByText('/palaces/1/quiz?tab=practice')).toBeTruthy()
     })
   })
 })

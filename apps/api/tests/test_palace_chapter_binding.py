@@ -148,6 +148,31 @@ class PalaceChapterBindingTests(unittest.TestCase):
         self.assertEqual(palace["resolved_title"], "第一节 第十章小节")
         self.assertEqual(palace["resolved_parent_chapter"]["id"], self.chapter10_id)
 
+    def test_grouped_summary_omits_heavy_fields_and_includes_counts(self):
+        self.client.put(
+            f"/api/v1/palaces/{self.palace_id}/chapters",
+            json={"chapter_ids": [self.chapter10_section1_id], "primary_chapter_id": self.chapter10_section1_id},
+        )
+
+        with self.SessionLocal() as session:
+            palace = session.query(Palace).filter_by(id=self.palace_id).first()
+            self.assertIsNotNone(palace)
+            palace.editor_doc = '{"root":{"data":{"text":"test","uid":"root"},"children":[]}}'
+            session.commit()
+
+        response = self.client.get("/api/v1/palaces/grouped-summary")
+        self.assertEqual(response.status_code, 200)
+
+        subjects = response.json()["subjects"]
+        self.assertEqual(len(subjects), 1)
+        palace_payload = subjects[0]["chapter_groups"][0]["palaces"][0]
+        self.assertEqual(palace_payload["segment_count"], 0)
+        self.assertEqual(palace_payload["chapter_count"], 2)
+        self.assertNotIn("editor_doc", palace_payload)
+        self.assertNotIn("segments", palace_payload)
+        self.assertNotIn("mini_palaces", palace_payload)
+        self.assertNotIn("review_stages", palace_payload)
+
 
 if __name__ == "__main__":
     unittest.main()

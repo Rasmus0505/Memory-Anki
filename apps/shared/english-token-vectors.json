@@ -1,0 +1,37 @@
+[
+  {
+    "name": "basic punctuation normalization",
+    "text": "Hello, world!",
+    "tokens": ["hello", "world"],
+    "checkInput": "Hello world",
+    "checkPassed": true
+  },
+  {
+    "name": "apostrophe normalization",
+    "text": "It's a student's book.",
+    "tokens": ["it's", "a", "student's", "book"],
+    "checkInput": "It's a student's book",
+    "checkPassed": true
+  },
+  {
+    "name": "usd whole dollars expansion",
+    "text": "The ticket costs $25.",
+    "tokens": ["the", "ticket", "costs", "twenty-five", "dollars"],
+    "checkInput": "The ticket costs twenty-five dollars",
+    "checkPassed": true
+  },
+  {
+    "name": "usd dollars and cents expansion",
+    "text": "I paid $10.50 today.",
+    "tokens": ["i", "paid", "ten", "dollars", "and", "fifty", "cents", "today"],
+    "checkInput": "I paid ten dollars and fifty cents today",
+    "checkPassed": true
+  },
+  {
+    "name": "mismatch detection",
+    "text": "We can keep going.",
+    "tokens": ["we", "can", "keep", "going"],
+    "checkInput": "We can stop going",
+    "checkPassed": false
+  }
+]

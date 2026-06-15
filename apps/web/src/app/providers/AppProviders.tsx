@@ -3,6 +3,7 @@ import { BrowserRouter } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { Toaster, toast } from 'sonner'
 import { migrateLegacyTimeRecordsToBackend } from '@/entities/session/model'
+import { QuizLauncherProvider } from '@/features/palace-quiz/QuizLauncherProvider'
 import { GlobalFeedbackProvider } from '@/shared/feedback/GlobalFeedbackProvider'
 import { cleanupExpiredAppLogs, logAppError } from '@/shared/logs/model/appLogs'
 import { useMutationQueueAutoSync } from '@/shared/persistence/useMutationQueue'
@@ -59,8 +60,10 @@ export function AppProviders({ children }: PropsWithChildren) {
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <GlobalFeedbackProvider>
-          {children}
-          <Toaster position="bottom-right" richColors />
+          <QuizLauncherProvider>
+            {children}
+            <Toaster position="bottom-right" richColors />
+          </QuizLauncherProvider>
         </GlobalFeedbackProvider>
       </BrowserRouter>
     </QueryClientProvider>

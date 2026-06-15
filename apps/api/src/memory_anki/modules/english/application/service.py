@@ -10,12 +10,7 @@ from memory_anki.modules.english.application.course_service import (
     resolve_course_media_path,
     update_course_progress,
 )
-from memory_anki.modules.english.application.startup import (
-    ensure_english_storage_schema as ensure_english_schema,
-)
-from memory_anki.modules.english.application.startup import (
-    prepare_english_runtime,
-)
+from memory_anki.modules.english.application.startup import prepare_english_runtime
 from memory_anki.modules.english.application.task_service import (
     EnglishRuntime,
     cleanup_incomplete_generation_tasks,
@@ -57,7 +52,6 @@ __all__ = [
     "configure_english_runtime",
     "create_generation_task",
     "delete_course",
-    "ensure_english_schema",
     "get_course_detail",
     "get_course_generation_log",
     "get_course_media_file",

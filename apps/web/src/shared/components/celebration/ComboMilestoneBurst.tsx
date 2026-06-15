@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 
 /**
  * 连击里程碑视觉庆祝 overlay。
@@ -95,14 +95,19 @@ export function ComboMilestoneBurst({
 }: ComboMilestoneBurstProps) {
   const palette = MILESTONE_PALETTES[Math.min(milestoneStep, MILESTONE_PALETTES.length - 1)]
   const [visible, setVisible] = useState(true)
+  const onCompleteRef = useRef(onComplete)
+
+  useEffect(() => {
+    onCompleteRef.current = onComplete
+  }, [onComplete])
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
       setVisible(false)
-      onComplete?.()
+      onCompleteRef.current?.()
     }, durationMs)
     return () => window.clearTimeout(timer)
-  }, [durationMs, onComplete])
+  }, [durationMs])
 
   const particles = useMemo(
     () =>
