@@ -1,0 +1,615 @@
+[CodeGraph daemon] Listening on \\.\pipe\codegraph-d59324454b12e43e (pid 26228, v0.9.7). Idle timeout 300000ms.
+[CodeGraph MCP] File watcher active — graph will auto-sync on changes
+[CodeGraph daemon] socket error: write EPIPE
+[CodeGraph MCP] Caught up 438 file(s) changed since last run
+[CodeGraph daemon] Listening on \\.\pipe\codegraph-d59324454b12e43e (pid 19048, v0.9.7). Idle timeout 300000ms.
+[CodeGraph MCP] File watcher active — graph will auto-sync on changes
+[CodeGraph MCP] Auto-synced 1 file(s) in 455ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 265ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 248ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 248ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 285ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 187ms
+[CodeGraph daemon] Listening on \\.\pipe\codegraph-d59324454b12e43e (pid 28536, v0.9.7). Idle timeout 300000ms.
+[CodeGraph MCP] File watcher active — graph will auto-sync on changes
+[CodeGraph daemon] Listening on \\.\pipe\codegraph-d59324454b12e43e (pid 26428, v0.9.7). Idle timeout 300000ms.
+[CodeGraph MCP] File watcher active — graph will auto-sync on changes
+[CodeGraph daemon] Listening on \\.\pipe\codegraph-d59324454b12e43e (pid 29424, v0.9.7). Idle timeout 300000ms.
+[CodeGraph MCP] File watcher active — graph will auto-sync on changes
+[CodeGraph MCP] Auto-synced 1 file(s) in 453ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 281ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 171ms
+[CodeGraph daemon] Listening on \\.\pipe\codegraph-d59324454b12e43e (pid 10888, v0.9.7). Idle timeout 300000ms.
+[CodeGraph MCP] File watcher active — graph will auto-sync on changes
+[CodeGraph MCP] Caught up 80 file(s) changed since last run
+[CodeGraph daemon] Another daemon (pid 10888) already holds the lock; exiting.
+[CodeGraph daemon] Listening on \\.\pipe\codegraph-d59324454b12e43e (pid 37320, v0.9.7). Idle timeout 300000ms.
+[CodeGraph MCP] File watcher active — graph will auto-sync on changes
+[CodeGraph MCP] Auto-synced 1 file(s) in 460ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 251ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 201ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 245ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 205ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 222ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 253ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 239ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 176ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 216ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 211ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 249ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 219ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 226ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 243ms
+[CodeGraph MCP] Auto-synced 4 file(s) in 396ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 259ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 355ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 237ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 241ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 258ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 216ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 234ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 214ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 241ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 197ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 252ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 216ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 246ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 241ms
+[CodeGraph MCP] Auto-synced 2 file(s) in 305ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 230ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 233ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 215ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 253ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 240ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 223ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 198ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 284ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 294ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 286ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 196ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 328ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 204ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 235ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 324ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 286ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 221ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 220ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 307ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 256ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 318ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 337ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 201ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 249ms
+[CodeGraph MCP] Auto-synced 2 file(s) in 178ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 264ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 181ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 250ms
+[CodeGraph MCP] Auto-synced 6 file(s) in 650ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 197ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 193ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 199ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 198ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 177ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 181ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 176ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 210ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 256ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 246ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 213ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 218ms
+[CodeGraph MCP] Auto-synced 4 file(s) in 279ms
+[CodeGraph MCP] Auto-synced 5 file(s) in 535ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 182ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 190ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 204ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 165ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 249ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 211ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 210ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 201ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 196ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 236ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 271ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 248ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 228ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 232ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 309ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 307ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 277ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 271ms
+[CodeGraph MCP] Auto-synced 2 file(s) in 394ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 200ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 241ms
+[CodeGraph MCP] Auto-synced 2 file(s) in 239ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 257ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 212ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 251ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 243ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 214ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 365ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 226ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 247ms
+[CodeGraph MCP] Auto-synced 2 file(s) in 318ms
+[CodeGraph MCP] Auto-synced 2 file(s) in 204ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 239ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 188ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 207ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 195ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 565ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 385ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 207ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 268ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 177ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 329ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 298ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 309ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 208ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 235ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 205ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 240ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 223ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 270ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 325ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 281ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 277ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 276ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 322ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 218ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 243ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 224ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 224ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 195ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 217ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 218ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 274ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 226ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 209ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 255ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 186ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 216ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 214ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 191ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 192ms
+[CodeGraph MCP] Auto-synced 2 file(s) in 220ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 205ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 225ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 198ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 190ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 216ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 178ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 241ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 203ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 200ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 232ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 212ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 202ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 193ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 187ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 228ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 276ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 194ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 196ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 207ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 222ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 243ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 191ms
+[CodeGraph MCP] Auto-synced 64 file(s) in 8647ms
+[CodeGraph MCP] Auto-synced 64 file(s) in 2750ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 223ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 201ms
+[CodeGraph MCP] Auto-synced 64 file(s) in 4128ms
+[CodeGraph MCP] Auto-synced 64 file(s) in 4806ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 225ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 271ms
+[CodeGraph] File watcher error {
+  error: "Error: EBUSY: resource busy or locked, watch 'D:\\我的网站\\Memory Anki\\runtime-data\\data\\backups\\full\\20260615-013338-before-start\\data\\attachments\\subjects\\5\\16bec87e958a4341951921c017804443.pdf'"
+}
+[CodeGraph] File watcher error {
+  error: "Error: EBUSY: resource busy or locked, watch 'D:\\我的网站\\Memory Anki\\runtime-data\\data\\backups\\full\\20260615-013338-before-start\\data\\attachments\\subjects\\5\\28f39d25526047ccb66ea421bf7174a8.pdf'"
+}
+[CodeGraph] File watcher error {
+  error: "Error: EBUSY: resource busy or locked, watch 'D:\\我的网站\\Memory Anki\\runtime-data\\data\\backups\\full\\20260615-013338-before-start\\data\\attachments\\subjects\\5\\8e7774e4e943484db653d66e2c54bff5.pdf'"
+}
+[CodeGraph] File watcher error {
+  error: "Error: EBUSY: resource busy or locked, watch 'D:\\我的网站\\Memory Anki\\runtime-data\\data\\backups\\full\\20260615-013338-before-start\\english\\media\\course-1\\source.mp4'"
+}
+[CodeGraph] File watcher error {
+  error: "Error: EBUSY: resource busy or locked, watch 'D:\\我的网站\\Memory Anki\\runtime-data\\data\\backups\\full\\20260615-013338-before-start\\english\\media\\course-2\\source.mp4'"
+}
+[CodeGraph MCP] Auto-synced 1 file(s) in 292ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 239ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 172ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 231ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 227ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 232ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 234ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 329ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 358ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 343ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 356ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 197ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 186ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 194ms
+[CodeGraph MCP] Auto-synced 2 file(s) in 406ms
+[CodeGraph MCP] Auto-synced 4 file(s) in 440ms
+[CodeGraph MCP] Auto-synced 4 file(s) in 475ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 209ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 165ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 208ms
+[CodeGraph MCP] Auto-synced 11 file(s) in 524ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 179ms
+[CodeGraph MCP] Auto-synced 2 file(s) in 248ms
+[CodeGraph] File watcher error {
+  error: "Error: EBUSY: resource busy or locked, watch 'D:\\我的网站\\Memory Anki\\runtime-data\\data\\backups\\full\\20260615-053352-periodic\\data\\attachments\\subjects\\5\\16bec87e958a4341951921c017804443.pdf'"
+}
+[CodeGraph] File watcher error {
+  error: "Error: EBUSY: resource busy or locked, watch 'D:\\我的网站\\Memory Anki\\runtime-data\\data\\backups\\full\\20260615-053352-periodic\\data\\attachments\\subjects\\5\\28f39d25526047ccb66ea421bf7174a8.pdf'"
+}
+[CodeGraph] File watcher error {
+  error: "Error: EBUSY: resource busy or locked, watch 'D:\\我的网站\\Memory Anki\\runtime-data\\data\\backups\\full\\20260615-053352-periodic\\data\\attachments\\subjects\\5\\8e7774e4e943484db653d66e2c54bff5.pdf'"
+}
+[CodeGraph] File watcher error {
+  error: "Error: EBUSY: resource busy or locked, watch 'D:\\我的网站\\Memory Anki\\runtime-data\\data\\backups\\full\\20260615-053352-periodic\\english\\media\\course-1\\source.mp4'"
+}
+[CodeGraph] File watcher error {
+  error: "Error: EBUSY: resource busy or locked, watch 'D:\\我的网站\\Memory Anki\\runtime-data\\data\\backups\\full\\20260615-093353-periodic\\data\\attachments\\subjects\\5\\16bec87e958a4341951921c017804443.pdf'"
+}
+[CodeGraph] File watcher error {
+  error: "Error: EBUSY: resource busy or locked, watch 'D:\\我的网站\\Memory Anki\\runtime-data\\data\\backups\\full\\20260615-093353-periodic\\data\\attachments\\subjects\\5\\28f39d25526047ccb66ea421bf7174a8.pdf'"
+}
+[CodeGraph] File watcher error {
+  error: "Error: EBUSY: resource busy or locked, watch 'D:\\我的网站\\Memory Anki\\runtime-data\\data\\backups\\full\\20260615-093353-periodic\\data\\attachments\\subjects\\5\\8e7774e4e943484db653d66e2c54bff5.pdf'"
+}
+[CodeGraph] File watcher error {
+  error: "Error: EBUSY: resource busy or locked, watch 'D:\\我的网站\\Memory Anki\\runtime-data\\data\\backups\\full\\20260615-093353-periodic\\english\\media\\course-1\\source.mp4'"
+}
+[CodeGraph] File watcher error {
+  error: "Error: EBUSY: resource busy or locked, watch 'D:\\我的网站\\Memory Anki\\runtime-data\\data\\backups\\full\\20260615-093353-periodic\\english\\media\\course-2\\source.mp4'"
+}
+[CodeGraph] File watcher error {
+  error: "Error: EBUSY: resource busy or locked, watch 'D:\\我的网站\\Memory Anki\\runtime-data\\data\\backups\\full\\20260615-101110-before-start\\data\\attachments\\subjects\\5\\16bec87e958a4341951921c017804443.pdf'"
+}
+[CodeGraph] File watcher error {
+  error: "Error: EBUSY: resource busy or locked, watch 'D:\\我的网站\\Memory Anki\\runtime-data\\data\\backups\\full\\20260615-101110-before-start\\data\\attachments\\subjects\\5\\28f39d25526047ccb66ea421bf7174a8.pdf'"
+}
+[CodeGraph] File watcher error {
+  error: "Error: EBUSY: resource busy or locked, watch 'D:\\我的网站\\Memory Anki\\runtime-data\\data\\backups\\full\\20260615-101110-before-start\\data\\attachments\\subjects\\5\\8e7774e4e943484db653d66e2c54bff5.pdf'"
+}
+[CodeGraph] File watcher error {
+  error: "Error: EBUSY: resource busy or locked, watch 'D:\\我的网站\\Memory Anki\\runtime-data\\data\\backups\\full\\20260615-101110-before-start\\english\\media\\course-1\\source.mp4'"
+}
+[CodeGraph] File watcher error {
+  error: "Error: EBUSY: resource busy or locked, watch 'D:\\我的网站\\Memory Anki\\runtime-data\\data\\backups\\full\\20260615-101110-before-start\\english\\media\\course-2\\source.mp4'"
+}
+[CodeGraph] File watcher error {
+  error: "Error: EBUSY: resource busy or locked, watch 'D:\\我的网站\\Memory Anki\\runtime-data\\data\\backups\\full\\20260615-101423-before-start\\data\\attachments\\subjects\\5\\16bec87e958a4341951921c017804443.pdf'"
+}
+[CodeGraph] File watcher error {
+  error: "Error: EBUSY: resource busy or locked, watch 'D:\\我的网站\\Memory Anki\\runtime-data\\data\\backups\\full\\20260615-101423-before-start\\data\\attachments\\subjects\\5\\28f39d25526047ccb66ea421bf7174a8.pdf'"
+}
+[CodeGraph] File watcher error {
+  error: "Error: EBUSY: resource busy or locked, watch 'D:\\我的网站\\Memory Anki\\runtime-data\\data\\backups\\full\\20260615-101423-before-start\\data\\attachments\\subjects\\5\\8e7774e4e943484db653d66e2c54bff5.pdf'"
+}
+[CodeGraph] File watcher error {
+  error: "Error: EBUSY: resource busy or locked, watch 'D:\\我的网站\\Memory Anki\\runtime-data\\data\\backups\\full\\20260615-101423-before-start\\english\\media\\course-1\\source.mp4'"
+}
+[CodeGraph] File watcher error {
+  error: "Error: EBUSY: resource busy or locked, watch 'D:\\我的网站\\Memory Anki\\runtime-data\\data\\backups\\full\\20260615-101423-before-start\\english\\media\\course-2\\source.mp4'"
+}
+[CodeGraph MCP] Auto-synced 4 file(s) in 417ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 176ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 188ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 274ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 231ms
+[CodeGraph] File watcher error {
+  error: "Error: EBUSY: resource busy or locked, watch 'D:\\我的网站\\Memory Anki\\runtime-data\\data\\backups\\full\\20260615-101757-before-start\\data\\attachments\\subjects\\5\\16bec87e958a4341951921c017804443.pdf'"
+}
+[CodeGraph] File watcher error {
+  error: "Error: EBUSY: resource busy or locked, watch 'D:\\我的网站\\Memory Anki\\runtime-data\\data\\backups\\full\\20260615-101757-before-start\\data\\attachments\\subjects\\5\\28f39d25526047ccb66ea421bf7174a8.pdf'"
+}
+[CodeGraph] File watcher error {
+  error: "Error: EBUSY: resource busy or locked, watch 'D:\\我的网站\\Memory Anki\\runtime-data\\data\\backups\\full\\20260615-101900-before-start\\data\\attachments\\subjects\\5\\16bec87e958a4341951921c017804443.pdf'"
+}
+[CodeGraph] File watcher error {
+  error: "Error: EBUSY: resource busy or locked, watch 'D:\\我的网站\\Memory Anki\\runtime-data\\data\\backups\\full\\20260615-101900-before-start\\data\\attachments\\subjects\\5\\28f39d25526047ccb66ea421bf7174a8.pdf'"
+}
+[CodeGraph] File watcher error {
+  error: "Error: EBUSY: resource busy or locked, watch 'D:\\我的网站\\Memory Anki\\runtime-data\\data\\backups\\full\\20260615-101900-before-start\\data\\attachments\\subjects\\5\\8e7774e4e943484db653d66e2c54bff5.pdf'"
+}
+[CodeGraph] File watcher error {
+  error: "Error: EBUSY: resource busy or locked, watch 'D:\\我的网站\\Memory Anki\\runtime-data\\data\\backups\\full\\20260615-101900-before-start\\english\\media\\course-1\\source.mp4'"
+}
+[CodeGraph] File watcher error {
+  error: "Error: EBUSY: resource busy or locked, watch 'D:\\我的网站\\Memory Anki\\runtime-data\\data\\backups\\full\\20260615-101900-before-start\\english\\media\\course-2\\source.mp4'"
+}
+[CodeGraph] File watcher error {
+  error: "Error: EBUSY: resource busy or locked, watch 'D:\\我的网站\\Memory Anki\\runtime-data\\data\\backups\\full\\20260615-102058-before-start\\data\\attachments\\subjects\\5\\16bec87e958a4341951921c017804443.pdf'"
+}
+[CodeGraph] File watcher error {
+  error: "Error: EBUSY: resource busy or locked, watch 'D:\\我的网站\\Memory Anki\\runtime-data\\data\\backups\\full\\20260615-102058-before-start\\data\\attachments\\subjects\\5\\28f39d25526047ccb66ea421bf7174a8.pdf'"
+}
+[CodeGraph] File watcher error {
+  error: "Error: EBUSY: resource busy or locked, watch 'D:\\我的网站\\Memory Anki\\runtime-data\\data\\backups\\full\\20260615-102058-before-start\\data\\attachments\\subjects\\5\\8e7774e4e943484db653d66e2c54bff5.pdf'"
+}
+[CodeGraph] File watcher error {
+  error: "Error: EBUSY: resource busy or locked, watch 'D:\\我的网站\\Memory Anki\\runtime-data\\data\\backups\\full\\20260615-102058-before-start\\english\\media\\course-1\\source.mp4'"
+}
+[CodeGraph] File watcher error {
+  error: "Error: EBUSY: resource busy or locked, watch 'D:\\我的网站\\Memory Anki\\runtime-data\\data\\backups\\full\\20260615-102058-before-start\\english\\media\\course-2\\source.mp4'"
+}
+[CodeGraph] File watcher error {
+  error: "Error: EBUSY: resource busy or locked, watch 'D:\\我的网站\\Memory Anki\\runtime-data\\data\\backups\\full\\20260615-102123-before-start\\data\\attachments\\subjects\\5\\16bec87e958a4341951921c017804443.pdf'"
+}
+[CodeGraph] File watcher error {
+  error: "Error: EBUSY: resource busy or locked, watch 'D:\\我的网站\\Memory Anki\\runtime-data\\data\\backups\\full\\20260615-102123-before-start\\data\\attachments\\subjects\\5\\28f39d25526047ccb66ea421bf7174a8.pdf'"
+}
+[CodeGraph] File watcher error {
+  error: "Error: EBUSY: resource busy or locked, watch 'D:\\我的网站\\Memory Anki\\runtime-data\\data\\backups\\full\\20260615-102123-before-start\\data\\attachments\\subjects\\5\\8e7774e4e943484db653d66e2c54bff5.pdf'"
+}
+[CodeGraph] File watcher error {
+  error: "Error: EBUSY: resource busy or locked, watch 'D:\\我的网站\\Memory Anki\\runtime-data\\data\\backups\\full\\20260615-102123-before-start\\english\\media\\course-1\\source.mp4'"
+}
+[CodeGraph] File watcher error {
+  error: "Error: EBUSY: resource busy or locked, watch 'D:\\我的网站\\Memory Anki\\runtime-data\\data\\backups\\full\\20260615-102123-before-start\\english\\media\\course-2\\source.mp4'"
+}
+[CodeGraph MCP] Auto-synced 2 file(s) in 243ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 213ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 204ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 242ms
+[CodeGraph] File watcher error {
+  error: "Error: EBUSY: resource busy or locked, watch 'D:\\我的网站\\Memory Anki\\runtime-data\\data\\backups\\full\\20260615-102720-before-start\\data\\attachments\\subjects\\5\\16bec87e958a4341951921c017804443.pdf'"
+}
+[CodeGraph] File watcher error {
+  error: "Error: EBUSY: resource busy or locked, watch 'D:\\我的网站\\Memory Anki\\runtime-data\\data\\backups\\full\\20260615-102720-before-start\\data\\attachments\\subjects\\5\\28f39d25526047ccb66ea421bf7174a8.pdf'"
+}
+[CodeGraph] File watcher error {
+  error: "Error: EBUSY: resource busy or locked, watch 'D:\\我的网站\\Memory Anki\\runtime-data\\data\\backups\\full\\20260615-102720-before-start\\data\\attachments\\subjects\\5\\8e7774e4e943484db653d66e2c54bff5.pdf'"
+}
+[CodeGraph] File watcher error {
+  error: "Error: EBUSY: resource busy or locked, watch 'D:\\我的网站\\Memory Anki\\runtime-data\\data\\backups\\full\\20260615-102720-before-start\\english\\media\\course-1\\source.mp4'"
+}
+[CodeGraph] File watcher error {
+  error: "Error: EBUSY: resource busy or locked, watch 'D:\\我的网站\\Memory Anki\\runtime-data\\data\\backups\\full\\20260615-102720-before-start\\english\\media\\course-2\\source.mp4'"
+}
+[CodeGraph MCP] Auto-synced 1 file(s) in 229ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 168ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 183ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 207ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 232ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 175ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 213ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 241ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 216ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 212ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 228ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 195ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 243ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 271ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 224ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 188ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 184ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 210ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 187ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 260ms
+[CodeGraph] File watcher error {
+  error: "Error: EBUSY: resource busy or locked, watch 'D:\\我的网站\\Memory Anki\\runtime-data\\data\\backups\\full\\20260615-104219-before-start\\data\\attachments\\subjects\\5\\16bec87e958a4341951921c017804443.pdf'"
+}
+[CodeGraph] File watcher error {
+  error: "Error: EBUSY: resource busy or locked, watch 'D:\\我的网站\\Memory Anki\\runtime-data\\data\\backups\\full\\20260615-104219-before-start\\data\\attachments\\subjects\\5\\28f39d25526047ccb66ea421bf7174a8.pdf'"
+}
+[CodeGraph] File watcher error {
+  error: "Error: EBUSY: resource busy or locked, watch 'D:\\我的网站\\Memory Anki\\runtime-data\\data\\backups\\full\\20260615-104219-before-start\\data\\attachments\\subjects\\5\\8e7774e4e943484db653d66e2c54bff5.pdf'"
+}
+[CodeGraph] File watcher error {
+  error: "Error: EBUSY: resource busy or locked, watch 'D:\\我的网站\\Memory Anki\\runtime-data\\data\\backups\\full\\20260615-104219-before-start\\english\\media\\course-1\\source.mp4'"
+}
+[CodeGraph] File watcher error {
+  error: "Error: EBUSY: resource busy or locked, watch 'D:\\我的网站\\Memory Anki\\runtime-data\\data\\backups\\full\\20260615-104219-before-start\\english\\media\\course-2\\source.mp4'"
+}
+[CodeGraph MCP] Auto-synced 1 file(s) in 351ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 320ms
+[CodeGraph] File watcher error {
+  error: "Error: EBUSY: resource busy or locked, watch 'D:\\我的网站\\Memory Anki\\runtime-data\\data\\backups\\rescue\\20260615-105311-before-rescue-restore\\data\\attachments\\subjects\\5\\28f39d25526047ccb66ea421bf7174a8.pdf'"
+}
+[CodeGraph] File watcher error {
+  error: "Error: EBUSY: resource busy or locked, watch 'D:\\我的网站\\Memory Anki\\runtime-data\\data\\backups\\rescue\\20260615-105311-before-rescue-restore\\data\\attachments\\subjects\\5\\8e7774e4e943484db653d66e2c54bff5.pdf'"
+}
+[CodeGraph] File watcher error {
+  error: "Error: EBUSY: resource busy or locked, watch 'D:\\我的网站\\Memory Anki\\runtime-data\\data\\backups\\rescue\\20260615-105311-before-rescue-restore\\english\\media\\course-1\\source.mp4'"
+}
+[CodeGraph] File watcher error {
+  error: "Error: EBUSY: resource busy or locked, watch 'D:\\我的网站\\Memory Anki\\runtime-data\\data\\backups\\rescue\\20260615-105401-before-rescue-restore\\data\\attachments\\subjects\\5\\28f39d25526047ccb66ea421bf7174a8.pdf'"
+}
+[CodeGraph] File watcher error {
+  error: "Error: EBUSY: resource busy or locked, watch 'D:\\我的网站\\Memory Anki\\runtime-data\\data\\backups\\rescue\\20260615-105401-before-rescue-restore\\data\\attachments\\subjects\\5\\8e7774e4e943484db653d66e2c54bff5.pdf'"
+}
+[CodeGraph] File watcher error {
+  error: "Error: EBUSY: resource busy or locked, watch 'D:\\我的网站\\Memory Anki\\runtime-data\\data\\backups\\rescue\\20260615-105401-before-rescue-restore\\english\\media\\course-1\\source.mp4'"
+}
+[CodeGraph] File watcher error {
+  error: "Error: EBUSY: resource busy or locked, watch 'D:\\我的网站\\Memory Anki\\runtime-data\\data\\backups\\rescue\\20260615-105401-before-rescue-restore\\english\\media\\course-2\\source.mp4'"
+}
+[CodeGraph MCP] Auto-synced 1 file(s) in 195ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 306ms
+[CodeGraph] File watcher error {
+  error: "Error: EBUSY: resource busy or locked, watch 'D:\\我的网站\\Memory Anki\\runtime-data\\data\\backups\\rescue\\20260615-105959-before-rescue-restore\\data\\attachments\\subjects\\5\\28f39d25526047ccb66ea421bf7174a8.pdf'"
+}
+[CodeGraph] File watcher error {
+  error: "Error: EBUSY: resource busy or locked, watch 'D:\\我的网站\\Memory Anki\\runtime-data\\data\\backups\\rescue\\20260615-105959-before-rescue-restore\\data\\attachments\\subjects\\5\\8e7774e4e943484db653d66e2c54bff5.pdf'"
+}
+[CodeGraph] File watcher error {
+  error: "Error: EBUSY: resource busy or locked, watch 'D:\\我的网站\\Memory Anki\\runtime-data\\data\\backups\\rescue\\20260615-105959-before-rescue-restore\\english\\media\\course-1\\source.mp4'"
+}
+[CodeGraph] File watcher error {
+  error: "Error: EBUSY: resource busy or locked, watch 'D:\\我的网站\\Memory Anki\\runtime-data\\data\\backups\\rescue\\20260615-110054-before-rescue-restore\\data\\attachments\\subjects\\5\\28f39d25526047ccb66ea421bf7174a8.pdf'"
+}
+[CodeGraph] File watcher error {
+  error: "Error: EBUSY: resource busy or locked, watch 'D:\\我的网站\\Memory Anki\\runtime-data\\data\\backups\\rescue\\20260615-110054-before-rescue-restore\\data\\attachments\\subjects\\5\\8e7774e4e943484db653d66e2c54bff5.pdf'"
+}
+[CodeGraph] File watcher error {
+  error: "Error: EBUSY: resource busy or locked, watch 'D:\\我的网站\\Memory Anki\\runtime-data\\data\\backups\\rescue\\20260615-110054-before-rescue-restore\\english\\media\\course-1\\source.mp4'"
+}
+[CodeGraph MCP] Auto-synced 1 file(s) in 269ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 248ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 211ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 179ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 205ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 182ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 187ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 165ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 175ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 181ms
+[CodeGraph] File watcher error {
+  error: "Error: EBUSY: resource busy or locked, watch 'D:\\我的网站\\Memory Anki\\runtime-data\\data\\backups\\rescue\\20260615-112406-before-rescue-restore\\data\\attachments\\subjects\\5\\28f39d25526047ccb66ea421bf7174a8.pdf'"
+}
+[CodeGraph] File watcher error {
+  error: "Error: EBUSY: resource busy or locked, watch 'D:\\我的网站\\Memory Anki\\runtime-data\\data\\backups\\rescue\\20260615-112406-before-rescue-restore\\data\\attachments\\subjects\\5\\8e7774e4e943484db653d66e2c54bff5.pdf'"
+}
+[CodeGraph] File watcher error {
+  error: "Error: EBUSY: resource busy or locked, watch 'D:\\我的网站\\Memory Anki\\runtime-data\\data\\backups\\rescue\\20260615-112406-before-rescue-restore\\english\\media\\course-1\\source.mp4'"
+}
+[CodeGraph MCP] Auto-synced 1 file(s) in 229ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 228ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 206ms
+[CodeGraph] File watcher error {
+  error: "Error: EBUSY: resource busy or locked, watch 'D:\\我的网站\\Memory Anki\\runtime-data\\data\\backups\\rescue\\20260615-113008-before-rescue-restore\\data\\attachments\\subjects\\4\\fde2ca9310db414a806f487f3f139b61.pdf'"
+}
+[CodeGraph] File watcher error {
+  error: "Error: EBUSY: resource busy or locked, watch 'D:\\我的网站\\Memory Anki\\runtime-data\\data\\backups\\rescue\\20260615-113008-before-rescue-restore\\data\\attachments\\subjects\\5\\16bec87e958a4341951921c017804443.pdf'"
+}
+[CodeGraph] File watcher error {
+  error: "Error: EBUSY: resource busy or locked, watch 'D:\\我的网站\\Memory Anki\\runtime-data\\data\\backups\\rescue\\20260615-113008-before-rescue-restore\\data\\attachments\\subjects\\5\\28f39d25526047ccb66ea421bf7174a8.pdf'"
+}
+[CodeGraph] File watcher error {
+  error: "Error: EBUSY: resource busy or locked, watch 'D:\\我的网站\\Memory Anki\\runtime-data\\data\\backups\\rescue\\20260615-113008-before-rescue-restore\\data\\attachments\\subjects\\5\\8e7774e4e943484db653d66e2c54bff5.pdf'"
+}
+[CodeGraph] File watcher error {
+  error: "Error: EBUSY: resource busy or locked, watch 'D:\\我的网站\\Memory Anki\\runtime-data\\data\\backups\\rescue\\20260615-113008-before-rescue-restore\\english\\media\\course-1\\source.mp4'"
+}
+[CodeGraph] File watcher error {
+  error: "Error: EBUSY: resource busy or locked, watch 'D:\\我的网站\\Memory Anki\\runtime-data\\data\\backups\\rescue\\20260615-113008-before-rescue-restore\\english\\media\\course-2\\source.mp4'"
+}
+[CodeGraph MCP] Auto-synced 1 file(s) in 187ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 223ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 196ms
+[CodeGraph] File watcher error {
+  error: "Error: EBUSY: resource busy or locked, watch 'D:\\我的网站\\Memory Anki\\runtime-data\\data\\backups\\rescue\\20260615-113558-before-rescue-restore\\data\\attachments\\subjects\\5\\28f39d25526047ccb66ea421bf7174a8.pdf'"
+}
+[CodeGraph] File watcher error {
+  error: "Error: EBUSY: resource busy or locked, watch 'D:\\我的网站\\Memory Anki\\runtime-data\\data\\backups\\rescue\\20260615-113558-before-rescue-restore\\data\\attachments\\subjects\\5\\8e7774e4e943484db653d66e2c54bff5.pdf'"
+}
+[CodeGraph] File watcher error {
+  error: "Error: EBUSY: resource busy or locked, watch 'D:\\我的网站\\Memory Anki\\runtime-data\\data\\backups\\rescue\\20260615-113558-before-rescue-restore\\english\\media\\course-1\\source.mp4'"
+}
+[CodeGraph] File watcher error {
+  error: "Error: EBUSY: resource busy or locked, watch 'D:\\我的网站\\Memory Anki\\runtime-data\\data\\backups\\rescue\\20260615-113558-before-rescue-restore\\english\\media\\course-2\\source.mp4'"
+}
+[CodeGraph] File watcher error {
+  error: "Error: EBUSY: resource busy or locked, watch 'D:\\我的网站\\Memory Anki\\runtime-data\\data\\backups\\rescue\\20260615-113627-before-rescue-restore\\data\\attachments\\subjects\\5\\28f39d25526047ccb66ea421bf7174a8.pdf'"
+}
+[CodeGraph] File watcher error {
+  error: "Error: EBUSY: resource busy or locked, watch 'D:\\我的网站\\Memory Anki\\runtime-data\\data\\backups\\rescue\\20260615-113627-before-rescue-restore\\data\\attachments\\subjects\\5\\8e7774e4e943484db653d66e2c54bff5.pdf'"
+}
+[CodeGraph] File watcher error {
+  error: "Error: EBUSY: resource busy or locked, watch 'D:\\我的网站\\Memory Anki\\runtime-data\\data\\backups\\rescue\\20260615-113627-before-rescue-restore\\english\\media\\course-1\\source.mp4'"
+}
+[CodeGraph] File watcher error {
+  error: "Error: EBUSY: resource busy or locked, watch 'D:\\我的网站\\Memory Anki\\runtime-data\\data\\backups\\rescue\\20260615-113627-before-rescue-restore\\english\\media\\course-2\\source.mp4'"
+}
+[CodeGraph MCP] Auto-synced 1 file(s) in 190ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 186ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 195ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 199ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 227ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 230ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 205ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 213ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 185ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 733ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 227ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 178ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 221ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 216ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 245ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 213ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 222ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 242ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 191ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 178ms
+[CodeGraph] File watcher error {
+  error: "Error: EBUSY: resource busy or locked, watch 'D:\\我的网站\\Memory Anki\\runtime-data\\data\\backups\\rescue\\20260615-115013-before-rescue-restore\\data\\attachments\\subjects\\4\\fde2ca9310db414a806f487f3f139b61.pdf'"
+}
+[CodeGraph] File watcher error {
+  error: "Error: EBUSY: resource busy or locked, watch 'D:\\我的网站\\Memory Anki\\runtime-data\\data\\backups\\rescue\\20260615-115013-before-rescue-restore\\data\\attachments\\subjects\\5\\16bec87e958a4341951921c017804443.pdf'"
+}
+[CodeGraph] File watcher error {
+  error: "Error: EBUSY: resource busy or locked, watch 'D:\\我的网站\\Memory Anki\\runtime-data\\data\\backups\\rescue\\20260615-115013-before-rescue-restore\\data\\attachments\\subjects\\5\\28f39d25526047ccb66ea421bf7174a8.pdf'"
+}
+[CodeGraph] File watcher error {
+  error: "Error: EBUSY: resource busy or locked, watch 'D:\\我的网站\\Memory Anki\\runtime-data\\data\\backups\\rescue\\20260615-115013-before-rescue-restore\\data\\attachments\\subjects\\5\\8e7774e4e943484db653d66e2c54bff5.pdf'"
+}
+[CodeGraph] File watcher error {
+  error: "Error: EBUSY: resource busy or locked, watch 'D:\\我的网站\\Memory Anki\\runtime-data\\data\\backups\\rescue\\20260615-115013-before-rescue-restore\\english\\media\\course-1\\source.mp4'"
+}
+[CodeGraph] File watcher error {
+  error: "Error: EBUSY: resource busy or locked, watch 'D:\\我的网站\\Memory Anki\\runtime-data\\data\\backups\\rescue\\20260615-115013-before-rescue-restore\\english\\media\\course-2\\source.mp4'"
+}
+[CodeGraph MCP] Auto-synced 1 file(s) in 2394ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 227ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 193ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 223ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 249ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 224ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 182ms
+[CodeGraph] File watcher error {
+  error: "Error: EBUSY: resource busy or locked, watch 'D:\\我的网站\\Memory Anki\\runtime-data\\data\\backups\\rescue\\20260615-115559-before-rescue-restore\\data\\attachments\\subjects\\5\\16bec87e958a4341951921c017804443.pdf'"
+}
+[CodeGraph] File watcher error {
+  error: "Error: EBUSY: resource busy or locked, watch 'D:\\我的网站\\Memory Anki\\runtime-data\\data\\backups\\rescue\\20260615-115559-before-rescue-restore\\data\\attachments\\subjects\\5\\28f39d25526047ccb66ea421bf7174a8.pdf'"
+}
+[CodeGraph] File watcher error {
+  error: "Error: EBUSY: resource busy or locked, watch 'D:\\我的网站\\Memory Anki\\runtime-data\\data\\backups\\rescue\\20260615-115559-before-rescue-restore\\data\\attachments\\subjects\\5\\8e7774e4e943484db653d66e2c54bff5.pdf'"
+}
+[CodeGraph] File watcher error {
+  error: "Error: EBUSY: resource busy or locked, watch 'D:\\我的网站\\Memory Anki\\runtime-data\\data\\backups\\rescue\\20260615-115559-before-rescue-restore\\english\\media\\course-1\\source.mp4'"
+}
+[CodeGraph] File watcher error {
+  error: "Error: EBUSY: resource busy or locked, watch 'D:\\我的网站\\Memory Anki\\runtime-data\\data\\backups\\rescue\\20260615-115559-before-rescue-restore\\english\\media\\course-2\\source.mp4'"
+}
+[CodeGraph MCP] Auto-synced 4 file(s) in 305ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 181ms
+[CodeGraph MCP] Auto-synced 3 file(s) in 250ms
+[CodeGraph MCP] Auto-synced 2 file(s) in 210ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 195ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 205ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 192ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 181ms
+[CodeGraph MCP] Auto-synced 2 file(s) in 244ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 179ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 184ms
+[CodeGraph MCP] Auto-synced 2 file(s) in 178ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 248ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 226ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 216ms
+[CodeGraph MCP] Auto-synced 2 file(s) in 224ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 231ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 224ms
+[CodeGraph MCP] Auto-synced 3 file(s) in 242ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 227ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 221ms
+[CodeGraph MCP] Auto-synced 2 file(s) in 248ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 214ms
+[CodeGraph MCP] Auto-synced 2 file(s) in 224ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 176ms
+[CodeGraph MCP] Auto-synced 2 file(s) in 196ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 261ms
+[CodeGraph MCP] Auto-synced 2 file(s) in 557ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 198ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 223ms
+[CodeGraph MCP] Auto-synced 7 file(s) in 258ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 209ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 199ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 221ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 207ms
+[CodeGraph MCP] Auto-synced 2 file(s) in 301ms
+[CodeGraph MCP] Auto-synced 1 file(s) in 204ms

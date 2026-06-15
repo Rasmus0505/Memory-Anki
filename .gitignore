@@ -1,24 +1,55 @@
-/.playwright-mcp/
-/.pytest_cache/
-/.tmp_video_frames/
+# ===== Build output =====
 /output/
 /apps/web/dist/
 /apps/web/node_modules/
+/node_modules/
+/apps/web/.vite/
+/apps/web/coverage/
+
+# ===== Python =====
+*.pyc
+__pycache__/
 /apps/api/.venv/
+/apps/api/.coverage
+/apps/api/htmlcov/
+
+# Python tool caches (root + apps/api)
+/.mypy_cache/
+/.pytest_cache/
+/.ruff_cache/
 /apps/api/.mypy_cache/
 /apps/api/.ruff_cache/
 /apps/api/.pytest_cache/
-/apps/web/.vite/
-/apps/web/coverage/
-/apps/api/.coverage
-/apps/api/htmlcov/
+
+# ===== Runtime / local data =====
+/runtime-data/
 /data/**
 !/data/.gitkeep
 !/data/README.md
-*.pyc
-__pycache__/
+
+# SQLite databases
 *.sqlite3
 *.db
+
+# ===== Logs & temp scratch files =====
 *.log
-*.png
-System.Collections.Hashtable/
+tmp-*.log
+tmp-*.json
+tmp-*.out.log
+tmp-*.err.log
+palace_new_requests.txt
+
+# ===== Editor / IDE / local config =====
+/.vscode/
+/.tmp/
+/.tmp_video_frames/
+
+# ===== AI / agent tooling artifacts (never commit) =====
+/.specstory/
+/.claude/
+/.reasonix/
+/.codegraph/
+/.playwright-mcp/
+
+# ===== Misc =====
+# NOTE: do not blanket-ignore *.png — it would swallow docs/assets; ignore by path instead.

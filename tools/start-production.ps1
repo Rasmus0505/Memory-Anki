@@ -1,4 +1,4 @@
-Set-StrictMode -Version Latest
+﻿Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
@@ -47,12 +47,17 @@ function Get-DefaultAppHome {
     if ($env:MEMORY_ANKI_HOME) {
         return [System.IO.Path]::GetFullPath($env:MEMORY_ANKI_HOME)
     }
-    if ($env:LOCALAPPDATA) {
-        return (Join-Path $env:LOCALAPPDATA 'MemoryAnki')
+    $userHome = [Environment]::GetEnvironmentVariable('MEMORY_ANKI_HOME', 'User')
+    if (-not [string]::IsNullOrWhiteSpace($userHome)) {
+        return [System.IO.Path]::GetFullPath($userHome)
     }
-    return (Join-Path $HOME 'AppData\Local\MemoryAnki')
+    $machineHome = [Environment]::GetEnvironmentVariable('MEMORY_ANKI_HOME', 'Machine')
+    if (-not [string]::IsNullOrWhiteSpace($machineHome)) {
+        return [System.IO.Path]::GetFullPath($machineHome)
+    }
+    $repoRootForHome = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+    return (Join-Path $repoRootForHome 'runtime-data')
 }
-
 function ConvertTo-HashtableValue {
     param([Parameter(Mandatory = $true)][object]$Value)
 
@@ -213,59 +218,34 @@ function New-StartupBackup {
     )
 
     Ensure-Directory -Path $Config.FullBackupsDir
-    $timestamp = Get-Date -Format 'yyyyMMdd-HHmmss'
-    $folder = Join-Path $Config.FullBackupsDir "$timestamp-$Reason"
-    Ensure-Directory -Path $folder
-
-    $includedItems = @()
-    foreach ($item in $Config.StorageLayout.managed_items) {
-        if (-not $item.backup) {
-            continue
+    $entryScript = Join-Path $Config.RepoRoot 'tools\create_startup_backup.py'
+    $psi = New-Object System.Diagnostics.ProcessStartInfo
+    $psi.FileName = 'python'
+    $dq = [char]34
+    $psi.Arguments = $dq + $entryScript + $dq + ' ' + $dq + $Reason + $dq
+    $psi.UseShellExecute = $false
+    $psi.RedirectStandardOutput = $true
+    $psi.RedirectStandardError = $true
+    $psi.CreateNoWindow = $true
+    $psi.EnvironmentVariables['MEMORY_ANKI_HOME'] = $Config.AppHome
+    $process = New-Object System.Diagnostics.Process
+    $process.StartInfo = $psi
+    try {
+        [void]$process.Start()
+        $stdout = $process.StandardOutput.ReadToEnd().Trim()
+        $stderr = $process.StandardError.ReadToEnd().Trim()
+        $process.WaitForExit()
+        if ($process.ExitCode -ne 0) {
+            throw "Startup backup failed (exit $($process.ExitCode)): $stderr"
         }
-        $relativePath = [string]$item.relative_path
-        if ([string]::IsNullOrWhiteSpace($relativePath)) {
-            continue
+        if ([string]::IsNullOrWhiteSpace($stdout)) {
+            throw "Startup backup returned no path. stderr: $stderr"
         }
-        $sourcePath = Join-Path $Config.AppHome $relativePath
-        $destinationPath = Join-Path $folder $relativePath
-        $destinationParent = Split-Path $destinationPath -Parent
-        if (-not [string]::IsNullOrWhiteSpace($destinationParent)) {
-            Ensure-Directory -Path $destinationParent
-        }
-
-        $sourceExists = Test-Path -LiteralPath $sourcePath
-        if ($sourceExists) {
-            if ($item.kind -eq 'directory') {
-                Copy-Item -LiteralPath $sourcePath -Destination $destinationPath -Recurse -Force
-            } else {
-                Copy-Item -LiteralPath $sourcePath -Destination $destinationPath -Force
-            }
-        } elseif ($item.kind -eq 'directory' -and $item.required) {
-            Ensure-Directory -Path $destinationPath
-        }
-
-        $includedItems += [ordered]@{
-            key = $item.key
-            relative_path = $relativePath
-            kind = $item.kind
-            required = [bool]$item.required
-            source_exists = [bool]$sourceExists
-            included = [bool]($sourceExists -or ($item.kind -eq 'directory' -and $item.required))
-        }
+        return $stdout
+    } finally {
+        $process.Dispose()
     }
-
-    $manifest = [ordered]@{
-        version = 3
-        reason = $Reason
-        created_at = (Get-Date).ToString('s')
-        storage_mode = $Config.StorageLayout.storage_mode
-        app_home = $Config.AppHome
-        included_items = $includedItems
-    }
-    Set-Content -LiteralPath (Join-Path $folder 'manifest.json') -Value ($manifest | ConvertTo-Json -Depth 5) -Encoding UTF8
-    return $folder
 }
-
 function Get-ListeningPidsByPort {
     param([Parameter(Mandatory = $true)][int]$Port)
     $pids = @()
