@@ -8,27 +8,29 @@ from memory_anki.infrastructure.db.models import (
     ReviewSchedule,
     get_session,
 )
-from memory_anki.modules.persistence.application.idempotency import (
-    get_idempotent_response,
-    save_idempotent_response,
-)
-from memory_anki.modules.palaces.application.segment_nodes import (
-    build_segments_editor_doc,
-)
 from memory_anki.modules.palaces.application.mini_palace_service import (
     build_mini_palace_editor_doc,
     mini_palace_summary_json,
+)
+from memory_anki.modules.palaces.application.palace_serializer import (
+    palace_json as palace_detail_json,
+)
+from memory_anki.modules.palaces.application.segment_nodes import (
+    build_segments_editor_doc,
 )
 from memory_anki.modules.palaces.application.segment_review_service import (
     build_segment_editor_doc,
     palace_review_stages_json,
     segment_summary_json,
 )
-from memory_anki.modules.palaces.presentation.router import palace_json as palace_detail_json
+from memory_anki.modules.persistence.application.idempotency import (
+    get_idempotent_response,
+    save_idempotent_response,
+)
 from memory_anki.modules.reviews.application.review_execution_service import (
     build_batch_segment_review_session,
-    submit_mini_review,
     submit_batch_segment_review,
+    submit_mini_review,
     submit_review,
     submit_segment_review,
 )
@@ -79,50 +81,6 @@ def session_dep():
         session.close()
 
 
-def peg_json(peg) -> dict:
-    return {
-        "id": peg.id,
-        "name": peg.name,
-        "content": peg.content,
-        "sort_order": peg.sort_order,
-        "parent_id": peg.parent_id,
-        "children": [peg_json(child) for child in (peg.children or [])],
-    }
-
-
-def palace_json(palace) -> dict:
-    return {
-        "id": palace.id,
-        "title": palace.title,
-        "description": palace.description,
-        "archived": palace.archived,
-        "mastered": palace.mastered,
-        "editor_doc": palace.editor_doc,
-        "pegs": [peg_json(peg) for peg in palace.pegs],
-        "attachments": [
-            {
-                "id": attachment.id,
-                "filename": attachment.filename,
-                "original_name": attachment.original_name,
-            }
-            for attachment in palace.attachments
-        ],
-        "chapters": [
-            {
-                "id": chapter.id,
-                "name": chapter.name,
-                "subject_id": chapter.subject_id,
-                "subject": (
-                    {"id": chapter.subject.id, "name": chapter.subject.name}
-                    if chapter.subject
-                    else None
-                ),
-            }
-            for chapter in palace.chapters
-        ],
-    }
-
-
 def chapter_json(chapter: Chapter | None) -> dict | None:
     if chapter is None:
         return None
@@ -139,7 +97,7 @@ def chapter_json(chapter: Chapter | None) -> dict | None:
 
 
 def schedule_json(schedule, session: Session | None = None) -> dict:
-    palace_data = palace_json(schedule.palace) if schedule.palace else None
+    palace_data = palace_detail_json(schedule.palace, session) if schedule.palace else None
     if palace_data and session:
         algorithm = next(
             (
@@ -303,7 +261,11 @@ def api_segment_review_session(schedule_id: int, session: Session = Depends(sess
     schedule = session.query(PalaceSegmentReviewSchedule).filter_by(id=schedule_id).first()
     if schedule and schedule.segment:
         payload = segment_schedule_json(schedule, session)
-        payload["palace"] = palace_json(schedule.segment.palace) if schedule.segment.palace else None
+        payload["palace"] = (
+            palace_detail_json(schedule.segment.palace, session)
+            if schedule.segment.palace
+            else None
+        )
         payload["segment"] = segment_summary_json(session, schedule.segment)
         payload["editor_doc"] = build_segment_editor_doc(schedule.segment.palace, schedule.segment)
         return payload
