@@ -2,6 +2,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { ArrowLeft, ChevronLeft, ChevronRight, Settings2, Sparkles, Volume2 } from 'lucide-react'
 import type { EnglishCourseDetail, EnglishSentenceCheckResponse } from '@/shared/api/contracts'
 import { SessionTimerBar } from '@/shared/components/session/SessionTimerBar'
+import { LoadingState } from '@/shared/components/state-placeholders'
 import { Button } from '@/shared/components/ui/button'
 import { EnglishPracticeSettingsDialog } from '@/features/english/components/EnglishPracticeSettingsDialog'
 import {
@@ -126,11 +127,7 @@ export function EnglishCoursePageView(props: EnglishCoursePageViewProps) {
   }
 
   if (loading || !course) {
-    return (
-      <div className="flex min-h-[55vh] items-center justify-center text-sm text-muted-foreground">
-        正在加载英语课程...
-      </div>
-    )
+    return <LoadingState text="正在加载英语课程…" />
   }
 
   const sentenceCount = course.sentences.length
@@ -256,9 +253,9 @@ export function EnglishCoursePageView(props: EnglishCoursePageViewProps) {
                   <p
                     className={`rounded-xl ${
                       translationMode === 'current'
-                        ? 'border border-emerald-200 bg-emerald-50 text-emerald-800'
+                        ? 'border border-success/20 bg-success/5 text-success'
                         : translationMode === 'previous'
-                          ? 'border border-sky-200 bg-sky-50/70 text-sky-900'
+                          ? 'border border-info/20 bg-info/5 text-info'
                           : 'bg-muted/40 text-muted-foreground'
                     } ${densityClasses.translation}`}
                   >
@@ -335,7 +332,7 @@ export function EnglishCoursePageView(props: EnglishCoursePageViewProps) {
                   {sidePanelTab === 'shortcuts' ? (
                     <div className="space-y-3">
                       <ShortcutSummary settings={practiceSettings} />
-                      <div className="rounded-2xl border border-sky-200 bg-sky-50/80 px-4 py-3 text-sm text-sky-800">
+                      <div className="rounded-2xl border border-info/20 bg-info/5 px-4 py-3 text-sm text-info">
                         点击“练习设置”可以重新录制快捷键。默认全部使用带修饰键组合，避免和拼写输入冲突。
                       </div>
                     </div>

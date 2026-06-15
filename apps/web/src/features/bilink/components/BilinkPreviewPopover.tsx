@@ -30,12 +30,12 @@ function NodePills({
   if (!items.length) return null
   return (
     <div className="space-y-2">
-      <div className="text-xs font-medium uppercase tracking-wide text-slate-500">{label}</div>
+      <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</div>
       <div className="flex flex-wrap gap-2">
         {items.map((item) => (
           <span
             key={item.uid}
-            className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs text-slate-700"
+            className="inline-flex rounded-full border border-border bg-muted px-2.5 py-1 text-xs text-muted-foreground"
           >
             {sanitizeBilinkText(item.text) || '未命名节点'}
           </span>
@@ -71,7 +71,7 @@ export function BilinkPreviewPopover({
 
   return (
     <div className="pointer-events-auto fixed inset-0 z-[125] flex items-center justify-center bg-black/20 p-4">
-      <Card className="flex h-[min(88vh,940px)] w-[min(1200px,100%)] flex-col border-slate-200 bg-white shadow-2xl">
+      <Card className="flex h-[min(88vh,940px)] w-[min(1200px,100%)] flex-col border-border bg-background shadow-2xl">
         <CardHeader className="flex flex-row items-center justify-between gap-3">
           <div>
             <CardTitle className="text-base">宫殿预览</CardTitle>
@@ -94,20 +94,20 @@ export function BilinkPreviewPopover({
           {!loading && !error && context && previewEditorState ? (
             <>
               <div className="min-h-0 space-y-4 overflow-y-auto pr-1">
-                <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
-                  <div className="text-lg font-semibold text-slate-900">{sanitizedNodeText}</div>
+                <div className="rounded-2xl border border-border bg-muted/70 p-4">
+                  <div className="text-lg font-semibold text-primary">{sanitizedNodeText}</div>
                   {sanitizedNodePath.length > 0 ? (
-                    <div className="mt-2 text-xs text-slate-500">
+                    <div className="mt-2 text-xs text-muted-foreground">
                       {sanitizedNodePath.join(' / ')}
                     </div>
                   ) : null}
                   {sanitizedNodeNote ? (
-                    <div className="mt-3 whitespace-pre-wrap text-sm text-slate-700">{sanitizedNodeNote}</div>
+                    <div className="mt-3 whitespace-pre-wrap text-sm text-muted-foreground">{sanitizedNodeNote}</div>
                   ) : null}
                 </div>
 
                 {sanitizedParentText ? (
-                  <div className="flex items-center gap-2 text-sm text-slate-600">
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
                     <MoveRight className="h-4 w-4" />
                     父节点：{sanitizedParentText}
                   </div>
@@ -130,7 +130,7 @@ export function BilinkPreviewPopover({
                   editorState={previewEditorState}
                   readonly
                   onEditorStateChange={() => {}}
-                  className="h-[min(68vh,760px)] w-full rounded-2xl border border-border/70 bg-white"
+                  className="h-[min(68vh,760px)] w-full rounded-2xl border border-border/70 bg-background"
                 />
               </div>
             </>

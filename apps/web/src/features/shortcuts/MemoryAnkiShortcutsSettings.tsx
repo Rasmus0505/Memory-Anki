@@ -98,7 +98,7 @@ export function MemoryAnkiShortcutsSettings() {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-5">
-          <div className="rounded-2xl border border-sky-200 bg-sky-50/80 px-4 py-3 text-sm text-sky-800">
+          <div className="rounded-2xl border border-info/30 bg-info/5 px-4 py-3 text-sm text-info">
             快捷键保存在当前浏览器。录制时按下组合键即可覆盖；输入框、文本编辑和录制状态中不会触发业务快捷键。
           </div>
 

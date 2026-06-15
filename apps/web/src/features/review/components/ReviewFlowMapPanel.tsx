@@ -220,7 +220,7 @@ export function ReviewFlowMapPanel({
         onFullscreenChange={setNativeFullscreenActive}
         onUiClearedChange={setUiCleared}
         className={cn(
-          'w-full rounded-2xl border border-border/70 bg-white',
+          'w-full rounded-2xl border border-border/70 bg-background',
           fullscreen ? 'h-full' : 'h-[64vh]',
         )}
       />

@@ -9,6 +9,14 @@ export interface ReviewFeedbackSettings {
   volume: number
   animationEnabled: boolean
   surpriseEnabled: boolean
+  /**
+   * 控制全局通用 UI 反馈（普通点击 / 悬停 / 打字等 DOM 原生事件）的强度。
+   * 不影响脑图编辑与复习流程中通过 dispatchGlobalFeedback 主动派发的反馈。
+   * - 'immersive'：全开（每个点击/悬停都有粒子与声音）
+   * - 'balanced'（默认）：仅语义明确的操作有声，普通微操作仅视觉、默认无声，悬停默认关闭
+   * - 'quiet'：通用 UI 反馈静默
+   */
+  globalIntensity: 'quiet' | 'balanced' | 'immersive'
 }
 
 export const REVIEW_FEEDBACK_SETTINGS_STORAGE_KEY = 'memory-anki-review-feedback-settings-v1'
@@ -20,6 +28,7 @@ export const DEFAULT_REVIEW_FEEDBACK_SETTINGS: ReviewFeedbackSettings = {
   volume: 1.5,
   animationEnabled: true,
   surpriseEnabled: true,
+  globalIntensity: 'balanced',
 }
 
 function sanitizeBoolean(value: unknown, fallback: boolean) {
@@ -36,6 +45,10 @@ function sanitizeNumber(value: unknown, fallback: number, minimum: number, maxim
 export function sanitizeReviewFeedbackSettings(value: unknown): ReviewFeedbackSettings {
   const raw = value && typeof value === 'object' ? (value as Record<string, unknown>) : {}
   const mode = raw.mode === 'quiet' ? 'quiet' : 'immersive'
+  const globalIntensity =
+    raw.globalIntensity === 'immersive' || raw.globalIntensity === 'quiet' || raw.globalIntensity === 'balanced'
+      ? raw.globalIntensity
+      : DEFAULT_REVIEW_FEEDBACK_SETTINGS.globalIntensity
   return {
     mode,
     soundEnabled: sanitizeBoolean(raw.soundEnabled, DEFAULT_REVIEW_FEEDBACK_SETTINGS.soundEnabled),
@@ -48,6 +61,7 @@ export function sanitizeReviewFeedbackSettings(value: unknown): ReviewFeedbackSe
       raw.surpriseEnabled,
       DEFAULT_REVIEW_FEEDBACK_SETTINGS.surpriseEnabled,
     ),
+    globalIntensity,
   }
 }
 

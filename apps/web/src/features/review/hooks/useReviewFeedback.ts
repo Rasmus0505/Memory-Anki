@@ -1,5 +1,6 @@
 import * as React from 'react'
 import {
+  REVIEW_COMBO_MILESTONES,
   createInitialReviewRewardSnapshot,
   deriveReviewFeedbackTransition,
   getReviewProgressPercent,
@@ -21,7 +22,7 @@ import type { MindMapReviewFxPayload } from '@/shared/components/mindmap-host/ho
 import type {
   RevealFlowMode,
   ReviewMindMapNode,
-} from '@/features/review/model/review-flow-tree'
+} from '@/entities/review/model/review-flow-tree'
 import type { RevealState } from '@/entities/session/model'
 import { useMindMapFeedbackAudio } from '@/shared/components/mindmap-host/useMindMapFeedback'
 
@@ -91,6 +92,7 @@ export function useReviewFeedback({
   )
   const rewardSnapshotRef = React.useRef(createInitialReviewRewardSnapshot())
   const previousRevealMapRef = React.useRef<Record<string, RevealState>>(revealMap)
+  const previousComboCountRef = React.useRef(0)
   const lastSurpriseAtMsRef = React.useRef<number | null>(null)
   const completionTimerRef = React.useRef<number | null>(null)
   const flashTimerRef = React.useRef<number | null>(null)
@@ -137,10 +139,19 @@ export function useReviewFeedback({
       transition,
     })
     rewardSnapshotRef.current = nextRewardSnapshot
+    const prevCombo = previousComboCountRef.current
+    previousComboCountRef.current = nextRewardSnapshot.comboCount
     setComboCount(nextRewardSnapshot.comboCount)
     setMaxComboCount(nextRewardSnapshot.maxComboCount)
     setNextMilestone(nextRewardSnapshot.nextMilestone)
     setAllClearReady(nextRewardSnapshot.allClearReady)
+
+    // 连击里程碑音效：combo 恰好达到里程碑值时播放升调音
+    const newCombo = nextRewardSnapshot.comboCount
+    const milestoneIndex = REVIEW_COMBO_MILESTONES.indexOf(newCombo)
+    if (milestoneIndex !== -1 && newCombo > prevCombo) {
+      audio.playComboMilestone(milestoneIndex)
+    }
 
     const nextFlashState =
       settings.animationEnabled && !reducedMotion
@@ -249,6 +260,7 @@ export function useReviewFeedback({
     (event: ReviewFeedbackEvent) => {
       if (event === 'session_reset') {
         rewardSnapshotRef.current = resetReviewRewardState()
+        previousComboCountRef.current = 0
         setComboCount(0)
         setMaxComboCount(0)
         setNextMilestone(3)

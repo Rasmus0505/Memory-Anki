@@ -6,6 +6,7 @@ import type {
   MindMapImportJobStatus,
   MindMapImportJobUsage,
   MindMapImportSourceTree,
+  ResolvedAiRuntimeMeta,
 } from '@/shared/api/contracts'
 import {
   buildEditorDocFromSourceTree,
@@ -47,6 +48,7 @@ export interface ImportJobStateController {
   currentJobStatus: MindMapImportJobStatus | null
   currentJobStage: MindMapImportJobStage | null
   currentJobUsage: MindMapImportJobUsage | null
+  currentJobResolvedAi: ResolvedAiRuntimeMeta | null
   currentJobPauseRequested: boolean
   importReusedExistingResult: boolean
   reusedExistingResultRef: React.MutableRefObject<boolean>
@@ -95,6 +97,7 @@ export function useImportJobState({
   const [currentJobStatus, setCurrentJobStatus] = useState<MindMapImportJobStatus | null>(null)
   const [currentJobStage, setCurrentJobStage] = useState<MindMapImportJobStage | null>(null)
   const [currentJobUsage, setCurrentJobUsage] = useState<MindMapImportJobUsage | null>(null)
+  const [currentJobResolvedAi, setCurrentJobResolvedAi] = useState<ResolvedAiRuntimeMeta | null>(null)
   const [currentJobPauseRequested, setCurrentJobPauseRequested] = useState(false)
   const [reusedExistingResult, setReusedExistingResultState] = useState(false)
   const reusedExistingResultRef = useRef(false)
@@ -126,6 +129,7 @@ export function useImportJobState({
     setCurrentJobStatus(null)
     setCurrentJobStage(null)
     setCurrentJobUsage(null)
+    setCurrentJobResolvedAi(null)
     setCurrentJobPauseRequested(false)
   }
 
@@ -148,6 +152,7 @@ export function useImportJobState({
     setCurrentJobStatus(job.status)
     setCurrentJobStage(job.stage)
     setCurrentJobUsage(job.usage ?? null)
+    setCurrentJobResolvedAi(job.resolved_ai ?? null)
     setCurrentJobPauseRequested(Boolean(job.pause_requested))
     setImportReusedExistingResult(Boolean(options?.reused))
     setModeState(job.mode)
@@ -291,6 +296,7 @@ export function useImportJobState({
     currentJobStatus,
     currentJobStage,
     currentJobUsage,
+    currentJobResolvedAi,
     currentJobPauseRequested,
     importReusedExistingResult: reusedExistingResult,
     reusedExistingResultRef,

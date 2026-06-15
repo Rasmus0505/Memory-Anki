@@ -4,6 +4,7 @@ import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
 import { Dialog, DialogClose, DialogContent, DialogHeader, DialogTitle } from '@/shared/components/ui/dialog'
 import { Input } from '@/shared/components/ui/input'
+import { EmptyState } from '@/shared/components/state-placeholders'
 import { cn } from '@/shared/lib/utils'
 import type { MiniPalaceController } from './useMiniPalaceController'
 
@@ -52,9 +53,11 @@ export function MiniPalacePanel({ controller, className, onEditSave, onEditCance
 
             <div className="max-h-[52vh] space-y-2 overflow-auto pr-1">
               {controller.items.length === 0 && !controller.loading ? (
-                <div className="rounded-lg border border-border/70 bg-muted/30 px-4 py-6 text-center text-sm text-muted-foreground">
-                  还没有小宫殿。
-                </div>
+                <EmptyState
+                  variant="create"
+                  title="还没有小宫殿"
+                  description="小宫殿是主宫殿的轻量练习单元，适合快速复习核心节点。"
+                />
               ) : null}
               {controller.items.map((item) => (
                 <div
@@ -184,7 +187,7 @@ export function MiniPalacePanel({ controller, className, onEditSave, onEditCance
       {controller.isPracticing && controller.activeMiniPalace ? (
         <div
           className={cn(
-            'fixed right-5 top-20 z-[140] w-[min(380px,calc(100vw-40px))] rounded-lg border border-emerald-200 bg-white/96 p-4 shadow-xl',
+            'fixed right-5 top-20 z-[140] w-[min(380px,calc(100vw-40px))] rounded-lg border border-success/20 bg-white/96 p-4 shadow-xl',
             className,
           )}
         >
@@ -194,7 +197,7 @@ export function MiniPalacePanel({ controller, className, onEditSave, onEditCance
               <div className="mt-2 flex flex-wrap gap-2">
                 <Badge variant="outline">{controller.activeMiniPalace.node_count} 个检查点</Badge>
                 {controller.completed ? (
-                  <Badge className="bg-emerald-600 text-white hover:bg-emerald-600">已完成</Badge>
+                  <Badge className="bg-success text-success-foreground hover:bg-success">已完成</Badge>
                 ) : (
                   <Badge variant="secondary">小宫殿翻卡</Badge>
                 )}

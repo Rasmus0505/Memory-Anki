@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { ArrowLeft, History, Search, Volume2 } from 'lucide-react'
 import {
@@ -31,8 +31,10 @@ import {
   VoiceCoachSettingsDialog,
 } from '@/features/voice-coach'
 import { MiniPalacePanel } from '@/features/mini-palace'
+import { useRouteResidency } from '@/app/router/RouteResidency'
 
 export default function PalaceEdit() {
+  const { isActive } = useRouteResidency()
   const navigate = useNavigate()
   const page = usePalaceEditPage()
   const mindMapFrameRef = useRef<MindMapFrameHandle | null>(null)
@@ -119,6 +121,12 @@ export default function PalaceEdit() {
     if (!page.palaceId) return
     navigate(`/palaces/${page.palaceId}/quiz`)
   }
+
+  useEffect(() => {
+    if (isActive) return
+    if (!mindMapNativeFullscreen) return
+    void mindMapFrameRef.current?.exitNativeFullscreen()
+  }, [isActive, mindMapNativeFullscreen])
 
   if (!page.palaceId) {
     return (
@@ -483,7 +491,7 @@ export default function PalaceEdit() {
                     onBilinkNodeClick={page.handleBilinkNodeClick}
                     onMiniPalacePour={page.miniPalace.isPracticing ? page.miniPalace.handleSpacePour : undefined}
                     className={cn(
-                      'w-full flex-1 rounded-2xl border border-border/70 bg-white',
+                      'w-full flex-1 rounded-2xl border border-border/70 bg-background',
                       page.mindMapFullscreen ? 'h-full' : 'h-[64vh]',
                     )}
                   />
@@ -564,6 +572,7 @@ export default function PalaceEdit() {
         currentJobStatus={mindMapImport.currentJobStatus}
         currentJobStage={mindMapImport.currentJobStage}
         currentJobUsage={mindMapImport.currentJobUsage}
+        currentJobResolvedAi={mindMapImport.currentJobResolvedAi}
         currentJobPauseRequested={mindMapImport.currentJobPauseRequested}
         canResumeJob={mindMapImport.canResumeJob}
         canPauseJob={mindMapImport.canPauseJob}

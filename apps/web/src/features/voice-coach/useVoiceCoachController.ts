@@ -142,7 +142,7 @@ export function useVoiceCoachController({
       return sessionAiOptionsRef.current
     }
     const aiOptions = await resolveAiOptions({
-      scenarioKey: 'tts',
+      scenarioKey: 'tts_voice_coach',
       entrypointKey: `voice-coach:${scene}`,
       title: '语音教练配置',
       description: '本次会话会沿用这里的语音合成模型配置，后续自动触发不再重复询问。',

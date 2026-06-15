@@ -34,7 +34,7 @@ export function buildPalaceImportValidationFingerprint(
   }
 
   try {
-    const comparableDoc = JSON.parse(JSON.stringify(parsedDoc)) as MindMapDoc
+    const comparableDoc = structuredClone(parsedDoc) as MindMapDoc
 
     const visit = (node: MindMapDocNode | null | undefined, isRoot = false) => {
       if (!node || typeof node !== 'object') return

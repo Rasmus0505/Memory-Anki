@@ -85,6 +85,7 @@ function buildProps(
     currentJobStatus: null,
     currentJobStage: null,
     currentJobUsage: null,
+    currentJobResolvedAi: null,
     currentJobPauseRequested: false,
     canResumeJob: false,
     canPauseJob: false,

@@ -4,6 +4,7 @@ import { Plus, X } from 'lucide-react'
 import { dispatchGlobalFeedback } from '@/shared/feedback/globalFeedbackModel'
 import type { MindMapNode } from './adapter'
 import { getNodeSize, type LayoutRole } from './layout'
+import { BRANCH_COLORS } from './branchColors'
 
 type NodeCardData = MindMapNode & {
   depth?: number
@@ -18,8 +19,6 @@ type NodeCardData = MindMapNode & {
   onAddChild?: (nodeId: string) => void
   onDelete?: (nodeId: string) => void
 }
-
-const PAPER_BRANCH_COLORS = ['#2563eb', '#059669', '#d97706', '#7c3aed', '#e11d48', '#0891b2', '#4f46e5', '#be123c']
 
 function getMouseFeedbackPoint(event?: React.MouseEvent) {
   return event
@@ -42,7 +41,7 @@ function getElementFeedbackPoint(element: HTMLElement | null) {
 function MindMapNodeCard({ data, id }: NodeProps) {
   const nodeData = data as unknown as NodeCardData
   const depth = Number(nodeData.metadata?.depth ?? 0)
-  const branchColor = String(nodeData.metadata?.branchColor ?? PAPER_BRANCH_COLORS[depth % PAPER_BRANCH_COLORS.length])
+  const branchColor = String(nodeData.metadata?.branchColor ?? BRANCH_COLORS[depth % BRANCH_COLORS.length])
   const layoutRole = String(nodeData.metadata?.layoutRole ?? (depth === 0 ? 'root' : 'branch')) as LayoutRole
   const isRoot = layoutRole === 'root'
   const isLeaf = layoutRole === 'leaf'
@@ -205,7 +204,7 @@ function MindMapNodeCard({ data, id }: NodeProps) {
             })
             nodeData.onDelete?.(id)
           }}
-          className={`${btnClass} hover:bg-rose-50 hover:text-rose-600`}
+          className={`${btnClass} hover:bg-destructive/5 hover:text-destructive`}
           title="删除节点"
         >
           <X className="h-3.5 w-3.5" />

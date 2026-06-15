@@ -4,7 +4,7 @@ import { useRevealSession } from '@/entities/review/model/useRevealSession'
 import {
   allNodesRevealed,
   buildInitialRevealState,
-} from '@/features/review/model/review-flow-tree'
+} from '@/entities/review/model/review-flow-tree'
 import {
   clearPracticeSessionProgressApi,
   getPracticeSessionProgressApi,

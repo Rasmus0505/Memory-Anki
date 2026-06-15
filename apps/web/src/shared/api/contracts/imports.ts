@@ -1,4 +1,4 @@
-import type { AiRuntimeOptions } from './profile'
+import type { AiRuntimeOptions, ResolvedAiRuntimeMeta } from './profile'
 import type { MindMapDoc } from './mindmap'
 
 export interface MindMapImportSourceNode {
@@ -29,6 +29,7 @@ export interface MindMapImportPreviewResponse {
   warnings?: string[]
   ocr_grounding_used?: boolean
   ocr_text_chars?: number | null
+  resolved_ai?: ResolvedAiRuntimeMeta | null
 }
 export interface MindMapBatchImportPreviewResponse {
   ok: boolean
@@ -37,12 +38,14 @@ export interface MindMapBatchImportPreviewResponse {
   editor_doc?: MindMapDoc | string | null
   structure_image_index?: number | null
   image_count?: number
+  resolved_ai?: ResolvedAiRuntimeMeta | null
 }
 export interface ImageTextPreviewResponse {
   ok: boolean
   error?: string
   extracted_text?: string
   selected_pages?: number[]
+  resolved_ai?: ResolvedAiRuntimeMeta | null
 }
 export interface MindMapAiSplitRequest {
   editor_doc: MindMapDoc | string | null
@@ -58,6 +61,7 @@ export interface MindMapAiSplitResponse {
   ai_call_log_id?: string | null
   error?: string
   request_id?: string
+  resolved_ai?: ResolvedAiRuntimeMeta | null
 }
 export type MindMapImportJobStatus = 'draft' | 'running' | 'paused' | 'completed' | 'failed' | 'interrupted'
 export type MindMapImportJobStage = 'prepared' | 'structure' | 'ocr' | 'merge' | 'text' | 'completed'
@@ -110,6 +114,7 @@ export interface MindMapImportJob {
   mode: 'mindmap' | 'text'
   source_meta?: Record<string, unknown>
   result?: MindMapImportJobResult | null
+  resolved_ai?: ResolvedAiRuntimeMeta | null
   error?: MindMapImportJobError | null
   usage?: MindMapImportJobUsage
   progress?: MindMapImportJobProgress | null

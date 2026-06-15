@@ -1,4 +1,5 @@
-import { API_BASE, fetchWithMutationQueue, request } from '@/shared/api/http'
+import { API_BASE, fetchWithMutationQueue, request, uploadWithFormData } from '@/shared/api/http'
+import { parseSseEventBlock } from '@/shared/api/sse'
 import type {
   ReadingGenerateStreamStatusEvent,
   ReadingCompletionResponse,
@@ -10,35 +11,6 @@ import type {
   ReadingVersion,
   ReadingWorkspaceResponse,
 } from '@/shared/api/contracts'
-
-async function uploadWithFormData<T>(url: string, formData: FormData): Promise<T> {
-  const response = await fetchWithMutationQueue(
-    `${API_BASE}${url}`,
-    {
-      method: 'POST',
-      body: formData,
-    },
-    {
-      resourceKey: 'english-reading:create-material',
-      description: '创建英语阅读材料',
-      replayMode: 'manual',
-    },
-  )
-  if (!response.ok) {
-    const body = await response.text().catch(() => '')
-    let message = body || `HTTP ${response.status}`
-    try {
-      const parsed = JSON.parse(body) as { detail?: unknown }
-      if (typeof parsed.detail === 'string' && parsed.detail.trim()) {
-        message = parsed.detail
-      }
-    } catch {
-      // Ignore parse errors and use the raw message.
-    }
-    throw new Error(message)
-  }
-  return response.json() as Promise<T>
-}
 
 export function getEnglishReadingProfileApi() {
   return request<ReadingProfile>('/english-reading/profile')
@@ -69,7 +41,10 @@ export function createEnglishReadingMaterialApi(input: { text?: string; file?: F
   if (input.file) {
     formData.append('reading_file', input.file)
   }
-  return uploadWithFormData<ReadingMaterial>('/english-reading/materials', formData)
+  return uploadWithFormData<ReadingMaterial>('/english-reading/materials', formData, {
+    resourceKey: 'english-reading:create-material',
+    description: '创建英语阅读材料',
+  })
 }
 
 export function generateEnglishReadingVersionApi(
@@ -85,27 +60,6 @@ export function generateEnglishReadingVersionApi(
       replayMode: 'manual',
     },
   })
-}
-
-function parseSseEventBlock(block: string): { event: string; data: string } | null {
-  const lines = block
-    .split(/\r?\n/)
-    .map((line) => line.trimEnd())
-    .filter(Boolean)
-  if (lines.length === 0) return null
-  let event = 'message'
-  const dataLines: string[] = []
-  for (const line of lines) {
-    if (line.startsWith('event:')) {
-      event = line.slice(6).trim()
-      continue
-    }
-    if (line.startsWith('data:')) {
-      dataLines.push(line.slice(5).trim())
-    }
-  }
-  if (dataLines.length === 0) return null
-  return { event, data: dataLines.join('\n') }
 }
 
 function isReadingGenerateStreamStatusEvent(

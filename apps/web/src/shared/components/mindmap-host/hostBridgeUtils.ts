@@ -165,7 +165,7 @@ declare global {
 }
 
 export function cloneValue<T>(value: T): T {
-  return JSON.parse(JSON.stringify(value)) as T
+  return structuredClone(value)
 }
 
 export function normalizeEditorDoc(value: MindMapEditorState['editor_doc']): Record<string, unknown> | string {

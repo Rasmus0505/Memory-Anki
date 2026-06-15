@@ -1,5 +1,6 @@
 import { ArrowLeft, FileText } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { LoadingState } from '@/shared/components/state-placeholders'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import {
   buildAttachmentUrl,
@@ -23,7 +24,7 @@ import {
   type ReviewFlowSnapshot,
 } from '@/features/review/components/MindMapReviewFlow'
 import { StageSelectDialog } from '@/features/review/components/StageSelectDialog'
-import type { RevealFlowMode } from '@/features/review/model/review-flow-tree'
+import type { RevealFlowMode } from '@/entities/review/model/review-flow-tree'
 
 type ReviewDisplayMode = 'review' | 'edit'
 
@@ -314,7 +315,7 @@ export function ReviewSessionContainer({
     activePalaceId != null && !editEditorState && !displayLoadError
 
   if (!session || !reviewEditorState || editorLoading || waitingForEditorState) {
-    return <div className="flex items-center justify-center py-32 text-sm text-muted-foreground">正在加载复习会话...</div>
+    return <LoadingState text="正在加载复习会话…" />
   }
 
   if (!palace || !editEditorState || displayLoadError) {

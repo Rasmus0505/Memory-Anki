@@ -1,5 +1,6 @@
 import type { AiCallLogDetail } from './aiLogs'
 import type { DashboardResponse } from './dashboard'
+import type { ResolvedAiRuntimeMeta } from './profile'
 
 export interface EnglishGenerationTask {
   id: string
@@ -11,6 +12,7 @@ export interface EnglishGenerationTask {
   fileSize: number
   errorMessage: string
   courseId: number | null
+  resolved_ai?: ResolvedAiRuntimeMeta | null
   createdAt: string | null
   updatedAt: string | null
   startedAt: string | null

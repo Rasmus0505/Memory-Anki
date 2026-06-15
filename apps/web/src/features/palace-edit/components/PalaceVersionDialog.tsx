@@ -73,10 +73,10 @@ export function PalaceVersionDialog({
                   {versions.map((version) => (
                     <div
                       key={version.id}
-                      className="flex flex-col gap-4 rounded-[24px] border border-border/70 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.82))] px-4 py-4 sm:flex-row sm:items-center sm:justify-between"
+                      className="flex flex-col gap-4 rounded-[24px] border border-border/70 bg-card/90 px-4 py-4 sm:flex-row sm:items-center sm:justify-between"
                     >
                       <div className="min-w-0">
-                        <div className="flex flex-wrap items-center gap-2 text-sm font-medium text-slate-950">
+                        <div className="flex flex-wrap items-center gap-2 text-sm font-medium text-foreground">
                           <span>
                             {version.trigger_reason === 'editor_save'
                               ? '自动恢复点'
@@ -155,8 +155,8 @@ export function PalaceVersionDialog({
                 </div>
               ) : previewVersionDetail ? (
                 <div className="space-y-4">
-                  <div className="rounded-[24px] border border-border/70 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.82))] px-5 py-4">
-                    <div className="flex flex-wrap items-center gap-2 text-sm font-medium text-slate-950">
+                  <div className="rounded-[24px] border border-border/70 bg-card/90 px-5 py-4">
+                    <div className="flex flex-wrap items-center gap-2 text-sm font-medium text-foreground">
                       <span>
                         {previewVersionDetail.trigger_reason === 'editor_save'
                           ? '自动恢复点'
@@ -173,7 +173,7 @@ export function PalaceVersionDialog({
                         恢复点 #{previewVersionDetail.id}
                       </Badge>
                     </div>
-                    <div className="mt-2 text-base font-semibold text-slate-950">
+                    <div className="mt-2 text-base font-semibold text-foreground">
                       {previewVersionDetail.title || '未命名宫殿'}
                     </div>
                   </div>
@@ -196,7 +196,7 @@ export function PalaceVersionDialog({
                         }}
                         readonly
                         onEditorStateChange={() => {}}
-                        className="h-[56vh] w-full rounded-2xl border border-border/70 bg-white"
+                        className="h-[56vh] w-full rounded-2xl border border-border/70 bg-background"
                       />
                     </CardContent>
                   </Card>

@@ -44,12 +44,12 @@ function ToggleButton({
       onClick={onClick}
       className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
         active
-          ? 'border-emerald-300 bg-emerald-50 text-emerald-700'
+          ? 'border-success/30 bg-success/5 text-success'
           : 'border-border bg-background text-muted-foreground hover:text-foreground'
       }`}
     >
       <span
-        className={`h-2.5 w-2.5 rounded-full ${active ? 'bg-emerald-500' : 'bg-muted-foreground/40'}`}
+        className={`h-2.5 w-2.5 rounded-full ${active ? 'bg-success' : 'bg-muted-foreground/40'}`}
       />
       {label}
     </button>
@@ -181,7 +181,7 @@ export function EnglishPracticeSettingsDialog({
                     }))
                   }
                   data-english-control-focus="true"
-                  className="h-1.5 w-28 cursor-pointer appearance-none rounded-full bg-border accent-emerald-500 [&::-webkit-slider-thumb]:h-3.5 [&::-webkit-slider-thumb]:w-3.5 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-emerald-500"
+                  className="h-1.5 w-28 cursor-pointer appearance-none rounded-full bg-border accent-success [&::-webkit-slider-thumb]:h-3.5 [&::-webkit-slider-thumb]:w-3.5 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-success"
                 />
                 <span className="w-8 text-right text-xs tabular-nums text-muted-foreground">
                   {Math.round(draftSettings.sound.masterVolume * 100)}%
@@ -234,7 +234,7 @@ export function EnglishPracticeSettingsDialog({
               <Keyboard className="h-4 w-4 text-muted-foreground" />
               <h3 className="text-sm font-semibold">快捷键</h3>
             </div>
-            <div className="rounded-2xl border border-sky-200 bg-sky-50/80 px-4 py-3 text-sm text-sky-800">
+            <div className="rounded-2xl border border-info/30 bg-info/5 px-4 py-3 text-sm text-info">
               支持带 Shift / Ctrl / Alt / Meta 的组合键，也支持方向键和功能键。单字母会被当作答题输入键拦截，避免和拼写练习冲突。
             </div>
             <div className="rounded-2xl border border-border/70">

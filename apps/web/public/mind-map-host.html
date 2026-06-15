@@ -1383,6 +1383,7 @@
       }
       const immersiveToggleState = {
         nativeFullscreenRegistered: false,
+        parentFullscreenActive: false,
       }
       const interactionState = {
         pointerDownNodeUid: null,
@@ -5323,20 +5324,25 @@
       }
 
       async function exitNativeFullscreenIfNeeded() {
-        if (!document.fullscreenElement) return
-        try {
-          await document.exitFullscreen?.()
-        } catch (error) {
-          console.warn(error)
+        // 原生全屏现在由父文档控制（对 iframe 元素 requestFullscreen），
+        // iframe 内部不再直接操作全屏。这里仅作为兜底：
+        // 若 iframe 自身意外进入全屏则退出，否则通知父文档。
+        if (document.fullscreenElement) {
+          try {
+            await document.exitFullscreen?.()
+          } catch (error) {
+            console.warn(error)
+          }
+          return
         }
+        getHostBridge()?.notify?.('exit_native_fullscreen_request', null)
       }
 
       async function enterNativeFullscreen() {
-        try {
-          await document.documentElement.requestFullscreen?.()
-        } catch (error) {
-          console.warn(error)
-        }
+        // 原生全屏由父文档控制，iframe 内部仅发送请求通知。
+        // 父文档会对 iframe 元素调用 requestFullscreen()，
+        // 这样父文档的 Dialog/反馈层/庆祝 overlay 仍可正常渲染。
+        getHostBridge()?.notify?.('enter_native_fullscreen_request', null)
       }
 
       async function notifyParentUiAfterNativeFullscreenExit(eventName, payload = null) {
@@ -5382,7 +5388,9 @@
           })
           document.body.appendChild(button)
         }
-        button.hidden = !Boolean(document.fullscreenElement)
+        // 检查 iframe 自身全屏 或 父文档全屏（iframe 元素作为全屏目标）
+        const fullscreenActive = Boolean(document.fullscreenElement) || immersiveToggleState.parentFullscreenActive
+        button.hidden = !fullscreenActive
         return button
       }
 
@@ -5453,6 +5461,16 @@
           },
           true,
         )
+        // 监听父文档触发的 resize 事件（父文档全屏切换时会 dispatch resize），
+        // 同步父文档全屏状态到 iframe 内部，以便正确显示"退全屏"按钮。
+        window.addEventListener('resize', () => {
+          const wasParentActive = immersiveToggleState.parentFullscreenActive
+          immersiveToggleState.parentFullscreenActive = Boolean(window.__memoryAnkiParentFullscreenActive)
+          if (wasParentActive !== immersiveToggleState.parentFullscreenActive) {
+            updateNavigatorFullscreenPresentation()
+            scheduleMindMapResizeSync()
+          }
+        })
       }
 
       function getCurrentActiveNode() {
@@ -6973,22 +6991,21 @@
         const mindMap = getMindMap()
         const renderer = getRenderer()
         const refreshCalls = [
-          () => renderer?.render?.(),
-          () => renderer?.reRender?.(),
-          () => renderer?.refresh?.(),
-          () => renderer?.draw?.render?.(),
-          () => mindMap?.render?.(),
-          () => mindMap?.refresh?.(),
-          () => mindMap?.view?.render?.(),
-          () => mindMap?.view?.update?.(),
+          typeof renderer?.render === 'function' ? () => renderer.render() : null,
+          typeof renderer?.reRender === 'function' ? () => renderer.reRender() : null,
+          typeof renderer?.refresh === 'function' ? () => renderer.refresh() : null,
+          typeof renderer?.draw?.render === 'function' ? () => renderer.draw.render() : null,
+          typeof mindMap?.render === 'function' ? () => mindMap.render() : null,
+          typeof mindMap?.refresh === 'function' ? () => mindMap.refresh() : null,
+          typeof mindMap?.view?.render === 'function' ? () => mindMap.view.render() : null,
+          typeof mindMap?.view?.update === 'function' ? () => mindMap.view.update() : null,
         ]
         for (const run of refreshCalls) {
           try {
-            if (typeof run === 'function') {
-              const result = run()
-              if (typeof result !== 'undefined') {
-                break
-              }
+            if (typeof run !== 'function') continue
+            const result = run()
+            if (typeof result !== 'undefined') {
+              break
             }
           } catch (error) {
             console.warn(error)

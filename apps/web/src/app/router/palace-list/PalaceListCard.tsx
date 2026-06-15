@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { BookOpen, Building2, MoreHorizontal, Pencil, Settings2, Target, Trash2 } from 'lucide-react'
+import { BookOpen, Building2, ChevronDown, ChevronRight, MoreHorizontal, Pencil, Settings2, Target, Trash2 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { PalaceStageProgress } from '@/app/router/palace-list/PalaceStageProgress'
 import type { PalaceListViewSettings } from '@/app/router/palace-view-settings'
@@ -35,6 +35,7 @@ interface PalaceListCardProps {
   viewSettings: PalaceListViewSettings
   segmentReviewLoadingId: number | null
   markReviewedKey: string | null
+  defaultExpanded?: boolean
   onOpenBatchReview: (palace: PalaceGroupedItem) => void
   onSegmentReviewAction: (segment: PalaceSegmentSummary) => void
   onOpenStageEdit: (
@@ -98,6 +99,7 @@ export function PalaceListCard({
   viewSettings,
   segmentReviewLoadingId,
   markReviewedKey,
+  defaultExpanded = false,
   onOpenBatchReview,
   onSegmentReviewAction,
   onOpenStageEdit,
@@ -108,6 +110,7 @@ export function PalaceListCard({
   onDelete,
 }: PalaceListCardProps) {
   const [menuOpen, setMenuOpen] = useState(false)
+  const [expanded, setExpanded] = useState(defaultExpanded)
   const menuRef = useRef<HTMLDivElement | null>(null)
   const segmentCount = Array.isArray(palace.segments) ? palace.segments.length : 0
   const isMultiSegment = segmentCount > 1
@@ -211,10 +214,24 @@ export function PalaceListCard({
               <span>{palace.chapters?.length || 0} 章节</span>
             )}
             {(palace.focus_count ?? 0) > 0 ? (
-              <span className="inline-flex items-center gap-1 text-amber-700">
+              <span className="inline-flex items-center gap-1 text-warning">
                 <Target className="h-3.5 w-3.5" />
                 专项 {(palace.focus_count ?? 0)} 张
               </span>
+            ) : null}
+            {(showMainSegmentList || (Array.isArray(palace.mini_palaces) && palace.mini_palaces.length > 0)) ? (
+              <button
+                type="button"
+                className="inline-flex items-center gap-0.5 transition-colors hover:text-foreground"
+                onClick={() => setExpanded((prev) => !prev)}
+              >
+                {expanded ? (
+                  <ChevronDown className="h-3.5 w-3.5" />
+                ) : (
+                  <ChevronRight className="h-3.5 w-3.5" />
+                )}
+                {expanded ? '收起详情' : '展开详情'}
+              </button>
             ) : null}
           </div>
 
@@ -227,7 +244,7 @@ export function PalaceListCard({
                 onStageClick={(stage) => onOpenStageEdit(palace, singleSegment, stage)}
               />
             </div>
-          ) : showMainSegmentList ? (
+          ) : expanded && showMainSegmentList ? (
             <div className={getSegmentListClass(viewSettings.densityMode)}>
               {palace.segments.map((segment, index) => {
                 const segmentReviewState = getReviewButtonState(segment.next_review_at)
@@ -308,7 +325,7 @@ export function PalaceListCard({
                 )
               })}
             </div>
-          ) : !mainReviewOwnedByMini ? (
+          ) : expanded && !mainReviewOwnedByMini ? (
             <PalaceStageProgress
               stageLabels={palace.stage_labels}
               completed={palace.review_stage_completed}
@@ -316,17 +333,17 @@ export function PalaceListCard({
             />
           ) : null}
 
-          {palace.description ? (
+          {expanded && palace.description ? (
             <p className="mt-2 line-clamp-1 text-sm text-muted-foreground">{palace.description.slice(0, 150)}</p>
           ) : null}
 
-          {Array.isArray(palace.mini_palaces) && palace.mini_palaces.length > 0 ? (
+          {expanded && Array.isArray(palace.mini_palaces) && palace.mini_palaces.length > 0 ? (
             <div className="mt-3 border-t border-border/50 pt-3">
               <div className="mb-2 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
                 <Building2 className="h-3.5 w-3.5" />
                 小宫殿
                 {mainReviewOwnedByMini ? (
-                  <Badge className="bg-sky-600 text-[10px] text-white hover:bg-sky-600">
+                  <Badge className="bg-info text-[10px] text-white hover:bg-info">
                     接管正式复习
                   </Badge>
                 ) : null}
@@ -376,7 +393,7 @@ export function PalaceListCard({
                               </Badge>
                             )}
                             {mini.needs_practice ? (
-                              <Badge className="bg-emerald-600 text-[10px] text-white hover:bg-emerald-600">
+                              <Badge className="bg-success text-[10px] text-white hover:bg-success">
                                 需练习
                               </Badge>
                             ) : null}
@@ -406,7 +423,7 @@ export function PalaceListCard({
                             variant={mini.needs_practice ? 'default' : 'ghost'}
                             className={cn(
                               'h-8 w-full text-xs',
-                              mini.needs_practice && 'bg-emerald-600 text-white hover:bg-emerald-700',
+                              mini.needs_practice && 'bg-success text-white hover:bg-success/80',
                             )}
                             onClick={() => onMiniPalacePractice(mini)}
                             disabled={mini.is_empty}
@@ -462,7 +479,7 @@ export function PalaceListCard({
             <Button
               variant={palace.needs_practice ? 'default' : 'ghost'}
               size="sm"
-              className={cn('h-8', palace.needs_practice && 'bg-emerald-600 text-white hover:bg-emerald-700')}
+	              className={cn('h-8', palace.needs_practice && 'bg-success text-white hover:bg-success/80')}
             >
               练习
             </Button>
@@ -472,7 +489,7 @@ export function PalaceListCard({
               <Button
                 variant="outline"
                 size="sm"
-                className="h-8 border-amber-300 bg-amber-50 text-amber-900 hover:bg-amber-100"
+	              className="h-8 border-warning/30 bg-warning/5 text-warning hover:bg-warning/10"
               >
                 专项练习
               </Button>

@@ -19,7 +19,7 @@ import {
   type RevealFlowOptions,
   sanitizeRedNodeIds,
   type ReviewFlowSnapshot,
-} from '@/features/review/model/review-flow-tree'
+} from '@/entities/review/model/review-flow-tree'
 
 interface UseRevealSessionOptions {
   title: string

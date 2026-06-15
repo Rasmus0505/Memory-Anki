@@ -182,7 +182,7 @@ export function PalaceKnowledgeOutlinePanel({
                   onFullscreenChange={setMindMapNativeFullscreen}
                   onUiClearedChange={setMindMapUiCleared}
                   className={cn(
-                    'w-full flex-1 rounded-2xl border border-border/70 bg-white',
+                    'w-full flex-1 rounded-2xl border border-border/70 bg-background',
                     mindMapFullscreen ? 'h-full' : 'h-[52vh]',
                   )}
                 />

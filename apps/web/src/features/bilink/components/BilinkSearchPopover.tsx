@@ -95,11 +95,11 @@ export function BilinkSearchPopover({
     return (
       <div
         key={`${result.type}-${result.palace_id}-${result.node_uid ?? 'palace'}`}
-        className="rounded-xl border border-slate-200 bg-white/90 px-3 py-3"
+        className="rounded-xl border border-border bg-background/90 px-3 py-3"
       >
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
-            <div className="whitespace-pre-wrap break-words text-sm leading-6 text-slate-800">
+            <div className="whitespace-pre-wrap break-words text-sm leading-6 text-foreground">
               {displayText}
             </div>
           </div>
@@ -138,7 +138,7 @@ export function BilinkSearchPopover({
       )}
       style={style}
     >
-      <Card className="w-[min(640px,calc(100vw-2rem))] border-slate-200 bg-white/98 shadow-2xl">
+      <Card className="w-[min(640px,calc(100vw-2rem))] border-border bg-background/98 shadow-2xl">
         <CardHeader className="space-y-2 pb-3">
           <div className="flex items-center justify-between gap-3">
             <CardTitle className="text-sm">
@@ -187,8 +187,8 @@ export function BilinkSearchPopover({
                 >
                   <div className="flex items-start justify-between gap-3 border-b border-border/60 pb-3">
                     <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
-                        <span className="inline-flex rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] text-emerald-700">
+                      <div className="flex items-center gap-2 text-sm font-semibold text-primary">
+                        <span className="inline-flex rounded-full bg-success/5 px-2 py-0.5 text-[11px] text-success">
                           宫殿
                         </span>
                         <span className="truncate">{sanitizeBilinkText(group.palaceTitle) || '未命名宫殿'}</span>

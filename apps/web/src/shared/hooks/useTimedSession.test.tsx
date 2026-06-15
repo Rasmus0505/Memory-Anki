@@ -293,6 +293,65 @@ describe('useTimedSession automation config', () => {
     })
   })
 
+  it('can suspend and resume the active scene without relying on unmount', async () => {
+    appendTimeRecordSpy.mockImplementation(async (record) => record)
+
+    const { result } = renderHook(() =>
+      useTimedSession({
+        kind: 'practice',
+        title: '测试',
+        palaceId: 1,
+        autoPauseMs: 60_000,
+        persistKey: 'practice:scene-toggle',
+      }),
+    )
+
+    act(() => {
+      result.current.start({ source: 'test' })
+      vi.advanceTimersByTime(2_000)
+      result.current.setSceneActive(false, { source: 'route_inactive' })
+    })
+
+    expect(result.current.status).toBe('paused')
+    expect(readPersistedSnapshot('practice:scene-toggle')?.resumeDeadlineAt).toBeTruthy()
+    expect(appendTimeRecordSpy).toHaveBeenCalledTimes(1)
+    expect(appendTimeRecordSpy.mock.calls[0]?.[0]).toMatchObject({
+      completionMethod: 'left_page',
+      effectiveSeconds: 2,
+    })
+
+    act(() => {
+      vi.advanceTimersByTime(10_000)
+      result.current.setSceneActive(true, { source: 'route_active' })
+    })
+
+    expect(result.current.status).toBe('running')
+    expect(result.current.effectiveSeconds).toBe(2)
+  })
+
+  it('does not count time away while a scene is inactive', () => {
+    const { result } = renderHook(() =>
+      useTimedSession({
+        kind: 'practice',
+        title: '测试',
+        palaceId: 1,
+        autoPauseMs: 60_000,
+        persistKey: 'practice:scene-pause',
+      }),
+    )
+
+    act(() => {
+      result.current.start({ source: 'test' })
+      vi.advanceTimersByTime(3_000)
+      result.current.setSceneActive(false, { source: 'route_inactive' })
+      vi.advanceTimersByTime(20_000)
+      result.current.setSceneActive(true, { source: 'route_active' })
+    })
+
+    expect(result.current.status).toBe('running')
+    expect(result.current.effectiveSeconds).toBe(3)
+  })
+
   it('drops expired suspended snapshots instead of resuming them', async () => {
     appendTimeRecordSpy.mockImplementation(async (record) => record)
 

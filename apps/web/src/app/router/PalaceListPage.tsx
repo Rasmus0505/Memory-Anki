@@ -24,6 +24,7 @@ import {
   getPalacesGroupedApi,
 } from '@/shared/api/modules/palaces'
 import { Button } from '@/shared/components/ui/button'
+import { PageIntro } from '@/shared/components/layout/PageIntro'
 import { useLocalStorageState } from '@/shared/lib/localStorage'
 import { usePalaceListCardActions } from '@/app/router/palace-list/usePalaceListCardActions'
 
@@ -104,6 +105,7 @@ export default function PalaceList() {
         viewSettings={viewSettings}
         segmentReviewLoadingId={cardActions.segmentReviewLoadingId}
         markReviewedKey={cardActions.markReviewedKey}
+        defaultExpanded
         onOpenBatchReview={cardActions.onOpenBatchReview}
         onSegmentReviewAction={cardActions.onSegmentReviewAction}
         onOpenStageEdit={cardActions.onOpenStageEdit}
@@ -119,28 +121,27 @@ export default function PalaceList() {
 
   return (
     <div className="space-y-8">
-      <div className="flex items-center justify-between">
-        <div>
-          <div className="mb-3">
+      <PageIntro
+        title="记忆宫殿"
+        description={currentSubjectTitle ? `当前书架：${currentSubjectTitle}` : undefined}
+        actions={
+          <div className="flex items-center gap-3">
             <Link to="/palaces">
               <Button variant="ghost" size="sm" className="-ml-3">
                 <ArrowLeft className="h-4 w-4" />
                 返回学科书架
               </Button>
             </Link>
+            <Link to="/palaces/new">
+              <Button size="sm">
+                <Plus className="h-4 w-4" />
+                新建宫殿
+              </Button>
+            </Link>
           </div>
-          <h1 className="text-2xl font-semibold tracking-tight">记忆宫殿</h1>
-          {currentSubjectTitle ? (
-            <p className="mt-2 text-sm text-muted-foreground">当前书架：{currentSubjectTitle}</p>
-          ) : null}
-        </div>
-        <Link to="/palaces/new">
-          <Button size="sm">
-            <Plus className="h-4 w-4" />
-            新建宫殿
-          </Button>
-        </Link>
-      </div>
+        }
+        compact
+      />
 
       <PalaceListToolbar
         search={search}

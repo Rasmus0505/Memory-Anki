@@ -97,7 +97,7 @@ export function StageSelectDialog({
           </p>
 
           <div className="relative py-6">
-            <div className="absolute left-0 right-0 top-1/2 h-1.5 -translate-y-1/2 rounded-full bg-slate-200" />
+            <div className="absolute left-0 right-0 top-1/2 h-1.5 -translate-y-1/2 rounded-full bg-border" />
             <div className="relative flex items-center justify-between">
               {normalizedStages.map((stage, index) => {
                 const isCompleted = stage.completed && index <= currentReviewNumber
@@ -116,13 +116,13 @@ export function StageSelectDialog({
                       'relative h-5 w-5 rounded-full border-2 transition-all',
                       'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
                       isCompleted
-                        ? 'border-emerald-400 bg-emerald-500'
+                        ? 'border-success bg-success'
                         : isPast
-                          ? 'border-slate-400 bg-slate-300'
-                          : 'border-slate-300 bg-white',
-                      isDefault && !isSelected && 'ring-2 ring-blue-300 ring-offset-1',
-                      isSelected && 'ring-2 ring-amber-400 ring-offset-1 scale-125',
-                      isCurrent && 'border-slate-700',
+                          ? 'border-muted-foreground/40 bg-muted-foreground/20'
+                          : 'border-border bg-background',
+                      isDefault && !isSelected && 'ring-2 ring-info ring-offset-1',
+                      isSelected && 'ring-2 ring-warning ring-offset-1 scale-125',
+                      isCurrent && 'border-muted-foreground',
                     )}
                   >
                     {(isSelected || isDefault) && (

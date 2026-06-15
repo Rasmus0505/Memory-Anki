@@ -11,6 +11,7 @@ import {
 import { getRuntimeInfoApi } from '@/shared/api/modules/runtime'
 import { Button } from '@/shared/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card'
+import { EmptyState } from '@/shared/components/state-placeholders'
 
 export default function ProfileBackupsPage() {
   const [backups, setBackups] = useState<BackupSummary[]>([])
@@ -60,7 +61,7 @@ export default function ProfileBackupsPage() {
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="text-sm text-muted-foreground">
-            主库仍然是 SQLite。这里提供项目内整库快照和事故快照，用于快速回滚数据库与附件。
+            主库仍然是 SQLite。这里提供项目内整库快照和事故快照，用于快速回滚数据库与附件。编辑时会自动生成仅含数据库的轻量备份，完整备份和事故快照仅保留最近若干份。
           </div>
           {runtimeInfo ? (
             <div className="rounded-2xl border border-border/70 bg-background/70 px-4 py-3 text-xs text-muted-foreground">
@@ -85,20 +86,30 @@ export default function ProfileBackupsPage() {
               正在读取备份列表…
             </div>
           ) : backups.length === 0 ? (
-            <div className="py-6 text-sm text-muted-foreground">
-              当前还没有可用备份。
-            </div>
+            <EmptyState
+              variant="list"
+              title="当前还没有可用备份"
+              description="系统会在关键操作后自动创建备份，你也可以手动触发备份。"
+            />
           ) : (
-            backups.map((backup) => (
+            backups.map((backup) => {
+              const isLightweight = backup.full === false || backup.scope === 'rolling'
+              const kindLabel = backup.kind === 'full' ? '整库备份' : '事故快照'
+              const scopeLabel = isLightweight ? '仅数据库' : '完整'
+              return (
               <div
                 key={backup.path}
                 className="rounded-2xl border border-border/70 bg-background/70 px-4 py-4 text-sm"
               >
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
-                    <div className="font-medium">{backup.name}</div>
+                    <div className="font-medium">
+                      {backup.name}
+                      <span className="ml-2 inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+                        {kindLabel} · {scopeLabel}
+                      </span>
+                    </div>
                     <div className="mt-1 text-xs text-muted-foreground">
-                      {backup.kind === 'full' ? '整库备份' : '事故快照'} ·{' '}
                       {backup.created_at}
                     </div>
                     <div className="mt-2 break-all text-xs text-muted-foreground">
@@ -111,7 +122,7 @@ export default function ProfileBackupsPage() {
                     ) : null}
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    {backup.kind === 'full' ? (
+                    {backup.kind === 'full' && !isLightweight ? (
                       <Button
                         variant="outline"
                         size="sm"
@@ -124,7 +135,8 @@ export default function ProfileBackupsPage() {
                   </div>
                 </div>
               </div>
-            ))
+              )
+            })
           )}
         </CardContent>
       </Card>

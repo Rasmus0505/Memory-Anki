@@ -46,7 +46,7 @@ function ToggleRow({
       onClick={onClick}
       className={cn(
         'flex w-full items-start justify-between gap-4 rounded-xl border px-4 py-3 text-left transition-colors',
-        active ? 'border-emerald-300 bg-emerald-50/70' : 'border-border/70 bg-background/80',
+        active ? 'border-success/30 bg-success/5' : 'border-border/70 bg-background/80',
       )}
     >
       <span className="flex min-w-0 gap-3">
@@ -149,7 +149,7 @@ export function VoiceCoachSettingsDialog({
                 className={cn(
                   'flex min-h-16 items-center justify-between rounded-xl border px-3 py-2 text-sm',
                   settings.scenes[key as keyof VoiceCoachSettings['scenes']]
-                    ? 'border-emerald-300 bg-emerald-50/70'
+                    ? 'border-success/30 bg-success/5'
                     : 'border-border/70 bg-background/80',
                 )}
               >

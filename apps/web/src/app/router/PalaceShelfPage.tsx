@@ -1,6 +1,7 @@
 ﻿import { BookOpen, ChevronRight, LayoutGrid, LibraryBig, List, Plus, Rows3, Search, WrapText } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { PageIntro } from '@/shared/components/layout/PageIntro'
 import { PalaceListCard } from '@/app/router/palace-list/PalaceListCard'
 import {
   DEFAULT_PALACE_SHELF_VIEW_SETTINGS,
@@ -19,6 +20,8 @@ import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
 import { Card, CardContent } from '@/shared/components/ui/card'
 import { Input } from '@/shared/components/ui/input'
+import { PageIntro } from '@/shared/components/layout/PageIntro'
+import { EmptyState } from '@/shared/components/state-placeholders'
 import { usePalaceListCardActions } from '@/app/router/palace-list/usePalaceListCardActions'
 import { useLocalStorageState } from '@/shared/lib/localStorage'
 import { cn } from '@/shared/lib/utils'
@@ -47,10 +50,10 @@ function statusBadge(item: PalaceSubjectShelfItem) {
     return <span className="inline-block h-3 w-3 rounded-full bg-destructive" title="当前可立即复习" />
   }
   if ((item.due_later_today_count ?? 0) > 0) {
-    return <span className="inline-block h-3 w-3 rounded-full bg-amber-400" title="今天稍后可复习" />
+    return <span className="inline-block h-3 w-3 rounded-full bg-warning" title="今天稍后可复习" />
   }
   if ((item.needs_practice_count ?? 0) > 0) {
-    return <span className="inline-block h-3 w-3 rounded-full bg-emerald-500" title="需要练习" />
+    return <span className="inline-block h-3 w-3 rounded-full bg-success" title="需要练习" />
   }
   return null
 }
@@ -88,8 +91,8 @@ function getShelfTitleClass(densityMode: PalaceShelfDensityMode) {
 function renderShelfStatusSummary(item: PalaceSubjectShelfItem) {
   const entries = [
     { label: '立即复习', count: item.due_now_count ?? 0, color: 'text-destructive' },
-    { label: '今日稍后', count: item.due_later_today_count ?? 0, color: 'text-amber-500' },
-    { label: '要练习', count: item.needs_practice_count ?? 0, color: 'text-emerald-600' },
+    { label: '今日稍后', count: item.due_later_today_count ?? 0, color: 'text-warning' },
+    { label: '要练习', count: item.needs_practice_count ?? 0, color: 'text-success' },
   ]
   const hasAny = entries.some((entry) => entry.count > 0)
 
@@ -195,6 +198,7 @@ export default function PalaceShelfPage() {
         viewSettings={expandedViewSettings}
         segmentReviewLoadingId={cardActions.segmentReviewLoadingId}
         markReviewedKey={cardActions.markReviewedKey}
+        defaultExpanded
         onOpenBatchReview={cardActions.onOpenBatchReview}
         onSegmentReviewAction={cardActions.onSegmentReviewAction}
         onOpenStageEdit={cardActions.onOpenStageEdit}
@@ -210,20 +214,18 @@ export default function PalaceShelfPage() {
 
   return (
     <div className="space-y-8">
-      <div className="flex items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">学科书架</h1>
-          <p className="mt-2 text-sm text-muted-foreground">
-            一个学科就是一本书，点击进入后继续查看你熟悉的章节和宫殿列表。
-          </p>
-        </div>
-        <Link to="/palaces/new">
-          <Button size="sm">
-            <Plus className="h-4 w-4" />
-            新建宫殿
-          </Button>
-        </Link>
-      </div>
+      <PageIntro
+        title="学科书架"
+        description="一个学科就是一本书，点击进入后继续查看你熟悉的章节和宫殿列表。"
+        actions={
+          <Link to="/palaces/new">
+            <Button size="sm">
+              <Plus className="h-4 w-4" />
+              新建宫殿
+            </Button>
+          </Link>
+        }
+      />
 
       <Card>
         <CardContent className="p-4">
@@ -381,7 +383,7 @@ export default function PalaceShelfPage() {
                 }
                 className="text-left"
               >
-                <Card className="group relative h-full overflow-hidden border-border/70 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.96))] transition-all hover:-translate-y-1 hover:shadow-xl">
+                <Card className="group relative h-full overflow-hidden border-border/70 bg-card/90 transition-all hover:-translate-y-1 hover:shadow-xl">
                   <div
                     className="absolute inset-y-0 left-0 w-5 rounded-l-xl opacity-90"
                     style={{ backgroundColor: color }}
@@ -433,15 +435,20 @@ export default function PalaceShelfPage() {
         </div>
       ) : (
         <Card>
-          <CardContent className="flex flex-col items-center p-12 text-center">
-            <LibraryBig className="mb-4 h-12 w-12 text-muted-foreground/30" />
-            <p className="text-sm text-muted-foreground">还没有可以展示的学科书架。</p>
-            <Link to="/palaces/new" className="mt-2">
-              <Button variant="outline" size="sm">
-                <Plus className="h-4 w-4" />
-                创建第一个宫殿
-              </Button>
-            </Link>
+          <CardContent>
+            <EmptyState
+              variant="create"
+              title="还没有学科书架"
+              description="创建你的第一个记忆宫殿，它会自动归入学科书架。"
+              action={
+                <Link to="/palaces/new">
+                  <Button variant="outline" size="sm">
+                    <Plus className="mr-2 h-4 w-4" />
+                    创建第一个宫殿
+                  </Button>
+                </Link>
+              }
+            />
           </CardContent>
         </Card>
       )}

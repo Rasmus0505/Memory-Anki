@@ -308,7 +308,7 @@ export function PalaceImportSourceConfigPanel({
                         'rounded-2xl border px-3 py-3 text-left transition-colors',
                         !isStructuredPdfMode
                           ? 'border-foreground/30 bg-foreground/[0.04]'
-                          : 'border-border/70 bg-white',
+                          : 'border-border/70 bg-background',
                       )}
                     >
                       <div className="text-sm font-medium">按范围直接生成</div>
@@ -323,7 +323,7 @@ export function PalaceImportSourceConfigPanel({
                         'rounded-2xl border px-3 py-3 text-left transition-colors',
                         isStructuredPdfMode
                           ? 'border-foreground/30 bg-foreground/[0.04]'
-                          : 'border-border/70 bg-white',
+                          : 'border-border/70 bg-background',
                       )}
                     >
                       <div className="text-sm font-medium">结构页补全模式</div>
@@ -390,7 +390,7 @@ export function PalaceImportSourceConfigPanel({
               ) : null}
 
               {importWarnings.length > 0 ? (
-                <div className="rounded-2xl border border-amber-300/60 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                <div className="rounded-2xl border border-warning/60 bg-warning/5 px-3 py-2 text-sm text-warning">
                   <div className="mb-1 font-medium">导入提示</div>
                   <div className="space-y-1">
                     {importWarnings.map((warning, index) => (
@@ -502,7 +502,7 @@ export function PalaceImportSourceConfigPanel({
         ) : null}
 
         {reusedExistingResult && currentJobUsage && currentJobUsage.total === 0 ? (
-          <div className="flex items-center gap-2 text-xs text-emerald-700">
+          <div className="flex items-center gap-2 text-xs text-success">
             <Check className="h-3.5 w-3.5" />
             当前结果来自历史草稿复用，未重复触发识别。
           </div>

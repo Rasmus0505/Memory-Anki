@@ -6,10 +6,6 @@ import type {
 
 const HIGHLIGHT_STYLE = 'color:#dc2626;font-weight:700;'
 
-function cloneValue<T>(value: T): T {
-  return JSON.parse(JSON.stringify(value)) as T
-}
-
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
@@ -132,14 +128,14 @@ function parseEditorDoc(raw: MindMapEditorState['editor_doc']): MindMapDoc | nul
     }
   }
   if (typeof raw === 'object') {
-    return cloneValue(raw as MindMapDoc)
+    return structuredClone(raw as MindMapDoc)
   }
   return null
 }
 
 function highlightDocNode(node: MindMapDocNode | undefined, query: string): MindMapDocNode | undefined {
   if (!node || typeof node !== 'object') return node
-  const nextNode = cloneValue(node)
+  const nextNode = structuredClone(node)
   const data = nextNode.data
 
   if (data && typeof data === 'object' && typeof data.text === 'string' && data.text) {

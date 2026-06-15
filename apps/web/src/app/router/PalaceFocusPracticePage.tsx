@@ -2,6 +2,7 @@
 import { Link, useParams } from 'react-router-dom'
 import { ArrowLeft, Target } from 'lucide-react'
 import { PageIntro } from '@/shared/components/layout/PageIntro'
+import { LoadingState } from '@/shared/components/state-placeholders'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
 import type { MindMapEditorState, ReviewPalaceSummary } from '@/shared/api/contracts'
@@ -14,7 +15,7 @@ import {
   buildReviewTree,
   flattenNodes,
   parseEditorDoc,
-} from '@/features/review/model/review-flow-tree'
+} from '@/entities/review/model/review-flow-tree'
 import {
   clearFocusPracticeSessionProgressApi,
   getFocusPracticeSessionProgressApi,
@@ -118,7 +119,7 @@ export default function PalaceFocusPracticePage() {
   }, [editorState, initialSnapshot, palace])
 
   if (!palaceId || loading) {
-    return <div className="flex min-h-[60vh] items-center justify-center text-sm text-muted-foreground">正在加载专项练习内容...</div>
+    return <LoadingState text="正在加载专项练习内容…" />
   }
 
   if (!palace || !editorState || error) {

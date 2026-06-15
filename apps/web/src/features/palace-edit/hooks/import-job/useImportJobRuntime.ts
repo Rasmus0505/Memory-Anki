@@ -20,6 +20,12 @@ import {
   runImportJobApi,
 } from '@/shared/api/modules/palaces'
 import type { ImportJobStateController } from '@/features/palace-edit/hooks/import-job/useImportJobState'
+import {
+  completeTask,
+  failTask,
+  registerTask,
+  updateTask,
+} from '@/shared/background-tasks/backgroundTaskRegistry'
 
 interface UseImportJobRuntimeOptions {
   entityKey: string | null
@@ -68,6 +74,13 @@ export function useImportJobRuntime({
   const startPollingJob = (jobId: string) => {
     const token = pollTokenRef.current + 1
     pollTokenRef.current = token
+    // 登记到全局后台任务栏：切走编辑器后用户也能在顶部看到导入进度。
+    registerTask({
+      id: `palace-import-${jobId}`,
+      section: 'palaces',
+      title: '记忆宫殿 · 识别导入中',
+      detail: '正在识别思维导图……',
+    })
     void (async () => {
       while (pollTokenRef.current === token) {
         try {
@@ -76,8 +89,18 @@ export function useImportJobRuntime({
             reused: state.reusedExistingResultRef.current,
             preservePreviewUrl: true,
           })
+          // 同步进度到全局任务栏。
+          const nodeCount =
+            (job.result?.source_tree?.children || []).length +
+            (job.result?.extracted_text?.length || 0)
+          updateTask(`palace-import-${jobId}`, {
+            detail: job.stage
+              ? `识别中 · ${job.stage}${nodeCount ? `（已识别 ${nodeCount} 项）` : ''}`
+              : undefined,
+          })
           if (job.status !== 'running' && !job.pause_requested) {
             if (job.status === 'completed') {
+              completeTask(`palace-import-${jobId}`, { detail: '识别完成' })
               logAiCall({
                 feature: describeImportFeature(job.source_kind, job.mode),
                 stage: 'completed',
@@ -98,8 +121,8 @@ export function useImportJobRuntime({
                     : '',
                 responseSummary:
                   job.mode === 'mindmap'
-                    ? `璇嗗埆瀹屾垚锛涜妭鐐?${(job.result?.source_tree?.children || []).length}`
-                    : `璇嗗埆瀹屾垚锛涙枃瀛?${(job.result?.extracted_text || '').length} 瀛梎`,
+                    ? `识别完成；节点 ${(job.result?.source_tree?.children || []).length}`
+                    : `识别完成；文本 ${(job.result?.extracted_text || '').length} 字`,
                 jobId: job.id,
                 requestId: job.error?.request_id,
                 meta: {
@@ -110,10 +133,14 @@ export function useImportJobRuntime({
                 },
               })
             } else if (job.status === 'failed') {
+              failTask(
+                `palace-import-${jobId}`,
+                job.error?.message || '识别失败',
+              )
               logAiCall({
                 feature: describeImportFeature(job.source_kind, job.mode),
                 stage: 'failure',
-                errorMessage: job.error?.message || '璇嗗埆澶辫触锛岃绋嶅悗閲嶈瘯銆?',
+                errorMessage: job.error?.message || '识别失败，请稍后重试。',
                 jobId: job.id,
                 requestId: job.error?.request_id,
                 meta: {
@@ -131,18 +158,22 @@ export function useImportJobRuntime({
           await wait(1200)
         } catch (nextError) {
           if (pollTokenRef.current !== token) return
+          failTask(
+            `palace-import-${jobId}`,
+            nextError instanceof Error ? nextError.message : '轮询导入任务失败。',
+          )
           state.setImportLoading(false)
           const requestId = getRequestId(nextError)
           state.setImportError(
             formatMindMapImportError(
-              nextError instanceof Error ? nextError.message : '杞瀵煎叆浠诲姟澶辫触銆?',
+              nextError instanceof Error ? nextError.message : '轮询导入任务失败。',
             ),
           )
           logAiCall({
-            feature: '瀵煎叆浠诲姟杞',
+            feature: '导入任务轮询',
             stage: 'failure',
             requestSummary: `jobId=${jobId}`,
-            errorMessage: nextError instanceof Error ? nextError.message : '杞瀵煎叆浠诲姟澶辫触銆?',
+            errorMessage: nextError instanceof Error ? nextError.message : '轮询导入任务失败。',
             jobId,
             requestId,
             meta: {
@@ -194,7 +225,7 @@ export function useImportJobRuntime({
     } catch (nextError) {
       state.setImportError(
         formatMindMapImportError(
-          nextError instanceof Error ? nextError.message : '鍔犺浇瀵煎叆浠诲姟澶辫触銆?',
+          nextError instanceof Error ? nextError.message : '加载导入任务失败。',
         ),
       )
     }
@@ -208,7 +239,7 @@ export function useImportJobRuntime({
       state.setImportLoading(false)
       state.setImportError(
         formatMindMapImportError(
-          nextError instanceof Error ? nextError.message : '缁х画璇嗗埆澶辫触銆?',
+          nextError instanceof Error ? nextError.message : '继续识别失败。',
         ),
       )
     }
@@ -227,7 +258,7 @@ export function useImportJobRuntime({
     } catch (nextError) {
       state.setImportError(
         formatMindMapImportError(
-          nextError instanceof Error ? nextError.message : '鏆傚仠璇嗗埆澶辫触銆?',
+          nextError instanceof Error ? nextError.message : '暂停识别失败。',
         ),
       )
     }
@@ -246,7 +277,7 @@ export function useImportJobRuntime({
     } catch (nextError) {
       state.setImportError(
         formatMindMapImportError(
-          nextError instanceof Error ? nextError.message : '鍔犺浇瀵煎叆鍘嗗彶澶辫触銆?',
+          nextError instanceof Error ? nextError.message : '加载导入历史失败。',
         ),
       )
     }
@@ -254,7 +285,7 @@ export function useImportJobRuntime({
 
   const handleImportDeleteHistory = async (id: string) => {
     const confirmed = window.confirm(
-      '鍒犻櫎杩欐潯瀵煎叆鍘嗗彶鍚庯紝灏嗕笉鑳藉啀浠庡巻鍙蹭腑鎭㈠杩欎唤鑽夌銆傜‘瀹氬垹闄ゅ悧锛?',
+      '删除这条导入历史后，将不能从历史中恢复这份草案。确定删除吗？',
     )
     if (!confirmed) return
     try {
@@ -267,7 +298,7 @@ export function useImportJobRuntime({
     } catch (nextError) {
       state.setImportError(
         formatMindMapImportError(
-          nextError instanceof Error ? nextError.message : '鍒犻櫎瀵煎叆鍘嗗彶澶辫触銆?',
+          nextError instanceof Error ? nextError.message : '删除导入历史失败。',
         ),
       )
     }

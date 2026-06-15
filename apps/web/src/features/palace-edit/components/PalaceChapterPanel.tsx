@@ -106,11 +106,11 @@ export function PalaceChapterPanel({
           className={cn(
             'flex items-start gap-3 rounded-2xl border px-3 py-3 text-sm transition-colors',
             hasCompletedChildren
-              ? 'border-emerald-500 bg-emerald-100/90 text-emerald-950 shadow-sm'
+              ? 'border-success bg-success/10 text-success shadow-sm'
               : isExplicit
-                ? 'border-emerald-300 bg-emerald-50/90 text-emerald-950'
+                ? 'border-success/30 bg-success/5 text-success'
                 : 'border-border/70 bg-background/70',
-            isPrimary && 'ring-1 ring-amber-300',
+            isPrimary && 'ring-1 ring-warning/30',
             selectionPending && 'opacity-75',
           )}
           style={{ marginLeft: `${option.depth * 18}px` }}

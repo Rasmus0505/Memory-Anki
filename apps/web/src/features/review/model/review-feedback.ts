@@ -2,7 +2,7 @@ import type { RevealState } from '@/entities/session/model'
 import type {
   RevealFlowMode,
   ReviewMindMapNode,
-} from '@/features/review/model/review-flow-tree'
+} from '@/entities/review/model/review-flow-tree'
 
 export type ReviewFeedbackEvent =
   | 'category_expand'

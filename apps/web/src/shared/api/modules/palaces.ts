@@ -1,4 +1,5 @@
 ﻿import { API_BASE, fetchWithMutationQueue, request } from "@/shared/api/http"
+import { parseSseEventBlock } from '@/shared/api/sse'
 import { logAppError } from '@/shared/logs/model/appLogs'
 import type {
   ImageTextPreviewResponse,
@@ -106,27 +107,6 @@ async function readImportJson<T>(response: Response): Promise<T> {
     })
     throw buildRequestError(message, requestId)
   }
-}
-
-function parseSseEventBlock(block: string): { event: string; data: string } | null {
-  const lines = block
-    .split(/\r?\n/)
-    .map((line) => line.trimEnd())
-    .filter(Boolean)
-  if (lines.length === 0) return null
-  let event = "message"
-  const dataLines: string[] = []
-  for (const line of lines) {
-    if (line.startsWith("event:")) {
-      event = line.slice(6).trim()
-      continue
-    }
-    if (line.startsWith("data:")) {
-      dataLines.push(line.slice(5).trim())
-    }
-  }
-  if (dataLines.length === 0) return null
-  return { event, data: dataLines.join("\n") }
 }
 
 async function parseImportStreamResponse<T extends { ok: boolean; error?: string }>(

@@ -1,4 +1,5 @@
 import { request } from '@/shared/api/http'
+import type { ResolvedAiRuntimeMeta } from '@/shared/api/contracts'
 
 export type VoiceCoachEvent =
   | 'session_start'
@@ -20,6 +21,7 @@ export interface VoiceCoachSynthesizeResponse {
   audio_format: string
   sample_rate: number
   request_id: string
+  resolved_ai?: ResolvedAiRuntimeMeta | null
 }
 
 export function synthesizeVoiceCoachApi(

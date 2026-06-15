@@ -69,6 +69,7 @@ export function PalaceMindMapImportDrawer(props: PalaceMindMapImportDrawerProps)
     pdfOcrTextChars,
     currentJobId,
     currentJobUsage,
+    currentJobResolvedAi,
     reusedExistingResult,
     className,
     overlayClassName,
@@ -133,6 +134,7 @@ export function PalaceMindMapImportDrawer(props: PalaceMindMapImportDrawerProps)
       : mode === 'mindmap'
         ? '图片转脑图'
         : '图片转文字'
+  const resolvedModelBadgeLabel = currentJobResolvedAi?.model_label || '等待实际调用模型'
 
   const historyViewModel: PalaceImportHistoryViewModel = {
     history: props.history,
@@ -295,8 +297,8 @@ export function PalaceMindMapImportDrawer(props: PalaceMindMapImportDrawerProps)
         data-testid="mindmap-import-dialog-content"
         className={cn(
           layoutMode === 'sidebar'
-            ? 'ml-auto mr-0 h-[calc(100vh-32px)] max-w-[620px] rounded-none rounded-l-3xl border-l bg-card/98 p-0 shadow-[0_24px_80px_rgba(15,23,42,0.28)]'
-            : 'h-[min(92vh,980px)] max-w-[min(92vw,1440px)] rounded-[28px] border bg-card/98 p-0 shadow-[0_24px_80px_rgba(15,23,42,0.28)]',
+            ? 'ml-auto mr-0 h-[calc(100vh-32px)] max-w-[620px] rounded-none rounded-l-3xl border-l bg-card/98 p-0 shadow-floating'
+            : 'h-[min(92vh,980px)] max-w-[min(92vw,1440px)] rounded-[28px] border bg-card/98 p-0 shadow-floating',
           'overflow-hidden overscroll-contain',
           className,
         )}
@@ -313,7 +315,7 @@ export function PalaceMindMapImportDrawer(props: PalaceMindMapImportDrawerProps)
                 ) : (
                   <>
                     <DialogTitle>{sourceTitle}</DialogTitle>
-                    <Badge variant="secondary">Qwen3-VL-Flash</Badge>
+                    <Badge variant="secondary">{resolvedModelBadgeLabel}</Badge>
                   </>
                 )}
               </div>

@@ -6,6 +6,15 @@ import * as knowledgeApi from '@/shared/api/modules/knowledge'
 import * as palaceApi from '@/shared/api/modules/palaces'
 import * as profileApi from '@/shared/api/modules/profile'
 
+export const promptForAiOptionsMock = vi.fn()
+
+vi.mock('@/features/ai-config/useAiRunConfigDialog', () => ({
+  useAiRunConfigDialog: () => ({
+    promptForAiOptions: (...args: unknown[]) => promptForAiOptionsMock(...args),
+    aiRunConfigDialog: null,
+  }),
+}))
+
 export function buildEditorState(): MindMapEditorState {
   return {
     editor_doc: {
@@ -162,7 +171,7 @@ export function buildTextJob(
 }
 
 export function cloneJob<T>(value: T): T {
-  return JSON.parse(JSON.stringify(value)) as T
+  return structuredClone(value)
 }
 
 export function Harness({
@@ -297,6 +306,8 @@ export interface UseMindMapImportTestContext {
 export function setupUseMindMapImportTestContext(): UseMindMapImportTestContext {
   vi.restoreAllMocks()
   localStorage.clear()
+  promptForAiOptionsMock.mockReset()
+  promptForAiOptionsMock.mockResolvedValue({})
 
   const context = {} as UseMindMapImportTestContext
   context.jobsById = {}

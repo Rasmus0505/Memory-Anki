@@ -257,6 +257,7 @@ describe('PalaceQuizPage', () => {
       start: vi.fn(),
       pause: vi.fn(),
       resume: vi.fn(),
+      setSceneActive: vi.fn(),
       leaveScene: vi.fn().mockResolvedValue(null),
       registerActivity: vi.fn(),
       logEvent: vi.fn(),

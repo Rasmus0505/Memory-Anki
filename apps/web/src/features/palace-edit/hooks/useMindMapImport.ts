@@ -225,6 +225,7 @@ export function useMindMapImport({
     currentJobStatus: jobs.currentJobStatus,
     currentJobStage: jobs.currentJobStage,
     currentJobUsage: jobs.currentJobUsage,
+    currentJobResolvedAi: jobs.currentJobResolvedAi,
     currentJobPauseRequested: jobs.currentJobPauseRequested,
     canResumeJob: jobs.canResumeJob,
     canPauseJob: jobs.canPauseJob,

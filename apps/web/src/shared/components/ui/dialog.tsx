@@ -1,63 +1,82 @@
-import { forwardRef, type HTMLAttributes, type PropsWithChildren, useEffect } from 'react'
-import { createPortal } from 'react-dom'
+import { forwardRef, type HTMLAttributes, type PropsWithChildren } from 'react'
+import * as DialogPrimitive from '@radix-ui/react-dialog'
 import { X } from 'lucide-react'
+import { cn } from '@/shared/lib/utils'
 
-interface DialogProps extends PropsWithChildren {
+/**
+ * 基于 Radix UI 的 Dialog 实现。
+ *
+ * 保持与旧自研版本完全一致的简化 API（Dialog / DialogContent / DialogHeader /
+ * DialogTitle / DialogDescription / DialogFooter / DialogClose），调用方无需改动，
+ * 同时获得开箱即用的无障碍能力：role=dialog、aria-modal、focus trap、焦点恢复、滚动锁定。
+ *
+ * `modal` prop 控制模态行为（与旧版一致，默认 true）。非模态（modal={false}）用于
+ * 导入抽屉等需要背景交互的场景：不渲染遮罩、不锁定背景。
+ */
+function Dialog({
+  open,
+  onOpenChange,
+  children,
+  modal = true,
+  className: _className,
+}: PropsWithChildren<{
   open: boolean
   onOpenChange: (open: boolean) => void
   modal?: boolean
   className?: string
-}
-
-export function Dialog({ open, onOpenChange, children, modal = true, className = '' }: DialogProps) {
-  useEffect(() => {
-    if (!open) return
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onOpenChange(false)
-    }
-
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [onOpenChange, open])
-
-  if (!open) return null
-
-  return createPortal(
-    <div
-      className={`fixed inset-0 z-[140] flex items-center justify-center p-4 ${
-        modal ? '' : 'pointer-events-none'
-      } ${className}`}
-    >
-      {modal ? (
-        <button
-          type="button"
-          className="absolute inset-0 bg-black/45"
-          aria-label="关闭弹窗"
-          onClick={() => onOpenChange(false)}
-        />
-      ) : null}
+}>) {
+  return (
+    <DialogPrimitive.Root open={open} onOpenChange={onOpenChange} modal={modal}>
       {children}
-    </div>,
-    document.body,
+    </DialogPrimitive.Root>
   )
 }
 
-export const DialogContent = forwardRef<HTMLDivElement, PropsWithChildren<HTMLAttributes<HTMLDivElement>>>(
-  function DialogContent({ children, className = '', ...props }, ref) {
-    return (
-      <div
+const DialogContent = forwardRef<
+  HTMLDivElement,
+  PropsWithChildren<HTMLAttributes<HTMLDivElement>> & { showCloseButton?: boolean }
+>(function DialogContent({ children, className, showCloseButton = false, ...props }, ref) {
+  return (
+    <DialogPrimitive.Portal>
+      <DialogPrimitive.Overlay
+        className={cn(
+          'fixed inset-0 z-[140] bg-black/45',
+          'data-[state=open]:animate-in data-[state=open]:fade-in-0',
+          'data-[state=closed]:animate-out data-[state=closed]:fade-out-0',
+        )}
+      />
+      <DialogPrimitive.Content
         ref={ref}
         {...props}
-        className={`pointer-events-auto relative z-10 flex w-full max-w-3xl flex-col rounded-2xl border bg-background shadow-2xl ${className}`}
+        className={cn(
+          // 居中容器：用 fixed + flex 实现旧版的 items-center justify-center 行为
+          'fixed inset-0 z-[141] flex items-center justify-center p-4',
+          className,
+        )}
       >
-        {children}
-      </div>
-    )
-  },
-)
+        <div
+          className={cn(
+            'pointer-events-auto relative flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border bg-background shadow-2xl',
+            'data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95',
+            'data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95',
+          )}
+        >
+          {children}
+          {showCloseButton ? (
+            <DialogPrimitive.Close
+              className="absolute right-4 top-4 rounded-md p-2 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+              aria-label="关闭"
+            >
+              <X className="h-4 w-4" />
+            </DialogPrimitive.Close>
+          ) : null}
+        </div>
+      </DialogPrimitive.Content>
+    </DialogPrimitive.Portal>
+  )
+})
 
-export function DialogHeader({ children }: PropsWithChildren) {
+function DialogHeader({ children }: PropsWithChildren) {
   return (
     <div className="flex items-start justify-between gap-4 border-b px-6 py-4">
       <div className="space-y-1">{children}</div>
@@ -65,43 +84,63 @@ export function DialogHeader({ children }: PropsWithChildren) {
   )
 }
 
-export function DialogTitle({ children, className = '' }: PropsWithChildren<{ className?: string }>) {
-  return <h2 className={`text-lg font-semibold ${className}`}>{children}</h2>
+function DialogTitle({ children, className }: PropsWithChildren<{ className?: string }>) {
+  return (
+    <DialogPrimitive.Title asChild>
+      <h2 className={cn('text-lg font-semibold', className)}>{children}</h2>
+    </DialogPrimitive.Title>
+  )
 }
 
-export function DialogDescription({
+function DialogDescription({
   children,
-  className = '',
-}: PropsWithChildren<{ className?: string }>) {
-  return <p className={`text-sm text-muted-foreground ${className}`}>{children}</p>
-}
-
-export function DialogFooter({
-  children,
-  className = '',
+  className,
 }: PropsWithChildren<{ className?: string }>) {
   return (
-    <div className={`flex items-center justify-end gap-3 border-t px-6 py-4 ${className}`}>
+    <DialogPrimitive.Description asChild>
+      <p className={cn('text-sm text-muted-foreground', className)}>{children}</p>
+    </DialogPrimitive.Description>
+  )
+}
+
+function DialogFooter({
+  children,
+  className,
+}: PropsWithChildren<{ className?: string }>) {
+  return (
+    <div className={cn('flex items-center justify-end gap-3 border-t px-6 py-4', className)}>
       {children}
     </div>
   )
 }
 
-export function DialogClose({
+function DialogClose({
   onClick,
-  className = '',
+  className,
 }: {
   onClick?: () => void
   className?: string
 }) {
   return (
-    <button
-      type="button"
+    <DialogPrimitive.Close
       onClick={onClick}
-      className={`rounded-md p-2 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground ${className}`}
+      className={cn(
+        'rounded-md p-2 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground',
+        className,
+      )}
       aria-label="关闭"
     >
       <X className="h-4 w-4" />
-    </button>
+    </DialogPrimitive.Close>
   )
+}
+
+export {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+  DialogClose,
 }

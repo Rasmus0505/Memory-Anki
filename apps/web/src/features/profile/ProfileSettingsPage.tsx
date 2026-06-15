@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react'
+import { LoadingState } from '@/shared/components/state-placeholders'
 import {
   Download,
   FileJson,
@@ -88,9 +89,7 @@ export default function ProfileSettingsPage() {
 
   if (!config) {
     return (
-      <div className="flex items-center justify-center py-32 text-sm text-muted-foreground">
-        Loading...
-      </div>
+      <LoadingState text="正在加载设置…" />
     )
   }
 
@@ -100,7 +99,7 @@ export default function ProfileSettingsPage() {
       description="这里继续管理复习排程、导入导出，以及新的 AI 分卡接入配置。"
     >
       {clientPreferencesReady ? (
-        <div className="rounded-2xl border border-emerald-200 bg-emerald-50/70 px-4 py-3 text-sm text-emerald-800">
+        <div className="rounded-2xl border border-success/30 bg-success/5 px-4 py-3 text-sm text-success">
           快捷键、英语听力设置、复习反馈、计时自动化和部分视图偏好现在已经由后端托管保存。
         </div>
       ) : null}
@@ -323,7 +322,7 @@ export default function ProfileSettingsPage() {
                   </label>
                 ))}
               </div>
-              <div className="rounded-lg border border-amber-200 bg-amber-50 p-4">
+              <div className="rounded-lg border border-warning/30 bg-warning/5 p-4">
                 <label className="flex items-center gap-2">
                   <input
                     type="checkbox"
@@ -334,7 +333,7 @@ export default function ProfileSettingsPage() {
                     保存时立即应用到所有未完成计划
                   </span>
                 </label>
-                <p className="mt-2 text-xs text-amber-700">
+                <p className="mt-2 text-xs text-warning">
                   勾选后会删除当前待复习 schedule，再按新算法重建。
                 </p>
               </div>

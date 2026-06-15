@@ -1,3 +1,5 @@
+import type { ResolvedAiRuntimeMeta } from './profile'
+
 export type PalaceQuizQuestionType =
   | 'multiple_choice'
   | 'true_false'
@@ -115,6 +117,7 @@ export interface PalaceQuizGenerationPreview {
   questions: PalaceQuizQuestionDraft[]
   source_meta: PalaceQuizSourceMeta
   ai_call_log_id: string | null
+  resolved_ai?: ResolvedAiRuntimeMeta | null
   warnings?: string[]
   generation_stats?: {
     returned_count: number
@@ -145,6 +148,7 @@ export interface PalaceShortAnswerFeedback {
   question_id: number
   feedback_text: string
   ai_call_log_id: string | null
+  resolved_ai?: ResolvedAiRuntimeMeta | null
 }
 
 export interface PalaceQuizMiniPalaceClassificationResult {
@@ -157,4 +161,5 @@ export interface PalaceQuizMiniPalaceClassificationResult {
   unassigned_count: number
   copied_question_count: number
   ai_call_log_id: string | null
+  resolved_ai?: ResolvedAiRuntimeMeta | null
 }

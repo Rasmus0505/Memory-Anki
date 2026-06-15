@@ -20,6 +20,12 @@
   --color-accent-foreground: hsl(240 5.9% 10%);
   --color-destructive: hsl(0 84.2% 60.2%);
   --color-destructive-foreground: hsl(0 0% 98%);
+  --color-success: hsl(142 71% 45%);
+  --color-success-foreground: hsl(0 0% 100%);
+  --color-warning: hsl(38 92% 50%);
+  --color-warning-foreground: hsl(0 0% 100%);
+  --color-info: hsl(217 91% 60%);
+  --color-info-foreground: hsl(0 0% 100%);
   --color-border: hsl(240 5.9% 90%);
   --color-input: hsl(240 5.9% 90%);
   --color-ring: hsl(240 5.9% 10%);
@@ -29,6 +35,11 @@
   --radius-md: calc(var(--color-radius) - 2px);
   --radius-lg: var(--color-radius);
   --radius-xl: calc(var(--color-radius) + 4px);
+
+  --shadow-soft: 0 1px 2px rgba(15, 23, 42, 0.04);
+  --shadow-card: 0 4px 16px rgba(15, 23, 42, 0.06);
+  --shadow-popover: 0 12px 40px rgba(15, 23, 42, 0.10);
+  --shadow-floating: 0 24px 80px rgba(15, 23, 42, 0.12);
 }
 
 * { border-color: var(--color-border); }
@@ -379,7 +390,7 @@ select:focus-visible,
 .memory-anki-feedback-layer {
   position: fixed;
   inset: 0;
-  z-index: 120;
+  z-index: 150;
   pointer-events: none;
   overflow: hidden;
 }
@@ -640,3 +651,316 @@ select:focus-visible,
     stroke-dashoffset: 0;
   }
 }
+
+/* === COMBO MILESTONE BURST (情感化视觉：连击里程碑庆祝) === */
+
+/* CSS 伪全屏：替代浏览器原生 Fullscreen API，保留所有 React overlay 可见性 */
+.memory-anki-mindmap-native-fullscreen {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 95 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  border-radius: 0 !important;
+  border: none !important;
+  background: #f8fafc !important;
+}
+
+.memory-anki-combo-burst-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 160;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.memory-anki-combo-burst-rings {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.memory-anki-combo-burst-ring {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 80px;
+  height: 80px;
+  margin-left: -40px;
+  margin-top: -40px;
+  border-radius: 9999px;
+  border: 3px solid;
+  opacity: 0;
+  animation: memory-anki-combo-ring-expand 900ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes memory-anki-combo-ring-expand {
+  0% {
+    transform: scale(0.3);
+    opacity: 0;
+    border-width: 4px;
+  }
+  25% {
+    opacity: 0.7;
+  }
+  100% {
+    transform: scale(4.2);
+    opacity: 0;
+    border-width: 1px;
+  }
+}
+
+.memory-anki-combo-burst-center {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  text-align: center;
+}
+
+.memory-anki-combo-burst-particles {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 0;
+  height: 0;
+}
+
+.memory-anki-combo-burst-particle {
+  position: absolute;
+  left: 0;
+  top: 0;
+  border-radius: 9999px;
+  background: var(--combo-particle-color, #f59e0b);
+  box-shadow:
+    0 0 12px var(--combo-particle-color, #f59e0b),
+    0 0 24px var(--combo-particle-color, #f59e0b);
+  transform: translate(-50%, -50%);
+  opacity: 0;
+  animation: memory-anki-combo-particle-fly 800ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes memory-anki-combo-particle-fly {
+  0% {
+    transform: translate(-50%, -50%) scale(0.4);
+    opacity: 0;
+  }
+  20% {
+    transform: translate(-50%, -50%) scale(1.3);
+    opacity: 1;
+  }
+  100% {
+    transform:
+      translate(
+        calc(-50% + var(--combo-particle-tx, 100px)),
+        calc(-50% + var(--combo-particle-ty, 100px))
+      )
+      rotate(var(--combo-particle-rotate, 180deg))
+      scale(0.3);
+    opacity: 0;
+  }
+}
+
+.memory-anki-combo-burst-number {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  animation: memory-anki-combo-burst-pop 700ms cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+  filter: drop-shadow(0 0 20px var(--combo-burst-glow, rgba(245, 158, 11, 0.45)));
+}
+
+.memory-anki-combo-burst-number-label {
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  opacity: 0.85;
+}
+
+.memory-anki-combo-burst-number-value {
+  font-size: 68px;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
+
+@keyframes memory-anki-combo-burst-pop {
+  0% {
+    transform: scale(0) rotate(-8deg);
+    opacity: 0;
+  }
+  50% {
+    transform: scale(1.18) rotate(2deg);
+    opacity: 1;
+  }
+  70% {
+    transform: scale(0.96) rotate(-1deg);
+  }
+  100% {
+    transform: scale(1) rotate(0deg);
+    opacity: 1;
+  }
+}
+
+.memory-anki-combo-burst-copy {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  opacity: 0;
+  animation: memory-anki-combo-copy-in 500ms ease-out 300ms forwards;
+}
+
+@keyframes memory-anki-combo-copy-in {
+  0% {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  100% {
+    opacity: 0.9;
+    transform: translateY(0);
+  }
+}
+
+/* === COMPLETION CELEBRATION (情感化视觉：复习完成庆祝) === */
+
+.memory-anki-completion-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 160;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.memory-anki-completion-confetti-layer {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+
+.memory-anki-completion-confetti {
+  position: absolute;
+  top: -20px;
+  width: 10px;
+  height: 16px;
+  border-radius: 2px;
+  animation: memory-anki-confetti-fall 1800ms linear forwards;
+}
+
+@keyframes memory-anki-confetti-fall {
+  0% {
+    transform: translateY(-20px) rotate(0deg) translateX(0);
+    opacity: 1;
+  }
+  100% {
+    transform:
+      translateY(105vh) rotate(var(--confetti-rotate, 720deg))
+      translateX(var(--confetti-drift, 40px));
+    opacity: 0.6;
+  }
+}
+
+.memory-anki-completion-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 32px 40px;
+  border-radius: 28px;
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(12px);
+  box-shadow:
+    0 0 0 1px rgba(245, 158, 11, 0.12),
+    0 24px 60px rgba(15, 23, 42, 0.14);
+  animation: memory-anki-completion-card-in 600ms cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+  opacity: 0;
+}
+
+@keyframes memory-anki-completion-card-in {
+  0% {
+    transform: scale(0.7) translateY(20px);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1) translateY(0);
+    opacity: 1;
+  }
+}
+
+.memory-anki-completion-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 64px;
+  height: 64px;
+  border-radius: 9999px;
+  background: linear-gradient(135deg, #fbbf24, #f59e0b);
+  box-shadow: 0 8px 24px rgba(245, 158, 11, 0.35);
+  animation: memory-anki-completion-icon-bounce 800ms ease-out 200ms forwards;
+}
+
+@keyframes memory-anki-completion-icon-bounce {
+  0% {
+    transform: scale(0);
+  }
+  60% {
+    transform: scale(1.2);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.memory-anki-completion-title {
+  font-size: 22px;
+  font-weight: 700;
+  color: #0f172a;
+  letter-spacing: 0.02em;
+}
+
+.memory-anki-completion-stats {
+  display: flex;
+  gap: 28px;
+}
+
+.memory-anki-completion-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.memory-anki-completion-stat-value {
+  font-size: 28px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.memory-anki-completion-stat-label {
+  font-size: 12px;
+  color: #64748b;
+  font-weight: 500;
+}
+
+/* 尊重 prefers-reduced-motion */
+@media (prefers-reduced-motion: reduce) {
+  .memory-anki-combo-burst-particle,
+  .memory-anki-combo-burst-ring,
+  .memory-anki-combo-burst-number,
+  .memory-anki-combo-burst-copy,
+  .memory-anki-completion-confetti,
+  .memory-anki-completion-card,
+  .memory-anki-completion-icon {
+    animation-duration: 1ms !important;
+    animation-delay: 0ms !important;
+  }
+}
+

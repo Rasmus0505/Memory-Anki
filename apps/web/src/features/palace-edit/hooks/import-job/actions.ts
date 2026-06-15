@@ -38,7 +38,7 @@ export function buildImportJobActions({
   const handleImportImage = async (file: File) => {
     if (!options.entityKey) {
       state.setImportError(
-        '褰撳墠椤甸潰杩樻病鏈夌ǔ瀹氱殑瀹炰綋鏍囪瘑锛屾殏鏃舵棤娉曞垱寤哄彲鎭㈠浠诲姟銆?',
+        '当前页面还没有稳固的实体标识，暂时无法创建可恢复任务。',
       )
       return
     }
@@ -46,7 +46,7 @@ export function buildImportJobActions({
     options.setBatchStatus('idle')
     options.setLastBatchMeta(null)
     const aiOptions = await options.promptForAiOptions({
-      scenarioKey: 'vision',
+      scenarioKey: options.mode === 'mindmap' ? 'vision_image_mindmap' : 'vision_image_text',
       entrypointKey: options.mode === 'mindmap' ? 'import-image-mindmap' : 'import-image-text',
       title: options.mode === 'mindmap' ? '图片转脑图配置' : '图片转文字配置',
     })
@@ -56,7 +56,7 @@ export function buildImportJobActions({
     const previewUrl = await fileToDataUrl(file)
     state.setImportImagePreviewUrl(previewUrl)
     const feature = describeImportFeature('image-single', options.mode)
-    const requestSummary = `鏂囦欢锛?{file.name}锛涙ā寮忥細${options.mode === 'mindmap' ? '杞剳鍥?' : '杞枃瀛?'}`
+    const requestSummary = `文件：${file.name}；模式：${options.mode === 'mindmap' ? '转脑图' : '转文字'}`
 
     try {
       logAiCall({
@@ -81,8 +81,8 @@ export function buildImportJobActions({
         requestSummary,
         responseSummary:
           job.status === 'completed'
-            ? `宸插畬鎴愶紱${job.mode === 'mindmap' ? '鑺傜偣宸茬敓鎴?' : `鏂囧瓧 ${job.result?.extracted_text?.length || 0} 瀛梎`}`
-            : '浠诲姟宸插垱寤猴紝绛夊緟鎵ц',
+            ? `已完成；${job.mode === 'mindmap' ? '节点已生成' : `文字 ${job.result?.extracted_text?.length || 0} 字`}`
+            : '任务已创建，等待执行',
         jobId: job.id,
         meta: {
           entityKey: options.entityKey,
@@ -110,7 +110,7 @@ export function buildImportJobActions({
       })
       state.setImportError(
         formatMindMapImportError(
-          nextError instanceof Error ? nextError.message : '缃戠粶寮傚父锛岃妫€鏌ョ綉缁滃悗閲嶈瘯銆?',
+          nextError instanceof Error ? nextError.message : '网络异常，请检查网络后重试。',
         ),
       )
     }
@@ -119,12 +119,12 @@ export function buildImportJobActions({
   const handleBatchImportStart = async (structureImageId: string | null) => {
     if (!options.entityKey) {
       state.setImportError(
-        '褰撳墠椤甸潰杩樻病鏈夌ǔ瀹氱殑瀹炰綋鏍囪瘑锛屾殏鏃舵棤娉曞垱寤哄彲鎭㈠浠诲姟銆?',
+        '当前页面还没有稳固的实体标识，暂时无法创建可恢复任务。',
       )
       return
     }
     if (options.batchImagesRef.current.length === 0) {
-      state.setImportError('璇峰厛涓婁紶鑷冲皯涓€寮犲浘鐗囥€?')
+      state.setImportError('请先上传至少一张图片。')
       options.setBatchStatus('error')
       return
     }
@@ -137,7 +137,7 @@ export function buildImportJobActions({
     state.setImportError('')
     state.setImportReusedExistingResult(false)
     const aiOptions = await options.promptForAiOptions({
-      scenarioKey: 'vision',
+      scenarioKey: 'vision_batch_mindmap',
       entrypointKey: 'import-image-batch-mindmap',
       title: '多图转脑图配置',
     })
@@ -175,7 +175,7 @@ export function buildImportJobActions({
         stage: job.status === 'completed' ? 'success' : 'queued',
         requestSummary,
         responseSummary:
-          job.status === 'completed' ? '宸插畬鎴愶紱鑺傜偣宸茬敓鎴?' : '浠诲姟宸插垱寤猴紝绛夊緟鎵ц',
+          job.status === 'completed' ? '已完成；节点已生成' : '任务已创建，等待执行',
         jobId: job.id,
         meta: {
           entityKey: options.entityKey,
@@ -204,7 +204,7 @@ export function buildImportJobActions({
       })
       state.setImportError(
         formatMindMapImportError(
-          nextError instanceof Error ? nextError.message : '缃戠粶寮傚父锛岃妫€鏌ョ綉缁滃悗閲嶈瘯銆?',
+          nextError instanceof Error ? nextError.message : '网络异常，请检查网络后重试。',
         ),
       )
     }
@@ -213,22 +213,22 @@ export function buildImportJobActions({
   const handlePdfImportStart = async () => {
     if (!options.entityKey) {
       state.setImportError(
-        '褰撳墠椤甸潰杩樻病鏈夌ǔ瀹氱殑瀹炰綋鏍囪瘑锛屾殏鏃舵棤娉曞垱寤哄彲鎭㈠浠诲姟銆?',
+        '当前页面还没有稳固的实体标识，暂时无法创建可恢复任务。',
       )
       return
     }
     if (!options.selectedSubjectDocumentId) {
-      state.setImportError('璇峰厛閫夋嫨涓€浠藉绉?PDF 璧勬枡銆?')
+      state.setImportError('请先选择一份学社 PDF 资料。')
       return
     }
     if (options.selectedPdfPages.length === 0) {
-      state.setImportError('璇峰厛閫夋嫨鑷冲皯涓€椤?PDF銆?')
+      state.setImportError('请先选择至少一页 PDF。')
       return
     }
 
     resetSharedRequestState()
     const aiOptions = await options.promptForAiOptions({
-      scenarioKey: 'vision',
+      scenarioKey: options.mode === 'mindmap' ? 'vision_pdf_mindmap' : 'vision_pdf_text',
       entrypointKey: options.mode === 'mindmap' ? 'import-pdf-mindmap' : 'import-pdf-text',
       title: options.mode === 'mindmap' ? 'PDF 转脑图配置' : 'PDF 转文字配置',
     })
@@ -273,7 +273,7 @@ export function buildImportJobActions({
         pdf_mode: options.pdfImportMode,
         structure_page: options.pdfImportMode === 'structured_merge' ? options.structurePage : null,
         range_prompt: options.rangePrompt.trim(),
-        fallback_title: selectedDocument?.original_name || '鏈懡鍚嶅娈?',
+        fallback_title: selectedDocument?.original_name || '未命名草案',
         import_options: options.pdfImportOptions,
         ai_options: aiOptions,
       })
@@ -283,7 +283,7 @@ export function buildImportJobActions({
         stage: job.status === 'completed' ? 'success' : 'queued',
         requestSummary,
         responseSummary:
-          job.status === 'completed' ? '宸插畬鎴愶紱鑺傜偣宸茬敓鎴?' : '浠诲姟宸插垱寤猴紝绛夊緟鎵ц',
+          job.status === 'completed' ? '已完成；节点已生成' : '任务已创建，等待执行',
         jobId: job.id,
         meta: {
           entityKey: options.entityKey,
@@ -316,7 +316,7 @@ export function buildImportJobActions({
       })
       state.setImportError(
         formatMindMapImportError(
-          nextError instanceof Error ? nextError.message : '缃戠粶寮傚父锛岃妫€鏌ョ綉缁滃悗閲嶈瘯銆?',
+          nextError instanceof Error ? nextError.message : '网络异常，请检查网络后重试。',
         ),
       )
     }

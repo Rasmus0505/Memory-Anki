@@ -81,7 +81,7 @@ export function PalaceMiniReviewModeDialog({
                     className={cn(
                       'rounded-2xl border px-4 py-4 text-left transition-colors',
                       active
-                        ? 'border-sky-400 bg-sky-50 shadow-sm'
+                        ? 'border-info bg-info/5 shadow-sm'
                         : 'border-border/70 bg-background/80 hover:bg-muted/40',
                     )}
                     onClick={() => setMode(option.value)}

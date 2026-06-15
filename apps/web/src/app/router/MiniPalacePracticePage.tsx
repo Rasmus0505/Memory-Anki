@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom'
 import { ArrowLeft } from 'lucide-react'
 import type { MindMapEditorState, MiniPalaceSummary } from '@/shared/api/contracts'
 import { PageIntro } from '@/shared/components/layout/PageIntro'
+import { LoadingState } from '@/shared/components/state-placeholders'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
 import {
@@ -84,11 +85,7 @@ export default function MiniPalacePracticePage() {
   }, [miniPalaceId])
 
   if (!miniPalaceId || loading) {
-    return (
-      <div className="flex min-h-[60vh] items-center justify-center text-sm text-muted-foreground">
-        正在加载小宫殿练习内容...
-      </div>
-    )
+    return <LoadingState text="正在加载小宫殿练习内容…" />
   }
 
   if (!miniPalace || !editorState || error) {

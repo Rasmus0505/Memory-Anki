@@ -40,6 +40,8 @@ describe('MindMapFrame host runtime behavior', () => {
     const hostSource = readFileSync(resolve(process.cwd(), 'public/mind-map-host.html'), 'utf8')
 
     expect(hostSource).toContain('function requestHostVisualRefresh()')
+    expect(hostSource).toContain("typeof renderer?.reRender === 'function'")
+    expect(hostSource).not.toContain('() => renderer?.reRender?.()')
     expect(hostSource).toMatch(
       /function performFullEditorSync[\s\S]*requestHostVisualRefresh\(\)[\s\S]*markLastAppliedEditorFingerprint\(nextFingerprint, 'full'\)/,
     )

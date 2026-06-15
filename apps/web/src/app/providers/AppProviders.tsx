@@ -1,7 +1,7 @@
 import { type PropsWithChildren, useEffect } from 'react'
 import { BrowserRouter } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { Toaster } from 'sonner'
+import { Toaster, toast } from 'sonner'
 import { migrateLegacyTimeRecordsToBackend } from '@/entities/session/model'
 import { GlobalFeedbackProvider } from '@/shared/feedback/GlobalFeedbackProvider'
 import { cleanupExpiredAppLogs, logAppError } from '@/shared/logs/model/appLogs'
@@ -17,7 +17,12 @@ export function AppProviders({ children }: PropsWithChildren) {
   useMutationQueueAutoSync()
 
   useEffect(() => {
-    void migrateLegacyTimeRecordsToBackend().catch(() => undefined)
+    void migrateLegacyTimeRecordsToBackend().catch((error) => {
+      // 历史学习时长迁移失败时通知用户，避免静默丢失数据。
+      toast.error('学习时长迁移失败', {
+        description: error instanceof Error ? error.message : '请稍后刷新页面重试。',
+      })
+    })
     cleanupExpiredAppLogs()
 
     const handleWindowError = (event: ErrorEvent) => {

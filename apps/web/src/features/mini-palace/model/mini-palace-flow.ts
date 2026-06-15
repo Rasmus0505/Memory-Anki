@@ -7,7 +7,7 @@ import {
   sanitizeCheckpointNodeIds,
   buildVisibleEditorState,
   type ReviewMindMapNode,
-} from '@/features/review/model/review-flow-tree'
+} from '@/entities/review/model/review-flow-tree'
 import type { MindMapDoc } from '@/shared/api/contracts'
 
 export function sanitizeMiniPalaceCheckpointIds(

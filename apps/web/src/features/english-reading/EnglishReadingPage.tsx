@@ -25,6 +25,7 @@ import type {
 } from "react";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
+import { LoadingState } from "@/shared/components/state-placeholders";
 import { useAiRunConfigDialog } from "@/features/ai-config/useAiRunConfigDialog";
 import type {
   AiRuntimeOptions,
@@ -75,6 +76,14 @@ import { Label } from "@/shared/components/ui/label";
 import { Textarea } from "@/shared/components/ui/textarea";
 import { cn } from "@/shared/lib/utils";
 import { useTimedSession } from "@/shared/hooks/useTimedSession";
+import { useRouteResidency } from "@/app/router/RouteResidency";
+import {
+  completeTask,
+  failTask,
+  registerTask,
+  updateTask,
+  dismissTask,
+} from "@/shared/background-tasks/backgroundTaskRegistry";
 import {
   completeEnglishReadingMaterialApi,
   createEnglishReadingMaterialApi,
@@ -136,6 +145,7 @@ type SentenceTranslationPanelState = {
   cacheKey: string;
   originalText: string;
   translatedText: string;
+  resolvedAi?: ReadingSentenceTranslationResponse["resolved_ai"];
 };
 
 type SentenceSelectionPayload = {
@@ -537,7 +547,7 @@ function ReadingLookupText({
             role="button"
             tabIndex={0}
             data-reading-word="true"
-            className="cursor-pointer rounded-md px-0.5 text-inherit transition-colors hover:bg-sky-100 hover:text-sky-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300"
+            className="cursor-pointer rounded-md px-0.5 text-inherit transition-colors hover:bg-info/10 hover:text-info focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-info/30"
             onClick={(event) => onLookupWord(part.value, event)}
           >
             {part.value}
@@ -566,12 +576,12 @@ function AnnotationMark({
 }) {
   const palette =
     annotation.kind === "green"
-      ? "text-emerald-700 bg-emerald-100/80 ring-emerald-200"
+      ? "text-success bg-success/10 ring-success/20"
       : annotation.kind === "yellow"
-        ? "text-amber-800 bg-amber-100/90 ring-amber-200"
+        ? "text-warning bg-warning/10 ring-warning/20"
         : annotation.kind === "red"
-          ? "text-rose-700 bg-rose-100/90 ring-rose-200"
-          : "text-slate-900 bg-slate-100/65 ring-slate-200";
+          ? "text-destructive bg-destructive/10 ring-destructive/20"
+          : "text-primary bg-primary/5 ring-primary/20";
   const resolvedLemma = annotation.resolvedLemma.trim();
   const showResolvedLemma =
     resolvedLemma.length > 0 &&
@@ -588,8 +598,8 @@ function AnnotationMark({
       onMouseEnter={() => onHover(annotation.id)}
     >
       <ReadingLookupText text={text} onLookupWord={onLookupWord} />
-      <span className="invisible absolute bottom-[calc(100%+10px)] left-1/2 z-20 w-72 -translate-x-1/2 rounded-2xl border border-slate-200 bg-white/98 p-3 text-left text-xs text-slate-700 opacity-0 shadow-[0_18px_50px_rgba(15,23,42,0.18)] transition-all group-hover:visible group-hover:opacity-100">
-        <span className="block font-medium text-slate-900">
+        <span className="invisible absolute bottom-[calc(100%+10px)] left-1/2 z-20 w-72 -translate-x-1/2 rounded-2xl border border-border bg-background/98 p-3 text-left text-xs text-muted-foreground opacity-0 shadow-popover transition-all group-hover:visible group-hover:opacity-100">
+        <span className="block font-medium text-primary">
           {annotation.cefr}:{annotation.originalText || annotation.displayText}
         </span>
         <span className="mt-1 block">
@@ -657,22 +667,22 @@ function SentenceLine({
 
   return (
     <span className="mb-3 inline-block align-top">
-      <span className="rounded-xl bg-rose-50/90 px-2 py-1 text-left leading-9 text-rose-950">
+      <span className="rounded-xl bg-destructive/5 px-2 py-1 text-left leading-9 text-destructive">
         {content}
       </span>
       <button
         type="button"
-        className="ml-2 inline-flex items-center rounded-full border border-rose-200 bg-white/90 px-3 py-1 text-xs font-medium text-rose-700 transition hover:bg-rose-100"
+        className="ml-2 inline-flex items-center rounded-full border border-destructive/20 bg-white/90 px-3 py-1 text-xs font-medium text-destructive transition hover:bg-destructive/5"
         onClick={onToggleExpanded}
       >
         {expanded ? "收起原句" : "展开原句"}
       </button>
       {expanded ? (
-        <span className="mt-2 block rounded-2xl border border-rose-200/80 bg-white/95 p-4 text-sm leading-7 text-slate-700 shadow-sm">
-          <span className="block text-[11px] font-semibold uppercase tracking-[0.18em] text-rose-500">
+        <span className="mt-2 block rounded-2xl border border-destructive/20 bg-white/95 p-4 text-sm leading-7 text-muted-foreground shadow-sm">
+          <span className="block text-[11px] font-semibold uppercase tracking-[0.18em] text-destructive/70">
             原句骨架
           </span>
-          <span className="mt-2 block text-[15px] text-slate-900">
+          <span className="mt-2 block text-[15px] text-primary">
             {sentenceAnnotation.originalText}
           </span>
           {sentenceAnnotation.skeletonHints.length > 0 ? (
@@ -680,7 +690,7 @@ function SentenceLine({
               {sentenceAnnotation.skeletonHints.map((hint) => (
                 <span
                   key={sentence.id + "-hint-" + hint}
-                  className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs text-slate-600"
+                  className="rounded-full border border-border bg-muted px-3 py-1 text-xs text-muted-foreground"
                 >
                   {hint}
                 </span>
@@ -694,6 +704,7 @@ function SentenceLine({
 }
 
 export default function EnglishReadingPage() {
+  const { isActive } = useRouteResidency();
   const [searchParams, setSearchParams] = useSearchParams();
   const currentMaterialId = Number(searchParams.get("material") || "");
   const resolvedMaterialId =
@@ -792,6 +803,10 @@ export default function EnglishReadingPage() {
     movedTooFar: boolean;
     timerId: number | null;
   } | null>(null);
+  // 记录当前 version 所属的 material id，用于区分"切换 material"与"同 material
+  // 下重新生成（initial/regenerate 导致 version.id 变化）"两种场景。前者需要清空
+  // 阅读交互状态（hover/展开/词典等），后者不应清空，避免切走再回来时状态被重置。
+  const versionResetMaterialIdRef = useRef<number | null>(null);
 
   const timer = useTimedSession({
     kind: "practice",
@@ -887,6 +902,12 @@ export default function EnglishReadingPage() {
   }, [loadMaterialAndVersion, loadWorkspace, resolvedMaterialId]);
 
   useEffect(() => {
+    timer.setSceneActive?.(isActive, {
+      source: isActive ? "route_active" : "route_inactive",
+    });
+  }, [isActive, timer]);
+
+  useEffect(() => {
     timerRef.current = timer;
   }, [timer]);
 
@@ -927,6 +948,15 @@ export default function EnglishReadingPage() {
 
   useEffect(() => {
     if (!version?.id) return;
+    // 仅在 material 真正切换时清空阅读交互状态。
+    // 同 material 下重新生成（initial/regenerate）不应清空，避免用户切走再回来
+    // 时丢失 hover/展开/词典等已展开的交互。
+    const currentMaterialId = material?.id ?? null;
+    if (versionResetMaterialIdRef.current === currentMaterialId) {
+      timer.reset();
+      return;
+    }
+    versionResetMaterialIdRef.current = currentMaterialId;
     timer.reset();
     setHoveredAnnotationIds(new Set());
     setExpandedSentenceIds(new Set());
@@ -937,10 +967,27 @@ export default function EnglishReadingPage() {
     setSentenceTranslationPanel(null);
     dictionaryEntriesCacheRef.current.clear();
     sentenceTranslationCacheRef.current.clear();
-  }, [timer.reset, version?.id]);
+  }, [timer.reset, version?.id, material?.id]);
+
+  useEffect(() => {
+    if (isActive) return;
+    if (canUseSpeechSynthesis()) {
+      window.speechSynthesis.cancel();
+    }
+    dictionaryAudioRef.current?.pause();
+    dictionaryDragRef.current = null;
+    sentenceTranslationDragRef.current = null;
+    setDictionaryPanel((current) =>
+      current ? { ...current, dragging: false } : current,
+    );
+    setSentenceTranslationPanel((current) =>
+      current ? { ...current, dragging: false } : current,
+    );
+  }, [isActive]);
 
   useEffect(() => {
     if (!version?.id) return;
+    if (!isActive) return;
     if (timer.status !== "idle") return;
     if (
       !shouldAutoStartOnPageEnter(
@@ -950,9 +997,10 @@ export default function EnglishReadingPage() {
     )
       return;
     timer.start({ source: "english_reading_open" });
-  }, [timer.start, timer.status, version?.id]);
+  }, [isActive, timer.start, timer.status, version?.id]);
 
   useEffect(() => {
+    if (!isActive) return;
     if (!dictionaryPanel) return;
     const handlePointerDown = (event: MouseEvent) => {
       const target = event.target;
@@ -986,9 +1034,10 @@ export default function EnglishReadingPage() {
       document.removeEventListener("mousedown", handlePointerDown);
       window.removeEventListener("resize", handleViewportChange);
     };
-  }, [dictionaryPanel]);
+  }, [dictionaryPanel, isActive]);
 
   useEffect(() => {
+    if (!isActive) return;
     if (!sentenceTranslationTrigger) return;
     const handlePointerDown = (event: MouseEvent) => {
       const target = event.target;
@@ -1013,9 +1062,10 @@ export default function EnglishReadingPage() {
       document.removeEventListener("mousedown", handlePointerDown);
       window.removeEventListener("resize", handleViewportChange);
     };
-  }, [sentenceTranslationTrigger]);
+  }, [isActive, sentenceTranslationTrigger]);
 
   useEffect(() => {
+    if (!isActive) return;
     if (!sentenceTranslationPanel) return;
     const handlePointerDown = (event: MouseEvent) => {
       const target = event.target;
@@ -1055,9 +1105,10 @@ export default function EnglishReadingPage() {
       document.removeEventListener("mousedown", handlePointerDown);
       window.removeEventListener("resize", handleViewportChange);
     };
-  }, [sentenceTranslationPanel]);
+  }, [isActive, sentenceTranslationPanel]);
 
   useEffect(() => {
+    if (!isActive) return;
     if (!dictionaryPanel?.dragging) return;
     const updateDraggingPosition = (clientX: number, clientY: number) => {
       const dragState = dictionaryDragRef.current;
@@ -1132,9 +1183,10 @@ export default function EnglishReadingPage() {
       document.body.style.userSelect = "";
       dictionaryDragRef.current = null;
     };
-  }, [dictionaryPanel?.dragging]);
+  }, [dictionaryPanel?.dragging, isActive]);
 
   useEffect(() => {
+    if (!isActive) return;
     if (!sentenceTranslationPanel?.dragging) return;
     const updateDraggingPosition = (clientX: number, clientY: number) => {
       const dragState = sentenceTranslationDragRef.current;
@@ -1210,7 +1262,7 @@ export default function EnglishReadingPage() {
       document.body.style.userSelect = "";
       sentenceTranslationDragRef.current = null;
     };
-  }, [sentenceTranslationPanel?.dragging, sentenceTranslationPanel?.width]);
+  }, [isActive, sentenceTranslationPanel?.dragging, sentenceTranslationPanel?.width]);
 
   const handleSelectLevel = useCallback(async (level: CefrLevel) => {
     setProfileSaving(level);
@@ -1321,6 +1373,14 @@ export default function EnglishReadingPage() {
   const runGeneration = useCallback(
     async (request: GenerationRequest) => {
       setGenerating(true);
+      const taskId = `english-reading-gen-${Date.now()}`;
+      registerTask({
+        id: taskId,
+        section: "englishReading",
+        title: "英语阅读 · 生成中",
+        detail: "正在准备生成阅读稿……",
+        navigateTarget: "/english-reading",
+      });
       setGenerationStatus({
         stage: "queued",
         step: 1,
@@ -1329,14 +1389,16 @@ export default function EnglishReadingPage() {
       });
       try {
         const aiOptions = await promptForAiOptions({
-          scenarioKey: "english_reading",
+          scenarioKey: "reading_sentence_rewrite",
           entrypointKey:
             request.kind === "initial"
               ? "english-reading-generate-initial"
               : "english-reading-generate-regenerate",
           title: request.kind === "initial" ? "英语阅读生成配置" : "英语阅读重新生成配置",
+          syncScenarioKeys: ["reading_lexical_resolution"],
         });
         if (!aiOptions) {
+          dismissTask(taskId);
           setGenerating(false);
           return;
         }
@@ -1379,11 +1441,20 @@ export default function EnglishReadingPage() {
         const nextVersion = await generateEnglishReadingVersionStreamApi(
           activeMaterial.id,
           generationPayload,
-          {
-            onStatus: (event) => {
-              setGenerationStatus(event);
+            {
+              onStatus: (event) => {
+                setGenerationStatus(event);
+                const total = event.totalSteps || 8;
+                const progress = Math.min(
+                  99,
+                  Math.round(((event.step || 0) / total) * 100),
+                );
+                updateTask(taskId, {
+                  progress,
+                  detail: event.message || event.stage,
+                });
+              },
             },
-          },
         );
         const nextMaterial = await getEnglishReadingMaterialApi(
           activeMaterial.id,
@@ -1396,7 +1467,16 @@ export default function EnglishReadingPage() {
           setRegenerateDialogOpen(false);
         }
         toast.success(getGenerationSuccessMessage(request));
+        completeTask(taskId, { detail: "阅读稿已生成" });
       } catch (error) {
+        failTask(
+          taskId,
+          error instanceof Error ? error.message : "生成阅读材料失败。",
+        );
+        // 用户在配置弹窗取消时不应该留下失败记录。
+        if (error === undefined || error === null) {
+          dismissTask(taskId);
+        }
         toast.error(
           error instanceof Error ? error.message : "生成阅读材料失败。",
         );
@@ -1753,6 +1833,7 @@ export default function EnglishReadingPage() {
           cacheKey: payload.cacheKey,
           originalText: cachedTranslation.originalText,
           translatedText: cachedTranslation.translatedText,
+          resolvedAi: cachedTranslation.resolved_ai,
         });
         return;
       }
@@ -1768,11 +1849,12 @@ export default function EnglishReadingPage() {
         cacheKey: payload.cacheKey,
         originalText: payload.originalText,
         translatedText: "",
+        resolvedAi: null,
       });
 
       try {
         const aiOptions = await promptForAiOptions({
-          scenarioKey: "translation",
+          scenarioKey: "translation_reading_sentence",
           entrypointKey: "english-reading-sentence-translation",
           title: "英语句子翻译配置",
         });
@@ -1811,6 +1893,7 @@ export default function EnglishReadingPage() {
             cacheKey: payload.cacheKey,
             originalText: response.originalText,
             translatedText: response.translatedText,
+            resolvedAi: response.resolved_ai,
           };
         });
       } catch (error) {
@@ -1837,6 +1920,7 @@ export default function EnglishReadingPage() {
             cacheKey: payload.cacheKey,
             originalText: payload.originalText,
             translatedText: "",
+            resolvedAi: null,
           };
         });
       }
@@ -2007,6 +2091,7 @@ export default function EnglishReadingPage() {
   );
 
   useEffect(() => {
+    if (!isActive) return;
     const clearSentenceSelectionGesture = () => {
       const gesture = sentenceSelectionGestureRef.current;
       if (!gesture) return;
@@ -2095,7 +2180,7 @@ export default function EnglishReadingPage() {
       document.removeEventListener("pointerup", finishSentenceSelection);
       document.removeEventListener("pointercancel", cancelSentenceSelection);
     };
-  }, []);
+  }, [isActive]);
 
   const handleCompleteReading = useCallback(
     async (feedback: ReadingSessionResult["feedback"]) => {
@@ -2137,11 +2222,7 @@ export default function EnglishReadingPage() {
   );
 
   if (pageLoading || !profile) {
-    return (
-      <div className="flex min-h-[55vh] items-center justify-center text-sm text-muted-foreground">
-        正在加载英语阅读...
-      </div>
-    );
+    return <LoadingState text="正在加载英语阅读…" />;
   }
 
   const visibleStage = generationStatus?.message || "正在准备生成阅读稿……";
@@ -2183,8 +2264,8 @@ export default function EnglishReadingPage() {
                     className={cn(
                       "rounded-2xl border px-4 py-3 text-left transition-all",
                       active
-                        ? "border-slate-900 bg-slate-900 text-white shadow-[0_18px_40px_rgba(15,23,42,0.16)]"
-                        : "border-border/70 bg-background/75 hover:border-slate-300 hover:bg-white",
+                        ? "border-primary bg-primary text-primary-foreground shadow-card"
+                        : "border-border/70 bg-background/75 hover:border-border hover:bg-background",
                     )}
                     onClick={() => void handleSelectLevel(level)}
                     disabled={profileSaving !== null}
@@ -2278,8 +2359,8 @@ export default function EnglishReadingPage() {
                 className={cn(
                   "rounded-[28px] border border-dashed px-5 py-4 text-left transition-all",
                   dropzoneActive
-                    ? "border-sky-400 bg-sky-50 shadow-[0_20px_45px_rgba(59,130,246,0.14)]"
-                    : "border-border/70 bg-background/65 hover:border-slate-300 hover:bg-white/90",
+                    ? "border-info/50 bg-info/5 shadow-popover"
+                    : "border-border/70 bg-background/65 hover:border-border hover:bg-background",
                   generating
                     ? "cursor-not-allowed opacity-70"
                     : "cursor-pointer",
@@ -2304,14 +2385,14 @@ export default function EnglishReadingPage() {
                     className={cn(
                       "flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border transition-colors",
                       dropzoneActive
-                        ? "border-sky-300 bg-sky-100 text-sky-700"
-                        : "border-border/70 bg-card text-slate-600",
+                        ? "border-info/30 bg-info/10 text-info"
+                        : "border-border/70 bg-card text-muted-foreground",
                     )}
                   >
                     <FileText className="h-5 w-5" />
                   </div>
                   <div className="min-w-0">
-                    <div className="text-sm font-medium text-slate-900">
+                    <div className="text-sm font-medium text-primary">
                       拖动 `txt / md / pdf` 到这里，或点击选择文件
                     </div>
                     <div className="mt-1 text-xs text-muted-foreground">
@@ -2320,7 +2401,7 @@ export default function EnglishReadingPage() {
                         : "你也可以完全不上传文件，直接粘贴英文正文开始生成。"}
                     </div>
                     {selectedFile ? (
-                      <div className="mt-3 inline-flex max-w-full items-center rounded-full border border-border/70 bg-card px-3 py-1 text-sm text-slate-700">
+                      <div className="mt-3 inline-flex max-w-full items-center rounded-full border border-border/70 bg-card px-3 py-1 text-sm text-muted-foreground">
                         <span className="truncate">
                           已选择文件：{selectedFile.name}
                         </span>
@@ -2343,12 +2424,12 @@ export default function EnglishReadingPage() {
               </Button>
             </div>
             {generating ? (
-              <div className="rounded-3xl border border-sky-200 bg-sky-50/80 px-4 py-4">
-                <div className="flex items-center gap-2 text-sm font-medium text-sky-900">
+              <div className="rounded-3xl border border-info/20 bg-info/5 px-4 py-4">
+                <div className="flex items-center gap-2 text-sm font-medium text-info">
                   <LoaderCircle className="h-4 w-4 animate-spin" />
                   {visibleStage}
                 </div>
-                <div className="mt-3 h-2 overflow-hidden rounded-full bg-sky-100">
+                <div className="mt-3 h-2 overflow-hidden rounded-full bg-info/10">
                   <div
                     className="h-full rounded-full bg-[linear-gradient(90deg,#38bdf8,#2563eb)] transition-all"
                     style={{
@@ -2393,7 +2474,7 @@ export default function EnglishReadingPage() {
                         className: cn(
                           "rounded-2xl border transition-all",
                           active
-                            ? "border-slate-900 bg-slate-900 text-white shadow-[0_18px_40px_rgba(15,23,42,0.12)]"
+                            ? "border-primary bg-primary text-primary-foreground shadow-soft"
                             : "border-border/70 bg-background/70",
                         ),
                       },
@@ -2403,8 +2484,8 @@ export default function EnglishReadingPage() {
                           className={cn(
                             "w-full rounded-t-2xl px-4 py-4 text-left transition-all",
                             active
-                              ? "hover:bg-slate-800"
-                              : "hover:border-slate-300 hover:bg-white",
+                              ? "hover:bg-primary-foreground/10"
+                              : "hover:border-border hover:bg-background",
                           )}
                           onClick={() => void handleOpenRecentMaterial(item)}
                           disabled={busy}
@@ -2434,7 +2515,7 @@ export default function EnglishReadingPage() {
                                   className={cn(
                                     "text-xs",
                                     active
-                                      ? "text-slate-200"
+                                      ? "text-primary-foreground"
                                       : "text-muted-foreground",
                                   )}
                                 >
@@ -2448,7 +2529,7 @@ export default function EnglishReadingPage() {
                                 className={cn(
                                   "mt-2 text-xs",
                                   active
-                                    ? "text-slate-300"
+                                    ? "text-primary-foreground/70"
                                     : "text-muted-foreground",
                                 )}
                               >
@@ -2464,7 +2545,7 @@ export default function EnglishReadingPage() {
                               className={cn(
                                 "inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[11px]",
                                 active
-                                  ? "border-slate-600 text-slate-200"
+                                  ? "border-primary-foreground/20 text-primary-foreground"
                                   : "border-border/70 text-muted-foreground",
                               )}
                             >
@@ -2491,7 +2572,7 @@ export default function EnglishReadingPage() {
                             size="sm"
                             className={cn(
                               active
-                                ? "text-slate-200 hover:bg-slate-800 hover:text-white"
+                                ? "text-primary-foreground hover:bg-primary-foreground/10 hover:text-primary-foreground"
                                 : "",
                             )}
                             onClick={() =>
@@ -2512,7 +2593,7 @@ export default function EnglishReadingPage() {
                             size="sm"
                             className={cn(
                               active
-                                ? "text-slate-200 hover:bg-slate-800 hover:text-white"
+                                ? "text-primary-foreground hover:bg-primary-foreground/10 hover:text-primary-foreground"
                                 : "",
                             )}
                             onClick={() =>
@@ -2590,7 +2671,7 @@ export default function EnglishReadingPage() {
       {material && version ? (
         <Card className="overflow-hidden border-border/70 bg-card/95">
           <div ref={readingPanelRef} />
-          <CardHeader className="space-y-4 border-b border-border/70 bg-[linear-gradient(135deg,rgba(255,255,255,0.98),rgba(241,245,249,0.94))]">
+          <CardHeader className="space-y-4 border-b border-border/70 bg-card/90">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="space-y-2">
                 <div className="flex items-center gap-2">
@@ -2599,6 +2680,16 @@ export default function EnglishReadingPage() {
                   </Badge>
                   <Badge variant="secondary">目标 {version.targetCefr}</Badge>
                   <Badge variant="outline">{material.wordCount} 词</Badge>
+                  {version.summary._resolvedAi?.reading_sentence_rewrite?.model_label ? (
+                    <Badge variant="outline">
+                      改写：{version.summary._resolvedAi.reading_sentence_rewrite.model_label}
+                    </Badge>
+                  ) : null}
+                  {version.summary._resolvedAi?.reading_lexical_resolution?.model_label ? (
+                    <Badge variant="outline">
+                      分级：{version.summary._resolvedAi.reading_lexical_resolution.model_label}
+                    </Badge>
+                  ) : null}
                 </div>
                 <CardTitle className="text-2xl">{material.title}</CardTitle>
                 <div className="text-sm text-muted-foreground">
@@ -2631,10 +2722,10 @@ export default function EnglishReadingPage() {
             />
           </CardHeader>
           <CardContent className="space-y-6 p-4 sm:p-6">
-            <div className="rounded-[32px] border border-border/70 bg-[radial-gradient(circle_at_top_left,rgba(251,191,36,0.10),transparent_26%),radial-gradient(circle_at_bottom_right,rgba(16,185,129,0.08),transparent_28%),linear-gradient(180deg,rgba(255,252,245,0.96),rgba(255,255,255,0.98))] px-5 py-6 shadow-[0_24px_70px_rgba(15,23,42,0.08)] sm:px-8 sm:py-9">
+            <div className="rounded-[32px] border border-border/70 bg-card/90 px-5 py-6 shadow-floating sm:px-8 sm:py-9">
               <div
                 ref={readingContentRef}
-                className="mx-auto max-w-4xl space-y-6 text-[1.05rem] leading-9 text-slate-800 selection:bg-sky-100/70 selection:text-slate-900 sm:text-[1.1rem]"
+                className="mx-auto max-w-4xl space-y-6 text-[1.05rem] leading-9 text-foreground selection:bg-info/10 selection:text-primary sm:text-[1.1rem]"
                 onPointerDown={handleReadingContentPointerDown}
               >
                 {version.renderBlocks.map((block) => (
@@ -2659,8 +2750,8 @@ export default function EnglishReadingPage() {
                 ))}
               </div>
 
-              <div className="mx-auto mt-8 flex max-w-4xl flex-col gap-4 border-t border-slate-200/80 pt-6 lg:flex-row lg:items-center lg:justify-between">
-                <div className="flex flex-wrap gap-3 text-sm text-slate-600">
+              <div className="mx-auto mt-8 flex max-w-4xl flex-col gap-4 border-t border-border/80 pt-6 lg:flex-row lg:items-center lg:justify-between">
+                <div className="flex flex-wrap gap-3 text-sm text-muted-foreground">
                   <span className="rounded-full bg-white/90 px-3 py-1 shadow-sm">
                     绿色 {version.summary.greenCount}
                   </span>
@@ -2771,7 +2862,7 @@ export default function EnglishReadingPage() {
                           个 i+1 词汇进行了亲密接触，并无痛掠过了{" "}
                           {version.summary.redCount} 个超纲词。
                         </div>
-                        <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-4 text-emerald-800">
+                        <div className="rounded-2xl border border-success/20 bg-success/5 px-4 py-4 text-success">
                           本次反馈：
                           {summarizeFeedback(
                             completionResponse.session.feedback,
@@ -2823,7 +2914,7 @@ export default function EnglishReadingPage() {
             width: SENTENCE_TRANSLATION_TRIGGER_WIDTH,
             height: SENTENCE_TRANSLATION_TRIGGER_HEIGHT,
           }}
-          className="z-[144] inline-flex items-center justify-center rounded-full border border-sky-200/80 bg-white/92 px-4 text-sm font-medium text-sky-700 shadow-[0_12px_28px_rgba(15,23,42,0.10)] backdrop-blur-sm transition hover:border-sky-300 hover:bg-sky-50/95 hover:text-sky-900"
+          className="z-[144] inline-flex items-center justify-center rounded-full border border-info/20 bg-white/92 px-4 text-sm font-medium text-info shadow-soft backdrop-blur-sm transition hover:border-info/30 hover:bg-info/5 hover:text-primary"
         >
           翻译这句
         </button>
@@ -2847,14 +2938,14 @@ export default function EnglishReadingPage() {
               width: Math.min(DICTIONARY_PANEL_WIDTH, window.innerWidth - 32),
               maxHeight: dictionaryPanel.maxHeight,
             }}
-            className="max-w-none overflow-hidden rounded-[18px] border border-slate-300 bg-white p-0 text-slate-900 shadow-[0_24px_60px_rgba(15,23,42,0.22)]"
+            className="max-w-none overflow-hidden rounded-[18px] border border-border bg-background p-0 text-primary shadow-floating"
           >
             <div
               data-testid="dictionary-popup-header"
               onPointerDown={handleDictionaryHeaderPointerDown}
               onMouseDown={handleDictionaryHeaderMouseDown}
               className={cn(
-                "flex items-center justify-between border-b border-slate-200 px-3 py-2.5",
+                "flex items-center justify-between border-b border-border px-3 py-2.5",
                 dictionaryPanel.pinned
                   ? dictionaryPanel.dragging
                     ? "cursor-grabbing"
@@ -2863,12 +2954,12 @@ export default function EnglishReadingPage() {
               )}
             >
               <div className="min-w-0">
-                <DialogTitle className="truncate text-[1.02rem] font-semibold text-slate-950">
+                <DialogTitle className="truncate text-[1.02rem] font-semibold text-primary">
                   {dictionaryPanel.entry?.word || dictionaryPanel.queryWord}
                 </DialogTitle>
                 {dictionaryPanel.entry?.lemma &&
                 dictionaryPanel.entry.lemma !== dictionaryPanel.entry.word ? (
-                  <div className="mt-0.5 text-[11px] text-slate-500">
+                  <div className="mt-0.5 text-[11px] text-muted-foreground">
                     原形 {dictionaryPanel.entry.lemma}
                   </div>
                 ) : null}
@@ -2881,8 +2972,8 @@ export default function EnglishReadingPage() {
                   className={cn(
                     "inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium transition",
                     dictionaryPanel.pinned
-                      ? "bg-slate-900 text-white hover:bg-slate-800"
-                      : "text-slate-600 hover:bg-slate-100 hover:text-slate-950",
+                      ? "bg-primary text-primary-foreground hover:bg-primary/90"
+                      : "text-muted-foreground hover:bg-muted hover:text-primary",
                   )}
                 >
                   {dictionaryPanel.pinned ? (
@@ -2896,7 +2987,7 @@ export default function EnglishReadingPage() {
                   type="button"
                   aria-label="关闭"
                   onClick={() => setDictionaryPanel(null)}
-                  className="rounded-md p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-900"
+                  className="rounded-md p-2 text-muted-foreground transition hover:bg-muted hover:text-primary"
                 >
                   <span className="text-sm leading-none">×</span>
                 </button>
@@ -2908,29 +2999,29 @@ export default function EnglishReadingPage() {
               className="min-h-0 space-y-2.5 overflow-y-auto overscroll-contain px-3 py-2.5"
             >
               {dictionaryPanel.loading ? (
-                <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-2.5 text-sm text-slate-800">
+                <div className="flex items-center gap-2 rounded-lg border border-border bg-muted px-2.5 py-2.5 text-sm text-foreground">
                   <LoaderCircle className="h-4 w-4 animate-spin" />
                   正在查询词典...
                 </div>
               ) : null}
 
               {dictionaryPanel.error ? (
-                <div className="rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-2.5 text-sm text-rose-700">
+                <div className="rounded-lg border border-destructive/20 bg-destructive/5 px-2.5 py-2.5 text-sm text-destructive">
                   {dictionaryPanel.error}
                 </div>
               ) : null}
 
               {dictionaryPanel.entry ? (
                 <>
-                  <div className="space-y-1.5 border-b border-slate-200 pb-2">
-                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] text-slate-700">
-                      <span className="font-mono text-[15px] font-semibold tracking-[0.01em] text-slate-950">
+                  <div className="space-y-1.5 border-b border-border pb-2">
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] text-muted-foreground">
+                      <span className="font-mono text-[15px] font-semibold tracking-[0.01em] text-foreground">
                         美 {dictionaryPanel.entry.phoneticUs || "/暂无音标/"}
                       </span>
                       <button
                         type="button"
                         aria-label="播放美式发音"
-                        className="inline-flex items-center gap-1 rounded-md px-1 py-0.5 text-slate-700 transition hover:bg-slate-100 hover:text-slate-950"
+                        className="inline-flex items-center gap-1 rounded-md px-1 py-0.5 text-muted-foreground transition hover:bg-muted hover:text-foreground"
                         onClick={() =>
                           void playDictionaryPronunciation(
                             dictionaryPanel.entry as ReadingDictionaryEntry,
@@ -2942,7 +3033,7 @@ export default function EnglishReadingPage() {
                       >
                         <Volume2 className="h-3.5 w-3.5" />
                       </button>
-                      <span className="text-[11px] text-slate-500">
+                      <span className="text-[11px] text-muted-foreground">
                         {dictionaryPanel.entry.audioUsUrl
                           ? "已自动发音"
                           : canUseSpeechSynthesis()
@@ -2951,7 +3042,7 @@ export default function EnglishReadingPage() {
                       </span>
                     </div>
                     {dictionaryPanel.entry.summaryZh.length > 0 ? (
-                      <div className="text-[12px] leading-5 text-slate-700">
+                      <div className="text-[12px] leading-5 text-muted-foreground">
                         {dictionaryPanel.entry.summaryZh.join("；")}
                       </div>
                     ) : null}
@@ -2963,13 +3054,13 @@ export default function EnglishReadingPage() {
                         dictionaryPanel.entry.partsOfSpeech.map((part) => (
                           <span
                             key={part}
-                            className="rounded bg-slate-100 px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-[0.02em] text-slate-700"
+                            className="rounded bg-muted px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-[0.02em] text-muted-foreground"
                           >
                             {part}
                           </span>
                         ))
                       ) : (
-                        <span className="text-[12px] text-slate-500">
+                        <span className="text-[12px] text-muted-foreground">
                           暂无词性信息
                         </span>
                       )}
@@ -2982,10 +3073,10 @@ export default function EnglishReadingPage() {
                           .map((sense, index) => (
                             <div
                               key={`${sense.partOfSpeech}-${index}`}
-                              className="text-[13px] leading-5.5 text-slate-900"
+                              className="text-[13px] leading-5.5 text-primary"
                             >
                               <div>
-                                <span className="mr-1 font-semibold text-slate-700">
+                                <span className="mr-1 font-semibold text-foreground">
                                   {getDictionaryPartOfSpeechLabel(
                                     sense.partOfSpeech,
                                   )}
@@ -2993,31 +3084,31 @@ export default function EnglishReadingPage() {
                                 <span>{sense.definitionZh || sense.definition}</span>
                               </div>
                               {sense.definition.trim() ? (
-                                <div className="pl-5 text-[11px] leading-4.5 text-slate-500">
+                                <div className="pl-5 text-[11px] leading-4.5 text-muted-foreground">
                                   {sense.definition}
                                 </div>
                               ) : null}
                               {sense.exampleZh ? (
-                                <div className="mt-0.5 pl-5 text-[11px] leading-4.5 text-slate-600">
+                                <div className="mt-0.5 pl-5 text-[11px] leading-4.5 text-muted-foreground">
                                   例：{sense.exampleZh}
                                 </div>
                               ) : null}
                               {sense.example ? (
-                                <div className="pl-5 text-[11px] italic leading-4.5 text-slate-400">
+                                <div className="pl-5 text-[11px] italic leading-4.5 text-muted-foreground/70">
                                   e.g. {sense.example}
                                 </div>
                               ) : null}
                             </div>
                           ))
                       ) : (
-                        <div className="text-[12px] text-slate-500">
+                        <div className="text-[12px] text-muted-foreground">
                           暂无义项内容
                         </div>
                       )}
                     </div>
                   </div>
 
-                  <div className="flex items-center justify-between border-t border-slate-200 pt-2 text-[11px] text-slate-500">
+                  <div className="flex items-center justify-between border-t border-border pt-2 text-[11px] text-muted-foreground">
                     <span>来源 {dictionaryPanel.entry.source || "xxapi"}</span>
                     <span>
                       {dictionaryPanel.entry.senses.length > 4
@@ -3050,14 +3141,14 @@ export default function EnglishReadingPage() {
               width: sentenceTranslationPanel.width,
               maxHeight: sentenceTranslationPanel.maxHeight,
             }}
-            className="z-[145] max-w-none overflow-hidden rounded-[20px] border border-slate-300 bg-white p-0 text-slate-900 shadow-[0_26px_64px_rgba(15,23,42,0.16)]"
+            className="z-[145] max-w-none overflow-hidden rounded-[20px] border border-border bg-background p-0 text-primary shadow-floating"
           >
             <div
               data-testid="sentence-translation-header"
               onPointerDown={handleSentenceTranslationHeaderPointerDown}
               onMouseDown={handleSentenceTranslationHeaderMouseDown}
               className={cn(
-                "flex items-center justify-between border-b border-slate-200 px-3 py-2",
+                "flex items-center justify-between border-b border-border px-3 py-2",
                 sentenceTranslationPanel.pinned
                   ? sentenceTranslationPanel.dragging
                     ? "cursor-grabbing"
@@ -3065,7 +3156,7 @@ export default function EnglishReadingPage() {
                   : "",
               )}
             >
-              <DialogTitle className="truncate text-[1rem] font-semibold text-slate-950">
+              <DialogTitle className="truncate text-[1rem] font-semibold text-primary">
                 句子翻译
               </DialogTitle>
               <div className="ml-3 flex items-center gap-1">
@@ -3080,8 +3171,8 @@ export default function EnglishReadingPage() {
                   className={cn(
                     "inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium transition",
                     sentenceTranslationPanel.pinned
-                      ? "bg-slate-900 text-white hover:bg-slate-800"
-                      : "text-slate-600 hover:bg-slate-100 hover:text-slate-950",
+                      ? "bg-primary text-primary-foreground hover:bg-primary/90"
+                      : "text-muted-foreground hover:bg-muted hover:text-primary",
                   )}
                 >
                   {sentenceTranslationPanel.pinned ? (
@@ -3095,7 +3186,7 @@ export default function EnglishReadingPage() {
                   type="button"
                   aria-label="关闭句子翻译"
                   onClick={() => setSentenceTranslationPanel(null)}
-                  className="rounded-md p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-900"
+                  className="rounded-md p-2 text-muted-foreground transition hover:bg-muted hover:text-primary"
                 >
                   <span className="text-sm leading-none">×</span>
                 </button>
@@ -3106,8 +3197,8 @@ export default function EnglishReadingPage() {
               data-testid="sentence-translation-scroll"
               className="min-h-0 space-y-2.5 overflow-y-auto overscroll-contain px-3.5 py-3"
             >
-              <div className="rounded-2xl border border-slate-200/90 bg-slate-50/72 px-3 py-2.5 text-[14px] leading-6 text-slate-900">
-                <div className="mb-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+              <div className="rounded-2xl border border-border bg-muted/50 px-3 py-2.5 text-[14px] leading-6 text-primary">
+                <div className="mb-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
                   原文
                 </div>
                 <div data-testid="sentence-translation-original">
@@ -3118,17 +3209,22 @@ export default function EnglishReadingPage() {
                 </div>
               </div>
 
-              <div className="rounded-2xl border border-sky-100/90 bg-sky-50/60 px-3 py-2.5 text-[14px] leading-6 text-slate-900">
-                <div className="mb-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-sky-600">
+              <div className="rounded-2xl border border-info/10 bg-info/5 px-3 py-2.5 text-[14px] leading-6 text-primary">
+                <div className="mb-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-info/70">
                   翻译
                 </div>
+                {sentenceTranslationPanel.resolvedAi?.model_label ? (
+                  <div className="mb-1 text-[10px] text-muted-foreground">
+                    实际模型：{sentenceTranslationPanel.resolvedAi.model_label}
+                  </div>
+                ) : null}
                 {sentenceTranslationPanel.loading ? (
-                  <div className="flex items-center gap-2 text-sm text-slate-700">
+                  <div className="flex items-center gap-2 text-sm text-foreground">
                     <LoaderCircle className="h-4 w-4 animate-spin" />
                     正在翻译句子...
                   </div>
                 ) : sentenceTranslationPanel.error ? (
-                  <div className="text-sm text-rose-700">
+                  <div className="text-sm text-destructive">
                     {sentenceTranslationPanel.error}
                   </div>
                 ) : (
@@ -3202,8 +3298,8 @@ export default function EnglishReadingPage() {
                     className={cn(
                       "rounded-2xl border px-4 py-4 text-left transition-all",
                       active
-                        ? "border-slate-900 bg-slate-900 text-white shadow-[0_18px_40px_rgba(15,23,42,0.16)]"
-                        : "border-border/70 bg-background/80 hover:border-slate-300 hover:bg-white",
+                        ? "border-primary bg-primary text-primary-foreground shadow-card"
+                        : "border-border/70 bg-background/80 hover:border-border hover:bg-background",
                       generating && "cursor-not-allowed opacity-70",
                     )}
                   >
@@ -3211,7 +3307,7 @@ export default function EnglishReadingPage() {
                     <div
                       className={cn(
                         "mt-2 text-xs leading-5",
-                        active ? "text-slate-200" : "text-muted-foreground",
+                        active ? "text-primary-foreground" : "text-muted-foreground",
                       )}
                     >
                       {option.description}
@@ -3229,7 +3325,7 @@ export default function EnglishReadingPage() {
                 >
                   难度变化幅度
                 </Label>
-                <span className="text-sm font-semibold text-slate-900">
+                <span className="text-sm font-semibold text-primary">
                   {formatDifficultyDelta(regenerateDelta)}
                 </span>
               </div>

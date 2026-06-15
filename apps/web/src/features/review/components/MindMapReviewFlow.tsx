@@ -31,7 +31,7 @@ import { SessionTimerBar } from '@/shared/components/session/SessionTimerBar'
 import {
   useReviewFlowSession,
 } from '@/features/review/hooks/useReviewFlowSession'
-import type { RevealFlowMode, ReviewFlowSnapshot } from '@/features/review/model/review-flow-tree'
+import type { RevealFlowMode, ReviewFlowSnapshot } from '@/entities/review/model/review-flow-tree'
 import type { MindMapSelection } from '@/shared/components/mindmap-host'
 import { useMemoryAnkiShortcuts } from '@/features/shortcuts/memoryAnkiShortcuts'
 import {
@@ -43,8 +43,10 @@ import {
   useMiniPalaceController,
 } from '@/features/mini-palace'
 import { appendTimeRecord } from '@/entities/session/model'
+import { ComboMilestoneBurst, CompletionCelebration } from '@/shared/components/celebration'
+import { getReviewSurpriseCopy, REVIEW_COMBO_MILESTONES } from '@/features/review/model/review-feedback'
 
-export type { ReviewFlowSnapshot } from '@/features/review/model/review-flow-tree'
+export type { ReviewFlowSnapshot } from '@/entities/review/model/review-flow-tree'
 
 const EMPTY_CHECKPOINT_NODE_UIDS: string[] = []
 
@@ -90,11 +92,13 @@ function FeedbackSettingsDialog({
   volume,
   animationEnabled,
   surpriseEnabled,
+  globalIntensity,
   onToggleMode,
   onToggleSound,
   onVolumeChange,
   onToggleAnimation,
   onToggleSurprise,
+  onCycleGlobalIntensity,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -103,11 +107,13 @@ function FeedbackSettingsDialog({
   volume: number
   animationEnabled: boolean
   surpriseEnabled: boolean
+  globalIntensity: 'quiet' | 'balanced' | 'immersive'
   onToggleMode: () => void
   onToggleSound: () => void
   onVolumeChange: (volume: number) => void
   onToggleAnimation: () => void
   onToggleSurprise: () => void
+  onCycleGlobalIntensity: () => void
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -128,8 +134,8 @@ function FeedbackSettingsDialog({
             className={cn(
               'flex w-full items-center justify-between rounded-2xl border px-4 py-4 text-left transition-colors',
               mode === 'immersive'
-                ? 'border-amber-300 bg-amber-50/70'
-                : 'border-slate-200 bg-slate-50/70',
+                ? 'border-warning/30 bg-warning/5'
+                : 'border-border/70 bg-muted',
             )}
           >
             <div>
@@ -144,6 +150,22 @@ function FeedbackSettingsDialog({
             </div>
             <Badge variant={mode === 'immersive' ? 'default' : 'outline'}>
               {mode === 'immersive' ? '切到安静' : '切到沉浸'}
+            </Badge>
+          </button>
+
+          <button
+            type="button"
+            onClick={onCycleGlobalIntensity}
+            className="flex items-center justify-between rounded-2xl border border-border/70 bg-background/80 px-4 py-3 text-left"
+          >
+            <div>
+              <div className="text-sm font-medium">全局界面反馈</div>
+              <div className="mt-1 text-sm text-muted-foreground">
+                普通点击、悬停、打字等通用操作的粒子与声音强度。不影响脑图与复习的反馈。
+              </div>
+            </div>
+            <Badge variant="secondary">
+              {globalIntensity === 'immersive' ? '沉浸' : globalIntensity === 'balanced' ? '平衡' : '安静'}
             </Badge>
           </button>
 
@@ -250,6 +272,12 @@ export function MindMapReviewFlow({
   const [completionDialogOpen, setCompletionDialogOpen] = React.useState(false)
   const [savingIncomplete, setSavingIncomplete] = React.useState(false)
   const [activeNodes, setActiveNodes] = React.useState<MindMapSelection[]>([])
+  const [comboBurst, setComboBurst] = React.useState<{
+    milestoneStep: number
+    comboCount: number
+    copy: string
+  } | null>(null)
+  const prevComboCountRef = React.useRef(0)
   const [focusNodeUids, setFocusNodeUids] = React.useState<string[]>(() =>
     initialFocusNodeUids.map((uid) => String(uid)).filter(Boolean),
   )
@@ -293,6 +321,26 @@ export function MindMapReviewFlow({
     allClearReady: flow.feedback.allClearReady,
     completed: flow.completed,
   })
+
+  // 连击里程碑视觉庆祝：检测 combo 达到 [3, 5, 8, 13] 时触发爆发动画
+  const animationEnabled = flow.feedback.animationEnabled
+  React.useEffect(() => {
+    if (!animationEnabled) {
+      prevComboCountRef.current = flow.feedback.comboCount
+      return
+    }
+    const currentCombo = flow.feedback.comboCount
+    const prevCombo = prevComboCountRef.current
+    prevComboCountRef.current = currentCombo
+    if (currentCombo <= prevCombo) return
+    const milestoneIndex = REVIEW_COMBO_MILESTONES.indexOf(currentCombo)
+    if (milestoneIndex === -1) return
+    setComboBurst({
+      milestoneStep: milestoneIndex,
+      comboCount: currentCombo,
+      copy: getReviewSurpriseCopy(currentCombo),
+    })
+  }, [flow.feedback.comboCount, animationEnabled])
   const bilinks = useBilinks(palaceId)
   const bilinkCounts = useBilinkCounts(palaceId)
   const bilinkOverlay = useBilinkOverlay({
@@ -465,7 +513,7 @@ export function MindMapReviewFlow({
   const completeButtonClassName = cn(
     flow.feedback.allClearReady &&
       !flow.feedback.completionCeremonyActive &&
-      'memory-anki-review-complete-ready border-amber-300 bg-[linear-gradient(135deg,#f59e0b,#d97706)] text-white hover:bg-[linear-gradient(135deg,#f59e0b,#d97706)]',
+      'memory-anki-review-complete-ready border-warning bg-warning text-white hover:bg-warning',
   )
   const cardFlashClassName =
     flow.feedback.animationEnabled && flow.feedback.feedbackFlashState !== 'idle'
@@ -474,6 +522,25 @@ export function MindMapReviewFlow({
 
   return (
     <div className={cn('space-y-5', flow.screenGlowClass)}>
+      {/* 连击里程碑视觉庆祝 overlay */}
+      {comboBurst ? (
+        <ComboMilestoneBurst
+          milestoneStep={comboBurst.milestoneStep}
+          comboCount={comboBurst.comboCount}
+          copy={comboBurst.copy}
+          onComplete={() => setComboBurst(null)}
+        />
+      ) : null}
+
+      {/* 复习完成庆祝 overlay */}
+      {flow.feedback.completionCeremonyActive && flow.feedback.animationEnabled ? (
+        <CompletionCelebration
+          maxCombo={flow.feedback.maxComboCount}
+          completedNodes={flow.visibleNonRootCount}
+          totalNodes={Math.max(flow.totalNodeCount - 1, 0)}
+        />
+      ) : null}
+
       <div
         className={cn(
           'grid gap-4 xl:grid-cols-[320px_minmax(0,1fr)]',
@@ -507,8 +574,8 @@ export function MindMapReviewFlow({
             )}
           >
             {flow.feedback.completionCeremonyActive ? (
-              <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex justify-center px-4 pt-4">
-                <div className="memory-anki-review-completion-banner inline-flex items-center gap-2 rounded-full border border-amber-200 bg-[linear-gradient(135deg,rgba(255,251,235,0.96),rgba(254,243,199,0.94))] px-4 py-2 text-sm font-semibold text-amber-800 shadow-lg">
+              <div className="pointer-events-none absolute inset-x-0 top-0 z-[100] flex justify-center px-4 pt-4">
+                <div className="memory-anki-review-completion-banner inline-flex items-center gap-2 rounded-full border border-warning/30 bg-warning/10 px-4 py-2 text-sm font-semibold text-warning shadow-lg">
                   <Sparkles className="h-4 w-4" />
                   通关结算中
                 </div>
@@ -530,14 +597,14 @@ export function MindMapReviewFlow({
                     <Badge variant="outline">红标 {flow.redNodeCount}</Badge>
                   ) : null}
                   {flow.completed ? (
-                    <Badge className="bg-emerald-600 text-white hover:bg-emerald-600">
+                    <Badge className="bg-success text-white hover:bg-success">
                       本次已完成
                     </Badge>
                   ) : null}
                 </div>
 
                 {!isInlineEditMode ? (
-                  <div className="rounded-3xl border border-border/70 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.94))] px-4 py-4">
+                  <div className="rounded-3xl border border-border/70 bg-card/90 px-4 py-4">
                     <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                       <div className="flex min-w-0 flex-wrap items-center gap-2">
                         <div
@@ -557,12 +624,12 @@ export function MindMapReviewFlow({
                             : `下一里程碑 ${flow.feedback.nextMilestone}`}
                         </Badge>
                         {flow.feedback.allClearReady ? (
-                          <Badge className="bg-amber-500 text-white hover:bg-amber-500">
+                          <Badge className="bg-warning text-white hover:bg-warning">
                             可结算
                           </Badge>
                         ) : null}
                         {flow.feedback.surpriseText ? (
-                          <Badge className="max-w-full bg-emerald-600 text-white hover:bg-emerald-600">
+                          <Badge className="max-w-full bg-success text-white hover:bg-success">
                             {flow.feedback.surpriseText}
                           </Badge>
                         ) : null}
@@ -601,7 +668,7 @@ export function MindMapReviewFlow({
                       </div>
                     </div>
                     <div className="mt-3">
-                      <div className="h-2.5 overflow-hidden rounded-full bg-slate-200/80">
+                      <div className="h-2.5 overflow-hidden rounded-full bg-border">
                         <div
                           className={cn(
                             'h-full rounded-full transition-[width,background] duration-300',
@@ -750,6 +817,7 @@ export function MindMapReviewFlow({
         volume={flow.feedback.settings.volume}
         animationEnabled={flow.feedback.settings.animationEnabled}
         surpriseEnabled={flow.feedback.settings.surpriseEnabled}
+        globalIntensity={flow.feedback.settings.globalIntensity}
         onToggleMode={flow.feedback.toggleMode}
         onToggleSound={() =>
           flow.feedback.updateSettings((current) => ({
@@ -773,6 +841,17 @@ export function MindMapReviewFlow({
           flow.feedback.updateSettings((current) => ({
             ...current,
             surpriseEnabled: !current.surpriseEnabled,
+          }))
+        }
+        onCycleGlobalIntensity={() =>
+          flow.feedback.updateSettings((current) => ({
+            ...current,
+            globalIntensity:
+              current.globalIntensity === 'balanced'
+                ? 'immersive'
+                : current.globalIntensity === 'immersive'
+                  ? 'quiet'
+                  : 'balanced',
           }))
         }
       />

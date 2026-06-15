@@ -51,6 +51,7 @@ describe('useMindMapImport job flows', () => {
           semantic_split_long_paragraphs: true,
           preserve_line_breaks: true,
         },
+        ai_options: {},
       })
     })
   })
@@ -79,6 +80,7 @@ describe('useMindMapImport job flows', () => {
         range_prompt: '',
         fallback_title: 'test.pdf',
         import_options: expect.any(Object),
+        ai_options: {},
       })
     })
   })

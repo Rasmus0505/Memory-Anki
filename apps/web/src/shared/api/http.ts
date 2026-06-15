@@ -342,3 +342,41 @@ export async function request<T>(url: string, options?: PersistedRequestInit): P
   }
   return response.text() as unknown as T
 }
+
+/**
+ * Upload a `FormData` body via the mutation queue, returning the parsed JSON
+ * response. The `resourceKey`/`description` describe the upload for offline
+ * replay bookkeeping. Shared by the english and english-reading API modules
+ * (previously duplicated verbatim, differing only in those two fields).
+ */
+export async function uploadWithFormData<T>(
+  url: string,
+  formData: FormData,
+  persistence: { resourceKey: string; description: string },
+): Promise<T> {
+  const response = await fetchWithMutationQueue(
+    `${API_BASE}${url}`,
+    {
+      method: 'POST',
+      body: formData,
+    },
+    {
+      ...persistence,
+      replayMode: 'manual',
+    },
+  )
+  if (!response.ok) {
+    const body = await response.text().catch(() => '')
+    let message = body || `HTTP ${response.status}`
+    try {
+      const parsed = JSON.parse(body) as { detail?: unknown }
+      if (typeof parsed.detail === 'string' && parsed.detail.trim()) {
+        message = parsed.detail
+      }
+    } catch {
+      // Ignore JSON parse failures and use the raw text body.
+    }
+    throw new Error(message)
+  }
+  return response.json() as Promise<T>
+}

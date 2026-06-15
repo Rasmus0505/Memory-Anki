@@ -70,10 +70,10 @@ export function PalaceImportPdfSidebar({
                   className={cn(
                     'rounded-2xl border p-2 text-left transition-colors',
                     analyzed
-                      ? 'border-emerald-400/70 bg-emerald-50'
+                      ? 'border-success/70 bg-success/5'
                       : isPreview
                         ? 'border-foreground/30 bg-foreground/[0.04]'
-                        : 'border-border/70 bg-white',
+                        : 'border-border/70 bg-background',
                   )}
                 >
                   <div
@@ -105,7 +105,7 @@ export function PalaceImportPdfSidebar({
                         {selected ? <Badge variant="secondary">已选</Badge> : null}
                         {isStructuredPdfMode && isStructure ? <Badge variant="secondary">结构页</Badge> : null}
                         {analyzed ? (
-                          <Badge variant="secondary" className="bg-emerald-600 text-white hover:bg-emerald-600">
+                          <Badge variant="secondary" className="bg-success text-success-foreground hover:bg-success">
                             已分析
                           </Badge>
                         ) : null}

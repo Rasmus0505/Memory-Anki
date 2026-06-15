@@ -27,10 +27,6 @@ export interface RevealFlowOptions {
   checkpointIds?: Iterable<string>
 }
 
-function cloneValue<T>(value: T): T {
-  return JSON.parse(JSON.stringify(value)) as T
-}
-
 export function parseEditorDoc(raw: unknown): MindMapDoc | null {
   if (!raw) return null
   if (typeof raw === 'string') {
@@ -423,7 +419,7 @@ export function buildVisibleEditorDoc(
     const revealState = revealMap[id] ?? 'hidden'
     if (!forceVisible && revealState === 'hidden') return null
 
-    const nextNode = cloneValue(node)
+    const nextNode = structuredClone(node)
     let nextData = { ...(nextNode.data ?? {}) }
 
     if (forceVisible || revealState === 'revealed') {
@@ -466,7 +462,7 @@ export function buildVisibleEditorDoc(
   return {
     layout: 'mindMap',
     theme: DEFAULT_THEME,
-    ...cloneValue(source),
+    ...structuredClone(source),
     root: walk(source.root, 'root', true) ?? {
       data: { text: fallbackTitle || '未命名导图' },
       children: [],
@@ -541,8 +537,8 @@ export function buildVisibleEditorState(
       title,
       redNodeIds,
     ),
-    editor_config: cloneValue(editorState.editor_config ?? {}),
-    editor_local_config: cloneValue(editorState.editor_local_config ?? {}),
+    editor_config: structuredClone(editorState.editor_config ?? {}),
+    editor_local_config: structuredClone(editorState.editor_local_config ?? {}),
     lang: editorState.lang || 'zh',
   }
 }

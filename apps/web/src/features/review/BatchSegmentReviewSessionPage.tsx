@@ -1,6 +1,7 @@
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { ArrowLeft } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { LoadingState } from '@/shared/components/state-placeholders'
 import type {
   BatchSegmentReviewSessionResponse,
   MindMapEditorState,
@@ -160,7 +161,7 @@ export default function BatchSegmentReviewSessionPage() {
   }
 
   if (!session || !editorState) {
-    return <div className="flex items-center justify-center py-32 text-sm text-muted-foreground">正在加载多块复习会话...</div>
+    return <LoadingState text="正在加载多块复习会话…" />
   }
 
   return (

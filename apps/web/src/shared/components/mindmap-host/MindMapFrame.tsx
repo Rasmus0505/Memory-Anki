@@ -341,6 +341,8 @@ export const MindMapFrame = forwardRef<MindMapFrameHandle, MindMapFrameProps>(fu
   const onAiSplitRequestRef = useRef(onAiSplitRequest)
   const onFullscreenChangeRef = useRef(onFullscreenChange)
   const onFullscreenToggleRef = useRef(onFullscreenToggle)
+  const onEnterNativeFullscreenRef = useRef<(() => void) | undefined>(undefined)
+  const onExitNativeFullscreenRef = useRef<(() => void) | undefined>(undefined)
   const onUiClearedChangeRef = useRef(onUiClearedChange)
   const onBilinkTriggerRef = useRef(onBilinkTrigger)
   const onBilinkNodeClickRef = useRef(onBilinkNodeClick)
@@ -494,13 +496,45 @@ export const MindMapFrame = forwardRef<MindMapFrameHandle, MindMapFrameProps>(fu
   }, [])
 
   const enterIframeNativeFullscreen = useCallback(async () => {
-    const iframeWindow = iframeRef.current?.contentWindow as MindMapHostWindow | null
-    await iframeWindow?.enterNativeFullscreen?.()
+    // 使用 CSS 伪全屏而非浏览器原生 Fullscreen API。
+    // 原因：原生 requestFullscreen 会创建顶层上下文，只有全屏元素及其后代可见，
+    // 导致父文档的 Dialog（Radix Portal 挂载到 body）、GlobalFeedbackProvider 反馈层、
+    // 连击庆祝/完成庆祝 overlay 等全部不可见（它们是 iframe 的兄弟节点）。
+    // CSS 伪全屏通过 fixed + inset:0 + 高 z-index 模拟全屏效果，
+    // 同时保留所有 React overlay 的可见性。
+    const iframeElement = iframeRef.current
+    if (!iframeElement) return
+    iframeElement.classList.add('memory-anki-mindmap-native-fullscreen')
+    onFullscreenChangeRef.current?.(true)
+    // 通知 iframe 内部状态 + 触发 resize
+    const iframeWindow = iframeRef.current?.contentWindow as
+      | (Window & {
+          __memoryAnkiParentFullscreenActive?: boolean
+          dispatchEvent?: (event: Event) => boolean
+        })
+      | null
+    if (iframeWindow) {
+      iframeWindow.__memoryAnkiParentFullscreenActive = true
+      iframeWindow.dispatchEvent?.(new Event('resize'))
+    }
   }, [])
 
   const exitIframeNativeFullscreen = useCallback(async () => {
-    const iframeWindow = iframeRef.current?.contentWindow as MindMapHostWindow | null
-    await iframeWindow?.exitNativeFullscreen?.()
+    // 退出 CSS 伪全屏
+    const iframeElement = iframeRef.current
+    if (!iframeElement) return
+    iframeElement.classList.remove('memory-anki-mindmap-native-fullscreen')
+    onFullscreenChangeRef.current?.(false)
+    const iframeWindow = iframeRef.current?.contentWindow as
+      | (Window & {
+          __memoryAnkiParentFullscreenActive?: boolean
+          dispatchEvent?: (event: Event) => boolean
+        })
+      | null
+    if (iframeWindow) {
+      iframeWindow.__memoryAnkiParentFullscreenActive = false
+      iframeWindow.dispatchEvent?.(new Event('resize'))
+    }
   }, [])
 
   useImperativeHandle(
@@ -518,6 +552,32 @@ export const MindMapFrame = forwardRef<MindMapFrameHandle, MindMapFrameProps>(fu
       toggleIframeUiCleared,
     ],
   )
+
+  // 监听浏览器原生 fullscreenchange（仅在 iframe 内部意外触发原生全屏时兜底）
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      const isActive = Boolean(document.fullscreenElement)
+      if (!isActive) {
+        // 退出原生全屏时清理 CSS 伪全屏状态
+        const iframeElement = iframeRef.current
+        iframeElement?.classList.remove('memory-anki-mindmap-native-fullscreen')
+      }
+    }
+    document.addEventListener('fullscreenchange', handleFullscreenChange)
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenChange)
+    }
+  }, [])
+
+  // 保持原生全屏请求回调引用最新
+  useEffect(() => {
+    onEnterNativeFullscreenRef.current = () => {
+      void enterIframeNativeFullscreen()
+    }
+    onExitNativeFullscreenRef.current = () => {
+      void exitIframeNativeFullscreen()
+    }
+  }, [enterIframeNativeFullscreen, exitIframeNativeFullscreen])
 
   const forwardLocalEditorStateChange = useCallback((nextState: MindMapEditorState) => {
     pendingLocalCommitFingerprintRef.current = buildLocalEditorStateFingerprint(nextState)
@@ -692,6 +752,8 @@ export const MindMapFrame = forwardRef<MindMapFrameHandle, MindMapFrameProps>(fu
           onAiSplitRequest: onAiSplitRequestRef,
           onFullscreenChange: onFullscreenChangeRef,
           onFullscreenToggle: onFullscreenToggleRef,
+          onEnterNativeFullscreen: onEnterNativeFullscreenRef,
+          onExitNativeFullscreen: onExitNativeFullscreenRef,
           onUiClearedChange: onUiClearedChangeRef,
           onBilinkTrigger: onBilinkTriggerRef,
           onBilinkNodeClick: onBilinkNodeClickRef,

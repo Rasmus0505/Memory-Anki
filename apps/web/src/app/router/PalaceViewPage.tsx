@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, FileText, Target } from 'lucide-react'
 import { buildAttachmentUrl, getPalaceEditorApi, savePalaceEditorApi } from '@/shared/api/modules/palaces'
 import { PageIntro } from '@/shared/components/layout/PageIntro'
+import { LoadingState } from '@/shared/components/state-placeholders'
 import {
   MindMapFrame,
   MindMapPageToolbar,
@@ -50,7 +51,7 @@ export default function PalaceView() {
   const palace = meta as PalaceMeta | null
 
   if (!palaceId || (!palace && isLoading)) {
-    return <div className="flex min-h-[60vh] items-center justify-center text-sm text-muted-foreground">正在加载宫殿详情...</div>
+    return <LoadingState text="正在加载宫殿详情…" />
   }
 
   if (!palace || !editorState) {
@@ -98,7 +99,7 @@ export default function PalaceView() {
               </Link>
               {(palace.focus_count ?? 0) > 0 ? (
                 <Link to={`/palaces/${palace.id}/focus-practice`}>
-                  <Button variant="outline" size="sm" className="border-amber-300 bg-amber-50 text-amber-900 hover:bg-amber-100">
+                  <Button variant="outline" size="sm" className="border-warning/30 bg-warning/5 text-warning hover:bg-warning/10">
                     <Target className="mr-2 h-4 w-4" />
                     专项练习 {palace.focus_count}
                   </Button>
@@ -158,7 +159,7 @@ export default function PalaceView() {
                 onFullscreenChange={setMindMapNativeFullscreen}
                 onUiClearedChange={setMindMapUiCleared}
                 className={cn(
-                  'w-full flex-1 rounded-2xl border border-border/70 bg-white',
+                  'w-full flex-1 rounded-2xl border border-border/70 bg-background',
                   mindMapFullscreen ? 'h-full' : 'h-[62vh]',
                 )}
               />
@@ -174,7 +175,7 @@ export default function PalaceView() {
             <CardContent className="space-y-3 text-sm text-muted-foreground">
               {palace.mastered ? <Badge variant="secondary">已掌握</Badge> : null}
               {(palace.focus_count ?? 0) > 0 ? (
-                <Badge variant="outline" className="border-amber-300 text-amber-800">
+                <Badge variant="outline" className="border-warning/30 text-warning">
                   专项 {palace.focus_count} 张
                 </Badge>
               ) : null}

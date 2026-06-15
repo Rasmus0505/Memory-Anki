@@ -1,7 +1,14 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
+import { useRouteResidency } from '@/app/router/RouteResidency'
 import { useAiRunConfigDialog } from '@/features/ai-config/useAiRunConfigDialog'
+import {
+  failTask,
+  registerTask,
+  updateTask,
+  completeTask,
+} from '@/shared/background-tasks/backgroundTaskRegistry'
 import type {
   EnglishGenerationLogEvent,
   EnglishGenerationLogResponse,
@@ -23,6 +30,7 @@ function summarizeTaskEvents(events: EnglishGenerationLogEvent[]) {
 
 export function useEnglishWorkspaceController() {
   const navigate = useNavigate()
+  const { isActive } = useRouteResidency()
   const { promptForAiOptions, aiRunConfigDialog } = useAiRunConfigDialog()
   const [workspace, setWorkspace] = useState<EnglishWorkspaceResponse | null>(null)
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
@@ -35,6 +43,8 @@ export function useEnglishWorkspaceController() {
   const [logError, setLogError] = useState('')
   const [logData, setLogData] = useState<EnglishGenerationLogResponse | null>(null)
   const [pendingNavigationCourseId, setPendingNavigationCourseId] = useState<number | null>(null)
+  // 跟踪当前 ASR 任务是否已登记到全局后台任务栏，避免重复注册。
+  const registeredTaskIdRef = useRef<string | null>(null)
 
   const loadWorkspace = useCallback(async () => {
     const nextWorkspace = await getEnglishWorkspaceApi()
@@ -78,12 +88,26 @@ export function useEnglishWorkspaceController() {
       return
     }
     let closed = false
+    // 登记到全局后台任务栏：切走英语工作台后用户也能在顶部看到 ASR 进度。
+    if (registeredTaskIdRef.current !== activeTaskId) {
+      registeredTaskIdRef.current = activeTaskId
+      registerTask({
+        id: `english-asr-${activeTaskId}`,
+        section: 'english',
+        title: '英语听力 · ASR 生成中',
+        navigateTarget: '/english',
+      })
+    }
     const unsubscribe = subscribeEnglishTaskStream(activeTaskId, {
       onStatus: ({ task }) => {
         if (closed) return
         setStreamConnected(true)
         setWorkspace((current) => (current ? { ...current, currentTask: task } : current))
         setLogData((current) => (current ? { ...current, task } : current))
+        updateTask(`english-asr-${activeTaskId}`, {
+          progress: task.progressPercent,
+          detail: task.message || task.stage,
+        })
       },
       onLog: ({ event }) => {
         if (closed) return
@@ -102,6 +126,7 @@ export function useEnglishWorkspaceController() {
         setWorkspace((current) => (current ? { ...current, currentTask: task } : current))
         setLogData((current) => (current ? { ...current, task } : current))
         setStreamConnected(false)
+        completeTask(`english-asr-${activeTaskId}`, { detail: '英语课程已生成' })
         if (typeof task.courseId === 'number' && task.courseId > 0) {
           setPendingNavigationCourseId(task.courseId)
         } else {
@@ -116,6 +141,7 @@ export function useEnglishWorkspaceController() {
           setLogData((current) => (current ? { ...current, task } : current))
         }
         setStreamConnected(false)
+        failTask(`english-asr-${activeTaskId}`, error || '生成失败')
         if (error && error !== '英语任务实时连接已断开。') {
           toast.error(error)
         }
@@ -137,10 +163,17 @@ export function useEnglishWorkspaceController() {
 
   useEffect(() => {
     if (!pendingNavigationCourseId) return
+    // ASR 完成时只在用户仍在英语工作台时自动进入课程；
+    // 用户已切走时只保留任务栏"已完成"提示 + toast，不强制打断当前页面。
+    if (!isActive) {
+      toast.success('英语课程已生成，可在任务栏或英语听力中查看。')
+      setPendingNavigationCourseId(null)
+      return
+    }
     toast.success('英语课程已生成，正在进入课程。')
     navigate(`/english/courses/${pendingNavigationCourseId}`)
     setPendingNavigationCourseId(null)
-  }, [navigate, pendingNavigationCourseId])
+  }, [isActive, navigate, pendingNavigationCourseId])
 
   const canUpload = useMemo(() => {
     return !uploading && !workspace?.currentTask
@@ -166,7 +199,7 @@ export function useEnglishWorkspaceController() {
     setUploading(true)
     try {
       const aiOptions = await promptForAiOptions({
-        scenarioKey: 'asr',
+        scenarioKey: 'asr_course_transcription',
         entrypointKey: 'english-course-upload-asr',
         title: '英语课程 ASR 配置',
         description: '这次上传会沿用这里的 ASR 模型配置完成整条转写链路。',

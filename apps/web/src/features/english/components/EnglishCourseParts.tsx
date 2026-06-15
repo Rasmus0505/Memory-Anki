@@ -21,10 +21,10 @@ export function StatusBanner({ notice }: { notice: StatusNotice | null }) {
 
   const palette =
     notice.kind === 'success'
-      ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+      ? 'border-success/20 bg-success/5 text-success'
       : notice.kind === 'error'
-        ? 'border-rose-200 bg-rose-50 text-rose-700'
-        : 'border-sky-200 bg-sky-50 text-sky-700'
+        ? 'border-destructive/20 bg-destructive/5 text-destructive'
+        : 'border-info/20 bg-info/5 text-info'
 
   return (
     <div className={`rounded-2xl border px-4 py-3 text-sm ${palette}`}>
@@ -91,9 +91,9 @@ export function WordRail({
 
         const containerStyle =
           status === 'active'
-            ? 'ring-1 ring-sky-300 bg-sky-50 dark:bg-sky-950/30 dark:ring-sky-700'
+            ? 'ring-1 ring-info/30 bg-info/5'
             : status === 'wrong'
-              ? 'ring-1 ring-rose-300 bg-rose-50 dark:bg-rose-950/30'
+              ? 'ring-1 ring-destructive/30 bg-destructive/5'
               : ''
 
         const wordOpacity = status === 'pending' ? 'opacity-40' : status === 'correct' ? 'opacity-75' : ''
@@ -110,13 +110,13 @@ export function WordRail({
                 slot.state === 'empty'
                   ? 'text-gray-300 dark:text-gray-600'
                   : slot.state === 'correct'
-                    ? 'text-emerald-500'
+                    ? 'text-success'
                     : slot.state === 'revealed'
-                      ? 'text-amber-500 dark:text-amber-400'
+                      ? 'text-warning dark:text-warning/80'
                       : slot.state === 'wrong' && slot.extra
-                        ? 'text-rose-400 line-through decoration-1'
+                        ? 'text-destructive/70 line-through decoration-1'
                         : slot.state === 'wrong'
-                          ? 'text-rose-500'
+                          ? 'text-destructive'
                           : slot.state === 'fixed'
                             ? 'font-semibold text-gray-700 dark:text-gray-300'
                             : 'text-gray-300'
@@ -142,14 +142,14 @@ export function FinalCheckRail({
   if (!feedback || feedback.passed || feedback.tokenResults.length === 0) return null
 
   return (
-    <div className="flex flex-wrap gap-2 rounded-2xl border border-rose-200 bg-rose-50/70 px-4 py-4">
+    <div className="flex flex-wrap gap-2 rounded-2xl border border-destructive/20 bg-destructive/5 px-4 py-4">
       {feedback.tokenResults.map((item, index) => (
         <span
           key={`check-${index}`}
           className={`inline-flex min-h-10 min-w-[58px] items-center justify-center rounded-xl border-b-2 px-3 text-sm font-medium ${
             item.correct
-              ? 'border-emerald-500 bg-emerald-100 text-emerald-700'
-              : 'border-rose-400 bg-white text-rose-700'
+              ? 'border-success bg-success/10 text-success'
+              : 'border-destructive/70 bg-background text-destructive'
           }`}
         >
           {item.input || '____'}

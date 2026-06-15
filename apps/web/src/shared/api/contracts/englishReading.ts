@@ -1,3 +1,5 @@
+import type { AiRuntimeOptions, ResolvedAiRuntimeMeta } from './profile';
+
 export type CefrLevel = "A1" | "A2" | "B1" | "B2" | "C1" | "C2";
 export type ReadingGenerationMode = "initial" | "regenerate";
 export type ReadingDifficultyDirection = "easier" | "same" | "harder";
@@ -84,6 +86,7 @@ export interface ReadingVersionSummary {
   targetLexicalI: number;
   targetSyntacticI: number;
   targetCefr: CefrLevel;
+  _resolvedAi?: Record<string, ResolvedAiRuntimeMeta | null> | null;
 }
 
 export interface ReadingGenerationTraceItem {
@@ -135,6 +138,7 @@ export interface ReadingDictionaryEntry {
 export interface ReadingSentenceTranslationResponse {
   originalText: string;
   translatedText: string;
+  resolved_ai?: ResolvedAiRuntimeMeta | null;
 }
 
 export interface ReadingSessionResult {
@@ -179,4 +183,3 @@ export interface ReadingGenerateRequest {
 
 export interface ReadingGenerateStreamStatusEvent
   extends ReadingGenerationTraceItem {}
-import type { AiRuntimeOptions } from './profile';

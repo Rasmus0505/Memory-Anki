@@ -3,6 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { ArrowLeft, ArrowRight, BookOpen, Brain } from 'lucide-react'
 import type { ReviewQueueResponse } from '@/shared/api/contracts'
 import { PageIntro } from '@/shared/components/layout/PageIntro'
+import { EmptyState, LoadingState } from '@/shared/components/state-placeholders'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card'
@@ -49,7 +50,7 @@ export default function ReviewOverview() {
   }, [queue?.chapter])
 
   if (!queue) {
-    return <div className="flex items-center justify-center py-32 text-sm text-muted-foreground">正在加载复习队列...</div>
+    return <LoadingState text="正在加载复习队列…" />
   }
 
   const title = chapterLabel ? `章节复习：${chapterLabel}` : `今日复习队列：${queue.due_count}`
@@ -110,19 +111,21 @@ export default function ReviewOverview() {
               </Link>
             ))
           ) : (
-            <div className="rounded-2xl border border-dashed border-border/80 px-4 py-8 text-center text-sm text-muted-foreground">
-              {chapterId ? '当前章节暂时没有到期的正式复习任务。' : '当前没有需要处理的正式复习任务。'}
-              {!chapterId ? (
-                <div className="mt-3">
+            <EmptyState
+              variant="review"
+              title={chapterId ? '当前章节暂时没有到期的正式复习任务' : '当前没有需要处理的正式复习任务'}
+              description="稍后再来看看，或者前往知识树浏览章节内容。"
+              action={
+                !chapterId ? (
                   <Link to="/knowledge">
                     <Button variant="outline" size="sm">
                       <BookOpen className="mr-2 h-4 w-4" />
                       前往知识树查看章节
                     </Button>
                   </Link>
-                </div>
-              ) : null}
-            </div>
+                ) : null
+              }
+            />
           )}
         </CardContent>
       </Card>
@@ -157,9 +160,11 @@ export default function ReviewOverview() {
               </Link>
             ))
           ) : (
-            <div className="rounded-2xl border border-dashed border-border/80 px-4 py-8 text-center text-sm text-muted-foreground">
-              当前没有需要处理的分块复习任务。
-            </div>
+            <EmptyState
+              variant="review"
+              title="当前没有需要处理的分块复习任务"
+              description="稍后再来看看，分块复习会按间隔自动到期。"
+            />
           )}
         </CardContent>
       </Card>

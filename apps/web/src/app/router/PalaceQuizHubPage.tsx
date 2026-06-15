@@ -42,7 +42,7 @@ function QuizPalaceCard({ palace }: { palace: PalaceGroupedItem }) {
                 ) : null}
                 <span>{palace.segments?.length ?? 0} 个分段</span>
                 {(palace.focus_count ?? 0) > 0 ? (
-                  <span className="inline-flex items-center gap-1 text-amber-700">
+                  <span className="inline-flex items-center gap-1 text-warning">
                     <Target className="h-3.5 w-3.5" />
                     专项 {(palace.focus_count ?? 0)} 张
                   </span>

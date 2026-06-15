@@ -95,10 +95,10 @@ export function getReviewActionButtonClass(options: {
   return cn(
     'h-8 w-full rounded-md border text-xs font-medium transition-colors',
     state === 'due_now' &&
-      'border-emerald-700 bg-emerald-600 text-white hover:bg-emerald-700',
+      'border-success bg-success text-white hover:bg-success/80',
     state === 'due_later_today' &&
-      'border-amber-400 bg-amber-200 text-amber-950 hover:bg-amber-300',
-    isSleepReview && 'border-blue-700 bg-blue-600 text-white hover:bg-blue-700',
+      'border-warning/50 bg-warning/20 text-warning hover:bg-warning/30',
+    isSleepReview && 'border-info bg-info text-white hover:bg-info/80',
     disabled && 'border-border bg-muted/30 text-muted-foreground',
     className,
   )

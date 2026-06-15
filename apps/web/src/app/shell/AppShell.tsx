@@ -27,31 +27,122 @@ import { Button } from '@/shared/components/ui/button'
 import { AppLogDrawer } from '@/shared/logs/components/AppLogDrawer'
 import { MutationQueueDrawer } from '@/shared/persistence/components/MutationQueueDrawer'
 import { useMutationQueueState } from '@/shared/persistence/useMutationQueue'
+import { useRunningTaskCountBySection, type BackgroundTaskSection } from '@/shared/background-tasks/backgroundTaskRegistry'
+import { BackgroundTaskBar } from '@/shared/background-tasks/BackgroundTaskBar'
 import { cn } from '@/shared/lib/utils'
 
-const navItems = [
-  { to: '/', label: '仪表盘', icon: LayoutDashboard },
-  { to: '/palaces', label: '记忆宫殿', icon: BookOpen },
-  { to: '/palaces/quiz', label: '做题区', icon: Pencil },
-  { to: '/english', label: '英语听力', icon: Captions },
-  { to: '/english-reading', label: '英语阅读', icon: BookOpenText },
-  { to: '/knowledge', label: '知识大纲', icon: FolderTree },
-  { to: '/review', label: '复习', icon: Brain },
-  { to: '/profile', label: '个人中心', icon: User },
-]
+type NavSectionKey =
+  | 'dashboard'
+  | 'palaces'
+  | 'palaceQuiz'
+  | 'english'
+  | 'englishReading'
+  | 'knowledge'
+  | 'review'
+  | 'profile'
 
-function isPalaceNavActive(pathname: string) {
-  if (pathname === '/palaces' || pathname === '/palaces/list' || pathname === '/palaces/new') {
-    return true
-  }
-  return /^\/palaces\/\d+(?:\/(edit|practice|focus-practice))?$/.test(pathname)
+interface NavSectionDefinition {
+  key: NavSectionKey
+  to: string
+  label: string
+  icon: typeof LayoutDashboard
+  rememberLastVisited: boolean
+  matches: (pathname: string) => boolean
 }
 
-function isPalaceQuizNavActive(pathname: string) {
-  if (pathname === '/palaces/quiz') {
-    return true
+const navSectionLastUrls: Partial<Record<NavSectionKey, string>> = {}
+
+const navSections: NavSectionDefinition[] = [
+  {
+    key: 'dashboard',
+    to: '/',
+    label: '仪表盘',
+    icon: LayoutDashboard,
+    rememberLastVisited: false,
+    matches: (pathname) => pathname === '/',
+  },
+  {
+    key: 'palaces',
+    to: '/palaces',
+    label: '记忆宫殿',
+    icon: BookOpen,
+    rememberLastVisited: true,
+    matches: (pathname) =>
+      pathname === '/palaces' ||
+      pathname === '/palaces/list' ||
+      pathname === '/palaces/new' ||
+      /^\/palaces\/\d+(?:\/(edit|practice|focus-practice))?$/.test(pathname),
+  },
+  {
+    key: 'palaceQuiz',
+    to: '/palaces/quiz',
+    label: '做题区',
+    icon: Pencil,
+    rememberLastVisited: true,
+    matches: (pathname) =>
+      pathname === '/palaces/quiz' || /^\/palaces\/\d+\/quiz$/.test(pathname),
+  },
+  {
+    key: 'english',
+    to: '/english',
+    label: '英语听力',
+    icon: Captions,
+    rememberLastVisited: true,
+    matches: (pathname) =>
+      pathname === '/english' || /^\/english\/courses\/\d+$/.test(pathname),
+  },
+  {
+    key: 'englishReading',
+    to: '/english-reading',
+    label: '英语阅读',
+    icon: BookOpenText,
+    rememberLastVisited: true,
+    matches: (pathname) => pathname === '/english-reading',
+  },
+  {
+    key: 'knowledge',
+    to: '/knowledge',
+    label: '知识大纲',
+    icon: FolderTree,
+    rememberLastVisited: true,
+    matches: (pathname) => pathname === '/knowledge' || pathname.startsWith('/knowledge/'),
+  },
+  {
+    key: 'review',
+    to: '/review',
+    label: '复习',
+    icon: Brain,
+    rememberLastVisited: true,
+    matches: (pathname) =>
+      pathname === '/review' ||
+      /^\/review\/session\/\d+$/.test(pathname) ||
+      /^\/segment-review\/session\/\d+$/.test(pathname) ||
+      pathname === '/segment-review/batch' ||
+      /^\/mini-review\/session\/\d+$/.test(pathname),
+  },
+  {
+    key: 'profile',
+    to: '/profile',
+    label: '个人中心',
+    icon: User,
+    rememberLastVisited: true,
+    matches: (pathname) => pathname === '/profile' || pathname.startsWith('/profile/'),
+  },
+]
+
+function findNavSection(pathname: string) {
+  return navSections.find((section) => section.matches(pathname)) ?? null
+}
+
+function resolveNavSectionTarget(section: NavSectionDefinition) {
+  if (!section.rememberLastVisited) return section.to
+  return navSectionLastUrls[section.key] ?? section.to
+}
+
+export function resetNavSectionHistoryForTest() {
+  for (const key of Object.keys(navSectionLastUrls) as NavSectionKey[]) {
+    delete navSectionLastUrls[key]
   }
-  return /^\/palaces\/\d+\/quiz$/.test(pathname)
 }
 
 function RuntimeChannelBadge({
@@ -71,8 +162,8 @@ function RuntimeChannelBadge({
       className={cn(
         'border font-mono tracking-[0.08em]',
         isStable
-          ? 'border-emerald-300 bg-emerald-50 text-emerald-700'
-          : 'border-sky-300 bg-sky-50 text-sky-700',
+          ? 'border-success/30 bg-success/5 text-success'
+          : 'border-info/30 bg-info/5 text-info',
         compact ? 'px-2 py-0 text-[10px]' : 'px-2.5 py-0.5 text-[11px]',
       )}
       aria-label={`当前版本 ${label}${commitText ? ` ${commitText}` : ''}`}
@@ -83,22 +174,79 @@ function RuntimeChannelBadge({
   )
 }
 
+function NavSectionLink({
+  section,
+  pathname,
+  compact,
+}: {
+  section: NavSectionDefinition
+  pathname: string
+  compact: boolean
+}) {
+  const { to, label, icon: Icon } = section
+  const target = resolveNavSectionTarget(section)
+  const isActive = section.matches(pathname)
+  const runningCount = useRunningTaskCountBySection(
+    section.key as BackgroundTaskSection,
+  )
+  return (
+    <NavLink
+      to={target}
+      end={to === '/'}
+      className={cn(
+        'group relative flex items-center rounded-2xl text-sm font-medium transition-all',
+        isActive
+          ? 'bg-primary text-primary-foreground shadow-card'
+          : 'text-muted-foreground hover:bg-secondary/80 hover:text-foreground',
+        compact ? 'justify-center px-2.5 py-2.5' : 'gap-3 px-3.5 py-3',
+      )}
+    >
+      <Icon className="h-4 w-4" />
+      {!compact ? <span>{label}</span> : null}
+      {runningCount > 0 ? (
+        <span
+          className={cn(
+            'inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[11px] font-semibold tabular-nums',
+            compact ? 'absolute right-1 top-1' : 'ml-auto',
+            isActive
+              ? 'bg-primary-foreground/20 text-primary-foreground'
+              : 'bg-info text-white',
+          )}
+          title={`${runningCount} 个后台任务进行中`}
+        >
+          {runningCount}
+        </span>
+      ) : null}
+      {!compact && runningCount === 0 ? (
+        <ChevronRight
+          className={cn(
+            'ml-auto h-4 w-4 transition-transform',
+            isActive
+              ? 'translate-x-0'
+              : '-translate-x-1 opacity-0 group-hover:translate-x-0 group-hover:opacity-100',
+          )}
+        />
+      ) : null}
+    </NavLink>
+  )
+}
+
 function SidebarContent({ runtimeInfo }: { runtimeInfo: RuntimeInfo | null }) {
-  const { pathname } = useLocation()
+  const { pathname, search, hash } = useLocation()
   const shell = useShellContext()
   const compact = shell?.sidebarCollapsed ?? false
-  const active = (to: string) => {
-    if (to === '/') return pathname === '/'
-    if (to === '/palaces') return isPalaceNavActive(pathname)
-    if (to === '/palaces/quiz') return isPalaceQuizNavActive(pathname)
-    return pathname === to || pathname.startsWith(`${to}/`)
-  }
   const [now, setNow] = useState(() => new Date())
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(new Date()), 1000)
     return () => window.clearInterval(timer)
   }, [])
+
+  useEffect(() => {
+    const matchedSection = findNavSection(pathname)
+    if (!matchedSection?.rememberLastVisited) return
+    navSectionLastUrls[matchedSection.key] = `${pathname}${search}${hash}`
+  }, [hash, pathname, search])
 
   const currentDate = new Intl.DateTimeFormat('zh-CN', {
     month: '2-digit',
@@ -146,32 +294,13 @@ function SidebarContent({ runtimeInfo }: { runtimeInfo: RuntimeInfo | null }) {
       </div>
 
       <nav className={cn('flex flex-1 flex-col gap-1', compact ? 'px-2 py-3' : 'px-3 py-4')}>
-        {navItems.map(({ to, label, icon: Icon }) => (
-          <NavLink
-            key={to}
-            to={to}
-            end={to === '/'}
-            className={cn(
-              'group flex items-center rounded-2xl text-sm font-medium transition-all',
-              active(to)
-                ? 'bg-primary text-primary-foreground shadow-[0_10px_30px_rgba(15,23,42,0.14)]'
-                : 'text-muted-foreground hover:bg-secondary/80 hover:text-foreground',
-              compact ? 'justify-center px-2.5 py-2.5' : 'gap-3 px-3.5 py-3',
-            )}
-          >
-            <Icon className="h-4 w-4" />
-            {!compact ? <span>{label}</span> : null}
-            {!compact ? (
-              <ChevronRight
-                className={cn(
-                  'ml-auto h-4 w-4 transition-transform',
-                  active(to)
-                    ? 'translate-x-0'
-                    : '-translate-x-1 opacity-0 group-hover:translate-x-0 group-hover:opacity-100',
-                )}
-              />
-            ) : null}
-          </NavLink>
+        {navSections.map((section) => (
+          <NavSectionLink
+            key={section.to}
+            section={section}
+            pathname={pathname}
+            compact={compact}
+          />
         ))}
       </nav>
     </>
@@ -282,7 +411,7 @@ function ShellFrame({ children }: PropsWithChildren) {
 
         <aside
           className={cn(
-            'fixed inset-y-4 left-4 z-20 hidden overflow-hidden rounded-[30px] border border-border/70 bg-background/92 shadow-[0_24px_80px_rgba(15,23,42,0.12)] backdrop-blur lg:flex lg:flex-col transition-all duration-300',
+            'fixed inset-y-4 left-4 z-20 hidden overflow-hidden rounded-[30px] border border-border/70 bg-background/92 shadow-floating backdrop-blur lg:flex lg:flex-col transition-all duration-300',
             sidebarCollapsed ? 'w-[84px]' : 'w-[250px]',
           )}
         >
@@ -334,6 +463,7 @@ function ShellFrame({ children }: PropsWithChildren) {
           )}
         >
           <div className="mx-auto w-full max-w-[1700px] px-3 py-3 sm:px-5 sm:py-5 lg:px-6 lg:py-6 xl:px-8">
+            <BackgroundTaskBar />
             {children}
           </div>
         </main>

@@ -17,7 +17,7 @@ import {
   flattenNodes,
   hideRevealStateBranch,
   parseEditorDoc,
-} from '@/features/review/model/review-flow-tree'
+} from '@/entities/review/model/review-flow-tree'
 import {
   buildMiniPalaceRevealState,
   buildMiniPalaceVisibleEditorState,

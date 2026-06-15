@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { MemoryRouter } from 'react-router-dom'
+import { MemoryRouter, useLocation } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { AppShell } from '@/app/shell/AppShell'
+import { AppShell, resetNavSectionHistoryForTest } from '@/app/shell/AppShell'
 import { enqueueMutation, resetMutationQueueForTest } from '@/shared/persistence/mutationQueue'
 
 const getRuntimeInfoApi = vi.fn()
@@ -14,12 +14,19 @@ describe('AppShell', () => {
   beforeEach(async () => {
     await resetMutationQueueForTest()
     getRuntimeInfoApi.mockReset()
+    resetNavSectionHistoryForTest()
   })
 
   afterEach(async () => {
     await resetMutationQueueForTest()
+    resetNavSectionHistoryForTest()
     vi.restoreAllMocks()
   })
+
+  function LocationEcho() {
+    const location = useLocation()
+    return <div>{`${location.pathname}${location.search}${location.hash}`}</div>
+  }
 
   it('shows current runtime channel and short commit badge', async () => {
     getRuntimeInfoApi.mockResolvedValue({
@@ -164,5 +171,71 @@ describe('AppShell', () => {
 
     expect(quizLink.className).toContain('bg-primary')
     expect(palaceLink.className).not.toContain('bg-primary')
+  })
+
+  it('returns palace navigation to the last visited palace child route instead of the shelf root', async () => {
+    getRuntimeInfoApi.mockResolvedValue({
+      channel: 'stable',
+      commit: 'abcdef1234567890',
+      short_commit: 'abcdef12',
+      runtime_generation: 1,
+      declared_runtime_generation: 1,
+      min_supported_generation: 1,
+      max_supported_generation: 1,
+      last_started_at: '2026-06-01T12:00:00+08:00',
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/palaces/30/edit?miniPalaceId=5&miniPalaceMode=edit#mindmap']}>
+        <AppShell>
+          <LocationEcho />
+        </AppShell>
+      </MemoryRouter>,
+    )
+
+    await screen.findAllByText(/Stable abcdef12/)
+    expect(screen.getByText('/palaces/30/edit?miniPalaceId=5&miniPalaceMode=edit#mindmap')).toBeTruthy()
+
+    fireEvent.click(screen.getAllByRole('link', { name: '英语听力' })[0]!)
+    await waitFor(() => {
+      expect(screen.getByText('/english')).toBeTruthy()
+    })
+
+    fireEvent.click(screen.getAllByRole('link', { name: '记忆宫殿' })[0]!)
+    await waitFor(() => {
+      expect(screen.getByText('/palaces/30/edit?miniPalaceId=5&miniPalaceMode=edit#mindmap')).toBeTruthy()
+    })
+  })
+
+  it('returns review navigation to the last visited review child route', async () => {
+    getRuntimeInfoApi.mockResolvedValue({
+      channel: 'stable',
+      commit: 'abcdef1234567890',
+      short_commit: 'abcdef12',
+      runtime_generation: 1,
+      declared_runtime_generation: 1,
+      min_supported_generation: 1,
+      max_supported_generation: 1,
+      last_started_at: '2026-06-01T12:00:00+08:00',
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/review/session/9']}>
+        <AppShell>
+          <LocationEcho />
+        </AppShell>
+      </MemoryRouter>,
+    )
+
+    await screen.findAllByText(/Stable abcdef12/)
+    fireEvent.click(screen.getAllByRole('link', { name: '个人中心' })[0]!)
+    await waitFor(() => {
+      expect(screen.getByText('/profile')).toBeTruthy()
+    })
+
+    fireEvent.click(screen.getAllByRole('link', { name: '复习' })[0]!)
+    await waitFor(() => {
+      expect(screen.getByText('/review/session/9')).toBeTruthy()
+    })
   })
 })

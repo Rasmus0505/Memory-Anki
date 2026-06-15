@@ -1,5 +1,6 @@
 import { Position, type Edge, type Node } from '@xyflow/react'
 import type { GraphData, MindMapNode } from './adapter'
+import { BRANCH_COLORS } from './branchColors'
 
 export const TOOLBAR_HEIGHT = 54
 const ROOT_X = 52
@@ -16,7 +17,6 @@ const ROOT_STACK_GAP = 18
 const CHILD_GAP_Y = 10
 export const DROP_HIT_PADDING_X = 16
 export const DROP_HIT_PADDING_Y = 12
-const BRANCH_COLORS = ['#5f9e90', '#e4c25d', '#d98b63', '#c7d4c0', '#7ca7a1']
 
 export type LayoutRole = 'root' | 'branch' | 'leaf'
 export type DropMode = 'before' | 'inside' | 'after'

@@ -2,6 +2,7 @@
 import { Link, useParams } from 'react-router-dom'
 import { ArrowLeft } from 'lucide-react'
 import { PageIntro } from '@/shared/components/layout/PageIntro'
+import { LoadingState } from '@/shared/components/state-placeholders'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
 import type { MindMapEditorState } from '@/shared/api/contracts'
@@ -111,7 +112,7 @@ export default function PalacePractice() {
   }, [hasResumeProgress, palaceId])
 
   if (!palaceId || loading) {
-    return <div className="flex min-h-[60vh] items-center justify-center text-sm text-muted-foreground">正在加载练习内容...</div>
+    return <LoadingState text="正在加载练习内容…" />
   }
 
   if (!palace || !editorState || error) {

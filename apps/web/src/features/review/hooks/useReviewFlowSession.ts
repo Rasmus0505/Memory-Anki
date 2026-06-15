@@ -3,9 +3,10 @@ import type { MindMapEditorState } from '@/shared/api/contracts'
 import type { MindMapSelection } from '@/shared/components/mindmap-host'
 import { useRevealSession } from '@/entities/review/model/useRevealSession'
 import { useTimedSession } from '@/shared/hooks/useTimedSession'
-import { revealRemainingNodes, type ReviewFlowSnapshot } from '@/features/review/model/review-flow-tree'
+import { revealRemainingNodes, type ReviewFlowSnapshot } from '@/entities/review/model/review-flow-tree'
 import { useReviewFeedback } from '@/features/review/hooks/useReviewFeedback'
-import type { RevealFlowMode } from '@/features/review/model/review-flow-tree'
+import type { RevealFlowMode } from '@/entities/review/model/review-flow-tree'
+import { useRouteResidency } from '@/app/router/RouteResidency'
 
 interface CompleteFlowPayload {
   durationSeconds: number
@@ -47,6 +48,7 @@ export function useReviewFlowSession({
   onSnapshotChange,
   onFullscreenChange,
 }: UseReviewFlowSessionOptions) {
+  const { isActive } = useRouteResidency()
   const timer = useTimedSession({
     kind: sessionKind,
     title,
@@ -75,6 +77,15 @@ export function useReviewFlowSession({
   const timerRef = React.useRef(timer)
   const hardUnloadRef = React.useRef(false)
   const lastSnapshotPayloadRef = React.useRef('')
+
+  React.useEffect(() => {
+    timer.setSceneActive?.(isActive, { source: isActive ? 'route_active' : 'route_inactive' })
+  }, [isActive, timer])
+
+  React.useEffect(() => {
+    if (isActive) return
+    setFullscreen(false)
+  }, [isActive])
 
   React.useEffect(() => {
     if (!fullscreen) return

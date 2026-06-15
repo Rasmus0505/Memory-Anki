@@ -43,7 +43,7 @@ export function PalaceMetaPanel({
           {palace?.created_at ? (
             <div className="space-y-3 rounded-2xl border border-border/70 bg-background/70 p-4">
               <div className="flex items-center gap-2 text-sm font-medium text-foreground">
-                <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                <CheckCircle2 className="h-4 w-4 text-success" />
                 已确立建造宫殿
               </div>
               <div className="space-y-2">

@@ -13,6 +13,7 @@ import {
 import type { EnglishGenerationTask } from '@/shared/api/contracts'
 import { formatDuration } from '@/entities/session/model'
 import { PageIntro } from '@/shared/components/layout/PageIntro'
+import { EmptyState, LoadingState } from '@/shared/components/state-placeholders'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card'
@@ -76,11 +77,7 @@ export default function EnglishWorkspacePage() {
   } = useEnglishWorkspaceController()
 
   if (!workspace) {
-      return (
-        <div className="flex min-h-[55vh] items-center justify-center text-sm text-muted-foreground">
-          正在加载英语听力...
-        </div>
-      )
+      return <LoadingState text="正在加载英语听力…" />
   }
 
   return (
@@ -124,6 +121,9 @@ export default function EnglishWorkspacePage() {
                             '轮询回退'
                           )}
                         </Badge>
+                        {currentTask.resolved_ai?.model_label ? (
+                          <Badge variant="outline">{currentTask.resolved_ai.model_label}</Badge>
+                        ) : null}
                         <span>{formatFileSize(currentTask.fileSize)}</span>
                       </div>
                     </div>
@@ -344,9 +344,11 @@ export default function EnglishWorkspacePage() {
               ))}
             </div>
           ) : (
-            <div className="rounded-3xl border border-dashed border-border/70 py-12 text-center text-sm text-muted-foreground">
-              还没有英语课程。上传一段英语视频后，这里会自动出现历史记录。
-            </div>
+            <EmptyState
+              variant="list"
+              title="还没有英语课程"
+              description="上传一段英语视频后，这里会自动出现历史记录。"
+            />
           )}
         </CardContent>
       </Card>

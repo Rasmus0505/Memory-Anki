@@ -10,7 +10,7 @@ interface PageIntroProps {
 
 export function PageIntro({ eyebrow, title, description, actions, compact = false }: PageIntroProps) {
   return (
-    <div className={`flex flex-col rounded-[28px] border border-border/70 bg-card/90 shadow-[0_20px_50px_rgba(15,23,42,0.06)] lg:flex-row lg:justify-between ${compact ? 'gap-2 px-4 py-3 sm:px-5' : 'gap-4 px-5 py-5 sm:px-6 lg:items-end'}`}>
+    <div className={`flex flex-col rounded-[28px] border border-border/70 bg-card/90 shadow-card lg:flex-row lg:justify-between ${compact ? 'gap-2 px-4 py-3 sm:px-5' : 'gap-4 px-5 py-5 sm:px-6 lg:items-end'}`}>
       <div className={compact ? 'space-y-1' : 'space-y-2'}>
         {eyebrow ? (
           <div className={`font-semibold uppercase tracking-[0.24em] text-muted-foreground ${compact ? 'text-[10px]' : 'text-[11px]'}`}>

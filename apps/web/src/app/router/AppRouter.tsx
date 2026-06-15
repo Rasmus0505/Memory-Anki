@@ -1,81 +1,112 @@
-﻿import { Suspense, lazy } from 'react'
-import { Navigate, Route, Routes } from 'react-router-dom'
-import DashboardPage from '@/app/router/DashboardPage'
-import PalaceListPage from '@/app/router/PalaceListPage'
-import PalaceShelfPage from '@/app/router/PalaceShelfPage'
-import PalacePracticePage from '@/app/router/PalacePracticePage'
-import PalaceFocusPracticePage from '@/app/router/PalaceFocusPracticePage'
-import PalaceViewPage from '@/app/router/PalaceViewPage'
-import SegmentPracticePage from '@/app/router/SegmentPracticePage'
-import MiniPalacePracticePage from '@/app/router/MiniPalacePracticePage'
-import ReviewOverviewPage from '@/features/review/ReviewOverviewPage'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { useLocation, type Location } from 'react-router-dom'
+import { RouteResidencyProvider } from '@/app/router/RouteResidency'
+import { AppRoutes } from '@/app/router/appRoutes'
 
-const KnowledgePage = lazy(() => import('@/features/knowledge/KnowledgePage'))
-const EnglishWorkspacePage = lazy(() => import('@/features/english/EnglishWorkspacePage'))
-const EnglishCoursePage = lazy(() => import('@/features/english/EnglishCoursePage'))
-const EnglishReadingPage = lazy(() => import('@/features/english-reading/EnglishReadingPage'))
-const PalaceEditPage = lazy(() => import('@/features/palace-edit/PalaceEditPage'))
-const PalaceQuizHubPage = lazy(() => import('@/app/router/PalaceQuizHubPage'))
-const PalaceQuizPage = lazy(() => import('@/features/palace-quiz/PalaceQuizPage'))
-const ProfilePage = lazy(() => import('@/features/profile/ProfilePage'))
-const ProfileAiPage = lazy(() => import('@/features/profile/ProfileAiPage'))
-const ProfileBackupsPage = lazy(
-  () => import('@/features/profile/ProfileBackupsPage'),
-)
-const ReviewSessionPage = lazy(
-  () => import('@/features/review/ReviewSessionPage'),
-)
-const SegmentReviewSessionPage = lazy(
-  () => import('@/features/review/SegmentReviewSessionPage'),
-)
-const BatchSegmentReviewSessionPage = lazy(
-  () => import('@/features/review/BatchSegmentReviewSessionPage'),
-)
+export const MAX_CACHED_ENTRIES = 12
 
-const MiniReviewSessionPage = lazy(
-  () => import('@/features/review/MiniReviewSessionPage'),
-)
-
-function RouteFallback() {
-  return (
-    <div className="flex min-h-[50vh] items-center justify-center text-sm text-muted-foreground">
-      正在加载页面...
-    </div>
-  )
+/**
+ * 计算加入新条目后、超过上限时需要驱逐的缓存 key 列表（LRU）。
+ * 纯函数，便于单元测试；当前活动条目永不驱逐。
+ *
+ * @param keys 当前缓存中的全部 key
+ * @param activeKey 当前活动 key（不可被驱逐）
+ * @param activationTimes 每个 key 最近一次激活的时间戳
+ * @param maxEntries 缓存上限
+ * @returns 应被驱逐的 key 数组
+ */
+export function computeLruEvictions(
+  keys: string[],
+  activeKey: string,
+  activationTimes: Record<string, number>,
+  maxEntries: number,
+): string[] {
+  if (keys.length <= maxEntries) return []
+  const evictCount = keys.length - maxEntries
+  const candidates = keys
+    .filter((key) => key !== activeKey)
+    .sort((a, b) => (activationTimes[a] ?? 0) - (activationTimes[b] ?? 0))
+  return candidates.slice(0, evictCount)
 }
 
 export function AppRouter() {
+  const location = useLocation()
+  const activePathname = location.pathname
+  const previousPathnameRef = useRef(activePathname)
+  const [cachedLocations, setCachedLocations] = useState<Record<string, Location>>(() => ({
+    [activePathname]: location,
+  }))
+  const [activationTimes, setActivationTimes] = useState<Record<string, number>>(() => ({
+    [activePathname]: Date.now(),
+  }))
+
+  useEffect(() => {
+    setCachedLocations((current) => {
+      if (current[activePathname] === location) {
+        return current
+      }
+      const next: Record<string, Location> = {
+        ...current,
+        [activePathname]: location,
+      }
+      // LRU 上限保护：超过 MAX_CACHED_ENTRIES 时驱逐最久未激活的条目。
+      const evictions = computeLruEvictions(
+        Object.keys(next),
+        activePathname,
+        activationTimes,
+        MAX_CACHED_ENTRIES,
+      )
+      for (const key of evictions) {
+        delete next[key]
+      }
+      return next
+    })
+
+    if (previousPathnameRef.current !== activePathname) {
+      previousPathnameRef.current = activePathname
+      setActivationTimes((current) => ({
+        ...current,
+        [activePathname]: Date.now(),
+      }))
+      return
+    }
+
+    setActivationTimes((current) => {
+      if (current[activePathname]) return current
+      return {
+        ...current,
+        [activePathname]: Date.now(),
+      }
+    })
+  }, [activePathname, location, activationTimes])
+
+  const entries = useMemo(
+    () => Object.entries(cachedLocations),
+    [cachedLocations],
+  )
+
   return (
-    <Suspense fallback={<RouteFallback />}>
-      <Routes>
-        <Route path="/" element={<DashboardPage />} />
-        <Route path="/palaces" element={<PalaceShelfPage />} />
-        <Route path="/english" element={<EnglishWorkspacePage />} />
-        <Route path="/english-reading" element={<EnglishReadingPage />} />
-        <Route path="/english/courses/:id" element={<EnglishCoursePage />} />
-        <Route path="/palaces/list" element={<PalaceListPage />} />
-        <Route path="/palaces/new" element={<PalaceEditPage />} />
-        <Route path="/palaces/quiz" element={<PalaceQuizHubPage />} />
-        <Route path="/palaces/:id" element={<PalaceViewPage />} />
-        <Route path="/palaces/:id/quiz" element={<PalaceQuizPage />} />
-        <Route path="/palaces/:id/practice" element={<PalacePracticePage />} />
-        <Route path="/palaces/:id/focus-practice" element={<PalaceFocusPracticePage />} />
-        <Route path="/segments/:id/practice" element={<SegmentPracticePage />} />
-        <Route path="/mini-palaces/:id/practice" element={<MiniPalacePracticePage />} />
-        <Route path="/mini-review/session/:id" element={<MiniReviewSessionPage />} />
-        <Route path="/palaces/:id/edit" element={<PalaceEditPage />} />
-        <Route path="/knowledge" element={<KnowledgePage />} />
-        <Route path="/review" element={<ReviewOverviewPage />} />
-        <Route path="/review/session/:id" element={<ReviewSessionPage />} />
-        <Route path="/segment-review/session/:id" element={<SegmentReviewSessionPage />} />
-        <Route path="/segment-review/batch" element={<BatchSegmentReviewSessionPage />} />
-        <Route path="/profile" element={<ProfilePage />} />
-        <Route path="/profile/ai" element={<ProfileAiPage />} />
-        <Route path="/profile/ai-prompts" element={<Navigate to="/profile/ai?tab=prompts" replace />} />
-        <Route path="/profile/ai-split" element={<Navigate to="/profile/ai?tab=config" replace />} />
-        <Route path="/profile/voice-coach" element={<Navigate to="/profile/ai?tab=config" replace />} />
-        <Route path="/profile/backups" element={<ProfileBackupsPage />} />
-      </Routes>
-    </Suspense>
+    <>
+      {entries.map(([pathname, cachedLocation]) => {
+        const isActive = pathname === activePathname
+        return (
+          <div
+            key={pathname}
+            aria-hidden={!isActive}
+            style={{ display: isActive ? 'block' : 'none' }}
+          >
+            <RouteResidencyProvider
+              value={{
+                isActive,
+                pathname,
+                becameActiveAt: activationTimes[pathname] ?? 0,
+              }}
+            >
+              <AppRoutes location={cachedLocation} />
+            </RouteResidencyProvider>
+          </div>
+        )
+      })}
+    </>
   )
 }

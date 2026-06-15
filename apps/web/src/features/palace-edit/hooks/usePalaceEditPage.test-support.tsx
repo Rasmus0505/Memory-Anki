@@ -26,6 +26,8 @@ const mindMapFrameMockState = vi.hoisted(() => ({
   nextMountId: 1,
 }))
 
+export const promptForAiOptionsMock = vi.fn()
+
 export const timedSessionMock = {
   effectiveSeconds: 0,
   idleSeconds: 0,
@@ -37,6 +39,7 @@ export const timedSessionMock = {
   start: vi.fn(),
   pause: vi.fn(),
   resume: vi.fn(),
+  setSceneActive: vi.fn(),
   leaveScene: vi.fn(),
   adjustDuration: vi.fn(),
   registerActivity: vi.fn(),
@@ -52,6 +55,13 @@ vi.mock('@/shared/hooks/useTimedSession', () => ({
   shouldAutoStartOnPageEnter: (config: unknown) => shouldAutoStartOnPageEnterMock(config),
 }))
 
+vi.mock('@/features/ai-config/useAiRunConfigDialog', () => ({
+  useAiRunConfigDialog: () => ({
+    promptForAiOptions: (...args: unknown[]) => promptForAiOptionsMock(...args),
+    aiRunConfigDialog: null,
+  }),
+}))
+
 vi.mock('@/shared/components/mindmap-host', () => ({
   MindMapFrame: React.forwardRef(({
     syncIntent = 'soft',
@@ -62,6 +72,7 @@ vi.mock('@/shared/components/mindmap-host', () => ({
     practiceModeActive = false,
     readonly = false,
     preserveViewOnSync = false,
+    initialViewPolicy = 'preserve',
     aiSplitBusy = false,
     syncOnPropChange = false,
     externalSyncKey = null,
@@ -82,6 +93,7 @@ vi.mock('@/shared/components/mindmap-host', () => ({
     practiceModeActive?: boolean
     readonly?: boolean
     preserveViewOnSync?: boolean
+    initialViewPolicy?: 'preserve' | 'reset'
     aiSplitBusy?: boolean
     syncOnPropChange?: boolean
     externalSyncKey?: string | number | null
@@ -131,9 +143,11 @@ vi.mock('@/shared/components/mindmap-host', () => ({
     const root = editorState?.editor_doc?.root
     const child = root?.children?.[0]
     const grandchild = child?.children?.[0]
+    const shellMode = practiceModeActive ? 'toolbar' : 'plain'
+    const viewPolicy = preserveViewOnSync ? 'preserve' : initialViewPolicy
     return (
       <div data-testid="mindmap-frame">
-        <div>{`mindmap-${practiceModeActive ? 'practice' : 'edit'}-${readonly ? 'readonly' : 'editable'}-${preserveViewOnSync ? 'preserve' : 'reset'}-${syncOnPropChange ? 'sync' : 'nosync'}`}</div>
+        <div>{`mindmap-${practiceModeActive ? 'practice' : 'edit'}-${readonly ? 'readonly' : 'editable'}-${shellMode}-${viewPolicy}-import-${syncOnPropChange ? 'sync' : 'nosync'}`}</div>
         <div>{`mindmap-mount-${mountIdRef.current}`}</div>
         <div>{`sync-${syncIntent}-${forceSyncIntent}-${String(forceSyncKey ?? '')}-${String(externalSyncKey ?? '')}-${String(syncReason ?? '')}`}</div>
         <div>{`scope-${String(viewMemoryScope ?? '')}`}</div>
@@ -413,11 +427,14 @@ export function setupPalaceEditPageTestDefaults() {
   timedSessionMock.start.mockReset()
   timedSessionMock.pause.mockReset()
   timedSessionMock.resume.mockReset()
+  timedSessionMock.setSceneActive.mockReset()
   timedSessionMock.adjustDuration.mockReset()
   timedSessionMock.registerActivity.mockReset()
   timedSessionMock.logEvent.mockReset()
   timedSessionMock.complete.mockReset()
   timedSessionMock.reset.mockReset()
+  promptForAiOptionsMock.mockReset()
+  promptForAiOptionsMock.mockResolvedValue({})
   shouldAutoStartOnPageEnterMock.mockReset()
   shouldAutoStartOnPageEnterMock.mockReturnValue(false)
   vi.spyOn(bilinkApi, 'getBilinksApi').mockResolvedValue({ items: [] } as never)

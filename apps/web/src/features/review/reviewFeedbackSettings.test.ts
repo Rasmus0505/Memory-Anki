@@ -23,11 +23,13 @@ describe('reviewFeedbackSettings', () => {
       volume: 1.75,
       animationEnabled: true,
       surpriseEnabled: false,
+      globalIntensity: 'balanced',
     })
 
     expect(saved.mode).toBe('quiet')
     expect(saved.soundEnabled).toBe(false)
     expect(saved.volume).toBe(1.75)
+    expect(saved.globalIntensity).toBe('balanced')
     expect(window.localStorage.getItem(REVIEW_FEEDBACK_SETTINGS_STORAGE_KEY)).toContain('"mode":"quiet"')
     expect(window.localStorage.getItem(REVIEW_FEEDBACK_SETTINGS_STORAGE_KEY)).toContain('"volume":1.75')
   })
@@ -39,6 +41,7 @@ describe('reviewFeedbackSettings', () => {
       volume: 'loud',
       animationEnabled: false,
       surpriseEnabled: 'sometimes',
+      globalIntensity: 'nope',
     })
 
     expect(sanitized).toEqual({
@@ -47,10 +50,11 @@ describe('reviewFeedbackSettings', () => {
       volume: 1.5,
       animationEnabled: false,
       surpriseEnabled: true,
+      globalIntensity: 'balanced',
     })
   })
 
-  it('fills the default volume for legacy settings', () => {
+  it('fills the default volume and intensity for legacy settings', () => {
     expect(
       sanitizeReviewFeedbackSettings({
         mode: 'quiet',
@@ -64,6 +68,7 @@ describe('reviewFeedbackSettings', () => {
       volume: 1.5,
       animationEnabled: true,
       surpriseEnabled: false,
+      globalIntensity: 'balanced',
     })
   })
 

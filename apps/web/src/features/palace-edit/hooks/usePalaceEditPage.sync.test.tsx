@@ -189,6 +189,7 @@ describe('usePalaceEditPage sync and ai split behavior', () => {
 
     await waitFor(() => {
       expect(palaceApi.splitMindMapNodeApi).toHaveBeenCalledWith(101, {
+        ai_options: {},
         editor_doc: {
           root: {
             data: { text: '测试宫殿', uid: 'root-1' },

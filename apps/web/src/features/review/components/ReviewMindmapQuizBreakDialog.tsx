@@ -299,7 +299,7 @@ export function ReviewMindmapQuizBreakDialog({
         <button
           type="button"
           onClick={() => setMode('chapter')}
-          className={cn('rounded-2xl border px-4 py-4 text-left', mode === 'chapter' ? 'border-emerald-300 bg-emerald-50' : 'border-border/70')}
+          className={cn('rounded-2xl border px-4 py-4 text-left', mode === 'chapter' ? 'border-success/30 bg-success/5' : 'border-border/70')}
         >
           <div className="font-semibold">本章强化</div>
           <div className="mt-1 text-sm text-muted-foreground">只基于当前复习脑图生成题。</div>
@@ -307,7 +307,7 @@ export function ReviewMindmapQuizBreakDialog({
         <button
           type="button"
           onClick={() => setMode('cross_palace')}
-          className={cn('rounded-2xl border px-4 py-4 text-left', mode === 'cross_palace' ? 'border-sky-300 bg-sky-50' : 'border-border/70')}
+          className={cn('rounded-2xl border px-4 py-4 text-left', mode === 'cross_palace' ? 'border-info/30 bg-info/5' : 'border-border/70')}
         >
           <div className="font-semibold">跨宫殿联系</div>
           <div className="mt-1 text-sm text-muted-foreground">结合其他宫殿摘要，强化知识关联。</div>
@@ -325,7 +325,7 @@ export function ReviewMindmapQuizBreakDialog({
               className={cn(
                 'rounded-full border px-3 py-1.5 text-sm transition-colors',
                 questionTypes.includes(item.type)
-                  ? 'border-slate-900 bg-slate-900 text-white'
+                  ? 'border-primary bg-primary text-primary-foreground'
                   : 'border-border/70 bg-background',
               )}
             >
@@ -400,11 +400,11 @@ export function ReviewMindmapQuizBreakDialog({
   const renderFeedback = (correct: boolean | undefined, analysis: string) => {
     if (correct === undefined) return null
     return (
-      <div className={cn('mt-4 rounded-2xl border px-4 py-3', correct ? 'border-emerald-200 bg-emerald-50' : 'border-rose-200 bg-rose-50')}>
-        <div className={cn('font-semibold', correct ? 'text-emerald-700' : 'text-rose-700')}>
+      <div className={cn('mt-4 rounded-2xl border px-4 py-3', correct ? 'border-success/20 bg-success/5' : 'border-destructive/20 bg-destructive/5')}>
+        <div className={cn('font-semibold', correct ? 'text-success' : 'text-destructive')}>
           {correct ? '回答正确' : '再调整一下'}
         </div>
-        <div className="mt-2 text-sm text-slate-700">解析：{analysis || '暂无解析'}</div>
+        <div className="mt-2 text-sm text-muted-foreground">解析：{analysis || '暂无解析'}</div>
       </div>
     )
   }
@@ -427,8 +427,8 @@ export function ReviewMindmapQuizBreakDialog({
                 onClick={() => updateCurrentState({ selectedOptionId: option.id, resolved: true, correct: correct })}
                 className={cn(
                   'w-full rounded-2xl border px-4 py-3 text-left transition-colors',
-                  resolved && correct && 'border-emerald-300 bg-emerald-50',
-                  resolved && selected && !correct && 'border-rose-300 bg-rose-50',
+                  resolved && correct && 'border-success/30 bg-success/5',
+                  resolved && selected && !correct && 'border-destructive/30 bg-destructive/5',
                   !resolved && 'hover:bg-muted',
                 )}
               >
@@ -455,8 +455,8 @@ export function ReviewMindmapQuizBreakDialog({
                 onClick={() => updateCurrentState({ trueFalseAnswer: value, resolved: true, correct: value === correctAnswer })}
                 className={cn(
                   'rounded-2xl border px-4 py-5 text-lg font-semibold',
-                  resolved && value === correctAnswer && 'border-emerald-300 bg-emerald-50 text-emerald-700',
-                  resolved && currentState.trueFalseAnswer === value && value !== correctAnswer && 'border-rose-300 bg-rose-50 text-rose-700',
+                  resolved && value === correctAnswer && 'border-success/30 bg-success/5 text-success',
+                  resolved && currentState.trueFalseAnswer === value && value !== correctAnswer && 'border-destructive/30 bg-destructive/5 text-destructive',
                   !resolved && 'hover:bg-muted',
                 )}
               >
@@ -465,7 +465,7 @@ export function ReviewMindmapQuizBreakDialog({
             ))}
           </div>
           {resolved && !currentState.correct && answerPayload.false_explanation ? (
-            <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+            <div className="mt-4 rounded-2xl border border-warning/20 bg-warning/5 px-4 py-3 text-sm text-warning">
               错误点：{answerPayload.false_explanation}
             </div>
           ) : null}
@@ -536,10 +536,10 @@ export function ReviewMindmapQuizBreakDialog({
                   onClick={() => updateCurrentState({ selectedLeftId: pair.left_id })}
                   className={cn(
                     'w-full rounded-2xl border px-3 py-3 text-left',
-                    selectedLeftId === pair.left_id && 'border-sky-400 bg-sky-50',
-                    matchingPairs[pair.left_id] && 'bg-slate-50',
-                    currentState.resolved && matchingPairs[pair.left_id] === pair.right_id && 'border-emerald-300 bg-emerald-50',
-                    currentState.resolved && matchingPairs[pair.left_id] !== pair.right_id && 'border-rose-300 bg-rose-50',
+                    selectedLeftId === pair.left_id && 'border-info/50 bg-info/5',
+                    matchingPairs[pair.left_id] && 'bg-muted',
+                    currentState.resolved && matchingPairs[pair.left_id] === pair.right_id && 'border-success/30 bg-success/5',
+                    currentState.resolved && matchingPairs[pair.left_id] !== pair.right_id && 'border-destructive/30 bg-destructive/5',
                   )}
                 >
                   {pair.left}
@@ -561,7 +561,7 @@ export function ReviewMindmapQuizBreakDialog({
                   }}
                   className={cn(
                     'w-full rounded-2xl border px-3 py-3 text-left hover:bg-muted',
-                    Object.values(matchingPairs).includes(pair.right_id) && 'border-sky-200 bg-sky-50/60',
+                    Object.values(matchingPairs).includes(pair.right_id) && 'border-info/20 bg-info/5',
                   )}
                 >
                   {pair.right}
@@ -644,9 +644,9 @@ export function ReviewMindmapQuizBreakDialog({
                   onClick={() => updateCurrentState({ selectedCategorizationItemId: item.id })}
                   className={cn(
                     'rounded-full border px-3 py-1.5 text-sm',
-                    selectedItemId === item.id && 'border-sky-400 bg-sky-50',
-                    assigned && 'bg-slate-100',
-                    wrong && 'border-rose-300 bg-rose-50 text-rose-700',
+                    selectedItemId === item.id && 'border-info/50 bg-info/5',
+                    assigned && 'bg-muted',
+                    wrong && 'border-destructive/30 bg-destructive/5 text-destructive',
                   )}
                 >
                   {item.text}
@@ -668,7 +668,7 @@ export function ReviewMindmapQuizBreakDialog({
               >
                 <button
                   type="button"
-                  className="mb-2 w-full rounded-xl bg-slate-900 px-3 py-2 text-sm font-semibold text-white"
+                  className="mb-2 w-full rounded-xl bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground"
                   onClick={() => {
                     if (!selectedItemId || currentState.resolved) return
                     updateCurrentState({
@@ -710,7 +710,7 @@ export function ReviewMindmapQuizBreakDialog({
         />
         <Button type="button" onClick={() => updateCurrentState({ resolved: true, correct: true })}>提交答案</Button>
         {currentState.resolved ? (
-          <div className="space-y-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm">
+          <div className="space-y-3 rounded-2xl border border-success/20 bg-success/5 px-4 py-3 text-sm">
             <div><span className="font-semibold">参考答案：</span>{answerPayload.reference_answer || '暂无参考答案'}</div>
             <div><span className="font-semibold">解析：</span>{question.analysis || '暂无解析'}</div>
             <Button type="button" variant="outline" size="sm" disabled={currentState.shortAnswerFeedbackLoading} onClick={() => void handleShortAnswerFeedback()}>
@@ -736,7 +736,7 @@ export function ReviewMindmapQuizBreakDialog({
           <div className="flex flex-wrap items-center gap-2">
             <Badge variant="secondary">{currentIndex + 1} / {questions.length}</Badge>
             <Badge variant="outline">{getQuestionTypeLabel(currentQuestion.question_type)}</Badge>
-            {savedQuestionIds[currentIndex] ? <Badge className="bg-emerald-600 text-white hover:bg-emerald-600">已加入题库</Badge> : null}
+            {savedQuestionIds[currentIndex] ? <Badge className="bg-success text-success-foreground hover:bg-success">已加入题库</Badge> : null}
           </div>
           <div className="text-sm text-muted-foreground">已完成 {completedCount} 题</div>
         </div>
@@ -752,7 +752,7 @@ export function ReviewMindmapQuizBreakDialog({
 
   const renderSummary = () => (
     <div className="space-y-4 px-6 py-8 text-center">
-      <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-emerald-100 text-emerald-700">
+        <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-success/10 text-success">
         <CheckCircle2 className="h-8 w-8" />
       </div>
       <div>

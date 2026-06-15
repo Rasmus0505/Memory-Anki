@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { FileText, FolderTree, Plus, Save, Trash2, Upload } from 'lucide-react'
 import type { MindMapEditorState } from '@/shared/api/contracts'
 import { PageIntro } from '@/shared/components/layout/PageIntro'
+import { EmptyState } from '@/shared/components/state-placeholders'
 import {
   MindMapFrame,
   MindMapPageToolbar,
@@ -386,9 +387,11 @@ export default function Knowledge() {
                   ))}
                 </div>
               ) : (
-                <div className="rounded-2xl border border-dashed border-border/80 px-3 py-4 text-sm text-muted-foreground">
-                  还没有上传 PDF 资料。
-                </div>
+                <EmptyState
+                  variant="list"
+                  title="还没有上传 PDF 资料"
+                  description="上传 PDF 后，系统会自动提取知识结构并生成宫殿节点。"
+                />
               )}
             </div>
 
@@ -430,9 +433,11 @@ export default function Knowledge() {
                         ))}
                       </div>
                     ) : (
-                      <div className="rounded-2xl border border-dashed border-border/80 px-3 py-4 text-sm text-muted-foreground">
-                        当前章节还没有关联任何宫殿。
-                      </div>
+                      <EmptyState
+                        variant="link"
+                        title="当前章节还没有关联任何宫殿"
+                        description="关联宫殿后，可以在此快速跳转复习。"
+                      />
                     )}
                   </div>
                 </>
@@ -514,7 +519,7 @@ export default function Knowledge() {
                   onFullscreenChange={setMindMapNativeFullscreen}
                   onUiClearedChange={setMindMapUiCleared}
                   className={cn(
-                    'w-full flex-1 rounded-2xl border border-border/70 bg-white',
+                    'w-full flex-1 rounded-2xl border border-border/70 bg-background',
                     mindMapFullscreen ? 'h-full' : 'h-[62vh]',
                   )}
                 />
@@ -584,6 +589,7 @@ export default function Knowledge() {
         currentJobStatus={mindMapImport.currentJobStatus}
         currentJobStage={mindMapImport.currentJobStage}
         currentJobUsage={mindMapImport.currentJobUsage}
+        currentJobResolvedAi={mindMapImport.currentJobResolvedAi}
         currentJobPauseRequested={mindMapImport.currentJobPauseRequested}
         canResumeJob={mindMapImport.canResumeJob}
         canPauseJob={mindMapImport.canPauseJob}

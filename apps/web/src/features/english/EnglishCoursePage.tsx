@@ -30,6 +30,7 @@ import { useEnglishCourseShortcuts } from '@/features/english/hooks/useEnglishCo
 import { resolveDisplaySentenceIndex } from '@/features/english/model/english-course-progress'
 import { useEnglishTypingFeedbackSounds } from '@/features/english/useEnglishTypingFeedbackSounds'
 import { useEnglishWordTyping } from '@/features/english/useEnglishWordTyping'
+import { useRouteResidency } from '@/app/router/RouteResidency'
 
 const FOCUS_RESTORE_DELAY_MS = 180
 const EMPTY_TOKENS: string[] = []
@@ -75,6 +76,7 @@ function resolveWordRailDensity(
 }
 
 export default function EnglishCoursePage() {
+  const { isActive } = useRouteResidency()
   const { id } = useParams()
   const courseId = Number(id)
   const videoRef = useRef<HTMLVideoElement | null>(null)
@@ -145,6 +147,10 @@ export default function EnglishCoursePage() {
   }, [loadCourse])
 
   useEffect(() => {
+    timer.setSceneActive?.(isActive, { source: isActive ? 'route_active' : 'route_inactive' })
+  }, [isActive, timer])
+
+  useEffect(() => {
     const syncPracticeSettings = () => {
       setPracticeSettings(readEnglishPracticeSettings())
     }
@@ -181,10 +187,11 @@ export default function EnglishCoursePage() {
 
   useEffect(() => {
     if (!course) return
+    if (!isActive) return
     if (timer.status !== 'idle') return
     if (!shouldAutoStartOnPageEnter(readTimerAutomationConfig(), 'english')) return
     timer.start({ source: 'page_enter', scene: 'english_course' })
-  }, [course, timer])
+  }, [course, isActive, timer])
 
   const activeSentence = course?.sentences[typingSentenceIndex] ?? null
   const translationSentence =
@@ -246,6 +253,12 @@ export default function EnglishCoursePage() {
     }
     setIsSegmentPlaying(false)
   }, [])
+
+  useEffect(() => {
+    if (isActive) return
+    clearFocusRestoreTimer()
+    stopSegmentPlayback()
+  }, [clearFocusRestoreTimer, isActive, stopSegmentPlayback])
 
   const focusTypingInput = useCallback(
     (restoreKeyboard = false) => {
@@ -606,12 +619,13 @@ export default function EnglishCoursePage() {
   ])
 
   useEffect(() => {
+    if (!isActive) return
     if (!typingEnabled) return
     focusTypingInput(isTouchDevice)
-  }, [activeSentence?.id, focusTypingInput, isTouchDevice, typingEnabled, typingState.activeWordIndex])
+  }, [activeSentence?.id, focusTypingInput, isActive, isTouchDevice, typingEnabled, typingState.activeWordIndex])
 
   useEffect(() => {
-    if (!typingEnabled || settingsOpen || isTouchDevice) return undefined
+    if (!isActive || !typingEnabled || settingsOpen || isTouchDevice) return undefined
 
     const onPointerDownCapture = (event: PointerEvent) => {
       if (shouldKeepEnglishPracticeControlFocus(event.target)) return
@@ -624,9 +638,10 @@ export default function EnglishCoursePage() {
     return () => {
       window.removeEventListener('pointerdown', onPointerDownCapture, true)
     }
-  }, [focusTypingInput, isTouchDevice, settingsOpen, typingEnabled])
+  }, [focusTypingInput, isActive, isTouchDevice, settingsOpen, typingEnabled])
 
   useEffect(() => {
+    if (!isActive) return
     if (!activeSentence || sentencePhase !== 'listening_wait_input') return
     const previewKey = `${course?.id}:${activeSentence.index}`
     if (autoPreviewKeyRef.current === previewKey) return
@@ -637,7 +652,7 @@ export default function EnglishCoursePage() {
       source: 'english_sentence_preview',
       countReplay: false,
     })
-  }, [activeSentence, course?.id, sentencePhase, startPlaybackWindow])
+  }, [activeSentence, course?.id, isActive, sentencePhase, startPlaybackWindow])
 
   useEffect(() => {
     const element = videoRef.current

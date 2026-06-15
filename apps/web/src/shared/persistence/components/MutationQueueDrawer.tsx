@@ -122,9 +122,9 @@ export function MutationQueueDrawer({ open, onOpenChange }: MutationQueueDrawerP
                       </div>
                     </div>
                     {item.replayMode === 'auto' && item.status !== 'conflict' ? (
-                      <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" />
+                      <CheckCircle2 className="h-4 w-4 shrink-0 text-success" />
                     ) : (
-                      <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600" />
+                      <AlertTriangle className="h-4 w-4 shrink-0 text-warning" />
                     )}
                   </div>
                   <div className="mt-3 space-y-2 text-sm">

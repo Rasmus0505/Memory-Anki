@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowRight, BookOpen, Clock3, Plus, Sparkles, Timer, TrendingUp } from 'lucide-react'
+import { LoadingState } from '@/shared/components/state-placeholders'
 import type { DashboardQuery, DashboardResponse } from '@/shared/api/contracts'
 import { TimeRecordDialog } from '@/features/profile/components/TimeRecordDialog'
 import { TimeRecordsBreakdownChart } from '@/features/profile/components/TimeRecordsBreakdownChart'
@@ -346,7 +347,7 @@ export default function Dashboard() {
   }, [durationMode, hasLoadedDashboard, loadSelectedDuration, normalizedDurationFilter, rangeEndDate, rangeStartDate, selectedMonth])
 
   if (!data) {
-    return <div className="flex items-center justify-center py-32 text-sm text-muted-foreground">正在加载仪表盘...</div>
+    return <LoadingState text="正在加载仪表盘…" />
   }
 
   const selectedDurationLabel = formatSelectedDurationLabel(durationMode, selectedMonth, rangeStartDate, rangeEndDate)
@@ -379,11 +380,11 @@ export default function Dashboard() {
             <div className="text-xs text-muted-foreground">立即复习</div>
           </div>
           <div className="space-y-1">
-            <div className="text-3xl font-bold text-amber-500">{dueLaterTodayCount}</div>
+            <div className="text-3xl font-bold text-warning">{dueLaterTodayCount}</div>
             <div className="text-xs text-muted-foreground">今日稍后</div>
           </div>
           <div className="space-y-1">
-            <div className="text-3xl font-bold text-emerald-600">{needsPracticeCount}</div>
+            <div className="text-3xl font-bold text-success">{needsPracticeCount}</div>
             <div className="text-xs text-muted-foreground">要练习</div>
           </div>
         </div>

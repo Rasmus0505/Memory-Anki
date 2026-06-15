@@ -50,6 +50,10 @@ export interface TimedSessionController {
   start: (meta?: Record<string, boolean | number | string | null>) => void
   pause: (meta?: Record<string, boolean | number | string | null>) => void
   resume: (meta?: Record<string, boolean | number | string | null>) => void
+  setSceneActive: (
+    active: boolean,
+    meta?: Record<string, boolean | number | string | null>,
+  ) => void
   leaveScene: (meta?: Record<string, boolean | number | string | null>) => Promise<TimeSessionRecord | null>
   registerActivity: (
     activityKind: TimerAutomationActivityKind,
@@ -256,6 +260,7 @@ export function useTimedSession({
   const hiddenPauseRef = React.useRef<number | null>(null)
   const restoredStorageKeyRef = React.useRef<string | null>(null)
   const leaveHandledRef = React.useRef(false)
+  const sceneActiveRef = React.useRef(true)
   const suspendedAtRef = React.useRef<string | null>(null)
   const resumeDeadlineAtRef = React.useRef<string | null>(null)
   const leaveMetaRef =
@@ -379,6 +384,17 @@ export function useTimedSession({
     leaveMetaRef.current = null
     leaveHandledRef.current = false
   }, [])
+
+  const finalizeExpiredSuspendedState = React.useCallback(() => {
+    clearSuspendedState()
+    if (statusRef.current === 'paused') {
+      persistSnapshot({
+        statusOverride: 'paused',
+      })
+      return
+    }
+    clearPersistedSnapshot()
+  }, [clearPersistedSnapshot, clearSuspendedState, persistSnapshot])
 
   const ensureRecordId = React.useCallback(() => {
     if (!recordIdRef.current) {
@@ -505,6 +521,7 @@ export function useTimedSession({
 
   const beginRunning = React.useCallback((eventType: 'start' | 'resume', meta?: Record<string, boolean | number | string | null>) => {
     const nextStartedAt = startedAtRef.current ?? nowIso()
+    sceneActiveRef.current = true
     setStartedAt(nextStartedAt)
     startedAtRef.current = nextStartedAt
     ensureRecordId()
@@ -520,6 +537,38 @@ export function useTimedSession({
     pushEvent(eventType, meta)
     persistSnapshot()
   }, [armAutoPause, clearSuspendedState, ensureRecordId, persistSnapshot, pushEvent, startTicker])
+
+  const resumeSuspendedScene = React.useCallback(
+    (meta?: Record<string, boolean | number | string | null>) => {
+      if (!startedAtRef.current || !suspendedAtRef.current || !resumeDeadlineAtRef.current) {
+        return false
+      }
+      const deadlineMs = new Date(resumeDeadlineAtRef.current).getTime()
+      if (!Number.isFinite(deadlineMs) || Date.now() > deadlineMs) {
+        finalizeExpiredSuspendedState()
+        return false
+      }
+
+      const previousLeaveMeta = leaveMetaRef.current
+      clearSuspendedState()
+      lastActivityAtRef.current = Date.now()
+      idleSecondsRef.current = 0
+      setIdleSeconds(0)
+      statusRef.current = 'running'
+      setStatus('running')
+      setGlowState('running')
+      startTicker()
+      armAutoPause()
+      pushEvent('resume', {
+        reason: 'scene_return',
+        ...(previousLeaveMeta ?? {}),
+        ...(meta ?? {}),
+      })
+      persistSnapshot()
+      return true
+    },
+    [armAutoPause, clearSuspendedState, finalizeExpiredSuspendedState, persistSnapshot, pushEvent, startTicker],
+  )
 
   const start = React.useCallback((meta?: Record<string, boolean | number | string | null>) => {
     if (statusRef.current === 'running' || statusRef.current === 'completed') return
@@ -569,6 +618,7 @@ export function useTimedSession({
       statusRef.current = 'paused'
       setStatus('paused')
       setGlowState('idle')
+      sceneActiveRef.current = false
       idleSecondsRef.current = 0
       setIdleSeconds(0)
       pushEvent('leave_scene', meta, { persist: false })
@@ -598,10 +648,32 @@ export function useTimedSession({
     ],
   )
 
+  const setSceneActive = React.useCallback(
+    (active: boolean, meta?: Record<string, boolean | number | string | null>) => {
+      if (sceneActiveRef.current === active) {
+        return
+      }
+      sceneActiveRef.current = active
+
+      if (!active) {
+        void leaveScene({ source: 'scene_inactive', ...(meta ?? {}) })
+        return
+      }
+
+      if (suspendedAtRef.current && resumeDeadlineAtRef.current) {
+        resumeSuspendedScene(meta)
+      }
+    },
+    [leaveScene, resumeSuspendedScene],
+  )
+
   const registerActivity = React.useCallback((
     activityKind: TimerAutomationActivityKind,
     meta?: Record<string, boolean | number | string | null>,
   ) => {
+    if (!sceneActiveRef.current) {
+      return
+    }
     if (!isActivityEnabled(activityKind, automationConfig)) {
       return
     }
@@ -694,6 +766,7 @@ export function useTimedSession({
     setStartedAt(null)
     setDurationEdited(false)
     statusRef.current = 'idle'
+    sceneActiveRef.current = true
     setStatus('idle')
     setGlowState('idle')
     clearSuspendedState()
@@ -704,7 +777,7 @@ export function useTimedSession({
     if (!storageKey || restoredStorageKeyRef.current === storageKey) return
     restoredStorageKeyRef.current = storageKey
     clearCompetingSnapshots()
-    let parsed: RestorableTimedSessionSnapshot | null = null
+    let parsed: RestorableTimedSessionSnapshot | null
     try {
       const raw = window.sessionStorage.getItem(storageKey)
       parsed = normalizeSnapshot(raw ? JSON.parse(raw) as PersistedTimedSessionSnapshotV2 | LegacyPersistedTimedSessionSnapshot : null)
@@ -762,27 +835,24 @@ export function useTimedSession({
     setGlowState('idle')
 
     if (parsed.suspended) {
-      clearSuspendedState()
-      statusRef.current = 'running'
-      setStatus('running')
-      startTicker()
-      armAutoPause()
-      pushEvent('resume', {
-        reason: 'scene_return',
-        ...(parsed.leaveMeta ?? {}),
-      })
-      persistSnapshot()
+      suspendedAtRef.current = parsed.suspendedAt
+      resumeDeadlineAtRef.current = parsed.resumeDeadlineAt
+      leaveMetaRef.current = parsed.leaveMeta ?? null
+      sceneActiveRef.current = true
+      resumeSuspendedScene()
       return
     }
 
     if (parsed.status === 'paused') {
       statusRef.current = 'paused'
+      sceneActiveRef.current = true
       setStatus('paused')
       persistSnapshot()
       return
     }
 
     statusRef.current = 'running'
+    sceneActiveRef.current = true
     setStatus('running')
     startTicker()
     armAutoPause()
@@ -792,6 +862,7 @@ export function useTimedSession({
     clearCompetingSnapshots,
     clearPersistedSnapshot,
     clearSuspendedState,
+    resumeSuspendedScene,
     englishCourseId,
     kind,
     palaceId,
@@ -809,6 +880,10 @@ export function useTimedSession({
 
   React.useEffect(() => {
     const handleVisibility = () => {
+      if (!sceneActiveRef.current) {
+        clearTimer(hiddenPauseRef)
+        return
+      }
       if (document.visibilityState === 'hidden') {
         clearTimer(hiddenPauseRef)
         hiddenPauseRef.current = window.setTimeout(() => {
@@ -823,6 +898,10 @@ export function useTimedSession({
     }
 
     const handleBlur = () => {
+      if (!sceneActiveRef.current) {
+        clearTimer(hiddenPauseRef)
+        return
+      }
       clearTimer(hiddenPauseRef)
       hiddenPauseRef.current = window.setTimeout(() => {
         pause({ reason: 'blur' })
@@ -831,6 +910,9 @@ export function useTimedSession({
 
     const handleFocus = () => {
       clearTimer(hiddenPauseRef)
+      if (!sceneActiveRef.current) {
+        return
+      }
       if (statusRef.current === 'paused') {
         registerActivity('window_return', { reason: 'focus' })
       }
@@ -892,6 +974,7 @@ export function useTimedSession({
     start,
     pause,
     resume,
+    setSceneActive,
     leaveScene,
     registerActivity,
     logEvent,

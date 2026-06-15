@@ -9,6 +9,7 @@ import type { MindMapAiSplitRequestPayload, MindMapSelection } from '@/shared/co
 import type { MindMapFeedbackEvent, MindMapFeedbackFxPayload } from '@/shared/components/mindmap-host/hostBridgeUtils'
 import { readTimerAutomationConfig } from '@/shared/components/session/timer-automation-config'
 import { shouldAutoStartOnPageEnter, useTimedSession } from '@/shared/hooks/useTimedSession'
+import { useRouteResidency } from '@/app/router/RouteResidency'
 import { logAiCall, requestOpenAiLogDetail } from '@/shared/logs/model/appLogs'
 import { parseMindMapDoc } from '@/features/palace-edit/model/mindmap-editor'
 import { usePalaceEditorDocument } from '@/features/palace-edit/hooks/usePalaceEditorDocument'
@@ -31,6 +32,7 @@ function readSelectionNodeUid(nodes: MindMapSelection[]) {
 }
 
 export function usePalaceEditPage() {
+  const { isActive } = useRouteResidency()
   const { id } = useParams()
   const navigate = useNavigate()
   const location = useLocation()
@@ -311,10 +313,11 @@ export function usePalaceEditPage() {
 
   useEffect(() => {
     if (!palaceId || !documentState.editorState) return
+    if (!isActive) return
     if (timer.status !== 'idle') return
     if (!shouldAutoStartOnPageEnter(readTimerAutomationConfig(), 'palace_edit')) return
     timer.start({ source: 'page_enter' })
-  }, [documentState.editorState, palaceId, timer])
+  }, [documentState.editorState, isActive, palaceId, timer])
 
   const miniPalaceEditInitializedRef = useRef(false)
   useEffect(() => {
@@ -355,8 +358,17 @@ export function usePalaceEditPage() {
   }, [clearMiniPalaceQueryParams, miniPalace.cancelCreate])
 
   useEffect(() => {
+    timer.setSceneActive?.(isActive, { source: isActive ? 'route_active' : 'route_inactive' })
+  }, [isActive, timer])
+
+  useEffect(() => {
     timerRef.current = timer
   }, [timer])
+
+  useEffect(() => {
+    if (isActive) return
+    setMindMapFullscreen(false)
+  }, [isActive])
 
   useEffect(() => {
     const markHardUnload = () => {

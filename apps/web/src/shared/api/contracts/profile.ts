@@ -1,5 +1,8 @@
 export interface BackupSummary {
   kind: "full" | "rescue"
+  /** full = 完整备份(含附件等大目录)，rolling = 轻量备份(仅数据库+迁移状态) */
+  scope?: "full" | "rolling"
+  full?: boolean
   name: string
   path: string
   created_at: string
@@ -69,17 +72,39 @@ export interface AiRuntimeOptions {
   model?: string
   thinking_enabled?: boolean | null
 }
-export interface AiModelMetadata {
+export type AiProviderKey = 'dashscope' | 'qwen' | 'zhipu' | 'siliconflow'
+export type AiModelType = 'llm' | 'vl' | 'translation' | 'asr' | 'tts'
+
+export interface ResolvedAiRuntimeMeta {
+  scene_key: string
+  scene_label?: string
+  model_key: string
+  model_label: string
+  provider: AiProviderKey
+  provider_label?: string
+  model_type: AiModelType
+  model_type_label?: string
+  has_vision: boolean
+  thinking_enabled: boolean
+}
+
+export interface AiModelCatalogItem {
   key: string
   label: string
-  provider: 'dashscope' | 'zhipu'
-  modality: 'text' | 'vision' | 'translation' | 'tts' | 'asr'
+  display_name: string
+  provider: AiProviderKey
+  provider_label: string
+  model_type: AiModelType
+  model_type_label: string
+  has_vision: boolean
   supports_thinking: boolean
   supports_temperature: boolean
+  is_builtin: boolean
+  is_active: boolean
   default_base_url: string
 }
 export interface AiProviderSettings {
-  key: 'dashscope' | 'zhipu'
+  key: AiProviderKey
   label: string
   api_key_masked: string
   has_api_key: boolean
@@ -87,22 +112,50 @@ export interface AiProviderSettings {
   api_key_config_key: string
   base_url_config_key: string
 }
-export interface AiModelScenario {
+export interface AiModelCategory {
+  key: AiModelType
+  label: string
+  description: string
+  shared_model?: string | null
+  shared_thinking_enabled?: boolean
+  has_shared_config?: boolean
+  available_models: AiModelCatalogItem[]
+  scene_keys: string[]
+  scene_details: Array<{
+    key: string
+    label: string
+    description: string
+  }>
+}
+export interface AiSceneBinding {
   key: string
   label: string
   description: string
-  category: string
+  category_key: AiModelType
+  category_label: string
   config_key: string
   thinking_config_key: string
   default_model: string
+  current_model: string
   default_thinking_enabled: boolean
-  available_models: AiModelMetadata[]
+  current_thinking_enabled: boolean
+  effective_model: string
+  effective_thinking_enabled: boolean
+  inherits_category_default: boolean
+  available_models: AiModelCatalogItem[]
   source_location: string
+  latest_resolved_model?: ResolvedAiRuntimeMeta | null
 }
-export interface AiModelScenariosResponse {
-  scenarios: AiModelScenario[]
+export interface AiModelSettingsResponse {
   providers: AiProviderSettings[]
+  categories: AiModelCategory[]
+  models: AiModelCatalogItem[]
+  scenes: AiSceneBinding[]
+  scenarios?: AiSceneBinding[]
 }
+export type AiModelMetadata = AiModelCatalogItem
+export type AiModelScenario = AiSceneBinding
+export type AiModelScenariosResponse = AiModelSettingsResponse
 export interface ImportPalacesResponse {
   ok: boolean
   count?: number

@@ -1,6 +1,6 @@
 import { API_BASE, fetchWithMutationQueue, request } from '@/shared/api/http'
 import type {
-  AiModelScenariosResponse,
+  AiModelSettingsResponse,
   AiPromptTemplateListResponse,
   BackupListResponse,
   ClientPreferencesResponse,
@@ -58,20 +58,33 @@ export function resetAiPromptTemplatesApi(keys?: string[]) {
 }
 
 export function getAiModelScenariosApi() {
-  return request<AiModelScenariosResponse>('/settings/ai-models')
+  return request<AiModelSettingsResponse>('/settings/ai-models')
 }
 
 export function updateAiModelScenariosApi(data: {
-  scenario_updates?: Record<string, {
+  scene_updates?: Record<string, {
+    default_model?: string
+    current_model?: string
+    default_thinking_enabled?: boolean
+    current_thinking_enabled?: boolean
+  }>
+  category_updates?: Partial<Record<'llm' | 'vl' | 'translation' | 'asr' | 'tts', {
     default_model?: string
     default_thinking_enabled?: boolean
+    apply_to_scenes?: boolean
+  }>>
+  scenario_updates?: Record<string, {
+    default_model?: string
+    current_model?: string
+    default_thinking_enabled?: boolean
+    current_thinking_enabled?: boolean
   }>
   provider_updates?: Record<string, {
     api_key?: string
     base_url?: string
   }>
 }) {
-  return request<AiModelScenariosResponse>('/settings/ai-models', {
+  return request<AiModelSettingsResponse>('/settings/ai-models', {
     method: 'PUT',
     body: JSON.stringify(data),
     persistence: {
@@ -79,6 +92,37 @@ export function updateAiModelScenariosApi(data: {
       coalesceKey: 'settings:ai-models',
       description: '保存 AI 模型配置',
       replayMode: 'auto',
+    },
+  })
+}
+
+export function createOrUpdateAiModelApi(data: {
+  key: string
+  display_name?: string
+  provider: 'dashscope' | 'qwen' | 'zhipu' | 'siliconflow'
+  model_type: 'llm' | 'vl' | 'translation' | 'asr' | 'tts'
+  has_vision?: boolean
+  supports_thinking?: boolean
+  supports_temperature?: boolean
+}) {
+  return request<AiModelSettingsResponse>('/settings/ai-models/models', {
+    method: 'POST',
+    body: JSON.stringify(data),
+    persistence: {
+      resourceKey: `settings:ai-models:model:${data.key}`,
+      description: '保存 AI 模型目录',
+      replayMode: 'manual',
+    },
+  })
+}
+
+export function deleteAiModelApi(modelKey: string) {
+  return request<AiModelSettingsResponse>(`/settings/ai-models/models/${encodeURIComponent(modelKey)}`, {
+    method: 'DELETE',
+    persistence: {
+      resourceKey: `settings:ai-models:model:${modelKey}:delete`,
+      description: '删除 AI 模型目录',
+      replayMode: 'manual',
     },
   })
 }

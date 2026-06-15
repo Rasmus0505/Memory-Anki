@@ -20,6 +20,8 @@ interface HostEventHandlerRefs {
   onAiSplitRequest: MutableRefObject<((payload: MindMapAiSplitRequestPayload) => void) | undefined>
   onFullscreenChange: MutableRefObject<((active: boolean) => void) | undefined>
   onFullscreenToggle: MutableRefObject<((active?: boolean) => void) | undefined>
+  onEnterNativeFullscreen: MutableRefObject<(() => void) | undefined>
+  onExitNativeFullscreen: MutableRefObject<(() => void) | undefined>
   onUiClearedChange: MutableRefObject<((active: boolean) => void) | undefined>
   onBilinkTrigger: MutableRefObject<((payload: {
     nodeUid: string | null
@@ -137,6 +139,12 @@ export function dispatchHostEvent(
   }
   if (event === 'fullscreen_toggle') {
     handlers.onFullscreenToggle.current?.(typeof payload === 'boolean' ? payload : undefined)
+  }
+  if (event === 'enter_native_fullscreen_request') {
+    handlers.onEnterNativeFullscreen.current?.()
+  }
+  if (event === 'exit_native_fullscreen_request') {
+    handlers.onExitNativeFullscreen.current?.()
   }
   if (event === 'ui_cleared_change') {
     handlers.onUiClearedChange.current?.(Boolean(payload))

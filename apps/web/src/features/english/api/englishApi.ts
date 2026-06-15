@@ -1,4 +1,4 @@
-import { API_BASE, fetchWithMutationQueue, request } from '@/shared/api/http'
+import { API_BASE, request, uploadWithFormData } from '@/shared/api/http'
 import { logAppError } from '@/shared/logs/model/appLogs'
 import type {
   EnglishCourseDetail,
@@ -8,36 +8,6 @@ import type {
   EnglishSentenceCheckResponse,
   EnglishWorkspaceResponse,
 } from '@/shared/api/contracts'
-
-async function uploadWithFormData<T>(url: string, formData: FormData): Promise<T> {
-  const fileName = formData.get('video_file')
-  const response = await fetchWithMutationQueue(
-    `${API_BASE}${url}`,
-    {
-      method: 'POST',
-      body: formData,
-    },
-    {
-      resourceKey: `english:upload:${typeof fileName === 'string' ? fileName : 'video'}`,
-      description: '上传英语视频',
-      replayMode: 'manual',
-    },
-  )
-  if (!response.ok) {
-    const body = await response.text().catch(() => '')
-    let message = body || `HTTP ${response.status}`
-    try {
-      const parsed = JSON.parse(body) as { detail?: unknown }
-      if (typeof parsed.detail === 'string' && parsed.detail.trim()) {
-        message = parsed.detail
-      }
-    } catch {
-      // Ignore JSON parse failures here and use the raw text body.
-    }
-    throw new Error(message)
-  }
-  return response.json() as Promise<T>
-}
 
 export function getEnglishWorkspaceApi() {
   return request<EnglishWorkspaceResponse>('/english')
@@ -141,6 +111,10 @@ export async function uploadEnglishVideoApi(
   return uploadWithFormData<{ task: NonNullable<EnglishWorkspaceResponse['currentTask']> }>(
     '/english/upload',
     formData,
+    {
+      resourceKey: `english:upload:${file.name || 'video'}`,
+      description: '上传英语视频',
+    },
   )
 }
 

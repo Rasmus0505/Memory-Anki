@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import type { ReviewMindMapNode } from '@/features/review/model/review-flow-tree'
+import type { ReviewMindMapNode } from '@/entities/review/model/review-flow-tree'
 import {
   buildMiniPalaceRevealState,
   isMiniPalaceRevealComplete,
   pourMiniPalaceRevealState,
   sanitizeMiniPalaceCheckpointIds,
 } from './mini-palace-flow'
-import { flattenNodes } from '@/features/review/model/review-flow-tree'
+import { flattenNodes } from '@/entities/review/model/review-flow-tree'
 
 function node(
   id: string,

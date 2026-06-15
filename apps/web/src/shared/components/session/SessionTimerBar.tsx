@@ -157,7 +157,7 @@ export function SessionTimerBar({
       <>
         <div
           className={cn(
-            'rounded-2xl border border-border/70 bg-background/95 px-4 py-3 shadow-[0_14px_40px_rgba(15,23,42,0.12)] backdrop-blur',
+            'rounded-2xl border border-border/70 bg-background/95 px-4 py-3 shadow-soft backdrop-blur',
             className,
           )}
           data-testid="session-timer-bar"
@@ -223,7 +223,7 @@ export function SessionTimerBar({
 
   return (
     <div className={className ?? 'fixed right-5 top-5 z-40'} data-testid="session-timer-bar" data-layout="card">
-      <div className="w-[320px] rounded-2xl border border-border/70 bg-background/95 p-4 shadow-[0_18px_60px_rgba(15,23,42,0.18)] backdrop-blur">
+      <div className="w-[320px] rounded-2xl border border-border/70 bg-background/95 p-4 shadow-popover backdrop-blur">
         <div className="flex items-start justify-between gap-3">
           <div>
             <div className="text-2xl font-semibold text-foreground">{formatDuration(effectiveSeconds)}</div>

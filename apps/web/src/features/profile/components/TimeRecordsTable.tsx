@@ -20,6 +20,7 @@ import {
   CardTitle,
 } from '@/shared/components/ui/card'
 import { Input } from '@/shared/components/ui/input'
+import { EmptyState } from '@/shared/components/state-placeholders'
 
 interface TimeRecordsTableProps {
   thresholdInput: string
@@ -168,13 +169,15 @@ export function TimeRecordsTable({
 
       <CardContent>
         {visibleRecords.length === 0 ? (
-          <div className="rounded-[24px] border border-dashed border-border/80 py-10 text-center text-sm text-muted-foreground">
-            还没有可展示的时间记录。
-          </div>
+          <EmptyState
+            variant="search"
+            title="还没有可展示的时间记录"
+            description="调整筛选条件，或开始一次学习会话来产生记录。"
+          />
         ) : (
           <div className="overflow-x-auto rounded-[24px] border border-border/70">
             <table className="min-w-full divide-y divide-border text-sm">
-              <thead className="bg-slate-50/80 text-left text-xs uppercase tracking-[0.14em] text-muted-foreground">
+              <thead className="bg-muted/80 text-left text-xs uppercase tracking-[0.14em] text-muted-foreground">
                 <tr>
                   <th className="px-4 py-3">
                     <input
@@ -195,7 +198,7 @@ export function TimeRecordsTable({
                   <th className="px-4 py-3">操作</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-border/80 bg-white">
+              <tbody className="divide-y divide-border/80 bg-background">
                 {visibleRecords.map((record) => {
                   const isDeleting = deletingRecordId === record.id
                   const isRestoring = restoringRecordId === record.id
@@ -203,9 +206,9 @@ export function TimeRecordsTable({
                   return (
                     <tr
                       key={record.id}
-                      className={`transition-colors hover:bg-slate-50/80 active:bg-slate-100/70 ${
+                      className={`transition-colors hover:bg-muted/80 active:bg-muted ${
                         record.deletedAt
-                          ? 'bg-slate-50/70 text-muted-foreground'
+                          ? 'bg-muted/70 text-muted-foreground'
                           : ''
                       }`}
                     >
@@ -231,7 +234,7 @@ export function TimeRecordsTable({
                             className={`font-medium ${
                               record.deletedAt
                                 ? 'line-through'
-                                : 'text-slate-950'
+                                : 'text-foreground'
                             }`}
                           >
                             {record.title}
@@ -252,7 +255,7 @@ export function TimeRecordsTable({
                       <td className="px-4 py-4 whitespace-nowrap">
                         {formatTableDateTime(record.startedAt)}
                       </td>
-                      <td className="px-4 py-4 whitespace-nowrap font-medium text-slate-950">
+                      <td className="px-4 py-4 whitespace-nowrap font-medium text-foreground">
                         {formatDuration(record.effectiveSeconds)}
                       </td>
                       <td className="px-4 py-4">

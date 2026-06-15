@@ -2,6 +2,7 @@ import { ArrowRightLeft, Link2, Trash2 } from 'lucide-react'
 import type { BilinkItem } from '@/shared/api/contracts'
 import { Button } from '@/shared/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card'
+import { EmptyState } from '@/shared/components/state-placeholders'
 import { cn } from '@/shared/lib/utils'
 
 interface BilinkPanelProps {
@@ -54,9 +55,11 @@ export function BilinkPanel({
           </div>
         ) : null}
         {!loading && !error && items.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-border/80 bg-background/60 p-4 text-sm text-muted-foreground">
-            还没有跨宫殿链接。在节点编辑时输入 `@`，或用顶部搜索面板来创建。
-          </div>
+          <EmptyState
+            variant="link"
+            title="还没有跨宫殿链接"
+            description="在节点编辑时输入 @，或用顶部搜索面板来创建跨宫殿链接。"
+          />
         ) : null}
         {!loading && items.length > 0 ? (
           <div className="space-y-2.5">
@@ -64,13 +67,13 @@ export function BilinkPanel({
               <div key={item.id} className="rounded-2xl border border-border/70 bg-background/70 p-3">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2 text-sm font-medium text-slate-900">
+                    <div className="flex items-center gap-2 text-sm font-medium text-primary">
                       <span
                         className={cn(
                           'inline-flex rounded-full px-2 py-0.5 text-[11px]',
                           item.direction === 'incoming'
-                            ? 'bg-sky-50 text-sky-700'
-                            : 'bg-amber-50 text-amber-700',
+                            ? 'bg-info/5 text-info'
+                            : 'bg-warning/5 text-warning',
                         )}
                       >
                         {item.direction === 'incoming' ? '被引用' : '引用'}
@@ -79,10 +82,10 @@ export function BilinkPanel({
                     </div>
                     <div className="mt-1 text-xs text-muted-foreground">{targetPalace(item)}</div>
                     {targetPath(item)?.length ? (
-                      <div className="mt-2 text-xs text-slate-500">{targetPath(item)?.join(' / ')}</div>
+                      <div className="mt-2 text-xs text-muted-foreground">{targetPath(item)?.join(' / ')}</div>
                     ) : null}
                     {item.text ? (
-                      <div className="mt-2 text-xs text-slate-600">显示文本：{item.text}</div>
+                      <div className="mt-2 text-xs text-muted-foreground">显示文本：{item.text}</div>
                     ) : null}
                   </div>
                   <div className="flex shrink-0 gap-2">

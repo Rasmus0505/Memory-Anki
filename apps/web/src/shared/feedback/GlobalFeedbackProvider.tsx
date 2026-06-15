@@ -91,14 +91,37 @@ export function GlobalFeedbackProvider({
     (
       descriptor: FeedbackDescriptor,
       point: { x: number; y: number } | null,
+      channel: 'dom' | 'dispatch' = 'dispatch',
     ) => {
       if (!point) return
 
-      if (settings.soundEnabled && settings.mode === 'immersive') {
+      const audioOn = settings.soundEnabled && settings.mode === 'immersive'
+      const visualOn = settings.animationEnabled && !reducedMotion
+
+      // 全局通用 UI 反馈（DOM 原生事件：普通点击 / 悬停 / 打字）按 globalIntensity 收敛。
+      // 脑图编辑与复习流程通过 dispatchGlobalFeedback 主动派发（channel === 'dispatch'），
+      // 不受 globalIntensity 影响，反馈完整保留。
+      let playAudio = audioOn
+      let showVisual = visualOn
+      if (channel === 'dom') {
+        if (settings.globalIntensity === 'quiet') {
+          return
+        }
+        if (settings.globalIntensity === 'balanced') {
+          // 微操作（普通点击、悬停、单次按键）默认静默声音，仅保留轻量视觉。
+          playAudio = false
+          // 悬停反馈在 balanced 模式下完全关闭，避免视觉噪音。
+          if (descriptor.audioEvent === 'hover_pulse') {
+            showVisual = false
+          }
+        }
+      }
+
+      if (playAudio) {
         playEvent(descriptor.audioEvent)
       }
 
-      if (settings.animationEnabled && !reducedMotion) {
+      if (showVisual) {
         burstIdRef.current += 1
         const burstId = burstIdRef.current
         setBursts((current) => [
@@ -115,7 +138,7 @@ export function GlobalFeedbackProvider({
         }, getBurstTtlMs(descriptor))
       }
 
-      if (descriptor.screenPulse && settings.animationEnabled && !reducedMotion) {
+      if (descriptor.screenPulse && showVisual) {
         pulseIdRef.current += 1
         const pulseId = pulseIdRef.current
         setScreenPulse({
@@ -127,7 +150,7 @@ export function GlobalFeedbackProvider({
         }, PULSE_TTL_MS)
       }
     },
-    [playEvent, reducedMotion, settings.animationEnabled, settings.mode, settings.soundEnabled],
+    [playEvent, reducedMotion, settings.animationEnabled, settings.globalIntensity, settings.mode, settings.soundEnabled],
   )
 
   const emitFromEvent = React.useCallback(
@@ -137,7 +160,8 @@ export function GlobalFeedbackProvider({
       fallback?: { x: number; y: number },
     ) => {
       if (!descriptor) return
-      emitDescriptor(descriptor, resolveFeedbackPoint(target, fallback))
+      // emitFromEvent 仅被 DOM 原生事件监听器调用，因此标记为 'dom' 通道。
+      emitDescriptor(descriptor, resolveFeedbackPoint(target, fallback), 'dom')
     },
     [emitDescriptor],
   )
@@ -191,7 +215,7 @@ export function GlobalFeedbackProvider({
       x: window.innerWidth / 2,
       y: Math.max(86, Math.round(window.innerHeight * 0.2)),
     }
-    emitDescriptor(descriptor, point)
+    emitDescriptor(descriptor, point, 'dom')
   })
 
   const handleGlobalFeedbackRequest = React.useEffectEvent((event: Event) => {

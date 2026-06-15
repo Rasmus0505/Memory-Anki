@@ -61,11 +61,11 @@ export function ReviewFlowInfoPanel({
             翻卡模式只接管鼠标揭示与标红，不影响导图正文。
           </div>
           {persistProgress ? (
-            <div className="rounded-2xl border border-dashed border-emerald-200 bg-emerald-50 px-3 py-3 text-emerald-700">
+            <div className="rounded-2xl border border-dashed border-success/30 bg-success/5 px-3 py-3 text-success">
               未完成时会自动续练；完成或手动重开后会清空这次练习进度。
             </div>
           ) : (
-            <div className="rounded-2xl border border-dashed border-amber-200 bg-amber-50 px-3 py-3 text-amber-700">
+            <div className="rounded-2xl border border-dashed border-warning/30 bg-warning/5 px-3 py-3 text-warning">
               正式复习不会跨退出保留当前翻卡进度，但会记录本次有效时长。
             </div>
           )}

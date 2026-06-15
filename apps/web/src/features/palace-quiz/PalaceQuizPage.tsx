@@ -24,10 +24,13 @@ import { Textarea } from '@/shared/components/ui/textarea'
 import { cn } from '@/shared/lib/utils'
 import { readTimerAutomationConfig } from '@/shared/components/session/timer-automation-config'
 import { shouldAutoStartOnPageEnter, useTimedSession } from '@/shared/hooks/useTimedSession'
+import { dispatchGlobalFeedback } from '@/shared/feedback/globalFeedbackModel'
+import { useRouteResidency } from '@/app/router/RouteResidency'
 import type {
   MiniPalaceSummary,
   PalaceQuizPdfSourceMeta,
   PalaceQuizPdfSourceRole,
+  PalaceQuizMiniPalaceClassificationResult,
   PalaceQuizGenerationPreview,
   PalaceQuizQuestion,
   PalaceQuizQuestionDraft,
@@ -273,6 +276,7 @@ function QuestionSourceBadge({
 }
 
 export default function PalaceQuizPage() {
+  const { isActive } = useRouteResidency()
   const { id } = useParams()
   const palaceId = id ? Number(id) : null
   const [palace, setPalace] = useState<PalaceQuizPageMeta | null>(null)
@@ -303,16 +307,7 @@ export default function PalaceQuizPage() {
   const [generationStreamPreviewText, setGenerationStreamPreviewText] = useState('')
   const [generationClassifyByMiniPalace, setGenerationClassifyByMiniPalace] = useState(false)
   const [classificationLoading, setClassificationLoading] = useState(false)
-  const [classificationResult, setClassificationResult] = useState<{
-    mini_palace_groups: Array<{
-      mini_palace_id: number
-      mini_palace_name: string
-      question_count: number
-    }>
-    copied_question_count: number
-    unassigned_count: number
-    ai_call_log_id: string | null
-  } | null>(null)
+  const [classificationResult, setClassificationResult] = useState<PalaceQuizMiniPalaceClassificationResult | null>(null)
   const [subjects, setSubjects] = useState<Array<{ id: number; name: string }>>([])
   const [subjectsLoading, setSubjectsLoading] = useState(false)
   const { promptForAiOptions, aiRunConfigDialog } = useAiRunConfigDialog()
@@ -374,11 +369,22 @@ export default function PalaceQuizPage() {
     timer.registerActivity('practice_interaction', { source })
   }
 
+  const emitQuizFeedback = (
+    event: Parameters<typeof dispatchGlobalFeedback>[0],
+    options?: Parameters<typeof dispatchGlobalFeedback>[1],
+  ) => {
+    dispatchGlobalFeedback(event, options)
+  }
+
   useEffect(() => {
     if (typeof window !== 'undefined') {
       window.localStorage.setItem(QUIZ_VIEW_MODE_STORAGE_KEY, viewMode)
     }
   }, [viewMode])
+
+  useEffect(() => {
+    timer.setSceneActive?.(isActive, { source: isActive ? 'route_active' : 'route_inactive' })
+  }, [isActive, timer])
 
   useEffect(() => {
     timerRef.current = timer
@@ -416,10 +422,11 @@ export default function PalaceQuizPage() {
 
   useEffect(() => {
     if (!palaceId) return
+    if (!isActive) return
     if (timer.status !== 'idle') return
     if (!shouldAutoStartOnPageEnter(readTimerAutomationConfig(), 'quiz')) return
     timer.start({ source: 'page_enter' })
-  }, [palaceId, timer])
+  }, [isActive, palaceId, timer])
 
   useEffect(() => {
     if (!palaceId) return
@@ -486,6 +493,7 @@ export default function PalaceQuizPage() {
   const refreshQuestions = async () => {
     if (!palaceId) return
     registerQuizActivity('quiz_refresh')
+    emitQuizFeedback('navigation', { label: '刷新题库' })
     const result = await getPalaceQuizQuestionsApi(palaceId)
     setQuestions(result.items || [])
   }
@@ -515,11 +523,21 @@ export default function PalaceQuizPage() {
     }))
   }
 
+  const handleResetQuestionState = (questionId: number) => {
+    registerQuizActivity('question_reset')
+    emitQuizFeedback('session_reset', { label: '重做' })
+    resetQuestionState(questionId)
+  }
+
   const handleChoiceSelect = (question: PalaceQuizQuestion, optionId: string) => {
     const currentState = questionStates[question.id]
     if (currentState?.choiceResolved) return
     registerQuizActivity('choice_select')
     const isCorrect = question.answer_payload.correct_option_id === optionId
+    emitQuizFeedback(isCorrect ? 'save_success' : 'save_error', {
+      label: isCorrect ? '答对' : '答错',
+      screenPulse: isCorrect ? 'soft' : null,
+    })
     updateQuestionState(question.id, (state) => ({
       ...state,
       selectedOptionId: optionId,
@@ -531,14 +549,20 @@ export default function PalaceQuizPage() {
         setQuestions((current) =>
           current.map((item) => (item.id === question.id ? response.question : item)),
         )
+        emitQuizFeedback('card_reveal', {
+          label: isCorrect ? '揭晓' : '答案',
+          screenPulse: null,
+        })
       })
       .catch((nextError) => {
+        emitQuizFeedback('save_error', { label: '统计失败' })
         toast.error(nextError instanceof Error ? nextError.message : '统计刷新失败。')
       })
   }
 
   const handleShortAnswerSubmit = (questionId: number) => {
     registerQuizActivity('short_answer_submit')
+    emitQuizFeedback('text_commit', { label: '提交答案' })
     updateQuestionState(questionId, (state) => ({
       ...state,
       shortAnswerSubmitted: true,
@@ -551,16 +575,18 @@ export default function PalaceQuizPage() {
     const state = questionStates[question.id] || {}
     const userAnswer = state.shortAnswerText?.trim() || ''
     if (!userAnswer) {
+      emitQuizFeedback('save_error', { label: '先写答案' })
       toast.error('请先填写你的答案。')
       return
     }
+    emitQuizFeedback('shortcut_trigger', { label: 'AI点评' })
     updateQuestionState(question.id, (current) => ({
       ...current,
       aiFeedbackLoading: true,
     }))
     try {
       const aiOptions = await promptForAiOptions({
-        scenarioKey: 'quiz_text',
+        scenarioKey: 'quiz_short_answer_feedback',
         entrypointKey: 'quiz-short-answer-feedback',
         title: '简答题 AI 点评配置',
       })
@@ -569,6 +595,7 @@ export default function PalaceQuizPage() {
           ...current,
           aiFeedbackLoading: false,
         }))
+        emitQuizFeedback('toggle_off', { label: '取消AI' })
         return
       }
       const feedback = await requestPalaceShortAnswerFeedbackApi(question.id, userAnswer, aiOptions)
@@ -577,23 +604,27 @@ export default function PalaceQuizPage() {
         aiFeedback: feedback,
         aiFeedbackLoading: false,
       }))
+      emitQuizFeedback('bilink_action', { label: 'AI完成' })
     } catch (nextError) {
       updateQuestionState(question.id, (current) => ({
         ...current,
         aiFeedbackLoading: false,
       }))
+      emitQuizFeedback('save_error', { label: 'AI失败' })
       toast.error(nextError instanceof Error ? nextError.message : 'AI 点评失败。')
     }
   }
 
   const handleStartCreateQuestion = () => {
     registerQuizActivity('manage_create_start')
+    emitQuizFeedback('node_create', { label: '新增题目' })
     setEditingQuestionId(null)
     setQuestionForm(buildEmptyQuestionForm())
   }
 
   const handleEditQuestion = (question: PalaceQuizQuestion) => {
     registerQuizActivity('manage_edit_question')
+    emitQuizFeedback('node_edit_start', { label: '编辑题目' })
     setActiveTab('manage')
     setEditingQuestionId(question.id)
     setQuestionForm(buildQuestionFormFromQuestion(question))
@@ -602,6 +633,7 @@ export default function PalaceQuizPage() {
   const handleSaveQuestion = async () => {
     if (!palaceId) return
     registerQuizActivity('manage_save_question')
+    emitQuizFeedback('field_commit', { label: editingQuestionId != null ? '更新题目' : '保存题目' })
     setManageSaving(true)
     try {
       const draft = buildDraftFromForm(questionForm)
@@ -612,10 +644,14 @@ export default function PalaceQuizPage() {
         await createPalaceQuizQuestionApi(palaceId, draft)
         toast.success('题目已新增')
       }
+      emitQuizFeedback('save_success', {
+        label: editingQuestionId != null ? '已更新' : '已新增',
+      })
       await refreshQuestions()
       setEditingQuestionId(null)
       setQuestionForm(buildEmptyQuestionForm())
     } catch (nextError) {
+      emitQuizFeedback('save_error', { label: '保存失败' })
       toast.error(nextError instanceof Error ? nextError.message : '保存题目失败。')
     } finally {
       setManageSaving(false)
@@ -625,10 +661,12 @@ export default function PalaceQuizPage() {
   const handleDeleteQuestion = async (questionId: number) => {
     if (!window.confirm('确定删除这道题吗？')) return
     registerQuizActivity('manage_delete_question')
+    emitQuizFeedback('node_delete', { label: '删除题目' })
     setManageDeletingId(questionId)
     try {
       await deletePalaceQuizQuestionApi(questionId)
       toast.success('题目已删除')
+      emitQuizFeedback('save_success', { label: '已删除' })
       await refreshQuestions()
       setQuestionStates((current) => {
         const next = { ...current }
@@ -640,6 +678,7 @@ export default function PalaceQuizPage() {
         setQuestionForm(buildEmptyQuestionForm())
       }
     } catch (nextError) {
+      emitQuizFeedback('save_error', { label: '删除失败' })
       toast.error(nextError instanceof Error ? nextError.message : '删除题目失败。')
     } finally {
       setManageDeletingId(null)
@@ -648,6 +687,7 @@ export default function PalaceQuizPage() {
 
   const handleImageFileChange = (fileList: FileList | null) => {
     registerQuizActivity('generation_select_files')
+    emitQuizFeedback('drag_drop', { label: '选图片' })
     const nextFiles = Array.from(fileList || [])
     setGenerationFiles(
       generationSourceKind === 'image-single' ? nextFiles.slice(0, 1) : nextFiles,
@@ -658,10 +698,12 @@ export default function PalaceQuizPage() {
   const handleAddCurrentPdfSource = () => {
     registerQuizActivity('generation_add_pdf_source')
     if (!pdfController.selectedSubjectDocumentId || !selectedSubjectDocument) {
+      emitQuizFeedback('save_error', { label: '未选PDF' })
       setGenerationError('请先选择一份 PDF 资料。')
       return
     }
     if (pdfController.selectedPdfPages.length === 0) {
+      emitQuizFeedback('save_error', { label: '未选页码' })
       setGenerationError('请先为当前 PDF 选择至少一页。')
       return
     }
@@ -683,11 +725,13 @@ export default function PalaceQuizPage() {
       }
       return next
     })
+    emitQuizFeedback('node_create', { label: '加入PDF' })
     setGenerationError('')
   }
 
   const handleRemovePdfSource = (subjectDocumentId: number) => {
     registerQuizActivity('generation_remove_pdf_source')
+    emitQuizFeedback('node_delete', { label: '移除PDF' })
     setGenerationPdfSources((current) =>
       current.filter((item) => item.subject_document_id !== subjectDocumentId),
     )
@@ -698,6 +742,7 @@ export default function PalaceQuizPage() {
     subjectDocumentId: number,
     value: PalaceQuizPdfSourceRole,
   ) => {
+    emitQuizFeedback('toggle_on', { label: value === 'answer' ? '设为答案' : '设为题目' })
     setGenerationPdfSources((current) =>
       current.map((item) =>
         item.subject_document_id === subjectDocumentId ? { ...item, role_hint: value } : item,
@@ -715,6 +760,7 @@ export default function PalaceQuizPage() {
   const handleGeneratePreview = async () => {
     if (!palaceId) return
     registerQuizActivity('generation_preview')
+    emitQuizFeedback('shortcut_trigger', { label: '生成预览' })
     setGenerationLoading(true)
     setGenerationError('')
     setGenerationPreview(null)
@@ -724,10 +770,11 @@ export default function PalaceQuizPage() {
     generationStreamAutoFollowRef.current = true
     try {
       if (generationClassifyByMiniPalace && miniPalaces.length === 0) {
+        emitQuizFeedback('save_error', { label: '无小宫殿' })
         throw new Error('当前宫殿还没有小宫殿，无法按小宫殿分类保存。')
       }
       const aiOptions = await promptForAiOptions({
-        scenarioKey: generationSourceKind === 'subject-pdf' ? 'vision' : 'vision',
+        scenarioKey: generationSourceKind === 'subject-pdf' ? 'quiz_pdf_generation' : 'quiz_image_generation',
         entrypointKey:
           generationSourceKind === 'subject-pdf'
             ? 'quiz-generate-pdf'
@@ -740,11 +787,13 @@ export default function PalaceQuizPage() {
             : '图片做题生成配置',
       })
       if (!aiOptions) {
+        emitQuizFeedback('toggle_off', { label: '取消生成' })
         setGenerationLoading(false)
         return
       }
       if (generationSourceKind === 'subject-pdf') {
         if (generationPdfSources.length === 0) {
+          emitQuizFeedback('save_error', { label: '未加PDF' })
           throw new Error('请先把至少一份 PDF 加入资料列表。')
         }
         const preview = await previewPalaceQuizGenerationFromPdfStreamApi(palaceId, {
@@ -771,11 +820,15 @@ export default function PalaceQuizPage() {
         })
         setGenerationPreview(preview)
         setGenerationStreamStatus('题目预览已生成')
+        emitQuizFeedback('card_reveal', {
+          label: generationClassifyByMiniPalace ? '分组预览' : '题目预览',
+        })
         generationPdfSources.forEach((item) => {
           pdfController.persistAnalyzedPdfPages(item.subject_document_id, item.page_selection)
         })
       } else {
         if (generationFiles.length === 0) {
+          emitQuizFeedback('save_error', { label: '未选图片' })
           throw new Error('请先上传图片。')
         }
         const preview = await previewPalaceQuizGenerationFromImagesApi(
@@ -786,8 +839,10 @@ export default function PalaceQuizPage() {
           aiOptions,
         )
         setGenerationPreview(preview)
+        emitQuizFeedback('card_reveal', { label: '图片预览' })
       }
     } catch (nextError) {
+      emitQuizFeedback('save_error', { label: '生成失败' })
       setGenerationError(
         nextError instanceof Error ? nextError.message : '生成题目预览失败。',
       )
@@ -799,6 +854,7 @@ export default function PalaceQuizPage() {
   const handleSaveGenerationPreview = async () => {
     if (!palaceId || !generationPreview || generationPreview.questions.length === 0) return
     registerQuizActivity('generation_save_preview')
+    emitQuizFeedback('import_apply', { label: '写入题库' })
     setGenerationSaving(true)
     try {
       const groupedPreview = generationPreview.grouped_questions
@@ -813,10 +869,12 @@ export default function PalaceQuizPage() {
         : generationPreview.questions
       await batchCreatePalaceQuizQuestionsApi(palaceId, questionsToSave)
       toast.success('题目已保存到题库')
+      emitQuizFeedback('save_success', { label: '已入题库' })
       await refreshQuestions()
       setGenerationPreview(null)
       setActiveTab('practice')
     } catch (nextError) {
+      emitQuizFeedback('save_error', { label: '写入失败' })
       toast.error(nextError instanceof Error ? nextError.message : '保存 AI 题目失败。')
     } finally {
       setGenerationSaving(false)
@@ -826,23 +884,27 @@ export default function PalaceQuizPage() {
   const handleClassifyExistingQuestions = async () => {
     if (!palaceId) return
     registerQuizActivity('generation_classify_existing_to_mini_palaces')
+    emitQuizFeedback('segment_action', { label: '归类题库' })
     setClassificationLoading(true)
     setClassificationResult(null)
     try {
       const aiOptions = await promptForAiOptions({
-        scenarioKey: 'quiz_mini_palace',
+        scenarioKey: 'quiz_mini_palace_grouping',
         entrypointKey: 'quiz-classify-existing-mini-palace',
         title: '已有题库归类配置',
       })
       if (!aiOptions) {
+        emitQuizFeedback('toggle_off', { label: '取消归类' })
         setClassificationLoading(false)
         return
       }
       const result = await classifyPalaceQuizQuestionsToMiniPalacesApi(palaceId, aiOptions)
       setClassificationResult(result)
       toast.success('已有题库已按小宫殿归类')
+      emitQuizFeedback('all_clear_ready', { label: '归类完成' })
       await refreshQuestions()
     } catch (nextError) {
+      emitQuizFeedback('save_error', { label: '归类失败' })
       toast.error(nextError instanceof Error ? nextError.message : '归类小宫殿题库失败。')
     } finally {
       setClassificationLoading(false)
@@ -905,15 +967,16 @@ export default function PalaceQuizPage() {
 
       <div className="flex flex-wrap gap-2">
         {pageTabs.map((tab) => (
-          <Button
-            key={tab.key}
-            type="button"
-            variant={activeTab === tab.key ? 'default' : 'outline'}
-            onClick={() => {
-              registerQuizActivity(`tab_${tab.key}`)
-              setActiveTab(tab.key)
-            }}
-          >
+            <Button
+              key={tab.key}
+              type="button"
+              variant={activeTab === tab.key ? 'default' : 'outline'}
+              onClick={() => {
+                registerQuizActivity(`tab_${tab.key}`)
+                emitQuizFeedback('mode_switch', { label: tab.label })
+                setActiveTab(tab.key)
+              }}
+            >
             {tab.label}
           </Button>
         ))}
@@ -941,6 +1004,7 @@ export default function PalaceQuizPage() {
               size="sm"
               onClick={() => {
                 registerQuizActivity('view_mode_single')
+                emitQuizFeedback('mode_switch', { label: '逐题模式' })
                 setViewMode('single')
               }}
             >
@@ -952,6 +1016,7 @@ export default function PalaceQuizPage() {
               size="sm"
               onClick={() => {
                 registerQuizActivity('view_mode_list')
+                emitQuizFeedback('mode_switch', { label: '整页列表' })
                 setViewMode('list')
               }}
             >
@@ -964,7 +1029,10 @@ export default function PalaceQuizPage() {
               type="button"
               size="sm"
               variant={questionScope === 'all' ? 'default' : 'outline'}
-              onClick={() => setQuestionScope('all')}
+              onClick={() => {
+                emitQuizFeedback('segment_action', { label: '全部题目' })
+                setQuestionScope('all')
+              }}
             >
               全部
             </Button>
@@ -972,7 +1040,10 @@ export default function PalaceQuizPage() {
               type="button"
               size="sm"
               variant={questionScope === 'palace' ? 'default' : 'outline'}
-              onClick={() => setQuestionScope('palace')}
+              onClick={() => {
+                emitQuizFeedback('segment_action', { label: '大宫殿' })
+                setQuestionScope('palace')
+              }}
             >
               大宫殿
               <Badge variant="secondary" className="ml-2">
@@ -985,7 +1056,10 @@ export default function PalaceQuizPage() {
                 type="button"
                 size="sm"
                 variant={questionScope === `mini:${miniPalace.id}` ? 'default' : 'outline'}
-                onClick={() => setQuestionScope(`mini:${miniPalace.id}`)}
+                onClick={() => {
+                  emitQuizFeedback('segment_action', { label: miniPalace.name })
+                  setQuestionScope(`mini:${miniPalace.id}`)
+                }}
               >
                 {miniPalace.name}
                 <Badge variant="secondary" className="ml-2">
@@ -1017,6 +1091,7 @@ export default function PalaceQuizPage() {
                     disabled={currentQuestionIndex <= 0}
                     onClick={() => {
                       registerQuizActivity('question_prev')
+                      emitQuizFeedback('navigation', { label: '上一题' })
                       setCurrentQuestionIndex((current) => Math.max(current - 1, 0))
                     }}
                   >
@@ -1029,6 +1104,7 @@ export default function PalaceQuizPage() {
                     disabled={currentQuestionIndex >= filteredQuestions.length - 1}
                     onClick={() => {
                       registerQuizActivity('question_next')
+                      emitQuizFeedback('navigation', { label: '下一题' })
                       setCurrentQuestionIndex((current) =>
                         Math.min(current + 1, filteredQuestions.length - 1),
                       )
@@ -1045,7 +1121,7 @@ export default function PalaceQuizPage() {
                 onStateChange={updateQuestionState}
                 onShortAnswerSubmit={handleShortAnswerSubmit}
                 onShortAnswerFeedback={handleShortAnswerFeedback}
-                onReset={resetQuestionState}
+                onReset={handleResetQuestionState}
                 onEdit={handleEditQuestion}
               />
             </div>
@@ -1056,11 +1132,12 @@ export default function PalaceQuizPage() {
                   key={question.id}
                   question={question}
                   state={questionStates[question.id]}
+                  compact
                   onChoiceSelect={handleChoiceSelect}
                   onStateChange={updateQuestionState}
                   onShortAnswerSubmit={handleShortAnswerSubmit}
                   onShortAnswerFeedback={handleShortAnswerFeedback}
-                  onReset={resetQuestionState}
+                  onReset={handleResetQuestionState}
                   onEdit={handleEditQuestion}
                 />
               ))}
@@ -1085,7 +1162,10 @@ export default function PalaceQuizPage() {
                   type="button"
                   size="sm"
                   variant={questionScope === 'all' ? 'default' : 'outline'}
-                  onClick={() => setQuestionScope('all')}
+                  onClick={() => {
+                    emitQuizFeedback('segment_action', { label: '全部题目' })
+                    setQuestionScope('all')
+                  }}
                 >
                   全部
                 </Button>
@@ -1093,7 +1173,10 @@ export default function PalaceQuizPage() {
                   type="button"
                   size="sm"
                   variant={questionScope === 'palace' ? 'default' : 'outline'}
-                  onClick={() => setQuestionScope('palace')}
+                  onClick={() => {
+                    emitQuizFeedback('segment_action', { label: '大宫殿' })
+                    setQuestionScope('palace')
+                  }}
                 >
                   大宫殿
                 </Button>
@@ -1103,7 +1186,10 @@ export default function PalaceQuizPage() {
                     type="button"
                     size="sm"
                     variant={questionScope === `mini:${miniPalace.id}` ? 'default' : 'outline'}
-                    onClick={() => setQuestionScope(`mini:${miniPalace.id}`)}
+                    onClick={() => {
+                      emitQuizFeedback('segment_action', { label: miniPalace.name })
+                      setQuestionScope(`mini:${miniPalace.id}`)
+                    }}
                   >
                     {miniPalace.name}
                   </Button>
@@ -1116,62 +1202,70 @@ export default function PalaceQuizPage() {
                     : '当前范围下还没有题目。'}
                 </div>
               ) : (
-                filteredQuestions.map((question, index) => (
-                  <div
-                    key={question.id}
-                    className={cn(
-                      'rounded-2xl border px-4 py-4',
-                      editingQuestionId === question.id
-                        ? 'border-primary/40 bg-primary/5'
-                        : 'border-border/70 bg-background/70',
-                    )}
-                  >
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-                      <div className="space-y-2">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <Badge variant="secondary">#{index + 1}</Badge>
-                          <Badge variant="outline">
-                            {question.question_type === 'multiple_choice' ? '选择题' : '简答题'}
-                          </Badge>
-                          <Badge variant={question.mini_palace_id == null ? 'secondary' : 'outline'}>
-                            {getQuestionOwnershipLabel(question)}
-                          </Badge>
-                          <QuestionSourceBadge sourceMeta={question.source_meta} />
-                          {question.question_type === 'multiple_choice' ? (
-                            <span className="text-xs text-muted-foreground">
-                              答对 {question.correct_count} 次 / 答错 {question.incorrect_count} 次
-                            </span>
-                          ) : null}
+                <div className="grid gap-2 xl:grid-cols-2">
+                  {filteredQuestions.map((question, index) => (
+                    <div
+                      key={question.id}
+                      className={cn(
+                        'rounded-xl border px-3 py-3',
+                        editingQuestionId === question.id
+                          ? 'border-primary/40 bg-primary/5'
+                          : 'border-border/70 bg-background/70',
+                      )}
+                    >
+                      <div className="flex flex-wrap items-start justify-between gap-2">
+                        <div className="min-w-0 flex-1 space-y-1.5">
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <Badge variant="secondary">#{index + 1}</Badge>
+                            <Badge variant="outline">
+                              {question.question_type === 'multiple_choice' ? '选择题' : '简答题'}
+                            </Badge>
+                            <Badge variant={question.mini_palace_id == null ? 'secondary' : 'outline'}>
+                              {getQuestionOwnershipLabel(question)}
+                            </Badge>
+                          </div>
+                          <div className="line-clamp-3 text-sm font-medium leading-6">
+                            {question.stem}
+                          </div>
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <QuestionSourceBadge sourceMeta={question.source_meta} compact />
+                            {question.question_type === 'multiple_choice' ? (
+                              <span className="text-[11px] text-muted-foreground">
+                                对 {question.correct_count} / 错 {question.incorrect_count}
+                              </span>
+                            ) : null}
+                          </div>
                         </div>
-                        <div className="text-sm font-medium">{question.stem}</div>
-                      </div>
-                      <div className="flex gap-2">
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          onClick={() => handleEditQuestion(question)}
-                        >
-                          编辑
-                        </Button>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          disabled={manageDeletingId === question.id}
-                          onClick={() => void handleDeleteQuestion(question.id)}
-                        >
-                          {manageDeletingId === question.id ? (
-                            <LoaderCircle className="h-4 w-4 animate-spin" />
-                          ) : (
-                            <Trash2 className="h-4 w-4" />
-                          )}
-                          删除
-                        </Button>
+                        <div className="flex shrink-0 gap-1.5">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="h-8 px-2.5"
+                            onClick={() => handleEditQuestion(question)}
+                          >
+                            编辑
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="h-8 px-2.5"
+                            disabled={manageDeletingId === question.id}
+                            onClick={() => void handleDeleteQuestion(question.id)}
+                          >
+                            {manageDeletingId === question.id ? (
+                              <LoaderCircle className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <Trash2 className="h-4 w-4" />
+                            )}
+                            删除
+                          </Button>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))
+                  ))}
+                </div>
               )}
             </CardContent>
           </Card>
@@ -1389,12 +1483,17 @@ export default function PalaceQuizPage() {
                 <CardContent className="space-y-4">
                   <div className="rounded-2xl border border-border/70 bg-background/70 px-4 py-3 text-sm text-muted-foreground">
                     当前有 {rootQuestionCount} 道大宫殿题、{miniPalaces.length} 个小宫殿。这里会调用
-                    千问 Turbo 判断哪些题同时属于哪些小宫殿，并复制写入对应小宫殿题库。
+                    “小宫殿归类”场景会判断哪些题同时属于哪些小宫殿，并复制写入对应小宫殿题库。
                   </div>
-                  {classificationResult ? (
-                    <div className="rounded-2xl border border-border/70 bg-background/70 px-4 py-3 text-sm">
-                      <div>本次写入 {classificationResult.copied_question_count} 道小宫殿题。</div>
-                      <div className="mt-2 flex flex-wrap gap-2 text-xs text-muted-foreground">
+                    {classificationResult ? (
+                      <div className="rounded-2xl border border-border/70 bg-background/70 px-4 py-3 text-sm">
+                        <div>本次写入 {classificationResult.copied_question_count} 道小宫殿题。</div>
+                        {classificationResult.resolved_ai?.model_label ? (
+                          <div className="mt-1 text-xs text-muted-foreground">
+                            实际模型：{classificationResult.resolved_ai.model_label}
+                          </div>
+                        ) : null}
+                        <div className="mt-2 flex flex-wrap gap-2 text-xs text-muted-foreground">
                         {classificationResult.mini_palace_groups.map((group) => (
                           <Badge key={group.mini_palace_id} variant="outline">
                             {group.mini_palace_name}：{group.question_count}
@@ -1679,11 +1778,11 @@ export default function PalaceQuizPage() {
                     }
                     disabled={!hasMiniPalaces}
                   />
-                  <span>
+                    <span>
                     <span className="font-medium">生成时按小宫殿分类保存</span>
                     <span className="mt-1 block text-muted-foreground">
                       {hasMiniPalaces
-                        ? '开启后，题目仍先用当前视觉模型生成，再用千问 Turbo 按小宫殿分组返回，保存时自动分宫殿入库。'
+                        ? '开启后，题目会先按当前出题模型生成，再调用“小宫殿归类”场景做分组返回，保存时自动分宫殿入库。'
                         : '当前宫殿还没有小宫殿，暂时无法开启这个选项。'}
                     </span>
                   </span>
@@ -1778,6 +1877,9 @@ export default function PalaceQuizPage() {
                   <div className="rounded-2xl border border-border/70 bg-background/70 px-4 py-3 text-xs text-muted-foreground">
                     来源：{generationPreview.source_meta.source_kind} · 模式：
                     {generationPreview.source_meta.generation_mode}
+                    {generationPreview.resolved_ai?.model_label ? (
+                      <span> · 实际模型 {generationPreview.resolved_ai.model_label}</span>
+                    ) : null}
                     {generationPreview.generation_stats ? (
                       <span>
                         {' '}
@@ -1810,7 +1912,7 @@ export default function PalaceQuizPage() {
                     ) : null}
                   </div>
                   {generationPreview.warnings?.length ? (
-                    <div className="rounded-2xl border border-amber-300/60 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                    <div className="rounded-2xl border border-warning/30 bg-warning/5 px-4 py-3 text-sm text-warning">
                       {generationPreview.warnings.join('；')}
                     </div>
                   ) : null}
@@ -1876,6 +1978,7 @@ export default function PalaceQuizPage() {
 interface QuizQuestionCardProps {
   question: PalaceQuizQuestion
   state: QuizCardState | undefined
+  compact?: boolean
   onChoiceSelect: (question: PalaceQuizQuestion, optionId: string) => void
   onStateChange: (
     questionId: number,
@@ -1895,23 +1998,23 @@ function PreviewQuestionCard({
   index: number
 }) {
   return (
-    <div className="rounded-2xl border border-border/70 bg-background/70 px-4 py-4">
-      <div className="mb-2 flex items-center gap-2">
+    <div className="rounded-xl border border-border/70 bg-background/70 px-3 py-3">
+      <div className="mb-2 flex items-center gap-1.5">
         <Badge variant="secondary">#{index + 1}</Badge>
         <Badge variant="outline">
           {question.question_type === 'multiple_choice' ? '选择题' : '简答题'}
         </Badge>
       </div>
-      <div className="text-sm font-medium">{question.stem}</div>
+      <div className="text-sm font-medium leading-6">{question.stem}</div>
       {question.question_type === 'multiple_choice' ? (
-        <div className="mt-3 space-y-2">
+        <div className="mt-2.5 space-y-1.5">
           {question.options.map((option) => (
             <div
               key={option.id}
               className={cn(
-                'rounded-xl border px-3 py-2 text-sm',
+                'rounded-lg border px-2.5 py-1.5 text-sm',
                 option.id === question.answer_payload.correct_option_id
-                  ? 'border-emerald-300 bg-emerald-50 text-emerald-900'
+                  ? 'border-success/30 bg-success/5 text-success'
                   : 'border-border/70 bg-background',
               )}
             >
@@ -1920,11 +2023,11 @@ function PreviewQuestionCard({
           ))}
         </div>
       ) : (
-        <div className="mt-3 rounded-xl border border-border/70 bg-background px-3 py-3 text-sm">
+        <div className="mt-2.5 rounded-lg border border-border/70 bg-background px-2.5 py-2 text-sm">
           参考答案：{question.answer_payload.reference_answer || '暂无'}
         </div>
       )}
-      <div className="mt-3 text-sm text-muted-foreground">
+      <div className="mt-2.5 text-sm text-muted-foreground">
         解析：{question.analysis || '暂无解析'}
       </div>
     </div>
@@ -1934,6 +2037,7 @@ function PreviewQuestionCard({
 function QuizQuestionCard({
   question,
   state,
+  compact = false,
   onChoiceSelect,
   onStateChange,
   onShortAnswerSubmit,
@@ -1945,32 +2049,45 @@ function QuizQuestionCard({
 
   return (
     <Card className="border-border/70 bg-card/92">
-      <CardHeader className="flex flex-row items-start justify-between gap-3">
-        <div className="space-y-2">
-          <div className="flex flex-wrap items-center gap-2">
+      <CardHeader
+        className={cn(
+          'flex flex-row items-start justify-between gap-3',
+          compact ? 'px-4 py-4' : '',
+        )}
+      >
+        <div className={cn(compact ? 'space-y-1.5' : 'space-y-2')}>
+          <div className={cn('flex flex-wrap items-center', compact ? 'gap-1.5' : 'gap-2')}>
             <Badge variant="outline">
               {question.question_type === 'multiple_choice' ? '选择题' : '简答题'}
             </Badge>
             <Badge variant={question.mini_palace_id == null ? 'secondary' : 'outline'}>
               {getQuestionOwnershipLabel(question)}
             </Badge>
-            <QuestionSourceBadge sourceMeta={question.source_meta} />
+            <QuestionSourceBadge sourceMeta={question.source_meta} compact={compact} />
             {question.question_type === 'multiple_choice' ? (
-              <span className="text-xs text-muted-foreground">
+              <span className={cn('text-muted-foreground', compact ? 'text-[11px]' : 'text-xs')}>
                 答对 {question.correct_count} 次 / 答错 {question.incorrect_count} 次
               </span>
             ) : null}
           </div>
-          <CardTitle className="text-base leading-7">{question.stem}</CardTitle>
+          <CardTitle className={cn(compact ? 'text-sm leading-6' : 'text-base leading-7')}>
+            {question.stem}
+          </CardTitle>
         </div>
-        <Button type="button" size="sm" variant="outline" onClick={() => onEdit(question)}>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          className={compact ? 'h-8 px-2.5' : ''}
+          onClick={() => onEdit(question)}
+        >
           编辑
         </Button>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className={cn(compact ? 'space-y-3 px-4 pb-4 pt-0' : 'space-y-4')}>
         {question.question_type === 'multiple_choice' ? (
           <>
-            <div className="grid gap-3">
+            <div className={cn('grid', compact ? 'gap-2' : 'gap-3')}>
               {(question.options || []).map((option) => {
                 const tone = getOptionTone(question, state, option.id)
                 return (
@@ -1978,9 +2095,10 @@ function QuizQuestionCard({
                     key={option.id}
                     type="button"
                     className={cn(
-                      'rounded-2xl border px-4 py-3 text-left text-sm transition-colors',
-                      tone === 'correct' && 'border-emerald-300 bg-emerald-50 text-emerald-900',
-                      tone === 'incorrect' && 'border-rose-300 bg-rose-50 text-rose-900',
+                      'border text-left text-sm transition-colors',
+                      compact ? 'rounded-xl px-3 py-2' : 'rounded-2xl px-4 py-3',
+                      tone === 'correct' && 'border-success/30 bg-success/5 text-success',
+                      tone === 'incorrect' && 'border-destructive/30 bg-destructive/5 text-destructive',
                       tone === 'idle' && state?.choiceResolved && 'border-border/70 bg-background/60 text-muted-foreground',
                       !state?.choiceResolved && 'border-border/70 bg-background/80 hover:border-primary/40 hover:bg-primary/5',
                     )}
@@ -1994,14 +2112,19 @@ function QuizQuestionCard({
             </div>
 
             {state?.choiceResolved ? (
-              <div className="rounded-2xl border border-border/70 bg-background/70 px-4 py-4">
+              <div
+                className={cn(
+                  'border border-border/70 bg-background/70',
+                  compact ? 'rounded-xl px-3 py-3' : 'rounded-2xl px-4 py-4',
+                )}
+              >
                 <div className="text-sm font-medium">
                   {state.choiceCorrect ? '回答正确' : '回答错误'}
                 </div>
-                <div className="mt-2 text-sm text-muted-foreground">
+                <div className={cn('text-sm text-muted-foreground', compact ? 'mt-1.5' : 'mt-2')}>
                   正确答案：{question.answer_payload.correct_option_id || '暂无'}
                 </div>
-                <div className="mt-3 text-sm">
+                <div className={cn('text-sm', compact ? 'mt-2' : 'mt-3')}>
                   解析：{question.analysis || '暂无解析'}
                 </div>
               </div>
@@ -2019,7 +2142,7 @@ function QuizQuestionCard({
                     shortAnswerText: event.target.value,
                   }))
                 }
-                rows={5}
+                rows={compact ? 4 : 5}
                 placeholder="先写下你的答案，再点击提交"
               />
             </div>
@@ -2042,18 +2165,43 @@ function QuizQuestionCard({
               </Button>
             </div>
             {shortAnswerSubmitted ? (
-              <div className="rounded-2xl border border-border/70 bg-background/70 px-4 py-4 text-sm">
+              <div
+                className={cn(
+                  'border border-border/70 bg-background/70 text-sm',
+                  compact ? 'rounded-xl px-3 py-3' : 'rounded-2xl px-4 py-4',
+                )}
+              >
                 <div className="font-medium">参考答案</div>
-                <div className="mt-2 whitespace-pre-wrap text-muted-foreground">
+                <div
+                  className={cn(
+                    'whitespace-pre-wrap text-muted-foreground',
+                    compact ? 'mt-1.5' : 'mt-2',
+                  )}
+                >
                   {question.answer_payload.reference_answer || '暂无参考答案'}
                 </div>
-                <div className="mt-4 font-medium">解析</div>
-                <div className="mt-2 whitespace-pre-wrap text-muted-foreground">
+                <div className={cn('font-medium', compact ? 'mt-3' : 'mt-4')}>解析</div>
+                <div
+                  className={cn(
+                    'whitespace-pre-wrap text-muted-foreground',
+                    compact ? 'mt-1.5' : 'mt-2',
+                  )}
+                >
                   {question.analysis || '暂无解析'}
                 </div>
                 {state?.aiFeedback ? (
-                  <div className="mt-4 rounded-xl border border-primary/20 bg-primary/5 px-3 py-3">
+                  <div
+                    className={cn(
+                      'rounded-xl border border-primary/20 bg-primary/5 px-3 py-3',
+                      compact ? 'mt-3' : 'mt-4',
+                    )}
+                  >
                     <div className="mb-2 text-sm font-medium">AI点评</div>
+                    {state.aiFeedback.resolved_ai?.model_label ? (
+                      <div className="mb-2 text-xs text-muted-foreground">
+                        实际模型：{state.aiFeedback.resolved_ai.model_label}
+                      </div>
+                    ) : null}
                     <div className="whitespace-pre-wrap text-sm text-muted-foreground">
                       {state.aiFeedback.feedback_text}
                     </div>

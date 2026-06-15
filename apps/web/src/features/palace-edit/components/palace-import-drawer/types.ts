@@ -16,6 +16,7 @@ import type {
   PdfImportMode,
   PdfImportOptions,
   PdfPageSummary,
+  ResolvedAiRuntimeMeta,
   SubjectDocumentSummary,
 } from '@/shared/api/contracts'
 
@@ -75,6 +76,7 @@ export interface PalaceMindMapImportDrawerProps {
   currentJobStatus: MindMapImportJobStatus | null
   currentJobStage: MindMapImportJobStage | null
   currentJobUsage: MindMapImportJobUsage | null
+  currentJobResolvedAi: ResolvedAiRuntimeMeta | null
   currentJobPauseRequested: boolean
   canResumeJob: boolean
   canPauseJob: boolean

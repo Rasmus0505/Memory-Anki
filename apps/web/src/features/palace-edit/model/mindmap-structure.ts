@@ -1,7 +1,7 @@
 import type { MindMapDoc, MindMapDocNode } from '@/shared/api/contracts'
 
 function cloneDoc<T>(value: T): T {
-  return JSON.parse(JSON.stringify(value)) as T
+  return structuredClone(value)
 }
 
 function getNodeUid(node: MindMapDocNode | null | undefined): string | null {

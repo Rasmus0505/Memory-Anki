@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom'
 import type { PalaceGroupedItem, PalaceGroupedListResponse } from '@/shared/api/contracts'
 import { Button } from '@/shared/components/ui/button'
 import { Card, CardContent } from '@/shared/components/ui/card'
+import { EmptyState } from '@/shared/components/state-placeholders'
 import type { PalaceListViewSettings } from '@/app/router/palace-view-settings'
 import {
   getChapterCardClass,
@@ -89,15 +90,20 @@ export function PalaceListSections({
         ))
       ) : (
         <Card>
-          <CardContent className="flex flex-col items-center p-12 text-center">
-            <BookOpen className="mb-4 h-12 w-12 text-muted-foreground/30" />
-            <p className="text-sm text-muted-foreground">还没有记忆宫殿。</p>
-            <Link to="/palaces/new" className="mt-2">
-              <Button variant="outline" size="sm">
-                <Plus className="h-4 w-4" />
-                创建第一个
-              </Button>
-            </Link>
+          <CardContent>
+            <EmptyState
+              variant="create"
+              title="还没有记忆宫殿"
+              description="创建你的第一个记忆宫殿，开始构建知识网络。"
+              action={
+                <Link to="/palaces/new">
+                  <Button variant="outline" size="sm">
+                    <Plus className="mr-2 h-4 w-4" />
+                    创建第一个
+                  </Button>
+                </Link>
+              }
+            />
           </CardContent>
         </Card>
       )}

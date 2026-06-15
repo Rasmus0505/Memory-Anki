@@ -90,7 +90,7 @@ export function deleteImportHistory(entityKey: string, id: string): ImportHistor
 }
 
 export function cloneDoc<T>(value: T): T {
-  return JSON.parse(JSON.stringify(value)) as T
+  return structuredClone(value)
 }
 
 export function parseMindMapDoc(value: unknown): MindMapDoc | null {

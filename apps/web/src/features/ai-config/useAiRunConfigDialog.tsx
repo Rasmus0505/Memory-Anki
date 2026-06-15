@@ -4,7 +4,10 @@ import type {
   AiModelScenario,
   AiRuntimeOptions,
 } from '@/shared/api/contracts'
-import { getAiModelScenariosApi } from '@/shared/api/modules/profile'
+import {
+  getAiModelScenariosApi,
+  updateAiModelScenariosApi,
+} from '@/shared/api/modules/profile'
 import { Button } from '@/shared/components/ui/button'
 import {
   Dialog,
@@ -20,6 +23,7 @@ interface AiRunConfigRequest {
   entrypointKey: string
   title: string
   description?: string
+  syncScenarioKeys?: string[]
 }
 
 interface PendingRequest extends AiRunConfigRequest {
@@ -85,6 +89,7 @@ function normalizeScenarioAiConfig(
 export function useAiRunConfigDialog() {
   const [scenarios, setScenarios] = React.useState<AiModelScenario[]>([])
   const [loading, setLoading] = React.useState(false)
+  const [confirming, setConfirming] = React.useState(false)
   const [pending, setPending] = React.useState<PendingRequest | null>(null)
   const [selectedModel, setSelectedModel] = React.useState('')
   const [thinkingEnabled, setThinkingEnabled] = React.useState(false)
@@ -106,8 +111,9 @@ export function useAiRunConfigDialog() {
     setLoading(true)
     try {
       const response = await getAiModelScenariosApi()
-      setScenarios(response.scenarios)
-      return response.scenarios
+      const nextScenes = response.scenes ?? response.scenarios ?? []
+      setScenarios(nextScenes)
+      return nextScenes
     } catch (error) {
       const message = error instanceof Error ? error.message : '无法加载 AI 运行配置。'
       toast.error(message)
@@ -158,7 +164,7 @@ export function useAiRunConfigDialog() {
     }
   }, [pending])
 
-  const handleConfirm = React.useCallback(() => {
+  const handleConfirm = React.useCallback(async () => {
     if (!pending || !currentScenario || !selectedModelMeta) {
       closeDialog()
       return
@@ -167,10 +173,37 @@ export function useAiRunConfigDialog() {
       model: selectedModelMeta.key,
       thinking_enabled: selectedModelMeta.supports_thinking ? thinkingEnabled : false,
     }
-    writeRecentAiConfig(pending.entrypointKey, payload)
-    const resolve = pending.resolve
-    setPending(null)
-    resolve(payload)
+    const syncScenarioKeys = Array.from(
+      new Set([pending.scenarioKey, ...(pending.syncScenarioKeys ?? [])]),
+    )
+    setConfirming(true)
+    try {
+      const response = await updateAiModelScenariosApi({
+        scene_updates: Object.fromEntries(
+          syncScenarioKeys.map((sceneKey) => [
+            sceneKey,
+            {
+              default_model: payload.model,
+              default_thinking_enabled: payload.thinking_enabled ?? false,
+            },
+          ]),
+        ),
+      })
+      const nextScenes = response.scenes ?? response.scenarios ?? []
+      setScenarios(nextScenes)
+      writeRecentAiConfig(pending.entrypointKey, payload)
+      const syncedSceneLabels = syncScenarioKeys
+        .map((sceneKey) => nextScenes.find((item) => item.key === sceneKey)?.label ?? sceneKey)
+        .join('、')
+      toast.success(`已将 ${payload.model} 同步为 ${syncedSceneLabels} 场景默认模型`)
+      const resolve = pending.resolve
+      setPending(null)
+      resolve(payload)
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '同步 AI 默认模型失败。')
+    } finally {
+      setConfirming(false)
+    }
   }, [closeDialog, currentScenario, pending, selectedModelMeta, thinkingEnabled])
 
   const applyGlobalDefault = React.useCallback(() => {
@@ -193,7 +226,7 @@ export function useAiRunConfigDialog() {
         <DialogHeader>
           <DialogTitle>{pending?.title ?? '选择本次 AI 配置'}</DialogTitle>
           <DialogDescription>
-            {pending?.description ?? '本次运行只影响当前入口，不会改动个人中心里的全局默认。'}
+            {pending?.description ?? '确认后会同步更新该场景的个人主页默认模型，本次请求也会直接使用这份配置。'}
           </DialogDescription>
         </DialogHeader>
 
@@ -264,8 +297,8 @@ export function useAiRunConfigDialog() {
           <Button type="button" variant="outline" onClick={closeDialog}>
             取消
           </Button>
-          <Button type="button" onClick={handleConfirm} disabled={!currentScenario || !selectedModelMeta}>
-            开始本次运行
+          <Button type="button" onClick={() => { void handleConfirm() }} disabled={confirming || !currentScenario || !selectedModelMeta}>
+            {confirming ? '同步中...' : '确认并同步默认'}
           </Button>
         </DialogFooter>
       </DialogContent>

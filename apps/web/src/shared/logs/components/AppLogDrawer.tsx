@@ -10,6 +10,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/shared/components/ui/dialog'
+import { EmptyState } from '@/shared/components/state-placeholders'
 import {
   clearAppLogs,
   formatAppLogEntry,
@@ -198,9 +199,11 @@ export function AppLogDrawer({ open, onOpenChange }: AppLogDrawerProps) {
 
         <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
           {logs.length === 0 ? (
-            <div className="flex h-full min-h-[220px] items-center justify-center rounded-2xl border border-dashed border-border/70 bg-background/60 text-sm text-muted-foreground">
-              暂时还没有日志记录。
-            </div>
+            <EmptyState
+              variant="search"
+              title="暂时还没有日志记录"
+              description="系统运行日志会在这里实时显示。"
+            />
           ) : (
             <div className="space-y-3">
               {logs.map((log) => (
@@ -292,7 +295,7 @@ export function AppLogDrawer({ open, onOpenChange }: AppLogDrawerProps) {
                         {JSON.stringify(log.meta, null, 2)}
                       </pre>
                     ) : null}
-                    {copiedId === log.id ? <div className="text-xs text-emerald-600">已复制</div> : null}
+	                    {copiedId === log.id ? <div className="text-xs text-success">已复制</div> : null}
                   </div>
                 </div>
               ))}

@@ -132,7 +132,7 @@ export function PalaceSegmentsPanel({
                   className={cn(
                     'rounded-2xl border px-3 py-3',
                     activeSegmentId === segment.id
-                      ? 'border-slate-900 bg-slate-50'
+                      ? 'border-primary bg-muted'
                       : 'border-border/70 bg-background/70',
                   )}
                 >
