@@ -18,7 +18,7 @@ vi.mock('@/shared/api/modules/voiceCoach', () => ({
 
 const baseResponse = {
   summary: {
-    provider_count: 3,
+    provider_count: 4,
     active_model_count: 2,
     scene_count: 2,
     recent_success_call_count: 3,

@@ -73,6 +73,15 @@ def extract_message_content_text(content: Any) -> str:
     return ""
 
 
+def extract_message_reasoning_text(message: Any) -> str:
+    if not isinstance(message, dict):
+        return ""
+    reasoning_content = message.get("reasoning_content")
+    if isinstance(reasoning_content, str):
+        return reasoning_content.strip()
+    return ""
+
+
 def extract_chat_completion_stream_delta(
     payload_text: str,
     *,
@@ -96,7 +105,10 @@ def extract_chat_completion_stream_delta(
 
     message = choice.get("message")
     if isinstance(message, dict):
-        return extract_message_content_text(message.get("content"))
+        content_text = extract_message_content_text(message.get("content"))
+        if content_text:
+            return content_text
+        return extract_message_reasoning_text(message)
 
     return ""
 
@@ -109,11 +121,13 @@ def extract_chat_completion_text_from_body(
 ) -> str:
     try:
         parsed = json.loads(response_body)
-        content = parsed["choices"][0]["message"]["content"]
+        message = parsed["choices"][0]["message"]
     except (KeyError, IndexError, TypeError, json.JSONDecodeError) as exc:
         raise OpenAICompatibleProtocolError(protocol_error_message) from exc
 
-    content_text = extract_message_content_text(content)
+    content_text = extract_message_content_text(message.get("content"))
+    if not content_text:
+        content_text = extract_message_reasoning_text(message)
     if not content_text:
         raise OpenAICompatibleProtocolError(empty_response_message)
     return content_text.strip()

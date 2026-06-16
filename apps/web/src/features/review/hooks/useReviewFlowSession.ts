@@ -7,13 +7,7 @@ import { revealRemainingNodes, type ReviewFlowSnapshot } from '@/entities/review
 import { useReviewFeedback } from '@/features/review/hooks/useReviewFeedback'
 import type { RevealFlowMode } from '@/entities/review/model/review-flow-tree'
 import { useRouteResidency } from '@/app/router/RouteResidency'
-
-interface CompleteFlowPayload {
-  durationSeconds: number
-  completionMode: 'manual_complete' | 'auto_complete'
-  revealedRemaining: boolean
-  redNodeIds: string[]
-}
+import type { CompleteFlowPayload } from '@/features/review/model/mind-map-review-flow'
 
 interface UseReviewFlowSessionOptions {
   title: string

@@ -7,10 +7,10 @@ from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
 
 from memory_anki.infrastructure.db.models import NodeConnection, Palace
-from memory_anki.modules.mindmap.application.editor_state_service import (
+from memory_anki.modules.mindmap.application.editor_state_documents import (
     NODE_UID_KEY,
-    _deserialize,
     build_palace_editor_doc,
+    deserialize_editor_payload,
     normalize_editor_doc,
 )
 
@@ -350,7 +350,7 @@ def bilink_json(
 
 
 def build_palace_doc_index(palace: Palace) -> dict[str, Any]:
-    doc = _deserialize(palace.editor_doc, None)
+    doc = deserialize_editor_payload(palace.editor_doc, None)
     if not isinstance(doc, dict):
         doc = build_palace_editor_doc(palace)
     doc = normalize_editor_doc(doc, root_text=palace.title, root_kind="palace")

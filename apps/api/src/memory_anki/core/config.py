@@ -37,6 +37,10 @@ class EnvSettings(BaseSettings):
     SILICONFLOW_API_KEY: str | None = None
     SILICONFLOW_BASE_URL: str = "https://api.siliconflow.cn/v1"
 
+    # --- DeepSeek ---
+    DEEPSEEK_API_KEY: str | None = None
+    DEEPSEEK_BASE_URL: str = "https://api.deepseek.com"
+
 
 # Singleton – created once at import time.
 _env = EnvSettings()
@@ -54,6 +58,8 @@ ZHIPU_API_KEY = _env.ZHIPU_API_KEY
 ZHIPU_BASE_URL = _env.ZHIPU_BASE_URL
 SILICONFLOW_API_KEY = _env.SILICONFLOW_API_KEY
 SILICONFLOW_BASE_URL = _env.SILICONFLOW_BASE_URL
+DEEPSEEK_API_KEY = _env.DEEPSEEK_API_KEY
+DEEPSEEK_BASE_URL = _env.DEEPSEEK_BASE_URL
 
 
 # ---------------------------------------------------------------------------

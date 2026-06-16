@@ -30,6 +30,7 @@ from memory_anki.modules.settings.application.ai_model_registry import (
     test_provider_connection,
     upsert_ai_model_catalog_item,
 )
+from memory_anki.modules.settings.application.ai_model_registry_catalog import normalize_provider_key
 from memory_anki.modules.settings.application.ai_prompts import (
     AiPromptValidationError,
     list_prompt_templates,
@@ -289,14 +290,14 @@ def api_ai_model_catalog_test(model_key: str, s: Session = Depends(session_dep))
 
 @router.post("/settings/ai-models/providers/{provider_key}/test")
 def api_ai_provider_test(provider_key: str, data: dict | None = None, s: Session = Depends(session_dep)):
-    normalized_provider = str(provider_key or "").strip().lower()
-    if normalized_provider not in {"dashscope", "qwen", "zhipu", "siliconflow"}:
+    normalized_provider = normalize_provider_key(provider_key)
+    if normalized_provider is None:
         raise HTTPException(status_code=400, detail={"message": "Provider 无效。", "code": "provider_invalid"})
     model_key = None
     if isinstance(data, dict):
         model_key = data.get("model_key")
     try:
-        return test_provider_connection(s, normalized_provider, model_key=model_key)  # type: ignore[arg-type]
+        return test_provider_connection(s, normalized_provider, model_key=model_key)
     except AiModelRegistryError as exc:
         raise HTTPException(
             status_code=400,

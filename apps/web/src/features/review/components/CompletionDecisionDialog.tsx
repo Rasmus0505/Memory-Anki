@@ -5,6 +5,7 @@ import {
   Dialog,
   DialogClose,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from '@/shared/components/ui/dialog'
@@ -31,6 +32,9 @@ export function CompletionDecisionDialog({
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle>完成本次练习/复习</DialogTitle>
+          <DialogDescription>
+            你可以标记本轮已完成，或保留当前进度稍后继续。
+          </DialogDescription>
           <DialogClose onClick={() => onOpenChange(false)} />
         </DialogHeader>
         <div className="space-y-3 px-6 py-5">

@@ -10,11 +10,6 @@ import {
   useState,
 } from 'react'
 import type { MindMapEditorState } from '@/shared/api/contracts'
-import type {
-  BilinkItem,
-  MindMapHostSegmentRangeDraft,
-  MindMapHostSegmentSummary,
-} from '@/shared/api/contracts'
 import { dispatchHostEvent } from '@/shared/components/mindmap-host/hostEventDispatcher'
 import {
   buildHostBridgeHostState,
@@ -22,308 +17,18 @@ import {
   cloneValue,
   type HostBridge,
   type HostEditorStateSyncPayload,
-  type MindMapFeedbackEvent,
-  type MindMapFeedbackFxPayload,
-  type MindMapAiSplitRequestPayload,
-  type MindMapReviewFxPayload,
   type MindMapHostWindow,
-  type MindMapSelection,
   normalizeEditorDoc,
 } from '@/shared/components/mindmap-host/hostBridgeUtils'
 import { useHostSyncController } from '@/shared/components/mindmap-host/useHostSyncController'
-import { useMindMapFeedbackAudioFromSettings } from '@/shared/components/mindmap-host/useMindMapFeedback'
-
-const HOST_FRAME_RUNTIME_VERSION = '2026-06-10-card-width-drag-fix'
-const MIND_MAP_FRAME_BASE_CLASS = 'memory-anki-mindmap-frame'
-
-function buildMindMapFrameClassName(className?: string) {
-  return `${MIND_MAP_FRAME_BASE_CLASS} ${className ?? 'h-full w-full border-0'}`
-}
-
-function buildLocalEditorStateFingerprint(editorState: MindMapEditorState) {
-  return JSON.stringify({
-    editor_doc: normalizeEditorDoc(editorState.editor_doc),
-    editor_config: editorState.editor_config,
-    editor_local_config: editorState.editor_local_config,
-    lang: editorState.lang || 'zh',
-  })
-}
-
-interface MindMapFrameProps {
-  editorState: MindMapEditorState
-  readonly?: boolean
-  practiceModeActive?: boolean
-  viewMemoryScope?: string | null
-  immersiveModeActive?: boolean
-  aiSplitBusy?: boolean
-  syncOnPropChange?: boolean
-  syncIntent?: 'soft' | 'replace'
-  syncReason?: string | null
-  externalSyncKey?: string | number | null
-  forceSyncKey?: string | number | null
-  forceSyncIntent?: 'soft' | 'replace'
-  preserveViewOnSync?: boolean
-  initialViewPolicy?: 'preserve' | 'reset'
-  className?: string
-  segments?: MindMapHostSegmentSummary[]
-  activeSegmentId?: number | null
-  segmentColorMode?: 'all' | 'active-only' | 'all-with-active-emphasis'
-  segmentRangeDraft?: MindMapHostSegmentRangeDraft
-  bilinkCounts?: Record<string, number>
-  bilinkItems?: BilinkItem[]
-  bilinkCurrentPalaceId?: number | null
-  focusNodeUids?: string[]
-  focusRequestNodeUid?: string | null
-  focusRequestNonce?: number
-  miniPalaceDraft?: {
-    active: boolean
-    selectedNodeUids: string[]
-  }
-  miniPalacePracticeActive?: boolean
-  bilinkInsertionText?: string | null
-  bilinkInsertionNonce?: number
-  reviewFxSignal?: MindMapReviewFxPayload | null
-  feedbackFxSignal?: MindMapFeedbackFxPayload | null
-  onEditorStateChange: (nextState: MindMapEditorState) => void
-  onNodeActive?: (nodes: MindMapSelection[]) => void
-  onNodeClick?: (nodes: MindMapSelection[]) => void
-  onNodeContextMenu?: (nodes: MindMapSelection[]) => void
-  onNodeHover?: (nodes: MindMapSelection[]) => void
-  onSegmentSelect?: (segmentId: number | null) => void
-  onCreateSegmentFromSelection?: () => void
-  onSegmentRangeDraftChange?: (payload: {
-    selectedNodeUids: string[]
-    overriddenConflictNodeUids: string[]
-  }) => void
-  onSegmentRangeModeToggle?: (payload: {
-    active: boolean
-    targetSegmentId: number | 'new' | null
-  }) => void
-  onSegmentRangeConfirm?: () => void
-  onAiSplitRequest?: (payload: MindMapAiSplitRequestPayload) => void
-  onFullscreenChange?: (active: boolean) => void
-  onFullscreenToggle?: (active?: boolean) => void
-  onUiClearedChange?: (active: boolean) => void
-  onBilinkTrigger?: (payload: {
-    nodeUid: string | null
-    left: number
-    top: number
-    query: string
-  }) => void
-  onBilinkNodeClick?: (payload: {
-    palaceId: number | null
-    nodeUid: string | null
-    trigger: 'badge' | 'mark'
-  }) => void
-  onMiniPalacePour?: () => void
-  onReady?: () => void
-}
-
-export interface MindMapFrameHandle {
-  setUiCleared: (nextValue: boolean) => void
-  toggleUiCleared: () => void
-  enterNativeFullscreen: () => Promise<void>
-  exitNativeFullscreen: () => Promise<void>
-}
-
-function isMindMapFeedbackEvent(value: unknown): value is MindMapFeedbackEvent {
-  return (
-    value === 'category_expand' ||
-    value === 'quiz_nav_open_practice' ||
-    value === 'quiz_nav_question_prev' ||
-    value === 'quiz_nav_question_next' ||
-    value === 'quiz_nav_scope_change' ||
-    value === 'quiz_nav_view_switch' ||
-    value === 'quiz_nav_tab_switch' ||
-    value === 'quiz_answer_select' ||
-    value === 'quiz_answer_submit' ||
-    value === 'quiz_answer_reset' ||
-    value === 'quiz_result_correct' ||
-    value === 'quiz_result_incorrect' ||
-    value === 'quiz_result_reveal' ||
-    value === 'quiz_result_ai_feedback_ready' ||
-    value === 'quiz_manage_create_start' ||
-    value === 'quiz_manage_edit_start' ||
-    value === 'quiz_manage_save' ||
-    value === 'quiz_manage_delete' ||
-    value === 'quiz_manage_batch_delete' ||
-    value === 'quiz_generate_start' ||
-    value === 'quiz_generate_attach_source' ||
-    value === 'quiz_generate_preview_ready' ||
-    value === 'quiz_generate_save' ||
-    value === 'quiz_generate_classify_complete' ||
-    value === 'quiz_generate_cancel' ||
-    value === 'quiz_error_missing_input' ||
-    value === 'quiz_error_ai_failed' ||
-    value === 'quiz_error_persist_failed' ||
-    value === 'quiz_error_stat_failed' ||
-    value === 'category_expand' ||
-    value === 'next_level_expand' ||
-    value === 'card_reveal' ||
-    value === 'branch_clear' ||
-    value === 'all_clear_ready' ||
-    value === 'session_complete' ||
-    value === 'session_reset' ||
-    value === 'hover_pulse' ||
-    value === 'pointer_down' ||
-    value === 'pointer_click' ||
-    value === 'shortcut_trigger' ||
-    value === 'navigation' ||
-    value === 'field_focus' ||
-    value === 'field_commit' ||
-    value === 'toggle_on' ||
-    value === 'toggle_off' ||
-    value === 'key_press' ||
-    value === 'text_commit' ||
-    value === 'node_select' ||
-    value === 'node_edit_start' ||
-    value === 'node_create' ||
-    value === 'node_delete' ||
-    value === 'node_move' ||
-    value === 'drag_start' ||
-    value === 'drag_drop' ||
-    value === 'context_menu' ||
-    value === 'toolbar_action' ||
-    value === 'mode_switch' ||
-    value === 'save_success' ||
-    value === 'save_error' ||
-    value === 'import_apply' ||
-    value === 'bilink_action' ||
-    value === 'segment_action'
-  )
-}
-
-interface MindMapFeedbackAudioEvent {
-  type: MindMapFeedbackEvent
-  source: string | null
-  nodeUid: string | null
-}
-
-const FEEDBACK_AUDIO_COALESCE_MS = 110
-const FEEDBACK_AUDIO_KEY_COALESCE_MS = 48
-const FEEDBACK_AUDIO_DEDUP_MS = 140
-const FEEDBACK_AUDIO_IMMEDIATE_PRIORITY = 64
-
-const FEEDBACK_AUDIO_PRIORITY: Partial<Record<MindMapFeedbackEvent, number>> = {
-  quiz_generate_classify_complete: 98,
-  quiz_generate_save: 94,
-  quiz_manage_batch_delete: 90,
-  quiz_error_persist_failed: 88,
-  quiz_error_ai_failed: 86,
-  quiz_result_reveal: 80,
-  quiz_generate_preview_ready: 79,
-  quiz_result_correct: 77,
-  quiz_result_incorrect: 77,
-  quiz_result_ai_feedback_ready: 75,
-  quiz_answer_submit: 74,
-  quiz_manage_save: 72,
-  quiz_generate_start: 70,
-  quiz_manage_delete: 68,
-  quiz_manage_create_start: 66,
-  quiz_manage_edit_start: 66,
-  quiz_generate_attach_source: 64,
-  quiz_nav_open_practice: 62,
-  quiz_nav_tab_switch: 60,
-  quiz_nav_view_switch: 60,
-  quiz_nav_scope_change: 58,
-  quiz_generate_cancel: 56,
-  quiz_error_missing_input: 56,
-  quiz_error_stat_failed: 56,
-  quiz_nav_question_prev: 44,
-  quiz_nav_question_next: 44,
-  quiz_answer_reset: 42,
-  quiz_answer_select: 20,
-  session_complete: 100,
-  all_clear_ready: 96,
-  branch_clear: 92,
-  save_error: 88,
-  node_delete: 84,
-  import_apply: 82,
-  card_reveal: 78,
-  save_success: 76,
-  text_commit: 74,
-  node_edit_start: 72,
-  node_create: 68,
-  drag_drop: 66,
-  bilink_action: 64,
-  segment_action: 64,
-  mode_switch: 62,
-  field_commit: 60,
-  toggle_on: 58,
-  toggle_off: 58,
-  navigation: 56,
-  toolbar_action: 50,
-  shortcut_trigger: 48,
-  context_menu: 46,
-  drag_start: 42,
-  node_move: 36,
-  node_select: 30,
-  pointer_click: 24,
-  key_press: 18,
-  field_focus: 16,
-  pointer_down: 12,
-  hover_pulse: 4,
-}
-
-const LOW_PRIORITY_FEEDBACK_EVENTS = new Set<MindMapFeedbackEvent>([
-  'pointer_down',
-  'pointer_click',
-  'node_select',
-  'key_press',
-  'field_focus',
-  'hover_pulse',
-  'quiz_answer_select',
-])
-
-function getFeedbackAudioPriority(event: MindMapFeedbackEvent) {
-  return FEEDBACK_AUDIO_PRIORITY[event] ?? 40
-}
-
-function getFeedbackAudioCoalesceMs(event: MindMapFeedbackEvent) {
-  if (event === 'key_press') return FEEDBACK_AUDIO_KEY_COALESCE_MS
-  if (LOW_PRIORITY_FEEDBACK_EVENTS.has(event)) return FEEDBACK_AUDIO_COALESCE_MS
-  return 72
-}
-
-function isImmediateFeedbackAudioEvent(event: MindMapFeedbackEvent) {
-  return getFeedbackAudioPriority(event) >= FEEDBACK_AUDIO_IMMEDIATE_PRIORITY
-}
-
-function areRelatedFeedbackAudioEvents(
-  previous: MindMapFeedbackAudioEvent,
-  next: MindMapFeedbackAudioEvent,
-) {
-  if (previous.nodeUid && next.nodeUid) return previous.nodeUid === next.nodeUid
-  if (previous.source && next.source && previous.source === next.source) return true
-  if (LOW_PRIORITY_FEEDBACK_EVENTS.has(previous.type) && LOW_PRIORITY_FEEDBACK_EVENTS.has(next.type)) {
-    return true
-  }
-  return (
-    getFeedbackAudioPriority(previous.type) >= FEEDBACK_AUDIO_IMMEDIATE_PRIORITY &&
-    LOW_PRIORITY_FEEDBACK_EVENTS.has(next.type)
-  )
-}
-
-function readMindMapFeedbackAudioEvent(payload: unknown): MindMapFeedbackAudioEvent | null {
-  if (isMindMapFeedbackEvent(payload)) {
-    return {
-      type: payload,
-      source: null,
-      nodeUid: null,
-    }
-  }
-  if (payload && typeof payload === 'object') {
-    const raw = payload as { type?: unknown; source?: unknown; nodeUid?: unknown }
-    if (isMindMapFeedbackEvent(raw.type)) {
-      return {
-        type: raw.type,
-        source: typeof raw.source === 'string' && raw.source ? raw.source : null,
-        nodeUid: typeof raw.nodeUid === 'string' && raw.nodeUid ? raw.nodeUid : null,
-      }
-    }
-  }
-  return null
-}
+import {
+  buildLocalEditorStateFingerprint,
+  buildMindMapFrameClassName,
+  HOST_FRAME_RUNTIME_VERSION,
+  type MindMapFrameHandle,
+  type MindMapFrameProps,
+} from './MindMapFrame.types'
+import { useMindMapFeedbackAudioCoordinator } from './useMindMapFeedbackAudioCoordinator'
 
 export const MindMapFrame = forwardRef<MindMapFrameHandle, MindMapFrameProps>(function MindMapFrame({
   editorState,
@@ -413,20 +118,9 @@ export const MindMapFrame = forwardRef<MindMapFrameHandle, MindMapFrameProps>(fu
   const pendingLocalCommitFingerprintRef = useRef<string | null>(null)
   const hostHydratedRef = useRef(false)
   const [isIframeLoaded, setIsIframeLoaded] = useState(false)
-  const feedbackAudio = useMindMapFeedbackAudioFromSettings()
-  const feedbackAudioRef = useRef(feedbackAudio)
-  const pendingFeedbackAudioRef = useRef<{
-    event: MindMapFeedbackAudioEvent
-    receivedAt: number
-    timerId: number
-  } | null>(null)
-  const lastPlayedFeedbackAudioRef = useRef<{
-    event: MindMapFeedbackAudioEvent
-    playedAt: number
-  } | null>(null)
+  const { handleFeedbackRuntimePayload } = useMindMapFeedbackAudioCoordinator()
 
   stateRef.current = editorState
-  feedbackAudioRef.current = feedbackAudio
   onEditorStateChangeRef.current = onEditorStateChange
   onNodeActiveRef.current = onNodeActive
   onNodeClickRef.current = onNodeClick
@@ -642,69 +336,6 @@ export const MindMapFrame = forwardRef<MindMapFrameHandle, MindMapFrameProps>(fu
     onEditorStateChangeRef.current(nextState)
   }, [])
 
-  const clearPendingFeedbackAudio = useCallback(() => {
-    const pending = pendingFeedbackAudioRef.current
-    if (pending) {
-      window.clearTimeout(pending.timerId)
-      pendingFeedbackAudioRef.current = null
-    }
-  }, [])
-
-  const playFeedbackAudioNow = useCallback((event: MindMapFeedbackAudioEvent) => {
-    lastPlayedFeedbackAudioRef.current = {
-      event,
-      playedAt: Date.now(),
-    }
-    feedbackAudioRef.current.playEvent(event.type)
-  }, [])
-
-  const emitCoalescedFeedbackAudio = useCallback(
-    (event: MindMapFeedbackAudioEvent) => {
-      const now = Date.now()
-      const priority = getFeedbackAudioPriority(event.type)
-      const lastPlayed = lastPlayedFeedbackAudioRef.current
-      if (
-        lastPlayed &&
-        now - lastPlayed.playedAt < FEEDBACK_AUDIO_DEDUP_MS &&
-        getFeedbackAudioPriority(lastPlayed.event.type) >= priority &&
-        areRelatedFeedbackAudioEvents(lastPlayed.event, event)
-      ) {
-        return
-      }
-
-      const pending = pendingFeedbackAudioRef.current
-      if (pending) {
-        const pendingPriority = getFeedbackAudioPriority(pending.event.type)
-        if (
-          pendingPriority > priority &&
-          now - pending.receivedAt < FEEDBACK_AUDIO_COALESCE_MS
-        ) {
-          return
-        }
-        window.clearTimeout(pending.timerId)
-        pendingFeedbackAudioRef.current = null
-      }
-
-      if (isImmediateFeedbackAudioEvent(event.type)) {
-        playFeedbackAudioNow(event)
-        return
-      }
-
-      const timerId = window.setTimeout(() => {
-        pendingFeedbackAudioRef.current = null
-        playFeedbackAudioNow(event)
-      }, getFeedbackAudioCoalesceMs(event.type))
-      pendingFeedbackAudioRef.current = {
-        event,
-        receivedAt: now,
-        timerId,
-      }
-    },
-    [playFeedbackAudioNow],
-  )
-
-  useEffect(() => clearPendingFeedbackAudio, [clearPendingFeedbackAudio])
-
   const promoteHostReadyFromRuntimeEvent = useCallback(() => {
     if (hostReadyRef.current) return
     const iframeWindow = iframeRef.current?.contentWindow as MindMapHostWindow | null
@@ -792,10 +423,7 @@ export const MindMapFrame = forwardRef<MindMapFrameHandle, MindMapFrameProps>(fu
           hostHydratedRef.current = true
         }
         if (event === 'feedback_event') {
-          const feedbackEvent = readMindMapFeedbackAudioEvent(payload)
-          if (feedbackEvent) {
-            emitCoalescedFeedbackAudio(feedbackEvent)
-          }
+          handleFeedbackRuntimePayload(payload)
         }
         const result = dispatchHostEvent(event, payload, {
           onNodeActive: onNodeActiveRef,
@@ -835,12 +463,12 @@ export const MindMapFrame = forwardRef<MindMapFrameHandle, MindMapFrameProps>(fu
   }, [
     activeSegmentId,
     bilinkCounts,
-    emitCoalescedFeedbackAudio,
-    externalSyncKey,
-    forwardLocalEditorStateChange,
-    flushPendingHostEditorStateSync,
-    hostId,
-    promoteHostReadyFromRuntimeEvent,
+      externalSyncKey,
+      forwardLocalEditorStateChange,
+      flushPendingHostEditorStateSync,
+      handleFeedbackRuntimePayload,
+      hostId,
+      promoteHostReadyFromRuntimeEvent,
     preserveViewOnSync,
     readonly,
     segmentColorMode,
@@ -961,3 +589,5 @@ export const MindMapFrame = forwardRef<MindMapFrameHandle, MindMapFrameProps>(fu
 })
 
 MindMapFrame.displayName = 'MindMapFrame'
+
+export type { MindMapFrameHandle } from './MindMapFrame.types'

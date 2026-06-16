@@ -6,9 +6,9 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from memory_anki.infrastructure.db.models import Palace
-from memory_anki.modules.mindmap.application.editor_state_service import (
+from memory_anki.modules.mindmap.application.editor_state_documents import (
     NODE_UID_KEY,
-    _deserialize,
+    deserialize_editor_payload,
 )
 
 
@@ -34,7 +34,7 @@ def serialize_segment_node_uids(node_uids: list[str]) -> str:
 def collect_doc_nodes_with_descendants(
     editor_doc: Any,
 ) -> tuple[dict[str, set[str]], dict[str, str]]:
-    doc = _deserialize(editor_doc, {})
+    doc = deserialize_editor_payload(editor_doc, {})
     root = doc.get("root") if isinstance(doc, dict) else None
     descendants: dict[str, set[str]] = {}
     labels: dict[str, str] = {}
@@ -61,7 +61,7 @@ def collect_doc_nodes_with_descendants(
 
 def get_reviewable_doc_node_uids(editor_doc: Any) -> set[str]:
     descendants, _ = collect_doc_nodes_with_descendants(editor_doc)
-    doc = _deserialize(editor_doc, {})
+    doc = deserialize_editor_payload(editor_doc, {})
     root = doc.get("root") if isinstance(doc, dict) else None
     root_data = root.get("data") if isinstance(root, dict) and isinstance(root.get("data"), dict) else {}
     root_uid = str(root_data.get(NODE_UID_KEY) or "").strip()
@@ -129,7 +129,7 @@ def build_segments_editor_doc(
     palace: Palace,
     segment_node_uid_lists: list[list[str]],
 ) -> dict[str, Any]:
-    doc = _deserialize(palace.editor_doc, {})
+    doc = deserialize_editor_payload(palace.editor_doc, {})
     if not isinstance(doc, dict):
         fallback_title = palace.title or "未命名宫殿"
         return {"root": {"data": {"text": fallback_title}, "children": []}}

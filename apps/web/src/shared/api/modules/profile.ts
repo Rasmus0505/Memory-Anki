@@ -101,7 +101,7 @@ export function updateAiModelScenariosApi(data: {
 export function createOrUpdateAiModelApi(data: {
   key: string
   display_name?: string
-  provider: 'dashscope' | 'qwen' | 'zhipu' | 'siliconflow'
+  provider: 'dashscope' | 'qwen' | 'zhipu' | 'siliconflow' | 'deepseek'
   model_type: 'llm' | 'vl' | 'translation' | 'asr' | 'tts'
   has_vision?: boolean
   supports_thinking?: boolean

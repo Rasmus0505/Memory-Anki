@@ -24,13 +24,15 @@ from memory_anki.modules.reviews.application.schedule_service import (
     normalize_algorithm,
 )
 
+from .review_progress_datetime import parse_progress_datetime
+
 
 def adjust_segment_review_progress(
     session: Session,
     segment: PalaceSegment,
     payload: dict[str, Any],
 ) -> PalaceSegment:
-    completed_at = _parse_progress_datetime(payload.get("completed_at"))
+    completed_at = parse_progress_datetime(payload.get("completed_at"))
     completed_review_number = payload.get("completed_review_number")
     if completed_review_number is not None:
         completed_review_number = int(completed_review_number)
@@ -59,7 +61,7 @@ def adjust_palace_default_segment_review_progress(
     intervals = get_algorithm_intervals(session, algorithm)
     total = len(intervals)
     completed_count = max(0, min(int(payload.get("completed_count", 0)), total))
-    completed_at = _parse_progress_datetime(payload.get("completed_at"))
+    completed_at = parse_progress_datetime(payload.get("completed_at"))
     completed_review_number = payload.get("completed_review_number")
     if completed_review_number is not None:
         completed_review_number = int(completed_review_number)
@@ -131,12 +133,3 @@ def rebuild_segment_review_progress(
         completed_at=completed_at,
         algorithm_override=algorithm_override,
     )
-
-
-def _parse_progress_datetime(value: Any) -> datetime | None:
-    if value in (None, ""):
-        return None
-    parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
-    if parsed.tzinfo is not None:
-        parsed = parsed.astimezone().replace(tzinfo=None)
-    return parsed.replace(second=0, microsecond=0)

@@ -3,6 +3,10 @@
 This aligns legacy SQLite databases with the current chapter-question model,
 where chapter-owned quiz questions store ``source_chapter_id`` and may not
 belong to any single palace row.
+
+memory-anki: allow-destructive-migration
+Justification: this historical SQLite-only nullability relaxation is required
+to reconcile older local databases with the chapter-owned question model.
 """
 
 from __future__ import annotations

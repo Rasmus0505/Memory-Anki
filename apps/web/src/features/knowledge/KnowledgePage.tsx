@@ -14,22 +14,14 @@ import {
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/shared/components/ui/dialog'
 import { Input } from '@/shared/components/ui/input'
 import { Label } from '@/shared/components/ui/label'
-import { Textarea } from '@/shared/components/ui/textarea'
 import { usePersistedMindMapEditor } from '@/shared/hooks/usePersistedMindMapEditor'
 import { useProgrammaticEditorStateGuard } from '@/shared/hooks/useProgrammaticEditorStateGuard'
 import { applyProgrammaticEditorState } from '@/shared/lib/applyProgrammaticEditorState'
 import { cn } from '@/shared/lib/utils'
-import { PalaceMindMapImportDrawer } from '@/features/palace-edit/components/PalaceMindMapImportDrawer'
+import { KnowledgeChapterQuizDialog } from '@/features/knowledge/components/KnowledgeChapterQuizDialog'
+import { KnowledgeMindMapImportDrawer } from '@/features/knowledge/components/KnowledgeMindMapImportDrawer'
 import { useMindMapImport, type ImportApplyContext } from '@/features/palace-edit/hooks/useMindMapImport'
 import {
   createSubjectApi,
@@ -67,12 +59,6 @@ interface ChapterDetail {
   }
   palaces: Array<{ id: number; title: string }>
 }
-
-const CHAPTER_QUIZ_TYPE_OPTIONS: Array<{ value: PalaceQuizQuestionType; label: string }> = [
-  { value: 'multiple_choice', label: '选择题' },
-  { value: 'short_answer', label: '简答题' },
-  { value: 'true_false', label: '判断题' },
-]
 
 export default function Knowledge() {
   const mindMapFrameRef = useRef<MindMapFrameHandle | null>(null)
@@ -662,188 +648,27 @@ export default function Knowledge() {
         </Card>
       </div>
 
-      <PalaceMindMapImportDrawer
-        open={mindMapImport.importOpen}
-        onOpenChange={mindMapImport.setImportOpen}
-        mode={mindMapImport.importMode}
-        onModeChange={mindMapImport.setImportMode}
-        sourceKind={mindMapImport.importSourceKind}
-        onSourceKindChange={mindMapImport.setImportSourceKind}
-        onWorkflowChange={mindMapImport.setMindMapImportWorkflow}
-        loading={mindMapImport.importLoading}
-        streamPhase={mindMapImport.importStreamPhase}
-        streamStatusMessage={mindMapImport.importStreamStatusMessage}
-        streamStep={mindMapImport.importStreamStep}
-        streamTotalSteps={mindMapImport.importStreamTotalSteps}
-        streamPreviewText={mindMapImport.importStreamPreviewText}
-        applying={mindMapImport.importApplying}
-        undoing={mindMapImport.importUndoing}
-        error={mindMapImport.importError}
-        sourceTree={mindMapImport.importSourceTree}
-        previewEditorDoc={mindMapImport.importPreviewEditorDoc}
-        extractedText={mindMapImport.importExtractedText}
-        imagePreviewUrl={mindMapImport.importImagePreviewUrl}
-        batchImages={mindMapImport.importBatchImages}
-        structureImageId={mindMapImport.importStructureImageId}
-        batchStatus={mindMapImport.importBatchStatus}
-        batchMeta={mindMapImport.importBatchMeta}
-        subjectOptions={mindMapImport.importSubjectOptions}
-        selectedSubjectId={mindMapImport.importSelectedSubjectId}
-        onSelectedSubjectIdChange={mindMapImport.setImportSelectedSubjectId}
-        subjectDocuments={mindMapImport.importSubjectDocuments}
-        subjectDocumentsLoading={mindMapImport.importSubjectDocumentsLoading}
-        selectedSubjectDocumentId={mindMapImport.importSelectedSubjectDocumentId}
-        onSelectedSubjectDocumentIdChange={mindMapImport.setImportSelectedSubjectDocumentId}
-        pdfPageMeta={mindMapImport.importPdfPageMeta}
-        pdfPagesLoading={mindMapImport.importPdfPagesLoading}
-        selectedPdfPages={mindMapImport.importPdfPages}
-        pdfPageInput={mindMapImport.importPdfPageInput}
-        onPdfPageInputChange={mindMapImport.setImportPdfPageInput}
-        pdfSelectionError={mindMapImport.importPdfSelectionError}
-        pdfImportMode={mindMapImport.importPdfMode}
-        onPdfImportModeChange={mindMapImport.setImportPdfMode}
-        structurePage={mindMapImport.importStructurePage}
-        onStructurePageChange={mindMapImport.setImportStructurePage}
-        pdfPreviewPage={mindMapImport.importPdfPreviewPage}
-        onPdfPreviewPageChange={mindMapImport.setImportPdfPreviewPage}
-        analyzedPdfPages={mindMapImport.importAnalyzedPdfPages}
-        rangePrompt={mindMapImport.importRangePrompt}
-        onRangePromptChange={mindMapImport.setImportRangePrompt}
-        pdfImportOptions={mindMapImport.importPdfOptions}
-        onPdfImportOptionChange={mindMapImport.setImportPdfOption}
-        importWarnings={mindMapImport.importWarnings}
-        pdfOcrGroundingUsed={mindMapImport.importPdfOcrGroundingUsed}
-        pdfOcrTextChars={mindMapImport.importPdfOcrTextChars}
-        currentJobId={mindMapImport.currentJobId}
-        currentJobStatus={mindMapImport.currentJobStatus}
-        currentJobStage={mindMapImport.currentJobStage}
-        currentJobUsage={mindMapImport.currentJobUsage}
-        currentJobResolvedAi={mindMapImport.currentJobResolvedAi}
-        currentJobPauseRequested={mindMapImport.currentJobPauseRequested}
-        canResumeJob={mindMapImport.canResumeJob}
-        canPauseJob={mindMapImport.canPauseJob}
-        reusedExistingResult={mindMapImport.importReusedExistingResult}
-        onResumeJob={mindMapImport.handleResumeJob}
-        onPauseJob={mindMapImport.handlePauseJob}
-        onTogglePdfPage={mindMapImport.toggleImportPdfPage}
-        onPdfStart={mindMapImport.handlePdfImportStart}
-        targetNodeLabel={selectedNodeLabel}
-        canAppend={mindMapImport.importCanAppend}
-        canUndoLastImport={mindMapImport.importCanUndoLastImport}
-        onPaste={mindMapImport.handleImportPaste}
-        onFileChange={mindMapImport.handleImportFileChange}
-        onBatchStart={mindMapImport.handleBatchImportStart}
-        onBatchDeleteImage={mindMapImport.handleDeleteBatchImage}
-        onBatchMoveImage={mindMapImport.handleMoveBatchImage}
-        onBatchSetStructureImage={mindMapImport.handleSetStructureImage}
-        onApplyReplace={mindMapImport.handleImportApplyReplace}
-        onApplyAppend={mindMapImport.handleImportApplyAppend}
-        onUndoLastImport={mindMapImport.handleUndoLastImport}
-        history={mindMapImport.importHistory}
-        onSelectHistory={mindMapImport.handleImportSelectHistory}
-        onDeleteHistory={mindMapImport.handleImportDeleteHistory}
+      <KnowledgeMindMapImportDrawer mindMapImport={mindMapImport} targetNodeLabel={selectedNodeLabel} />
+
+      <KnowledgeChapterQuizDialog
+        open={chapterQuizDialogOpen}
+        onOpenChange={setChapterQuizDialogOpen}
+        questionTypes={chapterQuizQuestionTypes}
+        onToggleQuestionType={handleToggleChapterQuizType}
+        questionCount={chapterQuizQuestionCount}
+        onQuestionCountChange={setChapterQuizQuestionCount}
+        classify={chapterQuizClassify}
+        onClassifyChange={setChapterQuizClassify}
+        canClassify={canClassifyChapterQuiz}
+        childChapterCount={selectedChildChapters.length}
+        extraPrompt={chapterQuizExtraPrompt}
+        onExtraPromptChange={setChapterQuizExtraPrompt}
+        preview={chapterQuizPreview}
+        loading={chapterQuizLoading}
+        saving={chapterQuizSaving}
+        onGenerate={handleGenerateChapterQuiz}
+        onSave={handleSaveChapterQuiz}
       />
-
-      <Dialog open={chapterQuizDialogOpen} onOpenChange={setChapterQuizDialogOpen}>
-        <DialogContent className="max-w-4xl">
-          <DialogHeader>
-            <DialogTitle>章节 AI 出题</DialogTitle>
-            <DialogDescription>
-              以当前章节作为“大宫殿”生成题目；勾选“按宫殿分类”时，会按当前章节的直接子章节分类。
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 px-6 py-4">
-            <div className="space-y-2">
-              <div className="text-sm font-semibold">题型</div>
-              <div className="flex flex-wrap gap-2">
-                {CHAPTER_QUIZ_TYPE_OPTIONS.map((option) => (
-                  <label
-                    key={option.value}
-                    className="flex items-center gap-2 rounded-xl border border-border/70 px-3 py-2 text-sm"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={chapterQuizQuestionTypes.includes(option.value)}
-                      onChange={() => handleToggleChapterQuizType(option.value)}
-                    />
-                    <span>{option.label}</span>
-                  </label>
-                ))}
-              </div>
-            </div>
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="chapter-quiz-count">数量</Label>
-                <Input
-                  id="chapter-quiz-count"
-                  type="number"
-                  min={1}
-                  max={30}
-                  value={chapterQuizQuestionCount}
-                  onChange={(event) => setChapterQuizQuestionCount(Number(event.target.value || 5))}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    checked={chapterQuizClassify}
-                    disabled={!canClassifyChapterQuiz}
-                    onChange={(event) => setChapterQuizClassify(event.target.checked)}
-                  />
-                  <span>按宫殿分类</span>
-                </Label>
-                <div className="text-xs text-muted-foreground">
-                  {canClassifyChapterQuiz
-                    ? `将按 ${selectedChildChapters.length} 个直接子章节分类。`
-                    : '当前章节没有下级小节，无法分类。'}
-                </div>
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="chapter-quiz-extra-prompt">额外要求</Label>
-              <Textarea
-                id="chapter-quiz-extra-prompt"
-                value={chapterQuizExtraPrompt}
-                onChange={(event) => setChapterQuizExtraPrompt(event.target.value)}
-                placeholder="例如：偏重概念辨析；只出本章核心考点。"
-              />
-            </div>
-            {chapterQuizPreview ? (
-              <div className="space-y-3 rounded-2xl border border-border/70 bg-background/60 p-3">
-                <div className="text-sm font-semibold">生成预览</div>
-                <div className="text-xs text-muted-foreground">
-                  共 {chapterQuizPreview.questions.length} 题
-                  {chapterQuizPreview.grouped_questions &&
-                  'child_chapter_groups' in chapterQuizPreview.grouped_questions
-                    ? `，其中 ${chapterQuizPreview.grouped_questions.child_chapter_groups.length} 组已按子章节分类`
-                    : ''}
-                </div>
-                <div className="max-h-72 space-y-2 overflow-y-auto">
-                  {chapterQuizPreview.questions.map((question, index) => (
-                    <div key={`${question.stem}-${index}`} className="rounded-xl border border-border/70 px-3 py-2">
-                      <div className="text-xs text-muted-foreground">第 {index + 1} 题</div>
-                      <div className="text-sm">{question.stem}</div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ) : null}
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setChapterQuizDialogOpen(false)}>
-              取消
-            </Button>
-            <Button variant="outline" onClick={handleGenerateChapterQuiz} disabled={chapterQuizLoading}>
-              {chapterQuizLoading ? '生成中...' : '生成预览'}
-            </Button>
-            <Button onClick={handleSaveChapterQuiz} disabled={!chapterQuizPreview || chapterQuizSaving}>
-              {chapterQuizSaving ? '保存中...' : '确认保存'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
     </div>
   )
 }

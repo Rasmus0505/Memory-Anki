@@ -73,7 +73,7 @@ export interface AiRuntimeOptions {
   thinking_enabled?: boolean | null
 }
 export type AiScenarioRuntimeOptionsMap = Record<string, AiRuntimeOptions>
-export type AiProviderKey = 'dashscope' | 'qwen' | 'zhipu' | 'siliconflow'
+export type AiProviderKey = 'dashscope' | 'qwen' | 'zhipu' | 'siliconflow' | 'deepseek'
 export type AiModelType = 'llm' | 'vl' | 'translation' | 'asr' | 'tts'
 
 export interface ResolvedAiRuntimeMeta {

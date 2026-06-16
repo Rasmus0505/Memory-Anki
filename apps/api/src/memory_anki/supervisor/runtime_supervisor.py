@@ -11,28 +11,37 @@ import subprocess
 import sys
 import threading
 import time
-import uuid
-import webbrowser
-from dataclasses import asdict, dataclass, field
-from datetime import datetime
+from dataclasses import asdict
 from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
-from urllib.error import URLError
-from urllib.request import urlopen
 
-from memory_anki.core.config import APP_HOME, REPO_ROOT
 from memory_anki.core.runtime import detect_git_commit
+from memory_anki.supervisor.runtime_supervisor_support import (
+    INTERNAL_PORT_BASE,
+    POLL_INTERVAL_SECONDS,
+    RETIRED_RELEASE_TTL_SECONDS,
+    SESSION_GRACE_SECONDS,
+    SUPERVISOR_HOST,
+    SUPERVISOR_PORT,
+    ReleaseRecord,
+    SupervisorConfig,
+    build_supervisor_config,
+    creation_flags,
+    ensure_background_supervisor,
+    ensure_supervisor_directories,
+    http_get_json,
+    is_supervisor_healthy,
+    iso_now,
+    kill_process_tree,
+    list_listening_pids,
+    make_release_id,
+    make_session_id,
+    wait_for_supervisor,
+)
 
 COOKIE_NAME = "memory_anki_release"
-SESSION_GRACE_SECONDS = 300
-RETIRED_RELEASE_TTL_SECONDS = 900
-SUPERVISOR_PORT = 8012
-SUPERVISOR_HOST = "127.0.0.1"
-INTERNAL_PORT_BASE = 18012
-STATE_FILENAME = "supervisor-state.json"
-POLL_INTERVAL_SECONDS = 2.0
 HOP_BY_HOP_HEADERS = {
     "connection",
     "keep-alive",
@@ -71,163 +80,6 @@ IGNORE_PARTS = {
     ".ruff_cache",
     "runtime-data",
 }
-
-
-@dataclass(slots=True)
-class SupervisorConfig:
-    repo_root: Path
-    app_home: Path
-    runtime_root: Path
-    releases_root: Path
-    logs_dir: Path
-    state_path: Path
-    host: str = SUPERVISOR_HOST
-    port: int = SUPERVISOR_PORT
-    internal_port_base: int = INTERNAL_PORT_BASE
-    poll_interval_seconds: float = POLL_INTERVAL_SECONDS
-    session_grace_seconds: int = SESSION_GRACE_SECONDS
-    retired_release_ttl_seconds: int = RETIRED_RELEASE_TTL_SECONDS
-
-    @property
-    def browser_url(self) -> str:
-        return f"http://{self.host}:{self.port}/"
-
-
-@dataclass(slots=True)
-class ReleaseRecord:
-    release_id: str
-    path: str
-    fingerprint: str
-    runtime_generation: int
-    source_commit: str | None
-    port: int | None = None
-    process_id: int | None = None
-    ready: bool = False
-    created_at: float = field(default_factory=time.time)
-    retired_at: float | None = None
-
-
-def _iso_now() -> str:
-    return datetime.now().isoformat(timespec="seconds")
-
-
-def build_supervisor_config() -> SupervisorConfig:
-    runtime_root = APP_HOME / "runtime"
-    return SupervisorConfig(
-        repo_root=REPO_ROOT,
-        app_home=APP_HOME,
-        runtime_root=runtime_root,
-        releases_root=runtime_root / "releases",
-        logs_dir=APP_HOME / "logs",
-        state_path=APP_HOME / STATE_FILENAME,
-    )
-
-
-def _ensure_directories(config: SupervisorConfig) -> None:
-    for path in (config.app_home, config.runtime_root, config.releases_root, config.logs_dir):
-        path.mkdir(parents=True, exist_ok=True)
-
-
-def _http_get_json(url: str, timeout: float = 2.0) -> dict[str, Any] | None:
-    try:
-        with urlopen(url, timeout=timeout) as response:
-            payload = response.read().decode("utf-8")
-    except (URLError, OSError, TimeoutError):
-        return None
-    try:
-        parsed = json.loads(payload)
-    except json.JSONDecodeError:
-        return None
-    return parsed if isinstance(parsed, dict) else None
-
-
-def is_supervisor_healthy(config: SupervisorConfig) -> bool:
-    payload = _http_get_json(f"{config.browser_url}__supervisor/health")
-    return bool(payload and payload.get("ok"))
-
-
-def _open_browser(url: str) -> None:
-    try:
-        webbrowser.open(url)
-    except Exception:
-        pass
-
-
-def _creation_flags() -> int:
-    flags = 0
-    for name in ("DETACHED_PROCESS", "CREATE_NEW_PROCESS_GROUP", "CREATE_NO_WINDOW"):
-        flags |= int(getattr(subprocess, name, 0))
-    return flags
-
-
-def _listening_pids(port: int) -> list[int]:
-    try:
-        output = subprocess.check_output(
-            ["netstat", "-ano"],
-            text=True,
-            stderr=subprocess.DEVNULL,
-        )
-    except Exception:
-        return []
-    pids: list[int] = []
-    for line in output.splitlines():
-        if f":{port}" not in line or "LISTENING" not in line.upper():
-            continue
-        parts = [part for part in line.split() if part]
-        if len(parts) < 5:
-            continue
-        try:
-            pids.append(int(parts[-1]))
-        except ValueError:
-            continue
-    return sorted(set(pid for pid in pids if pid > 0))
-
-
-def _kill_process_tree(pid: int) -> None:
-    try:
-        subprocess.run(
-            ["taskkill", "/PID", str(pid), "/T", "/F"],
-            check=False,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
-    except Exception:
-        pass
-
-
-def wait_for_supervisor(config: SupervisorConfig, timeout_seconds: int = 120) -> None:
-    deadline = time.time() + timeout_seconds
-    while time.time() < deadline:
-        if is_supervisor_healthy(config):
-            return
-        time.sleep(0.5)
-    raise TimeoutError("Timed out waiting for runtime supervisor.")
-
-
-def ensure_background_supervisor(*, open_browser: bool = True) -> SupervisorConfig:
-    config = build_supervisor_config()
-    _ensure_directories(config)
-    if not is_supervisor_healthy(config):
-        for pid in _listening_pids(config.port):
-            _kill_process_tree(pid)
-        time.sleep(0.5)
-        log_path = config.logs_dir / "runtime-supervisor.log"
-        with log_path.open("ab") as log_file:
-            subprocess.Popen(
-                [sys.executable, str(config.repo_root / "tools" / "runtime_supervisor.py"), "--serve"],
-                cwd=str(config.repo_root),
-                stdout=log_file,
-                stderr=subprocess.STDOUT,
-                stdin=subprocess.DEVNULL,
-                creationflags=_creation_flags(),
-                close_fds=False,
-            )
-        wait_for_supervisor(config)
-    if open_browser:
-        _open_browser(config.browser_url)
-    return config
-
-
 class RuntimeSupervisor:
     def __init__(self, config: SupervisorConfig) -> None:
         self.config = config
@@ -279,7 +131,7 @@ class RuntimeSupervisor:
     def save_state(self) -> None:
         payload = {
             "version": 1,
-            "saved_at": _iso_now(),
+            "saved_at": iso_now(),
             "current_release_id": self.current_release_id,
             "candidate_release_id": self.candidate_release_id,
             "last_repo_fingerprint": self.last_repo_fingerprint,
@@ -463,7 +315,7 @@ class RuntimeSupervisor:
                 stdout=log_file,
                 stderr=subprocess.STDOUT,
                 stdin=subprocess.DEVNULL,
-                creationflags=_creation_flags(),
+                creationflags=creation_flags(),
                 close_fds=False,
             )
         release.port = port
@@ -474,7 +326,7 @@ class RuntimeSupervisor:
         deadline = time.time() + timeout_seconds
         url = f"http://{self.config.host}:{release.port}/api/v1/runtime-health"
         while time.time() < deadline:
-            payload = _http_get_json(url)
+            payload = http_get_json(url)
             if payload and payload.get("ok"):
                 release.ready = True
                 return
@@ -485,7 +337,7 @@ class RuntimeSupervisor:
         raise TimeoutError(f"Timed out waiting for backend health: {release.release_id}")
 
     def _publish_release(self, *, promote_immediately: bool) -> ReleaseRecord:
-        release_id = datetime.now().strftime("%Y%m%d-%H%M%S") + f"-{uuid.uuid4().hex[:6]}"
+        release_id = make_release_id()
         fingerprint = self._compute_source_fingerprint()
         runtime_generation = self._load_runtime_generation(self.config.repo_root)
         if not self._release_is_compatible(runtime_generation):
@@ -524,7 +376,7 @@ class RuntimeSupervisor:
                     "fingerprint": release.fingerprint,
                     "runtime_generation": release.runtime_generation,
                     "source_commit": release.source_commit,
-                    "created_at": _iso_now(),
+                    "created_at": iso_now(),
                 },
                 ensure_ascii=False,
                 indent=2,
@@ -711,7 +563,7 @@ class RuntimeSupervisor:
         return release_id or None, session_id or None
 
     def _make_cookie_value(self, release_id: str) -> tuple[str, str]:
-        session_id = uuid.uuid4().hex[:12]
+        session_id = make_session_id()
         return session_id, f"{release_id}.{session_id}"
 
     def _is_document_request(self, handler: BaseHTTPRequestHandler) -> bool:
@@ -861,7 +713,7 @@ class RuntimeSupervisor:
         return SupervisorHandler
 
     def start(self) -> None:
-        _ensure_directories(self.config)
+        ensure_supervisor_directories(self.config)
         self.load_state()
         restored = self._restore_saved_release(self.current_release_id)
         if restored and self.candidate_release_id:
@@ -931,7 +783,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--launch", action="store_true", help="Ensure the background supervisor is running.")
     args = parser.parse_args(argv)
     if args.launch:
-        ensure_background_supervisor(open_browser=True)
+        ensure_background_supervisor(open_browser_after_launch=True)
         return 0
     if args.serve:
         return serve_supervisor()

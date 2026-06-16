@@ -5,7 +5,7 @@ import uuid
 from html import escape, unescape
 from typing import Any
 
-from memory_anki.modules.mindmap.application.editor_state_service import normalize_editor_doc
+from memory_anki.modules.mindmap.application.editor_state_documents import normalize_editor_doc
 
 from .contracts import MindMapImportError
 from .model_io import (
