@@ -17,7 +17,7 @@ import type {
   ReadingDifficultyDelta,
   ReadingSessionResult,
 } from "@/shared/api/contracts";
-import { useRouteResidency } from "@/app/router/RouteResidency";
+import { useRouteResidency } from "@/shared/routing/RouteResidency";
 import { PageIntro } from "@/shared/components/layout/PageIntro";
 import { TimerAutomationDialog } from "@/shared/components/session/TimerAutomationDialog";
 import {

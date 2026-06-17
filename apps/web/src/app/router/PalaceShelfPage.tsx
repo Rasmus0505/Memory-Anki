@@ -15,7 +15,7 @@ import {
 } from '@/app/router/palace-view-settings'
 import { PalaceListSections } from '@/app/router/palace-list/PalaceListSections'
 import type { PalaceGroupedItem, PalaceGroupedListResponse, PalaceSubjectShelfItem } from '@/shared/api/contracts'
-import { getPalacesGroupedApi, getPalaceSubjectShelfApi } from '@/shared/api/modules/palaces'
+import { getPalacesGroupedApi, getPalaceSubjectShelfApi } from '@/shared/api/modules/palaces/catalogApi'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
 import { Card, CardContent } from '@/shared/components/ui/card'

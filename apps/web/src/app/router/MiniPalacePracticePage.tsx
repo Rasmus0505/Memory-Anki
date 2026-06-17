@@ -16,7 +16,7 @@ import {
   getPalaceMiniPalaceApi,
   saveMiniPracticeSessionProgressApi,
   updateMiniPalaceReviewProgressApi,
-} from '@/shared/api/modules/palaces'
+} from '@/shared/api/modules/palaces/structureApi'
 import { submitMiniReviewSessionApi } from '@/shared/api/modules/reviews'
 import { StageSelectDialog } from '@/features/review/components/StageSelectDialog'
 

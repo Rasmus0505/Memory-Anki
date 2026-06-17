@@ -8,7 +8,7 @@ from memory_anki.modules.settings.application.ai_prompt_templates import (
     build_palace_quiz_review_mindmap_prompt,
 )
 
-from .service import (
+from .question_contracts import (
     QUESTION_TYPES,
     PalaceQuizValidationError,
 )

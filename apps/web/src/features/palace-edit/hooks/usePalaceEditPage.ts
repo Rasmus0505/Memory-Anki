@@ -9,7 +9,7 @@ import type { MindMapAiSplitRequestPayload, MindMapSelection } from '@/shared/co
 import type { MindMapFeedbackEvent, MindMapFeedbackFxPayload } from '@/shared/components/mindmap-host/hostBridgeUtils'
 import { readTimerAutomationConfig } from '@/shared/components/session/timer-automation-config'
 import { shouldAutoStartOnPageEnter, useTimedSession } from '@/shared/hooks/useTimedSession'
-import { useRouteResidency } from '@/app/router/RouteResidency'
+import { useRouteResidency } from '@/shared/routing/RouteResidency'
 import { useGlobalTimerRegistration } from '@/shared/components/session/GlobalTimerProvider'
 import { logAiCall, requestOpenAiLogDetail } from '@/shared/logs/model/appLogs'
 import { parseMindMapDoc } from '@/features/palace-edit/model/mindmap-editor'

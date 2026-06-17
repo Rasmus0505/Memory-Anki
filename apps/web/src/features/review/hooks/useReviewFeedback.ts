@@ -20,7 +20,7 @@ import {
   type ReviewCelebrationEventSettings,
   type ReviewMilestoneCelebrationSettings,
   type ReviewFeedbackSettings,
-} from '@/features/review/reviewFeedbackSettings'
+} from '@/shared/feedback/reviewFeedbackSettings'
 import { emitReviewConfetti } from '@/shared/components/celebration'
 import type { MindMapReviewFxPayload } from '@/shared/components/mindmap-host/hostBridgeUtils'
 import type {

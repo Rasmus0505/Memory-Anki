@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from .service import PalaceQuizValidationError
+from .question_contracts import PalaceQuizValidationError
 
 
 def build_group_questions_by_child_chapter_preview(

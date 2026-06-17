@@ -17,14 +17,18 @@ import {
   parseEditorDoc,
 } from '@/entities/review/model/review-flow-tree'
 import {
+  getPalaceFocusSessionApi,
+  togglePalaceFocusNodeApi,
+} from '@/shared/api/modules/palaces/catalogApi'
+import {
   clearFocusPracticeSessionProgressApi,
   getFocusPracticeSessionProgressApi,
-  getPalaceFocusSessionApi,
   saveFocusPracticeSessionProgressApi,
-  togglePalaceFocusNodeApi,
+} from '@/shared/api/modules/palaces/practiceApi'
+import {
   updateDefaultSegmentReviewProgressApi,
   updatePalacePracticeFlagApi,
-} from '@/shared/api/modules/palaces'
+} from '@/shared/api/modules/palaces/structureApi'
 import { submitReviewSessionApi } from '@/shared/api/modules/reviews'
 import { StageSelectDialog } from '@/features/review/components/StageSelectDialog'
 

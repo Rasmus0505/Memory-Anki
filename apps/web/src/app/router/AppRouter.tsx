@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, type Location } from 'react-router-dom'
-import { RouteResidencyProvider } from '@/app/router/RouteResidency'
+import { RouteResidencyProvider } from '@/shared/routing/RouteResidency'
 import { AppRoutes } from '@/app/router/appRoutes'
 
 export const MAX_CACHED_ENTRIES = 12

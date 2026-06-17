@@ -8,7 +8,7 @@ import PalacePracticePage from '@/app/router/PalacePracticePage'
 import PalaceFocusPracticePage from '@/app/router/PalaceFocusPracticePage'
 import SegmentPracticePage from '@/app/router/SegmentPracticePage'
 import MiniPalacePracticePage from '@/app/router/MiniPalacePracticePage'
-import ReviewOverviewPage from '@/features/review/ReviewOverviewPage'
+import ReviewOverviewPage from '@/app/router/review/ReviewOverview'
 
 export const preloadPalaceViewPage = () => import('@/app/router/PalaceViewPage')
 
@@ -25,9 +25,7 @@ const ProfileAiPage = lazy(() => import('@/features/profile/ProfileAiPage'))
 const ProfileBackupsPage = lazy(
   () => import('@/features/profile/ProfileBackupsPage'),
 )
-const ReviewSessionPage = lazy(
-  () => import('@/features/review/ReviewSessionPage'),
-)
+const ReviewSessionPage = lazy(() => import('@/app/router/review/ReviewSession'))
 const ReviewFeedbackPreviewRoute = lazy(
   () => import('@/app/router/ReviewFeedbackPreviewRoute'),
 )

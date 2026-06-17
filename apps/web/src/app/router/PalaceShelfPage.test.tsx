@@ -30,6 +30,11 @@ vi.mock('@/app/router/palace-list/PalaceStageProgress', () => ({
   toDateTimeLocalValue: () => '',
 }))
 
+vi.mock('@/shared/api/modules/palaces/catalogApi', () => ({
+  getPalaceSubjectShelfApi: (...args: unknown[]) => getPalaceSubjectShelfApi(...args),
+  getPalacesGroupedApi: (...args: unknown[]) => getPalacesGroupedApi(...args),
+}))
+
 vi.mock('@/shared/api/modules/palaces', () => ({
   getPalaceSubjectShelfApi: (...args: unknown[]) => getPalaceSubjectShelfApi(...args),
   getPalacesGroupedApi: (...args: unknown[]) => getPalacesGroupedApi(...args),

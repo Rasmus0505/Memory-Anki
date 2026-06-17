@@ -9,10 +9,8 @@ from memory_anki.modules.palaces.application.title_sync_service import (
     get_palace_explicit_chapter_ids,
 )
 
-from .service import (
-    PalaceQuizValidationError,
-    get_chapter_or_raise,
-)
+from .question_contracts import PalaceQuizValidationError
+from .question_validation import get_chapter_or_raise
 
 
 def chapter_belongs_to_explicit_scope(chapter: Chapter, explicit_ids: set[int]) -> bool:

@@ -10,7 +10,7 @@ import {
   deleteBilinkApi,
   getBilinkNodeContextApi,
 } from '@/features/bilink/api/bilink'
-import { getPalaceEditorApi } from '@/shared/api/modules/palaces'
+import { getPalaceEditorApi } from '@/shared/api/modules/palaces/catalogApi'
 import { useBilinkSearch } from '@/features/bilink/hooks/useBilinkSearch'
 import {
   normalizePreviewConfig,

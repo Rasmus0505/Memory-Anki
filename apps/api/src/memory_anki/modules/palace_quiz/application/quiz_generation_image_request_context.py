@@ -11,10 +11,8 @@ from .quiz_generation_chaptering import (
     flatten_child_chapter_contexts,
     resolve_selected_generation_chapter,
 )
-from .service import (
-    PalaceQuizValidationError,
-    get_palace_or_raise,
-)
+from .question_contracts import PalaceQuizValidationError
+from .question_lookup_queries import get_palace_or_raise
 
 
 @dataclass(frozen=True, slots=True)

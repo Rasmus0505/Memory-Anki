@@ -6,7 +6,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from .service import upsert_classified_question_copy
+from .question_classification_commands import upsert_classified_question_copy
 
 
 def apply_grouped_question_copies(

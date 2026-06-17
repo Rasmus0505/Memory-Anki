@@ -8,11 +8,16 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 WEB_SRC = REPO_ROOT / "apps" / "web" / "src"
 API_SRC = REPO_ROOT / "apps" / "api" / "src" / "memory_anki"
 ALEMBIC_VERSIONS = REPO_ROOT / "apps" / "api" / "alembic" / "versions"
-WEB_LAYER_DIRS = ("app", "features", "entities")
+PALACE_QUIZ_APPLICATION = API_SRC / "modules" / "palace_quiz" / "application"
+SETTINGS_MODULE = API_SRC / "modules" / "settings"
+WEB_LAYER_DIRS = ("app", "features", "entities", "shared")
 
 FORBIDDEN_WEB_IMPORTS = {
     "@/shared/api/client": "Pages and features must import scoped API wrappers or contracts instead of the legacy shared/api/client aggregator.",
+    "@/app/": "features, entities, and shared modules must not import app-layer code; move shared routing/state helpers out of app/router.",
 }
+
+FORBIDDEN_SHARED_IMPORTS = ("@/app/", "@/features/")
 
 MAX_WEB_FILE_LINES = 750
 MAX_API_FILE_LINES = 800
@@ -38,13 +43,22 @@ def iter_files(root: Path, suffixes: tuple[str, ...]):
 
 def check_forbidden_imports(errors: list[str]) -> None:
     for path in iter_files(WEB_SRC, (".ts", ".tsx")):
+        relative = path.relative_to(WEB_SRC).as_posix()
         if not path.relative_to(WEB_SRC).parts or path.relative_to(WEB_SRC).parts[0] not in WEB_LAYER_DIRS:
             continue
         content = path.read_text(encoding="utf-8")
         for forbidden_import, message in FORBIDDEN_WEB_IMPORTS.items():
+            if forbidden_import == "@/app/" and relative.startswith("app/"):
+                continue
             if forbidden_import in content:
-                relative = path.relative_to(REPO_ROOT)
                 errors.append(f"{relative}: {message}")
+        if relative.startswith("shared/"):
+            for forbidden_prefix in FORBIDDEN_SHARED_IMPORTS:
+                if forbidden_prefix in content:
+                    errors.append(
+                        f"{relative}: shared modules must not import app or feature modules; move feature-specific logic out of shared."
+                    )
+                    break
 
 
 def check_file_sizes(errors: list[str]) -> None:
@@ -90,12 +104,36 @@ def check_forward_compatible_migrations(errors: list[str]) -> None:
                 break
 
 
+def check_palace_quiz_application_facades(errors: list[str]) -> None:
+    for path in iter_files(PALACE_QUIZ_APPLICATION, (".py",)):
+        if path.name == "service.py":
+            continue
+        content = path.read_text(encoding="utf-8")
+        if "from .service import" in content:
+            relative = path.relative_to(REPO_ROOT)
+            errors.append(
+                f"{relative}: palace_quiz application modules must import question leaf modules directly instead of the service facade."
+            )
+
+
+def check_settings_module_boundaries(errors: list[str]) -> None:
+    for path in iter_files(SETTINGS_MODULE, (".py",)):
+        content = path.read_text(encoding="utf-8")
+        if "memory_anki.modules.palaces" in content:
+            relative = path.relative_to(REPO_ROOT)
+            errors.append(
+                f"{relative}: settings modules must not import palaces modules; move shared prompt/config helpers to settings or core."
+            )
+
+
 def main() -> int:
     errors: list[str] = []
     check_forbidden_imports(errors)
     check_file_sizes(errors)
     check_runtime_data_ignored(errors)
     check_forward_compatible_migrations(errors)
+    check_palace_quiz_application_facades(errors)
+    check_settings_module_boundaries(errors)
 
     if errors:
         print("Architecture check failed:")

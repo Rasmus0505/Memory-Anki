@@ -6,7 +6,7 @@ import json
 from dataclasses import dataclass
 from typing import Any
 
-from .service import PalaceQuizValidationError
+from .question_contracts import PalaceQuizValidationError
 
 
 @dataclass(frozen=True, slots=True)

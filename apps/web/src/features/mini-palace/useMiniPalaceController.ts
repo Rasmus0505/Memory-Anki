@@ -8,7 +8,7 @@ import {
   deleteMiniPalaceApi,
   getMiniPalacesApi,
   updateMiniPalaceApi,
-} from '@/shared/api/modules/palaces'
+} from '@/shared/api/modules/palaces/structureApi'
 import { buildSubtreeUidMap } from '@/features/palace-edit/model/mindmap-editor'
 import {
   advanceRevealStateForNodeClick,

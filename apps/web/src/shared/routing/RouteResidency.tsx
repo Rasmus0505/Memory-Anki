@@ -25,3 +25,4 @@ export function RouteResidencyProvider({
 export function useRouteResidency() {
   return useContext(RouteResidencyContext)
 }
+

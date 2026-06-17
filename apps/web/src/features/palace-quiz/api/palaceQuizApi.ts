@@ -1,5 +1,5 @@
 import { getSubjectTreeApi, getSubjectsApi, uploadSubjectDocumentApi } from '@/shared/api/modules/knowledge'
-import { getPalaceApi } from '@/shared/api/modules/palaces'
+import { getPalaceApi } from '@/shared/api/modules/palaces/catalogApi'
 import {
   batchDeletePalaceQuizQuestionsApi,
   batchCreateChapterQuizQuestionsApi,

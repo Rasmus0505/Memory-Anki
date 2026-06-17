@@ -11,14 +11,18 @@ import {
   type ReviewFlowSnapshot,
 } from '@/features/review/components/MindMapReviewFlow'
 import {
-  clearPracticeSessionProgressApi,
   getPalaceEditorApi,
+  togglePalaceFocusNodeApi,
+} from '@/shared/api/modules/palaces/catalogApi'
+import {
+  clearPracticeSessionProgressApi,
   getPracticeSessionProgressApi,
   savePracticeSessionProgressApi,
-  togglePalaceFocusNodeApi,
+} from '@/shared/api/modules/palaces/practiceApi'
+import {
   updateDefaultSegmentReviewProgressApi,
   updatePalacePracticeFlagApi,
-} from '@/shared/api/modules/palaces'
+} from '@/shared/api/modules/palaces/structureApi'
 import { submitReviewSessionApi } from '@/shared/api/modules/reviews'
 import { StageSelectDialog } from '@/features/review/components/StageSelectDialog'
 import type { ReviewStageSummary } from '@/shared/api/contracts'

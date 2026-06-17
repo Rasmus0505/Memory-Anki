@@ -69,9 +69,13 @@ vi.mock('@/shared/api/modules/reviews', () => ({
   submitReviewSessionApi: (...args: unknown[]) => mocks.submitReviewSessionApi(...args),
 }))
 
-vi.mock('@/shared/api/modules/palaces', () => ({
+vi.mock('@/shared/api/modules/palaces/catalogApi', () => ({
   buildAttachmentUrl: (id: number) => `/attachments/${id}`,
   getPalaceEditorApi: vi.fn(),
+  togglePalaceFocusNodeApi: vi.fn(),
+}))
+
+vi.mock('@/shared/api/modules/palaces/editorApi', () => ({
   savePalaceEditorApi: vi.fn(),
   savePalaceEditorWithOptionsApi: vi.fn(),
 }))

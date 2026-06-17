@@ -11,7 +11,7 @@ from memory_anki.modules.knowledge.application.subject_document_service import (
     get_subject_document_by_id,
 )
 
-from .service import (
+from .question_contracts import (
     PalaceQuizNotFoundError,
     PalaceQuizValidationError,
 )

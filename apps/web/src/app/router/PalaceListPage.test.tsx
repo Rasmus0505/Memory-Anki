@@ -30,6 +30,10 @@ vi.mock('@/app/router/palace-list/PalaceStageProgress', () => ({
 const getPalacesGroupedApi = vi.fn()
 const submitSegmentReviewSessionApi = vi.fn()
 
+vi.mock('@/shared/api/modules/palaces/catalogApi', () => ({
+  getPalacesGroupedApi: (...args: unknown[]) => getPalacesGroupedApi(...args),
+}))
+
 vi.mock('@/shared/api/modules/palaces', () => ({
   deletePalaceApi: vi.fn(),
   getPalaceReviewPlanApi: vi.fn(),

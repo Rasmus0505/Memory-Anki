@@ -30,7 +30,7 @@ import { useEnglishCourseShortcuts } from '@/features/english/hooks/useEnglishCo
 import { resolveDisplaySentenceIndex } from '@/features/english/model/english-course-progress'
 import { useEnglishTypingFeedbackSounds } from '@/features/english/useEnglishTypingFeedbackSounds'
 import { useEnglishWordTyping } from '@/features/english/useEnglishWordTyping'
-import { useRouteResidency } from '@/app/router/RouteResidency'
+import { useRouteResidency } from '@/shared/routing/RouteResidency'
 import { useGlobalTimerRegistration } from '@/shared/components/session/GlobalTimerProvider'
 
 const FOCUS_RESTORE_DELAY_MS = 180

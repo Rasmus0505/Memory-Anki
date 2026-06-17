@@ -8,11 +8,13 @@ import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
 import {
   clearSegmentPracticeSessionProgressApi,
-  getPalaceSegmentApi,
   getSegmentPracticeSessionProgressApi,
   saveSegmentPracticeSessionProgressApi,
+} from '@/shared/api/modules/palaces/practiceApi'
+import {
+  getPalaceSegmentApi,
   updatePalaceSegmentReviewProgressApi,
-} from '@/shared/api/modules/palaces'
+} from '@/shared/api/modules/palaces/structureApi'
 import { submitSegmentReviewSessionApi } from '@/shared/api/modules/reviews'
 import { StageSelectDialog } from '@/features/review/components/StageSelectDialog'
 import {

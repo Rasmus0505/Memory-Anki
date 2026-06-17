@@ -31,7 +31,7 @@ import {
   VoiceCoachSettingsDialog,
 } from '@/features/voice-coach'
 import { MiniPalacePanel } from '@/features/mini-palace'
-import { useRouteResidency } from '@/app/router/RouteResidency'
+import { useRouteResidency } from '@/shared/routing/RouteResidency'
 
 export default function PalaceEdit() {
   const { isActive } = useRouteResidency()

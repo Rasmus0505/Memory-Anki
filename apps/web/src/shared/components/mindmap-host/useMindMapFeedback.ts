@@ -4,7 +4,7 @@ import {
   REVIEW_FEEDBACK_SETTINGS_UPDATED_EVENT,
   readReviewFeedbackSettings,
   type ReviewFeedbackSettings,
-} from '@/features/review/reviewFeedbackSettings'
+} from '@/shared/feedback/reviewFeedbackSettings'
 import {
   playLegacyComboMilestone,
   playLegacyFeedbackEvent,

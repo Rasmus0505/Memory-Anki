@@ -16,7 +16,7 @@ from .quiz_generation_image_request_payload import (
     build_image_generation_messages,
     build_image_generation_source_meta,
 )
-from .service import PalaceQuizValidationError
+from .question_contracts import PalaceQuizValidationError
 
 
 @dataclass(frozen=True, slots=True)

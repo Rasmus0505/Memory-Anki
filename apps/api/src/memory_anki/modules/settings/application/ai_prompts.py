@@ -7,15 +7,12 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from memory_anki.core.time import utc_now_naive
-from memory_anki.infrastructure.db.models import Config
-from memory_anki.modules.palaces.application.mindmap_ai_split.contracts import (
-    AI_SPLIT_SYSTEM_PROMPT,
-)
-from memory_anki.modules.palaces.application.mindmap_import.prompts import (
+from memory_anki.core.prompt_text import (
     format_page_numbers,
     truncate_prompt_text,
 )
+from memory_anki.core.time import utc_now_naive
+from memory_anki.infrastructure.db.models import Config
 from memory_anki.modules.settings.application.ai_prompt_templates import (
     ENGLISH_READING_GENERATE_PROMPT,
     IMPORT_BATCH_MINDMAP_PROMPT,
@@ -25,6 +22,7 @@ from memory_anki.modules.settings.application.ai_prompt_templates import (
     IMPORT_PDF_MERGE_TEMPLATE,
     IMPORT_PDF_PAGE_CONTEXT_PROMPT,
     IMPORT_PDF_STRUCTURE_TEMPLATE,
+    MINDMAP_AI_SPLIT_SYSTEM_PROMPT,
     PALACE_QUIZ_CLASSIFY_EXISTING_TO_MINI_PALACE_PROMPT,
     PALACE_QUIZ_GENERATE_PROMPT,
     PALACE_QUIZ_GROUP_BY_MINI_PALACE_PROMPT,
@@ -203,7 +201,7 @@ PROMPT_DEFINITIONS: dict[str, PromptTemplateDefinition] = {
         key="ai_prompt_mindmap_ai_split_system",
         label="AI 分卡系统提示词",
         description="脑图 AI 分卡发送给文本模型的系统提示词。",
-        default_template=AI_SPLIT_SYSTEM_PROMPT,
+        default_template=MINDMAP_AI_SPLIT_SYSTEM_PROMPT,
         source_location="apps/api/src/memory_anki/modules/palaces/application/mindmap_ai_split/contracts.py",
     ),
     "ai_prompt_palace_quiz_generate": PromptTemplateDefinition(

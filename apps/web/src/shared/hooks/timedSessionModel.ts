@@ -57,6 +57,10 @@ export interface TimedSessionController {
   reset: () => void
 }
 
+export function buildTimedSessionController(controller: TimedSessionController) {
+  return controller
+}
+
 export interface ActiveSceneSegmentSnapshot {
   scene: SessionScene
   kind: SessionKind

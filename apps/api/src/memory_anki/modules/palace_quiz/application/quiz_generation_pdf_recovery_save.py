@@ -13,10 +13,8 @@ from .quiz_generation_pdf_recovery_projection import (
 )
 from .quiz_generation_pdf_recovery_runtime import build_pdf_recovery_draft_state
 from .quiz_generation_pdf_recovery_support import load_pdf_recovery_context
-from .service import (
-    PalaceQuizValidationError,
-    batch_create_chapter_questions,
-)
+from .question_contracts import PalaceQuizValidationError
+from .question_creation_commands import batch_create_chapter_questions
 
 
 def recover_quiz_questions_from_ai_call_log_and_save(

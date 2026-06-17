@@ -5,10 +5,12 @@ import { Link, useParams, useSearchParams } from 'react-router-dom'
 import {
   buildAttachmentUrl,
   getPalaceEditorApi,
+  togglePalaceFocusNodeApi,
+} from '@/shared/api/modules/palaces/catalogApi'
+import {
   savePalaceEditorApi,
   savePalaceEditorWithOptionsApi,
-  togglePalaceFocusNodeApi,
-} from '@/shared/api/modules/palaces'
+} from '@/shared/api/modules/palaces/editorApi'
 import type {
   MindMapEditorState,
   MiniPalaceSummary,

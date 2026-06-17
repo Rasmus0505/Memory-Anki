@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from .service import PalaceQuizValidationError
+from .question_contracts import PalaceQuizValidationError
 
 
 def extract_pdf_candidate_lists(

@@ -5,7 +5,7 @@ import { vi } from "vitest";
 import {
   DEFAULT_REVIEW_FEEDBACK_SETTINGS,
   REVIEW_FEEDBACK_SETTINGS_STORAGE_KEY,
-} from "@/features/review/reviewFeedbackSettings";
+} from "@/shared/feedback/reviewFeedbackSettings";
 
 export const appendTimeRecordMock = vi.fn();
 

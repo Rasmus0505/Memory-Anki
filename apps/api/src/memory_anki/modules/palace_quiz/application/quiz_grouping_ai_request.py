@@ -17,7 +17,7 @@ from .quiz_grouping_context import (
     build_mini_palace_context,
     question_payload_for_grouping,
 )
-from .service import PalaceQuizValidationError
+from .question_contracts import PalaceQuizValidationError
 
 
 @dataclass(frozen=True, slots=True)

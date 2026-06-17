@@ -22,7 +22,7 @@ import type {
 } from '@/shared/api/contracts'
 import {
   getPalacesGroupedApi,
-} from '@/shared/api/modules/palaces'
+} from '@/shared/api/modules/palaces/catalogApi'
 import { Button } from '@/shared/components/ui/button'
 import { PageIntro } from '@/shared/components/layout/PageIntro'
 import { useLocalStorageState } from '@/shared/lib/localStorage'

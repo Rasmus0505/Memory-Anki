@@ -67,7 +67,7 @@ const pdfControllerMock = {
   handleSubjectDocumentDelete: vi.fn(),
 }
 
-vi.mock('@/shared/api/modules/palaces', () => ({
+vi.mock('@/shared/api/modules/palaces/catalogApi', () => ({
   getPalaceApi: (...args: unknown[]) => getPalaceApiMock(...args),
 }))
 
@@ -82,7 +82,7 @@ vi.mock('@/features/ai-config/useAiRunConfigDialog', () => ({
   }),
 }))
 
-vi.mock('@/features/palace-edit/hooks/usePdfImportController', () => ({
+vi.mock('@/entities/knowledge-import/model', () => ({
   usePdfImportController: () => pdfControllerMock,
 }))
 

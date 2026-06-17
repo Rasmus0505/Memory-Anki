@@ -12,8 +12,7 @@ import { FileText, ImagePlus, LoaderCircle, Play, Sparkles, Upload } from 'lucid
 import { useNavigate } from 'react-router-dom'
 import { toast } from '@/shared/feedback/toast'
 import { useAiRunConfigDialog } from '@/features/ai-config/useAiRunConfigDialog'
-import { usePdfImportController } from '@/features/palace-edit/hooks/usePdfImportController'
-import type { ImportSubjectOption } from '@/features/palace-edit/model/mindmap-import-types'
+import { usePdfImportController, type ImportSubjectOption } from '@/entities/knowledge-import/model'
 import {
   autoGenerateAndSavePalaceQuiz,
   type QuizGenerationRequestConfig,
@@ -21,7 +20,7 @@ import {
 } from '@/features/palace-quiz/quizGenerationController'
 import type { MindMapEditorState, PalaceQuizQuestionType } from '@/shared/api/contracts'
 import { getSubjectsApi } from '@/shared/api/modules/knowledge'
-import { getPalaceApi } from '@/shared/api/modules/palaces'
+import { getPalaceApi } from '@/shared/api/modules/palaces/catalogApi'
 import {
   completeTask,
   failTask,

@@ -7,7 +7,7 @@ import {
   setupMindMapReviewFlowTest,
 } from "@/features/review/components/MindMapReviewFlow.test-support";
 import { MindMapReviewFlow } from "@/features/review/components/MindMapReviewFlow";
-import { writeReviewFeedbackSettings } from "@/features/review/reviewFeedbackSettings";
+import { writeReviewFeedbackSettings } from "@/shared/feedback/reviewFeedbackSettings";
 describe("MindMapReviewFlow feedback", () => {
   beforeEach(() => {
     vi.useRealTimers();

@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from memory_anki.core.prompt_text import PROMPT_TEXT_MAX_CHARS
+
 
 class MindMapImportError(ValueError):
     pass
@@ -59,7 +61,6 @@ class PdfTextPreviewResult:
     selected_pages: list[int]
 
 
-PROMPT_TEXT_MAX_CHARS = 12000
 SINGLE_PAGE_PDF_WARNING = "仅选择了 1 页 PDF，本次只恢复结构页脑图，未补充正文内容。"
 PDF_OCR_FALLBACK_WARNING = "未获得稳定的 OCR 正文，本次会继续根据结构页和正文图片尝试补全。"
 PDF_DIRECT_OCR_FALLBACK_WARNING = "未获得稳定的 OCR 正文，本次将继续根据页面图片直接生成脑图，正文补全可信度可能下降。"

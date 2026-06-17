@@ -133,7 +133,7 @@ vi.mock('@/shared/feedback/globalFeedbackModel', () => ({
   dispatchGlobalFeedback: (...args: unknown[]) => dispatchGlobalFeedbackMock(...args),
 }))
 
-vi.mock('@/features/palace-edit/hooks/usePdfImportController', () => ({
+vi.mock('@/entities/knowledge-import/model', () => ({
   usePdfImportController: () => pdfControllerMock,
 }))
 

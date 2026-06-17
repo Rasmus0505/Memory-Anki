@@ -17,7 +17,7 @@ vi.mock('@/shared/api/modules/runtime', () => ({
   getRuntimeInfoApi: () => getRuntimeInfoApi(),
 }))
 
-vi.mock('@/shared/api/modules/palaces', () => ({
+vi.mock('@/shared/api/modules/palaces/catalogApi', () => ({
   prefetchPalaceSubjectShelfApi: () => prefetchPalaceSubjectShelfApi(),
 }))
 

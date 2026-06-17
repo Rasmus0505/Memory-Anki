@@ -14,10 +14,8 @@ from .quiz_generation_chapter_outline_support import (
     normalize_outline_question_types,
 )
 from .quiz_generation_chaptering import flatten_child_chapter_contexts
-from .service import (
-    PalaceQuizValidationError,
-    get_chapter_or_raise,
-)
+from .question_contracts import PalaceQuizValidationError
+from .question_validation import get_chapter_or_raise
 
 
 @dataclass(frozen=True, slots=True)

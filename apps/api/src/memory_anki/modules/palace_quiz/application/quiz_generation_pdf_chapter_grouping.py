@@ -11,7 +11,7 @@ from .quiz_generation_pdf_candidate_matching import (
     match_descendant_chapter_from_candidate_markers,
     select_pdf_question_candidate,
 )
-from .service import PalaceQuizValidationError
+from .question_contracts import PalaceQuizValidationError
 
 
 def group_pdf_questions_by_detected_chapters(

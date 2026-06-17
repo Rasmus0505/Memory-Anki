@@ -3,7 +3,7 @@ import type {
   RevealFlowMode,
   ReviewMindMapNode,
 } from '@/entities/review/model/review-flow-tree'
-import { DEFAULT_REVIEW_MILESTONE_STEPS } from '@/features/review/reviewFeedbackSettings'
+import { DEFAULT_REVIEW_MILESTONE_STEPS } from '@/shared/feedback/reviewFeedbackSettings'
 
 export type ReviewFeedbackEvent =
   | 'category_expand'

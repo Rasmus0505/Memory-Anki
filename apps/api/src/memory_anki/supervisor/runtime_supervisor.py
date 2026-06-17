@@ -2,8 +2,6 @@ from __future__ import annotations
 
 import argparse
 import hashlib
-import http.client
-import io
 import json
 import os
 import shutil
@@ -14,13 +12,14 @@ import threading
 import time
 from dataclasses import asdict
 from datetime import datetime
-from http.cookies import SimpleCookie
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from http.server import ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 
 from memory_anki.core.runtime import detect_git_commit
 from memory_anki.core.runtime_activity import list_active_runtime_instances
+from memory_anki.supervisor import runtime_supervisor_lifecycle as supervisor_lifecycle
+from memory_anki.supervisor import runtime_supervisor_proxy as supervisor_proxy
 from memory_anki.supervisor.runtime_supervisor_support import (
     INTERNAL_PORT_BASE,
     POLL_INTERVAL_SECONDS,
@@ -35,29 +34,16 @@ from memory_anki.supervisor.runtime_supervisor_support import (
     build_supervisor_config,
     ensure_background_supervisor,
     ensure_latest_workspace_runtime,
-    ensure_supervisor_directories,
     http_get_json,
     is_supervisor_healthy,
     iso_now,
     kill_process_tree,
     list_listening_pids,
     make_release_id,
-    make_session_id,
     resolve_runtime_run_mode,
     wait_for_supervisor,
 )
 
-COOKIE_NAME = "memory_anki_release"
-HOP_BY_HOP_HEADERS = {
-    "connection",
-    "keep-alive",
-    "proxy-authenticate",
-    "proxy-authorization",
-    "te",
-    "trailer",
-    "transfer-encoding",
-    "upgrade",
-}
 SOURCE_FINGERPRINT_PATHS = (
     "apps/api/src",
     "apps/api/alembic",
@@ -636,105 +622,20 @@ class RuntimeSupervisor:
         candidate = self.releases.get(self.candidate_release_id)
         return bool(candidate and candidate.ready and candidate.port)
 
-    def _send_text_response(
-        self,
-        handler: BaseHTTPRequestHandler,
-        status_code: int,
-        message: str,
-    ) -> None:
-        body = message.encode("utf-8", errors="replace")
-        handler.send_response(status_code)
-        handler.send_header("Content-Type", "text/plain; charset=utf-8")
-        handler.send_header("Content-Length", str(len(body)))
-        handler.end_headers()
-        if handler.command == "HEAD":
-            return
-        try:
-            handler.wfile.write(body)
-        except Exception:
-            pass
-
     def _publish_worker(self, *, promote_immediately: bool) -> None:
-        try:
-            self._publish_release(promote_immediately=promote_immediately)
-        except Exception as exc:
-            with self.lock:
-                self.last_publish_error = str(exc)
-                self.last_failed_fingerprint = self._compute_source_fingerprint()
-                self.save_state()
-        finally:
-            with self.lock:
-                self._set_building_locked(False)
+        supervisor_lifecycle.publish_worker(self, promote_immediately=promote_immediately)
 
     def trigger_publish(self, *, promote_immediately: bool = False) -> None:
-        with self.lock:
-            if self.building:
-                return
-            self._set_building_locked(True)
-        thread = threading.Thread(
-            target=self._publish_worker,
-            kwargs={"promote_immediately": promote_immediately},
-            name="memory-anki-release-build",
-            daemon=True,
-        )
-        thread.start()
+        supervisor_lifecycle.trigger_publish(self, promote_immediately=promote_immediately)
 
     def _watch_builds_disabled(self) -> bool:
-        raw_value = str(os.environ.get("MEMORY_ANKI_DISABLE_WATCH_BUILDS") or "").strip().lower()
-        return raw_value in {"1", "true", "yes", "on"}
+        return supervisor_lifecycle.watch_builds_disabled()
 
     def _watch_loop(self) -> None:
-        while not self.stop_event.wait(self.config.poll_interval_seconds):
-            fingerprint = self._compute_source_fingerprint()
-            with self.lock:
-                if fingerprint == self.last_repo_fingerprint:
-                    pass
-                elif fingerprint == self.last_blocked_fingerprint:
-                    pass
-                elif fingerprint == self.last_failed_fingerprint:
-                    pass
-                elif self.candidate_release_id:
-                    pass
-                elif self._watch_builds_disabled():
-                    pass
-                elif not self.building:
-                    self._set_building_locked(True)
-                    threading.Thread(
-                        target=self._publish_worker,
-                        kwargs={"promote_immediately": False},
-                        name="memory-anki-release-watch-build",
-                        daemon=True,
-                    ).start()
-            self._cleanup_releases()
+        supervisor_lifecycle.watch_loop(self)
 
     def _cleanup_releases(self) -> None:
-        now = time.time()
-        with self.lock:
-            removable: list[str] = []
-            for release_id, release in self.releases.items():
-                if release_id in {self.current_release_id, self.candidate_release_id}:
-                    continue
-                if release.retired_at is None:
-                    continue
-                sessions = self.release_sessions.get(release_id, {})
-                sessions = {
-                    session_key: last_seen
-                    for session_key, last_seen in sessions.items()
-                    if now - last_seen <= self.config.session_grace_seconds
-                }
-                self.release_sessions[release_id] = sessions
-                should_remove = not sessions and now - release.retired_at >= self.config.retired_release_ttl_seconds
-                if should_remove:
-                    removable.append(release_id)
-            for release_id in removable:
-                self._stop_release_process(release_id)
-                release = self.releases.pop(release_id, None)
-                self.release_sessions.pop(release_id, None)
-                if release:
-                    shutil.rmtree(release.path, ignore_errors=True)
-            if removable:
-                self.save_state()
-        self._reconcile_orphan_releases()
+        supervisor_lifecycle.cleanup_releases(self)
 
     def _promote_candidate_locked(self) -> str | None:
         candidate_id = self.candidate_release_id
@@ -748,310 +649,23 @@ class RuntimeSupervisor:
         self.save_state()
         return candidate_id
 
-    def _parse_cookie(self, raw_cookie: str | None) -> tuple[str | None, str | None]:
-        if not raw_cookie:
-            return None, None
-        try:
-            cookie = SimpleCookie(raw_cookie)
-        except Exception:
-            return None, None
-        morsel = cookie.get(COOKIE_NAME)
-        if morsel is None:
-            return None, None
-        value = morsel.value
-        if "." not in value:
-            return None, None
-        release_id, session_id = value.split(".", 1)
-        return release_id or None, session_id or None
-
-    def _make_cookie_value(self, release_id: str) -> tuple[str, str]:
-        session_id = make_session_id()
-        return session_id, f"{release_id}.{session_id}"
-
-    def _is_document_request(self, handler: BaseHTTPRequestHandler) -> bool:
-        if handler.command not in {"GET", "HEAD"}:
-            return False
-        path = handler.path.split("?", 1)[0]
-        if path.startswith("/api") or path.startswith("/__supervisor"):
-            return False
-        if path in {"/", ""}:
-            return True
-        if "." in Path(path).name:
-            return False
-        accept = str(handler.headers.get("Accept") or "")
-        return "text/html" in accept or "*/*" in accept
-
-    def _select_release_for_request(
-        self,
-        handler: BaseHTTPRequestHandler,
-    ) -> tuple[ReleaseRecord, str | None]:
-        request_release_id, session_id = self._parse_cookie(handler.headers.get("Cookie"))
-        with self.lock:
-            if not self.current_release_id or self.current_release_id not in self.releases:
-                raise RuntimeError("No active release is available.")
-            set_cookie_header: str | None = None
-            target_release_id = self.current_release_id
-            if self._is_document_request(handler):
-                if self._candidate_is_routable_locked():
-                    promoted_release_id = self._promote_candidate_locked()
-                    if promoted_release_id:
-                        target_release_id = promoted_release_id
-                    session_id, cookie_value = self._make_cookie_value(target_release_id)
-                    set_cookie_header = f"{COOKIE_NAME}={cookie_value}; Path=/; HttpOnly; SameSite=Lax"
-                elif request_release_id in self.releases and session_id:
-                    target_release_id = request_release_id
-                else:
-                    session_id, cookie_value = self._make_cookie_value(target_release_id)
-                    set_cookie_header = f"{COOKIE_NAME}={cookie_value}; Path=/; HttpOnly; SameSite=Lax"
-            elif request_release_id in self.releases and session_id:
-                target_release_id = request_release_id
-            release = self.releases[target_release_id]
-            if session_id:
-                self.release_sessions.setdefault(target_release_id, {})[session_id] = time.time()
-            return release, set_cookie_header
+    def _select_release_for_request(self, handler: Any) -> tuple[ReleaseRecord, str | None]:
+        return supervisor_proxy.select_release_for_request(self, handler)
 
     def _supervisor_status(self) -> dict[str, Any]:
-        with self.lock:
-            build_stuck_seconds = (
-                round(max(0.0, time.time() - self.build_started_at), 3)
-                if self.building and self.build_started_at is not None
-                else None
-            )
-            return {
-                "ok": True,
-                "current_release_id": self.current_release_id,
-                "candidate_release_id": self.candidate_release_id,
-                "building": self.building,
-                "last_successful_release_id": self.last_successful_release_id,
-                "build_started_at": self._serialize_timestamp(self.build_started_at if self.building else None),
-                "build_stuck_seconds": build_stuck_seconds,
-                "last_publish_error": self.last_publish_error,
-                "releases": [
-                    {
-                        "release_id": release.release_id,
-                        "ready": release.ready,
-                        "port": release.port,
-                        "state": (
-                            "current"
-                            if release.release_id == self.current_release_id
-                            else "candidate_ready"
-                            if release.release_id == self.candidate_release_id and release.ready
-                            else "candidate_pending"
-                            if release.release_id == self.candidate_release_id
-                            else "retired"
-                            if release.retired_at is not None
-                            else "tracked"
-                        ),
-                        "retired_at": release.retired_at,
-                    }
-                    for release in self.releases.values()
-                ],
-            }
+        return supervisor_proxy.supervisor_status(self)
 
-    def _is_connection_refused_proxy_error(self, exc: Exception) -> bool:
-        if isinstance(exc, ConnectionRefusedError):
-            return True
-        if isinstance(exc, OSError) and getattr(exc, "winerror", None) == 10061:
-            return True
-        return "[WinError 10061]" in str(exc)
-
-    def _recover_release_for_proxy(self, release_id: str) -> ReleaseRecord | None:
-        with self.lock:
-            release = self.releases.get(release_id)
-            if release is None:
-                return None
-            release_path = Path(release.path)
-        if not release_path.exists():
-            return None
-        self._stop_release_process(release_id)
-        if not self._restore_saved_release(release_id):
-            return None
-        with self.lock:
-            return self.releases.get(release_id)
-
-    def _forward_proxy_request(
-        self,
-        handler: BaseHTTPRequestHandler,
-        *,
-        release: ReleaseRecord,
-        set_cookie_header: str | None,
-        body: bytes | None,
-        headers: dict[str, str],
-    ) -> None:
-        content_length = int(handler.headers.get("Content-Length") or "0")
-        headers["Host"] = f"{self.config.host}:{release.port}"
-        connection = http.client.HTTPConnection(self.config.host, release.port, timeout=120)
-        try:
-            connection.request(handler.command, handler.path, body=body, headers=headers)
-            response = connection.getresponse()
-            handler.send_response(response.status, response.reason)
-            for header, value in response.getheaders():
-                if header.lower() in HOP_BY_HOP_HEADERS:
-                    continue
-                handler.send_header(header, value)
-            if set_cookie_header:
-                handler.send_header("Set-Cookie", set_cookie_header)
-            handler.end_headers()
-            if handler.command != "HEAD":
-                while True:
-                    chunk = response.read(64 * 1024)
-                    if not chunk:
-                        break
-                    handler.wfile.write(chunk)
-        finally:
-            try:
-                connection.close()
-            except Exception:
-                pass
-
-    def _proxy_request(self, handler: BaseHTTPRequestHandler) -> None:
-        try:
-            release, set_cookie_header = self._select_release_for_request(handler)
-        except Exception as exc:
-            self._send_text_response(handler, 503, str(exc))
-            return
-
-        content_length = int(handler.headers.get("Content-Length") or "0")
-        body = handler.rfile.read(content_length) if content_length > 0 else None
-        headers = {
-            key: value
-            for key, value in handler.headers.items()
-            if key.lower() not in HOP_BY_HOP_HEADERS and key.lower() != "host"
-        }
-        try:
-            self._forward_proxy_request(
-                handler,
-                release=release,
-                set_cookie_header=set_cookie_header,
-                body=body,
-                headers=dict(headers),
-            )
-        except Exception as exc:
-            if self._is_connection_refused_proxy_error(exc):
-                recovered_release = self._recover_release_for_proxy(release.release_id)
-                if recovered_release is not None:
-                    try:
-                        if body is not None and isinstance(handler.rfile, io.BufferedIOBase):
-                            handler.rfile = io.BytesIO(body)
-                        self._forward_proxy_request(
-                            handler,
-                            release=recovered_release,
-                            set_cookie_header=set_cookie_header,
-                            body=body,
-                            headers=dict(headers),
-                        )
-                        return
-                    except Exception as retry_exc:
-                        exc = retry_exc
-            self._send_text_response(handler, 502, f"Proxy error: {exc}")
+    def _proxy_request(self, handler: Any) -> None:
+        supervisor_proxy.proxy_request(self, handler)
 
     def make_handler(self):
-        supervisor = self
-
-        class SupervisorHandler(BaseHTTPRequestHandler):
-            def do_GET(self):  # noqa: N802
-                if self.path.startswith("/__supervisor/health"):
-                    payload = supervisor._supervisor_status()
-                    body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
-                    self.send_response(200)
-                    self.send_header("Content-Type", "application/json; charset=utf-8")
-                    self.send_header("Content-Length", str(len(body)))
-                    self.end_headers()
-                    self.wfile.write(body)
-                    return
-                supervisor._proxy_request(self)
-
-            def do_HEAD(self):  # noqa: N802
-                if self.path.startswith("/__supervisor/health"):
-                    payload = supervisor._supervisor_status()
-                    body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
-                    self.send_response(200)
-                    self.send_header("Content-Type", "application/json; charset=utf-8")
-                    self.send_header("Content-Length", str(len(body)))
-                    self.end_headers()
-                    return
-                supervisor._proxy_request(self)
-
-            def do_POST(self):  # noqa: N802
-                supervisor._proxy_request(self)
-
-            def do_PUT(self):  # noqa: N802
-                supervisor._proxy_request(self)
-
-            def do_PATCH(self):  # noqa: N802
-                supervisor._proxy_request(self)
-
-            def do_DELETE(self):  # noqa: N802
-                supervisor._proxy_request(self)
-
-            def log_message(self, _format: str, *_args: Any) -> None:
-                return
-
-        return SupervisorHandler
+        return supervisor_proxy.make_handler(self)
 
     def start(self) -> None:
-        ensure_supervisor_directories(self.config)
-        self.load_state()
-        self._reconcile_orphan_releases()
-        restored = self._restore_saved_release(self.current_release_id)
-        if restored and self.candidate_release_id:
-            candidate_restored = self._restore_saved_release(self.candidate_release_id)
-            with self.lock:
-                if not candidate_restored:
-                    self._drop_candidate_release()
-        if not restored:
-            self.trigger_publish(promote_immediately=True)
-            while True:
-                with self.lock:
-                    ready = bool(self.current_release_id and self.current_release_id in self.releases)
-                    building = self.building
-                    error = self.last_publish_error
-                if ready and not building:
-                    break
-                if error and not building:
-                    raise RuntimeError(error)
-                time.sleep(0.5)
-
-        repo_fingerprint = self._compute_source_fingerprint()
-        with self.lock:
-            if not self.last_repo_fingerprint:
-                self.last_repo_fingerprint = repo_fingerprint
-                self.save_state()
-            elif (
-                repo_fingerprint != self.last_repo_fingerprint
-                and repo_fingerprint != self.last_failed_fingerprint
-                and not self.candidate_release_id
-                and not self.building
-                and not self._watch_builds_disabled()
-            ):
-                self._set_building_locked(True)
-                threading.Thread(
-                    target=self._publish_worker,
-                    kwargs={"promote_immediately": False},
-                    daemon=True,
-                    name="memory-anki-startup-candidate-build",
-                ).start()
-
-        watcher = threading.Thread(target=self._watch_loop, daemon=True, name="memory-anki-supervisor-watch")
-        watcher.start()
-        self.server = ThreadingHTTPServer((self.config.host, self.config.port), self.make_handler())
-        try:
-            self.server.serve_forever(poll_interval=0.5)
-        finally:
-            self.stop_event.set()
-            self.shutdown()
+        supervisor_lifecycle.start(self)
 
     def shutdown(self) -> None:
-        if self.server:
-            try:
-                self.server.server_close()
-            except Exception:
-                pass
-        with self.lock:
-            release_ids = list(self.release_processes.keys())
-        for release_id in release_ids:
-            self._stop_release_process(release_id)
-        self.save_state()
+        supervisor_lifecycle.shutdown(self)
 
 
 def serve_supervisor() -> int:

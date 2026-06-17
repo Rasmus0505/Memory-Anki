@@ -3,16 +3,16 @@ import type { MindMapEditorState } from '@/shared/api/contracts'
 import { useImportApplyController } from '@/features/palace-edit/hooks/useImportApplyController'
 import { useImportBatchState } from '@/features/palace-edit/hooks/useImportBatchState'
 import { useImportJobController } from '@/features/palace-edit/hooks/useImportJobController'
-import { usePdfImportController } from '@/features/palace-edit/hooks/usePdfImportController'
+import { usePdfImportController } from '@/entities/knowledge-import/model'
 import { useAiRunConfigDialog } from '@/features/ai-config/useAiRunConfigDialog'
 import type {
   BatchImportMeta,
   ImportApplyContext,
   ImportMode,
   ImportSourceKind,
-  ImportSubjectOption,
   MindMapImportWorkflow,
 } from '@/features/palace-edit/model/mindmap-import-types'
+import type { ImportSubjectOption } from '@/entities/knowledge-import/model'
 
 interface UseMindMapImportOptions {
   entityKey: string | null

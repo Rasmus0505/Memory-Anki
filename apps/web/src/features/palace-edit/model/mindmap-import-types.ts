@@ -14,11 +14,7 @@ export interface BatchImportMeta {
   structureImageIndex: number | null
   imageCount: number
 }
-
-export interface ImportSubjectOption {
-  id: number
-  name: string
-}
+export type { ImportSubjectOption } from '@/entities/knowledge-import/model'
 
 export interface ImportApplyContext {
   source: 'import'

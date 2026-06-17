@@ -3,7 +3,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { BilinkItem, BilinkSearchResult } from '@/shared/api/contracts'
 import * as bilinkApi from '@/features/bilink/api/bilink'
-import * as palaceApi from '@/shared/api/modules/palaces'
+import * as palaceCatalogApi from '@/shared/api/modules/palaces/catalogApi'
 import { useBilinkOverlay } from './useBilinkOverlay'
 
 vi.mock('@/features/bilink/hooks/useBilinkSearch', () => ({
@@ -103,7 +103,7 @@ describe('useBilinkOverlay preview highlighting', () => {
       siblings: [],
     }))
 
-    vi.spyOn(palaceApi, 'getPalaceEditorApi').mockImplementation(async (palaceId) => ({
+    vi.spyOn(palaceCatalogApi, 'getPalaceEditorApi').mockImplementation(async (palaceId) => ({
       palace: { id: palaceId },
       editor_doc: {
         root: {

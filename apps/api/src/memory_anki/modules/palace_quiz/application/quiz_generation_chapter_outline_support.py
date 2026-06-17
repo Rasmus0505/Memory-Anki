@@ -6,7 +6,7 @@ from typing import Any
 
 from memory_anki.infrastructure.db.models import Chapter
 
-from .service import QUESTION_TYPES
+from .question_contracts import QUESTION_TYPES
 
 
 def normalize_outline_question_types(raw_question_types: Any) -> list[str]:

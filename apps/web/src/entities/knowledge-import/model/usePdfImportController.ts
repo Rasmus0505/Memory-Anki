@@ -17,14 +17,14 @@ import {
   getReviewSettingsApi,
   updateReviewSettingsApi,
 } from '@/shared/api/modules/profile'
-import { formatMindMapImportError } from '@/features/palace-edit/model/mindmap-import'
-import type { ImportSubjectOption } from '@/features/palace-edit/model/mindmap-import-types'
+import { formatKnowledgeImportError } from '@/entities/knowledge-import/model/importError'
+import type { ImportSubjectOption } from '@/entities/knowledge-import/model/importTypes'
 import {
   normalizePdfImportMode,
   parsePageSelectionInput,
   serializePageSelection,
   uniqueSortedPages,
-} from '@/features/palace-edit/hooks/mindmap-import-utils'
+} from '@/entities/knowledge-import/model/pdfImportSelection'
 
 const PDF_IMPORT_UI_STATE_PREFIX = 'mindmap_import_pdf_ui_'
 
@@ -162,7 +162,7 @@ export function usePdfImportController({
         setSubjectDocuments([])
         setSelectedSubjectDocumentId(null)
         setError(
-          formatMindMapImportError(
+          formatKnowledgeImportError(
             nextError instanceof Error ? nextError.message : '加载学科 PDF 资料失败。',
           ),
         )
@@ -225,7 +225,7 @@ export function usePdfImportController({
         setPdfPreviewPageState(null)
         setAnalyzedPdfPages([])
         setError(
-          formatMindMapImportError(
+          formatKnowledgeImportError(
             nextError instanceof Error ? nextError.message : '加载 PDF 页面失败。',
           ),
         )

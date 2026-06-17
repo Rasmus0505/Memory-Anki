@@ -16,10 +16,8 @@ from .quiz_generation_review_mindmap_support import (
     normalize_review_mindmap_question_count,
     normalize_review_mindmap_question_types,
 )
-from .service import (
-    PalaceQuizValidationError,
-    get_palace_or_raise,
-)
+from .question_contracts import PalaceQuizValidationError
+from .question_lookup_queries import get_palace_or_raise
 
 
 @dataclass(frozen=True, slots=True)

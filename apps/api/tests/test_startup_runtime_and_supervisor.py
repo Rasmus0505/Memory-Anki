@@ -192,9 +192,9 @@ class SupervisorRoutingTests(unittest.TestCase):
             "_compute_source_fingerprint",
             return_value="fp-old",
         ), patch(
-            "memory_anki.supervisor.runtime_supervisor.threading.Thread"
+            "memory_anki.supervisor.runtime_supervisor_lifecycle.threading.Thread"
         ) as thread_cls, patch(
-            "memory_anki.supervisor.runtime_supervisor.ThreadingHTTPServer",
+            "memory_anki.supervisor.runtime_supervisor_lifecycle.ThreadingHTTPServer",
             return_value=server,
         ):
             thread_cls.return_value.start.return_value = None
@@ -264,7 +264,7 @@ class SupervisorRoutingTests(unittest.TestCase):
             return True
 
         with patch(
-            "memory_anki.supervisor.runtime_supervisor.http.client.HTTPConnection",
+            "memory_anki.supervisor.runtime_supervisor_proxy.http.client.HTTPConnection",
             side_effect=[first_connection, second_connection],
         ), patch.object(
             supervisor,
@@ -628,7 +628,7 @@ class SupervisorProcessLaunchTests(unittest.TestCase):
             "_compute_source_fingerprint",
             return_value="new",
         ), patch.dict(os.environ, {"MEMORY_ANKI_DISABLE_WATCH_BUILDS": "1"}, clear=False), patch(
-            "memory_anki.supervisor.runtime_supervisor.threading.Thread"
+            "memory_anki.supervisor.runtime_supervisor_lifecycle.threading.Thread"
         ) as thread_cls:
             supervisor._watch_loop()
 
@@ -663,7 +663,7 @@ class SupervisorProcessLaunchTests(unittest.TestCase):
             "_compute_source_fingerprint",
             return_value="new",
         ), patch(
-            "memory_anki.supervisor.runtime_supervisor.threading.Thread"
+            "memory_anki.supervisor.runtime_supervisor_lifecycle.threading.Thread"
         ) as thread_cls:
             supervisor._watch_loop()
 
@@ -941,9 +941,9 @@ class SupervisorProcessLaunchTests(unittest.TestCase):
             "_compute_source_fingerprint",
             return_value="new",
         ), patch.dict(os.environ, {"MEMORY_ANKI_DISABLE_WATCH_BUILDS": "1"}, clear=False), patch(
-            "memory_anki.supervisor.runtime_supervisor.threading.Thread"
+            "memory_anki.supervisor.runtime_supervisor_lifecycle.threading.Thread"
         ) as thread_cls, patch(
-            "memory_anki.supervisor.runtime_supervisor.ThreadingHTTPServer",
+            "memory_anki.supervisor.runtime_supervisor_lifecycle.ThreadingHTTPServer",
             return_value=server,
         ):
             watcher_thread = MagicMock()

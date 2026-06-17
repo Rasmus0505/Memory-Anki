@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { previewImageTextApi, previewMindMapImportApi } from '@/shared/api/modules/palaces'
+import { previewImageTextApi, previewMindMapImportApi } from '@/shared/api/modules/palaces/importApi'
 import * as appLogs from '@/shared/logs/model/appLogs'
 
 function createStreamResponse(chunks: string[], contentType = 'text/event-stream') {
@@ -16,7 +16,7 @@ function createStreamResponse(chunks: string[], contentType = 'text/event-stream
   })
 }
 
-describe('palaces api stream parsing', () => {
+describe('import api stream parsing', () => {
   afterEach(() => {
     vi.restoreAllMocks()
   })

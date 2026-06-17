@@ -12,10 +12,8 @@ from .quiz_generation_pdf_request_sources import (
     PdfGenerationSourceArtifacts,
     prepare_pdf_generation_source_artifacts,
 )
-from .service import (
-    PalaceQuizValidationError,
-    get_palace_or_raise,
-)
+from .question_contracts import PalaceQuizValidationError
+from .question_lookup_queries import get_palace_or_raise
 
 
 @dataclass(frozen=True, slots=True)

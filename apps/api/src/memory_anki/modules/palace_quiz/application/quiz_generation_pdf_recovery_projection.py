@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from .question_contracts import PalaceQuizValidationError
 from .quiz_generation_shared import build_grouped_summary
-from .service import PalaceQuizValidationError
 
 
 def build_recovered_questions_to_save(

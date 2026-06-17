@@ -3,9 +3,9 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   GlobalTimerProvider,
-  calculateResizedTimerOverlayLayout,
   useGlobalTimerRegistration,
 } from '@/shared/components/session/GlobalTimerProvider'
+import { calculateResizedTimerOverlayLayout } from '@/shared/components/session/globalTimerModel'
 import type { TimerFocusScene } from '@/shared/components/session/timer-focus-config'
 import {
   TIMER_FOCUS_STORAGE_KEY,

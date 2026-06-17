@@ -8,7 +8,7 @@ import {
   DEFAULT_REVIEW_FEEDBACK_SETTINGS,
   readReviewFeedbackSettings,
   writeReviewFeedbackSettings,
-} from '@/features/review/reviewFeedbackSettings'
+} from '@/shared/feedback/reviewFeedbackSettings'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card'

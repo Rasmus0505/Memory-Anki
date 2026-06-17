@@ -8,12 +8,12 @@ from sqlalchemy.orm import Session
 
 from memory_anki.infrastructure.db.models import PalaceQuizQuestion
 
-from .question_schema import json_load
-from .service import (
+from .question_contracts import (
     QUESTION_TYPE_SHORT_ANSWER,
     PalaceQuizValidationError,
-    get_question_or_raise,
 )
+from .question_lookup_queries import get_question_or_raise
+from .question_schema import json_load
 
 
 @dataclass(frozen=True, slots=True)

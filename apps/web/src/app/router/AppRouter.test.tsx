@@ -6,8 +6,8 @@ import { AppRouter } from '@/app/router/AppRouter'
 
 vi.mock('@/app/router/appRoutes', async () => {
   const ReactModule = await import('react')
-  const residency = await vi.importActual<typeof import('@/app/router/RouteResidency')>(
-    '@/app/router/RouteResidency',
+  const residency = await vi.importActual<typeof import('@/shared/routing/RouteResidency')>(
+    '@/shared/routing/RouteResidency',
   )
 
   return {

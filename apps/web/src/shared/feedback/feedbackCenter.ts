@@ -8,7 +8,7 @@ import {
   playLegacyFeedbackEvent,
   playLegacyFireworkAccent,
 } from '@/shared/components/mindmap-host/legacyWebAudio'
-import { readReviewFeedbackSettings } from '@/features/review/reviewFeedbackSettings'
+import { readReviewFeedbackSettings } from '@/shared/feedback/reviewFeedbackSettings'
 import { dispatchGlobalFeedback } from './globalFeedbackModel'
 import {
   launchCelebrationPreset,

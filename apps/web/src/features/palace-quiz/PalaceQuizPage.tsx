@@ -12,7 +12,7 @@ import { usePalaceQuizPractice } from '@/features/palace-quiz/hooks/usePalaceQui
 import { usePalaceQuizQuestionBrowser } from '@/features/palace-quiz/hooks/usePalaceQuizQuestionBrowser'
 import { usePalaceQuizResources } from '@/features/palace-quiz/hooks/usePalaceQuizResources'
 import { readInitialTab, type PalaceQuizTabKey } from '@/features/palace-quiz/model/palaceQuizPage'
-import { useRouteResidency } from '@/app/router/RouteResidency'
+import { useRouteResidency } from '@/shared/routing/RouteResidency'
 import { PageIntro } from '@/shared/components/layout/PageIntro'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'

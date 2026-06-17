@@ -90,6 +90,36 @@ export function flattenGeneratedQuestions(
   ]
 }
 
+export function buildGeneratedQuestionsForChapterSave(
+  preview: PalaceQuizGenerationPreview,
+  selectedChapterId: number,
+): PalaceQuizQuestionDraft[] {
+  const withSelectedChapterScope = (question: PalaceQuizQuestionDraft) => ({
+    ...question,
+    source_chapter_id: selectedChapterId,
+    classified_chapter_id: null,
+    mini_palace_id: null,
+  })
+
+  if (!preview.grouped_questions) {
+    return preview.questions.map(withSelectedChapterScope)
+  }
+  if (preview.grouped_questions.child_chapter_groups) {
+    return [
+      ...preview.grouped_questions.child_chapter_groups.flatMap((group) =>
+        group.questions.map((question) => ({
+          ...question,
+          source_chapter_id: selectedChapterId,
+          classified_chapter_id: group.classified_chapter_id,
+          mini_palace_id: null,
+        })),
+      ),
+      ...preview.grouped_questions.unassigned_questions.map(withSelectedChapterScope),
+    ]
+  }
+  return flattenGeneratedQuestions(preview).map(withSelectedChapterScope)
+}
+
 export function getGenerationPreviewSaveCount(preview: PalaceQuizGenerationPreview | null) {
   if (!preview) return 0
   return flattenGeneratedQuestions(preview).length

@@ -1,78 +1,12 @@
-import * as React from 'react'
-import { act, render, renderHook, screen } from '@testing-library/react'
+﻿import { act, render, renderHook, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useTimedSession } from '@/shared/hooks/useTimedSession'
 import { TIMER_AUTOMATION_STORAGE_KEY } from '@/shared/components/session/timer-automation-config'
 import * as sessionRecordModel from '@/entities/session/model'
-
-interface TestHarnessProps {
-  kind: 'palace_edit' | 'practice' | 'review'
-  automationScene?: 'palace_edit' | 'practice' | 'review' | 'english'
-  autoPauseMs?: number
-  hiddenPauseMs?: number
-  persistKey?: string | null
-  autoStart?: boolean
-  persistCompletionRecord?: boolean
-}
-
-function TestHarness({
-  kind,
-  automationScene,
-  autoPauseMs,
-  hiddenPauseMs,
-  persistKey = null,
-  autoStart = true,
-  persistCompletionRecord = true,
-}: TestHarnessProps) {
-  const timer = useTimedSession({
-    kind,
-    title: '测试',
-    palaceId: 1,
-    automationScene,
-    autoPauseMs,
-    hiddenPauseMs,
-    persistKey,
-    persistCompletionRecord,
-  })
-
-  React.useEffect(() => {
-    if (!autoStart) return
-    timer.start({ source: 'test' })
-    // Start once so later rerenders don't mask pause/resume behavior under test.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoStart])
-
-  return (
-    <div>
-      <div data-testid="status">{timer.status}</div>
-      <div data-testid="pause-count">{timer.pauseCount}</div>
-      <div data-testid="seconds">{timer.effectiveSeconds}</div>
-      <button type="button" onClick={() => timer.registerActivity('node_switch', { source: 'test_node_switch' })}>
-        node-switch
-      </button>
-      <button type="button" onClick={() => timer.registerActivity('edit_operation', { source: 'test_edit_operation' })}>
-        edit-op
-      </button>
-      <button type="button" onClick={() => timer.registerActivity('practice_interaction', { source: 'test_practice_interaction' })}>
-        practice-op
-      </button>
-      <button type="button" onClick={() => void timer.complete('manual_complete', { source: 'test_complete' })}>
-        complete
-      </button>
-    </div>
-  )
-}
-
-function readPersistedSnapshot(persistKey: string) {
-  const raw = window.sessionStorage.getItem(`memory-anki-timed-session:${persistKey}`)
-  return raw
-    ? JSON.parse(raw) as {
-        recordId?: string | null
-        resumeDeadlineAt?: string | null
-        sceneSegments?: Array<{ scene: string; effectiveSeconds: number }>
-      }
-    : null
-}
+import {
+  readPersistedTimedSessionTestSnapshot,
+  TimedSessionTestHarness,
+} from '@/shared/hooks/useTimedSession.test-support'
 
 describe('useTimedSession automation config', () => {
   const appendTimeRecordSpy = vi.spyOn(sessionRecordModel, 'appendTimeRecord')
@@ -92,7 +26,7 @@ describe('useTimedSession automation config', () => {
   it('arms palace_edit default inactive auto pause at 20 seconds', () => {
     const timeoutSpy = vi.spyOn(window, 'setTimeout')
 
-    render(<TestHarness kind="palace_edit" />)
+    render(<TimedSessionTestHarness kind="palace_edit" />)
 
     expect(screen.getByTestId('status').textContent).toBe('running')
     expect(timeoutSpy.mock.calls.some(([, delay]) => delay === 20_000)).toBe(true)
@@ -101,7 +35,7 @@ describe('useTimedSession automation config', () => {
   it('treats explicit autoPauseMs overrides as milliseconds', () => {
     const timeoutSpy = vi.spyOn(window, 'setTimeout')
 
-    render(<TestHarness kind="palace_edit" autoPauseMs={20_000} />)
+    render(<TimedSessionTestHarness kind="palace_edit" autoPauseMs={20_000} />)
 
     expect(timeoutSpy.mock.calls.some(([, delay]) => delay === 20_000)).toBe(true)
     expect(timeoutSpy.mock.calls.some(([, delay]) => delay === 20_000_000)).toBe(false)
@@ -128,7 +62,7 @@ describe('useTimedSession automation config', () => {
       }),
     )
 
-    render(<TestHarness kind="practice" />)
+    render(<TimedSessionTestHarness kind="practice" />)
 
     act(() => {
       window.dispatchEvent(new Event('blur'))
@@ -157,7 +91,7 @@ describe('useTimedSession automation config', () => {
       }),
     )
 
-    render(<TestHarness kind="palace_edit" />)
+    render(<TimedSessionTestHarness kind="palace_edit" />)
 
     act(() => {
       vi.advanceTimersByTime(5_000)
@@ -187,7 +121,7 @@ describe('useTimedSession automation config', () => {
       }),
     )
 
-    render(<TestHarness kind="palace_edit" />)
+    render(<TimedSessionTestHarness kind="palace_edit" />)
 
     act(() => {
       vi.advanceTimersByTime(4_000)
@@ -202,7 +136,7 @@ describe('useTimedSession automation config', () => {
   it('persists running sessions as resumable snapshots on pagehide without counting time away', () => {
     appendTimeRecordSpy.mockImplementation(async (record) => record)
     const { unmount } = render(
-      <TestHarness kind="practice" autoPauseMs={60_000} persistKey="practice:restore-test" />,
+      <TimedSessionTestHarness kind="practice" autoPauseMs={60_000} persistKey="practice:restore-test" />,
     )
 
     act(() => {
@@ -223,7 +157,7 @@ describe('useTimedSession automation config', () => {
     })
 
     render(
-      <TestHarness
+      <TimedSessionTestHarness
         kind="practice"
         autoPauseMs={60_000}
         persistKey="practice:restore-test"
@@ -257,7 +191,7 @@ describe('useTimedSession automation config', () => {
       await result.current.leaveScene({ source: 'route_leave' })
     })
 
-    const snapshot = readPersistedSnapshot('practice:resume-window')
+    const snapshot = readPersistedTimedSessionTestSnapshot('practice:resume-window')
     const firstRecord = appendTimeRecordSpy.mock.calls[0]?.[0]
 
     expect(firstRecord).toMatchObject({
@@ -319,7 +253,7 @@ describe('useTimedSession automation config', () => {
     })
 
     expect(result.current.status).toBe('paused')
-    const snapshot = readPersistedSnapshot('practice:scene-toggle')
+    const snapshot = readPersistedTimedSessionTestSnapshot('practice:scene-toggle')
     expect(snapshot?.resumeDeadlineAt).toBeTruthy()
     expect(snapshot?.sceneSegments).toEqual([
       expect.objectContaining({
@@ -570,7 +504,7 @@ describe('useTimedSession automation config', () => {
       }),
     )
 
-    render(<TestHarness kind="review" />)
+    render(<TimedSessionTestHarness kind="review" />)
 
     act(() => {
       window.dispatchEvent(new Event('blur'))
@@ -599,7 +533,7 @@ describe('useTimedSession automation config', () => {
       }),
     )
 
-    render(<TestHarness kind="review" />)
+    render(<TimedSessionTestHarness kind="review" />)
 
     act(() => {
       window.dispatchEvent(new Event('blur'))
@@ -628,7 +562,7 @@ describe('useTimedSession automation config', () => {
       }),
     )
 
-    render(<TestHarness kind="palace_edit" />)
+    render(<TimedSessionTestHarness kind="palace_edit" />)
 
     act(() => {
       window.dispatchEvent(new Event('blur'))
@@ -657,7 +591,7 @@ describe('useTimedSession automation config', () => {
       }),
     )
 
-    const { rerender } = render(<TestHarness kind="palace_edit" />)
+    const { rerender } = render(<TimedSessionTestHarness kind="palace_edit" />)
 
     act(() => {
       window.dispatchEvent(new Event('blur'))
@@ -672,7 +606,7 @@ describe('useTimedSession automation config', () => {
 
     expect(screen.getByTestId('status').textContent).toBe('running')
 
-    rerender(<TestHarness kind="practice" />)
+    rerender(<TimedSessionTestHarness kind="practice" />)
 
     act(() => {
       window.dispatchEvent(new Event('blur'))
@@ -709,7 +643,7 @@ describe('useTimedSession automation config', () => {
       }),
     )
 
-    render(<TestHarness kind="practice" automationScene="english" />)
+    render(<TimedSessionTestHarness kind="practice" automationScene="english" />)
 
     act(() => {
       window.dispatchEvent(new Event('blur'))
@@ -720,7 +654,7 @@ describe('useTimedSession automation config', () => {
 
   it('can skip persisting completion records while still returning a finished session payload', async () => {
     render(
-      <TestHarness
+      <TimedSessionTestHarness
         kind="review"
         autoPauseMs={60_000}
         persistCompletionRecord={false}

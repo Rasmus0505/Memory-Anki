@@ -5,7 +5,7 @@ import {
   readReviewFeedbackSettings,
   sanitizeReviewFeedbackSettings,
   writeReviewFeedbackSettings,
-} from '@/features/review/reviewFeedbackSettings'
+} from '@/shared/feedback/reviewFeedbackSettings'
 
 describe('reviewFeedbackSettings', () => {
   beforeEach(() => {

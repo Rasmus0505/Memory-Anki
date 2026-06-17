@@ -40,13 +40,6 @@ export interface ReviewFeedbackSettings {
   revealFxIntensity: 'soft' | 'full'
   criticalFxIntensity: 'full' | 'cinematic'
   soundTheme: 'classic'
-  /**
-   * 控制全局通用 UI 反馈（普通点击 / 悬停 / 打字等 DOM 原生事件）的强度。
-   * 不影响脑图编辑与复习流程中通过 dispatchGlobalFeedback 主动派发的反馈。
-   * - 'immersive'：全开（每个点击/悬停都有粒子与声音）
-   * - 'balanced'（默认）：仅语义明确的操作有声，普通微操作仅视觉、默认无声，悬停默认关闭
-   * - 'quiet'：通用 UI 反馈静默
-   */
   globalIntensity: 'quiet' | 'balanced' | 'immersive'
   celebration: ReviewCelebrationSettings
 }
@@ -139,12 +132,7 @@ function sanitizeCelebrationEventSettings(
   return {
     enabled: sanitizeBoolean(raw.enabled, fallback.enabled),
     cooldownMs: sanitizeInteger(raw.cooldownMs, fallback.cooldownMs, 0, 120_000),
-    confettiAmount: sanitizeNumber(
-      raw.confettiAmount,
-      inheritedConfettiAmount,
-      0.5,
-      3,
-    ),
+    confettiAmount: sanitizeNumber(raw.confettiAmount, inheritedConfettiAmount, 0.5, 3),
     soundEnabled: sanitizeBoolean(raw.soundEnabled, inheritedSoundEnabled),
     animationEnabled: sanitizeBoolean(raw.animationEnabled, inheritedAnimationEnabled),
   }
@@ -160,12 +148,7 @@ function sanitizeSessionCompleteCelebrationSettings(
   const raw = value && typeof value === 'object' ? (value as Record<string, unknown>) : {}
   return {
     enabled: sanitizeBoolean(raw.enabled, fallback.enabled),
-    confettiAmount: sanitizeNumber(
-      raw.confettiAmount,
-      inheritedConfettiAmount,
-      0.5,
-      3,
-    ),
+    confettiAmount: sanitizeNumber(raw.confettiAmount, inheritedConfettiAmount, 0.5, 3),
     soundEnabled: sanitizeBoolean(raw.soundEnabled, inheritedSoundEnabled),
     animationEnabled: sanitizeBoolean(raw.animationEnabled, inheritedAnimationEnabled),
   }
@@ -189,12 +172,7 @@ function sanitizeCelebrationSettings(
       ? (raw.milestone as Record<string, unknown>)
       : {}
   return {
-    globalCooldownMs: sanitizeInteger(
-      raw.globalCooldownMs,
-      fallback.globalCooldownMs,
-      0,
-      120_000,
-    ),
+    globalCooldownMs: sanitizeInteger(raw.globalCooldownMs, fallback.globalCooldownMs, 0, 120_000),
     milestone: {
       ...milestoneBase,
       steps: sanitizeSteps(milestoneRaw.steps, fallback.milestone.steps),
@@ -227,7 +205,9 @@ export function sanitizeReviewFeedbackSettings(value: unknown): ReviewFeedbackSe
   const raw = value && typeof value === 'object' ? (value as Record<string, unknown>) : {}
   const mode = raw.mode === 'quiet' ? 'quiet' : 'immersive'
   const globalIntensity =
-    raw.globalIntensity === 'immersive' || raw.globalIntensity === 'quiet' || raw.globalIntensity === 'balanced'
+    raw.globalIntensity === 'immersive' ||
+    raw.globalIntensity === 'quiet' ||
+    raw.globalIntensity === 'balanced'
       ? raw.globalIntensity
       : DEFAULT_REVIEW_FEEDBACK_SETTINGS.globalIntensity
   const revealFxIntensity =
@@ -256,10 +236,7 @@ export function sanitizeReviewFeedbackSettings(value: unknown): ReviewFeedbackSe
     volume: sanitizeNumber(raw.volume, DEFAULT_REVIEW_FEEDBACK_SETTINGS.volume, 0, 2),
     confettiAmount,
     animationEnabled,
-    surpriseEnabled: sanitizeBoolean(
-      raw.surpriseEnabled,
-      DEFAULT_REVIEW_FEEDBACK_SETTINGS.surpriseEnabled,
-    ),
+    surpriseEnabled: sanitizeBoolean(raw.surpriseEnabled, DEFAULT_REVIEW_FEEDBACK_SETTINGS.surpriseEnabled),
     revealFxIntensity,
     criticalFxIntensity,
     soundTheme,
@@ -309,3 +286,4 @@ export function writeReviewFeedbackSettings(settings: ReviewFeedbackSettings) {
   }
   return sanitized
 }
+

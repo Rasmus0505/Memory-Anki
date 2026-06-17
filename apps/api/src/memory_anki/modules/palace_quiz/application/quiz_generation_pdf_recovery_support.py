@@ -15,10 +15,8 @@ from .quiz_generation_pdf_recovery_source_meta import (
     build_recovered_source_meta,
     resolve_recovery_selected_chapter_id,
 )
-from .service import (
-    PalaceQuizValidationError,
-    get_palace_or_raise,
-)
+from .question_contracts import PalaceQuizValidationError
+from .question_lookup_queries import get_palace_or_raise
 
 
 @dataclass(frozen=True, slots=True)

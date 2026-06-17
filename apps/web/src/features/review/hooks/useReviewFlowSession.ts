@@ -6,7 +6,7 @@ import { useTimedSession } from '@/shared/hooks/useTimedSession'
 import { revealRemainingNodes, type ReviewFlowSnapshot } from '@/entities/review/model/review-flow-tree'
 import { useReviewFeedback } from '@/features/review/hooks/useReviewFeedback'
 import type { RevealFlowMode } from '@/entities/review/model/review-flow-tree'
-import { useRouteResidency } from '@/app/router/RouteResidency'
+import { useRouteResidency } from '@/shared/routing/RouteResidency'
 import type { CompleteFlowPayload } from '@/features/review/model/mind-map-review-flow'
 import { useGlobalTimerRegistration } from '@/shared/components/session/GlobalTimerProvider'
 

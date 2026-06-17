@@ -8,8 +8,8 @@ from sqlalchemy.orm import Session
 
 from memory_anki.modules.settings.application.ai_model_registry import AiRuntimeOptions
 
+from .question_contracts import PalaceQuizValidationError
 from .quiz_generation_chaptering import group_questions_by_child_chapters
-from .service import PalaceQuizValidationError
 
 
 def _grouping_service():

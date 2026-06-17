@@ -3,9 +3,9 @@ import type {
   BatchImportMeta,
   BatchImportImageItem,
   ImportSourceKind,
-  ImportSubjectOption,
   MindMapImportWorkflow,
 } from '@/features/palace-edit/model/mindmap-import-types'
+import type { ImportSubjectOption } from '@/entities/knowledge-import/model'
 import type { ImportHistoryItem } from '@/features/palace-edit/model/mindmap-import'
 import type {
   MindMapEditorState,
