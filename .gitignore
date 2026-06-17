@@ -5,6 +5,10 @@
 /node_modules/
 /apps/web/.vite/
 /apps/web/coverage/
+/apps/web/.turbo/
+/apps/web/.parcel-cache/
+/apps/web/.eslintcache
+/apps/web/pnpm-lock.yaml
 
 # ===== Python =====
 *.pyc
@@ -12,6 +16,8 @@ __pycache__/
 /apps/api/.venv/
 /apps/api/.coverage
 /apps/api/htmlcov/
+/.coverage
+/htmlcov/
 
 # Python tool caches (root + apps/api)
 /.mypy_cache/
@@ -20,6 +26,7 @@ __pycache__/
 /apps/api/.mypy_cache/
 /apps/api/.ruff_cache/
 /apps/api/.pytest_cache/
+/apps/api/.import_linter_cache/
 
 # ===== Runtime / local data =====
 /runtime-data/
@@ -33,11 +40,19 @@ __pycache__/
 
 # ===== Logs & temp scratch files =====
 *.log
+*.out.log
+*.err.log
 tmp-*.log
 tmp-*.json
 tmp-*.out.log
 tmp-*.err.log
 palace_new_requests.txt
+_DEBUG_FALLBACK.json
+
+# ===== Environment / secrets =====
+.env
+.env.*
+!.env.example
 
 # ===== Editor / IDE / local config =====
 /.vscode/

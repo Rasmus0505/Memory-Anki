@@ -1,0 +1,84 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  backend:
+    name: Backend
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: apps/api/requirements-dev.txt
+
+      - name: Install dependencies
+        working-directory: apps/api
+        run: |
+          python -m pip install -r requirements-dev.txt
+          python -m pip install -e .
+
+      - name: Run tests
+        working-directory: apps/api
+        run: pytest
+
+      - name: Run ruff
+        working-directory: apps/api
+        run: ruff check src tests
+
+      - name: Run mypy
+        working-directory: apps/api
+        run: mypy
+
+      - name: Check import boundaries
+        working-directory: apps/api
+        run: lint-imports
+
+      - name: Check repository architecture
+        working-directory: apps/api
+        run: python ../../tools/check_architecture.py
+
+  frontend:
+    name: Frontend
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+
+      - name: Install dependencies
+        working-directory: apps/web
+        run: npm ci
+
+      - name: Typecheck
+        working-directory: apps/web
+        run: npm run typecheck
+
+      - name: Lint
+        working-directory: apps/web
+        run: npm run lint
+
+      - name: Test
+        working-directory: apps/web
+        run: npm run test
+
+      - name: Build
+        working-directory: apps/web
+        run: npm run build
