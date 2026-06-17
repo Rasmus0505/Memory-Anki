@@ -1,0 +1,207 @@
+import { toast as sonnerToast, type ExternalToast } from 'sonner'
+import type {
+  MindMapFeedbackEvent,
+  MindMapFeedbackOrigin,
+} from '@/shared/components/mindmap-host/hostBridgeUtils'
+import {
+  playLegacyComboMilestone,
+  playLegacyFeedbackEvent,
+  playLegacyFireworkAccent,
+} from '@/shared/components/mindmap-host/legacyWebAudio'
+import { readReviewFeedbackSettings } from '@/features/review/reviewFeedbackSettings'
+import { dispatchGlobalFeedback } from './globalFeedbackModel'
+import {
+  launchCelebrationPreset,
+  type CelebrationPreset,
+} from './celebrationEngine'
+
+export type FeedbackScenario =
+  | MindMapFeedbackEvent
+  | 'timer_secondary_complete'
+  | 'timer_primary_complete'
+  | 'review_milestone'
+  | 'review_branch_clear'
+  | 'review_all_clear_ready'
+  | 'review_complete'
+
+export type FeedbackToastKind = 'success' | 'error' | 'info' | 'warning' | 'message'
+
+interface FeedbackAudioRequest {
+  audioScope?: 'local' | 'global'
+  event?: MindMapFeedbackEvent
+  milestoneStep?: number | null
+  origin?: MindMapFeedbackOrigin
+  surprise?: boolean
+  volume?: number
+}
+
+interface CelebrationAudioCue {
+  kind: 'milestone' | 'branch_clear' | 'all_clear_ready' | 'session_complete'
+  milestoneStep?: number | null
+}
+
+export interface TriggerCelebrationRequest {
+  audioCue?: CelebrationAudioCue
+  preset: CelebrationPreset
+  reducedMotion: boolean
+  soundEnabled?: boolean
+  volume?: number
+}
+
+interface FeedbackVisualRequest {
+  event: MindMapFeedbackEvent
+  label?: string
+  level?: 'micro' | 'action' | 'milestone'
+  origin?: MindMapFeedbackOrigin
+  point?: {
+    x: number
+    y: number
+  }
+  screenPulse?: 'soft' | 'navigation' | 'celebration' | null
+}
+
+export interface FeedbackRequest {
+  scenario: FeedbackScenario
+  celebration?: TriggerCelebrationRequest | boolean
+  celebrationPreset?: CelebrationPreset | null
+  description?: string
+  message?: string
+  reducedMotion?: boolean
+  soundEnabled?: boolean
+  toastKind?: FeedbackToastKind | null
+  toastOptions?: ExternalToast
+  audio?: FeedbackAudioRequest | boolean
+  visual?: FeedbackVisualRequest | boolean
+  volume?: number
+}
+
+function clampVolume(value: number) {
+  if (!Number.isFinite(value)) return 1
+  return Math.max(0, Math.min(2, value))
+}
+
+function getFeedbackSettings() {
+  if (typeof window === 'undefined') {
+    return {
+      animationEnabled: true,
+      mode: 'immersive' as const,
+      soundEnabled: true,
+      volume: 1,
+    }
+  }
+  const settings = readReviewFeedbackSettings()
+  return {
+    animationEnabled: settings.animationEnabled,
+    mode: settings.mode,
+    soundEnabled: settings.soundEnabled,
+    volume: settings.volume,
+  }
+}
+
+export function showToast(
+  kind: FeedbackToastKind,
+  message: string,
+  options?: ExternalToast,
+) {
+  if (kind === 'success') return sonnerToast.success(message, options)
+  if (kind === 'error') return sonnerToast.error(message, options)
+  if (kind === 'info') return sonnerToast.info(message, options)
+  if (kind === 'warning') return sonnerToast.warning(message, options)
+  return sonnerToast.message(message, options)
+}
+
+export function playFeedbackAudio(request: FeedbackAudioRequest) {
+  const settings = getFeedbackSettings()
+  const soundEnabled = settings.soundEnabled && settings.mode === 'immersive'
+  const volume = clampVolume(request.volume ?? settings.volume)
+  if (!soundEnabled || volume <= 0) return
+
+  if (typeof request.milestoneStep === 'number') {
+    playLegacyComboMilestone({
+      milestoneStep: request.milestoneStep,
+      volume,
+    })
+    return
+  }
+
+  if (!request.event) return
+  playLegacyFeedbackEvent({
+    event: request.event,
+    surprise: request.surprise,
+    origin: request.origin,
+    audioScope: request.audioScope,
+    volume,
+  })
+}
+
+export function emitVisualFeedback(request: FeedbackVisualRequest) {
+  dispatchGlobalFeedback(request.event, {
+    label: request.label,
+    level: request.level,
+    origin: request.origin,
+    point: request.point,
+    screenPulse: request.screenPulse,
+  })
+}
+
+export function triggerCelebration(request: TriggerCelebrationRequest) {
+  const settings = getFeedbackSettings()
+  const animationEnabled = settings.animationEnabled && settings.mode === 'immersive'
+  const soundEnabled =
+    (request.soundEnabled ?? settings.soundEnabled) && settings.mode === 'immersive'
+  const volume = clampVolume(request.volume ?? settings.volume)
+
+  if (animationEnabled) {
+    launchCelebrationPreset({
+      preset: request.preset,
+      reducedMotion: request.reducedMotion,
+    })
+  }
+
+  if (!soundEnabled || volume <= 0 || !request.audioCue) return
+  playLegacyFireworkAccent({
+    kind: request.audioCue.kind,
+    milestoneStep: request.audioCue.milestoneStep ?? 0,
+    volume,
+  })
+}
+
+export function notifyFeedback(request: FeedbackRequest) {
+  if (request.toastKind && request.message) {
+    showToast(request.toastKind, request.message, {
+      ...request.toastOptions,
+      description: request.description ?? request.toastOptions?.description,
+    })
+  }
+
+  if (request.audio && request.audio !== true) {
+    playFeedbackAudio({
+      ...request.audio,
+      volume: request.volume ?? request.audio.volume,
+    })
+  }
+
+  if (request.visual && request.visual !== true) {
+    emitVisualFeedback(request.visual)
+  }
+
+  const preset =
+    request.celebration !== false
+      ? typeof request.celebration === 'object'
+        ? request.celebration.preset
+        : request.celebrationPreset
+      : null
+  if (!preset) return
+
+  const celebrationRequest =
+    typeof request.celebration === 'object'
+      ? request.celebration
+      : {
+          preset,
+          reducedMotion: request.reducedMotion ?? false,
+          soundEnabled: request.soundEnabled,
+          volume: request.volume,
+        }
+
+  triggerCelebration(celebrationRequest)
+}

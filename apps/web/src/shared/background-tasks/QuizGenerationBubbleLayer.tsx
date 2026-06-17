@@ -191,7 +191,7 @@ export function QuizGenerationBubbleLayer() {
                     size="sm"
                     onClick={() => navigate(task.navigateTarget!)}
                   >
-                    {isCompleted ? '去做题' : '查看做题区'}
+                    {isCompleted ? '去做题' : '查看题库'}
                   </Button>
                 ) : null}
               </div>

@@ -1,10 +1,11 @@
-import { useEffect } from 'react'
-import { toast } from 'sonner'
+﻿import { useEffect } from 'react'
+import { toast } from '@/shared/feedback/toast'
 import { DEFAULT_PALACE_LIST_VIEW_SETTINGS, DEFAULT_PALACE_SHELF_VIEW_SETTINGS, isPalaceListViewSettings, isPalaceShelfViewSettings, PALACE_LIST_VIEW_SETTINGS_KEY, PALACE_SHELF_VIEW_SETTINGS_KEY } from '@/app/router/palace-view-settings'
 import { DEFAULT_ENGLISH_PRACTICE_SETTINGS, ENGLISH_PRACTICE_SETTINGS_STORAGE_KEY, sanitizeEnglishPracticeSettings } from '@/features/english/englishPracticeSettings'
 import { DEFAULT_REVIEW_FEEDBACK_SETTINGS, REVIEW_FEEDBACK_SETTINGS_STORAGE_KEY, sanitizeReviewFeedbackSettings } from '@/features/review/reviewFeedbackSettings'
 import { DEFAULT_MEMORY_ANKI_SHORTCUTS, MEMORY_ANKI_SHORTCUTS_STORAGE_KEY, sanitizeMemoryAnkiShortcutMap } from '@/features/shortcuts/memoryAnkiShortcuts'
 import { DEFAULT_TIMER_AUTOMATION_CONFIG, TIMER_AUTOMATION_STORAGE_KEY, sanitizeTimerAutomationConfig } from '@/shared/components/session/timer-automation-config'
+import { DEFAULT_TIMER_FOCUS_CONFIG, TIMER_FOCUS_STORAGE_KEY, sanitizeTimerFocusConfig } from '@/shared/components/session/timer-focus-config'
 import { DEFAULT_VOICE_COACH_SETTINGS, VOICE_COACH_SETTINGS_STORAGE_KEY, sanitizeVoiceCoachSettings } from '@/features/voice-coach/voiceCoachSettings'
 import {
   initializeClientPreferences,
@@ -43,6 +44,12 @@ export function useClientPreferenceBootstrap() {
           sanitizeTimerAutomationConfig,
         ),
         migrateLocalPreferenceToBackend(
+          'timer_focus_config',
+          TIMER_FOCUS_STORAGE_KEY,
+          DEFAULT_TIMER_FOCUS_CONFIG,
+          sanitizeTimerFocusConfig,
+        ),
+        migrateLocalPreferenceToBackend(
           'voice_coach_settings',
           VOICE_COACH_SETTINGS_STORAGE_KEY,
           DEFAULT_VOICE_COACH_SETTINGS,
@@ -67,6 +74,7 @@ export function useClientPreferenceBootstrap() {
         Boolean(window.localStorage.getItem(REVIEW_FEEDBACK_SETTINGS_STORAGE_KEY)) ||
         Boolean(window.localStorage.getItem(ENGLISH_PRACTICE_SETTINGS_STORAGE_KEY)) ||
         Boolean(window.localStorage.getItem(TIMER_AUTOMATION_STORAGE_KEY)) ||
+        Boolean(window.localStorage.getItem(TIMER_FOCUS_STORAGE_KEY)) ||
         Boolean(window.localStorage.getItem(VOICE_COACH_SETTINGS_STORAGE_KEY)) ||
         Boolean(window.localStorage.getItem(PALACE_LIST_VIEW_SETTINGS_KEY)) ||
         Boolean(window.localStorage.getItem(PALACE_SHELF_VIEW_SETTINGS_KEY))

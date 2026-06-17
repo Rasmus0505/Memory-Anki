@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react'
-import { toast } from 'sonner'
+﻿import { useEffect, useMemo, useState } from 'react'
+import { toast } from '@/shared/feedback/toast'
 import type {
   PdfImportMode,
   PdfImportOptions,

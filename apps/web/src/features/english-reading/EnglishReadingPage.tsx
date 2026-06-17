@@ -1,6 +1,6 @@
-import { useCallback, useMemo } from "react";
+﻿import { useCallback, useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
-import { toast } from "sonner";
+import { toast } from "@/shared/feedback/toast";
 import { useAiRunConfigDialog } from "@/features/ai-config/useAiRunConfigDialog";
 import { completeEnglishReadingMaterialApi } from "@/features/english-reading/api/englishReadingApi";
 import { EnglishReadingDialogs } from "@/features/english-reading/components/EnglishReadingDialogs";
@@ -69,7 +69,7 @@ function summarizeFeedback(feedback: ReadingSessionResult["feedback"]) {
 }
 
 export default function EnglishReadingPage() {
-  const { isActive } = useRouteResidency();
+  const { isActive, becameActiveAt } = useRouteResidency();
   const [searchParams, setSearchParams] = useSearchParams();
   const currentMaterialId = Number(searchParams.get("material") || "");
   const resolvedMaterialId =
@@ -80,6 +80,7 @@ export default function EnglishReadingPage() {
 
   const workflow = useEnglishReadingWorkflow({
     isActive,
+    becameActiveAt,
     resolvedMaterialId,
     setSearchParams,
     promptForAiOptions,

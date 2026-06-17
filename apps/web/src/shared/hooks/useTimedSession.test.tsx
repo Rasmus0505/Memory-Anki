@@ -65,7 +65,13 @@ function TestHarness({
 
 function readPersistedSnapshot(persistKey: string) {
   const raw = window.sessionStorage.getItem(`memory-anki-timed-session:${persistKey}`)
-  return raw ? JSON.parse(raw) as { recordId?: string | null; resumeDeadlineAt?: string | null } : null
+  return raw
+    ? JSON.parse(raw) as {
+        recordId?: string | null
+        resumeDeadlineAt?: string | null
+        sceneSegments?: Array<{ scene: string; effectiveSeconds: number }>
+      }
+    : null
 }
 
 describe('useTimedSession automation config', () => {
@@ -313,12 +319,15 @@ describe('useTimedSession automation config', () => {
     })
 
     expect(result.current.status).toBe('paused')
-    expect(readPersistedSnapshot('practice:scene-toggle')?.resumeDeadlineAt).toBeTruthy()
-    expect(appendTimeRecordSpy).toHaveBeenCalledTimes(1)
-    expect(appendTimeRecordSpy.mock.calls[0]?.[0]).toMatchObject({
-      completionMethod: 'left_page',
-      effectiveSeconds: 2,
-    })
+    const snapshot = readPersistedSnapshot('practice:scene-toggle')
+    expect(snapshot?.resumeDeadlineAt).toBeTruthy()
+    expect(snapshot?.sceneSegments).toEqual([
+      expect.objectContaining({
+        scene: 'practice',
+        effectiveSeconds: 2,
+      }),
+    ])
+    expect(appendTimeRecordSpy).not.toHaveBeenCalled()
 
     act(() => {
       vi.advanceTimersByTime(10_000)
@@ -327,6 +336,53 @@ describe('useTimedSession automation config', () => {
 
     expect(result.current.status).toBe('running')
     expect(result.current.effectiveSeconds).toBe(2)
+  })
+
+  it('persists an expired suspended session as left_page when another timer enters later', async () => {
+    appendTimeRecordSpy.mockImplementation(async (record) => record)
+
+    const { result, unmount } = renderHook(() =>
+      useTimedSession({
+        kind: 'review',
+        title: '过期恢复测试',
+        palaceId: 1,
+        autoPauseMs: 5_000,
+        persistKey: 'review:expired-suspend-save',
+      }),
+    )
+
+    act(() => {
+      result.current.start({ source: 'test' })
+      vi.advanceTimersByTime(2_200)
+      result.current.setSceneActive(false, { source: 'route_inactive' })
+    })
+
+    unmount()
+
+    act(() => {
+      vi.advanceTimersByTime(6_000)
+    })
+
+    renderHook(() =>
+      useTimedSession({
+        kind: 'practice',
+        title: '后续场景',
+        palaceId: 2,
+        autoPauseMs: 60_000,
+        persistKey: 'practice:after-expired-review',
+      }),
+    )
+
+    await vi.waitFor(() => {
+      expect(appendTimeRecordSpy).toHaveBeenCalledTimes(1)
+    })
+
+    expect(appendTimeRecordSpy.mock.calls[0]?.[0]).toMatchObject({
+      kind: 'review',
+      title: '过期恢复测试',
+      completionMethod: 'left_page',
+      effectiveSeconds: 2,
+    })
   })
 
   it('does not count time away while a scene is inactive', () => {
@@ -395,7 +451,7 @@ describe('useTimedSession automation config', () => {
     expect(appendTimeRecordSpy).toHaveBeenCalledTimes(1)
   })
 
-  it('clears another scene suspended snapshot when a new scene enters', async () => {
+  it('adopts another scene suspended snapshot when a new scene enters', async () => {
     appendTimeRecordSpy.mockImplementation(async (record) => record)
 
     const { result, unmount } = renderHook(() =>
@@ -421,7 +477,7 @@ describe('useTimedSession automation config', () => {
 
     expect(window.sessionStorage.getItem('memory-anki-timed-session:practice:scene-a')).toBeTruthy()
 
-    renderHook(() =>
+    const { result: nextSceneResult } = renderHook(() =>
       useTimedSession({
         kind: 'review',
         title: '场景 B',
@@ -431,7 +487,74 @@ describe('useTimedSession automation config', () => {
       }),
     )
 
+    expect(nextSceneResult.current.status).toBe('running')
+    expect(nextSceneResult.current.effectiveSeconds).toBe(1)
     expect(window.sessionStorage.getItem('memory-anki-timed-session:practice:scene-a')).toBeNull()
+  })
+
+  it('records scene segments across multiple scene handoffs while keeping one session record', async () => {
+    appendTimeRecordSpy.mockImplementation(async (record) => record)
+
+    const firstScene = renderHook(() =>
+      useTimedSession({
+        kind: 'practice',
+        title: '场景 A',
+        palaceId: 1,
+        autoPauseMs: 60_000,
+        persistKey: 'practice:scene-a',
+      }),
+    )
+
+    act(() => {
+      firstScene.result.current.start({ source: 'test' })
+      vi.advanceTimersByTime(2_000)
+      firstScene.result.current.setSceneActive(false, { source: 'route_inactive' })
+    })
+    firstScene.unmount()
+
+    const secondScene = renderHook(() =>
+      useTimedSession({
+        kind: 'review',
+        title: '场景 B',
+        palaceId: 2,
+        autoPauseMs: 60_000,
+        persistKey: 'review:scene-b',
+      }),
+    )
+
+    act(() => {
+      vi.advanceTimersByTime(3_000)
+      secondScene.result.current.setSceneActive(false, { source: 'route_inactive' })
+    })
+    secondScene.unmount()
+
+    const thirdScene = renderHook(() =>
+      useTimedSession({
+        kind: 'practice',
+        title: '场景 C',
+        palaceId: 3,
+        autoPauseMs: 60_000,
+        persistKey: 'practice:scene-c',
+      }),
+    )
+
+    act(() => {
+      vi.advanceTimersByTime(1_000)
+    })
+
+    await act(async () => {
+      await thirdScene.result.current.complete('manual_complete', { source: 'test_complete' })
+    })
+
+    expect(appendTimeRecordSpy).toHaveBeenCalledTimes(1)
+    expect(appendTimeRecordSpy.mock.calls[0]?.[0]).toMatchObject({
+      effectiveSeconds: 6,
+      sceneSegments: [
+        expect.objectContaining({ scene: 'practice', title: '场景 A', effectiveSeconds: 2 }),
+        expect.objectContaining({ scene: 'review', title: '场景 B', effectiveSeconds: 3 }),
+        expect.objectContaining({ scene: 'practice', title: '场景 C', effectiveSeconds: 1 }),
+      ],
+    })
   })
 
   it('does not auto resume on focus when window return is disabled', () => {

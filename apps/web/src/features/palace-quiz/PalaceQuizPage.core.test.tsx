@@ -20,7 +20,7 @@ describe('PalaceQuizPage core flows', () => {
     renderPage()
 
     expect(await screen.findByText('细胞生物学宫殿 · 配套习题')).toBeTruthy()
-    expect(screen.getByRole('link', { name: '返回做题区' }).getAttribute('href')).toBe('/palaces/quiz')
+    expect(screen.getByRole('link', { name: '返回记忆宫殿' }).getAttribute('href')).toBe('/palaces')
     expect(screen.getByText('PDF生成')).toBeTruthy()
     expect(screen.getByText(/questions\.pdf/)).toBeTruthy()
     expect(screen.getByText(/answers\.pdf/)).toBeTruthy()

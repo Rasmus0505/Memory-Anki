@@ -117,6 +117,7 @@ describe('PalaceListCard', () => {
           viewSettings={{ layoutMode: 'chapter-double', densityMode: 'comfortable' }}
           segmentReviewLoadingId={null}
           markReviewedKey={null}
+          defaultExpanded
           onOpenBatchReview={vi.fn()}
           onSegmentReviewAction={vi.fn()}
           onOpenStageEdit={vi.fn()}
@@ -132,5 +133,43 @@ describe('PalaceListCard', () => {
     expect(screen.getByText('接管正式复习')).toBeTruthy()
     expect(screen.getAllByTestId('stage-track').length).toBe(1)
     expect(screen.getAllByText('小宫殿').length).toBeGreaterThan(0)
+    expect(screen.getAllByRole('button', { name: '做题' }).length).toBeGreaterThan(0)
+  })
+
+  it('does not render start review when due flag is false even if the timestamp is stale', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-06-12T10:00:00+08:00'))
+
+    render(
+      <MemoryRouter>
+        <PalaceListCard
+          palace={buildPalace({
+            mini_palaces: [],
+            mini_review_mode: 'independent',
+            segments: [
+              buildSegment({
+                next_review_at: '2026-06-12T09:00:00+08:00',
+                has_due_review: false,
+              }),
+            ],
+          })}
+          viewSettings={{ layoutMode: 'chapter-double', densityMode: 'comfortable' }}
+          segmentReviewLoadingId={null}
+          markReviewedKey={null}
+          onOpenBatchReview={vi.fn()}
+          onSegmentReviewAction={vi.fn()}
+          onOpenStageEdit={vi.fn()}
+          onMarkSegmentReviewed={vi.fn()}
+          onMiniPalacePractice={vi.fn()}
+          onMiniPalaceReview={vi.fn()}
+          onOpenConfig={vi.fn()}
+          onDelete={vi.fn()}
+        />
+      </MemoryRouter>,
+    )
+
+    expect(screen.queryByRole('button', { name: '开始复习' })).toBeNull()
+    expect(screen.getByRole('button', { name: '今日稍后' })).toBeTruthy()
+    vi.useRealTimers()
   })
 })

@@ -223,7 +223,7 @@ describe("MindMapReviewFlow modes", () => {
       child: "待回忆",
       grandchild: null,
     });
-    expect(screen.getByText("连击 0")).toBeTruthy();
+    expect(screen.getByText("推进链 0")).toBeTruthy();
 
     await act(async () => {
       getLatestMindMapFrameProps()?.onNodeClick?.([{ uid: "child", text: "Child" }]);
@@ -240,7 +240,7 @@ describe("MindMapReviewFlow modes", () => {
       child: "Child",
       grandchild: null,
     });
-    expect(screen.getByText("连击 1")).toBeTruthy();
+    expect(screen.getByText("推进链 1")).toBeTruthy();
 
     await act(async () => {
       getLatestMindMapFrameProps()?.onNodeClick?.([{ uid: "child", text: "Child" }]);

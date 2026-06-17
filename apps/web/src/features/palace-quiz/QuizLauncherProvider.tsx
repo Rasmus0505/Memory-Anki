@@ -1,4 +1,4 @@
-import {
+﻿import {
   createContext,
   useCallback,
   useContext,
@@ -10,7 +10,7 @@ import {
 } from 'react'
 import { FileText, ImagePlus, LoaderCircle, Play, Sparkles, Upload } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
-import { toast } from 'sonner'
+import { toast } from '@/shared/feedback/toast'
 import { useAiRunConfigDialog } from '@/features/ai-config/useAiRunConfigDialog'
 import { usePdfImportController } from '@/features/palace-edit/hooks/usePdfImportController'
 import type { ImportSubjectOption } from '@/features/palace-edit/model/mindmap-import-types'
@@ -158,7 +158,7 @@ export function QuizLauncherProvider({ children }: PropsWithChildren) {
   const handleDirectEnter = () => {
     if (!request) return
     dispatchGlobalFeedback('quiz_nav_open_practice', {
-      label: '直接进入做题区',
+      label: '直接进入做题',
       audioScope: 'global',
     })
     navigate(`/palaces/${request.palaceId}/quiz?tab=practice`)
@@ -263,9 +263,9 @@ export function QuizLauncherProvider({ children }: PropsWithChildren) {
       const navigateTarget = `/palaces/${request.palaceId}/quiz?tab=practice`
       registerTask({
         id: taskId,
-        section: 'palaceQuiz',
+        section: 'palaces',
         kind: 'quiz-generation',
-        title: `${palace.title} · 做题生成中`,
+        title: `${palace.title} · 题库生成中`,
         detail: '已缩成气泡，你可以继续操作脑图。',
         progress: 8,
         navigateTarget,
@@ -357,7 +357,7 @@ export function QuizLauncherProvider({ children }: PropsWithChildren) {
             <div>
               <DialogTitle>做题</DialogTitle>
               <DialogDescription>
-                这里可以直接进入做题区，也可以先生成新题。生成开始后会缩成可拖拽气泡，不会打断你继续看脑图。
+                这里可以直接进入当前宫殿做题页，也可以先生成新题。生成开始后会缩成可拖拽气泡，不会打断你继续看脑图。
               </DialogDescription>
             </div>
             <DialogClose onClick={closeLauncher} />
@@ -376,12 +376,12 @@ export function QuizLauncherProvider({ children }: PropsWithChildren) {
                     {palace?.title ? `${palace.title} · 做题入口` : '做题入口'}
                   </div>
                   <div className="mt-1 text-sm text-muted-foreground">
-                    直接进入做题区，或者先生成新题再去做。
+                    直接进入当前宫殿做题页，或者先生成新题再去做。
                   </div>
                   <div className="mt-3">
                     <Button type="button" onClick={handleDirectEnter}>
                       <Play className="h-4 w-4" />
-                      直接进入做题区
+                      直接进入做题
                     </Button>
                   </div>
                 </div>

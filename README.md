@@ -5,10 +5,10 @@ A single-machine, locally-deployed **memory palace + spaced-repetition** applica
 ```
 ┌──────────────────────────────────────────────────────────┐
 │ start.bat → tools/start_supervisor.py                     │
-│   • ensure runtime supervisor is running on port 8012     │
-│   • proxy requests to active hidden release               │
-│   • build/promote candidate release after source edits    │
-│   • switch to new release on manual page refresh          │
+│   • default: rebuild current workspace and run latest     │
+│   • always serve the current repo's apps/web/dist         │
+│   • restart on port 8012 so rerun = latest version        │
+│   • optional legacy supervisor via MEMORY_ANKI_RUN_MODE   │
 └──────────────────────────────────────────────────────────┘
 ```
 
@@ -51,7 +51,14 @@ powershell -ExecutionPolicy Bypass -File .\tools\configure-shared-home.ps1 -Path
 
 That writes `%LOCALAPPDATA%\MemoryAnki\shared-home.txt`, so every worktree on the same machine will use the same custom runtime home unless `MEMORY_ANKI_HOME` is explicitly set. If you do nothing, worktrees already share the default `%LOCALAPPDATA%\MemoryAnki`.
 
-The current launcher now starts a stable runtime supervisor. The supervisor keeps a single external URL on `127.0.0.1:8012`, runs the active backend from an immutable release directory, and prepares a candidate release in the background after code edits. Users stay on the old release until they manually refresh the page, at which point the supervisor switches them to the ready candidate.
+The default launcher now uses a single-version workspace-latest mode. Each time you run `start.bat`, it rebuilds the current workspace frontend, stops any old process on `127.0.0.1:8012`, and starts the backend directly from the current repo so the served site matches the current code immediately after restart.
+
+If you still need the old immutable multi-release supervisor for maintenance or rollback experiments, you can opt in explicitly:
+
+```
+set MEMORY_ANKI_RUN_MODE=supervisor
+start.bat
+```
 
 Shared-runtime rules:
 

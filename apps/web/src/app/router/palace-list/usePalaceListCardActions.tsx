@@ -1,5 +1,5 @@
 ﻿import { useState } from 'react'
-import { toast } from 'sonner'
+import { toast } from '@/shared/feedback/toast'
 import { PalaceBatchReviewDialog } from '@/app/router/palace-list/PalaceBatchReviewDialog'
 import { PalaceMiniReviewModeDialog } from '@/app/router/palace-list/PalaceMiniReviewModeDialog'
 import { toDateTimeLocalValue } from '@/app/router/palace-list/PalaceStageProgress'
@@ -245,7 +245,7 @@ export function usePalaceListCardActions({
   )
 
   const handleMiniPalacePractice = (mini: MiniPalaceSummary) => {
-    navigate(`/mini-palaces/${mini.id}/practice`)
+    navigate(`/palaces/${mini.palace_id}/quiz?tab=practice&miniPalaceId=${mini.id}`)
   }
 
   const handleMiniPalaceReview = (mini: MiniPalaceSummary) => {

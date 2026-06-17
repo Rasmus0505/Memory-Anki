@@ -741,6 +741,208 @@ class PalaceQuizRouteTests(unittest.TestCase):
         self.assertEqual(payload["generation_stats"]["returned_count"], 1)
         self.assertNotIn("英国教育", calls[1]["request_payload"]["prompt"])
 
+    def test_pdf_generation_multi_source_request_binds_each_image_to_a_role(self):
+        calls: list[dict[str, object]] = []
+
+        def fake_call_logged_chat_completion(**kwargs):
+            calls.append(kwargs)
+            if kwargs["operation"] == "palace_quiz_generate_pdf":
+                return (
+                    json.dumps(
+                        {
+                            "question_candidates": [
+                                {
+                                    "section": "第三章",
+                                    "number": "1",
+                                    "stem": "主观题题面",
+                                    "raw_type_label": "论述题",
+                                    "source_snippet": "第三章 二、论述题 主观题题面",
+                                }
+                            ],
+                            "answer_candidates": [
+                                {
+                                    "section": "第三章",
+                                    "number": "1",
+                                    "raw_type_label": "论述题",
+                                    "reference_answer": "参考答案",
+                                    "analysis": "解析",
+                                    "raw_answer_text": "参考答案",
+                                }
+                            ],
+                        },
+                        ensure_ascii=False,
+                    ),
+                    "log-generate-role-map",
+                )
+            return (
+                json.dumps(
+                    {
+                        "questions": [
+                            {
+                                "question_type": "short_answer",
+                                "stem": "主观题题面",
+                                "reference_answer": "参考答案",
+                                "analysis": "解析",
+                            }
+                        ]
+                    },
+                    ensure_ascii=False,
+                ),
+                "log-pair-role-map",
+            )
+
+        with (
+            patch.object(palace_quiz_ai_service, "DASHSCOPE_API_KEY", "test-key", create=True),
+            patch.object(
+                palace_quiz_ai_service,
+                "render_selected_pdf_pages",
+                side_effect=[
+                    [(10, b"question-10", "question-10.png"), (11, b"question-11", "question-11.png")],
+                    [(9, b"answer-9", "answer-9.png"), (10, b"answer-10", "answer-10.png")],
+                ],
+            ),
+            patch.object(
+                palace_quiz_ai_service,
+                "_call_logged_chat_completion",
+                side_effect=fake_call_logged_chat_completion,
+            ),
+        ):
+            response = self.client.post(
+                "/api/v1/palaces/1/quiz-generation/pdf",
+                json={
+                    "pdf_sources": [
+                        {"subject_document_id": 1, "page_selection": [10, 11], "role_hint": "question"},
+                        {"subject_document_id": 1, "page_selection": [9, 10], "role_hint": "answer"},
+                    ],
+                    "extra_prompt": "",
+                },
+            )
+
+        self.assertEqual(response.status_code, 200)
+        source_context = calls[0]["request_payload"]["source_context"]
+        first_user_text = calls[0]["messages"][-1]["content"][0]["text"]
+        second_user_text = calls[0]["messages"][-1]["content"][2]["text"]
+        self.assertIn("图片顺序与角色绑定", source_context)
+        self.assertIn("第 1 张图片 = demo.pdf 第 10 页；角色：题目来源", source_context)
+        self.assertIn("第 3 张图片 = demo.pdf 第 9 页；角色：答案与解析来源", source_context)
+        self.assertIn("只允许抄录到 question_candidates", source_context)
+        self.assertIn("只允许抄录到 answer_candidates", source_context)
+        self.assertIn("必须严格遵守每张图片绑定的角色", first_user_text)
+        self.assertIn("每张图片只能写入它在上方“图片顺序与角色绑定”里指定的候选池", second_user_text)
+
+    def test_pdf_generation_multi_source_subjective_candidates_return_short_answer(self):
+        calls: list[dict[str, object]] = []
+
+        def fake_call_logged_chat_completion(**kwargs):
+            calls.append(kwargs)
+            if kwargs["operation"] == "palace_quiz_generate_pdf":
+                return (
+                    json.dumps(
+                        {
+                            "question_candidates": [
+                                {
+                                    "section": "第三章西欧中世纪的教育",
+                                    "number": "1",
+                                    "stem": "【2007年311真题22】西欧中世纪的骑士教育是一种特殊形式的（）",
+                                    "raw_type_label": "单项选择题",
+                                    "source_snippet": "单项选择题 1",
+                                    "options": [
+                                        {"id": "A", "text": "学校教育"},
+                                        {"id": "B", "text": "家庭教育"},
+                                    ],
+                                },
+                                {
+                                    "section": "第三章西欧中世纪的教育",
+                                    "number": "二、论述题 1",
+                                    "stem": "试述中世纪大学的产生及其在教育史上的地位与作用。",
+                                    "raw_type_label": "论述题",
+                                    "source_snippet": "二、论述题 1. 试述中世纪大学的产生及其在教育史上的地位与作用。",
+                                },
+                            ],
+                            "answer_candidates": [
+                                {
+                                    "section": "第三章西欧中世纪的教育",
+                                    "number": "1",
+                                    "raw_type_label": "单项选择题",
+                                    "correct_option_id": "B",
+                                    "analysis": "骑士教育是一种特殊的家庭教育。",
+                                    "raw_answer_text": "[答案]B",
+                                },
+                                {
+                                    "section": "第三章西欧中世纪的教育",
+                                    "number": "二、论述题 1",
+                                    "raw_type_label": "论述题",
+                                    "reference_answer": "社会经济发展推动了中世纪大学产生，并在高等教育史上具有直接渊源地位。",
+                                    "analysis": "答案需覆盖产生背景与教育史意义。",
+                                    "raw_answer_text": "[参考答案] 社会经济发展推动了中世纪大学产生，并在高等教育史上具有直接渊源地位。",
+                                },
+                            ],
+                        },
+                        ensure_ascii=False,
+                    ),
+                    "log-generate-subjective",
+                )
+            return (
+                json.dumps(
+                    {
+                        "questions": [
+                            {
+                                "question_type": "multiple_choice",
+                                "stem": "【2007年311真题22】西欧中世纪的骑士教育是一种特殊形式的（）",
+                                "options": [
+                                    {"id": "A", "text": "学校教育"},
+                                    {"id": "B", "text": "家庭教育"},
+                                ],
+                                "correct_option_id": "B",
+                                "analysis": "骑士教育是一种特殊的家庭教育。",
+                            },
+                            {
+                                "question_type": "short_answer",
+                                "stem": "试述中世纪大学的产生及其在教育史上的地位与作用。",
+                                "reference_answer": "社会经济发展推动了中世纪大学产生，并在高等教育史上具有直接渊源地位。",
+                                "analysis": "答案需覆盖产生背景与教育史意义。",
+                            },
+                        ]
+                    },
+                    ensure_ascii=False,
+                ),
+                "log-pair-subjective",
+            )
+
+        with (
+            patch.object(palace_quiz_ai_service, "DASHSCOPE_API_KEY", "test-key", create=True),
+            patch.object(
+                palace_quiz_ai_service,
+                "render_selected_pdf_pages",
+                side_effect=[
+                    [(10, b"question-10", "question-10.png"), (11, b"question-11", "question-11.png")],
+                    [(9, b"answer-9", "answer-9.png"), (10, b"answer-10", "answer-10.png")],
+                ],
+            ),
+            patch.object(
+                palace_quiz_ai_service,
+                "_call_logged_chat_completion",
+                side_effect=fake_call_logged_chat_completion,
+            ),
+        ):
+            response = self.client.post(
+                "/api/v1/palaces/1/quiz-generation/pdf",
+                json={
+                    "pdf_sources": [
+                        {"subject_document_id": 1, "page_selection": [10, 11], "role_hint": "question"},
+                        {"subject_document_id": 1, "page_selection": [9, 10], "role_hint": "answer"},
+                    ],
+                    "extra_prompt": "",
+                },
+            )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual([item["question_type"] for item in payload["questions"]], ["multiple_choice", "short_answer"])
+        self.assertEqual(payload["questions"][1]["answer_payload"]["reference_answer"], "社会经济发展推动了中世纪大学产生，并在高等教育史上具有直接渊源地位。")
+        self.assertEqual(payload["generation_stats"]["returned_count"], 2)
+        self.assertEqual(payload["generation_stats"]["savable_count"], 2)
+
     def test_pdf_generation_secondary_review_is_controlled_by_explicit_flag(self):
         calls: list[dict[str, object]] = []
 

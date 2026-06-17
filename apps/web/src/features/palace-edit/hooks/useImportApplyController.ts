@@ -1,5 +1,5 @@
-import { useRef, useState } from 'react'
-import { toast } from 'sonner'
+﻿import { useRef, useState } from 'react'
+import { toast } from '@/shared/feedback/toast'
 import type { MindMapEditorState } from '@/shared/api/contracts'
 import {
   applyImportedEditorState,

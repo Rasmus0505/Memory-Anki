@@ -26,6 +26,7 @@ vi.mock('@/shared/api/modules/voiceCoach', () => ({
 
 function buildTimer(overrides: Partial<TimedSessionController> = {}): TimedSessionController {
   return {
+    sessionId: 'timer-1',
     effectiveSeconds: 0,
     idleSeconds: 0,
     pauseCount: 0,

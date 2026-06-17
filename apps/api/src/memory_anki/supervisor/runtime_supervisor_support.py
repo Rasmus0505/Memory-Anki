@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import os
+import shutil
 import subprocess
 import sys
 import time
@@ -22,6 +24,8 @@ SUPERVISOR_HOST = "127.0.0.1"
 INTERNAL_PORT_BASE = 18012
 STATE_FILENAME = "supervisor-state.json"
 POLL_INTERVAL_SECONDS = 2.0
+RUN_MODE_WORKSPACE_LATEST = "workspace-latest"
+RUN_MODE_SUPERVISOR = "supervisor"
 
 
 @dataclass(slots=True)
@@ -97,6 +101,11 @@ def is_supervisor_healthy(config: SupervisorConfig) -> bool:
     return bool(payload and payload.get("ok"))
 
 
+def is_workspace_runtime_healthy(config: SupervisorConfig) -> bool:
+    payload = http_get_json(f"{config.browser_url}api/v1/runtime-health")
+    return bool(payload and payload.get("ok"))
+
+
 def open_browser(url: str) -> None:
     try:
         webbrowser.open(url)
@@ -109,6 +118,21 @@ def creation_flags() -> int:
     for name in ("DETACHED_PROCESS", "CREATE_NEW_PROCESS_GROUP", "CREATE_NO_WINDOW"):
         flags |= int(getattr(subprocess, name, 0))
     return flags
+
+
+def build_hidden_process_kwargs() -> dict[str, Any]:
+    kwargs: dict[str, Any] = {}
+    flags = creation_flags()
+    if flags:
+        kwargs["creationflags"] = flags
+    if os.name == "nt":
+        startupinfo_cls = getattr(subprocess, "STARTUPINFO", None)
+        if startupinfo_cls is not None:
+            startupinfo = startupinfo_cls()
+            startupinfo.dwFlags |= int(getattr(subprocess, "STARTF_USESHOWWINDOW", 0))
+            startupinfo.wShowWindow = int(getattr(subprocess, "SW_HIDE", 0))
+            kwargs["startupinfo"] = startupinfo
+    return kwargs
 
 
 def list_listening_pids(port: int) -> list[int]:
@@ -155,6 +179,32 @@ def wait_for_supervisor(config: SupervisorConfig, timeout_seconds: int = 120) ->
     raise TimeoutError("Timed out waiting for runtime supervisor.")
 
 
+def wait_for_workspace_runtime(config: SupervisorConfig, timeout_seconds: int = 120) -> None:
+    deadline = time.time() + timeout_seconds
+    while time.time() < deadline:
+        if is_workspace_runtime_healthy(config):
+            return
+        time.sleep(0.5)
+    raise TimeoutError("Timed out waiting for workspace runtime.")
+
+
+def resolve_runtime_run_mode() -> str:
+    raw_value = str(os.environ.get("MEMORY_ANKI_RUN_MODE") or "").strip().lower()
+    if raw_value == RUN_MODE_SUPERVISOR:
+        return RUN_MODE_SUPERVISOR
+    return RUN_MODE_WORKSPACE_LATEST
+
+
+def _resolve_npm_command() -> str:
+    npm_cmd = shutil.which("npm.cmd")
+    if npm_cmd:
+        return npm_cmd
+    npm_path = shutil.which("npm")
+    if npm_path:
+        return npm_path
+    raise RuntimeError("npm executable was not found on PATH.")
+
+
 def ensure_background_supervisor(*, open_browser_after_launch: bool = True) -> SupervisorConfig:
     config = build_supervisor_config()
     ensure_supervisor_directories(config)
@@ -170,10 +220,81 @@ def ensure_background_supervisor(*, open_browser_after_launch: bool = True) -> S
                 stdout=log_file,
                 stderr=subprocess.STDOUT,
                 stdin=subprocess.DEVNULL,
-                creationflags=creation_flags(),
+                **build_hidden_process_kwargs(),
                 close_fds=False,
             )
         wait_for_supervisor(config)
+    if open_browser_after_launch:
+        open_browser(config.browser_url)
+    return config
+
+
+def ensure_latest_workspace_runtime(*, open_browser_after_launch: bool = True) -> SupervisorConfig:
+    config = build_supervisor_config()
+    ensure_supervisor_directories(config)
+
+    for pid in list_listening_pids(config.port):
+        kill_process_tree(pid)
+    time.sleep(0.5)
+
+    log_path = config.logs_dir / "runtime-launcher.log"
+    npm_command = _resolve_npm_command()
+    repo_root = config.repo_root
+    web_dir = repo_root / "apps" / "web"
+    api_src_dir = repo_root / "apps" / "api" / "src"
+    web_dist_dir = web_dir / "dist"
+
+    build_env = os.environ.copy()
+    build_env["MEMORY_ANKI_HOME"] = str(config.app_home)
+
+    with log_path.open("ab") as log_file:
+        build_result = subprocess.run(
+            [npm_command, "run", "build"],
+            cwd=str(web_dir),
+            env=build_env,
+            stdout=log_file,
+            stderr=subprocess.STDOUT,
+            stdin=subprocess.DEVNULL,
+            **build_hidden_process_kwargs(),
+            check=False,
+        )
+        if build_result.returncode != 0:
+            raise RuntimeError(f"Frontend build failed ({build_result.returncode}). See {log_path}.")
+
+        launch_env = os.environ.copy()
+        launch_env["MEMORY_ANKI_HOME"] = str(config.app_home)
+        launch_env["MEMORY_ANKI_CHANNEL"] = RUN_MODE_WORKSPACE_LATEST
+        launch_env["MEMORY_ANKI_WEB_DIST"] = str(web_dist_dir)
+        launch_env["MEMORY_ANKI_STARTUP_MODE"] = "serve"
+        launch_env.pop("MEMORY_ANKI_RUNTIME_SNAPSHOT", None)
+        process = subprocess.Popen(
+            [
+                sys.executable,
+                "-m",
+                "uvicorn",
+                "--app-dir",
+                str(api_src_dir),
+                "memory_anki.app.main:app",
+                "--host",
+                config.host,
+                "--port",
+                str(config.port),
+            ],
+            cwd=str(repo_root / "apps" / "api"),
+            env=launch_env,
+            stdout=log_file,
+            stderr=subprocess.STDOUT,
+            stdin=subprocess.DEVNULL,
+            **build_hidden_process_kwargs(),
+            close_fds=False,
+        )
+
+    try:
+        wait_for_workspace_runtime(config)
+    except Exception:
+        kill_process_tree(process.pid)
+        raise
+
     if open_browser_after_launch:
         open_browser(config.browser_url)
     return config

@@ -20,14 +20,13 @@ import {
   CardHeader,
   CardTitle,
 } from "@/shared/components/ui/card";
-import { SessionTimerBar } from "@/shared/components/session/SessionTimerBar";
 import { SentenceLine } from "@/features/english-reading/components/EnglishReadingText";
 
 type ReadingTimerState = {
   effectiveSeconds: number;
   idleSeconds: number;
   pauseCount: number;
-  status: "idle" | "running" | "paused";
+  status: "idle" | "running" | "paused" | "completed";
   start: (options: { source: string }) => void;
   pause: (options: { source: string }) => void;
   resume: (options: { source: string }) => void;
@@ -167,21 +166,6 @@ export function EnglishReadingReadingPanels({
                 重新生成内容
               </Button>
             </div>
-            <SessionTimerBar
-              effectiveSeconds={timer.effectiveSeconds}
-              idleSeconds={timer.idleSeconds}
-              automationScene="english_reading"
-              pauseCount={timer.pauseCount}
-              status={timer.status}
-              onStart={() => timer.start({ source: "manual_start" })}
-              onPause={() => timer.pause({ source: "manual_pause" })}
-              onResume={() => timer.resume({ source: "manual_resume" })}
-              onAdjustDuration={timer.adjustDuration}
-              showCompleteAction={false}
-              showRestartAction
-              onRestart={() => timer.reset()}
-              layout="compact"
-            />
           </CardHeader>
           <CardContent className="space-y-6 p-4 sm:p-6">
             <div className="rounded-[32px] border border-border/70 bg-card/90 px-5 py-6 shadow-floating sm:px-8 sm:py-9">

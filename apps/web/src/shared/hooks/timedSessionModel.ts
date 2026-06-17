@@ -2,6 +2,8 @@ import type {
   SessionCompletionMethod,
   SessionEventRecord,
   SessionKind,
+  SessionScene,
+  SessionSceneSegment,
   TimeSessionRecord,
 } from '@/entities/session/model'
 import type {
@@ -35,6 +37,7 @@ export interface TimedSessionOptions {
 }
 
 export interface TimedSessionController {
+  sessionId: string
   effectiveSeconds: number
   idleSeconds: number
   pauseCount: number
@@ -52,6 +55,17 @@ export interface TimedSessionController {
   adjustDuration: (seconds: number) => void
   complete: (method: SessionCompletionMethod, meta?: TimedSessionMeta) => Promise<TimeSessionRecord | null>
   reset: () => void
+}
+
+export interface ActiveSceneSegmentSnapshot {
+  scene: SessionScene
+  kind: SessionKind
+  palaceId: number | null
+  sourceKind: TimedSessionSourceKind
+  englishCourseId: number | null
+  title: string
+  startedAt: string
+  startEffectiveSeconds: number
 }
 
 export interface PersistedTimedSessionSnapshotV2 {
@@ -73,6 +87,8 @@ export interface PersistedTimedSessionSnapshotV2 {
   suspendedAt: string | null
   resumeDeadlineAt: string | null
   leaveMeta: TimedSessionMeta | null
+  sceneSegments?: SessionSceneSegment[]
+  activeSceneSegment?: ActiveSceneSegmentSnapshot | null
 }
 
 export interface LegacyPersistedTimedSessionSnapshot {
@@ -110,6 +126,8 @@ export interface RestorableTimedSessionSnapshot {
   suspendedAt: string | null
   resumeDeadlineAt: string | null
   leaveMeta: TimedSessionMeta | null
+  sceneSegments: SessionSceneSegment[]
+  activeSceneSegment: ActiveSceneSegmentSnapshot | null
 }
 
 export interface ResolvedTimedSessionAutomation {
@@ -130,6 +148,7 @@ function nowIso() {
 }
 
 export { nowIso }
+export type { SessionSceneSegment }
 
 function randomId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
@@ -177,6 +196,8 @@ export function normalizeSnapshot(
       suspendedAt: null,
       resumeDeadlineAt: null,
       leaveMeta: null,
+      sceneSegments: [],
+      activeSceneSegment: null,
     }
   }
 
@@ -215,6 +236,11 @@ export function normalizeSnapshot(
     leaveMeta:
       raw.leaveMeta && typeof raw.leaveMeta === 'object'
         ? (raw.leaveMeta as TimedSessionMeta)
+        : null,
+    sceneSegments: Array.isArray(raw.sceneSegments) ? (raw.sceneSegments as SessionSceneSegment[]) : [],
+    activeSceneSegment:
+      raw.activeSceneSegment && typeof raw.activeSceneSegment === 'object'
+        ? (raw.activeSceneSegment as ActiveSceneSegmentSnapshot)
         : null,
   }
 }

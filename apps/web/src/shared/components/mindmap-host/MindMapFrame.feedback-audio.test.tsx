@@ -2,66 +2,55 @@ import { act, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { MindMapFrame } from './MindMapFrame'
 import { attachIframeBridge, buildEditorState, getHostBridge } from './MindMapFrame.test-utils'
-
-function installAudioContextMock() {
-  const oscillator = {
-    type: 'sine',
-    frequency: { setValueAtTime: vi.fn(), exponentialRampToValueAtTime: vi.fn() },
-    connect: vi.fn(),
-    start: vi.fn(),
-    stop: vi.fn(),
-  }
-  const gainNode = {
-    gain: {
-      setValueAtTime: vi.fn(),
-      linearRampToValueAtTime: vi.fn(),
-      exponentialRampToValueAtTime: vi.fn(),
-    },
-    connect: vi.fn(),
-  }
-  const panNode = {
-    pan: { setValueAtTime: vi.fn() },
-    connect: vi.fn(),
-  }
-  const filterNode = {
-    type: 'highpass',
-    frequency: { setValueAtTime: vi.fn() },
-    connect: vi.fn(),
-  }
-  const bufferSource = {
-    buffer: null,
-    connect: vi.fn(),
-    start: vi.fn(),
-    stop: vi.fn(),
-  }
-  const buffer = {
-    getChannelData: vi.fn(() => new Float32Array(32)),
-  }
-  const audioContext = {
-    state: 'running',
-    currentTime: 0,
-    sampleRate: 44100,
-    destination: {},
-    createOscillator: vi.fn(() => oscillator),
-    createGain: vi.fn(() => gainNode),
-    createStereoPanner: vi.fn(() => panNode),
-    createBuffer: vi.fn(() => buffer),
-    createBufferSource: vi.fn(() => bufferSource),
-    createBiquadFilter: vi.fn(() => filterNode),
-    close: vi.fn(() => Promise.resolve()),
-    resume: vi.fn(() => Promise.resolve()),
-  }
-  const AudioContextMock = vi.fn(() => audioContext)
-  Object.defineProperty(window, 'AudioContext', {
-    configurable: true,
-    value: AudioContextMock,
-  })
-  return { AudioContextMock, audioContext }
-}
+import { __resetLegacyAudioContextForTests } from './legacyWebAudio'
 
 describe('MindMapFrame feedback audio behavior', () => {
+  let createOscillator: ReturnType<typeof vi.fn>
+
   beforeEach(() => {
     window.__memoryAnkiMindMapHosts = {}
+    __resetLegacyAudioContextForTests()
+    createOscillator = vi.fn(() => ({
+      connect: vi.fn(),
+      disconnect: vi.fn(),
+      frequency: {
+        linearRampToValueAtTime: vi.fn(),
+        setValueAtTime: vi.fn(),
+      },
+      start: vi.fn(),
+      stop: vi.fn(),
+      type: 'sine',
+    }))
+    const createGain = vi.fn(() => ({
+      connect: vi.fn(),
+      disconnect: vi.fn(),
+      gain: {
+        exponentialRampToValueAtTime: vi.fn(),
+        linearRampToValueAtTime: vi.fn(),
+        setValueAtTime: vi.fn(),
+      },
+    }))
+    const createStereoPanner = vi.fn(() => ({
+      connect: vi.fn(),
+      disconnect: vi.fn(),
+      pan: {
+        setValueAtTime: vi.fn(),
+      },
+    }))
+    const resume = vi.fn().mockResolvedValue(undefined)
+    const AudioContextMock = vi.fn(() => ({
+      createGain,
+      createOscillator,
+      createStereoPanner,
+      currentTime: 0,
+      destination: {},
+      resume,
+      state: 'running',
+    }))
+    Object.defineProperty(window, 'AudioContext', {
+      configurable: true,
+      value: AudioContextMock,
+    })
   })
 
   afterEach(() => {
@@ -71,7 +60,6 @@ describe('MindMapFrame feedback audio behavior', () => {
   })
 
   it('plays audio when the host reports a feedback event', async () => {
-    const { AudioContextMock, audioContext } = installAudioContextMock()
     render(<MindMapFrame editorState={buildEditorState()} onEditorStateChange={vi.fn()} />)
     const iframe = screen.getByTitle('mind-map-editor') as HTMLIFrameElement
     attachIframeBridge(iframe)
@@ -80,13 +68,11 @@ describe('MindMapFrame feedback audio behavior', () => {
       getHostBridge()?.notify?.('feedback_event', { type: 'save_success' })
     })
 
-    expect(AudioContextMock).toHaveBeenCalled()
-    expect(audioContext.createOscillator).toHaveBeenCalled()
+    expect(createOscillator).toHaveBeenCalled()
   })
 
   it('coalesces one node click into a single semantic audio event', async () => {
     vi.useFakeTimers()
-    const { audioContext } = installAudioContextMock()
     render(<MindMapFrame editorState={buildEditorState()} onEditorStateChange={vi.fn()} />)
     const iframe = screen.getByTitle('mind-map-editor') as HTMLIFrameElement
     attachIframeBridge(iframe)
@@ -109,18 +95,17 @@ describe('MindMapFrame feedback audio behavior', () => {
       })
     })
 
-    expect(audioContext.createOscillator).not.toHaveBeenCalled()
+    expect(createOscillator).not.toHaveBeenCalled()
 
     await act(async () => {
       vi.advanceTimersByTime(120)
     })
 
-    expect(audioContext.createOscillator).toHaveBeenCalledTimes(1)
+    expect(createOscillator).toHaveBeenCalledTimes(1)
   })
 
   it('lets edit-start audio replace pending click and selection feedback', async () => {
     vi.useFakeTimers()
-    const { audioContext } = installAudioContextMock()
     render(<MindMapFrame editorState={buildEditorState()} onEditorStateChange={vi.fn()} />)
     const iframe = screen.getByTitle('mind-map-editor') as HTMLIFrameElement
     attachIframeBridge(iframe)
@@ -143,18 +128,17 @@ describe('MindMapFrame feedback audio behavior', () => {
       })
     })
 
-    expect(audioContext.createOscillator).toHaveBeenCalledTimes(2)
+    expect(createOscillator).toHaveBeenCalledTimes(2)
 
     await act(async () => {
       vi.advanceTimersByTime(160)
     })
 
-    expect(audioContext.createOscillator).toHaveBeenCalledTimes(2)
+    expect(createOscillator).toHaveBeenCalledTimes(2)
   })
 
   it('coalesces repeated key presses but keeps structure feedback audible', async () => {
     vi.useFakeTimers()
-    const { audioContext } = installAudioContextMock()
     render(<MindMapFrame editorState={buildEditorState()} onEditorStateChange={vi.fn()} />)
     const iframe = screen.getByTitle('mind-map-editor') as HTMLIFrameElement
     attachIframeBridge(iframe)
@@ -181,7 +165,7 @@ describe('MindMapFrame feedback audio behavior', () => {
       vi.advanceTimersByTime(56)
     })
 
-    expect(audioContext.createOscillator).toHaveBeenCalledTimes(1)
+    expect(createOscillator).toHaveBeenCalledTimes(1)
 
     await act(async () => {
       getHostBridge()?.notify?.('feedback_event', {
@@ -191,7 +175,6 @@ describe('MindMapFrame feedback audio behavior', () => {
       })
     })
 
-    expect(audioContext.createOscillator).toHaveBeenCalledTimes(3)
-    expect(audioContext.createBuffer).not.toHaveBeenCalled()
+    expect(createOscillator).toHaveBeenCalledTimes(3)
   })
 })

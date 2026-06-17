@@ -38,12 +38,31 @@ from memory_anki.modules.reviews.application.schedule_service import (
     create_initial_review_schedules,
     get_algorithm_intervals,
     get_config_value,
+    get_initial_same_day_slot_count,
     is_schedule_due_or_later_today,
     normalize_algorithm,
 )
 from memory_anki.modules.time_records.application.time_records_service import (
     create_review_time_record,
 )
+
+
+def _resolve_completed_count_after_submit(
+    *,
+    session: Session,
+    algorithm: str,
+    schedule_review_type: str | None,
+    schedule_review_number: int,
+    requested_completed_count: int,
+    total_intervals: int,
+) -> int:
+    completed_count = min(requested_completed_count, total_intervals)
+    if schedule_review_type != "standard":
+        return completed_count
+    initial_slot_count = max(1, get_initial_same_day_slot_count(session, algorithm))
+    if schedule_review_number < initial_slot_count:
+        return max(completed_count, min(initial_slot_count, total_intervals))
+    return completed_count
 
 
 def submit_review(
@@ -84,11 +103,19 @@ def submit_review(
         if target_review_number is not None
         else schedule.review_number + 1
     )
+    completed_count = _resolve_completed_count_after_submit(
+        session=session,
+        algorithm=algorithm,
+        schedule_review_type=schedule.review_type,
+        schedule_review_number=schedule.review_number,
+        requested_completed_count=next_review_number,
+        total_intervals=len(intervals),
+    )
 
     rebuild_palace_review_schedules(
         session,
         palace,
-        completed_count=min(next_review_number, len(intervals)),
+        completed_count=completed_count,
         completed_review_number=schedule.review_number,
         completed_at=completed_at,
     )
@@ -151,11 +178,19 @@ def submit_segment_review(
         if target_review_number is not None
         else schedule.review_number + 1
     )
+    completed_count = _resolve_completed_count_after_submit(
+        session=session,
+        algorithm=algorithm,
+        schedule_review_type=schedule.review_type,
+        schedule_review_number=schedule.review_number,
+        requested_completed_count=next_review_number,
+        total_intervals=len(intervals),
+    )
 
     rebuild_segment_review_schedules(
         session,
         segment,
-        completed_count=min(next_review_number, len(intervals)),
+        completed_count=completed_count,
         completed_review_number=completed_review_number,
         completed_at=completed_at,
     )
@@ -222,11 +257,19 @@ def submit_mini_review(
         if target_review_number is not None
         else schedule.review_number + 1
     )
+    completed_count = _resolve_completed_count_after_submit(
+        session=session,
+        algorithm=algorithm,
+        schedule_review_type=schedule.review_type,
+        schedule_review_number=schedule.review_number,
+        requested_completed_count=next_review_number,
+        total_intervals=len(intervals),
+    )
 
     rebuild_mini_palace_review_progress(
         session,
         mini_palace,
-        completed_count=min(next_review_number, len(intervals)),
+        completed_count=completed_count,
         completed_review_number=completed_review_number,
         completed_at=completed_at,
     )

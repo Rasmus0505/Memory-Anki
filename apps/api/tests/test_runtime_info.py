@@ -48,6 +48,48 @@ class RuntimeInfoTests(unittest.TestCase):
         self.assertIn("backup_covered_items", info)
         self.assertIn("active_runtime_instances", info)
 
+    def test_build_runtime_info_exposes_release_and_bundle_metadata(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            web_dist = Path(temp_dir) / "web-dist"
+            web_dist.mkdir(parents=True, exist_ok=True)
+            (web_dist / "index.html").write_text(
+                '<!doctype html><script type="module" src="/assets/index-CPKO0nJg.js"></script>',
+                encoding="utf-8",
+            )
+
+            with patch.dict(
+                os.environ,
+                {
+                    "MEMORY_ANKI_RUNTIME_SNAPSHOT": str(Path(temp_dir) / "runtime" / "releases" / "rel-123"),
+                    "MEMORY_ANKI_WEB_DIST": str(web_dist),
+                },
+                clear=False,
+            ):
+                info = runtime_module.build_runtime_info(state={})
+
+        self.assertEqual(info["runtime_snapshot"], str(Path(temp_dir) / "runtime" / "releases" / "rel-123"))
+        self.assertEqual(info["release_id"], "rel-123")
+        self.assertEqual(info["frontend_entry_asset"], "index-CPKO0nJg.js")
+        self.assertEqual(info["frontend_bundle_hash"], "CPKO0nJg")
+
+    def test_build_runtime_health_returns_lightweight_readiness_payload(self):
+        payload = runtime_module.build_runtime_health(
+            state={"last_started_at": "2026-06-01T00:00:00+00:00"},
+            startup_mode="healthcheck",
+            runtime_snapshot="C:/runtime/releases/rel-456",
+        )
+
+        self.assertEqual(
+            payload,
+            {
+                "ok": True,
+                "startup_mode": "healthcheck",
+                "runtime_snapshot": "C:/runtime/releases/rel-456",
+                "release_id": "rel-456",
+                "started_at": "2026-06-01T00:00:00+00:00",
+            },
+        )
+
     def test_assert_runtime_compatible_rejects_newer_shared_generation(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             contract_path = Path(temp_dir) / "runtime-contract.json"
@@ -132,6 +174,41 @@ class RuntimeInfoTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["channel"], "production")
         self.assertEqual(response.json()["short_commit"], "abcdef12")
+
+    def test_runtime_info_route_includes_release_metadata(self):
+        app = FastAPI()
+        app.include_router(settings_router.router, prefix="/api/v1")
+        client = TestClient(app)
+
+        with patch.object(
+            settings_router,
+            "build_runtime_info",
+            return_value={
+                "channel": "production",
+                "commit": "abcdef1234567890",
+                "short_commit": "abcdef12",
+                "runtime_generation": 1,
+                "declared_runtime_generation": 1,
+                "min_supported_generation": 1,
+                "max_supported_generation": 1,
+                "last_started_at": "2026-06-01T12:00:00+08:00",
+                "app_home": "C:/Users/test/AppData/Local/MemoryAnki",
+                "app_home_source": "default",
+                "runtime_snapshot": "C:/runtime/releases/rel-789",
+                "release_id": "rel-789",
+                "frontend_entry_asset": "index-CPKO0nJg.js",
+                "frontend_bundle_hash": "CPKO0nJg",
+                "storage_mode": "user_app_home",
+                "managed_storage_items": [],
+                "backup_covered_items": [],
+                "active_runtime_instances": [],
+            },
+        ):
+            response = client.get("/api/v1/runtime-info")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["release_id"], "rel-789")
+        self.assertEqual(response.json()["frontend_bundle_hash"], "CPKO0nJg")
 
     def test_client_preferences_route_reads_and_writes_grouped_preferences(self):
         app = FastAPI()

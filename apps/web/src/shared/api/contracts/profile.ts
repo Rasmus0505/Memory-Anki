@@ -228,6 +228,7 @@ export interface ClientPreferences {
   review_feedback_settings: Record<string, unknown> | null
   english_practice_settings: Record<string, unknown> | null
   timer_automation_config: Record<string, unknown> | null
+  timer_focus_config: Record<string, unknown> | null
   dashboard_duration_filter: Record<string, unknown> | null
   palace_list_view_settings: Record<string, unknown> | null
   palace_shelf_view_settings: Record<string, unknown> | null

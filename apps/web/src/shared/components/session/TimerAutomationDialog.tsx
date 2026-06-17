@@ -5,6 +5,7 @@ import {
   Dialog,
   DialogClose,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from '@/shared/components/ui/dialog'
@@ -22,6 +23,21 @@ import {
   TIMER_AUTOMATION_SCENE_LABELS,
   sanitizeTimerAutomationConfig,
 } from '@/shared/components/session/timer-automation-config'
+import type {
+  TimerFeedbackIntensity,
+  TimerFocusConfig,
+  TimerFocusMode,
+  TimerFocusRule,
+  TimerFocusScene,
+} from '@/shared/components/session/timer-focus-config'
+import {
+  DEFAULT_TIMER_FOCUS_CONFIG,
+  getTimerFocusRule,
+  resetTimerFocusConfig,
+  saveTimerFocusConfig,
+  sanitizeTimerFocusConfig,
+  TIMER_FOCUS_SCENE_LABELS,
+} from '@/shared/components/session/timer-focus-config'
 
 interface TimerAutomationDialogProps {
   open: boolean
@@ -29,10 +45,13 @@ interface TimerAutomationDialogProps {
   onOpenChange: (open: boolean) => void
   onSave: (config: TimerAutomationConfig) => void
   onReset: () => void
+  focusConfig?: TimerFocusConfig
+  onFocusConfigSave?: (config: TimerFocusConfig) => void
 }
 
 type FieldKey = keyof TimerAutomationRule
 type ActionFieldKey = keyof TimerAutomationActivityConfig
+type FocusFieldKey = keyof TimerFocusRule
 
 function toDraft(config: TimerAutomationConfig) {
   return {
@@ -84,6 +103,41 @@ function toDraft(config: TimerAutomationConfig) {
       inactiveAutoPauseSeconds: String(config.english_reading.inactiveAutoPauseSeconds),
       hiddenAutoPauseSeconds: String(config.english_reading.hiddenAutoPauseSeconds),
       autoPauseRollbackSeconds: String(config.english_reading.autoPauseRollbackSeconds),
+    },
+  }
+}
+
+function toFocusDraft(config: TimerFocusConfig) {
+  return {
+    mode: config.mode,
+    feedbackIntensity: config.feedbackIntensity,
+    global: {
+      primaryMinutes: String(config.global.primaryMinutes),
+      secondaryMinutes: String(config.global.secondaryMinutes),
+    },
+    palace_edit: {
+      primaryMinutes: String(config.palace_edit.primaryMinutes),
+      secondaryMinutes: String(config.palace_edit.secondaryMinutes),
+    },
+    practice: {
+      primaryMinutes: String(config.practice.primaryMinutes),
+      secondaryMinutes: String(config.practice.secondaryMinutes),
+    },
+    quiz: {
+      primaryMinutes: String(config.quiz.primaryMinutes),
+      secondaryMinutes: String(config.quiz.secondaryMinutes),
+    },
+    review: {
+      primaryMinutes: String(config.review.primaryMinutes),
+      secondaryMinutes: String(config.review.secondaryMinutes),
+    },
+    english: {
+      primaryMinutes: String(config.english.primaryMinutes),
+      secondaryMinutes: String(config.english.secondaryMinutes),
+    },
+    english_reading: {
+      primaryMinutes: String(config.english_reading.primaryMinutes),
+      secondaryMinutes: String(config.english_reading.secondaryMinutes),
     },
   }
 }
@@ -163,19 +217,71 @@ function RuleEditor({
   )
 }
 
+function FocusRuleEditor({
+  label,
+  value,
+  defaults,
+  onFieldChange,
+  compact = false,
+}: {
+  label: string
+  value: {
+    primaryMinutes: string
+    secondaryMinutes: string
+  }
+  defaults: TimerFocusRule
+  onFieldChange: (field: FocusFieldKey, value: string) => void
+  compact?: boolean
+}) {
+  return (
+    <div className={cn('rounded-2xl border border-border/70 bg-card/70', compact ? 'p-3.5' : 'p-4')}>
+      <div className="text-sm font-semibold text-foreground">{label}</div>
+      <p className="mt-1 text-xs leading-5 text-muted-foreground">
+        一级总目标决定整段冲刺长度，二级子间隔决定大数字倒计时和爽感反馈节奏。
+      </p>
+      <div className={cn('mt-3 grid gap-3', compact ? 'md:grid-cols-2' : 'lg:grid-cols-2')}>
+        <label className="space-y-1.5 text-sm">
+          <span className="text-xs text-muted-foreground">一级目标（分钟）</span>
+          <Input
+            inputMode="numeric"
+            value={value.primaryMinutes}
+            onChange={(event) => onFieldChange('primaryMinutes', event.target.value)}
+          />
+        </label>
+        <label className="space-y-1.5 text-sm">
+          <span className="text-xs text-muted-foreground">二级子间隔（分钟）</span>
+          <Input
+            inputMode="numeric"
+            value={value.secondaryMinutes}
+            onChange={(event) => onFieldChange('secondaryMinutes', event.target.value)}
+          />
+        </label>
+      </div>
+      <div className="mt-3 text-xs text-muted-foreground">
+        默认值：
+        {` 一级 ${defaults.primaryMinutes} 分钟，二级 ${Math.min(defaults.primaryMinutes, defaults.secondaryMinutes)} 分钟`}
+      </div>
+    </div>
+  )
+}
+
 export function TimerAutomationDialog({
   open,
   config,
   onOpenChange,
   onSave,
   onReset,
+  focusConfig = DEFAULT_TIMER_FOCUS_CONFIG,
+  onFocusConfigSave,
 }: TimerAutomationDialogProps) {
   const [draft, setDraft] = React.useState(() => toDraft(config))
+  const [focusDraft, setFocusDraft] = React.useState(() => toFocusDraft(focusConfig))
 
   React.useEffect(() => {
     if (!open) return
     setDraft(toDraft(config))
-  }, [config, open])
+    setFocusDraft(toFocusDraft(focusConfig))
+  }, [config, focusConfig, open])
 
   const handleModeChange = React.useCallback((mode: TimerAutomationMode) => {
     setDraft((current) => ({ ...current, mode }))
@@ -214,6 +320,30 @@ export function TimerAutomationDialog({
         ...current.actions,
         [field]: checked,
       },
+    }))
+  }, [])
+
+  const handleFocusModeChange = React.useCallback((mode: TimerFocusMode) => {
+    setFocusDraft((current) => ({ ...current, mode }))
+  }, [])
+
+  const handleFocusFieldChange = React.useCallback(
+    (scene: 'global' | TimerFocusScene, field: FocusFieldKey, value: string) => {
+      setFocusDraft((current) => ({
+        ...current,
+        [scene]: {
+          ...current[scene],
+          [field]: value,
+        },
+      }))
+    },
+    [],
+  )
+
+  const handleFeedbackIntensityChange = React.useCallback((value: TimerFeedbackIntensity) => {
+    setFocusDraft((current) => ({
+      ...current,
+      feedbackIntensity: value,
     }))
   }, [])
 
@@ -273,6 +403,43 @@ export function TimerAutomationDialog({
     [draft],
   )
 
+  const parsedFocusConfig = React.useMemo(
+    () =>
+      sanitizeTimerFocusConfig({
+        mode: focusDraft.mode,
+        feedbackIntensity: focusDraft.feedbackIntensity,
+        global: {
+          primaryMinutes: focusDraft.global.primaryMinutes,
+          secondaryMinutes: focusDraft.global.secondaryMinutes,
+        },
+        palace_edit: {
+          primaryMinutes: focusDraft.palace_edit.primaryMinutes,
+          secondaryMinutes: focusDraft.palace_edit.secondaryMinutes,
+        },
+        practice: {
+          primaryMinutes: focusDraft.practice.primaryMinutes,
+          secondaryMinutes: focusDraft.practice.secondaryMinutes,
+        },
+        quiz: {
+          primaryMinutes: focusDraft.quiz.primaryMinutes,
+          secondaryMinutes: focusDraft.quiz.secondaryMinutes,
+        },
+        review: {
+          primaryMinutes: focusDraft.review.primaryMinutes,
+          secondaryMinutes: focusDraft.review.secondaryMinutes,
+        },
+        english: {
+          primaryMinutes: focusDraft.english.primaryMinutes,
+          secondaryMinutes: focusDraft.english.secondaryMinutes,
+        },
+        english_reading: {
+          primaryMinutes: focusDraft.english_reading.primaryMinutes,
+          secondaryMinutes: focusDraft.english_reading.secondaryMinutes,
+        },
+      }),
+    [focusDraft],
+  )
+
   const scenes = Object.keys(TIMER_AUTOMATION_SCENE_LABELS) as TimerAutomationScene[]
   const sceneRuleEditors = scenes.map((scene) =>
     React.createElement(RuleEditor, {
@@ -286,6 +453,17 @@ export function TimerAutomationDialog({
       compact: true,
     }),
   )
+  const focusScenes = Object.keys(TIMER_FOCUS_SCENE_LABELS) as TimerFocusScene[]
+  const focusRuleEditors = focusScenes.map((scene) => (
+    <FocusRuleEditor
+      key={scene}
+      label={TIMER_FOCUS_SCENE_LABELS[scene]}
+      value={focusDraft[scene]}
+      defaults={DEFAULT_TIMER_FOCUS_CONFIG[scene]}
+      onFieldChange={(field, value) => handleFocusFieldChange(scene, field, value)}
+      compact
+    />
+  ))
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -297,7 +475,9 @@ export function TimerAutomationDialog({
             </div>
             <div>
               <DialogTitle>自动化配置</DialogTitle>
-              <p className="text-sm text-muted-foreground">配置哪些动作算活动，并决定各场景何时自动暂停与回退。</p>
+              <DialogDescription className="mt-1">
+                配置哪些动作算活动，并决定各场景何时自动暂停、双层目标和反馈强度。
+              </DialogDescription>
             </div>
           </div>
           <DialogClose onClick={() => onOpenChange(false)} />
@@ -401,10 +581,93 @@ export function TimerAutomationDialog({
               {sceneRuleEditors}
             </div>
           )}
+
+          <div className="rounded-2xl border border-border/70 bg-card/70 p-4">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <div className="text-sm font-semibold text-foreground">专注目标配置</div>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  大数字永远显示二级子间隔倒计时；一级总目标只用作下方进度和总冲刺反馈。
+                </p>
+              </div>
+              <div className="inline-flex rounded-full border border-border/70 bg-background/80 p-1">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={focusDraft.mode === 'global' ? 'default' : 'ghost'}
+                  className="rounded-full px-4"
+                  onClick={() => handleFocusModeChange('global')}
+                >
+                  全局目标
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={focusDraft.mode === 'scene' ? 'default' : 'ghost'}
+                  className="rounded-full px-4"
+                  onClick={() => handleFocusModeChange('scene')}
+                >
+                  单独目标
+                </Button>
+              </div>
+            </div>
+
+            <div className="grid gap-3 md:grid-cols-3">
+              {([
+                ['extreme', '极强刺激', '默认就给最炸的烟花、闪屏和音效，并随二级累计次数继续增强。'],
+                ['strong', '强但可控', '保留强反馈，但整体喷发量和音量会略微收敛。'],
+                ['visual_only', '纯视觉', '保留明显视觉奖励，但不额外强化声音。'],
+              ] as const).map(([value, title, description]) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => handleFeedbackIntensityChange(value)}
+                  className={cn(
+                    'rounded-2xl border px-4 py-4 text-left transition-all',
+                    focusDraft.feedbackIntensity === value
+                      ? 'border-primary bg-primary/8 shadow-sm ring-1 ring-primary/30'
+                      : 'border-border/70 bg-background/70 hover:bg-secondary/70',
+                  )}
+                >
+                  <div className="text-sm font-semibold">{title}</div>
+                  <div className="mt-1 text-xs leading-5 text-muted-foreground">{description}</div>
+                </button>
+              ))}
+            </div>
+
+            <div className="mt-4">
+              {focusDraft.mode === 'global' ? (
+                <FocusRuleEditor
+                  label="全局专注目标"
+                  value={focusDraft.global}
+                  defaults={DEFAULT_TIMER_FOCUS_CONFIG.global}
+                  onFieldChange={(field, value) => handleFocusFieldChange('global', field, value)}
+                />
+              ) : (
+                <div className="grid gap-3 lg:grid-cols-2">
+                  {focusRuleEditors}
+                </div>
+              )}
+            </div>
+
+            <div className="mt-3 rounded-2xl border border-dashed border-border/70 bg-background/55 px-3 py-3 text-xs text-muted-foreground">
+              当前全局默认：一级 {getTimerFocusRule('practice', parsedFocusConfig).primaryMinutes} 分钟左右的总冲刺，
+              二级 {getTimerFocusRule('practice', parsedFocusConfig).secondaryMinutes} 分钟左右的小目标，更适合持续追小胜利。
+            </div>
+          </div>
         </div>
 
         <div className="flex flex-wrap items-center justify-between gap-3 border-t px-5 py-4 sm:px-6">
-          <Button type="button" variant="ghost" size="sm" onClick={onReset}>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              onReset()
+              const resetFocusConfig = resetTimerFocusConfig()
+              setFocusDraft(toFocusDraft(resetFocusConfig))
+            }}
+          >
             <RotateCcw className="mr-2 h-4 w-4" />
             恢复默认
           </Button>
@@ -417,6 +680,11 @@ export function TimerAutomationDialog({
               size="sm"
               onClick={() => {
                 onSave(parsedConfig)
+                if (onFocusConfigSave) {
+                  onFocusConfigSave(parsedFocusConfig)
+                } else {
+                  saveTimerFocusConfig(parsedFocusConfig)
+                }
                 onOpenChange(false)
               }}
             >

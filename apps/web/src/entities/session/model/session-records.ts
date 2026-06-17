@@ -1,6 +1,7 @@
 export type RevealState = 'hidden' | 'placeholder' | 'revealed'
 
 export type SessionKind = 'palace_edit' | 'practice' | 'quiz' | 'review'
+export type SessionScene = SessionKind | 'english' | 'english_reading'
 
 export type SessionCompletionMethod =
   | 'manual_complete'
@@ -28,6 +29,18 @@ export interface SessionEventRecord {
   meta?: Record<string, boolean | number | string | null>
 }
 
+export interface SessionSceneSegment {
+  scene: SessionScene
+  kind: SessionKind
+  palaceId: number | null
+  sourceKind?: 'palace' | 'english' | 'english_reading' | null
+  englishCourseId?: number | null
+  title: string
+  startedAt: string
+  endedAt: string
+  effectiveSeconds: number
+}
+
 export interface TimeSessionRecord {
   id: string
   kind: SessionKind
@@ -44,6 +57,7 @@ export interface TimeSessionRecord {
   deletedAt?: string | null
   deletedReason?: 'manual' | null
   events: SessionEventRecord[]
+  sceneSegments?: SessionSceneSegment[]
 }
 
 export interface TimeRecordSummary {

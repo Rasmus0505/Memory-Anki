@@ -27,6 +27,7 @@ const englishReadingPageMocks = vi.hoisted(() => ({
   toastSuccessMock: vi.fn(),
   promptForAiOptionsMock: vi.fn(),
   timer: {
+    sessionId: "reading-timer-1",
     effectiveSeconds: 180,
     idleSeconds: 0,
     pauseCount: 0,

@@ -1,4 +1,4 @@
-import {
+﻿import {
   Brain,
   CheckCircle2,
   Clock3,
@@ -10,7 +10,7 @@ import {
   Sparkles,
   Trash2,
 } from 'lucide-react'
-import { toast } from 'sonner'
+import { toast } from '@/shared/feedback/toast'
 import type {
   MiniPalaceSummary,
   PalaceQuizGenerationPreview,
@@ -109,6 +109,11 @@ export function PalaceQuizGenerationPanel({
           scenario_key: string
           model_label?: string | null
         }>
+      | {
+          generation?: { model_label?: string | null } | null
+          pairing?: { model_label?: string | null } | null
+          review?: { model_label?: string | null } | null
+        }
       | null
       | undefined,
   ) => string

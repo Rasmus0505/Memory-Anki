@@ -1,6 +1,6 @@
 ﻿import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { toast } from 'sonner'
+import { toast } from '@/shared/feedback/toast'
 import { useBilinkOverlay } from '@/features/bilink'
 import { useAiRunConfigDialog } from '@/features/ai-config/useAiRunConfigDialog'
 import { useBilinkCounts } from '@/features/bilink/hooks/useBilinkCounts'
@@ -10,6 +10,7 @@ import type { MindMapFeedbackEvent, MindMapFeedbackFxPayload } from '@/shared/co
 import { readTimerAutomationConfig } from '@/shared/components/session/timer-automation-config'
 import { shouldAutoStartOnPageEnter, useTimedSession } from '@/shared/hooks/useTimedSession'
 import { useRouteResidency } from '@/app/router/RouteResidency'
+import { useGlobalTimerRegistration } from '@/shared/components/session/GlobalTimerProvider'
 import { logAiCall, requestOpenAiLogDetail } from '@/shared/logs/model/appLogs'
 import { parseMindMapDoc } from '@/features/palace-edit/model/mindmap-editor'
 import { usePalaceEditorDocument } from '@/features/palace-edit/hooks/usePalaceEditorDocument'
@@ -32,7 +33,7 @@ function readSelectionNodeUid(nodes: MindMapSelection[]) {
 }
 
 export function usePalaceEditPage() {
-  const { isActive } = useRouteResidency()
+  const { isActive, becameActiveAt } = useRouteResidency()
   const { id } = useParams()
   const navigate = useNavigate()
   const location = useLocation()
@@ -83,6 +84,13 @@ export function usePalaceEditPage() {
     palace,
     reload: documentState.reload,
     timer,
+  })
+  useGlobalTimerRegistration({
+    scene: 'palace_edit',
+    title: meta.title || palaceTitle,
+    timer,
+    isRouteActive: isActive,
+    becameActiveAt,
   })
 
   const practice = usePalacePracticeMode({
@@ -384,11 +392,7 @@ export function usePalaceEditPage() {
 
   useEffect(() => {
     return () => {
-      const currentTimer = timerRef.current
       if (hardUnloadRef.current) return
-      if (currentTimer.startedAt && currentTimer.status !== 'completed') {
-        void currentTimer.leaveScene({ source: 'route_leave' })
-      }
     }
   }, [])
 

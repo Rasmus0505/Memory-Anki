@@ -1,13 +1,11 @@
-import { RotateCcw, Settings2, Sparkles, SquareCheckBig, Volume2, Waves } from "lucide-react";
+import { RotateCcw, Sparkles, SquareCheckBig, Volume2 } from "lucide-react";
 import { BilinkPreviewPopover, BilinkSearchPopover } from "@/features/bilink";
 import { CompletionDecisionDialog } from "@/features/review/components/CompletionDecisionDialog";
-import { ReviewFeedbackSettingsDialog } from "@/features/review/components/ReviewFeedbackSettingsDialog";
 import { ReviewFlowMapPanel } from "@/features/review/components/ReviewFlowMapPanel";
 import { useMindMapReviewFlowController } from "@/features/review/hooks/useMindMapReviewFlowController";
 import type { MindMapReviewFlowProps } from "@/features/review/model/mind-map-review-flow";
 import { MiniPalacePanel } from "@/features/mini-palace";
 import { ComboMilestoneBurst, CompletionCelebration } from "@/shared/components/celebration";
-import { SessionTimerBar } from "@/shared/components/session/SessionTimerBar";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/shared/components/ui/card";
@@ -41,9 +39,19 @@ export function MindMapReviewFlow({
     <div className={cn("space-y-5", review.flow.screenGlowClass)}>
       {review.comboBurst ? (
         <ComboMilestoneBurst
+          key={review.flow.feedback.milestoneCelebration?.nonce ?? review.comboBurst.comboCount}
           milestoneStep={review.comboBurst.milestoneStep}
           comboCount={review.comboBurst.comboCount}
           copy={review.comboBurst.copy}
+          label={review.comboBurst.label}
+          reducedMotion={
+            !review.flow.feedback.animationEnabled ||
+            !review.flow.feedback.settings.celebration.milestone.animationEnabled
+          }
+          criticalFxIntensity={review.flow.feedback.settings.criticalFxIntensity}
+          soundEnabled={review.flow.feedback.settings.celebration.milestone.soundEnabled}
+          volume={review.flow.feedback.settings.volume}
+          confettiAmount={review.flow.feedback.settings.celebration.milestone.confettiAmount}
           onComplete={() => review.setComboBurst(null)}
         />
       ) : null}
@@ -54,33 +62,18 @@ export function MindMapReviewFlow({
           maxCombo={review.flow.feedback.maxComboCount}
           completedNodes={review.flow.visibleNonRootCount}
           totalNodes={Math.max(review.flow.totalNodeCount - 1, 0)}
+          reducedMotion={
+            !review.flow.feedback.animationEnabled ||
+            !review.flow.feedback.settings.celebration.sessionComplete.animationEnabled
+          }
+          criticalFxIntensity={review.flow.feedback.settings.criticalFxIntensity}
+          soundEnabled={review.flow.feedback.settings.celebration.sessionComplete.soundEnabled}
+          volume={review.flow.feedback.settings.volume}
+          confettiAmount={review.flow.feedback.settings.celebration.sessionComplete.confettiAmount}
         />
       ) : null}
 
-      <div
-        className={cn(
-          "grid gap-4 xl:grid-cols-[320px_minmax(0,1fr)]",
-          review.flow.fullscreen && "grid-cols-1",
-        )}
-      >
-        <div className={cn("space-y-4", review.flow.fullscreen && "hidden")}>
-          <SessionTimerBar
-            effectiveSeconds={review.flow.timer.effectiveSeconds}
-            idleSeconds={review.flow.timer.idleSeconds}
-            automationScene={props.sessionKind === "review" ? "review" : "practice"}
-            pauseCount={review.flow.timer.pauseCount}
-            status={review.flow.timer.status}
-            onStart={() => review.flow.timer.start({ source: "manual" })}
-            onPause={() => review.flow.timer.pause({ source: "manual" })}
-            onResume={() => review.flow.timer.resume({ source: "manual" })}
-            onAdjustDuration={review.flow.timer.adjustDuration}
-            showCompleteAction={false}
-            showRestartAction={false}
-            className="sticky top-5 z-20"
-          />
-        </div>
-
-        <div className={cn("space-y-4", review.flow.fullscreen && "space-y-0")}>
+      <div className={cn("space-y-4", review.flow.fullscreen && "space-y-0")}>
           <Card
             className={cn(
               "relative min-h-[74vh] overflow-hidden border-border/70 bg-card/92",
@@ -132,19 +125,19 @@ export function MindMapReviewFlow({
                               "memory-anki-review-combo-badge-pop",
                           )}
                         >
-                          连击 {review.flow.feedback.comboCount}
+                          推进链 {review.flow.feedback.comboCount}
                         </div>
                         <Badge variant="outline">
-                          最高 {review.flow.feedback.maxComboCount}
+                          势能峰值 {review.flow.feedback.maxComboCount}
                         </Badge>
                         <Badge variant="outline">
                           {review.flow.feedback.nextMilestone == null
                             ? "已越过全部里程碑"
-                            : `下一里程碑 ${review.flow.feedback.nextMilestone}`}
+                            : `下一节点 ${review.flow.feedback.nextMilestone}${review.flow.feedback.milestoneLabel ? ` · ${review.flow.feedback.milestoneLabel}` : ""}`}
                         </Badge>
                         {review.flow.feedback.allClearReady ? (
                           <Badge className="bg-warning text-white hover:bg-warning">
-                            可结算
+                            可攻克全域
                           </Badge>
                         ) : null}
                         {review.flow.feedback.surpriseText ? (
@@ -154,37 +147,6 @@ export function MindMapReviewFlow({
                         ) : null}
                       </div>
                       <div className="flex flex-wrap items-center gap-2">
-                        <Badge
-                          variant={
-                            review.flow.feedback.settings.mode === "immersive"
-                              ? "secondary"
-                              : "outline"
-                          }
-                        >
-                          {review.flow.feedback.settings.mode === "immersive"
-                            ? "沉浸反馈"
-                            : "安静模式"}
-                        </Badge>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          onClick={review.flow.feedback.toggleMode}
-                        >
-                          <Waves className="mr-2 h-4 w-4" />
-                          {review.flow.feedback.settings.mode === "immersive"
-                            ? "一键降噪"
-                            : "恢复沉浸"}
-                        </Button>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          onClick={() => review.setFeedbackDialogOpen(true)}
-                        >
-                          <Settings2 className="mr-2 h-4 w-4" />
-                          反馈设置
-                        </Button>
                         <Button
                           type="button"
                           size="sm"
@@ -323,7 +285,6 @@ export function MindMapReviewFlow({
               </div>
             </CardContent>
           </Card>
-        </div>
       </div>
 
       <BilinkSearchPopover
@@ -349,23 +310,6 @@ export function MindMapReviewFlow({
         highlightQuery={review.bilinkOverlay.bilinkPreviewHighlightQuery}
         onClose={() => review.bilinkOverlay.setBilinkPreviewOpen(false)}
         onJump={review.bilinkOverlay.jumpToBilinkContext}
-      />
-
-      <ReviewFeedbackSettingsDialog
-        open={review.feedbackDialogOpen}
-        onOpenChange={review.setFeedbackDialogOpen}
-        mode={review.flow.feedback.settings.mode}
-        soundEnabled={review.flow.feedback.settings.soundEnabled}
-        volume={review.flow.feedback.settings.volume}
-        animationEnabled={review.flow.feedback.settings.animationEnabled}
-        surpriseEnabled={review.flow.feedback.settings.surpriseEnabled}
-        globalIntensity={review.flow.feedback.settings.globalIntensity}
-        onToggleMode={review.flow.feedback.toggleMode}
-        onToggleSound={review.handleToggleFeedbackSound}
-        onVolumeChange={review.handleFeedbackVolumeChange}
-        onToggleAnimation={review.handleToggleFeedbackAnimation}
-        onToggleSurprise={review.handleToggleFeedbackSurprise}
-        onCycleGlobalIntensity={review.handleCycleFeedbackGlobalIntensity}
       />
 
       <VoiceCoachSettingsDialog

@@ -13,18 +13,13 @@ import {
   Menu,
   PanelLeftClose,
   PanelLeftOpen,
-  Pencil,
   User,
   X,
 } from 'lucide-react'
 import { NavLink, useLocation } from 'react-router-dom'
-import { preloadPalaceQuizHubPage } from '@/app/router/appRoutes'
 import type { RuntimeInfo } from '@/shared/api/contracts'
 import { getRuntimeInfoApi } from '@/shared/api/modules/runtime'
-import {
-  prefetchPalacesGroupedSummaryApi,
-  prefetchPalaceSubjectShelfApi,
-} from '@/shared/api/modules/palaces'
+import { prefetchPalaceSubjectShelfApi } from '@/shared/api/modules/palaces'
 import { ShellProvider, useShellContext } from '@/shared/components/layout/ShellContext'
 import { useClientPreferenceBootstrap } from '@/shared/preferences/useClientPreferenceBootstrap'
 import { Badge } from '@/shared/components/ui/badge'
@@ -40,7 +35,6 @@ import { cn } from '@/shared/lib/utils'
 type NavSectionKey =
   | 'dashboard'
   | 'palaces'
-  | 'palaceQuiz'
   | 'english'
   | 'englishReading'
   | 'knowledge'
@@ -78,16 +72,7 @@ const navSections: NavSectionDefinition[] = [
       pathname === '/palaces' ||
       pathname === '/palaces/list' ||
       pathname === '/palaces/new' ||
-      /^\/palaces\/\d+(?:\/(edit|practice|focus-practice))?$/.test(pathname),
-  },
-  {
-    key: 'palaceQuiz',
-    to: '/palaces/quiz',
-    label: '做题区',
-    icon: Pencil,
-    rememberLastVisited: true,
-    matches: (pathname) =>
-      pathname === '/palaces/quiz' || /^\/palaces\/\d+\/quiz$/.test(pathname),
+      /^\/palaces\/\d+(?:\/(edit|practice|focus-practice|quiz))?$/.test(pathname),
   },
   {
     key: 'english',
@@ -158,11 +143,6 @@ function warmNavSection(section: NavSectionDefinition) {
   warmedNavSections.add(section.key)
   if (section.key === 'palaces') {
     prefetchPalaceSubjectShelfApi()
-    return
-  }
-  if (section.key === 'palaceQuiz') {
-    preloadPalaceQuizHubPage().catch(() => {})
-    prefetchPalacesGroupedSummaryApi()
   }
 }
 

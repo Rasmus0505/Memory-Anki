@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from 'react'
+﻿import { useEffect, useMemo, useState } from 'react'
 import { RotateCcw, Save, WandSparkles } from 'lucide-react'
-import { toast } from 'sonner'
+import { toast } from '@/shared/feedback/toast'
 import { ProfileLayout } from '@/features/profile/ProfileLayout'
 import type { AiPromptTemplate } from '@/shared/api/contracts'
 import {

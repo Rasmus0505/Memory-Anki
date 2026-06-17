@@ -11,23 +11,25 @@ import MiniPalacePracticePage from '@/app/router/MiniPalacePracticePage'
 import ReviewOverviewPage from '@/features/review/ReviewOverviewPage'
 
 export const preloadPalaceViewPage = () => import('@/app/router/PalaceViewPage')
-export const preloadPalaceQuizHubPage = () => import('@/app/router/PalaceQuizHubPage')
 
 const KnowledgePage = lazy(() => import('@/features/knowledge/KnowledgePage'))
 const EnglishWorkspacePage = lazy(() => import('@/features/english/EnglishWorkspacePage'))
 const EnglishCoursePage = lazy(() => import('@/features/english/EnglishCoursePage'))
 const EnglishReadingPage = lazy(() => import('@/features/english-reading/EnglishReadingPage'))
 const PalaceEditPage = lazy(() => import('@/features/palace-edit/PalaceEditPage'))
-const PalaceQuizHubPage = lazy(preloadPalaceQuizHubPage)
 const PalaceViewPage = lazy(preloadPalaceViewPage)
 const PalaceQuizPage = lazy(() => import('@/features/palace-quiz/PalaceQuizPage'))
 const ProfilePage = lazy(() => import('@/features/profile/ProfilePage'))
+const ProfileFeedbackPage = lazy(() => import('@/features/profile/ProfileFeedbackPage'))
 const ProfileAiPage = lazy(() => import('@/features/profile/ProfileAiPage'))
 const ProfileBackupsPage = lazy(
   () => import('@/features/profile/ProfileBackupsPage'),
 )
 const ReviewSessionPage = lazy(
   () => import('@/features/review/ReviewSessionPage'),
+)
+const ReviewFeedbackPreviewRoute = lazy(
+  () => import('@/app/router/ReviewFeedbackPreviewRoute'),
 )
 const SegmentReviewSessionPage = lazy(
   () => import('@/features/review/SegmentReviewSessionPage'),
@@ -58,10 +60,11 @@ export function resolveRouteFallbackTarget(pathname: string) {
   if (normalizedPathname === '/palaces') return '/palaces'
   if (normalizedPathname === '/palaces/list') return '/palaces/list'
   if (normalizedPathname === '/palaces/new') return '/palaces/new'
-  if (normalizedPathname === '/palaces/quiz') return '/palaces/quiz'
+  if (normalizedPathname === '/palaces/quiz') return '/palaces'
   if (normalizedPathname === '/review') return '/review'
   if (normalizedPathname === '/segment-review/batch') return '/segment-review/batch'
   if (normalizedPathname === '/profile') return '/profile'
+  if (normalizedPathname === '/profile/feedback') return '/profile/feedback'
   if (normalizedPathname === '/profile/ai') return '/profile/ai'
   if (normalizedPathname === '/profile/ai-prompts') return '/profile/ai-prompts'
   if (normalizedPathname === '/profile/ai-split') return '/profile/ai-split'
@@ -129,7 +132,7 @@ export function AppRoutes({ location }: { location?: Location }) {
         <Route path="/english/courses/:id" element={<EnglishCoursePage />} />
         <Route path="/palaces/list" element={<PalaceListPage />} />
         <Route path="/palaces/new" element={<PalaceEditPage />} />
-        <Route path="/palaces/quiz" element={<PalaceQuizHubPage />} />
+        <Route path="/palaces/quiz" element={<Navigate to="/palaces" replace />} />
         <Route path="/palaces/:id" element={<PalaceViewPage />} />
         <Route path="/palaces/:id/quiz" element={<PalaceQuizPage />} />
         <Route path="/palaces/:id/practice" element={<PalacePracticePage />} />
@@ -140,10 +143,12 @@ export function AppRoutes({ location }: { location?: Location }) {
         <Route path="/palaces/:id/edit" element={<PalaceEditPage />} />
         <Route path="/knowledge" element={<KnowledgePage />} />
         <Route path="/review" element={<ReviewOverviewPage />} />
+        <Route path="/review/feedback-preview" element={<ReviewFeedbackPreviewRoute />} />
         <Route path="/review/session/:id" element={<ReviewSessionPage />} />
         <Route path="/segment-review/session/:id" element={<SegmentReviewSessionPage />} />
         <Route path="/segment-review/batch" element={<BatchSegmentReviewSessionPage />} />
         <Route path="/profile" element={<ProfilePage />} />
+        <Route path="/profile/feedback" element={<ProfileFeedbackPage />} />
         <Route path="/profile/ai" element={<ProfileAiPage />} />
         <Route path="/profile/ai-prompts" element={<Navigate to="/profile/ai?tab=prompts" replace />} />
         <Route path="/profile/ai-split" element={<Navigate to="/profile/ai?tab=config" replace />} />

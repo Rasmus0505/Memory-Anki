@@ -18,6 +18,25 @@ export interface StageEditState {
 
 export type ReviewButtonState = 'due_now' | 'due_later_today' | 'future' | 'unscheduled'
 
+export function resolveReviewButtonState(
+  hasDueReview: boolean,
+  value: string | null,
+): ReviewButtonState {
+  if (hasDueReview) return 'due_now'
+  if (!value) return 'unscheduled'
+  const target = parseApiDateTime(value)
+  if (Number.isNaN(target.getTime())) return 'unscheduled'
+  const now = new Date()
+  const sameDay =
+    target.getFullYear() === now.getFullYear() &&
+    target.getMonth() === now.getMonth() &&
+    target.getDate() === now.getDate()
+  if (target.getTime() <= now.getTime()) {
+    return sameDay ? 'due_later_today' : 'future'
+  }
+  return sameDay ? 'due_later_today' : 'future'
+}
+
 export function getListSectionWrapperClass(layoutMode: PalaceListLayoutMode) {
   if (layoutMode === 'chapter-card-grid') return 'grid gap-4 xl:grid-cols-2'
   return 'space-y-4'
@@ -170,6 +189,12 @@ export function getReviewActionLabel(
   if (isSleepReview) return '睡前复习'
   if (state === 'due_now') return '开始复习'
   if (state === 'unscheduled') return unscheduledLabel
+  if (state === 'due_later_today') {
+    const target = value ? parseApiDateTime(value) : null
+    if (target && !Number.isNaN(target.getTime()) && target.getTime() <= Date.now()) {
+      return '今日稍后'
+    }
+  }
   return formatRelativeReviewTime(value)
 }
 

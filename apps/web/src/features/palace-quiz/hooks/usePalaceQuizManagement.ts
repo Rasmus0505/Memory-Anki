@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react'
-import { toast } from 'sonner'
+﻿import { useEffect, useMemo, useState } from 'react'
+import { toast } from '@/shared/feedback/toast'
 import type { dispatchGlobalFeedback } from '@/shared/feedback/globalFeedbackModel'
 import type { PalaceQuizQuestion } from '@/shared/api/contracts'
 import {

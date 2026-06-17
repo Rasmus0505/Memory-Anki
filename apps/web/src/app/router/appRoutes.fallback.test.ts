@@ -19,6 +19,7 @@ describe('resolveRouteFallbackTarget', () => {
   })
 
   it('falls back unknown section routes to their section entry page', () => {
+    expect(resolveRouteFallbackTarget('/palaces/quiz')).toBe('/palaces')
     expect(resolveRouteFallbackTarget('/review/legacy-mode')).toBe('/review')
     expect(resolveRouteFallbackTarget('/segment-review/legacy')).toBe('/review')
     expect(resolveRouteFallbackTarget('/english/legacy')).toBe('/english')

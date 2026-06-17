@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+﻿import { useCallback, useEffect, useRef, useState } from "react";
 import type {
   ChangeEvent,
   DragEvent,
@@ -6,7 +6,7 @@ import type {
   RefObject,
 } from "react";
 import type { SetURLSearchParams } from "react-router-dom";
-import { toast } from "sonner";
+import { toast } from "@/shared/feedback/toast";
 import {
   createEnglishReadingMaterialApi,
   deleteEnglishReadingMaterialApi,
@@ -47,6 +47,7 @@ import {
   useTimedSession,
   type TimedSessionController,
 } from "@/shared/hooks/useTimedSession";
+import { useGlobalTimerRegistration } from "@/shared/components/session/GlobalTimerProvider";
 
 const READING_FILE_SUFFIXES = [".txt", ".md", ".pdf"] as const;
 
@@ -103,11 +104,13 @@ function isSupportedReadingFile(file: File) {
 
 export function useEnglishReadingWorkflow({
   isActive,
+  becameActiveAt,
   resolvedMaterialId,
   setSearchParams,
   promptForAiOptions,
 }: {
   isActive: boolean;
+  becameActiveAt: number;
   resolvedMaterialId: number | null;
   setSearchParams: SetURLSearchParams;
   promptForAiOptions: PromptForAiOptions;
@@ -165,6 +168,13 @@ export function useEnglishReadingWorkflow({
     automationScene: "english_reading",
     sourceKind: "english_reading",
     persistKey: material ? `english-reading:${material.id}` : null,
+  });
+  useGlobalTimerRegistration({
+    scene: "english_reading",
+    title: material ? `英语阅读 · ${material.title}` : "英语阅读",
+    timer,
+    isRouteActive: isActive,
+    becameActiveAt,
   });
   const timerRef = useRef(timer);
   const activeReadingSessionKey =
@@ -266,13 +276,7 @@ export function useEnglishReadingWorkflow({
 
   useEffect(() => {
     return () => {
-      const currentTimer = timerRef.current;
       if (hardUnloadRef.current) return;
-      if (currentTimer.startedAt && currentTimer.status !== "completed") {
-        void currentTimer.leaveScene({
-          source: "english_reading_leave",
-        });
-      }
     };
   }, [activeReadingSessionKey]);
 

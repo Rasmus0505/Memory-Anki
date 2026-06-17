@@ -1,5 +1,5 @@
-import * as React from 'react'
-import { toast } from 'sonner'
+﻿import * as React from 'react'
+import { toast } from '@/shared/feedback/toast'
 import type { RevealState } from '@/entities/session/model'
 import type { MindMapDoc, MindMapEditorState, MiniPalaceSummary } from '@/shared/api/contracts'
 import type { MindMapSelection } from '@/shared/components/mindmap-host'

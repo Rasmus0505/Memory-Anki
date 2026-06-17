@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+﻿import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { toast } from 'sonner'
+import { toast } from '@/shared/feedback/toast'
 import { useRouteResidency } from '@/app/router/RouteResidency'
 import { useAiRunConfigDialog } from '@/features/ai-config/useAiRunConfigDialog'
 import {

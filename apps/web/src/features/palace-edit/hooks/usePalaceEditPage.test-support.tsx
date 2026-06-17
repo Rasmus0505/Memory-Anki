@@ -29,6 +29,7 @@ const mindMapFrameMockState = vi.hoisted(() => ({
 export const promptForAiOptionsMock = vi.fn()
 
 export const timedSessionMock = {
+  sessionId: 'timed-session-1',
   effectiveSeconds: 0,
   idleSeconds: 0,
   pauseCount: 0,

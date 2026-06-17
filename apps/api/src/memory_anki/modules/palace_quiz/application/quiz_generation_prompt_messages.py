@@ -45,6 +45,18 @@ def build_generation_messages(
     ]
     if source_context:
         user_content.append({"type": "text", "text": source_context})
+    if is_pdf_question_answer_pairing:
+        user_content.append(
+            {
+                "type": "text",
+                "text": (
+                    "请严格按接下来图片出现的顺序处理。"
+                    "每张图片只能写入它在上方“图片顺序与角色绑定”里指定的候选池。"
+                    "如果某张图是题目来源，即使没有选项，只要题型标题或题面显示为简答题、论述题、材料分析题等主观题，"
+                    "也必须写入 question_candidates。"
+                ),
+            }
+        )
     for image_bytes, filename in image_items:
         user_content.append(build_image_content_part(image_bytes=image_bytes, filename=filename))
     messages: list[dict[str, Any]] = [{"role": "system", "content": system_prompt}]

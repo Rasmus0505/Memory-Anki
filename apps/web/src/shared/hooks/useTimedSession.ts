@@ -2,7 +2,9 @@ import * as React from 'react'
 import {
   appendTimeRecord,
   getWeeklyLocalSessionStats,
+  type SessionCompletionMethod,
   type SessionEventRecord,
+  type TimeSessionRecord,
 } from '@/entities/session/model'
 import {
   getTimerAutomationRule,
@@ -20,11 +22,14 @@ import {
   nowIso,
   resolveTimedSessionAutomation,
   SNAPSHOT_VERSION,
+  SNAPSHOT_STORAGE_PREFIX,
+  type ActiveSceneSegmentSnapshot,
   type GlowState,
   type LegacyPersistedTimedSessionSnapshot,
   type PersistedSessionStatus,
   type PersistedTimedSessionSnapshotV2,
   type RestorableTimedSessionSnapshot,
+  type SessionSceneSegment,
   type SessionStatus,
   type TimedSessionController,
   type TimedSessionMeta,
@@ -50,6 +55,8 @@ export function useTimedSession({
   persistKey = null,
   persistCompletionRecord = true,
 }: TimedSessionOptions): TimedSessionController {
+  const sessionScene = automationScene
+  const sessionIdRef = React.useRef(createStableRecordId())
   const [effectiveSeconds, setEffectiveSeconds] = React.useState(0)
   const [idleSeconds, setIdleSeconds] = React.useState(0)
   const [pauseCount, setPauseCount] = React.useState(0)
@@ -77,6 +84,8 @@ export function useTimedSession({
   const suspendedAtRef = React.useRef<string | null>(null)
   const resumeDeadlineAtRef = React.useRef<string | null>(null)
   const leaveMetaRef = React.useRef<TimedSessionMeta | null>(null)
+  const sceneSegmentsRef = React.useRef<SessionSceneSegment[]>([])
+  const activeSceneSegmentRef = React.useRef<ActiveSceneSegmentSnapshot | null>(null)
   const [automationConfig, setAutomationConfig] = React.useState<TimerAutomationConfig>(() =>
     readTimerAutomationConfig(),
   )
@@ -127,6 +136,8 @@ export function useTimedSession({
         suspendedAt: options?.suspendedAt ?? null,
         resumeDeadlineAt: options?.resumeDeadlineAt ?? null,
         leaveMeta: options?.leaveMeta ?? null,
+        sceneSegments: [...sceneSegmentsRef.current],
+        activeSceneSegment: activeSceneSegmentRef.current,
       }
       try {
         window.sessionStorage.setItem(storageKey, JSON.stringify(snapshot))
@@ -158,16 +169,44 @@ export function useTimedSession({
     leaveHandledRef.current = false
   }, [])
 
-  const finalizeExpiredSuspendedState = React.useCallback(() => {
-    clearSuspendedState()
-    if (statusRef.current === 'paused') {
-      persistSnapshot({
-        statusOverride: 'paused',
+  const buildActiveSceneSegment = React.useCallback((): ActiveSceneSegmentSnapshot => ({
+    scene: sessionScene,
+    kind,
+    palaceId,
+    sourceKind,
+    englishCourseId,
+    title,
+    startedAt: nowIso(),
+    startEffectiveSeconds: effectiveSecondsRef.current,
+  }), [englishCourseId, kind, palaceId, sessionScene, sourceKind, title])
+
+  const maybeStartSceneSegment = React.useCallback(() => {
+    if (activeSceneSegmentRef.current) return
+    activeSceneSegmentRef.current = buildActiveSceneSegment()
+  }, [buildActiveSceneSegment])
+
+  const closeActiveSceneSegment = React.useCallback((endedAt = nowIso()) => {
+    const activeSegment = activeSceneSegmentRef.current
+    if (!activeSegment) return
+    const effectiveSegmentSeconds = Math.max(
+      0,
+      Math.round(effectiveSecondsRef.current - activeSegment.startEffectiveSeconds),
+    )
+    if (effectiveSegmentSeconds > 0) {
+      sceneSegmentsRef.current.push({
+        scene: activeSegment.scene,
+        kind: activeSegment.kind,
+        palaceId: activeSegment.palaceId,
+        sourceKind: activeSegment.sourceKind,
+        englishCourseId: activeSegment.englishCourseId,
+        title: activeSegment.title,
+        startedAt: activeSegment.startedAt,
+        endedAt,
+        effectiveSeconds: effectiveSegmentSeconds,
       })
-      return
     }
-    clearPersistedSnapshot()
-  }, [clearPersistedSnapshot, clearSuspendedState, persistSnapshot])
+    activeSceneSegmentRef.current = null
+  }, [])
 
   const ensureRecordId = React.useCallback(() => {
     if (!recordIdRef.current) {
@@ -230,6 +269,7 @@ export function useTimedSession({
     endedAt = nowIso(),
   ): TimeSessionRecord | null => {
     if (!startedAtRef.current) return null
+    closeActiveSceneSegment(endedAt)
     return {
       id: ensureRecordId(),
       kind,
@@ -244,8 +284,9 @@ export function useTimedSession({
       completionMethod: method,
       durationEdited: durationEditedRef.current,
       events: [...eventsRef.current],
+      sceneSegments: [...sceneSegmentsRef.current],
     }
-  }, [englishCourseId, ensureRecordId, kind, palaceId, sourceKind, title])
+  }, [closeActiveSceneSegment, englishCourseId, ensureRecordId, kind, palaceId, sourceKind, title])
 
   const persistRecord = React.useCallback(async (
     record: TimeSessionRecord | null,
@@ -257,6 +298,100 @@ export function useTimedSession({
       return record
     }
   }, [])
+
+  const persistExpiredSuspendedSnapshot = React.useCallback(async (
+    snapshot: RestorableTimedSessionSnapshot,
+  ) => {
+    if (!snapshot.startedAt) return null
+    if (snapshot.leaveMeta?.persisted_record === true) return null
+    const endedAt = snapshot.suspendedAt ?? snapshot.persistedAt ?? nowIso()
+    const sceneSegments = [...snapshot.sceneSegments]
+    const activeSegment = snapshot.activeSceneSegment
+    if (activeSegment) {
+      const effectiveSegmentSeconds = Math.max(
+        0,
+        Math.round(snapshot.effectiveSeconds - activeSegment.startEffectiveSeconds),
+      )
+      if (effectiveSegmentSeconds > 0) {
+        sceneSegments.push({
+          scene: activeSegment.scene,
+          kind: activeSegment.kind,
+          palaceId: activeSegment.palaceId,
+          sourceKind: activeSegment.sourceKind,
+          englishCourseId: activeSegment.englishCourseId,
+          title: activeSegment.title,
+          startedAt: activeSegment.startedAt,
+          endedAt,
+          effectiveSeconds: effectiveSegmentSeconds,
+        })
+      }
+    }
+    return persistRecord({
+      id: snapshot.recordId ?? createStableRecordId(),
+      kind: snapshot.kind,
+      palaceId: snapshot.palaceId,
+      sourceKind: snapshot.sourceKind,
+      englishCourseId: snapshot.englishCourseId,
+      title: snapshot.title,
+      startedAt: snapshot.startedAt,
+      endedAt,
+      effectiveSeconds: snapshot.effectiveSeconds,
+      pauseCount: snapshot.pauseCount,
+      completionMethod: 'left_page',
+      durationEdited: snapshot.durationEdited,
+      events: [...snapshot.events],
+      sceneSegments,
+    })
+  }, [persistRecord])
+
+  const finalizeExpiredSuspendedState = React.useCallback(() => {
+    const pendingSnapshot: RestorableTimedSessionSnapshot | null =
+      startedAtRef.current && suspendedAtRef.current
+        ? {
+            version: SNAPSHOT_VERSION,
+            recordId: recordIdRef.current,
+            kind,
+            palaceId,
+            sourceKind,
+            englishCourseId,
+            title,
+            effectiveSeconds: effectiveSecondsRef.current,
+            pauseCount: pauseCountRef.current,
+            status: 'paused',
+            startedAt: startedAtRef.current,
+            durationEdited: durationEditedRef.current,
+            events: [...eventsRef.current],
+            persistedAt: nowIso(),
+            suspended: true,
+            suspendedAt: suspendedAtRef.current,
+            resumeDeadlineAt: resumeDeadlineAtRef.current,
+            leaveMeta: leaveMetaRef.current,
+            sceneSegments: [...sceneSegmentsRef.current],
+            activeSceneSegment: activeSceneSegmentRef.current,
+          }
+        : null
+    clearSuspendedState()
+    if (pendingSnapshot) {
+      void persistExpiredSuspendedSnapshot(pendingSnapshot)
+    }
+    if (statusRef.current === 'paused') {
+      persistSnapshot({
+        statusOverride: 'paused',
+      })
+      return
+    }
+    clearPersistedSnapshot()
+  }, [
+    clearPersistedSnapshot,
+    clearSuspendedState,
+    englishCourseId,
+    kind,
+    palaceId,
+    persistExpiredSuspendedSnapshot,
+    persistSnapshot,
+    sourceKind,
+    title,
+  ])
 
   const armAutoPause = React.useCallback(() => {
     clearTimer(autoPauseRef)
@@ -305,11 +440,12 @@ export function useTimedSession({
     statusRef.current = 'running'
     setStatus('running')
     setGlowState('running')
+    maybeStartSceneSegment()
     startTicker()
     armAutoPause()
     pushEvent(eventType, meta)
     persistSnapshot()
-  }, [armAutoPause, clearSuspendedState, ensureRecordId, persistSnapshot, pushEvent, startTicker])
+  }, [armAutoPause, clearSuspendedState, ensureRecordId, maybeStartSceneSegment, persistSnapshot, pushEvent, startTicker])
 
   const resumeSuspendedScene = React.useCallback(
     (meta?: TimedSessionMeta) => {
@@ -330,6 +466,7 @@ export function useTimedSession({
       statusRef.current = 'running'
       setStatus('running')
       setGlowState('running')
+      maybeStartSceneSegment()
       startTicker()
       armAutoPause()
       pushEvent('resume', {
@@ -340,7 +477,7 @@ export function useTimedSession({
       persistSnapshot()
       return true
     },
-    [armAutoPause, clearSuspendedState, finalizeExpiredSuspendedState, persistSnapshot, pushEvent, startTicker],
+    [armAutoPause, clearSuspendedState, finalizeExpiredSuspendedState, maybeStartSceneSegment, persistSnapshot, pushEvent, startTicker],
   )
 
   const start = React.useCallback((meta?: TimedSessionMeta) => {
@@ -385,6 +522,10 @@ export function useTimedSession({
       const resumeDeadlineAt = formatLocalApiDateTime(
         new Date(currentMs + resolvedAutomation.resumeWindowMs),
       )
+      const persistedLeaveMeta = {
+        ...(meta ?? {}),
+        persisted_record: true,
+      }
       stopTicker(currentMs)
       clearTimer(autoPauseRef)
       clearTimer(hiddenPauseRef)
@@ -394,16 +535,17 @@ export function useTimedSession({
       sceneActiveRef.current = false
       idleSecondsRef.current = 0
       setIdleSeconds(0)
+      closeActiveSceneSegment(suspendedAt)
       pushEvent('leave_scene', meta, { persist: false })
       suspendedAtRef.current = suspendedAt
       resumeDeadlineAtRef.current = resumeDeadlineAt
-      leaveMetaRef.current = meta ?? null
+      leaveMetaRef.current = persistedLeaveMeta
       persistSnapshot({
         statusOverride: 'paused',
         suspended: true,
         suspendedAt,
         resumeDeadlineAt,
-        leaveMeta: meta ?? null,
+        leaveMeta: persistedLeaveMeta,
       })
       const record = buildRecord('left_page', suspendedAt)
       return persistRecord(record)
@@ -411,6 +553,7 @@ export function useTimedSession({
     [
       autoPauseRef,
       buildRecord,
+      closeActiveSceneSegment,
       clearTimer,
       hiddenPauseRef,
       persistRecord,
@@ -429,7 +572,34 @@ export function useTimedSession({
       sceneActiveRef.current = active
 
       if (!active) {
-        void leaveScene({ source: 'scene_inactive', ...(meta ?? {}) })
+        if (!startedAtRef.current || statusRef.current === 'completed') {
+          return
+        }
+        const currentMs = Date.now()
+        const suspendedAt = nowIso()
+        const resumeDeadlineAt = formatLocalApiDateTime(
+          new Date(currentMs + resolvedAutomation.resumeWindowMs),
+        )
+        stopTicker(currentMs)
+        clearTimer(autoPauseRef)
+        clearTimer(hiddenPauseRef)
+        statusRef.current = 'paused'
+        setStatus('paused')
+        setGlowState('idle')
+        idleSecondsRef.current = 0
+        setIdleSeconds(0)
+        closeActiveSceneSegment(suspendedAt)
+        pushEvent('leave_scene', { source: 'scene_inactive', ...(meta ?? {}) }, { persist: false })
+        suspendedAtRef.current = suspendedAt
+        resumeDeadlineAtRef.current = resumeDeadlineAt
+        leaveMetaRef.current = meta ?? null
+        persistSnapshot({
+          statusOverride: 'paused',
+          suspended: true,
+          suspendedAt,
+          resumeDeadlineAt,
+          leaveMeta: meta ?? null,
+        })
         return
       }
 
@@ -437,7 +607,7 @@ export function useTimedSession({
         resumeSuspendedScene(meta)
       }
     },
-    [leaveScene, resumeSuspendedScene],
+    [autoPauseRef, clearTimer, closeActiveSceneSegment, hiddenPauseRef, persistSnapshot, pushEvent, resolvedAutomation.resumeWindowMs, resumeSuspendedScene, stopTicker],
   )
 
   const registerActivity = React.useCallback((
@@ -515,6 +685,8 @@ export function useTimedSession({
     clearTimer(autoPauseRef)
     clearTimer(hiddenPauseRef)
     eventsRef.current = []
+    sceneSegmentsRef.current = []
+    activeSceneSegmentRef.current = null
     effectiveSecondsRef.current = 0
     idleSecondsRef.current = 0
     pauseCountRef.current = 0
@@ -538,21 +710,34 @@ export function useTimedSession({
   React.useEffect(() => {
     if (!storageKey || restoredStorageKeyRef.current === storageKey) return
     restoredStorageKeyRef.current = storageKey
-    clearCompetingSnapshots()
     let parsed: RestorableTimedSessionSnapshot | null
     try {
       const raw = window.sessionStorage.getItem(storageKey)
       parsed = normalizeSnapshot(raw ? JSON.parse(raw) as PersistedTimedSessionSnapshotV2 | LegacyPersistedTimedSessionSnapshot : null)
+      if (!parsed) {
+        for (let index = 0; index < window.sessionStorage.length; index += 1) {
+          const candidateKey = window.sessionStorage.key(index)
+          if (!candidateKey || !candidateKey.startsWith(SNAPSHOT_STORAGE_PREFIX) || candidateKey === storageKey) {
+            continue
+          }
+          const candidateRaw = window.sessionStorage.getItem(candidateKey)
+          const candidate = normalizeSnapshot(
+            candidateRaw ? JSON.parse(candidateRaw) as PersistedTimedSessionSnapshotV2 | LegacyPersistedTimedSessionSnapshot : null,
+          )
+          if (!candidate?.suspended) {
+            continue
+          }
+          const candidateAt = new Date(candidate.persistedAt).getTime()
+          const parsedAt = parsed ? new Date(parsed.persistedAt).getTime() : Number.NEGATIVE_INFINITY
+          if (!parsed || candidateAt > parsedAt) {
+            parsed = candidate
+          }
+        }
+      }
     } catch {
       parsed = null
     }
-    if (
-      !parsed ||
-      parsed.kind !== kind ||
-      parsed.palaceId !== palaceId ||
-      parsed.sourceKind !== sourceKind ||
-      parsed.englishCourseId !== englishCourseId
-    ) {
+    if (!parsed) {
       clearPersistedSnapshot()
       return
     }
@@ -564,6 +749,7 @@ export function useTimedSession({
     if (parsed.suspended) {
       const deadlineMs = parsed.resumeDeadlineAt ? new Date(parsed.resumeDeadlineAt).getTime() : Number.NaN
       if (!Number.isFinite(deadlineMs) || Date.now() > deadlineMs) {
+        void persistExpiredSuspendedSnapshot(parsed)
         clearPersistedSnapshot()
         return
       }
@@ -582,6 +768,8 @@ export function useTimedSession({
 
     recordIdRef.current = parsed.recordId ?? createStableRecordId()
     eventsRef.current = Array.isArray(parsed.events) ? parsed.events : []
+    sceneSegmentsRef.current = Array.isArray(parsed.sceneSegments) ? parsed.sceneSegments : []
+    activeSceneSegmentRef.current = parsed.activeSceneSegment ?? null
     effectiveSecondsRef.current = restoredEffectiveSeconds
     idleSecondsRef.current = 0
     pauseCountRef.current = Math.max(0, Math.round(parsed.pauseCount || 0))
@@ -595,11 +783,13 @@ export function useTimedSession({
     setStartedAt(parsed.startedAt)
     setDurationEdited(Boolean(parsed.durationEdited))
     setGlowState('idle')
+    clearCompetingSnapshots()
 
     if (parsed.suspended) {
       suspendedAtRef.current = parsed.suspendedAt
       resumeDeadlineAtRef.current = parsed.resumeDeadlineAt
       leaveMetaRef.current = parsed.leaveMeta ?? null
+      activeSceneSegmentRef.current = null
       sceneActiveRef.current = true
       resumeSuspendedScene()
       return
@@ -710,6 +900,7 @@ export function useTimedSession({
   }, [])
 
   return {
+    sessionId: sessionIdRef.current,
     effectiveSeconds,
     idleSeconds,
     pauseCount,

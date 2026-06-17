@@ -1946,6 +1946,45 @@ class ReviewRouteTests(unittest.TestCase):
             self.assertEqual(record.started_at, expected_start)
             self.assertEqual(record.ended_at, expected_end)
 
+    def test_create_time_record_preserves_scene_segments_alongside_events(self):
+        response = self.client.post(
+            "/api/v1/time-records",
+            json={
+                "id": "scene-segment-record",
+                "kind": "practice",
+                "palaceId": 1,
+                "palaceSegmentId": None,
+                "title": "Test Palace",
+                "startedAt": "2026-05-11T00:18:09.648",
+                "endedAt": "2026-05-11T00:31:24.463",
+                "effectiveSeconds": 628,
+                "pauseCount": 2,
+                "completionMethod": "manual_complete",
+                "durationEdited": False,
+                "deletedAt": None,
+                "deletedReason": None,
+                "events": [{"type": "start", "at": "2026-05-11T00:18:09.648"}],
+                "sceneSegments": [
+                    {
+                        "scene": "practice",
+                        "kind": "practice",
+                        "palaceId": 1,
+                        "sourceKind": "palace",
+                        "englishCourseId": None,
+                        "title": "Test Palace",
+                        "startedAt": "2026-05-11T00:18:09.648",
+                        "endedAt": "2026-05-11T00:28:09.648",
+                        "effectiveSeconds": 600,
+                    }
+                ],
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        item = response.json()["item"]
+        self.assertEqual(item["events"], [{"type": "start", "at": "2026-05-11T00:18:09.648"}])
+        self.assertEqual(item["sceneSegments"][0]["scene"], "practice")
+        self.assertEqual(item["sceneSegments"][0]["effectiveSeconds"], 600)
+
     def test_create_time_record_reuses_response_for_duplicate_mutation_id(self):
         headers = {"X-Memory-Anki-Mutation-ID": "time-record-mutation-1"}
         first = self.client.post(
@@ -2329,6 +2368,101 @@ class ReviewRouteTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.json()["ok"])
+
+    def test_virtual_default_segment_submit_clears_due_now_state_in_grouped_and_shelf_payloads(self):
+        with self.SessionLocal() as session:
+            palace = session.query(Palace).filter_by(id=1).first()
+            self.assertIsNotNone(palace)
+            palace.editor_doc = json.dumps(
+                {
+                    "root": {
+                        "data": {"text": "Test Palace"},
+                        "children": [
+                            {"data": {"text": "Branch A", "uid": "branch-a"}, "children": []},
+                            {"data": {"text": "Branch B", "uid": "branch-b"}, "children": []},
+                        ],
+                    }
+                }
+            )
+            session.commit()
+
+        response = self.client.post(
+            "/api/v1/segment-review/session/1/submit",
+            json={"duration_seconds": 30, "completion_mode": "manual_complete"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        grouped_response = self.client.get("/api/v1/palaces/grouped")
+        self.assertEqual(grouped_response.status_code, 200)
+        palace_payload = grouped_response.json()["subjects"][0]["ungrouped_palaces"][0]
+        default_segment = palace_payload["segments"][0]
+        self.assertTrue(default_segment["is_virtual_default"])
+        self.assertFalse(default_segment["has_due_review"])
+
+        shelf_response = self.client.get("/api/v1/palaces/subjects")
+        self.assertEqual(shelf_response.status_code, 200)
+        self.assertEqual(shelf_response.json()["items"][0]["due_now_count"], 0)
+
+    def test_segment_submit_clears_due_now_state_in_grouped_and_shelf_payloads(self):
+        with self.SessionLocal() as session:
+            palace = session.query(Palace).filter_by(id=1).first()
+            self.assertIsNotNone(palace)
+            palace.editor_doc = json.dumps(
+                {
+                    "root": {
+                        "data": {"text": "Test Palace"},
+                        "children": [
+                            {"data": {"text": "Branch A", "uid": "branch-a"}, "children": []},
+                            {"data": {"text": "Branch B", "uid": "branch-b"}, "children": []},
+                        ],
+                    }
+                }
+            )
+            default_schedule = session.query(ReviewSchedule).filter_by(id=1).first()
+            self.assertIsNotNone(default_schedule)
+            default_schedule.completed = True
+            default_schedule.completed_at = datetime.now().replace(second=0, microsecond=0)
+            segment = PalaceSegment(
+                palace_id=palace.id,
+                name="第 1 部分",
+                color="#14b8a6",
+                node_uids_json=json.dumps(["branch-a", "branch-b"]),
+                sort_order=0,
+            )
+            session.add(segment)
+            session.flush()
+            segment_schedule = PalaceSegmentReviewSchedule(
+                palace_segment_id=segment.id,
+                scheduled_date=date.today() - timedelta(days=1),
+                interval_days=1,
+                algorithm_used="ebbinghaus",
+                completed=False,
+                review_number=0,
+                review_type="standard",
+                anchor_date=date.today() - timedelta(days=1),
+            )
+            session.add(segment_schedule)
+            session.commit()
+            segment_id = segment.id
+            segment_schedule_id = segment_schedule.id
+
+        response = self.client.post(
+            f"/api/v1/segment-review/session/{segment_schedule_id}/submit",
+            json={"duration_seconds": 30, "completion_mode": "manual_complete"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        grouped_response = self.client.get("/api/v1/palaces/grouped")
+        self.assertEqual(grouped_response.status_code, 200)
+        palace_payload = grouped_response.json()["subjects"][0]["ungrouped_palaces"][0]
+        submitted_segment = next(
+            item for item in palace_payload["segments"] if item["id"] == segment_id
+        )
+        self.assertFalse(submitted_segment["has_due_review"])
+
+        shelf_response = self.client.get("/api/v1/palaces/subjects")
+        self.assertEqual(shelf_response.status_code, 200)
+        self.assertEqual(shelf_response.json()["items"][0]["due_now_count"], 0)
 
     def test_review_session_routes_return_404_for_missing_schedule(self):
         response = self.client.get("/api/v1/review/session/999999")

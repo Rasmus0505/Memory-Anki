@@ -1,189 +1,145 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-
-/**
- * 连击里程碑视觉庆祝 overlay。
- *
- * 在 combo 达到 [3, 5, 8, 13] 时触发：
- * - 全屏覆盖层（pointer-events-none，不阻挡交互）
- * - 中央大数字弹出动画
- * - 彩色粒子爆发（随机方向飞散）
- * - 扩散光环
- * - 鼓励文案
- *
- * 风格：活泼热烈，高饱和度配色，随里程碑等级递进。
- * 纯 CSS 动画，无外部依赖。
- *
- * z-index: 160 — 高于 Dialog(140/141) 和反馈层(150)，确保在最顶层可见，
- * 即使在半屏/全屏模式下也能看到。
- */
+import { motion } from 'motion/react'
+import { emitReviewConfetti } from '@/shared/components/celebration/reviewConfetti'
 
 export interface ComboMilestoneBurstProps {
-  /** 里程碑等级 0-3，对应 combo [3, 5, 8, 13] */
   milestoneStep: number
-  /** 当前连击数 */
   comboCount: number
-  /** 鼓励文案 */
   copy?: string
-  /** 动画结束后回调（用于卸载组件） */
-  onComplete?: () => void
-  /** 动画持续时间（ms），默认 1300 */
+  label?: string | null
   durationMs?: number
+  reducedMotion?: boolean
+  criticalFxIntensity?: 'full' | 'cinematic'
+  soundEnabled?: boolean
+  volume?: number
+  confettiAmount?: number
+  onComplete?: () => void
 }
 
-/** 各里程碑等级的配色方案（活泼热烈风格） */
 const MILESTONE_PALETTES = [
-  {
-    // 等级 0 (combo 3): 翠绿 - 起步鼓励
-    primary: '#22c55e',
-    secondary: '#86efac',
-    accent: '#fde68a',
-    glow: 'rgba(34, 197, 94, 0.45)',
-  },
-  {
-    // 等级 1 (combo 5): 琥珀金 - 节奏起来了
-    primary: '#f59e0b',
-    secondary: '#fcd34d',
-    accent: '#fb923c',
-    glow: 'rgba(245, 158, 11, 0.45)',
-  },
-  {
-    // 等级 2 (combo 8): 天青蓝 - 记忆通路发亮
-    primary: '#0ea5e9',
-    secondary: '#7dd3fc',
-    accent: '#a78bfa',
-    glow: 'rgba(14, 165, 233, 0.45)',
-  },
-  {
-    // 等级 3 (combo 13): 玫红紫 - 宫殿通感连线
-    primary: '#ec4899',
-    secondary: '#f9a8d4',
-    accent: '#c084fc',
-    glow: 'rgba(236, 72, 153, 0.45)',
-  },
+  { primary: '#22c55e', secondary: '#86efac', accent: '#fde68a', glow: 'rgba(34, 197, 94, 0.45)' },
+  { primary: '#f59e0b', secondary: '#fcd34d', accent: '#fb923c', glow: 'rgba(245, 158, 11, 0.45)' },
+  { primary: '#ef4444', secondary: '#fb7185', accent: '#fdba74', glow: 'rgba(239, 68, 68, 0.42)' },
+  { primary: '#0ea5e9', secondary: '#7dd3fc', accent: '#a78bfa', glow: 'rgba(14, 165, 233, 0.45)' },
+  { primary: '#ec4899', secondary: '#f9a8d4', accent: '#c084fc', glow: 'rgba(236, 72, 153, 0.45)' },
 ]
-
-const PARTICLE_COUNT = 16
-const RING_COUNT = 3
-
-function buildParticleStyle(index: number, palette: (typeof MILESTONE_PALETTES)[number]) {
-  const angle = (index / PARTICLE_COUNT) * Math.PI * 2 + (index % 2) * 0.3
-  const distance = 120 + (index % 4) * 40
-  const tx = Math.cos(angle) * distance
-  const ty = Math.sin(angle) * distance
-  const colors = [palette.primary, palette.secondary, palette.accent]
-  const color = colors[index % colors.length]
-  const size = 10 + (index % 3) * 6
-  const delay = index * 18
-  const rotate = (index % 2 === 0 ? 1 : -1) * (180 + index * 30)
-  return {
-    '--combo-particle-tx': `${tx}px`,
-    '--combo-particle-ty': `${ty}px`,
-    '--combo-particle-rotate': `${rotate}deg`,
-    '--combo-particle-color': color,
-    width: `${size}px`,
-    height: `${size}px`,
-    animationDelay: `${delay}ms`,
-  } as React.CSSProperties
-}
 
 export function ComboMilestoneBurst({
   milestoneStep,
   comboCount,
   copy,
+  label,
+  durationMs = 1400,
+  reducedMotion = false,
+  criticalFxIntensity = 'cinematic',
+  soundEnabled = false,
+  volume = 1,
+  confettiAmount = 1,
   onComplete,
-  durationMs = 1300,
 }: ComboMilestoneBurstProps) {
-  const palette = MILESTONE_PALETTES[Math.min(milestoneStep, MILESTONE_PALETTES.length - 1)]
   const [visible, setVisible] = useState(true)
   const onCompleteRef = useRef(onComplete)
+  const palette = MILESTONE_PALETTES[Math.min(milestoneStep, MILESTONE_PALETTES.length - 1)]
 
   useEffect(() => {
     onCompleteRef.current = onComplete
   }, [onComplete])
 
   useEffect(() => {
+    emitReviewConfetti({
+      kind: 'milestone',
+      milestoneStep,
+      reducedMotion,
+      criticalFxIntensity,
+      soundEnabled,
+      volume,
+      confettiAmount,
+    })
     const timer = window.setTimeout(() => {
       setVisible(false)
       onCompleteRef.current?.()
     }, durationMs)
     return () => window.clearTimeout(timer)
-  }, [durationMs])
+  }, [confettiAmount, criticalFxIntensity, durationMs, milestoneStep, reducedMotion, soundEnabled, volume])
 
-  const particles = useMemo(
+  const shards = useMemo(
     () =>
-      Array.from({ length: PARTICLE_COUNT }, (_, index) => ({
+      Array.from({ length: reducedMotion ? 4 : 14 }, (_, index) => ({
         id: index,
-        style: buildParticleStyle(index, palette),
+        angle: (index / 14) * 360,
+        distance: 84 + (index % 4) * 24,
+        color: [palette.primary, palette.secondary, palette.accent][index % 3],
       })),
-    [palette],
-  )
-
-  const rings = useMemo(
-    () =>
-      Array.from({ length: RING_COUNT }, (_, index) => ({
-        id: index,
-        delay: index * 120,
-        color: [palette.primary, palette.secondary, palette.accent][index],
-      })),
-    [palette],
+    [palette.accent, palette.primary, palette.secondary, reducedMotion],
   )
 
   if (!visible) return null
 
   return (
-    <div
+    <motion.div
       className="memory-anki-combo-burst-overlay"
       role="status"
       aria-live="assertive"
-      aria-label={`连击 ${comboCount}`}
-      style={{ '--combo-burst-glow': palette.glow } as React.CSSProperties}
+      aria-label={`推进链 ${comboCount}`}
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: reducedMotion ? 0.12 : 0.22 }}
     >
-      {/* 扩散光环 */}
-      <div className="memory-anki-combo-burst-rings">
-        {rings.map((ring) => (
-          <span
-            key={ring.id}
+      <motion.div
+        className="memory-anki-combo-burst-stage"
+        style={{ '--combo-burst-glow': palette.glow } as React.CSSProperties}
+        initial={{ scale: reducedMotion ? 1 : 0.88, y: reducedMotion ? 0 : 18, opacity: 0 }}
+        animate={{ scale: 1, y: 0, opacity: 1 }}
+        transition={{ type: 'spring', stiffness: 280, damping: 18 }}
+      >
+        <div className="memory-anki-combo-burst-rings">
+          <motion.span
             className="memory-anki-combo-burst-ring"
-            style={{
-              borderColor: ring.color,
-              animationDelay: `${ring.delay}ms`,
-            }}
+            style={{ borderColor: palette.primary }}
+            animate={reducedMotion ? { opacity: 0.26 } : { scale: [0.4, 1.2], opacity: [0.8, 0] }}
+            transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
           />
-        ))}
-      </div>
+          <motion.span
+            className="memory-anki-combo-burst-ring"
+            style={{ borderColor: palette.secondary }}
+            animate={reducedMotion ? { opacity: 0.18 } : { scale: [0.24, 1.55], opacity: [0.66, 0] }}
+            transition={{ duration: 0.92, ease: [0.16, 1, 0.3, 1], delay: 0.08 }}
+          />
+        </div>
 
-      {/* 中心爆发区 */}
-      <div className="memory-anki-combo-burst-center">
-        {/* 彩色粒子 */}
-        <div className="memory-anki-combo-burst-particles">
-          {particles.map((particle) => (
-            <span
-              key={particle.id}
-              className="memory-anki-combo-burst-particle"
-              style={particle.style}
+        <div className="memory-anki-combo-burst-shards">
+          {shards.map((shard, index) => (
+            <motion.span
+              key={shard.id}
+              className="memory-anki-combo-burst-shard"
+              style={{ background: shard.color }}
+              initial={{ x: 0, y: 0, rotate: 0, opacity: 0 }}
+              animate={
+                reducedMotion
+                  ? { opacity: 0.18 }
+                  : {
+                      x: Math.cos((shard.angle * Math.PI) / 180) * shard.distance,
+                      y: Math.sin((shard.angle * Math.PI) / 180) * shard.distance,
+                      rotate: index % 2 === 0 ? 120 : -140,
+                      opacity: [0, 1, 0],
+                    }
+              }
+              transition={{ duration: 0.66, ease: [0.16, 1, 0.3, 1], delay: index * 0.012 }}
             />
           ))}
         </div>
 
-        {/* 大数字 */}
-        <div
-          className="memory-anki-combo-burst-number"
-          style={{ color: palette.primary }}
+        <motion.div
+          className="memory-anki-combo-burst-core"
+          initial={{ scale: reducedMotion ? 1 : 0.7, rotate: reducedMotion ? 0 : -8, opacity: 0 }}
+          animate={{ scale: 1, rotate: 0, opacity: 1 }}
+          transition={{ type: 'spring', stiffness: 260, damping: 16 }}
         >
-          <span className="memory-anki-combo-burst-number-label">连击</span>
-          <span className="memory-anki-combo-burst-number-value">×{comboCount}</span>
-        </div>
-
-        {/* 鼓励文案 */}
-        {copy ? (
-          <div
-            className="memory-anki-combo-burst-copy"
-            style={{ color: palette.accent }}
-          >
-            {copy}
-          </div>
-        ) : null}
-      </div>
-    </div>
+          <span className="memory-anki-combo-burst-kicker">{label ?? '推进链升级'}</span>
+          <span className="memory-anki-combo-burst-value">×{comboCount}</span>
+          {copy ? <span className="memory-anki-combo-burst-copy">{copy}</span> : null}
+        </motion.div>
+      </motion.div>
+    </motion.div>
   )
 }

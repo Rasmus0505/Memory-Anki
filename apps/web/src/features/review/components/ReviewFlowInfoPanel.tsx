@@ -1,6 +1,5 @@
 import { PenLine } from 'lucide-react'
 import { formatDuration } from '@/entities/session/model'
-import { SessionTimerBar } from '@/shared/components/session/SessionTimerBar'
 
 interface ReviewFlowInfoPanelProps {
   visibleNonRootCount: number
@@ -32,21 +31,6 @@ export function ReviewFlowInfoPanel({
 }: ReviewFlowInfoPanelProps) {
   return (
     <>
-      <SessionTimerBar
-        effectiveSeconds={timer.effectiveSeconds}
-        idleSeconds={timer.idleSeconds}
-        automationScene={persistProgress ? 'practice' : 'review'}
-        pauseCount={timer.pauseCount}
-        status={timer.status}
-        onStart={() => timer.start({ source: 'manual' })}
-        onPause={() => timer.pause({ source: 'manual' })}
-        onResume={() => timer.resume({ source: 'manual' })}
-        onAdjustDuration={timer.adjustDuration}
-        showCompleteAction={false}
-        showRestartAction={false}
-        className="sticky top-5 z-20"
-      />
-
       <div className="rounded-2xl border border-border/70 bg-card p-4">
         <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
           <PenLine className="h-4 w-4" />

@@ -1,5 +1,5 @@
-import * as React from "react";
-import { toast } from "sonner";
+﻿import * as React from "react";
+import { toast } from "@/shared/feedback/toast";
 import {
   useBilinkCounts,
   useBilinkOverlay,
@@ -7,7 +7,7 @@ import {
 } from "@/features/bilink";
 import { useMiniPalaceController } from "@/features/mini-palace";
 import { useQuizLauncher } from "@/features/palace-quiz/QuizLauncherProvider";
-import { getReviewSurpriseCopy, REVIEW_COMBO_MILESTONES } from "@/features/review/model/review-feedback";
+import { getReviewSurpriseCopy } from "@/features/review/model/review-feedback";
 import { useReviewFlowSession } from "@/features/review/hooks/useReviewFlowSession";
 import { useMemoryAnkiShortcuts } from "@/features/shortcuts/memoryAnkiShortcuts";
 import { useVoiceCoachController } from "@/features/voice-coach";
@@ -57,11 +57,11 @@ export function useMindMapReviewFlowController({
     milestoneStep: number;
     comboCount: number;
     copy: string;
+    label: string | null;
   } | null>(null);
   const [focusNodeUids, setFocusNodeUids] = React.useState<string[]>(() =>
     initialFocusNodeUids.map((uid) => String(uid)).filter(Boolean),
   );
-  const prevComboCountRef = React.useRef(0);
   const selectedNode = activeNodes[0] ?? null;
   const selectedNodeUid = selectedNode?.uid ? String(selectedNode.uid) : null;
   const selectedNodeText = selectedNode?.text ? String(selectedNode.text) : "";
@@ -114,28 +114,35 @@ export function useMindMapReviewFlowController({
   const animationEnabled = flow.feedback.animationEnabled;
   React.useEffect(() => {
     if (!animationEnabled) {
-      prevComboCountRef.current = flow.feedback.comboCount;
       return;
     }
-    const currentCombo = flow.feedback.comboCount;
-    const prevCombo = prevComboCountRef.current;
-    prevComboCountRef.current = currentCombo;
-    if (currentCombo <= prevCombo) return;
-    const milestoneIndex = REVIEW_COMBO_MILESTONES.indexOf(currentCombo);
-    if (milestoneIndex === -1) return;
+    const milestoneCelebration = flow.feedback.milestoneCelebration;
+    if (!milestoneCelebration) return;
     setComboBurst({
-      milestoneStep: milestoneIndex,
-      comboCount: currentCombo,
-      copy: getReviewSurpriseCopy(currentCombo),
+      milestoneStep: milestoneCelebration.milestoneStep,
+      comboCount: milestoneCelebration.comboCount,
+      copy: getReviewSurpriseCopy(
+        milestoneCelebration.comboCount,
+        flow.feedback.settings.celebration.milestone.steps,
+      ),
+      label: flow.feedback.milestoneLabel,
     });
-  }, [animationEnabled, flow.feedback.comboCount]);
+  }, [
+    animationEnabled,
+    flow.feedback.comboCount,
+    flow.feedback.milestoneCelebration,
+    flow.feedback.milestoneLabel,
+    flow.feedback.settings.celebration.milestone.steps,
+  ]);
 
   const resolvedDisplayMode =
     inlineEditEnabled && displayMode === "edit" ? "edit" : "review";
   const isInlineEditMode = resolvedDisplayMode === "edit";
   const isDedicatedMiniMode = revealMode === "mini-checkpoint";
   const previousDisplayModeRef = React.useRef(resolvedDisplayMode);
-  const mapDisplayMode = miniPalace.isActive ? "review" : resolvedDisplayMode;
+  const mapDisplayMode: "review" | "edit" = miniPalace.isActive
+    ? "review"
+    : resolvedDisplayMode;
   const mapEditorState =
     miniPalace.visibleEditorState ??
     (miniPalace.isActive ? miniPalaceSourceEditorState : flow.visibleEditorState);
@@ -347,6 +354,21 @@ export function useMindMapReviewFlowController({
     }));
   }, [flow.feedback]);
 
+  const handleCycleRevealFxIntensity = React.useCallback(() => {
+    flow.feedback.updateSettings((current) => ({
+      ...current,
+      revealFxIntensity: current.revealFxIntensity === "full" ? "soft" : "full",
+    }));
+  }, [flow.feedback]);
+
+  const handleCycleCriticalFxIntensity = React.useCallback(() => {
+    flow.feedback.updateSettings((current) => ({
+      ...current,
+      criticalFxIntensity:
+        current.criticalFxIntensity === "cinematic" ? "full" : "cinematic",
+    }));
+  }, [flow.feedback]);
+
   const handleCycleFeedbackGlobalIntensity = React.useCallback(() => {
     flow.feedback.updateSettings((current) => ({
       ...current,
@@ -416,6 +438,8 @@ export function useMindMapReviewFlowController({
     handleFeedbackVolumeChange,
     handleToggleFeedbackAnimation,
     handleToggleFeedbackSurprise,
+    handleCycleRevealFxIntensity,
+    handleCycleCriticalFxIntensity,
     handleCycleFeedbackGlobalIntensity,
   };
 }

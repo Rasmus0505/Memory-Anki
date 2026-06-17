@@ -14,15 +14,15 @@ import { usePalaceQuizResources } from '@/features/palace-quiz/hooks/usePalaceQu
 import { readInitialTab, type PalaceQuizTabKey } from '@/features/palace-quiz/model/palaceQuizPage'
 import { useRouteResidency } from '@/app/router/RouteResidency'
 import { PageIntro } from '@/shared/components/layout/PageIntro'
-import { SessionTimerBar } from '@/shared/components/session/SessionTimerBar'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
 import { readTimerAutomationConfig } from '@/shared/components/session/timer-automation-config'
 import { dispatchGlobalFeedback } from '@/shared/feedback/globalFeedbackModel'
 import { shouldAutoStartOnPageEnter, useTimedSession } from '@/shared/hooks/useTimedSession'
+import { useGlobalTimerRegistration } from '@/shared/components/session/GlobalTimerProvider'
 
 export default function PalaceQuizPage() {
-  const { isActive } = useRouteResidency()
+  const { isActive, becameActiveAt } = useRouteResidency()
   const { id } = useParams()
   const [searchParams, setSearchParams] = useSearchParams()
   const palaceId = id ? Number(id) : null
@@ -38,6 +38,13 @@ export default function PalaceQuizPage() {
     automationScene: 'quiz',
     sourceKind: palaceId != null ? 'palace' : null,
     persistKey: palaceId ? `palace_quiz:${palaceId}` : null,
+  })
+  useGlobalTimerRegistration({
+    scene: 'quiz',
+    title: palace?.title ? `${palace.title} · 配套习题` : '宫殿配套习题',
+    timer,
+    isRouteActive: isActive,
+    becameActiveAt,
   })
   const timerRef = useRef(timer)
   const hardUnloadRef = useRef(false)
@@ -120,11 +127,7 @@ export default function PalaceQuizPage() {
 
   useEffect(() => {
     return () => {
-      const currentTimer = timerRef.current
       if (hardUnloadRef.current) return
-      if (currentTimer.startedAt && currentTimer.status !== 'completed') {
-        void currentTimer.leaveScene({ source: 'route_leave' })
-      }
     }
   }, [])
 
@@ -203,30 +206,15 @@ export default function PalaceQuizPage() {
         description="这里把宫殿级题库、手动管理和 AI 预览生成放在一起。选择题即时判题并累计统计，简答题提交后显示参考答案与解析。"
         actions={
           <>
-            <Link to="/palaces/quiz">
+            <Link to="/palaces">
               <Button variant="outline" size="sm">
                 <ArrowLeft className="h-4 w-4" />
-                返回做题区
+                返回记忆宫殿
               </Button>
             </Link>
             <Badge variant="secondary">{questions.length} 题</Badge>
           </>
         }
-      />
-
-      <SessionTimerBar
-        effectiveSeconds={timer.effectiveSeconds}
-        idleSeconds={timer.idleSeconds}
-        automationScene="quiz"
-        pauseCount={timer.pauseCount}
-        status={timer.status}
-        onStart={() => timer.start({ source: 'manual' })}
-        onPause={() => timer.pause({ source: 'manual' })}
-        onResume={() => timer.resume({ source: 'manual' })}
-        onAdjustDuration={timer.adjustDuration}
-        showCompleteAction={false}
-        showRestartAction={false}
-        layout="compact"
       />
 
       <div className="flex flex-wrap gap-2">

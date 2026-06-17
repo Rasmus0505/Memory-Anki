@@ -326,11 +326,11 @@ describe('PalaceListPage', () => {
     render(<PalaceListPage />)
 
     expect(await screen.findByText('第四节 收回教育权运动与教会教育的变革')).toBeTruthy()
-    expect(screen.getByText('当前书架：中国近代史')).toBeTruthy()
+    expect(screen.getByText('记忆宫殿')).toBeTruthy()
     expect(screen.queryByText('第 1 部分')).toBeNull()
     expect(screen.getByText('预计 1分 40秒')).toBeTruthy()
     expect(screen.getByRole('button', { name: '开始复习' })).toBeTruthy()
-    expect(screen.getByRole('button', { name: '练习' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: '做题' })).toBeTruthy()
   })
 
   it('shows saved incomplete progress inside the single-segment start review button without changing size', async () => {
@@ -368,10 +368,10 @@ describe('PalaceListPage', () => {
     render(<PalaceListPage />)
 
     const reviewButton = await screen.findByRole('button', { name: /小时|分钟/ })
-    expect(reviewButton.className).toContain('bg-amber-200')
+    expect(reviewButton.className).toContain('bg-warning/20')
     expect(within(reviewButton).queryByTestId('review-action-progress-fill')).toBeNull()
-    const practiceButton = screen.getByRole('button', { name: '练习' })
-    expect(practiceButton.className).toContain('bg-emerald-600')
+    const practiceButton = screen.getByRole('button', { name: '做题' })
+    expect(practiceButton.className).toContain('bg-success')
   })
 
   it('renders sleep review action with fixed blue sleep copy', async () => {
@@ -397,7 +397,7 @@ describe('PalaceListPage', () => {
     render(<PalaceListPage />)
 
     const reviewButton = await screen.findByRole('button', { name: '睡前复习' })
-    expect(reviewButton.className).toContain('bg-blue-600')
+    expect(reviewButton.className).toContain('bg-info')
     expect(within(reviewButton).queryByTestId('review-action-progress-fill')).toBeNull()
     expect(screen.queryByRole('button', { name: '开始复习' })).toBeNull()
   })

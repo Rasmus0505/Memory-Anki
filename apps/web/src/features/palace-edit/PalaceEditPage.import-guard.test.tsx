@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import PalaceEditPage from '@/features/palace-edit/PalaceEditPage'
@@ -243,6 +243,12 @@ vi.mock('@/shared/components/session/SessionTimerBar', () => ({
   SessionTimerBar: () => <div>timer</div>,
 }))
 
+vi.mock('@/features/palace-quiz/QuizLauncherProvider', () => ({
+  useQuizLauncher: () => ({
+    openQuizLauncher: vi.fn(),
+  }),
+}))
+
 vi.mock('@/features/palace-edit/components/PalaceAttachmentPanel', () => ({
   PalaceAttachmentPanel: () => <div>attachments</div>,
 }))
@@ -420,7 +426,9 @@ describe('PalaceEditPage import apply guard', () => {
     })
 
     fireEvent.click(screen.getByRole('button', { name: 'trigger-empty-sync' }))
-    await new Promise((resolve) => window.setTimeout(resolve, 700))
+    await act(async () => {
+      await new Promise((resolve) => window.setTimeout(resolve, 700))
+    })
     expect(savePalaceEditorApi).toHaveBeenCalledTimes(1)
 
     saveRequest.resolve({
@@ -440,7 +448,9 @@ describe('PalaceEditPage import apply guard', () => {
     })
 
     fireEvent.click(screen.getByRole('button', { name: 'trigger-empty-sync' }))
-    await new Promise((resolve) => window.setTimeout(resolve, 700))
+    await act(async () => {
+      await new Promise((resolve) => window.setTimeout(resolve, 700))
+    })
     expect(savePalaceEditorApi).toHaveBeenCalledTimes(1)
   }, 10000)
 

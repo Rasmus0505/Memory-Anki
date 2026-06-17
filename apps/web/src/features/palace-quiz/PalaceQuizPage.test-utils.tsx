@@ -287,6 +287,7 @@ export function setupPalaceQuizPageTest() {
   pdfControllerMock.setRangePrompt.mockClear()
   pdfControllerMock.persistAnalyzedPdfPages.mockClear()
   useTimedSessionMock.mockReturnValue({
+    sessionId: 'quiz-timer-1',
     effectiveSeconds: 0,
     idleSeconds: 0,
     pauseCount: 0,

@@ -11,21 +11,14 @@ import {
 import { enqueueMutation, resetMutationQueueForTest } from '@/shared/persistence/mutationQueue'
 
 const getRuntimeInfoApi = vi.fn()
-const preloadPalaceQuizHubPage = vi.fn(() => Promise.resolve({}))
 const prefetchPalaceSubjectShelfApi = vi.fn()
-const prefetchPalacesGroupedSummaryApi = vi.fn()
 
 vi.mock('@/shared/api/modules/runtime', () => ({
   getRuntimeInfoApi: () => getRuntimeInfoApi(),
 }))
 
-vi.mock('@/app/router/appRoutes', () => ({
-  preloadPalaceQuizHubPage: () => preloadPalaceQuizHubPage(),
-}))
-
 vi.mock('@/shared/api/modules/palaces', () => ({
   prefetchPalaceSubjectShelfApi: () => prefetchPalaceSubjectShelfApi(),
-  prefetchPalacesGroupedSummaryApi: () => prefetchPalacesGroupedSummaryApi(),
 }))
 
 describe('AppShell', () => {
@@ -33,9 +26,7 @@ describe('AppShell', () => {
     await resetMutationQueueForTest()
     __resetBackgroundTaskStoreForTest()
     getRuntimeInfoApi.mockReset()
-    preloadPalaceQuizHubPage.mockClear()
     prefetchPalaceSubjectShelfApi.mockClear()
-    prefetchPalacesGroupedSummaryApi.mockClear()
     resetNavSectionHistoryForTest()
   })
 
@@ -167,7 +158,7 @@ describe('AppShell', () => {
     expect(englishLink.className).not.toContain('bg-primary')
   })
 
-  it('activates only the quiz nav item on the palace quiz hub route', async () => {
+  it('keeps palace navigation active on a palace quiz route', async () => {
     getRuntimeInfoApi.mockResolvedValue({
       channel: 'stable',
       commit: 'abcdef1234567890',
@@ -180,7 +171,7 @@ describe('AppShell', () => {
     })
 
     render(
-      <MemoryRouter initialEntries={['/palaces/quiz']}>
+      <MemoryRouter initialEntries={['/palaces/12/quiz']}>
         <AppShell>
           <div>content</div>
         </AppShell>
@@ -190,13 +181,10 @@ describe('AppShell', () => {
     await screen.findAllByText(/Stable abcdef12/)
 
     const palaceLink = screen.getAllByRole('link', { name: '记忆宫殿' })[0]
-    const quizLink = screen.getAllByRole('link', { name: '做题区' })[0]
-
-    expect(quizLink.className).toContain('bg-primary')
-    expect(palaceLink.className).not.toContain('bg-primary')
+    expect(palaceLink.className).toContain('bg-primary')
   })
 
-  it('warms palace and quiz navigation targets on hover', async () => {
+  it('warms palace navigation targets on hover', async () => {
     getRuntimeInfoApi.mockResolvedValue({
       channel: 'stable',
       commit: 'abcdef1234567890',
@@ -219,11 +207,8 @@ describe('AppShell', () => {
     await screen.findAllByText(/Stable abcdef12/)
 
     fireEvent.mouseEnter(screen.getAllByRole('link', { name: '记忆宫殿' })[0]!)
-    fireEvent.mouseEnter(screen.getAllByRole('link', { name: '做题区' })[0]!)
 
     expect(prefetchPalaceSubjectShelfApi).toHaveBeenCalledTimes(1)
-    expect(prefetchPalacesGroupedSummaryApi).toHaveBeenCalledTimes(1)
-    expect(preloadPalaceQuizHubPage).toHaveBeenCalledTimes(1)
   })
 
   it('returns palace navigation to the last visited palace child route instead of the shelf root', async () => {

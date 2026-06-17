@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from 'react'
+﻿import { useEffect, useMemo, useState } from 'react'
 import type { FormEvent } from 'react'
-import { toast } from 'sonner'
+import { toast } from '@/shared/feedback/toast'
 import {
   createTimeRecord,
   getDailyTrend,

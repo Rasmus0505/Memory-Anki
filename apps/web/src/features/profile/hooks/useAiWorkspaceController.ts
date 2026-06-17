@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+﻿import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { toast } from "sonner";
+import { toast } from "@/shared/feedback/toast";
 import { readVoiceCoachSettings } from "@/features/voice-coach/voiceCoachSettings";
 import { getAiCallLogApi, listAiCallLogsApi } from "@/shared/api/modules/aiLogs";
 import type {

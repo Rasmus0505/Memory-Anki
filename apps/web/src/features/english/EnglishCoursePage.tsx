@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+﻿import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useParams } from 'react-router-dom'
-import { toast } from 'sonner'
+import { toast } from '@/shared/feedback/toast'
 import type { EnglishCourseDetail, EnglishSentenceCheckResponse } from '@/shared/api/contracts'
 import {
   buildEnglishCourseMediaUrl,
@@ -31,6 +31,7 @@ import { resolveDisplaySentenceIndex } from '@/features/english/model/english-co
 import { useEnglishTypingFeedbackSounds } from '@/features/english/useEnglishTypingFeedbackSounds'
 import { useEnglishWordTyping } from '@/features/english/useEnglishWordTyping'
 import { useRouteResidency } from '@/app/router/RouteResidency'
+import { useGlobalTimerRegistration } from '@/shared/components/session/GlobalTimerProvider'
 
 const FOCUS_RESTORE_DELAY_MS = 180
 const EMPTY_TOKENS: string[] = []
@@ -76,7 +77,7 @@ function resolveWordRailDensity(
 }
 
 export default function EnglishCoursePage() {
-  const { isActive } = useRouteResidency()
+  const { isActive, becameActiveAt } = useRouteResidency()
   const { id } = useParams()
   const courseId = Number(id)
   const videoRef = useRef<HTMLVideoElement | null>(null)
@@ -110,6 +111,14 @@ export default function EnglishCoursePage() {
     sourceKind: 'english',
     englishCourseId: Number.isFinite(courseId) ? courseId : null,
     persistKey: Number.isFinite(courseId) ? `english-course:${courseId}` : null,
+  })
+
+  useGlobalTimerRegistration({
+    scene: 'english',
+    title: course ? `英语听写 · ${course.title}` : '英语听写',
+    timer,
+    isRouteActive: isActive,
+    becameActiveAt,
   })
 
   const timerRef = useLatestRef(timer)
@@ -177,11 +186,7 @@ export default function EnglishCoursePage() {
       if (focusRestoreTimerRef.current != null) {
         window.clearTimeout(focusRestoreTimerRef.current)
       }
-      const currentTimer = timerRef.current
       if (hardUnloadRef.current) return
-      if (currentTimer.startedAt && currentTimer.status !== 'completed') {
-        void currentTimer.leaveScene({ source: 'english_course_leave' })
-      }
     }
   }, [])
 

@@ -468,7 +468,7 @@ describe('EnglishCoursePage', () => {
       expect(mocks.shouldAutoStartOnPageEnterMock).toHaveBeenCalledWith(expect.anything(), 'english')
     })
     expect(mocks.timerStartMock).toHaveBeenCalledWith({ source: 'page_enter', scene: 'english_course' })
-    expect(screen.getByTestId('session-timer-bar').dataset.layout).toBe('compact')
+    expect(screen.queryByTestId('session-timer-bar')).toBeNull()
     expect(screen.getByTestId('english-course-workbench').className).toContain('overflow-hidden')
     expect(screen.getByTestId('english-course-main-panel').dataset.density).toBe('dense')
     expect(screen.getByTestId('english-word-rail').dataset.density).toBe('dense')

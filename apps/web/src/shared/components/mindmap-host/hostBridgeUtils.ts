@@ -104,6 +104,11 @@ export interface MindMapReviewFxPayload {
   nodeUid: string | null
   relatedNodeUids: string[]
   intensity: 'full' | 'soft' | 'none'
+  milestoneStep?: number | null
+  anchor?: {
+    x: number
+    y: number
+  } | null
   lineMode?: 'spawn' | 'trace' | 'confirm' | 'clear'
   depthHint?: 0 | 1 | 2
   targetRole?: 'parent' | 'placeholder' | 'revealed'

@@ -34,6 +34,7 @@ from memory_anki.modules.time_records.application.time_record_queries import (
 
 
 def _normalize_record(record: TimeRecord) -> dict:
+    payload = _parse_record_payload(record.events_json)
     return {
         "id": record.id,
         "kind": record.kind,
@@ -50,7 +51,8 @@ def _normalize_record(record: TimeRecord) -> dict:
         "durationEdited": bool(record.duration_edited),
         "deletedAt": serialize_storage_datetime(record.deleted_at) if record.deleted_at else None,
         "deletedReason": record.deleted_reason,
-        "events": json.loads(record.events_json or "[]"),
+        "events": payload["events"],
+        "sceneSegments": payload["sceneSegments"],
     }
 
 
@@ -113,7 +115,10 @@ def create_time_record(session: Session, payload: dict) -> dict | None:
         duration_edited=bool(payload.get("durationEdited", False)),
         deleted_reason=payload.get("deletedReason"),
         deleted_at=parse_optional_storage_datetime(payload.get("deletedAt")),
-        events_json=json.dumps(payload.get("events", []), ensure_ascii=False),
+        events_json=_serialize_record_payload(
+            payload.get("events", []),
+            payload.get("sceneSegments", []),
+        ),
     )
     persistent_record = session.merge(record)
     session.commit()
@@ -140,11 +145,16 @@ def update_time_record(session: Session, record_id: str, updater: dict) -> dict 
         "durationEdited": ("duration_edited", bool),
         "deletedReason": ("deleted_reason", lambda value: value),
         "deletedAt": ("deleted_at", parse_optional_storage_datetime),
-        "events": ("events_json", lambda value: json.dumps(value, ensure_ascii=False)),
+        "events": ("events_json", lambda value: _serialize_record_payload(value, _parse_record_payload(record.events_json)["sceneSegments"])),
     }
     for key, (field, transform) in mapping.items():
         if key in updater:
             setattr(record, field, transform(updater[key]))
+    if "sceneSegments" in updater:
+        record.events_json = _serialize_record_payload(
+            _parse_record_payload(record.events_json)["events"],
+            updater.get("sceneSegments", []),
+        )
     if "sourceKind" in updater:
         record.source_kind = _normalize_source_kind(
             updater.get("sourceKind"),
@@ -287,25 +297,32 @@ def create_review_time_record(
     record_id: str,
     title: str,
     palace_id: int | None,
-    started_at: datetime,
+    palace_segment_id: int | None = None,
+    started_at: datetime | None = None,
+    ended_at: datetime | None = None,
     duration_seconds: int,
+    completion_method: str = "auto_complete",
 ) -> dict | None:
     threshold = get_threshold_seconds(session)
     effective_seconds = max(0, int(duration_seconds))
     if effective_seconds <= threshold:
         return None
-    ended_at = started_at + timedelta(seconds=effective_seconds)
+    if ended_at is None and started_at is None:
+        raise ValueError("started_at 或 ended_at 至少需要提供一个。")
+    resolved_started_at = started_at or (ended_at - timedelta(seconds=effective_seconds))
+    resolved_ended_at = ended_at or (resolved_started_at + timedelta(seconds=effective_seconds))
     record = TimeRecord(
         id=record_id,
         kind="review",
         palace_id=palace_id,
+        palace_segment_id=palace_segment_id,
         source_kind="palace" if palace_id is not None else None,
         title=title,
-        started_at=started_at,
-        ended_at=ended_at,
+        started_at=resolved_started_at,
+        ended_at=resolved_ended_at,
         effective_seconds=effective_seconds,
         pause_count=0,
-        completion_method="auto_complete",
+        completion_method=completion_method,
         duration_edited=False,
         deleted_reason=None,
         deleted_at=None,
@@ -340,10 +357,36 @@ def normalize_storage_datetime(value: datetime) -> datetime:
 
 
 def _parse_events(raw: str | None) -> list[dict[str, Any]]:
+    return _parse_record_payload(raw)["events"]
+
+
+def _parse_record_payload(raw: str | None) -> dict[str, list[dict[str, Any]]]:
     if not raw:
-        return []
+        return {"events": [], "sceneSegments": []}
     data = json.loads(raw)
-    return data if isinstance(data, list) else []
+    if isinstance(data, list):
+        return {"events": data, "sceneSegments": []}
+    if isinstance(data, dict):
+        events = data.get("events")
+        scene_segments = data.get("sceneSegments")
+        return {
+            "events": events if isinstance(events, list) else [],
+            "sceneSegments": scene_segments if isinstance(scene_segments, list) else [],
+        }
+    return {"events": [], "sceneSegments": []}
+
+
+def _serialize_record_payload(
+    events: Any,
+    scene_segments: Any,
+) -> str:
+    return json.dumps(
+        {
+            "events": events if isinstance(events, list) else [],
+            "sceneSegments": scene_segments if isinstance(scene_segments, list) else [],
+        },
+        ensure_ascii=False,
+    )
 
 
 def _find_event_time(

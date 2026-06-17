@@ -1,4 +1,4 @@
-import { act, fireEvent, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   editorState,
@@ -7,15 +7,14 @@ import {
   setupMindMapReviewFlowTest,
 } from "@/features/review/components/MindMapReviewFlow.test-support";
 import { MindMapReviewFlow } from "@/features/review/components/MindMapReviewFlow";
-import { REVIEW_FEEDBACK_SETTINGS_STORAGE_KEY } from "@/features/review/reviewFeedbackSettings";
-
+import { writeReviewFeedbackSettings } from "@/features/review/reviewFeedbackSettings";
 describe("MindMapReviewFlow feedback", () => {
   beforeEach(() => {
     vi.useRealTimers();
     setupMindMapReviewFlowTest();
   });
 
-  it("saves feedback volume from the feedback settings dialog", async () => {
+  it("removes inline feedback controls from the review flow header", async () => {
     renderInRouter(
       <MindMapReviewFlow
         title="Root"
@@ -26,21 +25,10 @@ describe("MindMapReviewFlow feedback", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "反馈设置" }));
-
-    const volumeInput = screen.getByLabelText("音量") as HTMLInputElement;
-    expect(volumeInput.value).toBe("1.5");
-    expect(screen.getByText("150%")).toBeTruthy();
-
-    fireEvent.change(volumeInput, { target: { value: "1.8" } });
-
-    await waitFor(() => {
-      const saved = JSON.parse(
-        window.localStorage.getItem(REVIEW_FEEDBACK_SETTINGS_STORAGE_KEY) || "{}",
-      ) as Record<string, unknown>;
-      expect(saved.volume).toBe(1.8);
-    });
-    expect(screen.getByText("180%")).toBeTruthy();
+    expect(screen.queryByText("沉浸反馈")).toBeNull();
+    expect(screen.queryByRole("button", { name: "一键降噪" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "恢复沉浸" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "反馈设置" })).toBeNull();
   });
 
   it("highlights completion readiness when all non-root nodes are revealed", async () => {
@@ -69,7 +57,7 @@ describe("MindMapReviewFlow feedback", () => {
       ]);
     });
 
-    expect(screen.getByText("可结算")).toBeTruthy();
+    expect(screen.getByText("可攻克全域")).toBeTruthy();
     expect(screen.getByRole("button", { name: "完成结算" })).toBeTruthy();
   });
 
@@ -108,6 +96,49 @@ describe("MindMapReviewFlow feedback", () => {
 
   it("dismisses the combo milestone burst on time even if the parent rerenders repeatedly", async () => {
     vi.useFakeTimers();
+    writeReviewFeedbackSettings({
+      mode: "immersive",
+      soundEnabled: true,
+      volume: 1.5,
+      confettiAmount: 1.6,
+      animationEnabled: true,
+      surpriseEnabled: true,
+      revealFxIntensity: "full",
+      criticalFxIntensity: "cinematic",
+      soundTheme: "classic",
+      globalIntensity: "balanced",
+      celebration: {
+        globalCooldownMs: 0,
+        milestone: {
+          enabled: true,
+          steps: [2, 4, 6, 10, 15],
+          cooldownMs: 0,
+          confettiAmount: 1.6,
+          soundEnabled: true,
+          animationEnabled: true,
+        },
+        branchClear: {
+          enabled: true,
+          cooldownMs: 0,
+          confettiAmount: 1.6,
+          soundEnabled: true,
+          animationEnabled: true,
+        },
+        allClearReady: {
+          enabled: true,
+          cooldownMs: 0,
+          confettiAmount: 1.6,
+          soundEnabled: true,
+          animationEnabled: true,
+        },
+        sessionComplete: {
+          enabled: true,
+          confettiAmount: 1.6,
+          soundEnabled: true,
+          animationEnabled: true,
+        },
+      },
+    });
     const comboEditorState = {
       editor_doc: {
         root: {
@@ -159,26 +190,18 @@ describe("MindMapReviewFlow feedback", () => {
       ]);
     });
 
-    expect(screen.getByRole("status", { name: "连击 3" })).toBeTruthy();
-    expect(screen.getAllByText("手感到了，继续揭晓。").length).toBeGreaterThan(0);
+    expect(screen.getByRole("status", { name: "推进链 2" })).toBeTruthy();
+    expect(screen.getAllByText("起势成功，继续爆裂揭示。").length).toBeGreaterThan(0);
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(600);
     });
 
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "反馈设置" }));
-    });
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "关闭弹窗" }));
-    });
-
-    await act(async () => {
       await vi.advanceTimersByTimeAsync(700);
     });
 
-    expect(screen.queryByRole("status", { name: "连击 3" })).toBeNull();
-    expect(screen.getByText("连击 3")).toBeTruthy();
+    expect(screen.getByText("推进链 3")).toBeTruthy();
     vi.useRealTimers();
   });
 });

@@ -11,7 +11,7 @@ import {
 describe("EnglishReadingPage session flows", () => {
   beforeEach(setupEnglishReadingPageTest);
 
-  it("records reading time when leaving the page without manual completion", async () => {
+  it("does not finalize reading time on route unmount because scene handoff stays resumable", async () => {
     mocks.timer.startedAt = "2026-06-12T10:00:00";
     mocks.timer.status = "running";
 
@@ -21,14 +21,10 @@ describe("EnglishReadingPage session flows", () => {
 
     view.unmount();
 
-    await waitFor(() => {
-      expect(mocks.timer.leaveScene).toHaveBeenCalledWith({
-        source: "english_reading_leave",
-      });
-    });
+    expect(mocks.timer.leaveScene).not.toHaveBeenCalled();
   });
 
-  it("records the current reading session before switching to another material", async () => {
+  it("does not finalize the current reading session before switching materials", async () => {
     mocks.timer.startedAt = "2026-06-12T10:00:00";
     mocks.timer.status = "running";
     mocks.getEnglishReadingMaterialApiMock.mockImplementation(
@@ -59,10 +55,9 @@ describe("EnglishReadingPage session flows", () => {
     fireEvent.click(screen.getAllByRole("button", { name: /打开/i })[1]);
 
     await waitFor(() => {
-      expect(mocks.timer.leaveScene).toHaveBeenCalledWith({
-        source: "english_reading_leave",
-      });
+      expect(screen.getByText("Napoleon reading material")).toBeTruthy();
     });
+    expect(mocks.timer.leaveScene).not.toHaveBeenCalled();
   });
 
   it("resets the reading timer only once when a version is loaded", async () => {

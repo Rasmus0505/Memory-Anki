@@ -1,101 +1,57 @@
 import { describe, expect, it } from 'vitest'
-import { deriveReviewFeedbackTransition } from '@/features/review/model/review-feedback'
+import {
+  createInitialReviewRewardSnapshot,
+  getReviewMilestoneLabel,
+  progressReviewRewardState,
+  shouldEmitSurprise,
+} from '@/features/review/model/review-feedback'
 
-const root = {
-  id: 'root',
-  text: 'root',
-  note: '',
-  parentId: null,
-  children: [
-    {
-      id: 'parent',
-      text: 'parent',
-      note: '',
-      parentId: 'root',
-      children: [
-        { id: 'child-a', text: 'a', note: '', parentId: 'parent', children: [] },
-        { id: 'child-b', text: 'b', note: '', parentId: 'parent', children: [] },
-      ],
-    },
-  ],
-}
-
-describe('deriveReviewFeedbackTransition', () => {
-  it('treats hidden to placeholder as a category expand event with the placeholder node as primary', () => {
-    const transition = deriveReviewFeedbackTransition({
-      previousRevealMap: {
-        root: 'revealed',
-        parent: 'revealed',
-        'child-a': 'hidden',
+describe('review-feedback model', () => {
+  it('uses custom milestone steps for reward progression', () => {
+    const next = progressReviewRewardState({
+      current: createInitialReviewRewardSnapshot([4, 8, 12, 20]),
+      transition: {
+        events: ['card_reveal'],
+        expandedNodeIds: [],
+        revealedNodeIds: ['node-a'],
+        branchClearNodeIds: [],
+        primaryNodeId: 'node-a',
+        primaryEvent: 'card_reveal',
+        milestoneStep: null,
+        fxAnchor: null,
+        depthHint: 2,
+        allClearReady: false,
       },
-      nextRevealMap: {
-        root: 'revealed',
-        parent: 'revealed',
-        'child-a': 'placeholder',
-      },
-      root,
+      milestoneSteps: [4, 8, 12, 20],
     })
 
-    expect(transition.events).toContain('next_level_expand')
-    expect(transition.expandedNodeIds).toEqual(['child-a'])
-    expect(transition.primaryNodeId).toBe('child-a')
+    expect(next.comboCount).toBe(1)
+    expect(next.nextMilestone).toBe(4)
   })
 
-  it('captures the last revealed node as primaryNodeId for card reveal', () => {
-    const transition = deriveReviewFeedbackTransition({
-      previousRevealMap: {
-        parent: 'placeholder',
-        'child-a': 'placeholder',
-      },
-      nextRevealMap: {
-        parent: 'revealed',
-        'child-a': 'revealed',
-      },
-      root,
-    })
-
-    expect(transition.events).toContain('card_reveal')
-    expect(transition.primaryNodeId).toBe('child-a')
+  it('derives labels from the configured milestone list', () => {
+    expect(getReviewMilestoneLabel([4, 8, 12, 20], 8)).toBe('热起来')
+    expect(getReviewMilestoneLabel([4, 8, 12, 20], 20)).toBe('攻区')
   })
 
-  it('treats hidden to revealed as card reveal in mini-checkpoint mode', () => {
-    const transition = deriveReviewFeedbackTransition({
-      previousRevealMap: {
-        root: 'revealed',
-        parent: 'revealed',
-        'child-a': 'hidden',
-      },
-      nextRevealMap: {
-        root: 'revealed',
-        parent: 'revealed',
-        'child-a': 'revealed',
-      },
-      root,
-      revealMode: 'mini-checkpoint',
-    })
-
-    expect(transition.events).toContain('card_reveal')
-    expect(transition.revealedNodeIds).toEqual(['child-a'])
-    expect(transition.primaryNodeId).toBe('child-a')
-  })
-
-  it('prefers cleared branch node id as primaryNodeId for branch clear', () => {
-    const transition = deriveReviewFeedbackTransition({
-      previousRevealMap: {
-        parent: 'placeholder',
-        'child-a': 'placeholder',
-        'child-b': 'hidden',
-      },
-      nextRevealMap: {
-        parent: 'placeholder',
-        'child-a': 'revealed',
-        'child-b': 'placeholder',
-      },
-      root,
-    })
-
-    expect(transition.events).toContain('branch_clear')
-    expect(transition.branchClearNodeIds).toEqual(['parent'])
-    expect(transition.primaryNodeId).toBe('parent')
+  it('only emits surprise text when the combo count hits configured milestones', () => {
+    expect(
+      shouldEmitSurprise({
+        comboCount: 2,
+        surpriseEnabled: true,
+        nowMs: 1000,
+        lastSurpriseAtMs: null,
+        milestoneSteps: [4, 8, 12, 20],
+      }),
+    ).toBe(false)
+    expect(
+      shouldEmitSurprise({
+        comboCount: 4,
+        surpriseEnabled: true,
+        nowMs: 1000,
+        lastSurpriseAtMs: null,
+        milestoneSteps: [4, 8, 12, 20],
+      }),
+    ).toBe(true)
   })
 })

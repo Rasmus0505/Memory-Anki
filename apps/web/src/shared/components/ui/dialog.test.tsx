@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
-import { Dialog, DialogContent } from '@/shared/components/ui/dialog'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/shared/components/ui/dialog'
 
 describe('Dialog', () => {
   it('renders above immersive fullscreen shells', () => {
@@ -8,17 +8,29 @@ describe('Dialog', () => {
       <>
         <div className="fixed inset-0 z-[90]">immersive-shell</div>
         <Dialog open onOpenChange={vi.fn()}>
-          <DialogContent showCloseButton>dialog body</DialogContent>
+          <DialogContent showCloseButton>
+            <DialogHeader>
+              <div>
+                <DialogTitle>test dialog</DialogTitle>
+                <DialogDescription>description</DialogDescription>
+              </div>
+            </DialogHeader>
+            dialog body
+          </DialogContent>
         </Dialog>
       </>,
     )
 
     const overlay = Array.from(document.querySelectorAll('[data-state="open"]')).find((element) =>
-      element.className.includes('z-[140]'),
+      element.className.includes('z-[240]'),
+    )
+    const centeredLayer = Array.from(document.querySelectorAll('div')).find((element) =>
+      element.className.includes('z-[241]') && element.className.includes('pointer-events-none'),
     )
 
     expect(overlay).not.toBeNull()
-    expect(overlay?.className).toContain('z-[140]')
+    expect(overlay?.className).toContain('z-[240]')
+    expect(centeredLayer).not.toBeUndefined()
   })
 
   it('closes when clicking the close button', () => {
@@ -26,7 +38,15 @@ describe('Dialog', () => {
 
     render(
       <Dialog open onOpenChange={onOpenChange}>
-        <DialogContent showCloseButton>dialog body</DialogContent>
+        <DialogContent showCloseButton>
+          <DialogHeader>
+            <div>
+              <DialogTitle>test dialog</DialogTitle>
+              <DialogDescription>description</DialogDescription>
+            </div>
+          </DialogHeader>
+          dialog body
+        </DialogContent>
       </Dialog>,
     )
 
@@ -38,6 +58,8 @@ describe('Dialog', () => {
     render(
       <Dialog open onOpenChange={vi.fn()} modal={false}>
         <DialogContent layout="unstyled" className="fixed left-[120px] top-[80px] w-40">
+          <DialogTitle>floating title</DialogTitle>
+          <DialogDescription>floating description</DialogDescription>
           floating
         </DialogContent>
       </Dialog>,
@@ -45,8 +67,9 @@ describe('Dialog', () => {
 
     expect(screen.getByText('floating').className).toContain('fixed')
     const overlay = Array.from(document.querySelectorAll('[data-state="open"]')).find((element) =>
-      element.className.includes('z-[140]'),
+      element.className.includes('z-[240]'),
     )
     expect(overlay).toBeUndefined()
+    expect(screen.getByText('floating').className).toContain('z-[241]')
   })
 })

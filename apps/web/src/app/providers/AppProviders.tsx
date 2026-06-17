@@ -1,12 +1,14 @@
 import { type PropsWithChildren, useEffect } from 'react'
 import { BrowserRouter } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { Toaster, toast } from 'sonner'
+import { Toaster } from 'sonner'
 import { migrateLegacyTimeRecordsToBackend } from '@/entities/session/model'
 import { QuizLauncherProvider } from '@/features/palace-quiz/QuizLauncherProvider'
 import { GlobalFeedbackProvider } from '@/shared/feedback/GlobalFeedbackProvider'
+import { toast } from '@/shared/feedback/toast'
 import { cleanupExpiredAppLogs, logAppError } from '@/shared/logs/model/appLogs'
 import { useMutationQueueAutoSync } from '@/shared/persistence/useMutationQueue'
+import { GlobalTimerProvider } from '@/shared/components/session/GlobalTimerProvider'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -60,10 +62,12 @@ export function AppProviders({ children }: PropsWithChildren) {
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <GlobalFeedbackProvider>
-          <QuizLauncherProvider>
-            {children}
-            <Toaster position="bottom-right" richColors />
-          </QuizLauncherProvider>
+          <GlobalTimerProvider>
+            <QuizLauncherProvider>
+              {children}
+              <Toaster position="bottom-right" richColors />
+            </QuizLauncherProvider>
+          </GlobalTimerProvider>
         </GlobalFeedbackProvider>
       </BrowserRouter>
     </QueryClientProvider>

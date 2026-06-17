@@ -8,6 +8,7 @@ import { useReviewFeedback } from '@/features/review/hooks/useReviewFeedback'
 import type { RevealFlowMode } from '@/entities/review/model/review-flow-tree'
 import { useRouteResidency } from '@/app/router/RouteResidency'
 import type { CompleteFlowPayload } from '@/features/review/model/mind-map-review-flow'
+import { useGlobalTimerRegistration } from '@/shared/components/session/GlobalTimerProvider'
 
 interface UseReviewFlowSessionOptions {
   title: string
@@ -42,7 +43,7 @@ export function useReviewFlowSession({
   onSnapshotChange,
   onFullscreenChange,
 }: UseReviewFlowSessionOptions) {
-  const { isActive } = useRouteResidency()
+  const { isActive, becameActiveAt } = useRouteResidency()
   const timer = useTimedSession({
     kind: sessionKind,
     title,
@@ -50,6 +51,13 @@ export function useReviewFlowSession({
     sourceKind: palaceId != null ? 'palace' : null,
     persistKey,
     persistCompletionRecord: sessionKind !== 'review',
+  })
+  useGlobalTimerRegistration({
+    scene: persistProgress ? 'practice' : 'review',
+    title,
+    timer,
+    isRouteActive: isActive,
+    becameActiveAt,
   })
   const reveal = useRevealSession({
     title,
@@ -126,14 +134,8 @@ export function useReviewFlowSession({
 
   React.useEffect(() => {
     return () => {
-      const currentTimer = timerRef.current
       if (hardUnloadRef.current) {
         return
-      }
-      if (currentTimer.startedAt && currentTimer.status !== 'completed') {
-        void currentTimer.leaveScene({
-          persist_progress: persistProgress,
-        })
       }
     }
   }, [persistProgress])

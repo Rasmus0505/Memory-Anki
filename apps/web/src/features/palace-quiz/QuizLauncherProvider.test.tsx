@@ -166,12 +166,12 @@ describe('QuizLauncherProvider', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '打开做题入口' }))
 
-    expect(await screen.findByText('直接进入做题区')).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: '直接进入做题区' }))
+    expect(await screen.findByText('直接进入做题')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: '直接进入做题' }))
 
     expect(dispatchGlobalFeedbackMock).toHaveBeenCalledWith(
       'quiz_nav_open_practice',
-      expect.objectContaining({ label: '直接进入做题区', audioScope: 'global' }),
+      expect.objectContaining({ label: '直接进入做题', audioScope: 'global' }),
     )
 
     await waitFor(() => {

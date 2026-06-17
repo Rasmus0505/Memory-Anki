@@ -15,7 +15,6 @@ import {
 import { Button } from '@/shared/components/ui/button'
 import { Badge } from '@/shared/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card'
-import { SessionTimerBar } from '@/shared/components/session/SessionTimerBar'
 import { cn } from '@/shared/lib/utils'
 import { PalaceAttachmentPanel } from '@/features/palace-edit/components/PalaceAttachmentPanel'
 import { PalaceChapterPanel } from '@/features/palace-edit/components/PalaceChapterPanel'
@@ -202,20 +201,6 @@ export default function PalaceEdit() {
         )}
       >
         <div className={cn('space-y-4', page.mindMapFullscreen && 'hidden')}>
-          <SessionTimerBar
-            effectiveSeconds={page.timer.effectiveSeconds}
-            idleSeconds={page.timer.idleSeconds}
-            automationScene="palace_edit"
-            pauseCount={page.timer.pauseCount}
-            status={page.timer.status}
-            onStart={() => page.timer.start({ source: 'manual' })}
-            onPause={() => page.timer.pause({ source: 'manual' })}
-            onResume={() => page.timer.resume({ source: 'manual' })}
-            onAdjustDuration={page.timer.adjustDuration}
-            showCompleteAction={false}
-            layout="compact"
-          />
-
           <PalaceMetaPanel
             palace={page.palace}
             title={page.title}

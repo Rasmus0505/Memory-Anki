@@ -295,9 +295,12 @@ PALACE_QUIZ_PDF_TRANSCRIPTION_PROMPT = (
     "question_candidates 按题目来源页从上到下抄录所有可见题目候选，不要预先限定题型。"
     "每个 question_candidate 至少保留 section、number、stem、raw_type_label、source_snippet；"
     "如果题面有选项，就附带 options[{id,text}] 并保留原顺序。"
+    "如果题目来源页出现简答题、论述题、材料分析题或其他主观题，即使没有选项，也必须保留题干并写入 question_candidates。"
+    "题目来源页若出现“答案 / 解析 / 参考答案”等内容，不要把这部分写进 question_candidates。"
     "answer_candidates 按答案来源页抄录所有可见答案候选；每个 answer_candidate 至少保留 "
     "section、number、raw_type_label、analysis、raw_answer_text；"
     "如果页面明确给了选择题答案字母，就附带 correct_option_id；如果页面明确给了简答/论述参考答案，就附带 reference_answer。"
+    "答案来源页只允许输出 answer_candidates，不要生成 question_candidates。"
     "题目中的“第几章 / 第几节 / 第几目 / 栏目标题 / 题型标题”要尽量原样保留到 section、raw_type_label 或 source_snippet 里。"
     "同一页范围内出现的所有可见栏目和题目都要完整抄录，不要中途漏题。"
 )
@@ -380,6 +383,8 @@ def build_palace_quiz_generation_user_text(*, source_label: str, is_pdf_question
             "请完整抄录接下来 PDF 图片中的题目候选和答案候选。"
             f"当前来源：{source_label}。"
             "题目来源页里每一道可见题目都要抄录；答案来源页里每个对应答案和解析都要抄录。"
+            "必须严格遵守每张图片绑定的角色，不能把答案页内容抄到 question_candidates。"
+            "如果题目来源页出现简答题、论述题、材料分析题等主观题，即使没有选项也必须抄录成 question_candidate。"
             "不要补题，不要提前做题型判断，不要提前丢弃任一栏目下的题目。"
             "如果看到第几章、第几节、第几目、题型标题或栏目标题，要尽量原样保留下来。"
         )

@@ -22,12 +22,12 @@ import {
   getPalaceIconClass,
   getReviewActionButtonClass,
   getReviewActionLabel,
-  getReviewButtonState,
   getSegmentCardClass,
   getSegmentDisplayName,
   getSegmentListClass,
   isSleepReviewSegment,
   palaceUsesMiniOnlyReview,
+  resolveReviewButtonState,
 } from '@/app/router/palace-list/utils'
 
 interface PalaceListCardProps {
@@ -130,7 +130,9 @@ export function PalaceListCard({
       Boolean(segment.current_review_schedule_id),
   )
   const canBatchReview = !mainReviewOwnedByMini && dueBatchSegments.length >= 2
-  const singleSegmentState = singleSegment ? getReviewButtonState(singleSegment.next_review_at) : 'unscheduled'
+  const singleSegmentState = singleSegment
+    ? resolveReviewButtonState(singleSegment.has_due_review, singleSegment.next_review_at)
+    : 'unscheduled'
   const isSingleSegmentSleepReview = singleSegment ? isSleepReviewSegment(singleSegment) : false
 
   useEffect(() => {
@@ -247,7 +249,10 @@ export function PalaceListCard({
           ) : expanded && showMainSegmentList ? (
             <div className={getSegmentListClass(viewSettings.densityMode)}>
               {palace.segments.map((segment, index) => {
-                const segmentReviewState = getReviewButtonState(segment.next_review_at)
+                const segmentReviewState = resolveReviewButtonState(
+                  segment.has_due_review,
+                  segment.next_review_at,
+                )
                 const isSegmentSleepReview = isSleepReviewSegment(segment)
                 const segmentReviewDisabled =
                   !segment.current_review_schedule_id ||
@@ -351,11 +356,10 @@ export function PalaceListCard({
 
               <div className={getSegmentListClass(viewSettings.densityMode)}>
                 {palace.mini_palaces.map((mini) => {
-                  const miniState = mini.has_due_review
-                    ? 'due_now'
-                    : mini.next_review_at
-                    ? getReviewButtonState(mini.next_review_at)
-                    : 'unscheduled'
+                  const miniState = resolveReviewButtonState(
+                    mini.has_due_review,
+                    mini.next_review_at,
+                  )
                   const isSleepMini = mini.current_review_type === 'sleep'
                   const miniReviewDisabled =
                     !mini.current_review_schedule_id ||
@@ -428,7 +432,7 @@ export function PalaceListCard({
                             onClick={() => onMiniPalacePractice(mini)}
                             disabled={mini.is_empty}
                           >
-                            练习
+                            做题
                           </Button>
 
                           <ReviewActionButton
@@ -475,13 +479,13 @@ export function PalaceListCard({
               已掌握
             </Badge>
           ) : null}
-          <Link to={`/palaces/${palace.id}/practice`}>
+          <Link to={`/palaces/${palace.id}/quiz`}>
             <Button
               variant={palace.needs_practice ? 'default' : 'ghost'}
               size="sm"
 	              className={cn('h-8', palace.needs_practice && 'bg-success text-white hover:bg-success/80')}
             >
-              练习
+              做题
             </Button>
           </Link>
           {(palace.focus_count ?? 0) > 0 ? (

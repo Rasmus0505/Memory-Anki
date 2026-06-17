@@ -208,6 +208,8 @@ describe('MindMapFrame sync behavior', () => {
       nodeUid: 'node-1',
       relatedNodeUids: ['node-1'],
       intensity: 'full' as const,
+      milestoneStep: null,
+      anchor: { x: 0.56, y: 0.48 },
       lineMode: 'confirm' as const,
       depthHint: 2 as const,
       targetRole: 'placeholder' as const,

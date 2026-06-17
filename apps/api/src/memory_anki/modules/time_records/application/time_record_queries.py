@@ -244,7 +244,7 @@ def get_english_course_stats(session: Session) -> dict[str, int]:
     total_courses = session.query(EnglishCourse).count()
     completed_courses = (
         session.query(EnglishCourseProgress)
-        .filter(EnglishCourseProgress.completed_at.is_not(None))
+        .filter(EnglishCourseProgress.is_completed.is_(True))
         .count()
     )
     unfinished_courses = max(0, total_courses - completed_courses)

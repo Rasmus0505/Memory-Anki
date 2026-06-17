@@ -1,7 +1,6 @@
 import { Link, useNavigate } from 'react-router-dom'
 import { ArrowLeft, ChevronLeft, ChevronRight, Settings2, Sparkles, Volume2 } from 'lucide-react'
 import type { EnglishCourseDetail, EnglishSentenceCheckResponse } from '@/shared/api/contracts'
-import { SessionTimerBar } from '@/shared/components/session/SessionTimerBar'
 import { LoadingState } from '@/shared/components/state-placeholders'
 import { Button } from '@/shared/components/ui/button'
 import { EnglishPracticeSettingsDialog } from '@/features/english/components/EnglishPracticeSettingsDialog'
@@ -156,22 +155,6 @@ export function EnglishCoursePageView(props: EnglishCoursePageViewProps) {
             Sentence {activeSentence.index + 1} / {sentenceCount}
           </span>
         ) : null}
-      </div>
-
-      <div className="shrink-0 px-3 pt-3">
-        <SessionTimerBar
-          effectiveSeconds={timer.effectiveSeconds}
-          idleSeconds={timer.idleSeconds}
-          automationScene="english"
-          pauseCount={timer.pauseCount}
-          status={timer.status}
-          onStart={() => timer.start({ source: 'manual_start', scene: 'english_course' })}
-          onPause={() => timer.pause({ source: 'manual_pause', scene: 'english_course' })}
-          onResume={() => timer.resume({ source: 'manual_resume', scene: 'english_course' })}
-          onAdjustDuration={timer.adjustDuration}
-          showCompleteAction={false}
-          layout="compact"
-        />
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden p-3">

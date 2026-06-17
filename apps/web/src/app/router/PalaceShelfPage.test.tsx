@@ -266,7 +266,7 @@ describe('PalaceShelfPage', () => {
     expect(getPalacesGroupedApi).toHaveBeenCalledTimes(1)
     expect(screen.getByTestId('list-layout-root').dataset.layoutMode).toBe('chapter-double')
     expect(screen.getAllByRole('button', { name: '开始复习' }).length).toBeGreaterThan(0)
-    expect(screen.getAllByRole('button', { name: '练习' }).length).toBeGreaterThan(0)
+    expect(screen.getAllByRole('button', { name: '做题' }).length).toBeGreaterThan(0)
     expect(screen.getByLabelText(/编辑宫殿/)).toBeTruthy()
     expect(screen.getByLabelText(/更多操作/)).toBeTruthy()
     expect(screen.getAllByTestId('stage-progress').length).toBeGreaterThan(0)
@@ -289,7 +289,7 @@ describe('PalaceShelfPage', () => {
     expect(screen.getByText('小宫殿')).toBeTruthy()
     expect(screen.getAllByRole('button', { name: '开始复习' }).length).toBeGreaterThan(1)
     expect(screen.getByRole('button', { name: '睡前复习' })).toBeTruthy()
-    expect(screen.getAllByRole('button', { name: '练习' }).length).toBeGreaterThan(1)
+    expect(screen.getAllByRole('button', { name: '做题' }).length).toBeGreaterThan(1)
   })
 
   it('reveals delete inside the overflow menu in expanded mode', async () => {

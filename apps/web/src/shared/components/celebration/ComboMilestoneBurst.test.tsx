@@ -3,6 +3,10 @@ import { act, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ComboMilestoneBurst } from '@/shared/components/celebration/ComboMilestoneBurst'
 
+vi.mock('canvas-confetti', () => ({
+  default: vi.fn(),
+}))
+
 describe('ComboMilestoneBurst', () => {
   afterEach(() => {
     vi.useRealTimers()
@@ -17,6 +21,7 @@ describe('ComboMilestoneBurst', () => {
         milestoneStep={0}
         comboCount={3}
         copy="手感到了，继续揭晓。"
+        label="起势"
         durationMs={1300}
         onComplete={onComplete}
       />,
@@ -42,13 +47,14 @@ describe('ComboMilestoneBurst', () => {
           <button type="button" onClick={() => setTick((value) => value + 1)}>
             rerender {tick}
           </button>
-          <ComboMilestoneBurst
-            milestoneStep={0}
-            comboCount={3}
-            copy="手感到了，继续揭晓。"
-            durationMs={1300}
-            onComplete={() => undefined}
-          />
+      <ComboMilestoneBurst
+        milestoneStep={0}
+        comboCount={3}
+        copy="手感到了，继续揭晓。"
+        label="起势"
+        durationMs={1300}
+        onComplete={() => undefined}
+      />
         </div>
       )
     }

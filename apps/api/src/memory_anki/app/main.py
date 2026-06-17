@@ -1,8 +1,10 @@
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from memory_anki.app.startup_runtime import (
     REVIEW_SCHEDULE_REPAIR_MIGRATION_KEY,
@@ -44,6 +46,20 @@ from memory_anki.modules.time_records.presentation import router as time_records
 from memory_anki.modules.voice_coach import presentation as voice_coach_router
 
 get_session = _get_session
+
+
+class SinglePageAppStaticFiles(StaticFiles):
+    async def get_response(self, path: str, scope):
+        try:
+            return await super().get_response(path, scope)
+        except StarletteHTTPException as exc:
+            if exc.status_code != 404:
+                raise
+        if scope.get("method") not in {"GET", "HEAD"}:
+            raise StarletteHTTPException(status_code=404)
+        if Path(path).suffix:
+            raise StarletteHTTPException(status_code=404)
+        return await super().get_response("index.html", scope)
 
 
 def run_review_schedule_repair_migration(session):
@@ -120,7 +136,7 @@ app.include_router(voice_coach_router.router, prefix="/api/v1")
 app.include_router(dashboard_router.router, prefix="/api/v1")
 
 if WEB_DIST_DIR and WEB_DIST_DIR.exists():
-    app.mount("/", StaticFiles(directory=str(WEB_DIST_DIR), html=True), name="web")
+    app.mount("/", SinglePageAppStaticFiles(directory=str(WEB_DIST_DIR), html=True), name="web")
 
 
 if __name__ == "__main__":

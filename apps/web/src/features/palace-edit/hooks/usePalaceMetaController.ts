@@ -1,5 +1,5 @@
-import { useEffect, useState, type ChangeEvent } from 'react'
-import { toast } from 'sonner'
+﻿import { useEffect, useState, type ChangeEvent } from 'react'
+import { toast } from '@/shared/feedback/toast'
 import { getSubjectTreeApi, getSubjectsApi } from '@/shared/api/modules/knowledge'
 import {
   deleteAttachmentApi,

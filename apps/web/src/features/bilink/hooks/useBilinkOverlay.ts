@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react'
+﻿import { useCallback, useState } from 'react'
 import type {
   BilinkItem,
   BilinkNodeContext,
@@ -16,7 +16,7 @@ import {
   normalizePreviewConfig,
   normalizePreviewEditorDoc,
 } from '@/features/palace-edit/model/palace-edit-format'
-import { toast } from 'sonner'
+import { toast } from '@/shared/feedback/toast'
 
 type BilinkSearchMode = 'inline' | 'toolbar'
 

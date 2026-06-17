@@ -58,7 +58,7 @@ const DialogContent = forwardRef<
   const resolvedLayout = layout ?? (modal ? 'centered' : 'unstyled')
   const panelClassName = cn(
     'pointer-events-auto relative flex flex-col overflow-hidden',
-    resolvedLayout === 'unstyled' && 'z-[141]',
+    resolvedLayout === 'unstyled' && 'z-[241]',
     resolvedLayout === 'centered' &&
       'max-h-[92vh] w-full max-w-3xl rounded-2xl border bg-background shadow-2xl',
     'data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95',
@@ -85,14 +85,14 @@ const DialogContent = forwardRef<
       {modal ? (
         <DialogPrimitive.Overlay
           className={cn(
-            'fixed inset-0 z-[140] bg-black/45',
+            'fixed inset-0 z-[240] bg-black/45',
             'data-[state=open]:animate-in data-[state=open]:fade-in-0',
             'data-[state=closed]:animate-out data-[state=closed]:fade-out-0',
           )}
         />
       ) : null}
       {resolvedLayout === 'centered' ? (
-        <div className="fixed inset-0 z-[141] flex items-center justify-center p-4 pointer-events-none">
+        <div className="fixed inset-0 z-[241] flex items-center justify-center p-4 pointer-events-none">
           {content}
         </div>
       ) : (

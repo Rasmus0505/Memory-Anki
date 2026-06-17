@@ -8,7 +8,7 @@ from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from memory_anki.core.config import DEFAULTS
-from memory_anki.core.runtime import build_runtime_info
+from memory_anki.core.runtime import build_runtime_health, build_runtime_info
 from memory_anki.core.time import utc_now_naive
 from memory_anki.infrastructure.db.models import Config, get_session
 from memory_anki.infrastructure.llm.external_ai_call_logs import (
@@ -53,6 +53,7 @@ CLIENT_PREFERENCE_GROUPS = {
     "review_feedback_settings",
     "english_practice_settings",
     "timer_automation_config",
+    "timer_focus_config",
     "dashboard_duration_filter",
     "palace_list_view_settings",
     "palace_shelf_view_settings",
@@ -181,11 +182,9 @@ def api_runtime_info():
 
 @router.get("/runtime-health")
 def api_runtime_health():
-    return {
-        "ok": True,
-        "startup_mode": str(os.environ.get("MEMORY_ANKI_STARTUP_MODE") or "serve"),
-        "runtime": build_runtime_info(),
-    }
+    return build_runtime_health(
+        startup_mode=str(os.environ.get("MEMORY_ANKI_STARTUP_MODE") or "serve"),
+    )
 
 
 @router.get("/profile/client-preferences")

@@ -201,11 +201,24 @@ export function formatResolvedAiSteps(
         scenario_key: string
         model_label?: string | null
       }>
+    | {
+        generation?: { model_label?: string | null } | null
+        pairing?: { model_label?: string | null } | null
+        review?: { model_label?: string | null } | null
+      }
     | null
     | undefined,
 ) {
-  if (!steps?.length) return ''
-  return steps
+  const normalizedSteps = Array.isArray(steps)
+    ? steps
+    : Object.entries(steps)
+        .filter(([, meta]) => Boolean(meta))
+        .map(([scenario_key, meta]) => ({
+          scenario_key,
+          model_label: meta?.model_label ?? null,
+        }))
+  if (!normalizedSteps.length) return ''
+  return normalizedSteps
     .map((step) => {
       const label = step.model_label?.trim()
       return label ? `${step.scenario_key}: ${label}` : step.scenario_key

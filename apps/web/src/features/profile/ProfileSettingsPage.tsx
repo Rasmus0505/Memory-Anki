@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react'
+﻿import { useEffect, useState, type FormEvent } from 'react'
 import { LoadingState } from '@/shared/components/state-placeholders'
 import {
   Download,
@@ -8,7 +8,7 @@ import {
   Settings,
   Upload,
 } from 'lucide-react'
-import { toast } from 'sonner'
+import { toast } from '@/shared/feedback/toast'
 import { ProfileLayout } from '@/features/profile/ProfileLayout'
 import type { ReviewSettings } from '@/shared/api/contracts'
 import {
