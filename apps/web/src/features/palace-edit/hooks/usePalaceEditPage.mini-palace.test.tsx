@@ -1,5 +1,6 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
-import * as palaceApi from '@/shared/api/modules/palaces'
+import * as miniPalaceApi from '@/entities/mini-palace/api'
+import * as palaceApi from '@/entities/palace/api'
 import {
   fireEvent,
   getMindMapTexts,
@@ -84,7 +85,7 @@ describe('usePalaceEditPage mini palace mode', () => {
   })
 
   it('creates a mini palace from selected cards and practices it without entering inline practice', async () => {
-    vi.mocked(palaceApi.createMiniPalaceApi).mockResolvedValueOnce({
+    vi.mocked(miniPalaceApi.createMiniPalaceApi).mockResolvedValueOnce({
       item: {
         id: 1,
         palace_id: 101,
@@ -129,7 +130,7 @@ describe('usePalaceEditPage mini palace mode', () => {
     fireEvent.click(screen.getByRole('button', { name: '小宫殿' }))
 
     await waitFor(() => {
-      expect(palaceApi.getMiniPalacesApi).toHaveBeenCalledWith(101)
+      expect(miniPalaceApi.getMiniPalacesApi).toHaveBeenCalledWith(101)
       expect(screen.getByRole('button', { name: '新建小宫殿' })).toBeTruthy()
     })
 
@@ -157,7 +158,7 @@ describe('usePalaceEditPage mini palace mode', () => {
     fireEvent.click(screen.getByRole('button', { name: '确认新建小宫殿' }))
 
     await waitFor(() => {
-      expect(palaceApi.createMiniPalaceApi).toHaveBeenCalledWith(101, {
+      expect(miniPalaceApi.createMiniPalaceApi).toHaveBeenCalledWith(101, {
         name: '',
         node_uids: ['child-1'],
       })
@@ -210,7 +211,7 @@ describe('usePalaceEditPage mini palace mode', () => {
   })
 
   it('edits an existing mini palace by toggling nodes and saving the updated selection', async () => {
-    vi.mocked(palaceApi.getMiniPalacesApi).mockResolvedValueOnce({
+    vi.mocked(miniPalaceApi.getMiniPalacesApi).mockResolvedValueOnce({
       items: [
         {
           id: 1,
@@ -235,7 +236,7 @@ describe('usePalaceEditPage mini palace mode', () => {
         },
       ],
     } as never)
-    vi.mocked(palaceApi.updateMiniPalaceApi).mockResolvedValueOnce({
+    vi.mocked(miniPalaceApi.updateMiniPalaceApi).mockResolvedValueOnce({
       item: {
         id: 1,
         palace_id: 101,
@@ -311,7 +312,7 @@ describe('usePalaceEditPage mini palace mode', () => {
     fireEvent.click(screen.getByRole('button', { name: '保存小宫殿' }))
 
     await waitFor(() => {
-      expect(palaceApi.updateMiniPalaceApi).toHaveBeenCalledWith(1, {
+      expect(miniPalaceApi.updateMiniPalaceApi).toHaveBeenCalledWith(1, {
         name: '旧小宫殿',
         node_uids: ['child-1', 'grandchild-1'],
       })

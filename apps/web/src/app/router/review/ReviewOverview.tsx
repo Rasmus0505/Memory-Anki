@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+﻿import { useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { ArrowLeft, ArrowRight, BookOpen, Brain } from 'lucide-react'
 import type { ReviewQueueResponse } from '@/shared/api/contracts'
@@ -12,7 +12,7 @@ import {
   getReviewQueueApi,
   getSegmentChapterReviewQueueApi,
   getSegmentReviewQueueApi,
-} from '@/shared/api/modules/reviews'
+} from '@/features/review/api/reviewApi'
 import {
   buildReviewSessionPath,
   buildSegmentReviewSessionPath,

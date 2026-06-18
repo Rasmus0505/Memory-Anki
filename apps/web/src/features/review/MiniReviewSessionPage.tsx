@@ -8,7 +8,7 @@ import {
   getMiniReviewSessionApi,
   saveMiniReviewSessionProgressApi,
   submitMiniReviewSessionApi,
-} from '@/shared/api/modules/reviews'
+} from '@/features/review/api/reviewApi'
 import {
   ReviewSessionContainer,
   type ReviewSessionContainerSession,

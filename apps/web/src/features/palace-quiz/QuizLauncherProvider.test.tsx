@@ -67,11 +67,11 @@ const pdfControllerMock = {
   handleSubjectDocumentDelete: vi.fn(),
 }
 
-vi.mock('@/shared/api/modules/palaces/catalogApi', () => ({
+vi.mock('@/entities/palace/api/catalogApi', () => ({
   getPalaceApi: (...args: unknown[]) => getPalaceApiMock(...args),
 }))
 
-vi.mock('@/shared/api/modules/knowledge', () => ({
+vi.mock('@/entities/knowledge/api/knowledgeApi', () => ({
   getSubjectsApi: (...args: unknown[]) => getSubjectsApiMock(...args),
 }))
 

@@ -1,4 +1,4 @@
-﻿import { useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { ArrowLeft } from 'lucide-react'
 import type { MindMapEditorState, PalaceSegmentSummary } from '@/shared/api/contracts'
@@ -10,12 +10,12 @@ import {
   clearSegmentPracticeSessionProgressApi,
   getSegmentPracticeSessionProgressApi,
   saveSegmentPracticeSessionProgressApi,
-} from '@/shared/api/modules/palaces/practiceApi'
+} from '@/entities/palace/api'
 import {
   getPalaceSegmentApi,
   updatePalaceSegmentReviewProgressApi,
-} from '@/shared/api/modules/palaces/structureApi'
-import { submitSegmentReviewSessionApi } from '@/shared/api/modules/reviews'
+} from '@/entities/palace-segment/api'
+import { submitSegmentReviewSessionApi } from '@/features/review/api/reviewApi'
 import { StageSelectDialog } from '@/features/review/components/StageSelectDialog'
 import {
   MindMapReviewFlow,

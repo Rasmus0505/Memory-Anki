@@ -14,11 +14,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/shared/components/ui/dialog'
+import { formatVersionSavedAt } from '@/features/palace-edit/model/palace-edit-format'
 import {
-  formatVersionSavedAt,
   normalizePreviewConfig,
   normalizePreviewEditorDoc,
-} from '@/features/palace-edit/model/palace-edit-format'
+} from '@/shared/lib/mindmapPreview'
 
 interface PalaceVersionDialogProps {
   open: boolean

@@ -15,7 +15,7 @@ import {
   previewPalaceQuizGenerationFromImagesApi,
   previewPalaceQuizGenerationFromPdfStreamApi,
   previewPalaceQuizGenerationFromReviewMindmapApi,
-} from '@/shared/api/modules/quizzes'
+} from '@/entities/quiz/api/quizApi'
 
 export type QuizLauncherGenerationSourceKind =
   | 'subject-pdf'

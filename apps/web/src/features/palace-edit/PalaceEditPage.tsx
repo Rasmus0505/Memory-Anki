@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+﻿import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowLeft, History, Search, Volume2 } from 'lucide-react'
 import {
@@ -21,8 +21,7 @@ import { PalaceChapterPanel } from '@/features/palace-edit/components/PalaceChap
 import { PalaceMetaPanel } from '@/features/palace-edit/components/PalaceMetaPanel'
 import { PalaceSegmentsPanel } from '@/features/palace-edit/components/PalaceSegmentsPanel'
 import { PalaceVersionDialog } from '@/features/palace-edit/components/PalaceVersionDialog'
-import { PalaceMindMapImportDrawer } from '@/features/palace-edit/components/PalaceMindMapImportDrawer'
-import { useMindMapImport } from '@/features/palace-edit/hooks/useMindMapImport'
+import { MindMapImportDrawer, useMindMapImport } from '@/features/mindmap-import'
 import { usePalaceEditPage } from '@/features/palace-edit/hooks/usePalaceEditPage'
 import { PalaceKnowledgeOutlinePanel } from '@/features/palace-edit/components/PalaceKnowledgeOutlinePanel'
 import { useQuizLauncher } from '@/features/palace-quiz/QuizLauncherProvider'
@@ -505,7 +504,7 @@ export default function PalaceEdit() {
 
       <MiniPalacePanel controller={page.miniPalace} onEditSave={page.handleMiniPalaceEditSave} onEditCancel={page.handleMiniPalaceEditCancel} />
 
-      <PalaceMindMapImportDrawer
+      <MindMapImportDrawer
         open={mindMapImport.importOpen}
         onOpenChange={mindMapImport.setImportOpen}
         mode={mindMapImport.importMode}

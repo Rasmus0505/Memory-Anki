@@ -8,7 +8,7 @@ import type {
 import {
   getAiModelScenariosApi,
   updateAiModelScenariosApi,
-} from '@/shared/api/modules/profile'
+} from '@/entities/preferences/api/aiModelSettingsApi'
 import { Button } from '@/shared/components/ui/button'
 import {
   Dialog,

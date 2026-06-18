@@ -1,4 +1,4 @@
-import { CheckCircle2, Sparkles, XCircle } from 'lucide-react'
+﻿import { CheckCircle2, Sparkles, XCircle } from 'lucide-react'
 import type { EnglishSentenceCheckResponse } from '@/shared/api/contracts'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
@@ -6,7 +6,7 @@ import {
   ENGLISH_SHORTCUT_ACTIONS,
   getShortcutLabel,
   type EnglishPracticeSettings,
-} from '@/features/english/englishPracticeSettings'
+} from '@/entities/preferences/model/englishPracticeSettings'
 import { buildLetterSlots } from '@/features/english/englishTypingHelpers'
 
 export interface StatusNotice {

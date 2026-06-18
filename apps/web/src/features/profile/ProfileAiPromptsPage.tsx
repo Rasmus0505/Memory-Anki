@@ -7,7 +7,7 @@ import {
   getAiPromptTemplatesApi,
   resetAiPromptTemplatesApi,
   updateAiPromptTemplatesApi,
-} from '@/shared/api/modules/profile'
+} from '@/features/profile/api/profileApi'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card'

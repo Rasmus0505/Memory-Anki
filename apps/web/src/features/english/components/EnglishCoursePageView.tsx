@@ -1,4 +1,4 @@
-import { Link, useNavigate } from 'react-router-dom'
+﻿import { Link, useNavigate } from 'react-router-dom'
 import { ArrowLeft, ChevronLeft, ChevronRight, Settings2, Sparkles, Volume2 } from 'lucide-react'
 import type { EnglishCourseDetail, EnglishSentenceCheckResponse } from '@/shared/api/contracts'
 import { LoadingState } from '@/shared/components/state-placeholders'
@@ -13,7 +13,7 @@ import {
   type StatusNotice,
   type WordRailDensity,
 } from '@/features/english/components/EnglishCourseParts'
-import type { EnglishPracticeSettings } from '@/features/english/englishPracticeSettings'
+import type { EnglishPracticeSettings } from '@/entities/preferences/model/englishPracticeSettings'
 import { shouldKeepEnglishPracticeControlFocus } from '@/features/english/englishTypingHelpers'
 import type { useEnglishWordTyping } from '@/features/english/useEnglishWordTyping'
 import type { useTimedSession } from '@/shared/hooks/useTimedSession'

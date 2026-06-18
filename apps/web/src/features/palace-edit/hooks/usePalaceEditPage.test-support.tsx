@@ -11,8 +11,10 @@ import { beforeEach, vi } from 'vitest'
 import * as bilinkApi from '@/features/bilink/api/bilink'
 import PalaceEditPage from '@/features/palace-edit/PalaceEditPage'
 import * as appLogs from '@/shared/logs/model/appLogs'
-import * as knowledgeApi from '@/shared/api/modules/knowledge'
-import * as palaceApi from '@/shared/api/modules/palaces'
+import * as knowledgeApi from '@/entities/knowledge/api/knowledgeApi'
+import * as importApi from '@/entities/knowledge-import/api'
+import * as palaceApi from '@/entities/palace/api'
+import * as miniPalaceApi from '@/entities/mini-palace/api'
 
 vi.mock('sonner', () => ({
   toast: {
@@ -60,6 +62,12 @@ vi.mock('@/features/ai-config/useAiRunConfigDialog', () => ({
   useAiRunConfigDialog: () => ({
     promptForAiOptions: (...args: unknown[]) => promptForAiOptionsMock(...args),
     aiRunConfigDialog: null,
+  }),
+}))
+
+vi.mock('@/features/palace-quiz/QuizLauncherProvider', () => ({
+  useQuizLauncher: () => ({
+    openQuizLauncher: vi.fn(),
   }),
 }))
 
@@ -352,32 +360,36 @@ vi.mock('@/features/palace-edit/components/PalaceVersionDialog', () => ({
     ) : null,
 }))
 
-vi.mock('@/features/palace-edit/components/PalaceMindMapImportDrawer', () => ({
-  PalaceMindMapImportDrawer: ({
-    open,
-    onApplyReplace,
-    onApplyAppend,
-    className,
-    overlayClassName,
-  }: {
-    open: boolean
-    onApplyReplace: () => void
-    onApplyAppend: () => void
-    className?: string
-    overlayClassName?: string
-  }) =>
-    open ? (
-      <div>
-        <div>{`drawer-${className ?? 'plain'}-${overlayClassName ?? 'overlay-plain'}`}</div>
-        <button type="button" onClick={onApplyReplace}>
-          覆盖当前脑图
-        </button>
-        <button type="button" onClick={onApplyAppend}>
-          追加到选中节点
-        </button>
-      </div>
-    ) : null,
-}))
+vi.mock('@/features/mindmap-import', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/features/mindmap-import')>()
+  return {
+    ...actual,
+    MindMapImportDrawer: ({
+      open,
+      onApplyReplace,
+      onApplyAppend,
+      className,
+      overlayClassName,
+    }: {
+      open: boolean
+      onApplyReplace: () => void
+      onApplyAppend: () => void
+      className?: string
+      overlayClassName?: string
+    }) =>
+      open ? (
+        <div>
+          <div>{`drawer-${className ?? 'plain'}-${overlayClassName ?? 'overlay-plain'}`}</div>
+          <button type="button" onClick={onApplyReplace}>
+            覆盖当前脑图
+          </button>
+          <button type="button" onClick={onApplyAppend}>
+            追加到选中节点
+          </button>
+        </div>
+      ) : null,
+  }
+})
 
 vi.mock('@/shared/components/session/SessionTimerBar', () => ({
   SessionTimerBar: () => <div>timer</div>,
@@ -449,8 +461,8 @@ export function setupPalaceEditPageTestDefaults() {
   vi.spyOn(palaceApi, 'getPracticeSessionProgressApi').mockResolvedValue({ progress: null } as never)
   vi.spyOn(palaceApi, 'savePracticeSessionProgressApi').mockResolvedValue({ progress: {} } as never)
   vi.spyOn(palaceApi, 'clearPracticeSessionProgressApi').mockResolvedValue({ ok: true } as never)
-  vi.spyOn(palaceApi, 'getMiniPalacesApi').mockResolvedValue({ items: [] } as never)
-  vi.spyOn(palaceApi, 'createMiniPalaceApi').mockResolvedValue({
+  vi.spyOn(miniPalaceApi, 'getMiniPalacesApi').mockResolvedValue({ items: [] } as never)
+  vi.spyOn(miniPalaceApi, 'createMiniPalaceApi').mockResolvedValue({
     item: {
       id: 1,
       palace_id: 101,
@@ -463,7 +475,7 @@ export function setupPalaceEditPageTestDefaults() {
       is_empty: false,
     },
   } as never)
-  vi.spyOn(palaceApi, 'updateMiniPalaceApi').mockResolvedValue({
+  vi.spyOn(miniPalaceApi, 'updateMiniPalaceApi').mockResolvedValue({
     item: {
       id: 1,
       palace_id: 101,
@@ -476,8 +488,8 @@ export function setupPalaceEditPageTestDefaults() {
       is_empty: false,
     },
   } as never)
-  vi.spyOn(palaceApi, 'deleteMiniPalaceApi').mockResolvedValue({ ok: true } as never)
-  vi.spyOn(palaceApi, 'previewMindMapImportApi').mockResolvedValue({
+  vi.spyOn(miniPalaceApi, 'deleteMiniPalaceApi').mockResolvedValue({ ok: true } as never)
+  vi.spyOn(importApi, 'previewMindMapImportApi').mockResolvedValue({
     ok: true,
     source_tree: {
       title: '导入脑图',

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+﻿import { useEffect, useMemo, useState } from 'react'
 import { Keyboard, RotateCcw, Save, Trash2, Volume2 } from 'lucide-react'
 import {
   captureShortcutFromKeyboardEvent,
@@ -9,7 +9,7 @@ import {
   sanitizeEnglishPracticeSettings,
   type EnglishPracticeSettings,
   type ShortcutActionId,
-} from '@/features/english/englishPracticeSettings'
+} from '@/entities/preferences/model/englishPracticeSettings'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
 import {

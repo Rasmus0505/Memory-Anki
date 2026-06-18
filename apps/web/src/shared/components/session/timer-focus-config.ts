@@ -1,6 +1,7 @@
 import {
-  getCachedClientPreference,
-  setClientPreference,
+  getClientPreferenceCacheStatus,
+  hasLoadedClientPreferences,
+  saveClientPreference,
 } from '@/shared/preferences/clientPreferences'
 
 export type TimerFocusScene =
@@ -114,6 +115,17 @@ export function sanitizeTimerFocusConfig(value: unknown): TimerFocusConfig {
 }
 
 export function readTimerFocusConfig(): TimerFocusConfig {
+  const cached = getClientPreferenceCacheStatus(
+    'timer_focus_config',
+    (candidate): candidate is TimerFocusConfig => Boolean(candidate && typeof candidate === 'object'),
+  )
+  if (cached.value) {
+    return sanitizeTimerFocusConfig(cached.value)
+  }
+  if (cached.hasEntry || hasLoadedClientPreferences()) {
+    return DEFAULT_TIMER_FOCUS_CONFIG
+  }
+
   try {
     const raw = window.localStorage.getItem(TIMER_FOCUS_STORAGE_KEY)
     if (raw) {
@@ -123,35 +135,31 @@ export function readTimerFocusConfig(): TimerFocusConfig {
     return DEFAULT_TIMER_FOCUS_CONFIG
   }
 
-  const cached = getCachedClientPreference(
-    'timer_focus_config',
-    DEFAULT_TIMER_FOCUS_CONFIG,
-    (candidate): candidate is TimerFocusConfig => Boolean(candidate && typeof candidate === 'object'),
-  )
-  if (cached !== DEFAULT_TIMER_FOCUS_CONFIG) {
-    return sanitizeTimerFocusConfig(cached)
-  }
   return DEFAULT_TIMER_FOCUS_CONFIG
 }
 
 function dispatchTimerFocusChange(config: TimerFocusConfig) {
+  if (typeof window === 'undefined') return
   window.dispatchEvent(new CustomEvent(TIMER_FOCUS_UPDATED_EVENT, { detail: config }))
 }
 
 export function saveTimerFocusConfig(config: TimerFocusConfig) {
   const sanitized = sanitizeTimerFocusConfig(config)
-  window.localStorage.setItem(TIMER_FOCUS_STORAGE_KEY, JSON.stringify(sanitized))
-  void setClientPreference('timer_focus_config', sanitized).then((saved) => {
-    dispatchTimerFocusChange(sanitizeTimerFocusConfig(saved))
+  dispatchTimerFocusChange(sanitized)
+  void saveClientPreference('timer_focus_config', sanitized).then((saved) => {
+    dispatchTimerFocusChange(sanitizeTimerFocusConfig(saved.value))
   })
   return sanitized
 }
 
 export function resetTimerFocusConfig() {
   const nextConfig = DEFAULT_TIMER_FOCUS_CONFIG
-  window.localStorage.removeItem(TIMER_FOCUS_STORAGE_KEY)
-  void setClientPreference('timer_focus_config', nextConfig).then((saved) => {
-    dispatchTimerFocusChange(sanitizeTimerFocusConfig(saved))
+  if (typeof window !== 'undefined') {
+    window.localStorage.removeItem(TIMER_FOCUS_STORAGE_KEY)
+  }
+  dispatchTimerFocusChange(nextConfig)
+  void saveClientPreference('timer_focus_config', nextConfig).then((saved) => {
+    dispatchTimerFocusChange(sanitizeTimerFocusConfig(saved.value))
   })
   return nextConfig
 }

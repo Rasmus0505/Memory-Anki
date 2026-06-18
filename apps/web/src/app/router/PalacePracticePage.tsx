@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { ArrowLeft } from 'lucide-react'
 import { PageIntro } from '@/shared/components/layout/PageIntro'
@@ -11,19 +11,17 @@ import {
   type ReviewFlowSnapshot,
 } from '@/features/review/components/MindMapReviewFlow'
 import {
-  getPalaceEditorApi,
-  togglePalaceFocusNodeApi,
-} from '@/shared/api/modules/palaces/catalogApi'
-import {
   clearPracticeSessionProgressApi,
+  getPalaceEditorApi,
   getPracticeSessionProgressApi,
   savePracticeSessionProgressApi,
-} from '@/shared/api/modules/palaces/practiceApi'
+  togglePalaceFocusNodeApi,
+  updatePalacePracticeFlagApi,
+} from '@/entities/palace/api'
 import {
   updateDefaultSegmentReviewProgressApi,
-  updatePalacePracticeFlagApi,
-} from '@/shared/api/modules/palaces/structureApi'
-import { submitReviewSessionApi } from '@/shared/api/modules/reviews'
+} from '@/entities/palace-segment/api'
+import { submitReviewSessionApi } from '@/features/review/api/reviewApi'
 import { StageSelectDialog } from '@/features/review/components/StageSelectDialog'
 import type { ReviewStageSummary } from '@/shared/api/contracts'
 

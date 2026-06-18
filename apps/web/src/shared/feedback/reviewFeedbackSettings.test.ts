@@ -1,7 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import {
   DEFAULT_REVIEW_FEEDBACK_SETTINGS,
-  REVIEW_FEEDBACK_SETTINGS_STORAGE_KEY,
   readReviewFeedbackSettings,
   sanitizeReviewFeedbackSettings,
   writeReviewFeedbackSettings,
@@ -16,7 +15,7 @@ describe('reviewFeedbackSettings', () => {
     expect(readReviewFeedbackSettings()).toEqual(DEFAULT_REVIEW_FEEDBACK_SETTINGS)
   })
 
-  it('writes sanitized settings to localStorage', () => {
+  it('writes sanitized settings without keeping localStorage as a second authority', () => {
     const saved = writeReviewFeedbackSettings({
       mode: 'quiet',
       soundEnabled: false,
@@ -68,9 +67,6 @@ describe('reviewFeedbackSettings', () => {
     expect(saved.globalIntensity).toBe('balanced')
     expect(saved.celebration.globalCooldownMs).toBe(3000)
     expect(saved.celebration.milestone.steps).toEqual([4, 8, 12])
-    expect(window.localStorage.getItem(REVIEW_FEEDBACK_SETTINGS_STORAGE_KEY)).toContain('"mode":"quiet"')
-    expect(window.localStorage.getItem(REVIEW_FEEDBACK_SETTINGS_STORAGE_KEY)).toContain('"volume":1.75')
-    expect(window.localStorage.getItem(REVIEW_FEEDBACK_SETTINGS_STORAGE_KEY)).toContain('"confettiAmount":2.4')
   })
 
   it('falls back to defaults for invalid values and sanitizes celebration settings', () => {

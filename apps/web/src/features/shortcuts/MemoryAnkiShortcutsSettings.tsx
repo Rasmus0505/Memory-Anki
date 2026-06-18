@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+﻿import { useEffect, useMemo, useState } from 'react'
 import { Keyboard, RotateCcw, Save, Trash2 } from 'lucide-react'
 import {
   captureShortcutFromKeyboardEvent,
@@ -13,7 +13,7 @@ import {
   type MemoryAnkiShortcutActionId,
   type MemoryAnkiShortcutMap,
   type ShortcutScene,
-} from '@/features/shortcuts/memoryAnkiShortcuts'
+} from '@/entities/preferences/model/memoryAnkiShortcuts'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card'

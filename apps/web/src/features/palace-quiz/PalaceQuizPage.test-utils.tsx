@@ -83,7 +83,7 @@ export const pdfControllerMock = {
   handleSubjectDocumentDelete: vi.fn(),
 }
 
-vi.mock('@/shared/api/modules/palaces', () => ({
+vi.mock('@/entities/palace/api/catalogApi', () => ({
   getPalaceApi: (...args: unknown[]) => getPalaceApiMock(...args),
 }))
 
@@ -94,7 +94,7 @@ vi.mock('@/features/ai-config/useAiRunConfigDialog', () => ({
   }),
 }))
 
-vi.mock('@/shared/api/modules/quizzes', () => ({
+vi.mock('@/entities/quiz/api/quizApi', () => ({
   getPalaceQuizQuestionsApi: (...args: unknown[]) => getPalaceQuizQuestionsApiMock(...args),
   createPalaceQuizQuestionApi: vi.fn(),
   batchCreateChapterQuizQuestionsApi: (...args: unknown[]) =>
@@ -118,7 +118,7 @@ vi.mock('@/shared/api/modules/quizzes', () => ({
     requestPalaceShortAnswerFeedbackApiMock(...args),
 }))
 
-vi.mock('@/shared/api/modules/knowledge', () => ({
+vi.mock('@/entities/knowledge/api/knowledgeApi', () => ({
   getSubjectsApi: (...args: unknown[]) => getSubjectsApiMock(...args),
   getSubjectTreeApi: (...args: unknown[]) => getSubjectTreeApiMock(...args),
   uploadSubjectDocumentApi: (...args: unknown[]) => uploadSubjectDocumentApiMock(...args),

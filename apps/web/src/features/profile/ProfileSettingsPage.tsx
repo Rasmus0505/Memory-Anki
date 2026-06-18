@@ -12,13 +12,16 @@ import { toast } from '@/shared/feedback/toast'
 import { ProfileLayout } from '@/features/profile/ProfileLayout'
 import type { ReviewSettings } from '@/shared/api/contracts'
 import {
-  exportJsonUrl,
-  getClientPreferencesApi,
-  exportMarkdownUrl,
+  buildPdfImportOptionsFromSettings,
   getReviewSettingsApi,
-  importFileApi,
   updateReviewSettingsApi,
-} from '@/shared/api/modules/profile'
+} from '@/entities/preferences/api/reviewSettingsApi'
+import { getClientPreferencesApi } from '@/entities/preferences/api/clientPreferencesApi'
+import {
+  exportJsonUrl,
+  exportMarkdownUrl,
+  importFileApi,
+} from '@/features/profile/api/profileApi'
 import { Button } from '@/shared/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card'
 import { Input } from '@/shared/components/ui/input'

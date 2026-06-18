@@ -3,7 +3,7 @@ import {
   getPalaceVersionDetailApi,
   getPalaceVersionsApi,
   restorePalaceVersionApi,
-} from '@/shared/api/modules/palaces'
+} from '@/entities/palace/api'
 import type { PalaceVersionDetail, PalaceVersionSummary } from '@/shared/api/contracts'
 import type { PalaceMeta, StatusBadgeState } from '@/features/palace-edit/model/palace-edit-types'
 

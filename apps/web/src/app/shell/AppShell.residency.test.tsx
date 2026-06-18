@@ -1,4 +1,4 @@
-import * as React from 'react'
+﻿import * as React from 'react'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -7,7 +7,7 @@ import { AppShell, resetNavSectionHistoryForTest } from '@/app/shell/AppShell'
 
 const getRuntimeInfoApi = vi.fn()
 
-vi.mock('@/shared/api/modules/runtime', () => ({
+vi.mock('@/entities/runtime/api/runtimeApi', () => ({
   getRuntimeInfoApi: () => getRuntimeInfoApi(),
 }))
 

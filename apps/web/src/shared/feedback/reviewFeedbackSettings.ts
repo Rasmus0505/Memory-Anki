@@ -1,6 +1,7 @@
 import {
-  getCachedClientPreference,
-  setClientPreference,
+  getClientPreferenceCacheStatus,
+  hasLoadedClientPreferences,
+  saveClientPreference,
 } from '@/shared/preferences/clientPreferences'
 
 export interface ReviewCelebrationEventSettings {
@@ -250,6 +251,17 @@ export function sanitizeReviewFeedbackSettings(value: unknown): ReviewFeedbackSe
 }
 
 export function readReviewFeedbackSettings() {
+  const cached = getClientPreferenceCacheStatus(
+    'review_feedback_settings',
+    (value): value is ReviewFeedbackSettings => Boolean(value && typeof value === 'object'),
+  )
+  if (cached.value) {
+    return sanitizeReviewFeedbackSettings(cached.value)
+  }
+  if (cached.hasEntry || hasLoadedClientPreferences()) {
+    return DEFAULT_REVIEW_FEEDBACK_SETTINGS
+  }
+
   if (typeof window !== 'undefined') {
     try {
       const raw = window.localStorage.getItem(REVIEW_FEEDBACK_SETTINGS_STORAGE_KEY)
@@ -261,29 +273,23 @@ export function readReviewFeedbackSettings() {
     }
   }
 
-  const cached = getCachedClientPreference(
-    'review_feedback_settings',
-    DEFAULT_REVIEW_FEEDBACK_SETTINGS,
-    (value): value is ReviewFeedbackSettings => Boolean(value && typeof value === 'object'),
-  )
-  if (cached !== DEFAULT_REVIEW_FEEDBACK_SETTINGS) {
-    return sanitizeReviewFeedbackSettings(cached)
-  }
   return DEFAULT_REVIEW_FEEDBACK_SETTINGS
+}
+
+function dispatchReviewFeedbackSettingsChange(settings: ReviewFeedbackSettings) {
+  if (typeof window === 'undefined') return
+  window.dispatchEvent(
+    new CustomEvent(REVIEW_FEEDBACK_SETTINGS_UPDATED_EVENT, {
+      detail: settings,
+    }),
+  )
 }
 
 export function writeReviewFeedbackSettings(settings: ReviewFeedbackSettings) {
   const sanitized = sanitizeReviewFeedbackSettings(settings)
-  if (typeof window !== 'undefined') {
-    window.localStorage.setItem(REVIEW_FEEDBACK_SETTINGS_STORAGE_KEY, JSON.stringify(sanitized))
-    void setClientPreference('review_feedback_settings', sanitized).then((saved) => {
-      window.dispatchEvent(
-        new CustomEvent(REVIEW_FEEDBACK_SETTINGS_UPDATED_EVENT, {
-          detail: saved,
-        }),
-      )
-    })
-  }
+  dispatchReviewFeedbackSettingsChange(sanitized)
+  void saveClientPreference('review_feedback_settings', sanitized).then((saved) => {
+    dispatchReviewFeedbackSettingsChange(sanitizeReviewFeedbackSettings(saved.value))
+  })
   return sanitized
 }
-

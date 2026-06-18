@@ -1,0 +1,385 @@
+{
+  "project": "Memory Anki Architecture Refactor",
+  "branchName": "ralph/architecture-boundary-refactor",
+  "description": "Long-term architecture stabilization by tightening boundaries, ownership, configuration contracts, and executable guardrails.",
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "Remove tracked generated artifacts",
+      "description": "As a maintainer, I need generated package metadata and unused starter assets out of source control.",
+      "acceptanceCriteria": [
+        "`git ls-files apps/api/src/memory_anki_api.egg-info` returns no files",
+        "`git grep -n -I -e \"hero.png\" -e \"react.svg\" -e \"vite.svg\" -- apps/web/src index.html` returns no matches",
+        "`.gitignore` contains `*.egg-info/`",
+        "Typecheck passes"
+      ],
+      "priority": 1,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-002",
+      "title": "Enforce frontend config contract",
+      "description": "As a maintainer, I need npm, typecheck, OpenAPI, and Vite proxy drift to fail fast.",
+      "acceptanceCriteria": [
+        "`apps/web/package.json` has `typecheck` equal to `tsc -b --noEmit`",
+        "`apps/web/package.json` `openapi:types` targets `http://127.0.0.1:8012/openapi.json`",
+        "`apps/web/vite.config.ts` `/api` proxy target is `http://127.0.0.1:8012`",
+        "`tools/check_architecture.py` rejects tracked `apps/web/pnpm-lock.yaml` and `.egg-info/` files",
+        "`python tools/check_architecture.py` passes",
+        "Typecheck passes"
+      ],
+      "priority": 2,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-003",
+      "title": "Consolidate browser preference transport",
+      "description": "As a developer, I need backend client preferences to have one cache and migration primitive.",
+      "acceptanceCriteria": [
+        "`apps/web/src/shared/preferences/clientPreferences.ts` exposes cache status and optimistic save helpers",
+        "`migrateLocalPreferenceToBackend` does not delete legacy localStorage when backend loading fails",
+        "`migrateLocalPreferenceToBackend` uploads legacy localStorage when backend key is null or missing",
+        "`apps/web/src/shared/preferences/clientPreferences.test.ts` covers missing-backend migration and offline preservation",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 3,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-004",
+      "title": "Create persistent preference store primitive",
+      "description": "As a developer, I need reusable preference stores to share backend-first read, optimistic write, and domain event behavior.",
+      "acceptanceCriteria": [
+        "`apps/web/src/shared/preferences/persistentPreferenceStore.ts` contains the generic store primitive only",
+        "Store read prefers loaded backend cache over stale localStorage",
+        "Store write does not create a long-lived localStorage shadow copy",
+        "`apps/web/src/shared/preferences/persistentPreferenceStore.test.ts` covers backend-first read and optimistic update events",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 4,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-005",
+      "title": "Move cross-feature preference models to entities",
+      "description": "As a frontend maintainer, I need shared preference schemas to have one entity-level owner.",
+      "acceptanceCriteria": [
+        "`apps/web/src/entities/preferences/model/englishPracticeSettings.ts` owns English practice settings",
+        "`apps/web/src/entities/preferences/model/memoryAnkiShortcuts.ts` owns global Memory Anki shortcuts",
+        "`apps/web/src/entities/preferences/model/voiceCoachSettings.ts` owns voice coach settings",
+        "`rg \"features/.*/.*Settings\" apps/web/src/entities apps/web/src/features` shows no imports from deleted feature-owned settings files",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 5,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-006",
+      "title": "Extract shortcut binding kernel",
+      "description": "As a developer, I need shortcut capture, labels, signatures, validation, and matching to share one implementation.",
+      "acceptanceCriteria": [
+        "`apps/web/src/shared/keyboard/shortcutBindings.ts` contains generic shortcut binding logic",
+        "English and global shortcut modules declare action schemas and defaults only",
+        "`apps/web/src/shared/keyboard/shortcutBindings.test.ts` covers capture, labels, signatures, and modifier matching",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 6,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-007",
+      "title": "Migrate review feedback preference to backend authority",
+      "description": "As a maintainer, I need review feedback settings to stop treating localStorage as a second source of truth.",
+      "acceptanceCriteria": [
+        "`readReviewFeedbackSettings` reads loaded client-preference cache before localStorage",
+        "`writeReviewFeedbackSettings` calls `saveClientPreference` and does not call `localStorage.setItem`",
+        "`REVIEW_FEEDBACK_SETTINGS_UPDATED_EVENT` fires for optimistic cache writes",
+        "`apps/web/src/shared/feedback/reviewFeedbackSettings.test.ts` passes",
+        "Typecheck passes"
+      ],
+      "priority": 7,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-008",
+      "title": "Migrate timer preferences to backend authority",
+      "description": "As a maintainer, I need timer automation and focus settings to follow the same backend-first preference model.",
+      "acceptanceCriteria": [
+        "`readTimerAutomationConfig` and `readTimerFocusConfig` read loaded client-preference cache before localStorage",
+        "`saveTimerAutomationConfig` and `saveTimerFocusConfig` call `saveClientPreference` and do not call `localStorage.setItem`",
+        "Reset functions remove legacy localStorage keys only as cleanup",
+        "`apps/web/src/shared/components/session/timer-automation-config.test.ts` passes",
+        "Typecheck passes"
+      ],
+      "priority": 8,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-009",
+      "title": "Keep route-local preference hook backend-first",
+      "description": "As a frontend maintainer, I need route-local preference state to bridge to backend preferences without hard-coded shared key maps.",
+      "acceptanceCriteria": [
+        "`apps/web/src/shared/lib/localStorage.ts` accepts explicit preference ownership instead of hard-coded dashboard/palace key maps",
+        "Feature callers provide backend preference keys explicitly; no local preference registry exists",
+        "`apps/web/src/shared/preferences/localPreferenceRegistry.ts` does not exist",
+        "`useLocalStorageState` still listens to `CLIENT_PREFERENCES_UPDATED_EVENT` for mapped keys",
+        "Dashboard, palace list, and palace shelf pages still typecheck",
+        "`python tools/check_architecture.py` rejects reintroducing the local preference registry",
+        "Typecheck passes"
+      ],
+      "priority": 9,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-010",
+      "title": "Keep Dashboard implementation under features",
+      "description": "As a frontend maintainer, I need the Dashboard business page to live in feature-owned code and not in app/router.",
+      "acceptanceCriteria": [
+        "Dashboard implementation lives in `apps/web/src/features/dashboard`",
+        "`apps/web/src/app/router` no longer contains `DashboardPage.tsx` or its dashboard tests",
+        "Route wiring imports the feature page instead of hosting the implementation",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 10,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-011",
+      "title": "Keep palace catalog implementation under features",
+      "description": "As a frontend maintainer, I need palace list and shelf business pages plus their catalog model to live in feature-owned code.",
+      "acceptanceCriteria": [
+        "Palace list and shelf implementations live in `apps/web/src/features/palace-catalog`",
+        "`apps/web/src/app/router` no longer contains `PalaceListPage.tsx`, `PalaceShelfPage.tsx`, or `palace-list/` components",
+        "Catalog scope and flattening logic live in a feature model module",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 11,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-012",
+      "title": "Extract palace quiz title read contract",
+      "description": "As a backend maintainer, I need palace_quiz to read palace titles through a stable contract instead of palaces internals.",
+      "acceptanceCriteria": [
+        "`question_explicit_chapter_queries.py` does not import `palaces.application.title_sync_service`",
+        "`quiz_generation_chapter_scope_selection.py` does not import `palaces.application.title_sync_service`",
+        "A public application contract or projection exposes only required title/chapter data",
+        "Relevant palace_quiz tests pass",
+        "Typecheck passes"
+      ],
+      "priority": 12,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-013",
+      "title": "Extract mindmap model serialization contract",
+      "description": "As a backend maintainer, I need quiz generation to use a public mindmap serialization contract.",
+      "acceptanceCriteria": [
+        "`question_generation_payloads.py` does not import `palaces.application.mindmap_import.model_io`",
+        "`quiz_generation_prompt_messages.py` does not import `palaces.application.mindmap_import.model_io`",
+        "New contract tests cover required mindmap input/output conversion",
+        "Relevant quiz generation tests pass",
+        "Typecheck passes"
+      ],
+      "priority": 13,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-014",
+      "title": "Extract quiz grouping read projections",
+      "description": "As a backend maintainer, I need quiz grouping to depend on public mini-palace and segment projections.",
+      "acceptanceCriteria": [
+        "`quiz_grouping_context.py` does not import `mini_palace_service`",
+        "`quiz_grouping_context.py` does not import `segment_nodes`",
+        "Projection module exposes only data required by quiz grouping",
+        "Relevant quiz grouping tests pass",
+        "Typecheck passes"
+      ],
+      "priority": 14,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-015",
+      "title": "Guard palace_quiz application imports",
+      "description": "As a maintainer, I need architecture checks to prevent new palace_quiz imports from palaces private application internals.",
+      "acceptanceCriteria": [
+        "`tools/check_architecture.py` scans `memory_anki/modules/palace_quiz/application` imports",
+        "Imports from `memory_anki.modules.palaces.application.*` fail unless they target an approved public contract",
+        "Adding an illegal import locally makes `python tools/check_architecture.py` fail",
+        "`python tools/check_architecture.py` passes on the current code",
+        "Typecheck passes"
+      ],
+      "priority": 15,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-016",
+      "title": "Split PalaceQuizGenerationPanel",
+      "description": "As a frontend maintainer, I need quiz generation UI split by responsibility.",
+      "acceptanceCriteria": [
+        "`PalaceQuizGenerationPanel.tsx` is under 350 lines",
+        "Input, progress, history, and container responsibilities live in separate files",
+        "`PalaceQuizPage.generation.test.tsx` passes",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 16,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-017",
+      "title": "Split useTimedSession",
+      "description": "As a frontend maintainer, I need timed session storage, snapshot, restore, and browser effects separated.",
+      "acceptanceCriteria": [
+        "`useTimedSession.ts` is under 350 lines",
+        "Storage, restoration, snapshot, and browser side effects live in separate modules",
+        "Pure model tests cover snapshot and restore boundaries",
+        "Existing timed session tests pass",
+        "Typecheck passes"
+      ],
+      "priority": 17,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-018",
+      "title": "Split English reading workflow state model",
+      "description": "As a frontend maintainer, I need English reading state transitions separated from asynchronous orchestration.",
+      "acceptanceCriteria": [
+        "`useEnglishReadingWorkflow.ts` is under 350 lines",
+        "Core state transitions live in a testable reducer or model module",
+        "EnglishReadingPage core, interaction, and session tests pass",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 18,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-019",
+      "title": "Move review API wrappers to review feature",
+      "description": "As a frontend maintainer, I need review endpoints to be owned by the review feature rather than shared business API modules.",
+      "acceptanceCriteria": [
+        "`apps/web/src/features/review/api/reviewApi.ts` owns review, segment-review, mini-review, and review progress wrappers",
+        "`apps/web/src/shared/api/modules/reviews.ts` does not exist",
+        "`rg \"@/shared/api/modules/reviews\" apps/web/src` returns no matches",
+        "`python tools/check_architecture.py` rejects recreating `shared/api/modules/reviews.ts`",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 19,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-020",
+      "title": "Move runtime and AI log APIs to entity owners",
+      "description": "As a frontend maintainer, I need cross-feature runtime and AI log endpoints to be entity-owned instead of broad shared API modules.",
+      "acceptanceCriteria": [
+        "`apps/web/src/entities/runtime/api/runtimeApi.ts` owns runtime-info requests",
+        "`apps/web/src/entities/ai-log/api/aiLogsApi.ts` owns AI call log requests",
+        "`apps/web/src/shared/api/modules/runtime.ts` and `apps/web/src/shared/api/modules/aiLogs.ts` do not exist",
+        "`rg \"@/shared/api/modules/(runtime|aiLogs)\" apps/web/src` returns no matches",
+        "`python tools/check_architecture.py` rejects recreating those shared API modules",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 20,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-021",
+      "title": "Move knowledge API wrappers to knowledge entity",
+      "description": "As a frontend maintainer, I need subject, chapter, editor, and document endpoints to be owned by the knowledge entity.",
+      "acceptanceCriteria": [
+        "`apps/web/src/entities/knowledge/api/knowledgeApi.ts` owns subject, chapter, subject-editor, and subject-document wrappers",
+        "`apps/web/src/shared/api/modules/knowledge.ts` does not exist",
+        "`rg \"@/shared/api/modules/knowledge\" apps/web/src` returns no matches",
+        "`saveSubjectEditorApi` contains no debug `console.log` output",
+        "`python tools/check_architecture.py` rejects recreating `shared/api/modules/knowledge.ts`",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 21,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-022",
+      "title": "Move quiz API wrappers to quiz entity",
+      "description": "As a frontend maintainer, I need question and quiz-generation endpoints to be entity-owned so knowledge and palace quiz features do not depend on each other.",
+      "acceptanceCriteria": [
+        "`apps/web/src/entities/quiz/api/quizApi.ts` owns quiz question, chapter quiz, generation, recovery, classification, attempt, and feedback wrappers",
+        "`apps/web/src/shared/api/modules/quizzes.ts` does not exist",
+        "`apps/web/src/features/palace-quiz/api/quizApi.ts` does not exist",
+        "`rg \"@/shared/api/modules/quizzes|@/features/palace-quiz/api/quizApi\" apps/web/src` returns no matches",
+        "`tools/check_architecture.py` rejects recreating the removed shared or feature quiz API files",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 22,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-023",
+      "title": "Move palace and import APIs to entity owners",
+      "description": "As a frontend maintainer, I need palace APIs and import-job APIs out of the shared palaces business bucket and owned by their domains.",
+      "acceptanceCriteria": [
+        "`apps/web/src/entities/palace/api` owns palace catalog, editor, practice, version, chapter-link, attachment, focus, and palace state API wrappers",
+        "`apps/web/src/entities/mini-palace/api` owns mini-palace API wrappers",
+        "`apps/web/src/entities/palace-segment/api` owns palace segment API wrappers",
+        "`apps/web/src/entities/knowledge-import/api` owns import preview, stream parsing, and import-job API wrappers",
+        "`apps/web/src/features/mindmap-import` owns shared mind-map import workflow UI, hooks, and model",
+        "`apps/web/src/features/palace-edit` does not contain `useMindMapImport`, `PalaceMindMapImportDrawer`, or `palace-import-drawer` internals",
+        "`apps/web/src/shared/api/modules/palaces.ts` and `apps/web/src/shared/api/modules/palaces/` do not exist",
+        "`rg \"@/shared/api/modules/palaces\" apps/web/src` returns no matches",
+        "`tools/check_architecture.py` rejects recreating the removed shared palaces module or directory",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 23,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-024",
+      "title": "Document architecture guardrails",
+      "description": "As a maintainer using AI coding tools, I need concise guardrails that preserve boundaries without freezing evolution.",
+      "acceptanceCriteria": [
+        "`docs/architecture/README.md` documents backend ownership and allowed cross-module dependencies",
+        "`docs/architecture/README.md` documents preference ownership and backend client preferences authority",
+        "`docs/architecture/README.md` documents config contract files and generated-output cleanup rules",
+        "A short AI architecture prompt is present",
+        "Typecheck passes"
+      ],
+      "priority": 24,
+      "passes": false,
+      "notes": ""
+    }
+  ]
+}

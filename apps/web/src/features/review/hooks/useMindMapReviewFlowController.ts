@@ -9,7 +9,7 @@ import { useMiniPalaceController } from "@/features/mini-palace";
 import { useQuizLauncher } from "@/features/palace-quiz/QuizLauncherProvider";
 import { getReviewSurpriseCopy } from "@/features/review/model/review-feedback";
 import { useReviewFlowSession } from "@/features/review/hooks/useReviewFlowSession";
-import { useMemoryAnkiShortcuts } from "@/features/shortcuts/memoryAnkiShortcuts";
+import { useMemoryAnkiShortcuts } from "@/entities/preferences/model/memoryAnkiShortcuts";
 import { useVoiceCoachController } from "@/features/voice-coach";
 import { appendTimeRecord } from "@/entities/session/model";
 import type { MindMapSelection } from "@/shared/components/mindmap-host";

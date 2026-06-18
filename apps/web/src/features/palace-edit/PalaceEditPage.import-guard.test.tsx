@@ -3,8 +3,8 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import PalaceEditPage from '@/features/palace-edit/PalaceEditPage'
-import * as palaceApi from '@/shared/api/modules/palaces'
-import * as knowledgeApi from '@/shared/api/modules/knowledge'
+import * as palaceApi from '@/entities/palace/api'
+import * as knowledgeApi from '@/entities/knowledge/api/knowledgeApi'
 
 vi.mock('sonner', () => ({
   toast: {
@@ -65,7 +65,7 @@ vi.mock('@/shared/hooks/useTimedSession', () => ({
   shouldAutoStartOnPageEnter: () => false,
 }))
 
-vi.mock('@/features/palace-edit/hooks/useMindMapImport', () => ({
+vi.mock('@/features/mindmap-import', () => ({
   useMindMapImport: (options: {
     applyEditorState?: (
       nextState: typeof importedEditorState,
@@ -173,6 +173,15 @@ vi.mock('@/features/palace-edit/hooks/useMindMapImport', () => ({
       importHistory: [],
     }
   },
+  MindMapImportDrawer: ({
+    onApplyReplace,
+  }: {
+    onApplyReplace: () => void
+  }) => (
+    <button type="button" onClick={onApplyReplace}>
+      覆盖当前脑图
+    </button>
+  ),
 }))
 
 vi.mock('@/shared/components/mindmap-host', () => ({
@@ -224,18 +233,6 @@ vi.mock('@/shared/components/mindmap-host', () => ({
       {importMindMapAction ? <button type="button" onClick={importMindMapAction.onClick}>{importMindMapAction.label}</button> : null}
       {importTextAction ? <button type="button" onClick={importTextAction.onClick}>{importTextAction.label}</button> : null}
     </div>
-  ),
-}))
-
-vi.mock('@/features/palace-edit/components/PalaceMindMapImportDrawer', () => ({
-  PalaceMindMapImportDrawer: ({
-    onApplyReplace,
-  }: {
-    onApplyReplace: () => void
-  }) => (
-    <button type="button" onClick={onApplyReplace}>
-      覆盖当前脑图
-    </button>
   ),
 }))
 

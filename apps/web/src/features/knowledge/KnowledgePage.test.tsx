@@ -1,8 +1,8 @@
-import * as React from 'react'
+﻿import * as React from 'react'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 import KnowledgePage from '@/features/knowledge/KnowledgePage'
-import * as knowledgeApi from '@/shared/api/modules/knowledge'
+import * as knowledgeApi from '@/entities/knowledge/api/knowledgeApi'
 
 const knowledgeReloadMock = vi.hoisted(() => vi.fn())
 const knowledgeReplaceEditorStateMock = vi.hoisted(() => vi.fn())
@@ -89,12 +89,9 @@ vi.mock('@/shared/components/mindmap-host', () => ({
   ),
 }))
 
-vi.mock('@/features/palace-edit/hooks/useMindMapImport', () => ({
+vi.mock('@/features/mindmap-import', () => ({
   useMindMapImport: knowledgeUseMindMapImportMock,
-}))
-
-vi.mock('@/features/palace-edit/components/PalaceMindMapImportDrawer', () => ({
-  PalaceMindMapImportDrawer: () => null,
+  MindMapImportDrawer: () => null,
 }))
 
 describe('KnowledgePage mind map host refresh behavior', () => {

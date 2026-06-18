@@ -1,14 +1,14 @@
-import { act, render, waitFor } from '@testing-library/react'
+﻿import { act, render, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useVoiceCoachController } from '@/features/voice-coach/useVoiceCoachController'
 import {
   DEFAULT_VOICE_COACH_SETTINGS,
   VOICE_COACH_SETTINGS_STORAGE_KEY,
-} from '@/features/voice-coach/voiceCoachSettings'
-import { synthesizeVoiceCoachApi } from '@/shared/api/modules/voiceCoach'
+} from '@/entities/preferences/model/voiceCoachSettings'
+import { synthesizeVoiceCoachApi } from '@/features/voice-coach/api'
 import type { TimedSessionController } from '@/shared/hooks/useTimedSession'
 
-vi.mock('@/shared/api/modules/voiceCoach', () => ({
+vi.mock('@/features/voice-coach/api', () => ({
   synthesizeVoiceCoachApi: vi.fn(async (event: string) => ({
     ok: true,
     event,

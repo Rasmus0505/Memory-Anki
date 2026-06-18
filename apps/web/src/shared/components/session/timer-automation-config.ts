@@ -1,8 +1,9 @@
 import type { SessionKind } from '@/entities/session/model'
 
 import {
-  getCachedClientPreference,
-  setClientPreference,
+  getClientPreferenceCacheStatus,
+  hasLoadedClientPreferences,
+  saveClientPreference,
 } from '@/shared/preferences/clientPreferences'
 
 export type TimerAutomationScene = SessionKind | 'english' | 'english_reading'
@@ -41,6 +42,7 @@ export type TimerAutomationActivityKind =
   | 'practice_interaction'
 
 export const TIMER_AUTOMATION_STORAGE_KEY = 'memory-anki-timer-automation-config'
+export const TIMER_AUTOMATION_UPDATED_EVENT = 'memory-anki-timer-automation-change'
 
 export const DEFAULT_TIMER_AUTOMATION_CONFIG: TimerAutomationConfig = {
   mode: 'scene',
@@ -201,6 +203,17 @@ export function sanitizeTimerAutomationConfig(value: unknown): TimerAutomationCo
 }
 
 export function readTimerAutomationConfig(): TimerAutomationConfig {
+  const cached = getClientPreferenceCacheStatus(
+    'timer_automation_config',
+    (value): value is TimerAutomationConfig => Boolean(value && typeof value === 'object'),
+  )
+  if (cached.value) {
+    return sanitizeTimerAutomationConfig(cached.value)
+  }
+  if (cached.hasEntry || hasLoadedClientPreferences()) {
+    return DEFAULT_TIMER_AUTOMATION_CONFIG
+  }
+
   try {
     const raw = window.localStorage.getItem(TIMER_AUTOMATION_STORAGE_KEY)
     if (raw) {
@@ -210,31 +223,31 @@ export function readTimerAutomationConfig(): TimerAutomationConfig {
     return DEFAULT_TIMER_AUTOMATION_CONFIG
   }
 
-  const cached = getCachedClientPreference(
-    'timer_automation_config',
-    DEFAULT_TIMER_AUTOMATION_CONFIG,
-    (value): value is TimerAutomationConfig => Boolean(value && typeof value === 'object'),
-  )
-  if (cached !== DEFAULT_TIMER_AUTOMATION_CONFIG) {
-    return sanitizeTimerAutomationConfig(cached)
-  }
   return DEFAULT_TIMER_AUTOMATION_CONFIG
+}
+
+function dispatchTimerAutomationChange(config: TimerAutomationConfig) {
+  if (typeof window === 'undefined') return
+  window.dispatchEvent(new CustomEvent(TIMER_AUTOMATION_UPDATED_EVENT, { detail: config }))
 }
 
 export function saveTimerAutomationConfig(config: TimerAutomationConfig) {
   const sanitized = sanitizeTimerAutomationConfig(config)
-  window.localStorage.setItem(TIMER_AUTOMATION_STORAGE_KEY, JSON.stringify(sanitized))
-  void setClientPreference('timer_automation_config', sanitized).then((saved) => {
-    window.dispatchEvent(new CustomEvent('memory-anki-timer-automation-change', { detail: saved }))
+  dispatchTimerAutomationChange(sanitized)
+  void saveClientPreference('timer_automation_config', sanitized).then((saved) => {
+    dispatchTimerAutomationChange(sanitizeTimerAutomationConfig(saved.value))
   })
   return sanitized
 }
 
 export function resetTimerAutomationConfig() {
   const nextConfig = DEFAULT_TIMER_AUTOMATION_CONFIG
-  window.localStorage.removeItem(TIMER_AUTOMATION_STORAGE_KEY)
-  void setClientPreference('timer_automation_config', nextConfig).then((saved) => {
-    window.dispatchEvent(new CustomEvent('memory-anki-timer-automation-change', { detail: saved }))
+  if (typeof window !== 'undefined') {
+    window.localStorage.removeItem(TIMER_AUTOMATION_STORAGE_KEY)
+  }
+  dispatchTimerAutomationChange(nextConfig)
+  void saveClientPreference('timer_automation_config', nextConfig).then((saved) => {
+    dispatchTimerAutomationChange(sanitizeTimerAutomationConfig(saved.value))
   })
   return nextConfig
 }

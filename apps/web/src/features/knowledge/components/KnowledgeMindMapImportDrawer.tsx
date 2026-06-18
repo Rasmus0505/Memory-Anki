@@ -1,5 +1,4 @@
-import { PalaceMindMapImportDrawer } from '@/features/palace-edit/components/PalaceMindMapImportDrawer'
-import { useMindMapImport } from '@/features/palace-edit/hooks/useMindMapImport'
+﻿import { MindMapImportDrawer, useMindMapImport } from '@/features/mindmap-import'
 
 interface KnowledgeMindMapImportDrawerProps {
   mindMapImport: ReturnType<typeof useMindMapImport>
@@ -11,7 +10,7 @@ export function KnowledgeMindMapImportDrawer({
   targetNodeLabel,
 }: KnowledgeMindMapImportDrawerProps) {
   return (
-    <PalaceMindMapImportDrawer
+    <MindMapImportDrawer
       open={mindMapImport.importOpen}
       onOpenChange={mindMapImport.setImportOpen}
       mode={mindMapImport.importMode}

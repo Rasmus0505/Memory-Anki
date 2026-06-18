@@ -1,4 +1,4 @@
-﻿import { useCallback, useState } from 'react'
+import { useCallback, useState } from 'react'
 import type {
   BilinkItem,
   BilinkNodeContext,
@@ -10,12 +10,12 @@ import {
   deleteBilinkApi,
   getBilinkNodeContextApi,
 } from '@/features/bilink/api/bilink'
-import { getPalaceEditorApi } from '@/shared/api/modules/palaces/catalogApi'
+import { getPalaceEditorApi } from '@/entities/palace/api'
 import { useBilinkSearch } from '@/features/bilink/hooks/useBilinkSearch'
 import {
   normalizePreviewConfig,
   normalizePreviewEditorDoc,
-} from '@/features/palace-edit/model/palace-edit-format'
+} from '@/shared/lib/mindmapPreview'
 import { toast } from '@/shared/feedback/toast'
 
 type BilinkSearchMode = 'inline' | 'toolbar'

@@ -7,8 +7,8 @@ import {
   createBackupApi,
   getBackupsApi,
   restoreBackupApi,
-} from '@/shared/api/modules/profile'
-import { getRuntimeInfoApi } from '@/shared/api/modules/runtime'
+} from '@/features/profile/api/profileApi'
+import { getRuntimeInfoApi } from '@/entities/runtime/api/runtimeApi'
 import { Button } from '@/shared/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card'
 import { EmptyState } from '@/shared/components/state-placeholders'

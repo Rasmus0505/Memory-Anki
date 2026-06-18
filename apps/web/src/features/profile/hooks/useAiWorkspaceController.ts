@@ -1,8 +1,8 @@
 ﻿import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "@/shared/feedback/toast";
-import { readVoiceCoachSettings } from "@/features/voice-coach/voiceCoachSettings";
-import { getAiCallLogApi, listAiCallLogsApi } from "@/shared/api/modules/aiLogs";
+import { readVoiceCoachSettings } from "@/entities/preferences/model/voiceCoachSettings";
+import { getAiCallLogApi, listAiCallLogsApi } from "@/entities/ai-log/api/aiLogsApi";
 import type {
   AiCallLogDetail,
   AiCallLogSummary,
@@ -23,8 +23,8 @@ import {
   testAiModelApi,
   testAiProviderApi,
   updateAiModelScenariosApi,
-} from "@/shared/api/modules/profile";
-import { synthesizeVoiceCoachApi } from "@/shared/api/modules/voiceCoach";
+} from "@/entities/preferences/api/aiModelSettingsApi";
+import { synthesizeVoiceCoachApi } from "@/features/voice-coach/api";
 import {
   buildEmptyModelDraft,
   categorySupportsThinking,

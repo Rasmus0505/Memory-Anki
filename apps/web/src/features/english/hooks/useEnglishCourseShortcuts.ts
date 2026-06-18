@@ -1,10 +1,10 @@
-import { useCallback, useEffect } from 'react'
+﻿import { useCallback, useEffect } from 'react'
 import type { KeyboardEvent as ReactKeyboardEvent, RefObject } from 'react'
 import {
   getShortcutLabel,
   isShortcutPressed,
   type EnglishPracticeSettings,
-} from '@/features/english/englishPracticeSettings'
+} from '@/entities/preferences/model/englishPracticeSettings'
 import { isEditableShortcutTarget } from '@/features/english/englishTypingHelpers'
 
 interface UseEnglishCourseShortcutsOptions {

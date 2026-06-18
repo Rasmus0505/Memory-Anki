@@ -1,9 +1,9 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+﻿import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { describe, expect, it, vi } from 'vitest'
 import { ProfileAiConfigPage } from '@/features/profile/ProfileAiConfigPage'
-import * as aiLogsApi from '@/shared/api/modules/aiLogs'
-import * as profileApi from '@/shared/api/modules/profile'
+import * as aiLogsApi from '@/entities/ai-log/api/aiLogsApi'
+import * as profileApi from '@/entities/preferences/api/aiModelSettingsApi'
 
 vi.mock('sonner', () => ({
   toast: {
@@ -12,7 +12,7 @@ vi.mock('sonner', () => ({
   },
 }))
 
-vi.mock('@/shared/api/modules/voiceCoach', () => ({
+vi.mock('@/features/voice-coach/api', () => ({
   synthesizeVoiceCoachApi: vi.fn(),
 }))
 

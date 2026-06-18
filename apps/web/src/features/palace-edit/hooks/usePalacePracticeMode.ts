@@ -9,7 +9,7 @@ import {
   clearPracticeSessionProgressApi,
   getPracticeSessionProgressApi,
   savePracticeSessionProgressApi,
-} from '@/shared/api/modules/palaces'
+} from '@/entities/palace/api'
 import type { MindMapSelection } from '@/shared/components/mindmap-host'
 import type { MindMapEditorState, SessionProgressSnapshot } from '@/shared/api/contracts'
 import type { EditorMode } from '@/features/palace-edit/model/mindmap-editor'

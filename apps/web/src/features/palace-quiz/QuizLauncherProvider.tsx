@@ -1,4 +1,4 @@
-﻿import {
+import {
   createContext,
   useCallback,
   useContext,
@@ -19,8 +19,8 @@ import {
   type QuizLauncherGenerationSourceKind,
 } from '@/features/palace-quiz/quizGenerationController'
 import type { MindMapEditorState, PalaceQuizQuestionType } from '@/shared/api/contracts'
-import { getSubjectsApi } from '@/shared/api/modules/knowledge'
-import { getPalaceApi } from '@/shared/api/modules/palaces/catalogApi'
+import { getSubjectsApi } from '@/entities/knowledge/api/knowledgeApi'
+import { getPalaceApi } from '@/entities/palace/api'
 import {
   completeTask,
   failTask,

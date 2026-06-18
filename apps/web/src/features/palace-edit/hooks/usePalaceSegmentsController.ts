@@ -4,7 +4,7 @@ import {
   deletePalaceSegmentApi,
   getPalaceSegmentsApi,
   updatePalaceSegmentApi,
-} from '@/shared/api/modules/palaces'
+} from '@/entities/palace-segment/api'
 import type { PalaceSegmentSummary } from '@/shared/api/contracts'
 import type { MindMapSelection } from '@/shared/components/mindmap-host'
 import {

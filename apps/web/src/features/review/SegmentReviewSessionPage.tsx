@@ -1,4 +1,4 @@
-import type {
+﻿import type {
   MindMapEditorState,
   ReviewScheduleSummary,
   SegmentReviewScheduleSummary,
@@ -9,7 +9,7 @@ import {
   getSegmentReviewSessionProgressApi,
   saveSegmentReviewSessionProgressApi,
   submitSegmentReviewSessionApi,
-} from '@/shared/api/modules/reviews'
+} from '@/features/review/api/reviewApi'
 import {
   ReviewSessionContainer,
   type ReviewSessionContainerSession,

@@ -1,5 +1,0 @@
-export * from './palaces/catalogApi'
-export * from './palaces/structureApi'
-export * from './palaces/editorApi'
-export * from './palaces/practiceApi'
-export * from './palaces/importApi'

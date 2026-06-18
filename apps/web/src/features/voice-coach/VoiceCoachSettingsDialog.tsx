@@ -1,4 +1,4 @@
-import * as React from 'react'
+﻿import * as React from 'react'
 import { Bell, PencilLine, Play, RotateCcw, Volume2 } from 'lucide-react'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
@@ -18,8 +18,8 @@ import {
   VOICE_COACH_SETTINGS_UPDATED_EVENT,
   writeVoiceCoachSettings,
   type VoiceCoachSettings,
-} from '@/features/voice-coach/voiceCoachSettings'
-import type { VoiceCoachEvent } from '@/shared/api/modules/voiceCoach'
+} from '@/entities/preferences/model/voiceCoachSettings'
+import type { VoiceCoachEvent } from '@/features/voice-coach/api'
 
 interface VoiceCoachSettingsDialogProps {
   open: boolean

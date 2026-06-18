@@ -7,10 +7,12 @@ import {
   shouldAutoStartOnPageEnter,
   TIMER_AUTOMATION_STORAGE_KEY,
 } from '@/shared/components/session/timer-automation-config'
+import { resetClientPreferenceCacheForTest } from '@/shared/preferences/clientPreferences'
 
 describe('timer automation config', () => {
   beforeEach(() => {
     window.localStorage.clear()
+    resetClientPreferenceCacheForTest()
     vi.restoreAllMocks()
   })
 
@@ -87,7 +89,7 @@ describe('timer automation config', () => {
     expect(saved.actions.autoResumeOnWindowReturn).toBe(
       DEFAULT_TIMER_AUTOMATION_CONFIG.actions.autoResumeOnWindowReturn,
     )
-    expect(window.localStorage.getItem(TIMER_AUTOMATION_STORAGE_KEY)).toContain('"hiddenAutoPauseSeconds":30')
+    expect(window.localStorage.getItem(TIMER_AUTOMATION_STORAGE_KEY)).toBeNull()
   })
 
   it('fills in default action rules and english scene for legacy stored configs', () => {
@@ -133,7 +135,7 @@ describe('timer automation config', () => {
     })
 
     expect(saved.palace_edit.autoPauseRollbackSeconds).toBe(20)
-    expect(window.localStorage.getItem(TIMER_AUTOMATION_STORAGE_KEY)).toContain('"autoPauseRollbackSeconds":20')
+    expect(window.localStorage.getItem(TIMER_AUTOMATION_STORAGE_KEY)).toBeNull()
   })
 
   it('resets to defaults', () => {

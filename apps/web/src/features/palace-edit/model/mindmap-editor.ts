@@ -1,4 +1,4 @@
-import {
+﻿import {
   countEditorDocNodes,
   fingerprintEditorDoc,
 } from '@/shared/lib/applyProgrammaticEditorState'
@@ -24,7 +24,7 @@ export function parseMindMapDoc(value: unknown): MindMapDoc | null {
   return typeof value === 'object' ? (value as MindMapDoc) : null
 }
 
-export function buildPalaceImportValidationFingerprint(
+export function buildMindMapImportValidationFingerprint(
   editorDoc: MindMapEditorState['editor_doc'],
   palaceTitle: string,
 ) {

@@ -13,6 +13,7 @@
 # ===== Python =====
 *.pyc
 __pycache__/
+*.egg-info/
 /apps/api/.venv/
 /apps/api/.coverage
 /apps/api/htmlcov/

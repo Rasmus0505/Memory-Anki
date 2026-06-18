@@ -21,7 +21,7 @@ import {
   readEnglishPracticeSettings,
   writeEnglishPracticeSettings,
   type EnglishPracticeSettings,
-} from '@/features/english/englishPracticeSettings'
+} from '@/entities/preferences/model/englishPracticeSettings'
 import {
   isTouchPrimaryInputDevice,
   shouldKeepEnglishPracticeControlFocus,

@@ -1,5 +1,5 @@
-import { getSubjectTreeApi, getSubjectsApi, uploadSubjectDocumentApi } from '@/shared/api/modules/knowledge'
-import { getPalaceApi } from '@/shared/api/modules/palaces/catalogApi'
+import { getSubjectTreeApi, getSubjectsApi, uploadSubjectDocumentApi } from '@/entities/knowledge/api/knowledgeApi'
+import { getPalaceApi } from '@/entities/palace/api'
 import {
   batchDeletePalaceQuizQuestionsApi,
   batchCreateChapterQuizQuestionsApi,
@@ -11,7 +11,7 @@ import {
   recoverAndSavePalaceQuizGenerationFromAiLogApi,
   requestPalaceShortAnswerFeedbackApi,
   updatePalaceQuizQuestionApi,
-} from '@/shared/api/modules/quizzes'
+} from '@/entities/quiz/api/quizApi'
 
 export {
   batchDeletePalaceQuizQuestionsApi,

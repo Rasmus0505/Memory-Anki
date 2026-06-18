@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { ClipboardList, Copy, Trash2, X } from 'lucide-react'
-import { getAiCallLogApi, listAiCallLogsApi } from '@/shared/api/modules/aiLogs'
+import { getAiCallLogApi, listAiCallLogsApi } from '@/entities/ai-log/api/aiLogsApi'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
 import {

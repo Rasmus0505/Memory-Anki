@@ -10,8 +10,8 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit",
-    "openapi:types": "openapi-typescript http://127.0.0.1:8000/openapi.json -o src/shared/api/generated.ts"
+    "typecheck": "tsc -b --noEmit",
+    "openapi:types": "openapi-typescript http://127.0.0.1:8012/openapi.json -o src/shared/api/generated.ts"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.16",

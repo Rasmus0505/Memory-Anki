@@ -22,7 +22,7 @@ import { applyProgrammaticEditorState } from '@/shared/lib/applyProgrammaticEdit
 import { cn } from '@/shared/lib/utils'
 import { KnowledgeChapterQuizDialog } from '@/features/knowledge/components/KnowledgeChapterQuizDialog'
 import { KnowledgeMindMapImportDrawer } from '@/features/knowledge/components/KnowledgeMindMapImportDrawer'
-import { useMindMapImport, type ImportApplyContext } from '@/features/palace-edit/hooks/useMindMapImport'
+import { useMindMapImport, type ImportApplyContext } from '@/features/mindmap-import'
 import {
   createSubjectApi,
   deleteSubjectApi,
@@ -30,24 +30,18 @@ import {
   getSubjectEditorApi,
   getSubjectsApi,
   saveSubjectEditorApi,
+  type SubjectSummary,
   updateSubjectApi,
-} from '@/shared/api/modules/knowledge'
+} from '@/entities/knowledge/api/knowledgeApi'
 import {
   batchCreateChapterQuizQuestionsApi,
   previewChapterQuizGenerationFromOutlineApi,
-} from '@/shared/api/modules/quizzes'
+} from '@/entities/quiz/api/quizApi'
 import type {
   PalaceQuizGenerationPreview,
   PalaceQuizQuestionDraft,
   PalaceQuizQuestionType,
 } from '@/shared/api/contracts'
-
-interface Subject {
-  id: number
-  name: string
-  color: string
-  sort_order: number
-}
 
 interface ChapterDetail {
   chapter: {
@@ -62,7 +56,7 @@ interface ChapterDetail {
 
 export default function Knowledge() {
   const mindMapFrameRef = useRef<MindMapFrameHandle | null>(null)
-  const [subjects, setSubjects] = useState<Subject[]>([])
+  const [subjects, setSubjects] = useState<SubjectSummary[]>([])
   const [selectedSubjectId, setSelectedSubjectId] = useState<number | null>(null)
   const [subjectName, setSubjectName] = useState('')
   const [subjectColor, setSubjectColor] = useState('#6366f1')
@@ -110,7 +104,7 @@ export default function Knowledge() {
     entityId: selectedSubjectId,
     fetcher: getSubjectEditorApi,
     saver: saveSubjectEditorApi,
-    selectMeta: (response) => response.subject as Subject,
+    selectMeta: (response) => response.subject,
     selectEditorState: (response) => ({
       editor_doc: response.editor_doc,
       editor_config: response.editor_config,
@@ -125,7 +119,7 @@ export default function Knowledge() {
     [selectedSubjectId],
   )
   const selectedSubjectMeta =
-    (meta as Subject | null)?.id === selectedSubjectId ? (meta as Subject | null) : null
+    (meta as SubjectSummary | null)?.id === selectedSubjectId ? (meta as SubjectSummary | null) : null
   const activeSubject = selectedSubjectMeta ?? subjects.find((item) => item.id === selectedSubjectId) ?? null
   const isSubjectEditorReady = Boolean(
     selectedSubjectId &&
@@ -161,7 +155,7 @@ export default function Knowledge() {
           editor_fingerprint: response.editor_fingerprint,
         }),
         afterSave: (response) => {
-          setMeta(response.subject as Subject)
+          setMeta(response.subject)
         },
         reload,
       })
@@ -188,7 +182,7 @@ export default function Knowledge() {
   useEffect(() => {
     if (!activeSubject) return
     setSubjectName(activeSubject.name)
-    setSubjectColor(activeSubject.color)
+    setSubjectColor(activeSubject.color || '#6366f1')
   }, [activeSubject])
 
   useEffect(() => {
@@ -394,7 +388,7 @@ export default function Knowledge() {
                   }`}
                 >
                   <span className="flex items-center gap-3">
-                    <span className="h-3 w-3 rounded-full" style={{ backgroundColor: subject.color }} />
+                    <span className="h-3 w-3 rounded-full" style={{ backgroundColor: subject.color || '#6366f1' }} />
                     <span className="font-medium">{subject.name}</span>
                   </span>
                   {selectedSubjectId === subject.id ? <Badge variant="secondary">当前</Badge> : null}

@@ -13,11 +13,11 @@ import { enqueueMutation, resetMutationQueueForTest } from '@/shared/persistence
 const getRuntimeInfoApi = vi.fn()
 const prefetchPalaceSubjectShelfApi = vi.fn()
 
-vi.mock('@/shared/api/modules/runtime', () => ({
+vi.mock('@/entities/runtime/api/runtimeApi', () => ({
   getRuntimeInfoApi: () => getRuntimeInfoApi(),
 }))
 
-vi.mock('@/shared/api/modules/palaces/catalogApi', () => ({
+vi.mock('@/entities/palace/api/catalogApi', () => ({
   prefetchPalaceSubjectShelfApi: () => prefetchPalaceSubjectShelfApi(),
 }))
 

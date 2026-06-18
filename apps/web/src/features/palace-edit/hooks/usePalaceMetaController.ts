@@ -1,12 +1,12 @@
-﻿import { useEffect, useState, type ChangeEvent } from 'react'
+import { useEffect, useState, type ChangeEvent } from 'react'
 import { toast } from '@/shared/feedback/toast'
-import { getSubjectTreeApi, getSubjectsApi } from '@/shared/api/modules/knowledge'
+import { getSubjectTreeApi, getSubjectsApi } from '@/entities/knowledge/api/knowledgeApi'
 import {
   deleteAttachmentApi,
   linkPalaceChaptersApi,
   updatePalaceApi,
   uploadAttachmentApi,
-} from '@/shared/api/modules/palaces'
+} from '@/entities/palace/api'
 import { formatDateTimeInputValue, toLocalDateTimePayload } from '@/features/palace-edit/model/palace-edit-format'
 import type { ChapterOption, PalaceMeta } from '@/features/palace-edit/model/palace-edit-types'
 

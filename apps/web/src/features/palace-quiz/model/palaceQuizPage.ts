@@ -209,6 +209,7 @@ export function formatResolvedAiSteps(
     | null
     | undefined,
 ) {
+  if (!steps) return ''
   const normalizedSteps = Array.isArray(steps)
     ? steps
     : Object.entries(steps)

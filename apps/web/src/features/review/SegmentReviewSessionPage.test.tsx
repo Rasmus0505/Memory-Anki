@@ -40,7 +40,7 @@ vi.mock('@/features/review/components/MindMapReviewFlow', () => ({
   },
 }))
 
-vi.mock('@/shared/api/modules/reviews', () => ({
+vi.mock('@/features/review/api/reviewApi', () => ({
   getSegmentReviewSessionApi: (...args: unknown[]) => mocks.getSegmentReviewSessionApi(...args),
   getSegmentReviewSessionProgressApi: (...args: unknown[]) => mocks.getSegmentReviewSessionProgressApi(...args),
   clearSegmentReviewSessionProgressApi: (...args: unknown[]) => mocks.clearSegmentReviewSessionProgressApi(...args),
@@ -48,7 +48,7 @@ vi.mock('@/shared/api/modules/reviews', () => ({
   submitSegmentReviewSessionApi: (...args: unknown[]) => mocks.submitSegmentReviewSessionApi(...args),
 }))
 
-vi.mock('@/shared/api/modules/palaces', () => ({
+vi.mock('@/entities/palace/api', () => ({
   buildAttachmentUrl: (id: number) => `/attachments/${id}`,
   getPalaceEditorApi: vi.fn(),
   savePalaceEditorApi: vi.fn(),

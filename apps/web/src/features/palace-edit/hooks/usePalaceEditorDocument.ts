@@ -4,10 +4,10 @@ import {
   getPalaceEditorApi,
   savePalaceEditorApi,
   savePalaceEditorWithOptionsApi,
-} from '@/shared/api/modules/palaces'
+} from '@/entities/palace/api'
 import { usePersistedMindMapEditor } from '@/shared/hooks/usePersistedMindMapEditor'
 import type { MindMapEditorState } from '@/shared/api/contracts'
-import type { ImportApplyContext } from '@/features/palace-edit/model/mindmap-import-types'
+import type { ImportApplyContext } from '@/features/mindmap-import'
 import {
   applyProgrammaticEditorState,
   countEditorDocNodes,
@@ -16,7 +16,7 @@ import {
 import { logAiCall } from '@/shared/logs/model/appLogs'
 import {
   buildImportExpectedNodeCount,
-  buildPalaceImportValidationFingerprint,
+  buildMindMapImportValidationFingerprint,
 } from '@/features/palace-edit/model/mindmap-editor'
 import type { PalaceMeta } from '@/features/palace-edit/model/palace-edit-types'
 
@@ -223,7 +223,7 @@ export function usePalaceEditorDocument({
         context?.source === 'import'
           ? {
               ...context,
-              expectedFingerprint: buildPalaceImportValidationFingerprint(
+              expectedFingerprint: buildMindMapImportValidationFingerprint(
                 nextState.editor_doc,
                 effectivePalaceTitle,
               ),
@@ -236,7 +236,7 @@ export function usePalaceEditorDocument({
         context: validationContext,
         flushPendingSaves: flushSave,
         fingerprintEditorDocForValidation: (value) =>
-          buildPalaceImportValidationFingerprint(value, effectivePalaceTitle),
+          buildMindMapImportValidationFingerprint(value, effectivePalaceTitle),
         beginProtectedWrite: (protectedState, nextContext) => {
           if (nextContext?.source === 'import') {
             beginImportApplyGuard(protectedState, nextContext as ImportApplyContext)

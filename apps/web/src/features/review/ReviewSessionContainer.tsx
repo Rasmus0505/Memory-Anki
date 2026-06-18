@@ -6,11 +6,9 @@ import {
   buildAttachmentUrl,
   getPalaceEditorApi,
   togglePalaceFocusNodeApi,
-} from '@/shared/api/modules/palaces/catalogApi'
-import {
   savePalaceEditorApi,
   savePalaceEditorWithOptionsApi,
-} from '@/shared/api/modules/palaces/editorApi'
+} from '@/entities/palace/api'
 import type {
   MindMapEditorState,
   MiniPalaceSummary,

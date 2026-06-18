@@ -1,4 +1,4 @@
-﻿import * as React from 'react'
+import * as React from 'react'
 import { toast } from '@/shared/feedback/toast'
 import type { RevealState } from '@/entities/session/model'
 import type { MindMapDoc, MindMapEditorState, MiniPalaceSummary } from '@/shared/api/contracts'
@@ -8,7 +8,7 @@ import {
   deleteMiniPalaceApi,
   getMiniPalacesApi,
   updateMiniPalaceApi,
-} from '@/shared/api/modules/palaces/structureApi'
+} from '@/entities/mini-palace/api'
 import { buildSubtreeUidMap } from '@/features/palace-edit/model/mindmap-editor'
 import {
   advanceRevealStateForNodeClick,

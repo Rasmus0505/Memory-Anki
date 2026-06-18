@@ -1,11 +1,11 @@
-import type { ReviewScheduleSummary } from '@/shared/api/contracts'
+﻿import type { ReviewScheduleSummary } from '@/shared/api/contracts'
 import {
   clearReviewSessionProgressApi,
   getReviewSessionApi,
   getReviewSessionProgressApi,
   saveReviewSessionProgressApi,
   submitReviewSessionApi,
-} from '@/shared/api/modules/reviews'
+} from '@/features/review/api/reviewApi'
 import {
   ReviewSessionContainer,
   type ReviewSessionContainerSession,

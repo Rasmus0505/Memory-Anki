@@ -1,4 +1,4 @@
-﻿import { useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { ArrowLeft } from 'lucide-react'
 import type { MindMapEditorState, MiniPalaceSummary } from '@/shared/api/contracts'
@@ -13,11 +13,13 @@ import {
 import {
   clearMiniPracticeSessionProgressApi,
   getMiniPracticeSessionProgressApi,
-  getPalaceMiniPalaceApi,
   saveMiniPracticeSessionProgressApi,
+} from '@/entities/palace/api'
+import {
+  getPalaceMiniPalaceApi,
   updateMiniPalaceReviewProgressApi,
-} from '@/shared/api/modules/palaces/structureApi'
-import { submitMiniReviewSessionApi } from '@/shared/api/modules/reviews'
+} from '@/entities/mini-palace/api'
+import { submitMiniReviewSessionApi } from '@/features/review/api/reviewApi'
 import { StageSelectDialog } from '@/features/review/components/StageSelectDialog'
 
 export default function MiniPalacePracticePage() {

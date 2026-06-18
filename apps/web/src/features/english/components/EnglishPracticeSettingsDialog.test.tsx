@@ -1,7 +1,7 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+﻿import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { EnglishPracticeSettingsDialog } from '@/features/english/components/EnglishPracticeSettingsDialog'
-import { DEFAULT_ENGLISH_PRACTICE_SETTINGS } from '@/features/english/englishPracticeSettings'
+import { DEFAULT_ENGLISH_PRACTICE_SETTINGS } from '@/entities/preferences/model/englishPracticeSettings'
 
 describe('EnglishPracticeSettingsDialog', () => {
   it('captures and saves a valid Shift+K shortcut binding', () => {

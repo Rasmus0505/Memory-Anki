@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+﻿import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ChapterOption, PalaceMeta } from '@/features/palace-edit/hooks/usePalaceEditPage'
 import type { MindMapEditorState } from '@/shared/api/contracts'
-import { getSubjectEditorApi, saveSubjectEditorApi } from '@/shared/api/modules/knowledge'
+import { getSubjectEditorApi, saveSubjectEditorApi } from '@/entities/knowledge/api/knowledgeApi'
 import {
   MindMapFrame,
   MindMapPageToolbar,

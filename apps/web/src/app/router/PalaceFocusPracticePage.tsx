@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { ArrowLeft, Target } from 'lucide-react'
 import { PageIntro } from '@/shared/components/layout/PageIntro'
@@ -17,19 +17,17 @@ import {
   parseEditorDoc,
 } from '@/entities/review/model/review-flow-tree'
 import {
-  getPalaceFocusSessionApi,
-  togglePalaceFocusNodeApi,
-} from '@/shared/api/modules/palaces/catalogApi'
-import {
   clearFocusPracticeSessionProgressApi,
+  getPalaceFocusSessionApi,
   getFocusPracticeSessionProgressApi,
   saveFocusPracticeSessionProgressApi,
-} from '@/shared/api/modules/palaces/practiceApi'
+  togglePalaceFocusNodeApi,
+  updatePalacePracticeFlagApi,
+} from '@/entities/palace/api'
 import {
   updateDefaultSegmentReviewProgressApi,
-  updatePalacePracticeFlagApi,
-} from '@/shared/api/modules/palaces/structureApi'
-import { submitReviewSessionApi } from '@/shared/api/modules/reviews'
+} from '@/entities/palace-segment/api'
+import { submitReviewSessionApi } from '@/features/review/api/reviewApi'
 import { StageSelectDialog } from '@/features/review/components/StageSelectDialog'
 
 export default function PalaceFocusPracticePage() {

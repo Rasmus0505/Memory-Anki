@@ -1,23 +1,27 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ClientPreferences } from '@/shared/api/contracts'
 import {
-  getCachedClientPreference,
-  setClientPreference,
+  CLIENT_PREFERENCES_UPDATED_EVENT,
+  getClientPreferenceCacheStatus,
+  saveClientPreference,
 } from '@/shared/preferences/clientPreferences'
 
-const LOCAL_STORAGE_PREFERENCE_MAP: Record<string, keyof ClientPreferences> = {
-  memory_anki_dashboard_total_duration_filter: 'dashboard_duration_filter',
-  palace_list_view_settings: 'palace_list_view_settings',
-  palace_shelf_view_settings: 'palace_shelf_view_settings',
-}
+type PreferenceKey = keyof ClientPreferences
 
 function readLocalStorageValue<T>(
   key: string,
   fallback: T,
   isValid: (value: unknown) => value is T,
+  preferenceKey?: PreferenceKey,
 ): T {
-  const preferenceKey = LOCAL_STORAGE_PREFERENCE_MAP[key]
   if (!preferenceKey) return fallback
+  const cached = getClientPreferenceCacheStatus(preferenceKey, isValid)
+  if (cached.value) {
+    return cached.value
+  }
+  if (cached.hasEntry) {
+    return fallback
+  }
   if (typeof window === 'undefined') return fallback
   try {
     const raw = window.localStorage.getItem(key)
@@ -25,16 +29,8 @@ function readLocalStorageValue<T>(
       const parsed: unknown = JSON.parse(raw)
       return isValid(parsed) ? parsed : fallback
     }
-    const cached = getCachedClientPreference(preferenceKey, fallback, isValid)
-    if (cached !== fallback) {
-      return cached
-    }
     return fallback
   } catch {
-    const cached = getCachedClientPreference(preferenceKey, fallback, isValid)
-    if (cached !== fallback) {
-      return cached
-    }
     return fallback
   }
 }
@@ -43,17 +39,55 @@ export function useLocalStorageState<T>(
   key: string,
   fallback: T,
   isValid: (value: unknown) => value is T,
+  preferenceKey?: PreferenceKey,
 ) {
-  const [value, setValue] = useState<T>(() => readLocalStorageValue(key, fallback, isValid))
+  const [value, setValue] = useState<T>(() =>
+    readLocalStorageValue(key, fallback, isValid, preferenceKey),
+  )
+  const valueRef = useRef(value)
 
   useEffect(() => {
-    const preferenceKey = LOCAL_STORAGE_PREFERENCE_MAP[key]
-    if (!preferenceKey) return
-    if (typeof window !== 'undefined') {
-      window.localStorage.setItem(key, JSON.stringify(value))
-    }
-    void setClientPreference(preferenceKey, value)
-  }, [key, value])
+    valueRef.current = value
+  }, [value])
 
-  return [value, setValue] as const
+  useEffect(() => {
+    if (!preferenceKey || typeof window === 'undefined') return undefined
+
+    const handleClientPreferenceUpdate = (event: Event) => {
+      const detail = event instanceof CustomEvent && detailIsPreferencePatch(event.detail)
+        ? event.detail
+        : null
+      if (!detail || !Object.prototype.hasOwnProperty.call(detail, preferenceKey)) return
+      const nextValue = detail[preferenceKey]
+      setValue(isValid(nextValue) ? nextValue : fallback)
+    }
+
+    window.addEventListener(CLIENT_PREFERENCES_UPDATED_EVENT, handleClientPreferenceUpdate)
+    return () => {
+      window.removeEventListener(CLIENT_PREFERENCES_UPDATED_EVENT, handleClientPreferenceUpdate)
+    }
+  }, [fallback, isValid, preferenceKey])
+
+  const setPersistentValue = useCallback(
+    (nextValue: T | ((current: T) => T)) => {
+      const resolved =
+        typeof nextValue === 'function'
+          ? (nextValue as (current: T) => T)(valueRef.current)
+          : nextValue
+      valueRef.current = resolved
+      setValue(resolved)
+      if (preferenceKey) {
+        void saveClientPreference(preferenceKey, resolved)
+      } else if (typeof window !== 'undefined') {
+        window.localStorage.setItem(key, JSON.stringify(resolved))
+      }
+    },
+    [key, preferenceKey],
+  )
+
+  return [value, setPersistentValue] as const
+}
+
+function detailIsPreferencePatch(value: unknown): value is Partial<ClientPreferences> {
+  return Boolean(value && typeof value === 'object')
 }

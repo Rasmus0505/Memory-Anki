@@ -1,15 +1,15 @@
-import * as React from 'react'
+﻿import * as React from 'react'
 import type { TimedSessionController } from '@/shared/hooks/useTimedSession'
 import type { AiRuntimeOptions } from '@/shared/api/contracts'
 import {
   synthesizeVoiceCoachApi,
   type VoiceCoachEvent,
-} from '@/shared/api/modules/voiceCoach'
+} from '@/features/voice-coach/api'
 import {
   readVoiceCoachSettings,
   VOICE_COACH_SETTINGS_UPDATED_EVENT,
   type VoiceCoachSettings,
-} from '@/features/voice-coach/voiceCoachSettings'
+} from '@/entities/preferences/model/voiceCoachSettings'
 
 export type VoiceCoachScene = 'review' | 'practice' | 'edit'
 

@@ -1,8 +1,5 @@
 /**
  * Shared helpers for parsing Server-Sent Events (SSE) streams.
- *
- * Previously duplicated verbatim in `shared/api/modules/palaces.ts` and
- * `features/english-reading/api/englishReadingApi.ts`.
  */
 
 /**

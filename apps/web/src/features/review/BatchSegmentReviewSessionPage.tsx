@@ -1,4 +1,4 @@
-import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+﻿import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { ArrowLeft } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { LoadingState } from '@/shared/components/state-placeholders'
@@ -9,7 +9,7 @@ import type {
 import {
   createBatchSegmentReviewSessionApi,
   submitBatchSegmentReviewSessionApi,
-} from '@/shared/api/modules/reviews'
+} from '@/features/review/api/reviewApi'
 import { PageIntro } from '@/shared/components/layout/PageIntro'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
