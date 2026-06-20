@@ -1,4 +1,4 @@
-import { act, fireEvent, screen } from "@testing-library/react";
+﻿import { act, fireEvent, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   editorState,
@@ -97,14 +97,21 @@ describe("MindMapReviewFlow feedback", () => {
   it("dismisses the combo milestone burst on time even if the parent rerenders repeatedly", async () => {
     vi.useFakeTimers();
     writeReviewFeedbackSettings({
+      visualStyle: 'warm_playful',
+      reducedCelebrationMotion: false,
+      scenes: {
+        review: { enabled: true, soundEnabled: true, animationEnabled: true, confettiAmount: 0.55, cooldownMs: 0 },
+        milestone: { enabled: true, soundEnabled: true, animationEnabled: true, confettiAmount: 1.6, cooldownMs: 0, steps: [2, 4, 6, 10, 15] },
+        completion: { enabled: true, soundEnabled: true, animationEnabled: true, confettiAmount: 1.6, cooldownMs: 0 },
+        timer: { enabled: true, soundEnabled: true, animationEnabled: true, confettiAmount: 2.2, cooldownMs: 12000 },
+      },
       mode: "immersive",
       soundEnabled: true,
       volume: 1.5,
+      baseVolumeMultiplier: 1,
       confettiAmount: 1.6,
       animationEnabled: true,
       surpriseEnabled: true,
-      revealFxIntensity: "full",
-      criticalFxIntensity: "cinematic",
       soundTheme: "classic",
       globalIntensity: "balanced",
       celebration: {
@@ -205,3 +212,4 @@ describe("MindMapReviewFlow feedback", () => {
     vi.useRealTimers();
   });
 });
+

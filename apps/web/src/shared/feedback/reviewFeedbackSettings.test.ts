@@ -1,6 +1,8 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+﻿import { beforeEach, describe, expect, it } from 'vitest'
 import {
   DEFAULT_REVIEW_FEEDBACK_SETTINGS,
+  FEEDBACK_CONFETTI_PRESETS,
+  FEEDBACK_CONFETTI_PRESET_LABELS,
   readReviewFeedbackSettings,
   sanitizeReviewFeedbackSettings,
   writeReviewFeedbackSettings,
@@ -15,47 +17,39 @@ describe('reviewFeedbackSettings', () => {
     expect(readReviewFeedbackSettings()).toEqual(DEFAULT_REVIEW_FEEDBACK_SETTINGS)
   })
 
-  it('writes sanitized settings without keeping localStorage as a second authority', () => {
+  it('exposes exactly five confetti presets with the new chinese labels', () => {
+    expect(FEEDBACK_CONFETTI_PRESETS).toEqual([
+      'random_direction',
+      'fireworks',
+      'realistic_look',
+      'stars',
+      'school_pride',
+    ])
+    expect(FEEDBACK_CONFETTI_PRESET_LABELS).toEqual({
+      random_direction: '庆祝',
+      fireworks: '爆发',
+      realistic_look: '写实',
+      stars: '星爆',
+      school_pride: '庆典',
+    })
+  })
+
+  it('writes sanitized scene-based settings (no intensity field)', () => {
     const saved = writeReviewFeedbackSettings({
+      ...DEFAULT_REVIEW_FEEDBACK_SETTINGS,
       mode: 'quiet',
       soundEnabled: false,
       volume: 1.75,
-      confettiAmount: 2.4,
-      animationEnabled: true,
-      surpriseEnabled: false,
-      revealFxIntensity: 'soft',
-      criticalFxIntensity: 'full',
-      soundTheme: 'classic',
-      globalIntensity: 'balanced',
-      celebration: {
-        globalCooldownMs: 3000,
-        milestone: {
-          enabled: true,
-          steps: [4, 8, 12],
-          cooldownMs: 8000,
-          confettiAmount: 1.9,
+      scenes: {
+        ...DEFAULT_REVIEW_FEEDBACK_SETTINGS.scenes,
+        review: {
+          ...DEFAULT_REVIEW_FEEDBACK_SETTINGS.scenes.review,
           soundEnabled: false,
-          animationEnabled: true,
+          confettiPreset: 'stars',
         },
-        branchClear: {
-          enabled: false,
-          cooldownMs: 6000,
-          confettiAmount: 1.4,
-          soundEnabled: false,
-          animationEnabled: true,
-        },
-        allClearReady: {
-          enabled: true,
-          cooldownMs: 12000,
-          confettiAmount: 2.2,
-          soundEnabled: true,
-          animationEnabled: false,
-        },
-        sessionComplete: {
-          enabled: true,
-          confettiAmount: 2.5,
-          soundEnabled: true,
-          animationEnabled: true,
+        timer: {
+          ...DEFAULT_REVIEW_FEEDBACK_SETTINGS.scenes.timer,
+          confettiAmount: 2.6,
         },
       },
     })
@@ -63,24 +57,30 @@ describe('reviewFeedbackSettings', () => {
     expect(saved.mode).toBe('quiet')
     expect(saved.soundEnabled).toBe(false)
     expect(saved.volume).toBe(1.75)
-    expect(saved.confettiAmount).toBe(2.4)
-    expect(saved.globalIntensity).toBe('balanced')
-    expect(saved.celebration.globalCooldownMs).toBe(3000)
-    expect(saved.celebration.milestone.steps).toEqual([4, 8, 12])
+    expect(saved.scenes.review.soundEnabled).toBe(false)
+    expect(saved.scenes.review.confettiPreset).toBe('stars')
+    expect(saved.scenes.timer.confettiAmount).toBe(2.6)
+    // 形容词强度档位已彻底移除
+    expect((saved.scenes.review as unknown as Record<string, unknown>).intensity).toBeUndefined()
+    expect((saved as unknown as Record<string, unknown>).revealFxIntensity).toBeUndefined()
+    expect((saved as unknown as Record<string, unknown>).criticalFxIntensity).toBeUndefined()
   })
 
-  it('falls back to defaults for invalid values and sanitizes celebration settings', () => {
+  it('drops legacy intensity fields from older stored settings without errors', () => {
     const sanitized = sanitizeReviewFeedbackSettings({
-      mode: 'loud',
-      soundEnabled: 'yes',
-      volume: 'loud',
-      confettiAmount: 'huge',
-      animationEnabled: false,
-      surpriseEnabled: 'sometimes',
-      revealFxIntensity: 'max',
-      criticalFxIntensity: 'nope',
-      soundTheme: 'retro',
-      globalIntensity: 'nope',
+      mode: 'quiet',
+      soundEnabled: false,
+      animationEnabled: true,
+      // 老版本遗留的强度字段，应被静默丢弃
+      revealFxIntensity: 'soft',
+      criticalFxIntensity: 'full',
+      confettiAmount: 1.6,
+      scenes: {
+        review: { enabled: true, intensity: 'soft', confettiAmount: 0.55, cooldownMs: 900 },
+        milestone: { enabled: true, intensity: 'celebration', steps: [4, 8], cooldownMs: 8000 },
+        completion: { enabled: true, intensity: 'cinematic', confettiAmount: 1.6, cooldownMs: 12000 },
+        timer: { enabled: true, intensity: 'cinematic', confettiAmount: 2.2, cooldownMs: 12000 },
+      },
       celebration: {
         globalCooldownMs: -10,
         milestone: {
@@ -90,127 +90,15 @@ describe('reviewFeedbackSettings', () => {
       },
     })
 
-    expect(sanitized).toEqual({
-      mode: 'immersive',
-      soundEnabled: true,
-      volume: 1.5,
-      confettiAmount: 1.6,
-      animationEnabled: false,
-      surpriseEnabled: true,
-      revealFxIntensity: 'full',
-      criticalFxIntensity: 'cinematic',
-      soundTheme: 'classic',
-      globalIntensity: 'balanced',
-      celebration: {
-        globalCooldownMs: 0,
-        milestone: {
-          enabled: true,
-          steps: [6, 12],
-          cooldownMs: 0,
-          confettiAmount: 1.6,
-          soundEnabled: true,
-          animationEnabled: false,
-        },
-        branchClear: {
-          enabled: true,
-          cooldownMs: 8000,
-          confettiAmount: 1.6,
-          soundEnabled: true,
-          animationEnabled: false,
-        },
-        allClearReady: {
-          enabled: true,
-          cooldownMs: 12000,
-          confettiAmount: 1.6,
-          soundEnabled: true,
-          animationEnabled: false,
-        },
-        sessionComplete: {
-          enabled: true,
-          confettiAmount: 1.6,
-          soundEnabled: true,
-          animationEnabled: false,
-        },
-      },
-    })
-  })
-
-  it('fills the default volume and migrates legacy settings into celebrations', () => {
-    expect(
-      sanitizeReviewFeedbackSettings({
-        mode: 'quiet',
-        soundEnabled: false,
-        animationEnabled: true,
-        surpriseEnabled: false,
-        confettiAmount: 1.6,
-      }),
-    ).toEqual({
-      mode: 'quiet',
-      soundEnabled: false,
-      volume: 1.5,
-      confettiAmount: 1.6,
-      animationEnabled: true,
-      surpriseEnabled: false,
-      revealFxIntensity: 'full',
-      criticalFxIntensity: 'cinematic',
-      soundTheme: 'classic',
-      globalIntensity: 'balanced',
-      celebration: {
-        globalCooldownMs: 5000,
-        milestone: {
-          enabled: true,
-          steps: [4, 8, 12, 20],
-          cooldownMs: 10000,
-          confettiAmount: 1.6,
-          soundEnabled: false,
-          animationEnabled: true,
-        },
-        branchClear: {
-          enabled: true,
-          cooldownMs: 8000,
-          confettiAmount: 1.6,
-          soundEnabled: false,
-          animationEnabled: true,
-        },
-        allClearReady: {
-          enabled: true,
-          cooldownMs: 12000,
-          confettiAmount: 1.6,
-          soundEnabled: false,
-          animationEnabled: true,
-        },
-        sessionComplete: {
-          enabled: true,
-          confettiAmount: 1.6,
-          soundEnabled: false,
-          animationEnabled: true,
-        },
-      },
-    })
-  })
-
-  it('clamps volume to the supported range', () => {
-    expect(sanitizeReviewFeedbackSettings({ volume: -1 }).volume).toBe(0)
-    expect(sanitizeReviewFeedbackSettings({ volume: 2.5 }).volume).toBe(2)
-  })
-
-  it('clamps confetti amount to the supported range', () => {
-    expect(sanitizeReviewFeedbackSettings({ confettiAmount: 0.1 }).confettiAmount).toBe(0.5)
-    expect(sanitizeReviewFeedbackSettings({ confettiAmount: 3.5 }).confettiAmount).toBe(3)
-  })
-
-  it('migrates legacy confetti and sound settings into event celebrations', () => {
-    const sanitized = sanitizeReviewFeedbackSettings({
-      soundEnabled: false,
-      animationEnabled: true,
-      confettiAmount: 2.3,
-    })
-
-    expect(sanitized.celebration.milestone.confettiAmount).toBe(2.3)
-    expect(sanitized.celebration.branchClear.confettiAmount).toBe(2.3)
-    expect(sanitized.celebration.allClearReady.confettiAmount).toBe(2.3)
-    expect(sanitized.celebration.sessionComplete.confettiAmount).toBe(2.3)
-    expect(sanitized.celebration.milestone.soundEnabled).toBe(false)
-    expect(sanitized.celebration.branchClear.soundEnabled).toBe(false)
+    expect(sanitized.mode).toBe('quiet')
+    // scenes.milestone.steps 为有效值 [4,8]，优先于 celebration 里的脏数据
+    expect(sanitized.scenes.milestone.steps).toEqual([4, 8])
+    // 强度字段不应出现在清洗后的结果里
+    expect((sanitized.scenes.review as unknown as Record<string, unknown>).intensity).toBeUndefined()
+    expect((sanitized.scenes.completion as unknown as Record<string, unknown>).intensity).toBeUndefined()
+    // 烟花类型按场景默认兜底
+    expect(sanitized.scenes.review.confettiPreset).toBe('random_direction')
+    expect(sanitized.scenes.milestone.confettiPreset).toBe('fireworks')
+    expect(sanitized.scenes.completion.confettiPreset).toBe('stars')
   })
 })

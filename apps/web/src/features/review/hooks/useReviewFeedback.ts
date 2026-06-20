@@ -15,8 +15,11 @@ import {
 } from '@/features/review/model/review-feedback'
 import {
   REVIEW_FEEDBACK_SETTINGS_UPDATED_EVENT,
+  getReviewFeedbackEffectiveVolume,
+  getSceneEffectiveVolume,
   readReviewFeedbackSettings,
   writeReviewFeedbackSettings,
+  type FeedbackSceneKey,
   type ReviewCelebrationEventSettings,
   type ReviewMilestoneCelebrationSettings,
   type ReviewFeedbackSettings,
@@ -32,6 +35,16 @@ import { useMindMapFeedbackAudio } from '@/shared/components/mindmap-host/useMin
 
 const FLASH_RESET_MS = 680
 const CELEBRATION_EVENT_KEYS = ['milestone', 'branch_clear', 'all_clear_ready', 'session_complete'] as const
+
+/**
+ * ReviewConfettiKind → 对应的场景配置键，用于读取该场景的 confettiPreset / volumeBoost。
+ */
+function confettiKindToSceneKey(kind: string): FeedbackSceneKey {
+  if (kind === 'milestone') return 'milestone'
+  if (kind === 'branch_clear') return 'review'
+  if (kind === 'all_clear_ready') return 'completion'
+  return 'completion'
+}
 
 type CelebrationEventKey = (typeof CELEBRATION_EVENT_KEYS)[number]
 type CooldownCelebrationConfig = ReviewMilestoneCelebrationSettings | ReviewCelebrationEventSettings
@@ -55,20 +68,20 @@ function deriveFxIntensity(args: {
   animationEnabled: boolean
   reducedMotion: boolean
   event?: ReviewFeedbackEvent
-  revealFxIntensity: ReviewFeedbackSettings['revealFxIntensity']
-  criticalFxIntensity: ReviewFeedbackSettings['criticalFxIntensity']
 }): MindMapReviewFxPayload['intensity'] {
   if (args.reducedMotion) return 'none'
   if (args.mode === 'quiet' || !args.animationEnabled) return 'soft'
+  // 关键节点演出（区域攻克 / 全域攻克 / 完成）保持满档；
+  // 普通翻卡为轻档，避免每次小爆发过强。
   if (
     args.event === 'branch_clear' ||
     args.event === 'all_clear_ready' ||
     args.event === 'session_complete'
   ) {
-    return args.criticalFxIntensity === 'cinematic' ? 'full' : 'soft'
+    return 'full'
   }
   if (args.event === 'card_reveal') {
-    return args.revealFxIntensity === 'full' ? 'full' : 'soft'
+    return 'soft'
   }
   return 'full'
 }
@@ -124,9 +137,10 @@ export function useReviewFeedback({
   } | null>(null)
 
   const reducedMotion = usePrefersReducedMotion()
+  const effectiveVolume = getReviewFeedbackEffectiveVolume(settings)
   const audio = useMindMapFeedbackAudio(
     settings.soundEnabled && settings.mode === 'immersive',
-    settings.volume,
+    effectiveVolume,
   )
   const rewardSnapshotRef = React.useRef(createInitialReviewRewardSnapshot(milestoneSteps))
   const previousRevealMapRef = React.useRef<Record<string, RevealState>>(revealMap)
@@ -359,10 +373,9 @@ export function useReviewFeedback({
         emitReviewConfetti({
           kind: 'branch_clear',
           reducedMotion,
-          criticalFxIntensity: settings.criticalFxIntensity,
           soundEnabled: celebrationDecision.soundEnabled,
-          volume: settings.volume,
-          confettiAmount: settings.celebration.branchClear.confettiAmount,
+          volume: getSceneEffectiveVolume(settings, 'review'),
+          confettiPreset: settings.scenes.review.confettiPreset,
         })
         }
       } else if (transition.events.includes('all_clear_ready')) {
@@ -373,10 +386,9 @@ export function useReviewFeedback({
         emitReviewConfetti({
           kind: 'all_clear_ready',
           reducedMotion,
-          criticalFxIntensity: settings.criticalFxIntensity,
           soundEnabled: celebrationDecision.soundEnabled,
-          volume: settings.volume,
-          confettiAmount: settings.celebration.allClearReady.confettiAmount,
+          volume: getSceneEffectiveVolume(settings, 'completion'),
+          confettiPreset: settings.scenes.completion.confettiPreset,
         })
         }
       }
@@ -407,8 +419,6 @@ export function useReviewFeedback({
           animationEnabled: settings.animationEnabled,
           reducedMotion,
           event: fxEvent,
-          revealFxIntensity: settings.revealFxIntensity,
-          criticalFxIntensity: settings.criticalFxIntensity,
         }),
         milestoneStep: milestoneIndex !== -1 && newCombo > prevCombo ? milestoneIndex : null,
         anchor: transition.fxAnchor,
@@ -442,12 +452,10 @@ export function useReviewFeedback({
     settings.celebration.branchClear,
     settings.celebration.milestone,
     settings.celebration.sessionComplete,
-    settings.criticalFxIntensity,
     settings.mode,
-    settings.revealFxIntensity,
     settings.surpriseEnabled,
     settings.soundEnabled,
-    settings.volume,
+    effectiveVolume,
     milestoneSteps,
     getCelebrationDecision,
   ])
@@ -525,8 +533,6 @@ export function useReviewFeedback({
             animationEnabled: settings.animationEnabled,
             reducedMotion,
             event,
-            revealFxIntensity: settings.revealFxIntensity,
-            criticalFxIntensity: settings.criticalFxIntensity,
           }),
           milestoneStep: null,
           anchor: event === 'session_complete' ? { x: 0.5, y: 0.24 } : null,
@@ -551,9 +557,7 @@ export function useReviewFeedback({
       settings.celebration.sessionComplete.animationEnabled,
       settings.celebration.sessionComplete.enabled,
       settings.celebration.sessionComplete.soundEnabled,
-      settings.criticalFxIntensity,
       settings.mode,
-      settings.revealFxIntensity,
     ],
   )
 

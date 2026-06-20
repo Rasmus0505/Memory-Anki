@@ -1,8 +1,42 @@
-import {
+﻿import {
   getClientPreferenceCacheStatus,
   hasLoadedClientPreferences,
   saveClientPreference,
 } from '@/shared/preferences/clientPreferences'
+export type { CelebrationPreset } from '@/shared/feedback/celebrationEngine'
+import type { CelebrationPreset } from '@/shared/feedback/celebrationEngine'
+
+export type FeedbackVisualStyle = 'warm_playful' | 'focus_light'
+
+/**
+ * 反馈场景键。四个场景分别对应：
+ * - review     普通复习 / 翻卡
+ * - milestone  连击 / 里程碑
+ * - completion 完成结算
+ * - timer      计时器达标
+ */
+export type FeedbackSceneKey = 'review' | 'milestone' | 'completion' | 'timer'
+
+/**
+ * 五种烟花类型（点击即预览）。顺序与中文标签一一对应：
+ * 庆祝 · 爆发 · 写实 · 星爆 · 庆典。
+ * 视觉强度由类型本身内置（庆典 > 爆发 > 星爆 > 写实 > 庆祝）。
+ */
+export const FEEDBACK_CONFETTI_PRESETS: CelebrationPreset[] = [
+  'random_direction',
+  'fireworks',
+  'realistic_look',
+  'stars',
+  'school_pride',
+]
+
+export const FEEDBACK_CONFETTI_PRESET_LABELS: Record<CelebrationPreset, string> = {
+  random_direction: '庆祝',
+  fireworks: '爆发',
+  realistic_look: '写实',
+  stars: '星爆',
+  school_pride: '庆典',
+}
 
 export interface ReviewCelebrationEventSettings {
   enabled: boolean
@@ -31,72 +65,163 @@ export interface ReviewCelebrationSettings {
   sessionComplete: ReviewSessionCompleteCelebrationSettings
 }
 
+export interface ReviewFeedbackSceneSettings {
+  enabled: boolean
+  soundEnabled: boolean
+  animationEnabled: boolean
+  confettiAmount: number
+  cooldownMs: number
+  /**
+   * 烟花效果的具体形式（庆祝 / 爆发 / 写实 / 星爆 / 庆典）。
+   * 缺省时由 reviewConfetti 按场景 kind 推导，保持向后兼容。
+   */
+  confettiPreset?: CelebrationPreset
+  /**
+   * 该场景相对全局基础音量的增强系数（0~3，1.0 = 与全局一致）。
+   * 最终音量 = 全局有效音量 × 场景 volumeBoost。
+   */
+  volumeBoost?: number
+}
+
+export interface ReviewMilestoneSceneSettings extends ReviewFeedbackSceneSettings {
+  steps: number[]
+}
+
+export interface ReviewFeedbackScenesSettings {
+  review: ReviewFeedbackSceneSettings
+  milestone: ReviewMilestoneSceneSettings
+  completion: ReviewFeedbackSceneSettings
+  timer: ReviewFeedbackSceneSettings
+}
+
 export interface ReviewFeedbackSettings {
   mode: 'immersive' | 'quiet'
+  visualStyle: FeedbackVisualStyle
   soundEnabled: boolean
   volume: number
+  baseVolumeMultiplier: number
   confettiAmount: number
   animationEnabled: boolean
+  reducedCelebrationMotion: boolean
   surpriseEnabled: boolean
-  revealFxIntensity: 'soft' | 'full'
-  criticalFxIntensity: 'full' | 'cinematic'
   soundTheme: 'classic'
   globalIntensity: 'quiet' | 'balanced' | 'immersive'
+  scenes: ReviewFeedbackScenesSettings
   celebration: ReviewCelebrationSettings
 }
 
-export const REVIEW_FEEDBACK_SETTINGS_STORAGE_KEY = 'memory-anki-review-feedback-settings-v1'
+export const REVIEW_FEEDBACK_SETTINGS_STORAGE_KEY = 'memory-anki-review-feedback-settings-v2'
 export const REVIEW_FEEDBACK_SETTINGS_UPDATED_EVENT = 'memory-anki-review-feedback-settings-change'
 
 export const DEFAULT_REVIEW_MILESTONE_STEPS = [4, 8, 12, 20]
+export const REVIEW_FEEDBACK_VOLUME_MAX = 2
+export const REVIEW_FEEDBACK_BASE_VOLUME_MULTIPLIER_MIN = 1
+export const REVIEW_FEEDBACK_BASE_VOLUME_MULTIPLIER_MAX = 8
+export const REVIEW_FEEDBACK_EFFECTIVE_VOLUME_MAX =
+  REVIEW_FEEDBACK_VOLUME_MAX * REVIEW_FEEDBACK_BASE_VOLUME_MULTIPLIER_MAX
+
+const DEFAULT_REVIEW_SCENE: Omit<ReviewFeedbackSceneSettings, never> = {
+  enabled: true,
+  soundEnabled: true,
+  animationEnabled: true,
+  confettiAmount: 1,
+  cooldownMs: 1500,
+  confettiPreset: 'realistic_look',
+  volumeBoost: 1,
+}
+
+const DEFAULT_SCENE_CONFETTI_PRESETS: Record<FeedbackSceneKey, CelebrationPreset> = {
+  review: 'random_direction',
+  milestone: 'fireworks',
+  completion: 'stars',
+  timer: 'school_pride',
+}
+
+const DEFAULT_SCENE_VOLUME_BOOSTS: Record<FeedbackSceneKey, number> = {
+  review: 1,
+  milestone: 1.1,
+  completion: 1.25,
+  timer: 1.35,
+}
+
+function buildLegacyCelebrationFromScenes(scenes: ReviewFeedbackScenesSettings): ReviewCelebrationSettings {
+  return {
+    globalCooldownMs: Math.max(scenes.milestone.cooldownMs, scenes.completion.cooldownMs),
+    milestone: {
+      enabled: scenes.milestone.enabled,
+      steps: scenes.milestone.steps,
+      cooldownMs: scenes.milestone.cooldownMs,
+      confettiAmount: scenes.milestone.confettiAmount,
+      soundEnabled: scenes.milestone.soundEnabled,
+      animationEnabled: scenes.milestone.animationEnabled,
+    },
+    branchClear: {
+      enabled: scenes.review.enabled,
+      cooldownMs: scenes.review.cooldownMs,
+      confettiAmount: Math.max(0.35, scenes.review.confettiAmount),
+      soundEnabled: scenes.review.soundEnabled,
+      animationEnabled: scenes.review.animationEnabled,
+    },
+    allClearReady: {
+      enabled: scenes.completion.enabled,
+      cooldownMs: scenes.completion.cooldownMs,
+      confettiAmount: scenes.completion.confettiAmount,
+      soundEnabled: scenes.completion.soundEnabled,
+      animationEnabled: scenes.completion.animationEnabled,
+    },
+    sessionComplete: {
+      enabled: scenes.completion.enabled,
+      confettiAmount: scenes.completion.confettiAmount,
+      soundEnabled: scenes.completion.soundEnabled,
+      animationEnabled: scenes.completion.animationEnabled,
+    },
+  }
+}
 
 export const DEFAULT_REVIEW_FEEDBACK_SETTINGS: ReviewFeedbackSettings = {
   mode: 'immersive',
+  visualStyle: 'warm_playful',
   soundEnabled: true,
-  volume: 1.5,
-  confettiAmount: 1.6,
+  volume: 1.15,
+  baseVolumeMultiplier: 1,
+  confettiAmount: 1.25,
   animationEnabled: true,
+  reducedCelebrationMotion: false,
   surpriseEnabled: true,
-  revealFxIntensity: 'full',
-  criticalFxIntensity: 'cinematic',
   soundTheme: 'classic',
   globalIntensity: 'balanced',
-  celebration: {
-    globalCooldownMs: 5000,
+  scenes: {
+    review: {
+      ...DEFAULT_REVIEW_SCENE,
+      confettiAmount: 0.55,
+      cooldownMs: 900,
+    },
     milestone: {
-      enabled: true,
-      steps: DEFAULT_REVIEW_MILESTONE_STEPS,
-      cooldownMs: 10000,
-      confettiAmount: 1.6,
-      soundEnabled: true,
-      animationEnabled: true,
-    },
-    branchClear: {
-      enabled: true,
+      ...DEFAULT_REVIEW_SCENE,
+      confettiAmount: 1.15,
       cooldownMs: 8000,
-      confettiAmount: 1.3,
-      soundEnabled: true,
-      animationEnabled: true,
+      steps: DEFAULT_REVIEW_MILESTONE_STEPS,
     },
-    allClearReady: {
-      enabled: true,
+    completion: {
+      ...DEFAULT_REVIEW_SCENE,
+      confettiAmount: 1.6,
       cooldownMs: 12000,
-      confettiAmount: 1.9,
-      soundEnabled: true,
-      animationEnabled: true,
     },
-    sessionComplete: {
-      enabled: true,
+    timer: {
+      ...DEFAULT_REVIEW_SCENE,
       confettiAmount: 2.2,
-      soundEnabled: true,
-      animationEnabled: true,
+      cooldownMs: 12000,
     },
   },
+  celebration: undefined as never,
 }
 
+DEFAULT_REVIEW_FEEDBACK_SETTINGS.celebration = buildLegacyCelebrationFromScenes(
+  DEFAULT_REVIEW_FEEDBACK_SETTINGS.scenes,
+)
+
 function sanitizeBoolean(value: unknown, fallback: boolean) {
-  if (typeof value === 'boolean') return value
-  return fallback
+  return typeof value === 'boolean' ? value : fallback
 }
 
 function sanitizeNumber(value: unknown, fallback: number, minimum: number, maximum: number) {
@@ -122,83 +247,99 @@ function sanitizeSteps(value: unknown, fallback: number[]) {
   return deduped.length > 0 ? deduped : fallback
 }
 
-function sanitizeCelebrationEventSettings(
+function sanitizeConfettiPreset(value: unknown, fallback?: CelebrationPreset): CelebrationPreset | undefined {
+  if (value === 'random_direction' || value === 'realistic_look' || value === 'fireworks' || value === 'stars' || value === 'school_pride') {
+    return value
+  }
+  return fallback
+}
+
+function sanitizeSceneSettings(
   value: unknown,
-  fallback: ReviewCelebrationEventSettings,
-  inheritedConfettiAmount: number,
+  fallback: ReviewFeedbackSceneSettings,
   inheritedSoundEnabled: boolean,
   inheritedAnimationEnabled: boolean,
-): ReviewCelebrationEventSettings {
+): ReviewFeedbackSceneSettings {
   const raw = value && typeof value === 'object' ? (value as Record<string, unknown>) : {}
   return {
     enabled: sanitizeBoolean(raw.enabled, fallback.enabled),
+    soundEnabled: sanitizeBoolean(raw.soundEnabled, inheritedSoundEnabled),
+    animationEnabled: sanitizeBoolean(raw.animationEnabled, inheritedAnimationEnabled),
+    confettiAmount: sanitizeNumber(raw.confettiAmount, fallback.confettiAmount, 0, 3),
     cooldownMs: sanitizeInteger(raw.cooldownMs, fallback.cooldownMs, 0, 120_000),
-    confettiAmount: sanitizeNumber(raw.confettiAmount, inheritedConfettiAmount, 0.5, 3),
-    soundEnabled: sanitizeBoolean(raw.soundEnabled, inheritedSoundEnabled),
-    animationEnabled: sanitizeBoolean(raw.animationEnabled, inheritedAnimationEnabled),
+    confettiPreset: sanitizeConfettiPreset(raw.confettiPreset, fallback.confettiPreset),
+    volumeBoost: sanitizeNumber(raw.volumeBoost, fallback.volumeBoost ?? 1, 0, 3),
   }
 }
 
-function sanitizeSessionCompleteCelebrationSettings(
+function sanitizeMilestoneSceneSettings(
   value: unknown,
-  fallback: ReviewSessionCompleteCelebrationSettings,
-  inheritedConfettiAmount: number,
+  fallback: ReviewMilestoneSceneSettings,
   inheritedSoundEnabled: boolean,
   inheritedAnimationEnabled: boolean,
-): ReviewSessionCompleteCelebrationSettings {
+): ReviewMilestoneSceneSettings {
   const raw = value && typeof value === 'object' ? (value as Record<string, unknown>) : {}
+  const base = sanitizeSceneSettings(raw, fallback, inheritedSoundEnabled, inheritedAnimationEnabled)
   return {
-    enabled: sanitizeBoolean(raw.enabled, fallback.enabled),
-    confettiAmount: sanitizeNumber(raw.confettiAmount, inheritedConfettiAmount, 0.5, 3),
-    soundEnabled: sanitizeBoolean(raw.soundEnabled, inheritedSoundEnabled),
-    animationEnabled: sanitizeBoolean(raw.animationEnabled, inheritedAnimationEnabled),
+    ...base,
+    steps: sanitizeSteps(raw.steps, fallback.steps),
   }
 }
 
-function sanitizeCelebrationSettings(
-  value: unknown,
-  inherited: Pick<ReviewFeedbackSettings, 'confettiAmount' | 'soundEnabled' | 'animationEnabled'>,
-): ReviewCelebrationSettings {
-  const raw = value && typeof value === 'object' ? (value as Record<string, unknown>) : {}
-  const fallback = DEFAULT_REVIEW_FEEDBACK_SETTINGS.celebration
-  const milestoneBase = sanitizeCelebrationEventSettings(
-    raw.milestone,
-    fallback.milestone,
-    inherited.confettiAmount,
-    inherited.soundEnabled,
-    inherited.animationEnabled,
-  )
-  const milestoneRaw =
-    raw.milestone && typeof raw.milestone === 'object'
-      ? (raw.milestone as Record<string, unknown>)
-      : {}
+function readLegacyCelebrationScenes(raw: Record<string, unknown>): ReviewFeedbackScenesSettings {
+  const celebration = raw.celebration && typeof raw.celebration === 'object'
+    ? (raw.celebration as Record<string, unknown>)
+    : {}
+  const milestone = celebration.milestone && typeof celebration.milestone === 'object'
+    ? (celebration.milestone as Record<string, unknown>)
+    : {}
+  const branchClear = celebration.branchClear && typeof celebration.branchClear === 'object'
+    ? (celebration.branchClear as Record<string, unknown>)
+    : {}
+  const allClearReady = celebration.allClearReady && typeof celebration.allClearReady === 'object'
+    ? (celebration.allClearReady as Record<string, unknown>)
+    : {}
+  const sessionComplete = celebration.sessionComplete && typeof celebration.sessionComplete === 'object'
+    ? (celebration.sessionComplete as Record<string, unknown>)
+    : {}
+
   return {
-    globalCooldownMs: sanitizeInteger(raw.globalCooldownMs, fallback.globalCooldownMs, 0, 120_000),
-    milestone: {
-      ...milestoneBase,
-      steps: sanitizeSteps(milestoneRaw.steps, fallback.milestone.steps),
+    review: {
+      enabled: sanitizeBoolean(branchClear.enabled, true),
+      soundEnabled: sanitizeBoolean(branchClear.soundEnabled, sanitizeBoolean(raw.soundEnabled, true)),
+      animationEnabled: sanitizeBoolean(branchClear.animationEnabled, sanitizeBoolean(raw.animationEnabled, true)),
+      confettiAmount: sanitizeNumber(branchClear.confettiAmount, 0.55, 0, 3),
+      cooldownMs: sanitizeInteger(branchClear.cooldownMs, 900, 0, 120_000),
+      confettiPreset: DEFAULT_SCENE_CONFETTI_PRESETS.review,
+      volumeBoost: DEFAULT_SCENE_VOLUME_BOOSTS.review,
     },
-    branchClear: sanitizeCelebrationEventSettings(
-      raw.branchClear,
-      fallback.branchClear,
-      inherited.confettiAmount,
-      inherited.soundEnabled,
-      inherited.animationEnabled,
-    ),
-    allClearReady: sanitizeCelebrationEventSettings(
-      raw.allClearReady,
-      fallback.allClearReady,
-      inherited.confettiAmount,
-      inherited.soundEnabled,
-      inherited.animationEnabled,
-    ),
-    sessionComplete: sanitizeSessionCompleteCelebrationSettings(
-      raw.sessionComplete,
-      fallback.sessionComplete,
-      inherited.confettiAmount,
-      inherited.soundEnabled,
-      inherited.animationEnabled,
-    ),
+    milestone: {
+      enabled: sanitizeBoolean(milestone.enabled, true),
+      soundEnabled: sanitizeBoolean(milestone.soundEnabled, sanitizeBoolean(raw.soundEnabled, true)),
+      animationEnabled: sanitizeBoolean(milestone.animationEnabled, sanitizeBoolean(raw.animationEnabled, true)),
+      confettiAmount: sanitizeNumber(milestone.confettiAmount, sanitizeNumber(raw.confettiAmount, 1.15, 0, 3), 0, 3),
+      cooldownMs: sanitizeInteger(milestone.cooldownMs, 8000, 0, 120_000),
+      steps: sanitizeSteps(milestone.steps, DEFAULT_REVIEW_MILESTONE_STEPS),
+      confettiPreset: DEFAULT_SCENE_CONFETTI_PRESETS.milestone,
+      volumeBoost: DEFAULT_SCENE_VOLUME_BOOSTS.milestone,
+    },
+    completion: {
+      enabled: sanitizeBoolean(sessionComplete.enabled, true),
+      soundEnabled: sanitizeBoolean(sessionComplete.soundEnabled, sanitizeBoolean(raw.soundEnabled, true)),
+      animationEnabled: sanitizeBoolean(sessionComplete.animationEnabled, sanitizeBoolean(raw.animationEnabled, true)),
+      confettiAmount: sanitizeNumber(
+        sessionComplete.confettiAmount,
+        sanitizeNumber(allClearReady.confettiAmount, sanitizeNumber(raw.confettiAmount, 1.6, 0, 3), 0, 3),
+        0,
+        3,
+      ),
+      cooldownMs: sanitizeInteger(celebration.globalCooldownMs, 12000, 0, 120_000),
+      confettiPreset: DEFAULT_SCENE_CONFETTI_PRESETS.completion,
+      volumeBoost: DEFAULT_SCENE_VOLUME_BOOSTS.completion,
+    },
+    timer: {
+      ...DEFAULT_REVIEW_FEEDBACK_SETTINGS.scenes.timer,
+    },
   }
 }
 
@@ -206,48 +347,70 @@ export function sanitizeReviewFeedbackSettings(value: unknown): ReviewFeedbackSe
   const raw = value && typeof value === 'object' ? (value as Record<string, unknown>) : {}
   const mode = raw.mode === 'quiet' ? 'quiet' : 'immersive'
   const globalIntensity =
-    raw.globalIntensity === 'immersive' ||
-    raw.globalIntensity === 'quiet' ||
-    raw.globalIntensity === 'balanced'
+    raw.globalIntensity === 'quiet' || raw.globalIntensity === 'balanced' || raw.globalIntensity === 'immersive'
       ? raw.globalIntensity
       : DEFAULT_REVIEW_FEEDBACK_SETTINGS.globalIntensity
-  const revealFxIntensity =
-    raw.revealFxIntensity === 'soft' || raw.revealFxIntensity === 'full'
-      ? raw.revealFxIntensity
-      : DEFAULT_REVIEW_FEEDBACK_SETTINGS.revealFxIntensity
-  const criticalFxIntensity =
-    raw.criticalFxIntensity === 'full' || raw.criticalFxIntensity === 'cinematic'
-      ? raw.criticalFxIntensity
-      : DEFAULT_REVIEW_FEEDBACK_SETTINGS.criticalFxIntensity
-  const soundTheme = raw.soundTheme === 'classic' ? raw.soundTheme : DEFAULT_REVIEW_FEEDBACK_SETTINGS.soundTheme
+  const visualStyle = raw.visualStyle === 'focus_light' ? 'focus_light' : DEFAULT_REVIEW_FEEDBACK_SETTINGS.visualStyle
   const soundEnabled = sanitizeBoolean(raw.soundEnabled, DEFAULT_REVIEW_FEEDBACK_SETTINGS.soundEnabled)
-  const confettiAmount = sanitizeNumber(
-    raw.confettiAmount,
-    DEFAULT_REVIEW_FEEDBACK_SETTINGS.confettiAmount,
-    0.5,
-    3,
-  )
-  const animationEnabled = sanitizeBoolean(
-    raw.animationEnabled,
-    DEFAULT_REVIEW_FEEDBACK_SETTINGS.animationEnabled,
-  )
+  const animationEnabled = sanitizeBoolean(raw.animationEnabled, DEFAULT_REVIEW_FEEDBACK_SETTINGS.animationEnabled)
+  const fallbackScenes = readLegacyCelebrationScenes(raw)
+  const scenesRaw = raw.scenes && typeof raw.scenes === 'object' ? (raw.scenes as Record<string, unknown>) : {}
+  const scenes: ReviewFeedbackScenesSettings = {
+    review: sanitizeSceneSettings(scenesRaw.review, fallbackScenes.review, soundEnabled, animationEnabled),
+    milestone: sanitizeMilestoneSceneSettings(scenesRaw.milestone, fallbackScenes.milestone, soundEnabled, animationEnabled),
+    completion: sanitizeSceneSettings(scenesRaw.completion, fallbackScenes.completion, soundEnabled, animationEnabled),
+    timer: sanitizeSceneSettings(scenesRaw.timer, fallbackScenes.timer, soundEnabled, animationEnabled),
+  }
+
   return {
     mode,
+    visualStyle,
     soundEnabled,
-    volume: sanitizeNumber(raw.volume, DEFAULT_REVIEW_FEEDBACK_SETTINGS.volume, 0, 2),
-    confettiAmount,
+    volume: sanitizeNumber(raw.volume, DEFAULT_REVIEW_FEEDBACK_SETTINGS.volume, 0, REVIEW_FEEDBACK_VOLUME_MAX),
+    baseVolumeMultiplier: sanitizeNumber(
+      raw.baseVolumeMultiplier,
+      DEFAULT_REVIEW_FEEDBACK_SETTINGS.baseVolumeMultiplier,
+      REVIEW_FEEDBACK_BASE_VOLUME_MULTIPLIER_MIN,
+      REVIEW_FEEDBACK_BASE_VOLUME_MULTIPLIER_MAX,
+    ),
+    confettiAmount: sanitizeNumber(
+      raw.confettiAmount,
+      Math.max(scenes.review.confettiAmount, scenes.milestone.confettiAmount),
+      0,
+      3,
+    ),
     animationEnabled,
+    reducedCelebrationMotion: sanitizeBoolean(raw.reducedCelebrationMotion, false),
     surpriseEnabled: sanitizeBoolean(raw.surpriseEnabled, DEFAULT_REVIEW_FEEDBACK_SETTINGS.surpriseEnabled),
-    revealFxIntensity,
-    criticalFxIntensity,
-    soundTheme,
+    soundTheme: 'classic',
     globalIntensity,
-    celebration: sanitizeCelebrationSettings(raw.celebration, {
-      confettiAmount,
-      soundEnabled,
-      animationEnabled,
-    }),
+    scenes,
+    celebration: buildLegacyCelebrationFromScenes(scenes),
   }
+}
+
+export function getReviewFeedbackEffectiveVolume(
+  settings: Pick<ReviewFeedbackSettings, 'volume' | 'baseVolumeMultiplier'>,
+) {
+  const combined = settings.volume * settings.baseVolumeMultiplier
+  if (!Number.isFinite(combined)) return DEFAULT_REVIEW_FEEDBACK_SETTINGS.volume
+  return Math.max(0, Math.min(REVIEW_FEEDBACK_EFFECTIVE_VOLUME_MAX, combined))
+}
+
+/**
+ * 某个反馈场景的最终有效音量 = 全局有效音量 × 该场景的 volumeBoost。
+ * 用于"每个提示单独设置音量"——解决部分场景声音过小的问题。
+ */
+export function getSceneEffectiveVolume(
+  settings: ReviewFeedbackSettings,
+  sceneKey: FeedbackSceneKey,
+) {
+  const global = getReviewFeedbackEffectiveVolume(settings)
+  const scene = settings.scenes[sceneKey]
+  const boost = scene?.volumeBoost ?? 1
+  const combined = global * boost
+  if (!Number.isFinite(combined)) return global
+  return Math.max(0, Math.min(REVIEW_FEEDBACK_EFFECTIVE_VOLUME_MAX, combined))
 }
 
 export function readReviewFeedbackSettings() {
@@ -255,19 +418,15 @@ export function readReviewFeedbackSettings() {
     'review_feedback_settings',
     (value): value is ReviewFeedbackSettings => Boolean(value && typeof value === 'object'),
   )
-  if (cached.value) {
-    return sanitizeReviewFeedbackSettings(cached.value)
-  }
-  if (cached.hasEntry || hasLoadedClientPreferences()) {
-    return DEFAULT_REVIEW_FEEDBACK_SETTINGS
-  }
+  if (cached.value) return sanitizeReviewFeedbackSettings(cached.value)
+  if (cached.hasEntry || hasLoadedClientPreferences()) return DEFAULT_REVIEW_FEEDBACK_SETTINGS
 
   if (typeof window !== 'undefined') {
     try {
       const raw = window.localStorage.getItem(REVIEW_FEEDBACK_SETTINGS_STORAGE_KEY)
-      if (raw) {
-        return sanitizeReviewFeedbackSettings(JSON.parse(raw))
-      }
+      if (raw) return sanitizeReviewFeedbackSettings(JSON.parse(raw))
+      const legacy = window.localStorage.getItem('memory-anki-review-feedback-settings-v1')
+      if (legacy) return sanitizeReviewFeedbackSettings(JSON.parse(legacy))
     } catch {
       return DEFAULT_REVIEW_FEEDBACK_SETTINGS
     }

@@ -8,14 +8,12 @@ vi.mock('@/shared/feedback/feedbackCenter', () => ({
 }))
 
 describe('review confetti bridge', () => {
-  it('maps session completion to the strongest global preset', () => {
+  it('maps session completion to the strongest global preset by default', () => {
     emitReviewConfetti({
       kind: 'session_complete',
       reducedMotion: false,
-      criticalFxIntensity: 'cinematic',
       soundEnabled: true,
       volume: 1,
-      confettiAmount: 2.5,
     })
 
     expect(notifyFeedback).toHaveBeenCalledWith(
@@ -23,6 +21,25 @@ describe('review confetti bridge', () => {
         scenario: 'review_complete',
         celebration: expect.objectContaining({
           preset: 'school_pride',
+        }),
+      }),
+    )
+  })
+
+  it('uses the explicitly passed confettiPreset instead of the kind default', () => {
+    emitReviewConfetti({
+      kind: 'milestone',
+      reducedMotion: false,
+      soundEnabled: true,
+      volume: 1,
+      confettiPreset: 'stars',
+    })
+
+    expect(notifyFeedback).toHaveBeenCalledWith(
+      expect.objectContaining({
+        scenario: 'review_milestone',
+        celebration: expect.objectContaining({
+          preset: 'stars',
         }),
       }),
     )

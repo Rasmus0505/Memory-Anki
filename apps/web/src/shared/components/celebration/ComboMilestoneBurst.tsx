@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { motion } from 'motion/react'
 import { emitReviewConfetti } from '@/shared/components/celebration/reviewConfetti'
+import type { CelebrationPreset } from '@/shared/feedback/celebrationEngine'
 
 export interface ComboMilestoneBurstProps {
   milestoneStep: number
@@ -9,10 +10,10 @@ export interface ComboMilestoneBurstProps {
   label?: string | null
   durationMs?: number
   reducedMotion?: boolean
-  criticalFxIntensity?: 'full' | 'cinematic'
   soundEnabled?: boolean
   volume?: number
-  confettiAmount?: number
+  /** 里程碑场景的烟花类型（缺省时由 reviewConfetti 按 kind 兜底）。 */
+  confettiPreset?: CelebrationPreset
   onComplete?: () => void
 }
 
@@ -31,10 +32,9 @@ export function ComboMilestoneBurst({
   label,
   durationMs = 1400,
   reducedMotion = false,
-  criticalFxIntensity = 'cinematic',
   soundEnabled = false,
   volume = 1,
-  confettiAmount = 1,
+  confettiPreset,
   onComplete,
 }: ComboMilestoneBurstProps) {
   const [visible, setVisible] = useState(true)
@@ -50,17 +50,16 @@ export function ComboMilestoneBurst({
       kind: 'milestone',
       milestoneStep,
       reducedMotion,
-      criticalFxIntensity,
       soundEnabled,
       volume,
-      confettiAmount,
+      confettiPreset,
     })
     const timer = window.setTimeout(() => {
       setVisible(false)
       onCompleteRef.current?.()
     }, durationMs)
     return () => window.clearTimeout(timer)
-  }, [confettiAmount, criticalFxIntensity, durationMs, milestoneStep, reducedMotion, soundEnabled, volume])
+  }, [confettiPreset, durationMs, milestoneStep, reducedMotion, soundEnabled, volume])
 
   const shards = useMemo(
     () =>

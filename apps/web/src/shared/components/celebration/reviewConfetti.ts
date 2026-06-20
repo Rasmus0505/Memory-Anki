@@ -4,56 +4,18 @@ import {
 } from '@/shared/feedback/feedbackCenter'
 import type { CelebrationPreset } from '@/shared/feedback/celebrationEngine'
 
-type CriticalFxIntensity = 'full' | 'cinematic'
 type ReviewConfettiKind = 'milestone' | 'branch_clear' | 'all_clear_ready' | 'session_complete'
 
-function clampConfettiAmount(value: number) {
-  if (!Number.isFinite(value)) return 1
-  return Math.max(0.5, Math.min(3, value))
-}
-
-function boostPreset(
-  preset: CelebrationPreset,
-  steps: number,
-) {
-  const orderedPresets: CelebrationPreset[] = [
-    'random_direction',
-    'realistic_look',
-    'fireworks',
-    'stars',
-    'school_pride',
-  ]
-  const startIndex = orderedPresets.indexOf(preset)
-  const nextIndex = Math.max(0, Math.min(orderedPresets.length - 1, startIndex + steps))
-  return orderedPresets[nextIndex] ?? preset
-}
-
-function resolveReviewCelebrationPreset(args: {
-  kind: ReviewConfettiKind
-  criticalFxIntensity: CriticalFxIntensity
-  milestoneStep: number | null
-  confettiAmount: number
-}) {
-  const { kind, criticalFxIntensity, milestoneStep, confettiAmount } = args
-  const safeAmount = clampConfettiAmount(confettiAmount)
-
-  let preset: CelebrationPreset
-  if (kind === 'milestone') {
-    preset = milestoneStep != null && milestoneStep >= 2 ? 'fireworks' : 'realistic_look'
-  } else if (kind === 'branch_clear') {
-    preset = 'fireworks'
-  } else if (kind === 'all_clear_ready') {
-    preset = 'stars'
-  } else {
-    preset = 'school_pride'
-  }
-
-  let boost = 0
-  if (criticalFxIntensity === 'cinematic') boost += 1
-  if (safeAmount >= 1.8) boost += 1
-  if (safeAmount >= 2.4) boost += 1
-  if (kind === 'session_complete') boost += 1
-  return boostPreset(preset, boost)
+/**
+ * 各事件未显式指定烟花类型时的兜底预设。
+ * 强度完全由预设本身决定（庆典 > 爆发 > 星爆 > 写实 > 庆祝），
+ * 不再有按 cinematic/confettiAmount 升档的逻辑。
+ */
+const DEFAULT_KIND_PRESET: Record<ReviewConfettiKind, CelebrationPreset> = {
+  milestone: 'fireworks',
+  branch_clear: 'fireworks',
+  all_clear_ready: 'stars',
+  session_complete: 'school_pride',
 }
 
 function resolveScenario(kind: ReviewConfettiKind): FeedbackScenario {
@@ -66,31 +28,30 @@ function resolveScenario(kind: ReviewConfettiKind): FeedbackScenario {
 export function emitReviewConfetti(args: {
   kind: ReviewConfettiKind
   reducedMotion: boolean
-  criticalFxIntensity?: CriticalFxIntensity
   milestoneStep?: number | null
   soundEnabled?: boolean
   volume?: number
-  confettiAmount?: number
+  /**
+   * 烟花类型（庆祝 / 爆发 / 写实 / 星爆 / 庆典）。
+   * 缺省时按事件 kind 兜底。
+   */
+  confettiPreset?: CelebrationPreset
 }) {
   const {
     kind,
     reducedMotion,
-    criticalFxIntensity = 'cinematic',
     milestoneStep = null,
     soundEnabled = false,
     volume = 1,
-    confettiAmount = 1,
+    confettiPreset,
   } = args
+
+  const preset = confettiPreset ?? DEFAULT_KIND_PRESET[kind]
 
   notifyFeedback({
     scenario: resolveScenario(kind),
     celebration: {
-      preset: resolveReviewCelebrationPreset({
-        kind,
-        criticalFxIntensity,
-        milestoneStep,
-        confettiAmount,
-      }),
+      preset,
       reducedMotion,
       soundEnabled,
       volume,

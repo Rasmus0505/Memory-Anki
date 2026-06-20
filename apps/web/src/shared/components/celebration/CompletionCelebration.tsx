@@ -2,16 +2,17 @@ import { useEffect, useMemo, useState } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
 import { PartyPopper } from 'lucide-react'
 import { emitReviewConfetti } from '@/shared/components/celebration/reviewConfetti'
+import type { CelebrationPreset } from '@/shared/feedback/celebrationEngine'
 
 export interface CompletionCelebrationProps {
   maxCombo: number
   completedNodes: number
   totalNodes: number
   reducedMotion?: boolean
-  criticalFxIntensity?: 'full' | 'cinematic'
   soundEnabled?: boolean
   volume?: number
-  confettiAmount?: number
+  /** 完成结算场景的烟花类型（缺省时由 reviewConfetti 按 kind 兜底）。 */
+  confettiPreset?: CelebrationPreset
   onComplete?: () => void
   durationMs?: number
 }
@@ -21,10 +22,9 @@ export function CompletionCelebration({
   completedNodes,
   totalNodes,
   reducedMotion = false,
-  criticalFxIntensity = 'cinematic',
   soundEnabled = false,
   volume = 1,
-  confettiAmount = 1,
+  confettiPreset,
   onComplete,
   durationMs = 2000,
 }: CompletionCelebrationProps) {
@@ -34,17 +34,16 @@ export function CompletionCelebration({
     emitReviewConfetti({
       kind: 'session_complete',
       reducedMotion,
-      criticalFxIntensity,
       soundEnabled,
       volume,
-      confettiAmount,
+      confettiPreset,
     })
     const timer = window.setTimeout(() => {
       setVisible(false)
       onComplete?.()
     }, durationMs)
     return () => window.clearTimeout(timer)
-  }, [confettiAmount, criticalFxIntensity, durationMs, onComplete, reducedMotion, soundEnabled, volume])
+  }, [confettiPreset, durationMs, onComplete, reducedMotion, soundEnabled, volume])
 
   const statCards = useMemo(
     () => [

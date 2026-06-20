@@ -354,21 +354,6 @@ export function useMindMapReviewFlowController({
     }));
   }, [flow.feedback]);
 
-  const handleCycleRevealFxIntensity = React.useCallback(() => {
-    flow.feedback.updateSettings((current) => ({
-      ...current,
-      revealFxIntensity: current.revealFxIntensity === "full" ? "soft" : "full",
-    }));
-  }, [flow.feedback]);
-
-  const handleCycleCriticalFxIntensity = React.useCallback(() => {
-    flow.feedback.updateSettings((current) => ({
-      ...current,
-      criticalFxIntensity:
-        current.criticalFxIntensity === "cinematic" ? "full" : "cinematic",
-    }));
-  }, [flow.feedback]);
-
   const handleCycleFeedbackGlobalIntensity = React.useCallback(() => {
     flow.feedback.updateSettings((current) => ({
       ...current,
@@ -438,8 +423,6 @@ export function useMindMapReviewFlowController({
     handleFeedbackVolumeChange,
     handleToggleFeedbackAnimation,
     handleToggleFeedbackSurprise,
-    handleCycleRevealFxIntensity,
-    handleCycleCriticalFxIntensity,
     handleCycleFeedbackGlobalIntensity,
   };
 }

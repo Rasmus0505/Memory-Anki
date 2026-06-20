@@ -109,9 +109,8 @@ export default function ReviewFeedbackPreviewPage() {
       mode: 'immersive',
       soundEnabled: true,
       animationEnabled: true,
-      revealFxIntensity: 'full',
-      criticalFxIntensity: 'cinematic',
       volume: 1.5,
+      baseVolumeMultiplier: 1,
     })
     setSettingsStamp(JSON.stringify(readReviewFeedbackSettings()))
   }, [])

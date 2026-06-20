@@ -9,6 +9,7 @@ import { ComboMilestoneBurst, CompletionCelebration } from "@/shared/components/
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/shared/components/ui/card";
+import { getReviewFeedbackEffectiveVolume } from "@/shared/feedback/reviewFeedbackSettings";
 import { cn } from "@/shared/lib/utils";
 import { VoiceCoachSettingsDialog } from "@/features/voice-coach";
 
@@ -34,6 +35,7 @@ export function MindMapReviewFlow({
     editError,
     submitting,
   });
+  const effectiveVolume = getReviewFeedbackEffectiveVolume(review.flow.feedback.settings);
 
   return (
     <div className={cn("space-y-5", review.flow.screenGlowClass)}>
@@ -48,10 +50,9 @@ export function MindMapReviewFlow({
             !review.flow.feedback.animationEnabled ||
             !review.flow.feedback.settings.celebration.milestone.animationEnabled
           }
-          criticalFxIntensity={review.flow.feedback.settings.criticalFxIntensity}
           soundEnabled={review.flow.feedback.settings.celebration.milestone.soundEnabled}
-          volume={review.flow.feedback.settings.volume}
-          confettiAmount={review.flow.feedback.settings.celebration.milestone.confettiAmount}
+          volume={effectiveVolume}
+          confettiPreset={review.flow.feedback.settings.scenes.milestone.confettiPreset}
           onComplete={() => review.setComboBurst(null)}
         />
       ) : null}
@@ -66,10 +67,9 @@ export function MindMapReviewFlow({
             !review.flow.feedback.animationEnabled ||
             !review.flow.feedback.settings.celebration.sessionComplete.animationEnabled
           }
-          criticalFxIntensity={review.flow.feedback.settings.criticalFxIntensity}
           soundEnabled={review.flow.feedback.settings.celebration.sessionComplete.soundEnabled}
-          volume={review.flow.feedback.settings.volume}
-          confettiAmount={review.flow.feedback.settings.celebration.sessionComplete.confettiAmount}
+          volume={effectiveVolume}
+          confettiPreset={review.flow.feedback.settings.scenes.completion.confettiPreset}
         />
       ) : null}
 
