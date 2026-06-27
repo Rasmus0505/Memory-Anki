@@ -4,6 +4,11 @@ import { useTimedSession } from '@/shared/hooks/useTimedSession'
 import { TIMER_AUTOMATION_STORAGE_KEY } from '@/shared/components/session/timer-automation-config'
 import * as sessionRecordModel from '@/entities/session/model'
 import {
+  clearPendingTimeRecordRecoveriesForTest,
+  listPendingTimeRecordRecoveries,
+} from '@/entities/session/model'
+import {
+  flushMicrotasks,
   readPersistedTimedSessionTestSnapshot,
   TimedSessionTestHarness,
 } from '@/shared/hooks/useTimedSession.test-support'
@@ -15,6 +20,14 @@ describe('useTimedSession automation config', () => {
     vi.useFakeTimers()
     window.localStorage.clear()
     window.sessionStorage.clear()
+    clearPendingTimeRecordRecoveriesForTest()
+    if (!('sendBeacon' in navigator)) {
+      Object.defineProperty(navigator, 'sendBeacon', {
+        configurable: true,
+        writable: true,
+        value: vi.fn(),
+      })
+    }
     appendTimeRecordSpy.mockReset()
     appendTimeRecordSpy.mockResolvedValue(null)
   })
@@ -39,6 +52,95 @@ describe('useTimedSession automation config', () => {
 
     expect(timeoutSpy.mock.calls.some(([, delay]) => delay === 20_000)).toBe(true)
     expect(timeoutSpy.mock.calls.some(([, delay]) => delay === 20_000_000)).toBe(false)
+  })
+
+  it('queues a pending recovery record and prefers sendBeacon on pagehide', async () => {
+    appendTimeRecordSpy.mockImplementation(async (record) => record)
+    const sendBeaconSpy = vi.spyOn(navigator, 'sendBeacon').mockReturnValue(true)
+
+    render(
+      <TimedSessionTestHarness
+        kind="practice"
+        autoPauseMs={60_000}
+        persistKey="practice:unload-beacon"
+      />,
+    )
+    await flushMicrotasks()
+
+    await act(async () => {
+      vi.advanceTimersByTime(4_200)
+      window.dispatchEvent(new Event('pagehide'))
+    })
+
+    await flushMicrotasks()
+
+    expect(sendBeaconSpy).toHaveBeenCalledTimes(1)
+    expect(listPendingTimeRecordRecoveries()).toHaveLength(1)
+    expect(listPendingTimeRecordRecoveries()[0]?.record).toMatchObject({
+      completionMethod: 'left_page',
+      effectiveSeconds: 4,
+    })
+  })
+
+  it('falls back to keepalive fetch when sendBeacon returns false', async () => {
+    appendTimeRecordSpy.mockImplementation(async (record) => record)
+    vi.spyOn(navigator, 'sendBeacon').mockReturnValue(false)
+    const fetchSpy = vi.spyOn(window, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ item: null }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      }),
+    )
+
+    render(
+      <TimedSessionTestHarness
+        kind="practice"
+        autoPauseMs={60_000}
+        persistKey="practice:unload-keepalive"
+      />,
+    )
+    await flushMicrotasks()
+
+    await act(async () => {
+      vi.advanceTimersByTime(2_100)
+      window.dispatchEvent(new Event('pagehide'))
+    })
+
+    await flushMicrotasks()
+
+    expect(fetchSpy).toHaveBeenCalledWith(
+      '/api/v1/time-records',
+      expect.objectContaining({
+        keepalive: true,
+        method: 'POST',
+      }),
+    )
+  })
+
+  it('keeps the recovery draft when unload transports are unavailable', async () => {
+    appendTimeRecordSpy.mockImplementation(async (record) => record)
+    vi.spyOn(navigator, 'sendBeacon').mockReturnValue(false)
+    vi.spyOn(window, 'fetch').mockImplementation(() => {
+      throw new Error('fetch unavailable')
+    })
+
+    render(
+      <TimedSessionTestHarness
+        kind="practice"
+        autoPauseMs={60_000}
+        persistKey="practice:unload-queued"
+      />,
+    )
+    await flushMicrotasks()
+
+    await act(async () => {
+      vi.advanceTimersByTime(2_900)
+      window.dispatchEvent(new Event('beforeunload'))
+    })
+
+    await flushMicrotasks()
+
+    expect(listPendingTimeRecordRecoveries()).toHaveLength(1)
   })
 
   it('arms overridden local config for practice hidden pause', () => {
@@ -144,8 +246,8 @@ describe('useTimedSession automation config', () => {
       window.dispatchEvent(new Event('pagehide'))
     })
 
-    expect(appendTimeRecordSpy).toHaveBeenCalledTimes(1)
-    expect(appendTimeRecordSpy.mock.calls[0]?.[0]).toMatchObject({
+    expect(listPendingTimeRecordRecoveries()).toHaveLength(1)
+    expect(listPendingTimeRecordRecoveries()[0]?.record).toMatchObject({
       completionMethod: 'left_page',
       effectiveSeconds: 3,
     })

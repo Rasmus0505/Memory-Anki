@@ -23,6 +23,7 @@ def build_generation_messages(
     source_label: str,
     image_items: list[tuple[bytes, str | None]],
     source_context: str | None = None,
+    prompt_override: str | None = None,
 ) -> tuple[list[dict[str, Any]], str]:
     is_pdf_question_answer_pairing = bool(
         source_context
@@ -34,6 +35,8 @@ def build_generation_messages(
         if is_pdf_question_answer_pairing
         else render_prompt("ai_prompt_palace_quiz_generate", {}, session=session)
     )
+    if prompt_override and str(prompt_override).strip():
+        system_prompt = str(prompt_override).strip()
     user_content: list[dict[str, Any]] = [
         {
             "type": "text",

@@ -33,6 +33,7 @@ def build_runtime(
     model: str,
     provider: str = "dashscope",
     extra_payload: dict[str, Any] | None = None,
+    prompt_override: str | None = None,
 ) -> DashscopeImportRuntime:
     return DashscopeImportRuntime(
         api_key=api_key or "",
@@ -40,6 +41,7 @@ def build_runtime(
         model=model,
         provider=provider,
         extra_payload=extra_payload,
+        prompt_override=prompt_override,
     )
 
 

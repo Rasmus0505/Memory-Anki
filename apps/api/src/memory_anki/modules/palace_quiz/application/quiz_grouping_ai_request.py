@@ -52,10 +52,14 @@ def prepare_mini_palace_grouping_request(
     if len(questions) == 0:
         raise PalaceQuizValidationError("没有可分类的题目。")
 
-    system_prompt = render_prompt(
-        operation,
-        {},
-        session=session,
+    system_prompt = (
+        ai_options.prompt_override.strip()
+        if ai_options and ai_options.prompt_override and ai_options.prompt_override.strip()
+        else render_prompt(
+            operation,
+            {},
+            session=session,
+        )
     )
     model_input = {
         "mini_palaces": mini_palace_contexts,

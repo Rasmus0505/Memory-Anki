@@ -74,7 +74,7 @@ export default function ReviewOverview() {
       />
 
       {queue.smoothed_count > 0 ? (
-        <Card className="border-border/70 bg-card/92">
+        <Card className="memory-anki-warm-panel memory-anki-surface-glow border-border/60 bg-card/90">
           <CardContent className="flex items-center justify-between gap-3 p-4 text-sm text-muted-foreground">
             <span>系统已将 {queue.smoothed_count} 项逾期任务自动平滑到后续日期。</span>
             <Badge variant="secondary">已平滑</Badge>
@@ -82,7 +82,7 @@ export default function ReviewOverview() {
         </Card>
       ) : null}
 
-      <Card className="border-border/70 bg-card/92">
+      <Card className="memory-anki-warm-panel memory-anki-surface-glow border-border/60 bg-card/90">
         <CardHeader>
           <CardTitle className="text-base">待处理任务</CardTitle>
         </CardHeader>
@@ -90,7 +90,7 @@ export default function ReviewOverview() {
           {queue.reviews.length > 0 ? (
             queue.reviews.map((review) => (
               <Link key={review.id} to={buildReviewSessionPath(review.id, chapterId)}>
-                <div className="flex items-center justify-between rounded-2xl border border-border/70 bg-background/70 px-4 py-4 transition-colors hover:bg-secondary/70">
+                <div className="memory-anki-soft-card flex items-center justify-between rounded-[24px] border border-border/60 bg-background/80 px-4 py-4 transition-all hover:-translate-y-[1px] hover:bg-secondary/75">
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
                       <Brain className="h-4 w-4 text-muted-foreground" />
@@ -130,7 +130,7 @@ export default function ReviewOverview() {
         </CardContent>
       </Card>
 
-      <Card className="border-border/70 bg-card/92">
+      <Card className="memory-anki-warm-panel memory-anki-surface-glow border-border/60 bg-card/90">
         <CardHeader>
           <CardTitle className="text-base">分块复习任务</CardTitle>
         </CardHeader>
@@ -138,7 +138,7 @@ export default function ReviewOverview() {
           {segmentQueue?.reviews?.length > 0 ? (
             segmentQueue.reviews.map((review: any) => (
               <Link key={review.id} to={buildSegmentReviewSessionPath(review.id, chapterId)}>
-                <div className="flex items-center justify-between rounded-2xl border border-border/70 bg-background/70 px-4 py-4 transition-colors hover:bg-secondary/70">
+                <div className="memory-anki-soft-card flex items-center justify-between rounded-[24px] border border-border/60 bg-background/80 px-4 py-4 transition-all hover:-translate-y-[1px] hover:bg-secondary/75">
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
                       <Brain className="h-4 w-4 text-muted-foreground" />
@@ -171,3 +171,4 @@ export default function ReviewOverview() {
     </div>
   )
 }
+

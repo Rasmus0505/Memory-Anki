@@ -16,13 +16,15 @@ export interface StageEditState {
   stage: ReviewStageSummary
 }
 
-export type ReviewButtonState = 'due_now' | 'due_later_today' | 'future' | 'unscheduled'
+export type ReviewButtonState = 'due_now' | 'due_later_today' | 'future' | 'unscheduled' | 'practice'
 
 export function resolveReviewButtonState(
   hasDueReview: boolean,
   value: string | null,
+  needsPractice = false,
 ): ReviewButtonState {
   if (hasDueReview) return 'due_now'
+  if (needsPractice) return 'practice'
   if (!value) return 'unscheduled'
   const target = parseApiDateTime(value)
   if (Number.isNaN(target.getTime())) return 'unscheduled'
@@ -115,6 +117,8 @@ export function getReviewActionButtonClass(options: {
     'h-8 w-full rounded-md border text-xs font-medium transition-colors',
     state === 'due_now' &&
       'border-success bg-success text-white hover:bg-success/80',
+    state === 'practice' &&
+      'border-success bg-success text-white hover:bg-success/80',
     state === 'due_later_today' &&
       'border-warning/50 bg-warning/20 text-warning hover:bg-warning/30',
     isSleepReview && 'border-info bg-info text-white hover:bg-info/80',
@@ -187,6 +191,7 @@ export function getReviewActionLabel(
 
   if (loading) return '加载中...'
   if (isSleepReview) return '睡前复习'
+  if (state === 'practice') return '练习'
   if (state === 'due_now') return '开始复习'
   if (state === 'unscheduled') return unscheduledLabel
   if (state === 'due_later_today') {

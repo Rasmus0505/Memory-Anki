@@ -27,6 +27,13 @@ export type BackgroundTaskSection =
   | 'review'
   | 'profile'
 
+export type TaskStepStatus = 'pending' | 'active' | 'done' | 'failed'
+
+export interface TaskStep {
+  label: string
+  status: TaskStepStatus
+}
+
 export interface BackgroundTask {
   /** 唯一 id（通常用任务源 id，如 jobId/taskId/materialId 组合）。 */
   id: string
@@ -46,6 +53,8 @@ export interface BackgroundTask {
   updatedAt: number
   kind?: BackgroundTaskKind
   bubble?: { x: number; y: number } | null
+  /** 分步进度，可选。提供时在任务条中显示步骤指示器。 */
+  steps?: TaskStep[]
 }
 
 interface StoreState {
@@ -117,6 +126,7 @@ export function registerTask(input: {
   navigateTarget?: string
   kind?: BackgroundTaskKind
   bubble?: { x: number; y: number } | null
+  steps?: TaskStep[]
 }): void {
   const now = Date.now()
   const existing = state.tasks[input.id]
@@ -130,6 +140,7 @@ export function registerTask(input: {
     navigateTarget: input.navigateTarget,
     kind: input.kind ?? existing?.kind ?? 'default',
     bubble: input.bubble ?? existing?.bubble ?? null,
+    steps: input.steps ?? existing?.steps,
     createdAt: existing?.createdAt ?? now,
     updatedAt: now,
   }
@@ -144,6 +155,7 @@ export function updateTask(
     detail?: string
     title?: string
     bubble?: { x: number; y: number } | null
+    steps?: TaskStep[]
   },
 ): void {
   const current = state.tasks[id]
@@ -155,6 +167,7 @@ export function updateTask(
       detail: patch.detail ?? current.detail,
       progress: patch.progress ?? current.progress,
       bubble: patch.bubble ?? current.bubble ?? null,
+      steps: patch.steps ?? current.steps,
       updatedAt: Date.now(),
     }),
   )

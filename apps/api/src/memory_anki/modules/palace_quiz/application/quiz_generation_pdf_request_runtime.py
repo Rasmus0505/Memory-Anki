@@ -91,6 +91,7 @@ def prepare_pdf_generation_request(
         context=request_context,
         extra_prompt=extra_prompt,
         source_context=source_context,
+        prompt_override=generation_ai_options.prompt_override if generation_ai_options else None,
     )
     request_payload = build_pdf_generation_request_payload(
         system_prompt=system_prompt,

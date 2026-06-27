@@ -88,6 +88,7 @@ export const MindMapFrame = forwardRef<MindMapFrameHandle, MindMapFrameProps>(fu
   onBilinkNodeClick,
   onMiniPalacePour,
   onReady,
+  onReadyTimeout,
 }: MindMapFrameProps, ref) {
   const iframeRef = useRef<HTMLIFrameElement | null>(null)
   const stateRef = useRef(editorState)
@@ -111,6 +112,7 @@ export const MindMapFrame = forwardRef<MindMapFrameHandle, MindMapFrameProps>(fu
   const onBilinkNodeClickRef = useRef(onBilinkNodeClick)
   const onMiniPalacePourRef = useRef(onMiniPalacePour)
   const onReadyRef = useRef(onReady)
+  const onReadyTimeoutRef = useRef(onReadyTimeout)
   const lastForcedSyncKeyRef = useRef<string | null>(null)
   const lastBilinkInsertionNonceRef = useRef<number>(0)
   const lastReviewFxNonceRef = useRef<number>(0)
@@ -139,6 +141,7 @@ export const MindMapFrame = forwardRef<MindMapFrameHandle, MindMapFrameProps>(fu
   onBilinkNodeClickRef.current = onBilinkNodeClick
   onMiniPalacePourRef.current = onMiniPalacePour
   onReadyRef.current = onReady
+  onReadyTimeoutRef.current = onReadyTimeout
 
   const rawHostId = useId()
   const hostId = useMemo(() => rawHostId.replace(/[^a-zA-Z0-9_-]/g, '_'), [rawHostId])
@@ -155,6 +158,22 @@ export const MindMapFrame = forwardRef<MindMapFrameHandle, MindMapFrameProps>(fu
     preserveViewOnSync,
     initialViewPolicy,
   })
+
+  useEffect(() => {
+    if (!isIframeLoaded) return
+    if (hostReadyRef.current) return
+    const timeoutId = window.setTimeout(() => {
+      if (hostReadyRef.current) return
+      console.warn('[MindMapFrame] host runtime did not become ready in time', {
+        hostId,
+        readonly,
+      })
+      onReadyTimeoutRef.current?.()
+    }, 6000)
+    return () => {
+      window.clearTimeout(timeoutId)
+    }
+  }, [hostId, hostReadyRef, isIframeLoaded, readonly])
 
   const syncHostState = useCallback(() => {
     const iframeWindow = iframeRef.current?.contentWindow as MindMapHostWindow | null

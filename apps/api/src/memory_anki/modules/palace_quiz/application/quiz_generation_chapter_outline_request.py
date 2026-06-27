@@ -67,6 +67,7 @@ def prepare_chapter_outline_generation_request(
         session=session,
         model_input=model_input,
         extra_prompt=extra_prompt,
+        prompt_override=ai_options.prompt_override if ai_options else None,
     )
     config, extra_payload, resolved_ai = _ai_service()._build_chat_config(
         session,

@@ -142,26 +142,31 @@ export default function SegmentPracticePage() {
         }}
         submitting={submitting}
         onComplete={async (payload) => {
-          const scheduleId = segment.current_review_schedule_id
-          const hasStages = Boolean(
-            segment.stage_labels?.length && segment.review_stages?.length
-          )
-          if (scheduleId && hasStages) {
+          let reviewSegment = segment
+          let hasStages = Boolean(reviewSegment.stage_labels?.length && reviewSegment.review_stages?.length)
+          if (!hasStages && (reviewSegment.review_stage_total ?? 0) > 0) {
+            const refreshed = await getPalaceSegmentApi(reviewSegment.id)
+            reviewSegment = refreshed.item
+            setSegment(reviewSegment)
+            setTitle(`${refreshed.palace.title} / ${refreshed.item.name}`)
+            hasStages = Boolean(reviewSegment.stage_labels?.length && reviewSegment.review_stages?.length)
+          }
+          if (hasStages) {
             setPendingPayload(payload)
             setStageDialogOpen(true)
             return
           }
           setSubmitting(true)
           try {
-            if (segment.review_stage_total != null && segment.review_stage_total > 0) {
-              const nextCompleted = (segment.review_stage_completed ?? 0) + 1
-              const targetReviewNumber = Math.min(nextCompleted, segment.review_stage_total - 1)
-              await updatePalaceSegmentReviewProgressApi(segment.id, {
+            if (reviewSegment.review_stage_total != null && reviewSegment.review_stage_total > 0) {
+              const nextCompleted = (reviewSegment.review_stage_completed ?? 0) + 1
+              const targetReviewNumber = Math.min(nextCompleted, reviewSegment.review_stage_total - 1)
+              await updatePalaceSegmentReviewProgressApi(reviewSegment.id, {
                 completed_count: nextCompleted,
                 completed_review_number: targetReviewNumber,
               })
             }
-            await clearSegmentPracticeSessionProgressApi(segment.id)
+            await clearSegmentPracticeSessionProgressApi(reviewSegment.id)
             setHasResumeProgress(false)
           } finally {
             setSubmitting(false)
@@ -190,6 +195,11 @@ export default function SegmentPracticePage() {
                   red_marked_count: pendingPayload.redNodeIds.length,
                   target_review_number: targetReviewNumber,
                   needs_practice: needsPractice,
+                })
+              } else {
+                await updatePalaceSegmentReviewProgressApi(segment.id, {
+                  completed_count: targetReviewNumber + 1,
+                  completed_review_number: targetReviewNumber,
                 })
               }
               await clearSegmentPracticeSessionProgressApi(segment.id)

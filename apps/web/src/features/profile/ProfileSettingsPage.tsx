@@ -1,5 +1,5 @@
 ﻿import { useEffect, useState, type FormEvent } from 'react'
-import { LoadingState } from '@/shared/components/state-placeholders'
+import { ProfileSkeleton } from './ProfileSkeleton'
 import {
   Download,
   FileJson,
@@ -92,7 +92,7 @@ export default function ProfileSettingsPage() {
 
   if (!config) {
     return (
-      <LoadingState text="正在加载设置…" />
+      <ProfileSkeleton />
     )
   }
 

@@ -1,5 +1,12 @@
 import { request } from '@/shared/api/http'
+import { invalidatePalaceCatalogCache } from '@/entities/palace/api/catalogApi'
 import type { MiniPalaceSummary } from '@/shared/api/contracts'
+
+async function withPalaceCatalogInvalidation<T>(operation: Promise<T>) {
+  const result = await operation
+  invalidatePalaceCatalogCache()
+  return result
+}
 
 export function getMiniPalacesApi(id: number) {
   return request<{ items: MiniPalaceSummary[] }>(`/palaces/${id}/mini-palaces`)
@@ -70,17 +77,19 @@ export function updateMiniPalaceReviewProgressApi(
     completed_at?: string | null
   },
 ) {
-  return request<{ item: MiniPalaceSummary; palace: any }>(
-    `/palace-mini-palaces/${miniPalaceId}/review-progress`,
-    {
-      method: 'PUT',
-      body: JSON.stringify(data),
-      persistence: {
-        resourceKey: `palace-mini-palace:${miniPalaceId}:review-progress`,
-        coalesceKey: `palace-mini-palace:${miniPalaceId}:review-progress`,
-        description: '保存小宫殿复习进度',
-        replayMode: 'auto',
+  return withPalaceCatalogInvalidation(
+    request<{ item: MiniPalaceSummary; palace: any }>(
+      `/palace-mini-palaces/${miniPalaceId}/review-progress`,
+      {
+        method: 'PUT',
+        body: JSON.stringify(data),
+        persistence: {
+          resourceKey: `palace-mini-palace:${miniPalaceId}:review-progress`,
+          coalesceKey: `palace-mini-palace:${miniPalaceId}:review-progress`,
+          description: '保存小宫殿复习进度',
+          replayMode: 'auto',
+        },
       },
-    },
+    ),
   )
 }

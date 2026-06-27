@@ -52,6 +52,7 @@ def build_pdf_generation_messages(
     context: PdfGenerationRequestContext,
     extra_prompt: str,
     source_context: str,
+    prompt_override: str | None = None,
 ) -> tuple[list[dict[str, Any]], str]:
     return build_generation_messages(
         session=session,
@@ -59,6 +60,7 @@ def build_pdf_generation_messages(
         source_label="；".join(context.source_artifacts.source_labels),
         image_items=context.source_artifacts.image_items,
         source_context=source_context,
+        prompt_override=prompt_override,
     )
 
 

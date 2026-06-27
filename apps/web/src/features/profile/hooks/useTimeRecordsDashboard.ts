@@ -8,10 +8,14 @@ import {
   getTimeRecordSummary,
   getTrendByRange,
   getTimeRecordingThresholdSeconds,
+  listPendingTimeRecordRecoveries,
   listTimeRecords,
+  removePendingTimeRecordRecovery,
+  replayPendingTimeRecordRecoveries,
   restoreTimeRecord,
   setTimeRecordingThresholdSeconds,
   softDeleteTimeRecord,
+  subscribePendingTimeRecordRecoveries,
   type SessionKind,
   type TimeRecordChartRange,
   type TimeSessionRecord,
@@ -56,6 +60,11 @@ export interface UseTimeRecordsDashboardResult {
     range: TimeRecordChartRange,
   ) => ReturnType<typeof getSessionKindBreakdown>
   visibleRecords: TimeSessionRecord[]
+  pendingRecoveryRecords: Array<{
+    record: TimeSessionRecord
+    status: 'pending' | 'syncing' | 'failed'
+    lastError: string | null
+  }>
   hasSelectableRecords: boolean
   allSelectableChecked: boolean
   hasSelectedRecords: boolean
@@ -65,6 +74,8 @@ export interface UseTimeRecordsDashboardResult {
   openEditDialog: (record: TimeSessionRecord) => void
   handleDeleteRecord: (record: TimeSessionRecord) => Promise<void>
   handleRestoreRecord: (record: TimeSessionRecord) => Promise<void>
+  handleReplayPendingRecovery: (recordId: string) => Promise<void>
+  handleDismissPendingRecovery: (recordId: string) => void
   toggleRecordSelection: (recordId: string, checked: boolean) => void
   toggleSelectAllVisible: (checked: boolean) => void
   handleBulkDelete: () => Promise<void>
@@ -81,6 +92,13 @@ export function useTimeRecordsDashboard(
   options: UseTimeRecordsDashboardOptions = {},
 ): UseTimeRecordsDashboardResult {
   const [records, setRecords] = useState<TimeSessionRecord[]>([])
+  const [pendingRecoveryRecords, setPendingRecoveryRecords] = useState<
+    Array<{
+      record: TimeSessionRecord
+      status: 'pending' | 'syncing' | 'failed'
+      lastError: string | null
+    }>
+  >([])
   const [thresholdSeconds, setThresholdSeconds] = useState(0)
   const [thresholdInput, setThresholdInput] = useState('0')
   const [showBelowThreshold, setShowBelowThreshold] = useState(false)
@@ -112,6 +130,16 @@ export function useTimeRecordsDashboard(
     setRecords(nextRecords)
   }
 
+  const refreshPendingRecoveries = () => {
+    setPendingRecoveryRecords(
+      listPendingTimeRecordRecoveries().map((item) => ({
+        record: item.record,
+        status: item.status,
+        lastError: item.lastError,
+      })),
+    )
+  }
+
   useEffect(() => {
     const load = async () => {
       const [threshold, nextRecords] = await Promise.all([
@@ -124,10 +152,18 @@ export function useTimeRecordsDashboard(
       setThresholdSeconds(threshold)
       setThresholdInput(String(threshold))
       setRecords(nextRecords)
+      refreshPendingRecoveries()
     }
 
     void load()
   }, [showBelowThreshold])
+
+  useEffect(() => {
+    refreshPendingRecoveries()
+    return subscribePendingTimeRecordRecoveries(() => {
+      refreshPendingRecoveries()
+    })
+  }, [])
 
   const applyThreshold = async () => {
     const parsed = Number(thresholdInput)
@@ -300,6 +336,20 @@ export function useTimeRecordsDashboard(
     }
   }
 
+  const handleReplayPendingRecovery = async (recordId: string) => {
+    await replayPendingTimeRecordRecoveries()
+    await refreshRecords()
+    refreshPendingRecoveries()
+    if (!listPendingTimeRecordRecoveries().some((item) => item.recordId === recordId)) {
+      toast.success('待恢复时间记录已补录')
+    }
+  }
+
+  const handleDismissPendingRecovery = (recordId: string) => {
+    removePendingTimeRecordRecovery(recordId)
+    toast.success('待恢复草稿已移除')
+  }
+
   const toggleRecordSelection = (recordId: string, checked: boolean) => {
     setSelectedRecordIds((current) => {
       if (checked) {
@@ -402,6 +452,7 @@ export function useTimeRecordsDashboard(
       return breakdown7
     },
     visibleRecords,
+    pendingRecoveryRecords,
     hasSelectableRecords,
     allSelectableChecked,
     hasSelectedRecords: selectedRecordIds.length > 0,
@@ -411,6 +462,8 @@ export function useTimeRecordsDashboard(
     openEditDialog,
     handleDeleteRecord,
     handleRestoreRecord,
+    handleReplayPendingRecovery,
+    handleDismissPendingRecovery,
     toggleRecordSelection,
     toggleSelectAllVisible,
     handleBulkDelete,

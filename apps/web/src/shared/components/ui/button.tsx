@@ -1,10 +1,15 @@
 import * as React from 'react'
+import { LoaderCircle } from 'lucide-react'
 import { cn } from '@/shared/lib/utils'
 
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: 'default' | 'destructive' | 'outline' | 'secondary' | 'ghost' | 'link'
   size?: 'default' | 'sm' | 'lg' | 'icon'
   asChild?: boolean
+  /** 显示 loading spinner 并自动 disabled */
+  loading?: boolean
+  /** loading 时替换按钮文字 */
+  loadingText?: string
 }
 
 function assignRef<T>(ref: React.Ref<T> | undefined, value: T | null) {
@@ -17,7 +22,7 @@ function assignRef<T>(ref: React.Ref<T> | undefined, value: T | null) {
 }
 
 const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ className, variant = 'default', size = 'default', asChild = false, children, ...props }, ref) => {
+  ({ className, variant = 'default', size = 'default', asChild = false, loading = false, loadingText, children, ...props }, ref) => {
     const base =
       'inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0'
     const variants: Record<string, string> = {
@@ -57,9 +62,18 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
       } as Partial<ButtonChildProps> & React.RefAttributes<HTMLButtonElement>)
     }
 
+    const isDisabled = loading || props.disabled
+
     return (
-      <button ref={ref} className={buttonClassName} data-feedback="button" {...props}>
-        {children}
+      <button ref={ref} className={buttonClassName} data-feedback="button" disabled={isDisabled} {...props}>
+        {loading ? (
+          <>
+            <LoaderCircle className="animate-spin" />
+            {loadingText ?? children}
+          </>
+        ) : (
+          children
+        )}
       </button>
     )
   },

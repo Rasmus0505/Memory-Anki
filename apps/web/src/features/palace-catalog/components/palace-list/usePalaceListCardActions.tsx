@@ -111,6 +111,14 @@ export function usePalaceListCardActions({
     }
   }
 
+  const handlePalacePractice = (palace: PalaceGroupedItem) => {
+    navigate(`/palaces/${palace.id}/practice`)
+  }
+
+  const handleSegmentPractice = (segment: PalaceSegmentSummary) => {
+    navigate(`/segments/${segment.id}/practice`)
+  }
+
   const handleOpenBatchReview = (palace: PalaceGroupedItem) => {
     const dueSegments = (palace.segments || []).filter(
       (segment) =>
@@ -248,7 +256,7 @@ export function usePalaceListCardActions({
   )
 
   const handleMiniPalacePractice = (mini: MiniPalaceSummary) => {
-    navigate(`/palaces/${mini.palace_id}/quiz?tab=practice&miniPalaceId=${mini.id}`)
+    navigate(`/mini-palaces/${mini.id}/practice`)
   }
 
   const handleMiniPalaceReview = (mini: MiniPalaceSummary) => {
@@ -260,6 +268,8 @@ export function usePalaceListCardActions({
     segmentReviewLoadingId,
     markReviewedKey,
     onOpenBatchReview: handleOpenBatchReview,
+    onPalacePractice: (palace: PalaceGroupedItem) => void handlePalacePractice(palace),
+    onSegmentPractice: (segment: PalaceSegmentSummary) => void handleSegmentPractice(segment),
     onSegmentReviewAction: (segment: PalaceSegmentSummary) => void handleSegmentReviewAction(segment),
     onOpenStageEdit: openStageEdit,
     onMarkSegmentReviewed: (segment: PalaceSegmentSummary) => void handleMarkSegmentReviewed(segment),

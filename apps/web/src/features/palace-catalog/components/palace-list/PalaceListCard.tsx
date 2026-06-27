@@ -37,6 +37,8 @@ interface PalaceListCardProps {
   markReviewedKey: string | null
   defaultExpanded?: boolean
   onOpenBatchReview: (palace: PalaceGroupedItem) => void
+  onPalacePractice: (palace: PalaceGroupedItem) => void
+  onSegmentPractice: (segment: PalaceSegmentSummary) => void
   onSegmentReviewAction: (segment: PalaceSegmentSummary) => void
   onOpenStageEdit: (
     palace: PalaceGroupedItem,
@@ -101,6 +103,8 @@ export function PalaceListCard({
   markReviewedKey,
   defaultExpanded = false,
   onOpenBatchReview,
+  onPalacePractice,
+  onSegmentPractice,
   onSegmentReviewAction,
   onOpenStageEdit,
   onMarkSegmentReviewed,
@@ -181,17 +185,23 @@ export function PalaceListCard({
                         state: singleSegmentState,
                         isSleepReview: isSingleSegmentSleepReview,
                         disabled:
-                          !singleSegment.current_review_schedule_id ||
-                          singleSegmentState === 'future',
+                          singleSegmentState !== 'practice' &&
+                          (!singleSegment.current_review_schedule_id ||
+                            singleSegmentState === 'future'),
                       }),
                     )}
                     disabled={
-                      !singleSegment.current_review_schedule_id ||
-                      singleSegmentState === 'future' ||
+                      (singleSegmentState !== 'practice' &&
+                        (!singleSegment.current_review_schedule_id ||
+                          singleSegmentState === 'future')) ||
                       segmentReviewLoadingId === singleSegment.id
                     }
                     progress={singleSegment.active_review_progress}
-                    onClick={() => onSegmentReviewAction(singleSegment)}
+                    onClick={() =>
+                      singleSegmentState === 'practice'
+                        ? onPalacePractice(palace)
+                        : onSegmentReviewAction(singleSegment)
+                    }
                   />
                 ) : null}
               </div>
@@ -255,8 +265,9 @@ export function PalaceListCard({
                 )
                 const isSegmentSleepReview = isSleepReviewSegment(segment)
                 const segmentReviewDisabled =
-                  !segment.current_review_schedule_id ||
-                  segmentReviewState === 'future' ||
+                  (segmentReviewState !== 'practice' &&
+                    (!segment.current_review_schedule_id ||
+                      segmentReviewState === 'future')) ||
                   segmentReviewLoadingId === segment.id
 
                 return (
@@ -305,7 +316,11 @@ export function PalaceListCard({
                             })}
                             disabled={segmentReviewDisabled}
                             progress={segment.active_review_progress}
-                            onClick={() => onSegmentReviewAction(segment)}
+                            onClick={() =>
+                              segmentReviewState === 'practice'
+                                ? onSegmentPractice(segment)
+                                : onSegmentReviewAction(segment)
+                            }
                           />
                         ) : null}
 
@@ -359,11 +374,13 @@ export function PalaceListCard({
                   const miniState = resolveReviewButtonState(
                     mini.has_due_review,
                     mini.next_review_at,
+                    mini.needs_practice,
                   )
                   const isSleepMini = mini.current_review_type === 'sleep'
                   const miniReviewDisabled =
-                    !mini.current_review_schedule_id ||
-                    miniState === 'future' ||
+                    (miniState !== 'practice' &&
+                      (!mini.current_review_schedule_id ||
+                        miniState === 'future')) ||
                     mini.is_empty
 
                   return (
@@ -422,18 +439,26 @@ export function PalaceListCard({
                         </div>
 
                         <div className="flex shrink-0 flex-col items-stretch gap-2 sm:min-w-[132px]">
-                          <Button
-                            size="sm"
-                            variant={mini.needs_practice ? 'default' : 'ghost'}
-                            className={cn(
-                              'h-8 w-full text-xs',
-                              mini.needs_practice && 'bg-success text-white hover:bg-success/80',
-                            )}
-                            onClick={() => onMiniPalacePractice(mini)}
-                            disabled={mini.is_empty}
-                          >
-                            做题
-                          </Button>
+                          {mini.is_empty ? (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-8 w-full text-xs"
+                              disabled
+                            >
+                              做题
+                            </Button>
+                          ) : (
+                            <Link to={`/palaces/${mini.palace_id}/quiz?tab=practice&miniPalaceId=${mini.id}`}>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-8 w-full text-xs"
+                              >
+                                做题
+                              </Button>
+                            </Link>
+                          )}
 
                           <ReviewActionButton
                             label={getReviewActionLabel(mini.next_review_at, {
@@ -447,7 +472,11 @@ export function PalaceListCard({
                             })}
                             disabled={miniReviewDisabled}
                             progress={mini.active_review_progress}
-                            onClick={() => onMiniPalaceReview(mini)}
+                            onClick={() =>
+                              miniState === 'practice'
+                                ? onMiniPalacePractice(mini)
+                                : onMiniPalaceReview(mini)
+                            }
                           />
 
                           <Link
@@ -481,9 +510,9 @@ export function PalaceListCard({
           ) : null}
           <Link to={`/palaces/${palace.id}/quiz`}>
             <Button
-              variant={palace.needs_practice ? 'default' : 'ghost'}
+              variant="ghost"
               size="sm"
-	              className={cn('h-8', palace.needs_practice && 'bg-success text-white hover:bg-success/80')}
+              className="h-8"
             >
               做题
             </Button>

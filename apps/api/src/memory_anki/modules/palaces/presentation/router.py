@@ -1,4 +1,6 @@
+import logging
 import os
+import time
 import uuid
 from collections import OrderedDict
 
@@ -49,6 +51,8 @@ from memory_anki.modules.palaces.application.mini_palace_service import (
     update_palace_mini_palace,
 )
 from memory_anki.modules.palaces.application.palace_serializer import (
+    palace_card_json,
+    palace_editor_meta_json,
     palace_json,
     palace_summary_json,
     review_plan_item_json,
@@ -57,8 +61,9 @@ from memory_anki.modules.palaces.application.palace_service import (
     create_palace,
     delete_palace,
     get_palace,
+    list_catalog_palaces,
+    list_catalog_palaces_by_subject,
     list_palaces,
-    list_palaces_by_subject,
     restore_archived_palaces,
     update_palace,
 )
@@ -82,6 +87,7 @@ from memory_anki.modules.palaces.application.title_sync_service import (
     build_chapter_grouped_palace_list,
     build_grouped_palace_list,
     build_subject_shelf_summary,
+    reconcile_palace_chapter_binding,
 )
 from memory_anki.modules.palaces.domain.schemas import PalaceCreate, PalaceUpdate
 from memory_anki.modules.reviews.application.review_execution_service import (
@@ -97,6 +103,7 @@ from memory_anki.modules.settings.application.ai_model_registry import (
 )
 
 router = APIRouter(tags=["palaces"])
+logger = logging.getLogger(__name__)
 
 
 def session_dep():
@@ -114,9 +121,9 @@ def api_list(search: str = "", s: Session = Depends(session_dep)):
 
 @router.get("/palaces/grouped")
 def api_list_grouped(search: str = "", subject_id: int | None = None, s: Session = Depends(session_dep)):
-    palaces = list_palaces_by_subject(s, subject_id, search)
-    chapter_grouped = build_chapter_grouped_palace_list(s, palaces, lambda p, sess: palace_json(p, sess))
-    model_grouped = build_grouped_palace_list(s, palaces, lambda p, sess: palace_json(p, sess))
+    palaces = list_catalog_palaces_by_subject(s, subject_id, search)
+    chapter_grouped = build_chapter_grouped_palace_list(s, palaces, lambda p, sess: palace_card_json(p, sess))
+    model_grouped = build_grouped_palace_list(s, palaces, lambda p, sess: palace_card_json(p, sess))
     return {
         "groups": model_grouped.get("groups", []),
         "ungrouped": model_grouped.get("ungrouped", []),
@@ -126,7 +133,7 @@ def api_list_grouped(search: str = "", subject_id: int | None = None, s: Session
 
 @router.get("/palaces/grouped-summary")
 def api_list_grouped_summary(search: str = "", subject_id: int | None = None, s: Session = Depends(session_dep)):
-    palaces = list_palaces_by_subject(s, subject_id, search)
+    palaces = list_catalog_palaces_by_subject(s, subject_id, search)
     chapter_grouped = build_chapter_grouped_palace_list(s, palaces, lambda p, sess: palace_summary_json(p, sess))
     model_grouped = build_grouped_palace_list(s, palaces, lambda p, sess: palace_summary_json(p, sess))
     return {
@@ -138,9 +145,9 @@ def api_list_grouped_summary(search: str = "", subject_id: int | None = None, s:
 
 @router.get("/palaces/subjects")
 def api_list_subject_shelf(search: str = "", s: Session = Depends(session_dep)):
-    palaces = list_palaces(s, search)
+    palaces = list_catalog_palaces(s, search)
     for palace in palaces:
-        palace_json(palace, s)
+        reconcile_palace_chapter_binding(s, palace)
     return build_subject_shelf_summary(s, palaces)
 
 
@@ -215,12 +222,33 @@ def api_review_plan(palace_id: int, s: Session = Depends(session_dep)):
 
 @router.get("/palaces/{palace_id}/editor")
 def api_get_editor(palace_id: int, s: Session = Depends(session_dep)):
+    started_at = time.perf_counter()
+    lookup_started_at = started_at
     palace = get_palace(s, palace_id)
+    lookup_ms = round((time.perf_counter() - lookup_started_at) * 1000, 2)
     if not palace:
         return {"error": "not found"}
+    meta_started_at = time.perf_counter()
+    palace_meta = palace_editor_meta_json(palace, s)
+    meta_ms = round((time.perf_counter() - meta_started_at) * 1000, 2)
+    editor_state_started_at = time.perf_counter()
+    editor_state = get_palace_editor_state(palace)
+    editor_state_ms = round((time.perf_counter() - editor_state_started_at) * 1000, 2)
+    total_ms = round((time.perf_counter() - started_at) * 1000, 2)
+    logger.info(
+        "palace editor payload prepared palace_id=%s lookup_ms=%s meta_ms=%s editor_state_ms=%s total_ms=%s root_child_count=%s",
+        palace_id,
+        lookup_ms,
+        meta_ms,
+        editor_state_ms,
+        total_ms,
+        len((editor_state.get("editor_doc") or {}).get("root", {}).get("children", []))
+        if isinstance(editor_state.get("editor_doc"), dict)
+        else None,
+    )
     return {
-        "palace": palace_json(palace, s),
-        **get_palace_editor_state(palace),
+        "palace": palace_meta,
+        **editor_state,
     }
 
 

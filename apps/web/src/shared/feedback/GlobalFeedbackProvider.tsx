@@ -4,6 +4,7 @@ import {
   useMindMapFeedbackAudio,
   useMindMapFeedbackSettings,
 } from '@/shared/components/mindmap-host/useMindMapFeedback'
+import { getReviewFeedbackEffectiveVolume } from '@/shared/feedback/reviewFeedbackSettings'
 import {
   buildFeedbackStyle,
   createCommitDescriptor,
@@ -84,7 +85,7 @@ export function GlobalFeedbackProvider({
   const reducedMotion = usePrefersReducedMotion()
   const { playEvent } = useMindMapFeedbackAudio(
     settings.soundEnabled && settings.mode === 'immersive',
-    settings.volume,
+    getReviewFeedbackEffectiveVolume(settings),
   )
 
   const emitDescriptor = React.useCallback(

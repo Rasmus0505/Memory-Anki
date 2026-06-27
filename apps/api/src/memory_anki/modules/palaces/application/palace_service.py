@@ -23,6 +23,11 @@ def list_palaces(session: Session, search: str = ""):
     return _repo(session).list_palaces(search=search)
 
 
+def list_catalog_palaces(session: Session, search: str = ""):
+    restore_archived_palaces(session)
+    return _repo(session).list_catalog_palaces(search=search)
+
+
 def list_palaces_by_subject(session: Session, subject_id: int | None, search: str = ""):
     palaces = list_palaces(session, search)
     if subject_id is None:
@@ -32,6 +37,18 @@ def list_palaces_by_subject(session: Session, subject_id: int | None, search: st
     for palace in palaces:
         chapters = list(getattr(palace, "chapters", []) or [])
         if any(getattr(chapter, "subject_id", None) == subject_id for chapter in chapters):
+            filtered.append(palace)
+    return filtered
+
+
+def list_catalog_palaces_by_subject(session: Session, subject_id: int | None, search: str = ""):
+    palaces = list_catalog_palaces(session, search)
+    if subject_id is None:
+        return palaces
+    filtered: list[Palace] = []
+    for palace in palaces:
+        chapters = list(getattr(palace, "chapters", []) or [])
+        if any(chapter.subject_id == subject_id for chapter in chapters):
             filtered.append(palace)
     return filtered
 

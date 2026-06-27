@@ -28,6 +28,8 @@ function resolveScenario(kind: ReviewConfettiKind): FeedbackScenario {
 export function emitReviewConfetti(args: {
   kind: ReviewConfettiKind
   reducedMotion: boolean
+  confettiAmount?: number
+  durationMs?: number
   milestoneStep?: number | null
   soundEnabled?: boolean
   volume?: number
@@ -40,6 +42,8 @@ export function emitReviewConfetti(args: {
   const {
     kind,
     reducedMotion,
+    confettiAmount = 1,
+    durationMs,
     milestoneStep = null,
     soundEnabled = false,
     volume = 1,
@@ -52,7 +56,17 @@ export function emitReviewConfetti(args: {
     scenario: resolveScenario(kind),
     celebration: {
       preset,
+      amount: confettiAmount,
+      durationMs,
       reducedMotion,
+      scenario:
+        kind === 'milestone'
+          ? 'milestone'
+          : kind === 'branch_clear'
+            ? 'review'
+            : kind === 'all_clear_ready'
+              ? 'completion'
+              : 'completion',
       soundEnabled,
       volume,
       audioCue: {

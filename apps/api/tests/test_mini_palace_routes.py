@@ -207,6 +207,15 @@ class MiniPalaceRouteTests(unittest.TestCase):
         self.assertEqual(grouped_before.status_code, 200)
         before_palace = grouped_before.json()["subjects"][0]["ungrouped_palaces"][0]
         self.assertEqual(before_palace["mini_review_mode"], "independent")
+        self.assertNotIn("editor_doc", before_palace)
+        self.assertNotIn("pegs", before_palace)
+        self.assertIn("segments", before_palace)
+        self.assertIn("mini_palaces", before_palace)
+
+        editor_response = self.client.get(f"/api/v1/palaces/{self.palace_id}/editor")
+        self.assertEqual(editor_response.status_code, 200)
+        self.assertIn("editor_doc", editor_response.json())
+        self.assertIn("editor_doc", editor_response.json()["palace"])
 
         shelf_before = self.client.get("/api/v1/palaces/subjects")
         self.assertEqual(shelf_before.status_code, 200)

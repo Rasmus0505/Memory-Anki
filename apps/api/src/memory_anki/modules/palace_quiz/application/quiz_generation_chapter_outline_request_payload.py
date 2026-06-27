@@ -42,8 +42,13 @@ def build_chapter_outline_generation_messages(
     session,
     model_input: dict[str, object],
     extra_prompt: str,
+    prompt_override: str | None = None,
 ) -> tuple[str, list[dict[str, object]]]:
-    system_prompt = render_prompt("ai_prompt_palace_quiz_generate", {}, session=session)
+    system_prompt = (
+        str(prompt_override).strip()
+        if str(prompt_override or "").strip()
+        else render_prompt("ai_prompt_palace_quiz_generate", {}, session=session)
+    )
     messages: list[dict[str, object]] = [{"role": "system", "content": system_prompt}]
     normalized_extra_prompt = str(extra_prompt or "").strip()
     if normalized_extra_prompt:

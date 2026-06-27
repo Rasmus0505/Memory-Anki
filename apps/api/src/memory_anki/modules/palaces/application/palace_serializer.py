@@ -260,3 +260,73 @@ def palace_summary_json(p, session: Session | None = None) -> dict:
         "chapter_count": len(chapters),
         "segment_count": len(getattr(p, "segments", []) or []),
     }
+
+
+def palace_card_json(p, session: Session | None = None) -> dict:
+    """Serialize the palace catalog card without large editor/peg payloads."""
+    payload = palace_summary_json(p, session)
+    explicit_chapter_ids: set[int] = set()
+    if session is not None:
+        explicit_chapter_ids = get_palace_explicit_chapter_ids(session, p)
+    stage_labels = payload.get("stage_labels") if isinstance(payload.get("stage_labels"), list) else []
+    default_segment = (
+        build_palace_default_segment_summary(session, p)
+        if session is not None
+        else None
+    )
+    payload.update(
+        {
+            "review_stages": palace_review_stages_json(session, p, stage_labels) if session else [],
+            "chapters": [
+                {
+                    "id": c.id,
+                    "name": c.name,
+                    "subject_id": c.subject_id,
+                    "parent_id": c.parent_id,
+                    "is_explicit": c.id in explicit_chapter_ids,
+                    "subject": {"id": c.subject.id, "name": c.subject.name} if c.subject else None,
+                }
+                for c in (getattr(p, "chapters", []) or [])
+            ],
+            "segments": list_palace_segments(session, p, default_segment_payload=default_segment) if session else [],
+            "mini_palaces": list_palace_mini_palaces(session, p) if session else [],
+        }
+    )
+    return payload
+
+
+def palace_editor_meta_json(p, session: Session | None = None) -> dict:
+    """Serialize only the palace metadata required by editor/view/review shells.
+
+    Keep this payload intentionally lighter than ``palace_json`` by excluding
+    heavy nested structures such as ``pegs``, ``segments`` and ``mini_palaces``.
+    """
+    payload = palace_summary_json(p, session)
+    explicit_chapter_ids: set[int] = set()
+    if session is not None:
+        explicit_chapter_ids = get_palace_explicit_chapter_ids(session, p)
+    payload.update(
+        {
+            "attachments": [
+                {
+                    "id": a.id,
+                    "filename": a.filename,
+                    "original_name": a.original_name,
+                    "file_size": a.file_size,
+                }
+                for a in (getattr(p, "attachments", []) or [])
+            ],
+            "chapters": [
+                {
+                    "id": c.id,
+                    "name": c.name,
+                    "subject_id": c.subject_id,
+                    "parent_id": c.parent_id,
+                    "is_explicit": c.id in explicit_chapter_ids,
+                    "subject": {"id": c.subject.id, "name": c.subject.name} if c.subject else None,
+                }
+                for c in (getattr(p, "chapters", []) or [])
+            ],
+        }
+    )
+    return payload

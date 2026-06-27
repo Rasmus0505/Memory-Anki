@@ -55,8 +55,13 @@ def build_review_mindmap_generation_model_input(
 
 def build_review_mindmap_generation_messages(
     model_input: dict[str, Any],
+    prompt_override: str | None = None,
 ) -> tuple[str, list[dict[str, Any]]]:
-    system_prompt = review_mindmap_system_prompt()
+    system_prompt = (
+        str(prompt_override).strip()
+        if str(prompt_override or "").strip()
+        else review_mindmap_system_prompt()
+    )
     messages: list[dict[str, Any]] = [
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": json.dumps(model_input, ensure_ascii=False)},

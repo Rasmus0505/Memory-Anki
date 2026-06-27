@@ -1,4 +1,4 @@
-import { Pencil, Plus, Trash2, Undo2 } from 'lucide-react'
+import { Pencil, Plus, RotateCw, Trash2, Undo2, X } from 'lucide-react'
 import {
   formatCompletionMethod,
   formatDuration,
@@ -41,6 +41,11 @@ interface TimeRecordsTableProps {
   deletingRecordId: string | null
   restoringRecordId: string | null
   visibleRecords: TimeSessionRecord[]
+  pendingRecoveryRecords: Array<{
+    record: TimeSessionRecord
+    status: 'pending' | 'syncing' | 'failed'
+    lastError: string | null
+  }>
   hasSelectableRecords: boolean
   allSelectableChecked: boolean
   selectedRecordIds: string[]
@@ -49,6 +54,8 @@ interface TimeRecordsTableProps {
   onEditRecord: (record: TimeSessionRecord) => void
   onDeleteRecord: (record: TimeSessionRecord) => void | Promise<void>
   onRestoreRecord: (record: TimeSessionRecord) => void | Promise<void>
+  onReplayPendingRecovery: (recordId: string) => void | Promise<void>
+  onDismissPendingRecovery: (recordId: string) => void
 }
 
 export function TimeRecordsTable({
@@ -70,6 +77,7 @@ export function TimeRecordsTable({
   deletingRecordId,
   restoringRecordId,
   visibleRecords,
+  pendingRecoveryRecords,
   hasSelectableRecords,
   allSelectableChecked,
   selectedRecordIds,
@@ -78,6 +86,8 @@ export function TimeRecordsTable({
   onEditRecord,
   onDeleteRecord,
   onRestoreRecord,
+  onReplayPendingRecovery,
+  onDismissPendingRecovery,
 }: TimeRecordsTableProps) {
   const actionInProgress =
     isBulkDeleting || deletingRecordId !== null || restoringRecordId !== null
@@ -168,6 +178,60 @@ export function TimeRecordsTable({
       </CardHeader>
 
       <CardContent>
+        {pendingRecoveryRecords.length > 0 ? (
+          <div className="mb-5 rounded-[24px] border border-amber-200 bg-amber-50/80 p-4">
+            <div className="mb-3 text-sm font-medium text-amber-900">
+              待恢复时间记录
+            </div>
+            <div className="space-y-3">
+              {pendingRecoveryRecords.map((item) => (
+                <div
+                  key={item.record.id}
+                  className="flex flex-col gap-3 rounded-2xl border border-amber-200/80 bg-white/80 p-3 md:flex-row md:items-center md:justify-between"
+                >
+                  <div className="min-w-0">
+                    <div className="font-medium text-foreground">
+                      {item.record.title}
+                    </div>
+                    <div className="mt-1 text-xs text-muted-foreground">
+                      {formatSessionKind(item.record.kind)} ·{' '}
+                      {formatDuration(item.record.effectiveSeconds)} ·{' '}
+                      {formatTableDateTime(item.record.startedAt)}
+                    </div>
+                    <div className="mt-1 text-xs text-amber-900">
+                      {item.status === 'syncing'
+                        ? '正在自动补录...'
+                        : item.status === 'failed'
+                          ? item.lastError || '自动补录失败，需手动重试'
+                          : '等待自动补录'}
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="active:scale-[0.98]"
+                      onClick={() => void onReplayPendingRecovery(item.record.id)}
+                    >
+                      <RotateCw className="mr-2 h-4 w-4" />
+                      立即补录
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="active:scale-[0.98]"
+                      onClick={() => onDismissPendingRecovery(item.record.id)}
+                    >
+                      <X className="mr-2 h-4 w-4" />
+                      移除草稿
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
+
         {visibleRecords.length === 0 ? (
           <EmptyState
             variant="search"

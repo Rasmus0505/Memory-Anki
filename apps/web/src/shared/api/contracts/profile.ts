@@ -71,6 +71,7 @@ export interface AiPromptTemplateListResponse {
 export interface AiRuntimeOptions {
   model?: string
   thinking_enabled?: boolean | null
+  prompt_override?: string | null
 }
 export type AiScenarioRuntimeOptionsMap = Record<string, AiRuntimeOptions>
 export type AiProviderKey = 'dashscope' | 'qwen' | 'zhipu' | 'siliconflow' | 'deepseek'

@@ -263,6 +263,39 @@ export async function previewPalaceQuizGenerationFromImagesApi(
   return readQuizJson<PalaceQuizGenerationPreview>(response)
 }
 
+export async function previewPalaceQuizGenerationFromTextFilesApi(
+  palaceId: number,
+  files: File[],
+  extraPrompt: string,
+  classifyByMiniPalace = false,
+  selectedChapterId?: number | null,
+  aiOptions?: import('@/shared/api/contracts').AiRuntimeOptions,
+) {
+  const form = new FormData()
+  files.forEach((file) => form.append('files', file))
+  form.append('extra_prompt', extraPrompt)
+  form.append('classify_by_mini_palace', classifyByMiniPalace ? 'true' : 'false')
+  if (selectedChapterId) {
+    form.append('selected_chapter_id', String(selectedChapterId))
+  }
+  if (aiOptions) {
+    form.append('ai_options', JSON.stringify(aiOptions))
+  }
+  const response = await fetchWithMutationQueue(
+    `${API_BASE}/palaces/${palaceId}/quiz-generation/text-files`,
+    {
+      method: 'POST',
+      body: form,
+    },
+    {
+      resourceKey: `palace:${palaceId}:quiz-generation:text-files:${files.map((file) => file.name).join(',')}`,
+      description: 'AI 生成宫殿题目（文本文件）',
+      replayMode: 'manual',
+    },
+  )
+  return readQuizJson<PalaceQuizGenerationPreview>(response)
+}
+
 export function previewChapterQuizGenerationFromOutlineApi(
   chapterId: number,
   data: {

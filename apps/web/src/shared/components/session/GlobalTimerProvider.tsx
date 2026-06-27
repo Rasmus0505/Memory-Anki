@@ -12,6 +12,7 @@ import {
   type TimerAutomationConfig,
 } from '@/shared/components/session/timer-automation-config'
 import {
+  getTimerCelebrationConfig,
   getTimerFocusRule,
   readTimerFocusConfig,
   resetTimerFocusConfig,
@@ -29,8 +30,10 @@ import {
 import { emitTimerCelebration } from '@/shared/components/session/timer-celebration'
 import type { TimedSessionController } from '@/shared/hooks/useTimedSession'
 import { useMindMapFeedbackSettings } from '@/shared/components/mindmap-host/useMindMapFeedback'
+import { getReviewFeedbackEffectiveVolume } from '@/shared/feedback/reviewFeedbackSettings'
 import {
   calculateResizedTimerOverlayLayout,
+  createTimerOverlaySizeTokens,
   formatClock,
   formatIdlePrimaryProgress,
   formatPrimaryProgress,
@@ -88,6 +91,7 @@ function GlobalTimerFloatingOverlay({
   const [pulseNonce, setPulseNonce] = React.useState(0)
   const reducedMotion = usePrefersReducedMotion()
   const feedbackSettings = useMindMapFeedbackSettings()
+  const effectiveFeedbackVolume = getReviewFeedbackEffectiveVolume(feedbackSettings)
   const activeEntry = React.useMemo(() => selectActiveTimerEntry(entries), [entries])
   const dragStateRef = React.useRef<{
     startX: number
@@ -166,26 +170,30 @@ function GlobalTimerFloatingOverlay({
     }
 
     if (secondaryCount > previous.secondaryCount) {
+      const eventConfig = getTimerCelebrationConfig('secondary', focusConfig)
       emitTimerCelebration({
         completionCount: secondaryCount,
         kind: 'secondary',
         reducedMotion,
         soundEnabled: feedbackSettings.soundEnabled && feedbackSettings.mode === 'immersive',
-        volume: feedbackSettings.volume,
+        volume: effectiveFeedbackVolume,
         feedbackIntensity: focusConfig.feedbackIntensity,
+        eventConfig,
       })
       setPulseKind('secondary')
       setPulseNonce((current) => current + 1)
     }
 
     if (primaryDone && !previous.primaryDone) {
+      const eventConfig = getTimerCelebrationConfig('primary', focusConfig)
       emitTimerCelebration({
         completionCount: secondaryCount,
         kind: 'primary',
         reducedMotion,
         soundEnabled: feedbackSettings.soundEnabled && feedbackSettings.mode === 'immersive',
-        volume: feedbackSettings.volume,
+        volume: effectiveFeedbackVolume,
         feedbackIntensity: focusConfig.feedbackIntensity,
+        eventConfig,
       })
       setPulseKind('primary')
       setPulseNonce((current) => current + 1)
@@ -195,7 +203,7 @@ function GlobalTimerFloatingOverlay({
       secondaryCount,
       primaryDone,
     }
-  }, [activeEntry, feedbackSettings.mode, feedbackSettings.soundEnabled, feedbackSettings.volume, focusConfig, reducedMotion])
+  }, [activeEntry, effectiveFeedbackVolume, feedbackSettings.mode, feedbackSettings.soundEnabled, focusConfig, reducedMotion])
 
   const beginDrag = React.useCallback((event: React.PointerEvent<HTMLElement>) => {
     const target = event.target
@@ -340,6 +348,10 @@ function GlobalTimerFloatingOverlay({
               : activeEntry?.timer.start({ source: 'global_floating_timer' })),
         }
   const PrimaryActionIcon = primaryAction?.icon ?? Play
+  const sizeTokens = React.useMemo(
+    () => createTimerOverlaySizeTokens(layout),
+    [layout.height, layout.width],
+  )
 
   const overlay = (
     <>
@@ -369,12 +381,12 @@ function GlobalTimerFloatingOverlay({
               pulseKind === 'primary' && 'memory-anki-global-timer-panel-primary',
               pulseKind === 'secondary' && 'memory-anki-global-timer-panel-secondary',
             )}
-            style={{ width: layout.width, height: layout.height }}
+            style={{ width: layout.width, height: layout.height, ...sizeTokens.panelStyle }}
           >
             <div className="memory-anki-global-timer-dragbar" onPointerDown={beginDrag}>
               <div className="min-w-0">
                 <div className="memory-anki-global-timer-scene">{sceneLabel}</div>
-                <div className="truncate text-[11px] text-muted-foreground/85" title={title}>
+                <div className="memory-anki-global-timer-title" title={title}>
                   {title}
                 </div>
               </div>
@@ -383,23 +395,25 @@ function GlobalTimerFloatingOverlay({
                   type="button"
                   variant="ghost"
                   size="icon"
-                  className="h-8 w-8"
+                  className="memory-anki-global-timer-icon-button"
+                  style={sizeTokens.iconButtonStyle}
                   onPointerDown={(event) => event.stopPropagation()}
                   onClick={() => setAutomationOpen(true)}
                   title="打开计时器设置"
                 >
-                  <Settings2 className="h-4 w-4" />
+                  <Settings2 className="memory-anki-global-timer-icon" style={sizeTokens.iconStyle} />
                 </Button>
                 <Button
                   type="button"
                   variant="ghost"
                   size="icon"
-                  className="h-8 w-8"
+                  className="memory-anki-global-timer-icon-button"
+                  style={sizeTokens.iconButtonStyle}
                   onPointerDown={(event) => event.stopPropagation()}
                   onClick={toggleCollapsed}
                   title="折叠为胶囊"
                 >
-                  <Shrink className="h-4 w-4" />
+                  <Shrink className="memory-anki-global-timer-icon" style={sizeTokens.iconStyle} />
                 </Button>
               </div>
             </div>
@@ -415,13 +429,25 @@ function GlobalTimerFloatingOverlay({
               <div className="memory-anki-global-timer-body-spacer" aria-hidden="true" />
               <div className="memory-anki-global-timer-actions">
                 {activeEntry && primaryAction ? (
-                  <Button type="button" size="sm" className="flex-1" onClick={primaryAction.onClick}>
-                    <PrimaryActionIcon className="mr-2 h-4 w-4" />
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="memory-anki-global-timer-action-button flex-1"
+                    style={sizeTokens.actionButtonStyle}
+                    onClick={primaryAction.onClick}
+                  >
+                    <PrimaryActionIcon className="memory-anki-global-timer-icon mr-2" style={sizeTokens.iconStyle} />
                     {primaryAction.label}
                   </Button>
                 ) : (
-                  <Button type="button" size="sm" className="flex-1" disabled>
-                    <Play className="mr-2 h-4 w-4" />
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="memory-anki-global-timer-action-button flex-1"
+                    style={sizeTokens.actionButtonStyle}
+                    disabled
+                  >
+                    <Play className="memory-anki-global-timer-icon mr-2" style={sizeTokens.iconStyle} />
                     进入学习页后开始
                   </Button>
                 )}

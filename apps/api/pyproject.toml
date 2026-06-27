@@ -57,7 +57,6 @@ module = [
     "memory_anki.modules.reviews.presentation.router",
     "memory_anki.modules.settings.application.ai_model_registry",
     "memory_anki.modules.time_records.application.time_records_service",
-    "memory_anki.supervisor.runtime_supervisor",
 ]
 ignore_errors = true
 

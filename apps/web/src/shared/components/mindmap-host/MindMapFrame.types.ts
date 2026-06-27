@@ -96,6 +96,7 @@ export interface MindMapFrameProps {
   }) => void
   onMiniPalacePour?: () => void
   onReady?: () => void
+  onReadyTimeout?: () => void
 }
 
 export interface MindMapFrameHandle {

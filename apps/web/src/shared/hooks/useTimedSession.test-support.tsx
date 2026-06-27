@@ -69,3 +69,8 @@ export function readPersistedTimedSessionTestSnapshot(persistKey: string) {
       }
     : null
 }
+
+export async function flushMicrotasks() {
+  await Promise.resolve()
+  await Promise.resolve()
+}

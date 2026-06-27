@@ -31,6 +31,7 @@ import {
 } from '@/features/voice-coach'
 import { MiniPalacePanel } from '@/features/mini-palace'
 import { useRouteResidency } from '@/shared/routing/RouteResidency'
+import { PalaceEditSkeleton } from './PalaceEditSkeleton'
 
 export default function PalaceEdit() {
   const { isActive } = useRouteResidency()
@@ -131,11 +132,7 @@ export default function PalaceEdit() {
   }, [isActive, mindMapNativeFullscreen])
 
   if (!page.palaceId) {
-    return (
-      <div className="flex min-h-[60vh] items-center justify-center text-sm text-muted-foreground">
-        正在为新宫殿创建草稿…
-      </div>
-    )
+    return <PalaceEditSkeleton />
   }
 
   return (
@@ -485,9 +482,7 @@ export default function PalaceEdit() {
                   />
                 </div>
               ) : (
-                <div className="flex h-[64vh] items-center justify-center rounded-2xl border border-dashed border-border/80 bg-background/60 text-sm text-muted-foreground">
-                  正在加载宫殿编辑器…
-                </div>
+                <PalaceEditSkeleton />
               )}
             </CardContent>
           </Card>

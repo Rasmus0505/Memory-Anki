@@ -11,6 +11,7 @@ describe('review confetti bridge', () => {
   it('maps session completion to the strongest global preset by default', () => {
     emitReviewConfetti({
       kind: 'session_complete',
+      confettiAmount: 1.6,
       reducedMotion: false,
       soundEnabled: true,
       volume: 1,
@@ -20,7 +21,9 @@ describe('review confetti bridge', () => {
       expect.objectContaining({
         scenario: 'review_complete',
         celebration: expect.objectContaining({
+          amount: 1.6,
           preset: 'school_pride',
+          scenario: 'completion',
         }),
       }),
     )
@@ -29,6 +32,7 @@ describe('review confetti bridge', () => {
   it('uses the explicitly passed confettiPreset instead of the kind default', () => {
     emitReviewConfetti({
       kind: 'milestone',
+      confettiAmount: 1.15,
       reducedMotion: false,
       soundEnabled: true,
       volume: 1,
@@ -39,7 +43,9 @@ describe('review confetti bridge', () => {
       expect.objectContaining({
         scenario: 'review_milestone',
         celebration: expect.objectContaining({
+          amount: 1.15,
           preset: 'stars',
+          scenario: 'milestone',
         }),
       }),
     )

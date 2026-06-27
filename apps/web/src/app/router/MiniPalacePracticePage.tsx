@@ -160,26 +160,31 @@ export default function MiniPalacePracticePage() {
         }}
         submitting={submitting}
         onComplete={async (payload) => {
-          const scheduleId = miniPalace.current_review_schedule_id
-          const hasStages = Boolean(
-            miniPalace.stage_labels?.length && miniPalace.review_stages?.length
-          )
-          if (scheduleId && hasStages) {
+          let reviewMiniPalace = miniPalace
+          let hasStages = Boolean(reviewMiniPalace.stage_labels?.length && reviewMiniPalace.review_stages?.length)
+          if (!hasStages && (reviewMiniPalace.review_stage_total ?? 0) > 0) {
+            const refreshed = await getPalaceMiniPalaceApi(reviewMiniPalace.id)
+            reviewMiniPalace = refreshed.item
+            setMiniPalace(reviewMiniPalace)
+            setPalace(refreshed.palace)
+            hasStages = Boolean(reviewMiniPalace.stage_labels?.length && reviewMiniPalace.review_stages?.length)
+          }
+          if (hasStages) {
             setPendingPayload(payload)
             setStageDialogOpen(true)
             return
           }
           setSubmitting(true)
           try {
-            if (miniPalace.review_stage_total != null && miniPalace.review_stage_total > 0) {
-              const nextCompleted = (miniPalace.review_stage_completed ?? 0) + 1
-              const targetReviewNumber = Math.min(nextCompleted, miniPalace.review_stage_total - 1)
-              await updateMiniPalaceReviewProgressApi(miniPalace.id, {
+            if (reviewMiniPalace.review_stage_total != null && reviewMiniPalace.review_stage_total > 0) {
+              const nextCompleted = (reviewMiniPalace.review_stage_completed ?? 0) + 1
+              const targetReviewNumber = Math.min(nextCompleted, reviewMiniPalace.review_stage_total - 1)
+              await updateMiniPalaceReviewProgressApi(reviewMiniPalace.id, {
                 completed_count: nextCompleted,
                 completed_review_number: targetReviewNumber,
               })
             }
-            await clearMiniPracticeSessionProgressApi(miniPalace.id)
+            await clearMiniPracticeSessionProgressApi(reviewMiniPalace.id)
             setHasResumeProgress(false)
           } finally {
             setSubmitting(false)
@@ -208,6 +213,11 @@ export default function MiniPalacePracticePage() {
                   red_marked_count: pendingPayload.redNodeIds.length,
                   target_review_number: targetReviewNumber,
                   needs_practice: needsPractice,
+                })
+              } else {
+                await updateMiniPalaceReviewProgressApi(miniPalace.id, {
+                  completed_count: targetReviewNumber + 1,
+                  completed_review_number: targetReviewNumber,
                 })
               }
               await clearMiniPracticeSessionProgressApi(miniPalace.id)

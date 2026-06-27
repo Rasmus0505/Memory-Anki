@@ -1,4 +1,5 @@
 import { request } from '@/shared/api/http'
+import { invalidatePalaceCatalogCache } from '@/entities/palace/api/catalogApi'
 import type {
   BatchSegmentReviewSessionResponse,
   BatchSegmentReviewSubmitResponse,
@@ -10,6 +11,12 @@ import type {
   SegmentReviewScheduleSummary,
   SessionProgressSnapshot,
 } from '@/shared/api/contracts'
+
+async function withPalaceCatalogInvalidation<T>(operation: Promise<T>) {
+  const result = await operation
+  invalidatePalaceCatalogCache()
+  return result
+}
 
 export function getReviewQueueApi() {
   return request<ReviewQueueResponse>('/review/queue')
@@ -139,15 +146,17 @@ export function submitReviewSessionApi(
     needs_practice?: boolean
   },
 ) {
-  return request<ReviewSessionSubmitResponse>(`/review/session/${id}/submit`, {
-    method: 'POST',
-    body: JSON.stringify(data),
-    persistence: {
-      resourceKey: `review-submit:${id}`,
-      description: '提交正式复习',
-      replayMode: 'auto',
-    },
-  })
+  return withPalaceCatalogInvalidation(
+    request<ReviewSessionSubmitResponse>(`/review/session/${id}/submit`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+      persistence: {
+        resourceKey: `review-submit:${id}`,
+        description: '提交正式复习',
+        replayMode: 'auto',
+      },
+    }),
+  )
 }
 
 export function submitSegmentReviewSessionApi(
@@ -162,15 +171,17 @@ export function submitSegmentReviewSessionApi(
     needs_practice?: boolean
   },
 ) {
-  return request<ReviewSessionSubmitResponse>(`/segment-review/session/${id}/submit`, {
-    method: 'POST',
-    body: JSON.stringify(data),
-    persistence: {
-      resourceKey: `segment-review-submit:${id}`,
-      description: '提交分块复习',
-      replayMode: 'auto',
-    },
-  })
+  return withPalaceCatalogInvalidation(
+    request<ReviewSessionSubmitResponse>(`/segment-review/session/${id}/submit`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+      persistence: {
+        resourceKey: `segment-review-submit:${id}`,
+        description: '提交分块复习',
+        replayMode: 'auto',
+      },
+    }),
+  )
 }
 
 export function getMiniReviewSessionApi(id: number) {
@@ -239,15 +250,17 @@ export function submitMiniReviewSessionApi(
     needs_practice?: boolean
   },
 ) {
-  return request<ReviewSessionSubmitResponse>(`/mini-review/session/${id}/submit`, {
-    method: 'POST',
-    body: JSON.stringify(data),
-    persistence: {
-      resourceKey: `mini-review-submit:${id}`,
-      description: '提交小宫殿正式复习',
-      replayMode: 'auto',
-    },
-  })
+  return withPalaceCatalogInvalidation(
+    request<ReviewSessionSubmitResponse>(`/mini-review/session/${id}/submit`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+      persistence: {
+        resourceKey: `mini-review-submit:${id}`,
+        description: '提交小宫殿正式复习',
+        replayMode: 'auto',
+      },
+    }),
+  )
 }
 
 export function submitBatchSegmentReviewSessionApi(data: {
@@ -257,13 +270,15 @@ export function submitBatchSegmentReviewSessionApi(data: {
   revealed_remaining?: boolean
   red_marked_count?: number
 }) {
-  return request<BatchSegmentReviewSubmitResponse>('/segment-review/batch-session/submit', {
-    method: 'POST',
-    body: JSON.stringify(data),
-    persistence: {
-      resourceKey: `segment-review-batch-submit:${data.segment_ids.join(',')}`,
-      description: '提交多分块复习',
-      replayMode: 'auto',
-    },
-  })
+  return withPalaceCatalogInvalidation(
+    request<BatchSegmentReviewSubmitResponse>('/segment-review/batch-session/submit', {
+      method: 'POST',
+      body: JSON.stringify(data),
+      persistence: {
+        resourceKey: `segment-review-batch-submit:${data.segment_ids.join(',')}`,
+        description: '提交多分块复习',
+        replayMode: 'auto',
+      },
+    }),
+  )
 }

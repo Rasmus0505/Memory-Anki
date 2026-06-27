@@ -176,30 +176,31 @@ export default function PalacePractice() {
         }}
         submitting={submitting}
         onComplete={async (payload) => {
-          // Check if palace has active review schedule with stage info
-          const scheduleId = palace.current_review_schedule_id
-          const hasStages = Boolean(
-            palace.stage_labels?.length && palace.review_stages?.length
-          )
-          if (scheduleId && hasStages) {
-            // Has active schedule: show stage select dialog
+          let reviewPalace = palace
+          let hasStages = Boolean(reviewPalace.stage_labels?.length && reviewPalace.review_stages?.length)
+          if (!hasStages && (reviewPalace.review_stage_total ?? 0) > 0) {
+            const refreshed = await getPalaceEditorApi(reviewPalace.id)
+            reviewPalace = refreshed.palace as PalaceMeta
+            setPalace(reviewPalace)
+            hasStages = Boolean(reviewPalace.stage_labels?.length && reviewPalace.review_stages?.length)
+          }
+          if (hasStages) {
             setPendingPayload(payload)
             setStageDialogOpen(true)
             return
           }
-          // No active schedule: use manual progress adjust or just clear
           setSubmitting(true)
           try {
-            if (palace.review_stage_total != null && palace.review_stage_total > 0) {
-              const nextCompleted = (palace.review_stage_completed ?? 0) + 1
-              const targetReviewNumber = Math.min(nextCompleted, palace.review_stage_total - 1)
-              await updateDefaultSegmentReviewProgressApi(palace.id, {
+            if (reviewPalace.review_stage_total != null && reviewPalace.review_stage_total > 0) {
+              const nextCompleted = (reviewPalace.review_stage_completed ?? 0) + 1
+              const targetReviewNumber = Math.min(nextCompleted, reviewPalace.review_stage_total - 1)
+              await updateDefaultSegmentReviewProgressApi(reviewPalace.id, {
                 completed_count: nextCompleted,
                 completed_review_number: targetReviewNumber,
               })
             }
-            await clearPracticeSessionProgressApi(palace.id)
-            await updatePalacePracticeFlagApi(palace.id, { needs_practice: false })
+            await clearPracticeSessionProgressApi(reviewPalace.id)
+            await updatePalacePracticeFlagApi(reviewPalace.id, { needs_practice: false })
             setHasResumeProgress(false)
           } finally {
             setSubmitting(false)
@@ -235,6 +236,11 @@ export default function PalacePractice() {
                   red_marked_count: pendingPayload.redNodeIds.length,
                   target_review_number: targetReviewNumber,
                   needs_practice: needsPractice,
+                })
+              } else {
+                await updateDefaultSegmentReviewProgressApi(palace.id, {
+                  completed_count: targetReviewNumber + 1,
+                  completed_review_number: targetReviewNumber,
                 })
               }
               await clearPracticeSessionProgressApi(palace.id)

@@ -40,7 +40,11 @@ def prepare_pdf_pairing_request(
     extra_prompt: str,
     ai_options: AiRuntimeOptions | None = None,
 ) -> PdfGenerationStepPreparedRequest:
-    system_prompt = build_pdf_pairing_prompt(extra_prompt)
+    system_prompt = (
+        ai_options.prompt_override.strip()
+        if ai_options and ai_options.prompt_override and ai_options.prompt_override.strip()
+        else build_pdf_pairing_prompt(extra_prompt)
+    )
     model_input = {
         "source_context": source_context,
         "vision_draft": response_text,
@@ -78,7 +82,11 @@ def prepare_pdf_review_request(
     extra_prompt: str,
     ai_options: AiRuntimeOptions | None = None,
 ) -> PdfGenerationStepPreparedRequest:
-    system_prompt = build_pdf_review_prompt(extra_prompt)
+    system_prompt = (
+        ai_options.prompt_override.strip()
+        if ai_options and ai_options.prompt_override and ai_options.prompt_override.strip()
+        else build_pdf_review_prompt(extra_prompt)
+    )
     messages = [
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": response_text},

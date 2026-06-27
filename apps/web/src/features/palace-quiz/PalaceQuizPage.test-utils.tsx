@@ -20,6 +20,7 @@ export const getSubjectTreeApiMock = vi.fn()
 export const uploadSubjectDocumentApiMock = vi.fn()
 export const useTimedSessionMock = vi.fn()
 export const promptForAiOptionsMock = vi.fn()
+export const promptForScenarioAiOptionsMock = vi.fn()
 export const refreshSubjectDocumentsMock = vi.fn()
 
 export const pdfControllerMock = {
@@ -90,6 +91,7 @@ vi.mock('@/entities/palace/api/catalogApi', () => ({
 vi.mock('@/features/ai-config/useAiRunConfigDialog', () => ({
   useAiRunConfigDialog: () => ({
     promptForAiOptions: (...args: unknown[]) => promptForAiOptionsMock(...args),
+    promptForScenarioAiOptions: (...args: unknown[]) => promptForScenarioAiOptionsMock(...args),
     aiRunConfigDialog: null,
   }),
 }))
@@ -449,6 +451,10 @@ export function setupPalaceQuizPageTest() {
   })
   refreshSubjectDocumentsMock.mockResolvedValue(undefined)
   promptForAiOptionsMock.mockResolvedValue({})
+  promptForScenarioAiOptionsMock.mockImplementation(
+    (request: { entries?: Array<{ scenarioKey: string }> }) =>
+      Object.fromEntries((request.entries || []).map((entry) => [entry.scenarioKey, {}])),
+  )
   recordPalaceQuizChoiceAttemptApiMock.mockResolvedValue({
     question: {
       ...baseQuestions[0],

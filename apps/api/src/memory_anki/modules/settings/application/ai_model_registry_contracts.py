@@ -64,6 +64,7 @@ class AiCategoryConfig:
 class AiRuntimeOptions:
     model: str | None = None
     thinking_enabled: bool | None = None
+    prompt_override: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -81,6 +82,7 @@ class ResolvedAiModelRuntime:
     api_key: str
     base_url: str
     extra_payload: dict[str, Any] | None
+    prompt_override: str | None = None
 
     @property
     def model(self) -> str:

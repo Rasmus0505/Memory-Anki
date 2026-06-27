@@ -8,6 +8,7 @@ export interface CompletionCelebrationProps {
   maxCombo: number
   completedNodes: number
   totalNodes: number
+  confettiAmount?: number
   reducedMotion?: boolean
   soundEnabled?: boolean
   volume?: number
@@ -21,6 +22,7 @@ export function CompletionCelebration({
   maxCombo,
   completedNodes,
   totalNodes,
+  confettiAmount = 1.6,
   reducedMotion = false,
   soundEnabled = false,
   volume = 1,
@@ -33,6 +35,8 @@ export function CompletionCelebration({
   useEffect(() => {
     emitReviewConfetti({
       kind: 'session_complete',
+      confettiAmount,
+      durationMs,
       reducedMotion,
       soundEnabled,
       volume,
@@ -43,7 +47,7 @@ export function CompletionCelebration({
       onComplete?.()
     }, durationMs)
     return () => window.clearTimeout(timer)
-  }, [confettiPreset, durationMs, onComplete, reducedMotion, soundEnabled, volume])
+  }, [confettiAmount, confettiPreset, durationMs, onComplete, reducedMotion, soundEnabled, volume])
 
   const statCards = useMemo(
     () => [

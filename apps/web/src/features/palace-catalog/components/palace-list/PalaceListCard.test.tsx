@@ -1,4 +1,4 @@
-﻿import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { describe, expect, it, vi } from 'vitest'
 import { PalaceListCard } from '@/features/palace-catalog/components/palace-list/PalaceListCard'
@@ -119,6 +119,8 @@ describe('PalaceListCard', () => {
           markReviewedKey={null}
           defaultExpanded
           onOpenBatchReview={vi.fn()}
+          onPalacePractice={vi.fn()}
+          onSegmentPractice={vi.fn()}
           onSegmentReviewAction={vi.fn()}
           onOpenStageEdit={vi.fn()}
           onMarkSegmentReviewed={vi.fn()}
@@ -157,6 +159,8 @@ describe('PalaceListCard', () => {
           segmentReviewLoadingId={null}
           markReviewedKey={null}
           onOpenBatchReview={vi.fn()}
+          onPalacePractice={vi.fn()}
+          onSegmentPractice={vi.fn()}
           onSegmentReviewAction={vi.fn()}
           onOpenStageEdit={vi.fn()}
           onMarkSegmentReviewed={vi.fn()}
@@ -171,5 +175,47 @@ describe('PalaceListCard', () => {
     expect(screen.queryByRole('button', { name: '开始复习' })).toBeNull()
     expect(screen.getByRole('button', { name: '今日稍后' })).toBeTruthy()
     vi.useRealTimers()
+  })
+
+  it('uses the shared primary button for palace practice and keeps quiz as a plain entry', () => {
+    const onPalacePractice = vi.fn()
+
+    render(
+      <MemoryRouter>
+        <PalaceListCard
+          palace={buildPalace({
+            mini_palaces: [],
+            mini_review_mode: 'independent',
+            needs_practice: true,
+            segments: [
+              buildSegment({
+                has_due_review: false,
+                current_review_schedule_id: null,
+              }),
+            ],
+          })}
+          viewSettings={{ layoutMode: 'chapter-double', densityMode: 'comfortable' }}
+          segmentReviewLoadingId={null}
+          markReviewedKey={null}
+          onOpenBatchReview={vi.fn()}
+          onPalacePractice={onPalacePractice}
+          onSegmentPractice={vi.fn()}
+          onSegmentReviewAction={vi.fn()}
+          onOpenStageEdit={vi.fn()}
+          onMarkSegmentReviewed={vi.fn()}
+          onMiniPalacePractice={vi.fn()}
+          onMiniPalaceReview={vi.fn()}
+          onOpenConfig={vi.fn()}
+          onDelete={vi.fn()}
+        />
+      </MemoryRouter>,
+    )
+
+    const sharedPracticeButton = screen.getByRole('button', { name: '练习' })
+    expect(sharedPracticeButton.className).toContain('bg-success')
+    expect(screen.getByRole('button', { name: '做题' }).className).not.toContain('bg-success')
+
+    fireEvent.click(sharedPracticeButton)
+    expect(onPalacePractice).toHaveBeenCalledTimes(1)
   })
 })

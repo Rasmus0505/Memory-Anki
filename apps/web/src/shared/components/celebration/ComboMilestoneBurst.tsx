@@ -8,6 +8,7 @@ export interface ComboMilestoneBurstProps {
   comboCount: number
   copy?: string
   label?: string | null
+  confettiAmount?: number
   durationMs?: number
   reducedMotion?: boolean
   soundEnabled?: boolean
@@ -30,6 +31,7 @@ export function ComboMilestoneBurst({
   comboCount,
   copy,
   label,
+  confettiAmount = 1.15,
   durationMs = 1400,
   reducedMotion = false,
   soundEnabled = false,
@@ -48,6 +50,8 @@ export function ComboMilestoneBurst({
   useEffect(() => {
     emitReviewConfetti({
       kind: 'milestone',
+      confettiAmount,
+      durationMs,
       milestoneStep,
       reducedMotion,
       soundEnabled,
@@ -59,7 +63,7 @@ export function ComboMilestoneBurst({
       onCompleteRef.current?.()
     }, durationMs)
     return () => window.clearTimeout(timer)
-  }, [confettiPreset, durationMs, milestoneStep, reducedMotion, soundEnabled, volume])
+  }, [confettiAmount, confettiPreset, durationMs, milestoneStep, reducedMotion, soundEnabled, volume])
 
   const shards = useMemo(
     () =>

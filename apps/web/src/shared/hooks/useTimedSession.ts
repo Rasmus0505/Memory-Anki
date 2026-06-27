@@ -1,10 +1,12 @@
 import * as React from 'react'
 import {
   appendTimeRecord,
+  removePendingTimeRecordRecovery,
   getWeeklyLocalSessionStats,
   type SessionCompletionMethod,
   type SessionEventRecord,
   type TimeSessionRecord,
+  upsertPendingTimeRecordRecovery,
 } from '@/entities/session/model'
 import {
   getTimerAutomationRule,
@@ -50,6 +52,7 @@ import {
   useTimedSessionGlowReset,
   useTimedSessionUnloadPersistence,
 } from './timedSessionBrowserEffects'
+import { fireAndQueueTimeRecordOnUnload } from './timedSessionRecovery'
 import { useTimedSessionSnapshotRestore } from './timedSessionRestore'
 
 export type { TimedSessionController, TimedSessionOptions } from './timedSessionModel'
@@ -280,8 +283,14 @@ export function useTimedSession({
   ) => {
     if (!record) return null
     try {
-      return await appendTimeRecord(record)
+      const persisted = await appendTimeRecord(record)
+      removePendingTimeRecordRecovery(record.id)
+      return persisted
     } catch {
+      upsertPendingTimeRecordRecovery(record, {
+        status: 'failed',
+        lastError: '保存时间记录失败，已等待下次恢复',
+      })
       return record
     }
   }, [])
@@ -510,6 +519,65 @@ export function useTimedSession({
     ],
   )
 
+  const persistRecordForUnload = React.useCallback(
+    async (record: TimeSessionRecord | null) => {
+      if (!record) return null
+      await fireAndQueueTimeRecordOnUnload(record)
+      return record
+    },
+    [],
+  )
+
+  const leaveSceneForUnload = React.useCallback(async (meta?: TimedSessionMeta) => {
+    if (!startedAtRef.current || statusRef.current === 'completed' || leaveHandledRef.current) {
+      return null
+    }
+    leaveHandledRef.current = true
+    const currentMs = Date.now()
+    const suspendedAt = nowIso()
+    const resumeDeadlineAt = formatLocalApiDateTime(
+      new Date(currentMs + resolvedAutomation.resumeWindowMs),
+    )
+    const persistedLeaveMeta = {
+      ...(meta ?? {}),
+      persisted_record: true,
+      unload_persisted: true,
+    }
+    stopTicker(currentMs)
+    clearTimedSessionTimeout(autoPauseRef)
+    clearTimedSessionTimeout(hiddenPauseRef)
+    statusRef.current = 'paused'
+    setStatus('paused')
+    setGlowState('idle')
+    sceneActiveRef.current = false
+    idleSecondsRef.current = 0
+    setIdleSeconds(0)
+    closeActiveSceneSegment(suspendedAt)
+    pushEvent('leave_scene', meta, { persist: false })
+    suspendedAtRef.current = suspendedAt
+    resumeDeadlineAtRef.current = resumeDeadlineAt
+    leaveMetaRef.current = persistedLeaveMeta
+    persistSnapshot({
+      statusOverride: 'paused',
+      suspended: true,
+      suspendedAt,
+      resumeDeadlineAt,
+      leaveMeta: persistedLeaveMeta,
+    })
+    const record = buildRecord('left_page', suspendedAt)
+    return persistRecordForUnload(record)
+  }, [
+    autoPauseRef,
+    buildRecord,
+    closeActiveSceneSegment,
+    hiddenPauseRef,
+    persistRecordForUnload,
+    persistSnapshot,
+    pushEvent,
+    resolvedAutomation.resumeWindowMs,
+    stopTicker,
+  ])
+
   const setSceneActive = React.useCallback(
     (active: boolean, meta?: TimedSessionMeta) => {
       if (sceneActiveRef.current === active) {
@@ -618,6 +686,9 @@ export function useTimedSession({
 
       const record = buildRecord(method)
       clearPersistedSnapshot()
+      if (record) {
+        removePendingTimeRecordRecovery(record.id)
+      }
       if (!persistCompletionRecord) {
         return record
       }
@@ -702,7 +773,7 @@ export function useTimedSession({
     clearIntervalTimer: clearTimedSessionInterval,
   })
 
-  useTimedSessionUnloadPersistence(storageKey, leaveScene)
+  useTimedSessionUnloadPersistence(storageKey, leaveSceneForUnload)
 
   useTimedSessionAutomationConfigSubscription(setAutomationConfig)
 

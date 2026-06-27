@@ -28,6 +28,7 @@ def _serialize_runtime_payload(runtime: Any) -> dict[str, Any]:
         "thinking_enabled": runtime.thinking_enabled,
         "supports_thinking": runtime.supports_thinking,
         "extra_payload": runtime.extra_payload,
+        "prompt_override": getattr(runtime, "prompt_override", None),
         "resolved_ai": serialize_resolved_ai_runtime(runtime),
     }
 
@@ -43,6 +44,11 @@ def _dashscope_runtime(source_meta: dict[str, Any] | None = None) -> DashscopeIm
             extra_payload=(
                 dict(runtime_meta.get("extra_payload"))
                 if isinstance(runtime_meta.get("extra_payload"), dict)
+                else None
+            ),
+            prompt_override=(
+                str(runtime_meta.get("prompt_override")).strip()
+                if str(runtime_meta.get("prompt_override") or "").strip()
                 else None
             ),
         )
@@ -65,6 +71,7 @@ def _dashscope_runtime(source_meta: dict[str, Any] | None = None) -> DashscopeIm
         model=runtime.model,
         provider=runtime.provider,
         extra_payload=runtime.extra_payload,
+        prompt_override=runtime.prompt_override,
     )
 
 

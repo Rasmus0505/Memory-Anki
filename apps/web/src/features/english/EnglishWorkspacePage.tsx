@@ -13,7 +13,8 @@ import {
 import type { EnglishGenerationTask } from '@/shared/api/contracts'
 import { formatDuration } from '@/entities/session/model'
 import { PageIntro } from '@/shared/components/layout/PageIntro'
-import { EmptyState, LoadingState } from '@/shared/components/state-placeholders'
+import { EmptyState } from '@/shared/components/state-placeholders'
+import { EnglishWorkspaceSkeleton } from './EnglishWorkspaceSkeleton'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card'
@@ -77,7 +78,7 @@ export default function EnglishWorkspacePage() {
   } = useEnglishWorkspaceController()
 
   if (!workspace) {
-      return <LoadingState text="正在加载英语听力…" />
+      return <EnglishWorkspaceSkeleton />
   }
 
   return (

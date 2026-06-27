@@ -218,9 +218,16 @@ def normalize_ai_runtime_options(value: Any) -> AiRuntimeOptions:
     model = normalize_model_name(value.get("model"))
     raw_thinking = value.get("thinking_enabled")
     thinking_enabled = None if raw_thinking is None else normalize_bool(raw_thinking)
+    raw_prompt_override = value.get("prompt_override")
+    prompt_override = (
+        str(raw_prompt_override).strip()
+        if isinstance(raw_prompt_override, str) and raw_prompt_override.strip()
+        else None
+    )
     return AiRuntimeOptions(
         model=model or None,
         thinking_enabled=thinking_enabled,
+        prompt_override=prompt_override,
     )
 
 
@@ -327,6 +334,7 @@ def resolve_scenario_runtime(
             supports_thinking=supports_thinking,
             thinking_enabled=effective_thinking_enabled,
         ),
+        prompt_override=runtime_options.prompt_override,
     )
 
 

@@ -8,9 +8,33 @@ expresses intent (list / get / add / delete / sync-pegs).
 
 from __future__ import annotations
 
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload, selectinload
 
-from memory_anki.infrastructure.db._tables.palaces import Palace, Peg
+from memory_anki.infrastructure.db._tables.knowledge import Chapter
+from memory_anki.infrastructure.db._tables.palaces import Palace, PalaceMiniPalace, PalaceSegment, Peg
+
+
+def _catalog_loader_options():
+    return (
+        joinedload(Palace.primary_chapter).joinedload(Chapter.parent),
+        joinedload(Palace.primary_chapter).joinedload(Chapter.subject),
+        selectinload(Palace.chapters).joinedload(Chapter.subject),
+        selectinload(Palace.chapters).joinedload(Chapter.parent),
+        selectinload(Palace.review_schedules),
+        selectinload(Palace.review_logs),
+        selectinload(Palace.segments).selectinload(PalaceSegment.review_schedules),
+        selectinload(Palace.segments).selectinload(PalaceSegment.review_logs),
+        selectinload(Palace.mini_palaces).selectinload(PalaceMiniPalace.review_schedules),
+        selectinload(Palace.mini_palaces).selectinload(PalaceMiniPalace.review_logs),
+    )
+
+
+def _detail_loader_options():
+    return (
+        *_catalog_loader_options(),
+        selectinload(Palace.attachments),
+        selectinload(Palace.pegs),
+    )
 
 
 class PalaceRepository:
@@ -22,13 +46,24 @@ class PalaceRepository:
     # ---- Palace reads ----
 
     def list_palaces(self, *, search: str = "") -> list[Palace]:
-        query = self._session.query(Palace)
+        query = self._session.query(Palace).options(*_detail_loader_options())
+        if search:
+            query = query.filter(Palace.title.ilike(f"%{search}%"))
+        return query.order_by(Palace.updated_at.desc()).all()
+
+    def list_catalog_palaces(self, *, search: str = "") -> list[Palace]:
+        query = self._session.query(Palace).options(*_catalog_loader_options())
         if search:
             query = query.filter(Palace.title.ilike(f"%{search}%"))
         return query.order_by(Palace.updated_at.desc()).all()
 
     def get_palace(self, palace_id: int) -> Palace | None:
-        return self._session.query(Palace).filter_by(id=palace_id).first()
+        return (
+            self._session.query(Palace)
+            .options(*_detail_loader_options())
+            .filter_by(id=palace_id)
+            .first()
+        )
 
     def list_palaces_by_primary_chapter(self, chapter_id: int) -> list[Palace]:
         return (

@@ -1,4 +1,4 @@
-import * as React from 'react'
+﻿import * as React from 'react'
 import { RotateCcw, Save, Settings2 } from 'lucide-react'
 import { Button } from '@/shared/components/ui/button'
 import {
@@ -111,6 +111,10 @@ function toFocusDraft(config: TimerFocusConfig) {
   return {
     mode: config.mode,
     feedbackIntensity: config.feedbackIntensity,
+    celebration: {
+      secondaryInterval: { ...config.celebration.secondaryInterval },
+      primaryGoal: { ...config.celebration.primaryGoal },
+    },
     global: {
       primaryMinutes: String(config.global.primaryMinutes),
       secondaryMinutes: String(config.global.secondaryMinutes),
@@ -408,6 +412,7 @@ export function TimerAutomationDialog({
       sanitizeTimerFocusConfig({
         mode: focusDraft.mode,
         feedbackIntensity: focusDraft.feedbackIntensity,
+        celebration: focusDraft.celebration,
         global: {
           primaryMinutes: focusDraft.global.primaryMinutes,
           secondaryMinutes: focusDraft.global.secondaryMinutes,
@@ -614,9 +619,7 @@ export function TimerAutomationDialog({
 
             <div className="grid gap-3 md:grid-cols-3">
               {([
-                ['extreme', '极强刺激', '默认就给最炸的烟花、闪屏和音效，并随二级累计次数继续增强。'],
-                ['strong', '强但可控', '保留强反馈，但整体喷发量和音量会略微收敛。'],
-                ['visual_only', '纯视觉', '保留明显视觉奖励，但不额外强化声音。'],
+                ['cinematic', '冲顶庆典', '默认给最完整的烟花、闪屏和音效，并随累计次数继续增强。'],['celebration', '强而可控', '保留强反馈，但整体喷发量和音量会略微收敛。'],['balanced', '稳态激励', '保留明显奖励感，但更适合长期专注。'],
               ] as const).map(([value, title, description]) => (
                 <button
                   key={value}
@@ -697,3 +700,5 @@ export function TimerAutomationDialog({
     </Dialog>
   )
 }
+
+

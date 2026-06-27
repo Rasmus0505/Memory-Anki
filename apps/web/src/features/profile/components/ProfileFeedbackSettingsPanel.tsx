@@ -80,7 +80,12 @@ function ConfettiSegment({
             onClick={() => {
               onChange(preset)
               // 点击即预览：在当前页面全屏 canvas 喷发该类型烟花
-              launchCelebrationPreset({ preset, reducedMotion })
+              launchCelebrationPreset({
+                preset,
+                reducedMotion,
+                amount: 1.15,
+                scenario: 'preview',
+              })
             }}
             aria-pressed={active}
             className={cn(

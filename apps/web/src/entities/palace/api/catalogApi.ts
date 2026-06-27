@@ -10,6 +10,7 @@ import type {
 } from '@/shared/api/contracts'
 
 const warmedPalaceGetCache = new Map<string, Promise<unknown>>()
+export const PALACE_CATALOG_INVALIDATED_EVENT = 'palace-catalog:invalidated'
 
 function buildQueryString(params?: Record<string, string>) {
   return params ? `?${new URLSearchParams(params).toString()}` : ''
@@ -45,7 +46,25 @@ export function getPalacesApi(params?: Record<string, string>) {
 
 export function getPalacesGroupedApi(params?: Record<string, string>) {
   const q = buildQueryString(params)
-  return request<PalaceGroupedListResponse>(`/palaces/grouped${q}`)
+  const cacheKey = `grouped:${q}`
+  return consumeWarmedPalaceGet(cacheKey, () =>
+    request<PalaceGroupedListResponse>(`/palaces/grouped${q}`),
+  )
+}
+
+export function invalidatePalaceCatalogCache() {
+  warmedPalaceGetCache.clear()
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent(PALACE_CATALOG_INVALIDATED_EVENT))
+  }
+}
+
+export function prefetchPalacesGroupedApi(params?: Record<string, string>) {
+  const q = buildQueryString(params)
+  const cacheKey = `grouped:${q}`
+  prefetchPalaceGet(cacheKey, () =>
+    request<PalaceGroupedListResponse>(`/palaces/grouped${q}`),
+  )
 }
 
 export function getPalacesGroupedSummaryApi(params?: Record<string, string>) {

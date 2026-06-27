@@ -34,12 +34,14 @@ const submitSegmentReviewSessionApi = vi.fn()
 
 vi.mock('@/entities/palace/api/catalogApi', () => ({
   getPalacesGroupedApi: (...args: unknown[]) => getPalacesGroupedApi(...args),
+  PALACE_CATALOG_INVALIDATED_EVENT: 'palace-catalog:invalidated',
 }))
 
 vi.mock('@/entities/palace/api', () => ({
   deletePalaceApi: vi.fn(),
   getPalaceReviewPlanApi: vi.fn(),
   getPalacesGroupedApi: (...args: unknown[]) => getPalacesGroupedApi(...args),
+  PALACE_CATALOG_INVALIDATED_EVENT: 'palace-catalog:invalidated',
   updatePalaceMiniReviewModeApi: vi.fn(),
 }))
 
@@ -120,6 +122,7 @@ const reviewedPalace = {
         ...duePalace.segments[0],
         has_due_review: false,
         current_review_schedule_id: null,
+        next_review_at: null,
         active_review_progress: null,
       },
   ],
@@ -351,6 +354,16 @@ describe('PalaceListPage', () => {
     expect(screen.getByRole('button', { name: '做题' })).toBeTruthy()
   })
 
+  it('refreshes palace cards when the catalog invalidation event fires', async () => {
+    render(<PalaceListPage />)
+
+    expect(await screen.findByRole('button', { name: '开始复习' })).toBeTruthy()
+    window.dispatchEvent(new CustomEvent('palace-catalog:invalidated'))
+
+    await waitFor(() => expect(getPalacesGroupedApi).toHaveBeenCalledTimes(2))
+    expect(await screen.findByRole('button', { name: '未排入复习' })).toBeTruthy()
+  })
+
   it('shows saved incomplete progress inside the single-segment start review button without changing size', async () => {
     render(<PalaceListPage />)
 
@@ -363,7 +376,7 @@ describe('PalaceListPage', () => {
     expect(reviewButton.className).toContain('max-w-[132px]')
   })
 
-  it('renders later-today review in yellow and highlights practice button when needs practice', async () => {
+  it('does not reuse palace-level practice highlighting for a single segment button', async () => {
     const laterTodayPalace = buildLaterTodayPalace()
     getPalacesGroupedApi.mockReset()
     getPalacesGroupedApi.mockResolvedValue({
@@ -386,10 +399,84 @@ describe('PalaceListPage', () => {
     render(<PalaceListPage />)
 
     const reviewButton = await screen.findByRole('button', { name: /小时|分钟/ })
-    expect(reviewButton.className).toContain('bg-warning/20')
+    expect(reviewButton.className).not.toContain('bg-success')
     expect(within(reviewButton).queryByTestId('review-action-progress-fill')).toBeNull()
-    const practiceButton = screen.getByRole('button', { name: '做题' })
-    expect(practiceButton.className).toContain('bg-success')
+    const quizButton = screen.getByRole('button', { name: '做题' })
+    expect(quizButton.className).not.toContain('bg-success')
+  })
+
+  it('keeps refreshed segment actions out of practice highlight after marking reviewed', async () => {
+    const multiSegmentPalace = {
+      ...buildMultiSegmentPalace(),
+      needs_practice: true,
+    }
+    const refreshedMultiSegmentPalace = {
+      ...multiSegmentPalace,
+      needs_practice: false,
+      segments: [
+        {
+          ...multiSegmentPalace.segments[0],
+          has_due_review: false,
+          current_review_schedule_id: 288,
+          next_review_at: new Date(Date.now() + 90 * 60 * 1000).toISOString(),
+        },
+        {
+          ...multiSegmentPalace.segments[1],
+          has_due_review: false,
+          current_review_schedule_id: 289,
+          next_review_at: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(),
+        },
+      ],
+    }
+    getPalacesGroupedApi.mockReset()
+    getPalacesGroupedApi
+      .mockResolvedValueOnce({
+        groups: [],
+        ungrouped: [],
+        subjects: [
+          {
+            subject: { id: 1, name: '中国近代史', color: '#6366f1' },
+            chapter_groups: [
+              {
+                source_chapter: { id: 2, name: '第六节', subject_id: 1, parent_id: null },
+                palaces: [multiSegmentPalace],
+              },
+            ],
+            ungrouped_palaces: [],
+          },
+        ],
+      })
+      .mockResolvedValue({
+        groups: [],
+        ungrouped: [],
+        subjects: [
+          {
+            subject: { id: 1, name: '中国近代史', color: '#6366f1' },
+            chapter_groups: [
+              {
+                source_chapter: { id: 2, name: '第六节', subject_id: 1, parent_id: null },
+                palaces: [refreshedMultiSegmentPalace],
+              },
+            ],
+            ungrouped_palaces: [],
+          },
+        ],
+      })
+    submitSegmentReviewSessionApi.mockResolvedValue({ ok: true, next_id: 289, score: 5 })
+
+    render(<PalaceListPage />)
+
+    await screen.findByRole('button', { name: '开始复习' })
+    const markReviewedButton = screen
+      .getAllByRole('button', { name: '标记已复习' })
+      .find((button) => !(button as HTMLButtonElement).disabled)
+    expect(markReviewedButton).toBeTruthy()
+    fireEvent.click(markReviewedButton as HTMLButtonElement)
+
+    await waitFor(() => {
+      const refreshedButton = screen.getByRole('button', { name: /小时|分钟/ })
+      expect(refreshedButton.className).not.toContain('bg-success')
+    })
   })
 
   it('renders sleep review action with fixed blue sleep copy', async () => {

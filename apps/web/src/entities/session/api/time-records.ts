@@ -1,4 +1,5 @@
 import { request } from '@/shared/api/http'
+import type { PersistedRequestInit } from '@/shared/api/http'
 import type {
   SessionCompletionMethod,
   SessionKind,
@@ -22,16 +23,29 @@ export async function listTimeRecordsApi(options?: {
 
 export async function createTimeRecordApi(
   record: Omit<TimeSessionRecord, 'id'> & { id?: string },
+  options?: {
+    mutationId?: string
+    persistence?: PersistedRequestInit['persistence']
+  },
 ) {
   const id = record.id ?? crypto.randomUUID()
+  const persistence =
+    options?.persistence === undefined
+      ? {
+          resourceKey: `time-record:${id}`,
+          description: `保存学习时长：${record.title || record.kind}`,
+          replayMode: 'auto' as const,
+        }
+      : options.persistence
   return request<{ item: TimeSessionRecord | null }>('/time-records', {
     method: 'POST',
     body: JSON.stringify({ ...record, id }),
-    persistence: {
-      resourceKey: `time-record:${id}`,
-      description: `保存学习时长：${record.title || record.kind}`,
-      replayMode: 'auto',
-    },
+    headers: options?.mutationId
+      ? {
+          'X-Memory-Anki-Mutation-ID': options.mutationId,
+        }
+      : undefined,
+    persistence,
   })
 }
 

@@ -61,7 +61,10 @@ def prepare_review_mindmap_generation_request(
     )
     source_meta = build_review_mindmap_generation_source_meta(request_context)
     model_input = build_review_mindmap_generation_model_input(request_context)
-    system_prompt, messages = build_review_mindmap_generation_messages(model_input)
+    system_prompt, messages = build_review_mindmap_generation_messages(
+        model_input,
+        prompt_override=ai_options.prompt_override if ai_options else None,
+    )
     config, extra_payload, resolved_ai = _ai_service()._build_chat_config(
         session,
         scenario_key="quiz_review_mindmap_generation",

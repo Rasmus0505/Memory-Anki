@@ -15,12 +15,17 @@ import {
 } from '@/entities/preferences/model/palaceViewSettings'
 import { PalaceListSections } from '@/features/palace-catalog/components/palace-list/PalaceListSections'
 import type { PalaceGroupedItem, PalaceGroupedListResponse, PalaceSubjectShelfItem } from '@/shared/api/contracts'
-import { getPalacesGroupedApi, getPalaceSubjectShelfApi } from '@/entities/palace/api'
+import {
+  getPalacesGroupedApi,
+  getPalaceSubjectShelfApi,
+  PALACE_CATALOG_INVALIDATED_EVENT,
+} from '@/entities/palace/api'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
 import { Card, CardContent } from '@/shared/components/ui/card'
 import { Input } from '@/shared/components/ui/input'
 import { EmptyState } from '@/shared/components/state-placeholders'
+import { PalaceShelfSkeleton } from './components/PalaceShelfSkeleton'
 import { usePalaceListCardActions } from '@/features/palace-catalog/components/palace-list/usePalaceListCardActions'
 import { useLocalStorageState } from '@/shared/lib/localStorage'
 import { cn } from '@/shared/lib/utils'
@@ -164,6 +169,14 @@ export default function PalaceShelfPage() {
     return groupedData
   }, [fetchGroupedData, fetchShelfData, groupedData, isExpandedMode])
 
+  useEffect(() => {
+    const handleCatalogInvalidated = () => {
+      void fetchData()
+    }
+    window.addEventListener(PALACE_CATALOG_INVALIDATED_EVENT, handleCatalogInvalidated)
+    return () => window.removeEventListener(PALACE_CATALOG_INVALIDATED_EVENT, handleCatalogInvalidated)
+  }, [fetchData])
+
   const categorizedCount = useMemo(() => items.filter((item) => item.subject).length, [items])
   const allPalaces = useMemo(
     () => flattenGroupedPalaces(groupedData ?? createEmptyPalaceGroupedListResponse()),
@@ -192,6 +205,8 @@ export default function PalaceShelfPage() {
         markReviewedKey={cardActions.markReviewedKey}
         defaultExpanded
         onOpenBatchReview={cardActions.onOpenBatchReview}
+        onPalacePractice={cardActions.onPalacePractice}
+        onSegmentPractice={cardActions.onSegmentPractice}
         onSegmentReviewAction={cardActions.onSegmentReviewAction}
         onOpenStageEdit={cardActions.onOpenStageEdit}
         onMarkSegmentReviewed={cardActions.onMarkSegmentReviewed}
@@ -347,11 +362,7 @@ export default function PalaceShelfPage() {
             renderPalaceCard={renderExpandedPalaceCard}
           />
         ) : (
-          <Card>
-            <CardContent className="flex items-center justify-center p-12 text-sm text-muted-foreground">
-              正在加载宫殿详情...
-            </CardContent>
-          </Card>
+          <PalaceShelfSkeleton />
         )
       ) : items.length > 0 ? (
         <div
@@ -448,4 +459,3 @@ export default function PalaceShelfPage() {
     </div>
   )
 }
-

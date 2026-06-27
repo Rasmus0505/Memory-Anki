@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
-import { getDashboardApi } from "@/features/dashboard/api/dashboardApi"
+import { getDashboardApi, prefetchDashboardApi } from "@/features/dashboard/api/dashboardApi"
 import { request } from "@/shared/api/http"
 
 vi.mock("@/shared/api/http", () => ({
@@ -31,5 +31,15 @@ describe("dashboard api", () => {
     expect(requestMock).toHaveBeenCalledWith(
       "/dashboard?duration_mode=range&month=2026-06&start_date=2026-06-01&end_date=2026-06-18",
     )
+  })
+
+  it("reuses a warmed dashboard request exactly once", async () => {
+    requestMock.mockResolvedValue({})
+
+    prefetchDashboardApi()
+    await getDashboardApi()
+    await getDashboardApi()
+
+    expect(requestMock).toHaveBeenCalledTimes(2)
   })
 })

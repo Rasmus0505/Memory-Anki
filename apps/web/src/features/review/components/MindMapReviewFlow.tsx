@@ -46,6 +46,7 @@ export function MindMapReviewFlow({
           comboCount={review.comboBurst.comboCount}
           copy={review.comboBurst.copy}
           label={review.comboBurst.label}
+          confettiAmount={review.flow.feedback.settings.scenes.milestone.confettiAmount}
           reducedMotion={
             !review.flow.feedback.animationEnabled ||
             !review.flow.feedback.settings.celebration.milestone.animationEnabled
@@ -63,6 +64,7 @@ export function MindMapReviewFlow({
           maxCombo={review.flow.feedback.maxComboCount}
           completedNodes={review.flow.visibleNonRootCount}
           totalNodes={Math.max(review.flow.totalNodeCount - 1, 0)}
+          confettiAmount={review.flow.feedback.settings.scenes.completion.confettiAmount}
           reducedMotion={
             !review.flow.feedback.animationEnabled ||
             !review.flow.feedback.settings.celebration.sessionComplete.animationEnabled

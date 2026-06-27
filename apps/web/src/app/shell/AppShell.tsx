@@ -1,4 +1,4 @@
-import { useEffect, useState, type PropsWithChildren } from 'react'
+﻿import { useEffect, useState, type PropsWithChildren } from 'react'
 import {
   BookOpen,
   BookOpenText,
@@ -19,7 +19,11 @@ import {
 import { NavLink, useLocation } from 'react-router-dom'
 import type { RuntimeInfo } from '@/shared/api/contracts'
 import { getRuntimeInfoApi } from '@/entities/runtime/api/runtimeApi'
-import { prefetchPalaceSubjectShelfApi } from '@/entities/palace/api'
+import {
+  prefetchPalacesGroupedSummaryApi,
+  prefetchPalaceSubjectShelfApi,
+} from '@/entities/palace/api'
+import { prefetchDashboardApi } from '@/features/dashboard/api/dashboardApi'
 import { ShellProvider, useShellContext } from '@/shared/components/layout/ShellContext'
 import { useClientPreferenceBootstrap } from '@/app/providers/useClientPreferenceBootstrap'
 import { Badge } from '@/shared/components/ui/badge'
@@ -143,7 +147,25 @@ function warmNavSection(section: NavSectionDefinition) {
   warmedNavSections.add(section.key)
   if (section.key === 'palaces') {
     prefetchPalaceSubjectShelfApi()
+    prefetchPalacesGroupedSummaryApi()
   }
+  if (section.key === 'dashboard') {
+    prefetchDashboardApi()
+  }
+}
+
+function scheduleIdleWarmup(callback: () => void) {
+  if (typeof window === 'undefined') return () => {}
+  const idleWindow = window as Window & {
+    requestIdleCallback?: (callback: () => void) => number
+    cancelIdleCallback?: (handle: number) => void
+  }
+  if (typeof idleWindow.requestIdleCallback === 'function') {
+    const handle = idleWindow.requestIdleCallback(callback)
+    return () => idleWindow.cancelIdleCallback?.(handle)
+  }
+  const timeout = window.setTimeout(callback, 0)
+  return () => window.clearTimeout(timeout)
 }
 
 function RuntimeChannelBadge({
@@ -250,6 +272,20 @@ function SidebarContent({ runtimeInfo }: { runtimeInfo: RuntimeInfo | null }) {
     if (!matchedSection?.rememberLastVisited) return
     navSectionLastUrls[matchedSection.key] = `${pathname}${search}${hash}`
   }, [hash, pathname, search])
+
+  useEffect(() => {
+    return scheduleIdleWarmup(() => {
+      prefetchPalaceSubjectShelfApi()
+      prefetchPalacesGroupedSummaryApi()
+    })
+  }, [])
+
+  useEffect(() => {
+    if (pathname !== '/') return
+    return scheduleIdleWarmup(() => {
+      prefetchDashboardApi()
+    })
+  }, [pathname])
 
   const currentDate = new Intl.DateTimeFormat('zh-CN', {
     month: '2-digit',
@@ -414,7 +450,7 @@ function ShellFrame({ children }: PropsWithChildren) {
 
         <aside
           className={cn(
-            'fixed inset-y-4 left-4 z-20 hidden overflow-hidden rounded-[30px] border border-border/70 bg-background/92 shadow-floating backdrop-blur lg:flex lg:flex-col transition-all duration-300',
+            'memory-anki-warm-panel fixed inset-y-4 left-4 z-20 hidden overflow-hidden rounded-[32px] border border-border/60 bg-background/90 shadow-floating backdrop-blur-xl lg:flex lg:flex-col transition-all duration-300',
             sidebarCollapsed ? 'w-[84px]' : 'w-[250px]',
           )}
         >
@@ -465,7 +501,7 @@ function ShellFrame({ children }: PropsWithChildren) {
             sidebarCollapsed ? 'lg:pl-[122px]' : 'lg:pl-[282px]',
           )}
         >
-          <div className="mx-auto w-full max-w-[1700px] px-3 py-3 sm:px-5 sm:py-5 lg:px-6 lg:py-6 xl:px-8">
+          <div className="mx-auto w-full max-w-[1680px] px-3 py-4 sm:px-5 sm:py-5 lg:px-6 lg:py-7 xl:px-8">
             <BackgroundTaskBar />
             {children}
           </div>
@@ -481,3 +517,4 @@ function ShellFrame({ children }: PropsWithChildren) {
 export function AppShell({ children }: PropsWithChildren) {
   return <ShellFrame>{children}</ShellFrame>
 }
+

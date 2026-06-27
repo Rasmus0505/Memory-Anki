@@ -3,32 +3,6 @@ import { useLocation, type Location } from 'react-router-dom'
 import { RouteResidencyProvider } from '@/shared/routing/RouteResidency'
 import { AppRoutes } from '@/app/router/appRoutes'
 
-export const MAX_CACHED_ENTRIES = 12
-
-/**
- * 计算加入新条目后、超过上限时需要驱逐的缓存 key 列表（LRU）。
- * 纯函数，便于单元测试；当前活动条目永不驱逐。
- *
- * @param keys 当前缓存中的全部 key
- * @param activeKey 当前活动 key（不可被驱逐）
- * @param activationTimes 每个 key 最近一次激活的时间戳
- * @param maxEntries 缓存上限
- * @returns 应被驱逐的 key 数组
- */
-export function computeLruEvictions(
-  keys: string[],
-  activeKey: string,
-  activationTimes: Record<string, number>,
-  maxEntries: number,
-): string[] {
-  if (keys.length <= maxEntries) return []
-  const evictCount = keys.length - maxEntries
-  const candidates = keys
-    .filter((key) => key !== activeKey)
-    .sort((a, b) => (activationTimes[a] ?? 0) - (activationTimes[b] ?? 0))
-  return candidates.slice(0, evictCount)
-}
-
 export function AppRouter() {
   const location = useLocation()
   const activePathname = location.pathname
@@ -45,21 +19,10 @@ export function AppRouter() {
       if (current[activePathname] === location) {
         return current
       }
-      const next: Record<string, Location> = {
+      return {
         ...current,
         [activePathname]: location,
       }
-      // LRU 上限保护：超过 MAX_CACHED_ENTRIES 时驱逐最久未激活的条目。
-      const evictions = computeLruEvictions(
-        Object.keys(next),
-        activePathname,
-        activationTimes,
-        MAX_CACHED_ENTRIES,
-      )
-      for (const key of evictions) {
-        delete next[key]
-      }
-      return next
     })
 
     if (previousPathnameRef.current !== activePathname) {
@@ -78,7 +41,7 @@ export function AppRouter() {
         [activePathname]: Date.now(),
       }
     })
-  }, [activePathname, location, activationTimes])
+  }, [activePathname, location])
 
   const entries = useMemo(
     () => Object.entries(cachedLocations),

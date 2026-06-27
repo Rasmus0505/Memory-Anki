@@ -88,6 +88,20 @@ interface ReviewSessionContainerProps {
   }) => React.ReactNode
 }
 
+const inflightReviewSessionLoads = new Map<
+  string,
+  Promise<{
+    session: ReviewSessionContainerSession
+    progress: {
+      progress: {
+        reveal_map: Record<string, 'hidden' | 'placeholder' | 'revealed'>
+        red_node_ids: string[]
+        completed: boolean
+      } | null
+    }
+  }>
+>()
+
 function formatReviewStage(reviewType: string, reviewNumber: number) {
   if (reviewType === '1h') return '首日 1 小时'
   if (reviewType === 'sleep') return '首日睡前'
@@ -222,10 +236,22 @@ export function ReviewSessionContainer({
     let active = true
     const sessionId = Number(id)
     const load = async () => {
-      const [nextSession, progressResponse] = await Promise.all([
-        loadSession(sessionId),
-        loadProgress(sessionId),
-      ])
+      const inflightKey = `${eyebrow}:${sessionId}`
+      let pending = inflightReviewSessionLoads.get(inflightKey)
+      if (!pending) {
+        pending = Promise.all([loadSession(sessionId), loadProgress(sessionId)])
+          .then(([nextSession, progressResponse]) => ({
+            session: nextSession,
+            progress: progressResponse,
+          }))
+          .finally(() => {
+            if (inflightReviewSessionLoads.get(inflightKey) === pending) {
+              inflightReviewSessionLoads.delete(inflightKey)
+            }
+          })
+        inflightReviewSessionLoads.set(inflightKey, pending)
+      }
+      const { session: nextSession, progress: progressResponse } = await pending
       if (!active) return
       setSession(nextSession)
       setReviewEditorState(buildReviewEditorState(nextSession))
@@ -237,7 +263,7 @@ export function ReviewSessionContainer({
     return () => {
       active = false
     }
-  }, [buildReviewEditorState, id, loadProgress, loadSession])
+  }, [buildReviewEditorState, eyebrow, id, loadProgress, loadSession])
 
   const handleModeToggle = useCallback(async () => {
     if (!id || modeTransitioningRef.current) return

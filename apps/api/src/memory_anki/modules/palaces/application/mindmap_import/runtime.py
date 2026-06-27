@@ -47,6 +47,7 @@ class DashscopeImportRuntime:
     temperature: float = 0.1
     timeout_seconds: float = 90.0
     extra_payload: dict[str, Any] | None = None
+    prompt_override: str | None = None
 
 
 def ensure_dashscope_image_ready(
@@ -104,7 +105,7 @@ def call_dashscope_json(
     disable_rebalance: bool = False,
     external_log_context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    resolved_prompt = prompt or ai_prompts.build_import_pdf_direct_prompt(
+    resolved_prompt = runtime.prompt_override or prompt or ai_prompts.build_import_pdf_direct_prompt(
         range_prompt="",
         page_numbers=None,
         import_options=PdfImportOptions(),
@@ -147,7 +148,7 @@ def call_dashscope_text_with_images(
     external_log_context: dict[str, Any] | None = None,
 ) -> str:
     resolved_prompt = ai_prompts.extend_pdf_prompt(
-        ai_prompts.render_prompt("ai_prompt_import_image_text", {}),
+        runtime.prompt_override or ai_prompts.render_prompt("ai_prompt_import_image_text", {}),
         page_numbers=page_numbers,
         range_prompt=range_prompt,
     )
@@ -175,7 +176,7 @@ def call_dashscope_batch_json(
     extracted_text: str | None = None,
     external_log_context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    prompt = _build_batch_prompt(
+    prompt = runtime.prompt_override or _build_batch_prompt(
         structure_tree=structure_tree,
         range_prompt=range_prompt,
         page_numbers=page_numbers,
@@ -212,11 +213,19 @@ def call_dashscope_pdf_json(
     content_text = call_dashscope_with_images(
         runtime=runtime,
         image_items=image_items,
-        prompt=ai_prompts.build_import_pdf_direct_prompt(
-            range_prompt=range_prompt,
-            page_numbers=page_numbers,
-            import_options=import_options or PdfImportOptions(),
-            extracted_text=extracted_text,
+        prompt=(
+            ai_prompts.extend_pdf_prompt(
+                runtime.prompt_override,
+                page_numbers=page_numbers,
+                range_prompt=range_prompt,
+            )
+            if runtime.prompt_override
+            else ai_prompts.build_import_pdf_direct_prompt(
+                range_prompt=range_prompt,
+                page_numbers=page_numbers,
+                import_options=import_options or PdfImportOptions(),
+                extracted_text=extracted_text,
+            )
         ),
         response_format={"type": "json_object"},
         external_log_context=external_log_context,
@@ -234,7 +243,7 @@ def stream_call_dashscope_json(
     disable_rebalance: bool = False,
     external_log_context: dict[str, Any] | None = None,
 ) -> Generator[str, None, dict[str, Any]]:
-    resolved_prompt = prompt or ai_prompts.build_import_pdf_direct_prompt(
+    resolved_prompt = runtime.prompt_override or prompt or ai_prompts.build_import_pdf_direct_prompt(
         range_prompt="",
         page_numbers=None,
         import_options=PdfImportOptions(),
@@ -261,7 +270,7 @@ def stream_call_dashscope_text(
     external_log_context: dict[str, Any] | None = None,
 ) -> Generator[str, None, str]:
     resolved_prompt = ai_prompts.extend_pdf_prompt(
-        ai_prompts.render_prompt("ai_prompt_import_image_text", {}),
+        runtime.prompt_override or ai_prompts.render_prompt("ai_prompt_import_image_text", {}),
         page_numbers=page_numbers,
         range_prompt=range_prompt,
     )
@@ -289,7 +298,7 @@ def stream_call_dashscope_batch_json(
     extracted_text: str | None = None,
     external_log_context: dict[str, Any] | None = None,
 ) -> Generator[str, None, dict[str, Any]]:
-    prompt = _build_batch_prompt(
+    prompt = runtime.prompt_override or _build_batch_prompt(
         structure_tree=structure_tree,
         range_prompt=range_prompt,
         page_numbers=page_numbers,
@@ -326,11 +335,19 @@ def stream_call_dashscope_pdf_json(
     content_text = yield from stream_call_dashscope_with_images(
         runtime=runtime,
         image_items=image_items,
-        prompt=ai_prompts.build_import_pdf_direct_prompt(
-            range_prompt=range_prompt,
-            page_numbers=page_numbers,
-            import_options=import_options or PdfImportOptions(),
-            extracted_text=extracted_text,
+        prompt=(
+            ai_prompts.extend_pdf_prompt(
+                runtime.prompt_override,
+                page_numbers=page_numbers,
+                range_prompt=range_prompt,
+            )
+            if runtime.prompt_override
+            else ai_prompts.build_import_pdf_direct_prompt(
+                range_prompt=range_prompt,
+                page_numbers=page_numbers,
+                import_options=import_options or PdfImportOptions(),
+                extracted_text=extracted_text,
+            )
         ),
         response_format={"type": "json_object"},
         external_log_context=external_log_context,

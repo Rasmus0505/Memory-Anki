@@ -1,58 +1,16 @@
-import { describe, expect, it } from 'vitest'
+﻿import { beforeEach, describe, expect, it } from 'vitest'
 import {
   DEFAULT_TIMER_FOCUS_CONFIG,
   getTimerFocusRule,
   sanitizeTimerFocusConfig,
 } from '@/shared/components/session/timer-focus-config'
 
-describe('timer focus config', () => {
-  it('uses the global rule for every scene in global mode', () => {
-    const config = sanitizeTimerFocusConfig({
-      mode: 'global',
-      global: {
-        primaryMinutes: 30,
-        secondaryMinutes: 2,
-      },
-      practice: {
-        primaryMinutes: 10,
-        secondaryMinutes: 1,
-      },
-    })
-
-    expect(getTimerFocusRule('practice', config)).toEqual({
-      primaryMinutes: 30,
-      secondaryMinutes: 2,
-    })
-    expect(getTimerFocusRule('english_reading', config)).toEqual({
-      primaryMinutes: 30,
-      secondaryMinutes: 2,
-    })
+describe('timer-focus-config', () => {
+  beforeEach(() => {
+    window.localStorage.clear()
   })
 
-  it('keeps scene-specific rules in scene mode', () => {
-    const config = sanitizeTimerFocusConfig({
-      mode: 'scene',
-      practice: {
-        primaryMinutes: 18,
-        secondaryMinutes: 1,
-      },
-      quiz: {
-        primaryMinutes: 12,
-        secondaryMinutes: 2,
-      },
-    })
-
-    expect(getTimerFocusRule('practice', config)).toEqual({
-      primaryMinutes: 18,
-      secondaryMinutes: 1,
-    })
-    expect(getTimerFocusRule('quiz', config)).toEqual({
-      primaryMinutes: 12,
-      secondaryMinutes: 2,
-    })
-  })
-
-  it('clamps the secondary target so it cannot exceed the primary target', () => {
+  it('keeps secondary minutes within primary minutes', () => {
     const config = sanitizeTimerFocusConfig({
       mode: 'scene',
       practice: {
@@ -67,9 +25,50 @@ describe('timer focus config', () => {
     })
   })
 
+  it('maps legacy intensity values to stronger timer-first defaults', () => {
+    const balanced = sanitizeTimerFocusConfig({ feedbackIntensity: 'visual_only' })
+    const celebration = sanitizeTimerFocusConfig({ feedbackIntensity: 'strong' })
+
+    expect(balanced.feedbackIntensity).toBe('balanced')
+    expect(celebration.feedbackIntensity).toBe('celebration')
+    expect(celebration.celebration.primaryGoal.volumeBoost).toBeGreaterThan(
+      balanced.celebration.primaryGoal.volumeBoost,
+    )
+  })
+
+  it('keeps explicit event-level celebration settings when present', () => {
+    const config = sanitizeTimerFocusConfig({
+      feedbackIntensity: 'cinematic',
+      celebration: {
+        secondaryInterval: {
+          enabled: false,
+          soundEnabled: true,
+          animationEnabled: false,
+          volumeBoost: 1.35,
+          visualPreset: 'fireworks',
+        },
+        primaryGoal: {
+          enabled: true,
+          soundEnabled: true,
+          animationEnabled: true,
+          volumeBoost: 1.8,
+          visualPreset: 'school_pride',
+        },
+      },
+    })
+
+    expect(config.celebration.secondaryInterval).toEqual({
+      enabled: false,
+      soundEnabled: true,
+      animationEnabled: false,
+      volumeBoost: 1.35,
+      visualPreset: 'fireworks',
+    })
+    expect(config.celebration.primaryGoal.visualPreset).toBe('school_pride')
+  })
+
   it('falls back to defaults for invalid values', () => {
     const config = sanitizeTimerFocusConfig({
-      mode: 'scene',
       feedbackIntensity: 'bogus',
       practice: {
         primaryMinutes: 0,

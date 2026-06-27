@@ -1,7 +1,9 @@
 import * as React from 'react'
 import type { MindMapFeedbackEvent, MindMapFeedbackOrigin } from '@/shared/components/mindmap-host/hostBridgeUtils'
 import {
+  REVIEW_FEEDBACK_EFFECTIVE_VOLUME_MAX,
   REVIEW_FEEDBACK_SETTINGS_UPDATED_EVENT,
+  getReviewFeedbackEffectiveVolume,
   readReviewFeedbackSettings,
   type ReviewFeedbackSettings,
 } from '@/shared/feedback/reviewFeedbackSettings'
@@ -25,7 +27,7 @@ interface MindMapFeedbackAudioController {
 
 function clampFeedbackVolume(value: number) {
   if (!Number.isFinite(value)) return 1
-  return Math.max(0, Math.min(2, value))
+  return Math.max(0, Math.min(REVIEW_FEEDBACK_EFFECTIVE_VOLUME_MAX, value))
 }
 
 export function useMindMapFeedbackAudio(
@@ -87,7 +89,7 @@ export function useMindMapFeedbackAudioFromSettings() {
   const settings = useMindMapFeedbackSettings()
   return useMindMapFeedbackAudio(
     settings.soundEnabled && settings.mode === 'immersive',
-    settings.volume,
+    getReviewFeedbackEffectiveVolume(settings),
   )
 }
 

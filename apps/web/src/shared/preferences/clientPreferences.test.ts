@@ -113,4 +113,50 @@ describe('clientPreferences', () => {
     ).toEqual({ enabled: true })
     expect(events).toHaveLength(1)
   })
+
+  it('keeps the latest value when rapid saves resolve out of order', async () => {
+    let resolveFirst: ((value: { items: ReturnType<typeof emptyPreferences> }) => void) | null = null
+    let resolveSecond: ((value: { items: ReturnType<typeof emptyPreferences> }) => void) | null = null
+
+    mockUpdateClientPreferencesApi
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveFirst = resolve
+          }),
+      )
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveSecond = resolve
+          }),
+      )
+
+    const firstSave = saveClientPreference('voice_coach_settings', { enabled: true })
+    const secondSave = saveClientPreference('voice_coach_settings', { enabled: false })
+
+    resolveSecond?.({
+      items: {
+        ...emptyPreferences(),
+        voice_coach_settings: { enabled: false },
+      },
+    })
+    await secondSave
+
+    resolveFirst?.({
+      items: {
+        ...emptyPreferences(),
+        voice_coach_settings: { enabled: true },
+      },
+    })
+    await firstSave
+
+    expect(
+      getCachedClientPreference(
+        'voice_coach_settings',
+        null,
+        (value): value is { enabled: boolean } => Boolean(value && typeof value === 'object'),
+      ),
+    ).toEqual({ enabled: false })
+  })
 })

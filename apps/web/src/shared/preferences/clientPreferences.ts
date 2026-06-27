@@ -11,6 +11,7 @@ type PreferenceValidator<T> = (value: unknown) => value is T
 type PreferenceNormalizer<T> = PreferenceValidator<T> | ((value: unknown) => T)
 
 const cache: Partial<ClientPreferences> = {}
+const latestSaveVersion: Partial<Record<PreferenceKey, number>> = {}
 let initialized = false
 let initializationSucceeded = false
 let initializePromise: Promise<boolean> | null = null
@@ -72,10 +73,18 @@ export async function initializeClientPreferences() {
 }
 
 export async function saveClientPreference<T>(key: PreferenceKey, value: T) {
+  const requestVersion = (latestSaveVersion[key] ?? 0) + 1
+  latestSaveVersion[key] = requestVersion
   cache[key] = value as ClientPreferences[PreferenceKey]
   emitUpdate()
   try {
     const response = await updateClientPreferencesApi({ [key]: value })
+    if (latestSaveVersion[key] !== requestVersion) {
+      return {
+        value: cache[key] as T,
+        persisted: true,
+      }
+    }
     Object.assign(cache, response.items || {})
     emitUpdate()
     return {
@@ -99,6 +108,9 @@ export async function setClientPreference<T>(key: PreferenceKey, value: T) {
 export function resetClientPreferenceCacheForTest() {
   for (const key of Object.keys(cache) as PreferenceKey[]) {
     delete cache[key]
+  }
+  for (const key of Object.keys(latestSaveVersion) as PreferenceKey[]) {
+    delete latestSaveVersion[key]
   }
   initialized = false
   initializationSucceeded = false

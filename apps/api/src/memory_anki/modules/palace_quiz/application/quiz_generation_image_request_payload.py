@@ -33,12 +33,14 @@ def build_image_generation_messages(
     session,
     extra_prompt: str,
     image_items: list[tuple[bytes, str | None]],
+    prompt_override: str | None = None,
 ) -> tuple[list[dict[str, object]], str]:
     messages, system_prompt = build_generation_messages(
         session=session,
         extra_prompt=extra_prompt,
         source_label="图片识别",
         image_items=image_items,
+        prompt_override=prompt_override,
     )
     return messages, system_prompt
 

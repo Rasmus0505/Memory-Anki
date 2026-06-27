@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { cn } from '@/shared/lib/utils'
 import { Button } from '@/shared/components/ui/button'
 import { useBackgroundTasks, dismissTask } from '@/shared/background-tasks/backgroundTaskRegistry'
+import { TaskSteps } from '@/shared/background-tasks/TaskSteps'
 
 /**
  * 全局后台任务栏。
@@ -44,6 +45,9 @@ export function BackgroundTaskBar() {
               <div className="truncate font-medium">{task.title}</div>
               {task.detail ? (
                 <div className="truncate text-xs opacity-80">{task.detail}</div>
+              ) : null}
+              {task.steps && task.steps.length > 0 ? (
+                <TaskSteps steps={task.steps} className="mt-1.5" />
               ) : null}
             </div>
             {isRunning && typeof task.progress === 'number' ? (

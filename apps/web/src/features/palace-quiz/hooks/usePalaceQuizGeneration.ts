@@ -219,24 +219,40 @@ export function usePalaceQuizGeneration({
       let aiOptions: AiRuntimeOptions | undefined
       let aiOptionsByScenario: AiScenarioRuntimeOptionsMap | undefined
       if (config.sourceKind === 'subject-pdf') {
+        const pdfConfigEntries: Array<{
+          scenarioKey: string
+          entrypointKey: string
+          label: string
+          description: string
+        }> = [
+          {
+            scenarioKey: 'quiz_pdf_generation',
+            entrypointKey: 'quiz-generate-pdf',
+            label: '识别模型',
+            description: '负责逐页识别题干、选项、答案候选和解析候选。',
+          },
+        ]
         if (shouldShowPdfPairingModelSelector(config.pdfSources)) {
+          pdfConfigEntries.push({
+            scenarioKey: 'quiz_pdf_pairing',
+            entrypointKey: 'quiz-generate-pdf-pairing',
+            label: '文本配对模型',
+            description: '负责把题目册和答案册候选配对成最终题库。',
+          })
+        }
+        if (config.enableSecondaryReview) {
+          pdfConfigEntries.push({
+            scenarioKey: 'quiz_pdf_review',
+            entrypointKey: 'quiz-generate-pdf-review',
+            label: '二次复核模型',
+            description: '负责按额外提示词对已生成题目做范围复核和筛除。',
+          })
+        }
+        if (pdfConfigEntries.length > 1) {
           aiOptionsByScenario = await promptForScenarioAiOptions({
             title: 'PDF 做题生成配置',
-            description: '先选 VL 识别模型，再选题目与答案配对模型。本次请求会直接使用，并同步更新对应场景默认模型。',
-            entries: [
-              {
-                scenarioKey: 'quiz_pdf_generation',
-                entrypointKey: 'quiz-generate-pdf',
-                label: 'VL 识别模型',
-                description: '负责逐页识别题干、选项、答案候选和解析候选，不负责最终题答配对。',
-              },
-              {
-                scenarioKey: 'quiz_pdf_pairing',
-                entrypointKey: 'quiz-generate-pdf-pairing',
-                label: '文本配对模型',
-                description: '负责把题目册和答案册候选配对成最终题库。',
-              },
-            ],
+            description: '可分别调整识别、配对和复核步骤的模型与提示词。本次请求会直接使用。',
+            entries: pdfConfigEntries,
           }) || undefined
           aiOptions = aiOptionsByScenario?.quiz_pdf_generation
         } else {

@@ -22,10 +22,12 @@ import type {
 } from '@/shared/api/contracts'
 import {
   getPalacesGroupedApi,
+  PALACE_CATALOG_INVALIDATED_EVENT,
 } from '@/entities/palace/api'
 import { Button } from '@/shared/components/ui/button'
 import { PageIntro } from '@/shared/components/layout/PageIntro'
 import { useLocalStorageState } from '@/shared/lib/localStorage'
+import { PalaceListSkeleton } from './components/PalaceListSkeleton'
 import { usePalaceListCardActions } from '@/features/palace-catalog/components/palace-list/usePalaceListCardActions'
 import {
   buildPalaceCatalogQuery,
@@ -74,6 +76,14 @@ export default function PalaceList() {
     void fetchData()
   }, [fetchData])
 
+  useEffect(() => {
+    const handleCatalogInvalidated = () => {
+      void fetchData()
+    }
+    window.addEventListener(PALACE_CATALOG_INVALIDATED_EVENT, handleCatalogInvalidated)
+    return () => window.removeEventListener(PALACE_CATALOG_INVALIDATED_EVENT, handleCatalogInvalidated)
+  }, [fetchData])
+
   const cardActions = usePalaceListCardActions({
     allPalaces,
     fetchData,
@@ -90,6 +100,8 @@ export default function PalaceList() {
         markReviewedKey={cardActions.markReviewedKey}
         defaultExpanded
         onOpenBatchReview={cardActions.onOpenBatchReview}
+        onPalacePractice={cardActions.onPalacePractice}
+        onSegmentPractice={cardActions.onSegmentPractice}
         onSegmentReviewAction={cardActions.onSegmentReviewAction}
         onOpenStageEdit={cardActions.onOpenStageEdit}
         onMarkSegmentReviewed={cardActions.onMarkSegmentReviewed}
@@ -165,4 +177,3 @@ export default function PalaceList() {
     </div>
   )
 }
-

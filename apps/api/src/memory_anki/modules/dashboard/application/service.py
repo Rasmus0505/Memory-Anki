@@ -2,9 +2,11 @@ from __future__ import annotations
 
 from datetime import date, datetime, time, timedelta
 
+from sqlalchemy.orm import joinedload, selectinload
 from sqlalchemy.orm import Session
 
-from memory_anki.infrastructure.db.models import Palace
+from memory_anki.infrastructure.db.models import Chapter, Palace, PalaceMiniPalace, PalaceSegment
+from memory_anki.modules.palaces.application.palace_service import list_palaces
 from memory_anki.modules.palaces.application.title_sync_service import (
     build_today_new_palace_outline,
     count_palace_review_units,
@@ -34,6 +36,19 @@ class DashboardQueryError(ValueError):
     pass
 
 
+def _dashboard_palace_loader_options():
+    return (
+        joinedload(Palace.primary_chapter).joinedload(Chapter.parent),
+        joinedload(Palace.primary_chapter).joinedload(Chapter.subject),
+        selectinload(Palace.chapters).joinedload(Chapter.subject),
+        selectinload(Palace.chapters).joinedload(Chapter.parent),
+        selectinload(Palace.review_schedules),
+        selectinload(Palace.segments).selectinload(PalaceSegment.review_schedules),
+        selectinload(Palace.mini_palaces).selectinload(PalaceMiniPalace.review_schedules),
+        selectinload(Palace.pegs),
+    )
+
+
 def build_dashboard_payload(
     session: Session,
     *,
@@ -45,9 +60,16 @@ def build_dashboard_payload(
     reviews = get_today_review_groups(session)
     today_start = datetime.combine(date.today(), time.min)
     today_end = today_start + timedelta(days=1)
-    recent = session.query(Palace).order_by(Palace.updated_at.desc()).limit(5).all()
+    recent = (
+        session.query(Palace)
+        .options(*_dashboard_palace_loader_options())
+        .order_by(Palace.updated_at.desc())
+        .limit(5)
+        .all()
+    )
     today_new_palaces = (
         session.query(Palace)
+        .options(*_dashboard_palace_loader_options())
         .filter(
             Palace.created_at.is_not(None),
             Palace.created_at >= today_start,
@@ -56,7 +78,7 @@ def build_dashboard_payload(
         .order_by(Palace.created_at.asc(), Palace.id.asc())
         .all()
     )
-    all_palaces = session.query(Palace).all()
+    all_palaces = list_palaces(session)
     due_count = 0
     due_later_today_count = 0
     needs_practice_count = 0

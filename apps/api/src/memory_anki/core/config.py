@@ -26,6 +26,7 @@ class EnvSettings(BaseSettings):
     DASHSCOPE_TTS_BASE_URL: str = "https://dashscope.aliyuncs.com/api/v1"
     DASHSCOPE_ASR_MODEL: str = "qwen3-asr-flash-filetrans"
     DASHSCOPE_VISION_MODEL: str = "qwen3-vl-flash"
+    DASHSCOPE_OCR_MODEL: str = "qwen3.5-ocr"
     DASHSCOPE_TEXT_MODEL: str = "qwen3.6-flash"
     ENGLISH_TRANSLATION_MODEL: str = "qwen-mt-flash"
 
@@ -52,6 +53,7 @@ DASHSCOPE_BASE_URL = _env.DASHSCOPE_BASE_URL
 DASHSCOPE_TTS_BASE_URL = _env.DASHSCOPE_TTS_BASE_URL
 DASHSCOPE_ASR_MODEL = _env.DASHSCOPE_ASR_MODEL
 DASHSCOPE_VISION_MODEL = _env.DASHSCOPE_VISION_MODEL
+DASHSCOPE_OCR_MODEL = _env.DASHSCOPE_OCR_MODEL
 DASHSCOPE_TEXT_MODEL = _env.DASHSCOPE_TEXT_MODEL
 ENGLISH_TRANSLATION_MODEL = _env.ENGLISH_TRANSLATION_MODEL
 ZHIPU_API_KEY = _env.ZHIPU_API_KEY
@@ -189,19 +191,19 @@ DEFAULTS = {
     "scene_model_quiz_pdf_pairing_thinking_enabled": "false",
     "scene_model_quiz_pdf_review": "qwen-turbo",
     "scene_model_quiz_pdf_review_thinking_enabled": "false",
-    "scene_model_vision_image_mindmap": DASHSCOPE_VISION_MODEL,
+    "scene_model_vision_image_mindmap": DASHSCOPE_OCR_MODEL,
     "scene_model_vision_image_mindmap_thinking_enabled": "false",
-    "scene_model_vision_image_text": DASHSCOPE_VISION_MODEL,
+    "scene_model_vision_image_text": DASHSCOPE_OCR_MODEL,
     "scene_model_vision_image_text_thinking_enabled": "false",
-    "scene_model_vision_batch_mindmap": DASHSCOPE_VISION_MODEL,
+    "scene_model_vision_batch_mindmap": DASHSCOPE_OCR_MODEL,
     "scene_model_vision_batch_mindmap_thinking_enabled": "false",
-    "scene_model_vision_pdf_mindmap": DASHSCOPE_VISION_MODEL,
+    "scene_model_vision_pdf_mindmap": DASHSCOPE_OCR_MODEL,
     "scene_model_vision_pdf_mindmap_thinking_enabled": "false",
-    "scene_model_vision_pdf_text": DASHSCOPE_VISION_MODEL,
+    "scene_model_vision_pdf_text": DASHSCOPE_OCR_MODEL,
     "scene_model_vision_pdf_text_thinking_enabled": "false",
-    "scene_model_quiz_image_generation": DASHSCOPE_VISION_MODEL,
+    "scene_model_quiz_image_generation": DASHSCOPE_OCR_MODEL,
     "scene_model_quiz_image_generation_thinking_enabled": "false",
-    "scene_model_quiz_pdf_generation": DASHSCOPE_VISION_MODEL,
+    "scene_model_quiz_pdf_generation": DASHSCOPE_OCR_MODEL,
     "scene_model_quiz_pdf_generation_thinking_enabled": "false",
     "scene_model_translation_course": ENGLISH_TRANSLATION_MODEL,
     "scene_model_translation_course_thinking_enabled": "false",

@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+﻿import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowRight, BookOpen, Clock3, Plus, Sparkles, Timer, TrendingUp } from 'lucide-react'
-import { LoadingState } from '@/shared/components/state-placeholders'
+import { DashboardSkeleton } from './DashboardSkeleton'
 import type { DashboardQuery, DashboardResponse } from '@/shared/api/contracts'
 import { TimeRecordDialog } from '@/features/profile/components/TimeRecordDialog'
 import { TimeRecordsBreakdownChart } from '@/features/profile/components/TimeRecordsBreakdownChart'
@@ -344,7 +344,7 @@ export default function Dashboard() {
   }, [durationMode, hasLoadedDashboard, loadSelectedDuration, normalizedDurationFilter, rangeEndDate, rangeStartDate, selectedMonth])
 
   if (!data) {
-    return <LoadingState text="正在加载仪表盘…" />
+    return <DashboardSkeleton />
   }
 
   const selectedDurationLabel = formatSelectedDurationLabel(durationMode, selectedMonth, rangeStartDate, rangeEndDate)
@@ -714,6 +714,7 @@ export default function Dashboard() {
           deletingRecordId={timeRecordsDashboard.deletingRecordId}
           restoringRecordId={timeRecordsDashboard.restoringRecordId}
           visibleRecords={timeRecordsDashboard.visibleRecords}
+          pendingRecoveryRecords={timeRecordsDashboard.pendingRecoveryRecords}
           hasSelectableRecords={timeRecordsDashboard.hasSelectableRecords}
           allSelectableChecked={timeRecordsDashboard.allSelectableChecked}
           selectedRecordIds={timeRecordsDashboard.selectedRecordIds}
@@ -724,6 +725,12 @@ export default function Dashboard() {
           onEditRecord={timeRecordsDashboard.openEditDialog}
           onDeleteRecord={timeRecordsDashboard.handleDeleteRecord}
           onRestoreRecord={timeRecordsDashboard.handleRestoreRecord}
+          onReplayPendingRecovery={
+            timeRecordsDashboard.handleReplayPendingRecovery
+          }
+          onDismissPendingRecovery={
+            timeRecordsDashboard.handleDismissPendingRecovery
+          }
         />
       </div>
 
@@ -740,3 +747,4 @@ export default function Dashboard() {
     </div>
   )
 }
+

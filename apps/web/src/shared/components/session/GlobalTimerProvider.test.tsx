@@ -1,11 +1,14 @@
-import * as React from 'react'
+﻿import * as React from 'react'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   GlobalTimerProvider,
   useGlobalTimerRegistration,
 } from '@/shared/components/session/GlobalTimerProvider'
-import { calculateResizedTimerOverlayLayout } from '@/shared/components/session/globalTimerModel'
+import {
+  calculateResizedTimerOverlayLayout,
+  createTimerOverlaySizeTokens,
+} from '@/shared/components/session/globalTimerModel'
 import type { TimerFocusScene } from '@/shared/components/session/timer-focus-config'
 import {
   TIMER_FOCUS_STORAGE_KEY,
@@ -256,6 +259,47 @@ describe('GlobalTimerProvider', () => {
 
     expect(panel?.style.height).toBe('208px')
     expect(panel?.style.minHeight).toBe('')
+    expect(panel?.style.getPropertyValue('--timer-digits-font-size')).toBe('64px')
+    expect(panel?.style.transform).toBe('')
+  })
+
+  it('grows font and control tokens with larger overlay sizes without using transform scaling', () => {
+    window.localStorage.setItem(
+      'memory-anki-timer-overlay-layout',
+      JSON.stringify({
+        x: 24,
+        y: 96,
+        width: 480,
+        height: 312,
+        collapsed: false,
+      }),
+    )
+
+    renderOverlay(null)
+
+    const panel = document.querySelector('.memory-anki-global-timer-panel') as HTMLDivElement | null
+    const pauseButton = screen.getByRole('button', { name: '进入学习页后开始' }) as HTMLButtonElement
+
+    expect(panel?.style.width).toBe('480px')
+    expect(panel?.style.height).toBe('312px')
+    expect(panel?.style.getPropertyValue('--timer-digits-font-size')).toBe('96px')
+    expect(panel?.style.getPropertyValue('--timer-action-height')).toBe('46px')
+    expect(panel?.style.getPropertyValue('--timer-panel-padding')).toBe('18px')
+    expect(panel?.style.transform).toBe('')
+    expect(pauseButton.style.height).toBe('46px')
+  })
+
+  it('creates responsive token values from overlay size with width and height weighting', () => {
+    const compact = createTimerOverlaySizeTokens({ width: 220, height: 176 })
+    const large = createTimerOverlaySizeTokens({ width: 480, height: 312 })
+
+    expect(compact.widthRatio).toBeLessThan(1)
+    expect(compact.heightRatio).toBeLessThan(1)
+    expect(compact.panelStyle['--timer-digits-font-size']).toBe('47px')
+    expect(compact.panelStyle['--timer-action-height']).toBe('28px')
+    expect(large.panelStyle['--timer-digits-font-size']).toBe('96px')
+    expect(large.panelStyle['--timer-action-height']).toBe('46px')
+    expect(large.panelStyle['--timer-panel-padding']).toBe('18px')
   })
 
   it('resizes larger from the south-east corner without jumping back to defaults', () => {
@@ -386,7 +430,23 @@ describe('GlobalTimerProvider', () => {
   it('renders the secondary countdown as the primary visual target', () => {
     const focusConfig: TimerFocusConfig = {
       mode: 'global',
-      feedbackIntensity: 'extreme',
+      feedbackIntensity: 'cinematic',
+      celebration: {
+        secondaryInterval: {
+          enabled: true,
+          soundEnabled: true,
+          animationEnabled: true,
+          volumeBoost: 1,
+          visualPreset: 'auto',
+        },
+        primaryGoal: {
+          enabled: true,
+          soundEnabled: true,
+          animationEnabled: true,
+          volumeBoost: 1,
+          visualPreset: 'auto',
+        },
+      },
       global: {
         primaryMinutes: 25,
         secondaryMinutes: 1,
@@ -556,3 +616,4 @@ describe('GlobalTimerProvider', () => {
     expect(emitTimerCelebration).toHaveBeenCalledTimes(3)
   })
 })
+

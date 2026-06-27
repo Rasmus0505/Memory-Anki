@@ -2,6 +2,7 @@ import type { CSSProperties } from 'react'
 import type { TimedSessionController } from '@/shared/hooks/useTimedSession'
 import type { TimerFocusScene } from '@/shared/components/session/timer-focus-config'
 import {
+  DEFAULT_TIMER_OVERLAY_LAYOUT,
   sanitizeTimerOverlayLayout,
   TIMER_OVERLAY_MIN_HEIGHT,
   TIMER_OVERLAY_MIN_WIDTH,
@@ -19,6 +20,20 @@ export interface GlobalTimerRegistration {
 
 export const OVERLAY_VIEWPORT_MARGIN = 12
 export const TIMER_DRAG_CLICK_THRESHOLD_PX = 6
+export const TIMER_OVERLAY_BASE_WIDTH = DEFAULT_TIMER_OVERLAY_LAYOUT.width
+export const TIMER_OVERLAY_BASE_HEIGHT = DEFAULT_TIMER_OVERLAY_LAYOUT.height
+
+type TimerOverlayPanelStyle = CSSProperties & Record<`--${string}`, string>
+
+export interface TimerOverlaySizeTokens {
+  widthRatio: number
+  heightRatio: number
+  sizeRatio: number
+  panelStyle: TimerOverlayPanelStyle
+  iconButtonStyle: CSSProperties
+  iconStyle: CSSProperties
+  actionButtonStyle: CSSProperties
+}
 
 export type ResizeHandleDirection =
   | 'n'
@@ -144,6 +159,79 @@ export function clampTimerOverlayLayoutToViewport(layout: TimerOverlayLayout) {
 
 export function resolveFloatingTimerLayout(layout: TimerOverlayLayout) {
   return clampTimerOverlayLayoutToViewport(sanitizeTimerOverlayLayout(layout))
+}
+
+function clampNumber(value: number, minimum: number, maximum: number) {
+  return Math.max(minimum, Math.min(maximum, value))
+}
+
+function roundPx(value: number) {
+  return `${Math.round(value)}px`
+}
+
+export function createTimerOverlaySizeTokens(layout: Pick<TimerOverlayLayout, 'width' | 'height'>): TimerOverlaySizeTokens {
+  const widthRatio = layout.width / TIMER_OVERLAY_BASE_WIDTH
+  const heightRatio = layout.height / TIMER_OVERLAY_BASE_HEIGHT
+  const sizeRatio = Math.sqrt(widthRatio * heightRatio)
+  const panelPadding = clampNumber(12 * sizeRatio, 9, 22)
+  const panelRadius = clampNumber(28 * sizeRatio, 20, 42)
+  const innerRadius = Math.max(16, panelRadius - 2)
+  const dragGap = clampNumber(12 * sizeRatio, 8, 18)
+  const dragbarMinHeight = clampNumber(32 * heightRatio, 26, 46)
+  const sceneFontSize = clampNumber(11 * (0.55 * sizeRatio + 0.45 * widthRatio), 10, 16)
+  const titleFontSize = clampNumber(11 * (0.48 * sizeRatio + 0.52 * widthRatio), 10, 15)
+  const digitsFontSize = clampNumber(64 * (0.72 * widthRatio + 0.28 * heightRatio), 42, 108)
+  const digitsMarginTop = clampNumber(2 * heightRatio, 0, 6)
+  const rowFontSize = clampNumber(11 * (0.4 * widthRatio + 0.6 * heightRatio), 10, 15)
+  const rowMinHeight = clampNumber(22 * heightRatio, 20, 34)
+  const rowPaddingX = clampNumber(10 * widthRatio, 8, 18)
+  const bodyGap = clampNumber(6 * heightRatio, 4, 12)
+  const actionsGap = clampNumber(8 * widthRatio, 6, 14)
+  const actionHeight = clampNumber(32 * heightRatio, 28, 46)
+  const actionFontSize = clampNumber(12 * (0.42 * widthRatio + 0.58 * heightRatio), 11, 15)
+  const iconButtonSize = clampNumber(32 * sizeRatio, 28, 42)
+  const iconSize = clampNumber(16 * sizeRatio, 14, 22)
+  const buttonRadius = clampNumber(10 * sizeRatio, 8, 16)
+
+  return {
+    widthRatio,
+    heightRatio,
+    sizeRatio,
+    panelStyle: {
+      '--timer-panel-padding': roundPx(panelPadding),
+      '--timer-panel-radius': roundPx(panelRadius),
+      '--timer-panel-inner-radius': roundPx(innerRadius),
+      '--timer-dragbar-gap': roundPx(dragGap),
+      '--timer-dragbar-min-height': roundPx(dragbarMinHeight),
+      '--timer-scene-font-size': roundPx(sceneFontSize),
+      '--timer-title-font-size': roundPx(titleFontSize),
+      '--timer-digits-font-size': roundPx(digitsFontSize),
+      '--timer-digits-margin-top': roundPx(digitsMarginTop),
+      '--timer-row-font-size': roundPx(rowFontSize),
+      '--timer-row-min-height': roundPx(rowMinHeight),
+      '--timer-row-padding-x': roundPx(rowPaddingX),
+      '--timer-body-gap': roundPx(bodyGap),
+      '--timer-actions-gap': roundPx(actionsGap),
+      '--timer-action-height': roundPx(actionHeight),
+      '--timer-action-font-size': roundPx(actionFontSize),
+      '--timer-button-radius': roundPx(buttonRadius),
+    },
+    iconButtonStyle: {
+      width: roundPx(iconButtonSize),
+      height: roundPx(iconButtonSize),
+      minWidth: roundPx(iconButtonSize),
+      borderRadius: roundPx(buttonRadius),
+    },
+    iconStyle: {
+      width: roundPx(iconSize),
+      height: roundPx(iconSize),
+    },
+    actionButtonStyle: {
+      height: roundPx(actionHeight),
+      fontSize: roundPx(actionFontSize),
+      borderRadius: roundPx(buttonRadius),
+    },
+  }
 }
 
 export function calculateResizedTimerOverlayLayout(

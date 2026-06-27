@@ -48,67 +48,74 @@ function normalizePathname(pathname: string) {
   return pathname.replace(/\/+$/, '') || '/'
 }
 
+// 已注册的精确路由路径（normalize 后直接命中，保留原路径）。
+const REGISTERED_EXACT_PATHS = new Set<string>([
+  '/',
+  '/knowledge',
+  '/english',
+  '/english-reading',
+  '/palaces',
+  '/palaces/list',
+  '/palaces/new',
+  '/review',
+  '/segment-review/batch',
+  '/profile',
+  '/profile/feedback',
+  '/profile/ai',
+  '/profile/backups',
+])
+
+// 已注册的动态段路由（命中后保留原路径）。仅匹配到主段，不含未知后代。
+const REGISTERED_DYNAMIC_PATTERNS = [
+  /^\/palaces\/\d+(?:\/(edit|practice|focus-practice|quiz))?$/,
+  /^\/segments\/\d+\/practice$/,
+  /^\/mini-palaces\/\d+\/practice$/,
+  /^\/english\/courses\/\d+$/,
+  /^\/review\/session\/\d+$/,
+  /^\/segment-review\/session\/\d+$/,
+  /^\/mini-review\/session\/\d+$/,
+]
+
+// 动态段路由的"前缀提取"：命中已注册动态段的未知后代时，回退到主段。
+// 例：/palaces/42/unknown → /palaces/42；/review/session/9/x → /review/session/9。
+const DYNAMIC_PREFIX_FALLBACKS = [
+  { match: /^\/palaces\/(\d+)(?:\/.*)?$/, build: (id: string) => `/palaces/${id}` },
+  { match: /^\/english\/courses\/(\d+)(?:\/.*)?$/, build: (id: string) => `/english/courses/${id}` },
+  { match: /^\/review\/session\/(\d+)(?:\/.*)?$/, build: (id: string) => `/review/session/${id}` },
+  { match: /^\/segment-review\/session\/(\d+)(?:\/.*)?$/, build: (id: string) => `/segment-review/session/${id}` },
+  { match: /^\/mini-review\/session\/(\d+)(?:\/.*)?$/, build: (id: string) => `/mini-review/session/${id}` },
+  { match: /^\/segments\/(\d+)\/practice(?:\/.*)?$/, build: (id: string) => `/segments/${id}/practice` },
+  { match: /^\/mini-palaces\/(\d+)\/practice(?:\/.*)?$/, build: (id: string) => `/mini-palaces/${id}/practice` },
+]
+
+// 顶层 section 前缀：未知的子路径回退到 section 入口。
+const SECTION_PREFIX_FALLBACKS: Record<string, string> = {
+  '/knowledge/': '/knowledge',
+  '/profile/': '/profile',
+  '/review/': '/review',
+  '/segment-review/': '/review',
+  '/mini-review/': '/review',
+  '/english-reading/': '/english-reading',
+  '/english/': '/english',
+  '/palaces/': '/palaces',
+}
+
 export function resolveRouteFallbackTarget(pathname: string) {
   const normalizedPathname = normalizePathname(pathname)
 
-  if (normalizedPathname === '/') return '/'
-  if (normalizedPathname === '/knowledge') return '/knowledge'
-  if (normalizedPathname === '/english') return '/english'
-  if (normalizedPathname === '/english-reading') return '/english-reading'
-  if (normalizedPathname === '/palaces') return '/palaces'
-  if (normalizedPathname === '/palaces/list') return '/palaces/list'
-  if (normalizedPathname === '/palaces/new') return '/palaces/new'
-  if (normalizedPathname === '/palaces/quiz') return '/palaces'
-  if (normalizedPathname === '/review') return '/review'
-  if (normalizedPathname === '/segment-review/batch') return '/segment-review/batch'
-  if (normalizedPathname === '/profile') return '/profile'
-  if (normalizedPathname === '/profile/feedback') return '/profile/feedback'
-  if (normalizedPathname === '/profile/ai') return '/profile/ai'
-  if (normalizedPathname === '/profile/ai-prompts') return '/profile/ai-prompts'
-  if (normalizedPathname === '/profile/ai-split') return '/profile/ai-split'
-  if (normalizedPathname === '/profile/voice-coach') return '/profile/voice-coach'
-  if (normalizedPathname === '/profile/backups') return '/profile/backups'
-
-  if (/^\/palaces\/\d+$/.test(normalizedPathname)) return normalizedPathname
-  if (/^\/palaces\/\d+\/(edit|practice|focus-practice|quiz)$/.test(normalizedPathname)) {
+  if (REGISTERED_EXACT_PATHS.has(normalizedPathname)) return normalizedPathname
+  if (REGISTERED_DYNAMIC_PATTERNS.some((pattern) => pattern.test(normalizedPathname))) {
     return normalizedPathname
   }
-  if (/^\/segments\/\d+\/practice$/.test(normalizedPathname)) return normalizedPathname
-  if (/^\/mini-palaces\/\d+\/practice$/.test(normalizedPathname)) return normalizedPathname
-  if (/^\/mini-review\/session\/\d+$/.test(normalizedPathname)) return normalizedPathname
-  if (/^\/review\/session\/\d+$/.test(normalizedPathname)) return normalizedPathname
-  if (/^\/segment-review\/session\/\d+$/.test(normalizedPathname)) return normalizedPathname
-  if (/^\/english\/courses\/\d+$/.test(normalizedPathname)) return normalizedPathname
 
-  const palaceDetailMatch = normalizedPathname.match(/^\/palaces\/(\d+)(?:\/.*)?$/)
-  if (palaceDetailMatch) return `/palaces/${palaceDetailMatch[1]}`
+  for (const { match, build } of DYNAMIC_PREFIX_FALLBACKS) {
+    const matched = normalizedPathname.match(match)
+    if (matched) return build(matched[1])
+  }
 
-  const englishCourseMatch = normalizedPathname.match(/^\/english\/courses\/(\d+)(?:\/.*)?$/)
-  if (englishCourseMatch) return `/english/courses/${englishCourseMatch[1]}`
-
-  const reviewSessionMatch = normalizedPathname.match(/^\/review\/session\/(\d+)(?:\/.*)?$/)
-  if (reviewSessionMatch) return `/review/session/${reviewSessionMatch[1]}`
-
-  const segmentReviewSessionMatch = normalizedPathname.match(/^\/segment-review\/session\/(\d+)(?:\/.*)?$/)
-  if (segmentReviewSessionMatch) return `/segment-review/session/${segmentReviewSessionMatch[1]}`
-
-  const miniReviewSessionMatch = normalizedPathname.match(/^\/mini-review\/session\/(\d+)(?:\/.*)?$/)
-  if (miniReviewSessionMatch) return `/mini-review/session/${miniReviewSessionMatch[1]}`
-
-  const segmentPracticeMatch = normalizedPathname.match(/^\/segments\/(\d+)\/practice(?:\/.*)?$/)
-  if (segmentPracticeMatch) return `/segments/${segmentPracticeMatch[1]}/practice`
-
-  const miniPalacePracticeMatch = normalizedPathname.match(/^\/mini-palaces\/(\d+)\/practice(?:\/.*)?$/)
-  if (miniPalacePracticeMatch) return `/mini-palaces/${miniPalacePracticeMatch[1]}/practice`
-
-  if (normalizedPathname.startsWith('/knowledge/')) return '/knowledge'
-  if (normalizedPathname.startsWith('/profile/')) return '/profile'
-  if (normalizedPathname.startsWith('/review/')) return '/review'
-  if (normalizedPathname.startsWith('/segment-review/')) return '/review'
-  if (normalizedPathname.startsWith('/mini-review/')) return '/review'
-  if (normalizedPathname.startsWith('/english-reading/')) return '/english-reading'
-  if (normalizedPathname.startsWith('/english/')) return '/english'
-  if (normalizedPathname.startsWith('/palaces/')) return '/palaces'
+  for (const [prefix, target] of Object.entries(SECTION_PREFIX_FALLBACKS)) {
+    if (normalizedPathname.startsWith(prefix)) return target
+  }
 
   return '/'
 }

@@ -12,6 +12,8 @@ import { enqueueMutation, resetMutationQueueForTest } from '@/shared/persistence
 
 const getRuntimeInfoApi = vi.fn()
 const prefetchPalaceSubjectShelfApi = vi.fn()
+const prefetchPalacesGroupedSummaryApi = vi.fn()
+const prefetchDashboardApi = vi.fn()
 
 vi.mock('@/entities/runtime/api/runtimeApi', () => ({
   getRuntimeInfoApi: () => getRuntimeInfoApi(),
@@ -19,6 +21,11 @@ vi.mock('@/entities/runtime/api/runtimeApi', () => ({
 
 vi.mock('@/entities/palace/api/catalogApi', () => ({
   prefetchPalaceSubjectShelfApi: () => prefetchPalaceSubjectShelfApi(),
+  prefetchPalacesGroupedSummaryApi: () => prefetchPalacesGroupedSummaryApi(),
+}))
+
+vi.mock('@/features/dashboard/api/dashboardApi', () => ({
+  prefetchDashboardApi: () => prefetchDashboardApi(),
 }))
 
 describe('AppShell', () => {
@@ -27,6 +34,8 @@ describe('AppShell', () => {
     __resetBackgroundTaskStoreForTest()
     getRuntimeInfoApi.mockReset()
     prefetchPalaceSubjectShelfApi.mockClear()
+    prefetchPalacesGroupedSummaryApi.mockClear()
+    prefetchDashboardApi.mockClear()
     resetNavSectionHistoryForTest()
   })
 
@@ -205,10 +214,40 @@ describe('AppShell', () => {
     )
 
     await screen.findAllByText(/Stable abcdef12/)
+    const beforeHoverCalls = prefetchPalaceSubjectShelfApi.mock.calls.length
 
     fireEvent.mouseEnter(screen.getAllByRole('link', { name: '记忆宫殿' })[0]!)
 
-    expect(prefetchPalaceSubjectShelfApi).toHaveBeenCalledTimes(1)
+    expect(prefetchPalaceSubjectShelfApi.mock.calls.length).toBe(beforeHoverCalls + 1)
+    expect(prefetchPalacesGroupedSummaryApi.mock.calls.length).toBeGreaterThanOrEqual(1)
+  })
+
+  it('warms core palace routes on startup and dashboard on the home page', async () => {
+    getRuntimeInfoApi.mockResolvedValue({
+      channel: 'stable',
+      commit: 'abcdef1234567890',
+      short_commit: 'abcdef12',
+      runtime_generation: 1,
+      declared_runtime_generation: 1,
+      min_supported_generation: 1,
+      max_supported_generation: 1,
+      last_started_at: '2026-06-01T12:00:00+08:00',
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <AppShell>
+          <div>content</div>
+        </AppShell>
+      </MemoryRouter>,
+    )
+
+    await screen.findAllByText(/Stable abcdef12/)
+    await waitFor(() => {
+      expect(prefetchPalaceSubjectShelfApi).toHaveBeenCalledTimes(1)
+      expect(prefetchPalacesGroupedSummaryApi).toHaveBeenCalledTimes(1)
+      expect(prefetchDashboardApi).toHaveBeenCalledTimes(1)
+    })
   })
 
   it('returns palace navigation to the last visited palace child route instead of the shelf root', async () => {

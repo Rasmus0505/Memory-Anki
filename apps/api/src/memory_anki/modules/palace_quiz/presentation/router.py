@@ -17,6 +17,7 @@ from memory_anki.modules.palace_quiz.application.ai_service import (
     generate_quiz_preview_from_pdf,
     generate_quiz_preview_from_pdf_events,
     generate_quiz_preview_from_review_mindmap,
+    generate_quiz_preview_from_text_files,
     generate_short_answer_feedback,
 )
 from memory_anki.modules.palace_quiz.application.service import (
@@ -234,6 +235,39 @@ async def api_generate_palace_quiz_from_images(
             s,
             palace_id=palace_id,
             image_items=image_items,
+            extra_prompt=extra_prompt,
+            classify_by_mini_palace=str(classify_by_mini_palace).lower() == "true",
+            selected_chapter_id=(
+                int(selected_chapter_id)
+                if str(selected_chapter_id or "").strip()
+                else None
+            ),
+            ai_options=normalize_ai_runtime_options(
+                json.loads(ai_options) if ai_options else None
+            ),
+        )
+    except Exception as exc:  # pragma: no cover - centralized HTTP mapping
+        _raise_http_error(exc)
+
+
+@router.post("/palaces/{palace_id}/quiz-generation/text-files")
+async def api_generate_palace_quiz_from_text_files(
+    palace_id: int,
+    files: list[UploadFile] = File(...),
+    extra_prompt: str = Form(default=""),
+    classify_by_mini_palace: str = Form(default="false"),
+    selected_chapter_id: str = Form(default=""),
+    ai_options: str = Form(default=""),
+    s: Session = Depends(session_dep),
+):
+    try:
+        file_items: list[tuple[bytes, str | None, str | None]] = []
+        for item in files:
+            file_items.append((await item.read(), item.filename, item.content_type))
+        return generate_quiz_preview_from_text_files(
+            s,
+            palace_id=palace_id,
+            file_items=file_items,
             extra_prompt=extra_prompt,
             classify_by_mini_palace=str(classify_by_mini_palace).lower() == "true",
             selected_chapter_id=(

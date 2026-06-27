@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from memory_anki.core.config import DASHSCOPE_API_KEY as DASHSCOPE_API_KEY
+from memory_anki.infrastructure.llm import stream_chat_completion_text as stream_chat_completion_text
+
 from ._question_utils import (
     PalaceQuizAiError as PalaceQuizAiError,
     build_generation_source_meta as _build_generation_source_meta,
@@ -20,6 +23,7 @@ from .quiz_generation_service import (
     generate_quiz_preview_from_pdf,
     generate_quiz_preview_from_pdf_events,
     generate_quiz_preview_from_review_mindmap,
+    generate_quiz_preview_from_text_files,
     generate_short_answer_feedback,
     recover_quiz_questions_from_ai_call_log_and_save,
     recover_quiz_preview_from_ai_call_log,
@@ -33,6 +37,7 @@ def classify_existing_quiz_questions_to_mini_palaces(*args, **kwargs):
 
 
 __all__ = [
+    "DASHSCOPE_API_KEY",
     "PalaceQuizAiError",
     "QuizStreamEvent",
     "_build_chat_config",
@@ -46,8 +51,10 @@ __all__ = [
     "generate_quiz_preview_from_pdf",
     "generate_quiz_preview_from_pdf_events",
     "generate_quiz_preview_from_review_mindmap",
+    "generate_quiz_preview_from_text_files",
     "generate_short_answer_feedback",
     "recover_quiz_preview_from_ai_call_log",
     "recover_quiz_questions_from_ai_call_log_and_save",
     "render_selected_pdf_pages",
+    "stream_chat_completion_text",
 ]

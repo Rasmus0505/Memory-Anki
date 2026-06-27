@@ -1,3 +1,4 @@
+import { REVIEW_FEEDBACK_EFFECTIVE_VOLUME_MAX } from '@/shared/feedback/reviewFeedbackSettings'
 import type { MindMapFeedbackEvent, MindMapFeedbackOrigin } from '@/shared/components/mindmap-host/hostBridgeUtils'
 import { getComboMilestoneTone, getToneSpec, type ToneSpec } from './toneProfiles'
 
@@ -19,7 +20,7 @@ function getSharedAudioContext() {
 
 function clampFeedbackVolume(value: number) {
   if (!Number.isFinite(value)) return 1
-  return Math.max(0, Math.min(2, value))
+  return Math.max(0, Math.min(REVIEW_FEEDBACK_EFFECTIVE_VOLUME_MAX, value))
 }
 
 export function tuneToneSpec(

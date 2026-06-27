@@ -3,10 +3,15 @@ import type {
   AiConnectionTestResponse,
   AiModelImpactResponse,
   AiModelSettingsResponse,
+  AiPromptTemplateListResponse,
 } from '@/shared/api/contracts'
 
 export function getAiModelScenariosApi() {
   return request<AiModelSettingsResponse>('/settings/ai-models')
+}
+
+export function getAiPromptTemplatesApi() {
+  return request<AiPromptTemplateListResponse>('/settings/ai-prompts')
 }
 
 export function updateAiModelScenariosApi(data: {

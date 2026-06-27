@@ -184,26 +184,30 @@ export default function PalaceFocusPracticePage() {
         }}
         submitting={submitting}
         onComplete={async (payload) => {
-          const scheduleId = palace.current_review_schedule_id
-          const hasStages = Boolean(
-            palace.stage_labels?.length && palace.review_stages?.length
-          )
-          if (scheduleId && hasStages) {
+          let reviewPalace = palace
+          let hasStages = Boolean(reviewPalace.stage_labels?.length && reviewPalace.review_stages?.length)
+          if (!hasStages && (reviewPalace.review_stage_total ?? 0) > 0) {
+            const refreshed = await getPalaceFocusSessionApi(reviewPalace.id)
+            reviewPalace = refreshed.palace
+            setPalace(reviewPalace)
+            hasStages = Boolean(reviewPalace.stage_labels?.length && reviewPalace.review_stages?.length)
+          }
+          if (hasStages) {
             setPendingPayload(payload)
             setStageDialogOpen(true)
             return
           }
           setSubmitting(true)
           try {
-            if (palace.review_stage_total != null && palace.review_stage_total > 0) {
-              const nextCompleted = (palace.review_stage_completed ?? 0) + 1
-              const targetReviewNumber = Math.min(nextCompleted, palace.review_stage_total - 1)
-              await updateDefaultSegmentReviewProgressApi(palace.id, {
+            if (reviewPalace.review_stage_total != null && reviewPalace.review_stage_total > 0) {
+              const nextCompleted = (reviewPalace.review_stage_completed ?? 0) + 1
+              const targetReviewNumber = Math.min(nextCompleted, reviewPalace.review_stage_total - 1)
+              await updateDefaultSegmentReviewProgressApi(reviewPalace.id, {
                 completed_count: nextCompleted,
                 completed_review_number: targetReviewNumber,
               })
             }
-            await clearFocusPracticeSessionProgressApi(palace.id)
+            await clearFocusPracticeSessionProgressApi(reviewPalace.id)
             setHasResumeProgress(false)
           } finally {
             setSubmitting(false)
@@ -249,6 +253,11 @@ export default function PalaceFocusPracticePage() {
                   red_marked_count: pendingPayload.redNodeIds.length,
                   target_review_number: targetReviewNumber,
                   needs_practice: needsPractice,
+                })
+              } else {
+                await updateDefaultSegmentReviewProgressApi(palace.id, {
+                  completed_count: targetReviewNumber + 1,
+                  completed_review_number: targetReviewNumber,
                 })
               }
               await clearFocusPracticeSessionProgressApi(palace.id)

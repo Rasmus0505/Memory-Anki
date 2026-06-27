@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Generator
+import sys
 
 from memory_anki.infrastructure.llm import (
     OpenAICompatibleHttpError,
@@ -19,6 +20,15 @@ from .ai_service_runtime_logging import (
 from .ai_service_runtime_request import LoggedChatCompletionRequest
 
 
+def _resolve_stream_chat_completion_text():
+    facade = sys.modules.get("memory_anki.modules.palace_quiz.application.ai_service")
+    if facade is not None:
+        patched = getattr(facade, "stream_chat_completion_text", None)
+        if patched is not None:
+            return patched
+    return stream_chat_completion_text
+
+
 def call_logged_chat_completion_stream(
     request: LoggedChatCompletionRequest,
 ) -> Generator[str, None, tuple[str, str]]:
@@ -32,7 +42,7 @@ def call_logged_chat_completion_stream(
     )
     response_parts: list[str] = []
     try:
-        stream = stream_chat_completion_text(
+        stream = _resolve_stream_chat_completion_text()(
             config=request.config,
             messages=request.messages,
             response_format=request.response_format,

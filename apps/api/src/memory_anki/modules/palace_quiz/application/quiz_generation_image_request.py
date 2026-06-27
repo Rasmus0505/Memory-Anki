@@ -75,6 +75,7 @@ def prepare_image_generation_request(
         session=session,
         extra_prompt=extra_prompt,
         image_items=image_items,
+        prompt_override=ai_options.prompt_override if ai_options else None,
     )
     return ImageGenerationPreparedRequest(
         palace=request_context.palace,

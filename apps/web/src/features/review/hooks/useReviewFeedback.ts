@@ -372,6 +372,7 @@ export function useReviewFeedback({
         } else {
         emitReviewConfetti({
           kind: 'branch_clear',
+          confettiAmount: settings.scenes.review.confettiAmount,
           reducedMotion,
           soundEnabled: celebrationDecision.soundEnabled,
           volume: getSceneEffectiveVolume(settings, 'review'),
@@ -385,6 +386,7 @@ export function useReviewFeedback({
         } else {
         emitReviewConfetti({
           kind: 'all_clear_ready',
+          confettiAmount: settings.scenes.completion.confettiAmount,
           reducedMotion,
           soundEnabled: celebrationDecision.soundEnabled,
           volume: getSceneEffectiveVolume(settings, 'completion'),

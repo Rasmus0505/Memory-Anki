@@ -102,6 +102,7 @@ export default function ProfileFeedbackPage() {
   const triggerCompletionConfetti = React.useCallback(() => {
     emitReviewConfetti({
       kind: 'session_complete',
+      confettiAmount: draftSettings.scenes.completion.confettiAmount,
       reducedMotion: false,
       soundEnabled: draftSettings.soundEnabled,
       volume: getSceneEffectiveVolume(draftSettings, 'completion'),
@@ -375,6 +376,7 @@ export default function ProfileFeedbackPage() {
                 <ComboMilestoneBurst
                   comboCount={feedback.milestoneCelebration.comboCount}
                   copy={feedback.milestoneLabel ?? ''}
+                  confettiAmount={draftSettings.scenes.milestone.confettiAmount}
                   milestoneStep={feedback.milestoneCelebration.milestoneStep}
                   label={feedback.milestoneLabel ?? ''}
                 />
@@ -382,6 +384,7 @@ export default function ProfileFeedbackPage() {
               {completionPreview ? (
                 <CompletionCelebration
                   completedNodes={completionPreview.completedNodes}
+                  confettiAmount={draftSettings.scenes.completion.confettiAmount}
                   maxCombo={completionPreview.maxCombo}
                   totalNodes={completionPreview.totalNodes}
                 />

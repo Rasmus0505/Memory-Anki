@@ -3,6 +3,7 @@ import type { MindMapEditorState } from '@/shared/api/contracts'
 
 interface PersistedMindMapOptions<TResponse, TMeta> {
   entityId: number | null
+  loadCacheKey?: string
   fetcher: (id: number) => Promise<TResponse>
   saver: (id: number, data: PersistedMindMapSavePayload) => Promise<TResponse>
   selectMeta: (response: TResponse) => TMeta
@@ -25,6 +26,8 @@ interface AdoptExternalStateOptions {
   releaseAfterMs?: number
 }
 
+const inflightEditorLoads = new Map<string, Promise<unknown>>()
+
 function stableSerialize(value: unknown) {
   try {
     return JSON.stringify(value) ?? ''
@@ -45,6 +48,7 @@ function isConflictError(error: Error) {
 
 export function usePersistedMindMapEditor<TResponse, TMeta>({
   entityId,
+  loadCacheKey = 'persisted-mindmap',
   fetcher,
   saver,
   selectMeta,
@@ -248,7 +252,17 @@ export function usePersistedMindMapEditor<TResponse, TMeta>({
       setError(null)
     }
     try {
-      const response = await fetcherRef.current(entityId)
+      const inflightKey = `${loadCacheKey}:${entityId}`
+      let pending = inflightEditorLoads.get(inflightKey) as Promise<TResponse> | undefined
+      if (!pending) {
+        pending = fetcherRef.current(entityId).finally(() => {
+          if (inflightEditorLoads.get(inflightKey) === pending) {
+            inflightEditorLoads.delete(inflightKey)
+          }
+        })
+        inflightEditorLoads.set(inflightKey, pending)
+      }
+      const response = await pending
       if (!isCurrentLoadRequest(requestId, entityId)) return
       const nextEditorState = selectEditorStateRef.current(response)
       if (shouldIgnoreIncomingState(nextEditorState)) {
@@ -269,7 +283,7 @@ export function usePersistedMindMapEditor<TResponse, TMeta>({
         setIsLoading(false)
       }
     }
-  }, [entityId, isCurrentLoadRequest])
+  }, [entityId, isCurrentLoadRequest, loadCacheKey])
 
   const flushSave = useCallback(async () => {
     if (!entityIdRef.current || !editorStateRef.current || !dirtyRef.current || isSavingRef.current) return

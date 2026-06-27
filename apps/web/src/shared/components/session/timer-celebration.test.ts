@@ -1,35 +1,14 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { emitTimerCelebration } from '@/shared/components/session/timer-celebration'
+﻿import { describe, expect, it } from 'vitest'
+import { DEFAULT_TIMER_FOCUS_CONFIG, sanitizeTimerFocusConfig } from '@/shared/components/session/timer-focus-config'
 
-const notifyFeedback = vi.fn()
-
-vi.mock('@/shared/feedback/feedbackCenter', () => ({
-  notifyFeedback: (...args: unknown[]) => notifyFeedback(...args),
-}))
-
-describe('timer celebration', () => {
-  beforeEach(() => {
-    notifyFeedback.mockReset()
+describe('timer-focus-config compatibility', () => {
+  it('keeps cinematic as default', () => {
+    expect(DEFAULT_TIMER_FOCUS_CONFIG.feedbackIntensity).toBe('cinematic')
   })
 
-  it('keeps visual feedback but suppresses sound in visual_only mode', () => {
-    emitTimerCelebration({
-      completionCount: 4,
-      kind: 'secondary',
-      reducedMotion: false,
-      soundEnabled: true,
-      volume: 1,
-      feedbackIntensity: 'visual_only',
-    })
-
-    expect(notifyFeedback).toHaveBeenCalledWith(
-      expect.objectContaining({
-        scenario: 'timer_secondary_complete',
-        celebration: expect.objectContaining({
-          preset: 'random_direction',
-          soundEnabled: false,
-        }),
-      }),
-    )
+  it('maps legacy timer intensities', () => {
+    expect(sanitizeTimerFocusConfig({ feedbackIntensity: 'visual_only' }).feedbackIntensity).toBe('balanced')
+    expect(sanitizeTimerFocusConfig({ feedbackIntensity: 'strong' }).feedbackIntensity).toBe('celebration')
+    expect(sanitizeTimerFocusConfig({ feedbackIntensity: 'extreme' }).feedbackIntensity).toBe('cinematic')
   })
 })

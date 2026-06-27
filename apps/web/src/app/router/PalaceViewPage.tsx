@@ -35,6 +35,7 @@ export default function PalaceView() {
   const [mindMapNativeFullscreen, setMindMapNativeFullscreen] = useState(false)
   const [mindMapUiCleared, setMindMapUiCleared] = useState(false)
   const [shouldMountMindMap, setShouldMountMindMap] = useState(false)
+  const [hostReadyTimedOut, setHostReadyTimedOut] = useState(false)
 
   const { meta, editorState, isLoading, error } = usePersistedMindMapEditor({
     entityId: palaceId,
@@ -180,6 +181,11 @@ export default function PalaceView() {
                   onClick: () => mindMapFrameRef.current?.toggleUiCleared(),
                 }}
               />
+              {hostReadyTimedOut ? (
+                <div className="rounded-2xl border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-warning">
+                  脑图宿主初始化偏慢，已继续等待。若长时间不显示，可先返回列表后重新打开该宫殿。
+                </div>
+              ) : null}
               {shouldMountMindMap ? (
                 <MindMapFrame
                   ref={mindMapFrameRef}
@@ -191,6 +197,8 @@ export default function PalaceView() {
                   onFullscreenToggle={setMindMapFullscreen}
                   onFullscreenChange={setMindMapNativeFullscreen}
                   onUiClearedChange={setMindMapUiCleared}
+                  onReady={() => setHostReadyTimedOut(false)}
+                  onReadyTimeout={() => setHostReadyTimedOut(true)}
                   className={cn(
                     'w-full flex-1 rounded-2xl border border-border/70 bg-background',
                     mindMapFullscreen ? 'h-full' : 'h-[62vh]',

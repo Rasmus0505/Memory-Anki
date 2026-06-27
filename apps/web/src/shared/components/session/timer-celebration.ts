@@ -1,6 +1,9 @@
-import type { CelebrationPreset } from '@/shared/feedback/celebrationEngine'
+﻿import type { CelebrationPreset } from '@/shared/feedback/celebrationEngine'
 import { notifyFeedback } from '@/shared/feedback/feedbackCenter'
-import type { TimerFeedbackIntensity } from '@/shared/components/session/timer-focus-config'
+import type {
+  TimerCelebrationEventConfig,
+  TimerFeedbackIntensity,
+} from '@/shared/components/session/timer-focus-config'
 
 type TimerCelebrationKind = 'secondary' | 'primary'
 
@@ -10,16 +13,28 @@ function resolveTimerCelebrationPreset(
   completionCount: number,
 ): CelebrationPreset {
   if (kind === 'primary') {
-    if (intensity === 'visual_only') return 'stars'
-    if (intensity === 'strong') return 'school_pride'
-    return completionCount >= 6 ? 'school_pride' : 'stars'
+    if (intensity === 'balanced') return 'stars'
+    if (intensity === 'celebration') return 'school_pride'
+    return completionCount >= 6 ? 'school_pride' : 'fireworks'
   }
 
-  if (intensity === 'visual_only') return 'random_direction'
-  if (intensity === 'strong') return completionCount >= 6 ? 'fireworks' : 'realistic_look'
-  if (completionCount >= 10) return 'stars'
+  if (intensity === 'balanced') return 'realistic_look'
+  if (intensity === 'celebration') return completionCount >= 6 ? 'fireworks' : 'realistic_look'
+  if (completionCount >= 10) return 'school_pride'
   if (completionCount >= 6) return 'fireworks'
-  return 'realistic_look'
+  return 'stars'
+}
+
+function resolveConfiguredPreset(
+  kind: TimerCelebrationKind,
+  intensity: TimerFeedbackIntensity,
+  completionCount: number,
+  eventConfig: TimerCelebrationEventConfig,
+) {
+  if (eventConfig.visualPreset !== 'auto') {
+    return eventConfig.visualPreset
+  }
+  return resolveTimerCelebrationPreset(kind, intensity, completionCount)
 }
 
 export function emitTimerCelebration(args: {
@@ -29,6 +44,7 @@ export function emitTimerCelebration(args: {
   soundEnabled: boolean
   volume: number
   feedbackIntensity: TimerFeedbackIntensity
+  eventConfig: TimerCelebrationEventConfig
 }) {
   const {
     completionCount,
@@ -37,19 +53,24 @@ export function emitTimerCelebration(args: {
     soundEnabled,
     volume,
     feedbackIntensity,
+    eventConfig,
   } = args
 
   notifyFeedback({
     scenario: kind === 'primary' ? 'timer_primary_complete' : 'timer_secondary_complete',
-    celebration: {
-      preset: resolveTimerCelebrationPreset(kind, feedbackIntensity, completionCount),
-      reducedMotion,
-      soundEnabled: soundEnabled && feedbackIntensity !== 'visual_only',
-      volume: feedbackIntensity === 'strong' ? volume * 0.92 : volume,
-      audioCue: {
-        kind: kind === 'primary' ? 'session_complete' : 'milestone',
-        milestoneStep: Math.max(0, Math.min(4, completionCount - 1)),
-      },
-    },
+    celebration: eventConfig.enabled
+      ? {
+          preset: resolveConfiguredPreset(kind, feedbackIntensity, completionCount, eventConfig),
+          reducedMotion,
+          animationEnabled: eventConfig.animationEnabled,
+          soundEnabled: eventConfig.soundEnabled && soundEnabled,
+          volume: volume * eventConfig.volumeBoost,
+          audioCue: {
+            kind: kind === 'primary' ? 'session_complete' : 'milestone',
+            milestoneStep: Math.max(0, Math.min(4, completionCount - 1)),
+          },
+        }
+      : false,
+    soundEnabled: eventConfig.enabled && eventConfig.soundEnabled && soundEnabled,
   })
 }

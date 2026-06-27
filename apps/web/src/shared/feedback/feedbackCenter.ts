@@ -8,10 +8,15 @@ import {
   playLegacyFeedbackEvent,
   playLegacyFireworkAccent,
 } from '@/shared/components/mindmap-host/legacyWebAudio'
-import { readReviewFeedbackSettings } from '@/shared/feedback/reviewFeedbackSettings'
+import {
+  REVIEW_FEEDBACK_EFFECTIVE_VOLUME_MAX,
+  getReviewFeedbackEffectiveVolume,
+  readReviewFeedbackSettings,
+} from '@/shared/feedback/reviewFeedbackSettings'
 import { dispatchGlobalFeedback } from './globalFeedbackModel'
 import {
   launchCelebrationPreset,
+  type CelebrationScenario,
   type CelebrationPreset,
 } from './celebrationEngine'
 
@@ -41,9 +46,13 @@ interface CelebrationAudioCue {
 }
 
 export interface TriggerCelebrationRequest {
+  amount?: number
+  animationEnabled?: boolean
   audioCue?: CelebrationAudioCue
+  durationMs?: number
   preset: CelebrationPreset
   reducedMotion: boolean
+  scenario?: CelebrationScenario
   soundEnabled?: boolean
   volume?: number
 }
@@ -77,7 +86,7 @@ export interface FeedbackRequest {
 
 function clampVolume(value: number) {
   if (!Number.isFinite(value)) return 1
-  return Math.max(0, Math.min(2, value))
+  return Math.max(0, Math.min(REVIEW_FEEDBACK_EFFECTIVE_VOLUME_MAX, value))
 }
 
 function getFeedbackSettings() {
@@ -94,7 +103,7 @@ function getFeedbackSettings() {
     animationEnabled: settings.animationEnabled,
     mode: settings.mode,
     soundEnabled: settings.soundEnabled,
-    volume: settings.volume,
+    volume: getReviewFeedbackEffectiveVolume(settings),
   }
 }
 
@@ -146,7 +155,10 @@ export function emitVisualFeedback(request: FeedbackVisualRequest) {
 
 export function triggerCelebration(request: TriggerCelebrationRequest) {
   const settings = getFeedbackSettings()
-  const animationEnabled = settings.animationEnabled && settings.mode === 'immersive'
+  const animationEnabled =
+    (request.animationEnabled ?? true) &&
+    settings.animationEnabled &&
+    settings.mode === 'immersive'
   const soundEnabled =
     (request.soundEnabled ?? settings.soundEnabled) && settings.mode === 'immersive'
   const volume = clampVolume(request.volume ?? settings.volume)
@@ -155,6 +167,9 @@ export function triggerCelebration(request: TriggerCelebrationRequest) {
     launchCelebrationPreset({
       preset: request.preset,
       reducedMotion: request.reducedMotion,
+      amount: request.amount,
+      durationMs: request.durationMs,
+      scenario: request.scenario,
     })
   }
 
