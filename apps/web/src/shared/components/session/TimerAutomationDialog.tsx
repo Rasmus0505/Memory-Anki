@@ -92,6 +92,12 @@ function toDraft(config: TimerAutomationConfig) {
       hiddenAutoPauseSeconds: String(config.review.hiddenAutoPauseSeconds),
       autoPauseRollbackSeconds: String(config.review.autoPauseRollbackSeconds),
     },
+    freestyle: {
+      autoStartOnPageEnter: config.freestyle.autoStartOnPageEnter,
+      inactiveAutoPauseSeconds: String(config.freestyle.inactiveAutoPauseSeconds),
+      hiddenAutoPauseSeconds: String(config.freestyle.hiddenAutoPauseSeconds),
+      autoPauseRollbackSeconds: String(config.freestyle.autoPauseRollbackSeconds),
+    },
     english: {
       autoStartOnPageEnter: config.english.autoStartOnPageEnter,
       inactiveAutoPauseSeconds: String(config.english.inactiveAutoPauseSeconds),
@@ -134,6 +140,10 @@ function toFocusDraft(config: TimerFocusConfig) {
     review: {
       primaryMinutes: String(config.review.primaryMinutes),
       secondaryMinutes: String(config.review.secondaryMinutes),
+    },
+    freestyle: {
+      primaryMinutes: String(config.freestyle.primaryMinutes),
+      secondaryMinutes: String(config.freestyle.secondaryMinutes),
     },
     english: {
       primaryMinutes: String(config.english.primaryMinutes),
@@ -391,6 +401,12 @@ export function TimerAutomationDialog({
           hiddenAutoPauseSeconds: draft.review.hiddenAutoPauseSeconds,
           autoPauseRollbackSeconds: draft.review.autoPauseRollbackSeconds,
         },
+        freestyle: {
+          autoStartOnPageEnter: draft.freestyle.autoStartOnPageEnter,
+          inactiveAutoPauseSeconds: draft.freestyle.inactiveAutoPauseSeconds,
+          hiddenAutoPauseSeconds: draft.freestyle.hiddenAutoPauseSeconds,
+          autoPauseRollbackSeconds: draft.freestyle.autoPauseRollbackSeconds,
+        },
         english: {
           autoStartOnPageEnter: draft.english.autoStartOnPageEnter,
           inactiveAutoPauseSeconds: draft.english.inactiveAutoPauseSeconds,
@@ -432,6 +448,10 @@ export function TimerAutomationDialog({
         review: {
           primaryMinutes: focusDraft.review.primaryMinutes,
           secondaryMinutes: focusDraft.review.secondaryMinutes,
+        },
+        freestyle: {
+          primaryMinutes: focusDraft.freestyle.primaryMinutes,
+          secondaryMinutes: focusDraft.freestyle.secondaryMinutes,
         },
         english: {
           primaryMinutes: focusDraft.english.primaryMinutes,
@@ -700,5 +720,4 @@ export function TimerAutomationDialog({
     </Dialog>
   )
 }
-
 

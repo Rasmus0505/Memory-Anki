@@ -69,6 +69,11 @@ vi.mock('@/features/review/api/reviewApi', () => ({
   submitReviewSessionApi: (...args: unknown[]) => mocks.submitReviewSessionApi(...args),
 }))
 
+vi.mock('@/features/review/studyWarmup', () => ({
+  consumePrefetchedStudySession: (_kind: string, _id: number, loader: () => Promise<unknown>) =>
+    loader(),
+}))
+
 vi.mock('@/entities/palace/api/catalogApi', () => ({
   buildAttachmentUrl: (id: number) => `/attachments/${id}`,
   getPalaceEditorApi: vi.fn(),
@@ -185,6 +190,41 @@ describe('ReviewSession', () => {
     })
     expect(screen.getByTestId('flow-sync-version').textContent).toBe('1')
     expect(screen.getByTestId('flow-scope').textContent).toBe('review-session:309:edit')
+  })
+
+  it('renders the review flow before the full edit editor state finishes loading', async () => {
+    mocks.usePersistedMindMapEditor.mockReturnValue({
+      meta: null,
+      editorState: null,
+      setEditorState: mocks.setEditorState,
+      isLoading: true,
+      isSaving: false,
+      error: null,
+      reload: vi.fn(),
+      flushSave: mocks.flushSave,
+    })
+
+    render(<ReviewSession />)
+
+    await waitFor(() => {
+      expect(screen.getByTestId('flow-mode').textContent).toBe('review')
+    })
+    expect(mocks.latestFlowProps).toEqual(
+      expect.objectContaining({
+        reviewEditorState: {
+          editor_doc: null,
+          editor_config: {},
+          editor_local_config: {},
+          lang: 'zh',
+        },
+        editEditorState: {
+          editor_doc: null,
+          editor_config: {},
+          editor_local_config: {},
+          lang: 'zh',
+        },
+      }),
+    )
   })
 
   it('flushes edits on mode exit and still submits only one review completion after switching back', async () => {

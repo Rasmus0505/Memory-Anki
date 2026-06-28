@@ -1,6 +1,7 @@
 ﻿import { useEffect, useMemo, useState } from 'react'
 import type { FormEvent } from 'react'
 import { toast } from '@/shared/feedback/toast'
+import { appConfirm } from '@/shared/components/ui/native-dialog'
 import {
   createTimeRecord,
   getDailyTrend,
@@ -301,8 +302,9 @@ export function useTimeRecordsDashboard(
   const handleDeleteRecord = async (record: TimeSessionRecord) => {
     if (deletingRecordId || isBulkDeleting) return
 
-    const confirmed = window.confirm(
+    const confirmed = await appConfirm(
       `确定删除“${record.title}”吗？你之后仍可以在“显示已删除”中恢复。`,
+      { title: '删除时间记录', tone: 'danger' },
     )
     if (!confirmed) return
 
@@ -377,8 +379,9 @@ export function useTimeRecordsDashboard(
     )
     if (targets.length === 0) return
 
-    const confirmed = window.confirm(
+    const confirmed = await appConfirm(
       `确定批量删除所选的 ${targets.length} 条记录吗？你之后仍可以在“显示已删除”中恢复。`,
+      { title: '批量删除时间记录', tone: 'danger' },
     )
     if (!confirmed) return
 

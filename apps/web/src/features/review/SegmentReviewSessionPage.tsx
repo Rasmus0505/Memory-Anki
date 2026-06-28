@@ -66,6 +66,7 @@ export default function SegmentReviewSessionPage() {
       clearProgress={clearSegmentReviewSessionProgressApi}
       submitSession={submitSegmentReviewSessionApi}
       backHref={buildReviewOverviewPath}
+      warmupKind="segment-review-session"
       refreshReviewStateOnExitEdit
     />
   )

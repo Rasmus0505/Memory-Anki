@@ -164,6 +164,7 @@ export interface RecoverPalaceQuizFromAiLogRequest {
 export interface RecoverAndSavePalaceQuizFromAiLogRequest
   extends RecoverPalaceQuizFromAiLogRequest {
   selected_chapter_id: number
+  save_mode?: 'append' | 'overwrite'
 }
 
 export interface RecoverAndSavePalaceQuizFromAiLogResult {

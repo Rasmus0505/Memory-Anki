@@ -1,0 +1,254 @@
+import json
+import unittest
+from datetime import date, timedelta
+
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
+
+from memory_anki.infrastructure.db.models import (
+    Base,
+    Chapter,
+    EnglishCourse,
+    EnglishCourseProgress,
+    EnglishReadingMaterial,
+    EnglishReadingVersion,
+    Palace,
+    PalaceMiniPalace,
+    PalaceMiniPalaceReviewSchedule,
+    PalaceQuizQuestion,
+    PalaceSegment,
+    PalaceSegmentReviewSchedule,
+    ReviewSchedule,
+    Subject,
+)
+from memory_anki.modules.freestyle.presentation import router as freestyle_router
+
+
+def quiz_question(**kwargs):
+    payload = {
+        "question_type": "multiple_choice",
+        "stem": "默认题干",
+        "options_json": json.dumps(
+            [{"id": "A", "text": "A"}, {"id": "B", "text": "B"}],
+            ensure_ascii=False,
+        ),
+        "answer_payload_json": json.dumps({"correct_option_id": "A"}, ensure_ascii=False),
+        "analysis": "解析",
+        "source_meta_json": json.dumps({"source_kind": "manual"}, ensure_ascii=False),
+        "sort_order": 0,
+    }
+    payload.update(kwargs)
+    return PalaceQuizQuestion(**payload)
+
+
+class FreestyleRouteTests(unittest.TestCase):
+    def setUp(self):
+        self.engine = create_engine(
+            "sqlite://",
+            connect_args={"check_same_thread": False},
+            poolclass=StaticPool,
+        )
+        Base.metadata.create_all(self.engine)
+        self.SessionLocal = sessionmaker(bind=self.engine)
+        self.original_get_session = freestyle_router.get_session
+
+        def get_test_session():
+            return self.SessionLocal()
+
+        freestyle_router.get_session = get_test_session
+
+        with self.SessionLocal() as session:
+            subject = Subject(name="生物", color="#22c55e")
+            session.add(subject)
+            session.flush()
+            chapter = Chapter(subject_id=subject.id, name="细胞生物学", sort_order=0)
+            session.add(chapter)
+            session.flush()
+
+            palace = Palace(title="细胞宫殿", archived=False, mastered=False)
+            practice_palace = Palace(
+                title="练习宫殿",
+                archived=False,
+                mastered=False,
+                needs_practice=True,
+                focus_node_uids_json=json.dumps(["focus-a"], ensure_ascii=False),
+            )
+            archived_palace = Palace(title="归档宫殿", archived=True, mastered=False)
+            session.add_all([palace, practice_palace, archived_palace])
+            session.flush()
+            palace.chapters.append(chapter)
+
+            segment = PalaceSegment(
+                palace_id=palace.id,
+                name="第 1 部分",
+                node_uids_json=json.dumps(["a"], ensure_ascii=False),
+                sort_order=0,
+            )
+            mini_palace = PalaceMiniPalace(
+                palace_id=palace.id,
+                name="细胞核小宫殿",
+                node_uids_json=json.dumps(["a"], ensure_ascii=False),
+                needs_practice=True,
+                sort_order=0,
+            )
+            session.add_all([segment, mini_palace])
+            session.flush()
+
+            session.add_all(
+                [
+                    quiz_question(palace_id=palace.id, stem="细胞宫殿题"),
+                    quiz_question(palace_id=practice_palace.id, stem="练习宫殿题"),
+                    quiz_question(palace_id=archived_palace.id, stem="归档宫殿题"),
+                    quiz_question(source_chapter_id=chapter.id, stem="章节聚合题"),
+                    ReviewSchedule(
+                        palace_id=palace.id,
+                        scheduled_date=date.today() - timedelta(days=1),
+                        interval_days=1,
+                        algorithm_used="ebbinghaus",
+                        completed=False,
+                        review_number=0,
+                        review_type="standard",
+                    ),
+                    PalaceSegmentReviewSchedule(
+                        palace_segment_id=segment.id,
+                        scheduled_date=date.today() - timedelta(days=1),
+                        interval_days=1,
+                        algorithm_used="ebbinghaus",
+                        completed=False,
+                        review_number=0,
+                        review_type="standard",
+                    ),
+                    PalaceMiniPalaceReviewSchedule(
+                        palace_mini_palace_id=mini_palace.id,
+                        scheduled_date=date.today() - timedelta(days=1),
+                        interval_days=1,
+                        algorithm_used="ebbinghaus",
+                        completed=False,
+                        review_number=0,
+                        review_type="standard",
+                    ),
+                ]
+            )
+
+            course = EnglishCourse(
+                title="English Course",
+                original_filename="demo.mp4",
+                media_filename="source.mp4",
+                media_relative_path="1/source.mp4",
+                sentence_count=10,
+                duration_seconds=120,
+            )
+            session.add(course)
+            session.flush()
+            session.add(
+                EnglishCourseProgress(
+                    course_id=course.id,
+                    current_sentence_index=3,
+                    completed_sentence_indexes_json="[]",
+                    is_completed=False,
+                )
+            )
+
+            material = EnglishReadingMaterial(
+                title="Reading Material",
+                source_type="paste",
+                original_filename="",
+                original_text="hello world",
+                cleaned_text="hello world",
+                word_count=2,
+            )
+            session.add(material)
+            session.flush()
+            session.add(
+                EnglishReadingVersion(
+                    material_id=material.id,
+                    render_blocks_json="[]",
+                    span_annotations_json="[]",
+                    sentence_annotations_json="[]",
+                    summary_json="{}",
+                )
+            )
+            session.commit()
+
+            self.palace_id = palace.id
+            self.practice_palace_id = practice_palace.id
+
+        app = FastAPI()
+        app.include_router(freestyle_router.router, prefix="/api/v1")
+        self.client = TestClient(app)
+
+    def tearDown(self):
+        freestyle_router.get_session = self.original_get_session
+        Base.metadata.drop_all(self.engine)
+        self.engine.dispose()
+
+    def test_feed_aggregates_quiz_and_learning_action_cards(self):
+        response = self.client.get("/api/v1/freestyle/feed")
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        content_types = {card["content_type"] for card in payload["cards"]}
+        self.assertIn("quiz_question", content_types)
+        self.assertIn("review", content_types)
+        self.assertIn("segment_review", content_types)
+        self.assertIn("mini_review", content_types)
+        self.assertIn("practice", content_types)
+        self.assertIn("english", content_types)
+        self.assertIn("english_reading", content_types)
+        stems = [
+            card["question"]["stem"]
+            for card in payload["cards"]
+            if card["type"] == "quiz_question"
+        ]
+        self.assertIn("章节聚合题", stems)
+        self.assertNotIn("归档宫殿题", stems)
+
+    def test_content_type_filter_returns_only_quiz_cards(self):
+        response = self.client.get("/api/v1/freestyle/feed?content_types=quiz_question")
+
+        self.assertEqual(response.status_code, 200)
+        cards = response.json()["cards"]
+        self.assertTrue(cards)
+        self.assertTrue(all(card["content_type"] == "quiz_question" for card in cards))
+
+    def test_specific_palaces_filter_excludes_global_english_cards(self):
+        response = self.client.get(
+            f"/api/v1/freestyle/feed?range=specific_palaces&palace_ids={self.practice_palace_id}"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        cards = response.json()["cards"]
+        self.assertTrue(cards)
+        self.assertTrue(
+            all(
+                card.get("palace_context", {}).get("id") == self.practice_palace_id
+                for card in cards
+            )
+        )
+        self.assertNotIn("english", {card["content_type"] for card in cards})
+
+    def test_due_range_keeps_due_palace_work_and_skips_practice_actions(self):
+        response = self.client.get("/api/v1/freestyle/feed?range=due")
+
+        self.assertEqual(response.status_code, 200)
+        cards = response.json()["cards"]
+        content_types = {card["content_type"] for card in cards}
+        self.assertIn("quiz_question", content_types)
+        self.assertIn("review", content_types)
+        self.assertNotIn("practice", content_types)
+        self.assertNotIn("english", content_types)
+        self.assertTrue(
+            all(
+                card.get("palace_context", {}).get("id") == self.palace_id
+                for card in cards
+                if card.get("palace_context")
+            )
+        )
+
+
+if __name__ == "__main__":
+    unittest.main()
+

@@ -1,5 +1,9 @@
 import { request } from '@/shared/api/http'
 import { invalidatePalaceCatalogCache } from '@/entities/palace/api/catalogApi'
+import {
+  consumePrefetchedPromise,
+  prefetchPromise,
+} from '@/shared/api/promiseWarmupCache'
 import type {
   BatchSegmentReviewSessionResponse,
   BatchSegmentReviewSubmitResponse,
@@ -19,7 +23,13 @@ async function withPalaceCatalogInvalidation<T>(operation: Promise<T>) {
 }
 
 export function getReviewQueueApi() {
-  return request<ReviewQueueResponse>('/review/queue')
+  return consumePrefetchedPromise('review:queue', () =>
+    request<ReviewQueueResponse>('/review/queue'),
+  )
+}
+
+export function prefetchReviewQueueApi() {
+  prefetchPromise('review:queue', () => request<ReviewQueueResponse>('/review/queue'))
 }
 
 export function getChapterReviewQueueApi(chapterId: number) {
@@ -31,7 +41,15 @@ export function getReviewSessionApi(id: number) {
 }
 
 export function getSegmentReviewQueueApi() {
-  return request<SegmentReviewQueueResponse>('/segment-review/queue')
+  return consumePrefetchedPromise('segment-review:queue', () =>
+    request<SegmentReviewQueueResponse>('/segment-review/queue'),
+  )
+}
+
+export function prefetchSegmentReviewQueueApi() {
+  prefetchPromise('segment-review:queue', () =>
+    request<SegmentReviewQueueResponse>('/segment-review/queue'),
+  )
 }
 
 export function getSegmentChapterReviewQueueApi(chapterId: number) {

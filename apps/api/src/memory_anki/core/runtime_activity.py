@@ -107,7 +107,7 @@ def assert_exclusive_runtime_operation(operation_name: str, *, current_instance_
         for item in foreign_instances
     )
     raise RuntimeError(
-        f"{operation_name} requires exclusive access to the shared runtime data. "
+        f"{operation_name} requires exclusive access to the local runtime data. "
         f"Close the other running Memory Anki instance(s) first: {foreign_labels}."
     )
 

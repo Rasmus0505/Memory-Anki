@@ -9,10 +9,37 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from memory_anki.core import runtime as runtime_module
+from memory_anki.core import config as config_module
 from memory_anki.modules.settings.presentation import router as settings_router
 
 
 class RuntimeInfoTests(unittest.TestCase):
+    def test_resolve_app_home_defaults_to_local_app_home(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            default_home = Path(temp_dir) / "MemoryAnki"
+            (default_home / "shared-home.txt").parent.mkdir(parents=True, exist_ok=True)
+            (default_home / "shared-home.txt").write_text("D:/ignored-runtime", encoding="utf-8")
+
+            with patch.dict(os.environ, {}, clear=False), patch.object(
+                config_module,
+                "_default_app_home",
+                return_value=default_home,
+            ):
+                os.environ.pop("MEMORY_ANKI_HOME", None)
+                app_home, source = config_module._resolve_app_home()
+
+        self.assertEqual(app_home, default_home)
+        self.assertEqual(source, "default")
+
+    def test_resolve_app_home_keeps_env_override(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            override_home = Path(temp_dir) / "custom-runtime"
+            with patch.dict(os.environ, {"MEMORY_ANKI_HOME": str(override_home)}, clear=False):
+                app_home, source = config_module._resolve_app_home()
+
+        self.assertEqual(app_home, override_home)
+        self.assertEqual(source, "env")
+
     def test_build_runtime_info_uses_env_commit_and_shared_state(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             state_path = Path(temp_dir) / "migration-state.json"
@@ -111,7 +138,7 @@ class RuntimeInfoTests(unittest.TestCase):
             with self.assertRaises(RuntimeError) as error:
                 runtime_module.assert_runtime_compatible(contract, path=state_path)
 
-        self.assertIn("Shared data generation is newer", str(error.exception))
+        self.assertIn("Runtime data generation is newer", str(error.exception))
 
     def test_record_runtime_start_persists_channel_commit_and_generation(self):
         with tempfile.TemporaryDirectory() as temp_dir:

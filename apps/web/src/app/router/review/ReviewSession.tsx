@@ -42,6 +42,7 @@ export default function ReviewSession() {
       clearProgress={clearReviewSessionProgressApi}
       submitSession={submitReviewSessionApi}
       backHref={buildReviewOverviewPath}
+      warmupKind="review-session"
     />
   )
 }

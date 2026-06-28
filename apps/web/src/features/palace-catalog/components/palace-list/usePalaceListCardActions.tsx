@@ -28,6 +28,7 @@ import {
   buildBatchSegmentReviewPath,
   buildSegmentReviewSessionPath,
 } from '@/features/review/reviewSessionRoutes'
+import { prefetchStudySession } from '@/features/review/studyWarmup'
 import { flattenGroupedPalaces } from '@/features/palace-catalog/model/palaceCatalog'
 
 function ensureSubmitSucceeded(result: ReviewSessionSubmitResponse) {
@@ -115,8 +116,25 @@ export function usePalaceListCardActions({
     navigate(`/palaces/${palace.id}/practice`)
   }
 
+  const handleWarmPalacePractice = (palace: PalaceGroupedItem) => {
+    prefetchStudySession('palace-practice', palace.id)
+  }
+
+  const handleWarmFocusPractice = (palace: PalaceGroupedItem) => {
+    prefetchStudySession('focus-practice', palace.id)
+  }
+
   const handleSegmentPractice = (segment: PalaceSegmentSummary) => {
     navigate(`/segments/${segment.id}/practice`)
+  }
+
+  const handleWarmSegmentPractice = (segment: PalaceSegmentSummary) => {
+    prefetchStudySession('segment-practice', segment.id)
+  }
+
+  const handleWarmSegmentReview = (segment: PalaceSegmentSummary) => {
+    if (!segment.current_review_schedule_id) return
+    prefetchStudySession('segment-review-session', segment.current_review_schedule_id)
   }
 
   const handleOpenBatchReview = (palace: PalaceGroupedItem) => {
@@ -259,9 +277,18 @@ export function usePalaceListCardActions({
     navigate(`/mini-palaces/${mini.id}/practice`)
   }
 
+  const handleWarmMiniPalacePractice = (mini: MiniPalaceSummary) => {
+    prefetchStudySession('mini-practice', mini.id)
+  }
+
   const handleMiniPalaceReview = (mini: MiniPalaceSummary) => {
     if (!mini.current_review_schedule_id) return
     navigate(`/mini-review/session/${mini.current_review_schedule_id}`)
+  }
+
+  const handleWarmMiniPalaceReview = (mini: MiniPalaceSummary) => {
+    if (!mini.current_review_schedule_id) return
+    prefetchStudySession('mini-review-session', mini.current_review_schedule_id)
   }
 
   return {
@@ -269,15 +296,20 @@ export function usePalaceListCardActions({
     markReviewedKey,
     onOpenBatchReview: handleOpenBatchReview,
     onPalacePractice: (palace: PalaceGroupedItem) => void handlePalacePractice(palace),
+    onWarmPalacePractice: handleWarmPalacePractice,
+    onWarmFocusPractice: handleWarmFocusPractice,
     onSegmentPractice: (segment: PalaceSegmentSummary) => void handleSegmentPractice(segment),
+    onWarmSegmentPractice: handleWarmSegmentPractice,
     onSegmentReviewAction: (segment: PalaceSegmentSummary) => void handleSegmentReviewAction(segment),
+    onWarmSegmentReviewAction: handleWarmSegmentReview,
     onOpenStageEdit: openStageEdit,
     onMarkSegmentReviewed: (segment: PalaceSegmentSummary) => void handleMarkSegmentReviewed(segment),
     onMiniPalacePractice: (mini: MiniPalaceSummary) => void handleMiniPalacePractice(mini),
+    onWarmMiniPalacePractice: handleWarmMiniPalacePractice,
     onMiniPalaceReview: (mini: MiniPalaceSummary) => void handleMiniPalaceReview(mini),
+    onWarmMiniPalaceReview: handleWarmMiniPalaceReview,
     onOpenConfig: (palace: PalaceGroupedItem) => setMiniReviewModePalace(palace),
     onDelete: (id: number, title: string) => void handleDelete(id, title),
     dialogs,
   }
 }
-

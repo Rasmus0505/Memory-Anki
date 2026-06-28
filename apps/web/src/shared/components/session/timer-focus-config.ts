@@ -9,6 +9,7 @@ export type TimerFocusScene =
   | 'practice'
   | 'quiz'
   | 'review'
+  | 'freestyle'
   | 'english'
   | 'english_reading'
 
@@ -49,6 +50,7 @@ export interface TimerFocusConfig {
   practice: TimerFocusRule
   quiz: TimerFocusRule
   review: TimerFocusRule
+  freestyle: TimerFocusRule
   english: TimerFocusRule
   english_reading: TimerFocusRule
 }
@@ -61,6 +63,7 @@ export const TIMER_FOCUS_SCENE_LABELS: Record<TimerFocusScene, string> = {
   practice: '练习',
   quiz: '做题',
   review: '复习',
+  freestyle: '随心模式',
   english: '英语听力',
   english_reading: '英语阅读',
 }
@@ -145,6 +148,10 @@ export const DEFAULT_TIMER_FOCUS_CONFIG: TimerFocusConfig = {
     secondaryMinutes: 1,
   },
   review: {
+    primaryMinutes: 25,
+    secondaryMinutes: 1,
+  },
+  freestyle: {
     primaryMinutes: 25,
     secondaryMinutes: 1,
   },
@@ -247,6 +254,7 @@ export function sanitizeTimerFocusConfig(value: unknown): TimerFocusConfig {
     practice: sanitizeRule(raw.practice, DEFAULT_TIMER_FOCUS_CONFIG.practice),
     quiz: sanitizeRule(raw.quiz, DEFAULT_TIMER_FOCUS_CONFIG.quiz),
     review: sanitizeRule(raw.review, DEFAULT_TIMER_FOCUS_CONFIG.review),
+    freestyle: sanitizeRule(raw.freestyle, DEFAULT_TIMER_FOCUS_CONFIG.freestyle),
     english: sanitizeRule(raw.english, DEFAULT_TIMER_FOCUS_CONFIG.english),
     english_reading: sanitizeRule(raw.english_reading, DEFAULT_TIMER_FOCUS_CONFIG.english_reading),
   }

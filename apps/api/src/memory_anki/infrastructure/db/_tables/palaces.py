@@ -259,6 +259,21 @@ class PalaceMiniPalace(Base):
 
 class ReviewSchedule(Base):
     __tablename__ = "review_schedules"
+    __table_args__ = (
+        Index(
+            "ix_review_schedules_due_lookup",
+            "completed",
+            "scheduled_date",
+            "scheduled_at",
+            "id",
+        ),
+        Index(
+            "ix_review_schedules_palace_progress",
+            "palace_id",
+            "completed",
+            "review_number",
+        ),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     palace_id: Mapped[int] = mapped_column(
@@ -302,6 +317,13 @@ class PalaceSegmentReviewSchedule(Base):
             "palace_segment_id",
             "completed",
             "review_number",
+        ),
+        Index(
+            "ix_segment_review_schedules_due_lookup",
+            "completed",
+            "scheduled_date",
+            "scheduled_at",
+            "id",
         ),
     )
 
@@ -355,6 +377,13 @@ class PalaceMiniPalaceReviewSchedule(Base):
             "palace_mini_palace_id",
             "completed",
             "review_number",
+        ),
+        Index(
+            "ix_mini_review_schedules_due_lookup",
+            "completed",
+            "scheduled_date",
+            "scheduled_at",
+            "id",
         ),
     )
 

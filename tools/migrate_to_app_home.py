@@ -45,7 +45,7 @@ def resolve_standard_app_home() -> Path:
     return Path.home() / "AppData" / "Local" / "MemoryAnki"
 
 
-def resolve_shared_home_config_path() -> Path:
+def resolve_legacy_shared_home_config_path() -> Path:
     return resolve_standard_app_home() / "shared-home.txt"
 
 
@@ -104,7 +104,7 @@ def main() -> int:
         print("[i] 检测到 MEMORY_ANKI_HOME 环境变量重定向，本脚本将强制使用标准 APP_HOME。")
 
     standard_home = resolve_standard_app_home()
-    shared_home_file = resolve_shared_home_config_path()
+    legacy_shared_home_file = resolve_legacy_shared_home_config_path()
     repo_root = Path(__file__).resolve().parents[1]
     source_home = repo_root / "runtime-data"
 
@@ -162,10 +162,10 @@ def main() -> int:
             return 1
         print("[ok] 校验通过：目标数据库与源一致。")
 
-    # 清除 shared-home 重定向（若存在）
-    if shared_home_file.exists():
-        shared_home_file.unlink()
-        print(f"[i] 已删除 shared-home 重定向文件: {shared_home_file}")
+    # 清除旧版 shared-home 重定向（若存在）。新版不再读取该文件。
+    if legacy_shared_home_file.exists():
+        legacy_shared_home_file.unlink()
+        print(f"[i] 已删除旧版 shared-home 重定向文件: {legacy_shared_home_file}")
 
     # 清除 MEMORY_ANKI_HOME 环境变量的持久化设置（如果存在）
     # 注意：当前进程的环境变量无法持久化清除，只能提示用户。

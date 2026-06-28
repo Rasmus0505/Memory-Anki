@@ -76,23 +76,10 @@ def _default_app_home() -> Path:
     return Path.home() / "AppData" / "Local" / "MemoryAnki"
 
 
-def _shared_app_home_config_path() -> Path:
-    return _default_app_home() / "shared-home.txt"
-
-
 def _resolve_app_home() -> tuple[Path, str]:
     explicit_home = os.environ.get("MEMORY_ANKI_HOME")
     if explicit_home:
         return Path(explicit_home).expanduser(), "env"
-
-    shared_home_file = _shared_app_home_config_path()
-    if shared_home_file.exists():
-        try:
-            configured_home = shared_home_file.read_text(encoding="utf-8").strip()
-        except OSError:
-            configured_home = ""
-        if configured_home:
-            return Path(configured_home).expanduser(), "shared-home-file"
 
     return _default_app_home(), "default"
 
@@ -100,7 +87,6 @@ def _resolve_app_home() -> tuple[Path, str]:
 REPO_ROOT = Path(__file__).resolve().parents[5]
 LEGACY_DATA_DIR = REPO_ROOT / "data"
 APP_HOME, APP_HOME_SOURCE = _resolve_app_home()
-SHARED_APP_HOME_CONFIG_PATH = _shared_app_home_config_path()
 DATA_DIR = APP_HOME / "data"
 ATTACHMENTS_DIR = DATA_DIR / "attachments"
 SUBJECT_DOCUMENTS_DIR = ATTACHMENTS_DIR / "subjects"
@@ -187,6 +173,8 @@ DEFAULTS = {
     "scene_model_quiz_short_answer_thinking_enabled": "false",
     "scene_model_quiz_mini_palace": "qwen-turbo",
     "scene_model_quiz_mini_palace_thinking_enabled": "false",
+    "scene_model_quiz_text_generation": DASHSCOPE_TEXT_MODEL,
+    "scene_model_quiz_text_generation_thinking_enabled": "false",
     "scene_model_quiz_pdf_pairing": "qwen-plus",
     "scene_model_quiz_pdf_pairing_thinking_enabled": "false",
     "scene_model_quiz_pdf_review": "qwen-turbo",

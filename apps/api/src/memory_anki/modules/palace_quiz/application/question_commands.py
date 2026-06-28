@@ -12,6 +12,7 @@ from .question_lifecycle_commands import (
     batch_delete_questions as batch_delete_questions,
     delete_question as delete_question,
     record_choice_attempt as record_choice_attempt,
+    reset_question_attempts as reset_question_attempts,
     update_question as update_question,
 )
 
@@ -22,6 +23,7 @@ __all__ = [
     "create_question",
     "delete_question",
     "record_choice_attempt",
+    "reset_question_attempts",
     "update_question",
     "upsert_classified_question_copy",
 ]

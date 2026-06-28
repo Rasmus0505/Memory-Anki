@@ -2,9 +2,12 @@ from __future__ import annotations
 
 from sqlalchemy.orm import Session
 
+from memory_anki.core.time import utc_now_naive
+from memory_anki.infrastructure.db.models import PalaceQuizQuestion
+
 from .question_contracts import (
-    PalaceQuizValidationError,
     QUESTION_TYPE_MULTIPLE_CHOICE,
+    PalaceQuizValidationError,
     json_load,
 )
 from .question_queries import get_question_or_raise
@@ -38,4 +41,40 @@ def record_choice_attempt(
     )
 
 
-__all__ = ["record_choice_attempt"]
+def _normalize_attempt_reset_ids(question_ids: list[int]) -> list[int]:
+    if not isinstance(question_ids, list) or len(question_ids) == 0:
+        raise PalaceQuizValidationError("清空做题进度时至少需要选择一题。")
+    normalized_ids: list[int] = []
+    seen_ids: set[int] = set()
+    for raw_id in question_ids:
+        try:
+            question_id = int(raw_id)
+        except (TypeError, ValueError) as exc:
+            raise PalaceQuizValidationError("清空做题进度的题目 id 不合法。") from exc
+        if question_id <= 0 or question_id in seen_ids:
+            continue
+        seen_ids.add(question_id)
+        normalized_ids.append(question_id)
+    if len(normalized_ids) == 0:
+        raise PalaceQuizValidationError("清空做题进度时至少需要选择一题。")
+    return normalized_ids
+
+
+def reset_question_attempts(session: Session, question_ids: list[int]) -> int:
+    normalized_ids = _normalize_attempt_reset_ids(question_ids)
+    rows = (
+        session.query(PalaceQuizQuestion)
+        .filter(PalaceQuizQuestion.id.in_(normalized_ids))
+        .all()
+    )
+    now = utc_now_naive()
+    for row in rows:
+        row.attempt_count = 0
+        row.correct_count = 0
+        row.incorrect_count = 0
+        row.updated_at = now
+    session.commit()
+    return len(rows)
+
+
+__all__ = ["record_choice_attempt", "reset_question_attempts"]

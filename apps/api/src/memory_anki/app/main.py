@@ -1,3 +1,4 @@
+import re
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -12,6 +13,7 @@ from memory_anki.app.startup_runtime import (
     initialize_service_runtime,
     resolve_startup_mode,
 )
+from memory_anki.app.startup_warmup import start_startup_warmup
 from memory_anki.core.config import ATTACHMENTS_DIR, WEB_DIST_DIR
 from memory_anki.core.migration import (
     is_app_migration_completed,
@@ -31,6 +33,7 @@ from memory_anki.modules.backups.application.backup_service import (
 from memory_anki.modules.dashboard.presentation import router as dashboard_router
 from memory_anki.modules.english.presentation import router as english_router
 from memory_anki.modules.english_reading.presentation import router as english_reading_router
+from memory_anki.modules.freestyle.presentation import router as freestyle_router
 from memory_anki.modules.knowledge.presentation import bilink_router
 from memory_anki.modules.knowledge.presentation import router as knowledge_router
 from memory_anki.modules.palace_quiz.presentation import router as palace_quiz_router
@@ -46,6 +49,10 @@ from memory_anki.modules.time_records.presentation import router as time_records
 from memory_anki.modules.voice_coach import presentation as voice_coach_router
 
 get_session = _get_session
+
+HASHED_WEB_ASSET_PATTERN = re.compile(
+    r"^/assets/.+-[A-Za-z0-9_-]{8,}\.(?:js|css|png|jpg|jpeg|gif|svg|webp|woff2?|ttf)$"
+)
 
 
 class SinglePageAppStaticFiles(StaticFiles):
@@ -79,8 +86,13 @@ def install_web_cache_headers(app: FastAPI) -> None:
     @app.middleware("http")
     async def disable_web_static_cache(request: Request, call_next):
         response = await call_next(request)
-        if not request.url.path.startswith("/api"):
-            response.headers["Cache-Control"] = "no-cache"
+        path = request.url.path
+        if path.startswith("/api"):
+            return response
+        if response.status_code < 400 and HASHED_WEB_ASSET_PATTERN.match(path):
+            response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+            return response
+        response.headers["Cache-Control"] = "no-cache"
         return response
 
 
@@ -95,6 +107,7 @@ async def lifespan(app: FastAPI):
             startup_mode=startup_mode,
         )
         start_periodic_backup_loop()
+        start_startup_warmup()
     try:
         yield
     finally:
@@ -132,6 +145,7 @@ app.include_router(bilink_router.router, prefix="/api/v1")
 app.include_router(time_records_router.router, prefix="/api/v1")
 app.include_router(english_router.router, prefix="/api/v1")
 app.include_router(english_reading_router.router, prefix="/api/v1")
+app.include_router(freestyle_router.router, prefix="/api/v1")
 app.include_router(voice_coach_router.router, prefix="/api/v1")
 app.include_router(dashboard_router.router, prefix="/api/v1")
 

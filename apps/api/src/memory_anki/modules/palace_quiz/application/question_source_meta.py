@@ -28,6 +28,7 @@ def normalize_source_meta(raw_source_meta: Any) -> dict[str, Any]:
         page_numbers=page_numbers,
         image_names=image_names,
     )
+    manual_import = source_meta.get("manual_import")
     return {
         "source_kind": source_kind,
         "subject_document_id": normalized_pdf_meta.primary_subject_document_id,
@@ -42,6 +43,7 @@ def normalize_source_meta(raw_source_meta: Any) -> dict[str, Any]:
         "recovered_from_ai_call_log_id": normalize_optional_string(
             source_meta.get("recovered_from_ai_call_log_id")
         ),
+        "manual_import": manual_import if isinstance(manual_import, dict) else None,
         **normalize_review_source_meta(source_meta),
     }
 

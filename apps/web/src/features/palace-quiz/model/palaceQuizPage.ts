@@ -60,7 +60,7 @@ export interface PalaceQuizGenerationStateSnapshot {
   classificationResult: PalaceQuizMiniPalaceClassificationResult | null
 }
 
-export type QuizGenerationSourceKind = 'subject-pdf' | 'image-single' | 'image-batch'
+export type QuizGenerationSourceKind = 'subject-pdf' | 'image-single' | 'image-batch' | 'text-files'
 
 export const QUIZ_VIEW_MODE_STORAGE_KEY = 'memory_anki_palace_quiz_view_mode'
 

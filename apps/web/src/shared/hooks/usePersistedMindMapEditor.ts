@@ -209,7 +209,7 @@ export function usePersistedMindMapEditor<TResponse, TMeta>({
               ? null
               : isConflictError(nextError)
                 ? nextError.message
-                : `本地已保存，待同步：${nextError.message}`,
+                : `本地已保存，待请求恢复：${nextError.message}`,
           )
         }
       } finally {

@@ -1,5 +1,7 @@
+import asyncio
 import os
 import unittest
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from fastapi import FastAPI
@@ -56,6 +58,74 @@ class StartupModeTests(unittest.TestCase):
         )
         build_runtime_health.assert_called_once()
         build_runtime_info.assert_not_called()
+
+    def test_startup_warmup_runs_as_single_background_daemon(self):
+        from memory_anki.app import startup_warmup
+
+        startup_warmup.reset_startup_warmup_for_test()
+        with patch.object(startup_warmup.threading, "Thread") as thread_cls:
+            thread = thread_cls.return_value
+
+            first = startup_warmup.start_startup_warmup()
+            second = startup_warmup.start_startup_warmup()
+
+        self.assertIs(first, thread)
+        self.assertIsNone(second)
+        thread_cls.assert_called_once()
+        self.assertEqual(thread_cls.call_args.kwargs["name"], "memory-anki-startup-warmup")
+        self.assertTrue(thread_cls.call_args.kwargs["daemon"])
+        thread.start.assert_called_once()
+        startup_warmup.reset_startup_warmup_for_test()
+
+    def test_startup_warmup_swallows_and_logs_errors(self):
+        from memory_anki.app import startup_warmup
+
+        with patch.object(startup_warmup, "run_startup_warmup", side_effect=RuntimeError("boom")), patch.object(
+            startup_warmup.logger,
+            "exception",
+        ) as log_exception:
+            startup_warmup._run_startup_warmup_safely()
+
+        log_exception.assert_called_once_with("startup warmup failed")
+
+    def test_lifespan_does_not_start_warmup_in_healthcheck_mode(self):
+        from memory_anki.app import main as app_main
+
+        async def run_lifespan():
+            with patch.object(app_main, "resolve_startup_mode", return_value="healthcheck"), patch.object(
+                app_main,
+                "initialize_service_runtime",
+                return_value=SimpleNamespace(runtime_info={"channel": "test"}),
+            ), patch.object(app_main, "start_startup_warmup") as start_warmup:
+                async with app_main.lifespan(FastAPI()):
+                    pass
+                start_warmup.assert_not_called()
+
+        asyncio.run(run_lifespan())
+
+    def test_study_startup_indexes_are_declared_on_schedule_tables(self):
+        from memory_anki.infrastructure.db.models import (
+            PalaceMiniPalaceReviewSchedule,
+            PalaceSegmentReviewSchedule,
+            ReviewSchedule,
+        )
+
+        self.assertIn(
+            "ix_review_schedules_due_lookup",
+            {index.name for index in ReviewSchedule.__table__.indexes},
+        )
+        self.assertIn(
+            "ix_review_schedules_palace_progress",
+            {index.name for index in ReviewSchedule.__table__.indexes},
+        )
+        self.assertIn(
+            "ix_segment_review_schedules_due_lookup",
+            {index.name for index in PalaceSegmentReviewSchedule.__table__.indexes},
+        )
+        self.assertIn(
+            "ix_mini_review_schedules_due_lookup",
+            {index.name for index in PalaceMiniPalaceReviewSchedule.__table__.indexes},
+        )
 
 
 if __name__ == "__main__":

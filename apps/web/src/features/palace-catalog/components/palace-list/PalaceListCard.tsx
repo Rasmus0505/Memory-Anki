@@ -38,8 +38,12 @@ interface PalaceListCardProps {
   defaultExpanded?: boolean
   onOpenBatchReview: (palace: PalaceGroupedItem) => void
   onPalacePractice: (palace: PalaceGroupedItem) => void
+  onWarmPalacePractice?: (palace: PalaceGroupedItem) => void
+  onWarmFocusPractice?: (palace: PalaceGroupedItem) => void
   onSegmentPractice: (segment: PalaceSegmentSummary) => void
+  onWarmSegmentPractice?: (segment: PalaceSegmentSummary) => void
   onSegmentReviewAction: (segment: PalaceSegmentSummary) => void
+  onWarmSegmentReviewAction?: (segment: PalaceSegmentSummary) => void
   onOpenStageEdit: (
     palace: PalaceGroupedItem,
     segment: PalaceSegmentSummary,
@@ -47,7 +51,9 @@ interface PalaceListCardProps {
   ) => void
   onMarkSegmentReviewed: (segment: PalaceSegmentSummary) => void
   onMiniPalacePractice: (miniPalace: MiniPalaceSummary) => void
+  onWarmMiniPalacePractice?: (miniPalace: MiniPalaceSummary) => void
   onMiniPalaceReview: (miniPalace: MiniPalaceSummary) => void
+  onWarmMiniPalaceReview?: (miniPalace: MiniPalaceSummary) => void
   onOpenConfig: (palace: PalaceGroupedItem) => void
   onDelete: (id: number, title: string) => void
 }
@@ -58,12 +64,14 @@ function ReviewActionButton({
   disabled,
   progress,
   onClick,
+  onWarm,
 }: {
   label: string
   className: string
   disabled: boolean
   progress?: number | null
   onClick: () => void
+  onWarm?: () => void
 }) {
   const normalizedProgress =
     typeof progress === 'number' && Number.isFinite(progress)
@@ -82,6 +90,8 @@ function ReviewActionButton({
       className={cn('relative isolate overflow-hidden', className)}
       disabled={disabled}
       onClick={onClick}
+      onFocus={onWarm}
+      onMouseEnter={onWarm}
     >
       {showProgressFill ? (
         <span
@@ -104,12 +114,18 @@ export function PalaceListCard({
   defaultExpanded = false,
   onOpenBatchReview,
   onPalacePractice,
+  onWarmPalacePractice = () => {},
+  onWarmFocusPractice = () => {},
   onSegmentPractice,
+  onWarmSegmentPractice = () => {},
   onSegmentReviewAction,
+  onWarmSegmentReviewAction = () => {},
   onOpenStageEdit,
   onMarkSegmentReviewed,
   onMiniPalacePractice,
+  onWarmMiniPalacePractice = () => {},
   onMiniPalaceReview,
+  onWarmMiniPalaceReview = () => {},
   onOpenConfig,
   onDelete,
 }: PalaceListCardProps) {
@@ -197,6 +213,11 @@ export function PalaceListCard({
                       segmentReviewLoadingId === singleSegment.id
                     }
                     progress={singleSegment.active_review_progress}
+                    onWarm={() =>
+                      singleSegmentState === 'practice'
+                        ? onWarmPalacePractice(palace)
+                        : onWarmSegmentReviewAction(singleSegment)
+                    }
                     onClick={() =>
                       singleSegmentState === 'practice'
                         ? onPalacePractice(palace)
@@ -316,6 +337,11 @@ export function PalaceListCard({
                             })}
                             disabled={segmentReviewDisabled}
                             progress={segment.active_review_progress}
+                            onWarm={() =>
+                              segmentReviewState === 'practice'
+                                ? onWarmSegmentPractice(segment)
+                                : onWarmSegmentReviewAction(segment)
+                            }
                             onClick={() =>
                               segmentReviewState === 'practice'
                                 ? onSegmentPractice(segment)
@@ -472,6 +498,11 @@ export function PalaceListCard({
                             })}
                             disabled={miniReviewDisabled}
                             progress={mini.active_review_progress}
+                            onWarm={() =>
+                              miniState === 'practice'
+                                ? onWarmMiniPalacePractice(mini)
+                                : onWarmMiniPalaceReview(mini)
+                            }
                             onClick={() =>
                               miniState === 'practice'
                                 ? onMiniPalacePractice(mini)
@@ -523,6 +554,8 @@ export function PalaceListCard({
                 variant="outline"
                 size="sm"
 	              className="h-8 border-warning/30 bg-warning/5 text-warning hover:bg-warning/10"
+                onFocus={() => onWarmFocusPractice(palace)}
+                onMouseEnter={() => onWarmFocusPractice(palace)}
               >
                 专项练习
               </Button>

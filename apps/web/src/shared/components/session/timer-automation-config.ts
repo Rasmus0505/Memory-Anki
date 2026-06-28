@@ -6,7 +6,7 @@ import {
   saveClientPreference,
 } from '@/shared/preferences/clientPreferences'
 
-export type TimerAutomationScene = SessionKind | 'english' | 'english_reading'
+export type TimerAutomationScene = SessionKind | 'freestyle' | 'english' | 'english_reading'
 export type TimerAutomationMode = 'scene' | 'global'
 
 export interface TimerAutomationRule {
@@ -31,6 +31,7 @@ export interface TimerAutomationConfig {
   practice: TimerAutomationRule
   quiz: TimerAutomationRule
   review: TimerAutomationRule
+  freestyle: TimerAutomationRule
   english: TimerAutomationRule
   english_reading: TimerAutomationRule
 }
@@ -78,6 +79,12 @@ export const DEFAULT_TIMER_AUTOMATION_CONFIG: TimerAutomationConfig = {
   },
   review: {
     autoStartOnPageEnter: false,
+    inactiveAutoPauseSeconds: 120,
+    hiddenAutoPauseSeconds: 15,
+    autoPauseRollbackSeconds: 60,
+  },
+  freestyle: {
+    autoStartOnPageEnter: true,
     inactiveAutoPauseSeconds: 120,
     hiddenAutoPauseSeconds: 15,
     autoPauseRollbackSeconds: 60,
@@ -181,6 +188,12 @@ export function sanitizeTimerAutomationConfig(value: unknown): TimerAutomationCo
     practice,
     quiz,
     review: sanitizeRule(raw.review, DEFAULT_TIMER_AUTOMATION_CONFIG.review, legacyAutoStartOnPageEnter),
+    freestyle:
+      raw.freestyle === undefined
+        ? {
+            ...quiz,
+          }
+        : sanitizeRule(raw.freestyle, DEFAULT_TIMER_AUTOMATION_CONFIG.freestyle, legacyAutoStartOnPageEnter),
     english:
       raw.english === undefined
         ? {
@@ -297,6 +310,7 @@ export const TIMER_AUTOMATION_SCENE_LABELS: Record<TimerAutomationScene, string>
   practice: '练习',
   quiz: '做题',
   review: '复习',
+  freestyle: '随心模式',
   english: '英语听力',
   english_reading: '英语阅读',
 }

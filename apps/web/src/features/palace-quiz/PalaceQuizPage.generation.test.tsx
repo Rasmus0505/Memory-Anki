@@ -10,6 +10,7 @@ import {
   palaceResponse,
   pdfControllerMock,
   previewPalaceQuizGenerationFromPdfStreamApiMock,
+  previewPalaceQuizGenerationFromTextFilesApiMock,
   recoverAndSavePalaceQuizGenerationFromAiLogApiMock,
   refreshSubjectDocumentsMock,
   renderPage,
@@ -113,6 +114,84 @@ describe('PalaceQuizPage generation flows', () => {
             classified_chapter_id: null,
           }),
         ]),
+        'append',
+      )
+    })
+  })
+
+  it('sends overwrite mode when saving a generated preview with coverage selected', async () => {
+    previewPalaceQuizGenerationFromPdfStreamApiMock.mockResolvedValueOnce({
+      palace_id: 1,
+      questions: [
+        {
+          question_type: 'multiple_choice',
+          stem: '覆盖保存题目',
+          options: [
+            { id: 'A', text: '选项A' },
+            { id: 'B', text: '选项B' },
+          ],
+          answer_payload: { correct_option_id: 'A' },
+          analysis: '解析',
+          source_meta: {
+            source_kind: 'subject_pdf',
+            subject_document_id: 9,
+            page_numbers: [3],
+            image_names: ['page-3.png'],
+            extra_prompt: '',
+            ai_call_log_id: null,
+            generated_at: '2026-06-15T00:00:00',
+            generation_mode: 'subject_pdf',
+          },
+        },
+      ],
+      source_meta: {
+        source_kind: 'subject_pdf',
+        subject_document_id: 9,
+        page_numbers: [3],
+        image_names: ['page-3.png'],
+        extra_prompt: '',
+        ai_call_log_id: null,
+        generated_at: '2026-06-15T00:00:00',
+        generation_mode: 'subject_pdf',
+      },
+      ai_call_log_id: null,
+      grouped_questions: null,
+    })
+
+    renderPage()
+    fireEvent.click(await screen.findByRole('button', { name: 'AI生成' }))
+    fireEvent.change(screen.getByPlaceholderText('例如：3,4,8-10'), { target: { value: '3' } })
+    fireEvent.click(screen.getByRole('button', { name: '加入本次资料集' }))
+    fireEvent.click(screen.getByRole('button', { name: '生成预览' }))
+    fireEvent.click(await screen.findByRole('button', { name: '覆盖当前范围' }))
+    fireEvent.click(screen.getByRole('button', { name: '保存到题库' }))
+
+    await waitFor(() => {
+      expect(batchCreateChapterQuizQuestionsApiMock).toHaveBeenCalledWith(
+        1,
+        expect.arrayContaining([expect.objectContaining({ stem: '覆盖保存题目' })]),
+        'overwrite',
+      )
+    })
+  })
+
+  it('passes overwrite mode through the pdf recover-and-save path', async () => {
+    renderPage()
+    fireEvent.click(await screen.findByRole('button', { name: 'AI生成' }))
+    fireEvent.change(screen.getByPlaceholderText('例如：3,4,8-10'), { target: { value: '3' } })
+    fireEvent.click(screen.getByRole('button', { name: '加入本次资料集' }))
+    fireEvent.click(screen.getByRole('button', { name: '生成预览' }))
+    fireEvent.click(await screen.findByRole('button', { name: '覆盖当前范围' }))
+    fireEvent.click(screen.getByRole('button', { name: '保存到题库' }))
+
+    await waitFor(() => {
+      expect(recoverAndSavePalaceQuizGenerationFromAiLogApiMock).toHaveBeenCalledWith(
+        1,
+        expect.objectContaining({
+          ai_call_log_id: 'log-preview',
+          selected_chapter_id: 1,
+          save_mode: 'overwrite',
+        }),
       )
     })
   })
@@ -269,5 +348,34 @@ describe('PalaceQuizPage generation flows', () => {
     })
     expect(getSubjectsApiMock).toHaveBeenCalled()
     expect(getSubjectTreeApiMock).toHaveBeenCalled()
+  })
+
+  it('supports text file manual import from the generation panel', async () => {
+    renderPage()
+    fireEvent.click(await screen.findByRole('button', { name: 'AI生成' }))
+    fireEvent.click(screen.getByRole('button', { name: '文本/手动导入' }))
+
+    expect(await screen.findByText('文本文件导入说明')).toBeTruthy()
+    expect(screen.getByText('给 AI 的格式修正提示词')).toBeTruthy()
+
+    const fileInput = document.querySelector(
+      'input[accept*=".txt"]',
+    ) as HTMLInputElement | null
+    const questionFile = new File(['单项选择题'], 'bio_questions.txt', { type: 'text/plain' })
+    const answerFile = new File(['1.【答案】A'], 'bio_answers.txt', { type: 'text/plain' })
+    fireEvent.change(fileInput!, { target: { files: [questionFile, answerFile] } })
+    fireEvent.click(screen.getByRole('button', { name: '生成预览' }))
+
+    await waitFor(() => {
+      expect(previewPalaceQuizGenerationFromTextFilesApiMock).toHaveBeenCalledWith(
+        1,
+        [questionFile, answerFile],
+        '',
+        false,
+        1,
+        {},
+      )
+    })
+    expect(await screen.findByText('简述细胞核的作用。')).toBeTruthy()
   })
 })

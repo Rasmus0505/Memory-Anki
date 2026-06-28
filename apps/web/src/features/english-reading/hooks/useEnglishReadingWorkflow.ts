@@ -7,6 +7,7 @@ import type {
 } from "react";
 import type { SetURLSearchParams } from "react-router-dom";
 import { toast } from "@/shared/feedback/toast";
+import { appConfirm, appPrompt } from "@/shared/components/ui/native-dialog";
 import {
   createEnglishReadingMaterialApi,
   deleteEnglishReadingMaterialApi,
@@ -596,7 +597,10 @@ export function useEnglishReadingWorkflow({
   const handleRenameRecentMaterial = useCallback(
     async (item: ReadingMaterial) => {
       if (renamingMaterialId || deletingMaterialId) return;
-      const nextTitle = window.prompt("Edit title", item.title)?.trim();
+      const nextTitle = (await appPrompt("Edit title", {
+        title: "重命名阅读材料",
+        defaultValue: item.title,
+      }))?.trim();
       if (!nextTitle || nextTitle === item.title) return;
       setRenamingMaterialId(item.id);
       try {
@@ -624,8 +628,9 @@ export function useEnglishReadingWorkflow({
   const handleDeleteRecentMaterial = useCallback(
     async (item: ReadingMaterial) => {
       if (deletingMaterialId || renamingMaterialId) return;
-      const confirmed = window.confirm(
+      const confirmed = await appConfirm(
         `Delete "${item.title}" from reading history?`,
+        { title: "删除阅读历史", tone: "danger" },
       );
       if (!confirmed) return;
       setDeletingMaterialId(item.id);

@@ -21,6 +21,7 @@ import {
   MindMapReviewFlow,
   type ReviewFlowSnapshot,
 } from '@/features/review/components/MindMapReviewFlow'
+import { consumePrefetchedStudySession } from '@/features/review/studyWarmup'
 
 export default function SegmentPracticePage() {
   const { id } = useParams()
@@ -50,7 +51,13 @@ export default function SegmentPracticePage() {
       setLoading(true)
       setError('')
       try {
-        const payload = await getPalaceSegmentApi(segmentId)
+        const { session: payload, progress: progressResponse } =
+          await consumePrefetchedStudySession('segment-practice', segmentId, () =>
+            Promise.all([
+              getPalaceSegmentApi(segmentId),
+              getSegmentPracticeSessionProgressApi(segmentId),
+            ]).then(([session, progress]) => ({ session, progress })),
+          )
         setSegment(payload.item)
         setTitle(`${payload.palace.title} / ${payload.item.name}`)
         setEditorState({
@@ -59,7 +66,6 @@ export default function SegmentPracticePage() {
           editor_local_config: {},
           lang: 'zh',
         })
-        const progressResponse = await getSegmentPracticeSessionProgressApi(segmentId)
         const progress = progressResponse.progress
         setHasResumeProgress(Boolean(progress && !progress.completed))
         setInitialSnapshot(

@@ -11,7 +11,7 @@ apps/
   shared/   cross-app static resources, such as the CEFR word list
 tools/      startup, backup, and architecture-check scripts
 docs/       architecture docs; docs/architecture/README.md is authoritative
-data/       legacy placeholder; runtime data lives in MEMORY_ANKI_HOME
+data/       legacy placeholder; runtime data lives in the local app home
 ```
 
 Backend modules follow `src/memory_anki/modules/*/{domain,application,infrastructure,presentation}`. Frontend code follows `src/{app,features,entities,shared}`. See [docs/architecture/README.md](docs/architecture/README.md) before changing module boundaries.
@@ -71,20 +71,9 @@ On Windows:
 
 This runs `tools/start_supervisor.py`, rebuilds the current workspace frontend, stops any old process on `127.0.0.1:8012`, and starts the backend from the current repo so the served site matches the checked-out code.
 
-Runtime data, attachments, backups, and logs live under `%LOCALAPPDATA%\MemoryAnki` by default. Override that with `MEMORY_ANKI_HOME` when you need a custom runtime home.
+Runtime data, attachments, backups, and logs live under `%LOCALAPPDATA%\MemoryAnki` by default. Override that with `MEMORY_ANKI_HOME` only when you intentionally move the local runtime home on this PC.
 
-For multiple worktrees sharing one runtime home:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\tools\configure-shared-home.ps1 -Path D:\MemoryAnki-runtime
-```
-
-Shared-runtime rules:
-
-- Share the whole runtime home, not only the SQLite file.
-- Normal lightweight read/write usage can happen from two versions at once.
-- Database restore requires exclusive access to the shared runtime home.
-- Prefer additive schema migrations so short-lived stable worktrees can keep using the shared data.
+This is a single-machine app. Prefer one running Memory Anki instance at a time; database restore and other maintenance tasks require exclusive access to the local runtime data.
 
 ## Testing And Checks
 

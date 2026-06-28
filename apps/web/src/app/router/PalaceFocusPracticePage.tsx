@@ -29,6 +29,7 @@ import {
 } from '@/entities/palace-segment/api'
 import { submitReviewSessionApi } from '@/features/review/api/reviewApi'
 import { StageSelectDialog } from '@/features/review/components/StageSelectDialog'
+import { consumePrefetchedStudySession } from '@/features/review/studyWarmup'
 
 export default function PalaceFocusPracticePage() {
   const { id } = useParams()
@@ -57,10 +58,13 @@ export default function PalaceFocusPracticePage() {
       setLoading(true)
       setError('')
       try {
-        const [focusSession, progressResponse] = await Promise.all([
-          getPalaceFocusSessionApi(palaceId),
-          getFocusPracticeSessionProgressApi(palaceId),
-        ])
+        const { session: focusSession, progress: progressResponse } =
+          await consumePrefetchedStudySession('focus-practice', palaceId, () =>
+            Promise.all([
+              getPalaceFocusSessionApi(palaceId),
+              getFocusPracticeSessionProgressApi(palaceId),
+            ]).then(([session, progress]) => ({ session, progress })),
+          )
         setPalace(focusSession.palace)
         setEditorState({
           editor_doc: focusSession.editor_doc,

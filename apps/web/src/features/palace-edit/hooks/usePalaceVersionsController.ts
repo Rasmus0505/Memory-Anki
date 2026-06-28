@@ -6,6 +6,7 @@ import {
 } from '@/entities/palace/api'
 import type { PalaceVersionDetail, PalaceVersionSummary } from '@/shared/api/contracts'
 import type { PalaceMeta, StatusBadgeState } from '@/features/palace-edit/model/palace-edit-types'
+import { appConfirm } from '@/shared/components/ui/native-dialog'
 
 interface PalaceVersionsControllerOptions {
   palaceId: number | null
@@ -77,8 +78,9 @@ export function usePalaceVersionsController({
 
   const handleRestoreVersion = async (versionId: number) => {
     if (!palace) return
-    const confirmed = window.confirm(
+    const confirmed = await appConfirm(
       '恢复历史版本只会回滚当前宫殿内容，不会影响其他宫殿和复习记录。确定继续吗？',
+      { title: '恢复历史版本', tone: 'danger' },
     )
     if (!confirmed) return
     await restorePalaceVersionApi(palace.id, versionId)

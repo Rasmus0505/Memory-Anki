@@ -199,7 +199,7 @@ def _assert_expected_fingerprint(
     allow_stale_overwrite: bool,
 ) -> None:
     if expected_fingerprint and not allow_stale_overwrite and current_fingerprint != expected_fingerprint:
-        raise EditorStateConflictError("脑图保存冲突：服务端已有更新，本地待同步内容已保留，请确认后再覆盖。")
+        raise EditorStateConflictError("脑图保存冲突：服务端已有更新，本机待处理内容已保留，请确认后再覆盖。")
 
 
 def _resolve_local_config(stored_local_config: Any, local_input: Any, lang_input: Any) -> dict[str, Any]:

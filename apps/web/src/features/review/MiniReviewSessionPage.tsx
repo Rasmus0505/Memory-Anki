@@ -1,6 +1,5 @@
 ﻿import type {
   MiniPalaceSummary,
-  MindMapEditorState,
 } from '@/shared/api/contracts'
 import {
   clearMiniReviewSessionProgressApi,
@@ -71,6 +70,7 @@ export default function MiniReviewSessionPage() {
       clearProgress={clearMiniReviewSessionProgressApi}
       submitSession={submitMiniReviewSessionApi}
       backHref={buildReviewOverviewPath}
+      warmupKind="mini-review-session"
     />
   )
 }

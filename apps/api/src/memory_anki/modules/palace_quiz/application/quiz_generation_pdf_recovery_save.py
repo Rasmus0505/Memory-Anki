@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from sqlalchemy.orm import Session
 
 from memory_anki.modules.settings.application.ai_model_registry import AiRuntimeOptions
 
+from .question_contracts import PalaceQuizValidationError
+from .question_creation_commands import batch_create_chapter_questions
 from .quiz_generation_pdf_recovery_grouping import build_pdf_recovery_grouping_result
 from .quiz_generation_pdf_recovery_projection import (
     build_pdf_recovery_save_result,
@@ -13,8 +17,6 @@ from .quiz_generation_pdf_recovery_projection import (
 )
 from .quiz_generation_pdf_recovery_runtime import build_pdf_recovery_draft_state
 from .quiz_generation_pdf_recovery_support import load_pdf_recovery_context
-from .question_contracts import PalaceQuizValidationError
-from .question_creation_commands import batch_create_chapter_questions
 
 
 def recover_quiz_questions_from_ai_call_log_and_save(
@@ -24,6 +26,7 @@ def recover_quiz_questions_from_ai_call_log_and_save(
     ai_call_log_id: str,
     selected_chapter_id: int,
     classify_by_mini_palace: bool = False,
+    save_mode: str = "append",
     ai_options: AiRuntimeOptions | None = None,
 ) -> dict[str, Any]:
     if selected_chapter_id <= 0:
@@ -55,6 +58,7 @@ def recover_quiz_questions_from_ai_call_log_and_save(
         session,
         context.selected_chapter.id,
         questions_to_save,
+        save_mode=save_mode,
     )
     return build_pdf_recovery_save_result(
         items=items,

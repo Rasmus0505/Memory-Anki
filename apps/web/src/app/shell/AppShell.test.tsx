@@ -8,12 +8,21 @@ import {
   getBackgroundTasks,
   registerTask,
 } from '@/shared/background-tasks/backgroundTaskRegistry'
-import { enqueueMutation, resetMutationQueueForTest } from '@/shared/persistence/mutationQueue'
 
 const getRuntimeInfoApi = vi.fn()
 const prefetchPalaceSubjectShelfApi = vi.fn()
 const prefetchPalacesGroupedSummaryApi = vi.fn()
 const prefetchDashboardApi = vi.fn()
+const prefetchReviewQueueApi = vi.fn()
+const prefetchSegmentReviewQueueApi = vi.fn()
+const preloadPracticeRoutes = vi.fn()
+const preloadReviewRoutes = vi.fn()
+const preloadEnglishWorkspacePage = vi.fn()
+const preloadEnglishReadingPage = vi.fn()
+const preloadFreestylePage = vi.fn()
+const preloadKnowledgePage = vi.fn()
+const preloadPalaceEditPage = vi.fn()
+const preloadProfilePage = vi.fn()
 
 vi.mock('@/entities/runtime/api/runtimeApi', () => ({
   getRuntimeInfoApi: () => getRuntimeInfoApi(),
@@ -28,19 +37,43 @@ vi.mock('@/features/dashboard/api/dashboardApi', () => ({
   prefetchDashboardApi: () => prefetchDashboardApi(),
 }))
 
+vi.mock('@/features/review/api/reviewApi', () => ({
+  prefetchReviewQueueApi: () => prefetchReviewQueueApi(),
+  prefetchSegmentReviewQueueApi: () => prefetchSegmentReviewQueueApi(),
+}))
+
+vi.mock('@/app/router/appRoutes', () => ({
+  preloadPracticeRoutes: () => preloadPracticeRoutes(),
+  preloadReviewRoutes: () => preloadReviewRoutes(),
+  preloadEnglishWorkspacePage: () => preloadEnglishWorkspacePage(),
+  preloadEnglishReadingPage: () => preloadEnglishReadingPage(),
+  preloadFreestylePage: () => preloadFreestylePage(),
+  preloadKnowledgePage: () => preloadKnowledgePage(),
+  preloadPalaceEditPage: () => preloadPalaceEditPage(),
+  preloadProfilePage: () => preloadProfilePage(),
+}))
+
 describe('AppShell', () => {
   beforeEach(async () => {
-    await resetMutationQueueForTest()
     __resetBackgroundTaskStoreForTest()
     getRuntimeInfoApi.mockReset()
     prefetchPalaceSubjectShelfApi.mockClear()
     prefetchPalacesGroupedSummaryApi.mockClear()
     prefetchDashboardApi.mockClear()
+    prefetchReviewQueueApi.mockClear()
+    prefetchSegmentReviewQueueApi.mockClear()
+    preloadPracticeRoutes.mockClear()
+    preloadReviewRoutes.mockClear()
+    preloadEnglishWorkspacePage.mockClear()
+    preloadEnglishReadingPage.mockClear()
+    preloadFreestylePage.mockClear()
+    preloadKnowledgePage.mockClear()
+    preloadPalaceEditPage.mockClear()
+    preloadProfilePage.mockClear()
     resetNavSectionHistoryForTest()
   })
 
   afterEach(async () => {
-    await resetMutationQueueForTest()
     __resetBackgroundTaskStoreForTest()
     resetNavSectionHistoryForTest()
     vi.restoreAllMocks()
@@ -102,42 +135,6 @@ describe('AppShell', () => {
     expect(await screen.findByText('调用与错误日志')).toBeTruthy()
   })
 
-  it('opens the mutation queue drawer from shell actions', async () => {
-    getRuntimeInfoApi.mockResolvedValue({
-      channel: 'dev',
-      commit: 'abcdef1234567890',
-      short_commit: 'abcdef12',
-      runtime_generation: 1,
-      declared_runtime_generation: 1,
-      min_supported_generation: 1,
-      max_supported_generation: 1,
-      last_started_at: '2026-06-01T12:00:00+08:00',
-    })
-    await enqueueMutation({
-      resourceKey: 'time-record:record-1',
-      description: '保存学习时长',
-      url: '/api/v1/time-records',
-      method: 'POST',
-      bodyKind: 'json',
-      body: JSON.stringify({ id: 'record-1' }),
-      replayMode: 'auto',
-    })
-
-    render(
-      <MemoryRouter>
-        <AppShell>
-          <div>content</div>
-        </AppShell>
-      </MemoryRouter>,
-    )
-
-    const buttons = await screen.findAllByLabelText('打开数据同步侧边栏')
-    fireEvent.click(buttons[0]!)
-
-    expect(await screen.findByText('1 项待同步')).toBeTruthy()
-    expect(screen.getByText('保存学习时长')).toBeTruthy()
-  })
-
   it('keeps only the reading nav item active on the english reading route', async () => {
     getRuntimeInfoApi.mockResolvedValue({
       channel: 'stable',
@@ -165,6 +162,41 @@ describe('AppShell', () => {
 
     expect(readingLink.className).toContain('bg-primary')
     expect(englishLink.className).not.toContain('bg-primary')
+  })
+
+  it('places freestyle second in the main navigation and keeps it active on its route', async () => {
+    getRuntimeInfoApi.mockResolvedValue({
+      channel: 'stable',
+      commit: 'abcdef1234567890',
+      short_commit: 'abcdef12',
+      runtime_generation: 1,
+      declared_runtime_generation: 1,
+      min_supported_generation: 1,
+      max_supported_generation: 1,
+      last_started_at: '2026-06-01T12:00:00+08:00',
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/freestyle']}>
+        <AppShell>
+          <div>content</div>
+        </AppShell>
+      </MemoryRouter>,
+    )
+
+    await screen.findAllByText(/Stable abcdef12/)
+    const navLabels = screen
+      .getAllByRole('link')
+      .map((link) => link.textContent?.trim() || '')
+      .filter((label) => ['仪表盘', '随心模式', '记忆宫殿'].includes(label))
+
+    expect(navLabels.slice(0, 3)).toEqual(['仪表盘', '随心模式', '记忆宫殿'])
+    const freestyleLink = screen.getAllByRole('link', { name: '随心模式' })[0]
+    expect(freestyleLink.className).toContain('bg-primary')
+
+    preloadFreestylePage.mockClear()
+    fireEvent.mouseEnter(freestyleLink)
+    expect(preloadFreestylePage).toHaveBeenCalled()
   })
 
   it('keeps palace navigation active on a palace quiz route', async () => {
@@ -220,9 +252,10 @@ describe('AppShell', () => {
 
     expect(prefetchPalaceSubjectShelfApi.mock.calls.length).toBe(beforeHoverCalls + 1)
     expect(prefetchPalacesGroupedSummaryApi.mock.calls.length).toBeGreaterThanOrEqual(1)
+    expect(preloadPracticeRoutes).toHaveBeenCalled()
   })
 
-  it('warms core palace routes on startup and dashboard on the home page', async () => {
+  it('warms core study routes, queues, and dashboard on startup', async () => {
     getRuntimeInfoApi.mockResolvedValue({
       channel: 'stable',
       commit: 'abcdef1234567890',
@@ -247,6 +280,11 @@ describe('AppShell', () => {
       expect(prefetchPalaceSubjectShelfApi).toHaveBeenCalledTimes(1)
       expect(prefetchPalacesGroupedSummaryApi).toHaveBeenCalledTimes(1)
       expect(prefetchDashboardApi).toHaveBeenCalledTimes(1)
+      expect(prefetchReviewQueueApi).toHaveBeenCalledTimes(1)
+      expect(prefetchSegmentReviewQueueApi).toHaveBeenCalledTimes(1)
+      expect(preloadPracticeRoutes).toHaveBeenCalledTimes(1)
+      expect(preloadReviewRoutes).toHaveBeenCalledTimes(1)
+      expect(preloadFreestylePage).toHaveBeenCalledTimes(1)
     })
   })
 

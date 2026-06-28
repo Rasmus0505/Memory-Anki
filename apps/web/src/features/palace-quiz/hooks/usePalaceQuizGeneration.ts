@@ -81,6 +81,7 @@ export function usePalaceQuizGeneration({
   const [generationStreamPreviewText, setGenerationStreamPreviewText] = useState('')
   const [generationClassifyByMiniPalace, setGenerationClassifyByMiniPalace] = useState(false)
   const [generationEnableSecondaryReview, setGenerationEnableSecondaryReview] = useState(false)
+  const [generationSaveMode, setGenerationSaveMode] = useState<'append' | 'overwrite'>('append')
   const [generationHistory, setGenerationHistory] = useState<QuizGenerationHistoryItem[]>([])
   const [historyRegeneratingId, setHistoryRegeneratingId] = useState<string | null>(null)
   const [classificationLoading, setClassificationLoading] = useState(false)
@@ -185,7 +186,7 @@ export function usePalaceQuizGeneration({
 
     if (item.sourceKind !== 'subject-pdf') {
       setGenerationFiles([])
-      toast.message('历史配置已载入，图片需要重新上传后才能再次生成。')
+      toast.message('历史配置已载入，源文件需要重新上传后才能再次生成。')
       return
     }
     toast.success('历史配置已载入左侧。')
@@ -262,6 +263,12 @@ export function usePalaceQuizGeneration({
             title: 'PDF 做题生成配置',
           })) || undefined
         }
+      } else if (config.sourceKind === 'text-files') {
+        aiOptions = (await promptForAiOptions({
+          scenarioKey: 'quiz_text_generation',
+          entrypointKey: 'quiz-generate-text-files',
+          title: '文本做题导入配置',
+        })) || undefined
       } else {
         aiOptions = (await promptForAiOptions({
           scenarioKey: 'quiz_image_generation',
@@ -322,7 +329,10 @@ export function usePalaceQuizGeneration({
         )
         if (history) setGenerationHistory(history)
       } else {
-        emitQuizFeedback('quiz_generate_preview_ready', { label: '图片预览', audioScope: 'global' })
+        emitQuizFeedback('quiz_generate_preview_ready', {
+          label: config.sourceKind === 'text-files' ? '文本预览' : '图片预览',
+          audioScope: 'global',
+        })
         const history = persistQuizGenerationHistory(
           palaceId,
           preview,
@@ -403,6 +413,7 @@ export function usePalaceQuizGeneration({
           ai_call_log_id: aiCallLogId,
           selected_chapter_id: selectedChapterId,
           classify_by_mini_palace: Boolean(generationPreview.grouped_questions),
+          save_mode: generationSaveMode,
         })
         toast.success(`题目已保存到题库，本次写入 ${result.saved_count} 题。`)
       } else {
@@ -410,7 +421,11 @@ export function usePalaceQuizGeneration({
           generationPreview,
           selectedChapterId,
         )
-        await batchCreateChapterQuizQuestionsApi(selectedChapterId, questionsToSave)
+        await batchCreateChapterQuizQuestionsApi(
+          selectedChapterId,
+          questionsToSave,
+          generationSaveMode,
+        )
         toast.success('题目已保存到题库')
       }
       emitQuizFeedback('quiz_generate_save', { label: '已入题库', audioScope: 'global' })
@@ -481,6 +496,8 @@ export function usePalaceQuizGeneration({
     setGenerationClassifyByMiniPalace,
     generationEnableSecondaryReview,
     setGenerationEnableSecondaryReview,
+    generationSaveMode,
+    setGenerationSaveMode,
     generationHistory,
     historyRegeneratingId,
     classificationLoading,

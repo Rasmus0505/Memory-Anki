@@ -26,6 +26,7 @@ import {
   registerTask,
   updateTask,
 } from '@/shared/background-tasks/backgroundTaskRegistry'
+import { appConfirm } from '@/shared/components/ui/native-dialog'
 
 interface UseImportJobRuntimeOptions {
   entityKey: string | null
@@ -284,8 +285,9 @@ export function useImportJobRuntime({
   }
 
   const handleImportDeleteHistory = async (id: string) => {
-    const confirmed = window.confirm(
+    const confirmed = await appConfirm(
       '删除这条导入历史后，将不能从历史中恢复这份草案。确定删除吗？',
+      { title: '删除导入历史', tone: 'danger' },
     )
     if (!confirmed) return
     try {

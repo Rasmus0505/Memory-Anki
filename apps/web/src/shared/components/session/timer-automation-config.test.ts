@@ -59,6 +59,12 @@ describe('timer automation config', () => {
         hiddenAutoPauseSeconds: 18,
         autoPauseRollbackSeconds: -100,
       },
+      freestyle: {
+        autoStartOnPageEnter: true,
+        inactiveAutoPauseSeconds: 9,
+        hiddenAutoPauseSeconds: 11,
+        autoPauseRollbackSeconds: 5,
+      },
       english: {
         autoStartOnPageEnter: 'bad' as unknown as boolean,
         inactiveAutoPauseSeconds: 10,
@@ -109,6 +115,7 @@ describe('timer automation config', () => {
     expect(config.quiz.hiddenAutoPauseSeconds).toBe(config.practice.hiddenAutoPauseSeconds)
     expect(config.quiz.autoPauseRollbackSeconds).toBe(config.practice.autoPauseRollbackSeconds)
     expect(config.quiz.autoStartOnPageEnter).toBe(true)
+    expect(config.freestyle).toEqual(config.quiz)
     expect(config.english.inactiveAutoPauseSeconds).toBe(9)
     expect(config.english.hiddenAutoPauseSeconds).toBe(config.practice.hiddenAutoPauseSeconds)
     expect(config.english.autoPauseRollbackSeconds).toBe(config.practice.autoPauseRollbackSeconds)
@@ -148,6 +155,7 @@ describe('timer automation config', () => {
     expect(shouldAutoStartOnPageEnter(DEFAULT_TIMER_AUTOMATION_CONFIG, 'english')).toBe(true)
     expect(shouldAutoStartOnPageEnter(DEFAULT_TIMER_AUTOMATION_CONFIG, 'english_reading')).toBe(true)
     expect(shouldAutoStartOnPageEnter(DEFAULT_TIMER_AUTOMATION_CONFIG, 'quiz')).toBe(true)
+    expect(shouldAutoStartOnPageEnter(DEFAULT_TIMER_AUTOMATION_CONFIG, 'freestyle')).toBe(true)
     expect(shouldAutoStartOnPageEnter(DEFAULT_TIMER_AUTOMATION_CONFIG, 'palace_edit')).toBe(false)
   })
 

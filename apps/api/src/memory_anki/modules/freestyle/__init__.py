@@ -1,0 +1,2 @@
+"""Freestyle study feed module."""
+

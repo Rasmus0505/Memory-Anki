@@ -11,7 +11,8 @@
     "preview": "vite preview",
     "test": "vitest run",
     "typecheck": "tsc -b --noEmit",
-    "openapi:types": "openapi-typescript http://127.0.0.1:8012/openapi.json -o src/shared/api/generated.ts"
+    "openapi:types": "openapi-typescript http://127.0.0.1:8012/openapi.json -o src/shared/api/generated.ts",
+    "desktop:timer": "electron electron/main.cjs"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.16",
@@ -48,6 +49,7 @@
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.1",
+    "electron": "^39.2.7",
     "eslint": "^10.2.1",
     "eslint-plugin-boundaries": "^5.0.1",
     "eslint-plugin-react-hooks": "^7.1.1",

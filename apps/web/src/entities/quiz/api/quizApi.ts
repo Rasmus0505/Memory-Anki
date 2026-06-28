@@ -141,12 +141,13 @@ export function batchCreatePalaceQuizQuestionsApi(
 export function batchCreateChapterQuizQuestionsApi(
   chapterId: number,
   questions: PalaceQuizQuestionDraft[],
+  saveMode: 'append' | 'overwrite' = 'append',
 ) {
   return request<{ items: PalaceQuizQuestion[] }>(`/chapters/${chapterId}/quiz-questions/batch`, {
     method: 'POST',
-    body: JSON.stringify({ questions }),
+    body: JSON.stringify({ questions, save_mode: saveMode }),
     persistence: {
-      resourceKey: `chapter:${chapterId}:quiz-question:batch-create`,
+      resourceKey: `chapter:${chapterId}:quiz-question:batch-create:${saveMode}`,
       description: '批量保存章节题目',
       replayMode: 'manual',
     },
@@ -187,6 +188,18 @@ export function batchDeletePalaceQuizQuestionsApi(questionIds: number[]) {
     persistence: {
       resourceKey: `palace-quiz-question:batch-delete:${questionIds.join(',')}`,
       description: '批量删除宫殿题目',
+      replayMode: 'manual',
+    },
+  })
+}
+
+export function resetPalaceQuizQuestionAttemptsApi(questionIds: number[]) {
+  return request<{ ok: boolean; reset_count: number }>(`/palace-quiz-questions/reset-attempts`, {
+    method: 'POST',
+    body: JSON.stringify({ question_ids: questionIds }),
+    persistence: {
+      resourceKey: `palace-quiz-question:reset-attempts:${questionIds.join(',')}`,
+      description: '清空做题进度',
       replayMode: 'manual',
     },
   })

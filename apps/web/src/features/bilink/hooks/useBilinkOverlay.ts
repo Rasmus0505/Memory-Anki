@@ -17,6 +17,7 @@ import {
   normalizePreviewEditorDoc,
 } from '@/shared/lib/mindmapPreview'
 import { toast } from '@/shared/feedback/toast'
+import { appConfirm } from '@/shared/components/ui/native-dialog'
 
 type BilinkSearchMode = 'inline' | 'toolbar'
 
@@ -187,7 +188,10 @@ export function useBilinkOverlay({
   }, [bilinkSearchQuery, loadBilinkPreview])
 
   const handleBilinkDelete = useCallback(async (item: BilinkItem) => {
-    const confirmed = window.confirm('删除这条双向链接不会影响脑图节点内容，只会取消两端关联。确定继续吗？')
+    const confirmed = await appConfirm('删除这条双向链接不会影响脑图节点内容，只会取消两端关联。确定继续吗？', {
+      title: '删除双向链接',
+      tone: 'danger',
+    })
     if (!confirmed) return
     try {
       await deleteBilinkApi(item.id)

@@ -54,6 +54,7 @@ const SCENARIO_PROMPT_TEMPLATE_KEYS: Record<string, string> = {
   vision_pdf_mindmap: 'ai_prompt_import_pdf_direct',
   vision_pdf_text: 'ai_prompt_import_image_text',
   quiz_image_generation: 'ai_prompt_palace_quiz_generate',
+  quiz_text_generation: 'ai_prompt_palace_quiz_generate',
   quiz_pdf_generation: 'ai_prompt_palace_quiz_generate',
   quiz_pdf_pairing: 'ai_prompt_palace_quiz_pdf_pairing',
   quiz_pdf_review: 'ai_prompt_palace_quiz_pdf_review',

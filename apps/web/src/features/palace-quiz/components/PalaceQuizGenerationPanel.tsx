@@ -27,6 +27,20 @@ import { Textarea } from '@/shared/components/ui/textarea'
 import { cn } from '@/shared/lib/utils'
 import type { QuizGenerationPdfSourceDraft } from '@/features/palace-quiz/quizGenerationController'
 
+const MANUAL_TEXT_FORMAT_PROMPT = `请把我提供的题目资料整理成 Memory Anki 可识别的唯一 JSON，不要输出 markdown 或解释。
+顶层格式必须是 {"questions":[...]}。
+支持题型：
+1. multiple_choice：字段 question_type、stem、options、correct_option_id、analysis；options 为 [{"id":"A","text":"选项A"}]，correct_option_id 必须是某个选项 id。
+2. short_answer：字段 question_type、stem、reference_answer、analysis。
+3. true_false：字段 question_type、stem、correct_answer、false_explanation、analysis，correct_answer 是 true/false。
+4. fill_blank：stem 使用 {{blank_1}} 占位，blanks 为 [{"id":"blank_1","answer":"答案","aliases":[]}]。
+5. matching：pairs 为 [{"left_id":"L1","left":"左侧","right_id":"R1","right":"右侧"}]。
+6. ordering：items 为 [{"id":"I1","text":"条目"}]，correct_order_ids 覆盖全部 item id。
+7. categorization：categories 为 [{"id":"C1","name":"类别"}]，items 为 [{"id":"I1","text":"条目","category_id":"C1"}]。
+请保留原题题干、选项、答案和解析，不要编造资料外内容。`
+
+type GenerationSourceKind = 'subject-pdf' | 'image-single' | 'image-batch' | 'text-files'
+
 export function PalaceQuizGenerationPanel({
   hasMiniPalaces,
   rootQuestionCount,
@@ -39,6 +53,8 @@ export function PalaceQuizGenerationPanel({
   generationPdfSources,
   generationEnableSecondaryReview,
   setGenerationEnableSecondaryReview,
+  generationSaveMode,
+  setGenerationSaveMode,
   generationClassifyByMiniPalace,
   setGenerationClassifyByMiniPalace,
   generationError,
@@ -78,12 +94,14 @@ export function PalaceQuizGenerationPanel({
   miniPalaces: MiniPalaceSummary[]
   classificationLoading: boolean
   classificationResult: any
-  generationSourceKind: 'subject-pdf' | 'image-single' | 'image-batch'
-  setGenerationSourceKind: (value: 'subject-pdf' | 'image-single' | 'image-batch') => void
+  generationSourceKind: GenerationSourceKind
+  setGenerationSourceKind: (value: GenerationSourceKind) => void
   generationFiles: File[]
   generationPdfSources: QuizGenerationPdfSourceDraft[]
   generationEnableSecondaryReview: boolean
   setGenerationEnableSecondaryReview: (value: boolean) => void
+  generationSaveMode: 'append' | 'overwrite'
+  setGenerationSaveMode: (value: 'append' | 'overwrite') => void
   generationClassifyByMiniPalace: boolean
   setGenerationClassifyByMiniPalace: (value: boolean) => void
   generationError: string
@@ -217,6 +235,14 @@ export function PalaceQuizGenerationPanel({
               >
                 <Sparkles className="h-4 w-4" />
                 多图
+              </Button>
+              <Button
+                type="button"
+                variant={generationSourceKind === 'text-files' ? 'default' : 'outline'}
+                onClick={() => setGenerationSourceKind('text-files')}
+              >
+                <FileText className="h-4 w-4" />
+                文本/手动导入
               </Button>
             </div>
 
@@ -375,19 +401,58 @@ export function PalaceQuizGenerationPanel({
               </div>
             ) : (
               <div className="space-y-4 rounded-2xl border border-border/70 bg-background/60 p-4">
+                {generationSourceKind === 'text-files' ? (
+                  <div className="space-y-3 rounded-2xl border border-border/70 bg-background/70 px-4 py-3 text-sm">
+                    <div className="font-medium">文本文件导入说明</div>
+                    <div className="text-muted-foreground">
+                      支持标准 JSON，也支持题目文件和答案文件成对上传，例如
+                      *_questions.txt + *_answers.txt。标准 JSON 可包含全部题型；教材式 TXT 会自动提取选择题和主观题。
+                    </div>
+                    <div className="rounded-xl border border-border/70 bg-background p-3 text-xs text-muted-foreground">
+                      <div className="mb-2 font-medium text-foreground">给 AI 的格式修正提示词</div>
+                      <pre className="max-h-40 overflow-auto whitespace-pre-wrap font-sans leading-5">
+                        {MANUAL_TEXT_FORMAT_PROMPT}
+                      </pre>
+                      <Button
+                        type="button"
+                        className="mt-3"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          void navigator.clipboard?.writeText(MANUAL_TEXT_FORMAT_PROMPT)
+                          toast.success('格式修正提示词已复制')
+                        }}
+                      >
+                        复制提示词
+                      </Button>
+                    </div>
+                  </div>
+                ) : null}
                 <label className="flex min-h-[160px] cursor-pointer flex-col items-center justify-center rounded-2xl border border-dashed border-border/80 bg-background/70 px-4 py-6 text-center">
                   <input
                     type="file"
-                    accept="image/*"
-                    multiple={generationSourceKind === 'image-batch'}
+                    accept={generationSourceKind === 'text-files' ? '.txt,.md,.markdown,.json,text/plain,application/json' : 'image/*'}
+                    multiple={generationSourceKind === 'image-batch' || generationSourceKind === 'text-files'}
                     className="hidden"
                     onChange={(event) => onImageFileChange(event.target.files)}
                   />
-                  <ImagePlus className="h-6 w-6 text-muted-foreground" />
+                  {generationSourceKind === 'text-files' ? (
+                    <FileText className="h-6 w-6 text-muted-foreground" />
+                  ) : (
+                    <ImagePlus className="h-6 w-6 text-muted-foreground" />
+                  )}
                   <div className="mt-3 text-sm font-medium">
-                    {generationSourceKind === 'image-batch' ? '上传多张图片' : '上传一张图片'}
+                    {generationSourceKind === 'text-files'
+                      ? '上传文本文件'
+                      : generationSourceKind === 'image-batch'
+                        ? '上传多张图片'
+                        : '上传一张图片'}
                   </div>
-                  <div className="mt-1 text-xs text-muted-foreground">点击选择文件后直接开始准备资料。</div>
+                  <div className="mt-1 text-xs text-muted-foreground">
+                    {generationSourceKind === 'text-files'
+                      ? '可一次选择题目文件、答案文件或标准 JSON。'
+                      : '点击选择文件后直接开始准备资料。'}
+                  </div>
                 </label>
                 {generationFiles.length > 0 ? (
                   <div className="space-y-2">
@@ -401,7 +466,9 @@ export function PalaceQuizGenerationPanel({
                     ))}
                   </div>
                 ) : (
-                  <div className="text-sm text-muted-foreground">还没有图片。</div>
+                  <div className="text-sm text-muted-foreground">
+                    {generationSourceKind === 'text-files' ? '还没有文本文件。' : '还没有图片。'}
+                  </div>
                 )}
               </div>
             )}
@@ -503,7 +570,9 @@ export function PalaceQuizGenerationPanel({
                             ? 'PDF'
                             : item.sourceKind === 'image-single'
                               ? '单图'
-                              : '多图'}
+                              : item.sourceKind === 'text-files'
+                                ? '文本'
+                                : '多图'}
                         </Badge>
                       </div>
                       <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
@@ -556,7 +625,7 @@ export function PalaceQuizGenerationPanel({
                   </div>
                   {!canRegenerate ? (
                     <div className="mt-2 text-xs text-muted-foreground">
-                      图片历史会回填提示词和开关，但仍需重新上传图片。
+                      文件历史会回填提示词和开关，但仍需重新上传源文件。
                     </div>
                   ) : null}
                 </div>
@@ -568,7 +637,12 @@ export function PalaceQuizGenerationPanel({
 
       <Card className="border-border/70 bg-card/92">
         <CardHeader className="flex flex-row items-center justify-between gap-3">
-          <CardTitle className="text-base">预览后保存</CardTitle>
+          <div>
+            <CardTitle className="text-base">预览后保存</CardTitle>
+            <div className="mt-1 text-xs text-muted-foreground">
+              追加会保留当前范围旧题；覆盖会先删除当前所选章节范围内旧题。
+            </div>
+          </div>
           <div className="flex flex-wrap items-center justify-end gap-2">
             {generationPreview ? (
               <span className="text-xs text-muted-foreground">
@@ -590,6 +664,25 @@ export function PalaceQuizGenerationPanel({
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              size="sm"
+              variant={generationSaveMode === 'append' ? 'default' : 'outline'}
+              onClick={() => setGenerationSaveMode('append')}
+            >
+              追加保存
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant={generationSaveMode === 'overwrite' ? 'default' : 'outline'}
+              onClick={() => setGenerationSaveMode('overwrite')}
+            >
+              覆盖当前范围
+            </Button>
+          </div>
+
           {generationLoading || generationStreamStatus || generationStreamPreviewText ? (
             <div className="space-y-3 rounded-2xl border border-border/70 bg-background/70 p-4">
               <div className="flex flex-wrap items-center justify-between gap-2">

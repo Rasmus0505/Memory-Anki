@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 from memory_anki.app.main import SinglePageAppStaticFiles, install_web_cache_headers
 
 
-def test_web_routes_disable_cache_while_api_routes_keep_default_headers():
+def test_web_routes_cache_entrypoints_and_versioned_assets_separately():
     app = FastAPI()
     install_web_cache_headers(app)
 
@@ -20,6 +20,10 @@ def test_web_routes_disable_cache_while_api_routes_keep_default_headers():
     def asset():
         return PlainTextResponse("console.log('ok')")
 
+    @app.get("/assets/app-a1b2c3d4.js")
+    def hashed_asset():
+        return PlainTextResponse("console.log('ok')")
+
     @app.get("/api/ping")
     def api_ping():
         return JSONResponse({"ok": True})
@@ -28,10 +32,12 @@ def test_web_routes_disable_cache_while_api_routes_keep_default_headers():
 
     home_response = client.get("/")
     asset_response = client.get("/assets/app.js")
+    hashed_asset_response = client.get("/assets/app-a1b2c3d4.js")
     api_response = client.get("/api/ping")
 
     assert home_response.headers["cache-control"] == "no-cache"
     assert asset_response.headers["cache-control"] == "no-cache"
+    assert hashed_asset_response.headers["cache-control"] == "public, max-age=31536000, immutable"
     assert "cache-control" not in {key.lower(): value for key, value in api_response.headers.items()}
 
 

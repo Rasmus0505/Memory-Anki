@@ -4,10 +4,14 @@ import {
   baseQuestions,
   batchDeletePalaceQuizQuestionsApiMock,
   dispatchGlobalFeedbackMock,
+  getPalaceEditorApiMock,
+  getPalacesGroupedApiMock,
   getPalaceQuizQuestionsApiMock,
+  mindMapFramePropsMock,
   promptForAiOptionsMock,
   recordPalaceQuizChoiceAttemptApiMock,
   renderPage,
+  resetPalaceQuizQuestionAttemptsApiMock,
   requestPalaceShortAnswerFeedbackApiMock,
   setupPalaceQuizPageTest,
   useTimedSessionMock,
@@ -20,7 +24,8 @@ describe('PalaceQuizPage core flows', () => {
     renderPage()
 
     expect(await screen.findByText('细胞生物学宫殿 · 配套习题')).toBeTruthy()
-    expect(screen.getByRole('link', { name: '返回记忆宫殿' }).getAttribute('href')).toBe('/palaces')
+    expect(screen.queryByRole('link', { name: '返回记忆宫殿' })).toBeNull()
+    expect(screen.getByRole('button', { name: '查看记忆宫殿' })).toBeTruthy()
     expect(screen.getByText('PDF生成')).toBeTruthy()
     expect(screen.getByText(/questions\.pdf/)).toBeTruthy()
     expect(screen.getByText(/answers\.pdf/)).toBeTruthy()
@@ -43,6 +48,59 @@ describe('PalaceQuizPage core flows', () => {
     expect(await screen.findByText('生物 / 第三章')).toBeTruthy()
   })
 
+  it('opens a floating memory palace lookup without leaving the quiz state', async () => {
+    renderPage()
+    expect(await screen.findByText('细胞的控制中心是？')).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: '查看记忆宫殿' }))
+
+    expect(await screen.findByText('做题时快速查看宫殿内容，关闭后继续当前题目。')).toBeTruthy()
+    await waitFor(() => {
+      expect(getPalacesGroupedApiMock).toHaveBeenCalled()
+      expect(getPalaceEditorApiMock).toHaveBeenCalledWith(1)
+    })
+    expect((await screen.findByTestId('memory-lookup-mindmap')).getAttribute('data-readonly')).toBe(
+      'true',
+    )
+    await waitFor(() => {
+      expect(screen.getByTestId('memory-lookup-mindmap').getAttribute('data-root-uid')).toBe(
+        'root-1',
+      )
+    })
+    expect(mindMapFramePropsMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        focusRequestNodeUid: 'root-1',
+        focusRequestNonce: expect.any(Number),
+      }),
+    )
+    expect(screen.getByRole('button', { name: '从右下角调整记忆宫殿查看大小' })).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: '缩小为胶囊' }))
+    expect(await screen.findByRole('button', { name: '打开记忆宫殿查看' })).toBeTruthy()
+    expect(screen.queryByText('只读脑图预览')).toBeNull()
+    expect(screen.getByText('细胞的控制中心是？')).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: '打开记忆宫殿查看' }))
+    expect(await screen.findByText('只读脑图预览')).toBeTruthy()
+    const firstFocusNonce = Number(screen.getByTestId('memory-lookup-mindmap').getAttribute('data-focus-nonce'))
+
+    const secondPalaceButton = screen.getByText('遗传学宫殿').closest('button')
+    expect(secondPalaceButton).toBeTruthy()
+    fireEvent.click(secondPalaceButton!)
+    await waitFor(() => {
+      expect(getPalaceEditorApiMock).toHaveBeenCalledWith(2)
+    })
+    await waitFor(() => {
+      expect(screen.getByTestId('memory-lookup-mindmap').getAttribute('data-root-uid')).toBe(
+        'root-2',
+      )
+    })
+    expect(Number(screen.getByTestId('memory-lookup-mindmap').getAttribute('data-focus-nonce'))).toBeGreaterThan(
+      firstFocusNonce,
+    )
+    expect(screen.getByText('细胞的控制中心是？')).toBeTruthy()
+  })
+
   it('judges multiple-choice questions immediately, refreshes stats, and supports retry', async () => {
     renderPage()
     expect(await screen.findByText('细胞的控制中心是？')).toBeTruthy()
@@ -61,6 +119,23 @@ describe('PalaceQuizPage core flows', () => {
       'quiz_answer_reset',
       expect.objectContaining({ label: '重做', audioScope: 'local' }),
     )
+  })
+
+  it('clears attempt statistics for the current question scope', async () => {
+    renderPage()
+    expect(await screen.findByText('细胞的控制中心是？')).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: /大宫殿/ }))
+    fireEvent.click(screen.getByRole('button', { name: '清空当前范围进度' }))
+    expect(await screen.findByText('只会清空当前筛选范围内题目的累计答对、答错和作答次数，不会删除题目。')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: '清空进度' }))
+
+    await waitFor(() => {
+      expect(resetPalaceQuizQuestionAttemptsApiMock).toHaveBeenCalledWith([11, 12])
+    })
+    await waitFor(() => {
+      expect(getPalaceQuizQuestionsApiMock).toHaveBeenCalledTimes(2)
+    })
   })
 
   it('reveals short-answer reference content after submit and enables AI feedback', async () => {

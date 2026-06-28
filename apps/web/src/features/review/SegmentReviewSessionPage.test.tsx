@@ -48,6 +48,11 @@ vi.mock('@/features/review/api/reviewApi', () => ({
   submitSegmentReviewSessionApi: (...args: unknown[]) => mocks.submitSegmentReviewSessionApi(...args),
 }))
 
+vi.mock('@/features/review/studyWarmup', () => ({
+  consumePrefetchedStudySession: (_kind: string, _id: number, loader: () => Promise<unknown>) =>
+    loader(),
+}))
+
 vi.mock('@/entities/palace/api', () => ({
   buildAttachmentUrl: (id: number) => `/attachments/${id}`,
   getPalaceEditorApi: vi.fn(),

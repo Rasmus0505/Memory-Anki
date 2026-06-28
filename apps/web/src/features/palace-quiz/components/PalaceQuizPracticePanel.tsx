@@ -24,10 +24,12 @@ export function PalaceQuizPracticePanel({
   onShortAnswerSubmit,
   onShortAnswerFeedback,
   onReset,
+  onResetVisibleAttempts,
   onEdit,
   onScopeFeedback,
   onViewFeedback,
   onNavigateFeedback,
+  resetAttemptsLoading,
 }: {
   questions: PalaceQuizQuestion[]
   miniPalaces: MiniPalaceSummary[]
@@ -46,10 +48,12 @@ export function PalaceQuizPracticePanel({
   onShortAnswerSubmit: (questionId: number) => void
   onShortAnswerFeedback: (question: PalaceQuizQuestion) => void
   onReset: (questionId: number) => void
+  onResetVisibleAttempts: () => void
   onEdit: (question: PalaceQuizQuestion) => void
   onScopeFeedback: (scope: PalaceQuizScopeKey, label: string) => void
   onViewFeedback: (viewMode: PalaceQuizViewMode, label: string) => void
   onNavigateFeedback: (direction: 'prev' | 'next') => void
+  resetAttemptsLoading: boolean
 }) {
   return (
     <div className="space-y-4">
@@ -106,6 +110,15 @@ export function PalaceQuizPracticePanel({
             </Badge>
           </Button>
         ))}
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          disabled={filteredQuestions.length === 0 || resetAttemptsLoading}
+          onClick={onResetVisibleAttempts}
+        >
+          清空当前范围进度
+        </Button>
       </div>
 
       {filteredQuestions.length === 0 ? (

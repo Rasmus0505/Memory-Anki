@@ -12,6 +12,7 @@ import { getRuntimeInfoApi } from '@/entities/runtime/api/runtimeApi'
 import { Button } from '@/shared/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card'
 import { EmptyState } from '@/shared/components/state-placeholders'
+import { appConfirm } from '@/shared/components/ui/native-dialog'
 
 export default function ProfileBackupsPage() {
   const [backups, setBackups] = useState<BackupSummary[]>([])
@@ -40,8 +41,9 @@ export default function ProfileBackupsPage() {
   }
 
   const handleRestoreBackup = async (path: string) => {
-    const confirmed = window.confirm(
+    const confirmed = await appConfirm(
       '整库恢复会先自动生成事故快照，再把数据库和附件回到目标备份。确定继续吗？',
+      { title: '整库恢复', tone: 'danger' },
     )
     if (!confirmed) return
 

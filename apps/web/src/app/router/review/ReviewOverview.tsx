@@ -17,6 +17,7 @@ import {
   buildReviewSessionPath,
   buildSegmentReviewSessionPath,
 } from '@/features/review/reviewSessionRoutes'
+import { prefetchStudySession } from '@/features/review/studyWarmup'
 
 function formatReviewStage(reviewType: string, reviewNumber: number) {
   if (reviewType === '1h') return '首日 1 小时'
@@ -33,11 +34,11 @@ export default function ReviewOverview() {
 
   useEffect(() => {
     const load = async () => {
-      const nextQueue = chapterId ? await getChapterReviewQueueApi(chapterId) : await getReviewQueueApi()
+      const [nextQueue, nextSegmentQueue] = await Promise.all([
+        chapterId ? getChapterReviewQueueApi(chapterId) : getReviewQueueApi(),
+        chapterId ? getSegmentChapterReviewQueueApi(chapterId) : getSegmentReviewQueueApi(),
+      ])
       setQueue(nextQueue)
-      const nextSegmentQueue = chapterId
-        ? await getSegmentChapterReviewQueueApi(chapterId)
-        : await getSegmentReviewQueueApi()
       setSegmentQueue(nextSegmentQueue)
     }
     void load()
@@ -89,7 +90,12 @@ export default function ReviewOverview() {
         <CardContent className="space-y-3">
           {queue.reviews.length > 0 ? (
             queue.reviews.map((review) => (
-              <Link key={review.id} to={buildReviewSessionPath(review.id, chapterId)}>
+              <Link
+                key={review.id}
+                to={buildReviewSessionPath(review.id, chapterId)}
+                onFocus={() => prefetchStudySession('review-session', review.id)}
+                onMouseEnter={() => prefetchStudySession('review-session', review.id)}
+              >
                 <div className="memory-anki-soft-card flex items-center justify-between rounded-[24px] border border-border/60 bg-background/80 px-4 py-4 transition-all hover:-translate-y-[1px] hover:bg-secondary/75">
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
@@ -137,7 +143,12 @@ export default function ReviewOverview() {
         <CardContent className="space-y-3">
           {segmentQueue?.reviews?.length > 0 ? (
             segmentQueue.reviews.map((review: any) => (
-              <Link key={review.id} to={buildSegmentReviewSessionPath(review.id, chapterId)}>
+              <Link
+                key={review.id}
+                to={buildSegmentReviewSessionPath(review.id, chapterId)}
+                onFocus={() => prefetchStudySession('segment-review-session', review.id)}
+                onMouseEnter={() => prefetchStudySession('segment-review-session', review.id)}
+              >
                 <div className="memory-anki-soft-card flex items-center justify-between rounded-[24px] border border-border/60 bg-background/80 px-4 py-4 transition-all hover:-translate-y-[1px] hover:bg-secondary/75">
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
@@ -171,4 +182,3 @@ export default function ReviewOverview() {
     </div>
   )
 }
-

@@ -1,4 +1,4 @@
-import { Bot, HardDriveDownload, Settings, Sparkles } from 'lucide-react'
+import { Bot, HardDriveDownload, Settings, Sparkles, Timer } from 'lucide-react'
 import { Link, useLocation } from 'react-router-dom'
 import { cn } from '@/shared/lib/utils'
 
@@ -8,6 +8,7 @@ export function ProfileNav() {
 
   const items = [
     { href: '/profile', label: '复习配置与导入导出', icon: Settings },
+    { href: '/profile/timer', label: '计时与休息', icon: Timer },
     { href: '/profile/feedback', label: '反馈中心', icon: Sparkles },
     { href: '/profile/ai', label: 'AI管理', icon: Bot },
     { href: '/profile/backups', label: '备份与恢复', icon: HardDriveDownload },

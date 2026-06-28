@@ -1,5 +1,6 @@
 import * as React from 'react'
 import { toast } from '@/shared/feedback/toast'
+import { appConfirm } from '@/shared/components/ui/native-dialog'
 import type { RevealState } from '@/entities/session/model'
 import type { MindMapDoc, MindMapEditorState, MiniPalaceSummary } from '@/shared/api/contracts'
 import type { MindMapSelection } from '@/shared/components/mindmap-host'
@@ -253,7 +254,10 @@ export function useMiniPalaceController({
   }, [activeMiniPalace?.id, timer])
 
   const deleteMiniPalace = React.useCallback(async (item: MiniPalaceSummary) => {
-    const confirmed = window.confirm('删除这个小宫殿只会删除这组练习入口，不会删除脑图卡片。确定继续吗？')
+    const confirmed = await appConfirm('删除这个小宫殿只会删除这组练习入口，不会删除脑图卡片。确定继续吗？', {
+      title: '删除小宫殿',
+      tone: 'danger',
+    })
     if (!confirmed) return
     setSaving(true)
     setError('')

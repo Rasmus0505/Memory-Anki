@@ -5,6 +5,7 @@ from .question_commands import (
     create_question,
     delete_question,
     record_choice_attempt,
+    reset_question_attempts,
     update_question,
     upsert_classified_question_copy,
 )

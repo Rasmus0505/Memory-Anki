@@ -207,6 +207,33 @@ describe('GlobalTimerProvider', () => {
     expect(capsule.className).toContain('memory-anki-global-timer-capsule')
   })
 
+  it('defaults to a compact capsule for freestyle on narrow screens', () => {
+    window.innerWidth = 390
+    window.innerHeight = 844
+
+    renderOverlay(
+      <RegistrationProbe
+        timer={createTimer({
+          sessionId: 'freestyle-running',
+          effectiveSeconds: 5,
+          status: 'running',
+          startedAt: '2026-06-17T10:00:00',
+        })}
+        scene="freestyle"
+        title="随心模式"
+        isRouteActive
+        becameActiveAt={100}
+      />,
+    )
+
+    expect(screen.getByRole('button', { name: /随心模式 00:55/ })).toBeTruthy()
+    expect(document.querySelector('.memory-anki-global-timer-panel')).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: /随心模式 00:55/ }))
+
+    expect(document.querySelector('.memory-anki-global-timer-panel')).toBeTruthy()
+  })
+
   it('opens the timer automation dialog from the top settings button', () => {
     renderOverlay(null)
 
@@ -467,6 +494,10 @@ describe('GlobalTimerProvider', () => {
         primaryMinutes: 25,
         secondaryMinutes: 1,
       },
+      freestyle: {
+        primaryMinutes: 25,
+        secondaryMinutes: 1,
+      },
       english: {
         primaryMinutes: 25,
         secondaryMinutes: 1,
@@ -616,4 +647,3 @@ describe('GlobalTimerProvider', () => {
     expect(emitTimerCelebration).toHaveBeenCalledTimes(3)
   })
 })
-

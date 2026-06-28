@@ -5,6 +5,7 @@ import {
   getPalaceSegmentsApi,
   updatePalaceSegmentApi,
 } from '@/entities/palace-segment/api'
+import { appAlert, appConfirm } from '@/shared/components/ui/native-dialog'
 import type { PalaceSegmentSummary } from '@/shared/api/contracts'
 import type { MindMapSelection } from '@/shared/components/mindmap-host'
 import {
@@ -166,7 +167,7 @@ export function usePalaceSegmentsController({
 
   const handleConfirmSegmentRange = () => {
     if (!selectedRangeNodeUids.length) {
-      window.alert('先在脑图里选中至少一个节点，再确认分块范围。')
+      void appAlert('先在脑图里选中至少一个节点，再确认分块范围。', { title: '无法确认分块范围' })
       return
     }
     timer.registerActivity('edit_operation', { source: 'segment_range_confirm' })
@@ -220,7 +221,10 @@ export function usePalaceSegmentsController({
   }
 
   const handleDeleteSegment = async (segmentId: number) => {
-    const confirmed = window.confirm('删除这个分块只会取消这组节点的分块划分，不会删除任何脑图内容。确定继续吗？')
+    const confirmed = await appConfirm('删除这个分块只会取消这组节点的分块划分，不会删除任何脑图内容。确定继续吗？', {
+      title: '删除复习分块',
+      tone: 'danger',
+    })
     if (!confirmed) return
     timer.registerActivity('edit_operation', { source: 'segment_delete' })
     await deletePalaceSegmentApi(segmentId)

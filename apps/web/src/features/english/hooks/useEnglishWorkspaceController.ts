@@ -1,6 +1,7 @@
 ﻿import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { toast } from '@/shared/feedback/toast'
+import { appConfirm } from '@/shared/components/ui/native-dialog'
 import { useRouteResidency } from '@/shared/routing/RouteResidency'
 import { useAiRunConfigDialog } from '@/features/ai-config/useAiRunConfigDialog'
 import {
@@ -249,7 +250,10 @@ export function useEnglishWorkspaceController() {
 
   const handleDeleteCourse = useCallback(
     async (courseId: number, title: string) => {
-      const confirmed = window.confirm(`确定删除英语课程“${title}”吗？原始视频也会一起删除。`)
+      const confirmed = await appConfirm(`确定删除英语课程“${title}”吗？原始视频也会一起删除。`, {
+        title: '删除英语课程',
+        tone: 'danger',
+      })
       if (!confirmed) return
       setActionLoading(courseId)
       try {

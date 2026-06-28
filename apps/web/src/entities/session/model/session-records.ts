@@ -1,7 +1,7 @@
 export type RevealState = 'hidden' | 'placeholder' | 'revealed'
 
 export type SessionKind = 'palace_edit' | 'practice' | 'quiz' | 'review'
-export type SessionScene = SessionKind | 'english' | 'english_reading'
+export type SessionScene = SessionKind | 'english' | 'english_reading' | 'freestyle'
 
 export type SessionCompletionMethod =
   | 'manual_complete'

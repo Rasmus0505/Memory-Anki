@@ -11,33 +11,61 @@ import MiniPalacePracticePage from '@/app/router/MiniPalacePracticePage'
 import ReviewOverviewPage from '@/app/router/review/ReviewOverview'
 
 export const preloadPalaceViewPage = () => import('@/app/router/PalaceViewPage')
+export const preloadFreestylePage = () => import('@/features/freestyle/FreestylePage')
+export const preloadKnowledgePage = () => import('@/features/knowledge/KnowledgePage')
+export const preloadEnglishWorkspacePage = () => import('@/features/english/EnglishWorkspacePage')
+export const preloadEnglishCoursePage = () => import('@/features/english/EnglishCoursePage')
+export const preloadEnglishReadingPage = () => import('@/features/english-reading/EnglishReadingPage')
+export const preloadPalaceEditPage = () => import('@/features/palace-edit/PalaceEditPage')
+export const preloadPalaceQuizPage = () => import('@/features/palace-quiz/PalaceQuizPage')
+export const preloadProfilePage = () => import('@/features/profile/ProfilePage')
+export const preloadReviewSessionPage = () => import('@/app/router/review/ReviewSession')
+export const preloadSegmentReviewSessionPage = () =>
+  import('@/features/review/SegmentReviewSessionPage')
+export const preloadBatchSegmentReviewSessionPage = () =>
+  import('@/features/review/BatchSegmentReviewSessionPage')
+export const preloadMiniReviewSessionPage = () =>
+  import('@/features/review/MiniReviewSessionPage')
 
-const KnowledgePage = lazy(() => import('@/features/knowledge/KnowledgePage'))
-const EnglishWorkspacePage = lazy(() => import('@/features/english/EnglishWorkspacePage'))
-const EnglishCoursePage = lazy(() => import('@/features/english/EnglishCoursePage'))
-const EnglishReadingPage = lazy(() => import('@/features/english-reading/EnglishReadingPage'))
-const PalaceEditPage = lazy(() => import('@/features/palace-edit/PalaceEditPage'))
+export function preloadReviewRoutes() {
+  void preloadReviewSessionPage()
+  void preloadSegmentReviewSessionPage()
+  void preloadMiniReviewSessionPage()
+  void preloadBatchSegmentReviewSessionPage()
+}
+
+export function preloadPracticeRoutes() {
+  void preloadPalaceEditPage()
+  void preloadPalaceViewPage()
+  void preloadPalaceQuizPage()
+  void import('@/app/router/PalacePracticePage')
+  void import('@/app/router/PalaceFocusPracticePage')
+  void import('@/app/router/SegmentPracticePage')
+  void import('@/app/router/MiniPalacePracticePage')
+}
+
+const KnowledgePage = lazy(preloadKnowledgePage)
+const FreestylePage = lazy(preloadFreestylePage)
+const EnglishWorkspacePage = lazy(preloadEnglishWorkspacePage)
+const EnglishCoursePage = lazy(preloadEnglishCoursePage)
+const EnglishReadingPage = lazy(preloadEnglishReadingPage)
+const PalaceEditPage = lazy(preloadPalaceEditPage)
 const PalaceViewPage = lazy(preloadPalaceViewPage)
-const PalaceQuizPage = lazy(() => import('@/features/palace-quiz/PalaceQuizPage'))
-const ProfilePage = lazy(() => import('@/features/profile/ProfilePage'))
+const PalaceQuizPage = lazy(preloadPalaceQuizPage)
+const ProfilePage = lazy(preloadProfilePage)
 const ProfileFeedbackPage = lazy(() => import('@/features/profile/ProfileFeedbackPage'))
+const ProfileTimerPage = lazy(() => import('@/features/profile/ProfileTimerPage'))
 const ProfileAiPage = lazy(() => import('@/features/profile/ProfileAiPage'))
 const ProfileBackupsPage = lazy(
   () => import('@/features/profile/ProfileBackupsPage'),
 )
-const ReviewSessionPage = lazy(() => import('@/app/router/review/ReviewSession'))
+const ReviewSessionPage = lazy(preloadReviewSessionPage)
 const ReviewFeedbackPreviewRoute = lazy(
   () => import('@/app/router/ReviewFeedbackPreviewRoute'),
 )
-const SegmentReviewSessionPage = lazy(
-  () => import('@/features/review/SegmentReviewSessionPage'),
-)
-const BatchSegmentReviewSessionPage = lazy(
-  () => import('@/features/review/BatchSegmentReviewSessionPage'),
-)
-const MiniReviewSessionPage = lazy(
-  () => import('@/features/review/MiniReviewSessionPage'),
-)
+const SegmentReviewSessionPage = lazy(preloadSegmentReviewSessionPage)
+const BatchSegmentReviewSessionPage = lazy(preloadBatchSegmentReviewSessionPage)
+const MiniReviewSessionPage = lazy(preloadMiniReviewSessionPage)
 
 function RouteFallback() {
   return <LoadingState text="正在加载页面…" />
@@ -51,6 +79,7 @@ function normalizePathname(pathname: string) {
 // 已注册的精确路由路径（normalize 后直接命中，保留原路径）。
 const REGISTERED_EXACT_PATHS = new Set<string>([
   '/',
+  '/freestyle',
   '/knowledge',
   '/english',
   '/english-reading',
@@ -60,6 +89,7 @@ const REGISTERED_EXACT_PATHS = new Set<string>([
   '/review',
   '/segment-review/batch',
   '/profile',
+  '/profile/timer',
   '/profile/feedback',
   '/profile/ai',
   '/profile/backups',
@@ -91,6 +121,7 @@ const DYNAMIC_PREFIX_FALLBACKS = [
 // 顶层 section 前缀：未知的子路径回退到 section 入口。
 const SECTION_PREFIX_FALLBACKS: Record<string, string> = {
   '/knowledge/': '/knowledge',
+  '/freestyle/': '/freestyle',
   '/profile/': '/profile',
   '/review/': '/review',
   '/segment-review/': '/review',
@@ -131,6 +162,7 @@ export function AppRoutes({ location }: { location?: Location }) {
     <Suspense fallback={<RouteFallback />}>
       <Routes location={location}>
         <Route path="/" element={<DashboardPage />} />
+        <Route path="/freestyle" element={<FreestylePage />} />
         <Route path="/palaces" element={<PalaceShelfPage />} />
         <Route path="/english" element={<EnglishWorkspacePage />} />
         <Route path="/english-reading" element={<EnglishReadingPage />} />
@@ -153,6 +185,7 @@ export function AppRoutes({ location }: { location?: Location }) {
         <Route path="/segment-review/session/:id" element={<SegmentReviewSessionPage />} />
         <Route path="/segment-review/batch" element={<BatchSegmentReviewSessionPage />} />
         <Route path="/profile" element={<ProfilePage />} />
+        <Route path="/profile/timer" element={<ProfileTimerPage />} />
         <Route path="/profile/feedback" element={<ProfileFeedbackPage />} />
         <Route path="/profile/ai" element={<ProfileAiPage />} />
         <Route path="/profile/ai-prompts" element={<Navigate to="/profile/ai?tab=prompts" replace />} />

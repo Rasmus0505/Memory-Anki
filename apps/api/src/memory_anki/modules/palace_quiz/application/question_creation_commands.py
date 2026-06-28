@@ -6,13 +6,14 @@ from sqlalchemy.orm import Session
 
 from memory_anki.infrastructure.db.models import PalaceQuizQuestion
 
+from .question_batch_creation_support import (
+    batch_create_questions_for_scope,
+)
+from .question_contracts import PalaceQuizValidationError
 from .question_queries import (
     get_palace_or_raise,
     next_chapter_sort_order,
     next_palace_sort_order,
-)
-from .question_batch_creation_support import (
-    batch_create_questions_for_scope,
 )
 from .question_schema import (
     find_duplicate_question,
@@ -75,16 +76,30 @@ def batch_create_chapter_questions(
     session: Session,
     chapter_id: int,
     payloads: list[dict[str, Any]],
+    *,
+    save_mode: str = "append",
 ) -> list[dict[str, Any]]:
     get_chapter_or_raise(session, chapter_id)
+    normalized_save_mode = str(save_mode or "append").strip().lower()
+    if normalized_save_mode not in {"append", "overwrite"}:
+        raise PalaceQuizValidationError("题目保存模式必须是 append 或 overwrite。")
     existing_questions = (
         session.query(PalaceQuizQuestion).filter_by(source_chapter_id=chapter_id).all()
     )
+    excluded_import_question_ids: set[int] | None = None
+    next_sort_order = next_chapter_sort_order(session, chapter_id)
+    if normalized_save_mode == "overwrite":
+        excluded_import_question_ids = {int(question.id) for question in existing_questions}
+        for question in existing_questions:
+            session.delete(question)
+        existing_questions = []
+        next_sort_order = 0
     return batch_create_questions_for_scope(
         session,
         payloads=payloads,
         existing_questions=existing_questions,
-        next_sort_order=next_chapter_sort_order(session, chapter_id),
+        excluded_import_question_ids=excluded_import_question_ids,
+        next_sort_order=next_sort_order,
         normalize_payload=lambda payload: normalize_question_payload(
             {
                 **payload,

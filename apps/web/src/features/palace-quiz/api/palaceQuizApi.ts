@@ -10,6 +10,7 @@ import {
   recordPalaceQuizChoiceAttemptApi,
   recoverAndSavePalaceQuizGenerationFromAiLogApi,
   requestPalaceShortAnswerFeedbackApi,
+  resetPalaceQuizQuestionAttemptsApi,
   updatePalaceQuizQuestionApi,
 } from '@/entities/quiz/api/quizApi'
 
@@ -24,6 +25,7 @@ export {
   recordPalaceQuizChoiceAttemptApi,
   recoverAndSavePalaceQuizGenerationFromAiLogApi,
   requestPalaceShortAnswerFeedbackApi,
+  resetPalaceQuizQuestionAttemptsApi,
   updatePalaceQuizQuestionApi,
   uploadSubjectDocumentApi,
 }

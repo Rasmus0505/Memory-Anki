@@ -54,6 +54,7 @@ CLIENT_PREFERENCE_GROUPS = {
     "english_practice_settings",
     "timer_automation_config",
     "timer_focus_config",
+    "break_guard_config",
     "dashboard_duration_filter",
     "palace_list_view_settings",
     "palace_shelf_view_settings",

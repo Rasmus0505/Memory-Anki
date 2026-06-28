@@ -1,6 +1,6 @@
 import type { PalaceQuizPdfSourceRole, PalaceQuizGenerationPreview } from '@/shared/api/contracts'
 
-export type QuizGenerationSourceKind = 'subject-pdf' | 'image-single' | 'image-batch'
+export type QuizGenerationSourceKind = 'subject-pdf' | 'image-single' | 'image-batch' | 'text-files'
 
 export interface QuizGenerationHistoryPdfSource {
   subject_document_id: number
@@ -77,7 +77,9 @@ export function buildQuizGenerationHistoryTitle(
     return pdfSources.map((item) => item.document_name).join(' + ')
   }
   if (imageFileNames.length === 0) {
-    return sourceKind === 'image-single' ? '单图生成配置' : '多图生成配置'
+    if (sourceKind === 'image-single') return '单图生成配置'
+    if (sourceKind === 'text-files') return '文本导入配置'
+    return '多图生成配置'
   }
   return imageFileNames.join(' + ')
 }

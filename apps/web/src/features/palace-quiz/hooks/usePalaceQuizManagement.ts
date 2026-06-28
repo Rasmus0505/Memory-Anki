@@ -1,5 +1,6 @@
 ﻿import { useEffect, useMemo, useState } from 'react'
 import { toast } from '@/shared/feedback/toast'
+import { appConfirm } from '@/shared/components/ui/native-dialog'
 import type { dispatchGlobalFeedback } from '@/shared/feedback/globalFeedbackModel'
 import type { PalaceQuizQuestion } from '@/shared/api/contracts'
 import {
@@ -114,7 +115,7 @@ export function usePalaceQuizManagement({
   }
 
   const handleDeleteQuestion = async (questionId: number) => {
-    if (!window.confirm('确定删除这道题吗？')) return
+    if (!await appConfirm('确定删除这道题吗？', { title: '删除题目', tone: 'danger' })) return
     registerQuizActivity('manage_delete_question')
     emitQuizFeedback('quiz_manage_delete', { label: '删除题目', audioScope: 'local' })
     setManageDeletingId(questionId)
@@ -160,7 +161,10 @@ export function usePalaceQuizManagement({
 
   const handleBatchDeleteQuestions = async () => {
     if (selectedQuestionIds.length === 0) return
-    if (!window.confirm(`确定批量删除所选的 ${selectedQuestionIds.length} 道题吗？`)) return
+    if (!await appConfirm(`确定批量删除所选的 ${selectedQuestionIds.length} 道题吗？`, {
+      title: '批量删除题目',
+      tone: 'danger',
+    })) return
     registerQuizActivity('manage_batch_delete_questions')
     emitQuizFeedback('quiz_manage_batch_delete', { label: '批量删除', audioScope: 'global' })
     setManageBulkDeleting(true)

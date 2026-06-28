@@ -23,6 +23,7 @@ import {
 } from '@/entities/palace-segment/api'
 import { submitReviewSessionApi } from '@/features/review/api/reviewApi'
 import { StageSelectDialog } from '@/features/review/components/StageSelectDialog'
+import { consumePrefetchedStudySession } from '@/features/review/studyWarmup'
 import type { ReviewStageSummary } from '@/shared/api/contracts'
 
 interface PalaceMeta {
@@ -75,7 +76,13 @@ export default function PalacePractice() {
       setLoading(true)
       setError('')
       try {
-        const editor = await getPalaceEditorApi(palaceId)
+        const { session: editor, progress: progressResponse } =
+          await consumePrefetchedStudySession('palace-practice', palaceId, () =>
+            Promise.all([
+              getPalaceEditorApi(palaceId),
+              getPracticeSessionProgressApi(palaceId),
+            ]).then(([session, progress]) => ({ session, progress })),
+          )
         const data = editor
         setPalace(data.palace as PalaceMeta)
         setEditorState({
@@ -84,7 +91,6 @@ export default function PalacePractice() {
           editor_local_config: editor.editor_local_config,
           lang: editor.lang,
         })
-        const progressResponse = await getPracticeSessionProgressApi(palaceId)
         const progress = progressResponse.progress
         setHasResumeProgress(Boolean(progress && !progress.completed))
         setInitialSnapshot(

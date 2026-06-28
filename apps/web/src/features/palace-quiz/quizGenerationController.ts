@@ -15,12 +15,14 @@ import {
   previewPalaceQuizGenerationFromImagesApi,
   previewPalaceQuizGenerationFromPdfStreamApi,
   previewPalaceQuizGenerationFromReviewMindmapApi,
+  previewPalaceQuizGenerationFromTextFilesApi,
 } from '@/entities/quiz/api/quizApi'
 
 export type QuizLauncherGenerationSourceKind =
   | 'subject-pdf'
   | 'image-single'
   | 'image-batch'
+  | 'text-files'
   | 'review-mindmap'
 
 export interface QuizGenerationPdfSourceDraft {
@@ -169,7 +171,17 @@ export async function generatePalaceQuizPreview(
 
   const files = config.files || []
   if (files.length === 0) {
-    throw new Error('请先上传图片。')
+    throw new Error(config.sourceKind === 'text-files' ? '请先上传文本文件。' : '请先上传图片。')
+  }
+  if (config.sourceKind === 'text-files') {
+    return previewPalaceQuizGenerationFromTextFilesApi(
+      config.palaceId,
+      files,
+      config.extraPrompt,
+      config.classifyByMiniPalace,
+      config.selectedChapterId,
+      config.aiOptions,
+    )
   }
   return previewPalaceQuizGenerationFromImagesApi(
     config.palaceId,

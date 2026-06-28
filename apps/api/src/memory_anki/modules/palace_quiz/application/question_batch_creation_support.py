@@ -11,6 +11,10 @@ from .question_dedup import (
     build_question_dedup_key,
     question_to_dedup_payload,
 )
+from .question_import_dedup import (
+    build_existing_import_dedup_keys,
+    build_import_dedup_key,
+)
 from .question_write_support import commit_new_questions
 
 
@@ -28,6 +32,7 @@ def batch_create_questions_for_scope(
     *,
     payloads: list[dict[str, object]],
     existing_questions: list[PalaceQuizQuestion],
+    excluded_import_question_ids: set[int] | None = None,
     next_sort_order: int,
     normalize_payload: Callable[[dict[str, object]], dict[str, object]],
     create_row: Callable[[dict[str, object], int], PalaceQuizQuestion],
@@ -35,15 +40,27 @@ def batch_create_questions_for_scope(
     if not isinstance(payloads, list) or len(payloads) == 0:
         raise PalaceQuizValidationError("批量保存时至少需要一题。")
     existing_keys = _build_existing_question_keys(existing_questions)
+    existing_import_keys = build_existing_import_dedup_keys(
+        session,
+        exclude_question_ids=excluded_import_question_ids,
+    )
     payload_keys: set[str] = set()
+    payload_import_keys: set[str] = set()
     rows: list[PalaceQuizQuestion] = []
     current_sort_order = next_sort_order
     for payload in payloads:
         normalized = normalize_payload(payload)
         dedup_key = build_question_dedup_key(normalized)
-        if dedup_key in existing_keys or dedup_key in payload_keys:
+        import_dedup_key = build_import_dedup_key(normalized)
+        if (
+            dedup_key in existing_keys
+            or dedup_key in payload_keys
+            or import_dedup_key in existing_import_keys
+            or import_dedup_key in payload_import_keys
+        ):
             continue
         payload_keys.add(dedup_key)
+        payload_import_keys.add(import_dedup_key)
         current_sort_order += 1
         row = create_row(normalized, current_sort_order)
         session.add(row)

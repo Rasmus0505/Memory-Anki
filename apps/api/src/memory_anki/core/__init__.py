@@ -1,1 +1,1 @@
-"""Core utilities and shared runtime configuration."""
+"""Core utilities and local runtime configuration."""

@@ -23,15 +23,16 @@ from memory_anki.modules.palace_quiz.application.ai_service import (
 from memory_anki.modules.palace_quiz.application.service import (
     PalaceQuizNotFoundError,
     PalaceQuizValidationError,
-    batch_delete_questions,
     batch_create_chapter_questions,
     batch_create_questions,
+    batch_delete_questions,
     create_question,
     delete_question,
     list_aggregated_questions,
     list_chapter_questions,
     list_questions,
     record_choice_attempt,
+    reset_question_attempts,
     update_question,
 )
 from memory_anki.modules.settings.application.ai_model_registry import (
@@ -139,6 +140,7 @@ def api_batch_create_chapter_quiz_questions(
             s,
             chapter_id,
             payloads if isinstance(payloads, list) else [],
+            save_mode=str(data.get("save_mode") or "append") if isinstance(data, dict) else "append",
         )
         maybe_create_rolling_backup("rolling-batch-create-chapter-quiz-questions")
         return {"items": items}
@@ -180,6 +182,20 @@ def api_batch_delete_palace_quiz_questions(data: dict, s: Session = Depends(sess
         )
         maybe_create_rolling_backup("rolling-batch-delete-palace-quiz-questions")
         return {"ok": True, "deleted_count": deleted_count}
+    except Exception as exc:  # pragma: no cover - centralized HTTP mapping
+        _raise_http_error(exc)
+
+
+@router.post("/palace-quiz-questions/reset-attempts")
+def api_reset_palace_quiz_question_attempts(data: dict, s: Session = Depends(session_dep)):
+    try:
+        question_ids = data.get("question_ids") if isinstance(data, dict) else None
+        reset_count = reset_question_attempts(
+            s,
+            question_ids if isinstance(question_ids, list) else [],
+        )
+        maybe_create_rolling_backup("rolling-reset-palace-quiz-question-attempts")
+        return {"ok": True, "reset_count": reset_count}
     except Exception as exc:  # pragma: no cover - centralized HTTP mapping
         _raise_http_error(exc)
 
@@ -394,6 +410,7 @@ def api_recover_and_save_palace_quiz_from_ai_log(
             ai_call_log_id=str(data.get("ai_call_log_id") or ""),
             selected_chapter_id=int(data.get("selected_chapter_id") or 0),
             classify_by_mini_palace=bool(data.get("classify_by_mini_palace", False)),
+            save_mode=str(data.get("save_mode") or "append"),
             ai_options=normalize_ai_runtime_options(data.get("ai_options")),
         )
     except Exception as exc:  # pragma: no cover - centralized HTTP mapping

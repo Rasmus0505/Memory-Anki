@@ -1,38 +1,7 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect } from 'react'
 import {
-  buildMutationSummary,
-  readQueuedMutations,
   replayQueuedMutations,
-  subscribeMutationQueue,
-  type PersistedMutation,
 } from '@/shared/persistence/mutationQueue'
-
-export function useMutationQueueState() {
-  const [items, setItems] = useState<PersistedMutation[]>([])
-
-  useEffect(() => {
-    let cancelled = false
-    const refresh = async () => {
-      const nextItems = await readQueuedMutations()
-      if (!cancelled) {
-        setItems(nextItems)
-      }
-    }
-    void refresh()
-    const unsubscribe = subscribeMutationQueue(() => {
-      void refresh()
-    })
-    return () => {
-      cancelled = true
-      unsubscribe()
-    }
-  }, [])
-
-  return {
-    items,
-    summary: useMemo(() => buildMutationSummary(items), [items]),
-  }
-}
 
 export function useMutationQueueAutoSync() {
   useEffect(() => {
@@ -58,4 +27,3 @@ export function useMutationQueueAutoSync() {
     }
   }, [])
 }
-

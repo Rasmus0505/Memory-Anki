@@ -1,8 +1,12 @@
 import { fireEvent, render, screen } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/shared/components/ui/dialog'
 
 describe('Dialog', () => {
+  beforeEach(() => {
+    window.localStorage.clear()
+  })
+
   it('renders above immersive fullscreen shells', () => {
     render(
       <>
@@ -24,13 +28,11 @@ describe('Dialog', () => {
     const overlay = Array.from(document.querySelectorAll('[data-state="open"]')).find((element) =>
       element.className.includes('z-[240]'),
     )
-    const centeredLayer = Array.from(document.querySelectorAll('div')).find((element) =>
-      element.className.includes('z-[241]') && element.className.includes('pointer-events-none'),
-    )
+    const dialog = screen.getByRole('dialog')
 
     expect(overlay).not.toBeNull()
     expect(overlay?.className).toContain('z-[240]')
-    expect(centeredLayer).not.toBeUndefined()
+    expect(dialog.className).toContain('fixed')
   })
 
   it('closes when clicking the close button', () => {
@@ -72,4 +74,54 @@ describe('Dialog', () => {
     expect(overlay).toBeUndefined()
     expect(screen.getByText('floating').className).toContain('z-[241]')
   })
+
+  it('collapses a floating dialog into a draggable capsule and restores it', () => {
+    render(
+      <Dialog open onOpenChange={vi.fn()}>
+        <DialogContent>
+          <DialogHeader>
+            <div>
+              <DialogTitle>capsule dialog</DialogTitle>
+              <DialogDescription>description</DialogDescription>
+            </div>
+          </DialogHeader>
+          dialog body
+        </DialogContent>
+      </Dialog>,
+    )
+
+    fireEvent.click(screen.getByLabelText('缩小为胶囊'))
+
+    expect(screen.queryByText('dialog body')).toBeNull()
+    const restoreButton = screen.getByRole('button', { name: '恢复capsule dialog' })
+    expect(restoreButton).toBeTruthy()
+
+    fireEvent.click(restoreButton)
+
+    expect(screen.getByText('dialog body')).toBeTruthy()
+  })
+
+  it('prevents outside dismissal while pinned', () => {
+    const onOpenChange = vi.fn()
+
+    render(
+      <Dialog open onOpenChange={onOpenChange}>
+        <DialogContent>
+          <DialogHeader>
+            <div>
+              <DialogTitle>pinned dialog</DialogTitle>
+              <DialogDescription>description</DialogDescription>
+            </div>
+          </DialogHeader>
+          dialog body
+        </DialogContent>
+      </Dialog>,
+    )
+
+    fireEvent.click(screen.getByLabelText('置顶弹窗'))
+    fireEvent.pointerDown(document.body)
+
+    expect(onOpenChange).not.toHaveBeenCalledWith(false)
+  })
+
 })

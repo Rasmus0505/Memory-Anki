@@ -19,11 +19,11 @@ from memory_anki.infrastructure.db.models import (
     SubjectDocument,
 )
 from memory_anki.modules.palace_quiz.application import ai_service as palace_quiz_ai_service
+from memory_anki.modules.palace_quiz.presentation import router as palace_quiz_router
 from memory_anki.modules.palaces.application.title_sync_service import (
     reconcile_palace_chapter_binding,
     set_palace_chapter_links,
 )
-from memory_anki.modules.palace_quiz.presentation import router as palace_quiz_router
 from memory_anki.modules.settings.presentation import router as settings_router
 
 
@@ -570,6 +570,37 @@ class PalaceQuizRouteTests(unittest.TestCase):
         )
         self.assertEqual(short_answer_response.status_code, 400)
         self.assertIn("只有选择题可以累计对错统计", short_answer_response.json()["detail"])
+
+    def test_reset_question_attempt_statistics(self):
+        self.client.post(
+            "/api/v1/palace-quiz-questions/1/choice-attempts",
+            json={"selected_option_id": "B"},
+        )
+        self.client.post(
+            "/api/v1/palace-quiz-questions/1/choice-attempts",
+            json={"selected_option_id": "A"},
+        )
+
+        reset_response = self.client.post(
+            "/api/v1/palace-quiz-questions/reset-attempts",
+            json={"question_ids": [1, 2]},
+        )
+        self.assertEqual(reset_response.status_code, 200)
+        self.assertTrue(reset_response.json()["ok"])
+        self.assertEqual(reset_response.json()["reset_count"], 2)
+
+        listed = self.client.get("/api/v1/palaces/1/quiz-questions")
+        question = listed.json()["items"][0]
+        self.assertEqual(question["attempt_count"], 0)
+        self.assertEqual(question["correct_count"], 0)
+        self.assertEqual(question["incorrect_count"], 0)
+
+        invalid_response = self.client.post(
+            "/api/v1/palace-quiz-questions/reset-attempts",
+            json={"question_ids": []},
+        )
+        self.assertEqual(invalid_response.status_code, 400)
+        self.assertIn("至少需要选择一题", invalid_response.json()["detail"])
 
     def test_short_answer_feedback_builds_expected_model_input(self):
         captured: dict[str, object] = {}
@@ -1654,6 +1685,25 @@ class PalaceQuizRouteTests(unittest.TestCase):
                     error_json="{}",
                 )
             )
+            session.add(
+                PalaceQuizQuestion(
+                    palace_id=None,
+                    source_chapter_id=self.chapter_id,
+                    question_type="short_answer",
+                    stem="覆盖前旧题",
+                    options_json="[]",
+                    answer_payload_json=json.dumps(
+                        {"reference_answer": "旧答案"},
+                        ensure_ascii=False,
+                    ),
+                    analysis="旧解析。",
+                    source_meta_json=json.dumps(
+                        {"source_kind": "manual", "generation_mode": "manual"},
+                        ensure_ascii=False,
+                    ),
+                    sort_order=1,
+                )
+            )
             session.commit()
 
         with (
@@ -1702,6 +1752,7 @@ class PalaceQuizRouteTests(unittest.TestCase):
                     "ai_call_log_id": source_log_id,
                     "selected_chapter_id": self.chapter_id,
                     "classify_by_mini_palace": True,
+                    "save_mode": "overwrite",
                 },
             )
 
@@ -2104,6 +2155,145 @@ class PalaceQuizRouteTests(unittest.TestCase):
         payload = response.json()
         self.assertEqual(payload["source_meta"]["source_chapter_id"], self.chapter_id)
         self.assertEqual(payload["questions"][0]["source_chapter_id"], self.chapter_id)
+
+    def test_text_file_generation_reads_standard_json_without_ai(self):
+        with patch.object(
+            palace_quiz_ai_service,
+            "_call_logged_chat_completion",
+            side_effect=AssertionError("standard JSON should not call AI"),
+        ):
+            response = self.client.post(
+                "/api/v1/palaces/1/quiz-generation/text-files",
+                data={"extra_prompt": "", "selected_chapter_id": str(self.chapter_id)},
+                files=[
+                    (
+                        "files",
+                        (
+                            "questions.json",
+                            json.dumps(
+                                {
+                                    "questions": [
+                                        {
+                                            "question_type": "fill_blank",
+                                            "stem": "DNA 的基本单位是 {{blank_1}}。",
+                                            "blanks": [
+                                                {
+                                                    "id": "blank_1",
+                                                    "answer": "核苷酸",
+                                                    "aliases": ["脱氧核苷酸"],
+                                                }
+                                            ],
+                                            "analysis": "资料明确指出 DNA 由核苷酸组成。",
+                                        }
+                                    ]
+                                },
+                                ensure_ascii=False,
+                            ).encode("utf-8"),
+                            "application/json",
+                        ),
+                    )
+                ],
+            )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["source_meta"]["generation_mode"], "text_files")
+        self.assertEqual(payload["questions"][0]["question_type"], "fill_blank")
+        self.assertEqual(payload["questions"][0]["source_chapter_id"], self.chapter_id)
+
+    def test_text_file_generation_pairs_textbook_questions_and_answers(self):
+        question_text = "\n".join(
+            [
+                "第一章 细胞生物学",
+                "第一节 细胞结构",
+                "真题典例",
+                "单项选择题",
+                "1. 细胞遗传信息主要储存在（）",
+                "A. 细胞膜",
+                "B. 细胞核",
+                "C. 核糖体",
+                "D. 细胞壁",
+                "二、论述题",
+                "1. 简述有丝分裂的生物学意义。",
+            ]
+        )
+        answer_text = "\n".join(
+            [
+                "第一章 细胞生物学",
+                "第一节 细胞结构",
+                "真题典例",
+                "单项选择题",
+                "1.【答案】B 细胞核保存主要遗传信息。",
+                "二、论述题",
+                "1.【参考答案】保证遗传信息稳定传递，并维持亲子代细胞遗传稳定。",
+            ]
+        )
+
+        with patch.object(
+            palace_quiz_ai_service,
+            "_call_logged_chat_completion",
+            side_effect=AssertionError("paired textbook text should not call AI"),
+        ):
+            response = self.client.post(
+                "/api/v1/palaces/1/quiz-generation/text-files",
+                data={"extra_prompt": "", "selected_chapter_id": str(self.chapter_id)},
+                files=[
+                    ("files", ("bio_questions.txt", question_text.encode("utf-8"), "text/plain")),
+                    ("files", ("bio_answers.txt", answer_text.encode("utf-8"), "text/plain")),
+                ],
+            )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(len(payload["questions"]), 2)
+        self.assertEqual(payload["questions"][0]["question_type"], "multiple_choice")
+        self.assertEqual(payload["questions"][0]["answer_payload"]["correct_option_id"], "B")
+        self.assertEqual(payload["questions"][1]["question_type"], "short_answer")
+        self.assertIn("遗传信息稳定传递", payload["questions"][1]["answer_payload"]["reference_answer"])
+
+    def test_text_file_generation_global_dedupes_by_stem_and_options(self):
+        response = self.client.post(
+            "/api/v1/palaces/1/quiz-generation/text-files",
+            data={"extra_prompt": "", "selected_chapter_id": str(self.chapter_id)},
+            files=[
+                (
+                    "files",
+                    (
+                        "duplicate.json",
+                        json.dumps(
+                            {
+                                "questions": [
+                                    {
+                                        "question_type": "multiple_choice",
+                                        "stem": "细胞的控制中心是？",
+                                        "options": [
+                                            {"id": "A", "text": "细胞膜"},
+                                            {"id": "B", "text": "细胞核"},
+                                        ],
+                                        "correct_option_id": "B",
+                                        "analysis": "解析文字即使不同也应按导入口径去重。",
+                                    },
+                                    {
+                                        "question_type": "short_answer",
+                                        "stem": "说明细胞核的作用。",
+                                        "reference_answer": "储存遗传信息并控制细胞活动。",
+                                        "analysis": "细胞核是控制中心。",
+                                    },
+                                ]
+                            },
+                            ensure_ascii=False,
+                        ).encode("utf-8"),
+                        "application/json",
+                    ),
+                )
+            ],
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(len(payload["questions"]), 1)
+        self.assertEqual(payload["questions"][0]["stem"], "说明细胞核的作用。")
+        self.assertEqual(payload["generation_stats"]["skipped_count"], 1)
 
     def test_image_generation_accepts_parent_chapter_when_only_child_is_explicitly_bound(self):
         with self.SessionLocal() as session:
@@ -2531,6 +2721,64 @@ class PalaceQuizRouteTests(unittest.TestCase):
             and item["classified_chapter_id"] == self.child_chapter_id
         ]
         self.assertEqual(len(matched), 1)
+
+    def test_batch_create_chapter_quiz_questions_can_overwrite_selected_scope(self):
+        first_response = self.client.post(
+            f"/api/v1/chapters/{self.chapter_id}/quiz-questions/batch",
+            json={
+                "questions": [
+                    {
+                        "source_chapter_id": self.chapter_id,
+                        "question_type": "multiple_choice",
+                        "stem": "旧题 A？",
+                        "options": [
+                            {"id": "A", "text": "旧选项A"},
+                            {"id": "B", "text": "旧选项B"},
+                        ],
+                        "answer_payload": {"correct_option_id": "A"},
+                        "analysis": "旧解析。",
+                    },
+                    {
+                        "source_chapter_id": self.chapter_id,
+                        "question_type": "short_answer",
+                        "stem": "旧题 B？",
+                        "answer_payload": {"reference_answer": "旧答案"},
+                        "analysis": "旧解析。",
+                    },
+                ]
+            },
+        )
+        self.assertEqual(first_response.status_code, 200)
+        self.assertEqual(len(first_response.json()["items"]), 2)
+
+        overwrite_response = self.client.post(
+            f"/api/v1/chapters/{self.chapter_id}/quiz-questions/batch",
+            json={
+                "save_mode": "overwrite",
+                "questions": [
+                    {
+                        "source_chapter_id": self.chapter_id,
+                        "classified_chapter_id": self.child_chapter_id,
+                        "question_type": "multiple_choice",
+                        "stem": "新题？",
+                        "options": [
+                            {"id": "A", "text": "新选项A"},
+                            {"id": "B", "text": "新选项B"},
+                        ],
+                        "answer_payload": {"correct_option_id": "B"},
+                        "analysis": "新解析。",
+                    }
+                ],
+            },
+        )
+        self.assertEqual(overwrite_response.status_code, 200)
+        created = overwrite_response.json()["items"]
+        self.assertEqual(len(created), 1)
+        self.assertEqual(created[0]["sort_order"], 1)
+
+        listed = self.client.get(f"/api/v1/chapters/{self.chapter_id}/quiz-questions")
+        stems = [item["stem"] for item in listed.json()["items"]]
+        self.assertEqual(stems, ["新题？"])
 
     def test_batch_create_chapter_quiz_questions_rejects_mini_palace_binding(self):
         response = self.client.post(

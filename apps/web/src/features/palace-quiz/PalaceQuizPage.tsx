@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
-import { Link, useParams, useSearchParams } from 'react-router-dom'
-import { ArrowLeft } from 'lucide-react'
+import { useParams, useSearchParams } from 'react-router-dom'
+import { BookOpen } from 'lucide-react'
 import { useAiRunConfigDialog } from '@/features/ai-config/useAiRunConfigDialog'
 import { PalaceQuizGenerationPanel } from '@/features/palace-quiz/components/PalaceQuizGenerationPanel'
 import { PalaceQuizManagePanel } from '@/features/palace-quiz/components/PalaceQuizManagePanel'
+import { PalaceQuizMemoryLookupDialog } from '@/features/palace-quiz/components/PalaceQuizMemoryLookupDialog'
 import { PalaceQuizPracticePanel } from '@/features/palace-quiz/components/PalaceQuizPracticePanel'
 import { PalaceQuizRangeDialog } from '@/features/palace-quiz/components/PalaceQuizRangeDialog'
+import { resetPalaceQuizQuestionAttemptsApi } from '@/features/palace-quiz/api/palaceQuizApi'
 import { usePalaceQuizGeneration } from '@/features/palace-quiz/hooks/usePalaceQuizGeneration'
 import { usePalaceQuizManagement } from '@/features/palace-quiz/hooks/usePalaceQuizManagement'
 import { usePalaceQuizPractice } from '@/features/palace-quiz/hooks/usePalaceQuizPractice'
@@ -16,8 +18,10 @@ import { useRouteResidency } from '@/shared/routing/RouteResidency'
 import { PageIntro } from '@/shared/components/layout/PageIntro'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
+import { ConfirmDialog } from '@/shared/components/ui/confirm-dialog'
 import { readTimerAutomationConfig } from '@/shared/components/session/timer-automation-config'
 import { dispatchGlobalFeedback } from '@/shared/feedback/globalFeedbackModel'
+import { toast } from '@/shared/feedback/toast'
 import { shouldAutoStartOnPageEnter, useTimedSession } from '@/shared/hooks/useTimedSession'
 import { useGlobalTimerRegistration } from '@/shared/components/session/GlobalTimerProvider'
 
@@ -27,6 +31,9 @@ export default function PalaceQuizPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const palaceId = id ? Number(id) : null
   const [activeTab, setActiveTab] = useState<PalaceQuizTabKey>(() => readInitialTab(searchParams))
+  const [memoryLookupOpen, setMemoryLookupOpen] = useState(false)
+  const [resetAttemptsDialogOpen, setResetAttemptsDialogOpen] = useState(false)
+  const [resetAttemptsLoading, setResetAttemptsLoading] = useState(false)
   const { promptForAiOptions, promptForScenarioAiOptions, aiRunConfigDialog } = useAiRunConfigDialog()
   const { palace, questions, loading, error, setQuestions, refreshQuestions } =
     usePalaceQuizResources(palaceId)
@@ -179,6 +186,25 @@ export default function PalaceQuizPage() {
     }
   }
 
+  const handleResetVisibleAttempts = async () => {
+    const questionIds = browser.filteredQuestions.map((question) => question.id)
+    if (questionIds.length === 0) return
+    setResetAttemptsLoading(true)
+    try {
+      const result = await resetPalaceQuizQuestionAttemptsApi(questionIds)
+      practice.removeQuestionStates(questionIds)
+      await refreshQuestions()
+      toast.success(`已清空 ${result.reset_count} 道题的做题进度。`)
+      emitQuizFeedback('quiz_answer_reset', { label: '清空进度', audioScope: 'global' })
+    } catch (nextError) {
+      toast.error(nextError instanceof Error ? nextError.message : '清空做题进度失败。')
+      emitQuizFeedback('quiz_error_persist_failed', { label: '清空失败', audioScope: 'global' })
+    } finally {
+      setResetAttemptsLoading(false)
+      setResetAttemptsDialogOpen(false)
+    }
+  }
+
   const handleSaveGenerationPreview = async () => {
     await generation.handleSaveGenerationPreview()
     setActiveTab('practice')
@@ -200,18 +226,37 @@ export default function PalaceQuizPage() {
       onChangeCapture={() => registerQuizActivity('page_change')}
     >
       {aiRunConfigDialog}
+      <ConfirmDialog
+        open={resetAttemptsDialogOpen}
+        onOpenChange={setResetAttemptsDialogOpen}
+        title="清空当前范围进度"
+        description="只会清空当前筛选范围内题目的累计答对、答错和作答次数，不会删除题目。"
+        tone="danger"
+        confirmText={resetAttemptsLoading ? '清空中...' : '清空进度'}
+        onConfirm={() => void handleResetVisibleAttempts()}
+      />
+      {palaceId ? (
+        <PalaceQuizMemoryLookupDialog
+          open={memoryLookupOpen}
+          onOpenChange={setMemoryLookupOpen}
+          currentPalaceId={palaceId}
+        />
+      ) : null}
       <PageIntro
         eyebrow="宫殿做题"
         title={palace?.title ? `${palace.title} · 配套习题` : '宫殿配套习题'}
         description="这里把宫殿级题库、手动管理和 AI 预览生成放在一起。选择题即时判题并累计统计，简答题提交后显示参考答案与解析。"
         actions={
           <>
-            <Link to="/palaces">
-              <Button variant="outline" size="sm">
-                <ArrowLeft className="h-4 w-4" />
-                返回记忆宫殿
-              </Button>
-            </Link>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setMemoryLookupOpen(true)}
+            >
+              <BookOpen className="h-4 w-4" />
+              查看记忆宫殿
+            </Button>
             <Badge variant="secondary">{questions.length} 题</Badge>
           </>
         }
@@ -265,10 +310,12 @@ export default function PalaceQuizPage() {
           onShortAnswerSubmit={practice.handleShortAnswerSubmit}
           onShortAnswerFeedback={practice.handleShortAnswerFeedback}
           onReset={practice.handleResetQuestionState}
+          onResetVisibleAttempts={() => setResetAttemptsDialogOpen(true)}
           onEdit={handleOpenQuestionEditor}
           onScopeFeedback={handleScopeChange}
           onViewFeedback={handleViewModeChange}
           onNavigateFeedback={handleQuestionNavigate}
+          resetAttemptsLoading={resetAttemptsLoading}
         />
       ) : null}
 
@@ -318,6 +365,8 @@ export default function PalaceQuizPage() {
           generationPdfSources={generation.generationPdfSources}
           generationEnableSecondaryReview={generation.generationEnableSecondaryReview}
           setGenerationEnableSecondaryReview={generation.setGenerationEnableSecondaryReview}
+          generationSaveMode={generation.generationSaveMode}
+          setGenerationSaveMode={generation.setGenerationSaveMode}
           generationClassifyByMiniPalace={generation.generationClassifyByMiniPalace}
           setGenerationClassifyByMiniPalace={generation.setGenerationClassifyByMiniPalace}
           generationError={generation.generationError}

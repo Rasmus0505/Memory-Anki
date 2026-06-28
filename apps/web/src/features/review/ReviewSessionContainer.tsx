@@ -18,12 +18,17 @@ import { usePersistedMindMapEditor } from '@/shared/hooks/usePersistedMindMapEdi
 import { PageIntro } from '@/shared/components/layout/PageIntro'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
+import { appConfirm } from '@/shared/components/ui/native-dialog'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card'
 import {
   MindMapReviewFlow,
   type ReviewFlowSnapshot,
 } from '@/features/review/components/MindMapReviewFlow'
 import { StageSelectDialog } from '@/features/review/components/StageSelectDialog'
+import {
+  consumePrefetchedStudySession,
+  type StudyWarmupKind,
+} from '@/features/review/studyWarmup'
 import type { RevealFlowMode } from '@/entities/review/model/review-flow-tree'
 
 type ReviewDisplayMode = 'review' | 'edit'
@@ -81,6 +86,7 @@ interface ReviewSessionContainerProps {
     },
   ) => Promise<unknown>
   backHref: (chapterId: number | null) => string
+  warmupKind?: StudyWarmupKind
   refreshReviewStateOnExitEdit?: boolean
   renderBelowFlow?: (args: {
     session: ReviewSessionContainerSession
@@ -157,7 +163,7 @@ export function ReviewSessionContainer({
   clearProgress,
   submitSession,
   backHref,
-  refreshReviewStateOnExitEdit = false,
+  warmupKind,
   renderBelowFlow,
 }: ReviewSessionContainerProps) {
   const { id } = useParams()
@@ -193,7 +199,6 @@ export function ReviewSessionContainer({
     meta: editorPalace,
     editorState: editEditorState,
     setEditorState: setEditEditorState,
-    isLoading: editorLoading,
     isSaving: editorSaving,
     error: editorError,
     reload: reloadEditor,
@@ -212,8 +217,9 @@ export function ReviewSessionContainer({
     }),
     onSaveError: async (nextError, pendingState) => {
       if (!activePalaceId || !nextError.message.includes('危险结构变更')) return false
-      const confirmed = window.confirm(
+      const confirmed = await appConfirm(
         '这次保存会让宫殿节点数量骤减。只有在你确实要大幅删除宫殿结构时才继续。确定继续保存吗？',
+        { title: '确认危险保存', tone: 'danger' },
       )
       if (!confirmed) return true
       await savePalaceEditorWithOptionsApi(activePalaceId, {
@@ -237,20 +243,26 @@ export function ReviewSessionContainer({
     const sessionId = Number(id)
     const load = async () => {
       const inflightKey = `${eyebrow}:${sessionId}`
-      let pending = inflightReviewSessionLoads.get(inflightKey)
-      if (!pending) {
-        pending = Promise.all([loadSession(sessionId), loadProgress(sessionId)])
-          .then(([nextSession, progressResponse]) => ({
-            session: nextSession,
-            progress: progressResponse,
-          }))
-          .finally(() => {
-            if (inflightReviewSessionLoads.get(inflightKey) === pending) {
-              inflightReviewSessionLoads.delete(inflightKey)
-            }
-          })
-        inflightReviewSessionLoads.set(inflightKey, pending)
+      const loadSessionAndProgress = () => {
+        let pending = inflightReviewSessionLoads.get(inflightKey)
+        if (!pending) {
+          pending = Promise.all([loadSession(sessionId), loadProgress(sessionId)])
+            .then(([nextSession, progressResponse]) => ({
+              session: nextSession,
+              progress: progressResponse,
+            }))
+            .finally(() => {
+              if (inflightReviewSessionLoads.get(inflightKey) === pending) {
+                inflightReviewSessionLoads.delete(inflightKey)
+              }
+            })
+          inflightReviewSessionLoads.set(inflightKey, pending)
+        }
+        return pending
       }
+      const pending = warmupKind
+        ? consumePrefetchedStudySession(warmupKind, sessionId, loadSessionAndProgress)
+        : loadSessionAndProgress()
       const { session: nextSession, progress: progressResponse } = await pending
       if (!active) return
       setSession(nextSession)
@@ -263,7 +275,7 @@ export function ReviewSessionContainer({
     return () => {
       active = false
     }
-  }, [buildReviewEditorState, eyebrow, id, loadProgress, loadSession])
+  }, [buildReviewEditorState, eyebrow, id, loadProgress, loadSession, warmupKind])
 
   const handleModeToggle = useCallback(async () => {
     if (!id || modeTransitioningRef.current) return
@@ -279,7 +291,7 @@ export function ReviewSessionContainer({
     } finally {
       modeTransitioningRef.current = false
     }
-  }, [displayMode, flushSave, id, refreshReviewStateOnExitEdit, reloadSession])
+  }, [displayMode, flushSave, id, reloadSession])
 
   const submitCompletion = useCallback(async (payload: {
     durationSeconds: number
@@ -336,15 +348,20 @@ export function ReviewSessionContainer({
   }, [])
 
   const palace = session?.palace ?? editorPalace ?? null
-  const displayLoadError = (!reviewEditorState || !editEditorState) ? editorError : null
+  const displayLoadError = displayMode === 'edit' && !editEditorState ? editorError : null
   const waitingForEditorState =
-    activePalaceId != null && !editEditorState && !displayLoadError
+    displayMode === 'edit' &&
+    activePalaceId != null &&
+    !editEditorState &&
+    !displayLoadError
 
-  if (!session || !reviewEditorState || editorLoading || waitingForEditorState) {
+  if (!session || !reviewEditorState || waitingForEditorState) {
     return <LoadingState text="正在加载复习会话…" />
   }
 
-  if (!palace || !editEditorState || displayLoadError) {
+  const resolvedEditEditorState = editEditorState ?? reviewEditorState
+
+  if (!palace || !resolvedEditEditorState || displayLoadError) {
     return <div className="flex items-center justify-center py-32 text-sm text-destructive">{displayLoadError || '未找到可复习的宫殿。'}</div>
   }
 
@@ -388,7 +405,7 @@ export function ReviewSessionContainer({
           viewMemoryScope={resolvedViewMemoryScope}
           persistKey={`review:${session.id}`}
           reviewEditorState={reviewEditorState}
-          editEditorState={editEditorState}
+          editEditorState={resolvedEditEditorState}
           onModeToggle={handleModeToggle}
           onEditEditorStateChange={setEditEditorState}
           submitting={submitting}

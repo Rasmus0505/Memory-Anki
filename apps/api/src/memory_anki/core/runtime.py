@@ -145,17 +145,17 @@ def assert_runtime_compatible(
     shared_generation = current_runtime_generation(shared_state)
     if shared_generation > resolved_contract.max_supported_generation:
         raise RuntimeError(
-            "Shared data generation is newer than this version supports."
-            f" Shared generation: {shared_generation}."
+            "Runtime data generation is newer than this version supports."
+            f" Runtime generation: {shared_generation}."
             f" Max supported generation: {resolved_contract.max_supported_generation}."
             " Start a newer app version, or restore a compatible backup before switching back."
         )
     if shared_generation < resolved_contract.min_supported_generation:
         raise RuntimeError(
-            "Shared data generation is older than this version requires."
-            f" Shared generation: {shared_generation}."
+            "Runtime data generation is older than this version requires."
+            f" Runtime generation: {shared_generation}."
             f" Min required generation: {resolved_contract.min_supported_generation}."
-            " Upgrade the shared data with a compatible app version first."
+            " Upgrade the runtime data with a compatible app version first."
         )
     return shared_state
 

@@ -21,6 +21,7 @@ import {
 } from '@/entities/mini-palace/api'
 import { submitMiniReviewSessionApi } from '@/features/review/api/reviewApi'
 import { StageSelectDialog } from '@/features/review/components/StageSelectDialog'
+import { consumePrefetchedStudySession } from '@/features/review/studyWarmup'
 
 export default function MiniPalacePracticePage() {
   const { id } = useParams()
@@ -50,7 +51,13 @@ export default function MiniPalacePracticePage() {
       setLoading(true)
       setError('')
       try {
-        const payload = await getPalaceMiniPalaceApi(miniPalaceId)
+        const { session: payload, progress: progressResponse } =
+          await consumePrefetchedStudySession('mini-practice', miniPalaceId, () =>
+            Promise.all([
+              getPalaceMiniPalaceApi(miniPalaceId),
+              getMiniPracticeSessionProgressApi(miniPalaceId),
+            ]).then(([session, progress]) => ({ session, progress })),
+          )
         setMiniPalace(payload.item)
         setPalace(payload.palace)
         setEditorState({
@@ -65,7 +72,6 @@ export default function MiniPalacePracticePage() {
           editor_local_config: {},
           lang: 'zh',
         })
-        const progressResponse = await getMiniPracticeSessionProgressApi(miniPalaceId)
         const progress = progressResponse.progress
         setHasResumeProgress(Boolean(progress && !progress.completed))
         setInitialSnapshot(

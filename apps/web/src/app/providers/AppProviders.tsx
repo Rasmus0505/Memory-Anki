@@ -11,6 +11,7 @@ import { cleanupExpiredAppLogs, logAppError } from '@/shared/logs/model/appLogs'
 import { useMutationQueueAutoSync } from '@/shared/persistence/useMutationQueue'
 import { GlobalTimerProvider } from '@/shared/components/session/GlobalTimerProvider'
 import { RouteProgressBar } from '@/shared/components/route-progress/RouteProgressBar'
+import { NativeDialogProvider } from '@/shared/components/ui/native-dialog'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -69,6 +70,7 @@ export function AppProviders({ children }: PropsWithChildren) {
           <GlobalTimerProvider>
             <QuizLauncherProvider>
               {children}
+              <NativeDialogProvider />
               <Toaster position="bottom-right" richColors />
             </QuizLauncherProvider>
           </GlobalTimerProvider>

@@ -4,14 +4,18 @@ import { vi } from 'vitest'
 import PalaceQuizPage from '@/features/palace-quiz/PalaceQuizPage'
 
 export const getPalaceApiMock = vi.fn()
+export const getPalacesGroupedApiMock = vi.fn()
+export const getPalaceEditorApiMock = vi.fn()
 export const getPalaceQuizQuestionsApiMock = vi.fn()
 export const batchCreateChapterQuizQuestionsApiMock = vi.fn()
 export const batchCreatePalaceQuizQuestionsApiMock = vi.fn()
 export const batchDeletePalaceQuizQuestionsApiMock = vi.fn()
 export const previewPalaceQuizGenerationFromPdfStreamApiMock = vi.fn()
+export const previewPalaceQuizGenerationFromTextFilesApiMock = vi.fn()
 export const recoverAndSavePalaceQuizGenerationFromAiLogApiMock = vi.fn()
 export const classifyPalaceQuizQuestionsToMiniPalacesApiMock = vi.fn()
 export const recordPalaceQuizChoiceAttemptApiMock = vi.fn()
+export const resetPalaceQuizQuestionAttemptsApiMock = vi.fn()
 export const requestPalaceShortAnswerFeedbackApiMock = vi.fn()
 export const deletePalaceQuizQuestionApiMock = vi.fn()
 export const dispatchGlobalFeedbackMock = vi.fn()
@@ -22,6 +26,7 @@ export const useTimedSessionMock = vi.fn()
 export const promptForAiOptionsMock = vi.fn()
 export const promptForScenarioAiOptionsMock = vi.fn()
 export const refreshSubjectDocumentsMock = vi.fn()
+export const mindMapFramePropsMock = vi.fn()
 
 export const pdfControllerMock = {
   subjectDocuments: [
@@ -86,6 +91,26 @@ export const pdfControllerMock = {
 
 vi.mock('@/entities/palace/api/catalogApi', () => ({
   getPalaceApi: (...args: unknown[]) => getPalaceApiMock(...args),
+  getPalacesGroupedApi: (...args: unknown[]) => getPalacesGroupedApiMock(...args),
+  getPalaceEditorApi: (...args: unknown[]) => getPalaceEditorApiMock(...args),
+}))
+
+vi.mock('@/shared/components/mindmap-host', () => ({
+  MindMapFrame: (props: {
+    readonly?: boolean
+    focusRequestNodeUid?: string | null
+    focusRequestNonce?: number
+  }) => {
+    mindMapFramePropsMock(props)
+    return (
+      <div
+        data-testid="memory-lookup-mindmap"
+        data-readonly={props.readonly ? 'true' : 'false'}
+        data-root-uid={props.focusRequestNodeUid || ''}
+        data-focus-nonce={String(props.focusRequestNonce ?? 0)}
+      />
+    )
+  },
 }))
 
 vi.mock('@/features/ai-config/useAiRunConfigDialog', () => ({
@@ -110,12 +135,16 @@ vi.mock('@/entities/quiz/api/quizApi', () => ({
   previewPalaceQuizGenerationFromImagesApi: vi.fn(),
   previewPalaceQuizGenerationFromPdfStreamApi: (...args: unknown[]) =>
     previewPalaceQuizGenerationFromPdfStreamApiMock(...args),
+  previewPalaceQuizGenerationFromTextFilesApi: (...args: unknown[]) =>
+    previewPalaceQuizGenerationFromTextFilesApiMock(...args),
   recoverAndSavePalaceQuizGenerationFromAiLogApi: (...args: unknown[]) =>
     recoverAndSavePalaceQuizGenerationFromAiLogApiMock(...args),
   classifyPalaceQuizQuestionsToMiniPalacesApi: (...args: unknown[]) =>
     classifyPalaceQuizQuestionsToMiniPalacesApiMock(...args),
   recordPalaceQuizChoiceAttemptApi: (...args: unknown[]) =>
     recordPalaceQuizChoiceAttemptApiMock(...args),
+  resetPalaceQuizQuestionAttemptsApi: (...args: unknown[]) =>
+    resetPalaceQuizQuestionAttemptsApiMock(...args),
   requestPalaceShortAnswerFeedbackApi: (...args: unknown[]) =>
     requestPalaceShortAnswerFeedbackApiMock(...args),
 }))
@@ -157,6 +186,106 @@ export const palaceResponse = {
       subject: { id: 2, name: '生物' },
     },
   ],
+}
+
+export const palaceLookupGroupedResponse = {
+  groups: [],
+  ungrouped: [],
+  subjects: [
+    {
+      subject: { id: 2, name: '生物', color: '#22c55e' },
+      chapter_groups: [
+        {
+          source_chapter: { id: 1, name: '第三章', subject_id: 2, parent_id: null },
+          palaces: [
+            {
+              id: 1,
+              title: '细胞生物学宫殿',
+              resolved_title: '细胞生物学宫殿',
+              description: '',
+              mastered: false,
+              created_at: '2026-06-12T00:00:00',
+              next_review_at: null,
+              has_due_review: false,
+              current_review_schedule_id: null,
+              review_stage_total: 0,
+              review_stage_completed: 0,
+              review_stage_progress: 0,
+              stage_labels: [],
+              review_stages: [],
+              title_mode: 'sync',
+              manual_title: '',
+              grouping_mode: 'auto',
+              manual_group_chapter_id: null,
+              binding_status: 'ok',
+              primary_chapter_id: 1,
+              primary_chapter: { id: 1, name: '第三章', subject_id: 2, parent_id: null },
+              resolved_subject: { id: 2, name: '生物', color: '#22c55e' },
+              resolved_parent_chapter: null,
+              group_id: null,
+              group_sort_order: 0,
+              chapters: palaceResponse.chapters,
+              segments: [],
+              mini_palaces: palaceResponse.mini_palaces,
+            },
+            {
+              id: 2,
+              title: '遗传学宫殿',
+              resolved_title: '遗传学宫殿',
+              description: '',
+              mastered: false,
+              created_at: '2026-06-12T00:00:00',
+              next_review_at: null,
+              has_due_review: false,
+              current_review_schedule_id: null,
+              review_stage_total: 0,
+              review_stage_completed: 0,
+              review_stage_progress: 0,
+              stage_labels: [],
+              review_stages: [],
+              title_mode: 'sync',
+              manual_title: '',
+              grouping_mode: 'auto',
+              manual_group_chapter_id: null,
+              binding_status: 'ok',
+              primary_chapter_id: 2,
+              primary_chapter: { id: 2, name: '第四章', subject_id: 2, parent_id: null },
+              resolved_subject: { id: 2, name: '生物', color: '#22c55e' },
+              resolved_parent_chapter: null,
+              group_id: null,
+              group_sort_order: 0,
+              chapters: [{ ...palaceResponse.chapters[0], id: 2, name: '第四章' }],
+              segments: [],
+              mini_palaces: [],
+            },
+          ],
+        },
+      ],
+      ungrouped_palaces: [],
+    },
+  ],
+}
+
+export function buildPalaceEditorResponse(palaceId = 1) {
+  return {
+    palace: {
+      id: palaceId,
+      title: palaceId === 1 ? '细胞生物学宫殿' : '遗传学宫殿',
+    },
+    editor_doc: {
+      root: {
+        data: {
+          uid: `root-${palaceId}`,
+          text: palaceId === 1 ? '细胞生物学宫殿' : '遗传学宫殿',
+        },
+        children: [],
+      },
+    },
+    editor_config: {},
+    editor_local_config: {},
+    lang: 'zh',
+    editor_fingerprint: `palace-${palaceId}`,
+  }
 }
 
 export const baseQuestions = [
@@ -309,6 +438,10 @@ export function setupPalaceQuizPageTest() {
     reset: vi.fn(),
   })
   getPalaceApiMock.mockResolvedValue(palaceResponse)
+  getPalacesGroupedApiMock.mockResolvedValue(palaceLookupGroupedResponse)
+  getPalaceEditorApiMock.mockImplementation(async (palaceId: number) =>
+    buildPalaceEditorResponse(palaceId),
+  )
   getPalaceQuizQuestionsApiMock.mockResolvedValue({ items: baseQuestions })
   batchCreateChapterQuizQuestionsApiMock.mockResolvedValue({ items: [] })
   batchCreatePalaceQuizQuestionsApiMock.mockResolvedValue({ items: [] })
@@ -409,6 +542,39 @@ export function setupPalaceQuizPageTest() {
       }
     },
   )
+  previewPalaceQuizGenerationFromTextFilesApiMock.mockResolvedValue({
+    palace_id: 1,
+    questions: [
+      {
+        question_type: 'short_answer',
+        stem: '简述细胞核的作用。',
+        options: [],
+        answer_payload: { reference_answer: '储存遗传信息并控制细胞活动。' },
+        analysis: '细胞核是细胞活动控制中心。',
+        source_chapter_id: 1,
+        source_meta: {
+          ...baseQuestions[1].source_meta,
+          source_kind: 'text_files',
+          generation_mode: 'manual_text_pair',
+          image_names: ['bio_questions.txt', 'bio_answers.txt'],
+        },
+      },
+    ],
+    source_meta: {
+      ...baseQuestions[1].source_meta,
+      source_kind: 'text_files',
+      generation_mode: 'manual_text_pair',
+      image_names: ['bio_questions.txt', 'bio_answers.txt'],
+    },
+    ai_call_log_id: null,
+    warnings: [],
+    generation_stats: {
+      returned_count: 1,
+      savable_count: 1,
+      skipped_count: 0,
+    },
+    grouped_questions: null,
+  })
   classifyPalaceQuizQuestionsToMiniPalacesApiMock.mockResolvedValue({
     palace_id: 1,
     mini_palace_groups: [
@@ -465,6 +631,7 @@ export function setupPalaceQuizPageTest() {
     selected_option_id: 'B',
     is_correct: true,
   })
+  resetPalaceQuizQuestionAttemptsApiMock.mockResolvedValue({ ok: true, reset_count: 1 })
   requestPalaceShortAnswerFeedbackApiMock.mockResolvedValue({
     question_id: 12,
     feedback_text: '你的答案方向是对的，还可以补充遗传稳定性。',
