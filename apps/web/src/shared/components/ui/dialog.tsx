@@ -291,7 +291,9 @@ const DialogContent = forwardRef<
     (event: ReactPointerEvent<HTMLElement>) => {
       if (!floatingEnabled) return
       const target = event.target
+      const allowControlDrag = event.currentTarget.hasAttribute('data-dialog-capsule-drag')
       if (
+        !allowControlDrag &&
         target instanceof Element &&
         target.closest('button,a,input,textarea,select,[role="button"],[data-dialog-window-control="true"]')
       ) {
@@ -339,7 +341,8 @@ const DialogContent = forwardRef<
   )
 
   const panelClassName = cn(
-    'pointer-events-auto relative flex flex-col overflow-hidden',
+    'pointer-events-auto',
+    (resolvedLayout !== 'unstyled' || floatingEnabled) && 'relative flex flex-col overflow-hidden',
     resolvedLayout === 'unstyled' && !floatingEnabled && 'z-[241]',
     resolvedLayout === 'centered' &&
       'max-h-[92vh] w-full max-w-3xl rounded-2xl border bg-background shadow-2xl',
@@ -381,6 +384,7 @@ const DialogContent = forwardRef<
           <button
             type="button"
             className="inline-flex max-w-[min(360px,calc(100vw-32px))] cursor-grab items-center gap-2 rounded-full border border-border/80 bg-background/96 px-4 py-2 text-sm font-medium shadow-2xl backdrop-blur active:cursor-grabbing"
+            data-dialog-capsule-drag="true"
             onPointerDown={beginDrag}
             onClick={() => persistFloatingLayout((current) => ({ ...current, collapsed: false }))}
             aria-label={`恢复${derivedCapsuleLabel}`}

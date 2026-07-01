@@ -100,7 +100,8 @@ export function ReviewFlowMapPanel({
   const [hostReadyTimedOut, setHostReadyTimedOut] = useState(false)
   const isEditMode = displayMode === 'edit'
   const frameEditorState = isEditMode && editableEditorState ? editableEditorState : visibleEditorState
-  const frameSyncIntent = isEditMode ? 'soft' : 'replace'
+  const frameSyncIntent = 'soft'
+  const frameForceSyncKey = modeSyncVersion > 0 ? `${displayMode}:${modeSyncVersion}` : undefined
   const handleImmersiveToggle = useCallback(async () => {
     if (nativeFullscreenActive) {
       await frameRef.current?.exitNativeFullscreen()
@@ -204,8 +205,8 @@ export function ReviewFlowMapPanel({
         preserveViewOnSync
         syncReason={isEditMode ? null : 'review_flip'}
         externalSyncKey={isEditMode ? null : visibleEditorSyncKey}
-        forceSyncKey={`${displayMode}:${modeSyncVersion}`}
-        forceSyncIntent="replace"
+        forceSyncKey={frameForceSyncKey}
+        forceSyncIntent="soft"
         initialViewPolicy="preserve"
         bilinkCounts={bilinkCounts}
         bilinkItems={bilinkItems}

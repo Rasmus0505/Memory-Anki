@@ -1,4 +1,4 @@
-"""Start the Memory Anki web stack and open the desktop break-guard window."""
+"""Start the Memory Anki web stack and open the desktop app with a timer overlay."""
 
 from __future__ import annotations
 
@@ -17,6 +17,9 @@ FRONTEND_URL = f"http://{dev_server.BACKEND_HOST}:{dev_server.FRONTEND_PORT}/"
 def main() -> int:
     dev_server.free_port(dev_server.BACKEND_PORT, "后端")
     dev_server.free_port(dev_server.FRONTEND_PORT, "前端")
+
+    if not dev_server.sync_before_start():
+        return 1
 
     try:
         dev_server.ensure_backend_runtime_prepared()
@@ -43,8 +46,8 @@ def main() -> int:
     npm = dev_server._resolve_npm()
     env = os.environ.copy()
     env["MEMORY_ANKI_DESKTOP_URL"] = FRONTEND_URL
-    env["MEMORY_ANKI_OVERLAY_URL"] = FRONTEND_URL
-    print("[i] 启动休息守护桌面小窗 ...")
+    env["MEMORY_ANKI_TIMER_OVERLAY_URL"] = f"{FRONTEND_URL.rstrip('/')}/timer-overlay"
+    print("[i] 启动 Memory Anki 桌面端 + 全局计时器小窗 ...")
     result = subprocess.run(
       [npm, "run", "desktop:timer"],
       cwd=str(WEB_DIR),

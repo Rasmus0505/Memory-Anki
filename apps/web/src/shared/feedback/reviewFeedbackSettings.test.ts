@@ -15,6 +15,17 @@ describe('reviewFeedbackSettings', () => {
 
   it('returns defaults when storage is empty', () => {
     expect(readReviewFeedbackSettings()).toEqual(DEFAULT_REVIEW_FEEDBACK_SETTINGS)
+    expect(DEFAULT_REVIEW_FEEDBACK_SETTINGS.scenes.quiz).toEqual(
+      expect.objectContaining({
+        enabled: true,
+        soundEnabled: true,
+        animationEnabled: true,
+        confettiAmount: 0.8,
+        cooldownMs: 900,
+        confettiPreset: 'random_direction',
+        volumeBoost: 1.05,
+      }),
+    )
   })
 
   it('exposes exactly five confetti presets with the new chinese labels', () => {
@@ -51,6 +62,11 @@ describe('reviewFeedbackSettings', () => {
           ...DEFAULT_REVIEW_FEEDBACK_SETTINGS.scenes.timer,
           confettiAmount: 2.6,
         },
+        quiz: {
+          ...DEFAULT_REVIEW_FEEDBACK_SETTINGS.scenes.quiz,
+          confettiPreset: 'school_pride',
+          volumeBoost: 1.4,
+        },
       },
     })
 
@@ -60,6 +76,8 @@ describe('reviewFeedbackSettings', () => {
     expect(saved.scenes.review.soundEnabled).toBe(false)
     expect(saved.scenes.review.confettiPreset).toBe('stars')
     expect(saved.scenes.timer.confettiAmount).toBe(2.6)
+    expect(saved.scenes.quiz.confettiPreset).toBe('school_pride')
+    expect(saved.scenes.quiz.volumeBoost).toBe(1.4)
     // 形容词强度档位已彻底移除
     expect((saved.scenes.review as unknown as Record<string, unknown>).intensity).toBeUndefined()
     expect((saved as unknown as Record<string, unknown>).revealFxIntensity).toBeUndefined()
@@ -100,5 +118,61 @@ describe('reviewFeedbackSettings', () => {
     expect(sanitized.scenes.review.confettiPreset).toBe('random_direction')
     expect(sanitized.scenes.milestone.confettiPreset).toBe('fireworks')
     expect(sanitized.scenes.completion.confettiPreset).toBe('stars')
+    expect(sanitized.scenes.quiz).toEqual(
+      expect.objectContaining({
+        enabled: true,
+        soundEnabled: false,
+        animationEnabled: true,
+        confettiAmount: 0.8,
+        cooldownMs: 900,
+        confettiPreset: 'random_direction',
+        volumeBoost: 1.05,
+      }),
+    )
+  })
+
+  it('fills missing quiz scene and sanitizes invalid quiz values', () => {
+    const missingQuiz = sanitizeReviewFeedbackSettings({
+      ...DEFAULT_REVIEW_FEEDBACK_SETTINGS,
+      scenes: {
+        review: DEFAULT_REVIEW_FEEDBACK_SETTINGS.scenes.review,
+        milestone: DEFAULT_REVIEW_FEEDBACK_SETTINGS.scenes.milestone,
+        completion: DEFAULT_REVIEW_FEEDBACK_SETTINGS.scenes.completion,
+        timer: DEFAULT_REVIEW_FEEDBACK_SETTINGS.scenes.timer,
+      },
+    })
+
+    expect(missingQuiz.scenes.quiz).toEqual(DEFAULT_REVIEW_FEEDBACK_SETTINGS.scenes.quiz)
+
+    const sanitized = sanitizeReviewFeedbackSettings({
+      ...DEFAULT_REVIEW_FEEDBACK_SETTINGS,
+      scenes: {
+        review: DEFAULT_REVIEW_FEEDBACK_SETTINGS.scenes.review,
+        milestone: DEFAULT_REVIEW_FEEDBACK_SETTINGS.scenes.milestone,
+        completion: DEFAULT_REVIEW_FEEDBACK_SETTINGS.scenes.completion,
+        timer: DEFAULT_REVIEW_FEEDBACK_SETTINGS.scenes.timer,
+        quiz: {
+          enabled: true,
+          soundEnabled: true,
+          animationEnabled: false,
+          confettiAmount: 99,
+          cooldownMs: -40,
+          confettiPreset: 'not-a-preset',
+          volumeBoost: 99,
+        },
+      },
+    })
+
+    expect(sanitized.scenes.quiz).toEqual(
+      expect.objectContaining({
+        enabled: true,
+        soundEnabled: true,
+        animationEnabled: false,
+        confettiAmount: 3,
+        cooldownMs: 0,
+        confettiPreset: 'random_direction',
+        volumeBoost: 3,
+      }),
+    )
   })
 })

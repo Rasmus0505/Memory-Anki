@@ -1,4 +1,5 @@
 import * as React from 'react'
+import { getDesktopTimerBridge } from '@/shared/components/session/desktopTimerBridge'
 import {
   readTimerAutomationConfig,
   type TimerAutomationActivityKind,
@@ -145,19 +146,33 @@ export function useTimedSessionGlowReset(
 }
 
 export function useTimedSessionUnloadPersistence(
-  storageKey: string | null,
+  _storageKey: string | null,
   leaveScene: (meta?: TimedSessionMeta) => Promise<unknown>,
 ) {
   React.useEffect(() => {
-    if (!storageKey) return
-    const handlePersistOnUnload = () => {
-      void leaveScene({ source: 'page_unload' })
+    let pendingLeave: Promise<unknown> | null = null
+    const persistOnce = (source: string) => {
+      if (!pendingLeave) {
+        pendingLeave = leaveScene({ source }).finally(() => {
+          pendingLeave = null
+        })
+      }
+      return pendingLeave
     }
+    const handlePersistOnUnload = (event: Event) => {
+      const source = event.type === 'pagehide' ? 'pagehide' : 'beforeunload'
+      void persistOnce(source)
+    }
+    const bridge = getDesktopTimerBridge()
+    const unsubscribeDesktopFlush = bridge?.onDesktopFlushRequest?.((request) =>
+      persistOnce(request.reason ?? 'desktop_flush'),
+    )
     window.addEventListener('beforeunload', handlePersistOnUnload)
     window.addEventListener('pagehide', handlePersistOnUnload)
     return () => {
+      unsubscribeDesktopFlush?.()
       window.removeEventListener('beforeunload', handlePersistOnUnload)
       window.removeEventListener('pagehide', handlePersistOnUnload)
     }
-  }, [leaveScene, storageKey])
+  }, [leaveScene])
 }

@@ -5,7 +5,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import ProfileFeedbackPage from '@/features/profile/ProfileFeedbackPage'
 
 const emitTimerCelebration = vi.fn()
+const emitReviewConfetti = vi.fn()
 const launchCelebrationPreset = vi.fn()
+const playEvent = vi.fn()
 
 vi.mock('@/shared/components/session/timer-celebration', () => ({
   emitTimerCelebration: (...args: unknown[]) => emitTimerCelebration(...args),
@@ -17,6 +19,7 @@ vi.mock('@/shared/components/celebration', async () => {
   )
   return {
     ...actual,
+    emitReviewConfetti: (...args: unknown[]) => emitReviewConfetti(...args),
     launchCelebrationPreset: (...args: unknown[]) => launchCelebrationPreset(...args),
   }
 })
@@ -27,7 +30,7 @@ vi.mock('@/shared/components/mindmap-host', () => ({
 
 vi.mock('@/shared/components/mindmap-host/useMindMapFeedback', () => ({
   useMindMapFeedbackAudio: () => ({
-    playEvent: vi.fn(),
+    playEvent: (...args: unknown[]) => playEvent(...args),
     playComboMilestone: vi.fn(),
   }),
 }))
@@ -81,7 +84,9 @@ describe('ProfileFeedbackPage', () => {
   beforeEach(() => {
     window.localStorage.clear()
     emitTimerCelebration.mockReset()
+    emitReviewConfetti.mockReset()
     launchCelebrationPreset.mockReset()
+    playEvent.mockReset()
   })
 
   it('renders key sections', () => {
@@ -94,6 +99,7 @@ describe('ProfileFeedbackPage', () => {
     expect(screen.getByText('反馈配置')).toBeTruthy()
     expect(screen.getByText('翻卡反馈设置')).toBeTruthy()
     expect(screen.getByText('实时预览台')).toBeTruthy()
+    expect(screen.getAllByText('答题结果').length).toBeGreaterThan(0)
     expect(screen.getByText('脑图宿主页预览窗口')).toBeTruthy()
     expect(screen.getByTestId('mindmap-frame')).toBeTruthy()
   })
@@ -153,5 +159,26 @@ describe('ProfileFeedbackPage', () => {
       2,
       expect.objectContaining({ kind: 'primary' }),
     )
+  })
+
+  it('previews quiz result feedback from the draft configuration', () => {
+    render(
+      <MemoryRouter initialEntries={['/profile/feedback']}>
+        <ProfileFeedbackPage />
+      </MemoryRouter>,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: '答对反馈' }))
+    expect(emitReviewConfetti).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'quiz_correct',
+        confettiAmount: 0.8,
+        confettiPreset: 'random_direction',
+        soundEnabled: true,
+      }),
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: '答错音效' }))
+    expect(playEvent).toHaveBeenCalledWith('quiz_result_incorrect', { audioScope: 'global' })
   })
 })

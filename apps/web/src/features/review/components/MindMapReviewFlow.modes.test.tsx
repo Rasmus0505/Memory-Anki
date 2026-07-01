@@ -56,7 +56,7 @@ describe("MindMapReviewFlow modes", () => {
 
     const latestCall = getLatestMindMapFrameProps();
     expect(latestCall?.readonly).toBe(true);
-    expect(latestCall?.syncIntent).toBe("replace");
+    expect(latestCall?.syncIntent).toBe("soft");
     expect(latestCall?.syncReason).toBe("review_flip");
     expect(latestCall?.preserveViewOnSync).toBe(true);
   });

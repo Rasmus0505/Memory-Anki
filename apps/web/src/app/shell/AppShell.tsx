@@ -70,11 +70,11 @@ const warmedNavSections = new Set<NavSectionKey>()
 const navSections: NavSectionDefinition[] = [
   {
     key: 'dashboard',
-    to: '/',
+    to: '/dashboard',
     label: '仪表盘',
     icon: LayoutDashboard,
     rememberLastVisited: false,
-    matches: (pathname) => pathname === '/',
+    matches: (pathname) => pathname === '/' || pathname === '/dashboard',
   },
   {
     key: 'freestyle',
@@ -325,7 +325,7 @@ function SidebarContent({ runtimeInfo }: { runtimeInfo: RuntimeInfo | null }) {
   }, [])
 
   useEffect(() => {
-    if (pathname !== '/') return
+    if (pathname !== '/' && pathname !== '/dashboard') return
     return scheduleIdleWarmup(() => {
       void preloadPalaceEditPage()
       prefetchDashboardApi()
@@ -347,7 +347,7 @@ function SidebarContent({ runtimeInfo }: { runtimeInfo: RuntimeInfo | null }) {
   return (
     <>
       <div className={cn('border-b border-border/70', compact ? 'px-2 py-3' : 'px-5 py-5')}>
-        <NavLink to="/" className={cn('flex items-center', compact ? 'justify-center' : 'gap-3')}>
+        <NavLink to="/freestyle" className={cn('flex items-center', compact ? 'justify-center' : 'gap-3')}>
           <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary text-base font-semibold text-primary-foreground shadow-sm">
             记
           </div>

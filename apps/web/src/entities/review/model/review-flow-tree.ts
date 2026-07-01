@@ -170,6 +170,16 @@ export function buildInitialRevealState(
   return next
 }
 
+export function buildAllRevealedState(root: ReviewMindMapNode) {
+  const next: Record<string, RevealState> = {}
+  const walk = (node: ReviewMindMapNode) => {
+    next[node.id] = 'revealed'
+    node.children.forEach(walk)
+  }
+  walk(root)
+  return next
+}
+
 export function collectNodeIds(root: ReviewMindMapNode) {
   const ids: string[] = []
   const walk = (node: ReviewMindMapNode) => {

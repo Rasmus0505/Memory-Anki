@@ -72,6 +72,17 @@ function actionCard(id: string, priority = 10): FreestyleCard {
   }
 }
 
+function palaceActionCard(id: string, palaceId: number, priority = 10): FreestyleCard {
+  const card = actionCard(id, priority)
+  return {
+    ...card,
+    palace_context: {
+      id: palaceId,
+      title: `宫殿 ${palaceId}`,
+    },
+  }
+}
+
 describe('freestyle queue model', () => {
   beforeEach(() => {
     window.localStorage.clear()
@@ -123,6 +134,82 @@ describe('freestyle queue model', () => {
       'quiz:4',
       'review-low',
     ])
+  })
+
+  it('downgrades resolved quiz cards after fresh cards in grouped random mode', () => {
+    const queue = buildFreestyleQueue(
+      [
+        quizCard(1, 'palace:1'),
+        quizCard(2, 'palace:1'),
+        quizCard(3, 'palace:2', 2),
+        quizCard(4, 'palace:2', 2),
+      ],
+      {
+        ...DEFAULT_FREESTYLE_CONFIG,
+        actionFrequency: 'none',
+        seed: 3,
+      },
+      { resolvedQuestionIds: [1, 3] },
+    )
+
+    expect(queue.slice(0, 2).map((card) => card.id).sort()).toEqual(['quiz:2', 'quiz:4'])
+    expect(queue.slice(2).map((card) => card.id).sort()).toEqual(['quiz:1', 'quiz:3'])
+  })
+
+  it('keeps all-resolved quiz cards available instead of emptying the queue', () => {
+    const queue = buildFreestyleQueue(
+      [quizCard(1, 'palace:1'), quizCard(2, 'palace:1')],
+      {
+        ...DEFAULT_FREESTYLE_CONFIG,
+        actionFrequency: 'none',
+      },
+      { resolvedQuestionIds: [1, 2] },
+    )
+
+    expect(queue.map((card) => card.id).sort()).toEqual(['quiz:1', 'quiz:2'])
+  })
+
+  it('keeps random and sequential filters while downgrading resolved cards', () => {
+    const shortCard = quizCard(2, 'palace:2', 2)
+    if (shortCard.type === 'quiz_question') {
+      shortCard.question.question_type = 'short_answer'
+    }
+    const config = sanitizeFreestyleConfig({
+      ...DEFAULT_FREESTYLE_CONFIG,
+      range: 'specific_palaces',
+      specificPalaceIds: [2],
+      orderMode: 'random',
+      questionType: 'short_answer',
+    })
+
+    const randomQueue = buildFreestyleQueue(
+      [quizCard(1, 'palace:1', 1), shortCard, palaceActionCard('review-2', 2)],
+      config,
+      { resolvedQuestionIds: [2] },
+    )
+    const sequentialQueue = buildFreestyleQueue(
+      [quizCard(1, 'palace:1', 1), shortCard, palaceActionCard('review-2', 2)],
+      { ...config, orderMode: 'sequential' },
+      { resolvedQuestionIds: [2] },
+    )
+
+    expect(randomQueue.map((card) => card.id).sort()).toEqual(['quiz:2', 'review-2'])
+    expect(sequentialQueue.map((card) => card.id)).toEqual(['quiz:2', 'review-2'])
+  })
+
+  it('restores normal order when local progress is cleared', () => {
+    const cards = [quizCard(1, 'palace:1'), quizCard(2, 'palace:1'), quizCard(3, 'palace:1')]
+    const config = {
+      ...DEFAULT_FREESTYLE_CONFIG,
+      orderMode: 'sequential' as const,
+      actionFrequency: 'none' as const,
+    }
+
+    const downgraded = buildFreestyleQueue(cards, config, { resolvedQuestionIds: [1] })
+    const cleared = buildFreestyleQueue(cards, config, { resolvedQuestionIds: [] })
+
+    expect(downgraded.map((card) => card.id)).toEqual(['quiz:2', 'quiz:3', 'quiz:1'])
+    expect(cleared.map((card) => card.id)).toEqual(['quiz:1', 'quiz:2', 'quiz:3'])
   })
 
   it('filters by question type and specific palaces', () => {

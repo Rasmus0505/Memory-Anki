@@ -6,8 +6,21 @@ import {
   useState,
   type PointerEvent as ReactPointerEvent,
 } from 'react'
-import { BookOpen, Expand, LoaderCircle, Pin, PinOff, Search, Shrink, X } from 'lucide-react'
+import {
+  BookOpen,
+  Expand,
+  LoaderCircle,
+  Pin,
+  PinOff,
+  RotateCcw,
+  Search,
+  Shrink,
+  X,
+} from 'lucide-react'
 import { getPalaceEditorApi, getPalacesGroupedApi } from '@/entities/palace/api/catalogApi'
+import { useRevealSession } from '@/entities/review/model/useRevealSession'
+import { buildAllRevealedState } from '@/entities/review/model/review-flow-tree'
+import { useReviewFeedback } from '@/features/review/hooks/useReviewFeedback'
 import type {
   MindMapEditorState,
   PalaceGroupedItem,
@@ -34,6 +47,8 @@ import {
 } from '@/shared/components/ui/dialog'
 import { Input } from '@/shared/components/ui/input'
 import { cn } from '@/shared/lib/utils'
+
+type MemoryLookupPreviewMode = 'view' | 'flip'
 
 function createEmptyGroupedData(): PalaceGroupedListResponse {
   return {
@@ -104,6 +119,7 @@ export function PalaceQuizMemoryLookupDialog({
   const [previewError, setPreviewError] = useState('')
   const [layout, setLayout] = useState<MemoryLookupLayout>(() => readMemoryLookupLayout())
   const [pinned, setPinned] = useState(false)
+  const [previewMode, setPreviewMode] = useState<MemoryLookupPreviewMode>('view')
   const [rootFocusNonce, setRootFocusNonce] = useState(0)
   const dragStateRef = useRef<{
     startX: number
@@ -117,6 +133,22 @@ export function PalaceQuizMemoryLookupDialog({
   const palaces = useMemo(() => flattenPalaces(groupedData), [groupedData])
   const selectedPalace = palaces.find((palace) => palace.id === selectedPalaceId) ?? null
   const rootNodeUid = getRootNodeUid(previewState)
+  const revealSession = useRevealSession({
+    title: selectedPalace ? getPalaceTitle(selectedPalace) : previewTitle || '宫殿脑图',
+    editorState: previewState,
+  })
+  const feedback = useReviewFeedback({
+    root: revealSession.root,
+    revealMap: revealSession.revealMap,
+    revealedNonRootCount: revealSession.revealedNonRootCount,
+    totalNodeCount: revealSession.totalNodeCount,
+  })
+  const flipEditorState = revealSession.visibleEditorState
+  const enterFlipMode = useCallback(() => {
+    setPreviewMode('flip')
+    revealSession.setRevealMap(buildAllRevealedState(revealSession.root))
+    revealSession.setRedNodeIds(new Set<string>())
+  }, [revealSession.root, revealSession.setRedNodeIds, revealSession.setRevealMap])
 
   useEffect(() => {
     if (!open) return
@@ -503,7 +535,46 @@ export function PalaceQuizMemoryLookupDialog({
                   <div className="truncate text-sm font-semibold">
                     {selectedPalace ? getPalaceTitle(selectedPalace) : previewTitle || '宫殿脑图'}
                   </div>
-                  <div className="text-xs text-muted-foreground">只读脑图预览</div>
+                  <div className="text-xs text-muted-foreground">
+                    {previewMode === 'view'
+                      ? '只读脑图预览'
+                      : '翻卡模式：点击已显示节点展开子节点，点击“待回忆”翻开内容。'}
+                  </div>
+                </div>
+                <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+                  <div className="inline-flex rounded-full border border-border/70 bg-muted/45 p-1">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={previewMode === 'view' ? 'default' : 'ghost'}
+                      className="h-7 rounded-full px-3 text-xs"
+                      onClick={() => setPreviewMode('view')}
+                    >
+                      查看模式
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={previewMode === 'flip' ? 'default' : 'ghost'}
+                      className="h-7 rounded-full px-3 text-xs"
+                      onClick={enterFlipMode}
+                    >
+                      翻卡模式
+                    </Button>
+                  </div>
+                  {previewMode === 'flip' ? (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="h-8"
+                      disabled={!previewState}
+                      onClick={revealSession.reset}
+                    >
+                      <RotateCcw className="h-4 w-4" />
+                      重新开始
+                    </Button>
+                  ) : null}
                 </div>
               </div>
 
@@ -520,16 +591,36 @@ export function PalaceQuizMemoryLookupDialog({
                     </div>
                   </div>
                 ) : previewState ? (
-                  <MindMapFrame
-                    key={`quiz-memory-lookup-${selectedPalaceId}`}
-                    editorState={previewState}
-                    readonly
-                    focusRequestNodeUid={rootNodeUid}
-                    focusRequestNonce={rootFocusNonce}
-                    initialViewPolicy="reset"
-                    onEditorStateChange={() => {}}
-                    className="h-full min-h-[180px] w-full border-0"
-                  />
+                  previewMode === 'flip' && flipEditorState ? (
+                    <MindMapFrame
+                      key={`quiz-memory-lookup-${selectedPalaceId}-flip`}
+                      editorState={flipEditorState}
+                      readonly
+                      practiceModeActive
+                      syncOnPropChange
+                      syncIntent="replace"
+                      syncReason="review_flip"
+                      externalSyncKey={revealSession.visibleEditorSyncKey}
+                      preserveViewOnSync
+                      initialViewPolicy="reset"
+                      onEditorStateChange={() => {}}
+                      onNodeClick={revealSession.handleNodeClick}
+                      onNodeContextMenu={revealSession.handleNodeContextMenu}
+                      reviewFxSignal={feedback.reviewFxSignal}
+                      className="h-full min-h-[180px] w-full border-0"
+                    />
+                  ) : (
+                    <MindMapFrame
+                      key={`quiz-memory-lookup-${selectedPalaceId}-view`}
+                      editorState={previewState}
+                      readonly
+                      focusRequestNodeUid={rootNodeUid}
+                      focusRequestNonce={rootFocusNonce}
+                      initialViewPolicy="reset"
+                      onEditorStateChange={() => {}}
+                      className="h-full min-h-[180px] w-full border-0"
+                    />
+                  )
                 ) : (
                   <div className="flex h-full min-h-[180px] items-center justify-center text-sm text-muted-foreground">
                     请选择一个记忆宫殿。

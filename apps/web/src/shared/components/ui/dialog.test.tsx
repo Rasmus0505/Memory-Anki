@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/shared/components/ui/dialog'
 
@@ -68,6 +68,7 @@ describe('Dialog', () => {
     )
 
     expect(screen.getByText('floating').className).toContain('fixed')
+    expect(screen.getByText('floating').className).not.toContain('relative')
     const overlay = Array.from(document.querySelectorAll('[data-state="open"]')).find((element) =>
       element.className.includes('z-[240]'),
     )
@@ -99,6 +100,39 @@ describe('Dialog', () => {
     fireEvent.click(restoreButton)
 
     expect(screen.getByText('dialog body')).toBeTruthy()
+  })
+
+  it('keeps the collapsed floating dialog capsule draggable from the capsule button itself', () => {
+    render(
+      <Dialog open onOpenChange={vi.fn()}>
+        <DialogContent floatingId="drag-test">
+          <DialogHeader>
+            <div>
+              <DialogTitle>draggable capsule</DialogTitle>
+              <DialogDescription>description</DialogDescription>
+            </div>
+          </DialogHeader>
+          dialog body
+        </DialogContent>
+      </Dialog>,
+    )
+
+    fireEvent.click(screen.getByLabelText('缩小为胶囊'))
+    const restoreButton = screen.getByRole('button', { name: '恢复draggable capsule' })
+    act(() => {
+      restoreButton.dispatchEvent(
+        new MouseEvent('pointerdown', { bubbles: true, clientX: 100, clientY: 100 }),
+      )
+      window.dispatchEvent(
+        new MouseEvent('pointermove', { bubbles: true, clientX: 160, clientY: 145 }),
+      )
+      window.dispatchEvent(new MouseEvent('pointerup', { bubbles: true }))
+    })
+
+    const stored = JSON.parse(window.localStorage.getItem('memory-anki-floating-dialog:drag-test') || '{}')
+    expect(stored.x).toBeGreaterThan(16)
+    expect(stored.y).toBeGreaterThan(16)
+    expect(stored.collapsed).toBe(true)
   })
 
   it('prevents outside dismissal while pinned', () => {

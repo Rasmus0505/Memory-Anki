@@ -26,13 +26,13 @@ function buildTimeRecordRequestHeaders(mutationId: string) {
   }
 }
 
-async function queueTimeRecordRecovery(
+function queueTimeRecordRecovery(
   record: TimeSessionRecord,
   mutationId: string,
   body: string,
 ) {
   upsertPendingTimeRecordRecovery(record, { mutationId, status: 'pending' })
-  await enqueueMutation({
+  return enqueueMutation({
     mutationId,
     resourceKey: `time-record:${record.id}`,
     description: `恢复学习时长：${record.title || record.kind}`,
@@ -87,15 +87,18 @@ export async function fireAndQueueTimeRecordOnUnload(
 ): Promise<TimedSessionUnloadPersistenceResult> {
   const mutationId = buildTimeRecordRecoveryMutationId(record.id)
   const body = buildTimeRecordRequestBody(record)
-  await queueTimeRecordRecovery(record, mutationId, body)
+  const queuePromise = queueTimeRecordRecovery(record, mutationId, body)
 
   if (trySendBeacon(body)) {
+    await queuePromise
     return { mutationId, transport: 'beacon' }
   }
 
   if (tryKeepaliveFetch(record.id, body, mutationId)) {
+    await queuePromise
     return { mutationId, transport: 'keepalive' }
   }
 
+  await queuePromise
   return { mutationId, transport: 'queued' }
 }

@@ -116,6 +116,18 @@ export default function ProfileFeedbackPage() {
     })
   }, [draftSettings, reveal.revealedNonRootCount, reveal.totalNodeCount, feedback.maxComboCount])
 
+  const triggerQuizCorrectPreview = React.useCallback(() => {
+    emitReviewConfetti({
+      kind: 'quiz_correct',
+      confettiAmount: draftSettings.scenes.quiz.confettiAmount,
+      reducedMotion: draftSettings.reducedCelebrationMotion,
+      soundEnabled: draftSettings.soundEnabled && draftSettings.scenes.quiz.soundEnabled,
+      volume: getSceneEffectiveVolume(draftSettings, 'quiz'),
+      confettiPreset: draftSettings.scenes.quiz.confettiPreset,
+    })
+    setPreviewSummary('已触发答题正确反馈。')
+  }, [draftSettings])
+
   // ── 计时器预览 ──
   const previewTimerSecondary = React.useCallback(() => {
     emitTimerCelebration({
@@ -128,7 +140,7 @@ export default function ProfileFeedbackPage() {
       eventConfig: draftTimerConfig.celebration.secondaryInterval,
     })
     setPreviewSummary('已触发二级子间隔到点反馈。')
-  }, [draftSettings.soundEnabled, draftTimerConfig])
+  }, [draftSettings, draftTimerConfig])
 
   const previewTimerPrimary = React.useCallback(() => {
     emitTimerCelebration({
@@ -141,7 +153,7 @@ export default function ProfileFeedbackPage() {
       eventConfig: draftTimerConfig.celebration.primaryGoal,
     })
     setPreviewSummary('已触发一级总目标完成反馈。')
-  }, [draftSettings.soundEnabled, draftTimerConfig])
+  }, [draftSettings, draftTimerConfig])
 
   // ── 音量拖动时立即试听 ──
   const handleVolumePreview = React.useCallback(
@@ -150,7 +162,14 @@ export default function ProfileFeedbackPage() {
         previewTimerSecondary()
         return
       }
-      const event = scene === 'review' ? 'card_reveal' : scene === 'milestone' ? 'card_reveal' : 'session_complete'
+      const event =
+        scene === 'review'
+          ? 'card_reveal'
+          : scene === 'milestone'
+            ? 'card_reveal'
+            : scene === 'quiz'
+              ? 'quiz_result_correct'
+              : 'session_complete'
       audio.playEvent(event as Parameters<typeof audio.playEvent>[0], { audioScope: 'global' })
     },
     [audio, previewTimerSecondary],
@@ -335,6 +354,25 @@ export default function ProfileFeedbackPage() {
                     <Button type="button" variant="outline" onClick={() => reveal.reset()}>
                       <RotateCcw className="mr-2 h-4 w-4" />
                       重置脑图
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="memory-anki-soft-card rounded-[20px] px-4 py-4">
+                  <SectionTitle title="答题结果" />
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <Button type="button" onClick={triggerQuizCorrectPreview}>
+                      答对反馈
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => {
+                        audio.playEvent('quiz_result_incorrect', { audioScope: 'global' })
+                        setPreviewSummary('已触发答题错误音效。')
+                      }}
+                    >
+                      答错音效
                     </Button>
                   </div>
                 </div>

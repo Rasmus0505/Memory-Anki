@@ -1,25 +1,10 @@
 import * as React from 'react'
 import { createPortal } from 'react-dom'
-import { AlarmClock, Pause, Play, Settings2, Shrink, Expand } from 'lucide-react'
+import { Pause, Play, Settings2, Shrink, Expand } from 'lucide-react'
 import { Button } from '@/shared/components/ui/button'
+import { Input } from '@/shared/components/ui/input'
 import { cn } from '@/shared/lib/utils'
 import { TimerAutomationDialog } from '@/shared/components/session/TimerAutomationDialog'
-import {
-  appendBreakGuardLog,
-  BREAK_GUARD_UPDATED_EVENT,
-  readBreakGuardConfig,
-  updateBreakGuardLog,
-  type BreakGuardConfig,
-} from '@/shared/components/session/break-guard-config'
-import {
-  createBreakGuardCountdown,
-  expireBreakGuardIfDue,
-  formatBreakGuardClock,
-  IDLE_BREAK_GUARD_STATE,
-  shouldPromptForBreakGuard,
-  snoozeBreakGuard,
-  type BreakGuardState,
-} from '@/shared/components/session/breakGuardModel'
 import {
   getTimerAutomationRule,
   readTimerAutomationConfig,
@@ -44,9 +29,31 @@ import {
   type TimerOverlayLayout,
 } from '@/shared/components/session/timer-overlay-layout'
 import { emitTimerCelebration } from '@/shared/components/session/timer-celebration'
+import {
+  getDesktopTimerBridge,
+  hasDesktopTimerBridge,
+  type UnifiedTimerCommand,
+  type UnifiedTimerSnapshot,
+} from '@/shared/components/session/desktopTimerBridge'
 import type { TimedSessionController } from '@/shared/hooks/useTimedSession'
 import { useMindMapFeedbackSettings } from '@/shared/components/mindmap-host/useMindMapFeedback'
 import { getReviewFeedbackEffectiveVolume } from '@/shared/feedback/reviewFeedbackSettings'
+import {
+  appendBreakGuardLog,
+  BREAK_GUARD_UPDATED_EVENT,
+  readBreakGuardConfig,
+  updateBreakGuardLog,
+  type BreakGuardConfig,
+} from '@/shared/components/session/break-guard-config'
+import {
+  createBreakGuardCountdown,
+  expireBreakGuardIfDue,
+  formatBreakGuardClock,
+  IDLE_BREAK_GUARD_STATE,
+  shouldPromptForBreakGuard,
+  snoozeBreakGuard,
+  type BreakGuardState,
+} from '@/shared/components/session/breakGuardModel'
 import {
   calculateResizedTimerOverlayLayout,
   createTimerOverlaySizeTokens,
@@ -65,6 +72,7 @@ import {
 interface GlobalTimerContextValue {
   upsertTimer: (entry: GlobalTimerRegistration) => void
   removeTimer: (sessionId: string) => void
+  notifyStudyActivity: (sessionId: string) => void
 }
 
 const GlobalTimerContext = React.createContext<GlobalTimerContextValue | null>(null)
@@ -95,290 +103,148 @@ function createBreakLogId() {
   return `break-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
 }
 
-function openBreakGuardTarget(path: string) {
-  const targetPath = path.startsWith('/') ? path : '/freestyle'
-  if (typeof window === 'undefined') return
-  if (window.location.pathname !== targetPath) {
-    window.location.assign(targetPath)
-    return
-  }
-  window.focus()
+function formatTimerSnapshotClock(seconds: number | null) {
+  if (seconds == null) return '--:--'
+  return formatClock(seconds)
 }
 
-function playBreakGuardBeep() {
-  try {
-    const AudioContextConstructor = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
-    if (!AudioContextConstructor) return
-    const context = new AudioContextConstructor()
-    const oscillator = context.createOscillator()
-    const gain = context.createGain()
-    oscillator.type = 'sine'
-    oscillator.frequency.setValueAtTime(880, context.currentTime)
-    gain.gain.setValueAtTime(0.0001, context.currentTime)
-    gain.gain.exponentialRampToValueAtTime(0.12, context.currentTime + 0.02)
-    gain.gain.exponentialRampToValueAtTime(0.0001, context.currentTime + 0.42)
-    oscillator.connect(gain)
-    gain.connect(context.destination)
-    oscillator.start()
-    oscillator.stop(context.currentTime + 0.45)
-    window.setTimeout(() => void context.close(), 650)
-  } catch {
-    // Browser audio may be blocked until a user gesture.
-  }
-}
-
-function GlobalBreakGuardOverlay({
+function buildStudyTimerSnapshot({
   activeEntry,
+  focusConfig,
+  automationConfig,
 }: {
   activeEntry: GlobalTimerRegistration | null
-}) {
-  const [config, setConfig] = React.useState<BreakGuardConfig>(() => readBreakGuardConfig())
-  const [state, setState] = React.useState<BreakGuardState>(IDLE_BREAK_GUARD_STATE)
-  const [remainingMs, setRemainingMs] = React.useState(0)
-  const [customMinutes, setCustomMinutes] = React.useState('15')
-  const promptTimerRef = React.useRef<number | null>(null)
-  const alertTimerRef = React.useRef<number | null>(null)
-  const notificationShownRef = React.useRef(false)
+  focusConfig: TimerFocusConfig
+  automationConfig: TimerAutomationConfig
+}): UnifiedTimerSnapshot {
+  const scene = activeEntry?.scene ?? null
+  const sceneLabel = scene ? TIMER_FOCUS_SCENE_LABELS[scene] : '计时器'
+  const focusRule = scene ? getTimerFocusRule(scene, focusConfig) : focusConfig.global
+  const automationRule = scene ? getTimerAutomationRule(scene, automationConfig) : null
+  const primarySeconds = Math.max(60, focusRule.primaryMinutes * 60)
+  const secondarySeconds = Math.max(60, Math.min(primarySeconds, focusRule.secondaryMinutes * 60))
+  const effectiveSeconds = activeEntry?.timer.effectiveSeconds ?? 0
+  const secondaryRemainder = secondarySeconds > 0 ? effectiveSeconds % secondarySeconds : 0
+  const secondaryRemaining =
+    secondarySeconds > 0
+      ? secondaryRemainder === 0
+        ? secondarySeconds
+        : secondarySeconds - secondaryRemainder
+      : 0
+  const idleText = automationRule
+    ? `闲置 ${activeEntry?.timer.idleSeconds ?? 0}/${automationRule.inactiveAutoPauseSeconds} 秒`
+    : '当前无学习会话'
+  const status = activeEntry?.timer.status ?? 'idle'
 
-  React.useEffect(() => {
-    const handleConfigChange = (event: Event) => {
-      const nextConfig =
-        event instanceof CustomEvent && event.detail
-          ? (event.detail as BreakGuardConfig)
-          : readBreakGuardConfig()
-      setConfig(nextConfig)
-    }
-    window.addEventListener(BREAK_GUARD_UPDATED_EVENT, handleConfigChange)
-    return () => window.removeEventListener(BREAK_GUARD_UPDATED_EVENT, handleConfigChange)
-  }, [])
+  return {
+    mode: 'study',
+    status,
+    title: activeEntry?.title ?? '待开始',
+    scene: sceneLabel,
+    displaySeconds: activeEntry ? secondaryRemaining : secondarySeconds,
+    primaryText: activeEntry ? idleText : '当前无学习会话',
+    secondaryText: activeEntry
+      ? formatPrimaryProgress(effectiveSeconds, primarySeconds)
+      : formatIdlePrimaryProgress(primarySeconds),
+    snoozeCount: 0,
+    availableActions: activeEntry
+      ? status === 'running'
+        ? ['pause']
+        : ['resume']
+      : [],
+    presetMinutes: [],
+    snoozeMinutes: [],
+    targetPath: '/freestyle',
+    updatedAt: Date.now(),
+  }
+}
 
-  React.useEffect(() => {
-    const clearPromptTimer = () => {
-      if (promptTimerRef.current != null) {
-        window.clearTimeout(promptTimerRef.current)
-        promptTimerRef.current = null
-      }
-    }
+function buildBreakTimerSnapshot({
+  breakState,
+  config,
+  paused,
+  pausedRemainingMs,
+  now = Date.now(),
+}: {
+  breakState: BreakGuardState
+  config: BreakGuardConfig
+  paused: boolean
+  pausedRemainingMs?: number | null
+  now?: number
+}): UnifiedTimerSnapshot {
+  const remainingMs =
+    paused && pausedRemainingMs != null
+      ? pausedRemainingMs
+      : breakState.status === 'counting_down' && breakState.expiresAt != null
+      ? Math.max(0, breakState.expiresAt - now)
+      : breakState.status === 'expired'
+        ? 0
+        : null
+  const displaySeconds = remainingMs == null ? null : Math.ceil(remainingMs / 1000)
+  const plannedText = breakState.plannedMinutes ? `计划 ${breakState.plannedMinutes} 分钟` : '选择这次休息多久'
+  const snoozeText = `延后 ${breakState.snoozeCount} 次`
 
-    const handleLeave = () => {
-      clearPromptTimer()
-      if (!shouldPromptForBreakGuard(config, state)) return
-      promptTimerRef.current = window.setTimeout(() => {
-        setState((current) => (shouldPromptForBreakGuard(config, current) ? { ...current, status: 'prompting' } : current))
-      }, config.promptDelaySeconds * 1000)
+  if (breakState.status === 'prompting') {
+    return {
+      mode: 'break',
+      status: 'prompting',
+      title: '要开始休息吗？',
+      scene: '休息询问',
+      displaySeconds: null,
+      primaryText: '离开学习页一会儿了',
+      secondaryText: '开始休息会暂停当前学习计时',
+      snoozeCount: breakState.snoozeCount,
+      availableActions: ['startBreak'],
+      presetMinutes: config.presetMinutes,
+      snoozeMinutes: config.snoozeMinutes,
+      targetPath: config.targetPath,
+      updatedAt: now,
     }
-
-    const handleReturn = () => {
-      clearPromptTimer()
-      setState((current) => (current.status === 'prompting' || current.status === 'dismissed' ? IDLE_BREAK_GUARD_STATE : current))
-    }
-
-    const handleVisibility = () => {
-      if (document.visibilityState === 'hidden') {
-        handleLeave()
-        return
-      }
-      handleReturn()
-    }
-
-    window.addEventListener('blur', handleLeave)
-    window.addEventListener('focus', handleReturn)
-    document.addEventListener('visibilitychange', handleVisibility)
-    return () => {
-      clearPromptTimer()
-      window.removeEventListener('blur', handleLeave)
-      window.removeEventListener('focus', handleReturn)
-      document.removeEventListener('visibilitychange', handleVisibility)
-    }
-  }, [config, state])
-
-  React.useEffect(() => {
-    if (state.status !== 'counting_down' || state.expiresAt == null) return
-    const tick = () => {
-      const now = Date.now()
-      setRemainingMs(Math.max(0, state.expiresAt == null ? 0 : state.expiresAt - now))
-      setState((current) => expireBreakGuardIfDue(current, now))
-    }
-    tick()
-    const timer = window.setInterval(tick, 250)
-    return () => window.clearInterval(timer)
-  }, [state.expiresAt, state.status])
-
-  React.useEffect(() => {
-    if (state.status !== 'expired') {
-      notificationShownRef.current = false
-      if (alertTimerRef.current != null) {
-        window.clearInterval(alertTimerRef.current)
-        alertTimerRef.current = null
-      }
-      return
-    }
-
-    if (!notificationShownRef.current) {
-      notificationShownRef.current = true
-      playBreakGuardBeep()
-      if ('Notification' in window) {
-        if (Notification.permission === 'granted') {
-          new Notification('休息时间到了', { body: '回到随心模式继续一点点就好。' })
-        } else if (Notification.permission === 'default') {
-          void Notification.requestPermission()
-        }
-      }
-      if (config.alertStrength === 'strong') {
-        openBreakGuardTarget(config.targetPath)
-      }
-    }
-
-    if (config.alertStrength === 'strong' && alertTimerRef.current == null) {
-      alertTimerRef.current = window.setInterval(playBreakGuardBeep, 2500)
-    }
-
-    return () => {
-      if (alertTimerRef.current != null) {
-        window.clearInterval(alertTimerRef.current)
-        alertTimerRef.current = null
-      }
-    }
-  }, [config.alertStrength, config.targetPath, state.status])
-
-  const startBreak = React.useCallback((minutes: number) => {
-    const safeMinutes = Math.max(1, Math.round(minutes))
-    activeEntry?.timer.pause({ source: 'break_guard' })
-    const logId = config.recordBreakLogs ? createBreakLogId() : null
-    if (logId) {
-      appendBreakGuardLog({
-        id: logId,
-        startedAt: new Date().toISOString(),
-        plannedMinutes: safeMinutes,
-        endedAt: null,
-        overtime: false,
-        snoozeCount: 0,
-      })
-    }
-    setState(createBreakGuardCountdown(safeMinutes, Date.now(), logId))
-  }, [activeEntry, config.recordBreakLogs])
-
-  const finishBreak = React.useCallback((options?: { openTarget?: boolean }) => {
-    if (state.logId) {
-      updateBreakGuardLog(state.logId, {
-        endedAt: new Date().toISOString(),
-        overtime: state.status === 'expired',
-        snoozeCount: state.snoozeCount,
-      })
-    }
-    setState(IDLE_BREAK_GUARD_STATE)
-    if (options?.openTarget) {
-      openBreakGuardTarget(config.targetPath)
-    }
-  }, [config.targetPath, state.logId, state.snoozeCount, state.status])
-
-  const snooze = React.useCallback((minutes: number) => {
-    const nextState = snoozeBreakGuard(state, minutes)
-    if (nextState.logId) {
-      updateBreakGuardLog(nextState.logId, { snoozeCount: nextState.snoozeCount })
-    }
-    setState(nextState)
-  }, [state])
-
-  if (!config.enabled || state.status === 'idle' || state.status === 'dismissed') {
-    return null
   }
 
-  const customMinutesNumber = Math.max(1, Math.round(Number(customMinutes) || 0))
+  if (breakState.status === 'expired') {
+    return {
+      mode: 'break',
+      status: 'expired',
+      title: '该回来了',
+      scene: '休息到点',
+      displaySeconds: 0,
+      primaryText: '休息已经结束',
+      secondaryText: `${plannedText} · ${snoozeText}`,
+      snoozeCount: breakState.snoozeCount,
+      availableActions: ['snooze', 'finishBreak', 'openTarget'],
+      presetMinutes: config.presetMinutes,
+      snoozeMinutes: config.snoozeMinutes,
+      targetPath: config.targetPath,
+      updatedAt: now,
+    }
+  }
 
-  return (
-    <div className={cn('memory-anki-break-guard-layer', state.status === 'expired' && 'memory-anki-break-guard-layer-expired')}>
-      <div className={cn('memory-anki-break-guard-card', state.status === 'expired' && 'memory-anki-break-guard-card-expired')}>
-        <div className="flex items-start justify-between gap-4">
-          <div className="min-w-0">
-            <div className="memory-anki-break-guard-kicker">
-              {state.status === 'prompting' ? '离开了一会儿' : state.status === 'counting_down' ? '休息倒计时' : '休息时间到了'}
-            </div>
-            <div className="memory-anki-break-guard-title">
-              {state.status === 'prompting'
-                ? '要给这次休息定个边界吗？'
-                : state.status === 'counting_down'
-                  ? formatBreakGuardClock(remainingMs)
-                  : '回到随心模式'}
-            </div>
-          </div>
-          <AlarmClock className="h-5 w-5 shrink-0 text-primary" />
-        </div>
-
-        {state.status === 'prompting' ? (
-          <div className="mt-4 space-y-3">
-            <div className="grid grid-cols-3 gap-2">
-              {config.presetMinutes.map((minutes) => (
-                <Button key={minutes} type="button" size="sm" onClick={() => startBreak(minutes)}>
-                  {minutes} 分钟
-                </Button>
-              ))}
-            </div>
-            {config.allowCustomMinutes ? (
-              <div className="flex gap-2">
-                <input
-                  type="number"
-                  min="1"
-                  max="240"
-                  value={customMinutes}
-                  onChange={(event) => setCustomMinutes(event.target.value)}
-                  className="h-9 min-w-0 flex-1 rounded-md border border-input bg-background px-3 text-sm"
-                  aria-label="自定义休息分钟数"
-                />
-                <Button type="button" variant="outline" size="sm" onClick={() => startBreak(customMinutesNumber)}>
-                  自定义
-                </Button>
-              </div>
-            ) : null}
-            <Button type="button" variant="ghost" size="sm" className="w-full" onClick={() => setState({ ...IDLE_BREAK_GUARD_STATE, status: 'dismissed' })}>
-              这次不提醒
-            </Button>
-          </div>
-        ) : state.status === 'counting_down' ? (
-          <div className="mt-4 space-y-3">
-            <div className="memory-anki-break-guard-copy">
-              已暂停学习计时。到点后会提醒你回到随心模式。
-            </div>
-            <div className="flex gap-2">
-              <Button type="button" variant="outline" size="sm" className="flex-1" onClick={() => finishBreak()}>
-                结束休息
-              </Button>
-              <Button type="button" size="sm" className="flex-1" onClick={() => finishBreak({ openTarget: true })}>
-                回去学习
-              </Button>
-            </div>
-          </div>
-        ) : (
-          <div className="mt-4 space-y-3">
-            <div className="memory-anki-break-guard-copy">
-              延后 {state.snoozeCount} 次。现在回去，只要做一道也算赢。
-            </div>
-            <div className="grid grid-cols-3 gap-2">
-              {config.snoozeMinutes.map((minutes) => (
-                <Button key={minutes} type="button" variant="outline" size="sm" onClick={() => snooze(minutes)}>
-                  +{minutes} 分钟
-                </Button>
-              ))}
-            </div>
-            <div className="flex gap-2">
-              <Button type="button" variant="outline" size="sm" className="flex-1" onClick={() => finishBreak()}>
-                结束
-              </Button>
-              <Button type="button" size="sm" className="flex-1" onClick={() => finishBreak({ openTarget: true })}>
-                回到随心模式
-              </Button>
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
-  )
+  return {
+    mode: 'break',
+    status: paused ? 'paused' : 'running',
+    title: paused ? '休息已暂停' : '休息倒计时',
+    scene: '休息中',
+    displaySeconds,
+    primaryText: plannedText,
+    secondaryText: snoozeText,
+    snoozeCount: breakState.snoozeCount,
+    availableActions: [paused ? 'resume' : 'pause', 'finishBreak', 'openTarget'],
+    presetMinutes: config.presetMinutes,
+    snoozeMinutes: config.snoozeMinutes,
+    targetPath: config.targetPath,
+    updatedAt: now,
+  }
 }
 
 function GlobalTimerFloatingOverlay({
   entries,
+  snapshot,
+  onCommand,
 }: {
   entries: GlobalTimerRegistration[]
+  snapshot: UnifiedTimerSnapshot
+  onCommand: (command: UnifiedTimerCommand) => void
 }) {
   const [layout, setLayout] = React.useState<TimerOverlayLayout>(() =>
     resolveFloatingTimerLayout(readTimerOverlayLayout()),
@@ -392,6 +258,7 @@ function GlobalTimerFloatingOverlay({
   )
   const [pulseKind, setPulseKind] = React.useState<'secondary' | 'primary' | null>(null)
   const [pulseNonce, setPulseNonce] = React.useState(0)
+  const [customBreakMinutes, setCustomBreakMinutes] = React.useState('')
   const reducedMotion = usePrefersReducedMotion()
   const feedbackSettings = useMindMapFeedbackSettings()
   const effectiveFeedbackVolume = getReviewFeedbackEffectiveVolume(feedbackSettings)
@@ -674,6 +541,131 @@ function GlobalTimerFloatingOverlay({
     () => createTimerOverlaySizeTokens(layout),
     [layout.height, layout.width],
   )
+  const isBreakMode = snapshot.mode === 'break'
+  const isBreakExpired = isBreakMode && snapshot.status === 'expired'
+  const panelSceneLabel = isBreakMode ? snapshot.scene : sceneLabel
+  const panelTitle = isBreakMode ? snapshot.title : title
+  const panelDigits = isBreakMode
+    ? formatTimerSnapshotClock(snapshot.displaySeconds)
+    : formatClock(activeEntry ? secondaryRemaining : idleSecondarySeconds)
+  const panelPrimaryText = isBreakMode ? snapshot.primaryText : idleText
+  const panelSecondaryText = isBreakMode ? snapshot.secondaryText : primarySummaryText
+  const capsuleLabel = isBreakMode
+    ? `${snapshot.scene.replace('中', '')} ${snapshot.status === 'expired' ? '到点' : formatTimerSnapshotClock(snapshot.displaySeconds)}`
+    : activeEntry
+      ? `${sceneLabel} ${formatClock(secondaryRemaining)}`
+      : '计时器 待开始'
+
+  const renderBreakActions = () => {
+    if (snapshot.status === 'prompting') {
+      return (
+        <>
+          {snapshot.presetMinutes.slice(0, 2).map((minutes) => (
+            <Button
+              key={minutes}
+              type="button"
+              size="sm"
+              className="memory-anki-global-timer-action-button flex-1"
+              style={sizeTokens.actionButtonStyle}
+              onClick={() => onCommand({ type: 'startBreak', minutes })}
+            >
+              {minutes} 分钟
+            </Button>
+          ))}
+          <Input
+            type="number"
+            min={1}
+            step={1}
+            inputMode="numeric"
+            className="memory-anki-global-timer-custom-input"
+            value={customBreakMinutes}
+            onChange={(event) => setCustomBreakMinutes(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key !== 'Enter') return
+              event.preventDefault()
+              const minutes = Math.round(Number(customBreakMinutes))
+              if (!Number.isFinite(minutes) || minutes < 1) return
+              onCommand({ type: 'startBreak', minutes })
+              setCustomBreakMinutes('')
+            }}
+            placeholder="自定义分钟"
+            aria-label="自定义休息分钟"
+          />
+        </>
+      )
+    }
+
+    if (snapshot.status === 'expired') {
+      const firstSnooze = snapshot.snoozeMinutes[0] ?? 1
+      return (
+        <>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="memory-anki-global-timer-action-button flex-1"
+            style={sizeTokens.actionButtonStyle}
+            onClick={() => onCommand({ type: 'snooze', minutes: firstSnooze })}
+          >
+            +{firstSnooze}
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="memory-anki-global-timer-action-button flex-1"
+            style={sizeTokens.actionButtonStyle}
+            onClick={() => onCommand({ type: 'finishBreak' })}
+          >
+            结束
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            className="memory-anki-global-timer-action-button flex-1"
+            style={sizeTokens.actionButtonStyle}
+            onClick={() => onCommand({ type: 'finishBreak', openTarget: true })}
+          >
+            回随心
+          </Button>
+        </>
+      )
+    }
+
+    return (
+      <>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="memory-anki-global-timer-action-button flex-1"
+          style={sizeTokens.actionButtonStyle}
+          onClick={() => onCommand({ type: snapshot.status === 'paused' ? 'resume' : 'pause' })}
+        >
+          {snapshot.status === 'paused' ? '继续' : '暂停'}
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="memory-anki-global-timer-action-button flex-1"
+          style={sizeTokens.actionButtonStyle}
+          onClick={() => onCommand({ type: 'finishBreak' })}
+        >
+          结束
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          className="memory-anki-global-timer-action-button flex-1"
+          style={sizeTokens.actionButtonStyle}
+          onClick={() => onCommand({ type: 'finishBreak', openTarget: true })}
+        >
+          回学习
+        </Button>
+      </>
+    )
+  }
 
   const overlay = (
     <>
@@ -700,6 +692,8 @@ function GlobalTimerFloatingOverlay({
           <div
             className={cn(
               'memory-anki-global-timer-panel',
+              isBreakMode && 'memory-anki-global-timer-panel-break',
+              isBreakExpired && 'memory-anki-global-timer-panel-expired',
               pulseKind === 'primary' && 'memory-anki-global-timer-panel-primary',
               pulseKind === 'secondary' && 'memory-anki-global-timer-panel-secondary',
             )}
@@ -707,9 +701,9 @@ function GlobalTimerFloatingOverlay({
           >
             <div className="memory-anki-global-timer-dragbar" onPointerDown={beginDrag}>
               <div className="min-w-0">
-                <div className="memory-anki-global-timer-scene">{sceneLabel}</div>
-                <div className="memory-anki-global-timer-title" title={title}>
-                  {title}
+                <div className="memory-anki-global-timer-scene">{panelSceneLabel}</div>
+                <div className="memory-anki-global-timer-title" title={panelTitle}>
+                  {panelTitle}
                 </div>
               </div>
               <div className="flex items-center gap-1.5" data-timer-overlay-control="true">
@@ -742,15 +736,17 @@ function GlobalTimerFloatingOverlay({
 
             <div className="memory-anki-global-timer-body">
               <div className="memory-anki-global-timer-digits">
-                {formatClock(activeEntry ? secondaryRemaining : idleSecondarySeconds)}
+                {panelDigits}
               </div>
-              <div className="memory-anki-global-timer-row">{idleText}</div>
+              <div className="memory-anki-global-timer-row">{panelPrimaryText}</div>
               <div className="memory-anki-global-timer-row memory-anki-global-timer-row-primary">
-                {primarySummaryText}
+                {panelSecondaryText}
               </div>
               <div className="memory-anki-global-timer-body-spacer" aria-hidden="true" />
               <div className="memory-anki-global-timer-actions">
-                {activeEntry && primaryAction ? (
+                {isBreakMode ? (
+                  renderBreakActions()
+                ) : activeEntry && primaryAction ? (
                   <Button
                     type="button"
                     size="sm"
@@ -808,7 +804,7 @@ function GlobalTimerFloatingOverlay({
           >
             <span className="memory-anki-global-timer-capsule-dot" />
             <span className="memory-anki-global-timer-capsule-label">
-              {activeEntry ? `${sceneLabel} ${formatClock(secondaryRemaining)}` : '计时器 待开始'}
+              {capsuleLabel}
             </span>
             <Expand className="h-3.5 w-3.5" />
           </button>
@@ -847,7 +843,104 @@ export function GlobalTimerProvider({
   children,
 }: React.PropsWithChildren) {
   const [entries, setEntries] = React.useState<Record<string, GlobalTimerRegistration>>({})
+  const [showInPageTimerOverlay] = React.useState(() => !hasDesktopTimerBridge())
   const activeEntry = React.useMemo(() => selectActiveTimerEntry(Object.values(entries)), [entries])
+  const [automationConfig, setAutomationConfig] = React.useState<TimerAutomationConfig>(() =>
+    readTimerAutomationConfig(),
+  )
+  const [focusConfig, setFocusConfig] = React.useState<TimerFocusConfig>(() =>
+    readTimerFocusConfig(),
+  )
+  const [breakConfig, setBreakConfig] = React.useState<BreakGuardConfig>(() => readBreakGuardConfig())
+  const [breakState, setBreakState] = React.useState<BreakGuardState>(IDLE_BREAK_GUARD_STATE)
+  const [breakPaused, setBreakPaused] = React.useState(false)
+  const [breakPausedRemainingMs, setBreakPausedRemainingMs] = React.useState<number | null>(null)
+  const [breakInterruptedSessionId, setBreakInterruptedSessionId] = React.useState<string | null>(null)
+  const [breakTick, setBreakTick] = React.useState(0)
+  const promptTimerRef = React.useRef<number | null>(null)
+  const promptAutoStartTimerRef = React.useRef<number | null>(null)
+  const breakAutoOpenedKeyRef = React.useRef<string | null>(null)
+  const breakStateRef = React.useRef(breakState)
+  const breakConfigRef = React.useRef(breakConfig)
+  const breakPausedRef = React.useRef(breakPaused)
+  const breakPausedRemainingRef = React.useRef(breakPausedRemainingMs)
+  const breakInterruptedSessionIdRef = React.useRef(breakInterruptedSessionId)
+  const entriesRef = React.useRef(entries)
+  const activeEntryRef = React.useRef(activeEntry)
+
+  React.useEffect(() => {
+    breakStateRef.current = breakState
+  }, [breakState])
+
+  React.useEffect(() => {
+    if (breakState.status !== 'expired') {
+      breakAutoOpenedKeyRef.current = null
+      return
+    }
+    const autoOpenKey = `${breakState.startedAt ?? 'idle'}:${breakState.snoozeCount}`
+    if (breakAutoOpenedKeyRef.current === autoOpenKey) return
+    const bridge = getDesktopTimerBridge()
+    if (!bridge?.openMainTarget) return
+    breakAutoOpenedKeyRef.current = autoOpenKey
+    bridge.openMainTarget('/freestyle')
+  }, [breakState])
+
+  React.useEffect(() => {
+    breakConfigRef.current = breakConfig
+  }, [breakConfig])
+
+  React.useEffect(() => {
+    breakPausedRef.current = breakPaused
+  }, [breakPaused])
+
+  React.useEffect(() => {
+    breakPausedRemainingRef.current = breakPausedRemainingMs
+  }, [breakPausedRemainingMs])
+
+  React.useEffect(() => {
+    breakInterruptedSessionIdRef.current = breakInterruptedSessionId
+  }, [breakInterruptedSessionId])
+
+  React.useEffect(() => {
+    entriesRef.current = entries
+  }, [entries])
+
+  React.useEffect(() => {
+    activeEntryRef.current = activeEntry
+  }, [activeEntry])
+
+  React.useEffect(() => {
+    const handleAutomationChange = (event: Event) => {
+      const nextConfig =
+        event instanceof CustomEvent && event.detail
+          ? (event.detail as TimerAutomationConfig)
+          : readTimerAutomationConfig()
+      setAutomationConfig(nextConfig)
+    }
+    const handleFocusChange = (event: Event) => {
+      const nextConfig =
+        event instanceof CustomEvent && event.detail
+          ? (event.detail as TimerFocusConfig)
+          : readTimerFocusConfig()
+      setFocusConfig(nextConfig)
+    }
+    const handleBreakConfigChange = (event: Event) => {
+      const nextConfig =
+        event instanceof CustomEvent && event.detail
+          ? (event.detail as BreakGuardConfig)
+          : readBreakGuardConfig()
+      setBreakConfig(nextConfig)
+    }
+
+    window.addEventListener('memory-anki-timer-automation-change', handleAutomationChange)
+    window.addEventListener(TIMER_FOCUS_UPDATED_EVENT, handleFocusChange)
+    window.addEventListener(BREAK_GUARD_UPDATED_EVENT, handleBreakConfigChange)
+    return () => {
+      window.removeEventListener('memory-anki-timer-automation-change', handleAutomationChange)
+      window.removeEventListener(TIMER_FOCUS_UPDATED_EVENT, handleFocusChange)
+      window.removeEventListener(BREAK_GUARD_UPDATED_EVENT, handleBreakConfigChange)
+    }
+  }, [])
 
   const upsertTimer = React.useCallback((entry: GlobalTimerRegistration) => {
     setEntries((current) => {
@@ -878,19 +971,331 @@ export function GlobalTimerProvider({
     })
   }, [])
 
+  React.useEffect(() => {
+    if (breakState.status !== 'counting_down' || breakPaused) return
+    const timer = window.setInterval(() => {
+      setBreakTick((current) => current + 1)
+      setBreakState((current) => expireBreakGuardIfDue(current))
+    }, 250)
+    return () => window.clearInterval(timer)
+  }, [breakPaused, breakState.status])
+
+  React.useEffect(() => {
+    return () => {
+      if (promptTimerRef.current != null) {
+        window.clearTimeout(promptTimerRef.current)
+      }
+      if (promptAutoStartTimerRef.current != null) {
+        window.clearTimeout(promptAutoStartTimerRef.current)
+      }
+    }
+  }, [])
+
+  const openTarget = React.useCallback((targetPath: string) => {
+    const safePath = targetPath.startsWith('/') && !targetPath.startsWith('//')
+      ? targetPath
+      : '/freestyle'
+    if (window.location.pathname === safePath) return
+    window.location.assign(safePath)
+  }, [])
+
+  const finishBreak = React.useCallback((options?: { openTarget?: boolean }) => {
+    const current = breakStateRef.current
+    const config = breakConfigRef.current
+    if (current.logId) {
+      updateBreakGuardLog(current.logId, {
+        endedAt: new Date().toISOString(),
+        overtime: current.status === 'expired',
+        snoozeCount: current.snoozeCount,
+      })
+    }
+    setBreakPaused(false)
+    setBreakPausedRemainingMs(null)
+    setBreakInterruptedSessionId(null)
+    setBreakState(IDLE_BREAK_GUARD_STATE)
+    if (options?.openTarget) {
+      openTarget(config.targetPath)
+    }
+  }, [openTarget])
+
+  const clearPendingBreakPrompt = React.useCallback(() => {
+    if (promptTimerRef.current == null) return
+    window.clearTimeout(promptTimerRef.current)
+    promptTimerRef.current = null
+  }, [])
+
+  const clearPendingBreakPromptAutoStart = React.useCallback(() => {
+    if (promptAutoStartTimerRef.current == null) return
+    window.clearTimeout(promptAutoStartTimerRef.current)
+    promptAutoStartTimerRef.current = null
+  }, [])
+
+  const pauseActiveStudyForBreakGuard = React.useCallback(() => {
+    const currentActiveEntry = activeEntryRef.current
+    if (currentActiveEntry?.timer.status !== 'running') return
+    currentActiveEntry.timer.pause({ source: 'break_guard_prompt' })
+    setBreakInterruptedSessionId(currentActiveEntry.timer.sessionId)
+  }, [])
+
+  const resumeInterruptedStudyAfterPromptCancel = React.useCallback((entry: GlobalTimerRegistration | null) => {
+    const interruptedSessionId = breakInterruptedSessionIdRef.current
+    if (!entry?.isRouteActive || !interruptedSessionId || entry.timer.sessionId !== interruptedSessionId) return
+    entry.timer.resume({ source: 'break_guard_prompt_cancel' })
+  }, [])
+
+  const showBreakPrompt = React.useCallback((currentBreakState: BreakGuardState) => {
+    if (!shouldPromptForBreakGuard(breakConfigRef.current, currentBreakState)) return
+    clearPendingBreakPrompt()
+    pauseActiveStudyForBreakGuard()
+    setBreakState((current) =>
+      shouldPromptForBreakGuard(breakConfigRef.current, current)
+        ? { ...IDLE_BREAK_GUARD_STATE, status: 'prompting' }
+        : current,
+    )
+  }, [clearPendingBreakPrompt, pauseActiveStudyForBreakGuard])
+
+  const scheduleBreakPrompt = React.useCallback((config: BreakGuardConfig, currentBreakState: BreakGuardState) => {
+    if (!shouldPromptForBreakGuard(config, currentBreakState)) return
+    clearPendingBreakPrompt()
+    pauseActiveStudyForBreakGuard()
+    promptTimerRef.current = window.setTimeout(() => {
+      promptTimerRef.current = null
+      showBreakPrompt(breakStateRef.current)
+    }, config.promptDelaySeconds * 1000)
+  }, [clearPendingBreakPrompt, pauseActiveStudyForBreakGuard, showBreakPrompt])
+
+  const startBreakCountdown = React.useCallback((minutes: number) => {
+    const currentConfig = breakConfigRef.current
+    const currentActiveEntry = activeEntryRef.current
+    const safeMinutes = Math.max(1, Math.round(minutes))
+    clearPendingBreakPrompt()
+    clearPendingBreakPromptAutoStart()
+    const interruptedSessionId =
+      breakInterruptedSessionIdRef.current ??
+      (currentActiveEntry?.timer.status === 'running' ? currentActiveEntry.timer.sessionId : null)
+    if (currentActiveEntry?.timer.status === 'running') {
+      currentActiveEntry.timer.pause({ source: 'break_guard' })
+    }
+    const logId = currentConfig.recordBreakLogs ? createBreakLogId() : null
+    if (logId) {
+      appendBreakGuardLog({
+        id: logId,
+        startedAt: new Date().toISOString(),
+        plannedMinutes: safeMinutes,
+        endedAt: null,
+        overtime: false,
+        snoozeCount: 0,
+      })
+    }
+    setBreakPaused(false)
+    setBreakPausedRemainingMs(null)
+    setBreakInterruptedSessionId(interruptedSessionId)
+    setBreakState(createBreakGuardCountdown(safeMinutes, Date.now(), logId))
+  }, [clearPendingBreakPrompt, clearPendingBreakPromptAutoStart])
+
+  const endBreakAndResumeStudy = React.useCallback((entry: GlobalTimerRegistration | null) => {
+    if (!entry?.isRouteActive) return false
+
+    clearPendingBreakPrompt()
+    clearPendingBreakPromptAutoStart()
+    const currentBreakState = breakStateRef.current
+    if (currentBreakState.status === 'idle' || currentBreakState.status === 'dismissed') return true
+
+    if (currentBreakState.status === 'prompting') {
+      resumeInterruptedStudyAfterPromptCancel(entry)
+      setBreakPaused(false)
+      setBreakPausedRemainingMs(null)
+      setBreakState(IDLE_BREAK_GUARD_STATE)
+      setBreakInterruptedSessionId(null)
+      return true
+    }
+
+    return false
+  }, [clearPendingBreakPrompt, clearPendingBreakPromptAutoStart])
+
+  const returnToStudy = React.useCallback(() => {
+    const currentBreakState = breakStateRef.current
+    if (currentBreakState.status === 'idle' || currentBreakState.status === 'dismissed') {
+      clearPendingBreakPrompt()
+      clearPendingBreakPromptAutoStart()
+      resumeInterruptedStudyAfterPromptCancel(activeEntryRef.current)
+      setBreakInterruptedSessionId(null)
+      return
+    }
+    endBreakAndResumeStudy(activeEntryRef.current)
+  }, [clearPendingBreakPrompt, clearPendingBreakPromptAutoStart, endBreakAndResumeStudy, resumeInterruptedStudyAfterPromptCancel])
+
+  const notifyStudyActivity = React.useCallback((sessionId: string) => {
+    const entry = entriesRef.current[sessionId]
+    if (!entry?.isRouteActive) return
+    endBreakAndResumeStudy(entry)
+  }, [endBreakAndResumeStudy])
+
+  React.useEffect(() => {
+    if (!activeEntry?.isRouteActive) return
+    const currentBreakState = breakStateRef.current
+    if (currentBreakState.status === 'idle' || currentBreakState.status === 'dismissed') return
+    endBreakAndResumeStudy(activeEntry)
+  }, [activeEntry, endBreakAndResumeStudy])
+
   const contextValue = React.useMemo(
     () => ({
       upsertTimer,
       removeTimer,
+      notifyStudyActivity,
     }),
-    [removeTimer, upsertTimer],
+    [notifyStudyActivity, removeTimer, upsertTimer],
   )
+
+  const handleTimerCommand = React.useCallback((command: UnifiedTimerCommand) => {
+    const currentBreakState = breakStateRef.current
+    const config = breakConfigRef.current
+    const currentActiveEntry = activeEntryRef.current
+
+    if (command.type === 'promptBreak') {
+      scheduleBreakPrompt(config, currentBreakState)
+      return
+    }
+
+    if (command.type === 'returnToStudy') {
+      returnToStudy()
+      return
+    }
+
+    if (command.type === 'startBreak') {
+      startBreakCountdown(command.minutes)
+      return
+    }
+
+    if (command.type === 'pause') {
+      if (currentBreakState.status === 'counting_down') {
+        const remaining = Math.max(0, (currentBreakState.expiresAt ?? Date.now()) - Date.now())
+        setBreakPaused(true)
+        setBreakPausedRemainingMs(remaining)
+        return
+      }
+      currentActiveEntry?.timer.pause({ source: 'global_floating_timer' })
+      return
+    }
+
+    if (command.type === 'resume') {
+      if (currentBreakState.status === 'counting_down' && breakPausedRef.current) {
+        const remaining = breakPausedRemainingRef.current ?? 0
+        setBreakState((current) => ({
+          ...current,
+          expiresAt: Date.now() + remaining,
+        }))
+        setBreakPaused(false)
+        setBreakPausedRemainingMs(null)
+        return
+      }
+      if (currentActiveEntry?.timer.status === 'paused') {
+        currentActiveEntry.timer.resume({ source: 'global_floating_timer' })
+      } else if (currentActiveEntry?.timer.status === 'idle') {
+        currentActiveEntry.timer.start({ source: 'global_floating_timer' })
+      }
+      return
+    }
+
+    if (command.type === 'snooze') {
+      if (currentBreakState.status !== 'expired' && currentBreakState.status !== 'counting_down') return
+      const nextState = snoozeBreakGuard(currentBreakState, command.minutes)
+      if (nextState.logId) {
+        updateBreakGuardLog(nextState.logId, { snoozeCount: nextState.snoozeCount })
+      }
+      setBreakPaused(false)
+      setBreakPausedRemainingMs(null)
+      setBreakState(nextState)
+      return
+    }
+
+    if (command.type === 'finishBreak') {
+      finishBreak({ openTarget: command.openTarget })
+      return
+    }
+
+    if (command.type === 'openTarget') {
+      openTarget(command.path)
+      return
+    }
+
+    if (command.type === 'collapse') {
+      const bridge = getDesktopTimerBridge()
+      bridge?.setOverlayCollapsed?.(command.collapsed)
+    }
+  }, [finishBreak, openTarget, returnToStudy, scheduleBreakPrompt, startBreakCountdown])
+
+  const timerSnapshot = React.useMemo(() => {
+    if (
+      breakState.status === 'prompting' ||
+      breakState.status === 'counting_down' ||
+      breakState.status === 'expired'
+    ) {
+      return buildBreakTimerSnapshot({
+        breakState,
+        config: breakConfig,
+        paused: breakPaused,
+        pausedRemainingMs: breakPausedRemainingMs,
+      })
+    }
+    return buildStudyTimerSnapshot({
+      activeEntry,
+      focusConfig,
+      automationConfig,
+    })
+  }, [activeEntry, automationConfig, breakConfig, breakPaused, breakPausedRemainingMs, breakState, breakTick, focusConfig])
+
+  React.useEffect(() => {
+    clearPendingBreakPromptAutoStart()
+    if (breakState.status !== 'prompting') return
+    const defaultMinutes = breakConfig.presetMinutes[0] ?? 1
+    promptAutoStartTimerRef.current = window.setTimeout(() => {
+      promptAutoStartTimerRef.current = null
+      if (breakStateRef.current.status !== 'prompting') return
+      startBreakCountdown(defaultMinutes)
+    }, 5_000)
+    return () => {
+      clearPendingBreakPromptAutoStart()
+    }
+  }, [breakConfig.presetMinutes, breakState.status, clearPendingBreakPromptAutoStart, startBreakCountdown])
+
+  React.useEffect(() => {
+    const bridge = getDesktopTimerBridge()
+    if (!bridge?.onPauseActiveTimer) return
+    return bridge.onPauseActiveTimer(() => {
+      activeEntryRef.current?.timer.pause({ source: 'desktop_timer_overlay' })
+    })
+  }, [])
+
+  React.useEffect(() => {
+    const bridge = getDesktopTimerBridge()
+    bridge?.publishTimerSnapshot?.(timerSnapshot)
+  }, [timerSnapshot])
+
+  React.useEffect(() => {
+    const bridge = getDesktopTimerBridge()
+    if (!bridge?.onTimerCommand) return
+    return bridge.onTimerCommand(handleTimerCommand)
+  }, [handleTimerCommand])
+
+  React.useEffect(() => {
+    const bridge = getDesktopTimerBridge()
+    if (!bridge?.onMainWindowBlur) return
+    return bridge.onMainWindowBlur(() => {
+      scheduleBreakPrompt(breakConfigRef.current, breakStateRef.current)
+    })
+  }, [scheduleBreakPrompt])
 
   return (
     <GlobalTimerContext.Provider value={contextValue}>
       {children}
-      <GlobalTimerFloatingOverlay entries={Object.values(entries)} />
-      <GlobalBreakGuardOverlay activeEntry={activeEntry} />
+      {showInPageTimerOverlay ? (
+        <GlobalTimerFloatingOverlay
+          entries={Object.values(entries)}
+          snapshot={timerSnapshot}
+          onCommand={handleTimerCommand}
+        />
+      ) : null}
     </GlobalTimerContext.Provider>
   )
 }
@@ -910,6 +1315,22 @@ export function useGlobalTimerRegistration(entry: {
     isRouteActive,
     becameActiveAt,
   } = entry
+  const notifyStudyActivity = context?.notifyStudyActivity
+
+  React.useEffect(() => {
+    if (!notifyStudyActivity) return
+    const originalRegisterActivity = timer.registerActivity
+    const wrappedRegisterActivity: TimedSessionController['registerActivity'] = (activityKind, meta) => {
+      notifyStudyActivity(timer.sessionId)
+      originalRegisterActivity(activityKind, meta)
+    }
+    timer.registerActivity = wrappedRegisterActivity
+    return () => {
+      if (timer.registerActivity === wrappedRegisterActivity) {
+        timer.registerActivity = originalRegisterActivity
+      }
+    }
+  }, [notifyStudyActivity, timer])
 
   React.useEffect(() => {
     if (!context) return

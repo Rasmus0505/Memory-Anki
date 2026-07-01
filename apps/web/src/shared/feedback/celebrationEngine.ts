@@ -13,6 +13,7 @@ export type CelebrationScenario =
   | 'milestone'
   | 'completion'
   | 'timer'
+  | 'quiz'
 
 type CelebrationShape = 'square' | 'circle' | 'star'
 
@@ -69,6 +70,7 @@ const SCENARIO_DURATION_MULTIPLIER: Record<CelebrationScenario, number> = {
   milestone: 1,
   completion: 1.08,
   timer: 1.18,
+  quiz: 0.76,
 }
 
 let sharedCanvas: HTMLCanvasElement | null = null
@@ -146,6 +148,7 @@ const PRESET_DEFINITIONS: Record<CelebrationPreset, CelebrationPresetDefinition>
     scenarioDurationMultiplier: {
       preview: 0.7,
       review: 0.82,
+      quiz: 0.76,
       milestone: 0.92,
       completion: 1,
       timer: 1.05,
@@ -174,6 +177,7 @@ const PRESET_DEFINITIONS: Record<CelebrationPreset, CelebrationPresetDefinition>
     scenarioDurationMultiplier: {
       preview: 0.82,
       review: 0.88,
+      quiz: 0.78,
       milestone: 1,
       completion: 1.05,
       timer: 1.12,
@@ -211,6 +215,7 @@ const PRESET_DEFINITIONS: Record<CelebrationPreset, CelebrationPresetDefinition>
     scenarioDurationMultiplier: {
       preview: 0.78,
       review: 0.86,
+      quiz: 0.78,
       milestone: 0.96,
       completion: 1.02,
       timer: 1.08,
@@ -262,6 +267,7 @@ const PRESET_DEFINITIONS: Record<CelebrationPreset, CelebrationPresetDefinition>
     scenarioDurationMultiplier: {
       preview: 0.82,
       review: 0.88,
+      quiz: 0.8,
       milestone: 0.98,
       completion: 1.04,
       timer: 1.08,
@@ -314,6 +320,7 @@ const PRESET_DEFINITIONS: Record<CelebrationPreset, CelebrationPresetDefinition>
     scenarioDurationMultiplier: {
       preview: 0.88,
       review: 0.94,
+      quiz: 0.82,
       milestone: 1,
       completion: 1.1,
       timer: 1.18,

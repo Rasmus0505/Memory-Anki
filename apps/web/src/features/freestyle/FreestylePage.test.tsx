@@ -15,6 +15,7 @@ const promptForAiOptionsMock = vi.fn()
 const useTimedSessionMock = vi.fn()
 const toastErrorMock = vi.fn()
 const toastSuccessMock = vi.fn()
+const memoryLookupDialogMock = vi.fn()
 
 vi.mock('@/features/freestyle/api/freestyleApi', () => ({
   getFreestyleFeedApi: (...args: unknown[]) => getFreestyleFeedApiMock(...args),
@@ -29,6 +30,13 @@ vi.mock('@/features/palace-quiz/api/palaceQuizApi', () => ({
     recordPalaceQuizChoiceAttemptApiMock(...args),
   requestPalaceShortAnswerFeedbackApi: (...args: unknown[]) =>
     requestPalaceShortAnswerFeedbackApiMock(...args),
+}))
+
+vi.mock('@/features/palace-quiz/components/PalaceQuizMemoryLookupDialog', () => ({
+  PalaceQuizMemoryLookupDialog: (props: unknown) => {
+    memoryLookupDialogMock(props)
+    return null
+  },
 }))
 
 vi.mock('@/features/ai-config/useAiRunConfigDialog', () => ({
@@ -199,6 +207,7 @@ describe('FreestylePage feedback', () => {
     useTimedSessionMock.mockReturnValue(timerMock())
     toastErrorMock.mockClear()
     toastSuccessMock.mockClear()
+    memoryLookupDialogMock.mockClear()
   })
 
   it('emits correct and incorrect result feedback only when a card is first resolved', async () => {
@@ -229,6 +238,46 @@ describe('FreestylePage feedback', () => {
     expect(resultEvents).toHaveLength(2)
   })
 
+  it('emits quiz-result confetti for correct freestyle answers', async () => {
+    renderPage([quizCard(1)])
+
+    await answerChoiceAt(0)
+
+    await waitFor(() => {
+      expect(emitReviewConfettiMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          kind: 'quiz_correct',
+        }),
+      )
+    })
+    expect(emitReviewConfettiMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'quiz_correct',
+        confettiAmount: 0.8,
+        confettiPreset: 'random_direction',
+        reducedMotion: false,
+        soundEnabled: true,
+        volume: 1.265,
+      }),
+    )
+  })
+
+  it('does not emit result confetti for incorrect freestyle answers', async () => {
+    renderPage([quizCard(1, 'B')])
+
+    await answerChoiceAt(0)
+
+    await waitFor(() => {
+      expect(dispatchGlobalFeedbackMock).toHaveBeenCalledWith(
+        'quiz_result_incorrect',
+        expect.objectContaining({ label: '答错', screenPulse: null, audioScope: 'local' }),
+      )
+    })
+    expect(emitReviewConfettiMock).not.toHaveBeenCalledWith(
+      expect.objectContaining({ kind: 'quiz_correct' }),
+    )
+  })
+
   it('fires milestone confetti once when the correct streak reaches a configured step', async () => {
     renderPage([quizCard(1), quizCard(2), quizCard(3), quizCard(4)])
 
@@ -253,7 +302,7 @@ describe('FreestylePage feedback', () => {
         }),
       )
     })
-    expect(emitReviewConfettiMock).toHaveBeenCalledTimes(1)
+    expect(emitReviewConfettiMock.mock.calls.filter(([args]) => args.kind === 'milestone')).toHaveLength(1)
 
     fireEvent.click(screen.getByRole('button', { name: '清空本地进度' }))
     for (let index = 0; index < 4; index += 1) {
@@ -264,7 +313,7 @@ describe('FreestylePage feedback', () => {
       }
     }
     await waitFor(() => {
-      expect(emitReviewConfettiMock).toHaveBeenCalledTimes(2)
+      expect(emitReviewConfettiMock.mock.calls.filter(([args]) => args.kind === 'milestone')).toHaveLength(2)
     })
   })
 
@@ -281,6 +330,68 @@ describe('FreestylePage feedback', () => {
       )
     })
     expect(toastErrorMock).toHaveBeenCalledWith('请先填写你的答案。')
+  })
+
+  it('shows an immersive queue HUD and marks fresh versus answered cards', async () => {
+    renderPage([quizCard(1), quizCard(2)])
+
+    expect(await screen.findAllByText('新题')).toHaveLength(2)
+    expect(screen.getByText('未做 2')).toBeTruthy()
+    expect(screen.getByText('已做 0')).toBeTruthy()
+    expect(screen.getByText('跳转 0')).toBeTruthy()
+
+    await answerChoiceAt(0)
+
+    await waitFor(() => {
+      expect(screen.getByText('已做过')).toBeTruthy()
+      expect(screen.getAllByText('新题')).toHaveLength(1)
+      expect(screen.getByText('未做 1')).toBeTruthy()
+      expect(screen.getByText('已做 1')).toBeTruthy()
+    })
+  })
+
+  it('downgrades answered cards after a reload without clearing them from the deck', async () => {
+    const cards = [quizCard(1), quizCard(2), quizCard(3)]
+    const { unmount } = renderPage(cards)
+
+    await answerChoiceAt(0)
+    await waitFor(() => {
+      expect(screen.getByText('已做过')).toBeTruthy()
+    })
+
+    unmount()
+    getFreestyleFeedApiMock.mockResolvedValue({ cards })
+    render(
+      <MemoryRouter>
+        <FreestylePage />
+      </MemoryRouter>,
+    )
+
+    await screen.findByText('选择题 2')
+    expect(screen.getAllByText(/^选择题 \d$/).map((node) => node.textContent)).toEqual([
+      '选择题 2',
+      '选择题 3',
+      '选择题 1',
+    ])
+    expect(screen.getByText('未做 2')).toBeTruthy()
+    expect(screen.getByText('已做 1')).toBeTruthy()
+  })
+
+  it('reshuffles without clearing answered-card progress', async () => {
+    renderPage([quizCard(1), quizCard(2), quizCard(3)])
+
+    await answerChoiceAt(0)
+    await waitFor(() => {
+      expect(screen.getByText('已做 1')).toBeTruthy()
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: '重洗队列' }))
+
+    await waitFor(() => {
+      expect(screen.getByText('已做 1')).toBeTruthy()
+      expect(screen.getByText('未做 2')).toBeTruthy()
+    })
+    expect(toastSuccessMock).not.toHaveBeenCalledWith('已清空随心进度')
   })
 
   it('emits short-answer AI start, success, cancel, and failure feedback', async () => {
@@ -321,5 +432,44 @@ describe('FreestylePage feedback', () => {
         expect.objectContaining({ label: 'AI失败', audioScope: 'global' }),
       )
     })
+  })
+
+  it('opens the memory palace lookup for the current random card palace only when available', async () => {
+    renderPage([quizCard(1)])
+
+    await screen.findByText('选择题 1')
+    expect(screen.getByRole('button', { name: '查看宫殿' })).not.toHaveProperty('disabled', true)
+    fireEvent.click(screen.getByRole('button', { name: '查看宫殿' }))
+
+    await waitFor(() => {
+      expect(memoryLookupDialogMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          open: true,
+          currentPalaceId: 1,
+          followCurrentPalace: true,
+        }),
+      )
+    })
+  })
+
+  it('keeps the memory palace lookup disabled when the current random card has no palace context', async () => {
+    renderPage([
+      {
+        id: 'action:english',
+        type: 'action',
+        content_type: 'english',
+        action_kind: 'english',
+        title: '英语练习',
+        subtitle: '继续英语学习',
+        href: '/english',
+        reason: '推荐',
+        priority: 10,
+        palace_context: null,
+      },
+    ])
+
+    await screen.findByText('英语练习')
+    expect(screen.getByRole('button', { name: '查看宫殿' })).toHaveProperty('disabled', true)
+    expect(memoryLookupDialogMock).not.toHaveBeenCalled()
   })
 })

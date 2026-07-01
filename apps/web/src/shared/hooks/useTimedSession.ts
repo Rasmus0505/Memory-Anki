@@ -100,6 +100,7 @@ export function useTimedSession({
   const leaveMetaRef = React.useRef<TimedSessionMeta | null>(null)
   const sceneSegmentsRef = React.useRef<SessionSceneSegment[]>([])
   const activeSceneSegmentRef = React.useRef<ActiveSceneSegmentSnapshot | null>(null)
+  const lastTickPersistAtRef = React.useRef<number | null>(null)
   const [automationConfig, setAutomationConfig] = React.useState<TimerAutomationConfig>(() =>
     readTimerAutomationConfig(),
   )
@@ -225,10 +226,12 @@ export function useTimedSession({
     if (statusRef.current !== 'running' || lastTickAtRef.current == null) return
     const elapsedMs = Math.max(0, currentMs - lastTickAtRef.current)
     const diffSeconds = Math.floor(elapsedMs / 1000)
+    let changed = false
     if (diffSeconds > 0) {
       effectiveSecondsRef.current += diffSeconds
       setEffectiveSeconds(effectiveSecondsRef.current)
       lastTickAtRef.current += diffSeconds * 1000
+      changed = true
     } else if (elapsedMs > 0 && elapsedMs < 1000) {
       lastTickAtRef.current = currentMs - elapsedMs
     }
@@ -236,8 +239,12 @@ export function useTimedSession({
     if (nextIdle !== idleSecondsRef.current) {
       idleSecondsRef.current = nextIdle
       setIdleSeconds(nextIdle)
+      changed = true
     }
-    persistSnapshot()
+    if (changed && (lastTickPersistAtRef.current == null || currentMs - lastTickPersistAtRef.current >= 5_000)) {
+      lastTickPersistAtRef.current = currentMs
+      persistSnapshot()
+    }
   }, [getIdleSecondsAt, persistSnapshot])
 
   const startTicker = React.useCallback(() => {
@@ -391,6 +398,7 @@ export function useTimedSession({
     ensureRecordId()
     clearSuspendedState()
     lastActivityAtRef.current = Date.now()
+    lastTickPersistAtRef.current = null
     idleSecondsRef.current = 0
     setIdleSeconds(0)
     statusRef.current = 'running'
@@ -449,6 +457,7 @@ export function useTimedSession({
     pauseCountRef.current += 1
     setPauseCount(pauseCountRef.current)
     statusRef.current = 'paused'
+    lastTickPersistAtRef.current = null
     setStatus('paused')
     setGlowState('paused')
     pushEvent('pause', meta)
@@ -547,6 +556,7 @@ export function useTimedSession({
     clearTimedSessionTimeout(autoPauseRef)
     clearTimedSessionTimeout(hiddenPauseRef)
     statusRef.current = 'paused'
+    lastTickPersistAtRef.current = null
     setStatus('paused')
     setGlowState('idle')
     sceneActiveRef.current = false
@@ -705,6 +715,7 @@ export function useTimedSession({
     sceneSegmentsRef.current = []
     activeSceneSegmentRef.current = null
     effectiveSecondsRef.current = 0
+    lastTickPersistAtRef.current = null
     idleSecondsRef.current = 0
     pauseCountRef.current = 0
     startedAtRef.current = null

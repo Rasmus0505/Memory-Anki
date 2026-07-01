@@ -43,6 +43,7 @@ import {
   QuizQuestionInteraction,
   type QuizRuntimeState,
 } from '@/features/palace-quiz/QuizQuestionInteraction'
+import { emitQuizResultFeedback } from '@/features/palace-quiz/model/quizResultFeedback'
 import {
   recordPalaceQuizChoiceAttemptApi,
   requestPalaceShortAnswerFeedbackApi,
@@ -459,6 +460,7 @@ function FreestyleActionCardView({ card }: { card: FreestyleActionCard }) {
 function FreestyleQuizCardView({
   card,
   state,
+  answeredBefore,
   onStateChange,
   onChoiceResolve,
   onShortAnswerSubmit,
@@ -466,6 +468,7 @@ function FreestyleQuizCardView({
 }: {
   card: FreestyleQuizCard
   state: QuizRuntimeState | undefined
+  answeredBefore: boolean
   onStateChange: (updater: (current: QuizRuntimeState) => QuizRuntimeState) => void
   onChoiceResolve: (optionId: string, isCorrect: boolean) => void
   onShortAnswerSubmit: () => void
@@ -477,11 +480,22 @@ function FreestyleQuizCardView({
   return (
     <div className="mx-auto flex min-h-[min(760px,calc(100vh-140px))] w-full max-w-4xl flex-col justify-center px-4 py-16">
       <div className="rounded-2xl border border-white/12 bg-zinc-50 p-4 text-zinc-950 shadow-2xl sm:p-6">
-        <div className="flex flex-wrap items-center gap-2">
-          <Badge variant="secondary">{palaceTitle}</Badge>
-          {miniName ? <Badge variant="outline">{miniName}</Badge> : null}
-          {chapterName ? <Badge variant="outline">{chapterName}</Badge> : null}
-          <Badge variant="outline">{card.question.question_type}</Badge>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <Badge variant="secondary">{palaceTitle}</Badge>
+            {miniName ? <Badge variant="outline">{miniName}</Badge> : null}
+            {chapterName ? <Badge variant="outline">{chapterName}</Badge> : null}
+            <Badge variant="outline">{card.question.question_type}</Badge>
+          </div>
+          <Badge
+            variant="outline"
+            className={cn(
+              'border-zinc-200 bg-zinc-100 text-zinc-500',
+              !answeredBefore && 'border-emerald-200 bg-emerald-50 text-emerald-700',
+            )}
+          >
+            {answeredBefore ? '已做过' : '新题'}
+          </Badge>
         </div>
         <div className="mt-5 whitespace-pre-wrap text-xl font-semibold leading-8 sm:text-2xl">
           {card.question.stem}
@@ -517,6 +531,7 @@ export default function FreestylePage() {
   const previousResolvedQuestionIdsRef = useRef<Set<number>>(
     new Set(progress.resolvedQuestionIds),
   )
+  const queuePriorityResolvedIdsRef = useRef<number[]>(progress.resolvedQuestionIds)
   const emittedMilestonesRef = useRef<Set<number>>(new Set())
   const reducedMotion = usePrefersReducedMotion()
   const { promptForAiOptions, aiRunConfigDialog } = useAiRunConfigDialog()
@@ -538,7 +553,13 @@ export default function FreestylePage() {
     becameActiveAt,
   })
 
-  const queue = useMemo(() => buildFreestyleQueue(feedCards, config), [config, feedCards])
+  const queue = useMemo(
+    () =>
+      buildFreestyleQueue(feedCards, config, {
+        resolvedQuestionIds: queuePriorityResolvedIdsRef.current,
+      }),
+    [config, feedCards],
+  )
   const queueSignature = useMemo(() => buildQueueSignature(queue), [queue])
   const currentIndex = Math.min(progress.currentIndex, Math.max(0, queue.length - 1))
   const currentCard = queue[currentIndex] ?? null
@@ -644,12 +665,7 @@ export default function FreestylePage() {
       const state = progress.questionStates[questionId]
       if (!state?.resolved) return
       if (typeof state.correct === 'boolean') {
-        const isCorrect = state.correct
-        dispatchGlobalFeedback(isCorrect ? 'quiz_result_correct' : 'quiz_result_incorrect', {
-          label: isCorrect ? '答对' : '答错',
-          screenPulse: isCorrect ? 'soft' : null,
-          audioScope: 'local',
-        })
+        emitQuizResultFeedback({ correct: state.correct, reducedMotion })
       } else if (state.shortAnswerSubmitted) {
         dispatchGlobalFeedback('quiz_answer_submit', { label: '提交答案', audioScope: 'local' })
       }
@@ -824,6 +840,7 @@ export default function FreestylePage() {
   )
 
   const handleReshuffle = useCallback(() => {
+    queuePriorityResolvedIdsRef.current = progress.resolvedQuestionIds
     setConfigAndPersist((current) => ({
       ...current,
       seed: nextFreestyleSeed(current.seed),
@@ -834,7 +851,7 @@ export default function FreestylePage() {
       lastQueueSignature: '',
     }))
     emittedMilestonesRef.current = new Set()
-  }, [setConfigAndPersist, setProgressAndPersist])
+  }, [progress.resolvedQuestionIds, setConfigAndPersist, setProgressAndPersist])
 
   const handleKeyDown = useCallback(
     (event: KeyboardEvent<HTMLDivElement>) => {
@@ -857,9 +874,16 @@ export default function FreestylePage() {
     [currentIndex, goToIndex],
   )
 
+  const answeredQuestionIds = useMemo(
+    () => new Set(progress.resolvedQuestionIds),
+    [progress.resolvedQuestionIds],
+  )
   const quizTotal = queue.filter(isQuizCard).length
   const actionTotal = queue.filter(isActionCard).length
-  const resolvedCount = progress.resolvedQuestionIds.length
+  const resolvedCount = queue.filter(
+    (card) => isQuizCard(card) && answeredQuestionIds.has(card.question.id),
+  ).length
+  const freshCount = Math.max(0, quizTotal - resolvedCount)
 
   return (
     <TooltipProvider>
@@ -888,7 +912,6 @@ export default function FreestylePage() {
         <div className="pointer-events-none absolute left-0 right-0 top-0 z-20 flex items-start justify-end gap-3 px-4 py-4 sm:justify-between sm:px-5">
           <div className="pointer-events-auto flex min-w-0 flex-wrap items-center gap-2 rounded-full border border-white/10 bg-zinc-900/76 px-3 py-2 text-xs shadow-lg backdrop-blur">
             <Sparkles className="hidden h-4 w-4 text-amber-300 sm:block" />
-            <span className="hidden font-semibold sm:inline">随心模式</span>
             <span className="text-zinc-400">{RANGE_LABELS[config.range]}</span>
             <span className="text-zinc-400">
               {queue.length === 0 ? '0/0' : `${currentIndex + 1}/${queue.length}`}
@@ -929,10 +952,14 @@ export default function FreestylePage() {
           ) : queue.length === 0 ? (
             <section className="flex h-full snap-start items-center justify-center px-4">
               <EmptyState
-                title="暂无可刷内容"
-                description="当前筛选下没有题卡或学习卡。"
+                title="这组暂时刷空了"
+                description="当前筛选没有可展示的随心卡，换个范围或重洗队列再来一轮。"
                 action={
                   <div className="flex flex-wrap justify-center gap-2">
+                    <Button type="button" variant="secondary" onClick={handleReshuffle}>
+                      <Shuffle className="h-4 w-4" />
+                      重洗
+                    </Button>
                     <Button type="button" onClick={() => setSettingsOpen(true)}>
                       <SlidersHorizontal className="h-4 w-4" />
                       设置
@@ -958,6 +985,7 @@ export default function FreestylePage() {
                   <FreestyleQuizCardView
                     card={card}
                     state={progress.questionStates[card.question.id]}
+                    answeredBefore={answeredQuestionIds.has(card.question.id)}
                     onStateChange={(updater) => updateQuestionState(card.question.id, updater)}
                     onChoiceResolve={(optionId, isCorrect) => handleChoiceResolve(card, optionId, isCorrect)}
                     onShortAnswerSubmit={() => {
@@ -1011,8 +1039,12 @@ export default function FreestylePage() {
           </IconButton>
         </div>
 
-        <div className="pointer-events-none absolute bottom-4 left-4 z-20 hidden rounded-full border border-white/10 bg-zinc-900/72 px-3 py-2 text-xs text-zinc-300 shadow-lg backdrop-blur md:block">
-          题卡 {resolvedCount}/{quizTotal} · 跳转卡 {actionTotal}
+        <div className="pointer-events-none absolute bottom-4 left-4 z-20 hidden items-center gap-2 rounded-full border border-white/10 bg-zinc-900/72 px-3 py-2 text-xs text-zinc-300 shadow-lg backdrop-blur md:flex">
+          <span className="text-emerald-300">未做 {freshCount}</span>
+          <span className="text-zinc-600">/</span>
+          <span>已做 {resolvedCount}</span>
+          <span className="text-zinc-600">/</span>
+          <span>跳转 {actionTotal}</span>
         </div>
       </div>
     </TooltipProvider>

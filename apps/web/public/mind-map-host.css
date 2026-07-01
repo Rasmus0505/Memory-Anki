@@ -1,0 +1,1439 @@
+html,
+body,
+#app {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  overflow: hidden;
+  background: #f8fafc;
+}
+
+body.memory-anki-paper-map {
+  color: #18181b;
+  background:
+    radial-gradient(circle at 18% 12%, rgba(37, 99, 235, 0.08), transparent 28%),
+    radial-gradient(circle at 78% 18%, rgba(124, 58, 237, 0.07), transparent 26%),
+    linear-gradient(rgba(24, 24, 27, 0.045) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(24, 24, 27, 0.04) 1px, transparent 1px),
+    #fafafa;
+  background-size: auto, auto, 32px 32px, 32px 32px, auto;
+}
+
+body.memory-anki-paper-map #app {
+  background: transparent;
+}
+
+body.memory-anki-paper-map .smm-node.memory-anki-paper-node {
+  --memory-anki-paper-branch-color: #2563eb;
+  --memory-anki-paper-node-fill: #ffffff;
+  --memory-anki-paper-node-stroke: #e4e4e7;
+  --memory-anki-paper-node-text: #18181b;
+  --memory-anki-paper-node-shadow: rgba(24, 24, 27, 0.1);
+  --memory-anki-paper-node-weight: 560;
+  isolation: isolate;
+  overflow: visible;
+}
+
+body.memory-anki-paper-map .smm-node.memory-anki-paper-node foreignObject {
+  overflow: visible;
+}
+
+body.memory-anki-paper-map .smm-node.memory-anki-paper-node .smm-node-shape {
+  fill: var(--memory-anki-paper-node-fill);
+  stroke: var(--memory-anki-paper-node-stroke);
+  stroke-width: 1.25;
+  filter:
+    drop-shadow(0 1px 0 rgba(255, 255, 255, 0.82))
+    drop-shadow(0 12px 22px var(--memory-anki-paper-node-shadow));
+  transition:
+    fill 160ms ease,
+    stroke 160ms ease,
+    stroke-width 160ms ease,
+    filter 180ms ease,
+    opacity 160ms ease;
+}
+
+body.memory-anki-paper-map .smm-node.memory-anki-paper-root .smm-node-shape {
+  fill: #18181b;
+  stroke: #09090b;
+  stroke-width: 1.5;
+  filter:
+    drop-shadow(0 1px 0 rgba(255, 255, 255, 0.1))
+    drop-shadow(0 18px 34px rgba(24, 24, 27, 0.28));
+}
+
+body.memory-anki-paper-map .smm-node.memory-anki-paper-primary .smm-node-shape {
+  fill: var(--memory-anki-paper-branch-color);
+  stroke: var(--memory-anki-paper-branch-color);
+  stroke-width: 1.5;
+  filter:
+    drop-shadow(0 1px 0 rgba(255, 255, 255, 0.16))
+    drop-shadow(0 16px 30px var(--memory-anki-paper-node-shadow));
+}
+
+body.memory-anki-paper-map .smm-node.memory-anki-paper-node .smm-text-node-wrap,
+body.memory-anki-paper-map .smm-node.memory-anki-paper-node .smm-richtext-node-wrap,
+body.memory-anki-paper-map .smm-node.memory-anki-paper-node .smm-desctext-node-wrap,
+body.memory-anki-paper-map .smm-node.memory-anki-paper-node .ql-editor {
+  box-sizing: border-box;
+  color: var(--memory-anki-paper-node-text);
+  font-weight: var(--memory-anki-paper-node-weight);
+  line-height: 1.2;
+  max-width: 100%;
+  min-width: 0;
+  overflow: visible !important;
+  overflow-wrap: break-word;
+  text-rendering: optimizeLegibility;
+  white-space: normal;
+  width: 100%;
+  word-break: normal;
+  -webkit-font-smoothing: antialiased;
+}
+
+body.memory-anki-paper-map .smm-node.memory-anki-paper-node .smm-richtext-node-wrap *,
+body.memory-anki-paper-map .smm-node.memory-anki-paper-node .smm-desctext-node-wrap *,
+body.memory-anki-paper-map .smm-node.memory-anki-paper-node .ql-editor * {
+  box-sizing: border-box;
+  color: inherit;
+  max-width: 100%;
+  min-width: 0;
+  overflow-wrap: break-word;
+  width: 100%;
+  word-break: normal;
+}
+
+body.memory-anki-paper-map .smm-node.memory-anki-paper-node .smm-richtext-node-wrap p,
+body.memory-anki-paper-map .smm-node.memory-anki-paper-node .smm-desctext-node-wrap p,
+body.memory-anki-paper-map .smm-node.memory-anki-paper-node .ql-editor p {
+  box-sizing: border-box;
+  margin: 0;
+  max-width: 100%;
+  min-width: 0;
+  width: 100%;
+}
+
+body.memory-anki-paper-map .smm-node.memory-anki-paper-node text,
+body.memory-anki-paper-map .smm-node.memory-anki-paper-node tspan {
+  fill: var(--memory-anki-paper-node-text);
+}
+
+body.memory-anki-paper-map .smm-node.memory-anki-paper-root .smm-text-node-wrap,
+body.memory-anki-paper-map .smm-node.memory-anki-paper-root .smm-richtext-node-wrap,
+body.memory-anki-paper-map .smm-node.memory-anki-paper-root .ql-editor,
+body.memory-anki-paper-map .smm-node.memory-anki-paper-primary .smm-text-node-wrap,
+body.memory-anki-paper-map .smm-node.memory-anki-paper-primary .smm-richtext-node-wrap,
+body.memory-anki-paper-map .smm-node.memory-anki-paper-primary .ql-editor,
+body.memory-anki-paper-map .smm-node.memory-anki-paper-root text,
+body.memory-anki-paper-map .smm-node.memory-anki-paper-root tspan,
+body.memory-anki-paper-map .smm-node.memory-anki-paper-primary text,
+body.memory-anki-paper-map .smm-node.memory-anki-paper-primary tspan {
+  color: #fafafa;
+  fill: #fafafa;
+  font-weight: 700;
+}
+
+body.memory-anki-paper-map .smm-node.memory-anki-paper-node .smm-hover-node {
+  stroke: var(--memory-anki-paper-branch-color);
+  stroke-width: 2.8;
+  opacity: 0.82;
+}
+
+body.memory-anki-paper-map .smm-node.memory-anki-paper-node.active .smm-hover-node,
+body.memory-anki-paper-map .smm-node.memory-anki-paper-node.smm-node-highlight .smm-hover-node {
+  display: block;
+  opacity: 1;
+  stroke-width: 3.4;
+}
+
+body.memory-anki-paper-map .memory-anki-paper-line {
+  stroke: var(--memory-anki-paper-line-color, rgba(37, 99, 235, 0.68));
+  stroke-width: 2.55;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0.72;
+  filter: drop-shadow(0 1px 0 rgba(255, 255, 255, 0.75));
+  transition:
+    stroke 160ms ease,
+    stroke-width 160ms ease,
+    opacity 160ms ease,
+    filter 180ms ease;
+}
+
+body.memory-anki-paper-map .smm-node.memory-anki-paper-review-placeholder .smm-node-shape {
+  fill: #fffbeb;
+  stroke: #f59e0b;
+}
+
+body.memory-anki-paper-map .smm-node.memory-anki-paper-review-placeholder .smm-text-node-wrap,
+body.memory-anki-paper-map .smm-node.memory-anki-paper-review-placeholder .smm-richtext-node-wrap,
+body.memory-anki-paper-map .smm-node.memory-anki-paper-review-placeholder .ql-editor,
+body.memory-anki-paper-map .smm-node.memory-anki-paper-review-placeholder text,
+body.memory-anki-paper-map .smm-node.memory-anki-paper-review-placeholder tspan {
+  color: #92400e;
+  fill: #92400e;
+}
+
+body.memory-anki-paper-map .smm-node.memory-anki-paper-review-revealed .smm-node-shape {
+  fill: #ecfdf5;
+  stroke: #10b981;
+}
+
+body.memory-anki-paper-map .smm-node.memory-anki-paper-review-revealed .smm-text-node-wrap,
+body.memory-anki-paper-map .smm-node.memory-anki-paper-review-revealed .smm-richtext-node-wrap,
+body.memory-anki-paper-map .smm-node.memory-anki-paper-review-revealed .ql-editor,
+body.memory-anki-paper-map .smm-node.memory-anki-paper-review-revealed text,
+body.memory-anki-paper-map .smm-node.memory-anki-paper-review-revealed tspan {
+  color: #065f46;
+  fill: #065f46;
+}
+
+body.memory-anki-paper-map .smm-node.memory-anki-paper-review-red .smm-node-shape {
+  fill: #fff1f2;
+  stroke: #e11d48;
+}
+
+body.memory-anki-paper-map .smm-node.memory-anki-paper-review-red .smm-text-node-wrap,
+body.memory-anki-paper-map .smm-node.memory-anki-paper-review-red .smm-richtext-node-wrap,
+body.memory-anki-paper-map .smm-node.memory-anki-paper-review-red .ql-editor,
+body.memory-anki-paper-map .smm-node.memory-anki-paper-review-red text,
+body.memory-anki-paper-map .smm-node.memory-anki-paper-review-red tspan {
+  color: #881337;
+  fill: #881337;
+}
+
+body.memory-anki-paper-map .memory-anki-paper-line.memory-anki-paper-review-complete-line {
+  stroke: #10b981;
+  stroke-width: 3;
+  opacity: 0.88;
+}
+
+body.memory-anki-ui-cleared .toolbarContainer {
+  display: none !important;
+}
+
+body.memory-anki-ui-cleared .navigatorContainer {
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+body.is-host-readonly:not(.is-host-readonly-toolbar-visible) .toolbarContainer {
+  display: none !important;
+}
+
+body.is-host-readonly:not(.is-host-readonly-toolbar-visible) .navigatorContainer .item:nth-child(6) {
+  display: none !important;
+}
+
+.smm-node.memory-anki-keyboard-focus .smm-hover-node {
+  display: block !important;
+  opacity: 1 !important;
+  stroke: #18181b !important;
+  stroke-width: 3.4 !important;
+}
+
+.smm-node.memory-anki-keyboard-focus .smm-node-shape {
+  filter:
+    drop-shadow(0 0 0 rgba(24, 24, 27, 0.16))
+    drop-shadow(0 0 18px rgba(24, 24, 27, 0.22)) !important;
+}
+
+.smm-node.memory-anki-focus-card .smm-node-shape {
+  filter:
+    drop-shadow(0 0 0 rgba(225, 29, 72, 0.14))
+    drop-shadow(0 0 18px rgba(225, 29, 72, 0.26)) !important;
+}
+
+.smm-node.memory-anki-focus-card .smm-hover-node {
+  display: block !important;
+  opacity: 1 !important;
+  stroke: rgba(225, 29, 72, 0.9) !important;
+  stroke-width: 3.5 !important;
+}
+
+body.is-host-readonly:not(.is-host-readonly-toolbar-visible)
+  .smm-node.memory-anki-keyboard-focus
+  .smm-hover-node {
+  display: none !important;
+  opacity: 0 !important;
+  stroke-width: 0 !important;
+}
+
+body.is-host-readonly:not(.is-host-readonly-toolbar-visible)
+  .smm-node.memory-anki-keyboard-focus
+  .smm-node-shape {
+  filter: none !important;
+}
+
+.memory-anki-segment-toolbar {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 8px;
+  width: min(100%, 920px);
+  max-width: 100%;
+  min-width: 0;
+  margin-right: 8px;
+  margin-left: 0;
+  overflow: hidden;
+}
+
+.memory-anki-segment-toolbar > * {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.toolbarContainer .toolbar .toolbarBlock {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 8px;
+  min-width: 0;
+  overflow: visible;
+}
+
+.toolbarContainer.memory-anki-custom-toolbar-only
+  .toolbar
+  .toolbarBlock:not(.memory-anki-primary-toolbar-block) {
+  display: none !important;
+}
+
+.toolbarContainer.memory-anki-custom-toolbar-only
+  .toolbar
+  .memory-anki-primary-toolbar-block {
+  margin-right: 0 !important;
+}
+
+.toolbarContainer.memory-anki-custom-toolbar-only
+  .toolbar
+  .memory-anki-primary-toolbar-block
+  > :not(.memory-anki-segment-toolbar) {
+  display: none !important;
+}
+
+.sidebarTriggerContainer,
+.navigatorContainer {
+  display: none !important;
+}
+
+.memory-anki-segment-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid #d8dee9;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #111827;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.memory-anki-segment-button:hover {
+  background: #f8fafc;
+}
+
+.memory-anki-practice-button[hidden] {
+  display: none !important;
+}
+
+.memory-anki-mini-palace-button[hidden] {
+  display: none !important;
+}
+
+.memory-anki-practice-button.is-practice-label {
+  border-color: #15803d;
+  background: #16a34a;
+  color: #ffffff;
+}
+
+.memory-anki-practice-button.is-practice-label:hover {
+  background: #15803d;
+}
+
+.memory-anki-practice-button.is-edit-label {
+  border-color: #2563eb;
+  background: #2563eb;
+  color: #ffffff;
+}
+
+.memory-anki-practice-button.is-edit-label:hover {
+  background: #1d4ed8;
+}
+
+.memory-anki-layout-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid #d8dee9;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #111827;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.memory-anki-layout-button:hover {
+  background: #f8fafc;
+}
+
+.memory-anki-layout-button.is-active {
+  border-color: #0f172a;
+  background: #0f172a;
+  color: #ffffff;
+}
+
+.memory-anki-restore-ui-button,
+.memory-anki-exit-fullscreen-button {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  z-index: 10020;
+  display: inline-flex;
+  align-items: center;
+  height: 34px;
+  padding: 0 12px;
+  border: 1px solid rgba(15, 23, 42, 0.18);
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.96);
+  color: #0f172a;
+  font-size: 13px;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.12);
+  cursor: pointer;
+}
+
+.memory-anki-exit-fullscreen-button {
+  top: 58px;
+}
+
+.memory-anki-restore-ui-button[hidden],
+.memory-anki-exit-fullscreen-button[hidden] {
+  display: none !important;
+}
+
+.memory-anki-segment-range-panel {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: rgba(248, 250, 252, 0.95);
+}
+
+.memory-anki-segment-range-panel[hidden] {
+  display: none !important;
+}
+
+.memory-anki-segment-range-panel label,
+.memory-anki-segment-range-panel span {
+  font-size: 12px;
+  color: #334155;
+}
+
+.memory-anki-segment-range-select {
+  height: 30px;
+  min-width: 164px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #111827;
+  font-size: 12px;
+  padding: 0 8px;
+}
+
+.memory-anki-segment-range-action {
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #111827;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.memory-anki-segment-range-action.is-primary {
+  background: #111827;
+  border-color: #111827;
+  color: #ffffff;
+}
+
+.memory-anki-segment-range-meta {
+  font-size: 12px;
+  color: #475569;
+}
+
+.memory-anki-segment-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  z-index: 9999;
+  width: 240px;
+  padding: 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 0 14px 30px rgba(15, 23, 42, 0.16);
+}
+
+.memory-anki-segment-menu[hidden] {
+  display: none !important;
+}
+
+.memory-anki-segment-menu-title {
+  margin-bottom: 8px;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.memory-anki-segment-menu-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 260px;
+  overflow: auto;
+}
+
+.memory-anki-segment-menu-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #111827;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.memory-anki-segment-menu-item.is-active {
+  border-color: #111827;
+  background: #f8fafc;
+}
+
+.memory-anki-segment-menu-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid #e2e8f0;
+}
+
+.memory-anki-segment-color {
+  width: 10px;
+  height: 10px;
+  border-radius: 9999px;
+  flex-shrink: 0;
+}
+
+.smm-node.memory-anki-segment-selected .smm-node-shape {
+  stroke: #18181b !important;
+  stroke-width: 4 !important;
+  filter: drop-shadow(0 0 0 rgba(24, 24, 27, 0.12))
+    drop-shadow(0 0 14px rgba(24, 24, 27, 0.22)) !important;
+}
+
+.smm-node.memory-anki-segment-selected .smm-hover-node {
+  display: block !important;
+  opacity: 1 !important;
+  stroke: #18181b !important;
+  stroke-width: 3 !important;
+}
+
+.smm-node.memory-anki-segment-conflict-selected .smm-node-shape {
+  stroke-dasharray: 8 4;
+  filter: drop-shadow(0 0 0 rgba(239, 68, 68, 0.08))
+    drop-shadow(0 0 12px rgba(239, 68, 68, 0.28)) !important;
+}
+
+.smm-node.memory-anki-mini-palace-selected .smm-node-shape {
+  stroke: #7c3aed !important;
+  stroke-width: 4 !important;
+  filter: drop-shadow(0 0 0 rgba(124, 58, 237, 0.12))
+    drop-shadow(0 0 16px rgba(124, 58, 237, 0.28)) !important;
+}
+
+.smm-node.memory-anki-mini-palace-selected .smm-hover-node {
+  display: block !important;
+  opacity: 1 !important;
+  stroke: #7c3aed !important;
+  stroke-width: 3 !important;
+}
+
+.memory-anki-bilink-badge-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 10010;
+  pointer-events: none;
+}
+
+.memory-anki-bilink-badge {
+  position: absolute;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  border: 1px solid rgba(125, 211, 252, 0.85);
+  border-radius: 9999px;
+  background: rgba(240, 249, 255, 0.98);
+  color: #0369a1;
+  font-size: 11px;
+  font-weight: 700;
+  box-shadow: 0 10px 24px rgba(14, 116, 144, 0.18);
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+.richTextToolbar {
+  display: none !important;
+}
+
+.memory-anki-selection-drag-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 10030;
+  pointer-events: none;
+}
+
+.memory-anki-feedback-ripple-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 10035;
+  pointer-events: none;
+}
+
+.memory-anki-feedback-ripple {
+  position: fixed;
+  width: 14px;
+  height: 14px;
+  margin-left: -7px;
+  margin-top: -7px;
+  border-radius: 9999px;
+  border: 1px solid rgba(34, 197, 94, 0.58);
+  background: radial-gradient(circle, rgba(34, 197, 94, 0.14), rgba(34, 197, 94, 0));
+  box-shadow: 0 0 12px rgba(34, 197, 94, 0.14);
+  animation: memory-anki-feedback-ripple 300ms ease-out forwards;
+}
+
+.memory-anki-feedback-ripple.is-feedback-edit {
+  border-color: rgba(14, 165, 233, 0.58);
+  background: radial-gradient(circle, rgba(14, 165, 233, 0.13), rgba(14, 165, 233, 0));
+  box-shadow: 0 0 13px rgba(14, 165, 233, 0.14);
+}
+
+.memory-anki-feedback-ripple.is-feedback-touch {
+  border-color: rgba(148, 163, 184, 0.52);
+  background: radial-gradient(circle, rgba(148, 163, 184, 0.1), rgba(148, 163, 184, 0));
+  box-shadow: 0 0 9px rgba(148, 163, 184, 0.12);
+  animation-duration: 220ms;
+}
+
+.memory-anki-feedback-ripple.is-feedback-create,
+.memory-anki-feedback-ripple.is-feedback-reward {
+  width: 18px;
+  height: 18px;
+  margin-left: -9px;
+  margin-top: -9px;
+  border-color: rgba(251, 191, 36, 0.66);
+  background: radial-gradient(circle, rgba(251, 191, 36, 0.18), rgba(16, 185, 129, 0.04), rgba(251, 191, 36, 0));
+  box-shadow: 0 0 18px rgba(251, 191, 36, 0.18);
+  animation-duration: 420ms;
+}
+
+.memory-anki-feedback-ripple.is-feedback-move {
+  border-color: rgba(99, 102, 241, 0.58);
+  background: radial-gradient(circle, rgba(99, 102, 241, 0.14), rgba(56, 189, 248, 0));
+  box-shadow: 0 0 14px rgba(99, 102, 241, 0.14);
+  animation-duration: 340ms;
+}
+
+.memory-anki-feedback-ripple.is-feedback-link {
+  border-color: rgba(168, 85, 247, 0.56);
+  background: radial-gradient(circle, rgba(168, 85, 247, 0.13), rgba(168, 85, 247, 0));
+  box-shadow: 0 0 14px rgba(168, 85, 247, 0.14);
+}
+
+.memory-anki-feedback-ripple.is-feedback-segment {
+  border-color: rgba(245, 158, 11, 0.58);
+  background: radial-gradient(circle, rgba(245, 158, 11, 0.13), rgba(245, 158, 11, 0));
+  box-shadow: 0 0 14px rgba(245, 158, 11, 0.14);
+}
+
+.memory-anki-feedback-ripple.is-feedback-mode {
+  border-color: rgba(245, 158, 11, 0.56);
+  background: radial-gradient(circle, rgba(245, 158, 11, 0.13), rgba(245, 158, 11, 0));
+  box-shadow: 0 0 14px rgba(245, 158, 11, 0.14);
+}
+
+.memory-anki-feedback-ripple.is-feedback-danger {
+  border-color: rgba(239, 68, 68, 0.62);
+  background: radial-gradient(circle, rgba(239, 68, 68, 0.14), rgba(239, 68, 68, 0));
+  box-shadow: 0 0 15px rgba(239, 68, 68, 0.16);
+}
+
+.memory-anki-feedback-ripple.is-feedback-level-micro {
+  width: 10px;
+  height: 10px;
+  margin-left: -5px;
+  margin-top: -5px;
+  opacity: 0.72;
+  box-shadow: none;
+}
+
+.memory-anki-feedback-ripple.is-feedback-level-milestone {
+  box-shadow: 0 0 20px rgba(251, 191, 36, 0.2);
+}
+
+.memory-anki-feedback-particle {
+  position: fixed;
+  width: 3px;
+  height: 3px;
+  margin-left: -1.5px;
+  margin-top: -1.5px;
+  border-radius: 999px;
+  background: var(--memory-anki-feedback-particle-color, rgba(16, 185, 129, 0.92));
+  box-shadow: 0 0 7px var(--memory-anki-feedback-particle-color, rgba(16, 185, 129, 0.22));
+  transform: translate3d(0, 0, 0);
+  animation: memory-anki-feedback-particle 420ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.memory-anki-feedback-shockwave {
+  position: fixed;
+  left: 0;
+  top: 0;
+  width: 22px;
+  height: 22px;
+  margin-left: -11px;
+  margin-top: -11px;
+  border-radius: 999px;
+  border: 1.5px solid rgba(251, 191, 36, 0.7);
+  background:
+    radial-gradient(circle, rgba(253, 224, 71, 0.28) 0%, rgba(251, 191, 36, 0.08) 34%, rgba(251, 191, 36, 0) 72%);
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.18) inset,
+    0 0 24px rgba(251, 191, 36, 0.22);
+  transform: translate3d(0, 0, 0) scale(0.45);
+  animation: memory-anki-feedback-shockwave 460ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.memory-anki-feedback-shockwave.is-critical {
+  border-color: rgba(16, 185, 129, 0.76);
+  background:
+    radial-gradient(circle, rgba(16, 185, 129, 0.24) 0%, rgba(52, 211, 153, 0.12) 38%, rgba(16, 185, 129, 0) 74%);
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.2) inset,
+    0 0 28px rgba(16, 185, 129, 0.24);
+}
+
+.memory-anki-feedback-shard {
+  position: fixed;
+  left: 0;
+  top: 0;
+  width: 12px;
+  height: 4px;
+  margin-left: -6px;
+  margin-top: -2px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.94), rgba(251, 191, 36, 0.88));
+  box-shadow: 0 0 12px rgba(251, 191, 36, 0.3);
+  transform-origin: center;
+  animation: memory-anki-feedback-shard 420ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.memory-anki-feedback-shard.is-soft {
+  opacity: 0.78;
+  animation-duration: 300ms;
+}
+
+.memory-anki-feedback-flash {
+  position: fixed;
+  left: 0;
+  top: 0;
+  width: 72px;
+  height: 72px;
+  margin-left: -36px;
+  margin-top: -36px;
+  border-radius: 999px;
+  background:
+    radial-gradient(circle, rgba(255, 244, 214, 0.84) 0%, rgba(253, 224, 71, 0.36) 22%, rgba(253, 224, 71, 0.08) 48%, rgba(253, 224, 71, 0) 74%);
+  mix-blend-mode: screen;
+  animation: memory-anki-feedback-flash 220ms ease-out forwards;
+}
+
+.memory-anki-selection-drag-layer[hidden] {
+  display: none !important;
+}
+
+.memory-anki-selection-drag-proxy {
+  position: fixed;
+  min-width: 132px;
+  max-width: 240px;
+  min-height: 48px;
+  padding: 10px 14px;
+  border: 1px solid rgba(94, 200, 248, 0.72);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.96);
+  color: #0f172a;
+  font-size: 14px;
+  line-height: 1.4;
+  font-weight: 600;
+  box-shadow: 0 20px 36px rgba(15, 23, 42, 0.22);
+  pointer-events: none;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  word-break: break-word;
+  transform: translate3d(0, 0, 0);
+  transition: opacity 120ms ease, transform 120ms ease;
+}
+
+.memory-anki-selection-drag-proxy[hidden] {
+  display: none !important;
+}
+
+.memory-anki-selection-drag-slot {
+  position: fixed;
+  height: 2px;
+  border-radius: 999px;
+  background: linear-gradient(
+    90deg,
+    rgba(94, 200, 248, 0.18),
+    rgba(94, 200, 248, 0.95),
+    rgba(94, 200, 248, 0.18)
+  );
+  box-shadow: 0 0 0 3px rgba(94, 200, 248, 0.12);
+  pointer-events: none;
+}
+
+.smm-node.memory-anki-selection-drag-source {
+  opacity: 1 !important;
+}
+
+.smm-node.memory-anki-selection-drag-source .smm-hover-node,
+.smm-node.memory-anki-selection-drag-target .smm-hover-node {
+  display: block !important;
+  opacity: 1 !important;
+  stroke-width: 2.5 !important;
+}
+
+.smm-node.memory-anki-selection-drag-source .smm-node-shape,
+.smm-node.memory-anki-selection-drag-target .smm-node-shape {
+  filter: drop-shadow(0 0 0 rgba(94, 200, 248, 0.12))
+    drop-shadow(0 0 12px rgba(94, 200, 248, 0.28)) !important;
+}
+
+.smm-node.memory-anki-selection-drag-dimmed {
+  opacity: 0.24 !important;
+  transition: opacity 120ms ease;
+}
+
+.smm-node.memory-anki-feedback-touch .smm-hover-node,
+.smm-node.memory-anki-feedback-select .smm-hover-node,
+.smm-node.memory-anki-feedback-edit .smm-hover-node,
+.smm-node.memory-anki-feedback-confirm .smm-hover-node,
+.smm-node.memory-anki-feedback-create .smm-hover-node,
+.smm-node.memory-anki-feedback-link .smm-hover-node,
+.smm-node.memory-anki-feedback-segment .smm-hover-node,
+.smm-node.memory-anki-feedback-move .smm-hover-node,
+.smm-node.memory-anki-feedback-mode .smm-hover-node,
+.smm-node.memory-anki-feedback-reward .smm-hover-node,
+.smm-node.memory-anki-feedback-danger .smm-hover-node {
+  display: block !important;
+  opacity: 1 !important;
+  stroke-width: 2.4 !important;
+}
+
+.smm-node.memory-anki-feedback-touch .smm-hover-node {
+  stroke: rgba(148, 163, 184, 0.82) !important;
+}
+
+.smm-node.memory-anki-feedback-select .smm-hover-node {
+  stroke: rgba(59, 130, 246, 0.84) !important;
+}
+
+.smm-node.memory-anki-feedback-edit .smm-hover-node {
+  stroke: rgba(14, 165, 233, 0.84) !important;
+}
+
+.smm-node.memory-anki-feedback-confirm .smm-hover-node {
+  stroke: rgba(16, 185, 129, 0.9) !important;
+}
+
+.smm-node.memory-anki-feedback-create .smm-hover-node,
+.smm-node.memory-anki-feedback-reward .smm-hover-node {
+  stroke: rgba(251, 191, 36, 0.94) !important;
+  stroke-width: 3 !important;
+}
+
+.smm-node.memory-anki-feedback-link .smm-hover-node {
+  stroke: rgba(168, 85, 247, 0.86) !important;
+}
+
+.smm-node.memory-anki-feedback-segment .smm-hover-node {
+  stroke: rgba(245, 158, 11, 0.86) !important;
+}
+
+.smm-node.memory-anki-feedback-move .smm-hover-node {
+  stroke: rgba(99, 102, 241, 0.9) !important;
+}
+
+.smm-node.memory-anki-feedback-mode .smm-hover-node {
+  stroke: rgba(245, 158, 11, 0.9) !important;
+}
+
+.smm-node.memory-anki-feedback-danger .smm-hover-node {
+  stroke: rgba(239, 68, 68, 0.92) !important;
+}
+
+.smm-node.memory-anki-feedback-touch .smm-node-shape {
+  animation: memory-anki-feedback-node-touch 180ms ease-out;
+  filter: drop-shadow(0 0 6px rgba(148, 163, 184, 0.14)) !important;
+}
+
+.smm-node.memory-anki-feedback-select .smm-node-shape {
+  animation: memory-anki-feedback-node-tap 260ms ease-out;
+  filter: drop-shadow(0 0 9px rgba(59, 130, 246, 0.16)) !important;
+}
+
+.smm-node.memory-anki-feedback-edit .smm-node-shape {
+  animation: memory-anki-feedback-node-edit 320ms ease-out;
+  filter: drop-shadow(0 0 10px rgba(14, 165, 233, 0.17)) !important;
+}
+
+.smm-node.memory-anki-feedback-confirm .smm-node-shape {
+  animation: memory-anki-feedback-node-confirm 340ms ease-out;
+  filter: drop-shadow(0 0 12px rgba(16, 185, 129, 0.18)) !important;
+}
+
+.smm-node.memory-anki-feedback-create .smm-node-shape,
+.smm-node.memory-anki-feedback-reward .smm-node-shape {
+  animation: memory-anki-feedback-node-bloom 520ms cubic-bezier(0.16, 1, 0.3, 1);
+  filter:
+    drop-shadow(0 0 12px rgba(251, 191, 36, 0.22))
+    drop-shadow(0 0 20px rgba(16, 185, 129, 0.1)) !important;
+}
+
+.smm-node.memory-anki-feedback-link .smm-node-shape {
+  animation: memory-anki-feedback-node-link 440ms ease-out;
+  filter: drop-shadow(0 0 12px rgba(168, 85, 247, 0.16)) !important;
+}
+
+.smm-node.memory-anki-feedback-segment .smm-node-shape {
+  animation: memory-anki-feedback-node-segment 440ms ease-out;
+  filter: drop-shadow(0 0 12px rgba(245, 158, 11, 0.18)) !important;
+}
+
+.smm-node.memory-anki-feedback-move .smm-node-shape {
+  animation: memory-anki-feedback-node-move 460ms cubic-bezier(0.16, 1, 0.3, 1);
+  filter: drop-shadow(0 0 12px rgba(99, 102, 241, 0.18)) !important;
+}
+
+.smm-node.memory-anki-feedback-mode .smm-node-shape {
+  animation: memory-anki-feedback-node-mode 520ms ease-out;
+  filter: drop-shadow(0 0 12px rgba(245, 158, 11, 0.18)) !important;
+}
+
+.smm-node.memory-anki-feedback-danger .smm-node-shape {
+  animation: memory-anki-feedback-node-danger 340ms ease-out;
+  filter: drop-shadow(0 0 11px rgba(239, 68, 68, 0.18)) !important;
+}
+
+.memory-anki-review-line-trace {
+  stroke: rgba(59, 130, 246, 0.88) !important;
+  stroke-width: 2.8 !important;
+  filter: drop-shadow(0 0 7px rgba(59, 130, 246, 0.14)) !important;
+  animation: memory-anki-review-line-trace 360ms ease-out;
+}
+
+.memory-anki-review-line-clear {
+  stroke: rgba(239, 68, 68, 0.9) !important;
+  stroke-width: 3.2 !important;
+  filter: drop-shadow(0 0 7px rgba(239, 68, 68, 0.15)) !important;
+  animation: memory-anki-review-line-clear 420ms ease-out;
+}
+
+.memory-anki-review-line-spawn {
+  stroke: rgba(14, 165, 233, 0.94) !important;
+  stroke-width: 3.2 !important;
+  filter: drop-shadow(0 0 7px rgba(14, 165, 233, 0.15)) !important;
+  animation: memory-anki-review-line-spawn 420ms ease-out;
+}
+
+.memory-anki-review-line-confirm {
+  stroke: rgba(16, 185, 129, 0.94) !important;
+  stroke-width: 3.2 !important;
+  filter: drop-shadow(0 0 7px rgba(16, 185, 129, 0.16)) !important;
+  animation: memory-anki-review-line-confirm 380ms ease-out;
+}
+
+.memory-anki-review-line-soft {
+  stroke-width: 2.4 !important;
+  opacity: 0.7 !important;
+}
+
+.memory-anki-feedback-line-create,
+.memory-anki-feedback-line-reward {
+  stroke: rgba(251, 191, 36, 0.96) !important;
+  stroke-width: 3.6 !important;
+  filter:
+    drop-shadow(0 0 8px rgba(251, 191, 36, 0.18))
+    drop-shadow(0 0 14px rgba(16, 185, 129, 0.08)) !important;
+  animation: memory-anki-feedback-line-bloom 560ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.memory-anki-feedback-line-link {
+  stroke: rgba(168, 85, 247, 0.92) !important;
+  stroke-width: 3.3 !important;
+  filter: drop-shadow(0 0 8px rgba(168, 85, 247, 0.15)) !important;
+  animation: memory-anki-feedback-line-link 520ms ease-out;
+}
+
+.memory-anki-feedback-line-segment {
+  stroke: rgba(245, 158, 11, 0.94) !important;
+  stroke-width: 3.3 !important;
+  filter: drop-shadow(0 0 8px rgba(245, 158, 11, 0.16)) !important;
+  animation: memory-anki-feedback-line-segment 520ms ease-out;
+}
+
+.memory-anki-feedback-line-move {
+  stroke: rgba(99, 102, 241, 0.96) !important;
+  stroke-width: 3.3 !important;
+  filter: drop-shadow(0 0 8px rgba(99, 102, 241, 0.16)) !important;
+  animation: memory-anki-feedback-line-move 520ms ease-out;
+}
+
+.memory-anki-selection-drag-dimmed-line {
+  opacity: 0.2 !important;
+  transition: opacity 120ms ease;
+}
+
+body.is-host-readonly.memory-anki-review-fx-enabled .smm-node {
+  isolation: isolate;
+}
+
+body.is-host-readonly.memory-anki-review-fx-enabled .smm-node .smm-node-shape,
+body.is-host-readonly.memory-anki-review-fx-enabled .smm-node .smm-hover-node {
+  transition:
+    filter 180ms ease,
+    opacity 180ms ease,
+    stroke 180ms ease,
+    stroke-width 180ms ease;
+  transform-origin: center center;
+}
+
+body.is-host-readonly.memory-anki-review-fx-enabled .smm-node .smm-node-shape,
+body.is-host-readonly.memory-anki-review-fx-enabled .smm-node .smm-hover-node {
+  will-change: transform, filter, opacity;
+}
+
+body.is-host-readonly.memory-anki-review-fx-enabled .smm-node .smm-richtext-node-wrap,
+body.is-host-readonly.memory-anki-review-fx-enabled .smm-node .smm-text-node-wrap,
+body.is-host-readonly.memory-anki-review-fx-enabled .smm-node .ql-editor {
+  will-change: auto;
+  filter: none !important;
+  transform: none !important;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+body.is-host-readonly.memory-anki-review-fx-enabled .smm-node.memory-anki-review-expand-hit .smm-node-shape {
+  animation: memory-anki-review-node-tease 300ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+body.is-host-readonly.memory-anki-review-fx-enabled .smm-node.memory-anki-review-expand-hit .smm-node-shape {
+  filter:
+    drop-shadow(0 0 0 rgba(250, 204, 21, 0.08))
+    drop-shadow(0 0 14px rgba(250, 204, 21, 0.18)) !important;
+}
+
+body.is-host-readonly.memory-anki-review-fx-enabled .smm-node.memory-anki-review-reveal-hit .smm-node-shape {
+  animation: memory-anki-review-node-hit 320ms cubic-bezier(0.22, 1, 0.36, 1);
+  filter:
+    drop-shadow(0 0 0 rgba(251, 191, 36, 0.08))
+    drop-shadow(0 0 15px rgba(245, 158, 11, 0.22)) !important;
+}
+
+body.is-host-readonly.memory-anki-review-fx-enabled .smm-node.memory-anki-review-reveal-hit .smm-hover-node,
+body.is-host-readonly.memory-anki-review-fx-enabled .smm-node.memory-anki-review-expand-hit .smm-hover-node {
+  display: block !important;
+  opacity: 1 !important;
+  stroke: rgba(250, 204, 21, 0.82) !important;
+  stroke-width: 3.2 !important;
+}
+
+body.is-host-readonly.memory-anki-review-fx-enabled .smm-node.memory-anki-review-reveal-hit .smm-node-shape::after,
+body.is-host-readonly.memory-anki-review-fx-enabled .smm-node.memory-anki-review-branch-clear .smm-node-shape::after,
+body.is-host-readonly.memory-anki-review-fx-enabled .smm-node.memory-anki-review-pulse-source .smm-node-shape::after,
+body.is-host-readonly.memory-anki-review-fx-enabled .smm-node.memory-anki-review-expand-hit .smm-node-shape::after {
+  content: "";
+  position: absolute;
+  inset: -6px;
+  border-radius: 22px;
+  pointer-events: none;
+  background: linear-gradient(115deg, transparent 12%, rgba(251, 191, 36, 0.1) 42%, rgba(253, 224, 71, 0.36) 50%, rgba(251, 191, 36, 0.08) 58%, transparent 88%);
+  mix-blend-mode: normal;
+  animation: memory-anki-review-node-sweep 300ms ease-out;
+}
+
+body.is-host-readonly.memory-anki-review-fx-enabled .smm-node.memory-anki-review-branch-clear .smm-node-shape {
+  filter:
+    drop-shadow(0 0 0 rgba(16, 185, 129, 0.08))
+    drop-shadow(0 0 15px rgba(16, 185, 129, 0.2)) !important;
+}
+
+body.is-host-readonly.memory-anki-review-fx-enabled .smm-node.memory-anki-review-pulse-source .smm-node-shape {
+  animation: memory-anki-review-node-pulse 520ms ease-out;
+}
+
+body.is-host-readonly.memory-anki-review-fx-enabled .smm-node.memory-anki-review-soft .smm-node-shape {
+  filter: drop-shadow(0 0 9px rgba(245, 158, 11, 0.12)) !important;
+}
+
+body.is-host-readonly.memory-anki-review-fx-enabled .smm-node.memory-anki-review-ring-strong .smm-hover-node {
+  display: block !important;
+  opacity: 1 !important;
+  stroke: rgba(251, 191, 36, 0.86) !important;
+  stroke-width: 2.8 !important;
+}
+
+body.is-host-readonly.memory-anki-review-fx-enabled .memory-anki-review-line-trace {
+  stroke: rgba(245, 158, 11, 0.94) !important;
+  stroke-width: 3.2 !important;
+  filter:
+    drop-shadow(0 0 7px rgba(251, 191, 36, 0.18)) !important;
+  animation: memory-anki-review-line-trace 360ms ease-out;
+}
+
+body.is-host-readonly.memory-anki-review-fx-enabled .memory-anki-review-line-clear {
+  stroke: rgba(16, 185, 129, 0.92) !important;
+  stroke-width: 3.5 !important;
+  filter:
+    drop-shadow(0 0 8px rgba(16, 185, 129, 0.18)) !important;
+  animation: memory-anki-review-line-clear 420ms ease-out;
+}
+
+body.is-host-readonly.memory-anki-review-fx-enabled .memory-anki-review-line-spawn {
+  stroke: rgba(250, 204, 21, 0.96) !important;
+  stroke-width: 3.6 !important;
+  filter:
+    drop-shadow(0 0 8px rgba(250, 204, 21, 0.18)) !important;
+  animation: memory-anki-review-line-spawn 420ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+body.is-host-readonly.memory-anki-review-fx-enabled .memory-anki-review-line-confirm {
+  stroke: rgba(16, 185, 129, 0.98) !important;
+  stroke-width: 3.6 !important;
+  filter:
+    drop-shadow(0 0 8px rgba(16, 185, 129, 0.18)) !important;
+  animation: memory-anki-review-line-confirm 360ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+body.is-host-readonly.memory-anki-review-fx-enabled .memory-anki-review-line-soft {
+  stroke-width: 2.5 !important;
+  opacity: 0.72 !important;
+}
+
+@keyframes memory-anki-review-node-tease {
+  0% { transform: scale(1); }
+  28% { transform: scale(1.025); }
+  100% { transform: scale(1); }
+}
+
+@keyframes memory-anki-review-node-hit {
+  0% { transform: scale(1); }
+  34% { transform: scale(1.04); }
+  100% { transform: scale(1); }
+}
+
+@keyframes memory-anki-review-node-pulse {
+  0% { transform: scale(1); }
+  24% { transform: scale(1.025); }
+  100% { transform: scale(1); }
+}
+
+@keyframes memory-anki-review-node-sweep {
+  0% {
+    opacity: 0;
+    transform: translateX(-24%) skewX(-14deg);
+  }
+  20% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(24%) skewX(-14deg);
+  }
+}
+
+@keyframes memory-anki-review-line-trace {
+  0% {
+    opacity: 0.12;
+    stroke-dasharray: 10 14;
+    stroke-dashoffset: 36;
+  }
+  100% {
+    opacity: 1;
+    stroke-dasharray: none;
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes memory-anki-review-line-clear {
+  0% {
+    opacity: 0.16;
+    stroke-dasharray: 10 10;
+    stroke-dashoffset: 32;
+  }
+  100% {
+    opacity: 1;
+    stroke-dasharray: none;
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes memory-anki-review-line-spawn {
+  0% {
+    opacity: 0.08;
+    stroke-dasharray: 8 22;
+    stroke-dashoffset: 48;
+  }
+  55% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 1;
+    stroke-dasharray: none;
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes memory-anki-review-line-confirm {
+  0% {
+    opacity: 0.16;
+    stroke-dasharray: 20 14;
+    stroke-dashoffset: -36;
+  }
+  100% {
+    opacity: 1;
+    stroke-dasharray: none;
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes memory-anki-feedback-ripple {
+  0% {
+    opacity: 0.58;
+    transform: scale(0.56);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(2.3);
+  }
+}
+
+@keyframes memory-anki-feedback-particle {
+  0% {
+    opacity: 0;
+    transform: translate3d(0, 0, 0) scale(0.6);
+  }
+  18% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform:
+      translate3d(
+        var(--memory-anki-feedback-particle-x, 0px),
+        var(--memory-anki-feedback-particle-y, 0px),
+        0
+      )
+      scale(0.2);
+  }
+}
+
+@keyframes memory-anki-feedback-shockwave {
+  0% {
+    opacity: 0.94;
+    transform: translate3d(0, 0, 0) scale(0.4);
+  }
+  68% {
+    opacity: 0.52;
+  }
+  100% {
+    opacity: 0;
+    transform: translate3d(0, 0, 0) scale(3.8);
+  }
+}
+
+@keyframes memory-anki-feedback-shard {
+  0% {
+    opacity: 0;
+    transform:
+      translate3d(0, 0, 0)
+      rotate(var(--memory-anki-feedback-shard-rotate, 0deg))
+      scale(0.5);
+  }
+  18% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform:
+      translate3d(
+        var(--memory-anki-feedback-shard-x, 0px),
+        var(--memory-anki-feedback-shard-y, 0px),
+        0
+      )
+      rotate(var(--memory-anki-feedback-shard-rotate, 0deg))
+      scale(0.18);
+  }
+}
+
+@keyframes memory-anki-feedback-flash {
+  0% {
+    opacity: 0;
+    transform: scale(0.44);
+  }
+  28% {
+    opacity: 0.92;
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.18);
+  }
+}
+
+@keyframes memory-anki-feedback-node-touch {
+  0% { transform: scale(1); }
+  45% { transform: scale(0.985); }
+  100% { transform: scale(1); }
+}
+
+@keyframes memory-anki-feedback-node-tap {
+  0% { transform: scale(1); }
+  42% { transform: scale(1.018); }
+  100% { transform: scale(1); }
+}
+
+@keyframes memory-anki-feedback-node-edit {
+  0% { transform: scale(1); }
+  35% { transform: scale(1.025); }
+  100% { transform: scale(1); }
+}
+
+@keyframes memory-anki-feedback-node-confirm {
+  0% { transform: scale(1); }
+  38% { transform: scale(1.03); }
+  100% { transform: scale(1); }
+}
+
+@keyframes memory-anki-feedback-node-bloom {
+  0% { transform: scale(0.98); }
+  34% { transform: scale(1.045); }
+  68% { transform: scale(1.01); }
+  100% { transform: scale(1); }
+}
+
+@keyframes memory-anki-feedback-node-link {
+  0% { transform: translateX(0) scale(1); }
+  30% { transform: translateX(-1px) scale(1.018); }
+  62% { transform: translateX(1px) scale(1.012); }
+  100% { transform: translateX(0) scale(1); }
+}
+
+@keyframes memory-anki-feedback-node-segment {
+  0% { transform: scale(1); }
+  35% { transform: scale(1.022) rotate(-0.25deg); }
+  70% { transform: scale(1.008) rotate(0.25deg); }
+  100% { transform: scale(1) rotate(0); }
+}
+
+@keyframes memory-anki-feedback-node-move {
+  0% { transform: translateY(0) scale(1); }
+  34% { transform: translateY(-1.5px) scale(1.02); }
+  100% { transform: translateY(0) scale(1); }
+}
+
+@keyframes memory-anki-feedback-node-mode {
+  0% { transform: scale(1); filter: saturate(1); }
+  42% { transform: scale(1.02); filter: saturate(1.12); }
+  100% { transform: scale(1); filter: saturate(1); }
+}
+
+@keyframes memory-anki-feedback-node-danger {
+  0% { transform: translateX(0); }
+  24% { transform: translateX(-2px); }
+  48% { transform: translateX(2px); }
+  100% { transform: translateX(0); }
+}
+
+@keyframes memory-anki-feedback-line-bloom {
+  0% {
+    opacity: 0.12;
+    stroke-dasharray: 4 20;
+    stroke-dashoffset: 42;
+  }
+  55% { opacity: 1; }
+  100% {
+    opacity: 1;
+    stroke-dasharray: none;
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes memory-anki-feedback-line-link {
+  0% {
+    opacity: 0.18;
+    stroke-dasharray: 2 12;
+    stroke-dashoffset: -32;
+  }
+  100% {
+    opacity: 1;
+    stroke-dasharray: none;
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes memory-anki-feedback-line-segment {
+  0% {
+    opacity: 0.18;
+    stroke-dasharray: 14 8;
+    stroke-dashoffset: 32;
+  }
+  100% {
+    opacity: 1;
+    stroke-dasharray: none;
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes memory-anki-feedback-line-move {
+  0% {
+    opacity: 0.14;
+    stroke-dasharray: 24 10;
+    stroke-dashoffset: 46;
+  }
+  100% {
+    opacity: 1;
+    stroke-dasharray: none;
+    stroke-dashoffset: 0;
+  }
+}
+
+body.memory-anki-selection-dragging,
+body.memory-anki-selection-dragging * {
+  user-select: none !important;
+  -webkit-user-select: none !important;
+}

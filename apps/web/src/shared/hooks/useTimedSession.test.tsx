@@ -33,6 +33,7 @@ describe('useTimedSession automation config', () => {
   })
 
   afterEach(() => {
+    delete window.memoryAnkiDesktopTimer
     vi.useRealTimers()
   })
 
@@ -141,6 +142,135 @@ describe('useTimedSession automation config', () => {
     await flushMicrotasks()
 
     expect(listPendingTimeRecordRecoveries()).toHaveLength(1)
+  })
+
+  it('flushes the active timer when the desktop shell asks before closing', async () => {
+    appendTimeRecordSpy.mockImplementation(async (record) => record)
+    const sendBeaconSpy = vi.spyOn(navigator, 'sendBeacon').mockReturnValue(true)
+    let desktopFlushHandler: (() => Promise<unknown> | unknown) | null = null
+    window.memoryAnkiDesktopTimer = {
+      onDesktopFlushRequest: (handler) => {
+        desktopFlushHandler = () =>
+          handler({
+            requestId: 'desktop-close-1',
+            reason: 'main_window_close',
+            requestedAt: Date.now(),
+          })
+        return () => {
+          desktopFlushHandler = null
+        }
+      },
+    }
+
+    render(
+      <TimedSessionTestHarness
+        kind="practice"
+        autoPauseMs={60_000}
+        persistKey="practice:desktop-close"
+      />,
+    )
+    await flushMicrotasks()
+
+    await act(async () => {
+      vi.advanceTimersByTime(3_600)
+      await desktopFlushHandler?.()
+    })
+
+    await flushMicrotasks()
+
+    expect(sendBeaconSpy).toHaveBeenCalledTimes(1)
+    expect(listPendingTimeRecordRecoveries()).toHaveLength(1)
+    expect(listPendingTimeRecordRecoveries()[0]?.record).toMatchObject({
+      completionMethod: 'left_page',
+      effectiveSeconds: 3,
+      events: expect.arrayContaining([
+        expect.objectContaining({
+          type: 'leave_scene',
+          meta: expect.objectContaining({
+            source: 'main_window_close',
+          }),
+        }),
+      ]),
+    })
+  })
+
+  it('deduplicates desktop flush and pagehide when both fire during shutdown', async () => {
+    appendTimeRecordSpy.mockImplementation(async (record) => record)
+    const sendBeaconSpy = vi.spyOn(navigator, 'sendBeacon').mockReturnValue(true)
+    let desktopFlushHandler: (() => Promise<unknown> | unknown) | null = null
+    window.memoryAnkiDesktopTimer = {
+      onDesktopFlushRequest: (handler) => {
+        desktopFlushHandler = () =>
+          handler({
+            requestId: 'desktop-close-2',
+            reason: 'app_before_quit',
+            requestedAt: Date.now(),
+          })
+        return () => {
+          desktopFlushHandler = null
+        }
+      },
+    }
+
+    render(
+      <TimedSessionTestHarness
+        kind="practice"
+        autoPauseMs={60_000}
+        persistKey="practice:desktop-pagehide-dedupe"
+      />,
+    )
+    await flushMicrotasks()
+
+    await act(async () => {
+      vi.advanceTimersByTime(4_400)
+      const flushPromise = desktopFlushHandler?.()
+      window.dispatchEvent(new Event('pagehide'))
+      await flushPromise
+    })
+
+    await flushMicrotasks()
+
+    expect(sendBeaconSpy).toHaveBeenCalledTimes(1)
+    expect(listPendingTimeRecordRecoveries()).toHaveLength(1)
+    expect(listPendingTimeRecordRecoveries()[0]?.record).toMatchObject({
+      effectiveSeconds: 4,
+    })
+  })
+
+  it('saves on desktop flush even when the session has no restore snapshot key', async () => {
+    appendTimeRecordSpy.mockImplementation(async (record) => record)
+    vi.spyOn(navigator, 'sendBeacon').mockReturnValue(true)
+    let desktopFlushHandler: (() => Promise<unknown> | unknown) | null = null
+    window.memoryAnkiDesktopTimer = {
+      onDesktopFlushRequest: (handler) => {
+        desktopFlushHandler = () =>
+          handler({
+            requestId: 'desktop-close-no-key',
+            reason: 'app_before_quit',
+            requestedAt: Date.now(),
+          })
+        return () => {
+          desktopFlushHandler = null
+        }
+      },
+    }
+
+    render(<TimedSessionTestHarness kind="review" autoPauseMs={60_000} />)
+    await flushMicrotasks()
+
+    await act(async () => {
+      vi.advanceTimersByTime(2_100)
+      await desktopFlushHandler?.()
+    })
+
+    await flushMicrotasks()
+
+    expect(listPendingTimeRecordRecoveries()).toHaveLength(1)
+    expect(listPendingTimeRecordRecoveries()[0]?.record).toMatchObject({
+      kind: 'review',
+      completionMethod: 'left_page',
+      effectiveSeconds: 2,
+    })
   })
 
   it('arms overridden local config for practice hidden pause', () => {

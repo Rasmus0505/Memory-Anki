@@ -28,6 +28,10 @@ export interface FreestyleProgressSnapshot {
   lastQueueSignature: string
 }
 
+export interface FreestyleQueueOptions {
+  resolvedQuestionIds?: number[]
+}
+
 export const FREESTYLE_CONFIG_STORAGE_KEY = 'memory-anki.freestyle.config'
 export const FREESTYLE_PROGRESS_STORAGE_KEY = 'memory-anki.freestyle.progress'
 
@@ -238,7 +242,29 @@ export function enabledContentTypes(config: FreestyleConfig): FreestyleContentTy
   return FREESTYLE_CONTENT_TYPES.filter((type) => config.contentTypes[type])
 }
 
-export function buildFreestyleQueue(cards: FreestyleCard[], config: FreestyleConfig) {
+function downgradeResolvedQuizCards<T extends FreestyleCard>(
+  cards: T[],
+  resolvedQuestionIds: Set<number>,
+) {
+  if (resolvedQuestionIds.size === 0) return cards
+  const fresh: T[] = []
+  const resolved: T[] = []
+  cards.forEach((card) => {
+    if (isQuizCard(card) && resolvedQuestionIds.has(card.question.id)) {
+      resolved.push(card)
+    } else {
+      fresh.push(card)
+    }
+  })
+  return [...fresh, ...resolved]
+}
+
+export function buildFreestyleQueue(
+  cards: FreestyleCard[],
+  config: FreestyleConfig,
+  options: FreestyleQueueOptions = {},
+) {
+  const resolvedQuestionIds = new Set(options.resolvedQuestionIds ?? [])
   const enabled = new Set(enabledContentTypes(config))
   const filtered = cards.filter((card) => {
     if (!enabled.has(card.content_type)) return false
@@ -261,7 +287,7 @@ export function buildFreestyleQueue(cards: FreestyleCard[], config: FreestyleCon
     .sort((a, b) => b.priority - a.priority)
 
   if (config.orderMode === 'random') {
-    return shuffleStable(filtered, config.seed)
+    return downgradeResolvedQuizCards(shuffleStable(filtered, config.seed), resolvedQuestionIds)
   }
 
   const orderedQuizCards =
@@ -279,17 +305,18 @@ export function buildFreestyleQueue(cards: FreestyleCard[], config: FreestyleCon
           config.seed,
         ).flat()
 
+  const prioritizedQuizCards = downgradeResolvedQuizCards(orderedQuizCards, resolvedQuestionIds)
   const interval = actionInterval(config.actionFrequency)
   if (interval <= 0) {
-    return orderedQuizCards.length > 0 ? orderedQuizCards : actionCards
+    return prioritizedQuizCards.length > 0 ? prioritizedQuizCards : actionCards
   }
-  if (orderedQuizCards.length === 0) {
+  if (prioritizedQuizCards.length === 0) {
     return actionCards
   }
 
   const queue: FreestyleCard[] = []
   let actionIndex = 0
-  orderedQuizCards.forEach((card, index) => {
+  prioritizedQuizCards.forEach((card, index) => {
     queue.push(card)
     if ((index + 1) % interval !== 0) return
     if (actionIndex >= actionCards.length) return
@@ -306,4 +333,3 @@ export function buildQueueSignature(cards: FreestyleCard[]) {
 export function nextFreestyleSeed(seed: number) {
   return sanitizeSeed(seed + 1 + Math.floor(Math.random() * 10000))
 }
-

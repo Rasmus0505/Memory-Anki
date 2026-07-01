@@ -4,6 +4,10 @@ import {
 } from './break-guard-config'
 
 describe('break guard config', () => {
+  it('uses 1 and 3 minutes as the default break presets', () => {
+    expect(DEFAULT_BREAK_GUARD_CONFIG.presetMinutes).toEqual([1, 3])
+  })
+
   it('normalizes invalid values to safe defaults', () => {
     expect(sanitizeBreakGuardConfig({
       enabled: 'yes',

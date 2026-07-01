@@ -33,7 +33,7 @@ export const BREAK_GUARD_UPDATED_EVENT = 'memory-anki-break-guard-config-change'
 export const DEFAULT_BREAK_GUARD_CONFIG: BreakGuardConfig = {
   enabled: true,
   promptDelaySeconds: 5,
-  presetMinutes: [5, 10, 20],
+  presetMinutes: [1, 3],
   allowCustomMinutes: true,
   targetPath: '/freestyle',
   alertStrength: 'strong',

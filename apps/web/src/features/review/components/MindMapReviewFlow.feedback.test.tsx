@@ -104,6 +104,7 @@ describe("MindMapReviewFlow feedback", () => {
         milestone: { enabled: true, soundEnabled: true, animationEnabled: true, confettiAmount: 1.6, cooldownMs: 0, steps: [2, 4, 6, 10, 15] },
         completion: { enabled: true, soundEnabled: true, animationEnabled: true, confettiAmount: 1.6, cooldownMs: 0 },
         timer: { enabled: true, soundEnabled: true, animationEnabled: true, confettiAmount: 2.2, cooldownMs: 12000 },
+        quiz: { enabled: true, soundEnabled: true, animationEnabled: true, confettiAmount: 0.8, cooldownMs: 0 },
       },
       mode: "immersive",
       soundEnabled: true,
@@ -212,4 +213,3 @@ describe("MindMapReviewFlow feedback", () => {
     vi.useRealTimers();
   });
 });
-

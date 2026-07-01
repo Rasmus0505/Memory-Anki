@@ -3,7 +3,6 @@ setlocal
 cd /d "%~dp0"
 
 REM Clear legacy supervisor env overrides
-set MEMORY_ANKI_HOME=
 set MEMORY_ANKI_WEB_DIST=
 set MEMORY_ANKI_RUNTIME_SNAPSHOT=
 

@@ -19,6 +19,7 @@ export const resetPalaceQuizQuestionAttemptsApiMock = vi.fn()
 export const requestPalaceShortAnswerFeedbackApiMock = vi.fn()
 export const deletePalaceQuizQuestionApiMock = vi.fn()
 export const dispatchGlobalFeedbackMock = vi.fn()
+export const emitReviewConfettiMock = vi.fn()
 export const getSubjectsApiMock = vi.fn()
 export const getSubjectTreeApiMock = vi.fn()
 export const uploadSubjectDocumentApiMock = vi.fn()
@@ -27,6 +28,20 @@ export const promptForAiOptionsMock = vi.fn()
 export const promptForScenarioAiOptionsMock = vi.fn()
 export const refreshSubjectDocumentsMock = vi.fn()
 export const mindMapFramePropsMock = vi.fn()
+
+function collectMindMapNodes(root: any): Array<{ uid: string; text: string }> {
+  if (!root) return []
+  const nodes: Array<{ uid: string; text: string }> = []
+  const walk = (node: any, fallbackUid: string) => {
+    const uid = String(node?.data?.uid ?? node?.data?.memoryAnkiId ?? fallbackUid)
+    const text = String(node?.data?.text ?? '')
+    nodes.push({ uid, text })
+    const children = Array.isArray(node?.children) ? node.children : []
+    children.forEach((child, index) => walk(child, `${uid}-${index}`))
+  }
+  walk(root, 'root')
+  return nodes
+}
 
 export const pdfControllerMock = {
   subjectDocuments: [
@@ -97,18 +112,42 @@ vi.mock('@/entities/palace/api/catalogApi', () => ({
 
 vi.mock('@/shared/components/mindmap-host', () => ({
   MindMapFrame: (props: {
+    editorState?: any
     readonly?: boolean
     focusRequestNodeUid?: string | null
     focusRequestNonce?: number
+    onNodeClick?: (nodes: Array<{ uid: string; text: string }>) => void
+    onNodeContextMenu?: (nodes: Array<{ uid: string; text: string }>) => void
+    practiceModeActive?: boolean
+    reviewFxSignal?: { type?: string } | null
+    syncReason?: string | null
   }) => {
     mindMapFramePropsMock(props)
+    const nodes = collectMindMapNodes(props.editorState?.editor_doc?.root)
     return (
       <div
         data-testid="memory-lookup-mindmap"
         data-readonly={props.readonly ? 'true' : 'false'}
         data-root-uid={props.focusRequestNodeUid || ''}
         data-focus-nonce={String(props.focusRequestNonce ?? 0)}
-      />
+        data-practice-mode={props.practiceModeActive ? 'true' : 'false'}
+        data-review-fx={props.reviewFxSignal?.type || ''}
+        data-sync-reason={props.syncReason || ''}
+      >
+        {nodes.map((node) => (
+          <span
+            key={node.uid}
+            data-testid={`memory-node-${node.uid}`}
+            onClick={() => props.onNodeClick?.([{ uid: node.uid, text: node.text }])}
+            onContextMenu={(event) => {
+              event.preventDefault()
+              props.onNodeContextMenu?.([{ uid: node.uid, text: node.text }])
+            }}
+          >
+            {node.text}
+          </span>
+        ))}
+      </div>
     )
   },
 }))
@@ -163,6 +202,16 @@ vi.mock('@/shared/hooks/useTimedSession', () => ({
 vi.mock('@/shared/feedback/globalFeedbackModel', () => ({
   dispatchGlobalFeedback: (...args: unknown[]) => dispatchGlobalFeedbackMock(...args),
 }))
+
+vi.mock('@/shared/components/celebration', async () => {
+  const actual = await vi.importActual<typeof import('@/shared/components/celebration')>(
+    '@/shared/components/celebration',
+  )
+  return {
+    ...actual,
+    emitReviewConfetti: (...args: unknown[]) => emitReviewConfettiMock(...args),
+  }
+})
 
 vi.mock('@/entities/knowledge-import/model', () => ({
   usePdfImportController: () => pdfControllerMock,
@@ -278,7 +327,23 @@ export function buildPalaceEditorResponse(palaceId = 1) {
           uid: `root-${palaceId}`,
           text: palaceId === 1 ? '细胞生物学宫殿' : '遗传学宫殿',
         },
-        children: [],
+        children: [
+          {
+            data: {
+              uid: `child-${palaceId}`,
+              text: palaceId === 1 ? '细胞核节点' : '遗传因子节点',
+            },
+            children: [
+              {
+                data: {
+                  uid: `grandchild-${palaceId}`,
+                  text: palaceId === 1 ? '染色体线索' : '分离定律线索',
+                },
+                children: [],
+              },
+            ],
+          },
+        ],
       },
     },
     editor_config: {},

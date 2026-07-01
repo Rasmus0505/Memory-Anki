@@ -34,6 +34,11 @@ API_DIR = REPO_ROOT / "apps" / "api"
 WEB_DIR = REPO_ROOT / "apps" / "web"
 LOGS_DIR = REPO_ROOT / "logs"
 
+sys.path.insert(0, str(API_SRC))
+
+from memory_anki.core.file_sync import pull_on_start, push_on_stop  # noqa: E402
+from memory_anki.core.local_config import load_local_runtime_config  # noqa: E402
+
 BACKEND_HOST = "127.0.0.1"
 BACKEND_PORT = 8012
 FRONTEND_PORT = 5173
@@ -160,7 +165,7 @@ def wait_for_frontend(timeout_seconds: int = 40) -> bool:
 
 def ensure_backend_runtime_prepared() -> None:
     """确保数据库已初始化。若库不存在则跑一次 runtime_prepare。"""
-    api_home = _resolve_standard_app_home()
+    api_home = _resolve_configured_app_home()
     db_path = api_home / "data" / "memory_palace.db"
     if db_path.exists() and db_path.stat().st_size > 0:
         return
@@ -183,18 +188,18 @@ def ensure_backend_runtime_prepared() -> None:
         raise RuntimeError(f"runtime_prepare 失败 ({result.returncode})，详见 {log_path}")
 
 
-def _resolve_standard_app_home() -> Path:
-    local_app_data = os.environ.get("LOCALAPPDATA")
-    if local_app_data:
-        return Path(local_app_data) / "MemoryAnki"
-    return Path.home() / "AppData" / "Local" / "MemoryAnki"
+def _runtime_config():
+    return load_local_runtime_config()
+
+
+def _resolve_configured_app_home() -> Path:
+    return _runtime_config().local_app_home
 
 
 def _backend_env() -> dict:
-    """后端环境：强制不设 MEMORY_ANKI_HOME（走标准位置），不设 WEB_DIST（纯 API）。"""
+    """后端环境：从 local-config 解析 MEMORY_ANKI_HOME，不设 WEB_DIST（纯 API）。"""
     env = os.environ.copy()
-    # 解除任何旧的重定向，让 config.py 走标准 APP_HOME
-    env.pop("MEMORY_ANKI_HOME", None)
+    env["MEMORY_ANKI_HOME"] = str(_resolve_configured_app_home())
     env.pop("MEMORY_ANKI_WEB_DIST", None)
     env.pop("MEMORY_ANKI_RUNTIME_SNAPSHOT", None)
     env["MEMORY_ANKI_STARTUP_MODE"] = "serve"
@@ -275,8 +280,35 @@ def stop_all() -> int:
     print("[i] 停止 Memory Anki 服务 ...")
     free_port(BACKEND_PORT, "后端")
     free_port(FRONTEND_PORT, "前端")
+    result = sync_after_stop()
+    if not result:
+        return 1
     print("[ok] 已停止。")
     return 0
+
+
+def sync_before_start() -> bool:
+    config = _runtime_config()
+    if not config.sync_enabled:
+        print(f"[i] 本机同步未启用（配置文件: {config.config_path}）。")
+        return True
+    print(f"[i] 启动前同步检查 → {config.sync_root}")
+    result = pull_on_start(config)
+    prefix = "[ok]" if result.ok else "[!]"
+    print(f"{prefix} {result.message}")
+    return result.ok
+
+
+def sync_after_stop() -> bool:
+    config = _runtime_config()
+    if not config.sync_enabled:
+        print(f"[i] 本机同步未启用（配置文件: {config.config_path}）。")
+        return True
+    print(f"[i] 停止后同步推送 → {config.sync_root}")
+    result = push_on_stop(config)
+    prefix = "[ok]" if result.ok else "[!]"
+    print(f"{prefix} {result.message}")
+    return result.ok
 
 
 def main() -> int:
@@ -287,14 +319,18 @@ def main() -> int:
     free_port(BACKEND_PORT, "后端")
     free_port(FRONTEND_PORT, "前端")
 
-    # 2. 确保数据库就绪
+    # 2. 启动前从云盘拉取更新（如已启用）
+    if not sync_before_start():
+        return 1
+
+    # 3. 确保数据库就绪
     try:
         ensure_backend_runtime_prepared()
     except Exception as exc:
         print(f"[!] 数据初始化失败: {exc}")
         return 1
 
-    # 3. 启动后端并等待健康
+    # 4. 启动后端并等待健康
     backend_proc = start_backend()
     print("[i] 等待后端就绪 ...", end=" ", flush=True)
     if not wait_for_backend(timeout_seconds=60):
@@ -304,7 +340,7 @@ def main() -> int:
         return 1
     print("就绪 ✓")
 
-    # 4. 启动前端并等待端口监听
+    # 5. 启动前端并等待端口监听
     frontend_proc = start_frontend()
     print("[i] 等待前端就绪 ...", end=" ", flush=True)
     if not wait_for_frontend(timeout_seconds=40):
@@ -314,7 +350,7 @@ def main() -> int:
         return 1
     print("就绪 ✓")
 
-    # 5. 打开浏览器
+    # 6. 打开浏览器
     print(f"[ok] 启动完成，打开 {FRONTEND_URL}")
     try:
         webbrowser.open(FRONTEND_URL)
