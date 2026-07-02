@@ -38,13 +38,13 @@ from memory_anki.modules.english.infrastructure.task_runner import (
     EnglishTaskRunner,
     LocalThreadEnglishTaskRunner,
 )
+from memory_anki.modules.sessions.application.study_session_service import (
+    get_english_study_stats,
+)
 from memory_anki.modules.settings.application.ai_model_registry import (
     AiRuntimeOptions,
     resolve_scenario_runtime,
     serialize_resolved_ai_runtime,
-)
-from memory_anki.modules.time_records.application.time_records_service import (
-    get_english_course_stats,
 )
 
 from .asr_normalization import prepare_sentences_from_asr
@@ -92,7 +92,7 @@ def get_workspace_summary(session: Session) -> dict[str, Any]:
         "currentTask": get_current_task_payload(session),
         "continueCourse": get_recent_unfinished_course_payload(session),
         "recentCourses": list_recent_courses(session),
-        "stats": get_english_course_stats(session),
+        "stats": get_english_study_stats(session),
     }
 
 

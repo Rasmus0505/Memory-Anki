@@ -37,12 +37,11 @@ from memory_anki.modules.reviews.application.schedule_service import (
     migrate_sm2_to_ebbinghaus,
     normalize_algorithm,
 )
+from memory_anki.modules.sessions.application.study_session_service import (
+    ensure_review_log_study_sessions,
+)
 from memory_anki.modules.settings.application.ai_model_registry import (
     ensure_ai_model_catalog_seed,
-)
-from memory_anki.modules.time_records.application.time_records_service import (
-    ensure_review_log_time_records,
-    normalize_time_record_event_timezones,
 )
 
 STARTUP_MODE_PREPARE = "prepare"
@@ -107,8 +106,7 @@ def run_prepare_runtime() -> StartupState:
         _seed_default_config_rows(session)
         session.commit()
         migrate_sm2_to_ebbinghaus(session)
-        ensure_review_log_time_records(session)
-        normalize_time_record_event_timezones(session)
+        ensure_review_log_study_sessions(session)
         run_review_schedule_repair_migration(session)
         ensure_daily_backup()
         maybe_create_periodic_backup()

@@ -9,6 +9,7 @@ import type { TimeSessionRecord } from '@/entities/session/model'
 
 const JSON_CONTENT_TYPE = 'application/json'
 const MUTATION_ID_HEADER = 'X-Memory-Anki-Mutation-ID'
+const STUDY_SESSION_RECOVERY_URL = `${API_BASE}/study-sessions/from-time-record`
 
 export interface TimedSessionUnloadPersistenceResult {
   mutationId: string
@@ -36,7 +37,7 @@ function queueTimeRecordRecovery(
     mutationId,
     resourceKey: `time-record:${record.id}`,
     description: `恢复学习时长：${record.title || record.kind}`,
-    url: `${API_BASE}/time-records`,
+    url: STUDY_SESSION_RECOVERY_URL,
     method: 'POST',
     headers: buildTimeRecordRequestHeaders(mutationId),
     bodyKind: 'json',
@@ -51,7 +52,7 @@ function trySendBeacon(body: string) {
   }
   try {
     const payload = new Blob([body], { type: JSON_CONTENT_TYPE })
-    return navigator.sendBeacon(`${API_BASE}/time-records`, payload)
+    return navigator.sendBeacon(STUDY_SESSION_RECOVERY_URL, payload)
   } catch {
     return false
   }
@@ -62,7 +63,7 @@ function tryKeepaliveFetch(recordId: string, body: string, mutationId: string) {
     return false
   }
   try {
-    void fetch(`${API_BASE}/time-records`, {
+    void fetch(STUDY_SESSION_RECOVERY_URL, {
       method: 'POST',
       body,
       keepalive: true,

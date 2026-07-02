@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { createTimeRecordApi } from '@/entities/session/api'
+import { createStudySessionRecordApi } from '@/entities/study-session/api'
 import type { TimeSessionRecord } from '@/entities/session/model/session-records'
 
 const TIME_RECORD_RECOVERY_STORAGE_KEY = 'memory-anki.time-record-recovery.v1'
@@ -198,7 +198,7 @@ async function replayOnePendingTimeRecord(entry: PendingTimeRecordRecoveryEntry)
     lastError: null,
   })
   try {
-    await createTimeRecordApi(entry.record, {
+    await createStudySessionRecordApi(entry.record, {
       mutationId: entry.mutationId,
       persistence: false,
     })

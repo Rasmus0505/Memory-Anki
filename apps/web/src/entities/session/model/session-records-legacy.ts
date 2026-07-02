@@ -9,15 +9,16 @@ import type {
   TimeSessionRecord,
 } from '@/entities/session/model/session-records'
 import {
-  createTimeRecordApi,
-  getTimeRecordingThresholdApi,
-  importLegacyTimeRecordsApi,
-  listTimeRecordsApi,
-  restoreTimeRecordApi,
-  setTimeRecordingThresholdApi,
-  softDeleteTimeRecordApi,
-  updateTimeRecordApi,
-} from '@/entities/session/api'
+  createStudySessionFromTimeRecordApi,
+  getStudySessionThresholdApi,
+  listStudySessionsApi,
+  patchStudySessionApi,
+  restoreStudySessionApi,
+  setStudySessionThresholdApi,
+  softDeleteStudySessionApi,
+  type StudySessionPayload,
+  type StudySessionItem,
+} from '@/entities/study-session/api'
 import { formatLocalDateKey, parseApiDateTime } from '@/shared/lib/dateTime'
 
 const PRACTICE_PROGRESS_KEY = 'memory-anki.practice-progress.v1'
@@ -71,53 +72,178 @@ export function readLegacyTimeRecords() {
 export async function migrateLegacyTimeRecordsToBackend() {
   const records = readLegacyTimeRecords()
   if (records.length === 0) return 0
-  const result = await importLegacyTimeRecordsApi(records)
+  const results = await Promise.all(records.map((record) => createStudySessionFromTimeRecordApi(record)))
   window.localStorage.removeItem(TIME_RECORDS_KEY)
-  return result.imported
+  return results.filter((result) => result.item).length
 }
 
 export async function listTimeRecords(options?: { includeDeleted?: boolean; includeBelowThreshold?: boolean }) {
-  const result = await listTimeRecordsApi(options)
-  return result.items
+  return listStudySessionRecords(options)
+}
+
+export async function listStudySessionRecords(options?: { includeDeleted?: boolean; includeBelowThreshold?: boolean }) {
+  const result = await listStudySessionsApi(options)
+  return result.items.map(studySessionToTimeRecord)
 }
 
 export async function createTimeRecord(record: Omit<TimeSessionRecord, 'id'> & { id?: string }) {
-  const result = await createTimeRecordApi({
+  return createStudySessionRecord(record)
+}
+
+export async function createStudySessionRecord(record: Omit<TimeSessionRecord, 'id'> & { id?: string }) {
+  const result = await createStudySessionFromTimeRecordApi({
     ...record,
     id: record.id ?? crypto.randomUUID(),
   })
-  return result.item
+  return result.item ? studySessionToTimeRecord(result.item) : null
 }
 
-export async function appendTimeRecord(record: TimeSessionRecord) {
-  const result = await createTimeRecordApi(record)
-  return result.item
+export async function persistStudySessionRecord(record: TimeSessionRecord) {
+  const result = await createStudySessionFromTimeRecordApi(record)
+  return result.item ? studySessionToTimeRecord(result.item) : null
 }
 
 export async function updateTimeRecord(id: string, updater: Partial<TimeSessionRecord>) {
-  const result = await updateTimeRecordApi(id, updater)
-  return result.item
+  return updateStudySessionRecord(id, updater)
+}
+
+export async function updateStudySessionRecord(id: string, updater: Partial<TimeSessionRecord>) {
+  const result = await patchStudySessionApi(id, timeRecordPatchToStudySessionPatch(updater))
+  return result.item ? studySessionToTimeRecord(result.item) : null
 }
 
 export async function softDeleteTimeRecord(id: string) {
-  const result = await softDeleteTimeRecordApi(id)
-  return result.item
+  return softDeleteStudySessionRecord(id)
+}
+
+export async function softDeleteStudySessionRecord(id: string) {
+  const result = await softDeleteStudySessionApi(id)
+  return result.item ? studySessionToTimeRecord(result.item) : null
 }
 
 export async function restoreTimeRecord(id: string) {
-  const result = await restoreTimeRecordApi(id)
-  return result.item
+  return restoreStudySessionRecord(id)
+}
+
+export async function restoreStudySessionRecord(id: string) {
+  const result = await restoreStudySessionApi(id)
+  return result.item ? studySessionToTimeRecord(result.item) : null
 }
 
 export async function getTimeRecordingThresholdSeconds() {
-  const result = await getTimeRecordingThresholdApi()
+  return getStudySessionRecordingThresholdSeconds()
+}
+
+export async function getStudySessionRecordingThresholdSeconds() {
+  const result = await getStudySessionThresholdApi()
   return result.seconds
 }
 
 export async function setTimeRecordingThresholdSeconds(seconds: number) {
-  const result = await setTimeRecordingThresholdApi(seconds)
+  return setStudySessionRecordingThresholdSeconds(seconds)
+}
+
+export async function setStudySessionRecordingThresholdSeconds(seconds: number) {
+  const result = await setStudySessionThresholdApi(seconds)
   window.localStorage.removeItem(TIME_RECORDING_THRESHOLD_SECONDS_KEY)
   return result.seconds
+}
+
+function studySessionToTimeRecord(item: StudySessionItem): TimeSessionRecord {
+  const summary = item.summary || {}
+  const sceneSegments = readSceneSegments(summary)
+  return {
+    id: item.id,
+    kind: studySceneToSessionKind(item.scene),
+    palaceId: item.palace_id,
+    palaceSegmentId: item.palace_segment_id,
+    sourceKind: studySceneToSourceKind(item.scene),
+    englishCourseId: item.english_course_id,
+    title: item.title,
+    startedAt: item.started_at || '',
+    endedAt: item.ended_at || item.updated_at || item.started_at || '',
+    effectiveSeconds: item.effective_seconds,
+    pauseCount: item.pause_count,
+    completionMethod: (item.completion_method || 'manual_complete') as TimeSessionRecord['completionMethod'],
+    durationEdited: Boolean(summary.duration_edited),
+    deletedAt: item.deleted_at,
+    deletedReason: item.deleted_reason === 'manual' ? 'manual' : null,
+    events: item.events as TimeSessionRecord['events'],
+    sceneSegments,
+  }
+}
+
+function readSceneSegments(summary: Record<string, unknown>): TimeSessionRecord['sceneSegments'] {
+  const value = summary.scene_segments
+  return Array.isArray(value) ? value as TimeSessionRecord['sceneSegments'] : []
+}
+
+function studySceneToSessionKind(scene: string): SessionKind {
+  if (scene === 'palace_edit') return 'palace_edit'
+  if (scene === 'quiz') return 'quiz'
+  if (scene === 'review' || scene === 'segment_review' || scene === 'mini_review') return 'review'
+  return 'practice'
+}
+
+function studySceneToSourceKind(scene: string): TimeSessionRecord['sourceKind'] {
+  if (scene === 'english') return 'english'
+  if (scene === 'english_reading') return 'english_reading'
+  return scene ? 'palace' : null
+}
+
+function timeRecordPatchToStudySessionPatch(
+  updater: Partial<TimeSessionRecord>,
+): Partial<StudySessionPayload> {
+  const patch: Partial<StudySessionPayload> = {}
+  if ('kind' in updater && updater.kind) patch.scene = sessionKindToStudyScene(updater.kind, updater.sourceKind)
+  if ('sourceKind' in updater) patch.scene = sessionKindToStudyScene(updater.kind || 'practice', updater.sourceKind)
+  if ('palaceId' in updater) {
+    patch.palace_id = updater.palaceId ?? null
+    if (updater.palaceId != null) {
+      patch.target_type = 'palace'
+      patch.target_id = updater.palaceId
+    }
+  }
+  if ('palaceSegmentId' in updater) {
+    patch.palace_segment_id = updater.palaceSegmentId ?? null
+    if (updater.palaceSegmentId != null) {
+      patch.target_type = 'palace_segment'
+      patch.target_id = updater.palaceSegmentId
+    }
+  }
+  if ('englishCourseId' in updater) {
+    patch.english_course_id = updater.englishCourseId ?? null
+    if (updater.englishCourseId != null) {
+      patch.target_type = 'english_course'
+      patch.target_id = updater.englishCourseId
+    }
+  }
+  if ('title' in updater) patch.title = updater.title ?? ''
+  if ('startedAt' in updater) patch.started_at = updater.startedAt ?? null
+  if ('endedAt' in updater) patch.ended_at = updater.endedAt ?? null
+  if ('effectiveSeconds' in updater) patch.effective_seconds = updater.effectiveSeconds ?? 0
+  if ('pauseCount' in updater) patch.pause_count = updater.pauseCount ?? 0
+  if ('completionMethod' in updater) patch.completion_method = updater.completionMethod ?? 'manual_complete'
+  if ('events' in updater) patch.events = updater.events ?? []
+  if ('sceneSegments' in updater || 'durationEdited' in updater) {
+    patch.summary = {
+      ...(updater.sceneSegments ? { scene_segments: updater.sceneSegments } : {}),
+      ...(typeof updater.durationEdited === 'boolean' ? { duration_edited: updater.durationEdited } : {}),
+    }
+  }
+  return patch
+}
+
+function sessionKindToStudyScene(
+  kind: TimeSessionRecord['kind'],
+  sourceKind?: TimeSessionRecord['sourceKind'],
+) {
+  if (sourceKind === 'english') return 'english'
+  if (sourceKind === 'english_reading') return 'english_reading'
+  if (kind === 'palace_edit') return 'palace_edit'
+  if (kind === 'quiz') return 'quiz'
+  if (kind === 'review') return 'review'
+  return 'practice'
 }
 
 function startOfWeek(date: Date) {

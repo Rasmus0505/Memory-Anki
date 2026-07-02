@@ -31,10 +31,13 @@ from memory_anki.infrastructure.db.models import (
     EnglishReadingProfile,
     EnglishReadingSession,
     EnglishReadingVersion,
-    TimeRecord,
 )
 from memory_anki.modules.english_reading.domain.errors import EnglishReadingError
-from memory_anki.modules.time_records.application.time_records_service import get_threshold_seconds
+from memory_anki.modules.sessions.application.study_session_service import (
+    ENGLISH_READING_SCENES,
+    get_all_time_study_session_duration_seconds,
+    get_study_session_duration_seconds,
+)
 
 from . import service as _svc
 
@@ -181,35 +184,19 @@ def get_reading_duration_seconds(
     start,
     end,
 ) -> int:
-    threshold = get_threshold_seconds(session)
-    records = (
-        session.query(TimeRecord)
-        .filter(
-            TimeRecord.deleted_at.is_(None),
-            TimeRecord.kind == "practice",
-            TimeRecord.effective_seconds > threshold,
-            TimeRecord.source_kind == "english_reading",
-            TimeRecord.started_at >= start,
-            TimeRecord.started_at < end,
-        )
-        .all()
+    return get_study_session_duration_seconds(
+        session,
+        scenes=ENGLISH_READING_SCENES,
+        start=start,
+        end=end,
     )
-    return sum(int(record.effective_seconds or 0) for record in records)
 
 
 def get_total_reading_duration_seconds(session: Session) -> int:
-    threshold = get_threshold_seconds(session)
-    records = (
-        session.query(TimeRecord)
-        .filter(
-            TimeRecord.deleted_at.is_(None),
-            TimeRecord.kind == "practice",
-            TimeRecord.effective_seconds > threshold,
-            TimeRecord.source_kind == "english_reading",
-        )
-        .all()
+    return get_all_time_study_session_duration_seconds(
+        session,
+        scenes=ENGLISH_READING_SCENES,
     )
-    return sum(int(record.effective_seconds or 0) for record in records)
 
 
 def resolve_material_source(

@@ -2,8 +2,7 @@ from __future__ import annotations
 
 from datetime import date, datetime, time, timedelta
 
-from sqlalchemy.orm import joinedload, selectinload
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload, selectinload
 
 from memory_anki.infrastructure.db.models import Chapter, Palace, PalaceMiniPalace, PalaceSegment
 from memory_anki.modules.palaces.application.palace_service import list_palaces
@@ -17,18 +16,18 @@ from memory_anki.modules.reviews.application.review_metrics_service import (
 from memory_anki.modules.reviews.application.review_queue_service import (
     get_today_review_groups,
 )
-from memory_anki.modules.time_records.application.time_records_service import (
+from memory_anki.modules.sessions.application.study_session_service import (
+    FORMAL_REVIEW_SCENES,
+    STUDY_DASHBOARD_SCENES,
+    current_month_bounds,
+    current_week_bounds,
     date_range_bounds,
-    get_all_time_total_review_duration_seconds,
-    get_english_course_stats,
-    get_monthly_total_review_duration_seconds,
-    get_selected_total_review_duration_seconds,
-    get_today_formal_review_duration_seconds,
+    get_all_time_study_session_duration_seconds,
+    get_english_study_stats,
+    get_study_session_duration_seconds,
     get_today_palace_learning_breakdown,
-    get_today_total_review_duration_seconds,
-    get_weekly_formal_review_duration_seconds,
-    get_weekly_total_review_duration_seconds,
     month_bounds,
+    today_bounds,
 )
 
 
@@ -88,7 +87,15 @@ def build_dashboard_payload(
         due_later_today_count += counts["due_later_today_count"]
         needs_practice_count += counts["needs_practice_count"]
 
-    monthly_total_review_duration_seconds = get_monthly_total_review_duration_seconds(session)
+    current_month_start, current_month_end = current_month_bounds()
+    current_week_start, current_week_end = current_week_bounds()
+    today_start, today_end = today_bounds()
+    monthly_total_review_duration_seconds = get_study_session_duration_seconds(
+        session,
+        scenes=STUDY_DASHBOARD_SCENES,
+        start=current_month_start,
+        end=current_month_end,
+    )
     selected_total_review_duration_seconds = _resolve_selected_duration_seconds(
         session,
         duration_mode=duration_mode,
@@ -97,7 +104,12 @@ def build_dashboard_payload(
         end_date=end_date,
         default_seconds=monthly_total_review_duration_seconds,
     )
-    weekly_formal_review_duration_seconds = get_weekly_formal_review_duration_seconds(session)
+    weekly_formal_review_duration_seconds = get_study_session_duration_seconds(
+        session,
+        scenes=FORMAL_REVIEW_SCENES,
+        start=current_week_start,
+        end=current_week_end,
+    )
 
     return {
         "due_count": due_count,
@@ -122,14 +134,29 @@ def build_dashboard_payload(
             for review in reviews
         ],
         "stats": get_weekly_stats(session),
-        "today_review_duration_seconds": get_today_formal_review_duration_seconds(session),
+        "today_review_duration_seconds": get_study_session_duration_seconds(
+            session,
+            scenes=FORMAL_REVIEW_SCENES,
+            start=today_start,
+            end=today_end,
+        ),
         "weekly_review_duration_seconds": weekly_formal_review_duration_seconds,
-        "today_total_review_duration_seconds": get_today_total_review_duration_seconds(session),
+        "today_total_review_duration_seconds": get_study_session_duration_seconds(
+            session,
+            scenes=STUDY_DASHBOARD_SCENES,
+            start=today_start,
+            end=today_end,
+        ),
         "monthly_total_review_duration_seconds": monthly_total_review_duration_seconds,
         "selected_total_review_duration_seconds": selected_total_review_duration_seconds,
-        "weekly_total_review_duration_seconds": get_weekly_total_review_duration_seconds(session),
+        "weekly_total_review_duration_seconds": get_study_session_duration_seconds(
+            session,
+            scenes=STUDY_DASHBOARD_SCENES,
+            start=current_week_start,
+            end=current_week_end,
+        ),
         "weekly_formal_review_duration_seconds": weekly_formal_review_duration_seconds,
-        "english_stats": get_english_course_stats(session),
+        "english_stats": get_english_study_stats(session),
         "recent_palaces": [_palace_summary(palace) for palace in recent],
         "today_learning_palaces": get_today_palace_learning_breakdown(session),
         "today_new_palace_count": len(today_new_palaces),
@@ -166,8 +193,9 @@ def _resolve_selected_duration_seconds(
         except ValueError as error:
             raise DashboardQueryError("month 格式必须是 YYYY-MM。") from error
         selected_start, selected_end = month_bounds(selected_month)
-        return get_selected_total_review_duration_seconds(
+        return get_study_session_duration_seconds(
             session,
+            scenes=STUDY_DASHBOARD_SCENES,
             start=selected_start,
             end=selected_end,
         )
@@ -187,11 +215,16 @@ def _resolve_selected_duration_seconds(
             selected_start_date,
             selected_end_date,
         )
-        return get_selected_total_review_duration_seconds(
+        return get_study_session_duration_seconds(
             session,
+            scenes=STUDY_DASHBOARD_SCENES,
             start=selected_start,
             end=selected_end,
         )
     if duration_mode == "all":
-        return get_all_time_total_review_duration_seconds(session)
+        return get_all_time_study_session_duration_seconds(
+            session,
+            scenes=STUDY_DASHBOARD_SCENES,
+        )
     raise DashboardQueryError("duration_mode 仅支持 month、range 或 all。")
+

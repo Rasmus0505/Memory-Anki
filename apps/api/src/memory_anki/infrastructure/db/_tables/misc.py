@@ -1,4 +1,4 @@
-"""Cross-cutting ORM tables: time records, mindmap import jobs, AI call logs, config, AI model catalog."""
+"""Cross-cutting ORM tables: study sessions, time records, jobs, logs, config."""
 
 from __future__ import annotations
 
@@ -47,6 +47,62 @@ class TimeRecord(Base):
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     deleted_reason: Mapped[str | None] = mapped_column(String(32), nullable=True)
     events_json: Mapped[str] = mapped_column(Text, default="[]")
+    created_at: Mapped[datetime | None] = mapped_column(DateTime, default=utc_now_naive)
+    updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime,
+        default=utc_now_naive,
+        onupdate=utc_now_naive,
+    )
+
+
+class StudySession(Base):
+    __tablename__ = "study_sessions"
+    __table_args__ = (
+        Index("ix_study_sessions_status_updated", "status", "updated_at"),
+        Index("ix_study_sessions_scene_started", "scene", "started_at"),
+        Index(
+            "ix_study_sessions_target_status",
+            "target_type",
+            "target_id",
+            "status",
+        ),
+        Index("ix_study_sessions_palace_started", "palace_id", "started_at"),
+    )
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    status: Mapped[str] = mapped_column(String(24), nullable=False, default="active")
+    scene: Mapped[str] = mapped_column(String(40), nullable=False)
+    target_type: Mapped[str] = mapped_column(String(40), nullable=False, default="none")
+    target_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    palace_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("palaces.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    palace_segment_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("palace_segments.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    mini_palace_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("palace_mini_palaces.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    english_course_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    english_reading_material_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    title: Mapped[str] = mapped_column(String(300), nullable=False, default="")
+    started_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    ended_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    effective_seconds: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    idle_seconds: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    pause_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    completion_method: Mapped[str] = mapped_column(String(32), nullable=False, default="")
+    progress_json: Mapped[str] = mapped_column(Text, default="{}")
+    events_json: Mapped[str] = mapped_column(Text, default="[]")
+    summary_json: Mapped[str] = mapped_column(Text, default="{}")
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    deleted_reason: Mapped[str | None] = mapped_column(String(32), nullable=True)
     created_at: Mapped[datetime | None] = mapped_column(DateTime, default=utc_now_naive)
     updated_at: Mapped[datetime | None] = mapped_column(
         DateTime,

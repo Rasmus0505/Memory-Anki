@@ -2,8 +2,8 @@ import * as React from "react";
 import { fireEvent, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
-  appendTimeRecordMock,
   editorState,
+  persistStudySessionRecordMock,
   renderInRouter,
   setupMindMapReviewFlowTest,
   timer,
@@ -96,7 +96,7 @@ describe("MindMapReviewFlow session", () => {
         }),
       );
     });
-    expect(appendTimeRecordMock).toHaveBeenCalledTimes(1);
+    expect(persistStudySessionRecordMock).toHaveBeenCalledTimes(1);
     expect(timer.reset).toHaveBeenCalledTimes(1);
   });
 });

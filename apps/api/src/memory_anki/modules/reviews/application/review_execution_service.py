@@ -42,8 +42,8 @@ from memory_anki.modules.reviews.application.schedule_service import (
     is_schedule_due_or_later_today,
     normalize_algorithm,
 )
-from memory_anki.modules.time_records.application.time_records_service import (
-    create_review_time_record,
+from memory_anki.modules.sessions.application.study_session_service import (
+    create_review_study_session,
 )
 
 
@@ -130,15 +130,23 @@ def submit_review(
         extra["mastered"] = True
 
     session.flush()
-    create_review_time_record(
+    create_review_study_session(
         session,
-        record_id=f"review-log-{log.id}",
+        session_id=f"review-log-{log.id}",
+        scene="review",
+        target_type="review_schedule",
+        target_id=schedule_id,
         palace_id=schedule.palace_id,
         palace_segment_id=None,
         title=palace.title if palace else "未命名宫殿",
         duration_seconds=duration_seconds,
         ended_at=completed_at,
         completion_method=completion_mode or "manual_complete",
+        summary={
+            "review_number": schedule.review_number,
+            "target_review_number": target_review_number,
+            "needs_practice": bool(needs_practice),
+        },
     )
     session.commit()
     session.refresh(log)
@@ -205,15 +213,23 @@ def submit_segment_review(
     segment.palace.needs_practice = bool(needs_practice)
 
     session.flush()
-    create_review_time_record(
+    create_review_study_session(
         session,
-        record_id=f"segment-review-log-{schedule.id}-{int(completed_at.timestamp())}",
+        session_id=f"segment-review-log-{schedule.id}-{int(completed_at.timestamp())}",
+        scene="segment_review",
+        target_type="segment_review_schedule",
+        target_id=schedule_id,
         palace_id=segment.palace_id,
         palace_segment_id=segment.id,
         title=f"{segment.palace.title} / {segment.name}",
         duration_seconds=duration_seconds,
         ended_at=completed_at,
         completion_method=completion_mode or "manual_complete",
+        summary={
+            "review_number": schedule.review_number,
+            "target_review_number": target_review_number,
+            "needs_practice": bool(needs_practice),
+        },
     )
     session.commit()
     completed_schedule = (
@@ -286,15 +302,24 @@ def submit_mini_review(
         extra["mastered"] = True
 
     session.flush()
-    create_review_time_record(
+    create_review_study_session(
         session,
-        record_id=f"mini-review-log-{schedule.id}-{int(completed_at.timestamp())}",
+        session_id=f"mini-review-log-{schedule.id}-{int(completed_at.timestamp())}",
+        scene="mini_review",
+        target_type="mini_review_schedule",
+        target_id=schedule_id,
         palace_id=mini_palace.palace_id,
         palace_segment_id=None,
+        mini_palace_id=mini_palace.id,
         title=f"{mini_palace.palace.title} / {mini_palace.name}",
         duration_seconds=duration_seconds,
         ended_at=completed_at,
         completion_method=completion_mode or "manual_complete",
+        summary={
+            "review_number": schedule.review_number,
+            "target_review_number": target_review_number,
+            "needs_practice": bool(needs_practice),
+        },
     )
     session.commit()
     completed_schedule = (

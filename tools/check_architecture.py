@@ -181,6 +181,19 @@ PERSONAL_ABSOLUTE_PATH_PATTERNS = (
 )
 BACKEND_PRIVATE_CROSS_MODULE_SEGMENTS = (".infrastructure", ".presentation")
 BACKEND_CROSS_MODULE_PRIVATE_NAMES = ("repository", "repositories", "_")
+FRONTEND_STUDY_SESSION_LEGACY_ENDPOINT_PATTERN = re.compile(
+    r"/(?:time-records|sessions/[^'\"\s`]*/progress)"
+)
+FRONTEND_STUDY_SESSION_LEGACY_SYMBOLS = ("appendTimeRecord",)
+BACKEND_LEGACY_TIME_RECORD_MODULE = "modules/time_records/"
+BACKEND_STUDY_SESSION_LEGACY_PATTERNS = (
+    "memory_anki.modules.time_records",
+    " TimeRecord",
+    "(TimeRecord",
+    ", TimeRecord",
+    "TimeRecord,",
+    "query(TimeRecord",
+)
 
 
 def iter_files(root: Path, suffixes: tuple[str, ...]):
@@ -367,6 +380,38 @@ def check_frontend_public_api_surfaces(errors: list[str]) -> None:
             for forbidden_import, message in FORBIDDEN_PRODUCTION_FEATURE_DEEP_IMPORTS.items():
                 if forbidden_import in content:
                     errors.append(f"{relative}: {message}")
+
+
+def check_study_session_legacy_usage(errors: list[str]) -> None:
+    for path in iter_files(WEB_SRC, (".ts", ".tsx")):
+        relative = path.relative_to(WEB_SRC).as_posix()
+        if is_frontend_test_file(relative):
+            continue
+        content = path.read_text(encoding="utf-8")
+        if FRONTEND_STUDY_SESSION_LEGACY_ENDPOINT_PATTERN.search(content):
+            errors.append(
+                f"{relative}: production frontend must use /study-sessions APIs instead of legacy "
+                "/time-records or /sessions/*/progress endpoints."
+            )
+        for symbol in FRONTEND_STUDY_SESSION_LEGACY_SYMBOLS:
+            if symbol in content:
+                errors.append(
+                    f"{relative}: production frontend must persist learning sessions through "
+                    "StudySession helpers, not the old TimeRecord helper name."
+                )
+
+    backend_roots = (API_SRC / "app", API_SRC / "modules")
+    for root in backend_roots:
+        for path in iter_files(root, (".py",)):
+            relative = path.relative_to(API_SRC).as_posix()
+            if relative.startswith(BACKEND_LEGACY_TIME_RECORD_MODULE):
+                continue
+            content = path.read_text(encoding="utf-8")
+            if any(pattern in content for pattern in BACKEND_STUDY_SESSION_LEGACY_PATTERNS):
+                errors.append(
+                    f"{path.relative_to(REPO_ROOT)}: production backend modules must use "
+                    "modules.sessions StudySession services instead of TimeRecord/time_records."
+                )
 
 
 def check_runtime_data_ignored(errors: list[str]) -> None:
@@ -622,6 +667,7 @@ def main() -> int:
     check_shared_local_storage_facade(errors)
     check_removed_shared_api_modules(errors)
     check_frontend_public_api_surfaces(errors)
+    check_study_session_legacy_usage(errors)
     check_runtime_data_ignored(errors)
     check_frontend_config_contract(errors)
     check_storage_layout_contract(errors)

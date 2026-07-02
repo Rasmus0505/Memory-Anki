@@ -7,7 +7,7 @@ import {
   REVIEW_FEEDBACK_SETTINGS_STORAGE_KEY,
 } from "@/shared/feedback/reviewFeedbackSettings";
 
-export const appendTimeRecordMock = vi.fn();
+export const persistStudySessionRecordMock = vi.fn();
 
 vi.mock("@/entities/session/model", async () => {
   const actual = await vi.importActual<typeof import("@/entities/session/model")>(
@@ -15,7 +15,7 @@ vi.mock("@/entities/session/model", async () => {
   );
   return {
     ...actual,
-    appendTimeRecord: (...args: unknown[]) => appendTimeRecordMock(...args),
+    persistStudySessionRecord: (...args: unknown[]) => persistStudySessionRecordMock(...args),
   };
 });
 
@@ -255,8 +255,8 @@ export function renderInRouter(node: React.ReactNode) {
 }
 
 export function setupMindMapReviewFlowTest() {
-  appendTimeRecordMock.mockReset();
-  appendTimeRecordMock.mockResolvedValue(null);
+  persistStudySessionRecordMock.mockReset();
+  persistStudySessionRecordMock.mockResolvedValue(null);
   timer.complete.mockClear();
   timer.registerActivity.mockClear();
   timer.logEvent.mockClear();

@@ -38,6 +38,7 @@ from memory_anki.infrastructure.db._tables.misc import (
     Config,
     ExternalAiCallLog,
     MindMapImportJob,
+    StudySession,
     TimeRecord,
 )
 from memory_anki.infrastructure.db._tables.palaces import (
@@ -94,6 +95,7 @@ __all__ = [
     "SessionProgress",
     "Subject",
     "SubjectDocument",
+    "StudySession",
     "TimeRecord",
     "chapter_palace_table",
     "engine",

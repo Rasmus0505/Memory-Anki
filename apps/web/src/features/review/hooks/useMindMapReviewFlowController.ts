@@ -11,7 +11,7 @@ import { getReviewSurpriseCopy } from "@/features/review/model/review-feedback";
 import { useReviewFlowSession } from "@/features/review/hooks/useReviewFlowSession";
 import { useMemoryAnkiShortcuts } from "@/entities/preferences/model/memoryAnkiShortcuts";
 import { useVoiceCoachController } from "@/features/voice-coach";
-import { appendTimeRecord } from "@/entities/session/model";
+import { persistStudySessionRecord } from "@/entities/session/model";
 import type { MindMapSelection } from "@/shared/components/mindmap-host";
 import type { MindMapEditorState } from "@/shared/api/contracts";
 import { cn } from "@/shared/lib/utils";
@@ -294,7 +294,7 @@ export function useMindMapReviewFlowController({
         red_marked_count: flow.redNodeCount,
       });
       if (record && sessionKind === "review") {
-        await appendTimeRecord(record);
+        await persistStudySessionRecord(record);
       }
       toast.success("已保存进度和本段时长，下次可继续");
     } catch {

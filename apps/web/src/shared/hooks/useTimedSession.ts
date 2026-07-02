@@ -1,8 +1,8 @@
 import * as React from 'react'
 import {
-  appendTimeRecord,
   removePendingTimeRecordRecovery,
   getWeeklyLocalSessionStats,
+  persistStudySessionRecord,
   type SessionCompletionMethod,
   type SessionEventRecord,
   type TimeSessionRecord,
@@ -293,7 +293,7 @@ export function useTimedSession({
   ) => {
     if (!record) return null
     try {
-      const persisted = await appendTimeRecord(record)
+      const persisted = await persistStudySessionRecord(record)
       removePendingTimeRecordRecovery(record.id)
       return persisted
     } catch {

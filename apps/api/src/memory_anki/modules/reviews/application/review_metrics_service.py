@@ -6,7 +6,11 @@ from datetime import date, datetime, timedelta
 
 from sqlalchemy.orm import Session
 
-from memory_anki.infrastructure.db.models import ReviewLog, TimeRecord
+from memory_anki.infrastructure.db.models import ReviewLog
+from memory_anki.modules.sessions.application.study_session_service import (
+    STUDY_DASHBOARD_SCENES,
+    get_study_session_duration_seconds,
+)
 
 
 def get_palace_stats(session: Session, palace_id: int) -> dict:
@@ -57,16 +61,12 @@ def get_today_practice_duration_seconds(session: Session) -> int:
     today = date.today()
     start = datetime.combine(today, datetime.min.time())
     end = start + timedelta(days=1)
-    records = (
-        session.query(TimeRecord)
-        .filter(
-            TimeRecord.deleted_at.is_(None),
-            TimeRecord.started_at >= start,
-            TimeRecord.started_at < end,
-        )
-        .all()
+    return get_study_session_duration_seconds(
+        session,
+        scenes=STUDY_DASHBOARD_SCENES,
+        start=start,
+        end=end,
     )
-    return sum(record.effective_seconds for record in records)
 
 
 def get_weekly_practice_duration_seconds(session: Session) -> int:
@@ -74,13 +74,9 @@ def get_weekly_practice_duration_seconds(session: Session) -> int:
     start_of_week = today - timedelta(days=today.weekday())
     start = datetime.combine(start_of_week, datetime.min.time())
     end = datetime.combine(today + timedelta(days=1), datetime.min.time())
-    records = (
-        session.query(TimeRecord)
-        .filter(
-            TimeRecord.deleted_at.is_(None),
-            TimeRecord.started_at >= start,
-            TimeRecord.started_at < end,
-        )
-        .all()
+    return get_study_session_duration_seconds(
+        session,
+        scenes=STUDY_DASHBOARD_SCENES,
+        start=start,
+        end=end,
     )
-    return sum(record.effective_seconds for record in records)

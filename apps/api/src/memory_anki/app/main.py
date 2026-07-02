@@ -45,7 +45,6 @@ from memory_anki.modules.reviews.application.review_execution_service import (
 from memory_anki.modules.reviews.presentation import router as review_router
 from memory_anki.modules.sessions.presentation import router as sessions_router
 from memory_anki.modules.settings.presentation import router as settings_router
-from memory_anki.modules.time_records.presentation import router as time_records_router
 from memory_anki.modules.voice_coach import presentation as voice_coach_router
 
 get_session = _get_session
@@ -142,7 +141,6 @@ app.include_router(settings_router.router, prefix="/api/v1")
 app.include_router(import_router.router, prefix="/api/v1")
 app.include_router(knowledge_router.router, prefix="/api/v1")
 app.include_router(bilink_router.router, prefix="/api/v1")
-app.include_router(time_records_router.router, prefix="/api/v1")
 app.include_router(english_router.router, prefix="/api/v1")
 app.include_router(english_reading_router.router, prefix="/api/v1")
 app.include_router(freestyle_router.router, prefix="/api/v1")

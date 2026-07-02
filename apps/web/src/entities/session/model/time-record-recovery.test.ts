@@ -8,11 +8,11 @@ import {
 } from '@/entities/session/model/time-record-recovery'
 import type { TimeSessionRecord } from '@/entities/session/model/session-records'
 
-vi.mock('@/entities/session/api', () => ({
-  createTimeRecordApi: vi.fn(),
+vi.mock('@/entities/study-session/api', () => ({
+  createStudySessionRecordApi: vi.fn(),
 }))
 
-const { createTimeRecordApi } = await import('@/entities/session/api')
+const { createStudySessionRecordApi } = await import('@/entities/study-session/api')
 
 function buildRecord(overrides: Partial<TimeSessionRecord> = {}): TimeSessionRecord {
   return {
@@ -35,7 +35,7 @@ describe('time-record recovery store', () => {
   beforeEach(() => {
     window.localStorage.clear()
     clearPendingTimeRecordRecoveriesForTest()
-    vi.mocked(createTimeRecordApi).mockReset()
+    vi.mocked(createStudySessionRecordApi).mockReset()
   })
 
   afterEach(() => {
@@ -52,7 +52,7 @@ describe('time-record recovery store', () => {
   })
 
   it('removes the recovery entry after a successful replay', async () => {
-    vi.mocked(createTimeRecordApi).mockResolvedValue({ item: buildRecord() })
+    vi.mocked(createStudySessionRecordApi).mockResolvedValue({ item: null })
     upsertPendingTimeRecordRecovery(buildRecord(), {
       mutationId: buildTimeRecordRecoveryMutationId('record-1'),
     })
@@ -63,7 +63,7 @@ describe('time-record recovery store', () => {
   })
 
   it('keeps the recovery entry and marks it failed after replay errors', async () => {
-    vi.mocked(createTimeRecordApi).mockRejectedValue(new Error('network down'))
+    vi.mocked(createStudySessionRecordApi).mockRejectedValue(new Error('network down'))
     upsertPendingTimeRecordRecovery(buildRecord(), {
       mutationId: buildTimeRecordRecoveryMutationId('record-1'),
     })

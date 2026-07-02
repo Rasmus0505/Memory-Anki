@@ -34,7 +34,9 @@ from memory_anki.infrastructure.db.models import (
     EnglishReadingProfile,  # noqa: F401
     EnglishReadingSession,  # noqa: F401
     EnglishReadingVersion,  # noqa: F401
-    TimeRecord,  # noqa: F401
+)
+from memory_anki.infrastructure.llm.config_helpers import (
+    has_non_empty_config as _has_non_empty_config,  # noqa: F401
 )
 from memory_anki.infrastructure.llm.external_ai_call_logs import (
     begin_external_ai_call_log,  # noqa: F401
@@ -52,9 +54,6 @@ from memory_anki.modules.settings.application.ai_model_registry import (
     resolve_scenario_runtime,  # noqa: F401
 )
 from memory_anki.modules.settings.application.ai_prompts import get_prompt_template  # noqa: F401
-from memory_anki.modules.time_records.application.time_records_service import (
-    get_threshold_seconds,  # noqa: F401
-)
 
 CEFR_LEVELS = ("A1", "A2", "B1", "B2", "C1", "C2")
 LEVEL_TO_INDEX = {level: index for index, level in enumerate(CEFR_LEVELS)}
@@ -383,7 +382,6 @@ from .dictionary_service import (  # noqa: E402,F401,I001
     get_english_reading_runtime,
     prepare_english_reading_runtime,
     get_dictionary_entry,
-    _has_non_empty_config,
     _resolve_legacy_dashscope_runtime,
     translate_sentence_text,
     build_xxapi_dictionary_entry_payload,

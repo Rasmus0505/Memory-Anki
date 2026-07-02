@@ -51,9 +51,9 @@ describe('mutationQueue', () => {
 
     const item = await enqueueMutation({
       mutationId: 'mutation-1',
-      resourceKey: 'time-record:record-1',
-      description: '保存学习时长',
-      url: '/api/v1/time-records',
+      resourceKey: 'study-session:record-1',
+      description: '保存学习会话',
+      url: '/api/v1/study-sessions/from-time-record',
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       bodyKind: 'json',

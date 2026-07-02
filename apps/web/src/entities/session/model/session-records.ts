@@ -33,6 +33,7 @@ export interface SessionSceneSegment {
   scene: SessionScene
   kind: SessionKind
   palaceId: number | null
+  palaceSegmentId?: number | null
   sourceKind?: 'palace' | 'english' | 'english_reading' | null
   englishCourseId?: number | null
   title: string
@@ -45,6 +46,7 @@ export interface TimeSessionRecord {
   id: string
   kind: SessionKind
   palaceId: number | null
+  palaceSegmentId?: number | null
   sourceKind?: 'palace' | 'english' | 'english_reading' | null
   englishCourseId?: number | null
   title: string

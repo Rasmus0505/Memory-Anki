@@ -15,7 +15,7 @@ from memory_anki.infrastructure.db.models import (
     EnglishCourse,
     EnglishCourseProgress,
     EnglishSentence,
-    TimeRecord,
+    StudySession,
 )
 from memory_anki.modules.english.domain.errors import EnglishCourseError
 from memory_anki.modules.english.domain.text import check_sentence_tokens
@@ -130,10 +130,11 @@ def delete_course(session: Session, course_id: int) -> None:
         return
     media_path = resolve_course_media_path(course)
     course_path = media_path.parent if media_path else None
-    session.query(TimeRecord).filter(TimeRecord.english_course_id == course_id).update(
+    session.query(StudySession).filter(StudySession.english_course_id == course_id).update(
         {
             "english_course_id": None,
-            "source_kind": "english",
+            "target_type": "none",
+            "target_id": None,
         },
         synchronize_session=False,
     )

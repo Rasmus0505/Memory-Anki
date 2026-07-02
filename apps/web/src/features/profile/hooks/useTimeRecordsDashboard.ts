@@ -3,24 +3,24 @@ import type { FormEvent } from 'react'
 import { toast } from '@/shared/feedback/toast'
 import { appConfirm } from '@/shared/components/ui/native-dialog'
 import {
-  createTimeRecord,
+  createStudySessionRecord,
   getDailyTrend,
   getSessionKindBreakdown,
   getTimeRecordSummary,
   getTrendByRange,
-  getTimeRecordingThresholdSeconds,
+  getStudySessionRecordingThresholdSeconds,
   listPendingTimeRecordRecoveries,
-  listTimeRecords,
+  listStudySessionRecords,
   removePendingTimeRecordRecovery,
   replayPendingTimeRecordRecoveries,
-  restoreTimeRecord,
-  setTimeRecordingThresholdSeconds,
-  softDeleteTimeRecord,
+  restoreStudySessionRecord,
+  setStudySessionRecordingThresholdSeconds,
+  softDeleteStudySessionRecord,
   subscribePendingTimeRecordRecoveries,
   type SessionKind,
   type TimeRecordChartRange,
   type TimeSessionRecord,
-  updateTimeRecord,
+  updateStudySessionRecord,
 } from '@/entities/session/model'
 import {
   applyTimeRecordFormPatch,
@@ -124,7 +124,7 @@ export function useTimeRecordsDashboard(
   const [isBulkDeleting, setIsBulkDeleting] = useState(false)
 
   const refreshRecords = async () => {
-    const nextRecords = await listTimeRecords({
+    const nextRecords = await listStudySessionRecords({
       includeDeleted: true,
       includeBelowThreshold: showBelowThreshold,
     })
@@ -144,8 +144,8 @@ export function useTimeRecordsDashboard(
   useEffect(() => {
     const load = async () => {
       const [threshold, nextRecords] = await Promise.all([
-        getTimeRecordingThresholdSeconds(),
-        listTimeRecords({
+        getStudySessionRecordingThresholdSeconds(),
+        listStudySessionRecords({
           includeDeleted: true,
           includeBelowThreshold: showBelowThreshold,
         }),
@@ -168,7 +168,7 @@ export function useTimeRecordsDashboard(
 
   const applyThreshold = async () => {
     const parsed = Number(thresholdInput)
-    const safeThreshold = await setTimeRecordingThresholdSeconds(
+    const safeThreshold = await setStudySessionRecordingThresholdSeconds(
       Number.isNaN(parsed) || parsed < 0 ? 0 : parsed,
     )
     setThresholdSeconds(safeThreshold)
@@ -262,7 +262,7 @@ export function useTimeRecordsDashboard(
     setIsSubmittingRecord(true)
     try {
       if (dialogMode === 'create') {
-        const created = await createTimeRecord({
+        const created = await createStudySessionRecord({
           ...parsed.value,
           deletedAt: null,
           deletedReason: null,
@@ -277,7 +277,7 @@ export function useTimeRecordsDashboard(
         setRecords((current) => [created, ...current])
         toast.success('时间记录已新增')
       } else if (editingRecord) {
-        const updated = await updateTimeRecord(editingRecord.id, parsed.value)
+        const updated = await updateStudySessionRecord(editingRecord.id, parsed.value)
         if (updated) {
           setRecords((current) =>
             current.map((record) =>
@@ -310,7 +310,7 @@ export function useTimeRecordsDashboard(
 
     setDeletingRecordId(record.id)
     try {
-      await softDeleteTimeRecord(record.id)
+      await softDeleteStudySessionRecord(record.id)
       setSelectedRecordIds((current) =>
         current.filter((id) => id !== record.id),
       )
@@ -328,7 +328,7 @@ export function useTimeRecordsDashboard(
 
     setRestoringRecordId(record.id)
     try {
-      await restoreTimeRecord(record.id)
+      await restoreStudySessionRecord(record.id)
       toast.success('时间记录已恢复')
       await refreshRecords()
     } catch (error) {
@@ -388,7 +388,7 @@ export function useTimeRecordsDashboard(
     setIsBulkDeleting(true)
     try {
       await Promise.all(
-        targets.map((record) => softDeleteTimeRecord(record.id)),
+        targets.map((record) => softDeleteStudySessionRecord(record.id)),
       )
       setSelectedRecordIds([])
       toast.success(`已移入已删除：${targets.length} 条记录`)
