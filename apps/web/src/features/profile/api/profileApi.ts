@@ -1,4 +1,4 @@
-import { API_BASE, fetchWithMutationQueue, request } from '@/shared/api/http'
+import { API_BASE, request, uploadWithFormData } from '@/shared/api/http'
 import type {
   AiPromptTemplateListResponse,
   BackupListResponse,
@@ -48,16 +48,10 @@ export async function importFileApi(file: File, format: string) {
   const form = new FormData()
   form.append('file', file)
   form.append('format', format)
-  const response = await fetchWithMutationQueue(
-    `${API_BASE}/import`,
-    { method: "POST", body: form },
-    {
-      resourceKey: `import:file:${file.name}:${format}`,
-      description: `导入文件：${file.name}`,
-      replayMode: 'manual',
-    },
-  )
-  return response.json() as Promise<ImportPalacesResponse>
+  return uploadWithFormData<ImportPalacesResponse>('/import', form, {
+    resourceKey: `import:file:${file.name}:${format}`,
+    description: `导入文件：${file.name}`,
+  })
 }
 
 export function getBackupsApi() {

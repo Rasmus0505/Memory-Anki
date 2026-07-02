@@ -47,6 +47,15 @@ function RouterHarness() {
       <button type="button" onClick={() => navigate('/alpha?tab=2')}>
         alpha-query
       </button>
+      <button type="button" onClick={() => navigate('/gamma')}>
+        gamma
+      </button>
+      <button type="button" onClick={() => navigate('/delta')}>
+        delta
+      </button>
+      <button type="button" onClick={() => navigate('/epsilon')}>
+        epsilon
+      </button>
       <AppRouter />
     </>
   )
@@ -78,5 +87,26 @@ describe('AppRouter residency', () => {
     expect((screen.getByLabelText('input:/alpha') as HTMLInputElement).value).toBe('persisted alpha')
     expect(screen.getByDisplayValue('persisted beta')).toBeTruthy()
     expect(screen.getAllByTestId(/page:\//)).toHaveLength(2)
+  })
+
+  it('evicts the least recently active resident route when the cache reaches its limit', () => {
+    render(
+      <MemoryRouter initialEntries={['/alpha']}>
+        <RouterHarness />
+      </MemoryRouter>,
+    )
+
+    fireEvent.change(screen.getByLabelText('input:/alpha'), {
+      target: { value: 'old alpha state' },
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'beta' }))
+    fireEvent.click(screen.getByRole('button', { name: 'gamma' }))
+    fireEvent.click(screen.getByRole('button', { name: 'delta' }))
+    fireEvent.click(screen.getByRole('button', { name: 'epsilon' }))
+
+    expect(screen.queryByTestId('page:/alpha')).toBeNull()
+    expect(screen.getByTestId('page:/epsilon').getAttribute('data-active')).toBe('true')
+    expect(screen.getAllByTestId(/page:\//)).toHaveLength(4)
   })
 })

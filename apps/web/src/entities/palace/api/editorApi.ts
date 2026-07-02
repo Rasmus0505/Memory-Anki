@@ -1,12 +1,10 @@
-import { API_BASE, request } from '@/shared/api/http'
+import { request } from '@/shared/api/http'
 import type {
   MindMapAiSplitRequest,
   MindMapAiSplitResponse,
   PalaceEditorResponse,
   PalaceEditorSavePayload,
 } from '@/shared/api/contracts'
-import { readJsonResponse } from '@/shared/api/jsonResponse'
-import { logAppError } from '@/shared/logs/model/appLogs'
 
 export function savePalaceEditorApi(id: number, data: PalaceEditorSavePayload) {
   return request<PalaceEditorResponse>(`/palaces/${id}/editor`, {
@@ -38,28 +36,9 @@ export function savePalaceEditorWithOptionsApi(
 }
 
 export async function splitMindMapNodeApi(palaceId: number, data: MindMapAiSplitRequest) {
-  const requestUrl = `${API_BASE}/palaces/${palaceId}/editor/ai-split`
-  let response: Response
-  try {
-    response = await fetch(requestUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    })
-  } catch (error) {
-    logAppError({
-      feature: 'AI 分卡',
-      stage: 'network_failure',
-      error,
-      requestSummary: `POST ${requestUrl}`,
-      meta: {
-        palaceId,
-      },
-    })
-    throw error
-  }
-  return readJsonResponse<MindMapAiSplitResponse>(response, {
-    feature: 'AI 分卡',
-    nonJsonErrorMessage: '服务端暂时返回了非 JSON 错误页，请稍后继续分卡。',
+  return request<MindMapAiSplitResponse>(`/palaces/${palaceId}/editor/ai-split`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+    persistence: false,
   })
 }

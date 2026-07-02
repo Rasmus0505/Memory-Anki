@@ -314,12 +314,6 @@ export async function request<T>(url: string, options?: PersistedRequestInit): P
   return response.text() as unknown as T
 }
 
-/**
- * Upload a `FormData` body via the mutation queue, returning the parsed JSON
- * response. The `resourceKey`/`description` describe the upload for offline
- * replay bookkeeping. Shared by the english and english-reading API modules
- * (previously duplicated verbatim, differing only in those two fields).
- */
 export async function uploadWithFormData<T>(
   url: string,
   formData: FormData,

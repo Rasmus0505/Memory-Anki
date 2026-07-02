@@ -1,5 +1,5 @@
 import { API_BASE, fetchWithMutationQueue, request, uploadWithFormData } from '@/shared/api/http'
-import { parseSseEventBlock } from '@/shared/api/sse'
+import { readSseResultResponse } from '@/shared/api/sseResponse'
 import type {
   ReadingGenerateStreamStatusEvent,
   ReadingCompletionResponse,
@@ -83,58 +83,29 @@ async function parseEnglishReadingStream(
     onStatus?: (event: ReadingGenerateStreamStatusEvent) => void
   },
 ) {
-  if (!response.ok) {
-    const body = await response.text().catch(() => '')
-    let message = body || `HTTP ${response.status}`
-    try {
-      const parsed = JSON.parse(body) as { detail?: unknown }
-      if (typeof parsed.detail === 'string' && parsed.detail.trim()) {
-        message = parsed.detail
+  return readSseResultResponse<ReadingVersion, ReadingGenerateStreamStatusEvent>(response, {
+    feature: 'English reading stream API',
+    handlers,
+    statusGuard: isReadingGenerateStreamStatusEvent,
+    jsonOptions: { nonJsonErrorMessage: '生成阅读材料失败。' },
+    selectResult: (payload) => {
+      if (payload && typeof payload === 'object') {
+        const version = (payload as { version?: unknown }).version
+        return version ? (version as ReadingVersion) : null
       }
-    } catch {
-      // Ignore parse errors and use raw text.
-    }
-    throw new Error(message)
-  }
-  if (!response.body) {
-    throw new Error('浏览器不支持流式响应读取。')
-  }
-  const reader = response.body.getReader()
-  const decoder = new TextDecoder()
-  let buffer = ''
-  let finalVersion: ReadingVersion | null = null
-  let finalError = ''
-  while (true) {
-    const { value, done } = await reader.read()
-    buffer += decoder.decode(value || new Uint8Array(), { stream: !done })
-    const parts = buffer.split(/\r?\n\r?\n/)
-    buffer = parts.pop() ?? ''
-    for (const part of parts) {
-      const parsedEvent = parseSseEventBlock(part)
-      if (!parsedEvent) continue
-      const payload = JSON.parse(parsedEvent.data) as Record<string, unknown>
-      if (parsedEvent.event === 'status') {
-        if (isReadingGenerateStreamStatusEvent(payload)) {
-          handlers?.onStatus?.(payload)
-        }
-        continue
+      return null
+    },
+    selectErrorMessage: (payload) => {
+      if (payload && typeof payload === 'object') {
+        const detail = (payload as { detail?: unknown }).detail
+        if (typeof detail === 'string' && detail.trim()) return detail
       }
-      if (parsedEvent.event === 'result') {
-        finalVersion = payload.version as ReadingVersion
-        continue
-      }
-      if (parsedEvent.event === 'error') {
-        finalError =
-          typeof payload.detail === 'string'
-            ? payload.detail
-            : '生成阅读材料失败。'
-      }
-    }
-    if (done) break
-  }
-  if (finalVersion) return finalVersion
-  if (finalError) throw new Error(finalError)
-  throw new Error('流式响应未返回最终结果。')
+      return '生成阅读材料失败。'
+    },
+    unsupportedStreamMessage: '浏览器不支持流式响应读取。',
+    parseErrorMessage: '流式响应数据格式无效。',
+    missingResultMessage: '流式响应未返回最终结果。',
+  })
 }
 
 export async function generateEnglishReadingVersionStreamApi(

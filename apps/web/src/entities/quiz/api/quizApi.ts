@@ -1,6 +1,6 @@
 import { API_BASE, fetchWithMutationQueue, request, uploadWithFormData } from '@/shared/api/http'
-import { parseSseEventBlock } from '@/shared/api/sse'
 import { readJsonResponse } from '@/shared/api/jsonResponse'
+import { readSseResultResponse } from '@/shared/api/sseResponse'
 import type {
   AiScenarioRuntimeOptionsMap,
   MindMapEditorState,
@@ -25,56 +25,25 @@ async function readQuizStreamResponse<T>(
     onDelta?: (event: PalaceQuizStreamDeltaEvent) => void
   },
 ): Promise<T> {
-  if (!response.ok) {
-    return readQuizJson<T>(response)
-  }
-  const contentType = response.headers.get('content-type') || ''
-  if (!contentType.includes('text/event-stream')) {
-    return readQuizJson<T>(response)
-  }
-  if (!response.body) {
-    throw new Error('浏览器不支持流式响应读取。')
-  }
-  const reader = response.body.getReader()
-  const decoder = new TextDecoder()
-  let buffer = ''
-  let finalResult: T | null = null
-  let finalError = ''
-
-  while (true) {
-    const { value, done } = await reader.read()
-    buffer += decoder.decode(value || new Uint8Array(), { stream: !done })
-    const parts = buffer.split(/\r?\n\r?\n/)
-    buffer = parts.pop() ?? ''
-    for (const part of parts) {
-      const parsed = parseSseEventBlock(part)
-      if (!parsed) continue
-      const payload = JSON.parse(parsed.data)
-      if (parsed.event === 'status') {
-        handlers?.onStatus?.(payload as PalaceQuizStreamStatusEvent)
-        continue
-      }
-      if (parsed.event === 'delta') {
-        handlers?.onDelta?.(payload as PalaceQuizStreamDeltaEvent)
-        continue
-      }
-      if (parsed.event === 'result') {
-        finalResult = payload as T
-        continue
-      }
-      if (parsed.event === 'error') {
-        finalError = payload?.detail || payload?.error || '生成题目预览失败。'
-      }
-    }
-    if (done) break
-  }
-  if (finalError) {
-    throw new Error(finalError)
-  }
-  if (!finalResult) {
-    throw new Error('流式生成结束但没有返回题目结果。')
-  }
-  return finalResult
+  return readSseResultResponse<T, PalaceQuizStreamStatusEvent, PalaceQuizStreamDeltaEvent>(
+    response,
+    {
+      feature: 'Palace quiz stream API',
+      handlers,
+      jsonOptions: { nonJsonErrorMessage: '生成题目预览失败。' },
+      selectErrorMessage: (payload) => {
+        if (payload && typeof payload === 'object') {
+          const record = payload as Record<string, unknown>
+          if (typeof record.detail === 'string' && record.detail.trim()) return record.detail
+          if (typeof record.error === 'string' && record.error.trim()) return record.error
+        }
+        return '生成题目预览失败。'
+      },
+      unsupportedStreamMessage: '浏览器不支持流式响应读取。',
+      parseErrorMessage: '流式生成返回的数据格式无效。',
+      missingResultMessage: '流式生成结束但没有返回题目结果。',
+    },
+  )
 }
 
 export function getPalaceQuizQuestionsApi(palaceId: number) {

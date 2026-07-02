@@ -62,6 +62,7 @@ interface NavSectionDefinition {
   icon: typeof LayoutDashboard
   rememberLastVisited: boolean
   matches: (pathname: string) => boolean
+  warmup?: () => void
 }
 
 const navSectionLastUrls: Partial<Record<NavSectionKey, string>> = {}
@@ -75,6 +76,9 @@ const navSections: NavSectionDefinition[] = [
     icon: LayoutDashboard,
     rememberLastVisited: false,
     matches: (pathname) => pathname === '/' || pathname === '/dashboard',
+    warmup: () => {
+      prefetchDashboardApi()
+    },
   },
   {
     key: 'freestyle',
@@ -83,6 +87,9 @@ const navSections: NavSectionDefinition[] = [
     icon: Shuffle,
     rememberLastVisited: false,
     matches: (pathname) => pathname === '/freestyle',
+    warmup: () => {
+      void preloadFreestylePage()
+    },
   },
   {
     key: 'palaces',
@@ -95,6 +102,11 @@ const navSections: NavSectionDefinition[] = [
       pathname === '/palaces/list' ||
       pathname === '/palaces/new' ||
       /^\/palaces\/\d+(?:\/(edit|practice|focus-practice|quiz))?$/.test(pathname),
+    warmup: () => {
+      preloadPracticeRoutes()
+      prefetchPalaceSubjectShelfApi()
+      prefetchPalacesGroupedSummaryApi()
+    },
   },
   {
     key: 'english',
@@ -104,6 +116,9 @@ const navSections: NavSectionDefinition[] = [
     rememberLastVisited: true,
     matches: (pathname) =>
       pathname === '/english' || /^\/english\/courses\/\d+$/.test(pathname),
+    warmup: () => {
+      void preloadEnglishWorkspacePage()
+    },
   },
   {
     key: 'englishReading',
@@ -112,6 +127,9 @@ const navSections: NavSectionDefinition[] = [
     icon: BookOpenText,
     rememberLastVisited: true,
     matches: (pathname) => pathname === '/english-reading',
+    warmup: () => {
+      void preloadEnglishReadingPage()
+    },
   },
   {
     key: 'knowledge',
@@ -120,6 +138,9 @@ const navSections: NavSectionDefinition[] = [
     icon: FolderTree,
     rememberLastVisited: true,
     matches: (pathname) => pathname === '/knowledge' || pathname.startsWith('/knowledge/'),
+    warmup: () => {
+      void preloadKnowledgePage()
+    },
   },
   {
     key: 'review',
@@ -133,6 +154,11 @@ const navSections: NavSectionDefinition[] = [
       /^\/segment-review\/session\/\d+$/.test(pathname) ||
       pathname === '/segment-review/batch' ||
       /^\/mini-review\/session\/\d+$/.test(pathname),
+    warmup: () => {
+      preloadReviewRoutes()
+      prefetchReviewQueueApi()
+      prefetchSegmentReviewQueueApi()
+    },
   },
   {
     key: 'profile',
@@ -141,6 +167,9 @@ const navSections: NavSectionDefinition[] = [
     icon: User,
     rememberLastVisited: true,
     matches: (pathname) => pathname === '/profile' || pathname.startsWith('/profile/'),
+    warmup: () => {
+      void preloadProfilePage()
+    },
   },
 ]
 
@@ -163,34 +192,7 @@ export function resetNavSectionHistoryForTest() {
 function warmNavSection(section: NavSectionDefinition) {
   if (warmedNavSections.has(section.key)) return
   warmedNavSections.add(section.key)
-  if (section.key === 'palaces') {
-    preloadPracticeRoutes()
-    prefetchPalaceSubjectShelfApi()
-    prefetchPalacesGroupedSummaryApi()
-  }
-  if (section.key === 'dashboard') {
-    prefetchDashboardApi()
-  }
-  if (section.key === 'freestyle') {
-    void preloadFreestylePage()
-  }
-  if (section.key === 'review') {
-    preloadReviewRoutes()
-    prefetchReviewQueueApi()
-    prefetchSegmentReviewQueueApi()
-  }
-  if (section.key === 'english') {
-    void preloadEnglishWorkspacePage()
-  }
-  if (section.key === 'englishReading') {
-    void preloadEnglishReadingPage()
-  }
-  if (section.key === 'knowledge') {
-    void preloadKnowledgePage()
-  }
-  if (section.key === 'profile') {
-    void preloadProfilePage()
-  }
+  section.warmup?.()
 }
 
 function scheduleIdleWarmup(callback: () => void) {

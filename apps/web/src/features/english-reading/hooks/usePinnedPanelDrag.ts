@@ -36,7 +36,13 @@ export function usePinnedPanelDrag({
     const stopDragging = (event?: PointerEvent | MouseEvent) => {
       const dragState = dragRef.current;
       if (!dragState) return;
-      if (event instanceof PointerEvent && event.pointerId !== dragState.pointerId) return;
+      if (
+        typeof PointerEvent !== "undefined" &&
+        event instanceof PointerEvent &&
+        event.pointerId !== dragState.pointerId
+      ) {
+        return;
+      }
       dragRef.current = null;
       document.body.style.userSelect = "";
       onStop();

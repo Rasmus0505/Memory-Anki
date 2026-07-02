@@ -1,7 +1,6 @@
 import { request } from "@/shared/api/http"
 import type { DashboardQuery, DashboardResponse } from "@/shared/api/contracts"
-
-const warmedDashboardGetCache = new Map<string, Promise<DashboardResponse>>()
+import { consumePrefetchedPromise, prefetchPromise } from "@/shared/api/promiseWarmupCache"
 
 function buildDashboardPath(query?: DashboardQuery) {
   const params = new URLSearchParams()
@@ -15,21 +14,10 @@ function buildDashboardPath(query?: DashboardQuery) {
 
 export function getDashboardApi(query?: DashboardQuery) {
   const path = buildDashboardPath(query)
-  const warmed = warmedDashboardGetCache.get(path)
-  if (warmed) {
-    warmedDashboardGetCache.delete(path)
-    return warmed
-  }
-  return request<DashboardResponse>(path)
+  return consumePrefetchedPromise(`dashboard:${path}`, () => request<DashboardResponse>(path))
 }
 
 export function prefetchDashboardApi(query?: DashboardQuery) {
   const path = buildDashboardPath(query)
-  if (warmedDashboardGetCache.has(path)) return
-  const pending = request<DashboardResponse>(path).catch((error) => {
-    warmedDashboardGetCache.delete(path)
-    throw error
-  })
-  warmedDashboardGetCache.set(path, pending)
-  void pending.catch(() => {})
+  prefetchPromise(`dashboard:${path}`, () => request<DashboardResponse>(path))
 }

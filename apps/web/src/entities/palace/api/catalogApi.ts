@@ -1,4 +1,4 @@
-import { API_BASE, fetchWithMutationQueue, request } from '@/shared/api/http'
+import { API_BASE, request, uploadWithFormData } from '@/shared/api/http'
 import type {
   MindMapEditorState,
   PalaceEditorMeta,
@@ -10,8 +10,12 @@ import type {
   PalaceReviewPlanResponse,
   PalaceSubjectShelfResponse,
 } from '@/shared/api/contracts'
+import {
+  clearPrefetchedPromisesByPrefix,
+  consumePrefetchedPromise,
+  prefetchPromise,
+} from '@/shared/api/promiseWarmupCache'
 
-const warmedPalaceGetCache = new Map<string, Promise<unknown>>()
 export const PALACE_CATALOG_INVALIDATED_EVENT = 'palace-catalog:invalidated'
 
 export type PalaceMutationPayload = Partial<
@@ -24,27 +28,22 @@ export interface DeleteResponse {
   ok: boolean
 }
 
+export interface PalaceAttachmentUploadResponse {
+  id: number
+  filename: string
+  original_name: string
+}
+
 function buildQueryString(params?: Record<string, string>) {
   return params ? `?${new URLSearchParams(params).toString()}` : ''
 }
 
 function consumeWarmedPalaceGet<T>(cacheKey: string, loader: () => Promise<T>) {
-  const warmed = warmedPalaceGetCache.get(cacheKey) as Promise<T> | undefined
-  if (warmed) {
-    warmedPalaceGetCache.delete(cacheKey)
-    return warmed
-  }
-  return loader()
+  return consumePrefetchedPromise(`palace:${cacheKey}`, loader)
 }
 
 function prefetchPalaceGet<T>(cacheKey: string, loader: () => Promise<T>) {
-  if (warmedPalaceGetCache.has(cacheKey)) return
-  const pending = loader().catch((error) => {
-    warmedPalaceGetCache.delete(cacheKey)
-    throw error
-  })
-  warmedPalaceGetCache.set(cacheKey, pending)
-  void pending.catch(() => {})
+  prefetchPromise(`palace:${cacheKey}`, loader)
 }
 
 export function buildAttachmentUrl(attachmentId: number) {
@@ -65,7 +64,7 @@ export function getPalacesGroupedApi(params?: Record<string, string>) {
 }
 
 export function invalidatePalaceCatalogCache() {
-  warmedPalaceGetCache.clear()
+  clearPrefetchedPromisesByPrefix('palace:')
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent(PALACE_CATALOG_INVALIDATED_EVENT))
   }
@@ -179,19 +178,10 @@ export function deletePalaceApi(id: number) {
 export async function uploadAttachmentApi(palaceId: number, file: File) {
   const form = new FormData()
   form.append('file', file)
-  const response = await fetchWithMutationQueue(
-    `${API_BASE}/palaces/${palaceId}/upload`,
-    {
-      method: 'POST',
-      body: form,
-    },
-    {
-      resourceKey: `palace:${palaceId}:attachment:${file.name}`,
-      description: `上传附件：${file.name}`,
-      replayMode: 'manual',
-    },
-  )
-  return response.json()
+  return uploadWithFormData<PalaceAttachmentUploadResponse>(`/palaces/${palaceId}/upload`, form, {
+    resourceKey: `palace:${palaceId}:attachment:${file.name}`,
+    description: `上传附件：${file.name}`,
+  })
 }
 
 export function deleteAttachmentApi(id: number) {

@@ -130,7 +130,7 @@ export async function readSseResultResponse<T, TStatus = unknown, TDelta = unkno
     if (done) break
   }
 
-  if (finalResult) return attachRequestId(finalResult, requestId)
+  if (finalResult !== null) return attachRequestId(finalResult, requestId)
   if (finalError) {
     if (options.makeErrorResult) {
       return attachRequestId(options.makeErrorResult(finalError), requestId)
