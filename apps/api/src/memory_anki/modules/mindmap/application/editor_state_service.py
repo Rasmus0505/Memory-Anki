@@ -30,6 +30,7 @@ from memory_anki.modules.mindmap.application.editor_state_tree_sync import (
     sync_palace_tree_from_doc,
     sync_subject_tree_from_doc,
 )
+from memory_anki.modules.palaces.application.mindmap_import.normalization import html_to_plain_text
 
 SAFE_EXPLICIT_OVERWRITE_SOURCES = {"palace_edit", "version_restore", "backup_restore", "import_apply"}
 DANGEROUS_AUTOSAVE_SOURCES = {"palace_edit_autosave", "host_bootstrap_sync"}
@@ -38,6 +39,11 @@ DANGEROUS_EDITOR_SOURCES = {"review_edit", "practice_edit", "unknown"}
 
 class EditorStateConflictError(ValueError):
     pass
+
+
+def _plain_text(value: Any, fallback: str = "") -> str:
+    text = html_to_plain_text(value)
+    return text or fallback
 
 
 def get_subject_editor_state(subject: Subject) -> dict[str, Any]:
