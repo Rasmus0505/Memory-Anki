@@ -48,21 +48,21 @@
       "relative_path": "ai_call_logs",
       "kind": "directory",
       "required": true,
-      "backup": true
+      "backup": false
     },
     {
       "key": "backups_full",
       "relative_path": "data/backups/full",
       "kind": "directory",
       "required": true,
-      "backup": true
+      "backup": false
     },
     {
       "key": "backups_rescue",
       "relative_path": "data/backups/rescue",
       "kind": "directory",
       "required": true,
-      "backup": true
+      "backup": false
     },
     {
       "key": "runtime_active_instances",

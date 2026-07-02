@@ -3,6 +3,7 @@ import tempfile
 import unittest
 from dataclasses import replace
 from pathlib import Path
+from unittest.mock import patch
 
 from memory_anki.core.file_sync import pull_on_start, push_on_stop
 from memory_anki.core.local_config import LocalRuntimeConfig
@@ -86,6 +87,23 @@ class FileSyncTests(unittest.TestCase):
         self.assertEqual(conflict.status, "conflict")
         self.assertGreaterEqual(len(conflict_files), 1)
         self.assertEqual(remote_state["revision"], 2)
+
+    def test_pull_skips_hash_when_revisions_match(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            device_a = make_config(root, "device-a", "LaptopA")
+            device_b = make_config(root, "device-b", "LaptopB")
+
+            write_runtime_payload(device_a.local_app_home, "alpha")
+            self.assertTrue(push_on_stop(device_a).ok)
+            self.assertTrue(pull_on_start(device_b).ok)
+
+            with patch("memory_anki.core.file_sync.compute_snapshot_hash") as compute_hash:
+                result = pull_on_start(device_b)
+
+        self.assertTrue(result.ok, result.message)
+        self.assertEqual(result.status, "up-to-date")
+        compute_hash.assert_not_called()
 
     def test_sync_snapshot_names_sanitize_device_names(self):
         with tempfile.TemporaryDirectory() as temp_dir:

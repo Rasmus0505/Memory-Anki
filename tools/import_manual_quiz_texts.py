@@ -16,9 +16,11 @@ API_SRC = REPO_ROOT / "apps" / "api" / "src"
 if str(API_SRC) not in sys.path:
     sys.path.insert(0, str(API_SRC))
 
-DEFAULT_RUNTIME_HOME = Path(os.environ.get("LOCALAPPDATA", "")) / "MemoryAnki"
+from memory_anki.core.runtime_paths import APP_HOME_ENV, default_app_home  # noqa: E402
+
+DEFAULT_RUNTIME_HOME = default_app_home()
 if (DEFAULT_RUNTIME_HOME / "data" / "memory_palace.db").exists():
-    os.environ["MEMORY_ANKI_HOME"] = str(DEFAULT_RUNTIME_HOME)
+    os.environ[APP_HOME_ENV] = str(DEFAULT_RUNTIME_HOME)
 
 from memory_anki.core.config import DB_PATH  # noqa: E402
 from memory_anki.infrastructure.db.models import Chapter, Palace, get_session  # noqa: E402

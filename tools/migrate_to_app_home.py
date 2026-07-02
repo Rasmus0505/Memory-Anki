@@ -14,39 +14,39 @@
 
 from __future__ import annotations
 
-import json
 import os
 import shutil
 import sqlite3
 import sys
 from pathlib import Path
 
-# 这些是 config.py 里 APP_HOME 下的数据目录/文件（剔除 supervisor 专用产物）。
-# 参考 config.py 的 DATA_DIR / ATTACHMENTS_DIR / ENGLISH_DIR 等 + ensure_runtime_dirs()。
-APP_HOME_DATA_ENTRIES = [
-    "data",            # memory_palace.db + attachments + backups
-    "english",         # 英语模块媒体/任务
-    "english_reading", # 英语阅读模块
-    "import_jobs",     # 导入任务
-    "voice_coach",     # 语音教练缓存
-    "ai_call_logs",    # AI 调用日志
-    "migration-state.json",  # 迁移状态（config.py MIGRATION_STATE_PATH）
-]
+REPO_ROOT = Path(__file__).resolve().parents[1]
+API_SRC = REPO_ROOT / "apps" / "api" / "src"
+if str(API_SRC) not in sys.path:
+    sys.path.insert(0, str(API_SRC))
 
-# runtime-data 下这些是 supervisor 专用，迁移时跳过：
-#   runtime/, snapshot-inspect/, switcher-logs/, logs/,
-#   supervisor-state.json, switcher-state.json, startup-state.json
+from memory_anki.core.runtime_paths import APP_HOME_ENV, default_app_home  # noqa: E402
+from memory_anki.core.storage_layout import (  # noqa: E402
+    ManagedStorageItem,
+    get_managed_storage_items,
+)
+
+SKIPPED_MIGRATION_STORAGE_KEYS = {
+    "runtime_active_instances",
+    "sync_state",
+}
 
 
-def resolve_standard_app_home() -> Path:
-    local_app_data = os.environ.get("LOCALAPPDATA")
-    if local_app_data:
-        return Path(local_app_data) / "MemoryAnki"
-    return Path.home() / "AppData" / "Local" / "MemoryAnki"
+def iter_migration_storage_items() -> list[ManagedStorageItem]:
+    return [
+        item
+        for item in get_managed_storage_items()
+        if item.key not in SKIPPED_MIGRATION_STORAGE_KEYS
+    ]
 
 
 def resolve_legacy_shared_home_config_path() -> Path:
-    return resolve_standard_app_home() / "shared-home.txt"
+    return default_app_home() / "shared-home.txt"
 
 
 def count_db_tables(db_path: Path) -> tuple[int, dict[str, int]]:
@@ -100,13 +100,12 @@ def backup_existing_db(dst_data: Path) -> Path | None:
 
 def main() -> int:
     # 强制使用标准 APP_HOME，忽略环境变量重定向
-    if os.environ.get("MEMORY_ANKI_HOME"):
-        print("[i] 检测到 MEMORY_ANKI_HOME 环境变量重定向，本脚本将强制使用标准 APP_HOME。")
+    if APP_HOME_ENV in os.environ:
+        print(f"[i] 检测到 {APP_HOME_ENV} 环境变量重定向，本脚本将强制使用标准 APP_HOME。")
 
-    standard_home = resolve_standard_app_home()
+    standard_home = default_app_home()
     legacy_shared_home_file = resolve_legacy_shared_home_config_path()
-    repo_root = Path(__file__).resolve().parents[1]
-    source_home = repo_root / "runtime-data"
+    source_home = REPO_ROOT / "runtime-data"
 
     print(f"源 APP_HOME (仓库内)     : {source_home}")
     print(f"目标标准 APP_HOME         : {standard_home}")
@@ -136,13 +135,14 @@ def main() -> int:
 
         # 复制所有数据目录/文件
         print("[i] 复制数据到标准 APP_HOME ...")
-        for entry_name in APP_HOME_DATA_ENTRIES:
-            src_entry = source_home / entry_name
+        for item in iter_migration_storage_items():
+            entry_name = item.relative_path
+            src_entry = source_home / item.relative_path
             if not src_entry.exists():
                 continue
-            dst_entry = standard_home / entry_name
+            dst_entry = item.absolute_path(standard_home)
             print(f"    -> {entry_name} ...", end=" ", flush=True)
-            if src_entry.is_dir():
+            if item.kind == "directory":
                 safe_copy_tree(src_entry, dst_entry)
             else:
                 dst_entry.parent.mkdir(parents=True, exist_ok=True)

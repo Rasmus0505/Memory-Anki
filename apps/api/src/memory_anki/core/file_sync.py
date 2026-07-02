@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import os
 import shutil
-import subprocess
 import tempfile
 import time
 import zipfile
@@ -16,6 +16,7 @@ from typing import Any
 
 from memory_anki.core.files import safe_filename_part
 from memory_anki.core.local_config import LocalRuntimeConfig
+from memory_anki.core.runtime import detect_git_commit, load_runtime_contract
 from memory_anki.core.storage_layout import ManagedStorageItem, get_backup_storage_items
 from memory_anki.core.time import iso_utc_now
 
@@ -24,6 +25,10 @@ LOCAL_SYNC_STATE_NAME = "sync-state.json"
 SYNC_MANIFEST_NAME = "sync-manifest.json"
 LOCK_STALE_SECONDS = 15 * 60
 SYNC_STATE_VERSION = 1
+SNAPSHOT_PROGRESS_INTERVAL_SECONDS = 5
+SNAPSHOT_CHUNK_SIZE = 1024 * 1024
+
+logger = logging.getLogger(__name__)
 
 
 class SyncError(RuntimeError):
@@ -97,6 +102,46 @@ def _iter_files_for_item(app_home: Path, item: ManagedStorageItem) -> Iterable[t
         yield path.relative_to(app_home).as_posix(), path
 
 
+@dataclass(slots=True)
+class _SnapshotProgress:
+    action: str
+    last_report: float = 0.0
+    file_count: int = 0
+    byte_count: int = 0
+
+    def __post_init__(self) -> None:
+        self.last_report = time.monotonic()
+
+    def add_file(self, byte_count: int = 0) -> None:
+        self.file_count += 1
+        self.byte_count += byte_count
+
+    def add_bytes(self, byte_count: int) -> None:
+        self.byte_count += byte_count
+
+    def should_report(self) -> bool:
+        if time.monotonic() - self.last_report < SNAPSHOT_PROGRESS_INTERVAL_SECONDS:
+            return False
+        self.last_report = time.monotonic()
+        return True
+
+    def report(self, extra: str = "") -> None:
+        logger.info(
+            "%s: %s files, %.1f MB%s",
+            self.action,
+            self.file_count,
+            self.byte_count / (1024 * 1024),
+            extra,
+        )
+
+    def maybe_report(self, extra: str = "") -> None:
+        if self.should_report():
+            self.report(extra)
+
+    def report_complete(self, message: str) -> None:
+        logger.info(message, self.file_count, self.byte_count / (1024 * 1024))
+
+
 def has_local_payload(app_home: Path) -> bool:
     for item in get_backup_storage_items():
         absolute = item.absolute_path(app_home)
@@ -108,31 +153,33 @@ def has_local_payload(app_home: Path) -> bool:
 
 
 def compute_snapshot_hash(app_home: Path) -> str:
+    logger.info("scanning local payload and computing snapshot hash: %s", app_home)
     digest = hashlib.sha256()
+    progress = _SnapshotProgress("snapshot hash progress")
     for item in get_backup_storage_items():
         absolute = item.absolute_path(app_home)
         digest.update(f"ITEM\0{item.key}\0{item.relative_path}\0{item.kind}\0".encode())
+        saw_file = False
+        for relative_path, path in _iter_files_for_item(app_home, item):
+            saw_file = True
+            digest.update(f"FILE\0{relative_path}\0".encode())
+            with path.open("rb") as handle:
+                for chunk in iter(lambda: handle.read(SNAPSHOT_CHUNK_SIZE), b""):
+                    digest.update(chunk)
+                    progress.add_bytes(len(chunk))
+            progress.add_file()
+            progress.maybe_report()
+        if saw_file:
+            continue
         if item.kind == "directory" and absolute.exists():
-            files = list(_iter_files_for_item(app_home, item))
-            if not files:
-                digest.update(f"EMPTY_DIR\0{item.relative_path}\0".encode())
-            for relative_path, path in files:
-                digest.update(f"FILE\0{relative_path}\0".encode())
-                with path.open("rb") as handle:
-                    for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-                        digest.update(chunk)
+            digest.update(f"EMPTY_DIR\0{item.relative_path}\0".encode())
         elif item.kind == "file":
-            files = list(_iter_files_for_item(app_home, item))
-            if not files:
-                digest.update(f"MISSING_FILE\0{item.relative_path}\0".encode())
-            for relative_path, path in files:
-                digest.update(f"FILE\0{relative_path}\0".encode())
-                with path.open("rb") as handle:
-                    for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-                        digest.update(chunk)
+            digest.update(f"MISSING_FILE\0{item.relative_path}\0".encode())
         else:
             digest.update(f"MISSING_DIR\0{item.relative_path}\0".encode())
-    return digest.hexdigest()
+    snapshot_hash = digest.hexdigest()
+    progress.report_complete("snapshot hash completed: %s files, %.1f MB")
+    return snapshot_hash
 
 
 def _read_runtime_generation(app_home: Path) -> int:
@@ -144,12 +191,11 @@ def _read_runtime_generation(app_home: Path) -> int:
 
 
 def _load_runtime_contract() -> dict[str, int]:
-    contract_path = Path(__file__).resolve().parents[3] / "runtime-contract.json"
-    payload = _read_json(contract_path)
+    contract = load_runtime_contract()
     return {
-        "runtime_generation": int(payload.get("runtime_generation") or 1),
-        "min_supported_generation": int(payload.get("min_supported_generation") or 1),
-        "max_supported_generation": int(payload.get("max_supported_generation") or 1),
+        "runtime_generation": contract.runtime_generation,
+        "min_supported_generation": contract.min_supported_generation,
+        "max_supported_generation": contract.max_supported_generation,
     }
 
 
@@ -166,19 +212,6 @@ def _assert_remote_generation_compatible(remote_state: dict[str, Any]) -> None:
             "远端同步数据版本过旧，当前版本要求先升级。"
             f" remote={remote_generation}, min={contract['min_supported_generation']}"
         )
-
-
-def _detect_git_commit() -> str | None:
-    repo_root = Path(__file__).resolve().parents[5]
-    try:
-        return subprocess.check_output(
-            ["git", "rev-parse", "HEAD"],
-            cwd=str(repo_root),
-            stderr=subprocess.DEVNULL,
-            text=True,
-        ).strip() or None
-    except Exception:
-        return None
 
 
 def _snapshot_name(revision: int, config: LocalRuntimeConfig) -> str:
@@ -198,8 +231,10 @@ def create_snapshot_zip(
 ) -> dict[str, Any]:
     app_home.mkdir(parents=True, exist_ok=True)
     destination.parent.mkdir(parents=True, exist_ok=True)
+    logger.info("writing sync snapshot: %s", destination)
+    backup_items = get_backup_storage_items()
     resolved_hash = snapshot_hash or compute_snapshot_hash(app_home)
-    commit = _detect_git_commit()
+    commit = detect_git_commit()
     manifest = {
         "version": SYNC_STATE_VERSION,
         "reason": reason,
@@ -211,28 +246,45 @@ def create_snapshot_zip(
         "runtime_generation": _read_runtime_generation(app_home),
         "git_commit": commit,
         "short_commit": commit[:8] if commit else None,
-        "items": [item.key for item in get_backup_storage_items()],
+        "items": [item.key for item in backup_items],
     }
-    with zipfile.ZipFile(destination, "w", compression=zipfile.ZIP_DEFLATED) as archive:
-        archive.writestr(SYNC_MANIFEST_NAME, json.dumps(manifest, ensure_ascii=False, indent=2))
-        added_dirs: set[str] = set()
-        for item in get_backup_storage_items():
-            absolute = item.absolute_path(app_home)
-            if item.kind == "directory" and absolute.exists():
-                dir_name = Path(item.relative_path).as_posix().rstrip("/") + "/"
-                if dir_name not in added_dirs:
-                    archive.writestr(dir_name, "")
-                    added_dirs.add(dir_name)
-            for relative_path, path in _iter_files_for_item(app_home, item):
-                archive.write(path, relative_path)
+    progress = _SnapshotProgress("snapshot write progress")
+    partial_destination = destination.parent / f".{destination.name}.{os.getpid()}.tmp"
+    try:
+        with zipfile.ZipFile(partial_destination, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+            archive.writestr(SYNC_MANIFEST_NAME, json.dumps(manifest, ensure_ascii=False, indent=2))
+            added_dirs: set[str] = set()
+            for item in backup_items:
+                absolute = item.absolute_path(app_home)
+                if item.kind == "directory" and absolute.exists():
+                    dir_name = Path(item.relative_path).as_posix().rstrip("/") + "/"
+                    if dir_name not in added_dirs:
+                        archive.writestr(dir_name, "")
+                        added_dirs.add(dir_name)
+                for relative_path, path in _iter_files_for_item(app_home, item):
+                    archive.write(path, relative_path)
+                    try:
+                        source_size = path.stat().st_size
+                    except OSError:
+                        source_size = 0
+                    progress.add_file(source_size)
+                    if progress.should_report():
+                        zip_mb = partial_destination.stat().st_size / (1024 * 1024)
+                        progress.report(extra=f", zip {zip_mb:.1f} MB")
+        os.replace(partial_destination, destination)
+    except Exception:
+        partial_destination.unlink(missing_ok=True)
+        raise
+    logger.info("sync snapshot written: %s", destination)
     return manifest
 
 
 def _extract_snapshot(zip_path: Path, temp_root: Path) -> dict[str, Any]:
+    resolved_temp_root = temp_root.resolve()
     with zipfile.ZipFile(zip_path, "r") as archive:
         for member in archive.infolist():
             target = (temp_root / member.filename).resolve()
-            if not str(target).startswith(str(temp_root.resolve())):
+            if not target.is_relative_to(resolved_temp_root):
                 raise SyncError(f"同步快照包含非法路径: {member.filename}")
         archive.extractall(temp_root)
     manifest = _read_json(temp_root / SYNC_MANIFEST_NAME)
@@ -271,10 +323,12 @@ def _restore_extracted_snapshot(temp_root: Path, app_home: Path) -> None:
 
 
 def restore_snapshot_zip(zip_path: Path, app_home: Path) -> dict[str, Any]:
+    logger.info("restoring remote snapshot: %s", zip_path)
     with tempfile.TemporaryDirectory(prefix="memory-anki-sync-restore-") as temp_dir:
         temp_root = Path(temp_dir)
         manifest = _extract_snapshot(zip_path, temp_root)
         _restore_extracted_snapshot(temp_root, app_home)
+        logger.info("remote snapshot restored")
         return manifest
 
 
@@ -389,9 +443,13 @@ def pull_on_start(config: LocalRuntimeConfig) -> SyncResult:
                 return SyncResult(True, "no-remote", "远端同步目录尚未初始化，本次启动跳过拉取。")
             _assert_remote_generation_compatible(remote_state)
             local_state = _read_json(_local_state_path(app_home))
-            current_hash = compute_snapshot_hash(app_home)
             remote_revision = int(remote_state.get("revision") or 0)
             local_revision = int(local_state.get("remote_revision") or 0)
+            logger.info(
+                "sync revision check: local revision %s, remote revision %s",
+                local_revision,
+                remote_revision,
+            )
 
             if remote_revision < local_revision:
                 return SyncResult(
@@ -400,6 +458,9 @@ def pull_on_start(config: LocalRuntimeConfig) -> SyncResult:
                     "云盘中的同步版本比本机记录更旧，请等待云盘同步完成后再启动。",
                 )
             if remote_revision == local_revision:
+                if local_state:
+                    return SyncResult(True, "up-to-date", "本机数据已是最新，无需拉取。")
+                current_hash = compute_snapshot_hash(app_home)
                 if not local_state:
                     _write_local_state(
                         app_home,
@@ -410,8 +471,10 @@ def pull_on_start(config: LocalRuntimeConfig) -> SyncResult:
                     )
                 return SyncResult(True, "up-to-date", "本机数据已是最新，无需拉取。")
 
+            current_hash = compute_snapshot_hash(app_home)
             local_changed = _local_changed(local_state, current_hash, app_home)
             if local_changed:
+                logger.info("local and remote changes detected; writing conflict snapshot")
                 conflict_path = _write_conflict_snapshot(
                     app_home,
                     paths,
