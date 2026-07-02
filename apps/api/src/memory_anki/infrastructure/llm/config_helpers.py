@@ -1,9 +1,3 @@
-"""Shared helpers for reading AI-related runtime config rows.
-
-Several modules previously each defined their own private ``_has_non_empty_config``
-copy. They were byte-for-byte identical, so the single source of truth lives here.
-"""
-
 from __future__ import annotations
 
 from sqlalchemy.orm import Session
@@ -12,6 +6,13 @@ from memory_anki.infrastructure.db.models import Config
 
 
 def has_non_empty_config(session: Session, key: str) -> bool:
-    """Return ``True`` when a non-blank ``config`` row exists for ``key``."""
     row = session.query(Config).filter_by(key=key).first()
     return bool(row and str(row.value or "").strip())
+
+
+def has_non_empty_configs(session: Session, keys: set[str]) -> dict[str, bool]:
+    if not keys:
+        return {}
+    rows = session.query(Config.key, Config.value).filter(Config.key.in_(tuple(keys))).all()
+    values = {key: bool(str(value or "").strip()) for key, value in rows}
+    return {key: values.get(key, False) for key in keys}

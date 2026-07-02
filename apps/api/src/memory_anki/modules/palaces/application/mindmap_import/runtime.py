@@ -26,13 +26,13 @@ from memory_anki.infrastructure.llm.external_ai_call_logs import (
 from memory_anki.modules.settings.application import ai_prompts
 
 from .contracts import MindMapImportError, PdfImportOptions
-from .normalization import (
+from .model_io import (
     MAX_IMAGE_BYTES,
     build_image_content_part,
     normalize_extracted_text,
-    normalize_source_tree,
     parse_source_tree_json,
 )
+from .normalization import normalize_source_tree
 from .prompts import (
     PROMPT,
 )

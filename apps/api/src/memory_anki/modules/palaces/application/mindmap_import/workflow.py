@@ -8,7 +8,8 @@ from .contracts import (
     MindMapImportError,
     PdfImportOptions,
 )
-from .normalization import build_editor_doc, trim_pdf_extracted_text
+from .model_io import trim_pdf_extracted_text
+from .normalization import build_editor_doc
 
 
 def resolve_pdf_structure_page(page_numbers: list[int], structure_page: int | None) -> int:

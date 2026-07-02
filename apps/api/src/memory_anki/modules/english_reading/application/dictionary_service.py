@@ -21,9 +21,9 @@ from sqlalchemy.orm import Session
 
 from memory_anki.core.time import utc_now_naive
 from memory_anki.infrastructure.db.models import (
-    Config,
     EnglishReadingDictionaryCache,
 )
+from memory_anki.infrastructure.llm.config_helpers import has_non_empty_configs
 from memory_anki.infrastructure.llm.external_ai_call_logs import (
     begin_external_ai_call_log,
     complete_external_ai_call_log,
@@ -112,11 +112,6 @@ def get_dictionary_entry(session: Session, *, word: str) -> dict[str, Any]:
     raise EnglishReadingError(f"未找到单词“{safe_word}”的词典结果。")
 
 
-def _has_non_empty_config(session: Session, key: str) -> bool:
-    row = session.query(Config).filter_by(key=key).first()
-    return bool(row and str(row.value or "").strip())
-
-
 def _resolve_legacy_dashscope_runtime(
     session: Session,
     *,
@@ -127,19 +122,21 @@ def _resolve_legacy_dashscope_runtime(
     runtime = resolve_scenario_runtime(session, scenario_key, ai_options=ai_options)
     if not is_dashscope_compatible_provider(runtime.provider):
         return runtime
+    configured = has_non_empty_configs(
+        session,
+        {runtime.scene.config_key, "dashscope_api_key", "dashscope_base_url"},
+    )
     model = runtime.model
-    if not (ai_options and ai_options.model) and not _svc._has_non_empty_config(
-        session, runtime.scene.config_key
-    ):
+    if not (ai_options and ai_options.model) and not configured[runtime.scene.config_key]:
         model = str(legacy_default_model or runtime.model or "").strip()
     api_key = (
         runtime.api_key
-        if _svc._has_non_empty_config(session, "dashscope_api_key")
+        if configured["dashscope_api_key"]
         else str(_svc.DASHSCOPE_API_KEY or "").strip()
     )
     base_url = (
         runtime.base_url
-        if _svc._has_non_empty_config(session, "dashscope_base_url")
+        if configured["dashscope_base_url"]
         else str(_svc.DASHSCOPE_BASE_URL or runtime.base_url or "").strip()
     )
     return replace(

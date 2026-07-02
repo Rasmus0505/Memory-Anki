@@ -126,20 +126,17 @@ def render_subject_document_page(
     page_number: int,
     kind: str = "thumbnail",
 ) -> bytes:
-    path = subject_document_path(document)
-    if not path.exists():
-        raise FileNotFoundError("资料文件不存在。")
-    if page_number < 1 or page_number > max(document.page_count, 0):
-        raise ValueError("页码超出范围。")
+    return render_selected_pdf_pages(document, page_numbers=[page_number], kind=kind)[0][1]
 
+
+def _render_pdf_page(pdf_document: fitz.Document, *, page_number: int, kind: str) -> bytes:
     target_width = PREVIEW_WIDTH if kind == "preview" else THUMBNAIL_WIDTH
-    with fitz.open(path) as pdf_document:
-        page = pdf_document.load_page(page_number - 1)
-        width = max(page.rect.width, 1)
-        scale = target_width / width
-        matrix = fitz.Matrix(scale, scale)
-        pix = page.get_pixmap(matrix=matrix, alpha=False)
-        return pix.tobytes("png")
+    page = pdf_document.load_page(page_number - 1)
+    width = max(page.rect.width, 1)
+    scale = target_width / width
+    matrix = fitz.Matrix(scale, scale)
+    pix = page.get_pixmap(matrix=matrix, alpha=False)
+    return pix.tobytes("png")
 
 
 def render_selected_pdf_pages(
@@ -148,17 +145,20 @@ def render_selected_pdf_pages(
     page_numbers: list[int],
     kind: str = "preview",
 ) -> list[tuple[int, bytes, str]]:
+    path = subject_document_path(document)
+    if not path.exists():
+        raise FileNotFoundError("资料文件不存在。")
     unique_pages = sorted(set(page_numbers))
     if not unique_pages:
         raise ValueError("请至少选择一页 PDF。")
-    return [
-        (
-            page_number,
-            render_subject_document_page(document, page_number=page_number, kind=kind),
-            f"page-{page_number}.png",
-        )
-        for page_number in unique_pages
-    ]
+    page_count = max(document.page_count, 0)
+    if any(page_number < 1 or page_number > page_count for page_number in unique_pages):
+        raise ValueError("页码超出范围。")
+    with fitz.open(path) as pdf_document:
+        return [
+            (page_number, _render_pdf_page(pdf_document, page_number=page_number, kind=kind), f"page-{page_number}.png")
+            for page_number in unique_pages
+        ]
 
 
 def _ensure_pdf_upload(*, original_name: str, mime_type: str, content: bytes) -> None:

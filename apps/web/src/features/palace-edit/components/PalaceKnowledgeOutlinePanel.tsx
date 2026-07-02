@@ -2,6 +2,7 @@
 import type { ChapterOption, PalaceMeta } from '@/features/palace-edit/hooks/usePalaceEditPage'
 import type { MindMapEditorState } from '@/shared/api/contracts'
 import { getSubjectEditorApi, saveSubjectEditorApi } from '@/entities/knowledge/api'
+import { flattenChapterOptions } from '@/features/palace-edit/model/chapter-options'
 import {
   MindMapFrame,
   MindMapPageToolbar,
@@ -22,10 +23,6 @@ interface SubjectMeta {
   id: number
   name: string
   color: string
-}
-
-function flattenChapterOptions(options: ChapterOption[]): ChapterOption[] {
-  return options.flatMap((option) => [option, ...flattenChapterOptions(option.children)])
 }
 
 export function PalaceKnowledgeOutlinePanel({

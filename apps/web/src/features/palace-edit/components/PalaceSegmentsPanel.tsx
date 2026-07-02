@@ -2,6 +2,10 @@ import { useMemo, useState } from 'react'
 import { CalendarClock, Edit3, GitMerge, Plus, ScanSearch, Trash2 } from 'lucide-react'
 import type { PalaceSegmentSummary } from '@/shared/api/contracts'
 import { formatDuration } from '@/entities/session/model'
+import {
+  formatSegmentDateTime,
+  getSegmentDisplayName,
+} from '@/features/palace-segments/model/segment-display'
 import { Button } from '@/shared/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card'
 import {
@@ -41,17 +45,6 @@ interface PalaceSegmentsPanelProps {
   onDelete: (segmentId: number) => void | Promise<void>
   onAdjustRange: (segment: PalaceSegmentSummary) => void
   onMerge: (sourceSegmentId: number, targetSegmentId: number) => void | Promise<void>
-}
-
-function formatDateTime(value: string | null) {
-  if (!value) return '未设置'
-  return value.replace('T', ' ').slice(0, 16)
-}
-
-function getSegmentDisplayName(segment: PalaceSegmentSummary, index: number) {
-  if (segment.is_virtual_default) return '第 1 部分'
-  if (/^第\s*1\s*部分$/.test(segment.name)) return `第 ${index + 1} 部分`
-  return segment.name
 }
 
 function SegmentMetric({
@@ -148,7 +141,7 @@ export function PalaceSegmentsPanel({
                         </span>
                         <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
                           <CalendarClock className="h-3.5 w-3.5" />
-                          {formatDateTime(segment.created_at)}
+                          {formatSegmentDateTime(segment.created_at)}
                         </span>
                       </div>
 
@@ -168,7 +161,7 @@ export function PalaceSegmentsPanel({
                         {segment.next_review_at ? (
                           <SegmentMetric
                             label="下次"
-                            value={formatDateTime(segment.next_review_at)}
+                            value={formatSegmentDateTime(segment.next_review_at)}
                           />
                         ) : null}
                         {segment.is_empty ? (

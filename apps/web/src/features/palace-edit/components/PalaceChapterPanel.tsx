@@ -4,6 +4,7 @@ import type { ChapterOption } from '@/features/palace-edit/hooks/usePalaceEditPa
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card'
+import { flattenChapterOptions } from '@/features/palace-edit/model/chapter-options'
 import {
   Dialog,
   DialogClose,
@@ -29,10 +30,6 @@ interface SubjectChapterGroup {
   subjectName: string
   options: ChapterOption[]
   explicitCount: number
-}
-
-function flattenChapterOptions(options: ChapterOption[]): ChapterOption[] {
-  return options.flatMap((option) => [option, ...flattenChapterOptions(option.children)])
 }
 
 function countExplicitDescendants(option: ChapterOption, explicitIds: Set<number>): number {
