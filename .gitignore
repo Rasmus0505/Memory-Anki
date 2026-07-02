@@ -74,5 +74,5 @@ _DEBUG_FALLBACK.json
 /.playwright-mcp/
 
 # ===== Misc =====
-# NOTE: do not blanket-ignore *.png 鈥?it would swallow docs/assets; ignore by path instead.
+# NOTE: do not blanket-ignore *.png — it would swallow docs/assets; ignore by path instead.
 **/nul
