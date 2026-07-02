@@ -5,6 +5,7 @@ import {
   Clock3,
   ExternalLink,
   LoaderCircle,
+  Play,
   RotateCcw,
   Shuffle,
   SlidersHorizontal,
@@ -36,7 +37,24 @@ import {
   type FreestyleActionFrequency,
   type FreestyleConfig,
   type FreestyleOrderMode,
+  type FreestyleProgressSnapshot,
 } from '@/features/freestyle/model/freestyle'
+import {
+  DEFAULT_TODAY_TRAINING_CONFIG,
+  EMPTY_TODAY_TRAINING_SOURCES,
+  TODAY_TRAINING_ROUND_SIZE,
+  buildTodayTrainingQueue,
+  buildTodayTrainingSummary,
+  nextTodayTrainingSeed,
+  readTodayTrainingConfig,
+  readTodayTrainingProgress,
+  saveTodayTrainingConfig,
+  saveTodayTrainingProgress,
+  todayFeedContentTypes,
+  type FreestyleMode,
+  type TodayTrainingConfig,
+  type TodayTrainingSummary,
+} from '@/features/freestyle/model/today-training'
 import { PalaceQuizMemoryLookupDialog } from '@/features/palace-quiz/components/PalaceQuizMemoryLookupDialog'
 import { emitReviewConfetti } from '@/shared/components/celebration'
 import {
@@ -118,6 +136,11 @@ const ACTION_FREQUENCY_LABELS: Record<FreestyleActionFrequency, string> = {
   low: '低',
   medium: '中',
   high: '高',
+}
+
+const MODE_LABELS: Record<FreestyleMode, string> = {
+  today: '今日训练',
+  free: '自由随心',
 }
 
 const QUESTION_TYPE_OPTIONS: Array<{ value: FreestyleQuestionTypeFilter; label: string }> = [
@@ -425,6 +448,70 @@ function FreestyleSettingsDialog({
   )
 }
 
+function TodayTrainingSettingsDialog({
+  open,
+  config,
+  onOpenChange,
+  onConfigChange,
+}: {
+  open: boolean
+  config: TodayTrainingConfig
+  onOpenChange: (open: boolean) => void
+  onConfigChange: (updater: (current: TodayTrainingConfig) => TodayTrainingConfig) => void
+}) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-lg rounded-lg border-border/70 bg-background p-0">
+        <DialogHeader>
+          <div className="min-w-0">
+            <DialogTitle>今日训练设置</DialogTitle>
+            <DialogDescription className="mt-1">
+              每轮固定 {TODAY_TRAINING_ROUND_SIZE} 个任务，优先处理到期复习。
+            </DialogDescription>
+          </div>
+          <DialogClose onClick={() => onOpenChange(false)} />
+        </DialogHeader>
+
+        <div className="space-y-3 px-5 py-5">
+          <label className="flex items-center justify-between rounded-lg border border-border/70 bg-card/70 px-3 py-3 text-sm">
+            <span>混入英语听力</span>
+            <Switch
+              checked={config.includeEnglish}
+              onCheckedChange={(checked) =>
+                onConfigChange((current) => ({
+                  ...current,
+                  includeEnglish: Boolean(checked),
+                }))
+              }
+            />
+          </label>
+          <label className="flex items-center justify-between rounded-lg border border-border/70 bg-card/70 px-3 py-3 text-sm">
+            <span>混入英语阅读</span>
+            <Switch
+              checked={config.includeEnglishReading}
+              onCheckedChange={(checked) =>
+                onConfigChange((current) => ({
+                  ...current,
+                  includeEnglishReading: Boolean(checked),
+                }))
+              }
+            />
+          </label>
+        </div>
+
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={() => onConfigChange(() => DEFAULT_TODAY_TRAINING_CONFIG)}>
+            恢复默认
+          </Button>
+          <Button type="button" onClick={() => onOpenChange(false)}>
+            完成
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
 function FreestyleActionCardView({ card }: { card: FreestyleActionCard }) {
   return (
     <div className="mx-auto flex min-h-[min(720px,calc(100vh-150px))] w-full max-w-3xl flex-col justify-center px-4 py-16">
@@ -452,6 +539,70 @@ function FreestyleActionCardView({ card }: { card: FreestyleActionCard }) {
             继续
           </Link>
         </Button>
+      </div>
+    </div>
+  )
+}
+
+function FreestyleRoundSummaryCard({
+  summary,
+  onNextRound,
+  onSwitchToFree,
+}: {
+  summary: TodayTrainingSummary
+  onNextRound: () => void
+  onSwitchToFree: () => void
+}) {
+  return (
+    <div className="mx-auto flex min-h-[min(720px,calc(100vh-150px))] w-full max-w-3xl flex-col justify-center px-4 py-16">
+      <div className="rounded-lg border border-white/12 bg-zinc-900/88 p-5 text-zinc-50 shadow-2xl backdrop-blur sm:p-7">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <div className="text-xs font-semibold uppercase tracking-[0.14em] text-emerald-300">
+              今日训练
+            </div>
+            <h2 className="mt-3 text-2xl font-semibold leading-tight sm:text-3xl">
+              本轮完成
+            </h2>
+          </div>
+          <Badge className="border-emerald-300/30 bg-emerald-300/10 text-emerald-100">
+            {formatTimer(summary.durationSeconds)}
+          </Badge>
+        </div>
+
+        <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-3">
+            <div className="text-2xl font-semibold">{summary.totalCount}</div>
+            <div className="mt-1 text-xs text-zinc-400">本轮项目</div>
+          </div>
+          <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-3">
+            <div className="text-2xl font-semibold">{summary.answeredCount}</div>
+            <div className="mt-1 text-xs text-zinc-400">已答题</div>
+          </div>
+          <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-3">
+            <div className="text-2xl font-semibold text-emerald-300">{summary.correctCount}</div>
+            <div className="mt-1 text-xs text-zinc-400">答对</div>
+          </div>
+          <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-3">
+            <div className="text-2xl font-semibold text-rose-300">{summary.incorrectCount}</div>
+            <div className="mt-1 text-xs text-zinc-400">答错</div>
+          </div>
+        </div>
+
+        <div className="mt-5 rounded-lg border border-white/10 bg-white/5 px-3 py-3 text-sm text-zinc-300">
+          <div>到期继续卡 {summary.dueActionCount} 个</div>
+          <div className="mt-1 text-zinc-400">{summary.suggestion}</div>
+        </div>
+
+        <div className="mt-6 flex flex-wrap gap-2">
+          <Button type="button" onClick={onNextRound}>
+            <Play className="size-4" />
+            再来一轮
+          </Button>
+          <Button type="button" variant="outline" onClick={onSwitchToFree}>
+            切到自由随心
+          </Button>
+        </div>
       </div>
     </div>
   )
@@ -518,14 +669,18 @@ function FreestyleQuizCardView({
 
 export default function FreestylePage() {
   const { isActive, becameActiveAt } = useRouteResidency()
+  const [mode, setMode] = useState<FreestyleMode>('today')
   const [config, setConfig] = useState<FreestyleConfig>(() => readFreestyleConfig())
+  const [todayConfig, setTodayConfig] = useState<TodayTrainingConfig>(() => readTodayTrainingConfig())
   const [feedCards, setFeedCards] = useState<FreestyleCard[]>([])
+  const [todaySources, setTodaySources] = useState(EMPTY_TODAY_TRAINING_SOURCES)
   const [feedLoading, setFeedLoading] = useState(true)
   const [feedError, setFeedError] = useState('')
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [todaySettingsOpen, setTodaySettingsOpen] = useState(false)
   const [memoryLookupOpen, setMemoryLookupOpen] = useState(false)
   const [palaceOptionsData, setPalaceOptionsData] = useState<PalaceGroupedListResponse | null>(null)
-  const [progress, setProgress] = useState(() => readFreestyleProgress())
+  const [progress, setProgress] = useState<FreestyleProgressSnapshot>(() => readTodayTrainingProgress())
   const scrollRef = useRef<HTMLDivElement | null>(null)
   const cardRefs = useRef<Record<string, HTMLElement | null>>({})
   const previousResolvedQuestionIdsRef = useRef<Set<number>>(
@@ -554,14 +709,26 @@ export default function FreestylePage() {
   })
 
   const queue = useMemo(
-    () =>
-      buildFreestyleQueue(feedCards, config, {
+    () => {
+      if (mode === 'today') {
+        return buildTodayTrainingQueue(todaySources, todayConfig, {
+          resolvedQuestionIds: queuePriorityResolvedIdsRef.current,
+        })
+      }
+      return buildFreestyleQueue(feedCards, config, {
         resolvedQuestionIds: queuePriorityResolvedIdsRef.current,
-      }),
-    [config, feedCards],
+      })
+    },
+    [config, feedCards, mode, todayConfig, todaySources],
   )
   const queueSignature = useMemo(() => buildQueueSignature(queue), [queue])
-  const currentIndex = Math.min(progress.currentIndex, Math.max(0, queue.length - 1))
+  const summaryVisible =
+    mode === 'today' &&
+    queue.length > 0 &&
+    progress.currentIndex >= queue.length
+  const currentIndex = summaryVisible
+    ? queue.length
+    : Math.min(progress.currentIndex, Math.max(0, queue.length - 1))
   const currentCard = queue[currentIndex] ?? null
   const currentPalaceId = currentCard?.palace_context?.id ?? null
   const palaceOptions = useMemo(() => {
@@ -574,11 +741,20 @@ export default function FreestylePage() {
     setConfig((current) => saveFreestyleConfig(updater(current)))
   }, [])
 
+  const setTodayConfigAndPersist = useCallback((updater: (current: TodayTrainingConfig) => TodayTrainingConfig) => {
+    setTodayConfig((current) => saveTodayTrainingConfig(updater(current)))
+  }, [])
+
   const setProgressAndPersist = useCallback(
     (updater: (current: typeof progress) => typeof progress) => {
-      setProgress((current) => saveFreestyleProgress(updater(current)))
+      setProgress((current) => {
+        const next = updater(current)
+        return mode === 'today'
+          ? saveTodayTrainingProgress(next)
+          : saveFreestyleProgress(next)
+      })
     },
-    [],
+    [mode],
   )
 
   const loadFeed = useCallback(async (nextConfig: FreestyleConfig) => {
@@ -598,14 +774,51 @@ export default function FreestylePage() {
     }
   }, [])
 
+  const loadTodayFeed = useCallback(async (nextConfig: TodayTrainingConfig) => {
+    setFeedLoading(true)
+    setFeedError('')
+    try {
+      const contentTypes = todayFeedContentTypes(nextConfig)
+      const [dueResponse, practiceResponse, fillResponse] = await Promise.all([
+        getFreestyleFeedApi({
+          range: 'due',
+          contentTypes: contentTypes.due,
+        }),
+        getFreestyleFeedApi({
+          range: 'needs_practice',
+          contentTypes: contentTypes.practice,
+        }),
+        getFreestyleFeedApi({
+          range: 'all',
+          contentTypes: contentTypes.fill,
+        }),
+      ])
+      setTodaySources({
+        dueCards: dueResponse.cards || [],
+        practiceCards: practiceResponse.cards || [],
+        fillCards: fillResponse.cards || [],
+      })
+      setFeedCards([
+        ...(dueResponse.cards || []),
+        ...(practiceResponse.cards || []),
+        ...(fillResponse.cards || []),
+      ])
+    } catch (error) {
+      setFeedError(error instanceof Error ? error.message : '加载今日训练失败。')
+    } finally {
+      setFeedLoading(false)
+    }
+  }, [])
+
   useEffect(() => {
+    if (mode !== 'free') return
     void loadFeed(config)
-  }, [
-    config.range,
-    config.specificPalaceIds.join(','),
-    enabledContentTypes(config).join(','),
-    loadFeed,
-  ])
+  }, [mode, config, loadFeed])
+
+  useEffect(() => {
+    if (mode !== 'today') return
+    void loadTodayFeed(todayConfig)
+  }, [mode, todayConfig, loadTodayFeed])
 
   useEffect(() => {
     let active = true
@@ -625,19 +838,20 @@ export default function FreestylePage() {
     if (feedLoading) return
     if (queue.length === 0 && !feedError) return
     setProgressAndPersist((current) => {
+      const maxIndex = mode === 'today' ? queue.length : Math.max(0, queue.length - 1)
       if (current.lastQueueSignature === queueSignature) {
         return {
           ...current,
-          currentIndex: Math.min(current.currentIndex, Math.max(0, queue.length - 1)),
+          currentIndex: Math.min(current.currentIndex, maxIndex),
         }
       }
       return {
         ...current,
-        currentIndex: Math.min(current.currentIndex, Math.max(0, queue.length - 1)),
+        currentIndex: Math.min(current.currentIndex, maxIndex),
         lastQueueSignature: queueSignature,
       }
     })
-  }, [feedError, feedLoading, queue.length, queueSignature, setProgressAndPersist])
+  }, [feedError, feedLoading, mode, queue.length, queueSignature, setProgressAndPersist])
 
   useEffect(() => {
     timer.setSceneActive(isActive, { source: isActive ? 'route_active' : 'route_inactive' })
@@ -651,9 +865,13 @@ export default function FreestylePage() {
   }, [isActive, timer])
 
   useEffect(() => {
-    const target = currentCard ? cardRefs.current[currentCard.id] : null
+    const target = currentCard
+      ? cardRefs.current[currentCard.id]
+      : summaryVisible
+        ? cardRefs.current.__today_summary__
+        : null
     target?.scrollIntoView({ block: 'start' })
-  }, [currentCard?.id])
+  }, [currentCard, summaryVisible])
 
   useEffect(() => {
     const previousResolvedIds = previousResolvedQuestionIdsRef.current
@@ -714,14 +932,15 @@ export default function FreestylePage() {
   const goToIndex = useCallback(
     (index: number) => {
       if (queue.length === 0) return
-      const nextIndex = Math.max(0, Math.min(index, queue.length - 1))
+      const maxIndex = mode === 'today' ? queue.length : queue.length - 1
+      const nextIndex = Math.max(0, Math.min(index, maxIndex))
       timer.registerActivity('practice_interaction', { source: 'freestyle_nav' })
       setProgressAndPersist((current) => ({
         ...current,
         currentIndex: nextIndex,
       }))
     },
-    [queue.length, setProgressAndPersist, timer],
+    [mode, queue.length, setProgressAndPersist, timer],
   )
 
   const handleScroll = useCallback(() => {
@@ -729,14 +948,17 @@ export default function FreestylePage() {
     if (!element || queue.length === 0) return
     const nextIndex = Math.max(
       0,
-      Math.min(queue.length - 1, Math.round(element.scrollTop / Math.max(1, element.clientHeight))),
+      Math.min(
+        mode === 'today' ? queue.length : queue.length - 1,
+        Math.round(element.scrollTop / Math.max(1, element.clientHeight)),
+      ),
     )
     if (nextIndex === progress.currentIndex) return
     setProgressAndPersist((current) => ({
       ...current,
       currentIndex: nextIndex,
     }))
-  }, [progress.currentIndex, queue.length, setProgressAndPersist])
+  }, [mode, progress.currentIndex, queue.length, setProgressAndPersist])
 
   const updateQuestionState = useCallback(
     (questionId: number, updater: (current: QuizRuntimeState) => QuizRuntimeState) => {
@@ -843,17 +1065,47 @@ export default function FreestylePage() {
 
   const handleReshuffle = useCallback(() => {
     queuePriorityResolvedIdsRef.current = progress.resolvedQuestionIds
-    setConfigAndPersist((current) => ({
-      ...current,
-      seed: nextFreestyleSeed(current.seed),
-    }))
+    if (mode === 'today') {
+      setTodayConfigAndPersist((current) => ({
+        ...current,
+        seed: nextTodayTrainingSeed(current.seed),
+      }))
+    } else {
+      setConfigAndPersist((current) => ({
+        ...current,
+        seed: nextFreestyleSeed(current.seed),
+      }))
+    }
     setProgressAndPersist((current) => ({
       ...current,
       currentIndex: 0,
       lastQueueSignature: '',
     }))
     emittedMilestonesRef.current = new Set()
-  }, [progress.resolvedQuestionIds, setConfigAndPersist, setProgressAndPersist])
+  }, [
+    mode,
+    progress.resolvedQuestionIds,
+    setConfigAndPersist,
+    setProgressAndPersist,
+    setTodayConfigAndPersist,
+  ])
+
+  const switchMode = useCallback((nextMode: FreestyleMode) => {
+    if (nextMode === mode) return
+    setMode(nextMode)
+    const nextProgress = nextMode === 'today' ? readTodayTrainingProgress() : readFreestyleProgress()
+    setProgress(nextProgress)
+    previousResolvedQuestionIdsRef.current = new Set(nextProgress.resolvedQuestionIds)
+    queuePriorityResolvedIdsRef.current = nextProgress.resolvedQuestionIds
+    emittedMilestonesRef.current = new Set()
+    setFeedError('')
+    setFeedLoading(true)
+  }, [mode])
+
+  const todaySummary = useMemo(
+    () => buildTodayTrainingSummary(queue, progress, timer.effectiveSeconds),
+    [progress, queue, timer.effectiveSeconds],
+  )
 
   const handleKeyDown = useCallback(
     (event: KeyboardEvent<HTMLDivElement>) => {
@@ -902,6 +1154,12 @@ export default function FreestylePage() {
           onOpenChange={setSettingsOpen}
           onConfigChange={setConfigAndPersist}
         />
+        <TodayTrainingSettingsDialog
+          open={todaySettingsOpen}
+          config={todayConfig}
+          onOpenChange={setTodaySettingsOpen}
+          onConfigChange={setTodayConfigAndPersist}
+        />
         {currentPalaceId ? (
           <PalaceQuizMemoryLookupDialog
             open={memoryLookupOpen}
@@ -914,9 +1172,32 @@ export default function FreestylePage() {
         <div className="pointer-events-none absolute left-0 right-0 top-0 z-20 flex items-start justify-end gap-3 px-4 py-4 sm:justify-between sm:px-5">
           <div className="pointer-events-auto flex min-w-0 flex-wrap items-center gap-2 rounded-full border border-white/10 bg-zinc-900/76 px-3 py-2 text-xs shadow-lg backdrop-blur">
             <Sparkles className="hidden size-4 text-amber-300 sm:block" />
-            <span className="text-zinc-400">{RANGE_LABELS[config.range]}</span>
+            <div className="flex items-center gap-1 rounded-full bg-white/6 p-0.5">
+              {(['today', 'free'] as const).map((item) => (
+                <button
+                  key={item}
+                  type="button"
+                  className={cn(
+                    'rounded-full px-2 py-1 transition-colors',
+                    mode === item
+                      ? 'bg-emerald-300 text-zinc-950'
+                      : 'text-zinc-400 hover:text-zinc-50',
+                  )}
+                  onClick={() => switchMode(item)}
+                >
+                  {MODE_LABELS[item]}
+                </button>
+              ))}
+            </div>
             <span className="text-zinc-400">
-              {queue.length === 0 ? '0/0' : `${currentIndex + 1}/${queue.length}`}
+              {mode === 'today' ? `${TODAY_TRAINING_ROUND_SIZE} 个/轮` : RANGE_LABELS[config.range]}
+            </span>
+            <span className="text-zinc-400">
+              {queue.length === 0
+                ? '0/0'
+                : summaryVisible
+                  ? `${queue.length}/${queue.length}`
+                  : `${currentIndex + 1}/${queue.length}`}
             </span>
             <span className="text-emerald-300">连对 {progress.correctStreak}</span>
           </div>
@@ -944,7 +1225,16 @@ export default function FreestylePage() {
                 title="队列加载失败"
                 description={feedError}
                 action={
-                  <Button type="button" onClick={() => void loadFeed(config)}>
+                  <Button
+                    type="button"
+                    onClick={() => {
+                      if (mode === 'today') {
+                        void loadTodayFeed(todayConfig)
+                      } else {
+                        void loadFeed(config)
+                      }
+                    }}
+                  >
                     重试
                   </Button>
                 }
@@ -954,20 +1244,32 @@ export default function FreestylePage() {
           ) : queue.length === 0 ? (
             <section className="flex h-full snap-start items-center justify-center px-4">
               <EmptyState
-                title="这组暂时刷空了"
-                description="当前筛选没有可展示的随心卡，换个范围或重洗队列再来一轮。"
+                title={mode === 'today' ? '今天暂时没有可训练内容' : '这组暂时刷空了'}
+                description={
+                  mode === 'today'
+                    ? '到期复习、需练习和可补足题卡都暂时为空。'
+                    : '当前筛选没有可展示的随心卡，换个范围或重洗队列再来一轮。'
+                }
                 action={
                   <div className="flex flex-wrap justify-center gap-2">
-                    <Button type="button" variant="secondary" onClick={handleReshuffle}>
-                      <Shuffle className="size-4" />
-                      重洗
-                    </Button>
-                    <Button type="button" onClick={() => setSettingsOpen(true)}>
-                      <SlidersHorizontal className="size-4" />
-                      设置
-                    </Button>
+                    {mode === 'today' ? (
+                      <Button type="button" variant="secondary" onClick={() => switchMode('free')}>
+                        切到自由随心
+                      </Button>
+                    ) : (
+                      <>
+                        <Button type="button" variant="secondary" onClick={handleReshuffle}>
+                          <Shuffle className="size-4" />
+                          重洗
+                        </Button>
+                        <Button type="button" onClick={() => setSettingsOpen(true)}>
+                          <SlidersHorizontal className="size-4" />
+                          设置
+                        </Button>
+                      </>
+                    )}
                     <Button asChild variant="outline">
-                      <Link to="/palaces">记忆宫殿</Link>
+                      <Link to="/palaces/new">{mode === 'today' ? '新建宫殿' : '记忆宫殿'}</Link>
                     </Button>
                   </div>
                 }
@@ -975,36 +1277,61 @@ export default function FreestylePage() {
               />
             </section>
           ) : (
-            queue.map((card) => (
-              <section
-                key={card.id}
-                ref={(node) => {
-                  cardRefs.current[card.id] = node
-                }}
-                className="min-h-full snap-start"
-              >
-                {isQuizCard(card) ? (
-                  <FreestyleQuizCardView
-                    card={card}
-                    state={progress.questionStates[card.question.id]}
-                    answeredBefore={answeredQuestionIds.has(card.question.id)}
-                    onStateChange={(updater) => updateQuestionState(card.question.id, updater)}
-                    onChoiceResolve={(optionId, isCorrect) => handleChoiceResolve(card, optionId, isCorrect)}
-                    onShortAnswerSubmit={() => {
-                      timer.registerActivity('practice_interaction', { source: 'freestyle_short_submit' })
-                    }}
-                    onRequestShortAnswerFeedback={() => void handleShortAnswerFeedback(card)}
+            <>
+              {queue.map((card) => (
+                <section
+                  key={card.id}
+                  ref={(node) => {
+                    cardRefs.current[card.id] = node
+                  }}
+                  className="min-h-full snap-start"
+                >
+                  {isQuizCard(card) ? (
+                    <FreestyleQuizCardView
+                      card={card}
+                      state={progress.questionStates[card.question.id]}
+                      answeredBefore={answeredQuestionIds.has(card.question.id)}
+                      onStateChange={(updater) => updateQuestionState(card.question.id, updater)}
+                      onChoiceResolve={(optionId, isCorrect) => handleChoiceResolve(card, optionId, isCorrect)}
+                      onShortAnswerSubmit={() => {
+                        timer.registerActivity('practice_interaction', { source: 'freestyle_short_submit' })
+                      }}
+                      onRequestShortAnswerFeedback={() => void handleShortAnswerFeedback(card)}
+                    />
+                  ) : (
+                    <FreestyleActionCardView card={card} />
+                  )}
+                </section>
+              ))}
+              {mode === 'today' ? (
+                <section
+                  ref={(node) => {
+                    cardRefs.current.__today_summary__ = node
+                  }}
+                  className="min-h-full snap-start"
+                >
+                  <FreestyleRoundSummaryCard
+                    summary={todaySummary}
+                    onNextRound={handleReshuffle}
+                    onSwitchToFree={() => switchMode('free')}
                   />
-                ) : (
-                  <FreestyleActionCardView card={card} />
-                )}
-              </section>
-            ))
+                </section>
+              ) : null}
+            </>
           )}
         </div>
 
         <div className="absolute bottom-5 left-1/2 z-30 flex -translate-x-1/2 items-center gap-2 sm:bottom-auto sm:left-auto sm:right-5 sm:top-1/2 sm:-translate-y-1/2 sm:translate-x-0 sm:flex-col">
-          <IconButton label="设置" onClick={() => setSettingsOpen(true)}>
+          <IconButton
+            label="设置"
+            onClick={() => {
+              if (mode === 'today') {
+                setTodaySettingsOpen(true)
+              } else {
+                setSettingsOpen(true)
+              }
+            }}
+          >
             <SlidersHorizontal className="size-5" />
           </IconButton>
           <IconButton
@@ -1020,7 +1347,7 @@ export default function FreestylePage() {
           <IconButton
             label="下一题"
             onClick={() => goToIndex(currentIndex + 1)}
-            disabled={currentIndex >= queue.length - 1}
+            disabled={mode === 'today' ? currentIndex >= queue.length : currentIndex >= queue.length - 1}
           >
             <ChevronDown className="size-5" />
           </IconButton>
@@ -1030,7 +1357,10 @@ export default function FreestylePage() {
           <IconButton
             label="清空本地进度"
             onClick={() => {
-              const nextProgress = saveFreestyleProgress(DEFAULT_FREESTYLE_PROGRESS)
+              const nextProgress =
+                mode === 'today'
+                  ? saveTodayTrainingProgress(DEFAULT_FREESTYLE_PROGRESS)
+                  : saveFreestyleProgress(DEFAULT_FREESTYLE_PROGRESS)
               previousResolvedQuestionIdsRef.current = new Set(nextProgress.resolvedQuestionIds)
               emittedMilestonesRef.current = new Set()
               setProgress(nextProgress)

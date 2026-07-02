@@ -182,6 +182,23 @@ function renderPage(cards: FreestyleCard[]) {
   )
 }
 
+function renderPageWithFeed(
+  feeds: Array<{ cards: FreestyleCard[] }>,
+) {
+  feeds.forEach((feed) => {
+    getFreestyleFeedApiMock.mockResolvedValueOnce(feed)
+  })
+  return render(
+    <MemoryRouter>
+      <FreestylePage />
+    </MemoryRouter>,
+  )
+}
+
+async function switchToFreeMode() {
+  fireEvent.click(await screen.findByRole('button', { name: '自由随心' }))
+}
+
 async function answerChoiceAt(index: number, optionText = 'A. 正确项') {
   await screen.findByText(`选择题 ${index + 1}`)
   fireEvent.click(screen.getAllByRole('button', { name: optionText })[index])
@@ -378,6 +395,7 @@ describe('FreestylePage feedback', () => {
   it('restores the saved card index after reopening once the queue loads', async () => {
     const cards = [quizCard(1), quizCard(2), quizCard(3)]
     const { unmount } = renderPage(cards)
+    await switchToFreeMode()
 
     await screen.findByText('1/3')
     fireEvent.click(screen.getByRole('button', { name: '下一题' }))
@@ -397,6 +415,7 @@ describe('FreestylePage feedback', () => {
         <FreestylePage />
       </MemoryRouter>,
     )
+    await switchToFreeMode()
 
     await waitFor(() => {
       expect(screen.getByText('3/3')).toBeTruthy()
@@ -407,6 +426,7 @@ describe('FreestylePage feedback', () => {
   it('downgrades answered cards after a reload without clearing them from the deck', async () => {
     const cards = [quizCard(1), quizCard(2), quizCard(3)]
     const { unmount } = renderPage(cards)
+    await switchToFreeMode()
 
     await answerChoiceAt(0)
     await waitFor(() => {
@@ -420,6 +440,7 @@ describe('FreestylePage feedback', () => {
         <FreestylePage />
       </MemoryRouter>,
     )
+    await switchToFreeMode()
 
     await screen.findByText('选择题 2')
     expect(screen.getAllByText(/^选择题 \d$/).map((node) => node.textContent)).toEqual([
@@ -433,6 +454,7 @@ describe('FreestylePage feedback', () => {
 
   it('reshuffles without clearing answered-card progress', async () => {
     renderPage([quizCard(1), quizCard(2), quizCard(3)])
+    await switchToFreeMode()
 
     await answerChoiceAt(0)
     await waitFor(() => {
@@ -521,9 +543,105 @@ describe('FreestylePage feedback', () => {
         palace_context: null,
       },
     ])
+    await switchToFreeMode()
 
     await screen.findByText('英语练习')
     expect(screen.getByRole('button', { name: '查看宫殿' })).toHaveProperty('disabled', true)
     expect(memoryLookupDialogMock).not.toHaveBeenCalled()
+  })
+
+  it('opens in today training mode by default and can switch to free mode without overwriting free config', async () => {
+    window.localStorage.setItem(
+      'memory-anki.freestyle.config',
+      JSON.stringify({
+        range: 'specific_palaces',
+        contentTypes: {
+          quiz_question: true,
+          review: false,
+          segment_review: false,
+          mini_review: false,
+          practice: false,
+          english: false,
+          english_reading: false,
+        },
+        specificPalaceIds: [9],
+        orderMode: 'sequential',
+        questionType: 'all',
+        actionFrequency: 'none',
+        seed: 17,
+      }),
+    )
+    renderPageWithFeed([
+      { cards: [quizCard(1)] },
+      { cards: [] },
+      { cards: [quizCard(2)] },
+    ])
+
+    expect(await screen.findByRole('button', { name: '今日训练' })).toBeTruthy()
+    expect(screen.getByText('12 个/轮')).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: '自由随心' }))
+
+    await waitFor(() => {
+      expect(getFreestyleFeedApiMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          range: 'specific_palaces',
+          palaceIds: [9],
+        }),
+      )
+    })
+  })
+
+  it('shows a today training summary after the fixed round is completed', async () => {
+    renderPageWithFeed([
+      { cards: Array.from({ length: 12 }, (_, index) => quizCard(index + 1)) },
+      { cards: [] },
+      { cards: [] },
+    ])
+
+    await screen.findByText('选择题 1')
+    fireEvent.click(screen.getByRole('button', { name: '下一题' }))
+    for (let index = 0; index < 11; index += 1) {
+      fireEvent.click(screen.getByRole('button', { name: '下一题' }))
+    }
+
+    expect(await screen.findByText('本轮完成')).toBeTruthy()
+    expect(screen.getByRole('button', { name: '再来一轮' })).toBeTruthy()
+  })
+
+  it('keeps today progress when starting another round', async () => {
+    renderPageWithFeed([
+      { cards: [quizCard(1)] },
+      { cards: [] },
+      { cards: [] },
+      { cards: [quizCard(1)] },
+      { cards: [] },
+      { cards: [] },
+    ])
+
+    await answerChoiceAt(0)
+    await waitFor(() => {
+      expect(screen.getByText('已做 1')).toBeTruthy()
+    })
+    fireEvent.click(screen.getByRole('button', { name: '下一题' }))
+    fireEvent.click(await screen.findByRole('button', { name: '再来一轮' }))
+
+    await waitFor(() => {
+      expect(screen.getByText('已做 1')).toBeTruthy()
+    })
+  })
+
+  it('shows the today empty state with create and free-mode actions', async () => {
+    renderPageWithFeed([{ cards: [] }, { cards: [] }, { cards: [] }])
+
+    expect(await screen.findByText('今天暂时没有可训练内容')).toBeTruthy()
+    expect(screen.getByRole('link', { name: '新建宫殿' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: '切到自由随心' }))
+
+    await waitFor(() => {
+      expect(getFreestyleFeedApiMock).toHaveBeenCalledWith(
+        expect.objectContaining({ range: 'all' }),
+      )
+    })
   })
 })

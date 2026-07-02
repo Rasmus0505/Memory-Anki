@@ -10,6 +10,13 @@ import {
   saveFreestyleProgress,
   sanitizeFreestyleConfig,
 } from './freestyle'
+import {
+  DEFAULT_TODAY_TRAINING_CONFIG,
+  buildTodayTrainingQueue,
+  readTodayTrainingConfig,
+  saveTodayTrainingConfig,
+  todayFeedContentTypes,
+} from './today-training'
 
 function quizCard(id: number, groupKey: string, palaceId = 1): FreestyleCard {
   return {
@@ -54,12 +61,16 @@ function quizCard(id: number, groupKey: string, palaceId = 1): FreestyleCard {
   }
 }
 
-function actionCard(id: string, priority = 10): FreestyleCard {
+function actionCard(
+  id: string,
+  priority = 10,
+  contentType: Exclude<FreestyleCard['content_type'], 'quiz_question'> = 'review',
+): FreestyleCard {
   return {
     id,
     type: 'action',
-    content_type: 'review',
-    action_kind: 'review',
+    content_type: contentType,
+    action_kind: contentType === 'practice' ? 'practice' : contentType === 'english' ? 'english' : contentType === 'english_reading' ? 'english_reading' : 'review',
     title: id,
     subtitle: '',
     href: '/review/session/1',
@@ -245,5 +256,86 @@ describe('freestyle queue model', () => {
 
     expect(readFreestyleConfig()).toEqual(savedConfig)
     expect(readFreestyleProgress()).toEqual(savedProgress)
+  })
+})
+
+describe('today training queue model', () => {
+  beforeEach(() => {
+    window.localStorage.clear()
+  })
+
+  it('orders due actions, due quiz, practice cards, then fill quiz', () => {
+    const queue = buildTodayTrainingQueue(
+      {
+        dueCards: [
+          quizCard(1, 'palace:1'),
+          actionCard('due-low', 10),
+          actionCard('due-high', 50),
+        ],
+        practiceCards: [
+          quizCard(2, 'palace:2', 2),
+          actionCard('practice-action', 20, 'practice'),
+        ],
+        fillCards: [quizCard(3, 'palace:3', 3)],
+      },
+      DEFAULT_TODAY_TRAINING_CONFIG,
+    )
+
+    expect(queue.map((card) => card.id)).toEqual([
+      'due-high',
+      'due-low',
+      'quiz:1',
+      'practice-action',
+      'quiz:2',
+      'quiz:3',
+    ])
+  })
+
+  it('deduplicates cards and limits the queue to the configured round size', () => {
+    const fillCards = Array.from({ length: 20 }, (_, index) =>
+      quizCard(index + 1, `palace:${index + 1}`, index + 1),
+    )
+    const queue = buildTodayTrainingQueue(
+      {
+        dueCards: [fillCards[0]],
+        practiceCards: [fillCards[0], fillCards[1]],
+        fillCards,
+      },
+      DEFAULT_TODAY_TRAINING_CONFIG,
+    )
+
+    expect(queue).toHaveLength(12)
+    expect(new Set(queue.map((card) => card.id)).size).toBe(12)
+  })
+
+  it('keeps english feed content disabled by default and enables it from config', () => {
+    expect(todayFeedContentTypes(DEFAULT_TODAY_TRAINING_CONFIG).fill).toEqual([
+      'quiz_question',
+    ])
+
+    expect(
+      todayFeedContentTypes({
+        ...DEFAULT_TODAY_TRAINING_CONFIG,
+        includeEnglish: true,
+        includeEnglishReading: true,
+      }).fill,
+    ).toEqual(['quiz_question', 'english', 'english_reading'])
+  })
+
+  it('persists today training config without touching freestyle config', () => {
+    saveFreestyleConfig({
+      ...DEFAULT_FREESTYLE_CONFIG,
+      range: 'specific_palaces',
+      specificPalaceIds: [9],
+    })
+    const savedToday = saveTodayTrainingConfig({
+      ...DEFAULT_TODAY_TRAINING_CONFIG,
+      includeEnglish: true,
+      includeEnglishReading: true,
+      seed: 88,
+    })
+
+    expect(readTodayTrainingConfig()).toEqual(savedToday)
+    expect(readFreestyleConfig().range).toBe('specific_palaces')
   })
 })
