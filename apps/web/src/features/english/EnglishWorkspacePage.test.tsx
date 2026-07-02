@@ -26,7 +26,7 @@ const mocks = vi.hoisted(() => ({
   } | null,
 }))
 
-vi.mock('@/features/english/api/englishApi', () => ({
+vi.mock('@/features/english/api', () => ({
   clearEnglishCurrentTaskApi: mocks.clearEnglishCurrentTaskApiMock,
   deleteEnglishCourseApi: mocks.deleteEnglishCourseApiMock,
   getEnglishTaskGenerationLogApi: mocks.getEnglishTaskGenerationLogApiMock,
@@ -179,7 +179,7 @@ describe('EnglishWorkspacePage', () => {
     await waitFor(() => {
       expect(screen.getByTestId('course-route').textContent).toBe('course:9')
     })
-    expect(mocks.toastSuccessMock).toHaveBeenCalledWith('英语课程已生成，正在进入课程。')
+    expect(mocks.toastSuccessMock).toHaveBeenCalledWith('英语课程已生成，正在进入课程。', undefined)
   })
 
   it('keeps retry and clear actions available for failed tasks', async () => {

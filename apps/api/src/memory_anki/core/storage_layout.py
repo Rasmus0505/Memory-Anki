@@ -1,23 +1,16 @@
 from __future__ import annotations
 
 import json
-import os
 from dataclasses import dataclass
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parents[5]
+from memory_anki.core.runtime_paths import REPO_ROOT, get_app_home
 
 STORAGE_LAYOUT_PATH = REPO_ROOT / "apps" / "api" / "storage-layout.json"
 
 
 def resolve_app_home() -> Path:
-    explicit_home = os.environ.get("MEMORY_ANKI_HOME")
-    if explicit_home:
-        return Path(explicit_home)
-    local_app_data = os.environ.get("LOCALAPPDATA")
-    if local_app_data:
-        return Path(local_app_data) / "MemoryAnki"
-    return Path.home() / "AppData" / "Local" / "MemoryAnki"
+    return get_app_home()
 
 
 @dataclass(frozen=True, slots=True)

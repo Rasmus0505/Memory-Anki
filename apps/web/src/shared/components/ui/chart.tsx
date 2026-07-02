@@ -21,7 +21,7 @@ export function ChartContainer({
   return (
     <div
       className={cn(
-        'h-[280px] min-h-0 min-w-0 w-full rounded-3xl border border-border/60 bg-gradient-to-b from-background to-slate-50/80 p-3',
+        'h-[280px] min-h-0 min-w-0 w-full rounded-lg border border-border/70 bg-card p-3',
         className,
       )}
       style={style as React.CSSProperties}
@@ -55,16 +55,16 @@ export function ChartTooltipContent({
   if (!active || !payload?.length) return null
 
   return (
-    <div className="min-w-[140px] rounded-2xl border border-border/70 bg-background/95 px-3 py-2 text-xs shadow-xl backdrop-blur">
+    <div className="min-w-[140px] rounded-lg border border-border/70 bg-popover px-3 py-2 text-xs text-popover-foreground shadow-popover">
       {label ? <div className="mb-2 font-medium text-foreground">{label}</div> : null}
-      <div className="space-y-1.5">
+      <div className="flex flex-col gap-1.5">
         {payload.map((entry) => {
           const numericValue = typeof entry.value === 'number' ? entry.value : Number(entry.value ?? 0)
           return (
             <div key={entry.dataKey?.toString()} className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-2 text-muted-foreground">
                 <span
-                  className="h-2.5 w-2.5 rounded-full"
+                  className="size-2.5 rounded-full"
                   style={{ backgroundColor: entry.color ?? entry.payload?.fill ?? 'currentColor' }}
                 />
                 <span>{entry.name}</span>

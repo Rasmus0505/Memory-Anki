@@ -1,3 +1,5 @@
+import type { PalaceSegmentSummary } from '@/shared/api/contracts'
+
 export interface PalaceMeta {
   id: number
   title: string
@@ -14,6 +16,7 @@ export interface PalaceMeta {
     subject?: { id: number; name: string } | null
   }>
   primary_chapter_id?: number | null
+  segments?: PalaceSegmentSummary[]
 }
 
 export interface ChapterOption {

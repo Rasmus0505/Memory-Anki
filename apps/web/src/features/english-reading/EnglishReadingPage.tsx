@@ -2,7 +2,7 @@
 import { useSearchParams } from "react-router-dom";
 import { toast } from "@/shared/feedback/toast";
 import { useAiRunConfigDialog } from "@/features/ai-config/useAiRunConfigDialog";
-import { completeEnglishReadingMaterialApi } from "@/features/english-reading/api/englishReadingApi";
+import { completeEnglishReadingMaterialApi } from "@/features/english-reading/api";
 import { EnglishReadingDialogs } from "@/features/english-reading/components/EnglishReadingDialogs";
 import { EnglishReadingReadingPanels } from "@/features/english-reading/components/EnglishReadingReadingPanels";
 import {

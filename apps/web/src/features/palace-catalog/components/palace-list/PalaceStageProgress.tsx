@@ -10,6 +10,39 @@ import { cn } from '@/shared/lib/utils'
 
 const SEGMENT_UNITS = 12
 const PROGRESS_TICK_MS = 5 * 1000
+const palaceStageClockSubscribers = new Set<() => void>()
+let palaceStageClockTimer: number | null = null
+let palaceStageClockNowMs = Date.now()
+
+function subscribePalaceStageClock(onTick: () => void) {
+  palaceStageClockSubscribers.add(onTick)
+  palaceStageClockNowMs = Date.now()
+  if (palaceStageClockTimer == null) {
+    palaceStageClockTimer = window.setInterval(() => {
+      palaceStageClockNowMs = Date.now()
+      palaceStageClockSubscribers.forEach((subscriber) => subscriber())
+    }, PROGRESS_TICK_MS)
+  }
+  return () => {
+    palaceStageClockSubscribers.delete(onTick)
+    if (palaceStageClockSubscribers.size === 0 && palaceStageClockTimer != null) {
+      window.clearInterval(palaceStageClockTimer)
+      palaceStageClockTimer = null
+    }
+  }
+}
+
+function getPalaceStageClockSnapshot() {
+  return palaceStageClockNowMs
+}
+
+function usePalaceStageClock(enabled: boolean) {
+  return React.useSyncExternalStore(
+    enabled ? subscribePalaceStageClock : () => () => {},
+    getPalaceStageClockSnapshot,
+    getPalaceStageClockSnapshot,
+  )
+}
 
 function getSegmentProgress(
   previousStage: ReviewStageSummary,
@@ -72,18 +105,12 @@ export function PalaceStageProgress({
         scheduled_at: null,
       }))
   const total = normalizedStages.length
-  if (total <= 0) {
-    return null
-  }
-
-  const [nowMs, setNowMs] = React.useState(() => Date.now())
-
-  React.useEffect(() => {
-    const timer = window.setInterval(() => {
-      setNowMs(Date.now())
-    }, PROGRESS_TICK_MS)
-    return () => window.clearInterval(timer)
-  }, [])
+  const lastCompletedIndex = normalizedStages.reduce(
+    (lastIndex, stage, index) => (stage.completed ? index : lastIndex),
+    -1,
+  )
+  const shouldAnimateProgress = lastCompletedIndex >= 0 && lastCompletedIndex < total - 1
+  const nowMs = usePalaceStageClock(shouldAnimateProgress)
 
   const stageMetrics = React.useMemo(() => {
     if (total === 1) {
@@ -92,11 +119,6 @@ export function PalaceStageProgress({
         fillPercent: onlyStage?.completed ? 100 : 0,
       }
     }
-    const lastCompletedIndex = normalizedStages.reduce(
-      (lastIndex, stage, index) => (stage.completed ? index : lastIndex),
-      -1,
-    )
-
     if (lastCompletedIndex < 0) {
       return {
         fillPercent: 0,
@@ -122,7 +144,11 @@ export function PalaceStageProgress({
     return {
       fillPercent,
     }
-  }, [nextReviewAt, normalizedStages, nowMs, total])
+  }, [lastCompletedIndex, nextReviewAt, normalizedStages, nowMs, total])
+
+  if (total <= 0) {
+    return null
+  }
 
   return (
     <div className="mt-3">

@@ -274,7 +274,7 @@ export function QuizQuestionCard({
 
         <div className="flex flex-wrap gap-2">
           <Button type="button" variant="outline" size="sm" onClick={() => onReset(question.id)}>
-            <RotateCcw className="h-4 w-4" />
+            <RotateCcw className="size-4" />
             再做一次
           </Button>
         </div>

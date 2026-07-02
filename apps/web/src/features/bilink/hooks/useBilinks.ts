@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { BilinkItem } from '@/shared/api/contracts'
-import { getBilinksApi } from '@/features/bilink/api/bilink'
+import { getBilinksApi } from '@/features/bilink/api'
 
 export function useBilinks(palaceId: number | null) {
   const [items, setItems] = useState<BilinkItem[]>([])

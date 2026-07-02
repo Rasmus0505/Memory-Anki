@@ -10,12 +10,14 @@ import time
 import zipfile
 from collections.abc import Iterable
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from memory_anki.core.files import safe_filename_part
 from memory_anki.core.local_config import LocalRuntimeConfig
 from memory_anki.core.storage_layout import ManagedStorageItem, get_backup_storage_items
+from memory_anki.core.time import iso_utc_now
 
 SYNC_STATE_NAME = "state.json"
 LOCAL_SYNC_STATE_NAME = "sync-state.json"
@@ -36,7 +38,7 @@ class SyncResult:
 
 
 def iso_now() -> str:
-    return datetime.now(UTC).isoformat(timespec="seconds")
+    return iso_utc_now(timespec="seconds")
 
 
 def _read_json(path: Path) -> dict[str, Any]:
@@ -180,7 +182,7 @@ def _detect_git_commit() -> str | None:
 
 
 def _snapshot_name(revision: int, config: LocalRuntimeConfig) -> str:
-    safe_device = "".join(ch if ch.isalnum() or ch in {"-", "_"} else "-" for ch in config.device_name)
+    safe_device = safe_filename_part(config.device_name, fallback="device")
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     return f"rev-{revision:06d}-{safe_device}-{timestamp}.zip"
 
@@ -358,7 +360,8 @@ def _write_conflict_snapshot(
     reason: str,
     snapshot_hash: str,
 ) -> Path:
-    conflict_name = f"conflict-{config.device_name}-{datetime.now().strftime('%Y%m%d-%H%M%S')}.zip"
+    safe_device = safe_filename_part(config.device_name, fallback="device")
+    conflict_name = f"conflict-{safe_device}-{datetime.now().strftime('%Y%m%d-%H%M%S')}.zip"
     conflict_path = paths["conflicts"] / conflict_name
     create_snapshot_zip(
         app_home,

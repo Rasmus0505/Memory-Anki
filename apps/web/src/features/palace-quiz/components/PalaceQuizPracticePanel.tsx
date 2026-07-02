@@ -131,7 +131,7 @@ export function PalaceQuizPracticePanel({
         </Card>
       ) : viewMode === 'single' && currentQuestion ? (
         <div className="space-y-4">
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border/70 bg-card/90 px-4 py-3 text-sm">
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border/70 bg-card/90 px-4 py-3 text-sm">
             <div>
               第 {currentQuestionIndex + 1} / {filteredQuestions.length} 题
             </div>

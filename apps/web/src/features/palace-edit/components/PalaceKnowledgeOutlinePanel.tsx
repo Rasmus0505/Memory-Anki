@@ -1,7 +1,7 @@
 ﻿import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ChapterOption, PalaceMeta } from '@/features/palace-edit/hooks/usePalaceEditPage'
 import type { MindMapEditorState } from '@/shared/api/contracts'
-import { getSubjectEditorApi, saveSubjectEditorApi } from '@/entities/knowledge/api/knowledgeApi'
+import { getSubjectEditorApi, saveSubjectEditorApi } from '@/entities/knowledge/api'
 import {
   MindMapFrame,
   MindMapPageToolbar,
@@ -182,19 +182,19 @@ export function PalaceKnowledgeOutlinePanel({
                   onFullscreenChange={setMindMapNativeFullscreen}
                   onUiClearedChange={setMindMapUiCleared}
                   className={cn(
-                    'w-full flex-1 rounded-2xl border border-border/70 bg-background',
+                    'w-full flex-1 rounded-lg border border-border/70 bg-background',
                     mindMapFullscreen ? 'h-full' : 'h-[52vh]',
                   )}
                 />
               </div>
             ) : (
-              <div className="flex h-[52vh] items-center justify-center rounded-2xl border border-dashed border-border/80 bg-background/60 text-sm text-muted-foreground">
+              <div className="flex h-[52vh] items-center justify-center rounded-lg border border-dashed border-border/80 bg-background/60 text-sm text-muted-foreground">
                 正在加载知识大纲编辑器…
               </div>
             )}
           </>
         ) : (
-          <div className="flex min-h-[220px] items-center justify-center rounded-2xl border border-dashed border-border/80 bg-background/60 px-6 text-center text-sm text-muted-foreground">
+          <div className="flex min-h-[220px] items-center justify-center rounded-lg border border-dashed border-border/80 bg-background/60 px-6 text-center text-sm text-muted-foreground">
             {palace
               ? '先在左侧章节关联里勾选至少一个小节，下方才会加载对应学科的知识大纲。'
               : '当前宫殿还未加载完成。'}

@@ -95,7 +95,7 @@ function createChimeWavBlobUrl() {
     const freq = i < tone1Samples ? 660 : 880
     const t = i < tone1Samples ? i / sampleRate : (i - tone1Samples) / sampleRate
     const phase = 2 * Math.PI * freq * t
-    let waveform = (2 / Math.PI) * Math.asin(Math.sin(phase))
+    const waveform = (2 / Math.PI) * Math.asin(Math.sin(phase))
 
     const fadeIn = Math.min(1, i / (sampleRate * 0.006))
     const fadeOut = Math.min(1, (totalSamples - i) / (sampleRate * 0.04))

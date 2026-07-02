@@ -112,7 +112,8 @@ def rebuild_palace_review_schedules(
     completed_review_number: int | None = None,
     completed_at: datetime | None = None,
     fallback_completed_count: int | None = None,
-    preserve_existing_progress: bool = True,
+    preserve_existing_progress: bool = False,
+    preserve_same_day_slots: bool = True,
     algorithm_override: str | None = None,
 ) -> None:
     policy = load_review_schedule_policy(session)
@@ -215,17 +216,27 @@ def rebuild_palace_review_schedules(
 
     palace.mastered = effective_completed_count >= total and total > 0
     if not palace.mastered:
-        for review_number in _target_pending_review_numbers(
-            completed_count=effective_completed_count,
-            total=total,
-            initial_slot_count=initial_slot_count,
-        ):
+        pending_review_numbers = (
+            _target_pending_review_numbers(
+                completed_count=effective_completed_count,
+                total=total,
+                initial_slot_count=initial_slot_count,
+            )
+            if preserve_same_day_slots
+            else ([effective_completed_count] if effective_completed_count < total else [])
+        )
+        for review_number in pending_review_numbers:
             base_datetime = previous_anchor_at if review_number >= initial_slot_count else None
+            base_date = (
+                previous_anchor_at.date()
+                if previous_anchor_at is not None and not preserve_same_day_slots
+                else anchor
+            )
             draft = build_review_schedule_draft(
                 policy,
                 review_number=review_number,
                 algorithm=algorithm,
-                base_date=anchor if base_datetime is None else base_datetime.date(),
+                base_date=base_date if base_datetime is None else base_datetime.date(),
                 anchor_date=anchor,
                 base_datetime=base_datetime,
                 completed=False,
@@ -246,6 +257,8 @@ def rebuild_segment_review_schedules(
     completed_count: int,
     completed_review_number: int | None = None,
     completed_at: datetime | None = None,
+    preserve_existing_progress: bool = False,
+    preserve_same_day_slots: bool = True,
     algorithm_override: str | None = None,
 ) -> None:
     policy = load_review_schedule_policy(session)
@@ -262,6 +275,11 @@ def rebuild_segment_review_schedules(
         list(segment.review_schedules or []),
         key=lambda item: (item.review_number, item.id),
     )
+    if preserve_existing_progress:
+        safe_completed_count = max(
+            safe_completed_count,
+            infer_completed_stage_count(total=total, schedules=existing_schedules),
+        )
     completed_at_by_stage = _collect_completed_stage_times(
         schedules=existing_schedules,
         completed_count=safe_completed_count,
@@ -279,6 +297,11 @@ def rebuild_segment_review_schedules(
         for review_number in range(safe_completed_count):
             completed_at_by_stage.setdefault(review_number, normalized_completed_at)
 
+    if completed_at is not None and safe_completed_count > 0:
+        previous_anchor_at = _coerce_stage_completed_at(completed_at)
+    else:
+        previous_anchor_at = None
+
     session.query(PalaceSegmentReviewSchedule).filter_by(
         palace_segment_id=segment.id
     ).delete(synchronize_session=False)
@@ -288,7 +311,6 @@ def rebuild_segment_review_schedules(
             session.expunge(schedule)
     session.expire(segment, ["review_schedules"])
 
-    previous_anchor_at: datetime | None = None
     for review_number in range(safe_completed_count):
         stage_completed_at = _coerce_stage_completed_at(
             completed_at_by_stage.get(review_number),
@@ -337,17 +359,27 @@ def rebuild_segment_review_schedules(
             scheduled_display_at=scheduled_display_at,
         )
 
-    for review_number in _target_pending_review_numbers(
-        completed_count=safe_completed_count,
-        total=total,
-        initial_slot_count=initial_slot_count,
-    ):
+    pending_review_numbers = (
+        _target_pending_review_numbers(
+            completed_count=safe_completed_count,
+            total=total,
+            initial_slot_count=initial_slot_count,
+        )
+        if preserve_same_day_slots
+        else ([safe_completed_count] if safe_completed_count < total else [])
+    )
+    for review_number in pending_review_numbers:
         base_datetime = previous_anchor_at if review_number >= initial_slot_count else None
+        base_date = (
+            previous_anchor_at.date()
+            if previous_anchor_at is not None and not preserve_same_day_slots
+            else anchor
+        )
         draft = build_review_schedule_draft(
             policy,
             review_number=review_number,
             algorithm=algorithm,
-            base_date=anchor if base_datetime is None else base_datetime.date(),
+            base_date=base_date if base_datetime is None else base_datetime.date(),
             anchor_date=anchor,
             base_datetime=base_datetime,
             completed=False,
@@ -431,6 +463,7 @@ def rebuild_all_pending_review_schedules(
             segment,
             completed_count=fallback_completed_count,
             algorithm_override=algorithm,
+            preserve_existing_progress=True,
         )
         segment_count += 1
 

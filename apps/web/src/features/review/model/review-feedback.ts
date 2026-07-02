@@ -68,6 +68,16 @@ export const REVIEW_COMBO_MILESTONES = DEFAULT_REVIEW_MILESTONE_STEPS
 
 export const REVIEW_MILESTONE_LABELS = ['起势', '热起来', '破墙', '攻区', '爆发'] as const
 
+const REVIEW_SURPRISE_COPY_BY_MILESTONE = [
+  '起势成功，继续爆裂揭示。',
+  '热起来了，继续把区域一块块攻下。',
+  '破墙成功，翻卡手感已经上来了。',
+  '攻区完成，推进势能正在抬升。',
+  '爆发已成形，整张地图开始发烫。',
+] as const
+
+const DEFAULT_REVIEW_SURPRISE_COPY = '推进链继续抬升，保持这个节奏。'
+
 export function getReviewComboMilestones(steps: number[] | null | undefined) {
   return Array.isArray(steps) && steps.length > 0 ? steps : REVIEW_COMBO_MILESTONES
 }
@@ -295,13 +305,13 @@ export function getReviewProgressTone(progressPercent: number) {
 export function getReviewSurpriseCopy(comboCount: number, milestoneSteps?: number[] | null) {
   const normalizedSteps = getReviewComboMilestones(milestoneSteps)
   const milestoneIndex = normalizedSteps.indexOf(comboCount)
-  if (milestoneIndex >= 4) return '爆发已成形，整张地图开始发烫。'
-  if (milestoneIndex === 3) return '攻区完成，推进势能正在抬升。'
-  if (milestoneIndex === 2) return '破墙成功，翻卡手感已经上来了。'
-  if (milestoneIndex === 1) return '热起来了，继续把区域一块块攻下。'
-  if (milestoneIndex === 0) return '起势成功，继续爆裂揭示。'
-  if (comboCount >= (normalizedSteps.at(-1) ?? 0)) return '爆发已成形，整张地图开始发烫。'
-  return '推进链继续抬升，保持这个节奏。'
+  if (milestoneIndex >= 0) {
+    return REVIEW_SURPRISE_COPY_BY_MILESTONE[milestoneIndex] ?? REVIEW_SURPRISE_COPY_BY_MILESTONE.at(-1)
+  }
+  if (comboCount >= (normalizedSteps.at(-1) ?? 0)) {
+    return REVIEW_SURPRISE_COPY_BY_MILESTONE.at(-1)
+  }
+  return DEFAULT_REVIEW_SURPRISE_COPY
 }
 
 export function shouldEmitSurprise(args: {

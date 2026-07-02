@@ -8,11 +8,11 @@ import {
 } from '@/entities/session/model/time-record-recovery'
 import type { TimeSessionRecord } from '@/entities/session/model/session-records'
 
-vi.mock('@/entities/session/api/time-records', () => ({
+vi.mock('@/entities/session/api', () => ({
   createTimeRecordApi: vi.fn(),
 }))
 
-const { createTimeRecordApi } = await import('@/entities/session/api/time-records')
+const { createTimeRecordApi } = await import('@/entities/session/api')
 
 function buildRecord(overrides: Partial<TimeSessionRecord> = {}): TimeSessionRecord {
   return {

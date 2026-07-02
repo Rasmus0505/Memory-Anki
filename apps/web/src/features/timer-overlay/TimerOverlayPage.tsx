@@ -29,6 +29,7 @@ function createIdleSnapshot(): UnifiedTimerSnapshot {
     snoozeCount: 0,
     availableActions: [],
     presetMinutes: [5, 10, 20],
+    allowCustomMinutes: true,
     snoozeMinutes: [1, 3, 5],
     targetPath: '/freestyle',
     updatedAt: Date.now(),
@@ -155,22 +156,29 @@ export default function TimerOverlayPage() {
               {minutes} 分钟
             </Button>
           ))}
-          <Input
-            type="number"
-            min={1}
-            step={1}
-            inputMode="numeric"
-            className="memory-anki-timer-overlay-minutes-input"
-            value={customBreakMinutes}
-            onChange={(event) => setCustomBreakMinutes(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key !== 'Enter') return
-              event.preventDefault()
-              submitCustomBreakMinutes()
-            }}
-            placeholder="自定义分钟"
-            aria-label="自定义休息分钟"
-          />
+          {snapshot.allowCustomMinutes !== false ? (
+            <div className="memory-anki-timer-overlay-custom-break">
+              <Input
+                type="number"
+                min={1}
+                step={1}
+                inputMode="numeric"
+                className="memory-anki-timer-overlay-minutes-input"
+                value={customBreakMinutes}
+                onChange={(event) => setCustomBreakMinutes(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key !== 'Enter') return
+                  event.preventDefault()
+                  submitCustomBreakMinutes()
+                }}
+                placeholder="分钟"
+                aria-label="自定义休息分钟"
+              />
+              <Button type="button" variant="outline" size="sm" onClick={submitCustomBreakMinutes}>
+                自定
+              </Button>
+            </div>
+          ) : null}
         </>
       )
     }
@@ -183,7 +191,7 @@ export default function TimerOverlayPage() {
             +{firstSnooze}
           </Button>
           <Button type="button" variant="outline" size="sm" onClick={() => sendCommand({ type: 'finishBreak' })}>
-            <RotateCcw className="h-4 w-4" />
+            <RotateCcw className="size-4" />
             结束
           </Button>
           <Button type="button" size="sm" onClick={() => sendCommand({ type: 'finishBreak', openTarget: true })}>
@@ -202,7 +210,7 @@ export default function TimerOverlayPage() {
             size="sm"
             onClick={() => sendCommand({ type: snapshot.status === 'paused' ? 'resume' : 'pause' })}
           >
-            {snapshot.status === 'paused' ? <Play className="h-4 w-4" /> : <Pause className="h-4 w-4" />}
+            {snapshot.status === 'paused' ? <Play className="size-4" /> : <Pause className="size-4" />}
             {snapshot.status === 'paused' ? '继续' : '暂停'}
           </Button>
           <Button type="button" variant="outline" size="sm" onClick={() => sendCommand({ type: 'finishBreak' })}>
@@ -218,7 +226,7 @@ export default function TimerOverlayPage() {
     if (snapshot.status === 'running') {
       return (
         <Button type="button" size="sm" onClick={() => sendCommand({ type: 'pause' })}>
-          <Pause className="h-4 w-4" />
+          <Pause className="size-4" />
           暂停
         </Button>
       )
@@ -227,7 +235,7 @@ export default function TimerOverlayPage() {
     if (snapshot.status === 'paused' || snapshot.status === 'idle') {
       return (
         <Button type="button" size="sm" disabled={!snapshot.availableActions.includes('resume')} onClick={() => sendCommand({ type: 'resume' })}>
-          <Play className="h-4 w-4" />
+          <Play className="size-4" />
           {snapshot.status === 'paused' ? '继续' : '等待学习页'}
         </Button>
       )
@@ -251,7 +259,7 @@ export default function TimerOverlayPage() {
           title="展开计时器"
           aria-label="展开计时器"
         >
-          <ChevronsUp className="h-4 w-4" />
+          <ChevronsUp className="size-4" />
         </button>
       </div>
     )
@@ -278,7 +286,7 @@ export default function TimerOverlayPage() {
           onClick={() => setOverlayCollapsed(true)}
           title="折叠为胶囊"
         >
-          <ChevronsDown className="h-4 w-4" />
+          <ChevronsDown className="size-4" />
         </button>
       </div>
 

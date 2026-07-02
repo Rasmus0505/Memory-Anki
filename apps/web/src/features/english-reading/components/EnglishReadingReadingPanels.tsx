@@ -110,18 +110,18 @@ export function EnglishReadingReadingPanels({
             <CardTitle className="text-2xl">{material.title}</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="rounded-3xl border border-dashed border-border/70 bg-background/60 px-5 py-6 text-sm text-muted-foreground">
+            <div className="rounded-lg border border-dashed border-border/70 bg-background/60 px-5 py-6 text-sm text-muted-foreground">
               这篇材料已经进入阅读历史，但还没有生成可阅读版本。你可以直接继续生成，不需要重新上传。
             </div>
             <Button
               onClick={onGeneratePendingMaterial}
               disabled={generating}
-              className="h-11 rounded-2xl px-5"
+              className="h-11 rounded-lg px-5"
             >
               {generating ? (
-                <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
+                <LoaderCircle className="mr-2 size-4 animate-spin" />
               ) : (
-                <Sparkles className="mr-2 h-4 w-4" />
+                <Sparkles className="mr-2 size-4" />
               )}
               为这篇材料生成阅读稿
             </Button>
@@ -162,13 +162,13 @@ export function EnglishReadingReadingPanels({
                 onClick={onOpenRegenerateDialog}
                 disabled={generating}
               >
-                <RefreshCcw className="mr-2 h-4 w-4" />
+                <RefreshCcw className="mr-2 size-4" />
                 重新生成内容
               </Button>
             </div>
           </CardHeader>
           <CardContent className="space-y-6 p-4 sm:p-6">
-            <div className="rounded-[32px] border border-border/70 bg-card/90 px-5 py-6 shadow-floating sm:px-8 sm:py-9">
+            <div className="rounded-lg border border-border/70 bg-card/90 px-5 py-6 shadow-floating sm:px-8 sm:py-9">
               <div
                 ref={readingContentRef}
                 className="mx-auto max-w-4xl space-y-6 text-[1.05rem] leading-9 text-foreground selection:bg-info/10 selection:text-primary sm:text-[1.1rem]"
@@ -211,7 +211,7 @@ export function EnglishReadingReadingPanels({
                     句法重构 {version.summary.sentenceSimplifiedCount}
                   </span>
                 </div>
-                <Button size="lg" className="rounded-2xl px-7" onClick={onToggleCompletionPanel}>
+                <Button size="lg" className="rounded-lg px-7" onClick={onToggleCompletionPanel}>
                   我读完了
                 </Button>
               </div>
@@ -225,13 +225,13 @@ export function EnglishReadingReadingPanels({
                   </CardHeader>
                   <CardContent className="space-y-4">
                     <div className="grid gap-3 sm:grid-cols-2">
-                      <div className="rounded-2xl border border-border/70 bg-card px-4 py-4">
+                      <div className="rounded-lg border border-border/70 bg-card px-4 py-4">
                         <div className="text-xs text-muted-foreground">当前用时</div>
                         <div className="mt-2 text-lg font-semibold">
                           {formatMinutes(timer.effectiveSeconds)}
                         </div>
                       </div>
-                      <div className="rounded-2xl border border-border/70 bg-card px-4 py-4">
+                      <div className="rounded-lg border border-border/70 bg-card px-4 py-4">
                         <div className="text-xs text-muted-foreground">
                           已接触增长内容
                         </div>
@@ -247,7 +247,7 @@ export function EnglishReadingReadingPanels({
                         disabled={completionSubmitting !== null}
                       >
                         {completionSubmitting === "too_easy" ? (
-                          <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
+                          <LoaderCircle className="mr-2 size-4 animate-spin" />
                         ) : null}
                         太简单
                       </Button>
@@ -256,7 +256,7 @@ export function EnglishReadingReadingPanels({
                         disabled={completionSubmitting !== null}
                       >
                         {completionSubmitting === "just_right" ? (
-                          <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
+                          <LoaderCircle className="mr-2 size-4 animate-spin" />
                         ) : null}
                         刚刚好
                       </Button>
@@ -266,12 +266,12 @@ export function EnglishReadingReadingPanels({
                         disabled={completionSubmitting !== null}
                       >
                         {completionSubmitting === "too_hard" ? (
-                          <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
+                          <LoaderCircle className="mr-2 size-4 animate-spin" />
                         ) : null}
                         有点难
                       </Button>
                     </div>
-                    <div className="rounded-2xl border border-dashed border-border/70 px-4 py-4 text-sm text-muted-foreground">
+                    <div className="rounded-lg border border-dashed border-border/70 px-4 py-4 text-sm text-muted-foreground">
                       系统会根据你的主观反馈、阅读速度、悬浮次数和句法展开次数，只校准下一篇材料的内部难度，不会突然把当前文章改掉。
                     </div>
                   </CardContent>
@@ -284,29 +284,29 @@ export function EnglishReadingReadingPanels({
                   <CardContent>
                     {completionResponse ? (
                       <div className="space-y-3 text-sm">
-                        <div className="rounded-2xl border border-border/70 bg-card px-4 py-4">
+                        <div className="rounded-lg border border-border/70 bg-card px-4 py-4">
                           本次阅读用时：
                           {formatMinutes(completionResponse.session.durationSeconds)}
                         </div>
-                        <div className="rounded-2xl border border-border/70 bg-card px-4 py-4">
+                        <div className="rounded-lg border border-border/70 bg-card px-4 py-4">
                           阅读速度：{completionResponse.session.wordsPerMinute} 词/分钟
                         </div>
-                        <div className="rounded-2xl border border-border/70 bg-card px-4 py-4">
+                        <div className="rounded-lg border border-border/70 bg-card px-4 py-4">
                           你与 {version.summary.greenCount + version.summary.yellowCount} 个
                           i+1 词汇进行了亲密接触，并无痛掠过了 {version.summary.redCount} 个超纲词。
                         </div>
-                        <div className="rounded-2xl border border-success/20 bg-success/5 px-4 py-4 text-success">
+                        <div className="rounded-lg border border-success/20 bg-success/5 px-4 py-4 text-success">
                           本次反馈：
                           {summarizeFeedback(completionResponse.session.feedback)} · 获得{" "}
                           {completionResponse.session.xpAwarded} XP
                         </div>
-                        <div className="rounded-2xl border border-border/70 bg-card px-4 py-4">
+                        <div className="rounded-lg border border-border/70 bg-card px-4 py-4">
                           当前等级：{completionResponse.profile.declaredCefr} · 升级进度{" "}
                           {completionResponse.profile.levelProgress}/100
                         </div>
                       </div>
                     ) : (
-                      <div className="rounded-3xl border border-dashed border-border/70 py-12 text-center text-sm text-muted-foreground">
+                      <div className="rounded-lg border border-dashed border-border/70 py-12 text-center text-sm text-muted-foreground">
                         选择一个反馈后，这里会出现本次阅读的温和回顾。
                       </div>
                     )}
@@ -321,7 +321,7 @@ export function EnglishReadingReadingPanels({
       {!material && !versionLoading ? (
         <Card className="border-border/70 bg-card/95">
           <CardContent className="flex flex-col items-center justify-center gap-3 py-14 text-center">
-            <FileText className="h-10 w-10 text-muted-foreground" />
+            <FileText className="size-10 text-muted-foreground" />
             <div className="text-base font-medium">先导入一篇英文材料</div>
             <div className="max-w-xl text-sm text-muted-foreground">
               你可以先粘贴全文，或者上传 `txt / md / pdf`。系统会基于本地词典和 Qwen

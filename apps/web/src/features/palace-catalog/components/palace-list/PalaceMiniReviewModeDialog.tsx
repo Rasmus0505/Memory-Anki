@@ -79,7 +79,7 @@ export function PalaceMiniReviewModeDialog({
                     key={option.value}
                     type="button"
                     className={cn(
-                      'rounded-2xl border px-4 py-4 text-left transition-colors',
+                      'rounded-lg border px-4 py-4 text-left transition-colors',
                       active
                         ? 'border-info bg-info/5 shadow-sm'
                         : 'border-border/70 bg-background/80 hover:bg-muted/40',

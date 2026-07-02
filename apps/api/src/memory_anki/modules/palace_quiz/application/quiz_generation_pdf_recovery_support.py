@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-import sys
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -18,15 +17,6 @@ from .quiz_generation_pdf_recovery_source_meta import (
 )
 from .question_contracts import PalaceQuizValidationError
 from .question_lookup_queries import get_palace_or_raise
-
-
-def _resolve_get_external_ai_call_log():
-    facade = sys.modules.get("memory_anki.modules.palace_quiz.application.quiz_generation_service")
-    if facade is not None:
-        patched = getattr(facade, "get_external_ai_call_log", None)
-        if patched is not None:
-            return patched
-    return get_external_ai_call_log
 
 
 @dataclass(frozen=True, slots=True)
@@ -46,8 +36,9 @@ def load_pdf_recovery_context(
     palace_id: int,
     ai_call_log_id: str,
     selected_chapter_id: int | None = None,
+    get_ai_call_log=get_external_ai_call_log,
 ) -> PdfRecoveryContext:
-    log_payload = _resolve_get_external_ai_call_log()(session, ai_call_log_id)
+    log_payload = get_ai_call_log(session, ai_call_log_id)
     if not log_payload:
         raise PalaceQuizValidationError("AI 日志不存在，无法恢复题目。")
     log_inputs = extract_pdf_recovery_log_inputs(log_payload)

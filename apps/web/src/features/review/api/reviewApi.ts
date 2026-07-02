@@ -1,19 +1,24 @@
 import { request } from '@/shared/api/http'
-import { invalidatePalaceCatalogCache } from '@/entities/palace/api/catalogApi'
+import { invalidatePalaceCatalogCache } from '@/entities/palace/api'
 import {
   consumePrefetchedPromise,
   prefetchPromise,
 } from '@/shared/api/promiseWarmupCache'
+import {
+  clearSessionProgressApi,
+  getSessionProgressApi,
+  saveSessionProgressApi,
+  type SessionProgressPayload,
+} from '@/entities/session/api'
 import type {
   BatchSegmentReviewSessionResponse,
   BatchSegmentReviewSubmitResponse,
-  MiniPalaceSummary,
+  MiniReviewSessionResponse,
   ReviewQueueResponse,
   ReviewScheduleSummary,
   ReviewSessionSubmitResponse,
   SegmentReviewQueueResponse,
   SegmentReviewScheduleSummary,
-  SessionProgressSnapshot,
 } from '@/shared/api/contracts'
 
 async function withPalaceCatalogInvalidation<T>(operation: Promise<T>) {
@@ -71,85 +76,34 @@ export function createBatchSegmentReviewSessionApi(data: { segment_ids: number[]
     body: JSON.stringify(data),
     persistence: {
       resourceKey: `segment-review:batch-session:${data.segment_ids.join(',')}`,
-      description: '创建多分块复习会话',
+      description: 'Create batch segment review session',
       replayMode: 'manual',
     },
   })
 }
 
 export function getReviewSessionProgressApi(id: number) {
-  return request<{ progress: SessionProgressSnapshot | null }>(`/sessions/review/${id}/progress`)
+  return getSessionProgressApi('review', id)
 }
 
-export function saveReviewSessionProgressApi(
-  id: number,
-  data: {
-    reveal_map: Record<string, 'hidden' | 'placeholder' | 'revealed'>
-    red_node_ids: string[]
-    completed: boolean
-  },
-) {
-  return request<{ progress: SessionProgressSnapshot }>(`/sessions/review/${id}/progress`, {
-    method: 'PUT',
-    body: JSON.stringify(data),
-    persistence: {
-      resourceKey: `session-progress:review:${id}`,
-      coalesceKey: `session-progress:review:${id}`,
-      description: '保存复习进度',
-      replayMode: 'auto',
-    },
-  })
+export function saveReviewSessionProgressApi(id: number, data: SessionProgressPayload) {
+  return saveSessionProgressApi('review', id, data, 'Save review progress')
 }
 
 export function clearReviewSessionProgressApi(id: number) {
-  return request<{ ok: boolean }>(`/sessions/review/${id}/progress`, {
-    method: 'DELETE',
-    persistence: {
-      resourceKey: `session-progress:review:${id}:clear`,
-      description: '清除复习进度',
-      replayMode: 'manual',
-    },
-  })
+  return clearSessionProgressApi('review', id, 'Clear review progress')
 }
 
 export function getSegmentReviewSessionProgressApi(id: number) {
-  return request<{ progress: SessionProgressSnapshot | null }>(
-    `/sessions/segment-review/${id}/progress`,
-  )
+  return getSessionProgressApi('segment-review', id)
 }
 
-export function saveSegmentReviewSessionProgressApi(
-  id: number,
-  data: {
-    reveal_map: Record<string, 'hidden' | 'placeholder' | 'revealed'>
-    red_node_ids: string[]
-    completed: boolean
-  },
-) {
-  return request<{ progress: SessionProgressSnapshot }>(
-    `/sessions/segment-review/${id}/progress`,
-    {
-      method: 'PUT',
-      body: JSON.stringify(data),
-      persistence: {
-        resourceKey: `session-progress:segment-review:${id}`,
-        coalesceKey: `session-progress:segment-review:${id}`,
-        description: '保存分块复习进度',
-        replayMode: 'auto',
-      },
-    },
-  )
+export function saveSegmentReviewSessionProgressApi(id: number, data: SessionProgressPayload) {
+  return saveSessionProgressApi('segment-review', id, data, 'Save segment review progress')
 }
 
 export function clearSegmentReviewSessionProgressApi(id: number) {
-  return request<{ ok: boolean }>(`/sessions/segment-review/${id}/progress`, {
-    method: 'DELETE',
-    persistence: {
-      resourceKey: `session-progress:segment-review:${id}:clear`,
-      description: '清除分块复习进度',
-      replayMode: 'manual',
-    },
-  })
+  return clearSessionProgressApi('segment-review', id, 'Clear segment review progress')
 }
 
 export function submitReviewSessionApi(
@@ -170,7 +124,7 @@ export function submitReviewSessionApi(
       body: JSON.stringify(data),
       persistence: {
         resourceKey: `review-submit:${id}`,
-        description: '提交正式复习',
+        description: 'Submit review session',
         replayMode: 'auto',
       },
     }),
@@ -195,7 +149,7 @@ export function submitSegmentReviewSessionApi(
       body: JSON.stringify(data),
       persistence: {
         resourceKey: `segment-review-submit:${id}`,
-        description: '提交分块复习',
+        description: 'Submit segment review session',
         replayMode: 'auto',
       },
     }),
@@ -203,57 +157,19 @@ export function submitSegmentReviewSessionApi(
 }
 
 export function getMiniReviewSessionApi(id: number) {
-  return request<{
-    id: number
-    palace_mini_palace_id: number
-    palace_id: number
-    scheduled_date: string
-    interval_days: number
-    algorithm_used: string
-    completed: boolean
-    completed_at: string | null
-    review_number: number
-    review_type: string
-    mini_palace: MiniPalaceSummary
-    estimated_review_seconds: number
-    palace: unknown
-    editor_doc: Record<string, unknown> | string | null
-  }>(`/mini-review/session/${id}`)
+  return request<MiniReviewSessionResponse>(`/mini-review/session/${id}`)
 }
 
 export function getMiniReviewSessionProgressApi(id: number) {
-  return request<{ progress: SessionProgressSnapshot | null }>(
-    `/sessions/mini-review/${id}/progress`,
-  )
+  return getSessionProgressApi('mini-review', id)
 }
 
-export function saveMiniReviewSessionProgressApi(
-  id: number,
-  data: {
-    reveal_map: Record<string, 'hidden' | 'placeholder' | 'revealed'>
-    red_node_ids: string[]
-    completed: boolean
-  },
-) {
-  return request<{ progress: SessionProgressSnapshot }>(
-    `/sessions/mini-review/${id}/progress`,
-    {
-      method: 'PUT',
-      body: JSON.stringify(data),
-      persistence: {
-        resourceKey: `session-progress:mini-review:${id}`,
-        coalesceKey: `session-progress:mini-review:${id}`,
-        description: '保存小宫殿复习进度',
-        replayMode: 'auto',
-      },
-    },
-  )
+export function saveMiniReviewSessionProgressApi(id: number, data: SessionProgressPayload) {
+  return saveSessionProgressApi('mini-review', id, data, 'Save mini review progress')
 }
 
 export function clearMiniReviewSessionProgressApi(id: number) {
-  return request<{ ok: boolean }>(`/sessions/mini-review/${id}/progress`, {
-    method: 'DELETE',
-  })
+  return clearSessionProgressApi('mini-review', id)
 }
 
 export function submitMiniReviewSessionApi(
@@ -274,7 +190,7 @@ export function submitMiniReviewSessionApi(
       body: JSON.stringify(data),
       persistence: {
         resourceKey: `mini-review-submit:${id}`,
-        description: '提交小宫殿正式复习',
+        description: 'Submit mini review session',
         replayMode: 'auto',
       },
     }),
@@ -294,7 +210,7 @@ export function submitBatchSegmentReviewSessionApi(data: {
       body: JSON.stringify(data),
       persistence: {
         resourceKey: `segment-review-batch-submit:${data.segment_ids.join(',')}`,
-        description: '提交多分块复习',
+        description: 'Submit batch segment review session',
         replayMode: 'auto',
       },
     }),

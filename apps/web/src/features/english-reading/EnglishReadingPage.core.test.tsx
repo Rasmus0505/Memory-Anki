@@ -52,7 +52,7 @@ describe("EnglishReadingPage core flows", () => {
       screen.getAllByText("Important acquisition was recalcitrant.").length,
     ).toBeGreaterThan(0);
     expect(mocks.timer.start).toHaveBeenCalled();
-    expect(mocks.toastSuccessMock).toHaveBeenCalledWith("i+1 阅读材料已生成。");
+    expect(mocks.toastSuccessMock).toHaveBeenCalledWith("i+1 阅读材料已生成。", undefined);
   });
 
   it("shows simplified hover metadata with CEFR, lemma, and source label", async () => {

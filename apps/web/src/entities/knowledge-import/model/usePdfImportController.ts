@@ -11,12 +11,12 @@ import {
   getSubjectDocumentPagesApi,
   getSubjectDocumentsApi,
   uploadSubjectDocumentApi,
-} from '@/entities/knowledge/api/knowledgeApi'
+} from '@/entities/knowledge/api'
 import {
   buildPdfImportOptionsFromSettings,
   getReviewSettingsApi,
   updateReviewSettingsApi,
-} from '@/entities/preferences/api/reviewSettingsApi'
+} from '@/entities/preferences/api'
 import { formatKnowledgeImportError } from '@/entities/knowledge-import/model/importError'
 import type { ImportSubjectOption } from '@/entities/knowledge-import/model/importTypes'
 import {

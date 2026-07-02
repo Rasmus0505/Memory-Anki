@@ -38,7 +38,7 @@ const mocks = vi.hoisted(() => ({
   },
 }))
 
-vi.mock('@/features/english/api/englishApi', () => ({
+vi.mock('@/features/english/api', () => ({
   buildEnglishCourseMediaUrl: (courseId: number) => `/media/${courseId}.mp4`,
   checkEnglishSentenceApi: mocks.checkEnglishSentenceApiMock,
   getEnglishCourseApi: mocks.getEnglishCourseApiMock,

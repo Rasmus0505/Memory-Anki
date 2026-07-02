@@ -2,7 +2,7 @@ import type { ClientPreferences } from '@/shared/api/contracts'
 import {
   getClientPreferencesApi,
   updateClientPreferencesApi,
-} from '@/entities/preferences/api/clientPreferencesApi'
+} from '@/entities/preferences/api'
 
 export const CLIENT_PREFERENCES_UPDATED_EVENT = 'memory-anki-client-preferences-updated'
 
@@ -23,6 +23,15 @@ function emitUpdate() {
       detail: { ...cache },
     }),
   )
+}
+
+function arePreferenceValuesEqual(left: unknown, right: unknown) {
+  if (Object.is(left, right)) return true
+  try {
+    return JSON.stringify(left) === JSON.stringify(right)
+  } catch {
+    return false
+  }
 }
 
 export function getCachedClientPreference<T>(
@@ -73,6 +82,12 @@ export async function initializeClientPreferences() {
 }
 
 export async function saveClientPreference<T>(key: PreferenceKey, value: T) {
+  if (arePreferenceValuesEqual(cache[key], value)) {
+    return {
+      value: cache[key] as T,
+      persisted: true,
+    }
+  }
   const requestVersion = (latestSaveVersion[key] ?? 0) + 1
   latestSaveVersion[key] = requestVersion
   cache[key] = value as ClientPreferences[PreferenceKey]

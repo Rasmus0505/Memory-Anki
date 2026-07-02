@@ -1,4 +1,4 @@
-import { API_BASE, fetchWithMutationQueue } from '@/shared/api/http'
+import { API_BASE, fetchWithMutationQueue, request } from '@/shared/api/http'
 import type {
   AiRuntimeOptions,
   ImageTextPreviewResponse,
@@ -228,13 +228,12 @@ export async function pauseImportJobApi(jobId: string) {
 }
 
 export async function getImportJobApi(jobId: string) {
-  const response = await fetch(`${API_BASE}/import/jobs/${jobId}`)
-  return readImportJson<MindMapImportJob>(response)
+  return request<MindMapImportJob>(`/import/jobs/${jobId}`)
 }
 
 export async function listImportJobsApi(entityKey: string) {
-  const response = await fetch(`${API_BASE}/import/jobs?${new URLSearchParams({ entity_key: entityKey }).toString()}`)
-  return readImportJson<MindMapImportJobListResponse>(response)
+  const query = new URLSearchParams({ entity_key: entityKey }).toString()
+  return request<MindMapImportJobListResponse>(`/import/jobs?${query}`)
 }
 
 export async function deleteImportJobApi(jobId: string) {

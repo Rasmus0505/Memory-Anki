@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from collections import defaultdict
 from collections.abc import Callable
-from datetime import UTC, date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -428,10 +428,16 @@ def _normalize_stored_event_datetime(
 ) -> datetime | None:
     if stored is None or event_time is None:
         return None
-    local_naive = event_time.astimezone().replace(tzinfo=None)
+    local_naive = event_time.astimezone(timezone(timedelta(hours=8))).replace(tzinfo=None)
     if _is_whole_day_shift(stored, local_naive):
         return stored
-    return local_naive
+    event_utc_naive = event_time.astimezone(timezone.utc).replace(tzinfo=None)
+    if abs((stored - event_utc_naive).total_seconds()) <= 60:
+        return local_naive
+    normalized_local = local_naive.replace(second=0, microsecond=0)
+    if abs((stored - normalized_local).total_seconds()) <= 60:
+        return stored
+    return normalized_local
 
 
 def _repair_shifted_record_bounds(
@@ -445,8 +451,10 @@ def _repair_shifted_record_bounds(
         started_at, ended_at = ended_at, started_at
 
     if start_event is not None and end_event is not None:
-        expected_start = start_event.astimezone(UTC).replace(tzinfo=None)
-        expected_end = end_event.astimezone(UTC).replace(tzinfo=None)
+        expected_start = _normalize_stored_event_datetime(started_at, start_event)
+        expected_end = end_event.astimezone(timezone(timedelta(hours=8))).replace(tzinfo=None)
+        if expected_start is None or expected_end is None:
+            return started_at, ended_at
         if expected_start <= expected_end:
             if _needs_duration_repair(started_at, ended_at, record.effective_seconds) and _matches_expected_elapsed(expected_start, expected_end, record.effective_seconds):
                 return expected_start, expected_end
@@ -484,12 +492,19 @@ def _needs_duration_repair(
     tolerance_seconds: int = 120,
 ) -> bool:
     delta_seconds = max(0.0, (ended_at - started_at).total_seconds())
-    if delta_seconds <= tolerance_seconds:
+    expected_seconds = max(0, int(effective_seconds))
+    if abs(delta_seconds - expected_seconds) <= tolerance_seconds:
         return False
     whole_days = round(delta_seconds / 86400)
     if whole_days == 0:
         return False
-    return abs(delta_seconds - (whole_days * 86400)) <= tolerance_seconds
+    shifted_seconds = abs(delta_seconds - (whole_days * 86400))
+    if shifted_seconds > 43200:
+        shifted_seconds = abs(delta_seconds - ((whole_days + 1) * 86400))
+    return (
+        shifted_seconds <= tolerance_seconds
+        or abs(shifted_seconds - expected_seconds) <= tolerance_seconds
+    )
 
 
 def _matches_expected_elapsed(

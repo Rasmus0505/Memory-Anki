@@ -55,7 +55,7 @@ function renderResolvedFeedback(correct: boolean | undefined, analysis: string, 
     <div
       className={cn(
         'border px-4 py-3 text-sm',
-        compact ? 'rounded-xl' : 'rounded-2xl',
+        compact ? 'rounded-xl' : 'rounded-lg',
         correct ? 'border-success/20 bg-success/5' : 'border-destructive/20 bg-destructive/5',
       )}
     >
@@ -111,7 +111,7 @@ export function QuizQuestionInteraction({
               }}
               className={cn(
                 'border text-left text-sm transition-colors',
-                compact ? 'rounded-xl px-3 py-2' : 'rounded-2xl px-4 py-3',
+                compact ? 'rounded-xl px-3 py-2' : 'rounded-lg px-4 py-3',
                 resolved && correct && 'border-success/30 bg-success/5 text-success',
                 resolved && selected && !correct && 'border-destructive/30 bg-destructive/5 text-destructive',
                 resolved && !selected && !correct && 'border-border/70 bg-background/60 text-muted-foreground',
@@ -126,7 +126,7 @@ export function QuizQuestionInteraction({
           <div
             className={cn(
               'border border-border/70 bg-background/70',
-              compact ? 'rounded-xl px-3 py-3' : 'rounded-2xl px-4 py-4',
+              compact ? 'rounded-xl px-3 py-3' : 'rounded-lg px-4 py-4',
             )}
           >
             <div className="text-sm font-medium">
@@ -164,7 +164,7 @@ export function QuizQuestionInteraction({
                 }))
               }
               className={cn(
-                'rounded-2xl border px-4 py-4 text-base font-semibold',
+                'rounded-lg border px-4 py-4 text-base font-semibold',
                 resolved && value === correctAnswer && 'border-success/30 bg-success/5 text-success',
                 resolved &&
                   currentState.trueFalseAnswer === value &&
@@ -178,7 +178,7 @@ export function QuizQuestionInteraction({
           ))}
         </div>
         {resolved && !currentState.correct && question.answer_payload.false_explanation ? (
-          <div className="rounded-2xl border border-warning/20 bg-warning/5 px-4 py-3 text-sm text-warning">
+          <div className="rounded-lg border border-warning/20 bg-warning/5 px-4 py-3 text-sm text-warning">
             错误点：{question.answer_payload.false_explanation}
           </div>
         ) : null}
@@ -208,7 +208,7 @@ export function QuizQuestionInteraction({
           const submitted = submittedBlankIds.includes(blank.id)
           const correct = answerMatches(blankInputs[blank.id] || '', blank.answer, blank.aliases)
           return (
-            <div key={blank.id} className="rounded-2xl border border-border/70 px-4 py-3">
+            <div key={blank.id} className="rounded-lg border border-border/70 px-4 py-3">
               <div className="text-sm font-medium">{blank.id}</div>
               <div className="mt-2 flex gap-2">
                 <Input
@@ -266,7 +266,7 @@ export function QuizQuestionInteraction({
                 type="button"
                 onClick={() => onStateChange((current) => ({ ...current, selectedLeftId: pair.left_id }))}
                 className={cn(
-                  'w-full rounded-2xl border px-3 py-3 text-left',
+                  'w-full rounded-lg border px-3 py-3 text-left',
                   selectedLeftId === pair.left_id && 'border-info/50 bg-info/5',
                   matchingPairs[pair.left_id] && 'bg-muted',
                   currentState.resolved &&
@@ -298,7 +298,7 @@ export function QuizQuestionInteraction({
                   }))
                 }}
                 className={cn(
-                  'w-full rounded-2xl border px-3 py-3 text-left hover:bg-muted',
+                  'w-full rounded-lg border px-3 py-3 text-left hover:bg-muted',
                   Object.values(matchingPairs).includes(pair.right_id) && 'border-info/20 bg-info/5',
                 )}
               >
@@ -347,7 +347,7 @@ export function QuizQuestionInteraction({
               next.splice(index, 0, draggedId)
               onStateChange((current) => ({ ...current, orderingIds: next }))
             }}
-            className="flex items-center justify-between gap-3 rounded-2xl border border-border/70 px-4 py-3"
+            className="flex items-center justify-between gap-3 rounded-lg border border-border/70 px-4 py-3"
           >
             <span>
               <span className="mr-2 text-muted-foreground">{index + 1}.</span>
@@ -400,7 +400,7 @@ export function QuizQuestionInteraction({
           提交排序
         </Button>
         {currentState.resolved ? (
-          <div className="rounded-2xl border border-border/70 bg-muted/40 px-4 py-3 text-sm">
+          <div className="rounded-lg border border-border/70 bg-muted/40 px-4 py-3 text-sm">
             正确顺序：
             {(question.answer_payload.correct_order_ids || [])
               .map((id) => itemById[id]?.text || id)
@@ -419,7 +419,7 @@ export function QuizQuestionInteraction({
     const selectedItemId = currentState.selectedCategorizationItemId || null
     return (
       <div className="space-y-4">
-        <div className="flex flex-wrap gap-2 rounded-2xl border border-border/70 bg-muted/30 p-3">
+        <div className="flex flex-wrap gap-2 rounded-lg border border-border/70 bg-muted/30 p-3">
           {items.map((item) => (
             <button
               key={item.id}
@@ -461,7 +461,7 @@ export function QuizQuestionInteraction({
                   },
                 }))
               }}
-              className="min-h-28 rounded-2xl border border-border/70 p-3"
+              className="min-h-28 rounded-lg border border-border/70 p-3"
             >
               <button
                 type="button"
@@ -515,7 +515,7 @@ export function QuizQuestionInteraction({
           提交归类
         </Button>
         {currentState.resolved ? (
-          <div className="rounded-2xl border border-border/70 bg-muted/40 px-4 py-3 text-sm">
+          <div className="rounded-lg border border-border/70 bg-muted/40 px-4 py-3 text-sm">
             正确归类：
             {items
               .map(
@@ -568,9 +568,9 @@ export function QuizQuestionInteraction({
           onClick={() => onRequestShortAnswerFeedback?.()}
         >
           {currentState.shortAnswerFeedbackLoading ? (
-            <LoaderCircle className="h-4 w-4 animate-spin" />
+            <LoaderCircle className="size-4 animate-spin" />
           ) : (
-            <Sparkles className="h-4 w-4" />
+            <Sparkles className="size-4" />
           )}
           AI点评
         </Button>
@@ -579,7 +579,7 @@ export function QuizQuestionInteraction({
         <div
           className={cn(
             'border border-border/70 bg-background/70 text-sm',
-            compact ? 'rounded-xl px-3 py-3' : 'rounded-2xl px-4 py-4',
+            compact ? 'rounded-xl px-3 py-3' : 'rounded-lg px-4 py-4',
           )}
         >
           <div className="font-medium">参考答案</div>

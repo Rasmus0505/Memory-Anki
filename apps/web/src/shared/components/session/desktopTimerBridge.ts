@@ -29,6 +29,7 @@ export interface UnifiedTimerSnapshot {
   snoozeCount: number
   availableActions: UnifiedTimerAction[]
   presetMinutes: number[]
+  allowCustomMinutes?: boolean
   snoozeMinutes: number[]
   targetPath: string
   updatedAt: number

@@ -1,6 +1,7 @@
 import json
 import tempfile
 import unittest
+from dataclasses import replace
 from pathlib import Path
 
 from memory_anki.core.file_sync import pull_on_start, push_on_stop
@@ -85,6 +86,32 @@ class FileSyncTests(unittest.TestCase):
         self.assertEqual(conflict.status, "conflict")
         self.assertGreaterEqual(len(conflict_files), 1)
         self.assertEqual(remote_state["revision"], 2)
+
+    def test_sync_snapshot_names_sanitize_device_names(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            device_a = make_config(root, "device-a", "DeviceA")
+            device_b = make_config(root, "device-b", "DeviceB")
+            device_a = replace(device_a, device_name="Desk/One: A")
+            device_b = replace(device_b, device_name="Phone\\Two?")
+
+            write_runtime_payload(device_a.local_app_home, "base")
+            self.assertTrue(push_on_stop(device_a).ok)
+            self.assertTrue(pull_on_start(device_b).ok)
+
+            write_runtime_payload(device_a.local_app_home, "device-a-change")
+            self.assertTrue(push_on_stop(device_a).ok)
+            write_runtime_payload(device_b.local_app_home, "device-b-change")
+            conflict = push_on_stop(device_b)
+
+            snapshot_names = [path.name for path in (root / "sync-root" / "snapshots").glob("*.zip")]
+            conflict_names = [path.name for path in (root / "sync-root" / "conflicts").glob("*.zip")]
+
+        self.assertFalse(conflict.ok)
+        self.assertTrue(snapshot_names)
+        self.assertTrue(conflict_names)
+        self.assertTrue(all("/" not in name and "\\" not in name and ":" not in name for name in snapshot_names))
+        self.assertTrue(all("/" not in name and "\\" not in name and "?" not in name for name in conflict_names))
 
 
 if __name__ == "__main__":

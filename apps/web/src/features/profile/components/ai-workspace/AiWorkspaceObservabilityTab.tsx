@@ -63,7 +63,7 @@ export function AiWorkspaceObservabilityTab({
             <option value="started">started</option>
           </select>
           <Button type="button" onClick={() => void onLoadLogs()}>
-            <Search className="mr-2 h-4 w-4" />
+            <Search className="mr-2 size-4" />
             筛选
           </Button>
         </CardContent>

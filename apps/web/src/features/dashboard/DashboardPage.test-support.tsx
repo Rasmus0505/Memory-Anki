@@ -64,7 +64,7 @@ export const timeRecordsDashboardMock = {
   handleSubmitRecord: vi.fn(),
 };
 
-vi.mock("@/features/dashboard/api/dashboardApi", () => ({
+vi.mock("@/features/dashboard/api", () => ({
   getDashboardApi: async (...args: unknown[]) =>
     buildDashboardResponse(await getDashboardApi(...args)),
 }));

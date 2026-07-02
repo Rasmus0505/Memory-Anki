@@ -11,6 +11,7 @@ import {
 } from '@/shared/components/ui/dialog'
 import { Input } from '@/shared/components/ui/input'
 import { Label } from '@/shared/components/ui/label'
+import { Slider } from '@/shared/components/ui/slider'
 import { cn } from '@/shared/lib/utils'
 import {
   DEFAULT_VOICE_COACH_SETTINGS,
@@ -50,7 +51,7 @@ function ToggleRow({
       )}
     >
       <span className="flex min-w-0 gap-3">
-        <Icon className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+        <Icon className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
         <span>
           <span className="block text-sm font-medium">{title}</span>
           <span className="mt-1 block text-xs text-muted-foreground">{description}</span>
@@ -114,7 +115,7 @@ export function VoiceCoachSettingsDialog({
           </div>
           <DialogClose onClick={() => onOpenChange(false)} />
         </DialogHeader>
-        <div className="max-h-[78vh] space-y-5 overflow-y-auto px-6 py-5">
+        <div className="flex max-h-[78vh] flex-col gap-5 overflow-y-auto px-6 py-5">
           <ToggleRow
             active={settings.enabled}
             title={settings.enabled ? '语音教练已开启' : '语音教练已关闭'}
@@ -154,7 +155,7 @@ export function VoiceCoachSettingsDialog({
                 )}
               >
                 <span className="inline-flex items-center gap-2">
-                  <Icon className="h-4 w-4 text-muted-foreground" />
+                  <Icon className="size-4 text-muted-foreground" />
                   {label}
                 </span>
                 <Badge
@@ -171,19 +172,18 @@ export function VoiceCoachSettingsDialog({
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-2">
+            <div className="flex flex-col gap-2">
               <Label htmlFor="voice-coach-volume">音量</Label>
-              <Input
+              <Slider
                 id="voice-coach-volume"
-                type="range"
-                min="0"
-                max="1"
-                step="0.05"
-                value={settings.volume}
-                onChange={(event) =>
+                min={0}
+                max={1}
+                step={0.05}
+                value={[settings.volume]}
+                onValueChange={([value]) =>
                   updateSettings((current) => ({
                     ...current,
-                    volume: Number(event.currentTarget.value),
+                    volume: value ?? current.volume,
                   }))
                 }
               />
@@ -191,7 +191,7 @@ export function VoiceCoachSettingsDialog({
                 {Math.round(settings.volume * 100)}%
               </div>
             </div>
-            <div className="space-y-2">
+            <div className="flex flex-col gap-2">
               <Label htmlFor="voice-coach-cooldown">同类提示冷却秒数</Label>
               <Input
                 id="voice-coach-cooldown"
@@ -207,7 +207,7 @@ export function VoiceCoachSettingsDialog({
                 }
               />
             </div>
-            <div className="space-y-2">
+            <div className="flex flex-col gap-2">
               <Label htmlFor="voice-coach-idle">复习/练习空闲提醒</Label>
               <Input
                 id="voice-coach-idle"
@@ -223,7 +223,7 @@ export function VoiceCoachSettingsDialog({
                 }
               />
             </div>
-            <div className="space-y-2">
+            <div className="flex flex-col gap-2">
               <Label htmlFor="voice-coach-edit-idle">编辑空闲提醒</Label>
               <Input
                 id="voice-coach-edit-idle"
@@ -274,7 +274,7 @@ export function VoiceCoachSettingsDialog({
               variant="outline"
               onClick={() => updateSettings(DEFAULT_VOICE_COACH_SETTINGS)}
             >
-              <RotateCcw className="mr-2 h-4 w-4" />
+              <RotateCcw data-icon="inline-start" />
               恢复默认
             </Button>
             <div className="flex items-center gap-2">
@@ -282,7 +282,7 @@ export function VoiceCoachSettingsDialog({
                 <span className="text-xs text-destructive">测试失败，请检查 API Key。</span>
               ) : null}
               <Button type="button" onClick={handleTest} disabled={testState === 'running'}>
-                <Play className="mr-2 h-4 w-4" />
+                <Play data-icon="inline-start" />
                 {testState === 'running' ? '测试中' : '测试播放'}
               </Button>
             </div>

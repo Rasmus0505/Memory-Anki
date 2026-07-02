@@ -57,12 +57,16 @@ def _resolve_completed_count_after_submit(
     total_intervals: int,
 ) -> int:
     completed_count = min(requested_completed_count, total_intervals)
-    if schedule_review_type != "standard":
+    if schedule_review_type == "standard":
         return completed_count
     initial_slot_count = max(1, get_initial_same_day_slot_count(session, algorithm))
     if schedule_review_number < initial_slot_count:
         return max(completed_count, min(initial_slot_count, total_intervals))
     return completed_count
+
+
+def _should_preserve_same_day_slots(schedule_review_type: str | None) -> bool:
+    return schedule_review_type in {"1h", "sleep"}
 
 
 def submit_review(
@@ -118,6 +122,8 @@ def submit_review(
         completed_count=completed_count,
         completed_review_number=schedule.review_number,
         completed_at=completed_at,
+        preserve_existing_progress=False,
+        preserve_same_day_slots=_should_preserve_same_day_slots(schedule.review_type),
     )
     palace.needs_practice = bool(needs_practice)
     if next_review_number >= len(intervals):
@@ -193,6 +199,8 @@ def submit_segment_review(
         completed_count=completed_count,
         completed_review_number=completed_review_number,
         completed_at=completed_at,
+        preserve_existing_progress=False,
+        preserve_same_day_slots=_should_preserve_same_day_slots(schedule.review_type),
     )
     segment.palace.needs_practice = bool(needs_practice)
 

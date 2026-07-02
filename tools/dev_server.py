@@ -107,6 +107,55 @@ def kill_process_tree(pid: int) -> None:
     )
 
 
+def kill_memory_anki_desktop_processes() -> None:
+    """Stop desktop launcher and Electron processes started from this repo."""
+    try:
+        out = subprocess.run(
+            [
+                "wmic",
+                "process",
+                "where",
+                "name='python.exe' or name='node.exe' or name='electron.exe'",
+                "get",
+                "ProcessId,CommandLine",
+                "/format:csv",
+            ],
+            capture_output=True,
+            text=True,
+            encoding="gbk",
+            errors="replace",
+            check=False,
+        ).stdout
+    except Exception:
+        return
+
+    repo_marker = str(REPO_ROOT).lower()
+    matches: set[int] = set()
+    for line in out.splitlines():
+        if not line or "," not in line:
+            continue
+        lower = line.lower()
+        if (
+            "tools\\desktop_timer.py" not in lower
+            and "desktop-timer\\main.cjs" not in lower
+            and "run desktop:timer" not in lower
+            and repo_marker not in lower
+        ):
+            continue
+        parts = [part.strip() for part in line.rsplit(",", 1)]
+        if len(parts) != 2:
+            continue
+        try:
+            pid = int(parts[1])
+        except ValueError:
+            continue
+        if pid > 0:
+            matches.add(pid)
+
+    for pid in sorted(matches):
+        kill_process_tree(pid)
+
+
 def free_port(port: int, label: str) -> None:
     pids = list_listening_pids(port)
     if not pids:
@@ -258,7 +307,17 @@ def start_frontend() -> subprocess.Popen:
     LOGS_DIR.mkdir(parents=True, exist_ok=True)
     web_log = LOGS_DIR / "web-dev.log"
     npm = _resolve_npm()
-    cmd = [npm, "run", "dev", "--", "--port", str(FRONTEND_PORT), "--strictPort"]
+    cmd = [
+        npm,
+        "run",
+        "dev",
+        "--",
+        "--host",
+        BACKEND_HOST,
+        "--port",
+        str(FRONTEND_PORT),
+        "--strictPort",
+    ]
     log_file = web_log.open("ab")
     # 前端需要可见的控制台输出（vite 日志），但仍隐藏额外弹窗
     env = os.environ.copy()
@@ -280,6 +339,7 @@ def stop_all() -> int:
     print("[i] 停止 Memory Anki 服务 ...")
     free_port(BACKEND_PORT, "后端")
     free_port(FRONTEND_PORT, "前端")
+    kill_memory_anki_desktop_processes()
     result = sync_after_stop()
     if not result:
         return 1

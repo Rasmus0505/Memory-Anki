@@ -11,6 +11,8 @@ export interface BreakGuardConfig {
   promptDelaySeconds: number
   presetMinutes: number[]
   allowCustomMinutes: boolean
+  autoFinishOnStudyReturn: boolean
+  resumeInterruptedStudyOnReturn: boolean
   targetPath: string
   alertStrength: BreakGuardAlertStrength
   snoozeMinutes: number[]
@@ -35,6 +37,8 @@ export const DEFAULT_BREAK_GUARD_CONFIG: BreakGuardConfig = {
   promptDelaySeconds: 5,
   presetMinutes: [1, 3],
   allowCustomMinutes: true,
+  autoFinishOnStudyReturn: true,
+  resumeInterruptedStudyOnReturn: true,
   targetPath: '/freestyle',
   alertStrength: 'strong',
   snoozeMinutes: [1, 3, 5],
@@ -85,6 +89,14 @@ export function sanitizeBreakGuardConfig(value: unknown): BreakGuardConfig {
       typeof raw.allowCustomMinutes === 'boolean'
         ? raw.allowCustomMinutes
         : DEFAULT_BREAK_GUARD_CONFIG.allowCustomMinutes,
+    autoFinishOnStudyReturn:
+      typeof raw.autoFinishOnStudyReturn === 'boolean'
+        ? raw.autoFinishOnStudyReturn
+        : DEFAULT_BREAK_GUARD_CONFIG.autoFinishOnStudyReturn,
+    resumeInterruptedStudyOnReturn:
+      typeof raw.resumeInterruptedStudyOnReturn === 'boolean'
+        ? raw.resumeInterruptedStudyOnReturn
+        : DEFAULT_BREAK_GUARD_CONFIG.resumeInterruptedStudyOnReturn,
     targetPath: sanitizeTargetPath(raw.targetPath),
     alertStrength:
       raw.alertStrength === 'gentle' || raw.alertStrength === 'strong'
@@ -132,6 +144,18 @@ export function saveBreakGuardConfig(config: BreakGuardConfig) {
     dispatchBreakGuardConfigChange(sanitizeBreakGuardConfig(saved.value))
   })
   return sanitized
+}
+
+export function resetBreakGuardConfig() {
+  const nextConfig = DEFAULT_BREAK_GUARD_CONFIG
+  if (typeof window !== 'undefined') {
+    window.localStorage.removeItem(BREAK_GUARD_STORAGE_KEY)
+  }
+  dispatchBreakGuardConfigChange(nextConfig)
+  void saveClientPreference('break_guard_config', nextConfig).then((saved) => {
+    dispatchBreakGuardConfigChange(sanitizeBreakGuardConfig(saved.value))
+  })
+  return nextConfig
 }
 
 export function readBreakGuardLogs(): BreakGuardLogEntry[] {

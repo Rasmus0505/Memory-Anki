@@ -300,7 +300,7 @@ export function MindMapImportDrawer(props: MindMapImportDrawerProps) {
         className={cn(
           layoutMode === 'sidebar'
             ? 'ml-auto mr-0 h-[calc(100vh-32px)] max-w-[620px] rounded-none rounded-l-3xl border-l bg-card/98 p-0 shadow-floating'
-            : 'h-[min(92vh,980px)] max-w-[min(92vw,1440px)] rounded-[28px] border bg-card/98 p-0 shadow-floating',
+            : 'h-[min(92vh,980px)] max-w-[min(92vw,1440px)] rounded-lg border bg-card/98 p-0 shadow-floating',
           'overflow-hidden overscroll-contain',
           className,
         )}
@@ -311,7 +311,7 @@ export function MindMapImportDrawer(props: MindMapImportDrawerProps) {
               <div className="flex items-center gap-2">
                 {view === 'history' ? (
                   <Button variant="ghost" size="sm" onClick={() => setView('import')}>
-                    <ArrowLeft className="mr-2 h-4 w-4" />
+                    <ArrowLeft className="mr-2 size-4" />
                     返回导入
                   </Button>
                 ) : (
@@ -333,7 +333,7 @@ export function MindMapImportDrawer(props: MindMapImportDrawerProps) {
                     )}
                     onClick={() => onModeChange('mindmap')}
                   >
-                    <Sparkles className="mr-2 h-4 w-4" />
+                    <Sparkles className="mr-2 size-4" />
                     转脑图
                   </button>
                   <button
@@ -346,7 +346,7 @@ export function MindMapImportDrawer(props: MindMapImportDrawerProps) {
                     )}
                     onClick={() => onModeChange('text')}
                   >
-                    <Type className="mr-2 h-4 w-4" />
+                    <Type className="mr-2 size-4" />
                     转文字
                   </button>
                 </div>
@@ -358,12 +358,12 @@ export function MindMapImportDrawer(props: MindMapImportDrawerProps) {
                 >
                   {layoutMode === 'floating' ? (
                     <>
-                      <ArrowRightToLine className="mr-2 h-4 w-4" />
+                      <ArrowRightToLine className="mr-2 size-4" />
                       侧边栏
                     </>
                   ) : (
                     <>
-                      <PanelsTopLeft className="mr-2 h-4 w-4" />
+                      <PanelsTopLeft className="mr-2 size-4" />
                       悬浮窗
                     </>
                   )}
@@ -374,7 +374,7 @@ export function MindMapImportDrawer(props: MindMapImportDrawerProps) {
                     size="sm"
                     onClick={() => setView((current) => (current === 'history' ? 'import' : 'history'))}
                   >
-                    <Clock className="mr-2 h-4 w-4" />
+                    <Clock className="mr-2 size-4" />
                     历史记录
                     </Button>
                   ) : null}

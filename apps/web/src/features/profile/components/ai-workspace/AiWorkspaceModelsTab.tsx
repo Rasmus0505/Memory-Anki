@@ -75,7 +75,7 @@ export function AiWorkspaceModelsTab({
       <Card>
         <CardContent className="grid gap-3 p-4 lg:grid-cols-[minmax(0,1.6fr)_repeat(4,minmax(0,1fr))]">
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               value={modelSearch}
               onChange={(event) => onModelSearchChange(event.target.value)}
@@ -249,7 +249,7 @@ export function AiWorkspaceModelsTab({
               onClick={() => void onCreateModel()}
               disabled={Boolean(savingKeys["model:create"])}
             >
-              <Save className="mr-2 h-4 w-4" />
+              <Save className="mr-2 size-4" />
               {savingKeys["model:create"] ? "保存中..." : "保存模型目录"}
             </Button>
           </div>
@@ -312,7 +312,7 @@ export function AiWorkspaceModelsTab({
                   variant="outline"
                   onClick={() => void onTestModel(model)}
                 >
-                  <Play className="mr-2 h-4 w-4" />
+                  <Play className="mr-2 size-4" />
                   测试模型
                 </Button>
                 <Button
@@ -321,7 +321,7 @@ export function AiWorkspaceModelsTab({
                   variant="outline"
                   onClick={() => void onOpenImpact(model)}
                 >
-                  <Eye className="mr-2 h-4 w-4" />
+                  <Eye className="mr-2 size-4" />
                   查看使用影响
                 </Button>
                 <Button
@@ -339,7 +339,7 @@ export function AiWorkspaceModelsTab({
                   onClick={() => void onOpenImpact(model)}
                   disabled={Boolean(savingKeys[`delete:${model.key}`])}
                 >
-                  <Trash2 className="mr-2 h-4 w-4" />
+                  <Trash2 className="mr-2 size-4" />
                   停用模型
                 </Button>
               </div>

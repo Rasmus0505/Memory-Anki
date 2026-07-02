@@ -109,10 +109,10 @@ describe('PalaceChapterPanel', () => {
     const parentCard = within(dialogContent as HTMLElement).getByText('第十章').closest('label')
     const childCard = within(dialogContent as HTMLElement).getByText('第一节 第十章小节').closest('label')
 
-    expect(parentCard?.className).toContain('bg-emerald-100')
-    expect(parentCard?.className).toContain('border-emerald-500')
-    expect(childCard?.className).toContain('bg-emerald-50')
-    expect(childCard?.className).toContain('border-emerald-300')
+    expect(parentCard?.className).toContain('bg-success/10')
+    expect(parentCard?.className).toContain('border-success')
+    expect(childCard?.className).toContain('bg-success/5')
+    expect(childCard?.className).toContain('border-success/30')
   })
 
   it('toggles chapters from the dialog and disables controls while pending', () => {
@@ -146,7 +146,7 @@ describe('PalaceChapterPanel', () => {
       />,
     )
 
-    expect((screen.getByRole('button', { name: '保存中…' }) as HTMLButtonElement).disabled).toBe(true)
+    expect((screen.getByRole('button', { name: '保存中…', hidden: true }) as HTMLButtonElement).disabled).toBe(true)
     const disabledCheckboxes = screen.getAllByRole('checkbox')
     expect(disabledCheckboxes.every((checkbox) => (checkbox as HTMLInputElement).disabled)).toBe(true)
   })

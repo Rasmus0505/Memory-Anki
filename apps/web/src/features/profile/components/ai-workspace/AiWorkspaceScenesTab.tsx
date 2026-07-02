@@ -213,7 +213,7 @@ export function AiWorkspaceScenesTab({
                   onClick={() => void onCategorySave(currentCategory)}
                   disabled={Boolean(savingKeys[`category:${currentCategory.key}`])}
                 >
-                  <Save className="mr-2 h-4 w-4" />
+                  <Save className="mr-2 size-4" />
                   {savingKeys[`category:${currentCategory.key}`]
                     ? "保存中..."
                     : "保存并覆盖全部场景"}
@@ -228,7 +228,7 @@ export function AiWorkspaceScenesTab({
                     !currentCategory.has_shared_config
                   }
                 >
-                  <RefreshCcw className="mr-2 h-4 w-4" />
+                  <RefreshCcw className="mr-2 size-4" />
                   恢复本类全部场景
                 </Button>
               </div>
@@ -247,7 +247,7 @@ export function AiWorkspaceScenesTab({
             <CardContent className="space-y-4">
               <div className="grid gap-3 lg:grid-cols-[minmax(0,1.6fr)_180px_140px]">
                 <div className="relative">
-                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
                   <Input
                     value={sceneSearch}
                     onChange={(event) => onSceneSearchChange(event.target.value)}
@@ -322,7 +322,7 @@ export function AiWorkspaceScenesTab({
                     filteredCurrentScenes.length === 0
                   }
                 >
-                  <Save className="mr-2 h-4 w-4" />
+                  <Save className="mr-2 size-4" />
                   {savingKeys[`batch:${currentCategory.key}`]
                     ? "批量保存中..."
                     : "批量应用到当前筛选"}
@@ -447,7 +447,7 @@ export function AiWorkspaceScenesTab({
                         onClick={() => void onSceneSave(scene)}
                         disabled={isSaving || !isDirty}
                       >
-                        <Save className="mr-2 h-4 w-4" />
+                        <Save className="mr-2 size-4" />
                         {isSaving ? "保存中..." : "保存场景默认"}
                       </Button>
                       {currentCategory.has_shared_config ? (
@@ -463,7 +463,7 @@ export function AiWorkspaceScenesTab({
                             scene.inherits_category_default
                           }
                         >
-                          <RefreshCcw className="mr-2 h-4 w-4" />
+                          <RefreshCcw className="mr-2 size-4" />
                           恢复通用配置
                         </Button>
                       ) : null}
@@ -477,7 +477,7 @@ export function AiWorkspaceScenesTab({
           {currentCategory.key === "tts" ? (
             <div className="flex flex-wrap gap-2">
               <Button type="button" variant="outline" onClick={onOpenVoiceSettings}>
-                <Volume2 className="mr-2 h-4 w-4" />
+                <Volume2 className="mr-2 size-4" />
                 语音教练开关
               </Button>
               <Button
@@ -485,7 +485,7 @@ export function AiWorkspaceScenesTab({
                 onClick={() => void onTestVoice()}
                 disabled={testingVoice}
               >
-                <Play className="mr-2 h-4 w-4" />
+                <Play className="mr-2 size-4" />
                 {testingVoice ? "测试中" : "测试播放"}
               </Button>
             </div>

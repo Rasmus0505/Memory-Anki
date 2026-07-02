@@ -61,7 +61,10 @@ def build_pdf_recovery_draft_state(
         pairing_response_text,
         source_meta=context.recovered_source_meta,
     )
-    apply_source_chapter_to_drafts(drafts, chapter_id=context.selected_chapter.id)
+    apply_source_chapter_to_drafts(
+        drafts,
+        chapter_id=context.selected_chapter.id if context.selected_chapter is not None else None,
+    )
     return PdfRecoveryDraftState(
         pairing_response_text=pairing_response_text,
         pairing_resolved_ai=pairing_resolved_ai,

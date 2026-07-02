@@ -100,7 +100,8 @@ def plain_text(value: Any, *, fallback: str) -> str:
     text = HTML_BLOCK_BREAK_RE.sub("\n", text)
     text = TAG_RE.sub("", text)
     text = unescape(text)
-    text = re.sub(r"\s+", " ", text).strip()
+    lines = [re.sub(r"[^\S\r\n]+", " ", line).strip() for line in text.splitlines()]
+    text = "\n".join(line for line in lines if line)
     if not text:
         return fallback
     return text

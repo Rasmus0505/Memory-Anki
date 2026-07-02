@@ -37,6 +37,15 @@ export function extractResponseMessage(
       message?: unknown
     }
     if (typeof parsed.detail === 'string' && parsed.detail.trim()) return parsed.detail
+    if (
+      parsed.detail
+      && typeof parsed.detail === 'object'
+      && 'message' in parsed.detail
+      && typeof parsed.detail.message === 'string'
+      && parsed.detail.message.trim()
+    ) {
+      return parsed.detail.message
+    }
     if (typeof parsed.error === 'string' && parsed.error.trim()) return parsed.error
     if (typeof parsed.message === 'string' && parsed.message.trim()) return parsed.message
   } catch {

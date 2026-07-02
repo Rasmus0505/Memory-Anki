@@ -17,6 +17,7 @@ import {
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card'
+import { Alert, AlertDescription } from '@/shared/components/ui/alert'
 
 const SCENE_LABELS: Record<ShortcutScene, string> = {
   edit: '编辑',
@@ -89,21 +90,23 @@ export function MemoryAnkiShortcutsSettings() {
   }
 
   return (
-    <div className="space-y-5">
+    <div className="flex flex-col gap-5">
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base">
-            <Keyboard className="h-4 w-4" />
+            <Keyboard className="size-4" />
             快捷键
           </CardTitle>
         </CardHeader>
-        <CardContent className="space-y-5">
-          <div className="rounded-2xl border border-info/30 bg-info/5 px-4 py-3 text-sm text-info">
-            快捷键保存在当前浏览器。录制时按下组合键即可覆盖；输入框、文本编辑和录制状态中不会触发业务快捷键。
-          </div>
+        <CardContent className="flex flex-col gap-5">
+          <Alert variant="info">
+            <AlertDescription>
+              快捷键保存在当前浏览器。录制时按下组合键即可覆盖；输入框、文本编辑和录制状态中不会触发业务快捷键。
+            </AlertDescription>
+          </Alert>
 
           {groupedActions.map(({ scene, actions }) => (
-            <section key={scene} className="rounded-2xl border border-border/70">
+            <section key={scene} className="rounded-lg border border-border/70">
               <div className="border-b border-border/70 px-4 py-3">
                 <div className="text-sm font-semibold">{SCENE_LABELS[scene]}场景</div>
                 <div className="mt-1 text-xs text-muted-foreground">
@@ -121,9 +124,9 @@ export function MemoryAnkiShortcutsSettings() {
                     <div className="text-sm font-medium">{action.label}</div>
                     <div className="text-xs text-muted-foreground">{action.description}</div>
                     {recordingActionId === action.id && captureError ? (
-                      <div className="mt-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                      <Alert variant="destructive" className="mt-2 px-3 py-2">
                         {captureError}
-                      </div>
+                      </Alert>
                     ) : null}
                   </div>
                   <Badge variant="outline" className="justify-center px-3 py-1 font-mono text-xs">
@@ -152,7 +155,7 @@ export function MemoryAnkiShortcutsSettings() {
                         }))
                       }
                     >
-                      <Trash2 className="h-4 w-4" />
+                      <Trash2 data-icon="inline-start" />
                       清除
                     </Button>
                   </div>
@@ -171,7 +174,7 @@ export function MemoryAnkiShortcutsSettings() {
                 setCaptureError('')
               }}
             >
-              <RotateCcw className="h-4 w-4" />
+              <RotateCcw data-icon="inline-start" />
               恢复默认
             </Button>
             <div className="flex items-center gap-2">
@@ -187,7 +190,7 @@ export function MemoryAnkiShortcutsSettings() {
                 使用默认值
               </Button>
               <Button type="button" onClick={handleSave}>
-                <Save className="h-4 w-4" />
+                <Save data-icon="inline-start" />
                 保存快捷键
               </Button>
             </div>

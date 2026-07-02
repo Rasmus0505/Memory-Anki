@@ -4,7 +4,7 @@ import type {
   PointerEvent as ReactPointerEvent,
   RefObject,
 } from "react";
-import { translateEnglishReadingSentenceApi } from "@/features/english-reading/api/englishReadingApi";
+import { translateEnglishReadingSentenceApi } from "@/features/english-reading/api";
 import {
   extractSentenceSelection,
   resolveSentenceTranslationPanelLeft,
@@ -23,6 +23,8 @@ import type {
   ReadingSentenceTranslationResponse,
 } from "@/shared/api/contracts";
 import type { EnglishReadingTimerController } from "@/features/english-reading/hooks/useEnglishReadingWorkflow";
+import { usePinnedPanelDrag } from "@/features/english-reading/hooks/usePinnedPanelDrag";
+import type { PinnedPanelDragState } from "@/features/english-reading/hooks/usePinnedPanelDrag";
 
 type PromptForAiOptions = (request: {
   scenarioKey: string;
@@ -169,20 +171,13 @@ export function useEnglishReadingSentenceTranslationInteractions({
     };
   }, [dictionaryPanelRef, isActive, sentenceTranslationPanel]);
 
-  useEffect(() => {
-    if (!isActive || !sentenceTranslationPanel?.dragging) return;
-    const updateDraggingPosition = (clientX: number, clientY: number) => {
-      const dragState = sentenceTranslationDragRef.current;
-      if (
-        !dragState ||
-        !Number.isFinite(clientX) ||
-        !Number.isFinite(clientY)
-      ) {
-        return;
-      }
+  const updateSentenceTranslationDraggingPosition = useCallback(
+    (clientX: number, clientY: number, dragState: PinnedPanelDragState) => {
+      if (!Number.isFinite(clientX) || !Number.isFinite(clientY)) return;
+      const width = sentenceTranslationPanel?.width ?? 0;
       const nextLeft = resolveSentenceTranslationPanelLeft(
         dragState.originLeft + (clientX - dragState.startX),
-        sentenceTranslationPanel.width,
+        width,
       );
       const nextTop = resolveSentenceTranslationPanelTop(
         dragState.originTop + (clientY - dragState.startY),
@@ -197,55 +192,20 @@ export function useEnglishReadingSentenceTranslationInteractions({
             }
           : current,
       );
-    };
-    const handlePointerMove = (event: PointerEvent) => {
-      const dragState = sentenceTranslationDragRef.current;
-      if (!dragState || event.pointerId !== dragState.pointerId) return;
-      updateDraggingPosition(event.clientX, event.clientY);
-    };
-    const handleMouseMove = (event: MouseEvent) => {
-      updateDraggingPosition(event.clientX, event.clientY);
-    };
-    const stopDragging = (event?: PointerEvent | MouseEvent) => {
-      if (
-        event &&
-        sentenceTranslationDragRef.current &&
-        "pointerId" in event &&
-        event.pointerId !== sentenceTranslationDragRef.current.pointerId
-      ) {
-        return;
-      }
-      sentenceTranslationDragRef.current = null;
-      document.body.style.userSelect = "";
-      setSentenceTranslationPanel((current) =>
-        current ? { ...current, dragging: false } : current,
-      );
-    };
-    window.addEventListener("pointermove", handlePointerMove);
-    document.addEventListener("pointermove", handlePointerMove);
-    window.addEventListener("mousemove", handleMouseMove);
-    document.addEventListener("mousemove", handleMouseMove);
-    window.addEventListener("pointerup", stopDragging);
-    document.addEventListener("pointerup", stopDragging);
-    window.addEventListener("mouseup", stopDragging);
-    document.addEventListener("mouseup", stopDragging);
-    window.addEventListener("pointercancel", stopDragging);
-    document.addEventListener("pointercancel", stopDragging);
-    return () => {
-      window.removeEventListener("pointermove", handlePointerMove);
-      document.removeEventListener("pointermove", handlePointerMove);
-      window.removeEventListener("mousemove", handleMouseMove);
-      document.removeEventListener("mousemove", handleMouseMove);
-      window.removeEventListener("pointerup", stopDragging);
-      document.removeEventListener("pointerup", stopDragging);
-      window.removeEventListener("mouseup", stopDragging);
-      document.removeEventListener("mouseup", stopDragging);
-      window.removeEventListener("pointercancel", stopDragging);
-      document.removeEventListener("pointercancel", stopDragging);
-      document.body.style.userSelect = "";
-      sentenceTranslationDragRef.current = null;
-    };
-  }, [isActive, sentenceTranslationPanel?.dragging, sentenceTranslationPanel?.width]);
+    },
+    [sentenceTranslationPanel?.width],
+  );
+  const stopSentenceTranslationDragging = useCallback(() => {
+    setSentenceTranslationPanel((current) =>
+      current ? { ...current, dragging: false } : current,
+    );
+  }, []);
+  usePinnedPanelDrag({
+    active: isActive && Boolean(sentenceTranslationPanel?.dragging),
+    dragRef: sentenceTranslationDragRef,
+    onMove: updateSentenceTranslationDraggingPosition,
+    onStop: stopSentenceTranslationDragging,
+  });
 
   const resetSentenceTranslationInteractions = useCallback(() => {
     setSentenceTranslationTrigger(null);

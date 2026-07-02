@@ -2,6 +2,10 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import FreestylePage from '@/features/freestyle/FreestylePage'
+import {
+  readFreestyleProgress,
+  saveFreestyleProgress,
+} from '@/features/freestyle/model/freestyle'
 import type { ReviewFeedbackSettings } from '@/shared/feedback/reviewFeedbackSettings'
 import type { FreestyleCard, FreestyleQuizCard } from '@/shared/api/contracts'
 
@@ -17,15 +21,15 @@ const toastErrorMock = vi.fn()
 const toastSuccessMock = vi.fn()
 const memoryLookupDialogMock = vi.fn()
 
-vi.mock('@/features/freestyle/api/freestyleApi', () => ({
+vi.mock('@/features/freestyle/api', () => ({
   getFreestyleFeedApi: (...args: unknown[]) => getFreestyleFeedApiMock(...args),
 }))
 
-vi.mock('@/entities/palace/api/catalogApi', () => ({
+vi.mock('@/entities/palace/api', () => ({
   getPalacesGroupedApi: (...args: unknown[]) => getPalacesGroupedApiMock(...args),
 }))
 
-vi.mock('@/features/palace-quiz/api/palaceQuizApi', () => ({
+vi.mock('@/features/palace-quiz/api', () => ({
   recordPalaceQuizChoiceAttemptApi: (...args: unknown[]) =>
     recordPalaceQuizChoiceAttemptApiMock(...args),
   requestPalaceShortAnswerFeedbackApi: (...args: unknown[]) =>
@@ -347,6 +351,56 @@ describe('FreestylePage feedback', () => {
       expect(screen.getAllByText('新题')).toHaveLength(1)
       expect(screen.getByText('未做 1')).toBeTruthy()
       expect(screen.getByText('已做 1')).toBeTruthy()
+    })
+  })
+
+  it('does not overwrite the saved card index while the freestyle feed is still loading', async () => {
+    saveFreestyleProgress({
+      currentIndex: 2,
+      correctStreak: 3,
+      questionStates: {},
+      resolvedQuestionIds: [],
+      lastQueueSignature: 'quiz:1|quiz:2|quiz:3',
+    })
+    getFreestyleFeedApiMock.mockReturnValue(new Promise(() => undefined))
+
+    render(
+      <MemoryRouter>
+        <FreestylePage />
+      </MemoryRouter>,
+    )
+
+    await waitFor(() => {
+      expect(readFreestyleProgress().currentIndex).toBe(2)
+    })
+  })
+
+  it('restores the saved card index after reopening once the queue loads', async () => {
+    const cards = [quizCard(1), quizCard(2), quizCard(3)]
+    const { unmount } = renderPage(cards)
+
+    await screen.findByText('1/3')
+    fireEvent.click(screen.getByRole('button', { name: '下一题' }))
+    await waitFor(() => {
+      expect(screen.getByText('2/3')).toBeTruthy()
+    })
+    fireEvent.click(screen.getByRole('button', { name: '下一题' }))
+    await waitFor(() => {
+      expect(screen.getByText('3/3')).toBeTruthy()
+      expect(readFreestyleProgress().currentIndex).toBe(2)
+    })
+
+    unmount()
+    getFreestyleFeedApiMock.mockResolvedValue({ cards })
+    render(
+      <MemoryRouter>
+        <FreestylePage />
+      </MemoryRouter>,
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText('3/3')).toBeTruthy()
+      expect(readFreestyleProgress().currentIndex).toBe(2)
     })
   })
 

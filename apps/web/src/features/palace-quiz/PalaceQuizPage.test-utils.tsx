@@ -104,7 +104,7 @@ export const pdfControllerMock = {
   handleSubjectDocumentDelete: vi.fn(),
 }
 
-vi.mock('@/entities/palace/api/catalogApi', () => ({
+vi.mock('@/entities/palace/api', () => ({
   getPalaceApi: (...args: unknown[]) => getPalaceApiMock(...args),
   getPalacesGroupedApi: (...args: unknown[]) => getPalacesGroupedApiMock(...args),
   getPalaceEditorApi: (...args: unknown[]) => getPalaceEditorApiMock(...args),
@@ -160,7 +160,7 @@ vi.mock('@/features/ai-config/useAiRunConfigDialog', () => ({
   }),
 }))
 
-vi.mock('@/entities/quiz/api/quizApi', () => ({
+vi.mock('@/entities/quiz/api', () => ({
   getPalaceQuizQuestionsApi: (...args: unknown[]) => getPalaceQuizQuestionsApiMock(...args),
   createPalaceQuizQuestionApi: vi.fn(),
   batchCreateChapterQuizQuestionsApi: (...args: unknown[]) =>
@@ -188,7 +188,7 @@ vi.mock('@/entities/quiz/api/quizApi', () => ({
     requestPalaceShortAnswerFeedbackApiMock(...args),
 }))
 
-vi.mock('@/entities/knowledge/api/knowledgeApi', () => ({
+vi.mock('@/entities/knowledge/api', () => ({
   getSubjectsApi: (...args: unknown[]) => getSubjectsApiMock(...args),
   getSubjectTreeApi: (...args: unknown[]) => getSubjectTreeApiMock(...args),
   uploadSubjectDocumentApi: (...args: unknown[]) => uploadSubjectDocumentApiMock(...args),

@@ -414,10 +414,20 @@ def segment_schedule_json(
     session: Session,
 ) -> dict[str, object]:
     summary = segment_summary_json(session, schedule.segment) if schedule.segment else None
+    palace = schedule.segment.palace if schedule.segment and schedule.segment.palace else None
     return {
         "id": schedule.id,
         "palace_segment_id": schedule.palace_segment_id,
         "palace_id": schedule.segment.palace_id if schedule.segment else None,
+        "palace": (
+            {
+                "id": palace.id,
+                "title": palace.title,
+                "description": palace.description,
+            }
+            if palace
+            else None
+        ),
         "scheduled_date": schedule.scheduled_date.isoformat(),
         "interval_days": schedule.interval_days,
         "algorithm_used": schedule.algorithm_used,

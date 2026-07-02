@@ -15,6 +15,7 @@ from .question_contracts import (
     PalaceQuizNotFoundError,
     PalaceQuizValidationError,
 )
+from .quiz_generation_pdf_source_messages import normalize_positive_page_numbers
 
 
 @dataclass(frozen=True, slots=True)
@@ -25,20 +26,6 @@ class PdfGenerationSourceArtifacts:
     primary_subject_document_id: int | None
     all_page_numbers: list[int]
     all_image_names: list[str]
-
-
-def _normalize_selected_pages(raw_page_selection: Any) -> list[int]:
-    if not isinstance(raw_page_selection, list):
-        raw_page_selection = []
-    normalized_pages: set[int] = set()
-    for raw_page in raw_page_selection:
-        try:
-            page_number = int(raw_page)
-        except (TypeError, ValueError):
-            continue
-        if page_number > 0:
-            normalized_pages.add(page_number)
-    return sorted(normalized_pages)
 
 
 def prepare_pdf_generation_source_artifacts(
@@ -58,7 +45,7 @@ def prepare_pdf_generation_source_artifacts(
         document = get_subject_document_by_id(session, source["subject_document_id"])
         if not document:
             raise PalaceQuizNotFoundError("PDF 资料不存在。")
-        normalized_pages = _normalize_selected_pages(source.get("page_selection"))
+        normalized_pages = normalize_positive_page_numbers(source.get("page_selection"))
         if len(normalized_pages) == 0:
             raise PalaceQuizValidationError("每份 PDF 至少需要选择一页。")
         rendered_pages = render_selected_pdf_pages(

@@ -7,7 +7,7 @@ import { PalaceQuizManagePanel } from '@/features/palace-quiz/components/PalaceQ
 import { PalaceQuizMemoryLookupDialog } from '@/features/palace-quiz/components/PalaceQuizMemoryLookupDialog'
 import { PalaceQuizPracticePanel } from '@/features/palace-quiz/components/PalaceQuizPracticePanel'
 import { PalaceQuizRangeDialog } from '@/features/palace-quiz/components/PalaceQuizRangeDialog'
-import { resetPalaceQuizQuestionAttemptsApi } from '@/features/palace-quiz/api/palaceQuizApi'
+import { resetPalaceQuizQuestionAttemptsApi } from '@/features/palace-quiz/api'
 import { usePalaceQuizGeneration } from '@/features/palace-quiz/hooks/usePalaceQuizGeneration'
 import { usePalaceQuizManagement } from '@/features/palace-quiz/hooks/usePalaceQuizManagement'
 import { usePalaceQuizPractice } from '@/features/palace-quiz/hooks/usePalaceQuizPractice'
@@ -254,7 +254,7 @@ export default function PalaceQuizPage() {
               size="sm"
               onClick={() => setMemoryLookupOpen(true)}
             >
-              <BookOpen className="h-4 w-4" />
+              <BookOpen className="size-4" />
               查看记忆宫殿
             </Button>
             <Badge variant="secondary">{questions.length} 题</Badge>
@@ -280,7 +280,7 @@ export default function PalaceQuizPage() {
       </div>
 
       {error ? (
-        <div className="rounded-2xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+        <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
           {error}
         </div>
       ) : null}
@@ -348,58 +348,71 @@ export default function PalaceQuizPage() {
 
       {!loading && activeTab === 'generate' ? (
         <PalaceQuizGenerationPanel
-          hasMiniPalaces={miniPalaces.length > 0}
-          rootQuestionCount={browser.rootQuestionCount}
-          miniPalaces={miniPalaces}
-          classificationLoading={generation.classificationLoading}
-          classificationResult={generation.classificationResult}
-          generationSourceKind={generation.generationSourceKind}
-          setGenerationSourceKind={(value) => {
-            generation.setGenerationSourceKind(value)
-            generation.setGenerationError('')
-            if (value === 'image-single') {
-              generation.setGenerationFiles((current) => current.slice(0, 1))
-            }
+          context={{
+            selectedChapterSummary: generation.selectedChapterSummary,
+            selectedChapterHasChildren: generation.selectedChapterHasChildren,
           }}
-          generationFiles={generation.generationFiles}
-          generationPdfSources={generation.generationPdfSources}
-          generationEnableSecondaryReview={generation.generationEnableSecondaryReview}
-          setGenerationEnableSecondaryReview={generation.setGenerationEnableSecondaryReview}
-          generationSaveMode={generation.generationSaveMode}
-          setGenerationSaveMode={generation.setGenerationSaveMode}
-          generationClassifyByMiniPalace={generation.generationClassifyByMiniPalace}
-          setGenerationClassifyByMiniPalace={generation.setGenerationClassifyByMiniPalace}
-          generationError={generation.generationError}
-          generationLoading={generation.generationLoading}
-          generationSaving={generation.generationSaving}
-          generationPreview={generation.generationPreview}
-          generationHistory={generation.generationHistory}
-          historyRegeneratingId={generation.historyRegeneratingId}
-          generationStreamStatus={generation.generationStreamStatus}
-          generationStreamStepLabel={generation.generationStreamStepLabel}
-          generationStreamPreviewText={generation.generationStreamPreviewText}
-          selectedChapterSummary={generation.selectedChapterSummary}
-          selectedChapterHasChildren={generation.selectedChapterHasChildren}
-          subjectsLoading={generation.subjectsLoading}
-          subjectOptions={generation.subjectOptions}
-          pdfController={generation.pdfController}
-          subjectPdfUploadInputRef={generation.subjectPdfUploadInputRef}
-          generationStreamContentRef={generation.generationStreamContentRef}
-          getGenerationPreviewSaveCount={generation.getGenerationPreviewSaveCount}
-          formatResolvedAiSteps={generation.formatResolvedAiSteps}
-          onOpenRangeDialog={generation.handleOpenRangeDialog}
-          onGeneratePreview={generation.handleGeneratePreview}
-          onGenerationStreamScroll={generation.handleGenerationStreamScroll}
-          onImageFileChange={generation.handleImageFileChange}
-          onUploadSubjectPdf={generation.handleUploadSubjectPdf}
-          onAddCurrentPdfSource={generation.handleAddCurrentPdfSource}
-          onRemovePdfSource={generation.handleRemovePdfSource}
-          onPdfSourceRoleHintChange={generation.handlePdfSourceRoleHintChange}
-          onSaveGenerationPreview={handleSaveGenerationPreview}
-          onRegenerateFromHistory={generation.handleRegenerateFromHistory}
-          onDeleteGenerationHistory={generation.handleDeleteGenerationHistory}
-          onApplyHistoryConfig={generation.applyHistoryConfig}
-          onClassifyExistingQuestions={generation.handleClassifyExistingQuestions}
+          classification={{
+            hasMiniPalaces: miniPalaces.length > 0,
+            rootQuestionCount: browser.rootQuestionCount,
+            miniPalaces,
+            loading: generation.classificationLoading,
+            result: generation.classificationResult,
+            onClassifyExistingQuestions: generation.handleClassifyExistingQuestions,
+          }}
+          source={{
+            sourceKind: generation.generationSourceKind,
+            setSourceKind: (value) => {
+              generation.setGenerationSourceKind(value)
+              generation.setGenerationError('')
+              if (value === 'image-single') {
+                generation.setGenerationFiles((current) => current.slice(0, 1))
+              }
+            },
+            files: generation.generationFiles,
+            pdfSources: generation.generationPdfSources,
+            enableSecondaryReview: generation.generationEnableSecondaryReview,
+            setEnableSecondaryReview: generation.setGenerationEnableSecondaryReview,
+            classifyByMiniPalace: generation.generationClassifyByMiniPalace,
+            setClassifyByMiniPalace: generation.setGenerationClassifyByMiniPalace,
+            error: generation.generationError,
+            loading: generation.generationLoading,
+            subjectsLoading: generation.subjectsLoading,
+            subjectOptions: generation.subjectOptions,
+            pdfController: generation.pdfController,
+            subjectPdfUploadInputRef: generation.subjectPdfUploadInputRef,
+            onOpenRangeDialog: generation.handleOpenRangeDialog,
+            onGeneratePreview: generation.handleGeneratePreview,
+            onImageFileChange: generation.handleImageFileChange,
+            onUploadSubjectPdf: generation.handleUploadSubjectPdf,
+            onAddCurrentPdfSource: generation.handleAddCurrentPdfSource,
+            onRemovePdfSource: generation.handleRemovePdfSource,
+            onPdfSourceRoleHintChange: generation.handlePdfSourceRoleHintChange,
+          }}
+          history={{
+            items: generation.generationHistory,
+            regeneratingId: generation.historyRegeneratingId,
+            generationLoading: generation.generationLoading,
+            onRegenerateFromHistory: generation.handleRegenerateFromHistory,
+            onDeleteGenerationHistory: generation.handleDeleteGenerationHistory,
+            onApplyHistoryConfig: generation.applyHistoryConfig,
+          }}
+          preview={{
+            value: generation.generationPreview,
+            saving: generation.generationSaving,
+            saveMode: generation.generationSaveMode,
+            setSaveMode: generation.setGenerationSaveMode,
+            getSaveCount: generation.getGenerationPreviewSaveCount,
+            formatResolvedAiSteps: generation.formatResolvedAiSteps,
+            onSaveGenerationPreview: handleSaveGenerationPreview,
+          }}
+          stream={{
+            status: generation.generationStreamStatus,
+            stepLabel: generation.generationStreamStepLabel,
+            previewText: generation.generationStreamPreviewText,
+            contentRef: generation.generationStreamContentRef,
+            onScroll: generation.handleGenerationStreamScroll,
+          }}
         />
       ) : null}
 

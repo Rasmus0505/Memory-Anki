@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Iterable
 from typing import Any, Literal
 
 from sqlalchemy.orm import Session
@@ -122,6 +123,45 @@ def first_config_value(session: Session | None, keys: tuple[str, ...]) -> str:
 
 def has_config_value(session: Session | None, keys: tuple[str, ...]) -> bool:
     return bool(first_config_value(session, keys))
+
+
+def _load_config_snapshot(
+    session: Session | None,
+    keys: Iterable[str],
+) -> dict[str, str]:
+    normalized_keys = tuple(dict.fromkeys(key for key in keys if key))
+    if session is None or not normalized_keys:
+        return {}
+    rows = session.query(Config).filter(Config.key.in_(normalized_keys)).all()
+    return {str(row.key): str(row.value or "") for row in rows}
+
+
+def _first_snapshot_value(config_values: dict[str, str], keys: tuple[str, ...]) -> str:
+    for key in keys:
+        value = str(config_values.get(key) or "").strip()
+        if value:
+            return value
+    return ""
+
+
+def _snapshot_has_key(config_values: dict[str, str], keys: tuple[str, ...]) -> bool:
+    return any(key in config_values for key in keys)
+
+
+def _snapshot_has_value(config_values: dict[str, str], keys: tuple[str, ...]) -> bool:
+    return bool(_first_snapshot_value(config_values, keys))
+
+
+def _snapshot_bool(
+    config_values: dict[str, str],
+    keys: tuple[str, ...],
+    *,
+    default: bool = False,
+) -> bool:
+    for key in keys:
+        if key in config_values:
+            return normalize_bool(config_values[key], default=default)
+    return bool(default)
 
 
 def resolve_current_model(
@@ -270,9 +310,28 @@ def resolve_scenario_runtime(
     if scene is None:
         raise KeyError(f"unknown ai scenario: {scenario_key}")
     runtime_options = ai_options or AiRuntimeOptions()
-    scene_has_explicit_model = has_config_value(session, (scene.config_key, *scene.legacy_config_keys))
-    scene_configured_model = first_config_value(session, (scene.config_key, *scene.legacy_config_keys))
-    category_config = resolve_category_config(session, scene.category_key)
+    category_model_key = category_model_config_key(scene.category_key)
+    category_thinking_key = category_thinking_config_key(scene.category_key)
+    config_values = _load_config_snapshot(
+        session,
+        (
+            scene.config_key,
+            *scene.legacy_config_keys,
+            scene.thinking_config_key,
+            *scene.legacy_thinking_config_keys,
+            category_model_key,
+            category_thinking_key,
+        ),
+    )
+    scene_model_keys = (scene.config_key, *scene.legacy_config_keys)
+    scene_thinking_keys = (scene.thinking_config_key, *scene.legacy_thinking_config_keys)
+    scene_has_explicit_model = _snapshot_has_value(config_values, scene_model_keys)
+    scene_configured_model = _first_snapshot_value(config_values, scene_model_keys)
+    category_config = AiCategoryConfig(
+        model=_first_snapshot_value(config_values, (category_model_key,)) or None,
+        thinking_enabled=_snapshot_bool(config_values, (category_thinking_key,), default=False),
+        has_shared_config=_snapshot_has_value(config_values, (category_model_key,)),
+    )
     configured_model = (
         scene_configured_model
         if scene_has_explicit_model
@@ -290,16 +349,8 @@ def resolve_scenario_runtime(
         )
     else:
         model_meta = serialize_model_row(row)
-    scene_has_explicit_thinking = bool(session is not None) and any(
-        session.query(Config).filter_by(key=key).first() is not None
-        for key in (scene.thinking_config_key, *scene.legacy_thinking_config_keys)
-    )
-    scene_default_thinking_enabled = resolve_current_thinking_enabled(
-        session,
-        scene.thinking_config_key,
-        default=False,
-        fallback_config_keys=scene.legacy_thinking_config_keys,
-    )
+    scene_has_explicit_thinking = _snapshot_has_key(config_values, scene_thinking_keys)
+    scene_default_thinking_enabled = _snapshot_bool(config_values, scene_thinking_keys, default=False)
     default_thinking_enabled = (
         scene_default_thinking_enabled
         if scene_has_explicit_thinking
@@ -315,6 +366,22 @@ def resolve_scenario_runtime(
     provider = str(model_meta["provider"])
     supports_thinking = bool(model_meta["supports_thinking"])
     effective_thinking_enabled = bool(requested_thinking_enabled and supports_thinking)
+    provider_config_values = _load_config_snapshot(
+        session,
+        (
+            PROVIDER_API_KEY_CONFIG_KEYS[provider],  # type: ignore[index]
+            PROVIDER_BASE_URL_CONFIG_KEYS[provider],  # type: ignore[index]
+        ),
+    )
+    api_key = (
+        _first_snapshot_value(provider_config_values, (PROVIDER_API_KEY_CONFIG_KEYS[provider],))  # type: ignore[index]
+        or str(PROVIDER_ENV_DEFAULTS[provider]["api_key"] or "").strip()  # type: ignore[index]
+    )
+    base_url = (
+        _first_snapshot_value(provider_config_values, (PROVIDER_BASE_URL_CONFIG_KEYS[provider],))  # type: ignore[index]
+        or str(PROVIDER_ENV_DEFAULTS[provider]["base_url"] or "").strip()  # type: ignore[index]
+        or str(model_meta["default_base_url"] or "")
+    )
     return ResolvedAiModelRuntime(
         scene=scene,
         model_key=str(model_meta["key"]),
@@ -326,9 +393,8 @@ def resolve_scenario_runtime(
         thinking_enabled=effective_thinking_enabled,
         supports_thinking=supports_thinking,
         supports_temperature=bool(model_meta["supports_temperature"]),
-        api_key=resolve_provider_setting(session, provider, kind="api_key"),  # type: ignore[arg-type]
-        base_url=resolve_provider_setting(session, provider, kind="base_url")  # type: ignore[arg-type]
-        or str(model_meta["default_base_url"] or ""),
+        api_key=api_key,
+        base_url=base_url,
         extra_payload=_build_thinking_payload(
             provider=provider,  # type: ignore[arg-type]
             supports_thinking=supports_thinking,

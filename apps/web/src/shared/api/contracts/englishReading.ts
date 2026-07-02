@@ -181,5 +181,4 @@ export interface ReadingGenerateRequest {
   ai_options?: AiRuntimeOptions;
 }
 
-export interface ReadingGenerateStreamStatusEvent
-  extends ReadingGenerationTraceItem {}
+export type ReadingGenerateStreamStatusEvent = ReadingGenerationTraceItem;

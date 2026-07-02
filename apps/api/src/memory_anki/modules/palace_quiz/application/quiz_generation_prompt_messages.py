@@ -62,7 +62,6 @@ def build_generation_messages(
         )
     for image_bytes, filename in image_items:
         user_content.append(build_image_content_part(image_bytes=image_bytes, filename=filename))
-    messages: list[dict[str, Any]] = [{"role": "system", "content": system_prompt}]
     normalized_extra_prompt = str(extra_prompt or "").strip()
     if normalized_extra_prompt:
         range_guard = ""
@@ -71,16 +70,13 @@ def build_generation_messages(
                 "\n如果材料中有不符合该范围限定的原题，必须直接跳过，不要改写成题目；"
                 "最终 questions 数组只能包含满足限定范围的题目。"
             )
-        messages.append(
-            {
-                "role": "system",
-                "content": (
-                    "用户临时补充要求必须优先严格遵守；如果补充要求限定范围，"
-                    "不要生成范围外题目。\n"
-                    f"{normalized_extra_prompt}{range_guard}"
-                ),
-            }
+        system_prompt = (
+            f"{system_prompt}\n\n"
+            "用户临时补充要求必须优先严格遵守；如果补充要求限定范围，"
+            "不要生成范围外题目。\n"
+            f"{normalized_extra_prompt}{range_guard}"
         )
+    messages: list[dict[str, Any]] = [{"role": "system", "content": system_prompt}]
     messages.append({"role": "user", "content": user_content})
     return messages, system_prompt
 

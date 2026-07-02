@@ -55,8 +55,6 @@ export function BilinkPreviewPopover({
   onClose,
   onJump,
 }: BilinkPreviewPopoverProps) {
-  if (!open) return null
-
   const previewEditorState = useMemo(
     () => buildBilinkPreviewEditorState(editorState, highlightQuery),
     [editorState, highlightQuery],
@@ -68,6 +66,8 @@ export function BilinkPreviewPopover({
   const sanitizedNodeNote = sanitizeBilinkText(context?.node_note)
   const sanitizedParentText = sanitizeBilinkText(context?.parent_text)
   const sanitizedPalaceTitle = sanitizeBilinkText(context?.palace_title) || '未命名宫殿'
+
+  if (!open) return null
 
   return (
     <div className="pointer-events-auto fixed inset-0 z-[125] flex items-center justify-center bg-black/20 p-4">
@@ -94,7 +94,7 @@ export function BilinkPreviewPopover({
           {!loading && !error && context && previewEditorState ? (
             <>
               <div className="min-h-0 space-y-4 overflow-y-auto pr-1">
-                <div className="rounded-2xl border border-border bg-muted/70 p-4">
+                <div className="rounded-lg border border-border bg-muted/70 p-4">
                   <div className="text-lg font-semibold text-primary">{sanitizedNodeText}</div>
                   {sanitizedNodePath.length > 0 ? (
                     <div className="mt-2 text-xs text-muted-foreground">
@@ -108,7 +108,7 @@ export function BilinkPreviewPopover({
 
                 {sanitizedParentText ? (
                   <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <MoveRight className="h-4 w-4" />
+                    <MoveRight className="size-4" />
                     父节点：{sanitizedParentText}
                   </div>
                 ) : null}
@@ -118,7 +118,7 @@ export function BilinkPreviewPopover({
 
                 <div className="flex justify-end">
                   <Button type="button" onClick={() => onJump(context)}>
-                    <Link2 className="h-4 w-4" />
+                    <Link2 className="size-4" />
                     跳转到该宫殿
                   </Button>
                 </div>
@@ -130,7 +130,7 @@ export function BilinkPreviewPopover({
                   editorState={previewEditorState}
                   readonly
                   onEditorStateChange={() => {}}
-                  className="h-[min(68vh,760px)] w-full rounded-2xl border border-border/70 bg-background"
+                  className="h-[min(68vh,760px)] w-full rounded-lg border border-border/70 bg-background"
                 />
               </div>
             </>

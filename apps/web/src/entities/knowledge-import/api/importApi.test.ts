@@ -1,5 +1,5 @@
 ﻿import { afterEach, describe, expect, it, vi } from 'vitest'
-import { previewImageTextApi, previewMindMapImportApi } from '@/entities/knowledge-import/api/importApi'
+import { previewImageTextApi, previewMindMapImportApi } from '@/entities/knowledge-import/api'
 import * as appLogs from '@/shared/logs/model/appLogs'
 
 function createStreamResponse(chunks: string[], contentType = 'text/event-stream') {

@@ -1,149 +1,71 @@
 import { request } from '@/shared/api/http'
+import {
+  clearSessionProgressApi,
+  getSessionProgressApi,
+  saveSessionProgressApi,
+  type SessionProgressPayload,
+} from '@/entities/session/api'
 import type {
+  ChapterSummary,
+  PalaceEditorMeta,
   PalaceVersionDetail,
   PalaceVersionListResponse,
-  SessionProgressSnapshot,
 } from '@/shared/api/contracts'
 
 export function getPracticeSessionProgressApi(id: number) {
-  return request<{ progress: SessionProgressSnapshot | null }>(`/sessions/practice/${id}/progress`)
+  return getSessionProgressApi('practice', id)
 }
 
 export function getFocusPracticeSessionProgressApi(id: number) {
-  return request<{ progress: SessionProgressSnapshot | null }>(`/sessions/focus-practice/${id}/progress`)
+  return getSessionProgressApi('focus-practice', id)
 }
 
 export function getSegmentPracticeSessionProgressApi(id: number) {
-  return request<{ progress: SessionProgressSnapshot | null }>(`/sessions/segment-practice/${id}/progress`)
+  return getSessionProgressApi('segment-practice', id)
 }
 
-export function savePracticeSessionProgressApi(
-  id: number,
-  data: {
-    reveal_map: Record<string, 'hidden' | 'placeholder' | 'revealed'>
-    red_node_ids: string[]
-    completed: boolean
-  },
-) {
-  return request<{ progress: SessionProgressSnapshot }>(`/sessions/practice/${id}/progress`, {
-    method: 'PUT',
-    body: JSON.stringify(data),
-    persistence: {
-      resourceKey: `session-progress:practice:${id}`,
-      coalesceKey: `session-progress:practice:${id}`,
-      description: '保存练习进度',
-      replayMode: 'auto',
-    },
-  })
+export function savePracticeSessionProgressApi(id: number, data: SessionProgressPayload) {
+  return saveSessionProgressApi('practice', id, data, 'Save practice progress')
 }
 
-export function saveFocusPracticeSessionProgressApi(
-  id: number,
-  data: {
-    reveal_map: Record<string, 'hidden' | 'placeholder' | 'revealed'>
-    red_node_ids: string[]
-    completed: boolean
-  },
-) {
-  return request<{ progress: SessionProgressSnapshot }>(`/sessions/focus-practice/${id}/progress`, {
-    method: 'PUT',
-    body: JSON.stringify(data),
-    persistence: {
-      resourceKey: `session-progress:focus-practice:${id}`,
-      coalesceKey: `session-progress:focus-practice:${id}`,
-      description: '保存专项练习进度',
-      replayMode: 'auto',
-    },
-  })
+export function saveFocusPracticeSessionProgressApi(id: number, data: SessionProgressPayload) {
+  return saveSessionProgressApi('focus-practice', id, data, 'Save focus practice progress')
 }
 
 export function clearPracticeSessionProgressApi(id: number) {
-  return request<{ ok: boolean }>(`/sessions/practice/${id}/progress`, {
-    method: 'DELETE',
-    persistence: {
-      resourceKey: `session-progress:practice:${id}:clear`,
-      description: '清除练习进度',
-      replayMode: 'manual',
-    },
-  })
+  return clearSessionProgressApi('practice', id, 'Clear practice progress')
 }
 
 export function clearFocusPracticeSessionProgressApi(id: number) {
-  return request<{ ok: boolean }>(`/sessions/focus-practice/${id}/progress`, {
-    method: 'DELETE',
-    persistence: {
-      resourceKey: `session-progress:focus-practice:${id}:clear`,
-      description: '清除专项练习进度',
-      replayMode: 'manual',
-    },
-  })
+  return clearSessionProgressApi('focus-practice', id, 'Clear focus practice progress')
 }
 
-export function saveSegmentPracticeSessionProgressApi(
-  id: number,
-  data: {
-    reveal_map: Record<string, 'hidden' | 'placeholder' | 'revealed'>
-    red_node_ids: string[]
-    completed: boolean
-  },
-) {
-  return request<{ progress: SessionProgressSnapshot }>(`/sessions/segment-practice/${id}/progress`, {
-    method: 'PUT',
-    body: JSON.stringify(data),
-    persistence: {
-      resourceKey: `session-progress:segment-practice:${id}`,
-      coalesceKey: `session-progress:segment-practice:${id}`,
-      description: '保存分块练习进度',
-      replayMode: 'auto',
-    },
-  })
+export function saveSegmentPracticeSessionProgressApi(id: number, data: SessionProgressPayload) {
+  return saveSessionProgressApi('segment-practice', id, data, 'Save segment practice progress')
 }
 
 export function clearSegmentPracticeSessionProgressApi(id: number) {
-  return request<{ ok: boolean }>(`/sessions/segment-practice/${id}/progress`, {
-    method: 'DELETE',
-    persistence: {
-      resourceKey: `session-progress:segment-practice:${id}:clear`,
-      description: '清除分块练习进度',
-      replayMode: 'manual',
-    },
-  })
+  return clearSessionProgressApi('segment-practice', id, 'Clear segment practice progress')
 }
 
 export function getMiniPracticeSessionProgressApi(miniPalaceId: number) {
-  return request<{ progress: SessionProgressSnapshot | null }>(
-    `/sessions/mini-practice/${miniPalaceId}/progress`,
-  )
+  return getSessionProgressApi('mini-practice', miniPalaceId)
 }
 
 export function saveMiniPracticeSessionProgressApi(
   miniPalaceId: number,
-  data: {
-    reveal_map: Record<string, 'hidden' | 'placeholder' | 'revealed'>
-    red_node_ids: string[]
-    completed: boolean
-  },
+  data: SessionProgressPayload,
 ) {
-  return request<{ progress: SessionProgressSnapshot }>(
-    `/sessions/mini-practice/${miniPalaceId}/progress`,
-    {
-      method: 'PUT',
-      body: JSON.stringify(data),
-      persistence: {
-        resourceKey: `session-progress:mini-practice:${miniPalaceId}`,
-        coalesceKey: `session-progress:mini-practice:${miniPalaceId}`,
-        description: '保存小宫殿练习进度',
-        replayMode: 'auto',
-      },
-    },
+  return saveSessionProgressApi(
+    'mini-practice',
+    miniPalaceId,
+    data,
+    'Save mini practice progress',
   )
 }
 
 export function clearMiniPracticeSessionProgressApi(miniPalaceId: number) {
-  return request<{ ok: boolean }>(
-    `/sessions/mini-practice/${miniPalaceId}/progress`,
-    { method: 'DELETE' },
-  )
+  return clearSessionProgressApi('mini-practice', miniPalaceId)
 }
 
 export function getPalaceVersionsApi(id: number) {
@@ -155,26 +77,30 @@ export function getPalaceVersionDetailApi(palaceId: number, versionId: number) {
 }
 
 export function restorePalaceVersionApi(id: number, versionId: number) {
-  return request<any>(`/palaces/${id}/restore-version`, {
+  return request<PalaceEditorMeta>(`/palaces/${id}/restore-version`, {
     method: 'POST',
     body: JSON.stringify({ version_id: versionId }),
     persistence: {
       resourceKey: `palace:${id}:restore-version:${versionId}`,
-      description: '恢复宫殿版本',
+      description: 'Restore palace version',
       replayMode: 'manual',
     },
   })
 }
 
 export function getPalaceChaptersApi(id: number) {
-  return request<any[]>(`/palaces/${id}/chapters`)
+  return request<Array<ChapterSummary & { subject?: { id: number; name: string } | null }>>(
+    `/palaces/${id}/chapters`,
+  )
 }
 
 export function linkPalaceChaptersApi(
   palaceId: number,
   data: { chapter_ids: number[]; primary_chapter_id?: number | null },
 ) {
-  return request<any>(`/palaces/${palaceId}/chapters`, {
+  return request<{
+    chapters: Array<ChapterSummary & { subject?: { id: number; name: string } | null }>
+  }>(`/palaces/${palaceId}/chapters`, {
     method: 'PUT',
     body: JSON.stringify(data),
   })

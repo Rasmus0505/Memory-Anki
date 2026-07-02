@@ -8,7 +8,7 @@ export function TimeRecordsSummaryCards({
   summary,
 }: TimeRecordsSummaryCardsProps) {
   return (
-    <div className="rounded-[28px] border border-border/70 bg-card/90 p-6 shadow-card">
+    <div className="rounded-lg border border-border/70 bg-card/90 p-6 shadow-card">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <h1 className="text-3xl font-semibold tracking-tight text-foreground">
@@ -17,7 +17,7 @@ export function TimeRecordsSummaryCards({
         </div>
 
         <div className="grid grid-cols-2 gap-3">
-          <div className="rounded-2xl border border-border/60 bg-background/80 px-4 py-3">
+          <div className="rounded-lg border border-border/60 bg-background/80 px-4 py-3">
             <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
               总记录数
             </div>
@@ -25,7 +25,7 @@ export function TimeRecordsSummaryCards({
               {summary.totalRecords}
             </div>
           </div>
-          <div className="rounded-2xl border border-border/60 bg-background/80 px-4 py-3">
+          <div className="rounded-lg border border-border/60 bg-background/80 px-4 py-3">
             <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
               累计有效时长
             </div>

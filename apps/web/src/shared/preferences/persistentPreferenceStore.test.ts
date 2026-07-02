@@ -7,9 +7,9 @@ import {
 import {
   getClientPreferencesApi,
   updateClientPreferencesApi,
-} from '@/entities/preferences/api/clientPreferencesApi'
+} from '@/entities/preferences/api'
 
-vi.mock('@/entities/preferences/api/clientPreferencesApi', () => ({
+vi.mock('@/entities/preferences/api', () => ({
   getClientPreferencesApi: vi.fn(),
   updateClientPreferencesApi: vi.fn(),
 }))
@@ -88,5 +88,26 @@ describe('createPersistentPreferenceStore', () => {
     expect(saved).toEqual({ enabled: true })
     expect(updates).toEqual([{ enabled: true }])
     expect(window.localStorage.getItem('legacy-flag')).toBeNull()
+  })
+
+  it('does not notify or persist again when the sanitized value is unchanged', async () => {
+    mockGetClientPreferencesApi.mockResolvedValue({
+      items: {
+        ...emptyPreferences(),
+        voice_coach_settings: { enabled: true },
+      },
+    })
+    await initializeClientPreferences()
+    mockUpdateClientPreferencesApi.mockClear()
+    const updates: unknown[] = []
+    window.addEventListener('flag-updated', (event) => {
+      updates.push(event instanceof CustomEvent ? event.detail : null)
+    })
+
+    const saved = createFlagStore().write({ enabled: true })
+
+    expect(saved).toEqual({ enabled: true })
+    expect(mockUpdateClientPreferencesApi).not.toHaveBeenCalled()
+    expect(updates).toEqual([])
   })
 })

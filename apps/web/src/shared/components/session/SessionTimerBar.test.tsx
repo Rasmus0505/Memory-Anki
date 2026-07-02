@@ -1,13 +1,24 @@
 import * as React from 'react'
 import { fireEvent, render, screen } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { SessionTimerBar } from '@/shared/components/session/SessionTimerBar'
-import { TIMER_AUTOMATION_STORAGE_KEY } from '@/shared/components/session/timer-automation-config'
+import {
+  readTimerAutomationConfig,
+  TIMER_AUTOMATION_STORAGE_KEY,
+} from '@/shared/components/session/timer-automation-config'
+import { resetClientPreferenceCacheForTest } from '@/shared/preferences/clientPreferences'
 
 describe('SessionTimerBar', () => {
-  it('opens automation dialog and saves updated values', () => {
+  beforeEach(() => {
     window.localStorage.clear()
+    resetClientPreferenceCacheForTest()
+  })
 
+  afterEach(() => {
+    resetClientPreferenceCacheForTest()
+  })
+
+  it('opens automation dialog and saves updated values', () => {
     render(
       <SessionTimerBar
         effectiveSeconds={1}
@@ -28,7 +39,7 @@ describe('SessionTimerBar', () => {
     fireEvent.change(screen.getAllByDisplayValue('20')[0], { target: { value: '30' } })
     fireEvent.click(screen.getByRole('button', { name: '保存' }))
 
-    const saved = JSON.parse(window.localStorage.getItem(TIMER_AUTOMATION_STORAGE_KEY) || '{}')
+    const saved = readTimerAutomationConfig()
     expect(saved.palace_edit.autoStartOnPageEnter).toBe(true)
     expect(saved.palace_edit.inactiveAutoPauseSeconds).toBe(30)
     expect(saved.english.autoStartOnPageEnter).toBe(true)
@@ -164,7 +175,7 @@ describe('SessionTimerBar', () => {
       />,
     )
 
-    const idleText = screen.getByText('闲置0/300秒')
+    const idleText = screen.getByText('闲置0/20秒')
     expect(idleText.className).toContain('text-foreground')
     expect(idleText.className).not.toContain('text-orange-500')
 
@@ -182,6 +193,6 @@ describe('SessionTimerBar', () => {
       />,
     )
 
-    expect(screen.getByText('闲置12/300秒').className).toContain('text-orange-500')
+    expect(screen.getByText('闲置12/20秒').className).toContain('text-orange-500')
   })
 })

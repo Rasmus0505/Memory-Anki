@@ -21,7 +21,6 @@ from memory_anki.modules.english.application.course_service import (
     get_recent_unfinished_course_payload,
 )
 from memory_anki.modules.english_reading.application import service as english_reading_service
-from memory_anki.modules.palace_quiz.application.question_schema import serialize_question
 from memory_anki.modules.palaces.application.focus_service import parse_focus_node_uids
 from memory_anki.modules.palaces.application.mini_palace_service import (
     is_mini_palace_schedule_due,
@@ -29,12 +28,11 @@ from memory_anki.modules.palaces.application.mini_palace_service import (
 from memory_anki.modules.palaces.application.segment_review_service import (
     is_segment_schedule_due,
 )
-from memory_anki.modules.palaces.application.title_sync_service import (
-    get_palace_explicit_chapter_ids,
-    resolve_palace_subject,
-    resolve_palace_title,
-)
+from memory_anki.modules.palaces.application.title_sync_service import resolve_palace_title
 from memory_anki.modules.reviews.application.schedule_service import is_schedule_due
+
+from .card_context import palace_context
+from .quiz_cards import CONTENT_TYPE_QUIZ_QUESTION, build_quiz_cards
 
 FREESTYLE_RANGE_ALL = "all"
 FREESTYLE_RANGE_DUE = "due"
@@ -48,7 +46,6 @@ FREESTYLE_RANGES = {
     FREESTYLE_RANGE_SPECIFIC_PALACES,
 }
 
-CONTENT_TYPE_QUIZ_QUESTION = "quiz_question"
 CONTENT_TYPE_REVIEW = "review"
 CONTENT_TYPE_SEGMENT_REVIEW = "segment_review"
 CONTENT_TYPE_MINI_REVIEW = "mini_review"
@@ -115,66 +112,6 @@ def normalize_range(value: str | None) -> str:
     return normalized
 
 
-def _chapter_context(chapter: Chapter | None) -> dict[str, Any] | None:
-    if chapter is None:
-        return None
-    return {
-        "id": chapter.id,
-        "name": chapter.name,
-        "subject_id": chapter.subject_id,
-        "parent_id": chapter.parent_id,
-        "subject": (
-            {
-                "id": chapter.subject.id,
-                "name": chapter.subject.name,
-                "color": getattr(chapter.subject, "color", "#6366f1"),
-            }
-            if chapter.subject
-            else None
-        ),
-    }
-
-
-def _palace_context(palace: Palace) -> dict[str, Any]:
-    primary_chapter = getattr(palace, "primary_chapter", None)
-    parent_chapter = (
-        primary_chapter.parent
-        if primary_chapter is not None and getattr(primary_chapter, "parent", None)
-        else None
-    )
-    subject = resolve_palace_subject(palace)
-    return {
-        "id": palace.id,
-        "title": palace.title,
-        "resolved_title": resolve_palace_title(palace),
-        "subject": (
-            {
-                "id": subject.id,
-                "name": subject.name,
-                "color": getattr(subject, "color", "#6366f1"),
-            }
-            if subject
-            else None
-        ),
-        "primary_chapter": _chapter_context(primary_chapter),
-        "parent_chapter": _chapter_context(parent_chapter),
-        "needs_practice": bool(getattr(palace, "needs_practice", False)),
-        "focus_count": len(parse_focus_node_uids(palace)),
-    }
-
-
-def _mini_palace_context(mini_palace: PalaceMiniPalace | None) -> dict[str, Any] | None:
-    if mini_palace is None:
-        return None
-    return {
-        "id": mini_palace.id,
-        "palace_id": mini_palace.palace_id,
-        "name": mini_palace.name or f"小宫殿 {mini_palace.sort_order + 1}",
-        "sort_order": mini_palace.sort_order,
-        "needs_practice": bool(getattr(mini_palace, "needs_practice", False)),
-    }
-
-
 def _action_card(
     *,
     card_id: str,
@@ -200,7 +137,7 @@ def _action_card(
         "reason": reason,
     }
     if palace is not None:
-        payload["palace_context"] = _palace_context(palace)
+        payload["palace_context"] = palace_context(palace)
     if extra:
         payload.update(extra)
     return payload
@@ -234,7 +171,7 @@ def _load_active_palaces(
 def _due_palace_ids(session: Session, candidate_ids: set[int] | None) -> set[int]:
     now = datetime.now()
     ids: set[int] = set()
-    schedules = (
+    review_query = (
         session.query(ReviewSchedule)
         .join(Palace)
         .filter(
@@ -242,16 +179,17 @@ def _due_palace_ids(session: Session, candidate_ids: set[int] | None) -> set[int
             Palace.archived == False,
             Palace.mastered == False,
         )
-        .order_by(ReviewSchedule.review_number.asc(), ReviewSchedule.id.asc())
-        .all()
     )
+    if candidate_ids is not None:
+        if not candidate_ids:
+            return ids
+        review_query = review_query.filter(ReviewSchedule.palace_id.in_(candidate_ids))
+    schedules = review_query.order_by(ReviewSchedule.review_number.asc(), ReviewSchedule.id.asc()).all()
     for schedule in schedules:
-        if candidate_ids is not None and schedule.palace_id not in candidate_ids:
-            continue
         if schedule.palace and is_schedule_due(schedule, schedule.palace, session, now=now):
             ids.add(schedule.palace_id)
 
-    segment_schedules = (
+    segment_query = (
         session.query(PalaceSegmentReviewSchedule)
         .join(PalaceSegment)
         .join(Palace)
@@ -260,17 +198,20 @@ def _due_palace_ids(session: Session, candidate_ids: set[int] | None) -> set[int
             Palace.archived == False,
             Palace.mastered == False,
         )
-        .order_by(PalaceSegmentReviewSchedule.review_number.asc(), PalaceSegmentReviewSchedule.id.asc())
-        .all()
     )
-    for schedule in segment_schedules:
+    if candidate_ids is not None:
+        segment_query = segment_query.filter(Palace.id.in_(candidate_ids))
+    for schedule in segment_query.order_by(
+        PalaceSegmentReviewSchedule.review_number.asc(),
+        PalaceSegmentReviewSchedule.id.asc(),
+    ).all():
         palace_id = schedule.segment.palace_id if schedule.segment else None
-        if palace_id is None or (candidate_ids is not None and palace_id not in candidate_ids):
+        if palace_id is None:
             continue
         if schedule.segment and is_segment_schedule_due(session, schedule.segment, schedule, now=now):
             ids.add(palace_id)
 
-    mini_schedules = (
+    mini_query = (
         session.query(PalaceMiniPalaceReviewSchedule)
         .join(PalaceMiniPalace)
         .join(Palace)
@@ -279,13 +220,16 @@ def _due_palace_ids(session: Session, candidate_ids: set[int] | None) -> set[int
             Palace.archived == False,
             Palace.mastered == False,
         )
-        .order_by(PalaceMiniPalaceReviewSchedule.review_number.asc(), PalaceMiniPalaceReviewSchedule.id.asc())
-        .all()
     )
-    for schedule in mini_schedules:
+    if candidate_ids is not None:
+        mini_query = mini_query.filter(Palace.id.in_(candidate_ids))
+    for schedule in mini_query.order_by(
+        PalaceMiniPalaceReviewSchedule.review_number.asc(),
+        PalaceMiniPalaceReviewSchedule.id.asc(),
+    ).all():
         mini_palace = schedule.mini_palace
         palace_id = mini_palace.palace_id if mini_palace else None
-        if palace_id is None or (candidate_ids is not None and palace_id not in candidate_ids):
+        if palace_id is None:
             continue
         if mini_palace and is_mini_palace_schedule_due(session, mini_palace, schedule, now=now):
             ids.add(palace_id)
@@ -304,89 +248,6 @@ def _practice_palace_ids(palaces: list[Palace]) -> set[int]:
     return ids
 
 
-def _iter_palace_questions(session: Session, palace: Palace) -> list[PalaceQuizQuestion]:
-    seen: set[int] = set()
-    rows: list[PalaceQuizQuestion] = []
-    for question in sorted(
-        palace.quiz_questions or [],
-        key=lambda item: (
-            int(getattr(item, "mini_palace_id", 0) or 0),
-            int(getattr(item, "sort_order", 0) or 0),
-            int(getattr(item, "id", 0) or 0),
-        ),
-    ):
-        if question.id in seen:
-            continue
-        seen.add(question.id)
-        rows.append(question)
-
-    chapter_ids = sorted(get_palace_explicit_chapter_ids(session, palace))
-    if not chapter_ids:
-        chapter_ids = sorted(chapter.id for chapter in palace.chapters or [])
-    if chapter_ids:
-        chapter_questions = (
-            session.query(PalaceQuizQuestion)
-            .options(
-                selectinload(PalaceQuizQuestion.mini_palace),
-                selectinload(PalaceQuizQuestion.source_chapter).selectinload(Chapter.subject),
-                selectinload(PalaceQuizQuestion.classified_chapter).selectinload(Chapter.subject),
-            )
-            .filter(
-                PalaceQuizQuestion.source_chapter_id.in_(chapter_ids),
-            )
-            .order_by(PalaceQuizQuestion.sort_order.asc(), PalaceQuizQuestion.id.asc())
-            .all()
-        )
-        for question in chapter_questions:
-            if question.id in seen:
-                continue
-            seen.add(question.id)
-            rows.append(question)
-    return rows
-
-
-def _build_quiz_cards(
-    session: Session,
-    palaces: list[Palace],
-    *,
-    range_filter: str,
-    due_ids: set[int],
-    practice_ids: set[int],
-) -> list[dict[str, Any]]:
-    cards: list[dict[str, Any]] = []
-    for palace in palaces:
-        if range_filter == FREESTYLE_RANGE_DUE and palace.id not in due_ids:
-            continue
-        if range_filter == FREESTYLE_RANGE_NEEDS_PRACTICE and palace.id not in practice_ids:
-            continue
-        palace_context = _palace_context(palace)
-        for question in _iter_palace_questions(session, palace):
-            mini_palace = question.mini_palace
-            group_key = (
-                f"mini:{mini_palace.id}"
-                if mini_palace is not None
-                else f"palace:{palace.id}"
-            )
-            source_chapter = (
-                question.classified_chapter
-                if question.classified_chapter is not None
-                else question.source_chapter
-            )
-            cards.append(
-                {
-                    "id": f"quiz_question:{palace.id}:{question.id}",
-                    "type": "quiz_question",
-                    "content_type": CONTENT_TYPE_QUIZ_QUESTION,
-                    "question": serialize_question(question),
-                    "palace_context": palace_context,
-                    "mini_palace_context": _mini_palace_context(mini_palace),
-                    "chapter_context": _chapter_context(source_chapter),
-                    "group_key": group_key,
-                }
-            )
-    return cards
-
-
 def _build_review_cards(
     session: Session,
     *,
@@ -397,7 +258,7 @@ def _build_review_cards(
         return []
     now = datetime.now()
     groups: OrderedDict[int, dict[str, Any]] = OrderedDict()
-    schedules = (
+    query = (
         session.query(ReviewSchedule)
         .join(Palace)
         .filter(
@@ -405,12 +266,13 @@ def _build_review_cards(
             Palace.archived == False,
             Palace.mastered == False,
         )
-        .order_by(ReviewSchedule.review_number.asc(), ReviewSchedule.id.asc())
-        .all()
     )
+    if candidate_ids is not None:
+        if not candidate_ids:
+            return []
+        query = query.filter(ReviewSchedule.palace_id.in_(candidate_ids))
+    schedules = query.order_by(ReviewSchedule.review_number.asc(), ReviewSchedule.id.asc()).all()
     for schedule in schedules:
-        if candidate_ids is not None and schedule.palace_id not in candidate_ids:
-            continue
         if not schedule.palace or not is_schedule_due(schedule, schedule.palace, session, now=now):
             continue
         group = groups.setdefault(
@@ -458,7 +320,7 @@ def _build_segment_review_cards(
         return []
     now = datetime.now()
     groups: OrderedDict[int, dict[str, Any]] = OrderedDict()
-    schedules = (
+    query = (
         session.query(PalaceSegmentReviewSchedule)
         .join(PalaceSegment)
         .join(Palace)
@@ -467,15 +329,18 @@ def _build_segment_review_cards(
             Palace.archived == False,
             Palace.mastered == False,
         )
-        .order_by(PalaceSegmentReviewSchedule.review_number.asc(), PalaceSegmentReviewSchedule.id.asc())
-        .all()
     )
-    for schedule in schedules:
+    if candidate_ids is not None:
+        if not candidate_ids:
+            return []
+        query = query.filter(Palace.id.in_(candidate_ids))
+    for schedule in query.order_by(
+        PalaceSegmentReviewSchedule.review_number.asc(),
+        PalaceSegmentReviewSchedule.id.asc(),
+    ).all():
         segment = schedule.segment
         palace = segment.palace if segment else None
         if not segment or not palace:
-            continue
-        if candidate_ids is not None and palace.id not in candidate_ids:
             continue
         if not is_segment_schedule_due(session, segment, schedule, now=now):
             continue
@@ -525,7 +390,7 @@ def _build_mini_review_cards(
         return []
     now = datetime.now()
     groups: OrderedDict[int, dict[str, Any]] = OrderedDict()
-    schedules = (
+    query = (
         session.query(PalaceMiniPalaceReviewSchedule)
         .join(PalaceMiniPalace)
         .join(Palace)
@@ -534,18 +399,18 @@ def _build_mini_review_cards(
             Palace.archived == False,
             Palace.mastered == False,
         )
-        .order_by(
-            PalaceMiniPalaceReviewSchedule.review_number.asc(),
-            PalaceMiniPalaceReviewSchedule.id.asc(),
-        )
-        .all()
     )
-    for schedule in schedules:
+    if candidate_ids is not None:
+        if not candidate_ids:
+            return []
+        query = query.filter(Palace.id.in_(candidate_ids))
+    for schedule in query.order_by(
+        PalaceMiniPalaceReviewSchedule.review_number.asc(),
+        PalaceMiniPalaceReviewSchedule.id.asc(),
+    ).all():
         mini_palace = schedule.mini_palace
         palace = mini_palace.palace if mini_palace else None
         if not mini_palace or not palace:
-            continue
-        if candidate_ids is not None and palace.id not in candidate_ids:
             continue
         if not is_mini_palace_schedule_due(session, mini_palace, schedule, now=now):
             continue
@@ -724,12 +589,14 @@ def build_freestyle_feed(
     cards: list[dict[str, Any]] = []
     if CONTENT_TYPE_QUIZ_QUESTION in content_types:
         cards.extend(
-            _build_quiz_cards(
+            build_quiz_cards(
                 session,
                 palaces,
                 range_filter=range_filter,
                 due_ids=due_ids,
                 practice_ids=practice_ids,
+                due_range=FREESTYLE_RANGE_DUE,
+                needs_practice_range=FREESTYLE_RANGE_NEEDS_PRACTICE,
             )
         )
     if CONTENT_TYPE_REVIEW in content_types:

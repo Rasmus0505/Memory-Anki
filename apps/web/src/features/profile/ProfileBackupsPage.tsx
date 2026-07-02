@@ -7,8 +7,8 @@ import {
   createBackupApi,
   getBackupsApi,
   restoreBackupApi,
-} from '@/features/profile/api/profileApi'
-import { getRuntimeInfoApi } from '@/entities/runtime/api/runtimeApi'
+} from '@/features/profile/api'
+import { getRuntimeInfoApi } from '@/entities/runtime/api'
 import { Button } from '@/shared/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card'
 import { EmptyState } from '@/shared/components/state-placeholders'
@@ -66,13 +66,13 @@ export default function ProfileBackupsPage() {
             主库仍然是 SQLite。这里提供项目内整库快照和事故快照，用于快速回滚数据库与附件。编辑时会自动生成仅含数据库的轻量备份，完整备份和事故快照仅保留最近若干份。
           </div>
           {runtimeInfo ? (
-            <div className="rounded-2xl border border-border/70 bg-background/70 px-4 py-3 text-xs text-muted-foreground">
+            <div className="rounded-lg border border-border/70 bg-background/70 px-4 py-3 text-xs text-muted-foreground">
               <div>正式运行目录：{runtimeInfo.app_home}</div>
               <div className="mt-1">备份覆盖项：{runtimeInfo.backup_covered_items.join('、')}</div>
             </div>
           ) : null}
           <Button onClick={() => void handleCreateBackup()}>
-            <HardDriveDownload className="mr-2 h-4 w-4" />
+            <HardDriveDownload className="mr-2 size-4" />
             立即备份
           </Button>
         </CardContent>
@@ -101,7 +101,7 @@ export default function ProfileBackupsPage() {
               return (
               <div
                 key={backup.path}
-                className="rounded-2xl border border-border/70 bg-background/70 px-4 py-4 text-sm"
+                className="rounded-lg border border-border/70 bg-background/70 px-4 py-4 text-sm"
               >
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
@@ -130,7 +130,7 @@ export default function ProfileBackupsPage() {
                         size="sm"
                         onClick={() => void handleRestoreBackup(backup.path)}
                       >
-                        <RotateCcw className="mr-2 h-4 w-4" />
+                        <RotateCcw className="mr-2 size-4" />
                         整库恢复
                       </Button>
                     ) : null}

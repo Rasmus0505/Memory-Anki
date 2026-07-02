@@ -23,6 +23,20 @@
       "backup": true
     },
     {
+      "key": "english_reading",
+      "relative_path": "english_reading",
+      "kind": "directory",
+      "required": true,
+      "backup": true
+    },
+    {
+      "key": "voice_coach",
+      "relative_path": "voice_coach",
+      "kind": "directory",
+      "required": true,
+      "backup": true
+    },
+    {
       "key": "import_jobs",
       "relative_path": "import_jobs",
       "kind": "directory",
@@ -37,11 +51,39 @@
       "backup": true
     },
     {
+      "key": "backups_full",
+      "relative_path": "data/backups/full",
+      "kind": "directory",
+      "required": true,
+      "backup": true
+    },
+    {
+      "key": "backups_rescue",
+      "relative_path": "data/backups/rescue",
+      "kind": "directory",
+      "required": true,
+      "backup": true
+    },
+    {
+      "key": "runtime_active_instances",
+      "relative_path": "runtime/active-instances",
+      "kind": "directory",
+      "required": true,
+      "backup": false
+    },
+    {
       "key": "migration_state",
       "relative_path": "migration-state.json",
       "kind": "file",
       "required": false,
       "backup": true
+    },
+    {
+      "key": "sync_state",
+      "relative_path": "sync-state.json",
+      "kind": "file",
+      "required": false,
+      "backup": false
     }
   ]
 }

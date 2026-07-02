@@ -25,6 +25,7 @@ from memory_anki.modules.reviews.application.schedule_service import (
     get_algorithm_intervals,
     get_config_value,
 )
+from .review_progress_datetime import serialize_stage_datetime
 
 from .review_progress_datetime import parse_progress_datetime
 
@@ -82,12 +83,6 @@ def resolve_mini_palace_anchor_datetime(mini_palace: PalaceMiniPalace) -> dateti
 
 def mini_palace_is_empty(mini_palace: PalaceMiniPalace) -> bool:
     return len(parse_mini_palace_node_uids(mini_palace.node_uids_json)) == 0
-
-
-def serialize_stage_datetime(value: datetime | None) -> str | None:
-    if value is None:
-        return None
-    return value.replace(second=0, microsecond=0).isoformat(timespec="minutes")
 
 
 def copy_mini_schedule(

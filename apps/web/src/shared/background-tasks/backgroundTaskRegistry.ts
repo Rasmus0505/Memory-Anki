@@ -116,6 +116,43 @@ function removeTask(id: string): StoreState {
   return { tasks: next }
 }
 
+function taskStepsEqual(left?: TaskStep[], right?: TaskStep[]): boolean {
+  if (left === right) return true
+  if (!left || !right || left.length !== right.length) return false
+  return left.every((step, index) => {
+    const other = right[index]
+    return step.label === other.label && step.status === other.status
+  })
+}
+
+function taskBubbleEqual(
+  left?: { x: number; y: number } | null,
+  right?: { x: number; y: number } | null,
+): boolean {
+  if (left === right) return true
+  if (!left || !right) return !left && !right
+  return left.x === right.x && left.y === right.y
+}
+
+function taskPatchMatches(
+  current: BackgroundTask,
+  patch: {
+    title: string
+    detail?: string
+    progress?: number
+    bubble?: { x: number; y: number } | null
+    steps?: TaskStep[]
+  },
+): boolean {
+  return (
+    current.title === patch.title &&
+    current.detail === patch.detail &&
+    current.progress === patch.progress &&
+    taskBubbleEqual(current.bubble, patch.bubble ?? null) &&
+    taskStepsEqual(current.steps, patch.steps)
+  )
+}
+
 /** 登记一个后台任务（若已存在则更新）。 */
 export function registerTask(input: {
   id: string
@@ -130,6 +167,23 @@ export function registerTask(input: {
 }): void {
   const now = Date.now()
   const existing = state.tasks[input.id]
+  const nextPatch = {
+    title: input.title,
+    detail: input.detail,
+    progress: input.progress,
+    bubble: input.bubble ?? existing?.bubble ?? null,
+    steps: input.steps ?? existing?.steps,
+  }
+  if (
+    existing &&
+    existing.status === 'running' &&
+    existing.section === input.section &&
+    existing.navigateTarget === input.navigateTarget &&
+    existing.kind === (input.kind ?? existing.kind ?? 'default') &&
+    taskPatchMatches(existing, nextPatch)
+  ) {
+    return
+  }
   const task: BackgroundTask = {
     id: input.id,
     section: input.section,
@@ -160,14 +214,22 @@ export function updateTask(
 ): void {
   const current = state.tasks[id]
   if (!current) return
+  const nextPatch = {
+    title: patch.title ?? current.title,
+    detail: patch.detail ?? current.detail,
+    progress: patch.progress ?? current.progress,
+    bubble: patch.bubble ?? current.bubble ?? null,
+    steps: patch.steps ?? current.steps,
+  }
+  if (taskPatchMatches(current, nextPatch)) return
   setState(
     bumpTask({
       ...current,
-      title: patch.title ?? current.title,
-      detail: patch.detail ?? current.detail,
-      progress: patch.progress ?? current.progress,
-      bubble: patch.bubble ?? current.bubble ?? null,
-      steps: patch.steps ?? current.steps,
+      title: nextPatch.title,
+      detail: nextPatch.detail,
+      progress: nextPatch.progress,
+      bubble: nextPatch.bubble,
+      steps: nextPatch.steps,
       updatedAt: Date.now(),
     }),
   )
@@ -226,6 +288,7 @@ export function dismissTask(id: string): void {
 export function setTaskBubblePosition(id: string, bubble: { x: number; y: number }): void {
   const current = state.tasks[id]
   if (!current) return
+  if (taskBubbleEqual(current.bubble, bubble)) return
   setState(
     bumpTask({
       ...current,

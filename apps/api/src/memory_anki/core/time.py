@@ -11,8 +11,8 @@ def utc_now_naive() -> datetime:
     return utc_now().replace(tzinfo=None)
 
 
-def iso_utc_now() -> str:
-    return utc_now().isoformat()
+def iso_utc_now(timespec: str = "auto") -> str:
+    return utc_now().isoformat(timespec=timespec)
 
 
 def iso_utc_now_naive() -> str:

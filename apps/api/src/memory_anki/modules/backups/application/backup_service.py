@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from memory_anki.core.config import FULL_BACKUPS_DIR as FULL_BACKUPS_DIR
+from memory_anki.modules.backups.application import backup_lifecycle as _backup_lifecycle
 from memory_anki.modules.backups.application.backup_lifecycle import (
     ROLLING_EDIT_BACKUP_INTERVAL as ROLLING_EDIT_BACKUP_INTERVAL,
 )
@@ -17,9 +19,6 @@ from memory_anki.modules.backups.application.backup_lifecycle import (
 )
 from memory_anki.modules.backups.application.backup_lifecycle import (
     list_backups as list_backups,
-)
-from memory_anki.modules.backups.application.backup_lifecycle import (
-    maybe_create_interval_backup as maybe_create_interval_backup,
 )
 from memory_anki.modules.backups.application.backup_lifecycle import (
     maybe_create_periodic_backup as maybe_create_periodic_backup,
@@ -72,6 +71,15 @@ from .backup_palace_versions import (
     should_create_editor_snapshot,
 )
 
+
+def _sync_facade_dependencies() -> None:
+    _backup_lifecycle.FULL_BACKUPS_DIR = FULL_BACKUPS_DIR
+
+
+def maybe_create_interval_backup(*args, **kwargs):
+    _sync_facade_dependencies()
+    return _backup_lifecycle.maybe_create_interval_backup(*args, **kwargs)
+
 __all__ = [
     "MAX_SAFE_REMAINING_NODES",
     "MIN_DANGEROUS_NODE_COUNT",
@@ -86,6 +94,7 @@ __all__ = [
     "create_rescue_snapshot",
     "create_shutdown_backup",
     "ensure_daily_backup",
+    "FULL_BACKUPS_DIR",
     "export_palace_snapshot_comparison",
     "get_backup_palace_editor_snapshot",
     "get_current_palace_editor_snapshot",

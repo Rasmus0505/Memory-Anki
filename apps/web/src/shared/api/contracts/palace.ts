@@ -1,4 +1,4 @@
-import type { MindMapDoc } from './mindmap'
+import type { MindMapDoc, MindMapEditorState } from './mindmap'
 import type { ReviewPalaceSummary, ReviewQueueChapter, ReviewStageSummary } from './review'
 
 export type MiniReviewMode = 'independent' | 'mini_only'
@@ -114,6 +114,62 @@ export interface PalaceGroupedItem extends PalaceListItem {
   resolved_parent_chapter: ChapterSummary | null
   group_id: number | null
   group_sort_order: number
+}
+export interface PalaceEditorMeta {
+  id: number
+  title: string
+  description: string
+  archived?: boolean
+  mastered?: boolean
+  needs_practice?: boolean
+  focus_node_uids?: string[]
+  focus_count?: number
+  created_at?: string | null
+  updated_at?: string | null
+  primary_chapter_id?: number | null
+  primary_chapter?: ChapterSummary | null
+  chapters?: Array<ChapterSummary & {
+    subject?: { id: number; name: string } | null
+  }>
+  pegs?: Array<{ id: number; name: string; content: string; children: unknown[] }>
+  attachments: Array<{ id: number; filename?: string; original_name: string; file_size: number }>
+  stage_labels?: string[]
+  review_stages?: ReviewStageSummary[]
+  current_review_schedule_id?: number | null
+  review_stage_total?: number
+  review_stage_completed?: number
+  review_stage_progress?: number
+  segments?: PalaceSegmentSummary[]
+  editor_doc?: MindMapDoc | string | null
+}
+export interface PalaceEditorResponse extends MindMapEditorState {
+  palace: PalaceEditorMeta
+}
+export interface PalaceSegmentPracticeResponse {
+  palace: Pick<PalaceEditorMeta, 'id' | 'title' | 'editor_doc'>
+  item: PalaceSegmentSummary
+  editor_doc: MindMapDoc | string | null
+}
+export interface MiniPalacePracticeResponse {
+  palace: Pick<PalaceEditorMeta, 'id' | 'title' | 'editor_doc'> | null
+  item: MiniPalaceSummary
+  editor_doc: MindMapDoc | string | null
+}
+export interface MiniReviewSessionResponse {
+  id: number
+  palace_mini_palace_id: number
+  palace_id: number
+  scheduled_date: string
+  interval_days: number
+  algorithm_used: string
+  completed: boolean
+  completed_at: string | null
+  review_number: number
+  review_type: string
+  mini_palace: MiniPalaceSummary
+  estimated_review_seconds: number
+  palace: ReviewPalaceSummary
+  editor_doc: MindMapDoc | string | null
 }
 export interface PalaceGroupedSummaryItem {
   id: number
@@ -237,6 +293,7 @@ export interface SegmentReviewScheduleSummary {
   id: number
   palace_segment_id: number
   palace_id: number | null
+  palace: Pick<ReviewPalaceSummary, 'id' | 'title' | 'description'> | null
   scheduled_date: string
   interval_days: number
   algorithm_used: string

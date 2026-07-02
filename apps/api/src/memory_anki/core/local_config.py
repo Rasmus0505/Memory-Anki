@@ -9,6 +9,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from memory_anki.core.runtime_paths import default_app_home
+
 REPO_ROOT = Path(__file__).resolve().parents[5]
 LOCAL_CONFIG_DIR = REPO_ROOT / "local-config"
 LOCAL_CONFIG_PATH = LOCAL_CONFIG_DIR / "memory-anki.local.json"
@@ -30,13 +32,6 @@ class LocalRuntimeConfig:
     sync_on_stop: bool
     config_path: Path
     config_exists: bool
-
-
-def default_app_home() -> Path:
-    local_app_data = os.environ.get("LOCALAPPDATA")
-    if local_app_data:
-        return Path(local_app_data) / "MemoryAnki"
-    return Path.home() / "AppData" / "Local" / "MemoryAnki"
 
 
 def _expand_env_vars(raw_value: str) -> str:

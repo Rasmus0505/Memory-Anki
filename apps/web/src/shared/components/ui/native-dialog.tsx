@@ -175,7 +175,7 @@ export function NativeDialogProvider() {
         <DialogHeader>
           <div className="flex items-start gap-3">
             {request.type === 'confirm' && request.tone === 'danger' ? (
-              <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-destructive" />
+              <AlertTriangle className="mt-0.5 size-5 shrink-0 text-destructive" />
             ) : null}
             <div>
               <DialogTitle>{request.title}</DialogTitle>

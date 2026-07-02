@@ -14,7 +14,7 @@ export interface EnglishLetterSlot {
   extra: boolean
 }
 
-const PUNCT_EDGE_RE = /^[\s\.,!?;:"'`~\-\(\)\[\]\{\}]+|[\s\.,!?;:"'`~\-\(\)\[\]\{\}]+$/g
+const PUNCT_EDGE_RE = /^[\s.,!?;:"'`~()[\]{}-]+|[\s.,!?;:"'`~()[\]{}-]+$/g
 const USD_AMOUNT_RE = /(?<![A-Za-z0-9])\$(\d[\d,]*)(?:\.(\d{1,2}))?(?![A-Za-z0-9])/g
 const FIXED_TOKEN_CHARS = new Set(["'", '’', '-'])
 const NUMBER_WORDS_LT_20 = [

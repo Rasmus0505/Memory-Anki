@@ -1,6 +1,8 @@
 import { API_BASE, fetchWithMutationQueue, request } from '@/shared/api/http'
 import type {
   MindMapEditorState,
+  PalaceEditorMeta,
+  PalaceEditorResponse,
   PalaceFocusSessionResponse,
   PalaceGroupedListResponse,
   PalaceGroupedSummaryListResponse,
@@ -11,6 +13,16 @@ import type {
 
 const warmedPalaceGetCache = new Map<string, Promise<unknown>>()
 export const PALACE_CATALOG_INVALIDATED_EVENT = 'palace-catalog:invalidated'
+
+export type PalaceMutationPayload = Partial<
+  Pick<PalaceEditorMeta, 'title' | 'description' | 'created_at' | 'primary_chapter_id'>
+> & {
+  pegs?: Array<{ name?: string; content?: string; children?: unknown[] }>
+}
+
+export interface DeleteResponse {
+  ok: boolean
+}
 
 function buildQueryString(params?: Record<string, string>) {
   return params ? `?${new URLSearchParams(params).toString()}` : ''
@@ -100,7 +112,7 @@ export function prefetchPalaceSubjectShelfApi(params?: Record<string, string>) {
 }
 
 export function getPalaceApi(id: number) {
-  return request<any>(`/palaces/${id}`)
+  return request<PalaceEditorMeta>(`/palaces/${id}`)
 }
 
 export function togglePalaceFocusNodeApi(id: number, nodeUid: string, focused?: boolean) {
@@ -128,8 +140,8 @@ export function getPalaceReviewPlanApi(id: number) {
   return request<PalaceReviewPlanResponse>(`/palaces/${id}/review-plan`)
 }
 
-export function createPalaceApi(data: any) {
-  return request<any>('/palaces', {
+export function createPalaceApi(data: PalaceMutationPayload) {
+  return request<PalaceEditorMeta>('/palaces', {
     method: 'POST',
     body: JSON.stringify(data),
     persistence: {
@@ -140,8 +152,8 @@ export function createPalaceApi(data: any) {
   })
 }
 
-export function updatePalaceApi(id: number, data: any) {
-  return request<any>(`/palaces/${id}`, {
+export function updatePalaceApi(id: number, data: PalaceMutationPayload) {
+  return request<PalaceEditorMeta>(`/palaces/${id}`, {
     method: 'PUT',
     body: JSON.stringify(data),
     persistence: {
@@ -154,7 +166,7 @@ export function updatePalaceApi(id: number, data: any) {
 }
 
 export function deletePalaceApi(id: number) {
-  return request<any>(`/palaces/${id}`, {
+  return request<DeleteResponse>(`/palaces/${id}`, {
     method: 'DELETE',
     persistence: {
       resourceKey: `palace:${id}:delete`,
@@ -183,7 +195,7 @@ export async function uploadAttachmentApi(palaceId: number, file: File) {
 }
 
 export function deleteAttachmentApi(id: number) {
-  return request<any>(`/attachments/${id}`, {
+  return request<DeleteResponse>(`/attachments/${id}`, {
     method: 'DELETE',
     persistence: {
       resourceKey: `attachment:${id}:delete`,
@@ -194,7 +206,7 @@ export function deleteAttachmentApi(id: number) {
 }
 
 export function getPalaceEditorApi(id: number) {
-  return request<{ palace: any } & MindMapEditorState>(`/palaces/${id}/editor`)
+  return request<PalaceEditorResponse>(`/palaces/${id}/editor`)
 }
 
 export function getPalaceFocusSessionApi(id: number) {

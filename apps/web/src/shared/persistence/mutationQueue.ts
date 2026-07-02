@@ -1,3 +1,5 @@
+import { isConflictResponse } from '@/shared/api/conflict'
+
 export type MutationQueueStatus = 'pending' | 'syncing' | 'failed' | 'conflict' | 'manual'
 
 export type MutationBodyKind = 'json' | 'formData' | 'empty'
@@ -288,11 +290,6 @@ function buildReplayHeaders(item: PersistedMutation) {
   return headers
 }
 
-function shouldTreatAsConflict(status: number, message: string) {
-  if (status === 409) return true
-  return /冲突|fingerprint|stale|旧态|危险结构|覆盖当前/.test(message)
-}
-
 function nextBackoffMs(attemptCount: number) {
   return Math.min(5 * 60_000, Math.max(1_000, 2 ** Math.min(attemptCount, 8) * 1_000))
 }
@@ -301,7 +298,7 @@ async function replayOneMutation(item: PersistedMutation, force = false) {
   if (!force && item.replayMode !== 'auto') return
   if (!force && item.nextAttemptAt > Date.now()) return
 
-  let current = await updateMutation(item, { status: 'syncing' })
+  const current = await updateMutation(item, { status: 'syncing' })
   try {
     const response = await fetch(current.url, {
       method: current.method,
@@ -315,7 +312,7 @@ async function replayOneMutation(item: PersistedMutation, force = false) {
       return
     }
     const errorMessage = bodyText || `HTTP ${response.status}`
-    if (shouldTreatAsConflict(response.status, errorMessage)) {
+    if (isConflictResponse(response.status, errorMessage)) {
       await updateMutation(current, {
         status: 'conflict',
         conflictMessage: errorMessage,
@@ -334,7 +331,7 @@ async function replayOneMutation(item: PersistedMutation, force = false) {
     })
   } catch (error) {
     const attemptCount = current.attemptCount + 1
-    current = await updateMutation(current, {
+    await updateMutation(current, {
       status: 'failed',
       attemptCount,
       nextAttemptAt: Date.now() + nextBackoffMs(attemptCount),

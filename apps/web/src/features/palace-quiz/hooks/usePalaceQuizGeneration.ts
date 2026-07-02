@@ -12,7 +12,7 @@ import {
   batchCreateChapterQuizQuestionsApi,
   classifyPalaceQuizQuestionsToMiniPalacesApi,
   recoverAndSavePalaceQuizGenerationFromAiLogApi,
-} from '@/features/palace-quiz/api/palaceQuizApi'
+} from '@/features/palace-quiz/api'
 import {
   buildGeneratedQuestionsForChapterSave,
   generatePalaceQuizPreview,

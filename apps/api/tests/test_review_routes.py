@@ -172,6 +172,41 @@ class ReviewRouteTests(unittest.TestCase):
         self.assertEqual(payload["reviews"][0]["schedule_count"], 2)
         self.assertEqual(payload["reviews"][0]["overdue_schedule_count"], 2)
 
+    def test_segment_review_queue_includes_lightweight_palace_summary(self):
+        with self.SessionLocal() as session:
+            palace = session.query(Palace).filter_by(id=1).first()
+            self.assertIsNotNone(palace)
+            segment = PalaceSegment(
+                palace_id=palace.id,
+                name="第 1 部分",
+                color="#14b8a6",
+                node_uids_json="[]",
+                sort_order=0,
+            )
+            session.add(segment)
+            session.flush()
+            session.add(
+                PalaceSegmentReviewSchedule(
+                    palace_segment_id=segment.id,
+                    scheduled_date=date.today() - timedelta(days=1),
+                    interval_days=1,
+                    algorithm_used="ebbinghaus",
+                    completed=False,
+                    review_number=0,
+                    review_type="standard",
+                )
+            )
+            session.commit()
+            palace_title = palace.title
+
+        response = self.client.get("/api/v1/segment-review/queue")
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["due_count"], 1)
+        self.assertEqual(payload["reviews"][0]["segment"]["name"], "第 1 部分")
+        self.assertEqual(payload["reviews"][0]["palace"]["title"], palace_title)
+        self.assertNotIn("editor_doc", payload["reviews"][0]["palace"])
+
     def test_review_queue_auto_smoothing_skips_unstarted_overdue_palace(self):
         with self.SessionLocal() as session:
             session.add_all(

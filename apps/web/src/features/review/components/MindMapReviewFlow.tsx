@@ -87,7 +87,7 @@ export function MindMapReviewFlow({
             {review.flow.feedback.completionCeremonyActive ? (
               <div className="pointer-events-none absolute inset-x-0 top-0 z-[100] flex justify-center px-4 pt-4">
                 <div className="memory-anki-review-completion-banner inline-flex items-center gap-2 rounded-full border border-warning/30 bg-warning/10 px-4 py-2 text-sm font-semibold text-warning shadow-lg">
-                  <Sparkles className="h-4 w-4" />
+                  <Sparkles className="size-4" />
                   通关结算中
                 </div>
               </div>
@@ -116,12 +116,12 @@ export function MindMapReviewFlow({
                 </div>
 
                 {!review.isInlineEditMode ? (
-                  <div className="rounded-3xl border border-border/70 bg-card/90 px-4 py-4">
+                  <div className="rounded-lg border border-border/70 bg-card/90 px-4 py-4">
                     <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                       <div className="flex min-w-0 flex-wrap items-center gap-2">
                         <div
                           className={cn(
-                            "memory-anki-review-combo-badge inline-flex min-w-[108px] items-center justify-center rounded-2xl border px-3 py-2 text-sm font-semibold",
+                            "memory-anki-review-combo-badge inline-flex min-w-[108px] items-center justify-center rounded-lg border px-3 py-2 text-sm font-semibold",
                             review.flow.feedback.animationEnabled &&
                               review.flow.feedback.feedbackFlashState === "card_reveal" &&
                               "memory-anki-review-combo-badge-pop",
@@ -155,7 +155,7 @@ export function MindMapReviewFlow({
                           variant="outline"
                           onClick={() => review.setVoiceCoachDialogOpen(true)}
                         >
-                          <Volume2 className="mr-2 h-4 w-4" />
+                          <Volume2 className="mr-2 size-4" />
                           {review.voiceCoach.enabled ? "语音教练" : "开启语音"}
                         </Button>
                       </div>
@@ -183,7 +183,7 @@ export function MindMapReviewFlow({
                     disabled={review.miniPalace.isActive}
                     onClick={review.flow.handleRestart}
                   >
-                    <RotateCcw className="mr-2 h-4 w-4" />
+                    <RotateCcw className="mr-2 size-4" />
                     重新开始
                   </Button>
                 ) : null}
@@ -205,7 +205,7 @@ export function MindMapReviewFlow({
                     className={review.completeButtonClassName}
                     onClick={() => review.setCompletionDialogOpen(true)}
                   >
-                    <SquareCheckBig className="mr-2 h-4 w-4" />
+                    <SquareCheckBig className="mr-2 size-4" />
                     {review.flow.feedback.allClearReady ? "完成结算" : "完成"}
                   </Button>
                 ) : null}

@@ -166,7 +166,7 @@ export function AiWorkspaceDialogs({
                 Boolean(savingKeys[`delete:${impactModel?.key ?? ""}`])
               }
             >
-              <Trash2 className="mr-2 h-4 w-4" />
+              <Trash2 className="mr-2 size-4" />
               {impactModel && savingKeys[`delete:${impactModel.key}`]
                 ? "停用中..."
                 : "确认停用模型"}

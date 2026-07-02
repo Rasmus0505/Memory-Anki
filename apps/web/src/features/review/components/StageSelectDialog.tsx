@@ -80,7 +80,7 @@ export function StageSelectDialog({
 
         <div className="space-y-5 px-6 py-4">
           {typeof durationSeconds === 'number' ? (
-            <div className="rounded-2xl border border-border/70 bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
+            <div className="rounded-lg border border-border/70 bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
               本次耗时：<span className="font-medium text-foreground">{formatDuration(durationSeconds)}</span>
             </div>
           ) : null}
@@ -113,7 +113,7 @@ export function StageSelectDialog({
                     title={getStageTooltip(stage)}
                     onClick={() => setSelectedNumber(index)}
                     className={cn(
-                      'relative h-5 w-5 rounded-full border-2 transition-all',
+                      'relative size-5 rounded-full border-2 transition-all',
                       'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
                       isCompleted
                         ? 'border-success bg-success'

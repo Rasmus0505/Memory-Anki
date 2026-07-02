@@ -21,7 +21,7 @@ import {
 } from 'react'
 import { Link } from 'react-router-dom'
 import { useAiRunConfigDialog } from '@/features/ai-config/useAiRunConfigDialog'
-import { getFreestyleFeedApi } from '@/features/freestyle/api/freestyleApi'
+import { getFreestyleFeedApi } from '@/features/freestyle/api'
 import {
   DEFAULT_FREESTYLE_PROGRESS,
   FREESTYLE_CONTENT_TYPES,
@@ -47,8 +47,8 @@ import { emitQuizResultFeedback } from '@/features/palace-quiz/model/quizResultF
 import {
   recordPalaceQuizChoiceAttemptApi,
   requestPalaceShortAnswerFeedbackApi,
-} from '@/features/palace-quiz/api/palaceQuizApi'
-import { getPalacesGroupedApi } from '@/entities/palace/api/catalogApi'
+} from '@/features/palace-quiz/api'
+import { getPalacesGroupedApi } from '@/entities/palace/api'
 import type {
   FreestyleActionCard,
   FreestyleCard,
@@ -224,7 +224,7 @@ function IconButton({
           type="button"
           size="icon"
           variant="secondary"
-          className="h-11 w-11 rounded-full border border-white/12 bg-zinc-900/84 text-zinc-50 shadow-lg backdrop-blur hover:bg-zinc-800"
+          className="size-11 rounded-full border border-white/12 bg-zinc-900/84 text-zinc-50 shadow-lg backdrop-blur hover:bg-zinc-800"
           aria-label={label}
           title={label}
           disabled={disabled}
@@ -254,7 +254,7 @@ function FreestyleSettingsDialog({
   const selectedPalaceIds = new Set(config.specificPalaceIds)
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex max-h-[86vh] max-w-4xl flex-col overflow-hidden rounded-2xl border-border/70 bg-background p-0">
+      <DialogContent className="flex max-h-[86vh] max-w-4xl flex-col overflow-hidden rounded-lg border-border/70 bg-background p-0">
         <DialogHeader>
           <div className="min-w-0">
             <DialogTitle>随心设置</DialogTitle>
@@ -385,7 +385,7 @@ function FreestyleSettingsDialog({
                       >
                         <input
                           type="checkbox"
-                          className="h-4 w-4"
+                          className="size-4"
                           checked={checked}
                           onChange={(event) => {
                             const nextChecked = event.target.checked
@@ -428,7 +428,7 @@ function FreestyleSettingsDialog({
 function FreestyleActionCardView({ card }: { card: FreestyleActionCard }) {
   return (
     <div className="mx-auto flex min-h-[min(720px,calc(100vh-150px))] w-full max-w-3xl flex-col justify-center px-4 py-16">
-      <div className="rounded-2xl border border-white/12 bg-zinc-900/88 p-5 text-zinc-50 shadow-2xl backdrop-blur sm:p-7">
+      <div className="rounded-lg border border-white/12 bg-zinc-900/88 p-5 text-zinc-50 shadow-2xl backdrop-blur sm:p-7">
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
             <div className="text-xs font-semibold uppercase tracking-[0.14em] text-amber-300">
@@ -448,7 +448,7 @@ function FreestyleActionCardView({ card }: { card: FreestyleActionCard }) {
         ) : null}
         <Button asChild className="mt-6 w-full sm:w-auto">
           <Link to={card.href}>
-            <ExternalLink className="h-4 w-4" />
+            <ExternalLink className="size-4" />
             继续
           </Link>
         </Button>
@@ -479,7 +479,7 @@ function FreestyleQuizCardView({
   const chapterName = card.chapter_context?.name
   return (
     <div className="mx-auto flex min-h-[min(760px,calc(100vh-140px))] w-full max-w-4xl flex-col justify-center px-4 py-16">
-      <div className="rounded-2xl border border-white/12 bg-zinc-50 p-4 text-zinc-950 shadow-2xl sm:p-6">
+      <div className="rounded-lg border border-white/12 bg-zinc-50 p-4 text-zinc-950 shadow-2xl sm:p-6">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex min-w-0 flex-wrap items-center gap-2">
             <Badge variant="secondary">{palaceTitle}</Badge>
@@ -622,6 +622,8 @@ export default function FreestylePage() {
   }, [])
 
   useEffect(() => {
+    if (feedLoading) return
+    if (queue.length === 0 && !feedError) return
     setProgressAndPersist((current) => {
       if (current.lastQueueSignature === queueSignature) {
         return {
@@ -635,7 +637,7 @@ export default function FreestylePage() {
         lastQueueSignature: queueSignature,
       }
     })
-  }, [queue.length, queueSignature, setProgressAndPersist])
+  }, [feedError, feedLoading, queue.length, queueSignature, setProgressAndPersist])
 
   useEffect(() => {
     timer.setSceneActive(isActive, { source: isActive ? 'route_active' : 'route_inactive' })
@@ -888,7 +890,7 @@ export default function FreestylePage() {
   return (
     <TooltipProvider>
       <div
-        className="relative min-h-[calc(100vh-88px)] overflow-hidden rounded-2xl bg-zinc-950 text-zinc-50 shadow-2xl"
+        className="relative min-h-[calc(100vh-88px)] overflow-hidden rounded-lg bg-zinc-950 text-zinc-50 shadow-2xl"
         onKeyDown={handleKeyDown}
         tabIndex={-1}
       >
@@ -911,7 +913,7 @@ export default function FreestylePage() {
 
         <div className="pointer-events-none absolute left-0 right-0 top-0 z-20 flex items-start justify-end gap-3 px-4 py-4 sm:justify-between sm:px-5">
           <div className="pointer-events-auto flex min-w-0 flex-wrap items-center gap-2 rounded-full border border-white/10 bg-zinc-900/76 px-3 py-2 text-xs shadow-lg backdrop-blur">
-            <Sparkles className="hidden h-4 w-4 text-amber-300 sm:block" />
+            <Sparkles className="hidden size-4 text-amber-300 sm:block" />
             <span className="text-zinc-400">{RANGE_LABELS[config.range]}</span>
             <span className="text-zinc-400">
               {queue.length === 0 ? '0/0' : `${currentIndex + 1}/${queue.length}`}
@@ -919,7 +921,7 @@ export default function FreestylePage() {
             <span className="text-emerald-300">连对 {progress.correctStreak}</span>
           </div>
           <div className="pointer-events-auto hidden items-center gap-2 rounded-full border border-white/10 bg-zinc-900/76 px-3 py-2 text-xs shadow-lg backdrop-blur sm:flex">
-            <Clock3 className="h-4 w-4 text-emerald-300" />
+            <Clock3 className="size-4 text-emerald-300" />
             <span>{timer.status === 'running' ? formatTimer(timer.effectiveSeconds) : timer.status === 'paused' ? '暂停' : '待开始'}</span>
           </div>
         </div>
@@ -932,7 +934,7 @@ export default function FreestylePage() {
           {feedLoading ? (
             <section className="flex h-full snap-start items-center justify-center">
               <div className="flex items-center gap-2 text-sm text-zinc-300">
-                <LoaderCircle className="h-4 w-4 animate-spin" />
+                <LoaderCircle className="size-4 animate-spin" />
                 正在加载随心队列...
               </div>
             </section>
@@ -957,11 +959,11 @@ export default function FreestylePage() {
                 action={
                   <div className="flex flex-wrap justify-center gap-2">
                     <Button type="button" variant="secondary" onClick={handleReshuffle}>
-                      <Shuffle className="h-4 w-4" />
+                      <Shuffle className="size-4" />
                       重洗
                     </Button>
                     <Button type="button" onClick={() => setSettingsOpen(true)}>
-                      <SlidersHorizontal className="h-4 w-4" />
+                      <SlidersHorizontal className="size-4" />
                       设置
                     </Button>
                     <Button asChild variant="outline">
@@ -1003,27 +1005,27 @@ export default function FreestylePage() {
 
         <div className="absolute bottom-5 left-1/2 z-30 flex -translate-x-1/2 items-center gap-2 sm:bottom-auto sm:left-auto sm:right-5 sm:top-1/2 sm:-translate-y-1/2 sm:translate-x-0 sm:flex-col">
           <IconButton label="设置" onClick={() => setSettingsOpen(true)}>
-            <SlidersHorizontal className="h-5 w-5" />
+            <SlidersHorizontal className="size-5" />
           </IconButton>
           <IconButton
             label="查看宫殿"
             onClick={() => setMemoryLookupOpen(true)}
             disabled={!currentPalaceId}
           >
-            <BookOpen className="h-5 w-5" />
+            <BookOpen className="size-5" />
           </IconButton>
           <IconButton label="上一题" onClick={() => goToIndex(currentIndex - 1)} disabled={currentIndex <= 0}>
-            <ChevronUp className="h-5 w-5" />
+            <ChevronUp className="size-5" />
           </IconButton>
           <IconButton
             label="下一题"
             onClick={() => goToIndex(currentIndex + 1)}
             disabled={currentIndex >= queue.length - 1}
           >
-            <ChevronDown className="h-5 w-5" />
+            <ChevronDown className="size-5" />
           </IconButton>
           <IconButton label="重洗队列" onClick={handleReshuffle} disabled={queue.length <= 1}>
-            <Shuffle className="h-5 w-5" />
+            <Shuffle className="size-5" />
           </IconButton>
           <IconButton
             label="清空本地进度"
@@ -1035,7 +1037,7 @@ export default function FreestylePage() {
               toast.success('已清空随心进度')
             }}
           >
-            <RotateCcw className="h-5 w-5" />
+            <RotateCcw className="size-5" />
           </IconButton>
         </div>
 

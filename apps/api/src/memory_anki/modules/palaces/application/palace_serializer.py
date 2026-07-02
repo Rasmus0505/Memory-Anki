@@ -307,6 +307,7 @@ def palace_editor_meta_json(p, session: Session | None = None) -> dict:
         explicit_chapter_ids = get_palace_explicit_chapter_ids(session, p)
     payload.update(
         {
+            "editor_doc": p.editor_doc,
             "attachments": [
                 {
                     "id": a.id,

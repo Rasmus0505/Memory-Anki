@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import PalaceListPage from '@/features/palace-catalog/PalaceListPage'
 import { PALACE_LIST_VIEW_SETTINGS_KEY } from '@/entities/preferences/model/palaceViewSettings'
 import { resetClientPreferenceCacheForTest } from '@/shared/preferences/clientPreferences'
-import { updateClientPreferencesApi } from '@/entities/preferences/api/clientPreferencesApi'
+import { updateClientPreferencesApi } from '@/entities/preferences/api'
 
 const navigate = vi.fn()
 const searchParams = new URLSearchParams()
@@ -32,7 +32,7 @@ vi.mock('@/features/palace-catalog/components/palace-list/PalaceStageProgress', 
 const getPalacesGroupedApi = vi.fn()
 const submitSegmentReviewSessionApi = vi.fn()
 
-vi.mock('@/entities/palace/api/catalogApi', () => ({
+vi.mock('@/entities/palace/api', () => ({
   getPalacesGroupedApi: (...args: unknown[]) => getPalacesGroupedApi(...args),
   PALACE_CATALOG_INVALIDATED_EVENT: 'palace-catalog:invalidated',
 }))
@@ -50,12 +50,12 @@ vi.mock('@/entities/palace-segment/api', () => ({
   updatePalaceSegmentReviewProgressApi: vi.fn(),
 }))
 
-vi.mock('@/features/review/api/reviewApi', () => ({
+vi.mock('@/features/review/api', () => ({
   submitReviewSessionApi: vi.fn(),
   submitSegmentReviewSessionApi: (...args: unknown[]) => submitSegmentReviewSessionApi(...args),
 }))
 
-vi.mock('@/entities/preferences/api/clientPreferencesApi', () => ({
+vi.mock('@/entities/preferences/api', () => ({
   getClientPreferencesApi: vi.fn(async () => ({ items: {} })),
   updateClientPreferencesApi: vi.fn(async (data: Record<string, unknown>) => ({ items: data })),
 }))

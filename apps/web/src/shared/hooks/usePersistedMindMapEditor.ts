@@ -236,7 +236,7 @@ export function usePersistedMindMapEditor<TResponse, TMeta>({
     void persistSnapshot(retryEntityId, retryEditorState, changeVersionRef.current)
   }
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (options?: { force?: boolean }) => {
     const requestId = loadRequestIdRef.current + 1
     loadRequestIdRef.current = requestId
     if (!entityId) {
@@ -254,7 +254,7 @@ export function usePersistedMindMapEditor<TResponse, TMeta>({
     try {
       const inflightKey = `${loadCacheKey}:${entityId}`
       let pending = inflightEditorLoads.get(inflightKey) as Promise<TResponse> | undefined
-      if (!pending) {
+      if (!pending || options?.force) {
         pending = fetcherRef.current(entityId).finally(() => {
           if (inflightEditorLoads.get(inflightKey) === pending) {
             inflightEditorLoads.delete(inflightKey)
@@ -284,6 +284,8 @@ export function usePersistedMindMapEditor<TResponse, TMeta>({
       }
     }
   }, [entityId, isCurrentLoadRequest, loadCacheKey])
+
+  const reload = useCallback(() => load({ force: true }), [load])
 
   const flushSave = useCallback(async () => {
     if (!entityIdRef.current || !editorStateRef.current || !dirtyRef.current || isSavingRef.current) return
@@ -380,7 +382,7 @@ export function usePersistedMindMapEditor<TResponse, TMeta>({
     isLoading,
     isSaving,
     error,
-    reload: load,
+    reload,
     flushSave,
   }
 }

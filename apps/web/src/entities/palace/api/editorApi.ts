@@ -2,14 +2,14 @@ import { API_BASE, request } from '@/shared/api/http'
 import type {
   MindMapAiSplitRequest,
   MindMapAiSplitResponse,
-  MindMapEditorState,
+  PalaceEditorResponse,
   PalaceEditorSavePayload,
 } from '@/shared/api/contracts'
 import { readJsonResponse } from '@/shared/api/jsonResponse'
 import { logAppError } from '@/shared/logs/model/appLogs'
 
 export function savePalaceEditorApi(id: number, data: PalaceEditorSavePayload) {
-  return request<{ palace: any } & MindMapEditorState>(`/palaces/${id}/editor`, {
+  return request<PalaceEditorResponse>(`/palaces/${id}/editor`, {
     method: 'PUT',
     body: JSON.stringify({ editor_source: 'palace_edit_autosave', ...data }),
     persistence: {
@@ -25,7 +25,7 @@ export function savePalaceEditorWithOptionsApi(
   id: number,
   data: PalaceEditorSavePayload | Record<string, unknown>,
 ) {
-  return request<{ palace: any } & MindMapEditorState>(`/palaces/${id}/editor`, {
+  return request<PalaceEditorResponse>(`/palaces/${id}/editor`, {
     method: 'PUT',
     body: JSON.stringify(data),
     persistence: {

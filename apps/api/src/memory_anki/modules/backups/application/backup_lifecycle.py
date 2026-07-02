@@ -205,6 +205,8 @@ def prune_old_backups(root: Path, keep: int) -> int:
 
 def _daily_backup_exists() -> bool:
     prefix = datetime.now().strftime("%Y%m%d")
+    if not FULL_BACKUPS_DIR.exists():
+        return False
     return any(
         child.is_dir() and child.name.startswith(prefix)
         for child in FULL_BACKUPS_DIR.iterdir()
@@ -212,6 +214,8 @@ def _daily_backup_exists() -> bool:
 
 
 def _latest_full_backup() -> Path | None:
+    if not FULL_BACKUPS_DIR.exists():
+        return None
     folders = [child for child in FULL_BACKUPS_DIR.iterdir() if child.is_dir()]
     if not folders:
         return None

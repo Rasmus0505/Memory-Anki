@@ -1,6 +1,7 @@
 import { useEffect, useState, type ChangeEvent } from 'react'
 import { toast } from '@/shared/feedback/toast'
-import { getSubjectTreeApi, getSubjectsApi } from '@/entities/knowledge/api/knowledgeApi'
+import { getSubjectTreeApi, getSubjectsApi } from '@/entities/knowledge/api'
+import type { ChapterSummary } from '@/entities/knowledge/api'
 import {
   deleteAttachmentApi,
   linkPalaceChaptersApi,
@@ -15,6 +16,24 @@ interface PalaceMetaControllerOptions {
   reload: () => Promise<void>
   timer: {
     registerActivity: (kind: string, meta?: Record<string, unknown>) => void
+  }
+}
+
+function buildChapterOption(
+  chapter: ChapterSummary,
+  depth: number,
+  subjectName: string,
+): ChapterOption {
+  return {
+    id: chapter.id,
+    name: chapter.name,
+    depth,
+    subjectId: chapter.subject_id ?? null,
+    subjectName,
+    parentId: chapter.parent_id ?? null,
+    children: (chapter.children ?? []).map((child) =>
+      buildChapterOption(child, depth + 1, subjectName),
+    ),
   }
 }
 
@@ -50,22 +69,13 @@ export function usePalaceMetaController({
     const loadChapterOptions = async () => {
       const subjects = await getSubjectsApi()
       const trees = await Promise.all(subjects.map((subject) => getSubjectTreeApi(subject.id)))
-      const toNode = (node: any, depth: number, subjectName: string): ChapterOption => ({
-        id: node.id,
-        name: node.name,
-        depth,
-        subjectId: node.subject_id ?? null,
-        subjectName,
-        parentId: node.parent_id ?? null,
-        children: Array.isArray(node.children)
-          ? node.children.map((child: any) => toNode(child, depth + 1, subjectName))
-          : [],
-      })
 
       if (cancelled) return
       setChapterOptions(
         trees.flatMap((tree) =>
-          (tree.chapters || []).map((node: any) => toNode(node, 0, tree.subject?.name || '未命名学科')),
+          (tree.chapters ?? []).map((chapter) =>
+            buildChapterOption(chapter, 0, tree.subject?.name || '未命名学科'),
+          ),
         ),
       )
     }

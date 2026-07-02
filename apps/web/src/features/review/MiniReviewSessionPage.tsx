@@ -1,5 +1,5 @@
 ﻿import type {
-  MiniPalaceSummary,
+  MiniReviewSessionResponse,
 } from '@/shared/api/contracts'
 import {
   clearMiniReviewSessionProgressApi,
@@ -7,29 +7,12 @@ import {
   getMiniReviewSessionApi,
   saveMiniReviewSessionProgressApi,
   submitMiniReviewSessionApi,
-} from '@/features/review/api/reviewApi'
+} from '@/features/review/api'
 import {
   ReviewSessionContainer,
   type ReviewSessionContainerSession,
 } from '@/features/review/ReviewSessionContainer'
 import { buildReviewOverviewPath } from '@/features/review/reviewSessionRoutes'
-
-type MiniReviewSessionResponse = {
-  id: number
-  palace_mini_palace_id: number
-  palace_id: number
-  scheduled_date: string
-  interval_days: number
-  algorithm_used: string
-  completed: boolean
-  completed_at: string | null
-  review_number: number
-  review_type: string
-  mini_palace: MiniPalaceSummary
-  estimated_review_seconds: number
-  palace: any
-  editor_doc: Record<string, unknown> | string | null
-}
 
 function toContainerSession(session: MiniReviewSessionResponse): ReviewSessionContainerSession {
   return {
@@ -62,7 +45,7 @@ export default function MiniReviewSessionPage() {
         lang: 'zh',
       })}
       loadSession={async (sessionId) => {
-        const data = await getMiniReviewSessionApi(sessionId) as MiniReviewSessionResponse
+        const data = await getMiniReviewSessionApi(sessionId)
         return toContainerSession(data)
       }}
       loadProgress={getMiniReviewSessionProgressApi}

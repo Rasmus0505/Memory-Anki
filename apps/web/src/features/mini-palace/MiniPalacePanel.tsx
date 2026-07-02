@@ -46,7 +46,7 @@ export function MiniPalacePanel({ controller, className, onEditSave, onEditCance
                 {controller.error ? <Badge variant="destructive">{controller.error}</Badge> : null}
               </div>
               <Button type="button" size="sm" onClick={controller.startCreate}>
-                <Plus className="mr-2 h-4 w-4" />
+                <Plus className="mr-2 size-4" />
                 新建小宫殿
               </Button>
             </div>
@@ -90,7 +90,7 @@ export function MiniPalacePanel({ controller, className, onEditSave, onEditCance
                       disabled={controller.saving}
                       onClick={() => controller.renameMiniPalace(item, namesById[item.id] ?? item.name)}
                     >
-                      <Save className="mr-2 h-4 w-4" />
+                      <Save className="mr-2 size-4" />
                       保存
                     </Button>
                     <Button
@@ -100,7 +100,7 @@ export function MiniPalacePanel({ controller, className, onEditSave, onEditCance
                       disabled={controller.saving}
                       onClick={() => controller.startEdit(item)}
                     >
-                      <Pencil className="mr-2 h-4 w-4" />
+                      <Pencil className="mr-2 size-4" />
                       编辑
                     </Button>
                     <Button
@@ -109,7 +109,7 @@ export function MiniPalacePanel({ controller, className, onEditSave, onEditCance
                       disabled={controller.saving || item.is_empty}
                       onClick={() => controller.startPractice(item)}
                     >
-                      <Play className="mr-2 h-4 w-4" />
+                      <Play className="mr-2 size-4" />
                       进入
                     </Button>
                     <Button
@@ -120,7 +120,7 @@ export function MiniPalacePanel({ controller, className, onEditSave, onEditCance
                       onClick={() => void controller.deleteMiniPalace(item)}
                       aria-label={`删除 ${item.name}`}
                     >
-                      <Trash2 className="h-4 w-4" />
+                      <Trash2 className="size-4" />
                     </Button>
                   </div>
                 </div>
@@ -140,7 +140,7 @@ export function MiniPalacePanel({ controller, className, onEditSave, onEditCance
           <div className="mb-3 flex items-center justify-between gap-3">
             <div className="text-sm font-semibold">{controller.activeMiniPalace ? "编辑小宫殿" : "新建小宫殿"}</div>
             <Button type="button" size="icon" variant="ghost" onClick={controller.cancelCreate}>
-              <X className="h-4 w-4" />
+              <X className="size-4" />
             </Button>
           </div>
           <div className="space-y-3">
@@ -204,7 +204,7 @@ export function MiniPalacePanel({ controller, className, onEditSave, onEditCance
               </div>
             </div>
             <Button type="button" size="icon" variant="ghost" onClick={controller.exitPractice}>
-              <X className="h-4 w-4" />
+              <X className="size-4" />
             </Button>
           </div>
           <div className="mt-3 flex justify-end gap-2">

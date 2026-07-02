@@ -1,6 +1,6 @@
 import { request } from '@/shared/api/http'
-import { invalidatePalaceCatalogCache } from '@/entities/palace/api/catalogApi'
-import type { MiniPalaceSummary } from '@/shared/api/contracts'
+import { invalidatePalaceCatalogCache } from '@/entities/palace/api'
+import type { MiniPalacePracticeResponse, MiniPalaceSummary, PalaceEditorMeta } from '@/shared/api/contracts'
 
 async function withPalaceCatalogInvalidation<T>(operation: Promise<T>) {
   const result = await operation
@@ -62,11 +62,7 @@ export function deleteMiniPalaceApi(miniPalaceId: number) {
 }
 
 export function getPalaceMiniPalaceApi(miniPalaceId: number) {
-  return request<{
-    item: MiniPalaceSummary
-    palace: any
-    editor_doc: Record<string, unknown> | string | null
-  }>(`/palace-mini-palaces/${miniPalaceId}`)
+  return request<MiniPalacePracticeResponse>(`/palace-mini-palaces/${miniPalaceId}`)
 }
 
 export function updateMiniPalaceReviewProgressApi(
@@ -78,7 +74,7 @@ export function updateMiniPalaceReviewProgressApi(
   },
 ) {
   return withPalaceCatalogInvalidation(
-    request<{ item: MiniPalaceSummary; palace: any }>(
+    request<{ item: MiniPalaceSummary; palace: PalaceEditorMeta }>(
       `/palace-mini-palaces/${miniPalaceId}/review-progress`,
       {
         method: 'PUT',

@@ -1,4 +1,6 @@
-import { API_BASE, fetchWithMutationQueue, request } from '@/shared/api/http'
+import { API_BASE, fetchWithMutationQueue, request, uploadWithFormData } from '@/shared/api/http'
+import { parseSseEventBlock } from '@/shared/api/sse'
+import { readJsonResponse } from '@/shared/api/jsonResponse'
 import type {
   AiScenarioRuntimeOptionsMap,
   MindMapEditorState,
@@ -13,32 +15,7 @@ import type {
 } from '@/shared/api/contracts'
 
 async function readQuizJson<T>(response: Response): Promise<T> {
-  const data = await response.json().catch(() => ({}))
-  if (!response.ok) {
-    throw new Error(data?.detail || data?.error || `HTTP ${response.status}`)
-  }
-  return data as T
-}
-
-function parseQuizSseEventBlock(block: string): { event: string; data: string } | null {
-  const lines = block
-    .split(/\r?\n/)
-    .map((line) => line.trimEnd())
-    .filter(Boolean)
-  if (lines.length === 0) return null
-  let event = 'message'
-  const dataLines: string[] = []
-  for (const line of lines) {
-    if (line.startsWith('event:')) {
-      event = line.slice(6).trim()
-      continue
-    }
-    if (line.startsWith('data:')) {
-      dataLines.push(line.slice(5).trim())
-    }
-  }
-  if (dataLines.length === 0) return null
-  return { event, data: dataLines.join('\n') }
+  return readJsonResponse<T>(response, { feature: 'Palace quiz API' })
 }
 
 async function readQuizStreamResponse<T>(
@@ -70,7 +47,7 @@ async function readQuizStreamResponse<T>(
     const parts = buffer.split(/\r?\n\r?\n/)
     buffer = parts.pop() ?? ''
     for (const part of parts) {
-      const parsed = parseQuizSseEventBlock(part)
+      const parsed = parseSseEventBlock(part)
       if (!parsed) continue
       const payload = JSON.parse(parsed.data)
       if (parsed.event === 'status') {
@@ -243,6 +220,54 @@ export function requestPalaceShortAnswerFeedbackApi(
   )
 }
 
+function buildPalaceQuizGenerationUploadForm(input: {
+  files: File[]
+  extraPrompt: string
+  classifyByMiniPalace: boolean
+  selectedChapterId?: number | null
+  aiOptions?: import('@/shared/api/contracts').AiRuntimeOptions
+}) {
+  const form = new FormData()
+  input.files.forEach((file) => form.append('files', file))
+  form.append('extra_prompt', input.extraPrompt)
+  form.append('classify_by_mini_palace', input.classifyByMiniPalace ? 'true' : 'false')
+  if (input.selectedChapterId) {
+    form.append('selected_chapter_id', String(input.selectedChapterId))
+  }
+  if (input.aiOptions) {
+    form.append('ai_options', JSON.stringify(input.aiOptions))
+  }
+  return form
+}
+
+function previewPalaceQuizGenerationFromUploadedFiles(
+  palaceId: number,
+  kind: 'images' | 'text-files',
+  files: File[],
+  extraPrompt: string,
+  classifyByMiniPalace: boolean,
+  selectedChapterId?: number | null,
+  aiOptions?: import('@/shared/api/contracts').AiRuntimeOptions,
+) {
+  return uploadWithFormData<PalaceQuizGenerationPreview>(
+    `/palaces/${palaceId}/quiz-generation/${kind}`,
+    buildPalaceQuizGenerationUploadForm({
+      files,
+      extraPrompt,
+      classifyByMiniPalace,
+      selectedChapterId,
+      aiOptions,
+    }),
+    {
+      resourceKey: `palace:${palaceId}:quiz-generation:${kind}:${files.map((file) => file.name).join(',')}`,
+      description:
+        kind === 'images'
+          ? 'AI 生成宫殿题目（图片）'
+          : 'AI 生成宫殿题目（文本文件）',
+    },
+  )
+}
+
 export async function previewPalaceQuizGenerationFromImagesApi(
   palaceId: number,
   files: File[],
@@ -251,29 +276,15 @@ export async function previewPalaceQuizGenerationFromImagesApi(
   selectedChapterId?: number | null,
   aiOptions?: import('@/shared/api/contracts').AiRuntimeOptions,
 ) {
-  const form = new FormData()
-  files.forEach((file) => form.append('files', file))
-  form.append('extra_prompt', extraPrompt)
-  form.append('classify_by_mini_palace', classifyByMiniPalace ? 'true' : 'false')
-  if (selectedChapterId) {
-    form.append('selected_chapter_id', String(selectedChapterId))
-  }
-  if (aiOptions) {
-    form.append('ai_options', JSON.stringify(aiOptions))
-  }
-  const response = await fetchWithMutationQueue(
-    `${API_BASE}/palaces/${palaceId}/quiz-generation/images`,
-    {
-      method: 'POST',
-      body: form,
-    },
-    {
-      resourceKey: `palace:${palaceId}:quiz-generation:images:${files.map((file) => file.name).join(',')}`,
-      description: 'AI 生成宫殿题目（图片）',
-      replayMode: 'manual',
-    },
+  return previewPalaceQuizGenerationFromUploadedFiles(
+    palaceId,
+    'images',
+    files,
+    extraPrompt,
+    classifyByMiniPalace,
+    selectedChapterId,
+    aiOptions,
   )
-  return readQuizJson<PalaceQuizGenerationPreview>(response)
 }
 
 export async function previewPalaceQuizGenerationFromTextFilesApi(
@@ -284,29 +295,15 @@ export async function previewPalaceQuizGenerationFromTextFilesApi(
   selectedChapterId?: number | null,
   aiOptions?: import('@/shared/api/contracts').AiRuntimeOptions,
 ) {
-  const form = new FormData()
-  files.forEach((file) => form.append('files', file))
-  form.append('extra_prompt', extraPrompt)
-  form.append('classify_by_mini_palace', classifyByMiniPalace ? 'true' : 'false')
-  if (selectedChapterId) {
-    form.append('selected_chapter_id', String(selectedChapterId))
-  }
-  if (aiOptions) {
-    form.append('ai_options', JSON.stringify(aiOptions))
-  }
-  const response = await fetchWithMutationQueue(
-    `${API_BASE}/palaces/${palaceId}/quiz-generation/text-files`,
-    {
-      method: 'POST',
-      body: form,
-    },
-    {
-      resourceKey: `palace:${palaceId}:quiz-generation:text-files:${files.map((file) => file.name).join(',')}`,
-      description: 'AI 生成宫殿题目（文本文件）',
-      replayMode: 'manual',
-    },
+  return previewPalaceQuizGenerationFromUploadedFiles(
+    palaceId,
+    'text-files',
+    files,
+    extraPrompt,
+    classifyByMiniPalace,
+    selectedChapterId,
+    aiOptions,
   )
-  return readQuizJson<PalaceQuizGenerationPreview>(response)
 }
 
 export function previewChapterQuizGenerationFromOutlineApi(

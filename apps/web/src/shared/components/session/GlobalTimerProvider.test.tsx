@@ -21,6 +21,7 @@ import {
 import type { TimedSessionController } from '@/shared/hooks/useTimedSession'
 import type { DesktopTimerBridge, UnifiedTimerSnapshot } from '@/shared/components/session/desktopTimerBridge'
 import type { UnifiedTimerCommand } from '@/shared/components/session/desktopTimerBridge'
+import { resetClientPreferenceCacheForTest } from '@/shared/preferences/clientPreferences'
 
 const emitTimerCelebration = vi.fn()
 
@@ -76,7 +77,7 @@ function RegistrationProbe({
   becameActiveAt: number
   onRegistered?: (timer: TimedSessionController) => void
 }) {
-  useGlobalTimerRegistration({
+  const registeredTimer = useGlobalTimerRegistration({
     scene,
     title,
     timer,
@@ -85,8 +86,8 @@ function RegistrationProbe({
   })
 
   React.useEffect(() => {
-    onRegistered?.(timer)
-  }, [onRegistered, timer])
+    onRegistered?.(registeredTimer)
+  }, [onRegistered, registeredTimer])
 
   return null
 }
@@ -98,6 +99,7 @@ function renderOverlay(probes: React.ReactNode) {
 describe('GlobalTimerProvider', () => {
   beforeEach(() => {
     window.localStorage.clear()
+    resetClientPreferenceCacheForTest()
     delete window.memoryAnkiDesktopTimer
     emitTimerCelebration.mockReset()
     Object.defineProperty(window, 'innerWidth', {
@@ -114,6 +116,7 @@ describe('GlobalTimerProvider', () => {
 
   afterEach(() => {
     cleanup()
+    resetClientPreferenceCacheForTest()
   })
 
   it('prefers the active route running session over background sessions', () => {
@@ -950,7 +953,7 @@ describe('GlobalTimerProvider', () => {
     vi.useRealTimers()
   })
 
-  it('does not auto end an active break when returning to study', () => {
+  it('auto ends an active break when returning to study', () => {
     const publishTimerSnapshot = vi.fn()
     const pause = vi.fn()
     const resume = vi.fn()
@@ -997,16 +1000,23 @@ describe('GlobalTimerProvider', () => {
       commandHandler?.({ type: 'returnToStudy' })
     })
 
-    expect(resume).not.toHaveBeenCalled()
+    expect(resume).toHaveBeenCalledWith({ source: 'break_guard_return_to_study' })
     expect(publishTimerSnapshot).toHaveBeenLastCalledWith(
       expect.objectContaining({
-        mode: 'break',
+        mode: 'study',
         status: 'running',
+        title: '当前复习',
       }),
     )
+    const logs = JSON.parse(window.localStorage.getItem('memory-anki-break-guard-logs') ?? '[]')
+    expect(logs[0]).toEqual(expect.objectContaining({
+      endedAt: expect.any(String),
+      overtime: false,
+      snoozeCount: 0,
+    }))
   })
 
-  it('does not auto end an active break when study activity resumes', () => {
+  it('auto ends an active break when study activity resumes', () => {
     const publishTimerSnapshot = vi.fn()
     const pause = vi.fn()
     const resume = vi.fn()
@@ -1070,13 +1080,20 @@ describe('GlobalTimerProvider', () => {
       registeredTimer?.registerActivity('practice_interaction', { source: 'test_answer' })
     })
 
-    expect(resume).not.toHaveBeenCalled()
+    expect(resume).toHaveBeenCalledWith({ source: 'break_guard_return_to_study' })
     expect(publishTimerSnapshot).toHaveBeenLastCalledWith(
       expect.objectContaining({
-        mode: 'break',
+        mode: 'study',
         status: 'running',
+        title: '当前复习',
       }),
     )
+    const logs = JSON.parse(window.localStorage.getItem('memory-anki-break-guard-logs') ?? '[]')
+    expect(logs[0]).toEqual(expect.objectContaining({
+      endedAt: expect.any(String),
+      overtime: false,
+      snoozeCount: 0,
+    }))
   })
 
   it('treats active freestyle activity as study and leaves the break prompt', () => {

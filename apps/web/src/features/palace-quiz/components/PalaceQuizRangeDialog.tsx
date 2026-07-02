@@ -41,7 +41,7 @@ export function PalaceQuizRangeDialog({
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4 px-6 py-4">
-          <div className="rounded-2xl border border-border/70 bg-background/70 px-4 py-3 text-sm text-muted-foreground">
+          <div className="rounded-lg border border-border/70 bg-background/70 px-4 py-3 text-sm text-muted-foreground">
             当前选择：{pendingChapterId ? pendingChapterSummary : '尚未选择题目所属章节'}
           </div>
           {chapterTreesLoading ? (

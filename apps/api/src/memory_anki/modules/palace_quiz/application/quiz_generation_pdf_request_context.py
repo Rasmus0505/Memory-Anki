@@ -32,6 +32,8 @@ def load_pdf_generation_request_context(
     render_selected_pdf_pages: Any,
 ) -> PdfGenerationRequestContext:
     palace = get_palace_or_raise(session, palace_id)
+    if selected_chapter_id is None:
+        selected_chapter_id = palace.primary_chapter_id
     selected_chapter = resolve_selected_generation_chapter(
         session,
         palace=palace,

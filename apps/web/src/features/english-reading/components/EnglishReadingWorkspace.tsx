@@ -45,7 +45,7 @@ export function EnglishReadingProfileCard({
     <Card className="border-border/70 bg-card/95">
       <CardHeader className="pb-4">
         <CardTitle className="flex items-center gap-2 text-base">
-          <TrendingUp className="h-4 w-4" />
+          <TrendingUp className="size-4" />
           建立我的 i
         </CardTitle>
       </CardHeader>
@@ -58,7 +58,7 @@ export function EnglishReadingProfileCard({
                 key={level}
                 type="button"
                 className={cn(
-                  "rounded-2xl border px-4 py-3 text-left transition-all",
+                  "rounded-lg border px-4 py-3 text-left transition-all",
                   active
                     ? "border-primary bg-primary text-primary-foreground shadow-card"
                     : "border-border/70 bg-background/75 hover:border-border hover:bg-background",
@@ -78,7 +78,7 @@ export function EnglishReadingProfileCard({
           })}
         </div>
 
-        <div className="rounded-3xl border border-border/70 bg-background/70 p-4">
+        <div className="rounded-lg border border-border/70 bg-background/70 p-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <div className="text-sm font-medium">升级进度</div>
@@ -100,13 +100,13 @@ export function EnglishReadingProfileCard({
             />
           </div>
           <div className="mt-3 grid gap-3 sm:grid-cols-2">
-            <div className="rounded-2xl border border-border/70 bg-card px-4 py-3">
+            <div className="rounded-lg border border-border/70 bg-card px-4 py-3">
               <div className="text-xs text-muted-foreground">词汇舒适区</div>
               <div className="mt-1.5 text-lg font-semibold">
                 {formatWorkingBand(profile.workingLexicalI)}
               </div>
             </div>
-            <div className="rounded-2xl border border-border/70 bg-card px-4 py-3">
+            <div className="rounded-lg border border-border/70 bg-card px-4 py-3">
               <div className="text-xs text-muted-foreground">句法舒适区</div>
               <div className="mt-1.5 text-lg font-semibold">
                 {formatWorkingBand(profile.workingSyntacticI)}
@@ -165,7 +165,7 @@ export function EnglishReadingGeneratorCard({
       <CardHeader className="pb-4">
         <div className="flex items-center justify-between gap-3">
           <CardTitle className="flex items-center gap-2 text-base">
-            <Sparkles className="h-4 w-4" />
+            <Sparkles className="size-4" />
             定制我的 i+1 材料
           </CardTitle>
           <Button
@@ -174,7 +174,7 @@ export function EnglishReadingGeneratorCard({
             size="sm"
             onClick={onOpenAutomation}
           >
-            <Settings2 className="mr-2 h-4 w-4" />
+            <Settings2 className="mr-2 size-4" />
             自动化配置
           </Button>
         </div>
@@ -184,7 +184,7 @@ export function EnglishReadingGeneratorCard({
           value={textInput}
           onChange={onTextInputChange}
           placeholder="直接粘贴英文文章全文，或者上传 txt / md / pdf 文件。"
-          className="min-h-[170px] resize-y rounded-3xl bg-background/70 px-4 py-4 text-[15px] leading-6.5"
+          className="min-h-[170px] resize-y rounded-lg bg-background/70 px-4 py-4 text-[15px] leading-6.5"
         />
         <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
           <div
@@ -193,7 +193,7 @@ export function EnglishReadingGeneratorCard({
             aria-label="拖动或选择阅读文件"
             data-testid="reading-file-dropzone"
             className={cn(
-              "rounded-[28px] border border-dashed px-5 py-4 text-left transition-all",
+              "rounded-lg border border-dashed px-5 py-4 text-left transition-all",
               dropzoneActive
                 ? "border-info/50 bg-info/5 shadow-popover"
                 : "border-border/70 bg-background/65 hover:border-border hover:bg-background",
@@ -217,13 +217,13 @@ export function EnglishReadingGeneratorCard({
             <div className="flex items-start gap-3">
               <div
                 className={cn(
-                  "flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border transition-colors",
+                  "flex size-11 shrink-0 items-center justify-center rounded-lg border transition-colors",
                   dropzoneActive
                     ? "border-info/30 bg-info/10 text-info"
                     : "border-border/70 bg-card text-muted-foreground",
                 )}
               >
-                <FileText className="h-5 w-5" />
+                <FileText className="size-5" />
               </div>
               <div className="min-w-0">
                 <div className="text-sm font-medium text-primary">
@@ -245,20 +245,20 @@ export function EnglishReadingGeneratorCard({
           <Button
             onClick={onCreateAndGenerate}
             disabled={generating}
-            className="h-11 rounded-2xl px-5"
+            className="h-11 rounded-lg px-5"
           >
             {generating ? (
-              <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
+              <LoaderCircle className="mr-2 size-4 animate-spin" />
             ) : (
-              <BookOpenText className="mr-2 h-4 w-4" />
+              <BookOpenText className="mr-2 size-4" />
             )}
             开始定制我的 i+1 材料
           </Button>
         </div>
         {generating ? (
-          <div className="rounded-3xl border border-info/20 bg-info/5 px-4 py-4">
+          <div className="rounded-lg border border-info/20 bg-info/5 px-4 py-4">
             <div className="flex items-center gap-2 text-sm font-medium text-info">
-              <LoaderCircle className="h-4 w-4 animate-spin" />
+              <LoaderCircle className="size-4 animate-spin" />
               {visibleStage}
             </div>
             <div className="mt-3 h-2 overflow-hidden rounded-full bg-info/10">
@@ -269,7 +269,7 @@ export function EnglishReadingGeneratorCard({
             </div>
           </div>
         ) : (
-          <div className="rounded-3xl border border-dashed border-border/70 bg-background/60 px-4 py-4 text-sm text-muted-foreground">
+          <div className="rounded-lg border border-dashed border-border/70 bg-background/60 px-4 py-4 text-sm text-muted-foreground">
             当前支持手动粘贴，以及点击或拖动上传 `txt / md / pdf`。生成时会优先使用本地
             CEFR 词典，不认识的词形再交给 Qwen Flash 补洞。
           </div>
@@ -319,7 +319,7 @@ export function EnglishReadingRecentMaterialsCard({
                 <div
                   key={item.id}
                   className={cn(
-                    "rounded-2xl border transition-all",
+                    "rounded-lg border transition-all",
                     active
                       ? "border-primary bg-primary text-primary-foreground shadow-soft"
                       : "border-border/70 bg-background/70",
@@ -409,9 +409,9 @@ export function EnglishReadingRecentMaterialsCard({
                       disabled={busy}
                     >
                       {renamingMaterialId === item.id ? (
-                        <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
+                        <LoaderCircle className="mr-2 size-4 animate-spin" />
                       ) : (
-                        <PencilLine className="mr-2 h-4 w-4" />
+                        <PencilLine className="mr-2 size-4" />
                       )}
                       Edit
                     </Button>
@@ -428,9 +428,9 @@ export function EnglishReadingRecentMaterialsCard({
                       disabled={busy}
                     >
                       {deletingMaterialId === item.id ? (
-                        <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
+                        <LoaderCircle className="mr-2 size-4 animate-spin" />
                       ) : (
-                        <Trash2 className="mr-2 h-4 w-4" />
+                        <Trash2 className="mr-2 size-4" />
                       )}
                       Delete
                     </Button>
@@ -440,7 +440,7 @@ export function EnglishReadingRecentMaterialsCard({
             })}
           </div>
         ) : (
-          <div className="rounded-3xl border border-dashed border-border/70 py-12 text-center text-sm text-muted-foreground">
+          <div className="rounded-lg border border-dashed border-border/70 py-12 text-center text-sm text-muted-foreground">
             还没有阅读历史。先导入一篇英文材料，生成后会自动出现在这里。
           </div>
         )}

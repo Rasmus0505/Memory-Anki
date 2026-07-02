@@ -93,7 +93,7 @@ export function MindMapImportSourceConfigPanel({
               onSourceKindChange('image-single')
               onWorkflowChange('single')
             }}
-            icon={<ImagePlus className="h-4 w-4" />}
+            icon={<ImagePlus className="size-4" />}
             label="单图"
           />
           {mode === 'mindmap' ? (
@@ -103,22 +103,22 @@ export function MindMapImportSourceConfigPanel({
                 onSourceKindChange('image-batch')
                 onWorkflowChange('batch')
               }}
-              icon={<Sparkles className="h-4 w-4" />}
+              icon={<Sparkles className="size-4" />}
               label="多图"
             />
           ) : null}
           <SourceKindButton
             active={sourceKind === 'subject-pdf'}
             onClick={() => onSourceKindChange('subject-pdf')}
-            icon={<FileText className="h-4 w-4" />}
+            icon={<FileText className="size-4" />}
             label="学科 PDF"
           />
         </div>
 
         {sourceKind !== 'subject-pdf' ? (
           <>
-            <label className="flex cursor-pointer items-center justify-center rounded-2xl border border-dashed border-border/80 bg-background/70 px-4 py-5 text-sm text-muted-foreground transition-colors hover:text-foreground">
-              <ImagePlus className="mr-2 h-4 w-4" />
+            <label className="flex cursor-pointer items-center justify-center rounded-lg border border-dashed border-border/80 bg-background/70 px-4 py-5 text-sm text-muted-foreground transition-colors hover:text-foreground">
+              <ImagePlus className="mr-2 size-4" />
               {sourceKind === 'image-batch' ? '批量选择图片或直接在这里粘贴' : '选择图片或直接在这里粘贴'}
               <input
                 type="file"
@@ -130,7 +130,7 @@ export function MindMapImportSourceConfigPanel({
             </label>
 
             {sourceKind === 'image-batch' ? (
-              <div className="rounded-2xl border border-border/70 bg-background/60 p-3">
+              <div className="rounded-lg border border-border/70 bg-background/60 p-3">
                 <div className="mb-3 flex items-center justify-between gap-3">
                   <div>
                     <div className="text-sm font-medium">图片队列</div>
@@ -156,7 +156,7 @@ export function MindMapImportSourceConfigPanel({
                           <div
                             key={item.id}
                             className={cn(
-                              'flex items-center gap-3 rounded-2xl border px-3 py-3',
+                              'flex items-center gap-3 rounded-lg border px-3 py-3',
                               isStructure
                                 ? 'border-foreground/30 bg-foreground/[0.04]'
                                 : 'border-border/70 bg-background/70',
@@ -192,7 +192,7 @@ export function MindMapImportSourceConfigPanel({
                                 disabled={index === 0 || loading || applying || undoing}
                                 title="上移"
                               >
-                                <ArrowUp className="h-4 w-4" />
+                                <ArrowUp className="size-4" />
                               </Button>
                               <Button
                                 type="button"
@@ -202,7 +202,7 @@ export function MindMapImportSourceConfigPanel({
                                 disabled={index === batchImages.length - 1 || loading || applying || undoing}
                                 title="下移"
                               >
-                                <ArrowDown className="h-4 w-4" />
+                                <ArrowDown className="size-4" />
                               </Button>
                               <Button
                                 type="button"
@@ -212,7 +212,7 @@ export function MindMapImportSourceConfigPanel({
                                 disabled={loading || applying || undoing}
                                 title="删除图片"
                               >
-                                <Trash2 className="h-4 w-4" />
+                                <Trash2 className="size-4" />
                               </Button>
                             </div>
                           </div>
@@ -221,7 +221,7 @@ export function MindMapImportSourceConfigPanel({
                     </div>
                   </div>
                 ) : (
-                  <div className="flex h-24 items-center justify-center rounded-2xl border border-dashed border-border/80 bg-background/50 text-sm text-muted-foreground">
+                  <div className="flex h-24 items-center justify-center rounded-lg border border-dashed border-border/80 bg-background/50 text-sm text-muted-foreground">
                     还没有图片，先上传要识别的图片。
                   </div>
                 )}
@@ -229,7 +229,7 @@ export function MindMapImportSourceConfigPanel({
             ) : null}
           </>
         ) : (
-          <div className="rounded-2xl border border-border/70 bg-background/60 p-3">
+          <div className="rounded-lg border border-border/70 bg-background/60 p-3">
             <div className="grid gap-3">
               <div className="grid gap-2 sm:grid-cols-2">
                 <label className="grid gap-1 text-sm">
@@ -298,14 +298,14 @@ export function MindMapImportSourceConfigPanel({
               </label>
 
               {mode === 'mindmap' ? (
-                <div className="rounded-2xl border border-border/70 bg-background/70 p-3">
+                <div className="rounded-lg border border-border/70 bg-background/70 p-3">
                   <div className="mb-3 text-sm font-medium">导入模式</div>
                   <div className="grid gap-2 sm:grid-cols-2">
                     <button
                       type="button"
                       onClick={() => onPdfImportModeChange('direct_generation')}
                       className={cn(
-                        'rounded-2xl border px-3 py-3 text-left transition-colors',
+                        'rounded-lg border px-3 py-3 text-left transition-colors',
                         !isStructuredPdfMode
                           ? 'border-foreground/30 bg-foreground/[0.04]'
                           : 'border-border/70 bg-background',
@@ -320,7 +320,7 @@ export function MindMapImportSourceConfigPanel({
                       type="button"
                       onClick={() => onPdfImportModeChange('structured_merge')}
                       className={cn(
-                        'rounded-2xl border px-3 py-3 text-left transition-colors',
+                        'rounded-lg border px-3 py-3 text-left transition-colors',
                         isStructuredPdfMode
                           ? 'border-foreground/30 bg-foreground/[0.04]'
                           : 'border-border/70 bg-background',
@@ -384,13 +384,13 @@ export function MindMapImportSourceConfigPanel({
               ) : null}
 
               {pdfSelectionError ? (
-                <div className="rounded-2xl border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+                <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
                   {pdfSelectionError}
                 </div>
               ) : null}
 
               {importWarnings.length > 0 ? (
-                <div className="rounded-2xl border border-warning/60 bg-warning/5 px-3 py-2 text-sm text-warning">
+                <div className="rounded-lg border border-warning/60 bg-warning/5 px-3 py-2 text-sm text-warning">
                   <div className="mb-1 font-medium">导入提示</div>
                   <div className="space-y-1">
                     {importWarnings.map((warning, index) => (
@@ -487,7 +487,7 @@ export function MindMapImportSourceConfigPanel({
         ) : null}
 
         {error ? (
-          <div className="rounded-2xl border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+          <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
             {error}
           </div>
         ) : null}

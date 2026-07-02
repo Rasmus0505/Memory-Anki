@@ -1,6 +1,6 @@
 import { request } from '@/shared/api/http'
-import { invalidatePalaceCatalogCache } from '@/entities/palace/api/catalogApi'
-import type { PalaceSegmentSummary } from '@/shared/api/contracts'
+import { invalidatePalaceCatalogCache } from '@/entities/palace/api'
+import type { PalaceSegmentPracticeResponse, PalaceSegmentSummary } from '@/shared/api/contracts'
 
 async function withPalaceCatalogInvalidation<T>(operation: Promise<T>) {
   const result = await operation
@@ -110,9 +110,5 @@ export function deletePalaceSegmentApi(segmentId: number) {
 }
 
 export function getPalaceSegmentApi(segmentId: number) {
-  return request<{
-    item: PalaceSegmentSummary
-    palace: any
-    editor_doc: Record<string, unknown> | string | null
-  }>(`/palace-segments/${segmentId}`)
+  return request<PalaceSegmentPracticeResponse>(`/palace-segments/${segmentId}`)
 }

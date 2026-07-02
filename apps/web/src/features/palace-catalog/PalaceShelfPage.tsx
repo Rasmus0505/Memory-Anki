@@ -233,7 +233,7 @@ export default function PalaceShelfPage() {
         actions={
           <Link to="/palaces/new">
             <Button size="sm">
-              <Plus className="h-4 w-4" />
+              <Plus className="size-4" />
               新建宫殿
             </Button>
           </Link>
@@ -245,7 +245,7 @@ export default function PalaceShelfPage() {
           <div className="flex flex-wrap items-end gap-3">
             <div className="min-w-[180px] flex-1">
               <div className="relative">
-                <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
                   placeholder="搜索学科或宫殿..."
                   value={search}
@@ -307,7 +307,7 @@ export default function PalaceShelfPage() {
                         )
                       }
                     >
-                      <Icon className="h-4 w-4" />
+                      <Icon className="size-4" />
                       {option.label}
                     </Button>
                   )
@@ -402,10 +402,10 @@ export default function PalaceShelfPage() {
                       <div className="flex items-start justify-between gap-3">
                         <div className="flex items-center gap-3">
                           <div
-                            className="flex h-11 w-11 items-center justify-center rounded-2xl text-white shadow-sm"
+                            className="flex size-11 items-center justify-center rounded-lg text-white shadow-sm"
                             style={{ backgroundColor: color }}
                           >
-                            {isUncategorized ? <LibraryBig className="h-5 w-5" /> : <BookOpen className="h-5 w-5" />}
+                            {isUncategorized ? <LibraryBig className="size-5" /> : <BookOpen className="size-5" />}
                           </div>
                           <div>
                             <div className={cn('font-semibold text-foreground', getShelfTitleClass(viewSettings.densityMode))}>{title}</div>
@@ -418,11 +418,11 @@ export default function PalaceShelfPage() {
                       </div>
 
                       <div className="grid grid-cols-2 gap-3">
-                        <div className={cn('rounded-2xl border border-border/70 bg-background/70', getShelfStatCardClass(viewSettings.densityMode))}>
+                        <div className={cn('rounded-lg border border-border/70 bg-background/70', getShelfStatCardClass(viewSettings.densityMode))}>
                           <div className="text-xs text-muted-foreground">宫殿数量</div>
                           <div className="mt-1 text-xl font-semibold">{item.palace_count}</div>
                         </div>
-                        <div className={cn('rounded-2xl border border-border/70 bg-background/70', getShelfStatCardClass(viewSettings.densityMode))}>
+                        <div className={cn('rounded-lg border border-border/70 bg-background/70', getShelfStatCardClass(viewSettings.densityMode))}>
                           <div className="text-xs text-muted-foreground">章节数量</div>
                           <div className="mt-1 text-xl font-semibold">{item.chapter_count}</div>
                         </div>
@@ -433,7 +433,7 @@ export default function PalaceShelfPage() {
                       {renderShelfStatusSummary(item)}
                       <span className="inline-flex items-center font-medium text-foreground">
                         打开
-                        <ChevronRight className="ml-1 h-4 w-4 transition-transform group-hover:translate-x-1" />
+                        <ChevronRight className="ml-1 size-4 transition-transform group-hover:translate-x-1" />
                       </span>
                     </div>
                   </CardContent>
@@ -452,7 +452,7 @@ export default function PalaceShelfPage() {
               action={
                 <Link to="/palaces/new">
                   <Button variant="outline" size="sm">
-                    <Plus className="mr-2 h-4 w-4" />
+                    <Plus className="mr-2 size-4" />
                     创建第一个宫殿
                   </Button>
                 </Link>

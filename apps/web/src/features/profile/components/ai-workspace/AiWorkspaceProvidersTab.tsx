@@ -43,7 +43,7 @@ export function AiWorkspaceProvidersTab({
       <Card>
         <CardContent className="flex flex-wrap items-center gap-3 p-4">
           <div className="relative min-w-[260px] flex-1">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               value={providerSearch}
               onChange={(event) => onProviderSearchChange(event.target.value)}
@@ -146,7 +146,7 @@ export function AiWorkspaceProvidersTab({
                     onClick={() => void onProviderSave(provider.key)}
                     disabled={isSaving || !isDirty}
                   >
-                    <Save className="mr-2 h-4 w-4" />
+                    <Save className="mr-2 size-4" />
                     {isSaving ? "保存中..." : "保存 Provider 配置"}
                   </Button>
                   <Button
@@ -155,7 +155,7 @@ export function AiWorkspaceProvidersTab({
                     variant="outline"
                     onClick={() => void onProviderTest(provider)}
                   >
-                    <Play className="mr-2 h-4 w-4" />
+                    <Play className="mr-2 size-4" />
                     测试连接
                   </Button>
                   <Button
@@ -183,7 +183,7 @@ export function AiWorkspaceProvidersTab({
                       })
                     }
                   >
-                    <Trash2 className="mr-2 h-4 w-4" />
+                    <Trash2 className="mr-2 size-4" />
                     清空密钥
                   </Button>
                 </div>

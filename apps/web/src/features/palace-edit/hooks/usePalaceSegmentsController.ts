@@ -52,16 +52,16 @@ export function usePalaceSegmentsController({
 
   useEffect(() => {
     if (!palace) return
-    const nextSegments = Array.isArray((palace as any).segments) ? (palace as any).segments : []
+    const nextSegments = palace.segments ?? []
     setSegments(nextSegments)
     setActiveSegmentId((current) =>
-      current != null && nextSegments.some((segment: PalaceSegmentSummary) => segment.id === current)
+      current != null && nextSegments.some((segment) => segment.id === current)
         ? current
         : nextSegments[0]?.id ?? null,
     )
     setRangeTargetSegmentId((current) => {
       if (current === 'new') return current
-      return current != null && nextSegments.some((segment: PalaceSegmentSummary) => segment.id === current)
+      return current != null && nextSegments.some((segment) => segment.id === current)
         ? current
         : null
     })

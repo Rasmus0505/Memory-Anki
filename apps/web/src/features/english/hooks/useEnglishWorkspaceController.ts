@@ -23,7 +23,7 @@ import {
   retryEnglishCurrentTaskApi,
   subscribeEnglishTaskStream,
   uploadEnglishVideoApi,
-} from '@/features/english/api/englishApi'
+} from '@/features/english/api'
 
 function summarizeTaskEvents(events: EnglishGenerationLogEvent[]) {
   return events.slice(-5).reverse()

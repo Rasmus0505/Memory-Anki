@@ -6,7 +6,7 @@ import {
   savePalaceEditorWithOptionsApi,
 } from '@/entities/palace/api'
 import { usePersistedMindMapEditor } from '@/shared/hooks/usePersistedMindMapEditor'
-import type { MindMapEditorState } from '@/shared/api/contracts'
+import type { MindMapEditorState, PalaceEditorResponse } from '@/shared/api/contracts'
 import type { ImportApplyContext } from '@/features/mindmap-import'
 import {
   applyProgrammaticEditorState,
@@ -195,7 +195,7 @@ export function usePalaceEditorDocument({
   )
 
   const buildPalaceEditorStateFromResponse = useCallback(
-    (response: any) => ({
+    (response: PalaceEditorResponse) => ({
       editor_doc: response.editor_doc,
       editor_config: response.editor_config,
       editor_local_config: response.editor_local_config,

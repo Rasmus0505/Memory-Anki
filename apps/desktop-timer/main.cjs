@@ -130,7 +130,7 @@ function createTimerWindow() {
     resizable: true,
     skipTaskbar: true,
     alwaysOnTop: true,
-    title: 'Memory Anki 计时器',
+    title: 'Memory Anki Timer',
     backgroundColor: '#00000000',
     transparent: true,
     webPreferences: {

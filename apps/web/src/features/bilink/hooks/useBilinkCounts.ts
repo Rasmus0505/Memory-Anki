@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { getBilinkCountsApi } from '@/features/bilink/api/bilink'
+import { getBilinkCountsApi } from '@/features/bilink/api'
 
 export function useBilinkCounts(palaceId: number | null) {
   const [counts, setCounts] = useState<Record<string, number>>({})

@@ -31,11 +31,14 @@ def recover_quiz_questions_from_ai_call_log_and_save(
 ) -> dict[str, Any]:
     if selected_chapter_id <= 0:
         raise PalaceQuizValidationError("请先选择要写入的章节范围。")
+    from . import quiz_generation_service
+
     context = load_pdf_recovery_context(
         session,
         palace_id=palace_id,
         ai_call_log_id=ai_call_log_id,
         selected_chapter_id=selected_chapter_id,
+        get_ai_call_log=quiz_generation_service.get_external_ai_call_log,
     )
     draft_state = build_pdf_recovery_draft_state(
         session,

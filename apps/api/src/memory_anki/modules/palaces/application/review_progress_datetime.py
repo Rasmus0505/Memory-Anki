@@ -13,4 +13,10 @@ def parse_progress_datetime(value: Any) -> datetime | None:
     return parsed.replace(second=0, microsecond=0)
 
 
-__all__ = ["parse_progress_datetime"]
+def serialize_stage_datetime(value: datetime | None) -> str | None:
+    if value is None:
+        return None
+    return value.replace(second=0, microsecond=0).isoformat(timespec="minutes")
+
+
+__all__ = ["parse_progress_datetime", "serialize_stage_datetime"]

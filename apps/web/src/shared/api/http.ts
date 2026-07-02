@@ -1,5 +1,11 @@
 import { logAppError } from '@/shared/logs/model/appLogs'
 import {
+  buildRequestError,
+  extractResponseMessage,
+  getResponseRequestId,
+} from '@/shared/api/jsonResponse'
+import { isConflictResponse } from '@/shared/api/conflict'
+import {
   discardQueuedMutationsByCoalesceKey,
   enqueueMutation,
   isQueuedReplayRequest,
@@ -20,45 +26,6 @@ export interface RequestPersistenceOptions {
 
 export interface PersistedRequestInit extends RequestInit {
   persistence?: RequestPersistenceOptions | false
-}
-
-function extractApiErrorMessage(status: number, body: string) {
-  const normalized = body.trim()
-  if (!normalized) {
-    return `HTTP ${status}`
-  }
-  try {
-    const parsed = JSON.parse(normalized) as {
-      detail?: unknown
-      error?: unknown
-      message?: unknown
-    }
-    if (typeof parsed.detail === 'string' && parsed.detail.trim()) return parsed.detail
-    if (
-      parsed.detail
-      && typeof parsed.detail === 'object'
-      && 'message' in parsed.detail
-      && typeof parsed.detail.message === 'string'
-      && parsed.detail.message.trim()
-    ) {
-      return parsed.detail.message
-    }
-    if (typeof parsed.error === 'string' && parsed.error.trim()) return parsed.error
-    if (typeof parsed.message === 'string' && parsed.message.trim()) return parsed.message
-  } catch {
-    // Fall back to the raw response body below.
-  }
-  return normalized
-}
-
-function getRequestId(response: Response) {
-  return response.headers.get('X-Request-ID') || ''
-}
-
-function buildRequestError(message: string, requestId: string) {
-  const error = new Error(message) as Error & { requestId?: string }
-  error.requestId = requestId || undefined
-  return error
 }
 
 function generateMutationId() {
@@ -101,11 +68,6 @@ function canPersistRequestBody(body: BodyInit | null | undefined) {
   return body == null || typeof body === 'string' || (typeof FormData !== 'undefined' && body instanceof FormData)
 }
 
-function isConflictLike(status: number, message: string) {
-  if (status === 409) return true
-  return /冲突|fingerprint|stale|旧态|危险结构|覆盖当前/.test(message)
-}
-
 async function enqueueFailedRequest(input: {
   url: string
   method: string
@@ -121,7 +83,7 @@ async function enqueueFailedRequest(input: {
     typeof FormData !== 'undefined' && input.body instanceof FormData
       ? serializeFormData(input.body)
       : undefined
-  const conflict = input.status != null && isConflictLike(input.status, input.message || '')
+  const conflict = input.status != null && isConflictResponse(input.status, input.message || '')
   const mutation: EnqueueMutationInput = {
     mutationId: input.mutationId,
     resourceKey: input.persistence.resourceKey,
@@ -193,7 +155,7 @@ export async function fetchWithMutationQueue(
       !replayRequest &&
       method.toUpperCase() !== 'GET' &&
       !response.ok &&
-      (response.status >= 500 || isConflictLike(response.status, ''))
+      (response.status >= 500 || isConflictResponse(response.status))
     ) {
       const message = await response.clone().text().catch(() => `HTTP ${response.status}`)
       await enqueueFailedRequest({
@@ -283,9 +245,9 @@ export async function request<T>(url: string, options?: PersistedRequestInit): P
 
   if (!response.ok) {
     const body = await response.text().catch(() => '')
-    const message = extractApiErrorMessage(response.status, body)
-    const requestId = getRequestId(response)
-    if (persistence && (response.status >= 500 || isConflictLike(response.status, message))) {
+    const message = extractResponseMessage(response.status, body)
+    const requestId = getResponseRequestId(response)
+    if (persistence && (response.status >= 500 || isConflictResponse(response.status, message))) {
       await enqueueFailedRequest({
         url: requestUrl,
         method,
@@ -329,7 +291,7 @@ export async function request<T>(url: string, options?: PersistedRequestInit): P
     try {
       return await response.json()
     } catch (error) {
-      const requestId = getRequestId(response)
+      const requestId = getResponseRequestId(response)
       logAppError({
         feature: 'API 请求',
         stage: 'json_parse_error',

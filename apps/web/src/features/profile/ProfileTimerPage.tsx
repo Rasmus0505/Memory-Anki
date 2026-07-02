@@ -1,128 +1,124 @@
 import { useEffect, useMemo, useState } from 'react'
-import { AlarmClock, Bell, Clock3, RotateCcw } from 'lucide-react'
+import { AlarmClock, Clock3, Settings2, Sparkles } from 'lucide-react'
 import { ProfileLayout } from '@/features/profile/ProfileLayout'
+import { TimerAutomationDialog } from '@/shared/components/session/TimerAutomationDialog'
 import { Button } from '@/shared/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card'
-import { Input } from '@/shared/components/ui/input'
-import { Label } from '@/shared/components/ui/label'
-import { Switch } from '@/shared/components/ui/switch'
 import { toast } from '@/shared/feedback/toast'
 import {
-  DEFAULT_BREAK_GUARD_CONFIG,
+  getTimerAutomationRule,
+  readTimerAutomationConfig,
+  resetTimerAutomationConfig,
+  saveTimerAutomationConfig,
+  type TimerAutomationConfig,
+} from '@/shared/components/session/timer-automation-config'
+import {
+  getTimerFocusRule,
+  readTimerFocusConfig,
+  resetTimerFocusConfig,
+  saveTimerFocusConfig,
+  type TimerFocusConfig,
+} from '@/shared/components/session/timer-focus-config'
+import {
   readBreakGuardConfig,
+  resetBreakGuardConfig,
   saveBreakGuardConfig,
-  sanitizeBreakGuardConfig,
   type BreakGuardConfig,
 } from '@/shared/components/session/break-guard-config'
 
-function listToInputValue(values: number[]) {
-  return values.join(', ')
-}
-
-function inputValueToList(value: string, fallback: number[]) {
-  const parsed = value
-    .split(',')
-    .map((item) => Math.round(Number(item.trim())))
-    .filter((item) => Number.isFinite(item) && item > 0)
-  return parsed.length > 0 ? parsed : fallback
-}
-
 export default function ProfileTimerPage() {
-  const [config, setConfig] = useState<BreakGuardConfig>(() => readBreakGuardConfig())
-  const [presetInput, setPresetInput] = useState(() => listToInputValue(config.presetMinutes))
-  const [snoozeInput, setSnoozeInput] = useState(() => listToInputValue(config.snoozeMinutes))
+  const [automationConfig, setAutomationConfig] = useState<TimerAutomationConfig>(() => readTimerAutomationConfig())
+  const [focusConfig, setFocusConfig] = useState<TimerFocusConfig>(() => readTimerFocusConfig())
+  const [breakConfig, setBreakConfig] = useState<BreakGuardConfig>(() => readBreakGuardConfig())
+  const [dialogOpen, setDialogOpen] = useState(false)
 
   useEffect(() => {
-    const nextConfig = readBreakGuardConfig()
-    setConfig(nextConfig)
-    setPresetInput(listToInputValue(nextConfig.presetMinutes))
-    setSnoozeInput(listToInputValue(nextConfig.snoozeMinutes))
+    setAutomationConfig(readTimerAutomationConfig())
+    setFocusConfig(readTimerFocusConfig())
+    setBreakConfig(readBreakGuardConfig())
   }, [])
 
-  const normalizedPreview = useMemo(
-    () =>
-      sanitizeBreakGuardConfig({
-        ...config,
-        presetMinutes: inputValueToList(presetInput, DEFAULT_BREAK_GUARD_CONFIG.presetMinutes),
-        snoozeMinutes: inputValueToList(snoozeInput, DEFAULT_BREAK_GUARD_CONFIG.snoozeMinutes),
-      }),
-    [config, presetInput, snoozeInput],
+  const freestyleAutomation = useMemo(
+    () => getTimerAutomationRule('freestyle', automationConfig),
+    [automationConfig],
   )
-
-  const updateConfig = (updater: (current: BreakGuardConfig) => BreakGuardConfig) => {
-    setConfig((current) => updater(current))
-  }
-
-  const save = () => {
-    const saved = saveBreakGuardConfig(normalizedPreview)
-    setConfig(saved)
-    setPresetInput(listToInputValue(saved.presetMinutes))
-    setSnoozeInput(listToInputValue(saved.snoozeMinutes))
-    toast.success('计时与休息配置已保存')
-  }
-
-  const reset = () => {
-    const saved = saveBreakGuardConfig(DEFAULT_BREAK_GUARD_CONFIG)
-    setConfig(saved)
-    setPresetInput(listToInputValue(saved.presetMinutes))
-    setSnoozeInput(listToInputValue(saved.snoozeMinutes))
-    toast.success('已恢复默认休息守护配置')
-  }
+  const freestyleFocus = useMemo(
+    () => getTimerFocusRule('freestyle', focusConfig),
+    [focusConfig],
+  )
 
   return (
     <ProfileLayout
       title="计时与休息"
-      description="管理离开 Memory Anki 后的休息倒计时、提醒强度和回归入口。"
+      description="管理学习计时、双层目标、自动暂停、休息守护和达标反馈。"
     >
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
-        <div className="space-y-6">
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
+        <div className="grid gap-4 md:grid-cols-2">
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-base">
-                <AlarmClock className="h-4 w-4" />
+                <Clock3 className="size-4" />
+                学习自动化
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3 text-sm">
+              <div className="rounded-lg bg-secondary/70 px-3 py-2">
+                模式：{automationConfig.mode === 'global' ? '全局配置' : '按场景配置'}
+              </div>
+              <div className="rounded-lg bg-secondary/70 px-3 py-2">
+                随心进入自动开始：{freestyleAutomation.autoStartOnPageEnter ? '开启' : '关闭'}
+              </div>
+              <div className="rounded-lg bg-secondary/70 px-3 py-2">
+                无操作自动暂停：{freestyleAutomation.inactiveAutoPauseSeconds} 秒
+              </div>
+              <div className="rounded-lg bg-secondary/70 px-3 py-2">
+                自动暂停回退：{freestyleAutomation.autoPauseRollbackSeconds} 秒
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Sparkles className="size-4" />
+                专注目标
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3 text-sm">
+              <div className="rounded-lg bg-secondary/70 px-3 py-2">
+                目标模式：{focusConfig.mode === 'global' ? '全局目标' : '按场景目标'}
+              </div>
+              <div className="rounded-lg bg-secondary/70 px-3 py-2">
+                随心一级目标：{freestyleFocus.primaryMinutes} 分钟
+              </div>
+              <div className="rounded-lg bg-secondary/70 px-3 py-2">
+                随心二级间隔：{freestyleFocus.secondaryMinutes} 分钟
+              </div>
+              <div className="rounded-lg bg-secondary/70 px-3 py-2">
+                反馈强度：{focusConfig.feedbackIntensity}
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <AlarmClock className="size-4" />
                 休息守护
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-5">
-              <label className="flex items-center justify-between gap-4 rounded-lg border border-border/70 bg-card/70 px-4 py-3">
-                <div>
-                  <div className="text-sm font-medium">启用离开页面后的休息询问</div>
-                  <div className="mt-1 text-xs text-muted-foreground">
-                    Memory Anki 失焦或隐藏后，悬浮计时器会询问是否开始休息倒计时。
-                  </div>
-                </div>
-                <Switch
-                  checked={config.enabled}
-                  onCheckedChange={(checked) => updateConfig((current) => ({ ...current, enabled: checked }))}
-                />
-              </label>
-
-              <div className="grid gap-4 md:grid-cols-2">
-                <label className="space-y-2">
-                  <Label htmlFor="break-delay">离开后询问延迟（秒）</Label>
-                  <Input
-                    id="break-delay"
-                    type="number"
-                    min="0"
-                    max="120"
-                    value={config.promptDelaySeconds}
-                    onChange={(event) =>
-                      updateConfig((current) => ({
-                        ...current,
-                        promptDelaySeconds: Math.max(0, Math.round(Number(event.target.value) || 0)),
-                      }))
-                    }
-                  />
-                </label>
-                <label className="space-y-2">
-                  <Label htmlFor="break-target">到点后打开页面</Label>
-                  <Input
-                    id="break-target"
-                    value={config.targetPath}
-                    onChange={(event) => updateConfig((current) => ({ ...current, targetPath: event.target.value }))}
-                    placeholder="/freestyle"
-                  />
-                </label>
+            <CardContent className="space-y-3 text-sm">
+              <div className="rounded-lg bg-secondary/70 px-3 py-2">
+                状态：{breakConfig.enabled ? '已启用' : '已关闭'}
+              </div>
+              <div className="rounded-lg bg-secondary/70 px-3 py-2">
+                离开后询问：{breakConfig.promptDelaySeconds} 秒
+              </div>
+              <div className="rounded-lg bg-secondary/70 px-3 py-2">
+                休息按钮：{breakConfig.presetMinutes.join(' / ')} 分钟
+              </div>
+              <div className="rounded-lg bg-secondary/70 px-3 py-2">
+                学习即结束休息：{breakConfig.autoFinishOnStudyReturn ? '开启' : '关闭'}
               </div>
             </CardContent>
           </Card>
@@ -130,118 +126,63 @@ export default function ProfileTimerPage() {
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-base">
-                <Clock3 className="h-4 w-4" />
-                休息时长
+                <Settings2 className="size-4" />
+                配置入口
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-5">
-              <label className="space-y-2">
-                <Label htmlFor="break-presets">默认时长按钮（分钟，用英文逗号分隔）</Label>
-                <Input
-                  id="break-presets"
-                  value={presetInput}
-                  onChange={(event) => setPresetInput(event.target.value)}
-                  placeholder="5, 10, 20"
-                />
-              </label>
-              <label className="flex items-center justify-between gap-4 rounded-lg border border-border/70 bg-card/70 px-4 py-3">
-                <div>
-                  <div className="text-sm font-medium">允许自定义休息分钟数</div>
-                  <div className="mt-1 text-xs text-muted-foreground">离开时可输入任意 1-240 分钟。</div>
-                </div>
-                <Switch
-                  checked={config.allowCustomMinutes}
-                  onCheckedChange={(checked) =>
-                    updateConfig((current) => ({ ...current, allowCustomMinutes: checked }))
-                  }
-                />
-              </label>
-              <label className="space-y-2">
-                <Label htmlFor="break-snooze">延后按钮（分钟，用英文逗号分隔）</Label>
-                <Input
-                  id="break-snooze"
-                  value={snoozeInput}
-                  onChange={(event) => setSnoozeInput(event.target.value)}
-                  placeholder="1, 3, 5"
-                />
-              </label>
+            <CardContent className="space-y-3 text-sm">
+              <p className="leading-6 text-muted-foreground">
+                打开完整设置后，可以配置每个场景的自动开始、无操作暂停、后台暂停、回退时间、一级/二级目标、达标反馈和休息日志。
+              </p>
+              <Button type="button" onClick={() => setDialogOpen(true)}>
+                <Settings2 className="mr-2 size-4" />
+                打开完整计时器配置
+              </Button>
             </CardContent>
           </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-base">
-                <Bell className="h-4 w-4" />
-                提醒与记录
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-5">
-              <div className="grid gap-3 md:grid-cols-2">
-                {[
-                  { value: 'strong', title: '强提醒', desc: '置顶闪烁、声音、通知，并打开目标页面。' },
-                  { value: 'gentle', title: '温和提醒', desc: '显示提醒和通知，不主动跳转页面。' },
-                ].map((option) => (
-                  <button
-                    key={option.value}
-                    type="button"
-                    className={`rounded-lg border p-4 text-left transition-all ${
-                      config.alertStrength === option.value
-                        ? 'border-primary bg-primary/5 ring-1 ring-primary'
-                        : 'border-border/70 hover:bg-secondary'
-                    }`}
-                    onClick={() =>
-                      updateConfig((current) => ({
-                        ...current,
-                        alertStrength: option.value as BreakGuardConfig['alertStrength'],
-                      }))
-                    }
-                  >
-                    <div className="text-sm font-semibold">{option.title}</div>
-                    <div className="mt-1 text-xs text-muted-foreground">{option.desc}</div>
-                  </button>
-                ))}
-              </div>
-              <label className="flex items-center justify-between gap-4 rounded-lg border border-border/70 bg-card/70 px-4 py-3">
-                <div>
-                  <div className="text-sm font-medium">记录轻量休息日志</div>
-                  <div className="mt-1 text-xs text-muted-foreground">
-                    只记录开始、结束、是否超时和延后次数，不计入学习时长。
-                  </div>
-                </div>
-                <Switch
-                  checked={config.recordBreakLogs}
-                  onCheckedChange={(checked) => updateConfig((current) => ({ ...current, recordBreakLogs: checked }))}
-                />
-              </label>
-            </CardContent>
-          </Card>
-
-          <div className="flex flex-wrap gap-2">
-            <Button type="button" onClick={save}>
-              保存配置
-            </Button>
-            <Button type="button" variant="outline" onClick={reset}>
-              <RotateCcw className="h-4 w-4" />
-              恢复默认
-            </Button>
-          </div>
         </div>
 
         <Card className="h-fit">
           <CardHeader>
-            <CardTitle className="text-base">当前预览</CardTitle>
+            <CardTitle className="text-base">建议检查</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-3 text-sm">
-            <div className="rounded-lg bg-secondary/70 px-3 py-2">离开 {normalizedPreview.promptDelaySeconds} 秒后询问</div>
-            <div className="rounded-lg bg-secondary/70 px-3 py-2">休息按钮：{normalizedPreview.presetMinutes.join(' / ')} 分钟</div>
-            <div className="rounded-lg bg-secondary/70 px-3 py-2">延后按钮：{normalizedPreview.snoozeMinutes.join(' / ')} 分钟</div>
-            <div className="rounded-lg bg-secondary/70 px-3 py-2">到点打开：{normalizedPreview.targetPath}</div>
-            <div className="rounded-lg bg-secondary/70 px-3 py-2">
-              提醒强度：{normalizedPreview.alertStrength === 'strong' ? '强提醒' : '温和提醒'}
+          <CardContent className="space-y-3 text-sm text-muted-foreground">
+            <div className="rounded-lg bg-secondary/70 px-3 py-2 text-foreground">
+              如果你经常只是查资料，适合把休息询问延迟调长。
+            </div>
+            <div className="rounded-lg bg-secondary/70 px-3 py-2 text-foreground">
+              如果你回到学习后不希望倒计时继续压住学习，保持“学习即结束休息”开启。
+            </div>
+            <div className="rounded-lg bg-secondary/70 px-3 py-2 text-foreground">
+              二级目标可以设 1-3 分钟，一级目标可以设 15-45 分钟。
             </div>
           </CardContent>
         </Card>
       </div>
+
+      <TimerAutomationDialog
+        open={dialogOpen}
+        config={automationConfig}
+        focusConfig={focusConfig}
+        breakConfig={breakConfig}
+        onOpenChange={setDialogOpen}
+        onSave={(nextConfig) => {
+          setAutomationConfig(saveTimerAutomationConfig(nextConfig))
+          toast.success('计时自动化配置已保存')
+        }}
+        onFocusConfigSave={(nextConfig) => {
+          setFocusConfig(saveTimerFocusConfig(nextConfig))
+        }}
+        onBreakConfigSave={(nextConfig) => {
+          setBreakConfig(saveBreakGuardConfig(nextConfig))
+        }}
+        onReset={() => {
+          setAutomationConfig(resetTimerAutomationConfig())
+          setFocusConfig(resetTimerFocusConfig())
+          setBreakConfig(resetBreakGuardConfig())
+          toast.success('已恢复默认计时器配置')
+        }}
+      />
     </ProfileLayout>
   )
 }

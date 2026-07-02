@@ -41,30 +41,30 @@ export function MindMapCanvasToolbar({
         className="flex h-9 items-center justify-center gap-2 rounded-xl border border-transparent px-3 text-muted-foreground transition-colors hover:border-border hover:bg-muted hover:text-primary"
         title="手动整理画布"
       >
-        <RotateCcw className="h-4 w-4" />
+        <RotateCcw className="size-4" />
         <span className="text-xs font-medium">整理画布</span>
       </button>
       <div className="mx-1 h-5 w-px bg-border" />
       <button
         type="button"
         onClick={onZoomOut}
-        className="flex h-9 w-9 items-center justify-center rounded-xl border border-transparent text-muted-foreground transition-colors hover:border-border hover:bg-muted hover:text-primary"
+        className="flex size-9 items-center justify-center rounded-xl border border-transparent text-muted-foreground transition-colors hover:border-border hover:bg-muted hover:text-primary"
         title="缩小"
       >
-        <ZoomOut className="h-4 w-4" />
+        <ZoomOut className="size-4" />
       </button>
       <button
         type="button"
         onClick={onZoomIn}
-        className="flex h-9 w-9 items-center justify-center rounded-xl border border-transparent text-muted-foreground transition-colors hover:border-border hover:bg-muted hover:text-primary"
+        className="flex size-9 items-center justify-center rounded-xl border border-transparent text-muted-foreground transition-colors hover:border-border hover:bg-muted hover:text-primary"
         title="放大"
       >
-        <ZoomIn className="h-4 w-4" />
+        <ZoomIn className="size-4" />
       </button>
       <button
         type="button"
         onClick={onToggleFocusMode}
-        className={`flex h-9 w-9 items-center justify-center rounded-xl border transition-colors ${
+        className={`flex size-9 items-center justify-center rounded-xl border transition-colors ${
           focusMode
             ? 'border-info/30 bg-info/5 text-info hover:border-info/50 hover:bg-info/10'
             : 'border-transparent text-muted-foreground hover:border-border hover:bg-muted hover:text-primary'
@@ -72,9 +72,9 @@ export function MindMapCanvasToolbar({
         title={focusMode ? '退出画布专注模式' : '进入画布专注模式'}
       >
         {focusMode ? (
-          <Minimize2 className="h-4 w-4" />
+          <Minimize2 className="size-4" />
         ) : (
-          <Maximize2 className="h-4 w-4" />
+          <Maximize2 className="size-4" />
         )}
       </button>
       {showHistoryControls ? <div className="mx-1 h-5 w-px bg-border" /> : null}
@@ -83,10 +83,10 @@ export function MindMapCanvasToolbar({
           type="button"
           onClick={onUndo}
           disabled={!canUndo}
-          className="flex h-9 w-9 items-center justify-center rounded-xl border border-transparent text-muted-foreground transition-colors hover:border-border hover:bg-muted hover:text-primary disabled:opacity-30"
+          className="flex size-9 items-center justify-center rounded-xl border border-transparent text-muted-foreground transition-colors hover:border-border hover:bg-muted hover:text-primary disabled:opacity-30"
           title="撤销"
         >
-          <Undo2 className="h-4 w-4" />
+          <Undo2 className="size-4" />
         </button>
       ) : null}
       {onRedo ? (
@@ -94,10 +94,10 @@ export function MindMapCanvasToolbar({
           type="button"
           onClick={onRedo}
           disabled={!canRedo}
-          className="flex h-9 w-9 items-center justify-center rounded-xl border border-transparent text-muted-foreground transition-colors hover:border-border hover:bg-muted hover:text-primary disabled:opacity-30"
+          className="flex size-9 items-center justify-center rounded-xl border border-transparent text-muted-foreground transition-colors hover:border-border hover:bg-muted hover:text-primary disabled:opacity-30"
           title="重做"
         >
-          <Redo2 className="h-4 w-4" />
+          <Redo2 className="size-4" />
         </button>
       ) : null}
       <div className="ml-auto text-[11px] font-medium tracking-wide text-muted-foreground/70">

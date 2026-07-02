@@ -37,6 +37,13 @@ export function formatLocalApiDateTime(value: Date) {
   return `${year}-${month}-${day}T${hour}:${minute}:${second}.${milliseconds}`
 }
 
+export function formatLocalDateKey(value: Date): string {
+  const year = value.getFullYear()
+  const month = `${value.getMonth() + 1}`.padStart(2, '0')
+  const day = `${value.getDate()}`.padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
 export function formatLocalDateTimeInputValue(value: string) {
   const date = parseApiDateTime(value)
   if (Number.isNaN(date.getTime())) return ''
@@ -61,6 +68,13 @@ export function formatApiDateTime(value: string | null): string {
     minute: '2-digit',
     hour12: false,
   }).format(date).replace(/\//g, '-')
+}
+
+export function formatApiDate(value: string | null): string {
+  if (!value) return '鏈缃?'
+  const date = new Date(`${value}T00:00:00`)
+  if (Number.isNaN(date.getTime())) return value
+  return formatLocalDateKey(date)
 }
 
 export function formatDateTimeLocalValue(date: Date): string {

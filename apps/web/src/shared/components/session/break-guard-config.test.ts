@@ -14,6 +14,8 @@ describe('break guard config', () => {
       promptDelaySeconds: -1,
       presetMinutes: ['x', 0],
       allowCustomMinutes: 'no',
+      autoFinishOnStudyReturn: 'yes',
+      resumeInterruptedStudyOnReturn: 'yes',
       targetPath: 'https://example.com',
       alertStrength: 'loud',
       snoozeMinutes: [],

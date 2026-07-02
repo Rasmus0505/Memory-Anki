@@ -6,6 +6,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 from pydantic_settings import BaseSettings
 
+from memory_anki.core.runtime_paths import REPO_ROOT, resolve_app_home
 from memory_anki.core.storage_layout import get_managed_storage_items
 
 load_dotenv()
@@ -70,21 +71,19 @@ DEEPSEEK_BASE_URL = _env.DEEPSEEK_BASE_URL
 
 
 def _default_app_home() -> Path:
-    local_app_data = os.environ.get("LOCALAPPDATA")
-    if local_app_data:
-        return Path(local_app_data) / "MemoryAnki"
-    return Path.home() / "AppData" / "Local" / "MemoryAnki"
+    from memory_anki.core.runtime_paths import default_app_home
+
+    return default_app_home()
 
 
 def _resolve_app_home() -> tuple[Path, str]:
     explicit_home = os.environ.get("MEMORY_ANKI_HOME")
-    if explicit_home:
-        return Path(explicit_home).expanduser(), "env"
+    if not explicit_home:
+        return _default_app_home(), "default"
+    resolution = resolve_app_home()
+    return resolution.app_home, resolution.source
 
-    return _default_app_home(), "default"
 
-
-REPO_ROOT = Path(__file__).resolve().parents[5]
 LEGACY_DATA_DIR = REPO_ROOT / "data"
 APP_HOME, APP_HOME_SOURCE = _resolve_app_home()
 DATA_DIR = APP_HOME / "data"

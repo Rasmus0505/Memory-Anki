@@ -131,5 +131,6 @@ def rebuild_segment_review_progress(
         completed_count=completed_count,
         completed_review_number=completed_review_number,
         completed_at=completed_at,
+        preserve_same_day_slots=False,
         algorithm_override=algorithm_override,
     )

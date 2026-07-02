@@ -5,6 +5,20 @@ from __future__ import annotations
 from typing import Any
 
 
+def normalize_positive_page_numbers(raw_page_selection: Any) -> list[int]:
+    if not isinstance(raw_page_selection, list):
+        raw_page_selection = []
+    normalized_pages: set[int] = set()
+    for raw_page in raw_page_selection:
+        try:
+            page_number = int(raw_page)
+        except (TypeError, ValueError):
+            continue
+        if page_number > 0:
+            normalized_pages.add(page_number)
+    return sorted(normalized_pages)
+
+
 def _role_instruction(role_hint: str) -> str:
     if role_hint == "question":
         return "只允许抄录到 question_candidates；不要输出 answer_candidates。"
@@ -37,10 +51,7 @@ def normalize_pdf_sources_input(
                 subject_document_id = int(item.get("subject_document_id") or 0)
             except (TypeError, ValueError):
                 continue
-            page_selection_raw = item.get("page_selection")
-            if not isinstance(page_selection_raw, list):
-                page_selection_raw = []
-            normalized_pages = sorted({int(page) for page in page_selection_raw if int(page) > 0})
+            normalized_pages = normalize_positive_page_numbers(item.get("page_selection"))
             if subject_document_id <= 0 or len(normalized_pages) == 0:
                 continue
             normalized_sources.append(
@@ -52,9 +63,7 @@ def normalize_pdf_sources_input(
             )
     if normalized_sources:
         return normalized_sources
-    normalized_legacy_pages = sorted(
-        {int(page) for page in (legacy_page_selection or []) if int(page) > 0}
-    )
+    normalized_legacy_pages = normalize_positive_page_numbers(legacy_page_selection or [])
     if legacy_subject_document_id and normalized_legacy_pages:
         return [
             {
@@ -112,5 +121,6 @@ def build_pdf_source_context(pdf_sources: list[dict[str, Any]]) -> str:
 
 __all__ = [
     "build_pdf_source_context",
+    "normalize_positive_page_numbers",
     "normalize_pdf_sources_input",
 ]

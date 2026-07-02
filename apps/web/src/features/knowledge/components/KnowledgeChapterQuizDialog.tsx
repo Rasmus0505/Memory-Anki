@@ -127,7 +127,7 @@ export function KnowledgeChapterQuizDialog({
             />
           </div>
           {preview ? (
-            <div className="space-y-3 rounded-2xl border border-border/70 bg-background/60 p-3">
+            <div className="space-y-3 rounded-lg border border-border/70 bg-background/60 p-3">
               <div className="text-sm font-semibold">生成预览</div>
               <div className="text-xs text-muted-foreground">
                 共 {preview.questions.length} 题

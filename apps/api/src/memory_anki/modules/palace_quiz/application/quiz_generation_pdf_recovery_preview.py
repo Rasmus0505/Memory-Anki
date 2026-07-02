@@ -20,11 +20,14 @@ def recover_quiz_preview_from_ai_call_log(
     selected_chapter_id: int | None = None,
     ai_options: AiRuntimeOptions | None = None,
 ) -> dict[str, object]:
+    from . import quiz_generation_service
+
     context = load_pdf_recovery_context(
         session,
         palace_id=palace_id,
         ai_call_log_id=ai_call_log_id,
         selected_chapter_id=selected_chapter_id,
+        get_ai_call_log=quiz_generation_service.get_external_ai_call_log,
     )
     draft_state = build_pdf_recovery_draft_state(
         session,

@@ -57,7 +57,7 @@ export function TimeRecordDialog({
         if (!isSubmitting) onOpenChange(nextOpen)
       }}
     >
-      <DialogContent className="max-h-[88vh] overflow-y-auto rounded-[28px] border-border/70 bg-background/98 p-0">
+      <DialogContent className="max-h-[88vh] overflow-y-auto rounded-lg border-border/70 bg-background/98 p-0">
         <DialogHeader>
           <div>
             <DialogTitle>
@@ -189,7 +189,7 @@ export function TimeRecordDialog({
             </label>
           </div>
 
-          <label className="flex items-center gap-3 rounded-2xl border border-border/70 bg-muted/20 px-4 py-3 text-sm">
+          <label className="flex items-center gap-3 rounded-lg border border-border/70 bg-muted/20 px-4 py-3 text-sm">
             <input
               type="checkbox"
               checked={form.durationEdited}
@@ -202,7 +202,7 @@ export function TimeRecordDialog({
           </label>
 
           {error ? (
-            <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
               {error}
             </div>
           ) : null}

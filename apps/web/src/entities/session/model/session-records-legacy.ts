@@ -17,8 +17,8 @@ import {
   setTimeRecordingThresholdApi,
   softDeleteTimeRecordApi,
   updateTimeRecordApi,
-} from '@/entities/session/api/time-records'
-import { parseApiDateTime } from '@/shared/lib/dateTime'
+} from '@/entities/session/api'
+import { formatLocalDateKey, parseApiDateTime } from '@/shared/lib/dateTime'
 
 const PRACTICE_PROGRESS_KEY = 'memory-anki.practice-progress.v1'
 const TIME_RECORDS_KEY = 'memory-anki.time-records.v1'
@@ -142,10 +142,7 @@ function addDays(date: Date, amount: number) {
 }
 
 function formatDateKey(date: Date) {
-  const year = date.getFullYear()
-  const month = `${date.getMonth() + 1}`.padStart(2, '0')
-  const day = `${date.getDate()}`.padStart(2, '0')
-  return `${year}-${month}-${day}`
+  return formatLocalDateKey(date)
 }
 
 function formatTrendLabel(date: Date) {

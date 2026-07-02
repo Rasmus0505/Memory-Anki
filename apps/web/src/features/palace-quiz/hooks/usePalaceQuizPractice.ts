@@ -2,7 +2,7 @@
 import { toast } from '@/shared/feedback/toast'
 import type { dispatchGlobalFeedback } from '@/shared/feedback/globalFeedbackModel'
 import type { PalaceQuizQuestion } from '@/shared/api/contracts'
-import { recordPalaceQuizChoiceAttemptApi, requestPalaceShortAnswerFeedbackApi } from '@/features/palace-quiz/api/palaceQuizApi'
+import { recordPalaceQuizChoiceAttemptApi, requestPalaceShortAnswerFeedbackApi } from '@/features/palace-quiz/api'
 import type { QuizRuntimeState } from '@/features/palace-quiz/QuizQuestionInteraction'
 import { emitQuizResultFeedback } from '@/features/palace-quiz/model/quizResultFeedback'
 

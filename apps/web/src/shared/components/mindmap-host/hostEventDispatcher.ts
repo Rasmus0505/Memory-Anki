@@ -38,86 +38,91 @@ interface HostEventHandlerRefs {
   onReady: MutableRefObject<(() => void) | undefined>
 }
 
-export function dispatchHostEvent(
-  event: string,
-  payload: unknown,
-  handlers: HostEventHandlerRefs,
-): 'app_inited' | 'other' {
-  if (event === 'app_inited') {
-    handlers.onReady.current?.()
-    return 'app_inited'
+type HostEventDispatchResult = 'app_inited' | 'other'
+
+type DispatchableHostEventName =
+  | 'node_active'
+  | 'node_click'
+  | 'node_contextmenu'
+  | 'node_hover'
+  | 'segment_select'
+  | 'segment_create_from_selection'
+  | 'segment_range_draft_change'
+  | 'segment_range_mode_toggle'
+  | 'segment_range_confirm'
+  | 'ai_split_request'
+  | 'fullscreen_change'
+  | 'fullscreen_toggle'
+  | 'enter_native_fullscreen_request'
+  | 'exit_native_fullscreen_request'
+  | 'ui_cleared_change'
+  | 'bilink_trigger'
+  | 'bilink_node_click'
+  | 'mini_palace_pour'
+
+type HostEventDispatcher = (payload: unknown, handlers: HostEventHandlerRefs) => void
+
+function asRecord(payload: unknown): Record<string, unknown> | null {
+  return payload && typeof payload === 'object' ? (payload as Record<string, unknown>) : null
+}
+
+function parseSelections(payload: unknown): MindMapSelection[] {
+  return Array.isArray(payload) ? (payload as MindMapSelection[]) : []
+}
+
+function parseStringList(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : []
+}
+
+function parseSegmentId(payload: unknown): number | null {
+  return typeof payload === 'number' ? payload : payload == null ? null : Number(payload)
+}
+
+function parseSegmentRangeModeTarget(rawTarget: unknown): number | 'new' | null {
+  if (rawTarget === 'new') {
+    return 'new'
   }
-  if (event === 'feedback_event') {
-    return 'other'
-  }
-  if (event === 'node_active') {
-    handlers.onNodeActive.current?.(Array.isArray(payload) ? (payload as MindMapSelection[]) : [])
-  }
-  if (event === 'node_click') {
-    handlers.onNodeClick.current?.(Array.isArray(payload) ? (payload as MindMapSelection[]) : [])
-  }
-  if (event === 'node_contextmenu') {
-    handlers.onNodeContextMenu.current?.(Array.isArray(payload) ? (payload as MindMapSelection[]) : [])
-  }
-  if (event === 'node_hover') {
-    handlers.onNodeHover.current?.(Array.isArray(payload) ? (payload as MindMapSelection[]) : [])
-  }
-  if (event === 'segment_select') {
-    handlers.onSegmentSelect.current?.(
-      typeof payload === 'number' ? payload : payload == null ? null : Number(payload),
-    )
-  }
-  if (event === 'segment_create_from_selection') {
+  return rawTarget == null || rawTarget === '' ? null : Number(rawTarget)
+}
+
+const hostEventDispatchers = {
+  node_active: (payload, handlers) => {
+    handlers.onNodeActive.current?.(parseSelections(payload))
+  },
+  node_click: (payload, handlers) => {
+    handlers.onNodeClick.current?.(parseSelections(payload))
+  },
+  node_contextmenu: (payload, handlers) => {
+    handlers.onNodeContextMenu.current?.(parseSelections(payload))
+  },
+  node_hover: (payload, handlers) => {
+    handlers.onNodeHover.current?.(parseSelections(payload))
+  },
+  segment_select: (payload, handlers) => {
+    handlers.onSegmentSelect.current?.(parseSegmentId(payload))
+  },
+  segment_create_from_selection: (_payload, handlers) => {
     handlers.onCreateSegmentFromSelection.current?.()
-  }
-  if (event === 'segment_range_draft_change') {
-    const nextPayload =
-      payload && typeof payload === 'object'
-        ? (payload as { selectedNodeUids?: unknown; overriddenConflictNodeUids?: unknown })
-        : null
+  },
+  segment_range_draft_change: (payload, handlers) => {
+    const nextPayload = asRecord(payload)
     handlers.onSegmentRangeDraftChange.current?.({
-      selectedNodeUids: Array.isArray(nextPayload?.selectedNodeUids)
-        ? nextPayload.selectedNodeUids
-            .map((value) => (typeof value === 'string' ? value : null))
-            .filter((value): value is string => Boolean(value))
-        : [],
-      overriddenConflictNodeUids: Array.isArray(nextPayload?.overriddenConflictNodeUids)
-        ? nextPayload.overriddenConflictNodeUids
-            .map((value) => (typeof value === 'string' ? value : null))
-            .filter((value): value is string => Boolean(value))
-        : [],
+      selectedNodeUids: parseStringList(nextPayload?.selectedNodeUids),
+      overriddenConflictNodeUids: parseStringList(nextPayload?.overriddenConflictNodeUids),
     })
-  }
-  if (event === 'segment_range_mode_toggle') {
-    const nextPayload =
-      payload && typeof payload === 'object'
-        ? (payload as { active?: unknown; targetSegmentId?: unknown })
-        : null
-    const rawTarget = nextPayload?.targetSegmentId
+  },
+  segment_range_mode_toggle: (payload, handlers) => {
+    const nextPayload = asRecord(payload)
     handlers.onSegmentRangeModeToggle.current?.({
       active: Boolean(nextPayload?.active),
-      targetSegmentId:
-        rawTarget === 'new'
-          ? 'new'
-          : rawTarget == null || rawTarget === ''
-            ? null
-            : Number(rawTarget),
+      targetSegmentId: parseSegmentRangeModeTarget(nextPayload?.targetSegmentId),
     })
-  }
-  if (event === 'segment_range_confirm') {
+  },
+  segment_range_confirm: (_payload, handlers) => {
     handlers.onSegmentRangeConfirm.current?.()
-  }
-  if (event === 'ai_split_request') {
-    const nextPayload =
-      payload && typeof payload === 'object'
-        ? (payload as {
-            target_node_uid?: unknown
-            target_node_text?: unknown
-            target_node_note?: unknown
-            target_node_type?: unknown
-            is_root?: unknown
-          })
-        : null
+  },
+  ai_split_request: (payload, handlers) => {
+    const nextPayload = asRecord(payload)
     handlers.onAiSplitRequest.current?.({
       target_node_uid:
         typeof nextPayload?.target_node_uid === 'string'
@@ -133,39 +138,33 @@ export function dispatchHostEvent(
         typeof nextPayload?.target_node_type === 'string' ? nextPayload.target_node_type : null,
       is_root: Boolean(nextPayload?.is_root),
     })
-  }
-  if (event === 'fullscreen_change') {
+  },
+  fullscreen_change: (payload, handlers) => {
     handlers.onFullscreenChange.current?.(Boolean(payload))
-  }
-  if (event === 'fullscreen_toggle') {
+  },
+  fullscreen_toggle: (payload, handlers) => {
     handlers.onFullscreenToggle.current?.(typeof payload === 'boolean' ? payload : undefined)
-  }
-  if (event === 'enter_native_fullscreen_request') {
+  },
+  enter_native_fullscreen_request: (_payload, handlers) => {
     handlers.onEnterNativeFullscreen.current?.()
-  }
-  if (event === 'exit_native_fullscreen_request') {
+  },
+  exit_native_fullscreen_request: (_payload, handlers) => {
     handlers.onExitNativeFullscreen.current?.()
-  }
-  if (event === 'ui_cleared_change') {
+  },
+  ui_cleared_change: (payload, handlers) => {
     handlers.onUiClearedChange.current?.(Boolean(payload))
-  }
-  if (event === 'bilink_trigger') {
-    const nextPayload =
-      payload && typeof payload === 'object'
-        ? (payload as { nodeUid?: unknown; left?: unknown; top?: unknown; query?: unknown })
-        : null
+  },
+  bilink_trigger: (payload, handlers) => {
+    const nextPayload = asRecord(payload)
     handlers.onBilinkTrigger.current?.({
       nodeUid: typeof nextPayload?.nodeUid === 'string' ? nextPayload.nodeUid : null,
       left: typeof nextPayload?.left === 'number' ? nextPayload.left : 0,
       top: typeof nextPayload?.top === 'number' ? nextPayload.top : 0,
       query: typeof nextPayload?.query === 'string' ? nextPayload.query : '',
     })
-  }
-  if (event === 'bilink_node_click') {
-    const nextPayload =
-      payload && typeof payload === 'object'
-        ? (payload as { palaceId?: unknown; nodeUid?: unknown; trigger?: unknown })
-        : null
+  },
+  bilink_node_click: (payload, handlers) => {
+    const nextPayload = asRecord(payload)
     handlers.onBilinkNodeClick.current?.({
       palaceId:
         typeof nextPayload?.palaceId === 'number'
@@ -176,9 +175,30 @@ export function dispatchHostEvent(
       nodeUid: typeof nextPayload?.nodeUid === 'string' ? nextPayload.nodeUid : null,
       trigger: nextPayload?.trigger === 'mark' ? 'mark' : 'badge',
     })
-  }
-  if (event === 'mini_palace_pour') {
+  },
+  mini_palace_pour: (_payload, handlers) => {
     handlers.onMiniPalacePour.current?.()
+  },
+} satisfies Record<DispatchableHostEventName, HostEventDispatcher>
+
+function isDispatchableHostEvent(event: string): event is DispatchableHostEventName {
+  return event in hostEventDispatchers
+}
+
+export function dispatchHostEvent(
+  event: string,
+  payload: unknown,
+  handlers: HostEventHandlerRefs,
+): HostEventDispatchResult {
+  if (event === 'app_inited') {
+    handlers.onReady.current?.()
+    return 'app_inited'
+  }
+  if (event === 'feedback_event') {
+    return 'other'
+  }
+  if (isDispatchableHostEvent(event)) {
+    hostEventDispatchers[event](payload, handlers)
   }
   return 'other'
 }

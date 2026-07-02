@@ -59,7 +59,7 @@ export function AiWorkspacePage() {
         }
         className="space-y-4"
       >
-        <TabsList className="h-auto flex-wrap rounded-2xl border border-border/70 bg-background/90 p-1">
+        <TabsList className="h-auto flex-wrap rounded-lg border border-border/70 bg-background/90 p-1">
           {WORKSPACE_TABS.map((tab) => {
             const Icon = tab.icon;
             return (
@@ -68,7 +68,7 @@ export function AiWorkspacePage() {
                 value={tab.key}
                 className="gap-2 rounded-xl px-4 py-2"
               >
-                <Icon className="h-4 w-4" />
+                <Icon className="size-4" />
                 {tab.label}
               </TabsTrigger>
             );

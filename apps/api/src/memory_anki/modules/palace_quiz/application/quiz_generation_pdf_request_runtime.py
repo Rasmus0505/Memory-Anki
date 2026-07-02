@@ -65,19 +65,19 @@ def prepare_pdf_generation_request(
         allow_legacy_fallback=True,
     )
     ai = _ai_service()
-    config, extra_payload, resolved_ai = ai._build_chat_config(
-        session,
-        scenario_key="quiz_pdf_generation",
-        ai_options=generation_ai_options,
-        temperature=0.2,
-        timeout_seconds=120,
-    )
     request_context = load_pdf_generation_request_context(
         session,
         palace_id=palace_id,
         normalized_sources=normalized_sources,
         selected_chapter_id=selected_chapter_id,
         render_selected_pdf_pages=ai.render_selected_pdf_pages,
+    )
+    config, extra_payload, resolved_ai = ai._build_chat_config(
+        session,
+        scenario_key="quiz_pdf_generation",
+        ai_options=generation_ai_options,
+        temperature=0.2,
+        timeout_seconds=120,
     )
     source_meta = build_pdf_generation_source_meta(
         context=request_context,

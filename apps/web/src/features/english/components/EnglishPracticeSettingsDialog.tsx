@@ -49,7 +49,7 @@ function ToggleButton({
       }`}
     >
       <span
-        className={`h-2.5 w-2.5 rounded-full ${active ? 'bg-success' : 'bg-muted-foreground/40'}`}
+        className={`size-2.5 rounded-full ${active ? 'bg-success' : 'bg-muted-foreground/40'}`}
       />
       {label}
     </button>
@@ -149,7 +149,7 @@ export function EnglishPracticeSettingsDialog({
         <div className="space-y-6 overflow-y-auto px-6 py-5">
           <section className="space-y-3">
             <div className="flex items-center gap-2">
-              <Volume2 className="h-4 w-4 text-muted-foreground" />
+              <Volume2 className="size-4 text-muted-foreground" />
               <h3 className="text-sm font-semibold">练习偏好</h3>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -231,13 +231,13 @@ export function EnglishPracticeSettingsDialog({
 
           <section className="space-y-3">
             <div className="flex items-center gap-2">
-              <Keyboard className="h-4 w-4 text-muted-foreground" />
+              <Keyboard className="size-4 text-muted-foreground" />
               <h3 className="text-sm font-semibold">快捷键</h3>
             </div>
-            <div className="rounded-2xl border border-info/30 bg-info/5 px-4 py-3 text-sm text-info">
+            <div className="rounded-lg border border-info/30 bg-info/5 px-4 py-3 text-sm text-info">
               支持带 Shift / Ctrl / Alt / Meta 的组合键，也支持方向键和功能键。单字母会被当作答题输入键拦截，避免和拼写练习冲突。
             </div>
-            <div className="rounded-2xl border border-border/70">
+            <div className="rounded-lg border border-border/70">
               <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] gap-3 border-b border-border/70 px-4 py-3 text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">
                 <span>动作</span>
                 <span>当前绑定</span>
@@ -290,7 +290,7 @@ export function EnglishPracticeSettingsDialog({
                         }))
                       }
                     >
-                      <Trash2 className="h-4 w-4" />
+                      <Trash2 className="size-4" />
                       清除
                     </Button>
                   </div>
@@ -299,7 +299,7 @@ export function EnglishPracticeSettingsDialog({
             </div>
           </section>
 
-          <section className="space-y-2 rounded-2xl border border-border/70 bg-background/70 px-4 py-4">
+          <section className="space-y-2 rounded-lg border border-border/70 bg-background/70 px-4 py-4">
             <div className="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">
               当前摘要
             </div>
@@ -324,7 +324,7 @@ export function EnglishPracticeSettingsDialog({
               setCaptureError('')
             }}
           >
-            <RotateCcw className="h-4 w-4" />
+            <RotateCcw className="size-4" />
             恢复默认
           </Button>
           <div className="flex items-center gap-2">
@@ -332,7 +332,7 @@ export function EnglishPracticeSettingsDialog({
               取消
             </Button>
             <Button type="button" data-english-control-focus="true" onClick={handleSave}>
-              <Save className="h-4 w-4" />
+              <Save className="size-4" />
               保存设置
             </Button>
           </div>

@@ -64,6 +64,28 @@ export type QuizGenerationSourceKind = 'subject-pdf' | 'image-single' | 'image-b
 
 export const QUIZ_VIEW_MODE_STORAGE_KEY = 'memory_anki_palace_quiz_view_mode'
 
+const QUESTION_SOURCE_LABELS: Record<string, string> = {
+  subject_pdf: 'PDF生成',
+  image_batch: '多图生成',
+  image_single: '单图生成',
+  mindmap_review: '脑图复习生成',
+}
+
+const QUESTION_TYPE_LABELS = {
+  multiple_choice: '选择题',
+  short_answer: '简答题',
+  true_false: '判断题',
+  fill_blank: '填空题',
+  matching: '连线题',
+  ordering: '排序题',
+  categorization: '归类题',
+} satisfies Record<PalaceQuizQuestionType, string>
+
+const PDF_SOURCE_ROLE_LABELS = {
+  question: '题目来源',
+  answer: '答案来源',
+} satisfies Record<PalaceQuizPdfSourceRole, string>
+
 export function buildManualSourceMeta(): PalaceQuizSourceMeta {
   return {
     source_kind: 'manual',
@@ -178,15 +200,14 @@ export function getQuestionOwnershipLabel(question: PalaceQuizQuestion) {
 
 export function getQuestionSourceLabel(sourceMeta?: PalaceQuizSourceMeta | null) {
   if (!sourceMeta) return '手工录入'
-  if (sourceMeta.source_kind === 'subject_pdf') return 'PDF生成'
-  if (sourceMeta.source_kind === 'image_batch') return '多图生成'
-  if (sourceMeta.source_kind === 'image_single') return '单图生成'
-  if (sourceMeta.source_kind === 'mindmap_review') return '脑图复习生成'
-  return '手工录入'
+  return QUESTION_SOURCE_LABELS[sourceMeta.source_kind] ?? '手工录入'
 }
 
-export function getPdfSourceRoleLabel(roleHint?: string | null) {
-  return roleHint === 'answer' ? '答案来源' : '题目来源'
+export function getPdfSourceRoleLabel(roleHint?: PalaceQuizPdfSourceRole | string | null) {
+  if (roleHint === 'question' || roleHint === 'answer') {
+    return PDF_SOURCE_ROLE_LABELS[roleHint]
+  }
+  return PDF_SOURCE_ROLE_LABELS.question
 }
 
 export function shouldShowPdfPairingModelSelector(pdfSources: QuizPdfSourceDraft[] | undefined) {
@@ -228,24 +249,7 @@ export function formatResolvedAiSteps(
 }
 
 export function getQuestionTypeLabel(questionType: PalaceQuizQuestionType) {
-  switch (questionType) {
-    case 'multiple_choice':
-      return '选择题'
-    case 'short_answer':
-      return '简答题'
-    case 'true_false':
-      return '判断题'
-    case 'fill_blank':
-      return '填空题'
-    case 'matching':
-      return '连线题'
-    case 'ordering':
-      return '排序题'
-    case 'categorization':
-      return '归类题'
-    default:
-      return questionType
-  }
+  return QUESTION_TYPE_LABELS[questionType]
 }
 
 export function canManuallyEditQuestion(questionType: PalaceQuizQuestionType) {

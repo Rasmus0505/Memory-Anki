@@ -5,6 +5,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { MindMapFrame } from './MindMapFrame'
 import { attachIframeBridge, buildEditorState, getHostBridge } from './MindMapFrame.test-utils'
 
+function readHostRuntimeSource() {
+  return [
+    'public/mind-map-host.html',
+    'public/mind-map-host-bridge.js',
+    'public/mind-map-host.css',
+  ]
+    .map((path) => readFileSync(resolve(process.cwd(), path), 'utf8'))
+    .join('\n')
+}
+
 describe('MindMapFrame host runtime behavior', () => {
   beforeEach(() => {
     window.__memoryAnkiMindMapHosts = {}
@@ -16,7 +26,7 @@ describe('MindMapFrame host runtime behavior', () => {
   })
 
   it('keeps full replace dedupe separate from soft sync fingerprints in host runtime source', () => {
-    const hostSource = readFileSync(resolve(process.cwd(), 'public/mind-map-host.html'), 'utf8')
+    const hostSource = readHostRuntimeSource()
 
     expect(hostSource).toContain('window.__memoryAnkiLastAppliedFullEditorFingerprint')
     expect(hostSource).toContain("markLastAppliedEditorFingerprint(nextFingerprint, 'soft')")
@@ -24,7 +34,7 @@ describe('MindMapFrame host runtime behavior', () => {
   })
 
   it('keeps local baseline updates and stale pending soft sync discard logic in host runtime source', () => {
-    const hostSource = readFileSync(resolve(process.cwd(), 'public/mind-map-host.html'), 'utf8')
+    const hostSource = readHostRuntimeSource()
 
     expect(hostSource).toContain('function updatePendingEditorStateBaseline(overrides = {})')
     expect(hostSource).toContain('function shouldDiscardStalePendingSoftPayload(payload)')
@@ -37,7 +47,7 @@ describe('MindMapFrame host runtime behavior', () => {
   })
 
   it('requests a host visual refresh after full editor sync updates the tree', () => {
-    const hostSource = readFileSync(resolve(process.cwd(), 'public/mind-map-host.html'), 'utf8')
+    const hostSource = readHostRuntimeSource()
 
     expect(hostSource).toContain('function requestHostVisualRefresh()')
     expect(hostSource).toContain("typeof renderer?.reRender === 'function'")
@@ -51,7 +61,7 @@ describe('MindMapFrame host runtime behavior', () => {
   })
 
   it('applies unified paper map appearance before interaction overlays after host renders', () => {
-    const hostSource = readFileSync(resolve(process.cwd(), 'public/mind-map-host.html'), 'utf8')
+    const hostSource = readHostRuntimeSource()
     const applyUnifiedSection =
       hostSource.match(/function applyUnifiedMindMapAppearance\(\)[\s\S]*?function clearReviewFxState/)?.[0] ?? ''
     const paperReflowSection =
@@ -99,7 +109,7 @@ describe('MindMapFrame host runtime behavior', () => {
   })
 
   it('keeps medium-length imported Chinese cards on the wider default width path', () => {
-    const hostSource = readFileSync(resolve(process.cwd(), 'public/mind-map-host.html'), 'utf8')
+    const hostSource = readHostRuntimeSource()
 
     expect(hostSource).toContain('const HOST_IMPORTED_NODE_AUTO_WIDTH_THRESHOLD = 12')
     expect(hostSource).toContain('const HOST_IMPORTED_NODE_LEGACY_MEDIUM_TEXT_WIDTH = 132')
@@ -116,7 +126,7 @@ describe('MindMapFrame host runtime behavior', () => {
   })
 
   it('does not infer review placeholder colors from legacy text-width metadata', () => {
-    const hostSource = readFileSync(resolve(process.cwd(), 'public/mind-map-host.html'), 'utf8')
+    const hostSource = readHostRuntimeSource()
     const reviewRoleSection =
       hostSource.match(/function getPaperReviewRole\(data, isRoot\)[\s\S]*?function buildPaperNodeStyle/)?.[0] ?? ''
 
@@ -124,7 +134,7 @@ describe('MindMapFrame host runtime behavior', () => {
   })
 
   it('suppresses native pan during right-button selection drag and prefers node bodies over slot gaps', () => {
-    const hostSource = readFileSync(resolve(process.cwd(), 'public/mind-map-host.html'), 'utf8')
+    const hostSource = readHostRuntimeSource()
     const dragIntentSection =
       hostSource.match(/function buildSelectionDragIntent\(\)[\s\S]*?function updateSelectionDragPreview/)?.[0] ?? ''
 
@@ -174,7 +184,7 @@ describe('MindMapFrame host runtime behavior', () => {
   })
 
   it('keeps source node eligible as a child target while excluding descendants in host runtime source', () => {
-    const hostSource = readFileSync(resolve(process.cwd(), 'public/mind-map-host.html'), 'utf8')
+    const hostSource = readHostRuntimeSource()
 
     expect(hostSource).toContain('const excludedNodeUids = collectSelectionDragExcludedNodeUids(sourceNode)')
     expect(hostSource).not.toContain('excluded.add(uid)\n        }\n        if (Array.isArray(node.children)) {\n          node.children.forEach(child => collectSelectionDragExcludedNodeUids(child, excluded))')
@@ -184,7 +194,7 @@ describe('MindMapFrame host runtime behavior', () => {
   })
 
   it('keeps only minimal utility controls inside the hosted mind map runtime', () => {
-    const hostSource = readFileSync(resolve(process.cwd(), 'public/mind-map-host.html'), 'utf8')
+    const hostSource = readHostRuntimeSource()
 
     expect(hostSource).toContain('.memory-anki-restore-ui-button')
     expect(hostSource).toContain('.memory-anki-exit-fullscreen-button')
@@ -197,7 +207,7 @@ describe('MindMapFrame host runtime behavior', () => {
   })
 
   it('keeps mini palace runtime support inside the host interaction layer', () => {
-    const hostSource = readFileSync(resolve(process.cwd(), 'public/mind-map-host.html'), 'utf8')
+    const hostSource = readHostRuntimeSource()
 
     expect(hostSource).toContain('lastHoveredNodeUid')
     expect(hostSource).toContain('function getMiniPalaceDraft()')
@@ -217,7 +227,7 @@ describe('MindMapFrame host runtime behavior', () => {
   })
 
   it('keeps host utility buttons wired to fullscreen exit and ui clear notifications', () => {
-    const hostSource = readFileSync(resolve(process.cwd(), 'public/mind-map-host.html'), 'utf8')
+    const hostSource = readHostRuntimeSource()
 
     expect(hostSource).toContain("button.className = 'memory-anki-restore-ui-button'")
     expect(hostSource).toContain("button.className = 'memory-anki-exit-fullscreen-button'")
@@ -228,7 +238,7 @@ describe('MindMapFrame host runtime behavior', () => {
   })
 
   it('runs a resize-aware redraw and fit when the host viewport changes', () => {
-    const hostSource = readFileSync(resolve(process.cwd(), 'public/mind-map-host.html'), 'utf8')
+    const hostSource = readHostRuntimeSource()
 
     expect(hostSource).toContain('const viewportRefreshState =')
     expect(hostSource).toContain('function requestResizeAwareHostVisualRefresh(options = {})')
@@ -424,7 +434,7 @@ describe('MindMapFrame host runtime behavior', () => {
   })
 
   it('restores queued mode switch focus requests after host renders', () => {
-    const hostSource = readFileSync(resolve(process.cwd(), 'public/mind-map-host.html'), 'utf8')
+    const hostSource = readHostRuntimeSource()
 
     expect(hostSource).toContain('pendingFocusRequest')
     expect(hostSource).toContain('function centerNodeInViewport(node)')

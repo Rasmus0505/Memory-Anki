@@ -21,8 +21,8 @@ import {
   updateDefaultSegmentReviewProgressApi,
   updatePalaceSegmentReviewProgressApi,
 } from '@/entities/palace-segment/api'
-import { submitMiniReviewSessionApi } from '@/features/review/api/reviewApi'
-import { submitSegmentReviewSessionApi } from '@/features/review/api/reviewApi'
+import { submitMiniReviewSessionApi } from '@/features/review/api'
+import { submitSegmentReviewSessionApi } from '@/features/review/api'
 import type { StageEditState } from '@/features/palace-catalog/components/palace-list/utils'
 import {
   buildBatchSegmentReviewPath,

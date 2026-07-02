@@ -7,7 +7,7 @@ export function updatePalacePracticeFlagApi(
     needs_practice: boolean
   },
 ) {
-  return request<{ item: any }>(`/palaces/${palaceId}/practice-flag`, {
+  return request<{ item: PalaceListItem }>(`/palaces/${palaceId}/practice-flag`, {
     method: 'PUT',
     body: JSON.stringify(data),
     persistence: {

@@ -39,7 +39,7 @@ function Segment<T extends string>({
             type="button"
             onClick={() => onChange(option.value)}
             className={cn(
-              'rounded-2xl border px-3 py-3 text-center text-sm font-medium transition-all',
+              'rounded-lg border px-3 py-3 text-center text-sm font-medium transition-all',
               active
                 ? 'border-primary bg-primary/8 shadow-sm ring-1 ring-primary/30'
                 : 'border-border/70 bg-background/70 hover:bg-secondary/70',
@@ -64,7 +64,7 @@ function ToggleRow({
   onCheckedChange: (checked: boolean) => void
 }) {
   return (
-    <div className="flex items-center justify-between gap-4 rounded-2xl border border-border/70 bg-background/70 px-4 py-3">
+    <div className="flex items-center justify-between gap-4 rounded-lg border border-border/70 bg-background/70 px-4 py-3">
       <div className="text-sm font-medium">{label}</div>
       <Switch checked={checked} onCheckedChange={onCheckedChange} />
     </div>
@@ -82,7 +82,7 @@ function EventCard({
   onChange: (updater: (current: TimerCelebrationEventConfig) => TimerCelebrationEventConfig) => void
 }) {
   return (
-    <div className="rounded-2xl border border-border/70 bg-background/70 px-4 py-4">
+    <div className="rounded-lg border border-border/70 bg-background/70 px-4 py-4">
       <div className="mb-4 flex items-center justify-between gap-3">
         <SectionTitle title={title} />
         <Badge variant={eventConfig.enabled ? 'secondary' : 'outline'}>

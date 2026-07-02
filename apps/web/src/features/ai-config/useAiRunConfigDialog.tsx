@@ -2,13 +2,14 @@
 import { toast } from '@/shared/feedback/toast'
 import type {
   AiModelScenario,
+  AiPromptTemplate,
   AiScenarioRuntimeOptionsMap,
   AiRuntimeOptions,
 } from '@/shared/api/contracts'
 import {
   getAiPromptTemplatesApi,
   getAiModelScenariosApi,
-} from '@/entities/preferences/api/aiModelSettingsApi'
+} from '@/entities/preferences/api'
 import { Button } from '@/shared/components/ui/button'
 import {
   Dialog,
@@ -47,7 +48,7 @@ interface PendingRequest extends MultiAiRunConfigRequest {
 
 const RECENT_AI_CONFIG_PREFIX = 'memory-anki.ai-runtime-recent.'
 
-const SCENARIO_PROMPT_TEMPLATE_KEYS: Record<string, string> = {
+const SCENARIO_PROMPT_TEMPLATE_KEYS = {
   vision_image_mindmap: 'ai_prompt_import_image_mindmap',
   vision_image_text: 'ai_prompt_import_image_text',
   vision_batch_mindmap: 'ai_prompt_import_batch_mindmap',
@@ -60,6 +61,14 @@ const SCENARIO_PROMPT_TEMPLATE_KEYS: Record<string, string> = {
   quiz_pdf_review: 'ai_prompt_palace_quiz_pdf_review',
   quiz_review_mindmap_generation: 'ai_prompt_palace_quiz_review_mindmap',
   quiz_mini_palace_grouping: 'ai_prompt_palace_quiz_group_by_mini_palace',
+} as const satisfies Record<string, AiPromptTemplate['key']>
+
+type ScenarioPromptTemplateKey = keyof typeof SCENARIO_PROMPT_TEMPLATE_KEYS
+
+function getScenarioPromptTemplateKey(scenarioKey: string) {
+  return Object.prototype.hasOwnProperty.call(SCENARIO_PROMPT_TEMPLATE_KEYS, scenarioKey)
+    ? SCENARIO_PROMPT_TEMPLATE_KEYS[scenarioKey as ScenarioPromptTemplateKey]
+    : undefined
 }
 
 interface PromptTemplateSnapshot {
@@ -157,7 +166,7 @@ export function useAiRunConfigDialog() {
         entry,
         scenario: scenarios.find((item) => item.key === entry.scenarioKey) ?? null,
         recentConfig: readRecentAiConfig(entry.entrypointKey, entry.scenarioKey),
-        promptTemplate: promptTemplates[SCENARIO_PROMPT_TEMPLATE_KEYS[entry.scenarioKey] || ''] ?? null,
+        promptTemplate: promptTemplates[getScenarioPromptTemplateKey(entry.scenarioKey) ?? ''] ?? null,
       })),
     [pendingEntries, promptTemplates, scenarios],
   )
@@ -195,45 +204,43 @@ export function useAiRunConfigDialog() {
   }, [])
 
   const promptForScenarioAiOptions = React.useCallback(
-    async (request: MultiAiRunConfigRequest) =>
-      new Promise<AiScenarioRuntimeOptionsMap | undefined>(async (resolve) => {
-        let nextScenarios = scenarios
-        let nextPromptTemplates = promptTemplates
-        if (nextScenarios.length === 0) {
-          try {
-            const catalog = await loadScenarios()
-            nextScenarios = catalog.scenarios
-            nextPromptTemplates = catalog.promptTemplates
-          } catch {
-            resolve(undefined)
-            return
-          }
+    async (request: MultiAiRunConfigRequest) => {
+      let nextScenarios = scenarios
+      let nextPromptTemplates = promptTemplates
+      if (nextScenarios.length === 0) {
+        try {
+          const catalog = await loadScenarios()
+          nextScenarios = catalog.scenarios
+          nextPromptTemplates = catalog.promptTemplates
+        } catch {
+          return undefined
         }
-        const nextSelectedConfigs: Record<string, AiRuntimeOptions> = {}
-        for (const entry of request.entries) {
-          const scenario = nextScenarios.find((item) => item.key === entry.scenarioKey)
-          if (!scenario) {
-            toast.error('当前入口没有找到对应的 AI 场景配置。')
-            resolve(undefined)
-            return
-          }
-          const promptTemplateKey = SCENARIO_PROMPT_TEMPLATE_KEYS[entry.scenarioKey] || ''
-          const promptTemplate = nextPromptTemplates[promptTemplateKey] ?? null
-          const recentConfig = readRecentAiConfig(entry.entrypointKey, entry.scenarioKey)
-          nextSelectedConfigs[entry.scenarioKey] = normalizeScenarioAiConfig(
-            scenario,
-            recentConfig,
-            promptTemplate,
-          )
+      }
+      const nextSelectedConfigs: Record<string, AiRuntimeOptions> = {}
+      for (const entry of request.entries) {
+        const scenario = nextScenarios.find((item) => item.key === entry.scenarioKey)
+        if (!scenario) {
+          toast.error('当前入口没有找到对应的 AI 场景配置。')
+          return undefined
         }
-        if (request.entries.length === 0) {
-          toast.error('当前入口没有可选择的 AI 场景。')
-          resolve(undefined)
-          return
-        }
+        const promptTemplateKey = getScenarioPromptTemplateKey(entry.scenarioKey) ?? ''
+        const promptTemplate = nextPromptTemplates[promptTemplateKey] ?? null
+        const recentConfig = readRecentAiConfig(entry.entrypointKey, entry.scenarioKey)
+        nextSelectedConfigs[entry.scenarioKey] = normalizeScenarioAiConfig(
+          scenario,
+          recentConfig,
+          promptTemplate,
+        )
+      }
+      if (request.entries.length === 0) {
+        toast.error('当前入口没有可选择的 AI 场景。')
+        return undefined
+      }
+      return new Promise<AiScenarioRuntimeOptionsMap | undefined>((resolve) => {
         setSelectedConfigs(nextSelectedConfigs)
         setPending({ ...request, resolve })
-      }),
+      })
+    },
     [loadScenarios, promptTemplates, scenarios],
   )
 
@@ -332,7 +339,7 @@ export function useAiRunConfigDialog() {
   const applyScenarioDefault = React.useCallback((scenarioKey: string) => {
     const scenario = scenarios.find((item) => item.key === scenarioKey)
     if (!scenario) return
-    const promptTemplateKey = SCENARIO_PROMPT_TEMPLATE_KEYS[scenarioKey] || ''
+    const promptTemplateKey = getScenarioPromptTemplateKey(scenarioKey) ?? ''
     const promptTemplate = promptTemplates[promptTemplateKey] ?? null
     setSelectedConfigs((current) => ({
       ...current,
@@ -346,7 +353,7 @@ export function useAiRunConfigDialog() {
       if (!scenario) return
       const recentConfig = readRecentAiConfig(entrypointKey, scenarioKey)
       if (!recentConfig) return
-      const promptTemplateKey = SCENARIO_PROMPT_TEMPLATE_KEYS[scenarioKey] || ''
+      const promptTemplateKey = getScenarioPromptTemplateKey(scenarioKey) ?? ''
       const promptTemplate = promptTemplates[promptTemplateKey] ?? null
       setSelectedConfigs((current) => ({
         ...current,
@@ -362,7 +369,7 @@ export function useAiRunConfigDialog() {
     for (const entry of pending.entries) {
       const scenario = scenarios.find((item) => item.key === entry.scenarioKey)
       if (!scenario) continue
-      const promptTemplateKey = SCENARIO_PROMPT_TEMPLATE_KEYS[entry.scenarioKey] || ''
+      const promptTemplateKey = getScenarioPromptTemplateKey(entry.scenarioKey) ?? ''
       nextSelectedConfigs[entry.scenarioKey] = buildDefaultAiConfig(
         scenario,
         promptTemplates[promptTemplateKey] ?? null,
@@ -390,7 +397,7 @@ export function useAiRunConfigDialog() {
             return (
               <div
                 key={entry.scenarioKey}
-                className="grid gap-4 rounded-3xl border border-border/60 bg-muted/10 p-4 lg:grid-cols-[320px_minmax(0,1fr)]"
+                className="grid gap-4 rounded-lg border border-border/60 bg-muted/10 p-4 lg:grid-cols-[320px_minmax(0,1fr)]"
               >
                 <div className="space-y-4">
                   <div className="space-y-1">
@@ -409,7 +416,7 @@ export function useAiRunConfigDialog() {
                       <>
                         <div>场景默认模型：{scenario.default_model}</div>
                         <div>场景默认思考：{scenario.default_thinking_enabled ? '开启' : '关闭'}</div>
-                        <div>提示词模板：{SCENARIO_PROMPT_TEMPLATE_KEYS[entry.scenarioKey] || '未绑定'}</div>
+                        <div>提示词模板：{getScenarioPromptTemplateKey(entry.scenarioKey) ?? '未绑定'}</div>
                       </>
                     ) : loading ? '正在加载场景配置...' : '未找到场景配置。'}
                   </div>
@@ -456,7 +463,7 @@ export function useAiRunConfigDialog() {
                             thinking_enabled: event.target.checked,
                           }))
                         }}
-                        className="h-4 w-4"
+                        className="size-4"
                       />
                     </label>
                   ) : (
@@ -495,7 +502,7 @@ export function useAiRunConfigDialog() {
                       }))
                     }}
                     placeholder={promptTemplate?.defaultTemplate || '可填写本次完整系统提示词；留空则使用场景默认模板。'}
-                    className="min-h-[220px] resize-y rounded-2xl border border-input bg-background px-4 py-3 font-mono text-xs leading-5"
+                    className="min-h-[220px] resize-y rounded-lg border border-input bg-background px-4 py-3 font-mono text-xs leading-5"
                   />
                   <span className="text-xs text-muted-foreground">
                     这里会覆盖本次系统提示词；页面里的额外提示词/自然语言提示仍会作为补充要求拼接。

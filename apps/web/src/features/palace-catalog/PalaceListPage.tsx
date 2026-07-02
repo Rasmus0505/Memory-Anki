@@ -129,13 +129,13 @@ export default function PalaceList() {
           <div className="flex items-center gap-3">
             <Link to="/palaces">
               <Button variant="ghost" size="sm" className="-ml-3">
-                <ArrowLeft className="h-4 w-4" />
+                <ArrowLeft className="size-4" />
                 返回学科书架
               </Button>
             </Link>
             <Link to="/palaces/new">
               <Button size="sm">
-                <Plus className="h-4 w-4" />
+                <Plus className="size-4" />
                 新建宫殿
               </Button>
             </Link>

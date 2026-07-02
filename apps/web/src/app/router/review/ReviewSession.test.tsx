@@ -61,7 +61,7 @@ vi.mock('@/features/review/components/MindMapReviewFlow', () => ({
   },
 }))
 
-vi.mock('@/features/review/api/reviewApi', () => ({
+vi.mock('@/features/review/api', () => ({
   getReviewSessionApi: (...args: unknown[]) => mocks.getReviewSessionApi(...args),
   getReviewSessionProgressApi: (...args: unknown[]) => mocks.getReviewSessionProgressApi(...args),
   clearReviewSessionProgressApi: (...args: unknown[]) => mocks.clearReviewSessionProgressApi(...args),
@@ -74,15 +74,12 @@ vi.mock('@/features/review/studyWarmup', () => ({
     loader(),
 }))
 
-vi.mock('@/entities/palace/api/catalogApi', () => ({
+vi.mock('@/entities/palace/api', () => ({
   buildAttachmentUrl: (id: number) => `/attachments/${id}`,
   getPalaceEditorApi: vi.fn(),
-  togglePalaceFocusNodeApi: vi.fn(),
-}))
-
-vi.mock('@/entities/palace/api/editorApi', () => ({
   savePalaceEditorApi: vi.fn(),
   savePalaceEditorWithOptionsApi: vi.fn(),
+  togglePalaceFocusNodeApi: vi.fn(),
 }))
 
 vi.mock('@/shared/hooks/usePersistedMindMapEditor', () => ({

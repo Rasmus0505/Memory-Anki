@@ -19,7 +19,7 @@ import {
   type QuizLauncherGenerationSourceKind,
 } from '@/features/palace-quiz/quizGenerationController'
 import type { MindMapEditorState, PalaceQuizQuestionType } from '@/shared/api/contracts'
-import { getSubjectsApi } from '@/entities/knowledge/api/knowledgeApi'
+import { getSubjectsApi } from '@/entities/knowledge/api'
 import { getPalaceApi } from '@/entities/palace/api'
 import {
   completeTask,
@@ -365,12 +365,12 @@ export function QuizLauncherProvider({ children }: PropsWithChildren) {
           <div className="space-y-5 overflow-y-auto px-6 py-5">
             {loading ? (
               <div className="flex min-h-32 items-center justify-center text-sm text-muted-foreground">
-                <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
+                <LoaderCircle className="mr-2 size-4 animate-spin" />
                 正在准备做题入口…
               </div>
             ) : (
               <>
-                <div className="rounded-2xl border border-border/70 bg-background/70 p-4">
+                <div className="rounded-lg border border-border/70 bg-background/70 p-4">
                   <div className="text-sm font-medium">
                     {palace?.title ? `${palace.title} · 做题入口` : '做题入口'}
                   </div>
@@ -379,13 +379,13 @@ export function QuizLauncherProvider({ children }: PropsWithChildren) {
                   </div>
                   <div className="mt-3">
                     <Button type="button" onClick={handleDirectEnter}>
-                      <Play className="h-4 w-4" />
+                      <Play className="size-4" />
                       直接进入做题
                     </Button>
                   </div>
                 </div>
 
-                <div className="space-y-4 rounded-2xl border border-border/70 bg-background/70 p-4">
+                <div className="space-y-4 rounded-lg border border-border/70 bg-background/70 p-4">
                   <div className="flex flex-wrap gap-2">
                     {request?.scene === 'review' ? (
                       <Button
@@ -399,7 +399,7 @@ export function QuizLauncherProvider({ children }: PropsWithChildren) {
                           setSourceKind('review-mindmap')
                         }}
                       >
-                        <Sparkles className="h-4 w-4" />
+                        <Sparkles className="size-4" />
                         基于当前复习脑图
                       </Button>
                     ) : null}
@@ -414,7 +414,7 @@ export function QuizLauncherProvider({ children }: PropsWithChildren) {
                         setSourceKind('subject-pdf')
                       }}
                     >
-                      <FileText className="h-4 w-4" />
+                      <FileText className="size-4" />
                       学科 PDF
                     </Button>
                     <Button
@@ -428,7 +428,7 @@ export function QuizLauncherProvider({ children }: PropsWithChildren) {
                         setSourceKind('image-single')
                       }}
                     >
-                      <ImagePlus className="h-4 w-4" />
+                      <ImagePlus className="size-4" />
                       单图
                     </Button>
                     <Button
@@ -442,7 +442,7 @@ export function QuizLauncherProvider({ children }: PropsWithChildren) {
                         setSourceKind('image-batch')
                       }}
                     >
-                      <Sparkles className="h-4 w-4" />
+                      <Sparkles className="size-4" />
                       多图
                     </Button>
                   </div>
@@ -528,7 +528,7 @@ export function QuizLauncherProvider({ children }: PropsWithChildren) {
                             uploadInputRef.current?.click()
                           }}
                         >
-                          <Upload className="h-4 w-4" />
+                          <Upload className="size-4" />
                           上传 PDF
                         </Button>
                         <input
@@ -615,7 +615,7 @@ export function QuizLauncherProvider({ children }: PropsWithChildren) {
                 </div>
 
                 {error ? (
-                  <div className="rounded-2xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+                  <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
                     {error}
                   </div>
                 ) : null}
@@ -628,7 +628,7 @@ export function QuizLauncherProvider({ children }: PropsWithChildren) {
               取消
             </Button>
             <Button type="button" disabled={loading || starting} onClick={() => void handleStartGeneration()}>
-              {starting ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+              {starting ? <LoaderCircle className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
               生成新题并稍后去做
             </Button>
           </DialogFooter>

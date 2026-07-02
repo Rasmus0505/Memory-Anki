@@ -6,7 +6,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from memory_anki.core.config import APP_HOME, ensure_runtime_dirs
+from memory_anki.core.config import APP_HOME, BACKUPS_DIR, ensure_runtime_dirs
 from memory_anki.core.runtime import build_runtime_info
 from memory_anki.core.storage_layout import (
     ManagedStorageItem,
@@ -29,7 +29,12 @@ def _copy_item_to_backup(item: ManagedStorageItem, destination_root: Path) -> di
 
     if exists:
         if item.kind == "directory":
-            shutil.copytree(source, target, dirs_exist_ok=True)
+            shutil.copytree(
+                source,
+                target,
+                dirs_exist_ok=True,
+                ignore=_ignore_nested_backups,
+            )
         else:
             shutil.copy2(source, target)
     elif item.kind == "directory" and item.required:
@@ -43,6 +48,18 @@ def _copy_item_to_backup(item: ManagedStorageItem, destination_root: Path) -> di
         "source_exists": exists,
         "included": exists or (item.kind == "directory" and item.required),
     }
+
+
+def _ignore_nested_backups(current_dir: str, names: list[str]) -> set[str]:
+    current_path = Path(current_dir).resolve()
+    backups_path = BACKUPS_DIR.resolve()
+    if current_path.name == backups_path.name:
+        return set(names)
+    if current_path == backups_path.parent and backups_path.name in names:
+        return {backups_path.name}
+    if current_path.name == "data" and backups_path.name in names:
+        return {backups_path.name}
+    return set()
 
 
 def _select_backup_items(*, full: bool) -> list[ManagedStorageItem]:

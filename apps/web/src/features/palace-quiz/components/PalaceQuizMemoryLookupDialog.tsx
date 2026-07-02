@@ -17,7 +17,7 @@ import {
   Shrink,
   X,
 } from 'lucide-react'
-import { getPalaceEditorApi, getPalacesGroupedApi } from '@/entities/palace/api/catalogApi'
+import { getPalaceEditorApi, getPalacesGroupedApi } from '@/entities/palace/api'
 import { useRevealSession } from '@/entities/review/model/useRevealSession'
 import { buildAllRevealedState } from '@/entities/review/model/review-flow-tree'
 import { useReviewFeedback } from '@/features/review/hooks/useReviewFeedback'
@@ -381,7 +381,7 @@ export function PalaceQuizMemoryLookupDialog({
             }}
             aria-label="打开记忆宫殿查看"
           >
-            <BookOpen className="h-4 w-4 shrink-0 text-primary" />
+            <BookOpen className="size-4 shrink-0 text-primary" />
             <span className="shrink-0">查看宫殿</span>
             <span className="min-w-0 truncate text-xs text-muted-foreground">
               {selectedPalace ? getPalaceTitle(selectedPalace) : previewTitle || '记忆宫殿'}
@@ -400,7 +400,7 @@ export function PalaceQuizMemoryLookupDialog({
     }} modal={false}>
       <DialogContent
         layout="unstyled"
-        className="fixed z-[241] rounded-2xl border border-border/80 bg-card/98 shadow-2xl backdrop-blur"
+        className="fixed z-[241] rounded-lg border border-border/80 bg-card/98 shadow-2xl backdrop-blur"
         style={{
           left: layout.x,
           top: layout.y,
@@ -424,36 +424,36 @@ export function PalaceQuizMemoryLookupDialog({
                 type="button"
                 variant={pinned ? 'default' : 'ghost'}
                 size="icon"
-                className="h-8 w-8"
+                className="size-8"
                 aria-label={pinned ? '取消置顶记忆宫殿查看' : '置顶记忆宫殿查看'}
                 title={pinned ? '取消置顶' : '置顶'}
                 onPointerDown={(event) => event.stopPropagation()}
                 onClick={() => setPinned((current) => !current)}
               >
-                {pinned ? <PinOff className="h-4 w-4" /> : <Pin className="h-4 w-4" />}
+                {pinned ? <PinOff className="size-4" /> : <Pin className="size-4" />}
               </Button>
               <Button
                 type="button"
                 variant="ghost"
                 size="icon"
-                className="h-8 w-8"
+                className="size-8"
                 aria-label="缩小为胶囊"
                 title="缩小为胶囊"
                 onPointerDown={(event) => event.stopPropagation()}
                 onClick={collapse}
               >
-                <Shrink className="h-4 w-4" />
+                <Shrink className="size-4" />
               </Button>
               <Button
                 type="button"
                 variant="ghost"
                 size="icon"
-                className="h-8 w-8"
+                className="size-8"
                 aria-label="关闭记忆宫殿查看"
                 onPointerDown={(event) => event.stopPropagation()}
                 onClick={() => onOpenChange(false)}
               >
-                <X className="h-4 w-4" />
+                <X className="size-4" />
               </Button>
             </div>
           </div>
@@ -462,7 +462,7 @@ export function PalaceQuizMemoryLookupDialog({
             <div className="flex min-h-0 flex-col border-b border-border/70 lg:border-b-0 lg:border-r">
               <div className="border-b border-border/70 p-3">
                 <div className="relative">
-                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
                   <Input
                     value={search}
                     onChange={(event) => setSearch(event.target.value)}
@@ -474,7 +474,7 @@ export function PalaceQuizMemoryLookupDialog({
               <div className="min-h-0 flex-1 overflow-y-auto p-2">
                 {listLoading ? (
                   <div className="flex h-28 items-center justify-center gap-2 text-sm text-muted-foreground">
-                    <LoaderCircle className="h-4 w-4 animate-spin" />
+                    <LoaderCircle className="size-4 animate-spin" />
                     正在加载宫殿...
                   </div>
                 ) : listError ? (
@@ -502,7 +502,7 @@ export function PalaceQuizMemoryLookupDialog({
                           onClick={() => setSelectedPalaceId(palace.id)}
                         >
                           <div className="flex min-w-0 items-center gap-2">
-                            <BookOpen className="h-4 w-4 shrink-0" />
+                            <BookOpen className="size-4 shrink-0" />
                             <span className="truncate text-sm font-medium">{getPalaceTitle(palace)}</span>
                           </div>
                           <div
@@ -571,7 +571,7 @@ export function PalaceQuizMemoryLookupDialog({
                       disabled={!previewState}
                       onClick={revealSession.reset}
                     >
-                      <RotateCcw className="h-4 w-4" />
+                      <RotateCcw className="size-4" />
                       重新开始
                     </Button>
                   ) : null}
@@ -581,7 +581,7 @@ export function PalaceQuizMemoryLookupDialog({
               <div className="min-h-0 flex-1 overflow-hidden rounded-xl border border-border/70 bg-background">
                 {previewLoading ? (
                   <div className="flex h-full min-h-[180px] items-center justify-center gap-2 text-sm text-muted-foreground">
-                    <LoaderCircle className="h-4 w-4 animate-spin" />
+                    <LoaderCircle className="size-4 animate-spin" />
                     正在加载脑图...
                   </div>
                 ) : previewError ? (

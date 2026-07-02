@@ -2,9 +2,9 @@ import { renderHook, act } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useLocalStorageState } from '@/shared/lib/localStorage'
 import { resetClientPreferenceCacheForTest } from '@/shared/preferences/clientPreferences'
-import { updateClientPreferencesApi } from '@/entities/preferences/api/clientPreferencesApi'
+import { updateClientPreferencesApi } from '@/entities/preferences/api'
 
-vi.mock('@/entities/preferences/api/clientPreferencesApi', () => ({
+vi.mock('@/entities/preferences/api', () => ({
   getClientPreferencesApi: vi.fn(),
   updateClientPreferencesApi: vi.fn(async (data: Record<string, unknown>) => ({
     items: {

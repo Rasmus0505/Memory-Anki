@@ -24,6 +24,7 @@ from memory_anki.modules.reviews.application.schedule_service import (
     get_config_value,
     normalize_algorithm,
 )
+from .review_progress_datetime import serialize_stage_datetime
 
 
 def default_segment_algorithm(session: Session) -> str:
@@ -148,12 +149,6 @@ def palace_stage_progress(
     if palace.mastered and total > 0:
         completed = total
     return total, completed, completed / total
-
-
-def serialize_stage_datetime(value: datetime | None) -> str | None:
-    if value is None:
-        return None
-    return value.replace(second=0, microsecond=0).isoformat(timespec="minutes")
 
 
 def review_stages_json(

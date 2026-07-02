@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import re
 import uuid
-from html import escape, unescape
+from html import escape
 from typing import Any
 
 from memory_anki.modules.mindmap.application.editor_state_documents import normalize_editor_doc
+from memory_anki.modules.palaces.application.mindmap_ai_split.primitives import plain_text
 
 from .contracts import MindMapImportError
 from .model_io import (
@@ -621,11 +622,7 @@ def apply_emphasis_marks_to_html(text: str, emphasis_marks: Any, *, preserve_lin
 
 
 def html_to_plain_text(value: Any) -> str:
-    text = str(value or "")
-    text = re.sub(r"<br\s*/?>", "\n", text, flags=re.IGNORECASE)
-    text = re.sub(r"</(?:div|p|li|h[1-6]|blockquote|pre|tr)>", "\n", text, flags=re.IGNORECASE)
-    text = re.sub(r"<[^>]+>", "", text)
-    return unescape(text).strip()
+    return plain_text(value, fallback="")
 
 
 def split_heading_and_body(text: str) -> tuple[str | None, str | None]:

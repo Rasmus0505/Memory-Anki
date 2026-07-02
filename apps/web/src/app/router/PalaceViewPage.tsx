@@ -126,14 +126,14 @@ export default function PalaceView() {
             <>
               <Link to="/palaces">
                 <Button variant="outline" size="sm">
-                  <ArrowLeft className="mr-2 h-4 w-4" />
+                  <ArrowLeft className="mr-2 size-4" />
                   返回列表
                 </Button>
               </Link>
               {(palace.focus_count ?? 0) > 0 ? (
                 <Link to={`/palaces/${palace.id}/focus-practice`}>
                   <Button variant="outline" size="sm" className="border-warning/30 bg-warning/5 text-warning hover:bg-warning/10">
-                    <Target className="mr-2 h-4 w-4" />
+                    <Target className="mr-2 size-4" />
                     专项练习 {palace.focus_count}
                   </Button>
                 </Link>
@@ -182,7 +182,7 @@ export default function PalaceView() {
                 }}
               />
               {hostReadyTimedOut ? (
-                <div className="rounded-2xl border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-warning">
+                <div className="rounded-lg border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-warning">
                   脑图宿主初始化偏慢，已继续等待。若长时间不显示，可先返回列表后重新打开该宫殿。
                 </div>
               ) : null}
@@ -200,7 +200,7 @@ export default function PalaceView() {
                   onReady={() => setHostReadyTimedOut(false)}
                   onReadyTimeout={() => setHostReadyTimedOut(true)}
                   className={cn(
-                    'w-full flex-1 rounded-2xl border border-border/70 bg-background',
+                    'w-full flex-1 rounded-lg border border-border/70 bg-background',
                     mindMapFullscreen ? 'h-full' : 'h-[62vh]',
                   )}
                 />
@@ -208,7 +208,7 @@ export default function PalaceView() {
                 <LoadingState
                   text="正在准备脑图视图…"
                   className={cn(
-                    'w-full flex-1 rounded-2xl border border-border/70 bg-background px-4',
+                    'w-full flex-1 rounded-lg border border-border/70 bg-background px-4',
                     mindMapFullscreen ? 'h-full' : 'h-[62vh]',
                   )}
                 />
@@ -229,7 +229,7 @@ export default function PalaceView() {
                   专项 {palace.focus_count} 张
                 </Badge>
               ) : null}
-              <div className="rounded-2xl bg-background/70 p-3 whitespace-pre-wrap">
+              <div className="rounded-lg bg-background/70 p-3 whitespace-pre-wrap">
                 {palace.description || '当前宫殿没有补充描述。'}
               </div>
             </CardContent>
@@ -242,13 +242,13 @@ export default function PalaceView() {
             <CardContent className="space-y-2 text-sm">
               {palace.chapters.length > 0 ? (
                 palace.chapters.map((chapter) => (
-                  <div key={chapter.id} className="rounded-2xl border border-border/70 bg-background/70 px-3 py-3">
+                  <div key={chapter.id} className="rounded-lg border border-border/70 bg-background/70 px-3 py-3">
                     <div className="font-medium">{chapter.name}</div>
                     <div className="text-muted-foreground">{chapter.subject?.name || '未分类学科'}</div>
                   </div>
                 ))
               ) : (
-                <div className="rounded-2xl border border-dashed border-border/80 px-3 py-4 text-muted-foreground">
+                <div className="rounded-lg border border-dashed border-border/80 px-3 py-4 text-muted-foreground">
                   该宫殿还没有关联章节。
                 </div>
               )}
@@ -266,16 +266,16 @@ export default function PalaceView() {
                     key={attachment.id}
                     href={buildAttachmentUrl(attachment.id)}
                     target="_blank"
-                    className="block rounded-2xl border border-border/70 bg-background/70 px-3 py-3 transition-colors hover:text-foreground"
+                    className="block rounded-lg border border-border/70 bg-background/70 px-3 py-3 transition-colors hover:text-foreground"
                   >
                     <span className="inline-flex items-center gap-2">
-                      <FileText className="h-4 w-4" />
+                      <FileText className="size-4" />
                       {attachment.original_name}
                     </span>
                   </a>
                 ))
               ) : (
-                <div className="rounded-2xl border border-dashed border-border/80 px-3 py-4 text-muted-foreground">
+                <div className="rounded-lg border border-dashed border-border/80 px-3 py-4 text-muted-foreground">
                   没有附件。
                 </div>
               )}

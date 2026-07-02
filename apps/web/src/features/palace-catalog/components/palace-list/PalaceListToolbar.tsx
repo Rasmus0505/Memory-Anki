@@ -47,7 +47,7 @@ export function PalaceListToolbar({
         <div className="flex flex-wrap items-end gap-3">
           <div className="min-w-[180px] flex-1">
             <div className="relative">
-              <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 placeholder="搜索标题..."
                 value={search}
@@ -71,7 +71,7 @@ export function PalaceListToolbar({
                       onViewSettingsChange((current) => ({ ...current, layoutMode: option.value }))
                     }
                   >
-                    <Icon className="h-4 w-4" />
+                    <Icon className="size-4" />
                     {option.label}
                   </Button>
                 )

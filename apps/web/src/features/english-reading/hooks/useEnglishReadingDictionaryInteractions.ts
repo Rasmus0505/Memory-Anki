@@ -3,7 +3,7 @@ import type {
   MouseEvent as ReactMouseEvent,
   PointerEvent as ReactPointerEvent,
 } from "react";
-import { getEnglishReadingDictionaryApi } from "@/features/english-reading/api/englishReadingApi";
+import { getEnglishReadingDictionaryApi } from "@/features/english-reading/api";
 import {
   canUseSpeechSynthesis,
   hasActiveTextSelection,
@@ -16,6 +16,8 @@ import {
 } from "@/features/english-reading/model/englishReadingInteractions";
 import type { ReadingDictionaryEntry } from "@/shared/api/contracts";
 import type { EnglishReadingTimerController } from "@/features/english-reading/hooks/useEnglishReadingWorkflow";
+import { usePinnedPanelDrag } from "@/features/english-reading/hooks/usePinnedPanelDrag";
+import type { PinnedPanelDragState } from "@/features/english-reading/hooks/usePinnedPanelDrag";
 
 export function useEnglishReadingDictionaryInteractions({
   isActive,
@@ -90,13 +92,9 @@ export function useEnglishReadingDictionaryInteractions({
     };
   }, [dictionaryPanel, isActive]);
 
-  useEffect(() => {
-    if (!isActive || !dictionaryPanel?.dragging) return;
-    const updateDraggingPosition = (clientX: number, clientY: number) => {
-      const dragState = dictionaryDragRef.current;
-      if (!dragState || !Number.isFinite(clientX) || !Number.isFinite(clientY)) {
-        return;
-      }
+  const updateDictionaryDraggingPosition = useCallback(
+    (clientX: number, clientY: number, dragState: PinnedPanelDragState) => {
+      if (!Number.isFinite(clientX) || !Number.isFinite(clientY)) return;
       const nextLeft = resolveDictionaryPanelLeft(
         dragState.originLeft + (clientX - dragState.startX),
       );
@@ -113,55 +111,20 @@ export function useEnglishReadingDictionaryInteractions({
             }
           : current,
       );
-    };
-    const handlePointerMove = (event: PointerEvent) => {
-      const dragState = dictionaryDragRef.current;
-      if (!dragState || event.pointerId !== dragState.pointerId) return;
-      updateDraggingPosition(event.clientX, event.clientY);
-    };
-    const handleMouseMove = (event: MouseEvent) => {
-      updateDraggingPosition(event.clientX, event.clientY);
-    };
-    const stopDragging = (event?: PointerEvent | MouseEvent) => {
-      if (
-        event &&
-        dictionaryDragRef.current &&
-        "pointerId" in event &&
-        event.pointerId !== dictionaryDragRef.current.pointerId
-      ) {
-        return;
-      }
-      dictionaryDragRef.current = null;
-      document.body.style.userSelect = "";
-      setDictionaryPanel((current) =>
-        current ? { ...current, dragging: false } : current,
-      );
-    };
-    window.addEventListener("pointermove", handlePointerMove);
-    document.addEventListener("pointermove", handlePointerMove);
-    window.addEventListener("mousemove", handleMouseMove);
-    document.addEventListener("mousemove", handleMouseMove);
-    window.addEventListener("pointerup", stopDragging);
-    document.addEventListener("pointerup", stopDragging);
-    window.addEventListener("mouseup", stopDragging);
-    document.addEventListener("mouseup", stopDragging);
-    window.addEventListener("pointercancel", stopDragging);
-    document.addEventListener("pointercancel", stopDragging);
-    return () => {
-      window.removeEventListener("pointermove", handlePointerMove);
-      document.removeEventListener("pointermove", handlePointerMove);
-      window.removeEventListener("mousemove", handleMouseMove);
-      document.removeEventListener("mousemove", handleMouseMove);
-      window.removeEventListener("pointerup", stopDragging);
-      document.removeEventListener("pointerup", stopDragging);
-      window.removeEventListener("mouseup", stopDragging);
-      document.removeEventListener("mouseup", stopDragging);
-      window.removeEventListener("pointercancel", stopDragging);
-      document.removeEventListener("pointercancel", stopDragging);
-      document.body.style.userSelect = "";
-      dictionaryDragRef.current = null;
-    };
-  }, [dictionaryPanel?.dragging, isActive]);
+    },
+    [],
+  );
+  const stopDictionaryDragging = useCallback(() => {
+    setDictionaryPanel((current) =>
+      current ? { ...current, dragging: false } : current,
+    );
+  }, []);
+  usePinnedPanelDrag({
+    active: isActive && Boolean(dictionaryPanel?.dragging),
+    dragRef: dictionaryDragRef,
+    onMove: updateDictionaryDraggingPosition,
+    onStop: stopDictionaryDragging,
+  });
 
   const resetDictionaryInteractions = useCallback(() => {
     setDictionaryPanel(null);

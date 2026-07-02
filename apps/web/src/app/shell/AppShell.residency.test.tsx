@@ -7,7 +7,7 @@ import { AppShell, resetNavSectionHistoryForTest } from '@/app/shell/AppShell'
 
 const getRuntimeInfoApi = vi.fn()
 
-vi.mock('@/entities/runtime/api/runtimeApi', () => ({
+vi.mock('@/entities/runtime/api', () => ({
   getRuntimeInfoApi: () => getRuntimeInfoApi(),
 }))
 

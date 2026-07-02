@@ -53,7 +53,7 @@ export function PalaceVersionDialog({
 }: PalaceVersionDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="h-[min(80vh,900px)] max-h-[min(80vh,900px)] max-w-3xl overflow-hidden rounded-[28px] border-border/70 bg-background/98 p-0">
+      <DialogContent className="h-[min(80vh,900px)] max-h-[min(80vh,900px)] max-w-3xl overflow-hidden rounded-lg border-border/70 bg-background/98 p-0">
         <DialogHeader>
           <div>
             <DialogTitle>宫殿恢复点</DialogTitle>
@@ -65,7 +65,7 @@ export function PalaceVersionDialog({
           <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-6">
             <div className="space-y-3">
               {versions.length === 0 ? (
-                <div className="rounded-2xl border border-dashed border-border/80 bg-background/70 px-4 py-8 text-center text-sm text-muted-foreground">
+                <div className="rounded-lg border border-dashed border-border/80 bg-background/70 px-4 py-8 text-center text-sm text-muted-foreground">
                   当前还没有可恢复的有效快照。
                 </div>
               ) : (
@@ -102,7 +102,7 @@ export function PalaceVersionDialog({
                           size="sm"
                           onClick={() => void onPreviewVersion(version.id)}
                         >
-                          <Eye className="mr-2 h-4 w-4" />
+                          <Eye className="mr-2 size-4" />
                           预览
                         </Button>
                         <Button
@@ -115,7 +115,7 @@ export function PalaceVersionDialog({
                       </div>
                     </div>
                   ))}
-                  <div className="rounded-2xl border border-dashed border-border/80 bg-background/60 px-4 py-3 text-center text-sm text-muted-foreground">
+                  <div className="rounded-lg border border-dashed border-border/80 bg-background/60 px-4 py-3 text-center text-sm text-muted-foreground">
                     已显示全部 {versions.length} 个恢复点
                     {removedDuplicateCount > 0
                       ? `，本次已自动清理 ${removedDuplicateCount} 条重复快照`
@@ -131,7 +131,7 @@ export function PalaceVersionDialog({
             <div className="space-y-5">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <Button variant="outline" size="sm" onClick={onBackToList}>
-                  <ArrowLeft className="mr-2 h-4 w-4" />
+                  <ArrowLeft className="mr-2 size-4" />
                   返回列表
                 </Button>
                 {previewVersionDetail ? (
@@ -146,11 +146,11 @@ export function PalaceVersionDialog({
               </div>
 
               {previewLoading ? (
-                <div className="rounded-2xl border border-dashed border-border/80 bg-background/70 px-4 py-10 text-center text-sm text-muted-foreground">
+                <div className="rounded-lg border border-dashed border-border/80 bg-background/70 px-4 py-10 text-center text-sm text-muted-foreground">
                   正在加载版本预览…
                 </div>
               ) : previewError ? (
-                <div className="rounded-2xl border border-destructive/40 bg-destructive/10 px-4 py-4 text-sm text-destructive">
+                <div className="rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-4 text-sm text-destructive">
                   {previewError}
                 </div>
               ) : previewVersionDetail ? (
@@ -196,7 +196,7 @@ export function PalaceVersionDialog({
                         }}
                         readonly
                         onEditorStateChange={() => {}}
-                        className="h-[56vh] w-full rounded-2xl border border-border/70 bg-background"
+                        className="h-[56vh] w-full rounded-lg border border-border/70 bg-background"
                       />
                     </CardContent>
                   </Card>

@@ -2,6 +2,19 @@ import type { PalaceQuizPdfSourceRole, PalaceQuizGenerationPreview } from '@/sha
 
 export type QuizGenerationSourceKind = 'subject-pdf' | 'image-single' | 'image-batch' | 'text-files'
 
+export const QUIZ_GENERATION_SOURCE_LABELS = {
+  'subject-pdf': 'PDF',
+  'image-single': '单图',
+  'image-batch': '多图',
+  'text-files': '文本',
+} satisfies Record<QuizGenerationSourceKind, string>
+
+const EMPTY_SOURCE_HISTORY_TITLES = {
+  'image-single': '单图生成配置',
+  'image-batch': '多图生成配置',
+  'text-files': '文本导入配置',
+} satisfies Record<Exclude<QuizGenerationSourceKind, 'subject-pdf'>, string>
+
 export interface QuizGenerationHistoryPdfSource {
   subject_document_id: number
   document_name: string
@@ -77,9 +90,7 @@ export function buildQuizGenerationHistoryTitle(
     return pdfSources.map((item) => item.document_name).join(' + ')
   }
   if (imageFileNames.length === 0) {
-    if (sourceKind === 'image-single') return '单图生成配置'
-    if (sourceKind === 'text-files') return '文本导入配置'
-    return '多图生成配置'
+    return EMPTY_SOURCE_HISTORY_TITLES[sourceKind]
   }
   return imageFileNames.join(' + ')
 }

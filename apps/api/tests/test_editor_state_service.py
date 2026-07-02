@@ -7,12 +7,12 @@ from sqlalchemy.pool import StaticPool
 from memory_anki.infrastructure.db.models import Base, Chapter, Palace, Subject
 from memory_anki.modules.mindmap.application.editor_state_service import (
     EditorStateConflictError,
-    _plain_text,
     get_palace_editor_state,
     normalize_editor_doc,
     save_palace_editor_state,
     save_subject_editor_state,
 )
+from memory_anki.modules.palaces.application.mindmap_ai_split.primitives import plain_text
 from memory_anki.modules.palaces.application.title_sync_service import set_palace_chapter_links
 
 
@@ -20,7 +20,7 @@ class EditorStateServiceTests(unittest.TestCase):
     def test_plain_text_preserves_block_line_breaks_without_truncation(self):
         value = "<div>第一行</div><div>第二行</div><div>第三行</div>"
 
-        result = _plain_text(value, fallback="新节点")
+        result = plain_text(value, fallback="新节点")
 
         self.assertEqual(result, "第一行\n第二行\n第三行")
         self.assertGreater(len(result), 8)

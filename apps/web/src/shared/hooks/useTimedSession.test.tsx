@@ -3,6 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useTimedSession } from '@/shared/hooks/useTimedSession'
 import { TIMER_AUTOMATION_STORAGE_KEY } from '@/shared/components/session/timer-automation-config'
 import * as sessionRecordModel from '@/entities/session/model'
+import { resetAutoSaveCoordinatorForTest } from '@/shared/persistence/autosaveCoordinator'
+import { resetClientPreferenceCacheForTest } from '@/shared/preferences/clientPreferences'
 import {
   clearPendingTimeRecordRecoveriesForTest,
   listPendingTimeRecordRecoveries,
@@ -19,8 +21,10 @@ describe('useTimedSession automation config', () => {
   beforeEach(() => {
     vi.useFakeTimers()
     window.localStorage.clear()
+    resetClientPreferenceCacheForTest()
     window.sessionStorage.clear()
     clearPendingTimeRecordRecoveriesForTest()
+    resetAutoSaveCoordinatorForTest()
     if (!('sendBeacon' in navigator)) {
       Object.defineProperty(navigator, 'sendBeacon', {
         configurable: true,
@@ -34,6 +38,8 @@ describe('useTimedSession automation config', () => {
 
   afterEach(() => {
     delete window.memoryAnkiDesktopTimer
+    resetAutoSaveCoordinatorForTest()
+    resetClientPreferenceCacheForTest()
     vi.useRealTimers()
   })
 
@@ -934,5 +940,32 @@ describe('useTimedSession automation config', () => {
       completionMethod: 'manual_complete',
     })
     expect(record?.id).toBeTruthy()
+  })
+
+  it('autosaves an in-progress session to the local database on the background schedule', async () => {
+    appendTimeRecordSpy.mockImplementation(async (record) => record)
+
+    const { result } = renderHook(() =>
+      useTimedSession({
+        kind: 'practice',
+        title: '自动保存测试',
+        palaceId: 1,
+        autoPauseMs: 60_000,
+      }),
+    )
+
+    act(() => {
+      result.current.start({ source: 'test' })
+      vi.advanceTimersByTime(31_000)
+    })
+
+    await flushMicrotasks()
+
+    expect(appendTimeRecordSpy).toHaveBeenCalled()
+    expect(appendTimeRecordSpy.mock.calls[0]?.[0]).toMatchObject({
+      title: '自动保存测试',
+      completionMethod: 'saved',
+      effectiveSeconds: 30,
+    })
   })
 })

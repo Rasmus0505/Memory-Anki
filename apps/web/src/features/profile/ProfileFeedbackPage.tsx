@@ -241,11 +241,11 @@ export default function ProfileFeedbackPage() {
             </CardHeader>
             <CardContent className="flex flex-wrap gap-2">
               <Button type="button" onClick={saveAll} disabled={!isDirty}>
-                <Save className="mr-2 h-4 w-4" />
+                <Save className="mr-2 size-4" />
                 保存
               </Button>
               <Button type="button" variant="outline" onClick={resetToSaved} disabled={!isDirty}>
-                <RotateCcw className="mr-2 h-4 w-4" />
+                <RotateCcw className="mr-2 size-4" />
                 撤销
               </Button>
               <Button type="button" variant="ghost" onClick={restoreDefaults}>
@@ -330,11 +330,11 @@ export default function ProfileFeedbackPage() {
                         setPreviewSummary('已重置脑图，所有节点回到初始状态。')
                       }
                     }}>
-                      <WandSparkles className="mr-2 h-4 w-4" />
+                      <WandSparkles className="mr-2 size-4" />
                       翻一张卡
                     </Button>
                     <Button type="button" variant="outline" onClick={() => audio.playEvent('card_reveal', { audioScope: 'global' })}>
-                      <Volume2 className="mr-2 h-4 w-4" />
+                      <Volume2 className="mr-2 size-4" />
                       试听音效
                     </Button>
                   </div>
@@ -352,7 +352,7 @@ export default function ProfileFeedbackPage() {
                       触发完成
                     </Button>
                     <Button type="button" variant="outline" onClick={() => reveal.reset()}>
-                      <RotateCcw className="mr-2 h-4 w-4" />
+                      <RotateCcw className="mr-2 size-4" />
                       重置脑图
                     </Button>
                   </div>
@@ -408,7 +408,7 @@ export default function ProfileFeedbackPage() {
                 onNodeClick={reveal.handleNodeClick}
                 onNodeContextMenu={reveal.handleNodeContextMenu}
                 onEditorStateChange={() => {}}
-                className="h-[68vh] w-full rounded-2xl border border-border/70 bg-background"
+                className="h-[68vh] w-full rounded-lg border border-border/70 bg-background"
               />
               {feedback.milestoneCelebration ? (
                 <ComboMilestoneBurst
