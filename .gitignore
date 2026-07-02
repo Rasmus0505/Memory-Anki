@@ -43,6 +43,7 @@ __pycache__/
 *.db
 
 # ===== Logs & temp scratch files =====
+/logs/
 *.log
 *.out.log
 *.err.log
@@ -65,6 +66,7 @@ _DEBUG_FALLBACK.json
 /local-config/memory-anki.local.json
 
 # ===== AI / agent tooling artifacts (never commit) =====
+/.audit/
 /.specstory/
 /.claude/
 /.reasonix/
@@ -72,5 +74,5 @@ _DEBUG_FALLBACK.json
 /.playwright-mcp/
 
 # ===== Misc =====
-# NOTE: do not blanket-ignore *.png — it would swallow docs/assets; ignore by path instead.
+# NOTE: do not blanket-ignore *.png 鈥?it would swallow docs/assets; ignore by path instead.
 **/nul
