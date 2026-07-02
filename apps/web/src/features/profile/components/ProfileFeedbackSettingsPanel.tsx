@@ -318,6 +318,27 @@ export function ProfileFeedbackSettingsPanel({
           onVolumePreview={onVolumePreview}
         />
         <SceneCard
+          title="答题结果"
+          sceneKey="quiz"
+          enabled={settings.scenes.quiz.enabled}
+          confettiPreset={settings.scenes.quiz.confettiPreset}
+          volumeBoost={settings.scenes.quiz.volumeBoost ?? 1.05}
+          reducedMotion={settings.reducedCelebrationMotion}
+          onEnabledChange={(enabled) => updateSettings((current) => ({
+            ...current,
+            scenes: { ...current.scenes, quiz: { ...current.scenes.quiz, enabled } },
+          }))}
+          onConfettiPresetChange={(confettiPreset) => updateSettings((current) => ({
+            ...current,
+            scenes: { ...current.scenes, quiz: { ...current.scenes.quiz, confettiPreset } },
+          }))}
+          onVolumeBoostChange={(volumeBoost) => updateSettings((current) => ({
+            ...current,
+            scenes: { ...current.scenes, quiz: { ...current.scenes.quiz, volumeBoost } },
+          }))}
+          onVolumePreview={onVolumePreview}
+        />
+        <SceneCard
           title="计时器达标"
           sceneKey="timer"
           enabled={settings.scenes.timer.enabled}

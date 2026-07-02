@@ -9,6 +9,8 @@
 /apps/web/.parcel-cache/
 /apps/web/.eslintcache
 /apps/web/pnpm-lock.yaml
+/apps/web/test-results/
+/apps/web/playwright-report/
 
 # ===== Python =====
 *.pyc
@@ -24,6 +26,7 @@ __pycache__/
 /.mypy_cache/
 /.pytest_cache/
 /.ruff_cache/
+/.cache/
 /apps/api/.mypy_cache/
 /apps/api/.ruff_cache/
 /apps/api/.pytest_cache/
@@ -40,6 +43,7 @@ __pycache__/
 *.db
 
 # ===== Logs & temp scratch files =====
+/logs/
 *.log
 *.out.log
 *.err.log
@@ -59,8 +63,10 @@ _DEBUG_FALLBACK.json
 /.vscode/
 /.tmp/
 /.tmp_video_frames/
+/local-config/memory-anki.local.json
 
 # ===== AI / agent tooling artifacts (never commit) =====
+/.audit/
 /.specstory/
 /.claude/
 /.reasonix/
@@ -69,3 +75,4 @@ _DEBUG_FALLBACK.json
 
 # ===== Misc =====
 # NOTE: do not blanket-ignore *.png — it would swallow docs/assets; ignore by path instead.
+**/nul

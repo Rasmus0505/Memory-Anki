@@ -1,5 +1,5 @@
 ﻿import * as React from 'react'
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   GlobalTimerProvider,
@@ -19,6 +19,9 @@ import {
   TIMER_OVERLAY_MIN_WIDTH,
 } from '@/shared/components/session/timer-overlay-layout'
 import type { TimedSessionController } from '@/shared/hooks/useTimedSession'
+import type { DesktopTimerBridge, UnifiedTimerSnapshot } from '@/shared/components/session/desktopTimerBridge'
+import type { UnifiedTimerCommand } from '@/shared/components/session/desktopTimerBridge'
+import { resetClientPreferenceCacheForTest } from '@/shared/preferences/clientPreferences'
 
 const emitTimerCelebration = vi.fn()
 
@@ -65,20 +68,26 @@ function RegistrationProbe({
   title,
   isRouteActive,
   becameActiveAt,
+  onRegistered,
 }: {
   timer: TimedSessionController
   scene: TimerFocusScene
   title: string
   isRouteActive: boolean
   becameActiveAt: number
+  onRegistered?: (timer: TimedSessionController) => void
 }) {
-  useGlobalTimerRegistration({
+  const registeredTimer = useGlobalTimerRegistration({
     scene,
     title,
     timer,
     isRouteActive,
     becameActiveAt,
   })
+
+  React.useEffect(() => {
+    onRegistered?.(registeredTimer)
+  }, [onRegistered, registeredTimer])
 
   return null
 }
@@ -90,6 +99,8 @@ function renderOverlay(probes: React.ReactNode) {
 describe('GlobalTimerProvider', () => {
   beforeEach(() => {
     window.localStorage.clear()
+    resetClientPreferenceCacheForTest()
+    delete window.memoryAnkiDesktopTimer
     emitTimerCelebration.mockReset()
     Object.defineProperty(window, 'innerWidth', {
       configurable: true,
@@ -105,6 +116,7 @@ describe('GlobalTimerProvider', () => {
 
   afterEach(() => {
     cleanup()
+    resetClientPreferenceCacheForTest()
   })
 
   it('prefers the active route running session over background sessions', () => {
@@ -184,6 +196,996 @@ describe('GlobalTimerProvider', () => {
     expect(screen.getByText('当前无学习会话')).toBeTruthy()
     expect(screen.getByText('25:00/25:00 1.00')).toBeTruthy()
     expect(screen.getByRole('button', { name: '进入学习页后开始' }).hasAttribute('disabled')).toBe(true)
+  })
+
+  it('does not render the in-page timer overlay in the desktop main window but still publishes snapshots', () => {
+    const publishTimerSnapshot = vi.fn()
+    window.memoryAnkiDesktopTimer = {
+      publishTimerSnapshot: (snapshot: UnifiedTimerSnapshot) => publishTimerSnapshot(snapshot),
+    } satisfies DesktopTimerBridge
+
+    renderOverlay(
+      <RegistrationProbe
+        timer={createTimer({
+          sessionId: 'review-running',
+          effectiveSeconds: 10,
+          status: 'running',
+          startedAt: '2026-06-17T10:00:00',
+        })}
+        scene="review"
+        title="当前复习"
+        isRouteActive
+        becameActiveAt={100}
+      />,
+    )
+
+    expect(document.querySelector('.memory-anki-global-timer-panel')).toBeNull()
+    expect(document.querySelector('.memory-anki-global-timer-capsule')).toBeNull()
+    expect(screen.queryByText('当前复习')).toBeNull()
+    expect(publishTimerSnapshot).toHaveBeenCalledWith(
+      expect.objectContaining({
+        mode: 'study',
+        title: '当前复习',
+      }),
+    )
+  })
+
+  it('cancels a pending break prompt when the desktop main window returns to an active study route', () => {
+    vi.useFakeTimers()
+    const publishTimerSnapshot = vi.fn()
+    let commandHandler: ((command: UnifiedTimerCommand) => void) | null = null
+    window.memoryAnkiDesktopTimer = {
+      publishTimerSnapshot: (snapshot: UnifiedTimerSnapshot) => publishTimerSnapshot(snapshot),
+      onTimerCommand: (handler) => {
+        commandHandler = handler
+        return () => {
+          commandHandler = null
+        }
+      },
+    } satisfies DesktopTimerBridge
+
+    renderOverlay(
+      <RegistrationProbe
+        timer={createTimer({
+          sessionId: 'review-running',
+          effectiveSeconds: 10,
+          status: 'running',
+          startedAt: '2026-06-17T10:00:00',
+        })}
+        scene="review"
+        title="当前复习"
+        isRouteActive
+        becameActiveAt={100}
+      />,
+    )
+
+    act(() => {
+      commandHandler?.({ type: 'promptBreak' })
+      commandHandler?.({ type: 'returnToStudy' })
+      vi.advanceTimersByTime(5_000)
+    })
+
+    expect(publishTimerSnapshot).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        mode: 'break',
+        status: 'prompting',
+      }),
+    )
+    expect(publishTimerSnapshot).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        mode: 'study',
+        title: '当前复习',
+      }),
+    )
+    vi.useRealTimers()
+  })
+
+  it('switches a visible break prompt back to study when returning to an active study route', () => {
+    vi.useFakeTimers()
+    const publishTimerSnapshot = vi.fn()
+    let commandHandler: ((command: UnifiedTimerCommand) => void) | null = null
+    window.memoryAnkiDesktopTimer = {
+      publishTimerSnapshot: (snapshot: UnifiedTimerSnapshot) => publishTimerSnapshot(snapshot),
+      onTimerCommand: (handler) => {
+        commandHandler = handler
+        return () => {
+          commandHandler = null
+        }
+      },
+    } satisfies DesktopTimerBridge
+
+    renderOverlay(
+      <RegistrationProbe
+        timer={createTimer({
+          sessionId: 'review-running',
+          effectiveSeconds: 10,
+          status: 'running',
+          startedAt: '2026-06-17T10:00:00',
+        })}
+        scene="review"
+        title="当前复习"
+        isRouteActive
+        becameActiveAt={100}
+      />,
+    )
+
+    act(() => {
+      commandHandler?.({ type: 'promptBreak' })
+      vi.advanceTimersByTime(5_000)
+    })
+    expect(publishTimerSnapshot).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        mode: 'break',
+        status: 'prompting',
+      }),
+    )
+
+    act(() => {
+      commandHandler?.({ type: 'returnToStudy' })
+    })
+
+    expect(publishTimerSnapshot).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        mode: 'study',
+        title: '当前复习',
+      }),
+    )
+    vi.useRealTimers()
+  })
+
+  it('switches a visible break prompt back to study after the route becomes active', () => {
+    vi.useFakeTimers()
+    const publishTimerSnapshot = vi.fn()
+    let commandHandler: ((command: UnifiedTimerCommand) => void) | null = null
+    window.memoryAnkiDesktopTimer = {
+      publishTimerSnapshot: (snapshot: UnifiedTimerSnapshot) => publishTimerSnapshot(snapshot),
+      onTimerCommand: (handler) => {
+        commandHandler = handler
+        return () => {
+          commandHandler = null
+        }
+      },
+    } satisfies DesktopTimerBridge
+
+    const timer = createTimer({
+      sessionId: 'review-running',
+      effectiveSeconds: 10,
+      status: 'running',
+      startedAt: '2026-06-17T10:00:00',
+    })
+    const { rerender } = render(
+      <GlobalTimerProvider>
+        <RegistrationProbe
+          timer={timer}
+          scene="review"
+          title="当前复习"
+          isRouteActive={false}
+          becameActiveAt={100}
+        />
+      </GlobalTimerProvider>,
+    )
+
+    act(() => {
+      commandHandler?.({ type: 'promptBreak' })
+      vi.advanceTimersByTime(5_000)
+      commandHandler?.({ type: 'returnToStudy' })
+    })
+    expect(publishTimerSnapshot).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        mode: 'break',
+        status: 'prompting',
+      }),
+    )
+
+    rerender(
+      <GlobalTimerProvider>
+        <RegistrationProbe
+          timer={timer}
+          scene="review"
+          title="当前复习"
+          isRouteActive
+          becameActiveAt={200}
+        />
+      </GlobalTimerProvider>,
+    )
+
+    expect(publishTimerSnapshot).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        mode: 'study',
+        title: '当前复习',
+      }),
+    )
+    vi.useRealTimers()
+  })
+
+  it('does not prompt for a break after switching away inside the app', () => {
+    vi.useFakeTimers()
+    const publishTimerSnapshot = vi.fn()
+    const timer = createTimer({
+      sessionId: 'review-running',
+      effectiveSeconds: 10,
+      status: 'running',
+      startedAt: '2026-06-17T10:00:00',
+    })
+    window.memoryAnkiDesktopTimer = {
+      publishTimerSnapshot: (snapshot: UnifiedTimerSnapshot) => publishTimerSnapshot(snapshot),
+    } satisfies DesktopTimerBridge
+
+    const { rerender } = render(
+      <GlobalTimerProvider>
+        <RegistrationProbe
+          timer={timer}
+          scene="review"
+          title="当前复习"
+          isRouteActive
+          becameActiveAt={100}
+        />
+      </GlobalTimerProvider>,
+    )
+
+    rerender(
+      <GlobalTimerProvider>
+        <RegistrationProbe
+          timer={timer}
+          scene="review"
+          title="当前复习"
+          isRouteActive={false}
+          becameActiveAt={100}
+        />
+      </GlobalTimerProvider>,
+    )
+
+    act(() => {
+      vi.advanceTimersByTime(5_000)
+    })
+
+    expect(publishTimerSnapshot).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        mode: 'break',
+        status: 'prompting',
+      }),
+    )
+    expect(publishTimerSnapshot).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        mode: 'study',
+      }),
+    )
+    vi.useRealTimers()
+  })
+
+  it('prompts for a break after the desktop blur bridge delay', () => {
+    vi.useFakeTimers()
+    const publishTimerSnapshot = vi.fn()
+    const pause = vi.fn()
+    let blurHandler: (() => void) | null = null
+    window.memoryAnkiDesktopTimer = {
+      publishTimerSnapshot: (snapshot: UnifiedTimerSnapshot) => publishTimerSnapshot(snapshot),
+      onMainWindowBlur: (handler) => {
+        blurHandler = handler
+        return () => {
+          blurHandler = null
+        }
+      },
+    } satisfies DesktopTimerBridge
+
+    renderOverlay(
+      <RegistrationProbe
+        timer={createTimer({
+          sessionId: 'review-running',
+          effectiveSeconds: 10,
+          status: 'running',
+          startedAt: '2026-06-17T10:00:00',
+          pause,
+        })}
+        scene="review"
+        title="当前复习"
+        isRouteActive
+        becameActiveAt={100}
+      />,
+    )
+
+    act(() => {
+      blurHandler?.()
+    })
+
+    expect(pause).toHaveBeenCalledWith({ source: 'break_guard_prompt' })
+    expect(publishTimerSnapshot).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        mode: 'break',
+        status: 'prompting',
+      }),
+    )
+
+    act(() => {
+      vi.advanceTimersByTime(5_000)
+    })
+
+    expect(publishTimerSnapshot).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        mode: 'break',
+        status: 'prompting',
+      }),
+    )
+    vi.useRealTimers()
+  })
+
+  it('resumes the interrupted study timer when returning before the blur prompt opens', () => {
+    vi.useFakeTimers()
+    const publishTimerSnapshot = vi.fn()
+    const pause = vi.fn()
+    const resume = vi.fn()
+    let commandHandler: ((command: UnifiedTimerCommand) => void) | null = null
+    window.memoryAnkiDesktopTimer = {
+      publishTimerSnapshot: (snapshot: UnifiedTimerSnapshot) => publishTimerSnapshot(snapshot),
+      onTimerCommand: (handler) => {
+        commandHandler = handler
+        return () => {
+          commandHandler = null
+        }
+      },
+    } satisfies DesktopTimerBridge
+
+    const timer = createTimer({
+      sessionId: 'review-running',
+      effectiveSeconds: 10,
+      status: 'running',
+      startedAt: '2026-06-17T10:00:00',
+      pause,
+      resume,
+    })
+
+    const { rerender } = render(
+      <GlobalTimerProvider>
+        <RegistrationProbe
+          timer={timer}
+          scene="review"
+          title="当前复习"
+          isRouteActive
+          becameActiveAt={100}
+        />
+      </GlobalTimerProvider>,
+    )
+
+    act(() => {
+      commandHandler?.({ type: 'promptBreak' })
+    })
+    expect(pause).toHaveBeenCalledWith({ source: 'break_guard_prompt' })
+
+    timer.status = 'paused'
+    rerender(
+      <GlobalTimerProvider>
+        <RegistrationProbe
+          timer={timer}
+          scene="review"
+          title="当前复习"
+          isRouteActive
+          becameActiveAt={100}
+        />
+      </GlobalTimerProvider>,
+    )
+
+    act(() => {
+      commandHandler?.({ type: 'returnToStudy' })
+      vi.advanceTimersByTime(5_000)
+    })
+
+    expect(resume).toHaveBeenCalledWith({ source: 'break_guard_prompt_cancel' })
+    expect(publishTimerSnapshot).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        mode: 'break',
+        status: 'prompting',
+      }),
+    )
+    vi.useRealTimers()
+  })
+
+  it('auto starts a 1 minute break when the visible break prompt is ignored for 5 seconds', () => {
+    vi.useFakeTimers()
+    const publishTimerSnapshot = vi.fn()
+    const pause = vi.fn()
+    let commandHandler: ((command: UnifiedTimerCommand) => void) | null = null
+    window.memoryAnkiDesktopTimer = {
+      publishTimerSnapshot: (snapshot: UnifiedTimerSnapshot) => publishTimerSnapshot(snapshot),
+      onTimerCommand: (handler) => {
+        commandHandler = handler
+        return () => {
+          commandHandler = null
+        }
+      },
+    } satisfies DesktopTimerBridge
+
+    renderOverlay(
+      <RegistrationProbe
+        timer={createTimer({
+          sessionId: 'review-running',
+          effectiveSeconds: 10,
+          status: 'running',
+          startedAt: '2026-06-17T10:00:00',
+          pause,
+        })}
+        scene="review"
+        title="当前复习"
+        isRouteActive
+        becameActiveAt={100}
+      />,
+    )
+
+    act(() => {
+      commandHandler?.({ type: 'promptBreak' })
+      vi.advanceTimersByTime(5_000)
+    })
+
+    expect(publishTimerSnapshot).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        mode: 'break',
+        status: 'prompting',
+      }),
+    )
+
+    act(() => {
+      vi.advanceTimersByTime(5_000)
+    })
+
+    expect(pause).toHaveBeenCalledWith({ source: 'break_guard' })
+    expect(publishTimerSnapshot).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        mode: 'break',
+        status: 'running',
+        primaryText: '计划 1 分钟',
+      }),
+    )
+    vi.useRealTimers()
+  })
+
+  it('pauses the latest active timer when the desktop overlay sends pause', () => {
+    const firstPause = vi.fn()
+    const latestPause = vi.fn()
+    let commandHandler: ((command: UnifiedTimerCommand) => void) | null = null
+    const firstTimer = createTimer({
+      sessionId: 'first-running',
+      effectiveSeconds: 10,
+      status: 'running',
+      startedAt: '2026-06-17T10:00:00',
+      pause: firstPause,
+    })
+    const latestTimer = createTimer({
+      sessionId: 'latest-running',
+      effectiveSeconds: 20,
+      status: 'running',
+      startedAt: '2026-06-17T10:01:00',
+      pause: latestPause,
+    })
+    window.memoryAnkiDesktopTimer = {
+      publishTimerSnapshot: vi.fn(),
+      onTimerCommand: (handler) => {
+        commandHandler = handler
+        return () => {
+          commandHandler = null
+        }
+      },
+    } satisfies DesktopTimerBridge
+
+    const { rerender } = render(
+      <GlobalTimerProvider>
+        <RegistrationProbe
+          timer={firstTimer}
+          scene="review"
+          title="第一次复习"
+          isRouteActive
+          becameActiveAt={100}
+        />
+      </GlobalTimerProvider>,
+    )
+
+    rerender(
+      <GlobalTimerProvider>
+        <RegistrationProbe
+          timer={firstTimer}
+          scene="review"
+          title="第一次复习"
+          isRouteActive={false}
+          becameActiveAt={100}
+        />
+        <RegistrationProbe
+          timer={latestTimer}
+          scene="freestyle"
+          title="随心模式"
+          isRouteActive
+          becameActiveAt={200}
+        />
+      </GlobalTimerProvider>,
+    )
+
+    act(() => {
+      commandHandler?.({ type: 'pause' })
+    })
+
+    expect(firstPause).not.toHaveBeenCalled()
+    expect(latestPause).toHaveBeenCalledWith({ source: 'global_floating_timer' })
+  })
+
+  it('auto opens /freestyle once when a desktop break first reaches expired', () => {
+    vi.useFakeTimers()
+    const publishTimerSnapshot = vi.fn()
+    const openMainTarget = vi.fn()
+    let commandHandler: ((command: UnifiedTimerCommand) => void) | null = null
+    window.memoryAnkiDesktopTimer = {
+      publishTimerSnapshot: (snapshot: UnifiedTimerSnapshot) => publishTimerSnapshot(snapshot),
+      openMainTarget,
+      onTimerCommand: (handler) => {
+        commandHandler = handler
+        return () => {
+          commandHandler = null
+        }
+      },
+    } satisfies DesktopTimerBridge
+
+    renderOverlay(
+      <RegistrationProbe
+        timer={createTimer({
+          sessionId: 'review-running',
+          effectiveSeconds: 10,
+          status: 'running',
+          startedAt: '2026-06-17T10:00:00',
+        })}
+        scene="review"
+        title="当前复习"
+        isRouteActive
+        becameActiveAt={100}
+      />,
+    )
+
+    act(() => {
+      commandHandler?.({ type: 'startBreak', minutes: 1 })
+    })
+
+    act(() => {
+      vi.advanceTimersByTime(60_000)
+    })
+
+    expect(openMainTarget).toHaveBeenCalledTimes(1)
+    expect(openMainTarget).toHaveBeenCalledWith('/freestyle')
+    expect(publishTimerSnapshot).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        mode: 'break',
+        status: 'expired',
+      }),
+    )
+    vi.useRealTimers()
+  })
+
+  it('does not repeatedly auto open /freestyle while the same expired break keeps ticking', () => {
+    vi.useFakeTimers()
+    const openMainTarget = vi.fn()
+    let commandHandler: ((command: UnifiedTimerCommand) => void) | null = null
+    window.memoryAnkiDesktopTimer = {
+      publishTimerSnapshot: vi.fn(),
+      openMainTarget,
+      onTimerCommand: (handler) => {
+        commandHandler = handler
+        return () => {
+          commandHandler = null
+        }
+      },
+    } satisfies DesktopTimerBridge
+
+    renderOverlay(
+      <RegistrationProbe
+        timer={createTimer({
+          sessionId: 'review-running',
+          effectiveSeconds: 10,
+          status: 'running',
+          startedAt: '2026-06-17T10:00:00',
+        })}
+        scene="review"
+        title="当前复习"
+        isRouteActive
+        becameActiveAt={100}
+      />,
+    )
+
+    act(() => {
+      commandHandler?.({ type: 'startBreak', minutes: 1 })
+    })
+
+    act(() => {
+      vi.advanceTimersByTime(60_000)
+    })
+
+    act(() => {
+      vi.advanceTimersByTime(5_000)
+    })
+
+    expect(openMainTarget).toHaveBeenCalledTimes(1)
+    vi.useRealTimers()
+  })
+
+  it('auto opens /freestyle again after snoozing and reaching expired a second time', () => {
+    vi.useFakeTimers()
+    const openMainTarget = vi.fn()
+    let commandHandler: ((command: UnifiedTimerCommand) => void) | null = null
+    window.memoryAnkiDesktopTimer = {
+      publishTimerSnapshot: vi.fn(),
+      openMainTarget,
+      onTimerCommand: (handler) => {
+        commandHandler = handler
+        return () => {
+          commandHandler = null
+        }
+      },
+    } satisfies DesktopTimerBridge
+
+    renderOverlay(
+      <RegistrationProbe
+        timer={createTimer({
+          sessionId: 'review-running',
+          effectiveSeconds: 10,
+          status: 'running',
+          startedAt: '2026-06-17T10:00:00',
+        })}
+        scene="review"
+        title="当前复习"
+        isRouteActive
+        becameActiveAt={100}
+      />,
+    )
+
+    act(() => {
+      commandHandler?.({ type: 'startBreak', minutes: 1 })
+    })
+
+    act(() => {
+      vi.advanceTimersByTime(60_000)
+    })
+
+    act(() => {
+      commandHandler?.({ type: 'snooze', minutes: 1 })
+    })
+
+    act(() => {
+      vi.advanceTimersByTime(60_000)
+    })
+
+    expect(openMainTarget).toHaveBeenCalledTimes(2)
+    expect(openMainTarget).toHaveBeenNthCalledWith(1, '/freestyle')
+    expect(openMainTarget).toHaveBeenNthCalledWith(2, '/freestyle')
+    vi.useRealTimers()
+  })
+
+  it('does not auto open a page when the bridge has no openMainTarget support', () => {
+    vi.useFakeTimers()
+    const originalPathname = window.location.pathname
+    let commandHandler: ((command: UnifiedTimerCommand) => void) | null = null
+    window.memoryAnkiDesktopTimer = {
+      publishTimerSnapshot: vi.fn(),
+      onTimerCommand: (handler) => {
+        commandHandler = handler
+        return () => {
+          commandHandler = null
+        }
+      },
+    } satisfies DesktopTimerBridge
+
+    renderOverlay(
+      <RegistrationProbe
+        timer={createTimer({
+          sessionId: 'review-running',
+          effectiveSeconds: 10,
+          status: 'running',
+          startedAt: '2026-06-17T10:00:00',
+        })}
+        scene="review"
+        title="当前复习"
+        isRouteActive
+        becameActiveAt={100}
+      />,
+    )
+
+    act(() => {
+      commandHandler?.({ type: 'startBreak', minutes: 1 })
+    })
+
+    act(() => {
+      vi.advanceTimersByTime(60_000)
+    })
+
+    expect(window.location.pathname).toBe(originalPathname)
+    vi.useRealTimers()
+  })
+
+  it('switches a break prompt back to study when active study activity is registered', () => {
+    vi.useFakeTimers()
+    const publishTimerSnapshot = vi.fn()
+    const registerActivity = vi.fn()
+    let registeredTimer: TimedSessionController | null = null
+    let commandHandler: ((command: UnifiedTimerCommand) => void) | null = null
+    window.memoryAnkiDesktopTimer = {
+      publishTimerSnapshot: (snapshot: UnifiedTimerSnapshot) => publishTimerSnapshot(snapshot),
+      onTimerCommand: (handler) => {
+        commandHandler = handler
+        return () => {
+          commandHandler = null
+        }
+      },
+    } satisfies DesktopTimerBridge
+
+    renderOverlay(
+      <RegistrationProbe
+        timer={createTimer({
+          sessionId: 'review-running',
+          effectiveSeconds: 10,
+          status: 'running',
+          startedAt: '2026-06-17T10:00:00',
+          registerActivity,
+        })}
+        scene="review"
+        title="当前复习"
+        isRouteActive
+        becameActiveAt={100}
+        onRegistered={(timer) => {
+          registeredTimer = timer
+        }}
+      />,
+    )
+
+    act(() => {
+      commandHandler?.({ type: 'promptBreak' })
+      vi.advanceTimersByTime(5_000)
+    })
+    expect(publishTimerSnapshot).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        mode: 'break',
+        status: 'prompting',
+      }),
+    )
+
+    act(() => {
+      registeredTimer?.registerActivity('practice_interaction', { source: 'test_answer' })
+    })
+
+    expect(registerActivity).toHaveBeenCalledWith('practice_interaction', { source: 'test_answer' })
+    expect(publishTimerSnapshot).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        mode: 'study',
+        title: '当前复习',
+      }),
+    )
+    vi.useRealTimers()
+  })
+
+  it('auto ends an active break when returning to study', () => {
+    const publishTimerSnapshot = vi.fn()
+    const pause = vi.fn()
+    const resume = vi.fn()
+    let commandHandler: ((command: UnifiedTimerCommand) => void) | null = null
+    window.memoryAnkiDesktopTimer = {
+      publishTimerSnapshot: (snapshot: UnifiedTimerSnapshot) => publishTimerSnapshot(snapshot),
+      onTimerCommand: (handler) => {
+        commandHandler = handler
+        return () => {
+          commandHandler = null
+        }
+      },
+    } satisfies DesktopTimerBridge
+
+    renderOverlay(
+      <RegistrationProbe
+        timer={createTimer({
+          sessionId: 'review-running',
+          effectiveSeconds: 10,
+          status: 'running',
+          startedAt: '2026-06-17T10:00:00',
+          pause,
+          resume,
+        })}
+        scene="review"
+        title="当前复习"
+        isRouteActive
+        becameActiveAt={100}
+      />,
+    )
+
+    act(() => {
+      commandHandler?.({ type: 'startBreak', minutes: 5 })
+    })
+    expect(pause).toHaveBeenCalledWith({ source: 'break_guard' })
+    expect(publishTimerSnapshot).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        mode: 'break',
+        status: 'running',
+      }),
+    )
+
+    act(() => {
+      commandHandler?.({ type: 'returnToStudy' })
+    })
+
+    expect(resume).toHaveBeenCalledWith({ source: 'break_guard_return_to_study' })
+    expect(publishTimerSnapshot).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        mode: 'study',
+        status: 'running',
+        title: '当前复习',
+      }),
+    )
+    const logs = JSON.parse(window.localStorage.getItem('memory-anki-break-guard-logs') ?? '[]')
+    expect(logs[0]).toEqual(expect.objectContaining({
+      endedAt: expect.any(String),
+      overtime: false,
+      snoozeCount: 0,
+    }))
+  })
+
+  it('auto ends an active break when study activity resumes', () => {
+    const publishTimerSnapshot = vi.fn()
+    const pause = vi.fn()
+    const resume = vi.fn()
+    let registeredTimer: TimedSessionController | null = null
+    let commandHandler: ((command: UnifiedTimerCommand) => void) | null = null
+    const timer = createTimer({
+      sessionId: 'review-running',
+      effectiveSeconds: 10,
+      status: 'running',
+      startedAt: '2026-06-17T10:00:00',
+      pause,
+      resume,
+    })
+    window.memoryAnkiDesktopTimer = {
+      publishTimerSnapshot: (snapshot: UnifiedTimerSnapshot) => publishTimerSnapshot(snapshot),
+      onTimerCommand: (handler) => {
+        commandHandler = handler
+        return () => {
+          commandHandler = null
+        }
+      },
+    } satisfies DesktopTimerBridge
+
+    const { rerender } = render(
+      <GlobalTimerProvider>
+        <RegistrationProbe
+          timer={timer}
+          scene="review"
+          title="当前复习"
+          isRouteActive
+          becameActiveAt={100}
+          onRegistered={(registered) => {
+            registeredTimer = registered
+          }}
+        />
+      </GlobalTimerProvider>,
+    )
+
+    act(() => {
+      commandHandler?.({ type: 'startBreak', minutes: 5 })
+    })
+    expect(pause).toHaveBeenCalledWith({ source: 'break_guard' })
+
+    timer.status = 'paused'
+    rerender(
+      <GlobalTimerProvider>
+        <RegistrationProbe
+          timer={timer}
+          scene="review"
+          title="当前复习"
+          isRouteActive
+          becameActiveAt={100}
+          onRegistered={(registered) => {
+            registeredTimer = registered
+          }}
+        />
+      </GlobalTimerProvider>,
+    )
+
+    act(() => {
+      registeredTimer?.registerActivity('practice_interaction', { source: 'test_answer' })
+    })
+
+    expect(resume).toHaveBeenCalledWith({ source: 'break_guard_return_to_study' })
+    expect(publishTimerSnapshot).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        mode: 'study',
+        status: 'running',
+        title: '当前复习',
+      }),
+    )
+    const logs = JSON.parse(window.localStorage.getItem('memory-anki-break-guard-logs') ?? '[]')
+    expect(logs[0]).toEqual(expect.objectContaining({
+      endedAt: expect.any(String),
+      overtime: false,
+      snoozeCount: 0,
+    }))
+  })
+
+  it('treats active freestyle activity as study and leaves the break prompt', () => {
+    vi.useFakeTimers()
+    const publishTimerSnapshot = vi.fn()
+    let registeredTimer: TimedSessionController | null = null
+    let commandHandler: ((command: UnifiedTimerCommand) => void) | null = null
+    window.memoryAnkiDesktopTimer = {
+      publishTimerSnapshot: (snapshot: UnifiedTimerSnapshot) => publishTimerSnapshot(snapshot),
+      onTimerCommand: (handler) => {
+        commandHandler = handler
+        return () => {
+          commandHandler = null
+        }
+      },
+    } satisfies DesktopTimerBridge
+
+    renderOverlay(
+      <RegistrationProbe
+        timer={createTimer({
+          sessionId: 'freestyle-running',
+          effectiveSeconds: 10,
+          status: 'running',
+          startedAt: '2026-06-17T10:00:00',
+        })}
+        scene="freestyle"
+        title="随心模式"
+        isRouteActive
+        becameActiveAt={100}
+        onRegistered={(timer) => {
+          registeredTimer = timer
+        }}
+      />,
+    )
+
+    act(() => {
+      commandHandler?.({ type: 'promptBreak' })
+      vi.advanceTimersByTime(5_000)
+    })
+
+    act(() => {
+      registeredTimer?.registerActivity('practice_interaction', { source: 'freestyle_choice' })
+    })
+
+    expect(publishTimerSnapshot).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        mode: 'study',
+        title: '随心模式',
+      }),
+    )
+    vi.useRealTimers()
+  })
+
+  it('does not auto end a break when returning to a non-active study route', () => {
+    const publishTimerSnapshot = vi.fn()
+    let commandHandler: ((command: UnifiedTimerCommand) => void) | null = null
+    window.memoryAnkiDesktopTimer = {
+      publishTimerSnapshot: (snapshot: UnifiedTimerSnapshot) => publishTimerSnapshot(snapshot),
+      onTimerCommand: (handler) => {
+        commandHandler = handler
+        return () => {
+          commandHandler = null
+        }
+      },
+    } satisfies DesktopTimerBridge
+
+    renderOverlay(
+      <RegistrationProbe
+        timer={createTimer({
+          sessionId: 'review-running',
+          effectiveSeconds: 10,
+          status: 'running',
+          startedAt: '2026-06-17T10:00:00',
+        })}
+        scene="review"
+        title="后台复习"
+        isRouteActive={false}
+        becameActiveAt={100}
+      />,
+    )
+
+    act(() => {
+      commandHandler?.({ type: 'startBreak', minutes: 5 })
+      commandHandler?.({ type: 'returnToStudy' })
+    })
+
+    expect(publishTimerSnapshot).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        mode: 'break',
+        status: 'running',
+      }),
+    )
   })
 
   it('shows a capsule only after manual collapse and keeps it after remount', () => {

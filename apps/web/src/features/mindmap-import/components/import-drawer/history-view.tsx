@@ -18,7 +18,7 @@ export function MindMapImportHistoryView({
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
       <div className="border-b px-6 py-4">
         <div className="flex items-center gap-2 text-sm font-medium">
-          <Clock className="h-4 w-4" />
+          <Clock className="size-4" />
           导入历史记录
         </div>
         <div className="mt-2 text-xs text-muted-foreground">
@@ -29,7 +29,7 @@ export function MindMapImportHistoryView({
         {history.length > 0 ? (
           <div className="space-y-2">
             {history.map((item) => (
-              <div key={item.id} className="rounded-2xl border border-border/70 bg-background/70 px-4 py-3">
+              <div key={item.id} className="rounded-lg border border-border/70 bg-background/70 px-4 py-3">
                 <div className="flex items-start justify-between gap-3">
                   <button
                     type="button"
@@ -58,14 +58,14 @@ export function MindMapImportHistoryView({
                     onClick={() => onDeleteHistory(item.id)}
                     title="删除此记录"
                   >
-                    <Trash2 className="h-4 w-4" />
+                    <Trash2 className="size-4" />
                   </Button>
                 </div>
               </div>
             ))}
           </div>
         ) : (
-          <div className="flex h-full min-h-[260px] items-center justify-center rounded-2xl border border-dashed border-border/80 bg-background/60 text-sm text-muted-foreground">
+          <div className="flex h-full min-h-[260px] items-center justify-center rounded-lg border border-dashed border-border/80 bg-background/60 text-sm text-muted-foreground">
             还没有历史记录。先完成一次识别，历史会自动保存在这里。
           </div>
         )}

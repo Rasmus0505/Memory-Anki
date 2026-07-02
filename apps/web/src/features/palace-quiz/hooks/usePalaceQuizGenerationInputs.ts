@@ -16,7 +16,7 @@ import {
   getSubjectTreeApi,
   getSubjectsApi,
   uploadSubjectDocumentApi,
-} from '@/features/palace-quiz/api/palaceQuizApi'
+} from '@/features/palace-quiz/api'
 import {
   buildChapterSummary,
   collectAllowedChapterIds,

@@ -9,7 +9,7 @@ import {
   getSegmentReviewSessionProgressApi,
   saveSegmentReviewSessionProgressApi,
   submitSegmentReviewSessionApi,
-} from '@/features/review/api/reviewApi'
+} from '@/features/review/api'
 import {
   ReviewSessionContainer,
   type ReviewSessionContainerSession,

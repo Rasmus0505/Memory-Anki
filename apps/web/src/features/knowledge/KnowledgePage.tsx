@@ -32,11 +32,11 @@ import {
   saveSubjectEditorApi,
   type SubjectSummary,
   updateSubjectApi,
-} from '@/entities/knowledge/api/knowledgeApi'
+} from '@/entities/knowledge/api'
 import {
   batchCreateChapterQuizQuestionsApi,
   previewChapterQuizGenerationFromOutlineApi,
-} from '@/entities/quiz/api/quizApi'
+} from '@/entities/quiz/api'
 import type {
   PalaceQuizGenerationPreview,
   PalaceQuizQuestionDraft,
@@ -366,7 +366,7 @@ export default function Knowledge() {
         <Card className="border-border/70 bg-card/92">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
-              <FolderTree className="h-4 w-4" />
+              <FolderTree className="size-4" />
               学科
             </CardTitle>
           </CardHeader>
@@ -381,7 +381,7 @@ export default function Knowledge() {
                     setSelectedNodes([])
                     setChapterDetail(null)
                   }}
-                  className={`flex w-full items-center justify-between rounded-2xl border px-3 py-3 text-left transition-colors ${
+                  className={`flex w-full items-center justify-between rounded-lg border px-3 py-3 text-left transition-colors ${
                     selectedSubjectId === subject.id
                       ? 'border-primary/40 bg-primary/8 text-foreground'
                       : 'border-border/70 bg-background/70 text-muted-foreground hover:text-foreground'
@@ -396,7 +396,7 @@ export default function Knowledge() {
               ))}
             </div>
 
-            <div className="space-y-2 rounded-2xl border border-dashed border-border/80 bg-background/50 p-3">
+            <div className="space-y-2 rounded-lg border border-dashed border-border/80 bg-background/50 p-3">
               <Label htmlFor="new-subject">新增学科</Label>
               <Input
                 id="new-subject"
@@ -405,12 +405,12 @@ export default function Knowledge() {
                 placeholder="例如：英语语法"
               />
               <Button type="button" className="w-full" onClick={handleCreateSubject}>
-                <Plus className="mr-2 h-4 w-4" />
+                <Plus className="mr-2 size-4" />
                 创建学科
               </Button>
             </div>
 
-            <div className="space-y-3 rounded-2xl border border-border/70 bg-background/60 p-3">
+            <div className="space-y-3 rounded-lg border border-border/70 bg-background/60 p-3">
               <div className="text-sm font-semibold">当前学科</div>
               <div className="space-y-2">
                 <Label htmlFor="subject-name">名称</Label>
@@ -433,23 +433,23 @@ export default function Knowledge() {
               </div>
               <div className="flex gap-2">
                 <Button type="button" className="flex-1" onClick={handleSaveSubject} disabled={!activeSubject}>
-                  <Save className="mr-2 h-4 w-4" />
+                  <Save className="mr-2 size-4" />
                   保存学科信息
                 </Button>
                 <Button type="button" variant="outline" onClick={handleDeleteSubject} disabled={!activeSubject}>
-                  <Trash2 className="mr-2 h-4 w-4" />
+                  <Trash2 className="mr-2 size-4" />
                   删除
                 </Button>
               </div>
             </div>
 
-            <div className="space-y-3 rounded-2xl border border-border/70 bg-background/60 p-3">
+            <div className="space-y-3 rounded-lg border border-border/70 bg-background/60 p-3">
               <div className="flex items-center gap-2 text-sm font-semibold">
-                <FileText className="h-4 w-4" />
+                <FileText className="size-4" />
                 学科 PDF 资料库
               </div>
-              <label className="flex cursor-pointer items-center justify-center rounded-2xl border border-dashed border-border/80 px-3 py-4 text-sm text-muted-foreground transition-colors hover:text-foreground">
-                <Upload className="mr-2 h-4 w-4" />
+              <label className="flex cursor-pointer items-center justify-center rounded-lg border border-dashed border-border/80 px-3 py-4 text-sm text-muted-foreground transition-colors hover:text-foreground">
+                <Upload className="mr-2 size-4" />
                 上传 PDF
                 <input
                   type="file"
@@ -466,7 +466,7 @@ export default function Knowledge() {
                   {mindMapImport.importSubjectDocuments.map((document) => (
                     <div
                       key={document.id}
-                      className="flex items-center justify-between gap-3 rounded-2xl border border-border/70 bg-background/70 px-3 py-3 text-sm"
+                      className="flex items-center justify-between gap-3 rounded-lg border border-border/70 bg-background/70 px-3 py-3 text-sm"
                     >
                       <div className="min-w-0 flex-1">
                         <div className="truncate font-medium">{document.original_name}</div>
@@ -492,7 +492,7 @@ export default function Knowledge() {
               )}
             </div>
 
-            <div className="space-y-4 rounded-2xl border border-border/70 bg-background/60 p-3">
+            <div className="space-y-4 rounded-lg border border-border/70 bg-background/60 p-3">
               <div className="text-sm font-semibold">当前章节</div>
               {chapterDetail ? (
                 <>
@@ -504,7 +504,7 @@ export default function Knowledge() {
                       </div>
                     ) : null}
                   </div>
-                  <div className="rounded-2xl bg-background/70 p-3 text-sm text-muted-foreground whitespace-pre-wrap">
+                  <div className="rounded-lg bg-background/70 p-3 text-sm text-muted-foreground whitespace-pre-wrap">
                     {chapterDetail.chapter.notes || '该章节暂时没有备注。'}
                   </div>
                   <div className="space-y-2">
@@ -513,7 +513,7 @@ export default function Knowledge() {
                       <div className="flex items-center gap-2">
                         {selectedChapterId ? (
                           <Button size="sm" variant="outline" onClick={handleOpenChapterQuizDialog}>
-                            <Sparkles className="mr-2 h-4 w-4" />
+                            <Sparkles className="mr-2 size-4" />
                             AI 出题
                           </Button>
                         ) : null}
@@ -530,7 +530,7 @@ export default function Knowledge() {
                           <Link
                             key={palace.id}
                             to={`/palaces/${palace.id}`}
-                            className="flex items-center justify-between rounded-2xl border border-border/70 bg-background/70 px-3 py-3 text-sm transition-colors hover:text-foreground"
+                            className="flex items-center justify-between rounded-lg border border-border/70 bg-background/70 px-3 py-3 text-sm transition-colors hover:text-foreground"
                           >
                             <span>{palace.title}</span>
                             <span className="text-xs text-muted-foreground">查看宫殿</span>
@@ -547,7 +547,7 @@ export default function Knowledge() {
                   </div>
                 </>
               ) : (
-                <div className="rounded-2xl border border-dashed border-border/80 px-3 py-6 text-sm text-muted-foreground">
+                <div className="rounded-lg border border-dashed border-border/80 px-3 py-6 text-sm text-muted-foreground">
                   选中一个章节节点后，这里会显示章节信息。
                 </div>
               )}
@@ -628,13 +628,13 @@ export default function Knowledge() {
                   onFullscreenChange={setMindMapNativeFullscreen}
                   onUiClearedChange={setMindMapUiCleared}
                   className={cn(
-                    'w-full flex-1 rounded-2xl border border-border/70 bg-background',
+                    'w-full flex-1 rounded-lg border border-border/70 bg-background',
                     mindMapFullscreen ? 'h-full' : 'h-[62vh]',
                   )}
                 />
               </div>
             ) : (
-              <div className="flex h-[62vh] items-center justify-center rounded-2xl border border-dashed border-border/80 bg-background/60 text-sm text-muted-foreground">
+              <div className="flex h-[62vh] items-center justify-center rounded-lg border border-dashed border-border/80 bg-background/60 text-sm text-muted-foreground">
                 {selectedSubjectId ? '正在加载当前学科的脑图…' : '先创建或选择一个学科，宿主编辑器才会加载。'}
               </div>
             )}

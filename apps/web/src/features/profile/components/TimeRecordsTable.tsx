@@ -93,7 +93,7 @@ export function TimeRecordsTable({
     isBulkDeleting || deletingRecordId !== null || restoringRecordId !== null
 
   return (
-    <Card className="rounded-[28px] border-border/70">
+    <Card className="rounded-lg border-border/70">
       <CardHeader className="gap-4">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div>
@@ -120,7 +120,7 @@ export function TimeRecordsTable({
               onClick={onCreateRecord}
               disabled={actionInProgress}
             >
-              <Plus className="mr-2 h-4 w-4" />
+              <Plus className="mr-2 size-4" />
               手动新增记录
             </Button>
             <Button
@@ -130,7 +130,7 @@ export function TimeRecordsTable({
               onClick={onBulkDelete}
               disabled={bulkDeleteDisabled || isBulkDeleting}
             >
-              <Trash2 className="mr-2 h-4 w-4" />
+              <Trash2 className="mr-2 size-4" />
               {isBulkDeleting ? '删除中...' : '批量删除所选'}
             </Button>
           </div>
@@ -187,7 +187,7 @@ export function TimeRecordsTable({
               {pendingRecoveryRecords.map((item) => (
                 <div
                   key={item.record.id}
-                  className="flex flex-col gap-3 rounded-2xl border border-amber-200/80 bg-white/80 p-3 md:flex-row md:items-center md:justify-between"
+                  className="flex flex-col gap-3 rounded-lg border border-amber-200/80 bg-white/80 p-3 md:flex-row md:items-center md:justify-between"
                 >
                   <div className="min-w-0">
                     <div className="font-medium text-foreground">
@@ -213,7 +213,7 @@ export function TimeRecordsTable({
                       className="active:scale-[0.98]"
                       onClick={() => void onReplayPendingRecovery(item.record.id)}
                     >
-                      <RotateCw className="mr-2 h-4 w-4" />
+                      <RotateCw className="mr-2 size-4" />
                       立即补录
                     </Button>
                     <Button
@@ -222,7 +222,7 @@ export function TimeRecordsTable({
                       className="active:scale-[0.98]"
                       onClick={() => onDismissPendingRecovery(item.record.id)}
                     >
-                      <X className="mr-2 h-4 w-4" />
+                      <X className="mr-2 size-4" />
                       移除草稿
                     </Button>
                   </div>
@@ -336,7 +336,7 @@ export function TimeRecordsTable({
                                 onClick={() => onEditRecord(record)}
                                 disabled={actionInProgress}
                               >
-                                <Pencil className="mr-2 h-4 w-4" />
+                                <Pencil className="mr-2 size-4" />
                                 编辑
                               </Button>
                               <Button
@@ -346,7 +346,7 @@ export function TimeRecordsTable({
                                 onClick={() => void onDeleteRecord(record)}
                                 disabled={actionInProgress}
                               >
-                                <Trash2 className="mr-2 h-4 w-4" />
+                                <Trash2 className="mr-2 size-4" />
                                 {isDeleting ? '删除中...' : '删除'}
                               </Button>
                             </>
@@ -358,7 +358,7 @@ export function TimeRecordsTable({
                               onClick={() => void onRestoreRecord(record)}
                               disabled={actionInProgress}
                             >
-                              <Undo2 className="mr-2 h-4 w-4" />
+                              <Undo2 className="mr-2 size-4" />
                               {isRestoring ? '恢复中...' : '恢复'}
                             </Button>
                           )}

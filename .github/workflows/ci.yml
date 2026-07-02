@@ -48,6 +48,24 @@ jobs:
         working-directory: apps/api
         run: python ../../tools/check_architecture.py
 
+      - name: Check OpenAPI generated types
+        run: |
+          cd apps/api
+          python -m uvicorn memory_anki.app.main:app --host 127.0.0.1 --port 8012 &
+          echo $! > /tmp/memory-anki-api.pid
+          for i in {1..30}; do
+            if curl -fsS http://127.0.0.1:8012/openapi.json >/dev/null; then
+              break
+            fi
+            sleep 1
+          done
+          cd ../web
+          npm ci
+          npm run openapi:types
+          cd ../..
+          git diff --exit-code apps/web/src/shared/api/generated.ts
+          kill "$(cat /tmp/memory-anki-api.pid)"
+
   frontend:
     name: Frontend
     runs-on: ubuntu-latest

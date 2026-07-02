@@ -8,7 +8,7 @@ import {
   createPalaceQuizQuestionApi,
   deletePalaceQuizQuestionApi,
   updatePalaceQuizQuestionApi,
-} from '@/features/palace-quiz/api/palaceQuizApi'
+} from '@/features/palace-quiz/api'
 import {
   buildDraftFromForm,
   buildEmptyQuestionForm,

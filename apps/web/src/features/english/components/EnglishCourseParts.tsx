@@ -27,14 +27,14 @@ export function StatusBanner({ notice }: { notice: StatusNotice | null }) {
         : 'border-info/20 bg-info/5 text-info'
 
   return (
-    <div className={`rounded-2xl border px-4 py-3 text-sm ${palette}`}>
+    <div className={`rounded-lg border px-4 py-3 text-sm ${palette}`}>
       <div className="flex items-center gap-2 font-medium">
         {notice.kind === 'success' ? (
-          <CheckCircle2 className="h-4 w-4" />
+          <CheckCircle2 className="size-4" />
         ) : notice.kind === 'error' ? (
-          <XCircle className="h-4 w-4" />
+          <XCircle className="size-4" />
         ) : (
-          <Sparkles className="h-4 w-4" />
+          <Sparkles className="size-4" />
         )}
         {notice.text}
       </div>
@@ -57,7 +57,7 @@ export function WordRail({
 }) {
   if (!expectedTokens.length) {
     return (
-      <div className="rounded-2xl border border-dashed border-border/70 px-4 py-6 text-center text-sm text-muted-foreground">
+      <div className="rounded-lg border border-dashed border-border/70 px-4 py-6 text-center text-sm text-muted-foreground">
         当前句没有可练习的 token。
       </div>
     )
@@ -142,7 +142,7 @@ export function FinalCheckRail({
   if (!feedback || feedback.passed || feedback.tokenResults.length === 0) return null
 
   return (
-    <div className="flex flex-wrap gap-2 rounded-2xl border border-destructive/20 bg-destructive/5 px-4 py-4">
+    <div className="flex flex-wrap gap-2 rounded-lg border border-destructive/20 bg-destructive/5 px-4 py-4">
       {feedback.tokenResults.map((item, index) => (
         <span
           key={`check-${index}`}

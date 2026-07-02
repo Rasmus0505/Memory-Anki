@@ -14,8 +14,9 @@ export type FeedbackVisualStyle = 'warm_playful' | 'focus_light'
  * - milestone  连击 / 里程碑
  * - completion 完成结算
  * - timer      计时器达标
+ * - quiz       做题结果
  */
-export type FeedbackSceneKey = 'review' | 'milestone' | 'completion' | 'timer'
+export type FeedbackSceneKey = 'review' | 'milestone' | 'completion' | 'timer' | 'quiz'
 
 /**
  * 五种烟花类型（点击即预览）。顺序与中文标签一一对应：
@@ -92,6 +93,7 @@ export interface ReviewFeedbackScenesSettings {
   milestone: ReviewMilestoneSceneSettings
   completion: ReviewFeedbackSceneSettings
   timer: ReviewFeedbackSceneSettings
+  quiz: ReviewFeedbackSceneSettings
 }
 
 export interface ReviewFeedbackSettings {
@@ -135,6 +137,7 @@ const DEFAULT_SCENE_CONFETTI_PRESETS: Record<FeedbackSceneKey, CelebrationPreset
   milestone: 'fireworks',
   completion: 'stars',
   timer: 'school_pride',
+  quiz: 'random_direction',
 }
 
 const DEFAULT_SCENE_VOLUME_BOOSTS: Record<FeedbackSceneKey, number> = {
@@ -142,6 +145,7 @@ const DEFAULT_SCENE_VOLUME_BOOSTS: Record<FeedbackSceneKey, number> = {
   milestone: 1.1,
   completion: 1.25,
   timer: 1.35,
+  quiz: 1.05,
 }
 
 function buildLegacyCelebrationFromScenes(scenes: ReviewFeedbackScenesSettings): ReviewCelebrationSettings {
@@ -211,6 +215,13 @@ export const DEFAULT_REVIEW_FEEDBACK_SETTINGS: ReviewFeedbackSettings = {
       ...DEFAULT_REVIEW_SCENE,
       confettiAmount: 2.2,
       cooldownMs: 12000,
+    },
+    quiz: {
+      ...DEFAULT_REVIEW_SCENE,
+      confettiAmount: 0.8,
+      cooldownMs: 900,
+      confettiPreset: DEFAULT_SCENE_CONFETTI_PRESETS.quiz,
+      volumeBoost: DEFAULT_SCENE_VOLUME_BOOSTS.quiz,
     },
   },
   celebration: undefined as never,
@@ -340,6 +351,9 @@ function readLegacyCelebrationScenes(raw: Record<string, unknown>): ReviewFeedba
     timer: {
       ...DEFAULT_REVIEW_FEEDBACK_SETTINGS.scenes.timer,
     },
+    quiz: {
+      ...DEFAULT_REVIEW_FEEDBACK_SETTINGS.scenes.quiz,
+    },
   }
 }
 
@@ -360,6 +374,7 @@ export function sanitizeReviewFeedbackSettings(value: unknown): ReviewFeedbackSe
     milestone: sanitizeMilestoneSceneSettings(scenesRaw.milestone, fallbackScenes.milestone, soundEnabled, animationEnabled),
     completion: sanitizeSceneSettings(scenesRaw.completion, fallbackScenes.completion, soundEnabled, animationEnabled),
     timer: sanitizeSceneSettings(scenesRaw.timer, fallbackScenes.timer, soundEnabled, animationEnabled),
+    quiz: sanitizeSceneSettings(scenesRaw.quiz, fallbackScenes.quiz, soundEnabled, animationEnabled),
   }
 
   return {

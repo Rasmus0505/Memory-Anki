@@ -291,7 +291,9 @@ const DialogContent = forwardRef<
     (event: ReactPointerEvent<HTMLElement>) => {
       if (!floatingEnabled) return
       const target = event.target
+      const allowControlDrag = event.currentTarget.hasAttribute('data-dialog-capsule-drag')
       if (
+        !allowControlDrag &&
         target instanceof Element &&
         target.closest('button,a,input,textarea,select,[role="button"],[data-dialog-window-control="true"]')
       ) {
@@ -339,10 +341,11 @@ const DialogContent = forwardRef<
   )
 
   const panelClassName = cn(
-    'pointer-events-auto relative flex flex-col overflow-hidden',
+    'pointer-events-auto',
+    (resolvedLayout !== 'unstyled' || floatingEnabled) && 'relative flex flex-col overflow-hidden',
     resolvedLayout === 'unstyled' && !floatingEnabled && 'z-[241]',
     resolvedLayout === 'centered' &&
-      'max-h-[92vh] w-full max-w-3xl rounded-2xl border bg-background shadow-2xl',
+      'max-h-[92vh] w-full max-w-3xl rounded-lg border bg-background shadow-floating',
     floatingEnabled && 'fixed max-w-none touch-none',
     floatingLayout.pinned && 'ring-2 ring-primary/30',
     'data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95',
@@ -380,12 +383,13 @@ const DialogContent = forwardRef<
           <DialogPrimitive.Title className="sr-only">{derivedCapsuleLabel}</DialogPrimitive.Title>
           <button
             type="button"
-            className="inline-flex max-w-[min(360px,calc(100vw-32px))] cursor-grab items-center gap-2 rounded-full border border-border/80 bg-background/96 px-4 py-2 text-sm font-medium shadow-2xl backdrop-blur active:cursor-grabbing"
+            className="inline-flex max-w-[min(360px,calc(100vw-32px))] cursor-grab items-center gap-2 rounded-full border border-border/80 bg-background/96 px-4 py-2 text-sm font-medium shadow-popover backdrop-blur active:cursor-grabbing"
+            data-dialog-capsule-drag="true"
             onPointerDown={beginDrag}
             onClick={() => persistFloatingLayout((current) => ({ ...current, collapsed: false }))}
             aria-label={`恢复${derivedCapsuleLabel}`}
           >
-            <Maximize2 className="h-4 w-4 text-primary" />
+            <Maximize2 className="size-4 text-primary" />
             <span className="truncate">{derivedCapsuleLabel}</span>
           </button>
         </DialogPrimitive.Content>
@@ -450,7 +454,7 @@ const DialogContent = forwardRef<
             title={floatingLayout.pinned ? '取消置顶' : '置顶'}
             onClick={() => persistFloatingLayout((current) => ({ ...current, pinned: !current.pinned }))}
           >
-            {floatingLayout.pinned ? <PinOff className="h-4 w-4" /> : <Pin className="h-4 w-4" />}
+            {floatingLayout.pinned ? <PinOff className="size-4" /> : <Pin className="size-4" />}
           </button>
           <button
             type="button"
@@ -459,7 +463,7 @@ const DialogContent = forwardRef<
             title="缩小为胶囊"
             onClick={() => persistFloatingLayout((current) => ({ ...current, collapsed: true }))}
           >
-            <Minimize2 className="h-4 w-4" />
+            <Minimize2 className="size-4" />
           </button>
         </div>
       ) : null}
@@ -472,7 +476,7 @@ const DialogContent = forwardRef<
           aria-label="关闭弹窗"
           data-dialog-window-control="true"
         >
-          <X className="h-4 w-4" />
+          <X className="size-4" />
         </DialogPrimitive.Close>
       ) : null}
       {floatingEnabled
@@ -520,7 +524,7 @@ const DialogContent = forwardRef<
 function DialogHeader({ children }: PropsWithChildren) {
   return (
     <div className="flex cursor-move items-start justify-between gap-4 border-b px-6 py-4 pr-28">
-      <div className="space-y-1">{children}</div>
+      <div className="flex flex-col gap-1">{children}</div>
     </div>
   )
 }
@@ -580,7 +584,7 @@ function DialogClose({
       aria-label="关闭弹窗"
       data-dialog-window-control="true"
     >
-      <X className="h-4 w-4" />
+      <X className="size-4" />
     </DialogPrimitive.Close>
   )
 }

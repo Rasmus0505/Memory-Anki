@@ -15,7 +15,7 @@ import {
   getPalaceSegmentApi,
   updatePalaceSegmentReviewProgressApi,
 } from '@/entities/palace-segment/api'
-import { submitSegmentReviewSessionApi } from '@/features/review/api/reviewApi'
+import { submitSegmentReviewSessionApi } from '@/features/review/api'
 import { StageSelectDialog } from '@/features/review/components/StageSelectDialog'
 import {
   MindMapReviewFlow,
@@ -104,7 +104,7 @@ export default function SegmentPracticePage() {
           <>
             <Link to="/palaces">
               <Button variant="outline" size="sm">
-                <ArrowLeft className="mr-2 h-4 w-4" />
+                <ArrowLeft className="mr-2 size-4" />
                 返回列表
               </Button>
             </Link>

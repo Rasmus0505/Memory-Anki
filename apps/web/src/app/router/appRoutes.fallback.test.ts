@@ -24,6 +24,6 @@ describe('resolveRouteFallbackTarget', () => {
     expect(resolveRouteFallbackTarget('/freestyle/legacy-mode')).toBe('/freestyle')
     expect(resolveRouteFallbackTarget('/segment-review/legacy')).toBe('/review')
     expect(resolveRouteFallbackTarget('/english/legacy')).toBe('/english')
-    expect(resolveRouteFallbackTarget('/totally-unknown')).toBe('/')
+    expect(resolveRouteFallbackTarget('/totally-unknown')).toBe('/freestyle')
   })
 })

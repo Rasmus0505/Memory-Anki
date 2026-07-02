@@ -144,7 +144,7 @@ export default function PalaceEdit() {
             <>
               <Link to="/palaces">
                 <Button variant="outline" size="sm">
-                  <ArrowLeft className="mr-2 h-4 w-4" />
+                  <ArrowLeft className="mr-2 size-4" />
                   返回列表
                 </Button>
               </Link>
@@ -159,7 +159,7 @@ export default function PalaceEdit() {
                   })
                 }
               >
-                <Search className="mr-2 h-4 w-4" />
+                <Search className="mr-2 size-4" />
                 全局搜索
               </Button>
               <Button
@@ -167,7 +167,7 @@ export default function PalaceEdit() {
                 size="sm"
                 onClick={() => setVoiceCoachDialogOpen(true)}
               >
-                <Volume2 className="mr-2 h-4 w-4" />
+                <Volume2 className="mr-2 size-4" />
                 {voiceCoach.enabled ? '语音教练' : '开启语音'}
               </Button>
               {page.palace ? (
@@ -177,7 +177,7 @@ export default function PalaceEdit() {
                     size="sm"
                     onClick={() => void page.handleOpenVersions()}
                   >
-                    <History className="mr-2 h-4 w-4" />
+                    <History className="mr-2 size-4" />
                     恢复点
                   </Button>
                 </>
@@ -476,7 +476,7 @@ export default function PalaceEdit() {
                     onBilinkNodeClick={page.handleBilinkNodeClick}
                     onMiniPalacePour={page.miniPalace.isPracticing ? page.miniPalace.handleSpacePour : undefined}
                     className={cn(
-                      'w-full flex-1 rounded-2xl border border-border/70 bg-background',
+                      'w-full flex-1 rounded-lg border border-border/70 bg-background',
                       page.mindMapFullscreen ? 'h-full' : 'h-[64vh]',
                     )}
                   />

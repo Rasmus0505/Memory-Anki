@@ -1,4 +1,4 @@
-import { getSubjectTreeApi, getSubjectsApi, uploadSubjectDocumentApi } from '@/entities/knowledge/api/knowledgeApi'
+import { getSubjectTreeApi, getSubjectsApi, uploadSubjectDocumentApi } from '@/entities/knowledge/api'
 import { getPalaceApi } from '@/entities/palace/api'
 import {
   batchDeletePalaceQuizQuestionsApi,
@@ -12,7 +12,7 @@ import {
   requestPalaceShortAnswerFeedbackApi,
   resetPalaceQuizQuestionAttemptsApi,
   updatePalaceQuizQuestionApi,
-} from '@/entities/quiz/api/quizApi'
+} from '@/entities/quiz/api'
 
 export {
   batchDeletePalaceQuizQuestionsApi,

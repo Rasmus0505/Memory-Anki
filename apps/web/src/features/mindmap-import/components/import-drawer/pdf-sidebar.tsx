@@ -52,7 +52,7 @@ export function MindMapImportPdfSidebar({
       <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
         {pdfPagesLoading ? (
           <div className="flex h-28 items-center justify-center text-sm text-muted-foreground">
-            <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
+            <LoaderCircle className="mr-2 size-4 animate-spin" />
             正在加载页面…
           </div>
         ) : pdfPageMeta.length > 0 ? (
@@ -68,7 +68,7 @@ export function MindMapImportPdfSidebar({
                   type="button"
                   onClick={() => onTogglePdfPage(page.page_number)}
                   className={cn(
-                    'rounded-2xl border p-2 text-left transition-colors',
+                    'rounded-lg border p-2 text-left transition-colors',
                     analyzed
                       ? 'border-success/70 bg-success/5'
                       : isPreview

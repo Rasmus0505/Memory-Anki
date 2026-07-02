@@ -49,7 +49,7 @@ const englishReadingPageMocks = vi.hoisted(() => ({
 
 export const mocks = englishReadingPageMocks;
 
-vi.mock("@/features/english-reading/api/englishReadingApi", () => ({
+vi.mock("@/features/english-reading/api", () => ({
   completeEnglishReadingMaterialApi:
     englishReadingPageMocks.completeEnglishReadingMaterialApiMock,
   createEnglishReadingMaterialApi:

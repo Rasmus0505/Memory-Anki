@@ -17,7 +17,7 @@ import {
   setTimeRecordingThresholdApi,
   softDeleteTimeRecordApi,
   updateTimeRecordApi,
-} from '@/entities/session/api/time-records'
+} from '@/entities/session/api'
 import { parseApiDateTime } from '@/shared/lib/dateTime'
 
 const PRACTICE_PROGRESS_KEY = 'memory-anki.practice-progress.v1'

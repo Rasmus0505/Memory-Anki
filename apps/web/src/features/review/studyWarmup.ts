@@ -15,7 +15,7 @@ import {
   getReviewSessionProgressApi,
   getSegmentReviewSessionApi,
   getSegmentReviewSessionProgressApi,
-} from '@/features/review/api/reviewApi'
+} from '@/features/review/api'
 import {
   consumePrefetchedPromise,
   prefetchPromise,

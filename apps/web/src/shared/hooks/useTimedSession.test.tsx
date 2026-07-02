@@ -3,6 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useTimedSession } from '@/shared/hooks/useTimedSession'
 import { TIMER_AUTOMATION_STORAGE_KEY } from '@/shared/components/session/timer-automation-config'
 import * as sessionRecordModel from '@/entities/session/model'
+import { resetAutoSaveCoordinatorForTest } from '@/shared/persistence/autosaveCoordinator'
+import { resetClientPreferenceCacheForTest } from '@/shared/preferences/clientPreferences'
 import {
   clearPendingTimeRecordRecoveriesForTest,
   listPendingTimeRecordRecoveries,
@@ -19,8 +21,10 @@ describe('useTimedSession automation config', () => {
   beforeEach(() => {
     vi.useFakeTimers()
     window.localStorage.clear()
+    resetClientPreferenceCacheForTest()
     window.sessionStorage.clear()
     clearPendingTimeRecordRecoveriesForTest()
+    resetAutoSaveCoordinatorForTest()
     if (!('sendBeacon' in navigator)) {
       Object.defineProperty(navigator, 'sendBeacon', {
         configurable: true,
@@ -33,6 +37,9 @@ describe('useTimedSession automation config', () => {
   })
 
   afterEach(() => {
+    delete window.memoryAnkiDesktopTimer
+    resetAutoSaveCoordinatorForTest()
+    resetClientPreferenceCacheForTest()
     vi.useRealTimers()
   })
 
@@ -141,6 +148,135 @@ describe('useTimedSession automation config', () => {
     await flushMicrotasks()
 
     expect(listPendingTimeRecordRecoveries()).toHaveLength(1)
+  })
+
+  it('flushes the active timer when the desktop shell asks before closing', async () => {
+    appendTimeRecordSpy.mockImplementation(async (record) => record)
+    const sendBeaconSpy = vi.spyOn(navigator, 'sendBeacon').mockReturnValue(true)
+    let desktopFlushHandler: (() => Promise<unknown> | unknown) | null = null
+    window.memoryAnkiDesktopTimer = {
+      onDesktopFlushRequest: (handler) => {
+        desktopFlushHandler = () =>
+          handler({
+            requestId: 'desktop-close-1',
+            reason: 'main_window_close',
+            requestedAt: Date.now(),
+          })
+        return () => {
+          desktopFlushHandler = null
+        }
+      },
+    }
+
+    render(
+      <TimedSessionTestHarness
+        kind="practice"
+        autoPauseMs={60_000}
+        persistKey="practice:desktop-close"
+      />,
+    )
+    await flushMicrotasks()
+
+    await act(async () => {
+      vi.advanceTimersByTime(3_600)
+      await desktopFlushHandler?.()
+    })
+
+    await flushMicrotasks()
+
+    expect(sendBeaconSpy).toHaveBeenCalledTimes(1)
+    expect(listPendingTimeRecordRecoveries()).toHaveLength(1)
+    expect(listPendingTimeRecordRecoveries()[0]?.record).toMatchObject({
+      completionMethod: 'left_page',
+      effectiveSeconds: 3,
+      events: expect.arrayContaining([
+        expect.objectContaining({
+          type: 'leave_scene',
+          meta: expect.objectContaining({
+            source: 'main_window_close',
+          }),
+        }),
+      ]),
+    })
+  })
+
+  it('deduplicates desktop flush and pagehide when both fire during shutdown', async () => {
+    appendTimeRecordSpy.mockImplementation(async (record) => record)
+    const sendBeaconSpy = vi.spyOn(navigator, 'sendBeacon').mockReturnValue(true)
+    let desktopFlushHandler: (() => Promise<unknown> | unknown) | null = null
+    window.memoryAnkiDesktopTimer = {
+      onDesktopFlushRequest: (handler) => {
+        desktopFlushHandler = () =>
+          handler({
+            requestId: 'desktop-close-2',
+            reason: 'app_before_quit',
+            requestedAt: Date.now(),
+          })
+        return () => {
+          desktopFlushHandler = null
+        }
+      },
+    }
+
+    render(
+      <TimedSessionTestHarness
+        kind="practice"
+        autoPauseMs={60_000}
+        persistKey="practice:desktop-pagehide-dedupe"
+      />,
+    )
+    await flushMicrotasks()
+
+    await act(async () => {
+      vi.advanceTimersByTime(4_400)
+      const flushPromise = desktopFlushHandler?.()
+      window.dispatchEvent(new Event('pagehide'))
+      await flushPromise
+    })
+
+    await flushMicrotasks()
+
+    expect(sendBeaconSpy).toHaveBeenCalledTimes(1)
+    expect(listPendingTimeRecordRecoveries()).toHaveLength(1)
+    expect(listPendingTimeRecordRecoveries()[0]?.record).toMatchObject({
+      effectiveSeconds: 4,
+    })
+  })
+
+  it('saves on desktop flush even when the session has no restore snapshot key', async () => {
+    appendTimeRecordSpy.mockImplementation(async (record) => record)
+    vi.spyOn(navigator, 'sendBeacon').mockReturnValue(true)
+    let desktopFlushHandler: (() => Promise<unknown> | unknown) | null = null
+    window.memoryAnkiDesktopTimer = {
+      onDesktopFlushRequest: (handler) => {
+        desktopFlushHandler = () =>
+          handler({
+            requestId: 'desktop-close-no-key',
+            reason: 'app_before_quit',
+            requestedAt: Date.now(),
+          })
+        return () => {
+          desktopFlushHandler = null
+        }
+      },
+    }
+
+    render(<TimedSessionTestHarness kind="review" autoPauseMs={60_000} />)
+    await flushMicrotasks()
+
+    await act(async () => {
+      vi.advanceTimersByTime(2_100)
+      await desktopFlushHandler?.()
+    })
+
+    await flushMicrotasks()
+
+    expect(listPendingTimeRecordRecoveries()).toHaveLength(1)
+    expect(listPendingTimeRecordRecoveries()[0]?.record).toMatchObject({
+      kind: 'review',
+      completionMethod: 'left_page',
+      effectiveSeconds: 2,
+    })
   })
 
   it('arms overridden local config for practice hidden pause', () => {
@@ -804,5 +940,32 @@ describe('useTimedSession automation config', () => {
       completionMethod: 'manual_complete',
     })
     expect(record?.id).toBeTruthy()
+  })
+
+  it('autosaves an in-progress session to the local database on the background schedule', async () => {
+    appendTimeRecordSpy.mockImplementation(async (record) => record)
+
+    const { result } = renderHook(() =>
+      useTimedSession({
+        kind: 'practice',
+        title: '自动保存测试',
+        palaceId: 1,
+        autoPauseMs: 60_000,
+      }),
+    )
+
+    act(() => {
+      result.current.start({ source: 'test' })
+      vi.advanceTimersByTime(31_000)
+    })
+
+    await flushMicrotasks()
+
+    expect(appendTimeRecordSpy).toHaveBeenCalled()
+    expect(appendTimeRecordSpy.mock.calls[0]?.[0]).toMatchObject({
+      title: '自动保存测试',
+      completionMethod: 'saved',
+      effectiveSeconds: 30,
+    })
   })
 })

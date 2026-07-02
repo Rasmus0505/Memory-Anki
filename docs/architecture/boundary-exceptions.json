@@ -1,0 +1,92 @@
+{
+  "version": 1,
+  "exceptions": [
+    {
+      "id": "reviews-palaces-review-target-transition",
+      "source": "memory_anki.modules.reviews.application",
+      "target": "memory_anki.modules.palaces.application",
+      "allowed_files": [
+        "apps/api/src/memory_anki/modules/reviews/application/review_execution_service.py",
+        "apps/api/src/memory_anki/modules/reviews/application/_coupling.py"
+      ],
+      "allowed_symbols": [
+        "create_mini_palace_review_log",
+        "create_segment_review_log",
+        "get_mini_palace_review_projection",
+        "get_segment_review_projection"
+      ],
+      "reason": "Temporary transition while extracting a review target port and shared review session read model.",
+      "owner": "architecture",
+      "removal_condition": "Remove after reviews consumes a ReviewTargetPort instead of palaces application leaf services.",
+      "tests": [
+        "apps/api/tests/test_review_routes.py",
+        "python tools/check_architecture.py"
+      ]
+    },
+    {
+      "id": "palaces-reviews-schedule-transition",
+      "source": "memory_anki.modules.palaces.application",
+      "target": "memory_anki.modules.reviews.application",
+      "allowed_files": [
+        "apps/api/src/memory_anki/modules/palaces/application/mini_palace_review_progress.py",
+        "apps/api/src/memory_anki/modules/palaces/application/mini_palace_review_support.py",
+        "apps/api/src/memory_anki/modules/palaces/application/mini_palace_review_timing.py",
+        "apps/api/src/memory_anki/modules/palaces/application/palace_review_rollups.py",
+        "apps/api/src/memory_anki/modules/palaces/application/palace_serializer.py",
+        "apps/api/src/memory_anki/modules/palaces/application/segment_progress_service.py",
+        "apps/api/src/memory_anki/modules/palaces/application/segment_review_projections.py",
+        "apps/api/src/memory_anki/modules/palaces/application/segment_review_support.py",
+        "apps/api/src/memory_anki/modules/palaces/application/segment_review_timing.py"
+      ],
+      "allowed_symbols": [
+        "schedule_policy",
+        "schedule_rebuild_service",
+        "schedule_service"
+      ],
+      "reason": "Temporary transition while schedule policy moves to a shared contract or review scheduling port.",
+      "owner": "architecture",
+      "removal_condition": "Remove after palaces no longer imports reviews application schedule services directly.",
+      "tests": [
+        "apps/api/tests/test_review_routes.py",
+        "apps/api/tests/test_palace_chapter_binding.py",
+        "python tools/check_architecture.py"
+      ]
+    },
+    {
+      "id": "backups-mindmap-editor-codec-transition",
+      "source": "memory_anki.modules.backups.application",
+      "target": "memory_anki.modules.mindmap.application",
+      "allowed_files": [
+        "apps/api/src/memory_anki/modules/backups/application/backup_palace_versions.py"
+      ],
+      "allowed_symbols": [
+        "editor_state_documents"
+      ],
+      "reason": "Temporary transition while editor document serialization is extracted into a mindmap contract.",
+      "owner": "architecture",
+      "removal_condition": "Remove after backups consumes the shared editor document codec instead of mindmap services.",
+      "tests": [
+        "apps/api/tests/test_editor_state_service.py",
+        "python tools/check_architecture.py"
+      ]
+    },
+    {
+      "id": "mindmap-backups-save-guard-transition",
+      "source": "memory_anki.modules.mindmap.application",
+      "target": "memory_anki.modules.backups.application",
+      "allowed_files": [
+        "apps/api/src/memory_anki/modules/mindmap/application/editor_state_service.py"
+      ],
+      "allowed_symbols": [
+        "backup_service"
+      ],
+      "reason": "Temporary transition while save safety moves to an editor-state change event orchestrator.",
+      "owner": "architecture",
+      "removal_condition": "Remove after mindmap emits an application event and backups handles it outside the mindmap module.",
+      "tests": [
+        "apps/api/tests/test_editor_state_service.py",
+        "python tools/check_architecture.py"
+      ]
+    }
+  ]
+}

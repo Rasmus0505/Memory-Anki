@@ -103,7 +103,7 @@ def batch_create_chapter_questions(
         normalize_payload=lambda payload: normalize_question_payload(
             {
                 **payload,
-                "source_chapter_id": payload.get("source_chapter_id", chapter_id),
+                "source_chapter_id": chapter_id,
             },
             session=session,
             source_chapter_id=chapter_id,

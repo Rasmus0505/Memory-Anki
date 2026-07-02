@@ -37,7 +37,7 @@ export function PalaceBindingPanel({
     <Card className="border-border/70 bg-card/92">
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-base">
-          <Workflow className="h-4 w-4" />
+          <Workflow className="size-4" />
           绑定规则
         </CardTitle>
       </CardHeader>
@@ -109,7 +109,7 @@ export function PalaceBindingPanel({
 
         <div className="rounded-xl border border-border/70 bg-background/60 px-3 py-2 text-sm text-muted-foreground">
           <div className="flex items-center gap-2 font-medium text-foreground">
-            <Type className="h-4 w-4" />
+            <Type className="size-4" />
             当前绑定状态
           </div>
           <div className="mt-1">

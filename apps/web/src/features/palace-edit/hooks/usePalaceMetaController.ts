@@ -1,6 +1,6 @@
 import { useEffect, useState, type ChangeEvent } from 'react'
 import { toast } from '@/shared/feedback/toast'
-import { getSubjectTreeApi, getSubjectsApi } from '@/entities/knowledge/api/knowledgeApi'
+import { getSubjectTreeApi, getSubjectsApi } from '@/entities/knowledge/api'
 import {
   deleteAttachmentApi,
   linkPalaceChaptersApi,

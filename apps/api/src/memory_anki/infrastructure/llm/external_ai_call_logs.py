@@ -6,6 +6,7 @@ import uuid
 from pathlib import Path
 from typing import Any
 
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from memory_anki.core.config import AI_CALL_LOGS_DIR
@@ -128,51 +129,62 @@ def begin_external_ai_call_log(
     log_dir.mkdir(parents=True, exist_ok=True)
     _write_json(_request_json_path(log_id), request_payload_with_artifacts)
     _write_json(_artifact_manifest_path(log_id), artifacts)
-    with Session(engine) as session:
-        session.add(
-            ExternalAiCallLog(
-                id=log_id,
-                feature=feature,
-                operation=operation,
-                job_id=job_id,
-                palace_id=palace_id,
-                status="started",
-                provider=provider,
-                base_url=base_url,
-                model=model,
-                request_id=request_id,
-                request_json=_json_dump(request_payload_with_artifacts),
-                response_json="{}",
-                error_json="{}",
+    try:
+        with Session(engine) as session:
+            session.add(
+                ExternalAiCallLog(
+                    id=log_id,
+                    feature=feature,
+                    operation=operation,
+                    job_id=job_id,
+                    palace_id=palace_id,
+                    status="started",
+                    provider=provider,
+                    base_url=base_url,
+                    model=model,
+                    request_id=request_id,
+                    request_json=_json_dump(request_payload_with_artifacts),
+                    response_json="{}",
+                    error_json="{}",
+                )
             )
-        )
-        session.commit()
+            session.commit()
+    except SQLAlchemyError:
+        # AI generation should not fail solely because the observability table is
+        # unavailable in a test sandbox or partially initialized runtime.
+        pass
     return log_id
 
 
 def complete_external_ai_call_log(log_id: str, *, response_payload: dict[str, Any]) -> None:
     _write_json(_response_json_path(log_id), response_payload)
-    with Session(engine) as session:
-        row = session.query(ExternalAiCallLog).filter_by(id=log_id).first()
-        if not row:
-            return
-        row.status = "success"
-        row.response_json = _json_dump(response_payload)
-        row.error_json = "{}"
-        row.updated_at = utc_now_naive()
-        session.commit()
+    try:
+        with Session(engine) as session:
+            row = session.query(ExternalAiCallLog).filter_by(id=log_id).first()
+            if not row:
+                return
+            row.status = "success"
+            row.response_json = _json_dump(response_payload)
+            row.error_json = "{}"
+            row.updated_at = utc_now_naive()
+            session.commit()
+    except SQLAlchemyError:
+        pass
 
 
 def fail_external_ai_call_log(log_id: str, *, error_payload: dict[str, Any]) -> None:
     _write_json(_error_json_path(log_id), error_payload)
-    with Session(engine) as session:
-        row = session.query(ExternalAiCallLog).filter_by(id=log_id).first()
-        if not row:
-            return
-        row.status = "error"
-        row.error_json = _json_dump(error_payload)
-        row.updated_at = utc_now_naive()
-        session.commit()
+    try:
+        with Session(engine) as session:
+            row = session.query(ExternalAiCallLog).filter_by(id=log_id).first()
+            if not row:
+                return
+            row.status = "error"
+            row.error_json = _json_dump(error_payload)
+            row.updated_at = utc_now_naive()
+            session.commit()
+    except SQLAlchemyError:
+        pass
 
 
 def list_external_ai_call_logs(

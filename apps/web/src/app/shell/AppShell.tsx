@@ -15,7 +15,7 @@ import {
 } from 'lucide-react'
 import { NavLink, useLocation } from 'react-router-dom'
 import type { RuntimeInfo } from '@/shared/api/contracts'
-import { getRuntimeInfoApi } from '@/entities/runtime/api/runtimeApi'
+import { getRuntimeInfoApi } from '@/entities/runtime/api'
 import {
   prefetchPalacesGroupedSummaryApi,
   prefetchPalaceSubjectShelfApi,
@@ -30,11 +30,11 @@ import {
   preloadProfilePage,
   preloadReviewRoutes,
 } from '@/app/router/appRoutes'
-import { prefetchDashboardApi } from '@/features/dashboard/api/dashboardApi'
+import { prefetchDashboardApi } from '@/features/dashboard/api'
 import {
   prefetchReviewQueueApi,
   prefetchSegmentReviewQueueApi,
-} from '@/features/review/api/reviewApi'
+} from '@/features/review/api'
 import { ShellProvider, useShellContext } from '@/shared/components/layout/ShellContext'
 import { useClientPreferenceBootstrap } from '@/app/providers/useClientPreferenceBootstrap'
 import { Badge } from '@/shared/components/ui/badge'
@@ -70,11 +70,11 @@ const warmedNavSections = new Set<NavSectionKey>()
 const navSections: NavSectionDefinition[] = [
   {
     key: 'dashboard',
-    to: '/',
+    to: '/dashboard',
     label: '仪表盘',
     icon: LayoutDashboard,
     rememberLastVisited: false,
-    matches: (pathname) => pathname === '/',
+    matches: (pathname) => pathname === '/' || pathname === '/dashboard',
   },
   {
     key: 'freestyle',
@@ -256,7 +256,7 @@ function NavSectionLink({
       to={target}
       end={to === '/'}
       className={cn(
-        'group relative flex items-center rounded-2xl text-sm font-medium transition-all',
+        'group relative flex items-center rounded-lg text-sm font-medium transition-all',
         isActive
           ? 'bg-primary text-primary-foreground shadow-card'
           : 'text-muted-foreground hover:bg-secondary/80 hover:text-foreground',
@@ -265,7 +265,7 @@ function NavSectionLink({
       onMouseEnter={() => warmNavSection(section)}
       onFocus={() => warmNavSection(section)}
     >
-      <Icon className="h-4 w-4" />
+      <Icon className="size-4" />
       {!compact ? <span>{label}</span> : null}
       {runningCount > 0 ? (
         <span
@@ -274,7 +274,7 @@ function NavSectionLink({
             compact ? 'absolute right-1 top-1' : 'ml-auto',
             isActive
               ? 'bg-primary-foreground/20 text-primary-foreground'
-              : 'bg-info text-white',
+              : 'bg-info text-info-foreground',
           )}
           title={`${runningCount} 个后台任务进行中`}
         >
@@ -284,7 +284,7 @@ function NavSectionLink({
       {!compact && runningCount === 0 ? (
         <ChevronRight
           className={cn(
-            'ml-auto h-4 w-4 transition-transform',
+            'ml-auto size-4 transition-transform',
             isActive
               ? 'translate-x-0'
               : '-translate-x-1 opacity-0 group-hover:translate-x-0 group-hover:opacity-100',
@@ -325,7 +325,7 @@ function SidebarContent({ runtimeInfo }: { runtimeInfo: RuntimeInfo | null }) {
   }, [])
 
   useEffect(() => {
-    if (pathname !== '/') return
+    if (pathname !== '/' && pathname !== '/dashboard') return
     return scheduleIdleWarmup(() => {
       void preloadPalaceEditPage()
       prefetchDashboardApi()
@@ -347,8 +347,8 @@ function SidebarContent({ runtimeInfo }: { runtimeInfo: RuntimeInfo | null }) {
   return (
     <>
       <div className={cn('border-b border-border/70', compact ? 'px-2 py-3' : 'px-5 py-5')}>
-        <NavLink to="/" className={cn('flex items-center', compact ? 'justify-center' : 'gap-3')}>
-          <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary text-base font-semibold text-primary-foreground shadow-sm">
+        <NavLink to="/freestyle" className={cn('flex items-center', compact ? 'justify-center' : 'gap-3')}>
+          <div className="flex size-10 items-center justify-center rounded-lg bg-primary text-base font-semibold text-primary-foreground shadow-sm">
             记
           </div>
           {!compact ? (
@@ -360,7 +360,7 @@ function SidebarContent({ runtimeInfo }: { runtimeInfo: RuntimeInfo | null }) {
                 <RuntimeChannelBadge runtimeInfo={runtimeInfo} />
               </div>
               {runtimeInfo ? (
-                <div className="mt-2 space-y-1 text-[11px] text-muted-foreground">
+                <div className="mt-2 flex flex-col gap-1 text-[11px] text-muted-foreground">
                   <div>数据代际 {runtimeInfo.runtime_generation}</div>
                   <div className="truncate" title={runtimeInfo.app_home}>
                     {runtimeInfo.app_home}
@@ -418,10 +418,10 @@ function ShellFrame({ children }: PropsWithChildren) {
 
   return (
     <ShellProvider value={{ sidebarCollapsed, setSidebarCollapsed }}>
-      <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(59,130,246,0.09),_transparent_24%),linear-gradient(180deg,_rgba(248,250,252,0.96),_rgba(255,255,255,1))]">
+      <div className="min-h-screen bg-background">
         <aside
           className={cn(
-            'memory-anki-warm-panel fixed inset-y-4 left-4 z-20 flex flex-col overflow-hidden rounded-[32px] border border-border/60 bg-background/90 shadow-floating backdrop-blur-xl transition-all duration-300',
+            'memory-anki-warm-panel fixed inset-y-4 left-4 z-20 flex flex-col overflow-hidden rounded-xl border border-border/70 bg-card/95 shadow-card backdrop-blur-xl transition-all duration-300',
             sidebarCollapsed ? 'w-[84px]' : 'w-[250px]',
           )}
         >
@@ -435,18 +435,18 @@ function ShellFrame({ children }: PropsWithChildren) {
                 aria-label="打开日志侧边栏"
                 title="打开日志侧边栏"
               >
-                <ClipboardList className="h-4 w-4" />
+                <ClipboardList data-icon="inline-start" />
               </Button>
               <button
                 type="button"
                 onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-                className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-border/70 bg-background/80 text-muted-foreground transition-colors hover:text-foreground"
+                className="inline-flex size-9 items-center justify-center rounded-md border border-border/70 bg-background/80 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
                 aria-label={sidebarCollapsed ? '展开导航' : '收起导航'}
               >
                 {sidebarCollapsed ? (
-                  <PanelLeftOpen className="h-4 w-4" />
+                  <PanelLeftOpen className="size-4" />
                 ) : (
-                  <PanelLeftClose className="h-4 w-4" />
+                  <PanelLeftClose className="size-4" />
                 )}
               </button>
             </div>

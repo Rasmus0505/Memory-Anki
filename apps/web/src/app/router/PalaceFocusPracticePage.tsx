@@ -27,7 +27,7 @@ import {
 import {
   updateDefaultSegmentReviewProgressApi,
 } from '@/entities/palace-segment/api'
-import { submitReviewSessionApi } from '@/features/review/api/reviewApi'
+import { submitReviewSessionApi } from '@/features/review/api'
 import { StageSelectDialog } from '@/features/review/components/StageSelectDialog'
 import { consumePrefetchedStudySession } from '@/features/review/studyWarmup'
 
@@ -142,7 +142,7 @@ export default function PalaceFocusPracticePage() {
           <>
             <Link to="/palaces/list">
               <Button variant="outline" size="sm">
-                <ArrowLeft className="mr-2 h-4 w-4" />
+                <ArrowLeft className="mr-2 size-4" />
                 返回列表
               </Button>
             </Link>
@@ -227,9 +227,9 @@ export default function PalaceFocusPracticePage() {
       />
 
       {(palace.focus_count ?? 0) > 0 ? (
-        <div className="rounded-2xl border border-border/70 bg-card/92 px-4 py-3 text-sm text-muted-foreground">
+        <div className="rounded-lg border border-border/70 bg-card/92 px-4 py-3 text-sm text-muted-foreground">
           <span className="inline-flex items-center gap-2 font-medium text-foreground">
-            <Target className="h-4 w-4" />
+            <Target className="size-4" />
             当前专项池保留 {palace.focus_count} 张
           </span>
           <span className="ml-2">完成一次专项练习不会自动移出，仍需手动取消专项标记。</span>

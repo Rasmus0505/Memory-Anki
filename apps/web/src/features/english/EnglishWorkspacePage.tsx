@@ -106,7 +106,7 @@ export default function EnglishWorkspacePage() {
           <CardContent className="space-y-4">
             {currentTask ? (
               <div className="space-y-4">
-                <div className="rounded-3xl border border-border/70 bg-background/70 p-5">
+                <div className="rounded-lg border border-border/70 bg-background/70 p-5">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div className="space-y-2">
                       <div className="text-lg font-semibold">{currentTask.sourceFilename}</div>
@@ -134,7 +134,7 @@ export default function EnglishWorkspacePage() {
                     </div>
                   </div>
 
-                  <div className="mt-4 rounded-2xl border border-border/70 bg-card px-4 py-3 text-sm">
+                  <div className="mt-4 rounded-lg border border-border/70 bg-card px-4 py-3 text-sm">
                     {currentTask.message || '正在准备任务'}
                   </div>
 
@@ -147,13 +147,13 @@ export default function EnglishWorkspacePage() {
 
                   <div className="mt-4 flex flex-wrap gap-2">
                     <Button size="sm" variant="outline" onClick={() => void handleOpenLog()}>
-                      <ScrollText className="mr-2 h-4 w-4" />
+                      <ScrollText className="mr-2 size-4" />
                       查看完整日志
                     </Button>
                     {currentTask.status === 'failed' ? (
                       <>
                         <Button size="sm" onClick={() => void handleRetry()} disabled={actionLoading !== null}>
-                          <RefreshCcw className="mr-2 h-4 w-4" />
+                          <RefreshCcw className="mr-2 size-4" />
                           {actionLoading === 'retry' ? '重试中...' : '重试'}
                         </Button>
                         <Button
@@ -162,7 +162,7 @@ export default function EnglishWorkspacePage() {
                           onClick={() => void handleClearTask()}
                           disabled={actionLoading !== null}
                         >
-                          <Trash2 className="mr-2 h-4 w-4" />
+                          <Trash2 className="mr-2 size-4" />
                           {actionLoading === 'clear' ? '清除中...' : '清除'}
                         </Button>
                       </>
@@ -170,7 +170,7 @@ export default function EnglishWorkspacePage() {
                   </div>
                 </div>
 
-                <div className="rounded-3xl border border-border/70 bg-background/70 p-5">
+                <div className="rounded-lg border border-border/70 bg-background/70 p-5">
                   <div className="flex items-center justify-between gap-3">
                     <div className="text-sm font-medium">最近关键日志</div>
                     <div className="text-xs text-muted-foreground">
@@ -180,7 +180,7 @@ export default function EnglishWorkspacePage() {
                   {visibleTaskEvents.length > 0 ? (
                     <div className="mt-3 space-y-2">
                       {visibleTaskEvents.map((event) => (
-                        <div key={event.id} className="rounded-2xl border border-border/70 bg-card px-3 py-3">
+                        <div key={event.id} className="rounded-lg border border-border/70 bg-card px-3 py-3">
                           <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                             <Badge variant="outline">{getTaskStageLabel(event.stage)}</Badge>
                             <Badge variant="secondary">{event.kind}</Badge>
@@ -191,16 +191,16 @@ export default function EnglishWorkspacePage() {
                       ))}
                     </div>
                   ) : (
-                    <div className="mt-3 rounded-2xl border border-dashed border-border/70 px-4 py-4 text-sm text-muted-foreground">
+                    <div className="mt-3 rounded-lg border border-dashed border-border/70 px-4 py-4 text-sm text-muted-foreground">
                       正在等待任务写入第一条日志...
                     </div>
                   )}
                 </div>
 
                 {currentTask.status === 'failed' ? (
-                  <div className="rounded-3xl border border-red-200 bg-red-50 px-4 py-4 text-sm text-red-700">
+                  <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-4 text-sm text-red-700">
                     <div className="flex items-center gap-2 font-medium">
-                      <CircleAlert className="h-4 w-4" />
+                      <CircleAlert className="size-4" />
                       生成失败
                     </div>
                     <div className="mt-2">{currentTask.errorMessage || '请稍后重试。'}</div>
@@ -208,7 +208,7 @@ export default function EnglishWorkspacePage() {
                 ) : null}
               </div>
             ) : (
-              <div className="rounded-3xl border border-dashed border-border/70 bg-background/70 p-5">
+              <div className="rounded-lg border border-dashed border-border/70 bg-background/70 p-5">
                 <div className="flex flex-col gap-3 md:flex-row md:items-center">
                   <Input
                     type="file"
@@ -218,9 +218,9 @@ export default function EnglishWorkspacePage() {
                   />
                   <Button onClick={() => void handleUpload()} disabled={!selectedFile || !canUpload}>
                     {uploading ? (
-                      <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
+                      <LoaderCircle className="mr-2 size-4 animate-spin" />
                     ) : (
-                      <Upload className="mr-2 h-4 w-4" />
+                      <Upload className="mr-2 size-4" />
                     )}
                     {uploading ? '上传中...' : '上传并生成'}
                   </Button>
@@ -229,7 +229,7 @@ export default function EnglishWorkspacePage() {
                   生成链路会先做 ASR，再直接按返回句子翻译成中文译文，不再额外生成词汇辅助。生成完成后会自动进入课程页。
                 </div>
                 {selectedFile ? (
-                  <div className="mt-3 rounded-2xl border border-border/70 bg-card px-4 py-3 text-sm">
+                  <div className="mt-3 rounded-lg border border-border/70 bg-card px-4 py-3 text-sm">
                     已选择：{selectedFile.name} · {formatFileSize(selectedFile.size)}
                   </div>
                 ) : null}
@@ -244,15 +244,15 @@ export default function EnglishWorkspacePage() {
               <CardTitle className="text-base">英语听力统计</CardTitle>
             </CardHeader>
             <CardContent className="grid gap-3 sm:grid-cols-3 xl:grid-cols-1">
-              <div className="rounded-2xl border border-border/70 bg-background/70 px-4 py-4">
+              <div className="rounded-lg border border-border/70 bg-background/70 px-4 py-4">
                 <div className="text-xs text-muted-foreground">课程总数</div>
                 <div className="mt-2 text-2xl font-semibold">{workspace.stats.total_courses}</div>
               </div>
-              <div className="rounded-2xl border border-border/70 bg-background/70 px-4 py-4">
+              <div className="rounded-lg border border-border/70 bg-background/70 px-4 py-4">
                 <div className="text-xs text-muted-foreground">未完成课程</div>
                 <div className="mt-2 text-2xl font-semibold">{workspace.stats.unfinished_courses}</div>
               </div>
-              <div className="rounded-2xl border border-border/70 bg-background/70 px-4 py-4">
+              <div className="rounded-lg border border-border/70 bg-background/70 px-4 py-4">
                 <div className="text-xs text-muted-foreground">英语听力总时长</div>
                 <div className="mt-2 text-lg font-semibold">{formatDuration(workspace.stats.total_practice_seconds)}</div>
               </div>
@@ -265,7 +265,7 @@ export default function EnglishWorkspacePage() {
             </CardHeader>
             <CardContent>
               {workspace.continueCourse ? (
-                <div className="rounded-2xl border border-border/70 bg-background/70 px-4 py-4">
+                <div className="rounded-lg border border-border/70 bg-background/70 px-4 py-4">
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <div className="text-sm font-medium">{workspace.continueCourse.title}</div>
@@ -277,7 +277,7 @@ export default function EnglishWorkspacePage() {
                   </div>
                   <div className="mt-4 flex flex-wrap gap-2">
                     <Button onClick={() => navigateToCourse(workspace.continueCourse?.id)}>
-                      <BookAudio className="mr-2 h-4 w-4" />
+                      <BookAudio className="mr-2 size-4" />
                       继续练习
                     </Button>
                     <Button variant="outline" asChild>
@@ -288,7 +288,7 @@ export default function EnglishWorkspacePage() {
                   </div>
                 </div>
               ) : (
-                <div className="rounded-3xl border border-dashed border-border/70 py-12 text-center text-sm text-muted-foreground">
+                <div className="rounded-lg border border-dashed border-border/70 py-12 text-center text-sm text-muted-foreground">
                   暂时没有未完成的英语课程。
                 </div>
               )}
@@ -310,7 +310,7 @@ export default function EnglishWorkspacePage() {
               {workspace.recentCourses.map((course) => (
                 <div
                   key={course.id}
-                  className="flex flex-col gap-3 rounded-2xl border border-border/70 bg-background/70 px-4 py-4 md:flex-row md:items-center md:justify-between"
+                  className="flex flex-col gap-3 rounded-lg border border-border/70 bg-background/70 px-4 py-4 md:flex-row md:items-center md:justify-between"
                 >
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
@@ -329,7 +329,7 @@ export default function EnglishWorkspacePage() {
                     <Button asChild>
                       <Link to={`/english/courses/${course.id}`}>
                         {course.status === 'completed' ? '再次练习' : '进入课程'}
-                        <ArrowRight className="ml-2 h-4 w-4" />
+                        <ArrowRight className="ml-2 size-4" />
                       </Link>
                     </Button>
                     <Button
@@ -337,7 +337,7 @@ export default function EnglishWorkspacePage() {
                       onClick={() => void handleDeleteCourse(course.id, course.title)}
                       disabled={actionLoading === course.id}
                     >
-                      <Trash2 className="mr-2 h-4 w-4" />
+                      <Trash2 className="mr-2 size-4" />
                       {actionLoading === course.id ? '删除中...' : '删除'}
                     </Button>
                   </div>

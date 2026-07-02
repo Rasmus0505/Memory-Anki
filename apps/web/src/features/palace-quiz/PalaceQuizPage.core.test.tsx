@@ -4,6 +4,7 @@ import {
   baseQuestions,
   batchDeletePalaceQuizQuestionsApiMock,
   dispatchGlobalFeedbackMock,
+  emitReviewConfettiMock,
   getPalaceEditorApiMock,
   getPalacesGroupedApiMock,
   getPalaceQuizQuestionsApiMock,
@@ -62,6 +63,9 @@ describe('PalaceQuizPage core flows', () => {
     expect((await screen.findByTestId('memory-lookup-mindmap')).getAttribute('data-readonly')).toBe(
       'true',
     )
+    expect(screen.getByRole('button', { name: '查看模式' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: '翻卡模式' })).toBeTruthy()
+    expect(screen.getByText('只读脑图预览')).toBeTruthy()
     await waitFor(() => {
       expect(screen.getByTestId('memory-lookup-mindmap').getAttribute('data-root-uid')).toBe(
         'root-1',
@@ -74,6 +78,41 @@ describe('PalaceQuizPage core flows', () => {
       }),
     )
     expect(screen.getByRole('button', { name: '从右下角调整记忆宫殿查看大小' })).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: '翻卡模式' }))
+    expect(screen.getByText(/翻卡模式：点击已显示节点展开子节点/)).toBeTruthy()
+    expect(screen.getByRole('button', { name: /重新开始/ })).toBeTruthy()
+    await waitFor(() => {
+      expect(screen.getByTestId('memory-lookup-mindmap').getAttribute('data-practice-mode')).toBe(
+        'true',
+      )
+      expect(screen.getByTestId('memory-lookup-mindmap').getAttribute('data-sync-reason')).toBe(
+        'review_flip',
+      )
+    })
+    expect(screen.getByText('细胞核节点')).toBeTruthy()
+    expect(screen.getByText('染色体线索')).toBeTruthy()
+
+    fireEvent.contextMenu(screen.getByTestId('memory-node-child-1'))
+    await waitFor(() => {
+      expect(screen.queryByText('染色体线索')).toBeNull()
+    })
+    fireEvent.click(screen.getByTestId('memory-node-child-1'))
+    expect(await screen.findByText('待回忆')).toBeTruthy()
+    fireEvent.click(screen.getByTestId('memory-node-grandchild-1'))
+    await waitFor(() => {
+      expect(screen.getByText('染色体线索')).toBeTruthy()
+      expect(screen.getByTestId('memory-lookup-mindmap').getAttribute('data-review-fx')).toBe(
+        'card_reveal',
+      )
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: '查看模式' }))
+    await waitFor(() => {
+      expect(screen.getByTestId('memory-lookup-mindmap').getAttribute('data-practice-mode')).toBe(
+        'false',
+      )
+    })
 
     fireEvent.click(screen.getByRole('button', { name: '缩小为胶囊' }))
     expect(await screen.findByRole('button', { name: '打开记忆宫殿查看' })).toBeTruthy()
@@ -114,10 +153,53 @@ describe('PalaceQuizPage core flows', () => {
     await waitFor(() => {
       expect(screen.getByText('答对 3 次 / 答错 1 次')).toBeTruthy()
     })
+    await waitFor(() => {
+      expect(dispatchGlobalFeedbackMock).toHaveBeenCalledWith(
+        'quiz_result_correct',
+        expect.objectContaining({ label: '答对', screenPulse: 'soft', audioScope: 'local' }),
+      )
+      expect(emitReviewConfettiMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          kind: 'quiz_correct',
+          confettiAmount: 0.8,
+          confettiPreset: 'random_direction',
+          soundEnabled: true,
+        }),
+      )
+    })
     fireEvent.click(screen.getByRole('button', { name: /再做一次/ }))
     expect(dispatchGlobalFeedbackMock).toHaveBeenCalledWith(
       'quiz_answer_reset',
       expect.objectContaining({ label: '重做', audioScope: 'local' }),
+    )
+  })
+
+  it('emits incorrect quiz feedback without result confetti', async () => {
+    recordPalaceQuizChoiceAttemptApiMock.mockResolvedValueOnce({
+      question: {
+        ...baseQuestions[0],
+        correct_count: 2,
+        incorrect_count: 2,
+        attempt_count: 4,
+      },
+      selected_option_id: 'A',
+      is_correct: false,
+    })
+
+    renderPage()
+    expect(await screen.findByText('细胞的控制中心是？')).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: 'A. 细胞膜' }))
+
+    expect(await screen.findByText('回答错误')).toBeTruthy()
+    await waitFor(() => {
+      expect(dispatchGlobalFeedbackMock).toHaveBeenCalledWith(
+        'quiz_result_incorrect',
+        expect.objectContaining({ label: '答错', screenPulse: null, audioScope: 'local' }),
+      )
+    })
+    expect(emitReviewConfettiMock).not.toHaveBeenCalledWith(
+      expect.objectContaining({ kind: 'quiz_correct' }),
     )
   })
 

@@ -2,8 +2,9 @@
 import { toast } from '@/shared/feedback/toast'
 import type { dispatchGlobalFeedback } from '@/shared/feedback/globalFeedbackModel'
 import type { PalaceQuizQuestion } from '@/shared/api/contracts'
-import { recordPalaceQuizChoiceAttemptApi, requestPalaceShortAnswerFeedbackApi } from '@/features/palace-quiz/api/palaceQuizApi'
+import { recordPalaceQuizChoiceAttemptApi, requestPalaceShortAnswerFeedbackApi } from '@/features/palace-quiz/api'
 import type { QuizRuntimeState } from '@/features/palace-quiz/QuizQuestionInteraction'
+import { emitQuizResultFeedback } from '@/features/palace-quiz/model/quizResultFeedback'
 
 export function usePalaceQuizPractice({
   setQuestions,
@@ -86,11 +87,7 @@ export function usePalaceQuizPractice({
         setQuestions((current) =>
           current.map((item) => (item.id === question.id ? response.question : item)),
         )
-        emitQuizFeedback(isCorrect ? 'quiz_result_correct' : 'quiz_result_incorrect', {
-          label: isCorrect ? '答对' : '答错',
-          screenPulse: isCorrect ? 'soft' : null,
-          audioScope: 'local',
-        })
+        emitQuizResultFeedback({ correct: isCorrect })
         emitQuizFeedback('quiz_result_reveal', {
           label: isCorrect ? '揭晓' : '答案',
           screenPulse: null,

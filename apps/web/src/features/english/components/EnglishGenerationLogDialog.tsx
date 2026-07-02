@@ -44,7 +44,7 @@ export function EnglishGenerationLogDialog({
           ) : (
             <div className="space-y-4">
               {log.task ? (
-                <div className="rounded-2xl border border-border/70 p-4">
+                <div className="rounded-lg border border-border/70 p-4">
                   <div className="flex flex-wrap items-center gap-2">
                     <Badge variant={log.task.status === 'failed' ? 'destructive' : 'secondary'}>
                       {log.task.status}
@@ -62,7 +62,7 @@ export function EnglishGenerationLogDialog({
                 </div>
               ) : null}
 
-              <div className="rounded-2xl border border-border/70 p-4">
+              <div className="rounded-lg border border-border/70 p-4">
                 <div className="text-sm font-medium">阶段时间线</div>
                 {log.events.length > 0 ? (
                   <div className="mt-3 space-y-3">
@@ -89,7 +89,7 @@ export function EnglishGenerationLogDialog({
                 )}
               </div>
 
-              <div className="rounded-2xl border border-border/70 p-4">
+              <div className="rounded-lg border border-border/70 p-4">
                 <div className="text-sm font-medium">关联 AI 调用</div>
                 {log.aiLogs.length > 0 ? (
                   <div className="mt-3 space-y-4">

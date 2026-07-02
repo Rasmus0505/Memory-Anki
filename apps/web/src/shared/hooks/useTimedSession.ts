@@ -44,6 +44,7 @@ import {
   buildRecordFromExpiredSuspendedSnapshot,
   writePersistedTimedSessionSnapshot,
 } from './timedSessionSnapshot'
+import { markDirty, registerAutoSaveTarget } from '@/shared/persistence/autosaveCoordinator'
 import {
   clearTimedSessionInterval,
   clearTimedSessionTimeout,
@@ -100,9 +101,11 @@ export function useTimedSession({
   const leaveMetaRef = React.useRef<TimedSessionMeta | null>(null)
   const sceneSegmentsRef = React.useRef<SessionSceneSegment[]>([])
   const activeSceneSegmentRef = React.useRef<ActiveSceneSegmentSnapshot | null>(null)
+  const lastTickPersistAtRef = React.useRef<number | null>(null)
   const [automationConfig, setAutomationConfig] = React.useState<TimerAutomationConfig>(() =>
     readTimerAutomationConfig(),
   )
+  const timedSessionAutoSaveKey = React.useMemo(() => `timed-session:${sessionIdRef.current}`, [])
 
   const resolvedAutomation = React.useMemo(
     () => resolveTimedSessionAutomation(getTimerAutomationRule(automationScene, automationConfig), { autoPauseMs, hiddenPauseMs }),
@@ -225,10 +228,12 @@ export function useTimedSession({
     if (statusRef.current !== 'running' || lastTickAtRef.current == null) return
     const elapsedMs = Math.max(0, currentMs - lastTickAtRef.current)
     const diffSeconds = Math.floor(elapsedMs / 1000)
+    let changed = false
     if (diffSeconds > 0) {
       effectiveSecondsRef.current += diffSeconds
       setEffectiveSeconds(effectiveSecondsRef.current)
       lastTickAtRef.current += diffSeconds * 1000
+      changed = true
     } else if (elapsedMs > 0 && elapsedMs < 1000) {
       lastTickAtRef.current = currentMs - elapsedMs
     }
@@ -236,9 +241,14 @@ export function useTimedSession({
     if (nextIdle !== idleSecondsRef.current) {
       idleSecondsRef.current = nextIdle
       setIdleSeconds(nextIdle)
+      changed = true
     }
-    persistSnapshot()
-  }, [getIdleSecondsAt, persistSnapshot])
+    if (changed && (lastTickPersistAtRef.current == null || currentMs - lastTickPersistAtRef.current >= 5_000)) {
+      lastTickPersistAtRef.current = currentMs
+      persistSnapshot()
+      markDirty(timedSessionAutoSaveKey, 'tick')
+    }
+  }, [getIdleSecondsAt, persistSnapshot, timedSessionAutoSaveKey])
 
   const startTicker = React.useCallback(() => {
     clearTimedSessionInterval(tickerRef)
@@ -294,6 +304,17 @@ export function useTimedSession({
       return record
     }
   }, [])
+
+  const saveInProgressRecord = React.useCallback(async () => {
+    if (!startedAtRef.current || statusRef.current === 'completed') {
+      return
+    }
+    const record = buildRecord('saved', nowIso())
+    if (!record) {
+      return
+    }
+    await persistRecord(record)
+  }, [buildRecord, persistRecord])
 
   const persistExpiredSuspendedSnapshot = React.useCallback(async (
     snapshot: RestorableTimedSessionSnapshot,
@@ -380,8 +401,9 @@ export function useTimedSession({
         rollback_seconds: rollbackSeconds,
       })
       persistSnapshot()
+      markDirty(timedSessionAutoSaveKey, 'auto_pause')
     }, resolvedAutomation.autoPauseMs)
-  }, [getIdleSecondsAt, persistSnapshot, pushEvent, resolvedAutomation, stopTicker])
+  }, [getIdleSecondsAt, persistSnapshot, pushEvent, resolvedAutomation, stopTicker, timedSessionAutoSaveKey])
 
   const beginRunning = React.useCallback((eventType: 'start' | 'resume', meta?: TimedSessionMeta) => {
     const nextStartedAt = startedAtRef.current ?? nowIso()
@@ -391,6 +413,7 @@ export function useTimedSession({
     ensureRecordId()
     clearSuspendedState()
     lastActivityAtRef.current = Date.now()
+    lastTickPersistAtRef.current = null
     idleSecondsRef.current = 0
     setIdleSeconds(0)
     statusRef.current = 'running'
@@ -401,7 +424,8 @@ export function useTimedSession({
     armAutoPause()
     pushEvent(eventType, meta)
     persistSnapshot()
-  }, [armAutoPause, clearSuspendedState, ensureRecordId, maybeStartSceneSegment, persistSnapshot, pushEvent, startTicker])
+    markDirty(timedSessionAutoSaveKey, eventType)
+  }, [armAutoPause, clearSuspendedState, ensureRecordId, maybeStartSceneSegment, persistSnapshot, pushEvent, startTicker, timedSessionAutoSaveKey])
 
   const resumeSuspendedScene = React.useCallback(
     (meta?: TimedSessionMeta) => {
@@ -449,11 +473,13 @@ export function useTimedSession({
     pauseCountRef.current += 1
     setPauseCount(pauseCountRef.current)
     statusRef.current = 'paused'
+    lastTickPersistAtRef.current = null
     setStatus('paused')
     setGlowState('paused')
     pushEvent('pause', meta)
     persistSnapshot()
-  }, [persistSnapshot, pushEvent, stopTicker])
+    markDirty(timedSessionAutoSaveKey, 'pause')
+  }, [persistSnapshot, pushEvent, stopTicker, timedSessionAutoSaveKey])
 
   const resume = React.useCallback((meta?: TimedSessionMeta) => {
     if (statusRef.current === 'completed') return
@@ -547,6 +573,7 @@ export function useTimedSession({
     clearTimedSessionTimeout(autoPauseRef)
     clearTimedSessionTimeout(hiddenPauseRef)
     statusRef.current = 'paused'
+    lastTickPersistAtRef.current = null
     setStatus('paused')
     setGlowState('idle')
     sceneActiveRef.current = false
@@ -614,6 +641,7 @@ export function useTimedSession({
           resumeDeadlineAt,
           leaveMeta: meta ?? null,
         })
+        markDirty(timedSessionAutoSaveKey, 'scene_inactive')
         return
       }
 
@@ -621,7 +649,7 @@ export function useTimedSession({
         resumeSuspendedScene(meta)
       }
     },
-    [autoPauseRef, closeActiveSceneSegment, hiddenPauseRef, persistSnapshot, pushEvent, resolvedAutomation.resumeWindowMs, resumeSuspendedScene, stopTicker],
+    [autoPauseRef, closeActiveSceneSegment, hiddenPauseRef, persistSnapshot, pushEvent, resolvedAutomation.resumeWindowMs, resumeSuspendedScene, stopTicker, timedSessionAutoSaveKey],
   )
 
   const registerActivity = React.useCallback((
@@ -659,7 +687,8 @@ export function useTimedSession({
     durationEditedRef.current = true
     pushEvent('adjust_duration', { seconds: effectiveSecondsRef.current })
     persistSnapshot()
-  }, [persistSnapshot, pushEvent])
+    markDirty(timedSessionAutoSaveKey, 'adjust_duration')
+  }, [persistSnapshot, pushEvent, timedSessionAutoSaveKey])
 
   const complete = React.useCallback(
     async (
@@ -705,6 +734,7 @@ export function useTimedSession({
     sceneSegmentsRef.current = []
     activeSceneSegmentRef.current = null
     effectiveSecondsRef.current = 0
+    lastTickPersistAtRef.current = null
     idleSecondsRef.current = 0
     pauseCountRef.current = 0
     startedAtRef.current = null
@@ -776,6 +806,14 @@ export function useTimedSession({
   useTimedSessionUnloadPersistence(storageKey, leaveSceneForUnload)
 
   useTimedSessionAutomationConfigSubscription(setAutomationConfig)
+
+  React.useEffect(() => {
+    return registerAutoSaveTarget(timedSessionAutoSaveKey, {
+      flush: async () => {
+        await saveInProgressRecord()
+      },
+    })
+  }, [saveInProgressRecord, timedSessionAutoSaveKey])
 
   return buildTimedSessionController({
     sessionId: sessionIdRef.current,

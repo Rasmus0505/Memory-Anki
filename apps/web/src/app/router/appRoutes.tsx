@@ -79,6 +79,7 @@ function normalizePathname(pathname: string) {
 // 已注册的精确路由路径（normalize 后直接命中，保留原路径）。
 const REGISTERED_EXACT_PATHS = new Set<string>([
   '/',
+  '/dashboard',
   '/freestyle',
   '/knowledge',
   '/english',
@@ -93,6 +94,7 @@ const REGISTERED_EXACT_PATHS = new Set<string>([
   '/profile/feedback',
   '/profile/ai',
   '/profile/backups',
+  '/timer-overlay',
 ])
 
 // 已注册的动态段路由（命中后保留原路径）。仅匹配到主段，不含未知后代。
@@ -129,6 +131,7 @@ const SECTION_PREFIX_FALLBACKS: Record<string, string> = {
   '/english-reading/': '/english-reading',
   '/english/': '/english',
   '/palaces/': '/palaces',
+  '/timer-overlay/': '/timer-overlay',
 }
 
 export function resolveRouteFallbackTarget(pathname: string) {
@@ -148,7 +151,7 @@ export function resolveRouteFallbackTarget(pathname: string) {
     if (normalizedPathname.startsWith(prefix)) return target
   }
 
-  return '/'
+  return '/freestyle'
 }
 
 function RouteNotFound({ pathname }: { pathname: string }) {
@@ -161,7 +164,8 @@ export function AppRoutes({ location }: { location?: Location }) {
   return (
     <Suspense fallback={<RouteFallback />}>
       <Routes location={location}>
-        <Route path="/" element={<DashboardPage />} />
+        <Route path="/" element={<Navigate to="/freestyle" replace />} />
+        <Route path="/dashboard" element={<DashboardPage />} />
         <Route path="/freestyle" element={<FreestylePage />} />
         <Route path="/palaces" element={<PalaceShelfPage />} />
         <Route path="/english" element={<EnglishWorkspacePage />} />

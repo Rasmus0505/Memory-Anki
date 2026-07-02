@@ -5,7 +5,7 @@ import { useAiRunConfigDialog } from './useAiRunConfigDialog'
 const getAiModelScenariosApiMock = vi.fn()
 const getAiPromptTemplatesApiMock = vi.fn()
 
-vi.mock('@/entities/preferences/api/aiModelSettingsApi', () => ({
+vi.mock('@/entities/preferences/api', () => ({
   getAiModelScenariosApi: () => getAiModelScenariosApiMock(),
   getAiPromptTemplatesApi: () => getAiPromptTemplatesApiMock(),
 }))

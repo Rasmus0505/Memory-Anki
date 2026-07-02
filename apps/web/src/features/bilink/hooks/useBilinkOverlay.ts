@@ -9,7 +9,7 @@ import {
   createBilinkApi,
   deleteBilinkApi,
   getBilinkNodeContextApi,
-} from '@/features/bilink/api/bilink'
+} from '@/features/bilink/api'
 import { getPalaceEditorApi } from '@/entities/palace/api'
 import { useBilinkSearch } from '@/features/bilink/hooks/useBilinkSearch'
 import {

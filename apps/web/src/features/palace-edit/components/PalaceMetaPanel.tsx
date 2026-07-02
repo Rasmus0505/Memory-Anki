@@ -41,9 +41,9 @@ export function PalaceMetaPanel({
         <div className="space-y-2">
           <Label htmlFor="palace-created-at">建造状态</Label>
           {palace?.created_at ? (
-            <div className="space-y-3 rounded-2xl border border-border/70 bg-background/70 p-4">
+            <div className="space-y-3 rounded-lg border border-border/70 bg-background/70 p-4">
               <div className="flex items-center gap-2 text-sm font-medium text-foreground">
-                <CheckCircle2 className="h-4 w-4 text-success" />
+                <CheckCircle2 className="size-4 text-success" />
                 已确立建造宫殿
               </div>
               <div className="space-y-2">
@@ -57,7 +57,7 @@ export function PalaceMetaPanel({
               </div>
             </div>
           ) : (
-            <div className="space-y-3 rounded-2xl border border-dashed border-border/80 bg-background/70 p-4">
+            <div className="space-y-3 rounded-lg border border-dashed border-border/80 bg-background/70 p-4">
               <p className="text-sm text-muted-foreground">
                 确立后会以你点击按钮的时间作为该宫殿的创建时间，之后仍可继续修改。
               </p>
@@ -73,7 +73,7 @@ export function PalaceMetaPanel({
           )}
         </div>
         <Button type="button" className="w-full" onClick={() => void onSave()}>
-          <Save className="mr-2 h-4 w-4" />
+          <Save className="mr-2 size-4" />
           保存
         </Button>
       </CardContent>

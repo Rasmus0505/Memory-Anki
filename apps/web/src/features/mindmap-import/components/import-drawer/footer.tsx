@@ -67,7 +67,7 @@ export function MindMapImportFooter({ model, copied, onCopyText }: MindMapImport
               关闭窗口
             </Button>
             <Button variant="outline" onClick={() => void onCopyText()} disabled={!extractedText}>
-              {copied ? <Check className="mr-2 h-4 w-4" /> : <Copy className="mr-2 h-4 w-4" />}
+              {copied ? <Check className="mr-2 size-4" /> : <Copy className="mr-2 size-4" />}
               {copied ? '已复制' : '复制全部'}
             </Button>
           </div>

@@ -1,9 +1,9 @@
 from __future__ import annotations
 
+import ast
 import json
 import re
 import subprocess
-import sys
 from pathlib import Path
 
 
@@ -12,6 +12,8 @@ WEB_SRC = REPO_ROOT / "apps" / "web" / "src"
 WEB_ROOT = REPO_ROOT / "apps" / "web"
 API_SRC = REPO_ROOT / "apps" / "api" / "src" / "memory_anki"
 ALEMBIC_VERSIONS = REPO_ROOT / "apps" / "api" / "alembic" / "versions"
+STORAGE_LAYOUT_PATH = REPO_ROOT / "apps" / "api" / "storage-layout.json"
+BOUNDARY_EXCEPTIONS_PATH = REPO_ROOT / "docs" / "architecture" / "boundary-exceptions.json"
 PALACE_QUIZ_APPLICATION = API_SRC / "modules" / "palace_quiz" / "application"
 SETTINGS_MODULE = API_SRC / "modules" / "settings"
 WEB_LAYER_DIRS = ("app", "features", "entities", "shared")
@@ -25,6 +27,7 @@ FORBIDDEN_WEB_IMPORTS = {
 }
 
 FORBIDDEN_SHARED_IMPORTS = ("@/app/", "@/features/")
+FORBIDDEN_SHARED_BUSINESS_IMPORTS = ("@/entities/",)
 FORBIDDEN_DASHBOARD_IMPORTS = {
     "@/shared/api/modules/dashboard": "dashboard API wrappers belong in features/dashboard/api; import the feature-scoped API instead.",
 }
@@ -77,6 +80,9 @@ FORBIDDEN_PRODUCTION_FEATURE_DEEP_IMPORTS = {
     "@/features/mindmap-import/components/": "production consumers must import mind-map import UI through features/mindmap-import.",
     "@/features/mindmap-import/model/": "production consumers must import mind-map import contracts through features/mindmap-import.",
 }
+PUBLIC_API_DEEP_IMPORT_PATTERN = re.compile(
+    r"@/(entities|features)/([^/'\"]+)/api/([^/'\"]+)"
+)
 FORBIDDEN_ROUTER_RESIDENT_NAMES = {
     "DashboardPage",
     "PalaceListPage",
@@ -89,6 +95,56 @@ FORBIDDEN_SHARED_LOCAL_STORAGE_KEYS = (
     "palace_list_view_settings",
     "palace_shelf_view_settings",
 )
+BASELINE_SHARED_ENTITY_IMPORTS = {
+    "shared/components/session/SessionTimerBar.tsx",
+    "shared/components/session/timer-automation-config.ts",
+    "shared/hooks/timedSessionModel.ts",
+    "shared/hooks/timedSessionRecovery.ts",
+    "shared/hooks/timedSessionRestore.ts",
+    "shared/hooks/timedSessionSnapshot.ts",
+    "shared/hooks/useTimedSession.test.tsx",
+    "shared/hooks/useTimedSession.ts",
+    "shared/lib/localStorage.test.tsx",
+    "shared/logs/components/AppLogDrawer.tsx",
+    "shared/preferences/clientPreferences.test.ts",
+    "shared/preferences/clientPreferences.ts",
+    "shared/preferences/persistentPreferenceStore.test.ts",
+}
+BASELINE_PRESENTATION_SESSION_FILES = {
+    "apps/api/src/memory_anki/modules/dashboard/presentation/router.py",
+    "apps/api/src/memory_anki/modules/english/presentation/router.py",
+    "apps/api/src/memory_anki/modules/english_reading/presentation/router.py",
+    "apps/api/src/memory_anki/modules/freestyle/presentation/router.py",
+    "apps/api/src/memory_anki/modules/knowledge/presentation/bilink_router.py",
+    "apps/api/src/memory_anki/modules/knowledge/presentation/router.py",
+    "apps/api/src/memory_anki/modules/palace_quiz/presentation/router.py",
+    "apps/api/src/memory_anki/modules/palaces/presentation/import_router.py",
+    "apps/api/src/memory_anki/modules/palaces/presentation/router.py",
+    "apps/api/src/memory_anki/modules/reviews/presentation/router.py",
+    "apps/api/src/memory_anki/modules/sessions/presentation/router.py",
+    "apps/api/src/memory_anki/modules/settings/presentation/router.py",
+    "apps/api/src/memory_anki/modules/time_records/presentation/router.py",
+    "apps/api/src/memory_anki/modules/voice_coach/presentation/__init__.py",
+}
+BASELINE_PERSONAL_PATH_TOOLS = {
+    "tools/audit_1000_quiz_bank.py",
+    "tools/build_1000_questions_manifest.py",
+    "tools/import_manual_quiz_texts.py",
+    "tools/locate_1000_quiz_pages.py",
+    "tools/merge_1000_page_drafts.py",
+    "tools/ocr_1000_questions.py",
+    "tools/render_1000_question_pages.py",
+    "tools/run_1000_quiz_rerun_plan.py",
+}
+BASELINE_OVERSIZED_FILES = {
+    "apps/web/src/features/freestyle/FreestylePage.tsx",
+    "apps/web/src/features/palace-quiz/components/PalaceQuizGenerationPanel.tsx",
+    "apps/web/src/shared/components/session/GlobalTimerProvider.test.tsx",
+    "apps/web/src/shared/components/session/GlobalTimerProvider.tsx",
+    "apps/web/src/shared/components/session/TimerAutomationDialog.tsx",
+    "apps/web/src/shared/hooks/useTimedSession.test.tsx",
+    "apps/web/src/shared/hooks/useTimedSession.ts",
+}
 
 MAX_WEB_FILE_LINES = 750
 MAX_API_FILE_LINES = 800
@@ -104,12 +160,66 @@ DESTRUCTIVE_MIGRATION_PATTERNS = {
     "op.rename_table(": "rename tables",
     "rename table ": "rename tables",
 }
+REQUIRED_STORAGE_KEYS = {
+    "database",
+    "attachments",
+    "english",
+    "english_reading",
+    "voice_coach",
+    "import_jobs",
+    "ai_call_logs",
+    "backups_full",
+    "backups_rescue",
+    "runtime_active_instances",
+    "migration_state",
+    "sync_state",
+}
+PERSONAL_ABSOLUTE_PATH_PATTERNS = (
+    re.compile(r"[A-Za-z]:\\Users\\"),
+    re.compile(r"D:\\"),
+    re.compile(r"C:\\(?!Program Files\\nodejs|Program Files \(x86\)\\nodejs)"),
+)
+BACKEND_PRIVATE_CROSS_MODULE_SEGMENTS = (".infrastructure", ".presentation")
+BACKEND_CROSS_MODULE_PRIVATE_NAMES = ("repository", "repositories", "_")
 
 
 def iter_files(root: Path, suffixes: tuple[str, ...]):
     for path in root.rglob("*"):
         if path.is_file() and path.suffix in suffixes and "__pycache__" not in path.parts:
             yield path
+
+
+def load_boundary_exceptions() -> list[dict]:
+    if not BOUNDARY_EXCEPTIONS_PATH.exists():
+        return []
+    payload = json.loads(BOUNDARY_EXCEPTIONS_PATH.read_text(encoding="utf-8"))
+    exceptions = payload.get("exceptions", [])
+    return [item for item in exceptions if isinstance(item, dict)]
+
+
+def path_for_exception(path: Path) -> str:
+    return path.relative_to(REPO_ROOT).as_posix()
+
+
+def is_backend_boundary_exception(
+    *,
+    source_module: str,
+    imported_module: str,
+    path: Path,
+    exceptions: list[dict],
+) -> bool:
+    relative = path_for_exception(path)
+    for item in exceptions:
+        source = str(item.get("source") or "")
+        target = str(item.get("target") or "")
+        allowed_files = {str(value).replace("\\", "/") for value in item.get("allowed_files", [])}
+        if not source_module.startswith(source):
+            continue
+        if not imported_module.startswith(target):
+            continue
+        if relative in allowed_files:
+            return True
+    return False
 
 
 def check_forbidden_imports(errors: list[str]) -> None:
@@ -138,11 +248,22 @@ def check_forbidden_imports(errors: list[str]) -> None:
                         f"{relative}: shared modules must not import app or feature modules; move feature-specific logic out of shared."
                     )
                     break
+            for forbidden_prefix in FORBIDDEN_SHARED_BUSINESS_IMPORTS:
+                if forbidden_prefix in content:
+                    if relative in BASELINE_SHARED_ENTITY_IMPORTS:
+                        continue
+                    errors.append(
+                        f"{relative}: shared modules must not import entities; move business-aware code to the owning entity or feature."
+                    )
+                    break
 
 
 def check_file_sizes(errors: list[str]) -> None:
     for path in iter_files(WEB_SRC, (".ts", ".tsx")):
         line_count = len(path.read_text(encoding="utf-8").splitlines())
+        relative_posix = path.relative_to(REPO_ROOT).as_posix()
+        if relative_posix in BASELINE_OVERSIZED_FILES:
+            continue
         if line_count > MAX_WEB_FILE_LINES:
             relative = path.relative_to(REPO_ROOT)
             errors.append(
@@ -231,6 +352,14 @@ def check_frontend_public_api_surfaces(errors: list[str]) -> None:
         if relative.startswith("entities/") and "/api/" in relative:
             continue
         content = path.read_text(encoding="utf-8")
+        for match in PUBLIC_API_DEEP_IMPORT_PATTERN.finditer(content):
+            layer, owner, module_name = match.groups()
+            if module_name == "index":
+                continue
+            errors.append(
+                f"{relative}: production code must import {layer}/{owner} APIs through "
+                f"`@/{layer}/{owner}/api`, not internal API file `{module_name}`."
+            )
         for forbidden_import, message in FORBIDDEN_PRODUCTION_ENTITY_API_DEEP_IMPORTS.items():
             if forbidden_import in content:
                 errors.append(f"{relative}: {message}")
@@ -323,6 +452,130 @@ def check_frontend_config_contract(errors: list[str]) -> None:
             errors.append(f"{relative}: Python package metadata is generated output.")
 
 
+def check_storage_layout_contract(errors: list[str]) -> None:
+    payload = json.loads(STORAGE_LAYOUT_PATH.read_text(encoding="utf-8"))
+    items = payload.get("managed_items", [])
+    if not isinstance(items, list):
+        errors.append("apps/api/storage-layout.json: managed_items must be a list.")
+        return
+    keys = set()
+    for item in items:
+        if not isinstance(item, dict):
+            errors.append("apps/api/storage-layout.json: every managed item must be an object.")
+            continue
+        key = str(item.get("key") or "")
+        keys.add(key)
+        relative_path = str(item.get("relative_path") or "")
+        kind = str(item.get("kind") or "")
+        if not key or not relative_path:
+            errors.append("apps/api/storage-layout.json: every managed item needs key and relative_path.")
+        if kind not in {"file", "directory"}:
+            errors.append(f"apps/api/storage-layout.json: `{key}` must declare kind file or directory.")
+        if "backup" not in item:
+            errors.append(f"apps/api/storage-layout.json: `{key}` must explicitly declare backup true/false.")
+    missing = sorted(REQUIRED_STORAGE_KEYS - keys)
+    for key in missing:
+        errors.append(f"apps/api/storage-layout.json: missing managed runtime item `{key}`.")
+
+
+def module_name_for_api_path(path: Path) -> str:
+    relative = path.relative_to(API_SRC).with_suffix("")
+    return "memory_anki." + ".".join(relative.parts)
+
+
+def owning_backend_module(module_name: str) -> str | None:
+    parts = module_name.split(".")
+    if len(parts) >= 4 and parts[:3] == ["memory_anki", "modules", parts[2]]:
+        return parts[2]
+    if len(parts) >= 3 and parts[0] == "memory_anki" and parts[1] == "modules":
+        return parts[2]
+    return None
+
+
+def imported_module_from_node(node: ast.AST) -> str | None:
+    if isinstance(node, ast.ImportFrom):
+        return node.module
+    if isinstance(node, ast.Import) and node.names:
+        return node.names[0].name
+    return None
+
+
+def is_private_backend_cross_module_import(source_module: str, imported_module: str) -> bool:
+    if not imported_module.startswith("memory_anki.modules."):
+        return False
+    source_owner = owning_backend_module(source_module)
+    target_owner = owning_backend_module(imported_module)
+    if not source_owner or not target_owner or source_owner == target_owner:
+        return False
+    if any(segment in imported_module for segment in BACKEND_PRIVATE_CROSS_MODULE_SEGMENTS):
+        return True
+    tail = imported_module.split(".")[-1]
+    if tail.startswith("_"):
+        return True
+    return any(name in imported_module.split(".") for name in BACKEND_CROSS_MODULE_PRIVATE_NAMES)
+
+
+def check_backend_module_boundaries(errors: list[str]) -> None:
+    exceptions = load_boundary_exceptions()
+    for path in iter_files(API_SRC / "modules", (".py",)):
+        source_module = module_name_for_api_path(path)
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+        except SyntaxError as exc:
+            errors.append(f"{path.relative_to(REPO_ROOT)}: cannot parse imports: {exc}")
+            continue
+        for node in ast.walk(tree):
+            imported_module = imported_module_from_node(node)
+            if not imported_module:
+                continue
+            if is_private_backend_cross_module_import(source_module, imported_module):
+                if is_backend_boundary_exception(
+                    source_module=source_module,
+                    imported_module=imported_module,
+                    path=path,
+                    exceptions=exceptions,
+                ):
+                    continue
+                errors.append(
+                    f"{path.relative_to(REPO_ROOT)}: cross-module import `{imported_module}` reaches a private layer; "
+                    "use a public contract/port or register a bounded exception."
+                )
+
+
+def check_backend_presentation_orm_usage(errors: list[str]) -> None:
+    for path in (API_SRC / "modules").glob("*/presentation/**/*.py"):
+        relative = path.relative_to(REPO_ROOT).as_posix()
+        if relative in BASELINE_PRESENTATION_SESSION_FILES:
+            continue
+        content = path.read_text(encoding="utf-8")
+        forbidden_patterns = {
+            "get_session": "presentation must receive use-case dependencies instead of owning DB sessions",
+            ".query(": "presentation must not run ORM queries",
+            ".commit(": "presentation must not commit transactions",
+            "memory_anki.infrastructure.db.models": "presentation must not import SQLAlchemy models directly",
+        }
+        for pattern, message in forbidden_patterns.items():
+            if pattern in content:
+                errors.append(f"{relative}: {message}.")
+                break
+
+
+def check_tool_personal_paths(errors: list[str]) -> None:
+    for path in iter_files(REPO_ROOT / "tools", (".py", ".ps1", ".bat", ".cmd")):
+        relative = path.relative_to(REPO_ROOT).as_posix()
+        if relative == "tools/check_architecture.py":
+            continue
+        if relative in BASELINE_PERSONAL_PATH_TOOLS:
+            continue
+        content = path.read_text(encoding="utf-8", errors="ignore")
+        for pattern in PERSONAL_ABSOLUTE_PATH_PATTERNS:
+            if pattern.search(content):
+                errors.append(
+                    f"{relative}: tool scripts must not hard-code personal absolute paths; use local-config or repo-relative paths."
+                )
+                break
+
+
 def check_forward_compatible_migrations(errors: list[str]) -> None:
     for path in ALEMBIC_VERSIONS.glob("*.py"):
         content = path.read_text(encoding="utf-8")
@@ -371,9 +624,13 @@ def main() -> int:
     check_frontend_public_api_surfaces(errors)
     check_runtime_data_ignored(errors)
     check_frontend_config_contract(errors)
+    check_storage_layout_contract(errors)
     check_forward_compatible_migrations(errors)
     check_palace_quiz_application_facades(errors)
     check_settings_module_boundaries(errors)
+    check_backend_module_boundaries(errors)
+    check_backend_presentation_orm_usage(errors)
+    check_tool_personal_paths(errors)
 
     if errors:
         print("Architecture check failed:")

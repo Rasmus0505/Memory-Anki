@@ -21,7 +21,7 @@ import {
 import {
   updateDefaultSegmentReviewProgressApi,
 } from '@/entities/palace-segment/api'
-import { submitReviewSessionApi } from '@/features/review/api/reviewApi'
+import { submitReviewSessionApi } from '@/features/review/api'
 import { StageSelectDialog } from '@/features/review/components/StageSelectDialog'
 import { consumePrefetchedStudySession } from '@/features/review/studyWarmup'
 import type { ReviewStageSummary } from '@/shared/api/contracts'
@@ -137,7 +137,7 @@ export default function PalacePractice() {
           <>
             <Link to="/palaces">
               <Button variant="outline" size="sm">
-                <ArrowLeft className="mr-2 h-4 w-4" />
+                <ArrowLeft className="mr-2 size-4" />
                 返回列表
               </Button>
             </Link>

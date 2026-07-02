@@ -140,10 +140,10 @@ function renderAttachments(session: ReviewSessionContainerSession) {
             key={attachment.id}
             href={buildAttachmentUrl(attachment.id)}
             target="_blank"
-            className="block rounded-2xl border border-border/70 bg-background/70 px-3 py-3 transition-colors hover:text-foreground"
+            className="block rounded-lg border border-border/70 bg-background/70 px-3 py-3 transition-colors hover:text-foreground"
           >
             <span className="inline-flex items-center gap-2">
-              <FileText className="h-4 w-4" />
+              <FileText className="size-4" />
               {attachment.original_name}
             </span>
           </a>
@@ -379,7 +379,7 @@ export function ReviewSessionContainer({
             <>
               <Link to={backHref(chapterId)}>
                 <Button variant="outline" size="sm">
-                  <ArrowLeft className="mr-2 h-4 w-4" />
+                  <ArrowLeft className="mr-2 size-4" />
                   返回复习队列
                 </Button>
               </Link>

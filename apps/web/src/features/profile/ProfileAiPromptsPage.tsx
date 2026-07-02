@@ -7,7 +7,7 @@ import {
   getAiPromptTemplatesApi,
   resetAiPromptTemplatesApi,
   updateAiPromptTemplatesApi,
-} from '@/features/profile/api/profileApi'
+} from '@/features/profile/api'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card'
@@ -96,7 +96,7 @@ export function ProfileAiPromptsPage({ standalone = false }: { standalone?: bool
         <Badge variant="outline">共 {items.length} 组提示词</Badge>
         <Badge variant="secondary">已改动 {dirtyKeys.size}</Badge>
         <Button type="button" variant="outline" size="sm" onClick={handleResetAll} disabled={resettingAll}>
-          <RotateCcw className="mr-2 h-4 w-4" />
+          <RotateCcw className="mr-2 size-4" />
           {resettingAll ? '重置中...' : '全部恢复默认'}
         </Button>
       </div>
@@ -113,7 +113,7 @@ export function ProfileAiPromptsPage({ standalone = false }: { standalone?: bool
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div className="space-y-2">
                     <CardTitle className="flex items-center gap-2 text-base">
-                      <WandSparkles className="h-4 w-4" />
+                      <WandSparkles className="size-4" />
                       {item.label}
                     </CardTitle>
                     <p className="max-w-3xl text-sm text-muted-foreground">{item.description}</p>
@@ -159,11 +159,11 @@ export function ProfileAiPromptsPage({ standalone = false }: { standalone?: bool
 
                 <div className="flex flex-wrap gap-2">
                   <Button type="button" size="sm" onClick={() => void handleSaveOne(item)} disabled={isSaving || !isDirty}>
-                    <Save className="mr-2 h-4 w-4" />
+                    <Save className="mr-2 size-4" />
                     {isSaving ? '保存中...' : '保存'}
                   </Button>
                   <Button type="button" variant="outline" size="sm" onClick={() => void handleResetOne(item)} disabled={isResetting}>
-                    <RotateCcw className="mr-2 h-4 w-4" />
+                    <RotateCcw className="mr-2 size-4" />
                     {isResetting ? '重置中...' : '恢复默认'}
                   </Button>
                 </div>

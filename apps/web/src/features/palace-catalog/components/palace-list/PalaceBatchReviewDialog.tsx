@@ -53,18 +53,18 @@ export function PalaceBatchReviewDialog({
             return (
               <label
                 key={segment.id}
-                className="flex cursor-pointer items-start gap-3 rounded-2xl border border-border/70 bg-background/80 px-4 py-3 transition-colors hover:border-primary/40 hover:bg-accent/30"
+                className="flex cursor-pointer items-start gap-3 rounded-lg border border-border/70 bg-background/80 px-4 py-3 transition-colors hover:border-primary/40 hover:bg-accent/30"
               >
                 <input
                   type="checkbox"
-                  className="mt-1 h-4 w-4 rounded border-input"
+                  className="mt-1 size-4 rounded border-input"
                   checked={checked}
                   onChange={(event) => onToggleSegment(segment.id, event.target.checked)}
                 />
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
                     <span
-                      className="inline-block h-2.5 w-2.5 rounded-full"
+                      className="inline-block size-2.5 rounded-full"
                       style={{ backgroundColor: segment.color }}
                     />
                     <span className="truncate text-sm font-medium">

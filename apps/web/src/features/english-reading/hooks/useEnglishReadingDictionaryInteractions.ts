@@ -3,7 +3,7 @@ import type {
   MouseEvent as ReactMouseEvent,
   PointerEvent as ReactPointerEvent,
 } from "react";
-import { getEnglishReadingDictionaryApi } from "@/features/english-reading/api/englishReadingApi";
+import { getEnglishReadingDictionaryApi } from "@/features/english-reading/api";
 import {
   canUseSpeechSynthesis,
   hasActiveTextSelection,

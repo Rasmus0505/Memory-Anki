@@ -95,32 +95,32 @@ export function buildRestorableTimedSessionSnapshot(
 export function readRestorableTimedSessionSnapshot(
   storageKey: string,
 ): RestorableTimedSessionSnapshot | null {
-  let parsed: RestorableTimedSessionSnapshot | null = null
   try {
     const raw = window.sessionStorage.getItem(storageKey)
-    parsed = normalizeSnapshot(raw ? JSON.parse(raw) : null)
-    if (!parsed) {
-      for (let index = 0; index < window.sessionStorage.length; index += 1) {
-        const candidateKey = window.sessionStorage.key(index)
-        if (!candidateKey || !candidateKey.startsWith(SNAPSHOT_STORAGE_PREFIX) || candidateKey === storageKey) {
-          continue
-        }
-        const candidateRaw = window.sessionStorage.getItem(candidateKey)
-        const candidate = normalizeSnapshot(candidateRaw ? JSON.parse(candidateRaw) : null)
-        if (!candidate?.suspended) {
-          continue
-        }
-        const candidateAt = new Date(candidate.persistedAt).getTime()
-        const parsedAt = parsed ? new Date(parsed.persistedAt).getTime() : Number.NEGATIVE_INFINITY
-        if (!parsed || candidateAt > parsedAt) {
-          parsed = candidate
-        }
+    const primarySnapshot = normalizeSnapshot(raw ? JSON.parse(raw) : null)
+    let suspendedSnapshot: RestorableTimedSessionSnapshot | null = null
+    for (let index = 0; index < window.sessionStorage.length; index += 1) {
+      const candidateKey = window.sessionStorage.key(index)
+      if (!candidateKey || !candidateKey.startsWith(SNAPSHOT_STORAGE_PREFIX) || candidateKey === storageKey) {
+        continue
+      }
+      const candidateRaw = window.sessionStorage.getItem(candidateKey)
+      const candidate = normalizeSnapshot(candidateRaw ? JSON.parse(candidateRaw) : null)
+      if (!candidate?.suspended) {
+        continue
+      }
+      const candidateAt = new Date(candidate.persistedAt).getTime()
+      const suspendedAt = suspendedSnapshot
+        ? new Date(suspendedSnapshot.persistedAt).getTime()
+        : Number.NEGATIVE_INFINITY
+      if (!suspendedSnapshot || candidateAt > suspendedAt) {
+        suspendedSnapshot = candidate
       }
     }
+    return primarySnapshot ?? suspendedSnapshot
   } catch {
-    parsed = null
+    return null
   }
-  return parsed
 }
 
 export function isExpiredSuspendedSnapshot(snapshot: RestorableTimedSessionSnapshot) {

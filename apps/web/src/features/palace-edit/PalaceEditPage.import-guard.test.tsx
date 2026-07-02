@@ -4,7 +4,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import PalaceEditPage from '@/features/palace-edit/PalaceEditPage'
 import * as palaceApi from '@/entities/palace/api'
-import * as knowledgeApi from '@/entities/knowledge/api/knowledgeApi'
+import * as knowledgeApi from '@/entities/knowledge/api'
 
 vi.mock('sonner', () => ({
   toast: {
@@ -367,8 +367,8 @@ describe('PalaceEditPage import apply guard', () => {
         chapters: []
       }
       editor_doc: typeof importedEditorState.editor_doc
-      editor_config: {}
-      editor_local_config: {}
+      editor_config: Record<string, never>
+      editor_local_config: Record<string, never>
       lang: string
     }>()
 

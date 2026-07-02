@@ -2,7 +2,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 import KnowledgePage from '@/features/knowledge/KnowledgePage'
-import * as knowledgeApi from '@/entities/knowledge/api/knowledgeApi'
+import * as knowledgeApi from '@/entities/knowledge/api'
 
 const knowledgeReloadMock = vi.hoisted(() => vi.fn())
 const knowledgeReplaceEditorStateMock = vi.hoisted(() => vi.fn())

@@ -24,6 +24,10 @@ from memory_anki.modules.palaces.application.title_sync_service import (
     reconcile_palace_chapter_binding,
     set_palace_chapter_links,
 )
+from memory_anki.modules.settings.application.ai_prompt_templates import (
+    PALACE_QUIZ_PDF_TRANSCRIPTION_PROMPT,
+    build_palace_quiz_pdf_pairing_prompt,
+)
 from memory_anki.modules.settings.presentation import router as settings_router
 
 
@@ -347,6 +351,119 @@ class PalaceQuizRouteTests(unittest.TestCase):
         stems = [item["stem"] for item in list_response.json()["items"]]
         self.assertEqual(stems.count("细胞的控制中心是？"), 1)
         self.assertEqual(stems.count("光合作用场所是？"), 1)
+
+    def test_batch_create_import_dedup_normalizes_quotes_without_dropping_exam_label(self):
+        with self.SessionLocal() as session:
+            session.add(
+                PalaceQuizQuestion(
+                    source_chapter_id=self.chapter_id,
+                    question_type="multiple_choice",
+                    stem="【2011年311真题28】主张教育目的是‘为完满生活做准备’，反对英国古典主义教育传统的教育家是（）",
+                    options_json=json.dumps(
+                        [
+                            {"id": "A", "text": "斯宾塞"},
+                            {"id": "B", "text": "洛克"},
+                        ],
+                        ensure_ascii=False,
+                    ),
+                    answer_payload_json=json.dumps(
+                        {"correct_option_id": "A"},
+                        ensure_ascii=False,
+                    ),
+                    analysis="已有题。",
+                    source_meta_json=json.dumps({"source_kind": "manual"}, ensure_ascii=False),
+                    sort_order=1,
+                )
+            )
+            session.commit()
+
+        response = self.client.post(
+            f"/api/v1/chapters/{self.chapter_id}/quiz-questions/batch",
+            json={
+                "questions": [
+                    {
+                        "question_type": "multiple_choice",
+                        "stem": "【2011年311真题28】主张教育目的是“为完满生活做准备”，反对英国古典主义教育传统的教育家是()",
+                        "options": [
+                            {"id": "A", "text": "斯宾塞"},
+                            {"id": "B", "text": "洛克"},
+                        ],
+                        "answer_payload": {"correct_option_id": "A"},
+                        "analysis": "解析不同也应按导入口径去重。",
+                    }
+                ]
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["items"], [])
+
+    def test_pdf_pairing_prompt_requires_candidate_coverage(self):
+        prompt = build_palace_quiz_pdf_pairing_prompt("只要第四节的")
+
+        self.assertIn("逐条检查 question_candidates", prompt)
+        self.assertIn("模拟练习", prompt)
+        self.assertIn("论述题", prompt)
+        self.assertIn("skipped_reasons", prompt)
+        self.assertIn("missing_answer_candidate", prompt)
+        self.assertIn("最终 questions 数量应等于范围内可配对 question_candidates 数量", prompt)
+        self.assertIn("范围判断不能只依赖候选里的 section 字段", prompt)
+        self.assertIn("out_of_scope", prompt)
+        self.assertIn("答案/解析必须解释同一道题的核心关键词", prompt)
+        self.assertIn("answer_conflict", prompt)
+
+    def test_pdf_transcription_prompt_preserves_visible_section_boundaries(self):
+        prompt = PALACE_QUIZ_PDF_TRANSCRIPTION_PROMPT
+
+        self.assertIn("section 只能来自该题附近或本页上方真实可见的栏目标题", prompt)
+        self.assertIn("禁止为了迎合用户补充范围", prompt)
+        self.assertIn("previous_page_continuation", prompt)
+
+    def test_batch_create_import_dedup_keeps_exam_label_as_identity(self):
+        with self.SessionLocal() as session:
+            session.add(
+                PalaceQuizQuestion(
+                    source_chapter_id=self.chapter_id,
+                    question_type="multiple_choice",
+                    stem="主张教育目的是“为完满生活做准备”，反对英国古典主义教育传统的教育家是()",
+                    options_json=json.dumps(
+                        [
+                            {"id": "A", "text": "斯宾塞"},
+                            {"id": "B", "text": "洛克"},
+                        ],
+                        ensure_ascii=False,
+                    ),
+                    answer_payload_json=json.dumps(
+                        {"correct_option_id": "A"},
+                        ensure_ascii=False,
+                    ),
+                    analysis="已有题。",
+                    source_meta_json=json.dumps({"source_kind": "manual"}, ensure_ascii=False),
+                    sort_order=1,
+                )
+            )
+            session.commit()
+
+        response = self.client.post(
+            f"/api/v1/chapters/{self.chapter_id}/quiz-questions/batch",
+            json={
+                "questions": [
+                    {
+                        "question_type": "multiple_choice",
+                        "stem": "【2011年311真题28】主张教育目的是“为完满生活做准备”，反对英国古典主义教育传统的教育家是()",
+                        "options": [
+                            {"id": "A", "text": "斯宾塞"},
+                            {"id": "B", "text": "洛克"},
+                        ],
+                        "answer_payload": {"correct_option_id": "A"},
+                        "analysis": "带真题标签时应视作独立题目。",
+                    }
+                ]
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.json()["items"]), 1)
 
     def test_batch_delete_questions(self):
         with self.SessionLocal() as session:
@@ -771,6 +888,64 @@ class PalaceQuizRouteTests(unittest.TestCase):
         self.assertEqual(calls[1]["operation"], "palace_quiz_pair_pdf_with_turbo")
         self.assertEqual(payload["generation_stats"]["returned_count"], 1)
         self.assertNotIn("英国教育", calls[1]["request_payload"]["prompt"])
+
+    def test_pdf_generation_defaults_to_palace_primary_chapter(self):
+        with self.SessionLocal() as session:
+            palace = session.query(Palace).filter_by(id=1).first()
+            self.assertIsNotNone(palace)
+            set_palace_chapter_links(session, palace, [self.child_chapter_id])
+            reconcile_palace_chapter_binding(
+                session,
+                palace,
+                preferred_primary_chapter_id=self.child_chapter_id,
+            )
+            session.commit()
+
+        def fake_call_logged_chat_completion(**kwargs):
+            if kwargs["operation"] == "palace_quiz_generate_pdf":
+                return (
+                    json.dumps(
+                        {
+                            "questions": [
+                                {
+                                    "question_type": "short_answer",
+                                    "stem": "请概括该页核心内容。",
+                                    "reference_answer": "核心内容概括。",
+                                    "analysis": "围绕主概念整理即可。",
+                                }
+                            ]
+                        },
+                        ensure_ascii=False,
+                    ),
+                    "log-pdf-primary-chapter",
+                )
+            raise AssertionError("single-source PDF should not call pairing")
+
+        with (
+            patch.object(
+                palace_quiz_ai_service,
+                "render_selected_pdf_pages",
+                return_value=[(1, b"page", "page-1.png")],
+            ),
+            patch.object(
+                palace_quiz_ai_service,
+                "_call_logged_chat_completion",
+                side_effect=fake_call_logged_chat_completion,
+            ),
+        ):
+            response = self.client.post(
+                "/api/v1/palaces/1/quiz-generation/pdf",
+                json={
+                    "subject_document_id": 1,
+                    "page_selection": [1],
+                    "extra_prompt": "",
+                },
+            )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["source_meta"]["source_chapter_id"], self.child_chapter_id)
+        self.assertEqual(payload["questions"][0]["source_chapter_id"], self.child_chapter_id)
 
     def test_pdf_generation_multi_source_request_binds_each_image_to_a_role(self):
         calls: list[dict[str, object]] = []
@@ -2721,6 +2896,44 @@ class PalaceQuizRouteTests(unittest.TestCase):
             and item["classified_chapter_id"] == self.child_chapter_id
         ]
         self.assertEqual(len(matched), 1)
+
+    def test_batch_create_chapter_quiz_questions_forces_selected_chapter_scope(self):
+        response = self.client.post(
+            f"/api/v1/chapters/{self.child_chapter_id}/quiz-questions/batch",
+            json={
+                "questions": [
+                    {
+                        "source_chapter_id": self.chapter_id,
+                        "question_type": "multiple_choice",
+                        "stem": "AI 错标父章节的题？",
+                        "options": [
+                            {"id": "A", "text": "父章节"},
+                            {"id": "B", "text": "当前章节"},
+                        ],
+                        "answer_payload": {"correct_option_id": "B"},
+                        "analysis": "保存时必须以用户选择的章节为准。",
+                    }
+                ]
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        created = response.json()["items"]
+        self.assertEqual(len(created), 1)
+        self.assertEqual(created[0]["source_chapter_id"], self.child_chapter_id)
+
+        child_listed = self.client.get(f"/api/v1/chapters/{self.child_chapter_id}/quiz-questions")
+        self.assertEqual(child_listed.status_code, 200)
+        self.assertEqual(
+            [item["stem"] for item in child_listed.json()["items"]],
+            ["AI 错标父章节的题？"],
+        )
+
+        parent_listed = self.client.get(f"/api/v1/chapters/{self.chapter_id}/quiz-questions")
+        self.assertEqual(parent_listed.status_code, 200)
+        self.assertFalse(
+            any(item["stem"] == "AI 错标父章节的题？" for item in parent_listed.json()["items"])
+        )
 
     def test_batch_create_chapter_quiz_questions_can_overwrite_selected_scope(self):
         first_response = self.client.post(

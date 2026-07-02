@@ -2,7 +2,7 @@
 import { useSearchParams } from "react-router-dom";
 import { toast } from "@/shared/feedback/toast";
 import { readVoiceCoachSettings } from "@/entities/preferences/model/voiceCoachSettings";
-import { getAiCallLogApi, listAiCallLogsApi } from "@/entities/ai-log/api/aiLogsApi";
+import { getAiCallLogApi, listAiCallLogsApi } from "@/entities/ai-log/api";
 import type {
   AiCallLogDetail,
   AiCallLogSummary,
@@ -23,7 +23,7 @@ import {
   testAiModelApi,
   testAiProviderApi,
   updateAiModelScenariosApi,
-} from "@/entities/preferences/api/aiModelSettingsApi";
+} from "@/entities/preferences/api";
 import { synthesizeVoiceCoachApi } from "@/features/voice-coach/api";
 import {
   buildEmptyModelDraft,

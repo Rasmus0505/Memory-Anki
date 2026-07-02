@@ -154,6 +154,7 @@ export function PalaceListCard({
     ? resolveReviewButtonState(singleSegment.has_due_review, singleSegment.next_review_at)
     : 'unscheduled'
   const isSingleSegmentSleepReview = singleSegment ? isSleepReviewSegment(singleSegment) : false
+  const showPalacePracticeButton = Boolean(palace.needs_practice) && singleSegmentState !== 'due_now'
 
   useEffect(() => {
     if (!menuOpen) return
@@ -175,7 +176,7 @@ export function PalaceListCard({
             getPalaceIconClass(viewSettings.densityMode),
           )}
         >
-          <BookOpen className="h-5 w-5 text-muted-foreground" />
+          <BookOpen className="size-5 text-muted-foreground" />
         </div>
 
         <div className="min-w-0 flex-1">
@@ -189,41 +190,47 @@ export function PalaceListCard({
                   {palace.resolved_title || palace.title || '未命名宫殿'}
                 </Link>
                 {showSingleSegmentReviewPresentation && singleSegment ? (
-                  <ReviewActionButton
-                    label={getReviewActionLabel(singleSegment.next_review_at, {
-                      state: singleSegmentState,
-                      loading: segmentReviewLoadingId === singleSegment.id,
-                      isSleepReview: isSingleSegmentSleepReview,
-                    })}
-                    className={cn(
-                      'h-8 min-w-[104px] max-w-[132px] shrink-0 px-2.5 text-[11px] sm:min-w-[112px] sm:px-3 sm:text-xs',
-                      getReviewActionButtonClass({
+                  <>
+                    {showPalacePracticeButton ? (
+                      <ReviewActionButton
+                        label="练习"
+                        className={cn(
+                          'h-8 min-w-[84px] max-w-[112px] shrink-0 px-2.5 text-[11px] sm:px-3 sm:text-xs',
+                          getReviewActionButtonClass({ state: 'practice' }),
+                        )}
+                        disabled={false}
+                        onWarm={() => onWarmPalacePractice(palace)}
+                        onClick={() => onPalacePractice(palace)}
+                      />
+                    ) : null}
+                    <ReviewActionButton
+                      label={getReviewActionLabel(singleSegment.next_review_at, {
                         state: singleSegmentState,
+                        loading: segmentReviewLoadingId === singleSegment.id,
                         isSleepReview: isSingleSegmentSleepReview,
-                        disabled:
-                          singleSegmentState !== 'practice' &&
+                      })}
+                      className={cn(
+                        'h-8 min-w-[104px] max-w-[132px] shrink-0 px-2.5 text-[11px] sm:min-w-[112px] sm:px-3 sm:text-xs',
+                        getReviewActionButtonClass({
+                          state: singleSegmentState,
+                          isSleepReview: isSingleSegmentSleepReview,
+                          disabled:
+                            singleSegmentState !== 'practice' &&
+                            (!singleSegment.current_review_schedule_id ||
+                              singleSegmentState === 'future'),
+                        }),
+                      )}
+                      disabled={
+                        (singleSegmentState !== 'practice' &&
                           (!singleSegment.current_review_schedule_id ||
-                            singleSegmentState === 'future'),
-                      }),
-                    )}
-                    disabled={
-                      (singleSegmentState !== 'practice' &&
-                        (!singleSegment.current_review_schedule_id ||
-                          singleSegmentState === 'future')) ||
-                      segmentReviewLoadingId === singleSegment.id
-                    }
-                    progress={singleSegment.active_review_progress}
-                    onWarm={() =>
-                      singleSegmentState === 'practice'
-                        ? onWarmPalacePractice(palace)
-                        : onWarmSegmentReviewAction(singleSegment)
-                    }
-                    onClick={() =>
-                      singleSegmentState === 'practice'
-                        ? onPalacePractice(palace)
-                        : onSegmentReviewAction(singleSegment)
-                    }
-                  />
+                            singleSegmentState === 'future')) ||
+                        segmentReviewLoadingId === singleSegment.id
+                      }
+                      progress={singleSegment.active_review_progress}
+                      onWarm={() => onWarmSegmentReviewAction(singleSegment)}
+                      onClick={() => onSegmentReviewAction(singleSegment)}
+                    />
+                  </>
                 ) : null}
               </div>
               {canBatchReview ? (
@@ -303,7 +310,7 @@ export function PalaceListCard({
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
                           <span
-                            className="inline-block h-2.5 w-2.5 rounded-full"
+                            className="inline-block size-2.5 rounded-full"
                             style={{ backgroundColor: segment.color }}
                           />
                           <span className="truncate text-sm font-medium">
@@ -424,7 +431,7 @@ export function PalaceListCard({
                             getPalaceIconClass(viewSettings.densityMode),
                           )}
                         >
-                          <Building2 className="h-4 w-4 text-muted-foreground" />
+                          <Building2 className="size-4 text-muted-foreground" />
                         </div>
 
                         <div className="min-w-0 flex-1">
@@ -517,10 +524,10 @@ export function PalaceListCard({
                             <Button
                               variant="ghost"
                               size="icon"
-                              className="h-8 w-8"
+                              className="size-8"
                               aria-label={`编辑 ${mini.name}`}
                             >
-                              <Pencil className="h-4 w-4" />
+                              <Pencil className="size-4" />
                             </Button>
                           </Link>
                         </div>
@@ -565,21 +572,21 @@ export function PalaceListCard({
             <Button
               variant="ghost"
               size="icon"
-              className="h-8 w-8"
+              className="size-8"
               aria-label={`编辑宫殿 ${palace.resolved_title || palace.title}`}
             >
-              <Pencil className="h-4 w-4" />
+              <Pencil className="size-4" />
             </Button>
           </Link>
           <div className="relative" ref={menuRef}>
             <Button
               variant="ghost"
               size="icon"
-              className="h-8 w-8"
+              className="size-8"
               aria-label={`更多操作 ${palace.resolved_title || palace.title}`}
               onClick={() => setMenuOpen((current) => !current)}
             >
-              <MoreHorizontal className="h-4 w-4" />
+              <MoreHorizontal className="size-4" />
             </Button>
             {menuOpen ? (
               <div className="absolute right-0 top-9 z-20 min-w-[132px] rounded-xl border border-border/70 bg-background p-1 shadow-lg">
@@ -591,7 +598,7 @@ export function PalaceListCard({
                     onOpenConfig(palace)
                   }}
                 >
-                  <Settings2 className="h-4 w-4" />
+                  <Settings2 className="size-4" />
                   配置
                 </button>
                 <button
@@ -602,7 +609,7 @@ export function PalaceListCard({
                     onDelete(palace.id, palace.title)
                   }}
                 >
-                  <Trash2 className="h-4 w-4" />
+                  <Trash2 className="size-4" />
                   删除
                 </button>
               </div>

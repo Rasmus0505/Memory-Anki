@@ -9,7 +9,7 @@ import type {
 import {
   createBatchSegmentReviewSessionApi,
   submitBatchSegmentReviewSessionApi,
-} from '@/features/review/api/reviewApi'
+} from '@/features/review/api'
 import { PageIntro } from '@/shared/components/layout/PageIntro'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
@@ -147,7 +147,7 @@ export default function BatchSegmentReviewSessionPage() {
           actions={
             <Link to="/review">
               <Button variant="outline" size="sm">
-                <ArrowLeft className="mr-2 h-4 w-4" />
+                <ArrowLeft className="mr-2 size-4" />
                 返回复习队列
               </Button>
             </Link>
@@ -174,7 +174,7 @@ export default function BatchSegmentReviewSessionPage() {
             <>
               <Link to="/review">
                 <Button variant="outline" size="sm">
-                  <ArrowLeft className="mr-2 h-4 w-4" />
+                  <ArrowLeft className="mr-2 size-4" />
                   返回复习队列
                 </Button>
               </Link>

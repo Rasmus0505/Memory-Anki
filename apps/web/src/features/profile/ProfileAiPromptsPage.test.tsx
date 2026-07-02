@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { describe, expect, it, vi } from 'vitest'
 import ProfileAiPromptsPage from '@/features/profile/ProfileAiPromptsPage'
-import * as profileApi from '@/features/profile/api/profileApi'
+import * as profileApi from '@/features/profile/api'
 
 vi.mock('sonner', () => ({
   toast: {

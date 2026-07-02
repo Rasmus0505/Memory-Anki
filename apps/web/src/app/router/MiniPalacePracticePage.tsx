@@ -19,7 +19,7 @@ import {
   getPalaceMiniPalaceApi,
   updateMiniPalaceReviewProgressApi,
 } from '@/entities/mini-palace/api'
-import { submitMiniReviewSessionApi } from '@/features/review/api/reviewApi'
+import { submitMiniReviewSessionApi } from '@/features/review/api'
 import { StageSelectDialog } from '@/features/review/components/StageSelectDialog'
 import { consumePrefetchedStudySession } from '@/features/review/studyWarmup'
 
@@ -116,7 +116,7 @@ export default function MiniPalacePracticePage() {
           <>
             <Link to="/palaces">
               <Button variant="outline" size="sm">
-                <ArrowLeft className="mr-2 h-4 w-4" />
+                <ArrowLeft className="mr-2 size-4" />
                 返回书架
               </Button>
             </Link>

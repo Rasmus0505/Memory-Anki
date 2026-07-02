@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
-import { subscribeEnglishTaskStream } from '@/features/english/api/englishApi'
+import { subscribeEnglishTaskStream } from '@/features/english/api'
 
 class FakeEventSource {
   static instances: FakeEventSource[] = []

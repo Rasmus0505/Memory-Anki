@@ -21,7 +21,7 @@ import { usePalaceVersionsController } from '@/features/palace-edit/hooks/usePal
 import type { StatusBadgeState } from '@/features/palace-edit/model/palace-edit-types'
 import type { ImportApplyContext } from '@/features/mindmap-import'
 import { splitMindMapNodeApi, togglePalaceFocusNodeApi } from '@/entities/palace/api'
-import { getEnglishContinueCourseApi } from '@/features/english/api/englishApi'
+import { getEnglishContinueCourseApi } from '@/features/english/api'
 import type { MindMapEditorState } from '@/shared/api/contracts'
 import { useMemoryAnkiShortcuts } from '@/entities/preferences/model/memoryAnkiShortcuts'
 import { useMiniPalaceController } from '@/features/mini-palace'

@@ -1,5 +1,5 @@
 import { request } from '@/shared/api/http'
-import { invalidatePalaceCatalogCache } from '@/entities/palace/api/catalogApi'
+import { invalidatePalaceCatalogCache } from '@/entities/palace/api'
 import type { PalaceSegmentSummary } from '@/shared/api/contracts'
 
 async function withPalaceCatalogInvalidation<T>(operation: Promise<T>) {

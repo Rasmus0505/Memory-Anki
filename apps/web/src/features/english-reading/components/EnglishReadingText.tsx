@@ -98,7 +98,7 @@ function AnnotationMark({
       onMouseEnter={() => onHover(annotation.id)}
     >
       <ReadingLookupText text={text} onLookupWord={onLookupWord} />
-      <span className="invisible absolute bottom-[calc(100%+10px)] left-1/2 z-20 w-72 -translate-x-1/2 rounded-2xl border border-border bg-background/98 p-3 text-left text-xs text-muted-foreground opacity-0 shadow-popover transition-all group-hover:visible group-hover:opacity-100">
+      <span className="invisible absolute bottom-[calc(100%+10px)] left-1/2 z-20 w-72 -translate-x-1/2 rounded-lg border border-border bg-background/98 p-3 text-left text-xs text-muted-foreground opacity-0 shadow-popover transition-all group-hover:visible group-hover:opacity-100">
         <span className="block font-medium text-primary">
           {annotation.cefr}:{annotation.originalText || annotation.displayText}
         </span>
@@ -177,7 +177,7 @@ export function SentenceLine({
         {expanded ? "收起原句" : "展开原句"}
       </button>
       {expanded ? (
-        <span className="mt-2 block rounded-2xl border border-destructive/20 bg-white/95 p-4 text-sm leading-7 text-muted-foreground shadow-sm">
+        <span className="mt-2 block rounded-lg border border-destructive/20 bg-white/95 p-4 text-sm leading-7 text-muted-foreground shadow-sm">
           <span className="block text-[11px] font-semibold uppercase tracking-[0.18em] text-destructive/70">
             原句骨架
           </span>

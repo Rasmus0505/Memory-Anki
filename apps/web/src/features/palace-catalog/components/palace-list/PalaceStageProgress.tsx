@@ -72,9 +72,6 @@ export function PalaceStageProgress({
         scheduled_at: null,
       }))
   const total = normalizedStages.length
-  if (total <= 0) {
-    return null
-  }
 
   const [nowMs, setNowMs] = React.useState(() => Date.now())
 
@@ -123,6 +120,10 @@ export function PalaceStageProgress({
       fillPercent,
     }
   }, [nextReviewAt, normalizedStages, nowMs, total])
+
+  if (total <= 0) {
+    return null
+  }
 
   return (
     <div className="mt-3">

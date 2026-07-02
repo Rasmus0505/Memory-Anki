@@ -1,5 +1,5 @@
 import { request } from '@/shared/api/http'
-import { invalidatePalaceCatalogCache } from '@/entities/palace/api/catalogApi'
+import { invalidatePalaceCatalogCache } from '@/entities/palace/api'
 import {
   consumePrefetchedPromise,
   prefetchPromise,

@@ -20,9 +20,10 @@ interface MindMapFeedbackAudioController {
       surprise?: boolean
       origin?: MindMapFeedbackOrigin
       audioScope?: 'local' | 'global'
+      volume?: number
     },
   ) => void
-  playComboMilestone: (milestoneStep: number) => void
+  playComboMilestone: (milestoneStep: number, options?: { volume?: number }) => void
 }
 
 function clampFeedbackVolume(value: number) {
@@ -43,26 +44,29 @@ export function useMindMapFeedbackAudio(
         surprise?: boolean
         origin?: MindMapFeedbackOrigin
         audioScope?: 'local' | 'global'
+        volume?: number
       },
     ) => {
-      if (!enabled || feedbackVolume <= 0) return
+      const eventVolume = clampFeedbackVolume(options?.volume ?? feedbackVolume)
+      if (!enabled || eventVolume <= 0) return
       playLegacyFeedbackEvent({
         event,
         surprise: options?.surprise,
         origin: options?.origin,
         audioScope: options?.audioScope,
-        volume: feedbackVolume,
+        volume: eventVolume,
       })
     },
     [enabled, feedbackVolume],
   )
 
   const playComboMilestone = React.useCallback(
-    (milestoneStep: number) => {
-      if (!enabled || feedbackVolume <= 0) return
+    (milestoneStep: number, options?: { volume?: number }) => {
+      const eventVolume = clampFeedbackVolume(options?.volume ?? feedbackVolume)
+      if (!enabled || eventVolume <= 0) return
       playLegacyComboMilestone({
         milestoneStep,
-        volume: feedbackVolume,
+        volume: eventVolume,
       })
     },
     [enabled, feedbackVolume],

@@ -12,7 +12,7 @@ import {
   getReviewQueueApi,
   getSegmentChapterReviewQueueApi,
   getSegmentReviewQueueApi,
-} from '@/features/review/api/reviewApi'
+} from '@/features/review/api'
 import {
   buildReviewSessionPath,
   buildSegmentReviewSessionPath,
@@ -65,7 +65,7 @@ export default function ReviewOverview() {
             {chapterId ? (
               <Link to="/review">
                 <Button variant="outline" size="sm">
-                  <ArrowLeft className="mr-2 h-4 w-4" />
+                  <ArrowLeft className="mr-2 size-4" />
                   返回总览
                 </Button>
               </Link>
@@ -99,7 +99,7 @@ export default function ReviewOverview() {
                 <div className="memory-anki-soft-card flex items-center justify-between rounded-[24px] border border-border/60 bg-background/80 px-4 py-4 transition-all hover:-translate-y-[1px] hover:bg-secondary/75">
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
-                      <Brain className="h-4 w-4 text-muted-foreground" />
+                      <Brain className="size-4 text-muted-foreground" />
                       <span className="truncate font-medium">{review.palace?.title || '未命名宫殿'}</span>
                     </div>
                     <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
@@ -111,7 +111,7 @@ export default function ReviewOverview() {
                   </div>
                   <Button size="sm">
                     开始复习
-                    <ArrowRight className="ml-2 h-4 w-4" />
+                    <ArrowRight className="ml-2 size-4" />
                   </Button>
                 </div>
               </Link>
@@ -125,7 +125,7 @@ export default function ReviewOverview() {
                 !chapterId ? (
                   <Link to="/knowledge">
                     <Button variant="outline" size="sm">
-                      <BookOpen className="mr-2 h-4 w-4" />
+                      <BookOpen className="mr-2 size-4" />
                       前往知识树查看章节
                     </Button>
                   </Link>
@@ -152,7 +152,7 @@ export default function ReviewOverview() {
                 <div className="memory-anki-soft-card flex items-center justify-between rounded-[24px] border border-border/60 bg-background/80 px-4 py-4 transition-all hover:-translate-y-[1px] hover:bg-secondary/75">
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
-                      <Brain className="h-4 w-4 text-muted-foreground" />
+                      <Brain className="size-4 text-muted-foreground" />
                       <span className="truncate font-medium">
                         {review.segment?.name || '未命名分块'}
                       </span>
@@ -165,7 +165,7 @@ export default function ReviewOverview() {
                   </div>
                   <Button size="sm">
                     开始复习
-                    <ArrowRight className="ml-2 h-4 w-4" />
+                    <ArrowRight className="ml-2 size-4" />
                   </Button>
                 </div>
               </Link>

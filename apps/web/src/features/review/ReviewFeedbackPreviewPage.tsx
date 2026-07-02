@@ -134,12 +134,12 @@ export default function ReviewFeedbackPreviewPage() {
           <CardTitle className="text-xl">翻卡反馈预览台</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="rounded-2xl border border-border/70 bg-background/70 px-4 py-3 text-sm text-muted-foreground">
+          <div className="rounded-lg border border-border/70 bg-background/70 px-4 py-3 text-sm text-muted-foreground">
             这里直接走当前站点正在运行的脑图宿主页反馈链路。先点“一键开启完整预览反馈”，再逐个试听和查看。
           </div>
           <div className="flex flex-wrap gap-2">
             <Button type="button" onClick={enablePreviewMode}>
-              <WandSparkles className="mr-2 h-4 w-4" />
+              <WandSparkles className="mr-2 size-4" />
               一键开启完整预览反馈
             </Button>
             <Button
@@ -147,7 +147,7 @@ export default function ReviewFeedbackPreviewPage() {
               variant="outline"
               onClick={() => audio.playEvent('card_reveal', { audioScope: 'global' })}
             >
-              <Volume2 className="mr-2 h-4 w-4" />
+              <Volume2 className="mr-2 size-4" />
               单独试听翻卡音效
             </Button>
             <Button
@@ -155,7 +155,7 @@ export default function ReviewFeedbackPreviewPage() {
               variant="outline"
               onClick={() => audio.playComboMilestone(4)}
             >
-              <Sparkles className="mr-2 h-4 w-4" />
+              <Sparkles className="mr-2 size-4" />
               单独试听里程碑音效
             </Button>
           </div>
@@ -290,7 +290,7 @@ export default function ReviewFeedbackPreviewPage() {
             syncReason="review_flip"
             reviewFxSignal={reviewFxSignal}
             onEditorStateChange={() => {}}
-            className="h-[68vh] w-full rounded-2xl border border-border/70 bg-background"
+            className="h-[68vh] w-full rounded-lg border border-border/70 bg-background"
           />
         </CardContent>
       </Card>

@@ -17,7 +17,7 @@ import {
   getEnglishReadingVersionApi,
   updateEnglishReadingMaterialApi,
   updateEnglishReadingProfileApi,
-} from "@/features/english-reading/api/englishReadingApi";
+} from "@/features/english-reading/api";
 import {
   completeTask,
   dismissTask,

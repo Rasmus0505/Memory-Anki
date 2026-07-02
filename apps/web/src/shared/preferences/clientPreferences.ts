@@ -2,7 +2,7 @@ import type { ClientPreferences } from '@/shared/api/contracts'
 import {
   getClientPreferencesApi,
   updateClientPreferencesApi,
-} from '@/entities/preferences/api/clientPreferencesApi'
+} from '@/entities/preferences/api'
 
 export const CLIENT_PREFERENCES_UPDATED_EVENT = 'memory-anki-client-preferences-updated'
 

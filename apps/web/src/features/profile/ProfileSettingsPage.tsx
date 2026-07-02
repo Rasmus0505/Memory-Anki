@@ -15,13 +15,13 @@ import {
   buildPdfImportOptionsFromSettings,
   getReviewSettingsApi,
   updateReviewSettingsApi,
-} from '@/entities/preferences/api/reviewSettingsApi'
-import { getClientPreferencesApi } from '@/entities/preferences/api/clientPreferencesApi'
+} from '@/entities/preferences/api'
+import { getClientPreferencesApi } from '@/entities/preferences/api'
 import {
   exportJsonUrl,
   exportMarkdownUrl,
   importFileApi,
-} from '@/features/profile/api/profileApi'
+} from '@/features/profile/api'
 import { Button } from '@/shared/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card'
 import { Input } from '@/shared/components/ui/input'
@@ -102,7 +102,7 @@ export default function ProfileSettingsPage() {
       description="这里继续管理复习排程、导入导出，以及新的 AI 分卡接入配置。"
     >
       {clientPreferencesReady ? (
-        <div className="rounded-2xl border border-success/30 bg-success/5 px-4 py-3 text-sm text-success">
+        <div className="rounded-lg border border-success/30 bg-success/5 px-4 py-3 text-sm text-success">
           快捷键、英语听力设置、复习反馈、计时自动化和部分视图偏好现在已经由后端托管保存。
         </div>
       ) : null}
@@ -121,7 +121,7 @@ export default function ProfileSettingsPage() {
                 : 'border-transparent text-muted-foreground hover:border-border hover:text-foreground'
             }`}
           >
-            <Icon className="h-4 w-4" />
+            <Icon className="size-4" />
             {label}
           </button>
         ))}
@@ -357,7 +357,7 @@ export default function ProfileSettingsPage() {
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-base">
-                  <Download className="h-4 w-4" />
+                  <Download className="size-4" />
                   导出
                 </CardTitle>
               </CardHeader>
@@ -366,7 +366,7 @@ export default function ProfileSettingsPage() {
                   href={exportJsonUrl()}
                   className="flex items-center gap-3 rounded-lg border p-3 text-sm transition-colors hover:bg-secondary"
                 >
-                  <FileJson className="h-5 w-5 shrink-0 text-muted-foreground" />
+                  <FileJson className="size-5 shrink-0 text-muted-foreground" />
                   <div>
                     <div className="font-medium">JSON 导出/迁移</div>
                   </div>
@@ -375,7 +375,7 @@ export default function ProfileSettingsPage() {
                   href={exportMarkdownUrl()}
                   className="flex items-center gap-3 rounded-lg border p-3 text-sm transition-colors hover:bg-secondary"
                 >
-                  <FileText className="h-5 w-5 shrink-0 text-muted-foreground" />
+                  <FileText className="size-5 shrink-0 text-muted-foreground" />
                   <div>
                     <div className="font-medium">Markdown 导出/迁移</div>
                   </div>
@@ -386,7 +386,7 @@ export default function ProfileSettingsPage() {
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-base">
-                  <Upload className="h-4 w-4" />
+                  <Upload className="size-4" />
                   导入
                 </CardTitle>
               </CardHeader>
@@ -412,7 +412,7 @@ export default function ProfileSettingsPage() {
                     />
                   </div>
                   <Button type="submit" className="w-full">
-                    <Upload className="h-4 w-4" />
+                    <Upload className="size-4" />
                     开始导入
                   </Button>
                 </form>

@@ -15,7 +15,7 @@ export function ProfileNav() {
   ]
 
   return (
-    <nav className="flex flex-wrap gap-2 rounded-2xl border border-border/70 bg-card/70 p-2 lg:flex-col">
+    <nav className="flex flex-wrap gap-2 rounded-lg border border-border/70 bg-card/70 p-2 lg:flex-col">
       {items.map(({ href, label, icon: Icon }) => {
         const active = currentPath === href || (href === '/profile/ai' && currentPath.startsWith('/profile/ai'))
         return (
@@ -29,7 +29,7 @@ export function ProfileNav() {
                 : 'text-muted-foreground hover:bg-accent hover:text-foreground',
             )}
           >
-            <Icon className="h-4 w-4 shrink-0" />
+            <Icon className="size-4 shrink-0" />
             <span className="truncate">{label}</span>
           </Link>
         )

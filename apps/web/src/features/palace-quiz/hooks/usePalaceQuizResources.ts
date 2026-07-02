@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { PalaceQuizQuestion } from '@/shared/api/contracts'
-import { loadPalaceQuizPageData, loadPalaceQuizQuestions } from '@/features/palace-quiz/api/palaceQuizApi'
+import { loadPalaceQuizPageData, loadPalaceQuizQuestions } from '@/features/palace-quiz/api'
 import type { PalaceQuizPageMeta } from '@/features/palace-quiz/model/palaceQuizPage'
 
 export function usePalaceQuizResources(palaceId: number | null) {

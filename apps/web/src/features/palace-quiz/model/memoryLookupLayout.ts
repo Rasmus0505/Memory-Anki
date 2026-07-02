@@ -32,6 +32,9 @@ export const MEMORY_LOOKUP_LAYOUT_STORAGE_KEY = 'memory-anki-quiz-memory-lookup-
 export const MEMORY_LOOKUP_MIN_WIDTH = 360
 export const MEMORY_LOOKUP_MIN_HEIGHT = 280
 export const MEMORY_LOOKUP_VIEWPORT_MARGIN = 12
+export const MEMORY_LOOKUP_VISIBLE_EDGE = 44
+export const MEMORY_LOOKUP_CAPSULE_WIDTH = 280
+export const MEMORY_LOOKUP_CAPSULE_HEIGHT = 44
 export const MEMORY_LOOKUP_DRAG_CLICK_THRESHOLD_PX = 6
 
 export const MEMORY_LOOKUP_RESIZE_HANDLE_STYLES: Record<
@@ -156,12 +159,17 @@ export function clampMemoryLookupLayoutToViewport(
   const maxHeight = Math.max(MEMORY_LOOKUP_MIN_HEIGHT, viewportHeight - margin * 2)
   const width = Math.min(Math.max(MEMORY_LOOKUP_MIN_WIDTH, layout.width), maxWidth)
   const height = Math.min(Math.max(MEMORY_LOOKUP_MIN_HEIGHT, layout.height), maxHeight)
-  const maxX = Math.max(margin, viewportWidth - width - margin)
-  const maxY = Math.max(margin, viewportHeight - height - margin)
+  const boundsWidth = layout.collapsed ? Math.min(MEMORY_LOOKUP_CAPSULE_WIDTH, viewportWidth) : width
+  const boundsHeight = layout.collapsed ? Math.min(MEMORY_LOOKUP_CAPSULE_HEIGHT, viewportHeight) : height
+  const visibleEdge = Math.min(MEMORY_LOOKUP_VISIBLE_EDGE, boundsWidth, boundsHeight)
+  const minX = Math.min(margin, visibleEdge - boundsWidth)
+  const maxX = Math.max(minX, boundsWidth > visibleEdge ? viewportWidth - visibleEdge : margin)
+  const minY = Math.min(margin, visibleEdge - boundsHeight)
+  const maxY = Math.max(minY, boundsHeight > visibleEdge ? viewportHeight - visibleEdge : margin)
   return {
     ...layout,
-    x: Math.min(Math.max(margin, layout.x), maxX),
-    y: Math.min(Math.max(margin, layout.y), maxY),
+    x: Math.min(Math.max(minX, layout.x), maxX),
+    y: Math.min(Math.max(minY, layout.y), maxY),
     width,
     height,
   }

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { BilinkSearchResult } from '@/shared/api/contracts'
-import { searchBilinkNodesApi } from '@/features/bilink/api/bilink'
+import { searchBilinkNodesApi } from '@/features/bilink/api'
 
 export function useBilinkSearch(query: string, open: boolean, limit = 20) {
   const [results, setResults] = useState<BilinkSearchResult[]>([])

@@ -39,7 +39,7 @@ export function CompletionDecisionDialog({
         </DialogHeader>
         <div className="space-y-3 px-6 py-5">
           {typeof durationSeconds === 'number' ? (
-            <div className="rounded-2xl border border-border/70 bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
+            <div className="rounded-lg border border-border/70 bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
               本次耗时：<span className="font-medium text-foreground">{formatDuration(durationSeconds)}</span>
             </div>
           ) : null}

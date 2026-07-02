@@ -2,9 +2,9 @@
 import { vi } from 'vitest'
 import { useMindMapImport } from '@/features/mindmap-import/hooks/useMindMapImport'
 import type { MindMapEditorState, MindMapImportJob } from '@/shared/api/contracts'
-import * as knowledgeApi from '@/entities/knowledge/api/knowledgeApi'
+import * as knowledgeApi from '@/entities/knowledge/api'
 import * as importApi from '@/entities/knowledge-import/api'
-import * as profileApi from '@/entities/preferences/api/reviewSettingsApi'
+import * as profileApi from '@/entities/preferences/api'
 
 export const promptForAiOptionsMock = vi.fn()
 

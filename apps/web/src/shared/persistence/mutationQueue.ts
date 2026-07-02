@@ -301,7 +301,7 @@ async function replayOneMutation(item: PersistedMutation, force = false) {
   if (!force && item.replayMode !== 'auto') return
   if (!force && item.nextAttemptAt > Date.now()) return
 
-  let current = await updateMutation(item, { status: 'syncing' })
+  const current = await updateMutation(item, { status: 'syncing' })
   try {
     const response = await fetch(current.url, {
       method: current.method,
@@ -334,7 +334,7 @@ async function replayOneMutation(item: PersistedMutation, force = false) {
     })
   } catch (error) {
     const attemptCount = current.attemptCount + 1
-    current = await updateMutation(current, {
+    await updateMutation(current, {
       status: 'failed',
       attemptCount,
       nextAttemptAt: Date.now() + nextBackoffMs(attemptCount),

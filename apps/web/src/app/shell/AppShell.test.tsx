@@ -24,20 +24,20 @@ const preloadKnowledgePage = vi.fn()
 const preloadPalaceEditPage = vi.fn()
 const preloadProfilePage = vi.fn()
 
-vi.mock('@/entities/runtime/api/runtimeApi', () => ({
+vi.mock('@/entities/runtime/api', () => ({
   getRuntimeInfoApi: () => getRuntimeInfoApi(),
 }))
 
-vi.mock('@/entities/palace/api/catalogApi', () => ({
+vi.mock('@/entities/palace/api', () => ({
   prefetchPalaceSubjectShelfApi: () => prefetchPalaceSubjectShelfApi(),
   prefetchPalacesGroupedSummaryApi: () => prefetchPalacesGroupedSummaryApi(),
 }))
 
-vi.mock('@/features/dashboard/api/dashboardApi', () => ({
+vi.mock('@/features/dashboard/api', () => ({
   prefetchDashboardApi: () => prefetchDashboardApi(),
 }))
 
-vi.mock('@/features/review/api/reviewApi', () => ({
+vi.mock('@/features/review/api', () => ({
   prefetchReviewQueueApi: () => prefetchReviewQueueApi(),
   prefetchSegmentReviewQueueApi: () => prefetchSegmentReviewQueueApi(),
 }))

@@ -200,7 +200,7 @@ export function EnglishReadingDialogs({
             >
               {dictionaryPanel.loading ? (
                 <div className="flex items-center gap-2 rounded-lg border border-border bg-muted px-2.5 py-2.5 text-sm text-foreground">
-                  <LoaderCircle className="h-4 w-4 animate-spin" />
+                  <LoaderCircle className="size-4 animate-spin" />
                   正在查询词典...
                 </div>
               ) : null}
@@ -385,7 +385,7 @@ export function EnglishReadingDialogs({
               data-testid="sentence-translation-scroll"
               className="min-h-0 space-y-2.5 overflow-y-auto overscroll-contain px-3.5 py-3"
             >
-              <div className="rounded-2xl border border-border bg-muted/50 px-3 py-2.5 text-[14px] leading-6 text-primary">
+              <div className="rounded-lg border border-border bg-muted/50 px-3 py-2.5 text-[14px] leading-6 text-primary">
                 <div className="mb-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
                   原文
                 </div>
@@ -397,7 +397,7 @@ export function EnglishReadingDialogs({
                 </div>
               </div>
 
-              <div className="rounded-2xl border border-info/10 bg-info/5 px-3 py-2.5 text-[14px] leading-6 text-primary">
+              <div className="rounded-lg border border-info/10 bg-info/5 px-3 py-2.5 text-[14px] leading-6 text-primary">
                 <div className="mb-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-info/70">
                   翻译
                 </div>
@@ -408,7 +408,7 @@ export function EnglishReadingDialogs({
                 ) : null}
                 {sentenceTranslationPanel.loading ? (
                   <div className="flex items-center gap-2 text-sm text-foreground">
-                    <LoaderCircle className="h-4 w-4 animate-spin" />
+                    <LoaderCircle className="size-4 animate-spin" />
                     正在翻译句子...
                   </div>
                 ) : sentenceTranslationPanel.error ? (
@@ -464,7 +464,7 @@ export function EnglishReadingDialogs({
                     disabled={generating}
                     onClick={() => onSetRegenerateDirection(option.value)}
                     className={cn(
-                      "rounded-2xl border px-4 py-4 text-left transition-all",
+                      "rounded-lg border px-4 py-4 text-left transition-all",
                       active
                         ? "border-primary bg-primary text-primary-foreground shadow-card"
                         : "border-border/70 bg-background/80 hover:border-border hover:bg-background",
@@ -485,7 +485,7 @@ export function EnglishReadingDialogs({
               })}
             </div>
 
-            <div className="rounded-2xl border border-border/70 bg-background/75 px-4 py-4">
+            <div className="rounded-lg border border-border/70 bg-background/75 px-4 py-4">
               <div className="flex items-center justify-between gap-3">
                 <Label htmlFor="reading-regenerate-delta" className="text-sm font-medium">
                   难度变化幅度
@@ -524,7 +524,7 @@ export function EnglishReadingDialogs({
               取消
             </Button>
             <Button onClick={onConfirmRegenerate} disabled={generating}>
-              {generating ? <LoaderCircle className="mr-2 h-4 w-4 animate-spin" /> : null}
+              {generating ? <LoaderCircle className="mr-2 size-4 animate-spin" /> : null}
               确认生成
             </Button>
           </div>

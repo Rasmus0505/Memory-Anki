@@ -324,6 +324,7 @@ describe("EnglishReadingPage interactions", () => {
     });
     expect(mocks.toastSuccessMock).toHaveBeenLastCalledWith(
       "已重新生成当前内容。",
+      undefined,
     );
   });
 
@@ -357,6 +358,7 @@ describe("EnglishReadingPage interactions", () => {
     });
     expect(mocks.toastSuccessMock).toHaveBeenLastCalledWith(
       "已按更简单的难度重新生成。",
+      undefined,
     );
   });
 
@@ -384,6 +386,7 @@ describe("EnglishReadingPage interactions", () => {
     });
     expect(mocks.toastSuccessMock).toHaveBeenLastCalledWith(
       "已按更高的难度重新生成。",
+      undefined,
     );
   });
 
@@ -400,7 +403,7 @@ describe("EnglishReadingPage interactions", () => {
     fireEvent.click(screen.getByRole("button", { name: "确认生成" }));
 
     await waitFor(() => {
-      expect(mocks.toastErrorMock).toHaveBeenCalledWith("生成失败");
+      expect(mocks.toastErrorMock).toHaveBeenCalledWith("生成失败", undefined);
     });
     expect(screen.getByText("难度变化幅度")).toBeTruthy();
   });

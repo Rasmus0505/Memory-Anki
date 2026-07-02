@@ -111,7 +111,7 @@ export function BilinkSearchPopover({
               </Button>
             ) : null}
             <Button type="button" size="sm" onClick={() => onSelect(result)}>
-              <Link2 className="h-4 w-4" />
+              <Link2 className="size-4" />
               {mode === 'inline' ? '插入链接' : '查看'}
             </Button>
           </div>
@@ -149,7 +149,7 @@ export function BilinkSearchPopover({
             </Button>
           </div>
           <div className="relative">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               autoFocus
               value={query}
@@ -183,7 +183,7 @@ export function BilinkSearchPopover({
               {groupedResults.map((group) => (
                 <div
                   key={group.palaceId}
-                  className="rounded-2xl border border-border/70 bg-background/60 p-3"
+                  className="rounded-lg border border-border/70 bg-background/60 p-3"
                 >
                   <div className="flex items-start justify-between gap-3 border-b border-border/60 pb-3">
                     <div className="min-w-0 flex-1">
@@ -217,7 +217,7 @@ export function BilinkSearchPopover({
                           size="sm"
                           onClick={() => onSelect(group.palaceResult as BilinkSearchResult)}
                         >
-                          <Link2 className="h-4 w-4" />
+                          <Link2 className="size-4" />
                           {mode === 'inline' ? '插入宫殿' : '查看宫殿'}
                         </Button>
                       </div>

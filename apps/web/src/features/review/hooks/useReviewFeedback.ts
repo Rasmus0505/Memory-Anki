@@ -36,14 +36,15 @@ import { useMindMapFeedbackAudio } from '@/shared/components/mindmap-host/useMin
 const FLASH_RESET_MS = 680
 const CELEBRATION_EVENT_KEYS = ['milestone', 'branch_clear', 'all_clear_ready', 'session_complete'] as const
 
-/**
- * ReviewConfettiKind → 对应的场景配置键，用于读取该场景的 confettiPreset / volumeBoost。
- */
-function confettiKindToSceneKey(kind: string): FeedbackSceneKey {
-  if (kind === 'milestone') return 'milestone'
-  if (kind === 'branch_clear') return 'review'
-  if (kind === 'all_clear_ready') return 'completion'
-  return 'completion'
+function reviewEventToSceneKey(event: ReviewFeedbackEvent): FeedbackSceneKey {
+  if (event === 'session_complete' || event === 'all_clear_ready') return 'completion'
+  if (event === 'branch_clear' || event === 'card_reveal' || event === 'category_expand' || event === 'next_level_expand') return 'review'
+  return 'review'
+}
+
+function shouldPlaySceneAudio(settings: ReviewFeedbackSettings, sceneKey: FeedbackSceneKey) {
+  const scene = settings.scenes[sceneKey]
+  return settings.soundEnabled && scene.enabled && scene.soundEnabled
 }
 
 type CelebrationEventKey = (typeof CELEBRATION_EVENT_KEYS)[number]
@@ -304,7 +305,9 @@ export function useReviewFeedback({
         ? getCelebrationDecision('milestone', nowMs)
         : { allowed: false, soundEnabled: false, animationEnabled: false }
     if (milestoneIndex !== -1 && newCombo > prevCombo && milestoneCelebrationDecision.soundEnabled) {
-      audio.playComboMilestone(milestoneIndex)
+      audio.playComboMilestone(milestoneIndex, {
+        volume: getSceneEffectiveVolume(settings, 'milestone'),
+      })
     }
     if (milestoneIndex !== -1 && newCombo > prevCombo && milestoneCelebrationDecision.animationEnabled) {
       milestoneCelebrationNonceRef.current += 1
@@ -347,19 +350,12 @@ export function useReviewFeedback({
     }
 
     for (const event of transition.events) {
-      if (
-        event === 'branch_clear' &&
-        !settings.celebration.branchClear.soundEnabled
-      ) {
-        continue
-      }
-      if (
-        event === 'all_clear_ready' &&
-        !settings.celebration.allClearReady.soundEnabled
-      ) {
-        continue
-      }
-      audio.playEvent(event, { surprise })
+      const sceneKey = reviewEventToSceneKey(event)
+      if (!shouldPlaySceneAudio(settings, sceneKey)) continue
+      audio.playEvent(event, {
+        surprise,
+        volume: getSceneEffectiveVolume(settings, sceneKey),
+      })
     }
 
     if (settings.mode === 'immersive' && settings.animationEnabled && !reducedMotion) {
@@ -548,7 +544,12 @@ export function useReviewFeedback({
           settings.celebration.sessionComplete.soundEnabled
         )
       ) {
-        audio.playEvent(event)
+        const sceneKey = event === 'session_complete' ? 'completion' : 'review'
+        if (shouldPlaySceneAudio(settings, sceneKey)) {
+          audio.playEvent(event, {
+            volume: getSceneEffectiveVolume(settings, sceneKey),
+          })
+        }
       }
     },
     [

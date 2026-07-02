@@ -47,7 +47,7 @@ export function MindMapContainer({
     <div className="flex h-full min-h-0 flex-1 flex-col gap-3">
       <div className="flex shrink-0 items-center gap-3">
         {title ? <h3 className="text-sm font-semibold text-foreground">{title}</h3> : null}
-        <div className="inline-flex items-center rounded-2xl border border-border/70 bg-muted/30 p-1">
+        <div className="inline-flex items-center rounded-lg border border-border/70 bg-muted/30 p-1">
           {views.map(({ key, label, icon: Icon }) => (
             <button
               key={key}

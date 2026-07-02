@@ -8,6 +8,7 @@ import {
   Dialog,
   DialogClose,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from '@/shared/components/ui/dialog'
@@ -104,7 +105,7 @@ export function PalaceChapterPanel({
       <div key={option.id} className="space-y-2">
         <label
           className={cn(
-            'flex items-start gap-3 rounded-2xl border px-3 py-3 text-sm transition-colors',
+            'flex items-start gap-3 rounded-lg border px-3 py-3 text-sm transition-colors',
             hasCompletedChildren
               ? 'border-success bg-success/10 text-success shadow-sm'
               : isExplicit
@@ -149,7 +150,7 @@ export function PalaceChapterPanel({
         <CardHeader className="flex flex-row items-center justify-between gap-3">
           <div className="space-y-1">
             <CardTitle className="flex items-center gap-2 text-base">
-              <Link2 className="h-4 w-4" />
+              <Link2 className="size-4" />
               章节关联
             </CardTitle>
             <div className="text-sm text-muted-foreground">
@@ -163,17 +164,17 @@ export function PalaceChapterPanel({
             disabled={selectionPending}
             onClick={() => setDialogOpen(true)}
           >
-            <FolderTree className="h-4 w-4" />
+            <FolderTree className="size-4" />
             {selectionPending ? '保存中…' : '选择章节'}
           </Button>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid gap-3 sm:grid-cols-2">
-            <div className="rounded-2xl border border-border/70 bg-background/60 px-3 py-3">
+            <div className="rounded-lg border border-border/70 bg-background/60 px-3 py-3">
               <div className="text-xs text-muted-foreground">已关联章节</div>
               <div className="mt-1 text-2xl font-semibold">{explicitChapters.length}</div>
             </div>
-            <div className="rounded-2xl border border-border/70 bg-background/60 px-3 py-3">
+            <div className="rounded-lg border border-border/70 bg-background/60 px-3 py-3">
               <div className="text-xs text-muted-foreground">当前命名来源</div>
               <div className="mt-1 text-sm font-medium text-foreground">
                 {primaryChapter?.name || '尚未选择'}
@@ -181,7 +182,7 @@ export function PalaceChapterPanel({
             </div>
           </div>
 
-          <div className="space-y-2 rounded-2xl border border-border/70 bg-background/60 px-3 py-3">
+          <div className="space-y-2 rounded-lg border border-border/70 bg-background/60 px-3 py-3">
             <div className="text-xs text-muted-foreground">涉及学科</div>
             <div className="flex flex-wrap gap-2">
               {subjectSummaries.length > 0 ? (
@@ -196,7 +197,7 @@ export function PalaceChapterPanel({
             </div>
           </div>
 
-          <div className="space-y-2 rounded-2xl border border-border/70 bg-background/60 px-3 py-3">
+          <div className="space-y-2 rounded-lg border border-border/70 bg-background/60 px-3 py-3">
             <div className="text-xs text-muted-foreground">已选章节摘要</div>
             <div className="flex flex-wrap gap-2">
               {visibleExplicitChapters.length > 0 ? (
@@ -223,6 +224,9 @@ export function PalaceChapterPanel({
           <DialogHeader>
             <div className="space-y-2">
               <DialogTitle>选择章节关联</DialogTitle>
+              <DialogDescription className="sr-only">
+                按学科分组勾选宫殿关联章节，勾选后会立即保存。
+              </DialogDescription>
               <div className="flex flex-wrap gap-2 text-sm text-muted-foreground">
                 <Badge variant="secondary">已选 {explicitChapters.length}</Badge>
                 <Badge variant="outline">主章节：{primaryChapter?.name || '未指定'}</Badge>
@@ -238,7 +242,7 @@ export function PalaceChapterPanel({
                 {subjectGroups.map((group) => (
                   <section
                     key={group.key}
-                    className="space-y-3 rounded-3xl border border-border/70 bg-background/40 p-4"
+                    className="space-y-3 rounded-lg border border-border/70 bg-background/40 p-4"
                   >
                     <div className="flex flex-wrap items-center justify-between gap-3">
                       <div className="space-y-1">
@@ -256,7 +260,7 @@ export function PalaceChapterPanel({
                 ))}
               </div>
             ) : (
-              <div className="rounded-2xl border border-dashed border-border/80 px-4 py-10 text-center text-sm text-muted-foreground">
+              <div className="rounded-lg border border-dashed border-border/80 px-4 py-10 text-center text-sm text-muted-foreground">
                 还没有可关联的章节，请先到知识大纲里创建或导入章节。
               </div>
             )}

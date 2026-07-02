@@ -25,6 +25,8 @@ import {
 } from '@/shared/components/session/timer-automation-config'
 import type {
   TimerFeedbackIntensity,
+  TimerCelebrationEventConfig,
+  TimerCelebrationVisualPreset,
   TimerFocusConfig,
   TimerFocusMode,
   TimerFocusRule,
@@ -38,6 +40,16 @@ import {
   sanitizeTimerFocusConfig,
   TIMER_FOCUS_SCENE_LABELS,
 } from '@/shared/components/session/timer-focus-config'
+import type {
+  BreakGuardAlertStrength,
+  BreakGuardConfig,
+} from '@/shared/components/session/break-guard-config'
+import {
+  DEFAULT_BREAK_GUARD_CONFIG,
+  resetBreakGuardConfig,
+  saveBreakGuardConfig,
+  sanitizeBreakGuardConfig,
+} from '@/shared/components/session/break-guard-config'
 
 interface TimerAutomationDialogProps {
   open: boolean
@@ -47,11 +59,39 @@ interface TimerAutomationDialogProps {
   onReset: () => void
   focusConfig?: TimerFocusConfig
   onFocusConfigSave?: (config: TimerFocusConfig) => void
+  breakConfig?: BreakGuardConfig
+  onBreakConfigSave?: (config: BreakGuardConfig) => void
 }
 
 type FieldKey = keyof TimerAutomationRule
 type ActionFieldKey = keyof TimerAutomationActivityConfig
 type FocusFieldKey = keyof TimerFocusRule
+type CelebrationEventKey = 'secondaryInterval' | 'primaryGoal'
+type CelebrationBooleanFieldKey = 'enabled' | 'soundEnabled' | 'animationEnabled'
+type BreakNumberFieldKey = 'promptDelaySeconds'
+type BreakTextFieldKey = 'targetPath' | 'presetMinutes' | 'snoozeMinutes'
+type BreakBooleanFieldKey =
+  | 'enabled'
+  | 'allowCustomMinutes'
+  | 'autoFinishOnStudyReturn'
+  | 'resumeInterruptedStudyOnReturn'
+  | 'recordBreakLogs'
+
+function parseMinuteList(value: string) {
+  return value
+    .split(',')
+    .map((item) => Math.round(Number(item.trim())))
+    .filter((item) => Number.isFinite(item) && item > 0)
+}
+
+const TIMER_VISUAL_PRESET_LABELS: Record<TimerCelebrationVisualPreset, string> = {
+  auto: '自动',
+  random_direction: '随机方向',
+  realistic_look: '真实烟花',
+  fireworks: '礼花',
+  stars: '星星',
+  school_pride: '冲顶',
+}
 
 function toDraft(config: TimerAutomationConfig) {
   return {
@@ -118,8 +158,14 @@ function toFocusDraft(config: TimerFocusConfig) {
     mode: config.mode,
     feedbackIntensity: config.feedbackIntensity,
     celebration: {
-      secondaryInterval: { ...config.celebration.secondaryInterval },
-      primaryGoal: { ...config.celebration.primaryGoal },
+      secondaryInterval: {
+        ...config.celebration.secondaryInterval,
+        volumeBoost: String(config.celebration.secondaryInterval.volumeBoost),
+      },
+      primaryGoal: {
+        ...config.celebration.primaryGoal,
+        volumeBoost: String(config.celebration.primaryGoal.volumeBoost),
+      },
     },
     global: {
       primaryMinutes: String(config.global.primaryMinutes),
@@ -156,6 +202,21 @@ function toFocusDraft(config: TimerFocusConfig) {
   }
 }
 
+function toBreakDraft(config: BreakGuardConfig) {
+  return {
+    enabled: config.enabled,
+    promptDelaySeconds: String(config.promptDelaySeconds),
+    presetMinutes: config.presetMinutes.join(', '),
+    allowCustomMinutes: config.allowCustomMinutes,
+    autoFinishOnStudyReturn: config.autoFinishOnStudyReturn,
+    resumeInterruptedStudyOnReturn: config.resumeInterruptedStudyOnReturn,
+    targetPath: config.targetPath,
+    alertStrength: config.alertStrength,
+    snoozeMinutes: config.snoozeMinutes.join(', '),
+    recordBreakLogs: config.recordBreakLogs,
+  }
+}
+
 function RuleEditor({
   label,
   description,
@@ -179,7 +240,7 @@ function RuleEditor({
   compact?: boolean
 }) {
   return (
-    <div className={cn('rounded-2xl border border-border/70 bg-card/70', compact ? 'p-3.5' : 'p-4')}>
+    <div className={cn('rounded-lg border border-border/70 bg-card/70', compact ? 'p-3.5' : 'p-4')}>
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
           <div className="text-sm font-semibold text-foreground">{label}</div>
@@ -188,7 +249,7 @@ function RuleEditor({
         <label className="inline-flex items-center gap-2 rounded-full border border-border/60 bg-background/60 px-3 py-1.5 text-xs">
           <input
             type="checkbox"
-            className="h-4 w-4"
+            className="size-4"
             checked={value.autoStartOnPageEnter}
             onChange={(event) => onAutoStartChange(event.target.checked)}
           />
@@ -248,7 +309,7 @@ function FocusRuleEditor({
   compact?: boolean
 }) {
   return (
-    <div className={cn('rounded-2xl border border-border/70 bg-card/70', compact ? 'p-3.5' : 'p-4')}>
+    <div className={cn('rounded-lg border border-border/70 bg-card/70', compact ? 'p-3.5' : 'p-4')}>
       <div className="text-sm font-semibold text-foreground">{label}</div>
       <p className="mt-1 text-xs leading-5 text-muted-foreground">
         一级总目标决定整段冲刺长度，二级子间隔决定大数字倒计时和爽感反馈节奏。
@@ -279,6 +340,70 @@ function FocusRuleEditor({
   )
 }
 
+function CelebrationEventEditor({
+  title,
+  description,
+  value,
+  onBooleanChange,
+  onVolumeChange,
+  onPresetChange,
+}: {
+  title: string
+  description: string
+  value: Omit<TimerCelebrationEventConfig, 'volumeBoost'> & { volumeBoost: string }
+  onBooleanChange: (field: CelebrationBooleanFieldKey, checked: boolean) => void
+  onVolumeChange: (value: string) => void
+  onPresetChange: (value: TimerCelebrationVisualPreset) => void
+}) {
+  return (
+    <div className="rounded-lg border border-border/70 bg-background/65 p-4">
+      <div>
+        <div className="text-sm font-semibold text-foreground">{title}</div>
+        <p className="mt-1 text-xs leading-5 text-muted-foreground">{description}</p>
+      </div>
+      <div className="mt-3 grid gap-3 md:grid-cols-3">
+        {([
+          ['enabled', '启用反馈'],
+          ['soundEnabled', '播放声音'],
+          ['animationEnabled', '播放动画'],
+        ] as const).map(([field, label]) => (
+          <label key={field} className="flex items-center gap-2 rounded-lg border border-border/60 bg-card/60 px-3 py-2 text-sm">
+            <input
+              type="checkbox"
+              className="size-4"
+              checked={value[field]}
+              onChange={(event) => onBooleanChange(field, event.target.checked)}
+            />
+            <span>{label}</span>
+          </label>
+        ))}
+      </div>
+      <div className="mt-3 grid gap-3 md:grid-cols-2">
+        <label className="space-y-1.5 text-sm">
+          <span className="text-xs text-muted-foreground">音量倍率（0-3）</span>
+          <Input
+            inputMode="decimal"
+            value={value.volumeBoost}
+            onChange={(event) => onVolumeChange(event.target.value)}
+          />
+        </label>
+        <label className="space-y-1.5 text-sm">
+          <span className="text-xs text-muted-foreground">视觉预设</span>
+          <select
+            className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+            value={value.visualPreset}
+            onChange={(event) => onPresetChange(event.target.value as TimerCelebrationVisualPreset)}
+          >
+            {Object.entries(TIMER_VISUAL_PRESET_LABELS).map(([preset, label]) => (
+              <option key={preset} value={preset}>{label}</option>
+            ))}
+          </select>
+        </label>
+      </div>
+    </div>
+  )
+}
+
 export function TimerAutomationDialog({
   open,
   config,
@@ -287,15 +412,19 @@ export function TimerAutomationDialog({
   onReset,
   focusConfig = DEFAULT_TIMER_FOCUS_CONFIG,
   onFocusConfigSave,
+  breakConfig = DEFAULT_BREAK_GUARD_CONFIG,
+  onBreakConfigSave,
 }: TimerAutomationDialogProps) {
   const [draft, setDraft] = React.useState(() => toDraft(config))
   const [focusDraft, setFocusDraft] = React.useState(() => toFocusDraft(focusConfig))
+  const [breakDraft, setBreakDraft] = React.useState(() => toBreakDraft(breakConfig))
 
   React.useEffect(() => {
     if (!open) return
     setDraft(toDraft(config))
     setFocusDraft(toFocusDraft(focusConfig))
-  }, [config, focusConfig, open])
+    setBreakDraft(toBreakDraft(breakConfig))
+  }, [breakConfig, config, focusConfig, open])
 
   const handleModeChange = React.useCallback((mode: TimerAutomationMode) => {
     setDraft((current) => ({ ...current, mode }))
@@ -358,6 +487,80 @@ export function TimerAutomationDialog({
     setFocusDraft((current) => ({
       ...current,
       feedbackIntensity: value,
+    }))
+  }, [])
+
+  const handleCelebrationBooleanChange = React.useCallback((
+    eventKey: CelebrationEventKey,
+    field: CelebrationBooleanFieldKey,
+    checked: boolean,
+  ) => {
+    setFocusDraft((current) => ({
+      ...current,
+      celebration: {
+        ...current.celebration,
+        [eventKey]: {
+          ...current.celebration[eventKey],
+          [field]: checked,
+        },
+      },
+    }))
+  }, [])
+
+  const handleCelebrationVolumeChange = React.useCallback((eventKey: CelebrationEventKey, value: string) => {
+    setFocusDraft((current) => ({
+      ...current,
+      celebration: {
+        ...current.celebration,
+        [eventKey]: {
+          ...current.celebration[eventKey],
+          volumeBoost: value,
+        },
+      },
+    }))
+  }, [])
+
+  const handleCelebrationPresetChange = React.useCallback((
+    eventKey: CelebrationEventKey,
+    value: TimerCelebrationVisualPreset,
+  ) => {
+    setFocusDraft((current) => ({
+      ...current,
+      celebration: {
+        ...current.celebration,
+        [eventKey]: {
+          ...current.celebration[eventKey],
+          visualPreset: value,
+        },
+      },
+    }))
+  }, [])
+
+  const handleBreakBooleanChange = React.useCallback((field: BreakBooleanFieldKey, checked: boolean) => {
+    setBreakDraft((current) => ({
+      ...current,
+      [field]: checked,
+    }))
+  }, [])
+
+  const handleBreakNumberChange = React.useCallback((field: BreakNumberFieldKey, value: string) => {
+    setBreakDraft((current) => ({
+      ...current,
+      [field]: value,
+    }))
+  }, [])
+
+  const handleBreakTextChange = React.useCallback((field: BreakTextFieldKey, value: string) => {
+    setBreakDraft((current) => ({
+      ...current,
+      [field]: value,
+    }))
+  }, [])
+
+  const handleBreakAlertStrengthChange = React.useCallback((value: BreakGuardAlertStrength) => {
+    setBreakDraft((current) => ({
+      ...current,
+      alertStrength: value,
     }))
   }, [])
 
@@ -428,7 +631,16 @@ export function TimerAutomationDialog({
       sanitizeTimerFocusConfig({
         mode: focusDraft.mode,
         feedbackIntensity: focusDraft.feedbackIntensity,
-        celebration: focusDraft.celebration,
+        celebration: {
+          secondaryInterval: {
+            ...focusDraft.celebration.secondaryInterval,
+            volumeBoost: Number(focusDraft.celebration.secondaryInterval.volumeBoost),
+          },
+          primaryGoal: {
+            ...focusDraft.celebration.primaryGoal,
+            volumeBoost: Number(focusDraft.celebration.primaryGoal.volumeBoost),
+          },
+        },
         global: {
           primaryMinutes: focusDraft.global.primaryMinutes,
           secondaryMinutes: focusDraft.global.secondaryMinutes,
@@ -465,6 +677,23 @@ export function TimerAutomationDialog({
     [focusDraft],
   )
 
+  const parsedBreakConfig = React.useMemo(
+    () =>
+      sanitizeBreakGuardConfig({
+        enabled: breakDraft.enabled,
+        promptDelaySeconds: breakDraft.promptDelaySeconds,
+        presetMinutes: parseMinuteList(breakDraft.presetMinutes),
+        allowCustomMinutes: breakDraft.allowCustomMinutes,
+        autoFinishOnStudyReturn: breakDraft.autoFinishOnStudyReturn,
+        resumeInterruptedStudyOnReturn: breakDraft.resumeInterruptedStudyOnReturn,
+        targetPath: breakDraft.targetPath,
+        alertStrength: breakDraft.alertStrength,
+        snoozeMinutes: parseMinuteList(breakDraft.snoozeMinutes),
+        recordBreakLogs: breakDraft.recordBreakLogs,
+      }),
+    [breakDraft],
+  )
+
   const scenes = Object.keys(TIMER_AUTOMATION_SCENE_LABELS) as TimerAutomationScene[]
   const sceneRuleEditors = scenes.map((scene) =>
     React.createElement(RuleEditor, {
@@ -492,11 +721,11 @@ export function TimerAutomationDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex h-[min(88vh,820px)] w-[min(1100px,calc(100vw-24px))] max-w-[1100px] flex-col overflow-hidden rounded-[28px] border-border/70 bg-background/98 p-0">
+      <DialogContent className="flex h-[min(88vh,820px)] w-[min(1100px,calc(100vw-24px))] max-w-[1100px] flex-col overflow-hidden rounded-lg border-border/70 bg-background/98 p-0">
         <DialogHeader>
           <div className="flex min-w-0 items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-secondary text-foreground">
-              <Settings2 className="h-5 w-5" />
+            <div className="flex size-10 items-center justify-center rounded-lg bg-secondary text-foreground">
+              <Settings2 className="size-5" />
             </div>
             <div>
               <DialogTitle>自动化配置</DialogTitle>
@@ -512,7 +741,7 @@ export function TimerAutomationDialog({
           data-testid="timer-automation-dialog-content"
           className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain px-4 py-4 sm:px-6"
         >
-          <div className="rounded-2xl border border-border/70 bg-card/70 p-4">
+          <div className="rounded-lg border border-border/70 bg-card/70 p-4">
             <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
               <div>
                 <div className="text-sm font-semibold text-foreground">配置模式</div>
@@ -544,7 +773,7 @@ export function TimerAutomationDialog({
               <label className="flex items-start gap-3 rounded-xl border border-border/60 bg-background/50 px-3 py-3 text-sm">
                 <input
                   type="checkbox"
-                  className="mt-0.5 h-4 w-4"
+                  className="mt-0.5 size-4"
                   checked={draft.actions.autoResumeOnWindowReturn}
                   onChange={(event) => handleActionChange('autoResumeOnWindowReturn', event.target.checked)}
                 />
@@ -556,7 +785,7 @@ export function TimerAutomationDialog({
               <label className="flex items-start gap-3 rounded-xl border border-border/60 bg-background/50 px-3 py-3 text-sm">
                 <input
                   type="checkbox"
-                  className="mt-0.5 h-4 w-4"
+                  className="mt-0.5 size-4"
                   checked={draft.actions.countNodeSwitchAsActivity}
                   onChange={(event) => handleActionChange('countNodeSwitchAsActivity', event.target.checked)}
                 />
@@ -568,7 +797,7 @@ export function TimerAutomationDialog({
               <label className="flex items-start gap-3 rounded-xl border border-border/60 bg-background/50 px-3 py-3 text-sm">
                 <input
                   type="checkbox"
-                  className="mt-0.5 h-4 w-4"
+                  className="mt-0.5 size-4"
                   checked={draft.actions.countEditOperationsAsActivity}
                   onChange={(event) => handleActionChange('countEditOperationsAsActivity', event.target.checked)}
                 />
@@ -580,7 +809,7 @@ export function TimerAutomationDialog({
               <label className="flex items-start gap-3 rounded-xl border border-border/60 bg-background/50 px-3 py-3 text-sm">
                 <input
                   type="checkbox"
-                  className="mt-0.5 h-4 w-4"
+                  className="mt-0.5 size-4"
                   checked={draft.actions.countPracticeInteractionsAsActivity}
                   onChange={(event) => handleActionChange('countPracticeInteractionsAsActivity', event.target.checked)}
                 />
@@ -607,7 +836,7 @@ export function TimerAutomationDialog({
             </div>
           )}
 
-          <div className="rounded-2xl border border-border/70 bg-card/70 p-4">
+          <div className="rounded-lg border border-border/70 bg-card/70 p-4">
             <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
               <div>
                 <div className="text-sm font-semibold text-foreground">专注目标配置</div>
@@ -646,7 +875,7 @@ export function TimerAutomationDialog({
                   type="button"
                   onClick={() => handleFeedbackIntensityChange(value)}
                   className={cn(
-                    'rounded-2xl border px-4 py-4 text-left transition-all',
+                    'rounded-lg border px-4 py-4 text-left transition-all',
                     focusDraft.feedbackIntensity === value
                       ? 'border-primary bg-primary/8 shadow-sm ring-1 ring-primary/30'
                       : 'border-border/70 bg-background/70 hover:bg-secondary/70',
@@ -673,9 +902,137 @@ export function TimerAutomationDialog({
               )}
             </div>
 
-            <div className="mt-3 rounded-2xl border border-dashed border-border/70 bg-background/55 px-3 py-3 text-xs text-muted-foreground">
+            <div className="mt-4 grid gap-3 lg:grid-cols-2">
+              <CelebrationEventEditor
+                title="二级小目标反馈"
+                description="每次二级倒计时完成时触发，适合短周期奖励。"
+                value={focusDraft.celebration.secondaryInterval}
+                onBooleanChange={(field, checked) =>
+                  handleCelebrationBooleanChange('secondaryInterval', field, checked)
+                }
+                onVolumeChange={(value) => handleCelebrationVolumeChange('secondaryInterval', value)}
+                onPresetChange={(value) => handleCelebrationPresetChange('secondaryInterval', value)}
+              />
+              <CelebrationEventEditor
+                title="一级总目标反馈"
+                description="整段一级目标完成时触发，适合更强的完成仪式。"
+                value={focusDraft.celebration.primaryGoal}
+                onBooleanChange={(field, checked) =>
+                  handleCelebrationBooleanChange('primaryGoal', field, checked)
+                }
+                onVolumeChange={(value) => handleCelebrationVolumeChange('primaryGoal', value)}
+                onPresetChange={(value) => handleCelebrationPresetChange('primaryGoal', value)}
+              />
+            </div>
+
+            <div className="mt-3 rounded-lg border border-dashed border-border/70 bg-background/55 px-3 py-3 text-xs text-muted-foreground">
               当前全局默认：一级 {getTimerFocusRule('practice', parsedFocusConfig).primaryMinutes} 分钟左右的总冲刺，
               二级 {getTimerFocusRule('practice', parsedFocusConfig).secondaryMinutes} 分钟左右的小目标，更适合持续追小胜利。
+            </div>
+          </div>
+
+          <div className="rounded-lg border border-border/70 bg-card/70 p-4">
+            <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <div className="text-sm font-semibold text-foreground">休息守护配置</div>
+                <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                  控制离开主窗口后的休息询问、休息按钮、回到学习时如何结束休息，以及是否记录休息日志。
+                </p>
+              </div>
+              <label className="inline-flex items-center gap-2 rounded-full border border-border/60 bg-background/70 px-3 py-1.5 text-xs">
+                <input
+                  type="checkbox"
+                  className="size-4"
+                  checked={breakDraft.enabled}
+                  onChange={(event) => handleBreakBooleanChange('enabled', event.target.checked)}
+                />
+                启用休息守护
+              </label>
+            </div>
+
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+              {([
+                ['allowCustomMinutes', '允许自定义时长', '休息询问里展示自定义分钟输入。'],
+                ['autoFinishOnStudyReturn', '学习即结束休息', '回到学习页或产生学习操作时，自动结束休息倒计时。'],
+                ['resumeInterruptedStudyOnReturn', '恢复被暂停学习', '如果休息暂停了学习计时，回来后自动恢复它。'],
+                ['recordBreakLogs', '记录休息日志', '记录开始、结束、超时和延后次数。'],
+              ] as const).map(([field, title, description]) => (
+                <label key={field} className="flex items-start gap-3 rounded-xl border border-border/60 bg-background/50 px-3 py-3 text-sm">
+                  <input
+                    type="checkbox"
+                    className="mt-0.5 size-4"
+                    checked={breakDraft[field]}
+                    onChange={(event) => handleBreakBooleanChange(field, event.target.checked)}
+                  />
+                  <span>
+                    <span className="block font-medium text-foreground">{title}</span>
+                    <span className="text-xs text-muted-foreground">{description}</span>
+                  </span>
+                </label>
+              ))}
+            </div>
+
+            <div className="mt-4 grid gap-3 md:grid-cols-2">
+              <label className="space-y-1.5 text-sm">
+                <span className="text-xs text-muted-foreground">离开后询问延迟（秒）</span>
+                <Input
+                  inputMode="numeric"
+                  value={breakDraft.promptDelaySeconds}
+                  onChange={(event) => handleBreakNumberChange('promptDelaySeconds', event.target.value)}
+                />
+              </label>
+              <label className="space-y-1.5 text-sm">
+                <span className="text-xs text-muted-foreground">休息到点后打开路径</span>
+                <Input
+                  value={breakDraft.targetPath}
+                  onChange={(event) => handleBreakTextChange('targetPath', event.target.value)}
+                  placeholder="/freestyle"
+                />
+              </label>
+              <label className="space-y-1.5 text-sm">
+                <span className="text-xs text-muted-foreground">默认休息按钮（分钟，英文逗号分隔）</span>
+                <Input
+                  value={breakDraft.presetMinutes}
+                  onChange={(event) => handleBreakTextChange('presetMinutes', event.target.value)}
+                  placeholder="1, 3"
+                />
+              </label>
+              <label className="space-y-1.5 text-sm">
+                <span className="text-xs text-muted-foreground">延后按钮（分钟，英文逗号分隔）</span>
+                <Input
+                  value={breakDraft.snoozeMinutes}
+                  onChange={(event) => handleBreakTextChange('snoozeMinutes', event.target.value)}
+                  placeholder="1, 3, 5"
+                />
+              </label>
+            </div>
+
+            <div className="mt-4 grid gap-3 md:grid-cols-2">
+              {([
+                ['strong', '强提醒', '到点后强提醒，并可把主窗口带回目标页面。'],
+                ['gentle', '温和提醒', '保留提醒，但减少打断感。'],
+              ] as const).map(([value, title, description]) => (
+                <button
+                  key={value}
+                  type="button"
+                  className={cn(
+                    'rounded-lg border px-4 py-4 text-left transition-all',
+                    breakDraft.alertStrength === value
+                      ? 'border-primary bg-primary/8 shadow-sm ring-1 ring-primary/30'
+                      : 'border-border/70 bg-background/70 hover:bg-secondary/70',
+                  )}
+                  onClick={() => handleBreakAlertStrengthChange(value)}
+                >
+                  <div className="text-sm font-semibold">{title}</div>
+                  <div className="mt-1 text-xs leading-5 text-muted-foreground">{description}</div>
+                </button>
+              ))}
+            </div>
+
+            <div className="mt-3 rounded-lg border border-dashed border-border/70 bg-background/55 px-3 py-3 text-xs text-muted-foreground">
+              当前预览：离开 {parsedBreakConfig.promptDelaySeconds} 秒后询问；
+              休息按钮 {parsedBreakConfig.presetMinutes.join(' / ')} 分钟；
+              回到学习{parsedBreakConfig.autoFinishOnStudyReturn ? '会' : '不会'}自动结束休息。
             </div>
           </div>
         </div>
@@ -688,10 +1045,12 @@ export function TimerAutomationDialog({
             onClick={() => {
               onReset()
               const resetFocusConfig = resetTimerFocusConfig()
+              const resetBreakConfig = resetBreakGuardConfig()
               setFocusDraft(toFocusDraft(resetFocusConfig))
+              setBreakDraft(toBreakDraft(resetBreakConfig))
             }}
           >
-            <RotateCcw className="mr-2 h-4 w-4" />
+            <RotateCcw className="mr-2 size-4" />
             恢复默认
           </Button>
           <div className="flex gap-2">
@@ -708,10 +1067,15 @@ export function TimerAutomationDialog({
                 } else {
                   saveTimerFocusConfig(parsedFocusConfig)
                 }
+                if (onBreakConfigSave) {
+                  onBreakConfigSave(parsedBreakConfig)
+                } else {
+                  saveBreakGuardConfig(parsedBreakConfig)
+                }
                 onOpenChange(false)
               }}
             >
-              <Save className="mr-2 h-4 w-4" />
+              <Save className="mr-2 size-4" />
               保存
             </Button>
           </div>
@@ -720,4 +1084,3 @@ export function TimerAutomationDialog({
     </Dialog>
   )
 }
-

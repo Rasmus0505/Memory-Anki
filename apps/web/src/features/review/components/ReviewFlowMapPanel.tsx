@@ -100,7 +100,8 @@ export function ReviewFlowMapPanel({
   const [hostReadyTimedOut, setHostReadyTimedOut] = useState(false)
   const isEditMode = displayMode === 'edit'
   const frameEditorState = isEditMode && editableEditorState ? editableEditorState : visibleEditorState
-  const frameSyncIntent = isEditMode ? 'soft' : 'replace'
+  const frameSyncIntent = 'soft'
+  const frameForceSyncKey = modeSyncVersion > 0 ? `${displayMode}:${modeSyncVersion}` : undefined
   const handleImmersiveToggle = useCallback(async () => {
     if (nativeFullscreenActive) {
       await frameRef.current?.exitNativeFullscreen()
@@ -187,7 +188,7 @@ export function ReviewFlowMapPanel({
         }}
       />
       {hostReadyTimedOut ? (
-        <div className="mb-3 flex items-center justify-between gap-3 rounded-2xl border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-warning">
+        <div className="mb-3 flex items-center justify-between gap-3 rounded-lg border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-warning">
           <span>脑图宿主初始化偏慢，已继续等待。若长时间不显示，可先返回后重新进入。</span>
           <Badge className="bg-warning text-white hover:bg-warning">宿主超时</Badge>
         </div>
@@ -204,8 +205,8 @@ export function ReviewFlowMapPanel({
         preserveViewOnSync
         syncReason={isEditMode ? null : 'review_flip'}
         externalSyncKey={isEditMode ? null : visibleEditorSyncKey}
-        forceSyncKey={`${displayMode}:${modeSyncVersion}`}
-        forceSyncIntent="replace"
+        forceSyncKey={frameForceSyncKey}
+        forceSyncIntent="soft"
         initialViewPolicy="preserve"
         bilinkCounts={bilinkCounts}
         bilinkItems={bilinkItems}
@@ -230,7 +231,7 @@ export function ReviewFlowMapPanel({
         onReady={() => setHostReadyTimedOut(false)}
         onReadyTimeout={() => setHostReadyTimedOut(true)}
         className={cn(
-          'w-full rounded-2xl border border-border/70 bg-background',
+          'w-full rounded-lg border border-border/70 bg-background',
           fullscreen ? 'h-full' : 'h-[64vh]',
         )}
       />

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
-import { getDashboardApi, prefetchDashboardApi } from "@/features/dashboard/api/dashboardApi"
+import { getDashboardApi, prefetchDashboardApi } from "@/features/dashboard/api"
 import { request } from "@/shared/api/http"
 
 vi.mock("@/shared/api/http", () => ({

@@ -4,7 +4,7 @@ import type {
   PointerEvent as ReactPointerEvent,
   RefObject,
 } from "react";
-import { translateEnglishReadingSentenceApi } from "@/features/english-reading/api/englishReadingApi";
+import { translateEnglishReadingSentenceApi } from "@/features/english-reading/api";
 import {
   extractSentenceSelection,
   resolveSentenceTranslationPanelLeft,

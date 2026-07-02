@@ -2,8 +2,8 @@
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { describe, expect, it, vi } from 'vitest'
 import { ProfileAiConfigPage } from '@/features/profile/ProfileAiConfigPage'
-import * as aiLogsApi from '@/entities/ai-log/api/aiLogsApi'
-import * as profileApi from '@/entities/preferences/api/aiModelSettingsApi'
+import * as aiLogsApi from '@/entities/ai-log/api'
+import * as profileApi from '@/entities/preferences/api'
 
 vi.mock('sonner', () => ({
   toast: {

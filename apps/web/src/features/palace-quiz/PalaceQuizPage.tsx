@@ -7,7 +7,7 @@ import { PalaceQuizManagePanel } from '@/features/palace-quiz/components/PalaceQ
 import { PalaceQuizMemoryLookupDialog } from '@/features/palace-quiz/components/PalaceQuizMemoryLookupDialog'
 import { PalaceQuizPracticePanel } from '@/features/palace-quiz/components/PalaceQuizPracticePanel'
 import { PalaceQuizRangeDialog } from '@/features/palace-quiz/components/PalaceQuizRangeDialog'
-import { resetPalaceQuizQuestionAttemptsApi } from '@/features/palace-quiz/api/palaceQuizApi'
+import { resetPalaceQuizQuestionAttemptsApi } from '@/features/palace-quiz/api'
 import { usePalaceQuizGeneration } from '@/features/palace-quiz/hooks/usePalaceQuizGeneration'
 import { usePalaceQuizManagement } from '@/features/palace-quiz/hooks/usePalaceQuizManagement'
 import { usePalaceQuizPractice } from '@/features/palace-quiz/hooks/usePalaceQuizPractice'
@@ -254,7 +254,7 @@ export default function PalaceQuizPage() {
               size="sm"
               onClick={() => setMemoryLookupOpen(true)}
             >
-              <BookOpen className="h-4 w-4" />
+              <BookOpen className="size-4" />
               查看记忆宫殿
             </Button>
             <Badge variant="secondary">{questions.length} 题</Badge>
@@ -280,7 +280,7 @@ export default function PalaceQuizPage() {
       </div>
 
       {error ? (
-        <div className="rounded-2xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+        <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
           {error}
         </div>
       ) : null}

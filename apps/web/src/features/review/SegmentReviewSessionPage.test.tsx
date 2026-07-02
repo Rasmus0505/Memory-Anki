@@ -40,7 +40,7 @@ vi.mock('@/features/review/components/MindMapReviewFlow', () => ({
   },
 }))
 
-vi.mock('@/features/review/api/reviewApi', () => ({
+vi.mock('@/features/review/api', () => ({
   getSegmentReviewSessionApi: (...args: unknown[]) => mocks.getSegmentReviewSessionApi(...args),
   getSegmentReviewSessionProgressApi: (...args: unknown[]) => mocks.getSegmentReviewSessionProgressApi(...args),
   clearSegmentReviewSessionProgressApi: (...args: unknown[]) => mocks.clearSegmentReviewSessionProgressApi(...args),

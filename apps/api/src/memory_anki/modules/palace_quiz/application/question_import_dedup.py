@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import unicodedata
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -11,7 +12,27 @@ from .question_contracts import json_load
 
 
 def _normalize_import_text(value: Any) -> str:
-    text = str(value or "")
+    text = unicodedata.normalize("NFKC", str(value or ""))
+    text = text.translate(
+        str.maketrans(
+            {
+                "“": '"',
+                "”": '"',
+                "‘": '"',
+                "’": '"',
+                "（": "(",
+                "）": ")",
+                "，": ",",
+                "。": ".",
+                "；": ";",
+                "：": ":",
+                "？": "?",
+                "！": "!",
+            }
+        )
+    )
+    text = text.replace('"', "").replace("'", "")
+    text = re.sub(r"^\s*\d+\s*[.、．]\s*", "", text)
     text = re.sub(r"\s+", "", text)
     return text.strip().lower()
 

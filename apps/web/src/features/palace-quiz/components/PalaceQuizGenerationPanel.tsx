@@ -158,11 +158,11 @@ export function PalaceQuizGenerationPanel({
               <CardTitle className="text-base">已有题库归类到小宫殿</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="rounded-2xl border border-border/70 bg-background/70 px-4 py-3 text-sm text-muted-foreground">
+              <div className="rounded-lg border border-border/70 bg-background/70 px-4 py-3 text-sm text-muted-foreground">
                 当前有 {rootQuestionCount} 道大宫殿题、{miniPalaces.length} 个小宫殿。这里会调用“小宫殿归类”场景会判断哪些题同时属于哪些小宫殿，并复制写入对应小宫殿题库。
               </div>
               {classificationResult ? (
-                <div className="rounded-2xl border border-border/70 bg-background/70 px-4 py-3 text-sm">
+                <div className="rounded-lg border border-border/70 bg-background/70 px-4 py-3 text-sm">
                   <div>本次写入 {classificationResult.copied_question_count} 道小宫殿题。</div>
                   {classificationResult.resolved_ai?.model_label ? (
                     <div className="mt-1 text-xs text-muted-foreground">
@@ -184,9 +184,9 @@ export function PalaceQuizGenerationPanel({
               ) : null}
               <Button type="button" disabled={classificationLoading} onClick={() => void onClassifyExistingQuestions()}>
                 {classificationLoading ? (
-                  <LoaderCircle className="h-4 w-4 animate-spin" />
+                  <LoaderCircle className="size-4 animate-spin" />
                 ) : (
-                  <Sparkles className="h-4 w-4" />
+                  <Sparkles className="size-4" />
                 )}
                 归类已有题库
               </Button>
@@ -199,7 +199,7 @@ export function PalaceQuizGenerationPanel({
             <CardTitle className="text-base">来源设置</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="rounded-2xl border border-border/70 bg-background/60 p-4">
+            <div className="rounded-lg border border-border/70 bg-background/60 p-4">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="space-y-1">
                   <div className="text-sm font-medium">题目所属章节范围</div>
@@ -217,7 +217,7 @@ export function PalaceQuizGenerationPanel({
                 variant={generationSourceKind === 'subject-pdf' ? 'default' : 'outline'}
                 onClick={() => setGenerationSourceKind('subject-pdf')}
               >
-                <FileText className="h-4 w-4" />
+                <FileText className="size-4" />
                 学科 PDF
               </Button>
               <Button
@@ -225,7 +225,7 @@ export function PalaceQuizGenerationPanel({
                 variant={generationSourceKind === 'image-single' ? 'default' : 'outline'}
                 onClick={() => setGenerationSourceKind('image-single')}
               >
-                <ImagePlus className="h-4 w-4" />
+                <ImagePlus className="size-4" />
                 单图
               </Button>
               <Button
@@ -233,7 +233,7 @@ export function PalaceQuizGenerationPanel({
                 variant={generationSourceKind === 'image-batch' ? 'default' : 'outline'}
                 onClick={() => setGenerationSourceKind('image-batch')}
               >
-                <Sparkles className="h-4 w-4" />
+                <Sparkles className="size-4" />
                 多图
               </Button>
               <Button
@@ -241,13 +241,13 @@ export function PalaceQuizGenerationPanel({
                 variant={generationSourceKind === 'text-files' ? 'default' : 'outline'}
                 onClick={() => setGenerationSourceKind('text-files')}
               >
-                <FileText className="h-4 w-4" />
+                <FileText className="size-4" />
                 文本/手动导入
               </Button>
             </div>
 
             {generationSourceKind === 'subject-pdf' ? (
-              <div className="space-y-4 rounded-2xl border border-border/70 bg-background/60 p-4">
+              <div className="space-y-4 rounded-lg border border-border/70 bg-background/60 p-4">
                 <div className="grid gap-3 sm:grid-cols-2">
                   <label className="grid gap-2 text-sm">
                     <span className="font-medium">学科</span>
@@ -317,11 +317,11 @@ export function PalaceQuizGenerationPanel({
                     onClick={() => subjectPdfUploadInputRef.current?.click()}
                     disabled={!pdfController.selectedSubjectId}
                   >
-                    <Plus className="h-4 w-4" />
+                    <Plus className="size-4" />
                     上传新 PDF 到资料库
                   </Button>
                   <Button type="button" variant="outline" onClick={onAddCurrentPdfSource}>
-                    <Plus className="h-4 w-4" />
+                    <Plus className="size-4" />
                     加入本次资料集
                   </Button>
                 </div>
@@ -342,11 +342,11 @@ export function PalaceQuizGenerationPanel({
                   )}
                 </div>
 
-                <div className="rounded-2xl border border-border/70 bg-background/70 px-4 py-3 text-sm text-muted-foreground">
+                <div className="rounded-lg border border-border/70 bg-background/70 px-4 py-3 text-sm text-muted-foreground">
                   PDF 页面预览已关闭。请直接输入页码范围，例如 15,16,17 或 15-17。
                 </div>
 
-                <div className="space-y-3 rounded-2xl border border-border/70 bg-background/60 p-4">
+                <div className="space-y-3 rounded-lg border border-border/70 bg-background/60 p-4">
                   <div className="flex items-center justify-between gap-3">
                     <div className="text-sm font-medium">本次已加入的 PDF 资料</div>
                     <div className="text-xs text-muted-foreground">
@@ -361,7 +361,7 @@ export function PalaceQuizGenerationPanel({
                     generationPdfSources.map((source) => (
                       <div
                         key={source.subject_document_id}
-                        className="rounded-2xl border border-border/70 bg-background/70 px-4 py-3"
+                        className="rounded-lg border border-border/70 bg-background/70 px-4 py-3"
                       >
                         <div className="flex flex-wrap items-start justify-between gap-3">
                           <div className="space-y-1 text-sm">
@@ -390,7 +390,7 @@ export function PalaceQuizGenerationPanel({
                               variant="outline"
                               onClick={() => onRemovePdfSource(source.subject_document_id)}
                             >
-                              <Trash2 className="h-4 w-4" />
+                              <Trash2 className="size-4" />
                             </Button>
                           </div>
                         </div>
@@ -400,9 +400,9 @@ export function PalaceQuizGenerationPanel({
                 </div>
               </div>
             ) : (
-              <div className="space-y-4 rounded-2xl border border-border/70 bg-background/60 p-4">
+              <div className="space-y-4 rounded-lg border border-border/70 bg-background/60 p-4">
                 {generationSourceKind === 'text-files' ? (
-                  <div className="space-y-3 rounded-2xl border border-border/70 bg-background/70 px-4 py-3 text-sm">
+                  <div className="space-y-3 rounded-lg border border-border/70 bg-background/70 px-4 py-3 text-sm">
                     <div className="font-medium">文本文件导入说明</div>
                     <div className="text-muted-foreground">
                       支持标准 JSON，也支持题目文件和答案文件成对上传，例如
@@ -428,7 +428,7 @@ export function PalaceQuizGenerationPanel({
                     </div>
                   </div>
                 ) : null}
-                <label className="flex min-h-[160px] cursor-pointer flex-col items-center justify-center rounded-2xl border border-dashed border-border/80 bg-background/70 px-4 py-6 text-center">
+                <label className="flex min-h-[160px] cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed border-border/80 bg-background/70 px-4 py-6 text-center">
                   <input
                     type="file"
                     accept={generationSourceKind === 'text-files' ? '.txt,.md,.markdown,.json,text/plain,application/json' : 'image/*'}
@@ -459,7 +459,7 @@ export function PalaceQuizGenerationPanel({
                     {generationFiles.map((file) => (
                       <div
                         key={`${file.name}_${file.size}`}
-                        className="rounded-2xl border border-border/70 bg-background/70 px-4 py-3 text-sm"
+                        className="rounded-lg border border-border/70 bg-background/70 px-4 py-3 text-sm"
                       >
                         {file.name}
                       </div>
@@ -483,7 +483,7 @@ export function PalaceQuizGenerationPanel({
               />
             </div>
 
-            <label className="flex items-start gap-3 rounded-2xl border border-border/70 bg-background/70 px-4 py-3 text-sm">
+            <label className="flex items-start gap-3 rounded-lg border border-border/70 bg-background/70 px-4 py-3 text-sm">
               <input
                 type="checkbox"
                 className="mt-1"
@@ -498,7 +498,7 @@ export function PalaceQuizGenerationPanel({
               </span>
             </label>
 
-            <label className="flex items-start gap-3 rounded-2xl border border-border/70 bg-background/70 px-4 py-3 text-sm">
+            <label className="flex items-start gap-3 rounded-lg border border-border/70 bg-background/70 px-4 py-3 text-sm">
               <input
                 type="checkbox"
                 className="mt-1"
@@ -517,16 +517,16 @@ export function PalaceQuizGenerationPanel({
             </label>
 
             {generationError ? (
-              <div className="rounded-2xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+              <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
                 {generationError}
               </div>
             ) : null}
 
             <Button type="button" disabled={generationLoading} onClick={() => void onGeneratePreview()}>
               {generationLoading ? (
-                <LoaderCircle className="h-4 w-4 animate-spin" />
+                <LoaderCircle className="size-4 animate-spin" />
               ) : (
-                <Brain className="h-4 w-4" />
+                <Brain className="size-4" />
               )}
               生成预览
             </Button>
@@ -546,7 +546,7 @@ export function PalaceQuizGenerationPanel({
         </CardHeader>
         <CardContent className="space-y-3">
           {generationHistory.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-border/80 px-4 py-6 text-sm text-muted-foreground">
+            <div className="rounded-lg border border-dashed border-border/80 px-4 py-6 text-sm text-muted-foreground">
               还没有历史记录。先完成一次生成预览，这里会自动保存最近配置。
             </div>
           ) : (
@@ -555,7 +555,7 @@ export function PalaceQuizGenerationPanel({
               return (
                 <div
                   key={item.id}
-                  className="rounded-2xl border border-border/70 bg-background/70 px-4 py-4"
+                  className="rounded-lg border border-border/70 bg-background/70 px-4 py-4"
                 >
                   <div className="flex items-start justify-between gap-3">
                     <button
@@ -603,7 +603,7 @@ export function PalaceQuizGenerationPanel({
                       onClick={() => onDeleteGenerationHistory(item.id)}
                       title="删除历史记录"
                     >
-                      <Trash2 className="h-4 w-4" />
+                      <Trash2 className="size-4" />
                     </Button>
                   </div>
                   <div className="mt-3 flex flex-wrap gap-2">
@@ -616,9 +616,9 @@ export function PalaceQuizGenerationPanel({
                       onClick={() => void onRegenerateFromHistory(item)}
                     >
                       {historyRegeneratingId === item.id ? (
-                        <LoaderCircle className="h-4 w-4 animate-spin" />
+                        <LoaderCircle className="size-4 animate-spin" />
                       ) : (
-                        <RotateCcw className="h-4 w-4" />
+                        <RotateCcw className="size-4" />
                       )}
                       重新生成
                     </Button>
@@ -655,9 +655,9 @@ export function PalaceQuizGenerationPanel({
               onClick={() => void onSaveGenerationPreview()}
             >
               {generationSaving ? (
-                <LoaderCircle className="h-4 w-4 animate-spin" />
+                <LoaderCircle className="size-4 animate-spin" />
               ) : (
-                <CheckCircle2 className="h-4 w-4" />
+                <CheckCircle2 className="size-4" />
               )}
               保存到题库
             </Button>
@@ -684,7 +684,7 @@ export function PalaceQuizGenerationPanel({
           </div>
 
           {generationLoading || generationStreamStatus || generationStreamPreviewText ? (
-            <div className="space-y-3 rounded-2xl border border-border/70 bg-background/70 p-4">
+            <div className="space-y-3 rounded-lg border border-border/70 bg-background/70 p-4">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="text-sm font-medium">实时模型输出</div>
                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -696,7 +696,7 @@ export function PalaceQuizGenerationPanel({
               </div>
               <div
                 className={cn(
-                  'rounded-2xl border border-border/70 bg-background p-3',
+                  'rounded-lg border border-border/70 bg-background p-3',
                   !generationStreamPreviewText &&
                     'flex min-h-[160px] items-center justify-center text-sm text-muted-foreground',
                 )}
@@ -718,12 +718,12 @@ export function PalaceQuizGenerationPanel({
           ) : null}
 
           {!generationPreview ? (
-            <div className="rounded-2xl border border-dashed border-border/80 px-4 py-6 text-sm text-muted-foreground">
+            <div className="rounded-lg border border-dashed border-border/80 px-4 py-6 text-sm text-muted-foreground">
               先生成预览，这里会显示 AI 返回的题目草稿。确认后再批量写入题库。
             </div>
           ) : (
             <>
-              <div className="rounded-2xl border border-border/70 bg-background/70 px-4 py-3 text-xs text-muted-foreground">
+              <div className="rounded-lg border border-border/70 bg-background/70 px-4 py-3 text-xs text-muted-foreground">
                 <div>当前范围：{selectedChapterSummary}</div>
                 来源：{generationPreview.source_meta.source_kind} · 模式：
                 {generationPreview.source_meta.generation_mode}
@@ -762,7 +762,7 @@ export function PalaceQuizGenerationPanel({
                 ) : null}
               </div>
               {generationPreview.warnings?.length ? (
-                <div className="rounded-2xl border border-warning/30 bg-warning/5 px-4 py-3 text-sm text-warning">
+                <div className="rounded-lg border border-warning/30 bg-warning/5 px-4 py-3 text-sm text-warning">
                   {generationPreview.warnings.join('；')}
                 </div>
               ) : null}

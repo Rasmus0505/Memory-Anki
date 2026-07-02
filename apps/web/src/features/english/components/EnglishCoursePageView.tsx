@@ -146,7 +146,7 @@ export function EnglishCoursePageView(props: EnglishCoursePageViewProps) {
       <div className="flex shrink-0 items-center gap-2 border-b border-border/50 px-4 py-2">
         <Button variant="ghost" size="icon" asChild>
           <Link to="/english">
-            <ArrowLeft className="h-4 w-4" />
+            <ArrowLeft className="size-4" />
           </Link>
         </Button>
         <span className="truncate text-sm font-medium">{course.title}</span>
@@ -174,7 +174,7 @@ export function EnglishCoursePageView(props: EnglishCoursePageViewProps) {
             >
               <div
                 data-testid="english-course-video-panel"
-                className="overflow-hidden rounded-2xl bg-black"
+                className="overflow-hidden rounded-lg bg-black"
               >
                 <video
                   ref={videoRef}
@@ -187,7 +187,7 @@ export function EnglishCoursePageView(props: EnglishCoursePageViewProps) {
 
               <div
                 data-testid="english-course-spelling-panel"
-                className="flex min-h-0 flex-col overflow-hidden rounded-2xl border border-border/70 p-4"
+                className="flex min-h-0 flex-col overflow-hidden rounded-lg border border-border/70 p-4"
               >
                 <div className="flex shrink-0 items-center justify-between gap-3">
                   <div>
@@ -265,7 +265,7 @@ export function EnglishCoursePageView(props: EnglishCoursePageViewProps) {
                     onClick={() => replayCurrentSentence('english_button_replay')}
                     title="重播"
                   >
-                    <Volume2 className="h-4 w-4" />
+                    <Volume2 className="size-4" />
                   </Button>
                   <Button
                     variant="ghost"
@@ -274,18 +274,18 @@ export function EnglishCoursePageView(props: EnglishCoursePageViewProps) {
                     onClick={() => revealLetter()}
                     title="揭示字母"
                   >
-                    <Sparkles className="h-4 w-4" />
+                    <Sparkles className="size-4" />
                   </Button>
                   <div className="mx-1 h-5 w-px bg-border" />
                   <Button variant="ghost" size="icon" onClick={() => handleNavigateSentence(-1)} title="上一句">
-                    <ChevronLeft className="h-4 w-4" />
+                    <ChevronLeft className="size-4" />
                   </Button>
                   <Button variant="ghost" size="icon" onClick={() => handleNavigateSentence(1)} title="下一句">
-                    <ChevronRight className="h-4 w-4" />
+                    <ChevronRight className="size-4" />
                   </Button>
                   <div className="mx-1 h-5 w-px bg-border" />
                   <Button variant="ghost" size="icon" onClick={() => setSettingsOpen(true)} title="设置">
-                    <Settings2 className="h-4 w-4" />
+                    <Settings2 className="size-4" />
                   </Button>
                 </div>
               </div>
@@ -305,7 +305,7 @@ export function EnglishCoursePageView(props: EnglishCoursePageViewProps) {
               {helperPanelOpen ? (
                 <div
                   data-testid="english-course-helper-content"
-                  className="mt-2 max-h-[22vh] space-y-3 overflow-y-auto rounded-2xl border border-border/70 p-4"
+                  className="mt-2 max-h-[22vh] space-y-3 overflow-y-auto rounded-lg border border-border/70 p-4"
                 >
                   <div className="flex items-center gap-2">
                     <SidePanelTabButton active={sidePanelTab === 'info'} label="信息" onClick={() => setSidePanelTab('info')} />
@@ -315,7 +315,7 @@ export function EnglishCoursePageView(props: EnglishCoursePageViewProps) {
                   {sidePanelTab === 'shortcuts' ? (
                     <div className="space-y-3">
                       <ShortcutSummary settings={practiceSettings} />
-                      <div className="rounded-2xl border border-info/20 bg-info/5 px-4 py-3 text-sm text-info">
+                      <div className="rounded-lg border border-info/20 bg-info/5 px-4 py-3 text-sm text-info">
                         点击“练习设置”可以重新录制快捷键。默认全部使用带修饰键组合，避免和拼写输入冲突。
                       </div>
                     </div>

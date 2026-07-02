@@ -77,14 +77,14 @@ export function PalaceQuizManagePanel({
               onClick={() => void onBatchDeleteQuestions()}
             >
               {manageBulkDeleting ? (
-                <LoaderCircle className="h-4 w-4 animate-spin" />
+                <LoaderCircle className="size-4 animate-spin" />
               ) : (
-                <Trash2 className="h-4 w-4" />
+                <Trash2 className="size-4" />
               )}
               批量删除所选
             </Button>
             <Button type="button" size="sm" onClick={onStartCreateQuestion}>
-              <Plus className="h-4 w-4" />
+              <Plus className="size-4" />
               新增题目
             </Button>
           </div>
@@ -138,7 +138,7 @@ export function PalaceQuizManagePanel({
             ) : null}
           </div>
           {filteredQuestions.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-border/80 px-4 py-6 text-sm text-muted-foreground">
+            <div className="rounded-lg border border-dashed border-border/80 px-4 py-6 text-sm text-muted-foreground">
               {questions.length === 0
                 ? '还没有题目，可以先在右侧手动新增，或者去 AI生成 标签里先预览后保存。'
                 : '当前范围下还没有题目。'}
@@ -214,9 +214,9 @@ export function PalaceQuizManagePanel({
                       >
                         删除
                         {manageDeletingId === question.id ? (
-                          <LoaderCircle className="h-4 w-4 animate-spin" />
+                          <LoaderCircle className="size-4 animate-spin" />
                         ) : (
-                          <Trash2 className="h-4 w-4" />
+                          <Trash2 className="size-4" />
                         )}
                       </Button>
                     </div>
@@ -376,9 +376,9 @@ export function PalaceQuizManagePanel({
           <div className="flex flex-wrap gap-2">
             <Button type="button" disabled={manageSaving} onClick={() => void onSaveQuestion()}>
               {manageSaving ? (
-                <LoaderCircle className="h-4 w-4 animate-spin" />
+                <LoaderCircle className="size-4 animate-spin" />
               ) : (
-                <CheckCircle2 className="h-4 w-4" />
+                <CheckCircle2 className="size-4" />
               )}
               保存题目
             </Button>

@@ -115,12 +115,12 @@ export function PalaceSegmentsPanel({
         <CardHeader className="flex flex-row items-center justify-between gap-3">
           <CardTitle className="text-base">复习分块</CardTitle>
           <Button type="button" size="sm" variant="outline" onClick={onOpenDialog}>
-            <Plus className="mr-2 h-4 w-4" />
+            <Plus className="mr-2 size-4" />
             用当前选中创建
           </Button>
         </CardHeader>
         <CardContent className="space-y-3">
-          <div className="rounded-2xl border border-dashed border-border/80 bg-background/60 px-3 py-2 text-sm text-muted-foreground">
+          <div className="rounded-lg border border-dashed border-border/80 bg-background/60 px-3 py-2 text-sm text-muted-foreground">
             当前选中 {selectedNodeCount} 个节点
           </div>
 
@@ -130,7 +130,7 @@ export function PalaceSegmentsPanel({
                 <div
                   key={segment.id}
                   className={cn(
-                    'rounded-2xl border px-3 py-3',
+                    'rounded-lg border px-3 py-3',
                     activeSegmentId === segment.id
                       ? 'border-primary bg-muted'
                       : 'border-border/70 bg-background/70',
@@ -186,7 +186,7 @@ export function PalaceSegmentsPanel({
                           className="h-8"
                           onClick={() => onOpenEdit(segment)}
                         >
-                          <Edit3 className="mr-2 h-4 w-4" />
+                          <Edit3 className="mr-2 size-4" />
                           时间
                         </Button>
                       )}
@@ -201,7 +201,7 @@ export function PalaceSegmentsPanel({
                         className="h-8"
                         onClick={() => onAdjustRange(segment)}
                       >
-                        <ScanSearch className="mr-2 h-4 w-4" />
+                        <ScanSearch className="mr-2 size-4" />
                         调整范围
                       </Button>
                       {segments.length > 1 && !segment.is_virtual_default ? (
@@ -213,7 +213,7 @@ export function PalaceSegmentsPanel({
                           onClick={() => setMergeSourceId(segment.id)}
                           disabled={segmentMergingId === segment.id}
                         >
-                          <GitMerge className="mr-2 h-4 w-4" />
+                          <GitMerge className="mr-2 size-4" />
                           {segmentMergingId === segment.id ? '合并中…' : '合并到…'}
                         </Button>
                       ) : null}
@@ -225,7 +225,7 @@ export function PalaceSegmentsPanel({
                           className="h-8 text-destructive hover:text-destructive"
                           onClick={() => void onDelete(segment.id)}
                         >
-                          <Trash2 className="mr-2 h-4 w-4" />
+                          <Trash2 className="mr-2 size-4" />
                           删除分块
                         </Button>
                       )}
@@ -235,7 +235,7 @@ export function PalaceSegmentsPanel({
               ))}
             </div>
           ) : (
-            <div className="rounded-2xl border border-dashed border-border/80 bg-background/60 p-4 text-sm text-muted-foreground">
+            <div className="rounded-lg border border-dashed border-border/80 bg-background/60 p-4 text-sm text-muted-foreground">
               还没有分块。先在脑图里选中一组节点，再创建一个部分。
             </div>
           )}
@@ -277,7 +277,7 @@ export function PalaceSegmentsPanel({
                     key={color}
                     type="button"
                     className={cn(
-                      'h-8 w-8 rounded-full border-2',
+                      'size-8 rounded-full border-2',
                       segmentColor === color ? 'border-slate-950' : 'border-transparent',
                     )}
                     style={{ backgroundColor: color }}
@@ -326,7 +326,7 @@ export function PalaceSegmentsPanel({
                 <button
                   key={segment.id}
                   type="button"
-                  className="flex w-full items-center justify-between rounded-2xl border border-border/70 bg-background/80 px-3 py-3 text-left transition-colors hover:border-primary/40 hover:bg-accent/40"
+                  className="flex w-full items-center justify-between rounded-lg border border-border/70 bg-background/80 px-3 py-3 text-left transition-colors hover:border-primary/40 hover:bg-accent/40"
                   onClick={() => {
                     if (mergeSourceId == null) return
                     void onMerge(mergeSourceId, segment.id)

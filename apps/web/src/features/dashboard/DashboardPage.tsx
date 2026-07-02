@@ -11,8 +11,9 @@ import { getTimeRecordChartColor } from '@/features/profile/model/time-record-ch
 import { useTimeRecordsDashboard } from '@/features/profile/hooks/useTimeRecordsDashboard'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card'
 import { Button } from '@/shared/components/ui/button'
+import { Input } from '@/shared/components/ui/input'
 import { formatDuration, type TimeRecordChartRange } from '@/entities/session/model'
-import { getDashboardApi } from '@/features/dashboard/api/dashboardApi'
+import { getDashboardApi } from '@/features/dashboard/api'
 import { useLocalStorageState } from '@/shared/lib/localStorage'
 import { cn } from '@/shared/lib/utils'
 
@@ -214,7 +215,7 @@ function TimeRecordChartCard({
   children,
 }: TimeRecordChartCardProps) {
   return (
-    <Card className="min-w-0 rounded-[28px] border-border/70">
+    <Card className="min-w-0 border-border/70">
       <CardHeader className="flex flex-row items-start justify-between gap-4 pb-2">
         <CardTitle className="text-lg">{title}</CardTitle>
         <div className="flex flex-wrap justify-end gap-2">
@@ -446,9 +447,9 @@ export default function Dashboard() {
               </Button>
             </div>
           {durationMode === 'month' ? (
-            <input
+            <Input
               aria-label="选择月份"
-              className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs"
+              className="h-8 text-xs"
               type="month"
               value={selectedMonth}
               onChange={(event) =>
@@ -456,19 +457,19 @@ export default function Dashboard() {
               }
             />
           ) : durationMode === 'range' ? (
-            <div className="space-y-2">
-              <input
+            <div className="flex flex-col gap-2">
+              <Input
                 aria-label="开始日期"
-                className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs"
+                className="h-8 text-xs"
                 type="date"
                 value={rangeStartDate}
                 onChange={(event) =>
                   updateDurationFilter({ startDate: event.target.value })
                 }
               />
-              <input
+              <Input
                 aria-label="结束日期"
-                className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs"
+                className="h-8 text-xs"
                 type="date"
                 value={rangeEndDate}
                 onChange={(event) =>
@@ -486,7 +487,7 @@ export default function Dashboard() {
   ]
 
   return (
-    <div className="space-y-8">
+    <div className="flex flex-col gap-8">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">仪表盘</h1>
       </div>
@@ -496,14 +497,14 @@ export default function Dashboard() {
           <Card key={label}>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">{label}</CardTitle>
-              <Icon className="h-4 w-4 text-muted-foreground" />
+              <Icon className="size-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
               {valueNode ?? <div className={`text-3xl font-bold ${color}`}>{value}</div>}
               {link && dueNowCount > 0 ? (
                 <Link to={link} className="mt-1 inline-flex items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-primary">
                   {linkText}
-                  <ArrowRight className="h-3 w-3" />
+                  <ArrowRight className="size-3" />
                 </Link>
               ) : subtitle ? (
                 <p className="mt-2 text-xs text-muted-foreground">{subtitle}</p>
@@ -517,13 +518,13 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
-            <div className="space-y-2">
+            <div className="flex flex-col gap-2">
               <CardTitle className="text-base">今日学习</CardTitle>
               <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
                 {dashboardLearningLegend.map((legend) => (
                   <span key={legend.key} className="inline-flex items-center gap-1.5">
                     <span
-                      className="h-2.5 w-2.5 rounded-full"
+                      className="size-2.5 rounded-full"
                       style={{ backgroundColor: legend.color }}
                     />
                     <span>{legend.label}</span>
@@ -534,7 +535,7 @@ export default function Dashboard() {
           </CardHeader>
           <CardContent>
             {data.today_learning_palaces.length > 0 ? (
-              <div className="space-y-3">
+              <div className="flex flex-col gap-3">
                 {data.today_learning_palaces.map((item) => {
                   const segments = buildLearningSegments(item)
                   const isTooltipVisible = hoveredLearningPalaceId === item.palace_id
@@ -567,7 +568,7 @@ export default function Dashboard() {
                           ))}
                         </div>
                         {isTooltipVisible ? (
-                          <div className="pointer-events-none absolute left-0 top-full z-20 mt-2 min-w-[180px] rounded-2xl border border-border/70 bg-background/95 px-3 py-2 text-xs shadow-xl backdrop-blur">
+                          <div className="pointer-events-none absolute left-0 top-full z-20 mt-2 min-w-[180px] rounded-lg border border-border/70 bg-popover px-3 py-2 text-xs text-popover-foreground shadow-popover">
                             {formatLearningTooltip(item).split('\n').map((line, index) => (
                               <div
                                 key={`${item.palace_id}-${index}`}
@@ -597,27 +598,27 @@ export default function Dashboard() {
             <CardTitle className="text-base">{`新增章节数量：${data.today_new_palace_count}`}</CardTitle>
             <Link to="/palaces/new">
               <Button size="sm" variant="outline" className="h-8">
-                <Plus className="h-3.5 w-3.5" />
+                <Plus data-icon="inline-start" />
                 新建
               </Button>
             </Link>
           </CardHeader>
           <CardContent>
             {data.today_new_palaces.some((subject) => subject.chapter_groups.length > 0 || subject.ungrouped_palaces.length > 0) ? (
-              <div className="space-y-4">
+              <div className="flex flex-col gap-4">
                 {data.today_new_palaces.map((subjectGroup, subjectIndex) => {
                   const hasAny = subjectGroup.chapter_groups.length > 0 || subjectGroup.ungrouped_palaces.length > 0
                   if (!hasAny) return null
                   const showSubjectTitle = data.today_new_palaces.filter((item) => item.subject).length > 1
                   return (
-                    <div key={`${subjectGroup.subject?.id ?? 'ungrouped'}-${subjectIndex}`} className="space-y-2">
+                    <div key={`${subjectGroup.subject?.id ?? 'ungrouped'}-${subjectIndex}`} className="flex flex-col gap-2">
                       {showSubjectTitle && subjectGroup.subject ? (
                         <div className="text-xs font-medium text-muted-foreground">{subjectGroup.subject.name}</div>
                       ) : null}
                       {subjectGroup.chapter_groups.map((group) => (
-                        <div key={group.source_chapter?.id ?? `group-${subjectIndex}`} className="space-y-1">
+                        <div key={group.source_chapter?.id ?? `group-${subjectIndex}`} className="flex flex-col gap-1">
                           <div className="text-sm font-semibold">{group.source_chapter?.name ?? '未关联章节'}</div>
-                          <div className="space-y-1.5 pl-4">
+                          <div className="flex flex-col gap-1.5 pl-4">
                             {group.palaces.map((palace) => (
                               <Link
                                 key={palace.id}
@@ -631,9 +632,9 @@ export default function Dashboard() {
                         </div>
                       ))}
                       {subjectGroup.ungrouped_palaces.length > 0 ? (
-                        <div className="space-y-1">
+                        <div className="flex flex-col gap-1">
                           <div className="text-sm font-semibold text-muted-foreground">未关联章节</div>
-                          <div className="space-y-1.5 pl-4">
+                          <div className="flex flex-col gap-1.5 pl-4">
                             {subjectGroup.ungrouped_palaces.map((palace) => (
                               <Link
                                 key={palace.id}
@@ -656,7 +657,7 @@ export default function Dashboard() {
                 <div className="mt-3">
                   <Link to="/palaces/new">
                     <Button variant="outline" size="sm">
-                      <Sparkles className="mr-2 h-4 w-4" />
+                      <Sparkles data-icon="inline-start" />
                       创建一个
                     </Button>
                   </Link>
@@ -667,7 +668,7 @@ export default function Dashboard() {
         </Card>
       </div>
 
-      <div className="space-y-6">
+      <div className="flex flex-col gap-6">
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
           <TimeRecordChartCard
             title={formatTrendCardTitle(trendRangeDays)}
@@ -747,4 +748,3 @@ export default function Dashboard() {
     </div>
   )
 }
-

@@ -43,7 +43,7 @@ export function MindMapImportResultsPanel({
         {sourceKind === 'subject-pdf' && mode === 'mindmap' ? (
           <section
             data-testid="mindmap-import-pdf-summary"
-            className="rounded-2xl border border-border/70 bg-background/70 p-4 text-sm"
+            className="rounded-lg border border-border/70 bg-background/70 p-4 text-sm"
           >
             <div className="mb-2 font-medium">本次 PDF 识别摘要</div>
             <div className="grid gap-2 text-muted-foreground sm:grid-cols-2">
@@ -65,7 +65,7 @@ export function MindMapImportResultsPanel({
             <div className="text-sm font-medium">
               {sourceKind === 'image-batch' ? '结构图预览' : '原图预览'}
             </div>
-            <div className="overflow-hidden rounded-2xl border border-border/70 bg-background/70">
+            <div className="overflow-hidden rounded-lg border border-border/70 bg-background/70">
               {resolvedPreviewImageUrl ? (
                 <img
                   src={resolvedPreviewImageUrl}
@@ -96,7 +96,7 @@ export function MindMapImportResultsPanel({
                 <div
                   data-testid="mindmap-import-stream-preview"
                   className={cn(
-                    'rounded-2xl border border-border/70 bg-background/70 p-3',
+                    'rounded-lg border border-border/70 bg-background/70 p-3',
                     !rawModelPreviewText && 'flex min-h-[180px] items-center justify-center text-sm text-muted-foreground',
                   )}
                 >
@@ -133,7 +133,7 @@ export function MindMapImportResultsPanel({
               </div>
               <div
                 className={cn(
-                  'rounded-2xl border border-border/70 bg-background/70',
+                  'rounded-lg border border-border/70 bg-background/70',
                   !sourceTree && 'flex h-[260px] items-center justify-center text-sm text-muted-foreground',
                 )}
               >
@@ -174,7 +174,7 @@ export function MindMapImportResultsPanel({
               <div className="text-sm font-medium">文字结果</div>
               <div
                 className={cn(
-                  'flex min-h-[320px] flex-col rounded-2xl border border-border/70 bg-background/70 p-3',
+                  'flex min-h-[320px] flex-col rounded-lg border border-border/70 bg-background/70 p-3',
                   !extractedText && 'flex h-[260px] items-center justify-center text-sm text-muted-foreground',
                 )}
               >

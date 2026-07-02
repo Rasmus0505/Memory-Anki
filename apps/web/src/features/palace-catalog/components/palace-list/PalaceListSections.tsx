@@ -103,7 +103,7 @@ export function PalaceListSections<TPalace extends PalaceGroupedItem | PalaceGro
               action={
                 <Link to="/palaces/new">
                   <Button variant="outline" size="sm">
-                    <Plus className="mr-2 h-4 w-4" />
+                    <Plus className="mr-2 size-4" />
                     创建第一个
                   </Button>
                 </Link>

@@ -4,7 +4,7 @@ import {
 } from '@/shared/feedback/feedbackCenter'
 import type { CelebrationPreset } from '@/shared/feedback/celebrationEngine'
 
-type ReviewConfettiKind = 'milestone' | 'branch_clear' | 'all_clear_ready' | 'session_complete'
+type ReviewConfettiKind = 'milestone' | 'branch_clear' | 'all_clear_ready' | 'session_complete' | 'quiz_correct'
 
 /**
  * 各事件未显式指定烟花类型时的兜底预设。
@@ -16,12 +16,14 @@ const DEFAULT_KIND_PRESET: Record<ReviewConfettiKind, CelebrationPreset> = {
   branch_clear: 'fireworks',
   all_clear_ready: 'stars',
   session_complete: 'school_pride',
+  quiz_correct: 'random_direction',
 }
 
 function resolveScenario(kind: ReviewConfettiKind): FeedbackScenario {
   if (kind === 'milestone') return 'review_milestone'
   if (kind === 'branch_clear') return 'review_branch_clear'
   if (kind === 'all_clear_ready') return 'review_all_clear_ready'
+  if (kind === 'quiz_correct') return 'quiz_result_correct'
   return 'review_complete'
 }
 
@@ -66,11 +68,13 @@ export function emitReviewConfetti(args: {
             ? 'review'
             : kind === 'all_clear_ready'
               ? 'completion'
+              : kind === 'quiz_correct'
+                ? 'quiz'
               : 'completion',
       soundEnabled,
       volume,
       audioCue: {
-        kind,
+        kind: kind === 'quiz_correct' ? 'branch_clear' : kind,
         milestoneStep,
       },
     },

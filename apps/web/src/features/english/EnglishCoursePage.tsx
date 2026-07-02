@@ -7,7 +7,7 @@ import {
   checkEnglishSentenceApi,
   getEnglishCourseApi,
   updateEnglishCourseProgressApi,
-} from '@/features/english/api/englishApi'
+} from '@/features/english/api'
 import { shouldAutoStartOnPageEnter, useTimedSession } from '@/shared/hooks/useTimedSession'
 import { useLatestRef } from '@/shared/hooks/useLatestRef'
 import { readTimerAutomationConfig } from '@/shared/components/session/timer-automation-config'

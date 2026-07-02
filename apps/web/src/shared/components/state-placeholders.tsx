@@ -7,6 +7,8 @@ import {
   Sparkles,
   type LucideIcon,
 } from 'lucide-react'
+import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/shared/components/ui/empty'
+import { Skeleton } from '@/shared/components/ui/skeleton'
 import { cn } from '@/shared/lib/utils'
 
 /**
@@ -83,10 +85,10 @@ export function LoadingState({
       <p className="text-sm text-muted-foreground">{text}</p>
       {Array.from({ length: rows }).map((_, i) => (
         <div key={i} className="flex items-center gap-3">
-          <div className="h-10 w-10 animate-pulse rounded-md bg-muted" />
-          <div className="flex-1 space-y-2">
-            <div className="h-3.5 w-1/3 animate-pulse rounded bg-muted" />
-            <div className="h-3 w-1/2 animate-pulse rounded bg-muted" />
+          <Skeleton className="size-10" />
+          <div className="flex flex-1 flex-col gap-2">
+            <Skeleton className="h-3.5 w-1/3" />
+            <Skeleton className="h-3 w-1/2" />
           </div>
         </div>
       ))}
@@ -126,25 +128,19 @@ export function EmptyState({
   const VariantIcon = config?.icon
 
   return (
-    <div
-      className={cn(
-        'flex flex-col items-center justify-center gap-3 rounded-2xl px-6 py-16 text-center',
-        config?.containerClassName,
-        className,
-      )}
-    >
-      {icon ? (
-        <div className="text-muted-foreground/60">{icon}</div>
-      ) : VariantIcon ? (
-        <div className={cn('rounded-2xl bg-background/80 p-3 shadow-sm', config?.iconClassName)}>
-          <VariantIcon className="h-8 w-8" strokeWidth={1.5} />
-        </div>
-      ) : null}
-      <p className="text-base font-medium text-foreground">{resolvedTitle}</p>
-      {resolvedDescription ? (
-        <p className="max-w-sm text-sm text-muted-foreground">{resolvedDescription}</p>
-      ) : null}
-      {action ? <div className="mt-2">{action}</div> : null}
-    </div>
+    <Empty className={cn(config?.containerClassName, className)}>
+      <EmptyHeader>
+        {icon ? (
+          <div className="text-muted-foreground/60">{icon}</div>
+        ) : VariantIcon ? (
+          <EmptyMedia variant="icon" className={cn('bg-background/80 shadow-sm', config?.iconClassName)}>
+            <VariantIcon strokeWidth={1.5} />
+          </EmptyMedia>
+        ) : null}
+        <EmptyTitle>{resolvedTitle}</EmptyTitle>
+        {resolvedDescription ? <EmptyDescription>{resolvedDescription}</EmptyDescription> : null}
+      </EmptyHeader>
+      {action ? <div className="mt-1">{action}</div> : null}
+    </Empty>
   )
 }

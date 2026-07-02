@@ -13,6 +13,20 @@ import {
   type TimerAutomationConfig,
   type TimerAutomationScene,
 } from '@/shared/components/session/timer-automation-config'
+import {
+  readTimerFocusConfig,
+  resetTimerFocusConfig,
+  saveTimerFocusConfig,
+  TIMER_FOCUS_UPDATED_EVENT,
+  type TimerFocusConfig,
+} from '@/shared/components/session/timer-focus-config'
+import {
+  BREAK_GUARD_UPDATED_EVENT,
+  readBreakGuardConfig,
+  resetBreakGuardConfig,
+  saveBreakGuardConfig,
+  type BreakGuardConfig,
+} from '@/shared/components/session/break-guard-config'
 
 interface SessionTimerBarProps {
   effectiveSeconds: number
@@ -75,6 +89,8 @@ export function SessionTimerBar({
   const [automationConfig, setAutomationConfig] = React.useState<TimerAutomationConfig>(() =>
     readTimerAutomationConfig(),
   )
+  const [focusConfig, setFocusConfig] = React.useState<TimerFocusConfig>(() => readTimerFocusConfig())
+  const [breakConfig, setBreakConfig] = React.useState<BreakGuardConfig>(() => readBreakGuardConfig())
   const inactiveAutoPauseSeconds = React.useMemo(
     () => getTimerAutomationRule(automationScene, automationConfig).inactiveAutoPauseSeconds,
     [automationConfig, automationScene],
@@ -103,10 +119,28 @@ export function SessionTimerBar({
           : readTimerAutomationConfig()
       setAutomationConfig(nextConfig)
     }
+    const handleFocusChange = (event: Event) => {
+      const nextConfig =
+        event instanceof CustomEvent && event.detail
+          ? (event.detail as TimerFocusConfig)
+          : readTimerFocusConfig()
+      setFocusConfig(nextConfig)
+    }
+    const handleBreakConfigChange = (event: Event) => {
+      const nextConfig =
+        event instanceof CustomEvent && event.detail
+          ? (event.detail as BreakGuardConfig)
+          : readBreakGuardConfig()
+      setBreakConfig(nextConfig)
+    }
 
     window.addEventListener('memory-anki-timer-automation-change', handleAutomationChange)
+    window.addEventListener(TIMER_FOCUS_UPDATED_EVENT, handleFocusChange)
+    window.addEventListener(BREAK_GUARD_UPDATED_EVENT, handleBreakConfigChange)
     return () => {
       window.removeEventListener('memory-anki-timer-automation-change', handleAutomationChange)
+      window.removeEventListener(TIMER_FOCUS_UPDATED_EVENT, handleFocusChange)
+      window.removeEventListener(BREAK_GUARD_UPDATED_EVENT, handleBreakConfigChange)
     }
   }, [])
 
@@ -137,6 +171,8 @@ export function SessionTimerBar({
     <TimerAutomationDialog
       open={automationOpen}
       config={automationConfig}
+      focusConfig={focusConfig}
+      breakConfig={breakConfig}
       onOpenChange={setAutomationOpen}
       onSave={(nextConfig) => {
         const saved = saveTimerAutomationConfig(nextConfig)
@@ -145,6 +181,14 @@ export function SessionTimerBar({
       onReset={() => {
         const reset = resetTimerAutomationConfig()
         setAutomationConfig(reset)
+        setFocusConfig(resetTimerFocusConfig())
+        setBreakConfig(resetBreakGuardConfig())
+      }}
+      onFocusConfigSave={(nextConfig) => {
+        setFocusConfig(saveTimerFocusConfig(nextConfig))
+      }}
+      onBreakConfigSave={(nextConfig) => {
+        setBreakConfig(saveBreakGuardConfig(nextConfig))
       }}
     />
   )
@@ -157,7 +201,7 @@ export function SessionTimerBar({
       <>
         <div
           className={cn(
-            'rounded-2xl border border-border/70 bg-background/95 px-4 py-3 shadow-soft backdrop-blur',
+            'rounded-lg border border-border/70 bg-background/95 px-4 py-3 shadow-soft backdrop-blur',
             className,
           )}
           data-testid="session-timer-bar"
@@ -194,22 +238,22 @@ export function SessionTimerBar({
             <div className="flex flex-wrap gap-2">
               {showRestartAction && onRestart ? (
                 <Button type="button" variant="ghost" size="sm" onClick={onRestart}>
-                  <TimerReset className="h-4 w-4" />
+                  <TimerReset className="size-4" />
                 </Button>
               ) : null}
               <Button type="button" variant="outline" size="sm" onClick={() => setAutomationOpen(true)}>
-                <Settings2 className="mr-2 h-4 w-4" />
+                <Settings2 className="mr-2 size-4" />
                 自动化配置
               </Button>
               {primaryAction ? (
                 <Button type="button" variant={primaryAction.variant} size="sm" onClick={primaryAction.onClick}>
-                  <primaryAction.icon className="mr-2 h-4 w-4" />
+                  <primaryAction.icon className="mr-2 size-4" />
                   {primaryAction.label}
                 </Button>
               ) : null}
               {showCompleteAction && onComplete ? (
                 <Button type="button" variant="secondary" size="sm" onClick={onComplete}>
-                  <SquareCheckBig className="mr-2 h-4 w-4" />
+                  <SquareCheckBig className="mr-2 size-4" />
                   完成
                 </Button>
               ) : null}
@@ -223,7 +267,7 @@ export function SessionTimerBar({
 
   return (
     <div className={className ?? 'fixed right-5 top-5 z-40'} data-testid="session-timer-bar" data-layout="card">
-      <div className="w-[320px] rounded-2xl border border-border/70 bg-background/95 p-4 shadow-popover backdrop-blur">
+      <div className="w-[320px] rounded-lg border border-border/70 bg-background/95 p-4 shadow-popover backdrop-blur">
         <div className="flex items-start justify-between gap-3">
           <div>
             <div className="text-2xl font-semibold text-foreground">{formatDuration(effectiveSeconds)}</div>
@@ -232,7 +276,7 @@ export function SessionTimerBar({
           </div>
           {showRestartAction && onRestart ? (
             <Button type="button" variant="ghost" size="sm" onClick={onRestart}>
-              <TimerReset className="h-4 w-4" />
+              <TimerReset className="size-4" />
             </Button>
           ) : null}
         </div>
@@ -259,18 +303,18 @@ export function SessionTimerBar({
 
         <div className="mt-4 flex flex-wrap gap-2">
           <Button type="button" variant="outline" size="sm" onClick={() => setAutomationOpen(true)}>
-            <Settings2 className="mr-2 h-4 w-4" />
+            <Settings2 className="mr-2 size-4" />
             自动化配置
           </Button>
           {primaryAction ? (
             <Button type="button" variant={primaryAction.variant} size="sm" onClick={primaryAction.onClick}>
-              <primaryAction.icon className="mr-2 h-4 w-4" />
+              <primaryAction.icon className="mr-2 size-4" />
               {primaryAction.label}
             </Button>
           ) : null}
           {showCompleteAction && onComplete ? (
             <Button type="button" variant="secondary" size="sm" onClick={onComplete}>
-              <SquareCheckBig className="mr-2 h-4 w-4" />
+              <SquareCheckBig className="mr-2 size-4" />
               完成
             </Button>
           ) : null}
