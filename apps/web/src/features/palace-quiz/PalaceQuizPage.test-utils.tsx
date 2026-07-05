@@ -151,7 +151,7 @@ export const palaceResponse = {
   primary_chapter_id: 1,
   primary_chapter: { id: 1, name: '第三章', subject_id: 2, parent_id: null },
   mini_palaces: [
-    { id: 21, palace_id: 1, name: '细胞核小宫殿', node_uids: [], node_count: 1, sort_order: 0 },
+    { id: 21, palace_id: 1, name: '细胞核专项训练', node_uids: [], node_count: 1, sort_order: 0 },
   ],
   chapters: [
     {
@@ -259,7 +259,7 @@ export function buildPalaceEditorResponse(palaceId = 1) {
           {
             data: {
               uid: `child-${palaceId}`,
-              text: palaceId === 1 ? '细胞核节点' : '遗传因子节点',
+              text: palaceId === 1 ? '细胞核知识点' : '遗传因子知识点',
             },
             children: [
               {
@@ -353,7 +353,7 @@ export const baseQuestions = [
     analysis: '细胞核储存遗传物质并控制细胞活动。',
     mini_palace_id: 21,
     origin_question_id: 11,
-    mini_palace: { id: 21, name: '细胞核小宫殿' },
+    mini_palace: { id: 21, name: '细胞核专项训练' },
     source_meta: {
       source_kind: 'manual',
       page_numbers: null,
@@ -515,7 +515,7 @@ export function setupPalaceQuizPageTest() {
   classifyPalaceQuizQuestionsToMiniPalacesApiMock.mockResolvedValue({
     palace_id: 1,
     mini_palace_groups: [
-      { mini_palace_id: 21, mini_palace_name: '细胞核小宫殿', question_count: 1 },
+      { mini_palace_id: 21, mini_palace_name: '细胞核专项训练', question_count: 1 },
     ],
     unassigned_count: 1,
     copied_question_count: 1,

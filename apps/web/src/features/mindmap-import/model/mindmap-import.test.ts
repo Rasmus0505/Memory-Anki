@@ -286,7 +286,7 @@ describe('mindmap import helpers', () => {
     })
 
     expect(result.applied).toBe(false)
-    expect(result.error).toContain('请先在脑图中选中一个追加目标节点')
+    expect(result.error).toContain('请先在脑图中选中一个追加目标知识点')
   })
 
   it('returns append error when target uid does not exist', () => {
@@ -304,7 +304,7 @@ describe('mindmap import helpers', () => {
     })
 
     expect(result.applied).toBe(false)
-    expect(result.error).toContain('未找到追加目标节点')
+    expect(result.error).toContain('未找到追加目标知识点')
   })
 
   it('restores editor state from undo snapshot', () => {

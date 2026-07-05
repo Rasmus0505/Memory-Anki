@@ -20,12 +20,12 @@ describe('PalaceQuizPage generation flows', () => {
     renderPage()
     fireEvent.click(await screen.findByRole('button', { name: 'AI生成' }))
     fireEvent.click(screen.getByRole('button', { name: '归类已有题库' }))
-    expect(await screen.findByText('本次写入 1 道小宫殿题。')).toBeTruthy()
+    expect(await screen.findByText('本次写入 1 道专项训练题。')).toBeTruthy()
 
     const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement | null
     const imageFile = new File(['image'], 'bio-question.png', { type: 'image/png' })
     fireEvent.change(fileInput!, { target: { files: [imageFile] } })
-    fireEvent.click(screen.getByRole('checkbox', { name: /按小宫殿分类保存/ }))
+    fireEvent.click(screen.getByRole('checkbox', { name: /按专项训练分类保存/ }))
     fireEvent.click(screen.getByRole('button', { name: '生成预览' }))
 
     await waitFor(() => {
@@ -109,7 +109,7 @@ describe('PalaceQuizPage generation flows', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'AI生成' }))
     fireEvent.click(screen.getByRole('button', { name: '选择范围' }))
     await screen.findByText(
-      '选择本次 AI 生成题目所属的章节范围。一次只能选择一个章节节点，也支持直接选择父级大章节整章生成。',
+      '选择本次 AI 生成题目所属的章节范围。一次只能选择一个章节，也支持直接选择父级大章节整章生成。',
     )
     fireEvent.click(screen.getByRole('button', { name: /第二节/ }))
     fireEvent.click(screen.getByRole('button', { name: '确认范围' }))

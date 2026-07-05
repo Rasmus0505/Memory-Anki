@@ -38,8 +38,8 @@ export function ReviewFlowInfoPanel({
         </div>
         <div className="mt-3 space-y-3 text-sm text-muted-foreground">
           <div className="rounded-lg border border-border/70 bg-background/70 px-3 py-3">
-            已出现 {visibleNonRootCount} 张，已揭示 {revealedNonRootCount} 张，
-            红标 {redNodeCount} 张，当前有效时长 {formatDuration(effectiveSeconds)}。
+            已出现 {visibleNonRootCount} 个知识点，已揭示 {revealedNonRootCount} 个知识点，
+            红标 {redNodeCount} 个知识点，当前有效时长 {formatDuration(effectiveSeconds)}。
           </div>
           <div className="rounded-lg border border-dashed border-border/80 px-3 py-3">
             翻卡模式只接管鼠标揭示与标红，不影响导图正文。

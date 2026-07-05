@@ -156,7 +156,7 @@ export function usePalaceEditPage() {
   }, [])
 
   const handleInlinePracticeNodeClick = useCallback((nodes: MindMapSelection[]) => {
-    if (practice.editorMode === 'practice') {
+    if (practice.editorMode === 'recall') {
       selectedNodeUidRef.current = readSelectionNodeUid(nodes)
       setSelectedNodes(nodes)
     }
@@ -164,7 +164,7 @@ export function usePalaceEditPage() {
   }, [practice])
 
   const handleInlinePracticeNodeContextMenu = useCallback((nodes: MindMapSelection[]) => {
-    if (practice.editorMode === 'practice') {
+    if (practice.editorMode === 'recall') {
       selectedNodeUidRef.current = readSelectionNodeUid(nodes)
       setSelectedNodes(nodes)
     }
@@ -260,17 +260,17 @@ export function usePalaceEditPage() {
     if (practice.editorMode !== 'edit') return
     const nodeUid = selectedNode?.uid ? String(selectedNode.uid) : ''
     if (!nodeUid) {
-      toast.info('请先选中一个节点，再标记专项卡。')
+      toast.info('请先选中一个知识点，再标记专项卡。')
       return
     }
     void toggleFocusNodeUid(nodeUid, 'shortcut_toggle_focus_node')
   }, [practice.editorMode, selectedNode?.uid, toggleFocusNodeUid])
 
   const handleShortcutHideChildCards = useCallback(() => {
-    if (practice.editorMode !== 'practice') return
+    if (practice.editorMode !== 'recall') return
     const node = selectedNode
     if (!node?.uid) {
-      toast.info('请先选中一个节点，再隐藏子级卡片。')
+      toast.info('请先选中一个知识点，再隐藏子级知识点。')
       return
     }
     practice.handleInlinePracticeNodeContextMenu([node])
@@ -436,9 +436,9 @@ export function usePalaceEditPage() {
       if (practice.editorMode !== 'edit' || !palaceId || !documentState.editorState) return
       setAiSplitBusy(true)
       timer.registerActivity('edit_operation', { source: 'mindmap_ai_split' })
-      const requestSummary = `节点: ${payload.target_node_uid || 'unknown'}`
+      const requestSummary = `知识点: ${payload.target_node_uid || 'unknown'}`
       logAiCall({
-        feature: 'AI 分卡',
+        feature: 'AI 整理',
         stage: 'start',
         requestSummary,
         meta: {
@@ -450,7 +450,7 @@ export function usePalaceEditPage() {
         const aiOptions = await promptForAiOptions({
           scenarioKey: 'ai_split',
           entrypointKey: 'mindmap-ai-split',
-          title: 'AI 分卡配置',
+          title: 'AI 整理配置',
         })
         if (!aiOptions) {
           return
@@ -461,13 +461,13 @@ export function usePalaceEditPage() {
           ai_options: aiOptions,
         })
         if (!result.ok || !result.editor_doc) {
-          throw new Error(result.error || 'AI 分卡失败，请稍后重试。')
+          throw new Error(result.error || 'AI 整理失败，请稍后重试。')
         }
         logAiCall({
-          feature: 'AI 分卡',
+          feature: 'AI 整理',
           stage: 'success',
           requestSummary,
-          responseSummary: `新增 ${result.generated_children_count ?? 0} 个分类，重归类 ${result.reassigned_existing_children_count ?? 0} 个旧节点`,
+          responseSummary: `新增 ${result.generated_children_count ?? 0} 个分类，重归类 ${result.reassigned_existing_children_count ?? 0} 个旧知识点`,
           requestId:
             typeof (result as { request_id?: unknown }).request_id === 'string'
               ? (result as { request_id?: string }).request_id
@@ -495,10 +495,14 @@ export function usePalaceEditPage() {
         })
         const generatedCount = result.generated_children_count ?? 0
         const movedCount = result.reassigned_existing_children_count ?? 0
+        const reviewPreview = result.review_preview
+        const reviewSummary = reviewPreview
+          ? `预计形成 ${reviewPreview.node_count} 个知识点，约 ${reviewPreview.estimated_review_time || `${Math.max(1, Math.round(reviewPreview.estimated_review_seconds / 60))} 分钟`}。`
+          : ''
         toast.success(
           movedCount > 0
-            ? `AI 分卡完成，新增 ${generatedCount} 个分类并重新归类了 ${movedCount} 个旧节点。`
-            : `AI 分卡完成，新增 ${generatedCount} 个分类节点。`,
+            ? `AI 已整理知识点，新增 ${generatedCount} 个分类并重新归类了 ${movedCount} 个旧知识点。${reviewSummary}`
+            : `AI 已整理知识点，新增 ${generatedCount} 个分类。${reviewSummary}`,
           result.ai_call_log_id
             ? {
                 action: {
@@ -506,20 +510,20 @@ export function usePalaceEditPage() {
                   onClick: () =>
                     requestOpenAiLogDetail({
                       aiCallLogId: result.ai_call_log_id,
-                      title: 'AI 分卡',
+                      title: 'AI 整理',
                     }),
                 },
               }
             : undefined,
         )
       } catch (error) {
-        const message = error instanceof Error ? error.message : 'AI 分卡失败，请稍后重试。'
+        const message = error instanceof Error ? error.message : 'AI 整理失败，请稍后重试。'
         const requestId =
           error instanceof Error && 'requestId' in error && typeof error.requestId === 'string'
             ? error.requestId
             : ''
         logAiCall({
-          feature: 'AI 分卡',
+          feature: 'AI 整理',
           stage: 'failure',
           requestSummary,
           errorMessage: message,
@@ -555,6 +559,7 @@ export function usePalaceEditPage() {
     createdAt: meta.createdAt,
     setCreatedAt: meta.setCreatedAt,
     editorMode: practice.editorMode,
+    enterPreview: practice.enterPreview,
     chapterOptions: meta.chapterOptions,
     explicitChapterIds: meta.explicitChapterIds,
     inheritedChapterIds: meta.inheritedChapterIds,

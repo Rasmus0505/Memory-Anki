@@ -1,4 +1,4 @@
-import { FolderTree, Languages, ListChecks, Maximize, Minimize, ScanSearch, Wand2 } from 'lucide-react'
+import { Brain, Eye, FolderTree, Languages, ListChecks, Maximize, Minimize, PenLine, ScanSearch, Wand2 } from 'lucide-react'
 import { Button } from '@/shared/components/ui/button'
 import { cn } from '@/shared/lib/utils'
 
@@ -24,6 +24,12 @@ interface MindMapToolbarAction {
   disabled?: boolean
 }
 
+interface MindMapToolbarModeControl {
+  value: 'edit' | 'preview' | 'recall'
+  onChange: (value: 'edit' | 'preview' | 'recall') => void
+  disabled?: boolean
+}
+
 interface MindMapToolbarToggleAction extends MindMapToolbarAction {
   active?: boolean
 }
@@ -32,6 +38,7 @@ export interface MindMapPageToolbarProps {
   compact?: boolean
   className?: string
   segmentControl?: MindMapToolbarSegmentControl | null
+  modeControl?: MindMapToolbarModeControl | null
   modeToggle?: MindMapToolbarAction | null
   importMindMapAction?: MindMapToolbarAction | null
   importTextAction?: MindMapToolbarAction | null
@@ -44,12 +51,12 @@ export interface MindMapPageToolbarProps {
 }
 
 function resolveSegmentTargetLabel(segmentControl: MindMapToolbarSegmentControl) {
-  if (!segmentControl.active) return '分块'
+  if (!segmentControl.active) return '学习组'
   if (segmentControl.targetSegmentId === 'new' || segmentControl.targetSegmentId == null) {
-    return '分块中 · 新分块'
+    return '学习组中 · 新学习组'
   }
   const target = segmentControl.options.find((option) => option.id === segmentControl.targetSegmentId)
-  return `分块中 · ${target?.name || '当前分块'}`
+  return `学习组中 · ${target?.name || '当前学习组'}`
 }
 
 function parseSegmentTarget(value: string): number | 'new' | null {
@@ -62,6 +69,7 @@ export function MindMapPageToolbar({
   compact = false,
   className,
   segmentControl = null,
+  modeControl = null,
   modeToggle = null,
   importMindMapAction = null,
   importTextAction = null,
@@ -94,6 +102,31 @@ export function MindMapPageToolbar({
             <FolderTree className="h-4 w-4" />
             {resolveSegmentTargetLabel(segmentControl)}
           </Button>
+        ) : null}
+        {modeControl ? (
+          <div className="inline-flex rounded-lg border border-border/70 bg-background p-1">
+            {[
+              { value: 'edit' as const, label: '编辑模式', icon: PenLine },
+              { value: 'preview' as const, label: '预览模式', icon: Eye },
+              { value: 'recall' as const, label: '回忆模式', icon: Brain },
+            ].map(({ value, label, icon: Icon }) => (
+              <button
+                key={value}
+                type="button"
+                disabled={modeControl.disabled}
+                onClick={() => modeControl.onChange(value)}
+                className={cn(
+                  'inline-flex h-8 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium transition-colors',
+                  modeControl.value === value
+                    ? 'bg-foreground text-background'
+                    : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+                )}
+              >
+                <Icon className="h-3.5 w-3.5" />
+                {label}
+              </button>
+            ))}
+          </div>
         ) : null}
         {modeToggle ? (
           <Button
@@ -212,7 +245,7 @@ export function MindMapPageToolbar({
         >
           <span className="text-sm text-muted-foreground">当前目标</span>
           <select
-            aria-label="分块目标"
+            aria-label="学习组目标"
             className="h-8 min-w-[140px] rounded-md border border-input bg-background px-2 text-sm"
             disabled={segmentControl.disabled}
             value={
@@ -224,10 +257,10 @@ export function MindMapPageToolbar({
               segmentControl.onTargetChange(parseSegmentTarget(event.currentTarget.value))
             }}
           >
-            <option value="new">新建分块</option>
+            <option value="new">新建学习组</option>
             {segmentControl.options.map((option) => (
               <option key={option.id} value={String(option.id)}>
-                {option.name || `分块 ${option.id}`}
+                {option.name || `学习组 ${option.id}`}
               </option>
             ))}
           </select>

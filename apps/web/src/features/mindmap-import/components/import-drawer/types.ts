@@ -11,6 +11,7 @@ import type {
   MindMapImportJobStage,
   MindMapImportJobStatus,
   MindMapImportJobUsage,
+  MindMapReviewPreview,
   MindMapImportSourceTree,
   ResolvedAiRuntimeMeta,
 } from '@/shared/api/contracts'
@@ -41,6 +42,7 @@ export interface MindMapImportDrawerProps {
   batchStatus: 'idle' | 'ready' | 'loading' | 'success' | 'error'
   batchMeta: BatchImportMeta | null
   importWarnings: string[]
+  reviewPreview?: MindMapReviewPreview | null
   currentJobId: string | null
   currentJobStatus: MindMapImportJobStatus | null
   currentJobStage: MindMapImportJobStage | null
@@ -102,6 +104,7 @@ export type MindMapImportResultsModel = Pick<
   | 'mode'
   | 'sourceKind'
   | 'sourceTree'
+  | 'reviewPreview'
 > & {
   hasStreamProgress: boolean
   onStreamPreviewScroll: () => void

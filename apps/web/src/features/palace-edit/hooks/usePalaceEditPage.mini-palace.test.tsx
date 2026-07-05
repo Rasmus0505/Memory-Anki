@@ -37,13 +37,13 @@ describe('usePalaceEditPage mini palace mode', () => {
     })
 
     fireEvent.click(screen.getByRole('button', { name: '选中首子节点' }))
-    fireEvent.click(screen.getByRole('button', { name: '小宫殿' }))
+    fireEvent.click(screen.getByRole('button', { name: '专项训练' }))
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: '新建小宫殿' })).toBeTruthy()
+      expect(screen.getByRole('button', { name: '新建训练关卡' })).toBeTruthy()
     })
 
-    fireEvent.click(screen.getByRole('button', { name: '新建小宫殿' }))
+    fireEvent.click(screen.getByRole('button', { name: '新建训练关卡' }))
 
     await waitFor(() => {
       expect(screen.getByDisplayValue('子节点')).toBeTruthy()
@@ -70,13 +70,13 @@ describe('usePalaceEditPage mini palace mode', () => {
     })
 
     fireEvent.click(screen.getByRole('button', { name: '选中根节点' }))
-    fireEvent.click(screen.getByRole('button', { name: '小宫殿' }))
+    fireEvent.click(screen.getByRole('button', { name: '专项训练' }))
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: '新建小宫殿' })).toBeTruthy()
+      expect(screen.getByRole('button', { name: '新建训练关卡' })).toBeTruthy()
     })
 
-    fireEvent.click(screen.getByRole('button', { name: '新建小宫殿' }))
+    fireEvent.click(screen.getByRole('button', { name: '新建训练关卡' }))
 
     await waitFor(() => {
       const input = screen.getByPlaceholderText('不填则使用默认名字') as HTMLInputElement
@@ -127,42 +127,42 @@ describe('usePalaceEditPage mini palace mode', () => {
       expect(screen.getByText('mini-palace-idle-')).toBeTruthy()
     })
 
-    fireEvent.click(screen.getByRole('button', { name: '小宫殿' }))
+    fireEvent.click(screen.getByRole('button', { name: '专项训练' }))
 
     await waitFor(() => {
       expect(miniPalaceApi.getMiniPalacesApi).toHaveBeenCalledWith(101)
-      expect(screen.getByRole('button', { name: '新建小宫殿' })).toBeTruthy()
+      expect(screen.getByRole('button', { name: '新建训练关卡' })).toBeTruthy()
     })
 
-    fireEvent.click(screen.getByRole('button', { name: '新建小宫殿' }))
+    fireEvent.click(screen.getByRole('button', { name: '新建训练关卡' }))
 
     await waitFor(() => {
       expect(screen.getByText('mini-palace-selecting-')).toBeTruthy()
-      expect(screen.queryByRole('button', { name: '练习' })).toBeNull()
+      expect(screen.queryByRole('button', { name: '回忆模式' })).toBeNull()
     })
 
     fireEvent.click(screen.getByRole('button', { name: '点击根节点' }))
 
     await waitFor(() => {
       expect(screen.getByText('mini-palace-selecting-')).toBeTruthy()
-      expect(screen.getByText('已选 0 张')).toBeTruthy()
+      expect(screen.getByText('已选 0 个知识点')).toBeTruthy()
     })
 
     fireEvent.click(screen.getByRole('button', { name: '点击首子节点' }))
 
     await waitFor(() => {
       expect(screen.getByText('mini-palace-selecting-child-1')).toBeTruthy()
-      expect(screen.getByText('已选 1 张')).toBeTruthy()
+      expect(screen.getByText('已选 1 个知识点')).toBeTruthy()
     })
 
-    fireEvent.click(screen.getByRole('button', { name: '确认新建小宫殿' }))
+    fireEvent.click(screen.getByRole('button', { name: '确认新建训练关卡' }))
 
     await waitFor(() => {
       expect(miniPalaceApi.createMiniPalaceApi).toHaveBeenCalledWith(101, {
         name: '',
         node_uids: ['child-1'],
       })
-      expect(screen.getByText('小宫殿翻卡')).toBeTruthy()
+      expect(screen.getByText('训练关卡翻卡')).toBeTruthy()
       expect(getMindMapTexts()).toEqual({
         root: 'root-测试宫殿 / 子节点',
         child: 'child-待回忆',
@@ -216,7 +216,7 @@ describe('usePalaceEditPage mini palace mode', () => {
         {
           id: 1,
           palace_id: 101,
-          name: '旧小宫殿',
+          name: '旧训练关卡',
           node_uids: ['child-1'],
           node_count: 1,
           sort_order: 0,
@@ -240,7 +240,7 @@ describe('usePalaceEditPage mini palace mode', () => {
       item: {
         id: 1,
         palace_id: 101,
-        name: '旧小宫殿',
+        name: '旧训练关卡',
         node_uids: ['child-1', 'grandchild-1'],
         node_count: 2,
         sort_order: 0,
@@ -278,7 +278,7 @@ describe('usePalaceEditPage mini palace mode', () => {
       expect(screen.getByText('mini-palace-idle-')).toBeTruthy()
     })
 
-    fireEvent.click(screen.getByRole('button', { name: '小宫殿' }))
+    fireEvent.click(screen.getByRole('button', { name: '专项训练' }))
 
     await waitFor(() => {
       expect(screen.getByRole('button', { name: '编辑' })).toBeTruthy()
@@ -288,32 +288,32 @@ describe('usePalaceEditPage mini palace mode', () => {
 
     await waitFor(() => {
       expect(screen.getByText('mini-palace-selecting-child-1')).toBeTruthy()
-      expect(screen.getByText('已选 1 张')).toBeTruthy()
+      expect(screen.getByText('已选 1 个知识点')).toBeTruthy()
     })
 
     fireEvent.click(screen.getByRole('button', { name: '点击首子节点' }))
     await waitFor(() => {
       expect(screen.getByText('mini-palace-selecting-')).toBeTruthy()
-      expect(screen.getByText('已选 0 张')).toBeTruthy()
+      expect(screen.getByText('已选 0 个知识点')).toBeTruthy()
     })
 
     fireEvent.click(screen.getByRole('button', { name: '点击首子节点' }))
     await waitFor(() => {
       expect(screen.getByText('mini-palace-selecting-child-1')).toBeTruthy()
-      expect(screen.getByText('已选 1 张')).toBeTruthy()
+      expect(screen.getByText('已选 1 个知识点')).toBeTruthy()
     })
 
     fireEvent.click(screen.getByRole('button', { name: '右键首子节点' }))
     await waitFor(() => {
       expect(screen.getByText('mini-palace-selecting-child-1,grandchild-1')).toBeTruthy()
-      expect(screen.getByText('已选 2 张')).toBeTruthy()
+      expect(screen.getByText('已选 2 个知识点')).toBeTruthy()
     })
 
-    fireEvent.click(screen.getByRole('button', { name: '保存小宫殿' }))
+    fireEvent.click(screen.getByRole('button', { name: '保存训练关卡' }))
 
     await waitFor(() => {
       expect(miniPalaceApi.updateMiniPalaceApi).toHaveBeenCalledWith(1, {
-        name: '旧小宫殿',
+        name: '旧训练关卡',
         node_uids: ['child-1', 'grandchild-1'],
       })
     })

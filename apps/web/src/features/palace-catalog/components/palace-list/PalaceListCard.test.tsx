@@ -46,7 +46,7 @@ function buildMiniPalace(overrides: Partial<MiniPalaceSummary> = {}): MiniPalace
   return {
     id: 201,
     palace_id: 1,
-    name: '小宫殿',
+    name: '专项训练',
     node_uids: ['m1'],
     node_count: 22,
     sort_order: 0,
@@ -134,7 +134,7 @@ describe('PalaceListCard', () => {
     )
 
     expect(screen.queryByRole('button', { name: '开始复习' })).toBeNull()
-    expect(screen.getByRole('button', { name: '今日稍后' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: '今日稍后' })).toBeNull()
     vi.useRealTimers()
   })
 

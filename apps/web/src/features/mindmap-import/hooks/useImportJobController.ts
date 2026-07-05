@@ -32,6 +32,7 @@ export function useImportJobController(options: UseImportJobControllerOptions) {
     importImagePreviewUrl: state.importImagePreviewUrl,
     importHistory: state.importHistory,
     importWarnings: state.importWarnings,
+    importReviewPreview: state.importReviewPreview,
     currentJobId: state.currentJobId,
     currentJobStatus: state.currentJobStatus,
     currentJobStage: state.currentJobStage,

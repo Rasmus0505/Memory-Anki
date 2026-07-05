@@ -519,7 +519,7 @@ export function PalaceQuizMemoryLookupDialog({
                               active ? 'text-primary-foreground/78' : 'text-muted-foreground',
                             )}
                           >
-                            {(palace.chapters?.length || 0)} 章节 · {(palace.segments?.length || 0)} 分块
+                            {(palace.chapters?.length || 0)} 章节 · {(palace.segments?.length || 0)} 学习组
                           </div>
                         </button>
                       )
@@ -538,7 +538,7 @@ export function PalaceQuizMemoryLookupDialog({
                   <div className="text-xs text-muted-foreground">
                     {previewMode === 'view'
                       ? '只读脑图预览'
-                      : '翻卡模式：点击已显示节点展开子节点，点击“待回忆”翻开内容。'}
+                      : '翻卡模式：点击已显示知识点展开下一层知识点，点击“待回忆”翻开内容。'}
                   </div>
                 </div>
                 <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">

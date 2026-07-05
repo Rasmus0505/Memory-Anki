@@ -29,14 +29,14 @@ const PREVIEW_EDITOR_STATE: MindMapEditorState = {
           children: [
             {
               data: {
-                text: '待回忆节点 A1',
+                text: '待回忆知识点 A1',
                 uid: 'card-a1',
               },
               children: [],
             },
             {
               data: {
-                text: '待回忆节点 A2',
+                text: '待回忆知识点 A2',
                 uid: 'card-a2',
               },
               children: [],
@@ -51,7 +51,7 @@ const PREVIEW_EDITOR_STATE: MindMapEditorState = {
           children: [
             {
               data: {
-                text: '待回忆节点 B1',
+                text: '待回忆知识点 B1',
                 uid: 'card-b1',
               },
               children: [],

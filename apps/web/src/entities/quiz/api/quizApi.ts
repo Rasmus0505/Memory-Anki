@@ -275,7 +275,7 @@ export function classifyPalaceQuizQuestionsToMiniPalacesApi(
       body: JSON.stringify(aiOptions ? { ai_options: aiOptions } : {}),
       persistence: {
         resourceKey: `palace:${palaceId}:quiz-classification:mini-palaces`,
-        description: '把大宫殿题库归类到小宫殿',
+        description: '把记忆宫殿题库归类到专项训练',
         replayMode: 'manual',
       },
     },

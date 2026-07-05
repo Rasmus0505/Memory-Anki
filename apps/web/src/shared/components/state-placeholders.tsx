@@ -44,7 +44,7 @@ const VARIANT_CONFIGS: Record<EmptyStateVariant, VariantConfig> = {
     iconClassName: 'text-success/50',
     containerClassName: 'bg-success/5',
     defaultTitle: '暂无待复习内容',
-    defaultDescription: '当前没有需要复习的卡片，稍后再来看看。',
+    defaultDescription: '当前没有需要复习的知识点，稍后再来看看。',
   },
   create: {
     icon: Sparkles,
@@ -58,7 +58,7 @@ const VARIANT_CONFIGS: Record<EmptyStateVariant, VariantConfig> = {
     iconClassName: 'text-info/50',
     containerClassName: 'bg-info/5',
     defaultTitle: '还没有链接',
-    defaultDescription: '关联其他宫殿的节点，建立跨宫殿记忆网络。',
+    defaultDescription: '关联其他宫殿的知识点，建立跨宫殿记忆网络。',
   },
 }
 

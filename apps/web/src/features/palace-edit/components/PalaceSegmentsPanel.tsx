@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+﻿import { useMemo, useState } from 'react'
 import { CalendarClock, Edit3, GitMerge, Plus, ScanSearch, Trash2 } from 'lucide-react'
 import type { PalaceSegmentSummary } from '@/shared/api/contracts'
 import { formatDuration } from '@/entities/session/model'
@@ -106,7 +106,7 @@ export function PalaceSegmentsPanel({
     <>
       <Card className="border-border/70 bg-card/92">
         <CardHeader className="flex flex-row items-center justify-between gap-3">
-          <CardTitle className="text-base">复习分块</CardTitle>
+          <CardTitle className="text-base">学习组</CardTitle>
           <Button type="button" size="sm" variant="outline" onClick={onOpenDialog}>
             <Plus className="mr-2 size-4" />
             用当前选中创建
@@ -114,7 +114,7 @@ export function PalaceSegmentsPanel({
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="rounded-lg border border-dashed border-border/80 bg-background/60 px-3 py-2 text-sm text-muted-foreground">
-            当前选中 {selectedNodeCount} 个节点
+            当前选中 {selectedNodeCount} 个知识点
           </div>
 
           {segments.length > 0 ? (
@@ -146,7 +146,7 @@ export function PalaceSegmentsPanel({
                       </div>
 
                       <div className="mt-2 flex flex-wrap gap-2">
-                        <SegmentMetric label="节点" value={`${segment.node_count}`} />
+                        <SegmentMetric label="知识点" value={`${segment.node_count}`} />
                         {segment.is_virtual_default ? (
                           <SegmentMetric label="" value="未划分剩余内容" />
                         ) : null}
@@ -219,7 +219,7 @@ export function PalaceSegmentsPanel({
                           onClick={() => void onDelete(segment.id)}
                         >
                           <Trash2 className="mr-2 size-4" />
-                          删除分块
+                          删除学习组
                         </Button>
                       )}
                     </div>
@@ -229,7 +229,7 @@ export function PalaceSegmentsPanel({
             </div>
           ) : (
             <div className="rounded-lg border border-dashed border-border/80 bg-background/60 p-4 text-sm text-muted-foreground">
-              还没有分块。先在脑图里选中一组节点，再创建一个部分。
+              还没有学习组。先在脑图里选中一组知识点，再创建一个学习组。
             </div>
           )}
         </CardContent>
@@ -239,7 +239,7 @@ export function PalaceSegmentsPanel({
         <DialogContent className="max-w-xl">
           <DialogHeader>
             <div className="flex items-center justify-between gap-3">
-              <DialogTitle>{editingSegmentId ? '编辑复习分块' : '创建复习分块'}</DialogTitle>
+              <DialogTitle>{editingSegmentId ? '编辑学习组' : '创建学习组'}</DialogTitle>
               <DialogClose onClick={() => onOpenChange(false)} />
             </div>
           </DialogHeader>
@@ -259,7 +259,7 @@ export function PalaceSegmentsPanel({
                 id="segment-name"
                 value={segmentName}
                 onChange={(event) => setSegmentName(event.target.value)}
-                placeholder="例如：第二部分"
+                placeholder="例如：第二学习组"
               />
             </div>
             <div className="space-y-2">
@@ -295,7 +295,7 @@ export function PalaceSegmentsPanel({
                 取消
               </Button>
               <Button type="button" onClick={() => void onSave()} disabled={segmentSaving}>
-                {segmentSaving ? '保存中…' : '保存分块'}
+                {segmentSaving ? '保存中…' : '保存学习组'}
               </Button>
             </div>
           </div>
@@ -306,13 +306,13 @@ export function PalaceSegmentsPanel({
         <DialogContent className="max-w-md">
           <DialogHeader>
             <div className="flex items-center justify-between gap-3">
-              <DialogTitle>合并分块</DialogTitle>
+              <DialogTitle>合并学习组</DialogTitle>
               <DialogClose onClick={() => setMergeSourceId(null)} />
             </div>
           </DialogHeader>
           <div className="space-y-3 px-6 py-5">
             <p className="text-sm text-muted-foreground">
-              选择一个目标分块，当前分块的节点会并入目标分块，原分块会被删除，但脑图内容不会删除。
+              选择一个目标学习组，当前学习组的知识点会并入目标学习组，原学习组会被删除，但脑图内容不会删除。
             </p>
             <div className="space-y-2">
               {mergeTargets.map((segment) => (
@@ -333,7 +333,7 @@ export function PalaceSegmentsPanel({
                     />
                     <span className="truncate text-sm font-medium">{segment.name}</span>
                   </div>
-                  <span className="text-xs text-muted-foreground">{segment.node_count} 节点</span>
+                  <span className="text-xs text-muted-foreground">{segment.node_count} 知识点</span>
                 </button>
               ))}
             </div>

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -19,6 +20,7 @@ from memory_anki.modules.settings.application.ai_model_registry import (
 from .mindmap_ai_split import config_loader, gateway, tree_ops
 from .mindmap_ai_split import contracts as split_contracts
 from .mindmap_ai_split.primitives import ensure_dict
+from .review_preview import build_review_preview_payload
 
 AI_SPLIT_CONFIG_KEYS = split_contracts.AI_SPLIT_CONFIG_KEYS
 AI_SPLIT_DEFAULT_MAX_CHILDREN = split_contracts.AI_SPLIT_DEFAULT_MAX_CHILDREN
@@ -48,14 +50,20 @@ def split_palace_editor_doc_with_ai(
         raise MindMapAiSplitError("未找到要分卡的目标节点，请重新选中节点后再试。")
 
     existing_children = tree_ops.collect_first_level_children(target_node)
+    inferred_max_children = tree_ops.infer_split_max_children(
+        target_node,
+        existing_children,
+        configured_max_children=config.max_children,
+    )
+    runtime_config = replace(config, max_children=inferred_max_children)
     ai_payload = _call_mindmap_ai_split_model(
-        config=config,
+        config=runtime_config,
         target_node=target_node,
         existing_children=existing_children,
     )
     generated_children = tree_ops.normalize_generated_children(
         ai_payload.get("new_children"),
-        max_children=config.max_children,
+        max_children=inferred_max_children,
     )
     if not generated_children:
         raise MindMapAiSplitError("AI 没有返回可用的新分类节点，请调整提示词后重试。")
@@ -74,6 +82,7 @@ def split_palace_editor_doc_with_ai(
         model=config.model,
         ai_call_log_id=str(ai_payload.get("_ai_call_log_id") or "") or None,
         resolved_ai=serialize_resolved_ai_runtime(resolved_runtime),
+        review_preview=build_review_preview_payload(editor_doc=normalized_doc),
     )
 
 

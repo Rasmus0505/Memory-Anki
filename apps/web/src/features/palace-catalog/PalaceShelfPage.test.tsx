@@ -120,8 +120,8 @@ function buildGroupedResponse() {
                   {
                     id: 201,
                     palace_id: 101,
-                    name: '第 1 部分',
-                    display_name: '第 1 部分',
+                    name: '第 1 学习组',
+                    display_name: '第 1 学习组',
                     color: '#14b8a6',
                     node_count: 49,
                     sort_order: 0,
@@ -141,7 +141,7 @@ function buildGroupedResponse() {
                   {
                     id: 301,
                     palace_id: 101,
-                    name: '小宫殿 A',
+                    name: '专项训练 A',
                     node_uids: ['mini-a-1'],
                     node_count: 12,
                     sort_order: 0,
@@ -163,7 +163,7 @@ function buildGroupedResponse() {
                   {
                     id: 302,
                     palace_id: 101,
-                    name: '小宫殿 B',
+                    name: '专项训练 B',
                     node_uids: ['mini-b-1'],
                     node_count: 8,
                     sort_order: 1,
@@ -290,8 +290,8 @@ describe('PalaceShelfPage', () => {
     expect(screen.getByLabelText(/编辑宫殿/)).toBeTruthy()
     expect(screen.getByLabelText(/更多操作/)).toBeTruthy()
     fireEvent.click(screen.getAllByRole('button', { name: '练习' })[0])
-    expect(navigate).toHaveBeenCalledWith('/segments/201/practice')
-    fireEvent.click(screen.getByRole('button', { name: '卡片流' }))
+    expect(navigate).toHaveBeenCalledWith('/palaces/101/practice')
+    fireEvent.click(screen.getByRole('button', { name: '知识点流' }))
 
     expect(screen.getByTestId('list-layout-root').dataset.layoutMode).toBe('flow')
     expect(window.localStorage.getItem(PALACE_SHELF_VIEW_SETTINGS_KEY)).toBeNull()
@@ -311,9 +311,9 @@ describe('PalaceShelfPage', () => {
     await screen.findByText('中国近代史')
     fireEvent.click(screen.getByRole('button', { name: '展开' }))
 
-    await screen.findByText('小宫殿 A')
-    expect(screen.getByText('小宫殿')).toBeTruthy()
-    expect(screen.getAllByRole('button', { name: '练习' }).length).toBeGreaterThan(1)
+    await screen.findByText('专项训练 A')
+    expect(screen.getByText('专项训练')).toBeTruthy()
+    expect(screen.getAllByRole('button', { name: /开始复习|练习/ }).length).toBeGreaterThan(1)
     expect(screen.getAllByRole('button', { name: '做题' }).length).toBeGreaterThan(1)
   })
 

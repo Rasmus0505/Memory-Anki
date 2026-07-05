@@ -42,7 +42,7 @@ export function PalaceStageEditDialog({
             <DialogTitle>
               {stageEdit?.segment
                 ? `${getSegmentDisplayName(stageEdit.segment, 0)} · ${stageEdit.stage.label}`
-                : '复习节点'}
+                : '复习知识点'}
             </DialogTitle>
             <p className="mt-1 text-sm text-muted-foreground">
               {stageEdit?.stage.completed
@@ -81,7 +81,7 @@ export function PalaceStageEditDialog({
                   onClick={onRollbackBeforeStage}
                   disabled={stageEditSaving}
                 >
-                  退回到此节点前
+                  退回到此知识点前
                 </Button>
                 <Button type="button" onClick={onSaveCompletedAt} disabled={stageEditSaving}>
                   保存时间
@@ -89,7 +89,7 @@ export function PalaceStageEditDialog({
               </>
             ) : (
               <Button type="button" onClick={onAdvanceToStage} disabled={stageEditSaving}>
-                前进到此节点
+                前进到此知识点
               </Button>
             )}
           </div>

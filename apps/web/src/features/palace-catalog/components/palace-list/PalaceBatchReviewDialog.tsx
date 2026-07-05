@@ -40,9 +40,9 @@ export function PalaceBatchReviewDialog({
       <DialogContent className="max-w-lg">
         <DialogHeader>
           <div>
-            <DialogTitle>开始多块复习</DialogTitle>
+            <DialogTitle>开始多组复习</DialogTitle>
             <p className="mt-1 text-sm text-muted-foreground">
-              {palace?.title || '当前宫殿'} 中当前到期的分块会合并成一张思维导图，一次完成复习。
+              {palace?.title || '当前宫殿'} 中当前到期的学习组会合并成一张思维导图，一次完成复习。
             </p>
           </div>
           <DialogClose onClick={onClose} />
@@ -72,7 +72,7 @@ export function PalaceBatchReviewDialog({
                     </span>
                   </div>
                   <div className="mt-1 flex flex-wrap gap-2 text-xs text-muted-foreground">
-                    <span>{segment.node_count} 节点</span>
+                    <span>{segment.node_count} 个知识点</span>
                     <span>预计 {formatRelativeReviewTime(segment.next_review_at)}</span>
                     <span>{segment.estimated_review_seconds || 0} 秒</span>
                   </div>
@@ -82,7 +82,7 @@ export function PalaceBatchReviewDialog({
           })}
         </div>
         <div className="flex items-center justify-between gap-3">
-          <span className="text-xs text-muted-foreground">已选择 {selectedSegmentIds.length} 个分块</span>
+          <span className="text-xs text-muted-foreground">已选择 {selectedSegmentIds.length} 个学习组</span>
           <div className="flex items-center gap-2">
             <Button variant="ghost" onClick={onClose}>
               取消

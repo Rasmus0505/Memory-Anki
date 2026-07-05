@@ -175,7 +175,7 @@ export function usePalaceQuizGeneration({
     resetGenerationStreamFollow()
     try {
       if (config.classifyByMiniPalace && !selectedChapterHasChildren) {
-        emitQuizFeedback('quiz_error_missing_input', { label: '无小宫殿', audioScope: 'local' })
+        emitQuizFeedback('quiz_error_missing_input', { label: '无专项训练', audioScope: 'local' })
         throw new Error('当前范围没有直接子章节，无法分类保存。')
       }
       let aiOptions: AiRuntimeOptions | undefined
@@ -323,12 +323,12 @@ export function usePalaceQuizGeneration({
       }
       const result = await classifyPalaceQuizQuestionsToMiniPalacesApi(palaceId, aiOptions)
       setClassificationResult(result)
-      toast.success('已有题库已按小宫殿归类')
+      toast.success('已有题库已按专项训练归类')
       emitQuizFeedback('quiz_generate_classify_complete', { label: '归类完成', audioScope: 'global' })
       await refreshQuestions()
     } catch (nextError) {
       emitQuizFeedback('quiz_error_ai_failed', { label: '归类失败', audioScope: 'global' })
-      toast.error(nextError instanceof Error ? nextError.message : '归类小宫殿题库失败。')
+      toast.error(nextError instanceof Error ? nextError.message : '归类专项训练题库失败。')
     } finally {
       setClassificationLoading(false)
     }

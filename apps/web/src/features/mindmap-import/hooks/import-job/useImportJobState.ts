@@ -5,6 +5,7 @@ import type {
   MindMapImportJobStage,
   MindMapImportJobStatus,
   MindMapImportJobUsage,
+  MindMapReviewPreview,
   MindMapImportSourceTree,
   ResolvedAiRuntimeMeta,
 } from '@/shared/api/contracts'
@@ -39,6 +40,7 @@ export interface ImportJobStateController {
   setImportHistory: (value: ImportHistoryItem[]) => void
   importWarnings: string[]
   setImportWarnings: (value: string[]) => void
+  importReviewPreview: MindMapReviewPreview | null
   currentJobId: string | null
   currentJobStatus: MindMapImportJobStatus | null
   currentJobStage: MindMapImportJobStage | null
@@ -78,6 +80,7 @@ export function useImportJobState({
   const [imagePreviewUrl, setImagePreviewUrl] = useState('')
   const [history, setHistory] = useState<ImportHistoryItem[]>([])
   const [importWarnings, setImportWarnings] = useState<string[]>([])
+  const [reviewPreview, setReviewPreview] = useState<MindMapReviewPreview | null>(null)
   const [currentJobId, setCurrentJobId] = useState<string | null>(null)
   const [currentJobStatus, setCurrentJobStatus] = useState<MindMapImportJobStatus | null>(null)
   const [currentJobStage, setCurrentJobStage] = useState<MindMapImportJobStage | null>(null)
@@ -144,6 +147,7 @@ export function useImportJobState({
     setSourceKindState(job.source_kind)
     setMindMapWorkflowState(job.source_kind === 'image-batch' ? 'batch' : 'single')
     setImportWarnings(result?.warnings || [])
+    setReviewPreview(result?.review_preview ?? null)
     setError(job.error?.message || '')
     applyJobProgressState(job)
 
@@ -208,6 +212,7 @@ export function useImportJobState({
     setImagePreviewUrl('')
     setError('')
     setImportWarnings([])
+    setReviewPreview(null)
     setImportReusedExistingResult(false)
     setLastBatchMeta(null)
     resetStreamState()
@@ -234,6 +239,7 @@ export function useImportJobState({
     setImportHistory: setHistory,
     importWarnings,
     setImportWarnings,
+    importReviewPreview: reviewPreview,
     currentJobId,
     currentJobStatus,
     currentJobStage,

@@ -115,7 +115,7 @@ export function useMiniPalaceController({
       setItems(response.items)
       return response.items
     } catch (err) {
-      const message = err instanceof Error ? err.message : '加载小宫殿失败。'
+      const message = err instanceof Error ? err.message : '加载专项训练失败。'
       setError(message)
       return []
     } finally {
@@ -168,7 +168,7 @@ export function useMiniPalaceController({
     if (!editorState) return
     const checkpoints = sanitizeMiniPalaceCheckpointIds(root, item.node_uids)
     if (checkpoints.length === 0) {
-      toast.info('这个小宫殿没有可练习的卡片。')
+      toast.info('这个训练关卡没有可回忆的知识点。')
       return
     }
     timer.registerActivity('practice_interaction', { source: 'mini_palace_practice_start' })
@@ -194,7 +194,7 @@ export function useMiniPalaceController({
     if (!palaceId) return
     const checkpoints = draftNodeUids.filter((uid) => validCheckpointIds.has(uid))
     if (checkpoints.length === 0) {
-      toast.info('先在脑图里选中至少一张卡片。')
+      toast.info('先在脑图里选中至少一个知识点。')
       return
     }
     setSaving(true)
@@ -208,7 +208,7 @@ export function useMiniPalaceController({
         setDraftNodeUids([])
         setMode('idle')
         setActiveMiniPalace(null)
-        toast.success('小宫殿已更新')
+        toast.success('训练关卡已更新')
       } else {
         const response = await createMiniPalaceApi(palaceId, {
           name: draftName,
@@ -222,7 +222,7 @@ export function useMiniPalaceController({
         startPractice(created)
       }
     } catch (err) {
-      const message = err instanceof Error ? err.message : '保存小宫殿失败。'
+      const message = err instanceof Error ? err.message : '保存训练关卡失败。'
       setError(message)
       toast.error(message)
     } finally {
@@ -245,7 +245,7 @@ export function useMiniPalaceController({
         setActiveMiniPalace(response.item)
       }
     } catch (err) {
-      const message = err instanceof Error ? err.message : '重命名小宫殿失败。'
+      const message = err instanceof Error ? err.message : '重命名训练关卡失败。'
       setError(message)
       toast.error(message)
     } finally {
@@ -254,8 +254,8 @@ export function useMiniPalaceController({
   }, [activeMiniPalace?.id, timer])
 
   const deleteMiniPalace = React.useCallback(async (item: MiniPalaceSummary) => {
-    const confirmed = await appConfirm('删除这个小宫殿只会删除这组练习入口，不会删除脑图卡片。确定继续吗？', {
-      title: '删除小宫殿',
+    const confirmed = await appConfirm('删除这个训练关卡只会删除这组训练入口，不会删除脑图知识点。确定继续吗？', {
+      title: '删除训练关卡',
       tone: 'danger',
     })
     if (!confirmed) return
@@ -271,7 +271,7 @@ export function useMiniPalaceController({
         setRevealMap({})
       }
     } catch (err) {
-      const message = err instanceof Error ? err.message : '删除小宫殿失败。'
+      const message = err instanceof Error ? err.message : '删除训练关卡失败。'
       setError(message)
       toast.error(message)
     } finally {

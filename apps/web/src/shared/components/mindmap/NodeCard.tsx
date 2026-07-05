@@ -14,6 +14,13 @@ type NodeCardData = MindMapNode & {
   previewAdopt?: boolean
   previewGhost?: boolean
   editing?: boolean
+  readonly?: boolean
+  muted?: boolean
+  revealState?: 'hidden' | 'placeholder' | 'revealed'
+  segmentColor?: string | null
+  activeSegment?: boolean
+  focusMarked?: boolean
+  miniPalaceSelected?: boolean
   onStartEdit?: (nodeId: string) => void
   onFinishEdit?: (nodeId: string, text: string) => void
   onAddChild?: (nodeId: string) => void
@@ -50,6 +57,7 @@ function MindMapNodeCard({ data, id }: NodeProps) {
   const [editText, setEditText] = useState(nodeData.label)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const isEditing = localEdit || nodeData.editing
+  const readonly = Boolean(nodeData.readonly)
 
   useEffect(() => {
     if (isEditing && inputRef.current) {
@@ -60,6 +68,7 @@ function MindMapNodeCard({ data, id }: NodeProps) {
   }, [isEditing])
 
   const startEdit = useCallback((e?: React.MouseEvent) => {
+    if (readonly) return
     e?.stopPropagation()
     dispatchGlobalFeedback('node_edit_start', {
       point: getMouseFeedbackPoint(e),
@@ -68,7 +77,7 @@ function MindMapNodeCard({ data, id }: NodeProps) {
     setLocalEdit(true)
     setEditText(nodeData.label)
     nodeData.onStartEdit?.(id)
-  }, [id, nodeData])
+  }, [id, nodeData, readonly])
 
   const handleDoubleClick = useCallback((e: React.MouseEvent) => {
     e.stopPropagation()
@@ -104,11 +113,17 @@ function MindMapNodeCard({ data, id }: NodeProps) {
   const previewAdopt = Boolean(nodeData.previewAdopt)
   const previewGhost = Boolean(nodeData.previewGhost)
   const isPrimaryBranch = !isRoot && depth === 1
+  const revealState = nodeData.revealState
+  const hiddenForRecall = revealState === 'hidden'
+  const placeholderForRecall = revealState === 'placeholder'
+  const segmentColor = typeof nodeData.segmentColor === 'string' ? nodeData.segmentColor : null
+  const focusMarked = Boolean(nodeData.focusMarked)
+  const miniPalaceSelected = Boolean(nodeData.miniPalaceSelected)
 
   return (
     <div
       onDoubleClick={handleDoubleClick}
-      className={`group relative transition-[opacity,transform] duration-100 ${nodeData.dropHighlight ? 'scale-[1.01]' : ''} ${previewShifted ? 'translate-y-1' : ''} ${previewGhost ? 'opacity-82' : ''}`}
+      className={`group relative transition-[opacity,transform] duration-100 ${nodeData.dropHighlight ? 'scale-[1.01]' : ''} ${previewShifted ? 'translate-y-1' : ''} ${previewGhost || nodeData.muted ? 'opacity-82' : ''}`}
       style={{ width: nodeSize.width }}
     >
       <Handle type="target" position={Position.Left} className="!h-2 !w-2 !border-0 !bg-transparent !opacity-0" />
@@ -132,7 +147,7 @@ function MindMapNodeCard({ data, id }: NodeProps) {
           >
             <button
               type="button"
-              onClick={startEdit}
+              onClick={readonly ? undefined : startEdit}
               className="w-full break-words whitespace-pre-wrap pr-8 text-center text-[15px] font-semibold leading-5 text-white"
             >
               {nodeData.label || '未命名主题'}
@@ -144,25 +159,26 @@ function MindMapNodeCard({ data, id }: NodeProps) {
               isPrimaryBranch
                 ? 'shadow-[0_16px_30px_rgba(24,24,27,0.18)]'
                 : 'border-zinc-200 bg-white shadow-[0_12px_22px_rgba(24,24,27,0.08)]'
-            } ${nodeData.selected ? 'ring-2 ring-zinc-950/15' : isPrimaryBranch ? '' : 'hover:bg-zinc-50'} ${previewAdopt ? 'ring-1 ring-[#2563eb]/30' : ''}`}
+            } ${nodeData.selected ? 'ring-2 ring-zinc-950/15' : isPrimaryBranch ? '' : 'hover:bg-zinc-50'} ${previewAdopt ? 'ring-1 ring-[#2563eb]/30' : ''} ${placeholderForRecall ? 'ring-2 ring-amber-400/35' : ''} ${focusMarked ? 'outline outline-2 outline-rose-400/55' : ''} ${miniPalaceSelected ? 'outline outline-2 outline-sky-400/70' : ''}`}
             style={{
               minHeight: nodeSize.height,
               ...(isPrimaryBranch ? { backgroundColor: branchColor, borderColor: branchColor } : {}),
+              ...(!isPrimaryBranch && segmentColor ? { borderColor: segmentColor } : {}),
             }}
           >
             <button
               type="button"
-              onClick={startEdit}
+              onClick={readonly ? undefined : startEdit}
               className={`w-full break-words whitespace-pre-wrap text-left ${
                 isPrimaryBranch ? 'text-white' : 'text-zinc-950'
-              } ${isLeaf ? 'text-[12px] font-medium leading-4' : 'text-[13px] font-semibold leading-4'} pr-8`}
+              } ${hiddenForRecall ? 'blur-[3px] select-none' : ''} ${isLeaf ? 'text-[12px] font-medium leading-4' : 'text-[13px] font-semibold leading-4'} pr-8`}
             >
-              {nodeData.label || '未命名节点'}
+              {hiddenForRecall ? '待回忆' : nodeData.label || '未命名知识点'}
             </button>
             <div
               className="mt-1 h-[2px] rounded-full"
               style={{
-                backgroundColor: isPrimaryBranch ? 'rgba(255,255,255,0.72)' : branchColor,
+                backgroundColor: isPrimaryBranch ? 'rgba(255,255,255,0.72)' : segmentColor ?? branchColor,
                 width: isLeaf ? '48px' : '68px',
               }}
             />
@@ -178,6 +194,7 @@ function MindMapNodeCard({ data, id }: NodeProps) {
         )
       )}
 
+      {!readonly ? (
       <div className="absolute right-1 top-1 z-10 flex gap-1 opacity-0 transition-opacity group-hover:opacity-100">
         <button
           type="button"
@@ -190,7 +207,7 @@ function MindMapNodeCard({ data, id }: NodeProps) {
             nodeData.onAddChild?.(id)
           }}
           className={btnClass}
-          title="添加子节点"
+          title="添加子知识点"
         >
           <Plus className="h-3.5 w-3.5" />
         </button>
@@ -205,11 +222,12 @@ function MindMapNodeCard({ data, id }: NodeProps) {
             nodeData.onDelete?.(id)
           }}
           className={`${btnClass} hover:bg-destructive/5 hover:text-destructive`}
-          title="删除节点"
+          title="删除知识点"
         >
           <X className="h-3.5 w-3.5" />
         </button>
       </div>
+      ) : null}
 
       <Handle type="source" position={Position.Right} className="!h-2 !w-2 !border-0 !bg-transparent !opacity-0" />
     </div>

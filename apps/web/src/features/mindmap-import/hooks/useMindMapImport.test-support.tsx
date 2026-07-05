@@ -84,7 +84,7 @@ export function buildMindmapJob(
     result: {
       source_tree: {
         title,
-        children: [{ text: '新增节点', children: [] }],
+        children: [{ text: '新增知识点', children: [] }],
       },
       editor_doc: buildEditorDoc(rootText),
       warnings: [],

@@ -68,7 +68,7 @@ export function useImportApplyController({
     setError('')
     if (applyMode === 'append' && !hasNodeUid(editorState?.editor_doc ?? null, selectedNodeUid)) {
       setApplying(false)
-      setError('当前选中的追加目标节点不存在于最新脑图中，请重新选中节点后再试。')
+      setError('当前选中的追加目标知识点不存在于最新脑图中，请重新选中知识点后再试。')
       return
     }
     const applied = applyImportedEditorState({
@@ -83,7 +83,7 @@ export function useImportApplyController({
       setError(formatMindMapImportError(applied.error))
       return
     }
-    const requestSummary = `${applyMode === 'replace' ? '覆盖当前脑图' : '追加到选中节点'}；来源：${sourceTitle || '未命名导入草稿'}`
+    const requestSummary = `${applyMode === 'replace' ? '覆盖当前脑图' : '追加到选中知识点'}；来源：${sourceTitle || '未命名导入草稿'}`
     const beforeNodeCount = countDocNodes(editorState?.editor_doc ?? null)
     const afterNodeCount = countDocNodes(applied.nextEditorState.editor_doc)
     try {
@@ -114,7 +114,7 @@ export function useImportApplyController({
         feature: '导入应用',
         stage: 'success',
         requestSummary,
-        responseSummary: `节点数 ${beforeNodeCount} -> ${afterNodeCount}`,
+        responseSummary: `知识点数 ${beforeNodeCount} -> ${afterNodeCount}`,
         jobId: currentJobId,
         meta: {
           entityKey,
@@ -124,7 +124,7 @@ export function useImportApplyController({
           afterNodeCount,
         },
       })
-      toast.success(applyMode === 'replace' ? '已覆盖当前脑图' : '已追加到选中节点')
+      toast.success(applyMode === 'replace' ? '已覆盖当前脑图' : '已追加到选中知识点')
     } catch (nextError) {
       const requestId = getRequestId(nextError)
       logAiCall({

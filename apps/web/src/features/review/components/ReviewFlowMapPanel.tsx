@@ -131,7 +131,7 @@ export function ReviewFlowMapPanel({
         miniPalaceAction={
           showMiniPalaceButton && onMiniPalaceOpen
             ? {
-                label: '小宫殿',
+                label: '专项训练',
                 onClick: onMiniPalaceOpen,
               }
             : null

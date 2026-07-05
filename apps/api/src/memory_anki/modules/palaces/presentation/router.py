@@ -302,6 +302,7 @@ def api_ai_split_editor_node(palace_id: int, data: dict, s: Session = Depends(se
         "model": result.model,
         "ai_call_log_id": getattr(result, "ai_call_log_id", None),
         "resolved_ai": getattr(result, "resolved_ai", None),
+        "review_preview": getattr(result, "review_preview", None),
     }
 
 

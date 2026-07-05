@@ -87,7 +87,7 @@ class FreestyleRouteTests(unittest.TestCase):
             )
             mini_palace = PalaceMiniPalace(
                 palace_id=palace.id,
-                name="细胞核小宫殿",
+                name="细胞核专项训练",
                 node_uids_json=json.dumps(["a"], ensure_ascii=False),
                 needs_practice=True,
                 sort_order=0,

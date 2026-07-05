@@ -93,7 +93,7 @@ export function StageSelectDialog({
             <span className="font-medium text-foreground">
               第 {defaultTarget + 2} 次（{nextAfterDefaultLabel}）
             </span>
-            。你也可以选择其他节点来调整进度：
+            。你也可以选择其他阶段来调整进度：
           </p>
 
           <div className="relative py-6">

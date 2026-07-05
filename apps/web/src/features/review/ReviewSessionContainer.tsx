@@ -218,7 +218,7 @@ export function ReviewSessionContainer({
     onSaveError: async (nextError, pendingState) => {
       if (!activePalaceId || !nextError.message.includes('危险结构变更')) return false
       const confirmed = await appConfirm(
-        '这次保存会让宫殿节点数量骤减。只有在你确实要大幅删除宫殿结构时才继续。确定继续保存吗？',
+        '这次保存会让宫殿知识点数量骤减。只有在你确实要大幅删除宫殿结构时才继续。确定继续保存吗？',
         { title: '确认危险保存', tone: 'danger' },
       )
       if (!confirmed) return true

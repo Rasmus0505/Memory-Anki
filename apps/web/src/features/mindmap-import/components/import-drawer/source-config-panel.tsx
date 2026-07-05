@@ -220,7 +220,7 @@ export function MindMapImportSourceConfigPanel({
           ) : sourceTree ? (
             <>
               <Sparkles className="h-3.5 w-3.5" />
-              已生成草稿，共 {nodeCount} 个节点
+              已生成草稿，共 {nodeCount} 个知识点
               {sourceKind === 'image-batch' && batchMeta ? `，共使用 ${batchMeta.imageCount} 张图片` : ''}
             </>
           ) : extractedText ? (

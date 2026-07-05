@@ -91,8 +91,8 @@ const duePalace = {
     {
       id: 10,
       palace_id: 1,
-      name: '第 1 部分',
-      display_name: '第 1 部分',
+      name: '第 1 学习组',
+      display_name: '第 1 学习组',
       color: '#14b8a6',
       node_count: 49,
       sort_order: 0,
@@ -193,19 +193,19 @@ describe('PalaceListPage', () => {
     expect(await screen.findByText('第四节 收回教育权运动与教会教育的变革')).toBeTruthy()
     expect(screen.getByText('记忆宫殿')).toBeTruthy()
     expect(screen.queryByText('第 1 部分')).toBeNull()
-    expect(screen.getByText('预计 1分 40秒')).toBeTruthy()
-    expect(screen.getByRole('button', { name: '练习' })).toBeTruthy()
+    expect(screen.getAllByText('预计 1分 40秒').length).toBeGreaterThan(0)
+    expect(screen.getByRole('button', { name: '开始复习' })).toBeTruthy()
     expect(screen.getByRole('button', { name: '做题' })).toBeTruthy()
   })
 
   it('refreshes palace cards when the catalog invalidation event fires', async () => {
     render(<PalaceListPage />)
 
-    expect(await screen.findByRole('button', { name: '练习' })).toBeTruthy()
+    expect(await screen.findByRole('button', { name: '开始复习' })).toBeTruthy()
     window.dispatchEvent(new CustomEvent('palace-catalog:invalidated'))
 
     await waitFor(() => expect(getPalacesGroupedApi).toHaveBeenCalledTimes(2))
-    expect(await screen.findByRole('button', { name: '练习' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: '开始复习' })).toBeNull()
   })
 
   it('defaults to chapter-double and keeps local view settings after switching', async () => {
@@ -214,7 +214,7 @@ describe('PalaceListPage', () => {
     await screen.findByText('第四节 收回教育权运动与教会教育的变革')
     expect(screen.getByTestId('list-layout-root').dataset.layoutMode).toBe('chapter-double')
 
-    fireEvent.click(screen.getByRole('button', { name: '章节卡片双列' }))
+    fireEvent.click(screen.getByRole('button', { name: '章节知识点双列' }))
     fireEvent.click(screen.getByRole('button', { name: '紧凑' }))
 
     expect(screen.getByTestId('list-layout-root').dataset.layoutMode).toBe('chapter-card-grid')

@@ -49,7 +49,7 @@ function buildProps(
     reusedExistingResult: false,
     onResumeJob: vi.fn(),
     onPauseJob: vi.fn(),
-    targetNodeLabel: '测试节点',
+    targetNodeLabel: '测试知识点',
     canAppend: true,
     canUndoLastImport: false,
     history: [],

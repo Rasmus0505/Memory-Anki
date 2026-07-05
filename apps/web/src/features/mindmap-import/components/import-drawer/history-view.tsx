@@ -41,7 +41,7 @@ export function MindMapImportHistoryView({
                   >
                     <div className="truncate text-sm font-medium">{item.title || '未命名'}</div>
                     <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
-                      <span>{item.nodeCount} 节点</span>
+                      <span>{item.nodeCount} 个知识点</span>
                       {item.importMode === 'batch' ? <Badge variant="secondary">多图</Badge> : null}
                       {item.imageCount ? <span>{item.imageCount} 张图</span> : null}
                       {item.jobStatus ? <Badge variant="outline">{item.jobStatus}</Badge> : null}

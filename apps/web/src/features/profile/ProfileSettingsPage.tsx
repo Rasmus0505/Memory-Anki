@@ -94,7 +94,7 @@ export default function ProfileSettingsPage() {
   return (
     <ProfileLayout
       title="个人中心"
-      description="这里继续管理复习排程、导入导出，以及新的 AI 分卡接入配置。"
+      description="这里继续管理复习排程、导入导出，以及新的 AI 知识点拆分接入配置。"
     >
       {clientPreferencesReady ? (
         <div className="rounded-lg border border-success/30 bg-success/5 px-4 py-3 text-sm text-success">

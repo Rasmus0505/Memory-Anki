@@ -106,7 +106,7 @@ export function useImportJobRuntime({
                 requestSummary: '',
                 responseSummary:
                   job.mode === 'mindmap'
-                    ? `识别完成；节点 ${(job.result?.source_tree?.children || []).length}`
+                    ? `识别完成；知识点 ${(job.result?.source_tree?.children || []).length}`
                     : `识别完成；文本 ${(job.result?.extracted_text || '').length} 字`,
                 jobId: job.id,
                 requestId: job.error?.request_id,

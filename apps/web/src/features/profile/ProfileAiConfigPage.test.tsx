@@ -82,7 +82,7 @@ const baseResponse = {
       ],
       scene_keys: ['ai_split', 'reading_sentence_rewrite'],
       scene_details: [
-        { key: 'ai_split', label: 'AI 分卡', description: '拆分节点' },
+        { key: 'ai_split', label: 'AI 知识点拆分', description: '拆分知识点' },
         { key: 'reading_sentence_rewrite', label: '英语阅读句子改写', description: '改写句子' },
       ],
     },
@@ -122,7 +122,7 @@ const baseResponse = {
       is_active: true,
       default_base_url: 'https://zhipu.example/v1',
       usage_count: 1,
-      bound_scene_labels: ['AI 分卡'],
+      bound_scene_labels: ['AI 知识点拆分'],
       last_used_at: null,
       last_status: 'never_used',
     },
@@ -130,8 +130,8 @@ const baseResponse = {
   scenes: [
     {
       key: 'ai_split',
-      label: 'AI 分卡',
-      description: '拆分节点',
+      label: 'AI 知识点拆分',
+      description: '拆分知识点',
       category_key: 'llm',
       category_label: '大语言',
       config_key: 'scene_model_ai_split',
@@ -356,7 +356,7 @@ describe('ProfileAiConfigPage', () => {
       items: [
         {
           id: 'log-1',
-          feature: 'AI 分卡',
+          feature: 'AI 知识点拆分',
           operation: 'mindmap_ai_split',
           status: 'success',
           provider: 'qwen',
@@ -372,7 +372,7 @@ describe('ProfileAiConfigPage', () => {
     } as never)
     vi.spyOn(aiLogsApi, 'getAiCallLogApi').mockResolvedValue({
       id: 'log-1',
-      feature: 'AI 分卡',
+      feature: 'AI 知识点拆分',
       operation: 'mindmap_ai_split',
       status: 'success',
       provider: 'qwen',
@@ -400,7 +400,7 @@ describe('ProfileAiConfigPage', () => {
     )
 
     await waitFor(() => {
-      expect(screen.getByText('AI 分卡')).toBeTruthy()
+      expect(screen.getByText('AI 知识点拆分')).toBeTruthy()
     })
 
     fireEvent.click(screen.getByRole('button', { name: '查看详情' }))

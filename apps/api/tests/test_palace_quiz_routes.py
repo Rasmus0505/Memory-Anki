@@ -114,7 +114,7 @@ class PalaceQuizRouteTests(unittest.TestCase):
             session.add(
                 PalaceMiniPalace(
                     palace_id=palace.id,
-                    name="细胞核小宫殿",
+                    name="细胞核专项训练",
                     node_uids_json=json.dumps(["cell-core"], ensure_ascii=False),
                     sort_order=0,
                 )
@@ -3001,7 +3001,7 @@ class PalaceQuizRouteTests(unittest.TestCase):
         )
 
         self.assertEqual(response.status_code, 400)
-        self.assertIn("章节题暂不支持绑定小宫殿", response.json()["detail"])
+        self.assertIn("章节题暂不支持绑定专项训练", response.json()["detail"])
 
     def test_palace_aggregated_questions_include_bound_chapter_questions(self):
         with self.SessionLocal() as session:

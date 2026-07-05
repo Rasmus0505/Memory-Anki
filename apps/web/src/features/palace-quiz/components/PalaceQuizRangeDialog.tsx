@@ -37,7 +37,7 @@ export function PalaceQuizRangeDialog({
         <DialogHeader>
           <DialogTitle>选择范围</DialogTitle>
           <DialogDescription>
-            选择本次 AI 生成题目所属的章节范围。一次只能选择一个章节节点，也支持直接选择父级大章节整章生成。
+            选择本次 AI 生成题目所属的章节范围。一次只能选择一个章节，也支持直接选择父级大章节整章生成。
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4 px-6 py-4">

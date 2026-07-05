@@ -7,6 +7,42 @@ from uuid import uuid4
 from .primitives import ensure_dict, first_non_empty, plain_identifier, plain_text, stringify
 
 
+def infer_split_max_children(
+    target_node: dict[str, Any],
+    existing_children: list[dict[str, Any]],
+    *,
+    configured_max_children: int,
+) -> int:
+    cap = max(1, configured_max_children)
+    child_count = len(existing_children)
+    if child_count > 0:
+        if child_count <= 3:
+            inferred = 2
+        elif child_count <= 6:
+            inferred = 3
+        elif child_count <= 10:
+            inferred = 4
+        elif child_count <= 16:
+            inferred = 5
+        elif child_count <= 24:
+            inferred = 6
+        else:
+            inferred = 8
+        return min(cap, inferred)
+
+    data = ensure_dict(target_node.get("data"))
+    text_size = len(plain_text(data.get("text"), fallback="")) + len(
+        plain_text(data.get("note"), fallback="")
+    )
+    if text_size <= 80:
+        inferred = 2
+    elif text_size <= 200:
+        inferred = 3
+    else:
+        inferred = 4
+    return min(cap, inferred)
+
+
 def build_model_input(
     *,
     target_node: dict[str, Any],

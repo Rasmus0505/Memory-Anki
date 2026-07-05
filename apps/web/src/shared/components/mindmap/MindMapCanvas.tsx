@@ -1,8 +1,10 @@
 import {
   ReactFlowProvider,
 } from '@xyflow/react'
+import type { ComponentType } from 'react'
 import '@xyflow/react/dist/style.css'
 import { NodeContextMenu } from './NodeContextMenu'
+import type { ContextMenuAction } from './NodeContextMenu'
 import type { GraphData } from './adapter'
 import { MindMapCanvasToolbar } from './MindMapCanvasToolbar'
 import { MindMapCanvasViewport } from './MindMapCanvasViewport'
@@ -31,12 +33,19 @@ export interface MindMapCanvasProps {
   onMoveDown?: (nodeId: string) => void
   canMoveUp?: (nodeId: string) => boolean
   canMoveDown?: (nodeId: string) => boolean
+  readonly?: boolean
+  showToolbar?: boolean
+  onNodeActivate?: (nodeId: string) => void
+  onNodeContextAction?: (nodeId: string) => void
+  onNodeHover?: (nodeId: string | null) => void
+  buildNodeActions?: (nodeId: string) => ContextMenuAction[]
   className?: string
 }
 
 function MindMapCanvasInner({
   focusMode = false,
   onToggleFocusMode,
+  showToolbar = true,
   className,
   ...props
 }: MindMapCanvasProps) {
@@ -54,18 +63,20 @@ function MindMapCanvasInner({
       ref={state.frameRef}
       className={`relative flex h-full min-h-[520px] min-w-0 flex-col overflow-hidden rounded-[14px] border border-zinc-200 bg-zinc-50 shadow-[0_18px_44px_rgba(24,24,27,0.08)] ${className ?? ''}`}
     >
-      <MindMapCanvasToolbar
-        focusMode={focusMode}
-        canUndo={state.canUndo}
-        canRedo={state.canRedo}
-        showHistoryControls={state.canShowHistoryControls}
-        onReflow={state.resetLayout}
-        onZoomOut={state.zoomOutCanvas}
-        onZoomIn={state.zoomInCanvas}
-        onToggleFocusMode={handleToggleFocusMode}
-        onUndo={props.onUndo}
-        onRedo={props.onRedo}
-      />
+      {showToolbar ? (
+        <MindMapCanvasToolbar
+          focusMode={focusMode}
+          canUndo={state.canUndo}
+          canRedo={state.canRedo}
+          showHistoryControls={state.canShowHistoryControls}
+          onReflow={state.resetLayout}
+          onZoomOut={state.zoomOutCanvas}
+          onZoomIn={state.zoomInCanvas}
+          onToggleFocusMode={handleToggleFocusMode}
+          onUndo={props.onUndo}
+          onRedo={props.onRedo}
+        />
+      ) : null}
 
       <div className="min-h-0 flex-1">
         {state.isCanvasReady ? (
@@ -82,9 +93,12 @@ function MindMapCanvasInner({
             onNodeDragStart={state.handleNodeDragStart}
             onNodeDrag={state.handleNodeDrag}
             onNodeDragStop={state.handleNodeDragStop}
+            onNodeMouseEnter={state.handleNodeMouseEnter}
+            onNodeMouseLeave={state.handleNodeMouseLeave}
             onEdgeClick={state.handleEdgeClick}
             onEdgeDoubleClick={state.handleEdgeDoubleClick}
             onPaneClick={state.handlePaneClick}
+            readonly={Boolean(props.readonly)}
           />
         ) : (
           <div className="flex h-full min-h-[360px] items-center justify-center text-sm text-muted-foreground">

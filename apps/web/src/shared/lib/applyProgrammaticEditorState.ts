@@ -65,7 +65,7 @@ function validateSavedState(
   if (context.expectedNodeCount != null) {
     const actualNodeCount = countEditorDocNodes(nextState.editor_doc)
     if (actualNodeCount < context.expectedNodeCount) {
-      throw new Error('保存后的脑图节点数少于预期，已阻止显示成功结果。')
+      throw new Error('保存后的脑图知识点数少于预期，已阻止显示成功结果。')
     }
   }
 }

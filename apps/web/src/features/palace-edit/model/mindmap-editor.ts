@@ -9,7 +9,8 @@ import type {
 } from '@/shared/api/contracts'
 
 export type RangeTarget = number | 'new' | null
-export type EditorMode = 'edit' | 'practice'
+export type MindMapDisplayMode = 'edit' | 'preview' | 'recall'
+export type EditorMode = MindMapDisplayMode
 
 export function parseMindMapDoc(value: unknown): MindMapDoc | null {
   if (!value) return null

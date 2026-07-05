@@ -35,7 +35,7 @@ export function MiniPalacePanel({ controller, className, onEditSave, onEditCance
       <Dialog open={controller.panelOpen} onOpenChange={controller.setPanelOpen}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>小宫殿</DialogTitle>
+            <DialogTitle>专项训练</DialogTitle>
             <DialogClose onClick={controller.closePanel} />
           </DialogHeader>
           <div className="space-y-4 px-6 py-5">
@@ -47,7 +47,7 @@ export function MiniPalacePanel({ controller, className, onEditSave, onEditCance
               </div>
               <Button type="button" size="sm" onClick={controller.startCreate}>
                 <Plus className="mr-2 size-4" />
-                新建小宫殿
+                新建训练关卡
               </Button>
             </div>
 
@@ -55,8 +55,8 @@ export function MiniPalacePanel({ controller, className, onEditSave, onEditCance
               {controller.items.length === 0 && !controller.loading ? (
                 <EmptyState
                   variant="create"
-                  title="还没有小宫殿"
-                  description="小宫殿是主宫殿的轻量练习单元，适合快速复习核心节点。"
+                  title="还没有训练关卡"
+                  description="训练关卡适合把一组关键知识点拿出来快速回忆。"
                 />
               ) : null}
               {controller.items.map((item) => (
@@ -77,7 +77,7 @@ export function MiniPalacePanel({ controller, className, onEditSave, onEditCance
                     />
                     <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                       <Badge variant={item.is_empty ? 'destructive' : 'outline'}>
-                        {item.node_count} 张
+                        {item.node_count} 个知识点
                       </Badge>
                       {item.updated_at ? <span>{item.updated_at.replace('T', ' ').slice(0, 16)}</span> : null}
                     </div>
@@ -138,7 +138,7 @@ export function MiniPalacePanel({ controller, className, onEditSave, onEditCance
           )}
         >
           <div className="mb-3 flex items-center justify-between gap-3">
-            <div className="text-sm font-semibold">{controller.activeMiniPalace ? "编辑小宫殿" : "新建小宫殿"}</div>
+            <div className="text-sm font-semibold">{controller.activeMiniPalace ? "编辑训练关卡" : "新建训练关卡"}</div>
             <Button type="button" size="icon" variant="ghost" onClick={controller.cancelCreate}>
               <X className="size-4" />
             </Button>
@@ -150,7 +150,7 @@ export function MiniPalacePanel({ controller, className, onEditSave, onEditCance
               placeholder="不填则使用默认名字"
             />
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <Badge variant="outline">已选 {controller.draftNodeUids.length} 张</Badge>
+              <Badge variant="outline">已选 {controller.draftNodeUids.length} 个知识点</Badge>
               <div className="flex items-center gap-2">
                 <Button
                   type="button"
@@ -176,7 +176,7 @@ export function MiniPalacePanel({ controller, className, onEditSave, onEditCance
                     }
                   }}
                 >
-                  {controller.activeMiniPalace ? '保存小宫殿' : '确认新建小宫殿'}
+                  {controller.activeMiniPalace ? '保存训练关卡' : '确认新建训练关卡'}
                 </Button>
               </div>
             </div>
@@ -195,11 +195,11 @@ export function MiniPalacePanel({ controller, className, onEditSave, onEditCance
             <div className="min-w-0">
               <div className="truncate text-sm font-semibold">{controller.activeMiniPalace.name}</div>
               <div className="mt-2 flex flex-wrap gap-2">
-                <Badge variant="outline">{controller.activeMiniPalace.node_count} 个检查点</Badge>
+                <Badge variant="outline">{controller.activeMiniPalace.node_count} 个知识点</Badge>
                 {controller.completed ? (
                   <Badge className="bg-success text-success-foreground hover:bg-success">已完成</Badge>
                 ) : (
-                  <Badge variant="secondary">小宫殿翻卡</Badge>
+                  <Badge variant="secondary">训练关卡翻卡</Badge>
                 )}
               </div>
             </div>

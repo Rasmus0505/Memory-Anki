@@ -790,8 +790,8 @@ export function TimerAutomationDialog({
                   onChange={(event) => handleActionChange('countNodeSwitchAsActivity', event.target.checked)}
                 />
                 <span>
-                  <span className="block font-medium text-foreground">节点切换算活动</span>
-                  <span className="text-xs text-muted-foreground">把脑图节点激活、焦点切换等弱信号记为活动。</span>
+                  <span className="block font-medium text-foreground">知识点切换算活动</span>
+                  <span className="text-xs text-muted-foreground">把脑图知识点激活、焦点切换等弱信号记为活动。</span>
                 </span>
               </label>
               <label className="flex items-start gap-3 rounded-xl border border-border/60 bg-background/50 px-3 py-3 text-sm">
@@ -803,7 +803,7 @@ export function TimerAutomationDialog({
                 />
                 <span>
                   <span className="block font-medium text-foreground">实际编辑动作算活动</span>
-                  <span className="text-xs text-muted-foreground">包括脑图编辑、标题修改、附件与分块操作等。</span>
+                  <span className="text-xs text-muted-foreground">包括脑图编辑、标题修改、附件与学习组操作等。</span>
                 </span>
               </label>
               <label className="flex items-start gap-3 rounded-xl border border-border/60 bg-background/50 px-3 py-3 text-sm">

@@ -17,7 +17,7 @@ const importedEditorState = {
   editor_doc: {
     root: {
       data: { text: '导入脑图', uid: 'import-root' },
-      children: [{ data: { text: '新增节点', uid: 'import-child-1' }, children: [] }],
+      children: [{ data: { text: '新增知识点', uid: 'import-child-1' }, children: [] }],
     },
   },
   editor_config: {},
@@ -98,7 +98,7 @@ vi.mock('@/features/mindmap-import', () => ({
       importApplying: false,
       importUndoing: false,
       importError: '',
-      importSourceTree: { title: '导入脑图', children: [{ text: '新增节点', children: [] }] },
+      importSourceTree: { title: '导入脑图', children: [{ text: '新增知识点', children: [] }] },
       importPreviewEditorDoc: importedEditorState.editor_doc,
       importExtractedText: '',
       importImagePreviewUrl: '',
@@ -271,7 +271,7 @@ describe('PalaceEditPage import apply guard', () => {
     vi.useRealTimers()
   })
 
-  it('ignores blank iframe sync while import apply is saving and during the first post-reload sync window', async () => {
+  it('ignores blank native sync while import apply is saving and during the first post-reload sync window', async () => {
     const saveRequest = deferred<{
       palace: {
         id: number
@@ -371,7 +371,7 @@ describe('PalaceEditPage import apply guard', () => {
       editor_doc: {
         root: {
           data: { text: '测试宫殿', uid: 'root-1' },
-          children: [{ data: { text: '旧节点', uid: 'old-child' }, children: [] }],
+          children: [{ data: { text: '旧知识点', uid: 'old-child' }, children: [] }],
         },
       },
       editor_config: {},
@@ -385,7 +385,7 @@ describe('PalaceEditPage import apply guard', () => {
           children: [
             {
               data: {
-                text: '新增节点',
+                text: '新增知识点',
                 uid: 'import-child-1',
                 memoryAnkiId: 88,
                 memoryAnkiNodeType: 'peg',
@@ -419,7 +419,7 @@ describe('PalaceEditPage import apply guard', () => {
     const savePalaceEditorApi = vi
       .spyOn(palaceApi, 'savePalaceEditorApi')
       .mockRejectedValue(
-        new Error('检测到危险结构变更：新导图节点数骤减，已拒绝保存。请在正式编辑中确认后再执行。'),
+        new Error('检测到危险结构变更：新导图知识点数骤减，已拒绝保存。请在正式编辑中确认后再执行。'),
       )
     const savePalaceEditorWithOptionsApi = vi
       .spyOn(palaceApi, 'savePalaceEditorWithOptionsApi')
@@ -446,7 +446,7 @@ describe('PalaceEditPage import apply guard', () => {
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: '测试宫殿' })).toBeTruthy()
     })
-    expect(screen.getByTestId('mindmap-first-child-text').textContent).toBe('旧节点')
+    expect(screen.getByTestId('mindmap-first-child-text').textContent).toBe('旧知识点')
 
     fireEvent.click(screen.getByRole('button', { name: '覆盖当前脑图' }))
 
@@ -461,7 +461,7 @@ describe('PalaceEditPage import apply guard', () => {
       })
     })
     await waitFor(() => {
-      expect(screen.getByTestId('mindmap-first-child-text').textContent).toBe('新增节点')
+      expect(screen.getByTestId('mindmap-first-child-text').textContent).toBe('新增知识点')
     })
     expect(window.confirm).toHaveBeenCalledTimes(1)
   })

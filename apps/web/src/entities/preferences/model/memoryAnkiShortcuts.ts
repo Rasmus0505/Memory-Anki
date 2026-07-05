@@ -38,22 +38,22 @@ export const MEMORY_ANKI_SHORTCUT_ACTIONS: MemoryAnkiShortcutActionDefinition[] 
   {
     id: 'toggle_focus_node',
     scene: 'edit',
-    label: '标记/取消专项卡',
-    description: '对当前选中节点切换专项卡标记。',
+    label: '标记/取消专项知识点',
+    description: '对当前选中知识点切换专项标记。',
     defaultBinding: { code: 'KeyF', key: 'f', shift: true, ctrl: false, alt: false, meta: false },
   },
   {
     id: 'hide_child_cards_practice',
     scene: 'practice',
-    label: '隐藏/取消子级卡片显示',
-    description: '在练习模式对当前选中节点执行右键同款隐藏子级操作。',
+    label: '隐藏/取消子级知识点显示',
+    description: '在回忆模式对当前选中知识点执行右键同款隐藏子级操作。',
     defaultBinding: { code: 'KeyH', key: 'h', shift: true, ctrl: false, alt: false, meta: false },
   },
   {
     id: 'hide_child_cards_review',
     scene: 'review',
-    label: '隐藏/取消子级卡片显示',
-    description: '在复习模式对当前选中节点执行右键同款隐藏子级操作。',
+    label: '隐藏/取消子级知识点显示',
+    description: '在复习模式对当前选中知识点执行右键同款隐藏子级操作。',
     defaultBinding: { code: 'KeyH', key: 'h', shift: true, ctrl: false, alt: false, meta: false },
   },
 ]

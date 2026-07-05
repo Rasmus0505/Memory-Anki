@@ -41,22 +41,22 @@ export default function SegmentPracticePage() {
     <PracticeSessionRoute
       config={{
         prefetchKind: 'segment-practice',
-        loadingText: '正在加载分块练习内容...',
-        notFoundText: '未找到可练习的分块。',
+        loadingText: '正在加载学习组训练内容...',
+        notFoundText: '未找到可训练的学习组。',
         loadSession: getPalaceSegmentApi,
         loadProgress: getSegmentPracticeSessionProgressApi,
         buildSession: buildSegmentSession,
         clearProgress: ({ segment }) => clearSegmentPracticeSessionProgressApi(segment.id),
         saveProgress: ({ segment }, snapshot: PracticeProgressSnapshot) =>
           saveSegmentPracticeSessionProgressApi(segment.id, snapshot),
-        pageEyebrow: '分块练习',
+        pageEyebrow: '学习组训练',
         backTo: '/palaces',
         backLabel: '返回列表',
         renderBadge: (_data: SegmentPracticeData, hasResumeProgress) =>
           hasResumeProgress ? (
-            <Badge variant="secondary">已接续上次练习</Badge>
+            <Badge variant="secondary">已接续上次训练</Badge>
           ) : (
-            <Badge variant="outline">分块练习</Badge>
+            <Badge variant="outline">学习组训练</Badge>
           ),
         getFlowKey: ({ segment }, resetVersion) => `${segment.id}-${resetVersion}`,
         getPersistKey: ({ segment }) => `practice:segment:${segment.id}`,

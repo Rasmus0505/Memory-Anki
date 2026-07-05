@@ -134,7 +134,7 @@ export default function PalaceView() {
                 <Link to={`/palaces/${palace.id}/focus-practice`}>
                   <Button variant="outline" size="sm" className="border-warning/30 bg-warning/5 text-warning hover:bg-warning/10">
                     <Target className="mr-2 size-4" />
-                    专项练习 {palace.focus_count}
+                    专项训练 {palace.focus_count}
                   </Button>
                 </Link>
               ) : null}

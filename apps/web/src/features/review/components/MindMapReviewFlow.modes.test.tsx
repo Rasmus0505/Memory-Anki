@@ -33,7 +33,7 @@ describe("MindMapReviewFlow modes", () => {
     expect(screen.queryByRole("button", { name: "全屏导图" })).toBeNull();
     expect(screen.getByText("frame-readonly-plain")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "编辑" })).toBeNull();
-    expect(screen.getByRole("button", { name: "搜索" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "搜索" })).toBeNull();
     expect(screen.getByRole("button", { name: "做题" })).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "做题" }));

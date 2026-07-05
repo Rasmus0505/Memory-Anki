@@ -22,6 +22,7 @@ export function MindMapImportResultsPanel({
     previewMindMapState,
     previewSectionRef,
     rawModelPreviewText,
+    reviewPreview,
     resolvedPreviewImageUrl,
     sourceKind,
     sourceTree,
@@ -98,6 +99,42 @@ export function MindMapImportResultsPanel({
                   {sourceTree?.title ? <Badge variant="outline">{sourceTree.title}</Badge> : null}
                 </div>
               </div>
+              {reviewPreview ? (
+                <div className="grid gap-2 rounded-lg border border-border/70 bg-background/75 p-3 text-sm md:grid-cols-3">
+                  <div>
+                    <div className="text-xs text-muted-foreground">知识点</div>
+                    <div className="font-semibold text-foreground">{reviewPreview.node_count} 个</div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-muted-foreground">预计每次复习</div>
+                    <div className="font-semibold text-foreground">
+                      {reviewPreview.estimated_review_time ||
+                        `${Math.max(1, Math.round(reviewPreview.estimated_review_seconds / 60))} 分钟`}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-muted-foreground">建议学习组</div>
+                    <div className="font-semibold text-foreground">{reviewPreview.suggested_segment_count} 组</div>
+                  </div>
+                  {reviewPreview.suggested_segments.length > 0 ? (
+                    <div className="md:col-span-3">
+                      <div className="mb-1 text-xs text-muted-foreground">学习组建议</div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {reviewPreview.suggested_segments.slice(0, 5).map((segment, index) => (
+                          <Badge key={`${segment.title}-${index}`} variant="secondary">
+                            {segment.title} · {segment.node_count}
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+                  {reviewPreview.warnings.length > 0 ? (
+                    <div className="md:col-span-3 text-xs text-warning">
+                      {reviewPreview.warnings.join('；')}
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
               <div
                 className={cn(
                   'rounded-lg border border-border/70 bg-background/70',
@@ -124,7 +161,7 @@ export function MindMapImportResultsPanel({
                         <SourceTreeNode key={`${node.text}-${index}`} node={node} />
                       ))
                     ) : (
-                      <div className="text-sm text-muted-foreground">识别结果里还没有分支节点。</div>
+                      <div className="text-sm text-muted-foreground">识别结果里还没有分支知识点。</div>
                     )}
                   </div>
                 ) : sourceKind === 'image-batch' ? (

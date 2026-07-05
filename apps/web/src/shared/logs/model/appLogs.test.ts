@@ -16,15 +16,15 @@ describe('appLogs', () => {
   it('adds, formats, removes, and clears logs', () => {
     const entry = addAppLog({
       kind: 'ai_call',
-      feature: 'AI 分卡',
+      feature: 'AI 整理',
       stage: 'success',
-      requestSummary: '节点: 1',
+      requestSummary: '知识点: 1',
       responseSummary: '新增 1 个分类',
       meta: { palaceId: 1 },
     })
 
     expect(readAppLogs()).toHaveLength(1)
-    expect(formatAppLogEntry(entry)).toContain('AI 分卡')
+    expect(formatAppLogEntry(entry)).toContain('AI 整理')
     expect(formatAppLogs(readAppLogs())).toContain('新增 1 个分类')
 
     removeAppLog(entry.id)

@@ -55,7 +55,8 @@ export default function PalaceEdit() {
   const activeFrameEditorState =
     miniPalaceFrameEditorState ?? page.activeMindMapEditorState
   const miniPalaceFrameActive = page.miniPalace.isActive
-  const readonlyMindMap = page.editorMode === 'practice' || miniPalaceFrameActive
+  const recallModeActive = page.editorMode === 'recall'
+  const readonlyMindMap = page.editorMode !== 'edit' || miniPalaceFrameActive
   const segmentToolbarOptions = useMemo(
     () =>
       page.segments
@@ -91,7 +92,7 @@ export default function PalaceEdit() {
     if (!page.palaceId) return
     openQuizLauncher({
       palaceId: page.palaceId,
-      scene: page.editorMode === 'practice' ? 'practice' : 'edit',
+      scene: recallModeActive ? 'practice' : 'edit',
     })
   }
 
@@ -247,12 +248,16 @@ export default function PalaceEdit() {
                           targetSegmentId: null,
                         }),
                     }}
-                    modeToggle={
+                    modeControl={
                       miniPalaceFrameActive
                         ? null
                         : {
-                            label: page.editorMode === 'practice' ? '编辑' : '练习',
-                            onClick: page.toggleInlinePractice,
+                            value: page.editorMode,
+                            onChange: (mode) => {
+                              if (mode === 'edit') page.exitInlinePractice()
+                              if (mode === 'preview') page.enterPreview()
+                              if (mode === 'recall') page.enterInlinePractice()
+                            },
                           }
                     }
                     importMindMapAction={{
@@ -286,7 +291,7 @@ export default function PalaceEdit() {
                     miniPalaceAction={
                       page.palaceId
                         ? {
-                            label: '小宫殿',
+                            label: '专项训练',
                             onClick: page.miniPalace.openPanel,
                           }
                         : null
@@ -316,32 +321,32 @@ export default function PalaceEdit() {
                     ref={mindMapFrameRef}
                     editorState={activeFrameEditorState}
                     readonly={readonlyMindMap}
-                    practiceModeActive={page.editorMode === 'practice' || page.miniPalace.isPracticing}
+                    practiceModeActive={recallModeActive || page.miniPalace.isPracticing}
                     viewMemoryScope={
                       page.palaceId ? `palace-edit:${page.palaceId}` : null
                     }
                     immersiveModeActive={page.mindMapFullscreen}
                     aiSplitBusy={page.editorMode === 'edit' && !miniPalaceFrameActive ? page.aiSplitBusy : false}
                     syncOnPropChange
-                    syncIntent={page.editorMode === 'practice' || miniPalaceFrameActive ? 'replace' : 'soft'}
+                    syncIntent={recallModeActive || miniPalaceFrameActive ? 'replace' : 'soft'}
                     syncReason={
                       miniPalaceFrameActive
                         ? 'mini_palace'
-                        : page.editorMode === 'practice'
+                        : recallModeActive
                           ? 'review_flip'
                           : null
                     }
                     preserveViewOnSync={
                       miniPalaceFrameActive ||
-                      page.editorMode === 'practice' ||
+                      recallModeActive ||
                       mindMapImport.importAppliedSyncVersion > 0 ||
                       page.aiSplitAppliedSyncVersion > 0
                     }
-                    initialViewPolicy={page.editorMode === 'practice' || miniPalaceFrameActive ? 'preserve' : 'reset'}
+                    initialViewPolicy={recallModeActive || miniPalaceFrameActive ? 'preserve' : 'reset'}
                     externalSyncKey={
                       miniPalaceFrameActive
                         ? page.miniPalace.visibleSyncKey
-                        : page.editorMode === 'practice'
+                        : recallModeActive
                           ? page.practiceVisibleEditorSyncKey
                           : mindMapImport.importExternalSyncKey
                     }
@@ -368,7 +373,7 @@ export default function PalaceEdit() {
                     focusRequestNodeUid={page.modeFocusRequestNodeUid}
                     focusRequestNonce={page.modeFocusRequestNonce}
                     miniPalaceDraft={page.miniPalace.hostDraft}
-                    reviewFxSignal={page.editorMode === 'practice' ? page.reviewFxSignal : null}
+                    reviewFxSignal={recallModeActive ? page.reviewFxSignal : null}
                     feedbackFxSignal={page.feedbackFxSignal}
                     onEditorStateChange={page.handleMindMapEditorStateChange}
                     onNodeActive={(nodes) => {
@@ -450,6 +455,7 @@ export default function PalaceEdit() {
         batchStatus={mindMapImport.importBatchStatus}
         batchMeta={mindMapImport.importBatchMeta}
         importWarnings={mindMapImport.importWarnings}
+        reviewPreview={mindMapImport.importReviewPreview}
         currentJobId={mindMapImport.currentJobId}
         currentJobStatus={mindMapImport.currentJobStatus}
         currentJobStage={mindMapImport.currentJobStage}

@@ -78,7 +78,7 @@ describe('PalaceQuizPage core flows', () => {
     expect(screen.getByRole('button', { name: '从右下角调整记忆宫殿查看大小' })).toBeTruthy()
 
     fireEvent.click(screen.getByRole('button', { name: '翻卡模式' }))
-    expect(screen.getByText(/翻卡模式：点击已显示节点展开子节点/)).toBeTruthy()
+    expect(screen.getByText(/翻卡模式：点击已显示知识点展开下一层知识点/)).toBeTruthy()
     expect(screen.getByRole('button', { name: /重新开始/ })).toBeTruthy()
     await waitFor(() => {
       expect(screen.getByTestId('memory-lookup-mindmap').getAttribute('data-practice-mode')).toBe(
@@ -88,7 +88,7 @@ describe('PalaceQuizPage core flows', () => {
         'review_flip',
       )
     })
-    expect(screen.getByText('细胞核节点')).toBeTruthy()
+    expect(screen.getByText('细胞核知识点')).toBeTruthy()
     expect(screen.getByText('染色体线索')).toBeTruthy()
 
     fireEvent.contextMenu(screen.getByTestId('memory-node-child-1'))
@@ -240,10 +240,10 @@ describe('PalaceQuizPage core flows', () => {
   it('supports filtering questions by palace scope in manage view', async () => {
     renderPage()
     fireEvent.click(await screen.findByRole('button', { name: '管理' }))
-    fireEvent.click(screen.getByRole('button', { name: '细胞核小宫殿' }))
+    fireEvent.click(screen.getByRole('button', { name: '细胞核专项训练' }))
     expect(dispatchGlobalFeedbackMock).toHaveBeenCalledWith(
       'quiz_nav_scope_change',
-      expect.objectContaining({ label: '细胞核小宫殿', audioScope: 'global' }),
+      expect.objectContaining({ label: '细胞核专项训练', audioScope: 'global' }),
     )
     expect(await screen.findByText('细胞核的主要作用是什么？')).toBeTruthy()
     expect(screen.queryByText('简述有丝分裂的意义。')).toBeNull()

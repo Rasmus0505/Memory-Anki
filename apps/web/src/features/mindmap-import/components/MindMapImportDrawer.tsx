@@ -159,6 +159,7 @@ export function MindMapImportDrawer(props: MindMapImportDrawerProps) {
     previewMindMapState,
     previewSectionRef,
     rawModelPreviewText,
+    reviewPreview: props.reviewPreview,
     resolvedPreviewImageUrl,
     sourceKind: props.sourceKind,
     sourceTree: props.sourceTree,
@@ -344,7 +345,7 @@ export function MindMapImportDrawer(props: MindMapImportDrawerProps) {
                 : sourceKind === 'image-batch'
                     ? '先上传结构图和正文图，整理顺序后手动开始识别，再预览合成脑图草稿。'
                     : mode === 'mindmap'
-                      ? '粘贴一张结构图，先生成脑图草稿，再决定覆盖当前脑图或追加到选中节点。'
+                      ? '粘贴一张结构图，先生成脑图草稿，再决定覆盖当前脑图或追加到选中知识点。'
                       : '识别出的文字会一直保留在右侧，方便你回到导图里多次复制。'}
             </p>
           </div>

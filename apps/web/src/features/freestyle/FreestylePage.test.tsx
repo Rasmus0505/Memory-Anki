@@ -577,7 +577,7 @@ describe('FreestylePage feedback', () => {
     ])
 
     expect(await screen.findByRole('button', { name: '今日训练' })).toBeTruthy()
-    expect(screen.getByText('12 个/轮')).toBeTruthy()
+    expect(screen.getByText('1/2')).toBeTruthy()
 
     fireEvent.click(screen.getByRole('button', { name: '自由随心' }))
 

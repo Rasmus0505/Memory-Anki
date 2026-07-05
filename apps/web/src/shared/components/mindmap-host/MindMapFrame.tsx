@@ -2,49 +2,41 @@ import {
   forwardRef,
   useCallback,
   useEffect,
-  useId,
   useImperativeHandle,
-  useLayoutEffect,
   useMemo,
   useRef,
   useState,
 } from 'react'
+import { Brain, FolderTree, Scissors, Sparkles, Target } from 'lucide-react'
 import type { MindMapEditorState } from '@/shared/api/contracts'
-import { dispatchHostEvent } from '@/shared/components/mindmap-host/hostEventDispatcher'
+import { MindMapCanvas } from '@/shared/components/mindmap'
+import type { ContextMenuAction } from '@/shared/components/mindmap/NodeContextMenu'
 import {
-  buildHostBridgeHostState,
-  buildSyncFingerprint,
-  cloneValue,
-  type HostBridge,
-  type HostEditorStateSyncPayload,
-  type MindMapHostWindow,
-  normalizeEditorDoc,
-} from '@/shared/components/mindmap-host/hostBridgeUtils'
-import { useHostSyncController } from '@/shared/components/mindmap-host/useHostSyncController'
+  addEditorDocChild,
+  addEditorDocSibling,
+  buildSelectionFromDoc,
+  canMoveEditorDocNode,
+  deleteEditorDocNode,
+  editEditorDocNode,
+  editorDocToGraph,
+  moveEditorDocNode,
+  normalizeEditorDocTree,
+  reparentEditorDocNode,
+  reorderEditorDocNode,
+} from '@/shared/components/mindmap/editorDocAdapter'
+import { dispatchGlobalFeedback } from '@/shared/feedback/globalFeedbackModel'
 import {
-  buildLocalEditorStateFingerprint,
   buildMindMapFrameClassName,
-  HOST_FRAME_RUNTIME_VERSION,
   type MindMapFrameHandle,
   type MindMapFrameProps,
 } from './MindMapFrame.types'
-import { useMindMapFeedbackAudioCoordinator } from './useMindMapFeedbackAudioCoordinator'
 
 export const MindMapFrame = forwardRef<MindMapFrameHandle, MindMapFrameProps>(function MindMapFrame({
   editorState,
   readonly = false,
   practiceModeActive = false,
-  viewMemoryScope = null,
   immersiveModeActive = false,
   aiSplitBusy = false,
-  syncOnPropChange = false,
-  syncIntent = 'soft',
-  syncReason = null,
-  externalSyncKey = null,
-  forceSyncKey = null,
-  forceSyncIntent = 'replace',
-  preserveViewOnSync = false,
-  initialViewPolicy = 'preserve',
   className,
   segments = [],
   activeSegmentId = null,
@@ -62,7 +54,6 @@ export const MindMapFrame = forwardRef<MindMapFrameHandle, MindMapFrameProps>(fu
     active: false,
     selectedNodeUids: [],
   },
-  miniPalacePracticeActive = false,
   reviewFxSignal = null,
   feedbackFxSignal = null,
   onEditorStateChange,
@@ -70,506 +61,286 @@ export const MindMapFrame = forwardRef<MindMapFrameHandle, MindMapFrameProps>(fu
   onNodeClick,
   onNodeContextMenu,
   onNodeHover,
-  onSegmentSelect,
   onCreateSegmentFromSelection,
   onSegmentRangeDraftChange,
-  onSegmentRangeModeToggle,
-  onSegmentRangeConfirm,
   onAiSplitRequest,
   onFullscreenChange,
-  onFullscreenToggle,
   onUiClearedChange,
   onMiniPalacePour,
   onReady,
-  onReadyTimeout,
 }: MindMapFrameProps, ref) {
-  const iframeRef = useRef<HTMLIFrameElement | null>(null)
-  const stateRef = useRef(editorState)
-  const onEditorStateChangeRef = useRef(onEditorStateChange)
-  const onNodeActiveRef = useRef(onNodeActive)
-  const onNodeClickRef = useRef(onNodeClick)
-  const onNodeContextMenuRef = useRef(onNodeContextMenu)
-  const onNodeHoverRef = useRef(onNodeHover)
-  const onSegmentSelectRef = useRef(onSegmentSelect)
-  const onCreateSegmentFromSelectionRef = useRef(onCreateSegmentFromSelection)
-  const onSegmentRangeDraftChangeRef = useRef(onSegmentRangeDraftChange)
-  const onSegmentRangeModeToggleRef = useRef(onSegmentRangeModeToggle)
-  const onSegmentRangeConfirmRef = useRef(onSegmentRangeConfirm)
-  const onAiSplitRequestRef = useRef(onAiSplitRequest)
-  const onFullscreenChangeRef = useRef(onFullscreenChange)
-  const onFullscreenToggleRef = useRef(onFullscreenToggle)
-  const onEnterNativeFullscreenRef = useRef<(() => void) | undefined>(undefined)
-  const onExitNativeFullscreenRef = useRef<(() => void) | undefined>(undefined)
-  const onUiClearedChangeRef = useRef(onUiClearedChange)
-  const onMiniPalacePourRef = useRef(onMiniPalacePour)
-  const onReadyRef = useRef(onReady)
-  const onReadyTimeoutRef = useRef(onReadyTimeout)
-  const lastForcedSyncKeyRef = useRef<string | null>(null)
-  const lastReviewFxNonceRef = useRef<number>(0)
-  const lastFeedbackFxNonceRef = useRef<number>(0)
-  const pendingLocalCommitFingerprintRef = useRef<string | null>(null)
-  const hostHydratedRef = useRef(false)
-  const [isIframeLoaded, setIsIframeLoaded] = useState(false)
-  const { handleFeedbackRuntimePayload } = useMindMapFeedbackAudioCoordinator()
-
-  stateRef.current = editorState
-  onEditorStateChangeRef.current = onEditorStateChange
-  onNodeActiveRef.current = onNodeActive
-  onNodeClickRef.current = onNodeClick
-  onNodeContextMenuRef.current = onNodeContextMenu
-  onNodeHoverRef.current = onNodeHover
-  onSegmentSelectRef.current = onSegmentSelect
-  onCreateSegmentFromSelectionRef.current = onCreateSegmentFromSelection
-  onSegmentRangeDraftChangeRef.current = onSegmentRangeDraftChange
-  onSegmentRangeModeToggleRef.current = onSegmentRangeModeToggle
-  onSegmentRangeConfirmRef.current = onSegmentRangeConfirm
-  onAiSplitRequestRef.current = onAiSplitRequest
-  onFullscreenChangeRef.current = onFullscreenChange
-  onFullscreenToggleRef.current = onFullscreenToggle
-  onUiClearedChangeRef.current = onUiClearedChange
-  onMiniPalacePourRef.current = onMiniPalacePour
-  onReadyRef.current = onReady
-  onReadyTimeoutRef.current = onReadyTimeout
-
-  const rawHostId = useId()
-  const hostId = useMemo(() => rawHostId.replace(/[^a-zA-Z0-9_-]/g, '_'), [rawHostId])
-  const {
-    buildHostEditorStateSyncPayload,
-    flushPendingHostEditorStateSync,
-    hostReadyRef,
-    lastSyncedFingerprintRef,
-    markHostReady,
-    resetHostReady,
-    syncOrQueueHostEditorState,
-  } = useHostSyncController({
-    iframeRef,
-    preserveViewOnSync,
-    initialViewPolicy,
-  })
-
-  useEffect(() => {
-    if (!isIframeLoaded) return
-    if (hostReadyRef.current) return
-    const timeoutId = window.setTimeout(() => {
-      if (hostReadyRef.current) return
-      console.warn('[MindMapFrame] host runtime did not become ready in time', {
-        hostId,
-        readonly,
-      })
-      onReadyTimeoutRef.current?.()
-    }, 6000)
-    return () => {
-      window.clearTimeout(timeoutId)
-    }
-  }, [hostId, hostReadyRef, isIframeLoaded, readonly])
-
-  const syncHostState = useCallback(() => {
-    const iframeWindow = iframeRef.current?.contentWindow as MindMapHostWindow | null
-    iframeWindow?.applyHostState?.(
-      buildHostBridgeHostState({
-        readonly,
-        practiceModeActive,
-        viewMemoryScope,
-        immersiveModeActive,
-        aiSplitBusy,
+  const frameRef = useRef<HTMLDivElement | null>(null)
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
+  const [uiCleared, setUiCleared] = useState(false)
+  const editorDoc = editorState.editor_doc
+  const normalizedEditorState = useMemo<MindMapEditorState>(
+    () => ({
+      ...editorState,
+      editor_doc: normalizeEditorDocTree(editorDoc),
+      editor_config: editorState.editor_config ?? {},
+      editor_local_config: editorState.editor_local_config ?? {},
+      lang: editorState.lang || 'zh',
+    }),
+    [editorDoc, editorState],
+  )
+  const revealMap = useMemo(() => collectRevealMap(normalizedEditorState), [normalizedEditorState])
+  const graphData = useMemo(
+    () =>
+      editorDocToGraph(normalizedEditorState.editor_doc, {
         segments,
         activeSegmentId,
         segmentColorMode,
         segmentRangeDraft,
         focusNodeUids,
-        focusRequestNodeUid,
-        focusRequestNonce,
         miniPalaceDraft,
-        miniPalacePracticeActive,
-        hasAiSplitRequest: Boolean(onAiSplitRequestRef.current),
+        revealMap: practiceModeActive ? revealMap : undefined,
+        readonly,
       }),
-    )
-  }, [
-    activeSegmentId,
-    aiSplitBusy,
-    focusRequestNodeUid,
-    focusRequestNonce,
-    miniPalaceDraft,
-    miniPalacePracticeActive,
-    focusNodeUids,
-    immersiveModeActive,
-    practiceModeActive,
-    readonly,
-    segmentColorMode,
-    segmentRangeDraft,
-    segments,
-    viewMemoryScope,
-  ])
+    [
+      activeSegmentId,
+      focusNodeUids,
+      miniPalaceDraft,
+      normalizedEditorState.editor_doc,
+      practiceModeActive,
+      readonly,
+      revealMap,
+      segmentColorMode,
+      segmentRangeDraft,
+      segments,
+    ],
+  )
 
-  const dispatchIframeResizeSignal = useCallback(() => {
-    const iframeWindow = iframeRef.current?.contentWindow as
-      | (Window & {
-          dispatchEvent?: (event: Event) => boolean
-        })
-      | null
-    iframeWindow?.dispatchEvent?.(new Event('resize'))
-  }, [])
+  useEffect(() => {
+    onReady?.()
+  }, [onReady])
 
-  useLayoutEffect(() => {
-    const iframeElement = iframeRef.current
-    if (!iframeElement || typeof ResizeObserver === 'undefined') return
+  useEffect(() => {
+    if (!focusRequestNodeUid || focusRequestNonce <= 0) return
+    setSelectedNodeId(focusRequestNodeUid)
+    onNodeActive?.(buildSelectionFromDoc(normalizedEditorState.editor_doc, focusRequestNodeUid))
+  }, [focusRequestNodeUid, focusRequestNonce, normalizedEditorState.editor_doc, onNodeActive])
 
-    let frameId: number | null = null
-    const scheduleResizeSignal = () => {
-      if (frameId != null) {
-        window.cancelAnimationFrame(frameId)
-      }
-      frameId = window.requestAnimationFrame(() => {
-        frameId = null
-        dispatchIframeResizeSignal()
-      })
-    }
-
-    const observer = new ResizeObserver(() => {
-      scheduleResizeSignal()
+  useEffect(() => {
+    if (!reviewFxSignal) return
+    dispatchGlobalFeedback(reviewFxSignal.type, {
+      origin: 'review',
+      label: reviewFxSignal.nodeUid ?? undefined,
     })
-    observer.observe(iframeElement)
+  }, [reviewFxSignal])
 
-    return () => {
-      observer.disconnect()
-      if (frameId != null) {
-        window.cancelAnimationFrame(frameId)
+  useEffect(() => {
+    if (!feedbackFxSignal) return
+    dispatchGlobalFeedback(feedbackFxSignal.type, {
+      origin: feedbackFxSignal.origin ?? 'system',
+      label: feedbackFxSignal.nodeUid ?? feedbackFxSignal.source ?? undefined,
+    })
+  }, [feedbackFxSignal])
+
+  useEffect(() => {
+    onUiClearedChange?.(uiCleared)
+  }, [onUiClearedChange, uiCleared])
+
+  const emitState = useCallback(
+    (nextEditorDoc: MindMapEditorState['editor_doc']) => {
+      if (readonly) return
+      onEditorStateChange({
+        ...normalizedEditorState,
+        editor_doc: nextEditorDoc,
+      })
+    },
+    [normalizedEditorState, onEditorStateChange, readonly],
+  )
+
+  const selectNode = useCallback(
+    (nodeId: string | null) => {
+      setSelectedNodeId(nodeId)
+      onNodeActive?.(buildSelectionFromDoc(normalizedEditorState.editor_doc, nodeId))
+    },
+    [normalizedEditorState.editor_doc, onNodeActive],
+  )
+
+  const activateNode = useCallback(
+    (nodeId: string) => {
+      const selection = buildSelectionFromDoc(normalizedEditorState.editor_doc, nodeId)
+      onNodeActive?.(selection)
+      onNodeClick?.(selection)
+    },
+    [normalizedEditorState.editor_doc, onNodeActive, onNodeClick],
+  )
+
+  const contextNode = useCallback(
+    (nodeId: string) => {
+      const selection = buildSelectionFromDoc(normalizedEditorState.editor_doc, nodeId)
+      onNodeActive?.(selection)
+      onNodeContextMenu?.(selection)
+    },
+    [normalizedEditorState.editor_doc, onNodeActive, onNodeContextMenu],
+  )
+
+  const hoverNode = useCallback(
+    (nodeId: string | null) => {
+      onNodeHover?.(buildSelectionFromDoc(normalizedEditorState.editor_doc, nodeId))
+    },
+    [normalizedEditorState.editor_doc, onNodeHover],
+  )
+
+  const buildNodeActions = useCallback(
+    (nodeId: string): ContextMenuAction[] => {
+      const selection = buildSelectionFromDoc(normalizedEditorState.editor_doc, nodeId)
+      const selected = selection[0] ?? null
+      const actions: ContextMenuAction[] = []
+      if (onAiSplitRequest && !readonly && !practiceModeActive) {
+        actions.push({
+          label: aiSplitBusy ? '正在整理知识点...' : 'AI 拆分知识点',
+          icon: Sparkles,
+          disabled: aiSplitBusy,
+          onClick: () =>
+            onAiSplitRequest({
+              target_node_uid: selected?.uid ?? nodeId,
+              target_node_text: selected?.text ?? '',
+              target_node_note: selected?.note ?? '',
+              target_node_type: selected?.memoryAnkiNodeType ?? null,
+              is_root: graphData.nodes.find((node) => node.id === nodeId)?.parentId == null,
+            }),
+        })
       }
-    }
-  }, [dispatchIframeResizeSignal])
-
-  const setIframeUiCleared = useCallback((nextValue: boolean) => {
-    const iframeWindow = iframeRef.current?.contentWindow as MindMapHostWindow | null
-    iframeWindow?.setUiCleared?.(nextValue)
-  }, [])
-
-  const toggleIframeUiCleared = useCallback(() => {
-    const iframeWindow = iframeRef.current?.contentWindow as MindMapHostWindow | null
-    iframeWindow?.toggleUiCleared?.()
-  }, [])
-
-  const enterIframeNativeFullscreen = useCallback(async () => {
-    // 使用 CSS 伪全屏而非浏览器原生 Fullscreen API。
-    // 原因：原生 requestFullscreen 会创建顶层上下文，只有全屏元素及其后代可见，
-    // 导致父文档的 Dialog（Radix Portal 挂载到 body）、GlobalFeedbackProvider 反馈层、
-    // 连击庆祝/完成庆祝 overlay 等全部不可见（它们是 iframe 的兄弟节点）。
-    // CSS 伪全屏通过 fixed + inset:0 + 高 z-index 模拟全屏效果，
-    // 同时保留所有 React overlay 的可见性。
-    const iframeElement = iframeRef.current
-    if (!iframeElement) return
-    iframeElement.classList.add('memory-anki-mindmap-native-fullscreen')
-    onFullscreenChangeRef.current?.(true)
-    // 通知 iframe 内部状态 + 触发 resize
-    const iframeWindow = iframeRef.current?.contentWindow as
-      | (Window & {
-          __memoryAnkiParentFullscreenActive?: boolean
-          dispatchEvent?: (event: Event) => boolean
+      if (segmentRangeDraft.active) {
+        actions.push({
+          label: '加入/移出当前学习组',
+          icon: FolderTree,
+          onClick: () => {
+            const current = new Set(segmentRangeDraft.selectedNodeUids)
+            if (current.has(nodeId)) {
+              current.delete(nodeId)
+            } else {
+              current.add(nodeId)
+            }
+            onSegmentRangeDraftChange?.({
+              selectedNodeUids: [...current],
+              overriddenConflictNodeUids: segmentRangeDraft.overriddenConflictNodeUids,
+            })
+          },
         })
-      | null
-    if (iframeWindow) {
-      iframeWindow.__memoryAnkiParentFullscreenActive = true
-      iframeWindow.dispatchEvent?.(new Event('resize'))
-    }
-  }, [])
-
-  const exitIframeNativeFullscreen = useCallback(async () => {
-    // 退出 CSS 伪全屏
-    const iframeElement = iframeRef.current
-    if (!iframeElement) return
-    iframeElement.classList.remove('memory-anki-mindmap-native-fullscreen')
-    onFullscreenChangeRef.current?.(false)
-    const iframeWindow = iframeRef.current?.contentWindow as
-      | (Window & {
-          __memoryAnkiParentFullscreenActive?: boolean
-          dispatchEvent?: (event: Event) => boolean
+      }
+      if (onCreateSegmentFromSelection && !readonly) {
+        actions.push({
+          label: '将选中内容组成学习组',
+          icon: FolderTree,
+          onClick: onCreateSegmentFromSelection,
         })
-      | null
-    if (iframeWindow) {
-      iframeWindow.__memoryAnkiParentFullscreenActive = false
-      iframeWindow.dispatchEvent?.(new Event('resize'))
-    }
-  }, [])
+      }
+      if (miniPalaceDraft.active) {
+        actions.push({
+          label: '选为专项训练知识点',
+          icon: Target,
+          onClick: () => onNodeClick?.(selection),
+        })
+      }
+      if (practiceModeActive) {
+        actions.push({
+          label: '隐藏这个分支',
+          icon: Brain,
+          onClick: () => onNodeContextMenu?.(selection),
+        })
+      }
+      if (!readonly && !practiceModeActive) {
+        actions.push({
+          label: '添加子知识点',
+          icon: Scissors,
+          onClick: () => emitState(addEditorDocChild(normalizedEditorState.editor_doc, nodeId)),
+        })
+      }
+      return actions
+    },
+    [
+      aiSplitBusy,
+      emitState,
+      graphData.nodes,
+      miniPalaceDraft.active,
+      normalizedEditorState.editor_doc,
+      onAiSplitRequest,
+      onCreateSegmentFromSelection,
+      onNodeClick,
+      onNodeContextMenu,
+      onSegmentRangeDraftChange,
+      practiceModeActive,
+      readonly,
+      segmentRangeDraft.active,
+      segmentRangeDraft.overriddenConflictNodeUids,
+      segmentRangeDraft.selectedNodeUids,
+    ],
+  )
 
   useImperativeHandle(
     ref,
     () => ({
-      setUiCleared: setIframeUiCleared,
-      toggleUiCleared: toggleIframeUiCleared,
-      enterNativeFullscreen: enterIframeNativeFullscreen,
-      exitNativeFullscreen: exitIframeNativeFullscreen,
+      setUiCleared: setUiCleared,
+      toggleUiCleared: () => setUiCleared((current) => !current),
+      enterNativeFullscreen: async () => {
+        frameRef.current?.classList.add('memory-anki-mindmap-native-fullscreen')
+        onFullscreenChange?.(true)
+      },
+      exitNativeFullscreen: async () => {
+        frameRef.current?.classList.remove('memory-anki-mindmap-native-fullscreen')
+        onFullscreenChange?.(false)
+      },
     }),
-    [
-      enterIframeNativeFullscreen,
-      exitIframeNativeFullscreen,
-      setIframeUiCleared,
-      toggleIframeUiCleared,
-    ],
+    [onFullscreenChange],
   )
 
-  // 监听浏览器原生 fullscreenchange（仅在 iframe 内部意外触发原生全屏时兜底）
-  useEffect(() => {
-    const handleFullscreenChange = () => {
-      const isActive = Boolean(document.fullscreenElement)
-      if (!isActive) {
-        // 退出原生全屏时清理 CSS 伪全屏状态
-        const iframeElement = iframeRef.current
-        iframeElement?.classList.remove('memory-anki-mindmap-native-fullscreen')
-      }
-    }
-    document.addEventListener('fullscreenchange', handleFullscreenChange)
-    return () => {
-      document.removeEventListener('fullscreenchange', handleFullscreenChange)
-    }
-  }, [])
-
-  // 保持原生全屏请求回调引用最新
-  useEffect(() => {
-    onEnterNativeFullscreenRef.current = () => {
-      void enterIframeNativeFullscreen()
-    }
-    onExitNativeFullscreenRef.current = () => {
-      void exitIframeNativeFullscreen()
-    }
-  }, [enterIframeNativeFullscreen, exitIframeNativeFullscreen])
-
-  const forwardLocalEditorStateChange = useCallback((nextState: MindMapEditorState) => {
-    pendingLocalCommitFingerprintRef.current = buildLocalEditorStateFingerprint(nextState)
-    onEditorStateChangeRef.current(nextState)
-  }, [])
-
-  const promoteHostReadyFromRuntimeEvent = useCallback(() => {
-    if (hostReadyRef.current) return
-    const iframeWindow = iframeRef.current?.contentWindow as MindMapHostWindow | null
-    if (typeof iframeWindow?.syncHostEditorState !== 'function') return
-    markHostReady()
-    syncHostState()
-    flushPendingHostEditorStateSync()
-  }, [flushPendingHostEditorStateSync, hostReadyRef, markHostReady, syncHostState])
-
-  useEffect(() => {
-    if (!isIframeLoaded) return
-    const iframeWindow = iframeRef.current?.contentWindow as MindMapHostWindow | null
-    if (!iframeWindow) return
-    if (reviewFxSignal == null) {
-      iframeWindow.clearReviewFx?.()
-      return
-    }
-    if (reviewFxSignal.nonce === lastReviewFxNonceRef.current) return
-    lastReviewFxNonceRef.current = reviewFxSignal.nonce
-    iframeWindow.emitReviewFx?.(reviewFxSignal)
-  }, [isIframeLoaded, reviewFxSignal])
-
-  useEffect(() => {
-    if (!isIframeLoaded) return
-    const iframeWindow = iframeRef.current?.contentWindow as MindMapHostWindow | null
-    if (!iframeWindow || feedbackFxSignal == null) return
-    if (feedbackFxSignal.nonce === lastFeedbackFxNonceRef.current) return
-    lastFeedbackFxNonceRef.current = feedbackFxSignal.nonce
-    iframeWindow.emitFeedbackFx?.(feedbackFxSignal)
-  }, [feedbackFxSignal, isIframeLoaded])
-
-  useLayoutEffect(() => {
-    const registry = (window.__memoryAnkiMindMapHosts ??= {})
-    registry[hostId] = {
-      getMindMapData: () => normalizeEditorDoc(stateRef.current.editor_doc),
-      saveMindMapData: (data) => {
-        if (readonly || !hostHydratedRef.current) return
-        forwardLocalEditorStateChange({
-          ...stateRef.current,
-          editor_doc: cloneValue(data),
-        })
-      },
-      getMindMapConfig: () => cloneValue(stateRef.current.editor_config),
-      saveMindMapConfig: (config) => {
-        if (readonly || !hostHydratedRef.current) return
-        forwardLocalEditorStateChange({
-          ...stateRef.current,
-          editor_config: cloneValue(config),
-        })
-      },
-      getLanguage: () => stateRef.current.lang || 'zh',
-      saveLanguage: (lang) => {
-        if (readonly || !hostHydratedRef.current) return
-        forwardLocalEditorStateChange({
-          ...stateRef.current,
-          lang: lang || 'zh',
-        })
-      },
-      getLocalConfig: () => cloneValue(stateRef.current.editor_local_config),
-      saveLocalConfig: (config) => {
-        if (readonly || !hostHydratedRef.current) return
-        forwardLocalEditorStateChange({
-          ...stateRef.current,
-          editor_local_config: cloneValue(config),
-        })
-      },
-      isHydrated: () => hostHydratedRef.current,
-      notify: (event, payload) => {
-        if (event !== 'app_inited') {
-          promoteHostReadyFromRuntimeEvent()
-        }
-        if (event === 'initial_hydration_complete') {
-          hostHydratedRef.current = true
-        }
-        if (event === 'feedback_event') {
-          handleFeedbackRuntimePayload(payload)
-        }
-        const result = dispatchHostEvent(event, payload, {
-          onNodeActive: onNodeActiveRef,
-          onNodeClick: onNodeClickRef,
-          onNodeContextMenu: onNodeContextMenuRef,
-          onNodeHover: onNodeHoverRef,
-          onSegmentSelect: onSegmentSelectRef,
-          onCreateSegmentFromSelection: onCreateSegmentFromSelectionRef,
-          onSegmentRangeDraftChange: onSegmentRangeDraftChangeRef,
-          onSegmentRangeModeToggle: onSegmentRangeModeToggleRef,
-          onSegmentRangeConfirm: onSegmentRangeConfirmRef,
-          onAiSplitRequest: onAiSplitRequestRef,
-          onFullscreenChange: onFullscreenChangeRef,
-          onFullscreenToggle: onFullscreenToggleRef,
-          onEnterNativeFullscreen: onEnterNativeFullscreenRef,
-          onExitNativeFullscreen: onExitNativeFullscreenRef,
-          onUiClearedChange: onUiClearedChangeRef,
-          onMiniPalacePour: onMiniPalacePourRef,
-          onReady: onReadyRef,
-        })
-        if (result === 'app_inited') {
-          hostHydratedRef.current = readonly
-          markHostReady()
-          syncHostState()
-          flushPendingHostEditorStateSync()
-        }
-      },
-    }
-
-    return () => {
-      if (window.__memoryAnkiMindMapHosts) {
-        delete window.__memoryAnkiMindMapHosts[hostId]
-      }
-    }
-  }, [
-    activeSegmentId,
-      externalSyncKey,
-      forwardLocalEditorStateChange,
-      flushPendingHostEditorStateSync,
-      handleFeedbackRuntimePayload,
-      hostId,
-      promoteHostReadyFromRuntimeEvent,
-    preserveViewOnSync,
-    readonly,
-    segmentColorMode,
-    segmentRangeDraft,
-    miniPalaceDraft,
-    segments,
-    syncHostState,
-  ])
-
-  useEffect(() => {
-    if (isIframeLoaded) {
-      syncHostState()
-    }
-  }, [isIframeLoaded, syncHostState])
-
-  useEffect(() => {
-    if (!syncOnPropChange || !isIframeLoaded) return
-    const localEditorStateFingerprint = buildLocalEditorStateFingerprint(editorState)
-    const matchedPendingLocalCommit =
-      pendingLocalCommitFingerprintRef.current === localEditorStateFingerprint
-    if (matchedPendingLocalCommit) {
-      pendingLocalCommitFingerprintRef.current = null
-    }
-    const fingerprint = buildSyncFingerprint({
-      editorState,
-      activeSegmentId,
-      segmentColorMode,
-      segmentRangeDraft,
-      segments,
-      preserveViewOnSync,
-      externalSyncKey,
-    })
-    if (lastSyncedFingerprintRef.current === fingerprint) return
-    if (
-      !readonly &&
-      syncIntent === 'soft' &&
-      pendingLocalCommitFingerprintRef.current &&
-      pendingLocalCommitFingerprintRef.current !== localEditorStateFingerprint
-    ) {
-      return
-    }
-    if (!readonly && matchedPendingLocalCommit) {
-      lastSyncedFingerprintRef.current = fingerprint
-      return
-    }
-    syncOrQueueHostEditorState(
-      buildHostEditorStateSyncPayload(editorState, fingerprint, syncIntent, syncReason, 'prop'),
-    )
-  }, [
-    activeSegmentId,
-    buildHostEditorStateSyncPayload,
-    editorState,
-    externalSyncKey,
-    isIframeLoaded,
-    preserveViewOnSync,
-    readonly,
-    syncIntent,
-    syncReason,
-    segmentColorMode,
-    segmentRangeDraft,
-    segments,
-    syncOrQueueHostEditorState,
-    syncOnPropChange,
-  ])
-
-  useEffect(() => {
-    if (!isIframeLoaded || forceSyncKey == null) return
-    const syncKey = String(forceSyncKey)
-    if (lastForcedSyncKeyRef.current === syncKey) return
-    lastForcedSyncKeyRef.current = syncKey
-    pendingLocalCommitFingerprintRef.current = null
-    const fingerprint = buildSyncFingerprint({
-      editorState,
-      activeSegmentId,
-      segmentColorMode,
-      segmentRangeDraft,
-      segments,
-      preserveViewOnSync,
-      externalSyncKey,
-    })
-    syncOrQueueHostEditorState(
-      buildHostEditorStateSyncPayload(editorState, fingerprint, forceSyncIntent, null, 'force'),
-    )
-  }, [
-    activeSegmentId,
-    buildHostEditorStateSyncPayload,
-    editorState,
-    externalSyncKey,
-    forceSyncKey,
-    forceSyncIntent,
-    isIframeLoaded,
-    preserveViewOnSync,
-    segmentColorMode,
-    segmentRangeDraft,
-    segments,
-    syncOrQueueHostEditorState,
-  ])
+  const canEdit = !readonly && !practiceModeActive && !miniPalaceDraft.active
+  const frameClassName = buildMindMapFrameClassName(className)
 
   return (
-    <iframe
-      ref={iframeRef}
-      title="mind-map-editor"
-      src={`/mind-map-host.html?host=${encodeURIComponent(hostId)}&v=${HOST_FRAME_RUNTIME_VERSION}`}
-      className={buildMindMapFrameClassName(className)}
-      onLoad={() => {
-        hostHydratedRef.current = readonly
-        resetHostReady()
-        setIsIframeLoaded(true)
-        syncHostState()
-        dispatchIframeResizeSignal()
-      }}
-    />
+    <div ref={frameRef} className={frameClassName} data-testid="mindmap-frame-native">
+      <MindMapCanvas
+        graphData={graphData}
+        selectedNodeId={selectedNodeId}
+        readonly={!canEdit}
+        showToolbar={!uiCleared}
+        onNodeSelect={selectNode}
+        onNodeActivate={activateNode}
+        onNodeContextAction={contextNode}
+        onNodeHover={hoverNode}
+        buildNodeActions={buildNodeActions}
+        onAddChild={(nodeId) => emitState(addEditorDocChild(normalizedEditorState.editor_doc, nodeId))}
+        onAddSibling={(nodeId) => emitState(addEditorDocSibling(normalizedEditorState.editor_doc, nodeId))}
+        onDelete={(nodeId) => emitState(deleteEditorDocNode(normalizedEditorState.editor_doc, nodeId))}
+        onEdit={(nodeId, text) => emitState(editEditorDocNode(normalizedEditorState.editor_doc, nodeId, text))}
+        onReparent={(sourceId, targetId) => emitState(reparentEditorDocNode(normalizedEditorState.editor_doc, sourceId, targetId))}
+        onReorderSibling={(sourceId, targetId, position) =>
+          emitState(reorderEditorDocNode(normalizedEditorState.editor_doc, sourceId, targetId, position))
+        }
+        onMoveUp={(nodeId) => emitState(moveEditorDocNode(normalizedEditorState.editor_doc, nodeId, 'up'))}
+        onMoveDown={(nodeId) => emitState(moveEditorDocNode(normalizedEditorState.editor_doc, nodeId, 'down'))}
+        canMoveUp={(nodeId) => canMoveEditorDocNode(normalizedEditorState.editor_doc, nodeId, 'up')}
+        canMoveDown={(nodeId) => canMoveEditorDocNode(normalizedEditorState.editor_doc, nodeId, 'down')}
+        onToggleFocusMode={() => onMiniPalacePour?.()}
+        className="h-full min-h-0 w-full border-0 bg-transparent shadow-none"
+      />
+    </div>
   )
 })
 
 MindMapFrame.displayName = 'MindMapFrame'
 
 export type { MindMapFrameHandle } from './MindMapFrame.types'
+
+function collectRevealMap(editorState: MindMapEditorState) {
+  const result: Record<string, 'hidden' | 'placeholder' | 'revealed'> = {}
+  const doc = normalizeEditorDocTree(editorState.editor_doc)
+  const walk = (node: { data?: Record<string, unknown>; children?: unknown[] }) => {
+    const uid = typeof node.data?.uid === 'string' ? node.data.uid : ''
+    const text = typeof node.data?.text === 'string' ? node.data.text : ''
+    if (uid) {
+      result[uid] = text === '待回忆' ? 'hidden' : 'revealed'
+    }
+    ;(Array.isArray(node.children) ? node.children : []).forEach((child) => {
+      if (child && typeof child === 'object') {
+        walk(child as { data?: Record<string, unknown>; children?: unknown[] })
+      }
+    })
+  }
+  if (doc.root) walk(doc.root)
+  return result
+}

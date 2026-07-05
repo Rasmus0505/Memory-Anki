@@ -323,15 +323,15 @@ export default function ProfileFeedbackPage() {
                       )?.[0]
                       if (hiddenId) {
                         reveal.setRevealMap((current) => ({ ...current, [hiddenId]: 'placeholder' }))
-                        setPreviewSummary('已翻转一个节点，请查看脑图反馈。')
+                        setPreviewSummary('已翻转一个知识点，请查看脑图反馈。')
                       } else {
-                        // 所有节点都非 hidden，重置
+                        // 所有知识点都非 hidden，重置
                         reveal.reset()
-                        setPreviewSummary('已重置脑图，所有节点回到初始状态。')
+                        setPreviewSummary('已重置脑图，所有知识点回到初始状态。')
                       }
                     }}>
                       <WandSparkles className="mr-2 size-4" />
-                      翻一张卡
+                      翻一个知识点
                     </Button>
                     <Button type="button" variant="outline" onClick={() => audio.playEvent('card_reveal', { audioScope: 'global' })}>
                       <Volume2 className="mr-2 size-4" />

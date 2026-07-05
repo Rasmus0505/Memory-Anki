@@ -19,7 +19,7 @@ export function createPalaceSegmentApi(
     body: JSON.stringify(data),
     persistence: {
       resourceKey: `palace:${palaceId}:segments:create`,
-      description: `创建分块：${data.name || '未命名分块'}`,
+      description: `创建学习组：${data.name || '未命名学习组'}`,
       replayMode: 'manual',
     },
   })
@@ -41,7 +41,7 @@ export function updatePalaceSegmentApi(
     persistence: {
       resourceKey: `palace-segment:${segmentId}`,
       coalesceKey: `palace-segment:${segmentId}`,
-      description: '保存分块',
+      description: '保存学习组',
       replayMode: 'auto',
     },
   })
@@ -52,7 +52,7 @@ export function deletePalaceSegmentApi(segmentId: number) {
     method: 'DELETE',
     persistence: {
       resourceKey: `palace-segment:${segmentId}:delete`,
-      description: '删除分块',
+      description: '删除学习组',
       replayMode: 'manual',
     },
   })

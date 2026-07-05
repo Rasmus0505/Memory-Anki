@@ -51,20 +51,20 @@ export default function PalaceFocusPracticePage() {
     <PracticeSessionRoute
       config={{
         prefetchKind: 'focus-practice',
-        loadingText: '正在加载专项练习内容...',
-        notFoundText: '未找到可专项练习的宫殿。',
+        loadingText: '正在加载专项训练内容...',
+        notFoundText: '未找到可专项训练的宫殿。',
         loadSession: getPalaceFocusSessionApi,
         loadProgress: getFocusPracticeSessionProgressApi,
         buildSession: buildFocusSession,
         clearProgress: (palace) => clearFocusPracticeSessionProgressApi(palace.id),
         saveProgress: (palace, snapshot: PracticeProgressSnapshot) =>
           saveFocusPracticeSessionProgressApi(palace.id, snapshot),
-        pageEyebrow: '专项练习',
+        pageEyebrow: '专项训练',
         backTo: '/palaces/list',
         backLabel: '返回列表',
         renderBadge: (palace, hasResumeProgress) =>
           hasResumeProgress ? (
-            <Badge variant="secondary">已接续上次专项练习</Badge>
+            <Badge variant="secondary">已接续上次专项训练</Badge>
           ) : (
             <Badge variant="outline">专项 {palace.focus_count ?? 0} 张</Badge>
           ),
@@ -96,7 +96,7 @@ export default function PalaceFocusPracticePage() {
         computeInitialSnapshot: (session, initialSnapshot) => {
           const palace = session.data
           const parsedDoc = parseEditorDoc(session.reviewEditorState.editor_doc)
-          const root = buildReviewTree(parsedDoc, `${palace.title} / 专项练习`)
+          const root = buildReviewTree(parsedDoc, `${palace.title} / 专项训练`)
           const nodeMap = flattenNodes(root)
           const previousRevealMap = initialSnapshot?.revealMap ?? null
           return {
@@ -111,7 +111,7 @@ export default function PalaceFocusPracticePage() {
           }
         },
         flowProps: (palace) => ({
-          title: `${palace.title} / 专项练习`,
+          title: `${palace.title} / 专项训练`,
           focusNodeUids: palace.focus_node_uids ?? [],
           onToggleFocusNode: async (nodeUid) => {
             await togglePalaceFocusNodeApi(
@@ -129,7 +129,7 @@ export default function PalaceFocusPracticePage() {
                 当前专项池保留 {palace.focus_count} 张
               </span>
               <span className="ml-2">
-                完成一次专项练习不会自动移除，仍需手动取消专项标记。
+                完成一次专项训练不会自动移除，仍需手动取消专项标记。
               </span>
             </div>
           ) : null,

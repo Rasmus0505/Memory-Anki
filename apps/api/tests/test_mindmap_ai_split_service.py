@@ -119,6 +119,9 @@ def test_leaf_target_generates_parallel_children_when_no_existing_children(db_se
     assert all(child["children"] == [] for child in children)
     assert result.generated_children_count == 2
     assert result.reassigned_existing_children_count == 0
+    assert result.review_preview is not None
+    assert result.review_preview["node_count"] == 3
+    assert result.review_preview["suggested_segments"]["count"] == 0
 
 
 def test_existing_children_only_move_without_rewriting_descendants(db_session: Session):
@@ -223,6 +226,49 @@ def test_root_target_uid_none_replaces_root_children(db_session: Session):
     assert len(root_children) == 1
     assert root_children[0]["data"]["text"] == "总分类"
     assert [child["data"]["text"] for child in root_children[0]["children"]] == ["根子节点一", "根子节点二"]
+
+
+def test_split_granularity_is_inferred_from_existing_children(db_session: Session):
+    editor_doc = _build_editor_doc()
+    target_children = editor_doc["root"]["children"][0]["children"]
+    for index in range(4, 11):
+        target_children.append(
+            {
+                "data": {"text": f"已有子节点{index}", "uid": f"child-{index}"},
+                "children": [],
+            }
+        )
+    db_session.add(Config(key="mindmap_ai_split_max_children", value="12"))
+    db_session.commit()
+
+    def fake_call(*, config, target_node, existing_children):
+        assert config.max_children == 4
+        return {
+            "new_children": [
+                {"id": f"category_{index}", "text": f"学习组{index}"}
+                for index in range(1, 6)
+            ],
+            "child_assignments": [
+                {
+                    "source_ref": f"uid:child-{index}",
+                    "target_new_child_id": f"category_{((index - 1) % 4) + 1}",
+                }
+                for index in range(1, 11)
+            ],
+        }
+
+    with patch.object(service, "_call_mindmap_ai_split_model", side_effect=fake_call):
+        result = service.split_palace_editor_doc_with_ai(
+            db_session,
+            _get_palace(db_session),
+            editor_doc,
+            "target-1",
+        )
+
+    children = result.editor_doc["root"]["children"][0]["children"]
+    assert [child["data"]["text"] for child in children] == ["学习组1", "学习组2", "学习组3", "学习组4"]
+    assert result.generated_children_count == 4
+    assert result.reassigned_existing_children_count == 10
 
 
 def test_config_falls_back_to_environment_values(db_session: Session, monkeypatch: pytest.MonkeyPatch):

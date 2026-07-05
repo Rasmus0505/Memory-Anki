@@ -133,7 +133,7 @@ export function MindMapReviewFlow({
                         <Badge variant="outline">
                           {review.flow.feedback.nextMilestone == null
                             ? "已越过全部里程碑"
-                            : `下一节点 ${review.flow.feedback.nextMilestone}${review.flow.feedback.milestoneLabel ? ` · ${review.flow.feedback.milestoneLabel}` : ""}`}
+                            : `下一知识点 ${review.flow.feedback.nextMilestone}${review.flow.feedback.milestoneLabel ? ` · ${review.flow.feedback.milestoneLabel}` : ""}`}
                         </Badge>
                         {review.flow.feedback.allClearReady ? (
                           <Badge className="bg-warning text-white hover:bg-warning">

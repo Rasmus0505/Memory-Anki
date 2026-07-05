@@ -162,6 +162,7 @@ export function useMindMapImport({
     importExternalSyncKey: apply.externalSyncKey,
     importAppliedSyncVersion: apply.appliedSyncVersion,
     importWarnings: jobs.importWarnings,
+    importReviewPreview: jobs.importReviewPreview,
     currentJobId: jobs.currentJobId,
     currentJobStatus: jobs.currentJobStatus,
     currentJobStage: jobs.currentJobStage,

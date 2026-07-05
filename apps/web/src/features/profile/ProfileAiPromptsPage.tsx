@@ -179,7 +179,7 @@ export function ProfileAiPromptsPage({ standalone = false }: { standalone?: bool
     return (
       <ProfileLayout
         title="AI 提示词"
-        description="这里可以查看和编辑所有外部 AI 能力的预设提示词。保存后会立刻作用于后续识别与 AI 分卡请求，恢复默认会删除自定义覆盖值。"
+        description="这里可以查看和编辑所有外部 AI 能力的预设提示词。保存后会立刻作用于后续识别与 AI 知识点拆分请求，恢复默认会删除自定义覆盖值。"
       >
         {content}
       </ProfileLayout>

@@ -30,7 +30,7 @@ export function MindMapImportFooter({ model, copied, onCopyText }: MindMapImport
       {mode === 'mindmap' ? (
         <>
           <div className="mb-3 text-xs text-muted-foreground">
-            追加目标：{targetNodeLabel || '请先在脑图中选中一个节点'}
+            追加目标：{targetNodeLabel || '请先在脑图中选中一个知识点'}
           </div>
           <div className="flex flex-wrap items-center justify-between gap-2">
             <Button
@@ -49,7 +49,7 @@ export function MindMapImportFooter({ model, copied, onCopyText }: MindMapImport
                 onClick={onApplyAppend}
                 disabled={!sourceTree || !canAppend || loading || applying || undoing}
               >
-                {applying ? '应用中…' : '追加到选中节点'}
+                {applying ? '应用中…' : '追加到选中知识点'}
               </Button>
               <Button onClick={onApplyReplace} disabled={!sourceTree || loading || applying || undoing}>
                 {applying ? '应用中…' : '覆盖当前脑图'}

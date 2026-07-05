@@ -151,6 +151,8 @@ def test_batch_job_without_structure_image_uses_direct_generation_flow():
     assert payload["status"] == job_service.JOB_STATUS_COMPLETED
     assert payload["result"]["structure_image_index"] is None
     assert payload["result"]["image_count"] == 2
+    assert payload["result"]["review_preview"]["node_count"] == 2
+    assert payload["result"]["review_preview"]["suggested_segments"]["count"] == 2
     assert payload["usage"]["structure"] == 0
     assert payload["usage"]["merge"] == 1
     assert mock_structure.call_count == 0

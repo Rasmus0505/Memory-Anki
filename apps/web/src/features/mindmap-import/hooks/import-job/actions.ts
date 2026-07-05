@@ -77,7 +77,7 @@ export function buildImportJobActions({
         requestSummary,
         responseSummary:
           job.status === 'completed'
-            ? `已完成；${job.mode === 'mindmap' ? '节点已生成' : `文字 ${job.result?.extracted_text?.length || 0} 字`}`
+            ? `已完成；${job.mode === 'mindmap' ? '知识点已生成' : `文字 ${job.result?.extracted_text?.length || 0} 字`}`
             : '任务已创建，等待执行',
         jobId: job.id,
         meta: {
@@ -171,7 +171,7 @@ export function buildImportJobActions({
         stage: job.status === 'completed' ? 'success' : 'queued',
         requestSummary,
         responseSummary:
-          job.status === 'completed' ? '已完成；节点已生成' : '任务已创建，等待执行',
+          job.status === 'completed' ? '已完成；知识点已生成' : '任务已创建，等待执行',
         jobId: job.id,
         meta: {
           entityKey: options.entityKey,

@@ -1381,7 +1381,7 @@ class ReviewRouteTests(unittest.TestCase):
                             id="practice-dashboard",
                             kind="practice",
                             palace_id=palace.id,
-                            title="Test Palace / 小宫殿 A",
+                            title="Test Palace / 专项训练 A",
                             started_at=now - timedelta(seconds=180),
                             ended_at=now,
                             effective_seconds=180,

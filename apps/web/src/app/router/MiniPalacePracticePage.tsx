@@ -47,20 +47,20 @@ export default function MiniPalacePracticePage() {
     <PracticeSessionRoute
       config={{
         prefetchKind: 'mini-practice',
-        loadingText: '正在加载小宫殿练习内容...',
-        notFoundText: '未找到可练习的小宫殿。',
+        loadingText: '正在加载训练关卡内容...',
+        notFoundText: '未找到可训练的关卡。',
         loadSession: getPalaceMiniPalaceApi,
         loadProgress: getMiniPracticeSessionProgressApi,
         buildSession: buildMiniSession,
         clearProgress: ({ miniPalace }) => clearMiniPracticeSessionProgressApi(miniPalace.id),
         saveProgress: ({ miniPalace }, snapshot: PracticeProgressSnapshot) =>
           saveMiniPracticeSessionProgressApi(miniPalace.id, snapshot),
-        pageEyebrow: '小宫殿练习',
+        pageEyebrow: '训练关卡',
         backTo: '/palaces',
         backLabel: '返回书架',
         renderBadge: ({ miniPalace }: MiniPracticeData, hasResumeProgress) =>
           hasResumeProgress ? (
-            <Badge variant="secondary">已接续上次练习</Badge>
+            <Badge variant="secondary">已接续上次训练</Badge>
           ) : (
             <Badge variant="outline">{miniPalace.node_count} 张</Badge>
           ),

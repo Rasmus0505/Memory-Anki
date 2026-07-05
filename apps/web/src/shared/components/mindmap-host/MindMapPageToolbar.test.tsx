@@ -17,8 +17,8 @@ describe('MindMapPageToolbar', () => {
     expect(screen.getByRole('button', { name: '做题' })).toBeTruthy()
     expect(screen.getByRole('button', { name: '全屏编辑' })).toBeTruthy()
     expect(screen.getByRole('button', { name: '清屏' })).toBeTruthy()
-    expect(screen.queryByRole('button', { name: '练习' })).toBeNull()
-    expect(screen.queryByRole('button', { name: '分块' })).toBeNull()
+    expect(screen.queryByRole('button', { name: '回忆模式' })).toBeNull()
+    expect(screen.queryByRole('button', { name: '学习组' })).toBeNull()
   })
 
   it('renders scene toggle labels exactly as provided', () => {
@@ -46,8 +46,8 @@ describe('MindMapPageToolbar', () => {
           active: true,
           targetSegmentId: 'new',
           options: [
-            { id: 1, name: '第一块' },
-            { id: 2, name: '第二块' },
+            { id: 1, name: '第一学习组' },
+            { id: 2, name: '第二学习组' },
           ],
           onToggle,
           onTargetChange,
@@ -57,8 +57,8 @@ describe('MindMapPageToolbar', () => {
       />,
     )
 
-    fireEvent.click(screen.getByRole('button', { name: /分块中/ }))
-    fireEvent.change(screen.getByLabelText('分块目标'), { target: { value: '2' } })
+    fireEvent.click(screen.getByRole('button', { name: /学习组中/ }))
+    fireEvent.change(screen.getByLabelText('学习组目标'), { target: { value: '2' } })
     fireEvent.click(screen.getByRole('button', { name: '确认' }))
     fireEvent.click(screen.getByRole('button', { name: '取消' }))
 

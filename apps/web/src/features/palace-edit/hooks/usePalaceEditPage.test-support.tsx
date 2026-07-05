@@ -253,6 +253,7 @@ vi.mock('@/shared/components/mindmap-host', () => ({
   }),
   MindMapPageToolbar: ({
     segmentControl,
+    modeControl,
     modeToggle,
     importMindMapAction,
     importTextAction,
@@ -266,12 +267,12 @@ vi.mock('@/shared/components/mindmap-host', () => ({
       {segmentControl ? (
         <>
           <button type="button" onClick={segmentControl.onToggle}>
-            分块
+            学习组
           </button>
           {segmentControl.active ? (
             <>
               <select
-                aria-label="分块目标"
+                aria-label="学习组目标"
                 value={segmentControl.targetSegmentId == null ? 'new' : String(segmentControl.targetSegmentId)}
                 onChange={(event) =>
                   segmentControl.onTargetChange(
@@ -279,7 +280,7 @@ vi.mock('@/shared/components/mindmap-host', () => ({
                   )
                 }
               >
-                <option value="new">新建分块</option>
+                <option value="new">新建学习组</option>
                 {(segmentControl.options ?? []).map((option: { id: number; name: string }) => (
                   <option key={option.id} value={String(option.id)}>
                     {option.name}
@@ -294,6 +295,19 @@ vi.mock('@/shared/components/mindmap-host', () => ({
               </button>
             </>
           ) : null}
+        </>
+      ) : null}
+      {modeControl ? (
+        <>
+          <button type="button" onClick={() => modeControl.onChange('edit')}>
+            编辑模式
+          </button>
+          <button type="button" onClick={() => modeControl.onChange('preview')}>
+            预览模式
+          </button>
+          <button type="button" onClick={() => modeControl.onChange('recall')}>
+            回忆模式
+          </button>
         </>
       ) : null}
       {modeToggle ? <button type="button" onClick={modeToggle.onClick}>{modeToggle.label}</button> : null}
@@ -457,7 +471,7 @@ export function setupPalaceEditPageTestDefaults() {
     item: {
       id: 1,
       palace_id: 101,
-      name: '小宫殿 1',
+      name: '专项训练 1',
       node_uids: ['child-1'],
       node_count: 1,
       sort_order: 0,
@@ -470,7 +484,7 @@ export function setupPalaceEditPageTestDefaults() {
     item: {
       id: 1,
       palace_id: 101,
-      name: '小宫殿 1',
+      name: '专项训练 1',
       node_uids: ['child-1'],
       node_count: 1,
       sort_order: 0,
@@ -484,12 +498,12 @@ export function setupPalaceEditPageTestDefaults() {
     ok: true,
     source_tree: {
       title: '导入脑图',
-      children: [{ text: '新增节点', children: [] }],
+      children: [{ text: '新增知识点', children: [] }],
     },
     editor_doc: {
       root: {
         data: { text: '导入脑图', uid: 'import-root' },
-        children: [{ data: { text: '新增节点', uid: 'import-child-1' }, children: [] }],
+        children: [{ data: { text: '新增知识点', uid: 'import-child-1' }, children: [] }],
       },
     },
   } as never)
@@ -515,7 +529,7 @@ export function setupPalaceEditPageTestDefaults() {
     id: 'log-1',
     kind: 'ai_call',
     createdAt: new Date().toISOString(),
-    feature: 'AI 分卡',
+    feature: 'AI 整理',
     route: '',
     stage: 'start',
     requestSummary: '',

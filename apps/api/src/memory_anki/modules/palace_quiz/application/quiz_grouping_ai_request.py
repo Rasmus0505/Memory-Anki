@@ -48,7 +48,7 @@ def prepare_mini_palace_grouping_request(
 ) -> MiniPalaceGroupingPreparedRequest:
     mini_palace_contexts = build_mini_palace_context(palace)
     if len(mini_palace_contexts) == 0:
-        raise PalaceQuizValidationError("当前宫殿还没有小宫殿，暂时无法按小宫殿分类。")
+        raise PalaceQuizValidationError("当前宫殿还没有专项训练，暂时无法按专项训练分类。")
     if len(questions) == 0:
         raise PalaceQuizValidationError("没有可分类的题目。")
 

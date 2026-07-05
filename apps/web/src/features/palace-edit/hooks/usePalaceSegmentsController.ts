@@ -107,7 +107,7 @@ export function usePalaceSegmentsController({
 
   const handleOpenEditSegment = (segment: PalaceSegmentSummary) => {
     if (segment.is_virtual_default) {
-      setSegmentError('默认第 1 部分不单独保存为实体分块，时间沿用宫殿本身。')
+      setSegmentError('默认第 1 学习组不单独保存为实体学习组，时间沿用宫殿本身。')
       return
     }
     setSegmentError('')
@@ -167,7 +167,7 @@ export function usePalaceSegmentsController({
 
   const handleConfirmSegmentRange = () => {
     if (!selectedRangeNodeUids.length) {
-      void appAlert('先在脑图里选中至少一个节点，再确认分块范围。', { title: '无法确认分块范围' })
+      void appAlert('先在脑图里选中至少一个知识点，再确认学习组范围。', { title: '无法确认学习组范围' })
       return
     }
     timer.registerActivity('edit_operation', { source: 'segment_range_confirm' })
@@ -214,15 +214,15 @@ export function usePalaceSegmentsController({
       setSegmentDialogOpen(false)
       exitSegmentRangeMode()
     } catch (error) {
-      setSegmentError(error instanceof Error ? error.message : '保存分块失败，请稍后重试。')
+      setSegmentError(error instanceof Error ? error.message : '保存学习组失败，请稍后重试。')
     } finally {
       setSegmentSaving(false)
     }
   }
 
   const handleDeleteSegment = async (segmentId: number) => {
-    const confirmed = await appConfirm('删除这个分块只会取消这组节点的分块划分，不会删除任何脑图内容。确定继续吗？', {
-      title: '删除复习分块',
+    const confirmed = await appConfirm('删除这个学习组只会取消这组知识点的分组，不会删除任何脑图内容。确定继续吗？', {
+      title: '删除学习组',
       tone: 'danger',
     })
     if (!confirmed) return

@@ -405,7 +405,7 @@ export function ProfileFeedbackSettingsPanel({
           </div>
           <div className="memory-anki-soft-card rounded-[20px] px-4 py-4">
             <div className="mb-2 flex items-center justify-between gap-3">
-              <Label htmlFor="profile-feedback-milestones" className="text-sm font-medium">里程碑节点</Label>
+              <Label htmlFor="profile-feedback-milestones" className="text-sm font-medium">里程碑知识点</Label>
               <Badge variant="outline">{settings.scenes.milestone.steps.join(' / ')}</Badge>
             </div>
             <Input

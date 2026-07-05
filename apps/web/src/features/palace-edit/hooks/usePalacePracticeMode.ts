@@ -125,7 +125,7 @@ export function usePalacePracticeMode({
 
   const enterInlinePractice = useCallback(() => {
     timer.registerActivity('practice_interaction', { source: 'inline_practice_enter' })
-    setEditorMode('practice')
+    setEditorMode('recall')
   }, [timer])
 
   const exitInlinePractice = useCallback(() => {
@@ -133,8 +133,13 @@ export function usePalacePracticeMode({
     setEditorMode('edit')
   }, [timer])
 
+  const enterPreview = useCallback(() => {
+    timer.registerActivity('practice_interaction', { source: 'inline_preview_enter' })
+    setEditorMode('preview')
+  }, [timer])
+
   const toggleInlinePractice = useCallback(() => {
-    if (editorMode === 'practice') {
+    if (editorMode === 'recall') {
       exitInlinePractice()
       return
     }
@@ -142,13 +147,13 @@ export function usePalacePracticeMode({
   }, [editorMode, enterInlinePractice, exitInlinePractice])
 
   const handleInlinePracticeNodeClick = useCallback((nodes: MindMapSelection[]) => {
-    if (editorMode !== 'practice') return
+    if (editorMode !== 'recall') return
     timer.registerActivity('practice_interaction', { source: 'inline_practice_click' })
     handleNodeClick(nodes)
   }, [editorMode, handleNodeClick, timer])
 
   const handleInlinePracticeNodeContextMenu = useCallback((nodes: MindMapSelection[]) => {
-    if (editorMode !== 'practice') return
+    if (editorMode !== 'recall') return
     timer.registerActivity('practice_interaction', { source: 'inline_practice_contextmenu' })
     handleNodeContextMenu(nodes)
   }, [editorMode, handleNodeContextMenu, timer])
@@ -163,7 +168,7 @@ export function usePalacePracticeMode({
   }, [feedback, palaceId, reset, timer])
 
   const activeMindMapEditorState = useMemo<MindMapEditorState | null>(
-    () => (editorMode === 'practice' ? (visibleEditorState ?? editorState ?? null) : (editorState ?? null)),
+    () => (editorMode === 'recall' ? (visibleEditorState ?? editorState ?? null) : (editorState ?? null)),
     [editorMode, editorState, visibleEditorState],
   )
   const practiceVisibleEditorSyncKey = useMemo(
@@ -179,6 +184,7 @@ export function usePalacePracticeMode({
   return {
     activeMindMapEditorState,
     editorMode,
+    enterPreview,
     enterInlinePractice,
     exitInlinePractice,
     handleInlinePracticeNodeClick,

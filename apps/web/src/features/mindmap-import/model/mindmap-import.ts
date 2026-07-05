@@ -188,7 +188,7 @@ export function applyImportedDoc(
     return {
       applied: false,
       nextDoc: currentDoc,
-      error: '请先在脑图中选中一个追加目标节点。',
+      error: '请先在脑图中选中一个追加目标知识点。',
     }
   }
   const baseDoc = cloneDoc(currentDoc)
@@ -211,7 +211,7 @@ export function applyImportedDoc(
     : {
         applied: false,
         nextDoc: currentDoc,
-        error: '未找到追加目标节点，请重新选中节点后再试。',
+        error: '未找到追加目标知识点，请重新选中知识点后再试。',
       }
 }
 

@@ -85,7 +85,7 @@ describe('useMindMapImport job flows', () => {
       result: null,
       progress: {
         phase: 'merge',
-        message: '正在把正文补到结构节点下',
+        message: '正在把正文补到结构知识点下',
         step: 4,
         total_steps: 4,
         preview_text: '{"title":"draft"}',

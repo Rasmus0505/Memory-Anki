@@ -26,9 +26,12 @@ interface MindMapCanvasViewportProps {
   onNodeDragStart: (event: unknown, node: Node) => void
   onNodeDrag: (event: unknown, node: Node) => void
   onNodeDragStop: (event: unknown, node: Node) => void
+  onNodeMouseEnter: (event: React.MouseEvent, node: Node) => void
+  onNodeMouseLeave: (event: React.MouseEvent, node: Node) => void
   onEdgeClick: EdgeMouseHandler
   onEdgeDoubleClick: EdgeMouseHandler
   onPaneClick: () => void
+  readonly?: boolean
 }
 
 export function MindMapCanvasViewport({
@@ -44,9 +47,12 @@ export function MindMapCanvasViewport({
   onNodeDragStart,
   onNodeDrag,
   onNodeDragStop,
+  onNodeMouseEnter,
+  onNodeMouseLeave,
   onEdgeClick,
   onEdgeDoubleClick,
   onPaneClick,
+  readonly = false,
 }: MindMapCanvasViewportProps) {
   return (
     <div className="relative" style={{ width, height }}>
@@ -60,10 +66,12 @@ export function MindMapCanvasViewport({
         onNodeDragStart={onNodeDragStart}
         onNodeDrag={onNodeDrag}
         onNodeDragStop={onNodeDragStop}
+        onNodeMouseEnter={onNodeMouseEnter}
+        onNodeMouseLeave={onNodeMouseLeave}
         onEdgeClick={onEdgeClick}
         onEdgeDoubleClick={onEdgeDoubleClick}
         onPaneClick={onPaneClick}
-        nodesDraggable
+        nodesDraggable={!readonly}
         nodesConnectable={false}
         elementsSelectable
         nodeTypes={nodeTypes}

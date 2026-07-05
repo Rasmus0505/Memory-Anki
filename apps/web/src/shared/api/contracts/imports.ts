@@ -14,6 +14,18 @@ export interface MindMapImportSourceTree {
   title: string
   children: MindMapImportSourceNode[]
 }
+export interface MindMapReviewPreview {
+  node_count: number
+  estimated_review_seconds: number
+  estimated_review_time?: string
+  suggested_segment_count: number
+  suggested_segments: Array<{
+    title: string
+    node_count: number
+  }>
+  difficulty_distribution: Record<string, number>
+  warnings: string[]
+}
 export interface MindMapImportPreviewResponse {
   ok: boolean
   error?: string
@@ -30,6 +42,7 @@ export interface MindMapImportPreviewResponse {
   ocr_grounding_used?: boolean
   ocr_text_chars?: number | null
   resolved_ai?: ResolvedAiRuntimeMeta | null
+  review_preview?: MindMapReviewPreview | null
 }
 export interface MindMapBatchImportPreviewResponse {
   ok: boolean
@@ -39,6 +52,7 @@ export interface MindMapBatchImportPreviewResponse {
   structure_image_index?: number | null
   image_count?: number
   resolved_ai?: ResolvedAiRuntimeMeta | null
+  review_preview?: MindMapReviewPreview | null
 }
 export interface ImageTextPreviewResponse {
   ok: boolean
@@ -46,6 +60,7 @@ export interface ImageTextPreviewResponse {
   extracted_text?: string
   selected_pages?: number[]
   resolved_ai?: ResolvedAiRuntimeMeta | null
+  review_preview?: MindMapReviewPreview | null
 }
 export interface MindMapAiSplitRequest {
   editor_doc: MindMapDoc | string | null
@@ -62,6 +77,7 @@ export interface MindMapAiSplitResponse {
   error?: string
   request_id?: string
   resolved_ai?: ResolvedAiRuntimeMeta | null
+  review_preview?: MindMapReviewPreview | null
 }
 export type MindMapImportJobStatus = 'draft' | 'running' | 'paused' | 'completed' | 'failed' | 'interrupted'
 export type MindMapImportJobStage = 'prepared' | 'structure' | 'ocr' | 'merge' | 'text' | 'completed'
@@ -101,6 +117,7 @@ export interface MindMapImportJobResult {
   warnings?: string[]
   ocr_grounding_used?: boolean
   ocr_text_chars?: number | null
+  review_preview?: MindMapReviewPreview | null
 }
 export interface MindMapImportJob {
   id: string

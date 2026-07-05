@@ -66,6 +66,8 @@ export interface UseMindMapCanvasStateResult {
   onEdgesChange: OnEdgesChange<Edge>
   handleNodeClick: (event: MouseEvent, node: Node) => void
   handleNodeContextMenu: (event: MouseEvent, node: Node) => void
+  handleNodeMouseEnter: (event: MouseEvent, node: Node) => void
+  handleNodeMouseLeave: (event: MouseEvent, node: Node) => void
   handleNodeDragStart: (event: unknown, node: Node) => void
   handleNodeDrag: (event: unknown, node: Node) => void
   handleNodeDragStop: (event: unknown, node: Node) => void
@@ -106,6 +108,11 @@ export function useMindMapCanvasState(
     onMoveDown,
     canMoveUp,
     canMoveDown,
+    readonly = false,
+    onNodeActivate,
+    onNodeContextAction,
+    onNodeHover,
+    buildNodeActions,
   } = props
 
   const layouted = useMemo(() => applyMindMapLayout(graphData), [graphData])
@@ -182,6 +189,9 @@ export function useMindMapCanvasState(
     }
 
     updateSize()
+    if (typeof ResizeObserver === 'undefined') {
+      return undefined
+    }
     const observer = new ResizeObserver(updateSize)
     observer.observe(element)
     return () => observer.disconnect()
@@ -241,6 +251,7 @@ export function useMindMapCanvasState(
 
   const handleNodeDragStart = useCallback(
     (_event: unknown, node: Node) => {
+      if (readonly) return
       draggingNodeIdRef.current = node.id
       setIsDraggingNode(true)
       lastPreviewFeedbackRef.current = ''
@@ -253,11 +264,12 @@ export function useMindMapCanvasState(
         origin: 'pointer',
       })
     },
-    [onNodeSelect],
+    [onNodeSelect, readonly],
   )
 
   const handleNodeDrag = useCallback(
     (_event: unknown, node: Node) => {
+      if (readonly) return
       pendingDragRef.current = { event: _event, node }
       if (dragFrameRef.current !== null) return
 
@@ -270,11 +282,12 @@ export function useMindMapCanvasState(
         }
       })
     },
-    [checkOverlap],
+    [checkOverlap, readonly],
   )
 
   const handleNodeDragStop = useCallback(
     (_event: unknown, node: Node) => {
+      if (readonly) return
       const activePreview = previewStateRef.current
       if (dragFrameRef.current !== null) {
         cancelAnimationFrame(dragFrameRef.current)
@@ -307,12 +320,15 @@ export function useMindMapCanvasState(
       draggingNodeIdRef.current = null
       lastPreviewFeedbackRef.current = ''
     },
-    [graphData, onReorderSibling, onReparent, setEdges, setNodes],
+    [graphData, onReorderSibling, onReparent, readonly, setEdges, setNodes],
   )
 
   const handleFinishEdit = useCallback(
-    (nodeId: string, text: string) => onEdit?.(nodeId, text),
-    [onEdit],
+    (nodeId: string, text: string) => {
+      if (readonly) return
+      onEdit?.(nodeId, text)
+    },
+    [onEdit, readonly],
   )
 
   const displayNodes = useMemo(() => {
@@ -346,10 +362,11 @@ export function useMindMapCanvasState(
           onAddChild,
           onDelete,
           onFinishEdit: handleFinishEdit,
+          readonly,
         },
       }
     })
-  }, [handleFinishEdit, nodes, onAddChild, onDelete, previewLayout, previewState, selectedNodeId])
+  }, [handleFinishEdit, nodes, onAddChild, onDelete, previewLayout, previewState, readonly, selectedNodeId])
 
   const displayEdges = useMemo(() => {
     const baseEdges = previewLayout?.edges ?? edges
@@ -390,6 +407,7 @@ export function useMindMapCanvasState(
   const handleNodeContextMenu = useCallback(
     (event: MouseEvent, node: Node) => {
       event.preventDefault()
+      onNodeContextAction?.(node.id)
       setCtxMenu({ x: event.clientX, y: event.clientY, nodeId: node.id })
       setEdgeMenu(null)
       setSelectedEdgeId(null)
@@ -399,26 +417,42 @@ export function useMindMapCanvasState(
         origin: 'node',
       })
     },
-    [onNodeSelect],
+    [onNodeContextAction, onNodeSelect],
   )
 
   const handlePaneClick = useCallback(() => {
-    onNodeSelect(null)
-    setSelectedEdgeId(null)
-    setEdgeMenu(null)
-  }, [onNodeSelect])
+      onNodeSelect(null)
+      onNodeHover?.(null)
+      setSelectedEdgeId(null)
+      setEdgeMenu(null)
+  }, [onNodeHover, onNodeSelect])
 
   const handleNodeClick = useCallback(
     (event: MouseEvent, node: Node) => {
       setSelectedEdgeId(null)
       setEdgeMenu(null)
       onNodeSelect(node.id)
+      onNodeActivate?.(node.id)
       dispatchGlobalFeedback('node_select', {
         point: { x: event.clientX, y: event.clientY },
         origin: 'node',
       })
     },
-    [onNodeSelect],
+    [onNodeActivate, onNodeSelect],
+  )
+
+  const handleNodeMouseEnter = useCallback(
+    (_event: MouseEvent, node: Node) => {
+      onNodeHover?.(node.id)
+    },
+    [onNodeHover],
+  )
+
+  const handleNodeMouseLeave = useCallback(
+    () => {
+      onNodeHover?.(null)
+    },
+    [onNodeHover],
   )
 
   const handleEdgeDelete = useCallback(
@@ -487,11 +521,13 @@ export function useMindMapCanvasState(
   const nodeActions: ContextMenuAction[] = useMemo(() => {
     if (!ctxMenu) return []
     const nodeId = ctxMenu.nodeId
+    if (buildNodeActions) return buildNodeActions(nodeId)
     return [
       {
-        label: '添加子节点 (Tab)',
+        label: '添加子知识点 (Tab)',
         icon: Plus,
         onClick: () => {
+          if (readonly) return
           dispatchGlobalFeedback('node_create', {
             point: { x: ctxMenu.x, y: ctxMenu.y },
             origin: 'node',
@@ -500,9 +536,10 @@ export function useMindMapCanvasState(
         },
       },
       {
-        label: '添加同级节点 (Enter)',
+        label: '添加同级知识点 (Enter)',
         icon: Plus,
         onClick: () => {
+          if (readonly) return
           dispatchGlobalFeedback('node_create', {
             point: { x: ctxMenu.x, y: ctxMenu.y },
             origin: 'node',
@@ -514,38 +551,45 @@ export function useMindMapCanvasState(
         label: '上移',
         icon: ArrowUp,
         onClick: () => {
+          if (readonly) return
           dispatchGlobalFeedback('node_move', {
             point: { x: ctxMenu.x, y: ctxMenu.y },
             origin: 'node',
           })
           onMoveUp?.(nodeId)
         },
-        disabled: canMoveUp ? !canMoveUp(nodeId) : true,
+        disabled: readonly || (canMoveUp ? !canMoveUp(nodeId) : true),
       },
       {
         label: '下移',
         icon: ArrowDown,
         onClick: () => {
+          if (readonly) return
           dispatchGlobalFeedback('node_move', {
             point: { x: ctxMenu.x, y: ctxMenu.y },
             origin: 'node',
           })
           onMoveDown?.(nodeId)
         },
-        disabled: canMoveDown ? !canMoveDown(nodeId) : true,
+        disabled: readonly || (canMoveDown ? !canMoveDown(nodeId) : true),
       },
       {
         label: '重命名',
         icon: Pencil,
-        onClick: () => dispatchGlobalFeedback('node_edit_start', {
-          point: { x: ctxMenu.x, y: ctxMenu.y },
-          origin: 'node',
-        }),
+        onClick: () => {
+          if (readonly) return
+          dispatchGlobalFeedback('node_edit_start', {
+            point: { x: ctxMenu.x, y: ctxMenu.y },
+            origin: 'node',
+          })
+        },
+        disabled: readonly,
       },
       {
         label: '删除 (Delete)',
         icon: Trash2,
         onClick: () => {
+          if (readonly) return
           dispatchGlobalFeedback('node_delete', {
             point: { x: ctxMenu.x, y: ctxMenu.y },
             origin: 'node',
@@ -553,15 +597,16 @@ export function useMindMapCanvasState(
           onDelete(nodeId)
         },
         variant: 'danger' as const,
+        disabled: readonly,
       },
     ]
-  }, [canMoveDown, canMoveUp, ctxMenu, onAddChild, onAddSibling, onDelete, onMoveDown, onMoveUp])
+  }, [buildNodeActions, canMoveDown, canMoveUp, ctxMenu, onAddChild, onAddSibling, onDelete, onMoveDown, onMoveUp, readonly])
 
   const edgeActions: ContextMenuAction[] = useMemo(() => {
     if (!edgeMenu) return []
     return [
       {
-        label: '插入卡片',
+        label: '插入知识点',
         icon: BetweenHorizontalStart,
         onClick: () => {
           dispatchGlobalFeedback('node_create', {
@@ -651,6 +696,8 @@ export function useMindMapCanvasState(
     onEdgesChange,
     handleNodeClick,
     handleNodeContextMenu,
+    handleNodeMouseEnter,
+    handleNodeMouseLeave,
     handleNodeDragStart,
     handleNodeDrag,
     handleNodeDragStop,

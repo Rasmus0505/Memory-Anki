@@ -287,8 +287,8 @@ SCENES: tuple[AiSceneDefinition, ...] = (
     ),
     AiSceneDefinition(
         key="quiz_mini_palace_grouping",
-        label="小宫殿归类",
-        description="把题目按小宫殿分组，或把已存在的大宫殿题目批量归类到各个小宫殿。",
+        label="学习组归类",
+        description="把题目按学习组分组，或把已存在的大宫殿题目批量归类到各个学习组。",
         category_key="llm",
         config_key="scene_model_quiz_mini_palace",
         thinking_config_key="scene_model_quiz_mini_palace_thinking_enabled",

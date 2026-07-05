@@ -44,8 +44,8 @@ const shelfLayoutOptions: Array<{ value: PalaceShelfLayoutMode; label: string; i
 const expandedLayoutOptions: Array<{ value: PalaceListLayoutMode; label: string; icon: typeof List }> = [
   { value: 'chapter-single', label: '单列章节流', icon: List },
   { value: 'chapter-double', label: '章节内双列', icon: Rows3 },
-  { value: 'chapter-card-grid', label: '章节卡片双列', icon: LayoutGrid },
-  { value: 'flow', label: '卡片流', icon: WrapText },
+  { value: 'chapter-card-grid', label: '章节知识点双列', icon: LayoutGrid },
+  { value: 'flow', label: '知识点流', icon: WrapText },
 ]
 
 const shelfDensityOptions: Array<{ value: PalaceShelfDensityMode; label: string }> = [

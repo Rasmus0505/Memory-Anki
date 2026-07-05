@@ -1,8 +1,4 @@
 import type { MindMapEditorState } from '@/shared/api/contracts'
-import type {
-  MindMapHostSegmentRangeDraft,
-  MindMapHostSegmentSummary,
-} from '@/shared/api/contracts'
 
 export interface MindMapSelection {
   uid: string | null
@@ -124,73 +120,6 @@ export interface MindMapFeedbackFxPayload
   source?: string
 }
 
-export interface MindMapFrameHostState {
-  readonly: boolean
-  practiceModeActive: boolean
-  viewMemoryScope: string | null
-  immersiveModeActive: boolean
-  aiSplitBusy: boolean
-  aiSplitEnabled: boolean
-  segments: MindMapHostSegmentSummary[]
-  activeSegmentId: number | null
-  segmentColorMode: 'all' | 'active-only' | 'all-with-active-emphasis'
-  segmentRangeDraft: MindMapHostSegmentRangeDraft
-  focusNodeUids: string[]
-  focusRequestNodeUid: string | null
-  focusRequestNonce: number
-  miniPalaceDraft: {
-    active: boolean
-    selectedNodeUids: string[]
-  }
-  miniPalacePracticeActive: boolean
-}
-
-export interface HostEditorStateSyncPayload {
-  editorState: MindMapEditorState
-  preserveView: boolean
-  syncIntent: 'soft' | 'replace'
-  syncReason: string | null
-  fingerprint: string
-  source: 'prop' | 'force'
-}
-
-export interface HostBridge {
-  getMindMapData: () => Record<string, unknown> | string
-  saveMindMapData: (data: Record<string, unknown> | string) => void
-  getMindMapConfig: () => Record<string, unknown>
-  saveMindMapConfig: (config: Record<string, unknown>) => void
-  getLanguage: () => string
-  saveLanguage: (lang: string) => void
-  getLocalConfig: () => Record<string, unknown>
-  saveLocalConfig: (config: Record<string, unknown>) => void
-  isHydrated?: () => boolean
-  notify: (event: string, payload: unknown) => void
-}
-
-export interface MindMapHostWindow extends Window {
-  syncHostEditorState?: (payload: {
-    editorState: MindMapEditorState
-    preserveView: boolean
-    syncIntent: 'soft' | 'replace'
-    syncReason: string | null
-    viewPolicy: 'preserve' | 'reset'
-  }) => void
-  applyHostState?: (state: MindMapFrameHostState) => void
-  emitReviewFx?: (payload: MindMapReviewFxPayload) => void
-  emitFeedbackFx?: (payload: MindMapFeedbackFxPayload) => void
-  clearReviewFx?: () => void
-  setUiCleared?: (nextValue: boolean) => void
-  toggleUiCleared?: () => void
-  enterNativeFullscreen?: () => Promise<void> | void
-  exitNativeFullscreen?: () => Promise<void> | void
-}
-
-declare global {
-  interface Window {
-    __memoryAnkiMindMapHosts?: Record<string, HostBridge>
-  }
-}
-
 export function cloneValue<T>(value: T): T {
   return structuredClone(value)
 }
@@ -198,83 +127,4 @@ export function cloneValue<T>(value: T): T {
 export function normalizeEditorDoc(value: MindMapEditorState['editor_doc']): Record<string, unknown> | string {
   if (value == null) return {}
   return cloneValue(value)
-}
-
-export function hasMeaningfulExternalSyncKey(value: string | number | null): boolean {
-  if (value == null) return false
-  if (typeof value === 'number') return value !== 0
-  const normalized = value.trim()
-  return normalized !== '' && normalized !== '0'
-}
-
-export function buildSyncFingerprint(args: {
-  editorState: MindMapEditorState
-  activeSegmentId: number | null
-  segmentColorMode: 'all' | 'active-only' | 'all-with-active-emphasis'
-  segmentRangeDraft: MindMapHostSegmentRangeDraft
-  segments: MindMapHostSegmentSummary[]
-  preserveViewOnSync: boolean
-  externalSyncKey: string | number | null
-}) {
-  const {
-    editorState,
-    activeSegmentId,
-    segmentColorMode,
-    segmentRangeDraft,
-    segments,
-    preserveViewOnSync,
-    externalSyncKey,
-  } = args
-  const useExternalDocSyncKey = hasMeaningfulExternalSyncKey(externalSyncKey)
-  return JSON.stringify({
-    editor_doc: useExternalDocSyncKey ? undefined : normalizeEditorDoc(editorState.editor_doc),
-    editor_doc_sync_key: useExternalDocSyncKey ? externalSyncKey : undefined,
-    editor_config: editorState.editor_config,
-    editor_local_config: editorState.editor_local_config,
-    lang: editorState.lang,
-    segments,
-    activeSegmentId,
-    segmentColorMode,
-    segmentRangeDraft,
-    preserveViewOnSync,
-  })
-}
-
-export function buildHostBridgeHostState(args: {
-  readonly: boolean
-  practiceModeActive: boolean
-  viewMemoryScope: string | null
-  immersiveModeActive: boolean
-  aiSplitBusy: boolean
-  segments: MindMapHostSegmentSummary[]
-  activeSegmentId: number | null
-  segmentColorMode: 'all' | 'active-only' | 'all-with-active-emphasis'
-  segmentRangeDraft: MindMapHostSegmentRangeDraft
-  focusNodeUids: string[]
-  focusRequestNodeUid: string | null
-  focusRequestNonce: number
-  miniPalaceDraft: {
-    active: boolean
-    selectedNodeUids: string[]
-  }
-  miniPalacePracticeActive: boolean
-  hasAiSplitRequest: boolean
-}): MindMapFrameHostState {
-  return {
-    readonly: args.readonly,
-    practiceModeActive: args.practiceModeActive,
-    viewMemoryScope: args.viewMemoryScope,
-    immersiveModeActive: args.immersiveModeActive,
-    aiSplitBusy: args.aiSplitBusy,
-    aiSplitEnabled: args.hasAiSplitRequest,
-    segments: cloneValue(args.segments),
-    activeSegmentId: args.activeSegmentId,
-    segmentColorMode: args.segmentColorMode,
-    segmentRangeDraft: cloneValue(args.segmentRangeDraft),
-    focusNodeUids: cloneValue(args.focusNodeUids),
-    focusRequestNodeUid: args.focusRequestNodeUid,
-    focusRequestNonce: args.focusRequestNonce,
-    miniPalaceDraft: cloneValue(args.miniPalaceDraft),
-    miniPalacePracticeActive: args.miniPalacePracticeActive,
-  }
 }

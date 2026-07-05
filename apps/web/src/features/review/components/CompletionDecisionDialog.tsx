@@ -52,7 +52,7 @@ export function CompletionDecisionDialog({
           >
             <span className="text-sm font-semibold">已完成</span>
             <span className="text-xs font-normal opacity-80">
-              揭示剩余卡片，标记本轮完成并推进复习阶段
+              揭示剩余知识点，标记本轮完成并推进复习阶段
             </span>
           </Button>
           <Button

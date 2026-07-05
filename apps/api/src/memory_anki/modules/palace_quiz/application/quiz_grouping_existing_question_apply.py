@@ -41,7 +41,7 @@ def apply_grouped_question_copies(
         mini_palace_hit_counts.append(
             {
                 "mini_palace_id": mini_palace_id,
-                "mini_palace_name": group.get("mini_palace_name") or f"小宫殿 {mini_palace_id}",
+                "mini_palace_name": group.get("mini_palace_name") or f"专项训练 {mini_palace_id}",
                 "question_count": hit_count,
             }
         )

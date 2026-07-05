@@ -48,26 +48,26 @@ describe('usePalaceEditPage inline practice mode', () => {
     expect(screen.getByRole('button', { name: '转脑图' })).toBeTruthy()
     expect(screen.getByRole('button', { name: '转文字' })).toBeTruthy()
 
-    fireEvent.click(screen.getByRole('button', { name: '练习' }))
+    fireEvent.click(screen.getByRole('button', { name: '回忆模式' }))
     await waitFor(() => {
       expect(screen.getByText('outline')).toBeTruthy()
       expect(screen.getByText('mindmap-practice-readonly-toolbar-preserve-import-sync')).toBeTruthy()
       expect(
         screen.getByText((content) =>
-          content.startsWith('sync-replace-replace-practice:0:0-{"docFingerprint":'),
+          content.startsWith('sync-replace-replace-recall:0:0-{"docFingerprint":'),
         ),
       ).toBeTruthy()
       expect(screen.getByText('scope-palace-edit:101')).toBeTruthy()
-      expect(screen.getByRole('button', { name: '编辑' })).toBeTruthy()
+      expect(screen.getByRole('button', { name: '编辑模式' })).toBeTruthy()
     })
 
-    fireEvent.click(screen.getByRole('button', { name: '编辑' }))
+    fireEvent.click(screen.getByRole('button', { name: '编辑模式' }))
     await waitFor(() => {
       expect(screen.getByText('outline')).toBeTruthy()
       expect(screen.getByText('mindmap-edit-editable-plain-reset-import-sync')).toBeTruthy()
       expect(screen.getByText('sync-soft-replace-edit:0:0-0-')).toBeTruthy()
       expect(screen.getByText('scope-palace-edit:101')).toBeTruthy()
-      expect(screen.getByRole('button', { name: '练习' })).toBeTruthy()
+      expect(screen.getByRole('button', { name: '回忆模式' })).toBeTruthy()
     })
 
     expect(palaceApi.getPracticeSessionProgressApi).toHaveBeenCalledTimes(1)
@@ -106,14 +106,14 @@ describe('usePalaceEditPage inline practice mode', () => {
       expect(screen.getByText('mindmap-edit-editable-plain-reset-import-sync')).toBeTruthy()
     })
 
-    fireEvent.click(screen.getByRole('button', { name: '练习' }))
+    fireEvent.click(screen.getByRole('button', { name: '回忆模式' }))
 
     await waitFor(() => {
       expect(screen.getByText('mindmap-practice-readonly-toolbar-preserve-import-sync')).toBeTruthy()
     })
     expect(
       screen.getByText((content) =>
-        content.startsWith('sync-replace-replace-practice:0:0-{"docFingerprint":'),
+        content.startsWith('sync-replace-replace-recall:0:0-{"docFingerprint":'),
       ),
     ).toBeTruthy()
     expect(getMindMapTexts()).toEqual({
@@ -149,11 +149,11 @@ describe('usePalaceEditPage inline practice mode', () => {
       })
     })
 
-    fireEvent.click(screen.getByRole('button', { name: '编辑' }))
+    fireEvent.click(screen.getByRole('button', { name: '编辑模式' }))
     await waitFor(() => {
       expect(screen.getByText('mindmap-edit-editable-plain-reset-import-sync')).toBeTruthy()
     })
-    fireEvent.click(screen.getByRole('button', { name: '练习' }))
+    fireEvent.click(screen.getByRole('button', { name: '回忆模式' }))
     await waitFor(() => {
       expect(getMindMapTexts()).toEqual({
         root: 'root-测试宫殿',
@@ -201,7 +201,7 @@ describe('usePalaceEditPage inline practice mode', () => {
     expect(screen.getByText('focus-:0')).toBeTruthy()
 
     fireEvent.click(screen.getByRole('button', { name: '选中首子节点' }))
-    fireEvent.click(screen.getByRole('button', { name: '练习' }))
+    fireEvent.click(screen.getByRole('button', { name: '回忆模式' }))
 
     await waitFor(() => {
       expect(screen.getByText('mindmap-practice-readonly-toolbar-preserve-import-sync')).toBeTruthy()
@@ -213,7 +213,7 @@ describe('usePalaceEditPage inline practice mode', () => {
       expect(screen.getByRole('button', { name: '点击首子节点' })).toBeTruthy()
     })
     fireEvent.click(screen.getByRole('button', { name: '点击首子节点' }))
-    fireEvent.click(screen.getByRole('button', { name: '编辑' }))
+    fireEvent.click(screen.getByRole('button', { name: '编辑模式' }))
 
     await waitFor(() => {
       expect(screen.getByText('mindmap-edit-editable-plain-reset-import-sync')).toBeTruthy()
@@ -253,14 +253,14 @@ describe('usePalaceEditPage inline practice mode', () => {
       expect(screen.getByText('mindmap-edit-editable-plain-reset-import-sync')).toBeTruthy()
     })
 
-    fireEvent.click(screen.getByRole('button', { name: '练习' }))
+    fireEvent.click(screen.getByRole('button', { name: '回忆模式' }))
 
     await waitFor(() => {
       expect(screen.getByText('mindmap-practice-readonly-toolbar-preserve-import-sync')).toBeTruthy()
     })
     expect(
       screen.getByText((content) =>
-        content.startsWith('sync-replace-replace-practice:0:0-{"docFingerprint":'),
+        content.startsWith('sync-replace-replace-recall:0:0-{"docFingerprint":'),
       ),
     ).toBeTruthy()
 

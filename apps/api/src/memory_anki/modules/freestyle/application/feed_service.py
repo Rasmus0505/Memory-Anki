@@ -318,17 +318,17 @@ def _build_practice_cards(
         for mini_palace in palace.mini_palaces or []:
             if not bool(getattr(mini_palace, "needs_practice", False)):
                 continue
-            name = mini_palace.name or f"小宫殿 {mini_palace.sort_order + 1}"
+            name = mini_palace.name or f"专项训练 {mini_palace.sort_order + 1}"
             cards.append(
                 _action_card(
                     card_id=f"practice:mini:{mini_palace.id}",
                     content_type=CONTENT_TYPE_PRACTICE,
                     action_kind="mini_practice",
-                    title=f"小宫殿练习：{name}",
+                    title=f"专项训练：{name}",
                     subtitle=palace_title,
                     href=f"/mini-palaces/{mini_palace.id}/practice",
                     priority=68,
-                    reason="小宫殿需要练习",
+                    reason="专项训练需要练习",
                     palace=palace,
                     extra={
                         "mini_palace_id": mini_palace.id,
