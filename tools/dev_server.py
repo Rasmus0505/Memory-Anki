@@ -224,7 +224,14 @@ def ensure_backend_runtime_prepared() -> None:
     log_path.parent.mkdir(parents=True, exist_ok=True)
     with log_path.open("ab") as log_file:
         result = subprocess.run(
-            [sys.executable, "-m", "memory_anki.app.runtime_prepare"],
+            [
+                sys.executable,
+                "-c",
+                (
+                    f"import sys; sys.path.insert(0, {str(API_SRC)!r}); "
+                    "from memory_anki.app.runtime_prepare import main; raise SystemExit(main())"
+                ),
+            ],
             cwd=str(API_DIR),
             env=env,
             stdout=log_file,
@@ -235,6 +242,35 @@ def ensure_backend_runtime_prepared() -> None:
         )
     if result.returncode != 0:
         raise RuntimeError(f"runtime_prepare 失败 ({result.returncode})，详见 {log_path}")
+
+
+def ensure_backend_migrations_applied() -> None:
+    """Run Alembic migrations before uvicorn so health waiting only covers API startup."""
+    print("[i] 数据库迁移中...（详见 logs\\runtime-migrate.log）")
+    env = _backend_env()
+    log_path = LOGS_DIR / "runtime-migrate.log"
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    with log_path.open("ab") as log_file:
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-c",
+                (
+                    f"import sys; sys.path.insert(0, {str(API_SRC)!r}); "
+                    "from memory_anki.infrastructure.db.migrations import run_migrations; run_migrations()"
+                ),
+            ],
+            cwd=str(API_DIR),
+            env=env,
+            stdout=log_file,
+            stderr=subprocess.STDOUT,
+            stdin=subprocess.DEVNULL,
+            **hidden_process_kwargs(),
+            check=False,
+        )
+    if result.returncode != 0:
+        raise RuntimeError(f"数据库迁移失败 ({result.returncode})，详见 {log_path}")
+    print("[ok] 数据库迁移已完成。")
 
 
 def _runtime_config():
@@ -386,16 +422,17 @@ def main() -> int:
     # 3. 确保数据库就绪
     try:
         ensure_backend_runtime_prepared()
+        ensure_backend_migrations_applied()
     except Exception as exc:
-        print(f"[!] 数据初始化失败: {exc}")
+        print(f"[!] 数据库准备失败: {exc}")
         return 1
 
     # 4. 启动后端并等待健康
     backend_proc = start_backend()
     print("[i] 等待后端就绪 ...", end=" ", flush=True)
-    if not wait_for_backend(timeout_seconds=60):
+    if not wait_for_backend(timeout_seconds=120):
         print("超时")
-        print(f"[!] 后端 60 秒内未就绪，详见 {LOGS_DIR / 'api.log'}")
+        print(f"[!] 后端 120 秒内未就绪，详见 {LOGS_DIR / 'api.log'}")
         kill_process_tree(backend_proc.pid)
         return 1
     print("就绪 ✓")
@@ -407,6 +444,7 @@ def main() -> int:
         print("超时")
         print(f"[!] 前端 40 秒内未就绪，详见 {LOGS_DIR / 'web-dev.log'}")
         kill_process_tree(backend_proc.pid)
+        kill_process_tree(frontend_proc.pid)
         return 1
     print("就绪 ✓")
 

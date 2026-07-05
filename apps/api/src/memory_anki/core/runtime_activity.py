@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import threading
 import time
@@ -17,6 +18,7 @@ INSTANCE_HEARTBEAT_INTERVAL_SECONDS = 5.0
 INSTANCE_STALE_AFTER_SECONDS = 20.0
 
 _CURRENT_INSTANCE_ID: str | None = None
+logger = logging.getLogger(__name__)
 
 
 @dataclass(slots=True)
@@ -47,6 +49,18 @@ def _write_instance_payload(instance_id: str, payload: dict[str, Any]) -> None:
         json.dumps(payload, ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
+
+
+def _write_instance_payload_safely(instance_id: str, payload: dict[str, Any]) -> bool:
+    try:
+        _write_instance_payload(instance_id, payload)
+    except OSError:
+        logger.warning(
+            "runtime activity heartbeat write failed; continuing without blocking startup",
+            exc_info=True,
+        )
+        return False
+    return True
 
 
 def current_runtime_instance_id() -> str | None:
@@ -129,9 +143,9 @@ def start_runtime_activity_heartbeat(*, channel: str, startup_mode: str) -> Runt
 
     def run() -> None:
         while not stop_event.wait(INSTANCE_HEARTBEAT_INTERVAL_SECONDS):
-            _write_instance_payload(instance_id, payload)
+            _write_instance_payload_safely(instance_id, payload)
 
-    _write_instance_payload(instance_id, payload)
+    _write_instance_payload_safely(instance_id, payload)
     thread = threading.Thread(
         target=run,
         name=f"memory-anki-runtime-activity-{instance_id}",

@@ -9,8 +9,8 @@ from __future__ import annotations
 import json
 from datetime import datetime
 
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 
 revision = "0007_study_sessions"
 down_revision = "0006_study_startup_indexes"
@@ -44,6 +44,10 @@ def _create_index_once(index_name: str, table_name: str, columns: list[str]) -> 
 
 def _json_dumps(value: object) -> str:
     return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+
+
+def _iso_datetime(value: object) -> str:
+    return value.isoformat() if hasattr(value, "isoformat") else str(value)
 
 
 def _scene_from_time_record(kind: str | None, source_kind: str | None) -> str:
@@ -206,7 +210,7 @@ def _backfill_from_session_progress() -> None:
                 "completion_method": "",
                 "progress_json": _json_dumps(progress),
                 "events_json": _json_dumps(
-                    [{"type": "migrated_progress", "at": updated_at.isoformat()}]
+                    [{"type": "migrated_progress", "at": _iso_datetime(updated_at)}]
                 ),
                 "summary_json": _json_dumps({"migrated_from": "session_progress"}),
                 "deleted_at": None,

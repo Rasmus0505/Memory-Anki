@@ -26,6 +26,39 @@ class RuntimeActivityTests(unittest.TestCase):
 
                 self.assertEqual(runtime_activity.list_active_runtime_instances(), [])
 
+    def test_start_runtime_activity_heartbeat_continues_when_initial_write_fails(self):
+        with patch.object(
+            runtime_activity,
+            "_write_instance_payload",
+            side_effect=PermissionError("sync lock"),
+        ), patch.object(runtime_activity.logger, "warning") as warning:
+            handle = runtime_activity.start_runtime_activity_heartbeat(
+                channel="production",
+                startup_mode="serve",
+            )
+            try:
+                self.assertIsNotNone(handle.instance_id)
+                self.assertEqual(runtime_activity.current_runtime_instance_id(), handle.instance_id)
+            finally:
+                runtime_activity.stop_runtime_activity_heartbeat(handle)
+
+        warning.assert_called()
+
+    def test_safe_runtime_activity_write_swallows_os_errors(self):
+        with patch.object(
+            runtime_activity,
+            "_write_instance_payload",
+            side_effect=PermissionError("sync lock"),
+        ), patch.object(runtime_activity.logger, "warning") as warning:
+            self.assertFalse(
+                runtime_activity._write_instance_payload_safely(
+                    "instance",
+                    {"channel": "production"},
+                )
+            )
+
+        warning.assert_called_once()
+
     def test_exclusive_runtime_operation_rejects_foreign_instance(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             active_dir = Path(temp_dir) / "active-instances"

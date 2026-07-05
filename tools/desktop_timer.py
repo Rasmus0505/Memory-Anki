@@ -11,7 +11,7 @@ TOOLS_DIR = Path(__file__).resolve().parent
 if str(TOOLS_DIR) not in sys.path:
     sys.path.insert(0, str(TOOLS_DIR))
 
-import dev_server
+import dev_server  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 WEB_DIR = REPO_ROOT / "apps" / "web"
@@ -27,13 +27,14 @@ def main() -> int:
 
     try:
         dev_server.ensure_backend_runtime_prepared()
+        dev_server.ensure_backend_migrations_applied()
     except Exception as exc:
-        print(f"[!] Runtime preparation failed: {exc}")
+        print(f"[!] Runtime database preparation failed: {exc}")
         return 1
 
     backend_proc = dev_server.start_backend()
     print("[i] Waiting for backend ...", end=" ", flush=True)
-    if not dev_server.wait_for_backend(timeout_seconds=60):
+    if not dev_server.wait_for_backend(timeout_seconds=120):
         print("timeout")
         dev_server.kill_process_tree(backend_proc.pid)
         return 1

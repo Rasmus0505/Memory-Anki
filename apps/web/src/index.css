@@ -1303,7 +1303,7 @@ select:focus-visible,
   gap: clamp(5px, 2.7vh, 10px);
   padding: clamp(9px, 4vh, 14px);
   border-radius: 22px;
-  border: 1px solid rgba(148, 163, 184, 0.28);
+  border: 1px solid rgba(148, 163, 184, 0.42);
   background:
     radial-gradient(circle at top right, rgba(251, 191, 36, 0.18), transparent 34%),
     radial-gradient(circle at bottom left, rgba(14, 165, 233, 0.12), transparent 30%),
@@ -1341,11 +1341,19 @@ select:focus-visible,
 }
 
 .memory-anki-timer-overlay-kicker {
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 0.12em;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: #9a3412;
+  color: #64748b;
+}
+
+.memory-anki-timer-overlay-shell-break .memory-anki-timer-overlay-kicker {
+  color: #c2610a;
+}
+
+.memory-anki-timer-overlay-shell-expired .memory-anki-timer-overlay-kicker {
+  color: #b91c1c;
 }
 
 .memory-anki-timer-overlay-title {
@@ -1360,15 +1368,21 @@ select:focus-visible,
 
 .memory-anki-timer-overlay-icon-button {
   display: inline-flex;
-  width: 30px;
-  height: 30px;
+  width: 28px;
+  height: 28px;
   align-items: center;
   justify-content: center;
-  border-radius: 10px;
-  border: 1px solid rgba(148, 163, 184, 0.22);
-  background: rgba(255, 255, 255, 0.62);
-  color: #475569;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.26);
+  background: rgba(255, 255, 255, 0.58);
+  color: #64748b;
+  cursor: pointer;
   -webkit-app-region: no-drag;
+}
+
+.memory-anki-timer-overlay-icon-button:hover {
+  background: rgba(255, 255, 255, 0.82);
+  color: #334155;
 }
 
 .memory-anki-timer-overlay-digits {
@@ -1377,7 +1391,7 @@ select:focus-visible,
   align-items: center;
   justify-content: center;
   color: #111827;
-  font-size: clamp(34px, 28vh, 72px);
+  font-size: clamp(32px, 26vh, 62px);
   font-weight: 900;
   line-height: 0.95;
   letter-spacing: 0;
@@ -1386,13 +1400,10 @@ select:focus-visible,
 
 .memory-anki-timer-overlay-copy {
   min-height: 0;
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.68);
-  padding: clamp(5px, 2vh, 8px) 10px;
-  color: #475569;
+  color: #64748b;
   font-size: clamp(10px, 3.2vh, 12px);
-  font-weight: 600;
-  line-height: 1.25;
+  font-weight: 500;
+  line-height: 1.35;
   text-align: center;
   overflow: hidden;
 }

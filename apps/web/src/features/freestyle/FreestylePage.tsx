@@ -141,6 +141,16 @@ const MODE_LABELS: Record<FreestyleMode, string> = {
   free: '自由随心',
 }
 
+const QUESTION_TYPE_DISPLAY: Partial<Record<string, string>> = {
+  multiple_choice: '选择题',
+  true_false: '判断题',
+  fill_blank: '填空题',
+  matching: '匹配题',
+  ordering: '排序题',
+  categorization: '归类题',
+  short_answer: '简答题',
+}
+
 const QUESTION_TYPE_OPTIONS: Array<{ value: FreestyleQuestionTypeFilter; label: string }> = [
   { value: 'all', label: '全部题型' },
   { value: 'multiple_choice', label: '选择题' },
@@ -245,7 +255,7 @@ function IconButton({
           type="button"
           size="icon"
           variant="secondary"
-          className="size-11 rounded-full border border-white/12 bg-zinc-900/84 text-zinc-50 shadow-lg backdrop-blur hover:bg-zinc-800"
+          className="size-9 rounded-full border border-white/12 bg-zinc-900/84 text-zinc-50 shadow-lg backdrop-blur hover:bg-zinc-800 sm:size-11"
           aria-label={label}
           title={label}
           disabled={disabled}
@@ -628,13 +638,13 @@ function FreestyleQuizCardView({
   const chapterName = card.chapter_context?.name
   return (
     <div className="mx-auto flex min-h-[min(760px,calc(100vh-140px))] w-full max-w-4xl flex-col justify-center px-4 py-16">
-      <div className="rounded-lg border border-white/12 bg-zinc-50 p-4 text-zinc-950 shadow-2xl sm:p-6">
+      <div className="rounded-xl border border-zinc-200 bg-white p-4 text-zinc-950 shadow-[0_0_0_1px_rgba(255,255,255,0.06),0_12px_40px_rgba(0,0,0,0.62)] sm:p-6">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex min-w-0 flex-wrap items-center gap-2">
             <Badge variant="secondary">{palaceTitle}</Badge>
             {miniName ? <Badge variant="outline">{miniName}</Badge> : null}
             {chapterName ? <Badge variant="outline">{chapterName}</Badge> : null}
-            <Badge variant="outline">{card.question.question_type}</Badge>
+            <Badge variant="outline">{QUESTION_TYPE_DISPLAY[card.question.question_type] ?? card.question.question_type}</Badge>
           </div>
           <Badge
             variant="outline"
@@ -1167,41 +1177,51 @@ export default function FreestylePage() {
           />
         ) : null}
 
-        <div className="pointer-events-none absolute left-0 right-0 top-0 z-20 flex items-start justify-end gap-3 px-4 py-4 sm:justify-between sm:px-5">
-          <div className="pointer-events-auto flex min-w-0 flex-wrap items-center gap-2 rounded-full border border-white/10 bg-zinc-900/76 px-3 py-2 text-xs shadow-lg backdrop-blur">
-            <Sparkles className="hidden size-4 text-amber-300 sm:block" />
-            <div className="flex items-center gap-1 rounded-full bg-white/6 p-0.5">
-              {(['today', 'free'] as const).map((item) => (
-                <button
-                  key={item}
-                  type="button"
-                  className={cn(
-                    'rounded-full px-2 py-1 transition-colors',
-                    mode === item
-                      ? 'bg-emerald-300 text-zinc-950'
-                      : 'text-zinc-400 hover:text-zinc-50',
-                  )}
-                  onClick={() => switchMode(item)}
-                >
-                  {MODE_LABELS[item]}
-                </button>
-              ))}
-            </div>
-            <span className="text-zinc-400">
-              {mode === 'today' ? `${TODAY_TRAINING_ROUND_SIZE} 个/轮` : RANGE_LABELS[config.range]}
-            </span>
-            <span className="text-zinc-400">
+        <div className="pointer-events-none absolute left-0 right-0 top-0 z-20 flex items-start justify-between gap-2 px-3 py-3 sm:px-4 sm:py-4">
+          {/* 左侧：模式切换 */}
+          <div className="pointer-events-auto flex items-center gap-0.5 rounded-full border border-white/10 bg-zinc-900/80 p-0.5 shadow-lg backdrop-blur">
+            <Sparkles className="ml-2 hidden size-3.5 shrink-0 text-amber-300 sm:block" />
+            {(['today', 'free'] as const).map((item) => (
+              <button
+                key={item}
+                type="button"
+                className={cn(
+                  'rounded-full px-3 py-1.5 text-xs font-medium transition-colors',
+                  mode === item
+                    ? 'bg-emerald-300 text-zinc-950'
+                    : 'text-zinc-400 hover:text-zinc-100',
+                )}
+                onClick={() => switchMode(item)}
+              >
+                {MODE_LABELS[item]}
+              </button>
+            ))}
+          </div>
+
+          {/* 右侧：进度 + 连对 + 计时 */}
+          <div className="pointer-events-auto flex items-center gap-1.5 rounded-full border border-white/10 bg-zinc-900/80 px-3 py-2 text-xs shadow-lg backdrop-blur">
+            <span className="tabular-nums text-zinc-300">
               {queue.length === 0
                 ? '0/0'
                 : summaryVisible
                   ? `${queue.length}/${queue.length}`
                   : `${currentIndex + 1}/${queue.length}`}
             </span>
-            <span className="text-emerald-300">连对 {progress.correctStreak}</span>
-          </div>
-          <div className="pointer-events-auto hidden items-center gap-2 rounded-full border border-white/10 bg-zinc-900/76 px-3 py-2 text-xs shadow-lg backdrop-blur sm:flex">
-            <Clock3 className="size-4 text-emerald-300" />
-            <span>{timer.status === 'running' ? formatTimer(timer.effectiveSeconds) : timer.status === 'paused' ? '暂停' : '待开始'}</span>
+            {progress.correctStreak > 0 && (
+              <>
+                <span className="text-zinc-600">·</span>
+                <span className="text-emerald-300">🔥{progress.correctStreak}</span>
+              </>
+            )}
+            <span className="text-zinc-600">·</span>
+            <Clock3 className="size-3.5 shrink-0 text-zinc-400" />
+            <span className="tabular-nums text-zinc-300">
+              {timer.status === 'running'
+                ? formatTimer(timer.effectiveSeconds)
+                : timer.status === 'paused'
+                  ? '暂停'
+                  : '--:--'}
+            </span>
           </div>
         </div>
 
@@ -1369,12 +1389,12 @@ export default function FreestylePage() {
           </IconButton>
         </div>
 
-        <div className="pointer-events-none absolute bottom-4 left-4 z-20 hidden items-center gap-2 rounded-full border border-white/10 bg-zinc-900/72 px-3 py-2 text-xs text-zinc-300 shadow-lg backdrop-blur md:flex">
+        <div className="pointer-events-none absolute bottom-4 left-4 z-20 hidden items-center gap-1.5 rounded-full border border-white/10 bg-zinc-900/80 px-3 py-2 text-xs text-zinc-300 shadow-lg backdrop-blur sm:flex">
           <span className="text-emerald-300">未做 {freshCount}</span>
-          <span className="text-zinc-600">/</span>
-          <span>已做 {resolvedCount}</span>
-          <span className="text-zinc-600">/</span>
-          <span>跳转 {actionTotal}</span>
+          <span className="text-zinc-700">·</span>
+          <span className="text-zinc-400">已做 {resolvedCount}</span>
+          <span className="text-zinc-700">·</span>
+          <span className="text-amber-300/80">跳转 {actionTotal}</span>
         </div>
       </div>
     </TooltipProvider>

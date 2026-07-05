@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "Memory Anki/记忆宫殿/做题/PDF上传.md",
+                "file": "计划清单/claude清单/03-功能层-新增清单.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "PDF上传"
+              "title": "03-功能层-新增清单"
             }
           }
         ]
@@ -185,7 +185,10 @@
   },
   "active": "6fd171529d58af54",
   "lastOpenFiles": [
+    "计划清单/claude清单/02-功能层-优化清单.md",
     "计划清单/claude清单/01-功能层-删除清单.md",
-    "Memory Anki/记忆宫殿/做题/PDF上传.md"
+    "Memory Anki/记忆宫殿/做题/PDF上传.md",
+    "计划清单/codex发的提示词/0705-1441-随心计时器前端优化.md",
+    "计划清单/codex发的提示词"
   ]
 }
