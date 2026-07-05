@@ -1,6 +1,5 @@
 import type { MindMapEditorState } from '@/shared/api/contracts'
 import type {
-  BilinkItem,
   MindMapHostSegmentRangeDraft,
   MindMapHostSegmentSummary,
 } from '@/shared/api/contracts'
@@ -85,7 +84,6 @@ export type MindMapFeedbackEvent =
   | 'save_success'
   | 'save_error'
   | 'import_apply'
-  | 'bilink_action'
   | 'segment_action'
 
 export type MindMapFeedbackLevel = 'micro' | 'action' | 'milestone'
@@ -137,9 +135,6 @@ export interface MindMapFrameHostState {
   activeSegmentId: number | null
   segmentColorMode: 'all' | 'active-only' | 'all-with-active-emphasis'
   segmentRangeDraft: MindMapHostSegmentRangeDraft
-  bilinkCounts: Record<string, number>
-  bilinkItems: BilinkItem[]
-  bilinkCurrentPalaceId: number | null
   focusNodeUids: string[]
   focusRequestNodeUid: string | null
   focusRequestNonce: number
@@ -181,7 +176,6 @@ export interface MindMapHostWindow extends Window {
     viewPolicy: 'preserve' | 'reset'
   }) => void
   applyHostState?: (state: MindMapFrameHostState) => void
-  insertBilinkMark?: (text: string) => boolean
   emitReviewFx?: (payload: MindMapReviewFxPayload) => void
   emitFeedbackFx?: (payload: MindMapFeedbackFxPayload) => void
   clearReviewFx?: () => void
@@ -218,7 +212,6 @@ export function buildSyncFingerprint(args: {
   activeSegmentId: number | null
   segmentColorMode: 'all' | 'active-only' | 'all-with-active-emphasis'
   segmentRangeDraft: MindMapHostSegmentRangeDraft
-  bilinkCounts: Record<string, number>
   segments: MindMapHostSegmentSummary[]
   preserveViewOnSync: boolean
   externalSyncKey: string | number | null
@@ -228,7 +221,6 @@ export function buildSyncFingerprint(args: {
     activeSegmentId,
     segmentColorMode,
     segmentRangeDraft,
-    bilinkCounts,
     segments,
     preserveViewOnSync,
     externalSyncKey,
@@ -244,7 +236,6 @@ export function buildSyncFingerprint(args: {
     activeSegmentId,
     segmentColorMode,
     segmentRangeDraft,
-    bilinkCounts,
     preserveViewOnSync,
   })
 }
@@ -259,9 +250,6 @@ export function buildHostBridgeHostState(args: {
   activeSegmentId: number | null
   segmentColorMode: 'all' | 'active-only' | 'all-with-active-emphasis'
   segmentRangeDraft: MindMapHostSegmentRangeDraft
-  bilinkCounts: Record<string, number>
-  bilinkItems: BilinkItem[]
-  bilinkCurrentPalaceId: number | null
   focusNodeUids: string[]
   focusRequestNodeUid: string | null
   focusRequestNonce: number
@@ -283,9 +271,6 @@ export function buildHostBridgeHostState(args: {
     activeSegmentId: args.activeSegmentId,
     segmentColorMode: args.segmentColorMode,
     segmentRangeDraft: cloneValue(args.segmentRangeDraft),
-    bilinkCounts: cloneValue(args.bilinkCounts),
-    bilinkItems: cloneValue(args.bilinkItems),
-    bilinkCurrentPalaceId: args.bilinkCurrentPalaceId,
     focusNodeUids: cloneValue(args.focusNodeUids),
     focusRequestNodeUid: args.focusRequestNodeUid,
     focusRequestNonce: args.focusRequestNonce,

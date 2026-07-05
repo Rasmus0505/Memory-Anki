@@ -1,5 +1,4 @@
 import { Trash2 } from "lucide-react";
-import { VoiceCoachSettingsDialog } from "@/features/voice-coach";
 import type {
   AiCallLogDetail,
   AiConnectionTestResponse,
@@ -36,14 +35,11 @@ export function AiWorkspaceDialogs({
   logDetailOpen,
   logDetailLoading,
   logDetail,
-  settingsOpen,
   savingKeys,
   onImpactOpenChange,
   onConnectionOpenChange,
   onLogDetailOpenChange,
-  onSettingsOpenChange,
   onDeleteModel,
-  onTestVoice,
 }: {
   impactOpen: boolean;
   impactLoading: boolean;
@@ -56,14 +52,11 @@ export function AiWorkspaceDialogs({
   logDetailOpen: boolean;
   logDetailLoading: boolean;
   logDetail: AiCallLogDetail | null;
-  settingsOpen: boolean;
   savingKeys: Record<string, boolean>;
   onImpactOpenChange: (open: boolean) => void;
   onConnectionOpenChange: (open: boolean) => void;
   onLogDetailOpenChange: (open: boolean) => void;
-  onSettingsOpenChange: (open: boolean) => void;
   onDeleteModel: () => Promise<void>;
-  onTestVoice: () => Promise<void>;
 }) {
   return (
     <>
@@ -281,12 +274,6 @@ export function AiWorkspaceDialogs({
           ) : null}
         </DialogContent>
       </Dialog>
-
-      <VoiceCoachSettingsDialog
-        open={settingsOpen}
-        onOpenChange={onSettingsOpenChange}
-        onTest={() => onTestVoice()}
-      />
     </>
   );
 }

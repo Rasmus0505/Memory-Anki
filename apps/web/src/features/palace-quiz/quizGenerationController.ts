@@ -3,7 +3,6 @@ import type {
   AiScenarioRuntimeOptionsMap,
   MindMapEditorState,
   PalaceQuizGenerationPreview,
-  PalaceQuizPdfSourceRole,
   PalaceQuizQuestionDraft,
   PalaceQuizQuestionType,
   PalaceQuizStreamDeltaEvent,
@@ -13,24 +12,15 @@ import {
   batchCreateChapterQuizQuestionsApi,
   batchCreatePalaceQuizQuestionsApi,
   previewPalaceQuizGenerationFromImagesApi,
-  previewPalaceQuizGenerationFromPdfStreamApi,
   previewPalaceQuizGenerationFromReviewMindmapApi,
   previewPalaceQuizGenerationFromTextFilesApi,
 } from '@/entities/quiz/api'
 
 export type QuizLauncherGenerationSourceKind =
-  | 'subject-pdf'
   | 'image-single'
   | 'image-batch'
   | 'text-files'
   | 'review-mindmap'
-
-export interface QuizGenerationPdfSourceDraft {
-  subject_document_id: number
-  document_name: string
-  page_selection: number[]
-  role_hint: PalaceQuizPdfSourceRole
-}
 
 export interface QuizReviewMindmapGenerationConfig {
   mode: 'chapter' | 'cross_palace'
@@ -48,7 +38,6 @@ export interface QuizGenerationRequestConfig {
   aiOptions?: AiRuntimeOptions
   aiOptionsByScenario?: AiScenarioRuntimeOptionsMap
   files?: File[]
-  pdfSources?: QuizGenerationPdfSourceDraft[]
   enableSecondaryReview?: boolean
   classifyByMiniPalace?: boolean
   reviewMindmap?: QuizReviewMindmapGenerationConfig
@@ -138,35 +127,6 @@ export async function generatePalaceQuizPreview(
       ...config.reviewMindmap,
       ai_options: config.aiOptions,
     })
-  }
-
-  if (config.sourceKind === 'subject-pdf') {
-    const pdfSources = config.pdfSources || []
-    if (pdfSources.length === 0) {
-      throw new Error('请先把至少一份 PDF 加入资料列表。')
-    }
-    return previewPalaceQuizGenerationFromPdfStreamApi(
-      config.palaceId,
-      {
-        subject_document_id: pdfSources[0]?.subject_document_id,
-        page_selection: pdfSources[0]?.page_selection || [],
-        pdf_sources: pdfSources.map((item) => ({
-          subject_document_id: item.subject_document_id,
-          page_selection: item.page_selection,
-          role_hint: item.role_hint,
-        })),
-        extra_prompt: config.extraPrompt,
-        enable_secondary_review: config.enableSecondaryReview,
-        classify_by_mini_palace: config.classifyByMiniPalace,
-        selected_chapter_id: config.selectedChapterId,
-        ai_options: config.aiOptions,
-        ai_options_by_scenario: config.aiOptionsByScenario,
-      },
-      {
-        onStatus: config.onStatus,
-        onDelta: config.onDelta,
-      },
-    )
   }
 
   const files = config.files || []

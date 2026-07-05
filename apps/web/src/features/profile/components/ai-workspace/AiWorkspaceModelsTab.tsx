@@ -228,7 +228,7 @@ export function AiWorkspaceModelsTab({
               <input
                 type="checkbox"
                 checked={modelDraft.supportsTemperature}
-                disabled={["asr", "tts"].includes(newModelType)}
+                disabled={newModelType === "asr"}
                 onChange={(event) =>
                   onModelDraftChange({
                     ...modelDraft,

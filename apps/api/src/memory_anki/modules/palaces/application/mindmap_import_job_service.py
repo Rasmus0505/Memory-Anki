@@ -1,14 +1,8 @@
 from __future__ import annotations
 
 from memory_anki.core.config import IMPORT_JOBS_DIR as DEFAULT_IMPORT_JOBS_DIR
-from memory_anki.modules.knowledge.application.subject_document_service import (
-    get_subject_document_by_id,
-    render_selected_pdf_pages,
-)
 
 from .mindmap_import import (
-    PDF_IMPORT_MODE_DIRECT_GENERATION,
-    PDF_IMPORT_MODE_STRUCTURED_MERGE,
     MindMapImportError,
     job_creation,
     job_state,
@@ -24,23 +18,19 @@ from .mindmap_import_job_execution import (
     _RUNNING_JOB_THREADS as _RUNNING_JOB_THREADS,
     _UNSET as _UNSET,
     _build_structured_error as _build_structured_error,
-    _ensure_rendered_pdf_pages as _ensure_rendered_pdf_pages,
     _find_first_input_file as _find_first_input_file,
     _job_lifecycle_dependencies as _job_lifecycle_dependencies,
     _json_load as _json_load,
     _load_batch_image_items as _load_batch_image_items,
-    _load_rendered_pdf_pages as _load_rendered_pdf_pages,
     _mark_job_completed as _mark_job_completed,
     _mark_job_failed as _mark_job_failed,
     _pause_if_requested as _pause_if_requested,
     _run_image_batch_job as _run_image_batch_job,
     _run_image_single_job as _run_image_single_job,
     _run_job_worker as _run_job_worker,
-    _run_subject_pdf_job as _run_subject_pdf_job,
     _set_job_progress as _set_job_progress,
     _set_job_result as _set_job_result,
     _set_job_stage as _set_job_stage,
-    _source_meta_to_pdf_options as _source_meta_to_pdf_options,
     _sync_job_progress_artifact as _sync_job_progress_artifact,
     _update_job_usage as _update_job_usage,
     run_job_async as run_job_async,
@@ -49,14 +39,12 @@ from .mindmap_import_job_runtime import (
     MODE_MINDMAP as MODE_MINDMAP,
     MODE_TEXT as MODE_TEXT,
     SOURCE_KIND_IMAGE_BATCH as SOURCE_KIND_IMAGE_BATCH,
-    SOURCE_KIND_SUBJECT_PDF as SOURCE_KIND_SUBJECT_PDF,
     _dashscope_runtime as _dashscope_runtime,
     _prepare_batch_image_items as _prepare_batch_image_items,
     _resolve_provider_api_key_for_runtime as _resolve_provider_api_key_for_runtime,
     _serialize_runtime_payload as _serialize_runtime_payload,
     _stream_call_dashscope_batch_json as _stream_call_dashscope_batch_json,
     _stream_call_dashscope_json as _stream_call_dashscope_json,
-    _stream_call_dashscope_pdf_json as _stream_call_dashscope_pdf_json,
     _stream_call_dashscope_text as _stream_call_dashscope_text,
 )
 from memory_anki.modules.settings.application.ai_model_registry import resolve_scenario_runtime
@@ -85,9 +73,6 @@ def _sync_facade_dependencies() -> None:
     _job_execution._stream_call_dashscope_json = _stream_call_dashscope_json
     _job_execution._stream_call_dashscope_text = _stream_call_dashscope_text
     _job_execution._stream_call_dashscope_batch_json = _stream_call_dashscope_batch_json
-    _job_execution._stream_call_dashscope_pdf_json = _stream_call_dashscope_pdf_json
-    _job_execution.get_subject_document_by_id = get_subject_document_by_id
-    _job_execution.render_selected_pdf_pages = render_selected_pdf_pages
     _job_runtime._prepare_batch_image_items = _prepare_batch_image_items
 
 
@@ -122,11 +107,6 @@ def create_batch_import_job(*args, **kwargs):
         import_jobs_dir=IMPORT_JOBS_DIR,
         import_error_cls=MindMapImportError,
     )
-
-
-def create_pdf_import_job(*args, **kwargs):
-    _sync_facade_dependencies()
-    return _job_api.create_pdf_import_job(*args, **kwargs)
 
 
 def get_job(*args, **kwargs):
@@ -188,22 +168,17 @@ __all__ = [
     "JOB_STATUS_RUNNING",
     "MODE_MINDMAP",
     "MODE_TEXT",
-    "PDF_IMPORT_MODE_DIRECT_GENERATION",
-    "PDF_IMPORT_MODE_STRUCTURED_MERGE",
     "SOURCE_KIND_IMAGE_BATCH",
     "SOURCE_KIND_IMAGE_SINGLE",
-    "SOURCE_KIND_SUBJECT_PDF",
     "_RUNNING_JOB_LOCK",
     "_RUNNING_JOB_THREADS",
     "_UNSET",
     "_build_structured_error",
     "_dashscope_runtime",
-    "_ensure_rendered_pdf_pages",
     "_find_first_input_file",
     "_job_lifecycle_dependencies",
     "_json_load",
     "_load_batch_image_items",
-    "_load_rendered_pdf_pages",
     "_mark_job_completed",
     "_mark_job_failed",
     "_pause_if_requested",
@@ -212,29 +187,23 @@ __all__ = [
     "_run_image_batch_job",
     "_run_image_single_job",
     "_run_job_worker",
-    "_run_subject_pdf_job",
     "_serialize_runtime_payload",
     "_set_job_progress",
     "_set_job_result",
     "_set_job_stage",
-    "_source_meta_to_pdf_options",
     "_stream_call_dashscope_batch_json",
     "_stream_call_dashscope_json",
-    "_stream_call_dashscope_pdf_json",
     "_stream_call_dashscope_text",
     "_sync_job_progress_artifact",
     "_update_job_usage",
     "complete_job_from_preview",
     "create_batch_import_job",
     "create_image_import_job",
-    "create_pdf_import_job",
     "delete_job",
     "get_job",
     "get_job_artifact_dir",
-    "get_subject_document_by_id",
     "list_jobs",
     "request_pause_job",
-    "render_selected_pdf_pages",
     "run_job_async",
     "serialize_job",
     "wait_for_job_completion",

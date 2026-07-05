@@ -5,6 +5,5 @@ export {
   type ImportApplyContext,
   type ImportMode,
   type ImportSourceKind,
-  type ImportSubjectOption,
   type MindMapImportWorkflow,
 } from './hooks/useMindMapImport'

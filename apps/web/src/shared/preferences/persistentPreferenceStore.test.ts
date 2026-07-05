@@ -32,13 +32,12 @@ function emptyPreferences() {
     dashboard_duration_filter: null,
     palace_list_view_settings: null,
     palace_shelf_view_settings: null,
-    voice_coach_settings: null,
   }
 }
 
 function createFlagStore() {
   return createPersistentPreferenceStore<FlagPreference>({
-    cacheKey: 'voice_coach_settings',
+    cacheKey: 'timer_focus_config',
     defaultValue: { enabled: false },
     localStorageKey: 'legacy-flag',
     sanitize: (value) => ({
@@ -60,7 +59,7 @@ describe('createPersistentPreferenceStore', () => {
     mockGetClientPreferencesApi.mockResolvedValue({
       items: {
         ...emptyPreferences(),
-        voice_coach_settings: { enabled: true },
+        timer_focus_config: { enabled: true },
       },
     })
     window.localStorage.setItem('legacy-flag', JSON.stringify({ enabled: false }))
@@ -94,7 +93,7 @@ describe('createPersistentPreferenceStore', () => {
     mockGetClientPreferencesApi.mockResolvedValue({
       items: {
         ...emptyPreferences(),
-        voice_coach_settings: { enabled: true },
+        timer_focus_config: { enabled: true },
       },
     })
     await initializeClientPreferences()

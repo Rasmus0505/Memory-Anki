@@ -1,5 +1,4 @@
 import type {
-  BilinkItem,
   MindMapEditorState,
   MindMapHostSegmentRangeDraft,
   MindMapHostSegmentSummary,
@@ -48,9 +47,6 @@ export interface MindMapFrameProps {
   activeSegmentId?: number | null
   segmentColorMode?: 'all' | 'active-only' | 'all-with-active-emphasis'
   segmentRangeDraft?: MindMapHostSegmentRangeDraft
-  bilinkCounts?: Record<string, number>
-  bilinkItems?: BilinkItem[]
-  bilinkCurrentPalaceId?: number | null
   focusNodeUids?: string[]
   focusRequestNodeUid?: string | null
   focusRequestNonce?: number
@@ -59,8 +55,6 @@ export interface MindMapFrameProps {
     selectedNodeUids: string[]
   }
   miniPalacePracticeActive?: boolean
-  bilinkInsertionText?: string | null
-  bilinkInsertionNonce?: number
   reviewFxSignal?: MindMapReviewFxPayload | null
   feedbackFxSignal?: MindMapFeedbackFxPayload | null
   onEditorStateChange: (nextState: MindMapEditorState) => void
@@ -83,17 +77,6 @@ export interface MindMapFrameProps {
   onFullscreenChange?: (active: boolean) => void
   onFullscreenToggle?: (active?: boolean) => void
   onUiClearedChange?: (active: boolean) => void
-  onBilinkTrigger?: (payload: {
-    nodeUid: string | null
-    left: number
-    top: number
-    query: string
-  }) => void
-  onBilinkNodeClick?: (payload: {
-    palaceId: number | null
-    nodeUid: string | null
-    trigger: 'badge' | 'mark'
-  }) => void
   onMiniPalacePour?: () => void
   onReady?: () => void
   onReadyTimeout?: () => void

@@ -51,7 +51,6 @@ const FEEDBACK_AUDIO_PRIORITY: Partial<Record<MindMapFeedbackEvent, number>> = {
   node_edit_start: 72,
   node_create: 68,
   drag_drop: 66,
-  bilink_action: 64,
   segment_action: 64,
   mode_switch: 62,
   field_commit: 60,
@@ -142,7 +141,6 @@ function isMindMapFeedbackEvent(value: unknown): value is MindMapFeedbackEvent {
     value === 'save_success' ||
     value === 'save_error' ||
     value === 'import_apply' ||
-    value === 'bilink_action' ||
     value === 'segment_action'
   )
 }

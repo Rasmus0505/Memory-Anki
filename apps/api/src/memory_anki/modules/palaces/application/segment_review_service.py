@@ -4,7 +4,6 @@ from .segment_review_projections import (
     build_palace_default_segment_summary as build_palace_default_segment_summary,
     build_segment_editor_doc as build_segment_editor_doc,
     build_virtual_default_segment_summary as build_virtual_default_segment_summary,
-    create_segment_review_log as create_segment_review_log,
     estimate_palace_review_seconds as estimate_palace_review_seconds,
     estimate_segment_review_seconds as estimate_segment_review_seconds,
     get_segment_display_name as get_segment_display_name,
@@ -26,13 +25,6 @@ from .segment_review_support import (
     segment_stage_progress as _segment_progress,
     serialize_stage_datetime as _serialize_stage_datetime,
 )
-from .segment_review_timing import (
-    build_virtual_default_segment_timing as build_virtual_default_segment_timing,
-    ensure_segment_schedule_model as ensure_segment_schedule_model,
-    get_segment_schedule_display_datetime as get_segment_schedule_display_datetime,
-    is_segment_schedule_due as is_segment_schedule_due,
-    is_segment_schedule_overdue as is_segment_schedule_overdue,
-)
 
 __all__ = [
     "_default_segment_algorithm",
@@ -47,15 +39,9 @@ __all__ = [
     "build_palace_default_segment_summary",
     "build_segment_editor_doc",
     "build_virtual_default_segment_summary",
-    "build_virtual_default_segment_timing",
-    "create_segment_review_log",
-    "ensure_segment_schedule_model",
     "estimate_palace_review_seconds",
     "estimate_segment_review_seconds",
     "get_segment_display_name",
-    "get_segment_schedule_display_datetime",
-    "is_segment_schedule_due",
-    "is_segment_schedule_overdue",
     "list_palace_segments",
     "palace_has_virtual_default_segment",
     "palace_review_stages_json",

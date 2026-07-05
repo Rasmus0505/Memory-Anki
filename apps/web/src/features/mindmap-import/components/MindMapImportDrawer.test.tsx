@@ -17,7 +17,7 @@ function buildProps(
     onOpenChange: vi.fn(),
     mode: 'mindmap',
     onModeChange: vi.fn(),
-    sourceKind: 'subject-pdf',
+    sourceKind: 'image-single',
     onSourceKindChange: vi.fn(),
     onWorkflowChange: vi.fn(),
     loading: false,
@@ -37,50 +37,7 @@ function buildProps(
     structureImageId: null,
     batchStatus: 'idle',
     batchMeta: null,
-    subjectOptions: [{ id: 4, name: '外国教育史' }],
-    selectedSubjectId: 4,
-    onSelectedSubjectIdChange: vi.fn(),
-    subjectDocuments: [
-      {
-        id: 11,
-        subject_id: 4,
-        filename: 'subjects/4/test.pdf',
-        original_name: 'test.pdf',
-        mime_type: 'application/pdf',
-        file_size: 128,
-        page_count: 3,
-        created_at: '2026-05-27T10:00:00',
-      },
-    ],
-    subjectDocumentsLoading: false,
-    selectedSubjectDocumentId: 11,
-    onSelectedSubjectDocumentIdChange: vi.fn(),
-    pdfPageMeta: [{ page_number: 1, thumbnail_url: '/thumb-1', preview_url: '/preview-1' }],
-    pdfPagesLoading: false,
-    selectedPdfPages: [1],
-    pdfPageInput: '1',
-    onPdfPageInputChange: vi.fn(),
-    pdfSelectionError: '',
-    pdfImportMode: 'direct_generation',
-    onPdfImportModeChange: vi.fn(),
-    structurePage: 1,
-    onStructurePageChange: vi.fn(),
-    pdfPreviewPage: 1,
-    onPdfPreviewPageChange: vi.fn(),
-    analyzedPdfPages: [],
-    rangePrompt: '古希腊',
-    onRangePromptChange: vi.fn(),
-    pdfImportOptions: {
-      quote_original_text_only: true,
-      mount_on_original_leaf_only: true,
-      preserve_emphasis_marks: true,
-      semantic_split_long_paragraphs: true,
-      preserve_line_breaks: true,
-    },
-    onPdfImportOptionChange: vi.fn(),
     importWarnings: [],
-    pdfOcrGroundingUsed: null,
-    pdfOcrTextChars: null,
     currentJobId: null,
     currentJobStatus: null,
     currentJobStage: null,
@@ -92,8 +49,6 @@ function buildProps(
     reusedExistingResult: false,
     onResumeJob: vi.fn(),
     onPauseJob: vi.fn(),
-    onTogglePdfPage: vi.fn(),
-    onPdfStart: vi.fn(),
     targetNodeLabel: '测试节点',
     canAppend: true,
     canUndoLastImport: false,
@@ -330,56 +285,12 @@ describe('MindMapImportDrawer', () => {
     expect(screen.getByRole('button', { name: '暂停识别' })).toBeTruthy()
   })
 
-  it('shows direct-generation copy by default and toggles to structured mode', () => {
-    const onPdfImportModeChange = vi.fn()
-    render(
-      <MindMapImportDrawer
-        {...buildProps({
-          pdfImportMode: 'direct_generation',
-          onPdfImportModeChange,
-        })}
-      />,
-    )
-
-    expect(screen.getByText('按范围直接生成')).toBeTruthy()
-    expect(screen.getByText(/默认模式。会综合所选页的正文与版面关系，生成完整脑图草稿/)).toBeTruthy()
-    expect(screen.getByText('长段和明显列表才自动分点')).toBeTruthy()
-    expect(screen.getByText(/短定义和一两行节点保持原文粒度/)).toBeTruthy()
-    expect(screen.queryByText('当前结构页')).toBeNull()
-
-    fireEvent.click(screen.getByRole('button', { name: /结构页补全模式/ }))
-    expect(onPdfImportModeChange).toHaveBeenCalledWith('structured_merge')
-  })
-
   it('does not render the removed pdf preview sidebar', () => {
     render(<MindMapImportDrawer {...buildProps()} />)
 
     expect(screen.queryByTestId('mindmap-import-pdf-sidebar')).toBeNull()
     expect(screen.queryByText('当前识别页预览')).toBeNull()
-  })
-
-  it('shows the pdf execution summary and OCR grounding status', () => {
-    render(
-      <MindMapImportDrawer
-        {...buildProps({
-          sourceTree: {
-            title: '第一节 古罗马的教育阶段',
-            children: [{ text: '共和时期的罗马教育', children: [] }],
-          },
-          selectedPdfPages: [26, 27, 28],
-          pdfImportMode: 'direct_generation',
-          importWarnings: ['未获得稳定的 OCR 正文，本次将继续根据页面图片直接生成脑图，正文补全可信度可能下降。'],
-          pdfOcrGroundingUsed: false,
-          pdfOcrTextChars: null,
-        })}
-      />,
-    )
-
-    expect(screen.getByTestId('mindmap-import-pdf-summary').textContent).toContain('页码：26, 27, 28')
-    expect(screen.getByTestId('mindmap-import-pdf-summary').textContent).toContain('模式：按范围直接生成')
-    expect(screen.getByTestId('mindmap-import-pdf-summary').textContent).toContain('结构页：无')
-    expect(screen.getByTestId('mindmap-import-pdf-summary').textContent).toContain('OCR grounding：未启用，本次仅按图片直读')
-    expect(screen.getByTestId('mindmap-import-pdf-summary').textContent).toContain('正文补全可信度可能下降')
+    expect(screen.queryByRole('button', { name: '学科 PDF' })).toBeNull()
   })
 
   it('shows a pending pause label while waiting for the current step to finish', () => {

@@ -1,13 +1,10 @@
 import json
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
-from fastapi.responses import PlainTextResponse, StreamingResponse
+from fastapi.responses import PlainTextResponse
 from sqlalchemy.orm import Session
 
 from memory_anki.infrastructure.db.models import Palace, get_session
-from memory_anki.modules.knowledge.application.subject_document_service import (
-    get_subject_document_by_id,
-)
 from memory_anki.modules.palaces.application.import_export_service import (
     export_json,
     export_markdown,
@@ -18,7 +15,6 @@ from memory_anki.modules.palaces.application.mindmap_import_job_service import (
     complete_job_from_preview,
     create_batch_import_job,
     create_image_import_job,
-    create_pdf_import_job,
     delete_job,
     get_job,
     list_jobs,
@@ -27,11 +23,8 @@ from memory_anki.modules.palaces.application.mindmap_import_job_service import (
     serialize_job,
     wait_for_job_completion,
 )
-from memory_anki.modules.palaces.application.mindmap_import_service import (
-    PDF_IMPORT_MODE_DIRECT_GENERATION,
+from memory_anki.modules.palaces.application.mindmap_import import (
     MindMapImportError,
-    PdfImportOptions,
-    stream_pdf_import_preview,
 )
 from memory_anki.modules.reviews.application.review_execution_service import (
     trigger_review_for_palace,
@@ -44,7 +37,6 @@ router = APIRouter(tags=["import-export"])
 
 COMPAT_IMAGE_ENTITY_KEY = "__compat_preview_image__"
 COMPAT_BATCH_ENTITY_KEY = "__compat_preview_batch__"
-COMPAT_PDF_ENTITY_KEY = "__compat_preview_pdf__"
 
 
 def _wait_for_job_result(job_id: str) -> dict:
@@ -67,11 +59,6 @@ def session_dep():
         yield s
     finally:
         s.close()
-
-
-def _stream_import_events(events):
-    for event in events:
-        yield f"event: {event['event']}\ndata: {json.dumps(event['data'], ensure_ascii=False)}\n\n"
 
 
 def _parse_form_ai_options(value: str | None):
@@ -154,46 +141,6 @@ async def api_create_batch_import_job(
             fallback_title=fallback_title,
             structure_image_index=structure_image_index,
             ai_options=_parse_form_ai_options(ai_options),
-        )
-    except MindMapImportError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return serialize_job(job)
-
-
-@router.post("/import/jobs/pdf")
-def api_create_pdf_import_job(data: dict, s: Session = Depends(session_dep)):
-    entity_key = str(data.get("entity_key") or "")
-    mode = str(data.get("mode") or "mindmap")
-    document_id = int(data.get("subject_document_id") or 0)
-    page_selection = data.get("page_selection") or []
-    structure_page = data.get("structure_page")
-    pdf_mode = str(data.get("pdf_mode") or PDF_IMPORT_MODE_DIRECT_GENERATION)
-    range_prompt = str(data.get("range_prompt") or "")
-    fallback_title = str(data.get("fallback_title") or "未命名宫殿")
-    import_options_data = data.get("import_options") or {}
-    document = get_subject_document_by_id(s, document_id)
-    if not document:
-        raise HTTPException(status_code=404, detail="未找到所选 PDF 资料。")
-    import_options = PdfImportOptions(
-        quote_original_text_only=bool(import_options_data.get("quote_original_text_only", True)),
-        mount_on_original_leaf_only=bool(import_options_data.get("mount_on_original_leaf_only", True)),
-        preserve_emphasis_marks=bool(import_options_data.get("preserve_emphasis_marks", True)),
-        semantic_split_long_paragraphs=bool(import_options_data.get("semantic_split_long_paragraphs", True)),
-        preserve_line_breaks=bool(import_options_data.get("preserve_line_breaks", True)),
-    )
-    try:
-        job = create_pdf_import_job(
-            s,
-            entity_key=entity_key,
-            document=document,
-            mode=mode,
-            page_selection=[int(page) for page in page_selection],
-            structure_page=int(structure_page) if structure_page is not None else None,
-            pdf_mode=pdf_mode,
-            range_prompt=range_prompt,
-            fallback_title=fallback_title,
-            import_options=import_options,
-            ai_options=normalize_ai_runtime_options(data.get("ai_options")),
         )
     except MindMapImportError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -327,67 +274,3 @@ async def api_preview_text_import(
     return _wait_for_job_result(job.id)
 
 
-@router.post("/import/preview-mindmap-pdf")
-def api_preview_pdf_mindmap_import(data: dict, s: Session = Depends(session_dep)):
-    document_id = int(data.get("subject_document_id") or 0)
-    page_selection = data.get("page_selection") or []
-    structure_page = data.get("structure_page")
-    pdf_mode = str(data.get("pdf_mode") or PDF_IMPORT_MODE_DIRECT_GENERATION)
-    range_prompt = str(data.get("range_prompt") or "")
-    fallback_title = str(data.get("fallback_title") or "未命名宫殿")
-    import_options_data = data.get("import_options") or {}
-    document = get_subject_document_by_id(s, document_id)
-    if not document:
-        raise HTTPException(status_code=404, detail="未找到所选 PDF 资料。")
-    import_options = PdfImportOptions(
-        quote_original_text_only=bool(import_options_data.get("quote_original_text_only", True)),
-        mount_on_original_leaf_only=bool(import_options_data.get("mount_on_original_leaf_only", True)),
-        preserve_emphasis_marks=bool(import_options_data.get("preserve_emphasis_marks", True)),
-        semantic_split_long_paragraphs=bool(import_options_data.get("semantic_split_long_paragraphs", True)),
-        preserve_line_breaks=bool(import_options_data.get("preserve_line_breaks", True)),
-    )
-    return StreamingResponse(
-        _stream_import_events(
-            stream_pdf_import_preview(
-                document=document,
-                page_selection=[int(page) for page in page_selection],
-                structure_page=int(structure_page) if structure_page is not None else None,
-                pdf_mode=pdf_mode,
-                range_prompt=range_prompt,
-                fallback_title=fallback_title,
-                import_options=import_options,
-                session=s,
-                ai_options=normalize_ai_runtime_options(data.get("ai_options")),
-            )
-        ),
-        media_type="text/event-stream",
-        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
-    )
-
-
-@router.post("/import/preview-text-pdf")
-def api_preview_pdf_text_import(data: dict, s: Session = Depends(session_dep)):
-    document_id = int(data.get("subject_document_id") or 0)
-    page_selection = data.get("page_selection") or []
-    range_prompt = str(data.get("range_prompt") or "")
-    document = get_subject_document_by_id(s, document_id)
-    if not document:
-        return {"ok": False, "error": "未找到所选 PDF 资料。"}
-    try:
-        job = create_pdf_import_job(
-            s,
-            entity_key=COMPAT_PDF_ENTITY_KEY,
-            document=document,
-            mode="text",
-            page_selection=[int(page) for page in page_selection],
-            structure_page=None,
-            pdf_mode=PDF_IMPORT_MODE_DIRECT_GENERATION,
-            range_prompt=range_prompt,
-            fallback_title=document.original_name or "未命名宫殿",
-            import_options=None,
-            ai_options=normalize_ai_runtime_options(data.get("ai_options")),
-        )
-    except MindMapImportError as exc:
-        return {"ok": False, "error": str(exc)}
-    run_job_async(job.id)
-    return _wait_for_job_result(job.id)

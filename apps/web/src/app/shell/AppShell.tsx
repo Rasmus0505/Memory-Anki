@@ -31,10 +31,7 @@ import {
   preloadReviewRoutes,
 } from '@/app/router/appRoutes'
 import { prefetchDashboardApi } from '@/features/dashboard/api'
-import {
-  prefetchReviewQueueApi,
-  prefetchSegmentReviewQueueApi,
-} from '@/features/review/api'
+import { prefetchReviewQueueApi } from '@/features/review/api'
 import { ShellProvider, useShellContext } from '@/shared/components/layout/ShellContext'
 import { useClientPreferenceBootstrap } from '@/app/providers/useClientPreferenceBootstrap'
 import { Badge } from '@/shared/components/ui/badge'
@@ -150,14 +147,10 @@ const navSections: NavSectionDefinition[] = [
     rememberLastVisited: true,
     matches: (pathname) =>
       pathname === '/review' ||
-      /^\/review\/session\/\d+$/.test(pathname) ||
-      /^\/segment-review\/session\/\d+$/.test(pathname) ||
-      pathname === '/segment-review/batch' ||
-      /^\/mini-review\/session\/\d+$/.test(pathname),
+      /^\/review\/session\/\d+$/.test(pathname),
     warmup: () => {
       preloadReviewRoutes()
       prefetchReviewQueueApi()
-      prefetchSegmentReviewQueueApi()
     },
   },
   {
@@ -321,7 +314,6 @@ function SidebarContent({ runtimeInfo }: { runtimeInfo: RuntimeInfo | null }) {
       prefetchPalaceSubjectShelfApi()
       prefetchPalacesGroupedSummaryApi()
       prefetchReviewQueueApi()
-      prefetchSegmentReviewQueueApi()
       void preloadFreestylePage()
     })
   }, [])
@@ -363,7 +355,6 @@ function SidebarContent({ runtimeInfo }: { runtimeInfo: RuntimeInfo | null }) {
               </div>
               {runtimeInfo ? (
                 <div className="mt-2 flex flex-col gap-1 text-[11px] text-muted-foreground">
-                  <div>数据代际 {runtimeInfo.runtime_generation}</div>
                   <div className="truncate" title={runtimeInfo.app_home}>
                     {runtimeInfo.app_home}
                   </div>

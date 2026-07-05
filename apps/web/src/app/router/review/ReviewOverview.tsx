@@ -1,7 +1,7 @@
 ﻿import { useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { ArrowLeft, ArrowRight, BookOpen, Brain } from 'lucide-react'
-import type { ReviewQueueResponse, SegmentReviewQueueResponse } from '@/shared/api/contracts'
+import type { ReviewQueueResponse } from '@/shared/api/contracts'
 import { PageIntro } from '@/shared/components/layout/PageIntro'
 import { EmptyState, LoadingState } from '@/shared/components/state-placeholders'
 import { Badge } from '@/shared/components/ui/badge'
@@ -10,13 +10,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui
 import {
   getChapterReviewQueueApi,
   getReviewQueueApi,
-  getSegmentChapterReviewQueueApi,
-  getSegmentReviewQueueApi,
 } from '@/features/review/api'
-import {
-  buildReviewSessionPath,
-  buildSegmentReviewSessionPath,
-} from '@/features/review/reviewSessionRoutes'
+import { buildReviewSessionPath } from '@/features/review/reviewSessionRoutes'
 import { prefetchStudySession } from '@/features/review/studyWarmup'
 
 function formatReviewStage(reviewType: string, reviewNumber: number) {
@@ -30,16 +25,11 @@ export default function ReviewOverview() {
   const chapterIdParam = searchParams.get('chapterId')
   const chapterId = chapterIdParam ? Number(chapterIdParam) : null
   const [queue, setQueue] = useState<ReviewQueueResponse | null>(null)
-  const [segmentQueue, setSegmentQueue] = useState<SegmentReviewQueueResponse | null>(null)
 
   useEffect(() => {
     const load = async () => {
-      const [nextQueue, nextSegmentQueue] = await Promise.all([
-        chapterId ? getChapterReviewQueueApi(chapterId) : getReviewQueueApi(),
-        chapterId ? getSegmentChapterReviewQueueApi(chapterId) : getSegmentReviewQueueApi(),
-      ])
+      const nextQueue = chapterId ? await getChapterReviewQueueApi(chapterId) : await getReviewQueueApi()
       setQueue(nextQueue)
-      setSegmentQueue(nextSegmentQueue)
     }
     void load()
   }, [chapterId])
@@ -131,50 +121,6 @@ export default function ReviewOverview() {
                   </Link>
                 ) : null
               }
-            />
-          )}
-        </CardContent>
-      </Card>
-
-      <Card className="memory-anki-warm-panel memory-anki-surface-glow border-border/60 bg-card/90">
-        <CardHeader>
-          <CardTitle className="text-base">分块复习任务</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          {segmentQueue?.reviews?.length > 0 ? (
-            segmentQueue.reviews.map((review) => (
-              <Link
-                key={review.id}
-                to={buildSegmentReviewSessionPath(review.id, chapterId)}
-                onFocus={() => prefetchStudySession('segment-review-session', review.id)}
-                onMouseEnter={() => prefetchStudySession('segment-review-session', review.id)}
-              >
-                <div className="memory-anki-soft-card flex items-center justify-between rounded-[24px] border border-border/60 bg-background/80 px-4 py-4 transition-all hover:-translate-y-[1px] hover:bg-secondary/75">
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <Brain className="size-4 text-muted-foreground" />
-                      <span className="truncate font-medium">
-                        {review.segment?.name || '未命名分块'}
-                      </span>
-                    </div>
-                    <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                      <span>{review.palace?.title || '未命名宫殿'}</span>
-                      <span>{formatReviewStage(review.review_type, review.review_number)}</span>
-                      <span>间隔 {review.interval_days} 天</span>
-                    </div>
-                  </div>
-                  <Button size="sm">
-                    开始复习
-                    <ArrowRight className="ml-2 size-4" />
-                  </Button>
-                </div>
-              </Link>
-            ))
-          ) : (
-            <EmptyState
-              variant="review"
-              title="当前没有需要处理的分块复习任务"
-              description="稍后再来看看，分块复习会按间隔自动到期。"
             />
           )}
         </CardContent>

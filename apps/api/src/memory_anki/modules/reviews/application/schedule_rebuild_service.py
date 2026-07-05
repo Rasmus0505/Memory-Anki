@@ -8,8 +8,6 @@ from sqlalchemy.orm import Session
 
 from memory_anki.infrastructure.db.models import (
     Palace,
-    PalaceSegment,
-    PalaceSegmentReviewSchedule,
     ReviewSchedule,
 )
 
@@ -65,18 +63,11 @@ def infer_completed_stage_count(
 
 def segment_algorithm(
     session: Session,
-    segment: PalaceSegment,
+    segment,
     *,
     default_algorithm: str | None = None,
 ) -> str:
-    return next(
-        (
-            normalize_algorithm(item.algorithm_used)
-            for item in (segment.review_schedules or [])
-            if item.algorithm_used
-        ),
-        default_algorithm or _default_algorithm(session),
-    )
+    return "ebbinghaus"
 
 
 def palace_algorithm(
@@ -91,7 +82,7 @@ def palace_algorithm(
             for item in (palace.review_schedules or [])
             if item.algorithm_used
         ),
-        default_algorithm or _default_algorithm(session),
+        "ebbinghaus",
     )
 
 
@@ -117,10 +108,7 @@ def rebuild_palace_review_schedules(
     algorithm_override: str | None = None,
 ) -> None:
     policy = load_review_schedule_policy(session)
-    algorithm = normalize_algorithm(
-        algorithm_override
-        or palace_algorithm(session, palace, default_algorithm=policy.default_algorithm)
-    )
+    algorithm = "ebbinghaus"
     intervals = get_algorithm_intervals_for_policy(policy, algorithm)
     total = len(intervals)
     safe_completed_count = max(0, min(completed_count, total))
@@ -250,169 +238,17 @@ def rebuild_palace_review_schedules(
     session.flush()
 
 
-def rebuild_segment_review_schedules(
-    session: Session,
-    segment: PalaceSegment,
-    *,
-    completed_count: int,
-    completed_review_number: int | None = None,
-    completed_at: datetime | None = None,
-    preserve_existing_progress: bool = False,
-    preserve_same_day_slots: bool = True,
-    algorithm_override: str | None = None,
-) -> None:
-    policy = load_review_schedule_policy(session)
-    algorithm = normalize_algorithm(
-        algorithm_override
-        or segment_algorithm(session, segment, default_algorithm=policy.default_algorithm)
-    )
-    intervals = get_algorithm_intervals_for_policy(policy, algorithm)
-    total = len(intervals)
-    safe_completed_count = max(0, min(completed_count, total))
-    anchor = _segment_anchor_date(segment)
-    initial_slot_count = max(1, get_initial_same_day_slot_count_for_policy(policy, algorithm))
-    existing_schedules = sorted(
-        list(segment.review_schedules or []),
-        key=lambda item: (item.review_number, item.id),
-    )
-    if preserve_existing_progress:
-        safe_completed_count = max(
-            safe_completed_count,
-            infer_completed_stage_count(total=total, schedules=existing_schedules),
-        )
-    completed_at_by_stage = _collect_completed_stage_times(
-        schedules=existing_schedules,
-        completed_count=safe_completed_count,
-    )
-
-    if (
-        completed_review_number is not None
-        and 0 <= completed_review_number < safe_completed_count
-        and completed_at is not None
-    ):
-        completed_at_by_stage[completed_review_number] = _coerce_stage_completed_at(completed_at)
-    elif completed_at is not None and safe_completed_count > 0:
-        normalized_completed_at = _coerce_stage_completed_at(completed_at)
-        completed_at_by_stage[safe_completed_count - 1] = normalized_completed_at
-        for review_number in range(safe_completed_count):
-            completed_at_by_stage.setdefault(review_number, normalized_completed_at)
-
-    if completed_at is not None and safe_completed_count > 0:
-        previous_anchor_at = _coerce_stage_completed_at(completed_at)
-    else:
-        previous_anchor_at = None
-
-    session.query(PalaceSegmentReviewSchedule).filter_by(
-        palace_segment_id=segment.id
-    ).delete(synchronize_session=False)
-    session.flush()
-    for schedule in existing_schedules:
-        if sqlalchemy_inspect(schedule).session is session:
-            session.expunge(schedule)
-    session.expire(segment, ["review_schedules"])
-
-    for review_number in range(safe_completed_count):
-        stage_completed_at = _coerce_stage_completed_at(
-            completed_at_by_stage.get(review_number),
-            fallback=previous_anchor_at,
-        )
-        base_datetime = previous_anchor_at if review_number >= initial_slot_count else None
-        draft = build_review_schedule_draft(
-            policy,
-            review_number=review_number,
-            algorithm=algorithm,
-            base_date=anchor if base_datetime is None else base_datetime.date(),
-            anchor_date=anchor,
-            base_datetime=base_datetime,
-            completed=True,
-            completed_at=stage_completed_at,
-        )
-        _create_segment_schedule_from_draft(
-            session,
-            segment=segment,
-            draft=draft,
-            completed=True,
-            completed_at=stage_completed_at,
-        )
-        scheduled_display_at = _existing_schedule_display_at(
-            existing_schedules,
-            review_number,
-            policy=policy,
-            segment=segment,
-        ) or (
-            schedule_display_datetime_for_policy(
-                policy,
-                scheduled_date=draft.scheduled_date,
-                scheduled_at=draft.scheduled_at,
-                review_type=draft.review_type,
-                anchor_datetime=(
-                    segment.created_at
-                    or (segment.palace.created_at if segment.palace else None)
-                ),
-            )
-            if draft is not None and draft.scheduled_at is not None
-            else None
-        )
-        previous_anchor_at = _resolve_effective_stage_anchor_at(
-            use_anchor_mode=policy.early_review_anchor,
-            actual_completed_at=stage_completed_at,
-            scheduled_display_at=scheduled_display_at,
-        )
-
-    pending_review_numbers = (
-        _target_pending_review_numbers(
-            completed_count=safe_completed_count,
-            total=total,
-            initial_slot_count=initial_slot_count,
-        )
-        if preserve_same_day_slots
-        else ([safe_completed_count] if safe_completed_count < total else [])
-    )
-    for review_number in pending_review_numbers:
-        base_datetime = previous_anchor_at if review_number >= initial_slot_count else None
-        base_date = (
-            previous_anchor_at.date()
-            if previous_anchor_at is not None and not preserve_same_day_slots
-            else anchor
-        )
-        draft = build_review_schedule_draft(
-            policy,
-            review_number=review_number,
-            algorithm=algorithm,
-            base_date=base_date if base_datetime is None else base_datetime.date(),
-            anchor_date=anchor,
-            base_datetime=base_datetime,
-            completed=False,
-        )
-        _create_segment_schedule_from_draft(
-            session,
-            segment=segment,
-            draft=draft,
-            completed=False,
-            completed_at=None,
-        )
-    session.flush()
-
-
 def rebuild_all_pending_review_schedules(
     session: Session,
     *,
     algorithm_override: str | None = None,
 ) -> dict[str, Any]:
     palace_count = 0
-    segment_count = 0
     policy = load_review_schedule_policy(session)
 
     palaces = session.query(Palace).all()
     for palace in palaces:
-        algorithm = normalize_algorithm(
-            algorithm_override
-            or palace_algorithm(
-                session,
-                palace,
-                default_algorithm=policy.default_algorithm,
-            )
-        )
+        algorithm = "ebbinghaus"
         total = len(get_algorithm_intervals_for_policy(policy, algorithm))
         review_logs = [
             log
@@ -438,76 +274,15 @@ def rebuild_all_pending_review_schedules(
         )
         palace_count += 1
 
-    segments = session.query(PalaceSegment).all()
-    for segment in segments:
-        algorithm = normalize_algorithm(
-            algorithm_override
-            or segment_algorithm(
-                session,
-                segment,
-                default_algorithm=policy.default_algorithm,
-            )
-        )
-        total = len(get_algorithm_intervals_for_policy(policy, algorithm))
-        schedule_completed_count = infer_completed_stage_count(
-            total=total,
-            schedules=segment.review_schedules or [],
-        )
-        fallback_completed_count = (
-            schedule_completed_count
-            if segment.review_schedules
-            else max(len(segment.review_logs or []), schedule_completed_count)
-        )
-        rebuild_segment_review_schedules(
-            session,
-            segment,
-            completed_count=fallback_completed_count,
-            algorithm_override=algorithm,
-            preserve_existing_progress=True,
-        )
-        segment_count += 1
-
     session.commit()
     return {
         "palace_count": palace_count,
-        "segment_count": segment_count,
+        "segment_count": 0,
     }
 
 
 def _default_algorithm(session: Session) -> str:
-    return load_review_schedule_policy(session).default_algorithm
-
-
-def _segment_anchor_date(segment: PalaceSegment) -> date:
-    for schedule in segment.review_schedules or []:
-        if schedule.anchor_date:
-            return schedule.anchor_date
-    if segment.created_at:
-        return segment.created_at.date()
-    if segment.palace and segment.palace.created_at:
-        return segment.palace.created_at.date()
-    return date.today()
-
-
-def _copy_segment_schedule(
-    segment: PalaceSegment,
-    draft: ReviewScheduleDraft,
-    *,
-    completed: bool,
-    completed_at: datetime | None,
-) -> PalaceSegmentReviewSchedule:
-    return PalaceSegmentReviewSchedule(
-        palace_segment_id=segment.id,
-        scheduled_date=draft.scheduled_date,
-        scheduled_at=draft.scheduled_at,
-        interval_days=draft.interval_days,
-        algorithm_used=draft.algorithm_used,
-        completed=completed,
-        completed_at=completed_at,
-        review_number=draft.review_number,
-        review_type=draft.review_type,
-        anchor_date=draft.anchor_date,
-    )
+    return "ebbinghaus"
 
 
 def _coerce_stage_completed_at(
@@ -579,7 +354,6 @@ def _existing_schedule_display_at(
     *,
     policy: ReviewSchedulePolicy,
     palace: Palace | None = None,
-    segment: PalaceSegment | None = None,
 ) -> datetime | None:
     existing_schedule = next(
         (
@@ -601,17 +375,6 @@ def _existing_schedule_display_at(
             review_type=getattr(existing_schedule, "review_type", None),
             anchor_datetime=palace.created_at or palace.updated_at,
         )
-    if segment is not None:
-        return schedule_display_datetime_for_policy(
-            policy,
-            scheduled_date=getattr(existing_schedule, "scheduled_date", None),
-            scheduled_at=getattr(existing_schedule, "scheduled_at", None),
-            review_type=getattr(existing_schedule, "review_type", None),
-            anchor_datetime=(
-                segment.created_at
-                or (segment.palace.created_at if segment.palace else None)
-            ),
-        )
     return None
 
 
@@ -628,23 +391,3 @@ def _create_palace_schedule_from_draft(
         palace_id=palace_id,
         draft=draft,
     )
-
-
-def _create_segment_schedule_from_draft(
-    session: Session,
-    *,
-    segment: PalaceSegment,
-    draft: ReviewScheduleDraft | None,
-    completed: bool,
-    completed_at: datetime | None,
-) -> PalaceSegmentReviewSchedule | None:
-    if draft is None:
-        return None
-    schedule = _copy_segment_schedule(
-        segment,
-        draft,
-        completed=completed,
-        completed_at=completed_at,
-    )
-    session.add(schedule)
-    return schedule

@@ -1,49 +1,17 @@
 import { API_BASE, fetchWithMutationQueue, request, uploadWithFormData } from '@/shared/api/http'
 import { readJsonResponse } from '@/shared/api/jsonResponse'
-import { readSseResultResponse } from '@/shared/api/sseResponse'
 import type {
-  AiScenarioRuntimeOptionsMap,
   MindMapEditorState,
   PalaceQuizMiniPalaceClassificationResult,
-  PalaceQuizStreamDeltaEvent,
   PalaceQuizGenerationPreview,
   PalaceQuizQuestion,
   PalaceQuizQuestionDraft,
   PalaceQuizQuestionType,
-  PalaceQuizStreamStatusEvent,
   PalaceShortAnswerFeedback,
 } from '@/shared/api/contracts'
 
 async function readQuizJson<T>(response: Response): Promise<T> {
   return readJsonResponse<T>(response, { feature: 'Palace quiz API' })
-}
-
-async function readQuizStreamResponse<T>(
-  response: Response,
-  handlers?: {
-    onStatus?: (event: PalaceQuizStreamStatusEvent) => void
-    onDelta?: (event: PalaceQuizStreamDeltaEvent) => void
-  },
-): Promise<T> {
-  return readSseResultResponse<T, PalaceQuizStreamStatusEvent, PalaceQuizStreamDeltaEvent>(
-    response,
-    {
-      feature: 'Palace quiz stream API',
-      handlers,
-      jsonOptions: { nonJsonErrorMessage: '生成题目预览失败。' },
-      selectErrorMessage: (payload) => {
-        if (payload && typeof payload === 'object') {
-          const record = payload as Record<string, unknown>
-          if (typeof record.detail === 'string' && record.detail.trim()) return record.detail
-          if (typeof record.error === 'string' && record.error.trim()) return record.error
-        }
-        return '生成题目预览失败。'
-      },
-      unsupportedStreamMessage: '浏览器不支持流式响应读取。',
-      parseErrorMessage: '流式生成返回的数据格式无效。',
-      missingResultMessage: '流式生成结束但没有返回题目结果。',
-    },
-  )
 }
 
 export function getPalaceQuizQuestionsApi(palaceId: number) {
@@ -294,114 +262,6 @@ export function previewChapterQuizGenerationFromOutlineApi(
       replayMode: 'manual',
     },
   })
-}
-
-export function previewPalaceQuizGenerationFromPdfApi(
-  palaceId: number,
-  data: {
-    subject_document_id?: number
-    page_selection?: number[]
-    pdf_sources?: Array<{
-      subject_document_id: number
-      page_selection: number[]
-      role_hint?: string
-    }>
-    extra_prompt: string
-    enable_secondary_review?: boolean
-    classify_by_mini_palace?: boolean
-    selected_chapter_id?: number | null
-    ai_options?: import('@/shared/api/contracts').AiRuntimeOptions
-    ai_options_by_scenario?: AiScenarioRuntimeOptionsMap
-  },
-) {
-  const resourceId =
-    data.pdf_sources?.map((item) => item.subject_document_id).join(',') ||
-    String(data.subject_document_id || 'unknown')
-  return request<PalaceQuizGenerationPreview>(`/palaces/${palaceId}/quiz-generation/pdf`, {
-    method: 'POST',
-    body: JSON.stringify(data),
-    persistence: {
-      resourceKey: `palace:${palaceId}:quiz-generation:pdf:${resourceId}`,
-      description: 'AI 生成宫殿题目（PDF）',
-      replayMode: 'manual',
-    },
-  })
-}
-
-export async function previewPalaceQuizGenerationFromPdfStreamApi(
-  palaceId: number,
-  data: {
-    subject_document_id?: number
-    page_selection?: number[]
-    pdf_sources?: Array<{
-      subject_document_id: number
-      page_selection: number[]
-      role_hint?: string
-    }>
-    extra_prompt: string
-    enable_secondary_review?: boolean
-    classify_by_mini_palace?: boolean
-    selected_chapter_id?: number | null
-    ai_options?: import('@/shared/api/contracts').AiRuntimeOptions
-    ai_options_by_scenario?: AiScenarioRuntimeOptionsMap
-  },
-  handlers?: {
-    onStatus?: (event: PalaceQuizStreamStatusEvent) => void
-    onDelta?: (event: PalaceQuizStreamDeltaEvent) => void
-  },
-) {
-  const resourceId =
-    data.pdf_sources?.map((item) => item.subject_document_id).join(',') ||
-    String(data.subject_document_id || 'unknown')
-  const response = await fetchWithMutationQueue(
-    `${API_BASE}/palaces/${palaceId}/quiz-generation/pdf/stream`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    },
-    {
-      resourceKey: `palace:${palaceId}:quiz-generation:pdf-stream:${resourceId}`,
-      description: 'AI 流式生成宫殿题目（PDF）',
-      replayMode: 'manual',
-    },
-  )
-  return readQuizStreamResponse<PalaceQuizGenerationPreview>(response, handlers)
-}
-
-export function recoverPalaceQuizGenerationFromAiLogApi(
-  palaceId: number,
-  data: import('@/shared/api/contracts').RecoverPalaceQuizFromAiLogRequest & {
-    selected_chapter_id?: number | null
-  },
-) {
-  return request<PalaceQuizGenerationPreview>(`/palaces/${palaceId}/quiz-generation/pdf/recover`, {
-    method: 'POST',
-    body: JSON.stringify(data),
-    persistence: {
-      resourceKey: `palace:${palaceId}:quiz-generation:pdf-recover:${data.ai_call_log_id}`,
-      description: '从 AI 日志恢复宫殿题目（PDF）',
-      replayMode: 'manual',
-    },
-  })
-}
-
-export function recoverAndSavePalaceQuizGenerationFromAiLogApi(
-  palaceId: number,
-  data: import('@/shared/api/contracts').RecoverAndSavePalaceQuizFromAiLogRequest,
-) {
-  return request<import('@/shared/api/contracts').RecoverAndSavePalaceQuizFromAiLogResult>(
-    `/palaces/${palaceId}/quiz-generation/pdf/recover-and-save`,
-    {
-      method: 'POST',
-      body: JSON.stringify(data),
-      persistence: {
-        resourceKey: `palace:${palaceId}:quiz-generation:pdf-recover-save:${data.ai_call_log_id}`,
-        description: '从 AI 日志恢复并写入章节题库（PDF）',
-        replayMode: 'manual',
-      },
-    },
-  )
 }
 
 export function classifyPalaceQuizQuestionsToMiniPalacesApi(

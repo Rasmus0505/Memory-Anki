@@ -71,7 +71,6 @@ export const MODEL_TYPE_OPTIONS: Array<{
   { key: "vl", label: "VL" },
   { key: "translation", label: "翻译" },
   { key: "asr", label: "ASR" },
-  { key: "tts", label: "TTS" },
 ];
 
 export const MODEL_TYPE_HINTS: Record<AiModelType, string> = {
@@ -79,7 +78,6 @@ export const MODEL_TYPE_HINTS: Record<AiModelType, string> = {
   vl: "读图 / 读 PDF / OCR / 图文结构识别模型。",
   translation: "课程翻译、句子翻译等专用翻译模型。",
   asr: "音视频转写、字幕识别模型。",
-  tts: "语音合成与语音播报模型。",
 };
 
 export function buildEmptyModelDraft(modelType: AiModelType): ModelDraft {
@@ -89,7 +87,7 @@ export function buildEmptyModelDraft(modelType: AiModelType): ModelDraft {
     provider: "qwen",
     hasVision: modelType === "llm" ? false : modelType === "vl",
     supportsThinking: false,
-    supportsTemperature: !["asr", "tts"].includes(modelType),
+    supportsTemperature: modelType !== "asr",
   };
 }
 

@@ -15,8 +15,6 @@ export type SessionProgressMode =
   | 'segment-practice'
   | 'mini-practice'
   | 'review'
-  | 'segment-review'
-  | 'mini-review'
 
 export interface SessionProgressPayload {
   reveal_map: Record<string, 'hidden' | 'placeholder' | 'revealed'>
@@ -37,8 +35,6 @@ function modeToStudyTarget(mode: SessionProgressMode, id: number): {
   if (mode === 'segment-practice') return { scene: 'segment_practice', targetType: 'palace_segment', targetId: id }
   if (mode === 'mini-practice') return { scene: 'mini_practice', targetType: 'mini_palace', targetId: id }
   if (mode === 'review') return { scene: 'review', targetType: 'review_schedule', targetId: id }
-  if (mode === 'segment-review') return { scene: 'segment_review', targetType: 'segment_review_schedule', targetId: id }
-  if (mode === 'mini-review') return { scene: 'mini_review', targetType: 'mini_review_schedule', targetId: id }
   return { scene: 'practice', targetType: 'palace', targetId: id }
 }
 
@@ -52,10 +48,6 @@ function studySessionToProgress(item: StudySessionItem | null): SessionProgressS
     review_schedule_id: item.target_type === 'review_schedule' ? item.target_id : null,
     palace_segment_id: item.palace_segment_id,
     mini_palace_id: item.mini_palace_id,
-    palace_segment_review_schedule_id:
-      item.target_type === 'segment_review_schedule' ? item.target_id : null,
-    mini_palace_review_schedule_id:
-      item.target_type === 'mini_review_schedule' ? item.target_id : null,
     reveal_map: (progress.reveal_map || {}) as SessionProgressSnapshot['reveal_map'],
     red_node_ids: (progress.red_node_ids || []) as string[],
     completed: Boolean(progress.completed),

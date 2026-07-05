@@ -1,9 +1,5 @@
-import { request, uploadWithFormData } from '@/shared/api/http'
-import type {
-  MindMapEditorState,
-  PdfPageSummary,
-  SubjectDocumentSummary,
-} from '@/shared/api/contracts'
+import { request } from '@/shared/api/http'
+import type { MindMapEditorState } from '@/shared/api/contracts'
 
 export interface SubjectSummary {
   id: number
@@ -103,38 +99,4 @@ export function saveSubjectEditorApi(id: number, data: Partial<MindMapEditorStat
       replayMode: 'auto',
     },
   })
-}
-
-export async function uploadSubjectDocumentApi(subjectId: number, file: File) {
-  const form = new FormData()
-  form.append('file', file)
-  return uploadWithFormData<SubjectDocumentSummary>(
-    `/subjects/${subjectId}/documents`,
-    form,
-    {
-      resourceKey: `subject:${subjectId}:document:${file.name}`,
-      description: `上传学科 PDF：${file.name}`,
-    },
-  )
-}
-
-export function getSubjectDocumentsApi(subjectId: number) {
-  return request<{ items: SubjectDocumentSummary[] }>(`/subjects/${subjectId}/documents`)
-}
-
-export function deleteSubjectDocumentApi(subjectId: number, documentId: number) {
-  return request<{ ok: boolean }>(`/subjects/${subjectId}/documents/${documentId}`, {
-    method: 'DELETE',
-    persistence: {
-      resourceKey: `subject:${subjectId}:document:${documentId}:delete`,
-      description: '删除学科 PDF',
-      replayMode: 'manual',
-    },
-  })
-}
-
-export function getSubjectDocumentPagesApi(subjectId: number, documentId: number) {
-  return request<{ page_count: number; pages: PdfPageSummary[] }>(
-    `/subjects/${subjectId}/documents/${documentId}/pages`,
-  )
 }

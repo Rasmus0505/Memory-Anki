@@ -57,13 +57,3 @@ def validate_mode(mode: str, *, import_error_cls: type[Exception]) -> None:
     if mode not in {MODE_MINDMAP, MODE_TEXT}:
         raise import_error_cls("导入模式无效。")
 
-
-def source_meta_to_pdf_options(source_meta: dict[str, Any], pdf_options_cls):
-    data = source_meta.get("import_options") or {}
-    return pdf_options_cls(
-        quote_original_text_only=bool(data.get("quote_original_text_only", True)),
-        mount_on_original_leaf_only=bool(data.get("mount_on_original_leaf_only", True)),
-        preserve_emphasis_marks=bool(data.get("preserve_emphasis_marks", True)),
-        semantic_split_long_paragraphs=bool(data.get("semantic_split_long_paragraphs", True)),
-        preserve_line_breaks=bool(data.get("preserve_line_breaks", True)),
-    )

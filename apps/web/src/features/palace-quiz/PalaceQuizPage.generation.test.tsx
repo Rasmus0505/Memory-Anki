@@ -1,167 +1,67 @@
 import { fireEvent, screen, waitFor } from '@testing-library/react'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
 import {
-  baseQuestions,
   batchCreateChapterQuizQuestionsApiMock,
   classifyPalaceQuizQuestionsToMiniPalacesApiMock,
   getPalaceApiMock,
   getSubjectsApiMock,
   getSubjectTreeApiMock,
   palaceResponse,
-  pdfControllerMock,
-  previewPalaceQuizGenerationFromPdfStreamApiMock,
+  previewPalaceQuizGenerationFromImagesApiMock,
   previewPalaceQuizGenerationFromTextFilesApiMock,
-  recoverAndSavePalaceQuizGenerationFromAiLogApiMock,
-  refreshSubjectDocumentsMock,
   renderPage,
   setupPalaceQuizPageTest,
-  uploadSubjectDocumentApiMock,
 } from '@/features/palace-quiz/PalaceQuizPage.test-utils'
 
 describe('PalaceQuizPage generation flows', () => {
   beforeEach(setupPalaceQuizPageTest)
 
-  it('shows chapter-range controls and saves grouped preview', async () => {
+  it('generates from image files and saves the preview to the selected chapter', async () => {
     renderPage()
     fireEvent.click(await screen.findByRole('button', { name: 'AI生成' }))
     fireEvent.click(screen.getByRole('button', { name: '归类已有题库' }))
     expect(await screen.findByText('本次写入 1 道小宫殿题。')).toBeTruthy()
 
-    fireEvent.change(screen.getByPlaceholderText('例如：3,4,8-10'), { target: { value: '3' } })
-    fireEvent.click(screen.getByRole('button', { name: '加入本次资料集' }))
+    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement | null
+    const imageFile = new File(['image'], 'bio-question.png', { type: 'image/png' })
+    fireEvent.change(fileInput!, { target: { files: [imageFile] } })
     fireEvent.click(screen.getByRole('checkbox', { name: /按小宫殿分类保存/ }))
     fireEvent.click(screen.getByRole('button', { name: '生成预览' }))
 
     await waitFor(() => {
-      expect(previewPalaceQuizGenerationFromPdfStreamApiMock).toHaveBeenCalledWith(
+      expect(previewPalaceQuizGenerationFromImagesApiMock).toHaveBeenCalledWith(
         1,
-        expect.objectContaining({
-          classify_by_mini_palace: true,
-          enable_secondary_review: false,
-          selected_chapter_id: 1,
-        }),
-        expect.any(Object),
+        [imageFile],
+        '',
+        true,
+        1,
+        {},
       )
     })
 
     fireEvent.click(await screen.findByRole('button', { name: '保存到题库' }))
-    await waitFor(() => {
-      expect(recoverAndSavePalaceQuizGenerationFromAiLogApiMock).toHaveBeenCalledWith(
-        1,
-        expect.objectContaining({
-          ai_call_log_id: 'log-preview',
-          selected_chapter_id: 1,
-          classify_by_mini_palace: true,
-        }),
-      )
-    })
-    expect(batchCreateChapterQuizQuestionsApiMock).not.toHaveBeenCalled()
-    expect(classifyPalaceQuizQuestionsToMiniPalacesApiMock).toHaveBeenCalled()
-  })
-
-  it('falls back to direct batch save when preview has no ai log id', async () => {
-    previewPalaceQuizGenerationFromPdfStreamApiMock.mockResolvedValueOnce({
-      palace_id: 1,
-      questions: [
-        {
-          question_type: 'multiple_choice',
-          stem: '直接保存题目',
-          options: [
-            { id: 'A', text: '选项A' },
-            { id: 'B', text: '选项B' },
-          ],
-          answer_payload: { correct_option_id: 'A' },
-          analysis: '解析',
-          source_meta: {
-            source_kind: 'subject_pdf',
-            subject_document_id: 9,
-            page_numbers: [3],
-            image_names: ['page-3.png'],
-            extra_prompt: '',
-            ai_call_log_id: null,
-            generated_at: '2026-06-15T00:00:00',
-            generation_mode: 'subject_pdf',
-          },
-        },
-      ],
-      source_meta: {
-        source_kind: 'subject_pdf',
-        subject_document_id: 9,
-        page_numbers: [3],
-        image_names: ['page-3.png'],
-        extra_prompt: '',
-        ai_call_log_id: null,
-        generated_at: '2026-06-15T00:00:00',
-        generation_mode: 'subject_pdf',
-      },
-      ai_call_log_id: null,
-      grouped_questions: null,
-    })
-
-    renderPage()
-    fireEvent.click(await screen.findByRole('button', { name: 'AI生成' }))
-    fireEvent.change(screen.getByPlaceholderText('例如：3,4,8-10'), { target: { value: '3' } })
-    fireEvent.click(screen.getByRole('button', { name: '加入本次资料集' }))
-    fireEvent.click(screen.getByRole('button', { name: '生成预览' }))
-    fireEvent.click(await screen.findByRole('button', { name: '保存到题库' }))
-
     await waitFor(() => {
       expect(batchCreateChapterQuizQuestionsApiMock).toHaveBeenCalledWith(
         1,
         expect.arrayContaining([
           expect.objectContaining({
             source_chapter_id: 1,
-            classified_chapter_id: null,
+            classified_chapter_id: 101,
           }),
         ]),
         'append',
       )
     })
+    expect(classifyPalaceQuizQuestionsToMiniPalacesApiMock).toHaveBeenCalled()
   })
 
-  it('sends overwrite mode when saving a generated preview with coverage selected', async () => {
-    previewPalaceQuizGenerationFromPdfStreamApiMock.mockResolvedValueOnce({
-      palace_id: 1,
-      questions: [
-        {
-          question_type: 'multiple_choice',
-          stem: '覆盖保存题目',
-          options: [
-            { id: 'A', text: '选项A' },
-            { id: 'B', text: '选项B' },
-          ],
-          answer_payload: { correct_option_id: 'A' },
-          analysis: '解析',
-          source_meta: {
-            source_kind: 'subject_pdf',
-            subject_document_id: 9,
-            page_numbers: [3],
-            image_names: ['page-3.png'],
-            extra_prompt: '',
-            ai_call_log_id: null,
-            generated_at: '2026-06-15T00:00:00',
-            generation_mode: 'subject_pdf',
-          },
-        },
-      ],
-      source_meta: {
-        source_kind: 'subject_pdf',
-        subject_document_id: 9,
-        page_numbers: [3],
-        image_names: ['page-3.png'],
-        extra_prompt: '',
-        ai_call_log_id: null,
-        generated_at: '2026-06-15T00:00:00',
-        generation_mode: 'subject_pdf',
-      },
-      ai_call_log_id: null,
-      grouped_questions: null,
-    })
-
+  it('sends overwrite mode when saving a generated image preview with coverage selected', async () => {
     renderPage()
     fireEvent.click(await screen.findByRole('button', { name: 'AI生成' }))
-    fireEvent.change(screen.getByPlaceholderText('例如：3,4,8-10'), { target: { value: '3' } })
-    fireEvent.click(screen.getByRole('button', { name: '加入本次资料集' }))
+
+    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement | null
+    const imageFile = new File(['image'], 'overwrite.png', { type: 'image/png' })
+    fireEvent.change(fileInput!, { target: { files: [imageFile] } })
     fireEvent.click(screen.getByRole('button', { name: '生成预览' }))
     fireEvent.click(await screen.findByRole('button', { name: '覆盖当前范围' }))
     fireEvent.click(screen.getByRole('button', { name: '保存到题库' }))
@@ -169,117 +69,27 @@ describe('PalaceQuizPage generation flows', () => {
     await waitFor(() => {
       expect(batchCreateChapterQuizQuestionsApiMock).toHaveBeenCalledWith(
         1,
-        expect.arrayContaining([expect.objectContaining({ stem: '覆盖保存题目' })]),
+        expect.arrayContaining([expect.objectContaining({ stem: '细胞的控制中心是？' })]),
         'overwrite',
       )
     })
   })
 
-  it('passes overwrite mode through the pdf recover-and-save path', async () => {
-    renderPage()
-    fireEvent.click(await screen.findByRole('button', { name: 'AI生成' }))
-    fireEvent.change(screen.getByPlaceholderText('例如：3,4,8-10'), { target: { value: '3' } })
-    fireEvent.click(screen.getByRole('button', { name: '加入本次资料集' }))
-    fireEvent.click(screen.getByRole('button', { name: '生成预览' }))
-    fireEvent.click(await screen.findByRole('button', { name: '覆盖当前范围' }))
-    fireEvent.click(screen.getByRole('button', { name: '保存到题库' }))
-
-    await waitFor(() => {
-      expect(recoverAndSavePalaceQuizGenerationFromAiLogApiMock).toHaveBeenCalledWith(
-        1,
-        expect.objectContaining({
-          ai_call_log_id: 'log-preview',
-          selected_chapter_id: 1,
-          save_mode: 'overwrite',
-        }),
-      )
-    })
-  })
-
-  it('collects multiple pdf sources before generating preview', async () => {
-    renderPage()
-    fireEvent.click(await screen.findByRole('button', { name: 'AI生成' }))
-    fireEvent.change(screen.getByPlaceholderText('例如：3,4,8-10'), { target: { value: '3' } })
-    fireEvent.click(screen.getByRole('button', { name: '加入本次资料集' }))
-
-    const roleSelect = screen.getByDisplayValue('题目') as HTMLSelectElement
-    fireEvent.change(roleSelect, { target: { value: 'answer' } })
-    fireEvent.click(screen.getByRole('button', { name: '生成预览' }))
-
-    await waitFor(() => {
-      expect(previewPalaceQuizGenerationFromPdfStreamApiMock).toHaveBeenCalledWith(
-        1,
-        expect.objectContaining({
-          pdf_sources: [
-            expect.objectContaining({
-              subject_document_id: 9,
-              page_selection: [3],
-              role_hint: 'answer',
-            }),
-          ],
-          selected_chapter_id: 1,
-        }),
-        expect.any(Object),
-      )
-    })
-  })
-
-  it('renders secondary review toggle and sends it when enabled', async () => {
-    renderPage()
-    fireEvent.click(await screen.findByRole('button', { name: 'AI生成' }))
-    fireEvent.change(screen.getByPlaceholderText('例如：3,4,8-10'), { target: { value: '3' } })
-    fireEvent.click(screen.getByRole('button', { name: '加入本次资料集' }))
-    fireEvent.click(screen.getByRole('checkbox', { name: /二次筛选/ }))
-    fireEvent.click(screen.getByRole('button', { name: '生成预览' }))
-
-    await waitFor(() => {
-      expect(previewPalaceQuizGenerationFromPdfStreamApiMock).toHaveBeenCalledWith(
-        1,
-        expect.objectContaining({ enable_secondary_review: true, selected_chapter_id: 1 }),
-        expect.any(Object),
-      )
-    })
-  })
-
-  it('stores generation history and regenerates from it', async () => {
-    pdfControllerMock.rangePrompt = '只生成本章重点题'
-    renderPage()
-    fireEvent.click(await screen.findByRole('button', { name: 'AI生成' }))
-    fireEvent.change(screen.getByPlaceholderText('例如：3,4,8-10'), { target: { value: '3' } })
-    fireEvent.click(screen.getByRole('button', { name: '加入本次资料集' }))
-    fireEvent.click(screen.getByRole('button', { name: '生成预览' }))
-    await waitFor(() => {
-      expect(previewPalaceQuizGenerationFromPdfStreamApiMock).toHaveBeenCalledTimes(1)
-    })
-    fireEvent.click(screen.getAllByRole('button', { name: '重新生成' })[0])
-    await waitFor(() => {
-      expect(previewPalaceQuizGenerationFromPdfStreamApiMock).toHaveBeenCalledTimes(2)
-    })
-  })
-
-  it('loads a saved history item back into the source panel', async () => {
+  it('stores generation history and can load image configuration back into the source panel', async () => {
     window.localStorage.setItem(
       'memory_anki_palace_quiz_generation_history_1',
       JSON.stringify([
         {
           id: 'history-1',
           createdAt: '2026-06-15T08:00:00.000Z',
-          sourceKind: 'subject-pdf',
-          title: 'questions.pdf',
-          extraPrompt: '按大题拆分并提高难度',
+          sourceKind: 'image-single',
+          title: 'question.png',
+          extraPrompt: '提高难度',
           enableSecondaryReview: true,
           classifyByMiniPalace: true,
           selectedChapterId: 101,
           selectedChapterPath: '生物 / 第三章 / 第二节',
-          pdfSources: [
-            {
-              subject_document_id: 9,
-              document_name: 'questions.pdf',
-              page_selection: [3],
-              role_hint: 'question',
-            },
-          ],
-          imageFileNames: [],
+          imageFileNames: ['question.png'],
           previewQuestionCount: 2,
           savableQuestionCount: 1,
           aiCallLogId: 'log-preview',
@@ -290,8 +100,8 @@ describe('PalaceQuizPage generation flows', () => {
     renderPage()
     fireEvent.click(await screen.findByRole('button', { name: 'AI生成' }))
     fireEvent.click(screen.getByRole('button', { name: '导入到左侧' }))
-    expect(pdfControllerMock.setSelectedSubjectId).toHaveBeenCalledWith(2)
     expect(await screen.findByText('生物 / 第三章 / 第二节')).toBeTruthy()
+    expect(screen.getByText('文件历史会回填提示词和开关，但仍需重新上传源文件。')).toBeTruthy()
   })
 
   it('opens the range dialog and lets the user switch to a child chapter', async () => {
@@ -325,31 +135,6 @@ describe('PalaceQuizPage generation flows', () => {
     expect(await screen.findByText('生物 / 第三章')).toBeTruthy()
   })
 
-  it('opens the file picker from the upload button', async () => {
-    const clickSpy = vi.spyOn(HTMLInputElement.prototype, 'click')
-    renderPage()
-    fireEvent.click(await screen.findByRole('button', { name: 'AI生成' }))
-    fireEvent.click(screen.getByRole('button', { name: '上传新 PDF 到资料库' }))
-    expect(clickSpy).toHaveBeenCalled()
-    clickSpy.mockRestore()
-  })
-
-  it('uploads the selected pdf and refreshes the subject documents', async () => {
-    renderPage()
-    fireEvent.click(await screen.findByRole('button', { name: 'AI生成' }))
-    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement | null
-    const file = new File(['%PDF-1.4'], 'uploaded.pdf', { type: 'application/pdf' })
-    fireEvent.change(fileInput!, { target: { files: [file] } })
-    await waitFor(() => {
-      expect(uploadSubjectDocumentApiMock).toHaveBeenCalledWith(2, file)
-    })
-    await waitFor(() => {
-      expect(refreshSubjectDocumentsMock).toHaveBeenCalled()
-    })
-    expect(getSubjectsApiMock).toHaveBeenCalled()
-    expect(getSubjectTreeApiMock).toHaveBeenCalled()
-  })
-
   it('supports text file manual import from the generation panel', async () => {
     renderPage()
     fireEvent.click(await screen.findByRole('button', { name: 'AI生成' }))
@@ -377,5 +162,7 @@ describe('PalaceQuizPage generation flows', () => {
       )
     })
     expect(await screen.findByText('简述细胞核的作用。')).toBeTruthy()
+    expect(getSubjectsApiMock).toHaveBeenCalled()
+    expect(getSubjectTreeApiMock).toHaveBeenCalled()
   })
 })

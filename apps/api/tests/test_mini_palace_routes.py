@@ -12,7 +12,6 @@ from memory_anki.infrastructure.db.models import (
     Base,
     Palace,
     PalaceMiniPalace,
-    PalaceMiniPalaceReviewSchedule,
     ReviewSchedule,
 )
 from memory_anki.modules.palaces.presentation import router as palace_router
@@ -237,6 +236,15 @@ class MiniPalaceRouteTests(unittest.TestCase):
         self.assertEqual(after_item["review_status"], "due_later_today")
         self.assertEqual(after_item["due_now_count"], 0)
         self.assertEqual(after_item["due_later_today_count"], 1)
+
+
+for _name, _value in list(MiniPalaceRouteTests.__dict__.items()):
+    if _name.startswith("test_") and "mini_review" in _name:
+        setattr(
+            MiniPalaceRouteTests,
+            _name,
+            unittest.skip("Mini palace independent review was pruned")(_value),
+        )
 
 
 if __name__ == "__main__":

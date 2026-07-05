@@ -11,9 +11,6 @@ from memory_anki.modules.palaces.application.segment_nodes import (
     normalize_segment_node_uids,
     serialize_segment_node_uids,
 )
-from memory_anki.modules.palaces.application.segment_review_service import (
-    ensure_segment_schedule_model,
-)
 
 SEGMENT_COLOR_PALETTE = [
     "#14b8a6",
@@ -47,7 +44,6 @@ def create_palace_segment(
     )
     session.add(segment)
     session.flush()
-    ensure_segment_schedule_model(session, segment)
     session.commit()
     session.refresh(segment)
     return segment
@@ -77,7 +73,6 @@ def update_palace_segment(
                 exclude_segment_id=segment.id,
             )
         )
-    ensure_segment_schedule_model(session, segment)
     session.commit()
     session.refresh(segment)
     return segment

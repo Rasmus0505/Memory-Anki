@@ -43,7 +43,6 @@ function quizCard(id: number, groupKey: string, palaceId = 1): FreestyleCard {
       analysis: '',
       source_meta: {
         source_kind: 'manual',
-        subject_document_id: null,
         page_numbers: null,
         image_names: null,
         extra_prompt: '',

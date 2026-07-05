@@ -19,7 +19,6 @@ class JobLifecycleDependencies:
     get_job_artifact_dir_fn: Callable[[str], Path]
     run_image_single_job_fn: Callable[[Session, MindMapImportJob, dict[str, Any], Path], None]
     run_image_batch_job_fn: Callable[[Session, MindMapImportJob, dict[str, Any], Path], None]
-    run_subject_pdf_job_fn: Callable[[Session, MindMapImportJob, dict[str, Any], Path], None]
     mark_job_completed_fn: Callable[[Session, str], None]
     mark_job_failed_fn: Callable[[Session, str, Exception], None]
     utc_now_fn: Callable[[], Any]
@@ -28,7 +27,6 @@ class JobLifecycleDependencies:
     completed_status: str
     source_kind_image_single: str
     source_kind_image_batch: str
-    source_kind_subject_pdf: str
     import_error_cls: type[Exception]
 
 
@@ -82,8 +80,6 @@ def run_job_worker(
             deps.run_image_single_job_fn(session, job, source_meta, artifact_dir)
         elif job.source_kind == deps.source_kind_image_batch:
             deps.run_image_batch_job_fn(session, job, source_meta, artifact_dir)
-        elif job.source_kind == deps.source_kind_subject_pdf:
-            deps.run_subject_pdf_job_fn(session, job, source_meta, artifact_dir)
         else:
             raise deps.import_error_cls("Unknown import job source kind.")
 

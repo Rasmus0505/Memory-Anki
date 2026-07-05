@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import Any
-
 from memory_anki.core.time import utc_now_naive
 
 
@@ -11,15 +9,12 @@ def build_generation_source_meta(
     generation_mode: str,
     extra_prompt: str,
     secondary_review_enabled: bool = False,
-    subject_document_id: int | None = None,
     page_numbers: list[int] | None = None,
     image_names: list[str] | None = None,
     ai_call_log_id: str | None = None,
-    pdf_sources: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     return {
         "source_kind": source_kind,
-        "subject_document_id": subject_document_id,
         "page_numbers": page_numbers,
         "image_names": image_names,
         "extra_prompt": str(extra_prompt or "").strip(),
@@ -27,7 +22,6 @@ def build_generation_source_meta(
         "ai_call_log_id": ai_call_log_id,
         "generated_at": utc_now_naive().isoformat(),
         "generation_mode": generation_mode,
-        "pdf_sources": pdf_sources,
     }
 
 

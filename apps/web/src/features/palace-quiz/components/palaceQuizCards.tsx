@@ -7,7 +7,6 @@ import type {
   ChapterTreeNode,
 } from '@/features/palace-quiz/model/palaceQuizPage'
 import {
-  getPdfSourceRoleLabel,
   getQuestionOwnershipLabel,
   getQuestionSourceLabel,
   getQuestionTypeLabel,
@@ -113,17 +112,6 @@ export function QuestionSourceBadge({
         <div>来源：{getQuestionSourceLabel(sourceMeta)}</div>
         {sourceMeta.page_numbers?.length ? <div>页码：{sourceMeta.page_numbers.join(', ')}</div> : null}
         {sourceMeta.image_names?.length ? <div>图片：{sourceMeta.image_names.join(', ')}</div> : null}
-        {sourceMeta.pdf_sources?.length ? (
-          <div className="space-y-1">
-            {sourceMeta.pdf_sources.map((item, index) => (
-              <div key={`${item.subject_document_id ?? 'pdf'}_${index}`}>
-                {index + 1}. {item.document_name || `PDF ${index + 1}`}
-                {item.page_numbers?.length ? ` · 页码 ${item.page_numbers.join(', ')}` : ''}
-                {item.role_hint ? ` · ${getPdfSourceRoleLabel(item.role_hint)}` : ''}
-              </div>
-            ))}
-          </div>
-        ) : null}
         {sourceMeta.extra_prompt ? <div>提示词：{sourceMeta.extra_prompt}</div> : null}
         {sourceMeta.ai_call_log_id ? <div>AI日志 {sourceMeta.ai_call_log_id}</div> : null}
       </div>

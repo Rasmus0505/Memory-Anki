@@ -16,10 +16,7 @@ from memory_anki.infrastructure.llm.external_ai_call_logs import (
     list_external_ai_call_logs,
     resolve_external_ai_call_log_artifact,
 )
-from memory_anki.modules.reviews.application.schedule_service import (
-    normalize_algorithm,
-    update_all_pending_schedules,
-)
+from memory_anki.modules.reviews.application.schedule_service import update_all_pending_schedules
 from memory_anki.modules.settings.application.ai_model_registry import (
     AiModelRegistryError,
     delete_ai_model_catalog_item,
@@ -41,8 +38,6 @@ from memory_anki.modules.settings.application.ai_prompts import (
 router = APIRouter(tags=["settings"])
 
 SCHEDULE_IMPACTING_KEYS = {
-    "default_algorithm",
-    "custom_intervals",
     "ebbinghaus_intervals",
     "sleep_review_time",
     "early_review_anchor",
@@ -58,7 +53,6 @@ CLIENT_PREFERENCE_GROUPS = {
     "dashboard_duration_filter",
     "palace_list_view_settings",
     "palace_shelf_view_settings",
-    "voice_coach_settings",
 }
 
 CLIENT_PREFERENCE_KEY_PREFIX = "client_preferences."
@@ -75,7 +69,22 @@ def session_dep():
 def read_settings(session: Session) -> dict:
     result = dict(DEFAULTS)
     for row in session.query(Config).all():
-        result[row.key] = normalize_algorithm(row.value) if row.key == "default_algorithm" else row.value
+        if row.key in {
+            "default_algorithm",
+            "algorithm_change_scope",
+            "custom_intervals",
+            "time_recording_threshold_seconds",
+            "flow_voice_api_key",
+            "flow_voice_base_url",
+            "flow_voice_model",
+            "flow_voice_voice",
+            "flow_voice_format",
+            "flow_voice_sample_rate",
+            "flow_voice_instruction",
+            "flow_voice_thinking_enabled",
+        }:
+            continue
+        result[row.key] = row.value
     return result
 
 
@@ -84,7 +93,7 @@ def write_settings(data: dict, session: Session) -> dict:
 
     for key, value in data.items():
         if key in DEFAULTS:
-            nextValue = normalize_algorithm(value) if key == "default_algorithm" else value
+            nextValue = value
             row = session.query(Config).filter_by(key=key).first()
             if row:
                 row.value = str(nextValue)
@@ -103,7 +112,7 @@ def write_settings(data: dict, session: Session) -> dict:
         if changed_keys:
             update_all_pending_schedules(
                 session,
-                next_settings.get("default_algorithm"),
+                "ebbinghaus",
             )
             next_settings = read_settings(session)
 

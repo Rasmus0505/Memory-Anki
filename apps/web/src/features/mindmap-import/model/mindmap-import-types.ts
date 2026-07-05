@@ -1,6 +1,6 @@
 export type ImportMode = 'mindmap' | 'text'
 export type MindMapImportWorkflow = 'single' | 'batch'
-export type ImportSourceKind = 'image-single' | 'image-batch' | 'subject-pdf'
+export type ImportSourceKind = 'image-single' | 'image-batch'
 export type BatchImportStatus = 'idle' | 'ready' | 'loading' | 'success' | 'error'
 
 export interface BatchImportImageItem {
@@ -14,8 +14,6 @@ export interface BatchImportMeta {
   structureImageIndex: number | null
   imageCount: number
 }
-export type { ImportSubjectOption } from '@/entities/knowledge-import/model'
-
 export interface ImportApplyContext {
   source: 'import'
   jobId: string | null

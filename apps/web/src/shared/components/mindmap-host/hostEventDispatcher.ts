@@ -23,17 +23,6 @@ interface HostEventHandlerRefs {
   onEnterNativeFullscreen: MutableRefObject<(() => void) | undefined>
   onExitNativeFullscreen: MutableRefObject<(() => void) | undefined>
   onUiClearedChange: MutableRefObject<((active: boolean) => void) | undefined>
-  onBilinkTrigger: MutableRefObject<((payload: {
-    nodeUid: string | null
-    left: number
-    top: number
-    query: string
-  }) => void) | undefined>
-  onBilinkNodeClick: MutableRefObject<((payload: {
-    palaceId: number | null
-    nodeUid: string | null
-    trigger: 'badge' | 'mark'
-  }) => void) | undefined>
   onMiniPalacePour: MutableRefObject<(() => void) | undefined>
   onReady: MutableRefObject<(() => void) | undefined>
 }
@@ -56,8 +45,6 @@ type DispatchableHostEventName =
   | 'enter_native_fullscreen_request'
   | 'exit_native_fullscreen_request'
   | 'ui_cleared_change'
-  | 'bilink_trigger'
-  | 'bilink_node_click'
   | 'mini_palace_pour'
 
 type HostEventDispatcher = (payload: unknown, handlers: HostEventHandlerRefs) => void
@@ -153,28 +140,6 @@ const hostEventDispatchers = {
   },
   ui_cleared_change: (payload, handlers) => {
     handlers.onUiClearedChange.current?.(Boolean(payload))
-  },
-  bilink_trigger: (payload, handlers) => {
-    const nextPayload = asRecord(payload)
-    handlers.onBilinkTrigger.current?.({
-      nodeUid: typeof nextPayload?.nodeUid === 'string' ? nextPayload.nodeUid : null,
-      left: typeof nextPayload?.left === 'number' ? nextPayload.left : 0,
-      top: typeof nextPayload?.top === 'number' ? nextPayload.top : 0,
-      query: typeof nextPayload?.query === 'string' ? nextPayload.query : '',
-    })
-  },
-  bilink_node_click: (payload, handlers) => {
-    const nextPayload = asRecord(payload)
-    handlers.onBilinkNodeClick.current?.({
-      palaceId:
-        typeof nextPayload?.palaceId === 'number'
-          ? nextPayload.palaceId
-          : nextPayload?.palaceId == null
-            ? null
-            : Number(nextPayload.palaceId),
-      nodeUid: typeof nextPayload?.nodeUid === 'string' ? nextPayload.nodeUid : null,
-      trigger: nextPayload?.trigger === 'mark' ? 'mark' : 'badge',
-    })
   },
   mini_palace_pour: (_payload, handlers) => {
     handlers.onMiniPalacePour.current?.()

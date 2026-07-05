@@ -1,6 +1,5 @@
 import type {
   AiRuntimeOptions,
-  AiScenarioRuntimeOptionsMap,
   ResolvedAiRuntimeMeta,
 } from './profile'
 
@@ -12,8 +11,6 @@ export type PalaceQuizQuestionType =
   | 'ordering'
   | 'categorization'
   | 'short_answer'
-export type PalaceQuizPdfSourceRole = 'question' | 'answer'
-
 export interface PalaceQuizOption {
   id: string
   text: string
@@ -21,10 +18,8 @@ export interface PalaceQuizOption {
 
 export interface PalaceQuizSourceMeta {
   source_kind: string
-  subject_document_id: number | null
   page_numbers: number[] | null
   image_names: string[] | null
-  pdf_sources?: PalaceQuizPdfSourceMeta[] | null
   extra_prompt: string
   secondary_review_enabled?: boolean
   ai_call_log_id: string | null
@@ -41,14 +36,6 @@ export interface PalaceQuizSourceMeta {
   }> | null
   question_types?: PalaceQuizQuestionType[] | string[] | null
   question_count?: number | null
-}
-
-export interface PalaceQuizPdfSourceMeta {
-  subject_document_id: number | null
-  document_name?: string | null
-  page_numbers: number[] | null
-  image_names?: string[] | null
-  role_hint?: PalaceQuizPdfSourceRole | string | null
 }
 
 export interface PalaceQuizMiniPalaceRef {
@@ -151,43 +138,6 @@ export interface PalaceQuizGenerationPreview {
     title: string
     subject?: { id: number; name: string } | null
     first_multi_nodes: string[]
-  }>
-}
-
-export interface RecoverPalaceQuizFromAiLogRequest {
-  ai_call_log_id: string
-  classify_by_mini_palace?: boolean
-  ai_options?: AiRuntimeOptions
-  ai_options_by_scenario?: AiScenarioRuntimeOptionsMap
-}
-
-export interface RecoverAndSavePalaceQuizFromAiLogRequest
-  extends RecoverPalaceQuizFromAiLogRequest {
-  selected_chapter_id: number
-  save_mode?: 'append' | 'overwrite'
-}
-
-export interface RecoverAndSavePalaceQuizFromAiLogResult {
-  items: PalaceQuizQuestion[]
-  recovered_count: number
-  saved_count: number
-  deduped_count: number
-  ai_call_log_id: string
-  grouped_summary: Array<{
-    classified_chapter_id: number
-    classified_chapter_name: string
-    question_count: number
-  }>
-  generation_stats?: {
-    returned_count: number
-    savable_count: number
-    skipped_count: number
-  }
-  warnings?: string[]
-  skipped_reasons?: Array<{
-    code: string
-    count: number
-    question_indexes?: number[]
   }>
 }
 

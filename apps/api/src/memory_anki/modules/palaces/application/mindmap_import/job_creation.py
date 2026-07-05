@@ -5,7 +5,7 @@ from pathlib import Path
 
 from sqlalchemy.orm import Session
 
-from memory_anki.infrastructure.db.models import MindMapImportJob, SubjectDocument
+from memory_anki.infrastructure.db.models import MindMapImportJob
 
 from . import job_artifacts, job_creation_support, job_repository, job_state
 
@@ -94,63 +94,6 @@ def create_batch_job(
     for index, (image_bytes, filename) in enumerate(normalized_items):
         extension = Path(filename or "").suffix or job_creation_support.guess_extension_from_filename(filename)
         job_artifacts.write_bytes(artifact_dir / f"input-{index}{extension}", image_bytes)
-    job_artifacts.write_json(artifact_dir / "source_meta.json", source_meta)
-    return _touch_created_job(session, job.id, import_error_cls=import_error_cls)
-
-
-def create_pdf_job(
-    session: Session,
-    *,
-    entity_key: str,
-    document: SubjectDocument,
-    mode: str,
-    normalized_pages: list[int],
-    resolved_pdf_mode: str,
-    resolved_structure_page: int | None,
-    range_prompt: str,
-    fallback_title: str,
-    resolved_options,
-    ai_runtime: dict[str, object] | None,
-    import_jobs_dir: Path,
-    import_error_cls: type[Exception],
-) -> MindMapImportJob:
-    job_creation_support.validate_entity_key(entity_key, import_error_cls=import_error_cls)
-    job_creation_support.validate_mode(mode, import_error_cls=import_error_cls)
-
-    source_meta = {
-        "subject_document_id": document.id,
-        "document_filename": document.filename,
-        "document_original_name": document.original_name,
-        "document_file_size": int(document.file_size or 0),
-        "document_page_count": int(document.page_count or 0),
-        "page_selection": normalized_pages,
-        "pdf_mode": resolved_pdf_mode,
-        "structure_page": resolved_structure_page,
-        "range_prompt": str(range_prompt or ""),
-        "fallback_title": str(fallback_title or document.original_name or "未命名宫殿"),
-        "ai_runtime": dict(ai_runtime or {}),
-        "import_options": {
-            "quote_original_text_only": bool(resolved_options.quote_original_text_only),
-            "mount_on_original_leaf_only": bool(resolved_options.mount_on_original_leaf_only),
-            "preserve_emphasis_marks": bool(resolved_options.preserve_emphasis_marks),
-            "semantic_split_long_paragraphs": bool(
-                resolved_options.semantic_split_long_paragraphs
-            ),
-            "preserve_line_breaks": bool(resolved_options.preserve_line_breaks),
-        },
-    }
-    job, created = _create_draft_job_record(
-        session,
-        entity_key=entity_key,
-        source_kind=job_state.SOURCE_KIND_SUBJECT_PDF,
-        mode=mode,
-        source_meta=source_meta,
-    )
-    if not created:
-        return job
-
-    artifact_dir = job_artifacts.get_job_artifact_dir(import_jobs_dir, job.id)
-    artifact_dir.mkdir(parents=True, exist_ok=True)
     job_artifacts.write_json(artifact_dir / "source_meta.json", source_meta)
     return _touch_created_job(session, job.id, import_error_cls=import_error_cls)
 

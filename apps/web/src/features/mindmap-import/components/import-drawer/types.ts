@@ -1,11 +1,10 @@
-﻿import type { ChangeEvent, ClipboardEvent, RefObject } from 'react'
+import type { ChangeEvent, ClipboardEvent, RefObject } from 'react'
 import type {
-  BatchImportMeta,
   BatchImportImageItem,
+  BatchImportMeta,
   ImportSourceKind,
   MindMapImportWorkflow,
 } from '@/features/mindmap-import/model/mindmap-import-types'
-import type { ImportSubjectOption } from '@/entities/knowledge-import/model'
 import type { ImportHistoryItem } from '@/features/mindmap-import/model/mindmap-import'
 import type {
   MindMapEditorState,
@@ -13,11 +12,7 @@ import type {
   MindMapImportJobStatus,
   MindMapImportJobUsage,
   MindMapImportSourceTree,
-  PdfImportMode,
-  PdfImportOptions,
-  PdfPageSummary,
   ResolvedAiRuntimeMeta,
-  SubjectDocumentSummary,
 } from '@/shared/api/contracts'
 
 export interface MindMapImportDrawerProps {
@@ -45,33 +40,7 @@ export interface MindMapImportDrawerProps {
   structureImageId: string | null
   batchStatus: 'idle' | 'ready' | 'loading' | 'success' | 'error'
   batchMeta: BatchImportMeta | null
-  subjectOptions: ImportSubjectOption[]
-  selectedSubjectId: number | null
-  onSelectedSubjectIdChange: (subjectId: number | null) => void
-  subjectDocuments: SubjectDocumentSummary[]
-  subjectDocumentsLoading: boolean
-  selectedSubjectDocumentId: number | null
-  onSelectedSubjectDocumentIdChange: (documentId: number | null) => void
-  pdfPageMeta: PdfPageSummary[]
-  pdfPagesLoading: boolean
-  selectedPdfPages: number[]
-  pdfPageInput: string
-  onPdfPageInputChange: (value: string) => void
-  pdfSelectionError: string
-  pdfImportMode: PdfImportMode
-  onPdfImportModeChange: (mode: PdfImportMode) => void
-  structurePage: number | null
-  onStructurePageChange: (pageNumber: number | null) => void
-  pdfPreviewPage: number | null
-  onPdfPreviewPageChange: (pageNumber: number | null) => void
-  analyzedPdfPages: number[]
-  rangePrompt: string
-  onRangePromptChange: (value: string) => void
-  pdfImportOptions: PdfImportOptions
-  onPdfImportOptionChange: (key: keyof PdfImportOptions, value: boolean) => void
   importWarnings: string[]
-  pdfOcrGroundingUsed: boolean | null
-  pdfOcrTextChars: number | null
   currentJobId: string | null
   currentJobStatus: MindMapImportJobStatus | null
   currentJobStage: MindMapImportJobStage | null
@@ -83,8 +52,6 @@ export interface MindMapImportDrawerProps {
   reusedExistingResult: boolean
   onResumeJob: () => void
   onPauseJob: () => void
-  onTogglePdfPage: (pageNumber: number) => void
-  onPdfStart: () => void
   targetNodeLabel: string
   canAppend: boolean
   canUndoLastImport: boolean
@@ -109,21 +76,6 @@ export type MindMapImportHistoryViewModel = Pick<
   'history' | 'onDeleteHistory' | 'onSelectHistory'
 >
 
-export type MindMapImportPdfSidebarModel = Pick<
-  MindMapImportDrawerProps,
-  | 'analyzedPdfPages'
-  | 'onPdfPreviewPageChange'
-  | 'onStructurePageChange'
-  | 'onTogglePdfPage'
-  | 'pdfImportMode'
-  | 'pdfPageMeta'
-  | 'pdfPagesLoading'
-  | 'pdfPreviewPage'
-  | 'selectedPdfPages'
-  | 'sourceKind'
-  | 'structurePage'
->
-
 export type MindMapImportFooterModel = Pick<
   MindMapImportDrawerProps,
   | 'applying'
@@ -146,20 +98,13 @@ export type MindMapImportResultsModel = Pick<
   MindMapImportDrawerProps,
   | 'batchMeta'
   | 'extractedText'
-  | 'importWarnings'
   | 'loading'
   | 'mode'
-  | 'pdfImportMode'
-  | 'selectedPdfPages'
   | 'sourceKind'
   | 'sourceTree'
-  | 'structurePage'
 > & {
   hasStreamProgress: boolean
   onStreamPreviewScroll: () => void
-  pdfModeLabel: string
-  pdfOcrStatusLabel: string
-  pdfPageSummary: string
   previewFrameVersion: number
   previewMindMapState: MindMapEditorState | null
   previewSectionRef: RefObject<HTMLElement | null>
@@ -183,7 +128,6 @@ export type MindMapImportSourceConfigModel = Pick<
   | 'currentJobUsage'
   | 'error'
   | 'extractedText'
-  | 'importWarnings'
   | 'loading'
   | 'mode'
   | 'onBatchDeleteImage'
@@ -192,39 +136,19 @@ export type MindMapImportSourceConfigModel = Pick<
   | 'onBatchStart'
   | 'onFileChange'
   | 'onPauseJob'
-  | 'onPdfImportModeChange'
-  | 'onPdfImportOptionChange'
-  | 'onPdfPageInputChange'
-  | 'onPdfStart'
-  | 'onRangePromptChange'
   | 'onResumeJob'
-  | 'onSelectedSubjectDocumentIdChange'
-  | 'onSelectedSubjectIdChange'
   | 'onSourceKindChange'
   | 'onWorkflowChange'
-  | 'pdfImportMode'
-  | 'pdfImportOptions'
-  | 'pdfPageInput'
-  | 'pdfSelectionError'
-  | 'rangePrompt'
   | 'reusedExistingResult'
-  | 'selectedSubjectDocumentId'
-  | 'selectedSubjectId'
   | 'sourceKind'
   | 'sourceTree'
-  | 'structureImageId'
-  | 'structurePage'
-  | 'subjectDocuments'
-  | 'subjectDocumentsLoading'
-  | 'subjectOptions'
   | 'streamStatusMessage'
+  | 'structureImageId'
   | 'undoing'
 > & {
-  canStartPdfImport: boolean
   hasCurrentJob: boolean
   nodeCount: number
   normalizedStreamPhase: string
-  selectedPdfPageCount: number
   streamStepLabel: string
   usageLabel: string
 }

@@ -6,7 +6,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from memory_anki.core.config import IMPORT_JOBS_DIR
-from memory_anki.infrastructure.db.models import MindMapImportJob, SubjectDocument
+from memory_anki.infrastructure.db.models import MindMapImportJob
 from memory_anki.modules.settings.application.ai_model_registry import (
     AiRuntimeOptions,
     resolve_scenario_runtime,
@@ -14,21 +14,11 @@ from memory_anki.modules.settings.application.ai_model_registry import (
 
 from .mindmap_import import (
     MAX_IMAGE_BYTES,
-    PDF_IMPORT_MODE_DIRECT_GENERATION,
-    PDF_IMPORT_MODE_STRUCTURED_MERGE,
     MindMapImportError,
-    PdfImportOptions,
     job_artifacts,
     job_creation,
     job_repository,
     llm_gateway,
-)
-from .mindmap_import import normalize_page_selection as _normalize_page_selection
-from .mindmap_import.workflow import (
-    normalize_pdf_import_mode as _normalize_pdf_import_mode,
-)
-from .mindmap_import.workflow import (
-    resolve_pdf_structure_page as _resolve_pdf_structure_page,
 )
 from .mindmap_import_job_runtime import MODE_MINDMAP, _serialize_runtime_payload
 
@@ -89,50 +79,6 @@ def create_batch_import_job(
         normalized_items=normalized_items,
         resolved_structure_index=resolved_structure_index,
         fallback_title=fallback_title,
-        ai_runtime=_serialize_runtime_payload(runtime),
-        import_jobs_dir=IMPORT_JOBS_DIR,
-        import_error_cls=MindMapImportError,
-    )
-
-
-def create_pdf_import_job(
-    session: Session,
-    *,
-    entity_key: str,
-    document: SubjectDocument,
-    mode: str,
-    page_selection: list[int],
-    structure_page: int | None,
-    pdf_mode: str = PDF_IMPORT_MODE_DIRECT_GENERATION,
-    range_prompt: str,
-    fallback_title: str,
-    import_options: PdfImportOptions | None,
-    ai_options: AiRuntimeOptions | None = None,
-) -> MindMapImportJob:
-    runtime = resolve_scenario_runtime(
-        session,
-        "vision_pdf_mindmap" if mode == MODE_MINDMAP else "vision_pdf_text",
-        ai_options=ai_options,
-    )
-    normalized_pages = _normalize_page_selection(page_selection, document.page_count)
-    resolved_pdf_mode = _normalize_pdf_import_mode(pdf_mode)
-    resolved_structure_page = (
-        _resolve_pdf_structure_page(normalized_pages, structure_page)
-        if resolved_pdf_mode == PDF_IMPORT_MODE_STRUCTURED_MERGE
-        else None
-    )
-    resolved_options = import_options or PdfImportOptions()
-    return job_creation.create_pdf_job(
-        session,
-        entity_key=entity_key,
-        document=document,
-        mode=mode,
-        normalized_pages=normalized_pages,
-        resolved_pdf_mode=resolved_pdf_mode,
-        resolved_structure_page=resolved_structure_page,
-        range_prompt=range_prompt,
-        fallback_title=fallback_title,
-        resolved_options=resolved_options,
         ai_runtime=_serialize_runtime_payload(runtime),
         import_jobs_dir=IMPORT_JOBS_DIR,
         import_error_cls=MindMapImportError,
@@ -204,7 +150,6 @@ __all__ = [
     "complete_job_from_preview",
     "create_batch_import_job",
     "create_image_import_job",
-    "create_pdf_import_job",
     "delete_job",
     "get_job",
     "get_job_artifact_dir",

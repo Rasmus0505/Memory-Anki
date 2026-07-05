@@ -16,10 +16,7 @@ export interface BackupListResponse {
   items: BackupSummary[]
 }
 export interface ReviewSettings {
-  default_algorithm: string
   default_review_mode: string
-  custom_intervals: string
-  algorithm_change_scope: string
   sleep_review_time: string
   early_review_anchor: string
   ebbinghaus_intervals: string
@@ -28,12 +25,6 @@ export interface ReviewSettings {
   auto_smooth_overdue: string
   overdue_smoothing_days: string
   overdue_smoothing_threshold: string
-  time_recording_threshold_seconds: string
-  import_pdf_quote_original_default: string
-  import_pdf_mount_leaf_only_default: string
-  import_pdf_preserve_emphasis_default: string
-  import_pdf_semantic_split_default: string
-  import_pdf_preserve_line_breaks_default: string
   mindmap_ai_split_api_key: string
   mindmap_ai_split_base_url: string
   mindmap_ai_split_model: string
@@ -41,13 +32,6 @@ export interface ReviewSettings {
   mindmap_ai_split_max_children: string
   mindmap_ai_split_include_note: string
   mindmap_ai_split_custom_instruction: string
-  flow_voice_api_key: string
-  flow_voice_base_url: string
-  flow_voice_model: string
-  flow_voice_voice: string
-  flow_voice_format: string
-  flow_voice_sample_rate: string
-  flow_voice_instruction: string
   [key: string]: string
 }
 export interface AiPromptPlaceholder {
@@ -75,7 +59,7 @@ export interface AiRuntimeOptions {
 }
 export type AiScenarioRuntimeOptionsMap = Record<string, AiRuntimeOptions>
 export type AiProviderKey = 'dashscope' | 'qwen' | 'zhipu' | 'siliconflow' | 'deepseek'
-export type AiModelType = 'llm' | 'vl' | 'translation' | 'asr' | 'tts'
+export type AiModelType = 'llm' | 'vl' | 'translation' | 'asr'
 
 export interface ResolvedAiRuntimeMeta {
   scene_key: string
@@ -234,7 +218,6 @@ export interface ClientPreferences {
   dashboard_duration_filter: Record<string, unknown> | null
   palace_list_view_settings: Record<string, unknown> | null
   palace_shelf_view_settings: Record<string, unknown> | null
-  voice_coach_settings: Record<string, unknown> | null
 }
 export interface ClientPreferencesResponse {
   items: ClientPreferences

@@ -120,30 +120,6 @@ export function buildBatchJob(
   })
 }
 
-export function buildPdfJob(
-  id: string,
-  rootText: string,
-  overrides?: Partial<MindMapImportJob>,
-): MindMapImportJob {
-  return buildJob({
-    id,
-    source_kind: 'subject-pdf',
-    mode: 'mindmap',
-    result: {
-      source_tree: {
-        title: rootText,
-        children: [{ text: '第一节', children: [] }],
-      },
-      editor_doc: buildEditorDoc(rootText, '第一节'),
-      selected_pages: [1, 3],
-      warnings: [],
-      can_apply: true,
-      match_mode: 'direct_generation',
-    },
-    ...overrides,
-  })
-}
-
 export function buildTextJob(
   id: string,
   text: string,
@@ -186,8 +162,6 @@ export function Harness({
     setEditorState: (nextState) => setEditorState(nextState),
     applyEditorState,
     selectedNodeUid: 'a-1',
-    subjectOptions: [{ id: 4, name: '外国教育史' }],
-    defaultSubjectId: 4,
   })
 
   return (
@@ -195,9 +169,6 @@ export function Harness({
       <div data-testid="sync-version">{model.importAppliedSyncVersion}</div>
       <div data-testid="batch-count">{model.importBatchImages.length}</div>
       <div data-testid="batch-status">{model.importBatchStatus}</div>
-      <div data-testid="pdf-pages">{model.importPdfPages.join(',')}</div>
-      <div data-testid="pdf-doc-id">{model.importSelectedSubjectDocumentId ?? ''}</div>
-      <div data-testid="pdf-mode">{model.importPdfMode}</div>
       <div data-testid="extracted-text">{model.importExtractedText}</div>
       <div data-testid="current-job-id">{model.currentJobId ?? ''}</div>
       <div data-testid="current-job-status">{model.currentJobStatus ?? ''}</div>
@@ -266,24 +237,6 @@ export function Harness({
       <button type="button" onClick={() => void model.handleBatchImportStart()}>
         start-batch
       </button>
-      <button type="button" onClick={() => model.setImportSourceKind('subject-pdf')}>
-        enable-pdf
-      </button>
-      <button type="button" onClick={() => model.setImportPdfPageInput('1,3')}>
-        set-pdf-pages
-      </button>
-      <button type="button" onClick={() => model.setImportStructurePage(3)}>
-        set-structure-page
-      </button>
-      <button type="button" onClick={() => model.setImportPdfMode('structured_merge')}>
-        enable-structured-pdf
-      </button>
-      <button type="button" onClick={() => model.setImportRangePrompt('第一节 东方文明古国的教育')}>
-        set-range-prompt
-      </button>
-      <button type="button" onClick={() => void model.handlePdfImportStart()}>
-        start-pdf
-      </button>
       <button type="button" onClick={model.handleImportApplyReplace}>
         replace
       </button>
@@ -298,7 +251,6 @@ export interface UseMindMapImportTestContext {
   jobsById: Record<string, MindMapImportJob>
   nextImageJobFactory: (mode: 'mindmap' | 'text') => MindMapImportJob
   nextBatchJobFactory: () => MindMapImportJob
-  nextPdfJobFactory: () => MindMapImportJob
   runJobFactory: (jobId: string) => MindMapImportJob
   getJobFactory: (jobId: string) => MindMapImportJob
 }
@@ -316,7 +268,6 @@ export function setupUseMindMapImportTestContext(): UseMindMapImportTestContext 
       ? buildTextJob('job-text', '第一章\n第一节')
       : buildMindmapJob('job-single', 'Imported', '导入脑图')
   context.nextBatchJobFactory = () => buildBatchJob('job-batch', 'Batch Imported')
-  context.nextPdfJobFactory = () => buildPdfJob('job-pdf', 'PDF Imported')
   context.runJobFactory = (jobId) => cloneJob(context.jobsById[jobId])
   context.getJobFactory = (jobId) => cloneJob(context.jobsById[jobId])
 
@@ -326,28 +277,6 @@ export function setupUseMindMapImportTestContext(): UseMindMapImportTestContext 
     revokeObjectURL: vi.fn(),
   })
 
-  vi.spyOn(knowledgeApi, 'getSubjectDocumentsApi').mockResolvedValue({
-    items: [
-      {
-        id: 11,
-        subject_id: 4,
-        filename: 'subjects/4/test.pdf',
-        original_name: 'test.pdf',
-        mime_type: 'application/pdf',
-        file_size: 128,
-        page_count: 3,
-        created_at: '2026-05-26T10:00:00',
-      },
-    ],
-  } as never)
-  vi.spyOn(knowledgeApi, 'getSubjectDocumentPagesApi').mockResolvedValue({
-    page_count: 3,
-    pages: [
-      { page_number: 1, thumbnail_url: '/thumb-1', preview_url: '/preview-1' },
-      { page_number: 2, thumbnail_url: '/thumb-2', preview_url: '/preview-2' },
-      { page_number: 3, thumbnail_url: '/thumb-3', preview_url: '/preview-3' },
-    ],
-  } as never)
   vi.spyOn(profileApi, 'getReviewSettingsApi').mockResolvedValue({
     default_algorithm: 'ebbinghaus',
     default_review_mode: 'flashcard',
@@ -362,11 +291,6 @@ export function setupUseMindMapImportTestContext(): UseMindMapImportTestContext 
     overdue_smoothing_days: '7',
     overdue_smoothing_threshold: '5',
     time_recording_threshold_seconds: '0',
-    import_pdf_quote_original_default: 'true',
-    import_pdf_mount_leaf_only_default: 'true',
-    import_pdf_preserve_emphasis_default: 'true',
-    import_pdf_semantic_split_default: 'true',
-    import_pdf_preserve_line_breaks_default: 'true',
   } as never)
   vi.spyOn(profileApi, 'updateReviewSettingsApi').mockResolvedValue({
     default_algorithm: 'ebbinghaus',
@@ -382,11 +306,6 @@ export function setupUseMindMapImportTestContext(): UseMindMapImportTestContext 
     overdue_smoothing_days: '7',
     overdue_smoothing_threshold: '5',
     time_recording_threshold_seconds: '0',
-    import_pdf_quote_original_default: 'true',
-    import_pdf_mount_leaf_only_default: 'true',
-    import_pdf_preserve_emphasis_default: 'true',
-    import_pdf_semantic_split_default: 'true',
-    import_pdf_preserve_line_breaks_default: 'true',
   } as never)
 
   vi.spyOn(importApi, 'createImageImportJobApi').mockImplementation(async (_file, options) => {
@@ -396,11 +315,6 @@ export function setupUseMindMapImportTestContext(): UseMindMapImportTestContext 
   })
   vi.spyOn(importApi, 'createBatchImportJobApi').mockImplementation(async () => {
     const job = cloneJob(context.nextBatchJobFactory())
-    context.jobsById[job.id] = job
-    return cloneJob(job)
-  })
-  vi.spyOn(importApi, 'createPdfImportJobApi').mockImplementation(async () => {
-    const job = cloneJob(context.nextPdfJobFactory())
     context.jobsById[job.id] = job
     return cloneJob(job)
   })

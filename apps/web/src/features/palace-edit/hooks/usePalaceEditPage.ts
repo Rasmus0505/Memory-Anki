@@ -1,10 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { toast } from '@/shared/feedback/toast'
-import { useBilinkOverlay } from '@/features/bilink'
 import { useAiRunConfigDialog } from '@/features/ai-config/useAiRunConfigDialog'
-import { useBilinkCounts } from '@/features/bilink/hooks/useBilinkCounts'
-import { useBilinks } from '@/features/bilink/hooks/useBilinks'
 import type { MindMapAiSplitRequestPayload, MindMapSelection } from '@/shared/components/mindmap-host'
 import type { MindMapFeedbackEvent, MindMapFeedbackFxPayload } from '@/shared/components/mindmap-host/hostBridgeUtils'
 import { readTimerAutomationConfig } from '@/shared/components/session/timer-automation-config'
@@ -125,23 +122,6 @@ export function usePalaceEditPage() {
     isSaving: documentState.isSaving,
     reload: documentState.reload,
     onAfterRestore: () => setReplaceSyncVersion((value) => value + 1),
-  })
-
-  const bilinks = useBilinks(palaceId)
-  const bilinkCounts = useBilinkCounts(palaceId)
-  const refreshBilinks = useCallback(() => {
-    bilinks.refresh()
-    bilinkCounts.refresh()
-  }, [bilinkCounts, bilinks])
-
-  const bilinkOverlay = useBilinkOverlay({
-    currentPalaceId: palaceId,
-    allowCreate: true,
-    onBilinkCreated: refreshBilinks,
-    onBilinkDeleted: refreshBilinks,
-    onJumpToContext: (context) => {
-      navigate(`/palaces/${context.palace_id}/edit`)
-    },
   })
 
   useEffect(() => {
@@ -648,12 +628,6 @@ export function usePalaceEditPage() {
     enterInlinePractice,
     exitInlinePractice,
     toggleInlinePractice,
-    bilinks: bilinks.items,
-    bilinksLoading: bilinks.loading,
-    bilinksError: bilinks.error,
-    bilinkCounts: bilinkCounts.counts,
-    bilinkCountsLoading: bilinkCounts.loading,
-    ...bilinkOverlay,
     handleInlinePracticeNodeClick,
     handleInlinePracticeNodeContextMenu,
     handleEditNodeContextMenu,

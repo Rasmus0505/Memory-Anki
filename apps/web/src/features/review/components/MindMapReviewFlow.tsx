@@ -1,5 +1,4 @@
-import { RotateCcw, Sparkles, SquareCheckBig, Volume2 } from "lucide-react";
-import { BilinkPreviewPopover, BilinkSearchPopover } from "@/features/bilink";
+import { RotateCcw, Sparkles, SquareCheckBig } from "lucide-react";
 import { CompletionDecisionDialog } from "@/features/review/components/CompletionDecisionDialog";
 import { ReviewFlowMapPanel } from "@/features/review/components/ReviewFlowMapPanel";
 import { useMindMapReviewFlowController } from "@/features/review/hooks/useMindMapReviewFlowController";
@@ -11,7 +10,6 @@ import { Button } from "@/shared/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/shared/components/ui/card";
 import { getReviewFeedbackEffectiveVolume } from "@/shared/feedback/reviewFeedbackSettings";
 import { cn } from "@/shared/lib/utils";
-import { VoiceCoachSettingsDialog } from "@/features/voice-coach";
 
 export type { ReviewFlowSnapshot } from "@/entities/review/model/review-flow-tree";
 export type {
@@ -148,17 +146,6 @@ export function MindMapReviewFlow({
                           </Badge>
                         ) : null}
                       </div>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          onClick={() => review.setVoiceCoachDialogOpen(true)}
-                        >
-                          <Volume2 className="mr-2 size-4" />
-                          {review.voiceCoach.enabled ? "语音教练" : "开启语音"}
-                        </Button>
-                      </div>
                     </div>
                     <div className="mt-3">
                       <div className="h-2.5 overflow-hidden rounded-full bg-border">
@@ -236,12 +223,8 @@ export function MindMapReviewFlow({
                   visibleEditorState={review.mapEditorState ?? review.flow.visibleEditorState}
                   editableEditorState={props.editEditorState}
                   visibleEditorSyncKey={review.mapVisibleSyncKey}
-                  bilinkCounts={review.bilinkCounts.counts}
-                  bilinkItems={review.bilinks.items}
                   currentPalaceId={props.palaceId}
                   focusNodeUids={review.focusNodeUids}
-                  bilinkInsertionText={review.bilinkOverlay.bilinkInsertionText}
-                  bilinkInsertionNonce={review.bilinkOverlay.bilinkInsertionNonce}
                   reviewFxSignal={review.flow.feedback.reviewFxSignal}
                   showMiniPalaceButton={Boolean(props.palaceId)}
                   miniPalaceDraft={review.miniPalace.hostDraft}
@@ -268,14 +251,6 @@ export function MindMapReviewFlow({
                         : undefined
                   }
                   onEditNodeContextMenu={review.handleEditNodeContextMenu}
-                  onBilinkTrigger={review.bilinkOverlay.handleBilinkTrigger}
-                  onBilinkNodeClick={review.bilinkOverlay.handleBilinkNodeClick}
-                  onBilinkToolbarSearch={() =>
-                    review.bilinkOverlay.openBilinkSearch({
-                      mode: "toolbar",
-                      position: null,
-                    })
-                  }
                   onQuizBreakOpen={review.handleQuizBreakOpen}
                   onMiniPalaceOpen={review.miniPalace.openPanel}
                   onMiniPalacePour={
@@ -288,37 +263,6 @@ export function MindMapReviewFlow({
             </CardContent>
           </Card>
       </div>
-
-      <BilinkSearchPopover
-        open={review.bilinkOverlay.bilinkSearchOpen}
-        mode={review.bilinkOverlay.bilinkSearchMode}
-        position={review.bilinkOverlay.bilinkSearchPosition}
-        query={review.bilinkOverlay.bilinkSearchQuery}
-        loading={review.bilinkOverlay.bilinkSearchLoading}
-        error={review.bilinkOverlay.bilinkSearchError}
-        results={review.bilinkOverlay.bilinkSearchResults}
-        onQueryChange={review.bilinkOverlay.setBilinkSearchQuery}
-        onClose={review.bilinkOverlay.closeBilinkSearch}
-        onSelect={review.bilinkOverlay.handleBilinkSearchSelect}
-        onPreview={review.bilinkOverlay.handleBilinkResultPreview}
-      />
-
-      <BilinkPreviewPopover
-        open={review.bilinkOverlay.bilinkPreviewOpen}
-        loading={review.bilinkOverlay.bilinkPreviewLoading}
-        error={review.bilinkOverlay.bilinkPreviewError}
-        context={review.bilinkOverlay.bilinkPreviewContext}
-        editorState={review.bilinkOverlay.bilinkPreviewEditorState}
-        highlightQuery={review.bilinkOverlay.bilinkPreviewHighlightQuery}
-        onClose={() => review.bilinkOverlay.setBilinkPreviewOpen(false)}
-        onJump={review.bilinkOverlay.jumpToBilinkContext}
-      />
-
-      <VoiceCoachSettingsDialog
-        open={review.voiceCoachDialogOpen}
-        onOpenChange={review.setVoiceCoachDialogOpen}
-        onTest={review.voiceCoach.playTestEvent}
-      />
 
       <CompletionDecisionDialog
         open={review.completionDialogOpen}

@@ -9,16 +9,12 @@ export type FreestyleRange =
 export type FreestyleContentType =
   | 'quiz_question'
   | 'review'
-  | 'segment_review'
-  | 'mini_review'
   | 'practice'
   | 'english'
   | 'english_reading'
 
 export type FreestyleActionKind =
   | 'review'
-  | 'segment_review'
-  | 'mini_review'
   | 'practice'
   | 'focus_practice'
   | 'mini_practice'

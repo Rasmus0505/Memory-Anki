@@ -1,4 +1,4 @@
-import { Play, RefreshCcw, Save, Search, Volume2 } from "lucide-react";
+import { RefreshCcw, Save, Search } from "lucide-react";
 import type {
   AiModelCategory,
   AiModelType,
@@ -34,7 +34,6 @@ export function AiWorkspaceScenesTab({
   categoryModelSelections,
   categoryThinkingSelections,
   savingKeys,
-  testingVoice,
   onCurrentCategoryChange,
   onCategoryModelSelectionChange,
   onCategoryThinkingSelectionChange,
@@ -51,8 +50,6 @@ export function AiWorkspaceScenesTab({
   onSceneSave,
   onRestoreScene,
   onJumpToObservability,
-  onOpenVoiceSettings,
-  onTestVoice,
 }: {
   categories: AiModelCategory[];
   currentCategory: AiModelCategory | null;
@@ -69,7 +66,6 @@ export function AiWorkspaceScenesTab({
   categoryModelSelections: Record<string, string>;
   categoryThinkingSelections: Record<string, boolean>;
   savingKeys: Record<string, boolean>;
-  testingVoice: boolean;
   onCurrentCategoryChange: (value: AiModelType) => void;
   onCategoryModelSelectionChange: (
     category: AiModelCategory,
@@ -103,8 +99,6 @@ export function AiWorkspaceScenesTab({
     feature?: string;
     status?: string;
   }) => void;
-  onOpenVoiceSettings: () => void;
-  onTestVoice: () => Promise<void>;
 }) {
   return (
     <div className="grid gap-4 xl:grid-cols-[260px_minmax(0,1fr)]">
@@ -473,23 +467,6 @@ export function AiWorkspaceScenesTab({
               );
             })}
           </div>
-
-          {currentCategory.key === "tts" ? (
-            <div className="flex flex-wrap gap-2">
-              <Button type="button" variant="outline" onClick={onOpenVoiceSettings}>
-                <Volume2 className="mr-2 size-4" />
-                语音教练开关
-              </Button>
-              <Button
-                type="button"
-                onClick={() => void onTestVoice()}
-                disabled={testingVoice}
-              >
-                <Play className="mr-2 size-4" />
-                {testingVoice ? "测试中" : "测试播放"}
-              </Button>
-            </div>
-          ) : null}
         </div>
       ) : null}
     </div>

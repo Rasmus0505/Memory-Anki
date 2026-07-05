@@ -3,7 +3,6 @@ import type { MindMapEditorState } from '@/shared/api/contracts'
 import { useImportApplyController } from '@/features/mindmap-import/hooks/useImportApplyController'
 import { useImportBatchState } from '@/features/mindmap-import/hooks/useImportBatchState'
 import { useImportJobController } from '@/features/mindmap-import/hooks/useImportJobController'
-import { usePdfImportController } from '@/entities/knowledge-import/model'
 import { useAiRunConfigDialog } from '@/features/ai-config/useAiRunConfigDialog'
 import type {
   BatchImportMeta,
@@ -12,7 +11,6 @@ import type {
   ImportSourceKind,
   MindMapImportWorkflow,
 } from '@/features/mindmap-import/model/mindmap-import-types'
-import type { ImportSubjectOption } from '@/entities/knowledge-import/model'
 
 interface UseMindMapImportOptions {
   entityKey: string | null
@@ -20,8 +18,6 @@ interface UseMindMapImportOptions {
   setEditorState: (nextState: MindMapEditorState) => void
   applyEditorState?: (nextState: MindMapEditorState, context?: ImportApplyContext) => Promise<void> | void
   selectedNodeUid?: string | null
-  subjectOptions?: ImportSubjectOption[]
-  defaultSubjectId?: number | null
 }
 
 export type {
@@ -29,7 +25,6 @@ export type {
   ImportApplyContext,
   ImportMode,
   ImportSourceKind,
-  ImportSubjectOption,
   MindMapImportWorkflow,
 } from '@/features/mindmap-import/model/mindmap-import-types'
 
@@ -39,8 +34,6 @@ export function useMindMapImport({
   setEditorState,
   applyEditorState,
   selectedNodeUid = null,
-  subjectOptions = [],
-  defaultSubjectId = null,
 }: UseMindMapImportOptions) {
   const [controllerError, setControllerError] = useState('')
   const [mode, setModeState] = useState<ImportMode>('mindmap')
@@ -49,13 +42,6 @@ export function useMindMapImport({
 
   const batch = useImportBatchState(setControllerError)
   const { promptForAiOptions, aiRunConfigDialog } = useAiRunConfigDialog()
-  const pdf = usePdfImportController({
-    entityKey,
-    subjectOptions,
-    defaultSubjectId,
-    setError: setControllerError,
-  })
-
   const jobs = useImportJobController({
     entityKey,
     mode,
@@ -66,20 +52,6 @@ export function useMindMapImport({
     batchImagesRef: batch.batchImagesRef,
     setBatchStatus: batch.setBatchStatus,
     setLastBatchMeta: batch.setLastBatchMeta,
-    selectedPdfPages: pdf.selectedPdfPages,
-    setSelectedPdfPages: pdf.setSelectedPdfPages,
-    selectedSubjectDocumentId: pdf.selectedSubjectDocumentId,
-    subjectDocuments: pdf.subjectDocuments,
-    pdfPageMeta: pdf.pdfPageMeta,
-    pdfImportMode: pdf.pdfImportMode,
-    setPdfImportModeState: pdf.setPdfImportModeState,
-    structurePage: pdf.structurePage,
-    setStructurePage: pdf.setStructurePage,
-    analyzedPdfPages: pdf.analyzedPdfPages,
-    setAnalyzedPdfPages: pdf.setAnalyzedPdfPages,
-    persistAnalyzedPdfPages: pdf.persistAnalyzedPdfPages,
-    rangePrompt: pdf.rangePrompt,
-    pdfImportOptions: pdf.pdfImportOptions,
     promptForAiOptions,
   })
 
@@ -129,7 +101,6 @@ export function useMindMapImport({
   }
 
   const handleImportPaste = (event: ClipboardEvent<HTMLDivElement>) => {
-    if (sourceKind === 'subject-pdf') return
     const items = event.clipboardData?.items
     if (!items) return
     const imageFiles: File[] = []
@@ -147,10 +118,6 @@ export function useMindMapImport({
   }
 
   const handleImportFileChange = (event: ChangeEvent<HTMLInputElement>) => {
-    if (sourceKind === 'subject-pdf') {
-      event.target.value = ''
-      return
-    }
     const files = Array.from(event.target.files || [])
     if (files.length > 0) {
       if (mode === 'text' || sourceKind === 'image-single') {
@@ -194,33 +161,7 @@ export function useMindMapImport({
     importCanUndoLastImport: apply.canUndoLastImport,
     importExternalSyncKey: apply.externalSyncKey,
     importAppliedSyncVersion: apply.appliedSyncVersion,
-    importSubjectOptions: subjectOptions,
-    importSelectedSubjectId: pdf.selectedSubjectId,
-    setImportSelectedSubjectId: pdf.setSelectedSubjectId,
-    importSubjectDocuments: pdf.subjectDocuments,
-    importSubjectDocumentsLoading: pdf.subjectDocumentsLoading,
-    importSelectedSubjectDocumentId: pdf.selectedSubjectDocumentId,
-    setImportSelectedSubjectDocumentId: pdf.setSelectedSubjectDocumentId,
-    importPdfPageMeta: pdf.pdfPageMeta,
-    importPdfPagesLoading: pdf.pdfPagesLoading,
-    importPdfPages: pdf.selectedPdfPages,
-    importPdfPageInput: pdf.pdfPageInput,
-    setImportPdfPageInput: pdf.setPdfPageInput,
-    importPdfSelectionError: pdf.pdfSelectionError,
-    importPdfMode: pdf.pdfImportMode,
-    setImportPdfMode: pdf.setPdfImportMode,
-    importStructurePage: pdf.structurePage,
-    setImportStructurePage: pdf.setStructurePage,
-    importPdfPreviewPage: pdf.pdfPreviewPage,
-    setImportPdfPreviewPage: pdf.setPdfPreviewPage,
-    importAnalyzedPdfPages: pdf.analyzedPdfPages,
-    importRangePrompt: pdf.rangePrompt,
-    setImportRangePrompt: pdf.setRangePrompt,
-    importPdfOptions: pdf.pdfImportOptions,
-    setImportPdfOption: pdf.setImportPdfOption,
     importWarnings: jobs.importWarnings,
-    importPdfOcrGroundingUsed: jobs.importPdfOcrGroundingUsed,
-    importPdfOcrTextChars: jobs.importPdfOcrTextChars,
     currentJobId: jobs.currentJobId,
     currentJobStatus: jobs.currentJobStatus,
     currentJobStage: jobs.currentJobStage,
@@ -232,14 +173,9 @@ export function useMindMapImport({
     importReusedExistingResult: jobs.importReusedExistingResult,
     handleResumeJob: jobs.handleResumeJob,
     handlePauseJob: jobs.handlePauseJob,
-    handleSubjectDocumentUpload: pdf.handleSubjectDocumentUpload,
-    handleSubjectDocumentDelete: pdf.handleSubjectDocumentDelete,
-    refreshSubjectDocuments: pdf.refreshSubjectDocuments,
-    toggleImportPdfPage: pdf.togglePdfPage,
     handleImportPaste,
     handleImportFileChange,
     handleBatchImportStart: () => void jobs.handleBatchImportStart(batch.structureImageId),
-    handlePdfImportStart: jobs.handlePdfImportStart,
     handleDeleteBatchImage: batch.handleDeleteBatchImage,
     handleMoveBatchImage: batch.handleMoveBatchImage,
     handleSetStructureImage: batch.handleSetStructureImage,

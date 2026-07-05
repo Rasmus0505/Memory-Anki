@@ -1,16 +1,10 @@
 ﻿import * as React from "react";
 import { toast } from "@/shared/feedback/toast";
-import {
-  useBilinkCounts,
-  useBilinkOverlay,
-  useBilinks,
-} from "@/features/bilink";
 import { useMiniPalaceController } from "@/features/mini-palace";
 import { useQuizLauncher } from "@/features/palace-quiz/QuizLauncherProvider";
 import { getReviewSurpriseCopy } from "@/features/review/model/review-feedback";
 import { useReviewFlowSession } from "@/features/review/hooks/useReviewFlowSession";
 import { useMemoryAnkiShortcuts } from "@/entities/preferences/model/memoryAnkiShortcuts";
-import { useVoiceCoachController } from "@/features/voice-coach";
 import { persistStudySessionRecord } from "@/entities/session/model";
 import type { MindMapSelection } from "@/shared/components/mindmap-host";
 import type { MindMapEditorState } from "@/shared/api/contracts";
@@ -49,7 +43,6 @@ export function useMindMapReviewFlowController({
     [initialFocusNodeUids],
   );
   const [feedbackDialogOpen, setFeedbackDialogOpen] = React.useState(false);
-  const [voiceCoachDialogOpen, setVoiceCoachDialogOpen] = React.useState(false);
   const [completionDialogOpen, setCompletionDialogOpen] = React.useState(false);
   const [savingIncomplete, setSavingIncomplete] = React.useState(false);
   const [activeNodes, setActiveNodes] = React.useState<MindMapSelection[]>([]);
@@ -94,20 +87,6 @@ export function useMindMapReviewFlowController({
     selectedNodeUid,
     selectedNodeText,
     timer: flow.timer,
-  });
-  const voiceCoach = useVoiceCoachController({
-    scene: sessionKind,
-    timer: flow.timer,
-    comboCount: flow.feedback.comboCount,
-    progressPercent: flow.feedback.progressPercent,
-    allClearReady: flow.feedback.allClearReady,
-    completed: flow.completed,
-  });
-  const bilinks = useBilinks(palaceId);
-  const bilinkCounts = useBilinkCounts(palaceId);
-  const bilinkOverlay = useBilinkOverlay({
-    currentPalaceId: palaceId,
-    allowCreate: false,
   });
   const { openQuizLauncher } = useQuizLauncher();
 
@@ -388,14 +367,8 @@ export function useMindMapReviewFlowController({
   return {
     flow,
     miniPalace,
-    voiceCoach,
-    bilinks,
-    bilinkCounts,
-    bilinkOverlay,
     feedbackDialogOpen,
     setFeedbackDialogOpen,
-    voiceCoachDialogOpen,
-    setVoiceCoachDialogOpen,
     completionDialogOpen,
     setCompletionDialogOpen,
     savingIncomplete,

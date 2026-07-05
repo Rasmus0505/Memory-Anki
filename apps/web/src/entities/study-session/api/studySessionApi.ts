@@ -10,8 +10,6 @@ export type StudySessionScene =
   | 'segment_practice'
   | 'mini_practice'
   | 'review'
-  | 'segment_review'
-  | 'mini_review'
   | 'quiz'
   | 'freestyle'
   | 'english'
@@ -22,8 +20,6 @@ export type StudySessionTargetType =
   | 'palace_segment'
   | 'mini_palace'
   | 'review_schedule'
-  | 'segment_review_schedule'
-  | 'mini_review_schedule'
   | 'english_course'
   | 'english_reading_material'
   | 'freestyle'
@@ -106,16 +102,10 @@ export interface StudySessionRecordPayload {
 }
 
 export interface StudySessionListOptions {
-  includeDeleted?: boolean
-  includeBelowThreshold?: boolean
 }
 
-function listPath(options?: StudySessionListOptions) {
-  const params = new URLSearchParams()
-  if (options?.includeDeleted) params.set('include_deleted', 'true')
-  if (options?.includeBelowThreshold) params.set('include_below_threshold', 'true')
-  const query = params.toString()
-  return `/study-sessions${query ? `?${query}` : ''}`
+function listPath(_options?: StudySessionListOptions) {
+  return '/study-sessions'
 }
 
 export function createStudySessionApi(payload: StudySessionPayload) {
@@ -252,33 +242,23 @@ export async function createStudySessionRecordApi(
   return { item: result.item }
 }
 
-export function softDeleteStudySessionApi(
+export function deleteStudySessionApi(
   id: string,
   options?: { persistence?: PersistedRequestInit['persistence'] },
 ) {
-  return request<{ item: StudySessionItem | null }>(`/study-sessions/${id}/soft-delete`, {
-    method: 'POST',
+  return request<{ ok: boolean }>(`/study-sessions/${id}`, {
+    method: 'DELETE',
     persistence: options?.persistence,
   })
 }
 
-export function restoreStudySessionApi(
-  id: string,
+export function bulkDeleteStudySessionsApi(
+  ids: string[],
   options?: { persistence?: PersistedRequestInit['persistence'] },
 ) {
-  return request<{ item: StudySessionItem | null }>(`/study-sessions/${id}/restore`, {
+  return request<{ ok: boolean; deleted: number }>('/study-sessions/bulk-delete', {
     method: 'POST',
+    body: JSON.stringify({ ids }),
     persistence: options?.persistence,
-  })
-}
-
-export function getStudySessionThresholdApi() {
-  return request<{ seconds: number }>('/settings/study-session-threshold')
-}
-
-export function setStudySessionThresholdApi(seconds: number) {
-  return request<{ seconds: number }>('/settings/study-session-threshold', {
-    method: 'PUT',
-    body: JSON.stringify({ seconds }),
   })
 }

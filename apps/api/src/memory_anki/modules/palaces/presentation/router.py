@@ -41,7 +41,6 @@ from memory_anki.modules.palaces.application.mindmap_ai_split_service import (
     split_palace_editor_doc_with_ai,
 )
 from memory_anki.modules.palaces.application.mini_palace_service import (
-    adjust_mini_palace_review_progress,
     build_mini_palace_editor_doc,
     create_palace_mini_palace,
     delete_palace_mini_palace,
@@ -74,16 +73,12 @@ from memory_anki.modules.palaces.application.segment_review_service import (
     segment_summary_json,
 )
 from memory_anki.modules.palaces.application.segment_service import (
-    adjust_palace_default_segment_review_progress,
-    adjust_segment_review_progress,
     create_palace_segment,
     delete_palace_segment,
     get_palace_segment,
     update_palace_segment,
 )
 from memory_anki.modules.palaces.application.title_sync_service import (
-    MINI_REVIEW_MODE_INDEPENDENT,
-    MINI_REVIEW_MODE_MINI_ONLY,
     build_chapter_grouped_palace_list,
     build_grouped_palace_list,
     build_subject_shelf_summary,
@@ -339,31 +334,6 @@ def api_update_segment(segment_id: int, data: dict, s: Session = Depends(session
     return {"item": segment_summary_json(s, updated)}
 
 
-@router.put("/palace-segments/{segment_id}/review-progress")
-def api_update_segment_review_progress(segment_id: int, data: dict, s: Session = Depends(session_dep)):
-    segment = get_palace_segment(s, segment_id)
-    if not segment:
-        return {"error": "not found"}
-    updated = adjust_segment_review_progress(s, segment, data)
-    maybe_create_rolling_backup("rolling-update-palace-segment-review-progress")
-    return {"item": segment_summary_json(s, updated)}
-
-
-@router.put("/palaces/{palace_id}/default-segment/review-progress")
-def api_update_default_segment_review_progress(palace_id: int, data: dict, s: Session = Depends(session_dep)):
-    palace = get_palace(s, palace_id)
-    if not palace:
-        return {"error": "not found"}
-    updated = adjust_palace_default_segment_review_progress(s, palace, data)
-    maybe_create_rolling_backup("rolling-update-default-segment-review-progress")
-    payload = palace_json(updated, s)
-    default_segment = next(
-        (item for item in payload.get("segments", []) if item.get("is_virtual_default")),
-        None,
-    )
-    return {"item": default_segment, "palace": payload}
-
-
 @router.put("/palaces/{palace_id}/practice-flag")
 def api_update_palace_practice_flag(palace_id: int, data: dict, s: Session = Depends(session_dep)):
     palace = get_palace(s, palace_id)
@@ -372,21 +342,6 @@ def api_update_palace_practice_flag(palace_id: int, data: dict, s: Session = Dep
     palace.needs_practice = bool(data.get("needs_practice", False))
     s.commit()
     s.refresh(palace)
-    return {"item": palace_json(palace, s)}
-
-
-@router.put("/palaces/{palace_id}/mini-review-mode")
-def api_update_palace_mini_review_mode(palace_id: int, data: dict, s: Session = Depends(session_dep)):
-    palace = get_palace(s, palace_id)
-    if not palace:
-        return {"error": "not found"}
-    next_mode = str(data.get("mini_review_mode") or MINI_REVIEW_MODE_INDEPENDENT).strip()
-    if next_mode not in {MINI_REVIEW_MODE_INDEPENDENT, MINI_REVIEW_MODE_MINI_ONLY}:
-        raise HTTPException(status_code=400, detail="invalid mini_review_mode")
-    palace.mini_review_mode = next_mode
-    s.commit()
-    s.refresh(palace)
-    maybe_create_rolling_backup("rolling-update-palace-mini-review-mode")
     return {"item": palace_json(palace, s)}
 
 
@@ -469,23 +424,6 @@ def api_update_mini_palace(mini_palace_id: int, data: dict, s: Session = Depends
     updated = update_palace_mini_palace(s, mini_palace, data)
     maybe_create_rolling_backup("rolling-update-mini-palace")
     return {"item": mini_palace_summary_json(updated, s)}
-
-
-@router.put("/palace-mini-palaces/{mini_palace_id}/review-progress")
-def api_update_mini_palace_review_progress(
-    mini_palace_id: int,
-    data: dict,
-    s: Session = Depends(session_dep),
-):
-    mini_palace = get_palace_mini_palace(s, mini_palace_id)
-    if not mini_palace:
-        return {"error": "not found"}
-    updated = adjust_mini_palace_review_progress(s, mini_palace, data)
-    maybe_create_rolling_backup("rolling-update-mini-palace-review-progress")
-    return {
-        "item": mini_palace_summary_json(updated, s),
-        "palace": palace_json(updated.palace, s) if updated.palace else None,
-    }
 
 
 @router.delete("/palace-mini-palaces/{mini_palace_id}")

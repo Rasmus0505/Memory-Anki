@@ -359,8 +359,7 @@ describe('mindmap import helpers', () => {
       sourceTree: { title: '第一页', children: [] },
       editorDoc: null,
       imagePreviewUrl: '',
-      importMode: 'pdf',
-      imageCount: 6,
+      importMode: 'single',
     })
 
     expect(saved.history).toHaveLength(1)

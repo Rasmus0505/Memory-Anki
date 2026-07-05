@@ -6,7 +6,7 @@ import {
   type MindMapFrameHandle,
   type MindMapSelection,
 } from '@/shared/components/mindmap-host'
-import type { BilinkItem, MindMapEditorState } from '@/shared/api/contracts'
+import type { MindMapEditorState } from '@/shared/api/contracts'
 import type { MindMapReviewFxPayload } from '@/shared/components/mindmap-host/hostBridgeUtils'
 import { cn } from '@/shared/lib/utils'
 import { Badge } from '@/shared/components/ui/badge'
@@ -21,12 +21,8 @@ interface ReviewFlowMapPanelProps {
   visibleEditorState: MindMapEditorState
   editableEditorState?: MindMapEditorState | null
   visibleEditorSyncKey?: string | number | null
-  bilinkCounts?: Record<string, number>
-  bilinkItems?: BilinkItem[]
   currentPalaceId?: number | null
   focusNodeUids?: string[]
-  bilinkInsertionText?: string | null
-  bilinkInsertionNonce?: number
   reviewFxSignal?: MindMapReviewFxPayload | null
   showMiniPalaceButton?: boolean
   miniPalaceDraft?: {
@@ -40,18 +36,6 @@ interface ReviewFlowMapPanelProps {
   onEditNodeContextMenu?: (nodes: MindMapSelection[]) => void
   onNodeActive?: (nodes: MindMapSelection[]) => void
   onNodeHover?: (nodes: MindMapSelection[]) => void
-  onBilinkTrigger?: (payload: {
-    nodeUid: string | null
-    left: number
-    top: number
-    query: string
-  }) => void
-  onBilinkNodeClick?: (payload: {
-    palaceId: number | null
-    nodeUid: string | null
-    trigger: 'badge' | 'mark'
-  }) => void
-  onBilinkToolbarSearch?: () => void
   onQuizBreakOpen?: () => void
   onMiniPalaceOpen?: () => void
   onMiniPalacePour?: () => void
@@ -67,12 +51,8 @@ export function ReviewFlowMapPanel({
   visibleEditorState,
   editableEditorState = null,
   visibleEditorSyncKey = null,
-  bilinkCounts = {},
-  bilinkItems = [],
   currentPalaceId = null,
   focusNodeUids = [],
-  bilinkInsertionText = null,
-  bilinkInsertionNonce = 0,
   reviewFxSignal = null,
   showMiniPalaceButton = false,
   miniPalaceDraft = {
@@ -86,9 +66,6 @@ export function ReviewFlowMapPanel({
   onEditNodeContextMenu,
   onNodeActive,
   onNodeHover,
-  onBilinkTrigger,
-  onBilinkNodeClick,
-  onBilinkToolbarSearch,
   onQuizBreakOpen,
   onMiniPalaceOpen,
   onMiniPalacePour,
@@ -140,14 +117,6 @@ export function ReviewFlowMapPanel({
             ? {
                 label: isEditMode ? '复习' : '编辑',
                 onClick: onToggleMode,
-              }
-            : null
-        }
-        bilinkSearchAction={
-          onBilinkToolbarSearch
-            ? {
-                label: '搜索',
-                onClick: onBilinkToolbarSearch,
               }
             : null
         }
@@ -208,22 +177,15 @@ export function ReviewFlowMapPanel({
         forceSyncKey={frameForceSyncKey}
         forceSyncIntent="soft"
         initialViewPolicy="preserve"
-        bilinkCounts={bilinkCounts}
-        bilinkItems={bilinkItems}
-        bilinkCurrentPalaceId={currentPalaceId}
         focusNodeUids={focusNodeUids}
         miniPalaceDraft={miniPalaceDraft}
         miniPalacePracticeActive={miniPalacePracticeActive}
-        bilinkInsertionText={bilinkInsertionText}
-        bilinkInsertionNonce={bilinkInsertionNonce}
         reviewFxSignal={reviewFxSignal}
         onEditorStateChange={isEditMode && onEditorStateChange ? onEditorStateChange : () => {}}
         onNodeActive={onNodeActive}
         onNodeClick={isEditMode ? undefined : onNodeClick}
         onNodeContextMenu={isEditMode ? onEditNodeContextMenu : onNodeContextMenu}
         onNodeHover={isEditMode ? undefined : onNodeHover}
-        onBilinkTrigger={onBilinkTrigger}
-        onBilinkNodeClick={onBilinkNodeClick}
         onMiniPalacePour={onMiniPalacePour}
         onFullscreenToggle={onToggleFullscreen}
         onFullscreenChange={setNativeFullscreenActive}

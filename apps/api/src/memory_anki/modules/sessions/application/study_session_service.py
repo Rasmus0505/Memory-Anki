@@ -8,7 +8,7 @@ from uuid import uuid4
 from sqlalchemy.orm import Session
 
 from memory_anki.core.time import utc_now_naive
-from memory_anki.infrastructure.db.models import Config, Palace, ReviewLog, StudySession
+from memory_anki.infrastructure.db.models import Palace, ReviewLog, StudySession
 
 ACTIVE_STATUSES = ("active", "paused", "recovered")
 STUDY_DASHBOARD_SCENES = (
@@ -295,26 +295,26 @@ def get_active_study_session_by_target(
     return study_session_json(row) if row else None
 
 
-def soft_delete_study_session(session: Session, session_id: str) -> dict[str, Any] | None:
+def delete_study_session(session: Session, session_id: str) -> bool:
     row = session.query(StudySession).filter_by(id=session_id).first()
     if row is None:
-        return None
-    row.deleted_at = utc_now_naive()
-    row.deleted_reason = "manual"
+        return False
+    session.delete(row)
     session.commit()
-    session.refresh(row)
-    return study_session_json(row)
+    return True
 
 
-def restore_study_session(session: Session, session_id: str) -> dict[str, Any] | None:
-    row = session.query(StudySession).filter_by(id=session_id).first()
-    if row is None:
-        return None
-    row.deleted_at = None
-    row.deleted_reason = None
+def bulk_delete_study_sessions(session: Session, session_ids: list[str]) -> int:
+    normalized_ids = [str(item) for item in session_ids if str(item or "").strip()]
+    if not normalized_ids:
+        return 0
+    deleted = (
+        session.query(StudySession)
+        .filter(StudySession.id.in_(normalized_ids))
+        .delete(synchronize_session=False)
+    )
     session.commit()
-    session.refresh(row)
-    return study_session_json(row)
+    return int(deleted or 0)
 
 
 def list_study_sessions(
@@ -323,37 +323,10 @@ def list_study_sessions(
     include_deleted: bool = False,
     include_below_threshold: bool = False,
 ) -> list[dict[str, Any]]:
-    threshold = get_study_session_threshold_seconds(session)
     query = session.query(StudySession).order_by(StudySession.started_at.desc())
-    if not include_deleted:
-        query = query.filter(StudySession.deleted_at.is_(None))
+    query = query.filter(StudySession.deleted_at.is_(None))
     rows = query.all()
-    items = [study_session_json(row) for row in rows]
-    if include_below_threshold:
-        return items
-    return [item for item in items if int(item["effective_seconds"] or 0) > threshold]
-
-
-def get_study_session_threshold_seconds(session: Session) -> int:
-    row = session.query(Config).filter_by(key="time_recording_threshold_seconds").first()
-    if row is None:
-        return 0
-    try:
-        return max(0, int(row.value))
-    except Exception:
-        return 0
-
-
-def set_study_session_threshold_seconds(session: Session, seconds: int) -> int:
-    safe_seconds = max(0, int(seconds))
-    row = session.query(Config).filter_by(key="time_recording_threshold_seconds").first()
-    if row is None:
-        row = Config(key="time_recording_threshold_seconds", value=str(safe_seconds))
-        session.add(row)
-    else:
-        row.value = str(safe_seconds)
-    session.commit()
-    return safe_seconds
+    return [study_session_json(row) for row in rows]
 
 
 def create_completed_study_session_from_time_payload(
@@ -361,8 +334,6 @@ def create_completed_study_session_from_time_payload(
     payload: dict[str, Any],
 ) -> dict[str, Any] | None:
     effective_seconds = max(0, int(payload.get("effectiveSeconds", payload.get("effective_seconds", 0)) or 0))
-    if effective_seconds <= get_study_session_threshold_seconds(session):
-        return None
     started_at = _parse_datetime(payload.get("startedAt") or payload.get("started_at"))
     ended_at = _parse_datetime(payload.get("endedAt") or payload.get("ended_at"))
     if started_at is None or ended_at is None:
@@ -438,8 +409,6 @@ def create_review_study_session(
     summary: dict[str, Any] | None = None,
 ) -> dict[str, Any] | None:
     effective_seconds = max(0, int(duration_seconds))
-    if effective_seconds <= get_study_session_threshold_seconds(session):
-        return None
     resolved_ended_at = ended_at or utc_now_naive()
     started_at = resolved_ended_at - timedelta(seconds=effective_seconds)
     return create_study_session(
@@ -511,14 +480,12 @@ def get_study_session_duration_seconds(
     start: datetime,
     end: datetime,
 ) -> int:
-    threshold = get_study_session_threshold_seconds(session)
     rows = (
         session.query(StudySession)
         .filter(
             StudySession.deleted_at.is_(None),
             StudySession.status == "completed",
             StudySession.scene.in_(scenes),
-            StudySession.effective_seconds > threshold,
             StudySession.started_at >= start,
             StudySession.started_at < end,
         )
@@ -532,14 +499,12 @@ def get_all_time_study_session_duration_seconds(
     *,
     scenes: tuple[str, ...],
 ) -> int:
-    threshold = get_study_session_threshold_seconds(session)
     rows = (
         session.query(StudySession)
         .filter(
             StudySession.deleted_at.is_(None),
             StudySession.status == "completed",
             StudySession.scene.in_(scenes),
-            StudySession.effective_seconds > threshold,
         )
         .all()
     )
@@ -548,14 +513,12 @@ def get_all_time_study_session_duration_seconds(
 
 def get_today_palace_learning_breakdown(session: Session) -> list[dict[str, Any]]:
     start, end = today_bounds()
-    threshold = get_study_session_threshold_seconds(session)
     rows = (
         session.query(StudySession)
         .filter(
             StudySession.deleted_at.is_(None),
             StudySession.status == "completed",
             StudySession.scene.in_(STUDY_DASHBOARD_SCENES),
-            StudySession.effective_seconds > threshold,
             StudySession.palace_id.is_not(None),
             StudySession.started_at >= start,
             StudySession.started_at < end,

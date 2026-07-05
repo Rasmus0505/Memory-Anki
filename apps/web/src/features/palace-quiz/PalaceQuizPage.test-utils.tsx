@@ -10,9 +10,8 @@ export const getPalaceQuizQuestionsApiMock = vi.fn()
 export const batchCreateChapterQuizQuestionsApiMock = vi.fn()
 export const batchCreatePalaceQuizQuestionsApiMock = vi.fn()
 export const batchDeletePalaceQuizQuestionsApiMock = vi.fn()
-export const previewPalaceQuizGenerationFromPdfStreamApiMock = vi.fn()
+export const previewPalaceQuizGenerationFromImagesApiMock = vi.fn()
 export const previewPalaceQuizGenerationFromTextFilesApiMock = vi.fn()
-export const recoverAndSavePalaceQuizGenerationFromAiLogApiMock = vi.fn()
 export const classifyPalaceQuizQuestionsToMiniPalacesApiMock = vi.fn()
 export const recordPalaceQuizChoiceAttemptApiMock = vi.fn()
 export const resetPalaceQuizQuestionAttemptsApiMock = vi.fn()
@@ -22,11 +21,9 @@ export const dispatchGlobalFeedbackMock = vi.fn()
 export const emitReviewConfettiMock = vi.fn()
 export const getSubjectsApiMock = vi.fn()
 export const getSubjectTreeApiMock = vi.fn()
-export const uploadSubjectDocumentApiMock = vi.fn()
 export const useTimedSessionMock = vi.fn()
 export const promptForAiOptionsMock = vi.fn()
 export const promptForScenarioAiOptionsMock = vi.fn()
-export const refreshSubjectDocumentsMock = vi.fn()
 export const mindMapFramePropsMock = vi.fn()
 
 function collectMindMapNodes(root: any): Array<{ uid: string; text: string }> {
@@ -41,67 +38,6 @@ function collectMindMapNodes(root: any): Array<{ uid: string; text: string }> {
   }
   walk(root, 'root')
   return nodes
-}
-
-export const pdfControllerMock = {
-  subjectDocuments: [
-    {
-      id: 9,
-      subject_id: 2,
-      filename: 'subjects/2/questions.pdf',
-      original_name: 'questions.pdf',
-      mime_type: 'application/pdf',
-      file_size: 123,
-      page_count: 10,
-      created_at: '2026-06-12T00:00:00',
-    },
-    {
-      id: 10,
-      subject_id: 2,
-      filename: 'subjects/2/answers.pdf',
-      original_name: 'answers.pdf',
-      mime_type: 'application/pdf',
-      file_size: 123,
-      page_count: 10,
-      created_at: '2026-06-12T00:00:00',
-    },
-  ],
-  subjectDocumentsLoading: false,
-  selectedSubjectId: 2,
-  setSelectedSubjectId: vi.fn(),
-  selectedSubjectDocumentId: 9,
-  setSelectedSubjectDocumentId: vi.fn(),
-  pdfPageMeta: [],
-  pdfPagesLoading: false,
-  selectedPdfPages: [3],
-  setSelectedPdfPages: vi.fn(),
-  pdfPageInput: '3',
-  setPdfPageInput: vi.fn(),
-  pdfSelectionError: '',
-  pdfImportMode: 'direct_generation',
-  setPdfImportMode: vi.fn(),
-  setPdfImportModeState: vi.fn(),
-  structurePage: null,
-  setStructurePage: vi.fn(),
-  pdfPreviewPage: null,
-  setPdfPreviewPage: vi.fn(),
-  analyzedPdfPages: [],
-  setAnalyzedPdfPages: vi.fn(),
-  persistAnalyzedPdfPages: vi.fn(),
-  rangePrompt: '',
-  setRangePrompt: vi.fn(),
-  pdfImportOptions: {
-    quote_original_text_only: true,
-    mount_on_original_leaf_only: true,
-    preserve_emphasis_marks: true,
-    semantic_split_long_paragraphs: true,
-    preserve_line_breaks: true,
-  },
-  setImportPdfOption: vi.fn(),
-  refreshSubjectDocuments: (...args: unknown[]) => refreshSubjectDocumentsMock(...args),
-  togglePdfPage: vi.fn(),
-  handleSubjectDocumentUpload: vi.fn(),
-  handleSubjectDocumentDelete: vi.fn(),
 }
 
 vi.mock('@/entities/palace/api', () => ({
@@ -171,13 +107,10 @@ vi.mock('@/entities/quiz/api', () => ({
     batchDeletePalaceQuizQuestionsApiMock(...args),
   updatePalaceQuizQuestionApi: vi.fn(),
   deletePalaceQuizQuestionApi: (...args: unknown[]) => deletePalaceQuizQuestionApiMock(...args),
-  previewPalaceQuizGenerationFromImagesApi: vi.fn(),
-  previewPalaceQuizGenerationFromPdfStreamApi: (...args: unknown[]) =>
-    previewPalaceQuizGenerationFromPdfStreamApiMock(...args),
+  previewPalaceQuizGenerationFromImagesApi: (...args: unknown[]) =>
+    previewPalaceQuizGenerationFromImagesApiMock(...args),
   previewPalaceQuizGenerationFromTextFilesApi: (...args: unknown[]) =>
     previewPalaceQuizGenerationFromTextFilesApiMock(...args),
-  recoverAndSavePalaceQuizGenerationFromAiLogApi: (...args: unknown[]) =>
-    recoverAndSavePalaceQuizGenerationFromAiLogApiMock(...args),
   classifyPalaceQuizQuestionsToMiniPalacesApi: (...args: unknown[]) =>
     classifyPalaceQuizQuestionsToMiniPalacesApiMock(...args),
   recordPalaceQuizChoiceAttemptApi: (...args: unknown[]) =>
@@ -191,7 +124,6 @@ vi.mock('@/entities/quiz/api', () => ({
 vi.mock('@/entities/knowledge/api', () => ({
   getSubjectsApi: (...args: unknown[]) => getSubjectsApiMock(...args),
   getSubjectTreeApi: (...args: unknown[]) => getSubjectTreeApiMock(...args),
-  uploadSubjectDocumentApi: (...args: unknown[]) => uploadSubjectDocumentApiMock(...args),
 }))
 
 vi.mock('@/shared/hooks/useTimedSession', () => ({
@@ -212,10 +144,6 @@ vi.mock('@/shared/components/celebration', async () => {
     emitReviewConfetti: (...args: unknown[]) => emitReviewConfettiMock(...args),
   }
 })
-
-vi.mock('@/entities/knowledge-import/model', () => ({
-  usePdfImportController: () => pdfControllerMock,
-}))
 
 export const palaceResponse = {
   id: 1,
@@ -369,29 +297,14 @@ export const baseQuestions = [
     origin_question_id: null,
     mini_palace: null,
     source_meta: {
-      source_kind: 'subject_pdf',
-      subject_document_id: 9,
-      page_numbers: [3],
-      image_names: ['page-3.png'],
-      pdf_sources: [
-        {
-          subject_document_id: 9,
-          document_name: 'questions.pdf',
-          page_numbers: [3],
-          role_hint: 'question',
-        },
-        {
-          subject_document_id: 10,
-          document_name: 'answers.pdf',
-          page_numbers: [3],
-          role_hint: 'answer',
-        },
-      ],
+      source_kind: 'image_batch',
+      page_numbers: null,
+      image_names: ['question.png', 'answer.png'],
       extra_prompt: '只要本节的',
       secondary_review_enabled: false,
-      ai_call_log_id: 'log-pdf-source',
+      ai_call_log_id: 'log-image-source',
       generated_at: '2026-06-12T00:00:00',
-      generation_mode: 'subject_pdf_multi',
+      generation_mode: 'image_batch',
     },
     sort_order: 1,
     correct_count: 2,
@@ -413,7 +326,6 @@ export const baseQuestions = [
     mini_palace: null,
     source_meta: {
       source_kind: 'manual',
-      subject_document_id: null,
       page_numbers: null,
       image_names: null,
       extra_prompt: '',
@@ -444,7 +356,6 @@ export const baseQuestions = [
     mini_palace: { id: 21, name: '细胞核小宫殿' },
     source_meta: {
       source_kind: 'manual',
-      subject_document_id: null,
       page_numbers: null,
       image_names: null,
       extra_prompt: '',
@@ -475,13 +386,6 @@ export function setupPalaceQuizPageTest() {
   vi.clearAllMocks()
   vi.stubGlobal('confirm', vi.fn(() => true))
   window.localStorage.clear()
-  pdfControllerMock.rangePrompt = ''
-  pdfControllerMock.setSelectedSubjectId.mockClear()
-  pdfControllerMock.setSelectedSubjectDocumentId.mockClear()
-  pdfControllerMock.setSelectedPdfPages.mockClear()
-  pdfControllerMock.setPdfPageInput.mockClear()
-  pdfControllerMock.setRangePrompt.mockClear()
-  pdfControllerMock.persistAnalyzedPdfPages.mockClear()
   useTimedSessionMock.mockReturnValue({
     sessionId: 'quiz-timer-1',
     effectiveSeconds: 0,
@@ -512,19 +416,7 @@ export function setupPalaceQuizPageTest() {
   batchCreatePalaceQuizQuestionsApiMock.mockResolvedValue({ items: [] })
   batchDeletePalaceQuizQuestionsApiMock.mockResolvedValue({ ok: true, deleted_count: 0 })
   deletePalaceQuizQuestionApiMock.mockResolvedValue({ ok: true })
-  recoverAndSavePalaceQuizGenerationFromAiLogApiMock.mockResolvedValue({
-    items: [],
-    recovered_count: 1,
-    saved_count: 1,
-    deduped_count: 0,
-    ai_call_log_id: 'log-12',
-    grouped_summary: [],
-  })
-  previewPalaceQuizGenerationFromPdfStreamApiMock.mockImplementation(
-    async (_palaceId, _data, handlers) => {
-      handlers?.onStatus?.({ phase: 'generating', message: '正在调用模型生成题目', step: 2, total: 3 })
-      handlers?.onDelta?.({ text: '{"questions":[' })
-      return {
+  previewPalaceQuizGenerationFromImagesApiMock.mockResolvedValue({
         palace_id: 1,
         questions: [
           {
@@ -538,29 +430,17 @@ export function setupPalaceQuizPageTest() {
             analysis: '细胞核控制细胞活动。',
             source_meta: {
               ...baseQuestions[0].source_meta,
-              generation_mode: 'subject_pdf_multi',
-              pdf_sources: [
-                {
-                  subject_document_id: 9,
-                  document_name: 'questions.pdf',
-                  page_numbers: [3],
-                  role_hint: 'question',
-                },
-              ],
+              source_kind: 'image_single',
+              generation_mode: 'image_single',
+              image_names: ['bio-question.png'],
             },
           },
         ],
         source_meta: {
           ...baseQuestions[0].source_meta,
-          generation_mode: 'subject_pdf_multi',
-          pdf_sources: [
-            {
-              subject_document_id: 9,
-              document_name: 'questions.pdf',
-              page_numbers: [3],
-              role_hint: 'question',
-            },
-          ],
+          source_kind: 'image_single',
+          generation_mode: 'image_single',
+          image_names: ['bio-question.png'],
         },
         ai_call_log_id: 'log-preview',
         warnings: ['第 2 题正确答案不在选项列表中，已跳过；请重试或补充提示词要求选项完整。'],
@@ -588,15 +468,9 @@ export function setupPalaceQuizPageTest() {
                   classified_chapter_id: 101,
                   source_meta: {
                     ...baseQuestions[0].source_meta,
-                    generation_mode: 'subject_pdf_multi',
-                    pdf_sources: [
-                      {
-                        subject_document_id: 9,
-                        document_name: 'questions.pdf',
-                        page_numbers: [3],
-                        role_hint: 'question',
-                      },
-                    ],
+                    source_kind: 'image_single',
+                    generation_mode: 'image_single',
+                    image_names: ['bio-question.png'],
                   },
                 },
               ],
@@ -604,9 +478,7 @@ export function setupPalaceQuizPageTest() {
           ],
           unassigned_questions: [],
         },
-      }
-    },
-  )
+      })
   previewPalaceQuizGenerationFromTextFilesApiMock.mockResolvedValue({
     palace_id: 1,
     questions: [
@@ -670,17 +542,6 @@ export function setupPalaceQuizPageTest() {
       },
     ],
   })
-  uploadSubjectDocumentApiMock.mockResolvedValue({
-    id: 12,
-    subject_id: 2,
-    filename: 'subjects/2/uploaded.pdf',
-    original_name: 'uploaded.pdf',
-    mime_type: 'application/pdf',
-    file_size: 456,
-    page_count: 2,
-    created_at: '2026-06-15T00:00:00',
-  })
-  refreshSubjectDocumentsMock.mockResolvedValue(undefined)
   promptForAiOptionsMock.mockResolvedValue({})
   promptForScenarioAiOptionsMock.mockImplementation(
     (request: { entries?: Array<{ scenarioKey: string }> }) =>

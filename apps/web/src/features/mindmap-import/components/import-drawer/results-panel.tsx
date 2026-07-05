@@ -15,75 +15,45 @@ export function MindMapImportResultsPanel({
     batchMeta,
     extractedText,
     hasStreamProgress,
-    importWarnings,
     loading,
     mode,
     onStreamPreviewScroll,
-    pdfImportMode,
-    pdfModeLabel,
-    pdfOcrStatusLabel,
-    pdfPageSummary,
     previewFrameVersion,
     previewMindMapState,
     previewSectionRef,
     rawModelPreviewText,
     resolvedPreviewImageUrl,
-    selectedPdfPages,
     sourceKind,
     sourceTree,
     streamPreviewContentRef,
     streamStepLabel,
-    structurePage,
   } = model
-  const isStructuredPdfMode = pdfImportMode === 'structured_merge'
 
   return (
     <div data-testid="mindmap-import-results" className="px-6 py-5">
       <div className="grid gap-5">
-        {sourceKind === 'subject-pdf' && mode === 'mindmap' ? (
-          <section
-            data-testid="mindmap-import-pdf-summary"
-            className="rounded-lg border border-border/70 bg-background/70 p-4 text-sm"
-          >
-            <div className="mb-2 font-medium">本次 PDF 识别摘要</div>
-            <div className="grid gap-2 text-muted-foreground sm:grid-cols-2">
-              <div>页码：{pdfPageSummary}</div>
-              <div>模式：{pdfModeLabel}</div>
-              <div>结构页：{isStructuredPdfMode && structurePage ? `第 ${structurePage} 页` : '无'}</div>
-              <div>OCR grounding：{pdfOcrStatusLabel}</div>
-            </div>
-            {importWarnings.length > 0 ? (
-              <div className="mt-3 rounded-xl border border-warning/60 bg-warning/5 px-3 py-2 text-warning">
-                {importWarnings.join('；')}
+        <section ref={previewSectionRef} className="space-y-3">
+          <div className="text-sm font-medium">
+            {sourceKind === 'image-batch' ? '结构图预览' : '原图预览'}
+          </div>
+          <div className="overflow-hidden rounded-lg border border-border/70 bg-background/70">
+            {resolvedPreviewImageUrl ? (
+              <img
+                src={resolvedPreviewImageUrl}
+                alt="待识别内容预览"
+                className="max-h-[340px] w-full object-contain bg-white"
+              />
+            ) : (
+              <div className="flex h-[180px] items-center justify-center text-sm text-muted-foreground">
+                {sourceKind === 'image-batch'
+                  ? '识别完成后，这里会显示本次使用的结构图。'
+                  : '还没有图片，先粘贴或选择一张图片。'}
               </div>
-            ) : null}
-          </section>
-        ) : null}
+            )}
+          </div>
+        </section>
 
-        {sourceKind !== 'subject-pdf' ? (
-          <section ref={previewSectionRef} className="space-y-3">
-            <div className="text-sm font-medium">
-              {sourceKind === 'image-batch' ? '结构图预览' : '原图预览'}
-            </div>
-            <div className="overflow-hidden rounded-lg border border-border/70 bg-background/70">
-              {resolvedPreviewImageUrl ? (
-                <img
-                  src={resolvedPreviewImageUrl}
-                  alt="待识别内容预览"
-                  className="max-h-[340px] w-full object-contain bg-white"
-                />
-              ) : (
-                <div className="flex h-[180px] items-center justify-center text-sm text-muted-foreground">
-                  {sourceKind === 'image-batch'
-                    ? '识别完成后，这里会显示本次使用的结构图。'
-                    : '还没有图片，先粘贴或选择一张图片。'}
-                </div>
-              )}
-            </div>
-          </section>
-        ) : null}
-
-        <section ref={sourceKind === 'subject-pdf' ? previewSectionRef : undefined} className="space-y-3">
+        <section className="space-y-3">
           {mode === 'mindmap' ? (
             <>
               <div className="space-y-3">
@@ -117,16 +87,13 @@ export function MindMapImportResultsPanel({
 
               <div className="flex items-center justify-between gap-3">
                 <div className="text-sm font-medium">
-                  {sourceKind === 'subject-pdf' && !isStructuredPdfMode ? '脑图预览' : '结构预览'}
+                  结构预览
                 </div>
                 <div className="flex items-center gap-2">
                   {sourceKind === 'image-batch' && batchMeta ? (
                     <Badge variant="secondary">
                       {batchMeta.imageCount} 张图{batchMeta.structureImageIndex != null ? ' / 结构补全' : ' / 直接生成'}
                     </Badge>
-                  ) : null}
-                  {sourceKind === 'subject-pdf' && selectedPdfPages.length > 0 ? (
-                    <Badge variant="secondary">{selectedPdfPages.length} 页 PDF</Badge>
                   ) : null}
                   {sourceTree?.title ? <Badge variant="outline">{sourceTree.title}</Badge> : null}
                 </div>
@@ -160,8 +127,6 @@ export function MindMapImportResultsPanel({
                       <div className="text-sm text-muted-foreground">识别结果里还没有分支节点。</div>
                     )}
                   </div>
-                ) : sourceKind === 'subject-pdf' ? (
-                  '完成 PDF 范围识别后，这里会显示脑图预览。'
                 ) : sourceKind === 'image-batch' ? (
                   '点击开始识别后，这里会显示多图转脑图结果。'
                 ) : (

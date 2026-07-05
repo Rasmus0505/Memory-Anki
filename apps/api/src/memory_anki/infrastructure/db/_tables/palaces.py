@@ -1,9 +1,9 @@
 """Palace / review / session domain ORM tables.
 
-Palace, Peg, Attachment, segments, mini-palaces, the review schedule/log
-tables for each granularity, session progress, palace versions/groups, and
-the palace quiz questions all live here. Relationships use string references
-so cross-domain back-references resolve against the shared ``Base.metadata``.
+Palace, Peg, Attachment, segments, mini-palaces, the unified review
+schedule/log tables, session progress, palace versions/groups, and the palace
+quiz questions all live here. Relationships use string references so
+cross-domain back-references resolve against the shared ``Base.metadata``.
 """
 
 from __future__ import annotations
@@ -128,8 +128,6 @@ class Palace(Base):
     manual_title: Mapped[str] = mapped_column(String(200), default="")
     grouping_mode: Mapped[str] = mapped_column(String(20), default="auto")
     manual_group_chapter_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    mini_review_mode: Mapped[str] = mapped_column(String(20), default="independent")
-
     primary_chapter: Mapped[Chapter | None] = relationship(
         "Chapter", foreign_keys=[primary_chapter_id], lazy="joined"
     )
@@ -205,16 +203,6 @@ class PalaceSegment(Base):
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
 
     palace: Mapped[Palace] = relationship("Palace", back_populates="segments")
-    review_schedules: Mapped[list[PalaceSegmentReviewSchedule]] = relationship(
-        "PalaceSegmentReviewSchedule",
-        back_populates="segment",
-        cascade="all, delete-orphan",
-    )
-    review_logs: Mapped[list[PalaceSegmentReviewLog]] = relationship(
-        "PalaceSegmentReviewLog",
-        back_populates="segment",
-        cascade="all, delete-orphan",
-    )
 
 
 class PalaceMiniPalace(Base):
@@ -241,16 +229,6 @@ class PalaceMiniPalace(Base):
     )
 
     palace: Mapped[Palace] = relationship("Palace", back_populates="mini_palaces")
-    review_schedules: Mapped[list[PalaceMiniPalaceReviewSchedule]] = relationship(
-        "PalaceMiniPalaceReviewSchedule",
-        back_populates="mini_palace",
-        cascade="all, delete-orphan",
-    )
-    review_logs: Mapped[list[PalaceMiniPalaceReviewLog]] = relationship(
-        "PalaceMiniPalaceReviewLog",
-        back_populates="mini_palace",
-        cascade="all, delete-orphan",
-    )
     quiz_questions: Mapped[list[PalaceQuizQuestion]] = relationship(
         "PalaceQuizQuestion",
         back_populates="mini_palace",
@@ -308,127 +286,6 @@ class ReviewLog(Base):
 
     palace: Mapped[Palace] = relationship("Palace", back_populates="review_logs")
 
-
-class PalaceSegmentReviewSchedule(Base):
-    __tablename__ = "palace_segment_review_schedules"
-    __table_args__ = (
-        Index(
-            "ix_segment_review_schedule_segment",
-            "palace_segment_id",
-            "completed",
-            "review_number",
-        ),
-        Index(
-            "ix_segment_review_schedules_due_lookup",
-            "completed",
-            "scheduled_date",
-            "scheduled_at",
-            "id",
-        ),
-    )
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    palace_segment_id: Mapped[int] = mapped_column(
-        Integer,
-        ForeignKey("palace_segments.id", ondelete="CASCADE"),
-        nullable=False,
-    )
-    scheduled_date: Mapped[date] = mapped_column(Date, nullable=False)
-    scheduled_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-    interval_days: Mapped[int] = mapped_column(Integer, default=0)
-    algorithm_used: Mapped[str] = mapped_column(String(30), default="ebbinghaus")
-    completed: Mapped[bool] = mapped_column(Boolean, default=False)
-    completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-    review_number: Mapped[int] = mapped_column(Integer, default=0)
-    review_type: Mapped[str] = mapped_column(String(20), default="standard")
-    anchor_date: Mapped[date | None] = mapped_column(Date, nullable=True)
-
-    segment: Mapped[PalaceSegment] = relationship(
-        "PalaceSegment",
-        back_populates="review_schedules",
-    )
-
-
-class PalaceSegmentReviewLog(Base):
-    __tablename__ = "palace_segment_review_logs"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    palace_segment_id: Mapped[int] = mapped_column(
-        Integer,
-        ForeignKey("palace_segments.id", ondelete="CASCADE"),
-        nullable=False,
-    )
-    review_date: Mapped[date | None] = mapped_column(Date, default=date.today)
-    score: Mapped[int] = mapped_column(Integer, default=0)
-    review_mode: Mapped[str] = mapped_column(String(20), default="flashcard")
-    duration_seconds: Mapped[int] = mapped_column(Integer, default=0)
-
-    segment: Mapped[PalaceSegment] = relationship(
-        "PalaceSegment",
-        back_populates="review_logs",
-    )
-
-
-class PalaceMiniPalaceReviewSchedule(Base):
-    __tablename__ = "palace_mini_palace_review_schedules"
-    __table_args__ = (
-        Index(
-            "ix_mini_review_schedule_mini",
-            "palace_mini_palace_id",
-            "completed",
-            "review_number",
-        ),
-        Index(
-            "ix_mini_review_schedules_due_lookup",
-            "completed",
-            "scheduled_date",
-            "scheduled_at",
-            "id",
-        ),
-    )
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    palace_mini_palace_id: Mapped[int] = mapped_column(
-        Integer,
-        ForeignKey("palace_mini_palaces.id", ondelete="CASCADE"),
-        nullable=False,
-    )
-    scheduled_date: Mapped[date] = mapped_column(Date, nullable=False)
-    scheduled_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-    interval_days: Mapped[int] = mapped_column(Integer, default=0)
-    algorithm_used: Mapped[str] = mapped_column(String(30), default="ebbinghaus")
-    completed: Mapped[bool] = mapped_column(Boolean, default=False)
-    completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-    review_number: Mapped[int] = mapped_column(Integer, default=0)
-    review_type: Mapped[str] = mapped_column(String(20), default="standard")
-    anchor_date: Mapped[date | None] = mapped_column(Date, nullable=True)
-
-    mini_palace: Mapped[PalaceMiniPalace] = relationship(
-        "PalaceMiniPalace",
-        back_populates="review_schedules",
-    )
-
-
-class PalaceMiniPalaceReviewLog(Base):
-    __tablename__ = "palace_mini_palace_review_logs"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    palace_mini_palace_id: Mapped[int] = mapped_column(
-        Integer,
-        ForeignKey("palace_mini_palaces.id", ondelete="CASCADE"),
-        nullable=False,
-    )
-    review_date: Mapped[date | None] = mapped_column(Date, default=date.today)
-    score: Mapped[int] = mapped_column(Integer, default=0)
-    review_mode: Mapped[str] = mapped_column(String(20), default="flashcard")
-    duration_seconds: Mapped[int] = mapped_column(Integer, default=0)
-
-    mini_palace: Mapped[PalaceMiniPalace] = relationship(
-        "PalaceMiniPalace",
-        back_populates="review_logs",
-    )
-
-
 class SessionProgress(Base):
     __tablename__ = "session_progress"
     __table_args__ = (
@@ -456,31 +313,11 @@ class SessionProgress(Base):
             ),
         ),
         Index(
-            "ix_session_progress_segment_review",
-            "session_kind",
-            "palace_segment_review_schedule_id",
-            unique=True,
-            sqlite_where=text(
-                "session_kind = 'segment_review' "
-                "AND palace_segment_review_schedule_id IS NOT NULL"
-            ),
-        ),
-        Index(
             "ix_session_progress_mini_practice",
             "session_kind",
             "mini_palace_id",
             unique=True,
             sqlite_where=text("session_kind = 'mini_practice' AND mini_palace_id IS NOT NULL"),
-        ),
-        Index(
-            "ix_session_progress_mini_review",
-            "session_kind",
-            "mini_palace_review_schedule_id",
-            unique=True,
-            sqlite_where=text(
-                "session_kind = 'mini_review' "
-                "AND mini_palace_review_schedule_id IS NOT NULL"
-            ),
         ),
         Index(
             "ix_session_progress_focus_practice",
@@ -511,16 +348,6 @@ class SessionProgress(Base):
     mini_palace_id: Mapped[int | None] = mapped_column(
         Integer,
         ForeignKey("palace_mini_palaces.id", ondelete="CASCADE"),
-        nullable=True,
-    )
-    palace_segment_review_schedule_id: Mapped[int | None] = mapped_column(
-        Integer,
-        ForeignKey("palace_segment_review_schedules.id", ondelete="CASCADE"),
-        nullable=True,
-    )
-    mini_palace_review_schedule_id: Mapped[int | None] = mapped_column(
-        Integer,
-        ForeignKey("palace_mini_palace_review_schedules.id", ondelete="CASCADE"),
         nullable=True,
     )
     reveal_map: Mapped[str] = mapped_column(Text, default="{}")

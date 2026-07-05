@@ -129,9 +129,7 @@ function isActionCard(card: FreestyleCard): card is FreestyleActionCard {
 function isDueActionCard(card: FreestyleCard): card is FreestyleActionCard {
   return (
     isActionCard(card) &&
-    (card.content_type === 'review' ||
-      card.content_type === 'segment_review' ||
-      card.content_type === 'mini_review')
+    card.content_type === 'review'
   )
 }
 
@@ -286,7 +284,7 @@ export function todayFeedContentTypes(config: TodayTrainingConfig): {
   fill: FreestyleContentType[]
 } {
   return {
-    due: ['quiz_question', 'review', 'segment_review', 'mini_review'],
+    due: ['quiz_question', 'review'],
     practice: ['quiz_question', 'practice'],
     fill: [
       'quiz_question',

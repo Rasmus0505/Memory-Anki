@@ -30,7 +30,6 @@ function emptyPreferences() {
     dashboard_duration_filter: null,
     palace_list_view_settings: null,
     palace_shelf_view_settings: null,
-    voice_coach_settings: null,
   }
 }
 
@@ -79,11 +78,11 @@ describe('clientPreferences', () => {
 
   it('keeps local migration data when backend loading fails', async () => {
     mockGetClientPreferencesApi.mockRejectedValue(new Error('offline'))
-    window.localStorage.setItem('legacy-voice', JSON.stringify({ enabled: true }))
+    window.localStorage.setItem('legacy-focus', JSON.stringify({ enabled: true }))
 
     const migrated = await migrateLocalPreferenceToBackend(
-      'voice_coach_settings',
-      'legacy-voice',
+      'timer_focus_config',
+      'legacy-focus',
       { enabled: false },
       (value) => ({
         enabled: Boolean((value as { enabled?: unknown } | null)?.enabled),
@@ -92,7 +91,7 @@ describe('clientPreferences', () => {
 
     expect(migrated.enabled).toBe(true)
     expect(mockUpdateClientPreferencesApi).not.toHaveBeenCalled()
-    expect(window.localStorage.getItem('legacy-voice')).toBe(JSON.stringify({ enabled: true }))
+    expect(window.localStorage.getItem('legacy-focus')).toBe(JSON.stringify({ enabled: true }))
   })
 
   it('publishes optimistic cache updates even when persistence fails', async () => {
@@ -102,12 +101,12 @@ describe('clientPreferences', () => {
       events.push(event instanceof CustomEvent ? event.detail : null)
     })
 
-    const saved = await saveClientPreference('voice_coach_settings', { enabled: true })
+    const saved = await saveClientPreference('timer_focus_config', { enabled: true })
 
     expect(saved.persisted).toBe(false)
     expect(
       getCachedClientPreference(
-        'voice_coach_settings',
+        'timer_focus_config',
         null,
         (value): value is { enabled: boolean } => Boolean(value && typeof value === 'object'),
       ),
@@ -133,13 +132,13 @@ describe('clientPreferences', () => {
           }),
       )
 
-    const firstSave = saveClientPreference('voice_coach_settings', { enabled: true })
-    const secondSave = saveClientPreference('voice_coach_settings', { enabled: false })
+    const firstSave = saveClientPreference('timer_focus_config', { enabled: true })
+    const secondSave = saveClientPreference('timer_focus_config', { enabled: false })
 
     resolveSecond?.({
       items: {
         ...emptyPreferences(),
-        voice_coach_settings: { enabled: false },
+        timer_focus_config: { enabled: false },
       },
     })
     await secondSave
@@ -147,14 +146,14 @@ describe('clientPreferences', () => {
     resolveFirst?.({
       items: {
         ...emptyPreferences(),
-        voice_coach_settings: { enabled: true },
+        timer_focus_config: { enabled: true },
       },
     })
     await firstSave
 
     expect(
       getCachedClientPreference(
-        'voice_coach_settings',
+        'timer_focus_config',
         null,
         (value): value is { enabled: boolean } => Boolean(value && typeof value === 'object'),
       ),

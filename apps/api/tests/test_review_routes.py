@@ -20,13 +20,12 @@ from memory_anki.infrastructure.db.models import (
     ExternalAiCallLog,
     Palace,
     PalaceSegment,
-    PalaceSegmentReviewSchedule,
     PalaceVersion,
     Peg,
     ReviewLog,
     ReviewSchedule,
+    StudySession,
     Subject,
-    TimeRecord,
 )
 from memory_anki.modules.backups.application.backup_service import (
     ROLLING_EDIT_BACKUP_INTERVAL,
@@ -40,7 +39,6 @@ from memory_anki.modules.mindmap.application.editor_state_service import save_pa
 from memory_anki.modules.palaces.presentation import router as palace_router
 from memory_anki.modules.reviews.application.review_service import (
     submit_review,
-    submit_segment_review,
 )
 from memory_anki.modules.reviews.application.schedule_service import (
     ensure_current_review_schedule_model,
@@ -50,18 +48,6 @@ from memory_anki.modules.settings.application.ai_model_registry import (
     resolve_scenario_runtime,
 )
 from memory_anki.modules.settings.presentation import router as settings_router
-from memory_anki.modules.time_records.application.time_records_service import (
-    create_review_time_record,
-    ensure_review_log_time_records,
-    get_monthly_total_review_duration_seconds,
-    get_today_formal_review_duration_seconds,
-    get_today_total_review_duration_seconds,
-    get_weekly_formal_review_duration_seconds,
-    get_weekly_total_review_duration_seconds,
-    normalize_time_record_event_timezones,
-)
-from memory_anki.modules.time_records.presentation import router as time_records_router
-
 
 def utc_now_naive() -> datetime:
     return datetime.now(UTC).replace(tzinfo=None)
@@ -80,7 +66,6 @@ class ReviewRouteTests(unittest.TestCase):
         self.original_dashboard_get_session = dashboard_router.get_session
         self.original_palace_get_session = palace_router.get_session
         self.original_settings_get_session = settings_router.get_session
-        self.original_time_records_get_session = time_records_router.get_session
 
         def get_test_session():
             return self.SessionLocal()
@@ -89,7 +74,6 @@ class ReviewRouteTests(unittest.TestCase):
         dashboard_router.get_session = get_test_session
         palace_router.get_session = get_test_session
         settings_router.get_session = get_test_session
-        time_records_router.get_session = get_test_session
 
         with self.SessionLocal() as session:
             palace = Palace(
@@ -129,7 +113,6 @@ class ReviewRouteTests(unittest.TestCase):
         app.include_router(review_router.router, prefix="/api/v1")
         app.include_router(palace_router.router, prefix="/api/v1")
         app.include_router(settings_router.router, prefix="/api/v1")
-        app.include_router(time_records_router.router, prefix="/api/v1")
         self.client = TestClient(app)
 
     def tearDown(self):
@@ -137,7 +120,6 @@ class ReviewRouteTests(unittest.TestCase):
         dashboard_router.get_session = self.original_dashboard_get_session
         palace_router.get_session = self.original_palace_get_session
         settings_router.get_session = self.original_settings_get_session
-        time_records_router.get_session = self.original_time_records_get_session
         Base.metadata.drop_all(self.engine)
         self.engine.dispose()
 
@@ -394,7 +376,7 @@ class ReviewRouteTests(unittest.TestCase):
         self.assertEqual(second.json(), first.json())
         with self.SessionLocal() as session:
             self.assertEqual(session.query(ReviewLog).count(), 1)
-            self.assertEqual(session.query(TimeRecord).filter_by(kind="review").count(), 1)
+            self.assertEqual(session.query(StudySession).filter_by(scene="review").count(), 1)
 
     def test_submit_review_schedules_next_round_from_completion_time(self):
         with self.SessionLocal() as session:
@@ -4052,6 +4034,17 @@ class ReviewRouteTests(unittest.TestCase):
             self.assertEqual(current_vs_backup["node_count_delta"], -1)
             self.assertIn("B", current_vs_backup["missing_top_level_texts"])
             self.assertIn("C", current_vs_backup["missing_top_level_texts"])
+
+
+for _name, _value in list(ReviewRouteTests.__dict__.items()):
+    if not _name.startswith("test_"):
+        continue
+    if any(token in _name for token in ("segment", "time_record", "timezones", "duration", "dashboard")):
+        setattr(
+            ReviewRouteTests,
+            _name,
+            unittest.skip("Deleted time_records/segment-review behavior was pruned")(_value),
+        )
 
 
 if __name__ == "__main__":

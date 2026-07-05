@@ -25,7 +25,7 @@ from memory_anki.infrastructure.llm.external_ai_call_logs import (
 )
 from memory_anki.modules.settings.application import ai_prompts
 
-from .contracts import MindMapImportError, PdfImportOptions
+from .contracts import MindMapImportError
 from .model_io import (
     MAX_IMAGE_BYTES,
     build_image_content_part,
@@ -34,6 +34,7 @@ from .model_io import (
 )
 from .normalization import normalize_source_tree
 from .prompts import (
+    BATCH_PROMPT,
     PROMPT,
 )
 
@@ -105,12 +106,7 @@ def call_dashscope_json(
     disable_rebalance: bool = False,
     external_log_context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    resolved_prompt = runtime.prompt_override or prompt or ai_prompts.build_import_pdf_direct_prompt(
-        range_prompt="",
-        page_numbers=None,
-        import_options=PdfImportOptions(),
-        extracted_text=None,
-    )
+    resolved_prompt = runtime.prompt_override or prompt or PROMPT
     content_text = call_dashscope(
         runtime=runtime,
         image_bytes=image_bytes,
@@ -147,7 +143,7 @@ def call_dashscope_text_with_images(
     range_prompt: str,
     external_log_context: dict[str, Any] | None = None,
 ) -> str:
-    resolved_prompt = ai_prompts.extend_pdf_prompt(
+    resolved_prompt = _extend_image_prompt(
         runtime.prompt_override or ai_prompts.render_prompt("ai_prompt_import_image_text", {}),
         page_numbers=page_numbers,
         range_prompt=range_prompt,
@@ -168,11 +164,10 @@ def call_dashscope_batch_json(
     *,
     runtime: DashscopeImportRuntime,
     image_items: list[tuple[bytes, str | None]],
-    structure_tree: dict[str, Any],
+    structure_tree: dict[str, Any] | None,
     range_prompt: str = "",
     page_numbers: list[int] | None = None,
     disable_rebalance: bool = False,
-    import_options: PdfImportOptions | None = None,
     extracted_text: str | None = None,
     external_log_context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
@@ -180,7 +175,6 @@ def call_dashscope_batch_json(
         structure_tree=structure_tree,
         range_prompt=range_prompt,
         page_numbers=page_numbers,
-        import_options=import_options,
         extracted_text=extracted_text,
     )
     content_text = call_dashscope_with_images(
@@ -191,47 +185,9 @@ def call_dashscope_batch_json(
         external_log_context=external_log_context,
     )
     source_tree = parse_source_tree_json(content_text)
-    is_structured_merge = structure_tree is not None
-    if is_structured_merge:
-        return normalize_source_tree(source_tree, disable_rebalance=True)
     if disable_rebalance:
         return normalize_source_tree(source_tree, disable_rebalance=True)
     return normalize_source_tree(source_tree, disable_rebalance=False)
-
-
-def call_dashscope_pdf_json(
-    *,
-    runtime: DashscopeImportRuntime,
-    image_items: list[tuple[bytes, str | None]],
-    range_prompt: str = "",
-    page_numbers: list[int] | None = None,
-    disable_rebalance: bool = False,
-    import_options: PdfImportOptions | None = None,
-    extracted_text: str | None = None,
-    external_log_context: dict[str, Any] | None = None,
-) -> dict[str, Any]:
-    content_text = call_dashscope_with_images(
-        runtime=runtime,
-        image_items=image_items,
-        prompt=(
-            ai_prompts.extend_pdf_prompt(
-                runtime.prompt_override,
-                page_numbers=page_numbers,
-                range_prompt=range_prompt,
-            )
-            if runtime.prompt_override
-            else ai_prompts.build_import_pdf_direct_prompt(
-                range_prompt=range_prompt,
-                page_numbers=page_numbers,
-                import_options=import_options or PdfImportOptions(),
-                extracted_text=extracted_text,
-            )
-        ),
-        response_format={"type": "json_object"},
-        external_log_context=external_log_context,
-    )
-    source_tree = parse_source_tree_json(content_text)
-    return normalize_source_tree(source_tree, disable_rebalance=True)
 
 
 def stream_call_dashscope_json(
@@ -243,12 +199,7 @@ def stream_call_dashscope_json(
     disable_rebalance: bool = False,
     external_log_context: dict[str, Any] | None = None,
 ) -> Generator[str, None, dict[str, Any]]:
-    resolved_prompt = runtime.prompt_override or prompt or ai_prompts.build_import_pdf_direct_prompt(
-        range_prompt="",
-        page_numbers=None,
-        import_options=PdfImportOptions(),
-        extracted_text=None,
-    )
+    resolved_prompt = runtime.prompt_override or prompt or PROMPT
     content_text = yield from stream_call_dashscope(
         runtime=runtime,
         image_bytes=image_bytes,
@@ -269,7 +220,7 @@ def stream_call_dashscope_text(
     range_prompt: str,
     external_log_context: dict[str, Any] | None = None,
 ) -> Generator[str, None, str]:
-    resolved_prompt = ai_prompts.extend_pdf_prompt(
+    resolved_prompt = _extend_image_prompt(
         runtime.prompt_override or ai_prompts.render_prompt("ai_prompt_import_image_text", {}),
         page_numbers=page_numbers,
         range_prompt=range_prompt,
@@ -290,11 +241,10 @@ def stream_call_dashscope_batch_json(
     *,
     runtime: DashscopeImportRuntime,
     image_items: list[tuple[bytes, str | None]],
-    structure_tree: dict[str, Any],
+    structure_tree: dict[str, Any] | None,
     range_prompt: str = "",
     page_numbers: list[int] | None = None,
     disable_rebalance: bool = False,
-    import_options: PdfImportOptions | None = None,
     extracted_text: str | None = None,
     external_log_context: dict[str, Any] | None = None,
 ) -> Generator[str, None, dict[str, Any]]:
@@ -302,7 +252,6 @@ def stream_call_dashscope_batch_json(
         structure_tree=structure_tree,
         range_prompt=range_prompt,
         page_numbers=page_numbers,
-        import_options=import_options,
         extracted_text=extracted_text,
     )
     content_text = yield from stream_call_dashscope_with_images(
@@ -313,47 +262,9 @@ def stream_call_dashscope_batch_json(
         external_log_context=external_log_context,
     )
     source_tree = parse_source_tree_json(content_text)
-    is_structured_merge = structure_tree is not None
-    if is_structured_merge:
-        return normalize_source_tree(source_tree, disable_rebalance=True)
     if disable_rebalance:
         return normalize_source_tree(source_tree, disable_rebalance=True)
     return normalize_source_tree(source_tree, disable_rebalance=False)
-
-
-def stream_call_dashscope_pdf_json(
-    *,
-    runtime: DashscopeImportRuntime,
-    image_items: list[tuple[bytes, str | None]],
-    range_prompt: str = "",
-    page_numbers: list[int] | None = None,
-    disable_rebalance: bool = False,
-    import_options: PdfImportOptions | None = None,
-    extracted_text: str | None = None,
-    external_log_context: dict[str, Any] | None = None,
-) -> Generator[str, None, dict[str, Any]]:
-    content_text = yield from stream_call_dashscope_with_images(
-        runtime=runtime,
-        image_items=image_items,
-        prompt=(
-            ai_prompts.extend_pdf_prompt(
-                runtime.prompt_override,
-                page_numbers=page_numbers,
-                range_prompt=range_prompt,
-            )
-            if runtime.prompt_override
-            else ai_prompts.build_import_pdf_direct_prompt(
-                range_prompt=range_prompt,
-                page_numbers=page_numbers,
-                import_options=import_options or PdfImportOptions(),
-                extracted_text=extracted_text,
-            )
-        ),
-        response_format={"type": "json_object"},
-        external_log_context=external_log_context,
-    )
-    source_tree = parse_source_tree_json(content_text)
-    return normalize_source_tree(source_tree, disable_rebalance=True)
 
 
 def call_dashscope(
@@ -589,16 +500,30 @@ def extract_message_content_text(content: Any) -> str:
 
 def _build_batch_prompt(
     *,
-    structure_tree: dict[str, Any],
+    structure_tree: dict[str, Any] | None,
     range_prompt: str,
     page_numbers: list[int] | None,
-    import_options: PdfImportOptions | None,
     extracted_text: str | None,
 ) -> str:
-    return ai_prompts.build_import_pdf_merge_prompt(
-        structure_tree=structure_tree,
-        range_prompt=range_prompt,
-        page_numbers=page_numbers,
-        import_options=import_options or PdfImportOptions(),
-        extracted_text=extracted_text,
-    )
+    if structure_tree:
+        prompt = ai_prompts.build_import_batch_prompt(structure_tree=structure_tree)
+    else:
+        prompt = BATCH_PROMPT
+    if extracted_text:
+        prompt += f"\n\n已提取的图片文字参考：\n{extracted_text}"
+    return _extend_image_prompt(prompt, page_numbers=page_numbers, range_prompt=range_prompt)
+
+
+def _extend_image_prompt(
+    base_prompt: str,
+    *,
+    page_numbers: list[int] | None,
+    range_prompt: str,
+) -> str:
+    next_prompt = str(base_prompt or "").strip()
+    if page_numbers:
+        next_prompt += f"\n\n本次只允许处理这些图片序号：{', '.join(str(value) for value in page_numbers)}。"
+    normalized_range_prompt = str(range_prompt or "").strip()
+    if normalized_range_prompt:
+        next_prompt += f"\n用户补充提示：{normalized_range_prompt}"
+    return next_prompt

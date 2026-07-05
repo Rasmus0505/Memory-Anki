@@ -1,11 +1,6 @@
 ﻿import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowLeft, History, Search, Volume2 } from 'lucide-react'
-import {
-  BilinkPanel,
-  BilinkPreviewPopover,
-  BilinkSearchPopover,
-} from '@/features/bilink'
+import { ArrowLeft, History } from 'lucide-react'
 import { PageIntro } from '@/shared/components/layout/PageIntro'
 import {
   MindMapFrame,
@@ -25,10 +20,6 @@ import { MindMapImportDrawer, useMindMapImport } from '@/features/mindmap-import
 import { usePalaceEditPage } from '@/features/palace-edit/hooks/usePalaceEditPage'
 import { PalaceKnowledgeOutlinePanel } from '@/features/palace-edit/components/PalaceKnowledgeOutlinePanel'
 import { useQuizLauncher } from '@/features/palace-quiz/QuizLauncherProvider'
-import {
-  useVoiceCoachController,
-  VoiceCoachSettingsDialog,
-} from '@/features/voice-coach'
 import { MiniPalacePanel } from '@/features/mini-palace'
 import { useRouteResidency } from '@/shared/routing/RouteResidency'
 import { PalaceEditSkeleton } from './PalaceEditSkeleton'
@@ -38,13 +29,8 @@ export default function PalaceEdit() {
   const page = usePalaceEditPage()
   const { openQuizLauncher } = useQuizLauncher()
   const mindMapFrameRef = useRef<MindMapFrameHandle | null>(null)
-  const [voiceCoachDialogOpen, setVoiceCoachDialogOpen] = useState(false)
   const [mindMapUiCleared, setMindMapUiCleared] = useState(false)
   const [mindMapNativeFullscreen, setMindMapNativeFullscreen] = useState(false)
-  const voiceCoach = useVoiceCoachController({
-    scene: page.editorMode === 'practice' ? 'practice' : 'edit',
-    timer: page.timer,
-  })
 
   const selectedNodeUid =
     page.selectedNodes?.[0]?.uid ||
@@ -54,28 +40,12 @@ export default function PalaceEdit() {
     () => (page.palaceId ? `palace_${page.palaceId}` : null),
     [page.palaceId],
   )
-  const importSubjectOptions = useMemo(() => {
-    const seen = new Set<number>()
-    return (page.palace?.chapters || [])
-      .map((chapter) => chapter.subject)
-      .filter((subject): subject is { id: number; name: string } => Boolean(subject?.id && subject?.name))
-      .filter((subject) => {
-        if (seen.has(subject.id)) return false
-        seen.add(subject.id)
-        return true
-      })
-  }, [page.palace?.chapters])
   const mindMapImport = useMindMapImport({
     entityKey: importEntityKey,
     editorState: page.editorState,
     setEditorState: page.setEditorState,
     applyEditorState: page.applyImportedPalaceEditorState,
     selectedNodeUid,
-    subjectOptions: importSubjectOptions,
-    defaultSubjectId:
-      page.palace?.chapters.find((chapter) => chapter.id === page.primaryChapterId)?.subject?.id ??
-      page.palace?.chapters.find((chapter) => chapter.subject?.id)?.subject?.id ??
-      null,
   })
 
   const selectedNodeLabel = page.selectedNodes?.[0]?.text ?? ''
@@ -148,28 +118,6 @@ export default function PalaceEdit() {
                   返回列表
                 </Button>
               </Link>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() =>
-                  page.openBilinkSearch({
-                    mode: 'toolbar',
-                    nodeUid: page.selectedNode?.uid ?? null,
-                    position: null,
-                  })
-                }
-              >
-                <Search className="mr-2 size-4" />
-                全局搜索
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setVoiceCoachDialogOpen(true)}
-              >
-                <Volume2 className="mr-2 size-4" />
-                {voiceCoach.enabled ? '语音教练' : '开启语音'}
-              </Button>
               {page.palace ? (
                 <>
                   <Button
@@ -248,13 +196,6 @@ export default function PalaceEdit() {
             onDelete={page.handleAttachmentDelete}
           />
 
-          <BilinkPanel
-            items={page.bilinks}
-            loading={page.bilinksLoading}
-            error={page.bilinksError}
-            onPreview={page.handleBilinkPanelPreview}
-            onDelete={page.handleBilinkDelete}
-          />
         </div>
 
         <div className={cn('space-y-4', page.mindMapFullscreen && 'space-y-0')}>
@@ -333,15 +274,6 @@ export default function PalaceEdit() {
                       onClick: () => {
                         void page.handleOpenEnglishArea()
                       },
-                    }}
-                    bilinkSearchAction={{
-                      label: '搜索',
-                      onClick: () =>
-                        page.openBilinkSearch({
-                          mode: 'toolbar',
-                          nodeUid: page.selectedNode?.uid ?? null,
-                          position: null,
-                        }),
                     }}
                     quizAction={
                       page.palaceId
@@ -432,15 +364,10 @@ export default function PalaceEdit() {
                       selectedNodeUids: page.selectedRangeNodeUids,
                       overriddenConflictNodeUids: page.overriddenConflictNodeUids,
                     }}
-                    bilinkCounts={page.bilinkCounts}
-                    bilinkItems={page.bilinks}
-                    bilinkCurrentPalaceId={page.palaceId}
                     focusNodeUids={page.focusNodeUids}
                     focusRequestNodeUid={page.modeFocusRequestNodeUid}
                     focusRequestNonce={page.modeFocusRequestNonce}
                     miniPalaceDraft={page.miniPalace.hostDraft}
-                    bilinkInsertionText={page.bilinkInsertionText}
-                    bilinkInsertionNonce={page.bilinkInsertionNonce}
                     reviewFxSignal={page.editorMode === 'practice' ? page.reviewFxSignal : null}
                     feedbackFxSignal={page.feedbackFxSignal}
                     onEditorStateChange={page.handleMindMapEditorStateChange}
@@ -472,8 +399,6 @@ export default function PalaceEdit() {
                     }}
                     onFullscreenToggle={page.toggleMindMapFullscreen}
                     onUiClearedChange={setMindMapUiCleared}
-                    onBilinkTrigger={page.handleBilinkTrigger}
-                    onBilinkNodeClick={page.handleBilinkNodeClick}
                     onMiniPalacePour={page.miniPalace.isPracticing ? page.miniPalace.handleSpacePour : undefined}
                     className={cn(
                       'w-full flex-1 rounded-lg border border-border/70 bg-background',
@@ -524,33 +449,7 @@ export default function PalaceEdit() {
         structureImageId={mindMapImport.importStructureImageId}
         batchStatus={mindMapImport.importBatchStatus}
         batchMeta={mindMapImport.importBatchMeta}
-        subjectOptions={mindMapImport.importSubjectOptions}
-        selectedSubjectId={mindMapImport.importSelectedSubjectId}
-        onSelectedSubjectIdChange={mindMapImport.setImportSelectedSubjectId}
-        subjectDocuments={mindMapImport.importSubjectDocuments}
-        subjectDocumentsLoading={mindMapImport.importSubjectDocumentsLoading}
-        selectedSubjectDocumentId={mindMapImport.importSelectedSubjectDocumentId}
-        onSelectedSubjectDocumentIdChange={mindMapImport.setImportSelectedSubjectDocumentId}
-        pdfPageMeta={mindMapImport.importPdfPageMeta}
-        pdfPagesLoading={mindMapImport.importPdfPagesLoading}
-        selectedPdfPages={mindMapImport.importPdfPages}
-        pdfPageInput={mindMapImport.importPdfPageInput}
-        onPdfPageInputChange={mindMapImport.setImportPdfPageInput}
-        pdfSelectionError={mindMapImport.importPdfSelectionError}
-        pdfImportMode={mindMapImport.importPdfMode}
-        onPdfImportModeChange={mindMapImport.setImportPdfMode}
-        structurePage={mindMapImport.importStructurePage}
-        onStructurePageChange={mindMapImport.setImportStructurePage}
-        pdfPreviewPage={mindMapImport.importPdfPreviewPage}
-        onPdfPreviewPageChange={mindMapImport.setImportPdfPreviewPage}
-        analyzedPdfPages={mindMapImport.importAnalyzedPdfPages}
-        rangePrompt={mindMapImport.importRangePrompt}
-        onRangePromptChange={mindMapImport.setImportRangePrompt}
-        pdfImportOptions={mindMapImport.importPdfOptions}
-        onPdfImportOptionChange={mindMapImport.setImportPdfOption}
         importWarnings={mindMapImport.importWarnings}
-        pdfOcrGroundingUsed={mindMapImport.importPdfOcrGroundingUsed}
-        pdfOcrTextChars={mindMapImport.importPdfOcrTextChars}
         currentJobId={mindMapImport.currentJobId}
         currentJobStatus={mindMapImport.currentJobStatus}
         currentJobStage={mindMapImport.currentJobStage}
@@ -562,8 +461,6 @@ export default function PalaceEdit() {
         reusedExistingResult={mindMapImport.importReusedExistingResult}
         onResumeJob={mindMapImport.handleResumeJob}
         onPauseJob={mindMapImport.handlePauseJob}
-        onTogglePdfPage={mindMapImport.toggleImportPdfPage}
-        onPdfStart={mindMapImport.handlePdfImportStart}
         targetNodeLabel={selectedNodeLabel}
         canAppend={mindMapImport.importCanAppend}
         canUndoLastImport={mindMapImport.importCanUndoLastImport}
@@ -585,31 +482,6 @@ export default function PalaceEdit() {
       {mindMapImport.aiRunConfigDialog}
       {page.aiRunConfigDialog}
 
-      <BilinkSearchPopover
-        open={page.bilinkSearchOpen}
-        mode={page.bilinkSearchMode}
-        position={page.bilinkSearchPosition}
-        query={page.bilinkSearchQuery}
-        loading={page.bilinkSearchLoading}
-        error={page.bilinkSearchError}
-        results={page.bilinkSearchResults}
-        onQueryChange={page.setBilinkSearchQuery}
-        onClose={page.closeBilinkSearch}
-        onSelect={page.handleBilinkSearchSelect}
-        onPreview={page.handleBilinkResultPreview}
-      />
-
-      <BilinkPreviewPopover
-        open={page.bilinkPreviewOpen}
-        loading={page.bilinkPreviewLoading}
-        error={page.bilinkPreviewError}
-        context={page.bilinkPreviewContext}
-        editorState={page.bilinkPreviewEditorState}
-        highlightQuery={page.bilinkPreviewHighlightQuery}
-        onClose={() => page.setBilinkPreviewOpen(false)}
-        onJump={page.jumpToBilinkContext}
-      />
-
       <PalaceVersionDialog
         open={page.versionOpen}
         versions={page.versions}
@@ -629,11 +501,6 @@ export default function PalaceEdit() {
         onBackToList={page.resetVersionPreview}
       />
 
-      <VoiceCoachSettingsDialog
-        open={voiceCoachDialogOpen}
-        onOpenChange={setVoiceCoachDialogOpen}
-        onTest={voiceCoach.playTestEvent}
-      />
     </div>
   )
 }

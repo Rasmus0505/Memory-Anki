@@ -7,9 +7,7 @@ import {
 } from '@/entities/palace/api'
 import {
   getPalaceSegmentApi,
-  updatePalaceSegmentReviewProgressApi,
 } from '@/entities/palace-segment/api'
-import { submitSegmentReviewSessionApi } from '@/features/review/api'
 import {
   PracticeSessionRoute,
   type PracticeProgressSnapshot,
@@ -66,33 +64,9 @@ export default function SegmentPracticePage() {
         refreshStageTarget: async ({ segment }) =>
           buildSegmentSession(await getPalaceSegmentApi(segment.id)),
         completeWithoutStage: async ({ segment }) => {
-          if (segment.review_stage_total != null && segment.review_stage_total > 0) {
-            const nextCompleted = (segment.review_stage_completed ?? 0) + 1
-            const targetReviewNumber = Math.min(nextCompleted, segment.review_stage_total - 1)
-            await updatePalaceSegmentReviewProgressApi(segment.id, {
-              completed_count: nextCompleted,
-              completed_review_number: targetReviewNumber,
-            })
-          }
           await clearSegmentPracticeSessionProgressApi(segment.id)
         },
-        submitStage: async ({ segment }, payload, targetReviewNumber, needsPractice) => {
-          const scheduleId = segment.current_review_schedule_id
-          if (scheduleId) {
-            await submitSegmentReviewSessionApi(scheduleId, {
-              duration_seconds: payload.durationSeconds,
-              completion_mode: payload.completionMode,
-              revealed_remaining: payload.revealedRemaining,
-              red_marked_count: payload.redNodeIds.length,
-              target_review_number: targetReviewNumber,
-              needs_practice: needsPractice,
-            })
-          } else {
-            await updatePalaceSegmentReviewProgressApi(segment.id, {
-              completed_count: targetReviewNumber + 1,
-              completed_review_number: targetReviewNumber,
-            })
-          }
+        submitStage: async ({ segment }) => {
           await clearSegmentPracticeSessionProgressApi(segment.id)
         },
       }}

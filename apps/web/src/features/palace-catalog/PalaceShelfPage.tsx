@@ -201,24 +201,14 @@ export default function PalaceShelfPage() {
         key={palace.id}
         palace={palace}
         viewSettings={expandedViewSettings}
-        segmentReviewLoadingId={cardActions.segmentReviewLoadingId}
-        markReviewedKey={cardActions.markReviewedKey}
         defaultExpanded
-        onOpenBatchReview={cardActions.onOpenBatchReview}
         onPalacePractice={cardActions.onPalacePractice}
         onWarmPalacePractice={cardActions.onWarmPalacePractice}
         onWarmFocusPractice={cardActions.onWarmFocusPractice}
         onSegmentPractice={cardActions.onSegmentPractice}
         onWarmSegmentPractice={cardActions.onWarmSegmentPractice}
-        onSegmentReviewAction={cardActions.onSegmentReviewAction}
-        onWarmSegmentReviewAction={cardActions.onWarmSegmentReviewAction}
-        onOpenStageEdit={cardActions.onOpenStageEdit}
-        onMarkSegmentReviewed={cardActions.onMarkSegmentReviewed}
         onMiniPalacePractice={cardActions.onMiniPalacePractice}
         onWarmMiniPalacePractice={cardActions.onWarmMiniPalacePractice}
-        onMiniPalaceReview={cardActions.onMiniPalaceReview}
-        onWarmMiniPalaceReview={cardActions.onWarmMiniPalaceReview}
-        onOpenConfig={cardActions.onOpenConfig}
         onDelete={cardActions.onDelete}
       />
     ),

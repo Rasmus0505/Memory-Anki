@@ -1,4 +1,4 @@
-﻿import type { MindMapEditorState, MindMapImportJob, PdfImportMode } from '@/shared/api/contracts'
+import type { MindMapEditorState, MindMapImportJob } from '@/shared/api/contracts'
 import { logAiCall } from '@/shared/logs/model/appLogs'
 import {
   countSourceTreeNodes,
@@ -6,12 +6,6 @@ import {
   type ImportHistoryItem,
 } from '@/features/mindmap-import/model/mindmap-import'
 import type { ImportMode, ImportSourceKind } from '@/features/mindmap-import/model/mindmap-import-types'
-import {
-  normalizePdfImportMode,
-  serializePageSelection,
-} from '@/entities/knowledge-import/model'
-
-export { normalizePdfImportMode }
 
 export function fileToDataUrl(file: File): Promise<string> {
   return new Promise((resolve) => {
@@ -20,34 +14,18 @@ export function fileToDataUrl(file: File): Promise<string> {
     reader.readAsDataURL(file)
   })
 }
+
 export function describeImportFeature(sourceKind: ImportSourceKind, mode: ImportMode) {
-  if (sourceKind === 'subject-pdf') {
-    return mode === 'mindmap' ? '学科 PDF 转脑图' : '学科 PDF 转文字'
-  }
   if (sourceKind === 'image-batch') {
     return '多图转脑图'
   }
   return mode === 'mindmap' ? '图片转脑图' : '图片转文字'
 }
 
-export function summarizePdfRequest(params: {
-  pages: number[]
-  rangePrompt: string
-  pdfMode: PdfImportMode
-  structurePage: number | null
-}) {
-  const selection = serializePageSelection(params.pages) || '未选择'
-  const prompt = params.rangePrompt ? `；提示：${params.rangePrompt}` : ''
-  if (params.pdfMode === 'structured_merge') {
-    const structure = params.structurePage ? `；结构页：${params.structurePage}` : ''
-    return `页码：${selection}；模式：结构页补全${structure}${prompt}`
-  }
-  return `页码：${selection}；模式：按范围直接生成${prompt}`
-}
-
 export function buildHistoryItemFromJob(job: MindMapImportJob): ImportHistoryItem | null {
   const sourceTree = job.result?.source_tree
   if (job.mode !== 'mindmap' || !sourceTree) return null
+  if (job.source_kind !== 'image-single' && job.source_kind !== 'image-batch') return null
   return {
     id: job.id,
     jobId: job.id,
@@ -58,15 +36,8 @@ export function buildHistoryItemFromJob(job: MindMapImportJob): ImportHistoryIte
     sourceTree,
     editorDoc: job.result?.editor_doc ?? null,
     imagePreviewUrl: '',
-    importMode:
-      job.source_kind === 'image-batch'
-        ? 'batch'
-        : job.source_kind === 'subject-pdf'
-          ? 'pdf'
-          : 'single',
-    imageCount:
-      job.result?.image_count ??
-      (Array.isArray(job.result?.selected_pages) ? job.result?.selected_pages.length : undefined),
+    importMode: job.source_kind === 'image-batch' ? 'batch' : 'single',
+    imageCount: job.result?.image_count,
     createdAt: job.created_at || new Date().toISOString(),
   }
 }
@@ -86,11 +57,7 @@ export function describeJobProgress(
     }
   }
   const isTextMode = job.mode === 'text'
-  const isDirectPdfMindmap =
-    job.source_kind === 'subject-pdf' &&
-    job.mode === 'mindmap' &&
-    normalizePdfImportMode(job.source_meta?.pdf_mode) === 'direct_generation'
-  const total = isTextMode ? 3 : isDirectPdfMindmap ? 3 : 4
+  const total = isTextMode ? 3 : 4
   if (job.status === 'completed') {
     return {
       phase: 'completed',

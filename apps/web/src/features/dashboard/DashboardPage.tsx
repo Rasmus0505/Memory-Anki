@@ -713,7 +713,6 @@ export default function Dashboard() {
           bulkDeleteDisabled={!timeRecordsDashboard.hasSelectedRecords}
           isBulkDeleting={timeRecordsDashboard.isBulkDeleting}
           deletingRecordId={timeRecordsDashboard.deletingRecordId}
-          restoringRecordId={timeRecordsDashboard.restoringRecordId}
           visibleRecords={timeRecordsDashboard.visibleRecords}
           pendingRecoveryRecords={timeRecordsDashboard.pendingRecoveryRecords}
           hasSelectableRecords={timeRecordsDashboard.hasSelectableRecords}
@@ -725,7 +724,6 @@ export default function Dashboard() {
           onToggleRecordSelection={timeRecordsDashboard.toggleRecordSelection}
           onEditRecord={timeRecordsDashboard.openEditDialog}
           onDeleteRecord={timeRecordsDashboard.handleDeleteRecord}
-          onRestoreRecord={timeRecordsDashboard.handleRestoreRecord}
           onReplayPendingRecovery={
             timeRecordsDashboard.handleReplayPendingRecovery
           }

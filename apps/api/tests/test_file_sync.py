@@ -28,10 +28,7 @@ def write_runtime_payload(app_home: Path, value: str) -> None:
     data_dir = app_home / "data"
     data_dir.mkdir(parents=True, exist_ok=True)
     (data_dir / "memory_palace.db").write_text(value, encoding="utf-8")
-    (app_home / "migration-state.json").write_text(
-        json.dumps({"runtime_generation": 1}),
-        encoding="utf-8",
-    )
+    (app_home / "migration-state.json").write_text(json.dumps({}), encoding="utf-8")
 
 
 def read_database(app_home: Path) -> str:

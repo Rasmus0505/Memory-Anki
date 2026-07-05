@@ -17,10 +17,8 @@ from memory_anki.infrastructure.db.models import (
     EnglishReadingVersion,
     Palace,
     PalaceMiniPalace,
-    PalaceMiniPalaceReviewSchedule,
     PalaceQuizQuestion,
     PalaceSegment,
-    PalaceSegmentReviewSchedule,
     ReviewSchedule,
     Subject,
 )
@@ -112,24 +110,6 @@ class FreestyleRouteTests(unittest.TestCase):
                         review_number=0,
                         review_type="standard",
                     ),
-                    PalaceSegmentReviewSchedule(
-                        palace_segment_id=segment.id,
-                        scheduled_date=date.today() - timedelta(days=1),
-                        interval_days=1,
-                        algorithm_used="ebbinghaus",
-                        completed=False,
-                        review_number=0,
-                        review_type="standard",
-                    ),
-                    PalaceMiniPalaceReviewSchedule(
-                        palace_mini_palace_id=mini_palace.id,
-                        scheduled_date=date.today() - timedelta(days=1),
-                        interval_days=1,
-                        algorithm_used="ebbinghaus",
-                        completed=False,
-                        review_number=0,
-                        review_type="standard",
-                    ),
                 ]
             )
 
@@ -193,8 +173,6 @@ class FreestyleRouteTests(unittest.TestCase):
         content_types = {card["content_type"] for card in payload["cards"]}
         self.assertIn("quiz_question", content_types)
         self.assertIn("review", content_types)
-        self.assertIn("segment_review", content_types)
-        self.assertIn("mini_review", content_types)
         self.assertIn("practice", content_types)
         self.assertIn("english", content_types)
         self.assertIn("english_reading", content_types)
@@ -251,4 +229,3 @@ class FreestyleRouteTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

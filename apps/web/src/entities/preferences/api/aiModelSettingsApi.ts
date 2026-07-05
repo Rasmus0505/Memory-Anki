@@ -21,7 +21,7 @@ export function updateAiModelScenariosApi(data: {
     default_thinking_enabled?: boolean
     current_thinking_enabled?: boolean
   }>
-  category_updates?: Partial<Record<'llm' | 'vl' | 'translation' | 'asr' | 'tts', {
+  category_updates?: Partial<Record<'llm' | 'vl' | 'translation' | 'asr', {
     default_model?: string
     default_thinking_enabled?: boolean
     apply_to_scenes?: boolean
@@ -53,7 +53,7 @@ export function createOrUpdateAiModelApi(data: {
   key: string
   display_name?: string
   provider: 'dashscope' | 'qwen' | 'zhipu' | 'siliconflow' | 'deepseek'
-  model_type: 'llm' | 'vl' | 'translation' | 'asr' | 'tts'
+  model_type: 'llm' | 'vl' | 'translation' | 'asr'
   has_vision?: boolean
   supports_thinking?: boolean
   supports_temperature?: boolean

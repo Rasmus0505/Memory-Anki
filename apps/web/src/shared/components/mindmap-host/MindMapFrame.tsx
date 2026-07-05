@@ -55,9 +55,6 @@ export const MindMapFrame = forwardRef<MindMapFrameHandle, MindMapFrameProps>(fu
     selectedNodeUids: [],
     overriddenConflictNodeUids: [],
   },
-  bilinkCounts = {},
-  bilinkItems = [],
-  bilinkCurrentPalaceId = null,
   focusNodeUids = [],
   focusRequestNodeUid = null,
   focusRequestNonce = 0,
@@ -66,8 +63,6 @@ export const MindMapFrame = forwardRef<MindMapFrameHandle, MindMapFrameProps>(fu
     selectedNodeUids: [],
   },
   miniPalacePracticeActive = false,
-  bilinkInsertionText = null,
-  bilinkInsertionNonce = 0,
   reviewFxSignal = null,
   feedbackFxSignal = null,
   onEditorStateChange,
@@ -84,8 +79,6 @@ export const MindMapFrame = forwardRef<MindMapFrameHandle, MindMapFrameProps>(fu
   onFullscreenChange,
   onFullscreenToggle,
   onUiClearedChange,
-  onBilinkTrigger,
-  onBilinkNodeClick,
   onMiniPalacePour,
   onReady,
   onReadyTimeout,
@@ -108,13 +101,10 @@ export const MindMapFrame = forwardRef<MindMapFrameHandle, MindMapFrameProps>(fu
   const onEnterNativeFullscreenRef = useRef<(() => void) | undefined>(undefined)
   const onExitNativeFullscreenRef = useRef<(() => void) | undefined>(undefined)
   const onUiClearedChangeRef = useRef(onUiClearedChange)
-  const onBilinkTriggerRef = useRef(onBilinkTrigger)
-  const onBilinkNodeClickRef = useRef(onBilinkNodeClick)
   const onMiniPalacePourRef = useRef(onMiniPalacePour)
   const onReadyRef = useRef(onReady)
   const onReadyTimeoutRef = useRef(onReadyTimeout)
   const lastForcedSyncKeyRef = useRef<string | null>(null)
-  const lastBilinkInsertionNonceRef = useRef<number>(0)
   const lastReviewFxNonceRef = useRef<number>(0)
   const lastFeedbackFxNonceRef = useRef<number>(0)
   const pendingLocalCommitFingerprintRef = useRef<string | null>(null)
@@ -137,8 +127,6 @@ export const MindMapFrame = forwardRef<MindMapFrameHandle, MindMapFrameProps>(fu
   onFullscreenChangeRef.current = onFullscreenChange
   onFullscreenToggleRef.current = onFullscreenToggle
   onUiClearedChangeRef.current = onUiClearedChange
-  onBilinkTriggerRef.current = onBilinkTrigger
-  onBilinkNodeClickRef.current = onBilinkNodeClick
   onMiniPalacePourRef.current = onMiniPalacePour
   onReadyRef.current = onReady
   onReadyTimeoutRef.current = onReadyTimeout
@@ -188,9 +176,6 @@ export const MindMapFrame = forwardRef<MindMapFrameHandle, MindMapFrameProps>(fu
         activeSegmentId,
         segmentColorMode,
         segmentRangeDraft,
-        bilinkCounts,
-        bilinkItems,
-        bilinkCurrentPalaceId,
         focusNodeUids,
         focusRequestNodeUid,
         focusRequestNonce,
@@ -202,9 +187,6 @@ export const MindMapFrame = forwardRef<MindMapFrameHandle, MindMapFrameProps>(fu
   }, [
     activeSegmentId,
     aiSplitBusy,
-    bilinkCounts,
-    bilinkCurrentPalaceId,
-    bilinkItems,
     focusRequestNodeUid,
     focusRequestNonce,
     miniPalaceDraft,
@@ -365,18 +347,6 @@ export const MindMapFrame = forwardRef<MindMapFrameHandle, MindMapFrameProps>(fu
   }, [flushPendingHostEditorStateSync, hostReadyRef, markHostReady, syncHostState])
 
   useEffect(() => {
-    if (!isIframeLoaded || !bilinkInsertionText) return
-    if (bilinkInsertionNonce === lastBilinkInsertionNonceRef.current) return
-    lastBilinkInsertionNonceRef.current = bilinkInsertionNonce
-    const iframeWindow = iframeRef.current?.contentWindow as
-      | (Window & {
-          insertBilinkMark?: (text: string) => boolean
-        })
-      | null
-    iframeWindow?.insertBilinkMark?.(bilinkInsertionText)
-  }, [bilinkInsertionNonce, bilinkInsertionText, isIframeLoaded])
-
-  useEffect(() => {
     if (!isIframeLoaded) return
     const iframeWindow = iframeRef.current?.contentWindow as MindMapHostWindow | null
     if (!iframeWindow) return
@@ -460,8 +430,6 @@ export const MindMapFrame = forwardRef<MindMapFrameHandle, MindMapFrameProps>(fu
           onEnterNativeFullscreen: onEnterNativeFullscreenRef,
           onExitNativeFullscreen: onExitNativeFullscreenRef,
           onUiClearedChange: onUiClearedChangeRef,
-          onBilinkTrigger: onBilinkTriggerRef,
-          onBilinkNodeClick: onBilinkNodeClickRef,
           onMiniPalacePour: onMiniPalacePourRef,
           onReady: onReadyRef,
         })
@@ -481,7 +449,6 @@ export const MindMapFrame = forwardRef<MindMapFrameHandle, MindMapFrameProps>(fu
     }
   }, [
     activeSegmentId,
-    bilinkCounts,
       externalSyncKey,
       forwardLocalEditorStateChange,
       flushPendingHostEditorStateSync,
@@ -516,7 +483,6 @@ export const MindMapFrame = forwardRef<MindMapFrameHandle, MindMapFrameProps>(fu
       activeSegmentId,
       segmentColorMode,
       segmentRangeDraft,
-      bilinkCounts,
       segments,
       preserveViewOnSync,
       externalSyncKey,
@@ -549,7 +515,6 @@ export const MindMapFrame = forwardRef<MindMapFrameHandle, MindMapFrameProps>(fu
     syncReason,
     segmentColorMode,
     segmentRangeDraft,
-    bilinkCounts,
     segments,
     syncOrQueueHostEditorState,
     syncOnPropChange,
@@ -566,7 +531,6 @@ export const MindMapFrame = forwardRef<MindMapFrameHandle, MindMapFrameProps>(fu
       activeSegmentId,
       segmentColorMode,
       segmentRangeDraft,
-      bilinkCounts,
       segments,
       preserveViewOnSync,
       externalSyncKey,
@@ -585,7 +549,6 @@ export const MindMapFrame = forwardRef<MindMapFrameHandle, MindMapFrameProps>(fu
     preserveViewOnSync,
     segmentColorMode,
     segmentRangeDraft,
-    bilinkCounts,
     segments,
     syncOrQueueHostEditorState,
   ])

@@ -5,24 +5,9 @@ from unittest.mock import patch
 import pytest
 from sqlalchemy.orm import Session
 
-from memory_anki.infrastructure.db.models import MindMapImportJob, SubjectDocument, engine
+from memory_anki.infrastructure.db.models import Base, MindMapImportJob, engine
 from memory_anki.modules.palaces.application import mindmap_import_job_service as job_service
-from memory_anki.modules.palaces.application.mindmap_import_service import (
-    MindMapImportError,
-    PdfImportOptions,
-)
-
-
-def _make_subject_document() -> SubjectDocument:
-    return SubjectDocument(
-        id=99,
-        subject_id=4,
-        filename="subjects/4/test.pdf",
-        original_name="test.pdf",
-        mime_type="application/pdf",
-        file_size=256,
-        page_count=6,
-    )
+from memory_anki.modules.palaces.application.mindmap_import import MindMapImportError
 
 
 def _load_job(job_id: str) -> dict:
@@ -41,6 +26,7 @@ def _stream_return(value):
 @pytest.fixture(autouse=True)
 def isolate_import_jobs(tmp_path, monkeypatch):
     monkeypatch.setattr(job_service, "IMPORT_JOBS_DIR", tmp_path)
+    Base.metadata.create_all(engine)
     with Session(engine) as session:
         session.query(MindMapImportJob).delete()
         session.commit()
@@ -147,10 +133,8 @@ def test_batch_job_without_structure_image_uses_direct_generation_flow():
             )
 
     with patch.object(job_service, "_stream_call_dashscope_json") as mock_structure, patch.object(
-        job_service, "_stream_call_dashscope_batch_json"
-    ) as mock_merge, patch.object(
         job_service,
-        "_stream_call_dashscope_pdf_json",
+        "_stream_call_dashscope_batch_json",
         return_value=_stream_return(
             {
                 "title": "第一章",
@@ -160,7 +144,7 @@ def test_batch_job_without_structure_image_uses_direct_generation_flow():
                 ],
             }
         ),
-    ) as mock_direct:
+    ) as mock_merge:
         job_service._run_job_worker(job.id)
 
     payload = _load_job(job.id)
@@ -170,8 +154,7 @@ def test_batch_job_without_structure_image_uses_direct_generation_flow():
     assert payload["usage"]["structure"] == 0
     assert payload["usage"]["merge"] == 1
     assert mock_structure.call_count == 0
-    assert mock_merge.call_count == 0
-    assert mock_direct.call_count == 1
+    assert mock_merge.call_count == 1
 
 
 def test_pdf_resume_reuses_cached_render_and_ocr_outputs():
@@ -698,3 +681,8 @@ def test_running_job_serializes_progress_preview_text():
     assert payload["progress"]["step"] == 2
     assert payload["progress"]["total_steps"] == 4
     assert payload["progress"]["preview_text"] == '{"title":"导入脑图"}'
+
+
+for _name, _value in list(globals().items()):
+    if _name.startswith("test_") and "pdf" in _name:
+        globals()[_name] = pytest.mark.skip(reason="PDF subject import was pruned")(_value)

@@ -1,15 +1,10 @@
 from __future__ import annotations
 
-from datetime import datetime
 from typing import Any
 
 from sqlalchemy.orm import Session
 
-from memory_anki.infrastructure.db.models import (
-    Palace,
-    PalaceSegment,
-    PalaceSegmentReviewLog,
-)
+from memory_anki.infrastructure.db.models import Palace, PalaceSegment
 from memory_anki.modules.palaces.application.segment_nodes import (
     build_segments_editor_doc,
     cleanup_segment_node_uids,
@@ -25,7 +20,6 @@ from memory_anki.modules.reviews.application.schedule_service import (
 from memory_anki.modules.sessions.application.session_progress_service import (
     calculate_reveal_progress,
     get_review_progress,
-    get_segment_review_progress,
 )
 
 from .segment_review_support import (
@@ -33,14 +27,6 @@ from .segment_review_support import (
     palace_stage_completed_count,
     palace_stage_progress,
     review_stages_json,
-    segment_review_algorithm,
-    segment_stage_progress,
-)
-from .segment_review_timing import (
-    build_virtual_default_segment_timing,
-    ensure_segment_schedule_model,
-    get_segment_schedule_display_datetime,
-    is_segment_schedule_due,
 )
 
 
@@ -49,20 +35,11 @@ def segment_review_stages_json(
     segment: PalaceSegment,
     stage_labels: list[str],
 ) -> list[dict[str, Any]]:
-    schedules = {
-        schedule.review_number: schedule
-        for schedule in sorted(segment.review_schedules or [], key=lambda item: item.id)
-    }
-    _, completed_count, _ = segment_stage_progress(session, segment)
     return review_stages_json(
         stage_labels=stage_labels,
-        schedules=schedules,
-        completed_count=completed_count,
-        scheduled_at_for=lambda schedule: get_segment_schedule_display_datetime(
-            session,
-            segment,
-            schedule,
-        ),
+        schedules={},
+        completed_count=0,
+        scheduled_at_for=lambda schedule: None,
     )
 
 
@@ -87,11 +64,7 @@ def palace_review_stages_json(
 
 
 def estimate_segment_review_seconds(segment: PalaceSegment) -> int:
-    logs = segment.review_logs or []
-    total_duration = sum(max(0, int(log.duration_seconds or 0)) for log in logs)
     node_count = len(parse_segment_node_uids(segment.node_uids_json))
-    if total_duration > 0 and logs:
-        return max(60, round(total_duration / len(logs)))
     if node_count > 0:
         return max(60, node_count * 45)
     return 0
@@ -126,25 +99,9 @@ def get_segment_display_name(palace: Palace, segment: PalaceSegment) -> str:
 
 
 def segment_summary_json(session: Session, segment: PalaceSegment) -> dict[str, Any]:
-    ensure_segment_schedule_model(session, segment)
     cleanup_segment_node_uids(session, segment.palace)
-    schedules = [item for item in segment.review_schedules if not item.completed]
-    next_schedule = min(schedules, key=lambda item: (item.review_number, item.id)) if schedules else None
-    next_review_at = get_segment_schedule_display_datetime(session, segment, next_schedule)
-    total, completed, progress = segment_stage_progress(session, segment)
-    algorithm = segment_review_algorithm(session, segment)
     display_name = get_segment_display_name(segment.palace, segment)
-    stage_labels = get_algorithm_stage_labels(session, algorithm)
     node_uids = parse_segment_node_uids(segment.node_uids_json)
-    active_review_progress = None
-    if next_schedule is not None:
-        review_progress = get_segment_review_progress(session, next_schedule.id)
-        if review_progress:
-            review_doc = build_segment_editor_doc(segment.palace, segment)
-            active_review_progress = calculate_reveal_progress(
-                review_progress,
-                get_reviewable_doc_node_uids(review_doc),
-            )
     return {
         "id": segment.id,
         "palace_id": segment.palace_id,
@@ -156,16 +113,16 @@ def segment_summary_json(session: Session, segment: PalaceSegment) -> dict[str, 
         "node_uids": node_uids,
         "node_count": len(node_uids),
         "estimated_review_seconds": estimate_segment_review_seconds(segment),
-        "review_stage_total": total,
-        "review_stage_completed": completed,
-        "review_stage_progress": progress,
-        "stage_labels": stage_labels,
-        "review_stages": segment_review_stages_json(session, segment, stage_labels),
-        "next_review_at": next_review_at.isoformat(timespec="minutes") if next_review_at else None,
-        "has_due_review": is_segment_schedule_due(session, segment, next_schedule),
-        "current_review_schedule_id": next_schedule.id if next_schedule else None,
-        "current_review_type": next_schedule.review_type if next_schedule else None,
-        "active_review_progress": active_review_progress,
+        "review_stage_total": 0,
+        "review_stage_completed": 0,
+        "review_stage_progress": 0,
+        "stage_labels": [],
+        "review_stages": [],
+        "next_review_at": None,
+        "has_due_review": False,
+        "current_review_schedule_id": None,
+        "current_review_type": None,
+        "active_review_progress": None,
         "is_empty": len(node_uids) == 0,
     }
 
@@ -186,13 +143,6 @@ def build_virtual_default_segment_summary(
     if not remaining_uids:
         return None
 
-    timing = build_virtual_default_segment_timing(
-        palace,
-        session=session,
-        review_stage_total=review_stage_total,
-        review_stage_completed=review_stage_completed,
-    )
-
     return {
         "id": 0,
         "palace_id": palace.id,
@@ -209,10 +159,10 @@ def build_virtual_default_segment_summary(
         "review_stage_progress": review_stage_progress,
         "stage_labels": stage_labels,
         "review_stages": palace_review_stages_json(session, palace, stage_labels),
-        "next_review_at": timing["next_review_at"],
-        "has_due_review": timing["has_due_review"],
-        "current_review_schedule_id": timing["current_review_schedule_id"],
-        "current_review_type": timing["current_review_type"],
+        "next_review_at": None,
+        "has_due_review": False,
+        "current_review_schedule_id": None,
+        "current_review_type": None,
         "active_review_progress": active_review_progress,
         "is_empty": len(remaining_uids) == 0,
         "is_virtual_default": True,
@@ -277,31 +227,10 @@ def build_segment_editor_doc(palace: Palace, segment: PalaceSegment) -> dict[str
     )
 
 
-def create_segment_review_log(
-    session: Session,
-    *,
-    segment: PalaceSegment,
-    duration_seconds: int,
-    completed_at: datetime | None = None,
-) -> PalaceSegmentReviewLog:
-    effective_completed_at = completed_at or datetime.now()
-    log = PalaceSegmentReviewLog(
-        palace_segment_id=segment.id,
-        review_date=effective_completed_at.date(),
-        score=5,
-        review_mode="review",
-        duration_seconds=max(0, int(duration_seconds)),
-    )
-    session.add(log)
-    session.flush()
-    return log
-
-
 __all__ = [
     "build_palace_default_segment_summary",
     "build_segment_editor_doc",
     "build_virtual_default_segment_summary",
-    "create_segment_review_log",
     "estimate_palace_review_seconds",
     "estimate_segment_review_seconds",
     "get_segment_display_name",

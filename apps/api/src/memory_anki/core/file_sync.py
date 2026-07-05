@@ -16,7 +16,7 @@ from typing import Any
 
 from memory_anki.core.files import safe_filename_part
 from memory_anki.core.local_config import LocalRuntimeConfig
-from memory_anki.core.runtime import detect_git_commit, load_runtime_contract
+from memory_anki.core.runtime import detect_git_commit
 from memory_anki.core.storage_layout import ManagedStorageItem, get_backup_storage_items
 from memory_anki.core.time import iso_utc_now
 
@@ -182,36 +182,8 @@ def compute_snapshot_hash(app_home: Path) -> str:
     return snapshot_hash
 
 
-def _read_runtime_generation(app_home: Path) -> int:
-    state = _read_json(app_home / "migration-state.json")
-    try:
-        return max(1, int(state.get("runtime_generation") or 1))
-    except (TypeError, ValueError):
-        return 1
-
-
-def _load_runtime_contract() -> dict[str, int]:
-    contract = load_runtime_contract()
-    return {
-        "runtime_generation": contract.runtime_generation,
-        "min_supported_generation": contract.min_supported_generation,
-        "max_supported_generation": contract.max_supported_generation,
-    }
-
-
 def _assert_remote_generation_compatible(remote_state: dict[str, Any]) -> None:
-    remote_generation = int(remote_state.get("runtime_generation") or 1)
-    contract = _load_runtime_contract()
-    if remote_generation > contract["max_supported_generation"]:
-        raise SyncError(
-            "远端同步数据由更新版本创建，当前版本不支持读取。"
-            f" remote={remote_generation}, max={contract['max_supported_generation']}"
-        )
-    if remote_generation < contract["min_supported_generation"]:
-        raise SyncError(
-            "远端同步数据版本过旧，当前版本要求先升级。"
-            f" remote={remote_generation}, min={contract['min_supported_generation']}"
-        )
+    return None
 
 
 def _snapshot_name(revision: int, config: LocalRuntimeConfig) -> str:
@@ -243,7 +215,6 @@ def create_snapshot_zip(
         "device_id": config.device_id,
         "device_name": config.device_name,
         "created_at": iso_now(),
-        "runtime_generation": _read_runtime_generation(app_home),
         "git_commit": commit,
         "short_commit": commit[:8] if commit else None,
         "items": [item.key for item in backup_items],
@@ -590,7 +561,6 @@ def push_on_stop(config: LocalRuntimeConfig) -> SyncResult:
                 "device_id": config.device_id,
                 "device_name": config.device_name,
                 "pushed_at": iso_now(),
-                "runtime_generation": manifest.get("runtime_generation"),
                 "git_commit": manifest.get("git_commit"),
                 "short_commit": manifest.get("short_commit"),
             }

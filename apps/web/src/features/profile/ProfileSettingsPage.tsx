@@ -12,7 +12,6 @@ import { toast } from '@/shared/feedback/toast'
 import { ProfileLayout } from '@/features/profile/ProfileLayout'
 import type { ReviewSettings } from '@/shared/api/contracts'
 import {
-  buildPdfImportOptionsFromSettings,
   getReviewSettingsApi,
   updateReviewSettingsApi,
 } from '@/entities/preferences/api'
@@ -32,7 +31,6 @@ export default function ProfileSettingsPage() {
   const [tab, setTab] = useState<'config' | 'io' | 'shortcuts'>('config')
   const [config, setConfig] = useState<ReviewSettings | null>(null)
   const [clientPreferencesReady, setClientPreferencesReady] = useState(false)
-  const [algorithm, setAlgorithm] = useState('ebbinghaus')
   const [importResult, setImportResult] = useState<string | null>(null)
 
   useEffect(() => {
@@ -42,7 +40,6 @@ export default function ProfileSettingsPage() {
         getClientPreferencesApi().then(() => setClientPreferencesReady(true)).catch(() => setClientPreferencesReady(false)),
       ])
       setConfig(settings)
-      setAlgorithm(settings.default_algorithm)
     }
 
     void loadSettings()
@@ -58,7 +55,6 @@ export default function ProfileSettingsPage() {
       data[key] = value as string
     })
 
-    data.default_algorithm = algorithm
     data.auto_smooth_overdue = formData.get('auto_smooth_overdue')
       ? 'true'
       : 'false'
@@ -68,7 +64,6 @@ export default function ProfileSettingsPage() {
 
     const nextConfig = await updateReviewSettingsApi(data)
     setConfig(nextConfig)
-    setAlgorithm(nextConfig.default_algorithm)
     toast.success('复习高级配置已保存')
   }
 
@@ -136,64 +131,17 @@ export default function ProfileSettingsPage() {
               <CardTitle className="text-base">高级排程策略</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                {[
-                  {
-                    key: 'ebbinghaus',
-                    title: '按顺序写复习点',
-                    desc: '按 1小时、睡前、1天、x天 这样往后排。',
-                  },
-                  {
-                    key: 'custom',
-                    title: '只写天数间隔',
-                    desc: '完全按你自己填的天数顺序运行。',
-                  },
-                ].map((item) => (
-                  <button
-                    key={item.key}
-                    type="button"
-                    onClick={() => setAlgorithm(item.key)}
-                    className={`rounded-lg border p-4 text-left transition-all active:scale-[0.97] ${
-                      algorithm === item.key
-                        ? 'border-primary bg-primary/5 ring-1 ring-primary'
-                        : 'hover:bg-secondary'
-                    }`}
-                  >
-                    <div className="text-sm font-semibold">{item.title}</div>
-                    <div className="mt-1 text-xs text-muted-foreground">
-                      {item.desc}
-                    </div>
-                  </button>
-                ))}
+              <div className="space-y-2">
+                <Label htmlFor="ebbinghaus-intervals">
+                  增强艾宾浩斯顺序：1小时，睡前，1天，x天
+                </Label>
+                <Input
+                  id="ebbinghaus-intervals"
+                  name="ebbinghaus_intervals"
+                  defaultValue={config.ebbinghaus_intervals}
+                  placeholder="1h,sleep,1,2,4,7,15,30,60"
+                />
               </div>
-
-              {algorithm === 'custom' ? (
-                <div className="space-y-2">
-                  <Label htmlFor="custom-intervals">
-                    按天数写，例如 1天、2天、7天
-                  </Label>
-                  <Input
-                    id="custom-intervals"
-                    name="custom_intervals"
-                    defaultValue={config.custom_intervals}
-                    placeholder="1,2,4,7,15,30,60"
-                  />
-                </div>
-              ) : null}
-
-              {algorithm === 'ebbinghaus' ? (
-                <div className="space-y-2">
-                  <Label htmlFor="ebbinghaus-intervals">
-                    按这个顺序写：1小时，睡前，1天，x天
-                  </Label>
-                  <Input
-                    id="ebbinghaus-intervals"
-                    name="ebbinghaus_intervals"
-                    defaultValue={config.ebbinghaus_intervals}
-                    placeholder="1h,sleep,1,2,4,7,15,30,60"
-                  />
-                </div>
-              ) : null}
             </CardContent>
           </Card>
 
@@ -281,64 +229,6 @@ export default function ProfileSettingsPage() {
                     </div>
                   </div>
                 </label>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">算法切换策略</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-3">
-                {[
-                  {
-                    value: 'future_only',
-                    title: '仅影响新宫殿',
-                    desc: '已有未完成计划保持不变。',
-                  },
-                  {
-                    value: 'all',
-                    title: '重建所有待复习计划',
-                    desc: '删除并按新算法重建所有未完成 schedule。',
-                  },
-                ].map((option) => (
-                  <label
-                    key={option.value}
-                    className="flex items-start gap-3 rounded-lg border p-4"
-                  >
-                    <input
-                      type="radio"
-                      name="algorithm_change_scope"
-                      value={option.value}
-                      defaultChecked={
-                        config.algorithm_change_scope === option.value
-                      }
-                      className="mt-0.5"
-                    />
-                    <div>
-                      <div className="text-sm font-medium">{option.title}</div>
-                      <div className="mt-1 text-xs text-muted-foreground">
-                        {option.desc}
-                      </div>
-                    </div>
-                  </label>
-                ))}
-              </div>
-              <div className="rounded-lg border border-warning/30 bg-warning/5 p-4">
-                <label className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    name="apply_to_pending"
-                    value="all"
-                  />
-                  <span className="text-sm font-medium">
-                    保存时立即应用到所有未完成计划
-                  </span>
-                </label>
-                <p className="mt-2 text-xs text-warning">
-                  勾选后会删除当前待复习 schedule，再按新算法重建。
-                </p>
               </div>
             </CardContent>
           </Card>

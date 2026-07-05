@@ -10,7 +10,6 @@ from memory_anki.infrastructure.db.models import MindMapImportJob
 
 from . import (
     MindMapImportError,
-    pdf_job_worker,
     step_protocol,
 )
 from .job_artifacts import load_batch_image_items, read_json, read_text, write_json, write_text
@@ -212,7 +211,6 @@ def run_image_batch_job(
     import_jobs_dir: Path,
     stream_call_dashscope_json,
     stream_call_dashscope_batch_json,
-    stream_call_dashscope_pdf_json,
 ) -> None:
     image_items = load_batch_image_items(
         artifact_dir,
@@ -246,20 +244,20 @@ def run_image_batch_job(
                 session,
                 job_id=job.id,
                 import_jobs_dir=import_jobs_dir,
-                step=step_protocol.generate_pdf_mindmap_direct_step(),
+                step=step_protocol.generate_batch_mindmap_direct_step(),
                 preview_text="",
             )
             final_tree = consume_stream_result(
                 session,
                 job_id=job.id,
                 artifact_dir=artifact_dir,
-                generator=stream_call_dashscope_pdf_json(
+                generator=stream_call_dashscope_batch_json(
                     image_items=image_items,
+                    structure_tree=None,
                     channel="raw_model",
                     range_prompt="",
                     page_numbers=None,
                     disable_rebalance=True,
-                    import_options=None,
                     extracted_text=None,
                     external_log_context={
                         "feature": "多图转脑图",
@@ -364,40 +362,3 @@ def run_image_batch_job(
         result = read_json(result_path)
 
     set_job_result(session, job.id, result=result, stage=JOB_STAGE_COMPLETED)
-
-
-def run_subject_pdf_job(
-    session: Session,
-    job: MindMapImportJob,
-    source_meta: dict[str, Any],
-    artifact_dir: Path,
-    *,
-    import_jobs_dir: Path,
-    pdf_options_cls,
-    get_subject_document_by_id_fn,
-    render_selected_pdf_pages_fn,
-    ensure_rendered_page_size_fn,
-    stream_call_dashscope_json,
-    stream_call_dashscope_text,
-    stream_call_dashscope_batch_json,
-    stream_call_dashscope_pdf_json,
-    source_meta_to_pdf_options_fn,
-) -> None:
-    pdf_job_worker.run_subject_pdf_job(
-        session,
-        job,
-        source_meta,
-        artifact_dir,
-        deps=pdf_job_worker.PdfJobDependencies(
-            import_jobs_dir=import_jobs_dir,
-            pdf_options_cls=pdf_options_cls,
-            get_subject_document_by_id_fn=get_subject_document_by_id_fn,
-            render_selected_pdf_pages_fn=render_selected_pdf_pages_fn,
-            ensure_rendered_page_size_fn=ensure_rendered_page_size_fn,
-            stream_call_dashscope_json=stream_call_dashscope_json,
-            stream_call_dashscope_text=stream_call_dashscope_text,
-            stream_call_dashscope_batch_json=stream_call_dashscope_batch_json,
-            stream_call_dashscope_pdf_json=stream_call_dashscope_pdf_json,
-            source_meta_to_pdf_options_fn=source_meta_to_pdf_options_fn,
-        ),
-    )

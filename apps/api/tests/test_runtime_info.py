@@ -46,7 +46,6 @@ class RuntimeInfoTests(unittest.TestCase):
             state_path.write_text(
                 json.dumps(
                     {
-                        "runtime_generation": 2,
                         "last_started_channel": "production",
                         "last_started_at": "2026-06-01T00:00:00+00:00",
                     }
@@ -67,7 +66,6 @@ class RuntimeInfoTests(unittest.TestCase):
         self.assertEqual(info["channel"], "production")
         self.assertEqual(info["commit"], "abcdef1234567890")
         self.assertEqual(info["short_commit"], "abcdef12")
-        self.assertEqual(info["runtime_generation"], 2)
         self.assertEqual(info["last_started_at"], "2026-06-01T00:00:00+00:00")
         self.assertIn("app_home", info)
         self.assertIn("app_home_source", info)
@@ -117,56 +115,19 @@ class RuntimeInfoTests(unittest.TestCase):
             },
         )
 
-    def test_assert_runtime_compatible_rejects_newer_shared_generation(self):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            contract_path = Path(temp_dir) / "runtime-contract.json"
-            state_path = Path(temp_dir) / "migration-state.json"
-            contract_path.write_text(
-                json.dumps(
-                    {
-                        "runtime_generation": 1,
-                        "min_supported_generation": 1,
-                        "max_supported_generation": 1,
-                    }
-                ),
-                encoding="utf-8",
-            )
-            state_path.write_text(json.dumps({"runtime_generation": 2}), encoding="utf-8")
-
-            contract = runtime_module.load_runtime_contract(contract_path)
-
-            with self.assertRaises(RuntimeError) as error:
-                runtime_module.assert_runtime_compatible(contract, path=state_path)
-
-        self.assertIn("Runtime data generation is newer", str(error.exception))
-
-    def test_record_runtime_start_persists_channel_commit_and_generation(self):
+    def test_record_runtime_start_persists_channel_and_commit(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             state_path = Path(temp_dir) / "migration-state.json"
-            contract_path = Path(temp_dir) / "runtime-contract.json"
-            contract_path.write_text(
-                json.dumps(
-                    {
-                        "runtime_generation": 3,
-                        "min_supported_generation": 1,
-                        "max_supported_generation": 3,
-                    }
-                ),
-                encoding="utf-8",
-            )
-            state_path.write_text(json.dumps({"runtime_generation": 1}), encoding="utf-8")
+            state_path.write_text(json.dumps({}), encoding="utf-8")
 
-            contract = runtime_module.load_runtime_contract(contract_path)
             persisted = runtime_module.record_runtime_start(
-                contract,
                 channel="production",
                 commit="fedcba9876543210",
                 path=state_path,
             )
             reloaded = runtime_module.read_migration_state(state_path)
 
-        self.assertEqual(persisted["runtime_generation"], 3)
-        self.assertEqual(reloaded["runtime_generation"], 3)
+        self.assertEqual(persisted["last_started_channel"], "production")
         self.assertEqual(reloaded["last_started_channel"], "production")
         self.assertEqual(reloaded["last_started_commit"], "fedcba9876543210")
         self.assertIn("last_started_at", reloaded)
@@ -183,10 +144,6 @@ class RuntimeInfoTests(unittest.TestCase):
                 "channel": "production",
                 "commit": "abcdef1234567890",
                 "short_commit": "abcdef12",
-                "runtime_generation": 1,
-                "declared_runtime_generation": 1,
-                "min_supported_generation": 1,
-                "max_supported_generation": 1,
                 "last_started_at": "2026-06-01T12:00:00+08:00",
                 "app_home": "C:/Users/test/AppData/Local/MemoryAnki",
                 "app_home_source": "default",
@@ -214,10 +171,6 @@ class RuntimeInfoTests(unittest.TestCase):
                 "channel": "production",
                 "commit": "abcdef1234567890",
                 "short_commit": "abcdef12",
-                "runtime_generation": 1,
-                "declared_runtime_generation": 1,
-                "min_supported_generation": 1,
-                "max_supported_generation": 1,
                 "last_started_at": "2026-06-01T12:00:00+08:00",
                 "app_home": "C:/Users/test/AppData/Local/MemoryAnki",
                 "app_home_source": "default",

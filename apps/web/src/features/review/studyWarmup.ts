@@ -9,12 +9,8 @@ import {
 import { getPalaceMiniPalaceApi } from '@/entities/mini-palace/api'
 import { getPalaceSegmentApi } from '@/entities/palace-segment/api'
 import {
-  getMiniReviewSessionApi,
-  getMiniReviewSessionProgressApi,
   getReviewSessionApi,
   getReviewSessionProgressApi,
-  getSegmentReviewSessionApi,
-  getSegmentReviewSessionProgressApi,
 } from '@/features/review/api'
 import {
   consumePrefetchedPromise,
@@ -23,8 +19,6 @@ import {
 
 export type StudyWarmupKind =
   | 'review-session'
-  | 'segment-review-session'
-  | 'mini-review-session'
   | 'palace-practice'
   | 'focus-practice'
   | 'segment-practice'
@@ -37,17 +31,6 @@ function studyWarmupKey(kind: StudyWarmupKind, id: number) {
 function loadStudySession(kind: StudyWarmupKind, id: number): Promise<unknown> {
   if (kind === 'review-session') {
     return Promise.all([getReviewSessionApi(id), getReviewSessionProgressApi(id)]).then(
-      ([session, progress]) => ({ session, progress }),
-    )
-  }
-  if (kind === 'segment-review-session') {
-    return Promise.all([
-      getSegmentReviewSessionApi(id),
-      getSegmentReviewSessionProgressApi(id),
-    ]).then(([session, progress]) => ({ session, progress }))
-  }
-  if (kind === 'mini-review-session') {
-    return Promise.all([getMiniReviewSessionApi(id), getMiniReviewSessionProgressApi(id)]).then(
       ([session, progress]) => ({ session, progress }),
     )
   }

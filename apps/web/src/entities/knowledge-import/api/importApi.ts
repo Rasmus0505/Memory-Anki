@@ -6,8 +6,6 @@ import type {
   MindMapImportJob,
   MindMapImportJobListResponse,
   MindMapImportPreviewResponse,
-  MindMapPdfImportPreviewRequest,
-  TextPdfImportPreviewRequest,
 } from '@/shared/api/contracts'
 import {
   type ImportStreamHandlers,
@@ -56,30 +54,6 @@ export async function previewMindMapBatchImportApi(
     body: form,
   })
   return parseImportStreamResponse<MindMapBatchImportPreviewResponse>(response, handlers)
-}
-
-export async function previewMindMapPdfImportApi(
-  data: MindMapPdfImportPreviewRequest,
-  handlers?: ImportStreamHandlers,
-) {
-  const response = await fetch(`${API_BASE}/import/preview-mindmap-pdf`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data),
-  })
-  return parseImportStreamResponse<MindMapImportPreviewResponse>(response, handlers)
-}
-
-export async function previewPdfTextApi(
-  data: TextPdfImportPreviewRequest,
-  handlers?: ImportStreamHandlers,
-) {
-  const response = await fetch(`${API_BASE}/import/preview-text-pdf`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data),
-  })
-  return parseImportStreamResponse<ImageTextPreviewResponse>(response, handlers)
 }
 
 export async function createImageImportJobApi(
@@ -146,28 +120,6 @@ export async function createBatchImportJobApi(
     {
       resourceKey: `import-job:batch:${options.entityKey}:${files.map((file) => file.name).join(',')}`,
       description: '创建批量导入任务',
-      replayMode: 'manual',
-    },
-  )
-  return readImportJson<MindMapImportJob>(response)
-}
-
-export async function createPdfImportJobApi(
-  data: MindMapPdfImportPreviewRequest & {
-    entity_key: string
-    mode: 'mindmap' | 'text'
-  },
-) {
-  const response = await fetchWithMutationQueue(
-    `${API_BASE}/import/jobs/pdf`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    },
-    {
-      resourceKey: `import-job:pdf:${data.entity_key}`,
-      description: '创建 PDF 导入任务',
       replayMode: 'manual',
     },
   )

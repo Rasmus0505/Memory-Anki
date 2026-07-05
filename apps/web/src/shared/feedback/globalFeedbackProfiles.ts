@@ -397,14 +397,6 @@ const MIND_MAP_FEEDBACK_PROFILES: Record<MindMapFeedbackEvent, MindMapFeedbackPr
     size: 98,
     label: 'APPLY',
   },
-  bilink_action: {
-    visualKind: 'link',
-    level: 'action',
-    origin: 'node',
-    hue: 284,
-    size: 78,
-    label: 'LINK',
-  },
   segment_action: {
     visualKind: 'segment',
     level: 'action',

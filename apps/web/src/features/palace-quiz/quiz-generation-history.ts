@@ -1,9 +1,8 @@
-import type { PalaceQuizPdfSourceRole, PalaceQuizGenerationPreview } from '@/shared/api/contracts'
+import type { PalaceQuizGenerationPreview } from '@/shared/api/contracts'
 
-export type QuizGenerationSourceKind = 'subject-pdf' | 'image-single' | 'image-batch' | 'text-files'
+export type QuizGenerationSourceKind = 'image-single' | 'image-batch' | 'text-files'
 
 export const QUIZ_GENERATION_SOURCE_LABELS = {
-  'subject-pdf': 'PDF',
   'image-single': '单图',
   'image-batch': '多图',
   'text-files': '文本',
@@ -13,14 +12,7 @@ const EMPTY_SOURCE_HISTORY_TITLES = {
   'image-single': '单图生成配置',
   'image-batch': '多图生成配置',
   'text-files': '文本导入配置',
-} satisfies Record<Exclude<QuizGenerationSourceKind, 'subject-pdf'>, string>
-
-export interface QuizGenerationHistoryPdfSource {
-  subject_document_id: number
-  document_name: string
-  page_selection: number[]
-  role_hint: PalaceQuizPdfSourceRole
-}
+} satisfies Record<QuizGenerationSourceKind, string>
 
 export interface QuizGenerationHistoryItem {
   id: string
@@ -32,7 +24,6 @@ export interface QuizGenerationHistoryItem {
   classifyByMiniPalace: boolean
   selectedChapterId?: number | null
   selectedChapterPath?: string
-  pdfSources: QuizGenerationHistoryPdfSource[]
   imageFileNames: string[]
   previewQuestionCount: number
   savableQuestionCount: number
@@ -82,13 +73,8 @@ export function deleteQuizGenerationHistory(
 
 export function buildQuizGenerationHistoryTitle(
   sourceKind: QuizGenerationSourceKind,
-  pdfSources: QuizGenerationHistoryPdfSource[],
   imageFileNames: string[],
 ) {
-  if (sourceKind === 'subject-pdf') {
-    if (pdfSources.length === 0) return 'PDF 生成配置'
-    return pdfSources.map((item) => item.document_name).join(' + ')
-  }
   if (imageFileNames.length === 0) {
     return EMPTY_SOURCE_HISTORY_TITLES[sourceKind]
   }

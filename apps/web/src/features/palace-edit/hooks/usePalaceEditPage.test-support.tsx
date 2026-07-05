@@ -8,7 +8,6 @@ import {
 } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, vi } from 'vitest'
-import * as bilinkApi from '@/features/bilink/api'
 import PalaceEditPage from '@/features/palace-edit/PalaceEditPage'
 import * as appLogs from '@/shared/logs/model/appLogs'
 import * as knowledgeApi from '@/entities/knowledge/api'
@@ -258,7 +257,6 @@ vi.mock('@/shared/components/mindmap-host', () => ({
     importMindMapAction,
     importTextAction,
     englishAction,
-    bilinkSearchAction,
     miniPalaceAction,
     immersiveAction,
     nativeFullscreenAction,
@@ -302,7 +300,6 @@ vi.mock('@/shared/components/mindmap-host', () => ({
       {importMindMapAction ? <button type="button" onClick={importMindMapAction.onClick}>{importMindMapAction.label}</button> : null}
       {importTextAction ? <button type="button" onClick={importTextAction.onClick}>{importTextAction.label}</button> : null}
       {englishAction ? <button type="button" onClick={englishAction.onClick}>{englishAction.label}</button> : null}
-      {bilinkSearchAction ? <button type="button" onClick={bilinkSearchAction.onClick}>{bilinkSearchAction.label}</button> : null}
       {miniPalaceAction ? <button type="button" onClick={miniPalaceAction.onClick}>{miniPalaceAction.label}</button> : null}
       {immersiveAction ? <button type="button" onClick={immersiveAction.onClick}>{immersiveAction.label}</button> : null}
       {nativeFullscreenAction ? <button type="button" onClick={nativeFullscreenAction.onClick}>{nativeFullscreenAction.label}</button> : null}
@@ -450,12 +447,6 @@ export function setupPalaceEditPageTestDefaults() {
   promptForAiOptionsMock.mockResolvedValue({})
   shouldAutoStartOnPageEnterMock.mockReset()
   shouldAutoStartOnPageEnterMock.mockReturnValue(false)
-  vi.spyOn(bilinkApi, 'getBilinksApi').mockResolvedValue({ items: [] } as never)
-  vi.spyOn(bilinkApi, 'getBilinkCountsApi').mockResolvedValue({ counts: {} } as never)
-  vi.spyOn(bilinkApi, 'searchBilinkNodesApi').mockResolvedValue({ items: [] } as never)
-  vi.spyOn(bilinkApi, 'getBilinkNodeContextApi').mockResolvedValue({ error: '' } as never)
-  vi.spyOn(bilinkApi, 'createBilinkApi').mockResolvedValue({ item: {} } as never)
-  vi.spyOn(bilinkApi, 'deleteBilinkApi').mockResolvedValue({ ok: true } as never)
   vi.spyOn(knowledgeApi, 'getSubjectsApi').mockResolvedValue([])
   vi.spyOn(knowledgeApi, 'getSubjectTreeApi').mockResolvedValue({ chapters: [], subject: null } as never)
   vi.spyOn(palaceApi, 'getPracticeSessionProgressApi').mockResolvedValue({ progress: null } as never)

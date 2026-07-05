@@ -86,7 +86,7 @@ def build_fallback_model_metadata(
         model_type=model_type,
         has_vision=has_vision,
         supports_thinking=False,
-        supports_temperature=model_type not in {"asr", "tts"},
+        supports_temperature=model_type != "asr",
         is_builtin=False,
         is_active=True,
     )

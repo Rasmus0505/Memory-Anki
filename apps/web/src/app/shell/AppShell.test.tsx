@@ -14,7 +14,6 @@ const prefetchPalaceSubjectShelfApi = vi.fn()
 const prefetchPalacesGroupedSummaryApi = vi.fn()
 const prefetchDashboardApi = vi.fn()
 const prefetchReviewQueueApi = vi.fn()
-const prefetchSegmentReviewQueueApi = vi.fn()
 const preloadPracticeRoutes = vi.fn()
 const preloadReviewRoutes = vi.fn()
 const preloadEnglishWorkspacePage = vi.fn()
@@ -39,7 +38,6 @@ vi.mock('@/features/dashboard/api', () => ({
 
 vi.mock('@/features/review/api', () => ({
   prefetchReviewQueueApi: () => prefetchReviewQueueApi(),
-  prefetchSegmentReviewQueueApi: () => prefetchSegmentReviewQueueApi(),
 }))
 
 vi.mock('@/app/router/appRoutes', () => ({
@@ -61,7 +59,6 @@ describe('AppShell', () => {
     prefetchPalacesGroupedSummaryApi.mockClear()
     prefetchDashboardApi.mockClear()
     prefetchReviewQueueApi.mockClear()
-    prefetchSegmentReviewQueueApi.mockClear()
     preloadPracticeRoutes.mockClear()
     preloadReviewRoutes.mockClear()
     preloadEnglishWorkspacePage.mockClear()
@@ -89,8 +86,6 @@ describe('AppShell', () => {
       channel: 'stable',
       commit: 'abcdef1234567890',
       short_commit: 'abcdef12',
-      runtime_generation: 1,
-      declared_runtime_generation: 1,
       min_supported_generation: 1,
       max_supported_generation: 1,
       last_started_at: '2026-06-01T12:00:00+08:00',
@@ -114,8 +109,6 @@ describe('AppShell', () => {
       channel: 'dev',
       commit: 'abcdef1234567890',
       short_commit: 'abcdef12',
-      runtime_generation: 1,
-      declared_runtime_generation: 1,
       min_supported_generation: 1,
       max_supported_generation: 1,
       last_started_at: '2026-06-01T12:00:00+08:00',
@@ -140,8 +133,6 @@ describe('AppShell', () => {
       channel: 'stable',
       commit: 'abcdef1234567890',
       short_commit: 'abcdef12',
-      runtime_generation: 1,
-      declared_runtime_generation: 1,
       min_supported_generation: 1,
       max_supported_generation: 1,
       last_started_at: '2026-06-01T12:00:00+08:00',
@@ -169,8 +160,6 @@ describe('AppShell', () => {
       channel: 'stable',
       commit: 'abcdef1234567890',
       short_commit: 'abcdef12',
-      runtime_generation: 1,
-      declared_runtime_generation: 1,
       min_supported_generation: 1,
       max_supported_generation: 1,
       last_started_at: '2026-06-01T12:00:00+08:00',
@@ -204,8 +193,6 @@ describe('AppShell', () => {
       channel: 'stable',
       commit: 'abcdef1234567890',
       short_commit: 'abcdef12',
-      runtime_generation: 1,
-      declared_runtime_generation: 1,
       min_supported_generation: 1,
       max_supported_generation: 1,
       last_started_at: '2026-06-01T12:00:00+08:00',
@@ -230,8 +217,6 @@ describe('AppShell', () => {
       channel: 'stable',
       commit: 'abcdef1234567890',
       short_commit: 'abcdef12',
-      runtime_generation: 1,
-      declared_runtime_generation: 1,
       min_supported_generation: 1,
       max_supported_generation: 1,
       last_started_at: '2026-06-01T12:00:00+08:00',
@@ -260,8 +245,6 @@ describe('AppShell', () => {
       channel: 'stable',
       commit: 'abcdef1234567890',
       short_commit: 'abcdef12',
-      runtime_generation: 1,
-      declared_runtime_generation: 1,
       min_supported_generation: 1,
       max_supported_generation: 1,
       last_started_at: '2026-06-01T12:00:00+08:00',
@@ -281,7 +264,6 @@ describe('AppShell', () => {
       expect(prefetchPalacesGroupedSummaryApi).toHaveBeenCalledTimes(1)
       expect(prefetchDashboardApi).toHaveBeenCalledTimes(1)
       expect(prefetchReviewQueueApi).toHaveBeenCalledTimes(1)
-      expect(prefetchSegmentReviewQueueApi).toHaveBeenCalledTimes(1)
       expect(preloadPracticeRoutes).toHaveBeenCalledTimes(1)
       expect(preloadReviewRoutes).toHaveBeenCalledTimes(1)
       expect(preloadFreestylePage).toHaveBeenCalledTimes(1)
@@ -293,8 +275,6 @@ describe('AppShell', () => {
       channel: 'stable',
       commit: 'abcdef1234567890',
       short_commit: 'abcdef12',
-      runtime_generation: 1,
-      declared_runtime_generation: 1,
       min_supported_generation: 1,
       max_supported_generation: 1,
       last_started_at: '2026-06-01T12:00:00+08:00',
@@ -327,8 +307,6 @@ describe('AppShell', () => {
       channel: 'stable',
       commit: 'abcdef1234567890',
       short_commit: 'abcdef12',
-      runtime_generation: 1,
-      declared_runtime_generation: 1,
       min_supported_generation: 1,
       max_supported_generation: 1,
       last_started_at: '2026-06-01T12:00:00+08:00',
@@ -359,8 +337,6 @@ describe('AppShell', () => {
       channel: 'stable',
       commit: 'abcdef1234567890',
       short_commit: 'abcdef12',
-      runtime_generation: 1,
-      declared_runtime_generation: 1,
       min_supported_generation: 1,
       max_supported_generation: 1,
       last_started_at: '2026-06-01T12:00:00+08:00',

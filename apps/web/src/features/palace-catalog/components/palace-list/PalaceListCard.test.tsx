@@ -102,42 +102,12 @@ function buildPalace(overrides: Partial<PalaceGroupedItem> = {}): PalaceGroupedI
     active_review_progress: 0.2,
     segments: [buildSegment()],
     mini_palaces: [buildMiniPalace()],
-    mini_review_mode: 'mini_only',
     chapters: [{ id: 2, name: '第二节法国教育的发展' }],
     ...overrides,
   }
 }
 
 describe('PalaceListCard', () => {
-  it('hides the palace-level stage progress when mini palaces take over formal review', () => {
-    render(
-      <MemoryRouter>
-        <PalaceListCard
-          palace={buildPalace()}
-          viewSettings={{ layoutMode: 'chapter-double', densityMode: 'comfortable' }}
-          segmentReviewLoadingId={null}
-          markReviewedKey={null}
-          defaultExpanded
-          onOpenBatchReview={vi.fn()}
-          onPalacePractice={vi.fn()}
-          onSegmentPractice={vi.fn()}
-          onSegmentReviewAction={vi.fn()}
-          onOpenStageEdit={vi.fn()}
-          onMarkSegmentReviewed={vi.fn()}
-          onMiniPalacePractice={vi.fn()}
-          onMiniPalaceReview={vi.fn()}
-          onOpenConfig={vi.fn()}
-          onDelete={vi.fn()}
-        />
-      </MemoryRouter>,
-    )
-
-    expect(screen.getByText('接管正式复习')).toBeTruthy()
-    expect(screen.getAllByTestId('stage-track').length).toBe(1)
-    expect(screen.getAllByText('小宫殿').length).toBeGreaterThan(0)
-    expect(screen.getAllByRole('button', { name: '做题' }).length).toBeGreaterThan(0)
-  })
-
   it('does not render start review when due flag is false even if the timestamp is stale', () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-06-12T10:00:00+08:00'))
@@ -147,7 +117,6 @@ describe('PalaceListCard', () => {
         <PalaceListCard
           palace={buildPalace({
             mini_palaces: [],
-            mini_review_mode: 'independent',
             segments: [
               buildSegment({
                 next_review_at: '2026-06-12T09:00:00+08:00',
@@ -156,17 +125,9 @@ describe('PalaceListCard', () => {
             ],
           })}
           viewSettings={{ layoutMode: 'chapter-double', densityMode: 'comfortable' }}
-          segmentReviewLoadingId={null}
-          markReviewedKey={null}
-          onOpenBatchReview={vi.fn()}
           onPalacePractice={vi.fn()}
           onSegmentPractice={vi.fn()}
-          onSegmentReviewAction={vi.fn()}
-          onOpenStageEdit={vi.fn()}
-          onMarkSegmentReviewed={vi.fn()}
           onMiniPalacePractice={vi.fn()}
-          onMiniPalaceReview={vi.fn()}
-          onOpenConfig={vi.fn()}
           onDelete={vi.fn()}
         />
       </MemoryRouter>,
@@ -185,7 +146,6 @@ describe('PalaceListCard', () => {
         <PalaceListCard
           palace={buildPalace({
             mini_palaces: [],
-            mini_review_mode: 'independent',
             needs_practice: true,
             segments: [
               buildSegment({
@@ -195,17 +155,9 @@ describe('PalaceListCard', () => {
             ],
           })}
           viewSettings={{ layoutMode: 'chapter-double', densityMode: 'comfortable' }}
-          segmentReviewLoadingId={null}
-          markReviewedKey={null}
-          onOpenBatchReview={vi.fn()}
           onPalacePractice={onPalacePractice}
           onSegmentPractice={vi.fn()}
-          onSegmentReviewAction={vi.fn()}
-          onOpenStageEdit={vi.fn()}
-          onMarkSegmentReviewed={vi.fn()}
           onMiniPalacePractice={vi.fn()}
-          onMiniPalaceReview={vi.fn()}
-          onOpenConfig={vi.fn()}
           onDelete={vi.fn()}
         />
       </MemoryRouter>,

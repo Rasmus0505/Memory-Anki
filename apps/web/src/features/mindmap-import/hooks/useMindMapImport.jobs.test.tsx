@@ -3,7 +3,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   Harness,
   buildBatchJob,
-  buildPdfJob,
   cloneJob,
   setupUseMindMapImportTestContext,
   type UseMindMapImportTestContext,
@@ -17,79 +16,11 @@ describe('useMindMapImport job flows', () => {
     context = setupUseMindMapImportTestContext()
   })
 
-  it('builds subject-pdf requests from selected pages and prompt', async () => {
-    render(<Harness />)
-
-    await waitFor(() => {
-      expect(screen.getByTestId('pdf-doc-id').textContent).toBe('11')
-    })
-
-    fireEvent.click(screen.getByRole('button', { name: 'enable-pdf' }))
-    fireEvent.click(screen.getByRole('button', { name: 'set-pdf-pages' }))
-    fireEvent.click(screen.getByRole('button', { name: 'set-range-prompt' }))
-
-    await waitFor(() => {
-      expect(screen.getByTestId('pdf-pages').textContent).toBe('1,3')
-      expect(screen.getByTestId('pdf-mode').textContent).toBe('direct_generation')
-    })
-
-    fireEvent.click(screen.getByRole('button', { name: 'start-pdf' }))
-    await waitFor(() => {
-      expect(importApi.createPdfImportJobApi).toHaveBeenCalledWith({
-        entity_key: 'palace_1',
-        mode: 'mindmap',
-        subject_document_id: 11,
-        page_selection: [1, 3],
-        pdf_mode: 'direct_generation',
-        structure_page: null,
-        range_prompt: '第一节 东方文明古国的教育',
-        fallback_title: 'test.pdf',
-        import_options: {
-          quote_original_text_only: true,
-          mount_on_original_leaf_only: true,
-          preserve_emphasis_marks: true,
-          semantic_split_long_paragraphs: true,
-          preserve_line_breaks: true,
-        },
-        ai_options: {},
-      })
-    })
-  })
-
-  it('switches pdf import to structured merge only when explicitly selected', async () => {
-    render(<Harness />)
-
-    fireEvent.click(screen.getByRole('button', { name: 'enable-pdf' }))
-    fireEvent.click(screen.getByRole('button', { name: 'enable-structured-pdf' }))
-    fireEvent.click(screen.getByRole('button', { name: 'set-pdf-pages' }))
-    fireEvent.click(screen.getByRole('button', { name: 'set-structure-page' }))
-
-    await waitFor(() => {
-      expect(screen.getByTestId('pdf-mode').textContent).toBe('structured_merge')
-    })
-
-    fireEvent.click(screen.getByRole('button', { name: 'start-pdf' }))
-    await waitFor(() => {
-      expect(importApi.createPdfImportJobApi).toHaveBeenCalledWith({
-        entity_key: 'palace_1',
-        mode: 'mindmap',
-        subject_document_id: 11,
-        page_selection: [1, 3],
-        pdf_mode: 'structured_merge',
-        structure_page: 3,
-        range_prompt: '',
-        fallback_title: 'test.pdf',
-        import_options: expect.any(Object),
-        ai_options: {},
-      })
-    })
-  })
-
   it('restores the preferred job from backend history after reopening', async () => {
-    context.jobsById['job-old'] = buildPdfJob('job-old', 'Older Draft', {
+    context.jobsById['job-old'] = buildBatchJob('job-old', 'Older Draft', {
       created_at: '2026-05-30T09:00:00',
     })
-    context.jobsById['job-restore'] = buildPdfJob('job-restore', 'Restored Draft', {
+    context.jobsById['job-restore'] = buildBatchJob('job-restore', 'Restored Draft', {
       created_at: '2026-05-30T11:00:00',
     })
 
@@ -147,7 +78,7 @@ describe('useMindMapImport job flows', () => {
   })
 
   it('requests pause for a running job and keeps polling until the backend marks it paused', async () => {
-    const runningJob = buildPdfJob('job-running', 'PDF Draft', {
+    const runningJob = buildBatchJob('job-running', 'Batch Draft', {
       status: 'running',
       stage: 'merge',
       resumable: false,
@@ -174,7 +105,7 @@ describe('useMindMapImport job flows', () => {
     })
     context.getJobFactory = (jobId) =>
       pauseSettled
-        ? buildPdfJob(jobId, 'PDF Draft', {
+        ? buildBatchJob(jobId, 'Batch Draft', {
             status: 'paused',
             stage: 'merge',
             resumable: true,
@@ -207,38 +138,6 @@ describe('useMindMapImport job flows', () => {
     })
   })
 
-  it('starts subject-pdf imports through background jobs instead of preview completion', async () => {
-    context.nextPdfJobFactory = () =>
-      buildPdfJob('job-pdf', 'PDF Imported', {
-        status: 'draft',
-        stage: 'prepared',
-        result: null,
-      })
-    context.runJobFactory = (jobId) =>
-      buildPdfJob(jobId, 'PDF Imported', {
-        status: 'running',
-        stage: 'merge',
-        result: null,
-      })
-    context.getJobFactory = (jobId) => buildPdfJob(jobId, 'PDF Imported')
-
-    render(<Harness />)
-
-    await waitFor(() => {
-      expect(screen.getByTestId('pdf-doc-id').textContent).toBe('11')
-    })
-
-    fireEvent.click(screen.getByRole('button', { name: 'enable-pdf' }))
-    fireEvent.click(screen.getByRole('button', { name: 'set-pdf-pages' }))
-    fireEvent.click(screen.getByRole('button', { name: 'set-structure-page' }))
-    fireEvent.click(screen.getByRole('button', { name: 'set-range-prompt' }))
-    fireEvent.click(screen.getByRole('button', { name: 'start-pdf' }))
-
-    await waitFor(() => {
-      expect(importApi.createPdfImportJobApi).toHaveBeenCalled()
-      expect(importApi.runImportJobApi).toHaveBeenCalledWith('job-pdf')
-    })
-  })
 })
 
 

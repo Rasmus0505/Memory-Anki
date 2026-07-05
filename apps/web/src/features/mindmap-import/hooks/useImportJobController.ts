@@ -32,8 +32,6 @@ export function useImportJobController(options: UseImportJobControllerOptions) {
     importImagePreviewUrl: state.importImagePreviewUrl,
     importHistory: state.importHistory,
     importWarnings: state.importWarnings,
-    importPdfOcrGroundingUsed: state.importPdfOcrGroundingUsed,
-    importPdfOcrTextChars: state.importPdfOcrTextChars,
     currentJobId: state.currentJobId,
     currentJobStatus: state.currentJobStatus,
     currentJobStage: state.currentJobStage,

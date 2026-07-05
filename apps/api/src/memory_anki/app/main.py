@@ -34,7 +34,6 @@ from memory_anki.modules.dashboard.presentation import router as dashboard_route
 from memory_anki.modules.english.presentation import router as english_router
 from memory_anki.modules.english_reading.presentation import router as english_reading_router
 from memory_anki.modules.freestyle.presentation import router as freestyle_router
-from memory_anki.modules.knowledge.presentation import bilink_router
 from memory_anki.modules.knowledge.presentation import router as knowledge_router
 from memory_anki.modules.palace_quiz.presentation import router as palace_quiz_router
 from memory_anki.modules.palaces.presentation import import_router
@@ -45,7 +44,6 @@ from memory_anki.modules.reviews.application.review_execution_service import (
 from memory_anki.modules.reviews.presentation import router as review_router
 from memory_anki.modules.sessions.presentation import router as sessions_router
 from memory_anki.modules.settings.presentation import router as settings_router
-from memory_anki.modules.voice_coach import presentation as voice_coach_router
 
 get_session = _get_session
 
@@ -140,11 +138,9 @@ app.include_router(sessions_router.router, prefix="/api/v1")
 app.include_router(settings_router.router, prefix="/api/v1")
 app.include_router(import_router.router, prefix="/api/v1")
 app.include_router(knowledge_router.router, prefix="/api/v1")
-app.include_router(bilink_router.router, prefix="/api/v1")
 app.include_router(english_router.router, prefix="/api/v1")
 app.include_router(english_reading_router.router, prefix="/api/v1")
 app.include_router(freestyle_router.router, prefix="/api/v1")
-app.include_router(voice_coach_router.router, prefix="/api/v1")
 app.include_router(dashboard_router.router, prefix="/api/v1")
 
 if WEB_DIST_DIR and WEB_DIST_DIR.exists():

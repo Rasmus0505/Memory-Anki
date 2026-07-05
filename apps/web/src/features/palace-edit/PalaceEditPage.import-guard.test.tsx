@@ -75,7 +75,7 @@ vi.mock('@/features/mindmap-import', () => ({
     importHookState.triggerReplace = () => {
       void options.applyEditorState?.(importedEditorState, {
         source: 'import',
-        jobId: 'job-pdf-1',
+        jobId: 'job-image-1',
         applyMode: 'replace',
         sourceTitle: '导入脑图',
       })
@@ -85,7 +85,7 @@ vi.mock('@/features/mindmap-import', () => ({
       setImportOpen: vi.fn(),
       importMode: 'mindmap',
       setImportMode: vi.fn(),
-      importSourceKind: 'subject-pdf',
+      importSourceKind: 'image-single',
       setImportSourceKind: vi.fn(),
       mindMapImportWorkflow: 'single',
       setMindMapImportWorkflow: vi.fn(),
@@ -108,42 +108,10 @@ vi.mock('@/features/mindmap-import', () => ({
       importBatchMeta: null,
       importCanAppend: true,
       importCanUndoLastImport: false,
-      importExternalSyncKey: 0,
+      importExternalSyncKey: 'import:0',
       importAppliedSyncVersion: 0,
-      importSubjectOptions: [],
-      importSelectedSubjectId: null,
-      setImportSelectedSubjectId: vi.fn(),
-      importSubjectDocuments: [],
-      importSubjectDocumentsLoading: false,
-      importSelectedSubjectDocumentId: null,
-      setImportSelectedSubjectDocumentId: vi.fn(),
-      importPdfPageMeta: [],
-      importPdfPagesLoading: false,
-      importPdfPages: [26, 27, 28],
-      importPdfPageInput: '26, 27, 28',
-      setImportPdfPageInput: vi.fn(),
-      importPdfSelectionError: '',
-      importPdfMode: 'direct_generation',
-      setImportPdfMode: vi.fn(),
-      importStructurePage: null,
-      setImportStructurePage: vi.fn(),
-      importPdfPreviewPage: 26,
-      setImportPdfPreviewPage: vi.fn(),
-      importAnalyzedPdfPages: [26, 27, 28],
-      importRangePrompt: '第一节',
-      setImportRangePrompt: vi.fn(),
-      importPdfOptions: {
-        quote_original_text_only: true,
-        mount_on_original_leaf_only: true,
-        preserve_emphasis_marks: true,
-        semantic_split_long_paragraphs: true,
-        preserve_line_breaks: true,
-      },
-      setImportPdfOption: vi.fn(),
       importWarnings: [],
-      importPdfOcrGroundingUsed: true,
-      importPdfOcrTextChars: 128,
-      currentJobId: 'job-pdf-1',
+      currentJobId: 'job-image-1',
       currentJobStatus: 'completed',
       currentJobStage: 'completed',
       currentJobUsage: null,
@@ -153,14 +121,9 @@ vi.mock('@/features/mindmap-import', () => ({
       importReusedExistingResult: false,
       handleResumeJob: vi.fn(),
       handlePauseJob: vi.fn(),
-      handleSubjectDocumentUpload: vi.fn(),
-      handleSubjectDocumentDelete: vi.fn(),
-      refreshSubjectDocuments: vi.fn(),
-      toggleImportPdfPage: vi.fn(),
       handleImportPaste: vi.fn(),
       handleImportFileChange: vi.fn(),
       handleBatchImportStart: vi.fn(),
-      handlePdfImportStart: vi.fn(),
       handleDeleteBatchImage: vi.fn(),
       handleMoveBatchImage: vi.fn(),
       handleSetStructureImage: vi.fn(),
@@ -268,54 +231,6 @@ vi.mock('@/features/palace-edit/components/PalaceVersionDialog', () => ({
 
 vi.mock('@/features/palace-edit/components/PalaceKnowledgeOutlinePanel', () => ({
   PalaceKnowledgeOutlinePanel: () => <div>outline</div>,
-}))
-
-vi.mock('@/features/bilink', () => ({
-  useBilinkOverlay: () => ({
-    bilinkSearchOpen: false,
-    bilinkSearchMode: 'toolbar',
-    bilinkSearchPosition: null,
-    bilinkSearchQuery: '',
-    bilinkSearchLoading: false,
-    bilinkSearchError: '',
-    bilinkSearchResults: [],
-    setBilinkSearchQuery: vi.fn(),
-    closeBilinkSearch: vi.fn(),
-    handleBilinkSearchSelect: vi.fn(),
-    handleBilinkResultPreview: vi.fn(),
-    bilinkPreviewOpen: false,
-    bilinkPreviewLoading: false,
-    bilinkPreviewError: '',
-    bilinkPreviewContext: null,
-    bilinkPreviewEditorState: null,
-    bilinkPreviewHighlightQuery: '',
-    setBilinkPreviewOpen: vi.fn(),
-    jumpToBilinkContext: vi.fn(),
-    openBilinkSearch: vi.fn(),
-    handleBilinkPanelPreview: vi.fn(),
-    handleBilinkDelete: vi.fn(),
-    handleBilinkTrigger: vi.fn(),
-    handleBilinkNodeClick: vi.fn(),
-  }),
-  BilinkPanel: () => <div>bilinks</div>,
-  BilinkPreviewPopover: () => null,
-  BilinkSearchPopover: () => null,
-}))
-
-vi.mock('@/features/bilink/hooks/useBilinks', () => ({
-  useBilinks: () => ({
-    items: [],
-    loading: false,
-    error: '',
-    refresh: vi.fn(),
-  }),
-}))
-
-vi.mock('@/features/bilink/hooks/useBilinkCounts', () => ({
-  useBilinkCounts: () => ({
-    counts: {},
-    refresh: vi.fn(),
-  }),
 }))
 
 function deferred<T>() {

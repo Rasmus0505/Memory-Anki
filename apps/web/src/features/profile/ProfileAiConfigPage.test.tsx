@@ -12,10 +12,6 @@ vi.mock('sonner', () => ({
   },
 }))
 
-vi.mock('@/features/voice-coach/api', () => ({
-  synthesizeVoiceCoachApi: vi.fn(),
-}))
-
 const baseResponse = {
   summary: {
     provider_count: 4,

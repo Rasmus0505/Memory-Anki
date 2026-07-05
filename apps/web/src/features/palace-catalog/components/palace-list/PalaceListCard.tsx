@@ -1,5 +1,5 @@
 ﻿import { useEffect, useRef, useState } from 'react'
-import { BookOpen, Building2, ChevronDown, ChevronRight, MoreHorizontal, Pencil, Settings2, Target, Trash2 } from 'lucide-react'
+import { BookOpen, Building2, ChevronDown, ChevronRight, MoreHorizontal, Pencil, Target, Trash2 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { PalaceStageProgress } from '@/features/palace-catalog/components/palace-list/PalaceStageProgress'
 import type { PalaceListViewSettings } from '@/entities/preferences/model/palaceViewSettings'
@@ -8,7 +8,6 @@ import type {
   MiniPalaceSummary,
   PalaceGroupedItem,
   PalaceSegmentSummary,
-  ReviewStageSummary,
 } from '@/shared/api/contracts'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
@@ -16,45 +15,26 @@ import { Card, CardContent } from '@/shared/components/ui/card'
 import { cn } from '@/shared/lib/utils'
 import {
   formatCreatedAt,
-  formatRelativeReviewTime,
   getPalaceCardClass,
   getPalaceCardContentClass,
   getPalaceIconClass,
   getReviewActionButtonClass,
-  getReviewActionLabel,
   getSegmentCardClass,
   getSegmentDisplayName,
   getSegmentListClass,
-  isSleepReviewSegment,
-  palaceUsesMiniOnlyReview,
-  resolveReviewButtonState,
 } from '@/features/palace-catalog/components/palace-list/utils'
 
 interface PalaceListCardProps {
   palace: PalaceGroupedItem
   viewSettings: PalaceListViewSettings
-  segmentReviewLoadingId: number | null
-  markReviewedKey: string | null
   defaultExpanded?: boolean
-  onOpenBatchReview: (palace: PalaceGroupedItem) => void
   onPalacePractice: (palace: PalaceGroupedItem) => void
   onWarmPalacePractice?: (palace: PalaceGroupedItem) => void
   onWarmFocusPractice?: (palace: PalaceGroupedItem) => void
   onSegmentPractice: (segment: PalaceSegmentSummary) => void
   onWarmSegmentPractice?: (segment: PalaceSegmentSummary) => void
-  onSegmentReviewAction: (segment: PalaceSegmentSummary) => void
-  onWarmSegmentReviewAction?: (segment: PalaceSegmentSummary) => void
-  onOpenStageEdit: (
-    palace: PalaceGroupedItem,
-    segment: PalaceSegmentSummary,
-    stage: ReviewStageSummary,
-  ) => void
-  onMarkSegmentReviewed: (segment: PalaceSegmentSummary) => void
   onMiniPalacePractice: (miniPalace: MiniPalaceSummary) => void
   onWarmMiniPalacePractice?: (miniPalace: MiniPalaceSummary) => void
-  onMiniPalaceReview: (miniPalace: MiniPalaceSummary) => void
-  onWarmMiniPalaceReview?: (miniPalace: MiniPalaceSummary) => void
-  onOpenConfig: (palace: PalaceGroupedItem) => void
   onDelete: (id: number, title: string) => void
 }
 
@@ -109,24 +89,14 @@ function ReviewActionButton({
 export function PalaceListCard({
   palace,
   viewSettings,
-  segmentReviewLoadingId,
-  markReviewedKey,
   defaultExpanded = false,
-  onOpenBatchReview,
   onPalacePractice,
   onWarmPalacePractice = () => {},
   onWarmFocusPractice = () => {},
   onSegmentPractice,
   onWarmSegmentPractice = () => {},
-  onSegmentReviewAction,
-  onWarmSegmentReviewAction = () => {},
-  onOpenStageEdit,
-  onMarkSegmentReviewed,
   onMiniPalacePractice,
   onWarmMiniPalacePractice = () => {},
-  onMiniPalaceReview,
-  onWarmMiniPalaceReview = () => {},
-  onOpenConfig,
   onDelete,
 }: PalaceListCardProps) {
   const [menuOpen, setMenuOpen] = useState(false)
@@ -136,25 +106,11 @@ export function PalaceListCard({
   const isMultiSegment = segmentCount > 1
   const hasSingleSegment = segmentCount === 1
   const singleSegment = hasSingleSegment ? palace.segments[0] : null
-  const mainReviewOwnedByMini = palaceUsesMiniOnlyReview(palace)
-  const showSingleSegmentReviewPresentation = !mainReviewOwnedByMini && !isMultiSegment && Boolean(singleSegment)
   const showMainSegmentList =
-    !mainReviewOwnedByMini &&
     Array.isArray(palace.segments) &&
-    palace.segments.length > 0 &&
-    !showSingleSegmentReviewPresentation
-  const dueBatchSegments = (palace.segments || []).filter(
-    (segment) =>
-      !segment.is_virtual_default &&
-      segment.has_due_review &&
-      Boolean(segment.current_review_schedule_id),
-  )
-  const canBatchReview = !mainReviewOwnedByMini && dueBatchSegments.length >= 2
-  const singleSegmentState = singleSegment
-    ? resolveReviewButtonState(singleSegment.has_due_review, singleSegment.next_review_at)
-    : 'unscheduled'
-  const isSingleSegmentSleepReview = singleSegment ? isSleepReviewSegment(singleSegment) : false
-  const showPalacePracticeButton = Boolean(palace.needs_practice) && singleSegmentState !== 'due_now'
+    palace.segments.length > 0
+  const showPalacePracticeButton = Boolean(palace.needs_practice)
+  const primaryEstimatedSeconds = singleSegment?.estimated_review_seconds ?? 0
 
   useEffect(() => {
     if (!menuOpen) return
@@ -189,67 +145,28 @@ export function PalaceListCard({
                 >
                   {palace.resolved_title || palace.title || '未命名宫殿'}
                 </Link>
-                {showSingleSegmentReviewPresentation && singleSegment ? (
+                {showPalacePracticeButton ? (
                   <>
-                    {showPalacePracticeButton ? (
-                      <ReviewActionButton
-                        label="练习"
-                        className={cn(
-                          'h-8 min-w-[84px] max-w-[112px] shrink-0 px-2.5 text-[11px] sm:px-3 sm:text-xs',
-                          getReviewActionButtonClass({ state: 'practice' }),
-                        )}
-                        disabled={false}
-                        onWarm={() => onWarmPalacePractice(palace)}
-                        onClick={() => onPalacePractice(palace)}
-                      />
-                    ) : null}
                     <ReviewActionButton
-                      label={getReviewActionLabel(singleSegment.next_review_at, {
-                        state: singleSegmentState,
-                        loading: segmentReviewLoadingId === singleSegment.id,
-                        isSleepReview: isSingleSegmentSleepReview,
-                      })}
+                      label="练习"
                       className={cn(
-                        'h-8 min-w-[104px] max-w-[132px] shrink-0 px-2.5 text-[11px] sm:min-w-[112px] sm:px-3 sm:text-xs',
-                        getReviewActionButtonClass({
-                          state: singleSegmentState,
-                          isSleepReview: isSingleSegmentSleepReview,
-                          disabled:
-                            singleSegmentState !== 'practice' &&
-                            (!singleSegment.current_review_schedule_id ||
-                              singleSegmentState === 'future'),
-                        }),
+                        'h-8 min-w-[84px] max-w-[112px] shrink-0 px-2.5 text-[11px] sm:px-3 sm:text-xs',
+                        getReviewActionButtonClass({ state: 'practice' }),
                       )}
-                      disabled={
-                        (singleSegmentState !== 'practice' &&
-                          (!singleSegment.current_review_schedule_id ||
-                            singleSegmentState === 'future')) ||
-                        segmentReviewLoadingId === singleSegment.id
-                      }
-                      progress={singleSegment.active_review_progress}
-                      onWarm={() => onWarmSegmentReviewAction(singleSegment)}
-                      onClick={() => onSegmentReviewAction(singleSegment)}
+                      disabled={false}
+                      onWarm={() => onWarmPalacePractice(palace)}
+                      onClick={() => onPalacePractice(palace)}
                     />
                   </>
                 ) : null}
               </div>
-              {canBatchReview ? (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-8 shrink-0 text-xs"
-                  onClick={() => onOpenBatchReview(palace)}
-                >
-                  开始多块复习
-                </Button>
-              ) : null}
             </div>
           </div>
 
           <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
             <span>{formatCreatedAt(palace.created_at)}</span>
-            {showSingleSegmentReviewPresentation && singleSegment ? (
-              <span>预计 {formatDuration(singleSegment.estimated_review_seconds || 0)}</span>
+            {hasSingleSegment ? (
+              <span>预计 {formatDuration(primaryEstimatedSeconds)}</span>
             ) : (
               <span>{palace.chapters?.length || 0} 章节</span>
             )}
@@ -275,29 +192,9 @@ export function PalaceListCard({
             ) : null}
           </div>
 
-          {showSingleSegmentReviewPresentation && singleSegment ? (
-            <div className="mt-2">
-              <PalaceStageProgress
-                stageLabels={singleSegment.stage_labels}
-                completed={singleSegment.review_stage_completed}
-                stages={singleSegment.review_stages}
-                onStageClick={(stage) => onOpenStageEdit(palace, singleSegment, stage)}
-              />
-            </div>
-          ) : expanded && showMainSegmentList ? (
+          {expanded && showMainSegmentList ? (
             <div className={getSegmentListClass(viewSettings.densityMode)}>
               {palace.segments.map((segment, index) => {
-                const segmentReviewState = resolveReviewButtonState(
-                  segment.has_due_review,
-                  segment.next_review_at,
-                )
-                const isSegmentSleepReview = isSleepReviewSegment(segment)
-                const segmentReviewDisabled =
-                  (segmentReviewState !== 'practice' &&
-                    (!segment.current_review_schedule_id ||
-                      segmentReviewState === 'future')) ||
-                  segmentReviewLoadingId === segment.id
-
                 return (
                   <div
                     key={segment.id}
@@ -319,57 +216,21 @@ export function PalaceListCard({
                         </div>
                         <div className="mt-1 flex flex-wrap gap-2 text-[11px] text-muted-foreground">
                           <span>{segment.node_count} 节点</span>
-                          <span>预计 {formatRelativeReviewTime(segment.next_review_at)}</span>
+                          <span>预计 {formatDuration(segment.estimated_review_seconds || 0)}</span>
                         </div>
-                        <PalaceStageProgress
-                          stageLabels={segment.stage_labels}
-                          completed={segment.review_stage_completed}
-                          stages={segment.review_stages}
-                          onStageClick={(stage) => onOpenStageEdit(palace, segment, stage)}
-                        />
                       </div>
 
                       <div className="flex shrink-0 flex-col items-stretch gap-2 sm:min-w-[132px]">
                         {isMultiSegment ? (
-                          <ReviewActionButton
-                            label={getReviewActionLabel(segment.next_review_at, {
-                              state: segmentReviewState,
-                              loading: segmentReviewLoadingId === segment.id,
-                              isSleepReview: isSegmentSleepReview,
-                            })}
-                            className={getReviewActionButtonClass({
-                              state: segmentReviewState,
-                              isSleepReview: isSegmentSleepReview,
-                              disabled: segmentReviewDisabled,
-                            })}
-                            disabled={segmentReviewDisabled}
-                            progress={segment.active_review_progress}
-                            onWarm={() =>
-                              segmentReviewState === 'practice'
-                                ? onWarmSegmentPractice(segment)
-                                : onWarmSegmentReviewAction(segment)
-                            }
-                            onClick={() =>
-                              segmentReviewState === 'practice'
-                                ? onSegmentPractice(segment)
-                                : onSegmentReviewAction(segment)
-                            }
-                          />
-                        ) : null}
-
-                        {!segment.is_virtual_default ? (
                           <Button
                             size="sm"
-                            variant="outline"
+                            variant="secondary"
                             className="h-8 w-full text-xs"
-                            disabled={
-                              !segment.has_due_review ||
-                              !segment.current_review_schedule_id ||
-                              markReviewedKey === `segment-${segment.id}`
-                            }
-                            onClick={() => onMarkSegmentReviewed(segment)}
+                            onFocus={() => onWarmSegmentPractice(segment)}
+                            onMouseEnter={() => onWarmSegmentPractice(segment)}
+                            onClick={() => onSegmentPractice(segment)}
                           >
-                            {markReviewedKey === `segment-${segment.id}` ? '提交中...' : '标记已复习'}
+                            练习
                           </Button>
                         ) : null}
                       </div>
@@ -378,7 +239,7 @@ export function PalaceListCard({
                 )
               })}
             </div>
-          ) : expanded && !mainReviewOwnedByMini ? (
+          ) : expanded ? (
             <PalaceStageProgress
               stageLabels={palace.stage_labels}
               completed={palace.review_stage_completed}
@@ -395,27 +256,10 @@ export function PalaceListCard({
               <div className="mb-2 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
                 <Building2 className="h-3.5 w-3.5" />
                 小宫殿
-                {mainReviewOwnedByMini ? (
-                  <Badge className="bg-info text-[10px] text-white hover:bg-info">
-                    接管正式复习
-                  </Badge>
-                ) : null}
               </div>
 
               <div className={getSegmentListClass(viewSettings.densityMode)}>
                 {palace.mini_palaces.map((mini) => {
-                  const miniState = resolveReviewButtonState(
-                    mini.has_due_review,
-                    mini.next_review_at,
-                    mini.needs_practice,
-                  )
-                  const isSleepMini = mini.current_review_type === 'sleep'
-                  const miniReviewDisabled =
-                    (miniState !== 'practice' &&
-                      (!mini.current_review_schedule_id ||
-                        miniState === 'future')) ||
-                    mini.is_empty
-
                   return (
                     <div
                       key={mini.id}
@@ -455,20 +299,11 @@ export function PalaceListCard({
                           <div className="mt-1 flex flex-wrap gap-2 text-[11px] text-muted-foreground">
                             <span>预计 {formatDuration(mini.estimated_review_seconds || 0)}</span>
                             <span>
-                              {mini.next_review_at
-                                ? formatRelativeReviewTime(mini.next_review_at)
-                                : mini.updated_at
+                              {mini.updated_at
                                 ? `更新 ${formatCreatedAt(mini.updated_at)}`
-                                : '未排入复习'}
+                                : '未更新'}
                             </span>
                           </div>
-                          {mini.stage_labels?.length > 0 && !mini.is_empty ? (
-                            <PalaceStageProgress
-                              stageLabels={mini.stage_labels}
-                              completed={mini.review_stage_completed}
-                              stages={mini.review_stages}
-                            />
-                          ) : null}
                         </div>
 
                         <div className="flex shrink-0 flex-col items-stretch gap-2 sm:min-w-[132px]">
@@ -493,29 +328,17 @@ export function PalaceListCard({
                             </Link>
                           )}
 
-                          <ReviewActionButton
-                            label={getReviewActionLabel(mini.next_review_at, {
-                              state: miniState,
-                              isSleepReview: isSleepMini,
-                            })}
-                            className={getReviewActionButtonClass({
-                              state: miniState,
-                              isSleepReview: isSleepMini,
-                              disabled: miniReviewDisabled,
-                            })}
-                            disabled={miniReviewDisabled}
-                            progress={mini.active_review_progress}
-                            onWarm={() =>
-                              miniState === 'practice'
-                                ? onWarmMiniPalacePractice(mini)
-                                : onWarmMiniPalaceReview(mini)
-                            }
-                            onClick={() =>
-                              miniState === 'practice'
-                                ? onMiniPalacePractice(mini)
-                                : onMiniPalaceReview(mini)
-                            }
-                          />
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            className="h-8 w-full text-xs"
+                            disabled={mini.is_empty}
+                            onFocus={() => onWarmMiniPalacePractice(mini)}
+                            onMouseEnter={() => onWarmMiniPalacePractice(mini)}
+                            onClick={() => onMiniPalacePractice(mini)}
+                          >
+                            练习
+                          </Button>
 
                           <Link
                             to={`/palaces/${mini.palace_id}/edit?miniPalaceId=${mini.id}&miniPalaceMode=edit`}
@@ -590,17 +413,6 @@ export function PalaceListCard({
             </Button>
             {menuOpen ? (
               <div className="absolute right-0 top-9 z-20 min-w-[132px] rounded-xl border border-border/70 bg-background p-1 shadow-lg">
-                <button
-                  type="button"
-                  className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm transition-colors hover:bg-muted"
-                  onClick={() => {
-                    setMenuOpen(false)
-                    onOpenConfig(palace)
-                  }}
-                >
-                  <Settings2 className="size-4" />
-                  配置
-                </button>
                 <button
                   type="button"
                   className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-destructive transition-colors hover:bg-destructive/10"

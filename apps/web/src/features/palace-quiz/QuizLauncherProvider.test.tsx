@@ -16,57 +16,6 @@ const promptForAiOptionsMock = vi.fn()
 const autoGenerateAndSavePalaceQuizMock = vi.fn()
 const dispatchGlobalFeedbackMock = vi.fn()
 
-const pdfControllerMock = {
-  subjectDocuments: [
-    {
-      id: 9,
-      subject_id: 2,
-      filename: 'subjects/2/questions.pdf',
-      original_name: 'questions.pdf',
-      mime_type: 'application/pdf',
-      file_size: 123,
-      page_count: 10,
-      created_at: '2026-06-15T00:00:00',
-    },
-  ],
-  subjectDocumentsLoading: false,
-  selectedSubjectId: 2,
-  setSelectedSubjectId: vi.fn(),
-  selectedSubjectDocumentId: 9,
-  setSelectedSubjectDocumentId: vi.fn(),
-  pdfPageMeta: [],
-  pdfPagesLoading: false,
-  selectedPdfPages: [3],
-  setSelectedPdfPages: vi.fn(),
-  pdfPageInput: '3',
-  setPdfPageInput: vi.fn(),
-  pdfSelectionError: '',
-  pdfImportMode: 'direct_generation',
-  setPdfImportMode: vi.fn(),
-  setPdfImportModeState: vi.fn(),
-  structurePage: null,
-  setStructurePage: vi.fn(),
-  pdfPreviewPage: null,
-  setPdfPreviewPage: vi.fn(),
-  analyzedPdfPages: [],
-  setAnalyzedPdfPages: vi.fn(),
-  persistAnalyzedPdfPages: vi.fn(),
-  rangePrompt: '',
-  setRangePrompt: vi.fn(),
-  pdfImportOptions: {
-    quote_original_text_only: true,
-    mount_on_original_leaf_only: true,
-    preserve_emphasis_marks: true,
-    semantic_split_long_paragraphs: true,
-    preserve_line_breaks: true,
-  },
-  setImportPdfOption: vi.fn(),
-  refreshSubjectDocuments: vi.fn(),
-  togglePdfPage: vi.fn(),
-  handleSubjectDocumentUpload: vi.fn(),
-  handleSubjectDocumentDelete: vi.fn(),
-}
-
 vi.mock('@/entities/palace/api', () => ({
   getPalaceApi: (...args: unknown[]) => getPalaceApiMock(...args),
 }))
@@ -80,10 +29,6 @@ vi.mock('@/features/ai-config/useAiRunConfigDialog', () => ({
     promptForAiOptions: (...args: unknown[]) => promptForAiOptionsMock(...args),
     aiRunConfigDialog: null,
   }),
-}))
-
-vi.mock('@/entities/knowledge-import/model', () => ({
-  usePdfImportController: () => pdfControllerMock,
 }))
 
 vi.mock('@/features/palace-quiz/quizGenerationController', () => ({
@@ -137,7 +82,6 @@ describe('QuizLauncherProvider', () => {
         questions: [],
         source_meta: {
           source_kind: 'review-mindmap',
-          subject_document_id: null,
           page_numbers: null,
           image_names: null,
           extra_prompt: '',

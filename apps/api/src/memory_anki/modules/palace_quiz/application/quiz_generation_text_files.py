@@ -152,7 +152,6 @@ def generate_quiz_preview_from_text_files(
     )
     source_meta = {
         "source_kind": "text_files",
-        "subject_document_id": None,
         "page_numbers": None,
         "image_names": [str(item.get("filename") or "") for item in file_artifacts],
         "extra_prompt": str(extra_prompt or "").strip(),
@@ -160,7 +159,6 @@ def generate_quiz_preview_from_text_files(
         "ai_call_log_id": None,
         "generated_at": None,
         "generation_mode": "text_files_multi" if len(file_artifacts) > 1 else "text_files",
-        "pdf_sources": None,
     }
     if request_context.selected_chapter is not None:
         source_meta["source_chapter_id"] = request_context.selected_chapter.id

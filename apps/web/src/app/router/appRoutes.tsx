@@ -20,18 +20,9 @@ export const preloadPalaceEditPage = () => import('@/features/palace-edit/Palace
 export const preloadPalaceQuizPage = () => import('@/features/palace-quiz/PalaceQuizPage')
 export const preloadProfilePage = () => import('@/features/profile/ProfilePage')
 export const preloadReviewSessionPage = () => import('@/app/router/review/ReviewSession')
-export const preloadSegmentReviewSessionPage = () =>
-  import('@/features/review/SegmentReviewSessionPage')
-export const preloadBatchSegmentReviewSessionPage = () =>
-  import('@/features/review/BatchSegmentReviewSessionPage')
-export const preloadMiniReviewSessionPage = () =>
-  import('@/features/review/MiniReviewSessionPage')
 
 export function preloadReviewRoutes() {
   void preloadReviewSessionPage()
-  void preloadSegmentReviewSessionPage()
-  void preloadMiniReviewSessionPage()
-  void preloadBatchSegmentReviewSessionPage()
 }
 
 export function preloadPracticeRoutes() {
@@ -63,9 +54,6 @@ const ReviewSessionPage = lazy(preloadReviewSessionPage)
 const ReviewFeedbackPreviewRoute = lazy(
   () => import('@/app/router/ReviewFeedbackPreviewRoute'),
 )
-const SegmentReviewSessionPage = lazy(preloadSegmentReviewSessionPage)
-const BatchSegmentReviewSessionPage = lazy(preloadBatchSegmentReviewSessionPage)
-const MiniReviewSessionPage = lazy(preloadMiniReviewSessionPage)
 
 function RouteFallback() {
   return <LoadingState text="正在加载页面…" />
@@ -88,7 +76,6 @@ const REGISTERED_EXACT_PATHS = new Set<string>([
   '/palaces/list',
   '/palaces/new',
   '/review',
-  '/segment-review/batch',
   '/profile',
   '/profile/timer',
   '/profile/feedback',
@@ -104,8 +91,6 @@ const REGISTERED_DYNAMIC_PATTERNS = [
   /^\/mini-palaces\/\d+\/practice$/,
   /^\/english\/courses\/\d+$/,
   /^\/review\/session\/\d+$/,
-  /^\/segment-review\/session\/\d+$/,
-  /^\/mini-review\/session\/\d+$/,
 ]
 
 // 动态段路由的"前缀提取"：命中已注册动态段的未知后代时，回退到主段。
@@ -114,8 +99,6 @@ const DYNAMIC_PREFIX_FALLBACKS = [
   { match: /^\/palaces\/(\d+)(?:\/.*)?$/, build: (id: string) => `/palaces/${id}` },
   { match: /^\/english\/courses\/(\d+)(?:\/.*)?$/, build: (id: string) => `/english/courses/${id}` },
   { match: /^\/review\/session\/(\d+)(?:\/.*)?$/, build: (id: string) => `/review/session/${id}` },
-  { match: /^\/segment-review\/session\/(\d+)(?:\/.*)?$/, build: (id: string) => `/segment-review/session/${id}` },
-  { match: /^\/mini-review\/session\/(\d+)(?:\/.*)?$/, build: (id: string) => `/mini-review/session/${id}` },
   { match: /^\/segments\/(\d+)\/practice(?:\/.*)?$/, build: (id: string) => `/segments/${id}/practice` },
   { match: /^\/mini-palaces\/(\d+)\/practice(?:\/.*)?$/, build: (id: string) => `/mini-palaces/${id}/practice` },
 ]
@@ -126,8 +109,6 @@ const SECTION_PREFIX_FALLBACKS: Record<string, string> = {
   '/freestyle/': '/freestyle',
   '/profile/': '/profile',
   '/review/': '/review',
-  '/segment-review/': '/review',
-  '/mini-review/': '/review',
   '/english-reading/': '/english-reading',
   '/english/': '/english',
   '/palaces/': '/palaces',
@@ -180,21 +161,17 @@ export function AppRoutes({ location }: { location?: Location }) {
         <Route path="/palaces/:id/focus-practice" element={<PalaceFocusPracticePage />} />
         <Route path="/segments/:id/practice" element={<SegmentPracticePage />} />
         <Route path="/mini-palaces/:id/practice" element={<MiniPalacePracticePage />} />
-        <Route path="/mini-review/session/:id" element={<MiniReviewSessionPage />} />
         <Route path="/palaces/:id/edit" element={<PalaceEditPage />} />
         <Route path="/knowledge" element={<KnowledgePage />} />
         <Route path="/review" element={<ReviewOverviewPage />} />
         <Route path="/review/feedback-preview" element={<ReviewFeedbackPreviewRoute />} />
         <Route path="/review/session/:id" element={<ReviewSessionPage />} />
-        <Route path="/segment-review/session/:id" element={<SegmentReviewSessionPage />} />
-        <Route path="/segment-review/batch" element={<BatchSegmentReviewSessionPage />} />
         <Route path="/profile" element={<ProfilePage />} />
         <Route path="/profile/timer" element={<ProfileTimerPage />} />
         <Route path="/profile/feedback" element={<ProfileFeedbackPage />} />
         <Route path="/profile/ai" element={<ProfileAiPage />} />
         <Route path="/profile/ai-prompts" element={<Navigate to="/profile/ai?tab=prompts" replace />} />
         <Route path="/profile/ai-split" element={<Navigate to="/profile/ai?tab=config" replace />} />
-        <Route path="/profile/voice-coach" element={<Navigate to="/profile/ai?tab=config" replace />} />
         <Route path="/profile/backups" element={<ProfileBackupsPage />} />
         <Route path="*" element={<RouteNotFound pathname={fallbackPathname} />} />
       </Routes>

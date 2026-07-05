@@ -103,10 +103,8 @@ class StartupModeTests(unittest.TestCase):
 
         asyncio.run(run_lifespan())
 
-    def test_study_startup_indexes_are_declared_on_schedule_tables(self):
+    def test_study_startup_indexes_are_declared_on_review_schedule_table(self):
         from memory_anki.infrastructure.db.models import (
-            PalaceMiniPalaceReviewSchedule,
-            PalaceSegmentReviewSchedule,
             ReviewSchedule,
         )
 
@@ -117,14 +115,6 @@ class StartupModeTests(unittest.TestCase):
         self.assertIn(
             "ix_review_schedules_palace_progress",
             {index.name for index in ReviewSchedule.__table__.indexes},
-        )
-        self.assertIn(
-            "ix_segment_review_schedules_due_lookup",
-            {index.name for index in PalaceSegmentReviewSchedule.__table__.indexes},
-        )
-        self.assertIn(
-            "ix_mini_review_schedules_due_lookup",
-            {index.name for index in PalaceMiniPalaceReviewSchedule.__table__.indexes},
         )
 
 

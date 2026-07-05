@@ -2,14 +2,12 @@
 import {
   createBatchImportJobApi,
   createImageImportJobApi,
-  createPdfImportJobApi,
 } from '@/entities/knowledge-import/api'
 import { formatMindMapImportError } from '@/features/mindmap-import/model/mindmap-import'
 import {
   describeImportFeature,
   fileToDataUrl,
   logImportFailure,
-  summarizePdfRequest,
 } from '@/features/mindmap-import/hooks/mindmap-import-utils'
 import type { UseImportJobControllerOptions } from '@/features/mindmap-import/hooks/import-job/types'
 import type { ImportJobRuntimeController } from '@/features/mindmap-import/hooks/import-job/useImportJobRuntime'
@@ -29,8 +27,6 @@ export function buildImportJobActions({
   const resetSharedRequestState = () => {
     state.setImportError('')
     state.setImportWarnings([])
-    state.setImportPdfOcrGroundingUsed(null)
-    state.setImportPdfOcrTextChars(null)
     state.setImportReusedExistingResult(false)
     state.resetStreamState()
   }
@@ -210,122 +206,9 @@ export function buildImportJobActions({
     }
   }
 
-  const handlePdfImportStart = async () => {
-    if (!options.entityKey) {
-      state.setImportError(
-        '当前页面还没有稳固的实体标识，暂时无法创建可恢复任务。',
-      )
-      return
-    }
-    if (!options.selectedSubjectDocumentId) {
-      state.setImportError('请先选择一份学社 PDF 资料。')
-      return
-    }
-    if (options.selectedPdfPages.length === 0) {
-      state.setImportError('请先选择至少一页 PDF。')
-      return
-    }
-
-    resetSharedRequestState()
-    const aiOptions = await options.promptForAiOptions({
-      scenarioKey: options.mode === 'mindmap' ? 'vision_pdf_mindmap' : 'vision_pdf_text',
-      entrypointKey: options.mode === 'mindmap' ? 'import-pdf-mindmap' : 'import-pdf-text',
-      title: options.mode === 'mindmap' ? 'PDF 转脑图配置' : 'PDF 转文字配置',
-    })
-    if (!aiOptions) {
-      return
-    }
-
-    const selectedDocument =
-      options.subjectDocuments.find((item) => item.id === options.selectedSubjectDocumentId) ?? null
-    const previewPage =
-      options.pdfPageMeta.find((page) => page.page_number === options.structurePage) ??
-      options.pdfPageMeta.find((page) => options.selectedPdfPages.includes(page.page_number)) ??
-      options.pdfPageMeta[0]
-    const previewUrl = previewPage?.preview_url || previewPage?.thumbnail_url || ''
-    state.setImportImagePreviewUrl(previewUrl)
-    const feature = describeImportFeature('subject-pdf', options.mode)
-    const requestSummary = summarizePdfRequest({
-      pages: options.selectedPdfPages,
-      rangePrompt: options.rangePrompt.trim(),
-      pdfMode: options.pdfImportMode,
-      structurePage: options.structurePage,
-    })
-
-    try {
-      logAiCall({
-        feature,
-        stage: 'start',
-        requestSummary,
-        meta: {
-          entityKey: options.entityKey,
-          subjectDocumentId: options.selectedSubjectDocumentId,
-          pdfMode: options.pdfImportMode,
-          selectedPages: options.selectedPdfPages,
-          structurePage: options.pdfImportMode === 'structured_merge' ? options.structurePage : null,
-        },
-      })
-      const job = await createPdfImportJobApi({
-        entity_key: options.entityKey,
-        mode: options.mode,
-        subject_document_id: options.selectedSubjectDocumentId,
-        page_selection: options.selectedPdfPages,
-        pdf_mode: options.pdfImportMode,
-        structure_page: options.pdfImportMode === 'structured_merge' ? options.structurePage : null,
-        range_prompt: options.rangePrompt.trim(),
-        fallback_title: selectedDocument?.original_name || '未命名草案',
-        import_options: options.pdfImportOptions,
-        ai_options: aiOptions,
-      })
-      state.hydrateJobResult(job, { reused: job.status === 'completed', preservePreviewUrl: true })
-      logAiCall({
-        feature,
-        stage: job.status === 'completed' ? 'success' : 'queued',
-        requestSummary,
-        responseSummary:
-          job.status === 'completed' ? '已完成；节点已生成' : '任务已创建，等待执行',
-        jobId: job.id,
-        meta: {
-          entityKey: options.entityKey,
-          status: job.status,
-          pdfMode: options.pdfImportMode,
-          requestId: job.error?.request_id || '',
-        },
-      })
-      await runtime.refreshHistoryJobs(job.id)
-      if (job.status === 'completed') {
-        state.setImportLoading(false)
-        return
-      }
-      await runtime.resumeJob(job.id)
-    } catch (nextError) {
-      state.setImportLoading(false)
-      state.clearCurrentJobState()
-      logImportFailure({
-        entityKey: options.entityKey,
-        feature,
-        requestSummary,
-        error: nextError,
-        meta: {
-          subjectDocumentId: options.selectedSubjectDocumentId,
-          pdfMode: options.pdfImportMode,
-          selectedPages: options.selectedPdfPages,
-          structurePage:
-            options.pdfImportMode === 'structured_merge' ? options.structurePage : null,
-        },
-      })
-      state.setImportError(
-        formatMindMapImportError(
-          nextError instanceof Error ? nextError.message : '网络异常，请检查网络后重试。',
-        ),
-      )
-    }
-  }
-
   return {
     handleImportImage,
     handleBatchImportStart,
-    handlePdfImportStart,
   }
 }
 

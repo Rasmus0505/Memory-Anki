@@ -39,12 +39,6 @@ import {
   sanitizeTimerFocusConfig,
 } from '@/shared/components/session/timer-focus-config'
 import {
-  DEFAULT_VOICE_COACH_SETTINGS,
-  VOICE_COACH_SETTINGS_STORAGE_KEY,
-  VOICE_COACH_SETTINGS_UPDATED_EVENT,
-  sanitizeVoiceCoachSettings,
-} from '@/entities/preferences/model/voiceCoachSettings'
-import {
   initializeClientPreferences,
   migrateLocalPreferenceToBackend,
 } from '@/shared/preferences/clientPreferences'
@@ -92,13 +86,6 @@ export function useClientPreferenceBootstrap() {
           TIMER_FOCUS_UPDATED_EVENT,
         ),
         migrateAndNotify(
-          'voice_coach_settings',
-          VOICE_COACH_SETTINGS_STORAGE_KEY,
-          DEFAULT_VOICE_COACH_SETTINGS,
-          sanitizeVoiceCoachSettings,
-          VOICE_COACH_SETTINGS_UPDATED_EVENT,
-        ),
-        migrateAndNotify(
           'palace_list_view_settings',
           PALACE_LIST_VIEW_SETTINGS_KEY,
           DEFAULT_PALACE_LIST_VIEW_SETTINGS,
@@ -118,7 +105,6 @@ export function useClientPreferenceBootstrap() {
         Boolean(window.localStorage.getItem(ENGLISH_PRACTICE_SETTINGS_STORAGE_KEY)) ||
         Boolean(window.localStorage.getItem(TIMER_AUTOMATION_STORAGE_KEY)) ||
         Boolean(window.localStorage.getItem(TIMER_FOCUS_STORAGE_KEY)) ||
-        Boolean(window.localStorage.getItem(VOICE_COACH_SETTINGS_STORAGE_KEY)) ||
         Boolean(window.localStorage.getItem(PALACE_LIST_VIEW_SETTINGS_KEY)) ||
         Boolean(window.localStorage.getItem(PALACE_SHELF_VIEW_SETTINGS_KEY))
 
@@ -130,7 +116,6 @@ export function useClientPreferenceBootstrap() {
         Boolean(window.localStorage.getItem(ENGLISH_PRACTICE_SETTINGS_STORAGE_KEY)) ||
         Boolean(window.localStorage.getItem(TIMER_AUTOMATION_STORAGE_KEY)) ||
         Boolean(window.localStorage.getItem(TIMER_FOCUS_STORAGE_KEY)) ||
-        Boolean(window.localStorage.getItem(VOICE_COACH_SETTINGS_STORAGE_KEY)) ||
         Boolean(window.localStorage.getItem(PALACE_LIST_VIEW_SETTINGS_KEY)) ||
         Boolean(window.localStorage.getItem(PALACE_SHELF_VIEW_SETTINGS_KEY))
 

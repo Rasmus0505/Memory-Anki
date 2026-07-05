@@ -8,7 +8,6 @@ import {
   togglePalaceFocusNodeApi,
   updatePalacePracticeFlagApi,
 } from '@/entities/palace/api'
-import { updateDefaultSegmentReviewProgressApi } from '@/entities/palace-segment/api'
 import { submitReviewSessionApi } from '@/features/review/api'
 import {
   PracticeSessionRoute,
@@ -68,14 +67,6 @@ export default function PalacePracticePage() {
           }
         },
         completeWithoutStage: async (palace) => {
-          if (palace.review_stage_total != null && palace.review_stage_total > 0) {
-            const nextCompleted = (palace.review_stage_completed ?? 0) + 1
-            const targetReviewNumber = Math.min(nextCompleted, palace.review_stage_total - 1)
-            await updateDefaultSegmentReviewProgressApi(palace.id, {
-              completed_count: nextCompleted,
-              completed_review_number: targetReviewNumber,
-            })
-          }
           await clearPracticeSessionProgressApi(palace.id)
           await updatePalacePracticeFlagApi(palace.id, { needs_practice: false })
         },
@@ -89,11 +80,6 @@ export default function PalacePracticePage() {
               red_marked_count: payload.redNodeIds.length,
               target_review_number: targetReviewNumber,
               needs_practice: needsPractice,
-            })
-          } else {
-            await updateDefaultSegmentReviewProgressApi(palace.id, {
-              completed_count: targetReviewNumber + 1,
-              completed_review_number: targetReviewNumber,
             })
           }
           await clearPracticeSessionProgressApi(palace.id)

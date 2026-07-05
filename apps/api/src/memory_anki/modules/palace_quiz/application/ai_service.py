@@ -21,18 +21,13 @@ from .ai_service_runtime import (
     _build_chat_config as _runtime_build_chat_config,
     _call_logged_chat_completion as _runtime_call_logged_chat_completion,
     _call_logged_chat_completion_stream as _runtime_call_logged_chat_completion_stream,
-    render_selected_pdf_pages as render_selected_pdf_pages,
 )
 from .quiz_generation_service import (
     generate_quiz_preview_from_chapter_outline,
     generate_quiz_preview_from_images,
-    generate_quiz_preview_from_pdf,
-    generate_quiz_preview_from_pdf_events,
     generate_quiz_preview_from_review_mindmap,
     generate_quiz_preview_from_text_files,
     generate_short_answer_feedback,
-    recover_quiz_questions_from_ai_call_log_and_save,
-    recover_quiz_preview_from_ai_call_log,
 )
 
 _FACADE_TRANSPORT_MODEL_KEY = "facade-overridden-transport"
@@ -40,7 +35,6 @@ _FACADE_TRANSPORT_MODEL_KEY = "facade-overridden-transport"
 
 def _sync_facade_dependencies() -> None:
     _runtime_config.DASHSCOPE_API_KEY = DASHSCOPE_API_KEY
-    _runtime_facade.render_selected_pdf_pages = render_selected_pdf_pages
     _runtime_stream.stream_chat_completion_text = stream_chat_completion_text
 
 
@@ -132,13 +126,8 @@ __all__ = [
     "classify_existing_quiz_questions_to_mini_palaces",
     "generate_quiz_preview_from_chapter_outline",
     "generate_quiz_preview_from_images",
-    "generate_quiz_preview_from_pdf",
-    "generate_quiz_preview_from_pdf_events",
     "generate_quiz_preview_from_review_mindmap",
     "generate_quiz_preview_from_text_files",
     "generate_short_answer_feedback",
-    "recover_quiz_preview_from_ai_call_log",
-    "recover_quiz_questions_from_ai_call_log_and_save",
-    "render_selected_pdf_pages",
     "stream_chat_completion_text",
 ]

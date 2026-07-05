@@ -5,7 +5,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from memory_anki.infrastructure.db.models import Palace, PalaceSegment
+from memory_anki.infrastructure.db.models import Palace
 from memory_anki.modules.reviews.application.schedule_rebuild_service import (
     palace_algorithm as resolve_palace_review_algorithm,
 )
@@ -15,37 +15,11 @@ from memory_anki.modules.reviews.application.schedule_rebuild_service import (
 from memory_anki.modules.reviews.application.schedule_rebuild_service import (
     rebuild_palace_review_schedules as rebuild_palace_review_schedule_state,
 )
-from memory_anki.modules.reviews.application.schedule_rebuild_service import (
-    rebuild_segment_review_schedules as rebuild_segment_review_schedule_state,
-)
 from memory_anki.modules.reviews.application.schedule_service import (
     get_algorithm_intervals,
-    get_config_value,
-    normalize_algorithm,
 )
 
 from .review_progress_datetime import parse_progress_datetime
-
-
-def adjust_segment_review_progress(
-    session: Session,
-    segment: PalaceSegment,
-    payload: dict[str, Any],
-) -> PalaceSegment:
-    completed_at = parse_progress_datetime(payload.get("completed_at"))
-    completed_review_number = payload.get("completed_review_number")
-    if completed_review_number is not None:
-        completed_review_number = int(completed_review_number)
-    rebuild_segment_review_progress(
-        session,
-        segment,
-        completed_count=int(payload.get("completed_count", 0)),
-        completed_review_number=completed_review_number,
-        completed_at=completed_at,
-    )
-    session.commit()
-    session.refresh(segment)
-    return segment
 
 
 def adjust_palace_default_segment_review_progress(
@@ -56,7 +30,7 @@ def adjust_palace_default_segment_review_progress(
     algorithm = resolve_palace_review_algorithm(
         session,
         palace,
-        default_algorithm=normalize_algorithm(get_config_value(session, "default_algorithm")),
+        default_algorithm="ebbinghaus",
     )
     intervals = get_algorithm_intervals(session, algorithm)
     total = len(intervals)
@@ -112,25 +86,5 @@ def rebuild_palace_default_segment_progress(
         completed_at=completed_at,
         fallback_completed_count=fallback_completed_count,
         preserve_existing_progress=preserve_existing_progress,
-        algorithm_override=algorithm_override,
-    )
-
-
-def rebuild_segment_review_progress(
-    session: Session,
-    segment: PalaceSegment,
-    *,
-    completed_count: int,
-    completed_review_number: int | None = None,
-    completed_at: datetime | None = None,
-    algorithm_override: str | None = None,
-) -> None:
-    rebuild_segment_review_schedule_state(
-        session,
-        segment,
-        completed_count=completed_count,
-        completed_review_number=completed_review_number,
-        completed_at=completed_at,
-        preserve_same_day_slots=False,
         algorithm_override=algorithm_override,
     )

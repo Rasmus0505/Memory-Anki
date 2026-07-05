@@ -1,29 +1,18 @@
-"""知识体系路由：学科 + 章节 + 双向关联 + 自定义连线"""
+"""知识体系路由：学科 + 章节。"""
 import traceback
 
-from fastapi import APIRouter, Depends, File, Query, UploadFile
-from fastapi.responses import FileResponse, JSONResponse, Response
+from fastapi import APIRouter, Depends
+from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
 from memory_anki.core.config import REPO_ROOT
 from memory_anki.infrastructure.db.models import (
     Chapter,
-    NodeConnection,
     Palace,
     Subject,
     get_session,
 )
 from memory_anki.modules.backups.application.backup_service import maybe_create_rolling_backup
-from memory_anki.modules.knowledge.application.subject_document_service import (
-    build_page_summaries,
-    delete_subject_document,
-    get_subject_document,
-    list_subject_documents,
-    render_subject_document_page,
-    save_subject_document,
-    subject_document_json,
-    subject_document_path,
-)
 from memory_anki.modules.mindmap.application.editor_state_service import (
     EditorStateConflictError,
     get_subject_editor_state,
@@ -70,10 +59,6 @@ def subject_json(s: Subject) -> dict:
         "color": s.color,
         "sort_order": s.sort_order,
     }
-
-
-def subject_document_response(subject_id: int, document) -> dict:
-    return subject_document_json(document, subject_id=subject_id)
 
 
 # === 学科 ===
@@ -181,113 +166,6 @@ def update_subject_editor(subject_id: int, data: dict, s: Session = Depends(sess
         return JSONResponse(status_code=500, content={"error": tb})
 
 
-@router.get("/subjects/{subject_id}/documents")
-def list_subject_documents_api(subject_id: int, s: Session = Depends(session_dep)):
-    subject = s.query(Subject).filter_by(id=subject_id).first()
-    if not subject:
-        return {"error": "not found"}
-    return {
-        "items": [
-            subject_document_response(subject_id, document)
-            for document in list_subject_documents(s, subject_id)
-        ]
-    }
-
-
-@router.post("/subjects/{subject_id}/documents")
-async def upload_subject_document_api(
-    subject_id: int,
-    file: UploadFile = File(...),
-    s: Session = Depends(session_dep),
-):
-    subject = s.query(Subject).filter_by(id=subject_id).first()
-    if not subject:
-        return {"error": "not found"}
-    try:
-        document = save_subject_document(
-            s,
-            subject=subject,
-            original_name=file.filename or "document.pdf",
-            mime_type=file.content_type or "application/pdf",
-            content=await file.read(),
-        )
-        maybe_create_rolling_backup("rolling-subject-document-upload")
-        return subject_document_response(subject_id, document)
-    except ValueError as exc:
-        s.rollback()
-        return JSONResponse(status_code=400, content={"error": str(exc)})
-    except Exception:
-        s.rollback()
-        tb = traceback.format_exc()
-        DEBUG_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
-        with DEBUG_LOG_PATH.open("a", encoding="utf-8") as handle:
-            handle.write(
-                "[upload_subject_document FAIL]\n"
-                f"subject_id={subject_id}\n"
-                f"filename={file.filename!r}\n"
-                f"content_type={file.content_type!r}\n"
-                f"traceback=\n{tb}\n"
-            )
-        print(f"[DEBUG] upload_subject_document FAIL: {tb}", flush=True)
-        return JSONResponse(status_code=500, content={"error": "PDF 上传失败，请稍后重试。"})
-
-
-@router.get("/subjects/{subject_id}/documents/{document_id}")
-def get_subject_document_api(subject_id: int, document_id: int, s: Session = Depends(session_dep)):
-    document = get_subject_document(s, subject_id=subject_id, document_id=document_id)
-    if not document:
-        return {"error": "not found"}
-    path = subject_document_path(document)
-    if not path.exists():
-        return {"error": "file missing"}
-    return FileResponse(path, filename=document.original_name, media_type=document.mime_type)
-
-
-@router.delete("/subjects/{subject_id}/documents/{document_id}")
-def delete_subject_document_api(subject_id: int, document_id: int, s: Session = Depends(session_dep)):
-    document = get_subject_document(s, subject_id=subject_id, document_id=document_id)
-    if not document:
-        return {"error": "not found"}
-    delete_subject_document(s, document)
-    maybe_create_rolling_backup("rolling-subject-document-delete")
-    return {"ok": True}
-
-
-@router.get("/subjects/{subject_id}/documents/{document_id}/pages")
-def list_subject_document_pages_api(subject_id: int, document_id: int, s: Session = Depends(session_dep)):
-    document = get_subject_document(s, subject_id=subject_id, document_id=document_id)
-    if not document:
-        return {"error": "not found"}
-    return {
-        "page_count": document.page_count,
-        "pages": build_page_summaries(subject_id=subject_id, document=document),
-    }
-
-
-@router.get("/subjects/{subject_id}/documents/{document_id}/pages/{page_number}/image")
-def get_subject_document_page_image_api(
-    subject_id: int,
-    document_id: int,
-    page_number: int,
-    kind: str = Query(default="thumbnail"),
-    s: Session = Depends(session_dep),
-):
-    document = get_subject_document(s, subject_id=subject_id, document_id=document_id)
-    if not document:
-        return {"error": "not found"}
-    try:
-        image_bytes = render_subject_document_page(
-            document,
-            page_number=page_number,
-            kind="preview" if kind == "preview" else "thumbnail",
-        )
-    except FileNotFoundError:
-        return {"error": "file missing"}
-    except ValueError as exc:
-        return JSONResponse(status_code=400, content={"error": str(exc)})
-    return Response(content=image_bytes, media_type="image/png")
-
-
 @router.get("/chapters/{chapter_id}")
 def get_chapter(chapter_id: int, s: Session = Depends(session_dep)):
     """获取章节详情 + 关联的宫殿列表"""
@@ -387,7 +265,7 @@ def delete_chapter(chapter_id: int, s: Session = Depends(session_dep)):
         return JSONResponse(status_code=500, content={"error": tb})
 
 
-# === 双向关联 ===
+# === 宫殿章节关联 ===
 
 @router.get("/palaces/{palace_id}/chapters")
 def palace_chapters(palace_id: int, s: Session = Depends(session_dep)):
@@ -421,53 +299,3 @@ def link_chapters(palace_id: int, data: dict, s: Session = Depends(session_dep))
     return {"ok": True, "count": len(expanded_ids), "primary_chapter_id": p.primary_chapter_id}
 
 
-# === 自定义连线 ===
-
-def connection_json(conn: NodeConnection) -> dict:
-    return {
-        "id": conn.id,
-        "source_type": conn.source_type,
-        "source_id": conn.source_id,
-        "target_type": conn.target_type,
-        "target_id": conn.target_id,
-        "label": conn.label,
-        "style": conn.style,
-    }
-
-
-@router.get("/connections")
-def list_connections(
-    source_type: str = "",
-    source_id: int | None = None,
-    s: Session = Depends(session_dep),
-):
-    """查询连线，可按来源节点过滤"""
-    q = s.query(NodeConnection)
-    if source_type and source_id is not None:
-        q = q.filter_by(source_type=source_type, source_id=source_id)
-    return [connection_json(c) for c in q.all()]
-
-
-@router.post("/connections")
-def create_connection(data: dict, s: Session = Depends(session_dep)):
-    """创建自定义连线"""
-    conn = NodeConnection(
-        source_type=data.get("source_type", ""),
-        source_id=data.get("source_id", 0),
-        target_type=data.get("target_type", ""),
-        target_id=data.get("target_id", 0),
-        label=data.get("label", ""),
-        style=data.get("style", "solid"),
-    )
-    s.add(conn)
-    s.commit()
-    maybe_create_rolling_backup("rolling-create-connection")
-    return connection_json(conn)
-
-
-@router.delete("/connections/{conn_id}")
-def delete_connection(conn_id: int, s: Session = Depends(session_dep)):
-    s.query(NodeConnection).filter_by(id=conn_id).delete()
-    s.commit()
-    maybe_create_rolling_backup("rolling-delete-connection")
-    return {"ok": True}

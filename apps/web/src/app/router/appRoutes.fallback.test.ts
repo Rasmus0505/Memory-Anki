@@ -22,7 +22,6 @@ describe('resolveRouteFallbackTarget', () => {
     expect(resolveRouteFallbackTarget('/palaces/quiz')).toBe('/palaces')
     expect(resolveRouteFallbackTarget('/review/legacy-mode')).toBe('/review')
     expect(resolveRouteFallbackTarget('/freestyle/legacy-mode')).toBe('/freestyle')
-    expect(resolveRouteFallbackTarget('/segment-review/legacy')).toBe('/review')
     expect(resolveRouteFallbackTarget('/english/legacy')).toBe('/english')
     expect(resolveRouteFallbackTarget('/totally-unknown')).toBe('/freestyle')
   })

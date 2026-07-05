@@ -1,12 +1,5 @@
 import { request } from '@/shared/api/http'
-import { invalidatePalaceCatalogCache } from '@/entities/palace/api'
 import type { PalaceSegmentPracticeResponse, PalaceSegmentSummary } from '@/shared/api/contracts'
-
-async function withPalaceCatalogInvalidation<T>(operation: Promise<T>) {
-  const result = await operation
-  invalidatePalaceCatalogCache()
-  return result
-}
 
 export function getPalaceSegmentsApi(id: number) {
   return request<{ items: PalaceSegmentSummary[] }>(`/palaces/${id}/segments`)
@@ -52,50 +45,6 @@ export function updatePalaceSegmentApi(
       replayMode: 'auto',
     },
   })
-}
-
-export function updatePalaceSegmentReviewProgressApi(
-  segmentId: number,
-  data: {
-    completed_count: number
-    completed_review_number?: number | null
-    completed_at?: string | null
-  },
-) {
-  return withPalaceCatalogInvalidation(
-    request<{ item: PalaceSegmentSummary }>(`/palace-segments/${segmentId}/review-progress`, {
-      method: 'PUT',
-      body: JSON.stringify(data),
-      persistence: {
-        resourceKey: `palace-segment:${segmentId}:review-progress`,
-        coalesceKey: `palace-segment:${segmentId}:review-progress`,
-        description: '保存分块复习进度',
-        replayMode: 'auto',
-      },
-    }),
-  )
-}
-
-export function updateDefaultSegmentReviewProgressApi(
-  palaceId: number,
-  data: {
-    completed_count: number
-    completed_review_number?: number | null
-    completed_at?: string | null
-  },
-) {
-  return withPalaceCatalogInvalidation(
-    request<{ item: PalaceSegmentSummary | null }>(`/palaces/${palaceId}/default-segment/review-progress`, {
-      method: 'PUT',
-      body: JSON.stringify(data),
-      persistence: {
-        resourceKey: `palace:${palaceId}:default-segment-review-progress`,
-        coalesceKey: `palace:${palaceId}:default-segment-review-progress`,
-        description: '保存默认分块复习进度',
-        replayMode: 'auto',
-      },
-    }),
-  )
 }
 
 export function deletePalaceSegmentApi(segmentId: number) {

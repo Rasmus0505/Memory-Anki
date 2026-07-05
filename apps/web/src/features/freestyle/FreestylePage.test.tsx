@@ -141,7 +141,6 @@ function quizCard(id: number, correctOptionId = 'A'): FreestyleQuizCard {
       analysis: '解析',
       source_meta: {
         source_kind: 'manual',
-        subject_document_id: null,
         page_numbers: null,
         image_names: null,
         extra_prompt: '',

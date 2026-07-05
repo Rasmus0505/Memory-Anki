@@ -16,17 +16,12 @@ from memory_anki.infrastructure.db.models import (
     PalaceMiniPalace,
     PalaceQuizQuestion,
     Subject,
-    SubjectDocument,
 )
 from memory_anki.modules.palace_quiz.application import ai_service as palace_quiz_ai_service
 from memory_anki.modules.palace_quiz.presentation import router as palace_quiz_router
 from memory_anki.modules.palaces.application.title_sync_service import (
     reconcile_palace_chapter_binding,
     set_palace_chapter_links,
-)
-from memory_anki.modules.settings.application.ai_prompt_templates import (
-    PALACE_QUIZ_PDF_TRANSCRIPTION_PROMPT,
-    build_palace_quiz_pdf_pairing_prompt,
 )
 from memory_anki.modules.settings.presentation import router as settings_router
 
@@ -122,16 +117,6 @@ class PalaceQuizRouteTests(unittest.TestCase):
                     name="细胞核小宫殿",
                     node_uids_json=json.dumps(["cell-core"], ensure_ascii=False),
                     sort_order=0,
-                )
-            )
-            session.add(
-                SubjectDocument(
-                    subject_id=subject.id,
-                    filename="subjects/1/demo.pdf",
-                    original_name="demo.pdf",
-                    mime_type="application/pdf",
-                    file_size=123,
-                    page_count=12,
                 )
             )
             session.add_all(
@@ -3224,6 +3209,15 @@ class PalaceQuizRouteTests(unittest.TestCase):
         self.assertEqual(
             scenarios["quiz_mini_palace_grouping"]["config_key"],
             "scene_model_quiz_mini_palace",
+        )
+
+
+for _name, _value in list(PalaceQuizRouteTests.__dict__.items()):
+    if _name.startswith("test_") and "pdf" in _name:
+        setattr(
+            PalaceQuizRouteTests,
+            _name,
+            unittest.skip("PDF quiz generation was pruned")(_value),
         )
 
 

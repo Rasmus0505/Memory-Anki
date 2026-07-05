@@ -1,13 +1,11 @@
 import type {
   MiniPalaceSummary,
   PalaceQuizMiniPalaceClassificationResult,
-  PalaceQuizPdfSourceRole,
   PalaceQuizQuestion,
   PalaceQuizQuestionDraft,
   PalaceQuizQuestionType,
   PalaceQuizSourceMeta,
 } from '@/shared/api/contracts'
-import type { QuizGenerationPdfSourceDraft as QuizPdfSourceDraft } from '@/features/palace-quiz/quizGenerationController'
 
 export type PalaceQuizTabKey = 'practice' | 'manage' | 'generate'
 export type PalaceQuizViewMode = 'single' | 'list'
@@ -54,20 +52,19 @@ export interface QuestionFormState {
 
 export interface PalaceQuizGenerationStateSnapshot {
   sourceKind: QuizGenerationSourceKind
-  pdfSources: QuizPdfSourceDraft[]
   previewQuestionCount: number
   selectedChapterSummary: string
   classificationResult: PalaceQuizMiniPalaceClassificationResult | null
 }
 
-export type QuizGenerationSourceKind = 'subject-pdf' | 'image-single' | 'image-batch' | 'text-files'
+export type QuizGenerationSourceKind = 'image-single' | 'image-batch' | 'text-files'
 
 export const QUIZ_VIEW_MODE_STORAGE_KEY = 'memory_anki_palace_quiz_view_mode'
 
 const QUESTION_SOURCE_LABELS: Record<string, string> = {
-  subject_pdf: 'PDF生成',
   image_batch: '多图生成',
   image_single: '单图生成',
+  text_files: '文本生成',
   mindmap_review: '脑图复习生成',
 }
 
@@ -81,18 +78,11 @@ const QUESTION_TYPE_LABELS = {
   categorization: '归类题',
 } satisfies Record<PalaceQuizQuestionType, string>
 
-const PDF_SOURCE_ROLE_LABELS = {
-  question: '题目来源',
-  answer: '答案来源',
-} satisfies Record<PalaceQuizPdfSourceRole, string>
-
 export function buildManualSourceMeta(): PalaceQuizSourceMeta {
   return {
     source_kind: 'manual',
-    subject_document_id: null,
     page_numbers: null,
     image_names: null,
-    pdf_sources: null,
     extra_prompt: '',
     ai_call_log_id: null,
     generated_at: new Date().toISOString(),
@@ -201,19 +191,6 @@ export function getQuestionOwnershipLabel(question: PalaceQuizQuestion) {
 export function getQuestionSourceLabel(sourceMeta?: PalaceQuizSourceMeta | null) {
   if (!sourceMeta) return '手工录入'
   return QUESTION_SOURCE_LABELS[sourceMeta.source_kind] ?? '手工录入'
-}
-
-export function getPdfSourceRoleLabel(roleHint?: PalaceQuizPdfSourceRole | string | null) {
-  if (roleHint === 'question' || roleHint === 'answer') {
-    return PDF_SOURCE_ROLE_LABELS[roleHint]
-  }
-  return PDF_SOURCE_ROLE_LABELS.question
-}
-
-export function shouldShowPdfPairingModelSelector(pdfSources: QuizPdfSourceDraft[] | undefined) {
-  if (!pdfSources?.length) return false
-  const roleHints = new Set(pdfSources.map((item) => item.role_hint || 'question'))
-  return roleHints.has('question') && roleHints.has('answer')
 }
 
 export function formatResolvedAiSteps(

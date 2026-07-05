@@ -11,13 +11,12 @@ from memory_anki.modules.settings.application.ai_model_registry import (
     serialize_resolved_ai_runtime,
 )
 
-from .mindmap_import import PROMPT, PdfImportOptions, job_state, llm_gateway
+from .mindmap_import import PROMPT, job_state, llm_gateway
 from .mindmap_import.runtime import DashscopeImportRuntime
 
 MODE_MINDMAP = job_state.MODE_MINDMAP
 MODE_TEXT = job_state.MODE_TEXT
 SOURCE_KIND_IMAGE_BATCH = job_state.SOURCE_KIND_IMAGE_BATCH
-SOURCE_KIND_SUBJECT_PDF = job_state.SOURCE_KIND_SUBJECT_PDF
 
 
 def _serialize_runtime_payload(runtime: Any) -> dict[str, Any]:
@@ -57,9 +56,7 @@ def _dashscope_runtime(source_meta: dict[str, Any] | None = None) -> DashscopeIm
     if isinstance(source_meta, dict):
         source_kind = str(source_meta.get("source_kind") or "").strip()
         mode = str(source_meta.get("mode") or "").strip()
-        if source_kind == SOURCE_KIND_SUBJECT_PDF:
-            fallback_scenario_key = "vision_pdf_mindmap" if mode == MODE_MINDMAP else "vision_pdf_text"
-        elif source_kind == SOURCE_KIND_IMAGE_BATCH:
+        if source_kind == SOURCE_KIND_IMAGE_BATCH:
             fallback_scenario_key = "vision_batch_mindmap"
         elif mode == MODE_TEXT:
             fallback_scenario_key = "vision_image_text"
@@ -151,7 +148,6 @@ def _stream_call_dashscope_batch_json(
     range_prompt: str = "",
     page_numbers: list[int] | None = None,
     disable_rebalance: bool = False,
-    import_options: PdfImportOptions | None = None,
     extracted_text: str | None = None,
     external_log_context: dict[str, Any] | None = None,
 ):
@@ -164,34 +160,6 @@ def _stream_call_dashscope_batch_json(
             range_prompt=range_prompt,
             page_numbers=page_numbers,
             disable_rebalance=disable_rebalance,
-            import_options=import_options,
-            extracted_text=extracted_text,
-            external_log_context=external_log_context,
-        )
-    )
-
-
-def _stream_call_dashscope_pdf_json(
-    *,
-    source_meta: dict[str, Any] | None = None,
-    image_items: list[tuple[bytes, str | None]],
-    channel: str,
-    range_prompt: str = "",
-    page_numbers: list[int] | None = None,
-    disable_rebalance: bool = False,
-    import_options: PdfImportOptions | None = None,
-    extracted_text: str | None = None,
-    external_log_context: dict[str, Any] | None = None,
-):
-    return (
-        yield from llm_gateway.stream_pdf_json(
-            runtime=_dashscope_runtime(source_meta),
-            image_items=image_items,
-            channel=channel,
-            range_prompt=range_prompt,
-            page_numbers=page_numbers,
-            disable_rebalance=disable_rebalance,
-            import_options=import_options,
             extracted_text=extracted_text,
             external_log_context=external_log_context,
         )
@@ -202,13 +170,11 @@ __all__ = [
     "MODE_MINDMAP",
     "MODE_TEXT",
     "SOURCE_KIND_IMAGE_BATCH",
-    "SOURCE_KIND_SUBJECT_PDF",
     "_dashscope_runtime",
     "_prepare_batch_image_items",
     "_resolve_provider_api_key_for_runtime",
     "_serialize_runtime_payload",
     "_stream_call_dashscope_batch_json",
     "_stream_call_dashscope_json",
-    "_stream_call_dashscope_pdf_json",
     "_stream_call_dashscope_text",
 ]

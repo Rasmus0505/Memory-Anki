@@ -50,7 +50,6 @@ describe('QuizQuestionInteraction', () => {
       analysis: '复制在细胞分裂前完成准备。',
       source_meta: {
         source_kind: 'manual',
-        subject_document_id: null,
         page_numbers: null,
         image_names: null,
         extra_prompt: '',
@@ -78,7 +77,6 @@ describe('QuizQuestionInteraction', () => {
       analysis: '线粒体是细胞主要供能结构。',
       source_meta: {
         source_kind: 'manual',
-        subject_document_id: null,
         page_numbers: null,
         image_names: null,
         extra_prompt: '',
@@ -112,7 +110,6 @@ describe('QuizQuestionInteraction', () => {
       analysis: '两个细胞器分别负责供能和蛋白质合成。',
       source_meta: {
         source_kind: 'manual',
-        subject_document_id: null,
         page_numbers: null,
         image_names: null,
         extra_prompt: '',
@@ -151,7 +148,6 @@ describe('QuizQuestionInteraction', () => {
       analysis: '先复制遗传物质，再进入分裂。',
       source_meta: {
         source_kind: 'manual',
-        subject_document_id: null,
         page_numbers: null,
         image_names: null,
         extra_prompt: '',
@@ -188,7 +184,6 @@ describe('QuizQuestionInteraction', () => {
       analysis: '线粒体属于细胞器，细胞膜属于细胞结构。',
       source_meta: {
         source_kind: 'manual',
-        subject_document_id: null,
         page_numbers: null,
         image_names: null,
         extra_prompt: '',

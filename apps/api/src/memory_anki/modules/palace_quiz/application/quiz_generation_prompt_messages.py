@@ -11,7 +11,7 @@ from memory_anki.modules.palaces.application.mindmap_import.model_io import (
 )
 from memory_anki.modules.settings.application.ai_prompts import render_prompt
 from memory_anki.modules.settings.application.ai_prompt_templates import (
-    PALACE_QUIZ_PDF_TRANSCRIPTION_PROMPT,
+    PALACE_QUIZ_SOURCE_PAIR_TRANSCRIPTION_PROMPT,
     build_palace_quiz_generation_user_text,
 )
 
@@ -25,14 +25,14 @@ def build_generation_messages(
     source_context: str | None = None,
     prompt_override: str | None = None,
 ) -> tuple[list[dict[str, Any]], str]:
-    is_pdf_question_answer_pairing = bool(
+    is_source_pair_transcription = bool(
         source_context
         and "题目来源" in source_context
         and "答案与解析来源" in source_context
     )
     system_prompt = (
-        PALACE_QUIZ_PDF_TRANSCRIPTION_PROMPT
-        if is_pdf_question_answer_pairing
+        PALACE_QUIZ_SOURCE_PAIR_TRANSCRIPTION_PROMPT
+        if is_source_pair_transcription
         else render_prompt("ai_prompt_palace_quiz_generate", {}, session=session)
     )
     if prompt_override and str(prompt_override).strip():
@@ -42,13 +42,13 @@ def build_generation_messages(
             "type": "text",
             "text": build_palace_quiz_generation_user_text(
                 source_label=source_label,
-                is_pdf_question_answer_pairing=is_pdf_question_answer_pairing,
+                is_source_pair_transcription=is_source_pair_transcription,
             ),
         }
     ]
     if source_context:
         user_content.append({"type": "text", "text": source_context})
-    if is_pdf_question_answer_pairing:
+    if is_source_pair_transcription:
         user_content.append(
             {
                 "type": "text",

@@ -7,9 +7,7 @@ import {
 } from '@/entities/palace/api'
 import {
   getPalaceMiniPalaceApi,
-  updateMiniPalaceReviewProgressApi,
 } from '@/entities/mini-palace/api'
-import { submitMiniReviewSessionApi } from '@/features/review/api'
 import {
   PracticeSessionRoute,
   type PracticeProgressSnapshot,
@@ -72,33 +70,9 @@ export default function MiniPalacePracticePage() {
         refreshStageTarget: async ({ miniPalace }) =>
           buildMiniSession(await getPalaceMiniPalaceApi(miniPalace.id)),
         completeWithoutStage: async ({ miniPalace }) => {
-          if (miniPalace.review_stage_total != null && miniPalace.review_stage_total > 0) {
-            const nextCompleted = (miniPalace.review_stage_completed ?? 0) + 1
-            const targetReviewNumber = Math.min(nextCompleted, miniPalace.review_stage_total - 1)
-            await updateMiniPalaceReviewProgressApi(miniPalace.id, {
-              completed_count: nextCompleted,
-              completed_review_number: targetReviewNumber,
-            })
-          }
           await clearMiniPracticeSessionProgressApi(miniPalace.id)
         },
-        submitStage: async ({ miniPalace }, payload, targetReviewNumber, needsPractice) => {
-          const scheduleId = miniPalace.current_review_schedule_id
-          if (scheduleId) {
-            await submitMiniReviewSessionApi(scheduleId, {
-              duration_seconds: payload.durationSeconds,
-              completion_mode: payload.completionMode,
-              revealed_remaining: payload.revealedRemaining,
-              red_marked_count: payload.redNodeIds.length,
-              target_review_number: targetReviewNumber,
-              needs_practice: needsPractice,
-            })
-          } else {
-            await updateMiniPalaceReviewProgressApi(miniPalace.id, {
-              completed_count: targetReviewNumber + 1,
-              completed_review_number: targetReviewNumber,
-            })
-          }
+        submitStage: async ({ miniPalace }) => {
           await clearMiniPracticeSessionProgressApi(miniPalace.id)
         },
         flowProps: ({ miniPalace }) => ({

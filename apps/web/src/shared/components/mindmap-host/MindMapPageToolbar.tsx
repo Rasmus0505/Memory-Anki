@@ -1,4 +1,4 @@
-import { FolderTree, Languages, ListChecks, Maximize, Minimize, ScanSearch, Search, Wand2 } from 'lucide-react'
+import { FolderTree, Languages, ListChecks, Maximize, Minimize, ScanSearch, Wand2 } from 'lucide-react'
 import { Button } from '@/shared/components/ui/button'
 import { cn } from '@/shared/lib/utils'
 
@@ -36,7 +36,6 @@ export interface MindMapPageToolbarProps {
   importMindMapAction?: MindMapToolbarAction | null
   importTextAction?: MindMapToolbarAction | null
   englishAction?: MindMapToolbarAction | null
-  bilinkSearchAction?: MindMapToolbarAction | null
   quizAction?: MindMapToolbarAction | null
   miniPalaceAction?: MindMapToolbarAction | null
   immersiveAction?: MindMapToolbarToggleAction | null
@@ -67,7 +66,6 @@ export function MindMapPageToolbar({
   importMindMapAction = null,
   importTextAction = null,
   englishAction = null,
-  bilinkSearchAction = null,
   quizAction = null,
   miniPalaceAction = null,
   immersiveAction = null,
@@ -143,18 +141,6 @@ export function MindMapPageToolbar({
           >
             <Languages className="h-4 w-4" />
             {englishAction.label}
-          </Button>
-        ) : null}
-        {bilinkSearchAction ? (
-          <Button
-            type="button"
-            size={actionButtonSize}
-            variant="outline"
-            disabled={bilinkSearchAction.disabled}
-            onClick={bilinkSearchAction.onClick}
-          >
-            <Search className="h-4 w-4" />
-            {bilinkSearchAction.label}
           </Button>
         ) : null}
         {quizAction ? (

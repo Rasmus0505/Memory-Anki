@@ -145,7 +145,6 @@ vi.mock("@/shared/components/mindmap-host", () => ({
   }),
   MindMapPageToolbar: ({
     modeToggle,
-    bilinkSearchAction,
     quizAction,
     miniPalaceAction,
     immersiveAction,
@@ -156,11 +155,6 @@ vi.mock("@/shared/components/mindmap-host", () => ({
       {modeToggle ? (
         <button type="button" onClick={modeToggle.onClick}>
           {modeToggle.label}
-        </button>
-      ) : null}
-      {bilinkSearchAction ? (
-        <button type="button" onClick={bilinkSearchAction.onClick}>
-          {bilinkSearchAction.label}
         </button>
       ) : null}
       {quizAction ? (

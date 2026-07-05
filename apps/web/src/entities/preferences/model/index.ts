@@ -48,13 +48,3 @@ export {
   type MemoryAnkiShortcutMap,
   type ShortcutScene,
 } from './memoryAnkiShortcuts'
-export {
-  DEFAULT_VOICE_COACH_SETTINGS,
-  VOICE_COACH_SETTINGS_STORAGE_KEY,
-  VOICE_COACH_SETTINGS_UPDATED_EVENT,
-  readVoiceCoachSettings,
-  resetVoiceCoachSettings,
-  sanitizeVoiceCoachSettings,
-  type VoiceCoachSettings,
-  writeVoiceCoachSettings,
-} from './voiceCoachSettings'

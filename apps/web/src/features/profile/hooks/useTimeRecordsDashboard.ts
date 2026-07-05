@@ -8,15 +8,9 @@ import {
   getSessionKindBreakdown,
   getTimeRecordSummary,
   getTrendByRange,
-  getStudySessionRecordingThresholdSeconds,
-  listPendingTimeRecordRecoveries,
   listStudySessionRecords,
-  removePendingTimeRecordRecovery,
-  replayPendingTimeRecordRecoveries,
-  restoreStudySessionRecord,
-  setStudySessionRecordingThresholdSeconds,
-  softDeleteStudySessionRecord,
-  subscribePendingTimeRecordRecoveries,
+  bulkDeleteStudySessionRecords,
+  deleteStudySessionRecord,
   type SessionKind,
   type TimeRecordChartRange,
   type TimeSessionRecord,
@@ -49,7 +43,6 @@ export interface UseTimeRecordsDashboardResult {
   formError: string | null
   isSubmittingRecord: boolean
   deletingRecordId: string | null
-  restoringRecordId: string | null
   isBulkDeleting: boolean
   summary: ReturnType<typeof getTimeRecordSummary>
   trend: ReturnType<typeof getDailyTrend>
@@ -61,11 +54,7 @@ export interface UseTimeRecordsDashboardResult {
     range: TimeRecordChartRange,
   ) => ReturnType<typeof getSessionKindBreakdown>
   visibleRecords: TimeSessionRecord[]
-  pendingRecoveryRecords: Array<{
-    record: TimeSessionRecord
-    status: 'pending' | 'syncing' | 'failed'
-    lastError: string | null
-  }>
+  pendingRecoveryRecords: []
   hasSelectableRecords: boolean
   allSelectableChecked: boolean
   hasSelectedRecords: boolean
@@ -74,7 +63,6 @@ export interface UseTimeRecordsDashboardResult {
   openCreateDialog: () => void
   openEditDialog: (record: TimeSessionRecord) => void
   handleDeleteRecord: (record: TimeSessionRecord) => Promise<void>
-  handleRestoreRecord: (record: TimeSessionRecord) => Promise<void>
   handleReplayPendingRecovery: (recordId: string) => Promise<void>
   handleDismissPendingRecovery: (recordId: string) => void
   toggleRecordSelection: (recordId: string, checked: boolean) => void
@@ -93,13 +81,6 @@ export function useTimeRecordsDashboard(
   options: UseTimeRecordsDashboardOptions = {},
 ): UseTimeRecordsDashboardResult {
   const [records, setRecords] = useState<TimeSessionRecord[]>([])
-  const [pendingRecoveryRecords, setPendingRecoveryRecords] = useState<
-    Array<{
-      record: TimeSessionRecord
-      status: 'pending' | 'syncing' | 'failed'
-      lastError: string | null
-    }>
-  >([])
   const [thresholdSeconds, setThresholdSeconds] = useState(0)
   const [thresholdInput, setThresholdInput] = useState('0')
   const [showBelowThreshold, setShowBelowThreshold] = useState(false)
@@ -118,63 +99,27 @@ export function useTimeRecordsDashboard(
   const [formError, setFormError] = useState<string | null>(null)
   const [isSubmittingRecord, setIsSubmittingRecord] = useState(false)
   const [deletingRecordId, setDeletingRecordId] = useState<string | null>(null)
-  const [restoringRecordId, setRestoringRecordId] = useState<string | null>(
-    null,
-  )
   const [isBulkDeleting, setIsBulkDeleting] = useState(false)
 
   const refreshRecords = async () => {
-    const nextRecords = await listStudySessionRecords({
-      includeDeleted: true,
-      includeBelowThreshold: showBelowThreshold,
-    })
+    const nextRecords = await listStudySessionRecords()
     setRecords(nextRecords)
-  }
-
-  const refreshPendingRecoveries = () => {
-    setPendingRecoveryRecords(
-      listPendingTimeRecordRecoveries().map((item) => ({
-        record: item.record,
-        status: item.status,
-        lastError: item.lastError,
-      })),
-    )
   }
 
   useEffect(() => {
     const load = async () => {
-      const [threshold, nextRecords] = await Promise.all([
-        getStudySessionRecordingThresholdSeconds(),
-        listStudySessionRecords({
-          includeDeleted: true,
-          includeBelowThreshold: showBelowThreshold,
-        }),
-      ])
-      setThresholdSeconds(threshold)
-      setThresholdInput(String(threshold))
+      const nextRecords = await listStudySessionRecords()
+      setThresholdSeconds(0)
+      setThresholdInput('0')
       setRecords(nextRecords)
-      refreshPendingRecoveries()
     }
 
     void load()
-  }, [showBelowThreshold])
-
-  useEffect(() => {
-    refreshPendingRecoveries()
-    return subscribePendingTimeRecordRecoveries(() => {
-      refreshPendingRecoveries()
-    })
   }, [])
 
   const applyThreshold = async () => {
-    const parsed = Number(thresholdInput)
-    const safeThreshold = await setStudySessionRecordingThresholdSeconds(
-      Number.isNaN(parsed) || parsed < 0 ? 0 : parsed,
-    )
-    setThresholdSeconds(safeThreshold)
-    setThresholdInput(String(safeThreshold))
-    toast.success(`记录阈值已更新为 ${safeThreshold} 秒`)
-    await refreshRecords()
+    setThresholdSeconds(0)
+    setThresholdInput('0')
   }
 
   const summary = useMemo(() => getTimeRecordSummary(records), [records])
@@ -193,7 +138,6 @@ export function useTimeRecordsDashboard(
 
   const visibleRecords = useMemo(() => {
     return records.filter((record) => {
-      if (!showDeleted && record.deletedAt) return false
       if (kindFilter !== 'all' && record.kind !== kindFilter) return false
       if (
         keyword.trim() &&
@@ -203,7 +147,7 @@ export function useTimeRecordsDashboard(
       }
       return true
     })
-  }, [kindFilter, keyword, records, showDeleted])
+  }, [kindFilter, keyword, records])
 
   const selectableRecords = useMemo(
     () => visibleRecords.filter((record) => !record.deletedAt),
@@ -303,18 +247,19 @@ export function useTimeRecordsDashboard(
     if (deletingRecordId || isBulkDeleting) return
 
     const confirmed = await appConfirm(
-      `确定删除“${record.title}”吗？你之后仍可以在“显示已删除”中恢复。`,
+      `确定永久删除“${record.title}”吗？此操作不可恢复。`,
       { title: '删除时间记录', tone: 'danger' },
     )
     if (!confirmed) return
 
     setDeletingRecordId(record.id)
     try {
-      await softDeleteStudySessionRecord(record.id)
+      await deleteStudySessionRecord(record.id)
+      setRecords((current) => current.filter((item) => item.id !== record.id))
       setSelectedRecordIds((current) =>
         current.filter((id) => id !== record.id),
       )
-      toast.success('时间记录已移入已删除')
+      toast.success('时间记录已删除')
       await refreshRecords()
     } catch (error) {
       toast.error(error instanceof Error ? error.message : '删除失败，请重试')
@@ -323,33 +268,12 @@ export function useTimeRecordsDashboard(
     }
   }
 
-  const handleRestoreRecord = async (record: TimeSessionRecord) => {
-    if (restoringRecordId || isBulkDeleting) return
-
-    setRestoringRecordId(record.id)
-    try {
-      await restoreStudySessionRecord(record.id)
-      toast.success('时间记录已恢复')
-      await refreshRecords()
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : '恢复失败，请重试')
-    } finally {
-      setRestoringRecordId(null)
-    }
-  }
-
   const handleReplayPendingRecovery = async (recordId: string) => {
-    await replayPendingTimeRecordRecoveries()
-    await refreshRecords()
-    refreshPendingRecoveries()
-    if (!listPendingTimeRecordRecoveries().some((item) => item.recordId === recordId)) {
-      toast.success('待恢复时间记录已补录')
-    }
+    void recordId
   }
 
   const handleDismissPendingRecovery = (recordId: string) => {
-    removePendingTimeRecordRecovery(recordId)
-    toast.success('待恢复草稿已移除')
+    void recordId
   }
 
   const toggleRecordSelection = (recordId: string, checked: boolean) => {
@@ -380,18 +304,17 @@ export function useTimeRecordsDashboard(
     if (targets.length === 0) return
 
     const confirmed = await appConfirm(
-      `确定批量删除所选的 ${targets.length} 条记录吗？你之后仍可以在“显示已删除”中恢复。`,
+      `确定永久删除所选的 ${targets.length} 条记录吗？此操作不可恢复。`,
       { title: '批量删除时间记录', tone: 'danger' },
     )
     if (!confirmed) return
 
     setIsBulkDeleting(true)
     try {
-      await Promise.all(
-        targets.map((record) => softDeleteStudySessionRecord(record.id)),
-      )
+      await bulkDeleteStudySessionRecords(targets.map((record) => record.id))
+      setRecords((current) => current.filter((record) => !selectedRecordIds.includes(record.id)))
       setSelectedRecordIds([])
-      toast.success(`已移入已删除：${targets.length} 条记录`)
+      toast.success(`已删除：${targets.length} 条记录`)
       await refreshRecords()
     } catch (error) {
       toast.error(error instanceof Error ? error.message : '批量删除失败，请重试')
@@ -437,7 +360,6 @@ export function useTimeRecordsDashboard(
     formError,
     isSubmittingRecord,
     deletingRecordId,
-    restoringRecordId,
     isBulkDeleting,
     summary,
     trend,
@@ -455,7 +377,7 @@ export function useTimeRecordsDashboard(
       return breakdown7
     },
     visibleRecords,
-    pendingRecoveryRecords,
+    pendingRecoveryRecords: [],
     hasSelectableRecords,
     allSelectableChecked,
     hasSelectedRecords: selectedRecordIds.length > 0,
@@ -464,7 +386,6 @@ export function useTimeRecordsDashboard(
     openCreateDialog,
     openEditDialog,
     handleDeleteRecord,
-    handleRestoreRecord,
     handleReplayPendingRecovery,
     handleDismissPendingRecovery,
     toggleRecordSelection,

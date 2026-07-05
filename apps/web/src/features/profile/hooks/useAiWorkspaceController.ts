@@ -1,7 +1,6 @@
 ﻿import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "@/shared/feedback/toast";
-import { readVoiceCoachSettings } from "@/entities/preferences/model/voiceCoachSettings";
 import { getAiCallLogApi, listAiCallLogsApi } from "@/entities/ai-log/api";
 import type {
   AiCallLogDetail,
@@ -24,7 +23,6 @@ import {
   testAiProviderApi,
   updateAiModelScenariosApi,
 } from "@/entities/preferences/api";
-import { synthesizeVoiceCoachApi } from "@/features/voice-coach/api";
 import {
   buildEmptyModelDraft,
   categorySupportsThinking,
@@ -54,8 +52,6 @@ export function useAiWorkspaceController() {
   const [categoryThinkingSelections, setCategoryThinkingSelections] = useState<Record<string, boolean>>({});
   const [providerDrafts, setProviderDrafts] = useState<Record<string, ProviderDraft>>({});
   const [savingKeys, setSavingKeys] = useState<Record<string, boolean>>({});
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  const [testingVoice, setTestingVoice] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [providerSearch, setProviderSearch] = useState("");
@@ -548,22 +544,6 @@ export function useAiWorkspaceController() {
     }
   };
 
-  const handleVoiceTest = async (rethrow = false) => {
-    setTestingVoice(true);
-    try {
-      const response = await synthesizeVoiceCoachApi("session_start");
-      const audio = new Audio(response.audio_url);
-      audio.volume = readVoiceCoachSettings().volume;
-      await audio.play();
-      toast.success(response.cached ? "已播放缓存语音" : "已合成并播放语音");
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "语音测试失败，请检查配置。");
-      if (rethrow) throw err;
-    } finally {
-      setTestingVoice(false);
-    }
-  };
-
   const handleOpenLogDetail = async (logId: string) => {
     setLogDetailOpen(true);
     setLogDetail(null);
@@ -590,8 +570,6 @@ export function useAiWorkspaceController() {
     categoryThinkingSelections,
     providerDrafts,
     savingKeys,
-    settingsOpen,
-    testingVoice,
     error,
     loading,
     providerSearch,
@@ -629,7 +607,6 @@ export function useAiWorkspaceController() {
     currentCategoryScenes,
     filteredCurrentScenes,
     setProviderDrafts,
-    setSettingsOpen,
     setProviderSearch,
     setModelSearch,
     setModelProviderFilter,
@@ -667,7 +644,6 @@ export function useAiWorkspaceController() {
     handleRestoreScene,
     handleRestoreCategoryScenes,
     handleApplyBatch,
-    handleVoiceTest,
     handleOpenLogDetail,
   };
 }

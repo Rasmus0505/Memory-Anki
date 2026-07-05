@@ -1,4 +1,4 @@
-import { getSubjectTreeApi, getSubjectsApi, uploadSubjectDocumentApi } from '@/entities/knowledge/api'
+import { getSubjectTreeApi, getSubjectsApi } from '@/entities/knowledge/api'
 import { getPalaceApi } from '@/entities/palace/api'
 import {
   batchDeletePalaceQuizQuestionsApi,
@@ -8,7 +8,6 @@ import {
   deletePalaceQuizQuestionApi,
   getPalaceQuizQuestionsApi,
   recordPalaceQuizChoiceAttemptApi,
-  recoverAndSavePalaceQuizGenerationFromAiLogApi,
   requestPalaceShortAnswerFeedbackApi,
   resetPalaceQuizQuestionAttemptsApi,
   updatePalaceQuizQuestionApi,
@@ -23,11 +22,9 @@ export {
   getSubjectTreeApi,
   getSubjectsApi,
   recordPalaceQuizChoiceAttemptApi,
-  recoverAndSavePalaceQuizGenerationFromAiLogApi,
   requestPalaceShortAnswerFeedbackApi,
   resetPalaceQuizQuestionAttemptsApi,
   updatePalaceQuizQuestionApi,
-  uploadSubjectDocumentApi,
 }
 
 export async function loadPalaceQuizPageData(palaceId: number) {

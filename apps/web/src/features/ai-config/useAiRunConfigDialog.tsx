@@ -52,13 +52,8 @@ const SCENARIO_PROMPT_TEMPLATE_KEYS = {
   vision_image_mindmap: 'ai_prompt_import_image_mindmap',
   vision_image_text: 'ai_prompt_import_image_text',
   vision_batch_mindmap: 'ai_prompt_import_batch_mindmap',
-  vision_pdf_mindmap: 'ai_prompt_import_pdf_direct',
-  vision_pdf_text: 'ai_prompt_import_image_text',
   quiz_image_generation: 'ai_prompt_palace_quiz_generate',
   quiz_text_generation: 'ai_prompt_palace_quiz_generate',
-  quiz_pdf_generation: 'ai_prompt_palace_quiz_generate',
-  quiz_pdf_pairing: 'ai_prompt_palace_quiz_pdf_pairing',
-  quiz_pdf_review: 'ai_prompt_palace_quiz_pdf_review',
   quiz_review_mindmap_generation: 'ai_prompt_palace_quiz_review_mindmap',
   quiz_mini_palace_grouping: 'ai_prompt_palace_quiz_group_by_mini_palace',
 } as const satisfies Record<string, AiPromptTemplate['key']>

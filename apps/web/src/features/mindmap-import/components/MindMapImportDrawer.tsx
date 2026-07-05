@@ -54,19 +54,13 @@ export function MindMapImportDrawer(props: MindMapImportDrawerProps) {
     previewEditorDoc,
     extractedText,
     imagePreviewUrl,
-    selectedPdfPages,
-    selectedSubjectDocumentId,
     streamPhase,
     streamStatusMessage,
     streamStep,
     streamTotalSteps,
     streamPreviewText,
     loading,
-    pdfSelectionError,
     sourceTree,
-    pdfImportMode,
-    pdfOcrGroundingUsed,
-    pdfOcrTextChars,
     currentJobId,
     currentJobUsage,
     currentJobResolvedAi,
@@ -98,15 +92,6 @@ export function MindMapImportDrawer(props: MindMapImportDrawerProps) {
       } satisfies MindMapEditorState)
     : null
   const rawModelPreviewText = streamPreviewText.trim()
-  const selectedPdfPageCount = selectedPdfPages.length
-  const pdfPageSummary = selectedPdfPageCount > 0 ? selectedPdfPages.join(', ') : '未选择'
-  const pdfModeLabel = pdfImportMode === 'structured_merge' ? '结构页补全' : '按范围直接生成'
-  const pdfOcrStatusLabel =
-    pdfOcrGroundingUsed == null
-      ? '等待本次识别'
-      : pdfOcrGroundingUsed
-        ? `已启用${pdfOcrTextChars ? `（约 ${pdfOcrTextChars} 字）` : ''}`
-        : '未启用，本次仅按图片直读'
   const hasCurrentJob = Boolean(currentJobId)
   const hasStreamProgress = Boolean(streamStatusMessage)
   const streamStepLabel =
@@ -118,21 +103,8 @@ export function MindMapImportDrawer(props: MindMapImportDrawerProps) {
       : reusedExistingResult
         ? '已复用已有草稿，未重复识别'
         : ''
-  const canStartPdfImport =
-    sourceKind === 'subject-pdf' &&
-    selectedSubjectDocumentId != null &&
-    selectedPdfPageCount > 0 &&
-    !pdfSelectionError
-
-  const resolvedPreviewImageUrl = sourceKind === 'subject-pdf' ? '' : imagePreviewUrl
-  const sourceTitle =
-    sourceKind === 'subject-pdf'
-      ? mode === 'mindmap'
-        ? '学科 PDF 转脑图'
-        : '学科 PDF 转文字'
-      : mode === 'mindmap'
-        ? '图片转脑图'
-        : '图片转文字'
+  const resolvedPreviewImageUrl = imagePreviewUrl
+  const sourceTitle = mode === 'mindmap' ? '图片转脑图' : '图片转文字'
   const resolvedModelBadgeLabel = currentJobResolvedAi?.model_label || '等待实际调用模型'
 
   const historyViewModel: MindMapImportHistoryViewModel = {
@@ -147,7 +119,6 @@ export function MindMapImportDrawer(props: MindMapImportDrawerProps) {
     batchStatus: props.batchStatus,
     canPauseJob: props.canPauseJob,
     canResumeJob: props.canResumeJob,
-    canStartPdfImport,
     currentJobPauseRequested: props.currentJobPauseRequested,
     currentJobStage: props.currentJobStage,
     currentJobStatus: props.currentJobStatus,
@@ -155,7 +126,6 @@ export function MindMapImportDrawer(props: MindMapImportDrawerProps) {
     error: props.error,
     extractedText: props.extractedText,
     hasCurrentJob,
-    importWarnings: props.importWarnings,
     loading: props.loading,
     mode: props.mode,
     nodeCount,
@@ -166,34 +136,15 @@ export function MindMapImportDrawer(props: MindMapImportDrawerProps) {
     onBatchStart: props.onBatchStart,
     onFileChange: props.onFileChange,
     onPauseJob: props.onPauseJob,
-    onPdfImportModeChange: props.onPdfImportModeChange,
-    onPdfImportOptionChange: props.onPdfImportOptionChange,
-    onPdfPageInputChange: props.onPdfPageInputChange,
-    onPdfStart: props.onPdfStart,
-    onRangePromptChange: props.onRangePromptChange,
     onResumeJob: props.onResumeJob,
-    onSelectedSubjectDocumentIdChange: props.onSelectedSubjectDocumentIdChange,
-    onSelectedSubjectIdChange: props.onSelectedSubjectIdChange,
     onSourceKindChange: props.onSourceKindChange,
     onWorkflowChange: props.onWorkflowChange,
-    pdfImportMode: props.pdfImportMode,
-    pdfImportOptions: props.pdfImportOptions,
-    pdfPageInput: props.pdfPageInput,
-    pdfSelectionError: props.pdfSelectionError,
-    rangePrompt: props.rangePrompt,
     reusedExistingResult: props.reusedExistingResult,
-    selectedPdfPageCount,
-    selectedSubjectDocumentId: props.selectedSubjectDocumentId,
-    selectedSubjectId: props.selectedSubjectId,
     sourceKind: props.sourceKind,
     sourceTree: props.sourceTree,
     streamStatusMessage: props.streamStatusMessage,
     streamStepLabel,
     structureImageId: props.structureImageId,
-    structurePage: props.structurePage,
-    subjectDocuments: props.subjectDocuments,
-    subjectDocumentsLoading: props.subjectDocumentsLoading,
-    subjectOptions: props.subjectOptions,
     undoing: props.undoing,
     usageLabel,
   }
@@ -201,25 +152,18 @@ export function MindMapImportDrawer(props: MindMapImportDrawerProps) {
     batchMeta: props.batchMeta,
     extractedText: props.extractedText,
     hasStreamProgress,
-    importWarnings: props.importWarnings,
     loading: props.loading,
     mode: props.mode,
     onStreamPreviewScroll: handleStreamPreviewScroll,
-    pdfImportMode: props.pdfImportMode,
-    pdfModeLabel,
-    pdfOcrStatusLabel,
-    pdfPageSummary,
     previewFrameVersion,
     previewMindMapState,
     previewSectionRef,
     rawModelPreviewText,
     resolvedPreviewImageUrl,
-    selectedPdfPages: props.selectedPdfPages,
     sourceKind: props.sourceKind,
     sourceTree: props.sourceTree,
     streamPreviewContentRef,
     streamStepLabel,
-    structurePage: props.structurePage,
   }
   const footerModel: MindMapImportFooterModel = {
     applying: props.applying,
@@ -397,9 +341,7 @@ export function MindMapImportDrawer(props: MindMapImportDrawerProps) {
             <p className="text-sm text-muted-foreground">
               {view === 'history'
                 ? '这里集中查看、恢复和删除当前页面实体的导入历史草稿。'
-                : sourceKind === 'subject-pdf'
-                  ? '选择学科资料库中的 PDF，指定页码范围并补充自然语言提示，直接按所选页面生成脑图草稿。'
-                  : sourceKind === 'image-batch'
+                : sourceKind === 'image-batch'
                     ? '先上传结构图和正文图，整理顺序后手动开始识别，再预览合成脑图草稿。'
                     : mode === 'mindmap'
                       ? '粘贴一张结构图，先生成脑图草稿，再决定覆盖当前脑图或追加到选中节点。'

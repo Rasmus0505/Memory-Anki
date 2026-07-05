@@ -27,8 +27,6 @@ def get_config_value(session, key: str) -> str:
     with session.no_autoflush:
         row = session.query(Config).filter_by(key=key).first()
     if row:
-        if key == "default_algorithm":
-            return normalize_algorithm(row.value)
         return row.value
     return DEFAULTS.get(key, "")
 
@@ -41,10 +39,7 @@ def ebbinghaus_intervals(session) -> list[str]:
 
 
 def custom_intervals(session) -> list[str]:
-    return get_algorithm_intervals_for_policy(
-        load_review_schedule_policy(session),
-        "custom",
-    )
+    return ebbinghaus_intervals(session)
 
 
 def use_anchor(session) -> bool:
@@ -210,7 +205,7 @@ def infer_completed_stage_count(session, palace) -> int:
             for schedule in (palace.review_schedules or [])
             if schedule.algorithm_used
         ),
-        normalize_algorithm(get_config_value(session, "default_algorithm")),
+        "ebbinghaus",
     )
     intervals = get_algorithm_intervals(session, algorithm)
     initial_slot_count = max(1, get_initial_same_day_slot_count(session, algorithm))
@@ -323,7 +318,7 @@ def _rebuild_palace_review_schedule_model(session, palace) -> int:
             for schedule in schedules
             if schedule.algorithm_used
         ),
-        normalize_algorithm(get_config_value(session, "default_algorithm")),
+        "ebbinghaus",
     )
     intervals = get_algorithm_intervals(session, algorithm)
     if not intervals:
@@ -362,19 +357,5 @@ def _rebuild_palace_review_schedule_model(session, palace) -> int:
 def update_all_pending_schedules(session, new_algorithm: str | None = None) -> None:
     rebuild_all_pending_review_schedules(
         session,
-        algorithm_override=normalize_algorithm(new_algorithm) if new_algorithm else None,
+        algorithm_override="ebbinghaus",
     )
-
-
-def migrate_sm2_to_ebbinghaus(session) -> None:
-    from memory_anki.infrastructure.db.models import Config, ReviewSchedule
-
-    default_algorithm = session.query(Config).filter_by(key="default_algorithm").first()
-    if default_algorithm and default_algorithm.value == "sm2":
-        default_algorithm.value = "ebbinghaus"
-
-    pending_schedules = session.query(ReviewSchedule).filter(ReviewSchedule.algorithm_used == "sm2").all()
-    for schedule in pending_schedules:
-        schedule.algorithm_used = "ebbinghaus"
-
-    session.commit()

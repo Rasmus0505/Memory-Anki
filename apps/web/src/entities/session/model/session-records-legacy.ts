@@ -9,21 +9,17 @@ import type {
   TimeSessionRecord,
 } from '@/entities/session/model/session-records'
 import {
+  bulkDeleteStudySessionsApi,
   createStudySessionFromTimeRecordApi,
-  getStudySessionThresholdApi,
+  deleteStudySessionApi,
   listStudySessionsApi,
   patchStudySessionApi,
-  restoreStudySessionApi,
-  setStudySessionThresholdApi,
-  softDeleteStudySessionApi,
   type StudySessionPayload,
   type StudySessionItem,
 } from '@/entities/study-session/api'
 import { formatLocalDateKey, parseApiDateTime } from '@/shared/lib/dateTime'
 
 const PRACTICE_PROGRESS_KEY = 'memory-anki.practice-progress.v1'
-const TIME_RECORDS_KEY = 'memory-anki.time-records.v1'
-const TIME_RECORDING_THRESHOLD_SECONDS_KEY = 'memory-anki.time-recording-threshold-seconds.v1'
 
 function safeParse<T>(value: string | null, fallback: T): T {
   if (!value) return fallback
@@ -65,18 +61,6 @@ export function clearPracticeProgress(palaceId: number) {
   writeLocalStorage(PRACTICE_PROGRESS_KEY, store)
 }
 
-export function readLegacyTimeRecords() {
-  return readLocalStorage<TimeSessionRecord[]>(TIME_RECORDS_KEY, [])
-}
-
-export async function migrateLegacyTimeRecordsToBackend() {
-  const records = readLegacyTimeRecords()
-  if (records.length === 0) return 0
-  const results = await Promise.all(records.map((record) => createStudySessionFromTimeRecordApi(record)))
-  window.localStorage.removeItem(TIME_RECORDS_KEY)
-  return results.filter((result) => result.item).length
-}
-
 export async function listTimeRecords(options?: { includeDeleted?: boolean; includeBelowThreshold?: boolean }) {
   return listStudySessionRecords(options)
 }
@@ -112,41 +96,21 @@ export async function updateStudySessionRecord(id: string, updater: Partial<Time
   return result.item ? studySessionToTimeRecord(result.item) : null
 }
 
-export async function softDeleteTimeRecord(id: string) {
-  return softDeleteStudySessionRecord(id)
+export async function deleteTimeRecord(id: string) {
+  return deleteStudySessionRecord(id)
 }
 
-export async function softDeleteStudySessionRecord(id: string) {
-  const result = await softDeleteStudySessionApi(id)
-  return result.item ? studySessionToTimeRecord(result.item) : null
+export async function deleteStudySessionRecord(id: string) {
+  await deleteStudySessionApi(id)
+  return { ok: true }
 }
 
-export async function restoreTimeRecord(id: string) {
-  return restoreStudySessionRecord(id)
+export async function bulkDeleteTimeRecords(ids: string[]) {
+  return bulkDeleteStudySessionRecords(ids)
 }
 
-export async function restoreStudySessionRecord(id: string) {
-  const result = await restoreStudySessionApi(id)
-  return result.item ? studySessionToTimeRecord(result.item) : null
-}
-
-export async function getTimeRecordingThresholdSeconds() {
-  return getStudySessionRecordingThresholdSeconds()
-}
-
-export async function getStudySessionRecordingThresholdSeconds() {
-  const result = await getStudySessionThresholdApi()
-  return result.seconds
-}
-
-export async function setTimeRecordingThresholdSeconds(seconds: number) {
-  return setStudySessionRecordingThresholdSeconds(seconds)
-}
-
-export async function setStudySessionRecordingThresholdSeconds(seconds: number) {
-  const result = await setStudySessionThresholdApi(seconds)
-  window.localStorage.removeItem(TIME_RECORDING_THRESHOLD_SECONDS_KEY)
-  return result.seconds
+export async function bulkDeleteStudySessionRecords(ids: string[]) {
+  return bulkDeleteStudySessionsApi(ids)
 }
 
 function studySessionToTimeRecord(item: StudySessionItem): TimeSessionRecord {

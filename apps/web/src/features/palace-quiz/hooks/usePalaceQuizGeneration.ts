@@ -6,22 +6,18 @@ import type {
   AiScenarioRuntimeOptionsMap,
   PalaceQuizGenerationPreview,
   PalaceQuizMiniPalaceClassificationResult,
-  SubjectDocumentSummary,
 } from '@/shared/api/contracts'
 import {
   batchCreateChapterQuizQuestionsApi,
   classifyPalaceQuizQuestionsToMiniPalacesApi,
-  recoverAndSavePalaceQuizGenerationFromAiLogApi,
 } from '@/features/palace-quiz/api'
 import {
   buildGeneratedQuestionsForChapterSave,
   generatePalaceQuizPreview,
   getGenerationPreviewSaveCount,
-  type QuizGenerationPdfSourceDraft as QuizPdfSourceDraft,
 } from '@/features/palace-quiz/quizGenerationController'
 import {
   getQuestionTypeLabel,
-  shouldShowPdfPairingModelSelector,
   formatResolvedAiSteps,
   type PalaceQuizPageMeta,
   type QuizGenerationSourceKind,
@@ -88,7 +84,6 @@ export function usePalaceQuizGeneration({
   const [classificationResult, setClassificationResult] =
     useState<PalaceQuizMiniPalaceClassificationResult | null>(null)
   const generationInputs = usePalaceQuizGenerationInputs({
-    palaceId,
     palace,
     generationLoading,
     generationStreamPreviewText,
@@ -101,10 +96,9 @@ export function usePalaceQuizGeneration({
     setGenerationSourceKind,
     generationFiles,
     setGenerationFiles,
-    generationPdfSources,
-    setGenerationPdfSources,
+    extraPrompt,
+    setExtraPrompt,
     subjectsLoading,
-    subjectOptions,
     rangeDialogOpen,
     setRangeDialogOpen,
     chapterTrees,
@@ -116,19 +110,12 @@ export function usePalaceQuizGeneration({
     pendingChapterSummary,
     allowedChapterIds,
     selectedChapterHasChildren,
-    selectedSubjectDocument,
-    pdfController,
     generationStreamContentRef,
-    subjectPdfUploadInputRef,
     miniPalaces,
     handleOpenRangeDialog,
     handleConfirmRangeSelection,
     setPendingChapterId,
     handleImageFileChange,
-    handleUploadSubjectPdf,
-    handleAddCurrentPdfSource,
-    handleRemovePdfSource,
-    handlePdfSourceRoleHintChange,
     handleGenerationStreamScroll,
     resetGenerationStreamFollow,
     getChapterHasChildren,
@@ -151,15 +138,7 @@ export function usePalaceQuizGeneration({
   const applyHistoryConfig = (item: QuizGenerationHistoryItem) => {
     const nextSelectedChapterId = item.selectedChapterId ?? palace?.primary_chapter_id ?? null
     setGenerationSourceKind(item.sourceKind)
-    setGenerationPdfSources(
-      item.pdfSources.map((source) => ({
-        subject_document_id: source.subject_document_id,
-        document_name: source.document_name,
-        page_selection: [...source.page_selection],
-        role_hint: source.role_hint,
-      })),
-    )
-    pdfController.setRangePrompt(item.extraPrompt)
+    setExtraPrompt(item.extraPrompt)
     setGenerationEnableSecondaryReview(item.enableSecondaryReview)
     setGenerationClassifyByMiniPalace(
       item.classifyByMiniPalace && getChapterHasChildren(nextSelectedChapterId),
@@ -171,30 +150,12 @@ export function usePalaceQuizGeneration({
     setGenerationStreamStepLabel('')
     setGenerationStreamPreviewText('')
 
-    const firstSource = item.pdfSources[0]
-    if (firstSource) {
-      const matchingDocument = pdfController.subjectDocuments.find(
-        (document: SubjectDocumentSummary) => document.id === firstSource.subject_document_id,
-      )
-      if (matchingDocument) {
-        pdfController.setSelectedSubjectId(matchingDocument.subject_id)
-      }
-      pdfController.setSelectedSubjectDocumentId(firstSource.subject_document_id)
-      pdfController.setSelectedPdfPages(firstSource.page_selection)
-      pdfController.setPdfPageInput(firstSource.page_selection.join(','))
-    }
-
-    if (item.sourceKind !== 'subject-pdf') {
-      setGenerationFiles([])
-      toast.message('历史配置已载入，源文件需要重新上传后才能再次生成。')
-      return
-    }
-    toast.success('历史配置已载入左侧。')
+    setGenerationFiles([])
+    toast.message('历史配置已载入，源文件需要重新上传后才能再次生成。')
   }
 
   const executeGenerationPreview = async (config: {
     sourceKind: QuizGenerationSourceKind
-    pdfSources: QuizPdfSourceDraft[]
     files: File[]
     extraPrompt: string
     enableSecondaryReview: boolean
@@ -219,51 +180,7 @@ export function usePalaceQuizGeneration({
       }
       let aiOptions: AiRuntimeOptions | undefined
       let aiOptionsByScenario: AiScenarioRuntimeOptionsMap | undefined
-      if (config.sourceKind === 'subject-pdf') {
-        const pdfConfigEntries: Array<{
-          scenarioKey: string
-          entrypointKey: string
-          label: string
-          description: string
-        }> = [
-          {
-            scenarioKey: 'quiz_pdf_generation',
-            entrypointKey: 'quiz-generate-pdf',
-            label: '识别模型',
-            description: '负责逐页识别题干、选项、答案候选和解析候选。',
-          },
-        ]
-        if (shouldShowPdfPairingModelSelector(config.pdfSources)) {
-          pdfConfigEntries.push({
-            scenarioKey: 'quiz_pdf_pairing',
-            entrypointKey: 'quiz-generate-pdf-pairing',
-            label: '文本配对模型',
-            description: '负责把题目册和答案册候选配对成最终题库。',
-          })
-        }
-        if (config.enableSecondaryReview) {
-          pdfConfigEntries.push({
-            scenarioKey: 'quiz_pdf_review',
-            entrypointKey: 'quiz-generate-pdf-review',
-            label: '二次复核模型',
-            description: '负责按额外提示词对已生成题目做范围复核和筛除。',
-          })
-        }
-        if (pdfConfigEntries.length > 1) {
-          aiOptionsByScenario = await promptForScenarioAiOptions({
-            title: 'PDF 做题生成配置',
-            description: '可分别调整识别、配对和复核步骤的模型与提示词。本次请求会直接使用。',
-            entries: pdfConfigEntries,
-          }) || undefined
-          aiOptions = aiOptionsByScenario?.quiz_pdf_generation
-        } else {
-          aiOptions = (await promptForAiOptions({
-            scenarioKey: 'quiz_pdf_generation',
-            entrypointKey: 'quiz-generate-pdf',
-            title: 'PDF 做题生成配置',
-          })) || undefined
-        }
-      } else if (config.sourceKind === 'text-files') {
+      if (config.sourceKind === 'text-files') {
         aiOptions = (await promptForAiOptions({
           scenarioKey: 'quiz_text_generation',
           entrypointKey: 'quiz-generate-text-files',
@@ -290,7 +207,6 @@ export function usePalaceQuizGeneration({
         extraPrompt: config.extraPrompt,
         aiOptions,
         files: config.files,
-        pdfSources: config.pdfSources,
         enableSecondaryReview: config.enableSecondaryReview,
         classifyByMiniPalace: config.classifyByMiniPalace,
         selectedChapterId,
@@ -306,47 +222,22 @@ export function usePalaceQuizGeneration({
         },
       })
       setGenerationPreview(preview)
-      if (config.sourceKind === 'subject-pdf') {
-        setGenerationStreamStatus('题目预览已生成')
-        emitQuizFeedback('quiz_generate_preview_ready', {
-          label: config.classifyByMiniPalace ? '分组预览' : '题目预览',
-          audioScope: 'global',
-        })
-        config.pdfSources.forEach((item) => {
-          pdfController.persistAnalyzedPdfPages(item.subject_document_id, item.page_selection)
-        })
-        const history = persistQuizGenerationHistory(
-          palaceId,
-          preview,
-          config.sourceKind,
-          config.pdfSources,
-          [],
-          config.extraPrompt,
-          config.enableSecondaryReview,
-          config.classifyByMiniPalace,
-          selectedChapterId,
-          selectedChapterSummary,
-        )
-        if (history) setGenerationHistory(history)
-      } else {
-        emitQuizFeedback('quiz_generate_preview_ready', {
-          label: config.sourceKind === 'text-files' ? '文本预览' : '图片预览',
-          audioScope: 'global',
-        })
-        const history = persistQuizGenerationHistory(
-          palaceId,
-          preview,
-          config.sourceKind,
-          [],
-          config.files.map((file) => file.name),
-          config.extraPrompt,
-          config.enableSecondaryReview,
-          config.classifyByMiniPalace,
-          selectedChapterId,
-          selectedChapterSummary,
-        )
-        if (history) setGenerationHistory(history)
-      }
+      emitQuizFeedback('quiz_generate_preview_ready', {
+        label: config.sourceKind === 'text-files' ? '文本预览' : '图片预览',
+        audioScope: 'global',
+      })
+      const history = persistQuizGenerationHistory(
+        palaceId,
+        preview,
+        config.sourceKind,
+        config.files.map((file) => file.name),
+        config.extraPrompt,
+        config.enableSecondaryReview,
+        config.classifyByMiniPalace,
+        selectedChapterId,
+        selectedChapterSummary,
+      )
+      if (history) setGenerationHistory(history)
     } catch (nextError) {
       emitQuizFeedback('quiz_error_ai_failed', { label: '生成失败', audioScope: 'global' })
       setGenerationError(nextError instanceof Error ? nextError.message : '生成题目预览失败。')
@@ -360,9 +251,8 @@ export function usePalaceQuizGeneration({
     emitQuizFeedback('quiz_generate_start', { label: '生成预览', audioScope: 'global' })
     await executeGenerationPreview({
       sourceKind: generationSourceKind,
-      pdfSources: generationPdfSources,
       files: generationFiles,
-      extraPrompt: pdfController.rangePrompt,
+      extraPrompt,
       enableSecondaryReview: generationEnableSecondaryReview,
       classifyByMiniPalace: generationClassifyByMiniPalace,
     })
@@ -371,28 +261,7 @@ export function usePalaceQuizGeneration({
   const handleRegenerateFromHistory = async (item: QuizGenerationHistoryItem) => {
     registerQuizActivity('generation_history_regenerate')
     emitQuizFeedback('quiz_generate_start', { label: '历史重生成', audioScope: 'global' })
-    if (item.sourceKind !== 'subject-pdf') {
-      applyHistoryConfig(item)
-      return
-    }
-    setHistoryRegeneratingId(item.id)
-    try {
-      await executeGenerationPreview({
-        sourceKind: item.sourceKind,
-        pdfSources: item.pdfSources.map((source) => ({
-          subject_document_id: source.subject_document_id,
-          document_name: source.document_name,
-          page_selection: [...source.page_selection],
-          role_hint: source.role_hint,
-        })),
-        files: [],
-        extraPrompt: item.extraPrompt,
-        enableSecondaryReview: item.enableSecondaryReview,
-        classifyByMiniPalace: item.classifyByMiniPalace,
-      })
-    } finally {
-      setHistoryRegeneratingId(null)
-    }
+    applyHistoryConfig(item)
   }
 
   const handleDeleteGenerationHistory = (historyId: string) => {
@@ -406,28 +275,16 @@ export function usePalaceQuizGeneration({
     emitQuizFeedback('quiz_generate_save', { label: '写入题库', audioScope: 'global' })
     setGenerationSaving(true)
     try {
-      const aiCallLogId =
-        generationPreview.ai_call_log_id || generationPreview.source_meta?.ai_call_log_id || ''
-      if (aiCallLogId) {
-        const result = await recoverAndSavePalaceQuizGenerationFromAiLogApi(palaceId, {
-          ai_call_log_id: aiCallLogId,
-          selected_chapter_id: selectedChapterId,
-          classify_by_mini_palace: Boolean(generationPreview.grouped_questions),
-          save_mode: generationSaveMode,
-        })
-        toast.success(`题目已保存到题库，本次写入 ${result.saved_count} 题。`)
-      } else {
-        const questionsToSave = buildGeneratedQuestionsForChapterSave(
-          generationPreview,
-          selectedChapterId,
-        )
-        await batchCreateChapterQuizQuestionsApi(
-          selectedChapterId,
-          questionsToSave,
-          generationSaveMode,
-        )
-        toast.success('题目已保存到题库')
-      }
+      const questionsToSave = buildGeneratedQuestionsForChapterSave(
+        generationPreview,
+        selectedChapterId,
+      )
+      await batchCreateChapterQuizQuestionsApi(
+        selectedChapterId,
+        questionsToSave,
+        generationSaveMode,
+      )
+      toast.success('题目已保存到题库')
       emitQuizFeedback('quiz_generate_save', { label: '已入题库', audioScope: 'global' })
       await refreshQuestions()
       setGenerationPreview(null)
@@ -482,9 +339,10 @@ export function usePalaceQuizGeneration({
     setGenerationSourceKind,
     generationFiles,
     setGenerationFiles,
+    extraPrompt,
+    setExtraPrompt,
     generationPreview,
     setGenerationPreview,
-    generationPdfSources,
     generationLoading,
     generationSaving,
     generationError,
@@ -503,7 +361,6 @@ export function usePalaceQuizGeneration({
     classificationLoading,
     classificationResult,
     subjectsLoading,
-    subjectOptions,
     rangeDialogOpen,
     setRangeDialogOpen,
     chapterTrees,
@@ -514,19 +371,12 @@ export function usePalaceQuizGeneration({
     pendingChapterSummary,
     allowedChapterIds,
     selectedChapterHasChildren,
-    selectedSubjectDocument,
-    pdfController,
     generationStreamContentRef,
-    subjectPdfUploadInputRef,
     miniPalaces,
     handleOpenRangeDialog,
     handleConfirmRangeSelection,
     setPendingChapterId,
     handleImageFileChange,
-    handleUploadSubjectPdf,
-    handleAddCurrentPdfSource,
-    handleRemovePdfSource,
-    handlePdfSourceRoleHintChange,
     handleGenerationStreamScroll,
     resetGenerationStreamFollow,
     handleGeneratePreview,

@@ -21,7 +21,6 @@ function palace(id: number, title: string): PalaceGroupedItem {
     manual_title: '',
     grouping_mode: 'auto',
     manual_group_chapter_id: null,
-    mini_review_mode: 'independent',
     binding_status: 'ok',
     primary_chapter_id: null,
     primary_chapter: null,

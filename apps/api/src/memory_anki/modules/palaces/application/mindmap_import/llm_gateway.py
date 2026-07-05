@@ -3,14 +3,13 @@ from __future__ import annotations
 from collections.abc import Generator
 from typing import Any
 
-from .contracts import ImportStreamEvent, PdfImportOptions
+from .contracts import ImportStreamEvent
 from .events import stream_text_deltas_as_events
 from .prompts import PROMPT
 from .runtime import (
     DashscopeImportRuntime,
     call_dashscope_batch_json,
     call_dashscope_json,
-    call_dashscope_pdf_json,
     call_dashscope_text,
     call_dashscope_text_with_images,
     ensure_dashscope_image_ready,
@@ -21,7 +20,6 @@ from .runtime import (
     prepare_batch_image_items,
     stream_call_dashscope_batch_json,
     stream_call_dashscope_json,
-    stream_call_dashscope_pdf_json,
     stream_call_dashscope_text,
 )
 
@@ -126,11 +124,10 @@ def call_batch_json(
     *,
     runtime: DashscopeImportRuntime,
     image_items: list[tuple[bytes, str | None]],
-    structure_tree: dict[str, Any],
+    structure_tree: dict[str, Any] | None,
     range_prompt: str = "",
     page_numbers: list[int] | None = None,
     disable_rebalance: bool = False,
-    import_options: PdfImportOptions | None = None,
     extracted_text: str | None = None,
     external_log_context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
@@ -141,30 +138,6 @@ def call_batch_json(
         range_prompt=range_prompt,
         page_numbers=page_numbers,
         disable_rebalance=disable_rebalance,
-        import_options=import_options,
-        extracted_text=extracted_text,
-        external_log_context=external_log_context,
-    )
-
-
-def call_pdf_json(
-    *,
-    runtime: DashscopeImportRuntime,
-    image_items: list[tuple[bytes, str | None]],
-    range_prompt: str = "",
-    page_numbers: list[int] | None = None,
-    disable_rebalance: bool = False,
-    import_options: PdfImportOptions | None = None,
-    extracted_text: str | None = None,
-    external_log_context: dict[str, Any] | None = None,
-) -> dict[str, Any]:
-    return call_dashscope_pdf_json(
-        runtime=runtime,
-        image_items=image_items,
-        range_prompt=range_prompt,
-        page_numbers=page_numbers,
-        disable_rebalance=disable_rebalance,
-        import_options=import_options,
         extracted_text=extracted_text,
         external_log_context=external_log_context,
     )
@@ -222,12 +195,11 @@ def stream_batch_json(
     *,
     runtime: DashscopeImportRuntime,
     image_items: list[tuple[bytes, str | None]],
-    structure_tree: dict[str, Any],
+    structure_tree: dict[str, Any] | None,
     channel: str,
     range_prompt: str = "",
     page_numbers: list[int] | None = None,
     disable_rebalance: bool = False,
-    import_options: PdfImportOptions | None = None,
     extracted_text: str | None = None,
     external_log_context: dict[str, Any] | None = None,
 ) -> Generator[ImportStreamEvent, None, dict[str, Any]]:
@@ -240,36 +212,6 @@ def stream_batch_json(
                 range_prompt=range_prompt,
                 page_numbers=page_numbers,
                 disable_rebalance=disable_rebalance,
-                import_options=import_options,
-                extracted_text=extracted_text,
-                external_log_context=external_log_context,
-            ),
-            channel=channel,
-        )
-    )
-
-
-def stream_pdf_json(
-    *,
-    runtime: DashscopeImportRuntime,
-    image_items: list[tuple[bytes, str | None]],
-    channel: str,
-    range_prompt: str = "",
-    page_numbers: list[int] | None = None,
-    disable_rebalance: bool = False,
-    import_options: PdfImportOptions | None = None,
-    extracted_text: str | None = None,
-    external_log_context: dict[str, Any] | None = None,
-) -> Generator[ImportStreamEvent, None, dict[str, Any]]:
-    return (
-        yield from stream_text_deltas_as_events(
-            generator=stream_call_dashscope_pdf_json(
-                runtime=runtime,
-                image_items=image_items,
-                range_prompt=range_prompt,
-                page_numbers=page_numbers,
-                disable_rebalance=disable_rebalance,
-                import_options=import_options,
                 extracted_text=extracted_text,
                 external_log_context=external_log_context,
             ),

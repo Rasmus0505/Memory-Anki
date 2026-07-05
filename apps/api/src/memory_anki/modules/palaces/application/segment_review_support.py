@@ -28,7 +28,7 @@ from .review_progress_datetime import serialize_stage_datetime
 
 
 def default_segment_algorithm(session: Session) -> str:
-    return normalize_algorithm(get_config_value(session, "default_algorithm"))
+    return "ebbinghaus"
 
 
 def get_segment_anchor_date(segment: PalaceSegment) -> date:

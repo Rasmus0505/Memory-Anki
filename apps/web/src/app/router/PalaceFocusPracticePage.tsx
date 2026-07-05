@@ -9,7 +9,6 @@ import {
   togglePalaceFocusNodeApi,
   updatePalacePracticeFlagApi,
 } from '@/entities/palace/api'
-import { updateDefaultSegmentReviewProgressApi } from '@/entities/palace-segment/api'
 import {
   buildFocusRevealState,
   buildReviewTree,
@@ -75,14 +74,6 @@ export default function PalaceFocusPracticePage() {
         refreshStageTarget: async (palace) =>
           buildFocusSession((await getPalaceFocusSessionApi(palace.id)) as FocusPracticeSession),
         completeWithoutStage: async (palace) => {
-          if (palace.review_stage_total != null && palace.review_stage_total > 0) {
-            const nextCompleted = (palace.review_stage_completed ?? 0) + 1
-            const targetReviewNumber = Math.min(nextCompleted, palace.review_stage_total - 1)
-            await updateDefaultSegmentReviewProgressApi(palace.id, {
-              completed_count: nextCompleted,
-              completed_review_number: targetReviewNumber,
-            })
-          }
           await clearFocusPracticeSessionProgressApi(palace.id)
         },
         submitStage: async (palace, payload, targetReviewNumber, needsPractice) => {
@@ -95,11 +86,6 @@ export default function PalaceFocusPracticePage() {
               red_marked_count: payload.redNodeIds.length,
               target_review_number: targetReviewNumber,
               needs_practice: needsPractice,
-            })
-          } else {
-            await updateDefaultSegmentReviewProgressApi(palace.id, {
-              completed_count: targetReviewNumber + 1,
-              completed_review_number: targetReviewNumber,
             })
           }
           await clearFocusPracticeSessionProgressApi(palace.id)

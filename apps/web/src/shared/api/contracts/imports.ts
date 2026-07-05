@@ -102,7 +102,6 @@ export interface MindMapImportJobResult {
   ocr_grounding_used?: boolean
   ocr_text_chars?: number | null
 }
-export type PdfImportMode = 'direct_generation' | 'structured_merge'
 export interface MindMapImportJob {
   id: string
   entity_key?: string
@@ -110,7 +109,7 @@ export interface MindMapImportJob {
   stage: MindMapImportJobStage
   resumable: boolean
   pause_requested?: boolean
-  source_kind: 'image-single' | 'image-batch' | 'subject-pdf'
+  source_kind: 'image-single' | 'image-batch'
   mode: 'mindmap' | 'text'
   source_meta?: Record<string, unknown>
   result?: MindMapImportJobResult | null
@@ -136,27 +135,4 @@ export interface ImportStreamDeltaEvent {
   text: string
   accumulated_text: string
   channel: 'text' | 'raw_model'
-}
-export interface MindMapPdfImportPreviewRequest {
-  subject_document_id: number
-  page_selection: number[]
-  pdf_mode?: PdfImportMode
-  structure_page?: number | null
-  range_prompt?: string
-  fallback_title?: string
-  import_options?: PdfImportOptions
-  ai_options?: AiRuntimeOptions
-}
-export interface TextPdfImportPreviewRequest {
-  subject_document_id: number
-  page_selection: number[]
-  range_prompt?: string
-  ai_options?: AiRuntimeOptions
-}
-export interface PdfImportOptions {
-  quote_original_text_only: boolean
-  mount_on_original_leaf_only: boolean
-  preserve_emphasis_marks: boolean
-  semantic_split_long_paragraphs: boolean
-  preserve_line_breaks: boolean
 }

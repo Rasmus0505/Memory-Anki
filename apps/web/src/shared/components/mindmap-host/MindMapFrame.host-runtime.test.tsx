@@ -317,7 +317,6 @@ describe('MindMapFrame host runtime behavior', () => {
         editorState={buildEditorState()}
         readonly
         immersiveModeActive={false}
-        bilinkCounts={{ root: 1 }}
         syncOnPropChange
         syncIntent="soft"
         syncReason="review_flip"
@@ -341,7 +340,6 @@ describe('MindMapFrame host runtime behavior', () => {
         editorState={buildEditorState()}
         readonly
         immersiveModeActive
-        bilinkCounts={{ root: 2 }}
         syncOnPropChange
         syncIntent="soft"
         syncReason="review_flip"

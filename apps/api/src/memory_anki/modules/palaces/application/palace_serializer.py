@@ -27,13 +27,11 @@ from memory_anki.modules.palaces.application.title_sync_service import (
     get_palace_explicit_chapter_ids,
     reconcile_palace_chapter_binding,
     resolve_palace_binding_status,
-    resolve_palace_mini_review_mode,
     resolve_palace_subject,
     resolve_palace_title,
 )
 from memory_anki.modules.reviews.application.schedule_service import (
     get_algorithm_stage_labels,
-    get_config_value,
     is_schedule_due,
     normalize_algorithm,
 )
@@ -99,7 +97,7 @@ def palace_json(p, session: Session | None = None) -> dict:
                 for schedule in (p.review_schedules or [])
                 if schedule.algorithm_used
             ),
-            normalize_algorithm(get_config_value(session, "default_algorithm")),
+            "ebbinghaus",
         )
         stage_labels = get_algorithm_stage_labels(session, current_algorithm)
     default_segment = (
@@ -147,7 +145,6 @@ def palace_json(p, session: Session | None = None) -> dict:
         "resolved_title": resolve_palace_title(p),
         "grouping_mode": getattr(p, "grouping_mode", "auto") or "auto",
         "manual_group_chapter_id": getattr(p, "manual_group_chapter_id", None),
-        "mini_review_mode": resolve_palace_mini_review_mode(p),
         "binding_status": resolve_palace_binding_status(p),
         "primary_chapter_id": getattr(p, "primary_chapter_id", None),
         "primary_chapter": {
@@ -200,7 +197,7 @@ def palace_summary_json(p, session: Session | None = None) -> dict:
                 for schedule in (p.review_schedules or [])
                 if schedule.algorithm_used
             ),
-            normalize_algorithm(get_config_value(session, "default_algorithm")),
+            "ebbinghaus",
         )
         stage_labels = get_algorithm_stage_labels(session, current_algorithm)
 
@@ -234,7 +231,6 @@ def palace_summary_json(p, session: Session | None = None) -> dict:
         "resolved_title": resolve_palace_title(p),
         "grouping_mode": getattr(p, "grouping_mode", "auto") or "auto",
         "manual_group_chapter_id": getattr(p, "manual_group_chapter_id", None),
-        "mini_review_mode": resolve_palace_mini_review_mode(p),
         "binding_status": resolve_palace_binding_status(p),
         "primary_chapter_id": getattr(p, "primary_chapter_id", None),
         "primary_chapter": {

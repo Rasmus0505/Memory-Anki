@@ -1,6 +1,6 @@
-﻿import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react'
+﻿import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { FileText, FolderTree, Plus, Save, Sparkles, Trash2, Upload } from 'lucide-react'
+import { FolderTree, Plus, Save, Sparkles, Trash2 } from 'lucide-react'
 import { toast } from '@/shared/feedback/toast'
 import type { MindMapEditorState } from '@/shared/api/contracts'
 import { PageIntro } from '@/shared/components/layout/PageIntro'
@@ -168,8 +168,6 @@ export default function Knowledge() {
     setEditorState,
     applyEditorState: applyImportedSubjectEditorState,
     selectedNodeUid,
-    subjectOptions: activeSubject ? [{ id: activeSubject.id, name: activeSubject.name }] : [],
-    defaultSubjectId: selectedSubjectId,
   })
 
   useEffect(() => {
@@ -319,16 +317,6 @@ export default function Knowledge() {
     return <Badge variant="secondary">已接入 mind-map 宿主模式</Badge>
   }
 
-  const handleSubjectDocumentUpload = async (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
-    if (!file) return
-    try {
-      await mindMapImport.handleSubjectDocumentUpload(file)
-    } finally {
-      event.target.value = ''
-    }
-  }
-
   const handleImmersiveToolbarToggle = async () => {
     if (mindMapNativeFullscreen) {
       await mindMapFrameRef.current?.exitNativeFullscreen()
@@ -441,55 +429,6 @@ export default function Knowledge() {
                   删除
                 </Button>
               </div>
-            </div>
-
-            <div className="space-y-3 rounded-lg border border-border/70 bg-background/60 p-3">
-              <div className="flex items-center gap-2 text-sm font-semibold">
-                <FileText className="size-4" />
-                学科 PDF 资料库
-              </div>
-              <label className="flex cursor-pointer items-center justify-center rounded-lg border border-dashed border-border/80 px-3 py-4 text-sm text-muted-foreground transition-colors hover:text-foreground">
-                <Upload className="mr-2 size-4" />
-                上传 PDF
-                <input
-                  type="file"
-                  accept="application/pdf,.pdf"
-                  className="hidden"
-                  onChange={(event) => void handleSubjectDocumentUpload(event)}
-                  disabled={!activeSubject}
-                />
-              </label>
-              {mindMapImport.importSubjectDocumentsLoading ? (
-                <div className="text-sm text-muted-foreground">正在加载资料…</div>
-              ) : mindMapImport.importSubjectDocuments.length > 0 ? (
-                <div className="space-y-2">
-                  {mindMapImport.importSubjectDocuments.map((document) => (
-                    <div
-                      key={document.id}
-                      className="flex items-center justify-between gap-3 rounded-lg border border-border/70 bg-background/70 px-3 py-3 text-sm"
-                    >
-                      <div className="min-w-0 flex-1">
-                        <div className="truncate font-medium">{document.original_name}</div>
-                        <div className="mt-1 text-xs text-muted-foreground">{document.page_count} 页</div>
-                      </div>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => void mindMapImport.handleSubjectDocumentDelete(document.id)}
-                      >
-                        删除
-                      </Button>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <EmptyState
-                  variant="list"
-                  title="还没有上传 PDF 资料"
-                  description="上传 PDF 后，系统会自动提取知识结构并生成宫殿节点。"
-                />
-              )}
             </div>
 
             <div className="space-y-4 rounded-lg border border-border/70 bg-background/60 p-3">
@@ -666,3 +605,4 @@ export default function Knowledge() {
     </div>
   )
 }
+

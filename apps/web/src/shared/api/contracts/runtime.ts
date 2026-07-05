@@ -2,10 +2,6 @@ export interface RuntimeInfo {
   channel: string
   commit: string | null
   short_commit: string | null
-  runtime_generation: number
-  declared_runtime_generation: number
-  min_supported_generation: number
-  max_supported_generation: number
   last_started_at: string | null
   app_home: string
   app_home_source: 'default' | 'env'

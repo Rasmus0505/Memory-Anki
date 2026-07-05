@@ -10,11 +10,7 @@ from memory_anki.core.time import utc_now_naive
 from memory_anki.infrastructure.db.models import (
     Chapter,
     Palace,
-    PalaceMiniPalace,
-    PalaceMiniPalaceReviewSchedule,
     PalaceQuizQuestion,
-    PalaceSegment,
-    PalaceSegmentReviewSchedule,
     ReviewSchedule,
 )
 from memory_anki.modules.english.application.course_service import (
@@ -22,12 +18,6 @@ from memory_anki.modules.english.application.course_service import (
 )
 from memory_anki.modules.english_reading.application import service as english_reading_service
 from memory_anki.modules.palaces.application.focus_service import parse_focus_node_uids
-from memory_anki.modules.palaces.application.mini_palace_service import (
-    is_mini_palace_schedule_due,
-)
-from memory_anki.modules.palaces.application.segment_review_service import (
-    is_segment_schedule_due,
-)
 from memory_anki.modules.palaces.application.title_sync_service import resolve_palace_title
 from memory_anki.modules.reviews.application.schedule_service import is_schedule_due
 
@@ -47,8 +37,6 @@ FREESTYLE_RANGES = {
 }
 
 CONTENT_TYPE_REVIEW = "review"
-CONTENT_TYPE_SEGMENT_REVIEW = "segment_review"
-CONTENT_TYPE_MINI_REVIEW = "mini_review"
 CONTENT_TYPE_PRACTICE = "practice"
 CONTENT_TYPE_ENGLISH = "english"
 CONTENT_TYPE_ENGLISH_READING = "english_reading"
@@ -56,8 +44,6 @@ CONTENT_TYPE_ENGLISH_READING = "english_reading"
 FREESTYLE_CONTENT_TYPES = {
     CONTENT_TYPE_QUIZ_QUESTION,
     CONTENT_TYPE_REVIEW,
-    CONTENT_TYPE_SEGMENT_REVIEW,
-    CONTENT_TYPE_MINI_REVIEW,
     CONTENT_TYPE_PRACTICE,
     CONTENT_TYPE_ENGLISH,
     CONTENT_TYPE_ENGLISH_READING,
@@ -66,8 +52,6 @@ FREESTYLE_CONTENT_TYPES = {
 DEFAULT_FREESTYLE_CONTENT_TYPES = {
     CONTENT_TYPE_QUIZ_QUESTION,
     CONTENT_TYPE_REVIEW,
-    CONTENT_TYPE_SEGMENT_REVIEW,
-    CONTENT_TYPE_MINI_REVIEW,
     CONTENT_TYPE_PRACTICE,
     CONTENT_TYPE_ENGLISH,
     CONTENT_TYPE_ENGLISH_READING,
@@ -189,50 +173,6 @@ def _due_palace_ids(session: Session, candidate_ids: set[int] | None) -> set[int
         if schedule.palace and is_schedule_due(schedule, schedule.palace, session, now=now):
             ids.add(schedule.palace_id)
 
-    segment_query = (
-        session.query(PalaceSegmentReviewSchedule)
-        .join(PalaceSegment)
-        .join(Palace)
-        .filter(
-            PalaceSegmentReviewSchedule.completed == False,
-            Palace.archived == False,
-            Palace.mastered == False,
-        )
-    )
-    if candidate_ids is not None:
-        segment_query = segment_query.filter(Palace.id.in_(candidate_ids))
-    for schedule in segment_query.order_by(
-        PalaceSegmentReviewSchedule.review_number.asc(),
-        PalaceSegmentReviewSchedule.id.asc(),
-    ).all():
-        palace_id = schedule.segment.palace_id if schedule.segment else None
-        if palace_id is None:
-            continue
-        if schedule.segment and is_segment_schedule_due(session, schedule.segment, schedule, now=now):
-            ids.add(palace_id)
-
-    mini_query = (
-        session.query(PalaceMiniPalaceReviewSchedule)
-        .join(PalaceMiniPalace)
-        .join(Palace)
-        .filter(
-            PalaceMiniPalaceReviewSchedule.completed == False,
-            Palace.archived == False,
-            Palace.mastered == False,
-        )
-    )
-    if candidate_ids is not None:
-        mini_query = mini_query.filter(Palace.id.in_(candidate_ids))
-    for schedule in mini_query.order_by(
-        PalaceMiniPalaceReviewSchedule.review_number.asc(),
-        PalaceMiniPalaceReviewSchedule.id.asc(),
-    ).all():
-        mini_palace = schedule.mini_palace
-        palace_id = mini_palace.palace_id if mini_palace else None
-        if palace_id is None:
-            continue
-        if mini_palace and is_mini_palace_schedule_due(session, mini_palace, schedule, now=now):
-            ids.add(palace_id)
     return ids
 
 
@@ -305,146 +245,6 @@ def _build_review_cards(
                 reason=f"{overdue} 个逾期复习" if overdue else "今天待复习",
                 palace=palace,
                 extra={"schedule_id": schedule.id},
-            )
-        )
-    return cards
-
-
-def _build_segment_review_cards(
-    session: Session,
-    *,
-    candidate_ids: set[int] | None,
-    range_filter: str,
-) -> list[dict[str, Any]]:
-    if range_filter == FREESTYLE_RANGE_NEEDS_PRACTICE:
-        return []
-    now = datetime.now()
-    groups: OrderedDict[int, dict[str, Any]] = OrderedDict()
-    query = (
-        session.query(PalaceSegmentReviewSchedule)
-        .join(PalaceSegment)
-        .join(Palace)
-        .filter(
-            PalaceSegmentReviewSchedule.completed == False,
-            Palace.archived == False,
-            Palace.mastered == False,
-        )
-    )
-    if candidate_ids is not None:
-        if not candidate_ids:
-            return []
-        query = query.filter(Palace.id.in_(candidate_ids))
-    for schedule in query.order_by(
-        PalaceSegmentReviewSchedule.review_number.asc(),
-        PalaceSegmentReviewSchedule.id.asc(),
-    ).all():
-        segment = schedule.segment
-        palace = segment.palace if segment else None
-        if not segment or not palace:
-            continue
-        if not is_segment_schedule_due(session, segment, schedule, now=now):
-            continue
-        group = groups.setdefault(
-            segment.id,
-            {"schedule": schedule, "count": 0},
-        )
-        group["count"] += 1
-        current = group["schedule"]
-        if (schedule.review_number, schedule.id) < (current.review_number, current.id):
-            group["schedule"] = schedule
-
-    cards: list[dict[str, Any]] = []
-    for group in groups.values():
-        schedule = group["schedule"]
-        segment = schedule.segment
-        palace = segment.palace
-        segment_name = segment.name or f"第 {segment.sort_order + 1} 部分"
-        cards.append(
-            _action_card(
-                card_id=f"segment_review:{schedule.id}",
-                content_type=CONTENT_TYPE_SEGMENT_REVIEW,
-                action_kind="segment_review",
-                title=f"分块复习：{segment_name}",
-                subtitle=f"{resolve_palace_title(palace)} · 第 {schedule.review_number + 1} 轮",
-                href=f"/segment-review/session/{schedule.id}",
-                priority=92,
-                reason=f"{int(group['count'])} 个分块待复习",
-                palace=palace,
-                extra={
-                    "schedule_id": schedule.id,
-                    "segment_id": segment.id,
-                    "segment_name": segment_name,
-                },
-            )
-        )
-    return cards
-
-
-def _build_mini_review_cards(
-    session: Session,
-    *,
-    candidate_ids: set[int] | None,
-    range_filter: str,
-) -> list[dict[str, Any]]:
-    if range_filter == FREESTYLE_RANGE_NEEDS_PRACTICE:
-        return []
-    now = datetime.now()
-    groups: OrderedDict[int, dict[str, Any]] = OrderedDict()
-    query = (
-        session.query(PalaceMiniPalaceReviewSchedule)
-        .join(PalaceMiniPalace)
-        .join(Palace)
-        .filter(
-            PalaceMiniPalaceReviewSchedule.completed == False,
-            Palace.archived == False,
-            Palace.mastered == False,
-        )
-    )
-    if candidate_ids is not None:
-        if not candidate_ids:
-            return []
-        query = query.filter(Palace.id.in_(candidate_ids))
-    for schedule in query.order_by(
-        PalaceMiniPalaceReviewSchedule.review_number.asc(),
-        PalaceMiniPalaceReviewSchedule.id.asc(),
-    ).all():
-        mini_palace = schedule.mini_palace
-        palace = mini_palace.palace if mini_palace else None
-        if not mini_palace or not palace:
-            continue
-        if not is_mini_palace_schedule_due(session, mini_palace, schedule, now=now):
-            continue
-        group = groups.setdefault(
-            mini_palace.id,
-            {"schedule": schedule, "count": 0},
-        )
-        group["count"] += 1
-        current = group["schedule"]
-        if (schedule.review_number, schedule.id) < (current.review_number, current.id):
-            group["schedule"] = schedule
-
-    cards: list[dict[str, Any]] = []
-    for group in groups.values():
-        schedule = group["schedule"]
-        mini_palace = schedule.mini_palace
-        palace = mini_palace.palace
-        name = mini_palace.name or f"小宫殿 {mini_palace.sort_order + 1}"
-        cards.append(
-            _action_card(
-                card_id=f"mini_review:{schedule.id}",
-                content_type=CONTENT_TYPE_MINI_REVIEW,
-                action_kind="mini_review",
-                title=f"小宫殿复习：{name}",
-                subtitle=f"{resolve_palace_title(palace)} · 第 {schedule.review_number + 1} 轮",
-                href=f"/mini-review/session/{schedule.id}",
-                priority=88,
-                reason=f"{int(group['count'])} 个小宫殿待复习",
-                palace=palace,
-                extra={
-                    "schedule_id": schedule.id,
-                    "mini_palace_id": mini_palace.id,
-                    "mini_palace_name": name,
-                },
             )
         )
     return cards
@@ -602,22 +402,6 @@ def build_freestyle_feed(
     if CONTENT_TYPE_REVIEW in content_types:
         cards.extend(
             _build_review_cards(
-                session,
-                candidate_ids=candidate_filter,
-                range_filter=range_filter,
-            )
-        )
-    if CONTENT_TYPE_SEGMENT_REVIEW in content_types:
-        cards.extend(
-            _build_segment_review_cards(
-                session,
-                candidate_ids=candidate_filter,
-                range_filter=range_filter,
-            )
-        )
-    if CONTENT_TYPE_MINI_REVIEW in content_types:
-        cards.extend(
-            _build_mini_review_cards(
                 session,
                 candidate_ids=candidate_filter,
                 range_filter=range_filter,

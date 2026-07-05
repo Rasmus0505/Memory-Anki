@@ -38,8 +38,6 @@ export const FREESTYLE_PROGRESS_STORAGE_KEY = 'memory-anki.freestyle.progress'
 export const FREESTYLE_CONTENT_TYPES: FreestyleContentType[] = [
   'quiz_question',
   'review',
-  'segment_review',
-  'mini_review',
   'practice',
   'english',
   'english_reading',
@@ -50,8 +48,6 @@ export const DEFAULT_FREESTYLE_CONFIG: FreestyleConfig = {
   contentTypes: {
     quiz_question: true,
     review: true,
-    segment_review: true,
-    mini_review: true,
     practice: true,
     english: true,
     english_reading: true,

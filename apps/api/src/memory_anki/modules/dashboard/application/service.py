@@ -4,7 +4,7 @@ from datetime import date, datetime, time, timedelta
 
 from sqlalchemy.orm import Session, joinedload, selectinload
 
-from memory_anki.infrastructure.db.models import Chapter, Palace, PalaceMiniPalace, PalaceSegment
+from memory_anki.infrastructure.db.models import Chapter, Palace
 from memory_anki.modules.palaces.application.palace_service import list_palaces
 from memory_anki.modules.palaces.application.title_sync_service import (
     build_today_new_palace_outline,
@@ -42,8 +42,8 @@ def _dashboard_palace_loader_options():
         selectinload(Palace.chapters).joinedload(Chapter.subject),
         selectinload(Palace.chapters).joinedload(Chapter.parent),
         selectinload(Palace.review_schedules),
-        selectinload(Palace.segments).selectinload(PalaceSegment.review_schedules),
-        selectinload(Palace.mini_palaces).selectinload(PalaceMiniPalace.review_schedules),
+        selectinload(Palace.segments),
+        selectinload(Palace.mini_palaces),
         selectinload(Palace.pegs),
     )
 
@@ -227,4 +227,3 @@ def _resolve_selected_duration_seconds(
             scenes=STUDY_DASHBOARD_SCENES,
         )
     raise DashboardQueryError("duration_mode 仅支持 month、range 或 all。")
-

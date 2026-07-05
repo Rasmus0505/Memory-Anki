@@ -7,9 +7,7 @@ import {
   describeImportFeature,
   getRequestId,
   loadLastJobId,
-  normalizePdfImportMode,
   persistLastJobId,
-  summarizePdfRequest,
   wait,
 } from '@/features/mindmap-import/hooks/mindmap-import-utils'
 import {
@@ -105,21 +103,7 @@ export function useImportJobRuntime({
               logAiCall({
                 feature: describeImportFeature(job.source_kind, job.mode),
                 stage: 'completed',
-                requestSummary:
-                  job.source_kind === 'subject-pdf'
-                    ? summarizePdfRequest({
-                        pages: Array.isArray(job.result?.selected_pages) ? job.result.selected_pages : [],
-                        rangePrompt:
-                          typeof job.source_meta?.range_prompt === 'string'
-                            ? job.source_meta.range_prompt
-                            : '',
-                        pdfMode: normalizePdfImportMode(job.source_meta?.pdf_mode),
-                        structurePage:
-                          typeof job.source_meta?.structure_page === 'number'
-                            ? job.source_meta.structure_page
-                            : null,
-                      })
-                    : '',
+                requestSummary: '',
                 responseSummary:
                   job.mode === 'mindmap'
                     ? `识别完成；节点 ${(job.result?.source_tree?.children || []).length}`

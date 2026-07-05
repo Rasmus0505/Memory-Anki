@@ -1,7 +1,5 @@
 import type { MindMapDoc, MindMapEditorState } from './mindmap'
-import type { ReviewPalaceSummary, ReviewQueueChapter, ReviewStageSummary } from './review'
-
-export type MiniReviewMode = 'independent' | 'mini_only'
+import type { ReviewPalaceSummary, ReviewStageSummary } from './review'
 
 export interface PalaceReviewPlanItem {
   date: string | null
@@ -86,7 +84,6 @@ export interface PalaceListItem {
   active_review_progress?: number | null
   segments: PalaceSegmentSummary[]
   mini_palaces?: MiniPalaceSummary[]
-  mini_review_mode?: MiniReviewMode
   chapters?: Array<unknown>
 }
 export interface ChapterSummary {
@@ -155,22 +152,6 @@ export interface MiniPalacePracticeResponse {
   item: MiniPalaceSummary
   editor_doc: MindMapDoc | string | null
 }
-export interface MiniReviewSessionResponse {
-  id: number
-  palace_mini_palace_id: number
-  palace_id: number
-  scheduled_date: string
-  interval_days: number
-  algorithm_used: string
-  completed: boolean
-  completed_at: string | null
-  review_number: number
-  review_type: string
-  mini_palace: MiniPalaceSummary
-  estimated_review_seconds: number
-  palace: ReviewPalaceSummary
-  editor_doc: MindMapDoc | string | null
-}
 export interface PalaceGroupedSummaryItem {
   id: number
   title: string
@@ -195,7 +176,6 @@ export interface PalaceGroupedSummaryItem {
   resolved_title: string
   grouping_mode: string
   manual_group_chapter_id: number | null
-  mini_review_mode?: MiniReviewMode
   binding_status: string
   primary_chapter_id: number | null
   primary_chapter: ChapterSummary | null
@@ -289,69 +269,18 @@ export interface PalaceFocusSessionResponse {
   focus_node_uids: string[]
   focus_count: number
 }
-export interface SegmentReviewScheduleSummary {
-  id: number
-  palace_segment_id: number
-  palace_id: number | null
-  palace: Pick<ReviewPalaceSummary, 'id' | 'title' | 'description'> | null
-  scheduled_date: string
-  interval_days: number
-  algorithm_used: string
-  completed: boolean
-  completed_at?: string | null
-  review_number: number
-  review_type: string
-  schedule_count: number
-  overdue_schedule_count: number
-  next_due_date: string
-  estimated_review_seconds: number
-  segment: PalaceSegmentSummary | null
-}
-export interface SegmentReviewQueueResponse {
-  due_count: number
-  overdue_count: number
-  smoothed_count: number
-  stats: {
-    total: number
-    review_count: number
-    review_duration_seconds: number
-  }
-  chapter: ReviewQueueChapter | null
-  reviews: SegmentReviewScheduleSummary[]
-}
-export interface BatchSegmentReviewSessionResponse {
-  palace: {
-    id: number
-    title: string
-    description: string
-    focus_node_uids?: string[]
-    focus_count?: number
-  }
-  segments: PalaceSegmentSummary[]
-  editor_doc: Record<string, unknown> | string | null
-  estimated_review_seconds: number
-}
-export interface BatchSegmentReviewSubmitResponse {
-  ok: boolean
-  completed_segment_ids: number[]
-  completion_mode: "manual_complete" | "auto_complete" | string
-}
 export interface SessionProgressSnapshot {
   id: number
   session_kind:
     | "practice"
     | "review"
     | "segment_practice"
-    | "segment_review"
     | "focus_practice"
     | "mini_practice"
-    | "mini_review"
   palace_id: number | null
   review_schedule_id: number | null
   palace_segment_id: number | null
   mini_palace_id?: number | null
-  palace_segment_review_schedule_id: number | null
-  mini_palace_review_schedule_id?: number | null
   reveal_map: Record<string, "hidden" | "placeholder" | "revealed">
   red_node_ids: string[]
   completed: boolean

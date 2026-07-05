@@ -1,7 +1,6 @@
 ﻿import { cn } from '@/shared/lib/utils'
 import { parseApiDateTime } from '@/shared/lib/dateTime'
 import type {
-  MiniReviewMode,
   PalaceSegmentSummary,
   ReviewStageSummary,
 } from '@/shared/api/contracts'
@@ -234,9 +233,8 @@ export function getSegmentDisplayName(segment: PalaceSegmentSummary, index: numb
 
 export function palaceUsesMiniOnlyReview(
   palace: {
-    mini_review_mode?: MiniReviewMode
     mini_palaces?: Array<unknown>
   },
 ): boolean {
-  return palace.mini_review_mode === 'mini_only' && (palace.mini_palaces?.length ?? 0) > 0
+  return false
 }

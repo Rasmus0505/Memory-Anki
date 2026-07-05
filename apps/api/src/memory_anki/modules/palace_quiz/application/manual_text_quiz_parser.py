@@ -47,7 +47,6 @@ class ParsedManualQuestion:
     def to_payload(self) -> dict[str, Any]:
         source_meta = {
             "source_kind": "manual_text_import",
-            "subject_document_id": None,
             "page_numbers": None,
             "image_names": [self.source_filename] if self.source_filename else None,
             "extra_prompt": "",

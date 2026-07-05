@@ -5,9 +5,6 @@ from typing import Any
 from memory_anki.core.request_context import get_request_id
 from memory_anki.infrastructure.db.models import MindMapImportJob
 
-from .job_artifacts import json_load
-from .job_state import SOURCE_KIND_SUBJECT_PDF
-
 
 def build_structured_error(
     exc: Exception,
@@ -31,16 +28,12 @@ def build_structured_error(
         code = "import_failed"
     details: dict[str, Any] = {}
     if job is not None:
-        source_meta = json_load(job.source_meta_json, {})
         details = {
             "job_id": job.id,
             "source_kind": job.source_kind,
             "mode": job.mode,
             "stage": stage,
         }
-        if job.source_kind == SOURCE_KIND_SUBJECT_PDF:
-            details["selected_pages"] = list(source_meta.get("page_selection") or [])
-            details["structure_page"] = source_meta.get("structure_page")
     return {
         "code": code,
         "stage": stage,

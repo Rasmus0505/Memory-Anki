@@ -5,14 +5,12 @@ import type {
   TimeSessionRecord,
 } from '@/entities/session/model/session-records'
 import {
+  bulkDeleteStudySessionsApi,
   createStudySessionFromTimeRecordApi,
-  getStudySessionThresholdApi,
+  deleteStudySessionApi,
   listStudySessionsApi,
   patchStudySessionApi,
   type StudySessionPayload,
-  restoreStudySessionApi,
-  setStudySessionThresholdApi,
-  softDeleteStudySessionApi,
   type StudySessionItem,
 } from '@/entities/study-session/api'
 
@@ -21,15 +19,11 @@ export interface TimeRecordListResponse {
 }
 
 export async function listTimeRecordsApi(options?: {
-  includeDeleted?: boolean
-  includeBelowThreshold?: boolean
 }) {
   return listStudySessionRecordsApi(options)
 }
 
 export async function listStudySessionRecordsApi(options?: {
-  includeDeleted?: boolean
-  includeBelowThreshold?: boolean
 }) {
   const result = await listStudySessionsApi(options)
   return { items: result.items.map(studySessionToTimeRecord) }
@@ -93,50 +87,33 @@ export async function updateStudySessionRecordApi(
   return { item: result.item ? studySessionToTimeRecord(result.item) : null }
 }
 
-export async function softDeleteTimeRecordApi(id: string) {
-  return softDeleteStudySessionRecordApi(id)
+export async function deleteTimeRecordApi(id: string) {
+  return deleteStudySessionRecordApi(id)
 }
 
-export async function softDeleteStudySessionRecordApi(id: string) {
-  const result = await softDeleteStudySessionApi(id, {
+export async function deleteStudySessionRecordApi(id: string) {
+  await deleteStudySessionApi(id, {
     persistence: {
-      resourceKey: `study-session:${id}:soft-delete`,
+      resourceKey: `study-session:${id}:delete`,
       description: '删除学习会话',
       replayMode: 'manual',
     },
   })
-  return { item: result.item ? studySessionToTimeRecord(result.item) : null }
+  return { ok: true }
 }
 
-export async function restoreTimeRecordApi(id: string) {
-  return restoreStudySessionRecordApi(id)
+export async function bulkDeleteTimeRecordsApi(ids: string[]) {
+  return bulkDeleteStudySessionRecordsApi(ids)
 }
 
-export async function restoreStudySessionRecordApi(id: string) {
-  const result = await restoreStudySessionApi(id, {
+export async function bulkDeleteStudySessionRecordsApi(ids: string[]) {
+  return bulkDeleteStudySessionsApi(ids, {
     persistence: {
-      resourceKey: `study-session:${id}:restore`,
-      description: '恢复学习会话',
+      resourceKey: `study-session:bulk-delete:${ids.join(',')}`,
+      description: '批量删除学习会话',
       replayMode: 'manual',
     },
   })
-  return { item: result.item ? studySessionToTimeRecord(result.item) : null }
-}
-
-export async function getTimeRecordingThresholdApi() {
-  return getStudySessionRecordingThresholdApi()
-}
-
-export async function getStudySessionRecordingThresholdApi() {
-  return getStudySessionThresholdApi()
-}
-
-export async function setTimeRecordingThresholdApi(seconds: number) {
-  return setStudySessionRecordingThresholdApi(seconds)
-}
-
-export async function setStudySessionRecordingThresholdApi(seconds: number) {
-  return setStudySessionThresholdApi(seconds)
 }
 
 export async function importLegacyTimeRecordsApi(records: TimeSessionRecord[]) {

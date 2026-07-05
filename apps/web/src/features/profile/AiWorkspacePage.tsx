@@ -139,7 +139,6 @@ export function AiWorkspacePage() {
             categoryModelSelections={workspace.categoryModelSelections}
             categoryThinkingSelections={workspace.categoryThinkingSelections}
             savingKeys={workspace.savingKeys}
-            testingVoice={workspace.testingVoice}
             onCurrentCategoryChange={workspace.setCurrentCategoryKey}
             onCategoryModelSelectionChange={(category, nextModel) => {
               workspace.setCategoryModelSelections((current) => ({
@@ -193,8 +192,6 @@ export function AiWorkspacePage() {
             onSceneSave={workspace.handleSceneSave}
             onRestoreScene={workspace.handleRestoreScene}
             onJumpToObservability={workspace.jumpToObservability}
-            onOpenVoiceSettings={() => workspace.setSettingsOpen(true)}
-            onTestVoice={() => workspace.handleVoiceTest(false)}
           />
         </TabsContent>
 
@@ -222,14 +219,11 @@ export function AiWorkspacePage() {
         logDetailOpen={workspace.logDetailOpen}
         logDetailLoading={workspace.logDetailLoading}
         logDetail={workspace.logDetail}
-        settingsOpen={workspace.settingsOpen}
         savingKeys={workspace.savingKeys}
         onImpactOpenChange={workspace.setImpactOpen}
         onConnectionOpenChange={workspace.setConnectionOpen}
         onLogDetailOpenChange={workspace.setLogDetailOpen}
-        onSettingsOpenChange={workspace.setSettingsOpen}
         onDeleteModel={workspace.handleDeleteModel}
-        onTestVoice={() => workspace.handleVoiceTest(true)}
       />
     </div>
   );

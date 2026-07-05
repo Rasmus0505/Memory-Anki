@@ -5,7 +5,6 @@
   FileText,
   ImagePlus,
   LoaderCircle,
-  Plus,
   RotateCcw,
   Sparkles,
   Trash2,
@@ -14,8 +13,6 @@ import { toast } from '@/shared/feedback/toast'
 import type {
   MiniPalaceSummary,
   PalaceQuizGenerationPreview,
-  PalaceQuizPdfSourceMeta,
-  SubjectDocumentSummary,
 } from '@/shared/api/contracts'
 import { PreviewQuestionCard } from '@/features/palace-quiz/components/palaceQuizCards'
 import type { QuizGenerationHistoryItem } from '@/features/palace-quiz/quiz-generation-history'
@@ -26,8 +23,6 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui
 import { Input } from '@/shared/components/ui/input'
 import { Textarea } from '@/shared/components/ui/textarea'
 import { cn } from '@/shared/lib/utils'
-import type { QuizGenerationPdfSourceDraft } from '@/features/palace-quiz/quizGenerationController'
-import type { PalaceQuizGenerationInputs } from '@/features/palace-quiz/hooks/usePalaceQuizGenerationInputs'
 import type { PalaceQuizMiniPalaceClassificationResult } from '@/shared/api/contracts'
 
 const MANUAL_TEXT_FORMAT_PROMPT = `请把我提供的题目资料整理成 Memory Anki 可识别的唯一 JSON，不要输出 markdown 或解释。
@@ -42,7 +37,7 @@ const MANUAL_TEXT_FORMAT_PROMPT = `请把我提供的题目资料整理成 Memor
 7. categorization：categories 为 [{"id":"C1","name":"类别"}]，items 为 [{"id":"I1","text":"条目","category_id":"C1"}]。
 请保留原题题干、选项、答案和解析，不要编造资料外内容。`
 
-type GenerationSourceKind = 'subject-pdf' | 'image-single' | 'image-batch' | 'text-files'
+type GenerationSourceKind = 'image-single' | 'image-batch' | 'text-files'
 
 interface PalaceQuizGenerationPanelProps {
   context: {
@@ -61,24 +56,17 @@ interface PalaceQuizGenerationPanelProps {
     sourceKind: GenerationSourceKind
     setSourceKind: (value: GenerationSourceKind) => void
     files: File[]
-    pdfSources: QuizGenerationPdfSourceDraft[]
+    extraPrompt: string
+    setExtraPrompt: (value: string) => void
     enableSecondaryReview: boolean
     setEnableSecondaryReview: (value: boolean) => void
     classifyByMiniPalace: boolean
     setClassifyByMiniPalace: (value: boolean) => void
     error: string
     loading: boolean
-    subjectsLoading: boolean
-    subjectOptions: Array<{ id: number; name: string }>
-    pdfController: PalaceQuizGenerationInputs['pdfController']
-    subjectPdfUploadInputRef: React.RefObject<HTMLInputElement | null>
     onOpenRangeDialog: () => Promise<void>
     onGeneratePreview: () => Promise<void>
     onImageFileChange: (files: FileList | null) => void
-    onUploadSubjectPdf: (file: File) => Promise<void>
-    onAddCurrentPdfSource: () => void
-    onRemovePdfSource: (subjectDocumentId: number) => void
-    onPdfSourceRoleHintChange: (subjectDocumentId: number, value: 'question' | 'answer') => void
   }
   history: {
     items: QuizGenerationHistoryItem[]
@@ -140,24 +128,17 @@ export function PalaceQuizGenerationPanel({
     sourceKind: generationSourceKind,
     setSourceKind: setGenerationSourceKind,
     files: generationFiles,
-    pdfSources: generationPdfSources,
+    extraPrompt,
+    setExtraPrompt,
     enableSecondaryReview: generationEnableSecondaryReview,
     setEnableSecondaryReview: setGenerationEnableSecondaryReview,
     classifyByMiniPalace: generationClassifyByMiniPalace,
     setClassifyByMiniPalace: setGenerationClassifyByMiniPalace,
     error: generationError,
     loading: generationLoading,
-    subjectsLoading,
-    subjectOptions,
-    pdfController,
-    subjectPdfUploadInputRef,
     onOpenRangeDialog,
     onGeneratePreview,
     onImageFileChange,
-    onUploadSubjectPdf,
-    onAddCurrentPdfSource,
-    onRemovePdfSource,
-    onPdfSourceRoleHintChange,
   } = source
   const {
     items: generationHistory,
@@ -248,14 +229,6 @@ export function PalaceQuizGenerationPanel({
             <div className="flex flex-wrap gap-2">
               <Button
                 type="button"
-                variant={generationSourceKind === 'subject-pdf' ? 'default' : 'outline'}
-                onClick={() => setGenerationSourceKind('subject-pdf')}
-              >
-                <FileText className="size-4" />
-                学科 PDF
-              </Button>
-              <Button
-                type="button"
                 variant={generationSourceKind === 'image-single' ? 'default' : 'outline'}
                 onClick={() => setGenerationSourceKind('image-single')}
               >
@@ -280,161 +253,7 @@ export function PalaceQuizGenerationPanel({
               </Button>
             </div>
 
-            {generationSourceKind === 'subject-pdf' ? (
-              <div className="space-y-4 rounded-lg border border-border/70 bg-background/60 p-4">
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <label className="grid gap-2 text-sm">
-                    <span className="font-medium">学科</span>
-                    <select
-                      className="h-9 rounded-md border border-input bg-background px-3 text-sm"
-                      value={pdfController.selectedSubjectId ?? ''}
-                      onChange={(event) =>
-                        pdfController.setSelectedSubjectId(
-                          event.target.value ? Number(event.target.value) : null,
-                        )
-                      }
-                      disabled={subjectsLoading}
-                    >
-                      <option value="">请选择学科</option>
-                      {subjectOptions.map((subject) => (
-                        <option key={subject.id} value={subject.id}>
-                          {subject.name}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label className="grid gap-2 text-sm">
-                    <span className="font-medium">PDF 资料</span>
-                    <select
-                      className="h-9 rounded-md border border-input bg-background px-3 text-sm"
-                      value={pdfController.selectedSubjectDocumentId ?? ''}
-                      onChange={(event) =>
-                        pdfController.setSelectedSubjectDocumentId(
-                          event.target.value ? Number(event.target.value) : null,
-                        )
-                      }
-                      disabled={!pdfController.selectedSubjectId || pdfController.subjectDocumentsLoading}
-                    >
-                      <option value="">请选择 PDF</option>
-                      {pdfController.subjectDocuments.map((document: SubjectDocumentSummary) => (
-                        <option key={document.id} value={document.id}>
-                          {document.original_name}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                </div>
-
-                <div className="flex flex-wrap gap-2">
-                  <input
-                    ref={subjectPdfUploadInputRef}
-                    type="file"
-                    accept="application/pdf,.pdf"
-                    className="hidden"
-                    onChange={(event) => {
-                      const input = event.currentTarget
-                      const file = event.target.files?.[0]
-                      if (!file) return
-                      void onUploadSubjectPdf(file)
-                        .catch((nextError) => {
-                          toast.error(nextError instanceof Error ? nextError.message : 'PDF 上传失败。')
-                        })
-                        .finally(() => {
-                          input.value = ''
-                        })
-                    }}
-                    disabled={!pdfController.selectedSubjectId}
-                  />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => subjectPdfUploadInputRef.current?.click()}
-                    disabled={!pdfController.selectedSubjectId}
-                  >
-                    <Plus className="size-4" />
-                    上传新 PDF 到资料库
-                  </Button>
-                  <Button type="button" variant="outline" onClick={onAddCurrentPdfSource}>
-                    <Plus className="size-4" />
-                    加入本次资料集
-                  </Button>
-                </div>
-
-                <div className="grid gap-2">
-                  <span className="text-sm font-medium">页码范围</span>
-                  <Input
-                    value={pdfController.pdfPageInput}
-                    onChange={(event) => pdfController.setPdfPageInput(event.target.value)}
-                    placeholder="例如：3,4,8-10"
-                  />
-                  {pdfController.pdfSelectionError ? (
-                    <div className="text-xs text-destructive">{pdfController.pdfSelectionError}</div>
-                  ) : (
-                    <div className="text-xs text-muted-foreground">
-                      已选择 {pdfController.selectedPdfPages.length} 页
-                    </div>
-                  )}
-                </div>
-
-                <div className="rounded-lg border border-border/70 bg-background/70 px-4 py-3 text-sm text-muted-foreground">
-                  PDF 页面预览已关闭。请直接输入页码范围，例如 15,16,17 或 15-17。
-                </div>
-
-                <div className="space-y-3 rounded-lg border border-border/70 bg-background/60 p-4">
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="text-sm font-medium">本次已加入的 PDF 资料</div>
-                    <div className="text-xs text-muted-foreground">
-                      共 {generationPdfSources.length} 份
-                    </div>
-                  </div>
-                  {generationPdfSources.length === 0 ? (
-                    <div className="text-sm text-muted-foreground">
-                      先选中一份 PDF 和页码，再点“加入本次资料集”。可以把题目、答案、解析分开加入。
-                    </div>
-                  ) : (
-                    generationPdfSources.map((source) => (
-                      <div
-                        key={source.subject_document_id}
-                        className="rounded-lg border border-border/70 bg-background/70 px-4 py-3"
-                      >
-                        <div className="flex flex-wrap items-start justify-between gap-3">
-                          <div className="space-y-1 text-sm">
-                            <div className="font-medium">{source.document_name}</div>
-                            <div className="text-muted-foreground">
-                              页码：{source.page_selection.join(', ')}
-                            </div>
-                          </div>
-                          <div className="flex flex-wrap gap-2">
-                            <select
-                              className="h-9 rounded-md border border-input bg-background px-3 text-sm"
-                              value={source.role_hint || 'question'}
-                              onChange={(event) =>
-                                onPdfSourceRoleHintChange(
-                                  source.subject_document_id,
-                                  event.target.value as 'question' | 'answer',
-                                )
-                              }
-                            >
-                              <option value="question">题目</option>
-                              <option value="answer">答案</option>
-                            </select>
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="outline"
-                              onClick={() => onRemovePdfSource(source.subject_document_id)}
-                            >
-                              <Trash2 className="size-4" />
-                            </Button>
-                          </div>
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
-            ) : (
-              <div className="space-y-4 rounded-lg border border-border/70 bg-background/60 p-4">
+            <div className="space-y-4 rounded-lg border border-border/70 bg-background/60 p-4">
                 {generationSourceKind === 'text-files' ? (
                   <div className="space-y-3 rounded-lg border border-border/70 bg-background/70 px-4 py-3 text-sm">
                     <div className="font-medium">文本文件导入说明</div>
@@ -504,14 +323,13 @@ export function PalaceQuizGenerationPanel({
                     {generationSourceKind === 'text-files' ? '还没有文本文件。' : '还没有图片。'}
                   </div>
                 )}
-              </div>
-            )}
+            </div>
 
             <div className="grid gap-2">
               <span className="text-sm font-medium">额外提示词</span>
               <Textarea
-                value={pdfController.rangePrompt}
-                onChange={(event) => pdfController.setRangePrompt(event.target.value)}
+                value={extraPrompt}
+                onChange={(event) => setExtraPrompt(event.target.value)}
                 placeholder="这里会与系统模板自动拼接，而不是覆盖。你可以补充题型偏好、难度要求、重点页码等。"
                 rows={4}
               />
@@ -585,7 +403,7 @@ export function PalaceQuizGenerationPanel({
             </div>
           ) : (
             generationHistory.map((item) => {
-              const canRegenerate = item.sourceKind === 'subject-pdf'
+              const canRegenerate = false
               return (
                 <div
                   key={item.id}
@@ -772,21 +590,6 @@ export function PalaceQuizGenerationPanel({
                 )}
                 {generationPreview.ai_call_log_id ? (
                   <span> · AI日志 {generationPreview.ai_call_log_id}</span>
-                ) : null}
-                {generationPreview.source_meta.pdf_sources?.length ? (
-                  <div className="mt-2 space-y-1">
-                    {generationPreview.source_meta.pdf_sources.map(
-                      (source: PalaceQuizPdfSourceMeta, index: number) => (
-                        <div key={`${source.subject_document_id ?? 'pdf'}_${index}`}>
-                          {index + 1}. {source.document_name || `PDF ${index + 1}`}
-                          {source.page_numbers?.length ? ` · 页码 ${source.page_numbers.join(', ')}` : ''}
-                          {source.role_hint
-                            ? ` · 角色 ${source.role_hint === 'answer' ? '答案' : '题目'}`
-                            : ''}
-                        </div>
-                      ),
-                    )}
-                  </div>
                 ) : null}
               </div>
               {generationPreview.warnings?.length ? (

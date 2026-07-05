@@ -3,19 +3,15 @@ from __future__ import annotations
 import json
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
-from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from memory_anki.infrastructure.db.models import get_session
 from memory_anki.modules.backups.application.backup_service import maybe_create_rolling_backup
-from memory_anki.modules.palace_quiz.application import ai_service as palace_quiz_ai_service
 from memory_anki.modules.palace_quiz.application.ai_service import (
     PalaceQuizAiError,
     classify_existing_quiz_questions_to_mini_palaces,
     generate_quiz_preview_from_chapter_outline,
     generate_quiz_preview_from_images,
-    generate_quiz_preview_from_pdf,
-    generate_quiz_preview_from_pdf_events,
     generate_quiz_preview_from_review_mindmap,
     generate_quiz_preview_from_text_files,
     generate_short_answer_feedback,
@@ -294,124 +290,6 @@ async def api_generate_palace_quiz_from_text_files(
             ai_options=normalize_ai_runtime_options(
                 json.loads(ai_options) if ai_options else None
             ),
-        )
-    except Exception as exc:  # pragma: no cover - centralized HTTP mapping
-        _raise_http_error(exc)
-
-
-@router.post("/palaces/{palace_id}/quiz-generation/pdf")
-def api_generate_palace_quiz_from_pdf(
-    palace_id: int,
-    data: dict,
-    s: Session = Depends(session_dep),
-):
-    try:
-        page_selection = data.get("page_selection")
-        pdf_sources = data.get("pdf_sources")
-        return generate_quiz_preview_from_pdf(
-            s,
-            palace_id=palace_id,
-            subject_document_id=int(data.get("subject_document_id") or 0),
-            page_selection=list(page_selection or []),
-            extra_prompt=str(data.get("extra_prompt") or ""),
-            enable_secondary_review=bool(data.get("enable_secondary_review", False)),
-            pdf_sources=list(pdf_sources or []) if isinstance(pdf_sources, list) else None,
-            classify_by_mini_palace=bool(data.get("classify_by_mini_palace", False)),
-            selected_chapter_id=(
-                int(data.get("selected_chapter_id"))
-                if data.get("selected_chapter_id") not in (None, "", 0, "0")
-                else None
-            ),
-            ai_options=normalize_ai_runtime_options(data.get("ai_options")),
-            ai_options_by_scenario=_normalize_ai_runtime_options_by_scenario(
-                data.get("ai_options_by_scenario")
-            ),
-        )
-    except Exception as exc:  # pragma: no cover - centralized HTTP mapping
-        _raise_http_error(exc)
-
-
-@router.post("/palaces/{palace_id}/quiz-generation/pdf/stream")
-def api_stream_generate_palace_quiz_from_pdf(
-    palace_id: int,
-    data: dict,
-    s: Session = Depends(session_dep),
-):
-    def event_stream():
-        try:
-            page_selection = data.get("page_selection")
-            pdf_sources = data.get("pdf_sources")
-            for event_name, payload in generate_quiz_preview_from_pdf_events(
-                s,
-                palace_id=palace_id,
-                subject_document_id=int(data.get("subject_document_id") or 0),
-                page_selection=list(page_selection or []),
-                extra_prompt=str(data.get("extra_prompt") or ""),
-                enable_secondary_review=bool(data.get("enable_secondary_review", False)),
-                pdf_sources=list(pdf_sources or []) if isinstance(pdf_sources, list) else None,
-                classify_by_mini_palace=bool(data.get("classify_by_mini_palace", False)),
-                selected_chapter_id=(
-                    int(data.get("selected_chapter_id"))
-                    if data.get("selected_chapter_id") not in (None, "", 0, "0")
-                    else None
-                ),
-                ai_options=normalize_ai_runtime_options(data.get("ai_options")),
-                ai_options_by_scenario=_normalize_ai_runtime_options_by_scenario(
-                    data.get("ai_options_by_scenario")
-                ),
-            ):
-                yield _quiz_sse(event_name, payload)
-        except Exception as exc:
-            if isinstance(exc, PalaceQuizNotFoundError | PalaceQuizValidationError | PalaceQuizAiError):
-                yield _quiz_sse("error", {"detail": str(exc)})
-                return
-            yield _quiz_sse("error", {"detail": str(exc) or "生成题目预览失败。"})
-
-    return StreamingResponse(
-        event_stream(),
-        media_type="text/event-stream",
-        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
-    )
-
-
-@router.post("/palaces/{palace_id}/quiz-generation/pdf/recover")
-def api_recover_palace_quiz_from_ai_log(
-    palace_id: int,
-    data: dict,
-    s: Session = Depends(session_dep),
-):
-    try:
-        return palace_quiz_ai_service.recover_quiz_preview_from_ai_call_log(
-            s,
-            palace_id=palace_id,
-            ai_call_log_id=str(data.get("ai_call_log_id") or ""),
-            classify_by_mini_palace=bool(data.get("classify_by_mini_palace", False)),
-            selected_chapter_id=(
-                int(data.get("selected_chapter_id"))
-                if data.get("selected_chapter_id") not in (None, "", 0, "0")
-                else None
-            ),
-            ai_options=normalize_ai_runtime_options(data.get("ai_options")),
-        )
-    except Exception as exc:  # pragma: no cover - centralized HTTP mapping
-        _raise_http_error(exc)
-
-
-@router.post("/palaces/{palace_id}/quiz-generation/pdf/recover-and-save")
-def api_recover_and_save_palace_quiz_from_ai_log(
-    palace_id: int,
-    data: dict,
-    s: Session = Depends(session_dep),
-):
-    try:
-        return palace_quiz_ai_service.recover_quiz_questions_from_ai_call_log_and_save(
-            s,
-            palace_id=palace_id,
-            ai_call_log_id=str(data.get("ai_call_log_id") or ""),
-            selected_chapter_id=int(data.get("selected_chapter_id") or 0),
-            classify_by_mini_palace=bool(data.get("classify_by_mini_palace", False)),
-            save_mode=str(data.get("save_mode") or "append"),
-            ai_options=normalize_ai_runtime_options(data.get("ai_options")),
         )
     except Exception as exc:  # pragma: no cover - centralized HTTP mapping
         _raise_http_error(exc)

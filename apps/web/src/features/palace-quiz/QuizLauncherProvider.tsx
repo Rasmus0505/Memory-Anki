@@ -4,22 +4,19 @@ import {
   useContext,
   useEffect,
   useMemo,
-  useRef,
   useState,
   type PropsWithChildren,
 } from 'react'
-import { FileText, ImagePlus, LoaderCircle, Play, Sparkles, Upload } from 'lucide-react'
+import { ImagePlus, LoaderCircle, Play, Sparkles } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { toast } from '@/shared/feedback/toast'
 import { useAiRunConfigDialog } from '@/features/ai-config/useAiRunConfigDialog'
-import { usePdfImportController, type ImportSubjectOption } from '@/entities/knowledge-import/model'
 import {
   autoGenerateAndSavePalaceQuiz,
   type QuizGenerationRequestConfig,
   type QuizLauncherGenerationSourceKind,
 } from '@/features/palace-quiz/quizGenerationController'
 import type { MindMapEditorState, PalaceQuizQuestionType } from '@/shared/api/contracts'
-import { getSubjectsApi } from '@/entities/knowledge/api'
 import { getPalaceApi } from '@/entities/palace/api'
 import {
   completeTask,
@@ -78,38 +75,21 @@ const QUIZ_LAUNCHER_QUESTION_TYPES: PalaceQuizQuestionType[] = [
 const QuizLauncherContext = createContext<QuizLauncherContextValue | null>(null)
 
 function getDefaultSourceKind(scene: QuizLauncherScene): QuizLauncherGenerationSourceKind {
-  return scene === 'review' ? 'review-mindmap' : 'subject-pdf'
+  return scene === 'review' ? 'review-mindmap' : 'image-single'
 }
 
 export function QuizLauncherProvider({ children }: PropsWithChildren) {
   const navigate = useNavigate()
   const [request, setRequest] = useState<QuizLauncherRequest | null>(null)
   const [palace, setPalace] = useState<LauncherPalaceMeta | null>(null)
-  const [subjects, setSubjects] = useState<Array<{ id: number; name: string }>>([])
   const [loading, setLoading] = useState(false)
-  const [sourceKind, setSourceKind] = useState<QuizLauncherGenerationSourceKind>('subject-pdf')
+  const [sourceKind, setSourceKind] = useState<QuizLauncherGenerationSourceKind>('image-single')
   const [extraPrompt, setExtraPrompt] = useState('')
   const [imageFiles, setImageFiles] = useState<File[]>([])
   const [questionCount, setQuestionCount] = useState(6)
   const [error, setError] = useState('')
   const [starting, setStarting] = useState(false)
   const { promptForAiOptions, aiRunConfigDialog } = useAiRunConfigDialog()
-  const uploadInputRef = useRef<HTMLInputElement | null>(null)
-
-  const subjectOptions = useMemo<ImportSubjectOption[]>(
-    () => subjects.map((subject) => ({ id: subject.id, name: subject.name })),
-    [subjects],
-  )
-  const defaultSubjectId = useMemo(
-    () => palace?.chapters?.find((chapter) => chapter.subject?.id)?.subject?.id ?? null,
-    [palace],
-  )
-  const pdfController = usePdfImportController({
-    entityKey: request?.palaceId ? `quiz_launcher_${request.palaceId}` : null,
-    subjectOptions,
-    defaultSubjectId,
-    setError,
-  })
 
   useEffect(() => {
     if (!request) return
@@ -117,11 +97,10 @@ export function QuizLauncherProvider({ children }: PropsWithChildren) {
     setError('')
     setSourceKind(getDefaultSourceKind(request.scene))
     let cancelled = false
-    void Promise.all([getPalaceApi(request.palaceId), getSubjectsApi()])
-      .then(([palaceResponse, subjectResponse]) => {
+    void getPalaceApi(request.palaceId)
+      .then((palaceResponse) => {
         if (cancelled) return
         setPalace(palaceResponse as LauncherPalaceMeta)
-        setSubjects((subjectResponse || []).map((item) => ({ id: item.id, name: item.name })))
       })
       .catch((nextError) => {
         if (cancelled) return
@@ -182,32 +161,8 @@ export function QuizLauncherProvider({ children }: PropsWithChildren) {
         },
       }
     }
-    if (sourceKind === 'subject-pdf') {
-      const selectedDocument = pdfController.subjectDocuments.find(
-        (document) => document.id === pdfController.selectedSubjectDocumentId,
-      )
-      if (!pdfController.selectedSubjectDocumentId || !selectedDocument) {
-        throw new Error('请先选择一份 PDF 资料。')
-      }
-      if (pdfController.selectedPdfPages.length === 0) {
-        throw new Error('请先选择至少一页 PDF。')
-      }
-      return {
-        palaceId: request.palaceId,
-        sourceKind,
-        extraPrompt,
-        pdfSources: [
-          {
-            subject_document_id: selectedDocument.id,
-            document_name: selectedDocument.original_name,
-            page_selection: pdfController.selectedPdfPages,
-            role_hint: 'question',
-          },
-        ],
-      }
-    }
     if (imageFiles.length === 0) {
-      throw new Error('请先上传图片。')
+      throw new Error(sourceKind === 'text-files' ? '请先上传文本文件。' : '请先上传图片。')
     }
     return {
       palaceId: request.palaceId,
@@ -228,23 +183,17 @@ export function QuizLauncherProvider({ children }: PropsWithChildren) {
         scenarioKey:
           sourceKind === 'review-mindmap'
             ? 'quiz_review_mindmap_generation'
-            : sourceKind === 'subject-pdf'
-              ? 'quiz_pdf_generation'
-              : 'quiz_image_generation',
+            : 'quiz_image_generation',
         entrypointKey:
           sourceKind === 'review-mindmap'
             ? 'quiz-generate-review-mindmap'
-            : sourceKind === 'subject-pdf'
-              ? 'quiz-generate-pdf'
-              : sourceKind === 'image-batch'
+            : sourceKind === 'image-batch'
                 ? 'quiz-generate-images-batch'
                 : 'quiz-generate-images-single',
         title:
           sourceKind === 'review-mindmap'
             ? '复习脑图做题生成配置'
-            : sourceKind === 'subject-pdf'
-              ? 'PDF 做题生成配置'
-              : '图片做题生成配置',
+            : '图片做题生成配置',
       })
       if (!aiOptions) {
         dispatchGlobalFeedback('quiz_generate_cancel', {
@@ -279,11 +228,6 @@ export function QuizLauncherProvider({ children }: PropsWithChildren) {
               progress: 25,
               detail: '正在根据当前复习脑图生成题目…',
             })
-          } else if (sourceKind === 'subject-pdf') {
-            updateTask(taskId, {
-              progress: 18,
-              detail: '正在解析 PDF 并生成题目…',
-            })
           } else {
             updateTask(taskId, {
               progress: 18,
@@ -294,16 +238,6 @@ export function QuizLauncherProvider({ children }: PropsWithChildren) {
           const result = await autoGenerateAndSavePalaceQuiz({
             ...generationConfig,
             aiOptions,
-            onStatus: (event) => {
-              if (sourceKind !== 'subject-pdf') return
-              const total = event.total || 4
-              const step = event.step || 1
-              const progress = Math.min(92, Math.max(18, Math.round((step / total) * 78)))
-              updateTask(taskId, {
-                progress,
-                detail: event.message || '正在生成题目…',
-              })
-            },
           })
 
           updateTask(taskId, {
@@ -405,20 +339,6 @@ export function QuizLauncherProvider({ children }: PropsWithChildren) {
                     ) : null}
                     <Button
                       type="button"
-                      variant={sourceKind === 'subject-pdf' ? 'default' : 'outline'}
-                      onClick={() => {
-                        dispatchGlobalFeedback('quiz_nav_scope_change', {
-                          label: '学科PDF',
-                          audioScope: 'global',
-                        })
-                        setSourceKind('subject-pdf')
-                      }}
-                    >
-                      <FileText className="size-4" />
-                      学科 PDF
-                    </Button>
-                    <Button
-                      type="button"
                       variant={sourceKind === 'image-single' ? 'default' : 'outline'}
                       onClick={() => {
                         dispatchGlobalFeedback('quiz_nav_scope_change', {
@@ -462,119 +382,6 @@ export function QuizLauncherProvider({ children }: PropsWithChildren) {
                       <div className="rounded-xl border border-border/70 bg-muted/35 px-3 py-3 text-sm text-muted-foreground">
                         会基于你当前看到的复习脑图生成一组综合题，并在完成后自动写入题库。
                       </div>
-                    </div>
-                  ) : null}
-
-                  {sourceKind === 'subject-pdf' ? (
-                    <div className="space-y-4">
-                      <div className="grid gap-3 sm:grid-cols-2">
-                        <label className="grid gap-2 text-sm">
-                          <span className="font-medium">学科</span>
-                          <select
-                            className="h-9 rounded-md border border-input bg-background px-3 text-sm"
-                            value={pdfController.selectedSubjectId ?? ''}
-                            onChange={(event) => {
-                              dispatchGlobalFeedback('quiz_generate_attach_source', {
-                                label: '学科',
-                                audioScope: 'local',
-                              })
-                              pdfController.setSelectedSubjectId(
-                                event.target.value ? Number(event.target.value) : null,
-                              )
-                            }}
-                          >
-                            <option value="">请选择学科</option>
-                            {subjectOptions.map((subject) => (
-                              <option key={subject.id} value={subject.id}>
-                                {subject.name}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
-                        <label className="grid gap-2 text-sm">
-                          <span className="font-medium">PDF 资料</span>
-                          <select
-                            className="h-9 rounded-md border border-input bg-background px-3 text-sm"
-                            value={pdfController.selectedSubjectDocumentId ?? ''}
-                            onChange={(event) => {
-                              dispatchGlobalFeedback('quiz_generate_attach_source', {
-                                label: 'PDF',
-                                audioScope: 'local',
-                              })
-                              pdfController.setSelectedSubjectDocumentId(
-                                event.target.value ? Number(event.target.value) : null,
-                              )
-                            }}
-                          >
-                            <option value="">请选择 PDF</option>
-                            {pdfController.subjectDocuments.map((document) => (
-                              <option key={document.id} value={document.id}>
-                                {document.original_name}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
-                      </div>
-                      <div className="flex flex-wrap items-center gap-3">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={() => {
-                            dispatchGlobalFeedback('quiz_generate_attach_source', {
-                              label: '上传PDF',
-                              audioScope: 'local',
-                            })
-                            uploadInputRef.current?.click()
-                          }}
-                        >
-                          <Upload className="size-4" />
-                          上传 PDF
-                        </Button>
-                        <input
-                          ref={uploadInputRef}
-                          type="file"
-                          accept="application/pdf,.pdf"
-                          className="hidden"
-                          onChange={(event) => {
-                            const file = event.target.files?.[0]
-                            if (!file) return
-                            dispatchGlobalFeedback('quiz_generate_attach_source', {
-                              label: '选择PDF',
-                              audioScope: 'local',
-                            })
-                            void pdfController
-                              .handleSubjectDocumentUpload(file)
-                              .catch((nextError) =>
-                                setError(
-                                  nextError instanceof Error
-                                    ? nextError.message
-                                    : '上传 PDF 失败。',
-                                ),
-                              )
-                              .finally(() => {
-                                event.currentTarget.value = ''
-                              })
-                          }}
-                        />
-                        <span className="text-xs text-muted-foreground">
-                          选择 PDF 和页码后，生成结果会直接写入题库。
-                        </span>
-                      </div>
-                      <label className="grid gap-2 text-sm">
-                        <span className="font-medium">页码</span>
-                        <Input
-                          value={pdfController.pdfPageInput}
-                          onChange={(event) => {
-                            dispatchGlobalFeedback('quiz_generate_attach_source', {
-                              label: '页码',
-                              audioScope: 'local',
-                            })
-                            pdfController.setPdfPageInput(event.target.value)
-                          }}
-                          placeholder="例如：3,4,8-10"
-                        />
-                      </label>
                     </div>
                   ) : null}
 

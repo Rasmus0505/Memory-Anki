@@ -27,9 +27,7 @@ describe('PalaceQuizPage core flows', () => {
     expect(await screen.findByText('细胞生物学宫殿 · 配套习题')).toBeTruthy()
     expect(screen.queryByRole('link', { name: '返回记忆宫殿' })).toBeNull()
     expect(screen.getByRole('button', { name: '查看记忆宫殿' })).toBeTruthy()
-    expect(screen.getByText('PDF生成')).toBeTruthy()
-    expect(screen.getByText(/questions\.pdf/)).toBeTruthy()
-    expect(screen.getByText(/answers\.pdf/)).toBeTruthy()
+    expect(screen.getByText('多图生成')).toBeTruthy()
     expect(useTimedSessionMock).toHaveBeenCalledWith(
       expect.objectContaining({
         kind: 'quiz',
@@ -268,7 +266,6 @@ describe('PalaceQuizPage core flows', () => {
           mini_palace: null,
           source_meta: {
             source_kind: 'manual',
-            subject_document_id: null,
             page_numbers: null,
             image_names: null,
             extra_prompt: '',

@@ -111,8 +111,6 @@ import { shouldAutoStartOnPageEnter, useTimedSession } from '@/shared/hooks/useT
 const CONTENT_TYPE_LABELS: Record<FreestyleContentType, string> = {
   quiz_question: '宫殿题卡',
   review: '正式复习',
-  segment_review: '分块复习',
-  mini_review: '小宫殿复习',
   practice: '专项练习',
   english: '英语听力',
   english_reading: '英语阅读',

@@ -11,7 +11,6 @@ const searchParams = new URLSearchParams()
 const setSearchParams = vi.fn()
 const getPalaceSubjectShelfApi = vi.fn()
 const getPalacesGroupedApi = vi.fn()
-const submitSegmentReviewSessionApi = vi.fn()
 
 vi.mock('react-router-dom', () => ({
   Link: ({ children, to }: { children: React.ReactNode; to: string }) => <a href={to}>{children}</a>,
@@ -43,16 +42,11 @@ vi.mock('@/entities/palace/api', () => ({
   getPalacesGroupedApi: (...args: unknown[]) => getPalacesGroupedApi(...args),
   PALACE_CATALOG_INVALIDATED_EVENT: 'palace-catalog:invalidated',
   deletePalaceApi: vi.fn(),
-  updatePalaceMiniReviewModeApi: vi.fn(),
 }))
 
 vi.mock('@/entities/palace-segment/api', () => ({
   updateDefaultSegmentReviewProgressApi: vi.fn(),
   updatePalaceSegmentReviewProgressApi: vi.fn(),
-}))
-
-vi.mock('@/features/review/api', () => ({
-  submitSegmentReviewSessionApi: (...args: unknown[]) => submitSegmentReviewSessionApi(...args),
 }))
 
 vi.mock('@/entities/preferences/api', () => ({
@@ -98,7 +92,6 @@ function buildGroupedResponse() {
                 title_mode: 'sync',
                 grouping_mode: 'auto',
                 manual_group_chapter_id: null,
-                mini_review_mode: 'independent',
                 binding_status: 'bound',
                 primary_chapter_id: 11,
                 primary_chapter: { id: 11, name: '第一章', subject_id: 1, parent_id: null },
@@ -206,10 +199,8 @@ describe('PalaceShelfPage', () => {
     setSearchParams.mockReset()
     getPalaceSubjectShelfApi.mockReset()
     getPalacesGroupedApi.mockReset()
-    submitSegmentReviewSessionApi.mockReset()
     getPalaceSubjectShelfApi.mockResolvedValue({ items: [buildShelfItem()] })
     getPalacesGroupedApi.mockResolvedValue(buildGroupedResponse())
-    submitSegmentReviewSessionApi.mockResolvedValue({ ok: true, next_id: 502, score: 5 })
     searchParams.delete('search')
     window.localStorage.clear()
     resetClientPreferenceCacheForTest()
@@ -294,13 +285,12 @@ describe('PalaceShelfPage', () => {
 
     expect(getPalacesGroupedApi).toHaveBeenCalledTimes(1)
     expect(screen.getByTestId('list-layout-root').dataset.layoutMode).toBe('chapter-double')
-    expect(screen.getAllByRole('button', { name: '开始复习' }).length).toBeGreaterThan(0)
+    expect(screen.getAllByRole('button', { name: '练习' }).length).toBeGreaterThan(0)
     expect(screen.getAllByRole('button', { name: '做题' }).length).toBeGreaterThan(0)
     expect(screen.getByLabelText(/编辑宫殿/)).toBeTruthy()
     expect(screen.getByLabelText(/更多操作/)).toBeTruthy()
-    expect(screen.getAllByTestId('stage-progress').length).toBeGreaterThan(0)
-    fireEvent.click(screen.getAllByRole('button', { name: '开始复习' })[0])
-    expect(navigate).toHaveBeenCalledWith('/segment-review/session/501')
+    fireEvent.click(screen.getAllByRole('button', { name: '练习' })[0])
+    expect(navigate).toHaveBeenCalledWith('/segments/201/practice')
     fireEvent.click(screen.getByRole('button', { name: '卡片流' }))
 
     expect(screen.getByTestId('list-layout-root').dataset.layoutMode).toBe('flow')
@@ -323,134 +313,8 @@ describe('PalaceShelfPage', () => {
 
     await screen.findByText('小宫殿 A')
     expect(screen.getByText('小宫殿')).toBeTruthy()
-    expect(screen.getAllByRole('button', { name: '开始复习' }).length).toBeGreaterThan(1)
-    expect(screen.getByRole('button', { name: '睡前复习' })).toBeTruthy()
+    expect(screen.getAllByRole('button', { name: '练习' }).length).toBeGreaterThan(1)
     expect(screen.getAllByRole('button', { name: '做题' }).length).toBeGreaterThan(1)
-  })
-
-  it('does not reuse palace-level practice highlighting for a single segment in expanded mode', async () => {
-    getPalacesGroupedApi.mockResolvedValueOnce({
-      groups: [],
-      ungrouped: [],
-      subjects: [
-        {
-          subject: { id: 1, name: '中国近代史', color: '#6366f1' },
-          chapter_groups: [
-            {
-              source_chapter: { id: 11, name: '第一章', subject_id: 1, parent_id: null },
-              palaces: [
-                {
-                  ...buildGroupedResponse().subjects[0].chapter_groups[0].palaces[0],
-                  needs_practice: true,
-                  mini_palaces: [],
-                  segments: [
-                    {
-                      ...buildGroupedResponse().subjects[0].chapter_groups[0].palaces[0].segments[0],
-                      has_due_review: false,
-                      current_review_schedule_id: null,
-                    },
-                  ],
-                },
-              ],
-            },
-          ],
-          ungrouped_palaces: [],
-        },
-      ],
-    })
-
-    render(<PalaceShelfPage />)
-
-    await screen.findByText('中国近代史')
-    fireEvent.click(screen.getByRole('button', { name: '展开' }))
-
-    const reviewButton = await screen.findByRole('button', { name: /今日稍后|小时|分钟|未排入复习/ })
-    expect(reviewButton.className).not.toContain('bg-success')
-    expect(screen.getAllByRole('button', { name: '做题' })[0].className).not.toContain('bg-success')
-  })
-
-  it('keeps the refreshed single-segment button out of practice highlight in expanded mode', async () => {
-    const groupedResponse = buildGroupedResponse()
-    const initialPalace = {
-      ...groupedResponse.subjects[0].chapter_groups[0].palaces[0],
-      needs_practice: true,
-      mini_palaces: [],
-      segments: [
-        {
-          ...groupedResponse.subjects[0].chapter_groups[0].palaces[0].segments[0],
-          id: 201,
-          has_due_review: true,
-          current_review_schedule_id: 501,
-          next_review_at: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
-        },
-        {
-          ...groupedResponse.subjects[0].chapter_groups[0].palaces[0].segments[0],
-          id: 202,
-          has_due_review: false,
-          current_review_schedule_id: 502,
-          next_review_at: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(),
-        },
-      ],
-    }
-    const refreshedPalace = {
-      ...initialPalace,
-      needs_practice: false,
-      segments: [
-        {
-          ...initialPalace.segments[0],
-          has_due_review: false,
-          current_review_schedule_id: 501,
-          next_review_at: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(),
-        },
-      ],
-    }
-    getPalacesGroupedApi.mockReset()
-    getPalacesGroupedApi
-      .mockResolvedValueOnce({
-        ...groupedResponse,
-        subjects: [
-          {
-            ...groupedResponse.subjects[0],
-            chapter_groups: [
-              {
-                ...groupedResponse.subjects[0].chapter_groups[0],
-                palaces: [initialPalace],
-              },
-            ],
-          },
-        ],
-      })
-      .mockResolvedValue({
-        ...groupedResponse,
-        subjects: [
-          {
-            ...groupedResponse.subjects[0],
-            chapter_groups: [
-              {
-                ...groupedResponse.subjects[0].chapter_groups[0],
-                palaces: [refreshedPalace],
-              },
-            ],
-          },
-        ],
-      })
-
-    render(<PalaceShelfPage />)
-
-    await screen.findByText('中国近代史')
-    fireEvent.click(screen.getByRole('button', { name: '展开' }))
-    await screen.findByRole('button', { name: '开始复习' })
-
-    const markReviewedButton = screen
-      .getAllByRole('button', { name: '标记已复习' })
-      .find((button) => !(button as HTMLButtonElement).disabled)
-    expect(markReviewedButton).toBeTruthy()
-    fireEvent.click(markReviewedButton as HTMLButtonElement)
-
-    await waitFor(() => {
-      const refreshedButton = screen.getByRole('button', { name: /小时|分钟|未排入复习/ })
-      expect(refreshedButton.className).not.toContain('bg-success')
-    })
   })
 
   it('refreshes shelf and expanded palace data when the catalog is invalidated', async () => {
@@ -477,7 +341,6 @@ describe('PalaceShelfPage', () => {
 
     fireEvent.click(screen.getByLabelText(/更多操作/))
     expect(screen.getByRole('button', { name: '删除' })).toBeTruthy()
-    expect(screen.getByRole('button', { name: '配置' })).toBeTruthy()
   })
 })
 

@@ -258,11 +258,6 @@ const TONE_PROFILES: Record<MindMapFeedbackEvent, ToneSpec[]> = {
     { frequency: 587, durationMs: 128, gain: 0.028, type: 'sine', offsetMs: 76, pan: 0 },
     { frequency: 880, durationMs: 150, gain: 0.022, type: 'triangle', offsetMs: 148, pan: 0.24 },
   ],
-  bilink_action: [
-    { frequency: 523, durationMs: 58, gain: 0.026, type: 'triangle', offsetMs: 0, pan: -0.28 },
-    { frequency: 523, durationMs: 58, gain: 0.024, type: 'triangle', offsetMs: 72, pan: 0.28 },
-    { frequency: 784, durationMs: 98, gain: 0.02, type: 'sine', offsetMs: 136, pan: 0 },
-  ],
   segment_action: [
     { frequency: 349, durationMs: 58, gain: 0.028, type: 'triangle', offsetMs: 0, pan: -0.08 },
     { frequency: 466, durationMs: 58, gain: 0.026, type: 'triangle', offsetMs: 62, pan: 0.08 },

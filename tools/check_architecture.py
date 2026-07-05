@@ -43,7 +43,6 @@ FORBIDDEN_REMOVED_SHARED_API_MODULES = {
     "quizzes.ts": "quiz question and generation API wrappers belong in entities/quiz/api.",
     "reviews.ts": "review API wrappers belong in features/review/api.",
     "runtime.ts": "runtime API wrappers belong in entities/runtime/api.",
-    "voiceCoach.ts": "voice coach API wrappers belong in features/voice-coach/api.",
 }
 FORBIDDEN_REMOVED_SHARED_API_DIRS = {
     "palaces": "palace API submodules belong in entities/palace/api; import preview/job submodules belong in entities/knowledge-import/api.",
@@ -124,7 +123,6 @@ BASELINE_PRESENTATION_SESSION_FILES = {
     "apps/api/src/memory_anki/modules/sessions/presentation/router.py",
     "apps/api/src/memory_anki/modules/settings/presentation/router.py",
     "apps/api/src/memory_anki/modules/time_records/presentation/router.py",
-    "apps/api/src/memory_anki/modules/voice_coach/presentation/__init__.py",
 }
 BASELINE_PERSONAL_PATH_TOOLS = {
     "tools/audit_1000_quiz_bank.py",
@@ -165,7 +163,6 @@ REQUIRED_STORAGE_KEYS = {
     "attachments",
     "english",
     "english_reading",
-    "voice_coach",
     "import_jobs",
     "ai_call_logs",
     "backups_full",

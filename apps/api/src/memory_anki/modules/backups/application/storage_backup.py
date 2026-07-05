@@ -90,8 +90,6 @@ def create_storage_backup_manifest(
         "runtime_info": {
             "channel": runtime_info.get("channel"),
             "commit": runtime_info.get("commit"),
-            "runtime_generation": runtime_info.get("runtime_generation"),
-            "declared_runtime_generation": runtime_info.get("declared_runtime_generation"),
             "min_supported_generation": runtime_info.get("min_supported_generation"),
             "max_supported_generation": runtime_info.get("max_supported_generation"),
         },

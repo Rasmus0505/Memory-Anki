@@ -56,7 +56,7 @@ describe('useMindMapImport apply flows', () => {
     })
   })
 
-  it('exposes preview editor docs for single image, batch, and pdf imports', async () => {
+  it('exposes preview editor docs for single image and batch imports', async () => {
     render(<Harness />)
 
     fireEvent.click(screen.getByRole('button', { name: 'load' }))
@@ -71,13 +71,6 @@ describe('useMindMapImport apply flows', () => {
       expect(screen.getByTestId('preview-doc-root').textContent).toBe('Batch Imported')
     })
 
-    fireEvent.click(screen.getByRole('button', { name: 'enable-pdf' }))
-    fireEvent.click(screen.getByRole('button', { name: 'set-pdf-pages' }))
-    fireEvent.click(screen.getByRole('button', { name: 'set-range-prompt' }))
-    fireEvent.click(screen.getByRole('button', { name: 'start-pdf' }))
-    await waitFor(() => {
-      expect(screen.getByTestId('preview-doc-root').textContent).toBe('PDF Imported')
-    })
   })
 
   it('queues batch images without auto-starting recognition', async () => {

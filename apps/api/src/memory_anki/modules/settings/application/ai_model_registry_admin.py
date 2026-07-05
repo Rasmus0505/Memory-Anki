@@ -497,7 +497,7 @@ def _pick_provider_test_model(
             raise AiModelRegistryError("要测试的模型不存在。", code="model_not_found")
         return serialize_model_row(row)
 
-    ordered_model_types: tuple[AiModelType, ...] = ("llm", "translation", "vl", "asr", "tts")
+    ordered_model_types: tuple[AiModelType, ...] = ("llm", "translation", "vl", "asr")
     for model_type in ordered_model_types:
         row = (
             session.query(AiModelCatalog)
@@ -601,7 +601,7 @@ def upsert_ai_model_catalog_item(session: Session, payload: dict[str, Any]) -> d
     row.model_type = model_type
     row.has_vision = bool(payload.get("has_vision"))
     row.supports_thinking = bool(payload.get("supports_thinking"))
-    row.supports_temperature = bool(payload.get("supports_temperature", model_type not in {"asr", "tts"}))
+    row.supports_temperature = bool(payload.get("supports_temperature", model_type != "asr"))
     row.is_builtin = bool(row.is_builtin)
     row.is_active = True
     session.commit()

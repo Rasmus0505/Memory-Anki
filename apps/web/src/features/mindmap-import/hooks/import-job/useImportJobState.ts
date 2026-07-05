@@ -14,7 +14,6 @@ import {
 } from '@/features/mindmap-import/model/mindmap-import'
 import {
   describeJobProgress,
-  normalizePdfImportMode,
   persistLastJobId,
 } from '@/features/mindmap-import/hooks/mindmap-import-utils'
 import type { ImportJobHydrateOptions, UseImportJobControllerOptions } from '@/features/mindmap-import/hooks/import-job/types'
@@ -40,10 +39,6 @@ export interface ImportJobStateController {
   setImportHistory: (value: ImportHistoryItem[]) => void
   importWarnings: string[]
   setImportWarnings: (value: string[]) => void
-  importPdfOcrGroundingUsed: boolean | null
-  setImportPdfOcrGroundingUsed: (value: boolean | null) => void
-  importPdfOcrTextChars: number | null
-  setImportPdfOcrTextChars: (value: number | null) => void
   currentJobId: string | null
   currentJobStatus: MindMapImportJobStatus | null
   currentJobStage: MindMapImportJobStage | null
@@ -68,14 +63,6 @@ export function useImportJobState({
   batchImagesRef,
   setBatchStatus,
   setLastBatchMeta,
-  selectedPdfPages,
-  setSelectedPdfPages,
-  selectedSubjectDocumentId,
-  setPdfImportModeState,
-  setStructurePage,
-  analyzedPdfPages,
-  setAnalyzedPdfPages,
-  persistAnalyzedPdfPages,
 }: UseImportJobControllerOptions): ImportJobStateController {
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -91,8 +78,6 @@ export function useImportJobState({
   const [imagePreviewUrl, setImagePreviewUrl] = useState('')
   const [history, setHistory] = useState<ImportHistoryItem[]>([])
   const [importWarnings, setImportWarnings] = useState<string[]>([])
-  const [pdfOcrGroundingUsed, setPdfOcrGroundingUsed] = useState<boolean | null>(null)
-  const [pdfOcrTextChars, setPdfOcrTextChars] = useState<number | null>(null)
   const [currentJobId, setCurrentJobId] = useState<string | null>(null)
   const [currentJobStatus, setCurrentJobStatus] = useState<MindMapImportJobStatus | null>(null)
   const [currentJobStage, setCurrentJobStage] = useState<MindMapImportJobStage | null>(null)
@@ -159,10 +144,6 @@ export function useImportJobState({
     setSourceKindState(job.source_kind)
     setMindMapWorkflowState(job.source_kind === 'image-batch' ? 'batch' : 'single')
     setImportWarnings(result?.warnings || [])
-    setPdfOcrGroundingUsed(
-      typeof result?.ocr_grounding_used === 'boolean' ? result.ocr_grounding_used : null,
-    )
-    setPdfOcrTextChars(typeof result?.ocr_text_chars === 'number' ? result.ocr_text_chars : null)
     setError(job.error?.message || '')
     applyJobProgressState(job)
 
@@ -217,39 +198,6 @@ export function useImportJobState({
     } else if (job.mode === 'text') {
       setExtractedText('')
     }
-
-    if (job.source_kind === 'subject-pdf') {
-      const nextPdfMode = normalizePdfImportMode(job.source_meta?.pdf_mode)
-      setPdfImportModeState(nextPdfMode)
-      const nextPages = Array.isArray(result?.selected_pages)
-        ? result.selected_pages.slice()
-        : selectedPdfPages
-      if (nextPages.length > 0) {
-        setSelectedPdfPages(nextPages)
-      }
-      if (nextPdfMode === 'structured_merge') {
-        const nextStructurePage =
-          typeof result?.structure_page === 'number'
-            ? result.structure_page
-            : typeof job.source_meta?.structure_page === 'number'
-              ? job.source_meta.structure_page
-              : nextPages[0] ?? null
-        setStructurePage(
-          nextStructurePage != null && nextPages.includes(nextStructurePage)
-            ? nextStructurePage
-            : nextPages[0] ?? null,
-        )
-      } else {
-        setStructurePage(null)
-      }
-      if (selectedSubjectDocumentId && nextPages.length > 0 && job.status === 'completed') {
-        const nextAnalyzedPages = Array.from(
-          new Set([...analyzedPdfPages, ...nextPages]),
-        ).sort((left, right) => left - right)
-        setAnalyzedPdfPages(nextAnalyzedPages)
-        persistAnalyzedPdfPages(selectedSubjectDocumentId, nextAnalyzedPages)
-      }
-    }
   }
 
   const clearPreviewState = () => {
@@ -260,8 +208,6 @@ export function useImportJobState({
     setImagePreviewUrl('')
     setError('')
     setImportWarnings([])
-    setPdfOcrGroundingUsed(null)
-    setPdfOcrTextChars(null)
     setImportReusedExistingResult(false)
     setLastBatchMeta(null)
     resetStreamState()
@@ -288,10 +234,6 @@ export function useImportJobState({
     setImportHistory: setHistory,
     importWarnings,
     setImportWarnings,
-    importPdfOcrGroundingUsed: pdfOcrGroundingUsed,
-    setImportPdfOcrGroundingUsed: setPdfOcrGroundingUsed,
-    importPdfOcrTextChars: pdfOcrTextChars,
-    setImportPdfOcrTextChars: setPdfOcrTextChars,
     currentJobId,
     currentJobStatus,
     currentJobStage,

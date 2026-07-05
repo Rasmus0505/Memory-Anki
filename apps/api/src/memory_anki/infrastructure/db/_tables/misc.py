@@ -1,4 +1,4 @@
-"""Cross-cutting ORM tables: study sessions, time records, jobs, logs, config."""
+"""Cross-cutting ORM tables: study sessions, jobs, logs, config."""
 
 from __future__ import annotations
 
@@ -10,49 +10,6 @@ from sqlalchemy.orm import Mapped, mapped_column
 from memory_anki.core.time import utc_now_naive
 
 from ._base import Base
-
-
-class TimeRecord(Base):
-    __tablename__ = "time_records"
-    __table_args__ = (
-        Index("ix_time_records_source_kind_started", "source_kind", "started_at"),
-        Index("ix_time_records_english_course_started", "english_course_id", "started_at"),
-    )
-
-    id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    kind: Mapped[str] = mapped_column(String(20), nullable=False)
-    palace_id: Mapped[int | None] = mapped_column(
-        Integer,
-        ForeignKey("palaces.id", ondelete="SET NULL"),
-        nullable=True,
-    )
-    palace_segment_id: Mapped[int | None] = mapped_column(
-        Integer,
-        ForeignKey("palace_segments.id", ondelete="SET NULL"),
-        nullable=True,
-    )
-    source_kind: Mapped[str | None] = mapped_column(String(32), nullable=True)
-    english_course_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    title: Mapped[str] = mapped_column(String(300), nullable=False, default="")
-    started_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
-    ended_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
-    effective_seconds: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    pause_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    completion_method: Mapped[str] = mapped_column(
-        String(32),
-        nullable=False,
-        default="manual_complete",
-    )
-    duration_edited: Mapped[bool] = mapped_column(Boolean, default=False)
-    deleted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-    deleted_reason: Mapped[str | None] = mapped_column(String(32), nullable=True)
-    events_json: Mapped[str] = mapped_column(Text, default="[]")
-    created_at: Mapped[datetime | None] = mapped_column(DateTime, default=utc_now_naive)
-    updated_at: Mapped[datetime | None] = mapped_column(
-        DateTime,
-        default=utc_now_naive,
-        onupdate=utc_now_naive,
-    )
 
 
 class StudySession(Base):

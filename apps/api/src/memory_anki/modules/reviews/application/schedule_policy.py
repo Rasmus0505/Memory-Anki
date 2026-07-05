@@ -6,9 +6,7 @@ from datetime import date, datetime, time, timedelta
 
 @dataclass(frozen=True, slots=True)
 class ReviewSchedulePolicy:
-    default_algorithm: str
     ebbinghaus_intervals: tuple[str, ...]
-    custom_intervals: tuple[str, ...]
     early_review_anchor: bool
     sleep_review_time: time
 
@@ -27,8 +25,6 @@ class ReviewScheduleDraft:
 
 
 def normalize_algorithm(algorithm: str | None) -> str:
-    if algorithm == "custom":
-        return "custom"
     return "ebbinghaus"
 
 
@@ -37,9 +33,7 @@ def load_review_schedule_policy(session) -> ReviewSchedulePolicy:
     from memory_anki.infrastructure.db.models import Config
 
     keys = [
-        "default_algorithm",
         "ebbinghaus_intervals",
-        "custom_intervals",
         "early_review_anchor",
         "sleep_review_time",
     ]
@@ -51,18 +45,8 @@ def load_review_schedule_policy(session) -> ReviewSchedulePolicy:
         )
     values = {row.key: row.value for row in rows}
 
-    default_algorithm = normalize_algorithm(
-        values.get("default_algorithm", DEFAULTS.get("default_algorithm", ""))
-    )
     ebbinghaus_intervals = _split_intervals(
         values.get("ebbinghaus_intervals", DEFAULTS.get("ebbinghaus_intervals", ""))
-    )
-    custom_intervals = tuple(
-        item
-        for item in _split_intervals(
-            values.get("custom_intervals", DEFAULTS.get("custom_intervals", ""))
-        )
-        if item.isdigit()
     )
     early_review_anchor = values.get(
         "early_review_anchor",
@@ -72,9 +56,7 @@ def load_review_schedule_policy(session) -> ReviewSchedulePolicy:
         values.get("sleep_review_time", DEFAULTS.get("sleep_review_time", "22:00"))
     )
     return ReviewSchedulePolicy(
-        default_algorithm=default_algorithm,
         ebbinghaus_intervals=ebbinghaus_intervals,
-        custom_intervals=custom_intervals,
         early_review_anchor=early_review_anchor,
         sleep_review_time=sleep_review_time,
     )
@@ -84,12 +66,7 @@ def get_algorithm_intervals_for_policy(
     policy: ReviewSchedulePolicy,
     algorithm: str,
 ) -> list[str]:
-    normalized_algorithm = normalize_algorithm(algorithm)
-    intervals = (
-        list(policy.custom_intervals)
-        if normalized_algorithm == "custom"
-        else list(policy.ebbinghaus_intervals)
-    )
+    intervals = list(policy.ebbinghaus_intervals)
     if not intervals:
         intervals = ["1", "2", "4", "7", "15", "30", "60"]
     return intervals

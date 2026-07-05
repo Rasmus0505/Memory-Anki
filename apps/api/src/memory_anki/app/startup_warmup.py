@@ -26,8 +26,6 @@ def run_startup_warmup() -> None:
         for table_name in (
             "palaces",
             "review_schedules",
-            "palace_segment_review_schedules",
-            "palace_mini_palace_review_schedules",
             "session_progress",
         ):
             connection.execute(text(f"SELECT COUNT(*) FROM {table_name}")).scalar()
@@ -36,30 +34,6 @@ def run_startup_warmup() -> None:
                 """
                 SELECT id
                 FROM review_schedules
-                WHERE completed = 0 AND scheduled_date <= :today
-                ORDER BY scheduled_date, COALESCE(scheduled_at, scheduled_date), id
-                LIMIT 8
-                """
-            ),
-            {"today": today},
-        ).fetchall()
-        connection.execute(
-            text(
-                """
-                SELECT id
-                FROM palace_segment_review_schedules
-                WHERE completed = 0 AND scheduled_date <= :today
-                ORDER BY scheduled_date, COALESCE(scheduled_at, scheduled_date), id
-                LIMIT 8
-                """
-            ),
-            {"today": today},
-        ).fetchall()
-        connection.execute(
-            text(
-                """
-                SELECT id
-                FROM palace_mini_palace_review_schedules
                 WHERE completed = 0 AND scheduled_date <= :today
                 ORDER BY scheduled_date, COALESCE(scheduled_at, scheduled_date), id
                 LIMIT 8

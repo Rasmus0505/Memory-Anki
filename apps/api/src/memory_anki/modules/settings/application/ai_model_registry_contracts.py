@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import Any, Literal
 
 AiProviderKey = Literal["dashscope", "qwen", "zhipu", "siliconflow", "deepseek"]
-AiModelType = Literal["llm", "vl", "translation", "asr", "tts"]
+AiModelType = Literal["llm", "vl", "translation", "asr"]
 
 
 class AiModelRegistryError(ValueError):

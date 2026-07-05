@@ -10,12 +10,9 @@ import {
 } from 'react'
 import { toast } from '@/shared/feedback/toast'
 import type { dispatchGlobalFeedback } from '@/shared/feedback/globalFeedbackModel'
-import type { SubjectDocumentSummary } from '@/shared/api/contracts'
-import { usePdfImportController, type ImportSubjectOption } from '@/entities/knowledge-import/model'
 import {
   getSubjectTreeApi,
   getSubjectsApi,
-  uploadSubjectDocumentApi,
 } from '@/features/palace-quiz/api'
 import {
   buildChapterSummary,
@@ -25,10 +22,8 @@ import {
   type QuizGenerationSourceKind,
   type SubjectTreePayload,
 } from '@/features/palace-quiz/model/palaceQuizPage'
-import type { QuizGenerationPdfSourceDraft as QuizPdfSourceDraft } from '@/features/palace-quiz/quizGenerationController'
 
 interface UsePalaceQuizGenerationInputsOptions {
-  palaceId: number | null
   palace: PalaceQuizPageMeta | null
   generationLoading: boolean
   generationStreamPreviewText: string
@@ -45,10 +40,9 @@ export interface PalaceQuizGenerationInputs {
   setGenerationSourceKind: Dispatch<SetStateAction<QuizGenerationSourceKind>>
   generationFiles: File[]
   setGenerationFiles: Dispatch<SetStateAction<File[]>>
-  generationPdfSources: QuizPdfSourceDraft[]
-  setGenerationPdfSources: Dispatch<SetStateAction<QuizPdfSourceDraft[]>>
+  extraPrompt: string
+  setExtraPrompt: Dispatch<SetStateAction<string>>
   subjectsLoading: boolean
-  subjectOptions: ImportSubjectOption[]
   rangeDialogOpen: boolean
   setRangeDialogOpen: Dispatch<SetStateAction<boolean>>
   chapterTrees: SubjectTreePayload[]
@@ -60,29 +54,18 @@ export interface PalaceQuizGenerationInputs {
   pendingChapterSummary: string
   allowedChapterIds: Set<number>
   selectedChapterHasChildren: boolean
-  selectedSubjectDocument: SubjectDocumentSummary | null
-  pdfController: ReturnType<typeof usePdfImportController>
   generationStreamContentRef: RefObject<HTMLPreElement | null>
-  subjectPdfUploadInputRef: RefObject<HTMLInputElement | null>
   miniPalaces: NonNullable<PalaceQuizPageMeta['mini_palaces']>
   handleOpenRangeDialog: () => Promise<void>
   handleConfirmRangeSelection: () => void
   setPendingChapterId: Dispatch<SetStateAction<number | null>>
   handleImageFileChange: (fileList: FileList | null) => void
-  handleUploadSubjectPdf: (file: File) => Promise<void>
-  handleAddCurrentPdfSource: () => void
-  handleRemovePdfSource: (subjectDocumentId: number) => void
-  handlePdfSourceRoleHintChange: (
-    subjectDocumentId: number,
-    roleHint: 'question' | 'answer',
-  ) => void
   handleGenerationStreamScroll: () => void
   resetGenerationStreamFollow: () => void
   getChapterHasChildren: (chapterId: number | null) => boolean
 }
 
 export function usePalaceQuizGenerationInputs({
-  palaceId,
   palace,
   generationLoading,
   generationStreamPreviewText,
@@ -91,9 +74,9 @@ export function usePalaceQuizGenerationInputs({
   setGenerationError,
 }: UsePalaceQuizGenerationInputsOptions): PalaceQuizGenerationInputs {
   const [generationSourceKind, setGenerationSourceKind] =
-    useState<QuizGenerationSourceKind>('subject-pdf')
+    useState<QuizGenerationSourceKind>('image-single')
   const [generationFiles, setGenerationFiles] = useState<File[]>([])
-  const [generationPdfSources, setGenerationPdfSources] = useState<QuizPdfSourceDraft[]>([])
+  const [extraPrompt, setExtraPrompt] = useState('')
   const [subjects, setSubjects] = useState<Array<{ id: number; name: string }>>([])
   const [subjectsLoading, setSubjectsLoading] = useState(false)
   const [rangeDialogOpen, setRangeDialogOpen] = useState(false)
@@ -103,22 +86,6 @@ export function usePalaceQuizGenerationInputs({
   const [pendingChapterId, setPendingChapterId] = useState<number | null>(null)
   const generationStreamContentRef = useRef<HTMLPreElement | null>(null)
   const generationStreamAutoFollowRef = useRef(true)
-  const subjectPdfUploadInputRef = useRef<HTMLInputElement | null>(null)
-
-  const subjectOptions = useMemo<ImportSubjectOption[]>(
-    () => subjects.map((subject) => ({ id: subject.id, name: subject.name })),
-    [subjects],
-  )
-  const defaultSubjectId = useMemo(
-    () => palace?.chapters?.find((chapter) => chapter.subject?.id)?.subject?.id ?? null,
-    [palace],
-  )
-  const pdfController = usePdfImportController({
-    entityKey: palaceId ? `palace_quiz_${palaceId}` : null,
-    subjectOptions,
-    defaultSubjectId,
-    setError: setGenerationError,
-  })
 
   const miniPalaces = palace?.mini_palaces || []
   const explicitPalaceChapterIds = useMemo(
@@ -171,14 +138,6 @@ export function usePalaceQuizGenerationInputs({
   const pendingChapterSummary = buildChapterSummary(pendingChapterInfo)
   const selectedChapterHasChildren = Boolean(
     selectedChapterInfo?.path[selectedChapterInfo.path.length - 1]?.children?.length,
-  )
-  const selectedSubjectDocument = useMemo(
-    () =>
-      pdfController.subjectDocuments.find(
-        (document: SubjectDocumentSummary) =>
-          document.id === pdfController.selectedSubjectDocumentId,
-      ) || null,
-    [pdfController.selectedSubjectDocumentId, pdfController.subjectDocuments],
   )
 
   const getChapterHasChildren = useCallback(
@@ -268,7 +227,7 @@ export function usePalaceQuizGenerationInputs({
   const handleImageFileChange = useCallback(
     (fileList: FileList | null) => {
       registerQuizActivity('generation_select_files')
-      emitQuizFeedback('quiz_generate_attach_source', { label: '选图片', audioScope: 'local' })
+      emitQuizFeedback('quiz_generate_attach_source', { label: '选文件', audioScope: 'local' })
       const nextFiles = Array.from(fileList || [])
       setGenerationFiles(
         generationSourceKind === 'image-single' ? nextFiles.slice(0, 1) : nextFiles,
@@ -276,80 +235,6 @@ export function usePalaceQuizGenerationInputs({
       setGenerationError('')
     },
     [emitQuizFeedback, generationSourceKind, registerQuizActivity, setGenerationError],
-  )
-
-  const handleUploadSubjectPdf = useCallback(
-    async (file: File) => {
-      if (!pdfController.selectedSubjectId) return
-      await uploadSubjectDocumentApi(pdfController.selectedSubjectId, file)
-      toast.success('PDF 已上传到资料库')
-      await pdfController.refreshSubjectDocuments()
-    },
-    [pdfController],
-  )
-
-  const handleAddCurrentPdfSource = useCallback(() => {
-    registerQuizActivity('generation_add_pdf_source')
-    if (!pdfController.selectedSubjectDocumentId || !selectedSubjectDocument) {
-      emitQuizFeedback('quiz_error_missing_input', { label: '未选PDF', audioScope: 'local' })
-      setGenerationError('请先选择一份 PDF 资料。')
-      return
-    }
-    if (pdfController.selectedPdfPages.length === 0) {
-      emitQuizFeedback('quiz_error_missing_input', { label: '未选页码', audioScope: 'local' })
-      setGenerationError('请先为当前 PDF 选择至少一页。')
-      return
-    }
-    const nextSource: QuizPdfSourceDraft = {
-      subject_document_id: pdfController.selectedSubjectDocumentId,
-      document_name: selectedSubjectDocument.original_name,
-      page_selection: [...pdfController.selectedPdfPages],
-      role_hint: 'question',
-    }
-    setGenerationPdfSources((current) => {
-      const next = [...current]
-      const existingIndex = next.findIndex(
-        (item) => item.subject_document_id === nextSource.subject_document_id,
-      )
-      if (existingIndex >= 0) next[existingIndex] = nextSource
-      else next.push(nextSource)
-      return next
-    })
-    emitQuizFeedback('quiz_generate_attach_source', { label: '加入PDF', audioScope: 'local' })
-    setGenerationError('')
-  }, [
-    emitQuizFeedback,
-    pdfController,
-    registerQuizActivity,
-    selectedSubjectDocument,
-    setGenerationError,
-  ])
-
-  const handleRemovePdfSource = useCallback(
-    (subjectDocumentId: number) => {
-      registerQuizActivity('generation_remove_pdf_source')
-      emitQuizFeedback('quiz_manage_delete', { label: '移除PDF', audioScope: 'local' })
-      setGenerationPdfSources((current) =>
-        current.filter((item) => item.subject_document_id !== subjectDocumentId),
-      )
-      setGenerationError('')
-    },
-    [emitQuizFeedback, registerQuizActivity, setGenerationError],
-  )
-
-  const handlePdfSourceRoleHintChange = useCallback(
-    (subjectDocumentId: number, roleHint: 'question' | 'answer') => {
-      emitQuizFeedback('quiz_generate_attach_source', {
-        label: roleHint === 'answer' ? '设为答案' : '设为题目',
-        audioScope: 'local',
-      })
-      setGenerationPdfSources((current) =>
-        current.map((item) =>
-          item.subject_document_id === subjectDocumentId ? { ...item, role_hint: roleHint } : item,
-        ),
-      )
-    },
-    [emitQuizFeedback],
   )
 
   const handleGenerationStreamScroll = useCallback(() => {
@@ -368,10 +253,9 @@ export function usePalaceQuizGenerationInputs({
     setGenerationSourceKind,
     generationFiles,
     setGenerationFiles,
-    generationPdfSources,
-    setGenerationPdfSources,
+    extraPrompt,
+    setExtraPrompt,
     subjectsLoading,
-    subjectOptions,
     rangeDialogOpen,
     setRangeDialogOpen,
     chapterTrees,
@@ -383,19 +267,12 @@ export function usePalaceQuizGenerationInputs({
     pendingChapterSummary,
     allowedChapterIds,
     selectedChapterHasChildren,
-    selectedSubjectDocument,
-    pdfController,
     generationStreamContentRef,
-    subjectPdfUploadInputRef,
     miniPalaces,
     handleOpenRangeDialog,
     handleConfirmRangeSelection,
     setPendingChapterId,
     handleImageFileChange,
-    handleUploadSubjectPdf,
-    handleAddCurrentPdfSource,
-    handleRemovePdfSource,
-    handlePdfSourceRoleHintChange,
     handleGenerationStreamScroll,
     resetGenerationStreamFollow,
     getChapterHasChildren,

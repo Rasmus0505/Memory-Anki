@@ -11,7 +11,7 @@ from __future__ import annotations
 from sqlalchemy.orm import Session, joinedload, selectinload
 
 from memory_anki.infrastructure.db._tables.knowledge import Chapter
-from memory_anki.infrastructure.db._tables.palaces import Palace, PalaceMiniPalace, PalaceSegment, Peg
+from memory_anki.infrastructure.db._tables.palaces import Palace, Peg
 
 
 def _catalog_loader_options():
@@ -22,10 +22,8 @@ def _catalog_loader_options():
         selectinload(Palace.chapters).joinedload(Chapter.parent),
         selectinload(Palace.review_schedules),
         selectinload(Palace.review_logs),
-        selectinload(Palace.segments).selectinload(PalaceSegment.review_schedules),
-        selectinload(Palace.segments).selectinload(PalaceSegment.review_logs),
-        selectinload(Palace.mini_palaces).selectinload(PalaceMiniPalace.review_schedules),
-        selectinload(Palace.mini_palaces).selectinload(PalaceMiniPalace.review_logs),
+        selectinload(Palace.segments),
+        selectinload(Palace.mini_palaces),
     )
 
 
