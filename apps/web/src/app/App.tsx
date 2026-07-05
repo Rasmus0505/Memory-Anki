@@ -1,18 +1,47 @@
+import { Suspense, lazy } from 'react'
 import { AppProviders } from '@/app/providers/AppProviders'
-import { AppRouter } from '@/app/router/AppRouter'
-import { AppShell } from '@/app/shell/AppShell'
-import { TimerOverlayApp } from '@/features/timer-overlay/TimerOverlayApp'
+
+const DesktopApp = lazy(() => import('@/app/DesktopApp'))
+const MobileFreestyleApp = lazy(() => import('@/features/mobile/MobileFreestyleApp'))
+const TimerOverlayApp = lazy(() =>
+  import('@/features/timer-overlay/TimerOverlayApp').then((module) => ({
+    default: module.TimerOverlayApp,
+  })),
+)
+
+function isMobilePwaPath(pathname: string) {
+  return (
+    pathname === '/m' ||
+    pathname.startsWith('/m/') ||
+    pathname === '/mobile' ||
+    pathname.startsWith('/mobile/')
+  )
+}
+
+function AppFallback() {
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-background text-sm text-muted-foreground">
+      正在加载...
+    </div>
+  )
+}
 
 export default function App() {
   if (window.location.pathname === '/timer-overlay') {
-    return <TimerOverlayApp />
+    return (
+      <Suspense fallback={<AppFallback />}>
+        <TimerOverlayApp />
+      </Suspense>
+    )
   }
+
+  const EntryApp = isMobilePwaPath(window.location.pathname) ? MobileFreestyleApp : DesktopApp
 
   return (
     <AppProviders>
-      <AppShell>
-        <AppRouter />
-      </AppShell>
+      <Suspense fallback={<AppFallback />}>
+        <EntryApp />
+      </Suspense>
     </AppProviders>
   )
 }

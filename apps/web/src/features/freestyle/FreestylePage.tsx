@@ -20,7 +20,7 @@ import {
   type KeyboardEvent,
   type ReactNode,
 } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import { useAiRunConfigDialog } from '@/features/ai-config/useAiRunConfigDialog'
 import { getFreestyleFeedApi } from '@/features/freestyle/api'
 import {
@@ -676,6 +676,12 @@ function FreestyleQuizCardView({
 }
 
 export default function FreestylePage() {
+  const location = useLocation()
+  const isMobilePwa =
+    location.pathname === '/m' ||
+    location.pathname.startsWith('/m/') ||
+    location.pathname === '/mobile' ||
+    location.pathname.startsWith('/mobile/')
   const { isActive, becameActiveAt } = useRouteResidency()
   const [mode, setMode] = useState<FreestyleMode>('today')
   const [config, setConfig] = useState<FreestyleConfig>(() => readFreestyleConfig())
@@ -1150,7 +1156,10 @@ export default function FreestylePage() {
   return (
     <TooltipProvider>
       <div
-        className="relative min-h-[calc(100vh-88px)] overflow-hidden rounded-lg bg-zinc-950 text-zinc-50 shadow-2xl"
+        className={cn(
+          'relative overflow-hidden bg-zinc-950 text-zinc-50 shadow-2xl',
+          isMobilePwa ? 'min-h-[100dvh] rounded-none' : 'min-h-[calc(100vh-88px)] rounded-lg',
+        )}
         onKeyDown={handleKeyDown}
         tabIndex={-1}
       >
@@ -1227,7 +1236,10 @@ export default function FreestylePage() {
 
         <div
           ref={scrollRef}
-          className="h-[calc(100vh-88px)] snap-y snap-mandatory overflow-y-auto overscroll-contain scroll-smooth"
+          className={cn(
+            'snap-y snap-mandatory overflow-y-auto overscroll-contain scroll-smooth',
+            isMobilePwa ? 'h-[100dvh]' : 'h-[calc(100vh-88px)]',
+          )}
           onScroll={handleScroll}
         >
           {feedLoading ? (
