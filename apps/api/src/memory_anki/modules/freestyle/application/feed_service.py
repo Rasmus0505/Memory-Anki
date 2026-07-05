@@ -4,7 +4,7 @@ from collections import OrderedDict
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy.orm import Session, load_only, selectinload
 
 from memory_anki.core.time import utc_now_naive
 from memory_anki.infrastructure.db.models import (
@@ -140,7 +140,6 @@ def _load_active_palaces(
             selectinload(Palace.quiz_questions).selectinload(PalaceQuizQuestion.mini_palace),
             selectinload(Palace.mini_palaces),
             selectinload(Palace.segments),
-            selectinload(Palace.review_schedules),
         )
         .filter(Palace.archived == False)
         .order_by(Palace.group_sort_order.asc(), Palace.id.asc())
@@ -157,6 +156,18 @@ def _due_palace_ids(session: Session, candidate_ids: set[int] | None) -> set[int
     ids: set[int] = set()
     review_query = (
         session.query(ReviewSchedule)
+        .options(
+            load_only(
+                ReviewSchedule.id,
+                ReviewSchedule.palace_id,
+                ReviewSchedule.scheduled_date,
+                ReviewSchedule.scheduled_at,
+                ReviewSchedule.completed,
+                ReviewSchedule.review_number,
+                ReviewSchedule.review_type,
+                ReviewSchedule.anchor_date,
+            )
+        )
         .join(Palace)
         .filter(
             ReviewSchedule.completed == False,
@@ -200,6 +211,18 @@ def _build_review_cards(
     groups: OrderedDict[int, dict[str, Any]] = OrderedDict()
     query = (
         session.query(ReviewSchedule)
+        .options(
+            load_only(
+                ReviewSchedule.id,
+                ReviewSchedule.palace_id,
+                ReviewSchedule.scheduled_date,
+                ReviewSchedule.scheduled_at,
+                ReviewSchedule.completed,
+                ReviewSchedule.review_number,
+                ReviewSchedule.review_type,
+                ReviewSchedule.anchor_date,
+            )
+        )
         .join(Palace)
         .filter(
             ReviewSchedule.completed == False,
