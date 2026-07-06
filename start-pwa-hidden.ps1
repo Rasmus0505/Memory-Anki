@@ -9,4 +9,4 @@ if (Test-Path $python313) {
 }
 
 Set-Location $repoRoot
-& $python (Join-Path $repoRoot "tools\pwa_server.py") @args
+& $python (Join-Path $repoRoot "tools\pwa_server.py") --build @args

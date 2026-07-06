@@ -17,16 +17,9 @@ https://desktop-lp-2026481850.tail92e457.ts.net/m
 
 ## 首次配置
 
-### 1. 构建前端
+### 1. 构建前端（自动）
 
-在项目根目录运行：
-
-```powershell
-cd "D:\BaiduSyncdisk\Memory Anki\apps\web"
-npm run build
-```
-
-如果 `apps\web\dist` 已经存在，并且包含 `index.html`、`manifest.webmanifest`、`sw.js`，`start-pwa.bat` 会直接复用；缺少时会自动构建。
+`start-pwa.bat` 会在启动前自动重新构建前端，所以更新代码后直接双击 `start-pwa.bat` 即可，不需要手动打开终端运行 `npm run build`。
 
 ### 2. 启动 PWA 后端
 
@@ -39,6 +32,7 @@ npm run build
 该脚本会：
 
 - 使用生产构建的 `apps\web\dist`；
+- 每次启动前自动执行前端构建，确保手机端拿到最新 PWA 代码；
 - 启动 FastAPI 到 `127.0.0.1:8012`；
 - 将 `/m` 作为移动端随心模式入口；
 - 默认跳过百度云盘启动同步，避免手机 PWA 自启被同步锁卡住。桌面端 `start-desktop.bat` / `stop.bat` 仍负责正常同步。
@@ -149,4 +143,3 @@ https://desktop-lp-2026481850.tail92e457.ts.net/m
 ```
 
 如果桌面端开发服务正在运行，它也可能占用 `8012`。移动端 PWA 和桌面开发服务不要同时争用同一个端口。
-

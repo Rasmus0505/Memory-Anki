@@ -31,7 +31,7 @@ if errorlevel 1 (
   exit /b 1
 )
 
-"%PYTHON_CMD%" "%~dp0tools\pwa_server.py" %*
+"%PYTHON_CMD%" "%~dp0tools\pwa_server.py" --build %*
 set "EXIT_CODE=%ERRORLEVEL%"
 if not "%EXIT_CODE%"=="0" (
   echo.
