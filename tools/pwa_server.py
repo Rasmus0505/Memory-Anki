@@ -110,6 +110,7 @@ def _run_frontend_build() -> bool:
             stdout=log_file,
             stderr=subprocess.STDOUT,
             stdin=subprocess.DEVNULL,
+            env=_pwa_local_env(),
             check=False,
             **dev_server.hidden_process_kwargs(),
         )
@@ -119,14 +120,23 @@ def _run_frontend_build() -> bool:
     return True
 
 
-def _backend_env() -> dict[str, str]:
+def _pwa_local_env() -> dict[str, str]:
     env = dev_server._backend_env()
+    # Tailscale PWA is the offline/local fallback. Keep it pinned to the
+    # local SQLite runtime even if the shell or .env contains cloud settings.
+    env["MEMORY_ANKI_DEPLOY_TARGET"] = "local"
+    env["MEMORY_ANKI_DATABASE_URL"] = ""
+    env["VITE_API_ORIGIN"] = ""
     env["MEMORY_ANKI_WEB_DIST"] = str(WEB_DIST)
     env["MEMORY_ANKI_CHANNEL"] = "pwa"
     env["MEMORY_ANKI_STARTUP_MODE"] = "healthcheck"
     env[PWA_PROCESS_MARKER] = "1"
     env["PYTHONPATH"] = str(API_SRC)
     return env
+
+
+def _backend_env() -> dict[str, str]:
+    return _pwa_local_env()
 
 
 def _start_backend() -> subprocess.Popen:
@@ -237,8 +247,9 @@ def start(
         print("[i] Skipping cloud sync for PWA autostart. Desktop stop/start still performs sync.")
 
     try:
-        dev_server.ensure_backend_runtime_prepared()
-        dev_server.ensure_backend_migrations_applied()
+        local_env = _backend_env()
+        dev_server.ensure_backend_runtime_prepared(env=local_env)
+        dev_server.ensure_backend_migrations_applied(env=local_env)
     except Exception as exc:
         print(f"[!] Runtime database preparation failed: {exc}")
         return 1
