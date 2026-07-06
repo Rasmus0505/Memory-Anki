@@ -20,8 +20,12 @@ from memory_anki.infrastructure.db.migrations import run_migrations
 ensure_runtime_dirs()
 database_url = make_url(DATABASE_URL)
 engine_options = {}
-if database_url.get_backend_name() == "sqlite":
+database_backend = database_url.get_backend_name()
+if database_backend == "sqlite":
     engine_options["connect_args"] = {"check_same_thread": False, "timeout": 30}
+elif database_backend == "postgresql":
+    engine_options["connect_args"] = {"prepare_threshold": None}
+    engine_options["pool_pre_ping"] = True
 
 engine = create_engine(DATABASE_URL, **engine_options)
 
