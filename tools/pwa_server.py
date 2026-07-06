@@ -110,7 +110,7 @@ def _run_frontend_build() -> bool:
             stdout=log_file,
             stderr=subprocess.STDOUT,
             stdin=subprocess.DEVNULL,
-            env=_pwa_local_env(),
+            env=_backend_env(),
             check=False,
             **dev_server.hidden_process_kwargs(),
         )
@@ -120,23 +120,14 @@ def _run_frontend_build() -> bool:
     return True
 
 
-def _pwa_local_env() -> dict[str, str]:
+def _backend_env() -> dict[str, str]:
     env = dev_server._backend_env()
-    # Tailscale PWA is the offline/local fallback. Keep it pinned to the
-    # local SQLite runtime even if the shell or .env contains cloud settings.
-    env["MEMORY_ANKI_DEPLOY_TARGET"] = "local"
-    env["MEMORY_ANKI_DATABASE_URL"] = ""
-    env["VITE_API_ORIGIN"] = ""
     env["MEMORY_ANKI_WEB_DIST"] = str(WEB_DIST)
     env["MEMORY_ANKI_CHANNEL"] = "pwa"
     env["MEMORY_ANKI_STARTUP_MODE"] = "healthcheck"
     env[PWA_PROCESS_MARKER] = "1"
     env["PYTHONPATH"] = str(API_SRC)
     return env
-
-
-def _backend_env() -> dict[str, str]:
-    return _pwa_local_env()
 
 
 def _start_backend() -> subprocess.Popen:
@@ -244,7 +235,7 @@ def start(
     if sync and not dev_server.sync_before_start():
         return 1
     if not sync:
-        print("[i] Skipping cloud sync for PWA autostart. Desktop stop/start still performs sync.")
+        print("[i] Skipping startup sync for PWA autostart. Desktop stop/start still performs sync.")
 
     try:
         local_env = _backend_env()

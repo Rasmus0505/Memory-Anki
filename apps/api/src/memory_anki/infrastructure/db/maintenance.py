@@ -5,7 +5,6 @@ import logging
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
 
-from memory_anki.core.config import is_cloud_deploy
 from memory_anki.infrastructure.db.models import engine as default_engine
 
 logger = logging.getLogger(__name__)
@@ -20,7 +19,7 @@ def checkpoint_sqlite_wal(
     *,
     require_complete: bool = False,
 ) -> bool:
-    if is_cloud_deploy() or engine.dialect.name != "sqlite":
+    if engine.dialect.name != "sqlite":
         return False
     try:
         with engine.begin() as connection:
@@ -41,7 +40,7 @@ def checkpoint_sqlite_wal(
 
 
 def analyze_database(engine: Engine = default_engine) -> bool:
-    if is_cloud_deploy() or engine.dialect.name != "sqlite":
+    if engine.dialect.name != "sqlite":
         return False
     try:
         with engine.begin() as connection:

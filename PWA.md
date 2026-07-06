@@ -2,7 +2,7 @@
 
 本文是项目根目录下唯一的当前 PWA 说明文档。`docx/移动端重构/`、`docx/移动端完善/` 等目录里的 PWA 文档是历史计划或交付记录，只用于追溯，不作为当前运行依据。
 
-当前 PWA 的定位是：通过 Tailscale 私有网络访问本机运行的完整桌面端 Memory Anki，作为云端不可用时仍能使用的本地兜底入口。PWA 不再维护单独移动端应用；安装后打开的是同一套桌面端前端，默认进入 `/freestyle` 随心模式，仍可通过桌面导航访问完整功能。
+当前 PWA 的定位是：通过 Tailscale 私有网络访问本机运行的完整桌面端 Memory Anki。PWA 不再维护单独移动端应用；安装后打开的是同一套桌面端前端，默认进入 `/freestyle` 随心模式，仍可通过桌面导航访问完整功能。
 
 ## 访问口径
 
@@ -13,17 +13,11 @@
 
 旧计划文档里出现的 `8000`、`100.94.*`、临时局域网地址、`/m` 或 `/mobile` 都属于历史记录。当前 PWA 默认入口是 `/freestyle`；旧 `/m`、`/mobile` 地址只作为兼容路径回退到随心模式。
 
-## 本地兜底原则
+## 本地运行原则
 
-PWA 必须保持本地运行，不依赖云端数据库或云端 API。`tools/pwa_server.py` 会在 PWA 专用流程里强制设置：
+PWA 必须保持本地运行，使用本机服务和本机数据目录。PWA 默认会跳过百度云盘启动同步，避免开机自启时被同步锁或网络状态卡住。正常跨设备同步仍由桌面端 `start-desktop.bat` / `stop.bat` 负责。
 
-- `MEMORY_ANKI_DEPLOY_TARGET=local`
-- `MEMORY_ANKI_DATABASE_URL=`
-- `VITE_API_ORIGIN=`
-
-这意味着即使系统环境或 `.env` 里残留云端数据库连接、云部署标记或远程 API 地址，PWA 的前端构建、数据库准备、迁移和后端启动都会回到本机 SQLite 与同源 API。不要把 PWA 改成依赖 Supabase、Render、Vercel 或其他云端服务；云部署说明请单独看 `supabase-vercel-render说明.md` 和 `docs/cloud-deployment.md`。
-
-PWA 默认也会跳过百度云盘启动同步，避免开机自启时被同步锁或网络状态卡住。正常跨设备同步仍由桌面端 `start-desktop.bat` / `stop.bat` 负责。
+PWA 只通过 Tailscale Serve 在 tailnet 内私有访问，不做公网暴露。
 
 ## 日常使用
 
@@ -58,7 +52,6 @@ https://desktop-lp-2026481850.tail92e457.ts.net/freestyle
 - 每次启动前自动执行前端构建，确保 PWA 拿到最新代码；
 - 启动 FastAPI 到 `127.0.0.1:8012`；
 - 默认打开完整桌面端应用，并以 `/freestyle` 作为 PWA 起始入口；
-- 固定使用本机 SQLite 数据库，并清空云端 API / 云端数据库指向，作为云端不可用时的本地兜底入口；
 - 默认跳过百度云盘启动同步，避免 PWA 自启被同步锁卡住。桌面端 `start-desktop.bat` / `stop.bat` 仍负责正常同步。
 
 停止 PWA 后端：

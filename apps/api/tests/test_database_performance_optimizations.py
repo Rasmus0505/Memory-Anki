@@ -465,14 +465,13 @@ class DatabasePerformanceOptimizationTests(unittest.TestCase):
         def record_statement(_connection, _cursor, statement, _parameters, _context, _executemany):
             statements.append(statement.upper())
 
-        with patch.object(db_maintenance, "is_cloud_deploy", return_value=False):
-            event.listen(test_engine, "before_cursor_execute", record_statement)
-            try:
-                self.assertTrue(db_maintenance.checkpoint_sqlite_wal(test_engine))
-                self.assertTrue(db_maintenance.analyze_database(test_engine))
-            finally:
-                event.remove(test_engine, "before_cursor_execute", record_statement)
-                test_engine.dispose()
+        event.listen(test_engine, "before_cursor_execute", record_statement)
+        try:
+            self.assertTrue(db_maintenance.checkpoint_sqlite_wal(test_engine))
+            self.assertTrue(db_maintenance.analyze_database(test_engine))
+        finally:
+            event.remove(test_engine, "before_cursor_execute", record_statement)
+            test_engine.dispose()
 
         self.assertTrue(any("PRAGMA WAL_CHECKPOINT" in statement for statement in statements))
         self.assertTrue(any("ANALYZE" in statement for statement in statements))
@@ -481,19 +480,18 @@ class DatabasePerformanceOptimizationTests(unittest.TestCase):
     def test_database_maintenance_reports_incomplete_checkpoint(self):
         incomplete_engine = _FakeCheckpointEngine((1, 3, 2))
 
-        with patch.object(db_maintenance, "is_cloud_deploy", return_value=False):
-            self.assertFalse(db_maintenance.checkpoint_sqlite_wal(incomplete_engine))
-            with self.assertRaises(db_maintenance.DatabaseMaintenanceError):
-                db_maintenance.checkpoint_sqlite_wal(
-                    incomplete_engine,
-                    require_complete=True,
-                )
+        self.assertFalse(db_maintenance.checkpoint_sqlite_wal(incomplete_engine))
+        with self.assertRaises(db_maintenance.DatabaseMaintenanceError):
+            db_maintenance.checkpoint_sqlite_wal(
+                incomplete_engine,
+                require_complete=True,
+            )
 
-            for row in ((0, 3, 2), None, (0, 1), ("busy", 3, 3)):
-                self.assertFalse(db_maintenance.checkpoint_sqlite_wal(_FakeCheckpointEngine(row)))
+        for row in ((0, 3, 2), None, (0, 1), ("busy", 3, 3)):
+            self.assertFalse(db_maintenance.checkpoint_sqlite_wal(_FakeCheckpointEngine(row)))
 
-            self.assertTrue(db_maintenance.checkpoint_sqlite_wal(_FakeCheckpointEngine((0, 3, 3))))
-            self.assertTrue(db_maintenance.checkpoint_sqlite_wal(_FakeCheckpointEngine((0, -1, -1))))
+        self.assertTrue(db_maintenance.checkpoint_sqlite_wal(_FakeCheckpointEngine((0, 3, 3))))
+        self.assertTrue(db_maintenance.checkpoint_sqlite_wal(_FakeCheckpointEngine((0, -1, -1))))
 
 
 def _index_columns(model, index_name: str) -> list[str]:

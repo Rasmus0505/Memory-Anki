@@ -67,11 +67,6 @@ class EnvSettings(BaseSettings):
     DEEPSEEK_API_KEY: str | None = None
     DEEPSEEK_BASE_URL: str = "https://api.deepseek.com"
 
-    # --- Cloud deployment ---
-    MEMORY_ANKI_DATABASE_URL: str | None = None
-    MEMORY_ANKI_CORS_ORIGINS: str = "*"
-    MEMORY_ANKI_DEPLOY_TARGET: str = "local"
-
 
 # Singleton – created once at import time.
 _env = EnvSettings()
@@ -91,8 +86,6 @@ SILICONFLOW_API_KEY = _env.SILICONFLOW_API_KEY
 SILICONFLOW_BASE_URL = _env.SILICONFLOW_BASE_URL
 DEEPSEEK_API_KEY = _env.DEEPSEEK_API_KEY
 DEEPSEEK_BASE_URL = _env.DEEPSEEK_BASE_URL
-MEMORY_ANKI_CORS_ORIGINS = _env.MEMORY_ANKI_CORS_ORIGINS
-MEMORY_ANKI_DEPLOY_TARGET = _env.MEMORY_ANKI_DEPLOY_TARGET
 
 
 # ---------------------------------------------------------------------------
@@ -136,18 +129,8 @@ FULL_BACKUPS_DIR = BACKUPS_DIR / "full"
 RESCUE_BACKUPS_DIR = BACKUPS_DIR / "rescue"
 DB_PATH = DATA_DIR / "memory_palace.db"
 MIGRATION_STATE_PATH = APP_HOME / "migration-state.json"
-DATABASE_URL = _env.MEMORY_ANKI_DATABASE_URL or f"sqlite:///{DB_PATH}"
+DATABASE_URL = f"sqlite:///{DB_PATH}"
 WEB_DIST_DIR = Path(os.environ["MEMORY_ANKI_WEB_DIST"]) if os.environ.get("MEMORY_ANKI_WEB_DIST") else None
-
-
-def resolve_cors_origins(value: str | None = None) -> list[str]:
-    raw_value = MEMORY_ANKI_CORS_ORIGINS if value is None else value
-    origins = [origin.strip() for origin in (raw_value or "").split(",") if origin.strip()]
-    return origins or ["*"]
-
-
-def is_cloud_deploy() -> bool:
-    return MEMORY_ANKI_DEPLOY_TARGET.strip().lower() == "cloud"
 
 
 # ---------------------------------------------------------------------------
