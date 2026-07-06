@@ -100,7 +100,7 @@ def create_storage_backup_manifest(
 
 def write_storage_backup(destination_root: Path, *, reason: str, full: bool = True) -> dict[str, Any]:
     ensure_runtime_dirs()
-    checkpoint_sqlite_wal()
+    checkpoint_sqlite_wal(require_complete=True)
     destination_root.mkdir(parents=True, exist_ok=True)
     included_items = [
         _copy_item_to_backup(item, destination_root)
