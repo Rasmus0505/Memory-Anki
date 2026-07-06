@@ -1,7 +1,8 @@
 ﻿import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowRight, BookOpen, Clock3, Plus, Sparkles, Timer, TrendingUp } from 'lucide-react'
+import { ArrowRight, BookOpen, BrainCircuit, Clock3, ClipboardList, Plus, Sparkles, Timer, TrendingUp } from 'lucide-react'
 import { DashboardSkeleton } from './DashboardSkeleton'
+import { ErrorState } from '@/shared/components/state-placeholders'
 import type { DashboardQuery, DashboardResponse } from '@/shared/api/contracts'
 import { TimeRecordDialog } from '@/features/profile/components/TimeRecordDialog'
 import { TimeRecordsBreakdownChart } from '@/features/profile/components/TimeRecordsBreakdownChart'
@@ -40,6 +41,85 @@ const dashboardLearningLegend = [
   { key: 'quiz', label: '做题', color: getTimeRecordChartColor('quiz') },
   { key: 'review', label: '复习', color: getTimeRecordChartColor('review') },
 ] as const
+
+type TodayTodoTone = 'destructive' | 'warning' | 'success'
+
+interface TodayTodoBucket {
+  key: 'overdue' | 'today' | 'practice'
+  label: string
+  helper: string
+  count: number
+  tone: TodayTodoTone
+}
+
+const todayTodoToneClassName: Record<TodayTodoTone, {
+  text: string
+  border: string
+  bg: string
+  bar: string
+}> = {
+  destructive: {
+    text: 'text-destructive',
+    border: 'border-destructive/30',
+    bg: 'bg-destructive/5',
+    bar: 'bg-destructive',
+  },
+  warning: {
+    text: 'text-warning',
+    border: 'border-warning/30',
+    bg: 'bg-warning/5',
+    bar: 'bg-warning',
+  },
+  success: {
+    text: 'text-success',
+    border: 'border-success/30',
+    bg: 'bg-success/5',
+    bar: 'bg-success',
+  },
+}
+
+function buildTodayTodoBuckets(data: DashboardResponse): TodayTodoBucket[] {
+  const reviewOverdueCount = data.reviews.reduce(
+    (sum, review) => sum + Math.max(0, review.overdue_schedule_count ?? 0),
+    0,
+  )
+  const dueNowCount = data.due_count ?? 0
+  const dueLaterTodayCount = data.due_later_today_count ?? 0
+  const needsPracticeCount = data.needs_practice_count ?? 0
+  const overdueCount = reviewOverdueCount > 0 ? reviewOverdueCount : dueNowCount
+  const todayCount = Math.max(0, dueNowCount - overdueCount) + dueLaterTodayCount
+
+  return [
+    {
+      key: 'overdue',
+      label: '逾期/立即',
+      helper: '优先清理',
+      count: overdueCount,
+      tone: 'destructive',
+    },
+    {
+      key: 'today',
+      label: '今日',
+      helper: '按时推进',
+      count: todayCount,
+      tone: 'warning',
+    },
+    {
+      key: 'practice',
+      label: '可选提前巩固',
+      helper: '状态维护',
+      count: needsPracticeCount,
+      tone: 'success',
+    },
+  ]
+}
+
+function getBucketWidth(count: number, total: number, activeBuckets: number) {
+  if (count <= 0) return 0
+  if (total <= 0) return 0
+  if (activeBuckets <= 1) return 100
+  return Math.max(12, (count / total) * 100)
+}
 
 function buildLearningSegments(item: DashboardResponse['today_learning_palaces'][number]) {
   const rawSegments = [
@@ -259,6 +339,7 @@ export default function Dashboard() {
   } = normalizedDurationFilter
   const hasInitializedSelectedDurationRef = useRef(false)
   const [hasLoadedDashboard, setHasLoadedDashboard] = useState(false)
+  const [loadError, setLoadError] = useState<string | null>(null)
 
   const updateDurationFilter = useCallback(
     (
@@ -282,9 +363,15 @@ export default function Dashboard() {
   )
 
   const loadDashboard = useCallback(async () => {
-    const dashboard = await getDashboardApi()
-    setData(dashboard)
-    setHasLoadedDashboard(true)
+    setLoadError(null)
+    try {
+      const dashboard = await getDashboardApi()
+      setData(dashboard)
+      setHasLoadedDashboard(true)
+    } catch (error) {
+      setLoadError(error instanceof Error ? error.message : '加载仪表盘失败。')
+      throw error
+    }
   }, [])
 
   const loadSelectedDuration = useCallback(async (query: DashboardQuery) => {
@@ -302,7 +389,7 @@ export default function Dashboard() {
   })
 
   useEffect(() => {
-    void loadDashboard()
+    void loadDashboard().catch(() => undefined)
   }, [loadDashboard])
 
   useEffect(() => {
@@ -344,15 +431,55 @@ export default function Dashboard() {
     })
   }, [durationMode, hasLoadedDashboard, loadSelectedDuration, normalizedDurationFilter, rangeEndDate, rangeStartDate, selectedMonth])
 
+  if (!data && loadError) {
+    return (
+      <ErrorState
+        title="仪表盘加载失败"
+        description={loadError}
+        action={
+          <Button type="button" variant="outline" size="sm" onClick={() => void loadDashboard().catch(() => undefined)}>
+            重新加载
+          </Button>
+        }
+      />
+    )
+  }
+
   if (!data) {
     return <DashboardSkeleton />
   }
 
   const selectedDurationLabel = formatSelectedDurationLabel(durationMode, selectedMonth, rangeStartDate, rangeEndDate)
   const isRangeInvalid = Boolean(rangeStartDate && rangeEndDate && rangeStartDate > rangeEndDate)
+  const todayTodoBuckets = buildTodayTodoBuckets(data)
+  const todayTodoTotal = todayTodoBuckets.reduce((sum, bucket) => sum + bucket.count, 0)
+  const activeTodayTodoBuckets = todayTodoBuckets.filter((bucket) => bucket.count > 0).length
   const dueNowCount = data.due_count ?? 0
-  const dueLaterTodayCount = data.due_later_today_count ?? 0
-  const needsPracticeCount = data.needs_practice_count ?? 0
+  const quickActions: Array<{
+    label: string
+    description: string
+    to: string
+    icon: typeof BookOpen
+  }> = [
+    {
+      label: '开始复习',
+      description: todayTodoTotal > 0 ? `${todayTodoTotal} 项待处理` : '查看复习队列',
+      to: '/review',
+      icon: BookOpen,
+    },
+    {
+      label: '新建宫殿',
+      description: '录入新的知识结构',
+      to: '/palaces/new',
+      icon: Plus,
+    },
+    {
+      label: '做题练习',
+      description: '进入宫殿题库入口',
+      to: '/palaces',
+      icon: ClipboardList,
+    },
+  ]
 
   const statCards: Array<{
     label: string
@@ -372,18 +499,36 @@ export default function Dashboard() {
       link: '/review',
       linkText: '开始复习',
       valueNode: (
-        <div className="grid grid-cols-3 gap-3" aria-label="今日待处理状态计数">
-            <div className="space-y-1">
-            <div className="text-3xl font-bold text-destructive">{dueNowCount}</div>
-            <div className="text-xs text-muted-foreground">立即复习</div>
+        <div className="space-y-3" aria-label="今日待处理优先级">
+          <div className="flex min-h-3 overflow-hidden rounded-full border border-border/60 bg-secondary/80">
+            {todayTodoBuckets.map((bucket) => {
+              const tone = todayTodoToneClassName[bucket.tone]
+              const width = getBucketWidth(bucket.count, todayTodoTotal, activeTodayTodoBuckets)
+              return bucket.count > 0 ? (
+                <div
+                  key={bucket.key}
+                  className={cn('h-3', tone.bar)}
+                  style={{ width: `${width}%` }}
+                  title={`${bucket.label}：${bucket.count}`}
+                />
+              ) : null
+            })}
+            {todayTodoTotal === 0 ? <div className="h-3 w-full bg-muted" /> : null}
           </div>
-          <div className="space-y-1">
-            <div className="text-3xl font-bold text-warning">{dueLaterTodayCount}</div>
-            <div className="text-xs text-muted-foreground">今日稍后</div>
-          </div>
-          <div className="space-y-1">
-            <div className="text-3xl font-bold text-success">{needsPracticeCount}</div>
-            <div className="text-xs text-muted-foreground">要练习</div>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3 md:grid-cols-1 2xl:grid-cols-3">
+            {todayTodoBuckets.map((bucket) => {
+              const tone = todayTodoToneClassName[bucket.tone]
+              return (
+                <div
+                  key={bucket.key}
+                  className={cn('min-w-0 rounded-lg border px-2.5 py-2', tone.border, tone.bg)}
+                >
+                  <div className={cn('text-2xl font-bold leading-none', tone.text)}>{bucket.count}</div>
+                  <div className="mt-1 truncate text-xs font-medium text-foreground">{bucket.label}</div>
+                  <div className="mt-0.5 truncate text-[11px] text-muted-foreground">{bucket.helper}</div>
+                </div>
+              )
+            })}
           </div>
         </div>
       ),
@@ -514,6 +659,37 @@ export default function Dashboard() {
           </Card>
         ))}
       </div>
+
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex items-center gap-2">
+            <BrainCircuit className="size-4 text-muted-foreground" />
+            <CardTitle className="text-base">快速操作</CardTitle>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            {quickActions.map((action) => {
+              const Icon = action.icon
+              return (
+                <Link
+                  key={action.label}
+                  to={action.to}
+                  className="group flex min-w-0 items-center gap-3 rounded-lg border border-border/70 bg-background/80 px-3 py-3 transition-colors hover:border-primary/30 hover:bg-accent/70"
+                >
+                  <span className="flex size-10 shrink-0 items-center justify-center rounded-lg border border-border/70 bg-card text-muted-foreground transition-colors group-hover:text-primary">
+                    <Icon className="size-4" />
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block truncate text-sm font-medium text-foreground">{action.label}</span>
+                    <span className="mt-0.5 block truncate text-xs text-muted-foreground">{action.description}</span>
+                  </span>
+                </Link>
+              )
+            })}
+          </div>
+        </CardContent>
+      </Card>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <Card>

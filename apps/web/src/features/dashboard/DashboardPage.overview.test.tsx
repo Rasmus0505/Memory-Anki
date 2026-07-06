@@ -1,5 +1,5 @@
 ﻿import { act, fireEvent, screen } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import {
   getDashboardApi,
   renderDashboardPage,
@@ -94,10 +94,25 @@ describe("DashboardPage overview", () => {
 
   it("renders dashboard triage counts and review link gating", async () => {
     getDashboardApi.mockResolvedValue({
-      due_count: 2,
+      due_count: 3,
       due_later_today_count: 1,
       needs_practice_count: 4,
-      reviews: [],
+      reviews: [
+        {
+          id: 1,
+          palace_id: 1,
+          scheduled_date: "2026-07-05",
+          interval_days: 1,
+          algorithm_used: "anki",
+          completed: false,
+          review_number: 0,
+          review_type: "1d",
+          schedule_count: 3,
+          overdue_schedule_count: 2,
+          next_due_date: "2026-07-05",
+          palace: null,
+        },
+      ],
       stats: { total: 0, review_count: 0, review_duration_seconds: 0 },
       today_review_duration_seconds: 0,
       weekly_review_duration_seconds: 0,
@@ -115,10 +130,17 @@ describe("DashboardPage overview", () => {
     renderDashboardPage();
 
     expect(await screen.findByText("今日待处理")).toBeTruthy();
-    expect(screen.getByText("立即复习")).toBeTruthy();
-    expect(screen.getByText("今日稍后")).toBeTruthy();
-    expect(screen.getByText("要练习")).toBeTruthy();
-    expect(screen.getByRole("link", { name: /开始复习/i })).toBeTruthy();
+    expect(screen.getByLabelText("今日待处理优先级")).toBeTruthy();
+    expect(screen.getByText("逾期/立即")).toBeTruthy();
+    expect(screen.getByText("今日")).toBeTruthy();
+    expect(screen.getByText("可选提前巩固")).toBeTruthy();
+    expect(screen.getByText("优先清理")).toBeTruthy();
+    expect(screen.getByText("按时推进")).toBeTruthy();
+    expect(screen.getByText("状态维护")).toBeTruthy();
+    expect(screen.getByText("快速操作")).toBeTruthy();
+    expect(screen.getAllByRole("link", { name: /开始复习/i }).length).toBeGreaterThan(0);
+    expect(screen.getByRole("link", { name: /新建宫殿/i })).toBeTruthy();
+    expect(screen.getByRole("link", { name: /做题练习/i })).toBeTruthy();
   });
 
   it("shows learning tooltip immediately on hover", async () => {
