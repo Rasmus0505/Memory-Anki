@@ -1,6 +1,7 @@
 import * as React from 'react'
 import { formatDuration } from '@/entities/session/model'
 import { Button } from '@/shared/components/ui/button'
+import { isEditableKeyboardTarget } from '@/shared/keyboard/keyboardTargets'
 import {
   Dialog,
   DialogClose,
@@ -27,6 +28,27 @@ export function CompletionDecisionDialog({
   submitting = false,
   durationSeconds,
 }: CompletionDecisionDialogProps) {
+  React.useEffect(() => {
+    if (!open || submitting) return undefined
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey) return
+      if (isEditableKeyboardTarget(event.target)) return
+      if (event.key === '1' || event.code === 'Digit1') {
+        event.preventDefault()
+        event.stopPropagation()
+        onMarkUncompleted()
+        return
+      }
+      if (event.key === '5' || event.code === 'Digit5') {
+        event.preventDefault()
+        event.stopPropagation()
+        onMarkCompleted()
+      }
+    }
+    window.addEventListener('keydown', onKeyDown, true)
+    return () => window.removeEventListener('keydown', onKeyDown, true)
+  }, [onMarkCompleted, onMarkUncompleted, open, submitting])
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md">
@@ -52,7 +74,7 @@ export function CompletionDecisionDialog({
           >
             <span className="text-sm font-semibold">已完成</span>
             <span className="text-xs font-normal opacity-80">
-              揭示剩余知识点，标记本轮完成并推进复习阶段
+              揭示剩余知识点，标记本轮完成并推进复习阶段 · 5
             </span>
           </Button>
           <Button
@@ -64,7 +86,7 @@ export function CompletionDecisionDialog({
           >
             <span className="text-sm font-semibold">未完成</span>
             <span className="text-xs font-normal text-muted-foreground">
-              保存当前进度，下次可继续复习；不标记完成
+              保存当前进度，下次可继续复习；不标记完成 · 1
             </span>
           </Button>
         </div>

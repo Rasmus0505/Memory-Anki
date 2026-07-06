@@ -263,6 +263,57 @@ describe("MindMapReviewFlow modes", () => {
     });
   });
 
+  it("uses Space to advance the currently selected review node without firing inside inputs", async () => {
+    renderInRouter(
+      <MindMapReviewFlow
+        title="Root"
+        palaceId={1}
+        sessionKind="practice"
+        reviewEditorState={editorState}
+        onComplete={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("Space / 1-5")).toBeTruthy();
+    expect(getVisibleTextsFromLatestFrame()).toEqual({
+      root: "Root",
+      child: null,
+      grandchild: null,
+    });
+
+    await act(async () => {
+      getLatestMindMapFrameProps()?.onNodeActive?.([{ uid: "root", text: "Root" }]);
+    });
+    await act(async () => {
+      fireEvent.keyDown(window, { key: " ", code: "Space" });
+    });
+
+    expect(getVisibleTextsFromLatestFrame()).toEqual({
+      root: "Root",
+      child: "待回忆",
+      grandchild: null,
+    });
+    expect(timer.registerActivity).toHaveBeenCalledWith("practice_interaction", {
+      source: "left_click",
+    });
+
+    const input = document.createElement("input");
+    document.body.appendChild(input);
+    try {
+      await act(async () => {
+        fireEvent.keyDown(input, { key: " ", code: "Space" });
+      });
+    } finally {
+      input.remove();
+    }
+
+    expect(getVisibleTextsFromLatestFrame()).toEqual({
+      root: "Root",
+      child: "待回忆",
+      grandchild: null,
+    });
+  });
+
   it("keeps readonly left-click flip flow working after host fullscreen toggles", async () => {
     renderInRouter(
       <MindMapReviewFlow

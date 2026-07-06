@@ -8,6 +8,7 @@ import {
   normalizeShortcutBindingValue,
   type ShortcutBinding,
 } from '@/shared/keyboard/shortcutBindings'
+import { isEditableKeyboardTarget } from '@/shared/keyboard/keyboardTargets'
 import { createPersistentPreferenceStore } from '@/shared/preferences/persistentPreferenceStore'
 import { useEffect, useMemo, useState } from 'react'
 
@@ -116,18 +117,6 @@ export const readMemoryAnkiShortcuts = store.read
 export const writeMemoryAnkiShortcuts = store.write
 export const resetMemoryAnkiShortcuts = store.reset
 
-function isEditableTarget(target: EventTarget | null) {
-  const element = target instanceof Element ? target : null
-  if (!element) return false
-  const tagName = element.tagName.toLowerCase()
-  return (
-    tagName === 'input' ||
-    tagName === 'textarea' ||
-    tagName === 'select' ||
-    Boolean(element.closest('[contenteditable="true"]'))
-  )
-}
-
 export function useMemoryAnkiShortcuts(
   scene: ShortcutScene,
   handlers: MemoryAnkiShortcutHandlers,
@@ -156,7 +145,7 @@ export function useMemoryAnkiShortcuts(
   useEffect(() => {
     if (!enabled) return undefined
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.defaultPrevented || isEditableTarget(event.target)) return
+      if (event.defaultPrevented || isEditableKeyboardTarget(event.target)) return
       const matchedAction = sceneActions.find((action) => isShortcutPressed(event, shortcuts[action.id]))
       if (!matchedAction) return
       const handler = handlers[matchedAction.id]

@@ -8,6 +8,12 @@ import { ComboMilestoneBurst, CompletionCelebration } from "@/shared/components/
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/shared/components/ui/card";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/shared/components/ui/tooltip";
 import { getReviewFeedbackEffectiveVolume } from "@/shared/feedback/reviewFeedbackSettings";
 import { cn } from "@/shared/lib/utils";
 
@@ -103,6 +109,24 @@ export function MindMapReviewFlow({
                     已出现 {review.flow.visibleNonRootCount} /{" "}
                     {Math.max(review.flow.totalNodeCount - 1, 0)}
                   </Badge>
+                  {!review.isInlineEditMode && !review.miniPalace.isActive ? (
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Badge
+                            variant="outline"
+                            className="cursor-help"
+                            title="Space：推进当前选中节点的揭示；1-5：在结算弹窗中选择反馈"
+                          >
+                            Space / 1-5
+                          </Badge>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          Space 推进当前选中节点；结算弹窗中可用数字键选择反馈。
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  ) : null}
                   {review.flow.redNodeCount > 0 ? (
                     <Badge variant="outline">红标 {review.flow.redNodeCount}</Badge>
                   ) : null}

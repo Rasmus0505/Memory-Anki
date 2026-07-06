@@ -41,6 +41,7 @@ import { useRunningTaskCountBySection, type BackgroundTaskSection } from '@/shar
 import { BackgroundTaskBar } from '@/shared/background-tasks/BackgroundTaskBar'
 import { QuizGenerationBubbleLayer } from '@/shared/background-tasks/QuizGenerationBubbleLayer'
 import { cn } from '@/shared/lib/utils'
+import { GlobalCommandPalette } from '@/app/shell/GlobalCommandPalette'
 
 type NavSectionKey =
   | 'dashboard'
@@ -462,6 +463,7 @@ function ShellFrame({ children }: PropsWithChildren) {
         </main>
         <QuizGenerationBubbleLayer />
         <AppLogDrawer open={logDrawerOpen} onOpenChange={setLogDrawerOpen} />
+        <GlobalCommandPalette />
       </div>
     </ShellProvider>
   )

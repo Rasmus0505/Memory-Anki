@@ -261,4 +261,28 @@ describe('ReviewSession', () => {
     })
     expect(mocks.navigate).not.toHaveBeenCalled()
   })
+
+  it('lets number keys select the target stage in the completion feedback dialog', async () => {
+    render(<ReviewSession />)
+
+    fireEvent.click(await screen.findByRole('button', { name: '完成' }))
+    expect(await screen.findByText('快捷键 1-5 可选择前 5 个复习阶段。')).toBeTruthy()
+
+    fireEvent.keyDown(window, { key: '5', code: 'Digit5' })
+    const confirmButton = await screen.findByRole('button', {
+      name: /标记第 5 次完成.*4天/,
+    })
+    fireEvent.click(confirmButton)
+
+    await waitFor(() => expect(mocks.submitReviewSessionApi).toHaveBeenCalledTimes(1))
+    expect(mocks.submitReviewSessionApi).toHaveBeenCalledWith(309, {
+      chapter_id: undefined,
+      duration_seconds: 12,
+      completion_mode: 'manual_complete',
+      revealed_remaining: true,
+      red_marked_count: 1,
+      target_review_number: 4,
+      needs_practice: false,
+    })
+  })
 })

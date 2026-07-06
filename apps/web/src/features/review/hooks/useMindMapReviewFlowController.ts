@@ -8,6 +8,7 @@ import { useMemoryAnkiShortcuts } from "@/entities/preferences/model/memoryAnkiS
 import { persistStudySessionRecord } from "@/entities/session/model";
 import type { MindMapSelection } from "@/shared/components/mindmap-host";
 import type { MindMapEditorState } from "@/shared/api/contracts";
+import { isEditableKeyboardTarget } from "@/shared/keyboard/keyboardTargets";
 import { cn } from "@/shared/lib/utils";
 import type { MindMapReviewFlowProps } from "@/features/review/model/mind-map-review-flow";
 
@@ -27,7 +28,6 @@ export function useMindMapReviewFlowController({
   onModeToggle,
   onEditEditorStateChange,
   onRestart,
-  submitting = false,
   persistProgress = false,
   initialSnapshot = null,
   focusNodeUids: initialFocusNodeUids = [],
@@ -221,6 +221,25 @@ export function useMindMapReviewFlowController({
     true,
   );
 
+  const handleShortcutAdvanceReview = React.useCallback(() => {
+    if (
+      isInlineEditMode ||
+      miniPalace.isActive ||
+      isDedicatedMiniMode ||
+      flow.completed ||
+      activeNodes.length === 0
+    ) {
+      return;
+    }
+    flow.handleNodeClick(activeNodes);
+  }, [
+    activeNodes,
+    flow,
+    isDedicatedMiniMode,
+    isInlineEditMode,
+    miniPalace.isActive,
+  ]);
+
   const handleSpacePourRef = React.useRef(miniPalace.handleSpacePour);
   handleSpacePourRef.current = miniPalace.isPracticing
     ? miniPalace.handleSpacePour
@@ -231,15 +250,7 @@ export function useMindMapReviewFlowController({
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.defaultPrevented) return;
       if (event.key === " " || event.code === "Space") {
-        const target = event.target as HTMLElement | null;
-        if (
-          target &&
-          (target.tagName === "INPUT" ||
-            target.tagName === "TEXTAREA" ||
-            target.isContentEditable)
-        ) {
-          return;
-        }
+        if (isEditableKeyboardTarget(event.target)) return;
         event.preventDefault();
         event.stopPropagation();
         handleSpacePourRef.current();
@@ -248,6 +259,20 @@ export function useMindMapReviewFlowController({
     window.addEventListener("keydown", onKeyDown, true);
     return () => window.removeEventListener("keydown", onKeyDown, true);
   }, [flow.handleSpacePour, isDedicatedMiniMode, miniPalace.isPracticing]);
+
+  React.useEffect(() => {
+    if (isInlineEditMode || miniPalace.isActive || isDedicatedMiniMode) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey) return;
+      if (event.key !== " " && event.code !== "Space") return;
+      if (isEditableKeyboardTarget(event.target)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      handleShortcutAdvanceReview();
+    };
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
+  }, [handleShortcutAdvanceReview, isDedicatedMiniMode, isInlineEditMode, miniPalace.isActive]);
 
   const handleFullscreenToggle = React.useCallback(
     (active?: boolean) => {
@@ -397,6 +422,7 @@ export function useMindMapReviewFlowController({
     handleToggleFeedbackAnimation,
     handleToggleFeedbackSurprise,
     handleCycleFeedbackGlobalIntensity,
+    handleShortcutAdvanceReview,
   };
 }
 

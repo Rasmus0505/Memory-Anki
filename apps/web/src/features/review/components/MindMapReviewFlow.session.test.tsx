@@ -51,6 +51,59 @@ describe("MindMapReviewFlow session", () => {
     await waitFor(() => expect(onComplete).toHaveBeenCalledTimes(1));
   });
 
+  it("maps completion decision shortcuts to unfinished and completed feedback", async () => {
+    const onComplete = vi.fn().mockResolvedValue(undefined);
+
+    const { unmount } = renderInRouter(
+      <MindMapReviewFlow
+        title="Root"
+        palaceId={1}
+        sessionKind="review"
+        reviewEditorState={editorState}
+        onComplete={onComplete}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /完成/ }));
+    fireEvent.keyDown(window, { key: "1", code: "Digit1" });
+
+    await waitFor(() => {
+      expect(timer.complete).toHaveBeenCalledWith(
+        "saved",
+        expect.objectContaining({
+          revealed_remaining: false,
+          red_marked_count: 0,
+        }),
+      );
+    });
+    expect(onComplete).not.toHaveBeenCalled();
+
+    unmount();
+    setupMindMapReviewFlowTest();
+
+    renderInRouter(
+      <MindMapReviewFlow
+        title="Root"
+        palaceId={1}
+        sessionKind="review"
+        reviewEditorState={editorState}
+        onComplete={onComplete}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /完成/ }));
+    fireEvent.keyDown(window, { key: "5", code: "Digit5" });
+
+    await waitFor(() => expect(onComplete).toHaveBeenCalledTimes(1));
+    expect(timer.complete).toHaveBeenCalledWith(
+      "manual_complete",
+      expect.objectContaining({
+        revealed_remaining: true,
+        red_marked_count: 2,
+      }),
+    );
+  });
+
   it("disables local completion persistence for formal review sessions", async () => {
     renderInRouter(
       <MindMapReviewFlow

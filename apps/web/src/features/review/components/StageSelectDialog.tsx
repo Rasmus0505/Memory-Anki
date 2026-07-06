@@ -8,6 +8,7 @@ import {
   DialogTitle,
 } from '@/shared/components/ui/dialog'
 import { Button } from '@/shared/components/ui/button'
+import { isEditableKeyboardTarget } from '@/shared/keyboard/keyboardTargets'
 import { cn } from '@/shared/lib/utils'
 
 interface StageSelectDialogProps {
@@ -60,7 +61,6 @@ export function StageSelectDialog({
     }
   }, [open, defaultTarget])
 
-  const defaultLabel = normalizedStages[defaultTarget]?.label ?? `第 ${defaultTarget + 1} 次`
   const nextAfterDefault = normalizedStages[defaultTarget + 1]
   const nextAfterDefaultLabel = nextAfterDefault?.label ?? '完成全部'
 
@@ -69,6 +69,25 @@ export function StageSelectDialog({
   }
 
   const total = normalizedStages.length
+  const numberShortcutLimit = Math.min(5, total)
+
+  React.useEffect(() => {
+    if (!open) return undefined
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey) return
+      if (isEditableKeyboardTarget(event.target)) return
+      const digit = event.code.startsWith('Digit')
+        ? Number(event.code.slice('Digit'.length))
+        : Number(event.key)
+      if (!Number.isInteger(digit) || digit < 1 || digit > numberShortcutLimit) return
+      event.preventDefault()
+      event.stopPropagation()
+      setSelectedNumber(digit - 1)
+    }
+    window.addEventListener('keydown', onKeyDown, true)
+    return () => window.removeEventListener('keydown', onKeyDown, true)
+  }, [numberShortcutLimit, open])
+
   if (total <= 0) return null
 
   return (
@@ -95,6 +114,11 @@ export function StageSelectDialog({
             </span>
             。你也可以选择其他阶段来调整进度：
           </p>
+          {numberShortcutLimit > 0 ? (
+            <p className="text-xs text-muted-foreground">
+              快捷键 1-{numberShortcutLimit} 可选择前 {numberShortcutLimit} 个复习阶段。
+            </p>
+          ) : null}
 
           <div className="relative py-6">
             <div className="absolute left-0 right-0 top-1/2 h-1.5 -translate-y-1/2 rounded-full bg-border" />
@@ -110,7 +134,7 @@ export function StageSelectDialog({
                   <button
                     key={stage.review_number}
                     type="button"
-                    title={getStageTooltip(stage)}
+                    title={`${getStageTooltip(stage)}${index < 5 ? ` · 快捷键 ${index + 1}` : ''}`}
                     onClick={() => setSelectedNumber(index)}
                     className={cn(
                       'relative size-5 rounded-full border-2 transition-all',
