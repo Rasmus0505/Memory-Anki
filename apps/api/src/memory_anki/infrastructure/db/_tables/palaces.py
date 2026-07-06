@@ -44,11 +44,19 @@ chapter_palace_table = Table(
     Column("chapter_id", Integer, ForeignKey("chapters.id", ondelete="CASCADE")),
     Column("palace_id", Integer, ForeignKey("palaces.id", ondelete="CASCADE")),
     Column("is_explicit", Boolean, nullable=False, default=True),
+    Index("ux_chapter_palaces_chapter_palace", "chapter_id", "palace_id", unique=True),
+    Index("ix_chapter_palaces_palace_chapter", "palace_id", "chapter_id"),
 )
 
 
 class Palace(Base):
     __tablename__ = "palaces"
+    __table_args__ = (
+        Index("ix_palaces_updated_at", "updated_at"),
+        Index("ix_palaces_created_at_id", "created_at", "id"),
+        Index("ix_palaces_primary_chapter_id", "primary_chapter_id"),
+        Index("ix_palaces_mastered_archived", "mastered", "archived"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     title: Mapped[str] = mapped_column(String(200), nullable=False, default="")
@@ -136,12 +144,15 @@ class Palace(Base):
     grouping_mode: Mapped[str] = mapped_column(String(20), default="auto")
     manual_group_chapter_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     primary_chapter: Mapped[Chapter | None] = relationship(
-        "Chapter", foreign_keys=[primary_chapter_id], lazy="joined"
+        "Chapter", foreign_keys=[primary_chapter_id]
     )
 
 
 class Peg(Base):
     __tablename__ = "pegs"
+    __table_args__ = (
+        Index("ix_pegs_palace_parent_sort", "palace_id", "parent_id", "sort_order"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     palace_id: Mapped[int] = mapped_column(
@@ -173,6 +184,9 @@ class Peg(Base):
 
 class Attachment(Base):
     __tablename__ = "attachments"
+    __table_args__ = (
+        Index("ix_attachments_palace_id", "palace_id"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     palace_id: Mapped[int] = mapped_column(
@@ -280,6 +294,10 @@ class ReviewSchedule(Base):
 
 class ReviewLog(Base):
     __tablename__ = "review_logs"
+    __table_args__ = (
+        Index("ix_review_logs_palace_date_id", "palace_id", "review_date", "id"),
+        Index("ix_review_logs_date", "review_date"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     palace_id: Mapped[int] = mapped_column(
@@ -464,12 +482,10 @@ class PalaceQuizQuestion(Base):
     source_chapter: Mapped[Chapter | None] = relationship(
         "Chapter",
         foreign_keys=[source_chapter_id],
-        lazy="joined",
     )
     classified_chapter: Mapped[Chapter | None] = relationship(
         "Chapter",
         foreign_keys=[classified_chapter_id],
-        lazy="joined",
     )
 
 

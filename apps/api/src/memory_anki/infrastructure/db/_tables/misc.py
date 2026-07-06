@@ -24,6 +24,7 @@ class StudySession(Base):
             "status",
         ),
         Index("ix_study_sessions_palace_started", "palace_id", "started_at"),
+        Index("ix_study_sessions_deleted_started", "deleted_at", "started_at"),
     )
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)

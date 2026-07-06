@@ -2,19 +2,22 @@ from __future__ import annotations
 
 from datetime import date, datetime, time, timedelta
 
+from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload, selectinload
 
-from memory_anki.infrastructure.db.models import Chapter, Palace
-from memory_anki.modules.palaces.application.palace_service import list_palaces
+from memory_anki.infrastructure.db.models import Chapter, Palace, PalaceMiniPalace, ReviewSchedule
 from memory_anki.modules.palaces.application.title_sync_service import (
     build_today_new_palace_outline,
-    count_palace_review_units,
 )
 from memory_anki.modules.reviews.application.review_metrics_service import (
     get_weekly_stats,
 )
 from memory_anki.modules.reviews.application.review_queue_service import (
     get_today_review_groups,
+)
+from memory_anki.modules.reviews.application.schedule_policy import (
+    load_review_schedule_policy,
+    schedule_display_datetime_for_policy,
 )
 from memory_anki.modules.sessions.application.study_session_service import (
     FORMAL_REVIEW_SCENES,
@@ -77,15 +80,10 @@ def build_dashboard_payload(
         .order_by(Palace.created_at.asc(), Palace.id.asc())
         .all()
     )
-    all_palaces = list_palaces(session)
-    due_count = 0
-    due_later_today_count = 0
-    needs_practice_count = 0
-    for palace in all_palaces:
-        counts = count_palace_review_units(session, palace)
-        due_count += counts["due_now_count"]
-        due_later_today_count += counts["due_later_today_count"]
-        needs_practice_count += counts["needs_practice_count"]
+    review_unit_counts = _dashboard_review_unit_counts(session)
+    due_count = review_unit_counts["due_now_count"]
+    due_later_today_count = review_unit_counts["due_later_today_count"]
+    needs_practice_count = review_unit_counts["needs_practice_count"]
 
     current_month_start, current_month_end = current_month_bounds()
     current_week_start, current_week_end = current_week_bounds()
@@ -171,6 +169,79 @@ def _palace_summary(palace: Palace) -> dict:
         "description": palace.description,
         "peg_count": len(palace.pegs),
         "created_at": palace.created_at.isoformat() if palace.created_at else None,
+    }
+
+
+def _dashboard_review_unit_counts(session: Session, now: datetime | None = None) -> dict[str, int]:
+    current = now or datetime.now()
+    today = current.date()
+    next_schedule_ids = (
+        session.query(
+            ReviewSchedule.id.label("schedule_id"),
+            func.row_number()
+            .over(
+                partition_by=ReviewSchedule.palace_id,
+                order_by=(ReviewSchedule.review_number.asc(), ReviewSchedule.id.asc()),
+            )
+            .label("position"),
+        )
+        .join(Palace, Palace.id == ReviewSchedule.palace_id)
+        .filter(
+            ReviewSchedule.completed == False,
+        )
+        .subquery()
+    )
+    schedule_rows = (
+        session.query(ReviewSchedule, Palace)
+        .join(Palace, Palace.id == ReviewSchedule.palace_id)
+        .join(next_schedule_ids, next_schedule_ids.c.schedule_id == ReviewSchedule.id)
+        .filter(
+            next_schedule_ids.c.position == 1,
+            (
+                (ReviewSchedule.scheduled_date <= today)
+                | (ReviewSchedule.scheduled_at <= current)
+            ),
+        )
+        .order_by(
+            ReviewSchedule.palace_id.asc(),
+            ReviewSchedule.review_number.asc(),
+            ReviewSchedule.id.asc(),
+        )
+        .all()
+    )
+    due_now_count = 0
+    due_later_today_count = 0
+    policy = load_review_schedule_policy(session)
+    for schedule, palace in schedule_rows:
+        due_at = schedule_display_datetime_for_policy(
+            policy,
+            scheduled_date=schedule.scheduled_date,
+            scheduled_at=schedule.scheduled_at,
+            review_type=schedule.review_type,
+            anchor_datetime=palace.created_at or palace.updated_at,
+        )
+        if due_at and due_at <= current:
+            due_now_count += 1
+            continue
+        if due_at and due_at > current and due_at.date() == today:
+            due_later_today_count += 1
+
+    palace_needs_practice = (
+        session.query(func.count(Palace.id))
+        .filter(Palace.needs_practice == True)
+        .scalar()
+        or 0
+    )
+    mini_palace_needs_practice = (
+        session.query(func.count(PalaceMiniPalace.id))
+        .filter(PalaceMiniPalace.needs_practice == True)
+        .scalar()
+        or 0
+    )
+    return {
+        "due_now_count": due_now_count,
+        "due_later_today_count": due_later_today_count,
+        "needs_practice_count": int(palace_needs_practice) + int(mini_palace_needs_practice),
     }
 
 

@@ -13,6 +13,8 @@ from memory_anki.infrastructure.db._tables.palaces import Palace, Peg
 from memory_anki.modules.palaces.domain.schemas import PalaceCreate, PalaceUpdate, PegIn
 from memory_anki.modules.palaces.infrastructure.repositories import PalaceRepository
 
+_RESTORE_ARCHIVED_PALACES_SESSION_KEY = "palaces.restore_archived_palaces.done"
+
 
 def _repo(session: Session) -> PalaceRepository:
     return PalaceRepository(session)
@@ -54,6 +56,9 @@ def list_catalog_palaces_by_subject(session: Session, subject_id: int | None, se
 
 
 def restore_archived_palaces(session: Session) -> int:
+    if session.info.get(_RESTORE_ARCHIVED_PALACES_SESSION_KEY):
+        return 0
+    session.info[_RESTORE_ARCHIVED_PALACES_SESSION_KEY] = True
     repo = _repo(session)
     restored = repo.restore_archived()
     if restored:

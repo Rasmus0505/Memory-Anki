@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 from collections import OrderedDict
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, time, timedelta
 
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from memory_anki.infrastructure.db.models import (
@@ -26,12 +27,18 @@ from memory_anki.modules.reviews.application.schedule_service import (
 
 def _due_query(session: Session, chapter_id: int | None = None) -> list[ReviewSchedule]:
     restore_archived_palaces(session)
+    today = date.today()
+    now = datetime.now()
     query = (
         session.query(ReviewSchedule)
         .join(Palace)
         .filter(
             ReviewSchedule.completed == False,
             Palace.mastered == False,
+            or_(
+                ReviewSchedule.scheduled_date <= today,
+                ReviewSchedule.scheduled_at <= now,
+            ),
         )
         .order_by(
             ReviewSchedule.review_number,
@@ -132,12 +139,18 @@ def get_next_due_review(
 
 def get_overdue_count(session: Session) -> int:
     restore_archived_palaces(session)
+    today = date.today()
+    today_start = datetime.combine(today, time.min)
     schedules = (
         session.query(ReviewSchedule)
         .join(Palace)
         .filter(
             ReviewSchedule.completed == False,
             Palace.mastered == False,
+            or_(
+                ReviewSchedule.scheduled_date < today,
+                ReviewSchedule.scheduled_at < today_start,
+            ),
         )
         .all()
     )
@@ -240,4 +253,3 @@ def get_chapter_queue_payload(session: Session, chapter_id: int) -> dict:
     payload = get_review_queue_payload(session, chapter_id=chapter_id)
     payload["chapter"] = chapter
     return payload
-

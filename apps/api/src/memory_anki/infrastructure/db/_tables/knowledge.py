@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlalchemy import ForeignKey, Integer, String, Text
+from sqlalchemy import ForeignKey, Index, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from ._base import Base
@@ -30,6 +30,10 @@ class Subject(Base):
 
 class Chapter(Base):
     __tablename__ = "chapters"
+    __table_args__ = (
+        Index("ix_chapters_subject_sort", "subject_id", "sort_order"),
+        Index("ix_chapters_parent_sort", "parent_id", "sort_order"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     subject_id: Mapped[int] = mapped_column(

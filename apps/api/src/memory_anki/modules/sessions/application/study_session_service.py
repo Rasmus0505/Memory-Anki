@@ -5,6 +5,7 @@ from datetime import date, datetime, time, timedelta
 from typing import Any
 from uuid import uuid4
 
+from sqlalchemy import case, func
 from sqlalchemy.orm import Session
 
 from memory_anki.core.time import utc_now_naive
@@ -490,8 +491,8 @@ def get_study_session_duration_seconds(
     start: datetime,
     end: datetime,
 ) -> int:
-    rows = (
-        session.query(StudySession)
+    total = (
+        session.query(_positive_effective_seconds_sum())
         .filter(
             StudySession.deleted_at.is_(None),
             StudySession.status == "completed",
@@ -499,9 +500,9 @@ def get_study_session_duration_seconds(
             StudySession.started_at >= start,
             StudySession.started_at < end,
         )
-        .all()
+        .scalar()
     )
-    return sum(max(0, int(row.effective_seconds or 0)) for row in rows)
+    return int(total or 0)
 
 
 def get_all_time_study_session_duration_seconds(
@@ -509,16 +510,28 @@ def get_all_time_study_session_duration_seconds(
     *,
     scenes: tuple[str, ...],
 ) -> int:
-    rows = (
-        session.query(StudySession)
+    total = (
+        session.query(_positive_effective_seconds_sum())
         .filter(
             StudySession.deleted_at.is_(None),
             StudySession.status == "completed",
             StudySession.scene.in_(scenes),
         )
-        .all()
+        .scalar()
     )
-    return sum(max(0, int(row.effective_seconds or 0)) for row in rows)
+    return int(total or 0)
+
+
+def _positive_effective_seconds_sum():
+    return func.coalesce(
+        func.sum(
+            case(
+                (StudySession.effective_seconds > 0, StudySession.effective_seconds),
+                else_=0,
+            )
+        ),
+        0,
+    )
 
 
 def get_today_palace_learning_breakdown(session: Session) -> list[dict[str, Any]]:
