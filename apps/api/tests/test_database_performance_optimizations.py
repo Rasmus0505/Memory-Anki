@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import unittest
 from datetime import datetime, time, timedelta
 from pathlib import Path
@@ -346,6 +347,65 @@ class DatabasePerformanceOptimizationTests(unittest.TestCase):
 
         self.assertEqual(events, ["ensure", "checkpoint:True", "copy:database", "manifest"])
 
+    def test_storage_backup_manifest_records_database_info(self):
+        manifest = storage_backup.create_storage_backup_manifest(
+            reason="unit-test",
+            included_items=[],
+            full=False,
+        )
+
+        self.assertIn("database", manifest)
+        self.assertIn("relative_path", manifest["database"])
+        self.assertIn("sidecars", manifest["database"])
+
+    def test_storage_backup_copies_database_sidecars(self):
+        with TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            app_home = root / "app-home"
+            data_dir = app_home / "data"
+            data_dir.mkdir(parents=True)
+            db_path = data_dir / "memory_palace.db"
+            wal_path = data_dir / "memory_palace.db-wal"
+            shm_path = data_dir / "memory_palace.db-shm"
+            db_path.write_bytes(b"sqlite")
+            wal_path.write_bytes(b"wal")
+            shm_path.write_bytes(b"shm")
+            destination = root / "backup"
+            item = _BackupItem()
+            item.relative_path = "data/memory_palace.db"
+            item.kind = "file"
+            item.required = True
+
+            with patch.object(storage_backup, "APP_HOME", app_home):
+                result = storage_backup._copy_item_to_backup(item, destination)
+
+            restored_home = root / "restored"
+            manifest = {
+                "included_items": [
+                    {
+                        **result,
+                        "relative_path": "data/memory_palace.db",
+                    }
+                ]
+            }
+            (destination / storage_backup.BACKUP_MANIFEST_NAME).write_text(
+                json.dumps(manifest, ensure_ascii=False),
+                encoding="utf-8",
+            )
+            with patch.object(storage_backup, "APP_HOME", restored_home), patch.object(
+                storage_backup,
+                "ensure_runtime_dirs",
+            ):
+                restored = storage_backup.restore_storage_backup(destination)
+            backup_wal = (destination / "data" / "memory_palace.db-wal").read_bytes()
+            restored_wal = (restored_home / "data" / "memory_palace.db-wal").read_bytes()
+            restored_shm = (restored_home / "data" / "memory_palace.db-shm").read_bytes()
+
+        self.assertIn("database", restored)
+        self.assertEqual(backup_wal, b"wal")
+        self.assertEqual(restored_wal, b"wal")
+        self.assertEqual(restored_shm, b"shm")
+
     def test_storage_backup_stops_when_required_checkpoint_fails(self):
         with TemporaryDirectory() as temp_dir, patch.object(
             storage_backup,
@@ -538,6 +598,12 @@ class _MigrationOp:
 
 class _BackupItem:
     key = "database"
+    relative_path = "memory_palace.db"
+    kind = "file"
+    required = True
+
+    def absolute_path(self, app_home: Path) -> Path:
+        return app_home / self.relative_path
 
 
 class _RecordingLock:

@@ -1,4 +1,5 @@
 import json
+import sqlite3
 import tempfile
 import unittest
 from dataclasses import replace
@@ -127,6 +128,38 @@ class FileSyncTests(unittest.TestCase):
         self.assertTrue(conflict_names)
         self.assertTrue(all("/" not in name and "\\" not in name and ":" not in name for name in snapshot_names))
         self.assertTrue(all("/" not in name and "\\" not in name and "?" not in name for name in conflict_names))
+
+    def test_push_checkpoints_sqlite_wal_and_records_database_manifest(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            device_a = make_config(root, "device-a", "LaptopA")
+            data_dir = device_a.local_app_home / "data"
+            data_dir.mkdir(parents=True, exist_ok=True)
+            db_path = data_dir / "memory_palace.db"
+            connection = sqlite3.connect(str(db_path))
+            try:
+                connection.execute("PRAGMA journal_mode=WAL")
+                connection.execute("CREATE TABLE notes (id INTEGER PRIMARY KEY, body TEXT)")
+                connection.execute("INSERT INTO notes (body) VALUES ('alpha')")
+                connection.commit()
+            finally:
+                connection.close()
+            (device_a.local_app_home / "migration-state.json").write_text(json.dumps({}), encoding="utf-8")
+
+            result = push_on_stop(device_a)
+            remote_state = json.loads((root / "sync-root" / "state.json").read_text(encoding="utf-8"))
+            snapshot_path = root / "sync-root" / "snapshots" / remote_state["snapshot_name"]
+
+            import zipfile
+
+            with zipfile.ZipFile(snapshot_path, "r") as archive:
+                manifest = json.loads(archive.read("sync-manifest.json").decode("utf-8"))
+                names = set(archive.namelist())
+
+        self.assertTrue(result.ok, result.message)
+        self.assertEqual(manifest["database"]["relative_path"], "data/memory_palace.db")
+        self.assertGreater(manifest["database"]["size_bytes"], 0)
+        self.assertIn("data/memory_palace.db", names)
 
 
 if __name__ == "__main__":

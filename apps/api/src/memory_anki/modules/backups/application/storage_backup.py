@@ -6,7 +6,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from memory_anki.core.config import APP_HOME, BACKUPS_DIR, ensure_runtime_dirs
+from memory_anki.core.config import APP_HOME, BACKUPS_DIR, DB_PATH, ensure_runtime_dirs
 from memory_anki.core.runtime import build_runtime_info
 from memory_anki.core.storage_layout import (
     ManagedStorageItem,
@@ -22,11 +22,42 @@ BACKUP_MANIFEST_VERSION = 3
 ROLLING_BACKUP_ITEM_KEYS = ("database", "migration_state")
 
 
+def _database_sidecar_paths(path: Path) -> tuple[Path, Path]:
+    return (
+        path.with_name(f"{path.name}-wal"),
+        path.with_name(f"{path.name}-shm"),
+    )
+
+
+def _database_backup_info() -> dict[str, Any]:
+    sidecars = []
+    for sidecar in _database_sidecar_paths(DB_PATH):
+        sidecars.append(
+            {
+                "name": sidecar.name,
+                "relative_path": sidecar.relative_to(APP_HOME).as_posix()
+                if sidecar.is_relative_to(APP_HOME)
+                else sidecar.name,
+                "exists": sidecar.exists(),
+                "size_bytes": sidecar.stat().st_size if sidecar.exists() else 0,
+            }
+        )
+    return {
+        "relative_path": DB_PATH.relative_to(APP_HOME).as_posix()
+        if DB_PATH.is_relative_to(APP_HOME)
+        else DB_PATH.name,
+        "exists": DB_PATH.exists(),
+        "size_bytes": DB_PATH.stat().st_size if DB_PATH.exists() else 0,
+        "sidecars": sidecars,
+    }
+
+
 def _copy_item_to_backup(item: ManagedStorageItem, destination_root: Path) -> dict[str, Any]:
     source = item.absolute_path(APP_HOME)
     target = destination_root / item.relative_path
     target.parent.mkdir(parents=True, exist_ok=True)
     exists = source.exists()
+    sidecar_entries: list[dict[str, Any]] = []
 
     if exists:
         if item.kind == "directory":
@@ -38,6 +69,23 @@ def _copy_item_to_backup(item: ManagedStorageItem, destination_root: Path) -> di
             )
         else:
             shutil.copy2(source, target)
+            if item.key == "database":
+                for sidecar in _database_sidecar_paths(source):
+                    sidecar_target = target.with_name(sidecar.name)
+                    sidecar_exists = sidecar.exists()
+                    if sidecar_exists:
+                        shutil.copy2(sidecar, sidecar_target)
+                    elif sidecar_target.exists():
+                        sidecar_target.unlink()
+                    sidecar_entries.append(
+                        {
+                            "name": sidecar.name,
+                            "relative_path": sidecar_target.relative_to(destination_root).as_posix(),
+                            "source_exists": sidecar_exists,
+                            "included": sidecar_exists,
+                            "size_bytes": sidecar.stat().st_size if sidecar_exists else 0,
+                        }
+                    )
     elif item.kind == "directory" and item.required:
         target.mkdir(parents=True, exist_ok=True)
 
@@ -48,6 +96,7 @@ def _copy_item_to_backup(item: ManagedStorageItem, destination_root: Path) -> di
         "required": item.required,
         "source_exists": exists,
         "included": exists or (item.kind == "directory" and item.required),
+        "sidecars": sidecar_entries,
     }
 
 
@@ -88,6 +137,7 @@ def create_storage_backup_manifest(
         "created_at": datetime.now().isoformat(timespec="seconds"),
         "storage_mode": load_storage_layout().storage_mode,
         "app_home": str(APP_HOME),
+        "database": _database_backup_info(),
         "runtime_info": {
             "channel": runtime_info.get("channel"),
             "commit": runtime_info.get("commit"),
@@ -166,5 +216,15 @@ def restore_storage_backup(backup_root: Path) -> list[str]:
             shutil.copytree(source, destination)
         else:
             shutil.copy2(source, destination)
+            for sidecar in item.get("sidecars") or []:
+                if not isinstance(sidecar, dict) or not sidecar.get("included"):
+                    continue
+                sidecar_relative = str(sidecar.get("relative_path") or "").strip()
+                if not sidecar_relative:
+                    continue
+                sidecar_source = backup_root / sidecar_relative
+                sidecar_destination = destination.with_name(sidecar_source.name)
+                if sidecar_source.exists():
+                    shutil.copy2(sidecar_source, sidecar_destination)
         restored_keys.append(key)
     return restored_keys

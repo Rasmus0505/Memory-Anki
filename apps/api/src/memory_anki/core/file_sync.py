@@ -5,6 +5,7 @@ import json
 import logging
 import os
 import shutil
+import sqlite3
 import tempfile
 import time
 import zipfile
@@ -84,6 +85,82 @@ def _database_sidecar_paths(path: Path) -> tuple[Path, Path]:
     )
 
 
+def _database_file_info(app_home: Path) -> dict[str, Any]:
+    database_item = next(
+        (item for item in get_backup_storage_items() if item.key == "database"),
+        None,
+    )
+    if database_item is None:
+        return {"included": False}
+    database_path = database_item.absolute_path(app_home)
+    sidecars = []
+    for sidecar in _database_sidecar_paths(database_path):
+        sidecars.append(
+            {
+                "name": sidecar.name,
+                "relative_path": (Path(database_item.relative_path).parent / sidecar.name).as_posix(),
+                "exists": sidecar.exists(),
+                "size_bytes": sidecar.stat().st_size if sidecar.exists() else 0,
+            }
+        )
+    return {
+        "included": database_path.exists(),
+        "relative_path": database_item.relative_path,
+        "size_bytes": database_path.stat().st_size if database_path.exists() else 0,
+        "sidecars": sidecars,
+    }
+
+
+def _database_item() -> ManagedStorageItem | None:
+    return next(
+        (item for item in get_backup_storage_items() if item.key == "database"),
+        None,
+    )
+
+
+def _checkpoint_sqlite_database(app_home: Path, *, require_complete: bool) -> bool:
+    database_item = _database_item()
+    if database_item is None:
+        return False
+    database_path = database_item.absolute_path(app_home)
+    if not database_path.exists():
+        return False
+    try:
+        with database_path.open("rb") as handle:
+            header = handle.read(16)
+    except OSError:
+        if require_complete:
+            raise SyncError(f"无法读取本机数据库文件: {database_path}") from None
+        return False
+    if header != b"SQLite format 3\x00":
+        return False
+    try:
+        connection = sqlite3.connect(str(database_path))
+        try:
+            row = connection.execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchone()
+        finally:
+            connection.close()
+    except sqlite3.Error as exc:
+        if require_complete:
+            raise SyncError(f"同步前 SQLite WAL checkpoint 失败: {exc}") from None
+        logger.warning("sync SQLite WAL checkpoint failed", exc_info=True)
+        return False
+    completed = _checkpoint_completed(row)
+    if not completed and require_complete:
+        raise SyncError(f"同步前 SQLite WAL checkpoint 未完成: {row!r}")
+    return completed
+
+
+def _checkpoint_completed(row) -> bool:
+    if row is None or len(row) < 3:
+        return False
+    busy, log_frames, checkpointed_frames = row[0], row[1], row[2]
+    try:
+        return int(busy or 0) == 0 and int(checkpointed_frames or 0) >= int(log_frames or 0)
+    except (TypeError, ValueError):
+        return False
+
+
 def _iter_files_for_item(app_home: Path, item: ManagedStorageItem) -> Iterable[tuple[str, Path]]:
     absolute = item.absolute_path(app_home)
     base_relative = Path(item.relative_path)
@@ -153,6 +230,7 @@ def has_local_payload(app_home: Path) -> bool:
 
 
 def compute_snapshot_hash(app_home: Path) -> str:
+    _checkpoint_sqlite_database(app_home, require_complete=True)
     logger.info("scanning local payload and computing snapshot hash: %s", app_home)
     digest = hashlib.sha256()
     progress = _SnapshotProgress("snapshot hash progress")
@@ -203,6 +281,7 @@ def create_snapshot_zip(
 ) -> dict[str, Any]:
     app_home.mkdir(parents=True, exist_ok=True)
     destination.parent.mkdir(parents=True, exist_ok=True)
+    _checkpoint_sqlite_database(app_home, require_complete=True)
     logger.info("writing sync snapshot: %s", destination)
     backup_items = get_backup_storage_items()
     resolved_hash = snapshot_hash or compute_snapshot_hash(app_home)
@@ -218,6 +297,7 @@ def create_snapshot_zip(
         "git_commit": commit,
         "short_commit": commit[:8] if commit else None,
         "items": [item.key for item in backup_items],
+        "database": _database_file_info(app_home),
     }
     progress = _SnapshotProgress("snapshot write progress")
     partial_destination = destination.parent / f".{destination.name}.{os.getpid()}.tmp"
