@@ -97,6 +97,13 @@ function getRootNodeUid(editorState: MindMapEditorState | null) {
   return typeof uid === 'string' && uid.trim() ? uid.trim() : null
 }
 
+function isMobilePwaRuntime() {
+  return (
+    typeof document !== 'undefined' &&
+    document.documentElement.classList.contains('memory-anki-mobile-pwa')
+  )
+}
+
 export function PalaceQuizMemoryLookupDialog({
   open,
   onOpenChange,
@@ -121,6 +128,7 @@ export function PalaceQuizMemoryLookupDialog({
   const [pinned, setPinned] = useState(false)
   const [previewMode, setPreviewMode] = useState<MemoryLookupPreviewMode>('view')
   const [rootFocusNonce, setRootFocusNonce] = useState(0)
+  const isMobilePwa = isMobilePwaRuntime()
   const dragStateRef = useRef<{
     startX: number
     startY: number
@@ -137,8 +145,11 @@ export function PalaceQuizMemoryLookupDialog({
     title: selectedPalace ? getPalaceTitle(selectedPalace) : previewTitle || '宫殿脑图',
     editorState: previewState,
   })
+  const revealRoot = revealSession.root
+  const setRevealMap = revealSession.setRevealMap
+  const setRedNodeIds = revealSession.setRedNodeIds
   const feedback = useReviewFeedback({
-    root: revealSession.root,
+    root: revealRoot,
     revealMap: revealSession.revealMap,
     revealedNonRootCount: revealSession.revealedNonRootCount,
     totalNodeCount: revealSession.totalNodeCount,
@@ -146,9 +157,9 @@ export function PalaceQuizMemoryLookupDialog({
   const flipEditorState = revealSession.visibleEditorState
   const enterFlipMode = useCallback(() => {
     setPreviewMode('flip')
-    revealSession.setRevealMap(buildAllRevealedState(revealSession.root))
-    revealSession.setRedNodeIds(new Set<string>())
-  }, [revealSession.root, revealSession.setRedNodeIds, revealSession.setRevealMap])
+    setRevealMap(buildAllRevealedState(revealRoot))
+    setRedNodeIds(new Set<string>())
+  }, [revealRoot, setRedNodeIds, setRevealMap])
 
   useEffect(() => {
     if (!open) return
@@ -169,17 +180,18 @@ export function PalaceQuizMemoryLookupDialog({
   )
 
   useEffect(() => {
-    if (!open) return
+    if (!open || isMobilePwa) return
     persistLayout((current) => current)
-  }, [open, persistLayout])
+  }, [isMobilePwa, open, persistLayout])
 
   useEffect(() => {
+    if (isMobilePwa) return
     const handleResize = () => {
       persistLayout((current) => clampMemoryLookupLayoutToViewport(current))
     }
     window.addEventListener('resize', handleResize)
     return () => window.removeEventListener('resize', handleResize)
-  }, [persistLayout])
+  }, [isMobilePwa, persistLayout])
 
   useEffect(() => {
     if (!open) return
@@ -331,7 +343,7 @@ export function PalaceQuizMemoryLookupDialog({
   }, [])
 
   useEffect(() => {
-    if (!open) return
+    if (!open || isMobilePwa) return
     const handleWindowPointerMove = (event: PointerEvent) => {
       handlePointerMove(event.clientX, event.clientY)
     }
@@ -346,7 +358,7 @@ export function PalaceQuizMemoryLookupDialog({
       window.removeEventListener('pointerup', handleWindowPointerUp)
       window.removeEventListener('pointercancel', handleWindowPointerUp)
     }
-  }, [handlePointerMove, open, stopPointerInteraction])
+  }, [handlePointerMove, isMobilePwa, open, stopPointerInteraction])
 
   const collapse = () => {
     persistLayout((current) => ({ ...current, collapsed: true }))
@@ -354,6 +366,259 @@ export function PalaceQuizMemoryLookupDialog({
 
   const expand = () => {
     persistLayout((current) => ({ ...current, collapsed: false }))
+  }
+
+  const previewHeading = selectedPalace ? getPalaceTitle(selectedPalace) : previewTitle || '宫殿脑图'
+  const renderSearchInput = (inputClassName?: string) => (
+    <div className="relative">
+      <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+      <Input
+        value={search}
+        onChange={(event) => setSearch(event.target.value)}
+        placeholder="搜索记忆宫殿"
+        className={cn('h-9 pl-9', inputClassName)}
+      />
+    </div>
+  )
+  const renderPalaceList = (variant: 'desktop' | 'mobile') => {
+    if (listLoading) {
+      return (
+        <div className="flex h-28 items-center justify-center gap-2 text-sm text-muted-foreground">
+          <LoaderCircle className="size-4 animate-spin" />
+          正在加载宫殿...
+        </div>
+      )
+    }
+    if (listError) {
+      return (
+        <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          {listError}
+        </div>
+      )
+    }
+    if (palaces.length === 0) {
+      return (
+        <div className="flex h-28 items-center justify-center rounded-lg border border-dashed border-border/80 px-3 text-center text-sm text-muted-foreground">
+          没有找到记忆宫殿。
+        </div>
+      )
+    }
+
+    if (variant === 'mobile') {
+      return (
+        <div className="flex gap-2 overflow-x-auto pb-1 [-webkit-overflow-scrolling:touch]">
+          {palaces.map((palace) => {
+            const active = palace.id === selectedPalaceId
+            return (
+              <button
+                key={palace.id}
+                type="button"
+                className={cn(
+                  'min-h-10 max-w-[72vw] shrink-0 rounded-full border px-3 text-left transition-colors',
+                  active
+                    ? 'border-primary bg-primary text-primary-foreground shadow-sm'
+                    : 'border-border/70 bg-background hover:bg-secondary',
+                )}
+                onClick={() => setSelectedPalaceId(palace.id)}
+              >
+                <span className="block truncate text-sm font-medium">{getPalaceTitle(palace)}</span>
+                <span
+                  className={cn(
+                    'block truncate text-[11px]',
+                    active ? 'text-primary-foreground/78' : 'text-muted-foreground',
+                  )}
+                >
+                  {getPalaceContext(palace)}
+                </span>
+              </button>
+            )
+          })}
+        </div>
+      )
+    }
+
+    return (
+      <div className="space-y-1">
+        {palaces.map((palace) => {
+          const active = palace.id === selectedPalaceId
+          return (
+            <button
+              key={palace.id}
+              type="button"
+              className={cn(
+                'w-full rounded-lg px-3 py-2 text-left transition-colors',
+                active
+                  ? 'bg-primary text-primary-foreground shadow-sm'
+                  : 'hover:bg-secondary',
+              )}
+              onClick={() => setSelectedPalaceId(palace.id)}
+            >
+              <div className="flex min-w-0 items-center gap-2">
+                <BookOpen className="size-4 shrink-0" />
+                <span className="truncate text-sm font-medium">{getPalaceTitle(palace)}</span>
+              </div>
+              <div
+                className={cn(
+                  'mt-1 truncate text-xs',
+                  active ? 'text-primary-foreground/78' : 'text-muted-foreground',
+                )}
+              >
+                {getPalaceContext(palace)}
+              </div>
+              <div
+                className={cn(
+                  'mt-1 text-xs',
+                  active ? 'text-primary-foreground/78' : 'text-muted-foreground',
+                )}
+              >
+                {(palace.chapters?.length || 0)} 章节 · {(palace.segments?.length || 0)} 学习组
+              </div>
+            </button>
+          )
+        })}
+      </div>
+    )
+  }
+  const renderPreviewControls = (compact = false) => (
+    <div className={cn('flex shrink-0 flex-wrap items-center justify-end gap-2', compact && 'gap-1.5')}>
+      <div className="inline-flex rounded-full border border-border/70 bg-muted/45 p-1">
+        <Button
+          type="button"
+          size="sm"
+          variant={previewMode === 'view' ? 'default' : 'ghost'}
+          className={cn('h-7 rounded-full px-3 text-xs', compact && 'px-2')}
+          onClick={() => setPreviewMode('view')}
+        >
+          查看模式
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant={previewMode === 'flip' ? 'default' : 'ghost'}
+          className={cn('h-7 rounded-full px-3 text-xs', compact && 'px-2')}
+          onClick={enterFlipMode}
+        >
+          翻卡模式
+        </Button>
+      </div>
+      {previewMode === 'flip' ? (
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          className={cn('h-8', compact && 'px-2 text-xs')}
+          disabled={!previewState}
+          onClick={revealSession.reset}
+        >
+          <RotateCcw className="size-4" />
+          重新开始
+        </Button>
+      ) : null}
+    </div>
+  )
+  const renderMindMapContent = () => (
+    <div className="min-h-0 flex-1 overflow-hidden rounded-xl border border-border/70 bg-background">
+      {previewLoading ? (
+        <div className="flex h-full min-h-[180px] items-center justify-center gap-2 text-sm text-muted-foreground">
+          <LoaderCircle className="size-4 animate-spin" />
+          正在加载脑图...
+        </div>
+      ) : previewError ? (
+        <div className="flex h-full min-h-[180px] items-center justify-center p-4">
+          <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+            {previewError}
+          </div>
+        </div>
+      ) : previewState ? (
+        previewMode === 'flip' && flipEditorState ? (
+          <MindMapFrame
+            key={`quiz-memory-lookup-${selectedPalaceId}-flip`}
+            editorState={flipEditorState}
+            readonly
+            practiceModeActive
+            syncOnPropChange
+            syncIntent="replace"
+            syncReason="review_flip"
+            externalSyncKey={revealSession.visibleEditorSyncKey}
+            preserveViewOnSync
+            initialViewPolicy="reset"
+            onEditorStateChange={() => {}}
+            onNodeClick={revealSession.handleNodeClick}
+            onNodeContextMenu={revealSession.handleNodeContextMenu}
+            reviewFxSignal={feedback.reviewFxSignal}
+            className="h-full min-h-[180px] w-full border-0"
+          />
+        ) : (
+          <MindMapFrame
+            key={`quiz-memory-lookup-${selectedPalaceId}-view`}
+            editorState={previewState}
+            readonly
+            focusRequestNodeUid={rootNodeUid}
+            focusRequestNonce={rootFocusNonce}
+            initialViewPolicy="reset"
+            onEditorStateChange={() => {}}
+            className="h-full min-h-[180px] w-full border-0"
+          />
+        )
+      ) : (
+        <div className="flex h-full min-h-[180px] items-center justify-center text-sm text-muted-foreground">
+          请选择一个记忆宫殿。
+        </div>
+      )}
+    </div>
+  )
+
+  if (!open) return null
+
+  if (isMobilePwa) {
+    return (
+      <Dialog open={open} onOpenChange={onOpenChange} modal>
+        <DialogContent
+          layout="unstyled"
+          className="fixed inset-0 z-[241] flex h-[100dvh] max-h-[100dvh] w-screen flex-col overflow-hidden border-0 bg-card text-card-foreground shadow-none"
+          style={{
+            paddingTop: 'env(safe-area-inset-top)',
+            paddingBottom: 'env(safe-area-inset-bottom)',
+          }}
+        >
+          <DialogTitle className="sr-only">查看记忆宫殿</DialogTitle>
+          <DialogDescription className="sr-only">
+            移动端全屏查看当前记忆宫殿脑图。
+          </DialogDescription>
+          <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border/70 px-3 py-2">
+            <div className="flex min-w-0 items-center gap-2">
+              <BookOpen className="size-4 shrink-0 text-primary" />
+              <span className="truncate text-sm font-semibold">{previewHeading}</span>
+            </div>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="size-10 shrink-0 rounded-full"
+              aria-label="关闭记忆宫殿查看"
+              onClick={() => onOpenChange(false)}
+            >
+              <X className="size-5" />
+            </Button>
+          </div>
+
+          <div className="shrink-0 border-b border-border/70 px-3 py-2">
+            {renderSearchInput('h-10')}
+            <div className="mt-2">{renderPalaceList('mobile')}</div>
+          </div>
+
+          <div className="flex min-h-0 flex-1 flex-col p-2">
+            <div className="mb-2 flex min-h-8 items-center justify-between gap-2">
+              <div className="min-w-0">
+                <div className="truncate text-sm font-semibold">{previewHeading}</div>
+              </div>
+              {renderPreviewControls(true)}
+            </div>
+            {renderMindMapContent()}
+          </div>
+        </DialogContent>
+      </Dialog>
+    )
   }
 
   if (layout.collapsed) {
@@ -461,71 +726,10 @@ export function PalaceQuizMemoryLookupDialog({
           <div className="grid min-h-0 flex-1 gap-0 lg:grid-cols-[260px_minmax(0,1fr)]">
             <div className="flex min-h-0 flex-col border-b border-border/70 lg:border-b-0 lg:border-r">
               <div className="border-b border-border/70 p-3">
-                <div className="relative">
-                  <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                  <Input
-                    value={search}
-                    onChange={(event) => setSearch(event.target.value)}
-                    placeholder="搜索记忆宫殿"
-                    className="h-9 pl-9"
-                  />
-                </div>
+                {renderSearchInput()}
               </div>
               <div className="min-h-0 flex-1 overflow-y-auto p-2">
-                {listLoading ? (
-                  <div className="flex h-28 items-center justify-center gap-2 text-sm text-muted-foreground">
-                    <LoaderCircle className="size-4 animate-spin" />
-                    正在加载宫殿...
-                  </div>
-                ) : listError ? (
-                  <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-                    {listError}
-                  </div>
-                ) : palaces.length === 0 ? (
-                  <div className="flex h-28 items-center justify-center rounded-lg border border-dashed border-border/80 px-3 text-center text-sm text-muted-foreground">
-                    没有找到记忆宫殿。
-                  </div>
-                ) : (
-                  <div className="space-y-1">
-                    {palaces.map((palace) => {
-                      const active = palace.id === selectedPalaceId
-                      return (
-                        <button
-                          key={palace.id}
-                          type="button"
-                          className={cn(
-                            'w-full rounded-lg px-3 py-2 text-left transition-colors',
-                            active
-                              ? 'bg-primary text-primary-foreground shadow-sm'
-                              : 'hover:bg-secondary',
-                          )}
-                          onClick={() => setSelectedPalaceId(palace.id)}
-                        >
-                          <div className="flex min-w-0 items-center gap-2">
-                            <BookOpen className="size-4 shrink-0" />
-                            <span className="truncate text-sm font-medium">{getPalaceTitle(palace)}</span>
-                          </div>
-                          <div
-                            className={cn(
-                              'mt-1 truncate text-xs',
-                              active ? 'text-primary-foreground/78' : 'text-muted-foreground',
-                            )}
-                          >
-                            {getPalaceContext(palace)}
-                          </div>
-                          <div
-                            className={cn(
-                              'mt-1 text-xs',
-                              active ? 'text-primary-foreground/78' : 'text-muted-foreground',
-                            )}
-                          >
-                            {(palace.chapters?.length || 0)} 章节 · {(palace.segments?.length || 0)} 学习组
-                          </div>
-                        </button>
-                      )
-                    })}
-                  </div>
-                )}
+                {renderPalaceList('desktop')}
               </div>
             </div>
 
@@ -533,7 +737,7 @@ export function PalaceQuizMemoryLookupDialog({
               <div className="mb-3 flex min-h-9 items-center justify-between gap-3">
                 <div className="min-w-0">
                   <div className="truncate text-sm font-semibold">
-                    {selectedPalace ? getPalaceTitle(selectedPalace) : previewTitle || '宫殿脑图'}
+                    {previewHeading}
                   </div>
                   <div className="text-xs text-muted-foreground">
                     {previewMode === 'view'
@@ -541,92 +745,10 @@ export function PalaceQuizMemoryLookupDialog({
                       : '翻卡模式：点击已显示知识点展开下一层知识点，点击“待回忆”翻开内容。'}
                   </div>
                 </div>
-                <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
-                  <div className="inline-flex rounded-full border border-border/70 bg-muted/45 p-1">
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant={previewMode === 'view' ? 'default' : 'ghost'}
-                      className="h-7 rounded-full px-3 text-xs"
-                      onClick={() => setPreviewMode('view')}
-                    >
-                      查看模式
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant={previewMode === 'flip' ? 'default' : 'ghost'}
-                      className="h-7 rounded-full px-3 text-xs"
-                      onClick={enterFlipMode}
-                    >
-                      翻卡模式
-                    </Button>
-                  </div>
-                  {previewMode === 'flip' ? (
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      className="h-8"
-                      disabled={!previewState}
-                      onClick={revealSession.reset}
-                    >
-                      <RotateCcw className="size-4" />
-                      重新开始
-                    </Button>
-                  ) : null}
-                </div>
+                {renderPreviewControls()}
               </div>
 
-              <div className="min-h-0 flex-1 overflow-hidden rounded-xl border border-border/70 bg-background">
-                {previewLoading ? (
-                  <div className="flex h-full min-h-[180px] items-center justify-center gap-2 text-sm text-muted-foreground">
-                    <LoaderCircle className="size-4 animate-spin" />
-                    正在加载脑图...
-                  </div>
-                ) : previewError ? (
-                  <div className="flex h-full min-h-[180px] items-center justify-center p-4">
-                    <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-                      {previewError}
-                    </div>
-                  </div>
-                ) : previewState ? (
-                  previewMode === 'flip' && flipEditorState ? (
-                    <MindMapFrame
-                      key={`quiz-memory-lookup-${selectedPalaceId}-flip`}
-                      editorState={flipEditorState}
-                      readonly
-                      practiceModeActive
-                      syncOnPropChange
-                      syncIntent="replace"
-                      syncReason="review_flip"
-                      externalSyncKey={revealSession.visibleEditorSyncKey}
-                      preserveViewOnSync
-                      initialViewPolicy="reset"
-                      onEditorStateChange={() => {}}
-                      onNodeClick={revealSession.handleNodeClick}
-                      onNodeContextMenu={revealSession.handleNodeContextMenu}
-                      reviewFxSignal={feedback.reviewFxSignal}
-                      className="h-full min-h-[180px] w-full border-0"
-                    />
-                  ) : (
-                    <MindMapFrame
-                      key={`quiz-memory-lookup-${selectedPalaceId}-view`}
-                      editorState={previewState}
-                      readonly
-                      focusRequestNodeUid={rootNodeUid}
-                      focusRequestNonce={rootFocusNonce}
-                      initialViewPolicy="reset"
-                      onEditorStateChange={() => {}}
-                      className="h-full min-h-[180px] w-full border-0"
-                    />
-                  )
-                ) : (
-                  <div className="flex h-full min-h-[180px] items-center justify-center text-sm text-muted-foreground">
-                    请选择一个记忆宫殿。
-                  </div>
-                )}
-              </div>
+              {renderMindMapContent()}
             </div>
           </div>
         </div>
