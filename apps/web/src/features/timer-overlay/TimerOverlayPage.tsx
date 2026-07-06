@@ -151,8 +151,14 @@ export default function TimerOverlayPage() {
     if (snapshot.mode === 'break' && snapshot.status === 'prompting') {
       return (
         <>
-          {snapshot.presetMinutes.slice(0, 2).map((minutes) => (
-            <Button key={minutes} type="button" size="sm" onClick={() => sendCommand({ type: 'startBreak', minutes })}>
+          {snapshot.presetMinutes.slice(0, 2).map((minutes, i) => (
+            <Button
+              key={minutes}
+              type="button"
+              variant={i === 0 ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => sendCommand({ type: 'startBreak', minutes })}
+            >
               {minutes} 分钟
             </Button>
           ))}
@@ -225,7 +231,7 @@ export default function TimerOverlayPage() {
 
     if (snapshot.status === 'running') {
       return (
-        <Button type="button" size="sm" onClick={() => sendCommand({ type: 'pause' })}>
+        <Button type="button" size="sm" className="memory-anki-timer-overlay-action-single" onClick={() => sendCommand({ type: 'pause' })}>
           <Pause className="size-4" />
           暂停
         </Button>
@@ -234,7 +240,13 @@ export default function TimerOverlayPage() {
 
     if (snapshot.status === 'paused' || snapshot.status === 'idle') {
       return (
-        <Button type="button" size="sm" disabled={!snapshot.availableActions.includes('resume')} onClick={() => sendCommand({ type: 'resume' })}>
+        <Button
+          type="button"
+          size="sm"
+          className="memory-anki-timer-overlay-action-single"
+          disabled={!snapshot.availableActions.includes('resume')}
+          onClick={() => sendCommand({ type: 'resume' })}
+        >
           <Play className="size-4" />
           {snapshot.status === 'paused' ? '继续' : '等待学习页'}
         </Button>
@@ -244,13 +256,24 @@ export default function TimerOverlayPage() {
     return null
   }
 
+  const dotClass = cn(
+    'memory-anki-timer-overlay-dot',
+    snapshot.status === 'expired'
+      ? 'memory-anki-timer-overlay-dot-expired'
+      : snapshot.mode === 'break'
+        ? 'memory-anki-timer-overlay-dot-break'
+        : snapshot.status === 'running'
+          ? 'memory-anki-timer-overlay-dot-running'
+          : undefined,
+  )
+
   if (collapsed) {
     return (
       <div
         className={cn('memory-anki-timer-overlay-capsule', snapshot.status === 'expired' && 'memory-anki-timer-overlay-capsule-expired')}
         title="拖动计时器"
       >
-        <span className="memory-anki-timer-overlay-dot" />
+        <span className={dotClass} />
         <span className="memory-anki-timer-overlay-capsule-label">{capsuleText}</span>
         <button
           type="button"
@@ -292,10 +315,13 @@ export default function TimerOverlayPage() {
 
       <div className="memory-anki-timer-overlay-digits">{clock}</div>
 
-      <div className="memory-anki-timer-overlay-copy">
-        {snapshot.primaryText}
-        <span>{snapshot.secondaryText}</span>
-      </div>
+      {/* 学习计时运行中标题行已有上下文，隐藏 copy 行减少视觉噪音 */}
+      {!(snapshot.mode === 'study' && snapshot.status === 'running') && (
+        <div className="memory-anki-timer-overlay-copy">
+          {snapshot.primaryText}
+          <span>{snapshot.secondaryText}</span>
+        </div>
+      )}
 
       <div className="memory-anki-timer-overlay-actions">{renderActions()}</div>
     </main>

@@ -1,4 +1,4 @@
-const { app, BrowserWindow, globalShortcut, ipcMain, shell } = require('electron')
+const { app, BrowserWindow, globalShortcut, ipcMain, shell, session } = require('electron')
 const path = require('node:path')
 
 const APP_URL = process.env.MEMORY_ANKI_DESKTOP_URL || 'http://127.0.0.1:5173/'
@@ -178,7 +178,9 @@ function toggleTimerWindow() {
   ensureTimerWindow()
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
+  // 每次启动前清除 HTTP 缓存，确保 Vite dev server 提供最新代码
+  await session.defaultSession.clearCache()
   createMainWindow()
   createTimerWindow()
   globalShortcut.register('CommandOrControl+Shift+M', toggleTimerWindow)

@@ -1504,8 +1504,38 @@ select:focus-visible,
   width: 10px;
   height: 10px;
   border-radius: 999px;
-  background: linear-gradient(135deg, #f59e0b, #ef4444);
-  box-shadow: 0 0 0 4px rgba(251, 191, 36, 0.18);
+  background: linear-gradient(135deg, #94a3b8, #64748b);
+  box-shadow: 0 0 0 3px rgba(100, 116, 139, 0.15);
+}
+
+/* 学习计时运行中 → 绿色 */
+.memory-anki-timer-overlay-dot-running {
+  background: linear-gradient(135deg, #34d399, #10b981);
+  box-shadow: 0 0 0 3px rgba(52, 211, 153, 0.22);
+}
+
+/* 休息中 → 琥珀色 */
+.memory-anki-timer-overlay-dot-break {
+  background: linear-gradient(135deg, #fbbf24, #f59e0b);
+  box-shadow: 0 0 0 3px rgba(251, 191, 36, 0.22);
+}
+
+/* 休息到期 → 红色 */
+.memory-anki-timer-overlay-dot-expired {
+  background: linear-gradient(135deg, #f87171, #ef4444);
+  box-shadow: 0 0 0 3px rgba(248, 113, 113, 0.26);
+}
+
+/* 单操作按钮不拉伸到全宽 */
+.memory-anki-timer-overlay-action-single {
+  flex: 0 0 auto !important;
+  min-width: 80px;
+  max-width: 140px;
+}
+
+/* 到期状态数字变红 */
+.memory-anki-timer-overlay-shell-expired .memory-anki-timer-overlay-digits {
+  color: #ef4444;
 }
 
 .memory-anki-timer-screen-pulse-secondary {
