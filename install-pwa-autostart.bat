@@ -3,7 +3,7 @@ setlocal
 cd /d "%~dp0"
 
 echo Installing Windows startup shortcut: Memory Anki PWA
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0tools\install_pwa_startup_shortcut.ps1"
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0tools\pwa_launcher.ps1" InstallAutostart
 if errorlevel 1 (
   echo.
   echo [ERROR] Failed to install startup shortcut.
