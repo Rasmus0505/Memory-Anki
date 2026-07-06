@@ -129,9 +129,21 @@ export function TimeRecordsTable({
       <CardContent>
         {visibleRecords.length === 0 ? (
           <EmptyState
-            variant="search"
-            title="还没有可展示的时间记录"
-            description="调整筛选条件，或开始一次学习会话来产生记录。"
+            variant={keyword || kindFilter !== 'all' ? 'search' : 'create'}
+            title={keyword || kindFilter !== 'all' ? '没有匹配的学习记录' : '还没有学习记录'}
+            description={
+              keyword || kindFilter !== 'all'
+                ? '换个关键词或切回全部类型，看看是否有被筛选掉的记录。'
+                : '开始一次学习、复习或手动新增一条记录后，这里会显示有效学习时长。'
+            }
+            action={
+              keyword || kindFilter !== 'all' ? null : (
+                <Button variant="outline" size="sm" onClick={onCreateRecord}>
+                  <Plus className="mr-2 size-4" />
+                  手动新增记录
+                </Button>
+              )
+            }
           />
         ) : (
           <div className="overflow-x-auto rounded-[24px] border border-border/70">

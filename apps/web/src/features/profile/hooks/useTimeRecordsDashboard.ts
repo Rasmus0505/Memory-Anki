@@ -219,7 +219,7 @@ export function useTimeRecordsDashboard(
           return
         }
         setRecords((current) => [created, ...current])
-        toast.success('时间记录已新增')
+        toast.success(`已新增学习记录“${created.title}”。`)
       } else if (editingRecord) {
         const updated = await updateStudySessionRecord(editingRecord.id, parsed.value)
         if (updated) {
@@ -229,14 +229,14 @@ export function useTimeRecordsDashboard(
             ),
           )
         }
-        toast.success('时间记录已更新')
+        toast.success(`学习记录“${parsed.value.title}”已更新。`)
       }
 
       setDialogOpen(false)
       await refreshRecords()
       await options.onRecordsChanged?.()
     } catch (error) {
-      setFormError(error instanceof Error ? error.message : '保存失败，请重试。')
+      setFormError(error instanceof Error ? error.message : '保存学习记录失败，请检查时间和标题后重试。')
       return
     } finally {
       setIsSubmittingRecord(false)
@@ -259,10 +259,10 @@ export function useTimeRecordsDashboard(
       setSelectedRecordIds((current) =>
         current.filter((id) => id !== record.id),
       )
-      toast.success('时间记录已删除')
+      toast.success(`学习记录“${record.title}”已删除。`)
       await refreshRecords()
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : '删除失败，请重试')
+      toast.error(error instanceof Error ? error.message : '删除学习记录失败，请刷新列表后重试。')
     } finally {
       setDeletingRecordId(null)
     }
@@ -314,10 +314,10 @@ export function useTimeRecordsDashboard(
       await bulkDeleteStudySessionRecords(targets.map((record) => record.id))
       setRecords((current) => current.filter((record) => !selectedRecordIds.includes(record.id)))
       setSelectedRecordIds([])
-      toast.success(`已删除：${targets.length} 条记录`)
+      toast.success(`已删除 ${targets.length} 条学习记录。`)
       await refreshRecords()
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : '批量删除失败，请重试')
+      toast.error(error instanceof Error ? error.message : '批量删除学习记录失败，请重新选择后重试。')
     } finally {
       setIsBulkDeleting(false)
     }

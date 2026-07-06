@@ -102,6 +102,8 @@ export interface StudySessionRecordPayload {
 }
 
 export interface StudySessionListOptions {
+  includeDeleted?: boolean
+  includeBelowThreshold?: boolean
 }
 
 function listPath(_options?: StudySessionListOptions) {
