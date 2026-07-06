@@ -19,3 +19,9 @@ if not defined PYTHON_CMD (
 )
 
 "%PYTHON_CMD%" "%~dp0tools\pwa_server.py" --stop
+set "EXIT_CODE=%ERRORLEVEL%"
+if not "%EXIT_CODE%"=="0" (
+  echo.
+  echo [ERROR] Failed to stop PWA safely. See logs\pwa-api.log if the server was running.
+)
+exit /b %EXIT_CODE%
