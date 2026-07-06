@@ -23,7 +23,7 @@ from typing import (
 )
 
 import fitz
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, load_only, selectinload
 
 from memory_anki.core.time import utc_now_naive
 from memory_anki.infrastructure.db.models import (
@@ -146,6 +146,22 @@ def list_recent_materials(session: Session, limit: int = 12) -> list[dict[str, A
     safe_limit = max(1, min(50, int(limit)))
     materials = (
         session.query(EnglishReadingMaterial)
+        .options(
+            load_only(
+                EnglishReadingMaterial.id,
+                EnglishReadingMaterial.title,
+                EnglishReadingMaterial.source_type,
+                EnglishReadingMaterial.original_filename,
+                EnglishReadingMaterial.word_count,
+                EnglishReadingMaterial.created_at,
+                EnglishReadingMaterial.updated_at,
+            ),
+            selectinload(EnglishReadingMaterial.versions).load_only(
+                EnglishReadingVersion.id,
+                EnglishReadingVersion.material_id,
+                EnglishReadingVersion.created_at,
+            ),
+        )
         .order_by(EnglishReadingMaterial.updated_at.desc(), EnglishReadingMaterial.id.desc())
         .limit(safe_limit)
         .all()

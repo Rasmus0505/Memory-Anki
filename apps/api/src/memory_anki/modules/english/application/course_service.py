@@ -7,7 +7,7 @@ import shutil
 from pathlib import Path
 from typing import Any
 
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from memory_anki.core.config import ENGLISH_MEDIA_DIR
 from memory_anki.core.time import utc_now_naive
@@ -33,11 +33,12 @@ MAX_REASONABLE_MEDIA_DURATION_SECONDS = 60 * 60 * 24 * 30
 def list_recent_courses(session: Session, limit: int = 12) -> list[dict[str, Any]]:
     courses = (
         session.query(EnglishCourse)
+        .options(selectinload(EnglishCourse.progress))
         .order_by(EnglishCourse.updated_at.desc(), EnglishCourse.id.desc())
         .limit(max(1, min(limit, 50)))
         .all()
     )
-    return [serialize_course_summary(repair_course_duration_if_needed(session, course)) for course in courses]
+    return [serialize_course_summary(course) for course in courses]
 
 
 def get_recent_unfinished_course_payload(session: Session) -> dict[str, Any] | None:
@@ -303,6 +304,26 @@ def repair_course_duration_if_needed(session: Session, course: EnglishCourse) ->
     course.duration_seconds = repaired_duration_seconds
     session.commit()
     return course
+
+
+def repair_all_course_durations(session: Session) -> dict[str, int]:
+    courses = (
+        session.query(EnglishCourse)
+        .filter(
+            (EnglishCourse.duration_seconds <= 0)
+            | (EnglishCourse.duration_seconds > MAX_REASONABLE_MEDIA_DURATION_SECONDS)
+        )
+        .all()
+    )
+    checked_count = 0
+    repaired_count = 0
+    for course in courses:
+        checked_count += 1
+        previous_duration = int(course.duration_seconds or 0)
+        repair_course_duration_if_needed(session, course)
+        if int(course.duration_seconds or 0) != previous_duration:
+            repaired_count += 1
+    return {"checked_count": checked_count, "repaired_count": repaired_count}
 
 
 def ensure_progress_row(session: Session, course: EnglishCourse) -> EnglishCourseProgress:

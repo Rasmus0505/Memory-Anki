@@ -15,6 +15,7 @@ from memory_anki.modules.english.application.course_service import (
     get_course_media_file,
     get_course_progress,
     get_recent_unfinished_course_payload,
+    repair_all_course_durations,
     update_course_progress,
 )
 from memory_anki.modules.english.application.task_service import (
@@ -131,6 +132,11 @@ def api_list_english_courses(session: Session = Depends(session_dep)):
     return {
         "recentCourses": get_workspace_summary(session)["recentCourses"],
     }
+
+
+@router.post("/english/courses/repair-durations")
+def api_repair_english_course_durations(session: Session = Depends(session_dep)):
+    return {"ok": True, **repair_all_course_durations(session)}
 
 
 @router.get("/english/courses/{course_id}")
