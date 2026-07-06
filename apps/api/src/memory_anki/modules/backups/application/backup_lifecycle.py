@@ -11,6 +11,7 @@ from memory_anki.core.runtime_activity import (
     assert_exclusive_runtime_operation,
     current_runtime_instance_id,
 )
+from memory_anki.infrastructure.db.maintenance import analyze_database
 from memory_anki.modules.backups.application.storage_backup import (
     read_storage_backup_manifest,
     restore_storage_backup,
@@ -55,6 +56,7 @@ def create_full_backup(reason: str) -> Path:
         folder = FULL_BACKUPS_DIR / f"{timestamp_slug()}-{reason}"
         write_storage_backup(folder, reason=reason, full=True)
         prune_old_backups(FULL_BACKUPS_DIR, MAX_FULL_BACKUPS)
+        analyze_database()
         return folder
 
 

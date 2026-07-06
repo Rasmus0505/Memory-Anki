@@ -13,6 +13,7 @@ from memory_anki.core.storage_layout import (
     get_backup_storage_items,
     load_storage_layout,
 )
+from memory_anki.infrastructure.db.maintenance import checkpoint_sqlite_wal
 
 BACKUP_MANIFEST_NAME = "manifest.json"
 BACKUP_MANIFEST_VERSION = 3
@@ -99,6 +100,7 @@ def create_storage_backup_manifest(
 
 def write_storage_backup(destination_root: Path, *, reason: str, full: bool = True) -> dict[str, Any]:
     ensure_runtime_dirs()
+    checkpoint_sqlite_wal()
     destination_root.mkdir(parents=True, exist_ok=True)
     included_items = [
         _copy_item_to_backup(item, destination_root)
