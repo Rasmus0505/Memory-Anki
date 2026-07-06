@@ -738,6 +738,51 @@ class PalaceQuizRouteTests(unittest.TestCase):
             },
         )
 
+    def test_question_explain_builds_expected_model_input(self):
+        captured: dict[str, object] = {}
+
+        def fake_call_logged_chat_completion(**kwargs):
+            captured.update(kwargs)
+            return ("正确答案是细胞核，因为它控制细胞生命活动。", "log-explain")
+
+        with (
+            patch.object(palace_quiz_ai_service, "DASHSCOPE_API_KEY", "test-key"),
+            patch.object(
+                palace_quiz_ai_service,
+                "_call_logged_chat_completion",
+                side_effect=fake_call_logged_chat_completion,
+            ),
+        ):
+            response = self.client.post(
+                "/api/v1/palace-quiz-questions/1/explain",
+                json={"user_question": "为什么选 B？"},
+            )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["question_id"], 1)
+        self.assertEqual(payload["ai_call_log_id"], "log-explain")
+        self.assertIn("细胞核", payload["explanation_text"])
+        self.assertEqual(captured["operation"], "palace_quiz_question_explain")
+        self.assertEqual(captured["request_payload"]["user_question"], "为什么选 B？")
+        self.assertEqual(
+            captured["request_payload"]["model_input"],
+            {
+                "question_id": 1,
+                "question_type": "multiple_choice",
+                "stem": "细胞的控制中心是？",
+                "options": [
+                    {"id": "A", "text": "细胞膜"},
+                    {"id": "B", "text": "细胞核"},
+                ],
+                "answer_payload": {"correct_option_id": "B"},
+                "analysis": "细胞核控制细胞活动。",
+                "palace_title": "Quiz Palace",
+                "mini_palace_name": None,
+                "source_chapter_name": None,
+            },
+        )
+
     def test_pdf_generation_endpoint_passes_document_pages_and_extra_prompt(self):
         captured: dict[str, object] = {}
 

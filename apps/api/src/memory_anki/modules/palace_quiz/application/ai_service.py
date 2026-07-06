@@ -5,24 +5,36 @@ from __future__ import annotations
 from memory_anki.core.config import DASHSCOPE_API_KEY as DASHSCOPE_API_KEY
 from memory_anki.infrastructure.llm import (
     OpenAICompatibleChatConfig,
+)
+from memory_anki.infrastructure.llm import (
     stream_chat_completion_text as stream_chat_completion_text,
 )
 
-from . import ai_service_runtime as _runtime_facade
 from . import ai_service_runtime_config as _runtime_config
 from . import ai_service_runtime_stream as _runtime_stream
 from ._question_utils import (
     PalaceQuizAiError as PalaceQuizAiError,
+)
+from ._question_utils import (
     build_generation_source_meta as _build_generation_source_meta,
+)
+from ._question_utils import (
     normalize_generated_question_drafts as _normalize_generated_question_drafts,
 )
 from .ai_service_runtime import (
     QuizStreamEvent as QuizStreamEvent,
+)
+from .ai_service_runtime import (
     _build_chat_config as _runtime_build_chat_config,
+)
+from .ai_service_runtime import (
     _call_logged_chat_completion as _runtime_call_logged_chat_completion,
+)
+from .ai_service_runtime import (
     _call_logged_chat_completion_stream as _runtime_call_logged_chat_completion_stream,
 )
 from .quiz_generation_service import (
+    explain_question,
     generate_quiz_preview_from_chapter_outline,
     generate_quiz_preview_from_images,
     generate_quiz_preview_from_review_mindmap,
@@ -124,6 +136,7 @@ __all__ = [
     "_call_logged_chat_completion_stream",
     "_normalize_generated_question_drafts",
     "classify_existing_quiz_questions_to_mini_palaces",
+    "explain_question",
     "generate_quiz_preview_from_chapter_outline",
     "generate_quiz_preview_from_images",
     "generate_quiz_preview_from_review_mindmap",

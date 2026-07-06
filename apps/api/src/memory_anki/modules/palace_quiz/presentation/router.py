@@ -10,6 +10,7 @@ from memory_anki.modules.backups.application.backup_service import maybe_create_
 from memory_anki.modules.palace_quiz.application.ai_service import (
     PalaceQuizAiError,
     classify_existing_quiz_questions_to_mini_palaces,
+    explain_question,
     generate_quiz_preview_from_chapter_outline,
     generate_quiz_preview_from_images,
     generate_quiz_preview_from_review_mindmap,
@@ -223,6 +224,23 @@ def api_short_answer_feedback(
             s,
             question_id=question_id,
             user_answer=str(data.get("user_answer") or ""),
+            ai_options=normalize_ai_runtime_options(data.get("ai_options")),
+        )
+    except Exception as exc:  # pragma: no cover - centralized HTTP mapping
+        _raise_http_error(exc)
+
+
+@router.post("/palace-quiz-questions/{question_id}/explain")
+def api_explain_question(
+    question_id: int,
+    data: dict,
+    s: Session = Depends(session_dep),
+):
+    try:
+        return explain_question(
+            s,
+            question_id=question_id,
+            user_question=str(data.get("user_question") or ""),
             ai_options=normalize_ai_runtime_options(data.get("ai_options")),
         )
     except Exception as exc:  # pragma: no cover - centralized HTTP mapping
