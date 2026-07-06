@@ -27,10 +27,12 @@ from memory_anki.modules.palace_quiz.application.service import (
     delete_question,
     list_aggregated_questions,
     list_chapter_questions,
+    list_palace_ocr_sources,
     list_questions,
     record_choice_attempt,
     reset_question_attempts,
     update_question,
+    upsert_palace_ocr_sources,
 )
 from memory_anki.modules.settings.application.ai_model_registry import (
     AiRuntimeOptions,
@@ -88,6 +90,14 @@ def api_list_aggregated_palace_quiz_questions(palace_id: int, s: Session = Depen
         _raise_http_error(exc)
 
 
+@router.get("/palaces/{palace_id}/quiz-ocr-sources")
+def api_list_palace_quiz_ocr_sources(palace_id: int, s: Session = Depends(session_dep)):
+    try:
+        return {"items": list_palace_ocr_sources(s, palace_id)}
+    except Exception as exc:  # pragma: no cover - centralized HTTP mapping
+        _raise_http_error(exc)
+
+
 @router.get("/chapters/{chapter_id}/quiz-questions")
 def api_list_chapter_quiz_questions(chapter_id: int, s: Session = Depends(session_dep)):
     try:
@@ -119,6 +129,9 @@ def api_batch_create_palace_quiz_questions(
     try:
         payloads = data.get("questions") if isinstance(data, dict) else None
         items = batch_create_questions(s, palace_id, payloads if isinstance(payloads, list) else [])
+        ocr_sources = data.get("ocr_sources") if isinstance(data, dict) else None
+        if isinstance(ocr_sources, list) and ocr_sources:
+            upsert_palace_ocr_sources(s, palace_id=palace_id, payloads=ocr_sources)
         maybe_create_rolling_backup("rolling-batch-create-palace-quiz-questions")
         return {"items": items}
     except Exception as exc:  # pragma: no cover - centralized HTTP mapping
@@ -139,6 +152,10 @@ def api_batch_create_chapter_quiz_questions(
             payloads if isinstance(payloads, list) else [],
             save_mode=str(data.get("save_mode") or "append") if isinstance(data, dict) else "append",
         )
+        palace_id = data.get("palace_id") if isinstance(data, dict) else None
+        ocr_sources = data.get("ocr_sources") if isinstance(data, dict) else None
+        if palace_id and isinstance(ocr_sources, list) and ocr_sources:
+            upsert_palace_ocr_sources(s, palace_id=int(palace_id), payloads=ocr_sources)
         maybe_create_rolling_backup("rolling-batch-create-chapter-quiz-questions")
         return {"items": items}
     except Exception as exc:  # pragma: no cover - centralized HTTP mapping

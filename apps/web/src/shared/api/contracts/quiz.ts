@@ -36,6 +36,28 @@ export interface PalaceQuizSourceMeta {
   }> | null
   question_types?: PalaceQuizQuestionType[] | string[] | null
   question_count?: number | null
+  source_pages?: Record<string, string[]> | null
+  ocr_source_refs?: Array<Record<string, unknown>> | null
+  repair_batch?: string | null
+  repair_action?: string | null
+  import_batch?: string | null
+  approved_supplemental_from_ocr_source?: boolean | null
+}
+
+export interface PalaceQuizOcrSource {
+  id: number
+  palace_id: number
+  source_kind: string
+  source_set: string
+  page_key: string
+  page_number: number | null
+  image_path: string
+  raw_text: string
+  lines: Array<Record<string, unknown>>
+  source_meta: Record<string, unknown>
+  import_batch: string
+  created_at: string | null
+  updated_at: string | null
 }
 
 export interface PalaceQuizMiniPalaceRef {
@@ -139,7 +161,13 @@ export interface PalaceQuizGenerationPreview {
     subject?: { id: number; name: string } | null
     first_multi_nodes: string[]
   }>
+  ocr_sources?: PalaceQuizOcrSourceDraft[]
 }
+
+export type PalaceQuizOcrSourceDraft = Omit<
+  PalaceQuizOcrSource,
+  'id' | 'palace_id' | 'created_at' | 'updated_at'
+>
 
 export interface PalaceQuizStreamStatusEvent {
   phase: string

@@ -160,9 +160,16 @@ export async function autoGenerateAndSavePalaceQuiz(
   const questionsToSave = flattenGeneratedQuestions(preview)
   if (questionsToSave.length > 0) {
     if (config.selectedChapterId) {
-      await batchCreateChapterQuizQuestionsApi(config.selectedChapterId, questionsToSave)
+      await batchCreateChapterQuizQuestionsApi(config.selectedChapterId, questionsToSave, 'append', {
+        palaceId: config.palaceId,
+        ocrSources: preview.ocr_sources || [],
+      })
     } else {
-      await batchCreatePalaceQuizQuestionsApi(config.palaceId, questionsToSave)
+      await batchCreatePalaceQuizQuestionsApi(
+        config.palaceId,
+        questionsToSave,
+        preview.ocr_sources || [],
+      )
     }
   }
   return {

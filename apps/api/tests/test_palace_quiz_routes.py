@@ -3074,6 +3074,132 @@ class PalaceQuizRouteTests(unittest.TestCase):
         items = response.json()["items"]
         self.assertTrue(any(item["source_chapter_id"] == self.chapter_id for item in items))
 
+    def test_palace_aggregated_questions_deduplicates_dual_owned_rows(self):
+        with self.SessionLocal() as session:
+            session.add(
+                PalaceQuizQuestion(
+                    palace_id=1,
+                    source_chapter_id=self.chapter_id,
+                    question_type="short_answer",
+                    stem="同时属于宫殿和章节的题。",
+                    options_json="[]",
+                    answer_payload_json=json.dumps(
+                        {"reference_answer": "只应返回一次。"},
+                        ensure_ascii=False,
+                    ),
+                    analysis="聚合接口应按题目 id 去重。",
+                    source_meta_json=json.dumps({"source_kind": "manual"}, ensure_ascii=False),
+                    sort_order=99,
+                )
+            )
+            session.commit()
+
+        response = self.client.get("/api/v1/palaces/1/aggregated-quiz-questions")
+        self.assertEqual(response.status_code, 200)
+        matched = [
+            item
+            for item in response.json()["items"]
+            if item["stem"] == "同时属于宫殿和章节的题。"
+        ]
+        self.assertEqual(len(matched), 1)
+
+    def test_palace_quiz_ocr_sources_can_be_listed_and_are_palace_scoped(self):
+        payload = {
+            "questions": [
+                {
+                    "question_type": "multiple_choice",
+                    "stem": "带 OCR 来源的题？",
+                    "options": [
+                        {"id": "A", "text": "是"},
+                        {"id": "B", "text": "否"},
+                    ],
+                    "answer_payload": {"correct_option_id": "A"},
+                    "analysis": "用于测试 OCR 来源落库。",
+                    "source_meta": {
+                        "source_kind": "text_files",
+                        "ocr_source_refs": [
+                            {"source_set": "text_files", "page_key": "source_001"}
+                        ],
+                    },
+                }
+            ],
+            "ocr_sources": [
+                {
+                    "source_kind": "text_files",
+                    "source_set": "text_files",
+                    "page_key": "source_001",
+                    "page_number": 1,
+                    "image_path": "source.txt",
+                    "raw_text": "原始 OCR 文本",
+                    "lines": [{"text": "原始 OCR 文本"}],
+                    "source_meta": {"filename": "source.txt"},
+                    "import_batch": "test-batch",
+                }
+            ],
+        }
+
+        create_response = self.client.post("/api/v1/palaces/1/quiz-questions/batch", json=payload)
+        self.assertEqual(create_response.status_code, 200)
+        self.assertEqual(len(create_response.json()["items"]), 1)
+        self.assertEqual(
+            create_response.json()["items"][0]["source_meta"]["ocr_source_refs"][0]["page_key"],
+            "source_001",
+        )
+
+        list_response = self.client.get("/api/v1/palaces/1/quiz-ocr-sources")
+        self.assertEqual(list_response.status_code, 200)
+        items = list_response.json()["items"]
+        self.assertEqual(len(items), 1)
+        self.assertEqual(items[0]["raw_text"], "原始 OCR 文本")
+
+        isolated_response = self.client.get("/api/v1/palaces/2/quiz-ocr-sources")
+        self.assertEqual(isolated_response.status_code, 200)
+        self.assertEqual(isolated_response.json()["items"], [])
+
+    def test_chapter_question_save_can_store_palace_ocr_sources_idempotently(self):
+        payload = {
+            "palace_id": 1,
+            "questions": [
+                {
+                    "question_type": "short_answer",
+                    "stem": "章节题也记录宫殿 OCR。",
+                    "answer_payload": {"reference_answer": "可以。"},
+                    "analysis": "保存为章节题，OCR 归宫殿。",
+                    "source_meta": {
+                        "source_kind": "text_files",
+                        "ocr_source_refs": [
+                            {"source_set": "text_files", "page_key": "chapter_001"}
+                        ],
+                    },
+                }
+            ],
+            "ocr_sources": [
+                {
+                    "source_kind": "text_files",
+                    "source_set": "text_files",
+                    "page_key": "chapter_001",
+                    "page_number": 1,
+                    "image_path": "chapter.txt",
+                    "raw_text": "章节来源 OCR",
+                    "lines": [],
+                    "source_meta": {"filename": "chapter.txt"},
+                    "import_batch": "chapter-batch",
+                }
+            ],
+        }
+
+        first = self.client.post(f"/api/v1/chapters/{self.chapter_id}/quiz-questions/batch", json=payload)
+        self.assertEqual(first.status_code, 200)
+        second = self.client.post(f"/api/v1/chapters/{self.chapter_id}/quiz-questions/batch", json=payload)
+        self.assertEqual(second.status_code, 200)
+
+        list_response = self.client.get("/api/v1/palaces/1/quiz-ocr-sources")
+        self.assertEqual(list_response.status_code, 200)
+        matched = [
+            item for item in list_response.json()["items"] if item["page_key"] == "chapter_001"
+        ]
+        self.assertEqual(len(matched), 1)
+
     def test_palace_aggregated_questions_include_parent_scoped_questions_classified_to_bound_child(self):
         with self.SessionLocal() as session:
             palace = session.query(Palace).filter_by(id=1).first()

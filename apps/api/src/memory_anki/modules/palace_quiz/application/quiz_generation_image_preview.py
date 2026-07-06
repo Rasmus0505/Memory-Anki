@@ -14,6 +14,7 @@ from ._question_utils import (
 )
 from .quiz_generation_chaptering import apply_source_chapter_to_drafts
 from .quiz_generation_image_request import ImageGenerationPreparedRequest
+from .quiz_generation_ocr_sources import build_uploaded_image_ocr_sources
 from .quiz_generation_preview_grouping import group_questions_for_preview_scope
 from .quiz_generation_preview_result import build_quiz_generation_preview_result
 
@@ -31,6 +32,10 @@ def build_image_generation_preview_result(
     finalize_generation_source_meta(
         prepared_request.source_meta,
         ai_call_log_id=log_id,
+    )
+    ocr_sources = build_uploaded_image_ocr_sources(
+        image_items=prepared_request.image_items,
+        source_meta=prepared_request.source_meta,
     )
     drafts, warnings, generation_stats = normalize_generated_question_drafts(
         response_text,
@@ -64,6 +69,7 @@ def build_image_generation_preview_result(
         generation_stats=generation_stats,
         grouped_questions=grouped_questions,
         resolved_ai=prepared_request.resolved_ai,
+        extra_fields={"ocr_sources": ocr_sources},
     )
 
 

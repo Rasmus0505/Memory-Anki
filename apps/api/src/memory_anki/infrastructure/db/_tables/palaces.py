@@ -23,6 +23,7 @@ from sqlalchemy import (
     String,
     Table,
     Text,
+    UniqueConstraint,
     text,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -117,6 +118,12 @@ class Palace(Base):
         back_populates="palace",
         cascade="all, delete-orphan",
         order_by="PalaceQuizQuestion.sort_order",
+    )
+    quiz_ocr_sources: Mapped[list[PalaceQuizOcrSource]] = relationship(
+        "PalaceQuizOcrSource",
+        back_populates="palace",
+        cascade="all, delete-orphan",
+        order_by="PalaceQuizOcrSource.page_number",
     )
 
     primary_chapter_id: Mapped[int | None] = mapped_column(
@@ -464,3 +471,47 @@ class PalaceQuizQuestion(Base):
         foreign_keys=[classified_chapter_id],
         lazy="joined",
     )
+
+
+class PalaceQuizOcrSource(Base):
+    __tablename__ = "palace_quiz_ocr_sources"
+    __table_args__ = (
+        UniqueConstraint(
+            "palace_id",
+            "source_set",
+            "page_key",
+            "import_batch",
+            name="uq_palace_quiz_ocr_sources_page_batch",
+        ),
+        Index("ix_palace_quiz_ocr_sources_palace", "palace_id"),
+        Index(
+            "ix_palace_quiz_ocr_sources_palace_source",
+            "palace_id",
+            "source_set",
+            "page_number",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    palace_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("palaces.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    source_kind: Mapped[str] = mapped_column(String(40), nullable=False, default="ocr")
+    source_set: Mapped[str] = mapped_column(String(120), nullable=False, default="")
+    page_key: Mapped[str] = mapped_column(String(160), nullable=False, default="")
+    page_number: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    image_path: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    raw_text: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    lines_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    source_meta_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    import_batch: Mapped[str] = mapped_column(String(120), nullable=False, default="")
+    created_at: Mapped[datetime | None] = mapped_column(DateTime, default=utc_now_naive)
+    updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime,
+        default=utc_now_naive,
+        onupdate=utc_now_naive,
+    )
+
+    palace: Mapped[Palace] = relationship("Palace", back_populates="quiz_ocr_sources")

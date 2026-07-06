@@ -16,6 +16,7 @@ from .question_contracts import PalaceQuizValidationError
 from .question_import_dedup import filter_global_duplicate_import_questions
 from .quiz_generation_chaptering import apply_source_chapter_to_drafts
 from .quiz_generation_image_request_context import load_image_generation_request_context
+from .quiz_generation_ocr_sources import build_text_file_ocr_sources
 from .quiz_generation_text_preview import project_text_generation_preview_result
 from .quiz_generation_text_request import prepare_text_generation_request
 from .quiz_generation_text_support import (
@@ -196,6 +197,10 @@ def generate_quiz_preview_from_text_files(
     if not raw_questions:
         raise PalaceQuizValidationError("没有识别到可生成的题目。")
 
+    ocr_sources = build_text_file_ocr_sources(
+        file_artifacts=file_artifacts,
+        source_meta=source_meta,
+    )
     response_text = json.dumps({"questions": raw_questions}, ensure_ascii=False)
     drafts, warnings, generation_stats = normalize_generated_question_drafts(
         response_text,
@@ -234,6 +239,7 @@ def generate_quiz_preview_from_text_files(
         child_contexts=request_context.child_contexts,
         ai_options=ai_options,
         resolved_ai=resolved_ai,
+        ocr_sources=ocr_sources,
     )
 
 

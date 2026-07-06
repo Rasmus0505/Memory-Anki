@@ -321,6 +321,7 @@ export default function PalaceQuizPage() {
 
       {!loading && activeTab === 'manage' ? (
         <PalaceQuizManagePanel
+          palaceId={palaceId}
           questions={questions}
           miniPalaces={miniPalaces}
           questionScope={browser.questionScope}

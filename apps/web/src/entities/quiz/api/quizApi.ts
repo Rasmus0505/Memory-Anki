@@ -3,6 +3,8 @@ import { readJsonResponse } from '@/shared/api/jsonResponse'
 import type {
   MindMapEditorState,
   PalaceQuizMiniPalaceClassificationResult,
+  PalaceQuizOcrSource,
+  PalaceQuizOcrSourceDraft,
   PalaceQuizGenerationPreview,
   PalaceQuizQuestion,
   PalaceQuizQuestionDraft,
@@ -17,6 +19,10 @@ async function readQuizJson<T>(response: Response): Promise<T> {
 
 export function getPalaceQuizQuestionsApi(palaceId: number) {
   return request<{ items: PalaceQuizQuestion[] }>(`/palaces/${palaceId}/aggregated-quiz-questions`)
+}
+
+export function getPalaceQuizOcrSourcesApi(palaceId: number) {
+  return request<{ items: PalaceQuizOcrSource[] }>(`/palaces/${palaceId}/quiz-ocr-sources`)
 }
 
 export function getChapterQuizQuestionsApi(chapterId: number) {
@@ -41,10 +47,11 @@ export function createPalaceQuizQuestionApi(
 export function batchCreatePalaceQuizQuestionsApi(
   palaceId: number,
   questions: PalaceQuizQuestionDraft[],
+  ocrSources?: PalaceQuizOcrSourceDraft[],
 ) {
   return request<{ items: PalaceQuizQuestion[] }>(`/palaces/${palaceId}/quiz-questions/batch`, {
     method: 'POST',
-    body: JSON.stringify({ questions }),
+    body: JSON.stringify({ questions, ocr_sources: ocrSources || [] }),
     persistence: {
       resourceKey: `palace:${palaceId}:quiz-question:batch-create`,
       description: '批量保存宫殿题目',
@@ -57,10 +64,16 @@ export function batchCreateChapterQuizQuestionsApi(
   chapterId: number,
   questions: PalaceQuizQuestionDraft[],
   saveMode: 'append' | 'overwrite' = 'append',
+  options?: { palaceId?: number | null; ocrSources?: PalaceQuizOcrSourceDraft[] },
 ) {
   return request<{ items: PalaceQuizQuestion[] }>(`/chapters/${chapterId}/quiz-questions/batch`, {
     method: 'POST',
-    body: JSON.stringify({ questions, save_mode: saveMode }),
+    body: JSON.stringify({
+      questions,
+      save_mode: saveMode,
+      palace_id: options?.palaceId ?? null,
+      ocr_sources: options?.ocrSources || [],
+    }),
     persistence: {
       resourceKey: `chapter:${chapterId}:quiz-question:batch-create:${saveMode}`,
       description: '批量保存章节题目',

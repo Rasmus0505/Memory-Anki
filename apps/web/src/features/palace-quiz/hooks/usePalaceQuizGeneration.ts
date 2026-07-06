@@ -282,6 +282,7 @@ export function usePalaceQuizGeneration({
         selectedChapterId,
         questionsToSave,
         generationSaveMode,
+        { palaceId, ocrSources: generationPreview.ocr_sources || [] },
       )
       toast.success(`已保存 ${questionsToSave.length} 道 AI 题目到题库。`)
       emitQuizFeedback('quiz_generate_save', { label: '已入题库', audioScope: 'global' })

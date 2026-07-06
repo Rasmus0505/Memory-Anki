@@ -1,4 +1,5 @@
-import { CheckCircle2, LoaderCircle, Plus, Trash2 } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { CheckCircle2, FileText, LoaderCircle, Plus, RefreshCw, Trash2 } from 'lucide-react'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card'
@@ -6,7 +7,12 @@ import { Input } from '@/shared/components/ui/input'
 import { Textarea } from '@/shared/components/ui/textarea'
 import { EmptyState } from '@/shared/components/state-placeholders'
 import { cn } from '@/shared/lib/utils'
-import type { MiniPalaceSummary, PalaceQuizQuestion } from '@/shared/api/contracts'
+import type {
+  MiniPalaceSummary,
+  PalaceQuizOcrSource,
+  PalaceQuizQuestion,
+} from '@/shared/api/contracts'
+import { getPalaceQuizOcrSourcesApi } from '@/entities/quiz/api'
 import {
   buildEmptyQuestionForm,
   canManuallyEditQuestion,
@@ -18,6 +24,7 @@ import {
 import { QuestionSourceBadge } from '@/features/palace-quiz/components/palaceQuizCards'
 
 export function PalaceQuizManagePanel({
+  palaceId,
   questions,
   miniPalaces,
   questionScope,
@@ -41,6 +48,7 @@ export function PalaceQuizManagePanel({
   onSaveQuestion,
   onResetForm,
 }: {
+  palaceId: number | null
   questions: PalaceQuizQuestion[]
   miniPalaces: MiniPalaceSummary[]
   questionScope: PalaceQuizScopeKey
@@ -64,6 +72,34 @@ export function PalaceQuizManagePanel({
   onSaveQuestion: () => Promise<void>
   onResetForm: () => void
 }) {
+  const [ocrSources, setOcrSources] = useState<PalaceQuizOcrSource[]>([])
+  const [ocrLoading, setOcrLoading] = useState(false)
+  const [ocrError, setOcrError] = useState('')
+  const [expandedOcrId, setExpandedOcrId] = useState<number | null>(null)
+
+  const loadOcrSources = async () => {
+    if (!palaceId) return
+    setOcrLoading(true)
+    setOcrError('')
+    try {
+      const result = await getPalaceQuizOcrSourcesApi(palaceId)
+      setOcrSources(result.items)
+      setExpandedOcrId((current) =>
+        current && result.items.some((item) => item.id === current) ? current : null,
+      )
+    } catch (nextError) {
+      setOcrError(nextError instanceof Error ? nextError.message : '加载原始 OCR 失败。')
+    } finally {
+      setOcrLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    setOcrSources([])
+    setExpandedOcrId(null)
+    if (palaceId) void loadOcrSources()
+  }, [palaceId])
+
   return (
     <div className="grid gap-4 xl:grid-cols-[minmax(0,1.1fr)_380px]">
       <Card className="border-border/70 bg-card/92">
@@ -241,13 +277,14 @@ export function PalaceQuizManagePanel({
         </CardContent>
       </Card>
 
-      <Card className="border-border/70 bg-card/92">
-        <CardHeader>
-          <CardTitle className="text-base">
-            {editingQuestionId != null ? '编辑题目' : '手动新增题目'}
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
+      <div className="space-y-4">
+        <Card className="border-border/70 bg-card/92">
+          <CardHeader>
+            <CardTitle className="text-base">
+              {editingQuestionId != null ? '编辑题目' : '手动新增题目'}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
           <div className="grid gap-2">
             <span className="text-sm font-medium">题型</span>
             <select
@@ -399,8 +436,72 @@ export function PalaceQuizManagePanel({
               重置表单
             </Button>
           </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+
+        <Card className="border-border/70 bg-card/92">
+          <CardHeader className="flex flex-row items-center justify-between gap-3">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <FileText className="size-4" />
+              原始 OCR
+            </CardTitle>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={ocrLoading || !palaceId}
+              onClick={() => void loadOcrSources()}
+            >
+              <RefreshCw className={cn('size-4', ocrLoading && 'animate-spin')} />
+              刷新
+            </Button>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {ocrError ? <p className="text-sm text-destructive">{ocrError}</p> : null}
+            {ocrSources.length === 0 && !ocrLoading ? (
+              <p className="text-sm text-muted-foreground">暂无已记录的 OCR 来源。</p>
+            ) : (
+              <div className="space-y-2">
+                {ocrSources.map((source) => {
+                  const expanded = expandedOcrId === source.id
+                  const previewText = source.raw_text.trim() || source.image_path || source.page_key
+                  return (
+                    <div
+                      key={source.id}
+                      className="rounded-lg border border-border/70 bg-background/70 p-3"
+                    >
+                      <button
+                        type="button"
+                        className="flex w-full items-start justify-between gap-3 text-left"
+                        onClick={() => setExpandedOcrId(expanded ? null : source.id)}
+                      >
+                        <span className="min-w-0 space-y-1">
+                          <span className="block truncate text-sm font-medium">
+                            {source.source_set} · {source.page_key}
+                          </span>
+                          <span className="block text-xs text-muted-foreground">
+                            页码 {source.page_number ?? '-'} · {source.import_batch}
+                          </span>
+                        </span>
+                        <Badge variant="outline">{expanded ? '收起' : '查看'}</Badge>
+                      </button>
+                      {expanded ? (
+                        <pre className="mt-3 max-h-72 overflow-auto whitespace-pre-wrap rounded-md bg-muted/50 p-3 text-xs leading-5">
+                          {source.raw_text || '该来源仅记录了上传文件，没有可用 OCR 文本。'}
+                        </pre>
+                      ) : (
+                        <p className="mt-2 line-clamp-2 text-xs leading-5 text-muted-foreground">
+                          {previewText}
+                        </p>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
     </div>
   )
 }

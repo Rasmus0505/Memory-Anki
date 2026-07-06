@@ -20,6 +20,8 @@ def normalize_source_meta(raw_source_meta: Any) -> dict[str, Any]:
     page_numbers = normalize_positive_int_list(source_meta.get("page_numbers"))
     image_names = normalize_non_empty_string_list(source_meta.get("image_names"))
     manual_import = source_meta.get("manual_import")
+    source_pages = source_meta.get("source_pages")
+    ocr_source_refs = source_meta.get("ocr_source_refs")
     return {
         "source_kind": source_kind,
         "page_numbers": page_numbers,
@@ -33,6 +35,16 @@ def normalize_source_meta(raw_source_meta: Any) -> dict[str, Any]:
             source_meta.get("recovered_from_ai_call_log_id")
         ),
         "manual_import": manual_import if isinstance(manual_import, dict) else None,
+        "source_pages": source_pages if isinstance(source_pages, dict) else None,
+        "ocr_source_refs": ocr_source_refs if isinstance(ocr_source_refs, list) else None,
+        "repair_batch": normalize_optional_string(source_meta.get("repair_batch")),
+        "repair_action": normalize_optional_string(source_meta.get("repair_action")),
+        "import_batch": normalize_optional_string(source_meta.get("import_batch")),
+        "approved_supplemental_from_ocr_source": (
+            bool(source_meta.get("approved_supplemental_from_ocr_source"))
+            if "approved_supplemental_from_ocr_source" in source_meta
+            else None
+        ),
         **normalize_review_source_meta(source_meta),
     }
 

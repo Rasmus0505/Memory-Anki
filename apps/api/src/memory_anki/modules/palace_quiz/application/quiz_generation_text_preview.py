@@ -10,6 +10,7 @@ from memory_anki.modules.settings.application.ai_model_registry import AiRuntime
 
 from ._question_utils import finalize_generation_source_meta, normalize_generated_question_drafts
 from .quiz_generation_chaptering import apply_source_chapter_to_drafts
+from .quiz_generation_ocr_sources import build_text_file_ocr_sources
 from .quiz_generation_preview_grouping import group_questions_for_preview_scope
 from .quiz_generation_preview_result import build_quiz_generation_preview_result
 from .quiz_generation_text_request import TextGenerationPreparedRequest
@@ -30,6 +31,7 @@ def project_text_generation_preview_result(
     child_contexts: list[dict[str, Any]] | None = None,
     ai_options: AiRuntimeOptions | None = None,
     resolved_ai: dict[str, Any] | None = None,
+    ocr_sources: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     finalize_generation_source_meta(source_meta, ai_call_log_id=log_id)
     grouped_questions = None
@@ -55,6 +57,7 @@ def project_text_generation_preview_result(
         generation_stats=generation_stats,
         grouped_questions=grouped_questions,
         resolved_ai=resolved_ai,
+        extra_fields={"ocr_sources": ocr_sources or []},
     )
 
 
@@ -91,6 +94,10 @@ def build_text_generation_preview_result(
         child_contexts=prepared_request.child_contexts,
         ai_options=ai_options,
         resolved_ai=prepared_request.resolved_ai,
+        ocr_sources=build_text_file_ocr_sources(
+            file_artifacts=prepared_request.file_artifacts,
+            source_meta=prepared_request.source_meta,
+        ),
     )
 
 

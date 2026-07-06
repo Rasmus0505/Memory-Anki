@@ -38,7 +38,15 @@ def list_aggregated_questions(session: Session, palace_id: int) -> list[dict[str
         dedupe_chapter_questions(session, chapter_id)
     palace_rows = list_palace_question_rows(session, palace_id=palace_id)
     chapter_rows = list_aggregated_chapter_question_rows(session, chapter_ids=minimal_chapter_ids)
-    return serialize_question_rows([*palace_rows, *chapter_rows])
+    rows = []
+    seen_ids: set[int] = set()
+    for row in [*palace_rows, *chapter_rows]:
+        row_id = int(row.id)
+        if row_id in seen_ids:
+            continue
+        seen_ids.add(row_id)
+        rows.append(row)
+    return serialize_question_rows(rows)
 
 
 def list_root_questions(session: Session, palace_id: int):
