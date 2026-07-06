@@ -131,7 +131,8 @@ export function MindMapImportSourceConfigPanel({
                       >
                         <img
                           src={item.previewUrl}
-                          alt={item.name}
+                          alt={item.name || `导入图片 ${index + 1}`}
+                          loading="lazy"
                           className="h-14 w-14 rounded-xl border border-border/70 bg-white object-cover"
                         />
                         <div className="min-w-0 flex-1">
@@ -146,6 +147,7 @@ export function MindMapImportSourceConfigPanel({
                             type="button"
                             variant={isStructure ? 'default' : 'outline'}
                             size="sm"
+                            className="min-h-11 sm:h-8 sm:min-h-8"
                             onClick={() => onBatchSetStructureImage(item.id)}
                             disabled={loading || applying || undoing}
                           >
@@ -155,6 +157,7 @@ export function MindMapImportSourceConfigPanel({
                             type="button"
                             variant="ghost"
                             size="icon"
+                            className="min-h-11 min-w-11 sm:size-9 sm:min-h-9 sm:min-w-9"
                             onClick={() => onBatchMoveImage(item.id, 'up')}
                             disabled={index === 0 || loading || applying || undoing}
                             title="上移"
@@ -165,6 +168,7 @@ export function MindMapImportSourceConfigPanel({
                             type="button"
                             variant="ghost"
                             size="icon"
+                            className="min-h-11 min-w-11 sm:size-9 sm:min-h-9 sm:min-w-9"
                             onClick={() => onBatchMoveImage(item.id, 'down')}
                             disabled={index === batchImages.length - 1 || loading || applying || undoing}
                             title="下移"
@@ -175,6 +179,7 @@ export function MindMapImportSourceConfigPanel({
                             type="button"
                             variant="ghost"
                             size="icon"
+                            className="min-h-11 min-w-11 sm:size-9 sm:min-h-9 sm:min-w-9"
                             onClick={() => onBatchDeleteImage(item.id)}
                             disabled={loading || applying || undoing}
                             title="删除图片"
@@ -299,7 +304,7 @@ function SourceKindButton({
     <button
       type="button"
       className={cn(
-        'inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm transition-colors',
+        'inline-flex min-h-11 items-center gap-2 rounded-xl border px-3 py-2 text-sm transition-colors',
         active
           ? 'border-foreground/20 bg-foreground text-background'
           : 'border-border/70 bg-background/70 text-muted-foreground hover:text-foreground',

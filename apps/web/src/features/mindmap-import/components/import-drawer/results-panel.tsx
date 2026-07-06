@@ -42,6 +42,7 @@ export function MindMapImportResultsPanel({
               <img
                 src={resolvedPreviewImageUrl}
                 alt="待识别内容预览"
+                loading="lazy"
                 className="max-h-[340px] w-full object-contain bg-white"
               />
             ) : (

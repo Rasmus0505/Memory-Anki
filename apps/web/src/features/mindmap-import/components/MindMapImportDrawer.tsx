@@ -255,7 +255,12 @@ export function MindMapImportDrawer(props: MindMapImportDrawerProps) {
             <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-2">
                 {view === 'history' ? (
-                  <Button variant="ghost" size="sm" onClick={() => setView('import')}>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="min-h-11 sm:h-8 sm:min-h-8"
+                    onClick={() => setView('import')}
+                  >
                     <ArrowLeft className="mr-2 size-4" />
                     返回导入
                   </Button>
@@ -271,7 +276,7 @@ export function MindMapImportDrawer(props: MindMapImportDrawerProps) {
                   <button
                     type="button"
                     className={cn(
-                      'inline-flex items-center rounded-lg px-3 py-1.5 text-sm transition-colors',
+                      'inline-flex min-h-11 items-center rounded-lg px-3 py-1.5 text-sm transition-colors sm:min-h-8',
                       mode === 'mindmap'
                         ? 'bg-foreground text-background'
                         : 'text-muted-foreground hover:text-foreground',
@@ -284,7 +289,7 @@ export function MindMapImportDrawer(props: MindMapImportDrawerProps) {
                   <button
                     type="button"
                     className={cn(
-                      'inline-flex items-center rounded-lg px-3 py-1.5 text-sm transition-colors',
+                      'inline-flex min-h-11 items-center rounded-lg px-3 py-1.5 text-sm transition-colors sm:min-h-8',
                       mode === 'text'
                         ? 'bg-foreground text-background'
                         : 'text-muted-foreground hover:text-foreground',
@@ -298,6 +303,7 @@ export function MindMapImportDrawer(props: MindMapImportDrawerProps) {
                 <Button
                   variant="outline"
                   size="sm"
+                  className="min-h-11 sm:h-8 sm:min-h-8"
                   onClick={() => setLayoutMode((current) => (current === 'floating' ? 'sidebar' : 'floating'))}
                   title={layoutMode === 'floating' ? '切换为右侧边栏' : '切换为中间悬浮窗'}
                 >
@@ -317,6 +323,7 @@ export function MindMapImportDrawer(props: MindMapImportDrawerProps) {
                   <Button
                     variant="outline"
                     size="sm"
+                    className="min-h-11 sm:h-8 sm:min-h-8"
                     onClick={() => setView((current) => (current === 'history' ? 'import' : 'history'))}
                   >
                     <Clock className="mr-2 size-4" />
@@ -327,6 +334,7 @@ export function MindMapImportDrawer(props: MindMapImportDrawerProps) {
                   <Button
                     variant="outline"
                     size="sm"
+                    className="min-h-11 sm:h-8 sm:min-h-8"
                     onClick={() =>
                       requestOpenAiLogDetail({
                         jobId: currentJobId,

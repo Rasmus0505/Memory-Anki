@@ -26,6 +26,8 @@ interface AdoptExternalStateOptions {
   releaseAfterMs?: number
 }
 
+export type PersistedMindMapSaveStatus = 'saved' | 'saving' | 'unsaved' | 'error'
+
 const inflightEditorLoads = new Map<string, Promise<unknown>>()
 
 function stableSerialize(value: unknown) {
@@ -61,6 +63,7 @@ export function usePersistedMindMapEditor<TResponse, TMeta>({
   const [isLoading, setIsLoading] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
 
   const editorStateRef = useRef<MindMapEditorState | null>(null)
   const dirtyRef = useRef(false)
@@ -145,6 +148,7 @@ export function usePersistedMindMapEditor<TResponse, TMeta>({
     (nextState: MindMapEditorState, options?: AdoptExternalStateOptions) => {
       clearTimer()
       dirtyRef.current = false
+      setHasUnsavedChanges(false)
       retryCountRef.current = 0
       const nextFingerprint = stableSerialize(nextState)
       lastStateFingerprintRef.current = nextFingerprint
@@ -167,6 +171,7 @@ export function usePersistedMindMapEditor<TResponse, TMeta>({
       saveVersion: number,
     ) => {
       dirtyRef.current = false
+      setHasUnsavedChanges(false)
       if (isMountedRef.current) {
         setIsSaving(true)
         setError(null)
@@ -204,6 +209,7 @@ export function usePersistedMindMapEditor<TResponse, TMeta>({
         retryCountRef.current += 1
         dirtyRef.current = !handled
         if (isMountedRef.current) {
+          setHasUnsavedChanges(!handled)
           setError(
             handled
               ? null
@@ -242,10 +248,11 @@ export function usePersistedMindMapEditor<TResponse, TMeta>({
     if (!entityId) {
       if (!isMountedRef.current) return
       setMeta(null)
-      setEditorState(null)
-      lastStateFingerprintRef.current = ''
-      lastSavedEditorFingerprintRef.current = ''
-      return
+        setEditorState(null)
+        lastStateFingerprintRef.current = ''
+        lastSavedEditorFingerprintRef.current = ''
+        setHasUnsavedChanges(false)
+        return
     }
     if (isMountedRef.current) {
       setIsLoading(true)
@@ -271,6 +278,7 @@ export function usePersistedMindMapEditor<TResponse, TMeta>({
       changeVersionRef.current = 0
       retryCountRef.current = 0
       dirtyRef.current = false
+      setHasUnsavedChanges(false)
       lastSavedEditorFingerprintRef.current = getEditorFingerprint(nextEditorState)
       lastStateFingerprintRef.current = stableSerialize(nextEditorState)
       setMeta(selectMetaRef.current(response))
@@ -318,6 +326,7 @@ export function usePersistedMindMapEditor<TResponse, TMeta>({
     lastStateFingerprintRef.current = nextFingerprint
     setEditorState(nextState)
     dirtyRef.current = true
+    setHasUnsavedChanges(true)
     clearTimer()
     timerRef.current = window.setTimeout(() => {
       void flushSave()
@@ -335,6 +344,7 @@ export function usePersistedMindMapEditor<TResponse, TMeta>({
         setMeta(null)
         setEditorState(null)
         setError(null)
+        setHasUnsavedChanges(false)
         lastStateFingerprintRef.current = ''
         previousEntityIdRef.current = entityId
       }
@@ -370,6 +380,14 @@ export function usePersistedMindMapEditor<TResponse, TMeta>({
     }
   }, [flushPendingForEntity])
 
+  const saveStatus: PersistedMindMapSaveStatus = error
+    ? 'error'
+    : isSaving
+      ? 'saving'
+      : hasUnsavedChanges
+        ? 'unsaved'
+        : 'saved'
+
   return {
     meta,
     setMeta,
@@ -381,6 +399,8 @@ export function usePersistedMindMapEditor<TResponse, TMeta>({
     releaseExternalStateGuard,
     isLoading,
     isSaving,
+    hasUnsavedChanges,
+    saveStatus,
     error,
     reload,
     flushSave,

@@ -81,6 +81,7 @@ export function MindMapPageToolbar({
   clearUiAction = null,
 }: MindMapPageToolbarProps) {
   const actionButtonSize = compact ? 'sm' : 'default'
+  const actionButtonClassName = 'min-h-11'
 
   return (
     <div
@@ -96,6 +97,7 @@ export function MindMapPageToolbar({
             type="button"
             size={actionButtonSize}
             variant={segmentControl.active ? 'default' : 'outline'}
+            className={actionButtonClassName}
             disabled={segmentControl.disabled}
             onClick={segmentControl.onToggle}
           >
@@ -116,7 +118,7 @@ export function MindMapPageToolbar({
                 disabled={modeControl.disabled}
                 onClick={() => modeControl.onChange(value)}
                 className={cn(
-                  'inline-flex h-8 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium transition-colors',
+                  'inline-flex min-h-11 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium transition-colors sm:h-8 sm:min-h-8',
                   modeControl.value === value
                     ? 'bg-foreground text-background'
                     : 'text-muted-foreground hover:bg-muted hover:text-foreground',
@@ -133,6 +135,7 @@ export function MindMapPageToolbar({
             type="button"
             size={actionButtonSize}
             variant="outline"
+            className={actionButtonClassName}
             disabled={modeToggle.disabled}
             onClick={modeToggle.onClick}
           >
@@ -145,6 +148,7 @@ export function MindMapPageToolbar({
             type="button"
             size={actionButtonSize}
             variant="outline"
+            className={actionButtonClassName}
             disabled={importMindMapAction.disabled}
             onClick={importMindMapAction.onClick}
           >
@@ -157,6 +161,7 @@ export function MindMapPageToolbar({
             type="button"
             size={actionButtonSize}
             variant="outline"
+            className={actionButtonClassName}
             disabled={importTextAction.disabled}
             onClick={importTextAction.onClick}
           >
@@ -169,6 +174,7 @@ export function MindMapPageToolbar({
             type="button"
             size={actionButtonSize}
             variant="outline"
+            className={actionButtonClassName}
             disabled={englishAction.disabled}
             onClick={englishAction.onClick}
           >
@@ -181,6 +187,7 @@ export function MindMapPageToolbar({
             type="button"
             size={actionButtonSize}
             variant="outline"
+            className={actionButtonClassName}
             disabled={quizAction.disabled}
             onClick={quizAction.onClick}
           >
@@ -193,6 +200,7 @@ export function MindMapPageToolbar({
             type="button"
             size={actionButtonSize}
             variant="outline"
+            className={actionButtonClassName}
             disabled={miniPalaceAction.disabled}
             onClick={miniPalaceAction.onClick}
           >
@@ -204,6 +212,7 @@ export function MindMapPageToolbar({
             type="button"
             size={actionButtonSize}
             variant={immersiveAction.active ? 'default' : 'outline'}
+            className={actionButtonClassName}
             disabled={immersiveAction.disabled}
             onClick={immersiveAction.onClick}
           >
@@ -216,6 +225,7 @@ export function MindMapPageToolbar({
             type="button"
             size={actionButtonSize}
             variant={nativeFullscreenAction.active ? 'default' : 'outline'}
+            className={actionButtonClassName}
             disabled={nativeFullscreenAction.disabled}
             onClick={nativeFullscreenAction.onClick}
           >
@@ -228,6 +238,7 @@ export function MindMapPageToolbar({
             type="button"
             size={actionButtonSize}
             variant={clearUiAction.active ? 'default' : 'outline'}
+            className={actionButtonClassName}
             disabled={clearUiAction.disabled}
             onClick={clearUiAction.onClick}
           >
@@ -246,7 +257,7 @@ export function MindMapPageToolbar({
           <span className="text-sm text-muted-foreground">当前目标</span>
           <select
             aria-label="学习组目标"
-            className="h-8 min-w-[140px] rounded-md border border-input bg-background px-2 text-sm"
+            className="min-h-11 min-w-[140px] rounded-md border border-input bg-background px-2 text-sm sm:h-8 sm:min-h-8"
             disabled={segmentControl.disabled}
             value={
               segmentControl.targetSegmentId === 'new' || segmentControl.targetSegmentId == null
@@ -267,6 +278,7 @@ export function MindMapPageToolbar({
           <Button
             type="button"
             size="sm"
+            className="min-h-11 sm:h-8 sm:min-h-8"
             disabled={segmentControl.disabled}
             onClick={segmentControl.onConfirm}
           >
@@ -276,6 +288,7 @@ export function MindMapPageToolbar({
             type="button"
             size="sm"
             variant="outline"
+            className="min-h-11 sm:h-8 sm:min-h-8"
             disabled={segmentControl.disabled}
             onClick={segmentControl.onCancel}
           >

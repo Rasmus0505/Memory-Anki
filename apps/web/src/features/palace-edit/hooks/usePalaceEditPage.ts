@@ -362,13 +362,19 @@ export function usePalaceEditPage() {
     const markHardUnload = () => {
       hardUnloadRef.current = true
     }
-    window.addEventListener('beforeunload', markHardUnload)
+    const confirmUnsavedBeforeUnload = (event: BeforeUnloadEvent) => {
+      markHardUnload()
+      if (!documentState.hasUnsavedChanges && !documentState.isSaving) return
+      event.preventDefault()
+      event.returnValue = ''
+    }
+    window.addEventListener('beforeunload', confirmUnsavedBeforeUnload)
     window.addEventListener('pagehide', markHardUnload)
     return () => {
-      window.removeEventListener('beforeunload', markHardUnload)
+      window.removeEventListener('beforeunload', confirmUnsavedBeforeUnload)
       window.removeEventListener('pagehide', markHardUnload)
     }
-  }, [])
+  }, [documentState.hasUnsavedChanges, documentState.isSaving])
 
   useEffect(() => {
     return () => {
@@ -622,6 +628,9 @@ export function usePalaceEditPage() {
     setSelectedNodes,
     handleMindMapNodeActive,
     setEditorState: documentState.setEditorState,
+    hasUnsavedChanges: documentState.hasUnsavedChanges,
+    saveStatus: documentState.saveStatus,
+    saveError: documentState.error,
     handleMindMapEditorStateChange,
     aiSplitBusy,
     aiSplitAppliedSyncVersion,

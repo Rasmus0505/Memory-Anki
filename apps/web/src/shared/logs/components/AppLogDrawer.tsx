@@ -351,6 +351,7 @@ export function AppLogDrawer({ open, onOpenChange }: AppLogDrawerProps) {
                                 <img
                                   src={artifact.url}
                                   alt={artifact.label}
+                                  loading="lazy"
                                   className="max-h-80 w-full rounded-lg object-contain"
                                 />
                               ) : (

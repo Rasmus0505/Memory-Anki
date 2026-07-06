@@ -33,7 +33,7 @@ export function MindMapImportHistoryView({
                 <div className="flex items-start justify-between gap-3">
                   <button
                     type="button"
-                    className="min-w-0 flex-1 text-left"
+                    className="min-h-11 min-w-0 flex-1 text-left"
                     onClick={() => {
                       onSelectHistory(item)
                       onBackToImport()
@@ -54,6 +54,7 @@ export function MindMapImportHistoryView({
                     type="button"
                     variant="ghost"
                     size="icon"
+                    className="min-h-11 min-w-11 sm:size-9 sm:min-h-9 sm:min-w-9"
                     onClick={() => onDeleteHistory(item.id)}
                     title="删除此记录"
                   >

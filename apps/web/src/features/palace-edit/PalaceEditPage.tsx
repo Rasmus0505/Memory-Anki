@@ -1,6 +1,6 @@
 ﻿import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowLeft, History } from 'lucide-react'
+import { AlertCircle, ArrowLeft, CheckCircle2, History, LoaderCircle, PencilLine } from 'lucide-react'
 import { PageIntro } from '@/shared/components/layout/PageIntro'
 import {
   MindMapFrame,
@@ -23,6 +23,48 @@ import { useQuizLauncher } from '@/features/palace-quiz/QuizLauncherProvider'
 import { MiniPalacePanel } from '@/features/mini-palace'
 import { useRouteResidency } from '@/shared/routing/RouteResidency'
 import { PalaceEditSkeleton } from './PalaceEditSkeleton'
+
+function SaveStatusBadge({
+  status,
+  error,
+}: {
+  status: 'saved' | 'saving' | 'unsaved' | 'error'
+  error?: string | null
+}) {
+  if (status === 'saving') {
+    return (
+      <Badge variant="info" title="正在保存编辑内容">
+        <LoaderCircle className="size-3 animate-spin" />
+        保存中
+      </Badge>
+    )
+  }
+
+  if (status === 'unsaved') {
+    return (
+      <Badge variant="warning" title="内容已修改，系统会自动保存">
+        <PencilLine className="size-3" />
+        未保存
+      </Badge>
+    )
+  }
+
+  if (status === 'error') {
+    return (
+      <Badge variant="destructive" title={error || '自动保存失败，请稍后重试。'}>
+        <AlertCircle className="size-3" />
+        保存失败
+      </Badge>
+    )
+  }
+
+  return (
+    <Badge variant="success" title="最近的编辑内容已保存">
+      <CheckCircle2 className="size-3" />
+      已保存
+    </Badge>
+  )
+}
 
 export default function PalaceEdit() {
   const { isActive } = useRouteResidency()
@@ -134,9 +176,16 @@ export default function PalaceEdit() {
               <Badge variant={page.statusBadge.variant}>
                 {page.statusBadge.label}
               </Badge>
+              <SaveStatusBadge status={page.saveStatus} error={page.saveError} />
             </>
           }
         />
+      ) : null}
+
+      {!page.mindMapFullscreen && page.saveStatus === 'error' ? (
+        <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
+          自动保存暂时失败：{page.saveError || '请检查网络后继续编辑，系统会保留未保存内容并稍后重试。'}
+        </div>
       ) : null}
 
       <div
