@@ -24,7 +24,67 @@ API_DIR = REPO_ROOT / "apps" / "api"
 WEB_DIR = REPO_ROOT / "apps" / "web"
 WEB_DIST = WEB_DIR / "dist"
 LOGS_DIR = REPO_ROOT / "logs"
-PWA_URL = f"http://{dev_server.BACKEND_HOST}:{dev_server.BACKEND_PORT}/m"
+PWA_URL = f"http://{dev_server.BACKEND_HOST}:{dev_server.BACKEND_PORT}/freestyle"
+PWA_PROCESS_MARKER = "MEMORY_ANKI_PWA_SERVER"
+
+
+def _append_log_separator(path: Path, title: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
+    with path.open("ab") as log_file:
+        log_file.write(f"\n\n===== {title} {timestamp} =====\n".encode("utf-8"))
+
+
+def _is_memory_anki_pwa_process(pid: int) -> bool:
+    if os.name != "nt":
+        return True
+    try:
+        result = subprocess.run(
+            [
+                "wmic",
+                "process",
+                "where",
+                f"ProcessId={pid}",
+                "get",
+                "CommandLine",
+                "/value",
+            ],
+            capture_output=True,
+            text=True,
+            encoding="gbk",
+            errors="replace",
+            check=False,
+        )
+    except Exception:
+        return False
+    command_line = result.stdout.lower()
+    repo_marker = str(REPO_ROOT).lower()
+    return (
+        PWA_PROCESS_MARKER.lower() in command_line
+        or (
+            repo_marker in command_line
+            and "memory_anki.app.main:app" in command_line
+            and "uvicorn" in command_line
+        )
+    )
+
+
+def _free_pwa_port() -> bool:
+    pids = dev_server.list_listening_pids(dev_server.BACKEND_PORT)
+    if not pids:
+        return True
+    unsafe = [pid for pid in pids if not _is_memory_anki_pwa_process(pid)]
+    if unsafe:
+        print(
+            f"[!] Port {dev_server.BACKEND_PORT} is occupied by non-PWA process(es): {unsafe}. "
+            "Stop them manually or run desktop stop.bat first."
+        )
+        return False
+    print(f"[i] Cleaning existing PWA process(es) on port {dev_server.BACKEND_PORT}: {pids}")
+    for pid in pids:
+        dev_server.kill_process_tree(pid)
+    time.sleep(0.5)
+    return True
 
 
 def _pwa_dist_ready() -> bool:
@@ -41,6 +101,7 @@ def _run_frontend_build() -> bool:
     npm = dev_server._resolve_npm()
     LOGS_DIR.mkdir(parents=True, exist_ok=True)
     log_path = LOGS_DIR / "pwa-build.log"
+    _append_log_separator(log_path, "PWA frontend build")
     print(f"[i] Building PWA frontend, log: {log_path}")
     with log_path.open("ab") as log_file:
         result = subprocess.run(
@@ -63,6 +124,7 @@ def _backend_env() -> dict[str, str]:
     env["MEMORY_ANKI_WEB_DIST"] = str(WEB_DIST)
     env["MEMORY_ANKI_CHANNEL"] = "pwa"
     env["MEMORY_ANKI_STARTUP_MODE"] = "healthcheck"
+    env[PWA_PROCESS_MARKER] = "1"
     env["PYTHONPATH"] = str(API_SRC)
     return env
 
@@ -70,6 +132,7 @@ def _backend_env() -> dict[str, str]:
 def _start_backend() -> subprocess.Popen:
     LOGS_DIR.mkdir(parents=True, exist_ok=True)
     log_path = LOGS_DIR / "pwa-api.log"
+    _append_log_separator(log_path, "PWA backend")
     print(f"[i] Starting PWA backend at {PWA_URL}")
     cmd = [
         sys.executable,
@@ -161,7 +224,8 @@ def start(
     sync: bool = False,
     supervise: bool = True,
 ) -> int:
-    dev_server.free_port(dev_server.BACKEND_PORT, "pwa-backend")
+    if not _free_pwa_port():
+        return 1
 
     if build or not _pwa_dist_ready():
         if not _run_frontend_build():
@@ -194,8 +258,7 @@ def start(
 
 
 def stop() -> int:
-    dev_server.free_port(dev_server.BACKEND_PORT, "pwa-backend")
-    return 0
+    return 0 if _free_pwa_port() else 1
 
 
 def main() -> int:

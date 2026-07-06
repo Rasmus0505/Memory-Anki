@@ -1,4 +1,22 @@
 @echo off
+REM ====================================
+REM 启动记忆宫殿 PWA 服务器
+REM
+REM 功能：
+REM - 构建完整桌面端前端
+REM - 启动后端 API 服务器
+REM - 提供生产环境 PWA 访问
+REM
+REM 访问地址：
+REM - 本机：http://127.0.0.1:8012/
+REM - 默认入口：http://127.0.0.1:8012/freestyle
+REM - 手机：通过 configure-tailscale-pwa.bat 输出的 HTTPS Tailscale URL 访问 /freestyle
+REM
+REM PWA 功能：
+REM - 复用完整桌面端前端
+REM - 支持添加到主屏幕（iOS/Android）
+REM - 更新代码后启动时自动重新构建
+REM ====================================
 setlocal
 cd /d "%~dp0"
 
