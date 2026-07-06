@@ -245,13 +245,16 @@ def clear_practice_progress(session: Session, palace_id: int) -> None:
     session.commit()
 
 
-def clear_review_progress(session: Session, schedule_id: int) -> None:
+def clear_review_progress(session: Session, schedule_id: int, *, commit: bool = True) -> None:
     (
         session.query(SessionProgress)
         .filter_by(session_kind="review", review_schedule_id=schedule_id)
         .delete()
     )
-    session.commit()
+    if commit:
+        session.commit()
+    else:
+        session.flush()
 
 
 def clear_focus_practice_progress(session: Session, palace_id: int) -> None:

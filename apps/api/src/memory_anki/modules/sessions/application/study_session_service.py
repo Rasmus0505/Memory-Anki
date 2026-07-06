@@ -122,7 +122,12 @@ def study_session_json(row: StudySession) -> dict[str, Any]:
     }
 
 
-def create_study_session(session: Session, payload: dict[str, Any]) -> dict[str, Any]:
+def create_study_session(
+    session: Session,
+    payload: dict[str, Any],
+    *,
+    commit: bool = True,
+) -> dict[str, Any]:
     now = utc_now_naive()
     session_id = str(payload.get("id") or uuid4())
     started_at = _normalize_payload_datetime(payload, "started_at", now) or now
@@ -151,8 +156,11 @@ def create_study_session(session: Session, payload: dict[str, Any]) -> dict[str,
         updated_at=now,
     )
     persistent = session.merge(row)
-    session.commit()
-    session.refresh(persistent)
+    if commit:
+        session.commit()
+        session.refresh(persistent)
+    else:
+        session.flush()
     return study_session_json(persistent)
 
 
@@ -407,6 +415,7 @@ def create_review_study_session(
     duration_seconds: int,
     completion_method: str = "auto_complete",
     summary: dict[str, Any] | None = None,
+    commit: bool = True,
 ) -> dict[str, Any] | None:
     effective_seconds = max(0, int(duration_seconds))
     resolved_ended_at = ended_at or utc_now_naive()
@@ -432,6 +441,7 @@ def create_review_study_session(
             ],
             "summary": summary or {},
         },
+        commit=commit,
     )
 
 

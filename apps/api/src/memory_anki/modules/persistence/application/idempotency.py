@@ -44,6 +44,8 @@ def save_idempotent_response(
     session: Session,
     request: Request | None,
     payload: Any,
+    *,
+    commit: bool = True,
 ) -> None:
     mutation_id = read_mutation_id(request)
     if not mutation_id:
@@ -59,4 +61,7 @@ def save_idempotent_response(
     else:
         row.value = value
         row.updated_at = utc_now_naive()
-    session.commit()
+    if commit:
+        session.commit()
+    else:
+        session.flush()

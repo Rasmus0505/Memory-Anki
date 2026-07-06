@@ -184,11 +184,12 @@ def api_submit_session(
         str(data.get("completion_mode", "manual_complete")),
         target_review_number=data.get("target_review_number"),
         needs_practice=bool(data.get("needs_practice", False)),
+        commit=False,
     )
     if not log:
         raise_not_found()
 
-    clear_review_progress(session, schedule_id)
+    clear_review_progress(session, schedule_id, commit=False)
     chapter_id = data.get("chapter_id")
     next_schedule = get_next_due_review(
         session,
@@ -202,7 +203,9 @@ def api_submit_session(
         "next_id": next_schedule.id if next_schedule else None,
         "mastered": extra.get("mastered", False),
     }
-    save_idempotent_response(session, request, response)
+    save_idempotent_response(session, request, response, commit=False)
+    session.commit()
+    session.refresh(log)
     return response
 
 

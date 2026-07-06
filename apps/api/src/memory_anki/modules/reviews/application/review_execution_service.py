@@ -56,6 +56,8 @@ def submit_review(
     completion_mode: str = "manual_complete",
     target_review_number: int | None = None,
     needs_practice: bool = False,
+    *,
+    commit: bool = True,
 ) -> tuple[ReviewLog | None, dict]:
     schedule = session.query(ReviewSchedule).filter_by(id=schedule_id).first()
     if not schedule:
@@ -127,9 +129,13 @@ def submit_review(
             "target_review_number": target_review_number,
             "needs_practice": bool(needs_practice),
         },
+        commit=commit,
     )
-    session.commit()
-    session.refresh(log)
+    if commit:
+        session.commit()
+        session.refresh(log)
+    else:
+        session.flush()
     return log, extra
 
 

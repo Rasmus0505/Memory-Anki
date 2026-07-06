@@ -24,6 +24,7 @@ from memory_anki.infrastructure.db.models import (
     Peg,
     ReviewLog,
     ReviewSchedule,
+    SessionProgress,
     StudySession,
     Subject,
 )
@@ -113,6 +114,7 @@ class ReviewRouteTests(unittest.TestCase):
         app.include_router(review_router.router, prefix="/api/v1")
         app.include_router(palace_router.router, prefix="/api/v1")
         app.include_router(settings_router.router, prefix="/api/v1")
+        self.app = app
         self.client = TestClient(app)
 
     def tearDown(self):
@@ -377,6 +379,46 @@ class ReviewRouteTests(unittest.TestCase):
         with self.SessionLocal() as session:
             self.assertEqual(session.query(ReviewLog).count(), 1)
             self.assertEqual(session.query(StudySession).filter_by(scene="review").count(), 1)
+
+    def test_submit_review_rolls_back_when_idempotency_save_fails(self):
+        with self.SessionLocal() as session:
+            session.add(
+                SessionProgress(
+                    session_kind="review",
+                    palace_id=1,
+                    review_schedule_id=1,
+                    reveal_map=json.dumps({"branch-a": "revealed"}),
+                    red_node_ids="[]",
+                    completed=False,
+                    updated_at=utc_now_naive(),
+                )
+            )
+            session.commit()
+
+        failing_client = TestClient(self.app, raise_server_exceptions=False)
+        with patch.object(
+            review_router,
+            "save_idempotent_response",
+            side_effect=RuntimeError("idempotency write failed"),
+        ):
+            response = failing_client.post(
+                "/api/v1/review/session/1/submit",
+                headers={"X-Memory-Anki-Mutation-ID": "review-submit-rollback"},
+                json={"duration_seconds": 12, "completion_mode": "manual_complete"},
+            )
+
+        self.assertEqual(response.status_code, 500)
+        with self.SessionLocal() as session:
+            schedule = session.query(ReviewSchedule).filter_by(id=1).first()
+            self.assertIsNotNone(schedule)
+            self.assertFalse(schedule.completed)
+            self.assertEqual(session.query(ReviewLog).count(), 0)
+            self.assertEqual(session.query(StudySession).filter_by(scene="review").count(), 0)
+            self.assertIsNotNone(
+                session.query(SessionProgress)
+                .filter_by(session_kind="review", review_schedule_id=1)
+                .first()
+            )
 
     def test_submit_review_schedules_next_round_from_completion_time(self):
         with self.SessionLocal() as session:
