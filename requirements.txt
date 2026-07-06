@@ -9,5 +9,7 @@ aiofiles==24.1.0
 alembic==1.16.4
 PyMuPDF==1.26.4
 av==17.1.0
+dashscope==1.25.11
 pydantic-settings>=2.0
 python-dotenv>=1.0
+requests==2.32.3
