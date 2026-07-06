@@ -76,3 +76,4 @@ _DEBUG_FALLBACK.json
 # ===== Misc =====
 # NOTE: do not blanket-ignore *.png — it would swallow docs/assets; ignore by path instead.
 **/nul
+*.baiduyun.uploading.cfg

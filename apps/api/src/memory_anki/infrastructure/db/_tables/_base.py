@@ -11,16 +11,25 @@ from __future__ import annotations
 import sqlite3
 
 from sqlalchemy import create_engine, event
+from sqlalchemy.engine import make_url
 from sqlalchemy.orm import DeclarativeBase, Session
+from sqlalchemy.pool import StaticPool
 
-from memory_anki.core.config import DATABASE_URL, ensure_runtime_dirs
+from memory_anki.core.config import DATABASE_URL, ensure_runtime_dirs, is_cloud_deploy
 from memory_anki.infrastructure.db.migrations import run_migrations
 
 ensure_runtime_dirs()
-engine = create_engine(
-    DATABASE_URL,
-    connect_args={"check_same_thread": False, "timeout": 30},
-)
+database_url = make_url(DATABASE_URL)
+engine_options = {}
+database_backend = database_url.get_backend_name()
+if database_backend == "sqlite":
+    engine_options["connect_args"] = {"check_same_thread": False, "timeout": 30}
+    engine_options["poolclass"] = StaticPool
+elif database_backend == "postgresql":
+    engine_options["connect_args"] = {"prepare_threshold": None}
+    engine_options["pool_pre_ping"] = True
+
+engine = create_engine(DATABASE_URL, **engine_options)
 
 
 @event.listens_for(engine, "connect")
@@ -33,6 +42,9 @@ def _configure_sqlite_pragmas(dbapi_connection, _connection_record) -> None:
         cursor.execute("PRAGMA busy_timeout=30000")
         cursor.execute("PRAGMA synchronous=NORMAL")
         cursor.execute("PRAGMA journal_mode=WAL")
+        cursor.execute("PRAGMA cache_size=-32000")
+        cursor.execute("PRAGMA temp_store=MEMORY")
+        cursor.execute("PRAGMA mmap_size=268435456")
     finally:
         cursor.close()
 
@@ -42,6 +54,9 @@ class Base(DeclarativeBase):
 
 
 def init_db() -> None:
+    if is_cloud_deploy():
+        Base.metadata.create_all(bind=engine, checkfirst=True)
+        return
     run_migrations()
 
 

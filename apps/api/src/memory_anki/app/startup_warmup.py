@@ -21,8 +21,9 @@ def run_startup_warmup() -> None:
     try:
         connection = session.connection()
         connection.execute(text("SELECT 1")).scalar()
-        connection.execute(text("PRAGMA schema_version")).scalar()
-        connection.execute(text("PRAGMA journal_mode")).scalar()
+        if connection.dialect.name == "sqlite":
+            connection.execute(text("PRAGMA schema_version")).scalar()
+            connection.execute(text("PRAGMA journal_mode")).scalar()
         for table_name in (
             "palaces",
             "review_schedules",

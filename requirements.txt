@@ -11,6 +11,3 @@ PyMuPDF==1.26.4
 av==17.1.0
 pydantic-settings>=2.0
 python-dotenv>=1.0
-ruff==0.12.11
-mypy==1.17.1
-import-linter==2.3

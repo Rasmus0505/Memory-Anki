@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from fastapi import FastAPI
 from sqlalchemy.orm import Session
 
-from memory_anki.core.config import DEFAULTS
+from memory_anki.core.config import DEFAULTS, is_cloud_deploy
 from memory_anki.core.logging import configure_logging
 from memory_anki.core.migration import (
     ensure_legacy_repo_data_migrated,
@@ -83,7 +83,8 @@ def _seed_default_config_rows(session: Session) -> None:
 def run_prepare_runtime() -> StartupState:
     configure_logging()
     shared_state = {}
-    ensure_legacy_repo_data_migrated()
+    if not is_cloud_deploy():
+        ensure_legacy_repo_data_migrated()
     init_db()
     session = get_session()
     try:
@@ -94,8 +95,9 @@ def run_prepare_runtime() -> StartupState:
         session.commit()
         ensure_review_log_study_sessions(session)
         run_review_schedule_repair_migration(session)
-        ensure_daily_backup()
-        maybe_create_periodic_backup()
+        if not is_cloud_deploy():
+            ensure_daily_backup()
+            maybe_create_periodic_backup()
     finally:
         session.close()
     runtime_info = build_runtime_info(shared_state, channel="prepare")
@@ -110,7 +112,8 @@ def initialize_service_runtime(app: FastAPI, *, mode: str | None = None) -> Star
     configure_logging()
     startup_mode = mode or resolve_startup_mode()
     shared_state = {}
-    ensure_legacy_repo_data_migrated()
+    if not is_cloud_deploy():
+        ensure_legacy_repo_data_migrated()
     init_db()
     runtime_info = build_runtime_info(shared_state)
     if startup_mode == STARTUP_MODE_SERVE:
