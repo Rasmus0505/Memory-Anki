@@ -1,9 +1,12 @@
-const APP_CACHE = 'memory-anki-mobile-app-v1'
-const API_CACHE = 'memory-anki-mobile-api-v1'
+const CACHE_VERSION = '2026-07-06-desktop-pwa-v1'
+const APP_CACHE = `memory-anki-pwa-app-${CACHE_VERSION}`
+const API_CACHE = `memory-anki-pwa-api-${CACHE_VERSION}`
+const CACHE_PREFIX = 'memory-anki-pwa-'
+const LEGACY_CACHE_PREFIX = 'memory-anki-mobile-'
 const PRECACHE_URLS = [
   '/',
-  '/m',
-  '/mobile',
+  '/freestyle',
+  '/pwa-reset.html',
   '/offline.html',
   '/manifest.webmanifest',
   '/favicon.svg',
@@ -22,7 +25,16 @@ self.addEventListener('install', (event) => {
   event.waitUntil(
     caches
       .open(APP_CACHE)
-      .then((cache) => cache.addAll(PRECACHE_URLS))
+      .then((cache) =>
+        Promise.all(
+          PRECACHE_URLS.map(async (url) => {
+            const response = await fetch(new Request(url, { cache: 'reload' }))
+            if (response.ok) {
+              await cache.put(url, response)
+            }
+          }),
+        ),
+      )
       .then(() => self.skipWaiting()),
   )
 })
@@ -35,11 +47,22 @@ self.addEventListener('activate', (event) => {
         Promise.all(
           keys
             .filter((key) => key !== APP_CACHE && key !== API_CACHE)
+            .filter(
+              (key) =>
+                key.startsWith(CACHE_PREFIX) ||
+                key.startsWith(LEGACY_CACHE_PREFIX),
+            )
             .map((key) => caches.delete(key)),
         ),
       )
       .then(() => self.clients.claim()),
   )
+})
+
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SKIP_WAITING') {
+    self.skipWaiting()
+  }
 })
 
 function isSameOrigin(url) {
@@ -106,6 +129,11 @@ async function networkFirstFreestyleFeed(request) {
 }
 
 async function cacheFirstStaticAsset(request) {
+  const url = new URL(request.url)
+  if (url.pathname === '/sw.js') {
+    return fetch(request)
+  }
+
   const cached = await caches.match(request)
   if (cached) return cached
 
@@ -127,7 +155,7 @@ async function navigationFallback(request) {
     return response
   } catch {
     return (
-      (await caches.match('/m')) ||
+      (await caches.match('/freestyle')) ||
       (await caches.match('/')) ||
       (await caches.match('/offline.html')) ||
       Response.error()

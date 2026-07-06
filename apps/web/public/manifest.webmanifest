@@ -1,11 +1,10 @@
 {
-  "name": "Memory Anki 随心模式",
-  "short_name": "随心模式",
-  "description": "移动端碎片时间复习与刷题入口。",
-  "start_url": "/m",
+  "name": "Memory Anki",
+  "short_name": "Memory Anki",
+  "description": "完整桌面端学习入口，默认进入随心模式。",
+  "start_url": "/freestyle",
   "scope": "/",
   "display": "standalone",
-  "orientation": "portrait",
   "background_color": "#020617",
   "theme_color": "#020617",
   "icons": [
