@@ -11,16 +11,19 @@ from __future__ import annotations
 import sqlite3
 
 from sqlalchemy import create_engine, event
+from sqlalchemy.engine import make_url
 from sqlalchemy.orm import DeclarativeBase, Session
 
-from memory_anki.core.config import DATABASE_URL, ensure_runtime_dirs
+from memory_anki.core.config import DATABASE_URL, ensure_runtime_dirs, is_cloud_deploy
 from memory_anki.infrastructure.db.migrations import run_migrations
 
 ensure_runtime_dirs()
-engine = create_engine(
-    DATABASE_URL,
-    connect_args={"check_same_thread": False, "timeout": 30},
-)
+database_url = make_url(DATABASE_URL)
+engine_options = {}
+if database_url.get_backend_name() == "sqlite":
+    engine_options["connect_args"] = {"check_same_thread": False, "timeout": 30}
+
+engine = create_engine(DATABASE_URL, **engine_options)
 
 
 @event.listens_for(engine, "connect")
@@ -42,6 +45,9 @@ class Base(DeclarativeBase):
 
 
 def init_db() -> None:
+    if is_cloud_deploy():
+        Base.metadata.create_all(bind=engine, checkfirst=True)
+        return
     run_migrations()
 
 

@@ -14,7 +14,12 @@ from memory_anki.app.startup_runtime import (
     resolve_startup_mode,
 )
 from memory_anki.app.startup_warmup import start_startup_warmup
-from memory_anki.core.config import ATTACHMENTS_DIR, WEB_DIST_DIR
+from memory_anki.core.config import (
+    ATTACHMENTS_DIR,
+    WEB_DIST_DIR,
+    is_cloud_deploy,
+    resolve_cors_origins,
+)
 from memory_anki.core.migration import (
     is_app_migration_completed,
     mark_app_migration_completed,
@@ -103,25 +108,28 @@ async def lifespan(app: FastAPI):
             channel=str(startup_state.runtime_info.get("channel") or "production"),
             startup_mode=startup_mode,
         )
-        start_periodic_backup_loop()
+        if not is_cloud_deploy():
+            start_periodic_backup_loop()
         start_startup_warmup()
     try:
         yield
     finally:
         if startup_mode == STARTUP_MODE_SERVE:
-            stop_periodic_backup_loop()
+            if not is_cloud_deploy():
+                stop_periodic_backup_loop()
             stop_runtime_activity_heartbeat(runtime_activity_handle)
-            try:
-                create_shutdown_backup()
-            except Exception:
-                pass
+            if not is_cloud_deploy():
+                try:
+                    create_shutdown_backup()
+                except Exception:
+                    pass
 
 
 app = FastAPI(title="Memory Anki API", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=resolve_cors_origins(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
