@@ -1,6 +1,5 @@
 import { ArrowLeft, FileText } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { LoadingState } from '@/shared/components/state-placeholders'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import {
   buildAttachmentUrl,
@@ -30,6 +29,8 @@ import {
   type StudyWarmupKind,
 } from '@/features/review/studyWarmup'
 import type { RevealFlowMode } from '@/entities/review/model/review-flow-tree'
+import { ReviewSessionSkeleton } from '@/features/review/ReviewSessionSkeleton'
+import { ErrorState } from '@/shared/components/state-placeholders'
 
 type ReviewDisplayMode = 'review' | 'edit'
 
@@ -177,6 +178,8 @@ export function ReviewSessionContainer({
   const [mindMapFullscreen, setMindMapFullscreen] = useState(false)
   const [displayMode, setDisplayMode] = useState<ReviewDisplayMode>('review')
   const [modeSyncVersion, setModeSyncVersion] = useState(0)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [loadAttempt, setLoadAttempt] = useState(0)
   const [stageDialogOpen, setStageDialogOpen] = useState(false)
   const [pendingPayload, setPendingPayload] = useState<{
     durationSeconds: number
@@ -242,6 +245,7 @@ export function ReviewSessionContainer({
     let active = true
     const sessionId = Number(id)
     const load = async () => {
+      setLoadError(null)
       const inflightKey = `${eyebrow}:${sessionId}`
       const loadSessionAndProgress = () => {
         let pending = inflightReviewSessionLoads.get(inflightKey)
@@ -271,11 +275,14 @@ export function ReviewSessionContainer({
       setDisplayMode('review')
       setModeSyncVersion(0)
     }
-    void load()
+    void load().catch((error) => {
+      if (!active) return
+      setLoadError(error instanceof Error ? error.message : '加载复习会话失败。')
+    })
     return () => {
       active = false
     }
-  }, [buildReviewEditorState, eyebrow, id, loadProgress, loadSession, warmupKind])
+  }, [buildReviewEditorState, eyebrow, id, loadAttempt, loadProgress, loadSession, warmupKind])
 
   const handleModeToggle = useCallback(async () => {
     if (!id || modeTransitioningRef.current) return
@@ -355,14 +362,40 @@ export function ReviewSessionContainer({
     !editEditorState &&
     !displayLoadError
 
+  if (loadError) {
+    return (
+      <ErrorState
+        title="复习会话加载失败"
+        description={loadError}
+        action={
+          <Button type="button" variant="outline" size="sm" onClick={() => setLoadAttempt((value) => value + 1)}>
+            重新加载
+          </Button>
+        }
+      />
+    )
+  }
+
   if (!session || !reviewEditorState || waitingForEditorState) {
-    return <LoadingState text="正在加载复习会话…" />
+    return <ReviewSessionSkeleton />
   }
 
   const resolvedEditEditorState = editEditorState ?? reviewEditorState
 
   if (!palace || !resolvedEditEditorState || displayLoadError) {
-    return <div className="flex items-center justify-center py-32 text-sm text-destructive">{displayLoadError || '未找到可复习的宫殿。'}</div>
+    return (
+      <ErrorState
+        title="复习内容不可用"
+        description={displayLoadError || '未找到可复习的宫殿。'}
+        action={
+          displayLoadError ? (
+            <Button type="button" variant="outline" size="sm" onClick={() => void reloadEditor()}>
+              重新加载
+            </Button>
+          ) : null
+        }
+      />
+    )
   }
 
   const title = buildTitle(session)
