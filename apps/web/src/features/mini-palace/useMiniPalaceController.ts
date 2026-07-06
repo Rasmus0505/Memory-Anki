@@ -115,7 +115,7 @@ export function useMiniPalaceController({
       setItems(response.items)
       return response.items
     } catch (err) {
-      const message = err instanceof Error ? err.message : '加载专项训练失败。'
+      const message = err instanceof Error ? err.message : '加载训练关卡失败。'
       setError(message)
       return []
     } finally {

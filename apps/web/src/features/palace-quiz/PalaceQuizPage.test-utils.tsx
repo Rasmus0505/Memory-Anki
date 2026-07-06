@@ -372,11 +372,14 @@ export const baseQuestions = [
   },
 ]
 
-export function renderPage() {
+export function renderPage(
+  initialEntry = '/palaces/1/quiz',
+  routePath = '/palaces/:id/quiz',
+) {
   return render(
-    <MemoryRouter initialEntries={['/palaces/1/quiz']}>
+    <MemoryRouter initialEntries={[initialEntry]}>
       <Routes>
-        <Route path="/palaces/:id/quiz" element={<PalaceQuizPage />} />
+        <Route path={routePath} element={<PalaceQuizPage />} />
       </Routes>
     </MemoryRouter>,
   )

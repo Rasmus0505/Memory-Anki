@@ -139,6 +139,7 @@ describe('EnglishWorkspacePage', () => {
     mocks.toastSuccessMock.mockReset()
     mocks.uploadEnglishVideoApiMock.mockReset()
     mocks.latestStreamHandlers = null
+    window.confirm = vi.fn(() => true)
   })
 
   it('prioritizes the current task view and hides upload actions while generation is active', async () => {
@@ -205,6 +206,9 @@ describe('EnglishWorkspacePage', () => {
     })
 
     fireEvent.click(screen.getByRole('button', { name: '清除' }))
+    expect(window.confirm).toHaveBeenCalledWith(
+      '确定清除当前英语生成任务吗？此操作不可撤销，当前任务状态和生成日志会从工作台移除。',
+    )
     await waitFor(() => {
       expect(mocks.clearEnglishCurrentTaskApiMock).toHaveBeenCalled()
     })

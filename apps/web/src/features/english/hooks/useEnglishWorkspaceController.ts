@@ -234,6 +234,15 @@ export function useEnglishWorkspaceController() {
   }, [loadWorkspace])
 
   const handleClearTask = useCallback(async () => {
+    const confirmed = await appConfirm(
+      '确定清除当前英语生成任务吗？此操作不可撤销，当前任务状态和生成日志会从工作台移除。',
+      {
+        title: '清除当前任务',
+        confirmText: '清除任务',
+        tone: 'danger',
+      },
+    )
+    if (!confirmed) return
     setActionLoading('clear')
     try {
       await clearEnglishCurrentTaskApi()
@@ -252,6 +261,7 @@ export function useEnglishWorkspaceController() {
     async (courseId: number, title: string) => {
       const confirmed = await appConfirm(`确定删除英语课程“${title}”吗？原始视频也会一起删除。`, {
         title: '删除英语课程',
+        confirmText: '删除课程',
         tone: 'danger',
       })
       if (!confirmed) return

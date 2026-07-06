@@ -20,12 +20,12 @@ describe('PalaceQuizPage generation flows', () => {
     renderPage()
     fireEvent.click(await screen.findByRole('button', { name: 'AI生成' }))
     fireEvent.click(screen.getByRole('button', { name: '归类已有题库' }))
-    expect(await screen.findByText('本次写入 1 道专项训练题。')).toBeTruthy()
+    expect(await screen.findByText('本次写入 1 道训练关卡题。')).toBeTruthy()
 
     const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement | null
     const imageFile = new File(['image'], 'bio-question.png', { type: 'image/png' })
     fireEvent.change(fileInput!, { target: { files: [imageFile] } })
-    fireEvent.click(screen.getByRole('checkbox', { name: /按专项训练分类保存/ }))
+    fireEvent.click(screen.getByRole('checkbox', { name: /按训练关卡分类保存/ }))
     fireEvent.click(screen.getByRole('button', { name: '生成预览' }))
 
     await waitFor(() => {

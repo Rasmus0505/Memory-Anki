@@ -35,7 +35,7 @@ export function MiniPalacePanel({ controller, className, onEditSave, onEditCance
       <Dialog open={controller.panelOpen} onOpenChange={controller.setPanelOpen}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>专项训练</DialogTitle>
+            <DialogTitle>训练关卡</DialogTitle>
             <DialogClose onClick={controller.closePanel} />
           </DialogHeader>
           <div className="space-y-4 px-6 py-5">

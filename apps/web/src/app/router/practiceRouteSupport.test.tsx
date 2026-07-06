@@ -205,6 +205,7 @@ describe('PracticeSessionRoute', () => {
     mocks.consumePrefetchedStudySession.mockImplementation(
       (_kind: string, _id: number, loader: () => Promise<unknown>) => loader(),
     )
+    window.confirm = vi.fn(() => true)
   })
 
   it('loads session and progress through the warmup cache and passes the restored snapshot to the flow', async () => {
@@ -259,6 +260,9 @@ describe('PracticeSessionRoute', () => {
     await waitFor(() => expect(setup.clearProgress).toHaveBeenCalledTimes(1))
 
     fireEvent.click(screen.getByRole('button', { name: 'restart' }))
+    expect(window.confirm).toHaveBeenCalledWith(
+      '确定重新开始本次练习吗？此操作不可撤销，会清空当前练习进度并从头开始。',
+    )
     await waitFor(() => expect(setup.clearProgress).toHaveBeenCalledTimes(2))
 
     fireEvent.click(screen.getByRole('button', { name: 'complete flow' }))

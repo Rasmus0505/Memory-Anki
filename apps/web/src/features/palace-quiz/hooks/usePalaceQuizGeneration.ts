@@ -175,11 +175,10 @@ export function usePalaceQuizGeneration({
     resetGenerationStreamFollow()
     try {
       if (config.classifyByMiniPalace && !selectedChapterHasChildren) {
-        emitQuizFeedback('quiz_error_missing_input', { label: '无专项训练', audioScope: 'local' })
+        emitQuizFeedback('quiz_error_missing_input', { label: '无训练关卡', audioScope: 'local' })
         throw new Error('当前范围没有直接子章节，无法分类保存。')
       }
       let aiOptions: AiRuntimeOptions | undefined
-      let aiOptionsByScenario: AiScenarioRuntimeOptionsMap | undefined
       if (config.sourceKind === 'text-files') {
         aiOptions = (await promptForAiOptions({
           scenarioKey: 'quiz_text_generation',
@@ -208,10 +207,10 @@ export function usePalaceQuizGeneration({
         aiOptions,
         files: config.files,
         enableSecondaryReview: config.enableSecondaryReview,
-        classifyByMiniPalace: config.classifyByMiniPalace,
-        selectedChapterId,
-        aiOptionsByScenario,
-        onStatus: (event) => {
+          classifyByMiniPalace: config.classifyByMiniPalace,
+          selectedChapterId,
+          aiOptionsByScenario: undefined,
+          onStatus: (event) => {
           setGenerationStreamStatus(event.message || '正在生成题目')
           setGenerationStreamStepLabel(
             event.step != null && event.total != null ? `第 ${event.step}/${event.total} 步` : '',
@@ -284,7 +283,7 @@ export function usePalaceQuizGeneration({
         questionsToSave,
         generationSaveMode,
       )
-      toast.success('题目已保存到题库')
+      toast.success(`已保存 ${questionsToSave.length} 道 AI 题目到题库。`)
       emitQuizFeedback('quiz_generate_save', { label: '已入题库', audioScope: 'global' })
       await refreshQuestions()
       setGenerationPreview(null)
@@ -297,7 +296,7 @@ export function usePalaceQuizGeneration({
             : ''
         toast.error(requestId ? `${nextError.message}（请求ID：${requestId}）` : nextError.message)
       } else {
-        toast.error('保存 AI 题目失败。')
+        toast.error('保存 AI 题目失败，请重新生成预览后再试。')
       }
     } finally {
       setGenerationSaving(false)
@@ -323,12 +322,12 @@ export function usePalaceQuizGeneration({
       }
       const result = await classifyPalaceQuizQuestionsToMiniPalacesApi(palaceId, aiOptions)
       setClassificationResult(result)
-      toast.success('已有题库已按专项训练归类')
+      toast.success('已有题库已按训练关卡重新归类。')
       emitQuizFeedback('quiz_generate_classify_complete', { label: '归类完成', audioScope: 'global' })
       await refreshQuestions()
     } catch (nextError) {
       emitQuizFeedback('quiz_error_ai_failed', { label: '归类失败', audioScope: 'global' })
-      toast.error(nextError instanceof Error ? nextError.message : '归类专项训练题库失败。')
+      toast.error(nextError instanceof Error ? nextError.message : '归类训练关卡题库失败，请稍后重试。')
     } finally {
       setClassificationLoading(false)
     }

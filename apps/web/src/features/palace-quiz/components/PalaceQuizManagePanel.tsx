@@ -4,6 +4,7 @@ import { Button } from '@/shared/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card'
 import { Input } from '@/shared/components/ui/input'
 import { Textarea } from '@/shared/components/ui/textarea'
+import { EmptyState } from '@/shared/components/state-placeholders'
 import { cn } from '@/shared/lib/utils'
 import type { MiniPalaceSummary, PalaceQuizQuestion } from '@/shared/api/contracts'
 import {
@@ -138,11 +139,23 @@ export function PalaceQuizManagePanel({
             ) : null}
           </div>
           {filteredQuestions.length === 0 ? (
-            <div className="rounded-lg border border-dashed border-border/80 px-4 py-6 text-sm text-muted-foreground">
-              {questions.length === 0
-                ? '还没有题目，可以先在右侧手动新增，或者去 AI生成 标签里先预览后保存。'
-                : '当前范围下还没有题目。'}
-            </div>
+            <EmptyState
+              variant={questions.length === 0 ? 'create' : 'search'}
+              title={questions.length === 0 ? '题库里还没有题目' : '当前范围没有题目'}
+              description={
+                questions.length === 0
+                  ? '可以先在右侧手动新增一道题，或到 AI 生成里预览后保存到题库。'
+                  : '切换到全部题目，或为这个训练关卡单独新增题目。'
+              }
+              action={
+                questions.length === 0 ? (
+                  <Button type="button" size="sm" variant="outline" onClick={onStartCreateQuestion}>
+                    <Plus className="mr-2 size-4" />
+                    手动新增题目
+                  </Button>
+                ) : null
+              }
+            />
           ) : (
             <div className="grid gap-2 xl:grid-cols-2">
               {filteredQuestions.map((question, index) => (

@@ -183,7 +183,7 @@ export function getQuestionOwnershipLabel(question: PalaceQuizQuestion) {
     return `章节题 · ${question.classified_chapter.name}`
   }
   if (question.mini_palace?.name) {
-    return `专项训练 · ${question.mini_palace.name}`
+    return `训练关卡 · ${question.mini_palace.name}`
   }
   return '大宫殿'
 }

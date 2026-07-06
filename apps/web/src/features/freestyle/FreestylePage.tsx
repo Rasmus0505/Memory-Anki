@@ -59,6 +59,7 @@ import {
 } from '@/features/freestyle/model/today-training'
 import { PalaceQuizMemoryLookupDialog } from '@/features/palace-quiz/components/PalaceQuizMemoryLookupDialog'
 import { emitReviewConfetti } from '@/shared/components/celebration'
+import { appConfirm } from '@/shared/components/ui/native-dialog'
 import {
   QuizQuestionInteraction,
   type QuizRuntimeState,
@@ -991,6 +992,28 @@ export default function FreestylePage() {
     [mode, queue.length, setProgressAndPersist, timer],
   )
 
+  const handleClearLocalProgress = useCallback(async () => {
+    const confirmed = await appConfirm(
+      mode === 'today'
+        ? '确定清空今日训练本地进度吗？此操作不可撤销，会重置已做题目、连对记录和当前位置。'
+        : '确定清空随心练习本地进度吗？此操作不可撤销，会重置已做题目、连对记录和当前位置。',
+      {
+        title: '清空本地进度',
+        confirmText: '清空进度',
+        tone: 'danger',
+      },
+    )
+    if (!confirmed) return
+    const nextProgress =
+      mode === 'today'
+        ? saveTodayTrainingProgress(DEFAULT_FREESTYLE_PROGRESS)
+        : saveFreestyleProgress(DEFAULT_FREESTYLE_PROGRESS)
+    previousResolvedQuestionIdsRef.current = new Set(nextProgress.resolvedQuestionIds)
+    emittedMilestonesRef.current = new Set()
+    setProgress(nextProgress)
+    toast.success('已清空随心进度')
+  }, [mode])
+
   const handleScroll = useCallback(() => {
     const element = scrollRef.current
     if (!element || queue.length === 0) return
@@ -1453,16 +1476,7 @@ export default function FreestylePage() {
           </IconButton>
           <IconButton
             label="清空本地进度"
-            onClick={() => {
-              const nextProgress =
-                mode === 'today'
-                  ? saveTodayTrainingProgress(DEFAULT_FREESTYLE_PROGRESS)
-                  : saveFreestyleProgress(DEFAULT_FREESTYLE_PROGRESS)
-              previousResolvedQuestionIdsRef.current = new Set(nextProgress.resolvedQuestionIds)
-              emittedMilestonesRef.current = new Set()
-              setProgress(nextProgress)
-              toast.success('已清空随心进度')
-            }}
+            onClick={() => void handleClearLocalProgress()}
           >
             <RotateCcw className="size-5" />
           </IconButton>

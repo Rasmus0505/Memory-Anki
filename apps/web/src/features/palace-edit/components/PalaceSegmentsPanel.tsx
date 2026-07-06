@@ -176,7 +176,7 @@ export function PalaceSegmentsPanel({
                           type="button"
                           size="sm"
                           variant="outline"
-                          className="h-8"
+                          className="min-h-11 sm:h-8 sm:min-h-8"
                           onClick={() => onOpenEdit(segment)}
                         >
                           <Edit3 className="mr-2 size-4" />
@@ -191,7 +191,7 @@ export function PalaceSegmentsPanel({
                             ? 'default'
                             : 'outline'
                         }
-                        className="h-8"
+                        className="min-h-11 sm:h-8 sm:min-h-8"
                         onClick={() => onAdjustRange(segment)}
                       >
                         <ScanSearch className="mr-2 size-4" />
@@ -202,7 +202,7 @@ export function PalaceSegmentsPanel({
                           type="button"
                           size="sm"
                           variant="outline"
-                          className="h-8"
+                          className="min-h-11 sm:h-8 sm:min-h-8"
                           onClick={() => setMergeSourceId(segment.id)}
                           disabled={segmentMergingId === segment.id}
                         >
@@ -215,7 +215,7 @@ export function PalaceSegmentsPanel({
                           type="button"
                           size="sm"
                           variant="outline"
-                          className="h-8 text-destructive hover:text-destructive"
+                          className="min-h-11 text-destructive hover:text-destructive sm:h-8 sm:min-h-8"
                           onClick={() => void onDelete(segment.id)}
                         >
                           <Trash2 className="mr-2 size-4" />
@@ -270,7 +270,7 @@ export function PalaceSegmentsPanel({
                     key={color}
                     type="button"
                     className={cn(
-                      'size-8 rounded-full border-2',
+                      'min-h-11 min-w-11 rounded-full border-2 sm:size-8 sm:min-h-8 sm:min-w-8',
                       segmentColor === color ? 'border-slate-950' : 'border-transparent',
                     )}
                     style={{ backgroundColor: color }}

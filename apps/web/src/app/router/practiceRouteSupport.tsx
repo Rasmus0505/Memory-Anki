@@ -4,6 +4,7 @@ import { ArrowLeft } from 'lucide-react'
 import { PageIntro } from '@/shared/components/layout/PageIntro'
 import { LoadingState } from '@/shared/components/state-placeholders'
 import { Button } from '@/shared/components/ui/button'
+import { appConfirm } from '@/shared/components/ui/native-dialog'
 import type { MindMapEditorState, ReviewStageSummary } from '@/shared/api/contracts'
 import {
   MindMapReviewFlow,
@@ -201,6 +202,15 @@ export function PracticeSessionRoute<TData, TSession>({
           })
         }}
         onRestart={async () => {
+          const confirmed = await appConfirm(
+            '确定重新开始本次练习吗？此操作不可撤销，会清空当前练习进度并从头开始。',
+            {
+              title: '重新开始练习',
+              confirmText: '重新开始',
+              tone: 'danger',
+            },
+          )
+          if (!confirmed) return
           await config.clearProgress(data)
           setHasResumeProgress(false)
           setInitialSnapshot(null)
@@ -210,16 +220,14 @@ export function PracticeSessionRoute<TData, TSession>({
         }}
         submitting={submitting}
         onComplete={async (payload) => {
-          let activeSession = session
           let activeData = data
           let activeStageTarget = stageTarget
           if (!hasStageChoices(activeStageTarget) && (activeStageTarget.review_stage_total ?? 0) > 0) {
             const refreshed = await config.refreshStageTarget?.(activeData)
             if (refreshed) {
-              activeSession = refreshed
               activeData = refreshed.data
               activeStageTarget = config.getStageTarget(activeData)
-              setSession(activeSession)
+              setSession(refreshed)
               setEditEditorState(refreshed.editEditorState ?? editEditorState)
             }
           }

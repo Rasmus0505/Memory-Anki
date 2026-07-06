@@ -221,10 +221,14 @@ export function usePalaceSegmentsController({
   }
 
   const handleDeleteSegment = async (segmentId: number) => {
-    const confirmed = await appConfirm('删除这个学习组只会取消这组知识点的分组，不会删除任何脑图内容。确定继续吗？', {
-      title: '删除学习组',
-      tone: 'danger',
-    })
+    const confirmed = await appConfirm(
+      '确定删除这个学习组吗？此操作不可撤销，只会取消这组知识点的分组，不会删除任何脑图内容。',
+      {
+        title: '删除学习组',
+        confirmText: '删除学习组',
+        tone: 'danger',
+      },
+    )
     if (!confirmed) return
     timer.registerActivity('edit_operation', { source: 'segment_delete' })
     await deletePalaceSegmentApi(segmentId)

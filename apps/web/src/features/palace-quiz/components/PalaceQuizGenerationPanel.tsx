@@ -170,15 +170,15 @@ export function PalaceQuizGenerationPanel({
         {hasMiniPalaces && rootQuestionCount > 0 ? (
           <Card className="border-border/70 bg-card/92">
             <CardHeader>
-              <CardTitle className="text-base">已有题库归类到专项训练</CardTitle>
+              <CardTitle className="text-base">已有题库归类到训练关卡</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="rounded-lg border border-border/70 bg-background/70 px-4 py-3 text-sm text-muted-foreground">
-                当前有 {rootQuestionCount} 道记忆宫殿题、{miniPalaces.length} 个专项训练。这里会判断哪些题同时属于哪些专项训练，并复制写入对应训练题库。
+                当前有 {rootQuestionCount} 道记忆宫殿题、{miniPalaces.length} 个训练关卡。这里会判断哪些题同时属于哪些训练关卡，并复制写入对应训练题库。
               </div>
               {classificationResult ? (
                 <div className="rounded-lg border border-border/70 bg-background/70 px-4 py-3 text-sm">
-                  <div>本次写入 {classificationResult.copied_question_count} 道专项训练题。</div>
+                  <div>本次写入 {classificationResult.copied_question_count} 道训练关卡题。</div>
                   {classificationResult.resolved_ai?.model_label ? (
                     <div className="mt-1 text-xs text-muted-foreground">
                       实际模型：{classificationResult.resolved_ai.model_label}
@@ -359,7 +359,7 @@ export function PalaceQuizGenerationPanel({
                 disabled={!selectedChapterHasChildren}
               />
               <span>
-                <span className="font-medium">按专项训练分类保存</span>
+                <span className="font-medium">按训练关卡分类保存</span>
                 <span className="mt-1 block text-muted-foreground">
                   {selectedChapterHasChildren
                     ? '开启后，题目会按当前所选范围的直接子章节分类，并以章节题的形式分别保存。'
@@ -428,7 +428,7 @@ export function PalaceQuizGenerationPanel({
                         </span>
                         <span>预览 {item.previewQuestionCount} 题</span>
                         <span>可保存 {item.savableQuestionCount} 题</span>
-                        {item.classifyByMiniPalace ? <span>按专项训练分类保存</span> : null}
+                        {item.classifyByMiniPalace ? <span>按训练关卡分类保存</span> : null}
                         {item.enableSecondaryReview ? <span>二次筛选</span> : null}
                       </div>
                       {item.selectedChapterPath ? (

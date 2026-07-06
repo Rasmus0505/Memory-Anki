@@ -231,6 +231,7 @@ describe('FreestylePage feedback', () => {
     toastErrorMock.mockClear()
     toastSuccessMock.mockClear()
     memoryLookupDialogMock.mockClear()
+    window.confirm = vi.fn(() => true)
   })
 
   it('emits correct and incorrect result feedback only when a card is first resolved', async () => {
@@ -328,6 +329,9 @@ describe('FreestylePage feedback', () => {
     expect(emitReviewConfettiMock.mock.calls.filter(([args]) => args.kind === 'milestone')).toHaveLength(1)
 
     fireEvent.click(screen.getByRole('button', { name: '清空本地进度' }))
+    expect(window.confirm).toHaveBeenCalledWith(
+      '确定清空今日训练本地进度吗？此操作不可撤销，会重置已做题目、连对记录和当前位置。',
+    )
     for (let index = 0; index < 4; index += 1) {
       await answerChoiceAt(index)
       expect(recordPalaceQuizChoiceAttemptApiMock).toHaveBeenCalledWith(index + 1, 'A')

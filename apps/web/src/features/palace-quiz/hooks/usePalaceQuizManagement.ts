@@ -95,10 +95,10 @@ export function usePalaceQuizManagement({
       const draft = buildDraftFromForm(questionForm)
       if (editingQuestionId != null) {
         await updatePalaceQuizQuestionApi(editingQuestionId, draft)
-        toast.success('题目已更新')
+        toast.success('题目内容已更新，题库列表已刷新。')
       } else {
         await createPalaceQuizQuestionApi(palaceId, draft)
-        toast.success('题目已新增')
+        toast.success('新题目已加入当前宫殿题库。')
       }
       emitQuizFeedback('quiz_manage_save', {
         label: editingQuestionId != null ? '已更新' : '已新增',
@@ -108,20 +108,24 @@ export function usePalaceQuizManagement({
       resetEditingState()
     } catch (nextError) {
       emitQuizFeedback('quiz_error_persist_failed', { label: '保存失败', audioScope: 'global' })
-      toast.error(nextError instanceof Error ? nextError.message : '保存题目失败。')
+      toast.error(nextError instanceof Error ? nextError.message : '保存题目失败，请检查题干和答案后再试。')
     } finally {
       setManageSaving(false)
     }
   }
 
   const handleDeleteQuestion = async (questionId: number) => {
-    if (!await appConfirm('确定删除这道题吗？', { title: '删除题目', tone: 'danger' })) return
+    if (!await appConfirm('确定删除这道题吗？此操作不可撤销，题目的作答统计也会一起删除。', {
+      title: '删除题目',
+      confirmText: '删除题目',
+      tone: 'danger',
+    })) return
     registerQuizActivity('manage_delete_question')
     emitQuizFeedback('quiz_manage_delete', { label: '删除题目', audioScope: 'local' })
     setManageDeletingId(questionId)
     try {
       await deletePalaceQuizQuestionApi(questionId)
-      toast.success('题目已删除')
+      toast.success('题目已从题库删除。')
       emitQuizFeedback('quiz_manage_delete', { label: '已删除', audioScope: 'local' })
       await refreshQuestions()
       setSelectedQuestionIds((current) => current.filter((item) => item !== questionId))
@@ -131,7 +135,7 @@ export function usePalaceQuizManagement({
       }
     } catch (nextError) {
       emitQuizFeedback('quiz_error_persist_failed', { label: '删除失败', audioScope: 'global' })
-      toast.error(nextError instanceof Error ? nextError.message : '删除题目失败。')
+      toast.error(nextError instanceof Error ? nextError.message : '删除题目失败，请刷新题库后再试。')
     } finally {
       setManageDeletingId(null)
     }
@@ -161,8 +165,9 @@ export function usePalaceQuizManagement({
 
   const handleBatchDeleteQuestions = async () => {
     if (selectedQuestionIds.length === 0) return
-    if (!await appConfirm(`确定批量删除所选的 ${selectedQuestionIds.length} 道题吗？`, {
+    if (!await appConfirm(`确定批量删除所选的 ${selectedQuestionIds.length} 道题吗？此操作不可撤销，题目的作答统计也会一起删除。`, {
       title: '批量删除题目',
+      confirmText: '批量删除',
       tone: 'danger',
     })) return
     registerQuizActivity('manage_batch_delete_questions')
@@ -170,7 +175,7 @@ export function usePalaceQuizManagement({
     setManageBulkDeleting(true)
     try {
       await batchDeletePalaceQuizQuestionsApi(selectedQuestionIds)
-      toast.success(`已删除 ${selectedQuestionIds.length} 道题目`)
+      toast.success(`已从题库删除 ${selectedQuestionIds.length} 道题目。`)
       emitQuizFeedback('quiz_manage_batch_delete', { label: '批量删除完成', audioScope: 'global' })
       const deletedIds = [...selectedQuestionIds]
       await refreshQuestions()
@@ -181,7 +186,7 @@ export function usePalaceQuizManagement({
       }
     } catch (nextError) {
       emitQuizFeedback('quiz_error_persist_failed', { label: '批量删除失败', audioScope: 'global' })
-      toast.error(nextError instanceof Error ? nextError.message : '批量删除题目失败。')
+      toast.error(nextError instanceof Error ? nextError.message : '批量删除题目失败，请重新选择后再试。')
     } finally {
       setManageBulkDeleting(false)
     }
