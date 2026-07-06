@@ -1,19 +1,28 @@
-# Memory Anki 移动端 PWA 使用说明
+# Memory Anki PWA 使用说明
 
-本文说明如何把移动端「随心模式」作为 PWA 通过 Tailscale 私有网络使用。目标是：电脑开着，iPhone 打开 Tailscale，就能访问并安装 `/m`。
+本文说明如何把完整桌面端 Memory Anki 通过 Tailscale 私有网络安装为 PWA 使用。PWA 不再维护单独移动端应用；安装后打开的是同一套桌面端前端，默认进入 `/freestyle` 随心模式，仍可通过桌面导航访问完整功能。
+
+## 访问口径
+
+- 本机服务端口：`127.0.0.1:8012`
+- 本机检查地址：`http://127.0.0.1:8012/freestyle`
+- 手机安装地址：`https://desktop-lp-2026481850.tail92e457.ts.net/freestyle`
+- Tailscale Serve 转发：`https://desktop-lp-2026481850.tail92e457.ts.net` -> `http://127.0.0.1:8012`
+
+旧计划文档里出现的 `8000`、`100.94.*`、临时局域网地址、`/m` 或 `/mobile` 都属于历史记录。当前 PWA 默认入口是 `/freestyle`；旧 `/m`、`/mobile` 地址只作为兼容路径回退到随心模式。
 
 ## 日常使用
 
 1. 电脑开机并确保 Tailscale 已连接。
 2. 如果已安装自启，PWA 服务会随 Windows 登录自动启动；否则双击根目录的 `start-pwa.bat`。
-3. iPhone 打开 Tailscale。
-4. 用 Safari 打开：
+3. 手机打开 Tailscale。
+4. 用 Safari 或 Chrome 打开：
 
 ```text
-https://desktop-lp-2026481850.tail92e457.ts.net/m
+https://desktop-lp-2026481850.tail92e457.ts.net/freestyle
 ```
 
-5. 第一次打开后，在 Safari 点「分享」→「添加到主屏幕」。
+5. 第一次打开后，使用浏览器菜单添加到主屏幕。
 
 ## 首次配置
 
@@ -32,10 +41,10 @@ https://desktop-lp-2026481850.tail92e457.ts.net/m
 该脚本会：
 
 - 使用生产构建的 `apps\web\dist`；
-- 每次启动前自动执行前端构建，确保手机端拿到最新 PWA 代码；
+- 每次启动前自动执行前端构建，确保 PWA 拿到最新代码；
 - 启动 FastAPI 到 `127.0.0.1:8012`；
-- 将 `/m` 作为移动端随心模式入口；
-- 默认跳过百度云盘启动同步，避免手机 PWA 自启被同步锁卡住。桌面端 `start-desktop.bat` / `stop.bat` 仍负责正常同步。
+- 默认打开完整桌面端应用，并以 `/freestyle` 作为 PWA 起始入口；
+- 默认跳过百度云盘启动同步，避免 PWA 自启被同步锁卡住。桌面端 `start-desktop.bat` / `stop.bat` 仍负责正常同步。
 
 停止 PWA 后端：
 
@@ -99,7 +108,7 @@ uninstall-pwa-autostart.bat
 
 ## 脚本说明
 
-- `start-pwa.bat`：启动移动端 PWA 后端，保持窗口/进程常驻。
+- `start-pwa.bat`：启动完整桌面端 PWA 后端，保持窗口/进程常驻，监听 `127.0.0.1:8012`。
 - `start-pwa-hidden.ps1`：供自启使用的隐藏启动入口。
 - `stop-pwa.bat`：停止占用 `8012` 的 PWA 后端。
 - `configure-tailscale-pwa.bat`：配置 Tailscale Serve，将 HTTPS 转发到 `127.0.0.1:8012`。
@@ -109,14 +118,14 @@ uninstall-pwa-autostart.bat
 
 ## 常见问题
 
-### iPhone 打不开页面
+### 手机打不开页面
 
 检查：
 
 1. 电脑是否开机并连接 Tailscale；
-2. iPhone 是否打开 Tailscale；
+2. 手机是否打开 Tailscale；
 3. 电脑上 `start-pwa.bat` 是否正在运行；
-4. 电脑浏览器能否打开 `http://127.0.0.1:8012/m`；
+4. 电脑浏览器能否打开 `http://127.0.0.1:8012/freestyle`；
 5. `configure-tailscale-pwa.bat` 是否已成功显示 `proxy http://127.0.0.1:8012`。
 
 ### 浏览器提示不是 PWA 或无法安装
@@ -124,10 +133,27 @@ uninstall-pwa-autostart.bat
 PWA 安装需要 HTTPS。请用 Tailscale 的 HTTPS 地址访问：
 
 ```text
-https://desktop-lp-2026481850.tail92e457.ts.net/m
+https://desktop-lp-2026481850.tail92e457.ts.net/freestyle
 ```
 
-不要用 `http://127.0.0.1:8012/m` 在手机上安装。
+不要用 `http://127.0.0.1:8012/freestyle` 在手机上安装。
+
+### 更新后仍看到旧界面
+
+先重启 PWA 服务：
+
+```powershell
+.\stop-pwa.bat
+.\start-pwa.bat
+```
+
+如果手机主屏幕 PWA 仍加载旧缓存，打开：
+
+```text
+https://desktop-lp-2026481850.tail92e457.ts.net/pwa-reset.html
+```
+
+清理完成后重新进入 `/freestyle`。
 
 ### Serve 提示没有启用
 
@@ -142,4 +168,4 @@ https://desktop-lp-2026481850.tail92e457.ts.net/m
 .\start-pwa.bat
 ```
 
-如果桌面端开发服务正在运行，它也可能占用 `8012`。移动端 PWA 和桌面开发服务不要同时争用同一个端口。
+如果桌面端后端开发服务正在运行，它也可能占用 `8012`。PWA 和同端口后端服务不要同时争用 `8012`；Vite 前端开发端口仍按 `apps/web` 当前配置使用。
