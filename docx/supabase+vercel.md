@@ -1,4 +1,0 @@
-根据我项目的情况，结合vercel和supabase的skill和mcp分析如何上传我的数据库和部署网站给我私人使用
-
-Project name：memory anki
-Project name：nT55HwjAEZDSUHfvnT55HwjAEZDSUHfvnT55HwjAEZDSUHfv

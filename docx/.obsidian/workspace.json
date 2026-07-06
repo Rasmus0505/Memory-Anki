@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "supabase+vercel.md",
+                "file": "supabase+vercel+render.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "supabase+vercel"
+              "title": "supabase+vercel+render"
             }
           },
           {
@@ -27,16 +27,44 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "commit方法.md",
+                "file": "Memory Anki/Memory Anki.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "commit方法"
+              "title": "Memory Anki"
+            }
+          },
+          {
+            "id": "5accb58ce94a5fbc",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "数据库全方位优化建议.md",
+                "mode": "source",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "数据库全方位优化建议"
+            }
+          },
+          {
+            "id": "93fc643c7f3c9c34",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "tailscale.md",
+                "mode": "source",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "tailscale"
             }
           }
         ],
-        "currentTab": 1
+        "currentTab": 3
       }
     ],
     "direction": "vertical"
@@ -198,43 +226,43 @@
       "bases:新建数据库": false
     }
   },
-  "active": "442461c854729cc3",
+  "active": "93fc643c7f3c9c34",
   "lastOpenFiles": [
-    "Memory Anki/90_归档与原始素材/原始文件_整理前/记忆宫殿/做题/题库整理修复.md",
-    "Memory Anki/90_归档与原始素材/原始文件_整理前/记忆宫殿/做题/联系+练习+题型.md",
-    "Memory Anki/90_归档与原始素材/原始文件_整理前/记忆宫殿/做题/答案+题目双PDF.md",
-    "Memory Anki/90_归档与原始素材/原始文件_整理前/记忆宫殿/做题/生成题目选择范围.md",
-    "Memory Anki/90_归档与原始素材/原始文件_整理前/记忆宫殿/做题/新增做题.md",
-    "Memory Anki/90_归档与原始素材/原始文件_整理前/记忆宫殿/做题/支持上传json,markdown,txt.md",
-    "Memory Anki/90_归档与原始素材/原始文件_整理前/记忆宫殿/做题/悬浮打开记忆宫殿.md",
-    "Memory Anki/90_归档与原始素材/原始文件_整理前/记忆宫殿/做题/小宫殿题目来源.md",
-    "Memory Anki/90_归档与原始素材/原始文件_整理前/记忆宫殿/做题/增加生成时的提示词-模型配置.md",
-    "Memory Anki/90_归档与原始素材/原始文件_整理前/记忆宫殿/做题/全局优化.md",
-    "Memory Anki/90_归档与原始素材/原始文件_整理前/记忆宫殿/做题/优化.md",
-    "Memory Anki/90_归档与原始素材/原始文件_整理前/记忆宫殿/做题/PDF上传.md",
-    "Memory Anki/90_归档与原始素材/原始文件_整理前/记忆宫殿/小宫殿/小宫殿2.md",
-    "Memory Anki/90_归档与原始素材/原始文件_整理前/记忆宫殿/小宫殿/小宫殿.md",
-    "Memory Anki/90_归档与原始素材/原始文件_整理前/英语阅读/词典/接入词典API.md",
-    "Memory Anki/90_归档与原始素材/原始文件_整理前/英语阅读/词典/多个词典对比.md",
-    "Memory Anki/90_归档与原始素材/原始文件_整理前/英语阅读/词典/句子翻译.md",
-    "Memory Anki/90_归档与原始素材/原始文件_整理前/大局/清单/页面状态bug执行清单.md",
-    "Memory Anki/90_归档与原始素材/原始文件_整理前/大局/清单/随心模式执行清单.md",
-    "Memory Anki/90_归档与原始素材/原始文件_整理前/大局/清单/贵模型.md",
-    "Memory Anki/90_归档与原始素材/原始文件_整理前/大局/清单/架构层清单.md",
-    "Memory Anki/90_归档与原始素材/原始文件_整理前/大局/清单/反馈系统执行清单.md",
-    "Memory Anki/90_归档与原始素材/原始文件_整理前/大局/清单/功能层清单.md",
-    "Memory Anki/90_归档与原始素材/原始文件_整理前/大局/清单/体验层清单.md",
-    "Memory Anki/90_归档与原始素材/原始文件_整理前/大局/手动识别pdf/手动识别所有pdf.md",
-    "Memory Anki/90_归档与原始素材/原始文件_整理前/大局/手动识别pdf/已有图片.md",
-    "Memory Anki/90_归档与原始素材/原始文件_整理前/记忆宫殿/做题",
-    "Memory Anki/90_归档与原始素材/原始文件_整理前/记忆宫殿/小宫殿",
-    "Memory Anki/90_归档与原始素材/原始文件_整理前/英语阅读/词典",
-    "Memory Anki/90_归档与原始素材/原始文件_整理前/大局/清单",
-    "Memory Anki/90_归档与原始素材/原始文件_整理前/大局/手动识别pdf",
-    "Memory Anki/90_归档与原始素材/原始文件_整理前/随心模式",
-    "Memory Anki/90_归档与原始素材/原始文件_整理前/记忆宫殿",
-    "Memory Anki/90_归档与原始素材/原始文件_整理前/计时器",
-    "Memory Anki/90_归档与原始素材/原始文件_整理前/英语阅读",
-    "Memory Anki/90_归档与原始素材/原始文件_整理前/英语听力"
+    "数据库全方位优化建议.md",
+    "tailscale.md",
+    "7.6清单/随心模式全面优化清单.md",
+    "7.6清单",
+    "常用提示词/commit方法.md",
+    "常用提示词/plan.md",
+    "supabase+vercel+render.md",
+    "常用提示词/子代理执行任务.md",
+    "常用提示词",
+    "Memory Anki/Memory Anki.md",
+    "Memory Anki_原始归档_20260706_212341/刷抖音式学习/基础.md",
+    "Memory Anki_原始归档_20260706_212341/记忆宫殿/做题/题库整理修复.md",
+    "Memory Anki",
+    "Memory Anki_原始归档_20260706_212341/记忆宫殿/做题/生成题目选择范围.md",
+    "Memory Anki_原始归档_20260706_212341/记忆宫殿/做题/全局优化.md",
+    "Memory Anki_原始归档_20260706_212341/记忆宫殿/做题/联系+练习+题型.md",
+    "Memory Anki_原始归档_20260706_212341/记忆宫殿/做题/答案+题目双PDF.md",
+    "Memory Anki_原始归档_20260706_212341/记忆宫殿/小宫殿/小宫殿2.md",
+    "Memory Anki/20_核心功能/英语听力.md",
+    "Memory Anki_原始归档_20260706_212341/记忆宫殿/做题/新增做题.md",
+    "Memory Anki_原始归档_20260706_212341/记忆宫殿/做题/支持上传json,markdown,txt.md",
+    "Memory Anki_原始归档_20260706_212341/记忆宫殿/做题/悬浮打开记忆宫殿.md",
+    "Memory Anki_原始归档_20260706_212341/记忆宫殿/做题/小宫殿题目来源.md",
+    "Memory Anki_原始归档_20260706_212341/记忆宫殿/做题/增加生成时的提示词-模型配置.md",
+    "Memory Anki_原始归档_20260706_212341/记忆宫殿/做题/优化.md",
+    "Memory Anki_原始归档_20260706_212341/记忆宫殿/做题/PDF上传.md",
+    "Memory Anki_原始归档_20260706_212341/记忆宫殿/小宫殿/小宫殿.md",
+    "Memory Anki_原始归档_20260706_212341/记忆宫殿/工具栏复用.md",
+    "Memory Anki_原始归档_20260706_212341/记忆宫殿/小宫殿",
+    "Memory Anki_原始归档_20260706_212341/记忆宫殿/做题",
+    "Memory Anki_原始归档_20260706_212341/记忆宫殿/书架按钮优化.md",
+    "Memory Anki_原始归档_20260706_212341/记忆宫殿",
+    "Memory Anki_原始归档_20260706_212341/计时器",
+    "Memory Anki_原始归档_20260706_212341/英语阅读/词典",
+    "Memory Anki_原始归档_20260706_212341/大局/清单",
+    "Memory Anki_原始归档_20260706_212341/大局/手动识别pdf"
   ]
 }
