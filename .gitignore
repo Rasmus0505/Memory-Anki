@@ -69,9 +69,11 @@ _DEBUG_FALLBACK.json
 /.audit/
 /.specstory/
 /.claude/
+/.agents/
 /.reasonix/
 /.codegraph/
 /.playwright-mcp/
+/skills-lock.json
 
 # ===== Misc =====
 # NOTE: do not blanket-ignore *.png — it would swallow docs/assets; ignore by path instead.
