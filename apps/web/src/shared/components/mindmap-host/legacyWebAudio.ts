@@ -9,6 +9,38 @@ function resolveAudioContextConstructor() {
   return window.AudioContext ?? (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext ?? null
 }
 
+function unlockAudioContextForIosSafariGesture() {
+  let context = sharedAudioContext
+  if (!context) {
+    const AudioContextCtor = resolveAudioContextConstructor()
+    if (AudioContextCtor) {
+      context = new AudioContextCtor()
+      sharedAudioContext = context
+    }
+  }
+  if (context && context.state !== 'running') {
+    void context.resume().catch(() => undefined)
+  }
+}
+
+if (typeof document !== 'undefined') {
+  // iOS Safari PWA only allows AudioContext.resume() from a user gesture stack.
+  const unlockEvents = ['touchstart', 'pointerdown', 'click'] as const
+  for (const eventName of unlockEvents) {
+    document.addEventListener(eventName, unlockAudioContextForIosSafariGesture, {
+      passive: true,
+      capture: true,
+    })
+  }
+
+  document.addEventListener('visibilitychange', () => {
+    // Returning from background can suspend Web Audio again in iOS Safari.
+    if (document.visibilityState === 'visible' && sharedAudioContext) {
+      void sharedAudioContext.resume().catch(() => undefined)
+    }
+  })
+}
+
 function getSharedAudioContext() {
   const AudioContextCtor = resolveAudioContextConstructor()
   if (!AudioContextCtor) return null

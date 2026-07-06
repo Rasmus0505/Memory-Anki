@@ -20,6 +20,9 @@ export function emitQuizResultFeedback({
     screenPulse: correct ? 'soft' : null,
     audioScope: 'local',
   })
+  if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
+    navigator.vibrate(correct ? [30] : [40, 60, 40])
+  }
 
   if (!correct) return
   if (feedbackSettings.mode !== 'immersive' || !feedbackSettings.scenes.quiz.enabled) return
