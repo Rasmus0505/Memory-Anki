@@ -4,6 +4,7 @@ import type {
   PalaceListLayoutMode,
   PalaceListViewSettings,
 } from '@/entities/preferences/model/palaceViewSettings'
+import { useEffect, useRef } from 'react'
 import { DEFAULT_PALACE_LIST_VIEW_SETTINGS } from '@/entities/preferences/model/palaceViewSettings'
 import { Button } from '@/shared/components/ui/button'
 import { Card, CardContent } from '@/shared/components/ui/card'
@@ -41,6 +42,22 @@ export function PalaceListToolbar({
   onClearSearch,
   onViewSettingsChange,
 }: PalaceListToolbarProps) {
+  const searchInputRef = useRef<HTMLInputElement | null>(null)
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    if (params.get('focusSearch') !== 'true') return
+    searchInputRef.current?.focus()
+    searchInputRef.current?.select()
+    params.delete('focusSearch')
+    const nextSearch = params.toString()
+    window.history.replaceState(
+      null,
+      '',
+      `${window.location.pathname}${nextSearch ? `?${nextSearch}` : ''}${window.location.hash}`,
+    )
+  }, [])
+
   return (
     <Card>
       <CardContent className="p-4">
@@ -49,6 +66,7 @@ export function PalaceListToolbar({
             <div className="relative">
               <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
               <Input
+                ref={searchInputRef}
                 placeholder="搜索标题..."
                 value={search}
                 onChange={(event) => onSearchChange(event.target.value)}
@@ -66,7 +84,7 @@ export function PalaceListToolbar({
                     type="button"
                     variant={viewSettings.layoutMode === option.value ? 'secondary' : 'ghost'}
                     size="sm"
-                    className="h-8"
+                    className="min-h-11 sm:h-8 sm:min-h-8"
                     onClick={() =>
                       onViewSettingsChange((current) => ({ ...current, layoutMode: option.value }))
                     }
@@ -84,7 +102,7 @@ export function PalaceListToolbar({
                   type="button"
                   variant={viewSettings.densityMode === option.value ? 'secondary' : 'ghost'}
                   size="sm"
-                  className="h-8"
+                  className="min-h-11 sm:h-8 sm:min-h-8"
                   onClick={() =>
                     onViewSettingsChange((current) => ({ ...current, densityMode: option.value }))
                   }

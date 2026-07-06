@@ -24,7 +24,7 @@ import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
 import { Card, CardContent } from '@/shared/components/ui/card'
 import { Input } from '@/shared/components/ui/input'
-import { EmptyState } from '@/shared/components/state-placeholders'
+import { EmptyState, ErrorState } from '@/shared/components/state-placeholders'
 import { PalaceShelfSkeleton } from './components/PalaceShelfSkeleton'
 import { usePalaceListCardActions } from '@/features/palace-catalog/components/palace-list/usePalaceListCardActions'
 import { useLocalStorageState } from '@/shared/lib/localStorage'
@@ -128,6 +128,7 @@ export default function PalaceShelfPage() {
   const [items, setItems] = useState<PalaceSubjectShelfItem[]>([])
   const [groupedData, setGroupedData] = useState<PalaceGroupedListResponse | null>(null)
   const [groupedDataSearch, setGroupedDataSearch] = useState<string | null>(null)
+  const [loadError, setLoadError] = useState<string | null>(null)
   const [collapsedChapters, setCollapsedChapters] = useState<Set<number>>(new Set())
   const [viewSettings, setViewSettings] = useLocalStorageState<PalaceShelfViewSettings>(
     PALACE_SHELF_VIEW_SETTINGS_KEY,
@@ -138,12 +139,14 @@ export default function PalaceShelfPage() {
   const isExpandedMode = viewSettings.displayMode === 'expanded'
 
   const fetchShelfData = useCallback(async () => {
+    setLoadError(null)
     const params = buildPalaceCatalogQuery({ search, selectedSubjectId: null })
     const shelfResponse = await getPalaceSubjectShelfApi(params)
     setItems(shelfResponse.items || [])
   }, [search])
 
   const fetchGroupedData = useCallback(async () => {
+    setLoadError(null)
     const params = buildPalaceCatalogQuery({ search, selectedSubjectId: null })
     const groupedResponse = await getPalacesGroupedApi(params)
     setGroupedData(groupedResponse)
@@ -152,26 +155,36 @@ export default function PalaceShelfPage() {
   }, [search])
 
   useEffect(() => {
-    void fetchShelfData()
+    void fetchShelfData().catch((error) => {
+      setLoadError(error instanceof Error ? error.message : '加载学科书架失败。')
+    })
   }, [fetchShelfData])
 
   useEffect(() => {
     if (!isExpandedMode) return
     if (groupedDataSearch === search && groupedData) return
-    void fetchGroupedData()
+    void fetchGroupedData().catch((error) => {
+      setLoadError(error instanceof Error ? error.message : '加载宫殿列表失败。')
+    })
   }, [fetchGroupedData, groupedData, groupedDataSearch, isExpandedMode, search])
 
   const fetchData = useCallback(async () => {
-    await fetchShelfData()
-    if (isExpandedMode) {
-      return fetchGroupedData()
+    setLoadError(null)
+    try {
+      await fetchShelfData()
+      if (isExpandedMode) {
+        return fetchGroupedData()
+      }
+      return groupedData
+    } catch (error) {
+      setLoadError(error instanceof Error ? error.message : '加载学科书架失败。')
+      throw error
     }
-    return groupedData
   }, [fetchGroupedData, fetchShelfData, groupedData, isExpandedMode])
 
   useEffect(() => {
     const handleCatalogInvalidated = () => {
-      void fetchData()
+      void fetchData().catch(() => undefined)
     }
     window.addEventListener(PALACE_CATALOG_INVALIDATED_EVENT, handleCatalogInvalidated)
     return () => window.removeEventListener(PALACE_CATALOG_INVALIDATED_EVENT, handleCatalogInvalidated)
@@ -260,7 +273,7 @@ export default function PalaceShelfPage() {
                   type="button"
                   variant={viewSettings.displayMode === 'shelf' ? 'secondary' : 'ghost'}
                   size="sm"
-                  className="h-8"
+                  className="min-h-11 sm:h-8 sm:min-h-8"
                   onClick={() => setViewSettings((current) => ({ ...current, displayMode: 'shelf' }))}
                 >
                   收纳
@@ -269,7 +282,7 @@ export default function PalaceShelfPage() {
                   type="button"
                   variant={viewSettings.displayMode === 'expanded' ? 'secondary' : 'ghost'}
                   size="sm"
-                  className="h-8"
+                  className="min-h-11 sm:h-8 sm:min-h-8"
                   onClick={() => setViewSettings((current) => ({ ...current, displayMode: 'expanded' }))}
                 >
                   展开
@@ -288,7 +301,7 @@ export default function PalaceShelfPage() {
                       type="button"
                       variant={isActive ? 'secondary' : 'ghost'}
                       size="sm"
-                      className="h-8"
+                      className="min-h-11 sm:h-8 sm:min-h-8"
                       onClick={() =>
                         setViewSettings((current) =>
                           current.displayMode === 'expanded'
@@ -310,7 +323,7 @@ export default function PalaceShelfPage() {
                     type="button"
                     variant={viewSettings.densityMode === option.value ? 'secondary' : 'ghost'}
                     size="sm"
-                    className="h-8"
+                    className="min-h-11 sm:h-8 sm:min-h-8"
                     onClick={() => setViewSettings((current) => ({ ...current, densityMode: option.value }))}
                   >
                     {option.label}
@@ -340,7 +353,17 @@ export default function PalaceShelfPage() {
         <Badge variant="outline">{items.find((item) => item.subject == null) ? '含未分类' : '全部已分类'}</Badge>
       </div>
 
-      {viewSettings.displayMode === 'expanded' ? (
+      {loadError ? (
+        <ErrorState
+          title="学科书架加载失败"
+          description={loadError}
+          action={
+            <Button type="button" variant="outline" size="sm" onClick={() => void fetchData().catch(() => undefined)}>
+              重新加载
+            </Button>
+          }
+        />
+      ) : viewSettings.displayMode === 'expanded' ? (
         groupedData ? (
           <PalaceListSections
             groupedData={groupedData}
@@ -356,6 +379,13 @@ export default function PalaceShelfPage() {
               })
             }
             renderPalaceCard={renderExpandedPalaceCard}
+            emptyTitle={search ? '没有匹配的宫殿' : '还没有可展开的宫殿'}
+            emptyDescription={
+              search
+                ? '试试缩短关键词，或清除搜索查看全部学科书架。'
+                : '创建第一个记忆宫殿后，这里会按学科和章节展开显示。'
+            }
+            emptyActionLabel="创建宫殿"
           />
         ) : (
           <PalaceShelfSkeleton />
@@ -438,7 +468,7 @@ export default function PalaceShelfPage() {
             <EmptyState
               variant="create"
               title="还没有学科书架"
-              description="创建你的第一个记忆宫殿，它会自动归入学科书架。"
+              description="先创建一个记忆宫殿；绑定章节后，它会自动出现在对应学科书架里。"
               action={
                 <Link to="/palaces/new">
                   <Button variant="outline" size="sm">

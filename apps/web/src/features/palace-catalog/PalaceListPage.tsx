@@ -1,5 +1,5 @@
 ﻿import { ArrowLeft, Plus } from 'lucide-react'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import {
   PalaceListCard,
@@ -26,12 +26,14 @@ import {
 } from '@/entities/palace/api'
 import { Button } from '@/shared/components/ui/button'
 import { PageIntro } from '@/shared/components/layout/PageIntro'
+import { ErrorState } from '@/shared/components/state-placeholders'
 import { useLocalStorageState } from '@/shared/lib/localStorage'
 import { PalaceListSkeleton } from './components/PalaceListSkeleton'
 import { usePalaceListCardActions } from '@/features/palace-catalog/components/palace-list/usePalaceListCardActions'
 import {
   buildPalaceCatalogQuery,
   createEmptyPalaceGroupedListResponse,
+  filterGroupedPalacesBySearch,
   filterGroupedPalacesByScope,
   flattenGroupedPalaces,
   getPalaceCatalogScopeTitle,
@@ -47,6 +49,9 @@ export default function PalaceList() {
   const selectedSubjectId = searchParams.get('subjectId')
   const showUncategorizedOnly = searchParams.get('uncategorized') === 'true'
   const [collapsedChapters, setCollapsedChapters] = useState<Set<number>>(new Set())
+  const [isLoading, setIsLoading] = useState(true)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const hasLoadedRef = useRef(false)
   const [viewSettings, setViewSettings] = useLocalStorageState<PalaceListViewSettings>(
     PALACE_LIST_VIEW_SETTINGS_KEY,
     DEFAULT_PALACE_LIST_VIEW_SETTINGS,
@@ -56,11 +61,22 @@ export default function PalaceList() {
 
   const fetchData = useCallback(async () => {
     const scope = { selectedSubjectId, showUncategorizedOnly }
-    const params = buildPalaceCatalogQuery({ search, selectedSubjectId })
-    const data = await getPalacesGroupedApi(params)
-    const filteredData = filterGroupedPalacesByScope(data, scope)
-    setGroupedData(filteredData)
-    return filteredData
+    const params = buildPalaceCatalogQuery({ search: '', selectedSubjectId })
+    setLoadError(null)
+    if (!hasLoadedRef.current) setIsLoading(true)
+    try {
+      const data = await getPalacesGroupedApi(params)
+      const scopedData = filterGroupedPalacesByScope(data, scope)
+      const filteredData = filterGroupedPalacesBySearch(scopedData, search)
+      setGroupedData(filteredData)
+      hasLoadedRef.current = true
+      return filteredData
+    } catch (error) {
+      setLoadError(error instanceof Error ? error.message : '加载记忆宫殿失败。')
+      throw error
+    } finally {
+      setIsLoading(false)
+    }
   }, [search, selectedSubjectId, showUncategorizedOnly])
 
   const allPalaces = useMemo(() => flattenGroupedPalaces(groupedData), [groupedData])
@@ -70,15 +86,15 @@ export default function PalaceList() {
       selectedSubjectId,
       showUncategorizedOnly,
     })
-  }, [groupedData.subjects, selectedSubjectId, showUncategorizedOnly])
+  }, [groupedData, selectedSubjectId, showUncategorizedOnly])
 
   useEffect(() => {
-    void fetchData()
+    void fetchData().catch(() => undefined)
   }, [fetchData])
 
   useEffect(() => {
     const handleCatalogInvalidated = () => {
-      void fetchData()
+      void fetchData().catch(() => undefined)
     }
     window.addEventListener(PALACE_CATALOG_INVALIDATED_EVENT, handleCatalogInvalidated)
     return () => window.removeEventListener(PALACE_CATALOG_INVALIDATED_EVENT, handleCatalogInvalidated)
@@ -96,6 +112,7 @@ export default function PalaceList() {
         key={palace.id}
         palace={palace}
         viewSettings={viewSettings}
+        searchQuery={search}
         defaultExpanded
         onPalacePractice={cardActions.onPalacePractice}
         onWarmPalacePractice={cardActions.onWarmPalacePractice}
@@ -107,8 +124,26 @@ export default function PalaceList() {
         onDelete={cardActions.onDelete}
       />
     ),
-    [cardActions, viewSettings],
+    [cardActions, search, viewSettings],
   )
+
+  if (isLoading && !hasLoadedRef.current) {
+    return <PalaceListSkeleton />
+  }
+
+  if (loadError && !hasLoadedRef.current) {
+    return (
+      <ErrorState
+        title="记忆宫殿加载失败"
+        description={loadError}
+        action={
+          <Button type="button" variant="outline" size="sm" onClick={() => void fetchData().catch(() => undefined)}>
+            重新加载
+          </Button>
+        }
+      />
+    )
+  }
 
   return (
     <div className="space-y-8">
@@ -153,21 +188,40 @@ export default function PalaceList() {
         onViewSettingsChange={setViewSettings}
       />
 
-      <PalaceListSections
-        groupedData={groupedData}
-        hasPalaces={allPalaces.length > 0}
-        viewSettings={viewSettings}
-        collapsedChapters={collapsedChapters}
-        onToggleChapter={(chapterId) =>
-          setCollapsedChapters((current) => {
-            const next = new Set(current)
-            if (next.has(chapterId)) next.delete(chapterId)
-            else next.add(chapterId)
-            return next
-          })
-        }
-        renderPalaceCard={renderPalaceCard}
-      />
+      {loadError ? (
+        <ErrorState
+          title="记忆宫殿刷新失败"
+          description={loadError}
+          action={
+            <Button type="button" variant="outline" size="sm" onClick={() => void fetchData().catch(() => undefined)}>
+              重新加载
+            </Button>
+          }
+        />
+      ) : (
+        <PalaceListSections
+          groupedData={groupedData}
+          hasPalaces={allPalaces.length > 0}
+          viewSettings={viewSettings}
+          collapsedChapters={collapsedChapters}
+          onToggleChapter={(chapterId) =>
+            setCollapsedChapters((current) => {
+              const next = new Set(current)
+              if (next.has(chapterId)) next.delete(chapterId)
+              else next.add(chapterId)
+              return next
+            })
+          }
+          renderPalaceCard={renderPalaceCard}
+          emptyTitle={search ? '没有匹配的记忆宫殿' : '这个书架还没有宫殿'}
+          emptyDescription={
+            search
+              ? '换一个关键词，或清除搜索后查看全部宫殿。'
+              : '新建一个宫殿，或回到学科书架选择其他分类。'
+          }
+          emptyActionLabel="新建宫殿"
+        />
+      )}
 
       {cardActions.dialogs}
     </div>

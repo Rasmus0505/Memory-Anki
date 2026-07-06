@@ -3,6 +3,7 @@ import type { PalaceGroupedItem, PalaceGroupedListResponse } from '@/shared/api/
 import {
   buildPalaceCatalogQuery,
   createEmptyPalaceGroupedListResponse,
+  filterGroupedPalacesBySearch,
   filterGroupedPalacesByScope,
   flattenGroupedPalaces,
   getPalaceCatalogScopeTitle,
@@ -118,5 +119,23 @@ describe('palaceCatalog model', () => {
       102,
       201,
     ])
+  })
+
+  it('filters palace search by title, description, and optional tags', () => {
+    const data = groupedResponse()
+    data.subjects[0].chapter_groups[0].palaces = [
+      palace(101, '标题命中'),
+      { ...palace(102, '描述项'), description: '这段内容包含维新变法' },
+      { ...palace(103, '标签项'), tags: [{ name: '教会教育' }] } as PalaceGroupedItem & {
+        tags: Array<{ name: string }>
+      },
+      palace(104, '无关项'),
+    ]
+    data.subjects[0].ungrouped_palaces = []
+    data.subjects[1].ungrouped_palaces = []
+
+    expect(flattenGroupedPalaces(filterGroupedPalacesBySearch(data, '维新')).map((item) => item.id)).toEqual([102])
+    expect(flattenGroupedPalaces(filterGroupedPalacesBySearch(data, '教会')).map((item) => item.id)).toEqual([103])
+    expect(flattenGroupedPalaces(filterGroupedPalacesBySearch(data, '标题')).map((item) => item.id)).toEqual([101])
   })
 })

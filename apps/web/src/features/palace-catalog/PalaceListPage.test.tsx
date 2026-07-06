@@ -232,7 +232,8 @@ describe('PalaceListPage', () => {
     searchParams.set('search', '教育')
     render(<PalaceListPage />)
 
-    await screen.findByText('第四节 收回教育权运动与教会教育的变革')
+    const highlights = await screen.findAllByText('教育')
+    expect(highlights.some((highlight) => highlight.tagName === 'MARK')).toBe(true)
     fireEvent.click(screen.getByRole('button', { name: '清除搜索' }))
 
     await waitFor(() => {

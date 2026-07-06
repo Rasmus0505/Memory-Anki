@@ -25,6 +25,9 @@ interface PalaceListSectionsProps<TPalace extends PalaceGroupedItem | PalaceGrou
   collapsedChapters: Set<number>
   onToggleChapter: (chapterId: number) => void
   renderPalaceCard: (palace: TPalace) => ReactNode
+  emptyTitle?: string
+  emptyDescription?: string
+  emptyActionLabel?: string
 }
 
 export function PalaceListSections<TPalace extends PalaceGroupedItem | PalaceGroupedSummaryItem>({
@@ -34,6 +37,9 @@ export function PalaceListSections<TPalace extends PalaceGroupedItem | PalaceGro
   collapsedChapters,
   onToggleChapter,
   renderPalaceCard,
+  emptyTitle = '还没有记忆宫殿',
+  emptyDescription = '创建你的第一个记忆宫殿，开始构建知识网络。',
+  emptyActionLabel = '创建第一个宫殿',
 }: PalaceListSectionsProps<TPalace>) {
   return (
     <div
@@ -98,13 +104,13 @@ export function PalaceListSections<TPalace extends PalaceGroupedItem | PalaceGro
           <CardContent>
             <EmptyState
               variant="create"
-              title="还没有记忆宫殿"
-              description="创建你的第一个记忆宫殿，开始构建知识网络。"
+              title={emptyTitle}
+              description={emptyDescription}
               action={
                 <Link to="/palaces/new">
                   <Button variant="outline" size="sm">
                     <Plus className="mr-2 size-4" />
-                    创建第一个
+                    {emptyActionLabel}
                   </Button>
                 </Link>
               }

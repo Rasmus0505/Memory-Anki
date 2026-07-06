@@ -312,7 +312,7 @@ describe('PalaceShelfPage', () => {
     fireEvent.click(screen.getByRole('button', { name: '展开' }))
 
     await screen.findByText('专项训练 A')
-    expect(screen.getByText('专项训练')).toBeTruthy()
+    expect(screen.getByText('训练关卡')).toBeTruthy()
     expect(screen.getAllByRole('button', { name: /开始复习|练习/ }).length).toBeGreaterThan(1)
     expect(screen.getAllByRole('button', { name: '做题' }).length).toBeGreaterThan(1)
   })

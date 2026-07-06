@@ -1,4 +1,5 @@
 ﻿import { useEffect, useRef, useState } from 'react'
+import type { ReactNode } from 'react'
 import { BookOpen, Building2, ChevronDown, ChevronRight, MoreHorizontal, Pencil, Target, Trash2 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { PalaceStageProgress } from '@/features/palace-catalog/components/palace-list/PalaceStageProgress'
@@ -30,6 +31,7 @@ import {
 interface PalaceListCardProps {
   palace: PalaceGroupedItem
   viewSettings: PalaceListViewSettings
+  searchQuery?: string
   defaultExpanded?: boolean
   onPalacePractice: (palace: PalaceGroupedItem) => void
   onWarmPalacePractice?: (palace: PalaceGroupedItem) => void
@@ -39,6 +41,31 @@ interface PalaceListCardProps {
   onMiniPalacePractice: (miniPalace: MiniPalaceSummary) => void
   onWarmMiniPalacePractice?: (miniPalace: MiniPalaceSummary) => void
   onDelete: (id: number, title: string) => void
+}
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+function renderHighlightedText(text: string, query?: string): ReactNode {
+  const trimmedQuery = query?.trim()
+  if (!trimmedQuery) return text
+
+  const normalizedQuery = trimmedQuery.toLocaleLowerCase()
+  const matcher = new RegExp(`(${escapeRegExp(trimmedQuery)})`, 'gi')
+  return text.split(matcher).map((part, index) => {
+    if (!part) return null
+    if (part.toLocaleLowerCase() !== normalizedQuery) return part
+
+    return (
+      <mark
+        key={`${part}-${index}`}
+        className="rounded-sm bg-warning/20 px-0.5 text-inherit"
+      >
+        {part}
+      </mark>
+    )
+  })
 }
 
 function ReviewActionButton({
@@ -70,7 +97,7 @@ function ReviewActionButton({
   return (
     <button
       type="button"
-      className={cn('relative isolate overflow-hidden', className)}
+      className={cn('relative isolate min-h-11 overflow-hidden sm:min-h-8', className)}
       disabled={disabled}
       onClick={onClick}
       onFocus={onWarm}
@@ -92,6 +119,7 @@ function ReviewActionButton({
 export function PalaceListCard({
   palace,
   viewSettings,
+  searchQuery,
   defaultExpanded = false,
   onPalacePractice,
   onWarmPalacePractice = () => {},
@@ -124,6 +152,7 @@ export function PalaceListCard({
     palace.segments.length > 0
   const showPalacePracticeButton = Boolean(palace.needs_practice) && !showSingleSegmentReviewButton
   const primaryEstimatedSeconds = singleSegment?.estimated_review_seconds ?? 0
+  const palaceTitle = palace.resolved_title || palace.title || '未命名宫殿'
 
   useEffect(() => {
     if (!menuOpen) return
@@ -156,7 +185,7 @@ export function PalaceListCard({
                   to={`/palaces/${palace.id}/edit`}
                   className="min-w-0 truncate font-semibold transition-colors hover:text-primary"
                 >
-                  {palace.resolved_title || palace.title || '未命名宫殿'}
+                  {renderHighlightedText(palaceTitle, searchQuery)}
                 </Link>
                 {showPalacePracticeButton ? (
                   <>
@@ -257,7 +286,7 @@ export function PalaceListCard({
                           <Button
                             size="sm"
                             variant="secondary"
-                            className="h-8 w-full text-xs"
+                            className="min-h-11 w-full text-xs sm:h-8 sm:min-h-8"
                             onFocus={() => onWarmSegmentPractice(segment)}
                             onMouseEnter={() => onWarmSegmentPractice(segment)}
                             onClick={() => onSegmentPractice(segment)}
@@ -280,14 +309,16 @@ export function PalaceListCard({
           ) : null}
 
           {expanded && palace.description ? (
-            <p className="mt-2 line-clamp-1 text-sm text-muted-foreground">{palace.description.slice(0, 150)}</p>
+            <p className="mt-2 line-clamp-1 text-sm text-muted-foreground">
+              {renderHighlightedText(palace.description.slice(0, 150), searchQuery)}
+            </p>
           ) : null}
 
           {expanded && Array.isArray(palace.mini_palaces) && palace.mini_palaces.length > 0 ? (
             <div className="mt-3 border-t border-border/50 pt-3">
               <div className="mb-2 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
                 <Building2 className="h-3.5 w-3.5" />
-                专项训练
+                训练关卡
               </div>
 
               <div className={getSegmentListClass(viewSettings.densityMode)}>
@@ -343,7 +374,7 @@ export function PalaceListCard({
                             <Button
                               size="sm"
                               variant="ghost"
-                              className="h-8 w-full text-xs"
+                              className="min-h-11 w-full text-xs sm:h-8 sm:min-h-8"
                               disabled
                             >
                               做题
@@ -353,7 +384,7 @@ export function PalaceListCard({
                               <Button
                                 size="sm"
                                 variant="ghost"
-                                className="h-8 w-full text-xs"
+                                className="min-h-11 w-full text-xs sm:h-8 sm:min-h-8"
                               >
                                 做题
                               </Button>
@@ -363,7 +394,7 @@ export function PalaceListCard({
                           <Button
                             size="sm"
                             variant="secondary"
-                            className="h-8 w-full text-xs"
+                            className="min-h-11 w-full text-xs sm:h-8 sm:min-h-8"
                             disabled={mini.is_empty}
                             onFocus={() => onWarmMiniPalacePractice(mini)}
                             onMouseEnter={() => onWarmMiniPalacePractice(mini)}
@@ -379,7 +410,7 @@ export function PalaceListCard({
                             <Button
                               variant="ghost"
                               size="icon"
-                              className="size-8"
+                              className="min-h-11 min-w-11 sm:size-8 sm:min-h-8 sm:min-w-8"
                               aria-label={`编辑 ${mini.name}`}
                             >
                               <Pencil className="size-4" />
@@ -405,7 +436,7 @@ export function PalaceListCard({
             <Button
               variant="ghost"
               size="sm"
-              className="h-8"
+              className="min-h-11 sm:h-8 sm:min-h-8"
             >
               做题
             </Button>
@@ -415,7 +446,7 @@ export function PalaceListCard({
               <Button
                 variant="outline"
                 size="sm"
-	              className="h-8 border-warning/30 bg-warning/5 text-warning hover:bg-warning/10"
+                className="min-h-11 border-warning/30 bg-warning/5 text-warning hover:bg-warning/10 sm:h-8 sm:min-h-8"
                 onFocus={() => onWarmFocusPractice(palace)}
                 onMouseEnter={() => onWarmFocusPractice(palace)}
               >
@@ -427,7 +458,7 @@ export function PalaceListCard({
             <Button
               variant="ghost"
               size="icon"
-              className="size-8"
+              className="min-h-11 min-w-11 sm:size-8 sm:min-h-8 sm:min-w-8"
               aria-label={`编辑宫殿 ${palace.resolved_title || palace.title}`}
             >
               <Pencil className="size-4" />
@@ -437,7 +468,7 @@ export function PalaceListCard({
             <Button
               variant="ghost"
               size="icon"
-              className="size-8"
+              className="min-h-11 min-w-11 sm:size-8 sm:min-h-8 sm:min-w-8"
               aria-label={`更多操作 ${palace.resolved_title || palace.title}`}
               onClick={() => setMenuOpen((current) => !current)}
             >
@@ -447,7 +478,7 @@ export function PalaceListCard({
               <div className="absolute right-0 top-9 z-20 min-w-[132px] rounded-xl border border-border/70 bg-background p-1 shadow-lg">
                 <button
                   type="button"
-                  className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-destructive transition-colors hover:bg-destructive/10"
+                  className="flex min-h-11 w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-destructive transition-colors hover:bg-destructive/10"
                   onClick={() => {
                     setMenuOpen(false)
                     onDelete(palace.id, palace.title)

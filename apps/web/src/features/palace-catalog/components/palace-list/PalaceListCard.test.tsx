@@ -170,4 +170,29 @@ describe('PalaceListCard', () => {
     fireEvent.click(sharedPracticeButton)
     expect(onPalacePractice).toHaveBeenCalledTimes(1)
   })
+
+  it('highlights title and description search matches without treating special characters as regex', () => {
+    render(
+      <MemoryRouter>
+        <PalaceListCard
+          palace={buildPalace({
+            title: 'A.B 教育线索',
+            resolved_title: 'A.B 教育线索',
+            description: '描述里也有 A.B 这个关键词',
+          })}
+          viewSettings={{ layoutMode: 'chapter-double', densityMode: 'comfortable' }}
+          searchQuery="A.B"
+          defaultExpanded
+          onPalacePractice={vi.fn()}
+          onSegmentPractice={vi.fn()}
+          onMiniPalacePractice={vi.fn()}
+          onDelete={vi.fn()}
+        />
+      </MemoryRouter>,
+    )
+
+    const highlights = screen.getAllByText('A.B')
+    expect(highlights).toHaveLength(2)
+    highlights.forEach((highlight) => expect(highlight.tagName).toBe('MARK'))
+  })
 })

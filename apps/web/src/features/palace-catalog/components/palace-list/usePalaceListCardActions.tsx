@@ -1,4 +1,5 @@
 import { toast } from '@/shared/feedback/toast'
+import { appConfirm } from '@/shared/components/ui/native-dialog'
 import type {
   MiniPalaceSummary,
   PalaceGroupedItem,
@@ -19,10 +20,22 @@ export function usePalaceListCardActions({
   navigate,
 }: UsePalaceListCardActionsOptions) {
   const handleDelete = async (id: number, title: string) => {
-    if (!confirm(`确定删除“${title}”吗？此操作无法撤销。`)) return
-    await deletePalaceApi(id)
-    toast.success('已删除')
-    await fetchData()
+    const confirmed = await appConfirm(
+      `确定删除宫殿“${title}”吗？此操作不可撤销，宫殿内容、分组和练习记录都会被删除。`,
+      {
+        title: '删除宫殿',
+        confirmText: '删除宫殿',
+        tone: 'danger',
+      },
+    )
+    if (!confirmed) return
+    try {
+      await deletePalaceApi(id)
+      toast.success(`宫殿“${title}”已删除，列表已刷新。`)
+      await fetchData()
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '删除宫殿失败，请刷新列表后再试。')
+    }
   }
 
   const handlePalacePractice = (palace: PalaceGroupedItem) => {
