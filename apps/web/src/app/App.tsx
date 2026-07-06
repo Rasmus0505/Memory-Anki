@@ -2,21 +2,11 @@ import { Suspense, lazy } from 'react'
 import { AppProviders } from '@/app/providers/AppProviders'
 
 const DesktopApp = lazy(() => import('@/app/DesktopApp'))
-const MobileFreestyleApp = lazy(() => import('@/features/mobile/MobileFreestyleApp'))
 const TimerOverlayApp = lazy(() =>
   import('@/features/timer-overlay/TimerOverlayApp').then((module) => ({
     default: module.TimerOverlayApp,
   })),
 )
-
-function isMobilePwaPath(pathname: string) {
-  return (
-    pathname === '/m' ||
-    pathname.startsWith('/m/') ||
-    pathname === '/mobile' ||
-    pathname.startsWith('/mobile/')
-  )
-}
 
 function AppFallback() {
   return (
@@ -35,12 +25,10 @@ export default function App() {
     )
   }
 
-  const EntryApp = isMobilePwaPath(window.location.pathname) ? MobileFreestyleApp : DesktopApp
-
   return (
     <AppProviders>
       <Suspense fallback={<AppFallback />}>
-        <EntryApp />
+        <DesktopApp />
       </Suspense>
     </AppProviders>
   )

@@ -21,7 +21,7 @@ import {
   type KeyboardEvent,
   type ReactNode,
 } from 'react'
-import { Link, useLocation } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import { useAiRunConfigDialog } from '@/features/ai-config/useAiRunConfigDialog'
 import { getFreestyleFeedApi } from '@/features/freestyle/api'
 import { FreestyleAiExplainSheet } from '@/features/freestyle/components/FreestyleAiExplainSheet'
@@ -534,7 +534,7 @@ function TodayTrainingSettingsDialog({
 
 function FreestyleActionCardView({ card }: { card: FreestyleActionCard }) {
   return (
-    <div className="mx-auto flex min-h-[min(720px,calc(100vh-150px))] w-full max-w-3xl flex-col justify-center px-4 py-16">
+    <div className="mx-auto flex min-h-[min(720px,calc(100vh-150px))] w-full max-w-[calc(100vw-3rem)] flex-col justify-center px-0 py-16 sm:max-w-3xl sm:px-4">
       <div className="rounded-lg border border-white/12 bg-zinc-900/88 p-5 text-zinc-50 shadow-2xl backdrop-blur sm:p-7">
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
@@ -578,7 +578,7 @@ function FreestyleRoundSummaryCard({
     : 0
 
   return (
-    <div className="mx-auto flex min-h-[min(720px,calc(100vh-150px))] w-full max-w-3xl flex-col justify-center px-4 py-16">
+    <div className="mx-auto flex min-h-[min(720px,calc(100vh-150px))] w-full max-w-[calc(100vw-3rem)] flex-col justify-center px-0 py-16 sm:max-w-3xl sm:px-4">
       <div className="rounded-2xl border border-emerald-300/20 bg-zinc-900/90 p-5 text-zinc-50 shadow-[0_16px_56px_rgba(0,0,0,0.58)] backdrop-blur sm:p-7">
         <div className="text-center">
           <div className="mx-auto flex size-14 items-center justify-center rounded-full border border-emerald-300/25 bg-emerald-300/10 text-3xl">
@@ -653,7 +653,7 @@ function FreestyleQuizCardView({
   const isIncorrect = state?.correct === false
   const isResolved = state?.resolved === true
   return (
-    <div className="mx-auto flex min-h-[min(760px,calc(100vh-140px))] w-full max-w-4xl flex-col justify-center px-4 py-16">
+    <div className="mx-auto flex min-h-[min(760px,calc(100vh-140px))] w-full max-w-[calc(100vw-3rem)] flex-col justify-center px-0 py-16 sm:max-w-4xl sm:px-4">
       <div
         className={cn(
           'rounded-2xl border bg-zinc-900/82 p-4 text-zinc-50 shadow-[0_8px_40px_rgba(0,0,0,0.6)] backdrop-blur-md sm:p-6',
@@ -715,12 +715,6 @@ function FreestyleQuizCardView({
 }
 
 export default function FreestylePage() {
-  const location = useLocation()
-  const isMobilePwa =
-    location.pathname === '/m' ||
-    location.pathname.startsWith('/m/') ||
-    location.pathname === '/mobile' ||
-    location.pathname.startsWith('/mobile/')
   const { isActive, becameActiveAt } = useRouteResidency()
   const [mode, setMode] = useState<FreestyleMode>('today')
   const [config, setConfig] = useState<FreestyleConfig>(() => readFreestyleConfig())
@@ -1197,8 +1191,8 @@ export default function FreestylePage() {
     <TooltipProvider>
       <div
         className={cn(
-          'relative overflow-hidden bg-zinc-950 text-zinc-50 shadow-2xl',
-          isMobilePwa ? 'min-h-[100dvh] rounded-none' : 'min-h-[calc(100vh-88px)] rounded-lg',
+          'relative max-w-full overflow-hidden bg-zinc-950 text-zinc-50 shadow-2xl',
+          'min-h-[calc(100vh-88px)] rounded-lg',
         )}
         onKeyDown={handleKeyDown}
         tabIndex={-1}
@@ -1231,9 +1225,9 @@ export default function FreestylePage() {
           onClose={() => setExplainSheetOpen(false)}
         />
 
-        <div className="pointer-events-none absolute left-0 right-0 top-0 z-20 flex items-start justify-between gap-2 px-3 py-3 sm:px-4 sm:py-4">
+        <div className="pointer-events-none absolute left-0 right-0 top-0 z-20 flex w-full max-w-[100vw] flex-wrap items-start justify-between gap-2 px-3 py-3 sm:w-auto sm:flex-nowrap sm:px-4 sm:py-4">
           {/* 左侧：模式切换 */}
-          <div className="pointer-events-auto flex items-center gap-0.5 rounded-full border border-white/10 bg-zinc-950/85 p-0.5 shadow-lg ring-1 ring-white/8 backdrop-blur">
+          <div className="pointer-events-auto flex max-w-full items-center gap-0.5 rounded-full border border-white/10 bg-zinc-950/85 p-0.5 shadow-lg ring-1 ring-white/8 backdrop-blur">
             <Sparkles className="ml-2 hidden size-3.5 shrink-0 text-amber-300 sm:block" />
             {(['today', 'free'] as const).map((item) => (
               <button
@@ -1253,7 +1247,7 @@ export default function FreestylePage() {
           </div>
 
           {/* 右侧：进度 + 连对 + 计时 */}
-          <div className="pointer-events-auto flex items-center gap-1.5 rounded-full border border-white/10 bg-zinc-950/85 px-3 py-2 text-xs shadow-lg ring-1 ring-white/8 backdrop-blur">
+          <div className="pointer-events-auto flex max-w-full items-center gap-1.5 overflow-hidden rounded-full border border-white/10 bg-zinc-950/85 px-3 py-2 text-xs shadow-lg ring-1 ring-white/8 backdrop-blur">
             <span className="tabular-nums text-zinc-300">
               {queue.length === 0
                 ? '0/0'
@@ -1293,8 +1287,8 @@ export default function FreestylePage() {
         <div
           ref={scrollRef}
           className={cn(
-            'snap-y snap-mandatory overflow-y-auto overscroll-contain scroll-smooth [-webkit-overflow-scrolling:touch] will-change-scroll',
-            isMobilePwa ? 'h-[100dvh]' : 'h-[calc(100vh-88px)]',
+            'snap-y snap-mandatory overflow-y-auto overflow-x-hidden overscroll-contain scroll-smooth [-webkit-overflow-scrolling:touch] will-change-scroll',
+            'h-[calc(100vh-88px)]',
           )}
           onScroll={handleScroll}
         >
@@ -1375,7 +1369,7 @@ export default function FreestylePage() {
                   ref={(node) => {
                     cardRefs.current[card.id] = node
                   }}
-                  className="freestyle-card-enter relative flex min-h-full snap-start items-center justify-center bg-gradient-to-b from-zinc-950 via-zinc-950 to-zinc-900"
+                  className="freestyle-card-enter relative flex min-h-full w-full max-w-[100vw] snap-start items-center justify-center overflow-hidden bg-gradient-to-b from-zinc-950 via-zinc-950 to-zinc-900"
                 >
                   {isQuizCard(card) ? (
                     <FreestyleQuizCardView
@@ -1399,7 +1393,7 @@ export default function FreestylePage() {
                   ref={(node) => {
                     cardRefs.current.__today_summary__ = node
                   }}
-                  className="freestyle-card-enter relative flex min-h-full snap-start items-center justify-center bg-gradient-to-b from-zinc-950 via-zinc-950 to-zinc-900"
+                  className="freestyle-card-enter relative flex min-h-full w-full max-w-[100vw] snap-start items-center justify-center overflow-hidden bg-gradient-to-b from-zinc-950 via-zinc-950 to-zinc-900"
                 >
                   <FreestyleRoundSummaryCard
                     summary={todaySummary}
@@ -1415,116 +1409,63 @@ export default function FreestylePage() {
         <div
           className={cn(
             'absolute z-30',
-            isMobilePwa
-              ? 'bottom-5 left-0 right-0 flex justify-between px-4'
-              : 'bottom-5 left-1/2 flex -translate-x-1/2 items-center gap-2 sm:bottom-auto sm:left-auto sm:right-5 sm:top-1/2 sm:-translate-y-1/2 sm:translate-x-0 sm:flex-col',
+            'bottom-5 left-1/2 flex -translate-x-1/2 items-center gap-2 sm:bottom-auto sm:left-auto sm:right-5 sm:top-1/2 sm:-translate-y-1/2 sm:translate-x-0 sm:flex-col',
           )}
         >
-          {isMobilePwa ? (
-            <>
-              <div className="flex items-center gap-1.5">
-                <IconButton label="上一题" onClick={() => goToIndex(currentIndex - 1)} disabled={currentIndex <= 0}>
-                  <ChevronUp className="size-5" />
-                </IconButton>
-                <IconButton
-                  label="下一题"
-                  onClick={() => goToIndex(currentIndex + 1)}
-                  disabled={mode === 'today' ? currentIndex >= queue.length : currentIndex >= queue.length - 1}
-                >
-                  <ChevronDown className="size-5" />
-                </IconButton>
-                <IconButton label="重洗队列" onClick={handleReshuffle} disabled={queue.length <= 1}>
-                  <Shuffle className="size-5" />
-                </IconButton>
-              </div>
-
-              <div className="flex items-center gap-1.5">
-                <IconButton
-                  label="查看宫殿"
-                  onClick={() => setMemoryLookupOpen(true)}
-                  disabled={!currentPalaceId}
-                >
-                  <BookOpen className="size-5" />
-                </IconButton>
-                <IconButton
-                  label="AI 讲解"
-                  onClick={() => setExplainSheetOpen(true)}
-                  disabled={!isQuizCard(currentCard)}
-                >
-                  <Lightbulb className="size-5" />
-                </IconButton>
-                <IconButton
-                  label="设置"
-                  onClick={() => {
-                    if (mode === 'today') {
-                      setTodaySettingsOpen(true)
-                    } else {
-                      setSettingsOpen(true)
-                    }
-                  }}
-                >
-                  <SlidersHorizontal className="size-5" />
-                </IconButton>
-              </div>
-            </>
-          ) : (
-            <>
-            <IconButton
-              label="设置"
-              onClick={() => {
-                if (mode === 'today') {
-                  setTodaySettingsOpen(true)
-                } else {
-                  setSettingsOpen(true)
-                }
-              }}
-            >
-              <SlidersHorizontal className="size-5" />
-            </IconButton>
-            <IconButton
-              label="查看宫殿"
-              onClick={() => setMemoryLookupOpen(true)}
-              disabled={!currentPalaceId}
-            >
-              <BookOpen className="size-5" />
-            </IconButton>
-            <IconButton
-              label="AI 讲解"
-              onClick={() => setExplainSheetOpen(true)}
-              disabled={!isQuizCard(currentCard)}
-            >
-              <Lightbulb className="size-5" />
-            </IconButton>
-            <IconButton label="上一题" onClick={() => goToIndex(currentIndex - 1)} disabled={currentIndex <= 0}>
-              <ChevronUp className="size-5" />
-            </IconButton>
-            <IconButton
-              label="下一题"
-              onClick={() => goToIndex(currentIndex + 1)}
-              disabled={mode === 'today' ? currentIndex >= queue.length : currentIndex >= queue.length - 1}
-            >
-              <ChevronDown className="size-5" />
-            </IconButton>
-            <IconButton label="重洗队列" onClick={handleReshuffle} disabled={queue.length <= 1}>
-              <Shuffle className="size-5" />
-            </IconButton>
-            <IconButton
-              label="清空本地进度"
-              onClick={() => {
-                const nextProgress =
-                  mode === 'today'
-                    ? saveTodayTrainingProgress(DEFAULT_FREESTYLE_PROGRESS)
-                    : saveFreestyleProgress(DEFAULT_FREESTYLE_PROGRESS)
-                previousResolvedQuestionIdsRef.current = new Set(nextProgress.resolvedQuestionIds)
-                emittedMilestonesRef.current = new Set()
-                setProgress(nextProgress)
-                toast.success('已清空随心进度')
-              }}
-            >
-              <RotateCcw className="size-5" />
-            </IconButton>
-            </>
-          )}
+          <IconButton
+            label="设置"
+            onClick={() => {
+              if (mode === 'today') {
+                setTodaySettingsOpen(true)
+              } else {
+                setSettingsOpen(true)
+              }
+            }}
+          >
+            <SlidersHorizontal className="size-5" />
+          </IconButton>
+          <IconButton
+            label="查看宫殿"
+            onClick={() => setMemoryLookupOpen(true)}
+            disabled={!currentPalaceId}
+          >
+            <BookOpen className="size-5" />
+          </IconButton>
+          <IconButton
+            label="AI 讲解"
+            onClick={() => setExplainSheetOpen(true)}
+            disabled={!isQuizCard(currentCard)}
+          >
+            <Lightbulb className="size-5" />
+          </IconButton>
+          <IconButton label="上一题" onClick={() => goToIndex(currentIndex - 1)} disabled={currentIndex <= 0}>
+            <ChevronUp className="size-5" />
+          </IconButton>
+          <IconButton
+            label="下一题"
+            onClick={() => goToIndex(currentIndex + 1)}
+            disabled={mode === 'today' ? currentIndex >= queue.length : currentIndex >= queue.length - 1}
+          >
+            <ChevronDown className="size-5" />
+          </IconButton>
+          <IconButton label="重洗队列" onClick={handleReshuffle} disabled={queue.length <= 1}>
+            <Shuffle className="size-5" />
+          </IconButton>
+          <IconButton
+            label="清空本地进度"
+            onClick={() => {
+              const nextProgress =
+                mode === 'today'
+                  ? saveTodayTrainingProgress(DEFAULT_FREESTYLE_PROGRESS)
+                  : saveFreestyleProgress(DEFAULT_FREESTYLE_PROGRESS)
+              previousResolvedQuestionIdsRef.current = new Set(nextProgress.resolvedQuestionIds)
+              emittedMilestonesRef.current = new Set()
+              setProgress(nextProgress)
+              toast.success('已清空随心进度')
+            }}
+          >
+            <RotateCcw className="size-5" />
+          </IconButton>
         </div>
 
         <div className="pointer-events-none absolute bottom-4 left-4 z-20 hidden items-center gap-1.5 rounded-full border border-white/10 bg-zinc-900/80 px-3 py-2 text-xs text-zinc-300 shadow-lg backdrop-blur sm:flex">

@@ -1,5 +1,5 @@
 import { fireEvent, screen, waitFor } from '@testing-library/react'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
 import {
   baseQuestions,
   batchDeletePalaceQuizQuestionsApiMock,
@@ -20,10 +20,6 @@ import {
 
 describe('PalaceQuizPage core flows', () => {
   beforeEach(setupPalaceQuizPageTest)
-  afterEach(() => {
-    document.documentElement.classList.remove('memory-anki-mobile-pwa')
-    document.body.classList.remove('memory-anki-mobile-pwa')
-  })
 
   it('renders the route and switches among practice, manage, and AI tabs', async () => {
     renderPage()
@@ -140,41 +136,6 @@ describe('PalaceQuizPage core flows', () => {
       firstFocusNonce,
     )
     expect(screen.getByText('细胞的控制中心是？')).toBeTruthy()
-  })
-
-  it('uses a full-screen mobile PWA lookup instead of the draggable desktop window', async () => {
-    document.documentElement.classList.add('memory-anki-mobile-pwa')
-    document.body.classList.add('memory-anki-mobile-pwa')
-    renderPage()
-    expect(await screen.findByText('细胞的控制中心是？')).toBeTruthy()
-
-    fireEvent.click(screen.getByRole('button', { name: '查看记忆宫殿' }))
-
-    const dialog = await screen.findByRole('dialog', { name: '查看记忆宫殿' })
-    expect(dialog.getAttribute('class')).toContain('h-[100dvh]')
-    expect(screen.queryByText('做题时快速查看宫殿内容，关闭后继续当前题目。')).toBeNull()
-    expect(screen.queryByRole('button', { name: '缩小为胶囊' })).toBeNull()
-    expect(screen.queryByRole('button', { name: '从右下角调整记忆宫殿查看大小' })).toBeNull()
-    expect(screen.getByRole('button', { name: '关闭记忆宫殿查看' })).toBeTruthy()
-    expect(screen.getByPlaceholderText('搜索记忆宫殿')).toBeTruthy()
-
-    await waitFor(() => {
-      expect(getPalacesGroupedApiMock).toHaveBeenCalled()
-      expect(getPalaceEditorApiMock).toHaveBeenCalledWith(1)
-    })
-    expect((await screen.findByTestId('memory-lookup-mindmap')).getAttribute('data-readonly')).toBe(
-      'true',
-    )
-
-    const secondPalaceButton = screen.getByText('遗传学宫殿').closest('button')
-    expect(secondPalaceButton).toBeTruthy()
-    fireEvent.click(secondPalaceButton!)
-    await waitFor(() => {
-      expect(getPalaceEditorApiMock).toHaveBeenCalledWith(2)
-      expect(screen.getByTestId('memory-lookup-mindmap').getAttribute('data-root-uid')).toBe(
-        'root-2',
-      )
-    })
   })
 
   it('judges multiple-choice questions immediately, refreshes stats, and supports retry', async () => {

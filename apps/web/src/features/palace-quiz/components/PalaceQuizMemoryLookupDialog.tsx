@@ -97,13 +97,6 @@ function getRootNodeUid(editorState: MindMapEditorState | null) {
   return typeof uid === 'string' && uid.trim() ? uid.trim() : null
 }
 
-function isMobilePwaRuntime() {
-  return (
-    typeof document !== 'undefined' &&
-    document.documentElement.classList.contains('memory-anki-mobile-pwa')
-  )
-}
-
 export function PalaceQuizMemoryLookupDialog({
   open,
   onOpenChange,
@@ -128,7 +121,6 @@ export function PalaceQuizMemoryLookupDialog({
   const [pinned, setPinned] = useState(false)
   const [previewMode, setPreviewMode] = useState<MemoryLookupPreviewMode>('view')
   const [rootFocusNonce, setRootFocusNonce] = useState(0)
-  const isMobilePwa = isMobilePwaRuntime()
   const dragStateRef = useRef<{
     startX: number
     startY: number
@@ -180,18 +172,17 @@ export function PalaceQuizMemoryLookupDialog({
   )
 
   useEffect(() => {
-    if (!open || isMobilePwa) return
+    if (!open) return
     persistLayout((current) => current)
-  }, [isMobilePwa, open, persistLayout])
+  }, [open, persistLayout])
 
   useEffect(() => {
-    if (isMobilePwa) return
     const handleResize = () => {
       persistLayout((current) => clampMemoryLookupLayoutToViewport(current))
     }
     window.addEventListener('resize', handleResize)
     return () => window.removeEventListener('resize', handleResize)
-  }, [isMobilePwa, persistLayout])
+  }, [persistLayout])
 
   useEffect(() => {
     if (!open) return
@@ -343,7 +334,7 @@ export function PalaceQuizMemoryLookupDialog({
   }, [])
 
   useEffect(() => {
-    if (!open || isMobilePwa) return
+    if (!open) return
     const handleWindowPointerMove = (event: PointerEvent) => {
       handlePointerMove(event.clientX, event.clientY)
     }
@@ -358,7 +349,7 @@ export function PalaceQuizMemoryLookupDialog({
       window.removeEventListener('pointerup', handleWindowPointerUp)
       window.removeEventListener('pointercancel', handleWindowPointerUp)
     }
-  }, [handlePointerMove, isMobilePwa, open, stopPointerInteraction])
+  }, [handlePointerMove, open, stopPointerInteraction])
 
   const collapse = () => {
     persistLayout((current) => ({ ...current, collapsed: true }))
@@ -380,7 +371,7 @@ export function PalaceQuizMemoryLookupDialog({
       />
     </div>
   )
-  const renderPalaceList = (variant: 'desktop' | 'mobile') => {
+  const renderPalaceList = () => {
     if (listLoading) {
       return (
         <div className="flex h-28 items-center justify-center gap-2 text-sm text-muted-foreground">
@@ -400,39 +391,6 @@ export function PalaceQuizMemoryLookupDialog({
       return (
         <div className="flex h-28 items-center justify-center rounded-lg border border-dashed border-border/80 px-3 text-center text-sm text-muted-foreground">
           没有找到记忆宫殿。
-        </div>
-      )
-    }
-
-    if (variant === 'mobile') {
-      return (
-        <div className="flex gap-2 overflow-x-auto pb-1 [-webkit-overflow-scrolling:touch]">
-          {palaces.map((palace) => {
-            const active = palace.id === selectedPalaceId
-            return (
-              <button
-                key={palace.id}
-                type="button"
-                className={cn(
-                  'min-h-10 max-w-[72vw] shrink-0 rounded-full border px-3 text-left transition-colors',
-                  active
-                    ? 'border-primary bg-primary text-primary-foreground shadow-sm'
-                    : 'border-border/70 bg-background hover:bg-secondary',
-                )}
-                onClick={() => setSelectedPalaceId(palace.id)}
-              >
-                <span className="block truncate text-sm font-medium">{getPalaceTitle(palace)}</span>
-                <span
-                  className={cn(
-                    'block truncate text-[11px]',
-                    active ? 'text-primary-foreground/78' : 'text-muted-foreground',
-                  )}
-                >
-                  {getPalaceContext(palace)}
-                </span>
-              </button>
-            )
-          })}
         </div>
       )
     }
@@ -570,57 +528,6 @@ export function PalaceQuizMemoryLookupDialog({
 
   if (!open) return null
 
-  if (isMobilePwa) {
-    return (
-      <Dialog open={open} onOpenChange={onOpenChange} modal>
-        <DialogContent
-          layout="unstyled"
-          className="fixed inset-0 z-[241] flex h-[100dvh] max-h-[100dvh] w-screen flex-col overflow-hidden border-0 bg-card text-card-foreground shadow-none"
-          style={{
-            paddingTop: 'env(safe-area-inset-top)',
-            paddingBottom: 'env(safe-area-inset-bottom)',
-          }}
-        >
-          <DialogTitle className="sr-only">查看记忆宫殿</DialogTitle>
-          <DialogDescription className="sr-only">
-            移动端全屏查看当前记忆宫殿脑图。
-          </DialogDescription>
-          <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border/70 px-3 py-2">
-            <div className="flex min-w-0 items-center gap-2">
-              <BookOpen className="size-4 shrink-0 text-primary" />
-              <span className="truncate text-sm font-semibold">{previewHeading}</span>
-            </div>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className="size-10 shrink-0 rounded-full"
-              aria-label="关闭记忆宫殿查看"
-              onClick={() => onOpenChange(false)}
-            >
-              <X className="size-5" />
-            </Button>
-          </div>
-
-          <div className="shrink-0 border-b border-border/70 px-3 py-2">
-            {renderSearchInput('h-10')}
-            <div className="mt-2">{renderPalaceList('mobile')}</div>
-          </div>
-
-          <div className="flex min-h-0 flex-1 flex-col p-2">
-            <div className="mb-2 flex min-h-8 items-center justify-between gap-2">
-              <div className="min-w-0">
-                <div className="truncate text-sm font-semibold">{previewHeading}</div>
-              </div>
-              {renderPreviewControls(true)}
-            </div>
-            {renderMindMapContent()}
-          </div>
-        </DialogContent>
-      </Dialog>
-    )
-  }
-
   if (layout.collapsed) {
     return (
       <Dialog open={open} onOpenChange={(nextOpen) => {
@@ -729,7 +636,7 @@ export function PalaceQuizMemoryLookupDialog({
                 {renderSearchInput()}
               </div>
               <div className="min-h-0 flex-1 overflow-y-auto p-2">
-                {renderPalaceList('desktop')}
+                {renderPalaceList()}
               </div>
             </div>
 

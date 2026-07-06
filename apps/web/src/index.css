@@ -1611,25 +1611,6 @@ select:focus-visible,
   }
 }
 
-/* iOS Safari standalone PWA: keep content clear of the notch and Home Bar. */
-body.memory-anki-mobile-pwa {
-  padding-top: env(safe-area-inset-top, 0px);
-  padding-bottom: env(safe-area-inset-bottom, 0px);
-}
-
-/* iOS Safari PWA: reduce double-tap zoom and long-press selection during quiz gestures. */
-.memory-anki-mobile-pwa * {
-  touch-action: manipulation;
-  -webkit-user-select: none;
-  user-select: none;
-}
-
-.memory-anki-mobile-pwa input,
-.memory-anki-mobile-pwa textarea {
-  -webkit-user-select: text;
-  user-select: text;
-}
-
 @keyframes streak-pop {
   0% {
     transform: scale(1.4);

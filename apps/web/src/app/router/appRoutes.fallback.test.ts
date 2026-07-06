@@ -25,4 +25,11 @@ describe('resolveRouteFallbackTarget', () => {
     expect(resolveRouteFallbackTarget('/english/legacy')).toBe('/english')
     expect(resolveRouteFallbackTarget('/totally-unknown')).toBe('/freestyle')
   })
+
+  it('maps retired mobile PWA routes back to desktop freestyle', () => {
+    expect(resolveRouteFallbackTarget('/m')).toBe('/freestyle')
+    expect(resolveRouteFallbackTarget('/m/freestyle')).toBe('/freestyle')
+    expect(resolveRouteFallbackTarget('/mobile')).toBe('/freestyle')
+    expect(resolveRouteFallbackTarget('/mobile/review')).toBe('/freestyle')
+  })
 })
