@@ -1,8 +1,10 @@
 import { type PropsWithChildren, useEffect } from 'react'
 import { BrowserRouter } from 'react-router-dom'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { QueryClientProvider } from '@tanstack/react-query'
 import { Toaster } from 'sonner'
 import { QuizLauncherProvider } from '@/features/palace-quiz/QuizLauncherProvider'
+import { GlobalErrorBoundary } from '@/app/providers/GlobalErrorBoundary'
+import { createAppQueryClient } from '@/shared/api/queryClient'
 import { GlobalFeedbackProvider } from '@/shared/feedback/GlobalFeedbackProvider'
 import { cleanupExpiredAppLogs, logAppError } from '@/shared/logs/model/appLogs'
 import { useMutationQueueAutoSync } from '@/shared/persistence/useMutationQueue'
@@ -10,11 +12,7 @@ import { GlobalTimerProvider } from '@/shared/components/session/GlobalTimerProv
 import { RouteProgressBar } from '@/shared/components/route-progress/RouteProgressBar'
 import { NativeDialogProvider } from '@/shared/components/ui/native-dialog'
 
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: { staleTime: 30_000 },
-  },
-})
+const queryClient = createAppQueryClient()
 
 export function AppProviders({ children }: PropsWithChildren) {
   useMutationQueueAutoSync()
@@ -56,15 +54,17 @@ export function AppProviders({ children }: PropsWithChildren) {
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <RouteProgressBar />
-        <GlobalFeedbackProvider>
-          <GlobalTimerProvider>
-            <QuizLauncherProvider>
-              {children}
-              <NativeDialogProvider />
-              <Toaster position="bottom-right" richColors />
-            </QuizLauncherProvider>
-          </GlobalTimerProvider>
-        </GlobalFeedbackProvider>
+        <GlobalErrorBoundary>
+          <GlobalFeedbackProvider>
+            <GlobalTimerProvider>
+              <QuizLauncherProvider>
+                {children}
+                <NativeDialogProvider />
+                <Toaster position="bottom-right" richColors />
+              </QuizLauncherProvider>
+            </GlobalTimerProvider>
+          </GlobalFeedbackProvider>
+        </GlobalErrorBoundary>
       </BrowserRouter>
     </QueryClientProvider>
   )

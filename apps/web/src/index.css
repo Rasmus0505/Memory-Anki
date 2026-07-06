@@ -24,8 +24,13 @@
   --color-success-foreground: hsl(0 0% 100%);
   --color-warning: hsl(34 92% 52%);
   --color-warning-foreground: hsl(0 0% 100%);
+  --color-error: hsl(0 84.2% 60.2%);
+  --color-error-foreground: hsl(0 0% 98%);
   --color-info: hsl(210 72% 56%);
   --color-info-foreground: hsl(0 0% 100%);
+  --color-memory-strong: hsl(160 68% 34%);
+  --color-memory-medium: hsl(34 92% 52%);
+  --color-memory-weak: hsl(0 84.2% 60.2%);
   --color-border: hsl(220 14% 86%);
   --color-input: hsl(220 14% 84%);
   --color-ring: hsl(24 76% 43%);

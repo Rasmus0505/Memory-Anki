@@ -2,6 +2,7 @@ import { type ReactNode } from 'react'
 import {
   BookOpen,
   Brain,
+  AlertTriangle,
   Link2,
   Search,
   Sparkles,
@@ -139,6 +140,31 @@ export function EmptyState({
         ) : null}
         <EmptyTitle>{resolvedTitle}</EmptyTitle>
         {resolvedDescription ? <EmptyDescription>{resolvedDescription}</EmptyDescription> : null}
+      </EmptyHeader>
+      {action ? <div className="mt-1">{action}</div> : null}
+    </Empty>
+  )
+}
+
+export function ErrorState({
+  title = '加载失败',
+  description = '数据暂时没有加载出来，请稍后重试。',
+  action,
+  className,
+}: {
+  title?: string
+  description?: ReactNode
+  action?: ReactNode
+  className?: string
+}) {
+  return (
+    <Empty className={cn('bg-destructive/5', className)}>
+      <EmptyHeader>
+        <EmptyMedia variant="icon" className="bg-background/80 text-destructive shadow-sm">
+          <AlertTriangle strokeWidth={1.5} />
+        </EmptyMedia>
+        <EmptyTitle>{title}</EmptyTitle>
+        <EmptyDescription>{description}</EmptyDescription>
       </EmptyHeader>
       {action ? <div className="mt-1">{action}</div> : null}
     </Empty>
