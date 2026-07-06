@@ -159,6 +159,13 @@ export interface PalaceShortAnswerFeedback {
   resolved_ai?: ResolvedAiRuntimeMeta | null
 }
 
+export interface PalaceQuestionExplainResult {
+  question_id: number
+  explanation_text: string
+  ai_call_log_id: string | null
+  resolved_ai?: ResolvedAiRuntimeMeta | string | null
+}
+
 export interface PalaceQuizMiniPalaceClassificationResult {
   palace_id: number
   mini_palace_groups: Array<{

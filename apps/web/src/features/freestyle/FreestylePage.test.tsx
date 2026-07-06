@@ -12,6 +12,7 @@ import type { FreestyleCard, FreestyleQuizCard } from '@/shared/api/contracts'
 const getFreestyleFeedApiMock = vi.fn()
 const getPalacesGroupedApiMock = vi.fn()
 const recordPalaceQuizChoiceAttemptApiMock = vi.fn()
+const requestPalaceQuestionExplainApiMock = vi.fn()
 const requestPalaceShortAnswerFeedbackApiMock = vi.fn()
 const dispatchGlobalFeedbackMock = vi.fn()
 const emitReviewConfettiMock = vi.fn()
@@ -32,6 +33,8 @@ vi.mock('@/entities/palace/api', () => ({
 vi.mock('@/features/palace-quiz/api', () => ({
   recordPalaceQuizChoiceAttemptApi: (...args: unknown[]) =>
     recordPalaceQuizChoiceAttemptApiMock(...args),
+  requestPalaceQuestionExplainApi: (...args: unknown[]) =>
+    requestPalaceQuestionExplainApiMock(...args),
   requestPalaceShortAnswerFeedbackApi: (...args: unknown[]) =>
     requestPalaceShortAnswerFeedbackApiMock(...args),
 }))

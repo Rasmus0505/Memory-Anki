@@ -7,6 +7,7 @@ import type {
   PalaceQuizQuestion,
   PalaceQuizQuestionDraft,
   PalaceQuizQuestionType,
+  PalaceQuestionExplainResult,
   PalaceShortAnswerFeedback,
 } from '@/shared/api/contracts'
 
@@ -151,6 +152,25 @@ export function requestPalaceShortAnswerFeedbackApi(
       persistence: {
         resourceKey: `palace-quiz-question:${questionId}:short-feedback`,
         description: '生成简答题 AI 点评',
+        replayMode: 'manual',
+      },
+    },
+  )
+}
+
+export function requestPalaceQuestionExplainApi(
+  questionId: number,
+  userQuestion: string,
+  aiOptions?: import('@/shared/api/contracts').AiRuntimeOptions,
+) {
+  return request<PalaceQuestionExplainResult>(
+    `/palace-quiz-questions/${questionId}/explain`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ user_question: userQuestion, ai_options: aiOptions }),
+      persistence: {
+        resourceKey: `palace-quiz-question:${questionId}:explain`,
+        description: '生成题目 AI 讲解',
         replayMode: 'manual',
       },
     },
