@@ -195,6 +195,48 @@ class EnglishRouteTests(unittest.TestCase):
         self.assertEqual(check.status_code, 200)
         self.assertTrue(check.json()["passed"])
 
+    def test_course_list_does_not_repair_duration_until_explicit_maintenance(self):
+        course_dir = self.media_dir / "course-1"
+        course_dir.mkdir(parents=True)
+        (course_dir / "source.mp4").write_bytes(b"fake-video")
+        with self.SessionLocal() as session:
+            session.add(
+                EnglishCourse(
+                    id=1,
+                    title="Needs duration repair",
+                    original_filename="lesson.mp4",
+                    media_filename="source.mp4",
+                    media_relative_path="course-1/source.mp4",
+                    media_mime_type="video/mp4",
+                    duration_seconds=0,
+                    sentence_count=0,
+                )
+            )
+            session.commit()
+
+        calls: list[Path] = []
+        course_service.probe_media_duration_seconds = lambda path: calls.append(Path(path)) or 42
+
+        list_response = self.client.get("/api/v1/english/courses")
+        calls_after_list = list(calls)
+        with self.SessionLocal() as session:
+            duration_after_list = session.query(EnglishCourse).filter_by(id=1).one().duration_seconds
+
+        repair_response = self.client.post("/api/v1/english/courses/repair-durations")
+        with self.SessionLocal() as session:
+            duration_after_repair = session.query(EnglishCourse).filter_by(id=1).one().duration_seconds
+
+        self.assertEqual(list_response.status_code, 200)
+        self.assertEqual(duration_after_list, 0)
+        self.assertEqual(calls_after_list, [])
+        self.assertEqual(
+            [path.resolve() for path in calls],
+            [(self.media_dir / "course-1" / "source.mp4").resolve()],
+        )
+        self.assertEqual(repair_response.status_code, 200)
+        self.assertEqual(repair_response.json()["repaired_count"], 1)
+        self.assertEqual(duration_after_repair, 42)
+
     def test_failed_task_can_be_cleared(self):
         def failing_launch(task_id: str):
             task_service.update_task_fields(

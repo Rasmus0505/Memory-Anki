@@ -14,13 +14,7 @@ import {
   type StoredFormDataEntry,
 } from '@/shared/persistence/mutationQueue'
 
-export function normalizeApiOrigin(value: string | undefined) {
-  const origin = value?.trim()
-  if (!origin) return ''
-  return origin.replace(/\/+$/, '')
-}
-
-export const API_BASE = `${normalizeApiOrigin(import.meta.env.VITE_API_ORIGIN)}/api/v1`
+export const API_BASE = '/api/v1'
 const MUTATION_ID_HEADER = 'X-Memory-Anki-Mutation-ID'
 
 export interface RequestPersistenceOptions {

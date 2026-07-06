@@ -212,14 +212,14 @@ def wait_for_frontend(timeout_seconds: int = 40) -> bool:
 # 数据就绪检查（复用后端 runtime_prepare 逻辑）
 # ---------------------------------------------------------------------------
 
-def ensure_backend_runtime_prepared() -> None:
+def ensure_backend_runtime_prepared(env: dict | None = None) -> None:
     """确保数据库已初始化。若库不存在则跑一次 runtime_prepare。"""
     api_home = _resolve_configured_app_home()
     db_path = api_home / "data" / "memory_palace.db"
     if db_path.exists() and db_path.stat().st_size > 0:
         return
     print("[i] 数据库未初始化，执行 runtime_prepare（建库 + seed）...")
-    env = _backend_env()
+    backend_env = env or _backend_env()
     log_path = LOGS_DIR / "runtime-prepare.log"
     log_path.parent.mkdir(parents=True, exist_ok=True)
     with log_path.open("ab") as log_file:
@@ -233,7 +233,7 @@ def ensure_backend_runtime_prepared() -> None:
                 ),
             ],
             cwd=str(API_DIR),
-            env=env,
+            env=backend_env,
             stdout=log_file,
             stderr=subprocess.STDOUT,
             stdin=subprocess.DEVNULL,
@@ -244,10 +244,10 @@ def ensure_backend_runtime_prepared() -> None:
         raise RuntimeError(f"runtime_prepare 失败 ({result.returncode})，详见 {log_path}")
 
 
-def ensure_backend_migrations_applied() -> None:
+def ensure_backend_migrations_applied(env: dict | None = None) -> None:
     """Run Alembic migrations before uvicorn so health waiting only covers API startup."""
     print("[i] 数据库迁移中...（详见 logs\\runtime-migrate.log）")
-    env = _backend_env()
+    backend_env = env or _backend_env()
     log_path = LOGS_DIR / "runtime-migrate.log"
     log_path.parent.mkdir(parents=True, exist_ok=True)
     with log_path.open("ab") as log_file:
@@ -261,7 +261,7 @@ def ensure_backend_migrations_applied() -> None:
                 ),
             ],
             cwd=str(API_DIR),
-            env=env,
+            env=backend_env,
             stdout=log_file,
             stderr=subprocess.STDOUT,
             stdin=subprocess.DEVNULL,

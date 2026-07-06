@@ -25,6 +25,8 @@ from memory_anki.modules.palace_quiz.application.service import (
     batch_delete_questions,
     create_question,
     delete_question,
+    dedupe_chapter_questions,
+    dedupe_palace_questions,
     list_aggregated_questions,
     list_chapter_questions,
     list_palace_ocr_sources,
@@ -82,6 +84,17 @@ def api_list_palace_quiz_questions(palace_id: int, s: Session = Depends(session_
         _raise_http_error(exc)
 
 
+@router.post("/palaces/{palace_id}/quiz-questions/dedupe")
+def api_dedupe_palace_quiz_questions(palace_id: int, s: Session = Depends(session_dep)):
+    try:
+        deduped_count = dedupe_palace_questions(s, palace_id)
+        if deduped_count:
+            maybe_create_rolling_backup("rolling-dedupe-palace-quiz-questions")
+        return {"ok": True, "deduped_count": deduped_count}
+    except Exception as exc:  # pragma: no cover - centralized HTTP mapping
+        _raise_http_error(exc)
+
+
 @router.get("/palaces/{palace_id}/aggregated-quiz-questions")
 def api_list_aggregated_palace_quiz_questions(palace_id: int, s: Session = Depends(session_dep)):
     try:
@@ -102,6 +115,17 @@ def api_list_palace_quiz_ocr_sources(palace_id: int, s: Session = Depends(sessio
 def api_list_chapter_quiz_questions(chapter_id: int, s: Session = Depends(session_dep)):
     try:
         return {"items": list_chapter_questions(s, chapter_id)}
+    except Exception as exc:  # pragma: no cover - centralized HTTP mapping
+        _raise_http_error(exc)
+
+
+@router.post("/chapters/{chapter_id}/quiz-questions/dedupe")
+def api_dedupe_chapter_quiz_questions(chapter_id: int, s: Session = Depends(session_dep)):
+    try:
+        deduped_count = dedupe_chapter_questions(s, chapter_id)
+        if deduped_count:
+            maybe_create_rolling_backup("rolling-dedupe-chapter-quiz-questions")
+        return {"ok": True, "deduped_count": deduped_count}
     except Exception as exc:  # pragma: no cover - centralized HTTP mapping
         _raise_http_error(exc)
 

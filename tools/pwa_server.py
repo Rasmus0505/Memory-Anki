@@ -110,6 +110,7 @@ def _run_frontend_build() -> bool:
             stdout=log_file,
             stderr=subprocess.STDOUT,
             stdin=subprocess.DEVNULL,
+            env=_backend_env(),
             check=False,
             **dev_server.hidden_process_kwargs(),
         )
@@ -263,11 +264,12 @@ def start(
     if sync and not dev_server.sync_before_start():
         return 1
     if not sync:
-        print("[i] Skipping cloud sync for PWA autostart. Desktop stop/start still performs sync.")
+        print("[i] Skipping startup sync for PWA autostart. Desktop stop/start still performs sync.")
 
     try:
-        dev_server.ensure_backend_runtime_prepared()
-        dev_server.ensure_backend_migrations_applied()
+        local_env = _backend_env()
+        dev_server.ensure_backend_runtime_prepared(env=local_env)
+        dev_server.ensure_backend_migrations_applied(env=local_env)
     except Exception as exc:
         print(f"[!] Runtime database preparation failed: {exc}")
         return 1

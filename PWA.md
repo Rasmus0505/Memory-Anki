@@ -1,6 +1,8 @@
-# Memory Anki PWA 使用说明
+# Memory Anki PWA 运行说明
 
-本文说明如何把完整桌面端 Memory Anki 通过 Tailscale 私有网络安装为 PWA 使用。PWA 不维护单独移动端应用；手机上打开的是同一套桌面端前端，默认入口是 `/freestyle`。
+本文是项目根目录下唯一的当前 PWA 说明文档。`docx/移动端重构/`、`docx/移动端完善/` 等目录里的 PWA 文档是历史计划或交付记录，只用于追溯，不作为当前运行依据。
+
+当前 PWA 的定位是：通过 Tailscale 私有网络访问本机运行的完整桌面端 Memory Anki。PWA 不再维护单独移动端应用；安装后打开的是同一套桌面端前端，默认进入 `/freestyle` 随心模式，仍可通过桌面导航访问完整功能。
 
 ## 访问方式
 
@@ -11,6 +13,12 @@
 
 旧计划文档里出现的 `8000`、`100.94.*`、临时局域网地址、`/m` 或 `/mobile` 都属于历史记录。当前 PWA 默认入口是 `/freestyle`；旧 `/m`、`/mobile` 地址只作为兼容路径回退到随心模式。
 
+## 本地运行原则
+
+PWA 必须保持本地运行，使用本机服务和本机数据目录。PWA 默认会跳过百度云盘启动同步，避免开机自启时被同步锁或网络状态卡住。正常跨设备同步仍由桌面端 `start-desktop.bat` / `stop.bat` 负责。
+
+PWA 只通过 Tailscale Serve 在 tailnet 内私有访问，不做公网暴露，不要开启 Funnel。
+
 ## 日常使用
 
 1. 电脑开机并确保 Tailscale 已连接。
@@ -19,7 +27,7 @@
 4. 用 Safari 或 Chrome 打开 `configure-tailscale-pwa.bat` 输出的 HTTPS 地址，并访问 `/freestyle`。
 5. 第一次打开后，使用浏览器菜单添加到主屏幕。
 
-## 首次配置
+## 首次配置与启动
 
 ### 1. 启动 PWA 后端
 
@@ -50,6 +58,15 @@
 - 开启 `HTTPS certificates`；
 - 允许 `Serve`。
 
+如果本机脚本提示：
+
+```text
+Serve is not enabled on your tailnet.
+To enable, visit: ...
+```
+
+打开它给出的链接并确认启用即可。
+
 然后右键以管理员身份运行：
 
 ```text
@@ -63,8 +80,6 @@ configure-tailscale-pwa.bat
 ```powershell
 tailscale serve --https=443 off
 ```
-
-不要启用 Funnel；本项目只需要 tailnet 内私有访问。
 
 ### 3. 安装 Windows 登录自启
 
@@ -91,6 +106,16 @@ uninstall-pwa-autostart.bat
 - `uninstall-pwa-autostart.bat`：移除 Windows 登录自启快捷方式。
 - `tools/pwa_launcher.ps1`：共享脚本入口，统一处理 Python/Node 探测、日志和自启快捷方式。
 - `tools/pwa_server.py`：实际的 PWA 后端启动器。
+
+## 日志和检查
+
+- 前端构建日志：`logs/pwa-build.log`
+- PWA 后端日志：`logs/pwa-api.log`
+- 隐藏自启日志：`logs/pwa-startup.log`
+- 数据库准备日志：`logs/runtime-prepare.log`
+- 数据库迁移日志：`logs/runtime-migrate.log`
+
+启动后先在电脑上打开 `http://127.0.0.1:8012/freestyle` 检查本机服务，再在手机 Tailscale 环境里打开 HTTPS 地址。
 
 ## 常见问题
 

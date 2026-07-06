@@ -246,6 +246,36 @@ class PalaceQuizRouteTests(unittest.TestCase):
         self.assertEqual(final_response.status_code, 200)
         self.assertEqual(final_response.json()["items"], [])
 
+    def test_quiz_list_is_read_only_and_dedupe_is_explicit(self):
+        with self.SessionLocal() as session:
+            original = session.query(PalaceQuizQuestion).filter_by(palace_id=1).first()
+            duplicate = PalaceQuizQuestion(
+                palace_id=1,
+                question_type=original.question_type,
+                stem=original.stem,
+                options_json=original.options_json,
+                answer_payload_json=original.answer_payload_json,
+                analysis=original.analysis,
+                source_meta_json=original.source_meta_json,
+                sort_order=99,
+            )
+            session.add(duplicate)
+            session.commit()
+
+        list_response = self.client.get("/api/v1/palaces/1/quiz-questions")
+        with self.SessionLocal() as session:
+            count_after_list = session.query(PalaceQuizQuestion).filter_by(palace_id=1).count()
+
+        dedupe_response = self.client.post("/api/v1/palaces/1/quiz-questions/dedupe")
+        with self.SessionLocal() as session:
+            count_after_dedupe = session.query(PalaceQuizQuestion).filter_by(palace_id=1).count()
+
+        self.assertEqual(list_response.status_code, 200)
+        self.assertEqual(count_after_list, 3)
+        self.assertEqual(dedupe_response.status_code, 200)
+        self.assertEqual(dedupe_response.json()["deduped_count"], 1)
+        self.assertEqual(count_after_dedupe, 2)
+
     def test_batch_create_and_multiple_choice_validation(self):
         response = self.client.post(
             "/api/v1/palaces/1/quiz-questions/batch",

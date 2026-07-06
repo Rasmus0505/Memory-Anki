@@ -175,6 +175,7 @@ def _palace_summary(palace: Palace) -> dict:
 def _dashboard_review_unit_counts(session: Session, now: datetime | None = None) -> dict[str, int]:
     current = now or datetime.now()
     today = current.date()
+    tomorrow_start = datetime.combine(today + timedelta(days=1), time.min)
     next_schedule_ids = (
         session.query(
             ReviewSchedule.id.label("schedule_id"),
@@ -199,7 +200,7 @@ def _dashboard_review_unit_counts(session: Session, now: datetime | None = None)
             next_schedule_ids.c.position == 1,
             (
                 (ReviewSchedule.scheduled_date <= today)
-                | (ReviewSchedule.scheduled_at <= current)
+                | (ReviewSchedule.scheduled_at < tomorrow_start)
             ),
         )
         .order_by(
