@@ -176,6 +176,10 @@ function resolveNavSectionTarget(section: NavSectionDefinition) {
   return navSectionLastUrls[section.key] ?? section.to
 }
 
+function resolveMobileNavSectionTarget(section: NavSectionDefinition) {
+  return section.to
+}
+
 export function resetNavSectionHistoryForTest() {
   for (const key of Object.keys(navSectionLastUrls) as NavSectionKey[]) {
     delete navSectionLastUrls[key]
@@ -385,6 +389,49 @@ function SidebarContent({ runtimeInfo }: { runtimeInfo: RuntimeInfo | null }) {
   )
 }
 
+function MobileBottomNav() {
+  const { pathname, search, hash } = useLocation()
+  const mobileSections = navSections.filter((section) =>
+    ['freestyle', 'palaces', 'review', 'english', 'profile'].includes(section.key),
+  )
+
+  useEffect(() => {
+    const matchedSection = findNavSection(pathname)
+    if (!matchedSection?.rememberLastVisited) return
+    navSectionLastUrls[matchedSection.key] = `${pathname}${search}${hash}`
+  }, [hash, pathname, search])
+
+  return (
+    <nav
+      className="fixed inset-x-0 bottom-0 z-40 flex border-t border-border/70 bg-card/96 px-2 pb-[max(env(safe-area-inset-bottom),0.35rem)] pt-1.5 shadow-[0_-10px_34px_rgba(15,23,42,0.12)] backdrop-blur-xl lg:hidden"
+      aria-label="移动端主导航"
+    >
+      {mobileSections.map((section) => {
+        const Icon = section.icon
+        const isActive = section.matches(pathname)
+        const target = resolveMobileNavSectionTarget(section)
+        return (
+          <NavLink
+            key={section.key}
+            to={target}
+            className={cn(
+              'flex min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-lg px-1 py-1.5 text-[11px] font-medium transition-colors',
+              isActive
+                ? 'bg-primary/10 text-primary'
+                : 'text-muted-foreground hover:bg-secondary/70 hover:text-foreground',
+            )}
+            onFocus={() => warmNavSection(section)}
+            onTouchStart={() => warmNavSection(section)}
+          >
+            <Icon className="size-4" />
+            <span className="max-w-full truncate">{section.label}</span>
+          </NavLink>
+        )
+      })}
+    </nav>
+  )
+}
+
 function ShellFrame({ children }: PropsWithChildren) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [runtimeInfo, setRuntimeInfo] = useState<RuntimeInfo | null>(null)
@@ -415,7 +462,7 @@ function ShellFrame({ children }: PropsWithChildren) {
       <div className="min-h-screen bg-background">
         <aside
           className={cn(
-            'memory-anki-warm-panel fixed inset-y-4 left-4 z-20 flex flex-col overflow-hidden rounded-xl border border-border/70 bg-card/95 shadow-card backdrop-blur-xl transition-all duration-300',
+            'memory-anki-warm-panel fixed inset-y-4 left-4 z-20 hidden flex-col overflow-hidden rounded-xl border border-border/70 bg-card/95 shadow-card backdrop-blur-xl transition-all duration-300 lg:flex',
             sidebarCollapsed ? 'w-[84px]' : 'w-[250px]',
           )}
         >
@@ -452,15 +499,16 @@ function ShellFrame({ children }: PropsWithChildren) {
 
         <main
           className={cn(
-            'min-w-0 transition-[padding] duration-300',
-            sidebarCollapsed ? 'pl-[122px]' : 'pl-[282px]',
+            'min-w-0 pb-[calc(4.5rem+env(safe-area-inset-bottom,0px))] transition-[padding] duration-300 lg:pb-0',
+            sidebarCollapsed ? 'lg:pl-[122px]' : 'lg:pl-[282px]',
           )}
         >
-          <div className="mx-auto w-full max-w-[1680px] px-3 py-4 sm:px-5 sm:py-5 lg:px-6 lg:py-7 xl:px-8">
+          <div className="mx-auto w-full max-w-[1680px] px-2 py-2 sm:px-5 sm:py-5 lg:px-6 lg:py-7 xl:px-8">
             <BackgroundTaskBar />
             {children}
           </div>
         </main>
+        <MobileBottomNav />
         <QuizGenerationBubbleLayer />
         <AppLogDrawer open={logDrawerOpen} onOpenChange={setLogDrawerOpen} />
         <GlobalCommandPalette />

@@ -177,11 +177,11 @@ def _wait_for_pwa(timeout_seconds: int = 120) -> bool:
 
 
 def _configure_tailscale_serve() -> bool:
-    tailscale = shutil.which("tailscale")
+    tailscale = _resolve_tailscale_cli()
     if not tailscale:
         print("[!] Tailscale CLI was not found. Install Tailscale first.")
         return False
-    print("[i] Configuring Tailscale Serve: HTTPS -> 127.0.0.1:8012")
+    print(f"[i] Configuring Tailscale Serve: HTTPS -> 127.0.0.1:{dev_server.BACKEND_PORT}")
     result = subprocess.run(
         [tailscale, "serve", "--bg", str(dev_server.BACKEND_PORT)],
         capture_output=True,
@@ -190,15 +190,44 @@ def _configure_tailscale_serve() -> bool:
         errors="replace",
         check=False,
     )
-    if result.returncode == 0:
-        print("[ok] Tailscale Serve configured.")
-        return True
     output = "\n".join(part for part in [result.stdout.strip(), result.stderr.strip()] if part)
-    print("[!] Tailscale Serve could not be configured from this shell.")
     if output:
         print(output)
+    if result.returncode == 0:
+        print("[ok] Tailscale Serve configured.")
+        status = subprocess.run(
+            [tailscale, "serve", "status"],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            check=False,
+        )
+        status_output = "\n".join(part for part in [status.stdout.strip(), status.stderr.strip()] if part)
+        if status_output:
+            print("[i] Current Tailscale Serve status:")
+            print(status_output)
+        return True
+    print("[!] Tailscale Serve could not be configured from this shell.")
     print("[i] Run configure-tailscale-pwa.bat once as Administrator.")
     return False
+
+
+def _resolve_tailscale_cli() -> str | None:
+    tailscale = shutil.which("tailscale")
+    if tailscale:
+        return tailscale
+    if os.name != "nt":
+        return None
+    candidates = [
+        Path(os.environ.get("ProgramFiles", "")) / "Tailscale" / "tailscale.exe",
+        Path(os.environ.get("LOCALAPPDATA", "")) / "Tailscale" / "tailscale.exe",
+        Path(os.environ.get("ProgramFiles(x86)", "")) / "Tailscale" / "tailscale.exe",
+    ]
+    for candidate in candidates:
+        if candidate.exists():
+            return str(candidate)
+    return None
 
 
 def _supervise(process: subprocess.Popen) -> int:

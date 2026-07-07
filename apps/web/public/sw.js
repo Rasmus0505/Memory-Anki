@@ -1,4 +1,4 @@
-const CACHE_VERSION = '2026-07-06-desktop-pwa-v1'
+const CACHE_VERSION = '2026-07-07-mobile-pwa-v2'
 const APP_CACHE = `memory-anki-pwa-app-${CACHE_VERSION}`
 const API_CACHE = `memory-anki-pwa-api-${CACHE_VERSION}`
 const CACHE_PREFIX = 'memory-anki-pwa-'

@@ -138,6 +138,33 @@ describe('PalaceQuizPage core flows', () => {
     expect(screen.getByText('细胞的控制中心是？')).toBeTruthy()
   })
 
+  it('opens the memory palace lookup as a mobile full-screen dialog on narrow viewports', async () => {
+    window.matchMedia = ((query: string) => ({
+      matches: query.includes('max-width: 1023px'),
+      media: query,
+      onchange: null,
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+      addListener: () => undefined,
+      removeListener: () => undefined,
+      dispatchEvent: () => false,
+    })) as typeof window.matchMedia
+
+    renderPage()
+    expect(await screen.findByText('细胞的控制中心是？')).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: '查看记忆宫殿' }))
+
+    expect(await screen.findByRole('button', { name: '关闭记忆宫殿查看' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: '查看模式' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: '从右下角调整记忆宫殿查看大小' })).toBeNull()
+    await waitFor(() => {
+      expect(screen.getByTestId('memory-lookup-mindmap').getAttribute('data-readonly')).toBe(
+        'true',
+      )
+    })
+  })
+
   it('judges multiple-choice questions immediately, refreshes stats, and supports retry', async () => {
     renderPage()
     expect(await screen.findByText('细胞的控制中心是？')).toBeTruthy()

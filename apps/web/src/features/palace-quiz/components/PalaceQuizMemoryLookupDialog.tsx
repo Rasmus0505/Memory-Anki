@@ -97,6 +97,25 @@ function getRootNodeUid(editorState: MindMapEditorState | null) {
   return typeof uid === 'string' && uid.trim() ? uid.trim() : null
 }
 
+function useMemoryLookupNarrowViewport() {
+  const [matches, setMatches] = useState(false)
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return
+    const query = window.matchMedia('(max-width: 1023px)')
+    const sync = () => setMatches(query.matches)
+    sync()
+    if (typeof query.addEventListener === 'function') {
+      query.addEventListener('change', sync)
+      return () => query.removeEventListener('change', sync)
+    }
+    query.addListener(sync)
+    return () => query.removeListener(sync)
+  }, [])
+
+  return matches
+}
+
 export function PalaceQuizMemoryLookupDialog({
   open,
   onOpenChange,
@@ -129,6 +148,7 @@ export function PalaceQuizMemoryLookupDialog({
   } | null>(null)
   const resizeStateRef = useRef<MemoryLookupResizeState | null>(null)
   const suppressCapsuleClickRef = useRef(false)
+  const isNarrowViewport = useMemoryLookupNarrowViewport()
 
   const palaces = useMemo(() => flattenPalaces(groupedData), [groupedData])
   const selectedPalace = palaces.find((palace) => palace.id === selectedPalaceId) ?? null
@@ -528,51 +548,102 @@ export function PalaceQuizMemoryLookupDialog({
 
   if (!open) return null
 
+  const mobileDialog = (
+    <Dialog open={open} onOpenChange={onOpenChange} modal>
+      <DialogContent
+        layout="unstyled"
+        className="fixed inset-0 z-[241] flex h-[100dvh] w-screen max-w-none flex-col overflow-hidden rounded-none border-0 bg-card shadow-2xl lg:hidden"
+      >
+        <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border/70 px-4 pb-3 pt-[max(env(safe-area-inset-top),0.75rem)]">
+          <div className="min-w-0">
+            <DialogTitle className="truncate text-base">查看记忆宫殿</DialogTitle>
+            <DialogDescription className="truncate text-xs">
+              {previewHeading}
+            </DialogDescription>
+          </div>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="size-10 shrink-0"
+            aria-label="关闭记忆宫殿查看"
+            onClick={() => onOpenChange(false)}
+          >
+            <X className="size-5" />
+          </Button>
+        </div>
+
+        <div className="flex min-h-0 flex-1 flex-col">
+          <div className="shrink-0 border-b border-border/70 p-3">
+            {renderSearchInput('h-10')}
+          </div>
+          <div className="max-h-40 shrink-0 overflow-y-auto border-b border-border/70 p-2">
+            {renderPalaceList()}
+          </div>
+          <div className="flex min-h-0 flex-1 flex-col p-3 pb-[max(env(safe-area-inset-bottom),0.75rem)]">
+            <div className="mb-3 flex min-h-10 items-center justify-between gap-3">
+              <div className="min-w-0">
+                <div className="truncate text-sm font-semibold">{previewHeading}</div>
+                <div className="truncate text-xs text-muted-foreground">
+                  {previewMode === 'view' ? '只读脑图预览' : '翻卡模式'}
+                </div>
+              </div>
+              {renderPreviewControls(true)}
+            </div>
+            {renderMindMapContent()}
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+
+  if (isNarrowViewport) return mobileDialog
+
   if (layout.collapsed) {
     return (
       <Dialog open={open} onOpenChange={(nextOpen) => {
-        if (!nextOpen && pinned) return
-        onOpenChange(nextOpen)
-      }} modal={false}>
-        <DialogContent
-          layout="unstyled"
-          className="fixed z-[241]"
-          style={{ left: layout.x, top: layout.y }}
-        >
-          <DialogTitle className="sr-only">查看记忆宫殿</DialogTitle>
-          <button
-            type="button"
-            className="inline-flex max-w-[280px] items-center gap-2 rounded-full border border-border/80 bg-card/95 px-3 py-2 text-sm font-medium shadow-2xl backdrop-blur transition-colors hover:bg-secondary"
-            onPointerDown={beginDrag}
-            onClick={() => {
-              if (suppressCapsuleClickRef.current) {
-                suppressCapsuleClickRef.current = false
-                return
-              }
-              expand()
-            }}
-            aria-label="打开记忆宫殿查看"
+          if (!nextOpen && pinned) return
+          onOpenChange(nextOpen)
+        }} modal={false}>
+          <DialogContent
+            layout="unstyled"
+            className="fixed z-[241]"
+            style={{ left: layout.x, top: layout.y }}
           >
-            <BookOpen className="size-4 shrink-0 text-primary" />
-            <span className="shrink-0">查看宫殿</span>
-            <span className="min-w-0 truncate text-xs text-muted-foreground">
-              {selectedPalace ? getPalaceTitle(selectedPalace) : previewTitle || '记忆宫殿'}
-            </span>
-            <Expand className="h-3.5 w-3.5 shrink-0" />
-          </button>
-        </DialogContent>
-      </Dialog>
+            <DialogTitle className="sr-only">查看记忆宫殿</DialogTitle>
+            <button
+              type="button"
+              className="inline-flex max-w-[280px] items-center gap-2 rounded-full border border-border/80 bg-card/95 px-3 py-2 text-sm font-medium shadow-2xl backdrop-blur transition-colors hover:bg-secondary"
+              onPointerDown={beginDrag}
+              onClick={() => {
+                if (suppressCapsuleClickRef.current) {
+                  suppressCapsuleClickRef.current = false
+                  return
+                }
+                expand()
+              }}
+              aria-label="打开记忆宫殿查看"
+            >
+              <BookOpen className="size-4 shrink-0 text-primary" />
+              <span className="shrink-0">查看宫殿</span>
+              <span className="min-w-0 truncate text-xs text-muted-foreground">
+                {selectedPalace ? getPalaceTitle(selectedPalace) : previewTitle || '记忆宫殿'}
+              </span>
+              <Expand className="h-3.5 w-3.5 shrink-0" />
+            </button>
+          </DialogContent>
+        </Dialog>
     )
   }
 
   return (
     <Dialog open={open} onOpenChange={(nextOpen) => {
-      if (!nextOpen && pinned) return
-      onOpenChange(nextOpen)
-    }} modal={false}>
-      <DialogContent
-        layout="unstyled"
-        className="fixed z-[241] rounded-lg border border-border/80 bg-card/98 shadow-2xl backdrop-blur"
+        if (!nextOpen && pinned) return
+        onOpenChange(nextOpen)
+      }} modal={false}>
+        <DialogContent
+          layout="unstyled"
+          className="fixed z-[241] rounded-lg border border-border/80 bg-card/98 shadow-2xl backdrop-blur"
         style={{
           left: layout.x,
           top: layout.y,
