@@ -534,6 +534,19 @@ describe('FreestylePage feedback', () => {
     })
   })
 
+  it('splits mobile freestyle actions into navigation and utility groups', async () => {
+    renderPage([quizCard(1), quizCard(2)])
+
+    await screen.findByText('选择题 1')
+    const actions = screen.getByTestId('freestyle-mobile-actions')
+    expect(actions.className).toContain('justify-between')
+
+    const groups = actions.querySelectorAll(':scope > div')
+    expect(groups).toHaveLength(2)
+    expect(groups[0]?.querySelectorAll('button')).toHaveLength(3)
+    expect(groups[1]?.querySelectorAll('button')).toHaveLength(4)
+  })
+
   it('keeps the memory palace lookup disabled when the current random card has no palace context', async () => {
     renderPage([
       {

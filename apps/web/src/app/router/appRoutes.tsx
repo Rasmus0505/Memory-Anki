@@ -115,8 +115,22 @@ const SECTION_PREFIX_FALLBACKS: Record<string, string> = {
   '/timer-overlay/': '/timer-overlay',
 }
 
+const RETIRED_MOBILE_ROUTE_FALLBACKS: Record<string, string> = {
+  '/m': '/freestyle',
+  '/mobile': '/freestyle',
+  '/m/freestyle': '/freestyle',
+  '/mobile/freestyle': '/freestyle',
+  '/m/palaces': '/palaces',
+  '/mobile/palaces': '/palaces',
+  '/m/mindmap': '/palaces',
+  '/mobile/mindmap': '/palaces',
+}
+
 export function resolveRouteFallbackTarget(pathname: string) {
   const normalizedPathname = normalizePathname(pathname)
+
+  const retiredMobileTarget = RETIRED_MOBILE_ROUTE_FALLBACKS[normalizedPathname]
+  if (retiredMobileTarget) return retiredMobileTarget
 
   if (REGISTERED_EXACT_PATHS.has(normalizedPathname)) return normalizedPathname
   if (REGISTERED_DYNAMIC_PATTERNS.some((pattern) => pattern.test(normalizedPathname))) {

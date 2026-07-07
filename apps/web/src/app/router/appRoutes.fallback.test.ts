@@ -26,10 +26,14 @@ describe('resolveRouteFallbackTarget', () => {
     expect(resolveRouteFallbackTarget('/totally-unknown')).toBe('/freestyle')
   })
 
-  it('maps retired mobile PWA routes back to desktop freestyle', () => {
+  it('maps retired mobile PWA routes back to desktop entry points', () => {
     expect(resolveRouteFallbackTarget('/m')).toBe('/freestyle')
     expect(resolveRouteFallbackTarget('/m/freestyle')).toBe('/freestyle')
+    expect(resolveRouteFallbackTarget('/m/palaces')).toBe('/palaces')
+    expect(resolveRouteFallbackTarget('/m/mindmap')).toBe('/palaces')
     expect(resolveRouteFallbackTarget('/mobile')).toBe('/freestyle')
+    expect(resolveRouteFallbackTarget('/mobile/palaces')).toBe('/palaces')
+    expect(resolveRouteFallbackTarget('/mobile/mindmap')).toBe('/palaces')
     expect(resolveRouteFallbackTarget('/mobile/review')).toBe('/freestyle')
   })
 })

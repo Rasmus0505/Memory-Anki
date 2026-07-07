@@ -1209,13 +1209,20 @@ export default function FreestylePage() {
     (card) => isQuizCard(card) && answeredQuestionIds.has(card.question.id),
   ).length
   const freshCount = Math.max(0, quizTotal - resolvedCount)
+  const openSettings = () => {
+    if (mode === 'today') {
+      setTodaySettingsOpen(true)
+    } else {
+      setSettingsOpen(true)
+    }
+  }
 
   return (
     <TooltipProvider>
       <div
         className={cn(
           'relative max-w-full overflow-hidden bg-zinc-950 text-zinc-50 shadow-2xl',
-          'min-h-[calc(100vh-88px)] rounded-lg',
+          'min-h-[calc(100dvh-5.5rem-env(safe-area-inset-bottom,0px))] rounded-lg lg:min-h-[calc(100vh-88px)]',
         )}
         onKeyDown={handleKeyDown}
         tabIndex={-1}
@@ -1311,7 +1318,7 @@ export default function FreestylePage() {
           ref={scrollRef}
           className={cn(
             'snap-y snap-mandatory overflow-y-auto overflow-x-hidden overscroll-contain scroll-smooth [-webkit-overflow-scrolling:touch] will-change-scroll',
-            'h-[calc(100vh-88px)]',
+            'h-[calc(100dvh-5.5rem-env(safe-area-inset-bottom,0px))] lg:h-[calc(100vh-88px)]',
           )}
           onScroll={handleScroll}
         >
@@ -1432,54 +1439,52 @@ export default function FreestylePage() {
         <div
           className={cn(
             'absolute z-30',
-            'bottom-5 left-1/2 flex -translate-x-1/2 items-center gap-2 sm:bottom-auto sm:left-auto sm:right-5 sm:top-1/2 sm:-translate-y-1/2 sm:translate-x-0 sm:flex-col',
+            'bottom-[max(1rem,env(safe-area-inset-bottom,0px))] left-0 right-0 flex items-center justify-between gap-3 px-3 sm:bottom-auto sm:left-auto sm:right-5 sm:top-1/2 sm:w-auto sm:-translate-y-1/2 sm:flex-col sm:justify-start sm:px-0',
           )}
+          data-testid="freestyle-mobile-actions"
         >
-          <IconButton
-            label="设置"
-            onClick={() => {
-              if (mode === 'today') {
-                setTodaySettingsOpen(true)
-              } else {
-                setSettingsOpen(true)
-              }
-            }}
-          >
-            <SlidersHorizontal className="size-5" />
-          </IconButton>
-          <IconButton
-            label="查看宫殿"
-            onClick={() => setMemoryLookupOpen(true)}
-            disabled={!currentPalaceId}
-          >
-            <BookOpen className="size-5" />
-          </IconButton>
-          <IconButton
-            label="AI 讲解"
-            onClick={() => setExplainSheetOpen(true)}
-            disabled={!isQuizCard(currentCard)}
-          >
-            <Lightbulb className="size-5" />
-          </IconButton>
-          <IconButton label="上一题" onClick={() => goToIndex(currentIndex - 1)} disabled={currentIndex <= 0}>
-            <ChevronUp className="size-5" />
-          </IconButton>
-          <IconButton
-            label="下一题"
-            onClick={() => goToIndex(currentIndex + 1)}
-            disabled={mode === 'today' ? currentIndex >= queue.length : currentIndex >= queue.length - 1}
-          >
-            <ChevronDown className="size-5" />
-          </IconButton>
-          <IconButton label="重洗队列" onClick={handleReshuffle} disabled={queue.length <= 1}>
-            <Shuffle className="size-5" />
-          </IconButton>
-          <IconButton
-            label="清空本地进度"
-            onClick={() => void handleClearLocalProgress()}
-          >
-            <RotateCcw className="size-5" />
-          </IconButton>
+          <div className="flex items-center gap-1.5 rounded-full border border-white/10 bg-zinc-950/84 p-1 shadow-xl backdrop-blur sm:contents">
+            <IconButton label="上一题" onClick={() => goToIndex(currentIndex - 1)} disabled={currentIndex <= 0}>
+              <ChevronUp className="size-5" />
+            </IconButton>
+            <IconButton
+              label="下一题"
+              onClick={() => goToIndex(currentIndex + 1)}
+              disabled={mode === 'today' ? currentIndex >= queue.length : currentIndex >= queue.length - 1}
+            >
+              <ChevronDown className="size-5" />
+            </IconButton>
+            <IconButton label="重洗队列" onClick={handleReshuffle} disabled={queue.length <= 1}>
+              <Shuffle className="size-5" />
+            </IconButton>
+          </div>
+          <div className="flex items-center gap-1.5 rounded-full border border-white/10 bg-zinc-950/84 p-1 shadow-xl backdrop-blur sm:contents">
+            <IconButton
+              label="查看宫殿"
+              onClick={() => setMemoryLookupOpen(true)}
+              disabled={!currentPalaceId}
+            >
+              <BookOpen className="size-5" />
+            </IconButton>
+            <IconButton
+              label="AI 讲解"
+              onClick={() => setExplainSheetOpen(true)}
+              disabled={!isQuizCard(currentCard)}
+            >
+              <Lightbulb className="size-5" />
+            </IconButton>
+            <IconButton label="设置" onClick={openSettings}>
+              <SlidersHorizontal className="size-5" />
+            </IconButton>
+            <span className="hidden sm:contents">
+              <IconButton
+                label="清空本地进度"
+                onClick={() => void handleClearLocalProgress()}
+              >
+                <RotateCcw className="size-5" />
+              </IconButton>
+            </span>
+          </div>
         </div>
 
         <div className="pointer-events-none absolute bottom-4 left-4 z-20 hidden items-center gap-1.5 rounded-full border border-white/10 bg-zinc-900/80 px-3 py-2 text-xs text-zinc-300 shadow-lg backdrop-blur sm:flex">

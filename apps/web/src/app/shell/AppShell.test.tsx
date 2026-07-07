@@ -155,6 +155,25 @@ describe('AppShell', () => {
     expect(englishLink.className).not.toContain('bg-primary')
   })
 
+  it('renders a mobile bottom navigation that reuses the main route targets', async () => {
+    getRuntimeInfoApi.mockResolvedValue(null)
+
+    render(
+      <MemoryRouter initialEntries={['/freestyle']}>
+        <AppShell>
+          <div>content</div>
+        </AppShell>
+      </MemoryRouter>,
+    )
+
+    const mobileNav = screen.getByRole('navigation', { name: '移动端主导航' })
+    expect(mobileNav.className).toContain('lg:hidden')
+    expect(mobileNav.querySelectorAll('a')).toHaveLength(5)
+    expect(mobileNav.querySelector('a[href="/freestyle"]')?.className).toContain('bg-primary')
+    expect(mobileNav.querySelector('a[href="/palaces"]')).toBeTruthy()
+    expect(mobileNav.querySelector('a[href="/review"]')).toBeTruthy()
+  })
+
   it('places freestyle second in the main navigation and keeps it active on its route', async () => {
     getRuntimeInfoApi.mockResolvedValue({
       channel: 'stable',
@@ -270,7 +289,7 @@ describe('AppShell', () => {
     })
   })
 
-  it('returns palace navigation to the last visited palace child route instead of the shelf root', async () => {
+  it('returns desktop palace navigation to the last visited child route while mobile uses the shelf root', async () => {
     getRuntimeInfoApi.mockResolvedValue({
       channel: 'stable',
       commit: 'abcdef1234567890',
@@ -296,9 +315,15 @@ describe('AppShell', () => {
       expect(screen.getByText('/english')).toBeTruthy()
     })
 
+    const rememberedPalacePath = '/palaces/30/edit?miniPalaceId=5&miniPalaceMode=edit#mindmap'
+    const mobileNav = screen.getByRole('navigation', { name: '移动端主导航' })
+    const desktopLinks = screen.getAllByRole('link').filter((link) => !mobileNav.contains(link))
+    expect(desktopLinks.some((link) => link.getAttribute('href') === rememberedPalacePath)).toBe(true)
+    expect(mobileNav.querySelector('a[href="/palaces"]')).toBeTruthy()
+
     fireEvent.click(screen.getAllByRole('link', { name: '记忆宫殿' })[0]!)
     await waitFor(() => {
-      expect(screen.getByText('/palaces/30/edit?miniPalaceId=5&miniPalaceMode=edit#mindmap')).toBeTruthy()
+      expect(screen.getByText(rememberedPalacePath)).toBeTruthy()
     })
   })
 
