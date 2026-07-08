@@ -1,4 +1,4 @@
-const CACHE_VERSION = '2026-07-07-mobile-pwa-v2'
+const CACHE_VERSION = '2026-07-08-mobile-pwa-v3'
 const APP_CACHE = `memory-anki-pwa-app-${CACHE_VERSION}`
 const API_CACHE = `memory-anki-pwa-api-${CACHE_VERSION}`
 const CACHE_PREFIX = 'memory-anki-pwa-'
@@ -137,12 +137,54 @@ async function cacheFirstStaticAsset(request) {
   const cached = await caches.match(request)
   if (cached) return cached
 
-  const response = await fetch(request)
+  let response
+  try {
+    response = await fetch(request)
+  } catch {
+    if (request.destination === 'script') {
+      return staleScriptRecoveryResponse(url)
+    }
+    if (request.destination === 'style') {
+      return emptyStyleRecoveryResponse()
+    }
+    throw new Error('Static asset fetch failed')
+  }
+  if (!response.ok) {
+    if (request.destination === 'script') {
+      return staleScriptRecoveryResponse(url)
+    }
+    if (request.destination === 'style') {
+      return emptyStyleRecoveryResponse()
+    }
+  }
   if (response.ok) {
     const cache = await caches.open(APP_CACHE)
     await cache.put(request, response.clone())
   }
   return response
+}
+
+function staleScriptRecoveryResponse(url) {
+  return new Response(
+    `location.replace('/pwa-reset.html?missing_asset=${encodeURIComponent(url.pathname)}')\nexport default null\n`,
+    {
+      status: 200,
+      headers: {
+        'Cache-Control': 'no-store',
+        'Content-Type': 'application/javascript; charset=utf-8',
+      },
+    },
+  )
+}
+
+function emptyStyleRecoveryResponse() {
+  return new Response('', {
+    status: 200,
+    headers: {
+      'Cache-Control': 'no-store',
+      'Content-Type': 'text/css; charset=utf-8',
+    },
+  })
 }
 
 async function navigationFallback(request) {

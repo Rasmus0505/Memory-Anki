@@ -40,6 +40,8 @@ from memory_anki.infrastructure.db._tables.misc import (
 )
 from memory_anki.infrastructure.db._tables.palaces import (
     Attachment,
+    FreestyleAiExplanation,
+    FreestyleQuizAttempt,
     Palace,
     PalaceGroup,
     PalaceQuizOcrSource,
@@ -71,6 +73,8 @@ __all__ = [
     "EnglishReadingVersion",
     "EnglishSentence",
     "ExternalAiCallLog",
+    "FreestyleAiExplanation",
+    "FreestyleQuizAttempt",
     "MindMapImportJob",
     "Palace",
     "PalaceGroup",

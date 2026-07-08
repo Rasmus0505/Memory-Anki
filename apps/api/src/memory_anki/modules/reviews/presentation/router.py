@@ -2,13 +2,18 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
 from memory_anki.infrastructure.db.models import Chapter, ReviewSchedule, get_session
-from memory_anki.modules.palaces.application.palace_serializer import palace_json as palace_detail_json
+from memory_anki.modules.palaces.application.palace_serializer import (
+    palace_json as palace_detail_json,
+)
 from memory_anki.modules.palaces.application.segment_review_service import palace_review_stages_json
 from memory_anki.modules.persistence.application.idempotency import (
     get_idempotent_response,
     save_idempotent_response,
 )
-from memory_anki.modules.reviews.application.review_execution_service import submit_review
+from memory_anki.modules.reviews.application.review_execution_service import (
+    repair_review_stage_progress,
+    submit_review,
+)
 from memory_anki.modules.reviews.application.review_metrics_service import get_weekly_stats
 from memory_anki.modules.reviews.application.review_queue_service import (
     get_chapter_queue_payload,
@@ -124,6 +129,12 @@ def api_stats(session: Session = Depends(session_dep)):
 def api_spread(data: dict, session: Session = Depends(session_dep)):
     count = spread_overdue(session, int(data.get("days", 7)))
     return {"ok": True, "spread": count}
+
+
+@router.post("/review/repair-stage-progress")
+def api_repair_review_stage_progress(session: Session = Depends(session_dep)):
+    result = repair_review_stage_progress(session)
+    return {"ok": True, **result}
 
 
 @router.get("/review/queue")

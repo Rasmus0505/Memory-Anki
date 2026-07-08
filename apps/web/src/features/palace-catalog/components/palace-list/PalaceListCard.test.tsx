@@ -171,6 +171,130 @@ describe('PalaceListCard', () => {
     expect(onPalacePractice).toHaveBeenCalledTimes(1)
   })
 
+  it('shows active review progress for a resumed single-segment review', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-06-13T11:00:00+08:00'))
+
+    render(
+      <MemoryRouter>
+        <PalaceListCard
+          palace={buildPalace({
+            mini_palaces: [],
+            segments: [buildSegment({ active_review_progress: 0.4 })],
+          })}
+          viewSettings={{ layoutMode: 'chapter-double', densityMode: 'comfortable' }}
+          onPalacePractice={vi.fn()}
+          onSegmentPractice={vi.fn()}
+          onMiniPalacePractice={vi.fn()}
+          onDelete={vi.fn()}
+        />
+      </MemoryRouter>,
+    )
+
+    expect(screen.getByRole('progressbar', { name: '复习进度 40%' })).toBeTruthy()
+    expect(screen.getByTestId('review-action-progress-fill').style.width).toBe('40%')
+    vi.useRealTimers()
+  })
+
+  it('always shows stage nodes for a single-segment palace without rendering the default segment card', () => {
+    render(
+      <MemoryRouter>
+        <PalaceListCard
+          palace={buildPalace({
+            mini_palaces: [],
+            segments: [
+              buildSegment({
+                id: 0,
+                display_name: '第 1 部分',
+                is_virtual_default: true,
+              }),
+            ],
+          })}
+          viewSettings={{ layoutMode: 'chapter-double', densityMode: 'comfortable' }}
+          onPalacePractice={vi.fn()}
+          onSegmentPractice={vi.fn()}
+          onMiniPalacePractice={vi.fn()}
+          onDelete={vi.fn()}
+        />
+      </MemoryRouter>,
+    )
+
+    expect(screen.getByTestId('stage-track')).toBeTruthy()
+    expect(screen.getByTestId('stage-node-0')).toBeTruthy()
+    expect(screen.getByText('22 个知识点')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: '展开详情' })).toBeNull()
+    expect(screen.queryByText('第 1 部分')).toBeNull()
+  })
+
+  it('keeps multi-segment details expandable while showing stage nodes before expansion', () => {
+    render(
+      <MemoryRouter>
+        <PalaceListCard
+          palace={buildPalace({
+            mini_palaces: [],
+            segments: [
+              buildSegment({ id: 101, display_name: '17—18世纪' }),
+              buildSegment({ id: 102, display_name: '19世纪', sort_order: 1 }),
+            ],
+          })}
+          viewSettings={{ layoutMode: 'chapter-double', densityMode: 'comfortable' }}
+          onPalacePractice={vi.fn()}
+          onSegmentPractice={vi.fn()}
+          onMiniPalacePractice={vi.fn()}
+          onDelete={vi.fn()}
+        />
+      </MemoryRouter>,
+    )
+
+    expect(screen.getByTestId('stage-track')).toBeTruthy()
+    expect(screen.queryByText('17—18世纪')).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: '展开详情' }))
+
+    expect(screen.getByText('17—18世纪')).toBeTruthy()
+    expect(screen.getByText('19世纪')).toBeTruthy()
+  })
+
+  it('passes virtual default review segments through with their schedule progress', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-06-13T11:00:00+08:00'))
+    const onSegmentPractice = vi.fn()
+
+    render(
+      <MemoryRouter>
+        <PalaceListCard
+          palace={buildPalace({
+            mini_palaces: [],
+            segments: [
+              buildSegment({
+                id: 0,
+                is_virtual_default: true,
+                current_review_schedule_id: 1001,
+                active_review_progress: 0.4,
+              }),
+            ],
+          })}
+          viewSettings={{ layoutMode: 'chapter-double', densityMode: 'comfortable' }}
+          onPalacePractice={vi.fn()}
+          onSegmentPractice={onSegmentPractice}
+          onMiniPalacePractice={vi.fn()}
+          onDelete={vi.fn()}
+        />
+      </MemoryRouter>,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: /开始复习/ }))
+    expect(screen.getByRole('progressbar', { name: '复习进度 40%' })).toBeTruthy()
+    expect(screen.getByTestId('review-action-progress-fill').style.width).toBe('40%')
+    expect(onSegmentPractice).toHaveBeenCalledWith(
+      expect.objectContaining({
+        is_virtual_default: true,
+        current_review_schedule_id: 1001,
+      }),
+    )
+    vi.useRealTimers()
+  })
+
   it('highlights title and description search matches without treating special characters as regex', () => {
     render(
       <MemoryRouter>

@@ -2,7 +2,16 @@ import { Send, Sparkles, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Button } from '@/shared/components/ui/button'
 import { requestPalaceQuestionExplainApi } from '@/features/palace-quiz/api'
-import type { AiRuntimeOptions, FreestyleQuizCard } from '@/shared/api/contracts'
+import {
+  createFreestyleQuestionExplanationApi,
+  getFreestyleQuestionExplanationsApi,
+} from '@/features/freestyle/api'
+import type {
+  AiRuntimeOptions,
+  FreestyleAiExplanationRecord,
+  FreestyleQuizCard,
+} from '@/shared/api/contracts'
+import { toast } from '@/shared/feedback/toast'
 
 const PRESETS = [
   { label: '解释考点', question: '请解释这道题的核心考点是什么。' },
@@ -26,6 +35,7 @@ export function FreestyleAiExplainSheet({
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [history, setHistory] = useState<FreestyleAiExplanationRecord[]>([])
 
   useEffect(() => {
     if (open) return
@@ -33,7 +43,23 @@ export function FreestyleAiExplainSheet({
     setLoading(false)
     setResult(null)
     setError(null)
+    setHistory([])
   }, [open])
+
+  useEffect(() => {
+    if (!open || !card) return
+    let active = true
+    void getFreestyleQuestionExplanationsApi({ questionId: card.question.id, limit: 5 })
+      .then((response) => {
+        if (active) setHistory(response.items || [])
+      })
+      .catch(() => {
+        if (active) setHistory([])
+      })
+    return () => {
+      active = false
+    }
+  }, [card, open])
 
   async function send(question: string) {
     const trimmedQuestion = question.trim()
@@ -49,6 +75,26 @@ export function FreestyleAiExplainSheet({
         aiOptions,
       )
       setResult(response.explanation_text)
+      void createFreestyleQuestionExplanationApi({
+        question_id: card.question.id,
+        palace_id: card.palace_context.id,
+        palace_title: card.palace_context.resolved_title || card.palace_context.title || '',
+        mini_palace_id: card.mini_palace_context?.id ?? card.question.mini_palace_id ?? null,
+        mini_palace_name: card.mini_palace_context?.name || card.question.mini_palace?.name || '',
+        chapter_id: card.chapter_context?.id ?? card.question.classified_chapter_id ?? card.question.source_chapter_id ?? null,
+        chapter_name: card.chapter_context?.name || '',
+        question_type: card.question.question_type,
+        stem_snapshot: card.question.stem,
+        user_question: trimmedQuestion,
+        explanation_text: response.explanation_text,
+        ai_call_log_id: response.ai_call_log_id,
+      })
+        .then((saved) => {
+          setHistory((current) => [saved.item, ...current.filter((item) => item.id !== saved.item.id)].slice(0, 5))
+        })
+        .catch((err) => {
+          toast.error(err instanceof Error ? err.message : 'AI 讲解历史保存失败。')
+        })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'AI 讲解请求失败')
     } finally {
@@ -128,6 +174,21 @@ export function FreestyleAiExplainSheet({
             {error ? <p className="text-sm text-red-400">{error}</p> : null}
           </div>
         )}
+        {history.length > 0 ? (
+          <div className="max-h-40 overflow-y-auto border-t border-white/10 px-5 py-3">
+            <div className="mb-2 text-xs font-medium text-zinc-500">本题最近讲解</div>
+            <div className="space-y-2">
+              {history.map((item) => (
+                <div key={item.id} className="rounded-lg border border-white/10 bg-white/5 px-3 py-2">
+                  <div className="truncate text-xs text-zinc-400">{item.user_question}</div>
+                  <div className="mt-1 line-clamp-2 whitespace-pre-wrap text-xs leading-relaxed text-zinc-300">
+                    {item.explanation_text}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
         <div className="h-[env(safe-area-inset-bottom,0px)] shrink-0" />
       </div>
     </div>

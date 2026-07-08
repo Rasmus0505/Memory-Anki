@@ -9,6 +9,7 @@ import type {
   MindMapReviewFxPayload,
   MindMapSelection,
 } from '@/shared/components/mindmap-host/hostBridgeUtils'
+import type { MindMapMobileViewPolicy } from '@/shared/components/mindmap'
 import { normalizeEditorDoc } from '@/shared/components/mindmap-host/hostBridgeUtils'
 
 export const HOST_FRAME_RUNTIME_VERSION = '2026-06-10-card-width-drag-fix'
@@ -42,6 +43,7 @@ export interface MindMapFrameProps {
   forceSyncIntent?: 'soft' | 'replace'
   preserveViewOnSync?: boolean
   initialViewPolicy?: 'preserve' | 'reset'
+  mobileViewPolicy?: MindMapMobileViewPolicy
   className?: string
   segments?: MindMapHostSegmentSummary[]
   activeSegmentId?: number | null
@@ -85,6 +87,8 @@ export interface MindMapFrameProps {
 export interface MindMapFrameHandle {
   setUiCleared: (nextValue: boolean) => void
   toggleUiCleared: () => void
+  focusNode: (nodeUid: string | null) => void
+  fitView: () => void
   enterNativeFullscreen: () => Promise<void>
   exitNativeFullscreen: () => Promise<void>
 }

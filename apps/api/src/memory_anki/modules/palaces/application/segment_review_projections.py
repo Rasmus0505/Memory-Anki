@@ -15,6 +15,7 @@ from memory_anki.modules.palaces.application.segment_nodes import (
 )
 from memory_anki.modules.reviews.application.schedule_service import (
     get_algorithm_stage_labels,
+    is_schedule_due,
     schedule_display_datetime,
 )
 from memory_anki.modules.sessions.application.session_progress_service import (
@@ -138,6 +139,10 @@ def build_virtual_default_segment_summary(
     stage_labels: list[str],
     remaining_uids: list[str] | None = None,
     active_review_progress: float | None = None,
+    next_review_at: str | None = None,
+    has_due_review: bool = False,
+    current_review_schedule_id: int | None = None,
+    current_review_type: str | None = None,
 ) -> dict[str, Any] | None:
     remaining_uids = remaining_uids if remaining_uids is not None else remaining_unclaimed_node_uids(palace)
     if not remaining_uids:
@@ -159,10 +164,10 @@ def build_virtual_default_segment_summary(
         "review_stage_progress": review_stage_progress,
         "stage_labels": stage_labels,
         "review_stages": palace_review_stages_json(session, palace, stage_labels),
-        "next_review_at": None,
-        "has_due_review": False,
-        "current_review_schedule_id": None,
-        "current_review_type": None,
+        "next_review_at": next_review_at,
+        "has_due_review": has_due_review,
+        "current_review_schedule_id": current_review_schedule_id,
+        "current_review_type": current_review_type,
         "active_review_progress": active_review_progress,
         "is_empty": len(remaining_uids) == 0,
         "is_virtual_default": True,
@@ -184,8 +189,17 @@ def build_palace_default_segment_summary(
         key=lambda schedule: (schedule.review_number, schedule.id),
     )
     next_schedule = pending_schedules[0] if pending_schedules else None
+    next_review_at = None
+    has_due_review = False
+    current_review_schedule_id = None
+    current_review_type = None
     active_review_progress = None
     if next_schedule is not None:
+        next_review_at_value = schedule_display_datetime(next_schedule, palace, session)
+        next_review_at = next_review_at_value.isoformat(timespec="minutes") if next_review_at_value else None
+        has_due_review = is_schedule_due(next_schedule, palace, session)
+        current_review_schedule_id = next_schedule.id
+        current_review_type = next_schedule.review_type
         review_progress = get_review_progress(session, next_schedule.id)
         if review_progress:
             review_doc = build_segments_editor_doc(palace, [remaining_uids])
@@ -203,6 +217,10 @@ def build_palace_default_segment_summary(
         stage_labels=stage_labels,
         remaining_uids=remaining_uids,
         active_review_progress=active_review_progress,
+        next_review_at=next_review_at,
+        has_due_review=has_due_review,
+        current_review_schedule_id=current_review_schedule_id,
+        current_review_type=current_review_type,
     )
 
 

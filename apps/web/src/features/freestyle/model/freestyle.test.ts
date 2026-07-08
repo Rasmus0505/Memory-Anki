@@ -14,7 +14,10 @@ import {
   DEFAULT_TODAY_TRAINING_CONFIG,
   buildTodayTrainingQueue,
   readTodayTrainingConfig,
+  readTodayTrainingProgress,
   saveTodayTrainingConfig,
+  saveTodayTrainingProgress,
+  restoreTodayTrainingQueue,
   todayFeedContentTypes,
 } from './today-training'
 
@@ -250,11 +253,27 @@ describe('freestyle queue model', () => {
       correctStreak: 4,
       questionStates: { 1: { resolved: true, correct: true } },
       resolvedQuestionIds: [1],
+      activeQueueIds: ['quiz:1', 'quiz:2'],
       lastQueueSignature: buildQueueSignature([quizCard(1, 'palace:1')]),
     })
 
     expect(readFreestyleConfig()).toEqual(savedConfig)
     expect(readFreestyleProgress()).toEqual(savedProgress)
+  })
+
+  it('defaults missing active queue ids when reading legacy progress', () => {
+    window.localStorage.setItem(
+      'memory-anki.freestyle.progress',
+      JSON.stringify({
+        currentIndex: 2,
+        correctStreak: 1,
+        questionStates: {},
+        resolvedQuestionIds: [1],
+        lastQueueSignature: 'quiz:1|quiz:2',
+      }),
+    )
+
+    expect(readFreestyleProgress().activeQueueIds).toEqual([])
   })
 })
 
@@ -307,6 +326,19 @@ describe('today training queue model', () => {
     expect(new Set(queue.map((card) => card.id)).size).toBe(12)
   })
 
+  it('restores an active round by card id without filling missing cards', () => {
+    const restored = restoreTodayTrainingQueue(
+      {
+        dueCards: [quizCard(1, 'palace:1'), actionCard('due-review', 20)],
+        practiceCards: [quizCard(2, 'palace:2', 2)],
+        fillCards: [quizCard(3, 'palace:3', 3)],
+      },
+      ['quiz:3', 'missing-card', 'due-review', 'quiz:1', 'quiz:3'],
+    )
+
+    expect(restored.map((card) => card.id)).toEqual(['quiz:3', 'due-review', 'quiz:1'])
+  })
+
   it('keeps english feed content disabled by default and enables it from config', () => {
     expect(todayFeedContentTypes(DEFAULT_TODAY_TRAINING_CONFIG).fill).toEqual([
       'quiz_question',
@@ -336,5 +368,19 @@ describe('today training queue model', () => {
 
     expect(readTodayTrainingConfig()).toEqual(savedToday)
     expect(readFreestyleConfig().range).toBe('specific_palaces')
+  })
+
+  it('persists today training active queue ids', () => {
+    const savedProgress = saveTodayTrainingProgress({
+      currentIndex: 1,
+      correctStreak: 0,
+      questionStates: {},
+      resolvedQuestionIds: [],
+      activeQueueIds: ['quiz:2', 'quiz:1', '', 'quiz:2'],
+      lastQueueSignature: 'quiz:2|quiz:1',
+    })
+
+    expect(savedProgress.activeQueueIds).toEqual(['quiz:2', 'quiz:1'])
+    expect(readTodayTrainingProgress()).toEqual(savedProgress)
   })
 })

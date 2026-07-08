@@ -489,6 +489,88 @@ class PalaceQuizQuestion(Base):
     )
 
 
+class FreestyleQuizAttempt(Base):
+    __tablename__ = "freestyle_quiz_attempts"
+    __table_args__ = (
+        Index("ix_freestyle_quiz_attempts_created", "created_at", "id"),
+        Index("ix_freestyle_quiz_attempts_palace_created", "palace_id", "created_at"),
+        Index("ix_freestyle_quiz_attempts_question_created", "question_id", "created_at"),
+        Index("ix_freestyle_quiz_attempts_mode_created", "mode", "created_at"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    question_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("palace_quiz_questions.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    palace_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("palaces.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    palace_title: Mapped[str] = mapped_column(String(200), nullable=False, default="")
+    mini_palace_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("palace_mini_palaces.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    mini_palace_name: Mapped[str] = mapped_column(String(200), nullable=False, default="")
+    chapter_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("chapters.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    chapter_name: Mapped[str] = mapped_column(String(200), nullable=False, default="")
+    mode: Mapped[str] = mapped_column(String(20), nullable=False, default="free")
+    question_type: Mapped[str] = mapped_column(String(32), nullable=False, default="")
+    stem_snapshot: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    answer_payload_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    is_correct: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    created_at: Mapped[datetime | None] = mapped_column(DateTime, default=utc_now_naive)
+
+
+class FreestyleAiExplanation(Base):
+    __tablename__ = "freestyle_ai_explanations"
+    __table_args__ = (
+        Index("ix_freestyle_ai_explanations_created", "created_at", "id"),
+        Index("ix_freestyle_ai_explanations_palace_created", "palace_id", "created_at"),
+        Index("ix_freestyle_ai_explanations_question_created", "question_id", "created_at"),
+        Index("ix_freestyle_ai_explanations_log", "ai_call_log_id"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    question_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("palace_quiz_questions.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    palace_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("palaces.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    palace_title: Mapped[str] = mapped_column(String(200), nullable=False, default="")
+    mini_palace_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("palace_mini_palaces.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    mini_palace_name: Mapped[str] = mapped_column(String(200), nullable=False, default="")
+    chapter_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("chapters.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    chapter_name: Mapped[str] = mapped_column(String(200), nullable=False, default="")
+    question_type: Mapped[str] = mapped_column(String(32), nullable=False, default="")
+    stem_snapshot: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    user_question: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    explanation_text: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    ai_call_log_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    created_at: Mapped[datetime | None] = mapped_column(DateTime, default=utc_now_naive)
+
+
 class PalaceQuizOcrSource(Base):
     __tablename__ = "palace_quiz_ocr_sources"
     __table_args__ = (

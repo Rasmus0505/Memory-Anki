@@ -17,6 +17,84 @@
       rel="stylesheet"
       href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap"
     />
+    <script>
+      ;(() => {
+        const startedAt = Date.now()
+        const issues = []
+
+        function describeTarget(target) {
+          if (!target) return ''
+          return target.currentSrc || target.src || target.href || target.data || ''
+        }
+
+        function diagnosticText(reason, detail) {
+          const lines = [
+            `PWA 启动失败：${reason}`,
+            detail ? `细节：${detail}` : null,
+            `当前页面：${location.href}`,
+            `在线状态：${navigator.onLine ? 'online' : 'offline'}`,
+            `浏览器：${navigator.userAgent}`,
+            `启动耗时：${Date.now() - startedAt}ms`,
+          ].filter(Boolean)
+          return lines.join('\n')
+        }
+
+        function renderBootIssue(reason, detail) {
+          const root = document.getElementById('root')
+          if (!root || root.childElementCount > 0) return
+          const text = diagnosticText(reason, detail)
+          root.innerHTML = `
+            <main style="min-height:100vh;display:grid;place-items:center;background:#020617;color:#f8fafc;padding:24px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+              <section style="width:min(100%,520px);border:1px solid rgba(248,113,113,.45);border-radius:14px;background:rgba(127,29,29,.18);padding:18px;box-shadow:0 24px 80px rgba(0,0,0,.38);">
+                <h1 style="margin:0 0 8px;font-size:20px;">PWA 启动失败</h1>
+                <p style="margin:0 0 12px;color:#fecaca;line-height:1.6;">页面资源或网络请求没有成功加载。下面的信息可用于定位手机端 Load failed。</p>
+                <pre style="white-space:pre-wrap;word-break:break-word;margin:0;border-radius:10px;background:rgba(15,23,42,.9);padding:12px;color:#e2e8f0;font-size:12px;line-height:1.5;">${text.replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char])}</pre>
+                <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:14px;">
+                  <button id="pwa-copy-diagnostics" style="min-height:40px;border:0;border-radius:8px;background:#f8fafc;color:#020617;padding:0 14px;font-weight:700;">复制诊断信息</button>
+                  <a href="/pwa-reset.html" style="min-height:40px;display:inline-flex;align-items:center;border-radius:8px;background:#34d399;color:#020617;padding:0 14px;font-weight:700;text-decoration:none;">清理 PWA 缓存</a>
+                  <a href="/freestyle?boot_retry=1" style="min-height:40px;display:inline-flex;align-items:center;border-radius:8px;border:1px solid rgba(248,250,252,.3);color:#f8fafc;padding:0 14px;font-weight:700;text-decoration:none;">重试</a>
+                </div>
+              </section>
+            </main>
+          `
+          document.getElementById('pwa-copy-diagnostics')?.addEventListener('click', () => {
+            void navigator.clipboard?.writeText(text)
+          })
+        }
+
+        window.addEventListener(
+          'error',
+          (event) => {
+            const resource = describeTarget(event.target)
+            if (resource) {
+              issues.push(`资源加载失败：${resource}`)
+              renderBootIssue('资源加载失败', resource)
+              return
+            }
+            if (event.message) {
+              issues.push(`脚本错误：${event.message}`)
+            }
+          },
+          true,
+        )
+
+        window.addEventListener('unhandledrejection', (event) => {
+          const reason = event.reason
+          const message = reason && typeof reason === 'object' && 'message' in reason ? reason.message : String(reason)
+          issues.push(`Promise 失败：${message}`)
+          if (/load failed|failed to fetch|loading chunk|import/i.test(message)) {
+            renderBootIssue('脚本或网络请求失败', message)
+          }
+        })
+
+        window.setTimeout(() => {
+          const root = document.getElementById('root')
+          if (root && root.childElementCount === 0) {
+            renderBootIssue('React 未启动', issues.slice(-3).join('\n') || '入口脚本没有在 8 秒内渲染内容')
+          }
+        }, 8000)
+      })()
+    </script>
   </head>
   <body>
     <div id="root"></div>

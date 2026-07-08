@@ -3,7 +3,9 @@ import {
   ChevronDown,
   ChevronUp,
   Clock3,
+  Copy,
   ExternalLink,
+  History,
   Lightbulb,
   LoaderCircle,
   Play,
@@ -23,8 +25,9 @@ import {
 } from 'react'
 import { Link } from 'react-router-dom'
 import { useAiRunConfigDialog } from '@/features/ai-config/useAiRunConfigDialog'
-import { getFreestyleFeedApi } from '@/features/freestyle/api'
+import { createFreestyleQuestionAttemptApi, getFreestyleFeedApi } from '@/features/freestyle/api'
 import { FreestyleAiExplainSheet } from '@/features/freestyle/components/FreestyleAiExplainSheet'
+import { FreestyleHistoryDialog } from '@/features/freestyle/components/FreestyleHistoryDialog'
 import {
   DEFAULT_FREESTYLE_PROGRESS,
   FREESTYLE_CONTENT_TYPES,
@@ -53,6 +56,7 @@ import {
   saveTodayTrainingConfig,
   saveTodayTrainingProgress,
   todayFeedContentTypes,
+  restoreTodayTrainingQueue,
   type FreestyleMode,
   type TodayTrainingConfig,
   type TodayTrainingSummary,
@@ -183,6 +187,57 @@ function isActionCard(card: FreestyleCard | null | undefined): card is Freestyle
   return card?.type === 'action'
 }
 
+function stringListsEqual(left: string[], right: string[]) {
+  if (left.length !== right.length) return false
+  return left.every((item, index) => item === right[index])
+}
+
+function buildAttemptAnswerPayload(question: FreestyleQuizCard['question'], state: QuizRuntimeState) {
+  if (question.question_type === 'multiple_choice') {
+    return { selected_option_id: state.selectedOptionId || '' }
+  }
+  if (question.question_type === 'true_false') {
+    return { true_false_answer: state.trueFalseAnswer ?? null }
+  }
+  if (question.question_type === 'fill_blank') {
+    return {
+      blank_inputs: state.blankInputs || {},
+      submitted_blank_ids: state.submittedBlankIds || [],
+    }
+  }
+  if (question.question_type === 'matching') {
+    return { matching_pairs: state.matchingPairs || {} }
+  }
+  if (question.question_type === 'ordering') {
+    return { ordering_ids: state.orderingIds || [] }
+  }
+  if (question.question_type === 'categorization') {
+    return { categorization_assignments: state.categorizationAssignments || {} }
+  }
+  return { user_answer: state.shortAnswerText || '' }
+}
+
+function buildAttemptHistoryPayload(
+  card: FreestyleQuizCard,
+  state: QuizRuntimeState,
+  mode: FreestyleMode,
+) {
+  return {
+    question_id: card.question.id,
+    palace_id: card.palace_context.id,
+    palace_title: card.palace_context.resolved_title || card.palace_context.title || '',
+    mini_palace_id: card.mini_palace_context?.id ?? card.question.mini_palace_id ?? null,
+    mini_palace_name: card.mini_palace_context?.name || card.question.mini_palace?.name || '',
+    chapter_id: card.chapter_context?.id ?? card.question.classified_chapter_id ?? card.question.source_chapter_id ?? null,
+    chapter_name: card.chapter_context?.name || '',
+    mode,
+    question_type: card.question.question_type,
+    stem_snapshot: card.question.stem,
+    answer_payload: buildAttemptAnswerPayload(card.question, state),
+    is_correct: typeof state.correct === 'boolean' ? state.correct : null,
+  }
+}
+
 function flattenPalaceOptions(data: PalaceGroupedListResponse | null): FreestylePalaceContext[] {
   if (!data) return []
   const items: PalaceGroupedItem[] = []
@@ -220,6 +275,35 @@ function formatTimer(seconds: number) {
   const minutes = Math.floor(seconds / 60)
   const rest = seconds % 60
   return `${minutes}:${String(rest).padStart(2, '0')}`
+}
+
+function buildFreestyleLoadDiagnosticText({
+  error,
+  mode,
+}: {
+  error: string
+  mode: FreestyleMode
+}) {
+  if (typeof window === 'undefined') return error
+  return [
+    `随心队列加载失败（${MODE_LABELS[mode]}）`,
+    error,
+    `当前页面：${window.location.href}`,
+    `在线状态：${
+      typeof navigator !== 'undefined' && navigator.onLine ? 'online' : 'offline'
+    }`,
+    typeof navigator !== 'undefined' ? `浏览器：${navigator.userAgent}` : null,
+  ]
+    .filter(Boolean)
+    .join('\n')
+}
+
+function FreestyleFeedErrorDescription({ error }: { error: string }) {
+  return (
+    <span className="block max-w-[min(78vw,34rem)] whitespace-pre-wrap text-left">
+      {error}
+    </span>
+  )
 }
 
 function usePrefersReducedMotion() {
@@ -728,6 +812,7 @@ export default function FreestylePage() {
   const [todaySettingsOpen, setTodaySettingsOpen] = useState(false)
   const [memoryLookupOpen, setMemoryLookupOpen] = useState(false)
   const [explainSheetOpen, setExplainSheetOpen] = useState(false)
+  const [historyOpen, setHistoryOpen] = useState(false)
   const [palaceOptionsData, setPalaceOptionsData] = useState<PalaceGroupedListResponse | null>(null)
   const [progress, setProgress] = useState<FreestyleProgressSnapshot>(() => readTodayTrainingProgress())
   const scrollRef = useRef<HTMLDivElement | null>(null)
@@ -739,6 +824,7 @@ export default function FreestylePage() {
   const emittedMilestonesRef = useRef<Set<number>>(new Set())
   const reducedMotion = usePrefersReducedMotion()
   const { promptForAiOptions, aiRunConfigDialog } = useAiRunConfigDialog()
+  const activeQueueKey = progress.activeQueueIds.join('|')
 
   const timer = useTimedSession({
     kind: 'quiz',
@@ -760,6 +846,9 @@ export default function FreestylePage() {
   const queue = useMemo(
     () => {
       if (mode === 'today') {
+        if (progress.activeQueueIds.length > 0) {
+          return restoreTodayTrainingQueue(todaySources, progress.activeQueueIds)
+        }
         return buildTodayTrainingQueue(todaySources, todayConfig, {
           resolvedQuestionIds: queuePriorityResolvedIdsRef.current,
         })
@@ -768,7 +857,7 @@ export default function FreestylePage() {
         resolvedQuestionIds: queuePriorityResolvedIdsRef.current,
       })
     },
-    [config, feedCards, mode, todayConfig, todaySources],
+    [activeQueueKey, config, feedCards, mode, progress.activeQueueIds, todayConfig, todaySources],
   )
   const queueSignature = useMemo(() => buildQueueSignature(queue), [queue])
   const summaryVisible =
@@ -785,6 +874,16 @@ export default function FreestylePage() {
     if (fromCatalog.length > 0) return fromCatalog
     return uniquePalaceContexts(feedCards)
   }, [feedCards, palaceOptionsData])
+  const feedDiagnosticText = useMemo(
+    () =>
+      feedError
+        ? buildFreestyleLoadDiagnosticText({
+            error: feedError,
+            mode,
+          })
+        : '',
+    [feedError, mode],
+  )
 
   const setConfigAndPersist = useCallback((updater: (current: FreestyleConfig) => FreestyleConfig) => {
     setConfig((current) => saveFreestyleConfig(updater(current)))
@@ -798,6 +897,7 @@ export default function FreestylePage() {
     (updater: (current: typeof progress) => typeof progress) => {
       setProgress((current) => {
         const next = updater(current)
+        if (next === current) return current
         return mode === 'today'
           ? saveTodayTrainingProgress(next)
           : saveFreestyleProgress(next)
@@ -859,6 +959,16 @@ export default function FreestylePage() {
     }
   }, [])
 
+  const handleCopyFeedDiagnostics = useCallback(async () => {
+    if (!feedDiagnosticText) return
+    try {
+      await navigator.clipboard.writeText(feedDiagnosticText)
+      toast.success('诊断信息已复制')
+    } catch {
+      toast.error('复制失败，请截图当前错误信息')
+    }
+  }, [feedDiagnosticText])
+
   useEffect(() => {
     if (mode !== 'free') return
     void loadFeed(config)
@@ -888,19 +998,30 @@ export default function FreestylePage() {
     if (queue.length === 0 && !feedError) return
     setProgressAndPersist((current) => {
       const maxIndex = mode === 'today' ? queue.length : Math.max(0, queue.length - 1)
-      if (current.lastQueueSignature === queueSignature) {
-        return {
-          ...current,
-          currentIndex: Math.min(current.currentIndex, maxIndex),
-        }
+      const nextIndex = Math.min(current.currentIndex, maxIndex)
+      const nextActiveQueueIds =
+        mode === 'today' && current.activeQueueIds.length === 0
+          ? queue.map((card) => card.id)
+          : current.activeQueueIds
+      const nextQueueSignature =
+        current.lastQueueSignature === queueSignature
+          ? current.lastQueueSignature
+          : queueSignature
+      if (
+        current.currentIndex === nextIndex &&
+        current.lastQueueSignature === nextQueueSignature &&
+        stringListsEqual(current.activeQueueIds, nextActiveQueueIds)
+      ) {
+        return current
       }
       return {
         ...current,
-        currentIndex: Math.min(current.currentIndex, maxIndex),
-        lastQueueSignature: queueSignature,
+        currentIndex: nextIndex,
+        activeQueueIds: nextActiveQueueIds,
+        lastQueueSignature: nextQueueSignature,
       }
     })
-  }, [feedError, feedLoading, mode, queue.length, queueSignature, setProgressAndPersist])
+  }, [feedError, feedLoading, mode, queue, queue.length, queueSignature, setProgressAndPersist])
 
   useEffect(() => {
     timer.setSceneActive(isActive, { source: isActive ? 'route_active' : 'route_inactive' })
@@ -933,6 +1054,13 @@ export default function FreestylePage() {
     newlyResolvedIds.forEach((questionId) => {
       const state = progress.questionStates[questionId]
       if (!state?.resolved) return
+      const card = queue.find((item): item is FreestyleQuizCard => isQuizCard(item) && item.question.id === questionId)
+      if (card) {
+        void createFreestyleQuestionAttemptApi(buildAttemptHistoryPayload(card, state, mode))
+          .catch((error) => {
+            toast.error(error instanceof Error ? error.message : '随心做题记录保存失败。')
+          })
+      }
       if (typeof state.correct === 'boolean') {
         emitQuizResultFeedback({ correct: state.correct, reducedMotion })
       } else if (state.shortAnswerSubmitted) {
@@ -975,6 +1103,8 @@ export default function FreestylePage() {
     progress.correctStreak,
     progress.questionStates,
     progress.resolvedQuestionIds,
+    mode,
+    queue,
     reducedMotion,
   ])
 
@@ -1136,6 +1266,8 @@ export default function FreestylePage() {
 
   const handleReshuffle = useCallback(() => {
     queuePriorityResolvedIdsRef.current = progress.resolvedQuestionIds
+    setFeedError('')
+    setFeedLoading(true)
     if (mode === 'today') {
       setTodayConfigAndPersist((current) => ({
         ...current,
@@ -1150,6 +1282,7 @@ export default function FreestylePage() {
     setProgressAndPersist((current) => ({
       ...current,
       currentIndex: 0,
+      activeQueueIds: [],
       lastQueueSignature: '',
     }))
     emittedMilestonesRef.current = new Set()
@@ -1254,6 +1387,13 @@ export default function FreestylePage() {
           card={isQuizCard(currentCard) ? currentCard : null}
           onClose={() => setExplainSheetOpen(false)}
         />
+        <FreestyleHistoryDialog
+          open={historyOpen}
+          currentCard={currentCard}
+          currentPalaceId={currentPalaceId}
+          mode={mode}
+          onOpenChange={setHistoryOpen}
+        />
 
         <div className="pointer-events-none absolute left-0 right-0 top-0 z-20 flex w-full max-w-[100vw] flex-wrap items-start justify-between gap-2 px-3 py-3 sm:w-auto sm:flex-nowrap sm:px-4 sm:py-4">
           {/* 左侧：模式切换 */}
@@ -1333,20 +1473,32 @@ export default function FreestylePage() {
             <section className="flex h-full snap-start items-center justify-center px-4">
               <EmptyState
                 title="队列加载失败"
-                description={feedError}
+                description={<FreestyleFeedErrorDescription error={feedError} />}
                 action={
-                  <Button
-                    type="button"
-                    onClick={() => {
-                      if (mode === 'today') {
-                        void loadTodayFeed(todayConfig)
-                      } else {
-                        void loadFeed(config)
-                      }
-                    }}
-                  >
-                    重试
-                  </Button>
+                  <div className="flex flex-wrap justify-center gap-2">
+                    <Button
+                      type="button"
+                      onClick={() => {
+                        if (mode === 'today') {
+                          void loadTodayFeed(todayConfig)
+                        } else {
+                          void loadFeed(config)
+                        }
+                      }}
+                    >
+                      重试
+                    </Button>
+                    <Button type="button" variant="secondary" onClick={() => void handleCopyFeedDiagnostics()}>
+                      <Copy className="size-4" />
+                      复制诊断
+                    </Button>
+                    <Button type="button" variant="outline" asChild>
+                      <a href="/pwa-reset.html">
+                        <RotateCcw className="size-4" />
+                        清理 PWA 缓存
+                      </a>
+                    </Button>
+                  </div>
                 }
                 className="bg-zinc-900 text-zinc-50 [&_p]:text-zinc-100 [&_p+p]:text-zinc-400"
               />
@@ -1472,6 +1624,9 @@ export default function FreestylePage() {
               disabled={!isQuizCard(currentCard)}
             >
               <Lightbulb className="size-5" />
+            </IconButton>
+            <IconButton label="历史记录" onClick={() => setHistoryOpen(true)}>
+              <History className="size-5" />
             </IconButton>
             <IconButton label="设置" onClick={openSettings}>
               <SlidersHorizontal className="size-5" />

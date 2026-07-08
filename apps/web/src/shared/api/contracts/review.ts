@@ -67,3 +67,12 @@ export interface ReviewSessionSubmitResponse {
   next_id: number | null
   mastered: boolean
 }
+export interface ReviewStageProgressRepairResponse {
+  ok: boolean
+  palace_count: number
+  segment_count: number
+  orphan_progress_count?: number
+  orphan_study_session_count?: number
+  practice_recovery_count?: number
+  study_session_count?: number
+}

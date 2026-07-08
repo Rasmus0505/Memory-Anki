@@ -9,7 +9,7 @@ import {
 } from '@/shared/components/mindmap-host'
 import { Button } from '@/shared/components/ui/button'
 import { Badge } from '@/shared/components/ui/badge'
-import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card'
+import { Card, CardContent } from '@/shared/components/ui/card'
 import { cn } from '@/shared/lib/utils'
 import { PalaceAttachmentPanel } from '@/features/palace-edit/components/PalaceAttachmentPanel'
 import { PalaceChapterPanel } from '@/features/palace-edit/components/PalaceChapterPanel'
@@ -149,9 +149,10 @@ export default function PalaceEdit() {
   }
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-3">
       {!page.mindMapFullscreen ? (
         <PageIntro
+          compact
           title={page.palace?.title || '宫殿编辑器'}
           actions={
             <>
@@ -190,7 +191,7 @@ export default function PalaceEdit() {
 
       <div
         className={cn(
-          'grid gap-4 xl:grid-cols-[360px_minmax(0,1fr)]',
+          'grid gap-3 xl:grid-cols-[340px_minmax(0,1fr)]',
           page.mindMapFullscreen && 'grid-cols-1',
         )}
       >
@@ -256,21 +257,10 @@ export default function PalaceEdit() {
                 'fixed inset-x-5 bottom-5 top-5 z-[90] min-h-0 bg-card/96 shadow-2xl',
             )}
           >
-            <CardHeader className="flex flex-row items-center justify-between gap-3">
-              <div>
-                <CardTitle className="text-base">宫殿脑图</CardTitle>
-              </div>
-              {page.selectedNode?.memoryAnkiId ? (
-                <Badge variant="secondary">
-                  {page.selectedNode.memoryAnkiNodeType} #
-                  {page.selectedNode.memoryAnkiId}
-                </Badge>
-              ) : null}
-            </CardHeader>
             <CardContent
               className={cn(
-                'min-h-[64vh]',
-                page.mindMapFullscreen && 'h-[calc(100vh-108px)] min-h-0',
+                'min-h-[78vh] pt-5',
+                page.mindMapFullscreen && 'h-[calc(100vh-72px)] min-h-0',
               )}
             >
               {activeFrameEditorState ? (
@@ -456,7 +446,7 @@ export default function PalaceEdit() {
                     onMiniPalacePour={page.miniPalace.isPracticing ? page.miniPalace.handleSpacePour : undefined}
                     className={cn(
                       'w-full flex-1 rounded-lg border border-border/70 bg-background',
-                      page.mindMapFullscreen ? 'h-full' : 'h-[64vh]',
+                      page.mindMapFullscreen ? 'h-full' : 'h-[78vh]',
                     )}
                   />
                 </div>

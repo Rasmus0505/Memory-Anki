@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, Request
+from fastapi.responses import Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
@@ -55,12 +56,30 @@ HASHED_WEB_ASSET_PATTERN = re.compile(
 class SinglePageAppStaticFiles(StaticFiles):
     async def get_response(self, path: str, scope):
         try:
-            return await super().get_response(path, scope)
+            response = await super().get_response(path, scope)
         except StarletteHTTPException as exc:
             if exc.status_code != 404:
                 raise
+        else:
+            if response.status_code != 404:
+                return response
         if scope.get("method") not in {"GET", "HEAD"}:
             raise StarletteHTTPException(status_code=404)
+        requested_path = "/" + path.replace("\\", "/").lstrip("/")
+        if requested_path.startswith("/assets/") and path.endswith(".js"):
+            escaped_path = requested_path.replace("\\", "\\\\").replace("'", "\\'")
+            return Response(
+                "location.replace('/pwa-reset.html?missing_asset="
+                f"{escaped_path}')\nexport default null\n",
+                media_type="application/javascript",
+                headers={"Cache-Control": "no-store"},
+            )
+        if requested_path.startswith("/assets/") and path.endswith(".css"):
+            return Response(
+                "",
+                media_type="text/css",
+                headers={"Cache-Control": "no-store"},
+            )
         if Path(path).suffix:
             raise StarletteHTTPException(status_code=404)
         return await super().get_response("index.html", scope)
@@ -85,6 +104,8 @@ def install_web_cache_headers(app: FastAPI) -> None:
         response = await call_next(request)
         path = request.url.path
         if path.startswith("/api"):
+            return response
+        if response.headers.get("Cache-Control") == "no-store":
             return response
         if response.status_code < 400 and HASHED_WEB_ASSET_PATTERN.match(path):
             response.headers["Cache-Control"] = "public, max-age=31536000, immutable"

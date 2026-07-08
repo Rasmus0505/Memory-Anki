@@ -130,6 +130,109 @@ class ReviewRouteTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["count"], 1)
 
+    def test_repair_review_stage_progress_route_returns_repair_counts(self):
+        with patch.object(
+            review_router,
+            "repair_review_stage_progress",
+            return_value={"palace_count": 2, "segment_count": 0},
+        ) as repair:
+            response = self.client.post("/api/v1/review/repair-stage-progress")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"ok": True, "palace_count": 2, "segment_count": 0})
+        repair.assert_called_once()
+
+    def test_repair_review_stage_progress_preserves_active_session_progress(self):
+        with self.SessionLocal() as session:
+            schedule = session.query(ReviewSchedule).filter_by(id=1).first()
+            self.assertIsNotNone(schedule)
+            session.add(
+                SessionProgress(
+                    session_kind="review",
+                    palace_id=schedule.palace_id,
+                    review_schedule_id=schedule.id,
+                    reveal_map=json.dumps({"branch-a": "revealed", "branch-b": "hidden"}),
+                    red_node_ids="[]",
+                    completed=False,
+                    updated_at=utc_now_naive(),
+                )
+            )
+            session.commit()
+
+        response = self.client.post("/api/v1/review/repair-stage-progress")
+        self.assertEqual(response.status_code, 200)
+
+        with self.SessionLocal() as session:
+            progress = (
+                session.query(SessionProgress)
+                .filter_by(session_kind="review", palace_id=1)
+                .first()
+            )
+            self.assertIsNotNone(progress)
+            restored_schedule = (
+                session.query(ReviewSchedule)
+                .filter_by(id=progress.review_schedule_id)
+                .first()
+            )
+            self.assertIsNotNone(restored_schedule)
+            self.assertEqual(restored_schedule.review_number, 0)
+            self.assertFalse(restored_schedule.completed)
+            self.assertEqual(
+                json.loads(progress.reveal_map),
+                {"branch-a": "revealed", "branch-b": "hidden"},
+            )
+
+    def test_repair_review_stage_progress_migrates_orphan_review_progress(self):
+        with self.SessionLocal() as session:
+            schedule = session.query(ReviewSchedule).filter_by(id=1).first()
+            self.assertIsNotNone(schedule)
+            session.add(
+                SessionProgress(
+                    session_kind="review",
+                    palace_id=schedule.palace_id,
+                    review_schedule_id=999999,
+                    reveal_map=json.dumps({"branch-a": "revealed", "branch-b": "hidden"}),
+                    red_node_ids=json.dumps(["branch-a"]),
+                    completed=False,
+                    updated_at=utc_now_naive(),
+                )
+            )
+            session.commit()
+
+        response = self.client.post("/api/v1/review/repair-stage-progress")
+        self.assertEqual(response.status_code, 200)
+
+        with self.SessionLocal() as session:
+            pending_schedule = (
+                session.query(ReviewSchedule)
+                .filter_by(palace_id=1, completed=False)
+                .first()
+            )
+            self.assertIsNotNone(pending_schedule)
+            progress = (
+                session.query(SessionProgress)
+                .filter_by(session_kind="review", palace_id=1)
+                .first()
+            )
+            self.assertIsNotNone(progress)
+            self.assertEqual(progress.review_schedule_id, pending_schedule.id)
+            self.assertEqual(
+                json.loads(progress.reveal_map),
+                {"branch-a": "revealed", "branch-b": "hidden"},
+            )
+            study_session = (
+                session.query(StudySession)
+                .filter_by(
+                    scene="review",
+                    target_type="review_schedule",
+                    target_id=pending_schedule.id,
+                    status="active",
+                )
+                .first()
+            )
+            self.assertIsNotNone(study_session)
+            self.assertEqual(json.loads(study_session.progress_json)["reveal_map"]["branch-a"], "revealed")
+
     def test_review_queue_groups_multiple_due_schedules_by_palace(self):
         with self.SessionLocal() as session:
             palace = session.query(Palace).filter_by(id=1).first()
@@ -2393,6 +2496,36 @@ class ReviewRouteTests(unittest.TestCase):
                 (date.today() + timedelta(days=2)).isoformat()
             )
         )
+
+    def test_virtual_default_review_payload_exposes_pending_schedule_timing(self):
+        with self.SessionLocal() as session:
+            palace = session.query(Palace).filter_by(id=1).first()
+            self.assertIsNotNone(palace)
+            session.add(
+                PalaceSegment(
+                    palace_id=palace.id,
+                    name="第 2 部分",
+                    color="#14b8a6",
+                    node_uids_json=json.dumps(["branch-a"]),
+                    sort_order=0,
+                )
+            )
+            due_at = datetime.combine(date.today() + timedelta(days=2), time(hour=9, minute=30))
+            schedule = session.query(ReviewSchedule).filter_by(id=1).first()
+            self.assertIsNotNone(schedule)
+            schedule.scheduled_date = due_at.date()
+            schedule.scheduled_at = due_at
+            session.commit()
+
+        response = self.client.get("/api/v1/palaces")
+        self.assertEqual(response.status_code, 200)
+        item = response.json()[0]
+        default_payload = item["segments"][0]
+        self.assertTrue(default_payload["is_virtual_default"])
+        self.assertFalse(default_payload["has_due_review"])
+        self.assertEqual(default_payload["current_review_schedule_id"], 1)
+        self.assertEqual(default_payload["current_review_type"], "standard")
+        self.assertTrue(default_payload["next_review_at"].startswith(due_at.date().isoformat()))
 
     def test_virtual_default_segment_submit_uses_segment_review_route(self):
         with self.SessionLocal() as session:

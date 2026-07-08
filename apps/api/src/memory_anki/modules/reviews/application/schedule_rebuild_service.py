@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from memory_anki.infrastructure.db.models import (
     Palace,
     ReviewSchedule,
+    SessionProgress,
 )
 
 from .schedule_policy import (
@@ -136,6 +137,26 @@ def rebuild_palace_review_schedules(
         schedules=existing_schedules,
         completed_count=effective_completed_count,
     )
+    active_progress_by_stage = _collect_active_review_progress_by_stage(
+        session,
+        schedules=existing_schedules,
+    )
+
+    existing_schedule_ids = [
+        int(schedule.id)
+        for schedule in existing_schedules
+        if getattr(schedule, "id", None) is not None
+    ]
+    if existing_schedule_ids:
+        (
+            session.query(SessionProgress)
+            .filter(
+                SessionProgress.session_kind == "review",
+                SessionProgress.review_schedule_id.in_(existing_schedule_ids),
+            )
+            .delete(synchronize_session=False)
+        )
+        session.flush()
 
     if (
         completed_review_number is not None
@@ -203,6 +224,7 @@ def rebuild_palace_review_schedules(
         )
 
     palace.mastered = effective_completed_count >= total and total > 0
+    created_schedules: list[ReviewSchedule] = []
     if not palace.mastered:
         pending_review_numbers = (
             _target_pending_review_numbers(
@@ -229,12 +251,21 @@ def rebuild_palace_review_schedules(
                 base_datetime=base_datetime,
                 completed=False,
             )
-            _create_palace_schedule_from_draft(
+            created_schedule = _create_palace_schedule_from_draft(
                 session,
                 palace_id=palace.id,
                 draft=draft,
             )
+            if created_schedule is not None:
+                created_schedules.append(created_schedule)
 
+    session.flush()
+    _restore_active_review_progress(
+        session,
+        palace_id=palace.id,
+        schedules=created_schedules,
+        progress_by_stage=active_progress_by_stage,
+    )
     session.flush()
 
 
@@ -316,6 +347,91 @@ def _collect_completed_stage_times(
             getattr(completed_schedule, "completed_at", None)
         )
     return completed_at_by_stage
+
+
+def _collect_active_review_progress_by_stage(
+    session: Session,
+    *,
+    schedules: list[Any],
+) -> dict[int, dict[str, Any]]:
+    schedule_by_id = {
+        int(schedule.id): schedule
+        for schedule in schedules
+        if getattr(schedule, "id", None) is not None
+    }
+    if not schedule_by_id:
+        return {}
+
+    progress_rows = (
+        session.query(SessionProgress)
+        .filter(
+            SessionProgress.session_kind == "review",
+            SessionProgress.review_schedule_id.in_(list(schedule_by_id)),
+            SessionProgress.completed == False,
+        )
+        .all()
+    )
+    progress_by_stage: dict[int, dict[str, Any]] = {}
+    for progress in progress_rows:
+        schedule = schedule_by_id.get(int(progress.review_schedule_id or 0))
+        if schedule is None:
+            continue
+        review_number = int(schedule.review_number)
+        existing = progress_by_stage.get(review_number)
+        if existing is not None and _progress_updated_at(existing) >= _progress_updated_at(progress):
+            continue
+        progress_by_stage[review_number] = {
+            "reveal_map": progress.reveal_map,
+            "red_node_ids": progress.red_node_ids,
+            "completed": bool(progress.completed),
+            "updated_at": progress.updated_at,
+        }
+    return progress_by_stage
+
+
+def _progress_updated_at(progress: SessionProgress | dict[str, Any]) -> datetime:
+    updated_at = (
+        progress.get("updated_at")
+        if isinstance(progress, dict)
+        else getattr(progress, "updated_at", None)
+    )
+    return updated_at or datetime.min
+
+
+def _restore_active_review_progress(
+    session: Session,
+    *,
+    palace_id: int,
+    schedules: list[ReviewSchedule],
+    progress_by_stage: dict[int, dict[str, Any]],
+) -> None:
+    if not schedules or not progress_by_stage:
+        return
+
+    for schedule in schedules:
+        if schedule.completed:
+            continue
+        snapshot = progress_by_stage.get(int(schedule.review_number))
+        if snapshot is None:
+            continue
+        progress = (
+            session.query(SessionProgress)
+            .filter_by(session_kind="review", review_schedule_id=schedule.id)
+            .first()
+        )
+        if progress is None:
+            progress = SessionProgress(
+                session_kind="review",
+                review_schedule_id=schedule.id,
+            )
+            session.add(progress)
+        progress.palace_id = palace_id
+        progress.palace_segment_id = None
+        progress.mini_palace_id = None
+        progress.reveal_map = snapshot["reveal_map"]
+        progress.red_node_ids = snapshot["red_node_ids"]
+        progress.completed = bool(snapshot["completed"])
+        progress.updated_at = snapshot["updated_at"]
 
 
 def _target_pending_review_numbers(

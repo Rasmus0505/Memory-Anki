@@ -15,6 +15,7 @@ from memory_anki.infrastructure.db.models import (
     EnglishCourseProgress,
     EnglishReadingMaterial,
     EnglishReadingVersion,
+    ExternalAiCallLog,
     Palace,
     PalaceMiniPalace,
     PalaceQuizQuestion,
@@ -225,6 +226,106 @@ class FreestyleRouteTests(unittest.TestCase):
                 if card.get("palace_context")
             )
         )
+
+    def test_records_and_filters_freestyle_question_attempts(self):
+        response = self.client.post(
+            "/api/v1/freestyle/question-attempts",
+            json={
+                "question_id": 1,
+                "palace_id": self.palace_id,
+                "palace_title": "细胞宫殿",
+                "mode": "today",
+                "question_type": "multiple_choice",
+                "stem_snapshot": "细胞宫殿题",
+                "answer_payload": {"selected_option_id": "A"},
+                "is_correct": True,
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        item = response.json()["item"]
+        self.assertEqual(item["question_id"], 1)
+        self.assertEqual(item["palace_id"], self.palace_id)
+        self.assertEqual(item["mode"], "today")
+        self.assertEqual(item["answer_payload"]["selected_option_id"], "A")
+        self.assertTrue(item["is_correct"])
+
+        filtered = self.client.get(
+            f"/api/v1/freestyle/question-attempts?palace_id={self.palace_id}&mode=today"
+        )
+
+        self.assertEqual(filtered.status_code, 200)
+        self.assertEqual(len(filtered.json()["items"]), 1)
+        self.assertEqual(filtered.json()["items"][0]["id"], item["id"])
+
+    def test_records_and_filters_freestyle_ai_explanations(self):
+        response = self.client.post(
+            "/api/v1/freestyle/question-explanations",
+            json={
+                "question_id": 1,
+                "palace_id": self.palace_id,
+                "palace_title": "细胞宫殿",
+                "question_type": "multiple_choice",
+                "stem_snapshot": "细胞宫殿题",
+                "user_question": "为什么选 A？",
+                "explanation_text": "因为 A 是正确选项。",
+                "ai_call_log_id": "log-explain",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        item = response.json()["item"]
+        self.assertEqual(item["user_question"], "为什么选 A？")
+        self.assertEqual(item["explanation_text"], "因为 A 是正确选项。")
+        self.assertEqual(item["ai_call_log_id"], "log-explain")
+
+        filtered = self.client.get(
+            f"/api/v1/freestyle/question-explanations?question_id=1&palace_id={self.palace_id}"
+        )
+
+        self.assertEqual(filtered.status_code, 200)
+        self.assertEqual(len(filtered.json()["items"]), 1)
+        self.assertEqual(filtered.json()["items"][0]["id"], item["id"])
+
+    def test_history_summary_returns_legacy_quiz_and_ai_log_counts(self):
+        with self.SessionLocal() as session:
+            question = session.query(PalaceQuizQuestion).filter_by(id=1).one()
+            question.attempt_count = 3
+            question.correct_count = 2
+            question.incorrect_count = 1
+            session.add_all(
+                [
+                    ExternalAiCallLog(
+                        id="log-explain",
+                        feature="题目讲解",
+                        operation="palace_quiz_question_explain",
+                        status="success",
+                        provider="test",
+                        model="demo",
+                        request_id="req-1",
+                    ),
+                    ExternalAiCallLog(
+                        id="log-feedback",
+                        feature="简答点评",
+                        operation="palace_quiz_short_answer_feedback",
+                        status="success",
+                        provider="test",
+                        model="demo",
+                        request_id="req-2",
+                    ),
+                ]
+            )
+            session.commit()
+
+        response = self.client.get("/api/v1/freestyle/history-summary")
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["legacy_quiz"]["attempted_question_count"], 1)
+        self.assertEqual(payload["legacy_quiz"]["attempt_count"], 3)
+        self.assertEqual(payload["legacy_quiz"]["correct_count"], 2)
+        self.assertEqual(payload["legacy_quiz"]["incorrect_count"], 1)
+        self.assertEqual(payload["legacy_ai_logs"]["total_count"], 2)
 
 
 if __name__ == "__main__":

@@ -32,6 +32,7 @@ interface MindMapCanvasViewportProps {
   onEdgeDoubleClick: EdgeMouseHandler
   onPaneClick: () => void
   readonly?: boolean
+  mobileGuided?: boolean
 }
 
 export function MindMapCanvasViewport({
@@ -53,6 +54,7 @@ export function MindMapCanvasViewport({
   onEdgeDoubleClick,
   onPaneClick,
   readonly = false,
+  mobileGuided = false,
 }: MindMapCanvasViewportProps) {
   return (
     <div className="relative" style={{ width, height }}>
@@ -79,13 +81,18 @@ export function MindMapCanvasViewport({
         minZoom={0.38}
         maxZoom={1.4}
         proOptions={{ hideAttribution: true }}
+        panOnScroll={!mobileGuided}
+        panOnDrag
+        zoomOnPinch
+        zoomOnDoubleClick={!mobileGuided}
+        zoomActivationKeyCode="Control"
       >
         <Controls
           showZoom={false}
           showInteractive={false}
           className="!left-4 !top-4 !bottom-auto !rounded-lg !border !border-zinc-200 !bg-white/92 !shadow-lg"
         />
-        {!isDraggingNode ? (
+        {!isDraggingNode && !mobileGuided ? (
           <MiniMap
             pannable
             zoomable

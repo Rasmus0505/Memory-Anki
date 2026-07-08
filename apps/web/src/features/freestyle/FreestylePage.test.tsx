@@ -6,10 +6,19 @@ import {
   readFreestyleProgress,
   saveFreestyleProgress,
 } from '@/features/freestyle/model/freestyle'
+import {
+  readTodayTrainingProgress,
+  saveTodayTrainingProgress,
+} from '@/features/freestyle/model/today-training'
 import type { ReviewFeedbackSettings } from '@/shared/feedback/reviewFeedbackSettings'
 import type { FreestyleCard, FreestyleQuizCard } from '@/shared/api/contracts'
 
 const getFreestyleFeedApiMock = vi.fn()
+const createFreestyleQuestionAttemptApiMock = vi.fn()
+const createFreestyleQuestionExplanationApiMock = vi.fn()
+const getFreestyleQuestionAttemptsApiMock = vi.fn()
+const getFreestyleQuestionExplanationsApiMock = vi.fn()
+const getFreestyleHistorySummaryApiMock = vi.fn()
 const getPalacesGroupedApiMock = vi.fn()
 const recordPalaceQuizChoiceAttemptApiMock = vi.fn()
 const requestPalaceQuestionExplainApiMock = vi.fn()
@@ -24,6 +33,16 @@ const memoryLookupDialogMock = vi.fn()
 
 vi.mock('@/features/freestyle/api', () => ({
   getFreestyleFeedApi: (...args: unknown[]) => getFreestyleFeedApiMock(...args),
+  createFreestyleQuestionAttemptApi: (...args: unknown[]) =>
+    createFreestyleQuestionAttemptApiMock(...args),
+  createFreestyleQuestionExplanationApi: (...args: unknown[]) =>
+    createFreestyleQuestionExplanationApiMock(...args),
+  getFreestyleQuestionAttemptsApi: (...args: unknown[]) =>
+    getFreestyleQuestionAttemptsApiMock(...args),
+  getFreestyleQuestionExplanationsApi: (...args: unknown[]) =>
+    getFreestyleQuestionExplanationsApiMock(...args),
+  getFreestyleHistorySummaryApi: (...args: unknown[]) =>
+    getFreestyleHistorySummaryApiMock(...args),
 }))
 
 vi.mock('@/entities/palace/api', () => ({
@@ -218,6 +237,59 @@ describe('FreestylePage feedback', () => {
       removeListener: vi.fn(),
     })
     getFreestyleFeedApiMock.mockReset()
+    createFreestyleQuestionAttemptApiMock.mockResolvedValue({
+      item: {
+        id: 1,
+        question_id: 1,
+        palace_id: 1,
+        palace_title: '测试宫殿',
+        mini_palace_id: null,
+        mini_palace_name: '',
+        chapter_id: null,
+        chapter_name: '',
+        mode: 'today',
+        question_type: 'multiple_choice',
+        stem_snapshot: '选择题 1',
+        answer_payload: { selected_option_id: 'A' },
+        is_correct: true,
+        created_at: null,
+      },
+    })
+    createFreestyleQuestionExplanationApiMock.mockResolvedValue({
+      item: {
+        id: 1,
+        question_id: 1,
+        palace_id: 1,
+        palace_title: '测试宫殿',
+        mini_palace_id: null,
+        mini_palace_name: '',
+        chapter_id: null,
+        chapter_name: '',
+        question_type: 'multiple_choice',
+        stem_snapshot: '选择题 1',
+        user_question: '请解释这道题的核心考点是什么。',
+        explanation_text: '讲解内容',
+        ai_call_log_id: 'log-1',
+        created_at: null,
+      },
+    })
+    getFreestyleQuestionAttemptsApiMock.mockResolvedValue({ items: [] })
+    getFreestyleQuestionExplanationsApiMock.mockResolvedValue({ items: [] })
+    getFreestyleHistorySummaryApiMock.mockResolvedValue({
+      stored: { attempt_count: 0, explanation_count: 0 },
+      legacy_quiz: {
+        question_count: 0,
+        attempted_question_count: 0,
+        attempt_count: 0,
+        correct_count: 0,
+        incorrect_count: 0,
+      },
+      legacy_ai_logs: {
+        total_count: 0,
+        explanation_count: 0,
+        short_answer_feedback_count: 0,
+      },
+    })
     getPalacesGroupedApiMock.mockResolvedValue({ subjects: [] })
     recordPalaceQuizChoiceAttemptApiMock.mockReturnValue(new Promise(() => undefined))
     requestPalaceShortAnswerFeedbackApiMock.mockResolvedValue({
@@ -260,6 +332,87 @@ describe('FreestylePage feedback', () => {
       event === 'quiz_result_correct' || event === 'quiz_result_incorrect',
     )
     expect(resultEvents).toHaveLength(2)
+  })
+
+  it('records freestyle answer history when a card is first resolved', async () => {
+    renderPage([quizCard(1)])
+
+    await answerChoiceAt(0)
+
+    await waitFor(() => {
+      expect(createFreestyleQuestionAttemptApiMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          question_id: 1,
+          palace_id: 1,
+          palace_title: '测试宫殿',
+          mode: 'today',
+          question_type: 'multiple_choice',
+          stem_snapshot: '选择题 1',
+          answer_payload: { selected_option_id: 'A' },
+          is_correct: true,
+        }),
+      )
+    })
+  })
+
+  it('opens freestyle history and loads current-mode attempts', async () => {
+    getFreestyleQuestionAttemptsApiMock.mockResolvedValueOnce({
+      items: [
+        {
+          id: 7,
+          question_id: 1,
+          palace_id: 1,
+          palace_title: '测试宫殿',
+          mini_palace_id: null,
+          mini_palace_name: '',
+          chapter_id: null,
+          chapter_name: '',
+          mode: 'today',
+          question_type: 'multiple_choice',
+          stem_snapshot: '选择题 1',
+          answer_payload: { selected_option_id: 'A' },
+          is_correct: true,
+          created_at: null,
+        },
+      ],
+    })
+    renderPage([quizCard(1)])
+
+    fireEvent.click(await screen.findByRole('button', { name: '历史记录' }))
+
+    await waitFor(() => {
+      expect(getFreestyleHistorySummaryApiMock).toHaveBeenCalled()
+      expect(getFreestyleQuestionAttemptsApiMock).toHaveBeenCalledWith(
+        expect.objectContaining({ mode: 'today', limit: 80 }),
+      )
+    })
+    expect((await screen.findAllByText('选择题 1')).length).toBeGreaterThan(1)
+    expect(screen.getByText('选择：A')).toBeTruthy()
+  })
+
+  it('stores AI explanation history from the freestyle explain sheet', async () => {
+    requestPalaceQuestionExplainApiMock.mockResolvedValueOnce({
+      question_id: 1,
+      explanation_text: '讲解内容',
+      ai_call_log_id: 'log-1',
+    })
+    renderPage([quizCard(1)])
+
+    fireEvent.click(await screen.findByRole('button', { name: 'AI 讲解' }))
+    fireEvent.click(screen.getByRole('button', { name: '解释考点' }))
+
+    await waitFor(() => {
+      expect(createFreestyleQuestionExplanationApiMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          question_id: 1,
+          palace_id: 1,
+          user_question: '请解释这道题的核心考点是什么。',
+          explanation_text: '讲解内容',
+          ai_call_log_id: 'log-1',
+        }),
+      )
+    })
+    expect((await screen.findAllByText('讲解内容')).length).toBeGreaterThan(1)
   })
 
   it('emits quiz-result confetti for correct freestyle answers', async () => {
@@ -383,6 +536,7 @@ describe('FreestylePage feedback', () => {
       correctStreak: 3,
       questionStates: {},
       resolvedQuestionIds: [],
+      activeQueueIds: [],
       lastQueueSignature: 'quiz:1|quiz:2|quiz:3',
     })
     getFreestyleFeedApiMock.mockReturnValue(new Promise(() => undefined))
@@ -396,6 +550,40 @@ describe('FreestylePage feedback', () => {
     await waitFor(() => {
       expect(readFreestyleProgress().currentIndex).toBe(2)
     })
+  })
+
+  it('shows actionable diagnostics when the mobile PWA feed load fails', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    })
+    getFreestyleFeedApiMock.mockRejectedValue(
+      new Error(
+        [
+          '网络请求失败：GET /api/v1/freestyle/feed',
+          '浏览器错误：Load failed',
+          '当前页面：http://localhost/freestyle',
+        ].join('\n'),
+      ),
+    )
+
+    render(
+      <MemoryRouter>
+        <FreestylePage />
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByText('队列加载失败')).toBeTruthy()
+    expect(screen.getByText(/网络请求失败：GET \/api\/v1\/freestyle\/feed/)).toBeTruthy()
+    expect(screen.getByRole('link', { name: '清理 PWA 缓存' }).getAttribute('href')).toBe('/pwa-reset.html')
+
+    fireEvent.click(screen.getByRole('button', { name: '复制诊断' }))
+
+    await waitFor(() => {
+      expect(writeText).toHaveBeenCalledWith(expect.stringContaining('随心队列加载失败'))
+    })
+    expect(toastSuccessMock).toHaveBeenCalledWith('诊断信息已复制')
   })
 
   it('restores the saved card index after reopening once the queue loads', async () => {
@@ -544,7 +732,7 @@ describe('FreestylePage feedback', () => {
     const groups = actions.querySelectorAll(':scope > div')
     expect(groups).toHaveLength(2)
     expect(groups[0]?.querySelectorAll('button')).toHaveLength(3)
-    expect(groups[1]?.querySelectorAll('button')).toHaveLength(4)
+    expect(groups[1]?.querySelectorAll('button')).toHaveLength(5)
   })
 
   it('keeps the memory palace lookup disabled when the current random card has no palace context', async () => {
@@ -626,6 +814,120 @@ describe('FreestylePage feedback', () => {
 
     expect(await screen.findByText('本轮完成')).toBeTruthy()
     expect(screen.getByRole('button', { name: '再来一轮' })).toBeTruthy()
+  })
+
+  it('restores the same today round and card position after reopening', async () => {
+    const cards = Array.from({ length: 12 }, (_, index) => quizCard(index + 1))
+    const { unmount } = renderPageWithFeed([
+      { cards },
+      { cards: [] },
+      { cards: [] },
+    ])
+
+    await screen.findByText('1/12')
+    fireEvent.click(screen.getByRole('button', { name: '下一题' }))
+    fireEvent.click(screen.getByRole('button', { name: '下一题' }))
+    await waitFor(() => {
+      expect(screen.getByText('3/12')).toBeTruthy()
+      expect(readTodayTrainingProgress().currentIndex).toBe(2)
+      expect(readTodayTrainingProgress().activeQueueIds.slice(0, 3)).toEqual([
+        'quiz:1',
+        'quiz:2',
+        'quiz:3',
+      ])
+    })
+
+    unmount()
+    renderPageWithFeed([
+      { cards: [...cards].reverse() },
+      { cards: [] },
+      { cards: [] },
+    ])
+
+    await waitFor(() => {
+      expect(screen.getByText('3/12')).toBeTruthy()
+      expect(readTodayTrainingProgress().currentIndex).toBe(2)
+    })
+    expect(screen.getAllByText(/^选择题 \d+$/).slice(0, 3).map((node) => node.textContent)).toEqual([
+      '选择题 1',
+      '选择题 2',
+      '选择题 3',
+    ])
+  })
+
+  it('does not reorder answered cards out of the active today round after reopening', async () => {
+    const cards = [quizCard(1), quizCard(2), quizCard(3)]
+    const { unmount } = renderPageWithFeed([
+      { cards },
+      { cards: [] },
+      { cards: [] },
+    ])
+
+    await answerChoiceAt(0)
+    await waitFor(() => {
+      expect(readTodayTrainingProgress().resolvedQuestionIds).toEqual([1])
+      expect(readTodayTrainingProgress().activeQueueIds).toEqual(['quiz:1', 'quiz:2', 'quiz:3'])
+    })
+
+    unmount()
+    renderPageWithFeed([
+      { cards },
+      { cards: [] },
+      { cards: [] },
+    ])
+
+    await screen.findByText('选择题 1')
+    expect(screen.getAllByText(/^选择题 \d$/).map((node) => node.textContent)).toEqual([
+      '选择题 1',
+      '选择题 2',
+      '选择题 3',
+    ])
+  })
+
+  it('updates today active queue ids only when starting another round', async () => {
+    renderPageWithFeed([
+      { cards: [quizCard(1)] },
+      { cards: [] },
+      { cards: [] },
+      { cards: [quizCard(2)] },
+      { cards: [] },
+      { cards: [] },
+    ])
+
+    await waitFor(() => {
+      expect(readTodayTrainingProgress().activeQueueIds).toEqual(['quiz:1'])
+    })
+    fireEvent.click(screen.getByRole('button', { name: '下一题' }))
+    fireEvent.click(await screen.findByRole('button', { name: '再来一轮' }))
+
+    await waitFor(() => {
+      expect(readTodayTrainingProgress().activeQueueIds).toEqual(['quiz:2'])
+      expect(screen.getByText('选择题 2')).toBeTruthy()
+    })
+  })
+
+  it('restores only still-available today round cards without filling replacements', async () => {
+    saveTodayTrainingProgress({
+      currentIndex: 2,
+      correctStreak: 0,
+      questionStates: {},
+      resolvedQuestionIds: [],
+      activeQueueIds: ['quiz:1', 'quiz:2', 'quiz:3'],
+      lastQueueSignature: 'quiz:1|quiz:2|quiz:3',
+    })
+
+    renderPageWithFeed([
+      { cards: [quizCard(1), quizCard(2), quizCard(4)] },
+      { cards: [] },
+      { cards: [] },
+    ])
+
+    await waitFor(() => {
+      expect(screen.getByText('2/2')).toBeTruthy()
+      expect(screen.getByText('本轮完成')).toBeTruthy()
+      expect(readTodayTrainingProgress().currentIndex).toBe(2)
+    })
+    expect(screen.queryByText('选择题 4')).toBeNull()
   })
 
   it('keeps today progress when starting another round', async () => {

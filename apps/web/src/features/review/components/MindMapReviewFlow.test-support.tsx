@@ -66,6 +66,13 @@ vi.mock("@/shared/components/mindmap-host", () => ({
           true,
         );
       }),
+      focusNode: vi.fn((nodeUid: string | null) => {
+        if (!nodeUid) return;
+        (props.onNodeActive as ((nodes: unknown[]) => void) | undefined)?.([
+          { uid: nodeUid, text: nodeUid, note: "", memoryAnkiId: null },
+        ]);
+      }),
+      fitView: vi.fn(),
       enterNativeFullscreen: vi.fn(async () => {
         (props.onFullscreenChange as ((active: boolean) => void) | undefined)?.(
           true,

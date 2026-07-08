@@ -68,6 +68,35 @@ function renderHighlightedText(text: string, query?: string): ReactNode {
   })
 }
 
+function normalizeReviewProgress(progress?: number | null): number | null {
+  if (typeof progress !== 'number' || !Number.isFinite(progress)) return null
+  return Math.max(0, Math.min(progress, 1))
+}
+
+function ReviewProgressPill({ progress }: { progress: number }) {
+  const progressPercent = Math.round(progress * 100)
+
+  return (
+    <div
+      className="inline-flex max-w-full items-center gap-2 rounded-md border border-info/25 bg-info/10 px-2 py-1 text-[11px] font-medium text-info"
+      role="progressbar"
+      aria-label={`复习进度 ${progressPercent}%`}
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-valuenow={progressPercent}
+    >
+      <span className="shrink-0 whitespace-nowrap">复习进度</span>
+      <span className="h-1.5 w-16 overflow-hidden rounded-full bg-info/20">
+        <span
+          className="block h-full rounded-full bg-info transition-[width] duration-300"
+          style={{ width: `${progressPercent}%` }}
+        />
+      </span>
+      <span className="w-8 shrink-0 text-right tabular-nums">{progressPercent}%</span>
+    </div>
+  )
+}
+
 function ReviewActionButton({
   label,
   className,
@@ -83,13 +112,9 @@ function ReviewActionButton({
   onClick: () => void
   onWarm?: () => void
 }) {
-  const normalizedProgress =
-    typeof progress === 'number' && Number.isFinite(progress)
-      ? Math.max(0, Math.min(progress, 1))
-      : null
+  const normalizedProgress = normalizeReviewProgress(progress)
   const showProgressFill =
     !disabled &&
-    label === '开始复习' &&
     normalizedProgress !== null &&
     normalizedProgress > 0 &&
     normalizedProgress < 1
@@ -107,11 +132,16 @@ function ReviewActionButton({
         <span
           aria-hidden="true"
           data-testid="review-action-progress-fill"
-          className="pointer-events-none absolute inset-y-0 left-0 rounded-[inherit] bg-white/20 transition-[width] duration-300"
+          className="pointer-events-none absolute inset-y-0 left-0 rounded-[inherit] bg-white/25 shadow-[inset_-1px_0_0_rgb(255_255_255_/_0.18)] transition-[width] duration-300"
           style={{ width: `${normalizedProgress * 100}%` }}
         />
       ) : null}
       <span className="relative z-10">{label}</span>
+      {showProgressFill ? (
+        <span className="sr-only">
+          ，已完成 {Math.round(normalizedProgress * 100)}%
+        </span>
+      ) : null}
     </button>
   )
 }
@@ -147,12 +177,18 @@ export function PalaceListCard({
           singleSegment.current_review_schedule_id &&
           singleSegment.next_review_at)),
   )
-  const showMainSegmentList =
-    Array.isArray(palace.segments) &&
-    palace.segments.length > 0
+  const showExpandButton = isMultiSegment || (Array.isArray(palace.mini_palaces) && palace.mini_palaces.length > 0)
+  const shouldShowSegmentListWhenExpanded = isMultiSegment
+  const shouldShowStageProgress = Array.isArray(palace.stage_labels) && palace.stage_labels.length > 0
   const showPalacePracticeButton = Boolean(palace.needs_practice) && !showSingleSegmentReviewButton
   const primaryEstimatedSeconds = singleSegment?.estimated_review_seconds ?? 0
   const palaceTitle = palace.resolved_title || palace.title || '未命名宫殿'
+  const singleSegmentActiveProgress = normalizeReviewProgress(singleSegment?.active_review_progress)
+  const showSingleSegmentActiveProgress =
+    showSingleSegmentReviewButton &&
+    singleSegmentActiveProgress !== null &&
+    singleSegmentActiveProgress > 0 &&
+    singleSegmentActiveProgress < 1
 
   useEffect(() => {
     if (!menuOpen) return
@@ -221,13 +257,19 @@ export function PalaceListCard({
                   />
                 ) : null}
               </div>
+              {showSingleSegmentActiveProgress ? (
+                <ReviewProgressPill progress={singleSegmentActiveProgress} />
+              ) : null}
             </div>
           </div>
 
           <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
             <span>{formatCreatedAt(palace.created_at)}</span>
             {hasSingleSegment ? (
-              <span>预计 {formatDuration(primaryEstimatedSeconds)}</span>
+              <>
+                <span>{singleSegment.node_count} 个知识点</span>
+                <span>预计 {formatDuration(primaryEstimatedSeconds)}</span>
+              </>
             ) : (
               <span>{palace.chapters?.length || 0} 章节</span>
             )}
@@ -237,7 +279,7 @@ export function PalaceListCard({
                 专项 {(palace.focus_count ?? 0)} 张
               </span>
             ) : null}
-            {(showMainSegmentList || (Array.isArray(palace.mini_palaces) && palace.mini_palaces.length > 0)) ? (
+            {showExpandButton ? (
               <button
                 type="button"
                 className="inline-flex items-center gap-0.5 transition-colors hover:text-foreground"
@@ -253,7 +295,16 @@ export function PalaceListCard({
             ) : null}
           </div>
 
-          {expanded && showMainSegmentList ? (
+          {shouldShowStageProgress ? (
+            <PalaceStageProgress
+              stageLabels={palace.stage_labels}
+              completed={palace.review_stage_completed}
+              stages={palace.review_stages}
+              nextReviewAt={palace.next_review_at}
+            />
+          ) : null}
+
+          {expanded && shouldShowSegmentListWhenExpanded ? (
             <div className={getSegmentListClass(viewSettings.densityMode)}>
               {palace.segments.map((segment, index) => {
                 return (
@@ -300,12 +351,6 @@ export function PalaceListCard({
                 )
               })}
             </div>
-          ) : expanded ? (
-            <PalaceStageProgress
-              stageLabels={palace.stage_labels}
-              completed={palace.review_stage_completed}
-              stages={palace.review_stages}
-            />
           ) : null}
 
           {expanded && palace.description ? (

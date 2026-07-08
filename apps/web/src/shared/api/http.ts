@@ -16,6 +16,12 @@ import {
 
 export const API_BASE = '/api/v1'
 const MUTATION_ID_HEADER = 'X-Memory-Anki-Mutation-ID'
+const LOW_INFORMATION_NETWORK_ERRORS = [
+  'load failed',
+  'failed to fetch',
+  'networkerror',
+  'network request failed',
+]
 
 export interface RequestPersistenceOptions {
   resourceKey: string
@@ -62,6 +68,59 @@ function getMutationId(headers: Record<string, string>) {
     if (key.toLowerCase() === MUTATION_ID_HEADER.toLowerCase()) return value
   }
   return null
+}
+
+function readBrowserRuntimeSummary() {
+  if (typeof window === 'undefined') {
+    return {
+      currentUrl: '',
+      onlineStatus: 'unknown',
+      userAgent: '',
+    }
+  }
+  return {
+    currentUrl: window.location.href,
+    onlineStatus:
+      typeof navigator !== 'undefined' && 'onLine' in navigator
+        ? navigator.onLine
+          ? 'online'
+          : 'offline'
+        : 'unknown',
+    userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : '',
+  }
+}
+
+function isLowInformationNetworkError(message: string) {
+  const normalized = message.trim().toLowerCase()
+  return LOW_INFORMATION_NETWORK_ERRORS.some((pattern) => normalized.includes(pattern))
+}
+
+function buildNetworkFailureMessage(input: {
+  method: string
+  requestUrl: string
+  error: unknown
+}) {
+  const rawMessage = input.error instanceof Error ? input.error.message : String(input.error || '')
+  const runtime = readBrowserRuntimeSummary()
+  const lines = [
+    `网络请求失败：${input.method.toUpperCase()} ${input.requestUrl}`,
+    rawMessage ? `浏览器错误：${rawMessage}` : null,
+    runtime.currentUrl ? `当前页面：${runtime.currentUrl}` : null,
+    `在线状态：${runtime.onlineStatus}`,
+  ].filter(Boolean)
+
+  if (isLowInformationNetworkError(rawMessage)) {
+    lines.push(
+      '这通常表示手机端没有真正连到 PWA 后端，或 Service Worker / Tailscale Serve 仍在使用旧连接。',
+      '请依次检查：电脑端 start-pwa.bat 是否在运行；手机 Tailscale 是否已连接；Tailscale HTTPS 地址是否仍转发到 127.0.0.1:8012；刚更新后请访问 /pwa-reset.html 清理旧缓存。',
+    )
+  }
+
+  if (runtime.userAgent) {
+    lines.push(`浏览器：${runtime.userAgent}`)
+  }
+
+  return lines.join('\n')
 }
 
 function canPersistRequestBody(body: BodyInit | null | undefined) {
@@ -174,6 +233,11 @@ export async function fetchWithMutationQueue(
     }
     return response
   } catch (error) {
+    const networkMessage = buildNetworkFailureMessage({
+      method,
+      requestUrl: requestUrl,
+      error,
+    })
     if (!replayRequest && method.toUpperCase() !== 'GET') {
       await enqueueFailedRequest({
         url: requestUrl,
@@ -182,10 +246,10 @@ export async function fetchWithMutationQueue(
         mutationId,
         body,
         persistence,
-        message: error instanceof Error ? error.message : '网络请求失败',
+        message: networkMessage,
       })
     }
-    throw error
+    throw new Error(networkMessage)
   }
 }
 
@@ -219,6 +283,11 @@ export async function request<T>(url: string, options?: PersistedRequestInit): P
       headers,
     })
   } catch (error) {
+    const networkMessage = buildNetworkFailureMessage({
+      method,
+      requestUrl,
+      error,
+    })
     if (persistence) {
       await enqueueFailedRequest({
         url: requestUrl,
@@ -227,20 +296,21 @@ export async function request<T>(url: string, options?: PersistedRequestInit): P
         mutationId,
         body: fetchOptions.body,
         persistence,
-        message: error instanceof Error ? error.message : '网络请求失败',
+        message: networkMessage,
       })
     }
     logAppError({
       feature: 'API 请求',
       stage: 'network_failure',
-      error,
+      error: networkMessage,
       requestSummary: `${method} ${requestUrl}`,
       meta: {
         method,
         url: requestUrl,
+        originalError: error instanceof Error ? error.message : String(error),
       },
     })
-    throw error
+    throw new Error(networkMessage)
   }
 
   if (!response.ok) {

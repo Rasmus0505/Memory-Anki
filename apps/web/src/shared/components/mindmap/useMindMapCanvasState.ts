@@ -33,14 +33,20 @@ import {
   buildPreviewGraph,
   DROP_HIT_PADDING_X,
   DROP_HIT_PADDING_Y,
-  getNodeSize,
+  getResolvedNodeSize,
   isDescendant,
   type DropMode,
+  type NodeSize,
+  type NodeSizeMap,
   type PreviewState,
   TOOLBAR_HEIGHT,
 } from './layout'
 import { dispatchGlobalFeedback } from '@/shared/feedback/globalFeedbackModel'
 import type { MindMapCanvasProps } from './MindMapCanvas'
+
+type UseMindMapCanvasStateProps = MindMapCanvasProps & {
+  toolbarVisible?: boolean
+}
 
 export interface UseMindMapCanvasStateResult {
   frameRef: RefObject<HTMLDivElement | null>
@@ -51,6 +57,7 @@ export interface UseMindMapCanvasStateResult {
   displayNodes: Node[]
   displayEdges: Edge[]
   isDraggingNode: boolean
+  mobileGuidedActive: boolean
   nodeActions: ContextMenuAction[]
   edgeActions: ContextMenuAction[]
   canShowHistoryControls: boolean
@@ -84,8 +91,21 @@ function getEventFeedbackPoint(event: unknown) {
     : undefined
 }
 
+function hasMeaningfulSizeChange(
+  sizes: NodeSizeMap,
+  nodeId: string,
+  nextSize: NodeSize,
+) {
+  const previousSize = sizes.get(nodeId)
+  return (
+    !previousSize ||
+    Math.abs(previousSize.width - nextSize.width) > 1 ||
+    Math.abs(previousSize.height - nextSize.height) > 1
+  )
+}
+
 export function useMindMapCanvasState(
-  props: MindMapCanvasProps,
+  props: UseMindMapCanvasStateProps,
 ): UseMindMapCanvasStateResult {
   const {
     graphData,
@@ -113,12 +133,26 @@ export function useMindMapCanvasState(
     onNodeContextAction,
     onNodeHover,
     buildNodeActions,
+    mobileViewPolicy = 'auto',
+    viewCommand = null,
+    toolbarVisible = true,
   } = props
 
-  const layouted = useMemo(() => applyMindMapLayout(graphData), [graphData])
+  const measuredNodeSizesRef = useRef<Map<string, NodeSize>>(new Map())
+  const pendingMeasuredNodeSizesRef = useRef<Map<string, NodeSize>>(new Map())
+  const isDraggingNodeRef = useRef(false)
+  const [nodeSizeVersion, setNodeSizeVersion] = useState(0)
+
+  const layouted = useMemo(
+    () => {
+      void nodeSizeVersion
+      return applyMindMapLayout(graphData, measuredNodeSizesRef.current)
+    },
+    [graphData, nodeSizeVersion],
+  )
   const [nodes, setNodes, onNodesChange] = useNodesState(layouted.nodes)
   const [edges, setEdges, onEdgesChange] = useEdgesState(layouted.edges)
-  const { fitView, zoomIn, zoomOut } = useReactFlow()
+  const { fitView, zoomIn, zoomOut, setCenter } = useReactFlow()
 
   const [ctxMenu, setCtxMenu] = useState<{
     x: number
@@ -142,16 +176,32 @@ export function useMindMapCanvasState(
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null)
   const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 })
   const frameRef = useRef<HTMLDivElement>(null)
+  const handledViewCommandNonceRef = useRef<number | null>(null)
   const isCanvasReady = canvasSize.width > 0 && canvasSize.height > 0
+  const mobileGuidedActive =
+    mobileViewPolicy === 'guided' ||
+    (mobileViewPolicy === 'auto' &&
+      readonly &&
+      canvasSize.width > 0 &&
+      canvasSize.width < 768)
 
   const previewLayout = useMemo(
-    () => (previewState ? buildPreviewGraph(graphData, previewState) : null),
-    [graphData, previewState],
+    () => {
+      void nodeSizeVersion
+      return previewState
+        ? buildPreviewGraph(graphData, previewState, measuredNodeSizesRef.current)
+        : null
+    },
+    [graphData, nodeSizeVersion, previewState],
   )
 
   useEffect(() => {
     previewStateRef.current = previewState
   }, [previewState])
+
+  useEffect(() => {
+    isDraggingNodeRef.current = isDraggingNode
+  }, [isDraggingNode])
 
   useEffect(() => {
     return () => {
@@ -167,14 +217,32 @@ export function useMindMapCanvasState(
       requestAnimationFrame(() => {
         fitView({
           duration,
-          padding: focusMode ? 0.03 : 0.06,
+          padding: mobileGuidedActive ? 0.18 : focusMode ? 0.03 : 0.06,
           includeHiddenNodes: true,
-          minZoom: 0.42,
-          maxZoom: 1.15,
+          minZoom: mobileGuidedActive ? 0.34 : 0.42,
+          maxZoom: mobileGuidedActive ? 1.02 : 1.15,
         })
       })
     },
-    [fitView, focusMode, isCanvasReady],
+    [fitView, focusMode, isCanvasReady, mobileGuidedActive],
+  )
+
+  const centerNodeInCanvas = useCallback(
+    (nodeId: string | null | undefined, duration = 240) => {
+      if (!nodeId || !isCanvasReady) return
+      const target = nodes.find((node) => node.id === nodeId)
+      if (!target) return
+      const size = getResolvedNodeSize(target, undefined, measuredNodeSizesRef.current)
+      setCenter(
+        target.position.x + size.width / 2,
+        target.position.y + size.height / 2,
+        {
+          duration,
+          zoom: mobileGuidedActive ? 1.02 : undefined,
+        },
+      )
+    },
+    [isCanvasReady, mobileGuidedActive, nodes, setCenter],
   )
 
   useLayoutEffect(() => {
@@ -184,7 +252,10 @@ export function useMindMapCanvasState(
     const updateSize = () => {
       setCanvasSize({
         width: element.clientWidth,
-        height: Math.max(element.clientHeight - TOOLBAR_HEIGHT, 0),
+        height: Math.max(
+          element.clientHeight - (toolbarVisible ? TOOLBAR_HEIGHT : 0),
+          0,
+        ),
       })
     }
 
@@ -203,7 +274,8 @@ export function useMindMapCanvasState(
       const activeNode = draggedNode ?? dragNode
       if (!activeNode) return
 
-      const activeSize = getNodeSize(activeNode)
+      const measuredSizes = measuredNodeSizesRef.current
+      const activeSize = getResolvedNodeSize(activeNode, undefined, measuredSizes)
       const cx = activeNode.position.x + activeSize.width / 2
       const cy = activeNode.position.y + activeSize.height / 2
       let closest: { id: string; dist: number; mode: DropMode } | null = null
@@ -211,7 +283,7 @@ export function useMindMapCanvasState(
       for (const node of nodes) {
         if (node.id === dragId) continue
         if (isDescendant(graphData.nodes, dragId, node.id)) continue
-        const { width, height } = getNodeSize(node)
+        const { width, height } = getResolvedNodeSize(node, undefined, measuredSizes)
         const nx = node.position.x + width / 2
         const ny = node.position.y + height / 2
         const dist = Math.sqrt((cx - nx) ** 2 + (cy - ny) ** 2)
@@ -249,10 +321,41 @@ export function useMindMapCanvasState(
     [graphData.nodes, nodes],
   )
 
+  const handleNodeMeasure = useCallback((nodeId: string, size: NodeSize) => {
+    if (isDraggingNodeRef.current) {
+      if (hasMeaningfulSizeChange(pendingMeasuredNodeSizesRef.current, nodeId, size)) {
+        pendingMeasuredNodeSizesRef.current.set(nodeId, size)
+      }
+      return
+    }
+
+    if (!hasMeaningfulSizeChange(measuredNodeSizesRef.current, nodeId, size)) {
+      return
+    }
+
+    measuredNodeSizesRef.current.set(nodeId, size)
+    setNodeSizeVersion((version) => version + 1)
+  }, [])
+
+  const flushPendingMeasuredNodeSizes = useCallback(() => {
+    if (pendingMeasuredNodeSizesRef.current.size === 0) return false
+
+    let changed = false
+    for (const [nodeId, size] of pendingMeasuredNodeSizesRef.current) {
+      if (hasMeaningfulSizeChange(measuredNodeSizesRef.current, nodeId, size)) {
+        measuredNodeSizesRef.current.set(nodeId, size)
+        changed = true
+      }
+    }
+    pendingMeasuredNodeSizesRef.current.clear()
+    return changed
+  }, [])
+
   const handleNodeDragStart = useCallback(
     (_event: unknown, node: Node) => {
       if (readonly) return
       draggingNodeIdRef.current = node.id
+      isDraggingNodeRef.current = true
       setIsDraggingNode(true)
       lastPreviewFeedbackRef.current = ''
       setPreviewState(null)
@@ -309,18 +412,23 @@ export function useMindMapCanvasState(
           onReparent(node.id, activePreview.targetId)
         }
       }
+      const sizeChangedDuringDrag = flushPendingMeasuredNodeSizes()
       const nextLayout =
         activePreview && activePreview.sourceId === node.id
-          ? buildPreviewGraph(graphData, activePreview)
-          : applyMindMapLayout(graphData)
+          ? buildPreviewGraph(graphData, activePreview, measuredNodeSizesRef.current)
+          : applyMindMapLayout(graphData, measuredNodeSizesRef.current)
       setNodes(nextLayout.nodes)
       setEdges(nextLayout.edges)
       setPreviewState(null)
+      isDraggingNodeRef.current = false
       setIsDraggingNode(false)
       draggingNodeIdRef.current = null
       lastPreviewFeedbackRef.current = ''
+      if (sizeChangedDuringDrag) {
+        setNodeSizeVersion((version) => version + 1)
+      }
     },
-    [graphData, onReorderSibling, onReparent, readonly, setEdges, setNodes],
+    [flushPendingMeasuredNodeSizes, graphData, onReorderSibling, onReparent, readonly, setEdges, setNodes],
   )
 
   const handleFinishEdit = useCallback(
@@ -341,7 +449,7 @@ export function useMindMapCanvasState(
       const preview =
         previewState && previewState.targetId === node.id ? previewState : null
       const previewNode = previewNodesById.get(node.id)
-      const isSource = node.id === sourceId
+      const isSource = isDraggingNode && node.id === sourceId
       const shifted = Boolean(
         previewNode &&
           (Math.abs(previewNode.position.x - node.position.x) > 8 ||
@@ -351,6 +459,7 @@ export function useMindMapCanvasState(
       return {
         ...node,
         position: isSource || !previewNode ? node.position : previewNode.position,
+        zIndex: isSource ? 100 : preview ? 50 : 1,
         data: {
           ...(node.data as Record<string, unknown>),
           selected: node.id === selectedNodeId,
@@ -362,11 +471,12 @@ export function useMindMapCanvasState(
           onAddChild,
           onDelete,
           onFinishEdit: handleFinishEdit,
+          onMeasure: handleNodeMeasure,
           readonly,
         },
       }
     })
-  }, [handleFinishEdit, nodes, onAddChild, onDelete, previewLayout, previewState, readonly, selectedNodeId])
+  }, [handleFinishEdit, handleNodeMeasure, isDraggingNode, nodes, onAddChild, onDelete, previewLayout, previewState, readonly, selectedNodeId])
 
   const displayEdges = useMemo(() => {
     const baseEdges = previewLayout?.edges ?? edges
@@ -395,14 +505,23 @@ export function useMindMapCanvasState(
   }, [edges, previewLayout, selectedEdgeId])
 
   useEffect(() => {
-    const nextLayout = applyMindMapLayout(graphData)
+    const nextLayout = applyMindMapLayout(graphData, measuredNodeSizesRef.current)
     setNodes(nextLayout.nodes)
     setEdges(nextLayout.edges)
     setSelectedEdgeId(null)
     setEdgeMenu(null)
     setPreviewState(null)
+    isDraggingNodeRef.current = false
     setIsDraggingNode(false)
   }, [graphData, setEdges, setNodes])
+
+  useEffect(() => {
+    if (nodeSizeVersion === 0 || isDraggingNodeRef.current) return
+
+    const nextLayout = applyMindMapLayout(graphData, measuredNodeSizesRef.current)
+    setNodes(nextLayout.nodes)
+    setEdges(nextLayout.edges)
+  }, [graphData, nodeSizeVersion, setEdges, setNodes])
 
   const handleNodeContextMenu = useCallback(
     (event: MouseEvent, node: Node) => {
@@ -433,13 +552,32 @@ export function useMindMapCanvasState(
       setEdgeMenu(null)
       onNodeSelect(node.id)
       onNodeActivate?.(node.id)
+      if (mobileGuidedActive) {
+        centerNodeInCanvas(node.id)
+      }
       dispatchGlobalFeedback('node_select', {
         point: { x: event.clientX, y: event.clientY },
         origin: 'node',
       })
     },
-    [onNodeActivate, onNodeSelect],
+    [centerNodeInCanvas, mobileGuidedActive, onNodeActivate, onNodeSelect],
   )
+
+  useEffect(() => {
+    if (!mobileGuidedActive || !isCanvasReady || graphData.nodes.length === 0) return
+    runFitView(180)
+  }, [graphData.nodes.length, isCanvasReady, mobileGuidedActive, runFitView])
+
+  useEffect(() => {
+    if (!viewCommand || !isCanvasReady) return
+    if (handledViewCommandNonceRef.current === viewCommand.nonce) return
+    handledViewCommandNonceRef.current = viewCommand.nonce
+    if (viewCommand.type === 'fit') {
+      runFitView(220)
+      return
+    }
+    centerNodeInCanvas(viewCommand.nodeId, 220)
+  }, [centerNodeInCanvas, isCanvasReady, runFitView, viewCommand])
 
   const handleNodeMouseEnter = useCallback(
     (_event: MouseEvent, node: Node) => {
@@ -646,12 +784,13 @@ export function useMindMapCanvasState(
       origin: 'toolbar',
       label: 'LAYOUT',
     })
-    const { nodes: newNodes, edges: newEdges } = applyMindMapLayout(graphData)
+    const { nodes: newNodes, edges: newEdges } = applyMindMapLayout(graphData, measuredNodeSizesRef.current)
     setNodes(newNodes)
     setEdges(newEdges)
     setSelectedEdgeId(null)
     setEdgeMenu(null)
     setPreviewState(null)
+    isDraggingNodeRef.current = false
     setIsDraggingNode(false)
     runFitView()
   }, [graphData, runFitView, setEdges, setNodes])
@@ -681,6 +820,7 @@ export function useMindMapCanvasState(
     displayNodes,
     displayEdges,
     isDraggingNode,
+    mobileGuidedActive,
     nodeActions,
     edgeActions,
     canShowHistoryControls: Boolean(onUndo || onRedo),

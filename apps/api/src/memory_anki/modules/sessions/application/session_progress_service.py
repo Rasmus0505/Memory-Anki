@@ -5,7 +5,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from memory_anki.core.time import utc_now_naive
-from memory_anki.infrastructure.db.models import SessionProgress
+from memory_anki.infrastructure.db.models import SessionProgress, StudySession
 
 
 def _serialize_json(value: Any, fallback: str) -> str:
@@ -41,6 +41,26 @@ def _progress_json(progress: SessionProgress | None) -> dict | None:
     }
 
 
+def _progress_json_from_study_session(progress: StudySession | None) -> dict | None:
+    if progress is None:
+        return None
+    payload = _deserialize_json(progress.progress_json, {})
+    if not isinstance(payload, dict):
+        payload = {}
+    return {
+        "id": 0,
+        "session_kind": "review",
+        "palace_id": progress.palace_id,
+        "review_schedule_id": progress.target_id if progress.target_type == "review_schedule" else None,
+        "palace_segment_id": progress.palace_segment_id,
+        "mini_palace_id": progress.mini_palace_id,
+        "reveal_map": payload.get("reveal_map") or {},
+        "red_node_ids": payload.get("red_node_ids") or [],
+        "completed": bool(payload.get("completed", False)),
+        "updated_at": progress.updated_at.isoformat() if progress.updated_at else None,
+    }
+
+
 def calculate_reveal_progress(
     progress: dict | None,
     valid_node_uids: Collection[str],
@@ -72,6 +92,21 @@ def get_practice_progress(session: Session, palace_id: int) -> dict | None:
 
 
 def get_review_progress(session: Session, schedule_id: int) -> dict | None:
+    active_session = (
+        session.query(StudySession)
+        .filter(
+            StudySession.scene == "review",
+            StudySession.target_type == "review_schedule",
+            StudySession.target_id == schedule_id,
+            StudySession.status.in_(("active", "paused", "recovered")),
+            StudySession.deleted_at.is_(None),
+        )
+        .order_by(StudySession.updated_at.desc(), StudySession.started_at.desc())
+        .first()
+    )
+    if active_session is not None:
+        return _progress_json_from_study_session(active_session)
+
     progress = (
         session.query(SessionProgress)
         .filter_by(session_kind="review", review_schedule_id=schedule_id)

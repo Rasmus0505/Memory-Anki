@@ -96,3 +96,88 @@ export interface FreestyleFeedResponse {
 }
 
 export type FreestyleQuestionTypeFilter = PalaceQuizQuestionType | 'all'
+
+export type FreestyleHistoryMode = 'today' | 'free'
+
+export interface FreestyleQuizAttemptRecord {
+  id: number
+  question_id: number | null
+  palace_id: number | null
+  palace_title: string
+  mini_palace_id: number | null
+  mini_palace_name: string
+  chapter_id: number | null
+  chapter_name: string
+  mode: FreestyleHistoryMode
+  question_type: PalaceQuizQuestionType | string
+  stem_snapshot: string
+  answer_payload: Record<string, unknown>
+  is_correct: boolean | null
+  created_at: string | null
+}
+
+export interface FreestyleAiExplanationRecord {
+  id: number
+  question_id: number | null
+  palace_id: number | null
+  palace_title: string
+  mini_palace_id: number | null
+  mini_palace_name: string
+  chapter_id: number | null
+  chapter_name: string
+  question_type: PalaceQuizQuestionType | string
+  stem_snapshot: string
+  user_question: string
+  explanation_text: string
+  ai_call_log_id: string | null
+  created_at: string | null
+}
+
+export interface FreestyleHistorySummary {
+  stored: {
+    attempt_count: number
+    explanation_count: number
+  }
+  legacy_quiz: {
+    question_count: number
+    attempted_question_count: number
+    attempt_count: number
+    correct_count: number
+    incorrect_count: number
+  }
+  legacy_ai_logs: {
+    total_count: number
+    explanation_count: number
+    short_answer_feedback_count: number
+  }
+}
+
+export interface CreateFreestyleQuizAttemptPayload {
+  question_id: number
+  palace_id?: number | null
+  palace_title?: string
+  mini_palace_id?: number | null
+  mini_palace_name?: string
+  chapter_id?: number | null
+  chapter_name?: string
+  mode: FreestyleHistoryMode
+  question_type: PalaceQuizQuestionType | string
+  stem_snapshot: string
+  answer_payload: Record<string, unknown>
+  is_correct?: boolean | null
+}
+
+export interface CreateFreestyleAiExplanationPayload {
+  question_id: number
+  palace_id?: number | null
+  palace_title?: string
+  mini_palace_id?: number | null
+  mini_palace_name?: string
+  chapter_id?: number | null
+  chapter_name?: string
+  question_type: PalaceQuizQuestionType | string
+  stem_snapshot: string
+  user_question: string
+  explanation_text: string
+  ai_call_log_id?: string | null
+}

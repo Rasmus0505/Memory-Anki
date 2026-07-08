@@ -1,7 +1,6 @@
 import {
   ReactFlowProvider,
 } from '@xyflow/react'
-import type { ComponentType } from 'react'
 import '@xyflow/react/dist/style.css'
 import { NodeContextMenu } from './NodeContextMenu'
 import type { ContextMenuAction } from './NodeContextMenu'
@@ -10,6 +9,14 @@ import { MindMapCanvasToolbar } from './MindMapCanvasToolbar'
 import { MindMapCanvasViewport } from './MindMapCanvasViewport'
 import { useMindMapCanvasState } from './useMindMapCanvasState'
 import { dispatchGlobalFeedback } from '@/shared/feedback/globalFeedbackModel'
+
+export type MindMapMobileViewPolicy = 'auto' | 'map' | 'guided'
+
+export interface MindMapCanvasViewCommand {
+  type: 'fit' | 'center'
+  nodeId?: string | null
+  nonce: number
+}
 
 export interface MindMapCanvasProps {
   graphData: GraphData
@@ -39,6 +46,8 @@ export interface MindMapCanvasProps {
   onNodeContextAction?: (nodeId: string) => void
   onNodeHover?: (nodeId: string | null) => void
   buildNodeActions?: (nodeId: string) => ContextMenuAction[]
+  mobileViewPolicy?: MindMapMobileViewPolicy
+  viewCommand?: MindMapCanvasViewCommand | null
   className?: string
 }
 
@@ -49,7 +58,7 @@ function MindMapCanvasInner({
   className,
   ...props
 }: MindMapCanvasProps) {
-  const state = useMindMapCanvasState({ ...props, focusMode })
+  const state = useMindMapCanvasState({ ...props, focusMode, toolbarVisible: showToolbar })
   const handleToggleFocusMode = () => {
     dispatchGlobalFeedback('mode_switch', {
       origin: 'toolbar',
@@ -99,6 +108,7 @@ function MindMapCanvasInner({
             onEdgeDoubleClick={state.handleEdgeDoubleClick}
             onPaneClick={state.handlePaneClick}
             readonly={Boolean(props.readonly)}
+            mobileGuided={state.mobileGuidedActive}
           />
         ) : (
           <div className="flex h-full min-h-[360px] items-center justify-center text-sm text-muted-foreground">

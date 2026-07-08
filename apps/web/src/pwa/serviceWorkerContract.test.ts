@@ -10,7 +10,7 @@ describe('PWA service worker contract', () => {
   it('uses a fresh cache namespace and removes old Memory Anki PWA caches', () => {
     const sw = readFileSync(publicSwPath, 'utf8')
 
-    expect(sw).toContain("const CACHE_VERSION = '2026-07-06-desktop-pwa-v1'")
+    expect(sw).toContain("const CACHE_VERSION = '2026-07-08-mobile-pwa-v3'")
     expect(sw).toContain("const CACHE_PREFIX = 'memory-anki-pwa-'")
     expect(sw).toContain("const LEGACY_CACHE_PREFIX = 'memory-anki-mobile-'")
     expect(sw).toContain('key.startsWith(CACHE_PREFIX)')
@@ -18,6 +18,8 @@ describe('PWA service worker contract', () => {
     expect(sw).toContain("new Request(url, { cache: 'reload' })")
     expect(sw).toContain("'/pwa-reset.html'")
     expect(sw).toContain("'/freestyle'")
+    expect(sw).toContain("location.replace('/pwa-reset.html?missing_asset=")
+    expect(sw).toContain("'Content-Type': 'application/javascript; charset=utf-8'")
   })
 
   it('lets newly installed PWA workers take control without interrupting an active session', () => {

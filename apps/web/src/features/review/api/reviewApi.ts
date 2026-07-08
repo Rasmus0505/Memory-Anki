@@ -2,6 +2,7 @@ import { request } from '@/shared/api/http'
 import { invalidatePalaceCatalogCache } from '@/entities/palace/api'
 import {
   consumePrefetchedPromise,
+  invalidatePrefetchedPromise,
   prefetchPromise,
 } from '@/shared/api/promiseWarmupCache'
 import {
@@ -13,11 +14,17 @@ import {
 import type {
   ReviewQueueResponse,
   ReviewScheduleSummary,
+  ReviewStageProgressRepairResponse,
   ReviewSessionSubmitResponse,
 } from '@/shared/api/contracts'
 
-async function withPalaceCatalogInvalidation<T>(operation: Promise<T>) {
+export function invalidateReviewQueueCache() {
+  invalidatePrefetchedPromise('review:queue')
+}
+
+async function withReviewStateInvalidation<T>(operation: Promise<T>) {
   const result = await operation
+  invalidateReviewQueueCache()
   invalidatePalaceCatalogCache()
   return result
 }
@@ -52,6 +59,20 @@ export function clearReviewSessionProgressApi(id: number) {
   return clearSessionProgressApi('review', id, 'Clear review progress')
 }
 
+export function repairReviewStageProgressApi() {
+  return withReviewStateInvalidation(
+    request<ReviewStageProgressRepairResponse>('/review/repair-stage-progress', {
+      method: 'POST',
+      body: JSON.stringify({}),
+      persistence: {
+        resourceKey: 'review:repair-stage-progress',
+        description: '修复历史宫殿复习进度',
+        replayMode: 'manual',
+      },
+    }),
+  )
+}
+
 export function submitReviewSessionApi(
   id: number,
   data: {
@@ -64,7 +85,7 @@ export function submitReviewSessionApi(
     needs_practice?: boolean
   },
 ) {
-  return withPalaceCatalogInvalidation(
+  return withReviewStateInvalidation(
     request<ReviewSessionSubmitResponse>(`/review/session/${id}/submit`, {
       method: 'POST',
       body: JSON.stringify(data),

@@ -5,8 +5,10 @@ import {
   FileJson,
   FileText,
   Keyboard,
+  RefreshCw,
   Settings,
   Upload,
+  Wrench,
 } from 'lucide-react'
 import { toast } from '@/shared/feedback/toast'
 import { ProfileLayout } from '@/features/profile/ProfileLayout'
@@ -21,17 +23,25 @@ import {
   exportMarkdownUrl,
   importFileApi,
 } from '@/features/profile/api'
+import { repairReviewStageProgressApi } from '@/features/review/api'
 import { Button } from '@/shared/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card'
 import { Input } from '@/shared/components/ui/input'
 import { Label } from '@/shared/components/ui/label'
 import { MemoryAnkiShortcutsSettings } from '@/features/shortcuts/MemoryAnkiShortcutsSettings'
+import { resetPwaRuntime } from '@/pwa/resetPwa'
 
 export default function ProfileSettingsPage() {
   const [tab, setTab] = useState<'config' | 'io' | 'shortcuts'>('config')
   const [config, setConfig] = useState<ReviewSettings | null>(null)
   const [clientPreferencesReady, setClientPreferencesReady] = useState(false)
   const [importResult, setImportResult] = useState<string | null>(null)
+  const [pwaResetting, setPwaResetting] = useState(false)
+  const [repairProgressLoading, setRepairProgressLoading] = useState(false)
+  const [repairProgressMessage, setRepairProgressMessage] = useState<{
+    tone: 'success' | 'error'
+    text: string
+  } | null>(null)
 
   useEffect(() => {
     const loadSettings = async () => {
@@ -83,6 +93,52 @@ export default function ProfileSettingsPage() {
     }
 
     setImportResult(`导入失败: ${result.error ?? '未知错误'}`)
+  }
+
+  const handleResetPwa = async () => {
+    setPwaResetting(true)
+    try {
+      const result = await resetPwaRuntime()
+      toast.success(
+        `PWA 缓存已清理：${result.deletedCaches} 个缓存，${result.unregisteredServiceWorkers} 个 Service Worker`,
+      )
+      window.location.assign(`/freestyle?pwa_refresh=${Date.now()}`)
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'PWA 刷新失败，请稍后重试')
+      setPwaResetting(false)
+    }
+  }
+
+  const handleRepairReviewStageProgress = async () => {
+    setRepairProgressLoading(true)
+    setRepairProgressMessage(null)
+    try {
+      const result = await repairReviewStageProgressApi()
+      const recoveredCount = result.practice_recovery_count ?? 0
+      const migratedCount = (result.orphan_progress_count ?? 0) + (result.orphan_study_session_count ?? 0)
+      const syncedCount = result.study_session_count ?? 0
+      const details = [
+        `重建 ${result.palace_count} 个宫殿`,
+        recoveredCount > 0 ? `恢复 ${recoveredCount} 条节点进度` : null,
+        migratedCount > 0 ? `迁回 ${migratedCount} 条历史进度` : null,
+        syncedCount > 0 ? `同步 ${syncedCount} 条前端复习会话` : null,
+      ].filter(Boolean)
+      const message = `修复完成：${details.join('，')}。`
+      setRepairProgressMessage({
+        tone: 'success',
+        text: message,
+      })
+      toast.success(message)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '修复失败，请稍后重试'
+      setRepairProgressMessage({
+        tone: 'error',
+        text: message,
+      })
+      toast.error(message)
+    } finally {
+      setRepairProgressLoading(false)
+    }
   }
 
   if (!config) {
@@ -233,6 +289,41 @@ export default function ProfileSettingsPage() {
             </CardContent>
           </Card>
 
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Wrench className="size-4" />
+                维护工具
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="text-sm text-muted-foreground">
+                当旧版本宫殿的复习阶段、列表进度或下一轮排程显示不一致时，可以重新计算历史宫殿复习进度。
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => void handleRepairReviewStageProgress()}
+                loading={repairProgressLoading}
+                loadingText="正在修复复习进度"
+              >
+                <Wrench className="size-4" />
+                一键修复历史宫殿复习进度
+              </Button>
+              {repairProgressMessage ? (
+                <div
+                  className={`rounded-lg border px-4 py-3 text-sm ${
+                    repairProgressMessage.tone === 'success'
+                      ? 'border-success/30 bg-success/5 text-success'
+                      : 'border-destructive/50 bg-destructive/10 text-destructive'
+                  }`}
+                >
+                  {repairProgressMessage.text}
+                </div>
+              ) : null}
+            </CardContent>
+          </Card>
+
           <Button type="submit">保存复习配置</Button>
         </form>
       ) : (
@@ -306,6 +397,31 @@ export default function ProfileSettingsPage() {
                     开始导入
                   </Button>
                 </form>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <RefreshCw className="size-4" />
+                  PWA 更新
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="text-sm text-muted-foreground">
+                  清理当前设备里的 Memory Anki PWA 离线缓存和 Service Worker，然后重新进入随心模式。学习数据不会被清除。
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => void handleResetPwa()}
+                  loading={pwaResetting}
+                  loadingText="正在刷新 PWA"
+                >
+                  <RefreshCw className="size-4" />
+                  手动更新 PWA
+                </Button>
               </CardContent>
             </Card>
           </div>

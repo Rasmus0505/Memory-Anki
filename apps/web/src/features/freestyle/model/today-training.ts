@@ -231,6 +231,34 @@ export function buildTodayTrainingQueue(
   return queue.slice(0, config.roundSize)
 }
 
+export function restoreTodayTrainingQueue(
+  sources: TodayTrainingQueueSources,
+  activeQueueIds: string[],
+) {
+  if (activeQueueIds.length === 0) return []
+  const cardsById = new Map<string, FreestyleCard>()
+  const sourceCards = [
+    ...sources.dueCards,
+    ...sources.practiceCards,
+    ...sources.fillCards,
+  ]
+  sourceCards.forEach((card) => {
+    if (cardsById.has(card.id)) return
+    cardsById.set(card.id, card)
+  })
+
+  const restored: FreestyleCard[] = []
+  const seenCardIds = new Set<string>()
+  activeQueueIds.forEach((id) => {
+    if (seenCardIds.has(id)) return
+    const card = cardsById.get(id)
+    if (!card) return
+    seenCardIds.add(id)
+    restored.push(card)
+  })
+  return restored
+}
+
 export function buildTodayTrainingSummary(
   queue: FreestyleCard[],
   progress: FreestyleProgressSnapshot,

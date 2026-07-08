@@ -3,7 +3,11 @@ export type { TreeRendererProps, TreeRenderMeta } from './TreeRenderer'
 export { MindMapContainer } from './MindMapContainer'
 export type { MindMapContainerProps, ViewMode } from './MindMapContainer'
 export { MindMapCanvas } from './MindMapCanvas'
-export type { MindMapCanvasProps } from './MindMapCanvas'
+export type {
+  MindMapCanvasProps,
+  MindMapCanvasViewCommand,
+  MindMapMobileViewPolicy,
+} from './MindMapCanvas'
 export { MindMapWorkspace } from './MindMapWorkspace'
 export { nodeTypes } from './NodeCard'
 export { NodeContextMenu } from './NodeContextMenu'

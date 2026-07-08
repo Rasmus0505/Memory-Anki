@@ -10,6 +10,7 @@ import {
 import { Brain, FolderTree, Scissors, Sparkles, Target } from 'lucide-react'
 import type { MindMapEditorState } from '@/shared/api/contracts'
 import { MindMapCanvas } from '@/shared/components/mindmap'
+import type { MindMapCanvasViewCommand } from '@/shared/components/mindmap'
 import type { ContextMenuAction } from '@/shared/components/mindmap/NodeContextMenu'
 import {
   addEditorDocChild,
@@ -37,6 +38,7 @@ export const MindMapFrame = forwardRef<MindMapFrameHandle, MindMapFrameProps>(fu
   practiceModeActive = false,
   immersiveModeActive = false,
   aiSplitBusy = false,
+  mobileViewPolicy = 'auto',
   className,
   segments = [],
   activeSegmentId = null,
@@ -72,6 +74,8 @@ export const MindMapFrame = forwardRef<MindMapFrameHandle, MindMapFrameProps>(fu
   const frameRef = useRef<HTMLDivElement | null>(null)
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
   const [uiCleared, setUiCleared] = useState(false)
+  const [viewCommand, setViewCommand] = useState<MindMapCanvasViewCommand | null>(null)
+  const viewCommandNonceRef = useRef(0)
   const editorDoc = editorState.editor_doc
   const normalizedEditorState = useMemo<MindMapEditorState>(
     () => ({
@@ -115,12 +119,6 @@ export const MindMapFrame = forwardRef<MindMapFrameHandle, MindMapFrameProps>(fu
   }, [onReady])
 
   useEffect(() => {
-    if (!focusRequestNodeUid || focusRequestNonce <= 0) return
-    setSelectedNodeId(focusRequestNodeUid)
-    onNodeActive?.(buildSelectionFromDoc(normalizedEditorState.editor_doc, focusRequestNodeUid))
-  }, [focusRequestNodeUid, focusRequestNonce, normalizedEditorState.editor_doc, onNodeActive])
-
-  useEffect(() => {
     if (!reviewFxSignal) return
     dispatchGlobalFeedback(reviewFxSignal.type, {
       origin: 'review',
@@ -158,6 +156,34 @@ export const MindMapFrame = forwardRef<MindMapFrameHandle, MindMapFrameProps>(fu
     },
     [normalizedEditorState.editor_doc, onNodeActive],
   )
+
+  const requestFocusNode = useCallback(
+    (nodeUid: string | null) => {
+      setSelectedNodeId(nodeUid)
+      onNodeActive?.(buildSelectionFromDoc(normalizedEditorState.editor_doc, nodeUid))
+      if (!nodeUid) return
+      viewCommandNonceRef.current += 1
+      setViewCommand({
+        type: 'center',
+        nodeId: nodeUid,
+        nonce: viewCommandNonceRef.current,
+      })
+    },
+    [normalizedEditorState.editor_doc, onNodeActive],
+  )
+
+  const requestFitView = useCallback(() => {
+    viewCommandNonceRef.current += 1
+    setViewCommand({
+      type: 'fit',
+      nonce: viewCommandNonceRef.current,
+    })
+  }, [])
+
+  useEffect(() => {
+    if (!focusRequestNodeUid || focusRequestNonce <= 0) return
+    requestFocusNode(focusRequestNodeUid)
+  }, [focusRequestNodeUid, focusRequestNonce, requestFocusNode])
 
   const activateNode = useCallback(
     (nodeId: string) => {
@@ -276,6 +302,8 @@ export const MindMapFrame = forwardRef<MindMapFrameHandle, MindMapFrameProps>(fu
     () => ({
       setUiCleared: setUiCleared,
       toggleUiCleared: () => setUiCleared((current) => !current),
+      focusNode: requestFocusNode,
+      fitView: requestFitView,
       enterNativeFullscreen: async () => {
         frameRef.current?.classList.add('memory-anki-mindmap-native-fullscreen')
         onFullscreenChange?.(true)
@@ -285,7 +313,7 @@ export const MindMapFrame = forwardRef<MindMapFrameHandle, MindMapFrameProps>(fu
         onFullscreenChange?.(false)
       },
     }),
-    [onFullscreenChange],
+    [onFullscreenChange, requestFitView, requestFocusNode],
   )
 
   const canEdit = !readonly && !practiceModeActive && !miniPalaceDraft.active
@@ -298,6 +326,8 @@ export const MindMapFrame = forwardRef<MindMapFrameHandle, MindMapFrameProps>(fu
         selectedNodeId={selectedNodeId}
         readonly={!canEdit}
         showToolbar={!uiCleared}
+        mobileViewPolicy={mobileViewPolicy}
+        viewCommand={viewCommand}
         onNodeSelect={selectNode}
         onNodeActivate={activateNode}
         onNodeContextAction={contextNode}

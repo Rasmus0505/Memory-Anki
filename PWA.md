@@ -142,7 +142,9 @@ PWA 安装需要 HTTPS。请用 Tailscale Serve 输出的 HTTPS 地址访问 `/f
 .\start-pwa.bat
 ```
 
-如果手机主屏幕 PWA 仍加载旧缓存，打开当前设备的 HTTPS Tailscale 地址并访问 `/pwa-reset.html`，清理完成后重新进入 `/freestyle`。
+如果手机主屏幕 PWA 仍加载旧缓存，进入“个人中心 -> 导入导出 -> PWA 更新”，点击“手动更新 PWA”。它会清理当前设备的 PWA 离线缓存和 Service Worker，然后重新进入 `/freestyle`，不会清除学习数据。
+
+如果页面旧到看不到这个按钮，再打开当前设备的 HTTPS Tailscale 地址并访问 `/pwa-reset.html`，清理完成后重新进入 `/freestyle`。
 
 ### Serve 提示没有启用
 

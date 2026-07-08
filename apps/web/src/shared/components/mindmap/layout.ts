@@ -5,16 +5,16 @@ import { BRANCH_COLORS } from './branchColors'
 export const TOOLBAR_HEIGHT = 54
 const ROOT_X = 52
 const ROOT_Y = 280
-const ROOT_NODE_WIDTH = 174
-const ROOT_NODE_MIN_HEIGHT = 54
-const BRANCH_NODE_WIDTH = 156
-const BRANCH_NODE_MIN_HEIGHT = 52
-const LEAF_NODE_WIDTH = 132
-const LEAF_NODE_MIN_HEIGHT = 46
-const ROOT_GAP_X = 56
-const CHILD_GAP_X = 38
+const ROOT_NODE_WIDTH = 170
+const ROOT_NODE_MIN_HEIGHT = 40
+const BRANCH_NODE_WIDTH = 152
+const BRANCH_NODE_MIN_HEIGHT = 34
+const LEAF_NODE_WIDTH = 136
+const LEAF_NODE_MIN_HEIGHT = 30
+const ROOT_GAP_X = 48
+const CHILD_GAP_X = 30
 const ROOT_STACK_GAP = 18
-const CHILD_GAP_Y = 10
+const CHILD_GAP_Y = 12
 export const DROP_HIT_PADDING_X = 16
 export const DROP_HIT_PADDING_Y = 12
 
@@ -34,6 +34,13 @@ interface LayoutBounds {
   height: number
   subtreeHeight: number
 }
+
+export interface NodeSize {
+  width: number
+  height: number
+}
+
+export type NodeSizeMap = ReadonlyMap<string, NodeSize>
 
 export interface PositionedGraph {
   nodes: Node[]
@@ -75,6 +82,12 @@ function getNodeLabel(source: NodeSizeSource): string {
   return ''
 }
 
+function getNodeId(source: NodeSizeSource): string | null {
+  if (!source || typeof source === 'string') return null
+  const directId = 'id' in source ? source.id : undefined
+  return typeof directId === 'string' ? directId : null
+}
+
 export function getNodeRole(node?: NodeSizeSource): LayoutRole {
   if (isLayoutRole(node)) return node
 
@@ -102,31 +115,31 @@ function getBaseNodeSize(role: LayoutRole): {
       return {
         width: ROOT_NODE_WIDTH,
         minHeight: ROOT_NODE_MIN_HEIGHT,
-        horizontalPadding: 32,
-        verticalPadding: 16,
+        horizontalPadding: 24,
+        verticalPadding: 12,
         lineHeight: 20,
-        averageCharWidth: 15,
+        averageCharWidth: 14,
         metaHeight: 0,
       }
     case 'branch':
       return {
         width: BRANCH_NODE_WIDTH,
         minHeight: BRANCH_NODE_MIN_HEIGHT,
-        horizontalPadding: 16,
-        verticalPadding: 12,
-        lineHeight: 16,
+        horizontalPadding: 14,
+        verticalPadding: 10,
+        lineHeight: 17,
         averageCharWidth: 13,
-        metaHeight: 19,
+        metaHeight: 0,
       }
     default:
       return {
         width: LEAF_NODE_WIDTH,
         minHeight: LEAF_NODE_MIN_HEIGHT,
-        horizontalPadding: 16,
-        verticalPadding: 12,
-        lineHeight: 16,
+        horizontalPadding: 14,
+        verticalPadding: 9,
+        lineHeight: 17,
         averageCharWidth: 12,
-        metaHeight: 18,
+        metaHeight: 0,
       }
   }
 }
@@ -141,7 +154,7 @@ function getWeightedTextLength(text: string): number {
 export function getNodeSize(
   source?: NodeSizeSource,
   labelOverride?: string,
-): { width: number; height: number } {
+): NodeSize {
   const role = getNodeRole(source)
   const base = getBaseNodeSize(role)
   const label = ((labelOverride ?? getNodeLabel(source)) || '').trim() || '未命名节点'
@@ -157,6 +170,39 @@ export function getNodeSize(
   )
 
   return { width: base.width, height }
+}
+
+export function getResolvedNodeSize(
+  source?: NodeSizeSource,
+  labelOverride?: string,
+  measuredSizes?: NodeSizeMap,
+): NodeSize {
+  const fallback = getNodeSize(source, labelOverride)
+  const nodeId = getNodeId(source)
+  const measured = nodeId ? measuredSizes?.get(nodeId) : undefined
+
+  if (!measured || measured.width <= 0 || measured.height <= 0) {
+    return fallback
+  }
+
+  return {
+    width: Math.max(fallback.width, Math.ceil(measured.width)),
+    height: Math.max(fallback.height, Math.ceil(measured.height)),
+  }
+}
+
+function getTreeNodeSize(node: LayoutTreeNode, measuredSizes?: NodeSizeMap): NodeSize {
+  const measured = measuredSizes?.get(node.node.id)
+  const fallback = getNodeSize(node.layoutRole, node.node.label)
+
+  if (!measured || measured.width <= 0 || measured.height <= 0) {
+    return fallback
+  }
+
+  return {
+    width: Math.max(fallback.width, Math.ceil(measured.width)),
+    height: Math.max(fallback.height, Math.ceil(measured.height)),
+  }
 }
 
 export function isDescendant(
@@ -214,14 +260,14 @@ function buildLayoutForest(graphData: GraphData): LayoutTreeNode[] {
   )
 }
 
-function measureTree(node: LayoutTreeNode): LayoutBounds {
-  const size = getNodeSize(node.layoutRole, node.node.label)
+function measureTree(node: LayoutTreeNode, measuredSizes?: NodeSizeMap): LayoutBounds {
+  const size = getTreeNodeSize(node, measuredSizes)
 
   if (node.children.length === 0) {
     return { width: size.width, height: size.height, subtreeHeight: size.height }
   }
 
-  const childBounds = node.children.map(measureTree)
+  const childBounds = node.children.map((child) => measureTree(child, measuredSizes))
   const childrenHeight =
     childBounds.reduce((sum, bound) => sum + bound.subtreeHeight, 0) +
     CHILD_GAP_Y * Math.max(0, node.children.length - 1)
@@ -242,9 +288,10 @@ function layoutTreeNodes(
   top: number,
   positions: Map<string, Node>,
   edgeColors: Map<string, string>,
+  measuredSizes?: NodeSizeMap,
 ): LayoutBounds {
-  const size = getNodeSize(node.layoutRole, node.node.label)
-  const ownBounds = measureTree(node)
+  const size = getTreeNodeSize(node, measuredSizes)
+  const ownBounds = measureTree(node, measuredSizes)
   const y = top + ownBounds.subtreeHeight / 2 - size.height / 2
 
   positions.set(node.node.id, {
@@ -267,7 +314,7 @@ function layoutTreeNodes(
 
   if (node.children.length === 0) return ownBounds
 
-  const childBounds = node.children.map(measureTree)
+  const childBounds = node.children.map((child) => measureTree(child, measuredSizes))
   const childrenHeight =
     childBounds.reduce((sum, bound) => sum + bound.subtreeHeight, 0) +
     CHILD_GAP_Y * Math.max(0, node.children.length - 1)
@@ -284,6 +331,7 @@ function layoutTreeNodes(
       currentTop,
       positions,
       edgeColors,
+      measuredSizes,
     )
     edgeColors.set(`${node.node.id}->${child.node.id}`, child.branchColor)
     currentTop += childBound.subtreeHeight + CHILD_GAP_Y
@@ -292,11 +340,90 @@ function layoutTreeNodes(
   return ownBounds
 }
 
-export function applyMindMapLayout(graphData: GraphData): PositionedGraph {
+function getNodeParentId(node: Node): string | null {
+  const data = node.data as { parentId?: unknown }
+  return typeof data.parentId === 'string' ? data.parentId : null
+}
+
+function resolveOverlaps(
+  nodes: Node[],
+  measuredSizes?: NodeSizeMap,
+  minGap = 8,
+  maxIterations = 3,
+): Node[] {
+  const nodeMap = new Map<string, Node>(nodes.map((node) => [node.id, { ...node }]))
+  const childrenByParent = new Map<string, string[]>()
+
+  for (const node of nodes) {
+    const parentId = getNodeParentId(node)
+    if (!parentId) continue
+    const children = childrenByParent.get(parentId) ?? []
+    children.push(node.id)
+    childrenByParent.set(parentId, children)
+  }
+
+  const shiftSubtree = (nodeId: string, shift: number) => {
+    const stack = [nodeId]
+    while (stack.length > 0) {
+      const currentId = stack.pop()!
+      const current = nodeMap.get(currentId)
+      if (!current) continue
+
+      nodeMap.set(currentId, {
+        ...current,
+        position: {
+          x: current.position.x,
+          y: current.position.y + shift,
+        },
+      })
+
+      stack.push(...(childrenByParent.get(currentId) ?? []))
+    }
+  }
+
+  for (let iteration = 0; iteration < maxIterations; iteration++) {
+    const byColumn = new Map<number, Node[]>()
+
+    for (const node of nodeMap.values()) {
+      const column = Math.round(node.position.x)
+      const columnNodes = byColumn.get(column) ?? []
+      columnNodes.push(node)
+      byColumn.set(column, columnNodes)
+    }
+
+    let anyOverlap = false
+
+    for (const columnNodes of byColumn.values()) {
+      columnNodes.sort((a, b) => a.position.y - b.position.y)
+
+      for (let index = 0; index < columnNodes.length - 1; index++) {
+        const upper = columnNodes[index]
+        const lower = columnNodes[index + 1]
+        const upperBottom = upper.position.y + getResolvedNodeSize(upper, undefined, measuredSizes).height
+        const requiredTop = upperBottom + minGap
+
+        if (lower.position.y >= requiredTop) continue
+
+        anyOverlap = true
+        shiftSubtree(lower.id, requiredTop - lower.position.y)
+        columnNodes[index + 1] = nodeMap.get(lower.id)!
+      }
+    }
+
+    if (!anyOverlap) break
+  }
+
+  return nodes.map((node) => nodeMap.get(node.id) ?? node)
+}
+
+export function applyMindMapLayout(
+  graphData: GraphData,
+  measuredSizes?: NodeSizeMap,
+): PositionedGraph {
   const forest = buildLayoutForest(graphData)
   const positions = new Map<string, Node>()
   const edgeColors = new Map<string, string>()
-  const rootBounds = forest.map(measureTree)
+  const rootBounds = forest.map((root) => measureTree(root, measuredSizes))
 
   const totalHeight =
     rootBounds.reduce((sum, bound) => sum + bound.subtreeHeight, 0) +
@@ -304,13 +431,14 @@ export function applyMindMapLayout(graphData: GraphData): PositionedGraph {
   let currentTop = ROOT_Y - totalHeight / 2
 
   forest.forEach((root, index) => {
-    layoutTreeNodes(root, ROOT_X, currentTop, positions, edgeColors)
+    layoutTreeNodes(root, ROOT_X, currentTop, positions, edgeColors, measuredSizes)
     currentTop += rootBounds[index].subtreeHeight + ROOT_STACK_GAP
   })
 
-  const nodes = graphData.nodes
+  const rawNodes = graphData.nodes
     .map((graphNode) => positions.get(graphNode.id))
     .filter((node): node is Node => Boolean(node))
+  const nodes = resolveOverlaps(rawNodes, measuredSizes)
 
   const edges = graphData.edges.map((edge) => {
     const edgeColor = edgeColors.get(edge.id) ?? '#89a89e'
@@ -374,15 +502,16 @@ function movePreviewNode(
 export function buildPreviewGraph(
   graphData: GraphData,
   preview: PreviewState,
+  measuredSizes?: NodeSizeMap,
 ): PositionedGraph {
   const source = graphData.nodes.find((node) => node.id === preview.sourceId)
   const target = graphData.nodes.find((node) => node.id === preview.targetId)
-  if (!source || !target) return applyMindMapLayout(graphData)
+  if (!source || !target) return applyMindMapLayout(graphData, measuredSizes)
   if (
     source.id === target.id ||
     isDescendant(graphData.nodes, source.id, target.id)
   ) {
-    return applyMindMapLayout(graphData)
+    return applyMindMapLayout(graphData, measuredSizes)
   }
 
   const nodes = movePreviewNode(
@@ -391,5 +520,5 @@ export function buildPreviewGraph(
     preview.targetId,
     preview.mode,
   )
-  return applyMindMapLayout({ ...graphData, nodes })
+  return applyMindMapLayout({ ...graphData, nodes }, measuredSizes)
 }

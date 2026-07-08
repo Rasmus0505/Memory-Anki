@@ -25,6 +25,7 @@ export interface FreestyleProgressSnapshot {
   questionStates: Record<number, QuizRuntimeState>
   correctStreak: number
   resolvedQuestionIds: number[]
+  activeQueueIds: string[]
   lastQueueSignature: string
 }
 
@@ -64,6 +65,7 @@ export const DEFAULT_FREESTYLE_PROGRESS: FreestyleProgressSnapshot = {
   questionStates: {},
   correctStreak: 0,
   resolvedQuestionIds: [],
+  activeQueueIds: [],
   lastQueueSignature: '',
 }
 
@@ -78,6 +80,19 @@ function sanitizeNumberList(value: unknown) {
   value.forEach((item) => {
     const id = Number(item)
     if (!Number.isInteger(id) || id <= 0 || seen.has(id)) return
+    seen.add(id)
+    result.push(id)
+  })
+  return result
+}
+
+function sanitizeStringList(value: unknown) {
+  if (!Array.isArray(value)) return []
+  const seen = new Set<string>()
+  const result: string[] = []
+  value.forEach((item) => {
+    const id = typeof item === 'string' ? item.trim() : ''
+    if (!id || seen.has(id)) return
     seen.add(id)
     result.push(id)
   })
@@ -179,6 +194,7 @@ export function sanitizeFreestyleProgress(value: unknown): FreestyleProgressSnap
     questionStates: sanitizeQuestionStates(raw.questionStates),
     correctStreak,
     resolvedQuestionIds: sanitizeNumberList(raw.resolvedQuestionIds),
+    activeQueueIds: sanitizeStringList(raw.activeQueueIds),
     lastQueueSignature: typeof raw.lastQueueSignature === 'string' ? raw.lastQueueSignature : '',
   }
 }

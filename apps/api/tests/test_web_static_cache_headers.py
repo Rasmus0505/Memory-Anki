@@ -24,6 +24,13 @@ def test_web_routes_cache_entrypoints_and_versioned_assets_separately():
     def hashed_asset():
         return PlainTextResponse("console.log('ok')")
 
+    @app.get("/assets/recovery-a1b2c3d4.js")
+    def recovery_asset():
+        return PlainTextResponse(
+            "location.replace('/pwa-reset.html')",
+            headers={"Cache-Control": "no-store"},
+        )
+
     @app.get("/api/ping")
     def api_ping():
         return JSONResponse({"ok": True})
@@ -33,11 +40,13 @@ def test_web_routes_cache_entrypoints_and_versioned_assets_separately():
     home_response = client.get("/")
     asset_response = client.get("/assets/app.js")
     hashed_asset_response = client.get("/assets/app-a1b2c3d4.js")
+    recovery_asset_response = client.get("/assets/recovery-a1b2c3d4.js")
     api_response = client.get("/api/ping")
 
     assert home_response.headers["cache-control"] == "no-cache"
     assert asset_response.headers["cache-control"] == "no-cache"
     assert hashed_asset_response.headers["cache-control"] == "public, max-age=31536000, immutable"
+    assert recovery_asset_response.headers["cache-control"] == "no-store"
     assert "cache-control" not in {key.lower(): value for key, value in api_response.headers.items()}
 
 
@@ -61,5 +70,26 @@ def test_single_page_static_files_fall_back_to_index_for_frontend_routes():
         assert "spa" in route_response.text
         assert asset_response.status_code == 200
         assert missing_asset_response.status_code == 404
+    finally:
+        temp_dir.cleanup()
+
+
+def test_single_page_static_files_recovers_stale_pwa_script_assets():
+    temp_dir = tempfile.TemporaryDirectory()
+    try:
+        web_dist = Path(temp_dir.name)
+        (web_dist / "index.html").write_text("<html><body>spa</body></html>", encoding="utf-8")
+        (web_dist / "assets").mkdir(parents=True, exist_ok=True)
+
+        app = FastAPI()
+        app.mount("/", SinglePageAppStaticFiles(directory=str(web_dist), html=True), name="web")
+        client = TestClient(app)
+
+        response = client.get("/assets/index-oldhash.js")
+
+        assert response.status_code == 200
+        assert response.headers["cache-control"] == "no-store"
+        assert response.headers["content-type"].startswith("application/javascript")
+        assert "pwa-reset.html?missing_asset=/assets/index-oldhash.js" in response.text
     finally:
         temp_dir.cleanup()

@@ -59,6 +59,65 @@ describe("MindMapReviewFlow modes", () => {
     expect(latestCall?.syncIntent).toBe("soft");
     expect(latestCall?.syncReason).toBe("review_flip");
     expect(latestCall?.preserveViewOnSync).toBe(true);
+    expect(latestCall?.mobileViewPolicy).toBe("auto");
+  });
+
+  it("shows a mobile guided review rail that focuses, reveals, and returns to the whole map", async () => {
+    renderInRouter(
+      <MindMapReviewFlow
+        title="Root"
+        palaceId={1}
+        sessionKind="practice"
+        reviewEditorState={editorState}
+        onComplete={vi.fn()}
+      />,
+    );
+
+    expect(screen.getAllByText("Root").length).toBeGreaterThan(0);
+
+    expect(
+      (screen.getByRole("button", { name: "下一个" }) as HTMLButtonElement).disabled,
+    ).toBe(true);
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "揭示" }));
+    });
+
+    await waitFor(() => {
+      expect(getVisibleTextsFromLatestFrame()).toEqual({
+        root: "Root",
+        child: "待回忆",
+        grandchild: null,
+      });
+    });
+    expect(
+      (screen.getByRole("button", { name: "下一个" }) as HTMLButtonElement).disabled,
+    ).toBe(false);
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "下一个" }));
+    });
+
+    await waitFor(() => {
+      expect(getLatestMindMapFrameProps()?.focusRequestNodeUid).toBe("child");
+      expect(getLatestMindMapFrameProps()?.focusRequestNonce).toBeGreaterThan(0);
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "上级" }));
+    });
+
+    await waitFor(() => {
+      expect(getLatestMindMapFrameProps()?.focusRequestNodeUid).toBe("root");
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "全局" }));
+    });
+
+    await waitFor(() => {
+      expect(screen.getAllByText("Root").length).toBeGreaterThan(0);
+    });
   });
 
   it("switches review flow into inline edit mode with a return-to-review label and hides completion", async () => {

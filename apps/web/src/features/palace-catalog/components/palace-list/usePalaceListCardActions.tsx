@@ -7,6 +7,7 @@ import type {
   PalaceSegmentSummary,
 } from '@/shared/api/contracts'
 import { deletePalaceApi } from '@/entities/palace/api'
+import { buildReviewSessionPath } from '@/features/review/reviewSessionRoutes'
 import { prefetchStudySession } from '@/features/review/studyWarmup'
 
 interface UsePalaceListCardActionsOptions {
@@ -51,10 +52,18 @@ export function usePalaceListCardActions({
   }
 
   const handleSegmentPractice = (segment: PalaceSegmentSummary) => {
+    if (segment.current_review_schedule_id) {
+      navigate(buildReviewSessionPath(segment.current_review_schedule_id))
+      return
+    }
     navigate(`/segments/${segment.id}/practice`)
   }
 
   const handleWarmSegmentPractice = (segment: PalaceSegmentSummary) => {
+    if (segment.current_review_schedule_id) {
+      prefetchStudySession('review-session', segment.current_review_schedule_id)
+      return
+    }
     prefetchStudySession('segment-practice', segment.id)
   }
 

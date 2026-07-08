@@ -194,18 +194,60 @@ describe('PalaceListPage', () => {
     expect(screen.getByText('记忆宫殿')).toBeTruthy()
     expect(screen.queryByText('第 1 部分')).toBeNull()
     expect(screen.getAllByText('预计 1分 40秒').length).toBeGreaterThan(0)
-    expect(screen.getByRole('button', { name: '开始复习' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: /开始复习/ })).toBeTruthy()
     expect(screen.getByRole('button', { name: '做题' })).toBeTruthy()
   })
 
   it('refreshes palace cards when the catalog invalidation event fires', async () => {
     render(<PalaceListPage />)
 
-    expect(await screen.findByRole('button', { name: '开始复习' })).toBeTruthy()
+    expect(await screen.findByRole('button', { name: /开始复习/ })).toBeTruthy()
     window.dispatchEvent(new CustomEvent('palace-catalog:invalidated'))
 
     await waitFor(() => expect(getPalacesGroupedApi).toHaveBeenCalledTimes(2))
-    expect(screen.queryByRole('button', { name: '开始复习' })).toBeNull()
+    expect(screen.queryByRole('button', { name: /开始复习/ })).toBeNull()
+  })
+
+  it('opens formal review sessions for virtual default palace progress', async () => {
+    getPalacesGroupedApi.mockReset()
+    getPalacesGroupedApi.mockResolvedValue({
+      groups: [],
+      ungrouped: [],
+      subjects: [
+        {
+          subject: { id: 1, name: '中国近代史', color: '#6366f1' },
+          chapter_groups: [
+            {
+              source_chapter: { id: 2, name: '第四节', subject_id: 1, parent_id: null },
+              palaces: [
+                {
+                  ...duePalace,
+                  segments: [
+                    {
+                      ...duePalace.segments[0],
+                      id: 0,
+                      is_virtual_default: true,
+                      current_review_schedule_id: 88,
+                      has_due_review: true,
+                      active_review_progress: 0.5,
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+          ungrouped_palaces: [],
+        },
+      ],
+    })
+
+    render(<PalaceListPage />)
+
+    const startButton = await screen.findByRole('button', { name: /开始复习/ })
+    expect(screen.getByRole('progressbar', { name: '复习进度 50%' })).toBeTruthy()
+    fireEvent.click(startButton)
+
+    expect(navigate).toHaveBeenCalledWith('/review/session/88')
   })
 
   it('defaults to chapter-double and keeps local view settings after switching', async () => {
