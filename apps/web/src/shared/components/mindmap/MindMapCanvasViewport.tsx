@@ -56,6 +56,9 @@ export function MindMapCanvasViewport({
   readonly = false,
   mobileGuided = false,
 }: MindMapCanvasViewportProps) {
+  const largeGraph = nodes.length >= 240
+  const simplifiedDecorations = isDraggingNode || mobileGuided || largeGraph
+
   return (
     <div className="relative" style={{ width, height }}>
       <ReactFlow
@@ -92,7 +95,7 @@ export function MindMapCanvasViewport({
           showInteractive={false}
           className="!left-4 !top-4 !bottom-auto !rounded-lg !border !border-zinc-200 !bg-white/92 !shadow-lg"
         />
-        {!isDraggingNode && !mobileGuided ? (
+        {!simplifiedDecorations ? (
           <MiniMap
             pannable
             zoomable
@@ -107,12 +110,14 @@ export function MindMapCanvasViewport({
             className="!bottom-4 !right-4 !h-[116px] !w-[190px] !overflow-hidden !rounded-lg !border !border-zinc-200 !bg-white/92 !shadow-lg"
           />
         ) : null}
-        <Background
-          variant={BackgroundVariant.Dots}
-          gap={20}
-          size={1}
-          color="#e4e4e7"
-        />
+        {!simplifiedDecorations ? (
+          <Background
+            variant={BackgroundVariant.Dots}
+            gap={20}
+            size={1}
+            color="#e4e4e7"
+          />
+        ) : null}
       </ReactFlow>
     </div>
   )

@@ -5,8 +5,20 @@ type ListenerEntry = {
   options?: AddEventListenerOptions | boolean
 }
 
+interface MockOscillator {
+  connect: ReturnType<typeof vi.fn>
+  frequency: {
+    setValueAtTime: ReturnType<typeof vi.fn>
+    linearRampToValueAtTime: ReturnType<typeof vi.fn>
+  }
+  start: ReturnType<typeof vi.fn>
+  stop: ReturnType<typeof vi.fn>
+  type: OscillatorType
+}
+
 class MockAudioContext {
   static instances: MockAudioContext[] = []
+  static oscillators: MockOscillator[] = []
 
   currentTime = 0
   destination = {}
@@ -21,7 +33,7 @@ class MockAudioContext {
   }
 
   createOscillator() {
-    return {
+    const oscillator: MockOscillator = {
       connect: vi.fn(),
       frequency: {
         setValueAtTime: vi.fn(),
@@ -31,6 +43,8 @@ class MockAudioContext {
       stop: vi.fn(),
       type: 'sine',
     }
+    MockAudioContext.oscillators.push(oscillator)
+    return oscillator
   }
 
   createGain() {
@@ -53,11 +67,12 @@ function callListener(listener: EventListenerOrEventListenerObject, event: Event
   }
 }
 
-async function importLegacyWebAudio(
+async function importWebAudioFeedback(
   listeners: Map<string, ListenerEntry[]>,
 ) {
   vi.resetModules()
   MockAudioContext.instances = []
+  MockAudioContext.oscillators = []
   Object.defineProperty(window, 'AudioContext', {
     configurable: true,
     writable: true,
@@ -74,20 +89,21 @@ async function importLegacyWebAudio(
     listeners.set(eventName, entries)
   })
 
-  return import('./legacyWebAudio')
+  return import('./webAudioFeedback')
 }
 
-describe('legacyWebAudio iOS Safari unlock', () => {
+describe('webAudioFeedback iOS Safari unlock', () => {
   afterEach(() => {
     vi.restoreAllMocks()
     vi.resetModules()
     MockAudioContext.instances = []
+    MockAudioContext.oscillators = []
   })
 
   it('registers gesture listeners that unlock AudioContext for iOS Safari PWA', async () => {
     const listeners = new Map<string, ListenerEntry[]>()
 
-    await importLegacyWebAudio(listeners)
+    await importWebAudioFeedback(listeners)
 
     for (const eventName of ['touchstart', 'pointerdown', 'click']) {
       expect(listeners.get(eventName)?.[0]?.options).toMatchObject({
@@ -105,7 +121,7 @@ describe('legacyWebAudio iOS Safari unlock', () => {
   it('resumes the shared AudioContext when iOS Safari returns to the foreground', async () => {
     const listeners = new Map<string, ListenerEntry[]>()
 
-    await importLegacyWebAudio(listeners)
+    await importWebAudioFeedback(listeners)
     callListener(listeners.get('click')![0].listener, new Event('click'))
     const context = MockAudioContext.instances[0]
     context.resume.mockClear()
@@ -119,11 +135,27 @@ describe('legacyWebAudio iOS Safari unlock', () => {
 
   it('keeps the playback-time resume fallback for already suspended contexts', async () => {
     const listeners = new Map<string, ListenerEntry[]>()
-    const { playLegacyFeedbackEvent } = await importLegacyWebAudio(listeners)
+    const { playWebAudioFeedbackEvent } = await importWebAudioFeedback(listeners)
 
-    playLegacyFeedbackEvent({ event: 'quiz_result_correct', volume: 1 })
+    playWebAudioFeedbackEvent({ event: 'quiz_result_correct', volume: 1 })
 
     expect(MockAudioContext.instances).toHaveLength(1)
     expect(MockAudioContext.instances[0].resume).toHaveBeenCalledTimes(1)
+  })
+
+  it('plays firework accent tones from the shared tone profiles data source', async () => {
+    const listeners = new Map<string, ListenerEntry[]>()
+    const { playWebAudioFireworkAccent } = await importWebAudioFeedback(listeners)
+
+    playWebAudioFireworkAccent({ kind: 'all_clear_ready', volume: 1 })
+
+    expect(MockAudioContext.instances).toHaveLength(1)
+    expect(MockAudioContext.oscillators).toHaveLength(4)
+    expect(MockAudioContext.oscillators.map((oscillator) => oscillator.type)).toEqual([
+      'triangle',
+      'sine',
+      'triangle',
+      'sine',
+    ])
   })
 })

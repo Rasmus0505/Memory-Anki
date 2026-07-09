@@ -1,6 +1,11 @@
 import { REVIEW_FEEDBACK_EFFECTIVE_VOLUME_MAX } from '@/shared/feedback/reviewFeedbackSettings'
 import type { MindMapFeedbackEvent, MindMapFeedbackOrigin } from '@/shared/components/mindmap-host/hostBridgeUtils'
-import { getComboMilestoneTone, getToneSpec, type ToneSpec } from './toneProfiles'
+import {
+  getComboMilestoneTone,
+  getFireworkAccentTones,
+  getToneSpec,
+  type ToneSpec,
+} from './toneProfiles'
 
 let sharedAudioContext: AudioContext | null = null
 
@@ -145,7 +150,7 @@ function playToneSequence(tones: ToneSpec[], volume: number) {
   }
 }
 
-export function playLegacyFeedbackEvent(args: {
+export function playWebAudioFeedbackEvent(args: {
   event: MindMapFeedbackEvent
   surprise?: boolean
   origin?: MindMapFeedbackOrigin
@@ -161,7 +166,7 @@ export function playLegacyFeedbackEvent(args: {
   playToneSequence(tones, feedbackVolume)
 }
 
-export function playLegacyComboMilestone(args: {
+export function playWebAudioComboMilestone(args: {
   milestoneStep: number
   volume?: number
 }) {
@@ -171,43 +176,7 @@ export function playLegacyComboMilestone(args: {
   playToneSequence(getComboMilestoneTone(milestoneStep), feedbackVolume)
 }
 
-function getFireworkAccentTones(kind: 'milestone' | 'branch_clear' | 'all_clear_ready' | 'session_complete', milestoneStep: number) {
-  if (kind === 'milestone') {
-    const stepBoost = Math.max(0, Math.min(milestoneStep, 4))
-    const base = 760 + stepBoost * 46
-    return [
-      { frequency: base, endFrequency: base * 1.18, durationMs: 90, gain: 0.016 + stepBoost * 0.002, type: 'triangle' as const, offsetMs: 0, pan: -0.18 },
-      { frequency: base * 1.36, durationMs: 114, gain: 0.012 + stepBoost * 0.0015, type: 'sine' as const, offsetMs: 40, pan: 0.18 },
-      { frequency: base * 1.8, durationMs: 148, gain: 0.008 + stepBoost * 0.001, type: 'triangle' as const, offsetMs: 88, pan: 0 },
-    ]
-  }
-
-  if (kind === 'branch_clear') {
-    return [
-      { frequency: 620, endFrequency: 780, durationMs: 120, gain: 0.022, type: 'triangle' as const, offsetMs: 0, pan: -0.26 },
-      { frequency: 930, durationMs: 144, gain: 0.017, type: 'sine' as const, offsetMs: 52, pan: 0.26 },
-      { frequency: 1240, durationMs: 180, gain: 0.012, type: 'triangle' as const, offsetMs: 120, pan: 0 },
-    ]
-  }
-
-  if (kind === 'all_clear_ready') {
-    return [
-      { frequency: 560, endFrequency: 760, durationMs: 130, gain: 0.024, type: 'triangle' as const, offsetMs: 0, pan: -0.28 },
-      { frequency: 840, durationMs: 156, gain: 0.02, type: 'sine' as const, offsetMs: 48, pan: 0 },
-      { frequency: 1120, durationMs: 210, gain: 0.014, type: 'triangle' as const, offsetMs: 118, pan: 0.28 },
-      { frequency: 1480, durationMs: 240, gain: 0.01, type: 'sine' as const, offsetMs: 182, pan: 0 },
-    ]
-  }
-
-  return [
-    { frequency: 520, endFrequency: 720, durationMs: 148, gain: 0.026, type: 'triangle' as const, offsetMs: 0, pan: -0.3 },
-    { frequency: 784, durationMs: 182, gain: 0.022, type: 'sine' as const, offsetMs: 54, pan: -0.08 },
-    { frequency: 1046, durationMs: 236, gain: 0.018, type: 'triangle' as const, offsetMs: 122, pan: 0.12 },
-    { frequency: 1396, durationMs: 280, gain: 0.012, type: 'sine' as const, offsetMs: 206, pan: 0.3 },
-  ]
-}
-
-export function playLegacyFireworkAccent(args: {
+export function playWebAudioFireworkAccent(args: {
   kind: 'milestone' | 'branch_clear' | 'all_clear_ready' | 'session_complete'
   milestoneStep?: number | null
   volume?: number
@@ -218,6 +187,6 @@ export function playLegacyFireworkAccent(args: {
   playToneSequence(getFireworkAccentTones(kind, milestoneStep ?? 0), feedbackVolume)
 }
 
-export function __resetLegacyAudioContextForTests() {
+export function __resetWebAudioContextForTests() {
   sharedAudioContext = null
 }

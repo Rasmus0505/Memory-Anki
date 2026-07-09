@@ -12,6 +12,7 @@ import type { MindMapEditorState } from '@/shared/api/contracts'
 import { MindMapCanvas } from '@/shared/components/mindmap'
 import type { MindMapCanvasViewCommand } from '@/shared/components/mindmap'
 import type { ContextMenuAction } from '@/shared/components/mindmap/NodeContextMenu'
+import { WidgetErrorBoundary } from '@/shared/components/widget-error-boundary'
 import {
   addEditorDocChild,
   addEditorDocSibling,
@@ -318,36 +319,81 @@ export const MindMapFrame = forwardRef<MindMapFrameHandle, MindMapFrameProps>(fu
 
   const canEdit = !readonly && !practiceModeActive && !miniPalaceDraft.active
   const frameClassName = buildMindMapFrameClassName(className)
+  const handleAddChild = useCallback(
+    (nodeId: string) => emitState(addEditorDocChild(normalizedEditorState.editor_doc, nodeId)),
+    [emitState, normalizedEditorState.editor_doc],
+  )
+  const handleAddSibling = useCallback(
+    (nodeId: string) => emitState(addEditorDocSibling(normalizedEditorState.editor_doc, nodeId)),
+    [emitState, normalizedEditorState.editor_doc],
+  )
+  const handleDeleteNode = useCallback(
+    (nodeId: string) => emitState(deleteEditorDocNode(normalizedEditorState.editor_doc, nodeId)),
+    [emitState, normalizedEditorState.editor_doc],
+  )
+  const handleEditNode = useCallback(
+    (nodeId: string, text: string) => emitState(editEditorDocNode(normalizedEditorState.editor_doc, nodeId, text)),
+    [emitState, normalizedEditorState.editor_doc],
+  )
+  const handleReparentNode = useCallback(
+    (sourceId: string, targetId: string) =>
+      emitState(reparentEditorDocNode(normalizedEditorState.editor_doc, sourceId, targetId)),
+    [emitState, normalizedEditorState.editor_doc],
+  )
+  const handleReorderSibling = useCallback(
+    (sourceId: string, targetId: string, position: 'before' | 'after') =>
+      emitState(reorderEditorDocNode(normalizedEditorState.editor_doc, sourceId, targetId, position)),
+    [emitState, normalizedEditorState.editor_doc],
+  )
+  const handleMoveUp = useCallback(
+    (nodeId: string) => emitState(moveEditorDocNode(normalizedEditorState.editor_doc, nodeId, 'up')),
+    [emitState, normalizedEditorState.editor_doc],
+  )
+  const handleMoveDown = useCallback(
+    (nodeId: string) => emitState(moveEditorDocNode(normalizedEditorState.editor_doc, nodeId, 'down')),
+    [emitState, normalizedEditorState.editor_doc],
+  )
+  const canMoveNodeUp = useCallback(
+    (nodeId: string) => canMoveEditorDocNode(normalizedEditorState.editor_doc, nodeId, 'up'),
+    [normalizedEditorState.editor_doc],
+  )
+  const canMoveNodeDown = useCallback(
+    (nodeId: string) => canMoveEditorDocNode(normalizedEditorState.editor_doc, nodeId, 'down'),
+    [normalizedEditorState.editor_doc],
+  )
+  const handleToggleFocusMode = useCallback(() => {
+    onMiniPalacePour?.()
+  }, [onMiniPalacePour])
 
   return (
     <div ref={frameRef} className={frameClassName} data-testid="mindmap-frame-native">
-      <MindMapCanvas
-        graphData={graphData}
-        selectedNodeId={selectedNodeId}
-        readonly={!canEdit}
-        showToolbar={!uiCleared}
-        mobileViewPolicy={mobileViewPolicy}
-        viewCommand={viewCommand}
-        onNodeSelect={selectNode}
-        onNodeActivate={activateNode}
-        onNodeContextAction={contextNode}
-        onNodeHover={hoverNode}
-        buildNodeActions={buildNodeActions}
-        onAddChild={(nodeId) => emitState(addEditorDocChild(normalizedEditorState.editor_doc, nodeId))}
-        onAddSibling={(nodeId) => emitState(addEditorDocSibling(normalizedEditorState.editor_doc, nodeId))}
-        onDelete={(nodeId) => emitState(deleteEditorDocNode(normalizedEditorState.editor_doc, nodeId))}
-        onEdit={(nodeId, text) => emitState(editEditorDocNode(normalizedEditorState.editor_doc, nodeId, text))}
-        onReparent={(sourceId, targetId) => emitState(reparentEditorDocNode(normalizedEditorState.editor_doc, sourceId, targetId))}
-        onReorderSibling={(sourceId, targetId, position) =>
-          emitState(reorderEditorDocNode(normalizedEditorState.editor_doc, sourceId, targetId, position))
-        }
-        onMoveUp={(nodeId) => emitState(moveEditorDocNode(normalizedEditorState.editor_doc, nodeId, 'up'))}
-        onMoveDown={(nodeId) => emitState(moveEditorDocNode(normalizedEditorState.editor_doc, nodeId, 'down'))}
-        canMoveUp={(nodeId) => canMoveEditorDocNode(normalizedEditorState.editor_doc, nodeId, 'up')}
-        canMoveDown={(nodeId) => canMoveEditorDocNode(normalizedEditorState.editor_doc, nodeId, 'down')}
-        onToggleFocusMode={() => onMiniPalacePour?.()}
-        className="h-full min-h-0 w-full border-0 bg-transparent shadow-none"
-      />
+      <WidgetErrorBoundary label="思维导图">
+        <MindMapCanvas
+          graphData={graphData}
+          selectedNodeId={selectedNodeId}
+          readonly={!canEdit}
+          showToolbar={!uiCleared}
+          mobileViewPolicy={mobileViewPolicy}
+          viewCommand={viewCommand}
+          onNodeSelect={selectNode}
+          onNodeActivate={activateNode}
+          onNodeContextAction={contextNode}
+          onNodeHover={hoverNode}
+          buildNodeActions={buildNodeActions}
+          onAddChild={handleAddChild}
+          onAddSibling={handleAddSibling}
+          onDelete={handleDeleteNode}
+          onEdit={handleEditNode}
+          onReparent={handleReparentNode}
+          onReorderSibling={handleReorderSibling}
+          onMoveUp={handleMoveUp}
+          onMoveDown={handleMoveDown}
+          canMoveUp={canMoveNodeUp}
+          canMoveDown={canMoveNodeDown}
+          onToggleFocusMode={handleToggleFocusMode}
+          className="h-full min-h-0 w-full border-0 bg-transparent shadow-none"
+        />
+      </WidgetErrorBoundary>
     </div>
   )
 })

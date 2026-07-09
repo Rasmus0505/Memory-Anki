@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { applyMindMapLayout, getNodeSize } from './layout'
+import { applyMindMapLayout, buildPreviewGraph, getNodeSize } from './layout'
 import type { GraphData } from './adapter'
 
 describe('mind map layout sizing', () => {
@@ -224,4 +224,87 @@ describe('mind map layout sizing', () => {
     expect(lowerDescendant).toBeTruthy()
     expect(lowerBranch!.position.y).toBeGreaterThanOrEqual(lowerDescendant!.position.y + 104 + 8)
   })
+
+  it('builds preview graph for inside drops without mutating source graph data', () => {
+    const graphData: GraphData = {
+      nodes: [
+        { id: 'root', type: 'peg', label: 'root', originalId: 1, parentId: null, metadata: {} },
+        { id: 'a', type: 'peg', label: 'a', originalId: 2, parentId: 'root', metadata: {} },
+        { id: 'b', type: 'peg', label: 'b', originalId: 3, parentId: 'root', metadata: {} },
+      ],
+      edges: [
+        { id: 'root->a', source: 'root', target: 'a', type: 'parent-child' },
+        { id: 'root->b', source: 'root', target: 'b', type: 'parent-child' },
+      ],
+    }
+
+    const preview = buildPreviewGraph(graphData, { sourceId: 'a', targetId: 'b', mode: 'inside' })
+    const previewA = preview.nodes.find((node) => node.id === 'a')
+
+    expect(previewA?.data.parentId).toBe('b')
+    expect(graphData.nodes.find((node) => node.id === 'a')?.parentId).toBe('root')
+  })
+
+  it('guards preview graph when dropping into a descendant', () => {
+    const graphData: GraphData = {
+      nodes: [
+        { id: 'root', type: 'peg', label: 'root', originalId: 1, parentId: null, metadata: {} },
+        { id: 'a', type: 'peg', label: 'a', originalId: 2, parentId: 'root', metadata: {} },
+        { id: 'a-child', type: 'peg', label: 'a-child', originalId: 3, parentId: 'a', metadata: {} },
+      ],
+      edges: [
+        { id: 'root->a', source: 'root', target: 'a', type: 'parent-child' },
+        { id: 'a->a-child', source: 'a', target: 'a-child', type: 'parent-child' },
+      ],
+    }
+
+    const original = applyMindMapLayout(graphData)
+    const preview = buildPreviewGraph(graphData, {
+      sourceId: 'a',
+      targetId: 'a-child',
+      mode: 'inside',
+    })
+
+    expect(preview.nodes.map((node) => [node.id, node.position])).toEqual(
+      original.nodes.map((node) => [node.id, node.position]),
+    )
+  })
+
+  it('lays out large graphs within a small synchronous budget', () => {
+    const graphData = buildLargeGraphData(800)
+    const startedAt = performance.now()
+
+    const layout = applyMindMapLayout(graphData)
+    const elapsed = performance.now() - startedAt
+
+    expect(layout.nodes).toHaveLength(800)
+    expect(layout.edges).toHaveLength(799)
+    expect(elapsed).toBeLessThan(250)
+  })
 })
+
+function buildLargeGraphData(count: number): GraphData {
+  const nodes: GraphData['nodes'] = []
+  const edges: GraphData['edges'] = []
+  for (let index = 0; index < count; index += 1) {
+    const id = `node-${index}`
+    const parentId = index === 0 ? null : `node-${Math.floor((index - 1) / 3)}`
+    nodes.push({
+      id,
+      type: 'peg',
+      label: `节点 ${index}`,
+      originalId: index,
+      parentId,
+      metadata: {},
+    })
+    if (parentId) {
+      edges.push({
+        id: `${parentId}->${id}`,
+        source: parentId,
+        target: id,
+        type: 'parent-child',
+      })
+    }
+  }
+  return { nodes, edges }
+}

@@ -35,6 +35,8 @@ interface LayoutBounds {
   subtreeHeight: number
 }
 
+type LayoutBoundsMap = ReadonlyMap<string, LayoutBounds>
+
 export interface NodeSize {
   width: number
   height: number
@@ -260,14 +262,23 @@ function buildLayoutForest(graphData: GraphData): LayoutTreeNode[] {
   )
 }
 
-function measureTree(node: LayoutTreeNode, measuredSizes?: NodeSizeMap): LayoutBounds {
+function measureTree(
+  node: LayoutTreeNode,
+  measuredSizes: NodeSizeMap | undefined,
+  boundsByNodeId: Map<string, LayoutBounds>,
+): LayoutBounds {
+  const cached = boundsByNodeId.get(node.node.id)
+  if (cached) return cached
+
   const size = getTreeNodeSize(node, measuredSizes)
 
   if (node.children.length === 0) {
-    return { width: size.width, height: size.height, subtreeHeight: size.height }
+    const bounds = { width: size.width, height: size.height, subtreeHeight: size.height }
+    boundsByNodeId.set(node.node.id, bounds)
+    return bounds
   }
 
-  const childBounds = node.children.map((child) => measureTree(child, measuredSizes))
+  const childBounds = node.children.map((child) => measureTree(child, measuredSizes, boundsByNodeId))
   const childrenHeight =
     childBounds.reduce((sum, bound) => sum + bound.subtreeHeight, 0) +
     CHILD_GAP_Y * Math.max(0, node.children.length - 1)
@@ -275,11 +286,13 @@ function measureTree(node: LayoutTreeNode, measuredSizes?: NodeSizeMap): LayoutB
   const subtreeHeight = Math.max(size.height, childrenHeight)
   const gapX = node.depth === 0 ? ROOT_GAP_X : CHILD_GAP_X
 
-  return {
+  const bounds = {
     width: size.width + gapX + tallestChildWidth,
     height: size.height,
     subtreeHeight,
   }
+  boundsByNodeId.set(node.node.id, bounds)
+  return bounds
 }
 
 function layoutTreeNodes(
@@ -288,10 +301,15 @@ function layoutTreeNodes(
   top: number,
   positions: Map<string, Node>,
   edgeColors: Map<string, string>,
+  boundsByNodeId: LayoutBoundsMap,
   measuredSizes?: NodeSizeMap,
 ): LayoutBounds {
   const size = getTreeNodeSize(node, measuredSizes)
-  const ownBounds = measureTree(node, measuredSizes)
+  const ownBounds = boundsByNodeId.get(node.node.id) ?? {
+    width: size.width,
+    height: size.height,
+    subtreeHeight: size.height,
+  }
   const y = top + ownBounds.subtreeHeight / 2 - size.height / 2
 
   positions.set(node.node.id, {
@@ -314,7 +332,11 @@ function layoutTreeNodes(
 
   if (node.children.length === 0) return ownBounds
 
-  const childBounds = node.children.map((child) => measureTree(child, measuredSizes))
+  const childBounds = node.children.map((child) => boundsByNodeId.get(child.node.id) ?? {
+    width: getTreeNodeSize(child, measuredSizes).width,
+    height: getTreeNodeSize(child, measuredSizes).height,
+    subtreeHeight: getTreeNodeSize(child, measuredSizes).height,
+  })
   const childrenHeight =
     childBounds.reduce((sum, bound) => sum + bound.subtreeHeight, 0) +
     CHILD_GAP_Y * Math.max(0, node.children.length - 1)
@@ -331,6 +353,7 @@ function layoutTreeNodes(
       currentTop,
       positions,
       edgeColors,
+      boundsByNodeId,
       measuredSizes,
     )
     edgeColors.set(`${node.node.id}->${child.node.id}`, child.branchColor)
@@ -423,7 +446,8 @@ export function applyMindMapLayout(
   const forest = buildLayoutForest(graphData)
   const positions = new Map<string, Node>()
   const edgeColors = new Map<string, string>()
-  const rootBounds = forest.map((root) => measureTree(root, measuredSizes))
+  const boundsByNodeId = new Map<string, LayoutBounds>()
+  const rootBounds = forest.map((root) => measureTree(root, measuredSizes, boundsByNodeId))
 
   const totalHeight =
     rootBounds.reduce((sum, bound) => sum + bound.subtreeHeight, 0) +
@@ -431,7 +455,7 @@ export function applyMindMapLayout(
   let currentTop = ROOT_Y - totalHeight / 2
 
   forest.forEach((root, index) => {
-    layoutTreeNodes(root, ROOT_X, currentTop, positions, edgeColors, measuredSizes)
+    layoutTreeNodes(root, ROOT_X, currentTop, positions, edgeColors, boundsByNodeId, measuredSizes)
     currentTop += rootBounds[index].subtreeHeight + ROOT_STACK_GAP
   })
 
