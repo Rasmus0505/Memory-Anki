@@ -679,16 +679,23 @@ select:focus-visible,
 
 /* === COMBO MILESTONE BURST (情感化视觉：连击里程碑庆祝) === */
 
-/* CSS 伪全屏：替代浏览器原生 Fullscreen API，保留所有 React overlay 可见性 */
+/* PWA-safe app fullscreen layer for mind maps. */
 .memory-anki-mindmap-native-fullscreen {
   position: fixed !important;
   inset: 0 !important;
-  z-index: 95 !important;
+  z-index: 230 !important;
   width: 100vw !important;
+  width: 100dvw !important;
   height: 100vh !important;
+  height: 100dvh !important;
+  height: var(--memory-anki-mindmap-fullscreen-height, 100dvh) !important;
+  max-width: none !important;
+  max-height: none !important;
   border-radius: 0 !important;
   border: none !important;
   background: #f8fafc !important;
+  overflow: hidden !important;
+  overscroll-behavior: contain !important;
 }
 
 .memory-anki-combo-burst-overlay {

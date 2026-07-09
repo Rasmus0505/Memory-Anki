@@ -2,6 +2,7 @@ import {
   Maximize2,
   Minimize2,
   Redo2,
+  RefreshCw,
   RotateCcw,
   Undo2,
   ZoomIn,
@@ -14,6 +15,7 @@ interface MindMapCanvasToolbarProps {
   canRedo: boolean
   showHistoryControls: boolean
   onReflow: () => void
+  onRefresh: () => void
   onZoomOut: () => void
   onZoomIn: () => void
   onToggleFocusMode?: () => void
@@ -27,6 +29,7 @@ export function MindMapCanvasToolbar({
   canRedo,
   showHistoryControls,
   onReflow,
+  onRefresh,
   onZoomOut,
   onZoomIn,
   onToggleFocusMode,
@@ -43,6 +46,14 @@ export function MindMapCanvasToolbar({
       >
         <RotateCcw className="size-4" />
         <span className="text-xs font-medium">整理画布</span>
+      </button>
+      <button
+        type="button"
+        onClick={onRefresh}
+        className="flex size-9 items-center justify-center rounded-xl border border-transparent text-muted-foreground transition-colors hover:border-border hover:bg-muted hover:text-primary"
+        title="刷新脑图"
+      >
+        <RefreshCw className="size-4" />
       </button>
       <div className="mx-1 h-5 w-px bg-border" />
       <button

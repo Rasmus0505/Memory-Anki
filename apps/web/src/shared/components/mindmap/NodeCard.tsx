@@ -8,8 +8,9 @@ import {
   type ChangeEvent,
   type KeyboardEvent,
   type MouseEvent,
+  type PointerEvent,
 } from 'react'
-import { Handle, Position, type NodeProps } from '@xyflow/react'
+import { Handle, Position, type NodeProps, useUpdateNodeInternals } from '@xyflow/react'
 import { dispatchGlobalFeedback } from '@/shared/feedback/globalFeedbackModel'
 import type { MindMapNode } from './adapter'
 import { getNodeSize, type LayoutRole, type NodeSize } from './layout'
@@ -35,9 +36,13 @@ type NodeCardData = MindMapNode & {
   onAddChild?: (nodeId: string) => void
   onDelete?: (nodeId: string) => void
   onMeasure?: (nodeId: string, size: NodeSize) => void
+  onReadonlyDoubleClick?: (nodeId: string) => void
+  onTouchLongPress?: (nodeId: string, point: { x: number; y: number }) => void
 }
 
 const MEASURE_DELTA_PX = 1
+const LONG_PRESS_DELAY_MS = 550
+const LONG_PRESS_MOVE_TOLERANCE_PX = 10
 
 function getMouseFeedbackPoint(event?: MouseEvent) {
   return event
@@ -71,6 +76,10 @@ function MindMapNodeCard({ data, id }: NodeProps) {
   const shellRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const lastMeasuredRef = useRef<NodeSize | null>(null)
+  const updateNodeInternals = useUpdateNodeInternals()
+  const longPressTimerRef = useRef<number | null>(null)
+  const longPressStartRef = useRef<{ pointerId: number; x: number; y: number } | null>(null)
+  const longPressTriggeredRef = useRef(false)
   const isEditing = localEdit || nodeData.editing
   const readonly = Boolean(nodeData.readonly)
   const onMeasure = nodeData.onMeasure
@@ -116,8 +125,9 @@ function MindMapNodeCard({ data, id }: NodeProps) {
 
       lastMeasuredRef.current = nextSize
       onMeasure?.(id, nextSize)
+      updateNodeInternals(id)
     },
-    [id, onMeasure],
+    [id, onMeasure, updateNodeInternals],
   )
 
   useLayoutEffect(() => {
@@ -165,9 +175,13 @@ function MindMapNodeCard({ data, id }: NodeProps) {
   const handleDoubleClick = useCallback(
     (event: MouseEvent) => {
       event.stopPropagation()
+      if (readonly) {
+        nodeData.onReadonlyDoubleClick?.(id)
+        return
+      }
       startEdit(event)
     },
-    [startEdit],
+    [id, nodeData, readonly, startEdit],
   )
 
   const commitEdit = useCallback(() => {
@@ -240,6 +254,86 @@ function MindMapNodeCard({ data, id }: NodeProps) {
   const paddingCls = isRoot ? 'px-4 py-2.5' : depth === 1 ? 'px-3 py-2' : 'px-2.5 py-1.5'
   const borderStyle = segmentColor ? { borderColor: segmentColor } : undefined
 
+  const clearLongPress = useCallback(() => {
+    if (longPressTimerRef.current !== null) {
+      clearTimeout(longPressTimerRef.current)
+      longPressTimerRef.current = null
+    }
+    longPressStartRef.current = null
+  }, [])
+
+  const abortLongPress = useCallback(() => {
+    clearLongPress()
+    longPressTriggeredRef.current = false
+  }, [clearLongPress])
+
+  useEffect(() => {
+    return () => {
+      abortLongPress()
+    }
+  }, [abortLongPress])
+
+  const triggerLongPress = useCallback(
+    (point: { x: number; y: number }) => {
+      longPressTriggeredRef.current = true
+      nodeData.onTouchLongPress?.(id, point)
+    },
+    [id, nodeData],
+  )
+
+  const handlePointerDown = useCallback(
+    (event: PointerEvent<HTMLButtonElement>) => {
+      if (!nodeData.onTouchLongPress || !readonly) return
+      const pointerType = event.pointerType || 'touch'
+      if (pointerType === 'mouse') return
+      clearLongPress()
+      longPressTriggeredRef.current = false
+      longPressStartRef.current = {
+        pointerId: event.pointerId,
+        x: event.clientX,
+        y: event.clientY,
+      }
+      longPressTimerRef.current = window.setTimeout(() => {
+        longPressTimerRef.current = null
+        triggerLongPress({
+          x: longPressStartRef.current?.x ?? event.clientX,
+          y: longPressStartRef.current?.y ?? event.clientY,
+        })
+      }, LONG_PRESS_DELAY_MS)
+    },
+    [clearLongPress, nodeData, readonly, triggerLongPress],
+  )
+
+  const finishPointerInteraction = useCallback(() => {
+    clearLongPress()
+  }, [clearLongPress])
+
+  const handlePointerMove = useCallback((event: PointerEvent<HTMLButtonElement>) => {
+    if (longPressTriggeredRef.current) return
+    const start = longPressStartRef.current
+    if (!start || event.pointerId !== start.pointerId) return
+    const movedTooFar =
+      Math.abs(event.clientX - start.x) > LONG_PRESS_MOVE_TOLERANCE_PX ||
+      Math.abs(event.clientY - start.y) > LONG_PRESS_MOVE_TOLERANCE_PX
+    if (movedTooFar) {
+      abortLongPress()
+    }
+  }, [abortLongPress])
+
+  const handleClick = useCallback(
+    (event: MouseEvent<HTMLButtonElement>) => {
+      if (longPressTriggeredRef.current) {
+        event.preventDefault()
+        event.stopPropagation()
+        longPressTriggeredRef.current = false
+        return
+      }
+      if (readonly) return
+      startEdit(event)
+    },
+    [readonly, startEdit],
+  )
+
   return (
     <div
       ref={shellRef}
@@ -277,7 +371,19 @@ function MindMapNodeCard({ data, id }: NodeProps) {
         >
           <button
             type="button"
-            onClick={readonly ? undefined : startEdit}
+            onClick={handleClick}
+            onPointerDown={handlePointerDown}
+            onPointerMove={handlePointerMove}
+            onPointerUp={finishPointerInteraction}
+            onPointerCancel={finishPointerInteraction}
+            onPointerLeave={finishPointerInteraction}
+            onPointerOut={finishPointerInteraction}
+            onContextMenu={(event) => {
+              if (nodeData.onTouchLongPress) {
+                event.preventDefault()
+                event.stopPropagation()
+              }
+            }}
             className={textCls}
           >
             {hiddenForRecall

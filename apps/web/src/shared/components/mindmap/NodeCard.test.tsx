@@ -3,17 +3,23 @@ import { act, fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import NodeCard from '@/shared/components/mindmap/NodeCard'
 
+const LONG_PRESS_DELAY_MS = 550
+
 vi.mock('@xyflow/react', () => ({
   Handle: () => <div data-testid="handle" />,
   Position: {
     Left: 'left',
     Right: 'right',
   },
+  useUpdateNodeInternals: () => vi.fn(),
 }))
 
-function renderNodeCard(overrides?: Record<string, unknown>) {
+function renderNodeCard(
+  overrides?: Record<string, unknown>,
+  wrapperOnClick?: () => void,
+) {
   const onFinishEdit = vi.fn()
-  const view = render(
+  const nodeCard = (
     <NodeCard
       id="peg-1"
       draggable
@@ -36,7 +42,10 @@ function renderNodeCard(overrides?: Record<string, unknown>) {
         onFinishEdit,
         ...overrides,
       }}
-    />,
+    />
+  )
+  const view = render(
+    wrapperOnClick ? <div onClick={wrapperOnClick}>{nodeCard}</div> : nodeCard,
   )
   return { ...view, onFinishEdit }
 }
@@ -162,6 +171,20 @@ describe('NodeCard', () => {
     expect(onFinishEdit).toHaveBeenCalledWith('peg-1', '更新内容')
   })
 
+  it('maps readonly double click to the recall cancel handler', () => {
+    const onReadonlyDoubleClick = vi.fn()
+    renderNodeCard({
+      label: '待回忆',
+      readonly: true,
+      onReadonlyDoubleClick,
+    })
+
+    fireEvent.doubleClick(screen.getByRole('button', { name: '待回忆' }))
+
+    expect(onReadonlyDoubleClick).toHaveBeenCalledWith('peg-1')
+    expect(screen.queryByRole('textbox')).toBeNull()
+  })
+
   it.each([
     ['Shift+Enter', { shiftKey: true }],
     ['Ctrl+Enter', { ctrlKey: true }],
@@ -270,5 +293,100 @@ describe('NodeCard', () => {
 
     const button = screen.getByRole('button', { name: '待回忆' })
     expect(button.className).toContain('blur-[3px]')
+  })
+
+  it('fires a touch long press context action after the delay', async () => {
+    vi.useFakeTimers()
+    const onTouchLongPress = vi.fn()
+    renderNodeCard({
+      readonly: true,
+      onTouchLongPress,
+    })
+
+    const button = screen.getByRole('button', { name: /第一行/ })
+    fireEvent.pointerDown(button, {
+      pointerId: 1,
+      pointerType: 'touch',
+      clientX: 48,
+      clientY: 72,
+    })
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(LONG_PRESS_DELAY_MS - 1)
+    })
+    expect(onTouchLongPress).not.toHaveBeenCalled()
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1)
+    })
+    expect(onTouchLongPress).toHaveBeenCalledTimes(1)
+    expect(onTouchLongPress.mock.calls[0]?.[0]).toBe('peg-1')
+    vi.useRealTimers()
+  })
+
+  it('cancels touch long press when the finger lifts early', async () => {
+    vi.useFakeTimers()
+    const onTouchLongPress = vi.fn()
+    renderNodeCard({
+      readonly: true,
+      onTouchLongPress,
+    })
+
+    const button = screen.getByRole('button', { name: /第一行/ })
+    fireEvent.pointerDown(button, {
+      pointerId: 1,
+      pointerType: 'touch',
+      clientX: 48,
+      clientY: 72,
+    })
+    fireEvent.pointerUp(button, {
+      pointerId: 1,
+      pointerType: 'touch',
+      clientX: 48,
+      clientY: 72,
+    })
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(LONG_PRESS_DELAY_MS + 50)
+    })
+    expect(onTouchLongPress).not.toHaveBeenCalled()
+    vi.useRealTimers()
+  })
+
+  it('swallows the next click after a touch long press fires', async () => {
+    vi.useFakeTimers()
+    const onTouchLongPress = vi.fn()
+    const wrapperOnClick = vi.fn()
+    renderNodeCard(
+      {
+        readonly: true,
+        onTouchLongPress,
+      },
+      wrapperOnClick,
+    )
+
+    const button = screen.getByRole('button', { name: /第一行/ })
+    fireEvent.pointerDown(button, {
+      pointerId: 1,
+      pointerType: 'touch',
+      clientX: 48,
+      clientY: 72,
+    })
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(LONG_PRESS_DELAY_MS)
+    })
+
+    fireEvent.pointerUp(button, {
+      pointerId: 1,
+      pointerType: 'touch',
+      clientX: 48,
+      clientY: 72,
+    })
+    fireEvent.click(button)
+
+    expect(onTouchLongPress).toHaveBeenCalledTimes(1)
+    expect(wrapperOnClick).not.toHaveBeenCalled()
+    vi.useRealTimers()
   })
 })

@@ -7,6 +7,7 @@ import {
   useRef,
   useState,
 } from 'react'
+import { createPortal } from 'react-dom'
 import { Brain, FolderTree, Scissors, Sparkles, Target } from 'lucide-react'
 import type { MindMapEditorState } from '@/shared/api/contracts'
 import { MindMapCanvas } from '@/shared/components/mindmap'
@@ -38,6 +39,9 @@ export const MindMapFrame = forwardRef<MindMapFrameHandle, MindMapFrameProps>(fu
   practiceModeActive = false,
   immersiveModeActive = false,
   aiSplitBusy = false,
+  syncReason = null,
+  externalSyncKey = null,
+  forceSyncKey = null,
   mobileViewPolicy = 'auto',
   className,
   segments = [],
@@ -67,13 +71,14 @@ export const MindMapFrame = forwardRef<MindMapFrameHandle, MindMapFrameProps>(fu
   onSegmentRangeDraftChange,
   onAiSplitRequest,
   onFullscreenChange,
+  onFullscreenToggle,
   onUiClearedChange,
-  onMiniPalacePour,
   onReady,
 }: MindMapFrameProps, ref) {
   const frameRef = useRef<HTMLDivElement | null>(null)
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
   const [uiCleared, setUiCleared] = useState(false)
+  const [nativeFullscreenActive, setNativeFullscreenActive] = useState(false)
   const [viewCommand, setViewCommand] = useState<MindMapCanvasViewCommand | null>(null)
   const viewCommandNonceRef = useRef(0)
   const editorDoc = editorState.editor_doc
@@ -112,6 +117,17 @@ export const MindMapFrame = forwardRef<MindMapFrameHandle, MindMapFrameProps>(fu
       segmentRangeDraft,
       segments,
     ],
+  )
+  const canvasRecoveryKey = useMemo(
+    () =>
+      [
+        syncReason ?? '',
+        externalSyncKey ?? '',
+        forceSyncKey ?? '',
+        graphData.nodes.length,
+        graphData.edges.length,
+      ].join(':'),
+    [externalSyncKey, forceSyncKey, graphData.edges.length, graphData.nodes.length, syncReason],
   )
 
   useEffect(() => {
@@ -179,6 +195,94 @@ export const MindMapFrame = forwardRef<MindMapFrameHandle, MindMapFrameProps>(fu
       nonce: viewCommandNonceRef.current,
     })
   }, [])
+
+  const requestFitViewOnNextFrame = useCallback(() => {
+    if (typeof window === 'undefined') return
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        requestFitView()
+      })
+    })
+  }, [requestFitView])
+
+  const enterNativeFullscreen = useCallback(async () => {
+    setNativeFullscreenActive(true)
+    onFullscreenChange?.(true)
+    requestFitViewOnNextFrame()
+  }, [onFullscreenChange, requestFitViewOnNextFrame])
+
+  const exitNativeFullscreen = useCallback(async () => {
+    setNativeFullscreenActive(false)
+    onFullscreenChange?.(false)
+    requestFitViewOnNextFrame()
+  }, [onFullscreenChange, requestFitViewOnNextFrame])
+
+  const toggleCanvasFullscreen = useCallback(() => {
+    if (nativeFullscreenActive) {
+      void exitNativeFullscreen()
+      return
+    }
+    if (immersiveModeActive) {
+      onFullscreenToggle?.(false)
+    }
+    void enterNativeFullscreen()
+  }, [
+    enterNativeFullscreen,
+    exitNativeFullscreen,
+    immersiveModeActive,
+    nativeFullscreenActive,
+    onFullscreenToggle,
+  ])
+
+  useEffect(() => {
+    if (!nativeFullscreenActive) return
+    const previousBodyOverflow = document.body.style.overflow
+    const previousHtmlOverflow = document.documentElement.style.overflow
+    document.body.style.overflow = 'hidden'
+    document.documentElement.style.overflow = 'hidden'
+    return () => {
+      document.body.style.overflow = previousBodyOverflow
+      document.documentElement.style.overflow = previousHtmlOverflow
+    }
+  }, [nativeFullscreenActive])
+
+  useEffect(() => {
+    if (!nativeFullscreenActive || typeof window === 'undefined') return
+    const root = document.documentElement
+    const previousHeight = root.style.getPropertyValue('--memory-anki-mindmap-fullscreen-height')
+    const updateViewportHeight = () => {
+      const height = window.visualViewport?.height ?? window.innerHeight
+      root.style.setProperty('--memory-anki-mindmap-fullscreen-height', `${height}px`)
+    }
+    updateViewportHeight()
+    window.visualViewport?.addEventListener('resize', updateViewportHeight)
+    window.visualViewport?.addEventListener('scroll', updateViewportHeight)
+    window.addEventListener('resize', updateViewportHeight)
+    return () => {
+      window.visualViewport?.removeEventListener('resize', updateViewportHeight)
+      window.visualViewport?.removeEventListener('scroll', updateViewportHeight)
+      window.removeEventListener('resize', updateViewportHeight)
+      if (previousHeight) {
+        root.style.setProperty('--memory-anki-mindmap-fullscreen-height', previousHeight)
+      } else {
+        root.style.removeProperty('--memory-anki-mindmap-fullscreen-height')
+      }
+    }
+  }, [nativeFullscreenActive])
+
+  useEffect(() => {
+    if (!nativeFullscreenActive) return
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return
+      event.preventDefault()
+      event.stopPropagation()
+      void exitNativeFullscreen()
+    }
+    window.addEventListener('keydown', handleEscape, true)
+    return () => {
+      window.removeEventListener('keydown', handleEscape, true)
+    }
+  }, [exitNativeFullscreen, nativeFullscreenActive])
 
   useEffect(() => {
     if (!focusRequestNodeUid || focusRequestNonce <= 0) return
@@ -304,51 +408,62 @@ export const MindMapFrame = forwardRef<MindMapFrameHandle, MindMapFrameProps>(fu
       toggleUiCleared: () => setUiCleared((current) => !current),
       focusNode: requestFocusNode,
       fitView: requestFitView,
-      enterNativeFullscreen: async () => {
-        frameRef.current?.classList.add('memory-anki-mindmap-native-fullscreen')
-        onFullscreenChange?.(true)
-      },
-      exitNativeFullscreen: async () => {
-        frameRef.current?.classList.remove('memory-anki-mindmap-native-fullscreen')
-        onFullscreenChange?.(false)
-      },
+      enterNativeFullscreen,
+      exitNativeFullscreen,
     }),
-    [onFullscreenChange, requestFitView, requestFocusNode],
+    [enterNativeFullscreen, exitNativeFullscreen, requestFitView, requestFocusNode],
   )
 
   const canEdit = !readonly && !practiceModeActive && !miniPalaceDraft.active
   const frameClassName = buildMindMapFrameClassName(className)
+  const canvas = (
+    <MindMapCanvas
+      graphData={graphData}
+      selectedNodeId={selectedNodeId}
+      readonly={!canEdit}
+      practiceModeActive={practiceModeActive}
+      focusMode={nativeFullscreenActive || immersiveModeActive}
+      showToolbar={!uiCleared}
+      mobileViewPolicy={mobileViewPolicy}
+      viewCommand={viewCommand}
+      recoveryKey={canvasRecoveryKey}
+      onNodeSelect={selectNode}
+      onNodeActivate={activateNode}
+      onNodeContextAction={contextNode}
+      onNodeHover={hoverNode}
+      buildNodeActions={buildNodeActions}
+      onAddChild={(nodeId) => emitState(addEditorDocChild(normalizedEditorState.editor_doc, nodeId))}
+      onAddSibling={(nodeId) => emitState(addEditorDocSibling(normalizedEditorState.editor_doc, nodeId))}
+      onDelete={(nodeId) => emitState(deleteEditorDocNode(normalizedEditorState.editor_doc, nodeId))}
+      onEdit={(nodeId, text) => emitState(editEditorDocNode(normalizedEditorState.editor_doc, nodeId, text))}
+      onReparent={(sourceId, targetId) => emitState(reparentEditorDocNode(normalizedEditorState.editor_doc, sourceId, targetId))}
+      onReorderSibling={(sourceId, targetId, position) =>
+        emitState(reorderEditorDocNode(normalizedEditorState.editor_doc, sourceId, targetId, position))
+      }
+      onMoveUp={(nodeId) => emitState(moveEditorDocNode(normalizedEditorState.editor_doc, nodeId, 'up'))}
+      onMoveDown={(nodeId) => emitState(moveEditorDocNode(normalizedEditorState.editor_doc, nodeId, 'down'))}
+      canMoveUp={(nodeId) => canMoveEditorDocNode(normalizedEditorState.editor_doc, nodeId, 'up')}
+      canMoveDown={(nodeId) => canMoveEditorDocNode(normalizedEditorState.editor_doc, nodeId, 'down')}
+      onToggleFocusMode={toggleCanvasFullscreen}
+      className="h-full min-h-0 w-full border-0 bg-transparent shadow-none"
+    />
+  )
+  const fullscreenLayer = nativeFullscreenActive
+    ? createPortal(
+        <div className="memory-anki-mindmap-native-fullscreen" data-testid="mindmap-frame-fullscreen-layer">
+          {canvas}
+        </div>,
+        document.body,
+      )
+    : null
 
   return (
-    <div ref={frameRef} className={frameClassName} data-testid="mindmap-frame-native">
-      <MindMapCanvas
-        graphData={graphData}
-        selectedNodeId={selectedNodeId}
-        readonly={!canEdit}
-        showToolbar={!uiCleared}
-        mobileViewPolicy={mobileViewPolicy}
-        viewCommand={viewCommand}
-        onNodeSelect={selectNode}
-        onNodeActivate={activateNode}
-        onNodeContextAction={contextNode}
-        onNodeHover={hoverNode}
-        buildNodeActions={buildNodeActions}
-        onAddChild={(nodeId) => emitState(addEditorDocChild(normalizedEditorState.editor_doc, nodeId))}
-        onAddSibling={(nodeId) => emitState(addEditorDocSibling(normalizedEditorState.editor_doc, nodeId))}
-        onDelete={(nodeId) => emitState(deleteEditorDocNode(normalizedEditorState.editor_doc, nodeId))}
-        onEdit={(nodeId, text) => emitState(editEditorDocNode(normalizedEditorState.editor_doc, nodeId, text))}
-        onReparent={(sourceId, targetId) => emitState(reparentEditorDocNode(normalizedEditorState.editor_doc, sourceId, targetId))}
-        onReorderSibling={(sourceId, targetId, position) =>
-          emitState(reorderEditorDocNode(normalizedEditorState.editor_doc, sourceId, targetId, position))
-        }
-        onMoveUp={(nodeId) => emitState(moveEditorDocNode(normalizedEditorState.editor_doc, nodeId, 'up'))}
-        onMoveDown={(nodeId) => emitState(moveEditorDocNode(normalizedEditorState.editor_doc, nodeId, 'down'))}
-        canMoveUp={(nodeId) => canMoveEditorDocNode(normalizedEditorState.editor_doc, nodeId, 'up')}
-        canMoveDown={(nodeId) => canMoveEditorDocNode(normalizedEditorState.editor_doc, nodeId, 'down')}
-        onToggleFocusMode={() => onMiniPalacePour?.()}
-        className="h-full min-h-0 w-full border-0 bg-transparent shadow-none"
-      />
-    </div>
+    <>
+      <div ref={frameRef} className={frameClassName} data-testid="mindmap-frame-native">
+        {nativeFullscreenActive ? null : canvas}
+      </div>
+      {fullscreenLayer}
+    </>
   )
 })
 

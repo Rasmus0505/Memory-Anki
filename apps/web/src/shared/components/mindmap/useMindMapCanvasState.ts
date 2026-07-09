@@ -46,6 +46,7 @@ import type { MindMapCanvasProps } from './MindMapCanvas'
 
 type UseMindMapCanvasStateProps = MindMapCanvasProps & {
   toolbarVisible?: boolean
+  onHostRefresh?: () => void
 }
 
 export interface UseMindMapCanvasStateResult {
@@ -67,6 +68,7 @@ export interface UseMindMapCanvasStateResult {
   zoomInCanvas: () => void
   zoomOutCanvas: () => void
   resetLayout: () => void
+  refreshCanvas: () => void
   closeNodeMenu: () => void
   closeEdgeMenu: () => void
   onNodesChange: OnNodesChange<Node>
@@ -89,6 +91,15 @@ function getEventFeedbackPoint(event: unknown) {
   return typeof candidate.clientX === 'number' && typeof candidate.clientY === 'number'
     ? { x: candidate.clientX, y: candidate.clientY }
     : undefined
+}
+
+function isTouchPrimaryInputDevice() {
+  if (typeof window === 'undefined') return false
+  if (typeof window.matchMedia === 'function' && window.matchMedia('(pointer: coarse)').matches) {
+    return true
+  }
+  if (typeof navigator === 'undefined') return false
+  return Number(navigator.maxTouchPoints || 0) > 0
 }
 
 function hasMeaningfulSizeChange(
@@ -133,9 +144,11 @@ export function useMindMapCanvasState(
     onNodeContextAction,
     onNodeHover,
     buildNodeActions,
+    practiceModeActive = false,
     mobileViewPolicy = 'auto',
     viewCommand = null,
     toolbarVisible = true,
+    onHostRefresh,
   } = props
 
   const measuredNodeSizesRef = useRef<Map<string, NodeSize>>(new Map())
@@ -178,6 +191,7 @@ export function useMindMapCanvasState(
   const frameRef = useRef<HTMLDivElement>(null)
   const handledViewCommandNonceRef = useRef<number | null>(null)
   const isCanvasReady = canvasSize.width > 0 && canvasSize.height > 0
+  const touchLongPressEnabled = practiceModeActive && isTouchPrimaryInputDevice()
   const mobileGuidedActive =
     mobileViewPolicy === 'guided' ||
     (mobileViewPolicy === 'auto' &&
@@ -230,7 +244,9 @@ export function useMindMapCanvasState(
   const centerNodeInCanvas = useCallback(
     (nodeId: string | null | undefined, duration = 240) => {
       if (!nodeId || !isCanvasReady) return
-      const target = nodes.find((node) => node.id === nodeId)
+      const target = (readonly && !isDraggingNode ? layouted.nodes : nodes).find(
+        (node) => node.id === nodeId,
+      )
       if (!target) return
       const size = getResolvedNodeSize(target, undefined, measuredNodeSizesRef.current)
       setCenter(
@@ -242,7 +258,7 @@ export function useMindMapCanvasState(
         },
       )
     },
-    [isCanvasReady, mobileGuidedActive, nodes, setCenter],
+    [isCanvasReady, isDraggingNode, layouted.nodes, mobileGuidedActive, nodes, readonly, setCenter],
   )
 
   useLayoutEffect(() => {
@@ -266,7 +282,7 @@ export function useMindMapCanvasState(
     const observer = new ResizeObserver(updateSize)
     observer.observe(element)
     return () => observer.disconnect()
-  }, [])
+  }, [toolbarVisible])
 
   const checkOverlap = useCallback(
     (dragId: string, draggedNode?: Node, event?: unknown) => {
@@ -439,13 +455,48 @@ export function useMindMapCanvasState(
     [onEdit, readonly],
   )
 
+  const handleReadonlyNodeDoubleClick = useCallback(
+    (nodeId: string) => {
+      if (!readonly) return
+      setCtxMenu(null)
+      setEdgeMenu(null)
+      setSelectedEdgeId(null)
+      onNodeSelect(nodeId)
+      onNodeContextAction?.(nodeId)
+      dispatchGlobalFeedback('context_menu', {
+        origin: 'node',
+        label: 'DOUBLE_CLICK',
+      })
+    },
+    [onNodeContextAction, onNodeSelect, readonly],
+  )
+
+  const handleNodeTouchLongPress = useCallback(
+    (nodeId: string, point: { x: number; y: number }) => {
+      if (!touchLongPressEnabled) return
+      setCtxMenu(null)
+      setEdgeMenu(null)
+      setSelectedEdgeId(null)
+      onNodeSelect(nodeId)
+      onNodeContextAction?.(nodeId)
+      dispatchGlobalFeedback('context_menu', {
+        point,
+        origin: 'node',
+      })
+    },
+    [onNodeContextAction, onNodeSelect, touchLongPressEnabled],
+  )
+
+  const currentNodes = readonly && !isDraggingNode ? layouted.nodes : nodes
+  const currentEdges = readonly && !isDraggingNode ? layouted.edges : edges
+
   const displayNodes = useMemo(() => {
     const previewNodesById = new Map(
       (previewLayout?.nodes ?? []).map((node) => [node.id, node]),
     )
     const sourceId = draggingNodeIdRef.current
 
-    return nodes.map((node) => {
+    return currentNodes.map((node) => {
       const preview =
         previewState && previewState.targetId === node.id ? previewState : null
       const previewNode = previewNodesById.get(node.id)
@@ -472,14 +523,16 @@ export function useMindMapCanvasState(
           onDelete,
           onFinishEdit: handleFinishEdit,
           onMeasure: handleNodeMeasure,
+          onReadonlyDoubleClick: handleReadonlyNodeDoubleClick,
+          onTouchLongPress: touchLongPressEnabled ? handleNodeTouchLongPress : undefined,
           readonly,
         },
       }
     })
-  }, [handleFinishEdit, handleNodeMeasure, isDraggingNode, nodes, onAddChild, onDelete, previewLayout, previewState, readonly, selectedNodeId])
+  }, [currentNodes, handleFinishEdit, handleNodeMeasure, handleNodeTouchLongPress, handleReadonlyNodeDoubleClick, isDraggingNode, onAddChild, onDelete, previewLayout, previewState, readonly, selectedNodeId, touchLongPressEnabled])
 
   const displayEdges = useMemo(() => {
-    const baseEdges = previewLayout?.edges ?? edges
+    const baseEdges = previewLayout?.edges ?? currentEdges
     return baseEdges.map((edge) => ({
       ...edge,
       className:
@@ -502,9 +555,9 @@ export function useMindMapCanvasState(
             : edge.style?.opacity ?? 0.94,
       },
     }))
-  }, [edges, previewLayout, selectedEdgeId])
+  }, [currentEdges, previewLayout, selectedEdgeId])
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const nextLayout = applyMindMapLayout(graphData, measuredNodeSizesRef.current)
     setNodes(nextLayout.nodes)
     setEdges(nextLayout.edges)
@@ -515,7 +568,7 @@ export function useMindMapCanvasState(
     setIsDraggingNode(false)
   }, [graphData, setEdges, setNodes])
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (nodeSizeVersion === 0 || isDraggingNodeRef.current) return
 
     const nextLayout = applyMindMapLayout(graphData, measuredNodeSizesRef.current)
@@ -792,8 +845,46 @@ export function useMindMapCanvasState(
     setPreviewState(null)
     isDraggingNodeRef.current = false
     setIsDraggingNode(false)
+    const rootId = graphData.nodes.find((node) => node.parentId == null)?.id
+    const rootNode = rootId ? newNodes.find((node) => node.id === rootId) : null
+    if (rootNode) {
+      const size = getResolvedNodeSize(rootNode, undefined, measuredNodeSizesRef.current)
+      requestAnimationFrame(() => {
+        setCenter(
+          rootNode.position.x + size.width / 2,
+          rootNode.position.y + size.height / 2,
+          {
+            duration: 220,
+            zoom: mobileGuidedActive ? 1.02 : undefined,
+          },
+        )
+      })
+      return
+    }
     runFitView()
-  }, [graphData, runFitView, setEdges, setNodes])
+  }, [graphData, mobileGuidedActive, runFitView, setCenter, setEdges, setNodes])
+
+  const refreshCanvas = useCallback(() => {
+    dispatchGlobalFeedback('toolbar_action', {
+      origin: 'toolbar',
+      label: 'REFRESH',
+    })
+    measuredNodeSizesRef.current.clear()
+    pendingMeasuredNodeSizesRef.current.clear()
+    const { nodes: newNodes, edges: newEdges } = applyMindMapLayout(graphData, new Map())
+    setNodes(newNodes)
+    setEdges(newEdges)
+    setCtxMenu(null)
+    setSelectedEdgeId(null)
+    setEdgeMenu(null)
+    setPreviewState(null)
+    isDraggingNodeRef.current = false
+    setIsDraggingNode(false)
+    onHostRefresh?.()
+    if (!onHostRefresh) {
+      runFitView(0)
+    }
+  }, [graphData, onHostRefresh, runFitView, setEdges, setNodes])
 
   const zoomInCanvas = useCallback(() => {
     dispatchGlobalFeedback('toolbar_action', {
@@ -830,6 +921,7 @@ export function useMindMapCanvasState(
     zoomInCanvas,
     zoomOutCanvas,
     resetLayout,
+    refreshCanvas,
     closeNodeMenu: () => setCtxMenu(null),
     closeEdgeMenu: () => setEdgeMenu(null),
     onNodesChange,
