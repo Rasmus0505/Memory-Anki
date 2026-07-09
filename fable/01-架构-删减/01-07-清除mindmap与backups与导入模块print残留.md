@@ -6,9 +6,9 @@
 优先级: P1
 预估工作量: S（<2h）
 依赖文档: [01-06]
-状态: 未开始
-负责代理: 无
-完成时间: 无
+状态: 已完成
+负责代理: fable Worker 1
+完成时间: 2026-07-09
 ---
 
 # 01-07 清除 mindmap/backups/导入模块 print 残留
@@ -141,3 +141,4 @@ python -m pytest
 | 时间 | 执行者 | 动作 | 结果/备注 |
 |---|---|---|---|
 | 2026-07-08 | 文档代理（fable） | 文档创建；**与任务描述不符**：4 个目标文件实测无任何 print，原判断系 `fingerprint(` 子串误报；任务改为复核 + 启用 ruff T20 防回归 | - |
+| 2026-07-09 | fable Worker 1 | 复核目标文件和整个 `src/tests` 的真实 print；在 ruff select 追加 `T20` | 已完成；目标文件无真实 print，01-06 后 `python -m ruff check src tests --select T20` 通过，防回归护栏生效。`python -m ruff check src tests` 全量仍被既有/并行 lint 债阻塞（如 `tests/test_review_routes.py` 中旧符号 F821、其它文件 import 顺序与类型名问题），非 T20 违例 |

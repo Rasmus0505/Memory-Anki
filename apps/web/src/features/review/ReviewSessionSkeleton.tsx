@@ -1,5 +1,6 @@
 import { Card, CardContent } from '@/shared/components/ui/card'
 import { Skeleton } from '@/shared/components/ui/skeleton'
+import { SkeletonPanel } from '@/shared/components/ui/skeleton-layout'
 
 export function ReviewSessionSkeleton() {
   return (
@@ -16,13 +17,13 @@ export function ReviewSessionSkeleton() {
       {/* Card */}
       <Card className="w-full max-w-2xl">
         <CardContent className="flex flex-col gap-6 pt-8">
-        <Skeleton className="h-6 w-1/3" />
-        <Skeleton className="h-20 w-full rounded-xl" />
-        <div className="flex justify-center gap-3 pt-4">
-          <Skeleton className="h-10 w-24 rounded-md" />
-          <Skeleton className="h-10 w-24 rounded-md" />
-          <Skeleton className="h-10 w-24 rounded-md" />
-        </div>
+          <Skeleton className="h-6 w-1/3" />
+          <SkeletonPanel heightClassName="h-20" />
+          <div className="flex justify-center gap-3 pt-4">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <Skeleton key={i} className="h-10 w-24 rounded-md" />
+            ))}
+          </div>
         </CardContent>
       </Card>
     </div>

@@ -6,9 +6,9 @@
 优先级: P1（应该）
 预估工作量: L（>8h）
 依赖文档: 无（建议在 02-13、02-15 之前完成，避免这两篇文档的清单指向被移走的文件）
-状态: 未开始
-负责代理: 无
-完成时间: 无
+状态: 已完成
+负责代理: Codex
+完成时间: 2026-07-09
 ---
 
 # 02-02 重组 palace_quiz application 碎片
@@ -100,3 +100,5 @@ rg -n "from memory_anki.modules.palace_quiz.application" D:\322321\Memory-Anki\a
 | 时间 | 执行者 | 动作 | 结果/备注 |
 |---|---|---|---|
 | - | - | 文档创建 | - |
+| 2026-07-09 | Codex | 同步低冲突收尾状态 | 已删除 7 个纯转发/门面碎片（含 `question_commands.py`、`question_lifecycle_commands.py` 等）并更新引用；验证 `python -m pytest tests/test_palace_quiz_routes.py tests/test_manual_text_quiz_parser.py -q` 为 43 passed, 21 skipped，相关 ruff 通过。当前 application 顶层仍为 119 个 `.py`，尚未建立 `generation/`、`grouping/`、`questions/`、`ai_runtime/` 子包，因此保持部分完成。 |
+| 2026-07-09 | Codex | 完成子包重组与收尾 | 已建立并使用 `generation/`、`grouping/`、`questions/`、`ai_runtime/` 子包；删除纯 re-export question shim 44 个与旧 generation 顶层碎片 36 个；保留必要对外锚点。验收：`application` 合计 37 个 `.py`、顶层 15 个、无 >800 行文件；旧碎片 import 仅剩允许的 `quiz_generation_service` 门面与 `question_schema` 外部引用；`python -m pytest tests/test_palace_quiz_routes.py tests/test_manual_text_quiz_parser.py tests/test_freestyle_routes.py -q` 为 51 passed, 21 skipped；相关 ruff 通过。 |

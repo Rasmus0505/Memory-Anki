@@ -6,7 +6,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from memory_anki.core.config import IMPORT_JOBS_DIR
-from memory_anki.infrastructure.db.models import MindMapImportJob
+from memory_anki.infrastructure.db._tables.misc import MindMapImportJob
 from memory_anki.modules.settings.application.ai_model_registry import (
     AiRuntimeOptions,
     resolve_scenario_runtime,

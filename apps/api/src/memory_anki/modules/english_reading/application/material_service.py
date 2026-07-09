@@ -26,7 +26,7 @@ import fitz
 from sqlalchemy.orm import Session, load_only, selectinload
 
 from memory_anki.core.time import utc_now_naive
-from memory_anki.infrastructure.db.models import (
+from memory_anki.infrastructure.db._tables.english_reading import (
     EnglishReadingMaterial,
     EnglishReadingProfile,
     EnglishReadingSession,

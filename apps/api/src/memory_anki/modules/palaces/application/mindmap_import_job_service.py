@@ -109,13 +109,35 @@ def create_batch_import_job(*args, **kwargs):
     )
 
 
+def _is_job_thread_alive(job_id: str) -> bool:
+    with _RUNNING_JOB_LOCK:
+        thread = _RUNNING_JOB_THREADS.get(job_id)
+    return bool(thread and thread.is_alive())
+
+
+def reconcile_stale_running_jobs(session, *, entity_key: str | None = None) -> int:
+    from .mindmap_import.job_repository import reconcile_stale_running_jobs as _reconcile
+
+    return _reconcile(
+        session,
+        is_thread_alive_fn=_is_job_thread_alive,
+        entity_key=entity_key,
+    )
+
+
 def get_job(*args, **kwargs):
     _sync_facade_dependencies()
+    session = args[0] if args else kwargs.get("session")
+    if session is not None:
+        reconcile_stale_running_jobs(session)
     return _job_api.get_job(*args, **kwargs)
 
 
 def list_jobs(*args, **kwargs):
     _sync_facade_dependencies()
+    session = args[0] if args else kwargs.get("session")
+    if session is not None:
+        reconcile_stale_running_jobs(session, entity_key=kwargs.get("entity_key"))
     return _job_api.list_jobs(*args, **kwargs)
 
 
@@ -204,6 +226,7 @@ __all__ = [
     "get_job_artifact_dir",
     "list_jobs",
     "request_pause_job",
+    "reconcile_stale_running_jobs",
     "run_job_async",
     "serialize_job",
     "wait_for_job_completion",

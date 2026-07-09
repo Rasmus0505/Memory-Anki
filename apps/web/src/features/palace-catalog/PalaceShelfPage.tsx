@@ -28,6 +28,7 @@ import { EmptyState, ErrorState } from '@/shared/components/state-placeholders'
 import { PalaceShelfSkeleton } from './components/PalaceShelfSkeleton'
 import { usePalaceListCardActions } from '@/features/palace-catalog/components/palace-list/usePalaceListCardActions'
 import { useLocalStorageState } from '@/shared/lib/localStorage'
+import { onAppEvent } from '@/shared/events/appEvents'
 import { cn } from '@/shared/lib/utils'
 import {
   buildPalaceCatalogQuery,
@@ -183,11 +184,9 @@ export default function PalaceShelfPage() {
   }, [fetchGroupedData, fetchShelfData, groupedData, isExpandedMode])
 
   useEffect(() => {
-    const handleCatalogInvalidated = () => {
+    return onAppEvent(PALACE_CATALOG_INVALIDATED_EVENT, () => {
       void fetchData().catch(() => undefined)
-    }
-    window.addEventListener(PALACE_CATALOG_INVALIDATED_EVENT, handleCatalogInvalidated)
-    return () => window.removeEventListener(PALACE_CATALOG_INVALIDATED_EVENT, handleCatalogInvalidated)
+    })
   }, [fetchData])
 
   const categorizedCount = useMemo(() => items.filter((item) => item.subject).length, [items])

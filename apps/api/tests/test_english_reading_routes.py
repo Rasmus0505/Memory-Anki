@@ -1,23 +1,21 @@
 import io
 import json
 import tempfile
-import unittest
+from datetime import timedelta
 from pathlib import Path
 
 import fitz
-from fastapi import FastAPI
-from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
 
-from memory_anki.infrastructure.db.models import (
-    Base,
+from memory_anki.core.time import utc_now_naive
+from memory_anki.infrastructure.db._tables.english_reading import (
     EnglishReadingDictionaryCache,
     EnglishReadingLexiconCache,
+    EnglishReadingVocabularyNote,
 )
+from memory_anki.infrastructure.db._tables.misc import Config
 from memory_anki.modules.english_reading.application import service as reading_service
 from memory_anki.modules.english_reading.presentation import router as english_reading_router
+from support import RouterTestCase
 
 
 def build_pdf_bytes() -> bytes:
@@ -50,16 +48,10 @@ def build_bilingual_pdf_bytes() -> bytes:
         document.close()
 
 
-class EnglishReadingRouteTests(unittest.TestCase):
+class EnglishReadingRouteTests(RouterTestCase):
+    ROUTER_MODULES = (english_reading_router,)
+
     def setUp(self):
-        self.engine = create_engine(
-            "sqlite://",
-            connect_args={"check_same_thread": False},
-            poolclass=StaticPool,
-        )
-        Base.metadata.create_all(self.engine)
-        self.SessionLocal = sessionmaker(bind=self.engine)
-        self.original_router_get_session = english_reading_router.get_session
         self.original_runtime = reading_service.get_english_reading_runtime()
         self.original_call_chat_completion_text = reading_service.call_chat_completion_text
         self.original_fetch_xxapi_dictionary_payload = reading_service.fetch_xxapi_dictionary_payload
@@ -98,20 +90,12 @@ class EnglishReadingRouteTests(unittest.TestCase):
         reading_service.DASHSCOPE_API_KEY = "test-key"
         reading_service.DASHSCOPE_TEXT_MODEL = "qwen3.6-flash"
 
-        def get_test_session():
-            return self.SessionLocal()
+        super().setUp()
 
-        english_reading_router.get_session = get_test_session
-
-        with self.SessionLocal() as session:
-            reading_service.prepare_english_reading_runtime(session)
-
-        app = FastAPI()
-        app.include_router(english_reading_router.router, prefix="/api/v1")
-        self.client = TestClient(app)
+    def seed(self, session):
+        reading_service.prepare_english_reading_runtime(session)
 
     def tearDown(self):
-        english_reading_router.get_session = self.original_router_get_session
         reading_service.configure_english_reading_runtime(self.original_runtime)
         reading_service.call_chat_completion_text = self.original_call_chat_completion_text
         reading_service.fetch_xxapi_dictionary_payload = self.original_fetch_xxapi_dictionary_payload
@@ -119,8 +103,7 @@ class EnglishReadingRouteTests(unittest.TestCase):
         reading_service.DASHSCOPE_TEXT_MODEL = self.original_text_model
         reading_service.ENGLISH_READING_CEFR_PATH = self.original_cefr_path
         reading_service._lexicon_state = self.original_lexicon_state
-        Base.metadata.drop_all(self.engine)
-        self.engine.dispose()
+        super().tearDown()
         self.temp_dir.cleanup()
 
     def mock_llm(self, *, config, messages, response_format=None):
@@ -647,6 +630,73 @@ class EnglishReadingRouteTests(unittest.TestCase):
         self.assertEqual(payload["profile"]["levelProgress"], 5)
         self.assertGreater(payload["profile"]["workingLexicalI"], 2.4)
         self.assertGreater(payload["profile"]["workingSyntacticI"], 2.25)
+
+    def test_vocabulary_notes_can_be_saved_listed_and_review_scheduled(self):
+        with self.SessionLocal() as session:
+            session.add(Config(key="ebbinghaus_intervals", value="1,2,4"))
+            session.commit()
+
+        material = self.client.post(
+            "/api/v1/english-reading/materials",
+            data={"text": "Important acquisition was recalcitrant."},
+        )
+        self.assertEqual(material.status_code, 200)
+        material_id = material.json()["id"]
+
+        created = self.client.post(
+            "/api/v1/english-reading/vocabulary-notes",
+            json={
+                "word": "acquisition",
+                "definitionZh": "获得；习得",
+                "note": "Reader hovered this word.",
+                "context": "Important acquisition was recalcitrant.",
+                "materialId": material_id,
+                "spanAnnotationId": "span-2",
+                "cefr": "B2",
+            },
+        )
+        self.assertEqual(created.status_code, 200)
+        created_payload = created.json()
+        self.assertEqual(created_payload["word"], "acquisition")
+        self.assertEqual(created_payload["normalizedSurface"], "acquisition")
+        self.assertEqual(created_payload["materialId"], material_id)
+        self.assertEqual(created_payload["spanAnnotationId"], "span-2")
+        self.assertEqual(created_payload["reviewNumber"], 0)
+        self.assertEqual(created_payload["reviewCount"], 0)
+        self.assertGreater(created_payload["nextDueDate"], created_payload["anchorDate"])
+        self.assertEqual(created_payload["algorithmUsed"], "ebbinghaus")
+
+        notes = self.client.get("/api/v1/english-reading/vocabulary-notes")
+        self.assertEqual(notes.status_code, 200)
+        self.assertEqual(notes.json()["total"], 1)
+        self.assertEqual(notes.json()["items"][0]["definitionZh"], "获得；习得")
+
+        with self.SessionLocal() as session:
+            row = session.query(EnglishReadingVocabularyNote).first()
+            row.next_due_at = utc_now_naive() - timedelta(minutes=5)
+            row.next_due_date = row.next_due_at.date()
+            session.commit()
+
+        due_notes = self.client.get(
+            "/api/v1/english-reading/vocabulary-notes",
+            params={"dueOnly": "true"},
+        )
+        self.assertEqual(due_notes.status_code, 200)
+        self.assertEqual(due_notes.json()["dueCount"], 1)
+        self.assertTrue(due_notes.json()["items"][0]["isDue"])
+
+        reviewed = self.client.post(
+            f"/api/v1/english-reading/vocabulary-notes/{created_payload['id']}/review",
+            json={"result": "good"},
+        )
+        self.assertEqual(reviewed.status_code, 200)
+        reviewed_payload = reviewed.json()
+        self.assertEqual(reviewed_payload["reviewNumber"], 1)
+        self.assertEqual(reviewed_payload["reviewCount"], 1)
+        self.assertEqual(reviewed_payload["correctCount"], 1)
+        self.assertEqual(reviewed_payload["incorrectCount"], 0)
+        self.assertEqual(reviewed_payload["intervalDays"], 2)
+        self.assertFalse(reviewed_payload["isDue"])
 
     def test_xxapi_lookup_returns_chinese_and_caches_result(self):
         reading_service.fetch_xxapi_dictionary_payload = self.mock_xxapi_dictionary_payload

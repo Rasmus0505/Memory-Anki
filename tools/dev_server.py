@@ -36,7 +36,6 @@ LOGS_DIR = REPO_ROOT / "logs"
 
 sys.path.insert(0, str(API_SRC))
 
-from memory_anki.core.file_sync import pull_on_start, push_on_stop  # noqa: E402
 from memory_anki.core.local_config import load_local_runtime_config  # noqa: E402
 
 BACKEND_HOST = "127.0.0.1"
@@ -109,47 +108,46 @@ def kill_process_tree(pid: int) -> None:
 
 def kill_memory_anki_desktop_processes() -> None:
     """Stop desktop launcher and Electron processes started from this repo."""
+    repo_marker = str(REPO_ROOT).lower()
+    current_pid = os.getpid()
+    matches: set[int] = set()
+    ps_script = (
+        "$ErrorActionPreference='SilentlyContinue'; "
+        "Get-CimInstance Win32_Process | "
+        "Where-Object { $_.Name -in @('python.exe','node.exe','electron.exe') } | "
+        "ForEach-Object { \"$($_.ProcessId)`t$($_.CommandLine)\" }"
+    )
     try:
         out = subprocess.run(
-            [
-                "wmic",
-                "process",
-                "where",
-                "name='python.exe' or name='node.exe' or name='electron.exe'",
-                "get",
-                "ProcessId,CommandLine",
-                "/format:csv",
-            ],
+            ["powershell.exe", "-NoProfile", "-Command", ps_script],
             capture_output=True,
             text=True,
-            encoding="gbk",
+            encoding="utf-8",
             errors="replace",
             check=False,
         ).stdout
     except Exception:
-        return
+        out = ""
 
-    repo_marker = str(REPO_ROOT).lower()
-    matches: set[int] = set()
     for line in out.splitlines():
-        if not line or "," not in line:
+        if "\t" not in line:
             continue
-        lower = line.lower()
-        if (
-            "tools\\desktop_timer.py" not in lower
-            and "desktop-timer\\main.cjs" not in lower
-            and "run desktop:timer" not in lower
-            and repo_marker not in lower
-        ):
-            continue
-        parts = [part.strip() for part in line.rsplit(",", 1)]
-        if len(parts) != 2:
+        pid_text, command_line = line.split("\t", 1)
+        lower = command_line.lower()
+        is_desktop_process = (
+            "tools\\desktop_timer.py" in lower
+            or "tools/desktop_timer.py" in lower
+            or "desktop-timer\\main.cjs" in lower
+            or "desktop-timer/main.cjs" in lower
+            or "run desktop:timer" in lower
+        )
+        if not is_desktop_process or repo_marker not in lower:
             continue
         try:
-            pid = int(parts[1])
+            pid = int(pid_text.strip())
         except ValueError:
             continue
-        if pid > 0:
+        if pid > 0 and pid != current_pid:
             matches.add(pid)
 
     for pid in sorted(matches):
@@ -277,14 +275,23 @@ def _runtime_config():
     return load_local_runtime_config()
 
 
+def _apply_local_runtime_env(config=None):
+    resolved_config = config or _runtime_config()
+    os.environ["MEMORY_ANKI_HOME"] = str(resolved_config.local_app_home)
+    os.environ.pop("MEMORY_ANKI_WEB_DIST", None)
+    os.environ.pop("MEMORY_ANKI_RUNTIME_SNAPSHOT", None)
+    return resolved_config
+
+
 def _resolve_configured_app_home() -> Path:
     return _runtime_config().local_app_home
 
 
 def _backend_env() -> dict:
     """后端环境：从 local-config 解析 MEMORY_ANKI_HOME，不设 WEB_DIST（纯 API）。"""
+    config = _apply_local_runtime_env()
     env = os.environ.copy()
-    env["MEMORY_ANKI_HOME"] = str(_resolve_configured_app_home())
+    env["MEMORY_ANKI_HOME"] = str(config.local_app_home)
     env.pop("MEMORY_ANKI_WEB_DIST", None)
     env.pop("MEMORY_ANKI_RUNTIME_SNAPSHOT", None)
     env["MEMORY_ANKI_STARTUP_MODE"] = "serve"
@@ -384,10 +391,12 @@ def stop_all() -> int:
 
 
 def sync_before_start() -> bool:
-    config = _runtime_config()
+    config = _apply_local_runtime_env()
     if not config.sync_enabled:
         print(f"[i] 本机同步未启用（配置文件: {config.config_path}）。")
         return True
+    from memory_anki.core.file_sync import pull_on_start
+
     print(f"[i] 启动前同步检查 → {config.sync_root}")
     result = pull_on_start(config)
     prefix = "[ok]" if result.ok else "[!]"
@@ -396,10 +405,12 @@ def sync_before_start() -> bool:
 
 
 def sync_after_stop() -> bool:
-    config = _runtime_config()
+    config = _apply_local_runtime_env()
     if not config.sync_enabled:
         print(f"[i] 本机同步未启用（配置文件: {config.config_path}）。")
         return True
+    from memory_anki.core.file_sync import push_on_stop
+
     print(f"[i] 停止后同步推送 → {config.sync_root}")
     result = push_on_stop(config)
     prefix = "[ok]" if result.ok else "[!]"

@@ -6,12 +6,24 @@
 优先级: P1（应该）
 预估工作量: M（2-8h）
 依赖文档: 无（建议在 02-04 的 knowledge 批次之后执行，避免同文件冲突；与 02-06、02-08 涉及同一文件，执行前互查进度表）
-状态: 未开始
-负责代理: 无
-完成时间: 无
+状态: 已完成
+负责代理: Codex
+完成时间: 2026-07-09 03:41 +08:00
 ---
 
 # 02-05 knowledge 补建 application 层
+
+## 0. 完成摘要
+
+已按当前代码基线完成抽层，实际采用 `subject_service.py` + `chapter_service.py` 双 service 方案：
+
+- 新增 `apps/api/src/memory_anki/modules/knowledge/application/__init__.py`
+- 新增 `apps/api/src/memory_anki/modules/knowledge/application/subject_service.py`
+- 新增 `apps/api/src/memory_anki/modules/knowledge/application/chapter_service.py`
+- `presentation/router.py` 保留请求参数解析、`HTTPException`/`JSONResponse` 兼容、幂等写入入口和 service 调用；ORM 查询、序列化、树构建、章节详情、递归删除、删除影响统计、宫殿章节关联已下沉到 application
+- 基于 02-04 之后的当前行为实现：not found 保持 404；章节删除的 force/409 响应、分页、幂等写入和内部错误 JSONResponse 兼容保留
+
+说明：当前 router 因保留分页、幂等和错误兼容包装，收敛为 193 行，未强行压到旧文档预估的 150 行以内；关键架构验收项已达成：`presentation/router.py` 无 `s.query(...)`，`application/` 无 `fastapi` import。
 
 ## 1. 原始需求
 
@@ -112,3 +124,4 @@ def get_chapter(chapter_id: int, s: Session = Depends(session_dep)):
 | 时间 | 执行者 | 动作 | 结果/备注 |
 |---|---|---|---|
 | - | - | 文档创建 | - |
+| 2026-07-09 03:41 +08:00 | Codex | 新增 knowledge application 层并瘦身 router | 采用 `subject_service.py` + `chapter_service.py`；保留 02-04 已有 404/JSONResponse 兼容；指定测试与 ruff 通过；`rg -n "fastapi" src/memory_anki/modules/knowledge/application` 零匹配 |

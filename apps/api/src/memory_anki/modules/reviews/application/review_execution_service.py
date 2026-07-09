@@ -9,12 +9,12 @@ from uuid import uuid4
 
 from sqlalchemy.orm import Session
 
-from memory_anki.infrastructure.db.models import (
+from memory_anki.infrastructure.db._tables.misc import StudySession
+from memory_anki.infrastructure.db._tables.palaces import (
     Palace,
     ReviewLog,
     ReviewSchedule,
     SessionProgress,
-    StudySession,
 )
 from memory_anki.modules.palaces.application.segment_nodes import collect_doc_nodes_with_descendants
 from memory_anki.modules.reviews.application.schedule_rebuild_service import (
@@ -26,18 +26,18 @@ from memory_anki.modules.reviews.application.schedule_service import (
     get_algorithm_intervals,
     get_initial_same_day_slot_count,
     is_schedule_due_or_later_today,
-    normalize_algorithm,
+)
+from memory_anki.modules.sessions.application.study_session_bridge import (
+    create_review_study_session,
 )
 from memory_anki.modules.sessions.application.study_session_service import (
     ACTIVE_STATUSES,
-    create_review_study_session,
 )
 
 
 def _resolve_completed_count_after_submit(
     *,
     session: Session,
-    algorithm: str,
     schedule_review_type: str | None,
     schedule_review_number: int,
     requested_completed_count: int,
@@ -46,7 +46,7 @@ def _resolve_completed_count_after_submit(
     completed_count = min(requested_completed_count, total_intervals)
     if schedule_review_type == "standard":
         return completed_count
-    initial_slot_count = max(1, get_initial_same_day_slot_count(session, algorithm))
+    initial_slot_count = max(1, get_initial_same_day_slot_count(session))
     if schedule_review_number < initial_slot_count:
         return max(completed_count, min(initial_slot_count, total_intervals))
     return completed_count
@@ -54,6 +54,53 @@ def _resolve_completed_count_after_submit(
 
 def _should_preserve_same_day_slots(schedule_review_type: str | None) -> bool:
     return schedule_review_type in {"1h", "sleep"}
+
+
+def detect_review_stage_progress_issues(session: Session) -> dict:
+    """Read-only self-check for progress data handled by stage-progress repair."""
+    schedule_ids = {row[0] for row in session.query(ReviewSchedule.id).all()}
+
+    orphan_progress_count = sum(
+        1
+        for progress in session.query(SessionProgress)
+        .filter(SessionProgress.session_kind == "review", SessionProgress.completed == False)
+        .all()
+        if progress.review_schedule_id is None
+        or progress.review_schedule_id not in schedule_ids
+    )
+
+    orphan_study_session_count = sum(
+        1
+        for row in session.query(StudySession)
+        .filter(
+            StudySession.scene == "review",
+            StudySession.target_type == "review_schedule",
+            StudySession.status.in_(ACTIVE_STATUSES),
+            StudySession.deleted_at.is_(None),
+        )
+        .all()
+        if row.target_id is None or row.target_id not in schedule_ids
+    )
+
+    schedules_by_palace: dict[int, list[ReviewSchedule]] = {}
+    for schedule in session.query(ReviewSchedule).all():
+        schedules_by_palace.setdefault(schedule.palace_id, []).append(schedule)
+
+    stage_gap_palace_count = 0
+    for schedules in schedules_by_palace.values():
+        pending = [schedule.review_number for schedule in schedules if not schedule.completed]
+        completed = [schedule.review_number for schedule in schedules if schedule.completed]
+        if pending and completed and min(pending) < max(completed):
+            stage_gap_palace_count += 1
+
+    total_issues = orphan_progress_count + orphan_study_session_count + stage_gap_palace_count
+    return {
+        "orphan_progress_count": orphan_progress_count,
+        "orphan_study_session_count": orphan_study_session_count,
+        "stage_gap_palace_count": stage_gap_palace_count,
+        "total_issues": total_issues,
+        "needs_repair": total_issues > 0,
+    }
 
 
 def submit_review(
@@ -66,7 +113,15 @@ def submit_review(
     *,
     commit: bool = True,
 ) -> tuple[ReviewLog | None, dict]:
-    schedule = session.query(ReviewSchedule).filter_by(id=schedule_id).first()
+    schedule = (
+        session.query(ReviewSchedule)
+        .join(Palace)
+        .filter(
+            ReviewSchedule.id == schedule_id,
+            Palace.deleted_at.is_(None),
+        )
+        .first()
+    )
     if not schedule:
         return None, {}
 
@@ -89,8 +144,7 @@ def submit_review(
     )
     session.add(log)
     extra: dict[str, bool] = {}
-    algorithm = normalize_algorithm(schedule.algorithm_used)
-    intervals = get_algorithm_intervals(session, algorithm)
+    intervals = get_algorithm_intervals(session)
     next_review_number = (
         target_review_number + 1
         if target_review_number is not None
@@ -98,7 +152,6 @@ def submit_review(
     )
     completed_count = _resolve_completed_count_after_submit(
         session=session,
-        algorithm=algorithm,
         schedule_review_type=schedule.review_type,
         schedule_review_number=schedule.review_number,
         requested_completed_count=next_review_number,
@@ -166,7 +219,7 @@ def trigger_review_for_palace(session: Session, palace_id: int) -> None:
     existing = session.query(ReviewSchedule).filter_by(palace_id=palace_id).first()
     if existing:
         return
-    create_initial_review_schedules(session, palace_id, "ebbinghaus")
+    create_initial_review_schedules(session, palace_id)
 
 
 def _json_loads(raw: str | None, fallback: Any) -> Any:

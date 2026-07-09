@@ -48,8 +48,13 @@ function getTaskStageLabel(stage: string) {
     finalize: '整理课程',
     completed: '课程已生成',
     failed: '生成失败',
+    interrupted: '服务中断',
   }
   return stageMap[stage] || stage
+}
+
+function isInterruptedTask(task: EnglishGenerationTask) {
+  return task.status === 'failed' && task.stage === 'interrupted'
 }
 
 export default function EnglishWorkspacePage() {
@@ -201,9 +206,13 @@ export default function EnglishWorkspacePage() {
                   <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-4 text-sm text-red-700">
                     <div className="flex items-center gap-2 font-medium">
                       <CircleAlert className="size-4" />
-                      生成失败
+                      {isInterruptedTask(currentTask) ? '生成被服务重启中断' : '生成失败'}
                     </div>
-                    <div className="mt-2">{currentTask.errorMessage || '请稍后重试。'}</div>
+                    <div className="mt-2">
+                      {isInterruptedTask(currentTask)
+                        ? '点击重试将复用已完成的转写结果，不会重复计费。'
+                        : currentTask.errorMessage || '请稍后重试。'}
+                    </div>
                   </div>
                 ) : null}
               </div>

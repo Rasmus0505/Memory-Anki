@@ -1,3 +1,5 @@
+import { toast } from 'sonner'
+
 const PWA_CONTROLLER_RELOAD_KEY = 'memory-anki-pwa-controller-reload'
 
 let hasUserInteracted = false
@@ -36,6 +38,14 @@ function installControllerChangeReload() {
         console.info(
           '[memory-anki] PWA update installed. Restart the PWA to apply it without interrupting the current session.',
         )
+        toast.info('新版本已准备好', {
+          description: '当前学习不会被打断；空闲时刷新即可切换到新版。',
+          duration: 12_000,
+          action: {
+            label: '立即刷新',
+            onClick: () => window.location.reload(),
+          },
+        })
       }
       return
     }

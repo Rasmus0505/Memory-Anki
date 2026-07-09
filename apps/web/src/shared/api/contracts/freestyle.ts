@@ -5,6 +5,7 @@ export type FreestyleRange =
   | 'due'
   | 'needs_practice'
   | 'specific_palaces'
+  | 'wrong'
 
 export type FreestyleContentType =
   | 'quiz_question'
@@ -150,6 +151,21 @@ export interface FreestyleHistorySummary {
     explanation_count: number
     short_answer_feedback_count: number
   }
+}
+
+export interface WrongQuestionItem {
+  question: PalaceQuizQuestion
+  palace_id: number | null
+  palace_title: string
+  incorrect_count: number
+  correct_count: number
+  attempt_count: number
+  last_wrong_at: string | null
+}
+
+export interface WrongQuestionsResponse {
+  total: number
+  items: WrongQuestionItem[]
 }
 
 export interface CreateFreestyleQuizAttemptPayload {

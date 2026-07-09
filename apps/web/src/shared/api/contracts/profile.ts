@@ -208,6 +208,26 @@ export interface RestoreBackupResponse {
   ok: boolean
   rescue_path: string
 }
+export interface FullImportManifest {
+  format_version: number
+  alembic_revision: string
+  created_at: string
+  table_counts: Record<string, number>
+}
+export interface FullImportPreviewResponse {
+  ok: boolean
+  error?: string
+  manifest?: FullImportManifest
+  attachment_count?: number
+  schema_match?: boolean
+  current_alembic_revision?: string
+}
+export interface FullImportResponse {
+  ok: boolean
+  error?: string
+  table_counts?: Record<string, number>
+  restored_attachments?: number
+}
 export interface ClientPreferences {
   memory_anki_shortcuts: Record<string, unknown> | null
   review_feedback_settings: Record<string, unknown> | null
@@ -216,6 +236,7 @@ export interface ClientPreferences {
   timer_focus_config: Record<string, unknown> | null
   break_guard_config: Record<string, unknown> | null
   dashboard_duration_filter: Record<string, unknown> | null
+  study_goals: Record<string, unknown> | null
   palace_list_view_settings: Record<string, unknown> | null
   palace_shelf_view_settings: Record<string, unknown> | null
 }

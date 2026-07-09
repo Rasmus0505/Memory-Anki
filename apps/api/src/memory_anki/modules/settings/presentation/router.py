@@ -10,7 +10,8 @@ from sqlalchemy.orm import Session
 from memory_anki.core.config import DEFAULTS
 from memory_anki.core.runtime import build_runtime_health, build_runtime_info
 from memory_anki.core.time import utc_now_naive
-from memory_anki.infrastructure.db.models import Config, get_session
+from memory_anki.infrastructure.db._tables.misc import Config
+from memory_anki.infrastructure.db.deps import session_dep
 from memory_anki.infrastructure.llm.external_ai_call_logs import (
     get_external_ai_call_log,
     list_external_ai_call_logs,
@@ -27,12 +28,20 @@ from memory_anki.modules.settings.application.ai_model_registry import (
     test_provider_connection,
     upsert_ai_model_catalog_item,
 )
-from memory_anki.modules.settings.application.ai_model_registry_catalog import normalize_provider_key
+from memory_anki.modules.settings.application.ai_model_registry_catalog import (
+    normalize_provider_key,
+)
 from memory_anki.modules.settings.application.ai_prompts import (
     AiPromptValidationError,
     list_prompt_templates,
     reset_prompt_templates,
     save_prompt_templates,
+)
+from memory_anki.modules.settings.application.metrics_service import build_metrics
+from memory_anki.modules.settings.presentation.response_models import (
+    RuntimeHealthResponse,
+    RuntimeInfoResponse,
+    SettingsResponse,
 )
 
 router = APIRouter(tags=["settings"])
@@ -51,39 +60,31 @@ CLIENT_PREFERENCE_GROUPS = {
     "timer_focus_config",
     "break_guard_config",
     "dashboard_duration_filter",
+    "study_goals",
     "palace_list_view_settings",
     "palace_shelf_view_settings",
 }
 
 CLIENT_PREFERENCE_KEY_PREFIX = "client_preferences."
+_SETTINGS_EXCLUDED_PREFIXES = (
+    "api_mutation.",
+    CLIENT_PREFERENCE_KEY_PREFIX,
+)
 
 
-def session_dep():
-    s = get_session()
-    try:
-        yield s
-    finally:
-        s.close()
+def _like_prefix_pattern(prefix: str) -> str:
+    return prefix.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
 
 
 def read_settings(session: Session) -> dict:
     result = dict(DEFAULTS)
-    for row in session.query(Config).all():
-        if row.key in {
-            "default_algorithm",
-            "algorithm_change_scope",
-            "custom_intervals",
-            "time_recording_threshold_seconds",
-            "flow_voice_api_key",
-            "flow_voice_base_url",
-            "flow_voice_model",
-            "flow_voice_voice",
-            "flow_voice_format",
-            "flow_voice_sample_rate",
-            "flow_voice_instruction",
-            "flow_voice_thinking_enabled",
-        }:
-            continue
+    rows = session.query(Config).filter(
+        *[
+            Config.key.notlike(_like_prefix_pattern(prefix), escape="\\")
+            for prefix in _SETTINGS_EXCLUDED_PREFIXES
+        ]
+    ).all()
+    for row in rows:
         result[row.key] = row.value
     return result
 
@@ -110,10 +111,7 @@ def write_settings(data: dict, session: Session) -> dict:
             if str(before_settings.get(key, "")) != str(next_settings.get(key, ""))
         }
         if changed_keys:
-            update_all_pending_schedules(
-                session,
-                "ebbinghaus",
-            )
+            update_all_pending_schedules(session)
             next_settings = read_settings(session)
 
     return next_settings
@@ -155,46 +153,41 @@ def write_client_preferences(data: dict, session: Session) -> dict:
     return next_preferences
 
 
-@router.get("/settings")
+@router.get("/settings", response_model=SettingsResponse)
 def api_settings(s: Session = Depends(session_dep)):
     return read_settings(s)
 
 
-@router.put("/settings")
+@router.put("/settings", response_model=SettingsResponse)
 def api_settings_update(data: dict, s: Session = Depends(session_dep)):
     return write_settings(data, s)
 
 
-@router.get("/settings/review")
+@router.get("/settings/review", response_model=SettingsResponse)
 def api_review_settings(s: Session = Depends(session_dep)):
     return read_settings(s)
 
 
-@router.put("/settings/review")
+@router.put("/settings/review", response_model=SettingsResponse)
 def api_review_settings_update(data: dict, s: Session = Depends(session_dep)):
     return write_settings(data, s)
 
 
-@router.get("/profile/review-settings")
-def api_profile_review_settings(s: Session = Depends(session_dep)):
-    return read_settings(s)
-
-
-@router.put("/profile/review-settings")
-def api_profile_review_settings_update(data: dict, s: Session = Depends(session_dep)):
-    return write_settings(data, s)
-
-
-@router.get("/runtime-info")
+@router.get("/runtime-info", response_model=RuntimeInfoResponse)
 def api_runtime_info():
     return build_runtime_info()
 
 
-@router.get("/runtime-health")
+@router.get("/runtime-health", response_model=RuntimeHealthResponse)
 def api_runtime_health():
     return build_runtime_health(
         startup_mode=str(os.environ.get("MEMORY_ANKI_STARTUP_MODE") or "serve"),
     )
+
+
+@router.get("/metrics")
+def api_metrics(s: Session = Depends(session_dep)):
+    return build_metrics(s)
 
 
 @router.get("/profile/client-preferences")

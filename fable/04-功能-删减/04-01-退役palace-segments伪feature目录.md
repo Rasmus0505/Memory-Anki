@@ -6,9 +6,9 @@
 优先级: P1
 预估工作量: S（<2h）
 依赖文档: 无
-状态: 未开始
-负责代理: 无
-完成时间: 无
+状态: 已完成
+负责代理: Codex
+完成时间: 2026-07-09
 ---
 
 # 04-01 退役 palace-segments 伪 feature 目录
@@ -192,3 +192,4 @@ npm run test
 | 时间 | 执行者 | 动作 | 结果/备注 |
 |---|---|---|---|
 | 2026-07-08 | 文档代理（fable） | 文档创建；核实目录仅 1 文件 55 行、唯一调用方 PalaceSegmentsPanel.tsx 第 5-8 行、2 个函数为死代码 | - |
+| 2026-07-09 | Codex | 将仍使用的展示函数迁到 entities/palace-segment/model，更新 palace-edit import，删除 features/palace-segments 残留文件 | 待验证命令确认 |

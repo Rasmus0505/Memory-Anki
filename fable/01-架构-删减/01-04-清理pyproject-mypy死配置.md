@@ -6,9 +6,9 @@
 优先级: P1
 预估工作量: S（<2h）
 依赖文档: 无
-状态: 未开始
-负责代理: 无
-完成时间: 无
+状态: 已完成
+负责代理: fable Worker 1 / Codex复核
+完成时间: 2026-07-09
 ---
 
 # 01-04 清理 pyproject.toml mypy 死配置
@@ -98,3 +98,5 @@ cd apps/api && python -m mypy
 | 时间 | 执行者 | 动作 | 结果/备注 |
 |---|---|---|---|
 | 2026-07-08 | 文档撰写代理（fable） | 文档创建，已用目录列举确认两个模块不存在（knowledge 无 application 目录、modules 下无 time_records） | 待执行 |
+| 2026-07-09 | fable Worker 1 | 删除 `pyproject.toml` 中 `bilink_service` 与 `time_records_service` 两条 mypy override 死配置 | 已完成；`rg -n "bilink_service|time_records_service" apps/api/pyproject.toml apps/api/src apps/api/tests` 无匹配；`python -c "import tomllib; tomllib.load(open('apps/api/pyproject.toml','rb')); print('ok')"` 通过 |
+| 2026-07-09 | Codex | 复核重复文档状态 | `rg -n "bilink_service|time_records" apps/api/pyproject.toml apps/api/requirements.txt apps/api/requirements-dev.txt` 未命中死配置；本文档同步标记已完成 |

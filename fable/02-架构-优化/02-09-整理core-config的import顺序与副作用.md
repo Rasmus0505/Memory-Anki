@@ -6,9 +6,9 @@
 优先级: P1
 预估工作量: M
 依赖文档: 无
-状态: 未开始
-负责代理: 无
-完成时间: 无
+状态: 已完成
+负责代理: Codex
+完成时间: 2026-07-09
 ---
 
 # 02-09 整理 core-config 的 import 顺序与副作用
@@ -156,3 +156,4 @@ python tools/check_architecture.py               # 期望：passed
 | 时间 | 执行者 | 动作 | 结果/备注 |
 |---|---|---|---|
 | - | - | 文档创建 | 核实：BaseSettings import 确在第 32 行（函数定义之后）；load_dotenv() 第 37 行 import 期执行；EnvSettings re-export 为 **13** 个模块级常量（并非描述所说 56 个；含路径常量在内本模块共约 30 个模块级名字）；_base.py 第 19 行 ensure_runtime_dirs + 第 20 行急切 engine 属实；直接 import 方 31 个模块 |
+| 2026-07-09 | Codex | 与主文档保守方案同步完成 | 本重复文档中“环境常量 `__getattr__` 惰性化”和“engine 惰性化 + `__getattr__`”属于更激进方案，已按任务要求不执行；实际完成范围为 import 顺序修正、dotenv 兼容层迁出、`get_env_settings()` 访问器、冻结存量 re-export，以及将 `ensure_runtime_dirs()` 从 import 期移到模块级 engine 的首次连接前。 |

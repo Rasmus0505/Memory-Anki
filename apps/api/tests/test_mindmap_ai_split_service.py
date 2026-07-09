@@ -3,11 +3,10 @@ from __future__ import annotations
 from unittest.mock import patch
 
 import pytest
-from sqlalchemy import create_engine
-from sqlalchemy.orm import Session, sessionmaker
-from sqlalchemy.pool import StaticPool
+from sqlalchemy.orm import Session
 
-from memory_anki.infrastructure.db.models import Base, Config, Palace
+from memory_anki.infrastructure.db._tables.misc import Config
+from memory_anki.infrastructure.db._tables.palaces import Palace
 from memory_anki.modules.palaces.application import mindmap_ai_split_service as service
 
 
@@ -66,23 +65,17 @@ def _build_editor_doc() -> dict:
     }
 
 
-@pytest.fixture()
-def db_session(monkeypatch: pytest.MonkeyPatch):
+@pytest.fixture(autouse=True)
+def _mindmap_ai_split_test_defaults(
+    monkeypatch: pytest.MonkeyPatch,
+    db_session: Session,
+):
     monkeypatch.setattr(service, "DASHSCOPE_API_KEY", "test-key")
     monkeypatch.setattr(service, "DASHSCOPE_BASE_URL", "https://dashscope.test/v1")
     monkeypatch.setattr(service, "DASHSCOPE_TEXT_MODEL", "qwen3.6-flash")
-    engine = create_engine(
-        "sqlite://",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
-    Base.metadata.create_all(engine)
-    SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
-    with SessionLocal() as session:
-        palace = Palace(title="测试宫殿", description="")
-        session.add(palace)
-        session.commit()
-        yield session
+    palace = Palace(title="测试宫殿", description="")
+    db_session.add(palace)
+    db_session.commit()
 
 
 def _get_palace(session: Session) -> Palace:

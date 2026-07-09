@@ -6,9 +6,9 @@
 优先级: P1（应该）
 预估工作量: M（2-8h）
 依赖文档: 无
-状态: 未开始
-负责代理: 无
-完成时间: 无
+状态: 已完成
+负责代理: Codex
+完成时间: 2026-07-09
 ---
 
 # 02-09 整理 core/config.py
@@ -113,3 +113,4 @@ def _ensure_dirs_before_first_connect(dbapi_connection, _connection_record) -> N
 | 时间 | 执行者 | 动作 | 结果/备注 |
 |---|---|---|---|
 | - | - | 文档创建 | - |
+| 2026-07-09 | Codex | 按保守方案完成 02-09 | `BaseSettings` 已回到顶部 import 区；dotenv 兼容层迁至 `core/dotenv_compat.py`，`config.py` 仍 import 并调用 `load_dotenv()`；新增 `get_env_settings()` 并冻结现有 re-export；`_tables/_base.py` 保留模块级 `engine`，通过 `do_connect` 在首次 DBAPI 连接前执行 `ensure_runtime_dirs()`，未执行重复文档中的激进惰性 engine + `__getattr__` 方案，以避免改变公开 API 与模块级 engine 契约。 |

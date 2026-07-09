@@ -14,11 +14,8 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from memory_anki.core.time import utc_now_naive
-from memory_anki.infrastructure.db.models import (
-    EnglishCourse,
-    EnglishGenerationTask,
-    get_session,
-)
+from memory_anki.infrastructure.db._tables import get_session
+from memory_anki.infrastructure.db._tables.english import EnglishCourse, EnglishGenerationTask
 from memory_anki.modules.english.domain.errors import EnglishCourseError
 from memory_anki.modules.english.infrastructure.dashscope_gateway import (
     DashscopeEnglishAsrGateway,
@@ -145,6 +142,12 @@ def retry_current_task(session: Session) -> dict[str, Any]:
         content_type=task.source_mime_type or guess_media_type(task.source_filename),
         file_bytes=source_path.read_bytes(),
     )
+    old_dir = source_path.parent
+    new_dir = task_dir(retry_task["id"])
+    for artifact_name in ("asr_result.json", "audio.wav", "runtime_options.json"):
+        artifact = old_dir / artifact_name
+        if artifact.exists():
+            shutil.copy2(artifact, new_dir / artifact_name)
     task.status = "retried"
     task.stage = "retried"
     task.message = "已重试，历史日志保留。"
@@ -344,7 +347,8 @@ def run_generation_task(task_id: str) -> None:
         if not source_path.exists():
             raise EnglishCourseError("上传视频已丢失，请重新上传。")
         audio_path = source_path.parent / "audio.wav"
-        extract_audio_track_to_wav(source_path, audio_path)
+        if not audio_path.exists():
+            extract_audio_track_to_wav(source_path, audio_path)
         duration_seconds = probe_media_duration_seconds(source_path)
         append_generation_log_event(
             task_id=task_id,
@@ -384,12 +388,26 @@ def run_generation_task(task_id: str) -> None:
             message="开始调用 ASR 转写。",
         )
         runtime = get_english_runtime()
-        asr_payload = runtime.asr_gateway.transcribe(
-            audio_path,
-            task_id=task_id,
-            ai_options=load_task_asr_ai_options(source_path.parent),
-            progress_callback=asr_progress,
-        )
+        asr_cache_path = source_path.parent / "asr_result.json"
+        if asr_cache_path.exists():
+            asr_payload = json.loads(asr_cache_path.read_text(encoding="utf-8"))
+            append_generation_log_event(
+                task_id=task_id,
+                stage="transcribe",
+                kind="result",
+                message="复用已完成的 ASR 转写结果（未重新调用 ASR）。",
+            )
+        else:
+            asr_payload = runtime.asr_gateway.transcribe(
+                audio_path,
+                task_id=task_id,
+                ai_options=load_task_asr_ai_options(source_path.parent),
+                progress_callback=asr_progress,
+            )
+            asr_cache_path.write_text(
+                json.dumps(asr_payload, ensure_ascii=False),
+                encoding="utf-8",
+            )
 
         update_task_fields(
             None,
@@ -614,14 +632,25 @@ def cleanup_incomplete_generation_tasks(session: Session) -> dict[str, int]:
         .filter(EnglishGenerationTask.status.notin_(tuple(STARTUP_PRESERVED_TASK_STATUSES)))
         .all()
     )
+    interrupted = 0
     cleared = 0
     for task in tasks:
+        if task.status in ACTIVE_TASK_STATUSES:
+            task.status = "failed"
+            task.stage = "interrupted"
+            task.message = "生成因服务重启被中断，可点击重试继续。"
+            task.error_message = "服务重启导致任务中断。"
+            task.updated_at = utc_now_naive()
+            interrupted += 1
+            continue
+        if task.status == "failed":
+            continue
         task.status = "cleared"
         task.stage = "cleared"
-        task.message = "启动时清理未完成的历史任务。"
+        task.message = "启动时清理历史任务。"
         task.updated_at = utc_now_naive()
         shutil.rmtree(task_dir(task.id), ignore_errors=True)
         cleared += 1
-    if cleared:
+    if interrupted or cleared:
         session.commit()
-    return {"cleared": cleared}
+    return {"cleared": cleared, "interrupted": interrupted}

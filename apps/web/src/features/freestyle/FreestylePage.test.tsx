@@ -19,6 +19,7 @@ const createFreestyleQuestionExplanationApiMock = vi.fn()
 const getFreestyleQuestionAttemptsApiMock = vi.fn()
 const getFreestyleQuestionExplanationsApiMock = vi.fn()
 const getFreestyleHistorySummaryApiMock = vi.fn()
+const getWrongQuestionsApiMock = vi.fn()
 const getPalacesGroupedApiMock = vi.fn()
 const recordPalaceQuizChoiceAttemptApiMock = vi.fn()
 const requestPalaceQuestionExplainApiMock = vi.fn()
@@ -43,13 +44,14 @@ vi.mock('@/features/freestyle/api', () => ({
     getFreestyleQuestionExplanationsApiMock(...args),
   getFreestyleHistorySummaryApi: (...args: unknown[]) =>
     getFreestyleHistorySummaryApiMock(...args),
+  getWrongQuestionsApi: (...args: unknown[]) => getWrongQuestionsApiMock(...args),
 }))
 
 vi.mock('@/entities/palace/api', () => ({
   getPalacesGroupedApi: (...args: unknown[]) => getPalacesGroupedApiMock(...args),
 }))
 
-vi.mock('@/features/palace-quiz/api', () => ({
+vi.mock('@/entities/quiz/api', () => ({
   recordPalaceQuizChoiceAttemptApi: (...args: unknown[]) =>
     recordPalaceQuizChoiceAttemptApiMock(...args),
   requestPalaceQuestionExplainApi: (...args: unknown[]) =>
@@ -290,6 +292,8 @@ describe('FreestylePage feedback', () => {
         short_answer_feedback_count: 0,
       },
     })
+    getWrongQuestionsApiMock.mockReset()
+    getWrongQuestionsApiMock.mockResolvedValue({ total: 0, items: [] })
     getPalacesGroupedApiMock.mockResolvedValue({ subjects: [] })
     recordPalaceQuizChoiceAttemptApiMock.mockReturnValue(new Promise(() => undefined))
     requestPalaceShortAnswerFeedbackApiMock.mockResolvedValue({
@@ -732,7 +736,45 @@ describe('FreestylePage feedback', () => {
     const groups = actions.querySelectorAll(':scope > div')
     expect(groups).toHaveLength(2)
     expect(groups[0]?.querySelectorAll('button')).toHaveLength(3)
-    expect(groups[1]?.querySelectorAll('button')).toHaveLength(5)
+    expect(groups[1]?.querySelectorAll('button')).toHaveLength(6)
+  })
+
+  it('opens wrong-question book and starts wrong-question retraining', async () => {
+    getWrongQuestionsApiMock.mockResolvedValueOnce({
+      total: 1,
+      items: [
+        {
+          question: quizCard(9).question,
+          palace_id: 1,
+          palace_title: '测试宫殿',
+          incorrect_count: 2,
+          correct_count: 1,
+          attempt_count: 3,
+          last_wrong_at: '2026-07-09T10:30',
+        },
+      ],
+    })
+    renderPageWithFeed([
+      { cards: [quizCard(1)] },
+      { cards: [] },
+      { cards: [] },
+      { cards: [quizCard(9)] },
+    ])
+
+    fireEvent.click(await screen.findByRole('button', { name: '错题本' }))
+
+    await waitFor(() => {
+      expect(getWrongQuestionsApiMock).toHaveBeenCalled()
+    })
+    expect(await screen.findByText('错 2/3 次')).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: '重练全部错题（1）' }))
+
+    await waitFor(() => {
+      expect(getFreestyleFeedApiMock).toHaveBeenCalledWith(
+        expect.objectContaining({ range: 'wrong' }),
+      )
+    })
   })
 
   it('keeps the memory palace lookup disabled when the current random card has no palace context', async () => {

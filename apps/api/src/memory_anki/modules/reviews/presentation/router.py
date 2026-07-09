@@ -1,7 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
-from memory_anki.infrastructure.db.models import Chapter, ReviewSchedule, get_session
+from memory_anki.infrastructure.db._tables.knowledge import Chapter
+from memory_anki.infrastructure.db._tables.palaces import Palace, ReviewSchedule
+from memory_anki.infrastructure.db.deps import session_dep
 from memory_anki.modules.palaces.application.palace_serializer import (
     palace_json as palace_detail_json,
 )
@@ -11,20 +13,31 @@ from memory_anki.modules.persistence.application.idempotency import (
     save_idempotent_response,
 )
 from memory_anki.modules.reviews.application.review_execution_service import (
+    detect_review_stage_progress_issues,
     repair_review_stage_progress,
     submit_review,
 )
-from memory_anki.modules.reviews.application.review_metrics_service import get_weekly_stats
+from memory_anki.modules.reviews.application.review_metrics_service import (
+    get_review_load_forecast,
+    get_weekly_stats,
+    list_recent_review_notes,
+)
 from memory_anki.modules.reviews.application.review_queue_service import (
     get_chapter_queue_payload,
     get_next_due_review,
     get_overdue_count,
     get_review_queue_payload,
     spread_overdue,
+    undo_spread_overdue,
 )
 from memory_anki.modules.reviews.application.schedule_service import (
     get_algorithm_stage_labels,
-    normalize_algorithm,
+)
+from memory_anki.modules.reviews.presentation.response_models import (
+    OverdueCountResponse,
+    ReviewQueueResponse,
+    ReviewScheduleItem,
+    SubmitReviewResponse,
 )
 from memory_anki.modules.sessions.application.session_progress_service import (
     clear_review_progress,
@@ -39,12 +52,16 @@ def raise_not_found(message: str = "not found"):
     raise HTTPException(status_code=404, detail=message)
 
 
-def session_dep():
-    session = get_session()
-    try:
-        yield session
-    finally:
-        session.close()
+def active_schedule_by_id(session: Session, schedule_id: int) -> ReviewSchedule | None:
+    return (
+        session.query(ReviewSchedule)
+        .join(Palace)
+        .filter(
+            ReviewSchedule.id == schedule_id,
+            Palace.deleted_at.is_(None),
+        )
+        .first()
+    )
 
 
 def chapter_json(chapter: Chapter | None) -> dict | None:
@@ -65,15 +82,7 @@ def chapter_json(chapter: Chapter | None) -> dict | None:
 def schedule_json(schedule: ReviewSchedule, session: Session | None = None) -> dict:
     palace_data = palace_detail_json(schedule.palace, session) if schedule.palace else None
     if palace_data and session:
-        algorithm = next(
-            (
-                normalize_algorithm(item.algorithm_used)
-                for item in (schedule.palace.review_schedules or [])
-                if item.algorithm_used
-            ),
-            "ebbinghaus",
-        )
-        stage_labels = get_algorithm_stage_labels(session, algorithm)
+        stage_labels = get_algorithm_stage_labels(session)
         palace_data["stage_labels"] = stage_labels
         palace_data["review_stages"] = palace_review_stages_json(session, schedule.palace, stage_labels)
     return {
@@ -115,7 +124,7 @@ def queue_payload_json(payload: dict, session: Session | None = None) -> dict:
     }
 
 
-@router.get("/review/overdue-count")
+@router.get("/review/overdue-count", response_model=OverdueCountResponse)
 def api_overdue(session: Session = Depends(session_dep)):
     return {"count": get_overdue_count(session)}
 
@@ -125,10 +134,39 @@ def api_stats(session: Session = Depends(session_dep)):
     return get_weekly_stats(session)
 
 
+@router.get("/review/notes")
+def api_review_notes(limit: int = 20, session: Session = Depends(session_dep)):
+    return {"items": list_recent_review_notes(session, limit)}
+
+
+@router.get("/review/load-forecast")
+def api_load_forecast(days: int = 7, session: Session = Depends(session_dep)):
+    return get_review_load_forecast(session, days)
+
+
 @router.post("/review/spread-overdue")
-def api_spread(data: dict, session: Session = Depends(session_dep)):
-    count = spread_overdue(session, int(data.get("days", 7)))
-    return {"ok": True, "spread": count}
+def api_spread(data: dict, request: Request, session: Session = Depends(session_dep)):
+    existing_response = get_idempotent_response(session, request)
+    if existing_response is not None:
+        return existing_response
+    result = spread_overdue(
+        session,
+        int(data.get("days", 7)),
+        dry_run=bool(data.get("dry_run", False)),
+    )
+    response = {"ok": True, "spread": result["count"], "moves": result["moves"]}
+    save_idempotent_response(session, request, response)
+    return response
+
+
+@router.post("/review/spread-overdue/undo")
+def api_spread_undo(session: Session = Depends(session_dep)):
+    return {"ok": True, "restored": undo_spread_overdue(session)}
+
+
+@router.get("/review/stage-progress-health")
+def api_review_stage_progress_health(session: Session = Depends(session_dep)):
+    return {"ok": True, **detect_review_stage_progress_issues(session)}
 
 
 @router.post("/review/repair-stage-progress")
@@ -137,19 +175,19 @@ def api_repair_review_stage_progress(session: Session = Depends(session_dep)):
     return {"ok": True, **result}
 
 
-@router.get("/review/queue")
+@router.get("/review/queue", response_model=ReviewQueueResponse)
 def api_queue(session: Session = Depends(session_dep)):
     return queue_payload_json(get_review_queue_payload(session), session)
 
 
-@router.get("/review/chapter/{chapter_id}/queue")
+@router.get("/review/chapter/{chapter_id}/queue", response_model=ReviewQueueResponse)
 def api_chapter_queue(chapter_id: int, session: Session = Depends(session_dep)):
     return queue_payload_json(get_chapter_queue_payload(session, chapter_id), session)
 
 
-@router.get("/review/session/{schedule_id}")
+@router.get("/review/session/{schedule_id}", response_model=ReviewScheduleItem)
 def api_review_session(schedule_id: int, session: Session = Depends(session_dep)):
-    schedule = session.query(ReviewSchedule).filter_by(id=schedule_id).first()
+    schedule = active_schedule_by_id(session, schedule_id)
     if not schedule:
         raise_not_found()
     return schedule_json(schedule, session)
@@ -157,7 +195,7 @@ def api_review_session(schedule_id: int, session: Session = Depends(session_dep)
 
 @router.get("/review/session/{schedule_id}/progress")
 def api_review_progress(schedule_id: int, session: Session = Depends(session_dep)):
-    schedule = session.query(ReviewSchedule).filter_by(id=schedule_id).first()
+    schedule = active_schedule_by_id(session, schedule_id)
     if not schedule:
         raise_not_found()
     return {"progress": get_review_progress(session, schedule_id)}
@@ -165,7 +203,7 @@ def api_review_progress(schedule_id: int, session: Session = Depends(session_dep
 
 @router.put("/review/session/{schedule_id}/progress")
 def api_upsert_review_progress(schedule_id: int, data: dict, session: Session = Depends(session_dep)):
-    schedule = session.query(ReviewSchedule).filter_by(id=schedule_id).first()
+    schedule = active_schedule_by_id(session, schedule_id)
     if not schedule:
         raise_not_found()
     return {"progress": upsert_review_progress(session, schedule_id, schedule.palace_id, data)}
@@ -177,7 +215,7 @@ def api_delete_review_progress(schedule_id: int, session: Session = Depends(sess
     return {"ok": True}
 
 
-@router.post("/review/session/{schedule_id}/submit")
+@router.post("/review/session/{schedule_id}/submit", response_model=SubmitReviewResponse)
 def api_submit_session(
     schedule_id: int,
     data: dict,
@@ -200,6 +238,10 @@ def api_submit_session(
     if not log:
         raise_not_found()
 
+    note = str(data.get("note") or "").strip()
+    if note:
+        log.note = note[:2000]
+
     clear_review_progress(session, schedule_id, commit=False)
     chapter_id = data.get("chapter_id")
     next_schedule = get_next_due_review(
@@ -220,17 +262,17 @@ def api_submit_session(
     return response
 
 
-@router.get("/review")
+@router.get("/review", response_model=ReviewQueueResponse)
 def api_reviews(session: Session = Depends(session_dep)):
     return queue_payload_json(get_review_queue_payload(session), session)
 
 
-@router.get("/review/{schedule_id}")
+@router.get("/review/{schedule_id}", response_model=ReviewScheduleItem)
 def api_review_item(schedule_id: int, session: Session = Depends(session_dep)):
     return api_review_session(schedule_id, session)
 
 
-@router.post("/review/{schedule_id}/submit")
+@router.post("/review/{schedule_id}/submit", response_model=SubmitReviewResponse)
 def api_submit(
     schedule_id: int,
     data: dict,

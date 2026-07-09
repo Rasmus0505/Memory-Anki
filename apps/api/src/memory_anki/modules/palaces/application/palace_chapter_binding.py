@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-from typing import Any
-
-from sqlalchemy import text
+from sqlalchemy import bindparam, text
 from sqlalchemy.orm import Session
 
-from memory_anki.infrastructure.db.models import Chapter, Palace, PalaceGroup
+from memory_anki.infrastructure.db._tables.knowledge import Chapter
+from memory_anki.infrastructure.db._tables.palaces import Palace, PalaceGroup
 from memory_anki.modules.mindmap.application.editor_state_service import (
     sync_palace_editor_root,
 )
@@ -24,6 +23,30 @@ def get_palace_explicit_chapter_ids(session: Session, palace: Palace) -> set[int
         {"palace_id": palace.id},
     ).fetchall()
     return {int(row[0]) for row in rows if row[0] is not None}
+
+
+def get_explicit_chapter_ids_by_palace(
+    session: Session,
+    palace_ids: list[int],
+) -> dict[int, set[int]]:
+    if not palace_ids:
+        return {}
+    rows = session.execute(
+        text(
+            """
+            SELECT palace_id, chapter_id
+            FROM chapter_palaces
+            WHERE palace_id IN :palace_ids
+              AND COALESCE(is_explicit, 1) = 1
+            """
+        ).bindparams(bindparam("palace_ids", expanding=True)),
+        {"palace_ids": list(palace_ids)},
+    ).fetchall()
+    result: dict[int, set[int]] = {int(palace_id): set() for palace_id in palace_ids}
+    for palace_id, chapter_id in rows:
+        if chapter_id is not None:
+            result.setdefault(int(palace_id), set()).add(int(chapter_id))
+    return result
 
 
 def set_palace_chapter_links(
@@ -253,6 +276,7 @@ __all__ = [
     "_chapter_outline_path",
     "auto_assign_group",
     "ensure_inferred_primary_chapter",
+    "get_explicit_chapter_ids_by_palace",
     "get_palace_explicit_chapter_ids",
     "infer_primary_chapter",
     "reconcile_palace_chapter_binding",

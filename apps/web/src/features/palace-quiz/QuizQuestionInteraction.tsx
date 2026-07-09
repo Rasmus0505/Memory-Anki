@@ -67,6 +67,76 @@ function renderResolvedFeedback(correct: boolean | undefined, analysis: string, 
   )
 }
 
+function renderShortAnswerFeedback(feedback: PalaceShortAnswerFeedback, compact: boolean) {
+  const verdictLabel =
+    feedback.verdict === 'correct'
+      ? '基本正确'
+      : feedback.verdict === 'partial'
+        ? '部分正确'
+        : '需要重学'
+  const verdictVariant =
+    feedback.verdict === 'correct'
+      ? 'success'
+      : feedback.verdict === 'partial'
+        ? 'secondary'
+        : 'destructive'
+  const hitPoints = feedback.hit_points || []
+  const missedPoints = feedback.missed_points || []
+
+  return (
+    <div
+      className={cn(
+        'rounded-xl border border-primary/20 bg-primary/5 px-3 py-3',
+        compact ? 'mt-3' : 'mt-4',
+      )}
+    >
+      <div className="mb-2 flex items-center gap-2 text-sm font-medium">
+        AI点评
+        {feedback.verdict ? <Badge variant={verdictVariant}>{verdictLabel}</Badge> : null}
+      </div>
+      {feedback.resolved_ai?.model_label ? (
+        <div className="mb-2 text-xs text-muted-foreground">
+          实际模型：{feedback.resolved_ai.model_label}
+        </div>
+      ) : null}
+      {feedback.verdict ? (
+        <div className="space-y-2 text-sm">
+          {hitPoints.length > 0 ? (
+            <div>
+              <div className="font-medium text-success">答到的要点</div>
+              <ul className="mt-1 list-disc pl-5 text-muted-foreground">
+                {hitPoints.map((point) => (
+                  <li key={point}>{point}</li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+          {missedPoints.length > 0 ? (
+            <div>
+              <div className="font-medium text-destructive">遗漏或有偏差</div>
+              <ul className="mt-1 list-disc pl-5 text-muted-foreground">
+                {missedPoints.map((point) => (
+                  <li key={point}>{point}</li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+          {feedback.suggestion ? (
+            <div>
+              <div className="font-medium">建议</div>
+              <p className="mt-1 text-muted-foreground">{feedback.suggestion}</p>
+            </div>
+          ) : null}
+        </div>
+      ) : (
+        <div className="whitespace-pre-wrap text-sm text-muted-foreground">
+          {feedback.feedback_text}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export function QuizQuestionInteraction({
   question,
   state,
@@ -590,24 +660,9 @@ export function QuizQuestionInteraction({
           <div className={cn('whitespace-pre-wrap text-muted-foreground', compact ? 'mt-1.5' : 'mt-2')}>
             {question.analysis || '暂无解析'}
           </div>
-          {currentState.shortAnswerFeedback ? (
-            <div
-              className={cn(
-                'rounded-xl border border-primary/20 bg-primary/5 px-3 py-3',
-                compact ? 'mt-3' : 'mt-4',
-              )}
-            >
-              <div className="mb-2 text-sm font-medium">AI点评</div>
-              {currentState.shortAnswerFeedback.resolved_ai?.model_label ? (
-                <div className="mb-2 text-xs text-muted-foreground">
-                  实际模型：{currentState.shortAnswerFeedback.resolved_ai.model_label}
-                </div>
-              ) : null}
-              <div className="whitespace-pre-wrap text-sm text-muted-foreground">
-                {currentState.shortAnswerFeedback.feedback_text}
-              </div>
-            </div>
-          ) : null}
+          {currentState.shortAnswerFeedback
+            ? renderShortAnswerFeedback(currentState.shortAnswerFeedback, compact)
+            : null}
         </div>
       ) : null}
     </div>

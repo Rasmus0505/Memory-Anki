@@ -6,9 +6,9 @@
 优先级: P0
 预估工作量: M
 依赖文档: [02-01]
-状态: 未开始
-负责代理: 无
-完成时间: 无
+状态: 已完成
+负责代理: Codex
+完成时间: 2026-07-09
 ---
 
 # 02-03 backups 模块补建 presentation 层并迁移路由
@@ -141,3 +141,5 @@ python tools/check_architecture.py               # 期望：Architecture check p
 | 时间 | 执行者 | 动作 | 结果/备注 |
 |---|---|---|---|
 | - | - | 文档创建 | 核实：6 条路由实际位于 528–589 行（描述的 528–590 基本吻合）；除 list/create/restore-database/recover-palaces 外另两条为 restore-palace-from-backup 与 compare-palace-snapshots；前端只调用其中 3 条 |
+| 2026-07-09 | Codex | 迁移 `/backups*` 路由 | 新建 `modules/backups/presentation/__init__.py` 与 `router.py`；6 条路由从 palaces router 迁入 backups router；`app/main.py` 挂载 `backups_router`；palaces router 删除旧 `/backups*` handler 并清理失效 import；未迁移 palace versions 路由，未修改 backup application 逻辑、前端或 URL |
+| 2026-07-09 | Codex | 验证 | `PYTHONPATH=src python -c "from memory_anki.app.main import app; print(sorted(r.path for r in app.routes if '/backups' in getattr(r, 'path', '')))"` 输出 6 条 `/api/v1/backups*`；`rg --fixed-strings '\"/backups' -- apps/api/src/memory_anki/modules/palaces` 无匹配；`python -m ruff check src/memory_anki/modules/backups/presentation src/memory_anki/modules/palaces/presentation/router.py src/memory_anki/app/main.py` 通过；`PYTHONPATH=src python -m pytest tests/test_palace_routes.py tests/test_backup_lifecycle.py tests/test_verify_backup_tool.py -q` 通过（55 passed） |

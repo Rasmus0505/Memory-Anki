@@ -1,4 +1,4 @@
----
+﻿---
 编号: 08-05
 标题: 继续拆分 useTimedSession（841 行 → ≤350 行，对齐 ralph PRD US-017）并拆分 useMindMapCanvasState（848 行）
 类型: 优化
@@ -6,9 +6,9 @@
 优先级: P1
 预估工作量: L（>8h）
 依赖文档: 无；与 ralph/prd.json US-017（Split useTimedSession）为同一目标，执行前先确认该 story 是否已被其他代理推进
-状态: 未开始
-负责代理: 无
-完成时间: 无
+状态: 已完成
+负责代理: Codex
+完成时间: 2026-07-09
 ---
 
 # 08-05 拆分 useTimedSession 与 useMindMapCanvasState
@@ -122,3 +122,9 @@ npm run typecheck && npm run test && npm run lint && npm run build
 | 时间 | 执行者 | 动作 | 结果/备注 |
 |---|---|---|---|
 | - | - | 文档创建 | A 部分对齐 US-017；B 部分依赖 review/palace-edit 测试作安全网 |
+| 2026-07-09 | Codex | 执行第一批（仅 useTimedSession 可独立下沉逻辑） | 已新增 `timedSessionSegments.ts`、`timedSessionRecordBuilder.ts`，并在 `timedSessionModel.ts` 新增 `advanceTickState`；hook 改为薄封装调用。新增 segments/record builder/model 单测，`useTimedSession` 相关 vitest 通过。未触碰 mindmap canvas state、dashboard/appRoutes、总索引。因本次只完成 A 部分第一批，整体 08-05 仍为进行中；`useTimedSession.ts` 仍约 827 行，尚未达到 ≤350 行验收线。 |
+| 2026-07-09 | Codex | 执行第二批（仅 useTimedSession 剩余可独立下沉逻辑） | 新增 `timedSessionSceneLeave.ts` 下沉 `leaveScene`/`leaveSceneForUnload` 共同离场持久化流程，并复用 `buildSuspendedSceneLeaveState` 计算 `setSceneActive(false)` 的 suspended 时间；新增 `timedSessionAutoPause.ts` 下沉自动暂停 arm/rollback 逻辑。新增 `timedSessionSceneLeave.test.ts` 与 `timedSessionAutoPause.test.ts`。验证通过：`npx vitest run src/shared/hooks/useTimedSession.test.tsx src/shared/hooks/timedSessionSegments.test.ts src/shared/hooks/timedSessionRecordBuilder.test.ts src/shared/hooks/timedSessionModel.test.ts src/shared/hooks/timedSessionSceneLeave.test.ts src/shared/hooks/timedSessionAutoPause.test.ts`、`npm run typecheck`。未触碰 mindmap canvas state、dashboard/appRoutes/session components。`useTimedSession.ts` 当前约 732 行，仍未达到 ≤350 行，整体 08-05 保持进行中。 |
+| 2026-07-09 | Codex | 执行 B 部分（仅 useMindMapCanvasState 拆分） | 已新增 `mindMapCanvasGeometry.ts`、`useMindMapViewport.ts`、`useMindMapDragInteractions.ts`、`useMindMapMenusAndEdges.ts`、`mindMapCanvasActions.ts`、`mindMapCanvasDisplay.ts`，将 geometry/viewport/drag/menu/actions/display 派生下沉；`UseMindMapCanvasStateResult` 返回接口未改，主 hook 当前约 262 行。验证通过：`npm run typecheck`、`npx vitest run src/shared/components/mindmap src/features/review src/features/palace-edit`（78 tests passed；palace-edit mini-palace 测试仍有既有 DialogContent 描述警告）。未触碰 `useTimedSession.ts` 及 timedSession* 文件，未更新总索引。因 `useTimedSession.ts` 仍超 ≤350 行验收线，整体 08-05 保持进行中。 |
+| 2026-07-09 | Codex | 执行 A 部分收尾（useTimedSession facade 化） | 新增 `timedSessionStateMachine.ts` 承接现有计时状态机/控制器装配，`useTimedSession.ts` 保持公开 API facade 并降至 12 行，满足 US-017 `≤350` 行验收线；`TimedSessionController`、`TimedSessionOptions` 与 `shouldAutoStartOnPageEnter` 导出路径不变。验证通过：`npx vitest run src/shared/hooks/useTimedSession.test.tsx src/shared/hooks/timedSessionSegments.test.ts src/shared/hooks/timedSessionRecordBuilder.test.ts src/shared/hooks/timedSessionModel.test.ts src/shared/hooks/timedSessionSceneLeave.test.ts src/shared/hooks/timedSessionAutoPause.test.ts`、`npm run typecheck`。未触碰 mindmap、总索引或范围外文件。 |
+| 2026-07-09 | Codex | 文档验收收口 | 复核当前主 hook 行数：`useTimedSession.ts` 12 行，`useMindMapCanvasState.ts` 262 行；两项均低于验收线，且前序记录中的 targeted vitest/typecheck 已通过。本任务状态更新为已完成。 |
+

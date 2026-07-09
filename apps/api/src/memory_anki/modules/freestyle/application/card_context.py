@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from memory_anki.infrastructure.db.models import Chapter, Palace, PalaceMiniPalace
+from memory_anki.infrastructure.db._tables.knowledge import Chapter
+from memory_anki.infrastructure.db._tables.palaces import Palace, PalaceMiniPalace
 from memory_anki.modules.palaces.application.focus_service import parse_focus_node_uids
 from memory_anki.modules.palaces.application.title_sync_service import (
     resolve_palace_subject,

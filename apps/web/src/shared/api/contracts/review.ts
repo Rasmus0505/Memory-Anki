@@ -60,6 +60,19 @@ export interface ReviewQueueResponse {
   chapter: ReviewQueueChapter | null
   reviews: ReviewScheduleSummary[]
 }
+export interface SpreadOverdueMove {
+  schedule_id: number
+  palace_id: number
+  palace_title: string
+  old_date: string
+  old_at?: string | null
+  new_date: string
+}
+export interface SpreadOverdueResponse {
+  ok: boolean
+  spread: number
+  moves: SpreadOverdueMove[]
+}
 export interface ReviewSessionSubmitResponse {
   ok: boolean
   completion_mode: "manual_complete" | "auto_complete" | string
@@ -75,4 +88,26 @@ export interface ReviewStageProgressRepairResponse {
   orphan_study_session_count?: number
   practice_recovery_count?: number
   study_session_count?: number
+}
+
+export interface ReviewStageProgressHealthResponse {
+  ok: boolean
+  orphan_progress_count: number
+  orphan_study_session_count: number
+  stage_gap_palace_count: number
+  total_issues: number
+  needs_repair: boolean
+}
+
+export interface ReviewLoadForecastItem {
+  date: string
+  due_count: number
+  is_today: boolean
+}
+
+export interface ReviewLoadForecastResponse {
+  days: number
+  overdue_count: number
+  total_upcoming: number
+  items: ReviewLoadForecastItem[]
 }

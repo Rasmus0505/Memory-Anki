@@ -1,36 +1,36 @@
+import logging
+import os
 import re
 from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, Request
-from fastapi.responses import Response
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import Response
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from memory_anki.app.error_handlers import install_error_handlers
 from memory_anki.app.startup_runtime import (
-    REVIEW_SCHEDULE_REPAIR_MIGRATION_KEY,
     STARTUP_MODE_SERVE,
     initialize_service_runtime,
     resolve_startup_mode,
 )
 from memory_anki.app.startup_warmup import start_startup_warmup
-from memory_anki.core.config import ATTACHMENTS_DIR, WEB_DIST_DIR
-from memory_anki.core.migration import (
-    is_app_migration_completed,
-    mark_app_migration_completed,
-)
+from memory_anki.core.api_token_auth import ApiTokenAuthMiddleware
+from memory_anki.core.config import ATTACHMENTS_DIR, MEMORY_ANKI_API_TOKEN, WEB_DIST_DIR
 from memory_anki.core.request_logging import RequestLoggingMiddleware
 from memory_anki.core.runtime_activity import (
     start_runtime_activity_heartbeat,
     stop_runtime_activity_heartbeat,
 )
-from memory_anki.infrastructure.db.models import get_session as _get_session
-from memory_anki.modules.backups.application.backup_service import (
+from memory_anki.infrastructure.db._tables._base import get_session as _get_session
+from memory_anki.modules.backups.application.backup_lifecycle import (
     create_shutdown_backup,
     start_periodic_backup_loop,
     stop_periodic_backup_loop,
 )
+from memory_anki.modules.backups.presentation import router as backups_router
 from memory_anki.modules.dashboard.presentation import router as dashboard_router
 from memory_anki.modules.english.presentation import router as english_router
 from memory_anki.modules.english_reading.presentation import router as english_reading_router
@@ -39,14 +39,13 @@ from memory_anki.modules.knowledge.presentation import router as knowledge_route
 from memory_anki.modules.palace_quiz.presentation import router as palace_quiz_router
 from memory_anki.modules.palaces.presentation import import_router
 from memory_anki.modules.palaces.presentation import router as palace_router
-from memory_anki.modules.reviews.application.review_execution_service import (
-    repair_review_stage_progress,
-)
 from memory_anki.modules.reviews.presentation import router as review_router
+from memory_anki.modules.search.presentation import router as search_router
 from memory_anki.modules.sessions.presentation import router as sessions_router
 from memory_anki.modules.settings.presentation import router as settings_router
 
 get_session = _get_session
+logger = logging.getLogger(__name__)
 
 HASHED_WEB_ASSET_PATTERN = re.compile(
     r"^/assets/.+-[A-Za-z0-9_-]{8,}\.(?:js|css|png|jpg|jpeg|gif|svg|webp|woff2?|ttf)$"
@@ -85,19 +84,6 @@ class SinglePageAppStaticFiles(StaticFiles):
         return await super().get_response("index.html", scope)
 
 
-def run_review_schedule_repair_migration(session):
-    if is_app_migration_completed(REVIEW_SCHEDULE_REPAIR_MIGRATION_KEY):
-        return None
-    result = repair_review_stage_progress(session)
-    mark_app_migration_completed(
-        REVIEW_SCHEDULE_REPAIR_MIGRATION_KEY,
-        {
-            "result": result,
-        },
-    )
-    return result
-
-
 def install_web_cache_headers(app: FastAPI) -> None:
     @app.middleware("http")
     async def disable_web_static_cache(request: Request, call_next):
@@ -112,6 +98,19 @@ def install_web_cache_headers(app: FastAPI) -> None:
             return response
         response.headers["Cache-Control"] = "no-cache"
         return response
+
+
+def _resolve_cors_origins() -> list[str]:
+    """Default to local app/dev origins; append remote origins from the environment."""
+    origins = [
+        "http://127.0.0.1:8012",
+        "http://localhost:8012",
+        "http://127.0.0.1:5173",
+        "http://localhost:5173",
+    ]
+    extra = os.environ.get("MEMORY_ANKI_CORS_ORIGINS", "")
+    origins.extend(origin.strip() for origin in extra.split(",") if origin.strip())
+    return origins
 
 
 @asynccontextmanager
@@ -135,24 +134,27 @@ async def lifespan(app: FastAPI):
             try:
                 create_shutdown_backup()
             except Exception:
-                pass
+                logger.exception("shutdown backup failed")
 
 
 app = FastAPI(title="Memory Anki API", lifespan=lifespan)
+install_error_handlers(app)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=_resolve_cors_origins(),
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.add_middleware(ApiTokenAuthMiddleware, token=MEMORY_ANKI_API_TOKEN)
 app.add_middleware(RequestLoggingMiddleware)
 install_web_cache_headers(app)
 
 app.mount("/api/attachments", StaticFiles(directory=str(ATTACHMENTS_DIR)), name="attachments")
 
 app.include_router(palace_router.router, prefix="/api/v1")
+app.include_router(backups_router.router, prefix="/api/v1")
 app.include_router(palace_quiz_router.router, prefix="/api/v1")
 app.include_router(review_router.router, prefix="/api/v1")
 app.include_router(sessions_router.router, prefix="/api/v1")
@@ -163,6 +165,7 @@ app.include_router(english_router.router, prefix="/api/v1")
 app.include_router(english_reading_router.router, prefix="/api/v1")
 app.include_router(freestyle_router.router, prefix="/api/v1")
 app.include_router(dashboard_router.router, prefix="/api/v1")
+app.include_router(search_router.router, prefix="/api/v1")
 
 if WEB_DIST_DIR and WEB_DIST_DIR.exists():
     app.mount("/", SinglePageAppStaticFiles(directory=str(WEB_DIST_DIR), html=True), name="web")

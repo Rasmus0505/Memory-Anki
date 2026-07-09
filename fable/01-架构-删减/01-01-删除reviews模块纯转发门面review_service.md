@@ -6,9 +6,9 @@
 优先级: P1
 预估工作量: S（<2h）
 依赖文档: 无
-状态: 未开始
-负责代理: 无
-完成时间: 无
+状态: 已完成
+负责代理: Codex
+完成时间: 2026-07-09
 ---
 
 # 01-01 删除 reviews 模块纯转发门面 review_service.py
@@ -132,3 +132,4 @@ python -m ruff check src tests
 | 时间 | 执行者 | 动作 | 结果/备注 |
 |---|---|---|---|
 | 2026-07-08 | 文档代理（fable） | 文档创建，核实门面 47 行、唯一调用方为测试文件第 41 行 | - |
+| 2026-07-09 | Codex | 调用方改为直接 import `review_execution_service.submit_review`，删除 `review_service.py` | `rg -n "reviews.application.review_service" apps` 无匹配；相关 pytest 子集通过 |

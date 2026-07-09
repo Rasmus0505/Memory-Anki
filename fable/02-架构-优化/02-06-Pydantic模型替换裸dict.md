@@ -6,9 +6,9 @@
 优先级: P1（应该）
 预估工作量: M（2-8h）
 依赖文档: 无（与 02-05 涉及 knowledge 同一文件、与 02-13 涉及 sessions service，执行前互查进度表）
-状态: 未开始
-负责代理: 无
-完成时间: 无
+状态: 已完成
+负责代理: Codex
+完成时间: 2026-07-09
 ---
 
 # 02-06 Pydantic 模型替换裸 dict
@@ -193,3 +193,4 @@ class SubjectEditorUpdate(BaseModel):
 | 时间 | 执行者 | 动作 | 结果/备注 |
 |---|---|---|---|
 | - | - | 文档创建 | - |
+| 2026-07-09 | Codex | 完成实现与验证 | 按当前代码完成 sessions/freestyle/knowledge 关键写接口请求模型化，domain schema 仅依赖 Pydantic/标准库并使用 `extra="allow"`；服务层签名未改，router 以 `model_dump(exclude_unset=True, exclude_none=False)` 保持 PATCH 语义；保留 `from-time-record` 与 subject editor 两个自由结构 dict 并在代码注释说明；目标 pytest 31 passed（5 warnings），目标 ruff 通过 |

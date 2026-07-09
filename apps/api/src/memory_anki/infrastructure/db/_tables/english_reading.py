@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 
-from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, Text
+from sqlalchemy import Date, DateTime, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from memory_anki.core.time import utc_now_naive
@@ -140,6 +140,53 @@ class EnglishReadingSession(Base):
     version: Mapped[EnglishReadingVersion | None] = relationship(
         "EnglishReadingVersion",
         back_populates="sessions",
+    )
+
+
+class EnglishReadingVocabularyNote(Base):
+    __tablename__ = "english_reading_vocabulary_notes"
+    __table_args__ = (
+        Index("ix_english_reading_vocabulary_notes_due", "status", "next_due_date", "next_due_at"),
+        Index("ix_english_reading_vocabulary_notes_updated", "updated_at"),
+        Index("ix_english_reading_vocabulary_notes_material", "material_id", "version_id"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    normalized_surface: Mapped[str] = mapped_column(String(320), nullable=False, unique=True)
+    word: Mapped[str] = mapped_column(String(240), nullable=False, default="")
+    lemma: Mapped[str] = mapped_column(String(240), nullable=False, default="")
+    cefr: Mapped[str] = mapped_column(String(8), nullable=False, default="")
+    note: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    definition_zh: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    context: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    material_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("english_reading_materials.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    version_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("english_reading_versions.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    span_annotation_id: Mapped[str] = mapped_column(String(80), nullable=False, default="")
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="active")
+    review_number: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    review_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    correct_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    incorrect_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    next_due_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    next_due_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    interval_days: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    review_type: Mapped[str] = mapped_column(String(20), nullable=False, default="standard")
+    algorithm_used: Mapped[str] = mapped_column(String(30), nullable=False, default="ebbinghaus")
+    anchor_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    last_reviewed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime | None] = mapped_column(DateTime, default=utc_now_naive)
+    updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime,
+        default=utc_now_naive,
+        onupdate=utc_now_naive,
     )
 
 

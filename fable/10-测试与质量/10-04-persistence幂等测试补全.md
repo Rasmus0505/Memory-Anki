@@ -6,9 +6,9 @@
 优先级: P1（应该）
 预估工作量: S（<2h）
 依赖文档: 10-01（conftest 的 fixture）
-状态: 未开始
-负责代理: 无
-完成时间: 无
+状态: 已完成
+负责代理: fable Worker 3
+完成时间: 2026-07-09
 ---
 
 # 10-04 persistence 幂等测试补全
@@ -206,3 +206,5 @@ class TestSubmitRouteIdempotency:
 | 时间 | 执行者 | 动作 | 结果/备注 |
 |---|---|---|---|
 | 2026-07-08 | 文档代理（fable） | 文档创建；核实 idempotency.py 67 行零直测、生产调用方仅 reviews router submit 端点（187/217 行） | - |
+| 2026-07-09 | fable Worker 3 | 新增 `apps/api/tests/test_idempotency.py`，覆盖 `read_mutation_id`、`save_idempotent_response`、`get_idempotent_response` 与 reviews submit 路由幂等行为 | 13 tests；不同 mutation ID 的二次提交按真实行为收紧为 404 / `{"detail": "not found"}` |
+| 2026-07-09 | fable Worker 3 | 验证 | `python -m pytest tests/test_idempotency.py -v`：13 passed；`python -m pytest tests/test_idempotency.py tests/test_review_routes.py -k "idempotency or duplicate_mutation_id or submit_review_reuses_response or submit_review_rolls_back_when_idempotency_save_fails" -q`：15 passed, 2 skipped, 101 deselected |

@@ -7,7 +7,8 @@ import re
 from html import unescape
 from typing import Any
 
-from memory_anki.infrastructure.db.models import Chapter, Palace, Peg, Subject
+from memory_anki.infrastructure.db._tables.knowledge import Chapter, Subject
+from memory_anki.infrastructure.db._tables.palaces import Palace, Peg
 
 DEFAULT_LAYOUT = "logicalStructure"
 DEFAULT_THEME = {"template": "avocado", "config": {}}

@@ -14,6 +14,8 @@ vi.mock('@/entities/study-session/api', () => ({
 
 const { createStudySessionRecordApi } = await import('@/entities/study-session/api')
 
+const REMOVED_TIME_RECORD_RECOVERY_EVENT = ['memory-anki', 'time-record-recovery:changed'].join('-')
+
 function buildRecord(overrides: Partial<TimeSessionRecord> = {}): TimeSessionRecord {
   return {
     id: 'record-1',
@@ -49,6 +51,18 @@ describe('time-record recovery store', () => {
 
     expect(listPendingTimeRecordRecoveries()).toHaveLength(1)
     expect(listPendingTimeRecordRecoveries()[0]?.recordId).toBe('record-1')
+  })
+
+  it('does not dispatch the removed time record recovery change event', () => {
+    const dispatchSpy = vi.spyOn(window, 'dispatchEvent')
+
+    upsertPendingTimeRecordRecovery(buildRecord(), {
+      mutationId: buildTimeRecordRecoveryMutationId('record-1'),
+    })
+
+    expect(dispatchSpy).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: REMOVED_TIME_RECORD_RECOVERY_EVENT }),
+    )
   })
 
   it('removes the recovery entry after a successful replay', async () => {

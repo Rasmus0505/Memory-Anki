@@ -6,9 +6,9 @@
 优先级: P1
 预估工作量: S（<2h）
 依赖文档: 无
-状态: 未开始
-负责代理: 无
-完成时间: 无
+状态: 已完成
+负责代理: Codex
+完成时间: 2026-07-09
 ---
 
 # 01-02 删除 backups 模块转发门面 backup_service.py
@@ -301,3 +301,4 @@ lint-imports
 | 时间 | 执行者 | 动作 | 结果/备注 |
 |---|---|---|---|
 | 2026-07-08 | 文档代理（fable） | 文档创建；核实门面 117 行且含 `maybe_create_interval_backup` 包装（非纯转发），测试猴补丁依赖已写入步骤 7b | - |
+| 2026-07-09 | Codex | 所有调用方改为直接 import 真实实现模块，测试猴补丁改为 `backup_lifecycle.FULL_BACKUPS_DIR`，删除 `backup_service.py` | `rg -n "backups.application.backup_service\|application import backup_service" apps` 无匹配；相关 pytest 子集通过 |

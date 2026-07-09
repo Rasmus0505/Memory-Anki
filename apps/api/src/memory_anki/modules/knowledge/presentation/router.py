@@ -1,102 +1,91 @@
 """知识体系路由：学科 + 章节。"""
-import traceback
+import logging
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
-from memory_anki.core.config import REPO_ROOT
-from memory_anki.infrastructure.db.models import (
-    Chapter,
-    Palace,
-    Subject,
-    get_session,
+from memory_anki.infrastructure.db.deps import session_dep
+from memory_anki.modules.knowledge.application import chapter_service, subject_service
+from memory_anki.modules.knowledge.domain.schemas import (
+    ChapterUpdate,
+    PalaceChapterLinks,
+    SubjectCreate,
+    SubjectUpdate,
 )
-from memory_anki.modules.backups.application.backup_service import maybe_create_rolling_backup
 from memory_anki.modules.mindmap.application.editor_state_service import (
     EditorStateConflictError,
-    get_subject_editor_state,
-    save_subject_editor_state,
-    sync_subject_editor_root,
-)
-from memory_anki.modules.palaces.application.title_sync_service import (
-    get_palace_explicit_chapter_ids,
-    reconcile_palace_chapter_binding,
-    set_palace_chapter_links,
 )
 from memory_anki.modules.palaces.domain.schemas import ChapterCreate
+from memory_anki.modules.persistence.application.idempotency import (
+    get_idempotent_response,
+    save_idempotent_response,
+)
 
 router = APIRouter(tags=["knowledge"])
-DEBUG_LOG_PATH = REPO_ROOT / "output" / "subject-editor-debug.log"
+logger = logging.getLogger(__name__)
 
 
-def session_dep():
-    s = get_session()
-    try:
-        yield s
-    finally:
-        s.close()
-
-
-def chapter_json(c: Chapter) -> dict:
-    children = c.children or []
-    return {
-        "id": c.id,
-        "subject_id": c.subject_id,
-        "parent_id": c.parent_id,
-        "name": c.name,
-        "sort_order": c.sort_order,
-        "notes": c.notes,
-        "children": [chapter_json(ch) for ch in children],
-        "palace_count": len(c.palaces or []),
-    }
-
-
-def subject_json(s: Subject) -> dict:
-    return {
-        "id": s.id,
-        "name": s.name,
-        "color": s.color,
-        "sort_order": s.sort_order,
-    }
+def _internal_error_response(message: str) -> JSONResponse:
+    return JSONResponse(
+        status_code=500,
+        content={
+            "detail": {
+                "code": "internal_error",
+                "message": message,
+            }
+        },
+    )
 
 
 # === 学科 ===
 
 @router.get("/subjects")
-def list_subjects(s: Session = Depends(session_dep)):
-    return [subject_json(sub) for sub in s.query(Subject).order_by(Subject.sort_order).all()]
+def list_subjects(
+    limit: int | None = Query(default=None, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+    s: Session = Depends(session_dep),
+):
+    return subject_service.list_subjects(s, limit=limit, offset=offset)
 
 
 @router.post("/subjects")
-def create_subject(data: dict, s: Session = Depends(session_dep)):
-    sub = Subject(name=data.get("name", ""), color=data.get("color", "#6366f1"),
-                  sort_order=data.get("sort_order", 0))
-    s.add(sub)
-    s.commit()
-    return subject_json(sub)
+def create_subject(data: SubjectCreate, request: Request, s: Session = Depends(session_dep)):
+    existing_response = get_idempotent_response(s, request)
+    if existing_response is not None:
+        return existing_response
+    payload = data.model_dump(exclude_unset=True, exclude_none=False)
+    return subject_service.create_subject(
+        s,
+        name=payload.get("name", ""),
+        color=payload.get("color", "#6366f1"),
+        sort_order=payload.get("sort_order", 0),
+        before_commit=lambda response: save_idempotent_response(
+            s,
+            request,
+            response,
+            commit=False,
+        ),
+    )
 
 
 @router.put("/subjects/{subject_id}")
-def update_subject(subject_id: int, data: dict, s: Session = Depends(session_dep)):
-    sub = s.query(Subject).filter_by(id=subject_id).first()
-    if not sub:
-        return {"error": "not found"}
-    for key in ("name", "color", "sort_order"):
-        if key in data:
-            setattr(sub, key, data[key])
-    sync_subject_editor_root(sub)
-    s.commit()
-    return subject_json(sub)
+def update_subject(subject_id: int, data: SubjectUpdate, s: Session = Depends(session_dep)):
+    sub = subject_service.update_subject(
+        s,
+        subject_id,
+        data.model_dump(exclude_unset=True, exclude_none=False),
+    )
+    if sub is None:
+        raise HTTPException(status_code=404, detail="not found")
+    return sub
 
 
 @router.delete("/subjects/{subject_id}")
 def delete_subject(subject_id: int, s: Session = Depends(session_dep)):
-    sub = s.query(Subject).filter_by(id=subject_id).first()
-    if not sub:
-        return {"error": "not found"}
-    s.delete(sub)
-    s.commit()
+    deleted = subject_service.delete_subject(s, subject_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="not found")
     return {"ok": True}
 
 
@@ -105,164 +94,100 @@ def delete_subject(subject_id: int, s: Session = Depends(session_dep)):
 @router.get("/subjects/{subject_id}/tree")
 def get_tree(subject_id: int, s: Session = Depends(session_dep)):
     """获取学科完整章节树"""
-    subject = s.query(Subject).filter_by(id=subject_id).first()
-    if not subject:
-        return {"error": "not found"}
-    root_chapters = [c for c in subject.chapters if c.parent_id is None]
-    return {
-        "subject": subject_json(subject),
-        "chapters": [chapter_json(c) for c in root_chapters],
-    }
+    tree = subject_service.get_subject_tree(s, subject_id)
+    if tree is None:
+        raise HTTPException(status_code=404, detail="not found")
+    return tree
 
 
 @router.get("/subjects/{subject_id}/editor")
 def get_subject_editor(subject_id: int, s: Session = Depends(session_dep)):
-    subject = s.query(Subject).filter_by(id=subject_id).first()
-    if not subject:
-        return {"error": "not found"}
-    return {
-        "subject": subject_json(subject),
-        **get_subject_editor_state(subject),
-    }
+    payload = subject_service.get_subject_editor_payload(s, subject_id)
+    if payload is None:
+        raise HTTPException(status_code=404, detail="not found")
+    return payload
 
 
 @router.put("/subjects/{subject_id}/editor")
 def update_subject_editor(subject_id: int, data: dict, s: Session = Depends(session_dep)):
+    # Keep this as a free-form dict: the editor document/config payload is an
+    # open-ended mind-map state owned by the editor subsystem.
     try:
-        subject = s.query(Subject).filter_by(id=subject_id).first()
-        if not subject:
-            return {"error": "not found"}
-        editor_doc = data.get("editor_doc")
-        root = editor_doc.get("root") if isinstance(editor_doc, dict) else None
-        top_children = len(editor_doc.get("children", [])) if isinstance(editor_doc, dict) and isinstance(editor_doc.get("children"), list) else None
-        root_children = len(root.get("children", [])) if isinstance(root, dict) and isinstance(root.get("children"), list) else None
-        print(
-            f"[DEBUG] update_subject_editor payload: subject_id={subject_id}, "
-            f"doc_keys={list(editor_doc.keys()) if isinstance(editor_doc, dict) else type(editor_doc).__name__}, "
-            f"top_children={top_children}, root_children={root_children}",
-            flush=True,
-        )
-        result = {
-            "subject": subject_json(subject),
-            **save_subject_editor_state(s, subject, data),
-        }
-        maybe_create_rolling_backup("rolling-subject-editor-save")
-        return result
+        payload = subject_service.save_subject_editor(s, subject_id, data)
+        if payload is None:
+            raise HTTPException(status_code=404, detail="not found")
+        return payload
+    except HTTPException:
+        raise
     except EditorStateConflictError as exc:
         s.rollback()
         return JSONResponse(status_code=409, content={"detail": str(exc)})
     except Exception:
         s.rollback()
-        tb = traceback.format_exc()
-        DEBUG_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
-        with DEBUG_LOG_PATH.open("a", encoding="utf-8") as handle:
-            handle.write(
-                "[update_subject_editor FAIL]\n"
-                f"subject_id={subject_id}\n"
-                f"payload_keys={list(data.keys()) if isinstance(data, dict) else type(data).__name__}\n"
-                f"traceback=\n{tb}\n"
-            )
-        print(f"[DEBUG] update_subject_editor FAIL: {tb}", flush=True)
-        return JSONResponse(status_code=500, content={"error": tb})
+        logger.exception("update_subject_editor failed: subject_id=%s", subject_id)
+        return _internal_error_response("保存学科编辑器状态失败，请查看服务端日志。")
 
 
 @router.get("/chapters/{chapter_id}")
 def get_chapter(chapter_id: int, s: Session = Depends(session_dep)):
     """获取章节详情 + 关联的宫殿列表"""
-    c = s.query(Chapter).filter_by(id=chapter_id).first()
-    if not c:
-        return {"error": "not found"}
-
-    def palace_out(p):
-        return {
-            "id": p.id, "title": p.title,
-            "pegs": [{"id": pg.id, "name": pg.name, "content": pg.content} for pg in p.pegs],
-        }
-
-    # 面包屑路径 (通过 parent_id 手动查询)
-    breadcrumbs: list[dict[str, int | str]] = []
-    cur_id = c.parent_id
-    while cur_id:
-        parent = s.query(Chapter).filter_by(id=cur_id).first()
-        if parent:
-            breadcrumbs.insert(0, {"id": parent.id, "name": parent.name})
-            cur_id = parent.parent_id
-        else:
-            break
-
-    return {
-        "chapter": {
-            "id": c.id, "name": c.name, "notes": c.notes,
-            "subject": subject_json(c.subject) if c.subject else None,
-            "children": [chapter_json(ch) for ch in (c.children or [])],
-            "breadcrumbs": breadcrumbs,
-        },
-        "palaces": [palace_out(p) for p in c.palaces],
-    }
+    detail = chapter_service.get_chapter_detail(s, chapter_id)
+    if detail is None:
+        raise HTTPException(status_code=404, detail="not found")
+    return detail
 
 
 @router.post("/subjects/{subject_id}/chapters")
-def create_chapter(subject_id: int, data: ChapterCreate, s: Session = Depends(session_dep)):
-    print(f"[DEBUG] create_chapter: subject_id={subject_id}, data={data}", flush=True)
+def create_chapter(
+    subject_id: int,
+    data: ChapterCreate,
+    request: Request,
+    s: Session = Depends(session_dep),
+):
+    existing_response = get_idempotent_response(s, request)
+    if existing_response is not None:
+        return existing_response
     try:
-        c = Chapter(
-            subject_id=subject_id,
-            parent_id=data.parent_id,
-            name=data.name,
-            notes=data.notes,
-            sort_order=data.sort_order,
+        return chapter_service.create_chapter(
+            s,
+            subject_id,
+            data,
+            before_commit=lambda result: save_idempotent_response(
+                s,
+                request,
+                result,
+                commit=False,
+            ),
         )
-        s.add(c)
-        s.flush()
-        s.refresh(c)
-        result = chapter_json(c)
-        s.commit()
-        maybe_create_rolling_backup("rolling-create-chapter")
-        print(f"[DEBUG] create_chapter OK: chapter_id={c.id}", flush=True)
-        return result
     except Exception:
         s.rollback()
-        tb = traceback.format_exc()
-        print(f"[DEBUG] create_chapter FAIL: {tb}", flush=True)
-        return JSONResponse(status_code=500, content={"error": tb})
+        logger.exception("create_chapter failed: subject_id=%s", subject_id)
+        return _internal_error_response("创建章节失败，请查看服务端日志。")
 
 
 @router.put("/chapters/{chapter_id}")
-def update_chapter(chapter_id: int, data: dict, s: Session = Depends(session_dep)):
-    c = s.query(Chapter).filter_by(id=chapter_id).first()
-    if not c:
-        return {"error": "not found"}
-    for key in ("name", "notes", "sort_order", "parent_id"):
-        if key in data:
-            setattr(c, key, data[key])
-    s.commit()
-    maybe_create_rolling_backup("rolling-update-chapter")
-    return chapter_json(c)
-
-
-def _delete_recursive(chapter: Chapter, s: Session):
-    """递归删除章节及其所有后代"""
-    for child in chapter.children:
-        _delete_recursive(child, s)
-    s.delete(chapter)
+def update_chapter(chapter_id: int, data: ChapterUpdate, s: Session = Depends(session_dep)):
+    chapter = chapter_service.update_chapter(
+        s,
+        chapter_id,
+        data.model_dump(exclude_unset=True, exclude_none=False),
+    )
+    if chapter is None:
+        raise HTTPException(status_code=404, detail="not found")
+    return chapter
 
 
 @router.delete("/chapters/{chapter_id}")
-def delete_chapter(chapter_id: int, s: Session = Depends(session_dep)):
-    print(f"[DEBUG] delete_chapter: chapter_id={chapter_id}", flush=True)
+def delete_chapter(chapter_id: int, force: bool = False, s: Session = Depends(session_dep)):
     try:
-        c = s.query(Chapter).filter_by(id=chapter_id).first()
-        if c:
-            _delete_recursive(c, s)
-            s.commit()
-            maybe_create_rolling_backup("rolling-delete-chapter")
-            print("[DEBUG] delete_chapter OK (cascade)", flush=True)
-        return {"ok": True}
+        result = chapter_service.delete_chapter(s, chapter_id, force=force)
+        if result.get("requires_force"):
+            return JSONResponse(status_code=409, content=result)
+        return result
     except Exception:
         s.rollback()
-        tb = traceback.format_exc()
-        print(f"[DEBUG] delete_chapter FAIL: {tb}", flush=True)
-        return JSONResponse(status_code=500, content={"error": tb})
+        logger.exception("delete_chapter failed: chapter_id=%s", chapter_id)
+        return _internal_error_response("删除章节失败，请查看服务端日志。")
 
 
 # === 宫殿章节关联 ===
@@ -270,32 +195,20 @@ def delete_chapter(chapter_id: int, s: Session = Depends(session_dep)):
 @router.get("/palaces/{palace_id}/chapters")
 def palace_chapters(palace_id: int, s: Session = Depends(session_dep)):
     """获取宫殿关联的章节"""
-    p = s.query(Palace).filter_by(id=palace_id).first()
-    if not p:
-        return {"error": "not found"}
-    reconcile_palace_chapter_binding(s, p)
-    explicit_ids = get_palace_explicit_chapter_ids(s, p)
-    return [{
-        "id": c.id, "name": c.name, "subject_id": c.subject_id,
-        "parent_id": c.parent_id,
-        "is_explicit": c.id in explicit_ids,
-        "subject": {"id": c.subject.id, "name": c.subject.name} if c.subject else None,
-    } for c in p.chapters]
+    chapters = chapter_service.get_palace_chapters(s, palace_id)
+    if chapters is None:
+        raise HTTPException(status_code=404, detail="not found")
+    return chapters
 
 
 @router.put("/palaces/{palace_id}/chapters")
-def link_chapters(palace_id: int, data: dict, s: Session = Depends(session_dep)):
+def link_chapters(palace_id: int, data: PalaceChapterLinks, s: Session = Depends(session_dep)):
     """设置宫殿关联的章节 (data: {chapter_ids: [1,2,3], primary_chapter_id?: 3})"""
-    p = s.query(Palace).filter_by(id=palace_id).first()
-    if not p:
-        return {"error": "not found"}
-    ids = [int(chapter_id) for chapter_id in data.get("chapter_ids", [])]
-    primary_chapter_id = data.get("primary_chapter_id")
-    next_primary = int(primary_chapter_id) if primary_chapter_id is not None else None
-    _, expanded_ids = set_palace_chapter_links(s, p, ids)
-    reconcile_palace_chapter_binding(s, p, preferred_primary_chapter_id=next_primary)
-    s.commit()
-    maybe_create_rolling_backup("rolling-link-chapters")
-    return {"ok": True, "count": len(expanded_ids), "primary_chapter_id": p.primary_chapter_id}
-
-
+    result = chapter_service.link_palace_chapters(
+        s,
+        palace_id,
+        data.model_dump(exclude_unset=True, exclude_none=False),
+    )
+    if result is None:
+        raise HTTPException(status_code=404, detail="not found")
+    return result

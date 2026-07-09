@@ -1,35 +1,5 @@
-import { getSubjectTreeApi, getSubjectsApi } from '@/entities/knowledge/api'
 import { getPalaceApi } from '@/entities/palace/api'
-import {
-  batchDeletePalaceQuizQuestionsApi,
-  batchCreateChapterQuizQuestionsApi,
-  classifyPalaceQuizQuestionsToMiniPalacesApi,
-  createPalaceQuizQuestionApi,
-  deletePalaceQuizQuestionApi,
-  getPalaceQuizOcrSourcesApi,
-  getPalaceQuizQuestionsApi,
-  recordPalaceQuizChoiceAttemptApi,
-  requestPalaceQuestionExplainApi,
-  requestPalaceShortAnswerFeedbackApi,
-  resetPalaceQuizQuestionAttemptsApi,
-  updatePalaceQuizQuestionApi,
-} from '@/entities/quiz/api'
-
-export {
-  batchDeletePalaceQuizQuestionsApi,
-  batchCreateChapterQuizQuestionsApi,
-  classifyPalaceQuizQuestionsToMiniPalacesApi,
-  createPalaceQuizQuestionApi,
-  deletePalaceQuizQuestionApi,
-  getPalaceQuizOcrSourcesApi,
-  getSubjectTreeApi,
-  getSubjectsApi,
-  recordPalaceQuizChoiceAttemptApi,
-  requestPalaceQuestionExplainApi,
-  requestPalaceShortAnswerFeedbackApi,
-  resetPalaceQuizQuestionAttemptsApi,
-  updatePalaceQuizQuestionApi,
-}
+import { getPalaceQuizQuestionsApi } from '@/entities/quiz/api'
 
 export async function loadPalaceQuizPageData(palaceId: number) {
   const [palace, questions] = await Promise.all([

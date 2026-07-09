@@ -1,10 +1,8 @@
-﻿import { useState } from 'react'
-import { toast } from '@/shared/feedback/toast'
-import type { dispatchGlobalFeedback } from '@/shared/feedback/globalFeedbackModel'
-import type { PalaceQuizQuestion } from '@/shared/api/contracts'
-import { recordPalaceQuizChoiceAttemptApi, requestPalaceShortAnswerFeedbackApi } from '@/features/palace-quiz/api'
+import { useState } from 'react'
+import { useQuizAttemptOrchestration } from '@/features/palace-quiz/hooks/useQuizAttemptOrchestration'
 import type { QuizRuntimeState } from '@/features/palace-quiz/QuizQuestionInteraction'
-import { emitQuizResultFeedback } from '@/features/palace-quiz/model/quizResultFeedback'
+import type { AiRuntimeOptions, PalaceQuizQuestion } from '@/shared/api/contracts'
+import type { dispatchGlobalFeedback } from '@/shared/feedback/globalFeedbackModel'
 
 export function usePalaceQuizPractice({
   setQuestions,
@@ -17,7 +15,7 @@ export function usePalaceQuizPractice({
     scenarioKey: string
     entrypointKey: string
     title: string
-  }) => Promise<import('@/shared/api/contracts').AiRuntimeOptions | null | undefined>
+  }) => Promise<AiRuntimeOptions | null | undefined>
   registerQuizActivity: (source: string) => void
   emitQuizFeedback: (
     event: Parameters<typeof dispatchGlobalFeedback>[0],
@@ -76,84 +74,40 @@ export function usePalaceQuizPractice({
     resetQuestionState(questionId)
   }
 
-  const handleChoiceSelect = (question: PalaceQuizQuestion, optionId: string) => {
-    const currentState = questionStates[question.id]
-    if (currentState?.resolved) return
-    registerQuizActivity('choice_select')
-    const isCorrect = question.answer_payload.correct_option_id === optionId
-    emitQuizFeedback('quiz_answer_select', { label: optionId, audioScope: 'local' })
-    void recordPalaceQuizChoiceAttemptApi(question.id, optionId)
-      .then((response) => {
+  const orchestration = useQuizAttemptOrchestration({
+    adapter: {
+      readQuestionState: (questionId) => questionStates[questionId] || {},
+      updateQuestionState,
+      applyUpdatedQuestion: (question) => {
         setQuestions((current) =>
-          current.map((item) => (item.id === question.id ? response.question : item)),
+          current.map((item) => (item.id === question.id ? question : item)),
         )
-        emitQuizResultFeedback({ correct: isCorrect })
-        emitQuizFeedback('quiz_result_reveal', {
-          label: isCorrect ? '揭晓' : '答案',
-          screenPulse: null,
-          audioScope: 'local',
-        })
-      })
-      .catch((nextError) => {
-        emitQuizFeedback('quiz_error_stat_failed', { label: '统计失败', audioScope: 'local' })
-        toast.error(nextError instanceof Error ? nextError.message : '统计刷新失败。')
-      })
+      },
+    },
+    promptForAiOptions,
+    shortAnswerEntrypointKey: 'quiz-short-answer-feedback',
+    resultFeedbackMode: 'immediate',
+    emitFeedback: emitQuizFeedback,
+    emitChoiceStatErrorFeedback: true,
+    onChoiceStart: ({ optionId }) => {
+      registerQuizActivity('choice_select')
+      emitQuizFeedback('quiz_answer_select', { label: optionId, audioScope: 'local' })
+    },
+  })
+
+  const handleChoiceSelect = (question: PalaceQuizQuestion, optionId: string) => {
+    orchestration.handleChoiceSelect(question, optionId)
   }
 
   const handleShortAnswerSubmit = (questionId: number) => {
     registerQuizActivity('short_answer_submit')
     emitQuizFeedback('quiz_answer_submit', { label: '提交答案', audioScope: 'local' })
-    updateQuestionState(questionId, (state) => ({
-      ...state,
-      resolved: true,
-      shortAnswerSubmitted: true,
-      shortAnswerFeedback: null,
-    }))
+    orchestration.handleShortAnswerSubmit(questionId)
   }
 
   const handleShortAnswerFeedback = async (question: PalaceQuizQuestion) => {
     registerQuizActivity('short_answer_feedback')
-    const state = questionStates[question.id] || {}
-    const userAnswer = state.shortAnswerText?.trim() || ''
-    if (!userAnswer) {
-      emitQuizFeedback('quiz_error_missing_input', { label: '先写答案', audioScope: 'local' })
-      toast.error('请先填写你的答案。')
-      return
-    }
-    emitQuizFeedback('quiz_generate_start', { label: 'AI点评', audioScope: 'global' })
-    updateQuestionState(question.id, (current) => ({
-      ...current,
-      shortAnswerFeedbackLoading: true,
-    }))
-    try {
-      const aiOptions = await promptForAiOptions({
-        scenarioKey: 'quiz_short_answer_feedback',
-        entrypointKey: 'quiz-short-answer-feedback',
-        title: '简答题 AI 点评配置',
-      })
-      if (!aiOptions) {
-        updateQuestionState(question.id, (current) => ({
-          ...current,
-          shortAnswerFeedbackLoading: false,
-        }))
-        emitQuizFeedback('quiz_generate_cancel', { label: '取消AI', audioScope: 'global' })
-        return
-      }
-      const feedback = await requestPalaceShortAnswerFeedbackApi(question.id, userAnswer, aiOptions)
-      updateQuestionState(question.id, (current) => ({
-        ...current,
-        shortAnswerFeedback: feedback,
-        shortAnswerFeedbackLoading: false,
-      }))
-      emitQuizFeedback('quiz_result_ai_feedback_ready', { label: 'AI完成', audioScope: 'global' })
-    } catch (nextError) {
-      updateQuestionState(question.id, (current) => ({
-        ...current,
-        shortAnswerFeedbackLoading: false,
-      }))
-      emitQuizFeedback('quiz_error_ai_failed', { label: 'AI失败', audioScope: 'global' })
-      toast.error(nextError instanceof Error ? nextError.message : 'AI 点评失败。')
-    }
+    await orchestration.handleShortAnswerFeedback(question)
   }
 
   return {

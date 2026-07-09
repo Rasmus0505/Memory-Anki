@@ -6,9 +6,9 @@
 优先级: P0
 预估工作量: L（>8h）
 依赖文档: 无（可独立执行；若同时执行 08-14 色板迁移，先完成本文档再做 08-14）
-状态: 未开始
-负责代理: 无
-完成时间: 无
+状态: 已完成
+负责代理: Codex
+完成时间: 2026-07-09
 ---
 
 # 08-01 拆分 FreestylePage
@@ -194,3 +194,9 @@ npm run build                            # 期望：构建成功
 | 时间 | 执行者 | 动作 | 结果/备注 |
 |---|---|---|---|
 | - | - | 文档创建 | 分 6 批，每批跑 freestyle 目录测试 |
+| 2026-07-09 | Codex | 完成第 1 批：纯常量与纯函数下沉 | 新增 `model/freestyle-labels.ts`、`model/freestyle-cards.ts`、`model/freestyle-attempts.ts`，`FreestylePage.tsx` 降至约 1420 行；Freestyle targeted vitest 通过（41 tests）。`npm run typecheck` 仍失败于范围外 `src/shared/hooks/useTimedSession.ts(528,34): Cannot find name 'formatLocalApiDateTime'`，未修改 session hooks。 |
+| 2026-07-09 | Codex | 完成第 2 批：展示子组件搬到 `components/` | 新增 `FreestyleIconButton.tsx`、`FreestyleSettingsDialog.tsx`、`TodayTrainingSettingsDialog.tsx`、`FreestyleActionCardView.tsx`、`FreestyleRoundSummaryCard.tsx`、`FreestyleQuizCardView.tsx`，保持原 props/文案/className；`FreestylePage.tsx` 降至 986 行；指定 vitest 通过（41 tests）。 |
+| 2026-07-09 | Codex | 完成第 3 批：抽出 `useFreestyleFeed` | 新增 `hooks/useFreestyleFeed.ts`，迁入 feed state、自由/今日训练加载、诊断复制、宫殿选项加载和 `updateFeedQuestion`；`FreestylePage.tsx` 降至 874 行；指定 vitest 通过（41 tests），`npm run typecheck` 通过。整体仍进行中，下一批为 `useFreestyleQuizFlow`。 |
+| 2026-07-09 | Codex | 完成第 4 批：抽出 `useFreestyleQuizFlow` | 新增 `hooks/useFreestyleQuizFlow.ts`，迁入 progress state/ref、持久化 setter、答题状态更新、选择题上报、简答 AI 点评、清进度、新解题上报与里程碑庆祝；指定 vitest 通过（41 tests）。 |
+| 2026-07-09 | Codex | 完成第 5 批：抽出 `useTodayTraining` | 新增 `hooks/useTodayTraining.ts`，迁入队列派生、进度同步、配置持久化 setter、重洗、模式切换和今日训练 summary；指定 vitest 通过（41 tests）。 |
+| 2026-07-09 | Codex | 完成第 6 批：页面壳收尾 | 新增 `FreestyleHudBar.tsx`、`FreestyleFeedStates.tsx`、`FreestyleActionRail.tsx`、`FreestyleCardScroller.tsx`、`FreestyleDialogsHost.tsx`、`hooks/usePrefersReducedMotion.ts`；`FreestylePage.tsx` 降至 292 行；修复 `timer.status` 包含 `completed` 的 typecheck 类型问题；指定 vitest、`npm run typecheck`、`npm run test -- --run` 均通过。 |

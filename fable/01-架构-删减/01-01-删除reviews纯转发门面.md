@@ -6,9 +6,9 @@
 优先级: P1
 预估工作量: S（<2h）
 依赖文档: 无
-状态: 未开始
-负责代理: 无
-完成时间: 无
+状态: 已完成
+负责代理: fable Worker / Codex同步
+完成时间: 2026-07-09
 ---
 
 # 01-01 删除 reviews 模块纯转发门面 review_service.py
@@ -98,3 +98,4 @@ rg -n "reviews\.application\.review_service" apps/
 | 时间 | 执行者 | 动作 | 结果/备注 |
 |---|---|---|---|
 | 2026-07-08 | 文档撰写代理（fable） | 文档创建，已核实 review_service.py 现状与唯一引用方 | 待执行 |
+| 2026-07-09 | Codex | 同步同编号主文档完成状态 | 对应主文档 `01-01-删除reviews模块纯转发门面review_service.md` 已完成；`review_service.py` 已删除，引用已迁移，本文档作为同编号副本标记完成，避免重复认领。 |

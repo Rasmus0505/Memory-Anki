@@ -1,15 +1,15 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+
 from sqlalchemy.orm import Session
 
 from memory_anki.core.config import (
     DASHSCOPE_API_KEY,
     DASHSCOPE_ASR_MODEL,
-    DASHSCOPE_OCR_MODEL,
     DASHSCOPE_BASE_URL,
+    DASHSCOPE_OCR_MODEL,
     DASHSCOPE_TEXT_MODEL,
-    DASHSCOPE_VISION_MODEL,
     DEEPSEEK_API_KEY,
     DEEPSEEK_BASE_URL,
     ENGLISH_TRANSLATION_MODEL,
@@ -18,7 +18,7 @@ from memory_anki.core.config import (
     ZHIPU_API_KEY,
     ZHIPU_BASE_URL,
 )
-from memory_anki.infrastructure.db.models import AiModelCatalog
+from memory_anki.infrastructure.db._tables.misc import AiModelCatalog
 
 from .ai_model_registry_contracts import (
     AiModelCategoryDefinition,
@@ -27,6 +27,7 @@ from .ai_model_registry_contracts import (
     AiProviderKey,
     AiSceneDefinition,
 )
+
 
 @dataclass(frozen=True, slots=True)
 class AiProviderCatalogSpec:
@@ -216,6 +217,18 @@ SCENES: tuple[AiSceneDefinition, ...] = (
         legacy_config_keys=("mindmap_ai_split_model",),
         legacy_thinking_config_keys=("mindmap_ai_split_thinking_enabled",),
         source_location="apps/api/src/memory_anki/modules/palaces/application/mindmap_ai_split_service.py",
+    ),
+    AiSceneDefinition(
+        key="peg_association_suggestions",
+        label="记忆桩联想建议",
+        description="基于宫殿记忆桩、关联章节和用户输入知识点，生成可挂载到具体桩位的联想建议。",
+        category_key="llm",
+        config_key="scene_model_peg_association_suggestions",
+        thinking_config_key="scene_model_peg_association_suggestions_thinking_enabled",
+        default_model=DASHSCOPE_TEXT_MODEL,
+        legacy_config_keys=("mindmap_ai_split_model",),
+        legacy_thinking_config_keys=("mindmap_ai_split_thinking_enabled",),
+        source_location="apps/api/src/memory_anki/modules/palaces/application/peg_association_service.py",
     ),
     AiSceneDefinition(
         key="reading_lexical_resolution",

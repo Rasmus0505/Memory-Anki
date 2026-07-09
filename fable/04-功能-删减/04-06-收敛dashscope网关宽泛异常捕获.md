@@ -6,9 +6,9 @@
 优先级: P1
 预估工作量: M（2-8h）
 依赖文档: 无
-状态: 未开始
-负责代理: 无
-完成时间: 无
+状态: 已完成
+负责代理: Codex
+完成时间: 2026-07-09
 ---
 
 # 04-06 收敛 dashscope 网关宽泛异常捕获
@@ -249,3 +249,4 @@ mypy                                               # 期望：0 error
 | 时间 | 执行者 | 动作 | 结果/备注 |
 |---|---|---|---|
 | 2026-07-08 | fable 文档代理 | 文档创建；逐处核实 9 个 except 的行号与语义，确认 call_chat_completion_text 异常族为 OpenAICompatibleError | 待执行 |
+| 2026-07-09 | Codex | 核实实现与测试；确认 dashscope_gateway.py 已按 #1-#9 收敛：仅保留 ASR SDK/回调 5 处受控宽捕获，HTTP 下载、LLM 调用、to_dict 已收窄；确认 test_english_routes.py 覆盖单句空结果不二次包装与批量 mismatch fallback | 已完成；未改总索引 |

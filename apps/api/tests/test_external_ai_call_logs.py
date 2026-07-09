@@ -2,22 +2,14 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
-from sqlalchemy.pool import StaticPool
 
-from memory_anki.infrastructure.db.models import Base, ExternalAiCallLog
+from memory_anki.infrastructure.db._tables.misc import ExternalAiCallLog
 from memory_anki.infrastructure.llm import external_ai_call_logs
 from memory_anki.modules.palaces.application.mindmap_import import runtime
 
 
-def test_runtime_creates_persistent_ai_call_log_for_import(monkeypatch, tmp_path: Path):
-    test_engine = create_engine(
-        "sqlite://",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
-    Base.metadata.create_all(test_engine)
+def test_runtime_creates_persistent_ai_call_log_for_import(monkeypatch, tmp_path: Path, test_engine):
     monkeypatch.setattr(external_ai_call_logs, "engine", test_engine)
     monkeypatch.setattr(external_ai_call_logs, "AI_CALL_LOGS_DIR", tmp_path / "ai_call_logs")
 

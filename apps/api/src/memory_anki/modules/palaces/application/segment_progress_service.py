@@ -5,10 +5,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from memory_anki.infrastructure.db.models import Palace
-from memory_anki.modules.reviews.application.schedule_rebuild_service import (
-    palace_algorithm as resolve_palace_review_algorithm,
-)
+from memory_anki.infrastructure.db._tables.palaces import Palace
 from memory_anki.modules.reviews.application.schedule_rebuild_service import (
     rebuild_all_pending_review_schedules as rebuild_review_schedule_backlog,
 )
@@ -27,12 +24,7 @@ def adjust_palace_default_segment_review_progress(
     palace: Palace,
     payload: dict[str, Any],
 ) -> Palace:
-    algorithm = resolve_palace_review_algorithm(
-        session,
-        palace,
-        default_algorithm="ebbinghaus",
-    )
-    intervals = get_algorithm_intervals(session, algorithm)
+    intervals = get_algorithm_intervals(session)
     total = len(intervals)
     completed_count = max(0, min(int(payload.get("completed_count", 0)), total))
     completed_at = parse_progress_datetime(payload.get("completed_at"))
@@ -56,15 +48,8 @@ def repair_all_review_stage_progress(session: Session) -> dict[str, Any]:
     return rebuild_review_schedule_backlog(session)
 
 
-def rebuild_all_pending_review_schedules(
-    session: Session,
-    *,
-    algorithm_override: str | None = None,
-) -> dict[str, Any]:
-    return rebuild_review_schedule_backlog(
-        session,
-        algorithm_override=algorithm_override,
-    )
+def rebuild_all_pending_review_schedules(session: Session) -> dict[str, Any]:
+    return rebuild_review_schedule_backlog(session)
 
 
 def rebuild_palace_default_segment_progress(
@@ -76,7 +61,6 @@ def rebuild_palace_default_segment_progress(
     completed_at: datetime | None = None,
     fallback_completed_count: int | None = None,
     preserve_existing_progress: bool = True,
-    algorithm_override: str | None = None,
 ) -> None:
     rebuild_palace_review_schedule_state(
         session,
@@ -86,5 +70,4 @@ def rebuild_palace_default_segment_progress(
         completed_at=completed_at,
         fallback_completed_count=fallback_completed_count,
         preserve_existing_progress=preserve_existing_progress,
-        algorithm_override=algorithm_override,
     )

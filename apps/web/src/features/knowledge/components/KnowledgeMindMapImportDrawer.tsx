@@ -40,6 +40,7 @@ export function KnowledgeMindMapImportDrawer({
       currentJobStatus={mindMapImport.currentJobStatus}
       currentJobStage={mindMapImport.currentJobStage}
       currentJobUsage={mindMapImport.currentJobUsage}
+      currentJobError={mindMapImport.currentJobError}
       currentJobResolvedAi={mindMapImport.currentJobResolvedAi}
       currentJobPauseRequested={mindMapImport.currentJobPauseRequested}
       canResumeJob={mindMapImport.canResumeJob}

@@ -6,9 +6,9 @@
 优先级: P1
 预估工作量: L
 依赖文档: 无
-状态: 未开始
-负责代理: 无
-完成时间: 无
+状态: 已完成
+负责代理: Codex
+完成时间: 2026-07-09
 ---
 
 # 02-02 重组 palace_quiz 应用层碎片文件
@@ -151,3 +151,6 @@ python tools/check_architecture.py                 # 期望：passed（尤其 pa
 | 时间 | 执行者 | 动作 | 结果/备注 |
 |---|---|---|---|
 | - | - | 文档创建 | 核实：124 个文件属实；"11–100 行碎片"属实（112 个 ≤100 行）；示例文件行数与描述吻合（messages 11 行、child_chapter_runtime 16 行）；大量 ≤20 行文件为纯 re-export 门面 |
+| 2026-07-09 | Codex | 完成批次 0/1 的最小安全清理 | 当前目录直系 `.py` 为 126 个（含本轮新增 `quiz_generation_recovery.py`、`wrong_questions_service.py`）；删除 5 个纯转发门面：`quiz_generation_messages.py`、`quiz_generation_shared.py`、`quiz_generation_child_chapter_runtime.py`、`quiz_grouping_runtime.py`、`question_dedup.py`，并将引用改到真实模块；保留 `ai_service_runtime.py`。验证：touched files `ruff check` 通过；`python -m pytest tests/test_palace_quiz_routes.py tests/test_manual_text_quiz_parser.py -q` 为 43 passed, 21 skipped；旧门面导入无残留。未完成：尚未建立 `generation/`、`grouping/`、`questions/`、`ai_runtime/` 子包，也未执行批次 3-6 的大规模合并，因此本文档保持“部分完成”。 |
+| 2026-07-09 | Codex | 低冲突评估/收尾切片 | 当前 application 顶层直系 `.py` 为 119 个；本轮只删除 2 个“门面套门面”的纯转发文件：`question_commands.py`、`question_lifecycle_commands.py`，并让 `service.py` 直接从真实 command 模块导入，`service.py` 对外导出的函数集合保持不变（含并行阶段已加入的 `restore_question`）。复核：`rg -n "question_commands\|question_lifecycle_commands" apps/api/src apps/api/tests -g "*.py"` 无残留，`rg -n "from \.service import" apps/api/src/memory_anki/modules/palace_quiz/application -g "*.py"` 无残留。验证：`python -m ruff check src/memory_anki/modules/palace_quiz/application/service.py` 通过；`python -m pytest tests/test_palace_quiz_routes.py tests/test_manual_text_quiz_parser.py -q` 为 43 passed, 21 skipped。结论：02-02 仍为“部分完成”；剩余的 `generation/`、`grouping/`、`questions/`、`ai_runtime/` 子包建立与同族文件合并会改动大量 import 和多个正在被其他 agent 修改的 palace_quiz/palaces 相关文件，当前并行阶段不继续大搬家。 |
+| 2026-07-09 | Codex | 完成批次 2-6 的子包重组与收尾 | 已建立并使用 `generation/`、`grouping/`、`questions/`、`ai_runtime/` 子包：AI runtime 收到 `ai_runtime/runtime.py`，grouping 收到 `grouping/classify.py`，text/image/chapter/review/shared generation 收到 `generation/*.py`，question read/write/validation/dedup/serialization/source/scope 收到 `questions/*.py`。删除纯 re-export question shim 44 个与旧 generation 顶层碎片 36 个；保留对外锚点 `ai_service.py`、`service.py`、`quiz_generation_service.py`、`quiz_grouping_service.py`、`question_schema.py`、`manual_text_quiz_parser.py`。验收：`application` 合计 37 个 `.py`、顶层 15 个，无 >800 行文件；`rg` 旧碎片 import 仅剩允许的 `quiz_generation_service` 门面与 `question_schema` 外部引用；`python -m ruff check src/memory_anki/modules/palace_quiz/application src/memory_anki/modules/palace_quiz/presentation/router.py --fix` 后通过；`python -m pytest tests/test_palace_quiz_routes.py tests/test_manual_text_quiz_parser.py tests/test_freestyle_routes.py -q` 为 51 passed, 21 skipped。 |

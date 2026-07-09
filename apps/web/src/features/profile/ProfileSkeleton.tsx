@@ -1,12 +1,13 @@
 import { Card, CardContent } from '@/shared/components/ui/card'
 import { Skeleton } from '@/shared/components/ui/skeleton'
+import { SkeletonFormRows, SkeletonPageHeader } from '@/shared/components/ui/skeleton-layout'
 
 export function ProfileSkeleton() {
   return (
     <div className="flex flex-col gap-6">
       {/* Header */}
       <div className="flex flex-col gap-2">
-        <Skeleton className="h-8 w-24" />
+        <SkeletonPageHeader titleClassName="h-8 w-24" />
         <Skeleton className="size-48" />
       </div>
 
@@ -20,13 +21,8 @@ export function ProfileSkeleton() {
       {/* Tab content panel */}
       <Card>
         <CardContent className="flex flex-col gap-5 pt-6">
-        {Array.from({ length: 4 }).map((_, i) => (
-          <div key={i} className="flex flex-col gap-2">
-            <Skeleton className="h-4 w-24" />
-            <Skeleton className="h-9 w-full max-w-md rounded-md" />
-          </div>
-        ))}
-        <Skeleton className="h-9 w-20 rounded-md" />
+          <SkeletonFormRows rows={4} />
+          <Skeleton className="h-9 w-20 rounded-md" />
         </CardContent>
       </Card>
     </div>

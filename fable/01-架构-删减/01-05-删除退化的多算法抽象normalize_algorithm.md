@@ -6,9 +6,9 @@
 优先级: P1
 预估工作量: M（2-8h）
 依赖文档: 无
-状态: 未开始
-负责代理: 无
-完成时间: 无
+状态: 已完成
+负责代理: Codex
+完成时间: 2026-07-09
 ---
 
 # 01-05 删除退化的多算法抽象 normalize_algorithm
@@ -337,3 +337,4 @@ def resolve_interval_from_base_date(value: str, base_date: date) -> tuple[int, d
 | 时间 | 执行者 | 动作 | 结果/备注 |
 |---|---|---|---|
 | 2026-07-08 | 文档代理（fable） | 文档创建；核实 normalize_algorithm 位于 schedule_policy.py 27-28 行、6 个 import 方；另发现 7 个死函数与 2 处未使用 import（segment_review_support.py），一并纳入清单；确认 algorithm_used 列保留策略 | - |
+| 2026-07-09 | Codex | 执行删除 normalize_algorithm 与算法参数链，收敛 schedule_policy/service/rebuild 及 reviews/palaces 调用方 | 已完成；保留 algorithm_used 字段，相关 pytest/ruff 通过 |

@@ -6,9 +6,9 @@
 优先级: P0
 预估工作量: S（<2h）
 依赖文档: 无
-状态: 未开始
-负责代理: 无
-完成时间: 无
+状态: 已完成
+负责代理: fable Worker 1
+完成时间: 2026-07-09
 ---
 
 # 01-06 清除 knowledge 路由调试代码与 traceback 泄露
@@ -156,3 +156,4 @@ logger = logging.getLogger(__name__)
 | 时间 | 执行者 | 动作 | 结果/备注 |
 |---|---|---|---|
 | 2026-07-08 | 文档撰写代理（fable） | 文档创建，已核实 8 处 print 行号、DEBUG_LOG_PATH 与 3 处 traceback 泄露点；output/subject-editor-debug.log 当前不存在 | 待执行 |
+| 2026-07-09 | fable Worker 1 | 删除 knowledge 路由调试 print、DEBUG_LOG_PATH、traceback 响应泄露，改为 logger.exception + 通用 500 JSON | 已完成；`rg` 复核 knowledge 范围无 `traceback/DEBUG_LOG_PATH/format_exc/import traceback/print(`；`output/subject-editor-debug.log` 不存在；`python -m ruff check src/memory_anki/modules/knowledge/presentation/router.py --select E,F,I,T20` 通过 |

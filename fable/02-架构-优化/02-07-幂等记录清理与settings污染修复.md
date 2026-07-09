@@ -6,9 +6,9 @@
 优先级: P0
 预估工作量: M
 依赖文档: 无
-状态: 未开始
-负责代理: 无
-完成时间: 无
+状态: 已完成
+负责代理: Codex
+完成时间: 2026-07-09
 ---
 
 # 02-07 幂等记录清理与 settings 污染修复
@@ -165,3 +165,6 @@ python tools/check_architecture.py               # 期望：passed
 | 时间 | 执行者 | 动作 | 结果/备注 |
 |---|---|---|---|
 | - | - | 文档创建 | 核实：idempotency.py 确为 67 行、前缀 api_mutation.、无 TTL；read_settings 确在 69–88 行做 query(Config).all()；幂等调用方目前仅 reviews router；Config.updated_at 列存在可作 TTL 依据 |
+| 2026-07-09 | Codex | 实现 `purge_expired_idempotency_records()`，TTL 默认 14 天；`run_prepare_runtime()` seed 默认配置后执行清理；`read_settings()` 查询排除 `api_mutation.` 与 `client_preferences.` 前缀 | 保留 `startup_runtime.py` 既有 `_tables`/`backup_lifecycle` 改动；前缀匹配使用 escaped LIKE，避免 `_` 通配符误删/误过滤；未排除 `ai_prompt.`/`ai_model_catalog.`：当前代码中提示词 config 键为 `ai_prompt_...` 下划线形式，AI 模型目录为独立 `ai_model_catalog` 表；实际 DB 前缀探针未发现带点前缀 |
+| 2026-07-09 | Codex | 新增 `apps/api/tests/test_idempotency_purge.py` | 覆盖过期 `api_mutation.*` 删除、未过期与普通 config 保留、相似非前缀键不被误伤、`read_settings` 不返回 `api_mutation.*`/`client_preferences.*` 且保留历史顶层键 |
+| 2026-07-09 | Codex | 验证 | `python -m pytest tests/test_idempotency_purge.py tests/test_settings_routes.py tests/test_idempotency.py tests/test_review_routes.py -q`：97 passed, 42 skipped；相关文件 `ruff` passed；相关文件 `mypy` passed；项目级 `python -m mypy` 仍受既有 `missing py.typed marker` 阻断，`python tools/check_architecture.py` 仍受既有前端 shared/import、长文件、openapi 端口、destructive migration、个人绝对路径规则阻断 |

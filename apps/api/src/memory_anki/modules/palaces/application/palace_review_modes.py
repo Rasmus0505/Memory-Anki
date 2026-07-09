@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from memory_anki.infrastructure.db.models import Palace
+from memory_anki.infrastructure.db._tables.palaces import Palace
 
 MINI_REVIEW_MODE_INDEPENDENT = "independent"
 MINI_REVIEW_MODE_MINI_ONLY = "mini_only"

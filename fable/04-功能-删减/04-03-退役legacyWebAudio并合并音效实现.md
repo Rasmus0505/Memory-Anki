@@ -6,9 +6,9 @@
 优先级: P2
 预估工作量: M（2-8h）
 依赖文档: 无
-状态: 未开始
-负责代理: 无
-完成时间: 无
+状态: 已完成
+负责代理: Codex
+完成时间: 2026-07-09
 ---
 
 # 04-03 退役 legacyWebAudio 并合并音效实现
@@ -197,3 +197,4 @@ npm run test
 | 时间 | 执行者 | 动作 | 结果/备注 |
 |---|---|---|---|
 | 2026-07-08 | 文档代理（fable） | 文档创建；核实两文件为"引擎+数据表"关系、引擎为现役唯一实现、引用面共 5 个文件 | - |
+| 2026-07-09 | Codex | 执行更名与数据迁移；`legacyWebAudio.ts/test.ts` 改为 `webAudioFeedback.ts/test.ts`；礼花音效数据迁入 `toneProfiles.ts`；同步 feedbackCenter/useMindMapFeedback 引用与测试 | `rg -n "legacyWebAudio|playLegacy|__resetLegacy" apps/web/src` 无匹配；相关 vitest 与 typecheck 通过 |

@@ -3,19 +3,19 @@ import { playFeedbackAudio, triggerCelebration } from '@/shared/feedback/feedbac
 
 const mocks = vi.hoisted(() => ({
   launchCelebrationPreset: vi.fn(),
-  playLegacyComboMilestone: vi.fn(),
-  playLegacyFeedbackEvent: vi.fn(),
-  playLegacyFireworkAccent: vi.fn(),
+  playWebAudioComboMilestone: vi.fn(),
+  playWebAudioFeedbackEvent: vi.fn(),
+  playWebAudioFireworkAccent: vi.fn(),
 }))
 
 vi.mock('@/shared/feedback/celebrationEngine', () => ({
   launchCelebrationPreset: (...args: unknown[]) => mocks.launchCelebrationPreset(...args),
 }))
 
-vi.mock('@/shared/components/mindmap-host/legacyWebAudio', () => ({
-  playLegacyComboMilestone: (...args: unknown[]) => mocks.playLegacyComboMilestone(...args),
-  playLegacyFeedbackEvent: (...args: unknown[]) => mocks.playLegacyFeedbackEvent(...args),
-  playLegacyFireworkAccent: (...args: unknown[]) => mocks.playLegacyFireworkAccent(...args),
+vi.mock('@/shared/components/mindmap-host/webAudioFeedback', () => ({
+  playWebAudioComboMilestone: (...args: unknown[]) => mocks.playWebAudioComboMilestone(...args),
+  playWebAudioFeedbackEvent: (...args: unknown[]) => mocks.playWebAudioFeedbackEvent(...args),
+  playWebAudioFireworkAccent: (...args: unknown[]) => mocks.playWebAudioFireworkAccent(...args),
 }))
 
 vi.mock('@/shared/feedback/reviewFeedbackSettings', () => ({
@@ -46,9 +46,9 @@ vi.mock('sonner', () => ({
 describe('feedbackCenter celebration bridge', () => {
   beforeEach(() => {
     mocks.launchCelebrationPreset.mockReset()
-    mocks.playLegacyComboMilestone.mockReset()
-    mocks.playLegacyFeedbackEvent.mockReset()
-    mocks.playLegacyFireworkAccent.mockReset()
+    mocks.playWebAudioComboMilestone.mockReset()
+    mocks.playWebAudioFeedbackEvent.mockReset()
+    mocks.playWebAudioFireworkAccent.mockReset()
   })
 
   it('passes confetti amount and scenario through to the celebration engine', () => {
@@ -75,22 +75,22 @@ describe('feedbackCenter celebration bridge', () => {
       playFeedbackAudio({ event, audioScope: 'local', origin: 'review' })
     }
 
-    expect(mocks.playLegacyFeedbackEvent).toHaveBeenCalledTimes(3)
-    expect(mocks.playLegacyFeedbackEvent).toHaveBeenNthCalledWith(1, {
+    expect(mocks.playWebAudioFeedbackEvent).toHaveBeenCalledTimes(3)
+    expect(mocks.playWebAudioFeedbackEvent).toHaveBeenNthCalledWith(1, {
       event: 'quiz_result_correct',
       audioScope: 'local',
       origin: 'review',
       surprise: undefined,
       volume: 1,
     })
-    expect(mocks.playLegacyFeedbackEvent).toHaveBeenNthCalledWith(2, {
+    expect(mocks.playWebAudioFeedbackEvent).toHaveBeenNthCalledWith(2, {
       event: 'quiz_result_incorrect',
       audioScope: 'local',
       origin: 'review',
       surprise: undefined,
       volume: 1,
     })
-    expect(mocks.playLegacyFeedbackEvent).toHaveBeenNthCalledWith(3, {
+    expect(mocks.playWebAudioFeedbackEvent).toHaveBeenNthCalledWith(3, {
       event: 'quiz_answer_submit',
       audioScope: 'local',
       origin: 'review',
@@ -102,8 +102,25 @@ describe('feedbackCenter celebration bridge', () => {
   it('plays review milestone audio in the default immersive sound path', () => {
     playFeedbackAudio({ milestoneStep: 8 })
 
-    expect(mocks.playLegacyComboMilestone).toHaveBeenCalledWith({
+    expect(mocks.playWebAudioComboMilestone).toHaveBeenCalledWith({
       milestoneStep: 8,
+      volume: 1,
+    })
+  })
+
+  it('plays celebration audio cues through the web audio firework accent path', () => {
+    triggerCelebration({
+      preset: 'fireworks',
+      reducedMotion: false,
+      audioCue: {
+        kind: 'session_complete',
+        milestoneStep: null,
+      },
+    })
+
+    expect(mocks.playWebAudioFireworkAccent).toHaveBeenCalledWith({
+      kind: 'session_complete',
+      milestoneStep: 0,
       volume: 1,
     })
   })

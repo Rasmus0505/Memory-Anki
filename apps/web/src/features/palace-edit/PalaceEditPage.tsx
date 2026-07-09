@@ -1,6 +1,6 @@
 ﻿import { useEffect, useMemo, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
-import { AlertCircle, ArrowLeft, CheckCircle2, History, LoaderCircle, PencilLine } from 'lucide-react'
+import { Link, useNavigate } from 'react-router-dom'
+import { AlertCircle, ArrowLeft, CheckCircle2, History, LayoutTemplate, LoaderCircle, PencilLine } from 'lucide-react'
 import { PageIntro } from '@/shared/components/layout/PageIntro'
 import {
   MindMapFrame,
@@ -15,6 +15,7 @@ import { PalaceAttachmentPanel } from '@/features/palace-edit/components/PalaceA
 import { PalaceChapterPanel } from '@/features/palace-edit/components/PalaceChapterPanel'
 import { PalaceMetaPanel } from '@/features/palace-edit/components/PalaceMetaPanel'
 import { PalaceSegmentsPanel } from '@/features/palace-edit/components/PalaceSegmentsPanel'
+import { PalaceTemplateDialog } from '@/features/palace-edit/components/PalaceTemplateDialog'
 import { PalaceVersionDialog } from '@/features/palace-edit/components/PalaceVersionDialog'
 import { MindMapImportDrawer, useMindMapImport } from '@/features/mindmap-import'
 import { usePalaceEditPage } from '@/features/palace-edit/hooks/usePalaceEditPage'
@@ -22,6 +23,9 @@ import { PalaceKnowledgeOutlinePanel } from '@/features/palace-edit/components/P
 import { useQuizLauncher } from '@/features/palace-quiz/QuizLauncherProvider'
 import { MiniPalacePanel } from '@/features/mini-palace'
 import { useRouteResidency } from '@/shared/routing/RouteResidency'
+import { createPalaceTemplateApi } from '@/entities/palace/api'
+import { appPrompt } from '@/shared/components/ui/native-dialog'
+import { toast } from '@/shared/feedback/toast'
 import { PalaceEditSkeleton } from './PalaceEditSkeleton'
 
 function SaveStatusBadge({
@@ -68,11 +72,14 @@ function SaveStatusBadge({
 
 export default function PalaceEdit() {
   const { isActive } = useRouteResidency()
+  const navigate = useNavigate()
   const page = usePalaceEditPage()
   const { openQuizLauncher } = useQuizLauncher()
   const mindMapFrameRef = useRef<MindMapFrameHandle | null>(null)
   const [mindMapUiCleared, setMindMapUiCleared] = useState(false)
   const [mindMapNativeFullscreen, setMindMapNativeFullscreen] = useState(false)
+  const [templateDialogOpen, setTemplateDialogOpen] = useState(false)
+  const [templateSaving, setTemplateSaving] = useState(false)
 
   const selectedNodeUid =
     page.selectedNodes?.[0]?.uid ||
@@ -109,6 +116,35 @@ export default function PalaceEdit() {
         })),
     [page.segments],
   )
+  const showTemplateCreateAction = useMemo(() => {
+    if (!page.palaceId || !page.editorState?.editor_doc) return false
+    const editorDoc = page.editorState.editor_doc
+    if (typeof editorDoc === 'string') return false
+    const root = editorDoc.root
+    if (!root || typeof root !== 'object' || !('children' in root)) return false
+    const children = Array.isArray(root.children) ? root.children : []
+    return children.length === 0
+  }, [page.editorState?.editor_doc, page.palaceId])
+
+  const handleSaveTemplate = async () => {
+    if (!page.palaceId) return
+    const defaultName = page.palace?.title || page.title || ''
+    const name = await appPrompt('模板名称：', {
+      title: '存为宫殿模板',
+      defaultValue: defaultName,
+      confirmText: '保存',
+    })
+    if (name === null) return
+    setTemplateSaving(true)
+    try {
+      await createPalaceTemplateApi({ palace_id: page.palaceId, name })
+      toast.success('已存为模板')
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '存为模板失败。')
+    } finally {
+      setTemplateSaving(false)
+    }
+  }
 
   const handleImmersiveToolbarToggle = async () => {
     if (mindMapNativeFullscreen) {
@@ -171,6 +207,29 @@ export default function PalaceEdit() {
                   >
                     <History className="mr-2 size-4" />
                     恢复点
+                  </Button>
+                  {showTemplateCreateAction ? (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setTemplateDialogOpen(true)}
+                    >
+                      <LayoutTemplate className="mr-2 size-4" />
+                      从模板创建
+                    </Button>
+                  ) : null}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={templateSaving}
+                    onClick={() => void handleSaveTemplate()}
+                  >
+                    {templateSaving ? (
+                      <LoaderCircle className="mr-2 size-4 animate-spin" />
+                    ) : (
+                      <LayoutTemplate className="mr-2 size-4" />
+                    )}
+                    存为模板
                   </Button>
                 </>
               ) : null}
@@ -499,6 +558,7 @@ export default function PalaceEdit() {
         currentJobStatus={mindMapImport.currentJobStatus}
         currentJobStage={mindMapImport.currentJobStage}
         currentJobUsage={mindMapImport.currentJobUsage}
+        currentJobError={mindMapImport.currentJobError}
         currentJobResolvedAi={mindMapImport.currentJobResolvedAi}
         currentJobPauseRequested={mindMapImport.currentJobPauseRequested}
         canResumeJob={mindMapImport.canResumeJob}
@@ -544,6 +604,12 @@ export default function PalaceEdit() {
         onPreviewVersion={page.handlePreviewVersion}
         onRestoreVersion={page.handleRestoreVersion}
         onBackToList={page.resetVersionPreview}
+      />
+
+      <PalaceTemplateDialog
+        open={templateDialogOpen}
+        onOpenChange={setTemplateDialogOpen}
+        onCreated={(palaceId) => navigate(`/palaces/${palaceId}/edit`, { replace: true })}
       />
 
     </div>

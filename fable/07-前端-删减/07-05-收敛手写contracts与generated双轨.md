@@ -6,9 +6,9 @@
 优先级: P1
 预估工作量: S（<2h，路线 A）/ L（路线 B，跨前后端）
 依赖文档: 路线 B 依赖 fable 03-03（后端补 response_model）
-状态: 未开始（决策类文档：执行前须先在"进度记录"登记选定路线）
-负责代理: 无
-完成时间: 无
+状态: 已完成（已执行路线 A）
+负责代理: Codex
+完成时间: 2026-07-09
 ---
 
 ## 1. 原始需求
@@ -77,3 +77,4 @@
 | 时间 | 执行者 | 动作 | 结果/备注 |
 |---|---|---|---|
 | 2026-07-08 22:30 | 文档撰写代理 | 文档创建 | 已核实：generated.ts 5 行空壳、0 消费方；contracts 14 文件 1615 行；脚本仅 package.json 一处引用。**执行前先登记选定路线** |
+| 2026-07-09 | Codex | 选定并执行路线 A | 已删除 generated 空壳、openapi 脚本与 `openapi-typescript` devDependency；同步清理 `contracts/knowledge.ts` 空壳和桶导出，并在 `contracts/index.ts` 增加路线 A 决策注释。`npm uninstall` 因 Electron 文件锁 EBUSY 未完成，已手工精确更新 package manifest/lockfile。验证：`npm run typecheck`、`npm run build` 通过；`npm run openapi:types` 按预期 missing script。 |

@@ -1,17 +1,36 @@
 ---
 编号: 02-05
-标题: 为 knowledge 模块补建 application 层，把路由内业务逻辑抽入 knowledge_service.py
+标题: 为 knowledge 模块补建 application 层（subject_service / chapter_service）
 类型: 优化
 范围: 架构
 优先级: P1
 预估工作量: M
 依赖文档: [02-01]
-状态: 未开始
-负责代理: 无
-完成时间: 无
+状态: 已完成
+负责代理: Codex
+完成时间: 2026-07-09 03:41 +08:00
 ---
 
 # 02-05 为 knowledge 模块补建 application 层
+
+## 0. 完成摘要
+
+已与同编号主文档同步完成。当前实现没有采用旧稿建议的单文件 `knowledge_service.py`，而是按实际代码职责拆为：
+
+- `apps/api/src/memory_anki/modules/knowledge/application/subject_service.py`
+- `apps/api/src/memory_anki/modules/knowledge/application/chapter_service.py`
+- `apps/api/src/memory_anki/modules/knowledge/application/__init__.py`
+
+迁移内容包括 subject 序列化/CRUD/树/编辑器状态、chapter 序列化/详情/CRUD/递归删除/删除影响统计、宫殿章节绑定读写。`presentation/router.py` 仅保留请求解析、幂等入口、`HTTPException`/`JSONResponse` 兼容和 service 调用；基于 02-04 之后的当前行为实现，保留 404、force 删除 409、分页、幂等写入和内部错误兼容响应。
+
+验收结果：
+
+- `python -m pytest tests/test_knowledge_routes.py tests/test_palace_chapter_binding.py tests/test_mini_palace_routes.py -q`：24 passed, 1 skipped
+- `python -m ruff check src/memory_anki/modules/knowledge tests/test_knowledge_routes.py tests/test_palace_chapter_binding.py`：All checks passed
+- `rg -n "fastapi" src/memory_anki/modules/knowledge/application`：零匹配
+- `rg -n "s\.query\(" src/memory_anki/modules/knowledge/presentation/router.py`：零匹配
+
+说明：当前 router 因保留分页、幂等和错误兼容包装，收敛为 193 行，未强行压到旧稿预估的 150 行以内。
 
 ## 1. 原始需求
 
@@ -138,3 +157,4 @@ lint-imports                                     # 期望：契约通过（appli
 | 时间 | 执行者 | 动作 | 结果/备注 |
 |---|---|---|---|
 | - | - | 文档创建 | 核实：knowledge 模块确实只有 presentation/router.py（301 行，描述"302 行"basically 吻合）；无 application/domain 目录；pyproject mypy 豁免里引用的 knowledge.application.bilink_service 并不存在（死配置，见 01-04） |
+| 2026-07-09 03:41 +08:00 | Codex | 同步主文档实际方案 | 采用 `subject_service.py` + `chapter_service.py`，未采用旧稿 `knowledge_service.py`；指定测试、ruff 与 fastapi 零匹配检查通过 |

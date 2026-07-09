@@ -2,7 +2,7 @@ import asyncio
 import os
 import unittest
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -88,6 +88,33 @@ class StartupModeTests(unittest.TestCase):
 
         log_exception.assert_called_once_with("startup warmup failed")
 
+    def test_startup_warmup_logs_review_stage_progress_health_warning(self):
+        from memory_anki.app import startup_warmup
+        from memory_anki.modules.reviews.application import review_execution_service
+
+        session = MagicMock()
+        connection = MagicMock()
+        result = MagicMock()
+        result.scalar.return_value = 1
+        result.fetchall.return_value = []
+        connection.execute.return_value = result
+        session.connection.return_value = connection
+
+        with patch.object(startup_warmup, "get_session", return_value=session), patch.object(
+            review_execution_service,
+            "detect_review_stage_progress_issues",
+            return_value={"needs_repair": True, "total_issues": 2},
+        ) as detect, patch.object(startup_warmup.logger, "warning") as log_warning:
+            startup_warmup.run_startup_warmup()
+
+        detect.assert_called_once_with(session)
+        log_warning.assert_called_once_with(
+            "review stage progress self-check found %s issue(s); "
+            "user can repair via POST /api/v1/review/repair-stage-progress",
+            2,
+        )
+        session.close.assert_called_once()
+
     def test_lifespan_does_not_start_warmup_in_healthcheck_mode(self):
         from memory_anki.app import main as app_main
 
@@ -104,9 +131,7 @@ class StartupModeTests(unittest.TestCase):
         asyncio.run(run_lifespan())
 
     def test_study_startup_indexes_are_declared_on_review_schedule_table(self):
-        from memory_anki.infrastructure.db.models import (
-            ReviewSchedule,
-        )
+        from memory_anki.infrastructure.db._tables.palaces import ReviewSchedule
 
         self.assertIn(
             "ix_review_schedules_due_lookup",

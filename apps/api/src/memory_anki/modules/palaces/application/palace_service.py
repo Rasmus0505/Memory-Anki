@@ -8,7 +8,7 @@ session to keep call sites stable).
 
 from sqlalchemy.orm import Session
 
-from memory_anki.core.config import ATTACHMENTS_DIR
+from memory_anki.core.time import utc_now_naive
 from memory_anki.infrastructure.db._tables.palaces import Palace, Peg
 from memory_anki.modules.palaces.domain.schemas import PalaceCreate, PalaceUpdate, PegIn
 from memory_anki.modules.palaces.infrastructure.repositories import PalaceRepository
@@ -20,14 +20,29 @@ def _repo(session: Session) -> PalaceRepository:
     return PalaceRepository(session)
 
 
-def list_palaces(session: Session, search: str = ""):
+def list_palaces(
+    session: Session,
+    search: str = "",
+    *,
+    limit: int | None = None,
+    offset: int = 0,
+):
     restore_archived_palaces(session)
-    return _repo(session).list_palaces(search=search)
+    return _repo(session).list_palaces(search=search, limit=limit, offset=offset)
+
+
+def count_palaces(session: Session, search: str = "") -> int:
+    restore_archived_palaces(session)
+    return _repo(session).count_palaces(search=search)
 
 
 def list_catalog_palaces(session: Session, search: str = ""):
     restore_archived_palaces(session)
     return _repo(session).list_catalog_palaces(search=search)
+
+
+def list_deleted_palaces(session: Session) -> list[Palace]:
+    return _repo(session).list_deleted_palaces()
 
 
 def list_palaces_by_subject(session: Session, subject_id: int | None, search: str = ""):
@@ -107,12 +122,19 @@ def delete_palace(session: Session, palace_id: int) -> None:
     repo = _repo(session)
     palace = repo.get_palace(palace_id)
     if palace:
-        for attachment in palace.attachments:
-            filepath = ATTACHMENTS_DIR / attachment.filename
-            if filepath.exists():
-                filepath.unlink()
-        repo.delete(palace)
+        palace.deleted_at = utc_now_naive()
         repo.commit()
+
+
+def restore_deleted_palace(session: Session, palace_id: int) -> Palace | None:
+    repo = _repo(session)
+    palace = repo.get_any_palace(palace_id)
+    if palace is None or palace.deleted_at is None:
+        return None
+    palace.deleted_at = None
+    repo.commit()
+    repo.refresh(palace)
+    return palace
 
 
 def _sync_pegs(

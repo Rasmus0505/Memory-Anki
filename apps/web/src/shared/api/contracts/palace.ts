@@ -269,6 +269,13 @@ export interface PalaceFocusSessionResponse {
   focus_node_uids: string[]
   focus_count: number
 }
+export interface PalaceTemplateSummary {
+  id: number
+  name: string
+  description: string
+  source_palace_id: number | null
+  created_at: string | null
+}
 export interface SessionProgressSnapshot {
   id: number
   session_kind:

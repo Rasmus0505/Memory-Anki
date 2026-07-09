@@ -1,10 +1,19 @@
 import { act, fireEvent, render, screen } from '@testing-library/react'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/shared/components/ui/dialog'
 
 describe('Dialog', () => {
   beforeEach(() => {
     window.localStorage.clear()
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+    Object.defineProperty(window, 'innerWidth', {
+      configurable: true,
+      writable: true,
+      value: 1024,
+    })
   })
 
   it('renders above immersive fullscreen shells', () => {
@@ -156,6 +165,85 @@ describe('Dialog', () => {
     fireEvent.pointerDown(document.body)
 
     expect(onOpenChange).not.toHaveBeenCalledWith(false)
+  })
+
+  it('provides a hidden title fallback and suppresses optional description warnings', async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+    render(
+      <Dialog open onOpenChange={vi.fn()}>
+        <DialogContent accessibleTitle="fallback dialog">
+          dialog body
+        </DialogContent>
+      </Dialog>,
+    )
+
+    await new Promise((resolve) => window.setTimeout(resolve, 0))
+
+    expect(screen.getByRole('dialog', { name: 'fallback dialog' })).toBeTruthy()
+    expect(errorSpy.mock.calls.flat().join('\n')).not.toContain('DialogContent requires a DialogTitle')
+    expect(warnSpy.mock.calls.flat().join('\n')).not.toContain('Missing `Description`')
+  })
+
+  it('can provide a hidden description when content has no visible DialogDescription', () => {
+    render(
+      <Dialog open onOpenChange={vi.fn()}>
+        <DialogContent
+          accessibleTitle="command dialog"
+          accessibleDescription="Search operations and pages."
+        >
+          dialog body
+        </DialogContent>
+      </Dialog>,
+    )
+
+    const dialog = screen.getByRole('dialog', { name: 'command dialog' })
+    const descriptionId = dialog.getAttribute('aria-describedby')
+
+    expect(descriptionId).toBeTruthy()
+    expect(document.getElementById(descriptionId ?? '')?.textContent).toBe('Search operations and pages.')
+  })
+
+  it('disables floating controls on small coarse pointer viewports', () => {
+    Object.defineProperty(window, 'innerWidth', {
+      configurable: true,
+      writable: true,
+      value: 390,
+    })
+    vi.spyOn(window, 'matchMedia').mockImplementation(
+      (query) =>
+        ({
+          matches: query === '(pointer: coarse)',
+          media: query,
+          onchange: null,
+          addListener: vi.fn(),
+          removeListener: vi.fn(),
+          addEventListener: vi.fn(),
+          removeEventListener: vi.fn(),
+          dispatchEvent: vi.fn(),
+        }) as MediaQueryList,
+    )
+
+    render(
+      <Dialog open onOpenChange={vi.fn()}>
+        <DialogContent showCloseButton>
+          <DialogHeader>
+            <div>
+              <DialogTitle>mobile dialog</DialogTitle>
+              <DialogDescription>description</DialogDescription>
+            </div>
+          </DialogHeader>
+          dialog body
+        </DialogContent>
+      </Dialog>,
+    )
+
+    const dialog = screen.getByRole('dialog')
+
+    expect(dialog.className).not.toContain('touch-none')
+    expect(screen.queryByLabelText('缩小为胶囊')).toBeNull()
+    expect(screen.queryByLabelText('置顶弹窗')).toBeNull()
   })
 
 })

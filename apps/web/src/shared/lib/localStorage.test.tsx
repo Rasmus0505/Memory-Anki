@@ -15,6 +15,7 @@ vi.mock('@/entities/preferences/api', () => ({
       timer_focus_config: null,
       break_guard_config: null,
       dashboard_duration_filter: data.dashboard_duration_filter ?? null,
+      study_goals: data.study_goals ?? null,
       palace_list_view_settings: data.palace_list_view_settings ?? null,
       palace_shelf_view_settings: data.palace_shelf_view_settings ?? null,
     },

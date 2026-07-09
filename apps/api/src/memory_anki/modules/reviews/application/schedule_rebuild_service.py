@@ -6,7 +6,7 @@ from typing import Any
 from sqlalchemy import inspect as sqlalchemy_inspect
 from sqlalchemy.orm import Session
 
-from memory_anki.infrastructure.db.models import (
+from memory_anki.infrastructure.db._tables.palaces import (
     Palace,
     ReviewSchedule,
     SessionProgress,
@@ -20,7 +20,6 @@ from .schedule_policy import (
     get_algorithm_intervals_for_policy,
     get_initial_same_day_slot_count_for_policy,
     load_review_schedule_policy,
-    normalize_algorithm,
     schedule_display_datetime_for_policy,
 )
 
@@ -62,31 +61,6 @@ def infer_completed_stage_count(
     return max(0, min(completed_count, total))
 
 
-def segment_algorithm(
-    session: Session,
-    segment,
-    *,
-    default_algorithm: str | None = None,
-) -> str:
-    return "ebbinghaus"
-
-
-def palace_algorithm(
-    session: Session,
-    palace: Palace,
-    *,
-    default_algorithm: str | None = None,
-) -> str:
-    return next(
-        (
-            normalize_algorithm(item.algorithm_used)
-            for item in (palace.review_schedules or [])
-            if item.algorithm_used
-        ),
-        "ebbinghaus",
-    )
-
-
 def palace_anchor_date(palace: Palace) -> date:
     for schedule in palace.review_schedules or []:
         if schedule.anchor_date:
@@ -106,15 +80,13 @@ def rebuild_palace_review_schedules(
     fallback_completed_count: int | None = None,
     preserve_existing_progress: bool = False,
     preserve_same_day_slots: bool = True,
-    algorithm_override: str | None = None,
 ) -> None:
     policy = load_review_schedule_policy(session)
-    algorithm = "ebbinghaus"
-    intervals = get_algorithm_intervals_for_policy(policy, algorithm)
+    intervals = get_algorithm_intervals_for_policy(policy)
     total = len(intervals)
     safe_completed_count = max(0, min(completed_count, total))
     anchor = palace_anchor_date(palace)
-    initial_slot_count = max(1, get_initial_same_day_slot_count_for_policy(policy, algorithm))
+    initial_slot_count = max(1, get_initial_same_day_slot_count_for_policy(policy))
     existing_schedules = sorted(
         list(palace.review_schedules or []),
         key=lambda item: (item.review_number, item.id),
@@ -189,7 +161,6 @@ def rebuild_palace_review_schedules(
         draft = build_review_schedule_draft(
             policy,
             review_number=review_number,
-            algorithm=algorithm,
             base_date=anchor if base_datetime is None else base_datetime.date(),
             anchor_date=anchor,
             base_datetime=base_datetime,
@@ -245,7 +216,6 @@ def rebuild_palace_review_schedules(
             draft = build_review_schedule_draft(
                 policy,
                 review_number=review_number,
-                algorithm=algorithm,
                 base_date=base_date if base_datetime is None else base_datetime.date(),
                 anchor_date=anchor,
                 base_datetime=base_datetime,
@@ -269,18 +239,13 @@ def rebuild_palace_review_schedules(
     session.flush()
 
 
-def rebuild_all_pending_review_schedules(
-    session: Session,
-    *,
-    algorithm_override: str | None = None,
-) -> dict[str, Any]:
+def rebuild_all_pending_review_schedules(session: Session) -> dict[str, Any]:
     palace_count = 0
     policy = load_review_schedule_policy(session)
 
-    palaces = session.query(Palace).all()
+    palaces = session.query(Palace).filter(Palace.deleted_at.is_(None)).all()
     for palace in palaces:
-        algorithm = "ebbinghaus"
-        total = len(get_algorithm_intervals_for_policy(policy, algorithm))
+        total = len(get_algorithm_intervals_for_policy(policy))
         review_logs = [
             log
             for log in (palace.review_logs or [])
@@ -301,7 +266,6 @@ def rebuild_all_pending_review_schedules(
             palace,
             completed_count=fallback_completed_count,
             fallback_completed_count=fallback_completed_count,
-            algorithm_override=algorithm,
         )
         palace_count += 1
 
@@ -310,11 +274,6 @@ def rebuild_all_pending_review_schedules(
         "palace_count": palace_count,
         "segment_count": 0,
     }
-
-
-def _default_algorithm(session: Session) -> str:
-    return "ebbinghaus"
-
 
 def _coerce_stage_completed_at(
     value: datetime | None,

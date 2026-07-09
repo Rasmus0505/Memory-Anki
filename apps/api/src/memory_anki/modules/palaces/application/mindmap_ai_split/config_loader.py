@@ -4,7 +4,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from memory_anki.infrastructure.db.models import Config
+from memory_anki.infrastructure.db._tables.misc import Config
 from memory_anki.modules.settings.application.ai_model_registry import (
     AiRuntimeOptions,
     resolve_scenario_runtime,

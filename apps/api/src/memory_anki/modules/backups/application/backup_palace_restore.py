@@ -8,7 +8,8 @@ from pathlib import Path
 from sqlalchemy.orm import Session
 
 from memory_anki.core.config import FULL_BACKUPS_DIR
-from memory_anki.infrastructure.db.models import Chapter, Palace, Peg
+from memory_anki.infrastructure.db._tables.knowledge import Chapter
+from memory_anki.infrastructure.db._tables.palaces import Palace, Peg
 from memory_anki.modules.backups.application.editor_safety import count_editor_doc_nodes
 from memory_anki.modules.backups.application.snapshot_sources import (
     export_git_snapshot_db,
@@ -20,7 +21,7 @@ from .backup_palace_versions import cleanup_duplicate_palace_versions, create_pa
 
 
 def restore_palace_version(session: Session, palace: Palace, version_id: int):
-    from memory_anki.infrastructure.db.models import PalaceVersion
+    from memory_anki.infrastructure.db._tables.palaces import PalaceVersion
 
     version = session.query(PalaceVersion).filter_by(id=version_id, palace_id=palace.id).first()
     if version is None:

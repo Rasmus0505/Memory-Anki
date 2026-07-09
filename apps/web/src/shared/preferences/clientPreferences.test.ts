@@ -28,6 +28,7 @@ function emptyPreferences() {
     timer_focus_config: null,
     break_guard_config: null,
     dashboard_duration_filter: null,
+    study_goals: null,
     palace_list_view_settings: null,
     palace_shelf_view_settings: null,
   }

@@ -6,9 +6,9 @@
 优先级: P2
 预估工作量: S（<2h）
 依赖文档: 无
-状态: 未开始
-负责代理: 无
-完成时间: 无
+状态: 已完成
+负责代理: fable Worker 24 / Codex复核
+完成时间: 2026-07-09
 ---
 
 # 01-09 ruff / mypy / import-linter 移到 dev 依赖
@@ -126,3 +126,5 @@ python -m venv .tmp-dev && .tmp-dev\Scripts\pip install -r apps/api/requirements
 | 时间 | 执行者 | 动作 | 结果/备注 |
 |---|---|---|---|
 | 2026-07-08 | 文档撰写代理（fable） | 文档创建，已核实三个工具在 requirements.txt 第 13-15 行、CI 安装的是 requirements-dev.txt（含 -r requirements.txt）、启动器提示安装 requirements.txt | 待执行 |
+| 2026-07-09 | fable Worker 24 | 将 `ruff==0.12.11`、`mypy==1.17.1`、`import-linter==2.3` 从 `apps/api/requirements.txt` 平移到 `apps/api/requirements-dev.txt`，并同步 dev 文件注释 | 已完成；`requirements.txt` 仅保留运行时依赖，`requirements-dev.txt` 继续 `-r requirements.txt` 并显式安装 lint/type/architecture 工具 |
+| 2026-07-09 | Codex | 复核重复文档状态 | `rg -n "ruff|mypy|import-linter" apps/api/requirements.txt` 无匹配；`apps/api/requirements-dev.txt` 命中三项开发工具；本文档同步标记已完成 |

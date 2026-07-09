@@ -8,10 +8,10 @@ import {
   type ReviewFeedbackSettings,
 } from '@/shared/feedback/reviewFeedbackSettings'
 import {
-  playLegacyComboMilestone,
-  playLegacyFeedbackEvent,
+  playWebAudioComboMilestone,
+  playWebAudioFeedbackEvent,
   tuneToneSpec,
-} from './legacyWebAudio'
+} from './webAudioFeedback'
 
 interface MindMapFeedbackAudioController {
   playEvent: (
@@ -49,7 +49,7 @@ export function useMindMapFeedbackAudio(
     ) => {
       const eventVolume = clampFeedbackVolume(options?.volume ?? feedbackVolume)
       if (!enabled || eventVolume <= 0) return
-      playLegacyFeedbackEvent({
+      playWebAudioFeedbackEvent({
         event,
         surprise: options?.surprise,
         origin: options?.origin,
@@ -64,7 +64,7 @@ export function useMindMapFeedbackAudio(
     (milestoneStep: number, options?: { volume?: number }) => {
       const eventVolume = clampFeedbackVolume(options?.volume ?? feedbackVolume)
       if (!enabled || eventVolume <= 0) return
-      playLegacyComboMilestone({
+      playWebAudioComboMilestone({
         milestoneStep,
         volume: eventVolume,
       })

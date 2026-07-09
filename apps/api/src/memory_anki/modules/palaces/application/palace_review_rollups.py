@@ -5,7 +5,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from memory_anki.infrastructure.db.models import Palace, ReviewSchedule
+from memory_anki.infrastructure.db._tables.palaces import Palace, ReviewSchedule
 from memory_anki.modules.reviews.application.schedule_service import (
     is_schedule_due,
     schedule_display_datetime,

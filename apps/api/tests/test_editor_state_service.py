@@ -1,10 +1,9 @@
 import unittest
 
-from sqlalchemy import create_engine, text
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
+from sqlalchemy import text
 
-from memory_anki.infrastructure.db.models import Base, Chapter, Palace, Subject
+from memory_anki.infrastructure.db._tables.knowledge import Chapter, Subject
+from memory_anki.infrastructure.db._tables.palaces import Palace
 from memory_anki.modules.mindmap.application.editor_state_service import (
     EditorStateConflictError,
     get_palace_editor_state,
@@ -14,6 +13,7 @@ from memory_anki.modules.mindmap.application.editor_state_service import (
 )
 from memory_anki.modules.palaces.application.mindmap_ai_split.primitives import plain_text
 from memory_anki.modules.palaces.application.title_sync_service import set_palace_chapter_links
+from support import RouterTestCase
 
 
 class EditorStateServiceTests(unittest.TestCase):
@@ -51,20 +51,7 @@ class EditorStateServiceTests(unittest.TestCase):
         )
 
 
-class SubjectEditorStateSyncTests(unittest.TestCase):
-    def setUp(self):
-        self.engine = create_engine(
-            "sqlite://",
-            connect_args={"check_same_thread": False},
-            poolclass=StaticPool,
-        )
-        Base.metadata.create_all(self.engine)
-        self.SessionLocal = sessionmaker(bind=self.engine)
-
-    def tearDown(self):
-        Base.metadata.drop_all(self.engine)
-        self.engine.dispose()
-
+class SubjectEditorStateSyncTests(RouterTestCase):
     def test_save_subject_editor_state_reuses_matching_chapter_ids_and_keeps_palace_links(self):
         with self.SessionLocal() as session:
             subject = Subject(name="外国教育史", color="#334155", sort_order=0)

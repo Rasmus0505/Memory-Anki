@@ -1,19 +1,23 @@
 from __future__ import annotations
 
+from collections import OrderedDict
 from datetime import date, datetime, time, timedelta
 
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session, joinedload, selectinload
 
-from memory_anki.infrastructure.db.models import Chapter, Palace, PalaceMiniPalace, ReviewSchedule
+from memory_anki.infrastructure.db._tables.knowledge import Chapter
+from memory_anki.infrastructure.db._tables.palaces import (
+    Palace,
+    PalaceMiniPalace,
+    ReviewSchedule,
+)
+from memory_anki.modules.palaces.application.palace_service import restore_archived_palaces
 from memory_anki.modules.palaces.application.title_sync_service import (
     build_today_new_palace_outline,
 )
 from memory_anki.modules.reviews.application.review_metrics_service import (
     get_weekly_stats,
-)
-from memory_anki.modules.reviews.application.review_queue_service import (
-    get_today_review_groups,
 )
 from memory_anki.modules.reviews.application.schedule_policy import (
     load_review_schedule_policy,
@@ -59,12 +63,13 @@ def build_dashboard_payload(
     start_date: str | None = None,
     end_date: str | None = None,
 ) -> dict:
-    reviews = get_today_review_groups(session)
+    reviews = _dashboard_today_review_groups(session)
     today_start = datetime.combine(date.today(), time.min)
     today_end = today_start + timedelta(days=1)
     recent = (
         session.query(Palace)
         .options(*_dashboard_palace_loader_options())
+        .filter(Palace.deleted_at.is_(None))
         .order_by(Palace.updated_at.desc())
         .limit(5)
         .all()
@@ -76,6 +81,7 @@ def build_dashboard_payload(
             Palace.created_at.is_not(None),
             Palace.created_at >= today_start,
             Palace.created_at < today_end,
+            Palace.deleted_at.is_(None),
         )
         .order_by(Palace.created_at.asc(), Palace.id.asc())
         .all()
@@ -117,8 +123,8 @@ def build_dashboard_payload(
             {
                 "id": review["schedule"].id,
                 "palace_id": review["schedule"].palace_id,
-                "palace": _palace_summary(review["schedule"].palace)
-                if review["schedule"].palace
+                "palace": _palace_summary(review["palace"])
+                if review.get("palace")
                 else None,
                 "scheduled_date": review["schedule"].scheduled_date.isoformat(),
                 "interval_days": review["schedule"].interval_days,
@@ -189,6 +195,7 @@ def _dashboard_review_unit_counts(session: Session, now: datetime | None = None)
         .join(Palace, Palace.id == ReviewSchedule.palace_id)
         .filter(
             ReviewSchedule.completed == False,
+            Palace.deleted_at.is_(None),
         )
         .subquery()
     )
@@ -198,6 +205,7 @@ def _dashboard_review_unit_counts(session: Session, now: datetime | None = None)
         .join(next_schedule_ids, next_schedule_ids.c.schedule_id == ReviewSchedule.id)
         .filter(
             next_schedule_ids.c.position == 1,
+            Palace.deleted_at.is_(None),
             (
                 (ReviewSchedule.scheduled_date <= today)
                 | (ReviewSchedule.scheduled_at < tomorrow_start)
@@ -229,13 +237,20 @@ def _dashboard_review_unit_counts(session: Session, now: datetime | None = None)
 
     palace_needs_practice = (
         session.query(func.count(Palace.id))
-        .filter(Palace.needs_practice == True)
+        .filter(
+            Palace.needs_practice == True,
+            Palace.deleted_at.is_(None),
+        )
         .scalar()
         or 0
     )
     mini_palace_needs_practice = (
         session.query(func.count(PalaceMiniPalace.id))
-        .filter(PalaceMiniPalace.needs_practice == True)
+        .join(Palace, Palace.id == PalaceMiniPalace.palace_id)
+        .filter(
+            PalaceMiniPalace.needs_practice == True,
+            Palace.deleted_at.is_(None),
+        )
         .scalar()
         or 0
     )
@@ -244,6 +259,87 @@ def _dashboard_review_unit_counts(session: Session, now: datetime | None = None)
         "due_later_today_count": due_later_today_count,
         "needs_practice_count": int(palace_needs_practice) + int(mini_palace_needs_practice),
     }
+
+
+def _dashboard_today_review_groups(
+    session: Session,
+    *,
+    now: datetime | None = None,
+    respect_daily_limit: bool = True,
+) -> list[dict]:
+    restore_archived_palaces(session)
+    current = now or datetime.now()
+    today = current.date()
+    policy = load_review_schedule_policy(session)
+    daily_limit = int(_dashboard_config_value(session, "daily_max_reviews") or "0")
+    candidate_schedules = (
+        session.query(ReviewSchedule)
+        .join(Palace, Palace.id == ReviewSchedule.palace_id)
+        .options(joinedload(ReviewSchedule.palace).selectinload(Palace.pegs))
+        .filter(
+            ReviewSchedule.completed == False,
+            Palace.mastered == False,
+            Palace.deleted_at.is_(None),
+            or_(
+                ReviewSchedule.scheduled_date <= today,
+                ReviewSchedule.scheduled_at <= current,
+            ),
+        )
+        .order_by(
+            ReviewSchedule.scheduled_date.asc(),
+            ReviewSchedule.review_number.asc(),
+            ReviewSchedule.id.asc(),
+        )
+        .all()
+    )
+
+    grouped: OrderedDict[int, dict] = OrderedDict()
+    for schedule in candidate_schedules:
+        palace = schedule.palace
+        if palace is None:
+            continue
+        due_at = schedule_display_datetime_for_policy(
+            policy,
+            scheduled_date=schedule.scheduled_date,
+            scheduled_at=schedule.scheduled_at,
+            review_type=schedule.review_type,
+            anchor_datetime=palace.created_at or palace.updated_at,
+        )
+        if due_at is None or due_at > current:
+            continue
+
+        palace_id = int(schedule.palace_id)
+        group = grouped.get(palace_id)
+        if group is None:
+            if respect_daily_limit and daily_limit > 0 and len(grouped) >= daily_limit:
+                continue
+            group = {
+                "schedule": schedule,
+                "palace": palace,
+                "schedule_count": 0,
+                "overdue_schedule_count": 0,
+                "next_due_date": schedule.scheduled_date,
+            }
+            grouped[palace_id] = group
+
+        group["schedule_count"] += 1
+        if due_at.date() < today and due_at <= current:
+            group["overdue_schedule_count"] += 1
+        if schedule.scheduled_date < group["next_due_date"]:
+            group["next_due_date"] = schedule.scheduled_date
+            group["schedule"] = schedule
+    return list(grouped.values())
+
+
+def _dashboard_config_value(session: Session, key: str) -> str:
+    from memory_anki.core.config import DEFAULTS
+    from memory_anki.infrastructure.db._tables.misc import Config
+
+    with session.no_autoflush:
+        row = session.query(Config).filter_by(key=key).first()
+    if row:
+        return row.value
+    return DEFAULTS.get(key, "")
 
 
 def _resolve_selected_duration_seconds(
@@ -299,3 +395,54 @@ def _resolve_selected_duration_seconds(
             scenes=STUDY_DASHBOARD_SCENES,
         )
     raise DashboardQueryError("duration_mode 仅支持 month、range 或 all。")
+
+
+def build_weekly_report_payload(session: Session, *, offset_weeks: int = 1) -> dict:
+    """计算某一自然周（默认上一周）的学习摘要。offset_weeks=0 表示本周。"""
+    from memory_anki.infrastructure.db._tables.palaces import ReviewLog
+
+    safe_offset = max(0, min(int(offset_weeks or 0), 52))
+    current_week_start, _current_week_end = current_week_bounds()
+    week_start = current_week_start - timedelta(days=7 * safe_offset)
+    week_end = week_start + timedelta(days=7)
+
+    study_seconds = get_study_session_duration_seconds(
+        session,
+        scenes=STUDY_DASHBOARD_SCENES,
+        start=week_start,
+        end=week_end,
+    )
+    review_count, average_score = (
+        session.query(
+            func.count(ReviewLog.id),
+            func.avg(func.coalesce(ReviewLog.score, 0)),
+        )
+        .join(Palace, Palace.id == ReviewLog.palace_id)
+        .filter(
+            ReviewLog.review_date >= week_start.date(),
+            ReviewLog.review_date < week_end.date(),
+            Palace.deleted_at.is_(None),
+        )
+        .one()
+    )
+    review_count = int(review_count or 0)
+    average_score = round(float(average_score or 0), 1) if review_count else 0
+    new_palace_count = (
+        session.query(func.count(Palace.id))
+        .filter(
+            Palace.created_at.is_not(None),
+            Palace.created_at >= week_start,
+            Palace.created_at < week_end,
+            Palace.deleted_at.is_(None),
+        )
+        .scalar()
+        or 0
+    )
+    return {
+        "week_start": week_start.date().isoformat(),
+        "week_end": (week_end - timedelta(days=1)).date().isoformat(),
+        "study_seconds": int(study_seconds or 0),
+        "review_count": review_count,
+        "average_score": average_score,
+        "new_palace_count": int(new_palace_count),
+    }

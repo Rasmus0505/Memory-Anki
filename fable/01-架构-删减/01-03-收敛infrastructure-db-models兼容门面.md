@@ -6,9 +6,9 @@
 优先级: P2
 预估工作量: M（2-8h）
 依赖文档: 无
-状态: 未开始
-负责代理: 无
-完成时间: 无
+状态: 已完成
+负责代理: Codex
+完成时间: 2026-07-09
 ---
 
 # 01-03 收敛 infrastructure/db/models.py 兼容门面
@@ -185,3 +185,6 @@ python -c "from memory_anki.infrastructure.db._tables._base import Base; import 
 | 时间 | 执行者 | 动作 | 结果/备注 |
 |---|---|---|---|
 | 2026-07-08 | 文档代理（fable） | 文档创建；实测引用 124 个文件（src 107 / tests 14 / alembic 3），与 docstring 声称的 86 不符；制定 A/B/C 渐进方案 | - |
+| 2026-07-09 | Codex | 完成阶段 A 的 app/infrastructure 运行代码引用迁移：`app/main.py`、`app/startup_runtime.py`、`app/startup_warmup.py`、`infrastructure/db/maintenance.py`、`infrastructure/llm/external_ai_call_logs.py`、`infrastructure/llm/config_helpers.py` 改为直接从 `_tables._base` / `_tables.misc` import | `python -m pytest tests/test_startup_runtime_and_supervisor.py tests/test_external_ai_call_logs.py -q`：8 passed；`python -m ruff check` 针对 6 个改动文件通过；`PYTHONPATH=src python -c "from memory_anki.infrastructure.db._tables._base import Base; import memory_anki.infrastructure.db._tables; print(len(Base.metadata.tables))"` 输出 33（当前全表数量，含后续新增表）。未改 `models.py` 本体，避免与并行 06-06 模板表导出冲突；modules/tests/alembic 大批迁移仍待后续执行。 |
+| 2026-07-09 | Codex | 扩大执行机械迁移切片：将 `apps/api/src` 与 `apps/api/tests` 中可迁移的具体 ORM 表类 import 从 `memory_anki.infrastructure.db.models` 改为对应 `_tables.*` | 开工统计约 134 个文件 / 146 条 active import，具体 ORM 符号按目标模块为 english 13、english_reading 19、knowledge 44、misc 49、palaces 176；基础门面符号 `Base`/`engine`/`get_session` 为 11。完成 127 个文件 / 139 个 import 节点迁移。剩余 `db.models` import 为 11 条：8 条基础门面用法，以及 3 条因本次明确要求避让而保留的 `modules/palaces/presentation/**` 具体模型导入（`attachment_router.py`、`core_router.py`、`import_router.py`）。未触碰 alembic 历史迁移、tools/archive、旧归档脚本或 palaces presentation 文件。`python -m ruff check --select I001 <112 个新增 _tables import 文件>` 通过；`python -m pytest tests/test_palace_routes.py tests/test_palace_quiz_routes.py tests/test_review_routes.py tests/test_dashboard_routes.py -q`：164 passed, 21 skipped。状态保持部分完成；后续剩余仅为 palaces presentation 冲突窗口内的 3 条具体模型导入，以及最终收敛 `models.py` facade。 |
+| 2026-07-09 | Codex | 完成最终收敛：迁移 palaces presentation 剩余 3 条具体模型导入、基础入口、alembic 与非归档工具；`models.py` 缩为只导出 `Base`/`engine`/`get_session`/`init_db` 并保留表注册副作用 | `rg -n "from memory_anki\.infrastructure\.db\.models import\|import memory_anki\.infrastructure\.db\.models" apps/api/src apps/api/tests apps/api/alembic tools -g "*.py"` 仅剩 `tools/archive` 历史脚本与架构规则字符串；`python -m alembic heads; python -m alembic upgrade head` 通过且 head 为 `0017_soft_delete_palaces_and_quiz_questions`；`python -m ruff check` 针对 `models.py`、`_tables/__init__.py`、alembic 变更文件通过；集成回归 `python -m pytest tests/test_palace_routes.py tests/test_palace_quiz_routes.py tests/test_review_routes.py tests/test_dashboard_routes.py tests/test_mindmap_import_job_service.py tests/test_backup_lifecycle.py tests/test_full_transfer_service.py tests/test_english_routes.py -q` 为 194 passed, 29 skipped。 |

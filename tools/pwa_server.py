@@ -26,6 +26,7 @@ WEB_DIST = WEB_DIR / "dist"
 LOGS_DIR = REPO_ROOT / "logs"
 PWA_URL = f"http://{dev_server.BACKEND_HOST}:{dev_server.BACKEND_PORT}/freestyle"
 PWA_PROCESS_MARKER = "MEMORY_ANKI_PWA_SERVER"
+PWA_PID_FILE = LOGS_DIR / "pwa-server.pid"
 
 
 def _append_log_separator(path: Path, title: str) -> None:
@@ -36,8 +37,14 @@ def _append_log_separator(path: Path, title: str) -> None:
 
 
 def _is_memory_anki_pwa_process(pid: int) -> bool:
-    if os.name != "nt":
+    try:
+        recorded_pid = int(PWA_PID_FILE.read_text(encoding="utf-8").strip())
+    except Exception:
+        recorded_pid = 0
+    if recorded_pid == pid:
         return True
+    if os.name != "nt":
+        return recorded_pid == pid
     try:
         result = subprocess.run(
             [
@@ -58,15 +65,7 @@ def _is_memory_anki_pwa_process(pid: int) -> bool:
     except Exception:
         return False
     command_line = result.stdout.lower()
-    repo_marker = str(REPO_ROOT).lower()
-    return (
-        PWA_PROCESS_MARKER.lower() in command_line
-        or (
-            repo_marker in command_line
-            and "memory_anki.app.main:app" in command_line
-            and "uvicorn" in command_line
-        )
-    )
+    return PWA_PROCESS_MARKER.lower() in command_line
 
 
 def _free_pwa_port() -> bool:
@@ -77,12 +76,13 @@ def _free_pwa_port() -> bool:
     if unsafe:
         print(
             f"[!] Port {dev_server.BACKEND_PORT} is occupied by non-PWA process(es): {unsafe}. "
-            "Stop them manually or run tools\\stop.bat first."
+            "PWA and desktop dev mode share this port. Run stop.bat first, then run start-pwa.bat again."
         )
         return False
     print(f"[i] Cleaning existing PWA process(es) on port {dev_server.BACKEND_PORT}: {pids}")
     for pid in pids:
         dev_server.kill_process_tree(pid)
+    PWA_PID_FILE.unlink(missing_ok=True)
     time.sleep(0.5)
     return True
 
@@ -163,16 +163,19 @@ def _start_backend() -> subprocess.Popen:
         str(dev_server.BACKEND_PORT),
     ]
     log_file = log_path.open("ab")
-    return subprocess.Popen(
+    process = subprocess.Popen(
         cmd,
         cwd=str(API_DIR),
         env=_backend_env(),
         stdout=log_file,
         stderr=subprocess.STDOUT,
         stdin=subprocess.DEVNULL,
-        close_fds=False,
+        close_fds=True,
         **dev_server.hidden_process_kwargs(),
     )
+    PWA_PID_FILE.parent.mkdir(parents=True, exist_ok=True)
+    PWA_PID_FILE.write_text(str(process.pid), encoding="utf-8")
+    return process
 
 
 def _wait_for_pwa(timeout_seconds: int = 120) -> bool:
@@ -224,7 +227,7 @@ def _configure_tailscale_serve() -> bool:
             print(status_output)
         return True
     print("[!] Tailscale Serve could not be configured from this shell.")
-    print("[i] Run tools\\configure-tailscale-pwa.bat once as Administrator.")
+    print("[i] Run configure-tailscale-pwa.bat once as Administrator.")
     return False
 
 
@@ -246,7 +249,7 @@ def _resolve_tailscale_cli() -> str | None:
 
 
 def _supervise(process: subprocess.Popen) -> int:
-    print("[i] PWA server is running. Keep this process alive, or use tools\\stop-pwa.bat to stop it.")
+    print("[i] PWA server is running. Keep this process alive, or use stop-pwa.bat to stop it.")
     stopping = False
 
     def stop_child(*args) -> None:
@@ -298,6 +301,13 @@ def start(
     return 0
 
 
+def stop() -> int:
+    if _free_pwa_port():
+        PWA_PID_FILE.unlink(missing_ok=True)
+        return 0
+    return 1
+
+
 def prepare(*, build: bool = True) -> int:
     if build or not _pwa_dist_ready():
         if not _run_frontend_build():
@@ -306,10 +316,6 @@ def prepare(*, build: bool = True) -> int:
         return 1
     print(f"[ok] PWA assets and runtime are ready: {WEB_DIST}")
     return 0
-
-
-def stop() -> int:
-    return 0 if _free_pwa_port() else 1
 
 
 def main() -> int:

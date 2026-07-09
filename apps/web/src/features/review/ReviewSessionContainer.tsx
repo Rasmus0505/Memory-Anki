@@ -84,6 +84,7 @@ interface ReviewSessionContainerProps {
       red_marked_count?: number
       target_review_number?: number
       needs_practice?: boolean
+      note?: string
     },
   ) => Promise<unknown>
   backHref: (chapterId: number | null) => string
@@ -328,7 +329,7 @@ export function ReviewSessionContainer({
     setStageDialogOpen(true)
   }, [chapterId, clearProgress, flushSave, session, submitSession])
 
-  const handleStageConfirm = useCallback(async (targetReviewNumber: number, needsPractice: boolean) => {
+  const handleStageConfirm = useCallback(async (targetReviewNumber: number, needsPractice: boolean, note: string) => {
     if (!session || !pendingPayload) return
     setStageDialogOpen(false)
     setSubmitting(true)
@@ -342,6 +343,7 @@ export function ReviewSessionContainer({
         red_marked_count: pendingPayload.redNodeIds.length,
         target_review_number: targetReviewNumber,
         needs_practice: needsPractice,
+        ...(note ? { note } : {}),
       })
     } finally {
       setSubmitting(false)

@@ -12,7 +12,8 @@ from sqlalchemy.orm import Session
 from memory_anki.core.config import AI_CALL_LOGS_DIR
 from memory_anki.core.request_context import get_request_id
 from memory_anki.core.time import utc_now_naive
-from memory_anki.infrastructure.db.models import ExternalAiCallLog, engine
+from memory_anki.infrastructure.db._tables._base import engine
+from memory_anki.infrastructure.db._tables.misc import ExternalAiCallLog
 
 
 def _json_dump(value: Any) -> str:

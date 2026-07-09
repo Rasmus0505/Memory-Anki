@@ -6,9 +6,9 @@
 优先级: P1
 预估工作量: M（2-8h）
 依赖文档: 建议在 08-02（拆 GlobalTimerProvider）之后执行，避免同目录冲突
-状态: 未开始
-负责代理: 无
-完成时间: 无
+状态: 已完成
+负责代理: Codex
+完成时间: 2026-07-09
 ---
 
 # 08-03 拆分 TimerAutomationDialog
@@ -143,3 +143,4 @@ npm run typecheck && npm run test && npm run lint && npm run build
 | 时间 | 执行者 | 动作 | 结果/备注 |
 |---|---|---|---|
 | - | - | 文档创建 | 分 4 批：模型 → 编辑器 → 草稿 hook → section |
+| 2026-07-09 | Codex | 拆分 TimerAutomationDialog | 已拆出模型纯函数、草稿 hook、3 个编辑器和 3 个 section；`TimerAutomationDialog.tsx` 降至 173 行；session vitest 通过，typecheck 被既有 `src/shared/hooks/timedSessionRecordBuilder.test.ts(36,19)` 类型错误阻塞 |

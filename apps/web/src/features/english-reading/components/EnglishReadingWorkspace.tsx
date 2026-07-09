@@ -93,7 +93,7 @@ export function EnglishReadingProfileCard({
           </div>
           <div className="mt-3 h-2.5 overflow-hidden rounded-full bg-secondary">
             <div
-              className="h-full rounded-full bg-[linear-gradient(90deg,#1d4ed8,#0f766e,#16a34a)] transition-all"
+              className="h-full rounded-full bg-gradient-to-r from-info via-memory-strong to-success transition-all"
               style={{
                 width: `${Math.max(0, Math.min(100, profile.levelProgress))}%`,
               }}
@@ -263,7 +263,7 @@ export function EnglishReadingGeneratorCard({
             </div>
             <div className="mt-3 h-2 overflow-hidden rounded-full bg-info/10">
               <div
-                className="h-full rounded-full bg-[linear-gradient(90deg,#38bdf8,#2563eb)] transition-all"
+                className="h-full rounded-full bg-gradient-to-r from-info to-primary transition-all"
                 style={{ width: `${generationProgress}%` }}
               />
             </div>
@@ -392,7 +392,7 @@ export function EnglishReadingRecentMaterialsCard({
                     className={cn(
                       "flex items-center justify-end gap-2 border-t px-3 py-2",
                       active
-                        ? "border-slate-800/80 bg-slate-950/20"
+                        ? "border-primary-foreground/20 bg-primary-foreground/10"
                         : "border-border/60 bg-background/60",
                     )}
                   >

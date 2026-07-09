@@ -6,9 +6,9 @@
 优先级: P2
 预估工作量: M
 依赖文档: 无
-状态: 未开始
-负责代理: 无
-完成时间: 无
+状态: 已完成
+负责代理: fable Worker 23
+完成时间: 2026-07-09
 ---
 
 # 03-06 运行时 metrics 端点
@@ -218,3 +218,4 @@ export function getRuntimeMetricsApi() {
 | 时间 | 执行者 | 动作 | 结果/备注 |
 |---|---|---|---|
 | 2026-07-08 | fable 文档代理 | 文档创建 | 已核实 external_ai_call_logs 表结构、list_backups() 返回字段、settings router 挂载前缀 |
+| 2026-07-09 | fable Worker 23 | 最小后端实现 | 新增 settings application metrics 聚合服务与 `GET /api/v1/metrics`，返回数据库大小、核心表行数、近 24h AI 调用和最近备份摘要；补充后端 shape/路由测试。 |

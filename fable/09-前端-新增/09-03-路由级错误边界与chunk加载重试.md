@@ -6,9 +6,9 @@
 优先级: P0
 预估工作量: M（2-8h）
 依赖文档: 无
-状态: 未开始
-负责代理: 无
-完成时间: 无
+状态: 已完成
+负责代理: fable Worker 4
+完成时间: 2026-07-09 00:46
 ---
 
 # 09-03 路由级错误边界与 chunk 加载重试
@@ -419,3 +419,7 @@ cd apps/web && npm run build       # 期望：构建成功
 | 时间 | 执行者 | 动作 | 结果/备注 |
 |---|---|---|---|
 | - | - | 文档创建 | - |
+| 2026-07-09 00:46 | fable Worker 4 | 实现路由级错误边界、lazy chunk 重试与 widget 局部边界 | 新增 `lazyWithRetry`、`RouteErrorBoundary`、`WidgetErrorBoundary`；`appRoutes` 改用 `lazyWithRetry` 并在 `Suspense` 内包路由边界；MindMapFrame 与 ChartContainer 获得局部降级；补充 retry/边界测试。 |
+| 2026-07-09 00:46 | fable Worker 4 | 核实 stableChunkCompatPlugin 兼容性 | `stableChunkNames` 仅覆盖 `PalaceEditPage`、`useMindMapImport`；稳定 chunk 别名机制与 `lazyWithRetry` 无冲突，其余哈希 chunk 持续失败时由 `ChunkLoadError` 引导刷新。未修改 `vite.config.ts`。 |
+| 2026-07-09 00:46 | fable Worker 4 | 验证 | `npm run typecheck` 通过；`npx vitest run src/shared/lib/lazyWithRetry.test.ts src/app/providers/RouteErrorBoundary.test.tsx src/app/router/appRoutes.error-boundary.test.tsx src/shared/components/widget-error-boundary.test.tsx src/app/router/appRoutes.fallback.test.ts src/app/router/AppRouter.test.tsx src/shared/components/mindmap-host/MindMapFrame.test.tsx src/shared/components/ui/dialog.test.tsx` 通过。 |
+| 2026-07-09 01:46 | Codex | 复核并收口 | 代码核实：路由 lazy 页面均使用 `lazyWithRetry`，`AppRoutes` 在 `Suspense` 内接入 `RouteErrorBoundary`，`MindMapFrame` 与 `ChartContainer` 已包 `WidgetErrorBoundary`；`stableChunkCompatPlugin` 与 PWA `staleScriptRecoveryResponse` 兼容结论仍成立。验证：`npm run typecheck` 通过；同上 8 个相关 vitest 文件共 22 个测试通过。 |

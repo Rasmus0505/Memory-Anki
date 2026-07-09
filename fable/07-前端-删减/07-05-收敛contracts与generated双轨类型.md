@@ -6,9 +6,9 @@
 优先级: P1
 预估工作量: M（2-8h）
 依赖文档: 无（长期恢复 openapi 类型时与后端 03-03 response_model 文档联动）
-状态: 未开始
-负责代理: 无
-完成时间: 无
+状态: 已完成
+负责代理: Codex
+完成时间: 2026-07-09
 ---
 
 # 07-05 收敛 contracts 与 generated 双轨类型
@@ -148,3 +148,4 @@ npm run build       # 期望：构建成功
 | 时间 | 执行者 | 动作 | 结果/备注 |
 |---|---|---|---|
 | - | - | 文档创建 | 实测 contracts 为 14 文件约 1555 行（与任务描述 13 文件 1700+ 行不符）；发现 knowledge.ts 也是空壳 |
+| 2026-07-09 | Codex | 执行路线 A 并清理 knowledge 空壳 | 已确认前端源码无 `shared/api/generated` 消费方，`contracts/knowledge` 仅被桶导出引用；删除 `src/shared/api/generated.ts` 与 `contracts/knowledge.ts`，移除 `openapi:types` 脚本和 `openapi-typescript` devDependency，并在 `contracts/index.ts` 记录手写 contracts 为当前唯一事实来源。`npm uninstall openapi-typescript --save-dev` 因 Electron 文件锁 `default_app.asar` EBUSY 失败，改用等价 manifest/lockfile 精准删除。验证：`npm run typecheck`、`npm run build` 通过；`npm run openapi:types` 按预期报 missing script。 |

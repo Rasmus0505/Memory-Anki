@@ -1,4 +1,5 @@
 import * as React from 'react'
+import { WidgetErrorBoundary } from '@/shared/components/widget-error-boundary'
 import { cn } from '@/shared/lib/utils'
 
 export interface ChartConfigItem {
@@ -26,7 +27,9 @@ export function ChartContainer({
       )}
       style={style as React.CSSProperties}
     >
-      {children}
+      <WidgetErrorBoundary label="图表" className="flex h-full flex-col items-center justify-center gap-3 text-sm text-muted-foreground">
+        {children}
+      </WidgetErrorBoundary>
     </div>
   )
 }

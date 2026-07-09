@@ -6,9 +6,9 @@
 优先级: P1
 预估工作量: M（2-8h）
 依赖文档: 无
-状态: 未开始
-负责代理: 无
-完成时间: 无
+状态: 已完成
+负责代理: Codex
+完成时间: 2026-07-09
 ---
 
 # 04-02 退役 session-records-legacy 遗留兼容层
@@ -227,3 +227,4 @@ npm run test
 | 时间 | 执行者 | 动作 | 结果/备注 |
 |---|---|---|---|
 | 2026-07-08 | 文档代理（fable） | 文档创建；核实 5 个别名与 4 个进度函数零调用方、旧键仅剩浏览器残留、活代码调用面清单 | - |
+| 2026-07-09 | Codex | 删除 5 个死别名与旧 practice-progress localStorage 读写；删除 `PracticeProgressRecord`；新增一次性清理调用；文件更名为 `session-records-store` 并更新测试 | 相关残留检查、session/model vitest 通过；typecheck 当前被无关 `FreestylePage.tsx` 导入/本地声明冲突阻塞 |

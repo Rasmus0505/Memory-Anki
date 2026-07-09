@@ -6,9 +6,9 @@
 优先级: P1
 预估工作量: S（<2h）
 依赖文档: 与 08-06（TanStack Query 落地）互斥——二选一执行
-状态: 未开始
-负责代理: 无
-完成时间: 无
+状态: 已完成
+负责代理: Codex
+完成时间: 2026-07-09
 ---
 
 # 07-01 TanStack Query 去留决策
@@ -175,3 +175,4 @@ npm run build       # 期望：构建成功
 | 时间 | 执行者 | 动作 | 结果/备注 |
 |---|---|---|---|
 | 2026-07-08 | 文档撰写代理（fable-07） | 文档创建 | 核实：挂载点有 2 处（AppProviders + TimerOverlayApp），全库 0 个 useQuery/useMutation；推荐路线 B，与 08-06 互斥 |
+| 2026-07-09 | Codex | 采纳路线 B：保留 TanStack Query，不执行卸载路线 | `rg -n "@tanstack/react-query|QueryClientProvider|createAppQueryClient" apps\web\src apps\web\package.json apps\web\package-lock.json` 仅命中依赖声明、queryClient 与两个 Provider 挂载点；未发现真实 `useQuery`/`useMutation` 消费。本文档零代码改动收口，后续真正落地迁移归 08-06。 |

@@ -23,7 +23,9 @@ if (DEFAULT_RUNTIME_HOME / "data" / "memory_palace.db").exists():
     os.environ[APP_HOME_ENV] = str(DEFAULT_RUNTIME_HOME)
 
 from memory_anki.core.config import DB_PATH  # noqa: E402
-from memory_anki.infrastructure.db.models import Chapter, Palace, get_session  # noqa: E402
+from memory_anki.infrastructure.db._tables import get_session  # noqa: E402
+from memory_anki.infrastructure.db._tables.knowledge import Chapter  # noqa: E402
+from memory_anki.infrastructure.db._tables.palaces import Palace  # noqa: E402
 from memory_anki.modules.palace_quiz.application.manual_text_quiz_parser import (  # noqa: E402
     parse_manual_text_quiz_pairs,
 )

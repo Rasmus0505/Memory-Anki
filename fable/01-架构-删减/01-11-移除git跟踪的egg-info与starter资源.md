@@ -6,9 +6,9 @@
 优先级: P1
 预估工作量: S（<2h）
 依赖文档: 无
-状态: 未开始
-负责代理: 无
-完成时间: 无
+状态: 已完成
+负责代理: Codex
+完成时间: 2026-07-09
 ---
 
 # 01-11 移除 git 跟踪的 egg-info 与 starter 资源
@@ -169,3 +169,4 @@ python -m pytest
 | 时间 | 执行者 | 动作 | 结果/备注 |
 |---|---|---|---|
 | 2026-07-08 | 文档代理（fable） | 文档创建；**与任务描述不符**：实测 git 未跟踪任何 egg-info、apps/web 无 hero.png/react.svg/vite.svg 引用、.gitignore 已含 `*.egg-info/`（第 18 行），US-001 实质已达标；文档改为验证收口 + prd.json 状态更新 | - |
+| 2026-07-09 | Codex | 执行验证收口 | `git ls-files` 未发现 egg-info/starter 资源；`rg` 未发现 starter 引用；`.gitignore` 已含 `*.egg-info/`；未删除文件，仅回填 `ralph/prd.json` 的 US-001 `passes`/`notes` |

@@ -6,9 +6,9 @@
 优先级: P1（应该）
 预估工作量: L（>8h，可按端点分组分批）
 依赖文档: 10-01（conftest 与 fixture 先行）
-状态: 未开始
-负责代理: 无
-完成时间: 无
+状态: 已完成
+负责代理: Codex
+完成时间: 2026-07-09
 ---
 
 # 10-02 palaces 主路由测试补全
@@ -217,3 +217,5 @@ class TestPalaceGroupedLists:
 | 时间 | 执行者 | 动作 | 结果/备注 |
 |---|---|---|---|
 | 2026-07-08 | 文档代理（fable） | 文档创建；核实 router.py 628 行、无独立测试文件、not-found 分支返回 200+error 的现状 | - |
+| 2026-07-09 | Codex | 新增 `apps/api/tests/test_palace_routes.py`，覆盖 CRUD/grouped/editor/segments/versions/attachments/practice session/review-plan/practice-flag/archive/backups 等稳定主路径与 missing/error 分支 | 44 passed；按当前路由现状保留 `/palaces/{id}` missing 的兼容字段断言、editor 根节点标题规范化、archive 固定返回 `archived: false` 行为 |
+| 2026-07-09 | Codex | 运行目标测试、相邻回归、全量后端测试与 ruff | `python -m pytest tests/test_palace_routes.py -v` 44 passed；`python -m pytest tests/test_mini_palace_routes.py tests/test_palace_chapter_binding.py tests/test_review_routes.py -q` 73 passed/43 skipped；`python -m pytest tests -q` 347 passed/72 skipped；`python -m ruff check tests/test_palace_routes.py` 通过 |

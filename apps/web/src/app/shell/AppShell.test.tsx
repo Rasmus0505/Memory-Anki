@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter, useLocation } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AppShell, resetNavSectionHistoryForTest } from '@/app/shell/AppShell'
@@ -22,6 +22,9 @@ const preloadFreestylePage = vi.fn()
 const preloadKnowledgePage = vi.fn()
 const preloadPalaceEditPage = vi.fn()
 const preloadProfilePage = vi.fn()
+const backgroundTaskRegistryMock = vi.hoisted(() => ({
+  useRunningTaskCountBySection: vi.fn((_section: unknown) => 0),
+}))
 
 vi.mock('@/entities/runtime/api', () => ({
   getRuntimeInfoApi: () => getRuntimeInfoApi(),
@@ -51,6 +54,17 @@ vi.mock('@/app/router/appRoutes', () => ({
   preloadProfilePage: () => preloadProfilePage(),
 }))
 
+vi.mock('@/shared/background-tasks/backgroundTaskRegistry', async () => {
+  const actual = await vi.importActual<typeof import('@/shared/background-tasks/backgroundTaskRegistry')>(
+    '@/shared/background-tasks/backgroundTaskRegistry',
+  )
+  return {
+    ...actual,
+    useRunningTaskCountBySection: (section: unknown) =>
+      backgroundTaskRegistryMock.useRunningTaskCountBySection(section),
+  }
+})
+
 describe('AppShell', () => {
   beforeEach(async () => {
     __resetBackgroundTaskStoreForTest()
@@ -67,12 +81,15 @@ describe('AppShell', () => {
     preloadKnowledgePage.mockClear()
     preloadPalaceEditPage.mockClear()
     preloadProfilePage.mockClear()
+    backgroundTaskRegistryMock.useRunningTaskCountBySection.mockClear()
+    backgroundTaskRegistryMock.useRunningTaskCountBySection.mockReturnValue(0)
     resetNavSectionHistoryForTest()
   })
 
   afterEach(async () => {
     __resetBackgroundTaskStoreForTest()
     resetNavSectionHistoryForTest()
+    vi.useRealTimers()
     vi.restoreAllMocks()
   })
 
@@ -102,6 +119,29 @@ describe('AppShell', () => {
     await waitFor(() => {
       expect(screen.getAllByText(/Stable abcdef12/).length).toBeGreaterThan(0)
     })
+  })
+
+  it('keeps sidebar clock ticks from rerendering navigation subscriptions', () => {
+    vi.useFakeTimers()
+    getRuntimeInfoApi.mockReturnValue(new Promise(() => {}))
+
+    render(
+      <MemoryRouter>
+        <AppShell>
+          <div>content</div>
+        </AppShell>
+      </MemoryRouter>,
+    )
+
+    expect(backgroundTaskRegistryMock.useRunningTaskCountBySection).toHaveBeenCalled()
+    backgroundTaskRegistryMock.useRunningTaskCountBySection.mockClear()
+
+    act(() => {
+      vi.advanceTimersByTime(1000)
+    })
+
+    expect(backgroundTaskRegistryMock.useRunningTaskCountBySection).not.toHaveBeenCalled()
+    vi.useRealTimers()
   })
 
   it('opens the global app log drawer from shell actions', async () => {

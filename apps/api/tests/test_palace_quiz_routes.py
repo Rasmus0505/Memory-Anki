@@ -2,20 +2,13 @@ import json
 import unittest
 from unittest.mock import patch
 
-from fastapi import FastAPI
-from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
-
-from memory_anki.infrastructure.db.models import (
-    Base,
-    Chapter,
-    ExternalAiCallLog,
+from memory_anki.infrastructure.db._tables.knowledge import Chapter, Subject
+from memory_anki.infrastructure.db._tables.misc import ExternalAiCallLog
+from memory_anki.infrastructure.db._tables.palaces import (
+    FreestyleQuizAttempt,
     Palace,
     PalaceMiniPalace,
     PalaceQuizQuestion,
-    Subject,
 )
 from memory_anki.modules.palace_quiz.application import ai_service as palace_quiz_ai_service
 from memory_anki.modules.palace_quiz.presentation import router as palace_quiz_router
@@ -23,177 +16,161 @@ from memory_anki.modules.palaces.application.title_sync_service import (
     reconcile_palace_chapter_binding,
     set_palace_chapter_links,
 )
+from memory_anki.modules.settings.application.ai_prompt_templates import (
+    PALACE_QUIZ_SOURCE_PAIR_TRANSCRIPTION_PROMPT,
+)
 from memory_anki.modules.settings.presentation import router as settings_router
+from support import RouterTestCase
+
+PALACE_QUIZ_PDF_TRANSCRIPTION_PROMPT = PALACE_QUIZ_SOURCE_PAIR_TRANSCRIPTION_PROMPT
 
 
-class PalaceQuizRouteTests(unittest.TestCase):
-    def setUp(self):
-        self.engine = create_engine(
-            "sqlite://",
-            connect_args={"check_same_thread": False},
-            poolclass=StaticPool,
+def build_palace_quiz_pdf_pairing_prompt(extra_prompt: str) -> str:
+    return f"{PALACE_QUIZ_SOURCE_PAIR_TRANSCRIPTION_PROMPT}\n{extra_prompt}"
+
+
+class PalaceQuizRouteTests(RouterTestCase):
+    ROUTER_MODULES = (palace_quiz_router, settings_router)
+
+    def seed(self, session):
+        palace = Palace(
+            title="Quiz Palace",
+            description="desc",
+            editor_doc=json.dumps(
+                {
+                    "root": {
+                        "data": {"text": "Quiz Palace", "uid": "root"},
+                        "children": [
+                            {
+                                "data": {"text": "细胞核", "uid": "cell-core"},
+                                "children": [],
+                            },
+                            {
+                                "data": {"text": "有丝分裂", "uid": "mitosis"},
+                                "children": [],
+                            },
+                        ],
+                    }
+                },
+                ensure_ascii=False,
+            ),
         )
-        Base.metadata.create_all(self.engine)
-        self.SessionLocal = sessionmaker(bind=self.engine)
-        self.original_quiz_get_session = palace_quiz_router.get_session
-        self.original_settings_get_session = settings_router.get_session
-
-        def get_test_session():
-            return self.SessionLocal()
-
-        palace_quiz_router.get_session = get_test_session
-        settings_router.get_session = get_test_session
-
-        with self.SessionLocal() as session:
-            palace = Palace(
-                title="Quiz Palace",
-                description="desc",
-                editor_doc=json.dumps(
-                    {
-                        "root": {
-                            "data": {"text": "Quiz Palace", "uid": "root"},
-                            "children": [
-                                {
-                                    "data": {"text": "细胞核", "uid": "cell-core"},
-                                    "children": [],
-                                },
-                                {
-                                    "data": {"text": "有丝分裂", "uid": "mitosis"},
-                                    "children": [],
-                                },
-                            ],
-                        }
-                    },
-                    ensure_ascii=False,
-                ),
+        other_palace = Palace(
+            title="Other Palace",
+            description="other",
+            editor_doc=json.dumps(
+                {
+                    "root": {
+                        "data": {"text": "Other Palace", "uid": "other-root"},
+                        "children": [
+                            {
+                                "data": {"text": "单链入口", "uid": "single-1"},
+                                "children": [
+                                    {
+                                        "data": {"text": "继续单链", "uid": "single-2"},
+                                        "children": [
+                                            {
+                                                "data": {"text": "分支A", "uid": "branch-a"},
+                                                "children": [],
+                                            },
+                                            {
+                                                "data": {"text": "分支B", "uid": "branch-b"},
+                                                "children": [],
+                                            },
+                                        ],
+                                    }
+                                ],
+                            }
+                        ],
+                    }
+                },
+                ensure_ascii=False,
+            ),
+        )
+        subject = Subject(name="生物", color="#22c55e")
+        session.add_all([palace, other_palace, subject])
+        session.flush()
+        chapter = Chapter(subject_id=subject.id, name="细胞生物学", sort_order=0)
+        session.add(chapter)
+        session.flush()
+        child_chapter = Chapter(subject_id=subject.id, parent_id=chapter.id, name="细胞核", sort_order=0)
+        unrelated_chapter = Chapter(subject_id=subject.id, name="遗传学", sort_order=1)
+        session.add(child_chapter)
+        session.add(unrelated_chapter)
+        session.flush()
+        palace.chapters.append(chapter)
+        session.add(
+            PalaceMiniPalace(
+                palace_id=palace.id,
+                name="细胞核专项训练",
+                node_uids_json=json.dumps(["cell-core"], ensure_ascii=False),
+                sort_order=0,
             )
-            other_palace = Palace(
-                title="Other Palace",
-                description="other",
-                editor_doc=json.dumps(
-                    {
-                        "root": {
-                            "data": {"text": "Other Palace", "uid": "other-root"},
-                            "children": [
-                                {
-                                    "data": {"text": "单链入口", "uid": "single-1"},
-                                    "children": [
-                                        {
-                                            "data": {"text": "继续单链", "uid": "single-2"},
-                                            "children": [
-                                                {
-                                                    "data": {"text": "分支A", "uid": "branch-a"},
-                                                    "children": [],
-                                                },
-                                                {
-                                                    "data": {"text": "分支B", "uid": "branch-b"},
-                                                    "children": [],
-                                                },
-                                            ],
-                                        }
-                                    ],
-                                }
-                            ],
-                        }
-                    },
-                    ensure_ascii=False,
-                ),
-            )
-            subject = Subject(name="生物", color="#22c55e")
-            session.add_all([palace, other_palace, subject])
-            session.flush()
-            chapter = Chapter(subject_id=subject.id, name="细胞生物学", sort_order=0)
-            session.add(chapter)
-            session.flush()
-            child_chapter = Chapter(subject_id=subject.id, parent_id=chapter.id, name="细胞核", sort_order=0)
-            unrelated_chapter = Chapter(subject_id=subject.id, name="遗传学", sort_order=1)
-            session.add(child_chapter)
-            session.add(unrelated_chapter)
-            session.flush()
-            palace.chapters.append(chapter)
-            session.add(
-                PalaceMiniPalace(
+        )
+        session.add_all(
+            [
+                PalaceQuizQuestion(
                     palace_id=palace.id,
-                    name="细胞核专项训练",
-                    node_uids_json=json.dumps(["cell-core"], ensure_ascii=False),
-                    sort_order=0,
-                )
-            )
-            session.add_all(
-                [
-                    PalaceQuizQuestion(
-                        palace_id=palace.id,
-                        question_type="multiple_choice",
-                        stem="细胞的控制中心是？",
-                        options_json=json.dumps(
-                            [
-                                {"id": "A", "text": "细胞膜"},
-                                {"id": "B", "text": "细胞核"},
-                            ],
-                            ensure_ascii=False,
-                        ),
-                        answer_payload_json=json.dumps(
-                            {"correct_option_id": "B"},
-                            ensure_ascii=False,
-                        ),
-                        analysis="细胞核控制细胞活动。",
-                        source_meta_json=json.dumps(
-                            {
-                                "source_kind": "manual",
-                                "subject_document_id": None,
-                                "page_numbers": None,
-                                "image_names": None,
-                                "extra_prompt": "",
-                                "ai_call_log_id": None,
-                                "generated_at": "2026-06-12T00:00:00",
-                                "generation_mode": "manual",
-                            },
-                            ensure_ascii=False,
-                        ),
-                        sort_order=1,
+                    question_type="multiple_choice",
+                    stem="细胞的控制中心是？",
+                    options_json=json.dumps(
+                        [
+                            {"id": "A", "text": "细胞膜"},
+                            {"id": "B", "text": "细胞核"},
+                        ],
+                        ensure_ascii=False,
                     ),
-                    PalaceQuizQuestion(
-                        palace_id=palace.id,
-                        question_type="short_answer",
-                        stem="简述有丝分裂的意义。",
-                        options_json="[]",
-                        answer_payload_json=json.dumps(
-                            {"reference_answer": "保证遗传信息稳定传递。"},
-                            ensure_ascii=False,
-                        ),
-                        analysis="核心在于遗传物质平均分配。",
-                        source_meta_json=json.dumps(
-                            {
-                                "source_kind": "manual",
-                                "subject_document_id": None,
-                                "page_numbers": None,
-                                "image_names": None,
-                                "extra_prompt": "",
-                                "ai_call_log_id": None,
-                                "generated_at": "2026-06-12T00:00:00",
-                                "generation_mode": "manual",
-                            },
-                            ensure_ascii=False,
-                        ),
-                        sort_order=2,
+                    answer_payload_json=json.dumps(
+                        {"correct_option_id": "B"},
+                        ensure_ascii=False,
                     ),
-                ]
-            )
-            session.commit()
-            self.chapter_id = chapter.id
-            self.child_chapter_id = child_chapter.id
-            self.unrelated_chapter_id = unrelated_chapter.id
-
-        app = FastAPI()
-        app.include_router(palace_quiz_router.router, prefix="/api/v1")
-        app.include_router(settings_router.router, prefix="/api/v1")
-        self.client = TestClient(app)
-
-    def tearDown(self):
-        palace_quiz_router.get_session = self.original_quiz_get_session
-        settings_router.get_session = self.original_settings_get_session
-        Base.metadata.drop_all(self.engine)
-        self.engine.dispose()
+                    analysis="细胞核控制细胞活动。",
+                    source_meta_json=json.dumps(
+                        {
+                            "source_kind": "manual",
+                            "subject_document_id": None,
+                            "page_numbers": None,
+                            "image_names": None,
+                            "extra_prompt": "",
+                            "ai_call_log_id": None,
+                            "generated_at": "2026-06-12T00:00:00",
+                            "generation_mode": "manual",
+                        },
+                        ensure_ascii=False,
+                    ),
+                    sort_order=1,
+                ),
+                PalaceQuizQuestion(
+                    palace_id=palace.id,
+                    question_type="short_answer",
+                    stem="简述有丝分裂的意义。",
+                    options_json="[]",
+                    answer_payload_json=json.dumps(
+                        {"reference_answer": "保证遗传信息稳定传递。"},
+                        ensure_ascii=False,
+                    ),
+                    analysis="核心在于遗传物质平均分配。",
+                    source_meta_json=json.dumps(
+                        {
+                            "source_kind": "manual",
+                            "subject_document_id": None,
+                            "page_numbers": None,
+                            "image_names": None,
+                            "extra_prompt": "",
+                            "ai_call_log_id": None,
+                            "generated_at": "2026-06-12T00:00:00",
+                            "generation_mode": "manual",
+                        },
+                        ensure_ascii=False,
+                    ),
+                    sort_order=2,
+                ),
+            ]
+        )
+        session.commit()
+        self.chapter_id = chapter.id
+        self.child_chapter_id = child_chapter.id
+        self.unrelated_chapter_id = unrelated_chapter.id
 
     def test_quiz_crud_and_palace_isolation(self):
         response = self.client.get("/api/v1/palaces/1/quiz-questions")
@@ -246,6 +223,80 @@ class PalaceQuizRouteTests(unittest.TestCase):
         self.assertEqual(final_response.status_code, 200)
         self.assertEqual(final_response.json()["items"], [])
 
+    def test_delete_soft_deletes_hides_from_lists_and_restore_recovers(self):
+        with self.SessionLocal() as session:
+            question = session.query(PalaceQuizQuestion).filter_by(palace_id=1).first()
+            self.assertIsNotNone(question)
+            question_id = question.id
+            question.incorrect_count = 2
+            question.attempt_count = 3
+            session.commit()
+
+        delete_response = self.client.delete(f"/api/v1/palace-quiz-questions/{question_id}")
+        self.assertEqual(delete_response.status_code, 200)
+        self.assertTrue(delete_response.json()["ok"])
+
+        list_response = self.client.get("/api/v1/palaces/1/quiz-questions")
+        wrong_response = self.client.get("/api/v1/palace-quiz-questions/wrong?limit=10")
+        with self.SessionLocal() as session:
+            retained = session.get(PalaceQuizQuestion, question_id)
+
+        self.assertIsNotNone(retained)
+        self.assertIsNotNone(retained.deleted_at)
+        self.assertNotIn(question_id, [item["id"] for item in list_response.json()["items"]])
+        self.assertNotIn(
+            question_id,
+            [item["question"]["id"] for item in wrong_response.json()["items"]],
+        )
+
+        restore_response = self.client.post(f"/api/v1/palace-quiz-questions/{question_id}/restore")
+        self.assertEqual(restore_response.status_code, 200)
+        self.assertEqual(restore_response.json()["item"]["id"], question_id)
+
+        restored_response = self.client.get("/api/v1/palaces/1/quiz-questions")
+        self.assertIn(question_id, [item["id"] for item in restored_response.json()["items"]])
+
+    def test_wrong_questions_endpoint_orders_by_error_rate_and_last_wrong_time(self):
+        with self.SessionLocal() as session:
+            first = session.query(PalaceQuizQuestion).filter_by(stem="细胞的控制中心是？").one()
+            second = session.query(PalaceQuizQuestion).filter_by(stem="简述有丝分裂的意义。").one()
+            first.attempt_count = 4
+            first.correct_count = 1
+            first.incorrect_count = 3
+            second.attempt_count = 10
+            second.correct_count = 8
+            second.incorrect_count = 2
+            session.add(
+                FreestyleQuizAttempt(
+                    question_id=first.id,
+                    palace_id=1,
+                    palace_title="Quiz Palace",
+                    mode="free",
+                    question_type="multiple_choice",
+                    stem_snapshot=first.stem,
+                    answer_payload_json=json.dumps({"selected_option_id": "A"}, ensure_ascii=False),
+                    is_correct=False,
+                )
+            )
+            session.commit()
+
+        response = self.client.get("/api/v1/palace-quiz-questions/wrong?limit=10")
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["total"], 2)
+        self.assertEqual([item["question"]["stem"] for item in payload["items"]], [
+            "细胞的控制中心是？",
+            "简述有丝分裂的意义。",
+        ])
+        first_item = payload["items"][0]
+        self.assertEqual(first_item["palace_id"], 1)
+        self.assertEqual(first_item["palace_title"], "Quiz Palace")
+        self.assertEqual(first_item["incorrect_count"], 3)
+        self.assertEqual(first_item["correct_count"], 1)
+        self.assertEqual(first_item["attempt_count"], 4)
+        self.assertIsNotNone(first_item["last_wrong_at"])
+
     def test_quiz_list_is_read_only_and_dedupe_is_explicit(self):
         with self.SessionLocal() as session:
             original = session.query(PalaceQuizQuestion).filter_by(palace_id=1).first()
@@ -274,7 +325,14 @@ class PalaceQuizRouteTests(unittest.TestCase):
         self.assertEqual(count_after_list, 3)
         self.assertEqual(dedupe_response.status_code, 200)
         self.assertEqual(dedupe_response.json()["deduped_count"], 1)
-        self.assertEqual(count_after_dedupe, 2)
+        with self.SessionLocal() as session:
+            active_count_after_dedupe = (
+                session.query(PalaceQuizQuestion)
+                .filter_by(palace_id=1, deleted_at=None)
+                .count()
+            )
+        self.assertEqual(count_after_dedupe, 3)
+        self.assertEqual(active_count_after_dedupe, 2)
 
     def test_batch_create_and_multiple_choice_validation(self):
         response = self.client.post(
@@ -758,6 +816,11 @@ class PalaceQuizRouteTests(unittest.TestCase):
         payload = response.json()
         self.assertEqual(payload["ai_call_log_id"], "log-short")
         self.assertIn("抓住核心", payload["feedback_text"])
+        self.assertIsNone(payload["verdict"])
+        self.assertEqual(payload["hit_points"], [])
+        self.assertEqual(payload["missed_points"], [])
+        self.assertEqual(payload["suggestion"], "")
+        self.assertIsNone(captured["response_format"])
         self.assertEqual(
             captured["request_payload"]["model_input"],
             {
@@ -767,6 +830,71 @@ class PalaceQuizRouteTests(unittest.TestCase):
                 "analysis": "核心在于遗传物质平均分配。",
             },
         )
+
+    def test_short_answer_feedback_returns_structured_fields(self):
+        def fake_call_logged_chat_completion(**kwargs):
+            self.assertIsNone(kwargs["response_format"])
+            return (
+                json.dumps(
+                    {
+                        "verdict": "partial",
+                        "hit_points": ["答到了细胞分裂相关"],
+                        "missed_points": ["遗漏遗传信息稳定传递"],
+                        "suggestion": "补一句遗传物质平均分配的意义。",
+                    },
+                    ensure_ascii=False,
+                ),
+                "log-structured",
+            )
+
+        with (
+            patch.object(palace_quiz_ai_service, "DASHSCOPE_API_KEY", "test-key"),
+            patch.object(
+                palace_quiz_ai_service,
+                "_call_logged_chat_completion",
+                side_effect=fake_call_logged_chat_completion,
+            ),
+        ):
+            response = self.client.post(
+                "/api/v1/palace-quiz-questions/2/short-answer-feedback",
+                json={"user_answer": "可以保证细胞正常分裂。"},
+            )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["ai_call_log_id"], "log-structured")
+        self.assertEqual(payload["verdict"], "partial")
+        self.assertEqual(payload["hit_points"], ["答到了细胞分裂相关"])
+        self.assertEqual(payload["missed_points"], ["遗漏遗传信息稳定传递"])
+        self.assertEqual(payload["suggestion"], "补一句遗传物质平均分配的意义。")
+        self.assertIn("答到的要点", payload["feedback_text"])
+        self.assertIn("遗漏或有偏差", payload["feedback_text"])
+
+    def test_short_answer_feedback_falls_back_to_plain_text(self):
+        def fake_call_logged_chat_completion(**kwargs):
+            self.assertIsNone(kwargs["response_format"])
+            return ("你的答案方向正确，建议补充遗传稳定性。", "log-plain")
+
+        with (
+            patch.object(palace_quiz_ai_service, "DASHSCOPE_API_KEY", "test-key"),
+            patch.object(
+                palace_quiz_ai_service,
+                "_call_logged_chat_completion",
+                side_effect=fake_call_logged_chat_completion,
+            ),
+        ):
+            response = self.client.post(
+                "/api/v1/palace-quiz-questions/2/short-answer-feedback",
+                json={"user_answer": "可以保证细胞正常分裂。"},
+            )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["feedback_text"], "你的答案方向正确，建议补充遗传稳定性。")
+        self.assertIsNone(payload["verdict"])
+        self.assertEqual(payload["hit_points"], [])
+        self.assertEqual(payload["missed_points"], [])
+        self.assertEqual(payload["suggestion"], "")
 
     def test_question_explain_builds_expected_model_input(self):
         captured: dict[str, object] = {}
@@ -3383,6 +3511,105 @@ class PalaceQuizRouteTests(unittest.TestCase):
             self.child_chapter_id,
         )
         self.assertEqual(calls[0]["operation"], "chapter_quiz_generate_outline")
+
+    def test_recover_quiz_generation_preview_from_successful_ai_log(self):
+        with self.SessionLocal() as session:
+            session.add(
+                ExternalAiCallLog(
+                    id="recover-success-log",
+                    feature="宫殿做题",
+                    operation="palace_quiz_generate_images",
+                    palace_id=1,
+                    status="success",
+                    provider="openai_compatible",
+                    base_url="https://example.test",
+                    model="test-model",
+                    request_id="test-request",
+                    request_json=json.dumps(
+                        {
+                            "source_meta": {
+                                "source_kind": "image_upload",
+                                "generation_mode": "single_image",
+                                "extra_prompt": "偏重细胞核",
+                                "image_names": ["cell.png"],
+                                "page_numbers": None,
+                                "ai_call_log_id": "recover-success-log",
+                            }
+                        },
+                        ensure_ascii=False,
+                    ),
+                    response_json=json.dumps(
+                        {
+                            "response_text": json.dumps(
+                                {
+                                    "questions": [
+                                        {
+                                            "question_type": "multiple_choice",
+                                            "stem": "细胞核的功能是什么？",
+                                            "options": [
+                                                {"id": "A", "text": "控制细胞活动"},
+                                                {"id": "B", "text": "储存能量"},
+                                            ],
+                                            "correct_option_id": "A",
+                                            "analysis": "细胞核负责调控细胞活动。",
+                                        }
+                                    ]
+                                },
+                                ensure_ascii=False,
+                            )
+                        },
+                        ensure_ascii=False,
+                    ),
+                    error_json="{}",
+                )
+            )
+            session.commit()
+
+        response = self.client.post(
+            "/api/v1/palaces/1/quiz-generation/recover-from-log",
+            json={"log_id": "recover-success-log"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertTrue(payload["recovered_from_log"])
+        self.assertEqual(payload["ai_call_log_id"], "recover-success-log")
+        self.assertEqual(payload["ocr_sources"], [])
+        self.assertEqual(len(payload["questions"]), 1)
+        self.assertEqual(payload["questions"][0]["stem"], "细胞核的功能是什么？")
+        self.assertEqual(
+            payload["questions"][0]["source_meta"]["recovered_from_ai_call_log_id"],
+            "recover-success-log",
+        )
+        self.assertIn("历史 AI 日志恢复", "；".join(payload["warnings"]))
+
+    def test_recover_quiz_generation_preview_rejects_failed_ai_log(self):
+        with self.SessionLocal() as session:
+            session.add(
+                ExternalAiCallLog(
+                    id="recover-error-log",
+                    feature="宫殿做题",
+                    operation="palace_quiz_generate_images",
+                    palace_id=1,
+                    status="error",
+                    provider="openai_compatible",
+                    base_url="https://example.test",
+                    model="test-model",
+                    request_id="test-request",
+                    request_json="{}",
+                    response_json="{}",
+                    error_json=json.dumps({"message": "boom"}, ensure_ascii=False),
+                )
+            )
+            session.commit()
+
+        response = self.client.post(
+            "/api/v1/palaces/1/quiz-generation/recover-from-log",
+            json={"log_id": "recover-error-log"},
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("不是成功记录", response.json()["detail"])
 
     def test_settings_list_new_prompt_keys_and_quiz_scene_bindings(self):
         prompt_response = self.client.get("/api/v1/settings/ai-prompts")

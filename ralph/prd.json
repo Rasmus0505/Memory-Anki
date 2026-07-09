@@ -14,8 +14,8 @@
         "Typecheck passes"
       ],
       "priority": 1,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "2026-07-09 verified: no tracked egg-info, no starter asset references, .gitignore already has *.egg-info/."
     },
     {
       "id": "US-002",

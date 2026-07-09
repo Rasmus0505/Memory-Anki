@@ -238,6 +238,13 @@ function previewPalaceQuizGenerationFromUploadedFiles(
   )
 }
 
+export function recoverPalaceQuizPreviewFromLogApi(palaceId: number, logId: string) {
+  return request<PalaceQuizGenerationPreview>(
+    `/palaces/${palaceId}/quiz-generation/recover-from-log`,
+    { method: 'POST', body: JSON.stringify({ log_id: logId }) },
+  )
+}
+
 export async function previewPalaceQuizGenerationFromImagesApi(
   palaceId: number,
   files: File[],

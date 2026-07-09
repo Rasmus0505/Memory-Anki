@@ -8,8 +8,8 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from memory_anki.infrastructure.db.models import (
-    Chapter,
+from memory_anki.infrastructure.db._tables.knowledge import Chapter
+from memory_anki.infrastructure.db._tables.palaces import (
     Palace,
     PalaceMiniPalace,
     PalaceQuizQuestion,
@@ -17,7 +17,7 @@ from memory_anki.infrastructure.db.models import (
 from memory_anki.modules.settings.application.ai_model_registry import AiRuntimeOptions
 
 from .question_contracts import PalaceQuizValidationError, json_load
-from .question_lookup_queries import get_question_or_raise
+from .questions.queries import get_question_or_raise
 
 
 @dataclass(frozen=True, slots=True)

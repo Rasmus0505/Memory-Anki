@@ -6,9 +6,9 @@
 优先级: P1
 预估工作量: M
 依赖文档: 无
-状态: 未开始
-负责代理: 无
-完成时间: 无
+状态: 已完成
+负责代理: Codex
+完成时间: 2026-07-09
 ---
 
 # 02-08 修复 knowledge 面包屑与宫殿列表 N+1 查询
@@ -199,3 +199,5 @@ python tools/check_architecture.py               # 期望：passed
 | 时间 | 执行者 | 动作 | 结果/备注 |
 |---|---|---|---|
 | - | - | 文档创建 | 核实：面包屑逐级查询在 183–191 行（描述 169–201 为整个函数范围，吻合）；宫殿列表 N+1 主因是 palace_json 内部每宫殿的 chapter_palaces 裸 SQL 与 config 查询，而非关系 lazy load（仓储已 selectinload，与描述"palace_serializer.py 329 行内部再查询"的行数指文件总行数 329 吻合） |
+| 2026-07-09 | Codex | 修复 knowledge 章节详情与 palace 列表 explicit ids/stage labels N+1 | 在 `knowledge/application/chapter_service.py` 按当前 application 位置修复 breadcrumb 逐级查询，并为章节详情预加载 subject、children、palaces、pegs、review_schedules；新增 `get_explicit_chapter_ids_by_palace`，列表/grouped/grouped-summary 路由批量取 explicit ids 且每请求预取一次 stage labels，通过 serializer 预计算参数传入；未改响应 JSON、未改 `reconcile_palace_chapter_binding` 语义 |
+| 2026-07-09 | Codex | 验证 | `cd apps/api && python -m ruff check src/memory_anki/modules/knowledge/application/chapter_service.py src/memory_anki/modules/palaces/application/palace_chapter_binding.py src/memory_anki/modules/palaces/application/title_sync_service.py src/memory_anki/modules/palaces/application/palace_serializer.py src/memory_anki/modules/palaces/presentation/router.py`：通过；`cd apps/api && python -m pytest tests/test_palace_chapter_binding.py tests/test_palace_routes.py tests/test_review_routes.py tests/test_knowledge_routes.py -q`：131 passed, 42 skipped |

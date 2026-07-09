@@ -3,34 +3,9 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-try:
-    from dotenv import load_dotenv as _load_dotenv
-except (ImportError, AttributeError):
-    _load_dotenv = None
-
-
-def _fallback_load_dotenv(dotenv_path: str | os.PathLike[str] = ".env") -> bool:
-    path = Path(dotenv_path)
-    if not path.exists():
-        return False
-    for raw_line in path.read_text(encoding="utf-8").splitlines():
-        line = raw_line.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-        key, value = line.split("=", 1)
-        key = key.strip()
-        if not key or key in os.environ:
-            continue
-        os.environ[key] = value.strip().strip('"').strip("'")
-    return True
-
-
-def load_dotenv(dotenv_path: str | os.PathLike[str] = ".env", *args, **kwargs) -> bool:
-    if _load_dotenv is not None:
-        return bool(_load_dotenv(dotenv_path, *args, **kwargs))
-    return _fallback_load_dotenv(dotenv_path)
 from pydantic_settings import BaseSettings
 
+from memory_anki.core.dotenv_compat import load_dotenv
 from memory_anki.core.runtime_paths import REPO_ROOT, resolve_app_home
 from memory_anki.core.storage_layout import get_managed_storage_items
 
@@ -67,12 +42,22 @@ class EnvSettings(BaseSettings):
     DEEPSEEK_API_KEY: str | None = None
     DEEPSEEK_BASE_URL: str = "https://api.deepseek.com"
 
+    # --- Remote access auth (03-01) ---
+    MEMORY_ANKI_API_TOKEN: str | None = None
+
 
 # Singleton – created once at import time.
 _env = EnvSettings()
 
+
+def get_env_settings() -> EnvSettings:
+    """Recommended entry point for new environment-backed settings access."""
+    return _env
+
+
 # Re-export each setting as a module-level constant so existing imports work
 # unchanged (e.g. `from memory_anki.core.config import DASHSCOPE_API_KEY`).
+# 【冻结】以下 re-export 仅为兼容存量 import，禁止新增条目；新字段经 get_env_settings() 访问。
 DASHSCOPE_API_KEY = _env.DASHSCOPE_API_KEY
 DASHSCOPE_BASE_URL = _env.DASHSCOPE_BASE_URL
 DASHSCOPE_ASR_MODEL = _env.DASHSCOPE_ASR_MODEL
@@ -86,6 +71,7 @@ SILICONFLOW_API_KEY = _env.SILICONFLOW_API_KEY
 SILICONFLOW_BASE_URL = _env.SILICONFLOW_BASE_URL
 DEEPSEEK_API_KEY = _env.DEEPSEEK_API_KEY
 DEEPSEEK_BASE_URL = _env.DEEPSEEK_BASE_URL
+MEMORY_ANKI_API_TOKEN = _env.MEMORY_ANKI_API_TOKEN
 
 
 # ---------------------------------------------------------------------------

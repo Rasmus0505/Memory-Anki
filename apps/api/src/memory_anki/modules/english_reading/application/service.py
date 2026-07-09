@@ -26,14 +26,8 @@ from memory_anki.core.config import (
     ENGLISH_TRANSLATION_MODEL,  # noqa: F401
 )
 from memory_anki.core.time import utc_now_naive  # noqa: F401
-from memory_anki.infrastructure.db.models import (
-    Config,  # noqa: F401
-    EnglishReadingDictionaryCache,  # noqa: F401
-    EnglishReadingLexiconCache,  # noqa: F401
+from memory_anki.infrastructure.db._tables.english_reading import (
     EnglishReadingMaterial,  # noqa: F401
-    EnglishReadingProfile,  # noqa: F401
-    EnglishReadingSession,  # noqa: F401
-    EnglishReadingVersion,  # noqa: F401
 )
 from memory_anki.infrastructure.llm.config_helpers import (
     has_non_empty_config as _has_non_empty_config,  # noqa: F401
@@ -403,4 +397,10 @@ from .dictionary_service import (  # noqa: E402,F401,I001
     parse_float,
     normalize_feedback,
     serialize_dictionary_cache_row,
+)
+from .vocabulary_service import (  # noqa: E402,F401,I001
+    create_vocabulary_note,
+    list_vocabulary_notes,
+    review_vocabulary_note,
+    serialize_vocabulary_note,
 )

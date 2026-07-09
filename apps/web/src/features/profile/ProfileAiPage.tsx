@@ -1,7 +1,7 @@
 import { useSearchParams } from 'react-router-dom'
 import { ProfileLayout } from '@/features/profile/ProfileLayout'
 import { ProfileAiPromptsPage } from '@/features/profile/ProfileAiPromptsPage'
-import { ProfileAiConfigPage } from '@/features/profile/ProfileAiConfigPage'
+import { AiWorkspacePage } from '@/features/profile/AiWorkspacePage'
 import { cn } from '@/shared/lib/utils'
 
 export default function ProfileAiPage() {
@@ -37,7 +37,7 @@ export default function ProfileAiPage() {
           ))}
         </div>
 
-        {tab === 'prompts' ? <ProfileAiPromptsPage /> : <ProfileAiConfigPage />}
+        {tab === 'prompts' ? <ProfileAiPromptsPage /> : <AiWorkspacePage />}
       </div>
     </ProfileLayout>
   )

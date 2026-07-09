@@ -1,5 +1,6 @@
 ﻿import * as React from 'react'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { MemoryRouter } from 'react-router-dom'
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 import KnowledgePage from '@/features/knowledge/KnowledgePage'
 import * as knowledgeApi from '@/entities/knowledge/api'
@@ -46,11 +47,20 @@ vi.mock('@/shared/components/mindmap-host', () => ({
     forceSyncKey = null,
     initialViewPolicy = 'preserve',
     viewMemoryScope = null,
+    onNodeActive,
   }: {
     syncIntent?: 'soft' | 'replace'
     forceSyncKey?: string | number | null
     initialViewPolicy?: 'preserve' | 'reset'
     viewMemoryScope?: string | null
+    onNodeActive?: (nodes: Array<{
+      uid: string | null
+      text: string
+      note: string
+      memoryAnkiId: number | null
+      memoryAnkiNodeType: string | null
+      rawData: Record<string, unknown>
+    }>) => void
   }, ref) => {
     React.useImperativeHandle(ref, () => ({
       setUiCleared: vi.fn(),
@@ -69,6 +79,23 @@ vi.mock('@/shared/components/mindmap-host', () => ({
         <div>{`knowledge-force-${String(forceSyncKey ?? '')}`}</div>
         <div>{`knowledge-view-policy-${initialViewPolicy}`}</div>
         <div>{`knowledge-view-scope-${String(viewMemoryScope ?? '')}`}</div>
+        <button
+          type="button"
+          onClick={() =>
+            onNodeActive?.([
+              {
+                uid: 'chapter-42',
+                text: '第二章',
+                note: '',
+                memoryAnkiId: 42,
+                memoryAnkiNodeType: 'chapter',
+                rawData: {},
+              },
+            ])
+          }
+        >
+          选中测试章节
+        </button>
       </div>
     )
   }),
@@ -147,6 +174,7 @@ describe('KnowledgePage mind map host refresh behavior', () => {
       chapter: null,
       palaces: [],
     } as never)
+    vi.spyOn(knowledgeApi, 'deleteChapterApi').mockResolvedValue({ ok: true })
   })
 
   it('keeps the same host instance when saving subject info and stays on soft sync', async () => {
@@ -228,6 +256,62 @@ describe('KnowledgePage mind map host refresh behavior', () => {
 
     expect(knowledgeReplaceEditorStateMock).toHaveBeenCalledWith(nextState)
     expect(knowledgeApi.saveSubjectEditorApi).toHaveBeenCalledWith(7, nextState)
+    expect(knowledgeReloadMock).toHaveBeenCalled()
+  })
+
+  it('confirms chapter delete impact before force deleting', async () => {
+    vi.spyOn(knowledgeApi, 'getChapterApi').mockResolvedValue({
+      chapter: {
+        id: 42,
+        name: '第二章',
+        notes: '',
+        children: [],
+        breadcrumbs: [],
+      },
+      palaces: [
+        {
+          id: 9,
+          title: '教育史宫殿',
+          mastered: false,
+          archived: false,
+          review_stage_completed: 2,
+          review_stage_total: 5,
+          next_due_date: '2026-07-10',
+        },
+      ],
+    })
+    const impact = {
+      ok: false,
+      requires_force: true,
+      chapter_count: 2,
+      linked_palace_count: 1,
+      question_count: 3,
+    } as const
+    vi.spyOn(knowledgeApi, 'deleteChapterApi')
+      .mockRejectedValueOnce(new knowledgeApi.DeleteChapterImpactError(impact))
+      .mockResolvedValueOnce({ ok: true })
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
+
+    render(
+      <MemoryRouter>
+        <KnowledgePage />
+      </MemoryRouter>,
+    )
+
+    fireEvent.click(await screen.findByRole('button', { name: '选中测试章节' }))
+    await screen.findByText('教育史宫殿')
+    expect(screen.getByText('复习 2/5')).toBeTruthy()
+    expect(screen.getByText('下次 2026-07-10')).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: '删除章节' }))
+
+    await waitFor(() => {
+      expect(confirmSpy).toHaveBeenCalledWith(
+        '该章节及其子章节共 2 个，关联了 1 个宫殿、3 道题目。删除后题目将一并删除且不可恢复，确定删除吗？',
+      )
+    })
+    expect(knowledgeApi.deleteChapterApi).toHaveBeenNthCalledWith(1, 42)
+    expect(knowledgeApi.deleteChapterApi).toHaveBeenNthCalledWith(2, 42, { force: true })
     expect(knowledgeReloadMock).toHaveBeenCalled()
   })
 })

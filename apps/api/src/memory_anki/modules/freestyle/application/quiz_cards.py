@@ -3,10 +3,11 @@ from __future__ import annotations
 from collections import defaultdict
 from typing import Any
 
+from sqlalchemy import or_
 from sqlalchemy.orm import Session, selectinload
 
-from memory_anki.infrastructure.db.models import (
-    Chapter,
+from memory_anki.infrastructure.db._tables.knowledge import Chapter
+from memory_anki.infrastructure.db._tables.palaces import (
     Palace,
     PalaceQuizQuestion,
     chapter_palace_table,
@@ -79,7 +80,15 @@ def _load_chapter_questions_by_palace(
             selectinload(PalaceQuizQuestion.source_chapter).selectinload(Chapter.subject),
             selectinload(PalaceQuizQuestion.classified_chapter).selectinload(Chapter.subject),
         )
-        .filter(PalaceQuizQuestion.source_chapter_id.in_(all_chapter_ids))
+        .outerjoin(Palace, Palace.id == PalaceQuizQuestion.palace_id)
+        .filter(
+            PalaceQuizQuestion.source_chapter_id.in_(all_chapter_ids),
+            PalaceQuizQuestion.deleted_at.is_(None),
+            or_(
+                PalaceQuizQuestion.palace_id.is_(None),
+                Palace.deleted_at.is_(None),
+            ),
+        )
         .order_by(PalaceQuizQuestion.sort_order.asc(), PalaceQuizQuestion.id.asc())
         .all()
     )
@@ -99,6 +108,8 @@ def _iter_palace_questions(
     seen: set[int] = set()
     rows: list[PalaceQuizQuestion] = []
     for question in sorted(palace.quiz_questions or [], key=_question_sort_key):
+        if getattr(question, "deleted_at", None) is not None:
+            continue
         if question.id in seen:
             continue
         seen.add(question.id)
@@ -121,6 +132,7 @@ def build_quiz_cards(
     practice_ids: set[int],
     due_range: str,
     needs_practice_range: str,
+    wrong_range: str = "",
 ) -> list[dict[str, Any]]:
     cards: list[dict[str, Any]] = []
     chapter_questions_by_palace = _load_chapter_questions_by_palace(session, palaces)
@@ -131,6 +143,8 @@ def build_quiz_cards(
             continue
         context = palace_context(palace)
         for question in _iter_palace_questions(palace, chapter_questions_by_palace.get(palace.id, [])):
+            if range_filter == wrong_range and int(question.incorrect_count or 0) <= 0:
+                continue
             mini_palace = question.mini_palace
             source_chapter = (
                 question.classified_chapter

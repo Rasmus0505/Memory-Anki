@@ -3,7 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
-from memory_anki.infrastructure.db.models import get_session
+from memory_anki.infrastructure.db.deps import session_dep
 from memory_anki.modules.freestyle.application.feed_service import (
     FREESTYLE_RANGE_ALL,
     build_freestyle_feed,
@@ -15,16 +15,12 @@ from memory_anki.modules.freestyle.application.history_service import (
     list_question_attempts,
     list_question_explanations,
 )
+from memory_anki.modules.freestyle.domain.schemas import (
+    FreestyleQuestionAttemptCreate,
+    FreestyleQuestionExplanationCreate,
+)
 
 router = APIRouter(tags=["freestyle"])
-
-
-def session_dep():
-    session = get_session()
-    try:
-        yield session
-    finally:
-        session.close()
 
 
 @router.get("/freestyle/feed")
@@ -47,11 +43,16 @@ def api_freestyle_feed(
 
 @router.post("/freestyle/question-attempts")
 def api_create_freestyle_question_attempt(
-    data: dict,
+    data: FreestyleQuestionAttemptCreate,
     session: Session = Depends(session_dep),
 ):
     try:
-        return {"item": create_question_attempt(session, data if isinstance(data, dict) else {})}
+        return {
+            "item": create_question_attempt(
+                session,
+                data.model_dump(exclude_unset=True, exclude_none=False),
+            )
+        }
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -80,11 +81,16 @@ def api_list_freestyle_question_attempts(
 
 @router.post("/freestyle/question-explanations")
 def api_create_freestyle_question_explanation(
-    data: dict,
+    data: FreestyleQuestionExplanationCreate,
     session: Session = Depends(session_dep),
 ):
     try:
-        return {"item": create_question_explanation(session, data if isinstance(data, dict) else {})}
+        return {
+            "item": create_question_explanation(
+                session,
+                data.model_dump(exclude_unset=True, exclude_none=False),
+            )
+        }
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 

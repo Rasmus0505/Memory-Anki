@@ -6,9 +6,9 @@
 优先级: P1
 预估工作量: S（<2h，仅决策 + 路线 A 执行；路线 B 的执行在 08-06）
 依赖文档: 无（若选路线 B，后续执行依赖 08-06）
-状态: 未开始（本文档是决策类文档：执行前必须先由负责人在"进度记录"中写下选定路线，再按对应清单执行）
-负责代理: 无
-完成时间: 无
+状态: 已完成
+负责代理: Codex
+完成时间: 2026-07-09
 ---
 
 ## 1. 原始需求
@@ -101,3 +101,4 @@
 | 时间 | 执行者 | 动作 | 结果/备注 |
 |---|---|---|---|
 | 2026-07-08 22:30 | 文档撰写代理 | 文档创建 | 已核实：全库 0 个 useQuery；Provider 挂载点 2 处；自研缓存 92 行。**执行前必须先在此表登记选定路线（A 或 B）** |
+| 2026-07-09 | Codex | 采纳路线 B：保留 TanStack Query，不执行卸载路线 | `rg -n "@tanstack/react-query|QueryClientProvider|createAppQueryClient" apps\web\src apps\web\package.json apps\web\package-lock.json` 仅命中依赖声明、queryClient 与两个 Provider 挂载点；未发现真实 `useQuery`/`useMutation` 消费。本文档零代码改动收口，后续真正落地迁移归 08-06。 |

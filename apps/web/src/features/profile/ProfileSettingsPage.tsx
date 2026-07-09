@@ -30,6 +30,7 @@ import { Input } from '@/shared/components/ui/input'
 import { Label } from '@/shared/components/ui/label'
 import { MemoryAnkiShortcutsSettings } from '@/features/shortcuts/MemoryAnkiShortcutsSettings'
 import { resetPwaRuntime } from '@/pwa/resetPwa'
+import { ThemeSettingsCard } from '@/features/profile/ThemeSettingsCard'
 
 export default function ProfileSettingsPage() {
   const [tab, setTab] = useState<'config' | 'io' | 'shortcuts'>('config')
@@ -181,151 +182,154 @@ export default function ProfileSettingsPage() {
       {tab === 'shortcuts' ? (
         <MemoryAnkiShortcutsSettings />
       ) : tab === 'config' ? (
-        <form onSubmit={handleSaveConfig} className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">高级排程策略</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="ebbinghaus-intervals">
-                  增强艾宾浩斯顺序：1小时，睡前，1天，x天
-                </Label>
-                <Input
-                  id="ebbinghaus-intervals"
-                  name="ebbinghaus_intervals"
-                  defaultValue={config.ebbinghaus_intervals}
-                  placeholder="1h,sleep,1,2,4,7,15,30,60"
-                />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">会话与积压</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+        <div className="space-y-6">
+          <ThemeSettingsCard />
+          <form onSubmit={handleSaveConfig} className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">高级排程策略</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="sleep-review-time">睡前复习时间</Label>
+                  <Label htmlFor="ebbinghaus-intervals">
+                    增强艾宾浩斯顺序：1小时，睡前，1天，x天
+                  </Label>
                   <Input
-                    id="sleep-review-time"
-                    name="sleep_review_time"
-                    defaultValue={config.sleep_review_time || '22:00'}
-                    type="time"
+                    id="ebbinghaus-intervals"
+                    name="ebbinghaus_intervals"
+                    defaultValue={config.ebbinghaus_intervals}
+                    placeholder="1h,sleep,1,2,4,7,15,30,60"
                   />
                 </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">会话与积压</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                  <div className="space-y-2">
+                    <Label htmlFor="sleep-review-time">睡前复习时间</Label>
+                    <Input
+                      id="sleep-review-time"
+                      name="sleep_review_time"
+                      defaultValue={config.sleep_review_time || '22:00'}
+                      type="time"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="daily-max">每日正式复习上限</Label>
+                    <Input
+                      id="daily-max"
+                      name="daily_max_reviews"
+                      defaultValue={config.daily_max_reviews || '0'}
+                      type="number"
+                      min="0"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="overdue-days">逾期平滑窗口天数</Label>
+                    <Input
+                      id="overdue-days"
+                      name="overdue_smoothing_days"
+                      defaultValue={config.overdue_smoothing_days || '7'}
+                      type="number"
+                      min="1"
+                    />
+                  </div>
+                </div>
+
                 <div className="space-y-2">
-                  <Label htmlFor="daily-max">每日正式复习上限</Label>
+                  <Label htmlFor="overdue-threshold">
+                    触发自动平滑的逾期阈值
+                  </Label>
                   <Input
-                    id="daily-max"
-                    name="daily_max_reviews"
-                    defaultValue={config.daily_max_reviews || '0'}
+                    id="overdue-threshold"
+                    name="overdue_smoothing_threshold"
+                    defaultValue={config.overdue_smoothing_threshold || '5'}
                     type="number"
                     min="0"
                   />
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="overdue-days">逾期平滑窗口天数</Label>
-                  <Input
-                    id="overdue-days"
-                    name="overdue_smoothing_days"
-                    defaultValue={config.overdue_smoothing_days || '7'}
-                    type="number"
-                    min="1"
-                  />
+
+                <div className="rounded-lg border p-4">
+                  <label className="flex items-start gap-3">
+                    <input
+                      type="checkbox"
+                      name="auto_smooth_overdue"
+                      defaultChecked={config.auto_smooth_overdue === 'true'}
+                      className="mt-0.5"
+                    />
+                    <div>
+                      <div className="text-sm font-medium">
+                        默认自动平滑逾期任务
+                      </div>
+                      <div className="mt-1 text-xs text-muted-foreground">
+                        进入复习总览前先自动分散逾期任务，减少单日压死的情况。
+                      </div>
+                    </div>
+                  </label>
                 </div>
-              </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="overdue-threshold">
-                  触发自动平滑的逾期阈值
-                </Label>
-                <Input
-                  id="overdue-threshold"
-                  name="overdue_smoothing_threshold"
-                  defaultValue={config.overdue_smoothing_threshold || '5'}
-                  type="number"
-                  min="0"
-                />
-              </div>
-
-              <div className="rounded-lg border p-4">
-                <label className="flex items-start gap-3">
-                  <input
-                    type="checkbox"
-                    name="auto_smooth_overdue"
-                    defaultChecked={config.auto_smooth_overdue === 'true'}
-                    className="mt-0.5"
-                  />
-                  <div>
-                    <div className="text-sm font-medium">
-                      默认自动平滑逾期任务
+                <div className="rounded-lg border p-4">
+                  <label className="flex items-start gap-3">
+                    <input
+                      type="checkbox"
+                      name="early_review_anchor"
+                      defaultChecked={config.early_review_anchor === 'true'}
+                      className="mt-0.5"
+                    />
+                    <div>
+                      <div className="text-sm font-medium">提前复习锚定策略</div>
+                      <div className="mt-1 text-xs text-muted-foreground">
+                        启用后，提前复习不会缩短后续间隔，下次仍从原计划日继续计算。
+                      </div>
                     </div>
-                    <div className="mt-1 text-xs text-muted-foreground">
-                      进入复习总览前先自动分散逾期任务，减少单日压死的情况。
-                    </div>
-                  </div>
-                </label>
-              </div>
+                  </label>
+                </div>
+              </CardContent>
+            </Card>
 
-              <div className="rounded-lg border p-4">
-                <label className="flex items-start gap-3">
-                  <input
-                    type="checkbox"
-                    name="early_review_anchor"
-                    defaultChecked={config.early_review_anchor === 'true'}
-                    className="mt-0.5"
-                  />
-                  <div>
-                    <div className="text-sm font-medium">提前复习锚定策略</div>
-                    <div className="mt-1 text-xs text-muted-foreground">
-                      启用后，提前复习不会缩短后续间隔，下次仍从原计划日继续计算。
-                    </div>
-                  </div>
-                </label>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-base">
-                <Wrench className="size-4" />
-                维护工具
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="text-sm text-muted-foreground">
-                当旧版本宫殿的复习阶段、列表进度或下一轮排程显示不一致时，可以重新计算历史宫殿复习进度。
-              </div>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => void handleRepairReviewStageProgress()}
-                loading={repairProgressLoading}
-                loadingText="正在修复复习进度"
-              >
-                <Wrench className="size-4" />
-                一键修复历史宫殿复习进度
-              </Button>
-              {repairProgressMessage ? (
-                <div
-                  className={`rounded-lg border px-4 py-3 text-sm ${
-                    repairProgressMessage.tone === 'success'
-                      ? 'border-success/30 bg-success/5 text-success'
-                      : 'border-destructive/50 bg-destructive/10 text-destructive'
-                  }`}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <Wrench className="size-4" />
+                  维护工具
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="text-sm text-muted-foreground">
+                  当旧版本宫殿的复习阶段、列表进度或下一轮排程显示不一致时，可以重新计算历史宫殿复习进度。
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => void handleRepairReviewStageProgress()}
+                  loading={repairProgressLoading}
+                  loadingText="正在修复复习进度"
                 >
-                  {repairProgressMessage.text}
-                </div>
-              ) : null}
-            </CardContent>
-          </Card>
+                  <Wrench className="size-4" />
+                  一键修复历史宫殿复习进度
+                </Button>
+                {repairProgressMessage ? (
+                  <div
+                    className={`rounded-lg border px-4 py-3 text-sm ${
+                      repairProgressMessage.tone === 'success'
+                        ? 'border-success/30 bg-success/5 text-success'
+                        : 'border-destructive/50 bg-destructive/10 text-destructive'
+                    }`}
+                  >
+                    {repairProgressMessage.text}
+                  </div>
+                ) : null}
+              </CardContent>
+            </Card>
 
-          <Button type="submit">保存复习配置</Button>
-        </form>
+            <Button type="submit">保存复习配置</Button>
+          </form>
+        </div>
       ) : (
         <div className="space-y-6">
           {importResult ? (

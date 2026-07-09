@@ -5,7 +5,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from memory_anki.core.time import utc_now_naive
-from memory_anki.infrastructure.db.models import Palace, PalaceMiniPalace
+from memory_anki.infrastructure.db._tables.palaces import Palace, PalaceMiniPalace
 from memory_anki.modules.palaces.application.mini_palace_nodes import (
     cleanup_mini_palace_node_uids,
     normalize_mini_palace_node_uids,
@@ -13,6 +13,7 @@ from memory_anki.modules.palaces.application.mini_palace_nodes import (
     resolve_mini_palace_name,
     serialize_mini_palace_node_uids,
 )
+
 
 def list_palace_mini_palaces(session: Session, palace: Palace) -> list[dict[str, Any]]:
     changed = cleanup_mini_palace_node_uids(session, palace)

@@ -6,9 +6,9 @@
 优先级: P1
 预估工作量: S（<2h）
 依赖文档: 无
-状态: 未开始
-负责代理: 无
-完成时间: 无
+状态: 已完成
+负责代理: Codex
+完成时间: 2026-07-09
 ---
 
 # 01-11 移除 git 跟踪的 egg-info 与 starter 资源
@@ -127,3 +127,4 @@ egg-info 由 `pip install -e .`（CI 也这样装，见 `.github/workflows/ci.ym
 | 时间 | 执行者 | 动作 | 结果/备注 |
 |---|---|---|---|
 | 2026-07-08 | 文档撰写代理（fable） | 文档创建；核实结论：US-001 三条 git/rg 验收标准当前已全部满足（egg-info 未跟踪且磁盘不存在、无 starter 资源引用、.gitignore 第 18 行含 *.egg-info/），仅剩 prd.json passes 待回填 | 待执行（以步骤 1 现场复核为准） |
+| 2026-07-09 | Codex | 现场复核并收口 US-001 | `git ls-files` 未发现 egg-info/starter 资源；`rg` 未发现 starter 引用；`.gitignore` 已含 `*.egg-info/`；未删除文件，仅回填 `ralph/prd.json` 的 US-001 `passes`/`notes` |

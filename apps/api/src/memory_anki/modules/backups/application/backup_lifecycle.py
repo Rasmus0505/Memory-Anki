@@ -77,7 +77,6 @@ def list_backups() -> list[dict]:
         for folder in sorted(root.iterdir(), reverse=True):
             if not folder.is_dir():
                 continue
-            db_file = folder / DB_PATH.name
             manifest = read_storage_backup_manifest(folder)
             included_items = (
                 manifest.get("included_items")
@@ -106,7 +105,7 @@ def list_backups() -> list[dict]:
                         timespec="seconds"
                     ),
                     "reason": manifest.get("reason") or "",
-                    "has_database": db_file.exists(),
+                    "has_database": _backup_has_database(folder, manifest),
                     "has_attachments": "attachments" in included_keys
                     or (folder / "data" / "attachments").exists(),
                     "has_english_data": "english" in included_keys
@@ -119,9 +118,8 @@ def list_backups() -> list[dict]:
 
 def restore_database_backup(backup_folder: str) -> Path:
     source_dir = Path(backup_folder)
-    source_db = source_dir / DB_PATH.name
     manifest = read_storage_backup_manifest(source_dir)
-    if not source_db.exists() and not manifest:
+    if not _backup_has_database(source_dir, manifest):
         raise FileNotFoundError("备份中缺少数据库快照。")
     assert_exclusive_runtime_operation(
         "Database restore",
@@ -203,6 +201,37 @@ def prune_old_backups(root: Path, keep: int) -> int:
         except OSError:
             logger.warning("failed to prune old backup: %s", folder, exc_info=True)
     return removed
+
+
+def _backup_has_database(folder: Path, manifest: dict | None = None) -> bool:
+    manifest = manifest or {}
+    return any(path.exists() for path in _backup_database_candidates(folder, manifest))
+
+
+def _backup_database_candidates(folder: Path, manifest: dict) -> list[Path]:
+    candidates: list[Path] = []
+    database_info = manifest.get("database")
+    if isinstance(database_info, dict):
+        relative_path = str(database_info.get("relative_path") or "").strip()
+        if relative_path:
+            candidates.append(folder / relative_path)
+
+    included_items = manifest.get("included_items")
+    if isinstance(included_items, list):
+        for item in included_items:
+            if not isinstance(item, dict) or item.get("key") != "database":
+                continue
+            relative_path = str(item.get("relative_path") or "").strip()
+            if relative_path:
+                candidates.append(folder / relative_path)
+
+    candidates.extend(
+        [
+            folder / "data" / DB_PATH.name,
+            folder / DB_PATH.name,
+        ]
+    )
+    return list(dict.fromkeys(candidates))
 
 
 def _daily_backup_exists() -> bool:

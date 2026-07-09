@@ -6,9 +6,9 @@
 优先级: P0（必须）
 预估工作量: S（<2h）
 依赖文档: 无（若 02-01 已完成，session_dep 直接从共享模块 import，见步骤 1 说明）
-状态: 未开始
-负责代理: 无
-完成时间: 无
+状态: 已完成
+负责代理: Codex
+完成时间: 2026-07-09
 ---
 
 # 02-03 backups 补建 presentation 层
@@ -125,3 +125,5 @@ app.include_router(backups_router.router, prefix="/api/v1")
 | 时间 | 执行者 | 动作 | 结果/备注 |
 |---|---|---|---|
 | - | - | 文档创建 | - |
+| 2026-07-09 | Codex | 迁移 `/backups*` 路由 | 新建 `modules/backups/presentation/__init__.py` 与 `router.py`；6 条路由从 palaces router 迁入 backups router；`app/main.py` 挂载 `backups_router`；palaces router 删除旧 `/backups*` handler 并清理失效 import；未迁移 palace versions 路由，未修改 backup application 逻辑、前端或 URL |
+| 2026-07-09 | Codex | 验证 | `PYTHONPATH=src python -c "from memory_anki.app.main import app; print(sorted(r.path for r in app.routes if '/backups' in getattr(r, 'path', '')))"` 输出 6 条 `/api/v1/backups*`；`rg --fixed-strings '\"/backups' -- apps/api/src/memory_anki/modules/palaces` 无匹配；`python -m ruff check src/memory_anki/modules/backups/presentation src/memory_anki/modules/palaces/presentation/router.py src/memory_anki/app/main.py` 通过；`PYTHONPATH=src python -m pytest tests/test_palace_routes.py tests/test_backup_lifecycle.py tests/test_verify_backup_tool.py -q` 通过（55 passed） |

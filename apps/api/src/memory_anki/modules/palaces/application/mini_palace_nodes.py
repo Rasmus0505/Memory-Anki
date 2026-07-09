@@ -7,8 +7,10 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from memory_anki.core.time import utc_now_naive
-from memory_anki.infrastructure.db.models import Palace, PalaceMiniPalace
-from memory_anki.modules.mindmap.application.editor_state_documents import deserialize_editor_payload
+from memory_anki.infrastructure.db._tables.palaces import Palace, PalaceMiniPalace
+from memory_anki.modules.mindmap.application.editor_state_documents import (
+    deserialize_editor_payload,
+)
 from memory_anki.modules.palaces.application.segment_nodes import (
     build_segments_editor_doc,
     collect_doc_nodes_with_descendants,

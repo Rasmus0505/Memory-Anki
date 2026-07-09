@@ -19,7 +19,7 @@ target-version = "py312"
 src = ["src", "tests"]
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "B", "UP"]
+select = ["E", "F", "I", "B", "UP", "T20"]
 ignore = ["B008", "E501", "E712"]
 
 [tool.mypy]
@@ -39,7 +39,6 @@ module = [
     "memory_anki.modules.english.infrastructure.media",
     "memory_anki.modules.english_reading.application.session_service",
     "memory_anki.modules.english_reading.application.version_service",
-    "memory_anki.modules.knowledge.application.bilink_service",
     "memory_anki.modules.palace_quiz.application.quiz_generation_service",
     "memory_anki.modules.palace_quiz.application.quiz_grouping_service",
     "memory_anki.modules.palace_quiz.application.service",
@@ -47,8 +46,6 @@ module = [
     "memory_anki.modules.palaces.application.mindmap_import.job_creation",
     "memory_anki.modules.palaces.application.mindmap_import.job_repository",
     "memory_anki.modules.palaces.application.mindmap_import.normalization",
-    "memory_anki.modules.palaces.application.mindmap_import.pdf_model_workflows",
-    "memory_anki.modules.palaces.application.mindmap_import.preview_workflows",
     "memory_anki.modules.palaces.application.mindmap_import_job_service",
     "memory_anki.modules.palaces.application.segment_nodes",
     "memory_anki.modules.palaces.application.title_sync_service",
@@ -56,7 +53,6 @@ module = [
     "memory_anki.modules.reviews.application.review_execution_service",
     "memory_anki.modules.reviews.presentation.router",
     "memory_anki.modules.settings.application.ai_model_registry",
-    "memory_anki.modules.time_records.application.time_records_service",
 ]
 ignore_errors = true
 

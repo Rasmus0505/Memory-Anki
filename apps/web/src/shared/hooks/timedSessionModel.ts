@@ -276,3 +276,52 @@ export function resolveTimedSessionAutomation(
     ),
   }
 }
+
+export function advanceTickState(input: {
+  previousEffectiveSeconds: number
+  previousIdleSeconds: number
+  lastTickAtMs: number | null
+  lastActivityAtMs: number | null
+  currentMs: number
+}): {
+  effectiveSeconds: number
+  idleSeconds: number
+  lastTickAtMs: number | null
+  effectiveChanged: boolean
+  idleChanged: boolean
+} {
+  if (input.lastTickAtMs == null) {
+    return {
+      effectiveSeconds: input.previousEffectiveSeconds,
+      idleSeconds: input.previousIdleSeconds,
+      lastTickAtMs: input.lastTickAtMs,
+      effectiveChanged: false,
+      idleChanged: false,
+    }
+  }
+
+  const elapsedMs = Math.max(0, input.currentMs - input.lastTickAtMs)
+  const diffSeconds = Math.floor(elapsedMs / 1000)
+  const nextEffectiveSeconds =
+    diffSeconds > 0
+      ? input.previousEffectiveSeconds + diffSeconds
+      : input.previousEffectiveSeconds
+  const nextLastTickAtMs =
+    diffSeconds > 0
+      ? input.lastTickAtMs + diffSeconds * 1000
+      : elapsedMs > 0 && elapsedMs < 1000
+        ? input.currentMs - elapsedMs
+        : input.lastTickAtMs
+  const nextIdleSeconds =
+    input.lastActivityAtMs == null
+      ? 0
+      : Math.max(0, Math.floor((input.currentMs - input.lastActivityAtMs) / 1000))
+
+  return {
+    effectiveSeconds: nextEffectiveSeconds,
+    idleSeconds: nextIdleSeconds,
+    lastTickAtMs: nextLastTickAtMs,
+    effectiveChanged: nextEffectiveSeconds !== input.previousEffectiveSeconds,
+    idleChanged: nextIdleSeconds !== input.previousIdleSeconds,
+  }
+}

@@ -168,6 +168,54 @@ export interface ReadingCompletionResponse {
   session: ReadingSessionResult;
 }
 
+export type ReadingVocabularyReviewResult = "forgot" | "hard" | "good" | "easy";
+
+export interface ReadingVocabularyNote {
+  id: number;
+  word: string;
+  normalizedSurface: string;
+  lemma: string;
+  cefr: CefrLevel | null;
+  note: string;
+  definitionZh: string;
+  context: string;
+  materialId: number | null;
+  versionId: number | null;
+  spanAnnotationId: string | null;
+  status: "active" | "mastered";
+  reviewNumber: number;
+  reviewCount: number;
+  correctCount: number;
+  incorrectCount: number;
+  nextDueDate: string | null;
+  nextDueAt: string | null;
+  intervalDays: number;
+  reviewType: string;
+  algorithmUsed: string;
+  anchorDate: string | null;
+  lastReviewedAt: string | null;
+  isDue: boolean;
+  createdAt: string | null;
+  updatedAt: string | null;
+}
+
+export interface ReadingVocabularyNotesResponse {
+  items: ReadingVocabularyNote[];
+  dueCount: number;
+  total: number;
+}
+
+export interface ReadingVocabularyNoteCreateRequest {
+  word: string;
+  note?: string;
+  definitionZh?: string;
+  context?: string;
+  materialId?: number | null;
+  versionId?: number | null;
+  spanAnnotationId?: string;
+  cefr?: CefrLevel | null;
+}
+
 export interface ReadingWorkspaceResponse {
   profile: ReadingProfile;
   stats: ReadingWorkspaceStats;

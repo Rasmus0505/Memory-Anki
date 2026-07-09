@@ -5,6 +5,7 @@ import {
   getClientPreferenceCacheStatus,
   saveClientPreference,
 } from '@/shared/preferences/clientPreferences'
+import { onAppEvent } from '@/shared/events/appEvents'
 
 type PreferenceKey = keyof ClientPreferences
 
@@ -53,19 +54,15 @@ export function useLocalStorageState<T>(
   useEffect(() => {
     if (!preferenceKey || typeof window === 'undefined') return undefined
 
-    const handleClientPreferenceUpdate = (event: Event) => {
-      const detail = event instanceof CustomEvent && detailIsPreferencePatch(event.detail)
-        ? event.detail
+    const unsubscribe = onAppEvent(CLIENT_PREFERENCES_UPDATED_EVENT, (eventDetail) => {
+      const detail = detailIsPreferencePatch(eventDetail)
+        ? eventDetail
         : null
       if (!detail || !Object.prototype.hasOwnProperty.call(detail, preferenceKey)) return
       const nextValue = detail[preferenceKey]
       setValue(isValid(nextValue) ? nextValue : fallback)
-    }
-
-    window.addEventListener(CLIENT_PREFERENCES_UPDATED_EVENT, handleClientPreferenceUpdate)
-    return () => {
-      window.removeEventListener(CLIENT_PREFERENCES_UPDATED_EVENT, handleClientPreferenceUpdate)
-    }
+    })
+    return unsubscribe
   }, [fallback, isValid, preferenceKey])
 
   const setPersistentValue = useCallback(

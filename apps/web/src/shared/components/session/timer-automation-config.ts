@@ -5,6 +5,7 @@ import {
   hasLoadedClientPreferences,
   saveClientPreference,
 } from '@/shared/preferences/clientPreferences'
+import { APP_EVENT_NAMES, emitAppEvent } from '@/shared/events/appEvents'
 
 export type TimerAutomationScene = SessionKind | 'freestyle' | 'english' | 'english_reading'
 export type TimerAutomationMode = 'scene' | 'global'
@@ -43,7 +44,7 @@ export type TimerAutomationActivityKind =
   | 'practice_interaction'
 
 export const TIMER_AUTOMATION_STORAGE_KEY = 'memory-anki-timer-automation-config'
-export const TIMER_AUTOMATION_UPDATED_EVENT = 'memory-anki-timer-automation-change'
+export const TIMER_AUTOMATION_UPDATED_EVENT = APP_EVENT_NAMES.timerAutomationUpdated
 
 export const DEFAULT_TIMER_AUTOMATION_CONFIG: TimerAutomationConfig = {
   mode: 'scene',
@@ -240,8 +241,7 @@ export function readTimerAutomationConfig(): TimerAutomationConfig {
 }
 
 function dispatchTimerAutomationChange(config: TimerAutomationConfig) {
-  if (typeof window === 'undefined') return
-  window.dispatchEvent(new CustomEvent(TIMER_AUTOMATION_UPDATED_EVENT, { detail: config }))
+  emitAppEvent(TIMER_AUTOMATION_UPDATED_EVENT, config)
 }
 
 export function saveTimerAutomationConfig(config: TimerAutomationConfig) {

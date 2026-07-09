@@ -8,6 +8,7 @@ import type {
 import type { ImportHistoryItem } from '@/features/mindmap-import/model/mindmap-import'
 import type {
   MindMapEditorState,
+  MindMapImportJobError,
   MindMapImportJobStage,
   MindMapImportJobStatus,
   MindMapImportJobUsage,
@@ -47,6 +48,7 @@ export interface MindMapImportDrawerProps {
   currentJobStatus: MindMapImportJobStatus | null
   currentJobStage: MindMapImportJobStage | null
   currentJobUsage: MindMapImportJobUsage | null
+  currentJobError: MindMapImportJobError | null
   currentJobResolvedAi: ResolvedAiRuntimeMeta | null
   currentJobPauseRequested: boolean
   canResumeJob: boolean
@@ -128,6 +130,7 @@ export type MindMapImportSourceConfigModel = Pick<
   | 'currentJobPauseRequested'
   | 'currentJobStage'
   | 'currentJobStatus'
+  | 'currentJobError'
   | 'currentJobUsage'
   | 'error'
   | 'extractedText'

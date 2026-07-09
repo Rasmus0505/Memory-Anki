@@ -6,9 +6,9 @@
 优先级: P2
 预估工作量: M（2-8h）
 依赖文档: 活跃事件的统一收敛留给 08-08，本文档只删死事件
-状态: 未开始
-负责代理: 无
-完成时间: 无
+状态: 已完成
+负责代理: Codex
+完成时间: 2026-07-09
 ---
 
 # 07-09 清理冗余 CustomEvent 事件
@@ -130,3 +130,4 @@ npm run build       # 期望：构建成功
 | 时间 | 执行者 | 动作 | 结果/备注 |
 |---|---|---|---|
 | - | - | 文档创建 | 清点 13 个生产事件，死事件 2 个（mutation-queue:changed、time-record-recovery:changed） |
+| 2026-07-09 | Codex | 删除两个死事件 | 移除 `mutationQueue.ts` 的 `memory-anki-mutation-queue:changed` 派发/订阅和 `time-record-recovery.ts` 的 `memory-anki-time-record-recovery:changed` 派发/订阅；补测试确认旧事件不再广播；残留 `dispatchEvent` 扫描仅剩活跃事件 |

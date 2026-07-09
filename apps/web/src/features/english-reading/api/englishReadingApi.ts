@@ -9,6 +9,10 @@ import type {
   ReadingProfile,
   ReadingSentenceTranslationResponse,
   ReadingVersion,
+  ReadingVocabularyNote,
+  ReadingVocabularyNoteCreateRequest,
+  ReadingVocabularyNotesResponse,
+  ReadingVocabularyReviewResult,
   ReadingWorkspaceResponse,
 } from '@/shared/api/contracts'
 
@@ -203,6 +207,52 @@ export function completeEnglishReadingMaterialApi(
     persistence: {
       resourceKey: `english-reading:material:${materialId}:complete`,
       description: '完成英语阅读',
+      replayMode: 'manual',
+    },
+  })
+}
+
+export function listEnglishReadingVocabularyNotesApi(input: {
+  dueOnly?: boolean
+  limit?: number
+} = {}) {
+  const params = new URLSearchParams()
+  if (input.dueOnly) {
+    params.set('dueOnly', 'true')
+  }
+  if (input.limit !== undefined) {
+    params.set('limit', String(input.limit))
+  }
+  const query = params.toString()
+  return request<ReadingVocabularyNotesResponse>(
+    `/english-reading/vocabulary-notes${query ? `?${query}` : ''}`,
+  )
+}
+
+export function createEnglishReadingVocabularyNoteApi(
+  payload: ReadingVocabularyNoteCreateRequest,
+) {
+  return request<ReadingVocabularyNote>('/english-reading/vocabulary-notes', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+    persistence: {
+      resourceKey: `english-reading:vocabulary:${payload.word}`,
+      description: '保存英语词汇笔记',
+      replayMode: 'manual',
+    },
+  })
+}
+
+export function reviewEnglishReadingVocabularyNoteApi(
+  noteId: number,
+  result: ReadingVocabularyReviewResult,
+) {
+  return request<ReadingVocabularyNote>(`/english-reading/vocabulary-notes/${noteId}/review`, {
+    method: 'POST',
+    body: JSON.stringify({ result }),
+    persistence: {
+      resourceKey: `english-reading:vocabulary:${noteId}:review`,
+      description: '复习英语词汇笔记',
       replayMode: 'manual',
     },
   })

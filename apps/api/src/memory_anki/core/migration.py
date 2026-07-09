@@ -1,3 +1,10 @@
+"""文件系统级一次性迁移的状态轨道（migration-state.json）。
+
+收敛规则（2026-07 定）：
+- 动文件系统（搬数据目录、重排 APP_HOME）→ 用本模块 + migration-state.json；
+- 动数据库（schema 或数据修复）→ 一律写 Alembic 迁移，禁止再往 app_migrations 里加新 key。
+"""
+
 from __future__ import annotations
 
 import json

@@ -6,18 +6,17 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
 
-import memory_anki.app.main as main_module
-from memory_anki.infrastructure.db.models import (
-    Base,
-    Chapter,
+from memory_anki.infrastructure.db._tables import Base
+from memory_anki.infrastructure.db._tables.knowledge import Chapter, Subject
+from memory_anki.infrastructure.db._tables.misc import (
     Config,
-    ExternalAiCallLog,
+    StudySession,
+)
+from memory_anki.infrastructure.db._tables.palaces import (
     Palace,
     PalaceSegment,
     PalaceVersion,
@@ -25,110 +24,219 @@ from memory_anki.infrastructure.db.models import (
     ReviewLog,
     ReviewSchedule,
     SessionProgress,
-    StudySession,
-    Subject,
 )
-from memory_anki.modules.backups.application.backup_service import (
+from memory_anki.modules.backups.application.backup_lifecycle import (
     ROLLING_EDIT_BACKUP_INTERVAL,
-    create_palace_version,
-    export_palace_snapshot_comparison,
     maybe_create_interval_backup,
+)
+from memory_anki.modules.backups.application.backup_palace_restore import (
     restore_palace_from_backup,
 )
-from memory_anki.modules.dashboard.presentation import router as dashboard_router
+from memory_anki.modules.backups.application.backup_palace_snapshots import (
+    export_palace_snapshot_comparison,
+)
+from memory_anki.modules.backups.application.backup_palace_versions import (
+    create_palace_version,
+)
 from memory_anki.modules.mindmap.application.editor_state_service import save_palace_editor_state
 from memory_anki.modules.palaces.presentation import router as palace_router
-from memory_anki.modules.reviews.application.review_service import (
+from memory_anki.modules.reviews.application.review_execution_service import (
     submit_review,
 )
 from memory_anki.modules.reviews.application.schedule_service import (
     ensure_current_review_schedule_model,
 )
 from memory_anki.modules.reviews.presentation import router as review_router
-from memory_anki.modules.settings.application.ai_model_registry import (
-    resolve_scenario_runtime,
-)
 from memory_anki.modules.settings.presentation import router as settings_router
+from support import RouterTestCase
+
 
 def utc_now_naive() -> datetime:
     return datetime.now(UTC).replace(tzinfo=None)
 
 
-class ReviewRouteTests(unittest.TestCase):
-    def setUp(self):
-        self.engine = create_engine(
-            "sqlite://",
-            connect_args={"check_same_thread": False},
-            poolclass=StaticPool,
-        )
-        Base.metadata.create_all(self.engine)
-        self.SessionLocal = sessionmaker(bind=self.engine)
-        self.original_get_session = review_router.get_session
-        self.original_dashboard_get_session = dashboard_router.get_session
-        self.original_palace_get_session = palace_router.get_session
-        self.original_settings_get_session = settings_router.get_session
+class ReviewRouteTests(RouterTestCase):
+    ROUTER_MODULES = (review_router, palace_router, settings_router)
 
-        def get_test_session():
-            return self.SessionLocal()
-
-        review_router.get_session = get_test_session
-        dashboard_router.get_session = get_test_session
-        palace_router.get_session = get_test_session
-        settings_router.get_session = get_test_session
-
-        with self.SessionLocal() as session:
-            palace = Palace(
-                title="Test Palace",
-                description="",
-                difficulty=0,
-                review_mode="review",
-                editor_doc=json.dumps(
-                    {
-                        "root": {
-                                "data": {"text": "Test Palace"},
-                                "children": [
-                                {"data": {"text": "Branch A", "note": "Detail A", "uid": "branch-a"}, "children": []},
-                                {"data": {"text": "Branch B", "uid": "branch-b"}, "children": []},
-                            ],
-                        }
+    def seed(self, session):
+        palace = Palace(
+            title="Test Palace",
+            description="",
+            difficulty=0,
+            review_mode="review",
+            editor_doc=json.dumps(
+                {
+                    "root": {
+                            "data": {"text": "Test Palace"},
+                            "children": [
+                            {"data": {"text": "Branch A", "note": "Detail A", "uid": "branch-a"}, "children": []},
+                            {"data": {"text": "Branch B", "uid": "branch-b"}, "children": []},
+                        ],
                     }
-                ),
+                }
+            ),
+        )
+        session.add(palace)
+        session.flush()
+        create_palace_version(session, palace, "editor_save")
+        session.add(
+            ReviewSchedule(
+                palace_id=palace.id,
+                scheduled_date=date.today() - timedelta(days=1),
+                interval_days=1,
+                algorithm_used="ebbinghaus",
+                completed=False,
+                review_number=0,
+                review_type="standard",
             )
-            session.add(palace)
-            session.flush()
-            create_palace_version(session, palace, "editor_save")
-            session.add(
-                ReviewSchedule(
-                    palace_id=palace.id,
-                    scheduled_date=date.today() - timedelta(days=1),
-                    interval_days=1,
-                    algorithm_used="ebbinghaus",
-                    completed=False,
-                    review_number=0,
-                    review_type="standard",
-                )
-            )
-            session.commit()
-
-        app = FastAPI()
-        app.include_router(review_router.router, prefix="/api/v1")
-        app.include_router(palace_router.router, prefix="/api/v1")
-        app.include_router(settings_router.router, prefix="/api/v1")
-        self.app = app
-        self.client = TestClient(app)
-
-    def tearDown(self):
-        review_router.get_session = self.original_get_session
-        dashboard_router.get_session = self.original_dashboard_get_session
-        palace_router.get_session = self.original_palace_get_session
-        settings_router.get_session = self.original_settings_get_session
-        Base.metadata.drop_all(self.engine)
-        self.engine.dispose()
+        )
+        session.commit()
 
     def test_overdue_count_route_is_not_captured_by_schedule_id(self):
         response = self.client.get("/api/v1/review/overdue-count")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["count"], 1)
+
+    def test_soft_deleted_palace_is_excluded_from_review_surfaces(self):
+        delete_response = self.client.delete("/api/v1/palaces/1")
+        self.assertEqual(delete_response.status_code, 200)
+        self.assertEqual(delete_response.json(), {"ok": True})
+
+        overdue_response = self.client.get("/api/v1/review/overdue-count")
+        queue_response = self.client.get("/api/v1/review/queue")
+        session_response = self.client.get("/api/v1/review/session/1")
+
+        self.assertEqual(overdue_response.status_code, 200)
+        self.assertEqual(overdue_response.json()["count"], 0)
+        self.assertEqual(queue_response.status_code, 200)
+        self.assertEqual(queue_response.json()["due_count"], 0)
+        self.assertEqual(queue_response.json()["overdue_count"], 0)
+        self.assertEqual(queue_response.json()["reviews"], [])
+        self.assertEqual(session_response.status_code, 404)
+
+    def test_load_forecast_counts_overdue_and_future_active_schedules(self):
+        today = date.today()
+        with self.SessionLocal() as session:
+            palace = session.query(Palace).filter_by(id=1).first()
+            self.assertIsNotNone(palace)
+            archived_palace = Palace(title="Archived Palace", archived=True)
+            mastered_palace = Palace(title="Mastered Palace", mastered=True)
+            session.add_all([archived_palace, mastered_palace])
+            session.flush()
+            session.add_all(
+                [
+                    ReviewSchedule(
+                        palace_id=palace.id,
+                        scheduled_date=today,
+                        interval_days=1,
+                        algorithm_used="ebbinghaus",
+                        completed=False,
+                        review_number=1,
+                        review_type="standard",
+                    ),
+                    ReviewSchedule(
+                        palace_id=palace.id,
+                        scheduled_date=today + timedelta(days=3),
+                        interval_days=4,
+                        algorithm_used="ebbinghaus",
+                        completed=False,
+                        review_number=2,
+                        review_type="standard",
+                    ),
+                    ReviewSchedule(
+                        palace_id=palace.id,
+                        scheduled_date=today + timedelta(days=3),
+                        interval_days=4,
+                        algorithm_used="ebbinghaus",
+                        completed=True,
+                        review_number=3,
+                        review_type="standard",
+                    ),
+                    ReviewSchedule(
+                        palace_id=archived_palace.id,
+                        scheduled_date=today + timedelta(days=3),
+                        interval_days=4,
+                        algorithm_used="ebbinghaus",
+                        completed=False,
+                        review_number=0,
+                        review_type="standard",
+                    ),
+                    ReviewSchedule(
+                        palace_id=mastered_palace.id,
+                        scheduled_date=today + timedelta(days=3),
+                        interval_days=4,
+                        algorithm_used="ebbinghaus",
+                        completed=False,
+                        review_number=0,
+                        review_type="standard",
+                    ),
+                ]
+            )
+            session.commit()
+
+        response = self.client.get("/api/v1/review/load-forecast?days=7")
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["days"], 7)
+        self.assertEqual(payload["overdue_count"], 1)
+        self.assertEqual(payload["total_upcoming"], 2)
+        self.assertEqual(len(payload["items"]), 7)
+        self.assertEqual(payload["items"][0]["date"], today.isoformat())
+        self.assertTrue(payload["items"][0]["is_today"])
+        self.assertEqual(payload["items"][0]["due_count"], 1)
+        self.assertEqual(payload["items"][3]["date"], (today + timedelta(days=3)).isoformat())
+        self.assertEqual(payload["items"][3]["due_count"], 1)
+
+    def test_load_forecast_days_is_clamped(self):
+        response = self.client.get("/api/v1/review/load-forecast?days=999")
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["days"], 60)
+        self.assertEqual(len(payload["items"]), 60)
+
+    def test_review_notes_route_returns_recent_notes_before_dynamic_review_route(self):
+        today = date.today()
+        with self.SessionLocal() as session:
+            palace = session.query(Palace).filter_by(id=1).first()
+            self.assertIsNotNone(palace)
+            palace.manual_title = "Manual Palace Title"
+            session.add_all(
+                [
+                    ReviewLog(
+                        palace_id=palace.id,
+                        review_date=today - timedelta(days=1),
+                        score=4,
+                        review_mode="review",
+                        duration_seconds=30,
+                        note="first note",
+                    ),
+                    ReviewLog(
+                        palace_id=palace.id,
+                        review_date=today,
+                        score=5,
+                        review_mode="review",
+                        duration_seconds=40,
+                        note="second note",
+                    ),
+                    ReviewLog(
+                        palace_id=palace.id,
+                        review_date=today,
+                        score=5,
+                        review_mode="review",
+                        duration_seconds=40,
+                        note="",
+                    ),
+                ]
+            )
+            session.commit()
+
+        response = self.client.get("/api/v1/review/notes?limit=1")
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(len(payload["items"]), 1)
+        self.assertEqual(payload["items"][0]["note"], "second note")
+        self.assertEqual(payload["items"][0]["palace_title"], "Manual Palace Title")
+        self.assertEqual(payload["items"][0]["review_date"], today.isoformat())
 
     def test_repair_review_stage_progress_route_returns_repair_counts(self):
         with patch.object(
@@ -141,6 +249,58 @@ class ReviewRouteTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json(), {"ok": True, "palace_count": 2, "segment_count": 0})
         repair.assert_called_once()
+
+    def test_review_stage_progress_health_counts_read_only_repair_issues(self):
+        with self.SessionLocal() as session:
+            palace = session.query(Palace).filter_by(id=1).first()
+            self.assertIsNotNone(palace)
+            session.add_all(
+                [
+                    SessionProgress(
+                        session_kind="review",
+                        palace_id=palace.id,
+                        review_schedule_id=999999,
+                        reveal_map="{}",
+                        red_node_ids="[]",
+                        completed=False,
+                        updated_at=utc_now_naive(),
+                    ),
+                    StudySession(
+                        id="orphan-review-session",
+                        status="active",
+                        scene="review",
+                        target_type="review_schedule",
+                        target_id=999999,
+                        palace_id=palace.id,
+                        title="Orphan Review",
+                        started_at=utc_now_naive(),
+                        progress_json="{}",
+                        events_json="[]",
+                        summary_json="{}",
+                    ),
+                    ReviewSchedule(
+                        palace_id=palace.id,
+                        scheduled_date=date.today() - timedelta(days=2),
+                        interval_days=2,
+                        algorithm_used="ebbinghaus",
+                        completed=True,
+                        completed_at=utc_now_naive(),
+                        review_number=2,
+                        review_type="standard",
+                    ),
+                ]
+            )
+            session.commit()
+
+        response = self.client.get("/api/v1/review/stage-progress-health")
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertTrue(payload["ok"])
+        self.assertTrue(payload["needs_repair"])
+        self.assertEqual(payload["orphan_progress_count"], 1)
+        self.assertEqual(payload["orphan_study_session_count"], 1)
+        self.assertEqual(payload["stage_gap_palace_count"], 1)
+        self.assertEqual(payload["total_issues"], 3)
 
     def test_repair_review_stage_progress_preserves_active_session_progress(self):
         with self.SessionLocal() as session:
@@ -259,41 +419,6 @@ class ReviewRouteTests(unittest.TestCase):
         self.assertEqual(payload["reviews"][0]["schedule_count"], 2)
         self.assertEqual(payload["reviews"][0]["overdue_schedule_count"], 2)
 
-    def test_segment_review_queue_includes_lightweight_palace_summary(self):
-        with self.SessionLocal() as session:
-            palace = session.query(Palace).filter_by(id=1).first()
-            self.assertIsNotNone(palace)
-            segment = PalaceSegment(
-                palace_id=palace.id,
-                name="第 1 部分",
-                color="#14b8a6",
-                node_uids_json="[]",
-                sort_order=0,
-            )
-            session.add(segment)
-            session.flush()
-            session.add(
-                PalaceSegmentReviewSchedule(
-                    palace_segment_id=segment.id,
-                    scheduled_date=date.today() - timedelta(days=1),
-                    interval_days=1,
-                    algorithm_used="ebbinghaus",
-                    completed=False,
-                    review_number=0,
-                    review_type="standard",
-                )
-            )
-            session.commit()
-            palace_title = palace.title
-
-        response = self.client.get("/api/v1/segment-review/queue")
-        self.assertEqual(response.status_code, 200)
-        payload = response.json()
-        self.assertEqual(payload["due_count"], 1)
-        self.assertEqual(payload["reviews"][0]["segment"]["name"], "第 1 部分")
-        self.assertEqual(payload["reviews"][0]["palace"]["title"], palace_title)
-        self.assertNotIn("editor_doc", payload["reviews"][0]["palace"])
-
     def test_review_queue_auto_smoothing_skips_unstarted_overdue_palace(self):
         with self.SessionLocal() as session:
             session.add_all(
@@ -405,63 +530,21 @@ class ReviewRouteTests(unittest.TestCase):
             self.assertEqual(len(pending), 1)
             self.assertEqual([schedule.review_number for schedule in pending], [1])
 
-    def test_submit_review_creates_review_time_record(self):
-        with self.SessionLocal() as session:
-            log, _ = submit_review(
-                session,
-                1,
-                duration_seconds=120,
-                completion_mode="manual_complete",
-            )
-            self.assertIsNotNone(log)
-            records = session.query(TimeRecord).filter_by(kind="review").all()
-            self.assertEqual(len(records), 1)
-            self.assertEqual(records[0].id, f"review-log-{log.id}")
-            self.assertEqual(records[0].effective_seconds, 120)
-            self.assertEqual(records[0].title, "Test Palace")
-
-    def test_palace_list_exposes_incomplete_segment_review_progress(self):
-        with self.SessionLocal() as session:
-            segment = PalaceSegment(
-                palace_id=1,
-                name="第 1 部分",
-                color="#14b8a6",
-                node_uids_json=json.dumps(["branch-a", "branch-b"]),
-                sort_order=0,
-            )
-            session.add(segment)
-            session.flush()
-            schedule = PalaceSegmentReviewSchedule(
-                palace_segment_id=segment.id,
-                scheduled_date=date.today(),
-                interval_days=1,
-                algorithm_used="ebbinghaus",
-                completed=False,
-                review_number=0,
-                review_type="standard",
-            )
-            session.add(schedule)
-            session.commit()
-            schedule_id = schedule.id
-
-        save_response = self.client.put(
-            f"/api/v1/segment-review/session/{schedule_id}/progress",
+    def test_submit_review_session_persists_trimmed_note(self):
+        response = self.client.post(
+            "/api/v1/review/session/1/submit",
             json={
-                "reveal_map": {
-                    "branch-a": "revealed",
-                    "branch-b": "hidden",
-                },
-                "red_node_ids": [],
-                "completed": False,
+                "duration_seconds": 12,
+                "completion_mode": "manual_complete",
+                "note": "  瓣膜顺序卡壳  ",
             },
         )
-        self.assertEqual(save_response.status_code, 200)
-
-        response = self.client.get("/api/v1/palaces")
         self.assertEqual(response.status_code, 200)
-        payload = response.json()[0]
-        self.assertEqual(len(payload["segments"]), 1)
-        self.assertAlmostEqual(payload["segments"][0]["active_review_progress"], 0.5)
+        self.assertTrue(response.json()["ok"])
+
+        with self.SessionLocal() as session:
+            log = session.query(ReviewLog).one()
+            self.assertEqual(log.note, "瓣膜顺序卡壳")
 
     def test_submit_review_reuses_response_for_duplicate_mutation_id(self):
         headers = {"X-Memory-Anki-Mutation-ID": "review-submit-mutation-1"}
@@ -676,363 +759,6 @@ class ReviewRouteTests(unittest.TestCase):
             self.assertLessEqual(next_schedule.scheduled_at, after + timedelta(days=2))
             self.assertNotEqual(next_schedule.scheduled_at, due_at + timedelta(days=2))
 
-    def test_submit_segment_review_schedules_next_round_from_completion_time(self):
-        with self.SessionLocal() as session:
-            session.add(Config(key="ebbinghaus_intervals", value="1,2,4"))
-            palace = session.query(Palace).filter_by(id=1).first()
-            self.assertIsNotNone(palace)
-            segment = PalaceSegment(
-                palace_id=palace.id,
-                name="第 1 部分",
-                color="#14b8a6",
-                node_uids_json=json.dumps(["branch-a"]),
-                sort_order=0,
-            )
-            session.add(segment)
-            session.flush()
-            session.add(
-                PalaceSegmentReviewSchedule(
-                    palace_segment_id=segment.id,
-                    scheduled_date=date.today() - timedelta(days=1),
-                    interval_days=1,
-                    algorithm_used="ebbinghaus",
-                    completed=False,
-                    review_number=0,
-                    review_type="standard",
-                )
-            )
-            session.commit()
-
-        before = datetime.now().replace(second=0, microsecond=0)
-        with self.SessionLocal() as session:
-            submitted, _ = submit_segment_review(
-                session,
-                1,
-                duration_seconds=30,
-                completion_mode="manual_complete",
-            )
-        after = datetime.now().replace(second=0, microsecond=0)
-        self.assertIsNotNone(submitted)
-
-        with self.SessionLocal() as session:
-            next_schedule = (
-                session.query(PalaceSegmentReviewSchedule)
-                .filter_by(palace_segment_id=1, completed=False, review_number=1)
-                .first()
-            )
-            self.assertIsNotNone(next_schedule)
-            self.assertIsNotNone(next_schedule.scheduled_at)
-            self.assertGreaterEqual(next_schedule.scheduled_at, before + timedelta(days=2))
-            self.assertLessEqual(next_schedule.scheduled_at, after + timedelta(days=2))
-            self.assertEqual(next_schedule.scheduled_date, next_schedule.scheduled_at.date())
-            completed_schedule = (
-                session.query(PalaceSegmentReviewSchedule)
-                .filter_by(palace_segment_id=1, completed=True, review_number=0)
-                .first()
-            )
-            self.assertIsNotNone(completed_schedule)
-            self.assertIsNotNone(completed_schedule.completed_at)
-            self.assertGreaterEqual(completed_schedule.completed_at, before)
-            self.assertLessEqual(completed_schedule.completed_at, after)
-
-    def test_submit_segment_review_rebuilds_stale_future_pending_schedule(self):
-        stale_due_at = datetime.now().replace(second=0, microsecond=0) + timedelta(days=5)
-        with self.SessionLocal() as session:
-            session.add(Config(key="ebbinghaus_intervals", value="1,2,4"))
-            palace = session.query(Palace).filter_by(id=1).first()
-            self.assertIsNotNone(palace)
-            segment = PalaceSegment(
-                palace_id=palace.id,
-                name="第 1 部分",
-                color="#14b8a6",
-                node_uids_json=json.dumps(["branch-a"]),
-                sort_order=0,
-            )
-            session.add(segment)
-            session.flush()
-            schedule = PalaceSegmentReviewSchedule(
-                palace_segment_id=segment.id,
-                scheduled_date=date.today() - timedelta(days=1),
-                scheduled_at=datetime.now().replace(second=0, microsecond=0) - timedelta(hours=1),
-                interval_days=1,
-                algorithm_used="ebbinghaus",
-                completed=False,
-                review_number=0,
-                review_type="standard",
-                anchor_date=date.today() - timedelta(days=2),
-            )
-            stale_schedule = PalaceSegmentReviewSchedule(
-                palace_segment_id=segment.id,
-                scheduled_date=stale_due_at.date(),
-                scheduled_at=stale_due_at,
-                interval_days=2,
-                algorithm_used="ebbinghaus",
-                completed=False,
-                review_number=1,
-                review_type="standard",
-                anchor_date=date.today() - timedelta(days=2),
-            )
-            session.add_all([schedule, stale_schedule])
-            session.commit()
-            schedule_id = schedule.id
-
-        before = datetime.now().replace(second=0, microsecond=0)
-        with self.SessionLocal() as session:
-            submitted, _ = submit_segment_review(
-                session,
-                schedule_id,
-                duration_seconds=30,
-                completion_mode="manual_complete",
-            )
-            self.assertIsNotNone(submitted)
-        after = datetime.now().replace(second=0, microsecond=0)
-
-        with self.SessionLocal() as session:
-            pending = (
-                session.query(PalaceSegmentReviewSchedule)
-                .filter_by(palace_segment_id=1, completed=False, review_number=1)
-                .all()
-            )
-            self.assertEqual(len(pending), 1)
-            self.assertIsNotNone(pending[0].scheduled_at)
-            self.assertNotEqual(pending[0].scheduled_at, stale_due_at)
-            self.assertGreaterEqual(pending[0].scheduled_at, before + timedelta(days=2))
-            self.assertLessEqual(pending[0].scheduled_at, after + timedelta(days=2))
-
-    def test_adjust_segment_review_progress_advances_and_reschedules_next_round(self):
-        completed_at = datetime(2026, 5, 10, 10, 30)
-        with self.SessionLocal() as session:
-            session.add(Config(key="ebbinghaus_intervals", value="1,2,4"))
-            palace = session.query(Palace).filter_by(id=1).first()
-            segment = PalaceSegment(
-                palace_id=palace.id,
-                name="第 1 部分",
-                color="#14b8a6",
-                node_uids_json=json.dumps(["branch-a"]),
-                sort_order=0,
-            )
-            session.add(segment)
-            session.flush()
-            segment_id = segment.id
-            session.add(
-                PalaceSegmentReviewSchedule(
-                    palace_segment_id=segment.id,
-                    scheduled_date=date.today() - timedelta(days=1),
-                    interval_days=1,
-                    algorithm_used="ebbinghaus",
-                    completed=False,
-                    review_number=0,
-                    review_type="standard",
-                    anchor_date=date.today() - timedelta(days=1),
-                )
-            )
-            session.commit()
-
-        response = self.client.put(
-            f"/api/v1/palace-segments/{segment_id}/review-progress",
-            json={"completed_count": 2, "completed_at": completed_at.isoformat(timespec="minutes")},
-        )
-        self.assertEqual(response.status_code, 200)
-
-        with self.SessionLocal() as session:
-            schedules = (
-                session.query(PalaceSegmentReviewSchedule)
-                .filter_by(palace_segment_id=segment_id)
-                .order_by(PalaceSegmentReviewSchedule.review_number)
-                .all()
-            )
-            self.assertEqual([schedule.review_number for schedule in schedules], [0, 1, 2])
-            self.assertEqual([schedule.completed for schedule in schedules], [True, True, False])
-            self.assertEqual(schedules[0].completed_at, completed_at)
-            self.assertEqual(schedules[1].completed_at, completed_at)
-            self.assertEqual(schedules[2].scheduled_at, completed_at + timedelta(days=4))
-            self.assertEqual(schedules[2].scheduled_date, (completed_at + timedelta(days=4)).date())
-
-    def test_adjust_segment_review_progress_rolls_back_to_previous_node(self):
-        completed_at = datetime(2026, 5, 10, 10, 30)
-        with self.SessionLocal() as session:
-            session.add(Config(key="ebbinghaus_intervals", value="1,2,4"))
-            palace = session.query(Palace).filter_by(id=1).first()
-            segment = PalaceSegment(
-                palace_id=palace.id,
-                name="第 1 部分",
-                color="#14b8a6",
-                node_uids_json=json.dumps(["branch-a"]),
-                sort_order=0,
-            )
-            session.add(segment)
-            session.flush()
-            segment_id = segment.id
-            session.add_all(
-                [
-                    PalaceSegmentReviewSchedule(
-                        palace_segment_id=segment.id,
-                        scheduled_date=completed_at.date(),
-                        interval_days=1,
-                        algorithm_used="ebbinghaus",
-                        completed=True,
-                        completed_at=completed_at,
-                        review_number=0,
-                        review_type="standard",
-                        anchor_date=completed_at.date(),
-                    ),
-                    PalaceSegmentReviewSchedule(
-                        palace_segment_id=segment.id,
-                        scheduled_date=completed_at.date(),
-                        interval_days=2,
-                        algorithm_used="ebbinghaus",
-                        completed=True,
-                        completed_at=completed_at + timedelta(days=2),
-                        review_number=1,
-                        review_type="standard",
-                        anchor_date=completed_at.date(),
-                    ),
-                    PalaceSegmentReviewSchedule(
-                        palace_segment_id=segment.id,
-                        scheduled_date=(completed_at + timedelta(days=6)).date(),
-                        scheduled_at=completed_at + timedelta(days=6),
-                        interval_days=4,
-                        algorithm_used="ebbinghaus",
-                        completed=False,
-                        review_number=2,
-                        review_type="standard",
-                        anchor_date=completed_at.date(),
-                    ),
-                ]
-            )
-            session.commit()
-
-        response = self.client.put(
-            f"/api/v1/palace-segments/{segment_id}/review-progress",
-            json={"completed_count": 1},
-        )
-        self.assertEqual(response.status_code, 200)
-
-        with self.SessionLocal() as session:
-            schedules = (
-                session.query(PalaceSegmentReviewSchedule)
-                .filter_by(palace_segment_id=segment_id)
-                .order_by(PalaceSegmentReviewSchedule.review_number)
-                .all()
-            )
-            self.assertEqual([schedule.review_number for schedule in schedules], [0, 1])
-            self.assertEqual([schedule.completed for schedule in schedules], [True, False])
-            self.assertEqual(schedules[0].completed_at, completed_at)
-            self.assertEqual(schedules[1].scheduled_at, completed_at + timedelta(days=2))
-
-    def test_adjust_segment_review_progress_updates_completed_time(self):
-        old_completed_at = datetime(2026, 5, 10, 10, 30)
-        new_completed_at = datetime(2026, 5, 11, 9, 15)
-        with self.SessionLocal() as session:
-            session.add(Config(key="ebbinghaus_intervals", value="1,2,4"))
-            palace = session.query(Palace).filter_by(id=1).first()
-            segment = PalaceSegment(
-                palace_id=palace.id,
-                name="第 1 部分",
-                color="#14b8a6",
-                node_uids_json=json.dumps(["branch-a"]),
-                sort_order=0,
-            )
-            session.add(segment)
-            session.flush()
-            segment_id = segment.id
-            session.add_all(
-                [
-                    PalaceSegmentReviewSchedule(
-                        palace_segment_id=segment.id,
-                        scheduled_date=old_completed_at.date(),
-                        interval_days=1,
-                        algorithm_used="ebbinghaus",
-                        completed=True,
-                        completed_at=old_completed_at,
-                        review_number=0,
-                        review_type="standard",
-                        anchor_date=old_completed_at.date(),
-                    ),
-                    PalaceSegmentReviewSchedule(
-                        palace_segment_id=segment.id,
-                        scheduled_date=(old_completed_at + timedelta(days=2)).date(),
-                        scheduled_at=old_completed_at + timedelta(days=2),
-                        interval_days=2,
-                        algorithm_used="ebbinghaus",
-                        completed=False,
-                        review_number=1,
-                        review_type="standard",
-                        anchor_date=old_completed_at.date(),
-                    ),
-                ]
-            )
-            session.commit()
-
-        response = self.client.put(
-            f"/api/v1/palace-segments/{segment_id}/review-progress",
-            json={
-                "completed_count": 1,
-                "completed_review_number": 0,
-                "completed_at": new_completed_at.isoformat(timespec="minutes"),
-            },
-        )
-        self.assertEqual(response.status_code, 200)
-
-        with self.SessionLocal() as session:
-            schedules = (
-                session.query(PalaceSegmentReviewSchedule)
-                .filter_by(palace_segment_id=segment_id)
-                .order_by(PalaceSegmentReviewSchedule.review_number)
-                .all()
-            )
-            self.assertEqual(schedules[0].completed_at, new_completed_at)
-            self.assertEqual(schedules[1].scheduled_at, new_completed_at + timedelta(days=2))
-
-    def test_default_segment_review_progress_rebuilds_stale_future_pending_schedule(self):
-        stale_due_at = datetime(2026, 5, 29, 10, 0)
-        completed_at = datetime(2026, 5, 24, 10, 0)
-        with self.SessionLocal() as session:
-            session.add(Config(key="ebbinghaus_intervals", value="1,2,4"))
-            palace = session.query(Palace).filter_by(id=1).first()
-            self.assertIsNotNone(palace)
-            palace.created_at = datetime(2026, 5, 20, 10, 0)
-            first_schedule = session.query(ReviewSchedule).filter_by(id=1).first()
-            self.assertIsNotNone(first_schedule)
-            first_schedule.completed = True
-            first_schedule.completed_at = datetime(2026, 5, 20, 10, 0)
-            first_schedule.scheduled_date = first_schedule.completed_at.date()
-            first_schedule.scheduled_at = first_schedule.completed_at
-            session.add(
-                ReviewSchedule(
-                    palace_id=palace.id,
-                    scheduled_date=stale_due_at.date(),
-                    scheduled_at=stale_due_at,
-                    interval_days=2,
-                    algorithm_used="ebbinghaus",
-                    completed=False,
-                    review_number=1,
-                    review_type="standard",
-                    anchor_date=palace.created_at.date(),
-                )
-            )
-            session.commit()
-
-        response = self.client.put(
-            "/api/v1/palaces/1/default-segment/review-progress",
-            json={
-                "completed_count": 1,
-                "completed_review_number": 0,
-                "completed_at": completed_at.isoformat(timespec="minutes"),
-            },
-        )
-        self.assertEqual(response.status_code, 200)
-
-        with self.SessionLocal() as session:
-            pending = (
-                session.query(ReviewSchedule)
-                .filter_by(palace_id=1, completed=False, review_number=1)
-                .all()
-            )
-            self.assertEqual(len(pending), 1)
-            self.assertEqual(pending[0].scheduled_at, completed_at + timedelta(days=2))
-            self.assertNotEqual(pending[0].scheduled_at, stale_due_at)
-
     def test_profile_review_settings_apply_to_pending_rebuilds_for_anchor_change(self):
         early_completed_at = datetime(2026, 5, 20, 8, 0)
         scheduled_due_at = datetime(2026, 5, 20, 10, 0)
@@ -1070,7 +796,7 @@ class ReviewRouteTests(unittest.TestCase):
             session.commit()
 
         response = self.client.put(
-            "/api/v1/profile/review-settings",
+            "/api/v1/settings/review",
             json={
                 "early_review_anchor": "true",
                 "apply_to_pending": "all",
@@ -1088,539 +814,6 @@ class ReviewRouteTests(unittest.TestCase):
             self.assertEqual(len(pending), 1)
             self.assertEqual(pending[0].scheduled_at, anchored_pending_at)
             self.assertNotEqual(pending[0].scheduled_at, stale_pending_at)
-
-    def test_review_settings_include_ai_split_defaults(self):
-        response = self.client.get("/api/v1/settings/review")
-        self.assertEqual(response.status_code, 200)
-        payload = response.json()
-        self.assertEqual(payload["mindmap_ai_split_model"], "qwen3.6-flash")
-        self.assertEqual(payload["mindmap_ai_split_temperature"], "0.2")
-        self.assertEqual(payload["mindmap_ai_split_max_children"], "5")
-        self.assertEqual(payload["mindmap_ai_split_include_note"], "true")
-        self.assertIn("mindmap_ai_split_custom_instruction", payload)
-
-    def test_review_settings_can_persist_ai_split_config(self):
-        response = self.client.put(
-            "/api/v1/settings/review",
-            json={
-                "mindmap_ai_split_api_key": "demo-key",
-                "mindmap_ai_split_base_url": "https://example.test/v1",
-                "mindmap_ai_split_model": "qwen-custom",
-                "mindmap_ai_split_temperature": "0.6",
-                "mindmap_ai_split_max_children": "7",
-                "mindmap_ai_split_include_note": "false",
-                "mindmap_ai_split_custom_instruction": "优先按考试框架拆分。",
-            },
-        )
-        self.assertEqual(response.status_code, 200)
-        payload = response.json()
-        self.assertEqual(payload["mindmap_ai_split_api_key"], "demo-key")
-        self.assertEqual(payload["mindmap_ai_split_base_url"], "https://example.test/v1")
-        self.assertEqual(payload["mindmap_ai_split_model"], "qwen-custom")
-        self.assertEqual(payload["mindmap_ai_split_temperature"], "0.6")
-        self.assertEqual(payload["mindmap_ai_split_max_children"], "7")
-        self.assertEqual(payload["mindmap_ai_split_include_note"], "false")
-        self.assertEqual(payload["mindmap_ai_split_custom_instruction"], "优先按考试框架拆分。")
-
-    def test_ai_prompt_settings_can_list_save_and_reset_templates(self):
-        list_response = self.client.get("/api/v1/settings/ai-prompts")
-        self.assertEqual(list_response.status_code, 200)
-        items = list_response.json()["items"]
-        target = next(item for item in items if item["key"] == "ai_prompt_import_batch_mindmap")
-        self.assertIn("{{structure_tree_json}}", target["template"])
-
-        custom_template = (
-            "自定义批量提示词\n"
-            "{{structure_tree_json}}\n"
-            "请严格输出 JSON。"
-        )
-        save_response = self.client.put(
-            "/api/v1/settings/ai-prompts",
-            json={"templates": {"ai_prompt_import_batch_mindmap": custom_template}},
-        )
-        self.assertEqual(save_response.status_code, 200)
-        saved_target = next(
-            item
-            for item in save_response.json()["items"]
-            if item["key"] == "ai_prompt_import_batch_mindmap"
-        )
-        self.assertEqual(saved_target["template"], custom_template)
-        self.assertTrue(saved_target["is_customized"])
-
-        reset_response = self.client.post(
-            "/api/v1/settings/ai-prompts/reset",
-            json={"keys": ["ai_prompt_import_batch_mindmap"]},
-        )
-        self.assertEqual(reset_response.status_code, 200)
-        reset_target = next(
-            item
-            for item in reset_response.json()["items"]
-            if item["key"] == "ai_prompt_import_batch_mindmap"
-        )
-        self.assertEqual(reset_target["template"], reset_target["default_template"])
-        self.assertFalse(reset_target["is_customized"])
-
-    def test_ai_prompt_settings_reject_unknown_placeholder(self):
-        response = self.client.put(
-            "/api/v1/settings/ai-prompts",
-            json={
-                "templates": {
-                    "ai_prompt_import_batch_mindmap": "坏模板 {{structure_tree_json}} {{unknown_var}}"
-                }
-            },
-        )
-        self.assertEqual(response.status_code, 400)
-        self.assertIn("未知占位符", response.json()["detail"])
-
-    def test_ai_model_settings_list_qwen_provider_and_shared_category_fields(self):
-        with self.SessionLocal() as session:
-            session.add(
-                ExternalAiCallLog(
-                    id="scene-log-1",
-                    feature="AI 分卡",
-                    operation="mindmap_ai_split",
-                    job_id="job-scene-1",
-                    palace_id=1,
-                    status="success",
-                    provider="qwen",
-                    base_url="https://dashscope.example/v1",
-                    model="qwen3.5-flash",
-                    request_id="req-scene-1",
-                    request_json=json.dumps(
-                        {
-                            "resolved_ai": {
-                                "scene_key": "ai_split",
-                                "scene_label": "AI 分卡",
-                                "model_key": "qwen3.5-flash",
-                                "model_label": "qwen3.5-flash（无视觉）",
-                                "provider": "qwen",
-                                "provider_label": "Qwen",
-                                "model_type": "llm",
-                                "model_type_label": "大语言",
-                                "has_vision": False,
-                                "thinking_enabled": False,
-                            }
-                        },
-                        ensure_ascii=False,
-                    ),
-                    response_json="{}",
-                    error_json="{}",
-                )
-            )
-            session.commit()
-        response = self.client.get("/api/v1/settings/ai-models")
-        self.assertEqual(response.status_code, 200)
-        payload = response.json()
-
-        qwen_flash = next(item for item in payload["models"] if item["key"] == "qwen3.5-flash")
-        self.assertEqual(qwen_flash["provider"], "qwen")
-        self.assertEqual(qwen_flash["provider_label"], "Qwen")
-
-        llm_category = next(item for item in payload["categories"] if item["key"] == "llm")
-        self.assertIn("shared_model", llm_category)
-        self.assertIn("available_models", llm_category)
-        self.assertFalse(llm_category["has_shared_config"])
-        self.assertIn("scene_count", llm_category)
-        self.assertIn("custom_scene_count", llm_category)
-
-        qwen_provider = next(item for item in payload["providers"] if item["key"] == "dashscope")
-        self.assertIn("model_count", qwen_provider)
-        self.assertIn("api_key_source", qwen_provider)
-
-        ai_split_scene = next(item for item in payload["scenes"] if item["key"] == "ai_split")
-        self.assertEqual(ai_split_scene["last_status"], "success")
-        self.assertEqual(ai_split_scene["resolved_provider"], "qwen")
-        self.assertEqual(ai_split_scene["resolved_model_label"], "qwen3.5-flash（无视觉）")
-
-        summary = payload["summary"]
-        self.assertIn("recent_success_call_count", summary)
-
-    def test_ai_model_settings_can_save_category_shared_model_and_scene_override(self):
-        first_response = self.client.put(
-            "/api/v1/settings/ai-models",
-            json={
-                "category_updates": {
-                    "llm": {
-                        "default_model": "qwen3.5-flash",
-                        "default_thinking_enabled": False,
-                        "apply_to_scenes": True,
-                    }
-                }
-            },
-        )
-        self.assertEqual(first_response.status_code, 200)
-        payload = first_response.json()
-        llm_category = next(item for item in payload["categories"] if item["key"] == "llm")
-        self.assertTrue(llm_category["has_shared_config"])
-        self.assertEqual(llm_category["shared_model"], "qwen3.5-flash")
-
-        ai_split_scene = next(item for item in payload["scenes"] if item["key"] == "ai_split")
-        self.assertTrue(ai_split_scene["inherits_category_default"])
-        self.assertEqual(ai_split_scene["effective_model"], "qwen3.5-flash")
-
-        second_response = self.client.put(
-            "/api/v1/settings/ai-models",
-            json={
-                "scene_updates": {
-                    "ai_split": {
-                        "default_model": "glm-4.7-flash",
-                        "default_thinking_enabled": True,
-                    }
-                }
-            },
-        )
-        self.assertEqual(second_response.status_code, 200)
-        payload = second_response.json()
-        ai_split_scene = next(item for item in payload["scenes"] if item["key"] == "ai_split")
-        self.assertFalse(ai_split_scene["inherits_category_default"])
-        self.assertEqual(ai_split_scene["effective_model"], "glm-4.7-flash")
-        self.assertTrue(ai_split_scene["effective_thinking_enabled"])
-
-        with self.SessionLocal() as session:
-            runtime = resolve_scenario_runtime(session, "ai_split")
-            self.assertEqual(runtime.model_key, "glm-4.7-flash")
-            self.assertEqual(runtime.provider, "zhipu")
-
-    def test_qwen_runtime_reuses_dashscope_provider_credentials(self):
-        with self.SessionLocal() as session:
-            session.add_all(
-                [
-                    Config(key="category_model_llm", value="qwen3.5-flash"),
-                    Config(key="dashscope_api_key", value="dashscope-test-key"),
-                    Config(key="dashscope_base_url", value="https://dashscope.example/v1"),
-                ]
-            )
-            session.commit()
-            runtime = resolve_scenario_runtime(session, "ai_split")
-
-        self.assertEqual(runtime.provider, "qwen")
-        self.assertEqual(runtime.api_key, "dashscope-test-key")
-        self.assertEqual(runtime.base_url, "https://dashscope.example/v1")
-
-    def test_ai_model_impact_endpoint_and_delete_error_are_structured(self):
-        self.client.put(
-            "/api/v1/settings/ai-models",
-            json={
-                "scene_updates": {
-                    "ai_split": {
-                        "default_model": "glm-4.7-flash",
-                        "default_thinking_enabled": True,
-                    }
-                }
-            },
-        )
-        impact_response = self.client.get("/api/v1/settings/ai-models/models/glm-4.7-flash/impact")
-        self.assertEqual(impact_response.status_code, 200)
-        impact_payload = impact_response.json()
-        self.assertFalse(impact_payload["can_delete"])
-        self.assertGreaterEqual(impact_payload["usage_count"], 1)
-        self.assertIn("AI 分卡", impact_payload["bound_scene_labels"])
-
-        delete_response = self.client.delete("/api/v1/settings/ai-models/models/glm-4.7-flash")
-        self.assertEqual(delete_response.status_code, 400)
-        detail = delete_response.json()["detail"]
-        self.assertEqual(detail["code"], "model_in_use")
-        self.assertFalse(detail["can_delete"])
-        self.assertIn("scene_impacts", detail)
-
-    @patch("memory_anki.modules.settings.application.ai_model_registry.call_chat_completion_text")
-    def test_provider_and_model_test_endpoints(self, call_chat_completion_text_mock):
-        call_chat_completion_text_mock.return_value = "OK"
-        with self.SessionLocal() as session:
-            session.add_all(
-                [
-                    Config(key="dashscope_api_key", value="dashscope-test-key"),
-                    Config(key="dashscope_base_url", value="https://dashscope.example/v1"),
-                ]
-            )
-            session.commit()
-
-        provider_response = self.client.post("/api/v1/settings/ai-models/providers/qwen/test")
-        self.assertEqual(provider_response.status_code, 200)
-        self.assertTrue(provider_response.json()["ok"])
-        self.assertEqual(provider_response.json()["source"], "db")
-
-        model_response = self.client.post("/api/v1/settings/ai-models/models/qwen3.5-flash/test")
-        self.assertEqual(model_response.status_code, 200)
-        self.assertTrue(model_response.json()["ok"])
-        self.assertEqual(model_response.json()["model"], "qwen3.5-flash")
-
-    def test_provider_test_endpoint_handles_missing_api_key(self):
-        with patch.dict(
-            "memory_anki.modules.settings.application.ai_model_registry.PROVIDER_ENV_DEFAULTS",
-            {
-                "dashscope": {"api_key": "", "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1"},
-                "qwen": {"api_key": "", "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1"},
-                "zhipu": {"api_key": "", "base_url": "https://open.bigmodel.cn/api/paas/v4"},
-                "siliconflow": {"api_key": "", "base_url": "https://api.siliconflow.cn/v1"},
-            },
-        ):
-            response = self.client.post("/api/v1/settings/ai-models/providers/qwen/test")
-        self.assertEqual(response.status_code, 200)
-        payload = response.json()
-        self.assertFalse(payload["ok"])
-        self.assertIn("API Key", payload["error"])
-
-    def test_ai_call_log_endpoints_return_summary_and_detail(self):
-        with self.SessionLocal() as session:
-            session.add(
-                ExternalAiCallLog(
-                    id="log-1",
-                    feature="AI 分卡",
-                    operation="mindmap_ai_split",
-                    job_id="job-1",
-                    palace_id=1,
-                    status="success",
-                    provider="openai_compatible",
-                    base_url="https://example.test/v1",
-                    model="qwen3.6-flash",
-                    request_id="req-1",
-                    request_json=json.dumps({"prompt": "系统提示词", "input_artifacts": []}, ensure_ascii=False),
-                    response_json=json.dumps({"response_text": "{\"ok\":true}"}, ensure_ascii=False),
-                    error_json="{}",
-                )
-            )
-            session.commit()
-
-        list_response = self.client.get("/api/v1/ai-call-logs?job_id=job-1")
-        self.assertEqual(list_response.status_code, 200)
-        items = list_response.json()["items"]
-        self.assertEqual(len(items), 1)
-        self.assertEqual(items[0]["id"], "log-1")
-
-        detail_response = self.client.get("/api/v1/ai-call-logs/log-1")
-        self.assertEqual(detail_response.status_code, 200)
-        payload = detail_response.json()
-        self.assertEqual(payload["prompt_text"], "系统提示词")
-        self.assertEqual(payload["response_text"], "{\"ok\":true}")
-        self.assertEqual(payload["job_id"], "job-1")
-
-    def test_ensure_review_log_time_records_backfills_once(self):
-        with self.SessionLocal() as session:
-            review_log = ReviewLog(
-                palace_id=1,
-                review_date=date.today() - timedelta(days=1),
-                score=5,
-                review_mode="review",
-                duration_seconds=300,
-            )
-            session.add(review_log)
-            session.commit()
-            session.refresh(review_log)
-
-            created_first = ensure_review_log_time_records(session)
-            created_second = ensure_review_log_time_records(session)
-            migrated = session.query(TimeRecord).filter_by(id=f"review-log-{review_log.id}").first()
-
-            self.assertEqual(created_first, 1)
-            self.assertEqual(created_second, 0)
-            self.assertIsNotNone(migrated)
-            self.assertEqual(migrated.kind, "review")
-            self.assertEqual(migrated.effective_seconds, 300)
-
-    def test_dashboard_duration_helpers_only_use_time_records(self):
-        with self.SessionLocal() as session:
-            session.add(Config(key="time_recording_threshold_seconds", value="120"))
-            session.add(
-                ReviewLog(
-                    palace_id=1,
-                    review_date=date.today(),
-                    score=5,
-                    review_mode="review",
-                    duration_seconds=999,
-                )
-            )
-            now = datetime.now().replace(microsecond=0)
-            session.add_all(
-                [
-                    TimeRecord(
-                        id="review-now",
-                        kind="review",
-                        palace_id=1,
-                        title="Test Palace",
-                        started_at=now - timedelta(seconds=120),
-                        ended_at=now,
-                        effective_seconds=120,
-                        pause_count=0,
-                        completion_method="manual_complete",
-                        duration_edited=False,
-                        events_json="[]",
-                    ),
-                    TimeRecord(
-                        id="practice-now",
-                        kind="practice",
-                        palace_id=1,
-                        title="Test Palace",
-                        started_at=now - timedelta(seconds=180),
-                        ended_at=now,
-                        effective_seconds=180,
-                        pause_count=0,
-                        completion_method="manual_complete",
-                        duration_edited=False,
-                        events_json="[]",
-                    ),
-                    TimeRecord(
-                        id="edit-now",
-                        kind="palace_edit",
-                        palace_id=1,
-                        title="Test Palace",
-                        started_at=now - timedelta(seconds=60),
-                        ended_at=now,
-                        effective_seconds=60,
-                        pause_count=0,
-                        completion_method="saved",
-                        duration_edited=False,
-                        events_json="[]",
-                    ),
-                ]
-            )
-            session.commit()
-
-            self.assertEqual(get_today_formal_review_duration_seconds(session), 0)
-            self.assertEqual(get_weekly_formal_review_duration_seconds(session), 0)
-            self.assertEqual(get_today_total_review_duration_seconds(session), 180)
-            self.assertEqual(get_monthly_total_review_duration_seconds(session), 180)
-            self.assertEqual(get_weekly_total_review_duration_seconds(session), 180)
-
-    def test_dashboard_returns_today_learning_and_today_new_palaces(self):
-        original_main_get_session = main_module.get_session
-
-        def get_test_session():
-            return self.SessionLocal()
-
-        main_module.get_session = get_test_session
-        dashboard_client = TestClient(main_module.app)
-        try:
-            with self.SessionLocal() as session:
-                palace = session.query(Palace).filter_by(id=1).first()
-                self.assertIsNotNone(palace)
-                palace.created_at = datetime.combine(date.today(), time(hour=9))
-                palace.updated_at = palace.created_at
-
-                second_palace = Palace(
-                    title="Ungrouped Palace",
-                    description="",
-                    created_at=datetime.combine(date.today(), time(hour=10)),
-                    updated_at=datetime.combine(date.today(), time(hour=10)),
-                )
-                session.add(second_palace)
-                session.flush()
-
-                now = datetime.now().replace(microsecond=0)
-                session.add_all(
-                    [
-                        TimeRecord(
-                            id="review-dashboard",
-                            kind="review",
-                            palace_id=palace.id,
-                            title="Test Palace",
-                            started_at=now - timedelta(seconds=360),
-                            ended_at=now,
-                            effective_seconds=360,
-                            pause_count=0,
-                            completion_method="manual_complete",
-                            duration_edited=False,
-                            events_json="[]",
-                        ),
-                        TimeRecord(
-                            id="practice-dashboard",
-                            kind="practice",
-                            palace_id=palace.id,
-                            title="Test Palace / 专项训练 A",
-                            started_at=now - timedelta(seconds=180),
-                            ended_at=now,
-                            effective_seconds=180,
-                            pause_count=0,
-                            completion_method="manual_complete",
-                            duration_edited=False,
-                            events_json="[]",
-                        ),
-                        TimeRecord(
-                            id="edit-dashboard",
-                            kind="palace_edit",
-                            palace_id=second_palace.id,
-                            title="Ungrouped Palace",
-                            started_at=now - timedelta(seconds=240),
-                            ended_at=now,
-                            effective_seconds=240,
-                            pause_count=0,
-                            completion_method="saved",
-                            duration_edited=False,
-                            events_json="[]",
-                        ),
-                    ]
-                )
-                session.commit()
-
-            response = dashboard_client.get("/api/v1/dashboard")
-            self.assertEqual(response.status_code, 200)
-            payload = response.json()
-            self.assertEqual(payload["today_new_palace_count"], 2)
-            self.assertEqual(payload["monthly_total_review_duration_seconds"], 780)
-            self.assertEqual(payload["selected_total_review_duration_seconds"], 780)
-            self.assertEqual(len(payload["today_learning_palaces"]), 2)
-            self.assertEqual(payload["today_learning_palaces"][0]["palace_title"], "Test Palace")
-            self.assertEqual(payload["today_learning_palaces"][0]["total_seconds"], 540)
-            self.assertEqual(payload["today_learning_palaces"][0]["review_seconds"], 360)
-            self.assertEqual(payload["today_learning_palaces"][0]["practice_seconds"], 180)
-            self.assertEqual(payload["today_learning_palaces"][0]["palace_edit_seconds"], 0)
-            self.assertTrue(any(subject["ungrouped_palaces"] for subject in payload["today_new_palaces"]))
-        finally:
-            main_module.get_session = original_main_get_session
-
-    def test_dashboard_returns_due_later_today_and_practice_counts(self):
-        original_main_get_session = main_module.get_session
-
-        def get_test_session():
-            return self.SessionLocal()
-
-        main_module.get_session = get_test_session
-        dashboard_client = TestClient(main_module.app)
-        try:
-            with self.SessionLocal() as session:
-                primary_palace = session.query(Palace).filter_by(id=1).first()
-                self.assertIsNotNone(primary_palace)
-                primary_palace.needs_practice = True
-
-                later_palace = Palace(
-                    title="Later Today Palace",
-                    description="",
-                    created_at=datetime.combine(date.today(), time(hour=8)),
-                    updated_at=datetime.combine(date.today(), time(hour=8)),
-                )
-                practice_palace = Palace(
-                    title="Practice Palace",
-                    description="",
-                    created_at=datetime.combine(date.today(), time(hour=7)),
-                    updated_at=datetime.combine(date.today(), time(hour=7)),
-                    needs_practice=True,
-                )
-                session.add_all([later_palace, practice_palace])
-                session.flush()
-
-                later_due_at = datetime.now().replace(microsecond=0) + timedelta(hours=2)
-                session.add(
-                    ReviewSchedule(
-                        palace_id=later_palace.id,
-                        scheduled_date=later_due_at.date(),
-                        scheduled_at=later_due_at,
-                        interval_days=1,
-                        algorithm_used="ebbinghaus",
-                        completed=False,
-                        review_number=0,
-                        review_type="standard",
-                    )
-                )
-                session.commit()
-
-            response = dashboard_client.get("/api/v1/dashboard")
-            self.assertEqual(response.status_code, 200)
-            payload = response.json()
-            self.assertEqual(payload["due_count"], 1)
-            self.assertEqual(payload["due_later_today_count"], 1)
-            self.assertEqual(payload["needs_practice_count"], 2)
-        finally:
-            main_module.get_session = original_main_get_session
 
     def test_subject_shelf_summary_returns_triage_counts(self):
         with self.SessionLocal() as session:
@@ -1682,719 +875,6 @@ class ReviewRouteTests(unittest.TestCase):
         self.assertEqual(item["needs_practice_count"], 2)
         self.assertEqual(item["review_status"], "due_now")
 
-    def test_monthly_total_duration_helper_uses_current_month_total_learning_time(self):
-        with self.SessionLocal() as session:
-            session.add(Config(key="time_recording_threshold_seconds", value="120"))
-            now = datetime.now().replace(microsecond=0)
-            month_start = now.replace(day=1, hour=0, minute=0, second=0)
-            previous_month_day = month_start - timedelta(days=1)
-            previous_month_at_noon = previous_month_day.replace(hour=12, minute=0, second=0)
-            session.add_all(
-                [
-                    TimeRecord(
-                        id="review-month",
-                        kind="review",
-                        palace_id=1,
-                        title="Test Palace",
-                        started_at=now - timedelta(seconds=300),
-                        ended_at=now,
-                        effective_seconds=300,
-                        pause_count=0,
-                        completion_method="manual_complete",
-                        duration_edited=False,
-                        events_json="[]",
-                    ),
-                    TimeRecord(
-                        id="practice-month",
-                        kind="practice",
-                        palace_id=1,
-                        title="Test Palace",
-                        started_at=now - timedelta(minutes=30),
-                        ended_at=now - timedelta(minutes=25),
-                        effective_seconds=240,
-                        pause_count=0,
-                        completion_method="manual_complete",
-                        duration_edited=False,
-                        events_json="[]",
-                    ),
-                    TimeRecord(
-                        id="edit-month",
-                        kind="palace_edit",
-                        palace_id=1,
-                        title="Test Palace",
-                        started_at=now - timedelta(minutes=50),
-                        ended_at=now - timedelta(minutes=45),
-                        effective_seconds=180,
-                        pause_count=0,
-                        completion_method="saved",
-                        duration_edited=False,
-                        events_json="[]",
-                    ),
-                    TimeRecord(
-                        id="below-threshold",
-                        kind="review",
-                        palace_id=1,
-                        title="Test Palace",
-                        started_at=now - timedelta(minutes=10),
-                        ended_at=now - timedelta(minutes=9),
-                        effective_seconds=120,
-                        pause_count=0,
-                        completion_method="manual_complete",
-                        duration_edited=False,
-                        events_json="[]",
-                    ),
-                    TimeRecord(
-                        id="deleted-month",
-                        kind="practice",
-                        palace_id=1,
-                        title="Test Palace",
-                        started_at=now - timedelta(minutes=20),
-                        ended_at=now - timedelta(minutes=18),
-                        effective_seconds=600,
-                        pause_count=0,
-                        completion_method="manual_complete",
-                        duration_edited=False,
-                        deleted_at=now,
-                        deleted_reason="manual",
-                        events_json="[]",
-                    ),
-                    TimeRecord(
-                        id="previous-month",
-                        kind="review",
-                        palace_id=1,
-                        title="Test Palace",
-                        started_at=previous_month_at_noon,
-                        ended_at=previous_month_at_noon + timedelta(minutes=10),
-                        effective_seconds=600,
-                        pause_count=0,
-                        completion_method="manual_complete",
-                        duration_edited=False,
-                        events_json="[]",
-                    ),
-                ]
-            )
-            session.commit()
-
-            self.assertEqual(get_monthly_total_review_duration_seconds(session), 720)
-
-    def test_dashboard_returns_selected_total_duration_for_month_query(self):
-        original_main_get_session = main_module.get_session
-
-        def get_test_session():
-            return self.SessionLocal()
-
-        main_module.get_session = get_test_session
-        dashboard_client = TestClient(main_module.app)
-        try:
-            with self.SessionLocal() as session:
-                session.add(Config(key="time_recording_threshold_seconds", value="0"))
-                session.add_all(
-                    [
-                        TimeRecord(
-                            id="selected-june-review",
-                            kind="review",
-                            palace_id=1,
-                            title="Test Palace",
-                            started_at=datetime(2026, 6, 5, 10, 0, 0),
-                            ended_at=datetime(2026, 6, 5, 10, 10, 0),
-                            effective_seconds=600,
-                            pause_count=0,
-                            completion_method="manual_complete",
-                            duration_edited=False,
-                            events_json="[]",
-                        ),
-                        TimeRecord(
-                            id="selected-june-practice",
-                            kind="practice",
-                            palace_id=1,
-                            title="Test Palace",
-                            started_at=datetime(2026, 6, 10, 9, 0, 0),
-                            ended_at=datetime(2026, 6, 10, 9, 5, 0),
-                            effective_seconds=300,
-                            pause_count=0,
-                            completion_method="manual_complete",
-                            duration_edited=False,
-                            events_json="[]",
-                        ),
-                        TimeRecord(
-                            id="selected-may-edit",
-                            kind="palace_edit",
-                            palace_id=1,
-                            title="Test Palace",
-                            started_at=datetime(2026, 5, 20, 12, 0, 0),
-                            ended_at=datetime(2026, 5, 20, 12, 4, 0),
-                            effective_seconds=240,
-                            pause_count=0,
-                            completion_method="saved",
-                            duration_edited=False,
-                            events_json="[]",
-                        ),
-                    ]
-                )
-                session.commit()
-
-            response = dashboard_client.get("/api/v1/dashboard?duration_mode=month&month=2026-06")
-            self.assertEqual(response.status_code, 200)
-            payload = response.json()
-            self.assertEqual(payload["selected_total_review_duration_seconds"], 900)
-        finally:
-            main_module.get_session = original_main_get_session
-
-    def test_dashboard_returns_selected_total_duration_for_custom_range_query(self):
-        original_main_get_session = main_module.get_session
-
-        def get_test_session():
-            return self.SessionLocal()
-
-        main_module.get_session = get_test_session
-        dashboard_client = TestClient(main_module.app)
-        try:
-            with self.SessionLocal() as session:
-                session.add(Config(key="time_recording_threshold_seconds", value="120"))
-                session.add_all(
-                    [
-                        TimeRecord(
-                            id="range-review",
-                            kind="review",
-                            palace_id=1,
-                            title="Test Palace",
-                            started_at=datetime(2026, 6, 2, 10, 0, 0),
-                            ended_at=datetime(2026, 6, 2, 10, 10, 0),
-                            effective_seconds=600,
-                            pause_count=0,
-                            completion_method="manual_complete",
-                            duration_edited=False,
-                            events_json="[]",
-                        ),
-                        TimeRecord(
-                            id="range-practice",
-                            kind="practice",
-                            palace_id=1,
-                            title="Test Palace",
-                            started_at=datetime(2026, 6, 15, 8, 0, 0),
-                            ended_at=datetime(2026, 6, 15, 8, 3, 0),
-                            effective_seconds=180,
-                            pause_count=0,
-                            completion_method="manual_complete",
-                            duration_edited=False,
-                            events_json="[]",
-                        ),
-                        TimeRecord(
-                            id="range-below-threshold",
-                            kind="palace_edit",
-                            palace_id=1,
-                            title="Test Palace",
-                            started_at=datetime(2026, 6, 10, 7, 0, 0),
-                            ended_at=datetime(2026, 6, 10, 7, 1, 0),
-                            effective_seconds=120,
-                            pause_count=0,
-                            completion_method="saved",
-                            duration_edited=False,
-                            events_json="[]",
-                        ),
-                        TimeRecord(
-                            id="range-outside",
-                            kind="review",
-                            palace_id=1,
-                            title="Test Palace",
-                            started_at=datetime(2026, 6, 20, 9, 0, 0),
-                            ended_at=datetime(2026, 6, 20, 9, 5, 0),
-                            effective_seconds=300,
-                            pause_count=0,
-                            completion_method="manual_complete",
-                            duration_edited=False,
-                            events_json="[]",
-                        ),
-                    ]
-                )
-                session.commit()
-
-            response = dashboard_client.get("/api/v1/dashboard?duration_mode=range&start_date=2026-06-01&end_date=2026-06-15")
-            self.assertEqual(response.status_code, 200)
-            payload = response.json()
-            self.assertEqual(payload["selected_total_review_duration_seconds"], 780)
-        finally:
-            main_module.get_session = original_main_get_session
-
-    def test_dashboard_returns_selected_total_duration_for_all_query(self):
-        original_main_get_session = main_module.get_session
-
-        def get_test_session():
-            return self.SessionLocal()
-
-        main_module.get_session = get_test_session
-        dashboard_client = TestClient(main_module.app)
-        try:
-            with self.SessionLocal() as session:
-                session.add(Config(key="time_recording_threshold_seconds", value="120"))
-                session.add_all(
-                    [
-                        TimeRecord(
-                            id="all-review",
-                            kind="review",
-                            palace_id=1,
-                            title="Test Palace",
-                            started_at=datetime(2026, 5, 1, 10, 0, 0),
-                            ended_at=datetime(2026, 5, 1, 10, 10, 0),
-                            effective_seconds=600,
-                            pause_count=0,
-                            completion_method="manual_complete",
-                            duration_edited=False,
-                            events_json="[]",
-                        ),
-                        TimeRecord(
-                            id="all-practice",
-                            kind="practice",
-                            palace_id=1,
-                            title="Test Palace",
-                            started_at=datetime(2026, 5, 2, 8, 0, 0),
-                            ended_at=datetime(2026, 5, 2, 8, 5, 0),
-                            effective_seconds=300,
-                            pause_count=0,
-                            completion_method="manual_complete",
-                            duration_edited=False,
-                            events_json="[]",
-                        ),
-                        TimeRecord(
-                            id="all-edit",
-                            kind="palace_edit",
-                            palace_id=1,
-                            title="Test Palace",
-                            started_at=datetime(2026, 5, 3, 7, 0, 0),
-                            ended_at=datetime(2026, 5, 3, 7, 4, 0),
-                            effective_seconds=240,
-                            pause_count=0,
-                            completion_method="saved",
-                            duration_edited=False,
-                            events_json="[]",
-                        ),
-                        TimeRecord(
-                            id="all-below-threshold",
-                            kind="review",
-                            palace_id=1,
-                            title="Test Palace",
-                            started_at=datetime(2026, 5, 4, 7, 0, 0),
-                            ended_at=datetime(2026, 5, 4, 7, 2, 0),
-                            effective_seconds=120,
-                            pause_count=0,
-                            completion_method="manual_complete",
-                            duration_edited=False,
-                            events_json="[]",
-                        ),
-                        TimeRecord(
-                            id="all-deleted",
-                            kind="practice",
-                            palace_id=1,
-                            title="Test Palace",
-                            started_at=datetime(2026, 5, 5, 9, 0, 0),
-                            ended_at=datetime(2026, 5, 5, 9, 3, 0),
-                            effective_seconds=180,
-                            pause_count=0,
-                            completion_method="manual_complete",
-                            duration_edited=False,
-                            deleted_at=datetime(2026, 5, 5, 9, 5, 0),
-                            deleted_reason="manual",
-                            events_json="[]",
-                        ),
-                    ]
-                )
-                session.commit()
-
-            response = dashboard_client.get("/api/v1/dashboard?duration_mode=all")
-            self.assertEqual(response.status_code, 200)
-            payload = response.json()
-            self.assertEqual(payload["selected_total_review_duration_seconds"], 1140)
-        finally:
-            main_module.get_session = original_main_get_session
-
-    def test_dashboard_rejects_invalid_custom_range_query(self):
-        original_main_get_session = main_module.get_session
-
-        def get_test_session():
-            return self.SessionLocal()
-
-        main_module.get_session = get_test_session
-        dashboard_client = TestClient(main_module.app)
-        try:
-            response = dashboard_client.get("/api/v1/dashboard?duration_mode=range&start_date=2026-06-20&end_date=2026-06-10")
-            self.assertEqual(response.status_code, 400)
-            self.assertIn("开始日期不能晚于结束日期", response.json()["detail"])
-        finally:
-            main_module.get_session = original_main_get_session
-
-    def test_create_review_time_record_respects_threshold(self):
-        with self.SessionLocal() as session:
-            session.add(Config(key="time_recording_threshold_seconds", value="120"))
-            session.commit()
-
-            created = create_review_time_record(
-                session,
-                record_id="threshold-review",
-                palace_id=1,
-                palace_segment_id=None,
-                title="Test Palace",
-                duration_seconds=80,
-                ended_at=datetime.now(),
-                completion_method="manual_complete",
-            )
-
-            self.assertIsNone(created)
-            persisted = session.query(TimeRecord).filter_by(id="threshold-review").first()
-            self.assertIsNone(persisted)
-
-    def test_normalize_time_record_event_timezones_repairs_old_utc_mirrors(self):
-        with self.SessionLocal() as session:
-            record = TimeRecord(
-                id="utc-mirrored-record",
-                kind="practice",
-                palace_id=1,
-                title="Test Palace",
-                started_at=datetime(2026, 5, 10, 16, 18, 9, 648000),
-                ended_at=datetime(2026, 5, 10, 16, 31, 24, 463000),
-                effective_seconds=628,
-                pause_count=2,
-                completion_method="manual_complete",
-                duration_edited=False,
-                events_json=json.dumps(
-                    [
-                        {"type": "start", "at": "2026-05-10T16:18:09.648Z"},
-                        {"type": "manual_complete", "at": "2026-05-10T16:31:24.463Z"},
-                    ]
-                ),
-            )
-            session.add(record)
-            session.commit()
-
-            updated = normalize_time_record_event_timezones(session)
-            session.refresh(record)
-
-            expected_start = datetime.fromisoformat("2026-05-10T16:18:09.648+00:00").astimezone().replace(tzinfo=None)
-            expected_end = datetime.fromisoformat("2026-05-10T16:31:24.463+00:00").astimezone().replace(tzinfo=None)
-
-            self.assertEqual(updated, 1)
-            self.assertEqual(record.started_at, expected_start)
-            self.assertEqual(record.ended_at, expected_end)
-
-    def test_create_time_record_normalizes_explicit_timezone_to_local_naive(self):
-        response = self.client.post(
-            "/api/v1/time-records",
-            json={
-                "id": "timezone-aware-record",
-                "kind": "practice",
-                "palaceId": 1,
-                "palaceSegmentId": None,
-                "title": "Test Palace",
-                "startedAt": "2026-05-10T16:18:09.648Z",
-                "endedAt": "2026-05-10T16:31:24.463Z",
-                "effectiveSeconds": 628,
-                "pauseCount": 2,
-                "completionMethod": "manual_complete",
-                "durationEdited": False,
-                "deletedAt": None,
-                "deletedReason": None,
-                "events": [],
-            },
-        )
-        self.assertEqual(response.status_code, 200)
-        item = response.json()["item"]
-        expected_start = datetime.fromisoformat("2026-05-10T16:18:09.648+00:00").astimezone().replace(tzinfo=None)
-        expected_end = datetime.fromisoformat("2026-05-10T16:31:24.463+00:00").astimezone().replace(tzinfo=None)
-        self.assertEqual(item["startedAt"], expected_start.isoformat())
-        self.assertEqual(item["endedAt"], expected_end.isoformat())
-
-        with self.SessionLocal() as session:
-            record = session.query(TimeRecord).filter_by(id="timezone-aware-record").first()
-            self.assertIsNotNone(record)
-            self.assertEqual(record.started_at, expected_start)
-            self.assertEqual(record.ended_at, expected_end)
-
-    def test_create_time_record_preserves_scene_segments_alongside_events(self):
-        response = self.client.post(
-            "/api/v1/time-records",
-            json={
-                "id": "scene-segment-record",
-                "kind": "practice",
-                "palaceId": 1,
-                "palaceSegmentId": None,
-                "title": "Test Palace",
-                "startedAt": "2026-05-11T00:18:09.648",
-                "endedAt": "2026-05-11T00:31:24.463",
-                "effectiveSeconds": 628,
-                "pauseCount": 2,
-                "completionMethod": "manual_complete",
-                "durationEdited": False,
-                "deletedAt": None,
-                "deletedReason": None,
-                "events": [{"type": "start", "at": "2026-05-11T00:18:09.648"}],
-                "sceneSegments": [
-                    {
-                        "scene": "practice",
-                        "kind": "practice",
-                        "palaceId": 1,
-                        "sourceKind": "palace",
-                        "englishCourseId": None,
-                        "title": "Test Palace",
-                        "startedAt": "2026-05-11T00:18:09.648",
-                        "endedAt": "2026-05-11T00:28:09.648",
-                        "effectiveSeconds": 600,
-                    }
-                ],
-            },
-        )
-        self.assertEqual(response.status_code, 200)
-        item = response.json()["item"]
-        self.assertEqual(item["events"], [{"type": "start", "at": "2026-05-11T00:18:09.648"}])
-        self.assertEqual(item["sceneSegments"][0]["scene"], "practice")
-        self.assertEqual(item["sceneSegments"][0]["effectiveSeconds"], 600)
-
-    def test_create_time_record_reuses_response_for_duplicate_mutation_id(self):
-        headers = {"X-Memory-Anki-Mutation-ID": "time-record-mutation-1"}
-        first = self.client.post(
-            "/api/v1/time-records",
-            headers=headers,
-            json={
-                "id": "time-mutation-record-1",
-                "kind": "practice",
-                "palaceId": 1,
-                "palaceSegmentId": None,
-                "title": "Test Palace",
-                "startedAt": "2026-05-11T00:18:09.648",
-                "endedAt": "2026-05-11T00:31:24.463",
-                "effectiveSeconds": 628,
-                "pauseCount": 2,
-                "completionMethod": "manual_complete",
-                "durationEdited": False,
-                "deletedAt": None,
-                "deletedReason": None,
-                "events": [],
-            },
-        )
-        second = self.client.post(
-            "/api/v1/time-records",
-            headers=headers,
-            json={
-                "id": "time-mutation-record-2",
-                "kind": "practice",
-                "palaceId": 1,
-                "palaceSegmentId": None,
-                "title": "Should Not Be Created",
-                "startedAt": "2026-05-11T01:18:09.648",
-                "endedAt": "2026-05-11T01:31:24.463",
-                "effectiveSeconds": 628,
-                "pauseCount": 2,
-                "completionMethod": "manual_complete",
-                "durationEdited": False,
-                "deletedAt": None,
-                "deletedReason": None,
-                "events": [],
-            },
-        )
-
-        self.assertEqual(first.status_code, 200)
-        self.assertEqual(second.status_code, 200)
-        self.assertEqual(second.json(), first.json())
-        with self.SessionLocal() as session:
-            self.assertIsNotNone(session.query(TimeRecord).filter_by(id="time-mutation-record-1").first())
-            self.assertIsNone(session.query(TimeRecord).filter_by(id="time-mutation-record-2").first())
-
-    def test_update_time_record_rejects_start_after_end(self):
-        response = self.client.post(
-            "/api/v1/time-records",
-            json={
-                "id": "invalid-order-record",
-                "kind": "practice",
-                "palaceId": 1,
-                "palaceSegmentId": None,
-                "title": "Test Palace",
-                "startedAt": "2026-05-11T00:18:09.648",
-                "endedAt": "2026-05-11T00:31:24.463",
-                "effectiveSeconds": 628,
-                "pauseCount": 2,
-                "completionMethod": "manual_complete",
-                "durationEdited": False,
-                "deletedAt": None,
-                "deletedReason": None,
-                "events": [],
-            },
-        )
-        self.assertEqual(response.status_code, 200)
-
-        update = self.client.put(
-            "/api/v1/time-records/invalid-order-record",
-            json={
-                "startedAt": "2026-05-11T00:35:00",
-                "endedAt": "2026-05-11T00:31:24.463",
-            },
-        )
-        self.assertEqual(update.status_code, 400)
-        self.assertIn("开始时间不能晚于结束时间", update.json()["detail"])
-
-    def test_normalize_timezones_endpoint_is_idempotent(self):
-        with self.SessionLocal() as session:
-            session.add(
-                TimeRecord(
-                    id="normalize-endpoint-record",
-                    kind="practice",
-                    palace_id=1,
-                    title="Test Palace",
-                    started_at=datetime(2026, 5, 10, 16, 18, 9, 648000),
-                    ended_at=datetime(2026, 5, 10, 16, 31, 24, 463000),
-                    effective_seconds=628,
-                    pause_count=2,
-                    completion_method="manual_complete",
-                    duration_edited=False,
-                    events_json=json.dumps(
-                        [
-                            {"type": "start", "at": "2026-05-10T16:18:09.648Z"},
-                            {"type": "manual_complete", "at": "2026-05-10T16:31:24.463Z"},
-                        ]
-                    ),
-                )
-            )
-            session.commit()
-
-        first = self.client.post("/api/v1/time-records/normalize-timezones")
-        second = self.client.post("/api/v1/time-records/normalize-timezones")
-
-        self.assertEqual(first.status_code, 200)
-        self.assertEqual(second.status_code, 200)
-        self.assertEqual(first.json()["updated"], 1)
-        self.assertEqual(second.json()["updated"], 0)
-
-    def test_normalize_time_record_event_timezones_repairs_whole_day_shift_from_events(self):
-        with self.SessionLocal() as session:
-            record = TimeRecord(
-                id="whole-day-shift-with-events",
-                kind="review",
-                palace_id=1,
-                title="Test Palace / 第 1 部分",
-                started_at=datetime(2026, 5, 9, 23, 37, 0),
-                ended_at=datetime(2026, 5, 10, 23, 46, 0),
-                effective_seconds=510,
-                pause_count=1,
-                completion_method="manual_complete",
-                duration_edited=False,
-                events_json=json.dumps(
-                    [
-                        {"type": "start", "at": "2026-05-09T15:37:32.055Z"},
-                        {"type": "manual_complete", "at": "2026-05-09T15:46:12.830Z"},
-                    ]
-                ),
-            )
-            session.add(record)
-            session.commit()
-
-            updated = normalize_time_record_event_timezones(session)
-            session.refresh(record)
-
-            self.assertEqual(updated, 1)
-            self.assertEqual(record.started_at, datetime(2026, 5, 9, 23, 37, 0))
-            self.assertEqual(record.ended_at, datetime(2026, 5, 9, 23, 46, 12, 830000))
-
-    def test_normalize_time_record_event_timezones_repairs_whole_day_shift_without_events(self):
-        with self.SessionLocal() as session:
-            record = TimeRecord(
-                id="whole-day-shift-without-events",
-                kind="review",
-                palace_id=1,
-                title="Test Palace",
-                started_at=datetime(2026, 5, 9, 23, 37, 0),
-                ended_at=datetime(2026, 5, 10, 23, 46, 0),
-                effective_seconds=510,
-                pause_count=0,
-                completion_method="manual_complete",
-                duration_edited=False,
-                events_json="[]",
-            )
-            session.add(record)
-            session.commit()
-
-            updated = normalize_time_record_event_timezones(session)
-            session.refresh(record)
-
-            self.assertEqual(updated, 1)
-            self.assertEqual(record.started_at, datetime(2026, 5, 9, 23, 37, 0))
-            self.assertEqual(record.ended_at, datetime(2026, 5, 9, 23, 45, 30))
-
-    def test_segment_review_session_uses_segment_due_semantics(self):
-        with self.SessionLocal() as session:
-            palace = session.query(Palace).filter_by(id=1).first()
-            self.assertIsNotNone(palace)
-            segment = PalaceSegment(
-                palace_id=palace.id,
-                name="第 1 部分",
-                color="#14b8a6",
-                node_uids_json="[]",
-                sort_order=0,
-            )
-            session.add(segment)
-            session.flush()
-            schedule = PalaceSegmentReviewSchedule(
-                palace_segment_id=segment.id,
-                scheduled_date=date.today() - timedelta(days=1),
-                interval_days=1,
-                algorithm_used="ebbinghaus",
-                completed=False,
-                review_number=0,
-                review_type="standard",
-            )
-            session.add(schedule)
-            session.commit()
-
-            response = self.client.post(
-                f"/api/v1/segment-review/session/{schedule.id}/submit",
-                json={"duration_seconds": 30, "completion_mode": "manual_complete"},
-            )
-
-            self.assertEqual(response.status_code, 200)
-            self.assertTrue(response.json()["ok"])
-
-    def test_segment_review_submit_reuses_response_for_duplicate_mutation_id(self):
-        with self.SessionLocal() as session:
-            palace = session.query(Palace).filter_by(id=1).first()
-            self.assertIsNotNone(palace)
-            segment = PalaceSegment(
-                palace_id=palace.id,
-                name="第 1 部分",
-                color="#14b8a6",
-                node_uids_json="[]",
-                sort_order=0,
-            )
-            session.add(segment)
-            session.flush()
-            schedule = PalaceSegmentReviewSchedule(
-                palace_segment_id=segment.id,
-                scheduled_date=date.today() - timedelta(days=1),
-                interval_days=1,
-                algorithm_used="ebbinghaus",
-                completed=False,
-                review_number=0,
-                review_type="standard",
-            )
-            session.add(schedule)
-            session.commit()
-            schedule_id = schedule.id
-            segment_id = segment.id
-
-        headers = {"X-Memory-Anki-Mutation-ID": "segment-submit-mutation-1"}
-        first = self.client.post(
-            f"/api/v1/segment-review/session/{schedule_id}/submit",
-            headers=headers,
-            json={"duration_seconds": 30, "completion_mode": "manual_complete"},
-        )
-        second = self.client.post(
-            f"/api/v1/segment-review/session/{schedule_id}/submit",
-            headers=headers,
-            json={"duration_seconds": 999, "completion_mode": "manual_complete"},
-        )
-
-        self.assertEqual(first.status_code, 200)
-        self.assertEqual(second.status_code, 200)
-        self.assertEqual(second.json(), first.json())
-        with self.SessionLocal() as session:
-            records = session.query(TimeRecord).filter_by(kind="review", palace_segment_id=segment_id).all()
-            self.assertEqual(len(records), 1)
-
     def test_review_session_allows_later_today_submission_and_sets_needs_practice(self):
         with self.SessionLocal() as session:
             schedule = session.query(ReviewSchedule).filter_by(id=1).first()
@@ -2437,66 +917,6 @@ class ReviewRouteTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 404)
 
-    def test_virtual_default_segment_review_session_payload_is_available(self):
-        response = self.client.get("/api/v1/segment-review/session/1")
-        self.assertEqual(response.status_code, 200)
-        payload = response.json()
-        self.assertEqual(payload["id"], 1)
-        self.assertTrue(payload["segment"]["is_virtual_default"])
-        self.assertEqual(payload["segment"]["display_name"], "第 1 部分")
-        self.assertIn("editor_doc", payload)
-
-    def test_virtual_default_segment_uses_actual_pending_schedule_timing(self):
-        with self.SessionLocal() as session:
-            palace = session.query(Palace).filter_by(id=1).first()
-            self.assertIsNotNone(palace)
-            palace.editor_doc = json.dumps(
-                {
-                    "root": {
-                        "data": {"text": "Test Palace"},
-                        "children": [
-                            {"data": {"text": "Branch A", "uid": "branch-a"}, "children": []},
-                            {"data": {"text": "Branch B", "uid": "branch-b"}, "children": []},
-                        ],
-                    }
-                }
-            )
-            session.add(
-                PalaceSegment(
-                    palace_id=palace.id,
-                    name="第 2 部分",
-                    color="#14b8a6",
-                    node_uids_json=json.dumps(["branch-a"]),
-                    sort_order=0,
-                )
-            )
-            session.add(
-                ReviewLog(
-                    palace_id=palace.id,
-                    review_date=date.today() - timedelta(days=2),
-                    score=5,
-                    review_mode="review",
-                    duration_seconds=30,
-                )
-            )
-            schedule = session.query(ReviewSchedule).filter_by(id=1).first()
-            self.assertIsNotNone(schedule)
-            schedule.scheduled_date = date.today() + timedelta(days=2)
-            session.commit()
-
-        response = self.client.get("/api/v1/palaces")
-        self.assertEqual(response.status_code, 200)
-        item = response.json()[0]
-        default_segment = item["segments"][0]
-        self.assertTrue(default_segment["is_virtual_default"])
-        self.assertFalse(default_segment["has_due_review"])
-        self.assertEqual(default_segment["current_review_schedule_id"], 1)
-        self.assertTrue(
-            default_segment["next_review_at"].startswith(
-                (date.today() + timedelta(days=2)).isoformat()
-            )
-        )
-
     def test_virtual_default_review_payload_exposes_pending_schedule_timing(self):
         with self.SessionLocal() as session:
             palace = session.query(Palace).filter_by(id=1).first()
@@ -2527,135 +947,6 @@ class ReviewRouteTests(unittest.TestCase):
         self.assertEqual(default_payload["current_review_type"], "standard")
         self.assertTrue(default_payload["next_review_at"].startswith(due_at.date().isoformat()))
 
-    def test_virtual_default_segment_submit_uses_segment_review_route(self):
-        with self.SessionLocal() as session:
-            palace = session.query(Palace).filter_by(id=1).first()
-            self.assertIsNotNone(palace)
-            palace.editor_doc = json.dumps(
-                {
-                    "root": {
-                        "data": {"text": "Test Palace"},
-                        "children": [
-                            {"data": {"text": "Branch A", "uid": "branch-a"}, "children": []},
-                            {"data": {"text": "Branch B", "uid": "branch-b"}, "children": []},
-                        ],
-                    }
-                }
-            )
-            session.add(
-                PalaceSegment(
-                    palace_id=palace.id,
-                    name="第 2 部分",
-                    color="#14b8a6",
-                    node_uids_json=json.dumps(["branch-a"]),
-                    sort_order=0,
-                )
-            )
-            session.commit()
-
-        response = self.client.post(
-            "/api/v1/segment-review/session/1/submit",
-            json={"duration_seconds": 30, "completion_mode": "manual_complete"},
-        )
-
-        self.assertEqual(response.status_code, 200)
-        self.assertTrue(response.json()["ok"])
-
-    def test_virtual_default_segment_submit_clears_due_now_state_in_grouped_and_shelf_payloads(self):
-        with self.SessionLocal() as session:
-            palace = session.query(Palace).filter_by(id=1).first()
-            self.assertIsNotNone(palace)
-            palace.editor_doc = json.dumps(
-                {
-                    "root": {
-                        "data": {"text": "Test Palace"},
-                        "children": [
-                            {"data": {"text": "Branch A", "uid": "branch-a"}, "children": []},
-                            {"data": {"text": "Branch B", "uid": "branch-b"}, "children": []},
-                        ],
-                    }
-                }
-            )
-            session.commit()
-
-        response = self.client.post(
-            "/api/v1/segment-review/session/1/submit",
-            json={"duration_seconds": 30, "completion_mode": "manual_complete"},
-        )
-
-        self.assertEqual(response.status_code, 200)
-        grouped_response = self.client.get("/api/v1/palaces/grouped")
-        self.assertEqual(grouped_response.status_code, 200)
-        palace_payload = grouped_response.json()["subjects"][0]["ungrouped_palaces"][0]
-        default_segment = palace_payload["segments"][0]
-        self.assertTrue(default_segment["is_virtual_default"])
-        self.assertFalse(default_segment["has_due_review"])
-
-        shelf_response = self.client.get("/api/v1/palaces/subjects")
-        self.assertEqual(shelf_response.status_code, 200)
-        self.assertEqual(shelf_response.json()["items"][0]["due_now_count"], 0)
-
-    def test_segment_submit_clears_due_now_state_in_grouped_and_shelf_payloads(self):
-        with self.SessionLocal() as session:
-            palace = session.query(Palace).filter_by(id=1).first()
-            self.assertIsNotNone(palace)
-            palace.editor_doc = json.dumps(
-                {
-                    "root": {
-                        "data": {"text": "Test Palace"},
-                        "children": [
-                            {"data": {"text": "Branch A", "uid": "branch-a"}, "children": []},
-                            {"data": {"text": "Branch B", "uid": "branch-b"}, "children": []},
-                        ],
-                    }
-                }
-            )
-            default_schedule = session.query(ReviewSchedule).filter_by(id=1).first()
-            self.assertIsNotNone(default_schedule)
-            default_schedule.completed = True
-            default_schedule.completed_at = datetime.now().replace(second=0, microsecond=0)
-            segment = PalaceSegment(
-                palace_id=palace.id,
-                name="第 1 部分",
-                color="#14b8a6",
-                node_uids_json=json.dumps(["branch-a", "branch-b"]),
-                sort_order=0,
-            )
-            session.add(segment)
-            session.flush()
-            segment_schedule = PalaceSegmentReviewSchedule(
-                palace_segment_id=segment.id,
-                scheduled_date=date.today() - timedelta(days=1),
-                interval_days=1,
-                algorithm_used="ebbinghaus",
-                completed=False,
-                review_number=0,
-                review_type="standard",
-                anchor_date=date.today() - timedelta(days=1),
-            )
-            session.add(segment_schedule)
-            session.commit()
-            segment_id = segment.id
-            segment_schedule_id = segment_schedule.id
-
-        response = self.client.post(
-            f"/api/v1/segment-review/session/{segment_schedule_id}/submit",
-            json={"duration_seconds": 30, "completion_mode": "manual_complete"},
-        )
-
-        self.assertEqual(response.status_code, 200)
-        grouped_response = self.client.get("/api/v1/palaces/grouped")
-        self.assertEqual(grouped_response.status_code, 200)
-        palace_payload = grouped_response.json()["subjects"][0]["ungrouped_palaces"][0]
-        submitted_segment = next(
-            item for item in palace_payload["segments"] if item["id"] == segment_id
-        )
-        self.assertFalse(submitted_segment["has_due_review"])
-
-        shelf_response = self.client.get("/api/v1/palaces/subjects")
-        self.assertEqual(shelf_response.status_code, 200)
-        self.assertEqual(shelf_response.json()["items"][0]["due_now_count"], 0)
-
     def test_review_session_routes_return_404_for_missing_schedule(self):
         response = self.client.get("/api/v1/review/session/999999")
         self.assertEqual(response.status_code, 404)
@@ -2667,128 +958,6 @@ class ReviewRouteTests(unittest.TestCase):
         )
         self.assertEqual(submit_response.status_code, 404)
         self.assertEqual(submit_response.json()["detail"], "not found")
-
-    def test_segment_review_session_routes_return_404_for_missing_schedule(self):
-        response = self.client.get("/api/v1/segment-review/session/999999")
-        self.assertEqual(response.status_code, 404)
-        self.assertEqual(response.json()["detail"], "not found")
-
-        progress_response = self.client.get("/api/v1/segment-review/session/999999/progress")
-        self.assertEqual(progress_response.status_code, 404)
-        self.assertEqual(progress_response.json()["detail"], "not found")
-
-        submit_response = self.client.post(
-            "/api/v1/segment-review/session/999999/submit",
-            json={"duration_seconds": 30, "completion_mode": "manual_complete"},
-        )
-        self.assertEqual(submit_response.status_code, 404)
-        self.assertEqual(submit_response.json()["detail"], "not found")
-
-    def test_ensure_review_log_time_records_deduplicates_existing_review_time_record(self):
-        with self.SessionLocal() as session:
-            review_log = ReviewLog(
-                palace_id=1,
-                review_date=date.today(),
-                score=5,
-                review_mode="review",
-                duration_seconds=180,
-            )
-            session.add(review_log)
-            session.flush()
-            session.add(
-                TimeRecord(
-                    id="existing-review-record",
-                    kind="review",
-                    palace_id=1,
-                    title="Test Palace",
-                    started_at=datetime.combine(date.today(), datetime.min.time()) + timedelta(hours=10),
-                    ended_at=datetime.combine(date.today(), datetime.min.time()) + timedelta(hours=10, seconds=180),
-                    effective_seconds=180,
-                    pause_count=0,
-                    completion_method="manual_complete",
-                    duration_edited=False,
-                    events_json="[]",
-                )
-            )
-            session.commit()
-
-            created = ensure_review_log_time_records(session)
-            active_records = (
-                session.query(TimeRecord)
-                .filter(TimeRecord.kind == "review", TimeRecord.deleted_at.is_(None))
-                .all()
-            )
-
-            self.assertEqual(created, 0)
-            self.assertEqual(len(active_records), 1)
-            self.assertEqual(active_records[0].id, "existing-review-record")
-
-    def test_ensure_review_log_time_records_prefers_generated_review_log_record_over_client_duplicate(self):
-        with self.SessionLocal() as session:
-            review_log = ReviewLog(
-                palace_id=1,
-                review_date=date.today(),
-                score=5,
-                review_mode="review",
-                duration_seconds=876,
-            )
-            session.add(review_log)
-            session.flush()
-            session.add_all(
-                [
-                    TimeRecord(
-                        id=f"review-log-{review_log.id}",
-                        kind="review",
-                        palace_id=1,
-                        source_kind="palace",
-                        title="第一节古罗马的教育阶段",
-                        started_at=datetime.combine(date.today(), time(16, 10, 24)),
-                        ended_at=datetime.combine(date.today(), time(16, 25, 0)),
-                        effective_seconds=876,
-                        pause_count=0,
-                        completion_method="manual_complete",
-                        duration_edited=False,
-                        events_json="[]",
-                    ),
-                    TimeRecord(
-                        id="frontend-duplicate-review-record",
-                        kind="review",
-                        palace_id=1,
-                        source_kind="palace",
-                        title="第一节古罗马的教育阶段 / 第 1 部分",
-                        started_at=datetime.combine(date.today(), time(16, 4, 53)),
-                        ended_at=datetime.combine(date.today(), time(16, 25, 8)),
-                        effective_seconds=876,
-                        pause_count=0,
-                        completion_method="manual_complete",
-                        duration_edited=False,
-                        events_json=json.dumps(
-                            [
-                                {"type": "start", "at": "2026-06-05T16:04:53+08:00"},
-                                {"type": "manual_complete", "at": "2026-06-05T16:25:08+08:00"},
-                            ],
-                            ensure_ascii=False,
-                        ),
-                    ),
-                ]
-            )
-            session.commit()
-
-            created = ensure_review_log_time_records(session)
-            active_records = (
-                session.query(TimeRecord)
-                .filter(TimeRecord.kind == "review", TimeRecord.deleted_at.is_(None))
-                .order_by(TimeRecord.id.asc())
-                .all()
-            )
-            duplicate_record = session.query(TimeRecord).filter_by(id="frontend-duplicate-review-record").first()
-
-            self.assertEqual(created, 0)
-            self.assertEqual(len(active_records), 1)
-            self.assertEqual(active_records[0].id, f"review-log-{review_log.id}")
-            self.assertIsNotNone(duplicate_record)
-            self.assertIsNotNone(duplicate_record.deleted_at)
-            self.assertEqual(duplicate_record.deleted_reason, "migration_dedup")
 
     def test_review_session_includes_editor_doc(self):
         response = self.client.get("/api/v1/review/session/1")
@@ -2971,52 +1140,6 @@ class ReviewRouteTests(unittest.TestCase):
             self.assertFalse(schedules[1].completed)
             self.assertEqual(schedules[1].review_number, 1)
 
-    def test_run_review_schedule_repair_migration_marks_completion_once(self):
-        original_is_completed = main_module.is_app_migration_completed
-        original_mark_completed = main_module.mark_app_migration_completed
-        original_repair = main_module.repair_review_stage_progress
-        calls: list[tuple[str, dict]] = []
-
-        try:
-            main_module.is_app_migration_completed = lambda key: False
-            main_module.repair_review_stage_progress = lambda session: {"palace_count": 1, "segment_count": 2}
-            main_module.mark_app_migration_completed = lambda key, payload: calls.append((key, payload))
-
-            with self.SessionLocal() as session:
-                result = main_module.run_review_schedule_repair_migration(session)
-
-            self.assertEqual(result, {"palace_count": 1, "segment_count": 2})
-            self.assertEqual(len(calls), 1)
-            self.assertEqual(calls[0][0], main_module.REVIEW_SCHEDULE_REPAIR_MIGRATION_KEY)
-            self.assertEqual(calls[0][1]["result"], {"palace_count": 1, "segment_count": 2})
-        finally:
-            main_module.is_app_migration_completed = original_is_completed
-            main_module.mark_app_migration_completed = original_mark_completed
-            main_module.repair_review_stage_progress = original_repair
-
-    def test_run_review_schedule_repair_migration_skips_when_already_completed(self):
-        original_is_completed = main_module.is_app_migration_completed
-        original_mark_completed = main_module.mark_app_migration_completed
-        original_repair = main_module.repair_review_stage_progress
-        repair_calls: list[int] = []
-        mark_calls: list[int] = []
-
-        try:
-            main_module.is_app_migration_completed = lambda key: True
-            main_module.repair_review_stage_progress = lambda session: repair_calls.append(1) or {"palace_count": 0, "segment_count": 0}
-            main_module.mark_app_migration_completed = lambda key, payload: mark_calls.append(1)
-
-            with self.SessionLocal() as session:
-                result = main_module.run_review_schedule_repair_migration(session)
-
-            self.assertIsNone(result)
-            self.assertEqual(repair_calls, [])
-            self.assertEqual(mark_calls, [])
-        finally:
-            main_module.is_app_migration_completed = original_is_completed
-            main_module.mark_app_migration_completed = original_mark_completed
-            main_module.repair_review_stage_progress = original_repair
-
     def test_palace_list_shows_mastered_palace_as_full_progress(self):
         with self.SessionLocal() as session:
             palace = session.query(Palace).filter_by(id=1).first()
@@ -3030,322 +1153,6 @@ class ReviewRouteTests(unittest.TestCase):
         self.assertEqual(item["review_stage_total"], 9)
         self.assertEqual(item["review_stage_completed"], 9)
         self.assertEqual(item["review_stage_progress"], 1.0)
-
-    def test_palace_list_includes_virtual_default_segment_when_nodes_remain_unassigned(self):
-        with self.SessionLocal() as session:
-            palace = session.query(Palace).filter_by(id=1).first()
-            self.assertIsNotNone(palace)
-            palace.editor_doc = json.dumps(
-                {
-                    "root": {
-                        "data": {"text": "Test Palace"},
-                        "children": [
-                            {"data": {"text": "Branch A", "uid": "a"}, "children": []},
-                            {"data": {"text": "Branch B", "uid": "b"}, "children": []},
-                        ],
-                    }
-                }
-            )
-            session.add(
-                PalaceSegment(
-                    palace_id=palace.id,
-                    name="第 1 部分",
-                    color="#14b8a6",
-                    node_uids_json=json.dumps(["a"]),
-                    sort_order=0,
-                )
-            )
-            session.commit()
-
-        response = self.client.get("/api/v1/palaces")
-        self.assertEqual(response.status_code, 200)
-        item = response.json()[0]
-        self.assertEqual(len(item["segments"]), 2)
-        self.assertTrue(item["segments"][0]["is_virtual_default"])
-        self.assertEqual(item["segments"][0]["name"], "第 1 部分")
-        self.assertEqual(item["segments"][0]["node_uids"], ["b"])
-        self.assertEqual(item["segments"][1]["name"], "第 1 部分")
-
-    def test_palace_segments_endpoint_includes_virtual_default_segment(self):
-        with self.SessionLocal() as session:
-            palace = session.query(Palace).filter_by(id=1).first()
-            self.assertIsNotNone(palace)
-            palace.editor_doc = json.dumps(
-                {
-                    "root": {
-                        "data": {"text": "Test Palace"},
-                        "children": [
-                            {"data": {"text": "Branch A", "uid": "a"}, "children": []},
-                            {"data": {"text": "Branch B", "uid": "b"}, "children": []},
-                        ],
-                    }
-                }
-            )
-            session.add(
-                PalaceSegment(
-                    palace_id=palace.id,
-                    name="第二部分",
-                    color="#14b8a6",
-                    node_uids_json=json.dumps(["a"]),
-                    sort_order=0,
-                )
-            )
-            session.commit()
-
-        response = self.client.get("/api/v1/palaces/1/segments")
-        self.assertEqual(response.status_code, 200)
-        items = response.json()["items"]
-        self.assertEqual(len(items), 2)
-        self.assertTrue(items[0]["is_virtual_default"])
-        self.assertEqual(items[0]["node_uids"], ["b"])
-
-    def test_batch_segment_review_session_returns_merged_editor_doc(self):
-        with self.SessionLocal() as session:
-            palace = session.query(Palace).filter_by(id=1).first()
-            self.assertIsNotNone(palace)
-            palace.editor_doc = json.dumps(
-                {
-                    "root": {
-                        "data": {"text": "Test Palace"},
-                        "children": [
-                            {"data": {"text": "Branch A", "uid": "a"}, "children": []},
-                            {"data": {"text": "Branch B", "uid": "b"}, "children": []},
-                            {"data": {"text": "Branch C", "uid": "c"}, "children": []},
-                        ],
-                    }
-                }
-            )
-            segment_a = PalaceSegment(
-                palace_id=palace.id,
-                name="第 1 部分",
-                color="#14b8a6",
-                node_uids_json=json.dumps(["a"]),
-                sort_order=0,
-            )
-            segment_b = PalaceSegment(
-                palace_id=palace.id,
-                name="第 2 部分",
-                color="#3b82f6",
-                node_uids_json=json.dumps(["b"]),
-                sort_order=1,
-            )
-            session.add_all([segment_a, segment_b])
-            session.flush()
-            session.add_all(
-                [
-                    PalaceSegmentReviewSchedule(
-                        palace_segment_id=segment_a.id,
-                        scheduled_date=date.today() - timedelta(days=1),
-                        interval_days=1,
-                        algorithm_used="ebbinghaus",
-                        completed=False,
-                        review_number=0,
-                        review_type="standard",
-                    ),
-                    PalaceSegmentReviewSchedule(
-                        palace_segment_id=segment_b.id,
-                        scheduled_date=date.today() - timedelta(days=1),
-                        interval_days=1,
-                        algorithm_used="ebbinghaus",
-                        completed=False,
-                        review_number=0,
-                        review_type="standard",
-                    ),
-                ]
-            )
-            session.commit()
-
-        response = self.client.post(
-            "/api/v1/segment-review/batch-session",
-            json={"segment_ids": [1, 2]},
-        )
-        self.assertEqual(response.status_code, 200)
-        payload = response.json()
-        self.assertEqual(payload["palace"]["id"], 1)
-        self.assertEqual([item["id"] for item in payload["segments"]], [1, 2])
-        self.assertEqual(len(payload["editor_doc"]["root"]["children"]), 2)
-        self.assertEqual(
-            [child["data"]["uid"] for child in payload["editor_doc"]["root"]["children"]],
-            ["a", "b"],
-        )
-
-    def test_batch_segment_review_session_rejects_segments_from_other_palaces(self):
-        with self.SessionLocal() as session:
-            palace = session.query(Palace).filter_by(id=1).first()
-            self.assertIsNotNone(palace)
-            palace.editor_doc = json.dumps(
-                {
-                    "root": {
-                        "data": {"text": "Test Palace"},
-                        "children": [{"data": {"text": "Branch A", "uid": "a"}, "children": []}],
-                    }
-                }
-            )
-            other_palace = Palace(
-                title="Another Palace",
-                description="",
-                difficulty=0,
-                review_mode="review",
-                editor_doc=json.dumps(
-                    {
-                        "root": {
-                            "data": {"text": "Another Palace"},
-                            "children": [{"data": {"text": "Branch X", "uid": "x"}, "children": []}],
-                        }
-                    }
-                ),
-            )
-            session.add(other_palace)
-            session.flush()
-            segment_a = PalaceSegment(
-                palace_id=palace.id,
-                name="第 1 部分",
-                color="#14b8a6",
-                node_uids_json=json.dumps(["a"]),
-                sort_order=0,
-            )
-            segment_b = PalaceSegment(
-                palace_id=other_palace.id,
-                name="第 1 部分",
-                color="#3b82f6",
-                node_uids_json=json.dumps(["x"]),
-                sort_order=0,
-            )
-            session.add_all([segment_a, segment_b])
-            session.flush()
-            session.add_all(
-                [
-                    PalaceSegmentReviewSchedule(
-                        palace_segment_id=segment_a.id,
-                        scheduled_date=date.today() - timedelta(days=1),
-                        interval_days=1,
-                        algorithm_used="ebbinghaus",
-                        completed=False,
-                        review_number=0,
-                        review_type="standard",
-                    ),
-                    PalaceSegmentReviewSchedule(
-                        palace_segment_id=segment_b.id,
-                        scheduled_date=date.today() - timedelta(days=1),
-                        interval_days=1,
-                        algorithm_used="ebbinghaus",
-                        completed=False,
-                        review_number=0,
-                        review_type="standard",
-                    ),
-                ]
-            )
-            session.commit()
-
-        response = self.client.post(
-            "/api/v1/segment-review/batch-session",
-            json={"segment_ids": [1, 2]},
-        )
-        self.assertEqual(response.status_code, 400)
-        self.assertIn("同一宫殿", response.json()["detail"])
-
-    def test_submit_batch_segment_review_only_advances_selected_segments(self):
-        with self.SessionLocal() as session:
-            palace = session.query(Palace).filter_by(id=1).first()
-            self.assertIsNotNone(palace)
-            palace.editor_doc = json.dumps(
-                {
-                    "root": {
-                        "data": {"text": "Test Palace"},
-                        "children": [
-                            {"data": {"text": "Branch A", "uid": "a"}, "children": []},
-                            {"data": {"text": "Branch B", "uid": "b"}, "children": []},
-                            {"data": {"text": "Branch C", "uid": "c"}, "children": []},
-                        ],
-                    }
-                }
-            )
-            segment_a = PalaceSegment(
-                palace_id=palace.id,
-                name="第 1 部分",
-                color="#14b8a6",
-                node_uids_json=json.dumps(["a"]),
-                sort_order=0,
-            )
-            segment_b = PalaceSegment(
-                palace_id=palace.id,
-                name="第 2 部分",
-                color="#3b82f6",
-                node_uids_json=json.dumps(["b"]),
-                sort_order=1,
-            )
-            segment_c = PalaceSegment(
-                palace_id=palace.id,
-                name="第 3 部分",
-                color="#f97316",
-                node_uids_json=json.dumps(["c"]),
-                sort_order=2,
-            )
-            session.add_all([segment_a, segment_b, segment_c])
-            session.flush()
-            session.add_all(
-                [
-                    PalaceSegmentReviewSchedule(
-                        palace_segment_id=segment_a.id,
-                        scheduled_date=date.today() - timedelta(days=1),
-                        interval_days=1,
-                        algorithm_used="ebbinghaus",
-                        completed=False,
-                        review_number=0,
-                        review_type="standard",
-                    ),
-                    PalaceSegmentReviewSchedule(
-                        palace_segment_id=segment_b.id,
-                        scheduled_date=date.today() - timedelta(days=1),
-                        interval_days=1,
-                        algorithm_used="ebbinghaus",
-                        completed=False,
-                        review_number=0,
-                        review_type="standard",
-                    ),
-                    PalaceSegmentReviewSchedule(
-                        palace_segment_id=segment_c.id,
-                        scheduled_date=date.today() - timedelta(days=1),
-                        interval_days=1,
-                        algorithm_used="ebbinghaus",
-                        completed=False,
-                        review_number=0,
-                        review_type="standard",
-                    ),
-                ]
-            )
-            session.commit()
-
-        response = self.client.post(
-            "/api/v1/segment-review/batch-session/submit",
-            json={
-                "segment_ids": [1, 2],
-                "duration_seconds": 90,
-                "completion_mode": "manual_complete",
-            },
-        )
-        self.assertEqual(response.status_code, 200)
-        payload = response.json()
-        self.assertTrue(payload["ok"])
-        self.assertEqual(payload["completed_segment_ids"], [1, 2])
-
-        with self.SessionLocal() as session:
-            completed = {
-                schedule.palace_segment_id: schedule.completed
-                for schedule in session.query(PalaceSegmentReviewSchedule).order_by(PalaceSegmentReviewSchedule.id).all()
-                if schedule.review_number == 0
-            }
-            self.assertTrue(completed[1])
-            self.assertTrue(completed[2])
-            self.assertFalse(completed[3])
-
-            next_schedules = (
-                session.query(PalaceSegmentReviewSchedule)
-                .filter(PalaceSegmentReviewSchedule.review_number == 1)
-                .order_by(PalaceSegmentReviewSchedule.palace_segment_id)
-                .all()
-            )
-            self.assertEqual([item.palace_segment_id for item in next_schedules], [1, 2])
 
     def test_practice_progress_round_trip(self):
         response = self.client.put(
@@ -3437,8 +1244,8 @@ class ReviewRouteTests(unittest.TestCase):
 
     def test_palace_version_detail_rejects_wrong_version(self):
         response = self.client.get("/api/v1/palaces/1/versions/999999")
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json()["error"], "version not found")
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.json()["detail"], "version not found")
 
     def test_create_palace_version_skips_duplicate_snapshots(self):
         with self.SessionLocal() as session:
@@ -3612,11 +1419,11 @@ class ReviewRouteTests(unittest.TestCase):
 
     def test_interval_backup_skips_when_recent_backup_exists(self):
         with tempfile.TemporaryDirectory() as temp_dir:
-            from memory_anki.modules.backups.application import backup_service
+            from memory_anki.modules.backups.application import backup_lifecycle
 
-            original_full_dir = backup_service.FULL_BACKUPS_DIR
+            original_full_dir = backup_lifecycle.FULL_BACKUPS_DIR
             backup_root = Path(temp_dir)
-            backup_service.FULL_BACKUPS_DIR = backup_root
+            backup_lifecycle.FULL_BACKUPS_DIR = backup_root
             backup_root.mkdir(parents=True, exist_ok=True)
             recent = backup_root / "20260509-000000-rolling-edit"
             recent.mkdir()
@@ -3625,7 +1432,7 @@ class ReviewRouteTests(unittest.TestCase):
             try:
                 created = maybe_create_interval_backup("rolling-edit", ROLLING_EDIT_BACKUP_INTERVAL)
             finally:
-                backup_service.FULL_BACKUPS_DIR = original_full_dir
+                backup_lifecycle.FULL_BACKUPS_DIR = original_full_dir
 
         self.assertIsNone(created)
 
@@ -4052,7 +1859,7 @@ class ReviewRouteTests(unittest.TestCase):
         }
 
         with patch(
-            "memory_anki.modules.palaces.presentation.router.split_palace_editor_doc_with_ai",
+            "memory_anki.modules.palaces.presentation.editor_router.split_palace_editor_doc_with_ai",
             return_value=SimpleNamespace(
                 editor_doc=mocked_doc,
                 generated_children_count=1,
@@ -4209,18 +2016,6 @@ class ReviewRouteTests(unittest.TestCase):
             self.assertEqual(current_vs_backup["node_count_delta"], -1)
             self.assertIn("B", current_vs_backup["missing_top_level_texts"])
             self.assertIn("C", current_vs_backup["missing_top_level_texts"])
-
-
-for _name, _value in list(ReviewRouteTests.__dict__.items()):
-    if not _name.startswith("test_"):
-        continue
-    if any(token in _name for token in ("segment", "time_record", "timezones", "duration", "dashboard")):
-        setattr(
-            ReviewRouteTests,
-            _name,
-            unittest.skip("Deleted time_records/segment-review behavior was pruned")(_value),
-        )
-
 
 if __name__ == "__main__":
     unittest.main()

@@ -1,12 +1,16 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.orm import Session
 
-from memory_anki.infrastructure.db.models import (
+from memory_anki.infrastructure.db._tables.palaces import (
     Palace,
     PalaceMiniPalace,
     PalaceSegment,
     ReviewSchedule,
-    get_session,
+)
+from memory_anki.infrastructure.db.deps import session_dep
+from memory_anki.modules.persistence.application.idempotency import (
+    get_idempotent_response,
+    save_idempotent_response,
 )
 from memory_anki.modules.sessions.application.session_progress_service import (
     clear_focus_practice_progress,
@@ -25,13 +29,16 @@ from memory_anki.modules.sessions.application.session_progress_service import (
     upsert_review_progress,
     upsert_segment_practice_progress,
 )
+from memory_anki.modules.sessions.application.study_session_bridge import (
+    create_completed_study_session_from_time_payload,
+)
 from memory_anki.modules.sessions.application.study_session_service import (
     abandon_study_session,
     append_study_session_events,
     build_study_session_stats,
     bulk_delete_study_sessions,
     complete_study_session,
-    create_completed_study_session_from_time_payload,
+    count_study_sessions,
     create_study_session,
     delete_study_session,
     get_active_study_session_by_target,
@@ -40,17 +47,22 @@ from memory_anki.modules.sessions.application.study_session_service import (
     list_study_sessions,
     patch_study_session,
 )
+from memory_anki.modules.sessions.domain.schemas import (
+    PracticeProgressUpsert,
+    StudySessionAbandon,
+    StudySessionBulkDelete,
+    StudySessionComplete,
+    StudySessionCreate,
+    StudySessionEventsAppend,
+    StudySessionPatch,
+)
 
 router = APIRouter(tags=["sessions"])
 legacy_router = APIRouter(tags=["legacy-sessions"])
 
 
-def session_dep():
-    session = get_session()
-    try:
-        yield session
-    finally:
-        session.close()
+def _payload(data) -> dict:
+    return data.model_dump(exclude_unset=True, exclude_none=False)
 
 
 def _raise_not_found() -> None:
@@ -58,11 +70,20 @@ def _raise_not_found() -> None:
 
 
 @router.post("/study-sessions")
-def api_create_study_session(data: dict, session: Session = Depends(session_dep)):
+def api_create_study_session(
+    data: StudySessionCreate,
+    request: Request,
+    session: Session = Depends(session_dep),
+):
+    existing_response = get_idempotent_response(session, request)
+    if existing_response is not None:
+        return existing_response
     try:
-        return {"item": create_study_session(session, data)}
+        response = {"item": create_study_session(session, _payload(data))}
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    save_idempotent_response(session, request, response)
+    return response
 
 
 @router.get("/study-sessions/active")
@@ -94,9 +115,18 @@ def api_get_study_session_by_target(
 
 @router.get("/study-sessions")
 def api_list_study_sessions(
+    limit: int | None = Query(default=None, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
     session: Session = Depends(session_dep),
 ):
-    return {"items": list_study_sessions(session)}
+    if limit is None:
+        return {"items": list_study_sessions(session)}
+    return {
+        "items": list_study_sessions(session, limit=limit, offset=offset),
+        "total": count_study_sessions(session),
+        "limit": limit,
+        "offset": offset,
+    }
 
 
 @router.get("/study-sessions/{study_session_id}")
@@ -110,11 +140,11 @@ def api_get_study_session(study_session_id: str, session: Session = Depends(sess
 @router.patch("/study-sessions/{study_session_id}")
 def api_patch_study_session(
     study_session_id: str,
-    data: dict,
+    data: StudySessionPatch,
     session: Session = Depends(session_dep),
 ):
     try:
-        item = patch_study_session(session, study_session_id, data)
+        item = patch_study_session(session, study_session_id, _payload(data))
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     if item is None:
@@ -125,10 +155,14 @@ def api_patch_study_session(
 @router.post("/study-sessions/{study_session_id}/events")
 def api_append_study_session_events(
     study_session_id: str,
-    data: dict,
+    data: StudySessionEventsAppend,
+    request: Request,
     session: Session = Depends(session_dep),
 ):
-    events = data.get("events") if isinstance(data, dict) else None
+    existing_response = get_idempotent_response(session, request)
+    if existing_response is not None:
+        return existing_response
+    events = data.events
     item = append_study_session_events(
         session,
         study_session_id,
@@ -136,31 +170,45 @@ def api_append_study_session_events(
     )
     if item is None:
         _raise_not_found()
-    return {"item": item}
+    response = {"item": item}
+    save_idempotent_response(session, request, response)
+    return response
 
 
 @router.post("/study-sessions/{study_session_id}/complete")
 def api_complete_study_session(
     study_session_id: str,
-    data: dict,
+    data: StudySessionComplete,
+    request: Request,
     session: Session = Depends(session_dep),
 ):
-    item = complete_study_session(session, study_session_id, data)
+    existing_response = get_idempotent_response(session, request)
+    if existing_response is not None:
+        return existing_response
+    item = complete_study_session(session, study_session_id, _payload(data))
     if item is None:
         _raise_not_found()
-    return {"item": item}
+    response = {"item": item}
+    save_idempotent_response(session, request, response)
+    return response
 
 
 @router.post("/study-sessions/{study_session_id}/abandon")
 def api_abandon_study_session(
     study_session_id: str,
-    data: dict,
+    data: StudySessionAbandon,
+    request: Request,
     session: Session = Depends(session_dep),
 ):
-    item = abandon_study_session(session, study_session_id, data)
+    existing_response = get_idempotent_response(session, request)
+    if existing_response is not None:
+        return existing_response
+    item = abandon_study_session(session, study_session_id, _payload(data))
     if item is None:
         _raise_not_found()
-    return {"item": item}
+    response = {"item": item}
+    save_idempotent_response(session, request, response)
+    return response
 
 
 @router.delete("/study-sessions/{study_session_id}")
@@ -172,27 +220,38 @@ def api_delete_study_session(study_session_id: str, session: Session = Depends(s
 
 
 @router.post("/study-sessions/bulk-delete")
-def api_bulk_delete_study_sessions(data: dict, session: Session = Depends(session_dep)):
-    raw_ids = data.get("ids") if isinstance(data, dict) else None
-    if not isinstance(raw_ids, list):
-        raise HTTPException(status_code=400, detail="ids must be a list")
-    deleted = bulk_delete_study_sessions(session, [str(item) for item in raw_ids])
+def api_bulk_delete_study_sessions(
+    data: StudySessionBulkDelete,
+    session: Session = Depends(session_dep),
+):
+    deleted = bulk_delete_study_sessions(session, [str(item) for item in data.ids])
     return {"ok": True, "deleted": deleted}
 
 
 @router.post("/study-sessions/from-time-record")
-def api_create_study_session_from_time_record(data: dict, session: Session = Depends(session_dep)):
+def api_create_study_session_from_time_record(
+    data: dict,
+    request: Request,
+    session: Session = Depends(session_dep),
+):
+    # Keep this as a free-form dict: legacy timer recovery sends mixed camelCase
+    # and snake_case keys that the service normalizes directly.
+    existing_response = get_idempotent_response(session, request)
+    if existing_response is not None:
+        return existing_response
     try:
-        return {"item": create_completed_study_session_from_time_payload(session, data)}
+        response = {"item": create_completed_study_session_from_time_payload(session, data)}
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    save_idempotent_response(session, request, response)
+    return response
 
 
 @legacy_router.get("/sessions/practice/{palace_id}/progress")
 def api_get_practice_progress(palace_id: int, session: Session = Depends(session_dep)):
     palace = session.query(Palace).filter_by(id=palace_id).first()
     if not palace:
-        return {"error": "not found"}
+        _raise_not_found()
     return {"progress": get_practice_progress(session, palace_id)}
 
 
@@ -200,32 +259,32 @@ def api_get_practice_progress(palace_id: int, session: Session = Depends(session
 def api_get_focus_practice_progress(palace_id: int, session: Session = Depends(session_dep)):
     palace = session.query(Palace).filter_by(id=palace_id).first()
     if not palace:
-        return {"error": "not found"}
+        _raise_not_found()
     return {"progress": get_focus_practice_progress(session, palace_id)}
 
 
 @legacy_router.put("/sessions/practice/{palace_id}/progress")
 def api_upsert_practice_progress(
     palace_id: int,
-    data: dict,
+    data: PracticeProgressUpsert,
     session: Session = Depends(session_dep),
 ):
     palace = session.query(Palace).filter_by(id=palace_id).first()
     if not palace:
-        return {"error": "not found"}
-    return {"progress": upsert_practice_progress(session, palace_id, data)}
+        _raise_not_found()
+    return {"progress": upsert_practice_progress(session, palace_id, _payload(data))}
 
 
 @legacy_router.put("/sessions/focus-practice/{palace_id}/progress")
 def api_upsert_focus_practice_progress(
     palace_id: int,
-    data: dict,
+    data: PracticeProgressUpsert,
     session: Session = Depends(session_dep),
 ):
     palace = session.query(Palace).filter_by(id=palace_id).first()
     if not palace:
-        return {"error": "not found"}
-    return {"progress": upsert_focus_practice_progress(session, palace_id, data)}
+        _raise_not_found()
+    return {"progress": upsert_focus_practice_progress(session, palace_id, _payload(data))}
 
 
 @legacy_router.delete("/sessions/practice/{palace_id}/progress")
@@ -244,25 +303,25 @@ def api_delete_focus_practice_progress(palace_id: int, session: Session = Depend
 def api_get_segment_practice_progress(segment_id: int, session: Session = Depends(session_dep)):
     segment = session.query(PalaceSegment).filter_by(id=segment_id).first()
     if not segment:
-        return {"error": "not found"}
+        _raise_not_found()
     return {"progress": get_segment_practice_progress(session, segment_id)}
 
 
 @legacy_router.put("/sessions/segment-practice/{segment_id}/progress")
 def api_upsert_segment_practice_progress(
     segment_id: int,
-    data: dict,
+    data: PracticeProgressUpsert,
     session: Session = Depends(session_dep),
 ):
     segment = session.query(PalaceSegment).filter_by(id=segment_id).first()
     if not segment:
-        return {"error": "not found"}
+        _raise_not_found()
     return {
         "progress": upsert_segment_practice_progress(
             session,
             segment_id,
             segment.palace_id,
-            data,
+            _payload(data),
         )
     }
 
@@ -280,25 +339,25 @@ def api_get_mini_practice_progress(
 ):
     mini_palace = session.query(PalaceMiniPalace).filter_by(id=mini_palace_id).first()
     if not mini_palace:
-        return {"error": "not found"}
+        _raise_not_found()
     return {"progress": get_mini_practice_progress(session, mini_palace_id)}
 
 
 @legacy_router.put("/sessions/mini-practice/{mini_palace_id}/progress")
 def api_upsert_mini_practice_progress(
     mini_palace_id: int,
-    data: dict,
+    data: PracticeProgressUpsert,
     session: Session = Depends(session_dep),
 ):
     mini_palace = session.query(PalaceMiniPalace).filter_by(id=mini_palace_id).first()
     if not mini_palace:
-        return {"error": "not found"}
+        _raise_not_found()
     return {
         "progress": upsert_mini_practice_progress(
             session,
             mini_palace_id,
             mini_palace.palace_id,
-            data,
+            _payload(data),
         )
     }
 
@@ -316,25 +375,25 @@ def api_delete_mini_practice_progress(
 def api_get_review_progress(schedule_id: int, session: Session = Depends(session_dep)):
     schedule = session.query(ReviewSchedule).filter_by(id=schedule_id).first()
     if not schedule:
-        return {"error": "not found"}
+        _raise_not_found()
     return {"progress": get_review_progress(session, schedule_id)}
 
 
 @legacy_router.put("/sessions/review/{schedule_id}/progress")
 def api_upsert_review_progress(
     schedule_id: int,
-    data: dict,
+    data: PracticeProgressUpsert,
     session: Session = Depends(session_dep),
 ):
     schedule = session.query(ReviewSchedule).filter_by(id=schedule_id).first()
     if not schedule:
-        return {"error": "not found"}
+        _raise_not_found()
     return {
         "progress": upsert_review_progress(
             session,
             schedule_id,
             schedule.palace_id,
-            data,
+            _payload(data),
         )
     }
 
@@ -343,5 +402,3 @@ def api_upsert_review_progress(
 def api_delete_review_progress(schedule_id: int, session: Session = Depends(session_dep)):
     clear_review_progress(session, schedule_id)
     return {"ok": True}
-
-

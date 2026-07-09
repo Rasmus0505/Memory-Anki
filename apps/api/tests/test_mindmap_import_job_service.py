@@ -5,9 +5,14 @@ from unittest.mock import patch
 import pytest
 from sqlalchemy.orm import Session
 
-from memory_anki.infrastructure.db.models import Base, MindMapImportJob, engine
+from memory_anki.infrastructure.db._tables import Base, engine
+from memory_anki.infrastructure.db._tables.misc import MindMapImportJob
 from memory_anki.modules.palaces.application import mindmap_import_job_service as job_service
-from memory_anki.modules.palaces.application.mindmap_import import MindMapImportError
+from memory_anki.modules.palaces.application.mindmap_import import (
+    MindMapImportError,
+    job_repository,
+)
+from memory_anki.modules.palaces.presentation import import_router
 
 
 def _load_job(job_id: str) -> dict:
@@ -586,17 +591,18 @@ def test_non_json_or_html_provider_errors_become_structured_retryable_failures()
     assert "Internal Server Error" in failed_job["error"]["raw_snippet"]
 
 
-def test_stale_running_jobs_are_marked_interrupted_by_data_migration_logic():
-    with Session(engine) as session:
+def test_list_jobs_route_marks_stale_running_jobs_interrupted(make_client, session_factory):
+    client = make_client(import_router)
+    with session_factory() as session:
         session.add(
             MindMapImportJob(
-                id="stale-job",
+                id="stale-route-job",
                 entity_key="palace_1",
                 source_kind=job_service.SOURCE_KIND_IMAGE_SINGLE,
                 mode=job_service.MODE_MINDMAP,
                 status=job_service.JOB_STATUS_RUNNING,
                 stage=job_service.JOB_STAGE_MERGE,
-                fingerprint="fingerprint-1",
+                fingerprint="fingerprint-route",
                 source_meta_json="{}",
                 result_json="{}",
                 error_json="{}",
@@ -605,15 +611,90 @@ def test_stale_running_jobs_are_marked_interrupted_by_data_migration_logic():
         )
         session.commit()
 
-    with Session(engine) as session:
-        stale_job = session.query(MindMapImportJob).filter_by(id="stale-job").one()
-        stale_job.status = job_service.JOB_STATUS_INTERRUPTED
-        stale_job.pause_requested = False
-        session.commit()
+    response = client.get("/api/v1/import/jobs", params={"entity_key": "palace_1"})
 
-    stale_job = _load_job("stale-job")
+    assert response.status_code == 200
+    stale_job = response.json()["items"][0]
     assert stale_job["status"] == job_service.JOB_STATUS_INTERRUPTED
     assert stale_job["resumable"] is True
+    assert "服务重启" in stale_job["progress"]["message"]
+
+    with session_factory() as session:
+        stored_job = session.query(MindMapImportJob).filter_by(id="stale-route-job").one()
+        assert stored_job.status == job_service.JOB_STATUS_INTERRUPTED
+
+
+def test_reconcile_stale_running_jobs_keeps_alive_thread_running():
+    with Session(engine) as session:
+        session.add_all(
+            (
+                MindMapImportJob(
+                    id="stale-job",
+                    entity_key="palace_1",
+                    source_kind=job_service.SOURCE_KIND_IMAGE_SINGLE,
+                    mode=job_service.MODE_MINDMAP,
+                    status=job_service.JOB_STATUS_RUNNING,
+                    stage=job_service.JOB_STAGE_MERGE,
+                    fingerprint="fingerprint-1",
+                    source_meta_json="{}",
+                    result_json="{}",
+                    error_json="{}",
+                    usage_json="{}",
+                ),
+                MindMapImportJob(
+                    id="alive-job",
+                    entity_key="palace_1",
+                    source_kind=job_service.SOURCE_KIND_IMAGE_SINGLE,
+                    mode=job_service.MODE_MINDMAP,
+                    status=job_service.JOB_STATUS_RUNNING,
+                    stage=job_service.JOB_STAGE_STRUCTURE,
+                    fingerprint="fingerprint-2",
+                    source_meta_json="{}",
+                    result_json="{}",
+                    error_json="{}",
+                    usage_json="{}",
+                ),
+            )
+        )
+        session.commit()
+        changed = job_repository.reconcile_stale_running_jobs(
+            session,
+            is_thread_alive_fn=lambda job_id: job_id == "alive-job",
+            entity_key="palace_1",
+        )
+
+        stale_job = session.query(MindMapImportJob).filter_by(id="stale-job").one()
+        alive_job = session.query(MindMapImportJob).filter_by(id="alive-job").one()
+
+    assert changed == 1
+    assert stale_job.status == job_service.JOB_STATUS_INTERRUPTED
+    assert alive_job.status == job_service.JOB_STATUS_RUNNING
+
+
+def test_interrupted_job_can_resume_and_complete_from_checkpoint():
+    with Session(engine) as session:
+        job = job_service.create_image_import_job(
+            session,
+            entity_key="palace_1",
+            mode=job_service.MODE_MINDMAP,
+            image_bytes=b"image-a",
+            filename="demo.png",
+            fallback_title="未命名宫殿",
+        )
+        job.status = job_service.JOB_STATUS_INTERRUPTED
+        job_id = job.id
+        session.commit()
+
+    with patch.object(
+        job_service,
+        "_stream_call_dashscope_json",
+        return_value=_stream_return({"title": "导入脑图", "children": [{"text": "节点", "children": []}]}),
+    ):
+        job_service._run_job_worker(job_id)
+
+    payload = _load_job(job_id)
+    assert payload["status"] == job_service.JOB_STATUS_COMPLETED
+    assert payload["resumable"] is False
 
 
 def test_request_pause_sets_pause_requested_and_worker_lands_on_paused_checkpoint():

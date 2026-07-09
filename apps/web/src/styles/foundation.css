@@ -1,0 +1,166 @@
+﻿@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --font-sans: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC", sans-serif;
+  --font-mono: ui-monospace, "Cascadia Code", "SFMono-Regular", "Menlo", "Consolas", "Liberation Mono", monospace;
+
+  --color-background: hsl(38 28% 97%);
+  --color-foreground: hsl(224 24% 14%);
+  --color-card: hsl(0 0% 100%);
+  --color-card-foreground: hsl(224 24% 14%);
+  --color-popover: hsl(0 0% 100%);
+  --color-popover-foreground: hsl(224 24% 14%);
+  --color-primary: hsl(24 76% 43%);
+  --color-primary-foreground: hsl(34 100% 98%);
+  --color-secondary: hsl(220 16% 93%);
+  --color-secondary-foreground: hsl(222 22% 20%);
+  --color-muted: hsl(220 14% 94%);
+  --color-muted-foreground: hsl(220 10% 42%);
+  --color-accent: hsl(32 38% 91%);
+  --color-accent-foreground: hsl(222 22% 20%);
+  --color-destructive: hsl(0 84.2% 60.2%);
+  --color-destructive-foreground: hsl(0 0% 98%);
+  --color-success: hsl(145 55% 42%);
+  --color-success-foreground: hsl(0 0% 100%);
+  --color-warning: hsl(34 92% 52%);
+  --color-warning-foreground: hsl(0 0% 100%);
+  --color-error: hsl(0 84.2% 60.2%);
+  --color-error-foreground: hsl(0 0% 98%);
+  --color-info: hsl(210 72% 56%);
+  --color-info-foreground: hsl(0 0% 100%);
+  --color-memory-strong: hsl(160 68% 34%);
+  --color-memory-medium: hsl(34 92% 52%);
+  --color-memory-weak: hsl(0 84.2% 60.2%);
+  --color-border: hsl(220 14% 86%);
+  --color-input: hsl(220 14% 84%);
+  --color-ring: hsl(24 76% 43%);
+  --color-radius: 0.625rem;
+
+  --radius-sm: calc(var(--color-radius) - 4px);
+  --radius-md: calc(var(--color-radius) - 2px);
+  --radius-lg: var(--color-radius);
+  --radius-xl: calc(var(--color-radius) + 4px);
+
+  --shadow-soft: 0 1px 2px rgba(15, 23, 42, 0.04);
+  --shadow-card: 0 1px 2px rgba(15, 23, 42, 0.06), 0 8px 24px rgba(15, 23, 42, 0.06);
+  --shadow-popover: 0 18px 44px rgba(15, 23, 42, 0.12);
+  --shadow-floating: 0 24px 72px rgba(15, 23, 42, 0.14);
+}
+
+.dark {
+  --color-background: hsl(24 12% 9%);
+  --color-foreground: hsl(36 20% 92%);
+  --color-card: hsl(24 10% 12%);
+  --color-card-foreground: hsl(36 20% 92%);
+  --color-popover: hsl(24 10% 13%);
+  --color-popover-foreground: hsl(36 20% 92%);
+  --color-primary: hsl(26 82% 58%);
+  --color-primary-foreground: hsl(24 30% 10%);
+  --color-secondary: hsl(24 8% 18%);
+  --color-secondary-foreground: hsl(36 16% 88%);
+  --color-muted: hsl(24 8% 16%);
+  --color-muted-foreground: hsl(30 8% 62%);
+  --color-accent: hsl(28 20% 20%);
+  --color-accent-foreground: hsl(36 16% 88%);
+  --color-destructive: hsl(0 72% 58%);
+  --color-destructive-foreground: hsl(0 0% 98%);
+  --color-success: hsl(145 48% 48%);
+  --color-success-foreground: hsl(150 40% 8%);
+  --color-warning: hsl(34 90% 58%);
+  --color-warning-foreground: hsl(30 40% 8%);
+  --color-error: hsl(0 72% 58%);
+  --color-error-foreground: hsl(0 0% 98%);
+  --color-info: hsl(210 80% 62%);
+  --color-info-foreground: hsl(215 40% 8%);
+  --color-memory-strong: hsl(160 55% 45%);
+  --color-memory-medium: hsl(34 90% 58%);
+  --color-memory-weak: hsl(0 72% 62%);
+  --color-border: hsl(24 8% 24%);
+  --color-input: hsl(24 8% 26%);
+  --color-ring: hsl(26 82% 58%);
+
+  --shadow-soft: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.45), 0 8px 24px rgba(0, 0, 0, 0.45);
+  --shadow-popover: 0 18px 44px rgba(0, 0, 0, 0.6);
+  --shadow-floating: 0 24px 72px rgba(0, 0, 0, 0.65);
+}
+
+.dark body {
+  background:
+    radial-gradient(circle at top left, rgba(217, 119, 6, 0.08), transparent 26%),
+    linear-gradient(180deg, rgba(20, 16, 13, 0.98), rgba(24, 19, 16, 0.96)),
+    var(--color-background);
+}
+
+.dark .memory-anki-mindmap-frame {
+  border-color: hsl(24 8% 24%);
+  background:
+    radial-gradient(circle at 18% 12%, rgba(96, 165, 250, 0.06), transparent 30%),
+    radial-gradient(circle at 82% 20%, rgba(167, 139, 250, 0.06), transparent 28%),
+    linear-gradient(rgba(250, 250, 250, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(250, 250, 250, 0.045) 1px, transparent 1px),
+    hsl(24 10% 11%);
+  background-size: auto, auto, 32px 32px, 32px 32px, auto;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    0 18px 44px rgba(0, 0, 0, 0.5);
+}
+
+* { border-color: var(--color-border); }
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  background:
+    radial-gradient(circle at top left, rgba(180, 83, 9, 0.06), transparent 26%),
+    linear-gradient(180deg, rgba(248, 250, 252, 0.98), rgba(245, 245, 244, 0.96)),
+    var(--color-background);
+  color: var(--color-foreground);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.memory-anki-timer-overlay-page,
+.memory-anki-timer-overlay-page body,
+body.memory-anki-timer-overlay-page {
+  background: transparent;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+body.memory-anki-timer-overlay-page #root {
+  min-height: 100vh;
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-start;
+}
+
+.memory-anki-mindmap-frame {
+  border: 1px solid #e4e4e7;
+  border-radius: 0.875rem;
+  background:
+    radial-gradient(circle at 18% 12%, rgba(37, 99, 235, 0.08), transparent 30%),
+    radial-gradient(circle at 82% 20%, rgba(124, 58, 237, 0.07), transparent 28%),
+    linear-gradient(rgba(24, 24, 27, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(24, 24, 27, 0.035) 1px, transparent 1px),
+    #fafafa;
+  background-size: auto, auto, 32px 32px, 32px 32px, auto;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.86),
+    0 18px 44px rgba(24, 24, 27, 0.08);
+}
+
+/* flashcard flip */
+.perspective-1000 { perspective: 1000px; }
+.backface-hidden { backface-visibility: hidden; }
+.rotate-y-180 { transform: rotateY(180deg); }
+.transform-style-3d { transform-style: preserve-3d; }
+
+/* star rating */
+.star-rating input { display: none; }
+.star-rating label { font-size: 1.5rem; color: #d1d5db; cursor: pointer; transition: color 0.15s; }
+.star-rating input:checked ~ label,
+.star-rating label:hover ~ label,
+.star-rating label:hover { color: #f59e0b; }

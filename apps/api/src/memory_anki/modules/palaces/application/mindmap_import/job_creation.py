@@ -5,7 +5,7 @@ from pathlib import Path
 
 from sqlalchemy.orm import Session
 
-from memory_anki.infrastructure.db.models import MindMapImportJob
+from memory_anki.infrastructure.db._tables.misc import MindMapImportJob
 
 from . import job_artifacts, job_creation_support, job_repository, job_state
 

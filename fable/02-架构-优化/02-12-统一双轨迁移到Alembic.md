@@ -6,9 +6,9 @@
 优先级: P2（可以）
 预估工作量: M（2-8h）
 依赖文档: 无
-状态: 未开始
-负责代理: 无
-完成时间: 无
+状态: 已完成
+负责代理: Codex
+完成时间: 2026-07-09
 ---
 
 # 02-12 统一双轨迁移到 Alembic
@@ -113,3 +113,6 @@ def upgrade() -> None:
 | 时间 | 执行者 | 动作 | 结果/备注 |
 |---|---|---|---|
 | - | - | 文档创建 | - |
+| 2026-07-09 | Codex | 删除 startup_runtime JSON app migration 入口，新增 Alembic data migration | 新迁移 `0016_review_schedule_anchor_repair` 接在 `0015_review_log_notes` 后；`main.py` 中死代码副本已不存在；JSON 轨道仅保留 filesystem legacy migration。 |
+| 2026-07-09 | Codex | 迁移实现取舍 | `repair_review_stage_progress()` 依赖 `schedule_rebuild_service` 与多段 review/session helper，复制整套逻辑会明显超过 150 行且更易漂移；迁移改为在 `upgrade()` 内延迟 import 应用 repair 函数，并保留 `review_schedule_anchor_repair_v1` JSON 完成标记守卫。 |
+| 2026-07-09 | Codex | 验证 | `python -m pytest tests/test_startup_runtime_and_supervisor.py tests/test_review_routes.py -q`：74 passed, 42 skipped；`python -m alembic history`：线性到 `0016_review_schedule_anchor_repair (head)`；`python -m alembic upgrade head`：首次执行 0016 成功，重复执行无动作；`python -m ruff check src/memory_anki/app/main.py src/memory_anki/app/startup_runtime.py src/memory_anki/core/migration.py alembic/versions/0016_review_schedule_anchor_repair.py`：All checks passed。 |

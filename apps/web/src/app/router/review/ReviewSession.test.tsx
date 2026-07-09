@@ -285,4 +285,27 @@ describe('ReviewSession', () => {
       needs_practice: false,
     })
   })
+
+  it('submits the optional review note from the completion dialog', async () => {
+    render(<ReviewSession />)
+
+    fireEvent.click(await screen.findByRole('button', { name: '完成' }))
+    fireEvent.change(
+      await screen.findByPlaceholderText('例如：心脏瓣膜顺序又忘了，下次先背口诀'),
+      { target: { value: ' 瓣膜顺序卡壳 ' } },
+    )
+    fireEvent.click(await screen.findByRole('button', { name: /默认.*标记第 4 次完成/ }))
+
+    await waitFor(() => expect(mocks.submitReviewSessionApi).toHaveBeenCalledTimes(1))
+    expect(mocks.submitReviewSessionApi).toHaveBeenCalledWith(309, {
+      chapter_id: undefined,
+      duration_seconds: 12,
+      completion_mode: 'manual_complete',
+      revealed_remaining: true,
+      red_marked_count: 1,
+      target_review_number: 3,
+      needs_practice: false,
+      note: '瓣膜顺序卡壳',
+    })
+  })
 })

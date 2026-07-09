@@ -6,9 +6,9 @@
 优先级: P1
 预估工作量: M（2-8h）
 依赖文档: 无（与 08-06 TanStack Query 试点无冲突；若 08-06 已扩展到 dashboard 领域，加载逻辑以彼时结构为准）
-状态: 未开始
-负责代理: 无
-完成时间: 无
+状态: 已完成
+负责代理: Codex
+完成时间: 2026-07-09
 ---
 
 # 08-04 拆分 DashboardPage
@@ -104,3 +104,4 @@ npm run typecheck && npm run test && npm run lint && npm run build
 | 时间 | 执行者 | 动作 | 结果/备注 |
 |---|---|---|---|
 | - | - | 文档创建 | 分 4 批（第 4 批可选） |
+| 2026-07-09 | Codex | 拆分 DashboardPage | 下沉过滤器模型与派生函数，抽出统计卡、快速操作、今日学习、新增章节、图表卡组件；主文件 262 行；`npx vitest run src/features/dashboard`、`npm run typecheck` 通过 |

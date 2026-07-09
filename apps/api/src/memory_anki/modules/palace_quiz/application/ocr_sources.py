@@ -5,11 +5,10 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from memory_anki.core.time import utc_now_naive
-from memory_anki.infrastructure.db.models import PalaceQuizOcrSource
+from memory_anki.infrastructure.db._tables.palaces import PalaceQuizOcrSource
 
 from .question_contracts import json_dump, json_load
-from .question_lookup_queries import get_palace_or_raise
-
+from .questions.queries import get_palace_or_raise
 
 SOURCE_SET_ORDER = {
     "zhongjiao_questions": 10,

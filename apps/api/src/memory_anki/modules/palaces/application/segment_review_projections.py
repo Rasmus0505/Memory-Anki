@@ -4,7 +4,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from memory_anki.infrastructure.db.models import Palace, PalaceSegment
+from memory_anki.infrastructure.db._tables.palaces import Palace, PalaceSegment
 from memory_anki.modules.palaces.application.segment_nodes import (
     build_segments_editor_doc,
     cleanup_segment_node_uids,
@@ -24,7 +24,6 @@ from memory_anki.modules.sessions.application.session_progress_service import (
 )
 
 from .segment_review_support import (
-    palace_review_algorithm,
     palace_stage_completed_count,
     palace_stage_progress,
     review_stages_json,
@@ -179,8 +178,7 @@ def build_palace_default_segment_summary(
     palace: Palace,
 ) -> dict[str, Any] | None:
     total, completed, progress = palace_stage_progress(session, palace)
-    algorithm = palace_review_algorithm(session, palace)
-    stage_labels = get_algorithm_stage_labels(session, algorithm)
+    stage_labels = get_algorithm_stage_labels(session)
     remaining_uids = remaining_unclaimed_node_uids(palace)
     if not remaining_uids:
         return None

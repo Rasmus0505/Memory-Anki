@@ -1,4 +1,6 @@
-import { request } from '@/shared/api/http'
+import { getApiToken } from '@/shared/api/apiToken'
+import { extractResponseMessage } from '@/shared/api/jsonResponse'
+import { API_BASE, request } from '@/shared/api/http'
 import type { MindMapEditorState } from '@/shared/api/contracts'
 
 export interface SubjectSummary {
@@ -29,7 +31,33 @@ export interface ChapterDetailResponse {
     children: Array<{ id: number; name: string }>
     breadcrumbs: Array<{ id: number; name: string }>
   }
-  palaces: Array<{ id: number; title: string }>
+  palaces: Array<{
+    id: number
+    title: string
+    mastered: boolean
+    archived: boolean
+    review_stage_completed: number
+    review_stage_total: number
+    next_due_date: string | null
+  }>
+}
+
+export interface DeleteChapterImpact {
+  ok: false
+  requires_force: true
+  chapter_count: number
+  linked_palace_count: number
+  question_count: number
+}
+
+export class DeleteChapterImpactError extends Error {
+  impact: DeleteChapterImpact
+
+  constructor(impact: DeleteChapterImpact) {
+    super('删除章节需要确认影响范围')
+    this.name = 'DeleteChapterImpactError'
+    this.impact = impact
+  }
 }
 
 export function getSubjectsApi() {
@@ -82,6 +110,38 @@ export function getSubjectTreeApi(id: number) {
 
 export function getChapterApi(id: number) {
   return request<ChapterDetailResponse>(`/chapters/${id}`)
+}
+
+export async function deleteChapterApi(id: number, options: { force?: boolean } = {}) {
+  const search = options.force ? '?force=true' : ''
+  const apiToken = getApiToken()
+  const response = await fetch(`${API_BASE}/chapters/${id}${search}`, {
+    method: 'DELETE',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(apiToken ? { 'X-Memory-Anki-Token': apiToken } : {}),
+    },
+  })
+  const body = await response.text().catch(() => '')
+  let payload: unknown
+  try {
+    payload = body ? JSON.parse(body) : null
+  } catch {
+    payload = null
+  }
+  if (
+    response.status === 409 &&
+    payload &&
+    typeof payload === 'object' &&
+    'requires_force' in payload &&
+    payload.requires_force === true
+  ) {
+    throw new DeleteChapterImpactError(payload as DeleteChapterImpact)
+  }
+  if (!response.ok) {
+    throw new Error(extractResponseMessage(response.status, body))
+  }
+  return payload as { ok: boolean }
 }
 
 export function getSubjectEditorApi(id: number) {

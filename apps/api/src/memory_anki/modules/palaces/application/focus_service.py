@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 
-from memory_anki.infrastructure.db.models import Palace
+from memory_anki.infrastructure.db._tables.palaces import Palace
 
 
 def parse_focus_node_uids(palace: Palace | None) -> list[str]:

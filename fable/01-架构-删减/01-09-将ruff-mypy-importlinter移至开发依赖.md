@@ -6,9 +6,9 @@
 优先级: P2
 预估工作量: S（<2h）
 依赖文档: 无
-状态: 未开始
-负责代理: 无
-完成时间: 无
+状态: 已完成
+负责代理: fable Worker 24
+完成时间: 2026-07-09
 ---
 
 # 01-09 将 ruff/mypy/import-linter 移至开发依赖
@@ -185,3 +185,4 @@ python -m venv %TEMP%\ma-rt-venv
 | 时间 | 执行者 | 动作 | 结果/备注 |
 |---|---|---|---|
 | 2026-07-08 | 文档代理（fable） | 文档创建；核实三工具在 requirements.txt 第 13-15 行、CI 安装 dev 文件（级联 -r）、tools/ 与启动脚本无运行时依赖 | - |
+| 2026-07-09 | fable Worker 24 | 将 `ruff==0.12.11`、`mypy==1.17.1`、`import-linter==2.3` 从 `apps/api/requirements.txt` 平移到 `apps/api/requirements-dev.txt`；同步 dev 文件注释；未修改 `pyproject.toml` 工具配置或 mypy overrides | 已完成；`requirements.txt` 仅保留运行时依赖，dev 文件继续通过 `-r requirements.txt` 级联安装运行时依赖并显式安装 lint/type/architecture 工具 |

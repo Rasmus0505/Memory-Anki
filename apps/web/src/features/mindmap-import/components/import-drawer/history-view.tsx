@@ -44,7 +44,9 @@ export function MindMapImportHistoryView({
                       <span>{item.nodeCount} 个知识点</span>
                       {item.importMode === 'batch' ? <Badge variant="secondary">多图</Badge> : null}
                       {item.imageCount ? <span>{item.imageCount} 张图</span> : null}
-                      {item.jobStatus ? <Badge variant="outline">{item.jobStatus}</Badge> : null}
+                      {item.jobStatus ? (
+                        <Badge variant="outline">{JOB_STATUS_LABELS[item.jobStatus] ?? item.jobStatus}</Badge>
+                      ) : null}
                     </div>
                     <div className="mt-1 text-xs text-muted-foreground">
                       {new Date(item.createdAt).toLocaleString()}
@@ -73,3 +75,12 @@ export function MindMapImportHistoryView({
     </div>
   )
 }
+
+const JOB_STATUS_LABELS = {
+  draft: '待识别',
+  running: '识别中',
+  paused: '已暂停',
+  completed: '已完成',
+  failed: '识别失败',
+  interrupted: '已中断',
+} as const

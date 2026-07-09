@@ -7,10 +7,11 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from memory_anki.infrastructure.db.models import get_session
+from memory_anki.infrastructure.db.deps import session_dep
 from memory_anki.modules.english_reading.application.service import (
     complete_material,
     create_material,
+    create_vocabulary_note,
     delete_material,
     generate_material_version,
     generate_material_version_events,
@@ -19,6 +20,8 @@ from memory_anki.modules.english_reading.application.service import (
     get_material_version,
     get_profile,
     get_workspace,
+    list_vocabulary_notes,
+    review_vocabulary_note,
     translate_sentence_text,
     update_material,
     update_profile,
@@ -63,12 +66,19 @@ class ReadingSentenceTranslationRequest(BaseModel):
     ai_options: dict | None = None
 
 
-def session_dep():
-    session = get_session()
-    try:
-        yield session
-    finally:
-        session.close()
+class ReadingVocabularyNoteCreateRequest(BaseModel):
+    word: str
+    note: str = ""
+    definitionZh: str = ""
+    context: str = ""
+    materialId: int | None = None
+    versionId: int | None = None
+    spanAnnotationId: str = ""
+    cefr: str | None = None
+
+
+class ReadingVocabularyReviewRequest(BaseModel):
+    result: str = "good"
 
 
 @router.get("/english-reading/profile")
@@ -241,6 +251,48 @@ def api_translate_english_reading_sentence(
         if "翻译失败" in message:
             status_code = 502
         raise HTTPException(status_code=status_code, detail=message) from exc
+
+
+@router.get("/english-reading/vocabulary-notes")
+def api_list_english_reading_vocabulary_notes(
+    dueOnly: bool = False,
+    limit: int = 50,
+    session: Session = Depends(session_dep),
+):
+    return list_vocabulary_notes(session, due_only=dueOnly, limit=limit)
+
+
+@router.post("/english-reading/vocabulary-notes")
+def api_create_english_reading_vocabulary_note(
+    data: ReadingVocabularyNoteCreateRequest,
+    session: Session = Depends(session_dep),
+):
+    try:
+        return create_vocabulary_note(
+            session,
+            word=data.word,
+            note=data.note,
+            definition_zh=data.definitionZh,
+            context=data.context,
+            material_id=data.materialId,
+            version_id=data.versionId,
+            span_annotation_id=data.spanAnnotationId,
+            cefr=data.cefr,
+        )
+    except EnglishReadingError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/english-reading/vocabulary-notes/{note_id}/review")
+def api_review_english_reading_vocabulary_note(
+    note_id: int,
+    data: ReadingVocabularyReviewRequest,
+    session: Session = Depends(session_dep),
+):
+    try:
+        return review_vocabulary_note(session, note_id=note_id, result=data.result)
+    except EnglishReadingError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.post("/english-reading/materials/{material_id}/complete")

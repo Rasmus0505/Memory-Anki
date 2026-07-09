@@ -6,9 +6,9 @@
 优先级: P1
 预估工作量: S（<2h）
 依赖文档: 无
-状态: 未开始
-负责代理: 无
-完成时间: 无
+状态: 已完成
+负责代理: fable Worker 1
+完成时间: 2026-07-09
 ---
 
 # 01-04 清理 pyproject 中 mypy 死配置
@@ -123,3 +123,4 @@ python -m mypy
 | 时间 | 执行者 | 动作 | 结果/备注 |
 |---|---|---|---|
 | 2026-07-08 | 文档代理（fable） | 文档创建；核实 knowledge 模块无 application 目录、time_records 模块整体不存在，两条 override 确为死配置（位于 pyproject 第 42、59 行） | - |
+| 2026-07-09 | fable Worker 1 | 删除 pyproject.toml 中 `bilink_service` 与 `time_records_service` 两条 mypy override 死配置 | 已完成；执行前复核源码/测试无对应模块；`python -c "import tomllib; tomllib.load(open('apps/api/pyproject.toml','rb')); print('ok')"` 通过；`rg -n "bilink_service|time_records_service" pyproject.toml src tests` 无匹配。`python -m mypy` 仍有既有类型错误（54 errors/26 files，如 `question_generation_source_meta.py` 缺 `Any`、若干 palace_quiz/settings 类型问题），非本任务引入 |

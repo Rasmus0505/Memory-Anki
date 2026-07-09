@@ -108,17 +108,17 @@ export function WordRail({
             {slots.map((slot) => {
               const slotColor =
                 slot.state === 'empty'
-                  ? 'text-gray-300 dark:text-gray-600'
+                  ? 'text-gray-300'
                   : slot.state === 'correct'
                     ? 'text-success'
                     : slot.state === 'revealed'
-                      ? 'text-warning dark:text-warning/80'
+                      ? 'text-warning'
                       : slot.state === 'wrong' && slot.extra
                         ? 'text-destructive/70 line-through decoration-1'
                         : slot.state === 'wrong'
                           ? 'text-destructive'
                           : slot.state === 'fixed'
-                            ? 'font-semibold text-gray-700 dark:text-gray-300'
+                            ? 'font-semibold text-gray-700'
                             : 'text-gray-300'
 
               return (

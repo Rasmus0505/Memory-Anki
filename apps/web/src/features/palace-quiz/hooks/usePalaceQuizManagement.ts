@@ -8,7 +8,7 @@ import {
   createPalaceQuizQuestionApi,
   deletePalaceQuizQuestionApi,
   updatePalaceQuizQuestionApi,
-} from '@/features/palace-quiz/api'
+} from '@/entities/quiz/api'
 import {
   buildDraftFromForm,
   buildEmptyQuestionForm,

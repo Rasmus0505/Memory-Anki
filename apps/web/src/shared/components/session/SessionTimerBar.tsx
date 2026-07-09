@@ -10,9 +10,11 @@ import {
   readTimerAutomationConfig,
   resetTimerAutomationConfig,
   saveTimerAutomationConfig,
+  TIMER_AUTOMATION_UPDATED_EVENT,
   type TimerAutomationConfig,
   type TimerAutomationScene,
 } from '@/shared/components/session/timer-automation-config'
+import { onAppEvent } from '@/shared/events/appEvents'
 import {
   readTimerFocusConfig,
   resetTimerFocusConfig,
@@ -112,13 +114,10 @@ export function SessionTimerBar({
   }, [effectiveSeconds, inputValue, onAdjustDuration])
 
   React.useEffect(() => {
-    const handleAutomationChange = (event: Event) => {
-      const nextConfig =
-        event instanceof CustomEvent && event.detail
-          ? (event.detail as TimerAutomationConfig)
-          : readTimerAutomationConfig()
+    const unsubscribeAutomation = onAppEvent(TIMER_AUTOMATION_UPDATED_EVENT, (detail) => {
+      const nextConfig = detail || readTimerAutomationConfig()
       setAutomationConfig(nextConfig)
-    }
+    })
     const handleFocusChange = (event: Event) => {
       const nextConfig =
         event instanceof CustomEvent && event.detail
@@ -134,11 +133,10 @@ export function SessionTimerBar({
       setBreakConfig(nextConfig)
     }
 
-    window.addEventListener('memory-anki-timer-automation-change', handleAutomationChange)
     window.addEventListener(TIMER_FOCUS_UPDATED_EVENT, handleFocusChange)
     window.addEventListener(BREAK_GUARD_UPDATED_EVENT, handleBreakConfigChange)
     return () => {
-      window.removeEventListener('memory-anki-timer-automation-change', handleAutomationChange)
+      unsubscribeAutomation()
       window.removeEventListener(TIMER_FOCUS_UPDATED_EVENT, handleFocusChange)
       window.removeEventListener(BREAK_GUARD_UPDATED_EVENT, handleBreakConfigChange)
     }

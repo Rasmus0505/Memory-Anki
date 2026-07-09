@@ -6,9 +6,9 @@
 优先级: P0
 预估工作量: L（>8h）
 依赖文档: 无（与 08-03 拆 TimerAutomationDialog 相邻但互不依赖；建议先做本篇）
-状态: 未开始
-负责代理: 无
-完成时间: 无
+状态: 已完成
+负责代理: fable 并行 Worker 6
+完成时间: 2026-07-09
 ---
 
 # 08-02 拆分 GlobalTimerProvider
@@ -145,3 +145,8 @@ npm run typecheck && npm run test && npm run lint && npm run build   # 期望：
 | 时间 | 执行者 | 动作 | 结果/备注 |
 |---|---|---|---|
 | - | - | 文档创建 | 分 5 批；对外 API 经主文件 re-export 保持不变 |
+| 2026-07-09 | fable 并行 Worker 6 | 完成第 1 批 snapshot 纯函数下沉 | 新增 `timerSnapshotBuilders.ts`，从 `GlobalTimerProvider.tsx` 移出 `createBreakLogId`、`formatTimerSnapshotClock`、`buildStudyTimerSnapshot`、`buildBreakTimerSnapshot`；公共 API 与调用方 import 不变。`GlobalTimerProvider.test.tsx` 37 项通过，`npm run typecheck` 通过。 |
+| 2026-07-09 | fable 并行 Worker 8 | 完成第 2 批 context 与注册 hook 独立成文件 | 新增 `globalTimerContext.ts`，迁出 `GlobalTimerActionsContext`、`GlobalTimerActions` 与 `useGlobalTimerRegistration`；`GlobalTimerProvider.tsx` 改用 actions context provider，并继续从原公共路径 re-export `useGlobalTimerRegistration`。 |
+| 2026-07-09 | Codex | 完成第 3 批悬浮面板 UI 拆出 | 新增 `GlobalTimerFloatingOverlay.tsx` 与 `useTimerOverlayDrag.ts`，迁出面板 UI、胶囊态、拖拽与 8 方向 resize；保留原 className、aria-label 与对外命令行为。`GlobalTimerProvider.test.tsx` 37 项通过。 |
+| 2026-07-09 | Codex | 完成第 4-5 批休息守卫与桌面桥接 hook 拆分 | 新增 `useBreakGuardMachine.ts` 与 `useDesktopTimerBridgeSync.ts`，Provider 保留注册表、配置订阅、命令分发和 snapshot 组装；`GlobalTimerProvider.tsx` 降至 250 行，满足 ≤300 行验收。 |
+| 2026-07-09 | Codex | 验收测试 | `cd apps/web && npx vitest run src/shared/components/session/GlobalTimerProvider.test.tsx`：37 项通过；`cd apps/web && npx vitest run src/shared/components/session`：7 个测试文件、63 项通过；`cd apps/web && npm run typecheck`：通过。 |

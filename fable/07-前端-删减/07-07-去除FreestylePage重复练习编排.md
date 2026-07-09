@@ -6,9 +6,9 @@
 优先级: P1
 预估工作量: L（>8h）
 依赖文档: 08-01（拆分 FreestylePage）必须先行
-状态: 未开始
-负责代理: 无
-完成时间: 无
+状态: 已完成
+负责代理: Codex
+完成时间: 2026-07-09
 ---
 
 # 07-07 去除 FreestylePage 重复练习编排
@@ -129,3 +129,5 @@ npm run build       # 期望：构建成功
 | 时间 | 执行者 | 动作 | 结果/备注 |
 |---|---|---|---|
 | - | - | 文档创建 | 实测 FreestylePage 1575 行（非 1655）；已阻塞等待 08-01 |
+| 2026-07-09 | Codex | 完成共享编排抽取 | 已确认 08-01 状态为已完成，`FreestylePage.tsx` 已拆至约 292 行；真实 freestyle 做题编排位于 `apps/web/src/features/freestyle/hooks/useFreestyleQuizFlow.ts`，卡片组件位于 `components/FreestyleQuizCardView.tsx`。新增 `apps/web/src/features/palace-quiz/hooks/useQuizAttemptOrchestration.ts`，由 adapter 注入状态读写与题目回写；共享 hook 不 import freestyle。`usePalaceQuizPractice.ts` 保留内存态与 reset/remove 私有逻辑，选择题 immediate feedback 不变；`useFreestyleQuizFlow.ts` 复用共享 hook，freestyle 的外部结果 feedback effect、toast、持久化、历史记录与连击里程碑逻辑保留。功能代码中 `recordPalaceQuizChoiceAttemptApi` / `requestPalaceShortAnswerFeedbackApi` 的 feature 直接调用已收敛到共享 hook。 |
+| 2026-07-09 | Codex | 测试验收 | `cd apps/web && npm run test -- src/features/palace-quiz src/features/freestyle` 通过：8 files / 75 tests passed。`cd apps/web && npm run typecheck` 未通过，但失败点在 05-03 generation recovery 相关的 `PalaceQuizPage.tsx` props 缺口：`canRetryLastGeneration`、`onRetryLastGeneration`、`onRecoverFromLog`、`onRecoverGenerationHistoryPreview` 缺失；该范围已有其他 worker 处理，本任务未修改。 |

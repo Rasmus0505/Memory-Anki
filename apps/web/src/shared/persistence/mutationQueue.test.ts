@@ -7,6 +7,8 @@ import {
   resetMutationQueueForTest,
 } from './mutationQueue'
 
+const REMOVED_MUTATION_QUEUE_EVENT = ['memory-anki', 'mutation-queue:changed'].join('-')
+
 describe('mutationQueue', () => {
   beforeEach(async () => {
     await resetMutationQueueForTest()
@@ -43,6 +45,22 @@ describe('mutationQueue', () => {
     const items = await readQueuedMutations()
     expect(items).toHaveLength(1)
     expect(JSON.parse(items[0]!.body || '{}')).toEqual({ version: 2 })
+  })
+
+  it('does not dispatch the removed mutation queue change event', async () => {
+    const dispatchSpy = vi.spyOn(window, 'dispatchEvent')
+
+    await enqueueMutation({
+      resourceKey: 'palace:1:editor',
+      description: '保存宫殿脑图',
+      url: '/api/v1/palaces/1/editor',
+      method: 'PUT',
+      replayMode: 'auto',
+    })
+
+    expect(dispatchSpy).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: REMOVED_MUTATION_QUEUE_EVENT }),
+    )
   })
 
   it('replays auto mutations with the stored mutation id and removes successful items', async () => {

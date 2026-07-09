@@ -1,13 +1,15 @@
 import { Skeleton } from '@/shared/components/ui/skeleton'
+import {
+  SkeletonBlockRows,
+  SkeletonPageHeader,
+  SkeletonPanel,
+} from '@/shared/components/ui/skeleton-layout'
 
 export function PalaceEditSkeleton() {
   return (
     <div className="space-y-6">
       {/* Header with back + title */}
-      <div className="flex items-center gap-3">
-        <Skeleton className="size-8 rounded-md" />
-        <Skeleton className="h-7 w-36" />
-      </div>
+      <SkeletonPageHeader titleClassName="h-7 w-36" withIcon />
 
       {/* Editor layout: sidebar + main */}
       <div className="grid xl:grid-cols-[300px_minmax(0,1fr)] gap-4">
@@ -15,13 +17,11 @@ export function PalaceEditSkeleton() {
         <div className="space-y-3">
           <div className="rounded-lg border p-4 space-y-3">
             <Skeleton className="h-5 w-16" />
-            {Array.from({ length: 5 }).map((_, i) => (
-              <Skeleton key={i} className="h-9 w-full rounded-md" />
-            ))}
+            <SkeletonBlockRows rows={5} />
           </div>
           <div className="rounded-lg border p-4 space-y-3">
             <Skeleton className="h-5 w-20" />
-            <Skeleton className="h-20 w-full rounded-md" />
+            <SkeletonPanel heightClassName="h-20 rounded-md" />
           </div>
         </div>
 
@@ -32,7 +32,7 @@ export function PalaceEditSkeleton() {
             <Skeleton className="size-8 rounded-md" />
             <Skeleton className="size-8 rounded-md" />
           </div>
-          <Skeleton className="h-[450px] w-full rounded-xl" />
+          <SkeletonPanel heightClassName="h-[450px]" />
         </div>
       </div>
     </div>
