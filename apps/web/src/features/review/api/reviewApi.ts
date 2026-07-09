@@ -12,8 +12,11 @@ import {
   type SessionProgressPayload,
 } from '@/entities/session/api'
 import type {
+  ReviewLoadForecastResponse,
   ReviewQueueResponse,
   ReviewScheduleSummary,
+  SpreadOverdueResponse,
+  ReviewStageProgressHealthResponse,
   ReviewStageProgressRepairResponse,
   ReviewSessionSubmitResponse,
 } from '@/shared/api/contracts'
@@ -39,6 +42,10 @@ export function prefetchReviewQueueApi() {
   prefetchPromise('review:queue', () => request<ReviewQueueResponse>('/review/queue'))
 }
 
+export function getReviewLoadForecastApi(days = 7) {
+  return request<ReviewLoadForecastResponse>(`/review/load-forecast?days=${days}`)
+}
+
 export function getChapterReviewQueueApi(chapterId: number) {
   return request<ReviewQueueResponse>(`/review/chapter/${chapterId}/queue`)
 }
@@ -51,12 +58,52 @@ export function getReviewSessionProgressApi(id: number) {
   return getSessionProgressApi('review', id)
 }
 
+export function previewSpreadOverdueApi(days = 7) {
+  return request<SpreadOverdueResponse>('/review/spread-overdue', {
+    method: 'POST',
+    body: JSON.stringify({ days, dry_run: true }),
+    persistence: false,
+  })
+}
+
+export function spreadOverdueApi(days = 7) {
+  return withReviewStateInvalidation(
+    request<SpreadOverdueResponse>('/review/spread-overdue', {
+      method: 'POST',
+      body: JSON.stringify({ days }),
+      persistence: {
+        resourceKey: 'review:spread-overdue',
+        description: '平滑逾期复习',
+        replayMode: 'manual',
+      },
+    }),
+  )
+}
+
+export function undoSpreadOverdueApi() {
+  return withReviewStateInvalidation(
+    request<{ ok: boolean; restored: number }>('/review/spread-overdue/undo', {
+      method: 'POST',
+      body: JSON.stringify({}),
+      persistence: {
+        resourceKey: 'review:spread-overdue:undo',
+        description: '撤销逾期平滑',
+        replayMode: 'manual',
+      },
+    }),
+  )
+}
+
 export function saveReviewSessionProgressApi(id: number, data: SessionProgressPayload) {
   return saveSessionProgressApi('review', id, data, 'Save review progress')
 }
 
 export function clearReviewSessionProgressApi(id: number) {
   return clearSessionProgressApi('review', id, 'Clear review progress')
+}
+
+export function getReviewStageProgressHealthApi() {
+  return request<ReviewStageProgressHealthResponse>('/review/stage-progress-health')
 }
 
 export function repairReviewStageProgressApi() {
@@ -83,6 +130,7 @@ export function submitReviewSessionApi(
     red_marked_count?: number
     target_review_number?: number
     needs_practice?: boolean
+    note?: string
   },
 ) {
   return withReviewStateInvalidation(

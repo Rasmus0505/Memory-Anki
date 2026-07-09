@@ -115,6 +115,7 @@ vi.mock('@/features/mindmap-import', () => ({
       currentJobStatus: 'completed',
       currentJobStage: 'completed',
       currentJobUsage: null,
+      currentJobError: null,
       currentJobPauseRequested: false,
       canResumeJob: false,
       canPauseJob: false,

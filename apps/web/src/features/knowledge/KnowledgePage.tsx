@@ -25,11 +25,14 @@ import { KnowledgeMindMapImportDrawer } from '@/features/knowledge/components/Kn
 import { useMindMapImport, type ImportApplyContext } from '@/features/mindmap-import'
 import {
   createSubjectApi,
+  deleteChapterApi,
+  DeleteChapterImpactError,
   deleteSubjectApi,
   getChapterApi,
   getSubjectEditorApi,
   getSubjectsApi,
   saveSubjectEditorApi,
+  type ChapterDetailResponse,
   type SubjectSummary,
   updateSubjectApi,
 } from '@/entities/knowledge/api'
@@ -43,16 +46,7 @@ import type {
   PalaceQuizQuestionType,
 } from '@/shared/api/contracts'
 
-interface ChapterDetail {
-  chapter: {
-    id: number
-    name: string
-    notes: string
-    children: Array<{ id: number; name: string }>
-    breadcrumbs: Array<{ id: number; name: string }>
-  }
-  palaces: Array<{ id: number; title: string }>
-}
+type ChapterDetail = ChapterDetailResponse
 
 export default function Knowledge() {
   const mindMapFrameRef = useRef<MindMapFrameHandle | null>(null)
@@ -258,6 +252,36 @@ export default function Knowledge() {
     await refreshSubjects(null)
   }
 
+  const handleDeleteChapter = async () => {
+    if (!selectedChapterId || !chapterDetail) return
+    try {
+      await deleteChapterApi(selectedChapterId)
+      toast.success('章节已删除')
+      setSelectedNodes([])
+      setChapterDetail(null)
+      await reload()
+    } catch (error) {
+      if (error instanceof DeleteChapterImpactError) {
+        const impact = error.impact
+        const confirmed = window.confirm(
+          `该章节及其子章节共 ${impact.chapter_count} 个，关联了 ${impact.linked_palace_count} 个宫殿、${impact.question_count} 道题目。删除后题目将一并删除且不可恢复，确定删除吗？`,
+        )
+        if (!confirmed) return
+        try {
+          await deleteChapterApi(selectedChapterId, { force: true })
+          toast.success('章节已删除')
+          setSelectedNodes([])
+          setChapterDetail(null)
+          await reload()
+        } catch (forceError) {
+          toast.error(forceError instanceof Error ? forceError.message : '删除章节失败')
+        }
+        return
+      }
+      toast.error(error instanceof Error ? error.message : '删除章节失败')
+    }
+  }
+
   const handleToggleChapterQuizType = (questionType: PalaceQuizQuestionType) => {
     setChapterQuizQuestionTypes((current) => {
       if (current.includes(questionType)) {
@@ -436,12 +460,20 @@ export default function Knowledge() {
               {chapterDetail ? (
                 <>
                   <div>
-                    <div className="text-sm font-semibold">{chapterDetail.chapter.name}</div>
-                    {chapterDetail.chapter.breadcrumbs.length > 0 ? (
-                      <div className="mt-1 text-xs text-muted-foreground">
-                        {chapterDetail.chapter.breadcrumbs.map((item) => item.name).join(' / ')}
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="text-sm font-semibold">{chapterDetail.chapter.name}</div>
+                        {chapterDetail.chapter.breadcrumbs.length > 0 ? (
+                          <div className="mt-1 text-xs text-muted-foreground">
+                            {chapterDetail.chapter.breadcrumbs.map((item) => item.name).join(' / ')}
+                          </div>
+                        ) : null}
                       </div>
-                    ) : null}
+                      <Button type="button" size="sm" variant="outline" onClick={handleDeleteChapter}>
+                        <Trash2 className="mr-2 size-4" />
+                        删除章节
+                      </Button>
+                    </div>
                   </div>
                   <div className="rounded-lg bg-background/70 p-3 text-sm text-muted-foreground whitespace-pre-wrap">
                     {chapterDetail.chapter.notes || '该章节暂时没有备注。'}
@@ -472,7 +504,19 @@ export default function Knowledge() {
                             className="flex items-center justify-between rounded-lg border border-border/70 bg-background/70 px-3 py-3 text-sm transition-colors hover:text-foreground"
                           >
                             <span>{palace.title}</span>
-                            <span className="text-xs text-muted-foreground">查看宫殿</span>
+                            <span className="flex flex-wrap items-center justify-end gap-2">
+                              {palace.mastered ? (
+                                <Badge variant="secondary">已掌握</Badge>
+                              ) : palace.review_stage_total > 0 ? (
+                                <Badge variant="outline">
+                                  复习 {palace.review_stage_completed}/{palace.review_stage_total}
+                                </Badge>
+                              ) : null}
+                              {palace.next_due_date ? (
+                                <span className="text-xs text-muted-foreground">下次 {palace.next_due_date}</span>
+                              ) : null}
+                              <span className="text-xs text-muted-foreground">查看宫殿</span>
+                            </span>
                           </Link>
                         ))}
                       </div>
@@ -605,4 +649,3 @@ export default function Knowledge() {
     </div>
   )
 }
-

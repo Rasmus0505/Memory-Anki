@@ -37,6 +37,7 @@ export function useImportJobController(options: UseImportJobControllerOptions) {
     currentJobStatus: state.currentJobStatus,
     currentJobStage: state.currentJobStage,
     currentJobUsage: state.currentJobUsage,
+    currentJobError: state.currentJobError,
     currentJobResolvedAi: state.currentJobResolvedAi,
     currentJobPauseRequested: state.currentJobPauseRequested,
     importReusedExistingResult: state.importReusedExistingResult,

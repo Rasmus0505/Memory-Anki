@@ -13,7 +13,7 @@ import type { dispatchGlobalFeedback } from '@/shared/feedback/globalFeedbackMod
 import {
   getSubjectTreeApi,
   getSubjectsApi,
-} from '@/features/palace-quiz/api'
+} from '@/entities/knowledge/api'
 import {
   buildChapterSummary,
   collectAllowedChapterIds,

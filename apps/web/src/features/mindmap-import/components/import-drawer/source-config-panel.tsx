@@ -42,6 +42,7 @@ export function MindMapImportSourceConfigPanel({
     streamStatusMessage,
     currentJobStatus,
     currentJobStage,
+    currentJobError,
     currentJobPauseRequested,
     canPauseJob,
     canResumeJob,
@@ -242,8 +243,12 @@ export function MindMapImportSourceConfigPanel({
 
         {hasCurrentJob ? (
           <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-            {currentJobStatus ? <Badge variant="outline">{currentJobStatus}</Badge> : null}
-            {currentJobStage && currentJobStage !== 'completed' ? <Badge variant="secondary">{currentJobStage}</Badge> : null}
+            {currentJobStatus ? (
+              <Badge variant="outline">{JOB_STATUS_LABELS[currentJobStatus] ?? currentJobStatus}</Badge>
+            ) : null}
+            {currentJobStage && currentJobStage !== 'completed' ? (
+              <Badge variant="secondary">{STAGE_LABELS[currentJobStage] ?? currentJobStage}</Badge>
+            ) : null}
             {usageLabel ? <span>{usageLabel}</span> : null}
             {canPauseJob ? (
               <Button
@@ -263,7 +268,28 @@ export function MindMapImportSourceConfigPanel({
           </div>
         ) : null}
 
-        {error ? (
+        {currentJobError ? (
+          <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm">
+            <div className="font-medium text-destructive">
+              识别失败（阶段：{STAGE_LABELS[currentJobError.stage] ?? currentJobError.stage}）
+            </div>
+            <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+              <Badge variant="outline">{currentJobError.code}</Badge>
+              <span>{currentJobError.retryable ? '可继续识别' : '需要调整后重试'}</span>
+              {currentJobError.request_id ? <span>请求 ID：{currentJobError.request_id}</span> : null}
+            </div>
+            <p className="mt-2 text-destructive">{currentJobError.message}</p>
+            {currentJobError.raw_snippet ? (
+              <pre className="mt-2 max-h-24 overflow-auto whitespace-pre-wrap break-words rounded-md border border-border/70 bg-background/70 p-2 text-xs text-muted-foreground">
+                {currentJobError.raw_snippet}
+              </pre>
+            ) : null}
+            <p className="mt-2 text-xs text-muted-foreground">
+              已完成 {currentJobUsage?.total ?? 0} 次 AI 调用（结构 {currentJobUsage?.structure ?? 0} / 文本{' '}
+              {currentJobUsage?.text ?? 0} / 合并 {currentJobUsage?.merge ?? 0}），继续识别只会重跑失败的阶段。
+            </p>
+          </div>
+        ) : error ? (
           <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
             {error}
           </div>
@@ -288,6 +314,24 @@ export function MindMapImportSourceConfigPanel({
     </div>
   )
 }
+
+const JOB_STATUS_LABELS = {
+  draft: '待识别',
+  running: '识别中',
+  paused: '已暂停',
+  completed: '已完成',
+  failed: '识别失败',
+  interrupted: '已中断',
+} as const
+
+const STAGE_LABELS = {
+  prepared: '准备',
+  structure: '结构识别',
+  ocr: '文字识别',
+  merge: '合并',
+  text: '文本提取',
+  completed: '完成',
+} as const
 
 function SourceKindButton({
   active,

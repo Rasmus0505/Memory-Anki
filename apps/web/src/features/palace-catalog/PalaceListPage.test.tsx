@@ -1,10 +1,12 @@
 ﻿import * as React from 'react'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import PalaceListPage from '@/features/palace-catalog/PalaceListPage'
 import { PALACE_LIST_VIEW_SETTINGS_KEY } from '@/entities/preferences/model/palaceViewSettings'
 import { resetClientPreferenceCacheForTest } from '@/shared/preferences/clientPreferences'
 import { updateClientPreferencesApi } from '@/entities/preferences/api'
+import { buildPalaceCatalogGroupedQueryKey } from '@/features/palace-catalog/model/palaceCatalog'
 
 const navigate = vi.fn()
 const searchParams = new URLSearchParams()
@@ -30,6 +32,7 @@ vi.mock('@/features/palace-catalog/components/palace-list/PalaceStageProgress', 
 }))
 
 const getPalacesGroupedApi = vi.fn()
+let queryClient: QueryClient
 
 vi.mock('@/entities/palace/api', () => ({
   getPalacesGroupedApi: (...args: unknown[]) => getPalacesGroupedApi(...args),
@@ -126,6 +129,21 @@ const reviewedPalace = {
 
 const RealDate = Date
 
+function renderPalaceListPage() {
+  queryClient = new QueryClient({
+    defaultOptions: {
+      queries: {
+        retry: false,
+      },
+    },
+  })
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <PalaceListPage />
+    </QueryClientProvider>,
+  )
+}
+
 describe('PalaceListPage', () => {
   beforeEach(() => {
     const fixedNow = new RealDate('2026-05-11T10:00:00Z')
@@ -184,13 +202,17 @@ describe('PalaceListPage', () => {
   })
 
   afterEach(() => {
+    queryClient?.clear()
     vi.unstubAllGlobals()
   })
 
   it('renders single-segment palaces in compact two-line mode without default segment label', async () => {
-    render(<PalaceListPage />)
+    renderPalaceListPage()
 
     expect(await screen.findByText('第四节 收回教育权运动与教会教育的变革')).toBeTruthy()
+    expect(queryClient.getQueryData(buildPalaceCatalogGroupedQueryKey({ subject_id: '1' }))).toMatchObject({
+      subjects: [{ subject: { id: 1, name: '中国近代史' } }],
+    })
     expect(screen.getByText('记忆宫殿')).toBeTruthy()
     expect(screen.queryByText('第 1 部分')).toBeNull()
     expect(screen.getAllByText('预计 1分 40秒').length).toBeGreaterThan(0)
@@ -199,13 +221,14 @@ describe('PalaceListPage', () => {
   })
 
   it('refreshes palace cards when the catalog invalidation event fires', async () => {
-    render(<PalaceListPage />)
+    renderPalaceListPage()
 
     expect(await screen.findByRole('button', { name: /开始复习/ })).toBeTruthy()
     window.dispatchEvent(new CustomEvent('palace-catalog:invalidated'))
 
     await waitFor(() => expect(getPalacesGroupedApi).toHaveBeenCalledTimes(2))
-    expect(screen.queryByRole('button', { name: /开始复习/ })).toBeNull()
+    await waitFor(() => expect(screen.queryByRole('button', { name: /开始复习/ })).toBeNull())
+    expect(queryClient.getQueryState(buildPalaceCatalogGroupedQueryKey({ subject_id: '1' }))?.dataUpdateCount).toBe(2)
   })
 
   it('opens formal review sessions for virtual default palace progress', async () => {
@@ -241,7 +264,7 @@ describe('PalaceListPage', () => {
       ],
     })
 
-    render(<PalaceListPage />)
+    renderPalaceListPage()
 
     const startButton = await screen.findByRole('button', { name: /开始复习/ })
     expect(screen.getByRole('progressbar', { name: '复习进度 50%' })).toBeTruthy()
@@ -251,7 +274,7 @@ describe('PalaceListPage', () => {
   })
 
   it('defaults to chapter-double and keeps local view settings after switching', async () => {
-    render(<PalaceListPage />)
+    renderPalaceListPage()
 
     await screen.findByText('第四节 收回教育权运动与教会教育的变革')
     expect(screen.getByTestId('list-layout-root').dataset.layoutMode).toBe('chapter-double')
@@ -262,17 +285,19 @@ describe('PalaceListPage', () => {
     expect(screen.getByTestId('list-layout-root').dataset.layoutMode).toBe('chapter-card-grid')
     expect(screen.getByTestId('list-layout-root').dataset.densityMode).toBe('compact')
     expect(window.localStorage.getItem(PALACE_LIST_VIEW_SETTINGS_KEY)).toBeNull()
-    expect(mockUpdateClientPreferencesApi).toHaveBeenLastCalledWith({
-      palace_list_view_settings: {
-        layoutMode: 'chapter-card-grid',
-        densityMode: 'compact',
-      },
+    await waitFor(() => {
+      expect(mockUpdateClientPreferencesApi).toHaveBeenLastCalledWith({
+        palace_list_view_settings: {
+          layoutMode: 'chapter-card-grid',
+          densityMode: 'compact',
+        },
+      })
     })
   })
 
   it('clears search without dropping current subject context', async () => {
     searchParams.set('search', '教育')
-    render(<PalaceListPage />)
+    renderPalaceListPage()
 
     const highlights = await screen.findAllByText('教育')
     expect(highlights.some((highlight) => highlight.tagName === 'MARK')).toBe(true)
@@ -283,5 +308,3 @@ describe('PalaceListPage', () => {
     })
   })
 })
-
-

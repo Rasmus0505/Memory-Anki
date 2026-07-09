@@ -5,7 +5,7 @@ import { formatDuration } from '@/entities/session/model'
 import {
   formatSegmentDateTime,
   getSegmentDisplayName,
-} from '@/features/palace-segments/model/segment-display'
+} from '@/entities/palace-segment'
 import { Button } from '@/shared/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card'
 import {

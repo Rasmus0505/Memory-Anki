@@ -50,6 +50,7 @@ describe('PalaceQuizPage generation flows', () => {
           }),
         ]),
         'append',
+        expect.objectContaining({ palaceId: 1, ocrSources: [] }),
       )
     })
     expect(classifyPalaceQuizQuestionsToMiniPalacesApiMock).toHaveBeenCalled()
@@ -71,6 +72,7 @@ describe('PalaceQuizPage generation flows', () => {
         1,
         expect.arrayContaining([expect.objectContaining({ stem: '细胞的控制中心是？' })]),
         'overwrite',
+        expect.objectContaining({ palaceId: 1, ocrSources: [] }),
       )
     })
   })

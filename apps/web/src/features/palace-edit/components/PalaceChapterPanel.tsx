@@ -117,7 +117,15 @@ export function PalaceChapterPanel({
             type="checkbox"
             checked={isExplicit}
             disabled={selectionPending}
-            onChange={() => void onToggleChapter(option.id)}
+            onChange={() => {
+              if (isExplicit) {
+                const confirmed = window.confirm(
+                  `取消关联「${option.name}」后，该章节的复习队列和做题范围将不再包含本宫殿（题目本身不会被删除）。确定取消吗？`,
+                )
+                if (!confirmed) return
+              }
+              void onToggleChapter(option.id)
+            }}
             className="mt-1"
           />
           <span className="min-w-0 flex-1 space-y-1">

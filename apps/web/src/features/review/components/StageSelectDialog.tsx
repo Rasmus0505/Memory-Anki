@@ -8,6 +8,7 @@ import {
   DialogTitle,
 } from '@/shared/components/ui/dialog'
 import { Button } from '@/shared/components/ui/button'
+import { Textarea } from '@/shared/components/ui/textarea'
 import { isEditableKeyboardTarget } from '@/shared/keyboard/keyboardTargets'
 import { cn } from '@/shared/lib/utils'
 
@@ -17,7 +18,7 @@ interface StageSelectDialogProps {
   stages: ReviewStageSummary[]
   currentReviewNumber: number
   durationSeconds?: number
-  onConfirm: (targetReviewNumber: number, needsPractice: boolean) => void
+  onConfirm: (targetReviewNumber: number, needsPractice: boolean, note: string) => void
   onCancel: () => void
 }
 
@@ -54,10 +55,12 @@ export function StageSelectDialog({
   const defaultTarget = currentReviewNumber
 
   const [selectedNumber, setSelectedNumber] = React.useState<number>(defaultTarget)
+  const [note, setNote] = React.useState('')
 
   React.useEffect(() => {
     if (open) {
       setSelectedNumber(defaultTarget)
+      setNote('')
     }
   }, [open, defaultTarget])
 
@@ -65,7 +68,7 @@ export function StageSelectDialog({
   const nextAfterDefaultLabel = nextAfterDefault?.label ?? '完成全部'
 
   const handleConfirm = (needsPractice: boolean) => {
-    onConfirm(selectedNumber, needsPractice)
+    onConfirm(selectedNumber, needsPractice, note.trim())
   }
 
   const total = normalizedStages.length
@@ -158,6 +161,19 @@ export function StageSelectDialog({
                 )
               })}
             </div>
+          </div>
+
+          <div className="space-y-1">
+            <div className="text-xs text-muted-foreground">
+              复盘一句（可选）：这次哪里卡了、下次注意什么
+            </div>
+            <Textarea
+              value={note}
+              onChange={(event) => setNote(event.target.value)}
+              placeholder="例如：心脏瓣膜顺序又忘了，下次先背口诀"
+              rows={2}
+              maxLength={500}
+            />
           </div>
         </div>
 

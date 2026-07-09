@@ -64,8 +64,11 @@ interface PalaceQuizGenerationPanelProps {
     setClassifyByMiniPalace: (value: boolean) => void
     error: string
     loading: boolean
+    canRetryLastGeneration: boolean
     onOpenRangeDialog: () => Promise<void>
     onGeneratePreview: () => Promise<void>
+    onRetryLastGeneration: () => Promise<void>
+    onRecoverFromLog: () => Promise<void>
     onImageFileChange: (files: FileList | null) => void
   }
   history: {
@@ -73,6 +76,7 @@ interface PalaceQuizGenerationPanelProps {
     regeneratingId: string | null
     generationLoading: boolean
     onRegenerateFromHistory: (item: QuizGenerationHistoryItem) => Promise<void>
+    onRecoverGenerationHistoryPreview: (item: QuizGenerationHistoryItem) => Promise<void>
     onDeleteGenerationHistory: (historyId: string) => void
     onApplyHistoryConfig: (item: QuizGenerationHistoryItem) => void
   }
@@ -136,8 +140,11 @@ export function PalaceQuizGenerationPanel({
     setClassifyByMiniPalace: setGenerationClassifyByMiniPalace,
     error: generationError,
     loading: generationLoading,
+    canRetryLastGeneration,
     onOpenRangeDialog,
     onGeneratePreview,
+    onRetryLastGeneration,
+    onRecoverFromLog,
     onImageFileChange,
   } = source
   const {
@@ -145,6 +152,7 @@ export function PalaceQuizGenerationPanel({
     regeneratingId: historyRegeneratingId,
     generationLoading: historyGenerationLoading,
     onRegenerateFromHistory,
+    onRecoverGenerationHistoryPreview,
     onDeleteGenerationHistory,
     onApplyHistoryConfig,
   } = history
@@ -371,6 +379,26 @@ export function PalaceQuizGenerationPanel({
             {generationError ? (
               <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
                 {generationError}
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={!canRetryLastGeneration || generationLoading}
+                    onClick={() => void onRetryLastGeneration()}
+                  >
+                    <RotateCcw className="size-4" />
+                    重试本次生成
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={generationLoading}
+                    onClick={() => void onRecoverFromLog()}
+                  >
+                    <Clock3 className="size-4" />
+                    从 AI 日志恢复预览
+                  </Button>
+                </div>
               </div>
             ) : null}
 
@@ -468,6 +496,17 @@ export function PalaceQuizGenerationPanel({
                       )}
                       重新生成
                     </Button>
+                    {item.aiCallLogId ? (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        disabled={historyGenerationLoading}
+                        onClick={() => void onRecoverGenerationHistoryPreview(item)}
+                      >
+                        <Clock3 className="size-4" />
+                        恢复该次预览
+                      </Button>
+                    ) : null}
                   </div>
                   {!canRegenerate ? (
                     <div className="mt-2 text-xs text-muted-foreground">

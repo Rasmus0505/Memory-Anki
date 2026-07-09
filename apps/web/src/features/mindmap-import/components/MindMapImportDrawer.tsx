@@ -122,6 +122,7 @@ export function MindMapImportDrawer(props: MindMapImportDrawerProps) {
     currentJobPauseRequested: props.currentJobPauseRequested,
     currentJobStage: props.currentJobStage,
     currentJobStatus: props.currentJobStatus,
+    currentJobError: props.currentJobError,
     currentJobUsage: props.currentJobUsage,
     error: props.error,
     extractedText: props.extractedText,

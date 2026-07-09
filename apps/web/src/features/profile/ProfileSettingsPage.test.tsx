@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import ProfileSettingsPage from '@/features/profile/ProfileSettingsPage'
 import * as preferencesApi from '@/entities/preferences/api'
 import * as reviewApi from '@/features/review/api'
@@ -44,6 +44,7 @@ function mockSettings() {
       timer_focus_config: null,
       break_guard_config: null,
       dashboard_duration_filter: null,
+      study_goals: null,
       palace_list_view_settings: null,
       palace_shelf_view_settings: null,
     },
@@ -51,6 +52,16 @@ function mockSettings() {
 }
 
 describe('ProfileSettingsPage', () => {
+  beforeEach(() => {
+    window.localStorage.clear()
+    document.documentElement.className = ''
+    document.documentElement.style.colorScheme = ''
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
   it('repairs historical review stage progress from the settings page', async () => {
     mockSettings()
     const repairSpy = vi.spyOn(reviewApi, 'repairReviewStageProgressApi').mockResolvedValue({
@@ -74,5 +85,25 @@ describe('ProfileSettingsPage', () => {
       expect(repairSpy).toHaveBeenCalledTimes(1)
       expect(screen.getByText('修复完成：重建 3 个宫殿。')).toBeTruthy()
     })
+  })
+
+  it('renders the local theme setting and applies dark mode immediately', async () => {
+    mockSettings()
+
+    render(
+      <MemoryRouter initialEntries={['/profile']}>
+        <ProfileSettingsPage />
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByText('外观')).toBeTruthy()
+
+    const darkButton = screen.getByText('深色').closest('button')
+    expect(darkButton).toBeTruthy()
+    fireEvent.click(darkButton!)
+
+    expect(window.localStorage.getItem('memory-anki-theme')).toBe('dark')
+    expect(document.documentElement.classList.contains('dark')).toBe(true)
+    expect(document.documentElement.style.colorScheme).toBe('dark')
   })
 })

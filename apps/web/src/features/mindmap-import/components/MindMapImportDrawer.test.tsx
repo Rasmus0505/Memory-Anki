@@ -42,6 +42,7 @@ function buildProps(
     currentJobStatus: null,
     currentJobStage: null,
     currentJobUsage: null,
+    currentJobError: null,
     currentJobResolvedAi: null,
     currentJobPauseRequested: false,
     canResumeJob: false,
@@ -283,6 +284,55 @@ describe('MindMapImportDrawer', () => {
     )
 
     expect(screen.getByRole('button', { name: '暂停识别' })).toBeTruthy()
+  })
+
+  it('shows interrupted jobs as resumable', () => {
+    render(
+      <MindMapImportDrawer
+        {...buildProps({
+          currentJobId: 'job-interrupted',
+          currentJobStatus: 'interrupted',
+          currentJobStage: 'merge',
+          canResumeJob: true,
+        })}
+      />,
+    )
+
+    expect(screen.getByText('已中断')).toBeTruthy()
+    expect(screen.getByText('合并')).toBeTruthy()
+    expect(screen.getByRole('button', { name: '继续识别' })).toBeTruthy()
+  })
+
+  it('renders structured job error details', () => {
+    render(
+      <MindMapImportDrawer
+        {...buildProps({
+          currentJobId: 'job-failed',
+          currentJobStatus: 'failed',
+          currentJobStage: 'structure',
+          currentJobUsage: {
+            structure: 1,
+            ocr: 0,
+            merge: 0,
+            text: 0,
+            total: 1,
+          },
+          currentJobError: {
+            code: 'provider_network_error',
+            stage: 'structure',
+            message: '模型请求超时，请稍后继续识别。',
+            retryable: true,
+            raw_snippet: 'timed out after 60 seconds',
+            request_id: 'req-1',
+          },
+        })}
+      />,
+    )
+
+    expect(screen.getByText('识别失败（阶段：结构识别）')).toBeTruthy()
+    expect(screen.getByText('provider_network_error')).toBeTruthy()
+    expect(screen.getByText('timed out after 60 seconds')).toBeTruthy()
+    expect(screen.getByText(/已完成 1 次 AI 调用/)).toBeTruthy()
   })
 
   it('does not render the removed pdf preview sidebar', () => {

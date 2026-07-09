@@ -1,7 +1,7 @@
 ﻿import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { describe, expect, it, vi } from 'vitest'
-import { ProfileAiConfigPage } from '@/features/profile/ProfileAiConfigPage'
+import { AiWorkspacePage as ProfileAiConfigPage } from '@/features/profile/AiWorkspacePage'
 import * as aiLogsApi from '@/entities/ai-log/api'
 import * as profileApi from '@/entities/preferences/api'
 

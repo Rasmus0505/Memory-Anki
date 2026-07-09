@@ -50,11 +50,12 @@ export const timedSessionMock = {
   reset: vi.fn(),
 }
 
-export const shouldAutoStartOnPageEnterMock = vi.fn((_config?: unknown) => false)
+export const shouldAutoStartOnPageEnterMock = vi.fn((_config?: unknown, _scene?: unknown) => false)
 
 vi.mock('@/shared/hooks/useTimedSession', () => ({
   useTimedSession: () => timedSessionMock,
-  shouldAutoStartOnPageEnter: (config: unknown) => shouldAutoStartOnPageEnterMock(config),
+  shouldAutoStartOnPageEnter: (config: unknown, scene: unknown) =>
+    shouldAutoStartOnPageEnterMock(config, scene),
 }))
 
 vi.mock('@/features/ai-config/useAiRunConfigDialog', () => ({

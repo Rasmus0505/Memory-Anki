@@ -1,5 +1,6 @@
 ﻿import { ArrowLeft, Plus } from 'lucide-react'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import {
   PalaceListCard,
@@ -18,7 +19,6 @@ import {
 } from '@/entities/preferences/model/palaceViewSettings'
 import type {
   PalaceGroupedItem,
-  PalaceGroupedListResponse,
 } from '@/shared/api/contracts'
 import {
   getPalacesGroupedApi,
@@ -28,9 +28,12 @@ import { Button } from '@/shared/components/ui/button'
 import { PageIntro } from '@/shared/components/layout/PageIntro'
 import { ErrorState } from '@/shared/components/state-placeholders'
 import { useLocalStorageState } from '@/shared/lib/localStorage'
+import { onAppEvent } from '@/shared/events/appEvents'
 import { PalaceListSkeleton } from './components/PalaceListSkeleton'
 import { usePalaceListCardActions } from '@/features/palace-catalog/components/palace-list/usePalaceListCardActions'
 import {
+  PALACE_CATALOG_GROUPED_QUERY_KEY,
+  buildPalaceCatalogGroupedQueryKey,
   buildPalaceCatalogQuery,
   createEmptyPalaceGroupedListResponse,
   filterGroupedPalacesBySearch,
@@ -41,43 +44,54 @@ import {
 
 export default function PalaceList() {
   const navigate = useNavigate()
-  const [groupedData, setGroupedData] = useState<PalaceGroupedListResponse>(
-    createEmptyPalaceGroupedListResponse,
-  )
+  const queryClient = useQueryClient()
   const [searchParams, setSearchParams] = useSearchParams()
   const search = searchParams.get('search') || ''
   const selectedSubjectId = searchParams.get('subjectId')
   const showUncategorizedOnly = searchParams.get('uncategorized') === 'true'
   const [collapsedChapters, setCollapsedChapters] = useState<Set<number>>(new Set())
-  const [isLoading, setIsLoading] = useState(true)
-  const [loadError, setLoadError] = useState<string | null>(null)
-  const hasLoadedRef = useRef(false)
   const [viewSettings, setViewSettings] = useLocalStorageState<PalaceListViewSettings>(
     PALACE_LIST_VIEW_SETTINGS_KEY,
     DEFAULT_PALACE_LIST_VIEW_SETTINGS,
     isPalaceListViewSettings,
     'palace_list_view_settings',
   )
+  const catalogScope = useMemo(
+    () => ({ selectedSubjectId, showUncategorizedOnly }),
+    [selectedSubjectId, showUncategorizedOnly],
+  )
+  const catalogQueryParams = useMemo(
+    () => buildPalaceCatalogQuery({ search: '', selectedSubjectId }),
+    [selectedSubjectId],
+  )
+
+  const palaceCatalogQuery = useQuery({
+    queryKey: buildPalaceCatalogGroupedQueryKey(catalogQueryParams),
+    queryFn: () => getPalacesGroupedApi(catalogQueryParams),
+    select: (data) => {
+      const scopedData = filterGroupedPalacesByScope(data, catalogScope)
+      return filterGroupedPalacesBySearch(scopedData, search)
+    },
+  })
+
+  const groupedData = palaceCatalogQuery.data ?? createEmptyPalaceGroupedListResponse()
+  const loadError = palaceCatalogQuery.error
+    ? palaceCatalogQuery.error instanceof Error
+      ? palaceCatalogQuery.error.message
+      : '加载记忆宫殿失败。'
+    : null
+  const hasLoaded = palaceCatalogQuery.data !== undefined
+  const isInitialLoading = palaceCatalogQuery.isPending && !hasLoaded
 
   const fetchData = useCallback(async () => {
-    const scope = { selectedSubjectId, showUncategorizedOnly }
-    const params = buildPalaceCatalogQuery({ search: '', selectedSubjectId })
-    setLoadError(null)
-    if (!hasLoadedRef.current) setIsLoading(true)
-    try {
-      const data = await getPalacesGroupedApi(params)
-      const scopedData = filterGroupedPalacesByScope(data, scope)
-      const filteredData = filterGroupedPalacesBySearch(scopedData, search)
-      setGroupedData(filteredData)
-      hasLoadedRef.current = true
-      return filteredData
-    } catch (error) {
-      setLoadError(error instanceof Error ? error.message : '加载记忆宫殿失败。')
-      throw error
-    } finally {
-      setIsLoading(false)
-    }
-  }, [search, selectedSubjectId, showUncategorizedOnly])
+    await queryClient.invalidateQueries({
+      queryKey: PALACE_CATALOG_GROUPED_QUERY_KEY,
+      refetchType: 'none',
+    })
+    const result = await palaceCatalogQuery.refetch()
+    if (result.error) throw result.error
+    return result.data ?? createEmptyPalaceGroupedListResponse()
+  }, [palaceCatalogQuery, queryClient])
 
   const allPalaces = useMemo(() => flattenGroupedPalaces(groupedData), [groupedData])
 
@@ -89,16 +103,10 @@ export default function PalaceList() {
   }, [groupedData, selectedSubjectId, showUncategorizedOnly])
 
   useEffect(() => {
-    void fetchData().catch(() => undefined)
-  }, [fetchData])
-
-  useEffect(() => {
-    const handleCatalogInvalidated = () => {
-      void fetchData().catch(() => undefined)
-    }
-    window.addEventListener(PALACE_CATALOG_INVALIDATED_EVENT, handleCatalogInvalidated)
-    return () => window.removeEventListener(PALACE_CATALOG_INVALIDATED_EVENT, handleCatalogInvalidated)
-  }, [fetchData])
+    return onAppEvent(PALACE_CATALOG_INVALIDATED_EVENT, () => {
+      void queryClient.invalidateQueries({ queryKey: PALACE_CATALOG_GROUPED_QUERY_KEY })
+    })
+  }, [queryClient])
 
   const cardActions = usePalaceListCardActions({
     allPalaces,
@@ -127,11 +135,11 @@ export default function PalaceList() {
     [cardActions, search, viewSettings],
   )
 
-  if (isLoading && !hasLoadedRef.current) {
+  if (isInitialLoading) {
     return <PalaceListSkeleton />
   }
 
-  if (loadError && !hasLoadedRef.current) {
+  if (loadError && !hasLoaded) {
     return (
       <ErrorState
         title="记忆宫殿加载失败"

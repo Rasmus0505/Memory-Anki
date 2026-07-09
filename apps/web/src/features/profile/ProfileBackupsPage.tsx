@@ -1,12 +1,16 @@
 ﻿import { useEffect, useState } from 'react'
-import { HardDriveDownload, RotateCcw } from 'lucide-react'
+import { FileArchive, HardDriveDownload, RotateCcw, Upload } from 'lucide-react'
+import { useRef } from 'react'
 import { toast } from '@/shared/feedback/toast'
 import { ProfileLayout } from '@/features/profile/ProfileLayout'
-import type { BackupSummary, RuntimeInfo } from '@/shared/api/contracts'
+import type { BackupSummary, FullImportPreviewResponse, RuntimeInfo } from '@/shared/api/contracts'
 import {
   createBackupApi,
+  fullExportUrl,
   getBackupsApi,
+  previewFullImportApi,
   restoreBackupApi,
+  runFullImportApi,
 } from '@/features/profile/api'
 import { getRuntimeInfoApi } from '@/entities/runtime/api'
 import { Button } from '@/shared/components/ui/button'
@@ -15,9 +19,14 @@ import { EmptyState } from '@/shared/components/state-placeholders'
 import { appConfirm } from '@/shared/components/ui/native-dialog'
 
 export default function ProfileBackupsPage() {
+  const fullImportInputRef = useRef<HTMLInputElement | null>(null)
   const [backups, setBackups] = useState<BackupSummary[]>([])
   const [loading, setLoading] = useState(true)
   const [runtimeInfo, setRuntimeInfo] = useState<RuntimeInfo | null>(null)
+  const [fullImportPreview, setFullImportPreview] = useState<FullImportPreviewResponse | null>(null)
+  const [fullImportFileName, setFullImportFileName] = useState('')
+  const [previewingFullImport, setPreviewingFullImport] = useState(false)
+  const [runningFullImport, setRunningFullImport] = useState(false)
 
   const loadBackups = async () => {
     setLoading(true)
@@ -50,6 +59,44 @@ export default function ProfileBackupsPage() {
     const result = await restoreBackupApi(path)
     toast.success(`整库恢复完成，事故快照已保存到：${result.rescue_path}`)
     await loadBackups()
+  }
+
+  const handleFullImportFileChange = async (file: File | undefined) => {
+    if (!file) return
+    setFullImportFileName(file.name)
+    setFullImportPreview(null)
+    setPreviewingFullImport(true)
+    try {
+      const preview = await previewFullImportApi(file)
+      setFullImportPreview(preview)
+      if (!preview.ok) {
+        toast.error(preview.error || '导入包校验失败')
+        return
+      }
+      if (!preview.schema_match) {
+        toast.error('导出包数据库版本与当前程序不一致，已禁止导入。')
+        return
+      }
+      const confirmed = await appConfirm(buildFullImportConfirmMessage(preview), {
+        title: '导入全库 zip',
+        confirmText: '清空并导入',
+        tone: 'danger',
+      })
+      if (!confirmed) return
+      setRunningFullImport(true)
+      const result = await runFullImportApi(file)
+      if (!result.ok) {
+        toast.error(result.error || '全量导入失败')
+        return
+      }
+      toast.success(`全量导入完成，已还原 ${result.restored_attachments ?? 0} 个附件。`)
+      window.location.reload()
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '全量导入失败')
+    } finally {
+      setPreviewingFullImport(false)
+      setRunningFullImport(false)
+    }
   }
 
   return (
@@ -142,6 +189,88 @@ export default function ProfileBackupsPage() {
           )}
         </CardContent>
       </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">设备迁移 / 数据逃生</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="text-sm text-muted-foreground">
+            下载可携带的全库 zip，包含所有数据库表、导出清单和附件目录；另一台设备上传后会替换为该包的数据。
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button asChild>
+              <a href={fullExportUrl()} download>
+                <FileArchive className="mr-2 size-4" />
+                导出全库 zip
+              </a>
+            </Button>
+            <Button
+              variant="outline"
+              disabled={previewingFullImport || runningFullImport}
+              onClick={() => fullImportInputRef.current?.click()}
+            >
+              <Upload className="mr-2 size-4" />
+              {previewingFullImport
+                ? '正在校验…'
+                : runningFullImport
+                  ? '正在导入…'
+                  : '导入全库 zip'}
+            </Button>
+            <input
+              ref={fullImportInputRef}
+              className="sr-only"
+              type="file"
+              accept=".zip,application/zip"
+              disabled={previewingFullImport || runningFullImport}
+              onChange={(event) => {
+                void handleFullImportFileChange(event.target.files?.[0])
+                event.currentTarget.value = ''
+              }}
+            />
+          </div>
+          {fullImportPreview ? (
+            <div className="rounded-lg border border-border/70 bg-background/70 px-4 py-3 text-xs text-muted-foreground">
+              <div className="font-medium text-foreground">
+                {fullImportFileName || '已选择导入包'}
+              </div>
+              {fullImportPreview.ok && fullImportPreview.manifest ? (
+                <>
+                  <div className="mt-2">
+                    创建时间：{fullImportPreview.manifest.created_at}
+                  </div>
+                  <div className="mt-1">
+                    版本校验：{fullImportPreview.schema_match ? '通过' : '不匹配，禁止导入'}
+                  </div>
+                  <div className="mt-1">
+                    数据摘要：宫殿 {fullImportPreview.manifest.table_counts.palaces ?? 0}、
+                    复习日程 {fullImportPreview.manifest.table_counts.review_schedules ?? 0}、
+                    附件 {fullImportPreview.attachment_count ?? 0}
+                  </div>
+                </>
+              ) : (
+                <div className="mt-2 text-destructive">
+                  {fullImportPreview.error || '导入包校验失败'}
+                </div>
+              )}
+            </div>
+          ) : null}
+        </CardContent>
+      </Card>
     </ProfileLayout>
   )
+}
+
+function buildFullImportConfirmMessage(preview: FullImportPreviewResponse) {
+  const counts = preview.manifest?.table_counts ?? {}
+  return [
+    '导入会清空当前设备全部数据并替换为 zip 内的数据。',
+    '导入前会自动创建逃生备份，可从备份列表回滚。',
+    '',
+    `宫殿：${counts.palaces ?? 0}`,
+    `复习日程：${counts.review_schedules ?? 0}`,
+    `附件：${preview.attachment_count ?? 0}`,
+    '',
+    '确定继续吗？',
+  ].join('\n')
 }

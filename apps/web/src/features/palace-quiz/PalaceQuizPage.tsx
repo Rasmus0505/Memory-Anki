@@ -7,7 +7,7 @@ import { PalaceQuizManagePanel } from '@/features/palace-quiz/components/PalaceQ
 import { PalaceQuizMemoryLookupDialog } from '@/features/palace-quiz/components/PalaceQuizMemoryLookupDialog'
 import { PalaceQuizPracticePanel } from '@/features/palace-quiz/components/PalaceQuizPracticePanel'
 import { PalaceQuizRangeDialog } from '@/features/palace-quiz/components/PalaceQuizRangeDialog'
-import { resetPalaceQuizQuestionAttemptsApi } from '@/features/palace-quiz/api'
+import { resetPalaceQuizQuestionAttemptsApi } from '@/entities/quiz/api'
 import { usePalaceQuizGeneration } from '@/features/palace-quiz/hooks/usePalaceQuizGeneration'
 import { usePalaceQuizManagement } from '@/features/palace-quiz/hooks/usePalaceQuizManagement'
 import { usePalaceQuizPractice } from '@/features/palace-quiz/hooks/usePalaceQuizPractice'
@@ -385,8 +385,11 @@ export default function PalaceQuizPage() {
             setClassifyByMiniPalace: generation.setGenerationClassifyByMiniPalace,
             error: generation.generationError,
             loading: generation.generationLoading,
+            canRetryLastGeneration: Boolean(generation.lastFailedConfig),
             onOpenRangeDialog: generation.handleOpenRangeDialog,
             onGeneratePreview: generation.handleGeneratePreview,
+            onRetryLastGeneration: generation.handleRetryLastGeneration,
+            onRecoverFromLog: generation.handleRecoverFromLog,
             onImageFileChange: generation.handleImageFileChange,
           }}
           history={{
@@ -394,6 +397,7 @@ export default function PalaceQuizPage() {
             regeneratingId: generation.historyRegeneratingId,
             generationLoading: generation.generationLoading,
             onRegenerateFromHistory: generation.handleRegenerateFromHistory,
+            onRecoverGenerationHistoryPreview: generation.handleRecoverGenerationHistoryPreview,
             onDeleteGenerationHistory: generation.handleDeleteGenerationHistory,
             onApplyHistoryConfig: generation.applyHistoryConfig,
           }}

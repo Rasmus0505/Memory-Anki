@@ -213,4 +213,22 @@ describe('EnglishWorkspacePage', () => {
       expect(mocks.clearEnglishCurrentTaskApiMock).toHaveBeenCalled()
     })
   })
+
+  it('shows restart interruption copy for interrupted failed tasks', async () => {
+    const interruptedTask = buildTask({
+      status: 'failed',
+      stage: 'interrupted',
+      progressPercent: 45,
+      message: '生成因服务重启被中断，可点击重试继续。',
+      errorMessage: '服务重启导致任务中断。',
+    })
+    mocks.getEnglishWorkspaceApiMock.mockResolvedValue(buildWorkspace({ currentTask: interruptedTask }))
+    mocks.getEnglishTaskGenerationLogApiMock.mockResolvedValue(buildTaskLog(interruptedTask))
+
+    renderPage()
+
+    expect(await screen.findByText('生成被服务重启中断')).toBeTruthy()
+    expect(screen.getByText('点击重试将复用已完成的转写结果，不会重复计费。')).toBeTruthy()
+    expect(screen.getByRole('button', { name: '重试' })).toBeTruthy()
+  })
 })

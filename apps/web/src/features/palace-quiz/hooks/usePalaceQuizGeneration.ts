@@ -10,7 +10,9 @@ import type {
 import {
   batchCreateChapterQuizQuestionsApi,
   classifyPalaceQuizQuestionsToMiniPalacesApi,
-} from '@/features/palace-quiz/api'
+  recoverPalaceQuizPreviewFromLogApi,
+} from '@/entities/quiz/api'
+import { listAiCallLogsApi } from '@/entities/ai-log/api'
 import {
   buildGeneratedQuestionsForChapterSave,
   generatePalaceQuizPreview,
@@ -32,6 +34,17 @@ import {
 } from '@/features/palace-quiz/quiz-generation-history'
 import { persistQuizGenerationHistory } from '@/features/palace-quiz/model/persistQuizGenerationHistory'
 import { usePalaceQuizGenerationInputs } from './usePalaceQuizGenerationInputs'
+
+type GenerationPreviewConfig = {
+  sourceKind: QuizGenerationSourceKind
+  files: File[]
+  extraPrompt: string
+  enableSecondaryReview: boolean
+  classifyByMiniPalace: boolean
+  selectedChapterId: number | null
+  selectedChapterSummary: string
+  aiOptions?: AiRuntimeOptions
+}
 
 export function usePalaceQuizGeneration({
   palaceId,
@@ -80,6 +93,7 @@ export function usePalaceQuizGeneration({
   const [generationSaveMode, setGenerationSaveMode] = useState<'append' | 'overwrite'>('append')
   const [generationHistory, setGenerationHistory] = useState<QuizGenerationHistoryItem[]>([])
   const [historyRegeneratingId, setHistoryRegeneratingId] = useState<string | null>(null)
+  const [lastFailedConfig, setLastFailedConfig] = useState<GenerationPreviewConfig | null>(null)
   const [classificationLoading, setClassificationLoading] = useState(false)
   const [classificationResult, setClassificationResult] =
     useState<PalaceQuizMiniPalaceClassificationResult | null>(null)
@@ -154,15 +168,10 @@ export function usePalaceQuizGeneration({
     toast.message('历史配置已载入，源文件需要重新上传后才能再次生成。')
   }
 
-  const executeGenerationPreview = async (config: {
-    sourceKind: QuizGenerationSourceKind
-    files: File[]
-    extraPrompt: string
-    enableSecondaryReview: boolean
-    classifyByMiniPalace: boolean
-  }) => {
+  const executeGenerationPreview = async (config: GenerationPreviewConfig) => {
     if (!palaceId) return
-    if (!selectedChapterId) {
+    const targetChapterId = config.selectedChapterId
+    if (!targetChapterId) {
       setGenerationError('请先选择题目所属章节范围。')
       return
     }
@@ -173,27 +182,29 @@ export function usePalaceQuizGeneration({
     setGenerationStreamStepLabel('')
     setGenerationStreamPreviewText('')
     resetGenerationStreamFollow()
+    let aiOptions: AiRuntimeOptions | undefined = config.aiOptions
     try {
-      if (config.classifyByMiniPalace && !selectedChapterHasChildren) {
+      if (config.classifyByMiniPalace && !getChapterHasChildren(targetChapterId)) {
         emitQuizFeedback('quiz_error_missing_input', { label: '无训练关卡', audioScope: 'local' })
         throw new Error('当前范围没有直接子章节，无法分类保存。')
       }
-      let aiOptions: AiRuntimeOptions | undefined
-      if (config.sourceKind === 'text-files') {
-        aiOptions = (await promptForAiOptions({
-          scenarioKey: 'quiz_text_generation',
-          entrypointKey: 'quiz-generate-text-files',
-          title: '文本做题导入配置',
-        })) || undefined
-      } else {
-        aiOptions = (await promptForAiOptions({
-          scenarioKey: 'quiz_image_generation',
-          entrypointKey:
-            config.sourceKind === 'image-batch'
-              ? 'quiz-generate-images-batch'
-              : 'quiz-generate-images-single',
-          title: '图片做题生成配置',
-        })) || undefined
+      if (!aiOptions) {
+        if (config.sourceKind === 'text-files') {
+          aiOptions = (await promptForAiOptions({
+            scenarioKey: 'quiz_text_generation',
+            entrypointKey: 'quiz-generate-text-files',
+            title: '文本做题导入配置',
+          })) || undefined
+        } else {
+          aiOptions = (await promptForAiOptions({
+            scenarioKey: 'quiz_image_generation',
+            entrypointKey:
+              config.sourceKind === 'image-batch'
+                ? 'quiz-generate-images-batch'
+                : 'quiz-generate-images-single',
+            title: '图片做题生成配置',
+          })) || undefined
+        }
       }
       if (!aiOptions) {
         emitQuizFeedback('quiz_generate_cancel', { label: '取消生成', audioScope: 'global' })
@@ -207,10 +218,10 @@ export function usePalaceQuizGeneration({
         aiOptions,
         files: config.files,
         enableSecondaryReview: config.enableSecondaryReview,
-          classifyByMiniPalace: config.classifyByMiniPalace,
-          selectedChapterId,
-          aiOptionsByScenario: undefined,
-          onStatus: (event) => {
+        classifyByMiniPalace: config.classifyByMiniPalace,
+        selectedChapterId: targetChapterId,
+        aiOptionsByScenario: undefined,
+        onStatus: (event) => {
           setGenerationStreamStatus(event.message || '正在生成题目')
           setGenerationStreamStepLabel(
             event.step != null && event.total != null ? `第 ${event.step}/${event.total} 步` : '',
@@ -221,6 +232,7 @@ export function usePalaceQuizGeneration({
         },
       })
       setGenerationPreview(preview)
+      setLastFailedConfig(null)
       emitQuizFeedback('quiz_generate_preview_ready', {
         label: config.sourceKind === 'text-files' ? '文本预览' : '图片预览',
         audioScope: 'global',
@@ -233,12 +245,13 @@ export function usePalaceQuizGeneration({
         config.extraPrompt,
         config.enableSecondaryReview,
         config.classifyByMiniPalace,
-        selectedChapterId,
-        selectedChapterSummary,
+        targetChapterId,
+        config.selectedChapterSummary,
       )
       if (history) setGenerationHistory(history)
     } catch (nextError) {
       emitQuizFeedback('quiz_error_ai_failed', { label: '生成失败', audioScope: 'global' })
+      setLastFailedConfig({ ...config, aiOptions })
       setGenerationError(nextError instanceof Error ? nextError.message : '生成题目预览失败。')
     } finally {
       setGenerationLoading(false)
@@ -254,6 +267,8 @@ export function usePalaceQuizGeneration({
       extraPrompt,
       enableSecondaryReview: generationEnableSecondaryReview,
       classifyByMiniPalace: generationClassifyByMiniPalace,
+      selectedChapterId,
+      selectedChapterSummary,
     })
   }
 
@@ -266,6 +281,54 @@ export function usePalaceQuizGeneration({
   const handleDeleteGenerationHistory = (historyId: string) => {
     if (!palaceId) return
     setGenerationHistory(deleteQuizGenerationHistory(palaceId, historyId))
+  }
+
+  const handleRetryLastGeneration = async () => {
+    if (!lastFailedConfig) return
+    await executeGenerationPreview(lastFailedConfig)
+  }
+
+  const recoverPreviewFromLogId = async (logId: string) => {
+    if (!palaceId) return
+    setGenerationLoading(true)
+    try {
+      const preview = await recoverPalaceQuizPreviewFromLogApi(palaceId, logId)
+      setGenerationPreview(preview)
+      setGenerationError('')
+      setLastFailedConfig(null)
+      toast.success('已从 AI 调用日志恢复预览（未产生新的 AI 费用）。')
+    } catch (nextError) {
+      toast.error(nextError instanceof Error ? nextError.message : '恢复失败。')
+    } finally {
+      setGenerationLoading(false)
+    }
+  }
+
+  const handleRecoverFromLog = async () => {
+    if (!palaceId) return
+    setGenerationLoading(true)
+    try {
+      const { items } = await listAiCallLogsApi({ palaceId, status: 'success', limit: 5 })
+      const candidate = items.find((item) => item.operation.startsWith('palace_quiz_generate'))
+      if (!candidate) {
+        toast.message('最近没有可恢复的出题日志。')
+        return
+      }
+      const preview = await recoverPalaceQuizPreviewFromLogApi(palaceId, candidate.id)
+      setGenerationPreview(preview)
+      setGenerationError('')
+      setLastFailedConfig(null)
+      toast.success('已从 AI 调用日志恢复预览（未产生新的 AI 费用）。')
+    } catch (nextError) {
+      toast.error(nextError instanceof Error ? nextError.message : '恢复失败。')
+    } finally {
+      setGenerationLoading(false)
+    }
+  }
+
+  const handleRecoverGenerationHistoryPreview = async (item: QuizGenerationHistoryItem) => {
+    if (!item.aiCallLogId) return
+    await recoverPreviewFromLogId(item.aiCallLogId)
   }
 
   const handleSaveGenerationPreview = async () => {
@@ -358,6 +421,7 @@ export function usePalaceQuizGeneration({
     setGenerationSaveMode,
     generationHistory,
     historyRegeneratingId,
+    lastFailedConfig,
     classificationLoading,
     classificationResult,
     subjectsLoading,
@@ -382,6 +446,9 @@ export function usePalaceQuizGeneration({
     handleGeneratePreview,
     handleRegenerateFromHistory,
     handleDeleteGenerationHistory,
+    handleRetryLastGeneration,
+    handleRecoverFromLog,
+    handleRecoverGenerationHistoryPreview,
     handleSaveGenerationPreview,
     handleClassifyExistingQuestions,
     applyHistoryConfig,

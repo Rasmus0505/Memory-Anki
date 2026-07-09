@@ -3,6 +3,8 @@ import type {
   AiPromptTemplateListResponse,
   BackupListResponse,
   CreateBackupResponse,
+  FullImportPreviewResponse,
+  FullImportResponse,
   ImportPalacesResponse,
   RestoreBackupResponse,
 } from '@/shared/api/contracts'
@@ -44,6 +46,10 @@ export function exportMarkdownUrl() {
   return `${API_BASE}/export/markdown`
 }
 
+export function fullExportUrl() {
+  return `${API_BASE}/export/full`
+}
+
 export async function importFileApi(file: File, format: string) {
   const form = new FormData()
   form.append('file', file)
@@ -79,5 +85,23 @@ export function restoreBackupApi(path: string) {
       description: '恢复数据库备份',
       replayMode: 'manual',
     },
+  })
+}
+
+export function previewFullImportApi(file: File) {
+  const form = new FormData()
+  form.append('file', file)
+  return uploadWithFormData<FullImportPreviewResponse>('/import/full/preview', form, {
+    resourceKey: 'backup:full-import-preview',
+    description: '校验全量导入包',
+  })
+}
+
+export function runFullImportApi(file: File) {
+  const form = new FormData()
+  form.append('file', file)
+  return uploadWithFormData<FullImportResponse>('/import/full', form, {
+    resourceKey: 'backup:full-import',
+    description: '执行全量导入',
   })
 }

@@ -150,4 +150,35 @@ describe('PalaceChapterPanel', () => {
     const disabledCheckboxes = screen.getAllByRole('checkbox')
     expect(disabledCheckboxes.every((checkbox) => (checkbox as HTMLInputElement).disabled)).toBe(true)
   })
+
+  it('asks for confirmation before unbinding an explicit chapter', () => {
+    const onToggleChapter = vi.fn()
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    render(
+      <PalaceChapterPanel
+        chapterOptions={options}
+        explicitChapterIds={[11]}
+        inheritedChapterIds={[10]}
+        primaryChapterId={11}
+        onToggleChapter={onToggleChapter}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: '选择章节' }))
+    const chineseSection = screen.getAllByText('中国教育史')[0]?.closest('section')
+    expect(chineseSection).toBeTruthy()
+    const explicitCheckbox = within(chineseSection as HTMLElement).getAllByRole('checkbox')[1]
+
+    fireEvent.click(explicitCheckbox)
+
+    expect(confirmSpy).toHaveBeenCalledWith(
+      '取消关联「第一节 第十章小节」后，该章节的复习队列和做题范围将不再包含本宫殿（题目本身不会被删除）。确定取消吗？',
+    )
+    expect(onToggleChapter).not.toHaveBeenCalled()
+
+    confirmSpy.mockReturnValue(true)
+    fireEvent.click(explicitCheckbox)
+
+    expect(onToggleChapter).toHaveBeenCalledWith(11)
+  })
 })

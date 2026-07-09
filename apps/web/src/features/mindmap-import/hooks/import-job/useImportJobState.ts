@@ -2,6 +2,7 @@
 import type {
   MindMapEditorState,
   MindMapImportJob,
+  MindMapImportJobError,
   MindMapImportJobStage,
   MindMapImportJobStatus,
   MindMapImportJobUsage,
@@ -45,6 +46,7 @@ export interface ImportJobStateController {
   currentJobStatus: MindMapImportJobStatus | null
   currentJobStage: MindMapImportJobStage | null
   currentJobUsage: MindMapImportJobUsage | null
+  currentJobError: MindMapImportJobError | null
   currentJobResolvedAi: ResolvedAiRuntimeMeta | null
   currentJobPauseRequested: boolean
   importReusedExistingResult: boolean
@@ -85,6 +87,7 @@ export function useImportJobState({
   const [currentJobStatus, setCurrentJobStatus] = useState<MindMapImportJobStatus | null>(null)
   const [currentJobStage, setCurrentJobStage] = useState<MindMapImportJobStage | null>(null)
   const [currentJobUsage, setCurrentJobUsage] = useState<MindMapImportJobUsage | null>(null)
+  const [currentJobError, setCurrentJobError] = useState<MindMapImportJobError | null>(null)
   const [currentJobResolvedAi, setCurrentJobResolvedAi] = useState<ResolvedAiRuntimeMeta | null>(null)
   const [currentJobPauseRequested, setCurrentJobPauseRequested] = useState(false)
   const [reusedExistingResult, setReusedExistingResultState] = useState(false)
@@ -117,6 +120,7 @@ export function useImportJobState({
     setCurrentJobStatus(null)
     setCurrentJobStage(null)
     setCurrentJobUsage(null)
+    setCurrentJobError(null)
     setCurrentJobResolvedAi(null)
     setCurrentJobPauseRequested(false)
   }
@@ -140,6 +144,7 @@ export function useImportJobState({
     setCurrentJobStatus(job.status)
     setCurrentJobStage(job.stage)
     setCurrentJobUsage(job.usage ?? null)
+    setCurrentJobError(job.error ?? null)
     setCurrentJobResolvedAi(job.resolved_ai ?? null)
     setCurrentJobPauseRequested(Boolean(job.pause_requested))
     setImportReusedExistingResult(Boolean(options?.reused))
@@ -244,6 +249,7 @@ export function useImportJobState({
     currentJobStatus,
     currentJobStage,
     currentJobUsage,
+    currentJobError,
     currentJobResolvedAi,
     currentJobPauseRequested,
     importReusedExistingResult: reusedExistingResult,

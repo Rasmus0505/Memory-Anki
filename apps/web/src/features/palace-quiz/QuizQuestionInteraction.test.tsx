@@ -6,8 +6,8 @@ import {
 } from '@/features/palace-quiz/QuizQuestionInteraction'
 import type { PalaceQuizQuestionDraft } from '@/shared/api/contracts'
 
-function renderInteraction(question: PalaceQuizQuestionDraft) {
-  let latestState: QuizRuntimeState = {}
+function renderInteraction(question: PalaceQuizQuestionDraft, initialState: QuizRuntimeState = {}) {
+  let latestState: QuizRuntimeState = initialState
 
   function Harness() {
     return (
@@ -206,5 +206,47 @@ describe('QuizQuestionInteraction', () => {
 
     expect(screen.getByText('回答正确')).toBeTruthy()
     expect(screen.getByText(/正确归类：线粒体 → 细胞器；细胞膜 → 细胞结构/)).toBeTruthy()
+  })
+
+  it('renders structured short-answer AI feedback by section', () => {
+    renderInteraction(
+      {
+        question_type: 'short_answer',
+        stem: '简述有丝分裂的意义。',
+        options: [],
+        answer_payload: {
+          reference_answer: '保证遗传信息稳定传递。',
+        },
+        analysis: '核心在于遗传物质平均分配。',
+        source_meta: {
+          source_kind: 'manual',
+          page_numbers: null,
+          image_names: null,
+          extra_prompt: '',
+          ai_call_log_id: null,
+          generated_at: '2026-06-15T00:00:00',
+          generation_mode: 'manual',
+        },
+      },
+      {
+        shortAnswerSubmitted: true,
+        shortAnswerFeedback: {
+          question_id: 2,
+          feedback_text: '答到的要点：要点A',
+          verdict: 'partial',
+          hit_points: ['要点A'],
+          missed_points: ['要点B'],
+          suggestion: '补充完整因果关系。',
+          ai_call_log_id: 'log-structured',
+        },
+      },
+    )
+
+    expect(screen.getByText('部分正确')).toBeTruthy()
+    expect(screen.getByText('答到的要点')).toBeTruthy()
+    expect(screen.getByText('要点A')).toBeTruthy()
+    expect(screen.getByText('遗漏或有偏差')).toBeTruthy()
+    expect(screen.getByText('要点B')).toBeTruthy()
+    expect(screen.getByText('建议')).toBeTruthy()
   })
 })
