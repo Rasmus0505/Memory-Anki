@@ -1,4 +1,14 @@
-from .question_commands import (
+from .ocr_sources import (
+    list_palace_ocr_sources,
+    upsert_palace_ocr_sources,
+)
+from .question_schema import (
+    build_question_dedup_key,
+    find_duplicate_question,
+    question_to_dedup_payload,
+    serialize_question,
+)
+from .questions.commands import (
     batch_create_chapter_questions,
     batch_create_questions,
     batch_delete_questions,
@@ -6,30 +16,27 @@ from .question_commands import (
     delete_question,
     record_choice_attempt,
     reset_question_attempts,
+    restore_question,
     update_question,
     upsert_classified_question_copy,
 )
-from .ocr_sources import (
-    list_palace_ocr_sources,
-    upsert_palace_ocr_sources,
-)
-from .question_queries import (
+from .questions.dedup import (
     dedupe_chapter_questions,
     dedupe_palace_questions,
+)
+from .questions.queries import (
     get_palace_or_raise,
     get_question_or_raise,
     list_aggregated_questions,
     list_chapter_questions,
     list_questions,
-    list_root_questions,
     list_root_question_rows,
+    list_root_questions,
     next_chapter_sort_order,
     next_palace_sort_order,
     resolve_minimal_explicit_chapter_ids,
 )
-from .question_schema import (
-    PalaceQuizNotFoundError,
-    PalaceQuizValidationError,
+from .questions.validation import (
     QUESTION_TYPE_CATEGORIZATION,
     QUESTION_TYPE_FILL_BLANK,
     QUESTION_TYPE_MATCHING,
@@ -38,14 +45,12 @@ from .question_schema import (
     QUESTION_TYPE_SHORT_ANSWER,
     QUESTION_TYPE_TRUE_FALSE,
     QUESTION_TYPES,
-    build_question_dedup_key,
-    find_duplicate_question,
+    PalaceQuizNotFoundError,
+    PalaceQuizValidationError,
     get_chapter_or_raise,
     json_dump,
     json_load,
     normalize_question_payload,
-    question_to_dedup_payload,
-    serialize_question,
     validate_mini_palace,
 )
 
@@ -86,6 +91,7 @@ __all__ = [
     "question_to_dedup_payload",
     "record_choice_attempt",
     "reset_question_attempts",
+    "restore_question",
     "resolve_minimal_explicit_chapter_ids",
     "serialize_question",
     "update_question",

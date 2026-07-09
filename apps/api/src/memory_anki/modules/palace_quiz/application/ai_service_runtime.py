@@ -2,15 +2,18 @@
 
 from __future__ import annotations
 
-from .ai_service_runtime_calls import (
-    _call_logged_chat_completion as _call_logged_chat_completion,
-    _call_logged_chat_completion_stream as _call_logged_chat_completion_stream,
+from .ai_runtime.runtime import (
+    QuizStreamEvent as QuizStreamEvent,
 )
-from .ai_service_runtime_config import (
+from .ai_runtime.runtime import (
     _build_chat_config as _build_chat_config,
 )
-
-QuizStreamEvent = tuple[str, dict[str, object]]
+from .ai_runtime.runtime import (
+    _call_logged_chat_completion as _call_logged_chat_completion,
+)
+from .ai_runtime.runtime import (
+    _call_logged_chat_completion_stream as _call_logged_chat_completion_stream,
+)
 
 __all__ = [
     "QuizStreamEvent",

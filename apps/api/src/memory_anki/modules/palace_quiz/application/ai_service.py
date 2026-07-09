@@ -10,8 +10,6 @@ from memory_anki.infrastructure.llm import (
     stream_chat_completion_text as stream_chat_completion_text,
 )
 
-from . import ai_service_runtime_config as _runtime_config
-from . import ai_service_runtime_stream as _runtime_stream
 from ._question_utils import (
     PalaceQuizAiError as PalaceQuizAiError,
 )
@@ -21,6 +19,7 @@ from ._question_utils import (
 from ._question_utils import (
     normalize_generated_question_drafts as _normalize_generated_question_drafts,
 )
+from .ai_runtime import runtime as _runtime
 from .ai_service_runtime import (
     QuizStreamEvent as QuizStreamEvent,
 )
@@ -46,8 +45,8 @@ _FACADE_TRANSPORT_MODEL_KEY = "facade-overridden-transport"
 
 
 def _sync_facade_dependencies() -> None:
-    _runtime_config.DASHSCOPE_API_KEY = DASHSCOPE_API_KEY
-    _runtime_stream.stream_chat_completion_text = stream_chat_completion_text
+    _runtime.DASHSCOPE_API_KEY = DASHSCOPE_API_KEY
+    _runtime.stream_chat_completion_text = stream_chat_completion_text
 
 
 def _build_chat_config(*args, **kwargs):
