@@ -2,6 +2,7 @@
 import type { FormEvent } from 'react'
 import { toast } from '@/shared/feedback/toast'
 import { appConfirm } from '@/shared/components/ui/native-dialog'
+import { detectClientSource } from '@/shared/lib/clientSource'
 import {
   createStudySessionRecord,
   getDailyTrend,
@@ -208,6 +209,7 @@ export function useTimeRecordsDashboard(
       if (dialogMode === 'create') {
         const created = await createStudySessionRecord({
           ...parsed.value,
+          clientSource: detectClientSource(),
           deletedAt: null,
           deletedReason: null,
           events: [],
@@ -221,7 +223,11 @@ export function useTimeRecordsDashboard(
         setRecords((current) => [created, ...current])
         toast.success(`已新增学习记录“${created.title}”。`)
       } else if (editingRecord) {
-        const updated = await updateStudySessionRecord(editingRecord.id, parsed.value)
+        const updated = await updateStudySessionRecord(editingRecord.id, {
+          ...parsed.value,
+          clientSource: editingRecord.clientSource ?? null,
+          sceneSegments: editingRecord.sceneSegments,
+        })
         if (updated) {
           setRecords((current) =>
             current.map((record) =>

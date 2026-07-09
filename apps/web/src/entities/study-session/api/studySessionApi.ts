@@ -95,6 +95,7 @@ export interface StudySessionRecordPayload {
   pauseCount?: number
   completionMethod?: string
   durationEdited?: boolean
+  clientSource?: 'desktop' | 'mobile' | null
   events?: unknown[]
   sceneSegments?: unknown[]
   deletedAt?: string | null

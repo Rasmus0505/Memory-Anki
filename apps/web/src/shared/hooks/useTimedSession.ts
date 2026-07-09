@@ -16,6 +16,7 @@ import {
   type TimerAutomationConfig,
 } from '@/shared/components/session/timer-automation-config'
 import { formatLocalApiDateTime } from '@/shared/lib/dateTime'
+import { detectClientSource } from '@/shared/lib/clientSource'
 import {
   AUTO_PAUSE_MS,
   HIDDEN_PAUSE_MS,
@@ -283,6 +284,7 @@ export function useTimedSession({
       pauseCount: pauseCountRef.current,
       completionMethod: method,
       durationEdited: durationEditedRef.current,
+      clientSource: detectClientSource(),
       events: [...eventsRef.current],
       sceneSegments: [...sceneSegmentsRef.current],
     }

@@ -16,6 +16,7 @@ export interface GlobalTimerRegistration {
   timer: TimedSessionController
   isRouteActive: boolean
   becameActiveAt: number
+  routePath: string
 }
 
 export const OVERLAY_VIEWPORT_MARGIN = 12

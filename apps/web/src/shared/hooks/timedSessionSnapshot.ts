@@ -1,4 +1,5 @@
 import type { SessionKind, SessionSceneSegment, TimeSessionRecord } from '@/entities/session/model'
+import { detectClientSource } from '@/shared/lib/clientSource'
 import {
   createStableRecordId,
   normalizeSnapshot,
@@ -186,6 +187,7 @@ export function buildRecordFromExpiredSuspendedSnapshot(
     pauseCount: snapshot.pauseCount,
     completionMethod: 'left_page',
     durationEdited: snapshot.durationEdited,
+    clientSource: detectClientSource(),
     events: [...snapshot.events],
     sceneSegments,
   }

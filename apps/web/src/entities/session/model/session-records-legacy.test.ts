@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  formatClientSource,
   getAllDailyTrend,
   getSessionKindBreakdown,
   getTrendByRange,
@@ -92,5 +93,11 @@ describe('session-record chart helpers', () => {
       { kind: 'quiz', label: '做题', seconds: 300, sessions: 1 },
       { kind: 'palace_edit', label: '宫殿编辑', seconds: 0, sessions: 0 },
     ])
+  })
+
+  it('formats time record client source labels', () => {
+    expect(formatClientSource('desktop')).toBe('电脑端')
+    expect(formatClientSource('mobile')).toBe('手机端')
+    expect(formatClientSource(null)).toBe('未知端')
   })
 })

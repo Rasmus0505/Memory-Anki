@@ -32,6 +32,10 @@ interface UseRevealSessionOptions {
 
 const EMPTY_CHECKPOINT_IDS: string[] = []
 
+type RevealAction =
+  | { type: 'advance'; nodeId: string }
+  | { type: 'hide'; nodeId: string }
+
 export function useRevealSession({
   title,
   editorState,
@@ -57,7 +61,7 @@ export function useRevealSession({
   )
   const revealOptions = React.useMemo<RevealFlowOptions>(
     () => ({ mode, checkpointIds: normalizedCheckpointIds }),
-    [checkpointIdsKey, mode],
+    [mode, normalizedCheckpointIds],
   )
   const [revealMap, setRevealMap] = React.useState<Record<string, RevealState>>(
     () => buildInitialRevealState(root, initialSnapshot?.revealMap ?? null, revealOptions),
@@ -70,6 +74,8 @@ export function useRevealSession({
   const [hoveredNodeId, setHoveredNodeId] = React.useState<string | null>(null)
   const revealMapRef = React.useRef(revealMap)
   const hoveredNodeIdRef = React.useRef<string | null>(null)
+  const revealActionQueueRef = React.useRef<RevealAction[]>([])
+  const revealActionFrameRef = React.useRef<number | null>(null)
 
   React.useEffect(() => {
     revealMapRef.current = revealMap
@@ -78,6 +84,16 @@ export function useRevealSession({
   React.useEffect(() => {
     hoveredNodeIdRef.current = hoveredNodeId
   }, [hoveredNodeId])
+
+  React.useEffect(() => {
+    return () => {
+      if (revealActionFrameRef.current !== null && typeof window !== 'undefined') {
+        window.cancelAnimationFrame(revealActionFrameRef.current)
+      }
+      revealActionFrameRef.current = null
+      revealActionQueueRef.current = []
+    }
+  }, [])
 
   React.useEffect(() => {
     const nextRevealMap = buildInitialRevealState(root, revealMapRef.current, revealOptions)
@@ -114,17 +130,59 @@ export function useRevealSession({
     [docVersion, redNodeIds, revealMap],
   )
 
+  const flushRevealActions = React.useCallback(() => {
+    revealActionFrameRef.current = null
+    const actions = revealActionQueueRef.current
+    revealActionQueueRef.current = []
+    if (actions.length === 0) return
+
+    React.startTransition(() => {
+      setRevealMap((current) =>
+        actions.reduce((nextRevealMap, action) => {
+          if (action.type === 'advance') {
+            return advanceRevealStateForNodeClick(action.nodeId, nodeMap, nextRevealMap)
+          }
+          return hideRevealStateBranch(action.nodeId, nodeMap, nextRevealMap)
+        }, current),
+      )
+    })
+  }, [nodeMap])
+
+  const enqueueRevealAction = React.useCallback(
+    (action: RevealAction) => {
+      revealActionQueueRef.current.push(action)
+      if (revealActionFrameRef.current !== null) return
+
+      if (typeof window === 'undefined' || typeof window.requestAnimationFrame !== 'function') {
+        flushRevealActions()
+        return
+      }
+
+      let frameFlushedSynchronously = false
+      revealActionFrameRef.current = 0
+      const frameId = window.requestAnimationFrame((time) => {
+        frameFlushedSynchronously = true
+        flushRevealActions()
+        void time
+      })
+      if (!frameFlushedSynchronously) {
+        revealActionFrameRef.current = frameId
+      }
+    },
+    [flushRevealActions],
+  )
+
   const handleNodeClick = React.useCallback((nodes: MindMapSelection[]) => {
     const nodeId = buildSelectionNodeId(nodes[0] ?? null)
     if (!nodeId) return
-    setRevealMap((current) => advanceRevealStateForNodeClick(nodeId, nodeMap, current))
-  }, [nodeMap])
+    enqueueRevealAction({ type: 'advance', nodeId })
+  }, [enqueueRevealAction])
 
   const handleNodeContextMenu = React.useCallback((nodes: MindMapSelection[]) => {
     const nodeId = buildSelectionNodeId(nodes[0] ?? null)
     if (!nodeId) return
-    setRevealMap((current) => hideRevealStateBranch(nodeId, nodeMap, current))
-  }, [nodeMap])
+    enqueueRevealAction({ type: 'hide', nodeId })
+  }, [enqueueRevealAction])
 
   const handleNodeHover = React.useCallback((nodes: MindMapSelection[]) => {
     const nodeId = buildSelectionNodeId(nodes[0] ?? null)

@@ -130,11 +130,17 @@ function studySessionToTimeRecord(item: StudySessionItem): TimeSessionRecord {
     pauseCount: item.pause_count,
     completionMethod: (item.completion_method || 'manual_complete') as TimeSessionRecord['completionMethod'],
     durationEdited: Boolean(summary.duration_edited),
+    clientSource: normalizeClientSource(summary.client_source),
     deletedAt: item.deleted_at,
     deletedReason: item.deleted_reason === 'manual' ? 'manual' : null,
     events: item.events as TimeSessionRecord['events'],
     sceneSegments,
   }
+}
+
+function normalizeClientSource(value: unknown): TimeSessionRecord['clientSource'] {
+  if (value === 'desktop' || value === 'mobile') return value
+  return null
 }
 
 function readSceneSegments(summary: Record<string, unknown>): TimeSessionRecord['sceneSegments'] {
@@ -189,10 +195,11 @@ function timeRecordPatchToStudySessionPatch(
   if ('pauseCount' in updater) patch.pause_count = updater.pauseCount ?? 0
   if ('completionMethod' in updater) patch.completion_method = updater.completionMethod ?? 'manual_complete'
   if ('events' in updater) patch.events = updater.events ?? []
-  if ('sceneSegments' in updater || 'durationEdited' in updater) {
+  if ('sceneSegments' in updater || 'durationEdited' in updater || 'clientSource' in updater) {
     patch.summary = {
       ...(updater.sceneSegments ? { scene_segments: updater.sceneSegments } : {}),
       ...(typeof updater.durationEdited === 'boolean' ? { duration_edited: updater.durationEdited } : {}),
+      ...(updater.clientSource ? { client_source: updater.clientSource } : {}),
     }
   }
   return patch
@@ -456,6 +463,12 @@ export function formatSessionSource(record: Pick<TimeSessionRecord, 'sourceKind'
     return '宫殿学习'
   }
   return '未分类'
+}
+
+export function formatClientSource(source: TimeSessionRecord['clientSource']) {
+  if (source === 'desktop') return '电脑端'
+  if (source === 'mobile') return '手机端'
+  return '未知端'
 }
 
 export function formatCompletionMethod(method: SessionCompletionMethod) {

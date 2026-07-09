@@ -80,6 +80,13 @@ def _normalize_target_type(value: Any) -> str:
     return normalized
 
 
+def _normalize_client_source(value: Any) -> str | None:
+    normalized = str(value or "").strip()
+    if normalized in {"desktop", "mobile"}:
+        return normalized
+    return None
+
+
 def _int_or_none(value: Any) -> int | None:
     if value in (None, ""):
         return None
@@ -202,7 +209,12 @@ def patch_study_session(session: Session, session_id: str, payload: dict[str, An
     if "progress" in payload:
         row.progress_json = _json_dumps(payload.get("progress") or {}, "{}")
     if "summary" in payload:
-        row.summary_json = _json_dumps(payload.get("summary") or {}, "{}")
+        current_summary = _json_loads(row.summary_json, {})
+        next_summary = payload.get("summary") if isinstance(payload.get("summary"), dict) else {}
+        if isinstance(current_summary, dict):
+            row.summary_json = _json_dumps({**current_summary, **next_summary}, "{}")
+        else:
+            row.summary_json = _json_dumps(next_summary, "{}")
     if "events" in payload:
         row.events_json = _json_dumps(payload.get("events") or [], "[]")
     row.updated_at = utc_now_naive()
@@ -348,6 +360,7 @@ def create_completed_study_session_from_time_payload(
     if started_at is None or ended_at is None:
         raise ValueError("开始时间和结束时间不能为空。")
     source_kind = payload.get("sourceKind") or payload.get("source_kind")
+    client_source = _normalize_client_source(payload.get("clientSource") or payload.get("client_source"))
     kind = str(payload.get("kind") or "practice")
     scene = _scene_from_legacy_kind(kind, source_kind)
     target_type = "none"
@@ -361,6 +374,15 @@ def create_completed_study_session_from_time_payload(
         target_type, target_id = "palace_segment", palace_segment_id
     elif palace_id is not None:
         target_type, target_id = "palace", palace_id
+    summary_payload = payload.get("summary") if isinstance(payload.get("summary"), dict) else {}
+    summary_payload = {
+        **summary_payload,
+        "scene_segments": payload.get("sceneSegments") or payload.get("scene_segments") or [],
+        "duration_edited": bool(payload.get("durationEdited", payload.get("duration_edited", False))),
+    }
+    if client_source is not None:
+        summary_payload["client_source"] = client_source
+
     item = create_study_session(
         session,
         {
@@ -379,7 +401,7 @@ def create_completed_study_session_from_time_payload(
             "pause_count": max(0, int(payload.get("pauseCount", payload.get("pause_count", 0)) or 0)),
             "completion_method": payload.get("completionMethod") or payload.get("completion_method") or "manual_complete",
             "events": payload.get("events") or [],
-            "summary": {"scene_segments": payload.get("sceneSegments") or payload.get("scene_segments") or []},
+            "summary": summary_payload,
         },
     )
     return item

@@ -281,4 +281,9 @@ export function setupMindMapReviewFlowTest() {
       removeListener: vi.fn(),
     })),
   });
+  window.requestAnimationFrame = vi.fn((callback: FrameRequestCallback) => {
+    callback(16);
+    return 1;
+  });
+  window.cancelAnimationFrame = vi.fn();
 }

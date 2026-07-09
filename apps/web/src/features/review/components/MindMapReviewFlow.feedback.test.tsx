@@ -173,30 +173,42 @@ describe("MindMapReviewFlow feedback", () => {
       />,
     );
 
+    const flushRevealFrame = async () => {
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(16);
+      });
+    };
+
     await act(async () => {
       getLatestMindMapFrameProps()?.onNodeClick?.([{ uid: "root", text: "Root" }]);
     });
+    await flushRevealFrame();
     await act(async () => {
       getLatestMindMapFrameProps()?.onNodeClick?.([
         { uid: "child-a", text: "Child A" },
       ]);
     });
+    await flushRevealFrame();
     await act(async () => {
       getLatestMindMapFrameProps()?.onNodeClick?.([{ uid: "root", text: "Root" }]);
     });
+    await flushRevealFrame();
     await act(async () => {
       getLatestMindMapFrameProps()?.onNodeClick?.([
         { uid: "child-b", text: "Child B" },
       ]);
     });
+    await flushRevealFrame();
     await act(async () => {
       getLatestMindMapFrameProps()?.onNodeClick?.([{ uid: "root", text: "Root" }]);
     });
+    await flushRevealFrame();
     await act(async () => {
       getLatestMindMapFrameProps()?.onNodeClick?.([
         { uid: "child-c", text: "Child C" },
       ]);
     });
+    await flushRevealFrame();
 
     expect(screen.getByRole("status", { name: "推进链 2" })).toBeTruthy();
     expect(screen.getAllByText("起势成功，继续爆裂揭示。").length).toBeGreaterThan(0);

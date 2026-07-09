@@ -68,6 +68,7 @@ function RegistrationProbe({
   title,
   isRouteActive,
   becameActiveAt,
+  routePath = '/freestyle',
   onRegistered,
 }: {
   timer: TimedSessionController
@@ -75,6 +76,7 @@ function RegistrationProbe({
   title: string
   isRouteActive: boolean
   becameActiveAt: number
+  routePath?: string
   onRegistered?: (timer: TimedSessionController) => void
 }) {
   const registeredTimer = useGlobalTimerRegistration({
@@ -83,6 +85,7 @@ function RegistrationProbe({
     timer,
     isRouteActive,
     becameActiveAt,
+    routePath,
   })
 
   React.useEffect(() => {
@@ -704,7 +707,7 @@ describe('GlobalTimerProvider', () => {
     expect(latestPause).toHaveBeenCalledWith({ source: 'global_floating_timer' })
   })
 
-  it('auto opens /freestyle once when a desktop break first reaches expired', () => {
+  it('auto opens the interrupted study route once when a desktop break first reaches expired', () => {
     vi.useFakeTimers()
     const publishTimerSnapshot = vi.fn()
     const openMainTarget = vi.fn()
@@ -732,6 +735,7 @@ describe('GlobalTimerProvider', () => {
         title="当前复习"
         isRouteActive
         becameActiveAt={100}
+        routePath="/review/session/9"
       />,
     )
 
@@ -744,17 +748,18 @@ describe('GlobalTimerProvider', () => {
     })
 
     expect(openMainTarget).toHaveBeenCalledTimes(1)
-    expect(openMainTarget).toHaveBeenCalledWith('/freestyle')
+    expect(openMainTarget).toHaveBeenCalledWith('/review/session/9')
     expect(publishTimerSnapshot).toHaveBeenLastCalledWith(
       expect.objectContaining({
         mode: 'break',
         status: 'expired',
+        targetPath: '/review/session/9',
       }),
     )
     vi.useRealTimers()
   })
 
-  it('does not repeatedly auto open /freestyle while the same expired break keeps ticking', () => {
+  it('preserves query and hash when auto opening the interrupted study route', () => {
     vi.useFakeTimers()
     const openMainTarget = vi.fn()
     let commandHandler: ((command: UnifiedTimerCommand) => void) | null = null
@@ -781,6 +786,95 @@ describe('GlobalTimerProvider', () => {
         title="当前复习"
         isRouteActive
         becameActiveAt={100}
+        routePath="/review/session/9?chapterId=3#x"
+      />,
+    )
+
+    act(() => {
+      commandHandler?.({ type: 'startBreak', minutes: 1 })
+    })
+
+    act(() => {
+      vi.advanceTimersByTime(60_000)
+    })
+
+    expect(openMainTarget).toHaveBeenCalledTimes(1)
+    expect(openMainTarget).toHaveBeenCalledWith('/review/session/9?chapterId=3#x')
+    vi.useRealTimers()
+  })
+
+  it('falls back to /freestyle when the interrupted route path is not safe', () => {
+    vi.useFakeTimers()
+    const openMainTarget = vi.fn()
+    let commandHandler: ((command: UnifiedTimerCommand) => void) | null = null
+    window.memoryAnkiDesktopTimer = {
+      publishTimerSnapshot: vi.fn(),
+      openMainTarget,
+      onTimerCommand: (handler) => {
+        commandHandler = handler
+        return () => {
+          commandHandler = null
+        }
+      },
+    } satisfies DesktopTimerBridge
+
+    renderOverlay(
+      <RegistrationProbe
+        timer={createTimer({
+          sessionId: 'review-running',
+          effectiveSeconds: 10,
+          status: 'running',
+          startedAt: '2026-06-17T10:00:00',
+        })}
+        scene="review"
+        title="当前复习"
+        isRouteActive
+        becameActiveAt={100}
+        routePath="https://example.com/review/session/9"
+      />,
+    )
+
+    act(() => {
+      commandHandler?.({ type: 'startBreak', minutes: 1 })
+    })
+
+    act(() => {
+      vi.advanceTimersByTime(60_000)
+    })
+
+    expect(openMainTarget).toHaveBeenCalledTimes(1)
+    expect(openMainTarget).toHaveBeenCalledWith('/freestyle')
+    vi.useRealTimers()
+  })
+
+  it('does not repeatedly auto open the study route while the same expired break keeps ticking', () => {
+    vi.useFakeTimers()
+    const openMainTarget = vi.fn()
+    let commandHandler: ((command: UnifiedTimerCommand) => void) | null = null
+    window.memoryAnkiDesktopTimer = {
+      publishTimerSnapshot: vi.fn(),
+      openMainTarget,
+      onTimerCommand: (handler) => {
+        commandHandler = handler
+        return () => {
+          commandHandler = null
+        }
+      },
+    } satisfies DesktopTimerBridge
+
+    renderOverlay(
+      <RegistrationProbe
+        timer={createTimer({
+          sessionId: 'review-running',
+          effectiveSeconds: 10,
+          status: 'running',
+          startedAt: '2026-06-17T10:00:00',
+        })}
+        scene="review"
+        title="当前复习"
+        isRouteActive
+        becameActiveAt={100}
+        routePath="/review/session/9"
       />,
     )
 
@@ -800,7 +894,7 @@ describe('GlobalTimerProvider', () => {
     vi.useRealTimers()
   })
 
-  it('auto opens /freestyle again after snoozing and reaching expired a second time', () => {
+  it('auto opens the same study route again after snoozing and reaching expired a second time', () => {
     vi.useFakeTimers()
     const openMainTarget = vi.fn()
     let commandHandler: ((command: UnifiedTimerCommand) => void) | null = null
@@ -827,6 +921,7 @@ describe('GlobalTimerProvider', () => {
         title="当前复习"
         isRouteActive
         becameActiveAt={100}
+        routePath="/review/session/9"
       />,
     )
 
@@ -847,8 +942,8 @@ describe('GlobalTimerProvider', () => {
     })
 
     expect(openMainTarget).toHaveBeenCalledTimes(2)
-    expect(openMainTarget).toHaveBeenNthCalledWith(1, '/freestyle')
-    expect(openMainTarget).toHaveBeenNthCalledWith(2, '/freestyle')
+    expect(openMainTarget).toHaveBeenNthCalledWith(1, '/review/session/9')
+    expect(openMainTarget).toHaveBeenNthCalledWith(2, '/review/session/9')
     vi.useRealTimers()
   })
 

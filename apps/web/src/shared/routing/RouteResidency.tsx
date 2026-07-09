@@ -3,12 +3,14 @@ import { createContext, useContext, type ReactNode } from 'react'
 export interface RouteResidencyValue {
   isActive: boolean
   pathname: string
+  fullPath: string
   becameActiveAt: number
 }
 
 const RouteResidencyContext = createContext<RouteResidencyValue>({
   isActive: true,
   pathname: '/',
+  fullPath: '/',
   becameActiveAt: 0,
 })
 
@@ -25,4 +27,3 @@ export function RouteResidencyProvider({
 export function useRouteResidency() {
   return useContext(RouteResidencyContext)
 }
-

@@ -2,6 +2,7 @@ export type RevealState = 'hidden' | 'placeholder' | 'revealed'
 
 export type SessionKind = 'palace_edit' | 'practice' | 'quiz' | 'review'
 export type SessionScene = SessionKind | 'english' | 'english_reading' | 'freestyle'
+export type TimeRecordClientSource = 'desktop' | 'mobile'
 
 export type SessionCompletionMethod =
   | 'manual_complete'
@@ -56,6 +57,7 @@ export interface TimeSessionRecord {
   pauseCount: number
   completionMethod: SessionCompletionMethod
   durationEdited: boolean
+  clientSource?: TimeRecordClientSource | null
   deletedAt?: string | null
   deletedReason?: 'manual' | null
   events: SessionEventRecord[]

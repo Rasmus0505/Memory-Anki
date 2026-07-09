@@ -43,7 +43,7 @@ export function useReviewFlowSession({
   onSnapshotChange,
   onFullscreenChange,
 }: UseReviewFlowSessionOptions) {
-  const { isActive, becameActiveAt } = useRouteResidency()
+  const { isActive, becameActiveAt, fullPath } = useRouteResidency()
   const timer = useTimedSession({
     kind: sessionKind,
     title,
@@ -58,6 +58,7 @@ export function useReviewFlowSession({
     timer,
     isRouteActive: isActive,
     becameActiveAt,
+    routePath: fullPath,
   })
   const reveal = useRevealSession({
     title,

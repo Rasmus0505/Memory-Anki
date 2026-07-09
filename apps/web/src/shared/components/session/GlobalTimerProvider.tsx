@@ -103,6 +103,16 @@ function createBreakLogId() {
   return `break-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
 }
 
+function isSafeAppPath(path: string | null | undefined) {
+  return typeof path === 'string' && path.startsWith('/') && !path.startsWith('//')
+}
+
+function resolveBreakTargetPath(returnPath: string | null, fallbackPath: string) {
+  if (isSafeAppPath(returnPath)) return returnPath
+  if (isSafeAppPath(fallbackPath)) return fallbackPath
+  return '/freestyle'
+}
+
 function formatTimerSnapshotClock(seconds: number | null) {
   if (seconds == null) return '--:--'
   return formatClock(seconds)
@@ -162,12 +172,14 @@ function buildStudyTimerSnapshot({
 function buildBreakTimerSnapshot({
   breakState,
   config,
+  targetPath,
   paused,
   pausedRemainingMs,
   now = Date.now(),
 }: {
   breakState: BreakGuardState
   config: BreakGuardConfig
+  targetPath: string
   paused: boolean
   pausedRemainingMs?: number | null
   now?: number
@@ -198,7 +210,7 @@ function buildBreakTimerSnapshot({
     presetMinutes: config.presetMinutes,
     allowCustomMinutes: config.allowCustomMinutes,
     snoozeMinutes: config.snoozeMinutes,
-    targetPath: config.targetPath,
+    targetPath,
     updatedAt: now,
     }
   }
@@ -217,7 +229,7 @@ function buildBreakTimerSnapshot({
     presetMinutes: config.presetMinutes,
     allowCustomMinutes: config.allowCustomMinutes,
     snoozeMinutes: config.snoozeMinutes,
-    targetPath: config.targetPath,
+    targetPath,
     updatedAt: now,
     }
   }
@@ -235,7 +247,7 @@ function buildBreakTimerSnapshot({
     presetMinutes: config.presetMinutes,
     allowCustomMinutes: config.allowCustomMinutes,
     snoozeMinutes: config.snoozeMinutes,
-    targetPath: config.targetPath,
+    targetPath,
     updatedAt: now,
   }
 }
@@ -878,6 +890,7 @@ export function GlobalTimerProvider({
   const [breakPaused, setBreakPaused] = React.useState(false)
   const [breakPausedRemainingMs, setBreakPausedRemainingMs] = React.useState<number | null>(null)
   const [breakInterruptedSessionId, setBreakInterruptedSessionId] = React.useState<string | null>(null)
+  const [breakReturnPath, setBreakReturnPath] = React.useState<string | null>(null)
   const [breakTick, setBreakTick] = React.useState(0)
   const promptTimerRef = React.useRef<number | null>(null)
   const promptAutoStartTimerRef = React.useRef<number | null>(null)
@@ -887,6 +900,7 @@ export function GlobalTimerProvider({
   const breakPausedRef = React.useRef(breakPaused)
   const breakPausedRemainingRef = React.useRef(breakPausedRemainingMs)
   const breakInterruptedSessionIdRef = React.useRef(breakInterruptedSessionId)
+  const breakReturnPathRef = React.useRef(breakReturnPath)
   const entriesRef = React.useRef(entries)
   const activeEntryRef = React.useRef(activeEntry)
 
@@ -904,7 +918,7 @@ export function GlobalTimerProvider({
     const bridge = getDesktopTimerBridge()
     if (!bridge?.openMainTarget) return
     breakAutoOpenedKeyRef.current = autoOpenKey
-    bridge.openMainTarget('/freestyle')
+    bridge.openMainTarget(resolveBreakTargetPath(breakReturnPathRef.current, breakConfigRef.current.targetPath))
   }, [breakState])
 
   React.useEffect(() => {
@@ -922,6 +936,10 @@ export function GlobalTimerProvider({
   React.useEffect(() => {
     breakInterruptedSessionIdRef.current = breakInterruptedSessionId
   }, [breakInterruptedSessionId])
+
+  React.useEffect(() => {
+    breakReturnPathRef.current = breakReturnPath
+  }, [breakReturnPath])
 
   React.useEffect(() => {
     entriesRef.current = entries
@@ -973,6 +991,7 @@ export function GlobalTimerProvider({
         previous.title === entry.title &&
         previous.isRouteActive === entry.isRouteActive &&
         previous.becameActiveAt === entry.becameActiveAt &&
+        previous.routePath === entry.routePath &&
         previous.timer === entry.timer
       ) {
         return current
@@ -1014,16 +1033,16 @@ export function GlobalTimerProvider({
   }, [])
 
   const openTarget = React.useCallback((targetPath: string) => {
-    const safePath = targetPath.startsWith('/') && !targetPath.startsWith('//')
-      ? targetPath
-      : '/freestyle'
-    if (window.location.pathname === safePath) return
+    const safePath = resolveBreakTargetPath(targetPath, '/freestyle')
+    const currentPath = `${window.location.pathname}${window.location.search}${window.location.hash}`
+    if (currentPath === safePath) return
     window.location.assign(safePath)
   }, [])
 
   const finishBreak = React.useCallback((options?: { openTarget?: boolean }) => {
     const current = breakStateRef.current
     const config = breakConfigRef.current
+    const targetPath = resolveBreakTargetPath(breakReturnPathRef.current, config.targetPath)
     if (current.logId) {
       updateBreakGuardLog(current.logId, {
         endedAt: new Date().toISOString(),
@@ -1035,9 +1054,11 @@ export function GlobalTimerProvider({
     setBreakPausedRemainingMs(null)
     breakInterruptedSessionIdRef.current = null
     setBreakInterruptedSessionId(null)
+    breakReturnPathRef.current = null
+    setBreakReturnPath(null)
     setBreakState(IDLE_BREAK_GUARD_STATE)
     if (options?.openTarget) {
-      openTarget(config.targetPath)
+      openTarget(targetPath)
     }
   }, [openTarget])
 
@@ -1055,6 +1076,8 @@ export function GlobalTimerProvider({
 
   const pauseActiveStudyForBreakGuard = React.useCallback(() => {
     const currentActiveEntry = activeEntryRef.current
+    breakReturnPathRef.current = currentActiveEntry?.routePath ?? null
+    setBreakReturnPath(currentActiveEntry?.routePath ?? null)
     if (currentActiveEntry?.timer.status !== 'running') return
     currentActiveEntry.timer.pause({ source: 'break_guard_prompt' })
     breakInterruptedSessionIdRef.current = currentActiveEntry.timer.sessionId
@@ -1109,6 +1132,9 @@ export function GlobalTimerProvider({
     const interruptedSessionId =
       breakInterruptedSessionIdRef.current ??
       (currentActiveEntry?.timer.status === 'running' ? currentActiveEntry.timer.sessionId : null)
+    const returnPath = breakReturnPathRef.current ?? currentActiveEntry?.routePath ?? null
+    breakReturnPathRef.current = returnPath
+    setBreakReturnPath(returnPath)
     if (currentActiveEntry?.timer.status === 'running') {
       currentActiveEntry.timer.pause({ source: 'break_guard' })
     }
@@ -1146,6 +1172,8 @@ export function GlobalTimerProvider({
       setBreakState(IDLE_BREAK_GUARD_STATE)
       breakInterruptedSessionIdRef.current = null
       setBreakInterruptedSessionId(null)
+      breakReturnPathRef.current = null
+      setBreakReturnPath(null)
       return true
     }
 
@@ -1166,6 +1194,8 @@ export function GlobalTimerProvider({
       setBreakState(IDLE_BREAK_GUARD_STATE)
       breakInterruptedSessionIdRef.current = null
       setBreakInterruptedSessionId(null)
+      breakReturnPathRef.current = null
+      setBreakReturnPath(null)
       return true
     }
 
@@ -1180,6 +1210,8 @@ export function GlobalTimerProvider({
       resumeInterruptedStudyAfterPromptCancel(activeEntryRef.current)
       breakInterruptedSessionIdRef.current = null
       setBreakInterruptedSessionId(null)
+      breakReturnPathRef.current = null
+      setBreakReturnPath(null)
       return
     }
     endBreakAndResumeStudy(activeEntryRef.current)
@@ -1294,6 +1326,7 @@ export function GlobalTimerProvider({
       return buildBreakTimerSnapshot({
         breakState,
         config: breakConfig,
+        targetPath: resolveBreakTargetPath(breakReturnPath, breakConfig.targetPath),
         paused: breakPaused,
         pausedRemainingMs: breakPausedRemainingMs,
       })
@@ -1303,7 +1336,7 @@ export function GlobalTimerProvider({
       focusConfig,
       automationConfig,
     })
-  }, [activeEntry, automationConfig, breakConfig, breakPaused, breakPausedRemainingMs, breakState, breakTick, focusConfig])
+  }, [activeEntry, automationConfig, breakConfig, breakPaused, breakPausedRemainingMs, breakReturnPath, breakState, breakTick, focusConfig])
 
   React.useEffect(() => {
     clearPendingBreakPromptAutoStart()
@@ -1366,6 +1399,7 @@ export function useGlobalTimerRegistration(entry: {
   timer: TimedSessionController
   isRouteActive: boolean
   becameActiveAt: number
+  routePath: string
 }) {
   const context = React.useContext(GlobalTimerContext)
   const {
@@ -1374,6 +1408,7 @@ export function useGlobalTimerRegistration(entry: {
     timer,
     isRouteActive,
     becameActiveAt,
+    routePath,
   } = entry
   const notifyStudyActivity = context?.notifyStudyActivity
 
@@ -1397,11 +1432,12 @@ export function useGlobalTimerRegistration(entry: {
       timer: registeredTimer,
       isRouteActive,
       becameActiveAt,
+      routePath,
     })
     return () => {
       context.removeTimer(timer.sessionId)
     }
-  }, [becameActiveAt, context, isRouteActive, registeredTimer, scene, timer.sessionId, title])
+  }, [becameActiveAt, context, isRouteActive, registeredTimer, routePath, scene, timer.sessionId, title])
 
   return registeredTimer
 }

@@ -1,5 +1,6 @@
 import { Pencil, Plus, Trash2 } from 'lucide-react'
 import {
+  formatClientSource,
   formatCompletionMethod,
   formatDuration,
   formatSessionKind,
@@ -163,6 +164,7 @@ export function TimeRecordsTable({
                   </th>
                   <th className="px-4 py-3">标题</th>
                   <th className="px-4 py-3">类型</th>
+                  <th className="px-4 py-3">端来源</th>
                   <th className="px-4 py-3">开始时间</th>
                   <th className="px-4 py-3">有效时长</th>
                   <th className="px-4 py-3">完成方式</th>
@@ -205,6 +207,11 @@ export function TimeRecordsTable({
                       </td>
                       <td className="px-4 py-4">
                         {formatSessionKind(record.kind)}
+                      </td>
+                      <td className="px-4 py-4 whitespace-nowrap">
+                        <span className="rounded-md border border-border/70 bg-secondary/70 px-2 py-1 text-xs text-foreground">
+                          {formatClientSource(record.clientSource)}
+                        </span>
                       </td>
                       <td className="px-4 py-4 whitespace-nowrap">
                         {formatTableDateTime(record.startedAt)}
