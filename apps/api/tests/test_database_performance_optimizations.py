@@ -9,49 +9,39 @@ from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
 from sqlalchemy import create_engine, event
-from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from memory_anki.infrastructure.db import maintenance as db_maintenance
 from memory_anki.infrastructure.db._tables._base import _configure_sqlite_pragmas
-from memory_anki.infrastructure.db.models import (
+from memory_anki.infrastructure.db._tables.knowledge import Chapter, Subject
+from memory_anki.infrastructure.db._tables.misc import StudySession
+from memory_anki.infrastructure.db._tables.palaces import (
     Attachment,
-    Base,
-    Chapter,
     Palace,
     PalaceMiniPalace,
     PalaceQuizQuestion,
     Peg,
     ReviewLog,
     ReviewSchedule,
-    StudySession,
-    Subject,
     chapter_palace_table,
 )
 from memory_anki.modules.backups.application import backup_lifecycle, storage_backup
-from memory_anki.modules.dashboard.application.service import _dashboard_review_unit_counts
+from memory_anki.modules.dashboard.application.service import (
+    _dashboard_review_unit_counts,
+    build_dashboard_payload,
+    build_weekly_report_payload,
+)
 from memory_anki.modules.palaces.application.palace_service import restore_archived_palaces
 from memory_anki.modules.sessions.application.study_session_service import (
     STUDY_DASHBOARD_SCENES,
+    current_week_bounds,
     get_all_time_study_session_duration_seconds,
     get_study_session_duration_seconds,
 )
+from support import RouterTestCase
 
 
-class DatabasePerformanceOptimizationTests(unittest.TestCase):
-    def setUp(self):
-        self.engine = create_engine(
-            "sqlite://",
-            connect_args={"check_same_thread": False},
-            poolclass=StaticPool,
-        )
-        Base.metadata.create_all(self.engine)
-        self.SessionLocal = sessionmaker(bind=self.engine)
-
-    def tearDown(self):
-        Base.metadata.drop_all(self.engine)
-        self.engine.dispose()
-
+class DatabasePerformanceOptimizationTests(RouterTestCase):
     def test_performance_indexes_are_declared_on_orm_tables(self):
         self.assertEqual(_index_columns(Palace, "ix_palaces_updated_at"), ["updated_at"])
         self.assertEqual(_index_columns(Palace, "ix_palaces_created_at_id"), ["created_at", "id"])
@@ -278,6 +268,88 @@ class DatabasePerformanceOptimizationTests(unittest.TestCase):
         self.assertEqual(counts["due_now_count"], 12)
         self.assertEqual(counts["due_later_today_count"], 0)
         self.assertLessEqual(len(statements), 4)
+
+    def test_dashboard_payload_keeps_query_budget_with_many_due_palaces(self):
+        current = datetime.now()
+        with self.SessionLocal() as session:
+            palaces = [
+                Palace(
+                    title=f"dashboard-palace-{index}",
+                    created_at=current - timedelta(days=2, hours=index),
+                    updated_at=current - timedelta(minutes=index),
+                )
+                for index in range(40)
+            ]
+            session.add_all(palaces)
+            session.flush()
+            for index, palace in enumerate(palaces):
+                session.add(
+                    ReviewSchedule(
+                        palace_id=palace.id,
+                        scheduled_date=current.date() - timedelta(days=1),
+                        review_number=0,
+                        completed=False,
+                    )
+                )
+                session.add(Peg(palace_id=palace.id, name=f"peg-{index}", sort_order=0))
+            session.commit()
+
+            statements: list[str] = []
+
+            def record_select(_connection, _cursor, statement, _parameters, _context, _executemany):
+                if statement.lstrip().upper().startswith("SELECT"):
+                    statements.append(statement)
+
+            event.listen(self.engine, "before_cursor_execute", record_select)
+            try:
+                payload = build_dashboard_payload(session)
+            finally:
+                event.remove(self.engine, "before_cursor_execute", record_select)
+
+        self.assertEqual(payload["due_count"], 40)
+        self.assertEqual(len(payload["reviews"]), 40)
+        self.assertEqual(len(payload["recent_palaces"]), 5)
+        self.assertLessEqual(len(statements), 35)
+
+    def test_weekly_report_uses_sql_aggregate_for_review_logs(self):
+        current_week_start, _current_week_end = current_week_bounds()
+        week_start = current_week_start - timedelta(days=7)
+        with self.SessionLocal() as session:
+            palace = Palace(
+                title="weekly-report-sql",
+                created_at=week_start + timedelta(hours=1),
+                updated_at=week_start + timedelta(hours=1),
+            )
+            session.add(palace)
+            session.flush()
+            session.add_all(
+                [
+                    ReviewLog(
+                        palace_id=palace.id,
+                        review_date=(week_start + timedelta(days=index % 7)).date(),
+                        score=index % 5,
+                    )
+                    for index in range(80)
+                ]
+            )
+            session.commit()
+
+            statements: list[str] = []
+
+            def record_select(_connection, _cursor, statement, _parameters, _context, _executemany):
+                if statement.lstrip().upper().startswith("SELECT"):
+                    statements.append(statement)
+
+            event.listen(self.engine, "before_cursor_execute", record_select)
+            try:
+                payload = build_weekly_report_payload(session, offset_weeks=1)
+            finally:
+                event.remove(self.engine, "before_cursor_execute", record_select)
+
+        self.assertEqual(payload["review_count"], 80)
+        self.assertEqual(payload["average_score"], 2.0)
+        self.assertEqual(payload["new_palace_count"], 1)
+        self.assertLessEqual(len(statements), 3)
 
     def test_study_session_duration_uses_sql_sum_and_keeps_positive_seconds_semantics(self):
         start = datetime(2026, 7, 6, 0, 0, 0)

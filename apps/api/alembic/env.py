@@ -6,7 +6,7 @@ from alembic import context
 from sqlalchemy import engine_from_config, pool
 
 from memory_anki.core.config import DATABASE_URL
-from memory_anki.infrastructure.db.models import Base
+from memory_anki.infrastructure.db._tables import Base
 
 config = context.config
 config.set_main_option("sqlalchemy.url", DATABASE_URL)

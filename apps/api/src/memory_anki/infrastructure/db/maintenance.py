@@ -5,7 +5,7 @@ import logging
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
 
-from memory_anki.infrastructure.db.models import engine as default_engine
+from memory_anki.infrastructure.db._tables._base import engine as default_engine
 
 logger = logging.getLogger(__name__)
 

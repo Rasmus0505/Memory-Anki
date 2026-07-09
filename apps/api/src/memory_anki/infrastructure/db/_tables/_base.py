@@ -16,11 +16,15 @@ from sqlalchemy.orm import DeclarativeBase, Session
 from memory_anki.core.config import DATABASE_URL, ensure_runtime_dirs
 from memory_anki.infrastructure.db.migrations import run_migrations
 
-ensure_runtime_dirs()
 engine = create_engine(
     DATABASE_URL,
     connect_args={"check_same_thread": False, "timeout": 30},
 )
+
+
+@event.listens_for(engine, "do_connect")
+def _ensure_dirs_before_connect(_dialect, _conn_rec, _cargs, _cparams) -> None:
+    ensure_runtime_dirs()
 
 
 @event.listens_for(engine, "connect")

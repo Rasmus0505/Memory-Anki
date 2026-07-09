@@ -7,3 +7,6 @@ re-exports every symbol below for backwards compatibility.
 """
 
 from . import english, english_reading, knowledge, misc, palaces  # noqa: F401
+from ._base import Base, engine, get_session, init_db
+
+__all__ = ["Base", "engine", "get_session", "init_db"]

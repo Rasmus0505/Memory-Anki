@@ -2,7 +2,7 @@
 
 from alembic import op
 
-from memory_anki.infrastructure.db.models import Base
+from memory_anki.infrastructure.db._tables import Base
 
 revision = "0001_baseline"
 down_revision = None

@@ -56,6 +56,7 @@ class Palace(Base):
         Index("ix_palaces_created_at_id", "created_at", "id"),
         Index("ix_palaces_primary_chapter_id", "primary_chapter_id"),
         Index("ix_palaces_mastered_archived", "mastered", "archived"),
+        Index("ix_palaces_deleted_at", "deleted_at"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -76,6 +77,7 @@ class Palace(Base):
         default=utc_now_naive,
         onupdate=utc_now_naive,
     )
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     pegs: Mapped[list[Peg]] = relationship(
         "Peg",
@@ -308,6 +310,7 @@ class ReviewLog(Base):
     score: Mapped[int] = mapped_column(Integer, default=0)
     review_mode: Mapped[str] = mapped_column(String(20), default="flashcard")
     duration_seconds: Mapped[int] = mapped_column(Integer, default=0)
+    note: Mapped[str] = mapped_column(Text, nullable=False, default="")
 
     palace: Mapped[Palace] = relationship("Palace", back_populates="review_logs")
 
@@ -420,6 +423,23 @@ class PalaceGroup(Base):
     source_chapter_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
 
+class PalaceTemplate(Base):
+    __tablename__ = "palace_templates"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(200), nullable=False, default="")
+    description: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    editor_doc: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    editor_config: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    source_palace_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[datetime | None] = mapped_column(DateTime, default=utc_now_naive)
+    updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime,
+        default=utc_now_naive,
+        onupdate=utc_now_naive,
+    )
+
+
 class PalaceQuizQuestion(Base):
     __tablename__ = "palace_quiz_questions"
     __table_args__ = (
@@ -433,6 +453,7 @@ class PalaceQuizQuestion(Base):
         Index("ix_palace_quiz_questions_origin_mini", "origin_question_id", "mini_palace_id"),
         Index("ix_palace_quiz_questions_source_chapter", "source_chapter_id"),
         Index("ix_palace_quiz_questions_classified_chapter", "classified_chapter_id"),
+        Index("ix_palace_quiz_questions_deleted_at", "deleted_at"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -473,6 +494,7 @@ class PalaceQuizQuestion(Base):
         default=utc_now_naive,
         onupdate=utc_now_naive,
     )
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     palace: Mapped[Palace] = relationship("Palace", back_populates="quiz_questions")
     mini_palace: Mapped[PalaceMiniPalace | None] = relationship(
