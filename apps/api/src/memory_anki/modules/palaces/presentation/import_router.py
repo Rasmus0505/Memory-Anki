@@ -1,15 +1,27 @@
 import json
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
-from fastapi.responses import PlainTextResponse
+from fastapi.responses import PlainTextResponse, Response
 from sqlalchemy.orm import Session
 
-from memory_anki.infrastructure.db.models import Palace, get_session
+from memory_anki.infrastructure.db._tables import get_session
+from memory_anki.infrastructure.db._tables.palaces import Palace
+from memory_anki.infrastructure.db.deps import session_dep
+from memory_anki.modules.backups.application.backup_lifecycle import create_rescue_snapshot
+from memory_anki.modules.backups.application.full_transfer_service import (
+    FullTransferError,
+    build_full_archive,
+    import_full_archive,
+    inspect_archive,
+)
 from memory_anki.modules.palaces.application.import_export_service import (
     export_json,
     export_markdown,
     import_json,
     import_markdown,
+)
+from memory_anki.modules.palaces.application.mindmap_import import (
+    MindMapImportError,
 )
 from memory_anki.modules.palaces.application.mindmap_import_job_service import (
     complete_job_from_preview,
@@ -23,9 +35,7 @@ from memory_anki.modules.palaces.application.mindmap_import_job_service import (
     serialize_job,
     wait_for_job_completion,
 )
-from memory_anki.modules.palaces.application.mindmap_import import (
-    MindMapImportError,
-)
+from memory_anki.modules.palaces.presentation.errors import raise_bad_request
 from memory_anki.modules.reviews.application.review_execution_service import (
     trigger_review_for_palace,
 )
@@ -43,22 +53,11 @@ def _wait_for_job_result(job_id: str) -> dict:
     completed_job = wait_for_job_completion(get_session, job_id=job_id)
     payload = serialize_job(completed_job)
     if payload["status"] != "completed":
-        return {
-            "ok": False,
-            "error": (payload.get("error") or {}).get("message") or "识别失败，请稍后继续恢复。",
-        }
+        raise_bad_request((payload.get("error") or {}).get("message") or "识别失败，请稍后继续恢复。")
     result = dict(payload.get("result") or {})
     result["ok"] = True
     result["resolved_ai"] = payload.get("resolved_ai")
     return result
-
-
-def session_dep():
-    s = get_session()
-    try:
-        yield s
-    finally:
-        s.close()
 
 
 def _parse_form_ai_options(value: str | None):
@@ -83,6 +82,42 @@ def api_export_md(s: Session = Depends(session_dep)):
                              headers={"Content-Disposition": "attachment; filename=palaces.md"})
 
 
+@router.get("/export/full")
+def api_export_full(s: Session = Depends(session_dep)):
+    zip_bytes, filename = build_full_archive(s)
+    return Response(
+        zip_bytes,
+        media_type="application/zip",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
+
+
+@router.post("/import/full/preview")
+async def api_import_full_preview(
+    file: UploadFile = File(...),
+    s: Session = Depends(session_dep),
+):
+    try:
+        return {"ok": True, **inspect_archive(await file.read(), s)}
+    except FullTransferError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/import/full")
+async def api_import_full(
+    file: UploadFile = File(...),
+    s: Session = Depends(session_dep),
+):
+    zip_bytes = await file.read()
+    try:
+        inspect_archive(zip_bytes, s)
+        create_rescue_snapshot("before-full-import")
+        result = import_full_archive(zip_bytes, s)
+        return {"ok": True, **result}
+    except FullTransferError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
 @router.post("/import")
 async def api_import(file: UploadFile = File(...), format: str = "json",
                      s: Session = Depends(session_dep)):
@@ -93,8 +128,8 @@ async def api_import(file: UploadFile = File(...), format: str = "json",
         for p in latest:
             trigger_review_for_palace(s, p.id)
         return {"ok": True, "count": count}
-    except Exception as e:
-        return {"ok": False, "error": str(e)}
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.post("/import/jobs/image")
@@ -220,7 +255,7 @@ async def api_preview_mindmap_import(
             ai_options=_parse_form_ai_options(ai_options),
         )
     except MindMapImportError as exc:
-        return {"ok": False, "error": str(exc)}
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     run_job_async(job.id)
     return _wait_for_job_result(job.id)
 
@@ -246,7 +281,7 @@ async def api_preview_batch_mindmap_import(
             ai_options=_parse_form_ai_options(ai_options),
         )
     except MindMapImportError as exc:
-        return {"ok": False, "error": str(exc)}
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     run_job_async(job.id)
     return _wait_for_job_result(job.id)
 
@@ -269,8 +304,6 @@ async def api_preview_text_import(
             ai_options=_parse_form_ai_options(ai_options),
         )
     except MindMapImportError as exc:
-        return {"ok": False, "error": str(exc)}
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     run_job_async(job.id)
     return _wait_for_job_result(job.id)
-
-

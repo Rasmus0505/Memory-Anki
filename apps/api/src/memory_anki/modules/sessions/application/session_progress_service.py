@@ -5,7 +5,8 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from memory_anki.core.time import utc_now_naive
-from memory_anki.infrastructure.db.models import SessionProgress, StudySession
+from memory_anki.infrastructure.db._tables.misc import StudySession
+from memory_anki.infrastructure.db._tables.palaces import SessionProgress
 
 
 def _serialize_json(value: Any, fallback: str) -> str:

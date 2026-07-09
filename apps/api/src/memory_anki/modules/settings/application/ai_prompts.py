@@ -8,7 +8,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from memory_anki.core.time import utc_now_naive
-from memory_anki.infrastructure.db.models import Config
+from memory_anki.infrastructure.db._tables.misc import Config
 from memory_anki.modules.settings.application.ai_prompt_templates import (
     ENGLISH_READING_GENERATE_PROMPT,
     IMPORT_BATCH_MINDMAP_PROMPT,

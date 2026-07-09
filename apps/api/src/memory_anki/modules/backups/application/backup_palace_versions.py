@@ -7,8 +7,11 @@ from datetime import timedelta
 from sqlalchemy.orm import Session
 
 from memory_anki.core.time import utc_now_naive
-from memory_anki.infrastructure.db.models import Chapter, Palace, PalaceVersion, Peg
-from memory_anki.modules.backups.application.editor_safety import count_editor_doc_nodes
+from memory_anki.infrastructure.db._tables.palaces import (
+    Palace,
+    PalaceVersion,
+    Peg,
+)
 
 MAX_VERSION_COUNT = 50
 EDITOR_SNAPSHOT_INTERVAL = timedelta(minutes=5)

@@ -3,11 +3,11 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from sqlalchemy import case, func
+from sqlalchemy import case, func, or_
 from sqlalchemy.orm import Session
 
-from memory_anki.infrastructure.db.models import (
-    ExternalAiCallLog,
+from memory_anki.infrastructure.db._tables.misc import ExternalAiCallLog
+from memory_anki.infrastructure.db._tables.palaces import (
     FreestyleAiExplanation,
     FreestyleQuizAttempt,
     PalaceQuizQuestion,
@@ -67,7 +67,21 @@ def _normalize_mode(value: Any) -> str:
 def _question_fallback(session: Session, question_id: int | None) -> PalaceQuizQuestion | None:
     if not question_id:
         return None
-    return session.query(PalaceQuizQuestion).filter_by(id=question_id).first()
+    from memory_anki.infrastructure.db._tables.palaces import Palace
+
+    return (
+        session.query(PalaceQuizQuestion)
+        .outerjoin(Palace, Palace.id == PalaceQuizQuestion.palace_id)
+        .filter(
+            PalaceQuizQuestion.id == question_id,
+            PalaceQuizQuestion.deleted_at.is_(None),
+            or_(
+                PalaceQuizQuestion.palace_id.is_(None),
+                Palace.deleted_at.is_(None),
+            ),
+        )
+        .first()
+    )
 
 
 def _attempt_row_payload(row: FreestyleQuizAttempt) -> dict[str, Any]:
@@ -115,6 +129,8 @@ def create_question_attempt(session: Session, payload: dict[str, Any]) -> dict[s
     if not question_id:
         raise ValueError("随心做题记录需要题目 id。")
     question = _question_fallback(session, question_id)
+    if question is None:
+        raise ValueError("题目不存在或已删除。")
     is_correct = payload.get("is_correct")
     row = FreestyleQuizAttempt(
         question_id=question_id,
@@ -168,6 +184,8 @@ def create_question_explanation(session: Session, payload: dict[str, Any]) -> di
     if not question_id:
         raise ValueError("随心 AI 讲解历史需要题目 id。")
     question = _question_fallback(session, question_id)
+    if question is None:
+        raise ValueError("题目不存在或已删除。")
     explanation_text = _text(payload.get("explanation_text"))
     user_question = _text(payload.get("user_question"))
     if not user_question:
@@ -217,16 +235,29 @@ def list_question_explanations(
 
 
 def build_history_summary(session: Session) -> dict[str, Any]:
-    legacy = session.query(
-        func.count(PalaceQuizQuestion.id),
-        func.coalesce(func.sum(PalaceQuizQuestion.attempt_count), 0),
-        func.coalesce(func.sum(PalaceQuizQuestion.correct_count), 0),
-        func.coalesce(func.sum(PalaceQuizQuestion.incorrect_count), 0),
-        func.coalesce(
-            func.sum(case((PalaceQuizQuestion.attempt_count > 0, 1), else_=0)),
-            0,
-        ),
-    ).one()
+    from memory_anki.infrastructure.db._tables.palaces import Palace
+
+    legacy = (
+        session.query(
+            func.count(PalaceQuizQuestion.id),
+            func.coalesce(func.sum(PalaceQuizQuestion.attempt_count), 0),
+            func.coalesce(func.sum(PalaceQuizQuestion.correct_count), 0),
+            func.coalesce(func.sum(PalaceQuizQuestion.incorrect_count), 0),
+            func.coalesce(
+                func.sum(case((PalaceQuizQuestion.attempt_count > 0, 1), else_=0)),
+                0,
+            ),
+        )
+        .outerjoin(Palace, Palace.id == PalaceQuizQuestion.palace_id)
+        .filter(
+            PalaceQuizQuestion.deleted_at.is_(None),
+            or_(
+                PalaceQuizQuestion.palace_id.is_(None),
+                Palace.deleted_at.is_(None),
+            ),
+        )
+        .one()
+    )
     stored_attempt_count = session.query(func.count(FreestyleQuizAttempt.id)).scalar() or 0
     stored_explanation_count = session.query(func.count(FreestyleAiExplanation.id)).scalar() or 0
     ai_log_counts = dict(

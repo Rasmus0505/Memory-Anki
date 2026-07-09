@@ -7,7 +7,8 @@ from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from memory_anki.infrastructure.db.models import get_session
+from memory_anki.core.concurrency_limits import concurrency_slot
+from memory_anki.infrastructure.db.deps import session_dep
 from memory_anki.modules.english.application.course_service import (
     check_sentence_input,
     delete_course,
@@ -46,14 +47,6 @@ class EnglishSentenceCheckRequest(BaseModel):
     inputText: str = ""
 
 
-def session_dep():
-    session = get_session()
-    try:
-        yield session
-    finally:
-        session.close()
-
-
 @router.get("/english")
 def api_get_english_workspace(session: Session = Depends(session_dep)):
     return get_workspace_summary(session)
@@ -88,16 +81,17 @@ async def api_upload_english_video(
     session: Session = Depends(session_dep),
 ):
     try:
-        file_bytes = await video_file.read()
-        task = create_generation_task(
-            session,
-            filename=str(video_file.filename or ""),
-            content_type=str(video_file.content_type or "video/mp4"),
-            file_bytes=file_bytes,
-            asr_ai_options=normalize_ai_runtime_options(
-                json.loads(ai_options) if ai_options else None
-            ),
-        )
+        with concurrency_slot("heavy_upload"):
+            file_bytes = await video_file.read()
+            task = create_generation_task(
+                session,
+                filename=str(video_file.filename or ""),
+                content_type=str(video_file.content_type or "video/mp4"),
+                file_bytes=file_bytes,
+                asr_ai_options=normalize_ai_runtime_options(
+                    json.loads(ai_options) if ai_options else None
+                ),
+            )
         return {"task": task}
     except EnglishCourseError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

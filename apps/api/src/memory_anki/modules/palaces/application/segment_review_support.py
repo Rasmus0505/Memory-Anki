@@ -6,29 +6,16 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from memory_anki.infrastructure.db.models import Palace, PalaceSegment
-from memory_anki.modules.reviews.application.schedule_policy import (
-    resolve_interval_from_base_date,
-)
+from memory_anki.infrastructure.db._tables.palaces import Palace, PalaceSegment
 from memory_anki.modules.reviews.application.schedule_rebuild_service import (
     infer_completed_stage_count as infer_schedule_completed_stage_count,
-)
-from memory_anki.modules.reviews.application.schedule_rebuild_service import (
-    palace_algorithm as resolve_palace_review_algorithm,
-)
-from memory_anki.modules.reviews.application.schedule_rebuild_service import (
-    segment_algorithm as resolve_segment_review_algorithm,
 )
 from memory_anki.modules.reviews.application.schedule_service import (
     get_algorithm_intervals,
     get_config_value,
-    normalize_algorithm,
 )
+
 from .review_progress_datetime import serialize_stage_datetime
-
-
-def default_segment_algorithm(session: Session) -> str:
-    return "ebbinghaus"
 
 
 def get_segment_anchor_date(segment: PalaceSegment) -> date:
@@ -73,32 +60,6 @@ def schedule_display_datetime_for_anchor(
     return datetime.combine(scheduled_date, display_time)
 
 
-def segment_review_algorithm(
-    session: Session,
-    segment: PalaceSegment,
-    *,
-    default_algorithm: str | None = None,
-) -> str:
-    return resolve_segment_review_algorithm(
-        session,
-        segment,
-        default_algorithm=default_algorithm or default_segment_algorithm(session),
-    )
-
-
-def palace_review_algorithm(
-    session: Session,
-    palace: Palace,
-    *,
-    default_algorithm: str | None = None,
-) -> str:
-    return resolve_palace_review_algorithm(
-        session,
-        palace,
-        default_algorithm=default_algorithm or default_segment_algorithm(session),
-    )
-
-
 def palace_stage_completed_count(
     session: Session,
     palace: Palace,
@@ -115,8 +76,7 @@ def segment_stage_progress(
     session: Session,
     segment: PalaceSegment,
 ) -> tuple[int, int, float]:
-    algorithm = segment_review_algorithm(session, segment)
-    intervals = get_algorithm_intervals(session, algorithm)
+    intervals = get_algorithm_intervals(session)
     total = len(intervals)
     if total <= 0:
         return 0, 0, 0.0
@@ -131,8 +91,7 @@ def palace_stage_progress(
     session: Session,
     palace: Palace,
 ) -> tuple[int, int, float]:
-    algorithm = palace_review_algorithm(session, palace)
-    intervals = get_algorithm_intervals(session, algorithm)
+    intervals = get_algorithm_intervals(session)
     if not intervals:
         intervals = ["1", "2", "4", "7", "15", "30", "60"]
     total = len(intervals)
@@ -177,14 +136,11 @@ def review_stages_json(
 
 
 __all__ = [
-    "default_segment_algorithm",
     "get_segment_anchor_date",
-    "palace_review_algorithm",
     "palace_stage_completed_count",
     "palace_stage_progress",
     "review_stages_json",
     "schedule_display_datetime_for_anchor",
-    "segment_review_algorithm",
     "segment_stage_progress",
     "serialize_stage_datetime",
 ]

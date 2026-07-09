@@ -10,7 +10,7 @@ from memory_anki.core.config import (
     DASHSCOPE_BASE_URL,
     DASHSCOPE_TEXT_MODEL,
 )
-from memory_anki.infrastructure.db.models import Palace
+from memory_anki.infrastructure.db._tables.palaces import Palace
 from memory_anki.modules.mindmap.application.editor_state_documents import normalize_editor_doc
 from memory_anki.modules.settings.application.ai_model_registry import (
     AiRuntimeOptions,

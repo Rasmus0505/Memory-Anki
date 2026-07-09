@@ -3,51 +3,21 @@ from __future__ import annotations
 import unittest
 from datetime import date, datetime, timedelta
 
-from fastapi import FastAPI
-from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
-
-from memory_anki.infrastructure.db.models import Base, Palace, StudySession
+from memory_anki.infrastructure.db._tables.misc import StudySession
+from memory_anki.infrastructure.db._tables.palaces import Palace
 from memory_anki.modules.dashboard.presentation import router as dashboard_router
 from memory_anki.modules.sessions.presentation import router as sessions_router
+from support import RouterTestCase
 
 
-class StudySessionRouteTests(unittest.TestCase):
-    def setUp(self):
-        self.engine = create_engine(
-            "sqlite://",
-            connect_args={"check_same_thread": False},
-            poolclass=StaticPool,
-        )
-        Base.metadata.create_all(self.engine)
-        self.SessionLocal = sessionmaker(bind=self.engine)
-        self.original_sessions_get_session = sessions_router.get_session
-        self.original_dashboard_get_session = dashboard_router.get_session
+class StudySessionRouteTests(RouterTestCase):
+    ROUTER_MODULES = (sessions_router, dashboard_router)
 
-        def get_test_session():
-            return self.SessionLocal()
-
-        sessions_router.get_session = get_test_session
-        dashboard_router.get_session = get_test_session
-
-        with self.SessionLocal() as session:
-            palace = Palace(title="Memory Palace", description="")
-            session.add(palace)
-            session.commit()
-            self.palace_id = palace.id
-
-        app = FastAPI()
-        app.include_router(sessions_router.router, prefix="/api/v1")
-        app.include_router(dashboard_router.router, prefix="/api/v1")
-        self.client = TestClient(app)
-
-    def tearDown(self):
-        sessions_router.get_session = self.original_sessions_get_session
-        dashboard_router.get_session = self.original_dashboard_get_session
-        Base.metadata.drop_all(self.engine)
-        self.engine.dispose()
+    def seed(self, session):
+        palace = Palace(title="Memory Palace", description="")
+        session.add(palace)
+        session.commit()
+        self.palace_id = palace.id
 
     def test_create_patch_event_complete_and_lookup_by_target(self):
         response = self.client.post(
@@ -131,6 +101,166 @@ class StudySessionRouteTests(unittest.TestCase):
         payload = response.json()
         self.assertEqual(payload["today_total_review_duration_seconds"], 300)
         self.assertEqual(payload["today_learning_palaces"][0]["quiz_seconds"], 300)
+
+    def test_study_session_stats_lock_completed_not_deleted_positive_scene_scope(self):
+        today_start = datetime.combine(date.today(), datetime.min.time())
+        with self.SessionLocal() as session:
+            session.add_all(
+                [
+                    StudySession(
+                        id="stats-review",
+                        status="completed",
+                        scene="review",
+                        target_type="palace",
+                        palace_id=self.palace_id,
+                        started_at=today_start + timedelta(hours=1),
+                        effective_seconds=120,
+                    ),
+                    StudySession(
+                        id="stats-practice",
+                        status="completed",
+                        scene="practice",
+                        target_type="palace",
+                        palace_id=self.palace_id,
+                        started_at=today_start + timedelta(hours=2),
+                        effective_seconds=180,
+                    ),
+                    StudySession(
+                        id="stats-negative",
+                        status="completed",
+                        scene="review",
+                        target_type="palace",
+                        palace_id=self.palace_id,
+                        started_at=today_start + timedelta(hours=3),
+                        effective_seconds=-90,
+                    ),
+                    StudySession(
+                        id="stats-active",
+                        status="active",
+                        scene="review",
+                        target_type="palace",
+                        palace_id=self.palace_id,
+                        started_at=today_start + timedelta(hours=4),
+                        effective_seconds=240,
+                    ),
+                    StudySession(
+                        id="stats-deleted",
+                        status="completed",
+                        scene="review",
+                        target_type="palace",
+                        palace_id=self.palace_id,
+                        started_at=today_start + timedelta(hours=5),
+                        effective_seconds=300,
+                        deleted_at=today_start + timedelta(hours=6),
+                    ),
+                    StudySession(
+                        id="stats-other-scene",
+                        status="completed",
+                        scene="english",
+                        target_type="none",
+                        started_at=today_start + timedelta(hours=7),
+                        effective_seconds=360,
+                    ),
+                ]
+            )
+            session.commit()
+
+        response = self.client.get("/api/v1/study-sessions/stats")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.json(),
+            {
+                "today_total_seconds": 300,
+                "weekly_total_seconds": 300,
+                "today_review_seconds": 120,
+                "weekly_review_seconds": 120,
+            },
+        )
+
+    def test_list_study_sessions_keeps_default_shape_and_supports_pagination(self):
+        base = datetime(2026, 7, 2, 8, 0, 0)
+        with self.SessionLocal() as session:
+            session.add_all(
+                [
+                    StudySession(
+                        id="oldest-session",
+                        status="completed",
+                        scene="practice",
+                        target_type="palace",
+                        target_id=self.palace_id,
+                        palace_id=self.palace_id,
+                        title="Oldest",
+                        started_at=base,
+                        progress_json="{}",
+                        events_json="[]",
+                        summary_json="{}",
+                    ),
+                    StudySession(
+                        id="middle-session",
+                        status="completed",
+                        scene="practice",
+                        target_type="palace",
+                        target_id=self.palace_id,
+                        palace_id=self.palace_id,
+                        title="Middle",
+                        started_at=base + timedelta(minutes=5),
+                        progress_json="{}",
+                        events_json="[]",
+                        summary_json="{}",
+                    ),
+                    StudySession(
+                        id="newest-session",
+                        status="completed",
+                        scene="practice",
+                        target_type="palace",
+                        target_id=self.palace_id,
+                        palace_id=self.palace_id,
+                        title="Newest",
+                        started_at=base + timedelta(minutes=10),
+                        progress_json="{}",
+                        events_json="[]",
+                        summary_json="{}",
+                    ),
+                    StudySession(
+                        id="deleted-session",
+                        status="completed",
+                        scene="practice",
+                        target_type="palace",
+                        target_id=self.palace_id,
+                        palace_id=self.palace_id,
+                        title="Deleted",
+                        started_at=base + timedelta(minutes=15),
+                        progress_json="{}",
+                        events_json="[]",
+                        summary_json="{}",
+                        deleted_at=base + timedelta(minutes=20),
+                    ),
+                ]
+            )
+            session.commit()
+
+        response = self.client.get("/api/v1/study-sessions")
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(set(payload), {"items"})
+        self.assertEqual(
+            [item["id"] for item in payload["items"]],
+            ["newest-session", "middle-session", "oldest-session"],
+        )
+
+        response = self.client.get("/api/v1/study-sessions?limit=1&offset=1")
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["total"], 3)
+        self.assertEqual(payload["limit"], 1)
+        self.assertEqual(payload["offset"], 1)
+        self.assertEqual([item["id"] for item in payload["items"]], ["middle-session"])
+
+    def test_list_study_sessions_rejects_invalid_pagination(self):
+        for query in ("limit=0", "limit=501", "limit=1&offset=-1"):
+            response = self.client.get(f"/api/v1/study-sessions?{query}")
+            self.assertEqual(response.status_code, 422)
 
 
 if __name__ == "__main__":

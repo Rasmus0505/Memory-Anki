@@ -20,9 +20,7 @@ from typing import (
 from sqlalchemy.orm import Session
 
 from memory_anki.core.time import utc_now_naive
-from memory_anki.infrastructure.db.models import (
-    EnglishReadingDictionaryCache,
-)
+from memory_anki.infrastructure.db._tables.english_reading import EnglishReadingDictionaryCache
 from memory_anki.infrastructure.llm.config_helpers import has_non_empty_configs
 from memory_anki.infrastructure.llm.external_ai_call_logs import (
     begin_external_ai_call_log,

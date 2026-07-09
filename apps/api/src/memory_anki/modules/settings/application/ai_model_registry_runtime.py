@@ -5,7 +5,7 @@ from typing import Any, Literal
 
 from sqlalchemy.orm import Session
 
-from memory_anki.infrastructure.db.models import AiModelCatalog, Config
+from memory_anki.infrastructure.db._tables.misc import AiModelCatalog, Config
 
 from .ai_model_registry_catalog import (
     CATEGORY_BY_KEY,

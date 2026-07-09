@@ -8,7 +8,8 @@ from sqlalchemy.orm import Session
 
 from memory_anki.core.config import IMPORT_JOBS_DIR
 from memory_anki.core.time import utc_now_naive
-from memory_anki.infrastructure.db.models import MindMapImportJob, engine
+from memory_anki.infrastructure.db._tables import engine
+from memory_anki.infrastructure.db._tables.misc import MindMapImportJob
 
 from .mindmap_import import (
     ERROR_SNIPPET_LIMIT,
@@ -20,7 +21,6 @@ from .mindmap_import import (
     job_state,
     job_worker,
 )
-from .mindmap_import import ensure_rendered_page_size as _ensure_rendered_page_size
 from .mindmap_import import summarize_model_output as _summarize_model_output
 from .mindmap_import_job_runtime import (
     _stream_call_dashscope_batch_json,

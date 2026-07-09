@@ -9,7 +9,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from memory_anki.core.time import utc_now_naive
-from memory_anki.infrastructure.db.models import EnglishCourse, EnglishGenerationTask
+from memory_anki.infrastructure.db._tables.english import EnglishCourse, EnglishGenerationTask
 from memory_anki.infrastructure.llm.external_ai_call_logs import (
     get_external_ai_call_log,
     list_external_ai_call_logs,

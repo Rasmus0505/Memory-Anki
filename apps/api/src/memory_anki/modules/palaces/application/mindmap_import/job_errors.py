@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from memory_anki.core.request_context import get_request_id
-from memory_anki.infrastructure.db.models import MindMapImportJob
+from memory_anki.infrastructure.db._tables.misc import MindMapImportJob
 
 
 def build_structured_error(

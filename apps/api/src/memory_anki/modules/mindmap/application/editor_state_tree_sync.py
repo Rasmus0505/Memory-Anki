@@ -4,7 +4,8 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from memory_anki.infrastructure.db.models import Chapter, Palace, Peg, Subject
+from memory_anki.infrastructure.db._tables.knowledge import Chapter, Subject
+from memory_anki.infrastructure.db._tables.palaces import Palace, Peg
 from memory_anki.modules.mindmap.application.editor_state_documents import (
     NODE_ID_KEY,
     NODE_TYPE_KEY,

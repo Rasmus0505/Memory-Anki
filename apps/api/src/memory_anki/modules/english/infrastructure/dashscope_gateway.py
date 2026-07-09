@@ -26,6 +26,7 @@ from memory_anki.infrastructure.llm.external_ai_call_logs import (
 )
 from memory_anki.infrastructure.llm.openai_compatible import (
     OpenAICompatibleChatConfig,
+    OpenAICompatibleError,
     call_chat_completion_text,
 )
 from memory_anki.modules.english.domain.errors import (
@@ -85,6 +86,7 @@ class DashscopeEnglishAsrGateway:
         try:
             upload_response = Files.upload(file_path=str(audio_path), purpose="inference")
         except Exception as exc:
+            logger.warning("english asr upload failed", exc_info=True)
             raise EnglishCourseError(f"上传音频到转写服务失败：{exc}") from exc
         upload_output = to_dict(getattr(upload_response, "output", None))
         file_id = resolve_file_id(upload_output)
@@ -103,6 +105,7 @@ class DashscopeEnglishAsrGateway:
         try:
             file_meta = Files.get(file_id=file_id)
         except Exception as exc:
+            logger.warning("english asr file meta fetch failed", exc_info=True)
             raise EnglishCourseError(f"查询转写文件失败：{exc}") from exc
         meta_output = to_dict(getattr(file_meta, "output", None))
         signed_url = resolve_signed_url(meta_output)
@@ -126,6 +129,7 @@ class DashscopeEnglishAsrGateway:
                 enable_itn=False,
             )
         except Exception as exc:
+            logger.warning("english asr task create failed", exc_info=True)
             raise EnglishCourseError(f"创建字幕转写任务失败：{exc}") from exc
         task_output = to_dict(getattr(task_response, "output", None))
         remote_task_id = str(task_output.get("task_id") or "").strip()
@@ -150,6 +154,7 @@ class DashscopeEnglishAsrGateway:
             try:
                 fetch_response = QwenTranscription.fetch(task=remote_task_id)
             except Exception as exc:
+                logger.warning("english asr task poll failed", exc_info=True)
                 raise EnglishCourseError(f"轮询字幕转写任务失败：{exc}") from exc
             fetch_output = to_dict(getattr(fetch_response, "output", None))
             final_fetch_output = fetch_output
@@ -164,7 +169,7 @@ class DashscopeEnglishAsrGateway:
                         }
                     )
                 except Exception:
-                    logger.debug("english asr progress callback failed", exc_info=True)
+                    logger.warning("english asr progress callback failed", exc_info=True)
             append_generation_log_event(
                 task_id=task_id,
                 stage="transcribe",
@@ -191,7 +196,8 @@ class DashscopeEnglishAsrGateway:
             response = requests.get(transcription_url, timeout=60)
             response.raise_for_status()
             payload = response.json()
-        except Exception as exc:
+        except (requests.RequestException, ValueError) as exc:
+            logger.warning("english asr transcription download failed", exc_info=True)
             raise EnglishCourseError(f"下载字幕转写结果失败：{exc}") from exc
         normalized_payload = payload if isinstance(payload, dict) else {}
         append_generation_log_event(
@@ -383,15 +389,22 @@ class DashscopeEnglishTranslator:
                 },
             )
             return parsed
-        except Exception as exc:
+        except EnglishTranslationBatchMismatchError as exc:
             fail_external_ai_call_log(
                 log_id,
                 error_payload={
                     "error": str(exc),
                 },
             )
-            if isinstance(exc, EnglishTranslationBatchMismatchError):
-                raise
+            raise
+        except (OpenAICompatibleError, EnglishCourseError) as exc:
+            fail_external_ai_call_log(
+                log_id,
+                error_payload={
+                    "error": str(exc),
+                },
+            )
+            logger.warning("english batch translation failed", exc_info=True)
             raise EnglishCourseError(f"翻译句子失败：{exc}") from exc
 
     def translate_single_sentence(
@@ -463,13 +476,22 @@ class DashscopeEnglishTranslator:
                 },
             )
             return response_text
-        except Exception as exc:
+        except EnglishCourseError as exc:
             fail_external_ai_call_log(
                 log_id,
                 error_payload={
                     "error": str(exc),
                 },
             )
+            raise
+        except OpenAICompatibleError as exc:
+            fail_external_ai_call_log(
+                log_id,
+                error_payload={
+                    "error": str(exc),
+                },
+            )
+            logger.warning("english single translation failed", exc_info=True)
             raise EnglishCourseError(f"翻译句子失败：{exc}") from exc
 
 
@@ -518,8 +540,8 @@ def to_dict(value: Any) -> dict[str, Any]:
             parsed = value.to_dict()
             if isinstance(parsed, dict):
                 return parsed
-        except Exception:
-            pass
+        except (TypeError, ValueError, AttributeError):
+            logger.debug("dashscope response to_dict failed", exc_info=True)
     return {}
 
 

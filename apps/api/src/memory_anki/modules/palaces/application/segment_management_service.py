@@ -6,7 +6,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from memory_anki.core.time import utc_now_naive
-from memory_anki.infrastructure.db.models import Palace, PalaceSegment
+from memory_anki.infrastructure.db._tables.palaces import Palace, PalaceSegment
 from memory_anki.modules.palaces.application.segment_nodes import (
     normalize_segment_node_uids,
     serialize_segment_node_uids,

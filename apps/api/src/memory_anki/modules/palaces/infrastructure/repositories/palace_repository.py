@@ -43,14 +43,37 @@ class PalaceRepository:
 
     # ---- Palace reads ----
 
-    def list_palaces(self, *, search: str = "") -> list[Palace]:
-        query = self._session.query(Palace).options(*_detail_loader_options())
+    def list_palaces(
+        self,
+        *,
+        search: str = "",
+        limit: int | None = None,
+        offset: int = 0,
+    ) -> list[Palace]:
+        query = (
+            self._session.query(Palace)
+            .options(*_detail_loader_options())
+            .filter(Palace.deleted_at.is_(None))
+        )
         if search:
             query = query.filter(Palace.title.ilike(f"%{search}%"))
-        return query.order_by(Palace.updated_at.desc()).all()
+        query = query.order_by(Palace.updated_at.desc())
+        if limit is not None:
+            query = query.offset(max(0, offset)).limit(limit)
+        return query.all()
+
+    def count_palaces(self, *, search: str = "") -> int:
+        query = self._session.query(Palace).filter(Palace.deleted_at.is_(None))
+        if search:
+            query = query.filter(Palace.title.ilike(f"%{search}%"))
+        return query.count()
 
     def list_catalog_palaces(self, *, search: str = "") -> list[Palace]:
-        query = self._session.query(Palace).options(*_catalog_loader_options())
+        query = (
+            self._session.query(Palace)
+            .options(*_catalog_loader_options())
+            .filter(Palace.deleted_at.is_(None))
+        )
         if search:
             query = query.filter(Palace.title.ilike(f"%{search}%"))
         return query.order_by(Palace.updated_at.desc()).all()
@@ -59,16 +82,31 @@ class PalaceRepository:
         return (
             self._session.query(Palace)
             .options(*_detail_loader_options())
-            .filter_by(id=palace_id)
+            .filter(Palace.id == palace_id, Palace.deleted_at.is_(None))
             .first()
         )
 
     def list_palaces_by_primary_chapter(self, chapter_id: int) -> list[Palace]:
         return (
             self._session.query(Palace)
-            .filter_by(primary_chapter_id=chapter_id)
+            .filter(
+                Palace.primary_chapter_id == chapter_id,
+                Palace.deleted_at.is_(None),
+            )
             .all()
         )
+
+    def list_deleted_palaces(self) -> list[Palace]:
+        return (
+            self._session.query(Palace)
+            .options(*_catalog_loader_options())
+            .filter(Palace.deleted_at.isnot(None))
+            .order_by(Palace.deleted_at.desc(), Palace.id.desc())
+            .all()
+        )
+
+    def get_any_palace(self, palace_id: int) -> Palace | None:
+        return self._session.query(Palace).filter(Palace.id == palace_id).first()
 
     # ---- Palace writes ----
 
@@ -83,6 +121,7 @@ class PalaceRepository:
         return (
             self._session.query(Palace)
             .filter(Palace.archived == True)  # noqa: E712
+            .filter(Palace.deleted_at.is_(None))
             .update({Palace.archived: False}, synchronize_session=False)
         )
 

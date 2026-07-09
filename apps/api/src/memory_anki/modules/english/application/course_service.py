@@ -11,12 +11,12 @@ from sqlalchemy.orm import Session, selectinload
 
 from memory_anki.core.config import ENGLISH_MEDIA_DIR
 from memory_anki.core.time import utc_now_naive
-from memory_anki.infrastructure.db.models import (
+from memory_anki.infrastructure.db._tables.english import (
     EnglishCourse,
     EnglishCourseProgress,
     EnglishSentence,
-    StudySession,
 )
+from memory_anki.infrastructure.db._tables.misc import StudySession
 from memory_anki.modules.english.domain.errors import EnglishCourseError
 from memory_anki.modules.english.domain.text import check_sentence_tokens
 from memory_anki.modules.english.infrastructure.generation_log_store import (

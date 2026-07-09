@@ -5,7 +5,8 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from memory_anki.infrastructure.db.models import Chapter, Palace, PalaceGroup
+from memory_anki.infrastructure.db._tables.knowledge import Chapter
+from memory_anki.infrastructure.db._tables.palaces import Palace, PalaceGroup
 from memory_anki.modules.palaces.application.palace_chapter_binding import (
     _chapter_outline_path,
     reconcile_palace_chapter_binding,

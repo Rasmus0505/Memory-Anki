@@ -9,7 +9,7 @@ from pathlib import Path
 
 from sqlalchemy.orm import Session
 
-from memory_anki.infrastructure.db.models import Palace, PalaceVersion
+from memory_anki.infrastructure.db._tables.palaces import Palace, PalaceVersion
 from memory_anki.modules.backups.application.editor_safety import count_editor_doc_nodes
 
 

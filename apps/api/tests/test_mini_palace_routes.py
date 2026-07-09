@@ -2,19 +2,15 @@ import json
 import unittest
 from datetime import date, datetime, timedelta
 
-from fastapi import FastAPI
-from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
-
-from memory_anki.infrastructure.db.models import (
-    Base,
+from memory_anki.infrastructure.db._tables.palaces import (
     Palace,
     PalaceMiniPalace,
     ReviewSchedule,
 )
 from memory_anki.modules.palaces.presentation import router as palace_router
+from support import RouterTestCase
+
+PalaceMiniPalaceReviewSchedule = None
 
 
 def build_editor_doc(include_child_a: bool = True) -> str:
@@ -39,41 +35,29 @@ def build_editor_doc(include_child_a: bool = True) -> str:
     )
 
 
-class MiniPalaceRouteTests(unittest.TestCase):
+class MiniPalaceRouteTests(RouterTestCase):
+    ROUTER_MODULES = (palace_router,)
+
     def setUp(self):
-        self.engine = create_engine(
-            "sqlite://",
-            connect_args={"check_same_thread": False},
-            poolclass=StaticPool,
-        )
-        Base.metadata.create_all(self.engine)
-        self.SessionLocal = sessionmaker(bind=self.engine)
-        self.original_get_session = palace_router.get_session
         self.original_backup = palace_router.maybe_create_rolling_backup
-
-        def get_test_session():
-            return self.SessionLocal()
-
-        palace_router.get_session = get_test_session
         palace_router.maybe_create_rolling_backup = lambda *_args, **_kwargs: None
+        super().setUp()
 
-        with self.SessionLocal() as session:
-            palace = Palace(
-                title="Test Palace",
-                description="",
-                editor_doc=build_editor_doc(),
-            )
-            session.add(palace)
-            session.commit()
-            self.palace_id = palace.id
-
-        app = FastAPI()
-        app.include_router(palace_router.router, prefix="/api/v1")
-        self.client = TestClient(app)
+    def seed(self, session):
+        palace = Palace(
+            title="Test Palace",
+            description="",
+            editor_doc=build_editor_doc(),
+        )
+        session.add(palace)
+        session.commit()
+        self.palace_id = palace.id
 
     def tearDown(self):
-        palace_router.get_session = self.original_get_session
-        palace_router.maybe_create_rolling_backup = self.original_backup
+        try:
+            super().tearDown()
+        finally:
+            palace_router.maybe_create_rolling_backup = self.original_backup
 
     def test_creates_default_names_and_allows_overlapping_node_sets(self):
         first = self.client.post(
@@ -148,15 +132,20 @@ class MiniPalaceRouteTests(unittest.TestCase):
             [],
         )
 
-    def test_deleting_palace_cascades_mini_palaces(self):
-        self.client.post(
+    def test_deleting_palace_hides_mini_palaces_from_active_routes(self):
+        created = self.client.post(
             f"/api/v1/palaces/{self.palace_id}/mini-palaces",
             json={"node_uids": ["child-a"]},
-        )
+        ).json()["item"]
         self.client.delete(f"/api/v1/palaces/{self.palace_id}")
 
         with self.SessionLocal() as session:
-            self.assertEqual(session.query(PalaceMiniPalace).count(), 0)
+            self.assertEqual(session.query(PalaceMiniPalace).count(), 1)
+            self.assertIsNotNone(session.get(PalaceMiniPalace, created["id"]))
+
+        listed = self.client.get(f"/api/v1/palaces/{self.palace_id}/mini-palaces")
+        self.assertEqual(listed.status_code, 404)
+        self.assertEqual(listed.json()["detail"], "not found")
 
     def test_updates_mini_review_mode_and_shelf_counts_follow_mini_only_effective_review(self):
         later_today = datetime.now().replace(second=0, microsecond=0) + timedelta(hours=2)

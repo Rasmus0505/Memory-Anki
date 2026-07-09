@@ -5,7 +5,7 @@ import re
 
 from sqlalchemy.orm import Session
 
-from memory_anki.infrastructure.db.models import Palace, Peg
+from memory_anki.infrastructure.db._tables.palaces import Palace, Peg
 
 
 def _peg_tree(pegs) -> list[dict]:

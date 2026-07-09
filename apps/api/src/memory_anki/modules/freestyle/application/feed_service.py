@@ -7,8 +7,8 @@ from typing import Any
 from sqlalchemy.orm import Session, load_only, selectinload
 
 from memory_anki.core.time import utc_now_naive
-from memory_anki.infrastructure.db.models import (
-    Chapter,
+from memory_anki.infrastructure.db._tables.knowledge import Chapter
+from memory_anki.infrastructure.db._tables.palaces import (
     Palace,
     PalaceQuizQuestion,
     ReviewSchedule,
@@ -28,18 +28,32 @@ FREESTYLE_RANGE_ALL = "all"
 FREESTYLE_RANGE_DUE = "due"
 FREESTYLE_RANGE_NEEDS_PRACTICE = "needs_practice"
 FREESTYLE_RANGE_SPECIFIC_PALACES = "specific_palaces"
+FREESTYLE_RANGE_WRONG = "wrong"
 
 FREESTYLE_RANGES = {
     FREESTYLE_RANGE_ALL,
     FREESTYLE_RANGE_DUE,
     FREESTYLE_RANGE_NEEDS_PRACTICE,
     FREESTYLE_RANGE_SPECIFIC_PALACES,
+    FREESTYLE_RANGE_WRONG,
 }
 
 CONTENT_TYPE_REVIEW = "review"
 CONTENT_TYPE_PRACTICE = "practice"
 CONTENT_TYPE_ENGLISH = "english"
 CONTENT_TYPE_ENGLISH_READING = "english_reading"
+
+FEED_CONTENT_TYPE_WEIGHTS = {
+    CONTENT_TYPE_REVIEW: 50,
+    CONTENT_TYPE_QUIZ_QUESTION: 40,
+    CONTENT_TYPE_PRACTICE: 30,
+    CONTENT_TYPE_ENGLISH: 20,
+    CONTENT_TYPE_ENGLISH_READING: 10,
+}
+
+QUIZ_DUE_PRIORITY = 96
+QUIZ_PRACTICE_PRIORITY = 66
+QUIZ_DEFAULT_PRIORITY = 60
 
 FREESTYLE_CONTENT_TYPES = {
     CONTENT_TYPE_QUIZ_QUESTION,
@@ -141,7 +155,10 @@ def _load_active_palaces(
             selectinload(Palace.mini_palaces),
             selectinload(Palace.segments),
         )
-        .filter(Palace.archived == False)
+        .filter(
+            Palace.archived == False,
+            Palace.deleted_at.is_(None),
+        )
         .order_by(Palace.group_sort_order.asc(), Palace.id.asc())
     )
     if range_filter == FREESTYLE_RANGE_SPECIFIC_PALACES:
@@ -173,6 +190,7 @@ def _due_palace_ids(session: Session, candidate_ids: set[int] | None) -> set[int
             ReviewSchedule.completed == False,
             Palace.archived == False,
             Palace.mastered == False,
+            Palace.deleted_at.is_(None),
         )
     )
     if candidate_ids is not None:
@@ -205,7 +223,7 @@ def _build_review_cards(
     candidate_ids: set[int] | None,
     range_filter: str,
 ) -> list[dict[str, Any]]:
-    if range_filter == FREESTYLE_RANGE_NEEDS_PRACTICE:
+    if range_filter in (FREESTYLE_RANGE_NEEDS_PRACTICE, FREESTYLE_RANGE_WRONG):
         return []
     now = datetime.now()
     groups: OrderedDict[int, dict[str, Any]] = OrderedDict()
@@ -228,6 +246,7 @@ def _build_review_cards(
             ReviewSchedule.completed == False,
             Palace.archived == False,
             Palace.mastered == False,
+            Palace.deleted_at.is_(None),
         )
     )
     if candidate_ids is not None:
@@ -279,7 +298,7 @@ def _build_practice_cards(
     candidate_ids: set[int] | None,
     range_filter: str,
 ) -> list[dict[str, Any]]:
-    if range_filter == FREESTYLE_RANGE_DUE:
+    if range_filter in (FREESTYLE_RANGE_DUE, FREESTYLE_RANGE_WRONG):
         return []
     cards: list[dict[str, Any]] = []
     for palace in palaces:
@@ -388,6 +407,116 @@ def _build_english_reading_cards(session: Session, range_filter: str) -> list[di
     return cards
 
 
+def _card_palace_id(card: dict[str, Any]) -> int | None:
+    context = card.get("palace_context")
+    if not isinstance(context, dict):
+        return None
+    palace_id = context.get("id")
+    try:
+        return int(palace_id)
+    except (TypeError, ValueError):
+        return None
+
+
+def _feed_card_identity(card: dict[str, Any]) -> str:
+    if card.get("type") == "quiz_question":
+        question = card.get("question")
+        if isinstance(question, dict):
+            question_id = question.get("id")
+            if question_id is not None:
+                return f"quiz_question:{question_id}"
+    return str(card.get("id") or "")
+
+
+def _feed_card_action_priority(
+    card: dict[str, Any],
+    *,
+    due_ids: set[int],
+    practice_ids: set[int],
+) -> int:
+    if card.get("type") == "action":
+        try:
+            return int(card.get("priority") or 0)
+        except (TypeError, ValueError):
+            return 0
+
+    if card.get("type") != "quiz_question":
+        return 0
+
+    palace_id = _card_palace_id(card)
+    if palace_id in due_ids:
+        return QUIZ_DUE_PRIORITY
+    if palace_id in practice_ids:
+        return QUIZ_PRACTICE_PRIORITY
+    return QUIZ_DEFAULT_PRIORITY
+
+
+def _feed_due_rank(card: dict[str, Any], *, due_ids: set[int]) -> int:
+    priority = _feed_card_action_priority(card, due_ids=due_ids, practice_ids=set())
+    if card.get("content_type") == CONTENT_TYPE_REVIEW and priority >= 110:
+        return 2
+    if card.get("content_type") == CONTENT_TYPE_REVIEW and priority >= 100:
+        return 1
+    palace_id = _card_palace_id(card)
+    return 1 if palace_id in due_ids else 0
+
+
+def _feed_type_weight(card: dict[str, Any]) -> int:
+    return FEED_CONTENT_TYPE_WEIGHTS.get(str(card.get("content_type") or ""), 0)
+
+
+def _feed_rank(
+    card: dict[str, Any],
+    *,
+    due_ids: set[int],
+    practice_ids: set[int],
+) -> tuple[int, int, int]:
+    return (
+        _feed_card_action_priority(card, due_ids=due_ids, practice_ids=practice_ids),
+        _feed_due_rank(card, due_ids=due_ids),
+        _feed_type_weight(card),
+    )
+
+
+def _dedupe_and_sort_feed_cards(
+    cards: list[dict[str, Any]],
+    *,
+    due_ids: set[int],
+    practice_ids: set[int],
+) -> list[dict[str, Any]]:
+    best_by_identity: dict[str, tuple[int, dict[str, Any]]] = {}
+    anonymous_cards: list[tuple[int, dict[str, Any]]] = []
+
+    for index, card in enumerate(cards):
+        identity = _feed_card_identity(card)
+        if not identity:
+            anonymous_cards.append((index, card))
+            continue
+        existing = best_by_identity.get(identity)
+        if existing is None:
+            best_by_identity[identity] = (index, card)
+            continue
+        existing_index, existing_card = existing
+        if _feed_rank(card, due_ids=due_ids, practice_ids=practice_ids) > _feed_rank(
+            existing_card,
+            due_ids=due_ids,
+            practice_ids=practice_ids,
+        ):
+            best_by_identity[identity] = (existing_index, card)
+
+    ranked_cards = [*best_by_identity.values(), *anonymous_cards]
+    ranked_cards.sort(
+        key=lambda item: (
+            -_feed_card_action_priority(item[1], due_ids=due_ids, practice_ids=practice_ids),
+            -_feed_due_rank(item[1], due_ids=due_ids),
+            -_feed_type_weight(item[1]),
+            item[0],
+            str(item[1].get("id") or ""),
+        )
+    )
+    return [card for _, card in ranked_cards]
+
+
 def build_freestyle_feed(
     session: Session,
     *,
@@ -420,6 +549,7 @@ def build_freestyle_feed(
                 practice_ids=practice_ids,
                 due_range=FREESTYLE_RANGE_DUE,
                 needs_practice_range=FREESTYLE_RANGE_NEEDS_PRACTICE,
+                wrong_range=FREESTYLE_RANGE_WRONG,
             )
         )
     if CONTENT_TYPE_REVIEW in content_types:
@@ -449,6 +579,8 @@ def build_freestyle_feed(
         cards.extend(_build_english_card_from_course(session, range_filter))
     if CONTENT_TYPE_ENGLISH_READING in content_types:
         cards.extend(_build_english_reading_cards(session, range_filter))
+
+    cards = _dedupe_and_sort_feed_cards(cards, due_ids=due_ids, practice_ids=practice_ids)
 
     counts = {content_type: 0 for content_type in FREESTYLE_CONTENT_TYPES}
     for card in cards:

@@ -5,7 +5,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from memory_anki.infrastructure.db.models import Palace
+from memory_anki.infrastructure.db._tables.palaces import Palace
 from memory_anki.modules.mindmap.application.editor_state_documents import (
     NODE_UID_KEY,
     deserialize_editor_payload,

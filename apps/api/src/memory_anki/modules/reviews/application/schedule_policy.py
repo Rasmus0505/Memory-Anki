@@ -24,13 +24,9 @@ class ReviewScheduleDraft:
     anchor_date: date
 
 
-def normalize_algorithm(algorithm: str | None) -> str:
-    return "ebbinghaus"
-
-
 def load_review_schedule_policy(session) -> ReviewSchedulePolicy:
     from memory_anki.core.config import DEFAULTS
-    from memory_anki.infrastructure.db.models import Config
+    from memory_anki.infrastructure.db._tables.misc import Config
 
     keys = [
         "ebbinghaus_intervals",
@@ -64,7 +60,6 @@ def load_review_schedule_policy(session) -> ReviewSchedulePolicy:
 
 def get_algorithm_intervals_for_policy(
     policy: ReviewSchedulePolicy,
-    algorithm: str,
 ) -> list[str]:
     intervals = list(policy.ebbinghaus_intervals)
     if not intervals:
@@ -74,9 +69,8 @@ def get_algorithm_intervals_for_policy(
 
 def get_initial_same_day_slot_count_for_policy(
     policy: ReviewSchedulePolicy,
-    algorithm: str,
 ) -> int:
-    intervals = get_algorithm_intervals_for_policy(policy, algorithm)
+    intervals = get_algorithm_intervals_for_policy(policy)
     count = 0
     for value in intervals:
         if value in {"1h", "sleep"}:
@@ -90,15 +84,13 @@ def build_review_schedule_draft(
     policy: ReviewSchedulePolicy,
     *,
     review_number: int,
-    algorithm: str,
     base_date: date,
     anchor_date: date,
     base_datetime: datetime | None = None,
     completed: bool = False,
     completed_at: datetime | None = None,
 ) -> ReviewScheduleDraft | None:
-    intervals = get_algorithm_intervals_for_policy(policy, algorithm)
-    normalized_algorithm = normalize_algorithm(algorithm)
+    intervals = get_algorithm_intervals_for_policy(policy)
     if review_number >= len(intervals):
         return None
 
@@ -109,14 +101,12 @@ def build_review_schedule_draft(
             policy,
             value,
             base_datetime,
-            normalized_algorithm,
         )
         scheduled_date = scheduled_at.date()
     else:
         interval_days, scheduled_date, review_type, algorithm_used = resolve_interval_from_base_date(
             value,
             base_date,
-            normalized_algorithm,
         )
     return ReviewScheduleDraft(
         scheduled_date=scheduled_date,
@@ -132,7 +122,7 @@ def build_review_schedule_draft(
 
 
 def create_review_schedule_from_draft(session, *, palace_id: int, draft: ReviewScheduleDraft):
-    from memory_anki.infrastructure.db.models import ReviewSchedule
+    from memory_anki.infrastructure.db._tables.palaces import ReviewSchedule
 
     schedule = ReviewSchedule(
         palace_id=palace_id,
@@ -180,45 +170,30 @@ def schedule_display_datetime_for_policy(
     return datetime.combine(scheduled_date, display_time)
 
 
-def resolve_interval(value: str, anchor_date: date | None, algorithm: str) -> tuple[int, date, str, str]:
-    today = date.today()
+def resolve_interval_from_base_date(value: str, base_date: date) -> tuple[int, date, str, str]:
     if value == "1h":
-        return 0, today, "1h", algorithm
+        return 0, base_date, "1h", "ebbinghaus"
     if value == "sleep":
-        return 0, today, "sleep", algorithm
-
+        return 0, base_date, "sleep", "ebbinghaus"
     days = int(value)
-    base = anchor_date or today
-    return days, base + timedelta(days=days), "standard", algorithm
-
-
-def resolve_interval_from_base_date(value: str, base_date: date, algorithm: str) -> tuple[int, date, str, str]:
-    normalized_algorithm = normalize_algorithm(algorithm)
-    if value == "1h":
-        return 0, base_date, "1h", normalized_algorithm
-    if value == "sleep":
-        return 0, base_date, "sleep", normalized_algorithm
-    days = int(value)
-    return days, base_date + timedelta(days=days), "standard", normalized_algorithm
+    return days, base_date + timedelta(days=days), "standard", "ebbinghaus"
 
 
 def resolve_interval_from_base_datetime_for_policy(
     policy: ReviewSchedulePolicy,
     value: str,
     base_datetime: datetime,
-    algorithm: str,
 ) -> tuple[int, datetime, str, str]:
-    normalized_algorithm = normalize_algorithm(algorithm)
     clean_value = str(value or "").strip()
     if clean_value == "1h":
-        return 0, base_datetime + timedelta(hours=1), "1h", normalized_algorithm
+        return 0, base_datetime + timedelta(hours=1), "1h", "ebbinghaus"
     if clean_value == "sleep":
         sleep_at = datetime.combine(base_datetime.date(), policy.sleep_review_time)
         if base_datetime >= sleep_at:
             sleep_at += timedelta(days=1)
-        return 0, sleep_at, "sleep", normalized_algorithm
+        return 0, sleep_at, "sleep", "ebbinghaus"
     days = int(clean_value)
-    return days, base_datetime + timedelta(days=days), "standard", normalized_algorithm
+    return days, base_datetime + timedelta(days=days), "standard", "ebbinghaus"
 
 
 def _split_intervals(raw: str) -> tuple[str, ...]:

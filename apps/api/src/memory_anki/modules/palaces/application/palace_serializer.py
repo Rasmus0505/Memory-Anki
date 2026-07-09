@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from sqlalchemy.orm import Session
 
-from memory_anki.infrastructure.db.models import ReviewSchedule
+from memory_anki.infrastructure.db._tables.palaces import ReviewSchedule
 from memory_anki.modules.palaces.application.focus_service import parse_focus_node_uids
 from memory_anki.modules.palaces.application.mini_palace_service import (
     list_palace_mini_palaces,
@@ -33,7 +33,6 @@ from memory_anki.modules.palaces.application.title_sync_service import (
 from memory_anki.modules.reviews.application.schedule_service import (
     get_algorithm_stage_labels,
     is_schedule_due,
-    normalize_algorithm,
 )
 from memory_anki.modules.reviews.application.schedule_service import (
     schedule_display_datetime as review_schedule_display_datetime,
@@ -69,11 +68,21 @@ def review_plan_item_json(
     }
 
 
-def palace_json(p, session: Session | None = None) -> dict:
+def palace_json(
+    p,
+    session: Session | None = None,
+    *,
+    precomputed_explicit_chapter_ids: set[int] | None = None,
+    precomputed_stage_labels: list[str] | None = None,
+) -> dict:
     explicit_chapter_ids: set[int] = set()
     if session is not None:
         reconcile_palace_chapter_binding(session, p)
-        explicit_chapter_ids = get_palace_explicit_chapter_ids(session, p)
+        explicit_chapter_ids = (
+            precomputed_explicit_chapter_ids
+            if precomputed_explicit_chapter_ids is not None
+            else get_palace_explicit_chapter_ids(session, p)
+        )
     next_schedule = None
     pending_schedules = [schedule for schedule in (p.review_schedules or []) if not schedule.completed]
     if pending_schedules:
@@ -91,15 +100,11 @@ def palace_json(p, session: Session | None = None) -> dict:
     )
     stage_labels: list[str] = []
     if session:
-        current_algorithm = next(
-            (
-                normalize_algorithm(schedule.algorithm_used)
-                for schedule in (p.review_schedules or [])
-                if schedule.algorithm_used
-            ),
-            "ebbinghaus",
+        stage_labels = (
+            precomputed_stage_labels
+            if precomputed_stage_labels is not None
+            else get_algorithm_stage_labels(session)
         )
-        stage_labels = get_algorithm_stage_labels(session, current_algorithm)
     default_segment = (
         build_palace_default_segment_summary(session, p)
         if session is not None
@@ -169,11 +174,21 @@ def palace_json(p, session: Session | None = None) -> dict:
     }
 
 
-def palace_summary_json(p, session: Session | None = None) -> dict:
+def palace_summary_json(
+    p,
+    session: Session | None = None,
+    *,
+    precomputed_explicit_chapter_ids: set[int] | None = None,
+    precomputed_stage_labels: list[str] | None = None,
+) -> dict:
     explicit_chapter_ids: set[int] = set()
     if session is not None:
         reconcile_palace_chapter_binding(session, p)
-        explicit_chapter_ids = get_palace_explicit_chapter_ids(session, p)
+        explicit_chapter_ids = (
+            precomputed_explicit_chapter_ids
+            if precomputed_explicit_chapter_ids is not None
+            else get_palace_explicit_chapter_ids(session, p)
+        )
     next_schedule = None
     pending_schedules = [schedule for schedule in (p.review_schedules or []) if not schedule.completed]
     if pending_schedules:
@@ -191,15 +206,11 @@ def palace_summary_json(p, session: Session | None = None) -> dict:
     )
     stage_labels: list[str] = []
     if session:
-        current_algorithm = next(
-            (
-                normalize_algorithm(schedule.algorithm_used)
-                for schedule in (p.review_schedules or [])
-                if schedule.algorithm_used
-            ),
-            "ebbinghaus",
+        stage_labels = (
+            precomputed_stage_labels
+            if precomputed_stage_labels is not None
+            else get_algorithm_stage_labels(session)
         )
-        stage_labels = get_algorithm_stage_labels(session, current_algorithm)
 
     primary_chapter = getattr(p, "primary_chapter", None)
     resolved_subject = resolve_palace_subject(p)
@@ -258,12 +269,27 @@ def palace_summary_json(p, session: Session | None = None) -> dict:
     }
 
 
-def palace_card_json(p, session: Session | None = None) -> dict:
+def palace_card_json(
+    p,
+    session: Session | None = None,
+    *,
+    precomputed_explicit_chapter_ids: set[int] | None = None,
+    precomputed_stage_labels: list[str] | None = None,
+) -> dict:
     """Serialize the palace catalog card without large editor/peg payloads."""
-    payload = palace_summary_json(p, session)
+    payload = palace_summary_json(
+        p,
+        session,
+        precomputed_explicit_chapter_ids=precomputed_explicit_chapter_ids,
+        precomputed_stage_labels=precomputed_stage_labels,
+    )
     explicit_chapter_ids: set[int] = set()
     if session is not None:
-        explicit_chapter_ids = get_palace_explicit_chapter_ids(session, p)
+        explicit_chapter_ids = (
+            precomputed_explicit_chapter_ids
+            if precomputed_explicit_chapter_ids is not None
+            else get_palace_explicit_chapter_ids(session, p)
+        )
     stage_labels = payload.get("stage_labels") if isinstance(payload.get("stage_labels"), list) else []
     default_segment = (
         build_palace_default_segment_summary(session, p)

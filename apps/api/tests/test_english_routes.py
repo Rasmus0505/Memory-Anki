@@ -1,24 +1,20 @@
 import io
 import json
 import tempfile
-import unittest
 from pathlib import Path
 
-from fastapi import FastAPI
-from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
-
-from memory_anki.infrastructure.db.models import Base, EnglishCourse, EnglishGenerationTask
+from memory_anki.core.concurrency_limits import concurrency_slot
+from memory_anki.infrastructure.db._tables.english import EnglishCourse, EnglishGenerationTask
 from memory_anki.modules.english.application import course_service, task_service
 from memory_anki.modules.english.application.asr_normalization import prepare_sentences_from_asr
+from memory_anki.modules.english.domain.errors import EnglishCourseError
 from memory_anki.modules.english.domain.text import (
     check_sentence_tokens,
     tokenize_learning_sentence,
 )
 from memory_anki.modules.english.infrastructure import dashscope_gateway, paths
 from memory_anki.modules.english.presentation import router as english_router
+from support import RouterTestCase
 
 TOKEN_VECTOR_PATH = Path(__file__).resolve().parents[2] / "shared" / "english-token-vectors.json"
 
@@ -41,16 +37,10 @@ class NoopTranslator:
         return sentences
 
 
-class EnglishRouteTests(unittest.TestCase):
+class EnglishRouteTests(RouterTestCase):
+    ROUTER_MODULES = (english_router,)
+
     def setUp(self):
-        self.engine = create_engine(
-            "sqlite://",
-            connect_args={"check_same_thread": False},
-            poolclass=StaticPool,
-        )
-        Base.metadata.create_all(self.engine)
-        self.SessionLocal = sessionmaker(bind=self.engine)
-        self.original_router_get_session = english_router.get_session
         self.original_task_get_session = task_service.get_session
         self.original_runtime = task_service.get_english_runtime()
         self.original_call_chat_completion_text = dashscope_gateway.call_chat_completion_text
@@ -59,6 +49,8 @@ class EnglishRouteTests(unittest.TestCase):
         self.original_course_media_dir = course_service.ENGLISH_MEDIA_DIR
         self.original_paths_media_dir = paths.ENGLISH_MEDIA_DIR
         self.original_paths_tasks_dir = paths.ENGLISH_TASKS_DIR
+        self.original_task_extract_audio_track_to_wav = task_service.extract_audio_track_to_wav
+        self.original_task_probe_media_duration_seconds = task_service.probe_media_duration_seconds
         self.original_probe_media_duration_seconds = course_service.probe_media_duration_seconds
         self.temp_dir = tempfile.TemporaryDirectory()
         self.media_dir = Path(self.temp_dir.name) / "english_media"
@@ -71,18 +63,14 @@ class EnglishRouteTests(unittest.TestCase):
         dashscope_gateway.DASHSCOPE_API_KEY = "test-key"
         dashscope_gateway.ENGLISH_TRANSLATION_MODEL = "qwen-mt-flash"
 
+        super().setUp()
+
         def get_test_session():
             return self.SessionLocal()
 
-        english_router.get_session = get_test_session
         task_service.get_session = get_test_session
 
-        app = FastAPI()
-        app.include_router(english_router.router, prefix="/api/v1")
-        self.client = TestClient(app)
-
     def tearDown(self):
-        english_router.get_session = self.original_router_get_session
         task_service.get_session = self.original_task_get_session
         task_service.configure_english_runtime(self.original_runtime)
         dashscope_gateway.call_chat_completion_text = self.original_call_chat_completion_text
@@ -91,9 +79,10 @@ class EnglishRouteTests(unittest.TestCase):
         course_service.ENGLISH_MEDIA_DIR = self.original_course_media_dir
         paths.ENGLISH_MEDIA_DIR = self.original_paths_media_dir
         paths.ENGLISH_TASKS_DIR = self.original_paths_tasks_dir
+        task_service.extract_audio_track_to_wav = self.original_task_extract_audio_track_to_wav
+        task_service.probe_media_duration_seconds = self.original_task_probe_media_duration_seconds
         course_service.probe_media_duration_seconds = self.original_probe_media_duration_seconds
-        Base.metadata.drop_all(self.engine)
-        self.engine.dispose()
+        super().tearDown()
         self.temp_dir.cleanup()
 
     def test_upload_generates_course_and_progress_flow(self):
@@ -278,6 +267,16 @@ class EnglishRouteTests(unittest.TestCase):
         self.assertIsNone(workspace.json()["currentTask"])
         self.assertEqual(workspace.json()["recentCourses"], [])
 
+    def test_upload_rejects_while_heavy_upload_slot_is_held(self):
+        with concurrency_slot("heavy_upload"):
+            response = self.client.post(
+                "/api/v1/english/upload",
+                files={"video_file": ("busy.mp4", io.BytesIO(b"busy"), "video/mp4")},
+            )
+
+        self.assertEqual(response.status_code, 429)
+        self.assertIn("已有同类 AI 任务在进行中", response.json()["detail"])
+
     def test_workspace_repairs_implausible_course_durations(self):
         def fake_launch(task_id: str):
             with self.SessionLocal() as session:
@@ -357,34 +356,139 @@ class EnglishRouteTests(unittest.TestCase):
                 result = check_sentence_tokens(vector["tokens"], vector["checkInput"])
                 self.assertEqual(result.passed, vector["checkPassed"])
 
-    def test_startup_cleanup_marks_non_completed_tasks_cleared_and_removes_task_dirs(self):
+    def test_cleanup_marks_running_task_as_interrupted_failed(self):
         with self.SessionLocal() as session:
             completed = EnglishGenerationTask(id="completed-task", status="completed", stage="completed")
             already_cleared = EnglishGenerationTask(id="cleared-task", status="cleared", stage="cleared")
             failed = EnglishGenerationTask(id="failed-task", status="failed", stage="failed")
             running = EnglishGenerationTask(id="running-task", status="running", stage="transcribe")
             queued = EnglishGenerationTask(id="queued-task", status="queued", stage="queued")
-            session.add_all([completed, already_cleared, failed, running, queued])
+            retried = EnglishGenerationTask(id="retried-task", status="retried", stage="retried")
+            session.add_all([completed, already_cleared, failed, running, queued, retried])
             session.commit()
 
-            for task_id in ["failed-task", "running-task", "queued-task", "completed-task", "cleared-task"]:
+            for task_id in [
+                "failed-task",
+                "running-task",
+                "queued-task",
+                "completed-task",
+                "cleared-task",
+                "retried-task",
+            ]:
                 task_path = paths.task_dir(task_id)
                 task_path.mkdir(parents=True, exist_ok=True)
                 (task_path / "temp.txt").write_text("temporary", encoding="utf-8")
 
             result = task_service.cleanup_incomplete_generation_tasks(session)
 
-            self.assertEqual(result, {"cleared": 3})
+            self.assertEqual(result, {"cleared": 1, "interrupted": 2})
             self.assertEqual(session.get(EnglishGenerationTask, "completed-task").status, "completed")
             self.assertEqual(session.get(EnglishGenerationTask, "cleared-task").status, "cleared")
-            self.assertEqual(session.get(EnglishGenerationTask, "failed-task").status, "cleared")
-            self.assertEqual(session.get(EnglishGenerationTask, "running-task").status, "cleared")
-            self.assertEqual(session.get(EnglishGenerationTask, "queued-task").status, "cleared")
+            self.assertEqual(session.get(EnglishGenerationTask, "failed-task").status, "failed")
+            self.assertEqual(session.get(EnglishGenerationTask, "running-task").status, "failed")
+            self.assertEqual(session.get(EnglishGenerationTask, "running-task").stage, "interrupted")
+            self.assertEqual(
+                session.get(EnglishGenerationTask, "running-task").message,
+                "生成因服务重启被中断，可点击重试继续。",
+            )
+            self.assertEqual(
+                session.get(EnglishGenerationTask, "running-task").error_message,
+                "服务重启导致任务中断。",
+            )
+            self.assertEqual(session.get(EnglishGenerationTask, "queued-task").status, "failed")
+            self.assertEqual(session.get(EnglishGenerationTask, "queued-task").stage, "interrupted")
+            self.assertEqual(session.get(EnglishGenerationTask, "retried-task").status, "cleared")
             self.assertTrue(paths.task_dir("completed-task").exists())
             self.assertTrue(paths.task_dir("cleared-task").exists())
-            self.assertFalse(paths.task_dir("failed-task").exists())
-            self.assertFalse(paths.task_dir("running-task").exists())
-            self.assertFalse(paths.task_dir("queued-task").exists())
+            self.assertTrue(paths.task_dir("failed-task").exists())
+            self.assertTrue(paths.task_dir("running-task").exists())
+            self.assertTrue(paths.task_dir("queued-task").exists())
+            self.assertFalse(paths.task_dir("retried-task").exists())
+
+    def test_retry_reuses_asr_artifact(self):
+        class CountingAsrGateway:
+            def __init__(self):
+                self.calls = 0
+
+            def transcribe(self, audio_path, *, task_id, ai_options=None, progress_callback=None):
+                self.calls += 1
+                return {"transcripts": []}
+
+        class TextZhTranslator:
+            def translate_sentences(self, sentences, *, task_id):
+                return [{**sentence, "text_zh": "你好，世界。"} for sentence in sentences]
+
+        asr_gateway = CountingAsrGateway()
+        task_service.configure_english_runtime(
+            task_service.EnglishRuntime(
+                runner=CallbackRunner(lambda task_id: task_service.run_generation_task(task_id)),
+                asr_gateway=asr_gateway,
+                translator=TextZhTranslator(),
+            )
+        )
+        task_service.extract_audio_track_to_wav = lambda _source, _output: self.fail(
+            "audio artifact should be reused"
+        )
+        task_service.probe_media_duration_seconds = lambda _path: 42
+
+        with self.SessionLocal() as session:
+            original = task_service.create_task_row(
+                session,
+                filename="cached.mp4",
+                content_type="video/mp4",
+                file_bytes=b"cached-video",
+            )
+            failed = session.get(EnglishGenerationTask, original["id"])
+            failed.status = "failed"
+            failed.stage = "interrupted"
+            failed.message = "生成因服务重启被中断，可点击重试继续。"
+            failed.error_message = "服务重启导致任务中断。"
+            session.commit()
+
+        original_dir = paths.task_dir(original["id"])
+        (original_dir / "audio.wav").write_bytes(b"cached-audio")
+        (original_dir / "runtime_options.json").write_text(
+            json.dumps({"asr": {"model": "cached-model", "thinking_enabled": True}}, ensure_ascii=False),
+            encoding="utf-8",
+        )
+        (original_dir / "asr_result.json").write_text(
+            json.dumps(
+                {
+                    "transcripts": [
+                        {
+                            "sentences": [
+                                {
+                                    "text": "Hello world.",
+                                    "begin_time": 0,
+                                    "end_time": 1200,
+                                }
+                            ]
+                        }
+                    ]
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+
+        response = self.client.post("/api/v1/english/current-task/retry")
+        self.assertEqual(response.status_code, 200)
+        retry_task = response.json()["task"]
+
+        self.assertEqual(asr_gateway.calls, 0)
+        with self.SessionLocal() as session:
+            original_row = session.get(EnglishGenerationTask, original["id"])
+            retry_row = session.get(EnglishGenerationTask, retry_task["id"])
+            self.assertEqual(original_row.status, "retried")
+            self.assertEqual(retry_row.status, "completed")
+            self.assertEqual(retry_row.course_id, 1)
+
+        retry_log = self.client.get(f"/api/v1/english/tasks/{retry_task['id']}/generation-log")
+        self.assertEqual(retry_log.status_code, 200)
+        self.assertIn(
+            "复用已完成的 ASR 转写结果（未重新调用 ASR）。",
+            [event["message"] for event in retry_log.json()["events"]],
+        )
 
     def test_translate_sentences_uses_translation_options_and_falls_back_to_single(self):
         recorded_calls: list[dict] = []
@@ -443,3 +547,25 @@ class EnglishRouteTests(unittest.TestCase):
                 item["extra_payload"],
                 {"translation_options": {"source_lang": "English", "target_lang": "Chinese"}},
             )
+
+    def test_translate_single_sentence_empty_result_keeps_domain_error_message(self):
+        def fake_call_chat_completion_text(*, config, messages, extra_payload=None, **kwargs):
+            return "  "
+
+        dashscope_gateway.call_chat_completion_text = fake_call_chat_completion_text
+        config = dashscope_gateway.OpenAICompatibleChatConfig(
+            api_key="test-key",
+            base_url="https://dashscope.test/compatible-mode/v1",
+            model="qwen-mt-flash",
+            timeout_seconds=120,
+        )
+
+        with self.assertRaises(EnglishCourseError) as raised:
+            dashscope_gateway.DashscopeEnglishTranslator().translate_single_sentence(
+                config=config,
+                runtime_extra_payload=None,
+                sentence={"index": 7, "text_en": "Hello."},
+                task_id="empty-single-task",
+            )
+
+        self.assertEqual(str(raised.exception), "单句翻译结果为空。")

@@ -15,9 +15,7 @@ from typing import (
 from sqlalchemy.orm import Session
 
 from memory_anki.core.time import utc_now_naive
-from memory_anki.infrastructure.db.models import (
-    EnglishReadingLexiconCache,
-)
+from memory_anki.infrastructure.db._tables.english_reading import EnglishReadingLexiconCache
 from memory_anki.infrastructure.llm.openai_compatible import (
     OpenAICompatibleChatConfig,
 )

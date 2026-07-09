@@ -4,11 +4,14 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from memory_anki.infrastructure.db.models import Palace, Subject
-from memory_anki.modules.backups.application.backup_service import (
+from memory_anki.infrastructure.db._tables.knowledge import Subject
+from memory_anki.infrastructure.db._tables.palaces import Palace
+from memory_anki.modules.backups.application.backup_palace_versions import (
+    create_effective_palace_version,
+)
+from memory_anki.modules.backups.application.editor_safety import (
     MIN_DANGEROUS_NODE_COUNT,
     count_editor_doc_nodes,
-    create_effective_palace_version,
     is_dangerous_structure_change,
 )
 from memory_anki.modules.mindmap.application.editor_state_documents import (

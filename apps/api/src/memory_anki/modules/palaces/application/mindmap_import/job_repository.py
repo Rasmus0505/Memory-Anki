@@ -7,7 +7,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from memory_anki.core.time import utc_now_naive
-from memory_anki.infrastructure.db.models import MindMapImportJob
+from memory_anki.infrastructure.db._tables.misc import MindMapImportJob
 
 from .job_artifacts import (
     get_job_artifact_dir,
@@ -43,6 +43,36 @@ def get_job(
         )
         .first()
     )
+
+
+def reconcile_stale_running_jobs(
+    session: Session,
+    *,
+    is_thread_alive_fn,
+    entity_key: str | None = None,
+) -> int:
+    """Mark running jobs without a live local worker thread as interrupted."""
+    query = session.query(MindMapImportJob).filter(
+        MindMapImportJob.status == "running",
+        MindMapImportJob.deleted_at.is_(None),
+    )
+    if entity_key is not None:
+        query = query.filter(MindMapImportJob.entity_key == entity_key)
+
+    changed = 0
+    for job in query.all():
+        if is_thread_alive_fn(job.id):
+            continue
+        progress = json_load(job.progress_json, empty_progress())
+        progress["message"] = "识别被中断（服务重启），可继续识别，已完成的步骤不会重复调用 AI。"
+        job.status = JOB_STATUS_INTERRUPTED
+        job.pause_requested = False
+        job.progress_json = json_dump(progress)
+        job.updated_at = utc_now_naive()
+        changed += 1
+    if changed:
+        session.commit()
+    return changed
 
 
 def list_jobs(
