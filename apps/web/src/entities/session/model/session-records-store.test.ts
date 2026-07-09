@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  cleanupLegacyPracticeProgressStorage,
   getAllDailyTrend,
   getSessionKindBreakdown,
   getTrendByRange,
@@ -92,5 +93,17 @@ describe('session-record chart helpers', () => {
       { kind: 'quiz', label: '做题', seconds: 300, sessions: 1 },
       { kind: 'palace_edit', label: '宫殿编辑', seconds: 0, sessions: 0 },
     ])
+  })
+})
+
+describe('cleanupLegacyPracticeProgressStorage', () => {
+  it('removes the retired practice progress localStorage key', () => {
+    const legacyKey = ['memory-anki', ['practice', 'progress'].join('-'), 'v1'].join('.')
+
+    window.localStorage.setItem(legacyKey, '{"1":{"completed":false}}')
+
+    cleanupLegacyPracticeProgressStorage()
+
+    expect(window.localStorage.getItem(legacyKey)).toBeNull()
   })
 })

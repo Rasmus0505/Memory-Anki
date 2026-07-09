@@ -85,11 +85,3 @@ export interface SessionKindBreakdownItem {
   seconds: number
   sessions: number
 }
-
-export interface PracticeProgressRecord {
-  palaceId: number
-  updatedAt: string
-  completed: boolean
-  revealMap: Record<string, RevealState>
-  redNodeIds: string[]
-}

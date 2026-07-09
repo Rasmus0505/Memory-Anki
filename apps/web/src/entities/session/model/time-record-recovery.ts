@@ -3,7 +3,6 @@ import { createStudySessionRecordApi } from '@/entities/study-session/api'
 import type { TimeSessionRecord } from '@/entities/session/model/session-records'
 
 const TIME_RECORD_RECOVERY_STORAGE_KEY = 'memory-anki.time-record-recovery.v1'
-const TIME_RECORD_RECOVERY_CHANGE_EVENT = 'memory-anki-time-record-recovery:changed'
 const AUTO_RETRY_INTERVAL_MS = 30_000
 
 export type PendingTimeRecordRecoveryStatus = 'pending' | 'syncing' | 'failed'
@@ -76,17 +75,11 @@ function writeRecoveryStore(store: PendingTimeRecordRecoveryStore) {
   }
 }
 
-function dispatchRecoveryStoreChanged() {
-  if (typeof window === 'undefined') return
-  window.dispatchEvent(new Event(TIME_RECORD_RECOVERY_CHANGE_EVENT))
-}
-
 function updateRecoveryStore(
   updater: (store: PendingTimeRecordRecoveryStore) => PendingTimeRecordRecoveryStore,
 ) {
   const nextStore = updater(readRecoveryStore())
   writeRecoveryStore(nextStore)
-  dispatchRecoveryStoreChanged()
 }
 
 export function buildTimeRecordRecoveryMutationId(recordId: string) {
@@ -172,22 +165,6 @@ export function removePendingTimeRecordRecovery(recordId: string) {
 export function clearPendingTimeRecordRecoveriesForTest() {
   if (typeof window === 'undefined') return
   window.localStorage.removeItem(TIME_RECORD_RECOVERY_STORAGE_KEY)
-  dispatchRecoveryStoreChanged()
-}
-
-export function subscribePendingTimeRecordRecoveries(listener: () => void) {
-  if (typeof window === 'undefined') return () => {}
-  const handleStorage = (event: StorageEvent) => {
-    if (event.key === TIME_RECORD_RECOVERY_STORAGE_KEY) {
-      listener()
-    }
-  }
-  window.addEventListener(TIME_RECORD_RECOVERY_CHANGE_EVENT, listener)
-  window.addEventListener('storage', handleStorage)
-  return () => {
-    window.removeEventListener(TIME_RECORD_RECOVERY_CHANGE_EVENT, listener)
-    window.removeEventListener('storage', handleStorage)
-  }
 }
 
 let replayPromise: Promise<void> | null = null

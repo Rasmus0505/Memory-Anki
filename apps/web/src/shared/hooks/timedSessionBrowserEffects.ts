@@ -2,9 +2,11 @@ import * as React from 'react'
 import { getDesktopTimerBridge } from '@/shared/components/session/desktopTimerBridge'
 import {
   readTimerAutomationConfig,
+  TIMER_AUTOMATION_UPDATED_EVENT,
   type TimerAutomationActivityKind,
   type TimerAutomationConfig,
 } from '@/shared/components/session/timer-automation-config'
+import { onAppEvent } from '@/shared/events/appEvents'
 import type { TimedSessionMeta } from './timedSessionModel'
 
 export function clearTimedSessionTimeout(ref: React.MutableRefObject<number | null>) {
@@ -119,18 +121,10 @@ export function useTimedSessionAutomationConfigSubscription(
   setAutomationConfig: React.Dispatch<React.SetStateAction<TimerAutomationConfig>>,
 ) {
   React.useEffect(() => {
-    const handleAutomationChange = (event: Event) => {
-      const nextConfig =
-        event instanceof CustomEvent && event.detail
-          ? (event.detail as TimerAutomationConfig)
-          : readTimerAutomationConfig()
+    return onAppEvent(TIMER_AUTOMATION_UPDATED_EVENT, (detail) => {
+      const nextConfig = detail || readTimerAutomationConfig()
       setAutomationConfig(nextConfig)
-    }
-
-    window.addEventListener('memory-anki-timer-automation-change', handleAutomationChange)
-    return () => {
-      window.removeEventListener('memory-anki-timer-automation-change', handleAutomationChange)
-    }
+    })
   }, [setAutomationConfig])
 }
 

@@ -1,6 +1,5 @@
 import type {
   DailyTrendPoint,
-  PracticeProgressRecord,
   SessionCompletionMethod,
   SessionKind,
   SessionKindBreakdownItem,
@@ -19,59 +18,9 @@ import {
 } from '@/entities/study-session/api'
 import { formatLocalDateKey, parseApiDateTime } from '@/shared/lib/dateTime'
 
-const PRACTICE_PROGRESS_KEY = 'memory-anki.practice-progress.v1'
-
-function safeParse<T>(value: string | null, fallback: T): T {
-  if (!value) return fallback
-  try {
-    return JSON.parse(value) as T
-  } catch {
-    return fallback
-  }
-}
-
-function readLocalStorage<T>(key: string, fallback: T): T {
-  if (typeof window === 'undefined') return fallback
-  return safeParse(window.localStorage.getItem(key), fallback)
-}
-
-function writeLocalStorage<T>(key: string, value: T) {
-  if (typeof window === 'undefined') return
-  window.localStorage.setItem(key, JSON.stringify(value))
-}
-
-export function readPracticeProgressMap() {
-  return readLocalStorage<Record<string, PracticeProgressRecord>>(PRACTICE_PROGRESS_KEY, {})
-}
-
-export function getPracticeProgress(palaceId: number) {
-  const store = readPracticeProgressMap()
-  return store[String(palaceId)] ?? null
-}
-
-export function savePracticeProgress(record: PracticeProgressRecord) {
-  const store = readPracticeProgressMap()
-  store[String(record.palaceId)] = record
-  writeLocalStorage(PRACTICE_PROGRESS_KEY, store)
-}
-
-export function clearPracticeProgress(palaceId: number) {
-  const store = readPracticeProgressMap()
-  delete store[String(palaceId)]
-  writeLocalStorage(PRACTICE_PROGRESS_KEY, store)
-}
-
-export async function listTimeRecords(options?: { includeDeleted?: boolean; includeBelowThreshold?: boolean }) {
-  return listStudySessionRecords(options)
-}
-
 export async function listStudySessionRecords(options?: { includeDeleted?: boolean; includeBelowThreshold?: boolean }) {
   const result = await listStudySessionsApi(options)
   return result.items.map(studySessionToTimeRecord)
-}
-
-export async function createTimeRecord(record: Omit<TimeSessionRecord, 'id'> & { id?: string }) {
-  return createStudySessionRecord(record)
 }
 
 export async function createStudySessionRecord(record: Omit<TimeSessionRecord, 'id'> & { id?: string }) {
@@ -87,26 +36,14 @@ export async function persistStudySessionRecord(record: TimeSessionRecord) {
   return result.item ? studySessionToTimeRecord(result.item) : null
 }
 
-export async function updateTimeRecord(id: string, updater: Partial<TimeSessionRecord>) {
-  return updateStudySessionRecord(id, updater)
-}
-
 export async function updateStudySessionRecord(id: string, updater: Partial<TimeSessionRecord>) {
   const result = await patchStudySessionApi(id, timeRecordPatchToStudySessionPatch(updater))
   return result.item ? studySessionToTimeRecord(result.item) : null
 }
 
-export async function deleteTimeRecord(id: string) {
-  return deleteStudySessionRecord(id)
-}
-
 export async function deleteStudySessionRecord(id: string) {
   await deleteStudySessionApi(id)
   return { ok: true }
-}
-
-export async function bulkDeleteTimeRecords(ids: string[]) {
-  return bulkDeleteStudySessionRecords(ids)
 }
 
 export async function bulkDeleteStudySessionRecords(ids: string[]) {
@@ -464,4 +401,17 @@ export function formatCompletionMethod(method: SessionCompletionMethod) {
   if (method === 'restart') return '重新开始'
   if (method === 'saved') return '保存结束'
   return '离开页面'
+}
+
+/**
+ * 一次性清理：练习进度已服务端化（见 app/router/practiceRouteSupport.tsx），
+ * 移除两台设备浏览器中残留的旧 localStorage 键。清理逻辑保留至 2026-10 后可整体删除。
+ */
+export function cleanupLegacyPracticeProgressStorage() {
+  if (typeof window === 'undefined') return
+  try {
+    window.localStorage.removeItem('memory-anki.practice-progress.v1')
+  } catch {
+    // localStorage 不可用时静默跳过
+  }
 }
