@@ -800,7 +800,7 @@ function FreestyleQuizCardView({
 }
 
 export default function FreestylePage() {
-  const { isActive, becameActiveAt } = useRouteResidency()
+  const { isActive, becameActiveAt, fullPath } = useRouteResidency()
   const [mode, setMode] = useState<FreestyleMode>('today')
   const [config, setConfig] = useState<FreestyleConfig>(() => readFreestyleConfig())
   const [todayConfig, setTodayConfig] = useState<TodayTrainingConfig>(() => readTodayTrainingConfig())
@@ -841,6 +841,7 @@ export default function FreestylePage() {
     timer,
     isRouteActive: isActive,
     becameActiveAt,
+    routePath: fullPath,
   })
 
   const queue = useMemo(

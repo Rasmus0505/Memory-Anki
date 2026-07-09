@@ -106,12 +106,14 @@ function isSupportedReadingFile(file: File) {
 export function useEnglishReadingWorkflow({
   isActive,
   becameActiveAt,
+  routePath,
   resolvedMaterialId,
   setSearchParams,
   promptForAiOptions,
 }: {
   isActive: boolean;
   becameActiveAt: number;
+  routePath: string;
   resolvedMaterialId: number | null;
   setSearchParams: SetURLSearchParams;
   promptForAiOptions: PromptForAiOptions;
@@ -176,6 +178,7 @@ export function useEnglishReadingWorkflow({
     timer,
     isRouteActive: isActive,
     becameActiveAt,
+    routePath,
   });
   const timerRef = useRef(timer);
   const activeReadingSessionKey =

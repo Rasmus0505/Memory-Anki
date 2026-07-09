@@ -26,7 +26,7 @@ import { shouldAutoStartOnPageEnter, useTimedSession } from '@/shared/hooks/useT
 import { useGlobalTimerRegistration } from '@/shared/components/session/GlobalTimerProvider'
 
 export default function PalaceQuizPage() {
-  const { isActive, becameActiveAt } = useRouteResidency()
+  const { isActive, becameActiveAt, fullPath } = useRouteResidency()
   const { id } = useParams()
   const [searchParams, setSearchParams] = useSearchParams()
   const palaceId = id ? Number(id) : null
@@ -52,6 +52,7 @@ export default function PalaceQuizPage() {
     timer,
     isRouteActive: isActive,
     becameActiveAt,
+    routePath: fullPath,
   })
   const timerRef = useRef(timer)
   const hardUnloadRef = useRef(false)

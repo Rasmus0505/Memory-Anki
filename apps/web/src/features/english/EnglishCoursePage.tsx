@@ -77,7 +77,7 @@ function resolveWordRailDensity(
 }
 
 export default function EnglishCoursePage() {
-  const { isActive, becameActiveAt } = useRouteResidency()
+  const { isActive, becameActiveAt, fullPath } = useRouteResidency()
   const { id } = useParams()
   const courseId = Number(id)
   const videoRef = useRef<HTMLVideoElement | null>(null)
@@ -119,6 +119,7 @@ export default function EnglishCoursePage() {
     timer,
     isRouteActive: isActive,
     becameActiveAt,
+    routePath: fullPath,
   })
 
   const timerRef = useLatestRef(timer)

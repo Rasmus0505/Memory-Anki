@@ -69,7 +69,7 @@ function summarizeFeedback(feedback: ReadingSessionResult["feedback"]) {
 }
 
 export default function EnglishReadingPage() {
-  const { isActive, becameActiveAt } = useRouteResidency();
+  const { isActive, becameActiveAt, fullPath } = useRouteResidency();
   const [searchParams, setSearchParams] = useSearchParams();
   const currentMaterialId = Number(searchParams.get("material") || "");
   const resolvedMaterialId =
@@ -81,6 +81,7 @@ export default function EnglishReadingPage() {
   const workflow = useEnglishReadingWorkflow({
     isActive,
     becameActiveAt,
+    routePath: fullPath,
     resolvedMaterialId,
     setSearchParams,
     promptForAiOptions,

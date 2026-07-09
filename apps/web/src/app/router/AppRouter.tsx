@@ -93,6 +93,7 @@ export function AppRouter() {
               value={{
                 isActive,
                 pathname,
+                fullPath: `${residentRoute.location.pathname}${residentRoute.location.search}${residentRoute.location.hash}`,
                 becameActiveAt: residentRoute.becameActiveAt,
               }}
             >

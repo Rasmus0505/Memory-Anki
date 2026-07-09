@@ -30,7 +30,7 @@ function readSelectionNodeUid(nodes: MindMapSelection[]) {
 }
 
 export function usePalaceEditPage() {
-  const { isActive, becameActiveAt } = useRouteResidency()
+  const { isActive, becameActiveAt, fullPath } = useRouteResidency()
   const { id } = useParams()
   const navigate = useNavigate()
   const location = useLocation()
@@ -88,6 +88,7 @@ export function usePalaceEditPage() {
     timer,
     isRouteActive: isActive,
     becameActiveAt,
+    routePath: fullPath,
   })
 
   const practice = usePalacePracticeMode({
