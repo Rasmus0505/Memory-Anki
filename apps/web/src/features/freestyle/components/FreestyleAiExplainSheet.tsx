@@ -1,7 +1,7 @@
 import { Send, Sparkles, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Button } from '@/shared/components/ui/button'
-import { requestPalaceQuestionExplainApi } from '@/features/palace-quiz/api'
+import { requestPalaceQuestionExplainApi } from '@/entities/quiz/api'
 import {
   createFreestyleQuestionExplanationApi,
   getFreestyleQuestionExplanationsApi,

@@ -121,7 +121,8 @@ export function sanitizeFreestyleConfig(value: unknown): FreestyleConfig {
   const range =
     raw.range === 'due' ||
     raw.range === 'needs_practice' ||
-    raw.range === 'specific_palaces'
+    raw.range === 'specific_palaces' ||
+    raw.range === 'wrong'
       ? raw.range
       : 'all'
   const orderMode =

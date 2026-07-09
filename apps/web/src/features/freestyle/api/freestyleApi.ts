@@ -9,6 +9,7 @@ import type {
   FreestyleHistorySummary,
   FreestyleQuizAttemptRecord,
   FreestyleRange,
+  WrongQuestionsResponse,
 } from '@/shared/api/contracts'
 
 export function getFreestyleFeedApi(params: {
@@ -91,4 +92,8 @@ export function getFreestyleQuestionExplanationsApi(params?: {
 
 export function getFreestyleHistorySummaryApi() {
   return request<FreestyleHistorySummary>('/freestyle/history-summary')
+}
+
+export function getWrongQuestionsApi(limit = 200) {
+  return request<WrongQuestionsResponse>(`/palace-quiz-questions/wrong?limit=${limit}`)
 }

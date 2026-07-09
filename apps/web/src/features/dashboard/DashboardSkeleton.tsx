@@ -1,11 +1,15 @@
 import { Card, CardContent } from '@/shared/components/ui/card'
 import { Skeleton } from '@/shared/components/ui/skeleton'
+import {
+  SkeletonPageHeader,
+  SkeletonPanel,
+} from '@/shared/components/ui/skeleton-layout'
 
 export function DashboardSkeleton() {
   return (
     <div className="flex flex-col gap-6">
       {/* 页面标题 */}
-      <Skeleton className="h-8 w-40" />
+      <SkeletonPageHeader titleClassName="h-8 w-40" />
 
       {/* 5 stat cards */}
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
@@ -56,14 +60,14 @@ export function DashboardSkeleton() {
       <div className="grid gap-4 xl:grid-cols-2">
         <Card>
           <CardContent className="flex flex-col gap-3 pt-5">
-          <Skeleton className="h-5 w-32" />
-          <Skeleton className="h-52 rounded-xl" />
+            <Skeleton className="h-5 w-32" />
+            <SkeletonPanel heightClassName="h-52" />
           </CardContent>
         </Card>
         <Card>
           <CardContent className="flex flex-col gap-3 pt-5">
-          <Skeleton className="h-5 w-32" />
-          <Skeleton className="h-52 rounded-xl" />
+            <Skeleton className="h-5 w-32" />
+            <SkeletonPanel heightClassName="h-52" />
           </CardContent>
         </Card>
       </div>
