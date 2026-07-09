@@ -19,6 +19,7 @@ FRONTEND_URL = f"http://{dev_server.BACKEND_HOST}:{dev_server.FRONTEND_PORT}/"
 
 
 def main() -> int:
+    dev_server.kill_memory_anki_desktop_processes()
     dev_server.free_port(dev_server.BACKEND_PORT, "backend")
     dev_server.free_port(dev_server.FRONTEND_PORT, "frontend")
 
@@ -50,6 +51,15 @@ def main() -> int:
     print("OK")
 
     npm = dev_server._resolve_npm()
+    electron_exe = WEB_DIR / "node_modules" / "electron" / "dist" / "electron.exe"
+    if os.name == "nt" and not electron_exe.exists():
+        print(
+            "[!] Electron runtime is incomplete. Run `cd apps\\web && npm install` "
+            f"and make sure {electron_exe} exists."
+        )
+        dev_server.kill_process_tree(backend_proc.pid)
+        dev_server.kill_process_tree(frontend_proc.pid)
+        return 1
     env = os.environ.copy()
     env["MEMORY_ANKI_DESKTOP_URL"] = FRONTEND_URL
     env["MEMORY_ANKI_TIMER_OVERLAY_URL"] = f"{FRONTEND_URL.rstrip('/')}/timer-overlay"
