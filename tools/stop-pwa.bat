@@ -1,8 +1,8 @@
 @echo off
 setlocal
-cd /d "%~dp0"
+cd /d "%~dp0\.."
 
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0tools\pwa_launcher.ps1" Stop
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0pwa_launcher.ps1" Stop
 set "EXIT_CODE=%ERRORLEVEL%"
 if not "%EXIT_CODE%"=="0" (
   echo.

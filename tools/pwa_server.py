@@ -77,7 +77,7 @@ def _free_pwa_port() -> bool:
     if unsafe:
         print(
             f"[!] Port {dev_server.BACKEND_PORT} is occupied by non-PWA process(es): {unsafe}. "
-            "Stop them manually or run desktop stop.bat first."
+            "Stop them manually or run tools\\stop.bat first."
         )
         return False
     print(f"[i] Cleaning existing PWA process(es) on port {dev_server.BACKEND_PORT}: {pids}")
@@ -98,7 +98,11 @@ def _pwa_dist_ready() -> bool:
 
 
 def _run_frontend_build() -> bool:
-    npm = dev_server._resolve_npm()
+    try:
+        npm = dev_server._resolve_npm()
+    except Exception as exc:
+        print(f"[!] Unable to find npm: {exc}")
+        return False
     LOGS_DIR.mkdir(parents=True, exist_ok=True)
     log_path = LOGS_DIR / "pwa-build.log"
     _append_log_separator(log_path, "PWA frontend build")
@@ -116,6 +120,17 @@ def _run_frontend_build() -> bool:
         )
     if result.returncode != 0:
         print(f"[!] PWA frontend build failed ({result.returncode}). See {log_path}")
+        return False
+    return True
+
+
+def _prepare_runtime() -> bool:
+    try:
+        local_env = _backend_env()
+        dev_server.ensure_backend_runtime_prepared(env=local_env)
+        dev_server.ensure_backend_migrations_applied(env=local_env)
+    except Exception as exc:
+        print(f"[!] Runtime database preparation failed: {exc}")
         return False
     return True
 
@@ -209,7 +224,7 @@ def _configure_tailscale_serve() -> bool:
             print(status_output)
         return True
     print("[!] Tailscale Serve could not be configured from this shell.")
-    print("[i] Run configure-tailscale-pwa.bat once as Administrator.")
+    print("[i] Run tools\\configure-tailscale-pwa.bat once as Administrator.")
     return False
 
 
@@ -231,7 +246,7 @@ def _resolve_tailscale_cli() -> str | None:
 
 
 def _supervise(process: subprocess.Popen) -> int:
-    print("[i] PWA server is running. Keep this process alive, or use stop-pwa.bat to stop it.")
+    print("[i] PWA server is running. Keep this process alive, or use tools\\stop-pwa.bat to stop it.")
     stopping = False
 
     def stop_child(*args) -> None:
@@ -266,12 +281,7 @@ def start(
     if not sync:
         print("[i] Skipping startup sync for PWA autostart. Desktop stop/start still performs sync.")
 
-    try:
-        local_env = _backend_env()
-        dev_server.ensure_backend_runtime_prepared(env=local_env)
-        dev_server.ensure_backend_migrations_applied(env=local_env)
-    except Exception as exc:
-        print(f"[!] Runtime database preparation failed: {exc}")
+    if not _prepare_runtime():
         return 1
 
     process = _start_backend()
@@ -288,6 +298,16 @@ def start(
     return 0
 
 
+def prepare(*, build: bool = True) -> int:
+    if build or not _pwa_dist_ready():
+        if not _run_frontend_build():
+            return 1
+    if not _prepare_runtime():
+        return 1
+    print(f"[ok] PWA assets and runtime are ready: {WEB_DIST}")
+    return 0
+
+
 def stop() -> int:
     return 0 if _free_pwa_port() else 1
 
@@ -296,6 +316,8 @@ def main() -> int:
     args = set(sys.argv[1:])
     if "--stop" in args:
         return stop()
+    if "--prepare" in args:
+        return prepare(build="--no-build" not in args)
     return start(
         build="--build" in args,
         configure_serve="--configure-serve" in args,

@@ -1,6 +1,6 @@
 param(
   [Parameter(Position = 0)]
-  [ValidateSet("Start", "Stop", "ConfigureServe", "InstallAutostart", "UninstallAutostart")]
+  [ValidateSet("Start", "Stop", "Update", "ConfigureServe", "InstallAutostart", "UninstallAutostart")]
   [string]$Action = "Start",
 
   [switch]$Hidden,
@@ -104,8 +104,7 @@ function Uninstall-AutostartShortcut {
 try {
   switch ($Action) {
     "Start" {
-      Ensure-MemoryAnkiNodeRuntime
-      $serverArgs = @("--build")
+      $serverArgs = @()
       if ($ConfigureServe) {
         $serverArgs += "--configure-serve"
       }
@@ -115,8 +114,10 @@ try {
     "Stop" {
       exit (Invoke-PwaServer -ServerArgs @("--stop"))
     }
+    "Update" {
+      exit (Invoke-PwaServer -ServerArgs @("--prepare"))
+    }
     "ConfigureServe" {
-      Ensure-MemoryAnkiNodeRuntime
       $serverArgs = @("--configure-serve", "--no-supervise") + $RemainingArgs
       exit (Invoke-PwaServer -ServerArgs $serverArgs)
     }

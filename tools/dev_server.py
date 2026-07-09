@@ -459,7 +459,7 @@ def main() -> int:
     print("  前端 (vite dev, HMR 已关闭): " + FRONTEND_URL)
     print(f"  后端 (API): http://{BACKEND_HOST}:{BACKEND_PORT}")
     print(f"  日志: {LOGS_DIR / 'api.log'} / {LOGS_DIR / 'web-dev.log'}")
-    print("  停止所有服务: 运行 stop.bat")
+    print("  停止所有服务: 运行 tools\\stop.bat")
     print()
     print("  提示：改前端代码后，在浏览器按 F5 手动刷新即可看到更新（不会自动刷新打断）。")
     print("        改后端代码后，重跑 start.bat 以重启服务。")
