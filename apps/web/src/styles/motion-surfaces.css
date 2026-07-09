@@ -1,0 +1,72 @@
+﻿@keyframes streak-pop {
+  0% {
+    transform: scale(1.4);
+    opacity: 0.6;
+  }
+  60% {
+    transform: scale(1.1);
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes card-enter {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.freestyle-card-enter {
+  animation: card-enter 0.28s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* 尊重 prefers-reduced-motion */
+@media (prefers-reduced-motion: reduce) {
+  .memory-anki-combo-burst-particle,
+  .memory-anki-combo-burst-ring,
+  .memory-anki-completion-confetti,
+  .memory-anki-completion-card,
+  .memory-anki-completion-icon,
+  .memory-anki-global-timer-panel-secondary,
+  .memory-anki-global-timer-panel-primary,
+  .memory-anki-timer-screen-pulse,
+  .memory-anki-break-guard-card-expired,
+  .memory-anki-break-guard-layer-expired,
+  .freestyle-card-enter {
+    animation-duration: 1ms !important;
+    animation-delay: 0ms !important;
+  }
+}
+
+
+.memory-anki-warm-panel {
+  border: 1px solid color-mix(in srgb, var(--color-border) 78%, white);
+  background: linear-gradient(180deg, rgba(255,255,255,0.88), rgba(255,250,242,0.96));
+  box-shadow: var(--shadow-card);
+}
+
+.memory-anki-soft-card {
+  border: 1px solid rgba(201, 159, 103, 0.22);
+  background: rgba(255, 252, 247, 0.86);
+  box-shadow: 0 12px 28px rgba(120, 77, 28, 0.08);
+}
+
+.memory-anki-surface-glow {
+  position: relative;
+  overflow: hidden;
+}
+
+.memory-anki-surface-glow::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at top right, rgba(251,191,36,0.12), transparent 34%);
+  pointer-events: none;
+}

@@ -24,7 +24,11 @@ interface CommandDialogProps {
 
 const CommandDialog = ({ children, ...props }: CommandDialogProps) => (
   <Dialog {...props}>
-    <DialogContent className="overflow-hidden p-0 shadow-floating">
+    <DialogContent
+      accessibleTitle="命令面板"
+      accessibleDescription="搜索操作、页面和学习内容。"
+      className="overflow-hidden p-0 shadow-floating"
+    >
       <Command>{children}</Command>
     </DialogContent>
   </Dialog>

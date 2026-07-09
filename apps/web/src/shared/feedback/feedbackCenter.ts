@@ -4,10 +4,10 @@ import type {
   MindMapFeedbackOrigin,
 } from '@/shared/components/mindmap-host/hostBridgeUtils'
 import {
-  playLegacyComboMilestone,
-  playLegacyFeedbackEvent,
-  playLegacyFireworkAccent,
-} from '@/shared/components/mindmap-host/legacyWebAudio'
+  playWebAudioComboMilestone,
+  playWebAudioFeedbackEvent,
+  playWebAudioFireworkAccent,
+} from '@/shared/components/mindmap-host/webAudioFeedback'
 import {
   REVIEW_FEEDBACK_EFFECTIVE_VOLUME_MAX,
   getReviewFeedbackEffectiveVolume,
@@ -126,7 +126,7 @@ export function playFeedbackAudio(request: FeedbackAudioRequest) {
   if (!soundEnabled || volume <= 0) return
 
   if (typeof request.milestoneStep === 'number') {
-    playLegacyComboMilestone({
+    playWebAudioComboMilestone({
       milestoneStep: request.milestoneStep,
       volume,
     })
@@ -134,7 +134,7 @@ export function playFeedbackAudio(request: FeedbackAudioRequest) {
   }
 
   if (!request.event) return
-  playLegacyFeedbackEvent({
+  playWebAudioFeedbackEvent({
     event: request.event,
     surprise: request.surprise,
     origin: request.origin,
@@ -174,7 +174,7 @@ export function triggerCelebration(request: TriggerCelebrationRequest) {
   }
 
   if (!soundEnabled || volume <= 0 || !request.audioCue) return
-  playLegacyFireworkAccent({
+  playWebAudioFireworkAccent({
     kind: request.audioCue.kind,
     milestoneStep: request.audioCue.milestoneStep ?? 0,
     volume,

@@ -1,0 +1,694 @@
+﻿.memory-anki-global-timer-layer {
+  position: fixed;
+  z-index: 190;
+  pointer-events: none;
+}
+
+.memory-anki-global-timer-panel,
+.memory-anki-global-timer-capsule {
+  pointer-events: auto;
+}
+
+.memory-anki-global-timer-panel,
+.memory-anki-timer-overlay-shell {
+  border: 1px solid var(--timer-surface-border);
+  background: var(--timer-surface-background);
+  box-shadow: var(--timer-surface-shadow);
+  overflow: hidden;
+}
+
+.memory-anki-global-timer-panel-break,
+.memory-anki-timer-overlay-shell-break {
+  border-color: var(--timer-break-border);
+  background: var(--timer-break-background);
+}
+
+.memory-anki-global-timer-panel-expired,
+.memory-anki-timer-overlay-shell-expired {
+  border-color: var(--timer-expired-border);
+  background: var(--timer-expired-background);
+  animation: memory-anki-break-guard-card-alert 0.95s ease-in-out infinite alternate;
+}
+
+.memory-anki-global-timer-digits,
+.memory-anki-timer-overlay-digits {
+  color: var(--timer-digits-color);
+  font-weight: var(--timer-digits-weight);
+}
+
+.memory-anki-global-timer-custom-input,
+.memory-anki-timer-overlay-minutes-input {
+  flex: 1 1 0;
+  min-width: 0;
+  background: var(--timer-input-bg);
+}
+
+.memory-anki-global-timer-actions,
+.memory-anki-timer-overlay-actions,
+.memory-anki-global-timer-custom-break,
+.memory-anki-timer-overlay-custom-break {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--timer-actions-gap, 7px);
+}
+
+.memory-anki-global-timer-custom-break,
+.memory-anki-timer-overlay-custom-break {
+  flex: 1 1 0;
+}
+
+.memory-anki-global-timer-capsule,
+.memory-anki-timer-overlay-capsule {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: 1px solid var(--timer-surface-border);
+  background: var(--timer-surface-bg);
+  color: #0f172a;
+  box-shadow: var(--timer-capsule-shadow);
+}
+
+.memory-anki-global-timer-capsule-dot,
+.memory-anki-timer-overlay-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+}
+
+.memory-anki-global-timer-capsule-label,
+.memory-anki-timer-overlay-capsule-label {
+  white-space: nowrap;
+}
+
+.memory-anki-global-timer-panel {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--timer-panel-radius, 28px);
+  backdrop-filter: blur(18px);
+  padding: var(--timer-panel-padding, 12px);
+}
+
+.memory-anki-global-timer-panel::after {
+  content: "";
+  position: absolute;
+  inset: 1px;
+  border-radius: var(--timer-panel-inner-radius, 26px);
+  pointer-events: none;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.24), transparent 28%),
+    radial-gradient(circle at 70% 18%, rgba(249, 115, 22, 0.1), transparent 28%);
+  opacity: 0.72;
+}
+
+.memory-anki-global-timer-panel-secondary {
+  animation: memory-anki-global-timer-hit 320ms ease-out;
+}
+
+.memory-anki-global-timer-panel-primary {
+  animation: memory-anki-global-timer-hit-primary 520ms ease-out;
+}
+
+.memory-anki-global-timer-dragbar {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  min-height: var(--timer-dragbar-min-height, 32px);
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--timer-dragbar-gap, 12px);
+  cursor: grab;
+}
+
+.memory-anki-global-timer-dragbar:active {
+  cursor: grabbing;
+}
+
+.memory-anki-global-timer-scene {
+  font-size: var(--timer-scene-font-size, 11px);
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #7c2d12;
+}
+
+.memory-anki-global-timer-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--timer-title-font-size, 11px);
+  color: rgb(100 116 139 / 0.85);
+  line-height: 1.3;
+}
+
+.memory-anki-global-timer-digits {
+  position: relative;
+  z-index: 1;
+  font-size: var(--timer-digits-font-size, 64px);
+  line-height: 0.96;
+  letter-spacing: -0.05em;
+  text-align: center;
+  margin-top: var(--timer-digits-margin-top, 2px);
+}
+
+.memory-anki-global-timer-row {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--timer-row-min-height, 22px);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.62);
+  color: #475569;
+  font-size: var(--timer-row-font-size, 11px);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  padding: 0 var(--timer-row-padding-x, 10px);
+  text-align: center;
+}
+
+.memory-anki-global-timer-row-primary {
+  color: #334155;
+}
+
+.memory-anki-global-timer-body {
+  position: relative;
+  z-index: 1;
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto auto auto minmax(0, 1fr) auto;
+  gap: var(--timer-body-gap, 6px);
+}
+
+.memory-anki-global-timer-body-spacer {
+  min-height: 0;
+}
+
+.memory-anki-global-timer-actions {
+  align-items: center;
+  --timer-actions-gap: 8px;
+}
+
+.memory-anki-global-timer-custom-break {
+  min-width: min(100%, 122px);
+  --timer-actions-gap: 6px;
+}
+
+.memory-anki-global-timer-icon-button {
+  width: auto;
+  height: auto;
+  padding: 0;
+}
+
+.memory-anki-global-timer-icon {
+  flex: none;
+}
+
+.memory-anki-global-timer-action-button {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: var(--timer-action-height, 32px);
+  font-size: var(--timer-action-font-size, 12px);
+  line-height: 1;
+}
+
+.memory-anki-global-timer-custom-input {
+  min-height: var(--timer-action-height, 32px);
+  font-size: var(--timer-action-font-size, 12px);
+}
+
+.memory-anki-global-timer-custom-submit {
+  flex: 0 0 auto;
+  min-width: 54px;
+}
+
+.memory-anki-global-timer-panel .memory-anki-global-timer-resize {
+  position: absolute;
+  border: none;
+  background: transparent;
+  padding: 0;
+  z-index: 4;
+  isolation: auto;
+  box-shadow: none;
+  transform: none;
+}
+
+.memory-anki-global-timer-panel .memory-anki-global-timer-resize::before {
+  content: none;
+}
+
+.memory-anki-global-timer-panel .memory-anki-global-timer-resize:hover,
+.memory-anki-global-timer-panel .memory-anki-global-timer-resize:active {
+  transform: none;
+  box-shadow: none;
+}
+
+.memory-anki-global-timer-resize-se::before {
+  content: "";
+  position: absolute;
+  right: 2px;
+  bottom: 2px;
+  width: 12px;
+  height: 12px;
+  border-right: 2px solid rgba(71, 85, 105, 0.6);
+  border-bottom: 2px solid rgba(71, 85, 105, 0.6);
+  border-radius: 0 0 6px 0;
+}
+
+.memory-anki-global-timer-resize-n,
+.memory-anki-global-timer-resize-s {
+  left: 14px;
+  right: 14px;
+  height: 14px;
+}
+
+.memory-anki-global-timer-resize-n {
+  top: -6px;
+  cursor: ns-resize;
+}
+
+.memory-anki-global-timer-resize-s {
+  bottom: -6px;
+  cursor: ns-resize;
+}
+
+.memory-anki-global-timer-resize-e,
+.memory-anki-global-timer-resize-w {
+  top: 14px;
+  bottom: 14px;
+  width: 14px;
+}
+
+.memory-anki-global-timer-resize-e {
+  right: -6px;
+  cursor: ew-resize;
+}
+
+.memory-anki-global-timer-resize-w {
+  left: -6px;
+  cursor: ew-resize;
+}
+
+.memory-anki-global-timer-resize-nw,
+.memory-anki-global-timer-resize-ne,
+.memory-anki-global-timer-resize-se,
+.memory-anki-global-timer-resize-sw {
+  width: 26px;
+  height: 26px;
+}
+
+.memory-anki-global-timer-resize-nw {
+  top: -6px;
+  left: -6px;
+  cursor: nwse-resize;
+}
+
+.memory-anki-global-timer-resize-ne {
+  top: -6px;
+  right: -6px;
+  cursor: nesw-resize;
+}
+
+.memory-anki-global-timer-resize-se {
+  right: -6px;
+  bottom: -6px;
+  cursor: nwse-resize;
+}
+
+.memory-anki-global-timer-resize-sw {
+  left: -6px;
+  bottom: -6px;
+  cursor: nesw-resize;
+}
+
+.memory-anki-global-timer-capsule {
+  min-height: 46px;
+  backdrop-filter: blur(14px);
+  cursor: grab;
+}
+
+.memory-anki-global-timer-capsule:active {
+  cursor: grabbing;
+}
+
+.memory-anki-global-timer-capsule-dot {
+  background: linear-gradient(135deg, #f59e0b, #ef4444);
+  box-shadow: 0 0 0 4px rgba(251, 191, 36, 0.18);
+}
+
+.memory-anki-global-timer-capsule-label {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.memory-anki-timer-screen-pulse {
+  position: fixed;
+  inset: 0;
+  z-index: 185;
+  pointer-events: none;
+  animation: memory-anki-timer-screen-pulse 360ms ease-out forwards;
+}
+
+.memory-anki-break-guard-layer {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 210;
+  pointer-events: none;
+}
+
+.memory-anki-break-guard-layer-expired {
+  inset: 0;
+  right: auto;
+  bottom: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background:
+    radial-gradient(circle at 50% 32%, rgba(248, 113, 113, 0.18), transparent 34%),
+    rgba(15, 23, 42, 0.18);
+  animation: memory-anki-break-guard-backdrop 1.2s ease-in-out infinite alternate;
+}
+
+.memory-anki-break-guard-card {
+  width: min(360px, calc(100vw - 32px));
+  pointer-events: auto;
+  border-radius: 24px;
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  background:
+    radial-gradient(circle at top right, rgba(251, 191, 36, 0.16), transparent 34%),
+    rgba(255, 255, 255, 0.96);
+  padding: 16px;
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.44),
+    0 24px 64px rgba(15, 23, 42, 0.18);
+  backdrop-filter: blur(18px);
+}
+
+.memory-anki-break-guard-card-expired {
+  border-color: rgba(248, 113, 113, 0.44);
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.52),
+    0 0 44px rgba(248, 113, 113, 0.28),
+    0 28px 80px rgba(15, 23, 42, 0.24);
+  animation: memory-anki-break-guard-card-alert 0.95s ease-in-out infinite alternate;
+}
+
+.memory-anki-break-guard-kicker {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #9a3412;
+}
+
+.memory-anki-break-guard-title {
+  margin-top: 4px;
+  color: #111827;
+  font-size: 28px;
+  font-weight: 900;
+  line-height: 1.1;
+}
+
+.memory-anki-break-guard-copy {
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.68);
+  padding: 10px 12px;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.6;
+}
+
+.memory-anki-timer-overlay-shell {
+  --timer-surface-blue-stop: 30%;
+  box-sizing: border-box;
+  width: 100vw;
+  height: 100vh;
+  display: grid;
+  grid-template-rows: auto minmax(34px, 1fr) auto auto;
+  gap: clamp(5px, 2.7vh, 10px);
+  padding: clamp(9px, 4vh, 14px);
+  border-radius: 22px;
+}
+
+.memory-anki-timer-overlay-header {
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  -webkit-app-region: drag;
+}
+
+.memory-anki-timer-overlay-kicker {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #64748b;
+}
+
+.memory-anki-timer-overlay-shell-break .memory-anki-timer-overlay-kicker {
+  color: #c2610a;
+}
+
+.memory-anki-timer-overlay-shell-expired .memory-anki-timer-overlay-kicker {
+  color: #b91c1c;
+}
+
+.memory-anki-timer-overlay-title {
+  margin-top: 3px;
+  color: #334155;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: clamp(11px, 3.8vh, 13px);
+  font-weight: 700;
+}
+
+.memory-anki-timer-overlay-icon-button {
+  display: inline-flex;
+  width: 28px;
+  height: 28px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.26);
+  background: rgba(255, 255, 255, 0.58);
+  color: #64748b;
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+}
+
+.memory-anki-timer-overlay-icon-button:hover {
+  background: rgba(255, 255, 255, 0.82);
+  color: #334155;
+}
+
+.memory-anki-timer-overlay-digits {
+  display: flex;
+  min-height: 0;
+  align-items: center;
+  justify-content: center;
+  font-size: clamp(32px, 26vh, 62px);
+  line-height: 0.95;
+  letter-spacing: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.memory-anki-timer-overlay-copy {
+  min-height: 0;
+  color: #64748b;
+  font-size: clamp(10px, 3.2vh, 12px);
+  font-weight: 500;
+  line-height: 1.35;
+  text-align: center;
+  overflow: hidden;
+}
+
+.memory-anki-timer-overlay-copy span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.memory-anki-timer-overlay-actions {
+  min-height: 0;
+}
+
+.memory-anki-timer-overlay-custom-break {
+  min-width: 108px;
+}
+
+.memory-anki-timer-overlay-actions > button {
+  flex: 1;
+  height: clamp(30px, 9vh, 36px);
+  min-width: 0;
+  padding-inline: 8px;
+  overflow: hidden;
+  font-size: clamp(11px, 3.4vh, 13px);
+  white-space: nowrap;
+}
+
+.memory-anki-timer-overlay-minutes-input {
+  height: clamp(30px, 9vh, 36px);
+  font-size: clamp(11px, 3.4vh, 13px);
+}
+
+.memory-anki-timer-overlay-capsule {
+  box-sizing: border-box;
+  min-width: 190px;
+  min-height: 48px;
+  max-width: 100vw;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0;
+  user-select: none;
+  -webkit-app-region: drag;
+}
+
+.memory-anki-timer-overlay-capsule-expired {
+  border-color: rgba(248, 113, 113, 0.5);
+  animation: memory-anki-break-guard-card-alert 0.95s ease-in-out infinite alternate;
+}
+
+.memory-anki-timer-overlay-capsule-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.memory-anki-timer-overlay-capsule-expand {
+  display: inline-flex;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  background: rgba(255, 255, 255, 0.72);
+  color: #475569;
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+}
+
+.memory-anki-timer-overlay-capsule-expand:hover {
+  background: rgba(255, 255, 255, 0.92);
+}
+
+.memory-anki-timer-overlay-dot {
+  background: linear-gradient(135deg, #94a3b8, #64748b);
+  box-shadow: 0 0 0 3px rgba(100, 116, 139, 0.15);
+}
+
+/* 学习计时运行中 → 绿色 */
+.memory-anki-timer-overlay-dot-running {
+  background: linear-gradient(135deg, #34d399, #10b981);
+  box-shadow: 0 0 0 3px rgba(52, 211, 153, 0.22);
+}
+
+/* 休息中 → 琥珀色 */
+.memory-anki-timer-overlay-dot-break {
+  background: linear-gradient(135deg, #fbbf24, #f59e0b);
+  box-shadow: 0 0 0 3px rgba(251, 191, 36, 0.22);
+}
+
+/* 休息到期 → 红色 */
+.memory-anki-timer-overlay-dot-expired {
+  background: linear-gradient(135deg, #f87171, #ef4444);
+  box-shadow: 0 0 0 3px rgba(248, 113, 113, 0.26);
+}
+
+/* 单操作按钮不拉伸到全宽 */
+.memory-anki-timer-overlay-action-single {
+  flex: 0 0 auto !important;
+  min-width: 80px;
+  max-width: 140px;
+}
+
+/* 到期状态数字变红 */
+.memory-anki-timer-overlay-shell-expired .memory-anki-timer-overlay-digits {
+  color: #ef4444;
+}
+
+.memory-anki-timer-screen-pulse-secondary {
+  background:
+    radial-gradient(circle at 50% 14%, rgba(251, 191, 36, 0.18), transparent 24%),
+    linear-gradient(180deg, rgba(253, 224, 71, 0.08), transparent 42%);
+}
+
+.memory-anki-timer-screen-pulse-primary {
+  background:
+    radial-gradient(circle at 50% 12%, rgba(248, 113, 113, 0.18), transparent 24%),
+    radial-gradient(circle at 50% 24%, rgba(251, 191, 36, 0.22), transparent 30%),
+    linear-gradient(180deg, rgba(251, 146, 60, 0.08), transparent 48%);
+}
+
+@keyframes memory-anki-global-timer-hit {
+  0% {
+    transform: scale(0.98);
+  }
+  36% {
+    transform: scale(1.02);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes memory-anki-global-timer-hit-primary {
+  0% {
+    transform: scale(0.97);
+    box-shadow:
+      0 0 0 1px rgba(255, 255, 255, 0.42),
+      0 18px 42px rgba(15, 23, 42, 0.18);
+  }
+  42% {
+    transform: scale(1.03);
+    box-shadow:
+      0 0 0 1px rgba(255, 255, 255, 0.5),
+      0 30px 86px rgba(249, 115, 22, 0.24);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes memory-anki-timer-screen-pulse {
+  0% {
+    opacity: 0;
+  }
+  20% {
+    opacity: 0.9;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes memory-anki-break-guard-card-alert {
+  0% {
+    transform: scale(1);
+  }
+  100% {
+    transform: scale(1.025);
+  }
+}
+
+@keyframes memory-anki-break-guard-backdrop {
+  0% {
+    opacity: 0.82;
+  }
+  100% {
+    opacity: 1;
+  }
+}

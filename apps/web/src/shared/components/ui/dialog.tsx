@@ -1,6 +1,8 @@
 import {
+  Children,
   createContext,
   forwardRef,
+  isValidElement,
   useCallback,
   useContext,
   useEffect,
@@ -11,6 +13,7 @@ import {
   type ComponentPropsWithoutRef,
   type PropsWithChildren,
   type PointerEvent as ReactPointerEvent,
+  type ReactNode,
 } from 'react'
 import * as DialogPrimitive from '@radix-ui/react-dialog'
 import { Maximize2, Minimize2, Pin, PinOff, X } from 'lucide-react'
@@ -32,6 +35,12 @@ const FLOATING_DIALOG_STORAGE_PREFIX = 'memory-anki-floating-dialog:'
 const FLOATING_DIALOG_MIN_WIDTH = 320
 const FLOATING_DIALOG_MIN_HEIGHT = 180
 const FLOATING_DIALOG_VIEWPORT_PADDING = 16
+
+function isCoarsePointerViewport() {
+  if (typeof window === 'undefined') return false
+  if (typeof window.matchMedia !== 'function') return false
+  return window.matchMedia('(pointer: coarse)').matches && window.innerWidth < 1024
+}
 
 const resizeHandleStyles: Record<ResizeDirection, { className: string; label: string }> = {
   n: { className: 'left-6 right-6 top-[-6px] h-3 cursor-ns-resize', label: '从上边调整弹窗大小' },
@@ -119,6 +128,23 @@ function writeStoredFloatingLayout(storageKey: string, layout: FloatingDialogLay
 const DialogModalContext = createContext<{ modal: boolean }>({ modal: true })
 const DialogTitleTextContext = createContext<((title: string) => void) | null>(null)
 
+function containsDialogPart(
+  children: ReactNode,
+  part: typeof DialogTitle | typeof DialogDescription,
+): boolean {
+  let found = false
+  Children.forEach(children, (child) => {
+    if (found || !isValidElement(child)) return
+    if (child.type === part) {
+      found = true
+      return
+    }
+    const childProps = child.props as { children?: ReactNode }
+    if (childProps.children) found = containsDialogPart(childProps.children, part)
+  })
+  return found
+}
+
 /**
  * 基于 Radix UI 的 Dialog 实现。
  *
@@ -158,6 +184,8 @@ const DialogContent = forwardRef<
     floating?: boolean
     floatingId?: string
     capsuleLabel?: string
+    accessibleTitle?: string
+    accessibleDescription?: string
   }
 >(function DialogContent(
   {
@@ -168,6 +196,8 @@ const DialogContent = forwardRef<
     floating,
     floatingId,
     capsuleLabel,
+    accessibleTitle,
+    accessibleDescription,
     onPointerDownOutside,
     onInteractOutside,
     onEscapeKeyDown,
@@ -177,11 +207,19 @@ const DialogContent = forwardRef<
 ) {
   const { modal } = useContext(DialogModalContext)
   const resolvedLayout = layout ?? (modal ? 'centered' : 'unstyled')
-  const floatingEnabled = floating ?? resolvedLayout === 'centered'
+  const floatingEnabled = (floating ?? resolvedLayout === 'centered') && !isCoarsePointerViewport()
   const stableFloatingId = useMemo(
     () => floatingId ?? `dialog:${capsuleLabel ?? String(props['aria-label'] ?? className ?? 'default')}`,
     [capsuleLabel, className, floatingId, props],
   )
+  const hasDialogTitle = containsDialogPart(children, DialogTitle)
+  const hasDialogDescription = containsDialogPart(children, DialogDescription)
+  const hasExplicitDescription = Object.prototype.hasOwnProperty.call(props, 'aria-describedby')
+  const contentProps =
+    !hasDialogDescription && !accessibleDescription && !hasExplicitDescription
+      ? { ...props, 'aria-describedby': undefined }
+      : props
+  const fallbackTitle = accessibleTitle ?? capsuleLabel ?? String(props['aria-label'] ?? '弹窗')
   const storageKey = `${FLOATING_DIALOG_STORAGE_PREFIX}${stableFloatingId}`
   const [floatingLayout, setFloatingLayout] = useState<FloatingDialogLayout>(() =>
     readStoredFloatingLayout(storageKey),
@@ -368,6 +406,7 @@ const DialogContent = forwardRef<
         <DialogPrimitive.Content
           ref={mergedRef}
           {...props}
+          aria-describedby={undefined}
           onPointerDownOutside={(event) => {
             if (floatingLayout.pinned) event.preventDefault()
             onPointerDownOutside?.(event)
@@ -400,7 +439,7 @@ const DialogContent = forwardRef<
   const content = (
     <DialogPrimitive.Content
       ref={mergedRef}
-      {...props}
+      {...contentProps}
       onPointerDownOutside={(event) => {
         if (floatingLayout.pinned) event.preventDefault()
         onPointerDownOutside?.(event)
@@ -437,6 +476,14 @@ const DialogContent = forwardRef<
           if (!capsuleLabel && title.trim()) setDerivedCapsuleLabel(title.trim())
         }}
       >
+        {hasDialogTitle ? null : (
+          <DialogPrimitive.Title className="sr-only">{fallbackTitle}</DialogPrimitive.Title>
+        )}
+        {!hasDialogDescription && accessibleDescription ? (
+          <DialogPrimitive.Description className="sr-only">
+            {accessibleDescription}
+          </DialogPrimitive.Description>
+        ) : null}
         {children}
       </DialogTitleTextContext.Provider>
       {floatingEnabled ? (

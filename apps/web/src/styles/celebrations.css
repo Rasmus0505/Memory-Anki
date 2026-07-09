@@ -1,0 +1,219 @@
+﻿/* === COMBO MILESTONE BURST (情感化视觉：连击里程碑庆祝) === */
+
+/* CSS 伪全屏：替代浏览器原生 Fullscreen API，保留所有 React overlay 可见性 */
+.memory-anki-mindmap-native-fullscreen {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 95 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  border-radius: 0 !important;
+  border: none !important;
+  background: #f8fafc !important;
+}
+
+.memory-anki-combo-burst-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 160;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 50% 35%, rgba(251, 191, 36, 0.12), transparent 28%),
+    radial-gradient(circle at 50% 65%, rgba(236, 72, 153, 0.08), transparent 34%);
+}
+
+.memory-anki-combo-burst-stage {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 280px;
+  min-height: 240px;
+}
+
+.memory-anki-combo-burst-rings,
+.memory-anki-combo-burst-shards {
+  position: absolute;
+  inset: 0;
+}
+
+.memory-anki-combo-burst-ring {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 80px;
+  height: 80px;
+  margin-left: -40px;
+  margin-top: -40px;
+  border-radius: 9999px;
+  border: 3px solid;
+  box-shadow: 0 0 28px var(--combo-burst-glow, rgba(245, 158, 11, 0.45));
+}
+
+.memory-anki-combo-burst-shard {
+  position: absolute;
+  left: calc(50% - 4px);
+  top: calc(50% - 4px);
+  width: 8px;
+  height: 18px;
+  border-radius: 999px;
+  box-shadow: 0 0 18px currentColor;
+}
+
+.memory-anki-combo-burst-core {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  text-align: center;
+  padding: 26px 34px;
+  border-radius: 30px;
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  background: rgba(255, 255, 255, 0.9);
+  backdrop-filter: blur(16px);
+  box-shadow:
+    0 0 0 1px rgba(255,255,255,0.42),
+    0 24px 60px rgba(15, 23, 42, 0.16);
+  filter: drop-shadow(0 0 20px var(--combo-burst-glow, rgba(245, 158, 11, 0.45)));
+}
+
+.memory-anki-combo-burst-kicker {
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #9a3412;
+  opacity: 0.82;
+}
+
+.memory-anki-combo-burst-value {
+  font-size: 72px;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  color: #111827;
+}
+
+.memory-anki-combo-burst-copy {
+  max-width: 280px;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: #7c2d12;
+  opacity: 0.92;
+}
+
+/* === COMPLETION CELEBRATION (情感化视觉：复习完成庆祝) === */
+
+.memory-anki-completion-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 160;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.memory-anki-completion-backdrop {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 50% 20%, rgba(251, 191, 36, 0.18), transparent 30%),
+    linear-gradient(180deg, rgba(15, 23, 42, 0.08), rgba(15, 23, 42, 0.02));
+}
+
+.memory-anki-completion-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 32px 40px;
+  border-radius: 28px;
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(12px);
+  box-shadow:
+    0 0 0 1px rgba(245, 158, 11, 0.12),
+    0 24px 60px rgba(15, 23, 42, 0.14);
+  animation: memory-anki-completion-card-in 600ms cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+  opacity: 0;
+}
+
+@keyframes memory-anki-completion-card-in {
+  0% {
+    transform: scale(0.7) translateY(20px);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1) translateY(0);
+    opacity: 1;
+  }
+}
+
+.memory-anki-completion-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 64px;
+  height: 64px;
+  border-radius: 9999px;
+  background: linear-gradient(135deg, #fbbf24, #f59e0b);
+  box-shadow: 0 8px 24px rgba(245, 158, 11, 0.35);
+  animation: memory-anki-completion-icon-bounce 800ms ease-out 200ms forwards;
+}
+
+@keyframes memory-anki-completion-icon-bounce {
+  0% {
+    transform: scale(0);
+  }
+  60% {
+    transform: scale(1.2);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.memory-anki-completion-title {
+  font-size: 22px;
+  font-weight: 700;
+  color: #0f172a;
+  letter-spacing: 0.02em;
+}
+
+.memory-anki-completion-copy {
+  font-size: 14px;
+  color: #475569;
+  font-weight: 500;
+}
+
+.memory-anki-completion-stats {
+  display: flex;
+  gap: 28px;
+}
+
+.memory-anki-completion-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.memory-anki-completion-stat-value {
+  font-size: 28px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.memory-anki-completion-stat-label {
+  font-size: 12px;
+  color: #64748b;
+  font-weight: 500;
+}
