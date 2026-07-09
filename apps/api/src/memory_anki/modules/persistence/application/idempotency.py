@@ -1,17 +1,24 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timedelta
 from typing import Any
 
 from fastapi import Request
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from memory_anki.core.time import utc_now_naive
-from memory_anki.infrastructure.db.models import Config
+from memory_anki.infrastructure.db._tables.misc import Config
 
 MUTATION_ID_HEADER = "X-Memory-Anki-Mutation-ID"
 CONFIG_PREFIX = "api_mutation."
 MAX_MUTATION_ID_LENGTH = 80
+IDEMPOTENCY_TTL_DAYS = 14
+
+
+def _like_prefix_pattern(prefix: str) -> str:
+    return prefix.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
 
 
 def read_mutation_id(request: Request | None) -> str | None:
@@ -65,3 +72,23 @@ def save_idempotent_response(
         session.commit()
     else:
         session.flush()
+
+
+def purge_expired_idempotency_records(
+    session: Session,
+    *,
+    ttl_days: int = IDEMPOTENCY_TTL_DAYS,
+    now: datetime | None = None,
+) -> int:
+    """Delete expired mutation response cache rows and return the count."""
+    cutoff = (now or utc_now_naive()) - timedelta(days=ttl_days)
+    deleted = (
+        session.query(Config)
+        .filter(
+            Config.key.like(_like_prefix_pattern(CONFIG_PREFIX), escape="\\"),
+            or_(Config.updated_at.is_(None), Config.updated_at < cutoff),
+        )
+        .delete(synchronize_session=False)
+    )
+    session.commit()
+    return int(deleted)

@@ -6,7 +6,7 @@ from datetime import date
 
 from sqlalchemy import text
 
-from memory_anki.infrastructure.db.models import get_session
+from memory_anki.infrastructure.db._tables._base import get_session
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +41,17 @@ def run_startup_warmup() -> None:
             ),
             {"today": today},
         ).fetchall()
+        from memory_anki.modules.reviews.application.review_execution_service import (
+            detect_review_stage_progress_issues,
+        )
+
+        health = detect_review_stage_progress_issues(session)
+        if health["needs_repair"]:
+            logger.warning(
+                "review stage progress self-check found %s issue(s); "
+                "user can repair via POST /api/v1/review/repair-stage-progress",
+                health["total_issues"],
+            )
         logger.info("startup warmup completed")
     finally:
         session.close()

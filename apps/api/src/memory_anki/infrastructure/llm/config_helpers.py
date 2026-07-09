@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from sqlalchemy.orm import Session
 
-from memory_anki.infrastructure.db.models import Config
+from memory_anki.infrastructure.db._tables.misc import Config
 
 
 def has_non_empty_config(session: Session, key: str) -> bool:

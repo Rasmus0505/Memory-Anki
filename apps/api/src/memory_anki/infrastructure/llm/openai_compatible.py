@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import time
 import urllib.error
 import urllib.request
 from collections.abc import Generator
@@ -18,6 +19,8 @@ class OpenAICompatibleChatConfig:
     model: str
     temperature: float | None = 0.0
     timeout_seconds: float = 90.0
+    max_retries: int = 2
+    retry_backoff_seconds: float = 1.0
 
 
 class OpenAICompatibleError(RuntimeError):
@@ -221,20 +224,27 @@ def call_chat_completion_text(
         stream=False,
     )
     request_url = build_chat_completions_url(config.base_url)
-    request = urllib.request.Request(
-        request_url,
-        data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
-        headers=_build_headers(config.api_key),
-        method="POST",
-    )
-    try:
-        with urllib.request.urlopen(request, timeout=config.timeout_seconds) as response:
-            response_body = response.read().decode("utf-8", errors="ignore")
-    except urllib.error.HTTPError as exc:
-        raise _build_http_error(exc, request_url) from exc
-    except urllib.error.URLError as exc:
-        raise _build_network_error(exc, request_url) from exc
-    return extract_chat_completion_text_from_body(response_body)
+    for attempt in range(max(0, config.max_retries) + 1):
+        request = urllib.request.Request(
+            request_url,
+            data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+            headers=_build_headers(config.api_key),
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=config.timeout_seconds) as response:
+                response_body = response.read().decode("utf-8", errors="ignore")
+            return extract_chat_completion_text_from_body(response_body)
+        except urllib.error.HTTPError as exc:
+            error = _build_http_error(exc, request_url)
+            if not _should_retry_http_status(exc.code) or attempt >= max(0, config.max_retries):
+                raise error from exc
+        except urllib.error.URLError as exc:
+            error = _build_network_error(exc, request_url)
+            if attempt >= max(0, config.max_retries):
+                raise error from exc
+        _sleep_before_retry(attempt, config.retry_backoff_seconds)
+    raise AssertionError("unreachable retry loop state")
 
 
 def stream_chat_completion_text(
@@ -252,19 +262,30 @@ def stream_chat_completion_text(
         stream=True,
     )
     request_url = build_chat_completions_url(config.base_url)
-    request = urllib.request.Request(
-        request_url,
-        data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
-        headers=_build_headers(config.api_key, accept_sse=True),
-        method="POST",
-    )
-    try:
-        with urllib.request.urlopen(request, timeout=config.timeout_seconds) as response:
-            return (yield from parse_chat_completion_stream(response))
-    except urllib.error.HTTPError as exc:
-        raise _build_http_error(exc, request_url) from exc
-    except urllib.error.URLError as exc:
-        raise _build_network_error(exc, request_url) from exc
+    for attempt in range(max(0, config.max_retries) + 1):
+        request = urllib.request.Request(
+            request_url,
+            data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+            headers=_build_headers(config.api_key, accept_sse=True),
+            method="POST",
+        )
+        try:
+            response = urllib.request.urlopen(request, timeout=config.timeout_seconds)
+        except urllib.error.HTTPError as exc:
+            error = _build_http_error(exc, request_url)
+            if not _should_retry_http_status(exc.code) or attempt >= max(0, config.max_retries):
+                raise error from exc
+        except urllib.error.URLError as exc:
+            error = _build_network_error(exc, request_url)
+            if attempt >= max(0, config.max_retries):
+                raise error from exc
+        else:
+            try:
+                return (yield from parse_chat_completion_stream(response))
+            finally:
+                response.close()
+        _sleep_before_retry(attempt, config.retry_backoff_seconds)
+    raise AssertionError("unreachable retry loop state")
 
 
 def _build_payload(
@@ -313,3 +334,11 @@ def _build_network_error(exc: urllib.error.URLError, request_url: str) -> OpenAI
         request_url=request_url,
         reason=str(exc.reason),
     )
+
+
+def _should_retry_http_status(status_code: int) -> bool:
+    return status_code == 429 or 500 <= status_code <= 599
+
+
+def _sleep_before_retry(attempt: int, base_seconds: float) -> None:
+    time.sleep(max(0.0, base_seconds) * (2**attempt))
