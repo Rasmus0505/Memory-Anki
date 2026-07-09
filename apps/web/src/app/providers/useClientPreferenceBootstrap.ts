@@ -39,91 +39,109 @@ import {
   sanitizeTimerFocusConfig,
 } from '@/shared/components/session/timer-focus-config'
 import {
+  BREAK_GUARD_STORAGE_KEY,
+  BREAK_GUARD_UPDATED_EVENT,
+  DEFAULT_BREAK_GUARD_CONFIG,
+  sanitizeBreakGuardConfig,
+} from '@/shared/components/session/break-guard-config'
+import {
   initializeClientPreferences,
   migrateLocalPreferenceToBackend,
 } from '@/shared/preferences/clientPreferences'
+import { emitAppEvent } from '@/shared/events/appEvents'
 
 export function useClientPreferenceBootstrap() {
   useEffect(() => {
-    void (async () => {
-      await initializeClientPreferences()
-      if (typeof window === 'undefined') return
-
-      const migrations = [
-        migrateAndNotify(
-          'memory_anki_shortcuts',
-          MEMORY_ANKI_SHORTCUTS_STORAGE_KEY,
-          DEFAULT_MEMORY_ANKI_SHORTCUTS,
-          sanitizeMemoryAnkiShortcutMap,
-          MEMORY_ANKI_SHORTCUTS_UPDATED_EVENT,
-        ),
-        migrateAndNotify(
-          'review_feedback_settings',
-          REVIEW_FEEDBACK_SETTINGS_STORAGE_KEY,
-          DEFAULT_REVIEW_FEEDBACK_SETTINGS,
-          sanitizeReviewFeedbackSettings,
-          REVIEW_FEEDBACK_SETTINGS_UPDATED_EVENT,
-        ),
-        migrateAndNotify(
-          'english_practice_settings',
-          ENGLISH_PRACTICE_SETTINGS_STORAGE_KEY,
-          DEFAULT_ENGLISH_PRACTICE_SETTINGS,
-          sanitizeEnglishPracticeSettings,
-          ENGLISH_PRACTICE_SETTINGS_UPDATED_EVENT,
-        ),
-        migrateAndNotify(
-          'timer_automation_config',
-          TIMER_AUTOMATION_STORAGE_KEY,
-          DEFAULT_TIMER_AUTOMATION_CONFIG,
-          sanitizeTimerAutomationConfig,
-          TIMER_AUTOMATION_UPDATED_EVENT,
-        ),
-        migrateAndNotify(
-          'timer_focus_config',
-          TIMER_FOCUS_STORAGE_KEY,
-          DEFAULT_TIMER_FOCUS_CONFIG,
-          sanitizeTimerFocusConfig,
-          TIMER_FOCUS_UPDATED_EVENT,
-        ),
-        migrateAndNotify(
-          'palace_list_view_settings',
-          PALACE_LIST_VIEW_SETTINGS_KEY,
-          DEFAULT_PALACE_LIST_VIEW_SETTINGS,
-          isPalaceListViewSettings,
-        ),
-        migrateAndNotify(
-          'palace_shelf_view_settings',
-          PALACE_SHELF_VIEW_SETTINGS_KEY,
-          DEFAULT_PALACE_SHELF_VIEW_SETTINGS,
-          isPalaceShelfViewSettings,
-        ),
-      ]
-
-      const hadLegacyLocalState =
-        Boolean(window.localStorage.getItem(MEMORY_ANKI_SHORTCUTS_STORAGE_KEY)) ||
-        Boolean(window.localStorage.getItem(REVIEW_FEEDBACK_SETTINGS_STORAGE_KEY)) ||
-        Boolean(window.localStorage.getItem(ENGLISH_PRACTICE_SETTINGS_STORAGE_KEY)) ||
-        Boolean(window.localStorage.getItem(TIMER_AUTOMATION_STORAGE_KEY)) ||
-        Boolean(window.localStorage.getItem(TIMER_FOCUS_STORAGE_KEY)) ||
-        Boolean(window.localStorage.getItem(PALACE_LIST_VIEW_SETTINGS_KEY)) ||
-        Boolean(window.localStorage.getItem(PALACE_SHELF_VIEW_SETTINGS_KEY))
-
-      await Promise.all(migrations)
-
-      const hasRemainingLegacyLocalState =
-        Boolean(window.localStorage.getItem(MEMORY_ANKI_SHORTCUTS_STORAGE_KEY)) ||
-        Boolean(window.localStorage.getItem(REVIEW_FEEDBACK_SETTINGS_STORAGE_KEY)) ||
-        Boolean(window.localStorage.getItem(ENGLISH_PRACTICE_SETTINGS_STORAGE_KEY)) ||
-        Boolean(window.localStorage.getItem(TIMER_AUTOMATION_STORAGE_KEY)) ||
-        Boolean(window.localStorage.getItem(TIMER_FOCUS_STORAGE_KEY)) ||
-        Boolean(window.localStorage.getItem(PALACE_LIST_VIEW_SETTINGS_KEY)) ||
-        Boolean(window.localStorage.getItem(PALACE_SHELF_VIEW_SETTINGS_KEY))
-
-      if (hadLegacyLocalState && !hasRemainingLegacyLocalState) {
-        toast.success('关键个人设置已迁移到后端保存，改代码和切版本时会更稳。')
-      }
-    })()
+    void bootstrapClientPreferences()
   }, [])
+}
+
+export async function bootstrapClientPreferences() {
+  await initializeClientPreferences()
+  if (typeof window === 'undefined') return
+
+  const migrations = [
+    migrateAndNotify(
+      'memory_anki_shortcuts',
+      MEMORY_ANKI_SHORTCUTS_STORAGE_KEY,
+      DEFAULT_MEMORY_ANKI_SHORTCUTS,
+      sanitizeMemoryAnkiShortcutMap,
+      MEMORY_ANKI_SHORTCUTS_UPDATED_EVENT,
+    ),
+    migrateAndNotify(
+      'review_feedback_settings',
+      REVIEW_FEEDBACK_SETTINGS_STORAGE_KEY,
+      DEFAULT_REVIEW_FEEDBACK_SETTINGS,
+      sanitizeReviewFeedbackSettings,
+      REVIEW_FEEDBACK_SETTINGS_UPDATED_EVENT,
+    ),
+    migrateAndNotify(
+      'english_practice_settings',
+      ENGLISH_PRACTICE_SETTINGS_STORAGE_KEY,
+      DEFAULT_ENGLISH_PRACTICE_SETTINGS,
+      sanitizeEnglishPracticeSettings,
+      ENGLISH_PRACTICE_SETTINGS_UPDATED_EVENT,
+    ),
+    migrateAndNotify(
+      'timer_automation_config',
+      TIMER_AUTOMATION_STORAGE_KEY,
+      DEFAULT_TIMER_AUTOMATION_CONFIG,
+      sanitizeTimerAutomationConfig,
+      TIMER_AUTOMATION_UPDATED_EVENT,
+    ),
+    migrateAndNotify(
+      'timer_focus_config',
+      TIMER_FOCUS_STORAGE_KEY,
+      DEFAULT_TIMER_FOCUS_CONFIG,
+      sanitizeTimerFocusConfig,
+      TIMER_FOCUS_UPDATED_EVENT,
+    ),
+    migrateAndNotify(
+      'break_guard_config',
+      BREAK_GUARD_STORAGE_KEY,
+      DEFAULT_BREAK_GUARD_CONFIG,
+      sanitizeBreakGuardConfig,
+      BREAK_GUARD_UPDATED_EVENT,
+    ),
+    migrateAndNotify(
+      'palace_list_view_settings',
+      PALACE_LIST_VIEW_SETTINGS_KEY,
+      DEFAULT_PALACE_LIST_VIEW_SETTINGS,
+      isPalaceListViewSettings,
+    ),
+    migrateAndNotify(
+      'palace_shelf_view_settings',
+      PALACE_SHELF_VIEW_SETTINGS_KEY,
+      DEFAULT_PALACE_SHELF_VIEW_SETTINGS,
+      isPalaceShelfViewSettings,
+    ),
+  ]
+
+  const hadLegacyLocalState =
+    Boolean(window.localStorage.getItem(MEMORY_ANKI_SHORTCUTS_STORAGE_KEY)) ||
+    Boolean(window.localStorage.getItem(REVIEW_FEEDBACK_SETTINGS_STORAGE_KEY)) ||
+    Boolean(window.localStorage.getItem(ENGLISH_PRACTICE_SETTINGS_STORAGE_KEY)) ||
+    Boolean(window.localStorage.getItem(TIMER_AUTOMATION_STORAGE_KEY)) ||
+    Boolean(window.localStorage.getItem(TIMER_FOCUS_STORAGE_KEY)) ||
+    Boolean(window.localStorage.getItem(BREAK_GUARD_STORAGE_KEY)) ||
+    Boolean(window.localStorage.getItem(PALACE_LIST_VIEW_SETTINGS_KEY)) ||
+    Boolean(window.localStorage.getItem(PALACE_SHELF_VIEW_SETTINGS_KEY))
+
+  await Promise.all(migrations)
+
+  const hasRemainingLegacyLocalState =
+    Boolean(window.localStorage.getItem(MEMORY_ANKI_SHORTCUTS_STORAGE_KEY)) ||
+    Boolean(window.localStorage.getItem(REVIEW_FEEDBACK_SETTINGS_STORAGE_KEY)) ||
+    Boolean(window.localStorage.getItem(ENGLISH_PRACTICE_SETTINGS_STORAGE_KEY)) ||
+    Boolean(window.localStorage.getItem(TIMER_AUTOMATION_STORAGE_KEY)) ||
+    Boolean(window.localStorage.getItem(TIMER_FOCUS_STORAGE_KEY)) ||
+    Boolean(window.localStorage.getItem(BREAK_GUARD_STORAGE_KEY)) ||
+    Boolean(window.localStorage.getItem(PALACE_LIST_VIEW_SETTINGS_KEY)) ||
+    Boolean(window.localStorage.getItem(PALACE_SHELF_VIEW_SETTINGS_KEY))
+
+  if (hadLegacyLocalState && !hasRemainingLegacyLocalState) {
+    toast.success('关键个人设置已迁移到后端保存，改代码和切版本时会更稳。')
+  }
 }
 
 function migrateAndNotify<T>(
@@ -134,8 +152,8 @@ function migrateAndNotify<T>(
   updatedEvent?: string,
 ) {
   return migrateLocalPreferenceToBackend(key, localStorageKey, fallback, normalizeValue).then((value) => {
-    if (updatedEvent && typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent(updatedEvent, { detail: value }))
+    if (updatedEvent) {
+      emitAppEvent(updatedEvent, value)
     }
     return value
   })

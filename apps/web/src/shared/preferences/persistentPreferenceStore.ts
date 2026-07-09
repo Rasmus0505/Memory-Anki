@@ -5,6 +5,7 @@ import {
   hasLoadedClientPreferences,
   saveClientPreference,
 } from '@/shared/preferences/clientPreferences'
+import { emitAppEvent, onAppEvent } from '@/shared/events/appEvents'
 
 type PreferenceKey = keyof ClientPreferences
 type PreferenceValidator<T> = (value: unknown) => value is T
@@ -34,18 +35,14 @@ export function createPersistentPreferenceStore<T>({
   isValidCache,
 }: PersistentPreferenceStoreOptions<T>): PersistentPreferenceStore<T> {
   const dispatchUpdate = (value: T) => {
-    if (typeof window === 'undefined') return
-    window.dispatchEvent(new CustomEvent(updatedEvent, { detail: value }))
+    emitAppEvent(updatedEvent, value)
   }
 
   const bridgeKey = `${String(cacheKey)}:${updatedEvent}`
   if (typeof window !== 'undefined' && !bridgedPreferenceEvents.has(bridgeKey)) {
     bridgedPreferenceEvents.add(bridgeKey)
-    window.addEventListener(CLIENT_PREFERENCES_UPDATED_EVENT, (event) => {
-      const detail =
-        event instanceof CustomEvent && detailIsClientPreferencePatch(event.detail)
-          ? event.detail
-          : null
+    onAppEvent(CLIENT_PREFERENCES_UPDATED_EVENT, (eventDetail) => {
+      const detail = detailIsClientPreferencePatch(eventDetail) ? eventDetail : null
       if (!detail || !Object.prototype.hasOwnProperty.call(detail, cacheKey)) return
       const value = detail[cacheKey]
       dispatchUpdate(isValidCache(value) ? sanitize(value) : defaultValue)

@@ -9,14 +9,16 @@ import type {
   PalaceListItem,
   PalaceReviewPlanResponse,
   PalaceSubjectShelfResponse,
+  PalaceTemplateSummary,
 } from '@/shared/api/contracts'
 import {
   clearPrefetchedPromisesByPrefix,
   consumePrefetchedPromise,
   prefetchPromise,
 } from '@/shared/api/promiseWarmupCache'
+import { APP_EVENT_NAMES, emitAppEvent } from '@/shared/events/appEvents'
 
-export const PALACE_CATALOG_INVALIDATED_EVENT = 'palace-catalog:invalidated'
+export const PALACE_CATALOG_INVALIDATED_EVENT = APP_EVENT_NAMES.palaceCatalogInvalidated
 
 export type PalaceMutationPayload = Partial<
   Pick<PalaceEditorMeta, 'title' | 'description' | 'created_at' | 'primary_chapter_id'>
@@ -65,9 +67,7 @@ export function getPalacesGroupedApi(params?: Record<string, string>) {
 
 export function invalidatePalaceCatalogCache() {
   clearPrefetchedPromisesByPrefix('palace:')
-  if (typeof window !== 'undefined') {
-    window.dispatchEvent(new CustomEvent(PALACE_CATALOG_INVALIDATED_EVENT))
-  }
+  emitAppEvent(PALACE_CATALOG_INVALIDATED_EVENT)
 }
 
 export function prefetchPalacesGroupedApi(params?: Record<string, string>) {
@@ -201,4 +201,43 @@ export function getPalaceEditorApi(id: number) {
 
 export function getPalaceFocusSessionApi(id: number) {
   return request<PalaceFocusSessionResponse>(`/palaces/${id}/focus-session`)
+}
+
+export function listPalaceTemplatesApi() {
+  return request<{ items: PalaceTemplateSummary[] }>('/palace-templates')
+}
+
+export function createPalaceTemplateApi(data: { palace_id: number; name: string; description?: string }) {
+  return request<{ item: PalaceTemplateSummary }>('/palace-templates', {
+    method: 'POST',
+    body: JSON.stringify(data),
+    persistence: {
+      resourceKey: 'palace-template:create',
+      description: '存为宫殿模板',
+      replayMode: 'manual',
+    },
+  })
+}
+
+export function deletePalaceTemplateApi(id: number) {
+  return request<{ ok: boolean }>(`/palace-templates/${id}`, {
+    method: 'DELETE',
+    persistence: {
+      resourceKey: `palace-template:delete:${id}`,
+      description: '删除宫殿模板',
+      replayMode: 'manual',
+    },
+  })
+}
+
+export function instantiatePalaceTemplateApi(id: number, title: string) {
+  return request<{ id: number }>(`/palace-templates/${id}/instantiate`, {
+    method: 'POST',
+    body: JSON.stringify({ title }),
+    persistence: {
+      resourceKey: 'palace-template:instantiate',
+      description: '从模板创建宫殿',
+      replayMode: 'manual',
+    },
+  })
 }

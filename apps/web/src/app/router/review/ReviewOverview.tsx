@@ -1,7 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { ArrowLeft, ArrowRight, BookOpen, Brain } from 'lucide-react'
-import type { ReviewQueueResponse } from '@/shared/api/contracts'
+import { ArrowLeft, ArrowRight, BookOpen, Brain, CalendarClock, RotateCcw } from 'lucide-react'
+import { toast } from 'sonner'
+import type {
+  ReviewQueueResponse,
+  ReviewStageProgressHealthResponse,
+  SpreadOverdueResponse,
+} from '@/shared/api/contracts'
 import { PageIntro } from '@/shared/components/layout/PageIntro'
 import { EmptyState, ErrorState } from '@/shared/components/state-placeholders'
 import { Badge } from '@/shared/components/ui/badge'
@@ -11,7 +16,13 @@ import { Skeleton } from '@/shared/components/ui/skeleton'
 import {
   getChapterReviewQueueApi,
   getReviewQueueApi,
+  getReviewStageProgressHealthApi,
+  previewSpreadOverdueApi,
+  repairReviewStageProgressApi,
+  spreadOverdueApi,
+  undoSpreadOverdueApi,
 } from '@/features/review/api'
+import { ReviewLoadForecastCard } from '@/features/review/components/ReviewLoadForecastCard'
 import { buildReviewSessionPath } from '@/features/review/reviewSessionRoutes'
 import { prefetchStudySession } from '@/features/review/studyWarmup'
 
@@ -61,6 +72,11 @@ export default function ReviewOverview() {
   const chapterId = chapterIdParam ? Number(chapterIdParam) : null
   const [queue, setQueue] = useState<ReviewQueueResponse | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
+  const [spreadPreview, setSpreadPreview] = useState<SpreadOverdueResponse | null>(null)
+  const [lastSpreadCount, setLastSpreadCount] = useState(0)
+  const [spreadAction, setSpreadAction] = useState<'preview' | 'confirm' | 'undo' | null>(null)
+  const [health, setHealth] = useState<ReviewStageProgressHealthResponse | null>(null)
+  const [repairing, setRepairing] = useState(false)
 
   const loadQueue = useCallback(async () => {
     setLoadError(null)
@@ -78,11 +94,75 @@ export default function ReviewOverview() {
     void loadQueue().catch(() => undefined)
   }, [loadQueue])
 
+  useEffect(() => {
+    if (chapterId) {
+      setHealth(null)
+      return
+    }
+    getReviewStageProgressHealthApi()
+      .then(setHealth)
+      .catch(() => setHealth(null))
+  }, [chapterId])
+
   const chapterLabel = useMemo(() => {
     if (!queue?.chapter) return null
     if (queue.chapter.subject?.name) return `${queue.chapter.subject.name} / ${queue.chapter.name}`
     return queue.chapter.name
   }, [queue?.chapter])
+
+  const handlePreviewSpread = useCallback(async () => {
+    setSpreadAction('preview')
+    try {
+      setSpreadPreview(await previewSpreadOverdueApi())
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '逾期平滑预览失败')
+    } finally {
+      setSpreadAction(null)
+    }
+  }, [])
+
+  const handleConfirmSpread = useCallback(async () => {
+    setSpreadAction('confirm')
+    try {
+      const result = await spreadOverdueApi()
+      setLastSpreadCount(result.spread)
+      setSpreadPreview(null)
+      void loadQueue().catch(() => undefined)
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '逾期平滑失败')
+    } finally {
+      setSpreadAction(null)
+    }
+  }, [loadQueue])
+
+  const handleUndoSpread = useCallback(async () => {
+    setSpreadAction('undo')
+    try {
+      const result = await undoSpreadOverdueApi()
+      setLastSpreadCount(0)
+      setSpreadPreview(null)
+      toast.success(`已恢复 ${result.restored} 项`)
+      void loadQueue().catch(() => undefined)
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '撤销逾期平滑失败')
+    } finally {
+      setSpreadAction(null)
+    }
+  }, [loadQueue])
+
+  const handleRepairStageProgress = useCallback(async () => {
+    setRepairing(true)
+    try {
+      const result = await repairReviewStageProgressApi()
+      toast.success(`修复完成：重建 ${result.palace_count} 个宫殿`)
+      setHealth(await getReviewStageProgressHealthApi())
+      await loadQueue()
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '修复失败，请稍后重试')
+    } finally {
+      setRepairing(false)
+    }
+  }, [loadQueue])
 
   if (loadError) {
     return (
@@ -118,15 +198,104 @@ export default function ReviewOverview() {
                 </Button>
               </Link>
             ) : null}
+            {!chapterId && queue.overdue_count > 0 ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={spreadAction !== null}
+                onClick={() => void handlePreviewSpread()}
+              >
+                <CalendarClock className="mr-2 size-4" />
+                平滑逾期（{queue.overdue_count}）
+              </Button>
+            ) : null}
           </>
         }
       />
 
-      {queue.smoothed_count > 0 ? (
+      {spreadPreview ? (
+        <Card className="memory-anki-warm-panel memory-anki-surface-glow border-border/60 bg-card/90">
+          <CardHeader>
+            <CardTitle className="text-base">确认平滑逾期</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4 text-sm text-muted-foreground">
+            <p>将把 {spreadPreview.spread} 项逾期复习分摊到未来 7 天，最早的排在最前。</p>
+            {spreadPreview.moves.length > 0 ? (
+              <ul className="space-y-2">
+                {spreadPreview.moves.slice(0, 5).map((move) => (
+                  <li key={move.schedule_id} className="rounded-md border border-border/60 bg-background/70 px-3 py-2">
+                    <span className="font-medium text-foreground">{move.palace_title || `宫殿 ${move.palace_id}`}</span>
+                    <span className="ml-2">{move.old_date} → {move.new_date}</span>
+                  </li>
+                ))}
+                {spreadPreview.moves.length > 5 ? (
+                  <li className="px-3 text-xs">...等 {spreadPreview.moves.length} 项</li>
+                ) : null}
+              </ul>
+            ) : null}
+            <div className="flex flex-wrap justify-end gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={spreadAction !== null}
+                onClick={() => setSpreadPreview(null)}
+              >
+                取消
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                disabled={spreadAction !== null || spreadPreview.spread <= 0}
+                onClick={() => void handleConfirmSpread()}
+              >
+                <CalendarClock className="mr-2 size-4" />
+                确认平滑
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {health?.needs_repair ? (
+        <Card className="memory-anki-warm-panel memory-anki-surface-glow border-warning/40 bg-warning/5">
+          <CardContent className="flex flex-wrap items-center justify-between gap-3 p-4 text-sm text-warning">
+            <span className="min-w-0 flex-1">
+              检测到 {health.total_issues} 处复习进度异常（孤儿进度 {health.orphan_progress_count}、
+              孤儿会话 {health.orphan_study_session_count}、阶段断档 {health.stage_gap_palace_count}），建议立即修复。
+            </span>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="border-warning/30 bg-background/80 text-warning hover:bg-warning/10"
+              disabled={repairing}
+              onClick={() => void handleRepairStageProgress()}
+            >
+              {repairing ? '修复中...' : '一键修复'}
+            </Button>
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {queue.smoothed_count > 0 || lastSpreadCount > 0 ? (
         <Card className="memory-anki-warm-panel memory-anki-surface-glow border-border/60 bg-card/90">
           <CardContent className="flex items-center justify-between gap-3 p-4 text-sm text-muted-foreground">
-            <span>系统已将 {queue.smoothed_count} 项逾期任务自动平滑到后续日期。</span>
-            <Badge variant="secondary">已平滑</Badge>
+            <span>系统已将 {lastSpreadCount || queue.smoothed_count} 项逾期任务平滑到后续日期。</span>
+            <div className="flex items-center gap-2">
+              <Badge variant="secondary">已平滑</Badge>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={spreadAction !== null}
+                onClick={() => void handleUndoSpread()}
+              >
+                <RotateCcw className="mr-2 size-4" />
+                撤销
+              </Button>
+            </div>
           </CardContent>
         </Card>
       ) : null}
@@ -187,6 +356,8 @@ export default function ReviewOverview() {
           )}
         </CardContent>
       </Card>
+
+      {!chapterId ? <ReviewLoadForecastCard /> : null}
     </div>
   )
 }

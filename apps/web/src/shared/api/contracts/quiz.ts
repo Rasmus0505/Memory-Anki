@@ -162,6 +162,7 @@ export interface PalaceQuizGenerationPreview {
     first_multi_nodes: string[]
   }>
   ocr_sources?: PalaceQuizOcrSourceDraft[]
+  recovered_from_log?: boolean
 }
 
 export type PalaceQuizOcrSourceDraft = Omit<
@@ -183,6 +184,10 @@ export interface PalaceQuizStreamDeltaEvent {
 export interface PalaceShortAnswerFeedback {
   question_id: number
   feedback_text: string
+  verdict?: 'correct' | 'partial' | 'incorrect' | null
+  hit_points?: string[]
+  missed_points?: string[]
+  suggestion?: string
   ai_call_log_id: string | null
   resolved_ai?: ResolvedAiRuntimeMeta | null
 }

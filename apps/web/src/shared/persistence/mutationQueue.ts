@@ -65,7 +65,6 @@ export interface MutationQueueSummary {
 const DB_NAME = 'memory-anki-mutation-queue'
 const STORE_NAME = 'mutations'
 const DB_VERSION = 1
-const CHANGE_EVENT = 'memory-anki-mutation-queue:changed'
 const REPLAY_HEADER = 'X-Memory-Anki-Queued-Replay'
 const MUTATION_HEADER = 'X-Memory-Anki-Mutation-ID'
 
@@ -148,17 +147,6 @@ export async function readQueuedMutations() {
   const result = await withStore<PersistedMutation[]>('readonly', (store) => store.getAll())
   const items = result ?? Array.from(memoryStore.values())
   return items.sort((left, right) => Date.parse(left.createdAt) - Date.parse(right.createdAt))
-}
-
-function notifyMutationQueueChanged() {
-  if (typeof window === 'undefined') return
-  window.dispatchEvent(new Event(CHANGE_EVENT))
-}
-
-export function subscribeMutationQueue(listener: () => void) {
-  if (typeof window === 'undefined') return () => {}
-  window.addEventListener(CHANGE_EVENT, listener)
-  return () => window.removeEventListener(CHANGE_EVENT, listener)
 }
 
 export function buildMutationSummary(items: PersistedMutation[]): MutationQueueSummary {
@@ -249,7 +237,6 @@ export async function enqueueMutation(input: EnqueueMutationInput) {
   }
 
   await putMutation(nextItem)
-  notifyMutationQueueChanged()
   return nextItem
 }
 
@@ -260,7 +247,6 @@ async function updateMutation(item: PersistedMutation, patch: Partial<PersistedM
     updatedAt: nowIso(),
   }
   await putMutation(nextItem)
-  notifyMutationQueueChanged()
   return nextItem
 }
 
@@ -308,7 +294,6 @@ async function replayOneMutation(item: PersistedMutation, force = false) {
     const bodyText = await response.text().catch(() => '')
     if (response.ok) {
       await deleteMutationFromStore(current.id)
-      notifyMutationQueueChanged()
       return
     }
     const errorMessage = bodyText || `HTTP ${response.status}`
@@ -356,7 +341,6 @@ export async function replayQueuedMutations(options: { forceIds?: string[] } = {
 
 export async function discardQueuedMutation(id: string) {
   await deleteMutationFromStore(id)
-  notifyMutationQueueChanged()
 }
 
 export async function discardQueuedMutationsByCoalesceKey(coalesceKey: string | null | undefined) {
@@ -367,7 +351,6 @@ export async function discardQueuedMutationsByCoalesceKey(coalesceKey: string | 
       .filter((item) => item.coalesceKey === coalesceKey && item.status !== 'syncing')
       .map((item) => deleteMutationFromStore(item.id)),
   )
-  notifyMutationQueueChanged()
 }
 
 export async function markQueuedMutationManual(id: string, message?: string) {
@@ -410,5 +393,4 @@ export async function resetMutationQueueForTest() {
   const items = await readQueuedMutations()
   await Promise.all(items.map((item) => deleteMutationFromStore(item.id)))
   memoryStore.clear()
-  notifyMutationQueueChanged()
 }

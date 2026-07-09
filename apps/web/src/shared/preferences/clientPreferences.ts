@@ -3,8 +3,9 @@ import {
   getClientPreferencesApi,
   updateClientPreferencesApi,
 } from '@/entities/preferences/api'
+import { APP_EVENT_NAMES, emitAppEvent } from '@/shared/events/appEvents'
 
-export const CLIENT_PREFERENCES_UPDATED_EVENT = 'memory-anki-client-preferences-updated'
+export const CLIENT_PREFERENCES_UPDATED_EVENT = APP_EVENT_NAMES.clientPreferencesUpdated
 
 type PreferenceKey = keyof ClientPreferences
 type PreferenceValidator<T> = (value: unknown) => value is T
@@ -17,12 +18,7 @@ let initializationSucceeded = false
 let initializePromise: Promise<boolean> | null = null
 
 function emitUpdate() {
-  if (typeof window === 'undefined') return
-  window.dispatchEvent(
-    new CustomEvent(CLIENT_PREFERENCES_UPDATED_EVENT, {
-      detail: { ...cache },
-    }),
-  )
+  emitAppEvent(CLIENT_PREFERENCES_UPDATED_EVENT, { ...cache })
 }
 
 function arePreferenceValuesEqual(left: unknown, right: unknown) {

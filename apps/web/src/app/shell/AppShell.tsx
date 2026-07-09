@@ -1,17 +1,9 @@
-﻿import { useEffect, useState, type PropsWithChildren } from 'react'
+﻿import { memo, useEffect, useState, type PropsWithChildren } from 'react'
 import {
-  BookOpen,
-  BookOpenText,
-  Captions,
-  Brain,
   ChevronRight,
   ClipboardList,
-  FolderTree,
-  LayoutDashboard,
   PanelLeftClose,
   PanelLeftOpen,
-  Shuffle,
-  User,
 } from 'lucide-react'
 import { NavLink, useLocation } from 'react-router-dom'
 import type { RuntimeInfo } from '@/shared/api/contracts'
@@ -21,13 +13,9 @@ import {
   prefetchPalaceSubjectShelfApi,
 } from '@/entities/palace/api'
 import {
-  preloadEnglishReadingPage,
-  preloadEnglishWorkspacePage,
   preloadFreestylePage,
-  preloadKnowledgePage,
   preloadPalaceEditPage,
   preloadPracticeRoutes,
-  preloadProfilePage,
   preloadReviewRoutes,
 } from '@/app/router/appRoutes'
 import { prefetchDashboardApi } from '@/features/dashboard/api'
@@ -42,130 +30,21 @@ import { BackgroundTaskBar } from '@/shared/background-tasks/BackgroundTaskBar'
 import { QuizGenerationBubbleLayer } from '@/shared/background-tasks/QuizGenerationBubbleLayer'
 import { cn } from '@/shared/lib/utils'
 import { GlobalCommandPalette } from '@/app/shell/GlobalCommandPalette'
-
-type NavSectionKey =
-  | 'dashboard'
-  | 'freestyle'
-  | 'palaces'
-  | 'english'
-  | 'englishReading'
-  | 'knowledge'
-  | 'review'
-  | 'profile'
-
-interface NavSectionDefinition {
-  key: NavSectionKey
-  to: string
-  label: string
-  icon: typeof LayoutDashboard
-  rememberLastVisited: boolean
-  matches: (pathname: string) => boolean
-  warmup?: () => void
-}
+import { navSections, type NavSectionDefinition, type NavSectionKey } from '@/app/shell/navSections'
 
 const navSectionLastUrls: Partial<Record<NavSectionKey, string>> = {}
 const warmedNavSections = new Set<NavSectionKey>()
-
-const navSections: NavSectionDefinition[] = [
-  {
-    key: 'dashboard',
-    to: '/dashboard',
-    label: '仪表盘',
-    icon: LayoutDashboard,
-    rememberLastVisited: false,
-    matches: (pathname) => pathname === '/' || pathname === '/dashboard',
-    warmup: () => {
-      prefetchDashboardApi()
-    },
-  },
-  {
-    key: 'freestyle',
-    to: '/freestyle',
-    label: '随心模式',
-    icon: Shuffle,
-    rememberLastVisited: false,
-    matches: (pathname) => pathname === '/freestyle',
-    warmup: () => {
-      void preloadFreestylePage()
-    },
-  },
-  {
-    key: 'palaces',
-    to: '/palaces',
-    label: '记忆宫殿',
-    icon: BookOpen,
-    rememberLastVisited: true,
-    matches: (pathname) =>
-      pathname === '/palaces' ||
-      pathname === '/palaces/list' ||
-      pathname === '/palaces/new' ||
-      /^\/palaces\/\d+(?:\/(edit|practice|focus-practice|quiz))?$/.test(pathname),
-    warmup: () => {
-      preloadPracticeRoutes()
-      prefetchPalaceSubjectShelfApi()
-      prefetchPalacesGroupedSummaryApi()
-    },
-  },
-  {
-    key: 'english',
-    to: '/english',
-    label: '英语听力',
-    icon: Captions,
-    rememberLastVisited: true,
-    matches: (pathname) =>
-      pathname === '/english' || /^\/english\/courses\/\d+$/.test(pathname),
-    warmup: () => {
-      void preloadEnglishWorkspacePage()
-    },
-  },
-  {
-    key: 'englishReading',
-    to: '/english-reading',
-    label: '英语阅读',
-    icon: BookOpenText,
-    rememberLastVisited: true,
-    matches: (pathname) => pathname === '/english-reading',
-    warmup: () => {
-      void preloadEnglishReadingPage()
-    },
-  },
-  {
-    key: 'knowledge',
-    to: '/knowledge',
-    label: '知识大纲',
-    icon: FolderTree,
-    rememberLastVisited: true,
-    matches: (pathname) => pathname === '/knowledge' || pathname.startsWith('/knowledge/'),
-    warmup: () => {
-      void preloadKnowledgePage()
-    },
-  },
-  {
-    key: 'review',
-    to: '/review',
-    label: '复习',
-    icon: Brain,
-    rememberLastVisited: true,
-    matches: (pathname) =>
-      pathname === '/review' ||
-      /^\/review\/session\/\d+$/.test(pathname),
-    warmup: () => {
-      preloadReviewRoutes()
-      prefetchReviewQueueApi()
-    },
-  },
-  {
-    key: 'profile',
-    to: '/profile',
-    label: '个人中心',
-    icon: User,
-    rememberLastVisited: true,
-    matches: (pathname) => pathname === '/profile' || pathname.startsWith('/profile/'),
-    warmup: () => {
-      void preloadProfilePage()
-    },
-  },
-]
+const sidebarDateFormatter = new Intl.DateTimeFormat('zh-CN', {
+  month: '2-digit',
+  day: '2-digit',
+  weekday: 'short',
+})
+const sidebarTimeFormatter = new Intl.DateTimeFormat('zh-CN', {
+  hour: '2-digit',
+  minute: '2-digit',
+  second: '2-digit',
+  hour12: false,
+})
 
 function findNavSection(pathname: string) {
   return navSections.find((section) => section.matches(pathname)) ?? null
@@ -236,6 +115,22 @@ function RuntimeChannelBadge({
   )
 }
 
+const SidebarClock = memo(function SidebarClock() {
+  const [now, setNow] = useState(() => new Date())
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(new Date()), 1000)
+    return () => window.clearInterval(timer)
+  }, [])
+
+  return (
+    <>
+      <div className="mt-1 text-xs text-muted-foreground">{sidebarDateFormatter.format(now)}</div>
+      <div className="text-xs font-medium text-foreground/80">{sidebarTimeFormatter.format(now)}</div>
+    </>
+  )
+})
+
 function NavSectionLink({
   section,
   pathname,
@@ -299,12 +194,6 @@ function SidebarContent({ runtimeInfo }: { runtimeInfo: RuntimeInfo | null }) {
   const { pathname, search, hash } = useLocation()
   const shell = useShellContext()
   const compact = shell?.sidebarCollapsed ?? false
-  const [now, setNow] = useState(() => new Date())
-
-  useEffect(() => {
-    const timer = window.setInterval(() => setNow(new Date()), 1000)
-    return () => window.clearInterval(timer)
-  }, [])
 
   useEffect(() => {
     const matchedSection = findNavSection(pathname)
@@ -331,18 +220,6 @@ function SidebarContent({ runtimeInfo }: { runtimeInfo: RuntimeInfo | null }) {
     })
   }, [pathname])
 
-  const currentDate = new Intl.DateTimeFormat('zh-CN', {
-    month: '2-digit',
-    day: '2-digit',
-    weekday: 'short',
-  }).format(now)
-  const currentTime = new Intl.DateTimeFormat('zh-CN', {
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hour12: false,
-  }).format(now)
-
   return (
     <>
       <div className={cn('border-b border-border/70', compact ? 'px-2 py-3' : 'px-5 py-5')}>
@@ -353,8 +230,7 @@ function SidebarContent({ runtimeInfo }: { runtimeInfo: RuntimeInfo | null }) {
           {!compact ? (
             <div className="min-w-0">
               <div className="truncate text-sm font-semibold">记忆宫殿</div>
-              <div className="mt-1 text-xs text-muted-foreground">{currentDate}</div>
-              <div className="text-xs font-medium text-foreground/80">{currentTime}</div>
+              <SidebarClock />
               <div className="mt-2">
                 <RuntimeChannelBadge runtimeInfo={runtimeInfo} />
               </div>

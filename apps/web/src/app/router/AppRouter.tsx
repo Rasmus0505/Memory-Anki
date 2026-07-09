@@ -87,6 +87,7 @@ export function AppRouter() {
           <div
             key={pathname}
             aria-hidden={!isActive}
+            inert={!isActive}
             style={{ display: isActive ? 'block' : 'none' }}
           >
             <RouteResidencyProvider

@@ -4,6 +4,7 @@ import {
   extractResponseMessage,
   getResponseRequestId,
 } from '@/shared/api/jsonResponse'
+import { getApiToken } from '@/shared/api/apiToken'
 import { isConflictResponse } from '@/shared/api/conflict'
 import {
   discardQueuedMutationsByCoalesceKey,
@@ -200,6 +201,10 @@ export async function fetchWithMutationQueue(
   const method = options.method || 'GET'
   const replayRequest = isQueuedReplayRequest(options.headers)
   const headers = normalizeHeaders(options.headers)
+  const apiToken = getApiToken()
+  if (apiToken && !headers['X-Memory-Anki-Token']) {
+    headers['X-Memory-Anki-Token'] = apiToken
+  }
   const mutationId = getMutationId(headers) ?? generateMutationId()
   if (method.toUpperCase() !== 'GET' && !hasMutationId(headers)) {
     headers[MUTATION_ID_HEADER] = mutationId
@@ -249,7 +254,7 @@ export async function fetchWithMutationQueue(
         message: networkMessage,
       })
     }
-    throw new Error(networkMessage)
+    throw new Error(networkMessage, { cause: error })
   }
 }
 
@@ -267,8 +272,10 @@ export async function request<T>(url: string, options?: PersistedRequestInit): P
           description: `${method.toUpperCase()} ${url}`,
           replayMode: 'manual' as const,
         }
+  const apiToken = getApiToken()
   const headers = {
     'Content-Type': 'application/json',
+    ...(apiToken ? { 'X-Memory-Anki-Token': apiToken } : {}),
     ...normalizeHeaders(fetchOptions.headers),
   }
   const mutationId = getMutationId(headers) ?? generateMutationId()
@@ -310,7 +317,7 @@ export async function request<T>(url: string, options?: PersistedRequestInit): P
         originalError: error instanceof Error ? error.message : String(error),
       },
     })
-    throw new Error(networkMessage)
+    throw new Error(networkMessage, { cause: error })
   }
 
   if (!response.ok) {

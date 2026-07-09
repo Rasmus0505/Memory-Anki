@@ -76,3 +76,28 @@ export interface DashboardQuery {
   start_date?: string
   end_date?: string
 }
+
+export interface HeatmapDayItem {
+  date: string
+  review_count: number
+  study_seconds: number
+  active: boolean
+}
+
+export interface DashboardHeatmapResponse {
+  start_date: string
+  end_date: string
+  items: HeatmapDayItem[]
+  current_streak: number
+  longest_streak: number
+  active_day_count: number
+}
+
+export interface WeeklyReport {
+  week_start: string
+  week_end: string
+  study_seconds: number
+  review_count: number
+  average_score: number
+  new_palace_count: number
+}

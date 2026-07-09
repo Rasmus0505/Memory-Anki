@@ -1,6 +1,8 @@
-import { Suspense, lazy } from 'react'
+import { Suspense } from 'react'
 import { Navigate, Route, Routes, type Location } from 'react-router-dom'
+import { RouteErrorBoundary } from '@/app/providers/RouteErrorBoundary'
 import { LoadingState } from '@/shared/components/state-placeholders'
+import { lazyWithRetry } from '@/shared/lib/lazyWithRetry'
 import DashboardPage from '@/features/dashboard/DashboardPage'
 import PalaceListPage from '@/features/palace-catalog/PalaceListPage'
 import PalaceShelfPage from '@/features/palace-catalog/PalaceShelfPage'
@@ -18,7 +20,7 @@ export const preloadEnglishCoursePage = () => import('@/features/english/English
 export const preloadEnglishReadingPage = () => import('@/features/english-reading/EnglishReadingPage')
 export const preloadPalaceEditPage = () => import('@/features/palace-edit/PalaceEditPage')
 export const preloadPalaceQuizPage = () => import('@/features/palace-quiz/PalaceQuizPage')
-export const preloadProfilePage = () => import('@/features/profile/ProfilePage')
+export const preloadProfilePage = () => import('@/features/profile/ProfileSettingsPage')
 export const preloadReviewSessionPage = () => import('@/app/router/review/ReviewSession')
 
 export function preloadReviewRoutes() {
@@ -35,25 +37,26 @@ export function preloadPracticeRoutes() {
   void import('@/app/router/MiniPalacePracticePage')
 }
 
-const KnowledgePage = lazy(preloadKnowledgePage)
-const FreestylePage = lazy(preloadFreestylePage)
-const EnglishWorkspacePage = lazy(preloadEnglishWorkspacePage)
-const EnglishCoursePage = lazy(preloadEnglishCoursePage)
-const EnglishReadingPage = lazy(preloadEnglishReadingPage)
-const PalaceEditPage = lazy(preloadPalaceEditPage)
-const PalaceViewPage = lazy(preloadPalaceViewPage)
-const PalaceQuizPage = lazy(preloadPalaceQuizPage)
-const ProfilePage = lazy(preloadProfilePage)
-const ProfileFeedbackPage = lazy(() => import('@/features/profile/ProfileFeedbackPage'))
-const ProfileTimerPage = lazy(() => import('@/features/profile/ProfileTimerPage'))
-const ProfileAiPage = lazy(() => import('@/features/profile/ProfileAiPage'))
-const ProfileBackupsPage = lazy(
+const KnowledgePage = lazyWithRetry(preloadKnowledgePage)
+const FreestylePage = lazyWithRetry(preloadFreestylePage)
+const EnglishWorkspacePage = lazyWithRetry(preloadEnglishWorkspacePage)
+const EnglishCoursePage = lazyWithRetry(preloadEnglishCoursePage)
+const EnglishReadingPage = lazyWithRetry(preloadEnglishReadingPage)
+const PalaceEditPage = lazyWithRetry(preloadPalaceEditPage)
+const PalaceViewPage = lazyWithRetry(preloadPalaceViewPage)
+const PalaceQuizPage = lazyWithRetry(preloadPalaceQuizPage)
+const ProfilePage = lazyWithRetry(preloadProfilePage)
+const ProfileFeedbackPage = lazyWithRetry(() => import('@/features/profile/ProfileFeedbackPage'))
+const ProfileTimerPage = lazyWithRetry(() => import('@/features/profile/ProfileTimerPage'))
+const ProfileAiPage = lazyWithRetry(() => import('@/features/profile/ProfileAiPage'))
+const ProfileBackupsPage = lazyWithRetry(
   () => import('@/features/profile/ProfileBackupsPage'),
 )
-const ReviewSessionPage = lazy(preloadReviewSessionPage)
-const ReviewFeedbackPreviewRoute = lazy(
+const ReviewSessionPage = lazyWithRetry(preloadReviewSessionPage)
+const ReviewFeedbackPreviewRoute = lazyWithRetry(
   () => import('@/app/router/ReviewFeedbackPreviewRoute'),
 )
+const DevTokensPage = lazyWithRetry(() => import('@/app/dev/DevTokensPage'))
 
 function RouteFallback() {
   return <LoadingState text="正在加载页面…" />
@@ -115,22 +118,8 @@ const SECTION_PREFIX_FALLBACKS: Record<string, string> = {
   '/timer-overlay/': '/timer-overlay',
 }
 
-const RETIRED_MOBILE_ROUTE_FALLBACKS: Record<string, string> = {
-  '/m': '/freestyle',
-  '/mobile': '/freestyle',
-  '/m/freestyle': '/freestyle',
-  '/mobile/freestyle': '/freestyle',
-  '/m/palaces': '/palaces',
-  '/mobile/palaces': '/palaces',
-  '/m/mindmap': '/palaces',
-  '/mobile/mindmap': '/palaces',
-}
-
 export function resolveRouteFallbackTarget(pathname: string) {
   const normalizedPathname = normalizePathname(pathname)
-
-  const retiredMobileTarget = RETIRED_MOBILE_ROUTE_FALLBACKS[normalizedPathname]
-  if (retiredMobileTarget) return retiredMobileTarget
 
   if (REGISTERED_EXACT_PATHS.has(normalizedPathname)) return normalizedPathname
   if (REGISTERED_DYNAMIC_PATTERNS.some((pattern) => pattern.test(normalizedPathname))) {
@@ -158,37 +147,39 @@ export function AppRoutes({ location }: { location?: Location }) {
   const fallbackPathname = location?.pathname || '/'
   return (
     <Suspense fallback={<RouteFallback />}>
-      <Routes location={location}>
-        <Route path="/" element={<Navigate to="/freestyle" replace />} />
-        <Route path="/dashboard" element={<DashboardPage />} />
-        <Route path="/freestyle" element={<FreestylePage />} />
-        <Route path="/palaces" element={<PalaceShelfPage />} />
-        <Route path="/english" element={<EnglishWorkspacePage />} />
-        <Route path="/english-reading" element={<EnglishReadingPage />} />
-        <Route path="/english/courses/:id" element={<EnglishCoursePage />} />
-        <Route path="/palaces/list" element={<PalaceListPage />} />
-        <Route path="/palaces/new" element={<PalaceEditPage />} />
-        <Route path="/palaces/quiz" element={<Navigate to="/palaces" replace />} />
-        <Route path="/palaces/:id" element={<PalaceViewPage />} />
-        <Route path="/palaces/:id/quiz" element={<PalaceQuizPage />} />
-        <Route path="/palaces/:id/practice" element={<PalacePracticePage />} />
-        <Route path="/palaces/:id/focus-practice" element={<PalaceFocusPracticePage />} />
-        <Route path="/segments/:id/practice" element={<SegmentPracticePage />} />
-        <Route path="/mini-palaces/:id/practice" element={<MiniPalacePracticePage />} />
-        <Route path="/palaces/:id/edit" element={<PalaceEditPage />} />
-        <Route path="/knowledge" element={<KnowledgePage />} />
-        <Route path="/review" element={<ReviewOverviewPage />} />
-        <Route path="/review/feedback-preview" element={<ReviewFeedbackPreviewRoute />} />
-        <Route path="/review/session/:id" element={<ReviewSessionPage />} />
-        <Route path="/profile" element={<ProfilePage />} />
-        <Route path="/profile/timer" element={<ProfileTimerPage />} />
-        <Route path="/profile/feedback" element={<ProfileFeedbackPage />} />
-        <Route path="/profile/ai" element={<ProfileAiPage />} />
-        <Route path="/profile/ai-prompts" element={<Navigate to="/profile/ai?tab=prompts" replace />} />
-        <Route path="/profile/ai-split" element={<Navigate to="/profile/ai?tab=config" replace />} />
-        <Route path="/profile/backups" element={<ProfileBackupsPage />} />
-        <Route path="*" element={<RouteNotFound pathname={fallbackPathname} />} />
-      </Routes>
+      <RouteErrorBoundary resetKey={fallbackPathname}>
+        <Routes location={location}>
+          <Route path="/" element={<Navigate to="/freestyle" replace />} />
+          <Route path="/dashboard" element={<DashboardPage />} />
+          <Route path="/freestyle" element={<FreestylePage />} />
+          <Route path="/palaces" element={<PalaceShelfPage />} />
+          <Route path="/english" element={<EnglishWorkspacePage />} />
+          <Route path="/english-reading" element={<EnglishReadingPage />} />
+          <Route path="/english/courses/:id" element={<EnglishCoursePage />} />
+          <Route path="/palaces/list" element={<PalaceListPage />} />
+          <Route path="/palaces/new" element={<PalaceEditPage />} />
+          {/* 保留：若删除此行，/palaces/quiz 会被下面的 /palaces/:id 捕获并落到 NaN 坏页。 */}
+          <Route path="/palaces/quiz" element={<Navigate to="/palaces" replace />} />
+          <Route path="/palaces/:id" element={<PalaceViewPage />} />
+          <Route path="/palaces/:id/quiz" element={<PalaceQuizPage />} />
+          <Route path="/palaces/:id/practice" element={<PalacePracticePage />} />
+          <Route path="/palaces/:id/focus-practice" element={<PalaceFocusPracticePage />} />
+          <Route path="/segments/:id/practice" element={<SegmentPracticePage />} />
+          <Route path="/mini-palaces/:id/practice" element={<MiniPalacePracticePage />} />
+          <Route path="/palaces/:id/edit" element={<PalaceEditPage />} />
+          <Route path="/knowledge" element={<KnowledgePage />} />
+          <Route path="/review" element={<ReviewOverviewPage />} />
+          <Route path="/review/feedback-preview" element={<ReviewFeedbackPreviewRoute />} />
+          <Route path="/review/session/:id" element={<ReviewSessionPage />} />
+          <Route path="/profile" element={<ProfilePage />} />
+          <Route path="/profile/timer" element={<ProfileTimerPage />} />
+          <Route path="/profile/feedback" element={<ProfileFeedbackPage />} />
+          <Route path="/profile/ai" element={<ProfileAiPage />} />
+          <Route path="/profile/backups" element={<ProfileBackupsPage />} />
+          {import.meta.env.DEV ? <Route path="/dev/tokens" element={<DevTokensPage />} /> : null}
+          <Route path="*" element={<RouteNotFound pathname={fallbackPathname} />} />
+        </Routes>
+      </RouteErrorBoundary>
     </Suspense>
   )
 }
