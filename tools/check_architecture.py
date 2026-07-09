@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import ast
 import json
+import posixpath
 import re
 import subprocess
 from pathlib import Path
@@ -125,14 +126,16 @@ BASELINE_PRESENTATION_SESSION_FILES = {
     "apps/api/src/memory_anki/modules/time_records/presentation/router.py",
 }
 BASELINE_PERSONAL_PATH_TOOLS = {
-    "tools/audit_1000_quiz_bank.py",
-    "tools/build_1000_questions_manifest.py",
+    "tools/archive/1000-quiz/audit_1000_quiz_bank.py",
+    "tools/archive/1000-quiz/backfill_1000_quiz_ocr_sources.py",
+    "tools/archive/1000-quiz/build_1000_questions_manifest.py",
+    "tools/archive/1000-quiz/locate_1000_quiz_pages.py",
+    "tools/archive/1000-quiz/merge_1000_page_drafts.py",
+    "tools/archive/1000-quiz/ocr_1000_questions.py",
+    "tools/archive/1000-quiz/render_1000_question_pages.py",
+    "tools/archive/1000-quiz/repair_1000_quiz_bank_local.py",
+    "tools/archive/1000-quiz/run_1000_quiz_rerun_plan.py",
     "tools/import_manual_quiz_texts.py",
-    "tools/locate_1000_quiz_pages.py",
-    "tools/merge_1000_page_drafts.py",
-    "tools/ocr_1000_questions.py",
-    "tools/render_1000_question_pages.py",
-    "tools/run_1000_quiz_rerun_plan.py",
 }
 BASELINE_OVERSIZED_FILES = {
     "apps/web/src/features/freestyle/FreestylePage.tsx",
@@ -191,6 +194,13 @@ BACKEND_STUDY_SESSION_LEGACY_PATTERNS = (
     "TimeRecord,",
     "query(TimeRecord",
 )
+FRONTEND_IMPORT_FROM_PATTERN = re.compile(r"\bfrom\s+['\"]([^'\"]+)['\"]")
+FRONTEND_DYNAMIC_IMPORT_PATTERN = re.compile(r"\bimport\s*\(\s*['\"]([^'\"]+)['\"]\s*\)")
+FRONTEND_SIDE_EFFECT_IMPORT_PATTERN = re.compile(
+    r"^\s*(?:import|export)\s+['\"]([^'\"]+)['\"]", re.MULTILINE
+)
+GENERATED_API_IMPORT_ALLOWED_SOURCES = ("shared/api/contracts.ts", "shared/api/contracts/")
+GENERATED_API_MODULE = "shared/api/generated"
 
 
 def iter_files(root: Path, suffixes: tuple[str, ...]):
@@ -352,6 +362,56 @@ def is_frontend_test_file(relative: str) -> bool:
         or name.endswith(".test-utils.tsx")
         or name.endswith(".test-utils.ts")
     )
+
+
+def iter_frontend_import_specifiers(content: str) -> set[str]:
+    specifiers: set[str] = set()
+    for pattern in (
+        FRONTEND_IMPORT_FROM_PATTERN,
+        FRONTEND_DYNAMIC_IMPORT_PATTERN,
+        FRONTEND_SIDE_EFFECT_IMPORT_PATTERN,
+    ):
+        specifiers.update(match.group(1) for match in pattern.finditer(content))
+    return specifiers
+
+
+def frontend_import_matches_module(path: Path, specifier: str, module_path: str) -> bool:
+    normalized_specifier = specifier.replace("\\", "/").split("?", 1)[0].split("#", 1)[0]
+    if normalized_specifier == f"@/{module_path}" or normalized_specifier.startswith(
+        f"@/{module_path}/"
+    ):
+        return True
+    if not normalized_specifier.startswith("."):
+        return False
+
+    source_dir = path.relative_to(WEB_SRC).parent.as_posix()
+    normalized_target = posixpath.normpath(posixpath.join(source_dir, normalized_specifier))
+    for suffix in (".ts", ".tsx", ".js", ".jsx"):
+        if normalized_target.endswith(suffix):
+            normalized_target = normalized_target[: -len(suffix)]
+            break
+    return normalized_target == module_path or normalized_target.startswith(f"{module_path}/")
+
+
+def check_frontend_generated_api_boundary(errors: list[str]) -> None:
+    for path in iter_files(WEB_SRC, (".ts", ".tsx")):
+        relative = path.relative_to(WEB_SRC).as_posix()
+        if relative == "shared/api/generated.ts":
+            continue
+        if relative in GENERATED_API_IMPORT_ALLOWED_SOURCES or relative.startswith(
+            GENERATED_API_IMPORT_ALLOWED_SOURCES
+        ):
+            continue
+        if is_frontend_test_file(relative):
+            continue
+        content = path.read_text(encoding="utf-8")
+        for specifier in iter_frontend_import_specifiers(content):
+            if frontend_import_matches_module(path, specifier, GENERATED_API_MODULE):
+                errors.append(
+                    f"{relative}: production code must not import generated OpenAPI types directly; "
+                    "import stable contracts from `@/shared/api/contracts` or an owner API facade."
+                )
+                break
 
 
 def check_frontend_public_api_surfaces(errors: list[str]) -> None:
@@ -663,6 +723,7 @@ def main() -> int:
     check_router_residency(errors)
     check_shared_local_storage_facade(errors)
     check_removed_shared_api_modules(errors)
+    check_frontend_generated_api_boundary(errors)
     check_frontend_public_api_surfaces(errors)
     check_study_session_legacy_usage(errors)
     check_runtime_data_ignored(errors)
