@@ -39,10 +39,10 @@ def test_completed_time_payload_persists_client_source_in_summary():
         )
 
         assert item is not None
-        assert item["summary"]["client_source"] == "mobile"
+        assert item["summary"]["client_source"] == "pwa"
 
         persisted = session.query(StudySession).filter_by(id="mobile-record").one()
-        assert '"client_source": "mobile"' in persisted.summary_json
+        assert '"client_source": "pwa"' in persisted.summary_json
 
 
 def test_patch_study_session_merges_summary_fields():

@@ -258,9 +258,123 @@ class StudySessionRouteTests(RouterTestCase):
         self.assertEqual([item["id"] for item in payload["items"]], ["middle-session"])
 
     def test_list_study_sessions_rejects_invalid_pagination(self):
-        for query in ("limit=0", "limit=501", "limit=1&offset=-1"):
+        for query in (
+            "limit=0",
+            "limit=501",
+            "limit=1&offset=-1",
+            "limit=20&sort_by=unknown",
+            "limit=20&sort_order=sideways",
+        ):
             response = self.client.get(f"/api/v1/study-sessions?{query}")
             self.assertEqual(response.status_code, 422)
+
+    def test_list_study_sessions_filters_and_sorts_paginated_results(self):
+        base = datetime(2026, 7, 2, 8, 0, 0)
+        with self.SessionLocal() as session:
+            session.add_all(
+                [
+                    StudySession(
+                        id="practice-short",
+                        status="completed",
+                        scene="practice",
+                        target_type="none",
+                        title="Alpha practice",
+                        started_at=base,
+                        effective_seconds=60,
+                    ),
+                    StudySession(
+                        id="practice-long",
+                        status="completed",
+                        scene="english",
+                        target_type="none",
+                        title="Beta practice",
+                        started_at=base + timedelta(minutes=1),
+                        effective_seconds=600,
+                    ),
+                    StudySession(
+                        id="review-session",
+                        status="completed",
+                        scene="review",
+                        target_type="none",
+                        title="Alpha review",
+                        started_at=base + timedelta(minutes=2),
+                        effective_seconds=300,
+                    ),
+                ]
+            )
+            session.commit()
+
+        response = self.client.get(
+            "/api/v1/study-sessions?limit=20&offset=0&keyword=practice"
+            "&kind=practice&sort_by=effective_seconds&sort_order=asc"
+        )
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["total"], 2)
+        self.assertEqual(
+            [item["id"] for item in payload["items"]],
+            ["practice-short", "practice-long"],
+        )
+
+        response = self.client.get(
+            "/api/v1/study-sessions?limit=20&offset=0&sort_by=title&sort_order=desc"
+        )
+        self.assertEqual(
+            [item["id"] for item in response.json()["items"]],
+            ["practice-long", "review-session", "practice-short"],
+        )
+
+    def test_time_record_analytics_returns_zero_filled_trend_and_breakdown(self):
+        today = date.today()
+        today_start = datetime.combine(today, datetime.min.time())
+        with self.SessionLocal() as session:
+            session.add_all(
+                [
+                    StudySession(
+                        id="analytics-practice",
+                        status="completed",
+                        scene="practice",
+                        target_type="none",
+                        title="Practice",
+                        started_at=today_start,
+                        effective_seconds=120,
+                    ),
+                    StudySession(
+                        id="analytics-review",
+                        status="completed",
+                        scene="segment_review",
+                        target_type="none",
+                        title="Review",
+                        started_at=today_start - timedelta(days=2),
+                        effective_seconds=300,
+                    ),
+                    StudySession(
+                        id="analytics-deleted",
+                        status="completed",
+                        scene="quiz",
+                        target_type="none",
+                        title="Deleted",
+                        started_at=today_start,
+                        effective_seconds=999,
+                        deleted_at=today_start,
+                    ),
+                ]
+            )
+            session.commit()
+
+        response = self.client.get(
+            "/api/v1/study-sessions/time-record-analytics"
+            "?trend_range=7&breakdown_range=all"
+        )
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(len(payload["trend"]), 7)
+        self.assertEqual(payload["trend"][-1]["seconds"], 120)
+        self.assertEqual(payload["trend"][-3]["seconds"], 300)
+        breakdown = {item["kind"]: item for item in payload["breakdown"]}
+        self.assertEqual(breakdown["practice"]["seconds"], 120)
+        self.assertEqual(breakdown["review"]["seconds"], 300)
+        self.assertEqual(breakdown["quiz"]["sessions"], 0)
 
 
 if __name__ == "__main__":

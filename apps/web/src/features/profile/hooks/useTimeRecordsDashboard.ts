@@ -1,19 +1,21 @@
 ﻿import { useEffect, useMemo, useState } from 'react'
 import type { FormEvent } from 'react'
+import { useCallback, useRef } from 'react'
 import { toast } from '@/shared/feedback/toast'
 import { appConfirm } from '@/shared/components/ui/native-dialog'
 import { detectClientSource } from '@/shared/lib/clientSource'
 import {
   createStudySessionRecord,
-  getDailyTrend,
-  getSessionKindBreakdown,
-  getTimeRecordSummary,
-  getTrendByRange,
+  getStudySessionRecordAnalytics,
   listStudySessionRecords,
   bulkDeleteStudySessionRecords,
   deleteStudySessionRecord,
   type SessionKind,
+  type SessionKindBreakdownItem,
+  type DailyTrendPoint,
   type TimeRecordChartRange,
+  type TimeRecordSortBy,
+  type TimeRecordSortOrder,
   type TimeSessionRecord,
   updateStudySessionRecord,
 } from '@/entities/session/model'
@@ -37,6 +39,18 @@ export interface UseTimeRecordsDashboardResult {
   setKindFilter: (value: 'all' | SessionKind) => void
   keyword: string
   setKeyword: (value: string) => void
+  sortBy: TimeRecordSortBy
+  setSortBy: (value: TimeRecordSortBy) => void
+  sortOrder: TimeRecordSortOrder
+  setSortOrder: (value: TimeRecordSortOrder) => void
+  page: number
+  pageSize: number
+  totalRecords: number
+  totalPages: number
+  setPage: (value: number) => void
+  setPageSize: (value: number) => void
+  isLoadingRecords: boolean
+  recordsError: string | null
   selectedRecordIds: string[]
   dialogMode: 'create' | 'edit'
   dialogOpen: boolean
@@ -45,15 +59,8 @@ export interface UseTimeRecordsDashboardResult {
   isSubmittingRecord: boolean
   deletingRecordId: string | null
   isBulkDeleting: boolean
-  summary: ReturnType<typeof getTimeRecordSummary>
-  trend: ReturnType<typeof getDailyTrend>
-  breakdown: ReturnType<typeof getSessionKindBreakdown>
-  getTrendForRange: (
-    range: TimeRecordChartRange,
-  ) => ReturnType<typeof getDailyTrend>
-  getBreakdownForRange: (
-    range: TimeRecordChartRange,
-  ) => ReturnType<typeof getSessionKindBreakdown>
+  trend: DailyTrendPoint[]
+  breakdown: SessionKindBreakdownItem[]
   visibleRecords: TimeSessionRecord[]
   pendingRecoveryRecords: []
   hasSelectableRecords: boolean
@@ -76,6 +83,8 @@ export interface UseTimeRecordsDashboardResult {
 
 interface UseTimeRecordsDashboardOptions {
   onRecordsChanged?: () => void | Promise<void>
+  trendRange?: TimeRecordChartRange
+  breakdownRange?: TimeRecordChartRange
 }
 
 export function useTimeRecordsDashboard(
@@ -88,6 +97,16 @@ export function useTimeRecordsDashboard(
   const [showDeleted, setShowDeleted] = useState(false)
   const [kindFilter, setKindFilter] = useState<'all' | SessionKind>('all')
   const [keyword, setKeyword] = useState('')
+  const [debouncedKeyword, setDebouncedKeyword] = useState('')
+  const [sortBy, setSortBy] = useState<TimeRecordSortBy>('started_at')
+  const [sortOrder, setSortOrder] = useState<TimeRecordSortOrder>('desc')
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(20)
+  const [totalRecords, setTotalRecords] = useState(0)
+  const [isLoadingRecords, setIsLoadingRecords] = useState(false)
+  const [recordsError, setRecordsError] = useState<string | null>(null)
+  const [trend, setTrend] = useState<DailyTrendPoint[]>([])
+  const [breakdown, setBreakdown] = useState<SessionKindBreakdownItem[]>([])
   const [selectedRecordIds, setSelectedRecordIds] = useState<string[]>([])
   const [dialogMode, setDialogMode] = useState<'create' | 'edit'>('create')
   const [dialogOpen, setDialogOpen] = useState(false)
@@ -101,54 +120,79 @@ export function useTimeRecordsDashboard(
   const [isSubmittingRecord, setIsSubmittingRecord] = useState(false)
   const [deletingRecordId, setDeletingRecordId] = useState<string | null>(null)
   const [isBulkDeleting, setIsBulkDeleting] = useState(false)
+  const recordsRequestIdRef = useRef(0)
+  const analyticsRequestIdRef = useRef(0)
+  const trendRange = options.trendRange ?? 7
+  const breakdownRange = options.breakdownRange ?? 'all'
+  const totalPages = Math.max(1, Math.ceil(totalRecords / pageSize))
 
-  const refreshRecords = async () => {
-    const nextRecords = await listStudySessionRecords()
-    setRecords(nextRecords)
-  }
+  const loadRecords = useCallback(async (targetPage: number) => {
+    const requestId = ++recordsRequestIdRef.current
+    setIsLoadingRecords(true)
+    setRecordsError(null)
+    try {
+      const result = await listStudySessionRecords({
+        limit: pageSize,
+        offset: (targetPage - 1) * pageSize,
+        keyword: debouncedKeyword,
+        kind: kindFilter === 'all' ? undefined : kindFilter,
+        sortBy,
+        sortOrder,
+      })
+      if (requestId !== recordsRequestIdRef.current) return
+      const nextTotalPages = Math.max(1, Math.ceil(result.total / pageSize))
+      if (targetPage > nextTotalPages) {
+        setPage(nextTotalPages)
+        return
+      }
+      setRecords(result.items)
+      setTotalRecords(result.total)
+    } catch (error) {
+      if (requestId !== recordsRequestIdRef.current) return
+      setRecordsError(error instanceof Error ? error.message : '加载时间记录失败。')
+    } finally {
+      if (requestId === recordsRequestIdRef.current) {
+        setIsLoadingRecords(false)
+      }
+    }
+  }, [debouncedKeyword, kindFilter, pageSize, sortBy, sortOrder])
+
+  const refreshRecords = useCallback(async () => {
+    await loadRecords(page)
+  }, [loadRecords, page])
+
+  const refreshAnalytics = useCallback(async () => {
+    const requestId = ++analyticsRequestIdRef.current
+    const result = await getStudySessionRecordAnalytics({
+      trendRange,
+      breakdownRange,
+    })
+    if (requestId !== analyticsRequestIdRef.current) return
+    setTrend(result.trend)
+    setBreakdown(result.breakdown)
+  }, [breakdownRange, trendRange])
 
   useEffect(() => {
-    const load = async () => {
-      const nextRecords = await listStudySessionRecords()
-      setThresholdSeconds(0)
-      setThresholdInput('0')
-      setRecords(nextRecords)
-    }
+    const timer = window.setTimeout(() => {
+      setDebouncedKeyword(keyword.trim())
+    }, 300)
+    return () => window.clearTimeout(timer)
+  }, [keyword])
 
-    void load()
-  }, [])
+  useEffect(() => {
+    void loadRecords(page)
+  }, [loadRecords, page])
+
+  useEffect(() => {
+    void refreshAnalytics().catch(() => undefined)
+  }, [refreshAnalytics])
 
   const applyThreshold = async () => {
     setThresholdSeconds(0)
     setThresholdInput('0')
   }
 
-  const summary = useMemo(() => getTimeRecordSummary(records), [records])
-  const trend = useMemo(() => getDailyTrend(records, 7), [records])
-  const breakdown = useMemo(() => getSessionKindBreakdown(records), [records])
-  const trend30 = useMemo(() => getTrendByRange(records, 30), [records])
-  const trend90 = useMemo(() => getTrendByRange(records, 90), [records])
-  const trendAll = useMemo(() => getTrendByRange(records, 'all'), [records])
-  const breakdown7 = useMemo(() => getSessionKindBreakdown(records, 7), [records])
-  const breakdown30 = useMemo(() => getSessionKindBreakdown(records, 30), [records])
-  const breakdown90 = useMemo(() => getSessionKindBreakdown(records, 90), [records])
-  const breakdownAll = useMemo(
-    () => getSessionKindBreakdown(records, 'all'),
-    [records],
-  )
-
-  const visibleRecords = useMemo(() => {
-    return records.filter((record) => {
-      if (kindFilter !== 'all' && record.kind !== kindFilter) return false
-      if (
-        keyword.trim() &&
-        !record.title.toLowerCase().includes(keyword.trim().toLowerCase())
-      ) {
-        return false
-      }
-      return true
-    })
-  }, [kindFilter, keyword, records])
+  const visibleRecords = records
 
   const selectableRecords = useMemo(
     () => visibleRecords.filter((record) => !record.deletedAt),
@@ -239,8 +283,13 @@ export function useTimeRecordsDashboard(
       }
 
       setDialogOpen(false)
-      await refreshRecords()
-      await options.onRecordsChanged?.()
+      const targetPage = dialogMode === 'create' ? 1 : page
+      if (targetPage !== page) setPage(targetPage)
+      await loadRecords(targetPage)
+      await Promise.all([
+        refreshAnalytics(),
+        Promise.resolve(options.onRecordsChanged?.()),
+      ])
     } catch (error) {
       setFormError(error instanceof Error ? error.message : '保存学习记录失败，请检查时间和标题后重试。')
       return
@@ -266,7 +315,13 @@ export function useTimeRecordsDashboard(
         current.filter((id) => id !== record.id),
       )
       toast.success(`学习记录“${record.title}”已删除。`)
-      await refreshRecords()
+      const targetPage = records.length === 1 && page > 1 ? page - 1 : page
+      if (targetPage !== page) setPage(targetPage)
+      await loadRecords(targetPage)
+      await Promise.all([
+        refreshAnalytics(),
+        Promise.resolve(options.onRecordsChanged?.()),
+      ])
     } catch (error) {
       toast.error(error instanceof Error ? error.message : '删除学习记录失败，请刷新列表后重试。')
     } finally {
@@ -321,7 +376,13 @@ export function useTimeRecordsDashboard(
       setRecords((current) => current.filter((record) => !selectedRecordIds.includes(record.id)))
       setSelectedRecordIds([])
       toast.success(`已删除 ${targets.length} 条学习记录。`)
-      await refreshRecords()
+      const targetPage = targets.length === records.length && page > 1 ? page - 1 : page
+      if (targetPage !== page) setPage(targetPage)
+      await loadRecords(targetPage)
+      await Promise.all([
+        refreshAnalytics(),
+        Promise.resolve(options.onRecordsChanged?.()),
+      ])
     } catch (error) {
       toast.error(error instanceof Error ? error.message : '批量删除学习记录失败，请重新选择后重试。')
     } finally {
@@ -347,6 +408,10 @@ export function useTimeRecordsDashboard(
     )
   }, [visibleRecords])
 
+  useEffect(() => {
+    setSelectedRecordIds([])
+  }, [debouncedKeyword, kindFilter, page, pageSize, sortBy, sortOrder])
+
   return {
     thresholdSeconds,
     thresholdInput,
@@ -356,9 +421,36 @@ export function useTimeRecordsDashboard(
     showDeleted,
     setShowDeleted,
     kindFilter,
-    setKindFilter,
+    setKindFilter: (value) => {
+      setKindFilter(value)
+      setPage(1)
+    },
     keyword,
-    setKeyword,
+    setKeyword: (value) => {
+      setKeyword(value)
+      setPage(1)
+    },
+    sortBy,
+    setSortBy: (value) => {
+      setSortBy(value)
+      setPage(1)
+    },
+    sortOrder,
+    setSortOrder: (value) => {
+      setSortOrder(value)
+      setPage(1)
+    },
+    page,
+    pageSize,
+    totalRecords,
+    totalPages,
+    setPage: (value) => setPage(Math.min(Math.max(1, value), totalPages)),
+    setPageSize: (value) => {
+      setPageSize(value)
+      setPage(1)
+    },
+    isLoadingRecords,
+    recordsError,
     selectedRecordIds,
     dialogMode,
     dialogOpen,
@@ -367,21 +459,8 @@ export function useTimeRecordsDashboard(
     isSubmittingRecord,
     deletingRecordId,
     isBulkDeleting,
-    summary,
     trend,
     breakdown,
-    getTrendForRange: (range) => {
-      if (range === 30) return trend30
-      if (range === 90) return trend90
-      if (range === 'all') return trendAll
-      return trend
-    },
-    getBreakdownForRange: (range) => {
-      if (range === 30) return breakdown30
-      if (range === 90) return breakdown90
-      if (range === 'all') return breakdownAll
-      return breakdown7
-    },
     visibleRecords,
     pendingRecoveryRecords: [],
     hasSelectableRecords,

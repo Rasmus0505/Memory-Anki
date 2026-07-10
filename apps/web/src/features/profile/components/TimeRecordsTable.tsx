@@ -6,6 +6,8 @@ import {
   formatSessionKind,
   formatSessionSource,
   type SessionKind,
+  type TimeRecordSortBy,
+  type TimeRecordSortOrder,
   type TimeSessionRecord,
 } from '@/entities/session/model'
 import {
@@ -20,6 +22,7 @@ import {
   CardTitle,
 } from '@/shared/components/ui/card'
 import { Input } from '@/shared/components/ui/input'
+import { Pagination } from '@/shared/components/ui/pagination'
 import { EmptyState } from '@/shared/components/state-placeholders'
 
 interface TimeRecordsTableProps {
@@ -32,6 +35,18 @@ interface TimeRecordsTableProps {
   onKeywordChange: (value: string) => void
   kindFilter: 'all' | SessionKind
   onKindFilterChange: (value: 'all' | SessionKind) => void
+  sortBy: TimeRecordSortBy
+  onSortByChange: (value: TimeRecordSortBy) => void
+  sortOrder: TimeRecordSortOrder
+  onSortOrderChange: (value: TimeRecordSortOrder) => void
+  page: number
+  pageSize: number
+  totalRecords: number
+  totalPages: number
+  onPageChange: (value: number) => void
+  onPageSizeChange: (value: number) => void
+  isLoadingRecords: boolean
+  recordsError: string | null
   showDeleted: boolean
   onShowDeletedChange: (value: boolean) => void
   onCreateRecord: () => void
@@ -57,6 +72,18 @@ export function TimeRecordsTable({
   onKeywordChange,
   kindFilter,
   onKindFilterChange,
+  sortBy,
+  onSortByChange,
+  sortOrder,
+  onSortOrderChange,
+  page,
+  pageSize,
+  totalRecords,
+  totalPages,
+  onPageChange,
+  onPageSizeChange,
+  isLoadingRecords,
+  recordsError,
   onCreateRecord,
   onBulkDelete,
   bulkDeleteDisabled,
@@ -72,6 +99,8 @@ export function TimeRecordsTable({
   onDeleteRecord,
 }: TimeRecordsTableProps) {
   const actionInProgress = isBulkDeleting || deletingRecordId !== null
+  const visibleStart = totalRecords === 0 ? 0 : (page - 1) * pageSize + 1
+  const visibleEnd = Math.min(page * pageSize, totalRecords)
 
   return (
     <Card className="rounded-lg border-border/70">
@@ -104,7 +133,7 @@ export function TimeRecordsTable({
           </div>
         </div>
 
-        <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_180px]">
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_180px_180px_140px]">
           <Input
             placeholder="搜索标题"
             value={keyword}
@@ -124,11 +153,39 @@ export function TimeRecordsTable({
               </option>
             ))}
           </select>
+          <select
+            aria-label="排序字段"
+            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+            value={sortBy}
+            onChange={(event) =>
+              onSortByChange(event.target.value as TimeRecordSortBy)
+            }
+          >
+            <option value="started_at">按开始时间</option>
+            <option value="effective_seconds">按有效时长</option>
+            <option value="title">按标题</option>
+          </select>
+          <select
+            aria-label="排序方向"
+            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+            value={sortOrder}
+            onChange={(event) =>
+              onSortOrderChange(event.target.value as TimeRecordSortOrder)
+            }
+          >
+            <option value="desc">降序</option>
+            <option value="asc">升序</option>
+          </select>
         </div>
       </CardHeader>
 
       <CardContent>
-        {visibleRecords.length === 0 ? (
+        {recordsError ? (
+          <div className="mb-4 rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+            {recordsError}
+          </div>
+        ) : null}
+        {visibleRecords.length === 0 && !isLoadingRecords ? (
           <EmptyState
             variant={keyword || kindFilter !== 'all' ? 'search' : 'create'}
             title={keyword || kindFilter !== 'all' ? '没有匹配的学习记录' : '还没有学习记录'}
@@ -147,7 +204,12 @@ export function TimeRecordsTable({
             }
           />
         ) : (
-          <div className="overflow-x-auto rounded-[24px] border border-border/70">
+          <div
+            className={`overflow-x-auto rounded-[24px] border border-border/70 transition-opacity ${
+              isLoadingRecords ? 'opacity-60' : ''
+            }`}
+            aria-busy={isLoadingRecords}
+          >
             <table className="min-w-full divide-y divide-border text-sm">
               <thead className="bg-muted/80 text-left text-xs uppercase tracking-[0.14em] text-muted-foreground">
                 <tr>
@@ -253,6 +315,34 @@ export function TimeRecordsTable({
             </table>
           </div>
         )}
+        <div className="mt-4 flex flex-col gap-3 border-t border-border/70 pt-4 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
+            <span>
+              共 {totalRecords} 条，当前显示 {visibleStart}-{visibleEnd}
+            </span>
+            <label className="flex items-center gap-2">
+              每页
+              <select
+                aria-label="每页条数"
+                className="h-9 rounded-md border border-input bg-background px-2 text-sm text-foreground"
+                value={pageSize}
+                disabled={isLoadingRecords}
+                onChange={(event) => onPageSizeChange(Number(event.target.value))}
+              >
+                <option value={20}>20</option>
+                <option value={50}>50</option>
+                <option value={100}>100</option>
+              </select>
+              条
+            </label>
+          </div>
+          <Pagination
+            page={page}
+            totalPages={totalPages}
+            onPageChange={onPageChange}
+            disabled={isLoadingRecords || actionInProgress}
+          />
+        </div>
       </CardContent>
     </Card>
   )

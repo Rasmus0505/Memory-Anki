@@ -11,13 +11,14 @@ from memory_anki.infrastructure.db._tables.misc import StudySession
 from memory_anki.infrastructure.db._tables.palaces import ReviewLog
 
 from .serialization import _int_or_none, _parse_datetime
-from .study_session_service import create_study_session
 
 
 def _normalize_client_source(value: Any) -> str | None:
     normalized = str(value or "").strip()
-    if normalized in {"desktop", "mobile"}:
-        return normalized
+    if normalized == "desktop":
+        return "desktop"
+    if normalized in {"pwa", "mobile"}:
+        return "pwa"
     return None
 
 
@@ -25,6 +26,8 @@ def create_completed_study_session_from_time_payload(
     session: Session,
     payload: dict[str, Any],
 ) -> dict[str, Any] | None:
+    from .study_session_service import create_study_session
+
     effective_seconds = max(0, int(payload.get("effectiveSeconds", payload.get("effective_seconds", 0)) or 0))
     started_at = _parse_datetime(payload.get("startedAt") or payload.get("started_at"))
     ended_at = _parse_datetime(payload.get("endedAt") or payload.get("ended_at"))
@@ -44,7 +47,8 @@ def create_completed_study_session_from_time_payload(
         target_type, target_id = "palace_segment", palace_segment_id
     elif palace_id is not None:
         target_type, target_id = "palace", palace_id
-    summary_payload = payload.get("summary") if isinstance(payload.get("summary"), dict) else {}
+    raw_summary = payload.get("summary")
+    summary_payload = raw_summary if isinstance(raw_summary, dict) else {}
     summary_payload = {
         **summary_payload,
         "scene_segments": payload.get("sceneSegments") or payload.get("scene_segments") or [],
@@ -110,6 +114,8 @@ def create_review_study_session(
     summary: dict[str, Any] | None = None,
     commit: bool = True,
 ) -> dict[str, Any] | None:
+    from .study_session_service import create_study_session
+
     effective_seconds = max(0, int(duration_seconds))
     resolved_ended_at = ended_at or utc_now_naive()
     started_at = resolved_ended_at - timedelta(seconds=effective_seconds)

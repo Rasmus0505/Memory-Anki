@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime, time, timedelta
 from typing import Any
 
 from sqlalchemy import case, func
@@ -133,6 +133,142 @@ def build_study_session_stats(session: Session) -> dict[str, int]:
             session, scenes=FORMAL_REVIEW_SCENES, start=week_start, end=week_end
         ),
     }
+
+
+def build_time_record_analytics(
+    session: Session,
+    *,
+    trend_range: int | str,
+    breakdown_range: int | str,
+    reference_date: date | None = None,
+) -> dict[str, list[dict[str, Any]]]:
+    today = reference_date or date.today()
+    tomorrow = datetime.combine(today + timedelta(days=1), time.min)
+    return {
+        "trend": _build_time_record_trend(
+            session,
+            range_value=trend_range,
+            today=today,
+            tomorrow=tomorrow,
+        ),
+        "breakdown": _build_time_record_breakdown(
+            session,
+            range_value=breakdown_range,
+            today=today,
+            tomorrow=tomorrow,
+        ),
+    }
+
+
+def _range_start(
+    session: Session,
+    *,
+    range_value: int | str,
+    today: date,
+) -> date:
+    if range_value != "all":
+        return today - timedelta(days=max(1, int(range_value)) - 1)
+    earliest = (
+        session.query(func.min(StudySession.started_at))
+        .filter(StudySession.deleted_at.is_(None))
+        .scalar()
+    )
+    return earliest.date() if earliest is not None else today
+
+
+def _build_time_record_trend(
+    session: Session,
+    *,
+    range_value: int | str,
+    today: date,
+    tomorrow: datetime,
+) -> list[dict[str, Any]]:
+    start_date = _range_start(session, range_value=range_value, today=today)
+    start = datetime.combine(start_date, time.min)
+    rows = (
+        session.query(
+            func.date(StudySession.started_at),
+            func.coalesce(func.sum(StudySession.effective_seconds), 0),
+        )
+        .filter(
+            StudySession.deleted_at.is_(None),
+            StudySession.started_at >= start,
+            StudySession.started_at < tomorrow,
+        )
+        .group_by(func.date(StudySession.started_at))
+        .all()
+    )
+    totals = {str(date_key): int(seconds or 0) for date_key, seconds in rows}
+    days = max(1, (today - start_date).days + 1)
+    result: list[dict[str, Any]] = []
+    for index in range(days):
+        current = start_date + timedelta(days=index)
+        date_key = current.isoformat()
+        result.append(
+            {
+                "date_key": date_key,
+                "label": f"{current.month}/{current.day}",
+                "seconds": totals.get(date_key, 0),
+            }
+        )
+    return result
+
+
+def _build_time_record_breakdown(
+    session: Session,
+    *,
+    range_value: int | str,
+    today: date,
+    tomorrow: datetime,
+) -> list[dict[str, Any]]:
+    start_date = _range_start(session, range_value=range_value, today=today)
+    rows = (
+        session.query(
+            StudySession.scene,
+            func.coalesce(func.sum(StudySession.effective_seconds), 0),
+            func.count(StudySession.id),
+        )
+        .filter(
+            StudySession.deleted_at.is_(None),
+            StudySession.started_at >= datetime.combine(start_date, time.min),
+            StudySession.started_at < tomorrow,
+        )
+        .group_by(StudySession.scene)
+        .all()
+    )
+    totals = {
+        kind: {"seconds": 0, "sessions": 0}
+        for kind in ("review", "practice", "quiz", "palace_edit")
+    }
+    for scene, seconds, sessions in rows:
+        kind = _time_record_kind(str(scene or ""))
+        totals[kind]["seconds"] += int(seconds or 0)
+        totals[kind]["sessions"] += int(sessions or 0)
+    labels = {
+        "review": "正式复习",
+        "practice": "练习",
+        "quiz": "做题",
+        "palace_edit": "宫殿编辑",
+    }
+    return [
+        {
+            "kind": kind,
+            "label": labels[kind],
+            "seconds": totals[kind]["seconds"],
+            "sessions": totals[kind]["sessions"],
+        }
+        for kind in ("review", "practice", "quiz", "palace_edit")
+    ]
+
+
+def _time_record_kind(scene: str) -> str:
+    if scene == "palace_edit":
+        return "palace_edit"
+    if scene == "quiz":
+        return "quiz"
+    if scene in FORMAL_REVIEW_SCENES:
+        return "review"
+    return "practice"
 
 
 def get_english_study_stats(session: Session) -> dict[str, int]:

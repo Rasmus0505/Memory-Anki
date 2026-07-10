@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any
 from uuid import uuid4
 
-from sqlalchemy.orm import Session
+from sqlalchemy import func
+from sqlalchemy.orm import Query, Session
 
 from memory_anki.core.time import utc_now_naive
 from memory_anki.infrastructure.db._tables.misc import StudySession
@@ -36,6 +38,9 @@ from .study_session_constants import (
 )
 from .study_session_stats import (
     build_study_session_stats as build_study_session_stats,
+)
+from .study_session_stats import (
+    build_time_record_analytics as build_time_record_analytics,
 )
 from .study_session_stats import (
     get_all_time_study_session_duration_seconds as get_all_time_study_session_duration_seconds,
@@ -117,7 +122,7 @@ def patch_study_session(session: Session, session_id: str, payload: dict[str, An
     row = session.query(StudySession).filter_by(id=session_id).first()
     if row is None:
         return None
-    mapping = {
+    mapping: dict[str, tuple[str, Callable[[Any], Any]]] = {
         "status": ("status", lambda value: _normalize_status(value, row.status)),
         "scene": ("scene", _normalize_scene),
         "target_type": ("target_type", _normalize_target_type),
@@ -145,8 +150,9 @@ def patch_study_session(session: Session, session_id: str, payload: dict[str, An
     if "progress" in payload:
         row.progress_json = _json_dumps(payload.get("progress") or {}, "{}")
     if "summary" in payload:
-        current_summary = _json_loads(row.summary_json, {})
-        next_summary = payload.get("summary") if isinstance(payload.get("summary"), dict) else {}
+        current_summary: dict[str, Any] = _json_loads(row.summary_json, {})
+        raw_summary = payload.get("summary")
+        next_summary = raw_summary if isinstance(raw_summary, dict) else {}
         if isinstance(current_summary, dict):
             row.summary_json = _json_dumps({**current_summary, **next_summary}, "{}")
         else:
@@ -167,7 +173,7 @@ def append_study_session_events(
     row = session.query(StudySession).filter_by(id=session_id).first()
     if row is None:
         return None
-    current_events = _json_loads(row.events_json, [])
+    current_events: list[Any] = _json_loads(row.events_json, [])
     if not isinstance(current_events, list):
         current_events = []
     current_events.extend(event for event in events if isinstance(event, dict))
@@ -198,7 +204,7 @@ def complete_study_session(session: Session, session_id: str, payload: dict[str,
         "at": ended_at.isoformat(),
         "meta": {"effective_seconds": row.effective_seconds},
     }
-    current_events = _json_loads(row.events_json, [])
+    current_events: list[Any] = _json_loads(row.events_json, [])
     row.events_json = _json_dumps([*(current_events if isinstance(current_events, list) else []), event], "[]")
     row.updated_at = utc_now_naive()
     session.commit()
@@ -279,19 +285,57 @@ def list_study_sessions(
     *,
     include_deleted: bool = False,
     include_below_threshold: bool = False,
+    keyword: str | None = None,
+    kind: str | None = None,
+    sort_by: str = "started_at",
+    sort_order: str = "desc",
     limit: int | None = None,
     offset: int = 0,
 ) -> list[dict[str, Any]]:
-    query = session.query(StudySession).order_by(StudySession.started_at.desc())
-    query = query.filter(StudySession.deleted_at.is_(None))
+    query = _filtered_study_sessions_query(session, keyword=keyword, kind=kind)
+    sort_column = {
+        "started_at": StudySession.started_at,
+        "effective_seconds": StudySession.effective_seconds,
+        "title": func.lower(StudySession.title),
+    }.get(sort_by, StudySession.started_at)
+    order = sort_column.asc() if sort_order == "asc" else sort_column.desc()
+    query = query.order_by(order, StudySession.id.asc())
     if limit is not None:
         query = query.offset(max(0, offset)).limit(limit)
     rows = query.all()
     return [study_session_json(row) for row in rows]
 
 
-def count_study_sessions(session: Session) -> int:
-    return session.query(StudySession).filter(StudySession.deleted_at.is_(None)).count()
+def count_study_sessions(
+    session: Session,
+    *,
+    keyword: str | None = None,
+    kind: str | None = None,
+) -> int:
+    return _filtered_study_sessions_query(session, keyword=keyword, kind=kind).count()
+
+
+def _filtered_study_sessions_query(
+    session: Session,
+    *,
+    keyword: str | None,
+    kind: str | None,
+) -> Query:
+    query = session.query(StudySession).filter(StudySession.deleted_at.is_(None))
+    normalized_keyword = str(keyword or "").strip()
+    if normalized_keyword:
+        query = query.filter(StudySession.title.ilike(f"%{normalized_keyword}%"))
+    if kind == "palace_edit":
+        query = query.filter(StudySession.scene == "palace_edit")
+    elif kind == "quiz":
+        query = query.filter(StudySession.scene == "quiz")
+    elif kind == "review":
+        query = query.filter(StudySession.scene.in_(FORMAL_REVIEW_SCENES))
+    elif kind == "practice":
+        query = query.filter(
+            StudySession.scene.notin_(("palace_edit", "quiz", *FORMAL_REVIEW_SCENES))
+        )
+    return query
 
 
 from .study_session_bridge import (  # noqa: E402  (compatibility re-exports)

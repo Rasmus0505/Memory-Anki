@@ -1,3 +1,5 @@
+from typing import Literal, NoReturn
+
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.orm import Session
 
@@ -36,6 +38,7 @@ from memory_anki.modules.sessions.application.study_session_service import (
     abandon_study_session,
     append_study_session_events,
     build_study_session_stats,
+    build_time_record_analytics,
     bulk_delete_study_sessions,
     complete_study_session,
     count_study_sessions,
@@ -65,7 +68,7 @@ def _payload(data) -> dict:
     return data.model_dump(exclude_unset=True, exclude_none=False)
 
 
-def _raise_not_found() -> None:
+def _raise_not_found() -> NoReturn:
     raise HTTPException(status_code=404, detail="not found")
 
 
@@ -96,6 +99,19 @@ def api_study_session_stats(session: Session = Depends(session_dep)):
     return build_study_session_stats(session)
 
 
+@router.get('/study-sessions/time-record-analytics')
+def api_time_record_analytics(
+    trend_range: Literal['7', '30', '90', 'all'] = '7',
+    breakdown_range: Literal['7', '30', '90', 'all'] = 'all',
+    session: Session = Depends(session_dep),
+):
+    return build_time_record_analytics(
+        session,
+        trend_range='all' if trend_range == 'all' else int(trend_range),
+        breakdown_range='all' if breakdown_range == 'all' else int(breakdown_range),
+    )
+
+
 @router.get("/study-sessions/by-target")
 def api_get_study_session_by_target(
     target_type: str,
@@ -117,13 +133,33 @@ def api_get_study_session_by_target(
 def api_list_study_sessions(
     limit: int | None = Query(default=None, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
+    keyword: str | None = Query(default=None, max_length=300),
+    kind: Literal["palace_edit", "practice", "quiz", "review"] | None = None,
+    sort_by: Literal["started_at", "effective_seconds", "title"] = "started_at",
+    sort_order: Literal["asc", "desc"] = "desc",
     session: Session = Depends(session_dep),
 ):
     if limit is None:
-        return {"items": list_study_sessions(session)}
+        return {
+            "items": list_study_sessions(
+                session,
+                keyword=keyword,
+                kind=kind,
+                sort_by=sort_by,
+                sort_order=sort_order,
+            )
+        }
     return {
-        "items": list_study_sessions(session, limit=limit, offset=offset),
-        "total": count_study_sessions(session),
+        "items": list_study_sessions(
+            session,
+            keyword=keyword,
+            kind=kind,
+            sort_by=sort_by,
+            sort_order=sort_order,
+            limit=limit,
+            offset=offset,
+        ),
+        "total": count_study_sessions(session, keyword=keyword, kind=kind),
         "limit": limit,
         "offset": offset,
     }

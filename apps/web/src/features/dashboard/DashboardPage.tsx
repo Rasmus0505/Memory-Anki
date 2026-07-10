@@ -102,6 +102,8 @@ export default function Dashboard() {
   }, [])
   const timeRecordsDashboard = useTimeRecordsDashboard({
     onRecordsChanged: loadDashboard,
+    trendRange: trendRangeDays,
+    breakdownRange: breakdownRangeDays,
   })
 
   useEffect(() => {
@@ -201,7 +203,7 @@ export default function Dashboard() {
             }
           >
             <TimeRecordsTrendChart
-              trend={timeRecordsDashboard.getTrendForRange(trendRangeDays)}
+              trend={timeRecordsDashboard.trend}
             />
           </TimeRecordChartCard>
           <TimeRecordChartCard
@@ -212,9 +214,7 @@ export default function Dashboard() {
             }
           >
             <TimeRecordsBreakdownChart
-              breakdown={timeRecordsDashboard.getBreakdownForRange(
-                breakdownRangeDays,
-              )}
+              breakdown={timeRecordsDashboard.breakdown}
             />
           </TimeRecordChartCard>
         </div>
@@ -233,6 +233,18 @@ export default function Dashboard() {
           onKeywordChange={timeRecordsDashboard.setKeyword}
           kindFilter={timeRecordsDashboard.kindFilter}
           onKindFilterChange={timeRecordsDashboard.setKindFilter}
+          sortBy={timeRecordsDashboard.sortBy}
+          onSortByChange={timeRecordsDashboard.setSortBy}
+          sortOrder={timeRecordsDashboard.sortOrder}
+          onSortOrderChange={timeRecordsDashboard.setSortOrder}
+          page={timeRecordsDashboard.page}
+          pageSize={timeRecordsDashboard.pageSize}
+          totalRecords={timeRecordsDashboard.totalRecords}
+          totalPages={timeRecordsDashboard.totalPages}
+          onPageChange={timeRecordsDashboard.setPage}
+          onPageSizeChange={timeRecordsDashboard.setPageSize}
+          isLoadingRecords={timeRecordsDashboard.isLoadingRecords}
+          recordsError={timeRecordsDashboard.recordsError}
           showDeleted={timeRecordsDashboard.showDeleted}
           onShowDeletedChange={timeRecordsDashboard.setShowDeleted}
           onCreateRecord={timeRecordsDashboard.openCreateDialog}

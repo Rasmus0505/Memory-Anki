@@ -33,6 +33,18 @@ export const timeRecordsDashboardMock = {
   setKindFilter: vi.fn(),
   keyword: "",
   setKeyword: vi.fn(),
+  sortBy: "started_at" as const,
+  setSortBy: vi.fn(),
+  sortOrder: "desc" as const,
+  setSortOrder: vi.fn(),
+  page: 1,
+  pageSize: 20,
+  totalRecords: 0,
+  totalPages: 1,
+  setPage: vi.fn(),
+  setPageSize: vi.fn(),
+  isLoadingRecords: false,
+  recordsError: null,
   selectedRecordIds: [],
   dialogMode: "create" as const,
   dialogOpen: false,
@@ -42,15 +54,8 @@ export const timeRecordsDashboardMock = {
   deletingRecordId: null,
   restoringRecordId: null,
   isBulkDeleting: false,
-  summary: {},
   trend: [],
   breakdown: [],
-  getTrendForRange: vi.fn((range: 7 | 30 | 90 | "all") => [
-    { dateKey: `trend-${range}`, label: `trend-${range}`, seconds: 1 },
-  ]),
-  getBreakdownForRange: vi.fn((range: 7 | 30 | 90 | "all") => [
-    { kind: "review", label: `breakdown-${range}`, seconds: 1, sessions: 1 },
-  ]),
   visibleRecords: [],
   hasSelectableRecords: false,
   allSelectableChecked: false,
@@ -89,7 +94,23 @@ vi.mock("@/features/dashboard/api", () => ({
 }));
 
 vi.mock("@/features/profile/hooks/useTimeRecordsDashboard", () => ({
-  useTimeRecordsDashboard: () => timeRecordsDashboardMock,
+  useTimeRecordsDashboard: (options: {
+    trendRange?: 7 | 30 | 90 | "all";
+    breakdownRange?: 7 | 30 | 90 | "all";
+  }) => ({
+    ...timeRecordsDashboardMock,
+    trend: [{
+      dateKey: `trend-${options.trendRange ?? 7}`,
+      label: `trend-${options.trendRange ?? 7}`,
+      seconds: 1,
+    }],
+    breakdown: [{
+      kind: "review",
+      label: `breakdown-${options.breakdownRange ?? "all"}`,
+      seconds: 1,
+      sessions: 1,
+    }],
+  }),
 }));
 
 vi.mock("@/features/profile/components/TimeRecordsTrendChart", () => ({

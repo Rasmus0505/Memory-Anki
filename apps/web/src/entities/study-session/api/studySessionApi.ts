@@ -95,7 +95,7 @@ export interface StudySessionRecordPayload {
   pauseCount?: number
   completionMethod?: string
   durationEdited?: boolean
-  clientSource?: 'desktop' | 'mobile' | null
+  clientSource?: 'desktop' | 'pwa' | 'mobile' | null
   events?: unknown[]
   sceneSegments?: unknown[]
   deletedAt?: string | null
@@ -103,12 +103,41 @@ export interface StudySessionRecordPayload {
 }
 
 export interface StudySessionListOptions {
-  includeDeleted?: boolean
-  includeBelowThreshold?: boolean
+  limit?: number
+  offset?: number
+  keyword?: string
+  kind?: 'palace_edit' | 'practice' | 'quiz' | 'review'
+  sortBy?: 'started_at' | 'effective_seconds' | 'title'
+  sortOrder?: 'asc' | 'desc'
 }
 
-function listPath(_options?: StudySessionListOptions) {
-  return '/study-sessions'
+export interface StudySessionListResult {
+  items: StudySessionItem[]
+  total?: number
+  limit?: number
+  offset?: number
+}
+
+export interface StudySessionAnalyticsResult {
+  trend: Array<{ date_key: string; label: string; seconds: number }>
+  breakdown: Array<{
+    kind: 'palace_edit' | 'practice' | 'quiz' | 'review'
+    label: string
+    seconds: number
+    sessions: number
+  }>
+}
+
+function listPath(options?: StudySessionListOptions) {
+  const query = new URLSearchParams()
+  if (options?.limit != null) query.set('limit', String(options.limit))
+  if (options?.offset != null) query.set('offset', String(options.offset))
+  if (options?.keyword?.trim()) query.set('keyword', options.keyword.trim())
+  if (options?.kind) query.set('kind', options.kind)
+  if (options?.sortBy) query.set('sort_by', options.sortBy)
+  if (options?.sortOrder) query.set('sort_order', options.sortOrder)
+  const suffix = query.toString()
+  return suffix ? `/study-sessions?${suffix}` : '/study-sessions'
 }
 
 export function createStudySessionApi(payload: StudySessionPayload) {
@@ -128,7 +157,20 @@ export function getStudySessionApi(id: string) {
 }
 
 export function listStudySessionsApi(options?: StudySessionListOptions) {
-  return request<{ items: StudySessionItem[] }>(listPath(options))
+  return request<StudySessionListResult>(listPath(options))
+}
+
+export function getStudySessionAnalyticsApi(options: {
+  trendRange: 7 | 30 | 90 | 'all'
+  breakdownRange: 7 | 30 | 90 | 'all'
+}) {
+  const query = new URLSearchParams({
+    trend_range: String(options.trendRange),
+    breakdown_range: String(options.breakdownRange),
+  })
+  return request<StudySessionAnalyticsResult>(
+    `/study-sessions/time-record-analytics?${query}`,
+  )
 }
 
 export function patchStudySessionApi(

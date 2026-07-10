@@ -14,7 +14,7 @@ def _json_dumps(value: Any, fallback: str) -> str:
         return fallback
 
 
-def _json_loads(raw: str | None, fallback: Any) -> Any:
+def _json_loads[T](raw: str | None, fallback: T) -> T:
     if not raw:
         return fallback
     try:
