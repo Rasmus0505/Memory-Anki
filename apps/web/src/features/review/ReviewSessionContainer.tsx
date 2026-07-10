@@ -1,4 +1,4 @@
-import { ArrowLeft, FileText } from 'lucide-react'
+﻿import { ArrowLeft, FileText } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import {
@@ -433,6 +433,7 @@ export function ReviewSessionContainer({
           title={title}
           palaceId={palace.id}
           sessionKind="review"
+          studySessionId={String(session.id)}
           revealMode={session.revealMode ?? 'standard'}
           checkpointNodeUids={session.checkpointNodeUids ?? []}
           displayMode={displayMode}

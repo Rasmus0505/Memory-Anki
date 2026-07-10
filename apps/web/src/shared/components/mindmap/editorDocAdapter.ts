@@ -22,6 +22,8 @@ export interface EditorDocGraphOptions {
   }
   revealMap?: Record<string, RevealState>
   readonly?: boolean
+  highlightedNodeUids?: string[]
+  masteryByNodeUid?: Record<string, { status: string; manualLabel?: string | null }>
 }
 
 interface NodeLocation {
@@ -72,6 +74,7 @@ export function editorDocToGraph(
   const rangeSelected = new Set(options.segmentRangeDraft?.selectedNodeUids ?? [])
   const focusSet = new Set(options.focusNodeUids ?? [])
   const miniSet = new Set(options.miniPalaceDraft?.selectedNodeUids ?? [])
+  const highlightedSet = new Set(options.highlightedNodeUids ?? [])
 
   const walk = (node: MindMapDocNode, parentId: string | null, depth: number, indexPath: number[]) => {
     const uid = getNodeUid(node, indexPath.join('-') || 'root')
@@ -105,6 +108,9 @@ export function editorDocToGraph(
           !activeSegment,
         focusMarked: focusSet.has(uid),
         miniPalaceSelected: miniSet.has(uid),
+        searchHighlighted: highlightedSet.has(uid),
+        masteryStatus: options.masteryByNodeUid?.[uid]?.status ?? null,
+        manualMasteryLabel: options.masteryByNodeUid?.[uid]?.manualLabel ?? null,
       },
     })
     if (parentId) {

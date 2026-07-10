@@ -19,7 +19,11 @@ import {
   type NodeSize,
   type PreviewState,
 } from './layout'
-import type { MindMapCanvasViewCommand, MindMapMobileViewPolicy } from './MindMapCanvas'
+import type {
+  MindMapCanvasViewCommand,
+  MindMapContentChangeViewportPolicy,
+  MindMapMobileViewPolicy,
+} from './MindMapCanvas'
 import { dispatchGlobalFeedback } from '@/shared/feedback/globalFeedbackModel'
 
 const COLUMN_PROBE_PX = 240
@@ -33,6 +37,7 @@ interface UseMindMapViewportInput {
   focusMode: boolean
   readonly: boolean
   mobileViewPolicy: MindMapMobileViewPolicy
+  contentChangeViewportPolicy: MindMapContentChangeViewportPolicy
   toolbarVisible: boolean
   viewCommand: MindMapCanvasViewCommand | null
   setNodeSizeVersion: (updater: (version: number) => number) => void
@@ -47,6 +52,7 @@ export function useMindMapViewport({
   focusMode,
   readonly,
   mobileViewPolicy,
+  contentChangeViewportPolicy,
   toolbarVisible,
   viewCommand,
   setNodeSizeVersion,
@@ -55,6 +61,7 @@ export function useMindMapViewport({
   const pendingMeasuredNodeSizesRef = useRef<Map<string, NodeSize>>(new Map())
   const measureFrameRef = useRef<number | null>(null)
   const handledViewCommandNonceRef = useRef<number | null>(null)
+  const hasRunInitialMobileFitRef = useRef(false)
   const lastPreviewFeedbackRef = useRef('')
   const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 })
   const isCanvasReady = canvasSize.width > 0 && canvasSize.height > 0
@@ -283,8 +290,16 @@ export function useMindMapViewport({
 
   useEffect(() => {
     if (!mobileGuidedActive || !isCanvasReady || graphNodes.length === 0) return
+    if (contentChangeViewportPolicy === 'preserve' && hasRunInitialMobileFitRef.current) return
+    hasRunInitialMobileFitRef.current = true
     runFitView(180)
-  }, [graphNodes.length, isCanvasReady, mobileGuidedActive, runFitView])
+  }, [
+    contentChangeViewportPolicy,
+    graphNodes.length,
+    isCanvasReady,
+    mobileGuidedActive,
+    runFitView,
+  ])
 
   useEffect(() => {
     if (!viewCommand || !isCanvasReady) return

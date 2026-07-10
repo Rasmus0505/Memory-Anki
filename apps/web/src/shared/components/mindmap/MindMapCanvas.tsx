@@ -22,6 +22,8 @@ import { dispatchGlobalFeedback } from '@/shared/feedback/globalFeedbackModel'
 import { logAppError } from '@/shared/logs/model/appLogs'
 
 export type MindMapMobileViewPolicy = 'auto' | 'map' | 'guided'
+export type MindMapNodeClickViewportPolicy = 'preserve' | 'guided-center'
+export type MindMapContentChangeViewportPolicy = 'auto-fit' | 'preserve'
 
 export interface MindMapCanvasViewCommand {
   type: 'fit' | 'center'
@@ -59,6 +61,8 @@ export interface MindMapCanvasProps {
   buildNodeActions?: (nodeId: string) => ContextMenuAction[]
   practiceModeActive?: boolean
   mobileViewPolicy?: MindMapMobileViewPolicy
+  nodeClickViewportPolicy?: MindMapNodeClickViewportPolicy
+  contentChangeViewportPolicy?: MindMapContentChangeViewportPolicy
   viewCommand?: MindMapCanvasViewCommand | null
   recoveryKey?: string | number | null
   className?: string

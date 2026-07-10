@@ -1,6 +1,7 @@
 import { useCallback, useState, type MouseEvent } from 'react'
 import { type EdgeMouseHandler, type Node } from '@xyflow/react'
 import { dispatchGlobalFeedback } from '@/shared/feedback/globalFeedbackModel'
+import type { MindMapNodeClickViewportPolicy } from './MindMapCanvas'
 
 export interface MindMapNodeMenuState {
   x: number
@@ -24,6 +25,7 @@ interface UseMindMapMenusAndEdgesInput {
   onEdgeDelete?: (edgeId: string, sourceId: string, targetId: string) => void
   onEdgeInsert?: (edgeId: string, sourceId: string, targetId: string) => void
   mobileGuidedActive: boolean
+  nodeClickViewportPolicy: MindMapNodeClickViewportPolicy
   centerNodeInCanvas: (nodeId: string | null | undefined, duration?: number) => void
 }
 
@@ -35,6 +37,7 @@ export function useMindMapMenusAndEdges({
   onEdgeDelete,
   onEdgeInsert,
   mobileGuidedActive,
+  nodeClickViewportPolicy,
   centerNodeInCanvas,
 }: UseMindMapMenusAndEdgesInput) {
   const [ctxMenu, setCtxMenu] = useState<MindMapNodeMenuState | null>(null)
@@ -83,7 +86,7 @@ export function useMindMapMenusAndEdges({
       setEdgeMenu(null)
       onNodeSelect(node.id)
       onNodeActivate?.(node.id)
-      if (mobileGuidedActive) {
+      if (mobileGuidedActive && nodeClickViewportPolicy === 'guided-center') {
         centerNodeInCanvas(node.id)
       }
       dispatchGlobalFeedback('node_select', {
@@ -91,7 +94,7 @@ export function useMindMapMenusAndEdges({
         origin: 'node',
       })
     },
-    [centerNodeInCanvas, mobileGuidedActive, onNodeActivate, onNodeSelect],
+    [centerNodeInCanvas, mobileGuidedActive, nodeClickViewportPolicy, onNodeActivate, onNodeSelect],
   )
 
   const handleNodeMouseEnter = useCallback(

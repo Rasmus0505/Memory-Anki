@@ -1,6 +1,7 @@
-import { RotateCcw, Sparkles, SquareCheckBig } from "lucide-react";
+﻿import { RotateCcw, Sparkles, SquareCheckBig } from "lucide-react";
 import { CompletionDecisionDialog } from "@/features/review/components/CompletionDecisionDialog";
 import { ReviewFlowMapPanel } from "@/features/review/components/ReviewFlowMapPanel";
+import { MindMapRatingHistoryDrawer } from "@/features/review/components/MindMapRatingHistoryDrawer";
 import { useMindMapReviewFlowController } from "@/features/review/hooks/useMindMapReviewFlowController";
 import type { MindMapReviewFlowProps } from "@/features/review/model/mind-map-review-flow";
 import { MiniPalacePanel } from "@/features/mini-palace";
@@ -277,6 +278,11 @@ export function MindMapReviewFlow({
                   onEditNodeContextMenu={review.handleEditNodeContextMenu}
                   onQuizBreakOpen={review.handleQuizBreakOpen}
                   onMiniPalaceOpen={review.miniPalace.openPanel}
+                  recallRatings={review.recallRatings.round === 'first' ? review.recallRatings.firstRatings : review.recallRatings.retryRatings}
+                  recallRound={review.recallRatings.round}
+                  weakNodeUids={review.recallRatings.weakNodeUids}
+                  onRateNode={props.studySessionId ? (nodeUid, rating, round) => { void review.recallRatings.rateNode(nodeUid, rating, round) } : undefined}
+                  onOpenRatingHistory={props.studySessionId ? () => review.recallRatings.setHistoryOpen(true) : undefined}
                   onMiniPalacePour={
                     review.miniPalace.isPracticing
                       ? review.miniPalace.handleSpacePour
@@ -301,6 +307,8 @@ export function MindMapReviewFlow({
         }}
         submitting={submitting || review.savingIncomplete}
       />
+
+      <MindMapRatingHistoryDrawer open={review.recallRatings.historyOpen} onOpenChange={review.recallRatings.setHistoryOpen} events={review.recallRatings.currentEvents} onCorrect={(nodeUid, rating, round) => { void review.recallRatings.rateNode(nodeUid, rating, round) }} />
 
       <MiniPalacePanel controller={review.miniPalace} />
     </div>

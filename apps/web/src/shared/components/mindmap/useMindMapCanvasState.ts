@@ -98,6 +98,8 @@ export function useMindMapCanvasState(
     buildNodeActions: buildCustomNodeActions,
     practiceModeActive = false,
     mobileViewPolicy = 'auto',
+    nodeClickViewportPolicy = 'guided-center',
+    contentChangeViewportPolicy = 'auto-fit',
     viewCommand = null,
     toolbarVisible = true,
     onHostRefresh,
@@ -127,6 +129,7 @@ export function useMindMapCanvasState(
     focusMode,
     readonly,
     mobileViewPolicy,
+    contentChangeViewportPolicy,
     toolbarVisible,
     viewCommand,
     setNodeSizeVersion,
@@ -139,6 +142,7 @@ export function useMindMapCanvasState(
     onEdgeDelete,
     onEdgeInsert,
     mobileGuidedActive: viewport.mobileGuidedActive,
+    nodeClickViewportPolicy,
     centerNodeInCanvas: viewport.centerNodeInCanvas,
   })
   const drag = useMindMapDragInteractions({

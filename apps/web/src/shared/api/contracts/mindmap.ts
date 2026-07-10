@@ -53,3 +53,38 @@ export interface MindMapHostSegmentRangeDraft {
   selectedNodeUids: string[]
   overriddenConflictNodeUids: string[]
 }
+export type MindMapTask = 'build' | 'learn'
+export type MindMapRecallRating = 1 | 3 | 5
+export type MindMapRecallRound = 'first' | 'weak_retry'
+export type MindMapMasteryStatus = 'unknown' | 'stable' | 'reinforce' | 'weak'
+export type MindMapNodeManualLabel = 'weak' | 'mastered' | null
+
+export interface MindMapRecallEvent {
+  id: string
+  study_session_id: string
+  palace_id: number
+  node_uid: string
+  source_scene: string
+  recall_round: MindMapRecallRound
+  rating: MindMapRecallRating
+  occurred_at: string
+  supersedes_event_id: string | null
+}
+
+export interface MindMapRecallEventCreate extends Omit<MindMapRecallEvent, 'occurred_at'> {
+  occurred_at?: string | null
+}
+
+export interface MindMapNodeMastery {
+  palace_id: number
+  node_uid: string
+  status: MindMapMasteryStatus
+  computed_status: MindMapMasteryStatus
+  manual_label: MindMapNodeManualLabel
+  reason: string
+  priority: number
+  orphaned: boolean
+  hidden_by_mastered: boolean
+  recent_events: MindMapRecallEvent[]
+}
+

@@ -43,7 +43,10 @@ export const MindMapFrame = forwardRef<MindMapFrameHandle, MindMapFrameProps>(fu
   syncReason = null,
   externalSyncKey = null,
   forceSyncKey = null,
+  preserveViewOnSync = false,
   mobileViewPolicy = 'auto',
+  nodeClickViewportPolicy,
+  contentChangeViewportPolicy,
   className,
   segments = [],
   activeSegmentId = null,
@@ -55,6 +58,8 @@ export const MindMapFrame = forwardRef<MindMapFrameHandle, MindMapFrameProps>(fu
     overriddenConflictNodeUids: [],
   },
   focusNodeUids = [],
+  highlightedNodeUids = [],
+  masteryByNodeUid = {},
   focusRequestNodeUid = null,
   focusRequestNonce = 0,
   miniPalaceDraft = {
@@ -103,6 +108,8 @@ export const MindMapFrame = forwardRef<MindMapFrameHandle, MindMapFrameProps>(fu
         segmentColorMode,
         segmentRangeDraft,
         focusNodeUids,
+        highlightedNodeUids,
+        masteryByNodeUid,
         miniPalaceDraft,
         revealMap: practiceModeActive ? revealMap : undefined,
         readonly,
@@ -110,6 +117,8 @@ export const MindMapFrame = forwardRef<MindMapFrameHandle, MindMapFrameProps>(fu
     [
       activeSegmentId,
       focusNodeUids,
+      highlightedNodeUids,
+      masteryByNodeUid,
       miniPalaceDraft,
       normalizedEditorState.editor_doc,
       practiceModeActive,
@@ -124,12 +133,19 @@ export const MindMapFrame = forwardRef<MindMapFrameHandle, MindMapFrameProps>(fu
     () =>
       [
         syncReason ?? '',
-        externalSyncKey ?? '',
+        preserveViewOnSync ? '' : (externalSyncKey ?? ''),
         forceSyncKey ?? '',
-        graphData.nodes.length,
-        graphData.edges.length,
+        preserveViewOnSync ? '' : graphData.nodes.length,
+        preserveViewOnSync ? '' : graphData.edges.length,
       ].join(':'),
-    [externalSyncKey, forceSyncKey, graphData.edges.length, graphData.nodes.length, syncReason],
+    [
+      externalSyncKey,
+      forceSyncKey,
+      graphData.edges.length,
+      graphData.nodes.length,
+      preserveViewOnSync,
+      syncReason,
+    ],
   )
 
   useEffect(() => {
@@ -417,6 +433,11 @@ export const MindMapFrame = forwardRef<MindMapFrameHandle, MindMapFrameProps>(fu
   )
 
   const canEdit = !readonly && !practiceModeActive && !miniPalaceDraft.active
+  const preservePracticeViewport = practiceModeActive && preserveViewOnSync
+  const resolvedNodeClickViewportPolicy =
+    nodeClickViewportPolicy ?? (preservePracticeViewport ? 'preserve' : 'guided-center')
+  const resolvedContentChangeViewportPolicy =
+    contentChangeViewportPolicy ?? (preservePracticeViewport ? 'preserve' : 'auto-fit')
   const frameClassName = buildMindMapFrameClassName(className)
   const handleAddChild = useCallback(
     (nodeId: string) => emitState(addEditorDocChild(normalizedEditorState.editor_doc, nodeId)),
@@ -478,6 +499,8 @@ export const MindMapFrame = forwardRef<MindMapFrameHandle, MindMapFrameProps>(fu
         focusMode={nativeFullscreenActive || immersiveModeActive}
         showToolbar={!uiCleared}
         mobileViewPolicy={mobileViewPolicy}
+        nodeClickViewportPolicy={resolvedNodeClickViewportPolicy}
+        contentChangeViewportPolicy={resolvedContentChangeViewportPolicy}
         viewCommand={viewCommand}
         recoveryKey={canvasRecoveryKey}
         onNodeSelect={selectNode}

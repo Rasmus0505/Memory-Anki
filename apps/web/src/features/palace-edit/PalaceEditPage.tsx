@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { AlertCircle, ArrowLeft, CheckCircle2, History, LayoutTemplate, LoaderCircle, PencilLine } from 'lucide-react'
 import { PageIntro } from '@/shared/components/layout/PageIntro'
@@ -23,6 +23,7 @@ import { PalaceKnowledgeOutlinePanel } from '@/features/palace-edit/components/P
 import { useQuizLauncher } from '@/features/palace-quiz/QuizLauncherProvider'
 import { MiniPalacePanel } from '@/features/mini-palace'
 import { useRouteResidency } from '@/shared/routing/RouteResidency'
+import { useMindMapExperience } from '@/features/mindmap-experience'
 import { createPalaceTemplateApi } from '@/entities/palace/api'
 import { appPrompt } from '@/shared/components/ui/native-dialog'
 import { toast } from '@/shared/feedback/toast'
@@ -104,8 +105,14 @@ export default function PalaceEdit() {
   const activeFrameEditorState =
     miniPalaceFrameEditorState ?? page.activeMindMapEditorState
   const miniPalaceFrameActive = page.miniPalace.isActive
+  const mindMapExperience = useMindMapExperience({
+    entityType: 'palace',
+    entityId: page.palaceId,
+    editorState: page.editorState,
+    defaultTask: 'learn',
+  })
   const recallModeActive = page.editorMode === 'recall'
-  const readonlyMindMap = page.editorMode !== 'edit' || miniPalaceFrameActive
+  const readonlyMindMap = mindMapExperience.task === 'learn' || page.editorMode !== 'edit' || miniPalaceFrameActive
   const segmentToolbarOptions = useMemo(
     () =>
       page.segments
@@ -325,99 +332,63 @@ export default function PalaceEdit() {
               {activeFrameEditorState ? (
                 <div className="flex h-full min-h-0 flex-col gap-3">
                   <MindMapPageToolbar
-                    segmentControl={{
+                    taskControl={{
+                      value: mindMapExperience.task,
+                      onChange: (task) => {
+                        mindMapExperience.setTask(task)
+                        if (task === 'build') page.exitInlinePractice()
+                        else page.enterInlinePractice()
+                      },
+                    }}
+                    searchControl={{ value: mindMapExperience.searchQuery, onChange: mindMapExperience.setSearchQuery, resultCount: mindMapExperience.searchResults.length }}
+                    focusAction={mindMapExperience.selectedResult ? { label: '定位结果', onClick: () => mindMapFrameRef.current?.focusNode(mindMapExperience.selectedResult?.nodeUid ?? null) } : selectedNodeUid ? { label: '聚焦节点', onClick: () => mindMapFrameRef.current?.focusNode(selectedNodeUid) } : null}
+                    fitAction={{ label: '适应视图', onClick: () => mindMapFrameRef.current?.fitView() }}
+                    segmentControl={mindMapExperience.task === 'build' ? {
                       active: page.isSegmentRangeMode,
                       targetSegmentId: page.rangeTargetSegmentId,
                       options: segmentToolbarOptions,
-                      onToggle: () =>
-                        page.handleSegmentRangeModeToggle({
-                          active: !page.isSegmentRangeMode,
-                          targetSegmentId: page.rangeTargetSegmentId || 'new',
-                        }),
-                      onTargetChange: (targetSegmentId) =>
-                        page.handleSegmentRangeModeToggle({
-                          active: true,
-                          targetSegmentId,
-                        }),
+                      onToggle: () => page.handleSegmentRangeModeToggle({ active: !page.isSegmentRangeMode, targetSegmentId: page.rangeTargetSegmentId || 'new' }),
+                      onTargetChange: (targetSegmentId) => page.handleSegmentRangeModeToggle({ active: true, targetSegmentId }),
                       onConfirm: page.handleConfirmSegmentRange,
-                      onCancel: () =>
-                        page.handleSegmentRangeModeToggle({
-                          active: false,
-                          targetSegmentId: null,
-                        }),
-                    }}
-                    modeControl={
-                      miniPalaceFrameActive
-                        ? null
-                        : {
-                            value: page.editorMode,
-                            onChange: (mode) => {
-                              if (mode === 'edit') page.exitInlinePractice()
-                              if (mode === 'preview') page.enterPreview()
-                              if (mode === 'recall') page.enterInlinePractice()
-                            },
-                          }
-                    }
-                    importMindMapAction={{
-                      label: '转脑图',
-                      onClick: () => {
-                        mindMapImport.setImportMode('mindmap')
-                        mindMapImport.setImportOpen(true)
-                      },
-                    }}
-                    importTextAction={{
-                      label: '转文字',
-                      onClick: () => {
-                        mindMapImport.setImportMode('text')
-                        mindMapImport.setImportOpen(true)
-                      },
-                    }}
-                    englishAction={{
-                      label: '英语区',
-                      onClick: () => {
-                        void page.handleOpenEnglishArea()
-                      },
-                    }}
-                    quizAction={
-                      page.palaceId
-                        ? {
-                            label: '做题',
-                            onClick: handleOpenQuizPage,
-                          }
-                        : null
-                    }
-                    miniPalaceAction={
-                      page.palaceId
-                        ? {
-                            label: '专项训练',
-                            onClick: page.miniPalace.openPanel,
-                          }
-                        : null
-                    }
-                    immersiveAction={{
-                      label: '半屏编辑',
-                      active: page.mindMapFullscreen,
-                      onClick: () => {
-                        void handleImmersiveToolbarToggle()
-                      },
-                    }}
-                    nativeFullscreenAction={{
-                      label: '全屏编辑',
-                      active: mindMapNativeFullscreen,
-                      onClick: () => {
-                        void handleNativeFullscreenToolbarToggle()
-                      },
-                    }}
-                    clearUiAction={{
-                      label: '清屏',
-                      active: mindMapUiCleared,
-                      onClick: () => mindMapFrameRef.current?.toggleUiCleared(),
-                    }}
+                      onCancel: () => page.handleSegmentRangeModeToggle({ active: false, targetSegmentId: null }),
+                    } : null}
+                    moreActions={[
+                      { label: '导入资料', onClick: () => mindMapImport.setImportOpen(true) },
+                      { label: `结构检查（${mindMapExperience.structureIssues.length}）`, onClick: () => { const issue = mindMapExperience.structureIssues[0]; if (!issue) return toast.success('未发现结构问题'); mindMapFrameRef.current?.focusNode(issue.nodeUid); toast.warning(issue.message) } },
+                      { label: '英语区', onClick: () => { void page.handleOpenEnglishArea() }, separatorBefore: true },
+                      { label: '做题', onClick: handleOpenQuizPage },
+                      { label: '专项训练', onClick: page.miniPalace.openPanel },
+                      ...(selectedNodeUid ? [
+                        { label: '标记为薄弱', onClick: () => { void mindMapExperience.setNodeManualLabel(selectedNodeUid, 'weak') }, separatorBefore: true },
+                        { label: '标记为已掌握', onClick: () => { void mindMapExperience.setNodeManualLabel(selectedNodeUid, 'mastered') } },
+                        { label: '清除手动标记', onClick: () => { void mindMapExperience.setNodeManualLabel(selectedNodeUid, null) } },
+                      ] : []),
+                      { label: page.mindMapFullscreen ? '退出沉浸模式' : '沉浸模式', onClick: () => { void handleImmersiveToolbarToggle() }, separatorBefore: true },
+                      { label: mindMapNativeFullscreen ? '退出原生全屏' : '原生全屏', onClick: () => { void handleNativeFullscreenToolbarToggle() } },
+                      { label: mindMapUiCleared ? '恢复界面' : '清屏', onClick: () => mindMapFrameRef.current?.toggleUiCleared() },
+                    ]}
                   />
-
-                  <MindMapFrame
+                  {mindMapExperience.task === 'learn' && !mindMapExperience.searchQuery ? (
+                    <div className="grid gap-2 rounded-xl border bg-muted/15 p-3 sm:grid-cols-2 lg:grid-cols-4">
+                      <button type="button" className="rounded-xl border bg-background p-3 text-left hover:border-primary" onClick={() => page.enterInlinePractice()}><div className="font-medium">主动回忆</div><div className="mt-1 text-xs text-muted-foreground">连续揭示并回忆整张脑图</div></button>
+                      <button type="button" className="rounded-xl border bg-background p-3 text-left hover:border-primary" onClick={() => navigate('/reviews')}><div className="font-medium">正式复习</div><div className="mt-1 text-xs text-muted-foreground">进入复习队列并记录节点评分</div></button>
+                      <button type="button" className="rounded-xl border bg-background p-3 text-left hover:border-primary" disabled={!mindMapExperience.weakItems.length} onClick={() => { const item = mindMapExperience.weakItems[0]; if (item) mindMapFrameRef.current?.focusNode(item.node_uid) }}><div className="font-medium">薄弱训练 · {mindMapExperience.weakItems.length}</div><div className="mt-1 text-xs text-muted-foreground">优先定位薄弱和需巩固节点</div></button>
+                      <button type="button" className="rounded-xl border bg-background p-3 text-left hover:border-primary" onClick={handleOpenQuizPage}><div className="font-medium">做题训练</div><div className="mt-1 text-xs text-muted-foreground">基于当前宫殿进入题目训练</div></button>
+                    </div>
+                  ) : null}                  {mindMapExperience.searchQuery && mindMapExperience.searchResults.length ? (
+                    <div className="flex gap-2 overflow-x-auto rounded-xl border bg-muted/20 p-2">
+                      {mindMapExperience.searchResults.slice(0, 12).map((result) => (
+                        <button key={result.nodeUid} type="button" className="shrink-0 rounded-lg border bg-background px-3 py-2 text-left text-xs hover:border-primary" onClick={() => { mindMapExperience.selectSearchResult(result.nodeUid); mindMapFrameRef.current?.focusNode(result.nodeUid) }}>
+                          <div className="font-medium">{result.text || '未命名知识点'}</div>
+                          <div className="mt-1 max-w-64 truncate text-muted-foreground">{result.path.join(' › ')}</div>
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}                  <MindMapFrame
                     ref={mindMapFrameRef}
                     editorState={activeFrameEditorState}
+                    highlightedNodeUids={mindMapExperience.highlightedNodeUids}
+                    masteryByNodeUid={mindMapExperience.masteryByNodeUid}
                     readonly={readonlyMindMap}
                     practiceModeActive={recallModeActive || page.miniPalace.isPracticing}
                     viewMemoryScope={
@@ -615,3 +586,5 @@ export default function PalaceEdit() {
     </div>
   )
 }
+
+

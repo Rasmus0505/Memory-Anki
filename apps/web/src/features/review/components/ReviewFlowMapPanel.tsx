@@ -7,7 +7,7 @@ import {
   type MindMapFrameHandle,
   type MindMapSelection,
 } from '@/shared/components/mindmap-host'
-import type { MindMapEditorState } from '@/shared/api/contracts'
+import type { MindMapEditorState, MindMapRecallRating, MindMapRecallRound } from '@/shared/api/contracts'
 import type { MindMapReviewFxPayload } from '@/shared/components/mindmap-host/hostBridgeUtils'
 import { normalizeEditorDocTree } from '@/shared/components/mindmap/editorDocAdapter'
 import { cn } from '@/shared/lib/utils'
@@ -42,6 +42,11 @@ interface ReviewFlowMapPanelProps {
   onQuizBreakOpen?: () => void
   onMiniPalaceOpen?: () => void
   onMiniPalacePour?: () => void
+  recallRatings?: Map<string, MindMapRecallRating>
+  recallRound?: MindMapRecallRound
+  weakNodeUids?: string[]
+  onRateNode?: (nodeUid: string, rating: MindMapRecallRating, round: MindMapRecallRound) => void
+  onOpenRatingHistory?: () => void
 }
 
 interface GuidedMindMapNode {
@@ -146,6 +151,11 @@ export function ReviewFlowMapPanel({
   onQuizBreakOpen,
   onMiniPalaceOpen,
   onMiniPalacePour,
+  recallRatings = new Map(),
+  recallRound = 'first',
+  weakNodeUids = [],
+  onRateNode,
+  onOpenRatingHistory,
 }: ReviewFlowMapPanelProps) {
   const navigate = useNavigate()
   const frameRef = useRef<MindMapFrameHandle | null>(null)
@@ -153,17 +163,14 @@ export function ReviewFlowMapPanel({
   const [uiCleared, setUiCleared] = useState(false)
   const [hostReadyTimedOut, setHostReadyTimedOut] = useState(false)
   const [activeGuidedUid, setActiveGuidedUid] = useState<string | null>(null)
-  const [guidedFocusRequest, setGuidedFocusRequest] = useState<{
-    nodeUid: string | null
-    nonce: number
-  }>({ nodeUid: null, nonce: 0 })
+  const [ratingAdvancePending, setRatingAdvancePending] = useState(false)
   const isEditMode = displayMode === 'edit'
   const frameEditorState = isEditMode && editableEditorState ? editableEditorState : visibleEditorState
   const frameSyncIntent = 'soft'
   const frameForceSyncKey = modeSyncVersion > 0 ? `${displayMode}:${modeSyncVersion}` : undefined
   const guidedModel = useMemo(
     () => buildGuidedMindMapModel(frameEditorState),
-    [frameEditorState.editor_doc],
+    [frameEditorState],
   )
   const guidedCurrentUid =
     activeGuidedUid && guidedModel.byUid.has(activeGuidedUid)
@@ -186,21 +193,35 @@ export function ReviewFlowMapPanel({
     () => getGuidedPath(guidedModel.byUid, guidedCurrentUid),
     [guidedCurrentUid, guidedModel.byUid],
   )
+  const guidedCurrentRevealed = Boolean(guidedCurrentNode && guidedCurrentNode.text !== '待回忆')
+  const guidedEligibleNodes = useMemo(() => {
+    const nonRoot = guidedModel.nodes.filter((node) => node.uid !== guidedModel.rootUid)
+    return recallRound === 'weak_retry' ? nonRoot.filter((node) => weakNodeUids.includes(node.uid)) : nonRoot
+  }, [guidedModel.nodes, guidedModel.rootUid, recallRound, weakNodeUids])
+
 
   useEffect(() => {
     if (!guidedCurrentUid || activeGuidedUid === guidedCurrentUid) return
     setActiveGuidedUid(guidedCurrentUid)
   }, [activeGuidedUid, guidedCurrentUid])
 
-  const focusGuidedNode = useCallback((nodeUid: string | null) => {
-    if (!nodeUid) return
-    setActiveGuidedUid(nodeUid)
-    setGuidedFocusRequest((current) => ({
-      nodeUid,
-      nonce: current.nonce + 1,
-    }))
+  const selectGuidedNode = useCallback((nodeUid: string | null) => {
+    if (nodeUid) setActiveGuidedUid(nodeUid)
   }, [])
 
+  useEffect(() => {
+    if (!onRateNode || activeGuidedUid) return
+    const first = guidedEligibleNodes[0]
+    if (first) selectGuidedNode(first.uid)
+  }, [activeGuidedUid, guidedEligibleNodes, onRateNode, selectGuidedNode])
+
+  useEffect(() => {
+    if (!ratingAdvancePending) return
+    const next = guidedEligibleNodes.find((node) => !recallRatings.has(node.uid)) ?? null
+    if (!next) return
+    setRatingAdvancePending(false)
+    selectGuidedNode(next.uid)
+  }, [guidedEligibleNodes, ratingAdvancePending, recallRatings, selectGuidedNode])
   const handleGuidedGlobal = useCallback(() => {
     setActiveGuidedUid(guidedModel.rootUid)
     frameRef.current?.fitView?.()
@@ -211,7 +232,33 @@ export function ReviewFlowMapPanel({
     setActiveGuidedUid(guidedCurrentNode.uid)
     onNodeClick([toGuidedSelection(guidedCurrentNode)])
   }, [guidedCurrentNode, onNodeClick])
+  const handleGuidedRating = useCallback((rating: MindMapRecallRating) => {
+    if (!guidedCurrentNode || !onRateNode) return
+    onRateNode(guidedCurrentNode.uid, rating, recallRound)
+    onNodeClick([toGuidedSelection(guidedCurrentNode)])
+    setRatingAdvancePending(true)
+  }, [guidedCurrentNode, onNodeClick, onRateNode, recallRound])
 
+  useEffect(() => {
+    if (isEditMode || !onRateNode) return
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey) return
+      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return
+      if (event.key === ' ' || event.code === 'Space') {
+        if (!guidedCurrentRevealed) {
+          event.preventDefault()
+          handleGuidedReveal()
+        }
+        return
+      }
+      const rating = event.key === '1' ? 1 : event.key === '3' ? 3 : event.key === '5' ? 5 : null
+      if (!rating || !guidedCurrentRevealed || guidedCurrentNode?.uid === guidedModel.rootUid) return
+      event.preventDefault()
+      handleGuidedRating(rating)
+    }
+    window.addEventListener('keydown', onKeyDown, true)
+    return () => window.removeEventListener('keydown', onKeyDown, true)
+  }, [guidedCurrentNode?.uid, guidedCurrentRevealed, guidedModel.rootUid, handleGuidedRating, handleGuidedReveal, isEditMode, onRateNode])
   const handleNodeActive = useCallback(
     (nodes: MindMapSelection[]) => {
       const nextUid = nodes[0]?.uid ?? null
@@ -281,7 +328,7 @@ export function ReviewFlowMapPanel({
               variant="outline"
               className="min-h-11 px-1 text-xs"
               disabled={!guidedParentNode}
-              onClick={() => focusGuidedNode(guidedParentNode?.uid ?? null)}
+              onClick={() => selectGuidedNode(guidedParentNode?.uid ?? null)}
             >
               <CornerUpLeft className="size-4" />
               上级
@@ -292,21 +339,22 @@ export function ReviewFlowMapPanel({
               variant="outline"
               className="min-h-11 px-1 text-xs"
               disabled={!guidedNextNode}
-              onClick={() => focusGuidedNode(guidedNextNode?.uid ?? null)}
+              onClick={() => selectGuidedNode(guidedNextNode?.uid ?? null)}
             >
               <ArrowRight className="size-4" />
               下一个
             </Button>
-            <Button
-              type="button"
-              size="sm"
-              className="min-h-11 px-1 text-xs"
-              disabled={!guidedCurrentNode}
-              onClick={handleGuidedReveal}
-            >
-              <Eye className="size-4" />
-              揭示
-            </Button>
+            {guidedCurrentRevealed && onRateNode && guidedCurrentNode?.uid !== guidedModel.rootUid ? (
+              <div className="col-span-2 grid grid-cols-3 gap-1">
+                <Button type="button" size="sm" variant="destructive" className="min-h-11 px-1 text-xs" onClick={() => handleGuidedRating(1)}>忘记 1</Button>
+                <Button type="button" size="sm" variant="outline" className="min-h-11 px-1 text-xs" onClick={() => handleGuidedRating(3)}>模糊 3</Button>
+                <Button type="button" size="sm" className="min-h-11 px-1 text-xs" onClick={() => handleGuidedRating(5)}>记住 5</Button>
+              </div>
+            ) : (
+              <Button type="button" size="sm" className="min-h-11 px-1 text-xs" disabled={!guidedCurrentNode} onClick={handleGuidedReveal}>
+                <Eye className="size-4" />揭示
+              </Button>
+            )}
             <Button
               type="button"
               size="sm"
@@ -320,7 +368,18 @@ export function ReviewFlowMapPanel({
           </div>
         </div>
       ) : null}
-      <MindMapPageToolbar
+      {!isEditMode && onRateNode ? (
+        <div className="mb-3 hidden items-center justify-between gap-3 rounded-xl border border-border/70 bg-background/95 p-3 md:flex">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2"><Badge variant={recallRound === 'weak_retry' ? 'warning' : 'secondary'}>{recallRound === 'weak_retry' ? '弱点回合' : '首次回忆'}</Badge><span className="truncate text-sm font-medium">{guidedCurrentNode?.text ?? '选择一个节点'}</span></div>
+            <div className="mt-1 text-xs text-muted-foreground">Space 揭示；揭示后按 1 忘记、3 模糊、5 记住，评分后自动进入下一个。</div>
+          </div>
+          {guidedCurrentRevealed && guidedCurrentNode?.uid !== guidedModel.rootUid ? (
+            <div className="flex shrink-0 gap-2"><Button variant="destructive" onClick={() => handleGuidedRating(1)}>忘记 1</Button><Button variant="outline" onClick={() => handleGuidedRating(3)}>模糊 3</Button><Button onClick={() => handleGuidedRating(5)}>记住 5</Button></div>
+          ) : <Button onClick={handleGuidedReveal} disabled={!guidedCurrentNode}><Eye className="size-4" />揭示</Button>}
+        </div>
+      ) : null}      <MindMapPageToolbar
+        moreActions={onOpenRatingHistory ? [{ label: '本轮评分记录', onClick: onOpenRatingHistory }] : []}
         className={cn('mb-3', !isEditMode && 'hidden md:block')}
         modeToggle={
           onToggleMode
@@ -388,8 +447,7 @@ export function ReviewFlowMapPanel({
         forceSyncIntent="soft"
         initialViewPolicy="preserve"
         mobileViewPolicy={isEditMode ? 'map' : 'auto'}
-        focusRequestNodeUid={guidedFocusRequest.nodeUid}
-        focusRequestNonce={guidedFocusRequest.nonce}
+        nodeClickViewportPolicy={isEditMode ? 'guided-center' : 'preserve'}
         focusNodeUids={focusNodeUids}
         miniPalaceDraft={miniPalaceDraft}
         miniPalacePracticeActive={miniPalacePracticeActive}

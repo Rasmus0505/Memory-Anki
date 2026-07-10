@@ -1,4 +1,4 @@
-import type {
+﻿import type {
   RevealFlowMode,
   ReviewFlowSnapshot,
 } from "@/entities/review/model/review-flow-tree";
@@ -15,6 +15,7 @@ export interface MindMapReviewFlowProps {
   title: string;
   palaceId: number | null;
   sessionKind: "practice" | "review";
+  studySessionId?: string | null;
   revealMode?: RevealFlowMode;
   checkpointNodeUids?: string[];
   displayMode?: "review" | "edit";

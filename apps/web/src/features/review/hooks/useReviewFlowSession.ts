@@ -1,4 +1,4 @@
-import * as React from 'react'
+﻿import * as React from 'react'
 import type { MindMapEditorState } from '@/shared/api/contracts'
 import type { MindMapSelection } from '@/shared/components/mindmap-host'
 import { useRevealSession } from '@/entities/review/model/useRevealSession'
@@ -202,6 +202,10 @@ export function useReviewFlowSession({
     reveal.handleSpacePour()
   }, [reveal, revealMode, timer])
 
+  const startWeakRetryRound = React.useCallback((nodeUids: string[]) => {
+    const weakSet = new Set(nodeUids)
+    reveal.setRevealMap((current) => Object.fromEntries(Object.entries(current).map(([uid, state]) => [uid, weakSet.has(uid) ? 'placeholder' : state])))
+  }, [reveal])
   const handleRestart = React.useCallback(() => {
     reveal.reset()
     feedback.emitManualEvent('session_reset')
@@ -234,6 +238,7 @@ export function useReviewFlowSession({
     handleNodeHover,
     handleRestart,
     handleSpacePour,
+    startWeakRetryRound,
     finishFlow,
     screenGlowClass,
   }

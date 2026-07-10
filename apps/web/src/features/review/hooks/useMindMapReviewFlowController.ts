@@ -8,9 +8,11 @@ import { useMemoryAnkiShortcuts } from "@/entities/preferences/model/memoryAnkiS
 import { persistStudySessionRecord } from "@/entities/session/model";
 import type { MindMapSelection } from "@/shared/components/mindmap-host";
 import type { MindMapEditorState } from "@/shared/api/contracts";
+import { normalizeEditorDocTree } from "@/shared/components/mindmap/editorDocAdapter";
 import { isEditableKeyboardTarget } from "@/shared/keyboard/keyboardTargets";
 import { cn } from "@/shared/lib/utils";
 import type { MindMapReviewFlowProps } from "@/features/review/model/mind-map-review-flow";
+import { useMindMapRecallRatings } from '@/features/review/hooks/useMindMapRecallRatings';
 
 const EMPTY_CHECKPOINT_NODE_UIDS: string[] = [];
 
@@ -18,6 +20,7 @@ export function useMindMapReviewFlowController({
   title,
   palaceId,
   sessionKind,
+  studySessionId = null,
   revealMode = "standard",
   checkpointNodeUids = EMPTY_CHECKPOINT_NODE_UIDS,
   displayMode = "review",
@@ -58,6 +61,19 @@ export function useMindMapReviewFlowController({
   const selectedNode = activeNodes[0] ?? null;
   const selectedNodeUid = selectedNode?.uid ? String(selectedNode.uid) : null;
   const selectedNodeText = selectedNode?.text ? String(selectedNode.text) : "";
+  const recallRatings = useMindMapRecallRatings({ palaceId, studySessionId, enabled: sessionKind === 'review' && Boolean(studySessionId) });
+  const reviewNodeUids = React.useMemo(() => {
+    const doc = normalizeEditorDocTree(reviewEditorState.editor_doc);
+    const result: string[] = [];
+    const walk = (node: NonNullable<typeof doc.root>, isRoot = false) => {
+      const uid = String(node.data?.uid ?? node.data?.memoryAnkiId ?? '');
+      if (!isRoot && uid) result.push(uid);
+      (node.children ?? []).forEach((child) => walk(child, false));
+    };
+    if (doc.root) walk(doc.root, true);
+    return result;
+  }, [reviewEditorState.editor_doc]);
+
 
   const flow = useReviewFlowSession({
     title,
@@ -74,6 +90,18 @@ export function useMindMapReviewFlowController({
     onSnapshotChange,
     onFullscreenChange,
   });
+
+  const { startWeakRetryRound } = flow;
+  const { firstRatings, round: recallRound, setRound: setRecallRound, weakNodeUids } = recallRatings;
+
+  React.useEffect(() => {
+    if (recallRound !== 'first' || reviewNodeUids.length === 0) return;
+    if (!reviewNodeUids.every((uid) => firstRatings.has(uid))) return;
+    if (weakNodeUids.length > 0) {
+      startWeakRetryRound(weakNodeUids);
+      setRecallRound('weak_retry');
+    }
+  }, [firstRatings, recallRound, reviewNodeUids, setRecallRound, startWeakRetryRound, weakNodeUids]);
   const inlineEditEnabled =
     typeof onModeToggle === "function" &&
     typeof onEditEditorStateChange === "function" &&
@@ -423,6 +451,7 @@ export function useMindMapReviewFlowController({
     handleToggleFeedbackSurprise,
     handleCycleFeedbackGlobalIntensity,
     handleShortcutAdvanceReview,
+    recallRatings,
   };
 }
 

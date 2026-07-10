@@ -1,10 +1,15 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import type * as React from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { MindMapCanvas } from './MindMapCanvas'
 import type { GraphData } from './adapter'
 
 const reactFlowMockState = vi.hoisted(() => ({
   nextProviderId: 1,
+  fitView: vi.fn(),
+  setCenter: vi.fn(),
+  zoomIn: vi.fn(),
+  zoomOut: vi.fn(),
 }))
 
 vi.mock('@xyflow/react', async () => {
@@ -19,7 +24,15 @@ vi.mock('@xyflow/react', async () => {
       Left: 'left',
       Right: 'right',
     },
-    ReactFlow: ({ nodes }: { nodes: Array<{ id: string; data?: Record<string, unknown> }> }) => (
+    ReactFlow: ({
+      nodes,
+      onNodeClick,
+      onNodeContextMenu,
+    }: {
+      nodes: Array<{ id: string; data?: Record<string, unknown> }>
+      onNodeClick?: (event: React.MouseEvent, node: { id: string; data?: Record<string, unknown> }) => void
+      onNodeContextMenu?: (event: React.MouseEvent, node: { id: string; data?: Record<string, unknown> }) => void
+    }) => (
       <div data-testid="react-flow">
         {nodes.map((node) => (
           <button
@@ -27,11 +40,14 @@ vi.mock('@xyflow/react', async () => {
             type="button"
             data-testid={`node-${node.id}`}
             data-long-press={node.data?.onTouchLongPress ? 'yes' : 'no'}
-            onClick={() =>
-              (node.data?.onTouchLongPress as
+            onClick={(event) => {
+              void onNodeClick?.(event, node)
+              const touchLongPress = node.data?.onTouchLongPress as
                 | ((nodeId: string, point: { x: number; y: number }) => void)
-                | undefined)?.(node.id, { x: 0, y: 0 })
-            }
+                | undefined
+              touchLongPress?.(node.id, { x: 0, y: 0 })
+            }}
+            onContextMenu={(event) => onNodeContextMenu?.(event, node)}
           >
             {node.id}
           </button>
@@ -59,10 +75,10 @@ vi.mock('@xyflow/react', async () => {
       return [nodes, setNodes, vi.fn()]
     },
     useReactFlow: () => ({
-      fitView: vi.fn(),
-      setCenter: vi.fn(),
-      zoomIn: vi.fn(),
-      zoomOut: vi.fn(),
+      fitView: reactFlowMockState.fitView,
+      setCenter: reactFlowMockState.setCenter,
+      zoomIn: reactFlowMockState.zoomIn,
+      zoomOut: reactFlowMockState.zoomOut,
     }),
     useUpdateNodeInternals: () => vi.fn(),
   }
@@ -82,17 +98,54 @@ const graphData: GraphData = {
   edges: [],
 }
 
+const expandedGraphData: GraphData = {
+  nodes: [
+    ...graphData.nodes,
+    {
+      id: 'child',
+      type: 'peg',
+      label: 'Child',
+      originalId: 2,
+      parentId: 'root',
+      metadata: { depth: 1, layoutRole: 'branch' },
+    },
+  ],
+  edges: [
+    {
+      id: 'root-child',
+      source: 'root',
+      target: 'child',
+      type: 'parent-child',
+    },
+  ],
+}
+
 describe('MindMapCanvas recovery', () => {
   let widthSpy: ReturnType<typeof vi.spyOn>
   let heightSpy: ReturnType<typeof vi.spyOn>
+  let originalRequestAnimationFrame: typeof window.requestAnimationFrame
+  let originalCancelAnimationFrame: typeof window.cancelAnimationFrame
 
   beforeEach(() => {
+    originalRequestAnimationFrame = window.requestAnimationFrame
+    originalCancelAnimationFrame = window.cancelAnimationFrame
+    window.requestAnimationFrame = vi.fn((callback: FrameRequestCallback) => {
+      callback(0)
+      return 1
+    })
+    window.cancelAnimationFrame = vi.fn()
     reactFlowMockState.nextProviderId = 1
+    reactFlowMockState.fitView.mockClear()
+    reactFlowMockState.setCenter.mockClear()
+    reactFlowMockState.zoomIn.mockClear()
+    reactFlowMockState.zoomOut.mockClear()
     widthSpy = vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(800)
     heightSpy = vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(600)
   })
 
   afterEach(() => {
+    window.requestAnimationFrame = originalRequestAnimationFrame
+    window.cancelAnimationFrame = originalCancelAnimationFrame
     widthSpy.mockRestore()
     heightSpy.mockRestore()
   })
@@ -158,5 +211,109 @@ describe('MindMapCanvas recovery', () => {
     } finally {
       window.matchMedia = originalMatchMedia
     }
+  })
+
+  it('centers guided mobile node clicks only when the click viewport policy allows it', async () => {
+    const { rerender } = render(
+      <MindMapCanvas
+        graphData={graphData}
+        selectedNodeId={null}
+        onNodeSelect={vi.fn()}
+        onAddChild={vi.fn()}
+        onAddSibling={vi.fn()}
+        onDelete={vi.fn()}
+        mobileViewPolicy="guided"
+      />,
+    )
+
+    await waitFor(() => expect(reactFlowMockState.fitView).toHaveBeenCalled())
+    reactFlowMockState.fitView.mockClear()
+    fireEvent.click(screen.getByTestId('node-root'))
+
+    expect(reactFlowMockState.setCenter).toHaveBeenCalled()
+
+    reactFlowMockState.setCenter.mockClear()
+    rerender(
+      <MindMapCanvas
+        graphData={graphData}
+        selectedNodeId={null}
+        onNodeSelect={vi.fn()}
+        onAddChild={vi.fn()}
+        onAddSibling={vi.fn()}
+        onDelete={vi.fn()}
+        mobileViewPolicy="guided"
+        nodeClickViewportPolicy="preserve"
+      />,
+    )
+
+    fireEvent.click(screen.getByTestId('node-root'))
+
+    expect(reactFlowMockState.setCenter).not.toHaveBeenCalled()
+    expect(reactFlowMockState.fitView).not.toHaveBeenCalled()
+  })
+
+  it('keeps guided mobile content changes from fitting again when preserving the viewport', async () => {
+    const { rerender } = render(
+      <MindMapCanvas
+        graphData={graphData}
+        selectedNodeId={null}
+        onNodeSelect={vi.fn()}
+        onAddChild={vi.fn()}
+        onAddSibling={vi.fn()}
+        onDelete={vi.fn()}
+        mobileViewPolicy="guided"
+        contentChangeViewportPolicy="preserve"
+      />,
+    )
+
+    await waitFor(() => expect(reactFlowMockState.fitView).toHaveBeenCalledTimes(1))
+    reactFlowMockState.fitView.mockClear()
+
+    rerender(
+      <MindMapCanvas
+        graphData={expandedGraphData}
+        selectedNodeId={null}
+        onNodeSelect={vi.fn()}
+        onAddChild={vi.fn()}
+        onAddSibling={vi.fn()}
+        onDelete={vi.fn()}
+        mobileViewPolicy="guided"
+        contentChangeViewportPolicy="preserve"
+      />,
+    )
+
+    await waitFor(() => expect(screen.getByTestId('node-child')).toBeTruthy())
+    expect(reactFlowMockState.fitView).not.toHaveBeenCalled()
+  })
+
+  it('keeps the default guided mobile auto-fit behavior for content changes', async () => {
+    const { rerender } = render(
+      <MindMapCanvas
+        graphData={graphData}
+        selectedNodeId={null}
+        onNodeSelect={vi.fn()}
+        onAddChild={vi.fn()}
+        onAddSibling={vi.fn()}
+        onDelete={vi.fn()}
+        mobileViewPolicy="guided"
+      />,
+    )
+
+    await waitFor(() => expect(reactFlowMockState.fitView).toHaveBeenCalledTimes(1))
+    reactFlowMockState.fitView.mockClear()
+
+    rerender(
+      <MindMapCanvas
+        graphData={expandedGraphData}
+        selectedNodeId={null}
+        onNodeSelect={vi.fn()}
+        onAddChild={vi.fn()}
+        onAddSibling={vi.fn()}
+        onDelete={vi.fn()}
+        mobileViewPolicy="guided"
+      />,
+    )
+
+    await waitFor(() => expect(reactFlowMockState.fitView).toHaveBeenCalledTimes(1))
   })
 })

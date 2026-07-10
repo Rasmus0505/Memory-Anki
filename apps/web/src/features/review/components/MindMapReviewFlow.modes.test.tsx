@@ -60,9 +60,10 @@ describe("MindMapReviewFlow modes", () => {
     expect(latestCall?.syncReason).toBe("review_flip");
     expect(latestCall?.preserveViewOnSync).toBe(true);
     expect(latestCall?.mobileViewPolicy).toBe("auto");
+    expect(latestCall?.nodeClickViewportPolicy).toBe("preserve");
   });
 
-  it("shows a mobile guided review rail that focuses, reveals, and returns to the whole map", async () => {
+  it("shows a mobile guided review rail without moving the viewport during card navigation", async () => {
     renderInRouter(
       <MindMapReviewFlow
         title="Root"
@@ -99,8 +100,9 @@ describe("MindMapReviewFlow modes", () => {
     });
 
     await waitFor(() => {
-      expect(getLatestMindMapFrameProps()?.focusRequestNodeUid).toBe("child");
-      expect(getLatestMindMapFrameProps()?.focusRequestNonce).toBeGreaterThan(0);
+      expect(screen.getAllByText("待回忆").length).toBeGreaterThan(0);
+      expect(getLatestMindMapFrameProps()?.focusRequestNodeUid).toBeUndefined();
+      expect(getLatestMindMapFrameProps()?.focusRequestNonce).toBeUndefined();
     });
 
     await act(async () => {
@@ -108,7 +110,9 @@ describe("MindMapReviewFlow modes", () => {
     });
 
     await waitFor(() => {
-      expect(getLatestMindMapFrameProps()?.focusRequestNodeUid).toBe("root");
+      expect(screen.getAllByText("Root").length).toBeGreaterThan(0);
+      expect(getLatestMindMapFrameProps()?.focusRequestNodeUid).toBeUndefined();
+      expect(getLatestMindMapFrameProps()?.focusRequestNonce).toBeUndefined();
     });
 
     await act(async () => {

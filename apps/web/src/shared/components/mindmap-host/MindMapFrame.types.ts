@@ -9,7 +9,11 @@ import type {
   MindMapReviewFxPayload,
   MindMapSelection,
 } from '@/shared/components/mindmap-host/hostBridgeUtils'
-import type { MindMapMobileViewPolicy } from '@/shared/components/mindmap'
+import type {
+  MindMapContentChangeViewportPolicy,
+  MindMapMobileViewPolicy,
+  MindMapNodeClickViewportPolicy,
+} from '@/shared/components/mindmap'
 import { normalizeEditorDoc } from '@/shared/components/mindmap-host/hostBridgeUtils'
 
 export const HOST_FRAME_RUNTIME_VERSION = '2026-06-10-card-width-drag-fix'
@@ -44,12 +48,16 @@ export interface MindMapFrameProps {
   preserveViewOnSync?: boolean
   initialViewPolicy?: 'preserve' | 'reset'
   mobileViewPolicy?: MindMapMobileViewPolicy
+  nodeClickViewportPolicy?: MindMapNodeClickViewportPolicy
+  contentChangeViewportPolicy?: MindMapContentChangeViewportPolicy
   className?: string
   segments?: MindMapHostSegmentSummary[]
   activeSegmentId?: number | null
   segmentColorMode?: 'all' | 'active-only' | 'all-with-active-emphasis'
   segmentRangeDraft?: MindMapHostSegmentRangeDraft
   focusNodeUids?: string[]
+  highlightedNodeUids?: string[]
+  masteryByNodeUid?: Record<string, { status: string; manualLabel?: string | null }>
   focusRequestNodeUid?: string | null
   focusRequestNonce?: number
   miniPalaceDraft?: {

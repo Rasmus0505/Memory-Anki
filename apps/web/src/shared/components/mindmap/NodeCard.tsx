@@ -11,6 +11,7 @@ import {
   type PointerEvent,
 } from 'react'
 import { Handle, Position, type NodeProps, useUpdateNodeInternals } from '@xyflow/react'
+import { Pencil, Plus, Trash2 } from 'lucide-react'
 import { dispatchGlobalFeedback } from '@/shared/feedback/globalFeedbackModel'
 import type { MindMapNode } from './adapter'
 import { getNodeSize, type LayoutRole, type NodeSize } from './layout'
@@ -31,6 +32,9 @@ type NodeCardData = MindMapNode & {
   activeSegment?: boolean
   focusMarked?: boolean
   miniPalaceSelected?: boolean
+  searchHighlighted?: boolean
+  masteryStatus?: string | null
+  manualMasteryLabel?: string | null
   onStartEdit?: (nodeId: string) => void
   onFinishEdit?: (nodeId: string, text: string) => void
   onAddChild?: (nodeId: string) => void
@@ -108,6 +112,9 @@ function MindMapNodeCard({ data, id }: NodeProps) {
   const previewAdopt = Boolean(nodeData.previewAdopt)
   const dropMode = nodeData.dropMode ?? null
   const previewShifted = Boolean(nodeData.previewShifted)
+  const searchHighlighted = Boolean(nodeData.searchHighlighted ?? metadata.searchHighlighted)
+  const masteryStatus = String(nodeData.masteryStatus ?? metadata.masteryStatus ?? '')
+  const manualMasteryLabel = String(nodeData.manualMasteryLabel ?? metadata.manualMasteryLabel ?? '')
 
   const reportMeasuredSize = useCallback(
     (width: number, height: number) => {
@@ -342,6 +349,7 @@ function MindMapNodeCard({ data, id }: NodeProps) {
         'relative transition-[opacity,transform] duration-100',
         previewShifted ? 'translate-y-2' : '',
         previewGhost ? 'opacity-35 scale-[0.97]' : '',
+        searchHighlighted ? 'ring-4 ring-warning/45 rounded-2xl' : '',
         nodeData.muted && !previewGhost ? 'opacity-60' : '',
       ].filter(Boolean).join(' ')}
       style={{ width: nodeSize.width }}
@@ -369,6 +377,26 @@ function MindMapNodeCard({ data, id }: NodeProps) {
           className={`${containerCls} ${paddingCls}`}
           style={{ minHeight: nodeSize.height, ...borderStyle }}
         >
+          {nodeData.selected && !readonly ? (
+            <div className="absolute -bottom-10 left-1/2 z-30 flex -translate-x-1/2 gap-1 rounded-lg border bg-background p-1 shadow-lg">
+              <button type="button" aria-label="新增子节点" className="flex size-7 items-center justify-center rounded hover:bg-muted" onClick={(event) => { event.stopPropagation(); nodeData.onAddChild?.(id) }}><Plus className="size-3.5" /></button>
+              <button type="button" aria-label="重命名节点" className="flex size-7 items-center justify-center rounded hover:bg-muted" onClick={(event) => { event.stopPropagation(); nodeData.onStartEdit?.(id) }}><Pencil className="size-3.5" /></button>
+              {!isRoot ? <button type="button" aria-label="删除节点" className="flex size-7 items-center justify-center rounded text-destructive hover:bg-destructive/10" onClick={(event) => { event.stopPropagation(); nodeData.onDelete?.(id) }}><Trash2 className="size-3.5" /></button> : null}
+            </div>
+          ) : null}          {(masteryStatus || manualMasteryLabel) && !isRoot ? (
+            <span
+              className={`absolute -left-2 -top-2 z-20 size-3 rounded-full border-2 border-background ${
+                manualMasteryLabel === 'weak' || masteryStatus === 'weak'
+                  ? 'bg-destructive'
+                  : manualMasteryLabel === 'mastered' || masteryStatus === 'stable'
+                    ? 'bg-success'
+                    : masteryStatus === 'reinforce'
+                      ? 'bg-warning'
+                      : 'bg-muted-foreground/40'
+              }`}
+              title={manualMasteryLabel === 'weak' ? '手动标记薄弱' : manualMasteryLabel === 'mastered' ? '手动标记已掌握' : masteryStatus}
+            />
+          ) : null}
           <button
             type="button"
             onClick={handleClick}
@@ -405,3 +433,4 @@ function MindMapNodeCard({ data, id }: NodeProps) {
 const nodeTypes = { mindmapNode: memo(MindMapNodeCard) }
 export { nodeTypes }
 export default MindMapNodeCard
+

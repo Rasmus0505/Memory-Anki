@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { FolderTree, Plus, Save, Sparkles, Trash2 } from 'lucide-react'
 import { toast } from '@/shared/feedback/toast'
@@ -18,6 +18,7 @@ import { Input } from '@/shared/components/ui/input'
 import { Label } from '@/shared/components/ui/label'
 import { usePersistedMindMapEditor } from '@/shared/hooks/usePersistedMindMapEditor'
 import { useProgrammaticEditorStateGuard } from '@/shared/hooks/useProgrammaticEditorStateGuard'
+import { useMindMapExperience } from '@/features/mindmap-experience'
 import { applyProgrammaticEditorState } from '@/shared/lib/applyProgrammaticEditorState'
 import { cn } from '@/shared/lib/utils'
 import { KnowledgeChapterQuizDialog } from '@/features/knowledge/components/KnowledgeChapterQuizDialog'
@@ -162,6 +163,12 @@ export default function Knowledge() {
     setEditorState,
     applyEditorState: applyImportedSubjectEditorState,
     selectedNodeUid,
+  })
+  const mindMapExperience = useMindMapExperience({
+    entityType: 'subject',
+    entityId: selectedSubjectId,
+    editorState,
+    defaultTask: 'build',
   })
 
   useEffect(() => {
@@ -554,44 +561,48 @@ export default function Knowledge() {
             {isSubjectEditorReady && editorState ? (
               <div className="flex h-full min-h-0 flex-col gap-3">
                 <MindMapPageToolbar
-                  importMindMapAction={{
-                    label: '转脑图',
-                    onClick: () => {
-                      mindMapImport.setImportMode('mindmap')
-                      mindMapImport.setImportOpen(true)
-                    },
+                  taskControl={{ value: mindMapExperience.task, onChange: mindMapExperience.setTask }}
+                  searchControl={{
+                    value: mindMapExperience.searchQuery,
+                    onChange: mindMapExperience.setSearchQuery,
+                    resultCount: mindMapExperience.searchResults.length,
                   }}
-                  importTextAction={{
-                    label: '转文字',
-                    onClick: () => {
-                      mindMapImport.setImportMode('text')
-                      mindMapImport.setImportOpen(true)
-                    },
-                  }}
-                  immersiveAction={{
-                    label: '半屏编辑',
-                    active: mindMapFullscreen,
-                    onClick: () => {
-                      void handleImmersiveToolbarToggle()
-                    },
-                  }}
-                  nativeFullscreenAction={{
-                    label: '全屏编辑',
-                    active: mindMapNativeFullscreen,
-                    onClick: () => {
-                      void handleNativeFullscreenToolbarToggle()
-                    },
-                  }}
-                  clearUiAction={{
-                    label: '清屏',
-                    active: mindMapUiCleared,
-                    onClick: () => mindMapFrameRef.current?.toggleUiCleared(),
-                  }}
+                  focusAction={mindMapExperience.selectedResult ? {
+                    label: '定位结果',
+                    onClick: () => mindMapFrameRef.current?.focusNode(mindMapExperience.selectedResult?.nodeUid ?? null),
+                  } : null}
+                  fitAction={{ label: '适应视图', onClick: () => mindMapFrameRef.current?.fitView() }}
+                  moreActions={[
+                    { label: '导入资料', onClick: () => mindMapImport.setImportOpen(true) },
+                    { label: `结构检查（${mindMapExperience.structureIssues.length}）`, onClick: () => {
+                      const issue = mindMapExperience.structureIssues[0]
+                      if (!issue) return toast.success('未发现结构问题')
+                      mindMapFrameRef.current?.focusNode(issue.nodeUid)
+                      toast.warning(issue.message)
+                    } },
+                    { label: mindMapFullscreen ? '退出沉浸模式' : '沉浸模式', onClick: () => { void handleImmersiveToolbarToggle() }, separatorBefore: true },
+                    { label: mindMapNativeFullscreen ? '退出原生全屏' : '原生全屏', onClick: () => { void handleNativeFullscreenToolbarToggle() } },
+                    { label: mindMapUiCleared ? '恢复界面' : '清屏', onClick: () => mindMapFrameRef.current?.toggleUiCleared() },
+                  ]}
                 />
-                <MindMapFrame
+                {mindMapExperience.searchQuery && mindMapExperience.searchResults.length ? (
+                  <div className="flex gap-2 overflow-x-auto rounded-xl border bg-muted/20 p-2">
+                    {mindMapExperience.searchResults.slice(0, 12).map((result) => (
+                      <button key={result.nodeUid} type="button" className="shrink-0 rounded-lg border bg-background px-3 py-2 text-left text-xs hover:border-primary" onClick={() => {
+                        mindMapExperience.selectSearchResult(result.nodeUid)
+                        mindMapFrameRef.current?.focusNode(result.nodeUid)
+                      }}>
+                        <div className="font-medium">{result.text || '未命名知识点'}</div>
+                        <div className="mt-1 max-w-64 truncate text-muted-foreground">{result.path.join(' › ')}</div>
+                      </button>
+                    ))}
+                  </div>
+                ) : null}                <MindMapFrame
                   ref={mindMapFrameRef}
                   key={`subject-frame:${selectedSubjectId}:${mindMapImport.importAppliedSyncVersion}`}
                   editorState={editorState}
+                  readonly={mindMapExperience.task === 'learn'}
+                  highlightedNodeUids={mindMapExperience.highlightedNodeUids}
                   immersiveModeActive={mindMapFullscreen}
                   viewMemoryScope={
                     selectedSubjectId ? `knowledge-subject:${selectedSubjectId}` : null
