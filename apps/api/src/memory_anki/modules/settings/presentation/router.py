@@ -12,6 +12,7 @@ from memory_anki.core.runtime import build_runtime_health, build_runtime_info
 from memory_anki.core.time import utc_now_naive
 from memory_anki.infrastructure.db._tables.misc import Config
 from memory_anki.infrastructure.db.deps import session_dep
+from memory_anki.infrastructure.llm import AiGatewayError
 from memory_anki.infrastructure.llm.external_ai_call_logs import (
     get_external_ai_call_log,
     list_external_ai_call_logs,
@@ -31,12 +32,19 @@ from memory_anki.modules.settings.application.ai_model_registry import (
 from memory_anki.modules.settings.application.ai_model_registry_catalog import (
     normalize_provider_key,
 )
+from memory_anki.modules.settings.application.ai_prompt_versions import (
+    activate_prompt_version,
+    create_prompt_candidates,
+    create_reset_candidates,
+    get_eval_run,
+    list_prompt_versions,
+    run_prompt_eval,
+)
 from memory_anki.modules.settings.application.ai_prompts import (
     AiPromptValidationError,
     list_prompt_templates,
-    reset_prompt_templates,
-    save_prompt_templates,
 )
+from memory_anki.modules.settings.application.ai_quality import build_ai_quality_summary
 from memory_anki.modules.settings.application.metrics_service import build_metrics
 from memory_anki.modules.settings.presentation.response_models import (
     RuntimeHealthResponse,
@@ -213,7 +221,12 @@ def api_ai_prompt_settings_update(data: dict, s: Session = Depends(session_dep))
             str(key): str(value)
             for key, value in dict(templates or {}).items()
         }
-        return {"items": save_prompt_templates(s, normalized_templates)}
+        candidates = create_prompt_candidates(s, normalized_templates)
+        return {
+            "items": list_prompt_templates(s),
+            "candidates": candidates,
+            "requires_evaluation": True,
+        }
     except AiPromptValidationError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -224,14 +237,80 @@ def api_ai_prompt_settings_reset(data: dict, s: Session = Depends(session_dep)):
         keys = data.get("keys")
         if keys is not None and not isinstance(keys, list):
             raise AiPromptValidationError("keys 必须是字符串数组。")
+        candidates = create_reset_candidates(
+            s,
+            keys=[str(key) for key in keys] if keys else None,
+        )
         return {
-            "items": reset_prompt_templates(
-                s,
-                keys=[str(key) for key in keys] if keys else None,
-            )
+            "items": list_prompt_templates(s),
+            "candidates": candidates,
+            "requires_evaluation": True,
         }
     except AiPromptValidationError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.get("/settings/ai-prompts/{prompt_key}/versions")
+def api_ai_prompt_versions(prompt_key: str, s: Session = Depends(session_dep)):
+    try:
+        return {"items": list_prompt_versions(s, prompt_key)}
+    except AiPromptValidationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/settings/ai-prompts/{prompt_key}/versions/{version_id}/activate")
+def api_ai_prompt_version_activate(
+    prompt_key: str,
+    version_id: str,
+    s: Session = Depends(session_dep),
+):
+    try:
+        return activate_prompt_version(s, prompt_key, version_id)
+    except AiPromptValidationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/settings/ai-evals/runs")
+def api_ai_eval_run(data: dict, s: Session = Depends(session_dep)):
+    try:
+        return run_prompt_eval(
+            s,
+            str(data.get("prompt_key") or ""),
+            str(data.get("candidate_version_id") or ""),
+        )
+    except (AiPromptValidationError, AiGatewayError, KeyError) as exc:
+        detail = {
+            "message": str(exc),
+            "code": "ai_eval_failed",
+        }
+        if isinstance(exc, AiGatewayError):
+            detail.update({"kind": exc.kind.value, "retryable": exc.retryable})
+        raise HTTPException(status_code=400, detail=detail) from exc
+
+
+@router.get("/settings/ai-evals/runs/{run_id}")
+def api_ai_eval_run_detail(run_id: str, s: Session = Depends(session_dep)):
+    payload = get_eval_run(s, run_id)
+    if not payload:
+        raise HTTPException(status_code=404, detail="评测运行不存在。")
+    return payload
+
+
+@router.get("/settings/ai-quality/summary")
+def api_ai_quality_summary(
+    days: int = 7,
+    scene: str | None = None,
+    provider: str | None = None,
+    model: str | None = None,
+    s: Session = Depends(session_dep),
+):
+    return build_ai_quality_summary(
+        s,
+        days=days,
+        scene=scene,
+        provider=provider,
+        model=model,
+    )
 
 
 @router.get("/settings/ai-models")

@@ -8,7 +8,6 @@ from sqlalchemy.orm import Session
 from memory_anki.infrastructure.db._tables.misc import AiModelCatalog, Config
 
 from .ai_model_registry_catalog import (
-    CATEGORY_BY_KEY,
     MODEL_TYPE_LABELS,
     PROVIDER_API_KEY_CONFIG_KEYS,
     PROVIDER_BASE_URL_CONFIG_KEYS,
@@ -64,6 +63,10 @@ def serialize_model_row(row: AiModelCatalog) -> dict[str, Any]:
         "has_vision": bool(row.has_vision),
         "supports_thinking": bool(row.supports_thinking),
         "supports_temperature": bool(row.supports_temperature),
+        "structured_output_mode": str(row.structured_output_mode or "json_object"),
+        "input_price_per_million": row.input_price_per_million,
+        "output_price_per_million": row.output_price_per_million,
+        "cached_input_price_per_million": row.cached_input_price_per_million,
         "is_builtin": bool(row.is_builtin),
         "is_active": bool(row.is_active),
         "default_base_url": PROVIDER_ENV_DEFAULTS.get(
@@ -87,6 +90,7 @@ def build_fallback_model_metadata(
         has_vision=has_vision,
         supports_thinking=False,
         supports_temperature=model_type != "asr",
+        structured_output_mode="json_object",
         is_builtin=False,
         is_active=True,
     )
@@ -393,6 +397,10 @@ def resolve_scenario_runtime(
         thinking_enabled=effective_thinking_enabled,
         supports_thinking=supports_thinking,
         supports_temperature=bool(model_meta["supports_temperature"]),
+        structured_output_mode=str(model_meta.get("structured_output_mode") or "json_object"),
+        input_price_per_million=model_meta.get("input_price_per_million"),
+        output_price_per_million=model_meta.get("output_price_per_million"),
+        cached_input_price_per_million=model_meta.get("cached_input_price_per_million"),
         api_key=api_key,
         base_url=base_url,
         extra_payload=_build_thinking_payload(
@@ -417,4 +425,8 @@ def serialize_resolved_ai_runtime(runtime: ResolvedAiModelRuntime) -> dict[str, 
         "model_type_label": MODEL_TYPE_LABELS.get(runtime.model_type, runtime.model_type),
         "has_vision": runtime.has_vision,
         "thinking_enabled": runtime.thinking_enabled,
+        "structured_output_mode": runtime.structured_output_mode,
+        "input_price_per_million": runtime.input_price_per_million,
+        "output_price_per_million": runtime.output_price_per_million,
+        "cached_input_price_per_million": runtime.cached_input_price_per_million,
     }

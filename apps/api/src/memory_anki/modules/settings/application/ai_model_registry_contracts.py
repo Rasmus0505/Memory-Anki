@@ -79,6 +79,10 @@ class ResolvedAiModelRuntime:
     thinking_enabled: bool
     supports_thinking: bool
     supports_temperature: bool
+    structured_output_mode: str
+    input_price_per_million: float | None
+    output_price_per_million: float | None
+    cached_input_price_per_million: float | None
     api_key: str
     base_url: str
     extra_payload: dict[str, Any] | None

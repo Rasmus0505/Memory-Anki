@@ -205,11 +205,31 @@ def get_prompt_template(session: Session | None, key: str) -> str:
 
 
 def list_prompt_templates(session: Session) -> list[dict[str, Any]]:
+    from memory_anki.infrastructure.db._tables.misc import AiPromptVersion
+
+    from .ai_prompt_versions import ensure_prompt_versions
+
+    ensure_prompt_versions(session)
     overrides = _get_template_override_map(session)
     items: list[dict[str, Any]] = []
     for key in PROMPT_CONFIG_KEYS:
         definition = _definition_for(key)
         current_template = _normalize_template(overrides.get(key) or definition.default_template)
+        active_version = (
+            session.query(AiPromptVersion)
+            .filter_by(prompt_key=key, status="active")
+            .order_by(AiPromptVersion.activated_at.desc())
+            .first()
+        )
+        latest_candidate = (
+            session.query(AiPromptVersion)
+            .filter(
+                AiPromptVersion.prompt_key == key,
+                AiPromptVersion.status.in_(("candidate", "passed", "failed")),
+            )
+            .order_by(AiPromptVersion.created_at.desc())
+            .first()
+        )
         items.append(
             {
                 "key": definition.key,
@@ -222,6 +242,16 @@ def list_prompt_templates(session: Session) -> list[dict[str, Any]]:
                 != _normalize_template(definition.default_template),
                 "source_location": definition.source_location,
                 "required_placeholders": list(definition.required_placeholders),
+                "active_version_id": active_version.id if active_version else None,
+                "candidate_version": (
+                    {
+                        "id": latest_candidate.id,
+                        "status": latest_candidate.status,
+                        "eval_summary": json.loads(latest_candidate.eval_summary_json or "{}"),
+                    }
+                    if latest_candidate
+                    else None
+                ),
                 "available_placeholders": [
                     {"name": item.name, "description": item.description}
                     for item in definition.available_placeholders

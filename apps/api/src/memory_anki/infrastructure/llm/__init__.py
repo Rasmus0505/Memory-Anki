@@ -1,3 +1,16 @@
+from .gateway import (
+    AiErrorKind,
+    AiGatewayError,
+    AiRequest,
+    AiResult,
+    AiUsage,
+    ProviderAdapter,
+    StructuredOutputMode,
+    StructuredOutputSpec,
+    classify_ai_error,
+    execute_ai_request,
+    get_provider_adapter,
+)
 from .openai_compatible import (
     DEFAULT_EMPTY_RESPONSE_MESSAGE,
     DEFAULT_PROTOCOL_ERROR_MESSAGE,
@@ -30,4 +43,15 @@ __all__ = [
     "extract_message_content_text",
     "parse_chat_completion_stream",
     "stream_chat_completion_text",
+    "AiErrorKind",
+    "AiGatewayError",
+    "AiRequest",
+    "AiResult",
+    "AiUsage",
+    "ProviderAdapter",
+    "StructuredOutputMode",
+    "StructuredOutputSpec",
+    "classify_ai_error",
+    "execute_ai_request",
+    "get_provider_adapter",
 ]

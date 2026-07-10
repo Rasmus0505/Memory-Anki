@@ -63,21 +63,81 @@ class SettingsAiRouteTests(RouterTestCase):
             for item in save_response.json()["items"]
             if item["key"] == "ai_prompt_import_batch_mindmap"
         )
-        self.assertEqual(saved_target["template"], custom_template)
-        self.assertTrue(saved_target["is_customized"])
+        self.assertNotEqual(saved_target["template"], custom_template)
+        self.assertFalse(saved_target["is_customized"])
+        self.assertTrue(save_response.json()["requires_evaluation"])
+        candidate = save_response.json()["candidates"][0]
+        self.assertEqual(candidate["template"], custom_template)
+        self.assertEqual(candidate["status"], "candidate")
+
+        versions_response = self.client.get(
+            "/api/v1/settings/ai-prompts/ai_prompt_import_batch_mindmap/versions"
+        )
+        self.assertEqual(versions_response.status_code, 200)
+        self.assertGreaterEqual(len(versions_response.json()["items"]), 2)
 
         reset_response = self.client.post(
             "/api/v1/settings/ai-prompts/reset",
             json={"keys": ["ai_prompt_import_batch_mindmap"]},
         )
         self.assertEqual(reset_response.status_code, 200)
-        reset_target = next(
-            item
-            for item in reset_response.json()["items"]
-            if item["key"] == "ai_prompt_import_batch_mindmap"
+        self.assertTrue(reset_response.json()["requires_evaluation"])
+        self.assertEqual(reset_response.json()["candidates"][0]["source"], "builtin")
+
+    def test_ai_prompt_candidate_requires_passing_eval_before_activation(self):
+        custom_template = "候选提示词\n{{structure_tree_json}}"
+        save_response = self.client.put(
+            "/api/v1/settings/ai-prompts",
+            json={"templates": {"ai_prompt_import_batch_mindmap": custom_template}},
         )
-        self.assertEqual(reset_target["template"], reset_target["default_template"])
-        self.assertFalse(reset_target["is_customized"])
+        candidate = save_response.json()["candidates"][0]
+
+        eval_response = self.client.post(
+            "/api/v1/settings/ai-evals/runs",
+            json={
+                "prompt_key": "ai_prompt_import_batch_mindmap",
+                "candidate_version_id": candidate["id"],
+            },
+        )
+        self.assertEqual(eval_response.status_code, 200)
+        self.assertFalse(eval_response.json()["gate_passed"])
+        self.assertEqual(eval_response.json()["case_count"], 0)
+
+        activate_response = self.client.post(
+            f"/api/v1/settings/ai-prompts/ai_prompt_import_batch_mindmap/versions/{candidate['id']}/activate"
+        )
+        self.assertEqual(activate_response.status_code, 400)
+        self.assertIn("尚未通过", activate_response.json()["detail"])
+
+    def test_ai_quality_summary_returns_lightweight_metrics(self):
+        with self.SessionLocal() as session:
+            session.add(
+                ExternalAiCallLog(
+                    id="quality-log-1",
+                    feature="AI 分卡",
+                    operation="mindmap_ai_split",
+                    status="success",
+                    provider="qwen",
+                    base_url="https://example.test/v1",
+                    model="qwen-plus",
+                    request_id="request-1",
+                    scene="mindmap_ai_split",
+                    structured_output_mode="json_object",
+                    input_tokens=120,
+                    output_tokens=30,
+                    cached_input_tokens=20,
+                    duration_ms=800,
+                    estimated_cost=0.001,
+                )
+            )
+            session.commit()
+        response = self.client.get("/api/v1/settings/ai-quality/summary?days=7")
+        self.assertEqual(response.status_code, 200)
+        metrics = response.json()["metrics"]
+        self.assertEqual(metrics["total_calls"], 1)
+        self.assertEqual(metrics["success_rate"], 1.0)
+        self.assertEqual(metrics["input_tokens"], 120)
+        self.assertTrue(metrics["has_estimated_cost"])
 
     def test_ai_prompt_settings_reject_unknown_placeholder(self):
         response = self.client.put(

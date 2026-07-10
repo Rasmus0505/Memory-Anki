@@ -337,6 +337,10 @@ export function useAiWorkspaceController() {
           has_vision: newModelType === "llm" ? modelDraft.hasVision : false,
           supports_thinking: modelDraft.supportsThinking,
           supports_temperature: modelDraft.supportsTemperature,
+          structured_output_mode: modelDraft.structuredOutputMode,
+          input_price_per_million: modelDraft.inputPrice ? Number(modelDraft.inputPrice) : null,
+          output_price_per_million: modelDraft.outputPrice ? Number(modelDraft.outputPrice) : null,
+          cached_input_price_per_million: modelDraft.cachedInputPrice ? Number(modelDraft.cachedInputPrice) : null,
         }),
       );
       setModelDraft(buildEmptyModelDraft(newModelType));

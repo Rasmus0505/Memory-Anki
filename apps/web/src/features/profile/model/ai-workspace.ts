@@ -3,6 +3,7 @@ import {
   BookCopy,
   Cable,
   Wrench,
+  ShieldCheck,
   type LucideIcon,
 } from "lucide-react";
 import type {
@@ -14,7 +15,7 @@ import type {
   AiSceneBinding,
 } from "@/shared/api/contracts";
 
-export type WorkspaceTab = "providers" | "models" | "scenes" | "observability";
+export type WorkspaceTab = "providers" | "models" | "scenes" | "observability" | "quality";
 export type AiWorkspaceProviderFilter = "all" | AiProviderKey;
 export type AiWorkspaceModelOriginFilter = "all" | "builtin" | "custom";
 export type AiWorkspaceModelCapabilityFilter = "all" | "thinking" | "vision";
@@ -32,6 +33,10 @@ export interface ModelDraft {
   hasVision: boolean;
   supportsThinking: boolean;
   supportsTemperature: boolean;
+  structuredOutputMode: "json_schema" | "json_object" | "prompt_only";
+  inputPrice: string;
+  outputPrice: string;
+  cachedInputPrice: string;
 }
 
 export interface AiWorkspaceLogFilters {
@@ -50,6 +55,7 @@ export const WORKSPACE_TABS: Array<{
   { key: "models", label: "模型目录", icon: BookCopy },
   { key: "scenes", label: "场景绑定", icon: Wrench },
   { key: "observability", label: "调用观测", icon: Activity },
+  { key: "quality", label: "质量", icon: ShieldCheck },
 ];
 
 export const PROVIDER_SELECT_OPTIONS: Array<{
@@ -88,6 +94,10 @@ export function buildEmptyModelDraft(modelType: AiModelType): ModelDraft {
     hasVision: modelType === "llm" ? false : modelType === "vl",
     supportsThinking: false,
     supportsTemperature: modelType !== "asr",
+    structuredOutputMode: "json_object",
+    inputPrice: "",
+    outputPrice: "",
+    cachedInputPrice: "",
   };
 }
 
@@ -96,7 +106,8 @@ export function normalizeWorkspaceTab(value: string | null): WorkspaceTab {
     value === "providers" ||
     value === "models" ||
     value === "scenes" ||
-    value === "observability"
+    value === "observability" ||
+    value === "quality"
   ) {
     return value;
   }

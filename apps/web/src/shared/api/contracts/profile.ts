@@ -48,9 +48,30 @@ export interface AiPromptTemplate {
   source_location: string
   required_placeholders: string[]
   available_placeholders: AiPromptPlaceholder[]
+  active_version_id?: string | null
+  candidate_version?: AiPromptVersionSummary | null
+}
+export interface AiPromptVersionSummary {
+  id: string
+  prompt_key?: string
+  status: 'candidate' | 'passed' | 'failed' | 'active' | 'archived'
+  template?: string
+  source?: string
+  eval_summary?: {
+    run_id?: string
+    case_count?: number
+    schema_success_rate?: number
+    assertion_success_rate?: number
+    critical_passed?: boolean
+    gate_passed?: boolean
+  }
+  created_at?: string | null
+  activated_at?: string | null
 }
 export interface AiPromptTemplateListResponse {
   items: AiPromptTemplate[]
+  candidates?: AiPromptVersionSummary[]
+  requires_evaluation?: boolean
 }
 export interface AiRuntimeOptions {
   model?: string
@@ -85,6 +106,10 @@ export interface AiModelCatalogItem {
   has_vision: boolean
   supports_thinking: boolean
   supports_temperature: boolean
+  structured_output_mode: 'json_schema' | 'json_object' | 'prompt_only'
+  input_price_per_million?: number | null
+  output_price_per_million?: number | null
+  cached_input_price_per_million?: number | null
   is_builtin: boolean
   is_active: boolean
   default_base_url: string
@@ -177,6 +202,56 @@ export interface AiConnectionTestResponse {
   latency_ms: number
   error?: string | null
   source?: 'db' | 'env' | 'default'
+  structured_output_probe?: {
+    suggested_mode: 'json_schema' | 'json_object' | 'prompt_only'
+    current_mode: 'json_schema' | 'json_object' | 'prompt_only'
+    errors: Record<string, string>
+    requires_confirmation: boolean
+  }
+}
+export interface AiEvalRun {
+  id: string
+  prompt_key: string
+  candidate_version_id: string
+  status: string
+  case_count: number
+  schema_success_rate: number
+  assertion_success_rate: number
+  critical_passed: boolean
+  gate_passed: boolean
+  results: Array<Record<string, unknown>>
+}
+export interface AiQualitySummary {
+  range_days: number
+  metrics: {
+    total_calls: number
+    success_rate: number
+    structured_success_rate: number
+    repair_rate: number
+    p50_duration_ms: number | null
+    p95_duration_ms: number | null
+    input_tokens: number
+    output_tokens: number
+    cached_input_tokens: number
+    estimated_cost: number
+    has_estimated_cost: boolean
+  }
+  errors: Array<{ kind: string; count: number }>
+  recent_evals: Array<{
+    id: string
+    prompt_key: string
+    status: string
+    case_count: number
+    assertion_success_rate: number
+    gate_passed: boolean
+    created_at: string | null
+  }>
+  prompt_candidates: Array<{
+    id: string
+    prompt_key: string
+    status: string
+    created_at: string | null
+  }>
 }
 export interface AiModelSettingsSummary {
   provider_count: number

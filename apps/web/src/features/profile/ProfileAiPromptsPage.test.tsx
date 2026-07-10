@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+﻿import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { describe, expect, it, vi } from 'vitest'
 import ProfileAiPromptsPage from '@/features/profile/ProfileAiPromptsPage'
@@ -60,7 +60,7 @@ describe('ProfileAiPromptsPage', () => {
     fireEvent.change(screen.getByRole('textbox'), {
       target: { value: '自定义模板 {{structure_tree_json}}' },
     })
-    fireEvent.click(screen.getByRole('button', { name: '保存' }))
+    fireEvent.click(screen.getByRole('button', { name: '保存候选' }))
 
     await waitFor(() => {
       expect(updateSpy).toHaveBeenCalledWith({
@@ -69,3 +69,4 @@ describe('ProfileAiPromptsPage', () => {
     })
   })
 })
+

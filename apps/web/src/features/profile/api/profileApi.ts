@@ -1,6 +1,9 @@
 import { API_BASE, request, uploadWithFormData } from '@/shared/api/http'
 import type {
+  AiEvalRun,
   AiPromptTemplateListResponse,
+  AiPromptVersionSummary,
+  AiQualitySummary,
   BackupListResponse,
   CreateBackupResponse,
   FullImportPreviewResponse,
@@ -36,6 +39,41 @@ export function resetAiPromptTemplatesApi(keys?: string[]) {
       replayMode: 'manual',
     },
   })
+}
+
+export function getAiPromptVersionsApi(promptKey: string) {
+  return request<{ items: AiPromptVersionSummary[] }>(
+    `/settings/ai-prompts/${encodeURIComponent(promptKey)}/versions`,
+  )
+}
+
+export function runAiPromptEvalApi(promptKey: string, candidateVersionId: string) {
+  return request<AiEvalRun>('/settings/ai-evals/runs', {
+    method: 'POST',
+    body: JSON.stringify({ prompt_key: promptKey, candidate_version_id: candidateVersionId }),
+  })
+}
+
+export function activateAiPromptVersionApi(promptKey: string, versionId: string) {
+  return request<AiPromptVersionSummary>(
+    `/settings/ai-prompts/${encodeURIComponent(promptKey)}/versions/${encodeURIComponent(versionId)}/activate`,
+    { method: 'POST' },
+  )
+}
+
+export function getAiQualitySummaryApi(params: {
+  days?: number
+  scene?: string
+  provider?: string
+  model?: string
+} = {}) {
+  const query = new URLSearchParams()
+  if (params.days) query.set('days', String(params.days))
+  if (params.scene) query.set('scene', params.scene)
+  if (params.provider) query.set('provider', params.provider)
+  if (params.model) query.set('model', params.model)
+  const suffix = query.toString()
+  return request<AiQualitySummary>(`/settings/ai-quality/summary${suffix ? `?${suffix}` : ''}`)
 }
 
 export function exportJsonUrl() {

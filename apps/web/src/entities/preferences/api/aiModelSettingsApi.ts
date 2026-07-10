@@ -57,6 +57,10 @@ export function createOrUpdateAiModelApi(data: {
   has_vision?: boolean
   supports_thinking?: boolean
   supports_temperature?: boolean
+  structured_output_mode?: 'json_schema' | 'json_object' | 'prompt_only'
+  input_price_per_million?: number | null
+  output_price_per_million?: number | null
+  cached_input_price_per_million?: number | null
 }) {
   return request<AiModelSettingsResponse>('/settings/ai-models/models', {
     method: 'POST',

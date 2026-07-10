@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import random
 import time
 import urllib.error
 import urllib.request
@@ -32,10 +33,18 @@ class OpenAICompatibleProtocolError(OpenAICompatibleError):
 
 
 class OpenAICompatibleHttpError(OpenAICompatibleError):
-    def __init__(self, *, status_code: int, request_url: str, response_body: str):
+    def __init__(
+        self,
+        *,
+        status_code: int,
+        request_url: str,
+        response_body: str,
+        retry_after_seconds: float | None = None,
+    ):
         self.status_code = status_code
         self.request_url = request_url
         self.response_body = response_body
+        self.retry_after_seconds = retry_after_seconds
         super().__init__(f"HTTP {status_code}")
 
     @property
@@ -239,11 +248,19 @@ def call_chat_completion_text(
             error = _build_http_error(exc, request_url)
             if not _should_retry_http_status(exc.code) or attempt >= max(0, config.max_retries):
                 raise error from exc
-        except urllib.error.URLError as exc:
+        except (urllib.error.URLError, TimeoutError) as exc:
             error = _build_network_error(exc, request_url)
             if attempt >= max(0, config.max_retries):
                 raise error from exc
-        _sleep_before_retry(attempt, config.retry_backoff_seconds)
+        _sleep_before_retry(
+            attempt,
+            config.retry_backoff_seconds,
+            retry_after_seconds=(
+                error.retry_after_seconds
+                if isinstance(error, OpenAICompatibleHttpError)
+                else None
+            ),
+        )
     raise AssertionError("unreachable retry loop state")
 
 
@@ -275,7 +292,7 @@ def stream_chat_completion_text(
             error = _build_http_error(exc, request_url)
             if not _should_retry_http_status(exc.code) or attempt >= max(0, config.max_retries):
                 raise error from exc
-        except urllib.error.URLError as exc:
+        except (urllib.error.URLError, TimeoutError) as exc:
             error = _build_network_error(exc, request_url)
             if attempt >= max(0, config.max_retries):
                 raise error from exc
@@ -284,7 +301,15 @@ def stream_chat_completion_text(
                 return (yield from parse_chat_completion_stream(response))
             finally:
                 response.close()
-        _sleep_before_retry(attempt, config.retry_backoff_seconds)
+        _sleep_before_retry(
+            attempt,
+            config.retry_backoff_seconds,
+            retry_after_seconds=(
+                error.retry_after_seconds
+                if isinstance(error, OpenAICompatibleHttpError)
+                else None
+            ),
+        )
     raise AssertionError("unreachable retry loop state")
 
 
@@ -322,23 +347,42 @@ def _build_headers(api_key: str, *, accept_sse: bool = False) -> dict[str, str]:
 
 
 def _build_http_error(exc: urllib.error.HTTPError, request_url: str) -> OpenAICompatibleHttpError:
+    retry_after_seconds: float | None = None
+    retry_after = exc.headers.get("Retry-After") if exc.headers else None
+    if retry_after:
+        try:
+            retry_after_seconds = max(0.0, float(retry_after))
+        except (TypeError, ValueError):
+            retry_after_seconds = None
     return OpenAICompatibleHttpError(
         status_code=exc.code,
         request_url=request_url,
         response_body=exc.read().decode("utf-8", errors="ignore"),
+        retry_after_seconds=retry_after_seconds,
     )
 
 
-def _build_network_error(exc: urllib.error.URLError, request_url: str) -> OpenAICompatibleNetworkError:
+def _build_network_error(exc: BaseException, request_url: str) -> OpenAICompatibleNetworkError:
     return OpenAICompatibleNetworkError(
         request_url=request_url,
-        reason=str(exc.reason),
+        reason=str(getattr(exc, "reason", exc)) or exc.__class__.__name__,
     )
 
 
 def _should_retry_http_status(status_code: int) -> bool:
-    return status_code == 429 or 500 <= status_code <= 599
+    return status_code in {408, 409, 429} or 500 <= status_code <= 599
 
 
-def _sleep_before_retry(attempt: int, base_seconds: float) -> None:
-    time.sleep(max(0.0, base_seconds) * (2**attempt))
+def _sleep_before_retry(
+    attempt: int,
+    base_seconds: float,
+    *,
+    retry_after_seconds: float | None = None,
+) -> None:
+    if retry_after_seconds is not None:
+        delay = retry_after_seconds
+    else:
+        exponential = max(0.0, base_seconds) * (2**attempt)
+        delay = exponential + random.uniform(0.0, max(0.05, exponential * 0.25))
+    if delay > 0:
+        time.sleep(delay)

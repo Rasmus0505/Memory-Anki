@@ -195,6 +195,23 @@ export function AiWorkspaceModelsTab({
               ))}
             </select>
           </div>
+          <div className="grid gap-3 md:grid-cols-4">
+            <select
+              value={modelDraft.structuredOutputMode}
+              onChange={(event) => onModelDraftChange({
+                ...modelDraft,
+                structuredOutputMode: event.target.value as ModelDraft["structuredOutputMode"],
+              })}
+              className="flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm"
+            >
+              <option value="json_schema">JSON Schema</option>
+              <option value="json_object">JSON Object</option>
+              <option value="prompt_only">仅提示词</option>
+            </select>
+            <Input value={modelDraft.inputPrice} onChange={(event) => onModelDraftChange({ ...modelDraft, inputPrice: event.target.value })} placeholder="输入价/百万 token" type="number" min="0" step="0.0001" />
+            <Input value={modelDraft.outputPrice} onChange={(event) => onModelDraftChange({ ...modelDraft, outputPrice: event.target.value })} placeholder="输出价/百万 token" type="number" min="0" step="0.0001" />
+            <Input value={modelDraft.cachedInputPrice} onChange={(event) => onModelDraftChange({ ...modelDraft, cachedInputPrice: event.target.value })} placeholder="缓存输入价/百万" type="number" min="0" step="0.0001" />
+          </div>
           <div className="flex flex-wrap gap-4 rounded-xl border border-dashed border-border/70 px-4 py-3">
             {newModelType === "llm" ? (
               <label className="flex items-center gap-2 text-sm">

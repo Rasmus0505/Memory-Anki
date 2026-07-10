@@ -5,6 +5,7 @@ import { AiWorkspaceDialogs } from "@/features/profile/components/ai-workspace/A
 import { AiWorkspaceModelsTab } from "@/features/profile/components/ai-workspace/AiWorkspaceModelsTab";
 import { AiWorkspaceObservabilityTab } from "@/features/profile/components/ai-workspace/AiWorkspaceObservabilityTab";
 import { AiWorkspaceProvidersTab } from "@/features/profile/components/ai-workspace/AiWorkspaceProvidersTab";
+import { AiWorkspaceQualityTab } from "@/features/profile/components/ai-workspace/AiWorkspaceQualityTab";
 import { AiWorkspaceScenesTab } from "@/features/profile/components/ai-workspace/AiWorkspaceScenesTab";
 import { AiWorkspaceSummaryCards } from "@/features/profile/components/ai-workspace/AiWorkspaceSummaryCards";
 import { useAiWorkspaceController } from "@/features/profile/hooks/useAiWorkspaceController";
@@ -193,6 +194,10 @@ export function AiWorkspacePage() {
             onRestoreScene={workspace.handleRestoreScene}
             onJumpToObservability={workspace.jumpToObservability}
           />
+        </TabsContent>
+
+        <TabsContent value="quality" className="space-y-4">
+          <AiWorkspaceQualityTab />
         </TabsContent>
 
         <TabsContent value="observability" className="space-y-4">

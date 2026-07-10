@@ -114,6 +114,10 @@ def begin_external_ai_call_log(
     palace_id: int | None = None,
     artifact_refs: list[dict[str, Any]] | None = None,
     image_items: list[tuple[bytes, str | None]] | None = None,
+    scene: str | None = None,
+    prompt_version_id: str | None = None,
+    structured_output_mode: str | None = None,
+    repaired_from_log_id: str | None = None,
 ) -> str:
     log_id = uuid.uuid4().hex
     request_id = get_request_id() or ""
@@ -144,6 +148,10 @@ def begin_external_ai_call_log(
                     base_url=base_url,
                     model=model,
                     request_id=request_id,
+                    scene=str(scene or feature or ""),
+                    prompt_version_id=prompt_version_id,
+                    structured_output_mode=str(structured_output_mode or ""),
+                    repaired_from_log_id=repaired_from_log_id,
                     request_json=_json_dump(request_payload_with_artifacts),
                     response_json="{}",
                     error_json="{}",
@@ -157,7 +165,21 @@ def begin_external_ai_call_log(
     return log_id
 
 
-def complete_external_ai_call_log(log_id: str, *, response_payload: dict[str, Any]) -> None:
+def complete_external_ai_call_log(
+    log_id: str,
+    *,
+    response_payload: dict[str, Any],
+    request_id: str | None = None,
+    finish_reason: str | None = None,
+    input_tokens: int = 0,
+    output_tokens: int = 0,
+    cached_input_tokens: int = 0,
+    estimated_cost: float | None = None,
+    first_token_ms: int | None = None,
+    duration_ms: int | None = None,
+    attempt_count: int = 1,
+    structured_output_mode: str | None = None,
+) -> None:
     _write_json(_response_json_path(log_id), response_payload)
     try:
         with Session(engine) as session:
@@ -167,13 +189,31 @@ def complete_external_ai_call_log(log_id: str, *, response_payload: dict[str, An
             row.status = "success"
             row.response_json = _json_dump(response_payload)
             row.error_json = "{}"
+            row.request_id = str(request_id or row.request_id or "")
+            row.finish_reason = str(finish_reason or "")
+            row.input_tokens = max(0, int(input_tokens or 0))
+            row.output_tokens = max(0, int(output_tokens or 0))
+            row.cached_input_tokens = max(0, int(cached_input_tokens or 0))
+            row.estimated_cost = estimated_cost
+            row.first_token_ms = first_token_ms
+            row.duration_ms = duration_ms
+            row.attempt_count = max(1, int(attempt_count or 1))
+            if structured_output_mode:
+                row.structured_output_mode = structured_output_mode
             row.updated_at = utc_now_naive()
             session.commit()
     except SQLAlchemyError:
         pass
 
 
-def fail_external_ai_call_log(log_id: str, *, error_payload: dict[str, Any]) -> None:
+def fail_external_ai_call_log(
+    log_id: str,
+    *,
+    error_payload: dict[str, Any],
+    error_kind: str | None = None,
+    duration_ms: int | None = None,
+    attempt_count: int = 1,
+) -> None:
     _write_json(_error_json_path(log_id), error_payload)
     try:
         with Session(engine) as session:
@@ -182,6 +222,9 @@ def fail_external_ai_call_log(log_id: str, *, error_payload: dict[str, Any]) -> 
                 return
             row.status = "error"
             row.error_json = _json_dump(error_payload)
+            row.error_kind = str(error_kind or error_payload.get("kind") or "")
+            row.duration_ms = duration_ms
+            row.attempt_count = max(1, int(attempt_count or 1))
             row.updated_at = utc_now_naive()
             session.commit()
     except SQLAlchemyError:
@@ -246,6 +289,19 @@ def serialize_external_ai_call_log(
         "base_url": row.base_url,
         "model": row.model,
         "request_id": row.request_id,
+        "scene": row.scene,
+        "prompt_version_id": row.prompt_version_id,
+        "structured_output_mode": row.structured_output_mode,
+        "finish_reason": row.finish_reason,
+        "input_tokens": row.input_tokens,
+        "output_tokens": row.output_tokens,
+        "cached_input_tokens": row.cached_input_tokens,
+        "estimated_cost": row.estimated_cost,
+        "first_token_ms": row.first_token_ms,
+        "duration_ms": row.duration_ms,
+        "attempt_count": row.attempt_count,
+        "error_kind": row.error_kind,
+        "repaired_from_log_id": row.repaired_from_log_id,
         "created_at": row.created_at.isoformat() if row.created_at else None,
         "updated_at": row.updated_at.isoformat() if row.updated_at else None,
     }

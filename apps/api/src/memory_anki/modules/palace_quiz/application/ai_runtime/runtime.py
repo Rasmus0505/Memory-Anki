@@ -13,11 +13,14 @@ from memory_anki.core.config import (
     DASHSCOPE_BASE_URL,
 )
 from memory_anki.infrastructure.llm import (
+    AiGatewayError,
+    AiRequest,
     OpenAICompatibleChatConfig,
     OpenAICompatibleHttpError,
     OpenAICompatibleNetworkError,
     OpenAICompatibleProtocolError,
-    call_chat_completion_text,
+    build_chat_completions_url,
+    execute_ai_request,
     stream_chat_completion_text,
 )
 from memory_anki.infrastructure.llm.config_helpers import has_non_empty_config
@@ -106,7 +109,7 @@ def fail_ai_call_log_and_raise(
             },
         )
         raise PalaceQuizAiError(
-            f"AI 网络异常：{error.reason}。当前目标地址：{config.base_url.rstrip('/')}/chat/completions"
+            f"AI 网络异常：{error.reason}。当前目标地址：{build_chat_completions_url(config.base_url)}"
         ) from error
     raise error
 
@@ -154,6 +157,13 @@ class LoggedChatCompletionRequest:
     response_format: dict[str, Any] | None
     request_payload: dict[str, Any]
     image_items: list[tuple[bytes, str | None]] | None = None
+    scene: str | None = None
+    provider: str = "openai_compatible"
+    prompt_version_id: str | None = None
+    structured_output_mode: str | None = None
+    input_price_per_million: float | None = None
+    output_price_per_million: float | None = None
+    cached_input_price_per_million: float | None = None
 
 
 def call_logged_chat_completion_stream(
@@ -195,29 +205,85 @@ def call_logged_chat_completion_stream(
 def call_logged_chat_completion(
     request: LoggedChatCompletionRequest,
 ) -> tuple[str, str]:
-    log_id = start_ai_call_log(
-        config=request.config,
+    resolved_ai = (
+        request.request_payload.get("resolved_ai")
+        if isinstance(request.request_payload.get("resolved_ai"), dict)
+        else {}
+    )
+    log_id = begin_external_ai_call_log(
         feature=request.feature,
         operation=request.operation,
+        provider=str(resolved_ai.get("provider") or request.provider),
+        base_url=request.config.base_url,
+        model=request.config.model,
         palace_id=request.palace_id,
         request_payload=request.request_payload,
         image_items=request.image_items,
+        scene=str(resolved_ai.get("scene_key") or request.scene or request.feature),
+        prompt_version_id=request.prompt_version_id,
+        structured_output_mode=str(
+            resolved_ai.get("structured_output_mode")
+            or request.structured_output_mode
+            or (request.response_format or {}).get("type")
+            or ""
+        ),
     )
     try:
-        response_text = call_chat_completion_text(
-            config=request.config,
-            messages=request.messages,
-            response_format=request.response_format,
-            extra_payload=request.extra_payload,
+        result = execute_ai_request(
+            AiRequest(
+                scene=request.scene or request.feature,
+                config=request.config,
+                messages=request.messages,
+                provider=str(resolved_ai.get("provider") or request.provider),
+                prompt_version_id=request.prompt_version_id,
+                extra_payload=request.extra_payload,
+                legacy_response_format=request.response_format,
+            )
         )
-    except (
-        OpenAICompatibleProtocolError,
-        OpenAICompatibleHttpError,
-        OpenAICompatibleNetworkError,
-    ) as exc:
-        fail_ai_call_log_and_raise(log_id=log_id, config=request.config, error=exc)
-    complete_ai_call_log(log_id, response_text=response_text)
-    return response_text, log_id
+    except AiGatewayError as exc:
+        fail_external_ai_call_log(
+            log_id,
+            error_payload={
+                "type": "ai_gateway_error",
+                "kind": exc.kind.value,
+                "message": str(exc),
+                "retryable": exc.retryable,
+                "details": exc.details,
+            },
+            error_kind=exc.kind.value,
+        )
+        raise PalaceQuizAiError(str(exc)) from exc
+    usage = result.usage
+    estimated_cost = None
+    input_price = request.input_price_per_million
+    output_price = request.output_price_per_million
+    cached_price = request.cached_input_price_per_million
+    if input_price is None:
+        input_price = resolved_ai.get("input_price_per_million")
+    if output_price is None:
+        output_price = resolved_ai.get("output_price_per_million")
+    if cached_price is None:
+        cached_price = resolved_ai.get("cached_input_price_per_million")
+    if input_price is not None or output_price is not None:
+        estimated_cost = (
+            usage.input_tokens * float(input_price or 0.0)
+            + usage.output_tokens * float(output_price or 0.0)
+            + usage.cached_input_tokens * float(cached_price or 0.0)
+        ) / 1_000_000
+    complete_external_ai_call_log(
+        log_id,
+        response_payload={"response_text": result.text},
+        request_id=result.request_id,
+        finish_reason=result.finish_reason,
+        input_tokens=usage.input_tokens,
+        output_tokens=usage.output_tokens,
+        cached_input_tokens=usage.cached_input_tokens,
+        estimated_cost=estimated_cost,
+        duration_ms=result.duration_ms,
+        attempt_count=result.attempts,
+        structured_output_mode=result.structured_output_mode,
+    )
+    return result.text, log_id
 
 
 def _call_logged_chat_completion(

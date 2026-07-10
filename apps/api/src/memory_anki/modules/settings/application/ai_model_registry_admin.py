@@ -209,6 +209,38 @@ def test_provider_connection(
             extra_payload={"max_tokens": 8},
         )
         latency_ms = int((time.perf_counter() - started) * 1000)
+        suggested_mode = "prompt_only"
+        probe_errors: dict[str, str] = {}
+        for mode, response_format in (
+            (
+                "json_schema",
+                {
+                    "type": "json_schema",
+                    "json_schema": {
+                        "name": "connection_probe",
+                        "strict": True,
+                        "schema": {
+                            "type": "object",
+                            "properties": {"ok": {"type": "boolean"}},
+                            "required": ["ok"],
+                            "additionalProperties": False,
+                        },
+                    },
+                },
+            ),
+            ("json_object", {"type": "json_object"}),
+        ):
+            try:
+                call_chat_completion_text(
+                    config=config,
+                    messages=[{"role": "user", "content": 'Return JSON: {"ok": true}'}],
+                    response_format=response_format,
+                    extra_payload={"max_tokens": 24},
+                )
+                suggested_mode = mode
+                break
+            except OpenAICompatibleError as exc:
+                probe_errors[mode] = str(exc)
         return {
             "ok": True,
             "provider": provider,
@@ -217,6 +249,12 @@ def test_provider_connection(
             "latency_ms": latency_ms,
             "error": None,
             "source": source,
+            "structured_output_probe": {
+                "suggested_mode": suggested_mode,
+                "current_mode": candidate.get("structured_output_mode", "json_object"),
+                "errors": probe_errors,
+                "requires_confirmation": suggested_mode != candidate.get("structured_output_mode"),
+            },
         }
     except OpenAICompatibleError as exc:
         latency_ms = int((time.perf_counter() - started) * 1000)
@@ -262,6 +300,26 @@ def upsert_ai_model_catalog_item(session: Session, payload: dict[str, Any]) -> d
     row.has_vision = bool(payload.get("has_vision"))
     row.supports_thinking = bool(payload.get("supports_thinking"))
     row.supports_temperature = bool(payload.get("supports_temperature", model_type != "asr"))
+    structured_output_mode = str(payload.get("structured_output_mode") or "json_object").strip()
+    if structured_output_mode not in {"json_schema", "json_object", "prompt_only"}:
+        raise AiModelRegistryError("结构化输出模式无效。")
+    row.structured_output_mode = structured_output_mode
+    for field_name in (
+        "input_price_per_million",
+        "output_price_per_million",
+        "cached_input_price_per_million",
+    ):
+        value = payload.get(field_name)
+        if value in {None, ""}:
+            setattr(row, field_name, None)
+            continue
+        try:
+            price = float(value)
+        except (TypeError, ValueError) as exc:
+            raise AiModelRegistryError("模型价格必须是非负数字。") from exc
+        if price < 0:
+            raise AiModelRegistryError("模型价格必须是非负数字。")
+        setattr(row, field_name, price)
     row.is_builtin = bool(row.is_builtin)
     row.is_active = True
     session.commit()

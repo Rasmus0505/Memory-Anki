@@ -1,11 +1,13 @@
 ﻿import { useEffect, useMemo, useState } from 'react'
-import { RotateCcw, Save, WandSparkles } from 'lucide-react'
+import { Play, RotateCcw, Save, ShieldCheck, WandSparkles } from 'lucide-react'
 import { toast } from '@/shared/feedback/toast'
 import { ProfileLayout } from '@/features/profile/ProfileLayout'
 import type { AiPromptTemplate } from '@/shared/api/contracts'
 import {
+  activateAiPromptVersionApi,
   getAiPromptTemplatesApi,
   resetAiPromptTemplatesApi,
+  runAiPromptEvalApi,
   updateAiPromptTemplatesApi,
 } from '@/features/profile/api'
 import { Badge } from '@/shared/components/ui/badge'
@@ -23,6 +25,8 @@ export function ProfileAiPromptsPage({ standalone = false }: { standalone?: bool
   const [savingKeys, setSavingKeys] = useState<Record<string, boolean>>({})
   const [resettingKeys, setResettingKeys] = useState<Record<string, boolean>>({})
   const [resettingAll, setResettingAll] = useState(false)
+  const [evaluatingKeys, setEvaluatingKeys] = useState<Record<string, boolean>>({})
+  const [publishingKeys, setPublishingKeys] = useState<Record<string, boolean>>({})
 
   useEffect(() => {
     const load = async () => {
@@ -54,7 +58,7 @@ export function ProfileAiPromptsPage({ standalone = false }: { standalone?: bool
     try {
       const response = await updateAiPromptTemplatesApi({ [item.key]: drafts[item.key] ?? '' })
       syncItems(response.items)
-      toast.success(`${item.label} 已保存`)
+      toast.success(`${item.label} 已保存为候选版本，请运行评测`)
     } finally {
       setSavingKeys((current) => ({ ...current, [item.key]: false }))
     }
@@ -65,7 +69,7 @@ export function ProfileAiPromptsPage({ standalone = false }: { standalone?: bool
     try {
       const response = await resetAiPromptTemplatesApi([item.key])
       syncItems(response.items)
-      toast.success(`${item.label} 已恢复默认`)
+      toast.success(`${item.label} 的默认模板已保存为候选版本`)
     } finally {
       setResettingKeys((current) => ({ ...current, [item.key]: false }))
     }
@@ -76,9 +80,40 @@ export function ProfileAiPromptsPage({ standalone = false }: { standalone?: bool
     try {
       const response = await resetAiPromptTemplatesApi()
       syncItems(response.items)
-      toast.success('全部 AI 提示词已恢复默认')
+      toast.success('全部默认模板已保存为候选版本')
     } finally {
       setResettingAll(false)
+    }
+  }
+
+  const reload = async () => {
+    const response = await getAiPromptTemplatesApi()
+    syncItems(response.items)
+  }
+
+  const handleEvaluate = async (item: AiPromptTemplate) => {
+    const candidate = item.candidate_version
+    if (!candidate) return
+    setEvaluatingKeys((current) => ({ ...current, [item.key]: true }))
+    try {
+      const run = await runAiPromptEvalApi(item.key, candidate.id)
+      toast.success(run.gate_passed ? `${item.label} 评测通过` : `${item.label} 评测未通过`)
+      await reload()
+    } finally {
+      setEvaluatingKeys((current) => ({ ...current, [item.key]: false }))
+    }
+  }
+
+  const handlePublish = async (item: AiPromptTemplate) => {
+    const candidate = item.candidate_version
+    if (!candidate || candidate.status !== 'passed') return
+    setPublishingKeys((current) => ({ ...current, [item.key]: true }))
+    try {
+      await activateAiPromptVersionApi(item.key, candidate.id)
+      toast.success(`${item.label} 已发布`)
+      await reload()
+    } finally {
+      setPublishingKeys((current) => ({ ...current, [item.key]: false }))
     }
   }
 
@@ -107,6 +142,9 @@ export function ProfileAiPromptsPage({ standalone = false }: { standalone?: bool
           const isDirty = dirtyKeys.has(item.key)
           const isSaving = Boolean(savingKeys[item.key])
           const isResetting = Boolean(resettingKeys[item.key])
+          const isEvaluating = Boolean(evaluatingKeys[item.key])
+          const isPublishing = Boolean(publishingKeys[item.key])
+          const candidate = item.candidate_version
           return (
             <Card key={item.key}>
               <CardHeader className="space-y-3">
@@ -124,6 +162,11 @@ export function ProfileAiPromptsPage({ standalone = false }: { standalone?: bool
                     ) : null}
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
+                    {candidate ? (
+                      <Badge variant={candidate.status === 'passed' ? 'secondary' : candidate.status === 'failed' ? 'destructive' : 'outline'}>
+                        候选：{candidate.status}
+                      </Badge>
+                    ) : null}
                     <Badge variant={item.is_customized ? 'secondary' : 'outline'}>
                       {item.is_customized ? '已自定义' : '默认模板'}
                     </Badge>
@@ -160,8 +203,20 @@ export function ProfileAiPromptsPage({ standalone = false }: { standalone?: bool
                 <div className="flex flex-wrap gap-2">
                   <Button type="button" size="sm" onClick={() => void handleSaveOne(item)} disabled={isSaving || !isDirty}>
                     <Save className="mr-2 size-4" />
-                    {isSaving ? '保存中...' : '保存'}
+                    {isSaving ? '保存中...' : '保存候选'}
                   </Button>
+                  {candidate ? (
+                    <Button type="button" variant="outline" size="sm" onClick={() => void handleEvaluate(item)} disabled={isEvaluating}>
+                      <Play className="mr-2 size-4" />
+                      {isEvaluating ? '评测中...' : '运行评测'}
+                    </Button>
+                  ) : null}
+                  {candidate?.status === 'passed' ? (
+                    <Button type="button" size="sm" onClick={() => void handlePublish(item)} disabled={isPublishing}>
+                      <ShieldCheck className="mr-2 size-4" />
+                      {isPublishing ? '发布中...' : '发布'}
+                    </Button>
+                  ) : null}
                   <Button type="button" variant="outline" size="sm" onClick={() => void handleResetOne(item)} disabled={isResetting}>
                     <RotateCcw className="mr-2 size-4" />
                     {isResetting ? '重置中...' : '恢复默认'}
@@ -179,7 +234,7 @@ export function ProfileAiPromptsPage({ standalone = false }: { standalone?: bool
     return (
       <ProfileLayout
         title="AI 提示词"
-        description="这里可以查看和编辑所有外部 AI 能力的预设提示词。保存后会立刻作用于后续识别与 AI 知识点拆分请求，恢复默认会删除自定义覆盖值。"
+        description="这里可以编辑 AI 提示词。保存会创建候选版本，只有评测通过并发布后才会作用于后续请求。"
       >
         {content}
       </ProfileLayout>

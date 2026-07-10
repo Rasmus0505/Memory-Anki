@@ -8,6 +8,7 @@ from memory_anki.infrastructure.llm import (
     OpenAICompatibleHttpError,
     OpenAICompatibleNetworkError,
     OpenAICompatibleProtocolError,
+    build_chat_completions_url,
     call_chat_completion_text,
 )
 from memory_anki.infrastructure.llm.external_ai_call_logs import (
@@ -28,7 +29,7 @@ def call_model(
     existing_children: list[dict[str, Any]],
     build_model_input_fn,
 ) -> dict[str, Any]:
-    request_url = f"{config.base_url.rstrip('/')}/chat/completions"
+    request_url = build_chat_completions_url(config.base_url)
     system_prompt = render_prompt("ai_prompt_mindmap_ai_split_system", {})
     messages: list[dict[str, str]] = [{"role": "system", "content": system_prompt}]
     if config.custom_instruction:

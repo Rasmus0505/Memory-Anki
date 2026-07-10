@@ -1,4 +1,4 @@
-import logging
+﻿import logging
 import os
 import re
 from contextlib import asynccontextmanager
@@ -36,6 +36,7 @@ from memory_anki.modules.english.presentation import router as english_router
 from memory_anki.modules.english_reading.presentation import router as english_reading_router
 from memory_anki.modules.freestyle.presentation import router as freestyle_router
 from memory_anki.modules.knowledge.presentation import router as knowledge_router
+from memory_anki.modules.mindmap.presentation import router as mindmap_router
 from memory_anki.modules.palace_quiz.presentation import router as palace_quiz_router
 from memory_anki.modules.palaces.presentation import import_router
 from memory_anki.modules.palaces.presentation import router as palace_router
@@ -161,6 +162,7 @@ app.include_router(sessions_router.router, prefix="/api/v1")
 app.include_router(settings_router.router, prefix="/api/v1")
 app.include_router(import_router.router, prefix="/api/v1")
 app.include_router(knowledge_router.router, prefix="/api/v1")
+app.include_router(mindmap_router.router, prefix="/api/v1")
 app.include_router(english_router.router, prefix="/api/v1")
 app.include_router(english_reading_router.router, prefix="/api/v1")
 app.include_router(freestyle_router.router, prefix="/api/v1")
