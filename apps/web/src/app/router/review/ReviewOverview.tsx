@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { ArrowLeft, ArrowRight, BookOpen, Brain, CalendarClock, RotateCcw } from 'lucide-react'
-import { toast } from 'sonner'
+import { toast } from '@/shared/feedback/toast'
 import type {
   ReviewQueueResponse,
   ReviewStageProgressHealthResponse,

@@ -10,6 +10,7 @@ import {
   useRef,
   useState,
   type ErrorInfo,
+  type KeyboardEvent,
   type ReactNode,
 } from 'react'
 import { NodeContextMenu } from './NodeContextMenu'
@@ -34,10 +35,16 @@ export interface MindMapCanvasViewCommand {
 export interface MindMapCanvasProps {
   graphData: GraphData
   selectedNodeId: string | null
+  editingNodeId?: string | null
+  editingDraft?: string | null
   onNodeSelect: (nodeId: string | null) => void
+  onEditingNodeChange?: (nodeId: string | null) => void
+  onEditingDraftChange?: (nodeId: string, text: string) => void
+  onKeyDownCapture?: (event: KeyboardEvent<HTMLDivElement>) => void
   onAddChild: (parentId: string) => void
   onAddSibling: (nodeId: string) => void
   onDelete: (nodeId: string) => void
+  onDeleteNodeOnly?: (nodeId: string) => void
   onReparent?: (sourceId: string, targetId: string) => void
   onEdit?: (nodeId: string, text: string) => void
   canUndo?: boolean
@@ -236,6 +243,9 @@ function MindMapCanvasInner({
   return (
     <div
       ref={state.frameRef}
+      tabIndex={-1}
+      onKeyDownCapture={props.onKeyDownCapture}
+      data-interaction-mode={props.editingNodeId ? 'editing' : props.selectedNodeId ? 'selected' : 'idle'}
       className={`relative flex h-full min-h-[520px] min-w-0 flex-col overflow-hidden rounded-[14px] border border-zinc-200 bg-zinc-50 shadow-[0_18px_44px_rgba(24,24,27,0.08)] ${className ?? ''}`}
     >
       {showToolbar ? (
@@ -266,6 +276,7 @@ function MindMapCanvasInner({
               onNodesChange={state.onNodesChange}
               onEdgesChange={state.onEdgesChange}
               onNodeClick={state.handleNodeClick}
+              onNodeDoubleClick={state.handleNodeDoubleClick}
               onNodeContextMenu={state.handleNodeContextMenu}
               onNodeDragStart={state.handleNodeDragStart}
               onNodeDrag={state.handleNodeDrag}
@@ -275,8 +286,12 @@ function MindMapCanvasInner({
               onEdgeClick={state.handleEdgeClick}
               onEdgeDoubleClick={state.handleEdgeDoubleClick}
               onPaneClick={state.handlePaneClick}
+              onMoveStart={state.handleMoveStart}
+              onMove={state.handleMove}
+              onMoveEnd={state.handleMoveEnd}
               readonly={Boolean(props.readonly)}
               mobileGuided={state.mobileGuidedActive}
+              preserveViewport={state.preserveViewport}
             />
             {canvasIssue ? (
               <MindMapCanvasRecoveryPanel

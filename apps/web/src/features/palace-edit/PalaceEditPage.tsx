@@ -72,7 +72,7 @@ function SaveStatusBadge({
 }
 
 export default function PalaceEdit() {
-  const { isActive } = useRouteResidency()
+  const { isActive, becameActiveAt } = useRouteResidency()
   const navigate = useNavigate()
   const page = usePalaceEditPage()
   const { openQuizLauncher } = useQuizLauncher()
@@ -109,8 +109,18 @@ export default function PalaceEdit() {
     entityType: 'palace',
     entityId: page.palaceId,
     editorState: page.editorState,
-    defaultTask: 'learn',
+    defaultTask: 'build',
   })
+  const setMindMapTask = mindMapExperience.setTask
+  const editorMode = page.editorMode
+  const exitInlinePractice = page.exitInlinePractice
+  const lastBuildActivationRef = useRef<number | null>(null)
+  useEffect(() => {
+    if (!isActive || lastBuildActivationRef.current === becameActiveAt) return
+    lastBuildActivationRef.current = becameActiveAt
+    setMindMapTask('build')
+    if (editorMode !== 'edit') exitInlinePractice()
+  }, [becameActiveAt, editorMode, exitInlinePractice, isActive, setMindMapTask])
   const recallModeActive = page.editorMode === 'recall'
   const readonlyMindMap = mindMapExperience.task === 'learn' || page.editorMode !== 'edit' || miniPalaceFrameActive
   const segmentToolbarOptions = useMemo(
@@ -353,20 +363,20 @@ export default function PalaceEdit() {
                       onCancel: () => page.handleSegmentRangeModeToggle({ active: false, targetSegmentId: null }),
                     } : null}
                     moreActions={[
-                      { label: '导入资料', onClick: () => mindMapImport.setImportOpen(true) },
                       { label: `结构检查（${mindMapExperience.structureIssues.length}）`, onClick: () => { const issue = mindMapExperience.structureIssues[0]; if (!issue) return toast.success('未发现结构问题'); mindMapFrameRef.current?.focusNode(issue.nodeUid); toast.warning(issue.message) } },
-                      { label: '英语区', onClick: () => { void page.handleOpenEnglishArea() }, separatorBefore: true },
-                      { label: '做题', onClick: handleOpenQuizPage },
-                      { label: '专项训练', onClick: page.miniPalace.openPanel },
                       ...(selectedNodeUid ? [
                         { label: '标记为薄弱', onClick: () => { void mindMapExperience.setNodeManualLabel(selectedNodeUid, 'weak') }, separatorBefore: true },
                         { label: '标记为已掌握', onClick: () => { void mindMapExperience.setNodeManualLabel(selectedNodeUid, 'mastered') } },
                         { label: '清除手动标记', onClick: () => { void mindMapExperience.setNodeManualLabel(selectedNodeUid, null) } },
                       ] : []),
-                      { label: page.mindMapFullscreen ? '退出沉浸模式' : '沉浸模式', onClick: () => { void handleImmersiveToolbarToggle() }, separatorBefore: true },
-                      { label: mindMapNativeFullscreen ? '退出原生全屏' : '原生全屏', onClick: () => { void handleNativeFullscreenToolbarToggle() } },
-                      { label: mindMapUiCleared ? '恢复界面' : '清屏', onClick: () => mindMapFrameRef.current?.toggleUiCleared() },
                     ]}
+                    importMindMapAction={{ label: '转脑图', onClick: () => mindMapImport.setImportOpen(true) }}
+                    englishAction={{ label: '英语区', onClick: () => { void page.handleOpenEnglishArea() } }}
+                    quizAction={{ label: '做题', onClick: handleOpenQuizPage }}
+                    miniPalaceAction={{ label: '专项训练', onClick: page.miniPalace.openPanel }}
+                    immersiveAction={{ label: page.mindMapFullscreen ? '退出沉浸模式' : '沉浸模式', onClick: () => { void handleImmersiveToolbarToggle() } }}
+                    nativeFullscreenAction={{ label: mindMapNativeFullscreen ? '退出原生全屏' : '原生全屏', onClick: () => { void handleNativeFullscreenToolbarToggle() } }}
+                    clearUiAction={{ label: mindMapUiCleared ? '恢复界面' : '清屏', onClick: () => mindMapFrameRef.current?.toggleUiCleared() }}
                   />
                   {mindMapExperience.task === 'learn' && !mindMapExperience.searchQuery ? (
                     <div className="grid gap-2 rounded-xl border bg-muted/15 p-3 sm:grid-cols-2 lg:grid-cols-4">

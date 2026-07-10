@@ -25,6 +25,7 @@ interface UseMindMapMenusAndEdgesInput {
   onEdgeDelete?: (edgeId: string, sourceId: string, targetId: string) => void
   onEdgeInsert?: (edgeId: string, sourceId: string, targetId: string) => void
   mobileGuidedActive: boolean
+  contextActionOnly: boolean
   nodeClickViewportPolicy: MindMapNodeClickViewportPolicy
   centerNodeInCanvas: (nodeId: string | null | undefined, duration?: number) => void
 }
@@ -37,6 +38,7 @@ export function useMindMapMenusAndEdges({
   onEdgeDelete,
   onEdgeInsert,
   mobileGuidedActive,
+  contextActionOnly,
   nodeClickViewportPolicy,
   centerNodeInCanvas,
 }: UseMindMapMenusAndEdgesInput) {
@@ -60,17 +62,21 @@ export function useMindMapMenusAndEdges({
   const handleNodeContextMenu = useCallback(
     (event: MouseEvent, node: Node) => {
       event.preventDefault()
-      onNodeContextAction?.(node.id)
-      setCtxMenu({ x: event.clientX, y: event.clientY, nodeId: node.id })
       setEdgeMenu(null)
       setSelectedEdgeId(null)
       onNodeSelect(node.id)
+      if (contextActionOnly && onNodeContextAction) {
+        setCtxMenu(null)
+        onNodeContextAction(node.id)
+      } else {
+        setCtxMenu({ x: event.clientX, y: event.clientY, nodeId: node.id })
+      }
       dispatchGlobalFeedback('context_menu', {
         point: { x: event.clientX, y: event.clientY },
         origin: 'node',
       })
     },
-    [onNodeContextAction, onNodeSelect],
+    [contextActionOnly, onNodeContextAction, onNodeSelect],
   )
 
   const handlePaneClick = useCallback(() => {

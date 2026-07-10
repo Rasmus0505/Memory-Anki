@@ -9,7 +9,13 @@ interface BuildDisplayNodesInput {
   sourceId: string | null
   isDraggingNode: boolean
   selectedNodeId: string | null
+  editingNodeId: string | null
+  editingDraft: string | null
+  onStartEdit: (nodeId: string) => void
+  onCancelEdit: (nodeId: string) => void
+  onEditTextChange?: (nodeId: string, text: string) => void
   onAddChild: (parentId: string) => void
+  onAddSibling: (nodeId: string) => void
   onDelete: (nodeId: string) => void
   onFinishEdit: (nodeId: string, text: string) => void
   onMeasure: (nodeId: string, size: NodeSize) => void
@@ -26,7 +32,13 @@ export function buildDisplayNodes({
   sourceId,
   isDraggingNode,
   selectedNodeId,
+  editingNodeId,
+  editingDraft,
+  onStartEdit,
+  onCancelEdit,
+  onEditTextChange,
   onAddChild,
+  onAddSibling,
   onDelete,
   onFinishEdit,
   onMeasure,
@@ -52,13 +64,19 @@ export function buildDisplayNodes({
     const nextData = {
       ...(node.data as Record<string, unknown>),
       selected: node.id === selectedNodeId,
+      editing: node.id === editingNodeId,
+      editText: node.id === editingNodeId ? editingDraft : null,
       dropHighlight: Boolean(preview),
       dropMode: preview?.mode ?? null,
       previewShifted: shifted && !isSource,
       previewAdopt: preview?.mode === 'inside',
       previewGhost: isSource,
       onAddChild,
+      onAddSibling,
       onDelete,
+      onStartEdit,
+      onCancelEdit,
+      onEditTextChange,
       onFinishEdit,
       onMeasure,
       readonly,
@@ -104,6 +122,7 @@ function buildDisplayEdge(
   selectedEdgeId: string | null,
   previous?: Edge,
 ): Edge {
+  const baseStrokeWidth = Number(edge.style?.strokeWidth ?? 1.5)
   const className =
     edge.id === selectedEdgeId
       ? `${edge.className ?? ''} memory-anki-reactflow-edge-selected`.trim()
@@ -116,8 +135,8 @@ function buildDisplayEdge(
         : edge.style?.stroke ?? '#89a89e',
     strokeWidth:
       edge.id === selectedEdgeId
-        ? 2.3
-        : edge.style?.strokeWidth ?? 1.5,
+        ? Math.max(baseStrokeWidth + 1, 3)
+        : baseStrokeWidth,
     opacity:
       edge.id === selectedEdgeId
         ? 1

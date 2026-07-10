@@ -5,16 +5,20 @@ import { BRANCH_COLORS } from './branchColors'
 export const TOOLBAR_HEIGHT = 54
 const ROOT_X = 52
 const ROOT_Y = 280
-const ROOT_NODE_WIDTH = 170
+const ROOT_NODE_MIN_WIDTH = 200
+const ROOT_NODE_MAX_WIDTH = 330
 const ROOT_NODE_MIN_HEIGHT = 40
-const BRANCH_NODE_WIDTH = 152
+const BRANCH_NODE_MIN_WIDTH = 180
+const BRANCH_NODE_MAX_WIDTH = 300
 const BRANCH_NODE_MIN_HEIGHT = 34
-const LEAF_NODE_WIDTH = 136
+const LEAF_NODE_MIN_WIDTH = 160
+const LEAF_NODE_MAX_WIDTH = 280
 const LEAF_NODE_MIN_HEIGHT = 30
 const ROOT_GAP_X = 48
 const CHILD_GAP_X = 30
-const ROOT_STACK_GAP = 18
-const CHILD_GAP_Y = 12
+const ROOT_STACK_GAP = 28
+const CHILD_GAP_Y = 18
+export const NODE_SAFE_GAP = 18
 export const DROP_HIT_PADDING_X = 16
 export const DROP_HIT_PADDING_Y = 12
 
@@ -104,7 +108,8 @@ export function getNodeRole(node?: NodeSizeSource): LayoutRole {
 }
 
 function getBaseNodeSize(role: LayoutRole): {
-  width: number
+  minWidth: number
+  maxWidth: number
   minHeight: number
   horizontalPadding: number
   verticalPadding: number
@@ -115,7 +120,8 @@ function getBaseNodeSize(role: LayoutRole): {
   switch (role) {
     case 'root':
       return {
-        width: ROOT_NODE_WIDTH,
+        minWidth: ROOT_NODE_MIN_WIDTH,
+        maxWidth: ROOT_NODE_MAX_WIDTH,
         minHeight: ROOT_NODE_MIN_HEIGHT,
         horizontalPadding: 24,
         verticalPadding: 12,
@@ -125,7 +131,8 @@ function getBaseNodeSize(role: LayoutRole): {
       }
     case 'branch':
       return {
-        width: BRANCH_NODE_WIDTH,
+        minWidth: BRANCH_NODE_MIN_WIDTH,
+        maxWidth: BRANCH_NODE_MAX_WIDTH,
         minHeight: BRANCH_NODE_MIN_HEIGHT,
         horizontalPadding: 14,
         verticalPadding: 10,
@@ -135,7 +142,8 @@ function getBaseNodeSize(role: LayoutRole): {
       }
     default:
       return {
-        width: LEAF_NODE_WIDTH,
+        minWidth: LEAF_NODE_MIN_WIDTH,
+        maxWidth: LEAF_NODE_MAX_WIDTH,
         minHeight: LEAF_NODE_MIN_HEIGHT,
         horizontalPadding: 14,
         verticalPadding: 9,
@@ -160,7 +168,14 @@ export function getNodeSize(
   const role = getNodeRole(source)
   const base = getBaseNodeSize(role)
   const label = ((labelOverride ?? getNodeLabel(source)) || '').trim() || '未命名节点'
-  const contentWidth = Math.max(base.width - base.horizontalPadding, base.averageCharWidth)
+  const longestLineLength = label
+    .split(/\r?\n/)
+    .reduce((longest, line) => Math.max(longest, getWeightedTextLength(line)), 0)
+  const naturalWidth = Math.ceil(
+    longestLineLength * base.averageCharWidth + base.horizontalPadding,
+  )
+  const width = Math.min(base.maxWidth, Math.max(base.minWidth, naturalWidth))
+  const contentWidth = Math.max(width - base.horizontalPadding, base.averageCharWidth)
   const charsPerLine = Math.max(1, Math.floor(contentWidth / base.averageCharWidth))
   const textLineCount = label
     .split(/\r?\n/)
@@ -171,7 +186,7 @@ export function getNodeSize(
     Math.ceil(base.verticalPadding + textHeight + base.metaHeight),
   )
 
-  return { width: base.width, height }
+  return { width, height }
 }
 
 export function getResolvedNodeSize(
@@ -319,6 +334,7 @@ function layoutTreeNodes(
     targetPosition: Position.Left,
     position: { x, y },
     draggable: true,
+    dragHandle: '.mindmap-node-drag-handle',
     data: {
       ...node.node,
       metadata: {
@@ -368,11 +384,72 @@ function getNodeParentId(node: Node): string | null {
   return typeof data.parentId === 'string' ? data.parentId : null
 }
 
+function nodesOverlap(
+  first: Node,
+  second: Node,
+  measuredSizes: NodeSizeMap | undefined,
+  minGap: number,
+): boolean {
+  const firstSize = getResolvedNodeSize(first, undefined, measuredSizes)
+  const secondSize = getResolvedNodeSize(second, undefined, measuredSizes)
+  return !(
+    first.position.x + firstSize.width + minGap <= second.position.x ||
+    second.position.x + secondSize.width + minGap <= first.position.x ||
+    first.position.y + firstSize.height + minGap <= second.position.y ||
+    second.position.y + secondSize.height + minGap <= first.position.y
+  )
+}
+
+function hasNodeOverlaps(
+  nodes: Node[],
+  measuredSizes: NodeSizeMap | undefined,
+  minGap: number,
+): boolean {
+  const sortedNodes = [...nodes].sort((a, b) => a.position.y - b.position.y)
+  const activeNodes: Node[] = []
+
+  for (const node of sortedNodes) {
+    const nodeTop = node.position.y
+    for (let index = activeNodes.length - 1; index >= 0; index--) {
+      const active = activeNodes[index]
+      const activeBottom =
+        active.position.y + getResolvedNodeSize(active, undefined, measuredSizes).height + minGap
+      if (activeBottom <= nodeTop) {
+        activeNodes.splice(index, 1)
+      }
+    }
+    if (activeNodes.some((active) => nodesOverlap(active, node, measuredSizes, minGap))) {
+      return true
+    }
+    activeNodes.push(node)
+  }
+  return false
+}
+
+function stackNodesWithoutOverlap(
+  nodes: Node[],
+  measuredSizes: NodeSizeMap | undefined,
+  minGap: number,
+): Node[] {
+  let currentTop = Math.min(...nodes.map((node) => node.position.y), ROOT_Y)
+  return [...nodes]
+    .sort((a, b) => a.position.y - b.position.y || a.position.x - b.position.x)
+    .map((node) => {
+      const nextNode = {
+        ...node,
+        position: { x: node.position.x, y: currentTop },
+      }
+      currentTop += getResolvedNodeSize(node, undefined, measuredSizes).height + minGap
+      return nextNode
+    })
+    .sort((a, b) => nodes.findIndex((node) => node.id === a.id) - nodes.findIndex((node) => node.id === b.id))
+}
+
 function resolveOverlaps(
   nodes: Node[],
   measuredSizes?: NodeSizeMap,
-  minGap = 8,
-  maxIterations = 3,
+  minGap = NODE_SAFE_GAP,
+  maxIterations = 8,
 ): Node[] {
   const nodeMap = new Map<string, Node>(nodes.map((node) => [node.id, { ...node }]))
   const childrenByParent = new Map<string, string[]>()
@@ -405,38 +482,42 @@ function resolveOverlaps(
   }
 
   for (let iteration = 0; iteration < maxIterations; iteration++) {
-    const byColumn = new Map<number, Node[]>()
-
-    for (const node of nodeMap.values()) {
-      const column = Math.round(node.position.x)
-      const columnNodes = byColumn.get(column) ?? []
-      columnNodes.push(node)
-      byColumn.set(column, columnNodes)
-    }
-
+    const positionedNodes = Array.from(nodeMap.values()).sort(
+      (a, b) => a.position.y - b.position.y || a.position.x - b.position.x,
+    )
     let anyOverlap = false
 
-    for (const columnNodes of byColumn.values()) {
-      columnNodes.sort((a, b) => a.position.y - b.position.y)
+    for (let upperIndex = 0; upperIndex < positionedNodes.length; upperIndex++) {
+      const upper = nodeMap.get(positionedNodes[upperIndex].id)
+      if (!upper) continue
+      const upperSize = getResolvedNodeSize(upper, undefined, measuredSizes)
+      const upperRight = upper.position.x + upperSize.width
+      const upperBottom = upper.position.y + upperSize.height
 
-      for (let index = 0; index < columnNodes.length - 1; index++) {
-        const upper = columnNodes[index]
-        const lower = columnNodes[index + 1]
-        const upperBottom = upper.position.y + getResolvedNodeSize(upper, undefined, measuredSizes).height
-        const requiredTop = upperBottom + minGap
+      for (let lowerIndex = upperIndex + 1; lowerIndex < positionedNodes.length; lowerIndex++) {
+        const lower = nodeMap.get(positionedNodes[lowerIndex].id)
+        if (!lower) continue
+        const lowerSize = getResolvedNodeSize(lower, undefined, measuredSizes)
+        if (lower.position.y >= upperBottom + minGap) break
 
-        if (lower.position.y >= requiredTop) continue
+        const lowerRight = lower.position.x + lowerSize.width
+        const horizontallySeparated =
+          lower.position.x >= upperRight + minGap ||
+          upper.position.x >= lowerRight + minGap
+        if (horizontallySeparated) continue
 
         anyOverlap = true
-        shiftSubtree(lower.id, requiredTop - lower.position.y)
-        columnNodes[index + 1] = nodeMap.get(lower.id)!
+        shiftSubtree(lower.id, upperBottom + minGap - lower.position.y)
       }
     }
 
     if (!anyOverlap) break
   }
 
-  return nodes.map((node) => nodeMap.get(node.id) ?? node)
+  const resolvedNodes = nodes.map((node) => nodeMap.get(node.id) ?? node)
+  return hasNodeOverlaps(resolvedNodes, measuredSizes, minGap)
+    ? stackNodesWithoutOverlap(resolvedNodes, measuredSizes, minGap)
+    : resolvedNodes
 }
 
 export function applyMindMapLayout(
@@ -466,21 +547,24 @@ export function applyMindMapLayout(
 
   const edges = graphData.edges.map((edge) => {
     const edgeColor = edgeColors.get(edge.id) ?? '#89a89e'
+    const runtimeStyle = edge.renderStyle
     return {
       id: edge.id,
       source: edge.source,
       target: edge.target,
-      type: 'smoothstep',
+      type: 'default',
       animated: false,
       interactionWidth: 28,
       sourceHandle: undefined,
       targetHandle: undefined,
-      pathOptions: { offset: 10, borderRadius: 8 },
+      pathOptions: { curvature: 0.32 },
       style: {
-        stroke: edge.style === 'dashed' ? '#a0aab3' : edgeColor,
-        strokeWidth: edge.style === 'dashed' ? 1.3 : 1.5,
+        stroke: edge.style === 'dashed' ? '#a0aab3' : runtimeStyle?.stroke ?? edgeColor,
+        strokeWidth: edge.style === 'dashed' ? 1.3 : runtimeStyle?.strokeWidth ?? 1.5,
         strokeDasharray: edge.style === 'dashed' ? '4 4' : undefined,
-        opacity: 0.94,
+        strokeLinecap: 'round',
+        strokeLinejoin: 'round',
+        opacity: 0.92,
       },
       label: edge.label,
     } as Edge

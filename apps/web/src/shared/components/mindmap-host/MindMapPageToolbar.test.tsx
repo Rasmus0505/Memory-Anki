@@ -34,6 +34,29 @@ describe('MindMapPageToolbar', () => {
     expect(screen.queryByRole('button', { name: '复习' })).toBeNull()
   })
 
+  it('keeps dedicated scene actions accessible in the modern overflow menu', async () => {
+    const onImport = vi.fn()
+    const onMiniPalace = vi.fn()
+
+    render(
+      <MindMapPageToolbar
+        taskControl={{ value: 'build', onChange: vi.fn() }}
+        importMindMapAction={{ label: '转脑图', onClick: onImport }}
+        miniPalaceAction={{ label: '专项训练', onClick: onMiniPalace }}
+      />,
+    )
+
+    fireEvent.keyDown(screen.getByRole('button', { name: '更多脑图操作' }), { key: 'Enter' })
+    fireEvent.click(await screen.findByRole('menuitem', { name: '转脑图' }))
+
+    expect(onImport).toHaveBeenCalledTimes(1)
+
+    fireEvent.keyDown(screen.getByRole('button', { name: '更多脑图操作' }), { key: 'Enter' })
+    fireEvent.click(await screen.findByRole('menuitem', { name: '专项训练' }))
+
+    expect(onMiniPalace).toHaveBeenCalledTimes(1)
+  })
+
   it('supports segment target selection, confirm, and cancel', () => {
     const onToggle = vi.fn()
     const onTargetChange = vi.fn()

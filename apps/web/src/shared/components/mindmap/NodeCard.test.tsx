@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { act, fireEvent, render, screen } from '@testing-library/react'
+import { act, createEvent, fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import NodeCard from '@/shared/components/mindmap/NodeCard'
 
@@ -7,16 +7,27 @@ const LONG_PRESS_DELAY_MS = 550
 
 vi.mock('@xyflow/react', () => ({
   Handle: () => <div data-testid="handle" />,
+  NodeToolbar: ({
+    children,
+    isVisible,
+  }: {
+    children: React.ReactNode
+    isVisible?: boolean
+  }) => (isVisible ? <div data-testid="node-toolbar">{children}</div> : null),
   Position: {
+    Bottom: 'bottom',
     Left: 'left',
     Right: 'right',
+    Top: 'top',
   },
+  useStore: () => 'top:center',
   useUpdateNodeInternals: () => vi.fn(),
 }))
 
 function renderNodeCard(
   overrides?: Record<string, unknown>,
   wrapperOnClick?: () => void,
+  wrapperOnContextMenu?: () => void,
 ) {
   const onFinishEdit = vi.fn()
   const nodeCard = (
@@ -45,13 +56,18 @@ function renderNodeCard(
     />
   )
   const view = render(
-    wrapperOnClick ? <div onClick={wrapperOnClick}>{nodeCard}</div> : nodeCard,
+    wrapperOnClick || wrapperOnContextMenu ? (
+      <div onClick={wrapperOnClick} onContextMenu={wrapperOnContextMenu}>
+        {nodeCard}
+      </div>
+    ) : nodeCard,
   )
   return { ...view, onFinishEdit }
 }
 
 function getNodeShell() {
-  const button = screen.getByRole('button')
+  const button = document.querySelector('.mindmap-node-text') as HTMLButtonElement | null
+  if (!button) throw new Error('NodeCard text button was not rendered')
   const container = button.parentElement
   const shell = container?.parentElement
 
@@ -77,6 +93,64 @@ function createRect(width: number, height: number): DOMRect {
 }
 
 describe('NodeCard', () => {
+  it('uses single click for selection and double click for editing', () => {
+    renderNodeCard({ label: '可编辑内容' })
+    const textButton = screen.getByRole('button', { name: '可编辑内容' })
+
+    fireEvent.click(textButton)
+    expect(screen.queryByRole('textbox')).toBeNull()
+
+    fireEvent.doubleClick(textButton)
+    expect(screen.getByRole('textbox')).toBeTruthy()
+  })
+
+  it('limits node dragging to a dedicated handle and keeps text non-draggable', () => {
+    renderNodeCard({ label: '可编辑内容' })
+
+    const dragHandle = screen.getByRole('button', { name: '拖动节点' })
+    expect(dragHandle.className).toContain(
+      'mindmap-node-drag-handle',
+    )
+    expect(screen.getByRole('button', { name: '可编辑内容' }).className).toContain('nodrag')
+    expect(screen.getByRole('button', { name: '可编辑内容' }).className).toContain('nopan')
+    fireEvent.doubleClick(dragHandle)
+    expect(screen.queryByRole('textbox')).toBeNull()
+  })
+
+  it('keeps the text editor isolated from node dragging while selecting text', () => {
+    renderNodeCard({ label: '需要选中的部分文字' })
+
+    fireEvent.doubleClick(screen.getByRole('button', { name: '需要选中的部分文字' }))
+    const editor = screen.getByRole('textbox')
+
+    expect(editor.className).toContain('nodrag')
+    expect(editor.className).toContain('nopan')
+    expect(editor.className).toContain('nowheel')
+  })
+
+  it('shows non-destructive structural actions in the selected-node toolbar', () => {
+    const onAddChild = vi.fn()
+    const onAddSibling = vi.fn()
+    const onStartEdit = vi.fn()
+    renderNodeCard({
+      selected: true,
+      parentId: 'root',
+      metadata: { depth: 1, layoutRole: 'branch', branchColor: '#2563eb' },
+      onAddChild,
+      onAddSibling,
+      onStartEdit,
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: '新增子节点' }))
+    fireEvent.click(screen.getByRole('button', { name: '新增同级节点' }))
+    fireEvent.click(screen.getByRole('button', { name: '编辑节点' }))
+
+    expect(onAddChild).toHaveBeenCalledWith('peg-1')
+    expect(onAddSibling).toHaveBeenCalledWith('peg-1')
+    expect(onStartEdit).toHaveBeenCalledWith('peg-1')
+    expect(screen.queryByRole('button', { name: /删除/ })).toBeNull()
+  })
+
   it('preserves line breaks in display mode', () => {
     renderNodeCard()
     const button = screen.getByRole('button', { name: /第一行/ })
@@ -162,7 +236,7 @@ describe('NodeCard', () => {
   it('commits edits on plain Enter', () => {
     const { onFinishEdit } = renderNodeCard({ label: '原始内容' })
 
-    fireEvent.click(screen.getByRole('button', { name: '原始内容' }))
+    fireEvent.doubleClick(screen.getByRole('button', { name: '原始内容' }))
     const textarea = screen.getByRole('textbox')
 
     fireEvent.change(textarea, { target: { value: '更新内容' } })
@@ -191,7 +265,7 @@ describe('NodeCard', () => {
   ])('keeps editing on %s so line breaks can be preserved', (_name, modifier) => {
     const { onFinishEdit } = renderNodeCard({ label: '原始内容' })
 
-    fireEvent.click(screen.getByRole('button', { name: '原始内容' }))
+    fireEvent.doubleClick(screen.getByRole('button', { name: '原始内容' }))
     const textarea = screen.getByRole('textbox')
 
     fireEvent.change(textarea, { target: { value: '第一行\n第二行' } })
@@ -201,10 +275,24 @@ describe('NodeCard', () => {
     expect((screen.getByRole('textbox') as HTMLTextAreaElement).value).toBe('第一行\n第二行')
   })
 
+  it('keeps Tab inside the textarea while editing instead of creating structure', () => {
+    const onEditTextChange = vi.fn()
+    const { onFinishEdit } = renderNodeCard({ label: '原始内容', onEditTextChange })
+
+    fireEvent.doubleClick(screen.getByRole('button', { name: '原始内容' }))
+    const textarea = screen.getByRole('textbox') as HTMLTextAreaElement
+    textarea.setSelectionRange(2, 2)
+    fireEvent.keyDown(textarea, { key: 'Tab' })
+
+    expect(textarea.value).toBe('原始\t内容')
+    expect(onEditTextChange).toHaveBeenLastCalledWith('peg-1', '原始\t内容')
+    expect(onFinishEdit).not.toHaveBeenCalled()
+  })
+
   it('cancels edits on Escape', () => {
     const { onFinishEdit } = renderNodeCard({ label: '原始内容' })
 
-    fireEvent.click(screen.getByRole('button', { name: '原始内容' }))
+    fireEvent.doubleClick(screen.getByRole('button', { name: '原始内容' }))
     const textarea = screen.getByRole('textbox')
 
     fireEvent.change(textarea, { target: { value: '不会保存' } })
@@ -387,6 +475,90 @@ describe('NodeCard', () => {
 
     expect(onTouchLongPress).toHaveBeenCalledTimes(1)
     expect(wrapperOnClick).not.toHaveBeenCalled()
+    vi.useRealTimers()
+  })
+
+  it('lets a desktop context menu from the text button bubble to the node wrapper', () => {
+    const wrapperOnContextMenu = vi.fn()
+    renderNodeCard(
+      {
+        readonly: true,
+        onTouchLongPress: vi.fn(),
+      },
+      undefined,
+      wrapperOnContextMenu,
+    )
+
+    fireEvent.contextMenu(screen.getByRole('button', { name: /第一行/ }))
+
+    expect(wrapperOnContextMenu).toHaveBeenCalledTimes(1)
+  })
+
+  it('suppresses only the synthetic context menu emitted after touch long press', async () => {
+    vi.useFakeTimers()
+    const onTouchLongPress = vi.fn()
+    const wrapperOnContextMenu = vi.fn()
+    renderNodeCard(
+      {
+        readonly: true,
+        onTouchLongPress,
+      },
+      undefined,
+      wrapperOnContextMenu,
+    )
+
+    const button = screen.getByRole('button', { name: /第一行/ })
+    fireEvent.pointerDown(button, {
+      pointerId: 1,
+      pointerType: 'touch',
+      clientX: 48,
+      clientY: 72,
+    })
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(LONG_PRESS_DELAY_MS)
+    })
+    const syntheticTouchContextMenu = createEvent.contextMenu(button)
+    Object.defineProperty(syntheticTouchContextMenu, 'sourceCapabilities', {
+      value: { firesTouchEvents: true },
+    })
+    fireEvent(button, syntheticTouchContextMenu)
+
+    expect(onTouchLongPress).toHaveBeenCalledTimes(1)
+    expect(wrapperOnContextMenu).not.toHaveBeenCalled()
+
+    const mouseContextMenu = createEvent.contextMenu(button)
+    Object.defineProperty(mouseContextMenu, 'pointerType', { value: 'mouse' })
+    fireEvent(button, mouseContextMenu)
+
+    expect(wrapperOnContextMenu).toHaveBeenCalledTimes(1)
+    vi.useRealTimers()
+  })
+
+  it('stops suppressing context menus after the touch synthesis window expires', async () => {
+    vi.useFakeTimers()
+    const wrapperOnContextMenu = vi.fn()
+    renderNodeCard(
+      {
+        readonly: true,
+        onTouchLongPress: vi.fn(),
+      },
+      undefined,
+      wrapperOnContextMenu,
+    )
+
+    const button = screen.getByRole('button', { name: /第一行/ })
+    fireEvent.pointerDown(button, {
+      pointerId: 1,
+      pointerType: 'touch',
+      clientX: 48,
+      clientY: 72,
+    })
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(LONG_PRESS_DELAY_MS + 1_001)
+    })
+    fireEvent.contextMenu(button)
+
+    expect(wrapperOnContextMenu).toHaveBeenCalledTimes(1)
     vi.useRealTimers()
   })
 })

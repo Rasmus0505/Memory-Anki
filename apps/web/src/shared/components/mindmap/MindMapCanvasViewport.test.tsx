@@ -11,15 +11,21 @@ vi.mock('@xyflow/react', () => ({
   },
   Controls: () => <div data-testid="controls" />,
   MiniMap: () => <div data-testid="minimap" />,
-  ReactFlow: ({ children, nodesDraggable, panOnScroll, zoomOnDoubleClick }: {
+  ReactFlow: ({ children, nodesDraggable, nodesFocusable, edgesFocusable, deleteKeyCode, panOnScroll, zoomOnDoubleClick }: {
     children: React.ReactNode
     nodesDraggable: boolean
+    nodesFocusable: boolean
+    edgesFocusable: boolean
+    deleteKeyCode: unknown
     panOnScroll: boolean
     zoomOnDoubleClick: boolean
   }) => (
     <div
       data-testid="react-flow"
       data-nodes-draggable={String(nodesDraggable)}
+      data-nodes-focusable={String(nodesFocusable)}
+      data-edges-focusable={String(edgesFocusable)}
+      data-delete-key-code={String(deleteKeyCode)}
       data-pan-on-scroll={String(panOnScroll)}
       data-zoom-on-double-click={String(zoomOnDoubleClick)}
     >
@@ -50,6 +56,7 @@ function renderViewport(overrides?: Partial<React.ComponentProps<typeof MindMapC
     onNodesChange: vi.fn(),
     onEdgesChange: vi.fn(),
     onNodeClick: vi.fn(),
+    onNodeDoubleClick: vi.fn(),
     onNodeContextMenu: vi.fn(),
     onNodeDragStart: vi.fn(),
     onNodeDrag: vi.fn(),
@@ -71,6 +78,9 @@ describe('MindMapCanvasViewport', () => {
     expect(screen.getByTestId('minimap')).toBeTruthy()
     expect(screen.getByTestId('background')).toBeTruthy()
     expect(screen.getByTestId('react-flow').dataset.nodesDraggable).toBe('true')
+    expect(screen.getByTestId('react-flow').dataset.nodesFocusable).toBe('false')
+    expect(screen.getByTestId('react-flow').dataset.edgesFocusable).toBe('false')
+    expect(screen.getByTestId('react-flow').dataset.deleteKeyCode).toBe('null')
   })
 
   it('hides decorative layers while dragging', () => {

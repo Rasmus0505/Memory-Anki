@@ -16,7 +16,7 @@ import type {
 } from '@/shared/components/mindmap'
 import { normalizeEditorDoc } from '@/shared/components/mindmap-host/hostBridgeUtils'
 
-export const HOST_FRAME_RUNTIME_VERSION = '2026-06-10-card-width-drag-fix'
+export const HOST_FRAME_RUNTIME_VERSION = '2026-07-10-editor-interactions-v2'
 const MIND_MAP_FRAME_BASE_CLASS = 'memory-anki-mindmap-frame'
 
 export function buildMindMapFrameClassName(className?: string) {

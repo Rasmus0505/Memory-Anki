@@ -43,7 +43,12 @@ describe('mindMapCanvasDisplay', () => {
       sourceId: null,
       isDraggingNode: false,
       selectedNodeId: 'a',
+      editingNodeId: null,
+      editingDraft: null,
+      onStartEdit: vi.fn(),
+      onCancelEdit: vi.fn(),
       onAddChild,
+      onAddSibling: vi.fn(),
       onDelete,
       onFinishEdit,
       onMeasure,
@@ -58,7 +63,12 @@ describe('mindMapCanvasDisplay', () => {
       sourceId: null,
       isDraggingNode: false,
       selectedNodeId: 'b',
+      editingNodeId: null,
+      editingDraft: null,
+      onStartEdit: vi.fn(),
+      onCancelEdit: vi.fn(),
       onAddChild,
+      onAddSibling: vi.fn(),
       onDelete,
       onFinishEdit,
       onMeasure,
@@ -78,7 +88,12 @@ describe('mindMapCanvasDisplay', () => {
       sourceId: null,
       isDraggingNode: false,
       selectedNodeId: 'b',
+      editingNodeId: null,
+      editingDraft: null,
+      onStartEdit: second[0].data.onStartEdit as (nodeId: string) => void,
+      onCancelEdit: second[0].data.onCancelEdit as (nodeId: string) => void,
       onAddChild,
+      onAddSibling: second[0].data.onAddSibling as (nodeId: string) => void,
       onDelete,
       onFinishEdit,
       onMeasure,
@@ -98,7 +113,12 @@ describe('mindMapCanvasDisplay', () => {
       sourceId: 'source',
       isDraggingNode: true,
       selectedNodeId: 'source',
+      editingNodeId: null,
+      editingDraft: null,
+      onStartEdit: vi.fn(),
+      onCancelEdit: vi.fn(),
       onAddChild: vi.fn(),
+      onAddSibling: vi.fn(),
       onDelete: vi.fn(),
       onFinishEdit: vi.fn(),
       onMeasure: vi.fn(),
@@ -121,5 +141,15 @@ describe('mindMapCanvasDisplay', () => {
     expect(second[1]).not.toBe(first[1])
     expect(second[1].className).toContain('memory-anki-reactflow-edge-selected')
     expect(second[1].style?.stroke).toBe('#4f6d67')
+    expect(second[1].style?.strokeWidth).toBe(3)
+  })
+
+  it('keeps thick semantic edges thick when selected', () => {
+    const edge = makeEdge('a->b')
+    edge.style = { ...edge.style, strokeWidth: 6 }
+
+    const [selected] = buildDisplayEdges([edge], edge.id)
+
+    expect(selected.style?.strokeWidth).toBe(7)
   })
 })

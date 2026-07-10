@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { applyMindMapLayout, buildPreviewGraph, getNodeSize } from './layout'
+import { applyMindMapLayout, buildPreviewGraph, getNodeSize, NODE_SAFE_GAP } from './layout'
 import type { GraphData } from './adapter'
 
 describe('mind map layout sizing', () => {
@@ -10,7 +10,9 @@ describe('mind map layout sizing', () => {
       '路德提出应由国家普及义务教育，实施强迫义务教育。加尔文要求国家开办公立学校，实行免费教育；使所有儿童都有机会受到教育。',
     )
 
-    expect(longSize.width).toBe(shortSize.width)
+    expect(longSize.width).toBeGreaterThan(shortSize.width)
+    expect(shortSize.width).toBe(180)
+    expect(longSize.width).toBeLessThanOrEqual(300)
     expect(longSize.height).toBeGreaterThan(shortSize.height)
   })
 
@@ -19,6 +21,29 @@ describe('mind map layout sizing', () => {
     const multiLine = getNodeSize('leaf', '第一行\n第二行\n第三行')
 
     expect(multiLine.height).toBeGreaterThan(singleLine.height)
+  })
+
+  it('restricts node dragging to the dedicated drag handle', () => {
+    const graphData: GraphData = {
+      nodes: [
+        {
+          id: 'root',
+          type: 'peg',
+          label: '可编辑节点',
+          originalId: 1,
+          parentId: null,
+          metadata: {},
+        },
+      ],
+      edges: [],
+    }
+
+    const { nodes } = applyMindMapLayout(graphData)
+
+    expect(nodes[0]).toMatchObject({
+      draggable: true,
+      dragHandle: '.mindmap-node-drag-handle',
+    })
   })
 
   it('keeps sibling nodes vertically separated when labels wrap', () => {
@@ -64,7 +89,7 @@ describe('mind map layout sizing', () => {
     const topSize = getNodeSize(topNode)
 
     expect(siblings).toHaveLength(2)
-    expect(bottomNode.position.y).toBeGreaterThanOrEqual(topNode.position.y + topSize.height + 8)
+    expect(bottomNode.position.y).toBeGreaterThanOrEqual(topNode.position.y + topSize.height + NODE_SAFE_GAP)
   })
 
   it('keeps multiple long-text children separated by the minimum visual gap', () => {
@@ -107,7 +132,7 @@ describe('mind map layout sizing', () => {
       const upper = children[index]
       const lower = children[index + 1]
       expect(lower.position.y).toBeGreaterThanOrEqual(
-        upper.position.y + getNodeSize(upper).height + 8,
+        upper.position.y + getNodeSize(upper).height + NODE_SAFE_GAP,
       )
     }
   })
@@ -156,7 +181,7 @@ describe('mind map layout sizing', () => {
 
     expect(upper).toBeTruthy()
     expect(lower).toBeTruthy()
-    expect(lower!.position.y).toBeGreaterThanOrEqual(upper!.position.y + 128 + 8)
+    expect(lower!.position.y).toBeGreaterThanOrEqual(upper!.position.y + 128 + NODE_SAFE_GAP)
   })
 
   it('uses measured descendant heights when spacing sibling subtrees', () => {
@@ -222,7 +247,57 @@ describe('mind map layout sizing', () => {
 
     expect(lowerBranch).toBeTruthy()
     expect(lowerDescendant).toBeTruthy()
-    expect(lowerBranch!.position.y).toBeGreaterThanOrEqual(lowerDescendant!.position.y + 104 + 8)
+    expect(lowerBranch!.position.y).toBeGreaterThanOrEqual(lowerDescendant!.position.y + 104 + NODE_SAFE_GAP)
+  })
+
+  it('keeps every measured card rectangle separated in a dense multi-level tree', () => {
+    const graphData: GraphData = {
+      nodes: [
+        { id: 'root', type: 'peg', label: '教育思想', originalId: 1, parentId: null, metadata: {} },
+        { id: 'branch-a', type: 'peg', label: '管理', originalId: 2, parentId: 'root', metadata: {} },
+        { id: 'branch-b', type: 'peg', label: '不同点与共同点', originalId: 3, parentId: 'root', metadata: {} },
+        { id: 'leaf-a1', type: 'peg', label: '完整的组织管理制度，以学校整体设计为标准和尺度。', originalId: 4, parentId: 'branch-a', metadata: {} },
+        { id: 'leaf-a2', type: 'peg', label: '新教教育反对人文主义教育中的异教因素', originalId: 5, parentId: 'branch-a', metadata: {} },
+        { id: 'leaf-b1', type: 'peg', label: '在教育的基础上', originalId: 6, parentId: 'branch-b', metadata: {} },
+        { id: 'leaf-b2', type: 'peg', label: '在对宗教改革的态度上', originalId: 7, parentId: 'branch-b', metadata: {} },
+      ],
+      edges: [
+        { id: 'root->branch-a', source: 'root', target: 'branch-a', type: 'parent-child' },
+        { id: 'root->branch-b', source: 'root', target: 'branch-b', type: 'parent-child' },
+        { id: 'branch-a->leaf-a1', source: 'branch-a', target: 'leaf-a1', type: 'parent-child' },
+        { id: 'branch-a->leaf-a2', source: 'branch-a', target: 'leaf-a2', type: 'parent-child' },
+        { id: 'branch-b->leaf-b1', source: 'branch-b', target: 'leaf-b1', type: 'parent-child' },
+        { id: 'branch-b->leaf-b2', source: 'branch-b', target: 'leaf-b2', type: 'parent-child' },
+      ],
+    }
+    const measuredSizes = new Map([
+      ['root', { width: 200, height: 42 }],
+      ['branch-a', { width: 180, height: 38 }],
+      ['branch-b', { width: 210, height: 58 }],
+      ['leaf-a1', { width: 280, height: 92 }],
+      ['leaf-a2', { width: 260, height: 78 }],
+      ['leaf-b1', { width: 180, height: 42 }],
+      ['leaf-b2', { width: 220, height: 64 }],
+    ])
+
+    const { nodes } = applyMindMapLayout(graphData, measuredSizes)
+
+    for (let firstIndex = 0; firstIndex < nodes.length; firstIndex += 1) {
+      const first = nodes[firstIndex]
+      const firstSize = measuredSizes.get(first.id) ?? getNodeSize(first)
+      for (let secondIndex = firstIndex + 1; secondIndex < nodes.length; secondIndex += 1) {
+        const second = nodes[secondIndex]
+        const secondSize = measuredSizes.get(second.id) ?? getNodeSize(second)
+        const horizontallySeparated =
+          first.position.x + firstSize.width + NODE_SAFE_GAP <= second.position.x ||
+          second.position.x + secondSize.width + NODE_SAFE_GAP <= first.position.x
+        const verticallySeparated =
+          first.position.y + firstSize.height + NODE_SAFE_GAP <= second.position.y ||
+          second.position.y + secondSize.height + NODE_SAFE_GAP <= first.position.y
+
+        expect(horizontallySeparated || verticallySeparated).toBe(true)
+      }
+    }
   })
 
   it('builds preview graph for inside drops without mutating source graph data', () => {
@@ -268,6 +343,37 @@ describe('mind map layout sizing', () => {
     expect(preview.nodes.map((node) => [node.id, node.position])).toEqual(
       original.nodes.map((node) => [node.id, node.position]),
     )
+  })
+
+  it('prefers runtime review edge styles over decorative branch colors', () => {
+    const graphData: GraphData = {
+      nodes: [
+        { id: 'root', type: 'peg', label: 'root', originalId: 1, parentId: null, metadata: {} },
+        { id: 'child', type: 'peg', label: 'child', originalId: 2, parentId: 'root', metadata: {} },
+      ],
+      edges: [
+        {
+          id: 'root->child',
+          source: 'root',
+          target: 'child',
+          type: 'parent-child',
+          renderStyle: { stroke: '#059669', strokeWidth: 6 },
+        },
+      ],
+    }
+
+    const layout = applyMindMapLayout(graphData)
+
+    expect(layout.edges[0]).toMatchObject({
+      type: 'default',
+      pathOptions: { curvature: 0.32 },
+      style: {
+        stroke: '#059669',
+        strokeWidth: 6,
+        strokeLinecap: 'round',
+        strokeLinejoin: 'round',
+      },
+    })
   })
 
   it('lays out large graphs within a small synchronous budget', () => {

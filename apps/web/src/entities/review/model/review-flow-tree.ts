@@ -335,33 +335,61 @@ const ROOT_NODE_STYLE = {
   fontWeight: 'bold',
 }
 
-const DEFAULT_LINE_STYLE = {
-  lineColor: '#d4d4d8',
+const EXPANDING_LINE_STYLE = {
+  lineColor: '#d97706',
   lineWidth: 2,
 }
 
-const COMPLETED_LINE_STYLE = {
-  lineColor: '#10b981',
-  lineWidth: 3,
+const DIRECT_LEVEL_VISIBLE_LINE_STYLE = {
+  lineColor: '#2563eb',
+  lineWidth: 4,
 }
 
-function parentChildrenAllVisible(
-  parentId: string | null,
-  nodeMap: Map<string, ReviewMindMapNode>,
+const SUBTREE_REVEALED_LINE_STYLE = {
+  lineColor: '#059669',
+  lineWidth: 6,
+}
+
+function cardSlotHasAppeared(state: RevealState | undefined) {
+  return state === 'placeholder' || state === 'revealed'
+}
+
+function buildLineStylesByParentId(
+  root: ReviewMindMapNode,
   revealMap: Record<string, RevealState>,
 ) {
-  if (!parentId) return false
-  const parent = nodeMap.get(parentId)
-  if (!parent || parent.children.length === 0) return false
-  return parent.children.every(
-    (child) => (revealMap[child.id] ?? 'hidden') !== 'hidden',
-  )
+  const styles = new Map<string, Record<string, string | number>>()
+
+  const walk = (node: ReviewMindMapNode): boolean => {
+    const childrenAndDescendantsRevealed = node.children.map(walk)
+    if (node.children.length > 0) {
+      const directLevelVisible = node.children.every(
+        (child) => cardSlotHasAppeared(revealMap[child.id]),
+      )
+      const subtreeRevealed = childrenAndDescendantsRevealed.every(Boolean)
+      styles.set(
+        node.id,
+        subtreeRevealed
+          ? SUBTREE_REVEALED_LINE_STYLE
+          : directLevelVisible
+            ? DIRECT_LEVEL_VISIBLE_LINE_STYLE
+            : EXPANDING_LINE_STYLE,
+      )
+    }
+    return (
+      (revealMap[node.id] ?? 'hidden') === 'revealed' &&
+      childrenAndDescendantsRevealed.every(Boolean)
+    )
+  }
+
+  walk(root)
+  return styles
 }
 
 function getNodeVisualStyle(
   state: RevealState,
   isRoot: boolean,
-  edgeCompleted: boolean,
+  lineStyle: Record<string, string | number>,
   redMarked: boolean,
 ): Record<string, string | number> {
   const nodeStyle = isRoot
@@ -371,7 +399,6 @@ function getNodeVisualStyle(
       : state === 'placeholder'
         ? PLACEHOLDER_NODE_STYLE
         : REVEALED_NODE_STYLE
-  const lineStyle = edgeCompleted ? COMPLETED_LINE_STYLE : DEFAULT_LINE_STYLE
   return {
     ...nodeStyle,
     ...lineStyle,
@@ -419,6 +446,11 @@ export function buildVisibleEditorDoc(
     }
   }
 
+  const reviewRoot = nodeMap.get(getNodeId(source.root, 'root'))
+  const lineStylesByParentId = reviewRoot
+    ? buildLineStylesByParentId(reviewRoot, revealMap)
+    : new Map<string, Record<string, string | number>>()
+
   const walk = (
     node: MindMapDocNode | undefined,
     fallbackId: string,
@@ -452,11 +484,7 @@ export function buildVisibleEditorDoc(
       getNodeVisualStyle(
         forceVisible ? 'revealed' : revealState,
         fallbackId === 'root',
-        parentChildrenAllVisible(
-          nodeMap.get(id)?.parentId ?? null,
-          nodeMap,
-          revealMap,
-        ),
+        lineStylesByParentId.get(nodeMap.get(id)?.parentId ?? '') ?? EXPANDING_LINE_STYLE,
         redNodeIds.has(id) && fallbackId !== 'root',
       ),
     )

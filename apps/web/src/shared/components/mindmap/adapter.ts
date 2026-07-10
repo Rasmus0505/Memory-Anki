@@ -16,6 +16,10 @@ export interface MindMapEdge {
   type: 'parent-child' | 'custom'
   label?: string
   style?: 'solid' | 'dashed' | 'dotted'
+  renderStyle?: {
+    stroke: string
+    strokeWidth: number
+  }
 }
 
 export interface GraphData {

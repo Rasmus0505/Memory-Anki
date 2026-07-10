@@ -32,6 +32,11 @@ interface NodeLocation {
   index: number
 }
 
+export interface EditorDocCreateResult {
+  editorDoc: MindMapDoc
+  nodeUid: string | null
+}
+
 const DEFAULT_THEME = { template: 'default' as const, config: {} as const }
 
 export function parseEditorDoc(value: MindMapEditorState['editor_doc']): MindMapDoc {
@@ -114,11 +119,13 @@ export function editorDocToGraph(
       },
     })
     if (parentId) {
+      const renderStyle = options.revealMap ? getRuntimeEdgeRenderStyle(node.data) : undefined
       edges.push({
         id: `${parentId}->${uid}`,
         source: parentId,
         target: uid,
         type: 'parent-child',
+        renderStyle,
       })
     }
     const children = Array.isArray(node.children) ? node.children : []
@@ -127,6 +134,13 @@ export function editorDocToGraph(
 
   walk(doc.root, null, 0, [])
   return { nodes, edges }
+}
+
+function getRuntimeEdgeRenderStyle(data: MindMapDocNode['data']) {
+  const stroke = typeof data?.lineColor === 'string' ? data.lineColor.trim() : ''
+  const strokeWidth = typeof data?.lineWidth === 'number' ? data.lineWidth : Number.NaN
+  if (!stroke || !Number.isFinite(strokeWidth) || strokeWidth <= 0) return undefined
+  return { stroke, strokeWidth }
 }
 
 export function buildSelectionFromDoc(
@@ -165,24 +179,46 @@ export function addEditorDocChild(
   editorDoc: MindMapEditorState['editor_doc'],
   parentUid: string,
 ) {
-  return updateDoc(editorDoc, (doc) => {
+  return addEditorDocChildWithResult(editorDoc, parentUid).editorDoc
+}
+
+export function addEditorDocChildWithResult(
+  editorDoc: MindMapEditorState['editor_doc'],
+  parentUid: string,
+): EditorDocCreateResult {
+  let nodeUid: string | null = null
+  const nextDoc = updateDoc(editorDoc, (doc) => {
     const found = findNode(doc.root, parentUid)
     if (!found) return
-    found.node.children = [...(found.node.children ?? []), makeNode('新知识点')]
+    const created = makeNode('新知识点')
+    nodeUid = getNodeUid(created, '')
+    found.node.children = [...(found.node.children ?? []), created]
   })
+  return { editorDoc: nextDoc, nodeUid }
 }
 
 export function addEditorDocSibling(
   editorDoc: MindMapEditorState['editor_doc'],
   nodeUid: string,
 ) {
-  return updateDoc(editorDoc, (doc) => {
+  return addEditorDocSiblingWithResult(editorDoc, nodeUid).editorDoc
+}
+
+export function addEditorDocSiblingWithResult(
+  editorDoc: MindMapEditorState['editor_doc'],
+  nodeUid: string,
+): EditorDocCreateResult {
+  let createdNodeUid: string | null = null
+  const nextDoc = updateDoc(editorDoc, (doc) => {
     const found = findNode(doc.root, nodeUid)
     if (!found?.parent) return
     const siblings = found.parent.children ?? []
-    siblings.splice(found.index + 1, 0, makeNode('新知识点'))
+    const created = makeNode('新知识点')
+    createdNodeUid = getNodeUid(created, '')
+    siblings.splice(found.index + 1, 0, created)
     found.parent.children = siblings
   })
+  return { editorDoc: nextDoc, nodeUid: createdNodeUid }
 }
 
 export function deleteEditorDocNode(
@@ -194,6 +230,31 @@ export function deleteEditorDocNode(
     if (!found?.parent) return
     found.parent.children = (found.parent.children ?? []).filter((_, index) => index !== found.index)
   })
+}
+
+export function deleteEditorDocNodeOnly(
+  editorDoc: MindMapEditorState['editor_doc'],
+  nodeUid: string,
+) {
+  return updateDoc(editorDoc, (doc) => {
+    const found = findNode(doc.root, nodeUid)
+    if (!found?.parent) return
+    const siblings = found.parent.children ?? []
+    siblings.splice(found.index, 1, ...(found.node.children ?? []))
+    found.parent.children = siblings
+  })
+}
+
+export function countEditorDocSubtree(
+  editorDoc: MindMapEditorState['editor_doc'],
+  nodeUid: string,
+) {
+  const doc = normalizeEditorDocTree(editorDoc)
+  const found = findNode(doc.root, nodeUid)
+  if (!found) return 0
+  const count = (node: MindMapDocNode): number =>
+    1 + (node.children ?? []).reduce((total, child) => total + count(child), 0)
+  return count(found.node)
 }
 
 export function reparentEditorDocNode(

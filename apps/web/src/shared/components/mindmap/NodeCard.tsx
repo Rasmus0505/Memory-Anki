@@ -9,9 +9,17 @@ import {
   type KeyboardEvent,
   type MouseEvent,
   type PointerEvent,
+  type ReactNode,
 } from 'react'
-import { Handle, Position, type NodeProps, useUpdateNodeInternals } from '@xyflow/react'
-import { Pencil, Plus, Trash2 } from 'lucide-react'
+import {
+  Handle,
+  NodeToolbar,
+  Position,
+  type NodeProps,
+  useStore,
+  useUpdateNodeInternals,
+} from '@xyflow/react'
+import { CornerDownRight, GripVertical, Pencil, Plus } from 'lucide-react'
 import { dispatchGlobalFeedback } from '@/shared/feedback/globalFeedbackModel'
 import type { MindMapNode } from './adapter'
 import { getNodeSize, type LayoutRole, type NodeSize } from './layout'
@@ -25,6 +33,7 @@ type NodeCardData = MindMapNode & {
   previewAdopt?: boolean
   previewGhost?: boolean
   editing?: boolean
+  editText?: string | null
   readonly?: boolean
   muted?: boolean
   revealState?: 'hidden' | 'placeholder' | 'revealed'
@@ -36,8 +45,11 @@ type NodeCardData = MindMapNode & {
   masteryStatus?: string | null
   manualMasteryLabel?: string | null
   onStartEdit?: (nodeId: string) => void
+  onCancelEdit?: (nodeId: string) => void
+  onEditTextChange?: (nodeId: string, text: string) => void
   onFinishEdit?: (nodeId: string, text: string) => void
   onAddChild?: (nodeId: string) => void
+  onAddSibling?: (nodeId: string) => void
   onDelete?: (nodeId: string) => void
   onMeasure?: (nodeId: string, size: NodeSize) => void
   onReadonlyDoubleClick?: (nodeId: string) => void
@@ -46,7 +58,48 @@ type NodeCardData = MindMapNode & {
 
 const MEASURE_DELTA_PX = 1
 const LONG_PRESS_DELAY_MS = 550
-const LONG_PRESS_MOVE_TOLERANCE_PX = 10
+const LONG_PRESS_MOVE_TOLERANCE_PX = 18
+const SYNTHETIC_CONTEXT_MENU_WINDOW_MS = 1_000
+
+function AdaptiveNodeToolbar({ nodeId, children }: { nodeId: string; children: ReactNode }) {
+  const placement = useStore(
+    useCallback((state) => {
+      const internalNode = state.nodeLookup.get(nodeId)
+      if (!internalNode) return 'top:center'
+      const [translateX, translateY, zoom] = state.transform
+      const absolute = internalNode.internals.positionAbsolute
+      const measuredWidth = internalNode.measured.width ?? 220
+      const screenTop = absolute.y * zoom + translateY
+      const screenCenterX = (absolute.x + measuredWidth / 2) * zoom + translateX
+      const position = screenTop < 76 ? 'bottom' : 'top'
+      const align =
+        screenCenterX < 170
+          ? 'start'
+          : screenCenterX > state.width - 170
+            ? 'end'
+            : 'center'
+      return `${position}:${align}`
+    }, [nodeId]),
+  )
+  const [position, align] = placement.split(':') as [
+    'top' | 'bottom',
+    'start' | 'center' | 'end',
+  ]
+
+  return (
+    <NodeToolbar
+      isVisible
+      position={position === 'bottom' ? Position.Bottom : Position.Top}
+      align={align}
+      offset={12}
+      className="nodrag nopan flex items-center gap-1 rounded-xl border border-border bg-background p-1 shadow-xl"
+      style={{ zIndex: 1000 }}
+      aria-label="卡片快捷操作"
+    >
+      {children}
+    </NodeToolbar>
+  )
+}
 
 function getMouseFeedbackPoint(event?: MouseEvent) {
   return event
@@ -84,7 +137,11 @@ function MindMapNodeCard({ data, id }: NodeProps) {
   const longPressTimerRef = useRef<number | null>(null)
   const longPressStartRef = useRef<{ pointerId: number; x: number; y: number } | null>(null)
   const longPressTriggeredRef = useRef(false)
-  const isEditing = localEdit || nodeData.editing
+  const suppressSyntheticContextMenuUntilRef = useRef(0)
+  const [longPressPending, setLongPressPending] = useState(false)
+  const editingIsControlled = typeof nodeData.editing === 'boolean'
+  const isEditing = editingIsControlled ? Boolean(nodeData.editing) : localEdit
+  const editValue = typeof nodeData.editText === 'string' ? nodeData.editText : editText
   const readonly = Boolean(nodeData.readonly)
   const onMeasure = nodeData.onMeasure
 
@@ -172,15 +229,17 @@ function MindMapNodeCard({ data, id }: NodeProps) {
         point: getMouseFeedbackPoint(event),
         origin: 'node',
       })
-      setLocalEdit(true)
+      if (!editingIsControlled) setLocalEdit(true)
       setEditText(nodeData.label)
       nodeData.onStartEdit?.(id)
     },
-    [id, nodeData, readonly],
+    [editingIsControlled, id, nodeData, readonly],
   )
 
   const handleDoubleClick = useCallback(
     (event: MouseEvent) => {
+      const target = event.target instanceof HTMLElement ? event.target : null
+      if (target?.closest('.mindmap-node-drag-handle')) return
       event.stopPropagation()
       if (readonly) {
         nodeData.onReadonlyDoubleClick?.(id)
@@ -192,21 +251,49 @@ function MindMapNodeCard({ data, id }: NodeProps) {
   )
 
   const commitEdit = useCallback(() => {
-    if (editText.trim()) {
+    if (editValue.trim()) {
       dispatchGlobalFeedback('text_commit', {
         point: getElementFeedbackPoint(inputRef.current),
         origin: 'keyboard',
       })
-      nodeData.onFinishEdit?.(id, editText.trim())
+      nodeData.onFinishEdit?.(id, editValue.trim())
+    } else {
+      nodeData.onCancelEdit?.(id)
     }
     setLocalEdit(false)
-  }, [editText, id, nodeData])
+  }, [editValue, id, nodeData])
+
+  const updateEditValue = useCallback(
+    (nextValue: string) => {
+      setEditText(nextValue)
+      nodeData.onEditTextChange?.(id, nextValue)
+    },
+    [id, nodeData],
+  )
 
   const handleKeyDown = useCallback(
     (event: KeyboardEvent<HTMLTextAreaElement>) => {
       if (event.key === 'Escape') {
         setLocalEdit(false)
         setEditText(nodeData.label)
+        nodeData.onCancelEdit?.(id)
+        return
+      }
+      if (
+        event.key === 'Tab' &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !event.altKey
+      ) {
+        event.preventDefault()
+        const start = event.currentTarget.selectionStart
+        const end = event.currentTarget.selectionEnd
+        const nextValue = `${editValue.slice(0, start)}\t${editValue.slice(end)}`
+        updateEditValue(nextValue)
+        requestAnimationFrame(() => {
+          inputRef.current?.setSelectionRange(start + 1, start + 1)
+        })
+        return
       }
       if (
         event.key === 'Enter' &&
@@ -220,14 +307,14 @@ function MindMapNodeCard({ data, id }: NodeProps) {
         event.currentTarget.blur()
       }
     },
-    [nodeData.label],
+    [editValue, id, nodeData, updateEditValue],
   )
 
   const handleInput = useCallback((event: ChangeEvent<HTMLTextAreaElement>) => {
-    setEditText(event.target.value)
+    updateEditValue(event.target.value)
     event.target.style.height = 'auto'
     event.target.style.height = `${event.target.scrollHeight}px`
-  }, [])
+  }, [updateEditValue])
 
   const dropHighlightCls = nodeData.dropHighlight
     ? dropMode === 'inside'
@@ -267,6 +354,7 @@ function MindMapNodeCard({ data, id }: NodeProps) {
       longPressTimerRef.current = null
     }
     longPressStartRef.current = null
+    setLongPressPending(false)
   }, [])
 
   const abortLongPress = useCallback(() => {
@@ -283,23 +371,23 @@ function MindMapNodeCard({ data, id }: NodeProps) {
   const triggerLongPress = useCallback(
     (point: { x: number; y: number }) => {
       longPressTriggeredRef.current = true
+      suppressSyntheticContextMenuUntilRef.current = Date.now() + SYNTHETIC_CONTEXT_MENU_WINDOW_MS
+      setLongPressPending(false)
+      navigator.vibrate?.(35)
       nodeData.onTouchLongPress?.(id, point)
     },
     [id, nodeData],
   )
 
   const handlePointerDown = useCallback(
-    (event: PointerEvent<HTMLButtonElement>) => {
-      if (!nodeData.onTouchLongPress || !readonly) return
+    (event: PointerEvent<HTMLDivElement>) => {
       const pointerType = event.pointerType || 'touch'
-      if (pointerType === 'mouse') return
+      if (!nodeData.onTouchLongPress || !readonly || pointerType === 'mouse' || event.isPrimary === false) return
       clearLongPress()
       longPressTriggeredRef.current = false
-      longPressStartRef.current = {
-        pointerId: event.pointerId,
-        x: event.clientX,
-        y: event.clientY,
-      }
+      longPressStartRef.current = { pointerId: event.pointerId, x: event.clientX, y: event.clientY }
+      event.currentTarget.setPointerCapture?.(event.pointerId)
+      setLongPressPending(true)
       longPressTimerRef.current = window.setTimeout(() => {
         longPressTimerRef.current = null
         triggerLongPress({
@@ -311,49 +399,111 @@ function MindMapNodeCard({ data, id }: NodeProps) {
     [clearLongPress, nodeData, readonly, triggerLongPress],
   )
 
-  const finishPointerInteraction = useCallback(() => {
+  const finishPointerInteraction = useCallback((event: PointerEvent<HTMLDivElement>) => {
+    if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId)
+    }
     clearLongPress()
   }, [clearLongPress])
 
-  const handlePointerMove = useCallback((event: PointerEvent<HTMLButtonElement>) => {
+  const handlePointerMove = useCallback((event: PointerEvent<HTMLDivElement>) => {
     if (longPressTriggeredRef.current) return
     const start = longPressStartRef.current
     if (!start || event.pointerId !== start.pointerId) return
-    const movedTooFar =
-      Math.abs(event.clientX - start.x) > LONG_PRESS_MOVE_TOLERANCE_PX ||
-      Math.abs(event.clientY - start.y) > LONG_PRESS_MOVE_TOLERANCE_PX
-    if (movedTooFar) {
-      abortLongPress()
-    }
+    const movedTooFar = Math.hypot(event.clientX - start.x, event.clientY - start.y) > LONG_PRESS_MOVE_TOLERANCE_PX
+    if (movedTooFar) abortLongPress()
   }, [abortLongPress])
 
-  const handleClick = useCallback(
-    (event: MouseEvent<HTMLButtonElement>) => {
-      if (longPressTriggeredRef.current) {
-        event.preventDefault()
-        event.stopPropagation()
-        longPressTriggeredRef.current = false
-        return
-      }
-      if (readonly) return
-      startEdit(event)
-    },
-    [readonly, startEdit],
-  )
+  const handleClick = useCallback((event: MouseEvent<HTMLButtonElement>) => {
+    if (!longPressTriggeredRef.current) return
+    event.preventDefault()
+    event.stopPropagation()
+    longPressTriggeredRef.current = false
+  }, [])
+
+  const handleContextMenu = useCallback((event: MouseEvent<HTMLButtonElement>) => {
+    const nativeEvent = event.nativeEvent as globalThis.MouseEvent & {
+      pointerType?: string
+      sourceCapabilities?: { firesTouchEvents?: boolean } | null
+    }
+    const isSyntheticTouchContextMenu = nativeEvent.pointerType === 'touch'
+      || nativeEvent.sourceCapabilities?.firesTouchEvents === true
+    const shouldSuppressSyntheticContextMenu =
+      isSyntheticTouchContextMenu
+      && Date.now() <= suppressSyntheticContextMenuUntilRef.current
+
+    if (!shouldSuppressSyntheticContextMenu) return
+    event.preventDefault()
+    event.stopPropagation()
+    suppressSyntheticContextMenuUntilRef.current = 0
+  }, [])
 
   return (
     <div
       ref={shellRef}
       onDoubleClick={handleDoubleClick}
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={finishPointerInteraction}
+      onPointerCancel={finishPointerInteraction}
       className={[
-        'relative transition-[opacity,transform] duration-100',
+        'group relative transition-[opacity,transform] duration-100',
         previewShifted ? 'translate-y-2' : '',
         previewGhost ? 'opacity-35 scale-[0.97]' : '',
         searchHighlighted ? 'ring-4 ring-warning/45 rounded-2xl' : '',
         nodeData.muted && !previewGhost ? 'opacity-60' : '',
       ].filter(Boolean).join(' ')}
-      style={{ width: nodeSize.width }}
+      style={{ width: nodeSize.width, WebkitTouchCallout: 'none' }}
     >
+      {longPressPending ? (
+        <span
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-[-3px] z-20 rounded-[14px] border-2 border-amber-400/80 animate-pulse"
+        />
+      ) : null}
+      {nodeData.selected && !readonly && !isEditing ? (
+        <AdaptiveNodeToolbar nodeId={id}>
+          <button
+            type="button"
+            aria-label="新增子节点"
+            title="新增子级（Tab）"
+            className="flex h-8 items-center gap-1.5 rounded-lg px-2 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
+            onClick={(event) => {
+              event.stopPropagation()
+              nodeData.onAddChild?.(id)
+            }}
+          >
+            <Plus className="size-3.5" />
+            子级
+          </button>
+          {!isRoot ? (
+            <button
+              type="button"
+              aria-label="新增同级节点"
+              title="新增同级（Shift+Enter）"
+              className="flex h-8 items-center gap-1.5 rounded-lg px-2 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
+              onClick={(event) => {
+                event.stopPropagation()
+                nodeData.onAddSibling?.(id)
+              }}
+            >
+              <CornerDownRight className="size-3.5" />
+              同级
+            </button>
+          ) : null}
+          <button
+            type="button"
+            aria-label="编辑节点"
+            title="编辑（Enter / F2）"
+            className="flex h-8 items-center gap-1.5 rounded-lg px-2 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
+            onClick={(event) => startEdit(event)}
+          >
+            <Pencil className="size-3.5" />
+            编辑
+          </button>
+        </AdaptiveNodeToolbar>
+      ) : null}
+
       <Handle
         type="target"
         position={Position.Left}
@@ -363,12 +513,12 @@ function MindMapNodeCard({ data, id }: NodeProps) {
       {isEditing ? (
         <textarea
           ref={inputRef}
-          value={editText}
+          value={editValue}
           onChange={handleInput}
           onKeyDown={handleKeyDown}
           onBlur={commitEdit}
           aria-label="编辑节点文本"
-          className="min-h-[30px] w-full resize-none rounded-xl border border-zinc-300 bg-white px-2.5 py-2 text-sm leading-5 text-zinc-900 outline-none ring-0"
+          className="nodrag nopan nowheel min-h-[30px] w-full resize-none rounded-xl border border-zinc-400 bg-white px-3 py-2 text-sm leading-5 text-zinc-900 outline-none ring-2 ring-zinc-800/15"
           style={{ minHeight: nodeSize.height }}
           rows={1}
         />
@@ -377,13 +527,18 @@ function MindMapNodeCard({ data, id }: NodeProps) {
           className={`${containerCls} ${paddingCls}`}
           style={{ minHeight: nodeSize.height, ...borderStyle }}
         >
-          {nodeData.selected && !readonly ? (
-            <div className="absolute -bottom-10 left-1/2 z-30 flex -translate-x-1/2 gap-1 rounded-lg border bg-background p-1 shadow-lg">
-              <button type="button" aria-label="新增子节点" className="flex size-7 items-center justify-center rounded hover:bg-muted" onClick={(event) => { event.stopPropagation(); nodeData.onAddChild?.(id) }}><Plus className="size-3.5" /></button>
-              <button type="button" aria-label="重命名节点" className="flex size-7 items-center justify-center rounded hover:bg-muted" onClick={(event) => { event.stopPropagation(); nodeData.onStartEdit?.(id) }}><Pencil className="size-3.5" /></button>
-              {!isRoot ? <button type="button" aria-label="删除节点" className="flex size-7 items-center justify-center rounded text-destructive hover:bg-destructive/10" onClick={(event) => { event.stopPropagation(); nodeData.onDelete?.(id) }}><Trash2 className="size-3.5" /></button> : null}
-            </div>
-          ) : null}          {(masteryStatus || manualMasteryLabel) && !isRoot ? (
+          {!readonly ? (
+            <button
+              type="button"
+              className="mindmap-node-drag-handle absolute -left-3 top-1/2 z-20 flex h-8 w-6 -translate-y-1/2 cursor-grab items-center justify-center rounded-lg border border-border bg-background text-muted-foreground opacity-0 shadow-sm transition-opacity hover:text-foreground group-hover:opacity-100 data-[selected=true]:opacity-100 active:cursor-grabbing"
+              data-selected={nodeData.selected ? 'true' : 'false'}
+              aria-label="拖动节点"
+              title="拖动卡片"
+            >
+              <GripVertical className="size-3.5" />
+            </button>
+          ) : null}
+          {(masteryStatus || manualMasteryLabel) && !isRoot ? (
             <span
               className={`absolute -left-2 -top-2 z-20 size-3 rounded-full border-2 border-background ${
                 manualMasteryLabel === 'weak' || masteryStatus === 'weak'
@@ -400,19 +555,8 @@ function MindMapNodeCard({ data, id }: NodeProps) {
           <button
             type="button"
             onClick={handleClick}
-            onPointerDown={handlePointerDown}
-            onPointerMove={handlePointerMove}
-            onPointerUp={finishPointerInteraction}
-            onPointerCancel={finishPointerInteraction}
-            onPointerLeave={finishPointerInteraction}
-            onPointerOut={finishPointerInteraction}
-            onContextMenu={(event) => {
-              if (nodeData.onTouchLongPress) {
-                event.preventDefault()
-                event.stopPropagation()
-              }
-            }}
-            className={textCls}
+            onContextMenu={handleContextMenu}
+            className={`mindmap-node-text nodrag nopan ${textCls}`}
           >
             {hiddenForRecall
               ? '待回忆'

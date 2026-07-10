@@ -9,6 +9,7 @@ import {
   type Edge,
   type EdgeMouseHandler,
   type Node,
+  type OnMove,
 } from '@xyflow/react'
 import type { LayoutRole } from './layout'
 import { nodeTypes } from './NodeCard'
@@ -22,6 +23,7 @@ interface MindMapCanvasViewportProps {
   onNodesChange: OnNodesChange<Node>
   onEdgesChange: OnEdgesChange<Edge>
   onNodeClick: (event: React.MouseEvent, node: Node) => void
+  onNodeDoubleClick: (event: React.MouseEvent, node: Node) => void
   onNodeContextMenu: (event: React.MouseEvent, node: Node) => void
   onNodeDragStart: (event: unknown, node: Node) => void
   onNodeDrag: (event: unknown, node: Node) => void
@@ -31,8 +33,12 @@ interface MindMapCanvasViewportProps {
   onEdgeClick: EdgeMouseHandler
   onEdgeDoubleClick: EdgeMouseHandler
   onPaneClick: () => void
+  onMoveStart?: OnMove
+  onMove?: OnMove
+  onMoveEnd?: OnMove
   readonly?: boolean
   mobileGuided?: boolean
+  preserveViewport?: boolean
 }
 
 export function MindMapCanvasViewport({
@@ -44,6 +50,7 @@ export function MindMapCanvasViewport({
   onNodesChange,
   onEdgesChange,
   onNodeClick,
+  onNodeDoubleClick,
   onNodeContextMenu,
   onNodeDragStart,
   onNodeDrag,
@@ -53,8 +60,12 @@ export function MindMapCanvasViewport({
   onEdgeClick,
   onEdgeDoubleClick,
   onPaneClick,
+  onMoveStart,
+  onMove,
+  onMoveEnd,
   readonly = false,
   mobileGuided = false,
+  preserveViewport = false,
 }: MindMapCanvasViewportProps) {
   const largeGraph = nodes.length >= 240
   const simplifiedDecorations = isDraggingNode || mobileGuided || largeGraph
@@ -67,6 +78,7 @@ export function MindMapCanvasViewport({
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onNodeClick={onNodeClick}
+        onNodeDoubleClick={onNodeDoubleClick}
         onNodeContextMenu={onNodeContextMenu}
         onNodeDragStart={onNodeDragStart}
         onNodeDrag={onNodeDrag}
@@ -76,8 +88,14 @@ export function MindMapCanvasViewport({
         onEdgeClick={onEdgeClick}
         onEdgeDoubleClick={onEdgeDoubleClick}
         onPaneClick={onPaneClick}
+        onMoveStart={onMoveStart}
+        onMove={onMove}
+        onMoveEnd={onMoveEnd}
         nodesDraggable={!readonly}
         nodesConnectable={false}
+        nodesFocusable={false}
+        edgesFocusable={false}
+        deleteKeyCode={null}
         elementsSelectable
         nodeTypes={nodeTypes}
         defaultViewport={{ x: 4, y: 18, zoom: 0.99 }}
@@ -86,8 +104,10 @@ export function MindMapCanvasViewport({
         proOptions={{ hideAttribution: true }}
         panOnScroll={!mobileGuided}
         panOnDrag
+        autoPanOnNodeDrag={!preserveViewport}
+        autoPanOnConnect={!preserveViewport}
         zoomOnPinch
-        zoomOnDoubleClick={!mobileGuided}
+        zoomOnDoubleClick={readonly && !mobileGuided}
         zoomActivationKeyCode="Control"
       >
         <Controls

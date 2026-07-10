@@ -2,8 +2,9 @@ import { createRef } from 'react'
 import { act, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { MindMapFrame, type MindMapFrameHandle } from './MindMapFrame'
+import type { MindMapEditorState } from '@/shared/api/contracts'
 
-const editorState = {
+const editorState: MindMapEditorState = {
   editor_doc: {
     root: {
       data: { text: '宫殿', uid: 'root' },

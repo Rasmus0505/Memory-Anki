@@ -6,20 +6,23 @@ import {
   useMemo,
   useRef,
   useState,
+  type KeyboardEvent as ReactKeyboardEvent,
 } from 'react'
 import { createPortal } from 'react-dom'
-import { Brain, FolderTree, Scissors, Sparkles, Target } from 'lucide-react'
+import { Brain, FolderTree, Sparkles, Target } from 'lucide-react'
 import type { MindMapEditorState } from '@/shared/api/contracts'
 import { MindMapCanvas } from '@/shared/components/mindmap'
 import type { MindMapCanvasViewCommand } from '@/shared/components/mindmap'
 import type { ContextMenuAction } from '@/shared/components/mindmap/NodeContextMenu'
 import { WidgetErrorBoundary } from '@/shared/components/widget-error-boundary'
 import {
-  addEditorDocChild,
-  addEditorDocSibling,
+  addEditorDocChildWithResult,
+  addEditorDocSiblingWithResult,
   buildSelectionFromDoc,
   canMoveEditorDocNode,
+  countEditorDocSubtree,
   deleteEditorDocNode,
+  deleteEditorDocNodeOnly,
   editEditorDocNode,
   editorDocToGraph,
   moveEditorDocNode,
@@ -28,11 +31,23 @@ import {
   reorderEditorDocNode,
 } from '@/shared/components/mindmap/editorDocAdapter'
 import { dispatchGlobalFeedback } from '@/shared/feedback/globalFeedbackModel'
+import { toast } from '@/shared/feedback/toast'
 import {
   buildMindMapFrameClassName,
   type MindMapFrameHandle,
   type MindMapFrameProps,
 } from './MindMapFrame.types'
+import { useMindMapEditHistory } from './useMindMapEditHistory'
+
+type MindMapInteractionState =
+  | { mode: 'idle' }
+  | { mode: 'selected'; nodeId: string }
+  | {
+      mode: 'editing'
+      nodeId: string
+      originalText: string
+      draftText: string
+    }
 
 export const MindMapFrame = forwardRef<MindMapFrameHandle, MindMapFrameProps>(function MindMapFrame({
   editorState,
@@ -83,7 +98,11 @@ export const MindMapFrame = forwardRef<MindMapFrameHandle, MindMapFrameProps>(fu
   onReady,
 }: MindMapFrameProps, ref) {
   const frameRef = useRef<HTMLDivElement | null>(null)
-  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
+  const [interaction, setInteraction] = useState<MindMapInteractionState>({ mode: 'idle' })
+  const interactionRef = useRef<MindMapInteractionState>(interaction)
+  const selectedNodeId = interaction.mode === 'idle' ? null : interaction.nodeId
+  const editingNodeId = interaction.mode === 'editing' ? interaction.nodeId : null
+  const editingDraft = interaction.mode === 'editing' ? interaction.draftText : null
   const [uiCleared, setUiCleared] = useState(false)
   const [nativeFullscreenActive, setNativeFullscreenActive] = useState(false)
   const [viewCommand, setViewCommand] = useState<MindMapCanvasViewCommand | null>(null)
@@ -172,7 +191,7 @@ export const MindMapFrame = forwardRef<MindMapFrameHandle, MindMapFrameProps>(fu
     onUiClearedChange?.(uiCleared)
   }, [onUiClearedChange, uiCleared])
 
-  const emitState = useCallback(
+  const publishEditorDoc = useCallback(
     (nextEditorDoc: MindMapEditorState['editor_doc']) => {
       if (readonly) return
       onEditorStateChange({
@@ -182,19 +201,91 @@ export const MindMapFrame = forwardRef<MindMapFrameHandle, MindMapFrameProps>(fu
     },
     [normalizedEditorState, onEditorStateChange, readonly],
   )
+  const editHistory = useMindMapEditHistory(
+    normalizedEditorState.editor_doc,
+    publishEditorDoc,
+  )
+  const {
+    canUndo,
+    canRedo,
+    commit: commitEditorDoc,
+    undo: undoEditorDoc,
+    redo: redoEditorDoc,
+    getCurrentEditorDoc,
+  } = editHistory
+
+  const replaceInteraction = useCallback((next: MindMapInteractionState) => {
+    interactionRef.current = next
+    setInteraction(next)
+  }, [])
+
+  useEffect(() => {
+    if (!selectedNodeId) return
+    if (graphData.nodes.some((node) => node.id === selectedNodeId)) return
+    replaceInteraction({ mode: 'idle' })
+    onNodeActive?.([])
+  }, [graphData.nodes, onNodeActive, replaceInteraction, selectedNodeId])
+
+  const commitEditingDraft = useCallback(() => {
+    const current = interactionRef.current
+    if (current.mode !== 'editing') return
+    const text = current.draftText.trim()
+    if (text && text !== current.originalText) {
+      commitEditorDoc(editEditorDocNode(getCurrentEditorDoc(), current.nodeId, text))
+    }
+    replaceInteraction({ mode: 'selected', nodeId: current.nodeId })
+  }, [commitEditorDoc, getCurrentEditorDoc, replaceInteraction])
+
+  const cancelEditing = useCallback(() => {
+    const current = interactionRef.current
+    if (current.mode !== 'editing') return
+    replaceInteraction({ mode: 'selected', nodeId: current.nodeId })
+  }, [replaceInteraction])
+
+  const beginEditingNode = useCallback(
+    (nodeId: string) => {
+      const current = interactionRef.current
+      if (current.mode === 'editing' && current.nodeId === nodeId) return
+      if (current.mode === 'editing' && current.nodeId !== nodeId) commitEditingDraft()
+      const selection = buildSelectionFromDoc(getCurrentEditorDoc(), nodeId)
+      const text = selection[0]?.text || '未命名知识点'
+      replaceInteraction({
+        mode: 'editing',
+        nodeId,
+        originalText: text,
+        draftText: text,
+      })
+      onNodeActive?.(selection)
+    },
+    [commitEditingDraft, getCurrentEditorDoc, onNodeActive, replaceInteraction],
+  )
+
+  const updateEditingDraft = useCallback(
+    (nodeId: string, draftText: string) => {
+      const current = interactionRef.current
+      if (current.mode !== 'editing' || current.nodeId !== nodeId) return
+      replaceInteraction({ ...current, draftText })
+    },
+    [replaceInteraction],
+  )
 
   const selectNode = useCallback(
     (nodeId: string | null) => {
-      setSelectedNodeId(nodeId)
-      onNodeActive?.(buildSelectionFromDoc(normalizedEditorState.editor_doc, nodeId))
+      const current = interactionRef.current
+      if (current.mode === 'editing' && current.nodeId === nodeId) return
+      if (current.mode === 'editing') commitEditingDraft()
+      replaceInteraction(nodeId ? { mode: 'selected', nodeId } : { mode: 'idle' })
+      onNodeActive?.(buildSelectionFromDoc(getCurrentEditorDoc(), nodeId))
     },
-    [normalizedEditorState.editor_doc, onNodeActive],
+    [commitEditingDraft, getCurrentEditorDoc, onNodeActive, replaceInteraction],
   )
 
   const requestFocusNode = useCallback(
     (nodeUid: string | null) => {
-      setSelectedNodeId(nodeUid)
-      onNodeActive?.(buildSelectionFromDoc(normalizedEditorState.editor_doc, nodeUid))
+      const current = interactionRef.current
+      if (current.mode === 'editing') commitEditingDraft()
+      replaceInteraction(nodeUid ? { mode: 'selected', nodeId: nodeUid } : { mode: 'idle' })
+      onNodeActive?.(buildSelectionFromDoc(getCurrentEditorDoc(), nodeUid))
       if (!nodeUid) return
       viewCommandNonceRef.current += 1
       setViewCommand({
@@ -203,7 +294,7 @@ export const MindMapFrame = forwardRef<MindMapFrameHandle, MindMapFrameProps>(fu
         nonce: viewCommandNonceRef.current,
       })
     },
-    [normalizedEditorState.editor_doc, onNodeActive],
+    [commitEditingDraft, getCurrentEditorDoc, onNodeActive, replaceInteraction],
   )
 
   const requestFitView = useCallback(() => {
@@ -391,18 +482,10 @@ export const MindMapFrame = forwardRef<MindMapFrameHandle, MindMapFrameProps>(fu
           onClick: () => onNodeContextMenu?.(selection),
         })
       }
-      if (!readonly && !practiceModeActive) {
-        actions.push({
-          label: '添加子知识点',
-          icon: Scissors,
-          onClick: () => emitState(addEditorDocChild(normalizedEditorState.editor_doc, nodeId)),
-        })
-      }
       return actions
     },
     [
       aiSplitBusy,
-      emitState,
       graphData.nodes,
       miniPalaceDraft.active,
       normalizedEditorState.editor_doc,
@@ -440,47 +523,184 @@ export const MindMapFrame = forwardRef<MindMapFrameHandle, MindMapFrameProps>(fu
     contentChangeViewportPolicy ?? (preservePracticeViewport ? 'preserve' : 'auto-fit')
   const frameClassName = buildMindMapFrameClassName(className)
   const handleAddChild = useCallback(
-    (nodeId: string) => emitState(addEditorDocChild(normalizedEditorState.editor_doc, nodeId)),
-    [emitState, normalizedEditorState.editor_doc],
+    (nodeId: string) => {
+      const result = addEditorDocChildWithResult(getCurrentEditorDoc(), nodeId)
+      if (!result.nodeUid || !commitEditorDoc(result.editorDoc)) return
+      const selection = buildSelectionFromDoc(result.editorDoc, result.nodeUid)
+      const text = selection[0]?.text || '新知识点'
+      replaceInteraction({
+        mode: 'editing',
+        nodeId: result.nodeUid,
+        originalText: text,
+        draftText: text,
+      })
+      onNodeActive?.(selection)
+    },
+    [commitEditorDoc, getCurrentEditorDoc, onNodeActive, replaceInteraction],
   )
   const handleAddSibling = useCallback(
-    (nodeId: string) => emitState(addEditorDocSibling(normalizedEditorState.editor_doc, nodeId)),
-    [emitState, normalizedEditorState.editor_doc],
+    (nodeId: string) => {
+      const result = addEditorDocSiblingWithResult(getCurrentEditorDoc(), nodeId)
+      if (!result.nodeUid || !commitEditorDoc(result.editorDoc)) return
+      const selection = buildSelectionFromDoc(result.editorDoc, result.nodeUid)
+      const text = selection[0]?.text || '新知识点'
+      replaceInteraction({
+        mode: 'editing',
+        nodeId: result.nodeUid,
+        originalText: text,
+        draftText: text,
+      })
+      onNodeActive?.(selection)
+    },
+    [commitEditorDoc, getCurrentEditorDoc, onNodeActive, replaceInteraction],
   )
   const handleDeleteNode = useCallback(
-    (nodeId: string) => emitState(deleteEditorDocNode(normalizedEditorState.editor_doc, nodeId)),
-    [emitState, normalizedEditorState.editor_doc],
+    (nodeId: string) => {
+      const currentEditorDoc = getCurrentEditorDoc()
+      const removedCount = countEditorDocSubtree(currentEditorDoc, nodeId)
+      if (removedCount === 0) return
+      const nextEditorDoc = deleteEditorDocNode(currentEditorDoc, nodeId)
+      if (!commitEditorDoc(nextEditorDoc)) return
+      replaceInteraction({ mode: 'idle' })
+      onNodeActive?.([])
+      toast.success(
+        removedCount > 1 ? `已删除整条分支（${removedCount} 张卡片）` : '已删除卡片',
+        { action: { label: '撤销', onClick: undoEditorDoc } },
+      )
+    },
+    [commitEditorDoc, getCurrentEditorDoc, onNodeActive, replaceInteraction, undoEditorDoc],
+  )
+  const handleDeleteNodeOnly = useCallback(
+    (nodeId: string) => {
+      const currentEditorDoc = getCurrentEditorDoc()
+      const nextEditorDoc = deleteEditorDocNodeOnly(currentEditorDoc, nodeId)
+      if (!commitEditorDoc(nextEditorDoc)) return
+      replaceInteraction({ mode: 'idle' })
+      onNodeActive?.([])
+      toast.success('已单独删除卡片，子级已提升', {
+        action: { label: '撤销', onClick: undoEditorDoc },
+      })
+    },
+    [commitEditorDoc, getCurrentEditorDoc, onNodeActive, replaceInteraction, undoEditorDoc],
   )
   const handleEditNode = useCallback(
-    (nodeId: string, text: string) => emitState(editEditorDocNode(normalizedEditorState.editor_doc, nodeId, text)),
-    [emitState, normalizedEditorState.editor_doc],
+    (nodeId: string, text: string) => {
+      const trimmed = text.trim()
+      if (trimmed) commitEditorDoc(editEditorDocNode(getCurrentEditorDoc(), nodeId, trimmed))
+      replaceInteraction({ mode: 'selected', nodeId })
+    },
+    [commitEditorDoc, getCurrentEditorDoc, replaceInteraction],
   )
   const handleReparentNode = useCallback(
     (sourceId: string, targetId: string) =>
-      emitState(reparentEditorDocNode(normalizedEditorState.editor_doc, sourceId, targetId)),
-    [emitState, normalizedEditorState.editor_doc],
+      commitEditorDoc(reparentEditorDocNode(getCurrentEditorDoc(), sourceId, targetId)),
+    [commitEditorDoc, getCurrentEditorDoc],
   )
   const handleReorderSibling = useCallback(
     (sourceId: string, targetId: string, position: 'before' | 'after') =>
-      emitState(reorderEditorDocNode(normalizedEditorState.editor_doc, sourceId, targetId, position)),
-    [emitState, normalizedEditorState.editor_doc],
+      commitEditorDoc(reorderEditorDocNode(getCurrentEditorDoc(), sourceId, targetId, position)),
+    [commitEditorDoc, getCurrentEditorDoc],
   )
   const handleMoveUp = useCallback(
-    (nodeId: string) => emitState(moveEditorDocNode(normalizedEditorState.editor_doc, nodeId, 'up')),
-    [emitState, normalizedEditorState.editor_doc],
+    (nodeId: string) =>
+      commitEditorDoc(moveEditorDocNode(getCurrentEditorDoc(), nodeId, 'up')),
+    [commitEditorDoc, getCurrentEditorDoc],
   )
   const handleMoveDown = useCallback(
-    (nodeId: string) => emitState(moveEditorDocNode(normalizedEditorState.editor_doc, nodeId, 'down')),
-    [emitState, normalizedEditorState.editor_doc],
+    (nodeId: string) =>
+      commitEditorDoc(moveEditorDocNode(getCurrentEditorDoc(), nodeId, 'down')),
+    [commitEditorDoc, getCurrentEditorDoc],
   )
   const canMoveNodeUp = useCallback(
-    (nodeId: string) => canMoveEditorDocNode(normalizedEditorState.editor_doc, nodeId, 'up'),
-    [normalizedEditorState.editor_doc],
+    (nodeId: string) => canMoveEditorDocNode(getCurrentEditorDoc(), nodeId, 'up'),
+    [getCurrentEditorDoc],
   )
   const canMoveNodeDown = useCallback(
-    (nodeId: string) => canMoveEditorDocNode(normalizedEditorState.editor_doc, nodeId, 'down'),
-    [normalizedEditorState.editor_doc],
+    (nodeId: string) => canMoveEditorDocNode(getCurrentEditorDoc(), nodeId, 'down'),
+    [getCurrentEditorDoc],
   )
+
+  const handleCanvasKeyDown = useCallback(
+    (event: ReactKeyboardEvent<HTMLDivElement>) => {
+      if (!canEdit) return
+      const target = event.target instanceof HTMLElement ? event.target : null
+      if (isEditableKeyboardTarget(target)) return
+
+      const primaryModifier = event.ctrlKey || event.metaKey
+      const lowerKey = event.key.toLowerCase()
+      if (primaryModifier && lowerKey === 'z') {
+        event.preventDefault()
+        if (event.shiftKey) redoEditorDoc()
+        else undoEditorDoc()
+        return
+      }
+      if (primaryModifier && lowerKey === 'y') {
+        event.preventDefault()
+        redoEditorDoc()
+        return
+      }
+      if (isNonNodeInteractiveTarget(target)) return
+      if (!selectedNodeId || editingNodeId || event.repeat) return
+      const selectedNode = graphData.nodes.find((node) => node.id === selectedNodeId)
+      if (!selectedNode) return
+
+      if (event.key === 'Tab' && !event.ctrlKey && !event.metaKey && !event.altKey) {
+        event.preventDefault()
+        handleAddChild(selectedNodeId)
+        return
+      }
+      if (
+        event.key === 'Enter' &&
+        event.shiftKey &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !event.altKey &&
+        selectedNode.parentId != null
+      ) {
+        event.preventDefault()
+        handleAddSibling(selectedNodeId)
+        return
+      }
+      if (
+        (event.key === 'Enter' || event.key === 'F2') &&
+        !event.shiftKey &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !event.altKey
+      ) {
+        event.preventDefault()
+        beginEditingNode(selectedNodeId)
+        return
+      }
+      if (
+        (event.key === 'Delete' || event.key === 'Backspace') &&
+        selectedNode.parentId != null
+      ) {
+        event.preventDefault()
+        handleDeleteNode(selectedNodeId)
+      }
+    },
+    [
+      beginEditingNode,
+      canEdit,
+      editingNodeId,
+      graphData.nodes,
+      handleAddChild,
+      handleAddSibling,
+      handleDeleteNode,
+      redoEditorDoc,
+      selectedNodeId,
+      undoEditorDoc,
+    ],
+  )
+  const handleEditingNodeChange = useCallback(
+    (nodeId: string | null) => {
+      if (nodeId) beginEditingNode(nodeId)
+      else cancelEditing()
+    },
+    [beginEditingNode, cancelEditing],
+  )
+
   const handleMiniPalacePour = useCallback(() => {
     if (miniPalaceDraft.active && onMiniPalacePour) {
       onMiniPalacePour()
@@ -494,6 +714,8 @@ export const MindMapFrame = forwardRef<MindMapFrameHandle, MindMapFrameProps>(fu
       <MindMapCanvas
         graphData={graphData}
         selectedNodeId={selectedNodeId}
+        editingNodeId={editingNodeId}
+        editingDraft={editingDraft}
         readonly={!canEdit}
         practiceModeActive={practiceModeActive}
         focusMode={nativeFullscreenActive || immersiveModeActive}
@@ -504,6 +726,9 @@ export const MindMapFrame = forwardRef<MindMapFrameHandle, MindMapFrameProps>(fu
         viewCommand={viewCommand}
         recoveryKey={canvasRecoveryKey}
         onNodeSelect={selectNode}
+        onEditingNodeChange={handleEditingNodeChange}
+        onEditingDraftChange={updateEditingDraft}
+        onKeyDownCapture={handleCanvasKeyDown}
         onNodeActivate={activateNode}
         onNodeContextAction={contextNode}
         onNodeHover={hoverNode}
@@ -511,7 +736,12 @@ export const MindMapFrame = forwardRef<MindMapFrameHandle, MindMapFrameProps>(fu
         onAddChild={handleAddChild}
         onAddSibling={handleAddSibling}
         onDelete={handleDeleteNode}
+        onDeleteNodeOnly={handleDeleteNodeOnly}
         onEdit={handleEditNode}
+        canUndo={canUndo}
+        canRedo={canRedo}
+        onUndo={undoEditorDoc}
+        onRedo={redoEditorDoc}
         onReparent={handleReparentNode}
         onReorderSibling={handleReorderSibling}
         onMoveUp={handleMoveUp}
@@ -545,6 +775,19 @@ export const MindMapFrame = forwardRef<MindMapFrameHandle, MindMapFrameProps>(fu
 MindMapFrame.displayName = 'MindMapFrame'
 
 export type { MindMapFrameHandle } from './MindMapFrame.types'
+
+function isEditableKeyboardTarget(target: HTMLElement | null) {
+  if (!target) return false
+  return Boolean(target.closest('input, textarea, select, [contenteditable="true"]'))
+}
+
+function isNonNodeInteractiveTarget(target: HTMLElement | null) {
+  if (!target) return false
+  return Boolean(
+    target.closest('button, a, [role="menuitem"]') &&
+      !target.closest('.mindmap-node-text'),
+  )
+}
 
 function collectRevealMap(editorState: MindMapEditorState) {
   const result: Record<string, 'hidden' | 'placeholder' | 'revealed'> = {}
