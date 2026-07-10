@@ -14,6 +14,7 @@ export function FocusRuleEditor({
   value: {
     primaryMinutes: string
     secondaryMinutes: string
+    breakMinutes: string
   }
   defaults: TimerFocusRule
   onFieldChange: (field: FocusFieldKey, value: string) => void
@@ -23,11 +24,11 @@ export function FocusRuleEditor({
     <div className={cn('rounded-lg border border-border/70 bg-card/70', compact ? 'p-3.5' : 'p-4')}>
       <div className="text-sm font-semibold text-foreground">{label}</div>
       <p className="mt-1 text-xs leading-5 text-muted-foreground">
-        一级总目标决定整段冲刺长度，二级子间隔决定大数字倒计时和爽感反馈节奏。
+        主数字持续显示本次有效学习时长；轮次目标显示进度，阶段间隔只负责轻量提醒。
       </p>
-      <div className={cn('mt-3 grid gap-3', compact ? 'md:grid-cols-2' : 'lg:grid-cols-2')}>
+      <div className={cn('mt-3 grid gap-3', compact ? 'md:grid-cols-3' : 'lg:grid-cols-3')}>
         <label className="space-y-1.5 text-sm">
-          <span className="text-xs text-muted-foreground">一级目标（分钟）</span>
+          <span className="text-xs text-muted-foreground">每轮专注目标（分钟）</span>
           <Input
             inputMode="numeric"
             value={value.primaryMinutes}
@@ -35,17 +36,25 @@ export function FocusRuleEditor({
           />
         </label>
         <label className="space-y-1.5 text-sm">
-          <span className="text-xs text-muted-foreground">二级子间隔（分钟）</span>
+          <span className="text-xs text-muted-foreground">阶段提醒间隔（分钟）</span>
           <Input
             inputMode="numeric"
             value={value.secondaryMinutes}
             onChange={(event) => onFieldChange('secondaryMinutes', event.target.value)}
           />
         </label>
+        <label className="space-y-1.5 text-sm">
+          <span className="text-xs text-muted-foreground">建议休息（分钟）</span>
+          <Input
+            inputMode="numeric"
+            value={value.breakMinutes}
+            onChange={(event) => onFieldChange('breakMinutes', event.target.value)}
+          />
+        </label>
       </div>
       <div className="mt-3 text-xs text-muted-foreground">
         默认值：
-        {` 一级 ${defaults.primaryMinutes} 分钟，二级 ${Math.min(defaults.primaryMinutes, defaults.secondaryMinutes)} 分钟`}
+        {` 每轮 ${defaults.primaryMinutes} 分钟，每 ${Math.min(defaults.primaryMinutes, defaults.secondaryMinutes)} 分钟轻提醒，建议休息 ${defaults.breakMinutes ?? 5} 分钟`}
       </div>
     </div>
   )

@@ -3,6 +3,7 @@ import * as palaceApi from '@/entities/palace/api'
 import {
   fireEvent,
   getMindMapTexts,
+  mockPalaceEditorResponse,
   renderPalaceEditPage,
   screen,
   setupPalaceEditPageTestDefaults,
@@ -13,6 +14,19 @@ import {
 describe('usePalaceEditPage inline practice mode', () => {
   beforeEach(() => {
     setupPalaceEditPageTestDefaults()
+  })
+
+  it('always re-enters the edit route in build mode even when learn was persisted', async () => {
+    window.localStorage.setItem('memory-anki:mindmap-task:palace:101', 'learn')
+    mockPalaceEditorResponse()
+
+    renderPalaceEditPage()
+
+    await waitFor(() => {
+      expect(screen.getByText('mindmap-edit-editable-plain-reset-import-sync')).toBeTruthy()
+      expect(screen.getByRole('button', { name: '学习' })).toBeTruthy()
+    })
+    expect(window.localStorage.getItem('memory-anki:mindmap-task:palace:101')).toBe('build')
   })
 
   it('switches palace edit page into inline practice mode without changing layout or restarting the session', async () => {
@@ -46,9 +60,8 @@ describe('usePalaceEditPage inline practice mode', () => {
     expect(screen.getByText('sync-soft-replace-edit:0:0-0-')).toBeTruthy()
     expect(screen.getByText('scope-palace-edit:101')).toBeTruthy()
     expect(screen.getByRole('button', { name: '转脑图' })).toBeTruthy()
-    expect(screen.getByRole('button', { name: '转文字' })).toBeTruthy()
 
-    fireEvent.click(screen.getByRole('button', { name: '回忆模式' }))
+    fireEvent.click(screen.getByRole('button', { name: '学习' }))
     await waitFor(() => {
       expect(screen.getByText('outline')).toBeTruthy()
       expect(screen.getByText('mindmap-practice-readonly-toolbar-preserve-import-sync')).toBeTruthy()
@@ -58,16 +71,16 @@ describe('usePalaceEditPage inline practice mode', () => {
         ),
       ).toBeTruthy()
       expect(screen.getByText('scope-palace-edit:101')).toBeTruthy()
-      expect(screen.getByRole('button', { name: '编辑模式' })).toBeTruthy()
+      expect(screen.getByRole('button', { name: '构建' })).toBeTruthy()
     })
 
-    fireEvent.click(screen.getByRole('button', { name: '编辑模式' }))
+    fireEvent.click(screen.getByRole('button', { name: '构建' }))
     await waitFor(() => {
       expect(screen.getByText('outline')).toBeTruthy()
       expect(screen.getByText('mindmap-edit-editable-plain-reset-import-sync')).toBeTruthy()
       expect(screen.getByText('sync-soft-replace-edit:0:0-0-')).toBeTruthy()
       expect(screen.getByText('scope-palace-edit:101')).toBeTruthy()
-      expect(screen.getByRole('button', { name: '回忆模式' })).toBeTruthy()
+      expect(screen.getByRole('button', { name: '学习' })).toBeTruthy()
     })
 
     expect(palaceApi.getPracticeSessionProgressApi).toHaveBeenCalledTimes(1)
@@ -106,7 +119,7 @@ describe('usePalaceEditPage inline practice mode', () => {
       expect(screen.getByText('mindmap-edit-editable-plain-reset-import-sync')).toBeTruthy()
     })
 
-    fireEvent.click(screen.getByRole('button', { name: '回忆模式' }))
+    fireEvent.click(screen.getByRole('button', { name: '学习' }))
 
     await waitFor(() => {
       expect(screen.getByText('mindmap-practice-readonly-toolbar-preserve-import-sync')).toBeTruthy()
@@ -149,11 +162,11 @@ describe('usePalaceEditPage inline practice mode', () => {
       })
     })
 
-    fireEvent.click(screen.getByRole('button', { name: '编辑模式' }))
+    fireEvent.click(screen.getByRole('button', { name: '构建' }))
     await waitFor(() => {
       expect(screen.getByText('mindmap-edit-editable-plain-reset-import-sync')).toBeTruthy()
     })
-    fireEvent.click(screen.getByRole('button', { name: '回忆模式' }))
+    fireEvent.click(screen.getByRole('button', { name: '学习' }))
     await waitFor(() => {
       expect(getMindMapTexts()).toEqual({
         root: 'root-测试宫殿',
@@ -201,7 +214,7 @@ describe('usePalaceEditPage inline practice mode', () => {
     expect(screen.getByText('focus-:0')).toBeTruthy()
 
     fireEvent.click(screen.getByRole('button', { name: '选中首子节点' }))
-    fireEvent.click(screen.getByRole('button', { name: '回忆模式' }))
+    fireEvent.click(screen.getByRole('button', { name: '学习' }))
 
     await waitFor(() => {
       expect(screen.getByText('mindmap-practice-readonly-toolbar-preserve-import-sync')).toBeTruthy()
@@ -213,7 +226,7 @@ describe('usePalaceEditPage inline practice mode', () => {
       expect(screen.getByRole('button', { name: '点击首子节点' })).toBeTruthy()
     })
     fireEvent.click(screen.getByRole('button', { name: '点击首子节点' }))
-    fireEvent.click(screen.getByRole('button', { name: '编辑模式' }))
+    fireEvent.click(screen.getByRole('button', { name: '构建' }))
 
     await waitFor(() => {
       expect(screen.getByText('mindmap-edit-editable-plain-reset-import-sync')).toBeTruthy()
@@ -253,7 +266,7 @@ describe('usePalaceEditPage inline practice mode', () => {
       expect(screen.getByText('mindmap-edit-editable-plain-reset-import-sync')).toBeTruthy()
     })
 
-    fireEvent.click(screen.getByRole('button', { name: '回忆模式' }))
+    fireEvent.click(screen.getByRole('button', { name: '学习' }))
 
     await waitFor(() => {
       expect(screen.getByText('mindmap-practice-readonly-toolbar-preserve-import-sync')).toBeTruthy()
@@ -265,6 +278,9 @@ describe('usePalaceEditPage inline practice mode', () => {
     ).toBeTruthy()
 
     fireEvent.click(screen.getByRole('button', { name: '点击根节点' }))
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: '点击首子节点' })).toBeTruthy()
+    })
     fireEvent.click(screen.getByRole('button', { name: '点击首子节点' }))
     fireEvent.click(screen.getByRole('button', { name: '点击首子节点' }))
 

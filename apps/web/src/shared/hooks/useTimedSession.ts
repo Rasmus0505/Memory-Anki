@@ -1,5 +1,5 @@
 import { getWeeklyLocalSessionStats } from '@/entities/session/model'
-import { useTimedSession as useTimedSessionStateMachine } from './timedSessionStateMachine'
+import { useTimedSession as useTimedSessionStateMachine } from '@/entities/session/model/timed-session/timedSessionStateMachine'
 import type { TimedSessionController, TimedSessionOptions } from './timedSessionModel'
 
 export type { TimedSessionController, TimedSessionOptions } from './timedSessionModel'

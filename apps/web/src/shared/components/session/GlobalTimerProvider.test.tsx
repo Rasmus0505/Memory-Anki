@@ -1,5 +1,5 @@
 ﻿import * as React from 'react'
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   GlobalTimerProvider,
@@ -11,16 +11,17 @@ import {
 } from '@/shared/components/session/globalTimerModel'
 import type { TimerFocusScene } from '@/shared/components/session/timer-focus-config'
 import {
-  TIMER_FOCUS_STORAGE_KEY,
-  type TimerFocusConfig,
-} from '@/shared/components/session/timer-focus-config'
-import {
   TIMER_OVERLAY_MIN_HEIGHT,
   TIMER_OVERLAY_MIN_WIDTH,
 } from '@/shared/components/session/timer-overlay-layout'
 import type { TimedSessionController } from '@/shared/hooks/useTimedSession'
 import type { DesktopTimerBridge, UnifiedTimerSnapshot } from '@/shared/components/session/desktopTimerBridge'
 import type { UnifiedTimerCommand } from '@/shared/components/session/desktopTimerBridge'
+import {
+  BREAK_GUARD_STORAGE_KEY,
+  DEFAULT_BREAK_GUARD_CONFIG,
+  type BreakGuardConfig,
+} from '@/shared/components/session/break-guard-config'
 import { resetClientPreferenceCacheForTest } from '@/shared/preferences/clientPreferences'
 
 const emitTimerCelebration = vi.fn()
@@ -49,6 +50,12 @@ function createTimer(
     startedAt: overrides.startedAt ?? null,
     durationEdited: overrides.durationEdited ?? false,
     glowState: overrides.glowState ?? 'idle',
+    focusRound: overrides.focusRound ?? {
+      roundIndex: 1,
+      startedAtEffectiveSeconds: 0,
+      acknowledgedIntervalCount: 0,
+      goalCelebrated: false,
+    },
     start: overrides.start ?? vi.fn(),
     pause: overrides.pause ?? vi.fn(),
     resume: overrides.resume ?? vi.fn(),
@@ -56,10 +63,29 @@ function createTimer(
     leaveScene: overrides.leaveScene ?? vi.fn(async () => null),
     registerActivity: overrides.registerActivity ?? vi.fn(),
     logEvent: overrides.logEvent ?? vi.fn(),
+    acknowledgeFocusInterval: overrides.acknowledgeFocusInterval ?? vi.fn(),
+    acknowledgeFocusGoal: overrides.acknowledgeFocusGoal ?? vi.fn(),
+    startNextFocusRound: overrides.startNextFocusRound ?? vi.fn(),
     adjustDuration: overrides.adjustDuration ?? vi.fn(),
     complete: overrides.complete ?? vi.fn(async () => null),
     reset: overrides.reset ?? vi.fn(),
   }
+}
+
+function enableLegacyBreakGuard(overrides: Partial<BreakGuardConfig> = {}) {
+  window.localStorage.setItem(
+    BREAK_GUARD_STORAGE_KEY,
+    JSON.stringify({
+      ...DEFAULT_BREAK_GUARD_CONFIG,
+      promptOnWindowLeave: true,
+      promptDelaySeconds: 5,
+      presetMinutes: [1, 3],
+      autoFinishOnStudyReturn: true,
+      resumeInterruptedStudyOnReturn: true,
+      alertStrength: 'strong',
+      ...overrides,
+    }),
+  )
 }
 
 function RegistrationProbe({
@@ -197,7 +223,7 @@ describe('GlobalTimerProvider', () => {
     expect(screen.getByText('计时器')).toBeTruthy()
     expect(screen.getByText('待开始')).toBeTruthy()
     expect(screen.getByText('当前无学习会话')).toBeTruthy()
-    expect(screen.getByText('25:00/25:00 1.00')).toBeTruthy()
+    expect(screen.getByText('本轮 00:00/25:00')).toBeTruthy()
     expect(screen.getByRole('button', { name: '进入学习页后开始' }).hasAttribute('disabled')).toBe(true)
   })
 
@@ -234,6 +260,7 @@ describe('GlobalTimerProvider', () => {
   })
 
   it('cancels a pending break prompt when the desktop main window returns to an active study route', () => {
+    enableLegacyBreakGuard()
     vi.useFakeTimers()
     const publishTimerSnapshot = vi.fn()
     let commandHandler: ((command: UnifiedTimerCommand) => void) | null = null
@@ -284,6 +311,7 @@ describe('GlobalTimerProvider', () => {
   })
 
   it('switches a visible break prompt back to study when returning to an active study route', () => {
+    enableLegacyBreakGuard()
     vi.useFakeTimers()
     const publishTimerSnapshot = vi.fn()
     let commandHandler: ((command: UnifiedTimerCommand) => void) | null = null
@@ -336,7 +364,8 @@ describe('GlobalTimerProvider', () => {
     vi.useRealTimers()
   })
 
-  it('switches a visible break prompt back to study after the route becomes active', () => {
+  it('keeps a visible break prompt until explicit activity after the route becomes active', () => {
+    enableLegacyBreakGuard()
     vi.useFakeTimers()
     const publishTimerSnapshot = vi.fn()
     let commandHandler: ((command: UnifiedTimerCommand) => void) | null = null
@@ -394,14 +423,15 @@ describe('GlobalTimerProvider', () => {
 
     expect(publishTimerSnapshot).toHaveBeenLastCalledWith(
       expect.objectContaining({
-        mode: 'study',
-        title: '当前复习',
+        mode: 'break',
+        status: 'prompting',
       }),
     )
     vi.useRealTimers()
   })
 
   it('does not prompt for a break after switching away inside the app', () => {
+    enableLegacyBreakGuard()
     vi.useFakeTimers()
     const publishTimerSnapshot = vi.fn()
     const timer = createTimer({
@@ -456,7 +486,7 @@ describe('GlobalTimerProvider', () => {
     vi.useRealTimers()
   })
 
-  it('prompts for a break after the desktop blur bridge delay', () => {
+  it('does not subscribe to the obsolete desktop blur callback', () => {
     vi.useFakeTimers()
     const publishTimerSnapshot = vi.fn()
     const pause = vi.fn()
@@ -491,7 +521,8 @@ describe('GlobalTimerProvider', () => {
       blurHandler?.()
     })
 
-    expect(pause).toHaveBeenCalledWith({ source: 'break_guard_prompt' })
+    expect(blurHandler).toBeNull()
+    expect(pause).not.toHaveBeenCalled()
     expect(publishTimerSnapshot).not.toHaveBeenCalledWith(
       expect.objectContaining({
         mode: 'break',
@@ -503,7 +534,7 @@ describe('GlobalTimerProvider', () => {
       vi.advanceTimersByTime(5_000)
     })
 
-    expect(publishTimerSnapshot).toHaveBeenLastCalledWith(
+    expect(publishTimerSnapshot).not.toHaveBeenCalledWith(
       expect.objectContaining({
         mode: 'break',
         status: 'prompting',
@@ -513,6 +544,7 @@ describe('GlobalTimerProvider', () => {
   })
 
   it('resumes the interrupted study timer when returning before the blur prompt opens', () => {
+    enableLegacyBreakGuard()
     vi.useFakeTimers()
     const publishTimerSnapshot = vi.fn()
     const pause = vi.fn()
@@ -582,7 +614,8 @@ describe('GlobalTimerProvider', () => {
     vi.useRealTimers()
   })
 
-  it('auto starts a 1 minute break when the visible break prompt is ignored for 5 seconds', () => {
+  it('keeps a visible break prompt open until the user chooses a duration', () => {
+    enableLegacyBreakGuard()
     vi.useFakeTimers()
     const publishTimerSnapshot = vi.fn()
     const pause = vi.fn()
@@ -629,14 +662,13 @@ describe('GlobalTimerProvider', () => {
       vi.advanceTimersByTime(5_000)
     })
 
-    expect(pause).toHaveBeenCalledWith({ source: 'break_guard' })
     expect(publishTimerSnapshot).toHaveBeenLastCalledWith(
       expect.objectContaining({
         mode: 'break',
-        status: 'running',
-        primaryText: '计划 1 分钟',
+        status: 'prompting',
       }),
     )
+    expect(pause).not.toHaveBeenCalledWith({ source: 'break_guard' })
     vi.useRealTimers()
   })
 
@@ -708,6 +740,7 @@ describe('GlobalTimerProvider', () => {
   })
 
   it('auto opens the interrupted study route once when a desktop break first reaches expired', () => {
+    enableLegacyBreakGuard()
     vi.useFakeTimers()
     const publishTimerSnapshot = vi.fn()
     const openMainTarget = vi.fn()
@@ -760,6 +793,7 @@ describe('GlobalTimerProvider', () => {
   })
 
   it('preserves query and hash when auto opening the interrupted study route', () => {
+    enableLegacyBreakGuard()
     vi.useFakeTimers()
     const openMainTarget = vi.fn()
     let commandHandler: ((command: UnifiedTimerCommand) => void) | null = null
@@ -804,6 +838,7 @@ describe('GlobalTimerProvider', () => {
   })
 
   it('falls back to /freestyle when the interrupted route path is not safe', () => {
+    enableLegacyBreakGuard()
     vi.useFakeTimers()
     const openMainTarget = vi.fn()
     let commandHandler: ((command: UnifiedTimerCommand) => void) | null = null
@@ -848,6 +883,7 @@ describe('GlobalTimerProvider', () => {
   })
 
   it('does not repeatedly auto open the study route while the same expired break keeps ticking', () => {
+    enableLegacyBreakGuard()
     vi.useFakeTimers()
     const openMainTarget = vi.fn()
     let commandHandler: ((command: UnifiedTimerCommand) => void) | null = null
@@ -895,6 +931,7 @@ describe('GlobalTimerProvider', () => {
   })
 
   it('auto opens the same study route again after snoozing and reaching expired a second time', () => {
+    enableLegacyBreakGuard()
     vi.useFakeTimers()
     const openMainTarget = vi.fn()
     let commandHandler: ((command: UnifiedTimerCommand) => void) | null = null
@@ -989,6 +1026,7 @@ describe('GlobalTimerProvider', () => {
   })
 
   it('switches a break prompt back to study when active study activity is registered', () => {
+    enableLegacyBreakGuard()
     vi.useFakeTimers()
     const publishTimerSnapshot = vi.fn()
     const registerActivity = vi.fn()
@@ -1049,6 +1087,7 @@ describe('GlobalTimerProvider', () => {
   })
 
   it('auto ends an active break when returning to study', () => {
+    enableLegacyBreakGuard()
     const publishTimerSnapshot = vi.fn()
     const pause = vi.fn()
     const resume = vi.fn()
@@ -1112,6 +1151,7 @@ describe('GlobalTimerProvider', () => {
   })
 
   it('auto ends an active break when study activity resumes', () => {
+    enableLegacyBreakGuard()
     const publishTimerSnapshot = vi.fn()
     const pause = vi.fn()
     const resume = vi.fn()
@@ -1323,10 +1363,10 @@ describe('GlobalTimerProvider', () => {
       />,
     )
 
-    expect(screen.getByRole('button', { name: /随心模式 00:55/ })).toBeTruthy()
+    expect(screen.getByRole('button', { name: /随心模式 00:05/ })).toBeTruthy()
     expect(document.querySelector('.memory-anki-global-timer-panel')).toBeNull()
 
-    fireEvent.click(screen.getByRole('button', { name: /随心模式 00:55/ }))
+    fireEvent.click(screen.getByRole('button', { name: /随心模式 00:05/ }))
 
     expect(document.querySelector('.memory-anki-global-timer-panel')).toBeTruthy()
   })
@@ -1336,7 +1376,7 @@ describe('GlobalTimerProvider', () => {
 
     fireEvent.click(screen.getByTitle('打开计时器设置'))
 
-    expect(screen.getByRole('heading', { name: '自动化配置' })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: '专注计时设置' })).toBeTruthy()
   })
 
   it('clamps oversized stored layout back into the visible viewport', () => {
@@ -1551,61 +1591,7 @@ describe('GlobalTimerProvider', () => {
     })
   })
 
-  it('renders the secondary countdown as the primary visual target', () => {
-    const focusConfig: TimerFocusConfig = {
-      mode: 'global',
-      feedbackIntensity: 'cinematic',
-      celebration: {
-        secondaryInterval: {
-          enabled: true,
-          soundEnabled: true,
-          animationEnabled: true,
-          volumeBoost: 1,
-          visualPreset: 'auto',
-        },
-        primaryGoal: {
-          enabled: true,
-          soundEnabled: true,
-          animationEnabled: true,
-          volumeBoost: 1,
-          visualPreset: 'auto',
-        },
-      },
-      global: {
-        primaryMinutes: 25,
-        secondaryMinutes: 1,
-      },
-      palace_edit: {
-        primaryMinutes: 25,
-        secondaryMinutes: 1,
-      },
-      practice: {
-        primaryMinutes: 25,
-        secondaryMinutes: 1,
-      },
-      quiz: {
-        primaryMinutes: 25,
-        secondaryMinutes: 1,
-      },
-      review: {
-        primaryMinutes: 25,
-        secondaryMinutes: 1,
-      },
-      freestyle: {
-        primaryMinutes: 25,
-        secondaryMinutes: 1,
-      },
-      english: {
-        primaryMinutes: 25,
-        secondaryMinutes: 1,
-      },
-      english_reading: {
-        primaryMinutes: 25,
-        secondaryMinutes: 1,
-      },
-    }
-    window.localStorage.setItem(TIMER_FOCUS_STORAGE_KEY, JSON.stringify(focusConfig))
-
+  it('renders effective elapsed time as the primary visual target', () => {
     renderOverlay(
       <RegistrationProbe
         timer={createTimer({
@@ -1622,19 +1608,65 @@ describe('GlobalTimerProvider', () => {
       />,
     )
 
-    expect(screen.getByText('00:55')).toBeTruthy()
-    expect(screen.getByText('01:05/25:00 0.04')).toBeTruthy()
+    expect(screen.getByText('01:05')).toBeTruthy()
+    expect(screen.getByText('本轮 01:05/25:00')).toBeTruthy()
+    expect(screen.getByRole('progressbar', { name: '本轮专注进度' }).getAttribute('aria-valuenow')).toBe('65')
   })
 
-  it('emits secondary and primary celebrations only once per threshold crossing', () => {
+  it('routes the goal prompt actions through the active timer and break machine', () => {
+    const startNextFocusRound = vi.fn()
+    const logEvent = vi.fn()
+    const pause = vi.fn()
+
+    renderOverlay(
+      <RegistrationProbe
+        timer={createTimer({
+          sessionId: 'review-goal',
+          effectiveSeconds: 1500,
+          status: 'running',
+          startedAt: '2026-06-17T10:00:00',
+          focusRound: {
+            roundIndex: 1,
+            startedAtEffectiveSeconds: 0,
+            acknowledgedIntervalCount: 4,
+            goalCelebrated: true,
+          },
+          startNextFocusRound,
+          logEvent,
+          pause,
+        })}
+        scene="review"
+        title="复习会话"
+        isRouteActive
+        becameActiveAt={100}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: '继续学习' }))
+    expect(startNextFocusRound).toHaveBeenCalledWith({ source: 'goal_continue' })
+
+    fireEvent.click(screen.getByRole('button', { name: '休息 5 分钟' }))
+    expect(logEvent).toHaveBeenCalledWith(
+      'break_start',
+      expect.objectContaining({ source: 'focus_goal', planned_minutes: 5 }),
+    )
+    expect(startNextFocusRound).toHaveBeenCalledWith({ source: 'focus_goal_break' })
+    expect(pause).toHaveBeenCalledWith({ source: 'break_guard' })
+  })
+
+  it('emits interval and goal celebrations only once per persisted round threshold', () => {
+    const acknowledgeFocusInterval = vi.fn()
+    const acknowledgeFocusGoal = vi.fn()
     const { rerender } = render(
       <GlobalTimerProvider>
         <RegistrationProbe
           timer={createTimer({
             sessionId: 'review-running',
-            effectiveSeconds: 59,
+            effectiveSeconds: 299,
             status: 'running',
             startedAt: '2026-06-17T10:00:00',
+            acknowledgeFocusInterval,
+            acknowledgeFocusGoal,
           })}
           scene="review"
           title="复习会话"
@@ -1651,9 +1683,11 @@ describe('GlobalTimerProvider', () => {
         <RegistrationProbe
           timer={createTimer({
             sessionId: 'review-running',
-            effectiveSeconds: 60,
+            effectiveSeconds: 300,
             status: 'running',
             startedAt: '2026-06-17T10:00:00',
+            acknowledgeFocusInterval,
+            acknowledgeFocusGoal,
           })}
           scene="review"
           title="复习会话"
@@ -1671,15 +1705,27 @@ describe('GlobalTimerProvider', () => {
         completionCount: 1,
       }),
     )
+    expect(acknowledgeFocusInterval).toHaveBeenCalledWith(
+      1,
+      expect.objectContaining({ source: 'focus_cycle' }),
+    )
 
     rerender(
       <GlobalTimerProvider>
         <RegistrationProbe
           timer={createTimer({
             sessionId: 'review-running',
-            effectiveSeconds: 61,
+            effectiveSeconds: 301,
             status: 'running',
             startedAt: '2026-06-17T10:00:00',
+            focusRound: {
+              roundIndex: 1,
+              startedAtEffectiveSeconds: 0,
+              acknowledgedIntervalCount: 1,
+              goalCelebrated: false,
+            },
+            acknowledgeFocusInterval,
+            acknowledgeFocusGoal,
           })}
           scene="review"
           title="复习会话"
@@ -1699,6 +1745,14 @@ describe('GlobalTimerProvider', () => {
             effectiveSeconds: 1500,
             status: 'running',
             startedAt: '2026-06-17T10:00:00',
+            focusRound: {
+              roundIndex: 1,
+              startedAtEffectiveSeconds: 0,
+              acknowledgedIntervalCount: 4,
+              goalCelebrated: false,
+            },
+            acknowledgeFocusInterval,
+            acknowledgeFocusGoal,
           })}
           scene="review"
           title="复习会话"
@@ -1708,20 +1762,16 @@ describe('GlobalTimerProvider', () => {
       </GlobalTimerProvider>,
     )
 
-    expect(emitTimerCelebration).toHaveBeenCalledTimes(3)
+    expect(emitTimerCelebration).toHaveBeenCalledTimes(2)
     expect(emitTimerCelebration).toHaveBeenNthCalledWith(
       2,
       expect.objectContaining({
-        kind: 'secondary',
-        completionCount: 25,
+        kind: 'primary',
+        completionCount: 1,
       }),
     )
-    expect(emitTimerCelebration).toHaveBeenNthCalledWith(
-      3,
-      expect.objectContaining({
-        kind: 'primary',
-        completionCount: 25,
-      }),
+    expect(acknowledgeFocusGoal).toHaveBeenCalledWith(
+      expect.objectContaining({ source: 'focus_cycle' }),
     )
 
     rerender(
@@ -1732,6 +1782,14 @@ describe('GlobalTimerProvider', () => {
             effectiveSeconds: 1501,
             status: 'running',
             startedAt: '2026-06-17T10:00:00',
+            focusRound: {
+              roundIndex: 1,
+              startedAtEffectiveSeconds: 0,
+              acknowledgedIntervalCount: 4,
+              goalCelebrated: true,
+            },
+            acknowledgeFocusInterval,
+            acknowledgeFocusGoal,
           })}
           scene="review"
           title="复习会话"
@@ -1741,6 +1799,6 @@ describe('GlobalTimerProvider', () => {
       </GlobalTimerProvider>,
     )
 
-    expect(emitTimerCelebration).toHaveBeenCalledTimes(3)
+    expect(emitTimerCelebration).toHaveBeenCalledTimes(2)
   })
 })

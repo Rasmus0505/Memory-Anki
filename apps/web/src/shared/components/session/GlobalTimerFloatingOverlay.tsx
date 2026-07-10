@@ -6,7 +6,6 @@ import { Input } from '@/shared/components/ui/input'
 import { cn } from '@/shared/lib/utils'
 import { TimerAutomationDialog } from '@/shared/components/session/TimerAutomationDialog'
 import {
-  getTimerAutomationRule,
   readTimerAutomationConfig,
   resetTimerAutomationConfig,
   saveTimerAutomationConfig,
@@ -16,28 +15,31 @@ import {
 import { onAppEvent } from '@/shared/events/appEvents'
 import {
   getTimerCelebrationConfig,
-  getTimerFocusRule,
   readTimerFocusConfig,
   resetTimerFocusConfig,
   saveTimerFocusConfig,
-  TIMER_FOCUS_SCENE_LABELS,
   TIMER_FOCUS_UPDATED_EVENT,
   type TimerFocusConfig,
 } from '@/shared/components/session/timer-focus-config'
+import { emitTimerCelebration } from '@/shared/components/session/timer-celebration'
+import { useMindMapFeedbackSettings } from '@/shared/components/mindmap-host/useMindMapFeedback'
+import { getReviewFeedbackEffectiveVolume } from '@/shared/feedback/reviewFeedbackSettings'
+import { playFeedbackAudio } from '@/shared/feedback/feedbackCenter'
 import {
   readTimerOverlayLayout,
   saveTimerOverlayLayout,
   type TimerOverlayLayout,
 } from '@/shared/components/session/timer-overlay-layout'
-import { emitTimerCelebration } from '@/shared/components/session/timer-celebration'
 import type { UnifiedTimerCommand, UnifiedTimerSnapshot } from '@/shared/components/session/desktopTimerBridge'
-import { useMindMapFeedbackSettings } from '@/shared/components/mindmap-host/useMindMapFeedback'
-import { getReviewFeedbackEffectiveVolume } from '@/shared/feedback/reviewFeedbackSettings'
+import {
+  BREAK_GUARD_UPDATED_EVENT,
+  readBreakGuardConfig,
+  saveBreakGuardConfig,
+  type BreakGuardConfig,
+} from '@/shared/components/session/break-guard-config'
 import {
   createTimerOverlaySizeTokens,
   formatClock,
-  formatIdlePrimaryProgress,
-  formatPrimaryProgress,
   resolveFloatingTimerLayout,
   selectActiveTimerEntry,
   TIMER_RESIZE_HANDLE_STYLES,
@@ -45,25 +47,6 @@ import {
 } from '@/shared/components/session/globalTimerModel'
 import { formatTimerSnapshotClock } from '@/shared/components/session/timerSnapshotBuilders'
 import { useTimerOverlayDrag } from '@/shared/components/session/useTimerOverlayDrag'
-
-function usePrefersReducedMotion() {
-  const [reducedMotion, setReducedMotion] = React.useState(false)
-
-  React.useEffect(() => {
-    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return
-    const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)')
-    const sync = () => setReducedMotion(mediaQuery.matches)
-    sync()
-    if (typeof mediaQuery.addEventListener === 'function') {
-      mediaQuery.addEventListener('change', sync)
-      return () => mediaQuery.removeEventListener('change', sync)
-    }
-    mediaQuery.addListener(sync)
-    return () => mediaQuery.removeListener(sync)
-  }, [])
-
-  return reducedMotion
-}
 
 export function GlobalTimerFloatingOverlay({
   entries,
@@ -84,19 +67,21 @@ export function GlobalTimerFloatingOverlay({
   const [focusConfig, setFocusConfig] = React.useState<TimerFocusConfig>(() =>
     readTimerFocusConfig(),
   )
-  const [pulseKind, setPulseKind] = React.useState<'secondary' | 'primary' | null>(null)
+  const [breakConfig, setBreakConfig] = React.useState<BreakGuardConfig>(() =>
+    readBreakGuardConfig(),
+  )
+  const feedbackSettings = useMindMapFeedbackSettings()
+  const [pulseKind, setPulseKind] = React.useState<'interval' | 'goal' | null>(null)
   const [pulseNonce, setPulseNonce] = React.useState(0)
   const [customBreakMinutes, setCustomBreakMinutes] = React.useState('')
-  const reducedMotion = usePrefersReducedMotion()
-  const feedbackSettings = useMindMapFeedbackSettings()
-  const effectiveFeedbackVolume = getReviewFeedbackEffectiveVolume(feedbackSettings)
   const activeEntry = React.useMemo(() => selectActiveTimerEntry(entries), [entries])
   const scene = activeEntry?.scene ?? null
   const [isNarrowViewport, setIsNarrowViewport] = React.useState(() =>
     typeof window !== 'undefined' ? window.innerWidth < 640 : false,
   )
   const [freestyleMobileTimerExpanded, setFreestyleMobileTimerExpanded] = React.useState(false)
-  const completionStateRef = React.useRef<Record<string, { secondaryCount: number; primaryDone: boolean }>>({})
+  const lastFeedbackEventIdRef = React.useRef<string | null>(null)
+  const breakExpiredNotifiedRef = React.useRef(false)
 
   const persistLayout = React.useCallback((nextLayout: TimerOverlayLayout | ((current: TimerOverlayLayout) => TimerOverlayLayout)) => {
     setLayout((current) => {
@@ -119,7 +104,7 @@ export function GlobalTimerFloatingOverlay({
     }
   }, [persistLayout])
 
-  const useFreestyleMobileCompactTimer = scene === 'freestyle' && isNarrowViewport
+  const useFreestyleMobileCompactTimer = isNarrowViewport
 
   React.useEffect(() => {
     if (!useFreestyleMobileCompactTimer) {
@@ -143,72 +128,67 @@ export function GlobalTimerFloatingOverlay({
           : readTimerFocusConfig()
       setFocusConfig(nextConfig)
     }
+    const handleBreakChange = (event: Event) => {
+      const nextConfig =
+        event instanceof CustomEvent && event.detail
+          ? (event.detail as BreakGuardConfig)
+          : readBreakGuardConfig()
+      setBreakConfig(nextConfig)
+    }
 
     window.addEventListener(TIMER_FOCUS_UPDATED_EVENT, handleFocusChange)
+    window.addEventListener(BREAK_GUARD_UPDATED_EVENT, handleBreakChange)
     return () => {
       unsubscribeAutomation()
       window.removeEventListener(TIMER_FOCUS_UPDATED_EVENT, handleFocusChange)
+      window.removeEventListener(BREAK_GUARD_UPDATED_EVENT, handleBreakChange)
     }
   }, [])
 
   React.useEffect(() => {
     if (pulseKind == null) return
-    const timer = window.setTimeout(() => setPulseKind(null), pulseKind === 'primary' ? 540 : 360)
+    const timer = window.setTimeout(() => setPulseKind(null), pulseKind === 'goal' ? 540 : 360)
     return () => window.clearTimeout(timer)
   }, [pulseKind, pulseNonce])
 
   React.useEffect(() => {
-    if (!activeEntry) return
-    const previous = completionStateRef.current[activeEntry.sessionId]
-    const focusRule = getTimerFocusRule(activeEntry.scene, focusConfig)
-    const primarySeconds = Math.max(60, focusRule.primaryMinutes * 60)
-    const secondarySeconds = Math.max(60, Math.min(primarySeconds, focusRule.secondaryMinutes * 60))
-    const secondaryCount = Math.floor(activeEntry.timer.effectiveSeconds / secondarySeconds)
-    const primaryDone = activeEntry.timer.effectiveSeconds >= primarySeconds
+    const signal = snapshot.feedbackSignal
+    if (!signal || lastFeedbackEventIdRef.current === signal.eventId) return
+    lastFeedbackEventIdRef.current = signal.eventId
+    setPulseKind(signal.kind)
+    setPulseNonce((current) => current + 1)
+    const kind = signal.kind === 'goal' ? 'primary' : 'secondary'
+    emitTimerCelebration({
+      completionCount: signal.ordinal,
+      kind,
+      reducedMotion:
+        feedbackSettings.reducedCelebrationMotion ||
+        (typeof window.matchMedia === 'function' &&
+          window.matchMedia('(prefers-reduced-motion: reduce)').matches),
+      soundEnabled: feedbackSettings.soundEnabled && feedbackSettings.mode === 'immersive',
+      volume: getReviewFeedbackEffectiveVolume(feedbackSettings),
+      feedbackIntensity: focusConfig.feedbackIntensity,
+      eventConfig: getTimerCelebrationConfig(kind, focusConfig),
+    })
+  }, [feedbackSettings, focusConfig, snapshot.feedbackSignal])
 
-    if (!previous || secondaryCount < previous.secondaryCount || activeEntry.timer.effectiveSeconds === 0) {
-      completionStateRef.current[activeEntry.sessionId] = {
-        secondaryCount,
-        primaryDone,
-      }
+  React.useEffect(() => {
+    const expired = snapshot.mode === 'break' && snapshot.status === 'expired'
+    if (!expired) {
+      breakExpiredNotifiedRef.current = false
       return
     }
-
-    if (secondaryCount > previous.secondaryCount) {
-      const eventConfig = getTimerCelebrationConfig('secondary', focusConfig)
-      emitTimerCelebration({
-        completionCount: secondaryCount,
-        kind: 'secondary',
-        reducedMotion,
-        soundEnabled: feedbackSettings.soundEnabled && feedbackSettings.mode === 'immersive',
-        volume: effectiveFeedbackVolume,
-        feedbackIntensity: focusConfig.feedbackIntensity,
-        eventConfig,
-      })
-      setPulseKind('secondary')
-      setPulseNonce((current) => current + 1)
+    if (breakExpiredNotifiedRef.current) return
+    breakExpiredNotifiedRef.current = true
+    playFeedbackAudio({ event: 'navigation', audioScope: 'global' })
+    if (
+      feedbackSettings.desktopNotificationsEnabled &&
+      'Notification' in window &&
+      Notification.permission === 'granted'
+    ) {
+      new Notification('休息时间到了', { body: '准备好后手动开始下一轮学习。' })
     }
-
-    if (primaryDone && !previous.primaryDone) {
-      const eventConfig = getTimerCelebrationConfig('primary', focusConfig)
-      emitTimerCelebration({
-        completionCount: secondaryCount,
-        kind: 'primary',
-        reducedMotion,
-        soundEnabled: feedbackSettings.soundEnabled && feedbackSettings.mode === 'immersive',
-        volume: effectiveFeedbackVolume,
-        feedbackIntensity: focusConfig.feedbackIntensity,
-        eventConfig,
-      })
-      setPulseKind('primary')
-      setPulseNonce((current) => current + 1)
-    }
-
-    completionStateRef.current[activeEntry.sessionId] = {
-      secondaryCount,
-      primaryDone,
-    }
-  }, [activeEntry, effectiveFeedbackVolume, feedbackSettings.mode, feedbackSettings.soundEnabled, focusConfig, reducedMotion])
+  }, [feedbackSettings.desktopNotificationsEnabled, snapshot.mode, snapshot.status])
 
   const {
     beginDrag,
@@ -219,65 +199,70 @@ export function GlobalTimerFloatingOverlay({
     suppressCapsuleClickRef,
   } = useTimerOverlayDrag(layout, persistLayout)
 
-  const sceneLabel = scene ? TIMER_FOCUS_SCENE_LABELS[scene] : '计时器'
-  const title = activeEntry?.title ?? '待开始'
-  const focusRule = scene ? getTimerFocusRule(scene, focusConfig) : focusConfig.global
-  const automationRule = scene ? getTimerAutomationRule(scene, automationConfig) : null
-  const primarySeconds = Math.max(60, focusRule.primaryMinutes * 60)
-  const secondarySeconds = Math.max(60, Math.min(primarySeconds, focusRule.secondaryMinutes * 60))
-  const effectiveSeconds = activeEntry?.timer.effectiveSeconds ?? 0
-  const secondaryCount = secondarySeconds > 0 ? Math.floor(effectiveSeconds / secondarySeconds) : 0
-  const secondaryRemainder = secondarySeconds > 0 ? effectiveSeconds % secondarySeconds : 0
-  const secondaryRemaining =
-    secondarySeconds > 0
-      ? secondaryRemainder === 0
-        ? secondarySeconds
-        : secondarySeconds - secondaryRemainder
-      : 0
-  const idleSecondarySeconds = secondarySeconds
-  const idleText = automationRule
-    ? `闲置 ${activeEntry?.timer.idleSeconds ?? 0}/${automationRule.inactiveAutoPauseSeconds} 秒`
-    : '当前无学习会话'
-  const primarySummaryText = activeEntry
-    ? formatPrimaryProgress(effectiveSeconds, primarySeconds)
-    : formatIdlePrimaryProgress(primarySeconds)
   const showFullPanel =
-    !layout.collapsed && !(useFreestyleMobileCompactTimer && !freestyleMobileTimerExpanded)
-  const primaryAction =
-    activeEntry == null
-      ? null
-      : activeEntry.timer.status === 'running'
-      ? {
-          label: '暂停',
-          icon: Pause,
-          onClick: () => activeEntry.timer.pause({ source: 'global_floating_timer' }),
-        }
-      : {
-          label: activeEntry?.timer.status === 'paused' ? '继续' : '开始',
-          icon: Play,
-          onClick: () =>
-            (activeEntry?.timer.status === 'paused'
-              ? activeEntry.timer.resume({ source: 'global_floating_timer' })
-              : activeEntry?.timer.start({ source: 'global_floating_timer' })),
-        }
-  const PrimaryActionIcon = primaryAction?.icon ?? Play
+    !layout.collapsed &&
+    !(useFreestyleMobileCompactTimer && !freestyleMobileTimerExpanded)
+  const layoutWidth = layout.width
+  const layoutHeight = layout.height
   const sizeTokens = React.useMemo(
-    () => createTimerOverlaySizeTokens(layout),
-    [layout.height, layout.width],
+    () => createTimerOverlaySizeTokens({ width: layoutWidth, height: layoutHeight }),
+    [layoutHeight, layoutWidth],
   )
   const isBreakMode = snapshot.mode === 'break'
   const isBreakExpired = isBreakMode && snapshot.status === 'expired'
-  const panelSceneLabel = isBreakMode ? snapshot.scene : sceneLabel
-  const panelTitle = isBreakMode ? snapshot.title : title
+  const studyPhase = snapshot.studyPhase ?? (
+    snapshot.status === 'running'
+      ? 'focusing'
+      : snapshot.status === 'paused'
+        ? 'paused'
+        : snapshot.status === 'completed'
+          ? 'completed'
+          : 'idle'
+  )
+  const effectiveSeconds = Math.max(0, snapshot.effectiveSeconds ?? snapshot.displaySeconds ?? 0)
+  const roundElapsedSeconds = Math.max(0, snapshot.roundElapsedSeconds ?? 0)
+  const roundTargetSeconds = Math.max(0, snapshot.roundTargetSeconds ?? 0)
+  const roundProgress = roundTargetSeconds > 0
+    ? Math.min(1, roundElapsedSeconds / roundTargetSeconds)
+    : 0
+  const roundSummaryText = roundTargetSeconds > 0
+    ? `本轮 ${formatClock(roundElapsedSeconds)}/${formatClock(roundTargetSeconds)}`
+    : snapshot.secondaryText
+  const studyStatusText =
+    studyPhase === 'idle_warning'
+      ? `仍在学习吗？${snapshot.idleWarningRemainingSeconds != null ? ` ${Math.max(0, snapshot.idleWarningRemainingSeconds)} 秒后暂停` : ''}`
+      : studyPhase === 'goal_reached'
+        ? `第 ${Math.max(1, snapshot.roundIndex ?? 1)} 轮目标完成`
+        : studyPhase === 'paused'
+          ? '已暂停'
+          : studyPhase === 'completed'
+            ? '已完成'
+            : studyPhase === 'focusing'
+              ? '正在计时'
+              : snapshot.primaryText
+  const panelSceneLabel = snapshot.scene
+  const panelTitle = snapshot.title
   const panelDigits = isBreakMode
     ? formatTimerSnapshotClock(snapshot.displaySeconds)
-    : formatClock(activeEntry ? secondaryRemaining : idleSecondarySeconds)
-  const panelPrimaryText = isBreakMode ? snapshot.primaryText : idleText
-  const panelSecondaryText = isBreakMode ? snapshot.secondaryText : primarySummaryText
+    : formatClock(effectiveSeconds)
+  const panelPrimaryText = isBreakMode ? snapshot.primaryText : studyStatusText
+  const panelSecondaryText = isBreakMode ? snapshot.secondaryText : roundSummaryText
+  const studyCapsuleStatus =
+    studyPhase === 'idle_warning'
+      ? ' · 提醒'
+      : studyPhase === 'goal_reached'
+        ? ' · 达标'
+        : studyPhase === 'paused'
+          ? ' · 已暂停'
+          : ''
   const capsuleLabel = isBreakMode
-    ? `${snapshot.scene.replace('中', '')} ${snapshot.status === 'expired' ? '到点' : formatTimerSnapshotClock(snapshot.displaySeconds)}`
+    ? snapshot.status === 'expired'
+      ? '休息到点'
+      : snapshot.status === 'prompting'
+        ? '休息询问'
+        : `休息 ${formatTimerSnapshotClock(snapshot.displaySeconds)}`
     : activeEntry
-      ? `${sceneLabel} ${formatClock(secondaryRemaining)}`
+      ? `${snapshot.scene}${studyCapsuleStatus} ${formatClock(effectiveSeconds)}`
       : '计时器 待开始'
 
   const renderBreakActions = () => {
@@ -350,26 +335,17 @@ export function GlobalTimerFloatingOverlay({
             style={sizeTokens.actionButtonStyle}
             onClick={() => onCommand({ type: 'snooze', minutes: firstSnooze })}
           >
-            +{firstSnooze}
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="memory-anki-global-timer-action-button flex-1"
-            style={sizeTokens.actionButtonStyle}
-            onClick={() => onCommand({ type: 'finishBreak' })}
-          >
-            结束
+            延后 {firstSnooze} 分钟
           </Button>
           <Button
             type="button"
             size="sm"
             className="memory-anki-global-timer-action-button flex-1"
             style={sizeTokens.actionButtonStyle}
-            onClick={() => onCommand({ type: 'finishBreak', openTarget: true })}
+            onClick={() => onCommand({ type: 'startStudy' })}
           >
-            回随心
+            <Play className="memory-anki-global-timer-icon mr-2" style={sizeTokens.iconStyle} />
+            开始学习
           </Button>
         </>
       )
@@ -410,6 +386,80 @@ export function GlobalTimerFloatingOverlay({
     )
   }
 
+  const renderStudyActions = () => {
+    if (studyPhase === 'goal_reached') {
+      const suggestedBreakMinutes = Math.max(1, snapshot.suggestedBreakMinutes ?? 5)
+      return (
+        <>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="memory-anki-global-timer-action-button flex-1"
+            style={sizeTokens.actionButtonStyle}
+            onClick={() => onCommand({ type: 'continueRound' })}
+          >
+            继续学习
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            className="memory-anki-global-timer-action-button flex-1"
+            style={sizeTokens.actionButtonStyle}
+            onClick={() => onCommand({ type: 'startGoalBreak', minutes: suggestedBreakMinutes })}
+          >
+            休息 {suggestedBreakMinutes} 分钟
+          </Button>
+        </>
+      )
+    }
+
+    const canPause = snapshot.availableActions.includes('pause')
+    const canResume = snapshot.availableActions.includes('resume')
+    if (canPause) {
+      return (
+        <Button
+          type="button"
+          size="sm"
+          className="memory-anki-global-timer-action-button flex-1"
+          style={sizeTokens.actionButtonStyle}
+          onClick={() => onCommand({ type: 'pause' })}
+        >
+          <Pause className="memory-anki-global-timer-icon mr-2" style={sizeTokens.iconStyle} />
+          暂停
+        </Button>
+      )
+    }
+
+    if (canResume) {
+      return (
+        <Button
+          type="button"
+          size="sm"
+          className="memory-anki-global-timer-action-button flex-1"
+          style={sizeTokens.actionButtonStyle}
+          onClick={() => onCommand({ type: 'resume' })}
+        >
+          <Play className="memory-anki-global-timer-icon mr-2" style={sizeTokens.iconStyle} />
+          {studyPhase === 'paused' ? '继续' : '开始'}
+        </Button>
+      )
+    }
+
+    return (
+      <Button
+        type="button"
+        size="sm"
+        className="memory-anki-global-timer-action-button flex-1"
+        style={sizeTokens.actionButtonStyle}
+        disabled
+      >
+        <Play className="memory-anki-global-timer-icon mr-2" style={sizeTokens.iconStyle} />
+        进入学习页后开始
+      </Button>
+    )
+  }
+
   const overlay = (
     <>
       {pulseKind ? (
@@ -417,7 +467,7 @@ export function GlobalTimerFloatingOverlay({
           key={`${pulseKind}-${pulseNonce}`}
           className={cn(
             'memory-anki-timer-screen-pulse',
-            pulseKind === 'primary'
+            pulseKind === 'goal'
               ? 'memory-anki-timer-screen-pulse-primary'
               : 'memory-anki-timer-screen-pulse-secondary',
           )}
@@ -437,8 +487,10 @@ export function GlobalTimerFloatingOverlay({
               'memory-anki-global-timer-panel',
               isBreakMode && 'memory-anki-global-timer-panel-break',
               isBreakExpired && 'memory-anki-global-timer-panel-expired',
-              pulseKind === 'primary' && 'memory-anki-global-timer-panel-primary',
-              pulseKind === 'secondary' && 'memory-anki-global-timer-panel-secondary',
+              !isBreakMode && studyPhase === 'idle_warning' && 'memory-anki-global-timer-panel-warning',
+              !isBreakMode && studyPhase === 'goal_reached' && 'memory-anki-global-timer-panel-goal',
+              pulseKind === 'goal' && 'memory-anki-global-timer-panel-primary',
+              pulseKind === 'interval' && 'memory-anki-global-timer-panel-secondary',
             )}
             style={{ width: layout.width, height: layout.height, ...sizeTokens.panelStyle }}
           >
@@ -485,33 +537,21 @@ export function GlobalTimerFloatingOverlay({
               <div className="memory-anki-global-timer-row memory-anki-global-timer-row-primary">
                 {panelSecondaryText}
               </div>
+              {!isBreakMode && roundTargetSeconds > 0 ? (
+                <div
+                  className="memory-anki-timer-round-progress"
+                  role="progressbar"
+                  aria-label="本轮专注进度"
+                  aria-valuemin={0}
+                  aria-valuemax={roundTargetSeconds}
+                  aria-valuenow={Math.min(roundElapsedSeconds, roundTargetSeconds)}
+                >
+                  <span style={{ width: `${roundProgress * 100}%` }} />
+                </div>
+              ) : null}
               <div className="memory-anki-global-timer-body-spacer" aria-hidden="true" />
               <div className="memory-anki-global-timer-actions">
-                {isBreakMode ? (
-                  renderBreakActions()
-                ) : activeEntry && primaryAction ? (
-                  <Button
-                    type="button"
-                    size="sm"
-                    className="memory-anki-global-timer-action-button flex-1"
-                    style={sizeTokens.actionButtonStyle}
-                    onClick={primaryAction.onClick}
-                  >
-                    <PrimaryActionIcon className="memory-anki-global-timer-icon mr-2" style={sizeTokens.iconStyle} />
-                    {primaryAction.label}
-                  </Button>
-                ) : (
-                  <Button
-                    type="button"
-                    size="sm"
-                    className="memory-anki-global-timer-action-button flex-1"
-                    style={sizeTokens.actionButtonStyle}
-                    disabled
-                  >
-                    <Play className="memory-anki-global-timer-icon mr-2" style={sizeTokens.iconStyle} />
-                    进入学习页后开始
-                  </Button>
-                )}
+                {isBreakMode ? renderBreakActions() : renderStudyActions()}
               </div>
             </div>
 
@@ -527,7 +567,11 @@ export function GlobalTimerFloatingOverlay({
         ) : (
           <button
             type="button"
-            className="memory-anki-global-timer-capsule"
+            className={cn(
+              'memory-anki-global-timer-capsule',
+              !isBreakMode && studyPhase === 'idle_warning' && 'memory-anki-global-timer-capsule-warning',
+              !isBreakMode && studyPhase === 'goal_reached' && 'memory-anki-global-timer-capsule-goal',
+            )}
             onPointerDown={beginDrag}
             onClick={() => {
               if (suppressCapsuleClickRef.current) {
@@ -543,7 +587,7 @@ export function GlobalTimerFloatingOverlay({
               }
               persistLayout((current) => ({ ...current, collapsed: false }))
             }}
-            title={activeEntry ? `${sceneLabel} 计时器` : '展开计时器'}
+            title={activeEntry ? `${snapshot.scene} 计时器` : '展开计时器'}
           >
             <span className="memory-anki-global-timer-capsule-dot" />
             <span className="memory-anki-global-timer-capsule-label">
@@ -567,9 +611,14 @@ export function GlobalTimerFloatingOverlay({
           setFocusConfig(resetTimerFocusConfig())
         }}
         focusConfig={focusConfig}
+        breakConfig={breakConfig}
         onFocusConfigSave={(nextConfig) => {
           const saved = saveTimerFocusConfig(nextConfig)
           setFocusConfig(saved)
+        }}
+        onBreakConfigSave={(nextConfig) => {
+          const saved = saveBreakGuardConfig(nextConfig)
+          setBreakConfig(saved)
         }}
       />
     </>

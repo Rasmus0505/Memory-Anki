@@ -5,6 +5,36 @@ import type { UnifiedTimerSnapshot } from '@/shared/components/session/desktopTi
 let snapshotHandler: ((snapshot: UnifiedTimerSnapshot) => void) | null = null
 const sendTimerCommand = vi.fn()
 const setOverlayCollapsed = vi.fn()
+const oscillatorStart = vi.fn()
+
+class MockAudioContext {
+  currentTime = 0
+  destination = {}
+
+  createOscillator() {
+    return {
+      type: 'sine',
+      frequency: { setValueAtTime: vi.fn() },
+      connect: vi.fn(),
+      start: oscillatorStart,
+      stop: vi.fn(),
+    }
+  }
+
+  createGain() {
+    return {
+      gain: {
+        setValueAtTime: vi.fn(),
+        exponentialRampToValueAtTime: vi.fn(),
+      },
+      connect: vi.fn(),
+    }
+  }
+
+  close() {
+    return Promise.resolve()
+  }
+}
 
 vi.mock('@/shared/preferences/clientPreferences', () => ({
   getClientPreferenceCacheStatus: () => ({ hasEntry: false, value: null }),
@@ -36,6 +66,11 @@ describe('TimerOverlayPage', () => {
     snapshotHandler = null
     sendTimerCommand.mockClear()
     setOverlayCollapsed.mockClear()
+    oscillatorStart.mockClear()
+    Object.defineProperty(window, 'AudioContext', {
+      configurable: true,
+      value: MockAudioContext,
+    })
   })
 
   it('renders without the main app shell', () => {
@@ -183,5 +218,147 @@ describe('TimerOverlayPage', () => {
     expect(screen.getByText('随心模式')).toBeTruthy()
     expect(screen.getByText('00:55')).toBeTruthy()
     expect(screen.queryByText('休息询问')).toBeNull()
+  })
+
+  it('renders effective elapsed time, round progress, and goal actions from the shared snapshot', () => {
+    render(<TimerOverlayPage />)
+
+    act(() => {
+      snapshotHandler?.({
+        mode: 'study',
+        status: 'running',
+        title: '随心模式',
+        scene: '随心模式',
+        displaySeconds: 1502,
+        studyPhase: 'goal_reached',
+        effectiveSeconds: 1502,
+        roundElapsedSeconds: 1502,
+        roundTargetSeconds: 1500,
+        roundIndex: 1,
+        idleWarningRemainingSeconds: null,
+        suggestedBreakMinutes: 5,
+        feedbackSignal: null,
+        primaryText: '目标完成',
+        secondaryText: '',
+        snoozeCount: 0,
+        availableActions: ['continueRound', 'startGoalBreak'],
+        presetMinutes: [],
+        snoozeMinutes: [],
+        targetPath: '/freestyle',
+        updatedAt: 3,
+      })
+    })
+
+    expect(screen.getByText('25:02')).toBeTruthy()
+    expect(screen.getByText('第 1 轮目标完成')).toBeTruthy()
+    expect(screen.getByText('本轮 25:02/25:00')).toBeTruthy()
+    expect(screen.getByRole('progressbar', { name: '本轮专注进度' }).getAttribute('aria-valuenow')).toBe('1500')
+
+    fireEvent.click(screen.getByRole('button', { name: '继续学习' }))
+    fireEvent.click(screen.getByRole('button', { name: '休息 5 分钟' }))
+
+    expect(sendTimerCommand).toHaveBeenCalledWith({ type: 'continueRound' })
+    expect(sendTimerCommand).toHaveBeenCalledWith({ type: 'startGoalBreak', minutes: 5 })
+  })
+
+  it('shows the idle warning while keeping the pause command available', () => {
+    render(<TimerOverlayPage />)
+
+    act(() => {
+      snapshotHandler?.({
+        mode: 'study',
+        status: 'running',
+        title: '复习会话',
+        scene: '复习',
+        displaySeconds: 121,
+        studyPhase: 'idle_warning',
+        effectiveSeconds: 121,
+        roundElapsedSeconds: 121,
+        roundTargetSeconds: 1500,
+        roundIndex: 1,
+        idleWarningRemainingSeconds: 29,
+        suggestedBreakMinutes: 5,
+        feedbackSignal: null,
+        primaryText: '',
+        secondaryText: '',
+        snoozeCount: 0,
+        availableActions: ['pause'],
+        presetMinutes: [],
+        snoozeMinutes: [],
+        targetPath: '/freestyle',
+        updatedAt: 4,
+      })
+    })
+
+    expect(screen.getByText('仍在学习吗？ 29 秒后暂停')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: '暂停' }))
+    expect(sendTimerCommand).toHaveBeenCalledWith({ type: 'pause' })
+  })
+
+  it('starts study explicitly after an expired break', () => {
+    render(<TimerOverlayPage />)
+
+    act(() => {
+      snapshotHandler?.({
+        mode: 'break',
+        status: 'expired',
+        title: '该回来了',
+        scene: '休息到点',
+        displaySeconds: 0,
+        primaryText: '休息已经结束',
+        secondaryText: '计划 5 分钟',
+        snoozeCount: 0,
+        availableActions: ['snooze', 'startStudy'],
+        presetMinutes: [5],
+        snoozeMinutes: [1, 3, 5],
+        targetPath: '/freestyle',
+        updatedAt: 5,
+      })
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: '开始学习' }))
+    expect(sendTimerCommand).toHaveBeenCalledWith({ type: 'startStudy' })
+  })
+
+  it('plays each focus feedback signal only once even when the snapshot is republished', () => {
+    render(<TimerOverlayPage />)
+    const publishSignal = (nonce: number, kind: 'interval' | 'goal', updatedAt: number) => {
+      snapshotHandler?.({
+        mode: 'study',
+        status: 'running',
+        title: '随心模式',
+        scene: '随心模式',
+        displaySeconds: 300,
+        studyPhase: 'focusing',
+        effectiveSeconds: 300,
+        roundElapsedSeconds: 300,
+        roundTargetSeconds: 1500,
+        roundIndex: 1,
+        idleWarningRemainingSeconds: null,
+        suggestedBreakMinutes: 5,
+        feedbackSignal: {
+          eventId: `session:round:1:${kind}:${nonce}`,
+          kind,
+          ordinal: nonce,
+          roundIndex: 1,
+          occurredAt: updatedAt,
+        },
+        primaryText: '正在计时',
+        secondaryText: '',
+        snoozeCount: 0,
+        availableActions: ['pause'],
+        presetMinutes: [],
+        snoozeMinutes: [],
+        targetPath: '/freestyle',
+        updatedAt,
+      })
+    }
+
+    act(() => publishSignal(1, 'interval', 6))
+    act(() => publishSignal(1, 'interval', 7))
+    expect(oscillatorStart).toHaveBeenCalledTimes(1)
+
+    act(() => publishSignal(2, 'goal', 8))
+    expect(oscillatorStart).toHaveBeenCalledTimes(2)
   })
 })

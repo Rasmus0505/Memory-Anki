@@ -32,7 +32,6 @@ export function useBreakGuardMachine({
   const [breakReturnPath, setBreakReturnPath] = React.useState<string | null>(null)
   const [breakTick, setBreakTick] = React.useState(0)
   const promptTimerRef = React.useRef<number | null>(null)
-  const promptAutoStartTimerRef = React.useRef<number | null>(null)
   const breakAutoOpenedKeyRef = React.useRef<string | null>(null)
   const breakStateRef = React.useRef(breakState)
   const breakConfigRef = React.useRef(breakConfig)
@@ -52,6 +51,7 @@ export function useBreakGuardMachine({
       breakAutoOpenedKeyRef.current = null
       return
     }
+    if (breakConfigRef.current.alertStrength !== 'strong') return
     const autoOpenKey = `${breakState.startedAt ?? 'idle'}:${breakState.snoozeCount}`
     if (breakAutoOpenedKeyRef.current === autoOpenKey) return
     const bridge = getDesktopTimerBridge()
@@ -118,9 +118,6 @@ export function useBreakGuardMachine({
       if (promptTimerRef.current != null) {
         window.clearTimeout(promptTimerRef.current)
       }
-      if (promptAutoStartTimerRef.current != null) {
-        window.clearTimeout(promptAutoStartTimerRef.current)
-      }
     }
   }, [])
 
@@ -160,12 +157,6 @@ export function useBreakGuardMachine({
     if (promptTimerRef.current == null) return
     window.clearTimeout(promptTimerRef.current)
     promptTimerRef.current = null
-  }, [])
-
-  const clearPendingBreakPromptAutoStart = React.useCallback(() => {
-    if (promptAutoStartTimerRef.current == null) return
-    window.clearTimeout(promptAutoStartTimerRef.current)
-    promptAutoStartTimerRef.current = null
   }, [])
 
   const pauseActiveStudyForBreakGuard = React.useCallback(() => {
@@ -222,7 +213,6 @@ export function useBreakGuardMachine({
     const currentActiveEntry = activeEntryRef.current
     const safeMinutes = Math.max(1, Math.round(minutes))
     clearPendingBreakPrompt()
-    clearPendingBreakPromptAutoStart()
     const interruptedSessionId =
       breakInterruptedSessionIdRef.current ??
       (currentActiveEntry?.timer.status === 'running' ? currentActiveEntry.timer.sessionId : null)
@@ -248,13 +238,12 @@ export function useBreakGuardMachine({
     setBreakInterruptedSessionId(interruptedSessionId)
     setBreakReturnPath(returnPath)
     setBreakState(createBreakGuardCountdown(safeMinutes, Date.now(), logId))
-  }, [clearPendingBreakPrompt, clearPendingBreakPromptAutoStart])
+  }, [clearPendingBreakPrompt])
 
   const endBreakAndResumeStudy = React.useCallback((entry: GlobalTimerRegistration | null) => {
     if (!entry?.isRouteActive) return false
 
     clearPendingBreakPrompt()
-    clearPendingBreakPromptAutoStart()
     const config = breakConfigRef.current
     const currentBreakState = breakStateRef.current
     if (currentBreakState.status === 'idle' || currentBreakState.status === 'dismissed') return true
@@ -288,49 +277,24 @@ export function useBreakGuardMachine({
     }
 
     return false
-  }, [clearInterruptedStudy, clearPendingBreakPrompt, clearPendingBreakPromptAutoStart, resumeInterruptedStudyAfterBreak, resumeInterruptedStudyAfterPromptCancel])
+  }, [clearInterruptedStudy, clearPendingBreakPrompt, resumeInterruptedStudyAfterBreak, resumeInterruptedStudyAfterPromptCancel])
 
   const returnToStudy = React.useCallback(() => {
     const currentBreakState = breakStateRef.current
     if (currentBreakState.status === 'idle' || currentBreakState.status === 'dismissed') {
       clearPendingBreakPrompt()
-      clearPendingBreakPromptAutoStart()
       resumeInterruptedStudyAfterPromptCancel(activeEntryRef.current)
       clearInterruptedStudy()
       return
     }
     endBreakAndResumeStudy(activeEntryRef.current)
-  }, [clearInterruptedStudy, clearPendingBreakPrompt, clearPendingBreakPromptAutoStart, endBreakAndResumeStudy, resumeInterruptedStudyAfterPromptCancel])
+  }, [clearInterruptedStudy, clearPendingBreakPrompt, endBreakAndResumeStudy, resumeInterruptedStudyAfterPromptCancel])
 
   const notifyStudyActivity = React.useCallback((sessionId: string) => {
     const entry = entriesRef.current[sessionId]
-    if (!entry?.isRouteActive) return
-    endBreakAndResumeStudy(entry)
+    if (!entry?.isRouteActive) return false
+    return endBreakAndResumeStudy(entry)
   }, [endBreakAndResumeStudy])
-
-  React.useEffect(() => {
-    if (!activeEntry?.isRouteActive) return
-    const currentBreakState = breakStateRef.current
-    if (currentBreakState.status === 'idle' || currentBreakState.status === 'dismissed') return
-    endBreakAndResumeStudy(activeEntry)
-  }, [activeEntry, endBreakAndResumeStudy])
-
-
-
-  React.useEffect(() => {
-    clearPendingBreakPromptAutoStart()
-    if (breakState.status !== 'prompting') return
-    const defaultMinutes = breakConfig.presetMinutes[0] ?? 1
-    promptAutoStartTimerRef.current = window.setTimeout(() => {
-      promptAutoStartTimerRef.current = null
-      if (breakStateRef.current.status !== 'prompting') return
-      startBreakCountdown(defaultMinutes)
-    }, 5_000)
-    return () => {
-      clearPendingBreakPromptAutoStart()
-    }
-  }, [breakConfig.presetMinutes, breakState.status, clearPendingBreakPromptAutoStart, startBreakCountdown])
-
 
   return {
     breakConfig,

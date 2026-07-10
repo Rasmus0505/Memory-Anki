@@ -61,7 +61,7 @@ export function TimerFocusSection({
         <div>
           <div className="text-sm font-semibold text-foreground">专注目标配置</div>
           <p className="mt-1 text-xs text-muted-foreground">
-            大数字永远显示二级子间隔倒计时；一级总目标只用作下方进度和总冲刺反馈。
+            主数字显示累计有效学习时长，下方展示当前 25 分钟轮次进度；阶段提醒不会抢占主视觉。
           </p>
         </div>
         <div className="inline-flex rounded-full border border-border/70 bg-background/80 p-1">
@@ -88,9 +88,9 @@ export function TimerFocusSection({
 
       <div className="grid gap-3 md:grid-cols-3">
         {([
-          ['cinematic', '冲顶庆典', '默认给最完整的烟花、闪屏和音效，并随累计次数继续增强。'],
-          ['celebration', '强而可控', '保留强反馈，但整体喷发量和音量会略微收敛。'],
-          ['balanced', '稳态激励', '保留明显奖励感，但更适合长期专注。'],
+          ['balanced', '低打扰（推荐）', '阶段节点只播放短提示音，整轮完成时才显示简短动画。'],
+          ['celebration', '明显激励', '保留更强的完成反馈，但控制持续时间和打断感。'],
+          ['cinematic', '冲顶庆典', '使用完整烟花、闪屏和增强音效，适合偶尔使用。'],
         ] as const).map(([value, title, description]) => (
           <button
             key={value}
@@ -124,32 +124,38 @@ export function TimerFocusSection({
         )}
       </div>
 
-      <div className="mt-4 grid gap-3 lg:grid-cols-2">
-        <CelebrationEventEditor
-          title="二级小目标反馈"
-          description="每次二级倒计时完成时触发，适合短周期奖励。"
-          value={focusDraft.celebration.secondaryInterval}
-          onBooleanChange={(field, checked) =>
-            onCelebrationBooleanChange('secondaryInterval', field, checked)
-          }
-          onVolumeChange={(value) => onCelebrationVolumeChange('secondaryInterval', value)}
-          onPresetChange={(value) => onCelebrationPresetChange('secondaryInterval', value)}
-        />
-        <CelebrationEventEditor
-          title="一级总目标反馈"
-          description="整段一级目标完成时触发，适合更强的完成仪式。"
-          value={focusDraft.celebration.primaryGoal}
-          onBooleanChange={(field, checked) =>
-            onCelebrationBooleanChange('primaryGoal', field, checked)
-          }
-          onVolumeChange={(value) => onCelebrationVolumeChange('primaryGoal', value)}
-          onPresetChange={(value) => onCelebrationPresetChange('primaryGoal', value)}
-        />
-      </div>
+      <details className="mt-4 rounded-lg border border-border/70 bg-background/45 p-4">
+        <summary className="cursor-pointer text-sm font-semibold text-foreground">
+          高级设置：分别调整阶段与整轮反馈
+        </summary>
+        <div className="mt-3 grid gap-3 lg:grid-cols-2">
+          <CelebrationEventEditor
+            title="阶段提醒反馈"
+            description="每个阶段节点触发；默认只有短提示音，不播放动画。"
+            value={focusDraft.celebration.secondaryInterval}
+            onBooleanChange={(field, checked) =>
+              onCelebrationBooleanChange('secondaryInterval', field, checked)
+            }
+            onVolumeChange={(value) => onCelebrationVolumeChange('secondaryInterval', value)}
+            onPresetChange={(value) => onCelebrationPresetChange('secondaryInterval', value)}
+          />
+          <CelebrationEventEditor
+            title="整轮完成反馈"
+            description="完成一轮专注时触发；默认由计时面板显示完成态并播放短音效。"
+            value={focusDraft.celebration.primaryGoal}
+            onBooleanChange={(field, checked) =>
+              onCelebrationBooleanChange('primaryGoal', field, checked)
+            }
+            onVolumeChange={(value) => onCelebrationVolumeChange('primaryGoal', value)}
+            onPresetChange={(value) => onCelebrationPresetChange('primaryGoal', value)}
+          />
+        </div>
+      </details>
 
       <div className="mt-3 rounded-lg border border-dashed border-border/70 bg-background/55 px-3 py-3 text-xs text-muted-foreground">
-        当前全局默认：一级 {getTimerFocusRule('practice', parsedFocusConfig).primaryMinutes} 分钟左右的总冲刺，
-        二级 {getTimerFocusRule('practice', parsedFocusConfig).secondaryMinutes} 分钟左右的小目标，更适合持续追小胜利。
+        当前预览：主数字持续正计时；每轮 {getTimerFocusRule('practice', parsedFocusConfig).primaryMinutes} 分钟，
+        每 {getTimerFocusRule('practice', parsedFocusConfig).secondaryMinutes} 分钟轻提醒一次，完成后建议休息{' '}
+        {getTimerFocusRule('practice', parsedFocusConfig).breakMinutes ?? 5} 分钟。
       </div>
     </div>
   )

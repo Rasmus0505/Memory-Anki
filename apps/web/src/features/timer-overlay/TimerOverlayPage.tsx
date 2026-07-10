@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { ChevronsDown, ChevronsUp, Pause, Play, RotateCcw } from 'lucide-react'
+import { ChevronsDown, ChevronsUp, Pause, Play } from 'lucide-react'
 import { Button } from '@/shared/components/ui/button'
 import { Input } from '@/shared/components/ui/input'
 import {
@@ -8,6 +8,7 @@ import {
   type UnifiedTimerSnapshot,
 } from '@/shared/components/session/desktopTimerBridge'
 import { cn } from '@/shared/lib/utils'
+import { readReviewFeedbackSettings } from '@/shared/feedback/reviewFeedbackSettings'
 
 function formatOverlayClock(seconds: number | null) {
   if (seconds == null) return '--:--'
@@ -24,6 +25,14 @@ function createIdleSnapshot(): UnifiedTimerSnapshot {
     title: '待开始',
     scene: '学习计时',
     displaySeconds: null,
+    studyPhase: 'idle',
+    effectiveSeconds: 0,
+    roundElapsedSeconds: 0,
+    roundTargetSeconds: 25 * 60,
+    roundIndex: 1,
+    idleWarningRemainingSeconds: null,
+    suggestedBreakMinutes: 5,
+    feedbackSignal: null,
     primaryText: '当前无学习会话',
     secondaryText: '打开主窗口开始学习后会同步显示',
     snoozeCount: 0,
@@ -36,7 +45,7 @@ function createIdleSnapshot(): UnifiedTimerSnapshot {
   }
 }
 
-function playTimerBeep() {
+function playTimerBeep(kind: 'interval' | 'goal' | 'break' = 'break') {
   try {
     const AudioContextConstructor = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
     if (!AudioContextConstructor) return
@@ -44,14 +53,17 @@ function playTimerBeep() {
     const oscillator = context.createOscillator()
     const gain = context.createGain()
     oscillator.type = 'sine'
-    oscillator.frequency.setValueAtTime(880, context.currentTime)
+    oscillator.frequency.setValueAtTime(
+      kind === 'goal' ? 1046 : kind === 'interval' ? 784 : 880,
+      context.currentTime,
+    )
     gain.gain.setValueAtTime(0.0001, context.currentTime)
     gain.gain.exponentialRampToValueAtTime(0.13, context.currentTime + 0.02)
-    gain.gain.exponentialRampToValueAtTime(0.0001, context.currentTime + 0.48)
+    gain.gain.exponentialRampToValueAtTime(0.0001, context.currentTime + (kind === 'goal' ? 0.58 : 0.42))
     oscillator.connect(gain)
     gain.connect(context.destination)
     oscillator.start()
-    oscillator.stop(context.currentTime + 0.5)
+    oscillator.stop(context.currentTime + (kind === 'goal' ? 0.6 : 0.44))
     window.setTimeout(() => void context.close(), 700)
   } catch {
     // Browsers may block audio before user interaction.
@@ -59,13 +71,10 @@ function playTimerBeep() {
 }
 
 function notifyBreakExpired() {
+  if (!readReviewFeedbackSettings().desktopNotificationsEnabled) return
   if (!('Notification' in window)) return
   if (Notification.permission === 'granted') {
     new Notification('休息时间到了', { body: '回到随心模式继续一点点就好。' })
-    return
-  }
-  if (Notification.permission === 'default') {
-    void Notification.requestPermission()
   }
 }
 
@@ -74,8 +83,8 @@ export default function TimerOverlayPage() {
   const [snapshot, setSnapshot] = React.useState<UnifiedTimerSnapshot>(() => createIdleSnapshot())
   const [collapsed, setCollapsed] = React.useState(false)
   const [customBreakMinutes, setCustomBreakMinutes] = React.useState('')
-  const expiredAlertRef = React.useRef<number | null>(null)
-  const expiredNotifiedAtRef = React.useRef<number | null>(null)
+  const expiredNotifiedRef = React.useRef(false)
+  const feedbackEventIdRef = React.useRef<string | null>(null)
 
   React.useEffect(() => {
     if (!bridge?.onTimerSnapshot) return
@@ -85,32 +94,26 @@ export default function TimerOverlayPage() {
   }, [bridge])
 
   React.useEffect(() => {
-    if (snapshot.status !== 'expired') {
-      expiredNotifiedAtRef.current = null
-      if (expiredAlertRef.current != null) {
-        window.clearInterval(expiredAlertRef.current)
-        expiredAlertRef.current = null
-      }
+    const breakExpired = snapshot.mode === 'break' && snapshot.status === 'expired'
+    if (!breakExpired) {
+      expiredNotifiedRef.current = false
       return
     }
 
-    if (expiredNotifiedAtRef.current !== snapshot.updatedAt) {
-      expiredNotifiedAtRef.current = snapshot.updatedAt
-      notifyBreakExpired()
-      playTimerBeep()
-    }
+    if (expiredNotifiedRef.current) return
+    expiredNotifiedRef.current = true
+    notifyBreakExpired()
+    const settings = readReviewFeedbackSettings()
+    if (settings.soundEnabled && settings.mode === 'immersive') playTimerBeep('break')
+  }, [snapshot.mode, snapshot.status])
 
-    if (expiredAlertRef.current == null) {
-      expiredAlertRef.current = window.setInterval(playTimerBeep, 2500)
-    }
-
-    return () => {
-      if (expiredAlertRef.current != null) {
-        window.clearInterval(expiredAlertRef.current)
-        expiredAlertRef.current = null
-      }
-    }
-  }, [snapshot.status, snapshot.updatedAt])
+  React.useEffect(() => {
+    const signal = snapshot.feedbackSignal
+    if (!signal || feedbackEventIdRef.current === signal.eventId) return
+    feedbackEventIdRef.current = signal.eventId
+    const settings = readReviewFeedbackSettings()
+    if (settings.soundEnabled && settings.mode === 'immersive') playTimerBeep(signal.kind)
+  }, [snapshot.feedbackSignal])
 
   const sendCommand = React.useCallback((command: UnifiedTimerCommand) => {
     bridge?.sendTimerCommand?.(command)
@@ -129,6 +132,36 @@ export default function TimerOverlayPage() {
     bridge?.setOverlayCollapsed?.(nextCollapsed)
   }, [bridge])
 
+  const studyPhase = snapshot.studyPhase ?? (
+    snapshot.status === 'running'
+      ? 'focusing'
+      : snapshot.status === 'paused'
+        ? 'paused'
+        : snapshot.status === 'completed'
+          ? 'completed'
+          : 'idle'
+  )
+  const effectiveSeconds = Math.max(0, snapshot.effectiveSeconds ?? snapshot.displaySeconds ?? 0)
+  const roundElapsedSeconds = Math.max(0, snapshot.roundElapsedSeconds ?? 0)
+  const roundTargetSeconds = Math.max(0, snapshot.roundTargetSeconds ?? 0)
+  const roundProgress = roundTargetSeconds > 0
+    ? Math.min(1, roundElapsedSeconds / roundTargetSeconds)
+    : 0
+  const studyStatusText =
+    studyPhase === 'idle_warning'
+      ? `仍在学习吗？${snapshot.idleWarningRemainingSeconds != null ? ` ${Math.max(0, snapshot.idleWarningRemainingSeconds)} 秒后暂停` : ''}`
+      : studyPhase === 'goal_reached'
+        ? `第 ${Math.max(1, snapshot.roundIndex ?? 1)} 轮目标完成`
+        : studyPhase === 'paused'
+          ? '已暂停'
+          : studyPhase === 'completed'
+            ? '已完成'
+            : studyPhase === 'focusing'
+              ? '正在计时'
+              : snapshot.primaryText
+  const roundSummaryText = roundTargetSeconds > 0
+    ? `本轮 ${formatOverlayClock(roundElapsedSeconds)}/${formatOverlayClock(roundTargetSeconds)}`
+    : snapshot.secondaryText
   const modeLabel =
     snapshot.mode === 'break'
       ? snapshot.status === 'expired'
@@ -136,16 +169,24 @@ export default function TimerOverlayPage() {
         : snapshot.status === 'prompting'
           ? '休息询问'
           : '休息中'
-      : '学习计时'
-  const clock = formatOverlayClock(snapshot.displaySeconds)
+      : studyPhase === 'idle_warning'
+        ? '专注提醒'
+        : studyPhase === 'goal_reached'
+          ? '目标达成'
+          : studyPhase === 'paused'
+            ? '学习已暂停'
+            : '学习计时'
+  const clock = snapshot.mode === 'break'
+    ? formatOverlayClock(snapshot.displaySeconds)
+    : formatOverlayClock(effectiveSeconds)
   const capsuleText =
     snapshot.mode === 'break'
       ? snapshot.status === 'expired'
         ? '休息到点'
         : `休息 ${clock}`
-      : snapshot.displaySeconds == null
+      : studyPhase === 'idle'
         ? '学习 待开始'
-        : `学习 ${clock}`
+        : `学习${studyPhase === 'idle_warning' ? ' · 提醒' : studyPhase === 'goal_reached' ? ' · 达标' : studyPhase === 'paused' ? ' · 已暂停' : ''} ${clock}`
 
   const renderActions = () => {
     if (snapshot.mode === 'break' && snapshot.status === 'prompting') {
@@ -194,14 +235,11 @@ export default function TimerOverlayPage() {
       return (
         <>
           <Button type="button" variant="outline" size="sm" onClick={() => sendCommand({ type: 'snooze', minutes: firstSnooze })}>
-            +{firstSnooze}
+            延后 {firstSnooze} 分钟
           </Button>
-          <Button type="button" variant="outline" size="sm" onClick={() => sendCommand({ type: 'finishBreak' })}>
-            <RotateCcw className="size-4" />
-            结束
-          </Button>
-          <Button type="button" size="sm" onClick={() => sendCommand({ type: 'finishBreak', openTarget: true })}>
-            回随心
+          <Button type="button" size="sm" onClick={() => sendCommand({ type: 'startStudy' })}>
+            <Play className="size-4" />
+            开始学习
           </Button>
         </>
       )
@@ -229,7 +267,21 @@ export default function TimerOverlayPage() {
       )
     }
 
-    if (snapshot.status === 'running') {
+    if (studyPhase === 'goal_reached') {
+      const suggestedBreakMinutes = Math.max(1, snapshot.suggestedBreakMinutes ?? 5)
+      return (
+        <>
+          <Button type="button" variant="outline" size="sm" onClick={() => sendCommand({ type: 'continueRound' })}>
+            继续学习
+          </Button>
+          <Button type="button" size="sm" onClick={() => sendCommand({ type: 'startGoalBreak', minutes: suggestedBreakMinutes })}>
+            休息 {suggestedBreakMinutes} 分钟
+          </Button>
+        </>
+      )
+    }
+
+    if (snapshot.availableActions.includes('pause')) {
       return (
         <Button type="button" size="sm" className="memory-anki-timer-overlay-action-single" onClick={() => sendCommand({ type: 'pause' })}>
           <Pause className="size-4" />
@@ -238,7 +290,7 @@ export default function TimerOverlayPage() {
       )
     }
 
-    if (snapshot.status === 'paused' || snapshot.status === 'idle') {
+    if (snapshot.availableActions.includes('resume') || studyPhase === 'paused' || studyPhase === 'idle') {
       return (
         <Button
           type="button"
@@ -248,7 +300,7 @@ export default function TimerOverlayPage() {
           onClick={() => sendCommand({ type: 'resume' })}
         >
           <Play className="size-4" />
-          {snapshot.status === 'paused' ? '继续' : '等待学习页'}
+          {studyPhase === 'paused' ? '继续' : '等待学习页'}
         </Button>
       )
     }
@@ -258,19 +310,28 @@ export default function TimerOverlayPage() {
 
   const dotClass = cn(
     'memory-anki-timer-overlay-dot',
-    snapshot.status === 'expired'
+    snapshot.mode === 'break' && snapshot.status === 'expired'
       ? 'memory-anki-timer-overlay-dot-expired'
       : snapshot.mode === 'break'
         ? 'memory-anki-timer-overlay-dot-break'
-        : snapshot.status === 'running'
-          ? 'memory-anki-timer-overlay-dot-running'
-          : undefined,
+        : studyPhase === 'idle_warning'
+          ? 'memory-anki-timer-overlay-dot-warning'
+          : studyPhase === 'goal_reached'
+            ? 'memory-anki-timer-overlay-dot-goal'
+            : studyPhase === 'focusing'
+              ? 'memory-anki-timer-overlay-dot-running'
+              : undefined,
   )
 
   if (collapsed) {
     return (
       <div
-        className={cn('memory-anki-timer-overlay-capsule', snapshot.status === 'expired' && 'memory-anki-timer-overlay-capsule-expired')}
+        className={cn(
+          'memory-anki-timer-overlay-capsule',
+          snapshot.mode === 'break' && snapshot.status === 'expired' && 'memory-anki-timer-overlay-capsule-expired',
+          snapshot.mode === 'study' && studyPhase === 'idle_warning' && 'memory-anki-timer-overlay-capsule-warning',
+          snapshot.mode === 'study' && studyPhase === 'goal_reached' && 'memory-anki-timer-overlay-capsule-goal',
+        )}
         title="拖动计时器"
       >
         <span className={dotClass} />
@@ -293,7 +354,9 @@ export default function TimerOverlayPage() {
       className={cn(
         'memory-anki-timer-overlay-shell',
         snapshot.mode === 'break' && 'memory-anki-timer-overlay-shell-break',
-        snapshot.status === 'expired' && 'memory-anki-timer-overlay-shell-expired',
+        snapshot.mode === 'break' && snapshot.status === 'expired' && 'memory-anki-timer-overlay-shell-expired',
+        snapshot.mode === 'study' && studyPhase === 'idle_warning' && 'memory-anki-timer-overlay-shell-warning',
+        snapshot.mode === 'study' && studyPhase === 'goal_reached' && 'memory-anki-timer-overlay-shell-goal',
       )}
     >
       <div className="memory-anki-timer-overlay-header">
@@ -315,13 +378,23 @@ export default function TimerOverlayPage() {
 
       <div className="memory-anki-timer-overlay-digits">{clock}</div>
 
-      {/* 学习计时运行中标题行已有上下文，隐藏 copy 行减少视觉噪音 */}
-      {!(snapshot.mode === 'study' && snapshot.status === 'running') && (
-        <div className="memory-anki-timer-overlay-copy">
-          {snapshot.primaryText}
-          <span>{snapshot.secondaryText}</span>
+      <div className="memory-anki-timer-overlay-copy">
+        {snapshot.mode === 'break' ? snapshot.primaryText : studyStatusText}
+        <span>{snapshot.mode === 'break' ? snapshot.secondaryText : roundSummaryText}</span>
+      </div>
+
+      {snapshot.mode === 'study' && roundTargetSeconds > 0 ? (
+        <div
+          className="memory-anki-timer-round-progress memory-anki-timer-overlay-round-progress"
+          role="progressbar"
+          aria-label="本轮专注进度"
+          aria-valuemin={0}
+          aria-valuemax={roundTargetSeconds}
+          aria-valuenow={Math.min(roundElapsedSeconds, roundTargetSeconds)}
+        >
+          <span style={{ width: `${roundProgress * 100}%` }} />
         </div>
-      )}
+      ) : null}
 
       <div className="memory-anki-timer-overlay-actions">{renderActions()}</div>
     </main>

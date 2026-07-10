@@ -64,5 +64,5 @@ export function formatBreakGuardClock(milliseconds: number) {
 }
 
 export function shouldPromptForBreakGuard(config: BreakGuardConfig, state: BreakGuardState) {
-  return config.enabled && (state.status === 'idle' || state.status === 'dismissed')
+  return config.enabled && config.promptOnWindowLeave && (state.status === 'idle' || state.status === 'dismissed')
 }

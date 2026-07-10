@@ -93,8 +93,8 @@ export function SessionTimerBar({
   )
   const [focusConfig, setFocusConfig] = React.useState<TimerFocusConfig>(() => readTimerFocusConfig())
   const [breakConfig, setBreakConfig] = React.useState<BreakGuardConfig>(() => readBreakGuardConfig())
-  const inactiveAutoPauseSeconds = React.useMemo(
-    () => getTimerAutomationRule(automationScene, automationConfig).inactiveAutoPauseSeconds,
+  const automationRule = React.useMemo(
+    () => getTimerAutomationRule(automationScene, automationConfig),
     [automationConfig, automationScene],
   )
 
@@ -191,8 +191,20 @@ export function SessionTimerBar({
     />
   )
 
-  const idleStatusClassName = safeIdleSeconds > 0 ? 'text-orange-500' : 'text-foreground'
-  const idleStatusText = `闲置${safeIdleSeconds}/${inactiveAutoPauseSeconds}秒`
+  const isIdleWarning =
+    isRunning && safeIdleSeconds >= automationRule.inactiveAutoPauseSeconds
+  const idleWarningRemaining = Math.max(
+    0,
+    automationRule.inactiveAutoPauseSeconds + (automationRule.inactivePauseGraceSeconds ?? 30) - safeIdleSeconds,
+  )
+  const idleStatusClassName = isIdleWarning
+    ? 'font-medium text-orange-600'
+    : safeIdleSeconds > 0
+      ? 'text-orange-500'
+      : 'text-foreground'
+  const idleStatusText = isIdleWarning
+    ? `仍在学习吗？${idleWarningRemaining} 秒后暂停`
+    : `闲置 ${safeIdleSeconds}/${automationRule.inactiveAutoPauseSeconds} 秒`
 
   if (layout === 'compact') {
     return (

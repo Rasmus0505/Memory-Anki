@@ -10,6 +10,7 @@ import {
   type RestorableTimedSessionSnapshot,
   type SessionSceneSegment,
   type SessionStatus,
+  type TimedSessionFocusRoundState,
 } from './timedSessionModel'
 import {
   isExpiredSuspendedSnapshot,
@@ -24,12 +25,14 @@ interface TimedSessionRestoreOptions {
   eventsRef: React.MutableRefObject<SessionEventRecord[]>
   sceneSegmentsRef: React.MutableRefObject<SessionSceneSegment[]>
   activeSceneSegmentRef: React.MutableRefObject<ActiveSceneSegmentSnapshot | null>
+  focusRoundRef: React.MutableRefObject<TimedSessionFocusRoundState>
   effectiveSecondsRef: React.MutableRefObject<number>
   idleSecondsRef: React.MutableRefObject<number>
   pauseCountRef: React.MutableRefObject<number>
   startedAtRef: React.MutableRefObject<string | null>
   durationEditedRef: React.MutableRefObject<boolean>
   lastActivityAtRef: React.MutableRefObject<number | null>
+  autoPauseDeadlineAtRef: React.MutableRefObject<number | null>
   suspendedAtRef: React.MutableRefObject<string | null>
   resumeDeadlineAtRef: React.MutableRefObject<string | null>
   leaveMetaRef: React.MutableRefObject<RestorableTimedSessionSnapshot['leaveMeta']>
@@ -42,6 +45,7 @@ interface TimedSessionRestoreOptions {
   setDurationEdited: React.Dispatch<React.SetStateAction<boolean>>
   setGlowState: React.Dispatch<React.SetStateAction<GlowState>>
   setStatus: React.Dispatch<React.SetStateAction<SessionStatus>>
+  setFocusRound: React.Dispatch<React.SetStateAction<TimedSessionFocusRoundState>>
   clearPersistedSnapshot: () => void
   clearCompetingSnapshots: () => void
   persistExpiredSuspendedSnapshot: (
@@ -50,7 +54,7 @@ interface TimedSessionRestoreOptions {
   persistSnapshot: () => void
   resumeSuspendedScene: () => boolean
   startTicker: () => void
-  armAutoPause: () => void
+  armAutoPause: (deadlineAtMs?: number) => void
 }
 
 export function useTimedSessionSnapshotRestore({
@@ -60,12 +64,14 @@ export function useTimedSessionSnapshotRestore({
   eventsRef,
   sceneSegmentsRef,
   activeSceneSegmentRef,
+  focusRoundRef,
   effectiveSecondsRef,
   idleSecondsRef,
   pauseCountRef,
   startedAtRef,
   durationEditedRef,
   lastActivityAtRef,
+  autoPauseDeadlineAtRef,
   suspendedAtRef,
   resumeDeadlineAtRef,
   leaveMetaRef,
@@ -78,6 +84,7 @@ export function useTimedSessionSnapshotRestore({
   setDurationEdited,
   setGlowState,
   setStatus,
+  setFocusRound,
   clearPersistedSnapshot,
   clearCompetingSnapshots,
   persistExpiredSuspendedSnapshot,
@@ -108,18 +115,26 @@ export function useTimedSessionSnapshotRestore({
     eventsRef.current = Array.isArray(parsed.events) ? parsed.events : []
     sceneSegmentsRef.current = Array.isArray(parsed.sceneSegments) ? parsed.sceneSegments : []
     activeSceneSegmentRef.current = parsed.activeSceneSegment ?? null
+    focusRoundRef.current = parsed.focusRound
     effectiveSecondsRef.current = restoredEffectiveSeconds
-    idleSecondsRef.current = 0
+    const restoredLastActivityAtMs = parsed.lastActivityAtMs ?? Date.now()
+    const restoredIdleSeconds = Math.max(
+      0,
+      Math.floor((Date.now() - restoredLastActivityAtMs) / 1000),
+    )
+    idleSecondsRef.current = restoredIdleSeconds
     pauseCountRef.current = Math.max(0, Math.round(parsed.pauseCount || 0))
     startedAtRef.current = parsed.startedAt
     durationEditedRef.current = Boolean(parsed.durationEdited)
-    lastActivityAtRef.current = Date.now()
+    lastActivityAtRef.current = restoredLastActivityAtMs
+    autoPauseDeadlineAtRef.current = parsed.autoPauseDeadlineAtMs
 
     setEffectiveSeconds(restoredEffectiveSeconds)
-    setIdleSeconds(0)
+    setIdleSeconds(restoredIdleSeconds)
     setPauseCount(pauseCountRef.current)
     setStartedAt(parsed.startedAt)
     setDurationEdited(Boolean(parsed.durationEdited))
+    setFocusRound(parsed.focusRound)
     setGlowState('idle')
     clearCompetingSnapshots()
 
@@ -145,16 +160,18 @@ export function useTimedSessionSnapshotRestore({
     sceneActiveRef.current = true
     setStatus('running')
     startTicker()
-    armAutoPause()
+    armAutoPause(parsed.autoPauseDeadlineAtMs ?? undefined)
     persistSnapshot()
   }, [
     activeSceneSegmentRef,
     armAutoPause,
+    autoPauseDeadlineAtRef,
     clearCompetingSnapshots,
     clearPersistedSnapshot,
     durationEditedRef,
     effectiveSecondsRef,
     eventsRef,
+    focusRoundRef,
     idleSecondsRef,
     lastActivityAtRef,
     leaveMetaRef,
@@ -175,6 +192,7 @@ export function useTimedSessionSnapshotRestore({
     setPauseCount,
     setStartedAt,
     setStatus,
+    setFocusRound,
     startTicker,
     startedAtRef,
     storageKey,

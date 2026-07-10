@@ -1,10 +1,10 @@
-import type { SessionKind } from '@/entities/session/model'
+import type { SessionKind } from '@/entities/session/model/session-records'
 import type {
   ActiveSceneSegmentSnapshot,
   SessionSceneSegment,
   TimedSessionSourceKind,
-} from './timedSessionModel'
-import type { SessionScene } from '@/entities/session/model'
+} from '@/shared/hooks/timedSessionModel'
+import type { SessionScene } from '@/entities/session/model/session-records'
 
 export function createActiveSceneSegment(input: {
   scene: SessionScene

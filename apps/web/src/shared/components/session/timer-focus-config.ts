@@ -26,6 +26,7 @@ export type TimerCelebrationVisualPreset =
 export interface TimerFocusRule {
   primaryMinutes: number
   secondaryMinutes: number
+  breakMinutes?: number
 }
 
 export interface TimerCelebrationEventConfig {
@@ -42,6 +43,7 @@ export interface TimerFocusCelebrationConfig {
 }
 
 export interface TimerFocusConfig {
+  schemaVersion?: number
   mode: TimerFocusMode
   feedbackIntensity: TimerFeedbackIntensity
   celebration: TimerFocusCelebrationConfig
@@ -57,6 +59,7 @@ export interface TimerFocusConfig {
 
 export const TIMER_FOCUS_STORAGE_KEY = 'memory-anki-timer-focus-config'
 export const TIMER_FOCUS_UPDATED_EVENT = 'memory-anki-timer-focus-change'
+export const TIMER_FOCUS_CONFIG_VERSION = 2
 
 export const TIMER_FOCUS_SCENE_LABELS: Record<TimerFocusScene, string> = {
   palace_edit: '编辑',
@@ -76,15 +79,15 @@ function createDefaultTimerCelebrationConfig(
       secondaryInterval: {
         enabled: true,
         soundEnabled: true,
-        animationEnabled: true,
-        volumeBoost: 0.88,
-        visualPreset: 'realistic_look',
+        animationEnabled: false,
+        volumeBoost: 0.75,
+        visualPreset: 'stars',
       },
       primaryGoal: {
         enabled: true,
         soundEnabled: true,
-        animationEnabled: true,
-        volumeBoost: 0.94,
+        animationEnabled: false,
+        volumeBoost: 0.9,
         visualPreset: 'stars',
       },
     }
@@ -127,41 +130,69 @@ function createDefaultTimerCelebrationConfig(
   }
 }
 
-export const DEFAULT_TIMER_FOCUS_CONFIG: TimerFocusConfig = {
-  mode: 'global',
-  feedbackIntensity: 'cinematic',
+const LEGACY_DEFAULT_TIMER_FOCUS_CONFIG = {
+  feedbackIntensity: 'cinematic' as const,
   celebration: createDefaultTimerCelebrationConfig('cinematic'),
+  global: { primaryMinutes: 25, secondaryMinutes: 1 },
+  palace_edit: { primaryMinutes: 20, secondaryMinutes: 1 },
+  practice: { primaryMinutes: 25, secondaryMinutes: 1 },
+  quiz: { primaryMinutes: 20, secondaryMinutes: 1 },
+  review: { primaryMinutes: 25, secondaryMinutes: 1 },
+  freestyle: { primaryMinutes: 25, secondaryMinutes: 1 },
+  english: { primaryMinutes: 15, secondaryMinutes: 1 },
+  english_reading: { primaryMinutes: 30, secondaryMinutes: 2 },
+} satisfies Pick<
+  TimerFocusConfig,
+  | 'feedbackIntensity'
+  | 'celebration'
+  | 'global'
+  | TimerFocusScene
+>
+
+export const DEFAULT_TIMER_FOCUS_CONFIG: TimerFocusConfig = {
+  schemaVersion: TIMER_FOCUS_CONFIG_VERSION,
+  mode: 'global',
+  feedbackIntensity: 'balanced',
+  celebration: createDefaultTimerCelebrationConfig('balanced'),
   global: {
     primaryMinutes: 25,
-    secondaryMinutes: 1,
+    secondaryMinutes: 5,
+    breakMinutes: 5,
   },
   palace_edit: {
-    primaryMinutes: 20,
-    secondaryMinutes: 1,
+    primaryMinutes: 25,
+    secondaryMinutes: 5,
+    breakMinutes: 5,
   },
   practice: {
     primaryMinutes: 25,
-    secondaryMinutes: 1,
+    secondaryMinutes: 5,
+    breakMinutes: 5,
   },
   quiz: {
-    primaryMinutes: 20,
-    secondaryMinutes: 1,
+    primaryMinutes: 25,
+    secondaryMinutes: 5,
+    breakMinutes: 5,
   },
   review: {
     primaryMinutes: 25,
-    secondaryMinutes: 1,
+    secondaryMinutes: 5,
+    breakMinutes: 5,
   },
   freestyle: {
     primaryMinutes: 25,
-    secondaryMinutes: 1,
+    secondaryMinutes: 5,
+    breakMinutes: 5,
   },
   english: {
-    primaryMinutes: 15,
-    secondaryMinutes: 1,
+    primaryMinutes: 25,
+    secondaryMinutes: 5,
+    breakMinutes: 5,
   },
   english_reading: {
-    primaryMinutes: 30,
-    secondaryMinutes: 2,
+    primaryMinutes: 25,
+    secondaryMinutes: 5,
+    breakMinutes: 5,
   },
 }
 
@@ -171,13 +202,45 @@ function sanitizePositiveMinutes(value: unknown, fallback: number) {
   return Math.max(1, Math.round(parsed))
 }
 
-function sanitizeRule(value: unknown, fallback: TimerFocusRule): TimerFocusRule {
+function migrateLegacyField<T>(
+  value: unknown,
+  legacyDefault: T,
+  currentDefault: T,
+  isLegacyConfig: boolean,
+) {
+  if (!isLegacyConfig || value !== legacyDefault) return value
+  return currentDefault
+}
+
+function sanitizeRule(
+  value: unknown,
+  fallback: TimerFocusRule,
+  legacyFallback: TimerFocusRule,
+  isLegacyConfig: boolean,
+): TimerFocusRule {
   const raw = value && typeof value === 'object' ? (value as Record<string, unknown>) : {}
-  const primaryMinutes = sanitizePositiveMinutes(raw.primaryMinutes, fallback.primaryMinutes)
-  const requestedSecondaryMinutes = sanitizePositiveMinutes(raw.secondaryMinutes, fallback.secondaryMinutes)
+  const primaryMinutes = sanitizePositiveMinutes(
+    migrateLegacyField(
+      raw.primaryMinutes,
+      legacyFallback.primaryMinutes,
+      fallback.primaryMinutes,
+      isLegacyConfig,
+    ),
+    fallback.primaryMinutes,
+  )
+  const requestedSecondaryMinutes = sanitizePositiveMinutes(
+    migrateLegacyField(
+      raw.secondaryMinutes,
+      legacyFallback.secondaryMinutes,
+      fallback.secondaryMinutes,
+      isLegacyConfig,
+    ),
+    fallback.secondaryMinutes,
+  )
   return {
     primaryMinutes,
     secondaryMinutes: Math.min(primaryMinutes, requestedSecondaryMinutes),
+    breakMinutes: sanitizePositiveMinutes(raw.breakMinutes, fallback.breakMinutes ?? 5),
   }
 }
 
@@ -211,52 +274,185 @@ function sanitizeVisualPreset(
 function sanitizeCelebrationEventConfig(
   value: unknown,
   fallback: TimerCelebrationEventConfig,
+  legacyFallback: TimerCelebrationEventConfig,
+  isLegacyConfig: boolean,
 ): TimerCelebrationEventConfig {
   const raw = value && typeof value === 'object' ? (value as Record<string, unknown>) : {}
   return {
-    enabled: sanitizeBoolean(raw.enabled, fallback.enabled),
-    soundEnabled: sanitizeBoolean(raw.soundEnabled, fallback.soundEnabled),
-    animationEnabled: sanitizeBoolean(raw.animationEnabled, fallback.animationEnabled),
-    volumeBoost: sanitizeNumber(raw.volumeBoost, fallback.volumeBoost, 0, 3),
-    visualPreset: sanitizeVisualPreset(raw.visualPreset, fallback.visualPreset),
+    enabled: sanitizeBoolean(
+      migrateLegacyField(raw.enabled, legacyFallback.enabled, fallback.enabled, isLegacyConfig),
+      fallback.enabled,
+    ),
+    soundEnabled: sanitizeBoolean(
+      migrateLegacyField(
+        raw.soundEnabled,
+        legacyFallback.soundEnabled,
+        fallback.soundEnabled,
+        isLegacyConfig,
+      ),
+      fallback.soundEnabled,
+    ),
+    animationEnabled: sanitizeBoolean(
+      migrateLegacyField(
+        raw.animationEnabled,
+        legacyFallback.animationEnabled,
+        fallback.animationEnabled,
+        isLegacyConfig,
+      ),
+      fallback.animationEnabled,
+    ),
+    volumeBoost: sanitizeNumber(
+      migrateLegacyField(
+        raw.volumeBoost,
+        legacyFallback.volumeBoost,
+        fallback.volumeBoost,
+        isLegacyConfig,
+      ),
+      fallback.volumeBoost,
+      0,
+      3,
+    ),
+    visualPreset: sanitizeVisualPreset(
+      migrateLegacyField(
+        raw.visualPreset,
+        legacyFallback.visualPreset,
+        fallback.visualPreset,
+        isLegacyConfig,
+      ),
+      fallback.visualPreset,
+    ),
   }
 }
 
 function sanitizeCelebrationConfig(
   value: unknown,
   feedbackIntensity: TimerFeedbackIntensity,
+  legacyFeedbackIntensity: TimerFeedbackIntensity,
+  isLegacyConfig: boolean,
 ): TimerFocusCelebrationConfig {
   const fallback = createDefaultTimerCelebrationConfig(feedbackIntensity)
+  const legacyFallback = createLegacyTimerCelebrationConfig(legacyFeedbackIntensity)
   const raw = value && typeof value === 'object' ? (value as Record<string, unknown>) : {}
   return {
-    secondaryInterval: sanitizeCelebrationEventConfig(raw.secondaryInterval, fallback.secondaryInterval),
-    primaryGoal: sanitizeCelebrationEventConfig(raw.primaryGoal, fallback.primaryGoal),
+    secondaryInterval: sanitizeCelebrationEventConfig(
+      raw.secondaryInterval,
+      fallback.secondaryInterval,
+      legacyFallback.secondaryInterval,
+      isLegacyConfig,
+    ),
+    primaryGoal: sanitizeCelebrationEventConfig(
+      raw.primaryGoal,
+      fallback.primaryGoal,
+      legacyFallback.primaryGoal,
+      isLegacyConfig,
+    ),
   }
+}
+
+function createLegacyTimerCelebrationConfig(
+  feedbackIntensity: TimerFeedbackIntensity,
+): TimerFocusCelebrationConfig {
+  if (feedbackIntensity !== 'balanced') {
+    return createDefaultTimerCelebrationConfig(feedbackIntensity)
+  }
+  return {
+    secondaryInterval: {
+      enabled: true,
+      soundEnabled: true,
+      animationEnabled: true,
+      volumeBoost: 0.88,
+      visualPreset: 'realistic_look',
+    },
+    primaryGoal: {
+      enabled: true,
+      soundEnabled: true,
+      animationEnabled: true,
+      volumeBoost: 0.94,
+      visualPreset: 'stars',
+    },
+  }
+}
+
+function sanitizeFeedbackIntensity(value: unknown): TimerFeedbackIntensity | undefined {
+  if (value === 'balanced' || value === 'celebration' || value === 'cinematic') return value
+  if (value === 'visual_only') return 'balanced'
+  if (value === 'strong') return 'celebration'
+  return undefined
 }
 
 export function sanitizeTimerFocusConfig(value: unknown): TimerFocusConfig {
   const raw = value && typeof value === 'object' ? (value as Record<string, unknown>) : {}
-  const legacyIntensity = raw.feedbackIntensity
-  const feedbackIntensity: TimerFeedbackIntensity =
-    legacyIntensity === 'balanced' || legacyIntensity === 'celebration' || legacyIntensity === 'cinematic'
-      ? legacyIntensity
-      : legacyIntensity === 'visual_only'
-        ? 'balanced'
-        : legacyIntensity === 'strong'
-          ? 'celebration'
-          : DEFAULT_TIMER_FOCUS_CONFIG.feedbackIntensity
+  const schemaVersion = sanitizeNumber(raw.schemaVersion, 1, 1, TIMER_FOCUS_CONFIG_VERSION)
+  const isLegacyConfig = schemaVersion < TIMER_FOCUS_CONFIG_VERSION
+  const legacyFeedbackIntensity =
+    sanitizeFeedbackIntensity(raw.feedbackIntensity) ?? LEGACY_DEFAULT_TIMER_FOCUS_CONFIG.feedbackIntensity
+  const requestedFeedbackIntensity = sanitizeFeedbackIntensity(
+    migrateLegacyField(
+      legacyFeedbackIntensity,
+      LEGACY_DEFAULT_TIMER_FOCUS_CONFIG.feedbackIntensity,
+      DEFAULT_TIMER_FOCUS_CONFIG.feedbackIntensity,
+      isLegacyConfig,
+    ),
+  )
+  const feedbackIntensity = requestedFeedbackIntensity ?? DEFAULT_TIMER_FOCUS_CONFIG.feedbackIntensity
   return {
+    schemaVersion: TIMER_FOCUS_CONFIG_VERSION,
     mode: raw.mode === 'scene' ? 'scene' : 'global',
     feedbackIntensity,
-    celebration: sanitizeCelebrationConfig(raw.celebration, feedbackIntensity),
-    global: sanitizeRule(raw.global, DEFAULT_TIMER_FOCUS_CONFIG.global),
-    palace_edit: sanitizeRule(raw.palace_edit, DEFAULT_TIMER_FOCUS_CONFIG.palace_edit),
-    practice: sanitizeRule(raw.practice, DEFAULT_TIMER_FOCUS_CONFIG.practice),
-    quiz: sanitizeRule(raw.quiz, DEFAULT_TIMER_FOCUS_CONFIG.quiz),
-    review: sanitizeRule(raw.review, DEFAULT_TIMER_FOCUS_CONFIG.review),
-    freestyle: sanitizeRule(raw.freestyle, DEFAULT_TIMER_FOCUS_CONFIG.freestyle),
-    english: sanitizeRule(raw.english, DEFAULT_TIMER_FOCUS_CONFIG.english),
-    english_reading: sanitizeRule(raw.english_reading, DEFAULT_TIMER_FOCUS_CONFIG.english_reading),
+    celebration: sanitizeCelebrationConfig(
+      raw.celebration,
+      feedbackIntensity,
+      legacyFeedbackIntensity,
+      isLegacyConfig,
+    ),
+    global: sanitizeRule(
+      raw.global,
+      DEFAULT_TIMER_FOCUS_CONFIG.global,
+      LEGACY_DEFAULT_TIMER_FOCUS_CONFIG.global,
+      isLegacyConfig,
+    ),
+    palace_edit: sanitizeRule(
+      raw.palace_edit,
+      DEFAULT_TIMER_FOCUS_CONFIG.palace_edit,
+      LEGACY_DEFAULT_TIMER_FOCUS_CONFIG.palace_edit,
+      isLegacyConfig,
+    ),
+    practice: sanitizeRule(
+      raw.practice,
+      DEFAULT_TIMER_FOCUS_CONFIG.practice,
+      LEGACY_DEFAULT_TIMER_FOCUS_CONFIG.practice,
+      isLegacyConfig,
+    ),
+    quiz: sanitizeRule(
+      raw.quiz,
+      DEFAULT_TIMER_FOCUS_CONFIG.quiz,
+      LEGACY_DEFAULT_TIMER_FOCUS_CONFIG.quiz,
+      isLegacyConfig,
+    ),
+    review: sanitizeRule(
+      raw.review,
+      DEFAULT_TIMER_FOCUS_CONFIG.review,
+      LEGACY_DEFAULT_TIMER_FOCUS_CONFIG.review,
+      isLegacyConfig,
+    ),
+    freestyle: sanitizeRule(
+      raw.freestyle,
+      DEFAULT_TIMER_FOCUS_CONFIG.freestyle,
+      LEGACY_DEFAULT_TIMER_FOCUS_CONFIG.freestyle,
+      isLegacyConfig,
+    ),
+    english: sanitizeRule(
+      raw.english,
+      DEFAULT_TIMER_FOCUS_CONFIG.english,
+      LEGACY_DEFAULT_TIMER_FOCUS_CONFIG.english,
+      isLegacyConfig,
+    ),
+    english_reading: sanitizeRule(
+      raw.english_reading,
+      DEFAULT_TIMER_FOCUS_CONFIG.english_reading,
+      LEGACY_DEFAULT_TIMER_FOCUS_CONFIG.english_reading,
+      isLegacyConfig,
+    ),
   }
 }
 

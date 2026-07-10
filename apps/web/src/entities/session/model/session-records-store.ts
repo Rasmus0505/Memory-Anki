@@ -11,6 +11,7 @@ import {
   bulkDeleteStudySessionsApi,
   createStudySessionFromTimeRecordApi,
   deleteStudySessionApi,
+  getStudySessionAnalyticsApi,
   listStudySessionsApi,
   patchStudySessionApi,
   type StudySessionPayload,
@@ -18,9 +19,36 @@ import {
 } from '@/entities/study-session/api'
 import { formatLocalDateKey, parseApiDateTime } from '@/shared/lib/dateTime'
 
-export async function listStudySessionRecords(options?: { includeDeleted?: boolean; includeBelowThreshold?: boolean }) {
+export async function listStudySessionRecords(options: {
+  limit: number
+  offset: number
+  keyword?: string
+  kind?: SessionKind
+  sortBy: 'started_at' | 'effective_seconds' | 'title'
+  sortOrder: 'asc' | 'desc'
+}) {
   const result = await listStudySessionsApi(options)
-  return result.items.map(studySessionToTimeRecord)
+  return {
+    items: result.items.map(studySessionToTimeRecord),
+    total: result.total ?? result.items.length,
+    limit: result.limit ?? options.limit,
+    offset: result.offset ?? options.offset,
+  }
+}
+
+export async function getStudySessionRecordAnalytics(options: {
+  trendRange: TimeRecordChartRange
+  breakdownRange: TimeRecordChartRange
+}) {
+  const result = await getStudySessionAnalyticsApi(options)
+  return {
+    trend: result.trend.map((item) => ({
+      dateKey: item.date_key,
+      label: item.label,
+      seconds: item.seconds,
+    })),
+    breakdown: result.breakdown,
+  }
 }
 
 export async function createStudySessionRecord(record: Omit<TimeSessionRecord, 'id'> & { id?: string }) {
@@ -76,7 +104,8 @@ function studySessionToTimeRecord(item: StudySessionItem): TimeSessionRecord {
 }
 
 function normalizeClientSource(value: unknown): TimeSessionRecord['clientSource'] {
-  if (value === 'desktop' || value === 'mobile') return value
+  if (value === 'desktop') return 'desktop'
+  if (value === 'pwa' || value === 'mobile') return 'pwa'
   return null
 }
 
@@ -404,7 +433,7 @@ export function formatSessionSource(record: Pick<TimeSessionRecord, 'sourceKind'
 
 export function formatClientSource(source: TimeSessionRecord['clientSource']) {
   if (source === 'desktop') return '电脑端'
-  if (source === 'mobile') return '手机端'
+  if (source === 'pwa') return 'PWA 端'
   return '未知端'
 }
 

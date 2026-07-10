@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { SessionTimerBar } from '@/shared/components/session/SessionTimerBar'
 import {
@@ -35,13 +35,19 @@ describe('SessionTimerBar', () => {
     const dialogContent = screen.getByTestId('timer-automation-dialog-content')
     expect(dialogContent.className).toContain('overflow-y-auto')
     expect(dialogContent.className).toContain('overscroll-contain')
-    fireEvent.click(screen.getByRole('checkbox', { name: /宫殿编辑进入页面自动开始/ }))
-    fireEvent.change(screen.getAllByDisplayValue('20')[0], { target: { value: '30' } })
+    const palaceAutoStart = screen.getByRole('checkbox', { name: /宫殿编辑进入页面自动开始/ })
+    fireEvent.click(palaceAutoStart)
+    const palaceRule = palaceAutoStart.closest('.rounded-lg')
+    expect(palaceRule).not.toBeNull()
+    fireEvent.change(
+      within(palaceRule as HTMLElement).getByRole('textbox', { name: '闲置预警阈值（秒）' }),
+      { target: { value: '45' } },
+    )
     fireEvent.click(screen.getByRole('button', { name: '保存' }))
 
     const saved = readTimerAutomationConfig()
     expect(saved.palace_edit.autoStartOnPageEnter).toBe(true)
-    expect(saved.palace_edit.inactiveAutoPauseSeconds).toBe(30)
+    expect(saved.palace_edit.inactiveAutoPauseSeconds).toBe(45)
     expect(saved.english.autoStartOnPageEnter).toBe(true)
   })
 
@@ -157,7 +163,7 @@ describe('SessionTimerBar', () => {
       />,
     )
 
-    expect(screen.getByText('闲置3/300秒')).toBeTruthy()
+    expect(screen.getByText('闲置 3/300 秒')).toBeTruthy()
   })
 
   it('keeps the idle row visible and only highlights it after idle starts', () => {
@@ -175,7 +181,7 @@ describe('SessionTimerBar', () => {
       />,
     )
 
-    const idleText = screen.getByText('闲置0/20秒')
+    const idleText = screen.getByText('闲置 0/120 秒')
     expect(idleText.className).toContain('text-foreground')
     expect(idleText.className).not.toContain('text-orange-500')
 
@@ -193,6 +199,6 @@ describe('SessionTimerBar', () => {
       />,
     )
 
-    expect(screen.getByText('闲置12/20秒').className).toContain('text-orange-500')
+    expect(screen.getByText('闲置 12/120 秒').className).toContain('text-orange-500')
   })
 })

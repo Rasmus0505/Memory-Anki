@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { formatLocalApiDateTime } from '@/shared/lib/dateTime'
 import { buildSuspendedSceneLeaveState } from './timedSessionSceneLeave'
 
-describe('buildSuspendedSceneLeaveState', () => {
+describe('timed session scene leave state', () => {
   it('builds suspended timestamps and persisted leave meta', () => {
     const currentMs = new Date(2026, 0, 1, 10, 0, 0, 123).getTime()
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { SessionEventRecord } from '@/entities/session/model'
+import type { SessionEventRecord } from '@/entities/session/model/session-records'
 import { buildTimedSessionRecord } from './timedSessionRecordBuilder'
 
 describe('timedSessionRecordBuilder', () => {
@@ -44,6 +44,7 @@ describe('timedSessionRecordBuilder', () => {
       endedAt: '2026-01-01 10:02:00',
       effectiveSeconds: 120,
       completionMethod: 'manual_complete',
+      clientSource: 'desktop',
     })
     expect(record?.events).toHaveLength(1)
     expect(record?.sceneSegments).toHaveLength(1)

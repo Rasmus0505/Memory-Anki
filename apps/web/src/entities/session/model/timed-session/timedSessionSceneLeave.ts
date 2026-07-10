@@ -2,14 +2,14 @@ import * as React from 'react'
 import type {
   SessionCompletionMethod,
   TimeSessionRecord,
-} from '@/entities/session/model'
+} from '@/entities/session/model/session-records'
 import { formatLocalApiDateTime } from '@/shared/lib/dateTime'
-import { clearTimedSessionTimeout } from './timedSessionBrowserEffects'
+import { clearTimedSessionTimeout } from '@/shared/hooks/timedSessionBrowserEffects'
 import type {
   ResolvedTimedSessionAutomation,
   SessionStatus,
   TimedSessionMeta,
-} from './timedSessionModel'
+} from '@/shared/hooks/timedSessionModel'
 
 export function buildSuspendedSceneLeaveState(input: {
   currentMs: number
@@ -42,6 +42,7 @@ export function useTimedSessionSceneLeave(input: {
   statusRef: React.RefObject<SessionStatus>
   leaveHandledRef: React.RefObject<boolean>
   autoPauseRef: React.RefObject<number | null>
+  autoPauseDeadlineAtRef: React.RefObject<number | null>
   hiddenPauseRef: React.RefObject<number | null>
   sceneActiveRef: React.RefObject<boolean>
   idleSecondsRef: React.RefObject<number>
@@ -79,6 +80,7 @@ export function useTimedSessionSceneLeave(input: {
     statusRef,
     leaveHandledRef,
     autoPauseRef,
+    autoPauseDeadlineAtRef,
     hiddenPauseRef,
     sceneActiveRef,
     idleSecondsRef,
@@ -121,6 +123,7 @@ export function useTimedSessionSceneLeave(input: {
 
       stopTicker(currentMs)
       clearTimedSessionTimeout(autoPauseRef)
+      autoPauseDeadlineAtRef.current = null
       clearTimedSessionTimeout(hiddenPauseRef)
       statusRef.current = 'paused'
       if (options?.unload) {
@@ -148,6 +151,7 @@ export function useTimedSessionSceneLeave(input: {
     },
     [
       autoPauseRef,
+      autoPauseDeadlineAtRef,
       buildRecord,
       closeActiveSceneSegment,
       hiddenPauseRef,

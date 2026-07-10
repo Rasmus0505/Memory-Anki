@@ -7,6 +7,7 @@ import {
 } from '@/shared/components/session/timer-automation-config'
 import { onAppEvent } from '@/shared/events/appEvents'
 import {
+  getTimerFocusRule,
   readTimerFocusConfig,
   TIMER_FOCUS_UPDATED_EVENT,
   type TimerFocusConfig,
@@ -28,6 +29,7 @@ import {
 } from '@/shared/components/session/timerSnapshotBuilders'
 import { useBreakGuardMachine } from '@/shared/components/session/useBreakGuardMachine'
 import { useDesktopTimerBridgeSync } from '@/shared/components/session/useDesktopTimerBridgeSync'
+import { useTimerFocusCycle } from '@/shared/components/session/useTimerFocusCycle'
 import {
   GlobalTimerActionsContext,
   type GlobalTimerActions,
@@ -67,6 +69,7 @@ export function GlobalTimerProvider({
     setBreakPausedRemainingMs,
     setBreakState,
   } = useBreakGuardMachine({ activeEntry, entries })
+  const feedbackSignal = useTimerFocusCycle(activeEntry, focusConfig)
 
   React.useEffect(() => {
     const unsubscribeAutomation = onAppEvent(TIMER_AUTOMATION_UPDATED_EVENT, (detail) => {
@@ -131,7 +134,9 @@ export function GlobalTimerProvider({
     const currentActiveEntry = activeEntryRef.current
 
     if (command.type === 'promptBreak') {
-      scheduleBreakPrompt(config, currentBreakState)
+      if (config.promptOnWindowLeave) {
+        scheduleBreakPrompt(config, currentBreakState)
+      }
       return
     }
 
@@ -141,7 +146,61 @@ export function GlobalTimerProvider({
     }
 
     if (command.type === 'startBreak') {
+      currentActiveEntry?.timer.logEvent('break_start', {
+        source: 'legacy_break_prompt',
+        planned_minutes: command.minutes,
+      })
       startBreakCountdown(command.minutes)
+      return
+    }
+
+    if (command.type === 'continueRound') {
+      if (!currentActiveEntry) return
+      const rule = getTimerFocusRule(currentActiveEntry.scene, focusConfig)
+      const goalSeconds = Math.max(60, Math.round(rule.primaryMinutes * 60))
+      const roundElapsedSeconds = Math.max(
+        0,
+        currentActiveEntry.timer.effectiveSeconds -
+          currentActiveEntry.timer.focusRound.startedAtEffectiveSeconds,
+      )
+      if (roundElapsedSeconds < goalSeconds) return
+      currentActiveEntry.timer.startNextFocusRound({ source: 'goal_continue' })
+      return
+    }
+
+    if (command.type === 'startGoalBreak') {
+      if (!currentActiveEntry) return
+      const rule = getTimerFocusRule(currentActiveEntry.scene, focusConfig)
+      const goalSeconds = Math.max(60, Math.round(rule.primaryMinutes * 60))
+      const roundElapsedSeconds = Math.max(
+        0,
+        currentActiveEntry.timer.effectiveSeconds -
+          currentActiveEntry.timer.focusRound.startedAtEffectiveSeconds,
+      )
+      if (roundElapsedSeconds < goalSeconds) return
+      const minutes = Math.max(1, Math.round(command.minutes ?? rule.breakMinutes ?? 5))
+      currentActiveEntry.timer.logEvent('break_start', {
+        source: 'focus_goal',
+        planned_minutes: minutes,
+        round_index: currentActiveEntry.timer.focusRound.roundIndex,
+      })
+      currentActiveEntry.timer.startNextFocusRound({ source: 'focus_goal_break' })
+      startBreakCountdown(minutes)
+      return
+    }
+
+    if (command.type === 'startStudy') {
+      if (!currentActiveEntry) return
+      currentActiveEntry.timer.logEvent('break_end', {
+        source: 'manual_start_study',
+        break_status: currentBreakState.status,
+      })
+      finishBreak()
+      if (currentActiveEntry.timer.status === 'paused') {
+        currentActiveEntry.timer.resume({ source: 'break_complete_manual' })
+      } else if (currentActiveEntry.timer.status === 'idle') {
+        currentActiveEntry.timer.start({ source: 'break_complete_manual' })
+      }
       return
     }
 
@@ -188,6 +247,10 @@ export function GlobalTimerProvider({
     }
 
     if (command.type === 'finishBreak') {
+      currentActiveEntry?.timer.logEvent('break_end', {
+        source: 'manual_finish_break',
+        break_status: currentBreakState.status,
+      })
       finishBreak({ openTarget: command.openTarget })
       return
     }
@@ -201,7 +264,22 @@ export function GlobalTimerProvider({
       const bridge = getDesktopTimerBridge()
       bridge?.setOverlayCollapsed?.(command.collapsed)
     }
-  }, [finishBreak, openTarget, returnToStudy, scheduleBreakPrompt, startBreakCountdown])
+  }, [
+    activeEntryRef,
+    breakConfigRef,
+    breakPausedRef,
+    breakPausedRemainingRef,
+    breakStateRef,
+    finishBreak,
+    focusConfig,
+    openTarget,
+    returnToStudy,
+    scheduleBreakPrompt,
+    setBreakPaused,
+    setBreakPausedRemainingMs,
+    setBreakState,
+    startBreakCountdown,
+  ])
 
   const timerSnapshot = React.useMemo(() => {
     if (
@@ -209,6 +287,8 @@ export function GlobalTimerProvider({
       breakState.status === 'counting_down' ||
       breakState.status === 'expired'
     ) {
+      // The state object changes only on transitions; the tick forces countdown snapshots to refresh.
+      void breakTick
       return buildBreakTimerSnapshot({
         breakState,
         config: breakConfig,
@@ -221,16 +301,14 @@ export function GlobalTimerProvider({
       activeEntry,
       focusConfig,
       automationConfig,
+      feedbackSignal,
     })
-  }, [activeEntry, automationConfig, breakConfig, breakPaused, breakPausedRemainingMs, breakReturnPath, breakState, breakTick, focusConfig])
+  }, [activeEntry, automationConfig, breakConfig, breakPaused, breakPausedRemainingMs, breakReturnPath, breakState, breakTick, feedbackSignal, focusConfig])
 
   useDesktopTimerBridgeSync({
     timerSnapshot,
     handleTimerCommand,
     activeEntryRef,
-    scheduleBreakPrompt,
-    breakConfigRef,
-    breakStateRef,
   })
 
   return (

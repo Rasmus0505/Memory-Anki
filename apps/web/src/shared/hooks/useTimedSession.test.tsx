@@ -43,13 +43,13 @@ describe('useTimedSession automation config', () => {
     vi.useRealTimers()
   })
 
-  it('arms palace_edit default inactive auto pause at 20 seconds', () => {
+  it('arms the default inactivity pause after a 120-second warning and 30-second grace', () => {
     const timeoutSpy = vi.spyOn(window, 'setTimeout')
 
     render(<TimedSessionTestHarness kind="palace_edit" />)
 
     expect(screen.getByTestId('status').textContent).toBe('running')
-    expect(timeoutSpy.mock.calls.some(([, delay]) => delay === 20_000)).toBe(true)
+    expect(timeoutSpy.mock.calls.some(([, delay]) => delay === 150_000)).toBe(true)
   })
 
   it('treats explicit autoPauseMs overrides as milliseconds', () => {
@@ -310,7 +310,7 @@ describe('useTimedSession automation config', () => {
     expect(timeoutSpy.mock.calls.some(([, delay]) => delay === 7_000)).toBe(true)
   })
 
-  it('auto pauses on inactivity and rolls back effective seconds by config', () => {
+  it('keeps counting during the warning grace and auto pauses without rollback', () => {
     window.localStorage.setItem(
       TIMER_AUTOMATION_STORAGE_KEY,
       JSON.stringify({
@@ -323,8 +323,9 @@ describe('useTimedSession automation config', () => {
         palace_edit: {
           autoStartOnPageEnter: false,
           inactiveAutoPauseSeconds: 5,
+          inactivePauseGraceSeconds: 30,
           hiddenAutoPauseSeconds: 15,
-          autoPauseRollbackSeconds: 3,
+          autoPauseRollbackSeconds: 0,
         },
       }),
     )
@@ -335,12 +336,18 @@ describe('useTimedSession automation config', () => {
       vi.advanceTimersByTime(5_000)
     })
 
+    expect(screen.getByTestId('status').textContent).toBe('running')
+
+    act(() => {
+      vi.advanceTimersByTime(30_000)
+    })
+
     expect(screen.getByTestId('status').textContent).toBe('paused')
     expect(screen.getByTestId('pause-count').textContent).toBe('1')
-    expect(screen.getByTestId('seconds').textContent).toBe('2')
+    expect(screen.getByTestId('seconds').textContent).toBe('35')
   })
 
-  it('caps inactivity rollback to the actual idle tail instead of wiping active time', () => {
+  it('restarts the warning and grace window after valid study activity', () => {
     window.localStorage.setItem(
       TIMER_AUTOMATION_STORAGE_KEY,
       JSON.stringify({
@@ -353,8 +360,9 @@ describe('useTimedSession automation config', () => {
         palace_edit: {
           autoStartOnPageEnter: false,
           inactiveAutoPauseSeconds: 5,
+          inactivePauseGraceSeconds: 30,
           hiddenAutoPauseSeconds: 15,
-          autoPauseRollbackSeconds: 30,
+          autoPauseRollbackSeconds: 0,
         },
       }),
     )
@@ -364,11 +372,17 @@ describe('useTimedSession automation config', () => {
     act(() => {
       vi.advanceTimersByTime(4_000)
       screen.getByRole('button', { name: 'edit-op' }).click()
-      vi.advanceTimersByTime(5_000)
+      vi.advanceTimersByTime(34_000)
+    })
+
+    expect(screen.getByTestId('status').textContent).toBe('running')
+
+    act(() => {
+      vi.advanceTimersByTime(1_000)
     })
 
     expect(screen.getByTestId('status').textContent).toBe('paused')
-    expect(screen.getByTestId('seconds').textContent).toBe('4')
+    expect(screen.getByTestId('seconds').textContent).toBe('39')
   })
 
   it('persists running sessions as resumable snapshots on pagehide without counting time away', () => {

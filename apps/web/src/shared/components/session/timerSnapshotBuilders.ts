@@ -9,11 +9,13 @@ import {
 } from '@/shared/components/session/timer-focus-config'
 import type { BreakGuardConfig } from '@/shared/components/session/break-guard-config'
 import type { BreakGuardState } from '@/shared/components/session/breakGuardModel'
-import type { UnifiedTimerSnapshot } from '@/shared/components/session/desktopTimerBridge'
+import type {
+  UnifiedTimerFeedbackSignal,
+  UnifiedTimerSnapshot,
+  UnifiedTimerStudyPhase,
+} from '@/shared/components/session/desktopTimerBridge'
 import {
   formatClock,
-  formatIdlePrimaryProgress,
-  formatPrimaryProgress,
   type GlobalTimerRegistration,
 } from '@/shared/components/session/globalTimerModel'
 
@@ -33,50 +35,93 @@ export function buildStudyTimerSnapshot({
   activeEntry,
   focusConfig,
   automationConfig,
+  feedbackSignal = null,
 }: {
   activeEntry: GlobalTimerRegistration | null
   focusConfig: TimerFocusConfig
   automationConfig: TimerAutomationConfig
+  feedbackSignal?: UnifiedTimerFeedbackSignal | null
 }): UnifiedTimerSnapshot {
   const scene = activeEntry?.scene ?? null
   const sceneLabel = scene ? TIMER_FOCUS_SCENE_LABELS[scene] : '计时器'
   const focusRule = scene ? getTimerFocusRule(scene, focusConfig) : focusConfig.global
   const automationRule = scene ? getTimerAutomationRule(scene, automationConfig) : null
   const primarySeconds = Math.max(60, focusRule.primaryMinutes * 60)
-  const secondarySeconds = Math.max(60, Math.min(primarySeconds, focusRule.secondaryMinutes * 60))
   const effectiveSeconds = activeEntry?.timer.effectiveSeconds ?? 0
-  const secondaryRemainder = secondarySeconds > 0 ? effectiveSeconds % secondarySeconds : 0
-  const secondaryRemaining =
-    secondarySeconds > 0
-      ? secondaryRemainder === 0
-        ? secondarySeconds
-        : secondarySeconds - secondaryRemainder
-      : 0
-  const idleText = automationRule
-    ? `闲置 ${activeEntry?.timer.idleSeconds ?? 0}/${automationRule.inactiveAutoPauseSeconds} 秒`
-    : '当前无学习会话'
+  const roundState = activeEntry?.timer.focusRound
+  const roundStartedAt = Math.min(
+    effectiveSeconds,
+    Math.max(0, roundState?.startedAtEffectiveSeconds ?? 0),
+  )
+  const roundElapsedSeconds = Math.max(0, effectiveSeconds - roundStartedAt)
+  const roundIndex = Math.max(1, roundState?.roundIndex ?? 1)
   const status = activeEntry?.timer.status ?? 'idle'
+  const goalReached = Boolean(activeEntry && roundElapsedSeconds >= primarySeconds)
+  const idleSeconds = activeEntry?.timer.idleSeconds ?? 0
+  const warningThreshold = Math.max(0, automationRule?.inactiveAutoPauseSeconds ?? 0)
+  const warningGrace = Math.max(0, automationRule?.inactivePauseGraceSeconds ?? 30)
+  const idleWarningRemainingSeconds =
+    activeEntry && status === 'running' && warningGrace > 0 && idleSeconds >= warningThreshold
+      ? Math.max(0, warningThreshold + warningGrace - idleSeconds)
+      : null
+  const studyPhase: UnifiedTimerStudyPhase = !activeEntry
+    ? 'idle'
+    : status === 'paused'
+      ? 'paused'
+      : status === 'completed'
+        ? 'completed'
+        : goalReached
+          ? 'goal_reached'
+          : idleWarningRemainingSeconds != null
+            ? 'idle_warning'
+            : 'focusing'
+  const primaryText =
+    studyPhase === 'goal_reached'
+      ? `第 ${roundIndex} 轮已达标，继续学习或休息一下`
+      : studyPhase === 'idle_warning'
+        ? `仍在学习吗？${idleWarningRemainingSeconds} 秒后自动暂停`
+        : studyPhase === 'paused'
+          ? '计时已暂停，本轮进度已保留'
+          : studyPhase === 'completed'
+            ? '本次学习已经完成'
+            : activeEntry && automationRule
+              ? `专注中 · 闲置 ${idleSeconds}/${warningThreshold} 秒`
+              : '当前无学习会话'
+  const secondaryText = activeEntry
+    ? `本轮 ${formatClock(Math.min(roundElapsedSeconds, primarySeconds))}/${formatClock(primarySeconds)} · 第 ${roundIndex} 轮`
+    : `本轮 ${formatClock(0)}/${formatClock(primarySeconds)}`
+  const suggestedBreakMinutes = Math.max(1, Math.round(focusRule.breakMinutes ?? 5))
 
   return {
     mode: 'study',
     status,
     title: activeEntry?.title ?? '待开始',
     scene: sceneLabel,
-    displaySeconds: activeEntry ? secondaryRemaining : secondarySeconds,
-    primaryText: activeEntry ? idleText : '当前无学习会话',
-    secondaryText: activeEntry
-      ? formatPrimaryProgress(effectiveSeconds, primarySeconds)
-      : formatIdlePrimaryProgress(primarySeconds),
+    displaySeconds: effectiveSeconds,
+    primaryText,
+    secondaryText,
     snoozeCount: 0,
     availableActions: activeEntry
-      ? status === 'running'
-        ? ['pause']
-        : ['resume']
+      ? studyPhase === 'goal_reached'
+        ? ['continueRound', 'startGoalBreak']
+        : status === 'running'
+          ? ['pause']
+          : status === 'paused' || status === 'idle'
+            ? ['resume']
+            : []
       : [],
     presetMinutes: [],
     snoozeMinutes: [],
     targetPath: '/freestyle',
     updatedAt: Date.now(),
+    studyPhase,
+    effectiveSeconds,
+    roundElapsedSeconds,
+    roundTargetSeconds: primarySeconds,
+    roundIndex,
+    idleWarningRemainingSeconds,
+    suggestedBreakMinutes,
+    feedbackSignal,
   }
 }
 
@@ -134,10 +179,10 @@ export function buildBreakTimerSnapshot({
       title: '该回来了',
       scene: '休息到点',
       displaySeconds: 0,
-      primaryText: '休息已经结束',
+      primaryText: '休息已经结束，准备好后手动开始学习',
       secondaryText: `${plannedText} · ${snoozeText}`,
       snoozeCount: breakState.snoozeCount,
-      availableActions: ['snooze', 'finishBreak', 'openTarget'],
+      availableActions: ['snooze', 'startStudy'],
       presetMinutes: config.presetMinutes,
       allowCustomMinutes: config.allowCustomMinutes,
       snoozeMinutes: config.snoozeMinutes,
@@ -155,7 +200,7 @@ export function buildBreakTimerSnapshot({
     primaryText: plannedText,
     secondaryText: snoozeText,
     snoozeCount: breakState.snoozeCount,
-    availableActions: [paused ? 'resume' : 'pause', 'finishBreak', 'openTarget'],
+    availableActions: [paused ? 'resume' : 'pause', 'startStudy'],
     presetMinutes: config.presetMinutes,
     allowCustomMinutes: config.allowCustomMinutes,
     snoozeMinutes: config.snoozeMinutes,

@@ -30,6 +30,22 @@
   animation: memory-anki-break-guard-card-alert 0.95s ease-in-out infinite alternate;
 }
 
+.memory-anki-global-timer-panel-warning,
+.memory-anki-timer-overlay-shell-warning {
+  border-color: rgba(245, 158, 11, 0.44);
+  background:
+    radial-gradient(circle at 72% 12%, rgba(251, 191, 36, 0.15), transparent 34%),
+    var(--timer-surface-background);
+}
+
+.memory-anki-global-timer-panel-goal,
+.memory-anki-timer-overlay-shell-goal {
+  border-color: rgba(16, 185, 129, 0.42);
+  background:
+    radial-gradient(circle at 72% 12%, rgba(52, 211, 153, 0.15), transparent 34%),
+    var(--timer-surface-background);
+}
+
 .memory-anki-global-timer-digits,
 .memory-anki-timer-overlay-digits {
   color: var(--timer-digits-color);
@@ -174,13 +190,41 @@
   color: #334155;
 }
 
+.memory-anki-timer-round-progress {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  height: 5px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.2);
+}
+
+.memory-anki-timer-round-progress > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #38bdf8, #10b981);
+  transition: width 240ms ease-out;
+}
+
+.memory-anki-global-timer-panel-warning .memory-anki-timer-round-progress > span,
+.memory-anki-timer-overlay-shell-warning .memory-anki-timer-round-progress > span {
+  background: linear-gradient(90deg, #fbbf24, #f59e0b);
+}
+
+.memory-anki-global-timer-panel-goal .memory-anki-timer-round-progress > span,
+.memory-anki-timer-overlay-shell-goal .memory-anki-timer-round-progress > span {
+  background: linear-gradient(90deg, #34d399, #10b981);
+}
+
 .memory-anki-global-timer-body {
   position: relative;
   z-index: 1;
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-rows: auto auto auto minmax(0, 1fr) auto;
+  grid-template-rows: auto auto auto auto minmax(0, 1fr) auto;
   gap: var(--timer-body-gap, 6px);
 }
 
@@ -335,6 +379,28 @@
   cursor: grabbing;
 }
 
+.memory-anki-global-timer-capsule-warning,
+.memory-anki-timer-overlay-capsule-warning {
+  border-color: rgba(245, 158, 11, 0.5);
+  background: rgba(255, 251, 235, 0.96);
+}
+
+.memory-anki-global-timer-capsule-goal,
+.memory-anki-timer-overlay-capsule-goal {
+  border-color: rgba(16, 185, 129, 0.46);
+  background: rgba(236, 253, 245, 0.96);
+}
+
+.memory-anki-global-timer-capsule-warning .memory-anki-global-timer-capsule-dot,
+.memory-anki-timer-overlay-capsule-warning .memory-anki-timer-overlay-dot {
+  background: linear-gradient(135deg, #fbbf24, #f59e0b);
+}
+
+.memory-anki-global-timer-capsule-goal .memory-anki-global-timer-capsule-dot,
+.memory-anki-timer-overlay-capsule-goal .memory-anki-timer-overlay-dot {
+  background: linear-gradient(135deg, #34d399, #10b981);
+}
+
 .memory-anki-global-timer-capsule-dot {
   background: linear-gradient(135deg, #f59e0b, #ef4444);
   box-shadow: 0 0 0 4px rgba(251, 191, 36, 0.18);
@@ -431,9 +497,9 @@
   width: 100vw;
   height: 100vh;
   display: grid;
-  grid-template-rows: auto minmax(34px, 1fr) auto auto;
-  gap: clamp(5px, 2.7vh, 10px);
-  padding: clamp(9px, 4vh, 14px);
+  grid-template-rows: auto minmax(30px, 1fr) auto auto auto;
+  gap: clamp(3px, 1.8vh, 7px);
+  padding: clamp(8px, 3vh, 12px);
   border-radius: 22px;
 }
 
@@ -460,6 +526,14 @@
 
 .memory-anki-timer-overlay-shell-expired .memory-anki-timer-overlay-kicker {
   color: #b91c1c;
+}
+
+.memory-anki-timer-overlay-shell-warning .memory-anki-timer-overlay-kicker {
+  color: #b45309;
+}
+
+.memory-anki-timer-overlay-shell-goal .memory-anki-timer-overlay-kicker {
+  color: #047857;
 }
 
 .memory-anki-timer-overlay-title {
@@ -517,6 +591,11 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.memory-anki-timer-overlay-round-progress {
+  width: min(100%, 260px);
+  margin-inline: auto;
 }
 
 .memory-anki-timer-overlay-actions {
@@ -606,6 +685,16 @@
 .memory-anki-timer-overlay-dot-expired {
   background: linear-gradient(135deg, #f87171, #ef4444);
   box-shadow: 0 0 0 3px rgba(248, 113, 113, 0.26);
+}
+
+.memory-anki-timer-overlay-dot-warning {
+  background: linear-gradient(135deg, #fbbf24, #f59e0b);
+  box-shadow: 0 0 0 3px rgba(251, 191, 36, 0.24);
+}
+
+.memory-anki-timer-overlay-dot-goal {
+  background: linear-gradient(135deg, #34d399, #10b981);
+  box-shadow: 0 0 0 3px rgba(52, 211, 153, 0.24);
 }
 
 /* 单操作按钮不拉伸到全宽 */

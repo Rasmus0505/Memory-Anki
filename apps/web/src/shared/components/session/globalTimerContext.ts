@@ -6,7 +6,7 @@ import type { TimedSessionController } from '@/shared/hooks/useTimedSession'
 export interface GlobalTimerActions {
   upsertTimer: (entry: GlobalTimerRegistration) => void
   removeTimer: (sessionId: string) => void
-  notifyStudyActivity: (sessionId: string) => void
+  notifyStudyActivity: (sessionId: string) => boolean
 }
 
 export const GlobalTimerActionsContext = React.createContext<GlobalTimerActions | null>(null)
@@ -35,7 +35,7 @@ export function useGlobalTimerRegistration(entry: {
     return {
       ...timer,
       registerActivity: (activityKind, meta) => {
-        notifyStudyActivity(timer.sessionId)
+        if (!notifyStudyActivity(timer.sessionId)) return
         timer.registerActivity(activityKind, meta)
       },
     }

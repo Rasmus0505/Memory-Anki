@@ -9,6 +9,7 @@ import {
   DialogTitle,
 } from '@/shared/components/ui/dialog'
 import type { TimerAutomationConfig } from '@/shared/components/session/timer-automation-config'
+import { DEFAULT_TIMER_AUTOMATION_CONFIG } from '@/shared/components/session/timer-automation-config'
 import type { TimerFocusConfig } from '@/shared/components/session/timer-focus-config'
 import {
   DEFAULT_TIMER_FOCUS_CONFIG,
@@ -24,7 +25,7 @@ import {
 import { TimerAutomationSection } from '@/shared/components/session/TimerAutomationSection'
 import { TimerBreakGuardSection } from '@/shared/components/session/TimerBreakGuardSection'
 import { TimerFocusSection } from '@/shared/components/session/TimerFocusSection'
-import { toBreakDraft, toFocusDraft } from '@/shared/components/session/timerAutomationDialogModel'
+import { toBreakDraft, toDraft, toFocusDraft } from '@/shared/components/session/timerAutomationDialogModel'
 import { useTimerConfigDrafts } from '@/shared/components/session/useTimerConfigDrafts'
 
 interface TimerAutomationDialogProps {
@@ -54,6 +55,7 @@ export function TimerAutomationDialog({
     draft,
     focusDraft,
     breakDraft,
+    setDraft,
     setFocusDraft,
     setBreakDraft,
     handleModeChange,
@@ -84,9 +86,9 @@ export function TimerAutomationDialog({
               <Settings2 className="size-5" />
             </div>
             <div>
-              <DialogTitle>自动化配置</DialogTitle>
+              <DialogTitle>专注计时设置</DialogTitle>
               <DialogDescription className="mt-1">
-                配置哪些动作算活动，并决定各场景何时自动暂停、双层目标和反馈强度。
+                先设置常用的专注轮次、闲置预警与休息时长，再按需展开高级选项。
               </DialogDescription>
             </div>
           </div>
@@ -133,8 +135,11 @@ export function TimerAutomationDialog({
               onReset()
               const resetFocusConfig = resetTimerFocusConfig()
               const resetBreakConfig = resetBreakGuardConfig()
+              setDraft(toDraft(DEFAULT_TIMER_AUTOMATION_CONFIG))
               setFocusDraft(toFocusDraft(resetFocusConfig))
               setBreakDraft(toBreakDraft(resetBreakConfig))
+              onFocusConfigSave?.(resetFocusConfig)
+              onBreakConfigSave?.(resetBreakConfig)
             }}
           >
             <RotateCcw className="mr-2 size-4" />

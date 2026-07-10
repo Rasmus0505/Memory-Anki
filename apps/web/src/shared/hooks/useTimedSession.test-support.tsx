@@ -43,6 +43,10 @@ export function TimedSessionTestHarness({
       <div data-testid="status">{timer.status}</div>
       <div data-testid="pause-count">{timer.pauseCount}</div>
       <div data-testid="seconds">{timer.effectiveSeconds}</div>
+      <div data-testid="idle-seconds">{timer.idleSeconds}</div>
+      <div data-testid="focus-round-index">{timer.focusRound.roundIndex}</div>
+      <div data-testid="focus-round-start">{timer.focusRound.startedAtEffectiveSeconds}</div>
+      <div data-testid="focus-goal-celebrated">{String(timer.focusRound.goalCelebrated)}</div>
       <button type="button" onClick={() => timer.registerActivity('node_switch', { source: 'test_node_switch' })}>
         node-switch
       </button>
@@ -55,6 +59,21 @@ export function TimedSessionTestHarness({
       <button type="button" onClick={() => void timer.complete('manual_complete', { source: 'test_complete' })}>
         complete
       </button>
+      <button type="button" onClick={() => timer.pause({ source: 'test_pause' })}>
+        pause
+      </button>
+      <button type="button" onClick={() => timer.resume({ source: 'test_resume' })}>
+        resume
+      </button>
+      <button type="button" onClick={() => timer.acknowledgeFocusInterval(1, { source: 'test_interval' })}>
+        acknowledge-interval
+      </button>
+      <button type="button" onClick={() => timer.acknowledgeFocusGoal({ source: 'test_goal' })}>
+        acknowledge-goal
+      </button>
+      <button type="button" onClick={() => timer.startNextFocusRound({ source: 'test_next_round' })}>
+        next-round
+      </button>
     </div>
   )
 }
@@ -66,6 +85,14 @@ export function readPersistedTimedSessionTestSnapshot(persistKey: string) {
         recordId?: string | null
         resumeDeadlineAt?: string | null
         sceneSegments?: Array<{ scene: string; effectiveSeconds: number }>
+        focusRound?: {
+          roundIndex: number
+          startedAtEffectiveSeconds: number
+          acknowledgedIntervalCount: number
+          goalCelebrated: boolean
+        }
+        lastActivityAtMs?: number | null
+        autoPauseDeadlineAtMs?: number | null
       }
     : null
 }

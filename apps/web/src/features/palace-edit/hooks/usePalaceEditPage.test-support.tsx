@@ -253,6 +253,7 @@ vi.mock('@/shared/components/mindmap-host', () => ({
     )
   }),
   MindMapPageToolbar: ({
+    taskControl,
     segmentControl,
     modeControl,
     modeToggle,
@@ -265,6 +266,16 @@ vi.mock('@/shared/components/mindmap-host', () => ({
     clearUiAction,
   }: Record<string, any>) => (
     <div data-testid="mindmap-toolbar">
+      {taskControl ? (
+        <>
+          <button type="button" onClick={() => taskControl.onChange('build')}>
+            构建
+          </button>
+          <button type="button" onClick={() => taskControl.onChange('learn')}>
+            学习
+          </button>
+        </>
+      ) : null}
       {segmentControl ? (
         <>
           <button type="button" onClick={segmentControl.onToggle}>
@@ -445,6 +456,7 @@ export function renderPalaceEditPageStrict() {
 
 export function setupPalaceEditPageTestDefaults() {
   vi.restoreAllMocks()
+  window.localStorage.clear()
   mindMapFrameMockState.nextMountId = 1
   vi.spyOn(window, 'confirm').mockReturnValue(true)
   timedSessionMock.status = 'idle'

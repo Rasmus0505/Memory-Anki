@@ -69,7 +69,34 @@ export function TimerAutomationSection({
           </div>
         </div>
 
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <p className="text-xs leading-5 text-muted-foreground">
+          常用设置先确定自动开始、120 秒闲置预警和 30 秒确认宽限；活动识别等细节收在下方高级设置中。
+        </p>
+      </div>
+
+      {draft.mode === 'global' ? (
+        <RuleEditor
+          label="全局阈值"
+          description="这套设置会统一应用到宫殿编辑、练习、复习、英语听力和英语阅读。"
+          value={draft.shared}
+          onFieldChange={(field, value) => onFieldChange('shared', field, value)}
+          onAutoStartChange={(checked) => onAutoStartChange('shared', checked)}
+          defaults={DEFAULT_TIMER_AUTOMATION_CONFIG.shared}
+        />
+      ) : (
+        <div className="grid gap-3 lg:grid-cols-2">
+          {sceneRuleEditors}
+        </div>
+      )}
+
+      <details className="rounded-lg border border-border/70 bg-card/70 p-4">
+        <summary className="cursor-pointer text-sm font-semibold text-foreground">
+          高级设置：哪些操作算作正在学习
+        </summary>
+        <p className="mt-2 text-xs leading-5 text-muted-foreground">
+          这些信号会解除闲置预警。阅读或回忆场景建议只启用确实代表学习的操作。
+        </p>
+        <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           <label className="flex items-start gap-3 rounded-xl border border-border/60 bg-background/50 px-3 py-3 text-sm">
             <input
               type="checkbox"
@@ -119,22 +146,7 @@ export function TimerAutomationSection({
             </span>
           </label>
         </div>
-      </div>
-
-      {draft.mode === 'global' ? (
-        <RuleEditor
-          label="全局阈值"
-          description="这套设置会统一应用到宫殿编辑、练习、复习、英语听力和英语阅读。"
-          value={draft.shared}
-          onFieldChange={(field, value) => onFieldChange('shared', field, value)}
-          onAutoStartChange={(checked) => onAutoStartChange('shared', checked)}
-          defaults={DEFAULT_TIMER_AUTOMATION_CONFIG.shared}
-        />
-      ) : (
-        <div className="grid gap-3 lg:grid-cols-2">
-          {sceneRuleEditors}
-        </div>
-      )}
+      </details>
     </>
   )
 }

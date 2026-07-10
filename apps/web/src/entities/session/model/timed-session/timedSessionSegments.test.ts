@@ -4,7 +4,7 @@ import {
   createActiveSceneSegment,
 } from './timedSessionSegments'
 
-describe('timedSessionSegments', () => {
+describe('timed session segments', () => {
   it('creates an active scene segment snapshot', () => {
     expect(createActiveSceneSegment({
       scene: 'freestyle',

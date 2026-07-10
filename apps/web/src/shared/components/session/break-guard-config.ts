@@ -7,7 +7,9 @@ import {
 export type BreakGuardAlertStrength = 'strong' | 'gentle'
 
 export interface BreakGuardConfig {
+  schemaVersion?: number
   enabled: boolean
+  promptOnWindowLeave: boolean
   promptDelaySeconds: number
   presetMinutes: number[]
   allowCustomMinutes: boolean
@@ -31,8 +33,9 @@ export interface BreakGuardLogEntry {
 export const BREAK_GUARD_STORAGE_KEY = 'memory-anki-break-guard-config'
 export const BREAK_GUARD_LOG_STORAGE_KEY = 'memory-anki-break-guard-logs'
 export const BREAK_GUARD_UPDATED_EVENT = 'memory-anki-break-guard-config-change'
+export const BREAK_GUARD_CONFIG_VERSION = 2
 
-export const DEFAULT_BREAK_GUARD_CONFIG: BreakGuardConfig = {
+const LEGACY_DEFAULT_BREAK_GUARD_CONFIG = {
   enabled: true,
   promptDelaySeconds: 5,
   presetMinutes: [1, 3],
@@ -40,7 +43,22 @@ export const DEFAULT_BREAK_GUARD_CONFIG: BreakGuardConfig = {
   autoFinishOnStudyReturn: true,
   resumeInterruptedStudyOnReturn: true,
   targetPath: '/freestyle',
-  alertStrength: 'strong',
+  alertStrength: 'strong' as const,
+  snoozeMinutes: [1, 3, 5],
+  recordBreakLogs: true,
+}
+
+export const DEFAULT_BREAK_GUARD_CONFIG: BreakGuardConfig = {
+  schemaVersion: BREAK_GUARD_CONFIG_VERSION,
+  enabled: true,
+  promptOnWindowLeave: false,
+  promptDelaySeconds: 60,
+  presetMinutes: [5],
+  allowCustomMinutes: true,
+  autoFinishOnStudyReturn: false,
+  resumeInterruptedStudyOnReturn: false,
+  targetPath: '/freestyle',
+  alertStrength: 'gentle',
   snoozeMinutes: [1, 3, 5],
   recordBreakLogs: true,
 }
@@ -75,37 +93,116 @@ function sanitizeTargetPath(value: unknown) {
   return trimmed
 }
 
+function isSameLegacyValue(value: unknown, legacyDefault: unknown) {
+  if (!Array.isArray(value) || !Array.isArray(legacyDefault)) return value === legacyDefault
+  return value.length === legacyDefault.length && value.every((item, index) => item === legacyDefault[index])
+}
+
+function migrateLegacyField<T>(
+  value: unknown,
+  legacyDefault: T,
+  currentDefault: T,
+  isLegacyConfig: boolean,
+) {
+  if (!isLegacyConfig || !isSameLegacyValue(value, legacyDefault)) return value
+  return currentDefault
+}
+
 export function sanitizeBreakGuardConfig(value: unknown): BreakGuardConfig {
   const raw = value && typeof value === 'object' ? (value as Record<string, unknown>) : {}
+  const parsedSchemaVersion = Number(raw.schemaVersion)
+  const schemaVersion = Number.isFinite(parsedSchemaVersion) ? Math.round(parsedSchemaVersion) : 1
+  const isLegacyConfig = schemaVersion < BREAK_GUARD_CONFIG_VERSION
   return {
-    enabled: typeof raw.enabled === 'boolean' ? raw.enabled : DEFAULT_BREAK_GUARD_CONFIG.enabled,
+    schemaVersion: BREAK_GUARD_CONFIG_VERSION,
+    enabled:
+      typeof raw.enabled === 'boolean'
+        ? (migrateLegacyField(
+            raw.enabled,
+            LEGACY_DEFAULT_BREAK_GUARD_CONFIG.enabled,
+            DEFAULT_BREAK_GUARD_CONFIG.enabled,
+            isLegacyConfig,
+          ) as boolean)
+        : DEFAULT_BREAK_GUARD_CONFIG.enabled,
+    promptOnWindowLeave:
+      typeof raw.promptOnWindowLeave === 'boolean'
+        ? raw.promptOnWindowLeave
+        : DEFAULT_BREAK_GUARD_CONFIG.promptOnWindowLeave,
     promptDelaySeconds: sanitizePositiveInteger(
-      raw.promptDelaySeconds,
+      migrateLegacyField(
+        raw.promptDelaySeconds,
+        LEGACY_DEFAULT_BREAK_GUARD_CONFIG.promptDelaySeconds,
+        DEFAULT_BREAK_GUARD_CONFIG.promptDelaySeconds,
+        isLegacyConfig,
+      ),
       DEFAULT_BREAK_GUARD_CONFIG.promptDelaySeconds,
       { min: 0, max: 120 },
     ),
-    presetMinutes: sanitizeMinuteList(raw.presetMinutes, DEFAULT_BREAK_GUARD_CONFIG.presetMinutes, { maxItems: 6 }),
+    presetMinutes: sanitizeMinuteList(
+      migrateLegacyField(
+        raw.presetMinutes,
+        LEGACY_DEFAULT_BREAK_GUARD_CONFIG.presetMinutes,
+        DEFAULT_BREAK_GUARD_CONFIG.presetMinutes,
+        isLegacyConfig,
+      ),
+      DEFAULT_BREAK_GUARD_CONFIG.presetMinutes,
+      { maxItems: 6 },
+    ),
     allowCustomMinutes:
       typeof raw.allowCustomMinutes === 'boolean'
-        ? raw.allowCustomMinutes
+        ? (migrateLegacyField(
+            raw.allowCustomMinutes,
+            LEGACY_DEFAULT_BREAK_GUARD_CONFIG.allowCustomMinutes,
+            DEFAULT_BREAK_GUARD_CONFIG.allowCustomMinutes,
+            isLegacyConfig,
+          ) as boolean)
         : DEFAULT_BREAK_GUARD_CONFIG.allowCustomMinutes,
     autoFinishOnStudyReturn:
       typeof raw.autoFinishOnStudyReturn === 'boolean'
-        ? raw.autoFinishOnStudyReturn
+        ? (migrateLegacyField(
+            raw.autoFinishOnStudyReturn,
+            LEGACY_DEFAULT_BREAK_GUARD_CONFIG.autoFinishOnStudyReturn,
+            DEFAULT_BREAK_GUARD_CONFIG.autoFinishOnStudyReturn,
+            isLegacyConfig,
+          ) as boolean)
         : DEFAULT_BREAK_GUARD_CONFIG.autoFinishOnStudyReturn,
     resumeInterruptedStudyOnReturn:
       typeof raw.resumeInterruptedStudyOnReturn === 'boolean'
-        ? raw.resumeInterruptedStudyOnReturn
+        ? (migrateLegacyField(
+            raw.resumeInterruptedStudyOnReturn,
+            LEGACY_DEFAULT_BREAK_GUARD_CONFIG.resumeInterruptedStudyOnReturn,
+            DEFAULT_BREAK_GUARD_CONFIG.resumeInterruptedStudyOnReturn,
+            isLegacyConfig,
+          ) as boolean)
         : DEFAULT_BREAK_GUARD_CONFIG.resumeInterruptedStudyOnReturn,
     targetPath: sanitizeTargetPath(raw.targetPath),
     alertStrength:
       raw.alertStrength === 'gentle' || raw.alertStrength === 'strong'
-        ? raw.alertStrength
+        ? (migrateLegacyField(
+            raw.alertStrength,
+            LEGACY_DEFAULT_BREAK_GUARD_CONFIG.alertStrength,
+            DEFAULT_BREAK_GUARD_CONFIG.alertStrength,
+            isLegacyConfig,
+          ) as BreakGuardAlertStrength)
         : DEFAULT_BREAK_GUARD_CONFIG.alertStrength,
-    snoozeMinutes: sanitizeMinuteList(raw.snoozeMinutes, DEFAULT_BREAK_GUARD_CONFIG.snoozeMinutes, { maxItems: 4 }),
+    snoozeMinutes: sanitizeMinuteList(
+      migrateLegacyField(
+        raw.snoozeMinutes,
+        LEGACY_DEFAULT_BREAK_GUARD_CONFIG.snoozeMinutes,
+        DEFAULT_BREAK_GUARD_CONFIG.snoozeMinutes,
+        isLegacyConfig,
+      ),
+      DEFAULT_BREAK_GUARD_CONFIG.snoozeMinutes,
+      { maxItems: 4 },
+    ),
     recordBreakLogs:
       typeof raw.recordBreakLogs === 'boolean'
-        ? raw.recordBreakLogs
+        ? (migrateLegacyField(
+            raw.recordBreakLogs,
+            LEGACY_DEFAULT_BREAK_GUARD_CONFIG.recordBreakLogs,
+            DEFAULT_BREAK_GUARD_CONFIG.recordBreakLogs,
+            isLegacyConfig,
+          ) as boolean)
         : DEFAULT_BREAK_GUARD_CONFIG.recordBreakLogs,
   }
 }

@@ -2,7 +2,9 @@ export type RevealState = 'hidden' | 'placeholder' | 'revealed'
 
 export type SessionKind = 'palace_edit' | 'practice' | 'quiz' | 'review'
 export type SessionScene = SessionKind | 'english' | 'english_reading' | 'freestyle'
-export type TimeRecordClientSource = 'desktop' | 'mobile'
+export type TimeRecordClientSource = 'desktop' | 'pwa'
+export type TimeRecordSortBy = 'started_at' | 'effective_seconds' | 'title'
+export type TimeRecordSortOrder = 'asc' | 'desc'
 
 export type SessionCompletionMethod =
   | 'manual_complete'
@@ -23,6 +25,11 @@ export type SessionEventType =
   | 'restart'
   | 'auto_complete'
   | 'manual_complete'
+  | 'focus_interval_complete'
+  | 'focus_round_complete'
+  | 'focus_round_continue'
+  | 'break_start'
+  | 'break_end'
 
 export interface SessionEventRecord {
   type: SessionEventType

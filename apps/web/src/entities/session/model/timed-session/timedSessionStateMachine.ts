@@ -16,6 +16,7 @@ import {
   advanceTickState,
   buildTimedSessionController,
   createStableRecordId,
+  DEFAULT_TIMED_SESSION_FOCUS_ROUND,
   nowIso,
   resolveTimedSessionAutomation,
   type ActiveSceneSegmentSnapshot,
@@ -25,20 +26,21 @@ import {
   type SessionSceneSegment,
   type SessionStatus,
   type TimedSessionMeta,
+  type TimedSessionFocusRoundState,
   type TimedSessionOptions,
-} from './timedSessionModel'
+} from '@/shared/hooks/timedSessionModel'
 import {
   buildTimedSessionStorageKey,
   clearCompetingTimedSessionSnapshots,
   clearPersistedTimedSessionSnapshot,
-} from './timedSessionStorage'
+} from '@/shared/hooks/timedSessionStorage'
 import {
   buildPersistedTimedSessionSnapshot,
   buildRestorableTimedSessionSnapshot,
   writePersistedTimedSessionSnapshot,
-} from './timedSessionSnapshot'
+} from '@/shared/hooks/timedSessionSnapshot'
 import { markDirty, registerAutoSaveTarget } from '@/shared/persistence/autosaveCoordinator'
-import { useTimedSessionAutoPause } from './timedSessionAutoPause'
+import { useTimedSessionAutoPause } from '@/shared/hooks/timedSessionAutoPause'
 import {
   clearTimedSessionInterval,
   clearTimedSessionTimeout,
@@ -46,9 +48,9 @@ import {
   useTimedSessionBrowserPauseEffects,
   useTimedSessionGlowReset,
   useTimedSessionUnloadPersistence,
-} from './timedSessionBrowserEffects'
-import { fireAndQueueTimeRecordOnUnload } from './timedSessionRecovery'
-import { useTimedSessionSnapshotRestore } from './timedSessionRestore'
+} from '@/shared/hooks/timedSessionBrowserEffects'
+import { fireAndQueueTimeRecordOnUnload } from '@/shared/hooks/timedSessionRecovery'
+import { useTimedSessionSnapshotRestore } from '@/shared/hooks/timedSessionRestore'
 import {
   buildSuspendedSceneLeaveState,
   useTimedSessionSceneLeave,
@@ -85,6 +87,9 @@ export function useTimedSession({
   const [startedAt, setStartedAt] = React.useState<string | null>(null)
   const [durationEdited, setDurationEdited] = React.useState(false)
   const [glowState, setGlowState] = React.useState<GlowState>('idle')
+  const [focusRound, setFocusRound] = React.useState<TimedSessionFocusRoundState>(() => ({
+    ...DEFAULT_TIMED_SESSION_FOCUS_ROUND,
+  }))
 
   const statusRef = React.useRef<SessionStatus>('idle')
   const recordIdRef = React.useRef<string | null>(null)
@@ -98,6 +103,7 @@ export function useTimedSession({
   const durationEditedRef = React.useRef(false)
   const tickerRef = React.useRef<number | null>(null)
   const autoPauseRef = React.useRef<number | null>(null)
+  const autoPauseDeadlineAtRef = React.useRef<number | null>(null)
   const hiddenPauseRef = React.useRef<number | null>(null)
   const restoredStorageKeyRef = React.useRef<string | null>(null)
   const leaveHandledRef = React.useRef(false)
@@ -107,6 +113,9 @@ export function useTimedSession({
   const leaveMetaRef = React.useRef<TimedSessionMeta | null>(null)
   const sceneSegmentsRef = React.useRef<SessionSceneSegment[]>([])
   const activeSceneSegmentRef = React.useRef<ActiveSceneSegmentSnapshot | null>(null)
+  const focusRoundRef = React.useRef<TimedSessionFocusRoundState>({
+    ...DEFAULT_TIMED_SESSION_FOCUS_ROUND,
+  })
   const lastTickPersistAtRef = React.useRef<number | null>(null)
   const [automationConfig, setAutomationConfig] = React.useState<TimerAutomationConfig>(() =>
     readTimerAutomationConfig(),
@@ -155,6 +164,9 @@ export function useTimedSession({
         events: [...eventsRef.current],
         sceneSegments: [...sceneSegmentsRef.current],
         activeSceneSegment: activeSceneSegmentRef.current,
+        focusRound: focusRoundRef.current,
+        lastActivityAtMs: lastActivityAtRef.current,
+        autoPauseDeadlineAtMs: autoPauseDeadlineAtRef.current,
       }, options)
       writePersistedTimedSessionSnapshot(storageKey, snapshot)
     },
@@ -318,6 +330,9 @@ export function useTimedSession({
             events: [...eventsRef.current],
             sceneSegments: [...sceneSegmentsRef.current],
             activeSceneSegment: activeSceneSegmentRef.current,
+            focusRound: focusRoundRef.current,
+            lastActivityAtMs: lastActivityAtRef.current,
+            autoPauseDeadlineAtMs: autoPauseDeadlineAtRef.current,
           }, {
             suspended: true,
             suspendedAt: suspendedAtRef.current,
@@ -351,6 +366,7 @@ export function useTimedSession({
   const armAutoPause = useTimedSessionAutoPause({
     statusRef,
     autoPauseRef,
+    autoPauseDeadlineAtRef,
     lastActivityAtRef,
     effectiveSecondsRef,
     idleSecondsRef,
@@ -432,6 +448,7 @@ export function useTimedSession({
     if (statusRef.current !== 'running') return
     stopTicker()
     clearTimedSessionTimeout(autoPauseRef)
+    autoPauseDeadlineAtRef.current = null
     pauseCountRef.current += 1
     setPauseCount(pauseCountRef.current)
     statusRef.current = 'paused'
@@ -469,6 +486,7 @@ export function useTimedSession({
     statusRef,
     leaveHandledRef,
     autoPauseRef,
+    autoPauseDeadlineAtRef,
     hiddenPauseRef,
     sceneActiveRef,
     idleSecondsRef,
@@ -508,6 +526,7 @@ export function useTimedSession({
         })
         stopTicker(currentMs)
         clearTimedSessionTimeout(autoPauseRef)
+        autoPauseDeadlineAtRef.current = null
         clearTimedSessionTimeout(hiddenPauseRef)
         statusRef.current = 'paused'
         setStatus('paused')
@@ -565,9 +584,63 @@ export function useTimedSession({
     pushEvent(type, meta)
   }, [pushEvent])
 
+  const acknowledgeFocusInterval = React.useCallback((count: number, meta?: TimedSessionMeta) => {
+    const safeCount = Math.max(0, Math.round(count))
+    if (safeCount <= focusRoundRef.current.acknowledgedIntervalCount) return
+    const next = {
+      ...focusRoundRef.current,
+      acknowledgedIntervalCount: safeCount,
+    }
+    focusRoundRef.current = next
+    setFocusRound(next)
+    pushEvent('focus_interval_complete', {
+      round_index: next.roundIndex,
+      interval_count: safeCount,
+      ...(meta ?? {}),
+    })
+    markDirty(timedSessionAutoSaveKey, 'focus_interval_complete')
+  }, [pushEvent, timedSessionAutoSaveKey])
+
+  const acknowledgeFocusGoal = React.useCallback((meta?: TimedSessionMeta) => {
+    if (focusRoundRef.current.goalCelebrated) return
+    const next = {
+      ...focusRoundRef.current,
+      goalCelebrated: true,
+    }
+    focusRoundRef.current = next
+    setFocusRound(next)
+    pushEvent('focus_round_complete', {
+      round_index: next.roundIndex,
+      ...(meta ?? {}),
+    })
+    markDirty(timedSessionAutoSaveKey, 'focus_round_complete')
+  }, [pushEvent, timedSessionAutoSaveKey])
+
+  const startNextFocusRound = React.useCallback((meta?: TimedSessionMeta) => {
+    const next: TimedSessionFocusRoundState = {
+      roundIndex: focusRoundRef.current.roundIndex + 1,
+      startedAtEffectiveSeconds: effectiveSecondsRef.current,
+      acknowledgedIntervalCount: 0,
+      goalCelebrated: false,
+    }
+    focusRoundRef.current = next
+    setFocusRound(next)
+    pushEvent('focus_round_continue', {
+      round_index: next.roundIndex,
+      started_at_effective_seconds: next.startedAtEffectiveSeconds,
+      ...(meta ?? {}),
+    })
+    markDirty(timedSessionAutoSaveKey, 'focus_round_continue')
+  }, [pushEvent, timedSessionAutoSaveKey])
+
   const adjustDuration = React.useCallback((seconds: number) => {
     effectiveSecondsRef.current = Math.max(0, Math.round(seconds))
     setEffectiveSeconds(effectiveSecondsRef.current)
+    if (focusRoundRef.current.startedAtEffectiveSeconds > effectiveSecondsRef.current) {
+      const next = { ...DEFAULT_TIMED_SESSION_FOCUS_ROUND }
+      focusRoundRef.current = next
+      setFocusRound(next)
+    }
     setDurationEdited(true)
     durationEditedRef.current = true
     pushEvent('adjust_duration', { seconds: effectiveSecondsRef.current })
@@ -584,6 +657,7 @@ export function useTimedSession({
       if (statusRef.current === 'completed') return null
       stopTicker()
       clearTimedSessionTimeout(autoPauseRef)
+      autoPauseDeadlineAtRef.current = null
       clearTimedSessionTimeout(hiddenPauseRef)
       statusRef.current = 'completed'
       setStatus('completed')
@@ -614,6 +688,7 @@ export function useTimedSession({
   const reset = React.useCallback(() => {
     stopTicker()
     clearTimedSessionTimeout(autoPauseRef)
+    autoPauseDeadlineAtRef.current = null
     clearTimedSessionTimeout(hiddenPauseRef)
     eventsRef.current = []
     sceneSegmentsRef.current = []
@@ -625,12 +700,14 @@ export function useTimedSession({
     startedAtRef.current = null
     lastActivityAtRef.current = null
     durationEditedRef.current = false
+    focusRoundRef.current = { ...DEFAULT_TIMED_SESSION_FOCUS_ROUND }
     recordIdRef.current = null
     setEffectiveSeconds(0)
     setIdleSeconds(0)
     setPauseCount(0)
     setStartedAt(null)
     setDurationEdited(false)
+    setFocusRound({ ...DEFAULT_TIMED_SESSION_FOCUS_ROUND })
     statusRef.current = 'idle'
     sceneActiveRef.current = true
     setStatus('idle')
@@ -646,12 +723,14 @@ export function useTimedSession({
     eventsRef,
     sceneSegmentsRef,
     activeSceneSegmentRef,
+    focusRoundRef,
     effectiveSecondsRef,
     idleSecondsRef,
     pauseCountRef,
     startedAtRef,
     durationEditedRef,
     lastActivityAtRef,
+    autoPauseDeadlineAtRef,
     suspendedAtRef,
     resumeDeadlineAtRef,
     leaveMetaRef,
@@ -664,6 +743,7 @@ export function useTimedSession({
     setDurationEdited,
     setGlowState,
     setStatus,
+    setFocusRound,
     clearPersistedSnapshot,
     clearCompetingSnapshots,
     persistExpiredSuspendedSnapshot,
@@ -709,6 +789,7 @@ export function useTimedSession({
     startedAt,
     durationEdited,
     glowState,
+    focusRound,
     start,
     pause,
     resume,
@@ -716,6 +797,9 @@ export function useTimedSession({
     leaveScene,
     registerActivity,
     logEvent,
+    acknowledgeFocusInterval,
+    acknowledgeFocusGoal,
+    startNextFocusRound,
     adjustDuration,
     complete,
     reset,

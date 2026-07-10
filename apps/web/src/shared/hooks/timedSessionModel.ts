@@ -23,6 +23,38 @@ export type SessionStatus = 'idle' | 'running' | 'paused' | 'completed'
 export type GlowState = 'idle' | 'running' | 'paused'
 export type PersistedSessionStatus = Extract<SessionStatus, 'running' | 'paused'>
 
+export interface TimedSessionFocusRoundState {
+  roundIndex: number
+  startedAtEffectiveSeconds: number
+  acknowledgedIntervalCount: number
+  goalCelebrated: boolean
+}
+
+export const DEFAULT_TIMED_SESSION_FOCUS_ROUND: TimedSessionFocusRoundState = {
+  roundIndex: 1,
+  startedAtEffectiveSeconds: 0,
+  acknowledgedIntervalCount: 0,
+  goalCelebrated: false,
+}
+
+export function sanitizeTimedSessionFocusRound(
+  value: unknown,
+): TimedSessionFocusRoundState {
+  const raw = value && typeof value === 'object' ? value as Record<string, unknown> : {}
+  return {
+    roundIndex: Math.max(1, Math.round(Number(raw.roundIndex) || 1)),
+    startedAtEffectiveSeconds: Math.max(
+      0,
+      Math.round(Number(raw.startedAtEffectiveSeconds) || 0),
+    ),
+    acknowledgedIntervalCount: Math.max(
+      0,
+      Math.round(Number(raw.acknowledgedIntervalCount) || 0),
+    ),
+    goalCelebrated: Boolean(raw.goalCelebrated),
+  }
+}
+
 export interface TimedSessionOptions {
   kind: SessionKind
   title: string
@@ -45,6 +77,7 @@ export interface TimedSessionController {
   startedAt: string | null
   durationEdited: boolean
   glowState: GlowState
+  focusRound: TimedSessionFocusRoundState
   start: (meta?: TimedSessionMeta) => void
   pause: (meta?: TimedSessionMeta) => void
   resume: (meta?: TimedSessionMeta) => void
@@ -52,6 +85,9 @@ export interface TimedSessionController {
   leaveScene: (meta?: TimedSessionMeta) => Promise<TimeSessionRecord | null>
   registerActivity: (activityKind: TimerAutomationActivityKind, meta?: TimedSessionMeta) => void
   logEvent: (type: SessionEventRecord['type'], meta?: TimedSessionMeta) => void
+  acknowledgeFocusInterval: (count: number, meta?: TimedSessionMeta) => void
+  acknowledgeFocusGoal: (meta?: TimedSessionMeta) => void
+  startNextFocusRound: (meta?: TimedSessionMeta) => void
   adjustDuration: (seconds: number) => void
   complete: (method: SessionCompletionMethod, meta?: TimedSessionMeta) => Promise<TimeSessionRecord | null>
   reset: () => void
@@ -93,6 +129,9 @@ export interface PersistedTimedSessionSnapshotV2 {
   leaveMeta: TimedSessionMeta | null
   sceneSegments?: SessionSceneSegment[]
   activeSceneSegment?: ActiveSceneSegmentSnapshot | null
+  focusRound?: TimedSessionFocusRoundState
+  lastActivityAtMs?: number | null
+  autoPauseDeadlineAtMs?: number | null
 }
 
 export interface LegacyPersistedTimedSessionSnapshot {
@@ -132,9 +171,14 @@ export interface RestorableTimedSessionSnapshot {
   leaveMeta: TimedSessionMeta | null
   sceneSegments: SessionSceneSegment[]
   activeSceneSegment: ActiveSceneSegmentSnapshot | null
+  focusRound: TimedSessionFocusRoundState
+  lastActivityAtMs: number | null
+  autoPauseDeadlineAtMs: number | null
 }
 
 export interface ResolvedTimedSessionAutomation {
+  inactivityWarningMs: number
+  inactivityGraceMs: number
   autoPauseMs: number
   hiddenPauseMs: number
   resumeWindowMs: number
@@ -143,6 +187,7 @@ export interface ResolvedTimedSessionAutomation {
 
 interface TimedSessionAutomationRuleInput {
   inactiveAutoPauseSeconds: number
+  inactivePauseGraceSeconds?: number
   hiddenAutoPauseSeconds: number
   autoPauseRollbackSeconds: number
 }
@@ -202,6 +247,12 @@ export function normalizeSnapshot(
       leaveMeta: null,
       sceneSegments: [],
       activeSceneSegment: null,
+      focusRound: {
+        ...DEFAULT_TIMED_SESSION_FOCUS_ROUND,
+        startedAtEffectiveSeconds: Math.max(0, Math.round(Number(raw.effectiveSeconds) || 0)),
+      },
+      lastActivityAtMs: null,
+      autoPauseDeadlineAtMs: null,
     }
   }
 
@@ -246,6 +297,18 @@ export function normalizeSnapshot(
       raw.activeSceneSegment && typeof raw.activeSceneSegment === 'object'
         ? (raw.activeSceneSegment as ActiveSceneSegmentSnapshot)
         : null,
+    focusRound: raw.focusRound === undefined
+      ? {
+          ...DEFAULT_TIMED_SESSION_FOCUS_ROUND,
+          startedAtEffectiveSeconds: Math.max(0, Math.round(Number(raw.effectiveSeconds) || 0)),
+        }
+      : sanitizeTimedSessionFocusRound(raw.focusRound),
+    lastActivityAtMs: typeof raw.lastActivityAtMs === 'number' && Number.isFinite(raw.lastActivityAtMs)
+      ? raw.lastActivityAtMs
+      : null,
+    autoPauseDeadlineAtMs: typeof raw.autoPauseDeadlineAtMs === 'number' && Number.isFinite(raw.autoPauseDeadlineAtMs)
+      ? raw.autoPauseDeadlineAtMs
+      : null,
   }
 }
 
@@ -256,17 +319,30 @@ export function resolveTimedSessionAutomation(
     hiddenPauseMs?: number
   },
 ): ResolvedTimedSessionAutomation {
-  const resolvedInactiveMs = Math.max(
+  const inactivityGraceMs = Math.max(
     0,
-    Math.round(overrides.autoPauseMs ?? rule.inactiveAutoPauseSeconds * 1000),
+    Math.round((rule.inactivePauseGraceSeconds ?? 30) * 1000),
   )
+  const configuredWarningMs = Math.max(
+    0,
+    Math.round(rule.inactiveAutoPauseSeconds * 1000),
+  )
+  const explicitAutoPauseMs = overrides.autoPauseMs == null
+    ? null
+    : Math.max(0, Math.round(overrides.autoPauseMs))
+  const resolvedInactiveMs = explicitAutoPauseMs ?? configuredWarningMs + inactivityGraceMs
+  const inactivityWarningMs = explicitAutoPauseMs == null
+    ? configuredWarningMs
+    : Math.max(0, explicitAutoPauseMs - inactivityGraceMs)
   return {
+    inactivityWarningMs,
+    inactivityGraceMs,
     autoPauseMs: resolvedInactiveMs,
     hiddenPauseMs: Math.max(
       0,
       Math.round(overrides.hiddenPauseMs ?? rule.hiddenAutoPauseSeconds * 1000),
     ),
-    resumeWindowMs: resolvedInactiveMs,
+    resumeWindowMs: explicitAutoPauseMs ?? configuredWarningMs,
     autoPauseRollbackSeconds: Math.max(
       0,
       Math.min(

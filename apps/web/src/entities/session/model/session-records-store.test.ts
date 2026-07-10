@@ -98,7 +98,7 @@ describe('session-record chart helpers', () => {
 
   it('formats time record client source labels', () => {
     expect(formatClientSource('desktop')).toBe('电脑端')
-    expect(formatClientSource('mobile')).toBe('手机端')
+    expect(formatClientSource('pwa')).toBe('PWA 端')
     expect(formatClientSource(null)).toBe('未知端')
   })
 })

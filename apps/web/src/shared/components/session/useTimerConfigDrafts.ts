@@ -202,6 +202,7 @@ export function useTimerConfigDrafts({
     draft,
     focusDraft,
     breakDraft,
+    setDraft,
     setFocusDraft,
     setBreakDraft,
     handleModeChange,

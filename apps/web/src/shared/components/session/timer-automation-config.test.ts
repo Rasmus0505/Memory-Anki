@@ -3,8 +3,10 @@ import {
   DEFAULT_TIMER_AUTOMATION_CONFIG,
   readTimerAutomationConfig,
   resetTimerAutomationConfig,
+  sanitizeTimerAutomationConfig,
   saveTimerAutomationConfig,
   shouldAutoStartOnPageEnter,
+  TIMER_AUTOMATION_CONFIG_VERSION,
   TIMER_AUTOMATION_STORAGE_KEY,
 } from '@/shared/components/session/timer-automation-config'
 import { resetClientPreferenceCacheForTest } from '@/shared/preferences/clientPreferences'
@@ -18,6 +20,11 @@ describe('timer automation config', () => {
 
   it('returns defaults when storage is empty', () => {
     expect(readTimerAutomationConfig()).toEqual(DEFAULT_TIMER_AUTOMATION_CONFIG)
+    expect(DEFAULT_TIMER_AUTOMATION_CONFIG.shared).toMatchObject({
+      inactiveAutoPauseSeconds: 120,
+      inactivePauseGraceSeconds: 30,
+      autoPauseRollbackSeconds: 0,
+    })
   })
 
   it('sanitizes invalid values when saving', () => {
@@ -87,15 +94,72 @@ describe('timer automation config', () => {
     )
     expect(saved.quiz.inactiveAutoPauseSeconds).toBe(9)
     expect(saved.quiz.autoStartOnPageEnter).toBe(true)
-    expect(saved.review.autoPauseRollbackSeconds).toBe(
-      15,
-    )
+    expect(saved.review.autoPauseRollbackSeconds).toBe(0)
     expect(saved.palace_edit.autoStartOnPageEnter).toBe(true)
     expect(saved.english.autoStartOnPageEnter).toBe(DEFAULT_TIMER_AUTOMATION_CONFIG.english.autoStartOnPageEnter)
     expect(saved.actions.autoResumeOnWindowReturn).toBe(
       DEFAULT_TIMER_AUTOMATION_CONFIG.actions.autoResumeOnWindowReturn,
     )
     expect(window.localStorage.getItem(TIMER_AUTOMATION_STORAGE_KEY)).toBeNull()
+  })
+
+  it('migrates legacy defaults and keeps values that were explicitly customized', () => {
+    const config = sanitizeTimerAutomationConfig({
+      mode: 'scene',
+      shared: {
+        autoStartOnPageEnter: false,
+        inactiveAutoPauseSeconds: 120,
+        hiddenAutoPauseSeconds: 15,
+        autoPauseRollbackSeconds: 60,
+      },
+      palace_edit: {
+        autoStartOnPageEnter: false,
+        inactiveAutoPauseSeconds: 45,
+        hiddenAutoPauseSeconds: 15,
+        autoPauseRollbackSeconds: 7,
+      },
+      english_reading: {
+        autoStartOnPageEnter: true,
+        inactiveAutoPauseSeconds: 180,
+        hiddenAutoPauseSeconds: 20,
+        autoPauseRollbackSeconds: 90,
+      },
+    })
+
+    expect(config.schemaVersion).toBe(TIMER_AUTOMATION_CONFIG_VERSION)
+    expect(config.shared).toMatchObject({
+      inactiveAutoPauseSeconds: 120,
+      inactivePauseGraceSeconds: 30,
+      hiddenAutoPauseSeconds: 15,
+      autoPauseRollbackSeconds: 0,
+    })
+    expect(config.palace_edit).toMatchObject({
+      inactiveAutoPauseSeconds: 45,
+      inactivePauseGraceSeconds: 30,
+      autoPauseRollbackSeconds: 7,
+    })
+    expect(config.english_reading).toMatchObject({
+      inactiveAutoPauseSeconds: 120,
+      inactivePauseGraceSeconds: 30,
+      hiddenAutoPauseSeconds: 15,
+      autoPauseRollbackSeconds: 0,
+    })
+  })
+
+  it('preserves legacy-looking values once the config is current-version', () => {
+    const config = sanitizeTimerAutomationConfig({
+      schemaVersion: TIMER_AUTOMATION_CONFIG_VERSION,
+      shared: {
+        autoStartOnPageEnter: false,
+        inactiveAutoPauseSeconds: 120,
+        inactivePauseGraceSeconds: 12,
+        hiddenAutoPauseSeconds: 15,
+        autoPauseRollbackSeconds: 60,
+      },
+    })
+
+    expect(config.shared.inactivePauseGraceSeconds).toBe(12)
+    expect(config.shared.autoPauseRollbackSeconds).toBe(60)
   })
 
   it('fills in default action rules and english scene for legacy stored configs', () => {

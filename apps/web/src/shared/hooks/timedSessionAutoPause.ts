@@ -38,6 +38,7 @@ export function calculateAutoPauseTransition(input: {
 export function useTimedSessionAutoPause(input: {
   statusRef: React.RefObject<SessionStatus>
   autoPauseRef: React.RefObject<number | null>
+  autoPauseDeadlineAtRef: React.RefObject<number | null>
   lastActivityAtRef: React.RefObject<number | null>
   effectiveSecondsRef: React.RefObject<number>
   idleSecondsRef: React.RefObject<number>
@@ -60,6 +61,7 @@ export function useTimedSessionAutoPause(input: {
   const {
     statusRef,
     autoPauseRef,
+    autoPauseDeadlineAtRef,
     lastActivityAtRef,
     effectiveSecondsRef,
     idleSecondsRef,
@@ -76,12 +78,17 @@ export function useTimedSessionAutoPause(input: {
     setPauseCount,
   } = input
 
-  return React.useCallback(() => {
+  return React.useCallback((deadlineAtMs?: number) => {
     clearTimedSessionTimeout(autoPauseRef)
     if (statusRef.current !== 'running') return
+    const resolvedDeadlineAtMs = Number.isFinite(deadlineAtMs)
+      ? Number(deadlineAtMs)
+      : Date.now() + resolvedAutomation.autoPauseMs
+    autoPauseDeadlineAtRef.current = resolvedDeadlineAtMs
     autoPauseRef.current = window.setTimeout(() => {
       if (statusRef.current !== 'running') return
       const pausedAtMs = Date.now()
+      stopTicker(pausedAtMs)
       const idleSecondsAtPause = getIdleSecondsAt({
         lastActivityAtMs: lastActivityAtRef.current,
         currentMs: pausedAtMs,
@@ -93,7 +100,7 @@ export function useTimedSessionAutoPause(input: {
         maxRollbackSeconds: resolvedAutomation.autoPauseRollbackSeconds,
       })
       autoPauseRef.current = null
-      stopTicker(pausedAtMs)
+      autoPauseDeadlineAtRef.current = null
       pauseCountRef.current = next.pauseCount
       setPauseCount(next.pauseCount)
       statusRef.current = 'paused'
@@ -107,11 +114,14 @@ export function useTimedSessionAutoPause(input: {
         reason: 'inactive',
         idle_seconds: idleSecondsAtPause,
         rollback_seconds: next.rollbackSeconds,
+        warning_seconds: Math.round(resolvedAutomation.inactivityWarningMs / 1000),
+        grace_seconds: Math.round(resolvedAutomation.inactivityGraceMs / 1000),
       })
       persistSnapshot()
       markDirty(timedSessionAutoSaveKey, 'auto_pause')
-    }, resolvedAutomation.autoPauseMs)
+    }, Math.max(0, resolvedDeadlineAtMs - Date.now()))
   }, [
+    autoPauseDeadlineAtRef,
     autoPauseRef,
     effectiveSecondsRef,
     idleSecondsRef,

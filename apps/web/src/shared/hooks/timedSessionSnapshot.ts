@@ -11,6 +11,7 @@ import {
   type PersistedTimedSessionSnapshotV2,
   type RestorableTimedSessionSnapshot,
   type TimedSessionMeta,
+  type TimedSessionFocusRoundState,
   type TimedSessionSourceKind,
 } from './timedSessionModel'
 
@@ -29,6 +30,9 @@ interface TimedSessionSnapshotSource {
   events: RestorableTimedSessionSnapshot['events']
   sceneSegments: SessionSceneSegment[]
   activeSceneSegment: ActiveSceneSegmentSnapshot | null
+  focusRound: TimedSessionFocusRoundState
+  lastActivityAtMs: number | null
+  autoPauseDeadlineAtMs: number | null
 }
 
 interface SnapshotPersistenceOptions {
@@ -68,6 +72,9 @@ export function buildPersistedTimedSessionSnapshot(
     leaveMeta: options?.leaveMeta ?? null,
     sceneSegments: [...source.sceneSegments],
     activeSceneSegment: source.activeSceneSegment,
+    focusRound: { ...source.focusRound },
+    lastActivityAtMs: source.lastActivityAtMs,
+    autoPauseDeadlineAtMs: source.autoPauseDeadlineAtMs,
   }
 }
 
@@ -90,6 +97,9 @@ export function buildRestorableTimedSessionSnapshot(
     ...buildPersistedTimedSessionSnapshot(source, options),
     sceneSegments: [...source.sceneSegments],
     activeSceneSegment: source.activeSceneSegment,
+    focusRound: { ...source.focusRound },
+    lastActivityAtMs: source.lastActivityAtMs,
+    autoPauseDeadlineAtMs: source.autoPauseDeadlineAtMs,
   }
 }
 
@@ -134,9 +144,16 @@ export function resolveRestoredTimedSessionSnapshot(
   snapshot: RestorableTimedSessionSnapshot,
 ): RestoredTimedSessionSnapshot {
   const persistedAtMs = new Date(snapshot.persistedAt).getTime()
+  const restoreAtMs = Date.now()
+  const effectiveRestoreBoundaryMs =
+    snapshot.status === 'running' &&
+    snapshot.autoPauseDeadlineAtMs != null &&
+    Number.isFinite(snapshot.autoPauseDeadlineAtMs)
+      ? Math.min(restoreAtMs, snapshot.autoPauseDeadlineAtMs)
+      : restoreAtMs
   const elapsedSincePersistSeconds =
     !snapshot.suspended && snapshot.status === 'running' && Number.isFinite(persistedAtMs)
-      ? Math.max(0, Math.floor((Date.now() - persistedAtMs) / 1000))
+      ? Math.max(0, Math.floor((effectiveRestoreBoundaryMs - persistedAtMs) / 1000))
       : 0
   return {
     snapshot,

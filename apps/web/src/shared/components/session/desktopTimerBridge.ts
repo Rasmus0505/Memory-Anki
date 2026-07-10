@@ -9,6 +9,22 @@ export type UnifiedTimerStatus =
   | 'completed'
   | 'dismissed'
 
+export type UnifiedTimerStudyPhase =
+  | 'idle'
+  | 'focusing'
+  | 'idle_warning'
+  | 'goal_reached'
+  | 'paused'
+  | 'completed'
+
+export interface UnifiedTimerFeedbackSignal {
+  eventId: string
+  kind: 'interval' | 'goal'
+  ordinal: number
+  roundIndex: number
+  occurredAt: number
+}
+
 export type UnifiedTimerAction =
   | 'startBreak'
   | 'pause'
@@ -17,6 +33,9 @@ export type UnifiedTimerAction =
   | 'finishBreak'
   | 'openTarget'
   | 'collapse'
+  | 'continueRound'
+  | 'startGoalBreak'
+  | 'startStudy'
 
 export interface UnifiedTimerSnapshot {
   mode: UnifiedTimerMode
@@ -33,6 +52,14 @@ export interface UnifiedTimerSnapshot {
   snoozeMinutes: number[]
   targetPath: string
   updatedAt: number
+  studyPhase?: UnifiedTimerStudyPhase | null
+  effectiveSeconds?: number
+  roundElapsedSeconds?: number
+  roundTargetSeconds?: number
+  roundIndex?: number
+  idleWarningRemainingSeconds?: number | null
+  suggestedBreakMinutes?: number
+  feedbackSignal?: UnifiedTimerFeedbackSignal | null
 }
 
 export type UnifiedTimerCommand =
@@ -45,8 +72,12 @@ export type UnifiedTimerCommand =
   | { type: 'finishBreak'; openTarget?: boolean }
   | { type: 'openTarget'; path: string }
   | { type: 'collapse'; collapsed: boolean }
+  | { type: 'continueRound' }
+  | { type: 'startGoalBreak'; minutes?: number }
+  | { type: 'startStudy' }
 
 export interface DesktopTimerBridge {
+  isDesktop?: boolean
   onDesktopFlushRequest?: (
     handler: (request: { requestId: string; reason?: string; requestedAt?: number }) => Promise<unknown> | unknown,
   ) => () => void

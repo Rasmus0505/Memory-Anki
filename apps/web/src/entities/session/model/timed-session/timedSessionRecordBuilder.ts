@@ -9,12 +9,13 @@ import {
 } from '@/entities/session/model'
 import {
   buildRecordFromExpiredSuspendedSnapshot,
-} from './timedSessionSnapshot'
+} from '@/shared/hooks/timedSessionSnapshot'
 import type {
   RestorableTimedSessionSnapshot,
   SessionSceneSegment,
   TimedSessionSourceKind,
-} from './timedSessionModel'
+} from '@/shared/hooks/timedSessionModel'
+import { detectClientSource } from '@/shared/lib/clientSource'
 
 export function buildTimedSessionRecord(input: {
   id: string
@@ -46,6 +47,7 @@ export function buildTimedSessionRecord(input: {
     pauseCount: input.pauseCount,
     completionMethod: input.completionMethod,
     durationEdited: input.durationEdited,
+    clientSource: detectClientSource(),
     events: [...input.events],
     sceneSegments: [...input.sceneSegments],
   }
