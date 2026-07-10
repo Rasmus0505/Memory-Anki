@@ -41,8 +41,8 @@ def _dashscope_runtime(source_meta: dict[str, Any] | None = None) -> DashscopeIm
             model=str(runtime_meta.get("model") or DASHSCOPE_VISION_MODEL),
             provider=str(runtime_meta.get("provider") or "dashscope"),
             extra_payload=(
-                dict(runtime_meta.get("extra_payload"))
-                if isinstance(runtime_meta.get("extra_payload"), dict)
+                dict(raw_extra_payload)
+                if isinstance((raw_extra_payload := runtime_meta.get("extra_payload")), dict)
                 else None
             ),
             prompt_override=(

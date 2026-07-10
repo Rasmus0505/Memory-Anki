@@ -290,7 +290,10 @@ def palace_card_json(
             if precomputed_explicit_chapter_ids is not None
             else get_palace_explicit_chapter_ids(session, p)
         )
-    stage_labels = payload.get("stage_labels") if isinstance(payload.get("stage_labels"), list) else []
+    raw_stage_labels = payload.get("stage_labels")
+    stage_labels: list[str] = (
+        [str(item) for item in raw_stage_labels] if isinstance(raw_stage_labels, list) else []
+    )
     default_segment = (
         build_palace_default_segment_summary(session, p)
         if session is not None

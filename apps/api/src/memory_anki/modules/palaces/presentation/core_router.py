@@ -1,30 +1,25 @@
-from collections import OrderedDict
 from typing import Any
 
 from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from memory_anki.infrastructure.db._tables.palaces import ReviewSchedule
 from memory_anki.infrastructure.db.deps import session_dep
-from memory_anki.modules.mindmap.application.editor_state_service import (
-    sync_palace_editor_root,
-)
-from memory_anki.modules.palaces.application.palace_serializer import (
-    palace_json,
-    review_plan_item_json,
-)
+from memory_anki.modules.palaces.application.palace_serializer import palace_json
 from memory_anki.modules.palaces.application.palace_service import (
     create_palace,
     delete_palace,
     get_palace,
-    restore_archived_palaces,
     restore_deleted_palace,
+    unarchive_palace,
     update_palace,
 )
 from memory_anki.modules.palaces.application.peg_association_service import (
     MAX_SUGGESTIONS_LIMIT,
     suggest_peg_associations,
+)
+from memory_anki.modules.palaces.application.review_plan_service import (
+    build_palace_review_plan,
 )
 from memory_anki.modules.palaces.domain.schemas import PalaceCreate, PalaceUpdate
 from memory_anki.modules.palaces.presentation.errors import raise_not_found
@@ -112,10 +107,6 @@ def api_update(palace_id: int, data: PalaceUpdate, s: Session = Depends(session_
     if not p:
         raise_not_found()
     updated = update_palace(s, p, data)
-    if data.title is not None:
-        sync_palace_editor_root(updated)
-        s.commit()
-        s.refresh(updated)
     _maybe_create_rolling_backup("rolling-update-palace")
     return palace_json(updated, s)
 
@@ -139,31 +130,13 @@ def api_archive(palace_id: int, data: dict, s: Session = Depends(session_dep)):
     p = get_palace(s, palace_id)
     if not p:
         raise_not_found()
-    p.archived = False
-    s.commit()
-    return {"ok": True, "archived": p.archived}
+    palace = unarchive_palace(s, p)
+    return {"ok": True, "archived": palace.archived}
 
 
 @router.get("/palaces/{palace_id}/review-plan")
 def api_review_plan(palace_id: int, s: Session = Depends(session_dep)):
-    restore_archived_palaces(s)
-    palace = get_palace(s, palace_id)
-    if not palace:
+    plan = build_palace_review_plan(s, palace_id)
+    if plan is None:
         raise_not_found()
-    schedules = (
-        s.query(ReviewSchedule)
-        .filter_by(palace_id=palace_id)
-        .order_by(ReviewSchedule.scheduled_date, ReviewSchedule.id)
-        .all()
-    )
-    grouped_by_date: OrderedDict[str | None, list[ReviewSchedule]] = OrderedDict()
-    for schedule in schedules:
-        key = schedule.scheduled_date.isoformat() if schedule.scheduled_date else None
-        grouped_by_date.setdefault(key, []).append(schedule)
-
-    plan = [review_plan_item_json(date_key, grouped_schedules) for date_key, grouped_schedules in grouped_by_date.items()]
-    return {
-        "palace_id": palace.id,
-        "palace_title": palace.title,
-        "plan": plan,
-    }
+    return plan

@@ -96,8 +96,10 @@ def _coerce_editor_root(editor_doc: Any | None) -> ReviewPreviewNode | None:
 
 
 def _coerce_editor_node(node: dict[str, Any]) -> ReviewPreviewNode:
-    data = node.get("data") if isinstance(node.get("data"), dict) else {}
-    children = node.get("children") if isinstance(node.get("children"), list) else []
+    raw_data = node.get("data")
+    data: dict[str, Any] = raw_data if isinstance(raw_data, dict) else {}
+    raw_children = node.get("children")
+    children: list[Any] = raw_children if isinstance(raw_children, list) else []
     return ReviewPreviewNode(
         title=plain_editor_text(data.get("text"), fallback="").strip(),
         note=plain_editor_text(data.get("note"), fallback="").strip(),
@@ -113,7 +115,8 @@ def _coerce_editor_node(node: dict[str, Any]) -> ReviewPreviewNode:
 def _coerce_source_tree_root(source_tree: Any | None) -> ReviewPreviewNode | None:
     if not isinstance(source_tree, dict):
         return None
-    children = source_tree.get("children") if isinstance(source_tree.get("children"), list) else []
+    raw_children = source_tree.get("children")
+    children: list[Any] = raw_children if isinstance(raw_children, list) else []
     return ReviewPreviewNode(
         title=_source_text(source_tree.get("title")),
         note="",
@@ -127,7 +130,8 @@ def _coerce_source_tree_root(source_tree: Any | None) -> ReviewPreviewNode | Non
 
 
 def _coerce_source_node(node: dict[str, Any]) -> ReviewPreviewNode:
-    children = node.get("children") if isinstance(node.get("children"), list) else []
+    raw_children = node.get("children")
+    children: list[Any] = raw_children if isinstance(raw_children, list) else []
     return ReviewPreviewNode(
         title=_source_text(node.get("rich_text_html") or node.get("text")),
         note="",

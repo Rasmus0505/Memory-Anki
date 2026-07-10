@@ -419,8 +419,9 @@ def _normalize_ai_suggestions(
     for index, raw in enumerate(value, start=1):
         if not isinstance(raw, dict):
             continue
+        raw_peg_id = raw.get("peg_id")
         try:
-            peg_id = int(raw.get("peg_id"))
+            peg_id = int(raw_peg_id) if raw_peg_id is not None else 0
         except (TypeError, ValueError):
             continue
         peg = pegs_by_id.get(peg_id)

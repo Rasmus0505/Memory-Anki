@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 
+from sqlalchemy.orm import Session
+
 from memory_anki.infrastructure.db._tables.palaces import Palace
 
 
@@ -51,6 +53,34 @@ def toggle_focus_node_uid(palace: Palace, node_uid: str) -> tuple[list[str], boo
     next_uids = [*current, normalized_uid]
     set_focus_node_uids(palace, next_uids)
     return next_uids, True
+
+
+def update_focus_node_uid(
+    session: Session,
+    palace: Palace,
+    node_uid: str,
+    focused: bool | None,
+) -> tuple[list[str], bool]:
+    normalized_uid = str(node_uid or "").strip()
+    if focused is None:
+        focus_node_uids, is_focused = toggle_focus_node_uid(palace, normalized_uid)
+    else:
+        current_uids = parse_focus_node_uids(palace)
+        if not normalized_uid:
+            focus_node_uids = current_uids
+            is_focused = False
+        elif focused:
+            focus_node_uids = set_focus_node_uids(palace, [*current_uids, normalized_uid])
+            is_focused = True
+        else:
+            focus_node_uids = set_focus_node_uids(
+                palace,
+                [uid for uid in current_uids if uid != normalized_uid],
+            )
+            is_focused = False
+    session.commit()
+    session.refresh(palace)
+    return focus_node_uids, is_focused
 
 
 def _parse_editor_doc(raw_doc: str | dict | None) -> dict | None:

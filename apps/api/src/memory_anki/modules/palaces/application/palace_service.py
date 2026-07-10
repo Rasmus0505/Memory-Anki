@@ -112,6 +112,32 @@ def update_palace(session: Session, palace: Palace, data: PalaceUpdate) -> Palac
         palace.created_at = data.created_at
     if data.pegs is not None:
         _sync_pegs(session, palace, data.pegs)
+    if data.title is not None:
+        from memory_anki.modules.mindmap.application.editor_state_service import (
+            sync_palace_editor_root,
+        )
+
+        sync_palace_editor_root(palace)
+    repo = _repo(session)
+    repo.commit()
+    repo.refresh(palace)
+    return palace
+
+
+def unarchive_palace(session: Session, palace: Palace) -> Palace:
+    palace.archived = False
+    repo = _repo(session)
+    repo.commit()
+    repo.refresh(palace)
+    return palace
+
+
+def set_palace_practice_flag(
+    session: Session,
+    palace: Palace,
+    needs_practice: bool,
+) -> Palace:
+    palace.needs_practice = needs_practice
     repo = _repo(session)
     repo.commit()
     repo.refresh(palace)

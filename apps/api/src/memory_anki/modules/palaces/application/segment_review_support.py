@@ -6,7 +6,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from memory_anki.infrastructure.db._tables.palaces import Palace, PalaceSegment
+from memory_anki.infrastructure.db._tables.palaces import Palace, PalaceSegment, ReviewSchedule
 from memory_anki.modules.reviews.application.schedule_rebuild_service import (
     infer_completed_stage_count as infer_schedule_completed_stage_count,
 )
@@ -80,9 +80,15 @@ def segment_stage_progress(
     total = len(intervals)
     if total <= 0:
         return 0, 0, 0.0
+    schedules = (
+        session.query(ReviewSchedule)
+        .filter(ReviewSchedule.palace_id == segment.palace_id)
+        .order_by(ReviewSchedule.id.asc())
+        .all()
+    )
     completed_count = infer_schedule_completed_stage_count(
         total=total,
-        schedules=segment.review_schedules or [],
+        schedules=schedules,
     )
     return total, completed_count, completed_count / total
 

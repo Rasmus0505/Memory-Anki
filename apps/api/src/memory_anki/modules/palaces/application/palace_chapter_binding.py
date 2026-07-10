@@ -61,7 +61,7 @@ def set_palace_chapter_links(
 
     expanded_ids: set[int] = set()
     for chapter in explicit_chapters:
-        current = chapter
+        current: Chapter | None = chapter
         while current is not None:
             expanded_ids.add(current.id)
             current = current.parent

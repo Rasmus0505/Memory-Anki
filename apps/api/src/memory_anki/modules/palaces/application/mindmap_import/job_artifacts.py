@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+
 def get_job_artifact_dir(import_jobs_dir: Path, job_id: str) -> Path:
     return import_jobs_dir / job_id
 

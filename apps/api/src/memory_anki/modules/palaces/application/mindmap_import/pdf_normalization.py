@@ -165,7 +165,7 @@ def infer_pdf_grouping_relation(text: str) -> dict[str, Any] | None:
 
 
 def build_pdf_parent_children(parent: str, child_items: list[str]) -> dict[str, Any]:
-    normalized_children = [
+    normalized_children: list[dict[str, Any]] = [
         {
             "text": child,
             "rich_text_html": None,

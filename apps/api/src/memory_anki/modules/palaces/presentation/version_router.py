@@ -6,7 +6,7 @@ from memory_anki.modules.backups.application.backup_palace_restore import (
     restore_palace_version,
 )
 from memory_anki.modules.backups.application.backup_palace_versions import (
-    cleanup_duplicate_palace_versions,
+    cleanup_and_list_palace_versions,
     get_palace_version_detail,
     list_palace_versions,
 )
@@ -22,14 +22,12 @@ def api_list_palace_versions(palace_id: int, s: Session = Depends(session_dep)):
     palace = get_palace(s, palace_id)
     if not palace:
         raise_not_found()
-    removed_duplicates = cleanup_duplicate_palace_versions(s, palace.id)
-    if removed_duplicates:
-        s.commit()
+    removed_duplicates, versions = cleanup_and_list_palace_versions(s, palace.id)
     return {
         "palace_id": palace.id,
         "palace_title": palace.title,
         "removed_duplicates": removed_duplicates,
-        "versions": list_palace_versions(s, palace.id),
+        "versions": versions,
     }
 
 

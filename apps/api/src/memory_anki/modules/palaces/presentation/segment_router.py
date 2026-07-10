@@ -3,12 +3,13 @@ from sqlalchemy.orm import Session
 
 from memory_anki.infrastructure.db.deps import session_dep
 from memory_anki.modules.palaces.application.focus_service import (
-    parse_focus_node_uids,
-    set_focus_node_uids,
-    toggle_focus_node_uid,
+    update_focus_node_uid,
 )
 from memory_anki.modules.palaces.application.palace_serializer import palace_json
-from memory_anki.modules.palaces.application.palace_service import get_palace
+from memory_anki.modules.palaces.application.palace_service import (
+    get_palace,
+    set_palace_practice_flag,
+)
 from memory_anki.modules.palaces.application.segment_review_service import (
     build_palace_default_segment_summary,
     build_segment_editor_doc,
@@ -80,9 +81,11 @@ def api_update_palace_practice_flag(palace_id: int, data: dict, s: Session = Dep
     palace = get_palace(s, palace_id)
     if not palace:
         raise_not_found()
-    palace.needs_practice = bool(data.get("needs_practice", False))
-    s.commit()
-    s.refresh(palace)
+    palace = set_palace_practice_flag(
+        s,
+        palace,
+        bool(data.get("needs_practice", False)),
+    )
     return {"item": palace_json(palace, s)}
 
 
@@ -96,26 +99,17 @@ def api_toggle_palace_focus_node(
     palace = get_palace(s, palace_id)
     if not palace:
         raise_not_found()
-    normalized_uid = str(node_uid or "").strip()
-    if data is not None and "focused" in data:
-        current_uids = parse_focus_node_uids(palace)
-        target_focused = bool(data.get("focused"))
-        if not normalized_uid:
-            focus_node_uids = current_uids
-            focused = False
-        elif target_focused:
-            focus_node_uids = set_focus_node_uids(palace, [*current_uids, normalized_uid])
-            focused = True
-        else:
-            focus_node_uids = set_focus_node_uids(
-                palace,
-                [uid for uid in current_uids if uid != normalized_uid],
-            )
-            focused = False
-    else:
-        focus_node_uids, focused = toggle_focus_node_uid(palace, node_uid)
-    s.commit()
-    s.refresh(palace)
+    target_focused = (
+        bool(data.get("focused"))
+        if data is not None and "focused" in data
+        else None
+    )
+    focus_node_uids, focused = update_focus_node_uid(
+        s,
+        palace,
+        node_uid,
+        target_focused,
+    )
     return {
         "ok": True,
         "palace_id": palace.id,
