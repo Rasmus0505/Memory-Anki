@@ -39,8 +39,3 @@ export interface FeedbackBurst {
   y: number
   descriptor: FeedbackDescriptor
 }
-
-export type KeyboardLikeEvent = Pick<
-  KeyboardEvent,
-  'key' | 'ctrlKey' | 'altKey' | 'metaKey' | 'repeat'
->

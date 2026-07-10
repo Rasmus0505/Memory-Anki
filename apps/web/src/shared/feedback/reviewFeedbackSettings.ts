@@ -7,6 +7,7 @@ export type { CelebrationPreset } from '@/shared/feedback/celebrationEngine'
 import type { CelebrationPreset } from '@/shared/feedback/celebrationEngine'
 
 export type FeedbackVisualStyle = 'warm_playful' | 'focus_light'
+export type FeedbackPreset = 'focus' | 'balanced' | 'motivating'
 
 /**
  * 反馈场景键。四个场景分别对应：
@@ -97,6 +98,8 @@ export interface ReviewFeedbackScenesSettings {
 }
 
 export interface ReviewFeedbackSettings {
+  schemaVersion: 3
+  preset: FeedbackPreset
   mode: 'immersive' | 'quiet'
   visualStyle: FeedbackVisualStyle
   soundEnabled: boolean
@@ -108,6 +111,10 @@ export interface ReviewFeedbackSettings {
   surpriseEnabled: boolean
   soundTheme: 'classic'
   globalIntensity: 'quiet' | 'balanced' | 'immersive'
+  desktopNotificationsEnabled: boolean
+  learningSoundsEnabled: boolean
+  milestoneEffectsEnabled: boolean
+  completionEffectsEnabled: boolean
   scenes: ReviewFeedbackScenesSettings
   celebration: ReviewCelebrationSettings
 }
@@ -183,6 +190,8 @@ function buildLegacyCelebrationFromScenes(scenes: ReviewFeedbackScenesSettings):
 }
 
 export const DEFAULT_REVIEW_FEEDBACK_SETTINGS: ReviewFeedbackSettings = {
+  schemaVersion: 3,
+  preset: 'balanced',
   mode: 'immersive',
   visualStyle: 'warm_playful',
   soundEnabled: true,
@@ -194,6 +203,10 @@ export const DEFAULT_REVIEW_FEEDBACK_SETTINGS: ReviewFeedbackSettings = {
   surpriseEnabled: true,
   soundTheme: 'classic',
   globalIntensity: 'balanced',
+  desktopNotificationsEnabled: false,
+  learningSoundsEnabled: true,
+  milestoneEffectsEnabled: true,
+  completionEffectsEnabled: true,
   scenes: {
     review: {
       ...DEFAULT_REVIEW_SCENE,
@@ -359,6 +372,14 @@ function readLegacyCelebrationScenes(raw: Record<string, unknown>): ReviewFeedba
 
 export function sanitizeReviewFeedbackSettings(value: unknown): ReviewFeedbackSettings {
   const raw = value && typeof value === 'object' ? (value as Record<string, unknown>) : {}
+  const preset: FeedbackPreset =
+    raw.preset === 'focus' || raw.preset === 'motivating' || raw.preset === 'balanced'
+      ? raw.preset
+      : raw.globalIntensity === 'quiet'
+        ? 'focus'
+        : raw.globalIntensity === 'immersive'
+          ? 'motivating'
+          : 'balanced'
   const mode = raw.mode === 'quiet' ? 'quiet' : 'immersive'
   const globalIntensity =
     raw.globalIntensity === 'quiet' || raw.globalIntensity === 'balanced' || raw.globalIntensity === 'immersive'
@@ -378,6 +399,8 @@ export function sanitizeReviewFeedbackSettings(value: unknown): ReviewFeedbackSe
   }
 
   return {
+    schemaVersion: 3,
+    preset,
     mode,
     visualStyle,
     soundEnabled,
@@ -399,6 +422,10 @@ export function sanitizeReviewFeedbackSettings(value: unknown): ReviewFeedbackSe
     surpriseEnabled: sanitizeBoolean(raw.surpriseEnabled, DEFAULT_REVIEW_FEEDBACK_SETTINGS.surpriseEnabled),
     soundTheme: 'classic',
     globalIntensity,
+    desktopNotificationsEnabled: sanitizeBoolean(raw.desktopNotificationsEnabled, false),
+    learningSoundsEnabled: sanitizeBoolean(raw.learningSoundsEnabled, true),
+    milestoneEffectsEnabled: sanitizeBoolean(raw.milestoneEffectsEnabled, true),
+    completionEffectsEnabled: sanitizeBoolean(raw.completionEffectsEnabled, true),
     scenes,
     celebration: buildLegacyCelebrationFromScenes(scenes),
   }
@@ -410,6 +437,63 @@ export function getReviewFeedbackEffectiveVolume(
   const combined = settings.volume * settings.baseVolumeMultiplier
   if (!Number.isFinite(combined)) return DEFAULT_REVIEW_FEEDBACK_SETTINGS.volume
   return Math.max(0, Math.min(REVIEW_FEEDBACK_EFFECTIVE_VOLUME_MAX, combined))
+}
+
+export function applyFeedbackPreset(
+  settings: ReviewFeedbackSettings,
+  preset: FeedbackPreset,
+): ReviewFeedbackSettings {
+  const focus = preset === 'focus'
+  const motivating = preset === 'motivating'
+  const soundEnabled = settings.soundEnabled
+  const animationEnabled = settings.animationEnabled
+  const scenes: ReviewFeedbackScenesSettings = {
+    ...settings.scenes,
+    review: {
+      ...settings.scenes.review,
+      enabled: !focus,
+      soundEnabled: soundEnabled && !focus,
+      animationEnabled,
+      confettiAmount: motivating ? 0.7 : 0.45,
+    },
+    milestone: {
+      ...settings.scenes.milestone,
+      enabled: !focus,
+      soundEnabled: soundEnabled && !focus,
+      animationEnabled: animationEnabled && !focus,
+      confettiAmount: motivating ? 1.25 : 0.8,
+    },
+    completion: {
+      ...settings.scenes.completion,
+      enabled: true,
+      soundEnabled,
+      animationEnabled,
+      confettiAmount: focus ? 0.65 : motivating ? 1.65 : 1.1,
+    },
+    quiz: {
+      ...settings.scenes.quiz,
+      enabled: true,
+      soundEnabled: soundEnabled && !focus,
+      animationEnabled,
+      confettiAmount: 0,
+    },
+    // Timer event details remain authoritative in timer_focus_config. This
+    // legacy scene is kept only so existing stored payloads still sanitize.
+    timer: { ...settings.scenes.timer },
+  }
+
+  return {
+    ...settings,
+    schemaVersion: 3,
+    preset,
+    mode: 'immersive',
+    globalIntensity: preset === 'focus' ? 'quiet' : preset === 'motivating' ? 'immersive' : 'balanced',
+    learningSoundsEnabled: !focus,
+    milestoneEffectsEnabled: !focus,
+    completionEffectsEnabled: true,
+    scenes,
+    celebration: buildLegacyCelebrationFromScenes(scenes),
+  }
 }
 
 /**

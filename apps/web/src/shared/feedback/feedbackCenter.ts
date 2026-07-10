@@ -95,6 +95,9 @@ function getFeedbackSettings() {
       animationEnabled: true,
       mode: 'immersive' as const,
       soundEnabled: true,
+      learningSoundsEnabled: true,
+      milestoneEffectsEnabled: true,
+      completionEffectsEnabled: true,
       volume: 1,
     }
   }
@@ -103,6 +106,9 @@ function getFeedbackSettings() {
     animationEnabled: settings.animationEnabled,
     mode: settings.mode,
     soundEnabled: settings.soundEnabled,
+    learningSoundsEnabled: settings.learningSoundsEnabled !== false,
+    milestoneEffectsEnabled: settings.milestoneEffectsEnabled !== false,
+    completionEffectsEnabled: settings.completionEffectsEnabled !== false,
     volume: getReviewFeedbackEffectiveVolume(settings),
   }
 }
@@ -124,6 +130,15 @@ export function playFeedbackAudio(request: FeedbackAudioRequest) {
   const soundEnabled = settings.soundEnabled && settings.mode === 'immersive'
   const volume = clampVolume(request.volume ?? settings.volume)
   if (!soundEnabled || volume <= 0) return
+  if (
+    request.event &&
+    (request.event === 'quiz_result_correct' ||
+      request.event === 'quiz_result_incorrect' ||
+      request.event === 'card_reveal') &&
+    !settings.learningSoundsEnabled
+  ) {
+    return
+  }
 
   if (typeof request.milestoneStep === 'number') {
     playWebAudioComboMilestone({
@@ -155,10 +170,14 @@ export function emitVisualFeedback(request: FeedbackVisualRequest) {
 
 export function triggerCelebration(request: TriggerCelebrationRequest) {
   const settings = getFeedbackSettings()
+  const milestoneScenario = request.scenario === 'milestone' || request.scenario === 'review'
+  const completionScenario = request.scenario === 'completion'
   const animationEnabled =
     (request.animationEnabled ?? true) &&
     settings.animationEnabled &&
-    settings.mode === 'immersive'
+    settings.mode === 'immersive' &&
+    (!milestoneScenario || settings.milestoneEffectsEnabled) &&
+    (!completionScenario || settings.completionEffectsEnabled)
   const soundEnabled =
     (request.soundEnabled ?? settings.soundEnabled) && settings.mode === 'immersive'
   const volume = clampVolume(request.volume ?? settings.volume)

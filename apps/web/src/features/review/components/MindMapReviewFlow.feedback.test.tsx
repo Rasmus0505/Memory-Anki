@@ -97,6 +97,8 @@ describe("MindMapReviewFlow feedback", () => {
   it("dismisses the combo milestone burst on time even if the parent rerenders repeatedly", async () => {
     vi.useFakeTimers();
     writeReviewFeedbackSettings({
+      schemaVersion: 3,
+      preset: 'balanced',
       visualStyle: 'warm_playful',
       reducedCelebrationMotion: false,
       scenes: {
@@ -115,6 +117,10 @@ describe("MindMapReviewFlow feedback", () => {
       surpriseEnabled: true,
       soundTheme: "classic",
       globalIntensity: "balanced",
+      desktopNotificationsEnabled: false,
+      learningSoundsEnabled: true,
+      milestoneEffectsEnabled: true,
+      completionEffectsEnabled: true,
       celebration: {
         globalCooldownMs: 0,
         milestone: {

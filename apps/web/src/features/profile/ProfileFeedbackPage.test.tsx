@@ -1,31 +1,14 @@
-﻿import * as React from 'react'
+import * as React from 'react'
 import { fireEvent, render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import ProfileFeedbackPage from '@/features/profile/ProfileFeedbackPage'
 
-const emitTimerCelebration = vi.fn()
 const emitReviewConfetti = vi.fn()
-const launchCelebrationPreset = vi.fn()
 const playEvent = vi.fn()
 
-vi.mock('@/shared/components/session/timer-celebration', () => ({
-  emitTimerCelebration: (...args: unknown[]) => emitTimerCelebration(...args),
-}))
-
-vi.mock('@/shared/components/celebration', async () => {
-  const actual = await vi.importActual<typeof import('@/shared/components/celebration')>(
-    '@/shared/components/celebration',
-  )
-  return {
-    ...actual,
-    emitReviewConfetti: (...args: unknown[]) => emitReviewConfetti(...args),
-    launchCelebrationPreset: (...args: unknown[]) => launchCelebrationPreset(...args),
-  }
-})
-
-vi.mock('@/shared/components/mindmap-host', () => ({
-  MindMapFrame: () => <div data-testid="mindmap-frame">mindmap</div>,
+vi.mock('@/shared/components/celebration', () => ({
+  emitReviewConfetti: (...args: unknown[]) => emitReviewConfetti(...args),
 }))
 
 vi.mock('@/shared/components/mindmap-host/useMindMapFeedback', () => ({
@@ -35,150 +18,75 @@ vi.mock('@/shared/components/mindmap-host/useMindMapFeedback', () => ({
   }),
 }))
 
-vi.mock('@/features/review/hooks/useReviewFeedback', () => ({
-  useReviewFeedback: () => ({
-    settings: {},
-    comboCount: 0,
-    maxComboCount: 0,
-    nextMilestone: null,
-    milestoneLabel: null,
-    allClearReady: false,
-    feedbackFlashState: 'idle' as const,
-    progressPercent: 0,
-    progressTone: 'neutral' as const,
-    surpriseText: null,
-    completionCeremonyActive: false,
-    animationEnabled: false,
-    soundEnabled: false,
-    milestoneCelebration: null,
-    reviewFxSignal: null,
-    emitManualEvent: vi.fn(),
-    runCompletionCeremony: vi.fn(),
-  }),
-  usePrefersReducedMotion: () => false,
-}))
-
-vi.mock('@/entities/review/model/useRevealSession', () => ({
-  useRevealSession: () => ({
-    root: { id: 'root', children: [] },
-    revealMap: { root: 'revealed' },
-    visibleEditorState: null,
-    totalNodeCount: 1,
-    visibleNonRootCount: 0,
-    revealedNonRootCount: 0,
-    handleNodeClick: vi.fn(),
-    handleNodeContextMenu: vi.fn(),
-    handleNodeHover: vi.fn(),
-    handleSpacePour: vi.fn(),
-    reset: vi.fn(),
-    setRevealMap: vi.fn(),
-    nodeMap: {},
-    parsedDoc: null,
-    docFingerprint: '{}',
-    checkpointRevealComplete: false,
-    completed: false,
-  }),
-}))
-
 describe('ProfileFeedbackPage', () => {
   beforeEach(() => {
     window.localStorage.clear()
-    emitTimerCelebration.mockReset()
     emitReviewConfetti.mockReset()
-    launchCelebrationPreset.mockReset()
     playEvent.mockReset()
   })
 
-  it('renders key sections', () => {
-    render(
+  function renderPage() {
+    return render(
       <MemoryRouter initialEntries={['/profile/feedback']}>
         <ProfileFeedbackPage />
       </MemoryRouter>,
     )
+  }
 
-    expect(screen.getByText('反馈配置')).toBeTruthy()
-    expect(screen.getByText('翻卡反馈设置')).toBeTruthy()
-    expect(screen.getByText('实时预览台')).toBeTruthy()
-    expect(screen.getAllByText('答题结果').length).toBeGreaterThan(0)
-    expect(screen.getByText('脑图宿主页预览窗口')).toBeTruthy()
-    expect(screen.getByTestId('mindmap-frame')).toBeTruthy()
+  it('renders preset-first global controls without duplicate timer settings', () => {
+    renderPage()
+
+    expect(screen.getByRole('heading', { name: '反馈中心', level: 1 })).toBeTruthy()
+    expect(screen.getByText('反馈模式')).toBeTruthy()
+    expect(screen.getByRole('button', { name: /专注/ })).toBeTruthy()
+    expect(screen.getByRole('button', { name: /平衡/ }).getAttribute('aria-pressed')).toBe('true')
+    expect(screen.getByRole('switch', { name: '声音反馈' })).toBeTruthy()
+    expect(screen.queryByText('计时器反馈设置')).toBeNull()
+    expect(screen.queryByText('烟花类型')).toBeNull()
   })
 
-  it('renders the five confetti type buttons with new labels', () => {
-    render(
-      <MemoryRouter initialEntries={['/profile/feedback']}>
-        <ProfileFeedbackPage />
-      </MemoryRouter>,
-    )
+  it('applies a preset as a draft and confirms save inline', () => {
+    renderPage()
 
-    for (const label of ['庆祝', '爆发', '写实', '星爆', '庆典']) {
-      expect(screen.getAllByRole('button', { name: label }).length).toBeGreaterThan(0)
-    }
-    // 形容词强度档位应已彻底移除
-    expect(screen.queryByText('轻提示')).toBeNull()
-    expect(screen.queryByText('电影感')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: /专注/ }))
+    expect(screen.getByText('有尚未保存的更改')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: '保存设置' }))
+    expect(screen.getByRole('status').textContent).toContain('反馈偏好已保存')
   })
 
-  it('previews the confetti type immediately when its board is clicked', () => {
-    render(
-      <MemoryRouter initialEntries={['/profile/feedback']}>
-        <ProfileFeedbackPage />
-      </MemoryRouter>,
-    )
+  it('previews answer sounds without answer confetti', () => {
+    renderPage()
 
-    // 点击任一场景卡片里的"爆发"板块（4 个场景卡片各有一个，取第一个）
-    const burstBoards = screen.getAllByRole('button', { name: '爆发' })
-    fireEvent.click(burstBoards[0])
+    fireEvent.click(screen.getByRole('button', { name: '试听答对' }))
+    fireEvent.click(screen.getByRole('button', { name: '试听答错' }))
 
-    expect(launchCelebrationPreset).toHaveBeenCalledWith(
-      expect.objectContaining({ preset: 'fireworks' }),
-    )
+    expect(playEvent).toHaveBeenNthCalledWith(1, 'quiz_result_correct', { audioScope: 'global' })
+    expect(playEvent).toHaveBeenNthCalledWith(2, 'quiz_result_incorrect', { audioScope: 'global' })
+    expect(emitReviewConfetti).not.toHaveBeenCalled()
   })
 
-  it('renders timer preview buttons and routes them correctly', () => {
-    render(
-      <MemoryRouter initialEntries={['/profile/feedback']}>
-        <ProfileFeedbackPage />
-      </MemoryRouter>,
-    )
+  it('reserves celebration previews for milestones and final completion', () => {
+    renderPage()
 
-    // 需要先展开计时器设置（点击计时器卡片中的"展开"按钮，它是第二个）
-    const expandButtons = screen.getAllByRole('button', { name: '展开' })
-    // 第一个是"进阶设置"展开，第二个是"计时器反馈设置"展开
-    fireEvent.click(expandButtons[1])
+    fireEvent.click(screen.getByRole('button', { name: '预览里程碑' }))
+    fireEvent.click(screen.getByRole('button', { name: '预览完成' }))
 
-    // 计时器预览在右侧预览台中
-    fireEvent.click(screen.getByRole('button', { name: '二级子间隔' }))
-    fireEvent.click(screen.getByRole('button', { name: '一级总目标' }))
-
-    expect(emitTimerCelebration).toHaveBeenNthCalledWith(
-      1,
-      expect.objectContaining({ kind: 'secondary' }),
-    )
-    expect(emitTimerCelebration).toHaveBeenNthCalledWith(
-      2,
-      expect.objectContaining({ kind: 'primary' }),
-    )
+    expect(emitReviewConfetti).toHaveBeenNthCalledWith(1, expect.objectContaining({ kind: 'milestone' }))
+    expect(emitReviewConfetti).toHaveBeenNthCalledWith(2, expect.objectContaining({ kind: 'session_complete' }))
   })
 
-  it('previews quiz result feedback from the draft configuration', () => {
-    render(
-      <MemoryRouter initialEntries={['/profile/feedback']}>
-        <ProfileFeedbackPage />
-      </MemoryRouter>,
-    )
+  it('requests notification permission only after an explicit opt-in and keeps a denial local', async () => {
+    const requestPermission = vi.fn().mockResolvedValue('denied')
+    Object.defineProperty(window, 'Notification', {
+      configurable: true,
+      value: { permission: 'default', requestPermission },
+    })
+    renderPage()
 
-    fireEvent.click(screen.getByRole('button', { name: '答对反馈' }))
-    expect(emitReviewConfetti).toHaveBeenCalledWith(
-      expect.objectContaining({
-        kind: 'quiz_correct',
-        confettiAmount: 0.8,
-        confettiPreset: 'random_direction',
-        soundEnabled: true,
-      }),
-    )
+    fireEvent.click(screen.getByRole('switch', { name: '桌面通知' }))
 
-    fireEvent.click(screen.getByRole('button', { name: '答错音效' }))
-    expect(playEvent).toHaveBeenCalledWith('quiz_result_incorrect', { audioScope: 'global' })
+    expect(requestPermission).toHaveBeenCalledTimes(1)
+    expect(await screen.findByText('桌面通知权限未开启，计时器仍会保留常驻状态')).toBeTruthy()
+    expect(screen.getByRole('switch', { name: '桌面通知' }).getAttribute('aria-checked')).toBe('false')
   })
 })

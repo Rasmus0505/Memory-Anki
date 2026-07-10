@@ -15,6 +15,7 @@ import {
 } from '@/features/review/model/review-feedback'
 import {
   REVIEW_FEEDBACK_SETTINGS_UPDATED_EVENT,
+  applyFeedbackPreset,
   getReviewFeedbackEffectiveVolume,
   getSceneEffectiveVolume,
   readReviewFeedbackSettings,
@@ -44,6 +45,12 @@ function reviewEventToSceneKey(event: ReviewFeedbackEvent): FeedbackSceneKey {
 
 function shouldPlaySceneAudio(settings: ReviewFeedbackSettings, sceneKey: FeedbackSceneKey) {
   const scene = settings.scenes[sceneKey]
+  if (
+    (sceneKey === 'review' || sceneKey === 'quiz') &&
+    settings.learningSoundsEnabled === false
+  ) {
+    return false
+  }
   return settings.soundEnabled && scene.enabled && scene.soundEnabled
 }
 
@@ -171,6 +178,18 @@ export function useReviewFeedback({
       if (settings.mode !== 'immersive') {
         return { allowed: false, soundEnabled: false, animationEnabled: false }
       }
+      if (
+        (kind === 'milestone' || kind === 'branch_clear') &&
+        settings.milestoneEffectsEnabled === false
+      ) {
+        return { allowed: false, soundEnabled: false, animationEnabled: false }
+      }
+      if (
+        (kind === 'all_clear_ready' || kind === 'session_complete') &&
+        settings.completionEffectsEnabled === false
+      ) {
+        return { allowed: false, soundEnabled: false, animationEnabled: false }
+      }
 
       const eventConfig =
         kind === 'milestone'
@@ -220,6 +239,8 @@ export function useReviewFeedback({
       settings.celebration.milestone,
       settings.celebration.sessionComplete,
       settings.mode,
+      settings.milestoneEffectsEnabled,
+      settings.completionEffectsEnabled,
       settings.soundEnabled,
     ],
   )
@@ -474,10 +495,9 @@ export function useReviewFeedback({
   )
 
   const toggleMode = React.useCallback(() => {
-    updateSettings((current) => ({
-      ...current,
-      mode: current.mode === 'immersive' ? 'quiet' : 'immersive',
-    }))
+    updateSettings((current) =>
+      applyFeedbackPreset(current, current.preset === 'focus' ? 'balanced' : 'focus'),
+    )
   }, [updateSettings])
 
   const emitManualEvent = React.useCallback(
@@ -500,6 +520,7 @@ export function useReviewFeedback({
       }
       if (
         event === 'session_complete' &&
+        settings.completionEffectsEnabled !== false &&
         settings.animationEnabled &&
         settings.celebration.sessionComplete.enabled &&
         settings.celebration.sessionComplete.animationEnabled &&
@@ -517,6 +538,7 @@ export function useReviewFeedback({
         event === 'session_reset' ||
         (
           event === 'session_complete' &&
+          settings.completionEffectsEnabled !== false &&
           settings.celebration.sessionComplete.enabled &&
           settings.celebration.sessionComplete.animationEnabled
         )
@@ -561,6 +583,7 @@ export function useReviewFeedback({
       settings.celebration.sessionComplete.enabled,
       settings.celebration.sessionComplete.soundEnabled,
       settings.mode,
+      settings.completionEffectsEnabled,
     ],
   )
 

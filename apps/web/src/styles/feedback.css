@@ -230,74 +230,27 @@ summary,
 [role="button"],
 [role="link"],
 [role="switch"],
-[role="tab"],
-[data-feedback] {
+[role="tab"] {
   transition:
-    transform 0.18s var(--memory-anki-feedback-ease),
-    box-shadow 0.22s var(--memory-anki-feedback-ease),
+    transform 0.14s var(--memory-anki-feedback-ease),
     border-color 0.18s ease,
     background-color 0.18s ease,
     color 0.18s ease;
   transform-origin: center;
 }
 
-a[href]:hover,
-button:hover:not([disabled]),
-[role="button"]:hover,
-[role="link"]:hover,
-[role="switch"]:hover,
-[role="tab"]:hover,
-[data-feedback]:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 14px 30px rgba(56, 189, 248, 0.12);
-}
-
 button:active:not([disabled]),
-[role="button"]:active,
-[data-feedback]:active {
-  transform: translateY(1px) scale(0.975);
-}
-
-button:not([disabled]),
-[data-feedback="button"] {
-  position: relative;
-  isolation: isolate;
-}
-
-button:not([disabled])::before,
-[data-feedback="button"]::before {
-  content: "";
-  position: absolute;
-  inset: 1px;
-  border-radius: inherit;
-  background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.22), transparent 34%),
-    radial-gradient(circle at top right, rgba(251, 191, 36, 0.18), transparent 42%);
-  opacity: 0;
-  transition: opacity 0.18s ease;
-  z-index: -1;
-}
-
-button:hover:not([disabled])::before,
-[data-feedback="button"]:hover::before {
-  opacity: 1;
-}
-
-nav a:hover,
-a[href]:hover {
-  color: color-mix(in srgb, currentColor 80%, #38bdf8 20%);
+[role="button"]:active {
+  transform: translateY(1px) scale(0.985);
 }
 
 input:focus-visible,
 textarea:focus-visible,
 select:focus-visible,
 [contenteditable="true"]:focus-visible {
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(240, 249, 255, 0.96));
   box-shadow:
     0 0 0 1px rgba(59, 130, 246, 0.22),
-    0 0 0 6px rgba(56, 189, 248, 0.12),
-    0 16px 36px rgba(14, 165, 233, 0.08);
+    0 0 0 3px rgba(56, 189, 248, 0.1);
 }
 
 .memory-anki-feedback-layer {
@@ -547,7 +500,6 @@ select:focus-visible,
 .memory-anki-reactflow-edge-selected path,
 .memory-anki-reactflow-edge-selected .react-flow__edge-path {
   stroke: #3f766d !important;
-  stroke-width: 2.8 !important;
   filter: drop-shadow(0 0 8px rgba(20, 184, 166, 0.18));
   animation: memory-anki-reactflow-edge-pulse 360ms ease-out;
 }

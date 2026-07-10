@@ -1,5 +1,4 @@
 import * as React from 'react'
-import { useLocation } from 'react-router-dom'
 import {
   useMindMapFeedbackAudio,
   useMindMapFeedbackSettings,
@@ -7,22 +6,14 @@ import {
 import { getReviewFeedbackEffectiveVolume } from '@/shared/feedback/reviewFeedbackSettings'
 import {
   buildFeedbackStyle,
-  createCommitDescriptor,
-  createFocusDescriptor,
-  createHoverDescriptor,
-  createKeyboardDescriptor,
   createMindMapFeedbackDescriptor,
-  createPointerDescriptor,
-  createRouteDescriptor,
   GLOBAL_FEEDBACK_REQUEST_EVENT,
-  resolveFeedbackPoint,
   type FeedbackBurst,
   type FeedbackDescriptor,
   type GlobalFeedbackRequestDetail,
 } from '@/shared/feedback/globalFeedbackModel'
 
 const PULSE_TTL_MS = 420
-const HOVER_INTERVAL_MS = 220
 
 function getBurstTtlMs(descriptor: FeedbackDescriptor) {
   if (descriptor.level === 'micro') return 420
@@ -38,40 +29,21 @@ function usePrefersReducedMotion() {
     const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)')
     const sync = () => setReducedMotion(mediaQuery.matches)
     sync()
-    if (typeof mediaQuery.addEventListener === 'function') {
-      mediaQuery.addEventListener('change', sync)
-      return () => mediaQuery.removeEventListener('change', sync)
-    }
-    mediaQuery.addListener(sync)
-    return () => mediaQuery.removeListener(sync)
+    mediaQuery.addEventListener?.('change', sync)
+    return () => mediaQuery.removeEventListener?.('change', sync)
   }, [])
 
   return reducedMotion
 }
 
-function FeedbackRouteWatcher({
-  onRouteFeedback,
-}: {
-  onRouteFeedback: (descriptor: FeedbackDescriptor) => void
-}) {
-  const location = useLocation()
-  const isFirstRenderRef = React.useRef(true)
-  const emitRouteFeedback = React.useEffectEvent(onRouteFeedback)
-
-  React.useEffect(() => {
-    if (isFirstRenderRef.current) {
-      isFirstRenderRef.current = false
-      return
-    }
-    emitRouteFeedback(createRouteDescriptor())
-  }, [location.pathname])
-
-  return null
-}
-
-export function GlobalFeedbackProvider({
-  children,
-}: React.PropsWithChildren) {
+/**
+ * Renders feedback only for explicit semantic requests.
+ *
+ * Ordinary pointer, keyboard, focus and route interactions deliberately stay
+ * inside their owning controls. This keeps global effects meaningful and
+ * prevents duplicate feedback from bubbling DOM events.
+ */
+export function GlobalFeedbackProvider({ children }: React.PropsWithChildren) {
   const [bursts, setBursts] = React.useState<FeedbackBurst[]>([])
   const [screenPulse, setScreenPulse] = React.useState<{
     id: number
@@ -79,8 +51,6 @@ export function GlobalFeedbackProvider({
   } | null>(null)
   const burstIdRef = React.useRef(0)
   const pulseIdRef = React.useRef(0)
-  const hoverSignatureRef = React.useRef('')
-  const hoverAtRef = React.useRef(0)
   const settings = useMindMapFeedbackSettings()
   const reducedMotion = usePrefersReducedMotion()
   const { playEvent } = useMindMapFeedbackAudio(
@@ -89,187 +59,56 @@ export function GlobalFeedbackProvider({
   )
 
   const emitDescriptor = React.useCallback(
-    (
-      descriptor: FeedbackDescriptor,
-      point: { x: number; y: number } | null,
-      channel: 'dom' | 'dispatch' = 'dispatch',
-    ) => {
-      if (!point) return
-
-      const audioOn = settings.soundEnabled && settings.mode === 'immersive'
-      const visualOn = settings.animationEnabled && !reducedMotion
-
-      // 全局通用 UI 反馈（DOM 原生事件：普通点击 / 悬停 / 打字）按 globalIntensity 收敛。
-      // 脑图编辑与复习流程通过 dispatchGlobalFeedback 主动派发（channel === 'dispatch'），
-      // 不受 globalIntensity 影响，反馈完整保留。
-      let playAudio = audioOn
-      let showVisual = visualOn
-      if (channel === 'dom') {
-        if (settings.globalIntensity === 'quiet') {
-          return
-        }
-        if (settings.globalIntensity === 'balanced') {
-          // 微操作（普通点击、悬停、单次按键）默认静默声音，仅保留轻量视觉。
-          playAudio = false
-          // 悬停反馈在 balanced 模式下完全关闭，避免视觉噪音。
-          if (descriptor.audioEvent === 'hover_pulse') {
-            showVisual = false
-          }
-        }
-      }
-
-      if (playAudio) {
+    (descriptor: FeedbackDescriptor, point: { x: number; y: number }) => {
+      if (settings.soundEnabled && settings.mode === 'immersive') {
         playEvent(descriptor.audioEvent, {
           origin: descriptor.origin,
           audioScope: descriptor.audioScope,
         })
       }
 
-      if (showVisual) {
-        burstIdRef.current += 1
-        const burstId = burstIdRef.current
-        setBursts((current) => [
-          ...current,
-          {
-            id: burstId,
-            x: point.x,
-            y: point.y,
-            descriptor,
-          },
-        ])
-        window.setTimeout(() => {
-          setBursts((current) => current.filter((item) => item.id !== burstId))
-        }, getBurstTtlMs(descriptor))
-      }
+      const showVisual = settings.animationEnabled && !reducedMotion
+      if (!showVisual) return
 
-      if (descriptor.screenPulse && showVisual) {
-        pulseIdRef.current += 1
-        const pulseId = pulseIdRef.current
-        setScreenPulse({
-          id: pulseId,
-          kind: descriptor.screenPulse,
-        })
-        window.setTimeout(() => {
-          setScreenPulse((current) => (current?.id === pulseId ? null : current))
-        }, PULSE_TTL_MS)
-      }
+      burstIdRef.current += 1
+      const burstId = burstIdRef.current
+      setBursts((current) => [...current, { id: burstId, x: point.x, y: point.y, descriptor }])
+      window.setTimeout(() => {
+        setBursts((current) => current.filter((item) => item.id !== burstId))
+      }, getBurstTtlMs(descriptor))
+
+      if (!descriptor.screenPulse) return
+      pulseIdRef.current += 1
+      const pulseId = pulseIdRef.current
+      setScreenPulse({ id: pulseId, kind: descriptor.screenPulse })
+      window.setTimeout(() => {
+        setScreenPulse((current) => (current?.id === pulseId ? null : current))
+      }, PULSE_TTL_MS)
     },
-    [playEvent, reducedMotion, settings.animationEnabled, settings.globalIntensity, settings.mode, settings.soundEnabled],
+    [playEvent, reducedMotion, settings.animationEnabled, settings.mode, settings.soundEnabled],
   )
-
-  const emitFromEvent = React.useCallback(
-    (
-      descriptor: FeedbackDescriptor | null,
-      target: EventTarget | null,
-      fallback?: { x: number; y: number },
-    ) => {
-      if (!descriptor) return
-      // emitFromEvent 仅被 DOM 原生事件监听器调用，因此标记为 'dom' 通道。
-      emitDescriptor(descriptor, resolveFeedbackPoint(target, fallback), 'dom')
-    },
-    [emitDescriptor],
-  )
-
-  const handlePointerDown = React.useEffectEvent((event: PointerEvent) => {
-    emitFromEvent(
-      createPointerDescriptor(event.target, 'down'),
-      event.target,
-      { x: event.clientX, y: event.clientY },
-    )
-  })
-
-  const handleClick = React.useEffectEvent((event: MouseEvent) => {
-    emitFromEvent(
-      createPointerDescriptor(event.target, 'click'),
-      event.target,
-      { x: event.clientX, y: event.clientY },
-    )
-  })
-
-  const handleFocus = React.useEffectEvent((event: FocusEvent) => {
-    emitFromEvent(createFocusDescriptor(event.target), event.target)
-  })
-
-  const handleChange = React.useEffectEvent((event: Event) => {
-    emitFromEvent(createCommitDescriptor(event.target), event.target)
-  })
-
-  const handleHover = React.useEffectEvent((event: PointerEvent) => {
-    const descriptor = createHoverDescriptor(event.target)
-    if (!descriptor) return
-    const signature = `${descriptor.audioEvent}:${descriptor.visualKind}:${descriptor.hue}:${descriptor.size}`
-    const now = Date.now()
-    if (signature === hoverSignatureRef.current && now - hoverAtRef.current < HOVER_INTERVAL_MS) {
-      return
-    }
-    hoverSignatureRef.current = signature
-    hoverAtRef.current = now
-    emitFromEvent(
-      descriptor,
-      event.target,
-      { x: event.clientX, y: event.clientY },
-    )
-  })
-
-  const handleKeyDown = React.useEffectEvent((event: KeyboardEvent) => {
-    const descriptor = createKeyboardDescriptor(event)
-    if (!descriptor) return
-    const activeElement = document.activeElement
-    const point = resolveFeedbackPoint(activeElement) ?? {
-      x: window.innerWidth / 2,
-      y: Math.max(86, Math.round(window.innerHeight * 0.2)),
-    }
-    emitDescriptor(descriptor, point, 'dom')
-  })
 
   const handleGlobalFeedbackRequest = React.useEffectEvent((event: Event) => {
     if (!(event instanceof CustomEvent)) return
     const detail = event.detail as GlobalFeedbackRequestDetail | undefined
     if (!detail?.event) return
     const descriptor = createMindMapFeedbackDescriptor(detail.event, detail)
-    emitDescriptor(descriptor, detail.point ?? {
-      x: window.innerWidth / 2,
-      y: Math.max(86, Math.round(window.innerHeight * 0.2)),
-    })
+    emitDescriptor(
+      descriptor,
+      detail.point ?? {
+        x: window.innerWidth / 2,
+        y: Math.max(86, Math.round(window.innerHeight * 0.2)),
+      },
+    )
   })
 
   React.useEffect(() => {
-    document.addEventListener('pointerdown', handlePointerDown, true)
-    document.addEventListener('click', handleClick, true)
-    document.addEventListener('focusin', handleFocus, true)
-    document.addEventListener('change', handleChange, true)
-    document.addEventListener('pointerover', handleHover, true)
-    window.addEventListener('keydown', handleKeyDown, true)
     window.addEventListener(GLOBAL_FEEDBACK_REQUEST_EVENT, handleGlobalFeedbackRequest)
-    return () => {
-      document.removeEventListener('pointerdown', handlePointerDown, true)
-      document.removeEventListener('click', handleClick, true)
-      document.removeEventListener('focusin', handleFocus, true)
-      document.removeEventListener('change', handleChange, true)
-      document.removeEventListener('pointerover', handleHover, true)
-      window.removeEventListener('keydown', handleKeyDown, true)
-      window.removeEventListener(GLOBAL_FEEDBACK_REQUEST_EVENT, handleGlobalFeedbackRequest)
-    }
-  }, [
-    handleChange,
-    handleClick,
-    handleFocus,
-    handleGlobalFeedbackRequest,
-    handleHover,
-    handleKeyDown,
-    handlePointerDown,
-  ])
-
-  const handleRouteFeedback = React.useCallback((descriptor: FeedbackDescriptor) => {
-    emitDescriptor(descriptor, {
-      x: window.innerWidth / 2,
-      y: Math.max(112, Math.round(window.innerHeight * 0.16)),
-    })
-  }, [emitDescriptor])
+    return () => window.removeEventListener(GLOBAL_FEEDBACK_REQUEST_EVENT, handleGlobalFeedbackRequest)
+  }, [])
 
   return (
     <>
-      <FeedbackRouteWatcher onRouteFeedback={handleRouteFeedback} />
       {children}
       <div className="memory-anki-feedback-layer" aria-hidden="true">
         {screenPulse ? (
@@ -287,9 +126,6 @@ export function GlobalFeedbackProvider({
             <span className="memory-anki-feedback-ring" />
             <span className="memory-anki-feedback-core" />
             <span className="memory-anki-feedback-sparks" />
-            {burst.descriptor.label ? (
-              <span className="memory-anki-feedback-label">{burst.descriptor.label}</span>
-            ) : null}
           </div>
         ))}
       </div>

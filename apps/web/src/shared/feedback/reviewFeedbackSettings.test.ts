@@ -3,6 +3,7 @@ import {
   DEFAULT_REVIEW_FEEDBACK_SETTINGS,
   FEEDBACK_CONFETTI_PRESETS,
   FEEDBACK_CONFETTI_PRESET_LABELS,
+  applyFeedbackPreset,
   readReviewFeedbackSettings,
   sanitizeReviewFeedbackSettings,
   writeReviewFeedbackSettings,
@@ -26,6 +27,24 @@ describe('reviewFeedbackSettings', () => {
         volumeBoost: 1.05,
       }),
     )
+  })
+
+  it('migrates legacy intensity into the V3 preset model', () => {
+    expect(sanitizeReviewFeedbackSettings({ globalIntensity: 'quiet' }).preset).toBe('focus')
+    expect(sanitizeReviewFeedbackSettings({ globalIntensity: 'balanced' }).preset).toBe('balanced')
+    expect(sanitizeReviewFeedbackSettings({ globalIntensity: 'immersive' }).preset).toBe('motivating')
+  })
+
+  it('applies presets without making the legacy timer scene authoritative', () => {
+    const timerScene = DEFAULT_REVIEW_FEEDBACK_SETTINGS.scenes.timer
+    const focused = applyFeedbackPreset(DEFAULT_REVIEW_FEEDBACK_SETTINGS, 'focus')
+    const motivating = applyFeedbackPreset(DEFAULT_REVIEW_FEEDBACK_SETTINGS, 'motivating')
+
+    expect(focused.learningSoundsEnabled).toBe(false)
+    expect(focused.milestoneEffectsEnabled).toBe(false)
+    expect(focused.scenes.timer).toEqual(timerScene)
+    expect(motivating.scenes.quiz.confettiAmount).toBe(0)
+    expect(motivating.completionEffectsEnabled).toBe(true)
   })
 
   it('exposes exactly five confetti presets with the new chinese labels', () => {
