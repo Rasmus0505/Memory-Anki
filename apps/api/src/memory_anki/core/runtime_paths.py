@@ -4,7 +4,6 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
-
 REPO_ROOT = Path(__file__).resolve().parents[5]
 APP_HOME_ENV = "MEMORY_ANKI_HOME"
 APP_HOME_DIR_NAME = "MemoryAnki"

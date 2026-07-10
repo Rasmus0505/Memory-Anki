@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 from sqlalchemy.orm import Session
 
@@ -20,6 +20,7 @@ from .ai_model_registry_catalog import (
     category_model_config_key,
     category_thinking_config_key,
     normalize_model_name,
+    normalize_provider_key,
 )
 from .ai_model_registry_contracts import (
     AiCategoryConfig,
@@ -57,9 +58,15 @@ def serialize_model_row(row: AiModelCatalog) -> dict[str, Any]:
         "label": label,
         "display_name": row.display_name,
         "provider": row.provider,
-        "provider_label": PROVIDER_LABELS.get(row.provider, row.provider),
+        "provider_label": PROVIDER_LABELS.get(
+            normalize_provider_key(row.provider) or "dashscope", row.provider
+        ),
         "model_type": row.model_type,
-        "model_type_label": MODEL_TYPE_LABELS.get(row.model_type, row.model_type),
+        "model_type_label": (
+            MODEL_TYPE_LABELS[cast(AiModelType, row.model_type)]
+            if row.model_type in MODEL_TYPE_LABELS
+            else row.model_type
+        ),
         "has_vision": bool(row.has_vision),
         "supports_thinking": bool(row.supports_thinking),
         "supports_temperature": bool(row.supports_temperature),
@@ -69,9 +76,9 @@ def serialize_model_row(row: AiModelCatalog) -> dict[str, Any]:
         "cached_input_price_per_million": row.cached_input_price_per_million,
         "is_builtin": bool(row.is_builtin),
         "is_active": bool(row.is_active),
-        "default_base_url": PROVIDER_ENV_DEFAULTS.get(
-            str(row.provider or "dashscope"), PROVIDER_ENV_DEFAULTS["dashscope"]
-        )["base_url"],
+        "default_base_url": PROVIDER_ENV_DEFAULTS[
+            normalize_provider_key(row.provider) or "dashscope"
+        ]["base_url"],
     }
 
 
@@ -367,32 +374,38 @@ def resolve_scenario_runtime(
         if runtime_options.thinking_enabled is not None
         else default_thinking_enabled
     )
-    provider = str(model_meta["provider"])
+    resolved_provider = normalize_provider_key(str(model_meta["provider"]))
+    if resolved_provider is None:
+        raise ValueError(f"unsupported AI provider: {model_meta['provider']}")
+    raw_model_type = str(model_meta["model_type"])
+    if raw_model_type not in MODEL_TYPE_LABELS:
+        raise ValueError(f"unsupported AI model type: {raw_model_type}")
+    model_type = cast(AiModelType, raw_model_type)
     supports_thinking = bool(model_meta["supports_thinking"])
     effective_thinking_enabled = bool(requested_thinking_enabled and supports_thinking)
     provider_config_values = _load_config_snapshot(
         session,
         (
-            PROVIDER_API_KEY_CONFIG_KEYS[provider],  # type: ignore[index]
-            PROVIDER_BASE_URL_CONFIG_KEYS[provider],  # type: ignore[index]
+            PROVIDER_API_KEY_CONFIG_KEYS[resolved_provider],
+            PROVIDER_BASE_URL_CONFIG_KEYS[resolved_provider],
         ),
     )
     api_key = (
-        _first_snapshot_value(provider_config_values, (PROVIDER_API_KEY_CONFIG_KEYS[provider],))  # type: ignore[index]
-        or str(PROVIDER_ENV_DEFAULTS[provider]["api_key"] or "").strip()  # type: ignore[index]
+        _first_snapshot_value(provider_config_values, (PROVIDER_API_KEY_CONFIG_KEYS[resolved_provider],))
+        or str(PROVIDER_ENV_DEFAULTS[resolved_provider]["api_key"] or "").strip()
     )
     base_url = (
-        _first_snapshot_value(provider_config_values, (PROVIDER_BASE_URL_CONFIG_KEYS[provider],))  # type: ignore[index]
-        or str(PROVIDER_ENV_DEFAULTS[provider]["base_url"] or "").strip()  # type: ignore[index]
+        _first_snapshot_value(provider_config_values, (PROVIDER_BASE_URL_CONFIG_KEYS[resolved_provider],))
+        or str(PROVIDER_ENV_DEFAULTS[resolved_provider]["base_url"] or "").strip()
         or str(model_meta["default_base_url"] or "")
     )
     return ResolvedAiModelRuntime(
         scene=scene,
         model_key=str(model_meta["key"]),
         model_label=str(model_meta["label"]),
-        api_model=resolve_provider_model_id(provider, str(model_meta["key"])),  # type: ignore[arg-type]
-        provider=provider,  # type: ignore[arg-type]
-        model_type=str(model_meta["model_type"]),  # type: ignore[arg-type]
+        api_model=resolve_provider_model_id(resolved_provider, str(model_meta["key"])),
+        provider=resolved_provider,
+        model_type=model_type,
         has_vision=bool(model_meta["has_vision"]),
         thinking_enabled=effective_thinking_enabled,
         supports_thinking=supports_thinking,
@@ -404,7 +417,7 @@ def resolve_scenario_runtime(
         api_key=api_key,
         base_url=base_url,
         extra_payload=_build_thinking_payload(
-            provider=provider,  # type: ignore[arg-type]
+            provider=resolved_provider,
             supports_thinking=supports_thinking,
             thinking_enabled=effective_thinking_enabled,
         ),

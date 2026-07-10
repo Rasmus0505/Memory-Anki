@@ -85,11 +85,14 @@ def _palace_node_uids(session: Session, palace_id: int) -> set[str]:
     def walk(node: Any) -> None:
         if not isinstance(node, dict):
             return
-        data = node.get("data") if isinstance(node.get("data"), dict) else {}
+        raw_data = node.get("data")
+        data: dict[str, Any] = raw_data if isinstance(raw_data, dict) else {}
         uid = str(data.get("uid") or data.get("memoryAnkiId") or "").strip()
         if uid:
             found.add(uid)
-        for child in node.get("children") or []:
+        raw_children = node.get("children")
+        children = raw_children if isinstance(raw_children, list) else []
+        for child in children:
             walk(child)
 
     walk(doc.get("root"))

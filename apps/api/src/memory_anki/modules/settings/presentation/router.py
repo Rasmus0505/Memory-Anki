@@ -279,7 +279,7 @@ def api_ai_eval_run(data: dict, s: Session = Depends(session_dep)):
             str(data.get("candidate_version_id") or ""),
         )
     except (AiPromptValidationError, AiGatewayError, KeyError) as exc:
-        detail = {
+        detail: dict[str, object] = {
             "message": str(exc),
             "code": "ai_eval_failed",
         }

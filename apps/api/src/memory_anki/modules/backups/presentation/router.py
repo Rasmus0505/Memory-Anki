@@ -18,6 +18,15 @@ from memory_anki.modules.backups.application.backup_palace_snapshots import (
 router = APIRouter(tags=["backups"])
 
 
+def _request_int(value: object) -> int:
+    if not isinstance(value, str | int | float):
+        return 0
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return 0
+
+
 @router.get("/backups")
 def api_list_backups():
     return {"items": list_backups()}
@@ -47,7 +56,12 @@ def api_restore_backup(data: dict, s: Session = Depends(session_dep)):
 @router.post("/backups/recover-palaces")
 def api_recover_palaces(data: dict, s: Session = Depends(session_dep)):
     commit = str(data.get("commit") or "").strip()
-    palace_ids = [int(value) for value in (data.get("palace_ids") or []) if value is not None]
+    raw_palace_ids = data.get("palace_ids")
+    palace_ids = [
+        _request_int(value)
+        for value in (raw_palace_ids if isinstance(raw_palace_ids, list) else [])
+        if value is not None
+    ]
     if not commit or not palace_ids:
         raise HTTPException(status_code=400, detail="missing commit or palace_ids")
     result = recover_palaces_from_git_snapshot(s, commit, palace_ids)
@@ -57,7 +71,8 @@ def api_recover_palaces(data: dict, s: Session = Depends(session_dep)):
 @router.post("/backups/restore-palace-from-backup")
 def api_restore_palace_from_backup(data: dict, s: Session = Depends(session_dep)):
     backup_path = str(data.get("path") or "").strip()
-    palace_id = int(data.get("palace_id") or 0)
+    palace_id_raw = data.get("palace_id")
+    palace_id = _request_int(palace_id_raw)
     if not backup_path or palace_id <= 0:
         raise HTTPException(status_code=400, detail="missing path or palace_id")
     result = restore_palace_from_backup(s, backup_db_path=backup_path, palace_id=palace_id)
@@ -66,10 +81,11 @@ def api_restore_palace_from_backup(data: dict, s: Session = Depends(session_dep)
 
 @router.post("/backups/compare-palace-snapshots")
 def api_compare_palace_snapshots(data: dict, s: Session = Depends(session_dep)):
-    palace_id = int(data.get("palace_id") or 0)
+    palace_id_raw = data.get("palace_id")
+    palace_id = _request_int(palace_id_raw)
     version_id_raw = data.get("version_id")
     backup_path = str(data.get("backup_db_path") or data.get("path") or "").strip() or None
-    version_id = int(version_id_raw) if version_id_raw not in (None, "", 0, "0") else None
+    version_id = _request_int(version_id_raw) or None
     if palace_id <= 0:
         raise HTTPException(status_code=400, detail="missing palace_id")
     try:

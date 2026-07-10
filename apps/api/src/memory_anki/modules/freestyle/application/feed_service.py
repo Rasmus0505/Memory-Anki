@@ -412,6 +412,8 @@ def _card_palace_id(card: dict[str, Any]) -> int | None:
     if not isinstance(context, dict):
         return None
     palace_id = context.get("id")
+    if palace_id is None:
+        return None
     try:
         return int(palace_id)
     except (TypeError, ValueError):

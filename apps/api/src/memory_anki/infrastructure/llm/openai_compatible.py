@@ -233,6 +233,7 @@ def call_chat_completion_text(
         stream=False,
     )
     request_url = build_chat_completions_url(config.base_url)
+    error: OpenAICompatibleError
     for attempt in range(max(0, config.max_retries) + 1):
         request = urllib.request.Request(
             request_url,
@@ -279,6 +280,7 @@ def stream_chat_completion_text(
         stream=True,
     )
     request_url = build_chat_completions_url(config.base_url)
+    error: OpenAICompatibleError
     for attempt in range(max(0, config.max_retries) + 1):
         request = urllib.request.Request(
             request_url,

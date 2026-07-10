@@ -8,8 +8,8 @@ from unittest.mock import patch
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from memory_anki.core import runtime as runtime_module
 from memory_anki.core import config as config_module
+from memory_anki.core import runtime as runtime_module
 from memory_anki.modules.settings.presentation import router as settings_router
 
 

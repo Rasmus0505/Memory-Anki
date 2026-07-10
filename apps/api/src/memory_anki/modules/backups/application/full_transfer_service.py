@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from sqlalchemy import Date, DateTime, Table, text
-from sqlalchemy.engine import Engine
+from sqlalchemy.engine import Connection, Engine
 from sqlalchemy.orm import Session
 
 from memory_anki.core.config import ATTACHMENTS_DIR
@@ -156,25 +156,34 @@ def _read_data_json(archive: zipfile.ZipFile) -> dict[str, list[dict[str, Any]]]
 
 
 def _replace_tables(
-    bind: Engine,
+    bind: Engine | Connection,
+    data: dict[str, list[dict[str, Any]]],
+) -> dict[str, int]:
+    if isinstance(bind, Engine):
+        with bind.begin() as connection:
+            return _replace_tables_on_connection(connection, data)
+    return _replace_tables_on_connection(bind, data)
+
+
+def _replace_tables_on_connection(
+    connection: Connection,
     data: dict[str, list[dict[str, Any]]],
 ) -> dict[str, int]:
     imported_counts: dict[str, int] = {}
-    with bind.begin() as connection:
-        connection.exec_driver_sql("PRAGMA foreign_keys=OFF")
-        try:
-            for table in reversed(Base.metadata.sorted_tables):
-                connection.execute(table.delete())
-            for table in Base.metadata.sorted_tables:
-                rows = data.get(table.name) or []
-                if not rows:
-                    imported_counts[table.name] = 0
-                    continue
-                cleaned = [_coerce_row_types(table, row) for row in rows]
-                connection.execute(table.insert(), cleaned)
-                imported_counts[table.name] = len(cleaned)
-        finally:
-            connection.exec_driver_sql("PRAGMA foreign_keys=ON")
+    connection.exec_driver_sql("PRAGMA foreign_keys=OFF")
+    try:
+        for table in reversed(Base.metadata.sorted_tables):
+            connection.execute(table.delete())
+        for table in Base.metadata.sorted_tables:
+            rows = data.get(table.name) or []
+            if not rows:
+                imported_counts[table.name] = 0
+                continue
+            cleaned = [_coerce_row_types(table, row) for row in rows]
+            connection.execute(table.insert(), cleaned)
+            imported_counts[table.name] = len(cleaned)
+    finally:
+        connection.exec_driver_sql("PRAGMA foreign_keys=ON")
     return imported_counts
 
 

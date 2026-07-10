@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import time
-from typing import Any
+from typing import Any, cast
 
 from sqlalchemy.orm import Session
 
@@ -84,7 +84,7 @@ def save_ai_model_settings(
         normalized_category = str(category_key or "").strip().lower()
         if normalized_category not in CATEGORY_BY_KEY or not isinstance(payload, dict):
             continue
-        typed_category = normalized_category  # type: ignore[assignment]
+        typed_category = cast(AiModelType, normalized_category)
         model_name = normalize_model_name(payload.get("default_model"))
         if model_name:
             _upsert_config_value(session, category_model_config_key(typed_category), model_name)
@@ -105,12 +105,14 @@ def save_ai_model_settings(
                     )
 
     for scene_key, payload in dict(scene_updates or {}).items():
-        scene = next((item for item in SCENES if item.key == str(scene_key or "").strip()), None)
-        if scene is None or not isinstance(payload, dict):
+        selected_scene = next(
+            (item for item in SCENES if item.key == str(scene_key or "").strip()), None
+        )
+        if selected_scene is None or not isinstance(payload, dict):
             continue
         model_name = normalize_model_name(payload.get("default_model") or payload.get("current_model"))
         if model_name:
-            _upsert_config_value(session, scene.config_key, model_name)
+            _upsert_config_value(session, selected_scene.config_key, model_name)
         if "default_thinking_enabled" in payload or "current_thinking_enabled" in payload:
             raw_thinking = (
                 payload.get("default_thinking_enabled")
@@ -119,7 +121,7 @@ def save_ai_model_settings(
             )
             _upsert_config_value(
                 session,
-                scene.thinking_config_key,
+                selected_scene.thinking_config_key,
                 "true" if normalize_bool(raw_thinking) else "false",
             )
 
@@ -275,7 +277,10 @@ def test_model_connection(session: Session, model_key: str) -> dict[str, Any]:
     row = session.query(AiModelCatalog).filter_by(key=normalized_key).first()
     if row is None:
         raise AiModelRegistryError("要测试的模型不存在。", code="model_not_found")
-    return test_provider_connection(session, row.provider, model_key=normalized_key)
+    provider = normalize_provider_key(row.provider)
+    if provider is None:
+        raise AiModelRegistryError("模型 Provider 无效。")
+    return test_provider_connection(session, provider, model_key=normalized_key)
 
 
 def upsert_ai_model_catalog_item(session: Session, payload: dict[str, Any]) -> dict[str, Any]:
@@ -310,7 +315,7 @@ def upsert_ai_model_catalog_item(session: Session, payload: dict[str, Any]) -> d
         "cached_input_price_per_million",
     ):
         value = payload.get(field_name)
-        if value in {None, ""}:
+        if value is None or value == "":
             setattr(row, field_name, None)
             continue
         try:

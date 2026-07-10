@@ -27,7 +27,7 @@ def _json_dump(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, sort_keys=True)
 
 
-def _json_load(value: str | None, default: Any) -> Any:
+def _json_load[T](value: str | None, default: T) -> T:
     try:
         parsed = json.loads(value or "")
     except json.JSONDecodeError:
@@ -134,12 +134,19 @@ def create_reset_candidates(session: Session, keys: list[str] | None = None) -> 
 def _load_golden_cases(prompt_key: str) -> list[dict[str, Any]]:
     if not GOLDEN_DATASET_PATH.exists():
         return []
-    payload = _json_load(GOLDEN_DATASET_PATH.read_text(encoding="utf-8"), [])
-    return [item for item in payload if item.get("prompt_key") == prompt_key and item.get("approved")]
+    payload: list[Any] = _json_load(GOLDEN_DATASET_PATH.read_text(encoding="utf-8"), [])
+    return [
+        item
+        for item in payload
+        if isinstance(item, dict)
+        and item.get("prompt_key") == prompt_key
+        and item.get("approved")
+    ]
 
 
 def _assert_output(case: dict[str, Any], output: Any) -> dict[str, Any]:
-    expected = case.get("expected") if isinstance(case.get("expected"), dict) else {}
+    raw_expected = case.get("expected")
+    expected: dict[str, Any] = raw_expected if isinstance(raw_expected, dict) else {}
     schema_passed = isinstance(output, dict | list)
     assertions: list[dict[str, Any]] = []
     if expected.get("required_keys") and isinstance(output, dict):
@@ -174,7 +181,8 @@ def _evaluate_case(
 ) -> dict[str, Any]:
     scenario_key = str(case.get("scenario_key") or "").strip()
     runtime = resolve_scenario_runtime(session, scenario_key)
-    raw_messages = case.get("messages") if isinstance(case.get("messages"), list) else []
+    case_messages = case.get("messages")
+    raw_messages: list[Any] = case_messages if isinstance(case_messages, list) else []
     messages = [{"role": "system", "content": template}]
     messages.extend(item for item in raw_messages if isinstance(item, dict))
     result = execute_ai_request(
@@ -339,7 +347,7 @@ def activate_prompt_version(session: Session, prompt_key: str, version_id: str) 
     target = session.query(AiPromptVersion).filter_by(id=version_id, prompt_key=key).first()
     if not target:
         raise AiPromptValidationError("提示词版本不存在。")
-    summary = _json_load(target.eval_summary_json, {})
+    summary: dict[str, Any] = _json_load(target.eval_summary_json, {})
     was_active = target.activated_at is not None
     if not was_active and not bool(summary.get("gate_passed")):
         raise AiPromptValidationError("该候选版本尚未通过评测门禁。")

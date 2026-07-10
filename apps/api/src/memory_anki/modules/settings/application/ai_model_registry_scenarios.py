@@ -209,9 +209,9 @@ def list_model_scenarios(session: Session) -> dict[str, Any]:
             }
         )
     scene_usage_by_model: dict[str, list[str]] = {}
-    for scene in scenes:
-        scene_usage_by_model.setdefault(str(scene["effective_model"]), []).append(
-            str(scene["label"])
+    for serialized_scene in scenes:
+        scene_usage_by_model.setdefault(str(serialized_scene["effective_model"]), []).append(
+            str(serialized_scene["label"])
         )
     categories = [
         {

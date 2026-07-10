@@ -1,5 +1,9 @@
 """apps/api/tests shared fixtures."""
+import os
+import shutil
+import tempfile
 from collections.abc import Callable
+from pathlib import Path
 
 import pytest
 from fastapi import FastAPI
@@ -8,11 +12,27 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from memory_anki.infrastructure.db._tables import Base
+_TEST_APP_HOME = Path(tempfile.mkdtemp(prefix="memory-anki-tests-"))
+os.environ["MEMORY_ANKI_HOME"] = str(_TEST_APP_HOME)
+os.environ["MEMORY_ANKI_WEB_DIST"] = ""
+for _key in (
+    "DASHSCOPE_API_KEY",
+    "ZHIPU_API_KEY",
+    "SILICONFLOW_API_KEY",
+    "DEEPSEEK_API_KEY",
+    "OPENAI_API_KEY",
+):
+    os.environ[_key] = ""
+
+
+def pytest_sessionfinish(session, exitstatus):
+    shutil.rmtree(_TEST_APP_HOME, ignore_errors=True)
 
 
 @pytest.fixture()
 def test_engine():
+    from memory_anki.infrastructure.db._tables import Base
+
     engine = create_engine(
         "sqlite://",
         connect_args={"check_same_thread": False},

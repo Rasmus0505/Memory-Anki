@@ -1,10 +1,14 @@
 from __future__ import annotations
 
 import os
+from collections.abc import Callable
 from pathlib import Path
 
+_load_dotenv: Callable[..., bool] | None
 try:
-    from dotenv import load_dotenv as _load_dotenv
+    from dotenv import load_dotenv as _python_dotenv_load
+
+    _load_dotenv = _python_dotenv_load
 except (ImportError, AttributeError):
     _load_dotenv = None
 

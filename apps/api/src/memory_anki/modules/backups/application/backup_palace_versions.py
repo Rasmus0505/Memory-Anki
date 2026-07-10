@@ -143,6 +143,16 @@ def cleanup_duplicate_palace_versions(session: Session, palace_id: int) -> int:
     return removed
 
 
+def cleanup_and_list_palace_versions(
+    session: Session,
+    palace_id: int,
+) -> tuple[int, list[dict]]:
+    removed = cleanup_duplicate_palace_versions(session, palace_id)
+    if removed:
+        session.commit()
+    return removed, list_palace_versions(session, palace_id)
+
+
 def get_effective_palace_versions(session: Session, palace_id: int) -> list[PalaceVersion]:
     versions = list_versions_query(session, palace_id).all()
     effective: list[PalaceVersion] = []

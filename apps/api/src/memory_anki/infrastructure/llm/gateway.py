@@ -7,7 +7,7 @@ import urllib.request
 from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 from enum import StrEnum
-from typing import Any, Literal, TypeVar
+from typing import Any, Literal, TypeVar, cast
 
 from pydantic import BaseModel, ValidationError
 
@@ -124,11 +124,11 @@ class ProviderAdapter:
         return None
 
     def parse_usage(self, payload: dict[str, Any]) -> AiUsage:
-        usage = payload.get("usage") if isinstance(payload.get("usage"), dict) else {}
-        prompt_details = (
-            usage.get("prompt_tokens_details")
-            if isinstance(usage.get("prompt_tokens_details"), dict)
-            else {}
+        raw_usage = payload.get("usage")
+        usage: dict[str, Any] = raw_usage if isinstance(raw_usage, dict) else {}
+        raw_prompt_details = usage.get("prompt_tokens_details")
+        prompt_details: dict[str, Any] = (
+            raw_prompt_details if isinstance(raw_prompt_details, dict) else {}
         )
         return AiUsage(
             input_tokens=int(usage.get("prompt_tokens") or usage.get("input_tokens") or 0),
@@ -246,6 +246,7 @@ def _request_once(request: AiRequest, *, mode: StructuredOutputMode | None) -> A
     request_url = build_chat_completions_url(request.config.base_url)
     started = time.perf_counter()
     attempts = 0
+    error: OpenAICompatibleError
     for attempt in range(max(0, request.config.max_retries) + 1):
         attempts = attempt + 1
         http_request = urllib.request.Request(
@@ -293,7 +294,7 @@ def _validate_structured_text(text: str, spec: StructuredOutputSpec) -> Any:
         if isinstance(spec.validator, type) and issubclass(spec.validator, BaseModel):
             value: Any = spec.validator.model_validate(payload)
         else:
-            value = spec.validator(payload)
+            value = cast(Callable[[Any], Any], spec.validator)(payload)
         if spec.semantic_validator:
             spec.semantic_validator(value)
         return value

@@ -27,7 +27,7 @@ def _json_dump(value: Any) -> str:
         return "{}"
 
 
-def _json_load(value: str, fallback: Any) -> Any:
+def _json_load[T](value: str, fallback: T) -> T:
     try:
         return json.loads(value or "")
     except (TypeError, ValueError):
@@ -260,12 +260,15 @@ def build_history_summary(session: Session) -> dict[str, Any]:
     )
     stored_attempt_count = session.query(func.count(FreestyleQuizAttempt.id)).scalar() or 0
     stored_explanation_count = session.query(func.count(FreestyleAiExplanation.id)).scalar() or 0
-    ai_log_counts = dict(
+    ai_log_rows = (
         session.query(ExternalAiCallLog.operation, func.count(ExternalAiCallLog.id))
         .filter(ExternalAiCallLog.operation.in_(AI_EXPLANATION_OPERATIONS))
         .group_by(ExternalAiCallLog.operation)
         .all()
     )
+    ai_log_counts: dict[str, int] = {
+        str(operation): int(count or 0) for operation, count in ai_log_rows
+    }
     explain_count = int(ai_log_counts.get("palace_quiz_question_explain", 0))
     feedback_count = int(ai_log_counts.get("palace_quiz_short_answer_feedback", 0))
     return {
