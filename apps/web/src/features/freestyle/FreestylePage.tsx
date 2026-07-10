@@ -6,6 +6,7 @@ import {
   useState,
   type KeyboardEvent,
 } from 'react'
+import { useLocation } from 'react-router-dom'
 import { useAiRunConfigDialog } from '@/features/ai-config/useAiRunConfigDialog'
 import { FreestyleActionRail, FreestyleStatsPill } from '@/features/freestyle/components/FreestyleActionRail'
 import { FreestyleCardScroller } from '@/features/freestyle/components/FreestyleCardScroller'
@@ -25,8 +26,11 @@ import { useGlobalTimerRegistration } from '@/shared/components/session/GlobalTi
 import { cn } from '@/shared/lib/utils'
 import { useRouteResidency } from '@/shared/routing/RouteResidency'
 import { shouldAutoStartOnPageEnter, useTimedSession } from '@/shared/hooks/useTimedSession'
+import { clearPageHistorySnapshot } from '@/shared/page-history/pageHistoryStore'
+import { usePageHistoryAdapter } from '@/shared/page-history/usePageHistoryAdapter'
 
 export default function FreestylePage() {
+  const location = useLocation()
   const { isActive, becameActiveAt, fullPath } = useRouteResidency()
   const [mode, setMode] = useState<FreestyleMode>('today')
   const [config, setConfig] = useState<FreestyleConfig>(() => readFreestyleConfig())
@@ -34,6 +38,7 @@ export default function FreestylePage() {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [todaySettingsOpen, setTodaySettingsOpen] = useState(false)
   const [memoryLookupOpen, setMemoryLookupOpen] = useState(false)
+  const memoryLookupHistoryRef = useRef(false)
   const [explainSheetOpen, setExplainSheetOpen] = useState(false)
   const [historyOpen, setHistoryOpen] = useState(false)
   const [wrongQuestionsOpen, setWrongQuestionsOpen] = useState(false)
@@ -128,6 +133,14 @@ export default function FreestylePage() {
   const currentPalaceId = currentCard?.palace_context?.id ?? null
   queueRef.current = queue
 
+  usePageHistoryAdapter({
+    location,
+    ready: !feedLoading,
+    capture: () => ({
+      completionState: { summaryVisible },
+    }),
+  })
+
   useEffect(() => {
     timer.setSceneActive(isActive, { source: isActive ? 'route_active' : 'route_inactive' })
   }, [isActive, timer])
@@ -200,6 +213,35 @@ export default function FreestylePage() {
     [currentIndex, goToIndex],
   )
 
+
+  const openMemoryLookup = useCallback(() => {
+    if (!currentPalaceId) return
+    if (!memoryLookupHistoryRef.current) {
+      window.history.pushState({ ...window.history.state, memoryAnkiFreestyleLookup: true }, '', window.location.href)
+      memoryLookupHistoryRef.current = true
+    }
+    setMemoryLookupOpen(true)
+  }, [currentPalaceId])
+
+  const closeMemoryLookup = useCallback((open: boolean) => {
+    if (open) { openMemoryLookup(); return }
+    setMemoryLookupOpen(false)
+    if (memoryLookupHistoryRef.current) {
+      memoryLookupHistoryRef.current = false
+      window.history.back()
+    }
+  }, [openMemoryLookup])
+
+  useEffect(() => {
+    const handlePopState = () => {
+      if (!memoryLookupHistoryRef.current) return
+      memoryLookupHistoryRef.current = false
+      setMemoryLookupOpen(false)
+    }
+    window.addEventListener('popstate', handlePopState)
+    return () => window.removeEventListener('popstate', handlePopState)
+  }, [])
+
   const quizTotal = queue.filter(isQuizCard).length
   const actionTotal = queue.filter(isActionCard).length
   const resolvedCount = queue.filter(
@@ -225,6 +267,16 @@ export default function FreestylePage() {
       },
     }))
   }, [setConfigAndPersist, switchMode])
+
+  const handleRestartRound = useCallback(() => {
+    clearPageHistorySnapshot('freestyle')
+    handleReshuffle()
+  }, [handleReshuffle])
+
+  const handleClearProgress = useCallback(async () => {
+    clearPageHistorySnapshot('freestyle')
+    await handleClearLocalProgress()
+  }, [handleClearLocalProgress])
 
   return (
     <TooltipProvider>
@@ -252,7 +304,7 @@ export default function FreestylePage() {
           mode={mode}
           onSettingsOpenChange={setSettingsOpen}
           onTodaySettingsOpenChange={setTodaySettingsOpen}
-          onMemoryLookupOpenChange={setMemoryLookupOpen}
+          onMemoryLookupOpenChange={closeMemoryLookup}
           onExplainSheetOpenChange={setExplainSheetOpen}
           onHistoryOpenChange={setHistoryOpen}
           onWrongQuestionsOpenChange={setWrongQuestionsOpen}
@@ -291,8 +343,9 @@ export default function FreestylePage() {
           onLoadTodayFeed={loadTodayFeed}
           onCopyDiagnostics={handleCopyFeedDiagnostics}
           onSwitchMode={switchMode}
-          onReshuffle={handleReshuffle}
+          onReshuffle={handleRestartRound}
           onOpenSettings={() => setSettingsOpen(true)}
+          onOpenPalace={openMemoryLookup}
           onQuestionStateChange={updateQuestionState}
           onChoiceResolve={handleChoiceResolve}
           onShortAnswerSubmit={(card) => {
@@ -309,13 +362,13 @@ export default function FreestylePage() {
           currentPalaceId={currentPalaceId}
           hasQuizCard={isQuizCard(currentCard)}
           onGoToIndex={goToIndex}
-          onReshuffle={handleReshuffle}
-          onOpenMemoryLookup={() => setMemoryLookupOpen(true)}
+          onReshuffle={handleRestartRound}
+          onOpenMemoryLookup={openMemoryLookup}
           onOpenExplainSheet={() => setExplainSheetOpen(true)}
           onOpenHistory={() => setHistoryOpen(true)}
           onOpenWrongQuestions={() => setWrongQuestionsOpen(true)}
           onOpenSettings={openSettings}
-          onClearLocalProgress={() => void handleClearLocalProgress()}
+          onClearLocalProgress={() => void handleClearProgress()}
         />
 
         <FreestyleStatsPill

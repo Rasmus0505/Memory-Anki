@@ -96,5 +96,8 @@ describe('AppShell residency navigation memory', () => {
     expect((screen.getByLabelText('input:/english') as HTMLInputElement).value).toBe(
       'persisted english state',
     )
+    expect(screen.getAllByRole('link', { name: '记忆宫殿' })[1]?.getAttribute('href')).toBe(
+      '/palaces/30/edit?miniPalaceId=5&miniPalaceMode=edit',
+    )
   })
 })

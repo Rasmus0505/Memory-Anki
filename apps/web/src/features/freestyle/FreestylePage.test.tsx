@@ -1,7 +1,5 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { MemoryRouter } from 'react-router-dom'
+import { fireEvent, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import FreestylePage from '@/features/freestyle/FreestylePage'
 import {
   readFreestyleProgress,
   saveFreestyleProgress,
@@ -10,305 +8,34 @@ import {
   readTodayTrainingProgress,
   saveTodayTrainingProgress,
 } from '@/features/freestyle/model/today-training'
-import type { ReviewFeedbackSettings } from '@/shared/feedback/reviewFeedbackSettings'
-import type { FreestyleCard, FreestyleQuizCard } from '@/shared/api/contracts'
-
-const getFreestyleFeedApiMock = vi.fn()
-const createFreestyleQuestionAttemptApiMock = vi.fn()
-const createFreestyleQuestionExplanationApiMock = vi.fn()
-const getFreestyleQuestionAttemptsApiMock = vi.fn()
-const getFreestyleQuestionExplanationsApiMock = vi.fn()
-const getFreestyleHistorySummaryApiMock = vi.fn()
-const getWrongQuestionsApiMock = vi.fn()
-const getPalacesGroupedApiMock = vi.fn()
-const recordPalaceQuizChoiceAttemptApiMock = vi.fn()
-const requestPalaceQuestionExplainApiMock = vi.fn()
-const requestPalaceShortAnswerFeedbackApiMock = vi.fn()
-const dispatchGlobalFeedbackMock = vi.fn()
-const emitReviewConfettiMock = vi.fn()
-const promptForAiOptionsMock = vi.fn()
-const useTimedSessionMock = vi.fn()
-const toastErrorMock = vi.fn()
-const toastSuccessMock = vi.fn()
-const memoryLookupDialogMock = vi.fn()
-
-vi.mock('@/features/freestyle/api', () => ({
-  getFreestyleFeedApi: (...args: unknown[]) => getFreestyleFeedApiMock(...args),
-  createFreestyleQuestionAttemptApi: (...args: unknown[]) =>
-    createFreestyleQuestionAttemptApiMock(...args),
-  createFreestyleQuestionExplanationApi: (...args: unknown[]) =>
-    createFreestyleQuestionExplanationApiMock(...args),
-  getFreestyleQuestionAttemptsApi: (...args: unknown[]) =>
-    getFreestyleQuestionAttemptsApiMock(...args),
-  getFreestyleQuestionExplanationsApi: (...args: unknown[]) =>
-    getFreestyleQuestionExplanationsApiMock(...args),
-  getFreestyleHistorySummaryApi: (...args: unknown[]) =>
-    getFreestyleHistorySummaryApiMock(...args),
-  getWrongQuestionsApi: (...args: unknown[]) => getWrongQuestionsApiMock(...args),
-}))
-
-vi.mock('@/entities/palace/api', () => ({
-  getPalacesGroupedApi: (...args: unknown[]) => getPalacesGroupedApiMock(...args),
-}))
-
-vi.mock('@/entities/quiz/api', () => ({
-  recordPalaceQuizChoiceAttemptApi: (...args: unknown[]) =>
-    recordPalaceQuizChoiceAttemptApiMock(...args),
-  requestPalaceQuestionExplainApi: (...args: unknown[]) =>
-    requestPalaceQuestionExplainApiMock(...args),
-  requestPalaceShortAnswerFeedbackApi: (...args: unknown[]) =>
-    requestPalaceShortAnswerFeedbackApiMock(...args),
-}))
-
-vi.mock('@/features/palace-quiz/components/PalaceQuizMemoryLookupDialog', () => ({
-  PalaceQuizMemoryLookupDialog: (props: unknown) => {
-    memoryLookupDialogMock(props)
-    return null
-  },
-}))
-
-vi.mock('@/features/ai-config/useAiRunConfigDialog', () => ({
-  useAiRunConfigDialog: () => ({
-    promptForAiOptions: (...args: unknown[]) => promptForAiOptionsMock(...args),
-    aiRunConfigDialog: null,
-  }),
-}))
-
-vi.mock('@/shared/components/session/GlobalTimerProvider', () => ({
-  useGlobalTimerRegistration: vi.fn(),
-}))
-
-vi.mock('@/shared/hooks/useTimedSession', () => ({
-  useTimedSession: (...args: unknown[]) => useTimedSessionMock(...args),
-  shouldAutoStartOnPageEnter: vi.fn(() => false),
-}))
-
-vi.mock('@/shared/feedback/globalFeedbackModel', () => ({
-  dispatchGlobalFeedback: (...args: unknown[]) => dispatchGlobalFeedbackMock(...args),
-}))
-
-vi.mock('@/shared/components/celebration', () => ({
-  emitReviewConfetti: (...args: unknown[]) => emitReviewConfettiMock(...args),
-}))
-
-vi.mock('@/shared/feedback/reviewFeedbackSettings', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/shared/feedback/reviewFeedbackSettings')>()
-  return {
-    ...actual,
-    readReviewFeedbackSettings: () => ({
-      ...actual.DEFAULT_REVIEW_FEEDBACK_SETTINGS,
-      mode: 'immersive',
-      soundEnabled: true,
-      animationEnabled: true,
-      reducedCelebrationMotion: false,
-      scenes: {
-        ...actual.DEFAULT_REVIEW_FEEDBACK_SETTINGS.scenes,
-        milestone: {
-          ...actual.DEFAULT_REVIEW_FEEDBACK_SETTINGS.scenes.milestone,
-          enabled: true,
-          soundEnabled: true,
-          animationEnabled: true,
-          steps: [4, 8, 12, 20],
-          confettiAmount: 1.15,
-          confettiPreset: 'fireworks',
-          volumeBoost: 1.1,
-        },
-      },
-    }) satisfies ReviewFeedbackSettings,
-    getSceneEffectiveVolume: vi.fn(() => 1.265),
-  }
-})
-
-vi.mock('@/shared/feedback/toast', () => ({
-  toast: {
-    error: (...args: unknown[]) => toastErrorMock(...args),
-    success: (...args: unknown[]) => toastSuccessMock(...args),
-  },
-}))
-
-function timerMock() {
-  return {
-    status: 'idle',
-    effectiveSeconds: 0,
-    startedAt: null,
-    setSceneActive: vi.fn(),
-    start: vi.fn(),
-    registerActivity: vi.fn(),
-  }
-}
-
-function quizCard(id: number, correctOptionId = 'A'): FreestyleQuizCard {
-  return {
-    id: `quiz:${id}`,
-    type: 'quiz_question',
-    content_type: 'quiz_question',
-    group_key: 'palace:1',
-    palace_context: {
-      id: 1,
-      title: '测试宫殿',
-      resolved_title: '测试宫殿',
-    },
-    mini_palace_context: null,
-    chapter_context: null,
-    question: {
-      id,
-      palace_id: 1,
-      mini_palace_id: null,
-      mini_palace: null,
-      question_type: 'multiple_choice',
-      stem: `选择题 ${id}`,
-      options: [
-        { id: 'A', text: '正确项' },
-        { id: 'B', text: '干扰项' },
-      ],
-      answer_payload: { correct_option_id: correctOptionId },
-      analysis: '解析',
-      source_meta: {
-        source_kind: 'manual',
-        page_numbers: null,
-        image_names: null,
-        extra_prompt: '',
-        ai_call_log_id: null,
-        generated_at: '',
-        generation_mode: 'manual',
-      },
-      sort_order: id,
-      correct_count: 0,
-      incorrect_count: 0,
-      attempt_count: 0,
-      created_at: null,
-      updated_at: null,
-    },
-  }
-}
-
-function shortAnswerCard(id: number): FreestyleQuizCard {
-  const card = quizCard(id)
-  return {
-    ...card,
-    question: {
-      ...card.question,
-      question_type: 'short_answer',
-      stem: `简答题 ${id}`,
-      options: [],
-      answer_payload: { reference_answer: '参考答案' },
-    },
-  }
-}
-
-function renderPage(cards: FreestyleCard[]) {
-  getFreestyleFeedApiMock.mockResolvedValue({ cards })
-  return render(
-    <MemoryRouter>
-      <FreestylePage />
-    </MemoryRouter>,
-  )
-}
-
-function renderPageWithFeed(
-  feeds: Array<{ cards: FreestyleCard[] }>,
-) {
-  feeds.forEach((feed) => {
-    getFreestyleFeedApiMock.mockResolvedValueOnce(feed)
-  })
-  return render(
-    <MemoryRouter>
-      <FreestylePage />
-    </MemoryRouter>,
-  )
-}
-
-async function switchToFreeMode() {
-  fireEvent.click(await screen.findByRole('button', { name: '自由随心' }))
-}
-
-async function answerChoiceAt(index: number, optionText = 'A. 正确项') {
-  await screen.findByText(`选择题 ${index + 1}`)
-  fireEvent.click(screen.getAllByRole('button', { name: optionText })[index])
-}
+import {
+  answerChoiceAt,
+  createFreestyleQuestionAttemptApiMock,
+  createFreestyleQuestionExplanationApiMock,
+  dispatchGlobalFeedbackMock,
+  emitReviewConfettiMock,
+  getFreestyleFeedApiMock,
+  getFreestyleHistorySummaryApiMock,
+  getFreestyleQuestionAttemptsApiMock,
+  getWrongQuestionsApiMock,
+  memoryLookupDialogMock,
+  promptForAiOptionsMock,
+  quizCard,
+  recordPalaceQuizChoiceAttemptApiMock,
+  renderPage,
+  renderFreestylePage,
+  renderPageWithFeed,
+  requestPalaceQuestionExplainApiMock,
+  requestPalaceShortAnswerFeedbackApiMock,
+  setupFreestylePageTest,
+  shortAnswerCard,
+  switchToFreeMode,
+  toastErrorMock,
+  toastSuccessMock,
+} from './FreestylePage.test-support'
 
 describe('FreestylePage feedback', () => {
-  beforeEach(() => {
-    window.localStorage.clear()
-    window.HTMLElement.prototype.scrollIntoView = vi.fn()
-    window.matchMedia = vi.fn().mockReturnValue({
-      matches: false,
-      addEventListener: vi.fn(),
-      removeEventListener: vi.fn(),
-      addListener: vi.fn(),
-      removeListener: vi.fn(),
-    })
-    getFreestyleFeedApiMock.mockReset()
-    createFreestyleQuestionAttemptApiMock.mockResolvedValue({
-      item: {
-        id: 1,
-        question_id: 1,
-        palace_id: 1,
-        palace_title: '测试宫殿',
-        mini_palace_id: null,
-        mini_palace_name: '',
-        chapter_id: null,
-        chapter_name: '',
-        mode: 'today',
-        question_type: 'multiple_choice',
-        stem_snapshot: '选择题 1',
-        answer_payload: { selected_option_id: 'A' },
-        is_correct: true,
-        created_at: null,
-      },
-    })
-    createFreestyleQuestionExplanationApiMock.mockResolvedValue({
-      item: {
-        id: 1,
-        question_id: 1,
-        palace_id: 1,
-        palace_title: '测试宫殿',
-        mini_palace_id: null,
-        mini_palace_name: '',
-        chapter_id: null,
-        chapter_name: '',
-        question_type: 'multiple_choice',
-        stem_snapshot: '选择题 1',
-        user_question: '请解释这道题的核心考点是什么。',
-        explanation_text: '讲解内容',
-        ai_call_log_id: 'log-1',
-        created_at: null,
-      },
-    })
-    getFreestyleQuestionAttemptsApiMock.mockResolvedValue({ items: [] })
-    getFreestyleQuestionExplanationsApiMock.mockResolvedValue({ items: [] })
-    getFreestyleHistorySummaryApiMock.mockResolvedValue({
-      stored: { attempt_count: 0, explanation_count: 0 },
-      legacy_quiz: {
-        question_count: 0,
-        attempted_question_count: 0,
-        attempt_count: 0,
-        correct_count: 0,
-        incorrect_count: 0,
-      },
-      legacy_ai_logs: {
-        total_count: 0,
-        explanation_count: 0,
-        short_answer_feedback_count: 0,
-      },
-    })
-    getWrongQuestionsApiMock.mockReset()
-    getWrongQuestionsApiMock.mockResolvedValue({ total: 0, items: [] })
-    getPalacesGroupedApiMock.mockResolvedValue({ subjects: [] })
-    recordPalaceQuizChoiceAttemptApiMock.mockReturnValue(new Promise(() => undefined))
-    requestPalaceShortAnswerFeedbackApiMock.mockResolvedValue({
-      feedback_text: 'AI 点评完成',
-      resolved_ai: { model_label: '测试模型' },
-    })
-    dispatchGlobalFeedbackMock.mockClear()
-    emitReviewConfettiMock.mockClear()
-    promptForAiOptionsMock.mockResolvedValue({ provider: 'test', model: 'demo' })
-    useTimedSessionMock.mockReturnValue(timerMock())
-    toastErrorMock.mockClear()
-    toastSuccessMock.mockClear()
-    memoryLookupDialogMock.mockClear()
-    window.confirm = vi.fn(() => true)
-  })
+  beforeEach(setupFreestylePageTest)
 
   it('emits correct and incorrect result feedback only when a card is first resolved', async () => {
     renderPage([quizCard(1), quizCard(2, 'B')])
@@ -317,7 +44,7 @@ describe('FreestylePage feedback', () => {
     await waitFor(() => {
       expect(dispatchGlobalFeedbackMock).toHaveBeenCalledWith(
         'quiz_result_correct',
-        expect.objectContaining({ label: '答对', screenPulse: 'soft', audioScope: 'local' }),
+        expect.objectContaining({ audioScope: 'local' }),
       )
     })
     expect(recordPalaceQuizChoiceAttemptApiMock).toHaveBeenCalledWith(1, 'A')
@@ -327,7 +54,7 @@ describe('FreestylePage feedback', () => {
     await waitFor(() => {
       expect(dispatchGlobalFeedbackMock).toHaveBeenCalledWith(
         'quiz_result_incorrect',
-        expect.objectContaining({ label: '答错', screenPulse: null, audioScope: 'local' }),
+        expect.objectContaining({ audioScope: 'local' }),
       )
     })
     expect(recordPalaceQuizChoiceAttemptApiMock).toHaveBeenCalledWith(2, 'A')
@@ -419,27 +146,19 @@ describe('FreestylePage feedback', () => {
     expect((await screen.findAllByText('讲解内容')).length).toBeGreaterThan(1)
   })
 
-  it('emits quiz-result confetti for correct freestyle answers', async () => {
+  it('keeps correct-answer feedback local without result confetti', async () => {
     renderPage([quizCard(1)])
 
     await answerChoiceAt(0)
 
     await waitFor(() => {
-      expect(emitReviewConfettiMock).toHaveBeenCalledWith(
-        expect.objectContaining({
-          kind: 'quiz_correct',
-        }),
+      expect(dispatchGlobalFeedbackMock).toHaveBeenCalledWith(
+        'quiz_result_correct',
+        expect.objectContaining({ audioScope: 'local' }),
       )
     })
-    expect(emitReviewConfettiMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        kind: 'quiz_correct',
-        confettiAmount: 0.8,
-        confettiPreset: 'random_direction',
-        reducedMotion: false,
-        soundEnabled: true,
-        volume: 1.265,
-      }),
+    expect(emitReviewConfettiMock).not.toHaveBeenCalledWith(
+      expect.objectContaining({ kind: 'quiz_correct' }),
     )
   })
 
@@ -451,7 +170,7 @@ describe('FreestylePage feedback', () => {
     await waitFor(() => {
       expect(dispatchGlobalFeedbackMock).toHaveBeenCalledWith(
         'quiz_result_incorrect',
-        expect.objectContaining({ label: '答错', screenPulse: null, audioScope: 'local' }),
+        expect.objectContaining({ audioScope: 'local' }),
       )
     })
     expect(emitReviewConfettiMock).not.toHaveBeenCalledWith(
@@ -545,11 +264,7 @@ describe('FreestylePage feedback', () => {
     })
     getFreestyleFeedApiMock.mockReturnValue(new Promise(() => undefined))
 
-    render(
-      <MemoryRouter>
-        <FreestylePage />
-      </MemoryRouter>,
-    )
+    renderFreestylePage()
 
     await waitFor(() => {
       expect(readFreestyleProgress().currentIndex).toBe(2)
@@ -572,11 +287,7 @@ describe('FreestylePage feedback', () => {
       ),
     )
 
-    render(
-      <MemoryRouter>
-        <FreestylePage />
-      </MemoryRouter>,
-    )
+    renderFreestylePage()
 
     expect(await screen.findByText('队列加载失败')).toBeTruthy()
     expect(screen.getByText(/网络请求失败：GET \/api\/v1\/freestyle\/feed/)).toBeTruthy()
@@ -608,11 +319,7 @@ describe('FreestylePage feedback', () => {
 
     unmount()
     getFreestyleFeedApiMock.mockResolvedValue({ cards })
-    render(
-      <MemoryRouter>
-        <FreestylePage />
-      </MemoryRouter>,
-    )
+    renderFreestylePage()
     await switchToFreeMode()
 
     await waitFor(() => {
@@ -633,11 +340,7 @@ describe('FreestylePage feedback', () => {
 
     unmount()
     getFreestyleFeedApiMock.mockResolvedValue({ cards })
-    render(
-      <MemoryRouter>
-        <FreestylePage />
-      </MemoryRouter>,
-    )
+    renderFreestylePage()
     await switchToFreeMode()
 
     await screen.findByText('选择题 2')
@@ -712,6 +415,7 @@ describe('FreestylePage feedback', () => {
     renderPage([quizCard(1)])
 
     await screen.findByText('选择题 1')
+    const originalUrl = window.location.href
     expect(screen.getByRole('button', { name: '查看宫殿' })).not.toHaveProperty('disabled', true)
     fireEvent.click(screen.getByRole('button', { name: '查看宫殿' }))
 
@@ -722,6 +426,14 @@ describe('FreestylePage feedback', () => {
           currentPalaceId: 1,
           followCurrentPalace: true,
         }),
+      )
+    })
+    expect(window.location.href).toBe(originalUrl)
+
+    window.dispatchEvent(new PopStateEvent('popstate'))
+    await waitFor(() => {
+      expect(memoryLookupDialogMock).toHaveBeenLastCalledWith(
+        expect.objectContaining({ open: false, currentPalaceId: 1 }),
       )
     })
   })

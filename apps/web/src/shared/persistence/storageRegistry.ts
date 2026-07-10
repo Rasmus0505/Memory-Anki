@@ -138,4 +138,32 @@ export const REGISTERED_STORAGE_KEYS = defineStorageRegistry([
     owner: 'features/dashboard',
     purpose: 'Legacy dashboard duration filter before backend preference migration.',
   },
+  {
+    id: 'pageHistory.device',
+    key: 'memory-anki.page-history.device.v1',
+    area: 'localStorage',
+    owner: 'shared/page-history',
+    purpose: 'Versioned seven-day device page history with LRU cleanup.',
+  },
+  {
+    id: 'pageHistory.session',
+    key: 'memory-anki.page-history.session.v1',
+    area: 'sessionStorage',
+    owner: 'shared/page-history',
+    purpose: 'Per-tab navigation entry snapshots keyed by router location key.',
+  },
+  {
+    id: 'pageHistory.workspace',
+    key: 'memory-anki.page-history.workspace-id',
+    area: 'sessionStorage',
+    owner: 'shared/page-history',
+    purpose: 'Independent page-history workspace identity for each browser tab.',
+  },
+  {
+    id: 'pageHistory.launchRestored',
+    key: 'memory-anki.page-history.launch-restored',
+    area: 'sessionStorage',
+    owner: 'shared/page-history',
+    purpose: 'Prevents repeated launch restoration redirects in one tab.',
+  },
 ] as const)

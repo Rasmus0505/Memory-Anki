@@ -31,6 +31,12 @@ import { QuizGenerationBubbleLayer } from '@/shared/background-tasks/QuizGenerat
 import { cn } from '@/shared/lib/utils'
 import { GlobalCommandPalette } from '@/app/shell/GlobalCommandPalette'
 import { navSections, type NavSectionDefinition, type NavSectionKey } from '@/app/shell/navSections'
+import {
+  readPageHistorySectionUrl,
+  recordPageHistorySectionVisit,
+  resetPageHistoryStoreForTest,
+} from '@/shared/page-history/pageHistoryStore'
+import { resolvePageHistorySection } from '@/shared/page-history/pageHistoryRoute'
 
 const navSectionLastUrls: Partial<Record<NavSectionKey, string>> = {}
 const warmedNavSections = new Set<NavSectionKey>()
@@ -52,11 +58,11 @@ function findNavSection(pathname: string) {
 
 function resolveNavSectionTarget(section: NavSectionDefinition) {
   if (!section.rememberLastVisited) return section.to
-  return navSectionLastUrls[section.key] ?? section.to
+  return navSectionLastUrls[section.key] ?? readPageHistorySectionUrl(section.key) ?? section.to
 }
 
 function resolveMobileNavSectionTarget(section: NavSectionDefinition) {
-  return section.to
+  return resolveNavSectionTarget(section)
 }
 
 export function resetNavSectionHistoryForTest() {
@@ -64,6 +70,7 @@ export function resetNavSectionHistoryForTest() {
     delete navSectionLastUrls[key]
   }
   warmedNavSections.clear()
+  if (typeof window !== 'undefined') resetPageHistoryStoreForTest()
 }
 
 function warmNavSection(section: NavSectionDefinition) {
@@ -198,7 +205,9 @@ function SidebarContent({ runtimeInfo }: { runtimeInfo: RuntimeInfo | null }) {
   useEffect(() => {
     const matchedSection = findNavSection(pathname)
     if (!matchedSection?.rememberLastVisited) return
-    navSectionLastUrls[matchedSection.key] = `${pathname}${search}${hash}`
+    const fullPath = `${pathname}${search}${hash}`
+    navSectionLastUrls[matchedSection.key] = fullPath
+    recordPageHistorySectionVisit(resolvePageHistorySection(pathname), fullPath)
   }, [hash, pathname, search])
 
   useEffect(() => {
@@ -274,7 +283,9 @@ function MobileBottomNav() {
   useEffect(() => {
     const matchedSection = findNavSection(pathname)
     if (!matchedSection?.rememberLastVisited) return
-    navSectionLastUrls[matchedSection.key] = `${pathname}${search}${hash}`
+    const fullPath = `${pathname}${search}${hash}`
+    navSectionLastUrls[matchedSection.key] = fullPath
+    recordPageHistorySectionVisit(resolvePageHistorySection(pathname), fullPath)
   }, [hash, pathname, search])
 
   return (

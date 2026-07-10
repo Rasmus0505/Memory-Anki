@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, type Location } from 'react-router-dom'
 import { RouteResidencyProvider } from '@/shared/routing/RouteResidency'
 import { AppRoutes } from '@/app/router/appRoutes'
+import { usePageHistoryAdapter } from '@/shared/page-history/usePageHistoryAdapter'
 
 const MAX_RESIDENT_ROUTE_COUNT = 4
 
@@ -9,6 +10,11 @@ interface ResidentRoute {
   location: Location
   becameActiveAt: number
   lastActiveOrder: number
+}
+
+function ResidentRouteHistory({ location }: { location: Location }) {
+  usePageHistoryAdapter({ location })
+  return <AppRoutes location={location} />
 }
 
 function pruneResidentRoutes(
@@ -86,6 +92,7 @@ export function AppRouter() {
         return (
           <div
             key={pathname}
+            data-page-history-route={pathname}
             aria-hidden={!isActive}
             inert={!isActive}
             style={{ display: isActive ? 'block' : 'none' }}
@@ -98,7 +105,7 @@ export function AppRouter() {
                 becameActiveAt: residentRoute.becameActiveAt,
               }}
             >
-              <AppRoutes location={residentRoute.location} />
+              <ResidentRouteHistory location={residentRoute.location} />
             </RouteResidencyProvider>
           </div>
         )

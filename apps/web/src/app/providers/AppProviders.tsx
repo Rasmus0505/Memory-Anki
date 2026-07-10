@@ -11,6 +11,7 @@ import { useMutationQueueAutoSync } from '@/shared/persistence/useMutationQueue'
 import { GlobalTimerProvider } from '@/shared/components/session/GlobalTimerProvider'
 import { RouteProgressBar } from '@/shared/components/route-progress/RouteProgressBar'
 import { NativeDialogProvider } from '@/shared/components/ui/native-dialog'
+import { PageHistoryCoordinator } from '@/shared/page-history/PageHistoryCoordinator'
 
 const queryClient = createAppQueryClient()
 
@@ -53,18 +54,20 @@ export function AppProviders({ children }: PropsWithChildren) {
   return (
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
-        <RouteProgressBar />
-        <GlobalErrorBoundary>
-          <GlobalFeedbackProvider>
-            <GlobalTimerProvider>
-              <QuizLauncherProvider>
-                {children}
-                <NativeDialogProvider />
-                <Toaster position="bottom-right" richColors />
-              </QuizLauncherProvider>
-            </GlobalTimerProvider>
-          </GlobalFeedbackProvider>
-        </GlobalErrorBoundary>
+        <PageHistoryCoordinator>
+          <RouteProgressBar />
+          <GlobalErrorBoundary>
+            <GlobalFeedbackProvider>
+              <GlobalTimerProvider>
+                <QuizLauncherProvider>
+                  {children}
+                  <NativeDialogProvider />
+                  <Toaster position="bottom-right" richColors />
+                </QuizLauncherProvider>
+              </GlobalTimerProvider>
+            </GlobalFeedbackProvider>
+          </GlobalErrorBoundary>
+        </PageHistoryCoordinator>
       </BrowserRouter>
     </QueryClientProvider>
   )

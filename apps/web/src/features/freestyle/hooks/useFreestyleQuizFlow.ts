@@ -120,11 +120,8 @@ export function useFreestyleQuizFlow({
     shortAnswerEntrypointKey: 'freestyle-short-answer-feedback',
     resultFeedbackMode: 'external',
     emitFeedback: dispatchGlobalFeedback,
-    onChoiceStart: ({ correct }) => {
+    onChoiceStart: () => {
       timer.registerActivity('practice_interaction', { source: 'freestyle_choice' })
-      if (correct) {
-        toast.success('回答正确')
-      }
     },
   })
 
@@ -168,7 +165,6 @@ export function useFreestyleQuizFlow({
     previousResolvedQuestionIdsRef.current = new Set(nextProgress.resolvedQuestionIds)
     emittedMilestonesRef.current = new Set()
     setProgress(nextProgress)
-    toast.success('已清空随心进度')
   }, [mode])
 
   useEffect(() => {
@@ -209,6 +205,7 @@ export function useFreestyleQuizFlow({
     emittedMilestonesRef.current.add(currentStreak)
     if (
       feedbackSettings.mode !== 'immersive' ||
+      feedbackSettings.milestoneEffectsEnabled === false ||
       !feedbackSettings.scenes.milestone.enabled
     ) {
       return

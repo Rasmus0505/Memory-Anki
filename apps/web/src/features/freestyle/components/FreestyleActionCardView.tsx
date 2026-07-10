@@ -1,11 +1,16 @@
 import { ExternalLink } from 'lucide-react'
-import { Link } from 'react-router-dom'
 import { CONTENT_TYPE_LABELS } from '@/features/freestyle/model/freestyle-labels'
 import type { FreestyleActionCard } from '@/shared/api/contracts'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
 
-export function FreestyleActionCardView({ card }: { card: FreestyleActionCard }) {
+export function FreestyleActionCardView({
+  card,
+  onOpenPalace,
+}: {
+  card: FreestyleActionCard
+  onOpenPalace?: () => void
+}) {
   return (
     <div className="mx-auto flex min-h-[min(720px,calc(100vh-150px))] w-full max-w-[calc(100vw-3rem)] flex-col justify-center px-0 py-16 sm:max-w-3xl sm:px-4">
       <div className="rounded-lg border border-white/12 bg-zinc-900/88 p-5 text-zinc-50 shadow-2xl backdrop-blur sm:p-7">
@@ -26,12 +31,19 @@ export function FreestyleActionCardView({ card }: { card: FreestyleActionCard })
             {card.palace_context.resolved_title || card.palace_context.title}
           </div>
         ) : null}
-        <Button asChild className="mt-6 w-full sm:w-auto">
-          <Link to={card.href}>
+        {card.palace_context && onOpenPalace ? (
+          <Button type="button" className="mt-6 w-full sm:w-auto" onClick={onOpenPalace}>
             <ExternalLink className="size-4" />
-            继续
-          </Link>
-        </Button>
+            查看宫殿
+          </Button>
+        ) : (
+          <Button asChild className="mt-6 w-full sm:w-auto">
+            <a href={card.href}>
+              <ExternalLink className="size-4" />
+              继续
+            </a>
+          </Button>
+        )}
       </div>
     </div>
   )

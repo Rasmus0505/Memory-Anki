@@ -11,6 +11,7 @@ import PalaceFocusPracticePage from '@/app/router/PalaceFocusPracticePage'
 import SegmentPracticePage from '@/app/router/SegmentPracticePage'
 import MiniPalacePracticePage from '@/app/router/MiniPalacePracticePage'
 import ReviewOverviewPage from '@/app/router/review/ReviewOverview'
+import { readLastPageHistoryWorkspacePath } from '@/shared/page-history/pageHistoryStore'
 
 export const preloadPalaceViewPage = () => import('@/app/router/PalaceViewPage')
 export const preloadFreestylePage = () => import('@/features/freestyle/FreestylePage')
@@ -143,13 +144,17 @@ function RouteNotFound({ pathname }: { pathname: string }) {
   return <Navigate to={target} replace />
 }
 
+function StartupRedirect() {
+  return <Navigate to={readLastPageHistoryWorkspacePath() || '/freestyle'} replace />
+}
+
 export function AppRoutes({ location }: { location?: Location }) {
   const fallbackPathname = location?.pathname || '/'
   return (
     <Suspense fallback={<RouteFallback />}>
       <RouteErrorBoundary resetKey={fallbackPathname}>
         <Routes location={location}>
-          <Route path="/" element={<Navigate to="/freestyle" replace />} />
+          <Route path="/" element={<StartupRedirect />} />
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/freestyle" element={<FreestylePage />} />
           <Route path="/palaces" element={<PalaceShelfPage />} />

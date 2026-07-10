@@ -41,6 +41,7 @@ export function FreestyleCardScroller({
   onSwitchMode,
   onReshuffle,
   onOpenSettings,
+  onOpenPalace,
   onQuestionStateChange,
   onChoiceResolve,
   onShortAnswerSubmit,
@@ -64,6 +65,7 @@ export function FreestyleCardScroller({
   onSwitchMode: (mode: FreestyleMode) => void
   onReshuffle: () => void
   onOpenSettings: () => void
+  onOpenPalace: () => void
   onQuestionStateChange: (
     questionId: number,
     updater: (current: QuizRuntimeState) => QuizRuntimeState,
@@ -75,6 +77,7 @@ export function FreestyleCardScroller({
   return (
     <div
       ref={scrollRef}
+      data-page-history-scroll-key="freestyle-cards"
       className={cn(
         'snap-y snap-mandatory overflow-y-auto overflow-x-hidden overscroll-contain scroll-smooth [-webkit-overflow-scrolling:touch] will-change-scroll',
         'h-[calc(100dvh-5.5rem-env(safe-area-inset-bottom,0px))] lg:h-[calc(100vh-88px)]',
@@ -121,7 +124,7 @@ export function FreestyleCardScroller({
                   onRequestShortAnswerFeedback={() => onRequestShortAnswerFeedback(card)}
                 />
               ) : (
-                <FreestyleActionCardView card={card} />
+                <FreestyleActionCardView card={card} onOpenPalace={onOpenPalace} />
               )}
             </section>
           ))}
