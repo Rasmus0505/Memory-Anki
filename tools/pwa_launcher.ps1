@@ -44,7 +44,7 @@ function Get-LocalDeviceName {
 
 function Resolve-PythonRuntime {
   try {
-    return Resolve-MemoryAnkiPythonRuntime -ProbeCode "from pydantic_settings import BaseSettings; from dotenv import load_dotenv"
+    return Resolve-MemoryAnkiPythonRuntime -ProbeCode "import sys"
   } catch {
     throw "No usable Python runtime was found. Install dependencies with: python -m pip install -r apps\api\requirements.txt"
   }
@@ -61,8 +61,15 @@ function Invoke-PwaServer {
   Write-StartupLog "Running on $(Get-LocalDeviceName): $display"
 
   if ($Hidden) {
+    $env:MEMORY_ANKI_VISIBLE_BACKEND = "0"
+  } else {
+    $env:MEMORY_ANKI_VISIBLE_BACKEND = "1"
+  }
+
+  if ($Hidden) {
     & $python.File @invokeArgs 2>&1 | ForEach-Object {
       Add-Content -Path $startupLog -Value $_
+      Write-Output $_
     }
     $exitCode = if ($LASTEXITCODE -ne $null) { $LASTEXITCODE } else { 0 }
   } else {
@@ -77,12 +84,13 @@ function Invoke-PwaServer {
 function Install-AutostartShortcut {
   $startupDir = [Environment]::GetFolderPath("Startup")
   $shortcutPath = Join-Path $startupDir "Memory Anki PWA.lnk"
-  $scriptPath = Join-Path $repoRoot "tools\pwa_launcher.ps1"
+  $launcherPath = Join-Path $repoRoot "tools\pwa_launcher.ps1"
+  $diagnosticRunner = Join-Path $repoRoot "tools\run_with_diagnostics.ps1"
 
   $shell = New-Object -ComObject WScript.Shell
   $shortcut = $shell.CreateShortcut($shortcutPath)
   $shortcut.TargetPath = "powershell.exe"
-  $shortcut.Arguments = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$scriptPath`" Start -Hidden -ConfigureServe"
+  $shortcut.Arguments = "-NoProfile -ExecutionPolicy Bypass -File `"$diagnosticRunner`" -Name pwa-autostart -ScriptPath `"$launcherPath`" Start -ConfigureServe"
   $shortcut.WorkingDirectory = $repoRoot
   $shortcut.IconLocation = Join-Path $repoRoot "apps\web\public\favicon.svg"
   $shortcut.Description = "Start Memory Anki PWA server"
@@ -131,7 +139,7 @@ try {
     }
   }
 } catch {
-  Write-StartupLog "ERROR: $($_.Exception.Message)"
-  Write-Error $_.Exception.Message
+  Write-StartupLog "ERROR: $($_ | Out-String)"
+  Write-Error ($_ | Out-String)
   exit 1
 }

@@ -46,6 +46,47 @@ function Add-MemoryAnkiPythonInstallCandidates {
     }
 }
 
+function Get-MemoryAnkiPythonCachePath {
+  $localAppData = $env:LOCALAPPDATA
+  if (-not $localAppData) {
+    $localAppData = Join-Path $env:USERPROFILE "AppData\Local"
+  }
+  $cacheRoot = Join-Path $localAppData "MemoryAnki"
+  return Join-Path $cacheRoot "python-runtime.json"
+}
+
+function Read-MemoryAnkiPythonCache {
+  $cachePath = Get-MemoryAnkiPythonCachePath
+  if (-not (Test-Path -LiteralPath $cachePath)) {
+    return $null
+  }
+  try {
+    $cached = Get-Content -Raw -Encoding UTF8 -LiteralPath $cachePath | ConvertFrom-Json
+    $args = @()
+    if ($cached.args) {
+      $args = @($cached.args | ForEach-Object { [string]$_ })
+    }
+    return New-MemoryAnkiPythonCandidate -File ([string]$cached.file) -Args $args
+  } catch {
+    return $null
+  }
+}
+
+function Write-MemoryAnkiPythonCache {
+  param($Candidate)
+  try {
+    $cachePath = Get-MemoryAnkiPythonCachePath
+    $cacheDir = Split-Path -Parent $cachePath
+    New-Item -ItemType Directory -Force -Path $cacheDir | Out-Null
+    [pscustomobject]@{
+      file = $Candidate.File
+      args = @($Candidate.Args)
+    } | ConvertTo-Json -Compress | Set-Content -Encoding UTF8 -LiteralPath $cachePath
+  } catch {
+    # Runtime caching is an optimization; startup must still work if it cannot be written.
+  }
+}
+
 function Resolve-MemoryAnkiPythonRuntime {
   param(
     [string]$ProbeCode = "import sys"
@@ -55,6 +96,11 @@ function Resolve-MemoryAnkiPythonRuntime {
 
   if ($env:MEMORY_ANKI_PYTHON) {
     [void]$candidates.Add((New-MemoryAnkiPythonCandidate -File $env:MEMORY_ANKI_PYTHON))
+  } else {
+    $cached = Read-MemoryAnkiPythonCache
+    if ($cached) {
+      [void]$candidates.Add($cached)
+    }
   }
 
   Add-MemoryAnkiPythonInstallCandidates -Candidates $candidates -Root (Join-Path $env:LocalAppData "Programs\Python")
@@ -72,6 +118,9 @@ function Resolve-MemoryAnkiPythonRuntime {
 
   foreach ($candidate in $candidates) {
     if (Test-MemoryAnkiPythonCandidate -Candidate $candidate -ProbeCode $ProbeCode) {
+      if (-not $env:MEMORY_ANKI_PYTHON) {
+        Write-MemoryAnkiPythonCache -Candidate $candidate
+      }
       return $candidate
     }
   }

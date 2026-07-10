@@ -1,0 +1,1 @@
+declare const __MEMORY_ANKI_RELEASE_ID__: string

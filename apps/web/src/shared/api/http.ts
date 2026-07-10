@@ -96,6 +96,27 @@ function isLowInformationNetworkError(message: string) {
   return LOW_INFORMATION_NETWORK_ERRORS.some((pattern) => normalized.includes(pattern))
 }
 
+function isLocalDesktopRuntime(currentUrl: string, userAgent: string) {
+  if (/electron\//i.test(userAgent)) return true
+  try {
+    const hostname = new URL(currentUrl).hostname
+    return hostname === '127.0.0.1' || hostname === 'localhost' || hostname === '::1'
+  } catch {
+    return false
+  }
+}
+
+function formatCurrentUrlForMessage(currentUrl: string, userAgent: string) {
+  if (!currentUrl) return ''
+  if (!isLocalDesktopRuntime(currentUrl, userAgent)) return currentUrl
+  try {
+    const url = new URL(currentUrl)
+    return `本机应用${url.pathname}${url.search}${url.hash}`
+  } catch {
+    return '本机应用'
+  }
+}
+
 function buildNetworkFailureMessage(input: {
   method: string
   requestUrl: string
@@ -103,18 +124,26 @@ function buildNetworkFailureMessage(input: {
 }) {
   const rawMessage = input.error instanceof Error ? input.error.message : String(input.error || '')
   const runtime = readBrowserRuntimeSummary()
+  const displayCurrentUrl = formatCurrentUrlForMessage(runtime.currentUrl, runtime.userAgent)
   const lines = [
     `网络请求失败：${input.method.toUpperCase()} ${input.requestUrl}`,
     rawMessage ? `浏览器错误：${rawMessage}` : null,
-    runtime.currentUrl ? `当前页面：${runtime.currentUrl}` : null,
+    displayCurrentUrl ? `当前页面：${displayCurrentUrl}` : null,
     `在线状态：${runtime.onlineStatus}`,
   ].filter(Boolean)
 
   if (isLowInformationNetworkError(rawMessage)) {
-    lines.push(
-      '这通常表示手机端没有真正连到 PWA 后端，或 Service Worker / Tailscale Serve 仍在使用旧连接。',
-      '请依次检查：电脑端 start-pwa.bat 是否在运行；手机 Tailscale 是否已连接；Tailscale HTTPS 地址是否仍转发到 127.0.0.1:8012；刚更新后请访问 /pwa-reset.html 清理旧缓存。',
-    )
+    if (isLocalDesktopRuntime(runtime.currentUrl, runtime.userAgent)) {
+      lines.push(
+        '这通常表示本机共享服务尚未启动、正在重启或暂时无法连接。',
+        '请重新运行 start-desktop.bat；如果只使用手机 PWA，也可以运行 start-pwa.bat。桌面端与手机端会共用同一个本机服务。',
+      )
+    } else {
+      lines.push(
+        '这通常表示手机端没有真正连到 PWA 后端，或 Service Worker / Tailscale Serve 仍在使用旧连接。',
+        '请依次检查：电脑端共享服务是否在运行；手机 Tailscale 是否已连接；Tailscale HTTPS 转发是否仍有效；刚更新后请访问 /pwa-reset.html 清理旧缓存。',
+      )
+    }
   }
 
   if (runtime.userAgent) {

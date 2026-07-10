@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import datetime as dt
+import os
 import re
 import shutil
 from pathlib import Path
 
-ROOT = Path(r"D:\BaiduSyncdisk\Memory Anki\docx\Memory Anki")
+REPO_ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(os.environ.get("MEMORY_ANKI_DOCS_ROOT", REPO_ROOT / "docx" / "Memory Anki"))
 
 OLD_ROOTS = [
     "刷抖音式学习",

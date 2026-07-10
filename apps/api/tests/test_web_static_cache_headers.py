@@ -1,3 +1,6 @@
+import os
+import subprocess
+import sys
 import tempfile
 from pathlib import Path
 
@@ -6,6 +9,37 @@ from fastapi.responses import JSONResponse, PlainTextResponse
 from fastapi.testclient import TestClient
 
 from memory_anki.app.main import SinglePageAppStaticFiles, install_web_cache_headers
+
+
+def test_app_import_prepares_static_attachment_directory(tmp_path):
+    app_home = tmp_path / "fresh-app-home"
+    api_src = Path(__file__).resolve().parents[1] / "src"
+    env = os.environ.copy()
+    env["MEMORY_ANKI_HOME"] = str(app_home)
+    env["MEMORY_ANKI_WEB_DIST"] = ""
+    env["PYTHONPATH"] = os.pathsep.join(
+        value for value in (str(api_src), env.get("PYTHONPATH", "")) if value
+    )
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            (
+                f"import sys; sys.path.insert(0, {str(api_src)!r}); "
+                "from memory_anki.app.main import app; "
+                "from memory_anki.core.config import ATTACHMENTS_DIR; "
+                "assert ATTACHMENTS_DIR.is_dir(); print(ATTACHMENTS_DIR)"
+            ),
+        ],
+        cwd=tmp_path,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert str(app_home) in result.stdout
 
 
 def test_web_routes_cache_entrypoints_and_versioned_assets_separately():
@@ -74,7 +108,7 @@ def test_single_page_static_files_fall_back_to_index_for_frontend_routes():
         temp_dir.cleanup()
 
 
-def test_single_page_static_files_recovers_stale_pwa_script_assets():
+def test_single_page_static_files_rejects_stale_release_assets():
     temp_dir = tempfile.TemporaryDirectory()
     try:
         web_dist = Path(temp_dir.name)
@@ -85,11 +119,10 @@ def test_single_page_static_files_recovers_stale_pwa_script_assets():
         app.mount("/", SinglePageAppStaticFiles(directory=str(web_dist), html=True), name="web")
         client = TestClient(app)
 
-        response = client.get("/assets/index-oldhash.js")
+        script_response = client.get("/assets/index-oldhash.js")
+        style_response = client.get("/assets/index-oldhash.css")
 
-        assert response.status_code == 200
-        assert response.headers["cache-control"] == "no-store"
-        assert response.headers["content-type"].startswith("application/javascript")
-        assert "pwa-reset.html?missing_asset=/assets/index-oldhash.js" in response.text
+        assert script_response.status_code == 404
+        assert style_response.status_code == 404
     finally:
         temp_dir.cleanup()

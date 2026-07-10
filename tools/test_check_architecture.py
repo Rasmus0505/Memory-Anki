@@ -82,3 +82,49 @@ def test_ai_gateway_boundary_blocks_business_endpoint_literals(tmp_path: Path, m
     assert errors == [
         "apps/api/src/memory_anki/modules/quiz/application/service.py: AI endpoints must be constructed by infrastructure.llm; business modules must not hard-code `/chat/completions`."
     ]
+
+
+def test_migration_guard_ignores_destructive_downgrade(tmp_path: Path, monkeypatch) -> None:
+    versions = tmp_path / "versions"
+    monkeypatch.setattr(check_architecture, "ALEMBIC_VERSIONS", versions)
+    write_file(
+        versions / "0001_add_widget.py",
+        "def upgrade():\n    op.create_table('widget')\n\ndef downgrade():\n    op.drop_table('widget')\n",
+    )
+
+    errors: list[str] = []
+    check_architecture.check_forward_compatible_migrations(errors)
+
+    assert errors == []
+
+
+def test_migration_guard_blocks_destructive_upgrade(tmp_path: Path, monkeypatch) -> None:
+    versions = tmp_path / "versions"
+    monkeypatch.setattr(check_architecture, "ALEMBIC_VERSIONS", versions)
+    write_file(
+        versions / "0002_drop_widget.py",
+        "def upgrade():\n    op.drop_table('widget')\n\ndef downgrade():\n    op.create_table('widget')\n",
+    )
+
+    errors: list[str] = []
+    check_architecture.check_forward_compatible_migrations(errors)
+
+    assert len(errors) == 1
+    assert "destructive migration pattern `drop_table(...)`" in errors[0]
+
+
+def test_migration_guard_does_not_accept_comment_marker(tmp_path: Path, monkeypatch) -> None:
+    versions = tmp_path / "versions"
+    monkeypatch.setattr(check_architecture, "ALEMBIC_VERSIONS", versions)
+    write_file(
+        versions / "0003_drop_widget.py",
+        "def upgrade():\n"
+        "    # memory-anki: allow-destructive-migration\n"
+        "    op.drop_table('widget')\n",
+    )
+
+    errors: list[str] = []
+    check_architecture.check_forward_compatible_migrations(errors)
+
+    assert len(errors) == 1
+    assert "destructive migration pattern `drop_table(...)`" in errors[0]

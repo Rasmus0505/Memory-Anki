@@ -106,7 +106,9 @@ describe('PWA service worker contract', () => {
   it('uses a fresh cache namespace and removes old Memory Anki PWA caches', () => {
     const sw = readFileSync(publicSwPath, 'utf8')
 
-    expect(sw).toContain("const CACHE_VERSION = '2026-07-08-mobile-pwa-v3'")
+    expect(sw).toContain("const RELEASE_ID = '__MEMORY_ANKI_RELEASE_ID__'")
+    expect(sw).toContain('memory-anki-pwa-app-${RELEASE_ID}')
+    expect(sw).toContain('memory-anki-pwa-api-${RELEASE_ID}')
     expect(sw).toContain("const CACHE_PREFIX = 'memory-anki-pwa-'")
     expect(sw).toContain("const LEGACY_CACHE_PREFIX = 'memory-anki-mobile-'")
     expect(sw).toContain('key.startsWith(CACHE_PREFIX)')
@@ -114,19 +116,22 @@ describe('PWA service worker contract', () => {
     expect(sw).toContain("new Request(url, { cache: 'reload' })")
     expect(sw).toContain("'/pwa-reset.html'")
     expect(sw).toContain("'/freestyle'")
-    expect(sw).toContain("location.replace('/pwa-reset.html?missing_asset=")
-    expect(sw).toContain("'Content-Type': 'application/javascript; charset=utf-8'")
+    expect(sw).toContain("'/release.json'")
+    expect(sw).not.toContain('emptyStyleRecoveryResponse')
+    expect(sw).not.toContain('caches.match(request)')
   })
 
   it('lets newly installed PWA workers take control without interrupting an active session', () => {
     const sw = readFileSync(publicSwPath, 'utf8')
     const registration = readFileSync(registerServiceWorkerPath, 'utf8')
 
-    expect(sw).toContain("event.data.type === 'SKIP_WAITING'")
+    expect(sw).toContain("event.data?.type === 'SKIP_WAITING'")
     expect(registration).toContain("register('/sw.js', { updateViaCache: 'none' })")
     expect(registration).toContain('registration.update()')
     expect(registration).toContain('controllerchange')
-    expect(registration).toContain('hasUserInteracted')
+    expect(registration).toContain('lastInteractionAt')
+    expect(registration).toContain("fetch('/release.json', { cache: 'no-store' })")
+    expect(registration).toContain('isDesktopClient()')
     expect(registration).toContain('window.location.reload()')
   })
 
@@ -143,7 +148,7 @@ describe('PWA service worker contract', () => {
 
   it('serves the cached freestyle shell when a navigation is opened offline', async () => {
     const harness = createServiceWorkerHarness()
-    const appCache = await harness.caches.open('memory-anki-pwa-app-test')
+    const appCache = await harness.caches.open('memory-anki-pwa-app-__MEMORY_ANKI_RELEASE_ID__')
     await appCache.put('/freestyle', new Response('<main>cached freestyle shell</main>'))
 
     const response = await harness.dispatchFetch({
@@ -160,7 +165,7 @@ describe('PWA service worker contract', () => {
   it('serves the latest cached freestyle feed when the API is offline', async () => {
     const harness = createServiceWorkerHarness()
     const apiCache = await harness.caches.open(
-      'memory-anki-pwa-api-2026-07-08-mobile-pwa-v3',
+      'memory-anki-pwa-api-__MEMORY_ANKI_RELEASE_ID__',
     )
     await apiCache.put(
       'https://memory.test/api/v1/freestyle/feed?range=due',

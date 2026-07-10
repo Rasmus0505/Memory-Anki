@@ -161,6 +161,20 @@ DESTRUCTIVE_MIGRATION_PATTERNS = {
     "op.rename_table(": "rename tables",
     "rename table ": "rename tables",
 }
+HISTORICAL_DESTRUCTIVE_UPGRADE_EXCEPTIONS = {
+    "0003_reset_english_reading_dictionary_cache.py": (
+        "Drops only a rebuildable provider cache when its legacy schema is detected."
+    ),
+    "0005_relax_palace_quiz_question_palace_owner.py": (
+        "SQLite batch recreation is required to relax nullability without removing question rows."
+    ),
+    "0020_ai_quality_engineering.py": (
+        "Expands request identifiers in place; SQLite batch migration preserves existing AI call log rows."
+    ),
+    "0021_remove_mindmap_view_preferences.py": (
+        "Retires obsolete collapsed-node UI preferences only; no knowledge, review, or learning records are stored in this table."
+    ),
+}
 REQUIRED_STORAGE_KEYS = {
     "database",
     "attachments",
@@ -680,18 +694,57 @@ def check_tool_personal_paths(errors: list[str]) -> None:
 
 def check_forward_compatible_migrations(errors: list[str]) -> None:
     for path in ALEMBIC_VERSIONS.glob("*.py"):
-        content = path.read_text(encoding="utf-8")
-        normalized = content.casefold()
-        if DESTRUCTIVE_MIGRATION_ALLOW_MARKER in normalized:
+        try:
+            relative = path.relative_to(REPO_ROOT)
+        except ValueError:
+            relative = Path("apps/api/alembic/versions") / path.name
+        content = path.read_text(encoding="utf-8-sig")
+        try:
+            module = ast.parse(content)
+        except SyntaxError as exc:
+            errors.append(f"{relative}: cannot parse migration: {exc}")
             continue
-        for pattern, description in DESTRUCTIVE_MIGRATION_PATTERNS.items():
-            if pattern in normalized:
-                relative = path.relative_to(REPO_ROOT)
-                errors.append(
-                    f"{relative}: destructive migration pattern `{pattern}` is not allowed by default; "
-                    f"prefer additive migrations for shared-runtime compatibility, or add `{DESTRUCTIVE_MIGRATION_ALLOW_MARKER}` with a justification."
-                )
+        upgrade = next(
+            (
+                node
+                for node in module.body
+                if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == "upgrade"
+            ),
+            None,
+        )
+        if upgrade is None:
+            continue
+        destructive_pattern = None
+        for node in ast.walk(upgrade):
+            if not isinstance(node, ast.Call):
+                continue
+            call_name = ""
+            if isinstance(node.func, ast.Attribute):
+                call_name = node.func.attr.casefold()
+            if call_name in {"drop_column", "drop_table", "alter_column", "rename_table"}:
+                destructive_pattern = f"{call_name}(...)"
                 break
+            for argument in (*node.args, *(keyword.value for keyword in node.keywords)):
+                if not isinstance(argument, ast.Constant) or not isinstance(argument.value, str):
+                    continue
+                normalized_argument = argument.value.casefold()
+                matching_pattern = next(
+                    (pattern for pattern in DESTRUCTIVE_MIGRATION_PATTERNS if pattern in normalized_argument),
+                    None,
+                )
+                if matching_pattern:
+                    destructive_pattern = matching_pattern
+                    break
+            if destructive_pattern:
+                break
+        if destructive_pattern is None:
+            continue
+        if path.name in HISTORICAL_DESTRUCTIVE_UPGRADE_EXCEPTIONS:
+            continue
+        errors.append(
+            f"{relative.as_posix()}: destructive migration pattern `{destructive_pattern}` is not allowed by default; "
+            "prefer additive migrations for shared-runtime compatibility."
+        )
 
 
 def check_palace_quiz_application_facades(errors: list[str]) -> None:

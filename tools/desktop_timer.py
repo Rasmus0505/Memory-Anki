@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 TOOLS_DIR = Path(__file__).resolve().parent
@@ -12,43 +13,59 @@ if str(TOOLS_DIR) not in sys.path:
     sys.path.insert(0, str(TOOLS_DIR))
 
 import dev_server  # noqa: E402
+import pwa_server  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 WEB_DIR = REPO_ROOT / "apps" / "web"
-FRONTEND_URL = f"http://{dev_server.BACKEND_HOST}:{dev_server.FRONTEND_PORT}/"
+FRONTEND_URL = f"http://{dev_server.BACKEND_HOST}:{dev_server.BACKEND_PORT}/"
+
+
+def ensure_shared_tray() -> None:
+    if os.name != "nt":
+        return
+    tray_script = REPO_ROOT / "tools" / "pwa_tray.ps1"
+    subprocess.Popen(
+        [
+            "powershell.exe",
+            "-NoProfile",
+            "-STA",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-WindowStyle",
+            "Hidden",
+            "-File",
+            str(tray_script),
+            "-AttachOnly",
+        ],
+        cwd=str(REPO_ROOT),
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        **dev_server.hidden_process_kwargs(),
+    )
 
 
 def main() -> int:
-    dev_server.kill_memory_anki_desktop_processes()
-    dev_server.free_port(dev_server.BACKEND_PORT, "backend")
+    started_at = time.perf_counter()
+    log_path = dev_server.LOGS_DIR / "desktop-startup.log"
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+
+    def log(message: str) -> None:
+        timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
+        with log_path.open("a", encoding="utf-8") as log_file:
+            log_file.write(f"[{timestamp}] {message}\n")
+
+    log("Desktop startup requested")
     dev_server.free_port(dev_server.FRONTEND_PORT, "frontend")
 
-    if not dev_server.sync_before_start():
+    # The desktop BAT intentionally keeps the shared backend attached to its
+    # console so startup/runtime exceptions are immediately visible.
+    os.environ["MEMORY_ANKI_VISIBLE_BACKEND"] = "1"
+    if pwa_server.restart_for_desktop() != 0:
+        log("Shared service restart failed")
         return 1
-
-    try:
-        dev_server.ensure_backend_runtime_prepared()
-        dev_server.ensure_backend_migrations_applied()
-    except Exception as exc:
-        print(f"[!] Runtime database preparation failed: {exc}")
-        return 1
-
-    backend_proc = dev_server.start_backend()
-    print("[i] Waiting for backend ...", end=" ", flush=True)
-    if not dev_server.wait_for_backend(timeout_seconds=120):
-        print("timeout")
-        dev_server.kill_process_tree(backend_proc.pid)
-        return 1
-    print("OK")
-
-    frontend_proc = dev_server.start_frontend()
-    print("[i] Waiting for frontend ...", end=" ", flush=True)
-    if not dev_server.wait_for_frontend(timeout_seconds=40):
-        print("timeout")
-        dev_server.kill_process_tree(backend_proc.pid)
-        dev_server.kill_process_tree(frontend_proc.pid)
-        return 1
-    print("OK")
+    log(f"Shared service ready after {time.perf_counter() - started_at:.2f}s")
+    ensure_shared_tray()
 
     npm = dev_server._resolve_npm()
     electron_exe = WEB_DIR / "node_modules" / "electron" / "dist" / "electron.exe"
@@ -57,19 +74,23 @@ def main() -> int:
             "[!] Electron runtime is incomplete. Run `cd apps\\web && npm install` "
             f"and make sure {electron_exe} exists."
         )
-        dev_server.kill_process_tree(backend_proc.pid)
-        dev_server.kill_process_tree(frontend_proc.pid)
         return 1
     env = os.environ.copy()
     env["MEMORY_ANKI_DESKTOP_URL"] = FRONTEND_URL
     env["MEMORY_ANKI_TIMER_OVERLAY_URL"] = f"{FRONTEND_URL.rstrip('/')}/timer-overlay"
     print("[i] Launching Memory Anki desktop + timer overlay ...")
-    result = subprocess.run(
-        [npm, "run", "desktop:timer"],
-        cwd=str(WEB_DIR),
-        env=env,
-        check=False,
-    )
+    with log_path.open("a", encoding="utf-8") as log_file:
+        result = subprocess.run(
+            [npm, "run", "desktop:timer"],
+            cwd=str(WEB_DIR),
+            env=env,
+            stdout=log_file,
+            stderr=subprocess.STDOUT,
+            stdin=subprocess.DEVNULL,
+            check=False,
+            **dev_server.hidden_process_kwargs(),
+        )
+    log(f"Desktop window exited with code {result.returncode}; shared service remains running")
     return int(result.returncode)
 
 

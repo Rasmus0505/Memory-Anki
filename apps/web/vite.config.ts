@@ -2,11 +2,16 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { promises as fs } from 'node:fs'
+import { createHash } from 'node:crypto'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const srcDir = fileURLToPath(new URL('./src', import.meta.url))
 const stableChunkNames = new Set(['PalaceEditPage', 'useMindMapImport'])
+const releaseId = `${new Date().toISOString().replace(/[-:.TZ]/g, '').slice(0, 14)}-${createHash('sha256')
+  .update(`${Date.now()}-${Math.random()}`)
+  .digest('hex')
+  .slice(0, 10)}`
 const manualRefreshGuardScript = String.raw`
   (() => {
     if (typeof window === 'undefined' || typeof window.WebSocket === 'undefined') return
@@ -144,6 +149,36 @@ function stableChunkCompatPlugin() {
   }
 }
 
+function releaseArtifactsPlugin() {
+  let outDir = ''
+
+  return {
+    name: 'memory-anki-release-artifacts',
+    apply: 'build' as const,
+    configResolved(config: { root: string; build: { outDir: string } }) {
+      outDir = path.resolve(config.root, config.build.outDir)
+    },
+    transformIndexHtml(html: string) {
+      return html.replace(
+        '</head>',
+        `    <meta name="memory-anki-release" content="${releaseId}" />\n  </head>`,
+      )
+    },
+    async closeBundle() {
+      if (!outDir) return
+      const release = { releaseId, builtAt: new Date().toISOString() }
+      await fs.writeFile(path.join(outDir, 'release.json'), `${JSON.stringify(release, null, 2)}\n`, 'utf8')
+      const serviceWorkerPath = path.join(outDir, 'sw.js')
+      const serviceWorker = await fs.readFile(serviceWorkerPath, 'utf8')
+      await fs.writeFile(
+        serviceWorkerPath,
+        serviceWorker.replaceAll('__MEMORY_ANKI_RELEASE_ID__', releaseId),
+        'utf8',
+      )
+    },
+  }
+}
+
 export default defineConfig({
   plugins: [
     {
@@ -168,7 +203,11 @@ export default defineConfig({
     react(),
     tailwindcss(),
     stableChunkCompatPlugin(),
+    releaseArtifactsPlugin(),
   ],
+  define: {
+    __MEMORY_ANKI_RELEASE_ID__: JSON.stringify(releaseId),
+  },
   build: {
     emptyOutDir: false,
     rollupOptions: {

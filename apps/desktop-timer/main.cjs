@@ -1,7 +1,7 @@
 const { app, BrowserWindow, globalShortcut, ipcMain, shell, session } = require('electron')
 const path = require('node:path')
 
-const APP_URL = process.env.MEMORY_ANKI_DESKTOP_URL || 'http://127.0.0.1:5173/'
+const APP_URL = process.env.MEMORY_ANKI_DESKTOP_URL || 'http://127.0.0.1:8012/'
 const OVERLAY_URL = process.env.MEMORY_ANKI_TIMER_OVERLAY_URL || `${APP_URL.replace(/\/$/, '')}/timer-overlay`
 
 let mainWindow = null
@@ -12,6 +12,16 @@ let pendingFlush = null
 let allowMainWindowClose = false
 
 const FLUSH_TIMEOUT_MS = 1800
+const hasSingleInstanceLock = app.requestSingleInstanceLock()
+
+if (!hasSingleInstanceLock) {
+  app.quit()
+} else {
+  app.on('second-instance', () => {
+    ensureMainWindow()
+    ensureTimerWindow()
+  })
+}
 
 function clearMainBlurPromptTimer() {
   if (mainBlurPromptTimer == null) return
@@ -98,7 +108,7 @@ function createMainWindow() {
   mainWindow.on('close', (event) => {
     if (allowMainWindowClose) return
     event.preventDefault()
-    closeMainWindowAfterFlush('main_window_close')
+    closeMainWindowAfterFlush('main_window_close', { quitApp: true })
   })
   mainWindow.on('blur', () => {
     scheduleExternalMainBlurPrompt()
@@ -178,9 +188,10 @@ function toggleTimerWindow() {
   ensureTimerWindow()
 }
 
-app.whenReady().then(async () => {
-  // 每次启动前清除 HTTP 缓存，确保 Vite dev server 提供最新代码
+if (hasSingleInstanceLock) app.whenReady().then(async () => {
+  // Desktop always reads the current server build and must never remain controlled by a PWA worker.
   await session.defaultSession.clearCache()
+  await session.defaultSession.clearStorageData({ storages: ['serviceworkers', 'cachestorage'] })
   createMainWindow()
   createTimerWindow()
   globalShortcut.register('CommandOrControl+Shift+M', toggleTimerWindow)

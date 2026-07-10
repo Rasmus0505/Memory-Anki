@@ -3,11 +3,17 @@
 from __future__ import annotations
 
 import os
+import hashlib
+import json
+import re
+import json
 import shutil
 import signal
+import sqlite3
 import subprocess
 import sys
 import time
+from contextlib import contextmanager
 from pathlib import Path
 from urllib.error import URLError
 from urllib.request import urlopen
@@ -27,6 +33,117 @@ LOGS_DIR = REPO_ROOT / "logs"
 PWA_URL = f"http://{dev_server.BACKEND_HOST}:{dev_server.BACKEND_PORT}/freestyle"
 PWA_PROCESS_MARKER = "MEMORY_ANKI_PWA_SERVER"
 PWA_PID_FILE = LOGS_DIR / "pwa-server.pid"
+PWA_LOCK_FILE = LOGS_DIR / "pwa-service.lock"
+UPDATE_STATE_VERSION = 1
+
+
+def _update_state_path() -> Path:
+    local_app_data = os.environ.get("LOCALAPPDATA")
+    root = Path(local_app_data) if local_app_data else Path.home() / "AppData" / "Local"
+    return root / "MemoryAnki" / "update-state.json"
+
+
+def _iter_files(paths: list[Path]):
+    for path in paths:
+        if not path.exists():
+            continue
+        if path.is_file():
+            yield path
+            continue
+        for item in sorted(path.rglob("*")):
+            if not item.is_file():
+                continue
+            if any(part in {"node_modules", "dist", "__pycache__", ".pytest_cache"} for part in item.parts):
+                continue
+            yield item
+
+
+def _fingerprint(paths: list[Path]) -> str:
+    digest = hashlib.sha256()
+    for path in _iter_files(paths):
+        try:
+            relative = path.relative_to(REPO_ROOT).as_posix()
+        except ValueError:
+            relative = str(path)
+        digest.update(relative.encode("utf-8"))
+        digest.update(b"\0")
+        with path.open("rb") as source:
+            while chunk := source.read(1024 * 1024):
+                digest.update(chunk)
+        digest.update(b"\0")
+    return digest.hexdigest()
+
+
+def _current_update_fingerprints() -> dict[str, str]:
+    frontend = _fingerprint(
+        [
+            WEB_DIR / "src",
+            WEB_DIR / "public",
+            WEB_DIR / "index.html",
+            WEB_DIR / "vite.config.ts",
+            WEB_DIR / "package.json",
+            WEB_DIR / "package-lock.json",
+            WEB_DIR / "tsconfig.json",
+            WEB_DIR / "tsconfig.app.json",
+            WEB_DIR / "tsconfig.node.json",
+        ]
+    )
+    migrations = _fingerprint([API_DIR / "alembic", API_DIR / "alembic.ini"])
+    backend = _fingerprint(
+        [
+            API_DIR / "src",
+            API_DIR / "requirements.txt",
+            API_DIR / "pyproject.toml",
+            REPO_ROOT / "apps" / "desktop-timer" / "main.cjs",
+            REPO_ROOT / "apps" / "desktop-timer" / "preload.cjs",
+            REPO_ROOT / "tools" / "desktop_launcher.ps1",
+            REPO_ROOT / "tools" / "desktop_timer.py",
+            REPO_ROOT / "tools" / "dev_server.py",
+            REPO_ROOT / "tools" / "pwa_launcher.ps1",
+            REPO_ROOT / "tools" / "pwa_server.py",
+            REPO_ROOT / "tools" / "pwa_tray.ps1",
+            REPO_ROOT / "tools" / "windows_runtime.ps1",
+            REPO_ROOT / "start-desktop.bat",
+            REPO_ROOT / "start-pwa.bat",
+            REPO_ROOT / ".env.example",
+        ]
+    )
+    return {"frontend": frontend, "backend": backend, "migrations": migrations}
+
+
+def _read_update_state() -> dict[str, str]:
+    try:
+        data = json.loads(_update_state_path().read_text(encoding="utf-8"))
+    except (OSError, ValueError, TypeError):
+        return {}
+    if data.get("version") != UPDATE_STATE_VERSION:
+        return {}
+    return {name: str(data.get(name) or "") for name in ("frontend", "backend", "migrations")}
+
+
+def _write_update_state(fingerprints: dict[str, str]) -> None:
+    path = _update_state_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_suffix(".tmp")
+    payload = {"version": UPDATE_STATE_VERSION, **fingerprints}
+    temporary.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    temporary.replace(path)
+
+
+def _database_at_alembic_head() -> bool:
+    try:
+        from alembic.script import ScriptDirectory
+        from memory_anki.infrastructure.db.migrations import build_alembic_config
+
+        expected_heads = set(ScriptDirectory.from_config(build_alembic_config()).get_heads())
+        database_path = dev_server._resolve_configured_app_home() / "data" / "memory_palace.db"
+        if not database_path.exists():
+            return False
+        with sqlite3.connect(database_path) as connection:
+            rows = connection.execute("SELECT version_num FROM alembic_version").fetchall()
+        return {str(row[0]) for row in rows} == expected_heads
+    except Exception:
+        return False
 
 
 def _append_log_separator(path: Path, title: str) -> None:
@@ -36,65 +153,150 @@ def _append_log_separator(path: Path, title: str) -> None:
         log_file.write(f"\n\n===== {title} {timestamp} =====\n".encode("utf-8"))
 
 
-def _is_memory_anki_pwa_process(pid: int) -> bool:
-    try:
-        recorded_pid = int(PWA_PID_FILE.read_text(encoding="utf-8").strip())
-    except Exception:
-        recorded_pid = 0
-    if recorded_pid == pid:
-        return True
+def _process_command_line(pid: int) -> str:
     if os.name != "nt":
-        return recorded_pid == pid
+        return ""
     try:
         result = subprocess.run(
             [
-                "wmic",
-                "process",
-                "where",
-                f"ProcessId={pid}",
-                "get",
-                "CommandLine",
-                "/value",
+                "powershell.exe",
+                "-NoProfile",
+                "-Command",
+                (
+                    "$process = Get-CimInstance Win32_Process -Filter "
+                    f"\"ProcessId={pid}\" -ErrorAction SilentlyContinue; "
+                    "if ($process) { $process.CommandLine }"
+                ),
             ],
             capture_output=True,
             text=True,
-            encoding="gbk",
+            encoding="utf-8",
             errors="replace",
             check=False,
         )
     except Exception:
-        return False
-    command_line = result.stdout.lower()
-    return PWA_PROCESS_MARKER.lower() in command_line
+        return ""
+    return result.stdout.strip().lower()
 
 
-def _free_pwa_port() -> bool:
+def _is_memory_anki_service_process(pid: int) -> bool:
+    try:
+        recorded_pid = int(PWA_PID_FILE.read_text(encoding="utf-8").strip())
+    except Exception:
+        recorded_pid = 0
+    if os.name != "nt":
+        return recorded_pid == pid
+    command_line = _process_command_line(pid)
+    repo_marker = str(REPO_ROOT).lower()
+    return PWA_PROCESS_MARKER.lower() in command_line or (
+        "memory_anki.app.main:app" in command_line and repo_marker in command_line
+    )
+
+
+@contextmanager
+def service_lock(timeout_seconds: float = 180.0):
+    """Serialize PWA start/stop/sync so desktop and tray startup cannot race."""
+    LOGS_DIR.mkdir(parents=True, exist_ok=True)
+    lock_file = PWA_LOCK_FILE.open("a+b")
+    lock_file.seek(0, os.SEEK_END)
+    if lock_file.tell() == 0:
+        lock_file.write(b"\0")
+        lock_file.flush()
+
+    deadline = time.monotonic() + timeout_seconds
+    acquired = False
+    try:
+        while not acquired:
+            try:
+                lock_file.seek(0)
+                if os.name == "nt":
+                    import msvcrt
+
+                    msvcrt.locking(lock_file.fileno(), msvcrt.LK_NBLCK, 1)
+                else:
+                    import fcntl
+
+                    fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                acquired = True
+            except OSError:
+                if time.monotonic() >= deadline:
+                    raise TimeoutError("Timed out waiting for the Memory Anki service lock")
+                time.sleep(0.1)
+        yield
+    finally:
+        if acquired:
+            lock_file.seek(0)
+            if os.name == "nt":
+                import msvcrt
+
+                msvcrt.locking(lock_file.fileno(), msvcrt.LK_UNLCK, 1)
+            else:
+                import fcntl
+
+                fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+        lock_file.close()
+
+
+def _stop_service_unlocked() -> bool:
     pids = dev_server.list_listening_pids(dev_server.BACKEND_PORT)
     if not pids:
+        PWA_PID_FILE.unlink(missing_ok=True)
         return True
-    unsafe = [pid for pid in pids if not _is_memory_anki_pwa_process(pid)]
+    unsafe = [pid for pid in pids if not _is_memory_anki_service_process(pid)]
     if unsafe:
         print(
-            f"[!] Port {dev_server.BACKEND_PORT} is occupied by non-PWA process(es): {unsafe}. "
-            "PWA and desktop dev mode share this port. Run stop.bat first, then run start-pwa.bat again."
+            f"[!] The shared service address is occupied by non-Memory-Anki "
+            f"process(es): {unsafe}. Stop that program before starting Memory Anki."
         )
         return False
-    print(f"[i] Cleaning existing PWA process(es) on port {dev_server.BACKEND_PORT}: {pids}")
+    print(f"[i] Stopping existing Memory Anki service: {pids}")
     for pid in pids:
         dev_server.kill_process_tree(pid)
     PWA_PID_FILE.unlink(missing_ok=True)
-    time.sleep(0.5)
-    return True
+    deadline = time.monotonic() + 10
+    while time.monotonic() < deadline:
+        if not dev_server.list_listening_pids(dev_server.BACKEND_PORT):
+            return True
+        time.sleep(0.2)
+    print("[!] The shared service did not stop within 10 seconds.")
+    return False
 
 
 def _pwa_dist_ready() -> bool:
     required = [
         WEB_DIST / "index.html",
         WEB_DIST / "manifest.webmanifest",
+        WEB_DIST / "release.json",
         WEB_DIST / "sw.js",
         WEB_DIST / "offline.html",
     ]
     return all(path.exists() for path in required)
+
+
+def _validate_web_release() -> bool:
+    try:
+        release = json.loads((WEB_DIST / "release.json").read_text(encoding="utf-8"))
+        release_id = str(release.get("releaseId") or "")
+        index_html = (WEB_DIST / "index.html").read_text(encoding="utf-8")
+        service_worker = (WEB_DIST / "sw.js").read_text(encoding="utf-8")
+    except (OSError, ValueError, TypeError) as exc:
+        print(f"[!] PWA release metadata is invalid: {exc}")
+        return False
+    if not release_id:
+        print("[!] PWA releaseId is missing.")
+        return False
+    if f'content="{release_id}"' not in index_html or f"const RELEASE_ID = '{release_id}'" not in service_worker:
+        print("[!] PWA releaseId does not match index.html and sw.js.")
+        return False
+    if "__MEMORY_ANKI_RELEASE_ID__" in service_worker:
+        print("[!] PWA service worker still contains an unresolved release placeholder.")
+        return False
+    asset_paths = re.findall(r'(?:src|href)="(/assets/[^"]+)"', index_html)
+    missing = [asset for asset in asset_paths if not (WEB_DIST / asset.lstrip("/")).is_file()]
+    if missing:
+        print(f"[!] PWA index references missing assets: {missing}")
+        return False
+    return True
 
 
 def _run_frontend_build() -> bool:
@@ -121,6 +323,9 @@ def _run_frontend_build() -> bool:
     if result.returncode != 0:
         print(f"[!] PWA frontend build failed ({result.returncode}). See {log_path}")
         return False
+    if not _validate_web_release():
+        print(f"[!] PWA frontend release validation failed. See {log_path}")
+        return False
     return True
 
 
@@ -129,6 +334,15 @@ def _prepare_runtime() -> bool:
         local_env = _backend_env()
         dev_server.ensure_backend_runtime_prepared(env=local_env)
         dev_server.ensure_backend_migrations_applied(env=local_env)
+    except Exception as exc:
+        print(f"[!] Runtime database preparation failed: {exc}")
+        return False
+    return True
+
+
+def _ensure_runtime_initialized() -> bool:
+    try:
+        dev_server.ensure_backend_runtime_prepared(env=_backend_env())
     except Exception as exc:
         print(f"[!] Runtime database preparation failed: {exc}")
         return False
@@ -145,11 +359,20 @@ def _backend_env() -> dict[str, str]:
     return env
 
 
+def _backend_console_is_visible() -> bool:
+    return os.environ.get("MEMORY_ANKI_VISIBLE_BACKEND", "0").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+
+
 def _start_backend() -> subprocess.Popen:
     LOGS_DIR.mkdir(parents=True, exist_ok=True)
     log_path = LOGS_DIR / "pwa-api.log"
     _append_log_separator(log_path, "PWA backend")
-    print(f"[i] Starting PWA backend at {PWA_URL}")
+    print("[i] Starting shared Memory Anki service")
     cmd = [
         sys.executable,
         "-m",
@@ -162,25 +385,30 @@ def _start_backend() -> subprocess.Popen:
         "--port",
         str(dev_server.BACKEND_PORT),
     ]
-    log_file = log_path.open("ab")
+    visible = _backend_console_is_visible()
+    log_file = None if visible else log_path.open("ab")
+    if visible:
+        print("[i] Backend output is attached to this window; errors will remain visible.")
     process = subprocess.Popen(
         cmd,
         cwd=str(API_DIR),
         env=_backend_env(),
         stdout=log_file,
-        stderr=subprocess.STDOUT,
-        stdin=subprocess.DEVNULL,
+        stderr=None if visible else subprocess.STDOUT,
+        stdin=None if visible else subprocess.DEVNULL,
         close_fds=True,
-        **dev_server.hidden_process_kwargs(),
+        **({} if visible else dev_server.hidden_process_kwargs()),
     )
     PWA_PID_FILE.parent.mkdir(parents=True, exist_ok=True)
     PWA_PID_FILE.write_text(str(process.pid), encoding="utf-8")
     return process
 
 
-def _wait_for_pwa(timeout_seconds: int = 120) -> bool:
+def _wait_for_pwa(timeout_seconds: int = 120, process: subprocess.Popen | None = None) -> bool:
     deadline = time.time() + timeout_seconds
     while time.time() < deadline:
+        if process is not None and process.poll() is not None:
+            return False
         if not dev_server.wait_for_backend(timeout_seconds=2):
             time.sleep(0.5)
             continue
@@ -192,6 +420,17 @@ def _wait_for_pwa(timeout_seconds: int = 120) -> bool:
             pass
         time.sleep(0.5)
     return False
+
+
+def _pwa_is_ready() -> bool:
+    payload = dev_server.http_get_json(dev_server.HEALTH_URL, timeout=1.5)
+    if not payload or not payload.get("ok"):
+        return False
+    try:
+        with urlopen(PWA_URL, timeout=1.5) as response:
+            return response.status == 200
+    except (OSError, TimeoutError, URLError):
+        return False
 
 
 def _configure_tailscale_serve() -> bool:
@@ -272,50 +511,144 @@ def start(
     sync: bool = False,
     supervise: bool = True,
 ) -> int:
-    if not _free_pwa_port():
-        return 1
+    started_at = time.perf_counter()
 
-    if build or not _pwa_dist_ready():
-        if not _run_frontend_build():
+    def stage(message: str) -> None:
+        print(f"[i] {message} ({time.perf_counter() - started_at:.2f}s)", flush=True)
+
+    process: subprocess.Popen | None = None
+    with service_lock():
+        stage("Checking shared service")
+        pids = dev_server.list_listening_pids(dev_server.BACKEND_PORT)
+        unsafe = [pid for pid in pids if not _is_memory_anki_service_process(pid)]
+        if unsafe:
+            print(
+                f"[!] The shared service address is occupied by non-Memory-Anki "
+                f"process(es): {unsafe}. Stop that program before starting Memory Anki."
+            )
             return 1
 
-    if sync and not dev_server.sync_before_start():
-        return 1
-    if not sync:
-        print("[i] Skipping startup sync for PWA autostart. Desktop stop/start still performs sync.")
+        if pids and _pwa_is_ready() and not build and not sync:
+            print("[ok] Reusing running Memory Anki service")
+        else:
+            if pids and not _stop_service_unlocked():
+                return 1
+            if build or not _pwa_dist_ready():
+                stage("Building frontend assets")
+                if not _run_frontend_build():
+                    return 1
 
-    if not _prepare_runtime():
-        return 1
+            if sync and not dev_server.sync_before_start():
+                return 1
+            if not sync:
+                stage("Skipping startup sync (desktop start/stop handles synchronization)")
 
-    process = _start_backend()
-    if not _wait_for_pwa(timeout_seconds=120):
-        print("[!] PWA server did not become ready. See logs\\pwa-api.log")
-        dev_server.kill_process_tree(process.pid)
-        return 1
+            # Always migrate after the shared service is stopped. Synced databases can arrive
+            # behind the current ORM even when frontend/backend fingerprints are unchanged.
+            stage("Preparing local runtime and database migrations")
+            if not _prepare_runtime():
+                return 1
 
-    print(f"[ok] PWA server ready: {PWA_URL}")
+            stage("Starting backend")
+            process = _start_backend()
+            if not _wait_for_pwa(timeout_seconds=120, process=process):
+                print("[!] PWA server did not become ready. See logs\\pwa-api.log")
+                dev_server.kill_process_tree(process.pid)
+                return 1
+
+            print("[ok] Shared Memory Anki service is ready")
+
+    print(f"[ok] Startup completed in {time.perf_counter() - started_at:.2f}s", flush=True)
     if configure_serve:
         _configure_tailscale_serve()
-    if supervise:
+    if supervise and process is not None:
         return _supervise(process)
     return 0
 
 
 def stop() -> int:
-    if _free_pwa_port():
-        PWA_PID_FILE.unlink(missing_ok=True)
+    with service_lock():
+        return 0 if _stop_service_unlocked() else 1
+
+
+def restart_for_desktop() -> int:
+    """Restart the shared service around desktop startup sync, then leave it running."""
+    with service_lock():
+        if not _stop_service_unlocked():
+            return 1
+        if not dev_server.sync_before_start():
+            return 1
+        if not _pwa_dist_ready() and not _run_frontend_build():
+            return 1
+        if not _prepare_runtime():
+            return 1
+        process = _start_backend()
+        if not _wait_for_pwa(timeout_seconds=120, process=process):
+            print("[!] Shared service did not become ready. See logs\\pwa-api.log")
+            dev_server.kill_process_tree(process.pid)
+            return 1
+        print("[ok] Shared Memory Anki service is ready")
         return 0
-    return 1
+
+
+def stop_for_desktop_sync() -> int:
+    """Stop the shared service and push local data without another start racing in."""
+    with service_lock():
+        if not _stop_service_unlocked():
+            return 1
+        return 0 if dev_server.sync_after_stop() else 1
 
 
 def prepare(*, build: bool = True) -> int:
-    if build or not _pwa_dist_ready():
-        if not _run_frontend_build():
+    with service_lock():
+        started_at = time.perf_counter()
+        current = _current_update_fingerprints()
+        previous = _read_update_state()
+        frontend_changed = build and (
+            not previous or current["frontend"] != previous.get("frontend") or not _pwa_dist_ready()
+        )
+        backend_changed = not previous or current["backend"] != previous.get("backend")
+        migrations_changed = (
+            not previous
+            or current["migrations"] != previous.get("migrations")
+            or not _database_at_alembic_head()
+        )
+
+        if not frontend_changed and not backend_changed and not migrations_changed:
+            print(f"[ok] Memory Anki is already up to date ({time.perf_counter() - started_at:.2f}s).")
+            return 0
+
+        changed = []
+        if frontend_changed:
+            changed.append("frontend")
+        if backend_changed:
+            changed.append("backend")
+        if migrations_changed:
+            changed.append("database")
+        print(f"[i] Updating: {', '.join(changed)}")
+
+        dev_server.kill_memory_anki_desktop_processes()
+        dev_server.free_port(dev_server.FRONTEND_PORT, "frontend")
+        if not _stop_service_unlocked():
             return 1
-    if not _prepare_runtime():
-        return 1
-    print(f"[ok] PWA assets and runtime are ready: {WEB_DIST}")
-    return 0
+        if not dev_server.sync_after_stop():
+            return 1
+
+        if frontend_changed:
+            if not _run_frontend_build():
+                return 1
+        if not _ensure_runtime_initialized():
+            return 1
+        if migrations_changed:
+            try:
+                dev_server.ensure_backend_migrations_applied(env=_backend_env())
+            except Exception as exc:
+                print(f"[!] Runtime database preparation failed: {exc}")
+                return 1
+        _write_update_state(current)
+        print(f"[ok] PWA assets and runtime are ready: {WEB_DIST}")
+        print(f"[ok] Update completed in {time.perf_counter() - started_at:.2f}s")
+        return 0
 
 
 def main() -> int:

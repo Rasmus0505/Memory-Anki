@@ -18,6 +18,7 @@ ipcRenderer.on('memory-anki-desktop-flush-request', async (_event, request) => {
 })
 
 contextBridge.exposeInMainWorld('memoryAnkiDesktopTimer', {
+  isDesktop: true,
   onDesktopFlushRequest(handler) {
     desktopFlushHandlers.add(handler)
     return () => desktopFlushHandlers.delete(handler)

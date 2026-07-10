@@ -149,4 +149,19 @@ describe('shared api http token headers', () => {
     expect(headers['Content-Type']).toBeUndefined()
     expect(init.body).toBe(formData)
   })
+
+  it('shows shared local service guidance for Electron network failures', async () => {
+    vi.stubGlobal('navigator', {
+      onLine: true,
+      userAgent:
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Electron/39.8.10 Safari/537.36',
+    })
+    vi.stubGlobal('fetch', vi.fn(async () => Promise.reject(new TypeError('Failed to fetch'))))
+
+    await expect(request('/review/session/2063')).rejects.toThrow(
+      /本机共享服务尚未启动.*暂时无法连接/s,
+    )
+    await expect(request('/review/session/2063')).rejects.not.toThrow(/8012|5173/)
+    await expect(request('/review/session/2063')).rejects.not.toThrow(/手机 Tailscale/)
+  })
 })

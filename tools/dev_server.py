@@ -380,11 +380,11 @@ def start_frontend() -> subprocess.Popen:
 def stop_all() -> int:
     """停止后端 (8012) 和前端 (5173) 进程。"""
     print("[i] 停止 Memory Anki 服务 ...")
-    free_port(BACKEND_PORT, "后端")
-    free_port(FRONTEND_PORT, "前端")
     kill_memory_anki_desktop_processes()
-    result = sync_after_stop()
-    if not result:
+    free_port(FRONTEND_PORT, "前端")
+    import pwa_server
+
+    if pwa_server.stop_for_desktop_sync() != 0:
         return 1
     print("[ok] 已停止。")
     return 0
