@@ -706,6 +706,20 @@ def check_palace_quiz_application_facades(errors: list[str]) -> None:
             )
 
 
+def check_ai_gateway_boundary(errors: list[str]) -> None:
+    llm_root = API_SRC / "infrastructure" / "llm"
+    for path in iter_files(API_SRC, (".py",)):
+        if path.is_relative_to(llm_root):
+            continue
+        content = path.read_text(encoding="utf-8", errors="ignore")
+        if "/chat/completions" in content:
+            relative = Path("apps/api/src/memory_anki") / path.relative_to(API_SRC)
+            errors.append(
+                f"{relative.as_posix()}: AI endpoints must be constructed by infrastructure.llm; "
+                "business modules must not hard-code `/chat/completions`."
+            )
+
+
 def check_settings_module_boundaries(errors: list[str]) -> None:
     for path in iter_files(SETTINGS_MODULE, (".py",)):
         content = path.read_text(encoding="utf-8")
@@ -732,6 +746,7 @@ def main() -> int:
     check_forward_compatible_migrations(errors)
     check_palace_quiz_application_facades(errors)
     check_settings_module_boundaries(errors)
+    check_ai_gateway_boundary(errors)
     check_backend_module_boundaries(errors)
     check_backend_presentation_orm_usage(errors)
     check_tool_personal_paths(errors)

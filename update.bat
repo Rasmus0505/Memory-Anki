@@ -3,13 +3,13 @@ setlocal
 cd /d "%~dp0"
 
 echo Stopping running services...
-call "%~dp0tools\stop.bat"
-set "STOP_CODE=%ERRORLEVEL%"
-if not "%STOP_CODE%"=="0" (
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0tools\desktop_launcher.ps1" Stop
+set "EXIT_CODE=%ERRORLEVEL%"
+if not "%EXIT_CODE%"=="0" (
   echo.
   echo [ERROR] Failed to stop existing services.
   pause
-  exit /b %STOP_CODE%
+  exit /b %EXIT_CODE%
 )
 
 echo Rebuilding update-ready PWA assets...

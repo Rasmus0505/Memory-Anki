@@ -68,3 +68,17 @@ def test_frontend_generated_api_boundary_allows_contract_wrappers_and_tests(
     check_architecture.check_frontend_generated_api_boundary(errors)
 
     assert errors == []
+
+
+def test_ai_gateway_boundary_blocks_business_endpoint_literals(tmp_path: Path, monkeypatch) -> None:
+    api_src = tmp_path / "apps" / "api" / "src" / "memory_anki"
+    monkeypatch.setattr(check_architecture, "API_SRC", api_src)
+    write_file(api_src / "infrastructure" / "llm" / "client.py", 'URL = "/chat/completions"\n')
+    write_file(api_src / "modules" / "quiz" / "application" / "service.py", 'URL = "/chat/completions"\n')
+
+    errors: list[str] = []
+    check_architecture.check_ai_gateway_boundary(errors)
+
+    assert errors == [
+        "apps/api/src/memory_anki/modules/quiz/application/service.py: AI endpoints must be constructed by infrastructure.llm; business modules must not hard-code `/chat/completions`."
+    ]
