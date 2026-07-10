@@ -92,23 +92,22 @@ def dedupe_chapter_questions(session: Session, chapter_id: int) -> int:
 
 def _normalize_import_text(value: Any) -> str:
     text = unicodedata.normalize("NFKC", str(value or ""))
+    punctuation_map: dict[str, str | int | None] = {
+        "“": '"',
+        "”": '"',
+        "‘": "'",
+        "’": "'",
+        "（": "(",
+        "）": ")",
+        "，": ",",
+        "。": ".",
+        "；": ";",
+        "：": ":",
+        "？": "?",
+        "！": "!",
+    }
     text = text.translate(
-        str.maketrans(
-            {
-                "“": '"',
-                "”": '"',
-                "‘": "'",
-                "’": "'",
-                "（": "(",
-                "）": ")",
-                "，": ",",
-                "。": ".",
-                "；": ";",
-                "：": ":",
-                "？": "?",
-                "！": "!",
-            }
-        )
+        str.maketrans(punctuation_map)
     )
     text = text.replace('"', "").replace("'", "")
     text = re.sub(r"^\s*\d+\s*[.、．]\s*", "", text)

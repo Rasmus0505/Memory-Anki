@@ -430,7 +430,8 @@ def _collect_direct_questions(
             else None
         )
         if is_standard_questions_payload(parsed):
-            for item in parsed.get("questions", []):
+            standard_payload = parsed if isinstance(parsed, dict) else {}
+            for item in standard_payload.get("questions", []):
                 if isinstance(item, dict):
                     direct_questions.append(item)
             continue
@@ -465,7 +466,7 @@ def generate_quiz_preview_from_text_files(
         classify_by_mini_palace=classify_by_mini_palace,
         selected_chapter_id=selected_chapter_id,
     )
-    source_meta = {
+    source_meta: dict[str, Any] = {
         "source_kind": "text_files",
         "page_numbers": None,
         "image_names": [str(item.get("filename") or "") for item in file_artifacts],

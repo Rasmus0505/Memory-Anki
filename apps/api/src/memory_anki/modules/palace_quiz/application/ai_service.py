@@ -94,13 +94,16 @@ def _build_overridden_transport_chat_config(
     temperature: object,
     timeout_seconds: object,
 ):
+    normalized_timeout = (
+        float(timeout_seconds) if isinstance(timeout_seconds, int | float) else 90.0
+    )
     return (
         OpenAICompatibleChatConfig(
             api_key=_FACADE_TRANSPORT_MODEL_KEY,
             base_url="",
             model=_FACADE_TRANSPORT_MODEL_KEY,
             temperature=temperature if isinstance(temperature, int | float) else None,
-            timeout_seconds=float(timeout_seconds or 90),
+            timeout_seconds=normalized_timeout,
         ),
         None,
         {

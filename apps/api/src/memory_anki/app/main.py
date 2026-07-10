@@ -18,7 +18,12 @@ from memory_anki.app.startup_runtime import (
 )
 from memory_anki.app.startup_warmup import start_startup_warmup
 from memory_anki.core.api_token_auth import ApiTokenAuthMiddleware
-from memory_anki.core.config import ATTACHMENTS_DIR, MEMORY_ANKI_API_TOKEN, WEB_DIST_DIR
+from memory_anki.core.config import (
+    ATTACHMENTS_DIR,
+    MEMORY_ANKI_API_TOKEN,
+    WEB_DIST_DIR,
+    ensure_runtime_dirs,
+)
 from memory_anki.core.request_logging import RequestLoggingMiddleware
 from memory_anki.core.runtime_activity import (
     start_runtime_activity_heartbeat,
@@ -38,6 +43,7 @@ from memory_anki.modules.freestyle.presentation import router as freestyle_route
 from memory_anki.modules.knowledge.presentation import router as knowledge_router
 from memory_anki.modules.mindmap.presentation import router as mindmap_router
 from memory_anki.modules.palace_quiz.presentation import router as palace_quiz_router
+from memory_anki.modules.palace_quiz.presentation import workspace_router as palace_quiz_workspace_router
 from memory_anki.modules.palaces.presentation import import_router
 from memory_anki.modules.palaces.presentation import router as palace_router
 from memory_anki.modules.reviews.presentation import router as review_router
@@ -66,20 +72,8 @@ class SinglePageAppStaticFiles(StaticFiles):
         if scope.get("method") not in {"GET", "HEAD"}:
             raise StarletteHTTPException(status_code=404)
         requested_path = "/" + path.replace("\\", "/").lstrip("/")
-        if requested_path.startswith("/assets/") and path.endswith(".js"):
-            escaped_path = requested_path.replace("\\", "\\\\").replace("'", "\\'")
-            return Response(
-                "location.replace('/pwa-reset.html?missing_asset="
-                f"{escaped_path}')\nexport default null\n",
-                media_type="application/javascript",
-                headers={"Cache-Control": "no-store"},
-            )
-        if requested_path.startswith("/assets/") and path.endswith(".css"):
-            return Response(
-                "",
-                media_type="text/css",
-                headers={"Cache-Control": "no-store"},
-            )
+        if requested_path.startswith("/assets/"):
+            raise StarletteHTTPException(status_code=404)
         if Path(path).suffix:
             raise StarletteHTTPException(status_code=404)
         return await super().get_response("index.html", scope)
@@ -152,11 +146,13 @@ app.add_middleware(ApiTokenAuthMiddleware, token=MEMORY_ANKI_API_TOKEN)
 app.add_middleware(RequestLoggingMiddleware)
 install_web_cache_headers(app)
 
+ensure_runtime_dirs()
 app.mount("/api/attachments", StaticFiles(directory=str(ATTACHMENTS_DIR)), name="attachments")
 
 app.include_router(palace_router.router, prefix="/api/v1")
 app.include_router(backups_router.router, prefix="/api/v1")
 app.include_router(palace_quiz_router.router, prefix="/api/v1")
+app.include_router(palace_quiz_workspace_router.router, prefix="/api/v1")
 app.include_router(review_router.router, prefix="/api/v1")
 app.include_router(sessions_router.router, prefix="/api/v1")
 app.include_router(settings_router.router, prefix="/api/v1")

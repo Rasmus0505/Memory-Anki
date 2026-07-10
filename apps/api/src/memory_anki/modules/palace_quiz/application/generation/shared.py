@@ -149,7 +149,8 @@ def normalize_generated_question_drafts(
 def node_text(node: Any) -> str:
     if not isinstance(node, dict):
         return ""
-    data = node.get("data") if isinstance(node.get("data"), dict) else {}
+    raw_data = node.get("data")
+    data: dict[str, Any] = raw_data if isinstance(raw_data, dict) else {}
     return str(data.get("text") or node.get("text") or "").strip()
 
 
@@ -398,7 +399,7 @@ def build_generation_messages(
 
 # === quiz_generation_preview_grouping.py ===
 def _grouping_service():
-    from . import quiz_grouping_service
+    from .. import quiz_grouping_service
 
     return quiz_grouping_service
 
@@ -580,12 +581,6 @@ def prepare_short_answer_feedback_request(
     )
 
 # === quiz_generation_feedback.py ===
-def _ai_service():
-    from .. import ai_service
-
-    return ai_service
-
-
 def _coerce_feedback_points(value: object) -> list[str]:
     if not isinstance(value, list):
         return []
@@ -676,12 +671,8 @@ RECOVERABLE_OPERATIONS = {
 
 def _recover_source_meta(payload: dict[str, Any], log_id: str) -> dict[str, Any]:
     request_payload = payload.get("request_payload")
-    source_meta = (
-        dict(request_payload.get("source_meta"))
-        if isinstance(request_payload, dict)
-        and isinstance(request_payload.get("source_meta"), dict)
-        else {}
-    )
+    raw_source_meta = request_payload.get("source_meta") if isinstance(request_payload, dict) else None
+    source_meta = dict(raw_source_meta) if isinstance(raw_source_meta, dict) else {}
     source_meta["ai_call_log_id"] = log_id
     source_meta["recovered_from_ai_call_log_id"] = log_id
     return source_meta

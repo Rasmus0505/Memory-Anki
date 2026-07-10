@@ -175,7 +175,7 @@ class ReviewMindmapRequestContext:
     normalized_mode: str
     normalized_question_types: list[str]
     normalized_question_count: int
-    current_mindmap: list[dict[str, Any]]
+    current_mindmap: dict[str, Any]
     related_summaries: list[dict[str, Any]]
 
 
@@ -373,12 +373,6 @@ def build_review_mindmap_preview_result(
     )
 
 # === quiz_generation_review_mindmap_runtime.py ===
-def _ai_service():
-    from .. import ai_service
-
-    return ai_service
-
-
 def generate_quiz_preview_from_review_mindmap(
     session: Session,
     *,

@@ -38,10 +38,8 @@ function historyKey(palaceId: number) {
 
 export function loadQuizGenerationHistory(palaceId: number): QuizGenerationHistoryItem[] {
   try {
-    const raw = window.localStorage.getItem(historyKey(palaceId))
-    if (!raw) return []
-    const parsed = JSON.parse(raw)
-    return Array.isArray(parsed) ? (parsed as QuizGenerationHistoryItem[]) : []
+    window.localStorage.removeItem(historyKey(palaceId))
+    return []
   } catch {
     return []
   }

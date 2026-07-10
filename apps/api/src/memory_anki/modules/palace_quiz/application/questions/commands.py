@@ -345,11 +345,14 @@ def upsert_classified_question_copy(
     source_question: PalaceQuizQuestion,
     mini_palace_id: int,
 ) -> PalaceQuizQuestion:
-    validate_mini_palace(session, source_question.palace_id, mini_palace_id)
+    if source_question.palace_id is None:
+        raise PalaceQuizValidationError("章节题不能复制到专项训练。")
+    palace_id = source_question.palace_id
+    validate_mini_palace(session, palace_id, mini_palace_id)
     existing = (
         session.query(PalaceQuizQuestion)
         .filter(
-            PalaceQuizQuestion.palace_id == source_question.palace_id,
+            PalaceQuizQuestion.palace_id == palace_id,
             PalaceQuizQuestion.mini_palace_id == mini_palace_id,
             PalaceQuizQuestion.origin_question_id == source_question.id,
             PalaceQuizQuestion.deleted_at.is_(None),
@@ -360,10 +363,10 @@ def upsert_classified_question_copy(
         row = existing
     else:
         row = PalaceQuizQuestion(
-            palace_id=source_question.palace_id,
+            palace_id=palace_id,
             mini_palace_id=mini_palace_id,
             origin_question_id=source_question.id,
-            sort_order=next_palace_sort_order(session, source_question.palace_id) + 1,
+            sort_order=next_palace_sort_order(session, palace_id) + 1,
         )
         session.add(row)
     return upsert_classified_question_copy_row(

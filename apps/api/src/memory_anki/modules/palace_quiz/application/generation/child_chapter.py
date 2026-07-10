@@ -46,12 +46,19 @@ def build_group_questions_by_child_chapter_preview(
 ) -> dict[str, object]:
     grouped_items: list[dict[str, object]] = []
     assigned_indexes: set[int] = set()
-    context_by_id = {int(item["mini_palace_id"]): item for item in child_contexts}
-    for item in grouping_payload.get("mini_palace_groups", []):
+    context_by_id = {
+        int(raw_id): item
+        for item in child_contexts
+        if isinstance((raw_id := item.get("mini_palace_id")), int)
+    }
+    raw_groups = grouping_payload.get("mini_palace_groups")
+    groups = raw_groups if isinstance(raw_groups, list) else []
+    for item in groups:
         if not isinstance(item, dict):
             continue
         try:
-            child_chapter_id = int(item.get("mini_palace_id"))
+            raw_child_chapter_id = item.get("mini_palace_id")
+            child_chapter_id = int(raw_child_chapter_id) if raw_child_chapter_id is not None else 0
         except (TypeError, ValueError):
             continue
         question_indexes = item.get("question_indexes")
@@ -179,12 +186,6 @@ def prepare_child_chapter_grouping_request(
     )
 
 # === quiz_generation_child_chapter_ai_runtime.py ===
-def _ai_service():
-    from .. import ai_service
-
-    return ai_service
-
-
 def group_questions_by_child_chapters(
     session: Session,
     *,
@@ -249,11 +250,13 @@ def _payload_matches_child_chapter_request(
         return False
     if not isinstance(mini_palaces, list):
         return False
-    mini_palace_ids = {
-        int(item.get("mini_palace_id"))
-        for item in mini_palaces
-        if isinstance(item, dict) and item.get("mini_palace_id") is not None
-    }
+    mini_palace_ids: set[int] = set()
+    for item in mini_palaces:
+        if not isinstance(item, dict):
+            continue
+        raw_mini_palace_id = item.get("mini_palace_id")
+        if raw_mini_palace_id is not None:
+            mini_palace_ids.add(int(raw_mini_palace_id))
     return mini_palace_ids == expected_child_ids
 
 

@@ -30,7 +30,7 @@ def normalize_ocr_source_payload(payload: dict[str, Any]) -> dict[str, Any]:
         raise ValueError("OCR source requires source_set, page_key, and import_batch.")
     page_number = payload.get("page_number")
     try:
-        normalized_page_number = int(page_number) if page_number not in (None, "") else None
+        normalized_page_number = int(page_number) if page_number is not None and page_number != "" else None
     except (TypeError, ValueError):
         normalized_page_number = None
     lines = payload.get("lines")

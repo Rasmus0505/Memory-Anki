@@ -9,7 +9,8 @@
   Sparkles,
   Trash2,
 } from 'lucide-react'
-import { toast } from '@/shared/feedback/toast'
+import { useState } from 'react'
+import { TaskFeedbackPanel } from '@/shared/feedback/FeedbackStatus'
 import type {
   MiniPalaceSummary,
   PalaceQuizGenerationPreview,
@@ -20,7 +21,6 @@ import { QUIZ_GENERATION_SOURCE_LABELS } from '@/features/palace-quiz/quiz-gener
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card'
-import { Input } from '@/shared/components/ui/input'
 import { Textarea } from '@/shared/components/ui/textarea'
 import { cn } from '@/shared/lib/utils'
 import type { PalaceQuizMiniPalaceClassificationResult } from '@/shared/api/contracts'
@@ -119,6 +119,7 @@ export function PalaceQuizGenerationPanel({
   preview,
   stream,
 }: PalaceQuizGenerationPanelProps) {
+  const [promptCopied, setPromptCopied] = useState(false)
   const { selectedChapterSummary, selectedChapterHasChildren } = context
   const {
     hasMiniPalaces,
@@ -280,11 +281,13 @@ export function PalaceQuizGenerationPanel({
                         variant="outline"
                         size="sm"
                         onClick={() => {
-                          void navigator.clipboard?.writeText(MANUAL_TEXT_FORMAT_PROMPT)
-                          toast.success('格式修正提示词已复制')
+                          void navigator.clipboard?.writeText(MANUAL_TEXT_FORMAT_PROMPT).then(() => {
+                            setPromptCopied(true)
+                            window.setTimeout(() => setPromptCopied(false), 1600)
+                          })
                         }}
                       >
-                        复制提示词
+                        {promptCopied ? '已复制' : '复制提示词'}
                       </Button>
                     </div>
                   </div>
@@ -377,18 +380,18 @@ export function PalaceQuizGenerationPanel({
             </label>
 
             {generationError ? (
-              <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-                {generationError}
-                <div className="mt-3 flex flex-wrap gap-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    disabled={!canRetryLastGeneration || generationLoading}
-                    onClick={() => void onRetryLastGeneration()}
-                  >
-                    <RotateCcw className="size-4" />
-                    重试本次生成
-                  </Button>
+              <div className="space-y-3">
+                <TaskFeedbackPanel
+                  title="生成失败"
+                  description={generationError}
+                  state="error"
+                  onRetry={
+                    canRetryLastGeneration && !generationLoading
+                      ? () => void onRetryLastGeneration()
+                      : undefined
+                  }
+                />
+                <div className="flex flex-wrap gap-2">
                   <Button
                     type="button"
                     variant="outline"
@@ -569,16 +572,12 @@ export function PalaceQuizGenerationPanel({
           </div>
 
           {generationLoading || generationStreamStatus || generationStreamPreviewText ? (
-            <div className="space-y-3 rounded-lg border border-border/70 bg-background/70 p-4">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className="text-sm font-medium">实时模型输出</div>
-                <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                  {generationStreamStepLabel ? (
-                    <Badge variant="outline">{generationStreamStepLabel}</Badge>
-                  ) : null}
-                  <span>{generationStreamStatus || '等待生成'}</span>
-                </div>
-              </div>
+            <div className="space-y-3">
+              <TaskFeedbackPanel
+                title={generationStreamStepLabel || '正在生成题目预览'}
+                description={generationStreamStatus || '任务已开始，模型输出会持续保留在这里。'}
+                state={generationLoading ? 'running' : 'queued'}
+              />
               <div
                 className={cn(
                   'rounded-lg border border-border/70 bg-background p-3',

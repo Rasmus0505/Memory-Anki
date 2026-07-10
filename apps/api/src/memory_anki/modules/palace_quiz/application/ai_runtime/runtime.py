@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Generator
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, NoReturn
 
 from sqlalchemy.orm import Session
 
@@ -78,7 +78,7 @@ def fail_ai_call_log_and_raise(
     log_id: str,
     config: OpenAICompatibleChatConfig,
     error: Exception,
-) -> None:
+) -> NoReturn:
     if isinstance(error, OpenAICompatibleProtocolError):
         fail_external_ai_call_log(
             log_id,
@@ -205,11 +205,8 @@ def call_logged_chat_completion_stream(
 def call_logged_chat_completion(
     request: LoggedChatCompletionRequest,
 ) -> tuple[str, str]:
-    resolved_ai = (
-        request.request_payload.get("resolved_ai")
-        if isinstance(request.request_payload.get("resolved_ai"), dict)
-        else {}
-    )
+    raw_resolved_ai = request.request_payload.get("resolved_ai")
+    resolved_ai: dict[str, Any] = raw_resolved_ai if isinstance(raw_resolved_ai, dict) else {}
     log_id = begin_external_ai_call_log(
         feature=request.feature,
         operation=request.operation,

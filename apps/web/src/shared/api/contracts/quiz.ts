@@ -165,6 +165,70 @@ export interface PalaceQuizGenerationPreview {
   recovered_from_log?: boolean
 }
 
+export type QuizSourceRole = 'question' | 'answer'
+export type QuizSourceType = 'image' | 'text' | 'pdf' | 'review_mindmap'
+export type QuizGenerationJobStatus =
+  | 'draft'
+  | 'extracting'
+  | 'matching_review'
+  | 'generating'
+  | 'preview'
+  | 'saved'
+  | 'failed'
+
+export interface QuizPdfAsset {
+  id: number
+  name: string
+  original_name: string
+  file_size: number
+  page_count: number
+  archived: boolean
+  created_at: string | null
+  updated_at: string | null
+}
+
+export interface QuizGenerationSource {
+  id: number
+  role: QuizSourceRole
+  source_type: QuizSourceType
+  sort_order: number
+  display_name: string
+  original_name: string
+  mime_type: string
+  file_size: number
+  text_content: string
+  pdf_asset_id: number | null
+  page_numbers: number[]
+  config: Record<string, unknown>
+}
+
+export interface QuizMatchingItem {
+  id: string
+  status: 'matched' | 'multiple_candidates' | 'unmatched' | 'ai_generated_answer' | 'ignored'
+  confidence: 'high' | 'medium' | 'low'
+  ignored: boolean
+  question: PalaceQuizQuestionDraft
+  question_text: string
+  answer_text: string
+  answer_generated_by_ai: boolean
+}
+
+export interface QuizGenerationJob {
+  id: string
+  palace_id: number
+  selected_chapter_id: number | null
+  status: QuizGenerationJobStatus
+  title: string
+  extra_prompt: string
+  options: Record<string, unknown>
+  matching_items: QuizMatchingItem[]
+  preview: PalaceQuizGenerationPreview | null
+  error_message: string
+  sources: QuizGenerationSource[]
+  created_at: string | null
+  updated_at: string | null
+}
+
 export type PalaceQuizOcrSourceDraft = Omit<
   PalaceQuizOcrSource,
   'id' | 'palace_id' | 'created_at' | 'updated_at'

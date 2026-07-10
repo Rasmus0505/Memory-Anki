@@ -162,7 +162,7 @@ def build_grouped_preview_from_indexes(
         mini_palace_id = item.get("mini_palace_id")
         question_indexes_raw = item.get("question_indexes")
         try:
-            mini_palace_id_int = int(mini_palace_id)
+            mini_palace_id_int = int(mini_palace_id) if mini_palace_id is not None else 0
         except (TypeError, ValueError):
             continue
         if mini_palace_id_int not in context_by_id or not isinstance(question_indexes_raw, list):

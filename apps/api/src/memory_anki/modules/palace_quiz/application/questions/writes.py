@@ -18,17 +18,21 @@ def apply_normalized_question_to_row(
     row: PalaceQuizQuestion,
     normalized: dict[str, object],
 ) -> PalaceQuizQuestion:
-    row.mini_palace_id = normalized["mini_palace_id"]
-    row.source_chapter_id = normalized["source_chapter_id"]
-    row.classified_chapter_id = normalized["classified_chapter_id"]
-    row.origin_question_id = normalized["origin_question_id"]
-    row.question_type = normalized["question_type"]
-    row.stem = normalized["stem"]
+    row.mini_palace_id = _optional_int(normalized.get("mini_palace_id"))
+    row.source_chapter_id = _optional_int(normalized.get("source_chapter_id"))
+    row.classified_chapter_id = _optional_int(normalized.get("classified_chapter_id"))
+    row.origin_question_id = _optional_int(normalized.get("origin_question_id"))
+    row.question_type = str(normalized.get("question_type") or "")
+    row.stem = str(normalized.get("stem") or "")
     row.options_json = json_dump(normalized["options"], default=[])
     row.answer_payload_json = json_dump(normalized["answer_payload"], default={})
-    row.analysis = normalized["analysis"]
+    row.analysis = str(normalized.get("analysis") or "")
     row.source_meta_json = json_dump(normalized["source_meta"], default={})
     return row
+
+
+def _optional_int(value: object) -> int | None:
+    return int(value) if isinstance(value, int) and value > 0 else None
 
 
 def copy_question_content(

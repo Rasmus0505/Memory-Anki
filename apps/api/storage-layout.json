@@ -44,6 +44,13 @@
       "backup": true
     },
     {
+      "key": "quiz_generation",
+      "relative_path": "quiz_generation",
+      "kind": "directory",
+      "required": true,
+      "backup": true
+    },
+    {
       "key": "ai_call_logs",
       "relative_path": "ai_call_logs",
       "kind": "directory",

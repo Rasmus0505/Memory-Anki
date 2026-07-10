@@ -44,7 +44,7 @@ describe('PalaceQuizPage core flows', () => {
     expect(screen.getByRole('button', { name: /新增题目/ })).toBeTruthy()
 
     fireEvent.click(screen.getByRole('button', { name: 'AI生成' }))
-    expect(await screen.findByText('来源设置')).toBeTruthy()
+    expect(await screen.findByText('AI 题库生成工作台')).toBeTruthy()
     expect(await screen.findByText('生物 / 第三章')).toBeTruthy()
   })
 
@@ -182,17 +182,12 @@ describe('PalaceQuizPage core flows', () => {
     await waitFor(() => {
       expect(dispatchGlobalFeedbackMock).toHaveBeenCalledWith(
         'quiz_result_correct',
-        expect.objectContaining({ label: '答对', screenPulse: 'soft', audioScope: 'local' }),
-      )
-      expect(emitReviewConfettiMock).toHaveBeenCalledWith(
-        expect.objectContaining({
-          kind: 'quiz_correct',
-          confettiAmount: 0.8,
-          confettiPreset: 'random_direction',
-          soundEnabled: true,
-        }),
+        expect.objectContaining({ audioScope: 'local' }),
       )
     })
+    expect(emitReviewConfettiMock).not.toHaveBeenCalledWith(
+      expect.objectContaining({ kind: 'quiz_correct' }),
+    )
     fireEvent.click(screen.getByRole('button', { name: /再做一次/ }))
     expect(dispatchGlobalFeedbackMock).toHaveBeenCalledWith(
       'quiz_answer_reset',
@@ -221,7 +216,7 @@ describe('PalaceQuizPage core flows', () => {
     await waitFor(() => {
       expect(dispatchGlobalFeedbackMock).toHaveBeenCalledWith(
         'quiz_result_incorrect',
-        expect.objectContaining({ label: '答错', screenPulse: null, audioScope: 'local' }),
+        expect.objectContaining({ audioScope: 'local' }),
       )
     })
     expect(emitReviewConfettiMock).not.toHaveBeenCalledWith(

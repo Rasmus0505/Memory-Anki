@@ -538,26 +538,28 @@ def parse_manual_text_quiz_pairs(
             type_label=question.type_label,
             number=question.number,
         )
-        answer = answer_by_key.get(strict_key) or answer_by_loose_key.get(loose_key)
-        if answer is None and question.section_title:
-            answer = answer_by_section_type_number.get(
+        matched_answer: _AnswerCandidate | None = (
+            answer_by_key.get(strict_key) or answer_by_loose_key.get(loose_key)
+        )
+        if matched_answer is None and question.section_title:
+            matched_answer = answer_by_section_type_number.get(
                 (
                     _clean_line(question.section_title),
                     _type_family(question.type_label),
                     question.number,
                 )
             )
-        if answer is None and question.section_title:
-            answer = answer_by_section_number.get(
+        if matched_answer is None and question.section_title:
+            matched_answer = answer_by_section_number.get(
                 (_clean_line(question.section_title), question.number)
             )
-        if answer is None:
+        if matched_answer is None:
             warnings.append(
                 f"{question.section_title or question.chapter_title} {question.type_label}"
                 f" 第 {question.number} 题没有匹配到答案，已跳过。"
             )
             continue
-        if question.question_type == "multiple_choice" and answer.answer not in {
+        if question.question_type == "multiple_choice" and matched_answer.answer not in {
             option["id"] for option in question.options
         }:
             warnings.append(
@@ -570,8 +572,8 @@ def parse_manual_text_quiz_pairs(
                 question_type=question.question_type,
                 stem=question.stem,
                 options=question.options,
-                answer=answer.answer,
-                analysis=answer.analysis,
+                answer=matched_answer.answer,
+                analysis=matched_answer.analysis,
                 chapter_title=question.chapter_title,
                 section_title=question.section_title,
                 source_group=question.source_group,

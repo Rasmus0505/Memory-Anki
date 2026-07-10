@@ -253,12 +253,6 @@ def build_chapter_outline_preview_result(
     )
 
 # === quiz_generation_chapter_outline.py ===
-def _ai_service():
-    from .. import ai_service
-
-    return ai_service
-
-
 def generate_quiz_preview_from_chapter_outline(
     session: Session,
     *,

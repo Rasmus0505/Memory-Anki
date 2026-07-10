@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { ArrowLeft, BookOpen } from 'lucide-react'
 import { useAiRunConfigDialog } from '@/features/ai-config/useAiRunConfigDialog'
-import { PalaceQuizGenerationPanel } from '@/features/palace-quiz/components/PalaceQuizGenerationPanel'
+import { QuizGenerationWorkspace } from '@/features/palace-quiz/components/QuizGenerationWorkspace'
 import { PalaceQuizManagePanel } from '@/features/palace-quiz/components/PalaceQuizManagePanel'
 import { PalaceQuizMemoryLookupDialog } from '@/features/palace-quiz/components/PalaceQuizMemoryLookupDialog'
 import { PalaceQuizPracticePanel } from '@/features/palace-quiz/components/PalaceQuizPracticePanel'
@@ -206,11 +206,6 @@ export default function PalaceQuizPage() {
     }
   }
 
-  const handleSaveGenerationPreview = async () => {
-    await generation.handleSaveGenerationPreview()
-    setActiveTab('practice')
-  }
-
   if (!palaceId) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center text-sm text-muted-foreground">
@@ -355,68 +350,16 @@ export default function PalaceQuizPage() {
       ) : null}
 
       {!loading && activeTab === 'generate' ? (
-        <PalaceQuizGenerationPanel
-          context={{
-            selectedChapterSummary: generation.selectedChapterSummary,
-            selectedChapterHasChildren: generation.selectedChapterHasChildren,
-          }}
-          classification={{
-            hasMiniPalaces: miniPalaces.length > 0,
-            rootQuestionCount: browser.rootQuestionCount,
-            miniPalaces,
-            loading: generation.classificationLoading,
-            result: generation.classificationResult,
-            onClassifyExistingQuestions: generation.handleClassifyExistingQuestions,
-          }}
-          source={{
-            sourceKind: generation.generationSourceKind,
-            setSourceKind: (value) => {
-              generation.setGenerationSourceKind(value)
-              generation.setGenerationError('')
-              if (value === 'image-single') {
-                generation.setGenerationFiles((current) => current.slice(0, 1))
-              }
-            },
-            files: generation.generationFiles,
-            extraPrompt: generation.extraPrompt,
-            setExtraPrompt: generation.setExtraPrompt,
-            enableSecondaryReview: generation.generationEnableSecondaryReview,
-            setEnableSecondaryReview: generation.setGenerationEnableSecondaryReview,
-            classifyByMiniPalace: generation.generationClassifyByMiniPalace,
-            setClassifyByMiniPalace: generation.setGenerationClassifyByMiniPalace,
-            error: generation.generationError,
-            loading: generation.generationLoading,
-            canRetryLastGeneration: Boolean(generation.lastFailedConfig),
-            onOpenRangeDialog: generation.handleOpenRangeDialog,
-            onGeneratePreview: generation.handleGeneratePreview,
-            onRetryLastGeneration: generation.handleRetryLastGeneration,
-            onRecoverFromLog: generation.handleRecoverFromLog,
-            onImageFileChange: generation.handleImageFileChange,
-          }}
-          history={{
-            items: generation.generationHistory,
-            regeneratingId: generation.historyRegeneratingId,
-            generationLoading: generation.generationLoading,
-            onRegenerateFromHistory: generation.handleRegenerateFromHistory,
-            onRecoverGenerationHistoryPreview: generation.handleRecoverGenerationHistoryPreview,
-            onDeleteGenerationHistory: generation.handleDeleteGenerationHistory,
-            onApplyHistoryConfig: generation.applyHistoryConfig,
-          }}
-          preview={{
-            value: generation.generationPreview,
-            saving: generation.generationSaving,
-            saveMode: generation.generationSaveMode,
-            setSaveMode: generation.setGenerationSaveMode,
-            getSaveCount: generation.getGenerationPreviewSaveCount,
-            formatResolvedAiSteps: generation.formatResolvedAiSteps,
-            onSaveGenerationPreview: handleSaveGenerationPreview,
-          }}
-          stream={{
-            status: generation.generationStreamStatus,
-            stepLabel: generation.generationStreamStepLabel,
-            previewText: generation.generationStreamPreviewText,
-            contentRef: generation.generationStreamContentRef,
-            onScroll: generation.handleGenerationStreamScroll,
+        <QuizGenerationWorkspace
+          palaceId={palaceId}
+          palace={palace}
+          selectedChapterId={generation.selectedChapterId}
+          selectedChapterSummary={generation.selectedChapterSummary}
+          onOpenRangeDialog={generation.handleOpenRangeDialog}
+          promptForAiOptions={promptForAiOptions}
+          onSaved={async () => {
+            await refreshQuestions()
+            setActiveTab('practice')
           }}
         />
       ) : null}

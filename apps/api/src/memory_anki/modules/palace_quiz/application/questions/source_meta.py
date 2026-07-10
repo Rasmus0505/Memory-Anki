@@ -44,18 +44,11 @@ def normalize_non_empty_string_list(raw_values: Any) -> list[str] | None:
 
 
 def normalize_review_source_meta(source_meta: dict[str, Any]) -> dict[str, Any]:
-    question_count_raw = source_meta.get("question_count")
-    try:
-        question_count = (
-            int(question_count_raw)
-            if question_count_raw not in (None, "", 0, "0")
-            else None
-        )
-    except (TypeError, ValueError):
-        question_count = None
+    question_count = normalize_optional_int(source_meta.get("question_count"))
+    raw_related_palace_summaries = source_meta.get("related_palace_summaries")
     related_palace_summaries = (
-        [item for item in source_meta.get("related_palace_summaries") if isinstance(item, dict)]
-        if isinstance(source_meta.get("related_palace_summaries"), list)
+        [item for item in raw_related_palace_summaries if isinstance(item, dict)]
+        if isinstance(raw_related_palace_summaries, list)
         else None
     )
     return {
