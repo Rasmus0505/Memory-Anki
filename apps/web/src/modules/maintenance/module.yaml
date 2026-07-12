@@ -1,0 +1,17 @@
+{
+  "name": "maintenance",
+  "owns": [],
+  "forbids": [
+    "legacy business imports"
+  ],
+  "publicEntry": "src/modules/maintenance/public.ts",
+  "workflows": [],
+  "ports": [],
+  "events": [],
+  "dependencies": [],
+  "invariants": [
+    "cross-module imports use public.ts"
+  ],
+  "requiredTests": [],
+  "architectureVersion": 3
+}

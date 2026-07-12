@@ -1,0 +1,17 @@
+{
+  "name": "library",
+  "owns": [],
+  "forbids": [
+    "legacy business imports"
+  ],
+  "publicEntry": "src/modules/library/public.ts",
+  "workflows": [],
+  "ports": [],
+  "events": [],
+  "dependencies": [],
+  "invariants": [
+    "cross-module imports use public.ts"
+  ],
+  "requiredTests": [],
+  "architectureVersion": 3
+}

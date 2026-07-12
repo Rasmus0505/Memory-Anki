@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 3,
+  "useCases": {
+    "learning_record.append_event": {
+      "owner": "learning_record",
+      "kind": "command",
+      "input": "AppendLearningEvent",
+      "output": "LearningEventAppended",
+      "transactional": true,
+      "tests": ["apps/api/tests/test_architecture_v3_contracts.py"]
+    }
+  }
+}

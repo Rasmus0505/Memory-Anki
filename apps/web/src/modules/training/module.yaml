@@ -1,0 +1,22 @@
+{
+  "name": "training",
+  "owns": [],
+  "forbids": [
+    "legacy business imports"
+  ],
+  "publicEntry": "src/modules/training/public.ts",
+  "workflows": [],
+  "ports": [],
+  "events": [],
+  "dependencies": [
+    "memory_content",
+    "assessment",
+    "learning_record",
+    "preferences"
+  ],
+  "invariants": [
+    "cross-module imports use public.ts"
+  ],
+  "requiredTests": [],
+  "architectureVersion": 3
+}

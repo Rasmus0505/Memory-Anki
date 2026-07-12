@@ -16,10 +16,10 @@
       "presentation"
     ],
     "contexts": {
-            "ai_learning": {
+      "ai_learning": {
         "status": "migrated"
       },
-"batch_generation": {
+      "batch_generation": {
         "status": "migrated",
         "publicEntry": "memory_anki.modules.batch_generation.application"
       },
@@ -80,13 +80,45 @@
       "settings": {
         "status": "migrated",
         "publicEntry": "memory_anki.modules.settings.api"
+      },
+      "library": {
+        "status": "target",
+        "architectureVersion": 3
+      },
+      "memory_content": {
+        "status": "target",
+        "architectureVersion": 3
+      },
+      "assessment": {
+        "status": "target",
+        "architectureVersion": 3
+      },
+      "learning_record": {
+        "status": "target",
+        "architectureVersion": 3
+      },
+      "training": {
+        "status": "target",
+        "architectureVersion": 3
+      },
+      "ai_authoring": {
+        "status": "target",
+        "architectureVersion": 3
+      },
+      "preferences": {
+        "status": "target",
+        "architectureVersion": 3
+      },
+      "maintenance": {
+        "status": "target",
+        "architectureVersion": 3
       }
     },
     "allowedCrossContextDependencies": {
-            "ai_learning": [
+      "ai_learning": [
         "settings"
       ],
-"batch_generation": [],
+      "batch_generation": [],
       "backups": [
         "mindmap_document"
       ],
@@ -141,7 +173,15 @@
       "settings": [
         "backups",
         "reviews"
-      ]
+      ],
+      "library": [],
+      "memory_content": [],
+      "assessment": [],
+      "learning_record": [],
+      "training": [],
+      "ai_authoring": [],
+      "preferences": [],
+      "maintenance": []
     },
     "unitOfWorkManagedUseCases": [
       "modules/knowledge/application/chapter_service.py",
