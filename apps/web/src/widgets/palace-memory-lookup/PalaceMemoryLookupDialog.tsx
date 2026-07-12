@@ -53,6 +53,7 @@ import {
   getPalaceContext,
   getPalaceTitle,
   getRootNodeUid,
+  shouldBlockMemoryLookupClose,
   useMemoryLookupNarrowViewport,
   type MemoryLookupPreviewMode,
 } from '@/widgets/palace-memory-lookup/model/memoryLookupDialogSupport'
@@ -89,7 +90,32 @@ export function PalaceMemoryLookupDialog({
   } | null>(null)
   const resizeStateRef = useRef<MemoryLookupResizeState | null>(null)
   const suppressCapsuleClickRef = useRef(false)
+  const mindMapFullscreenRef = useRef(false)
+  const fullscreenExitGuardTimerRef = useRef<number | null>(null)
   const isNarrowViewport = useMemoryLookupNarrowViewport()
+
+  const handleMindMapFullscreenChange = useCallback((active: boolean) => {
+    if (fullscreenExitGuardTimerRef.current != null) {
+      window.clearTimeout(fullscreenExitGuardTimerRef.current)
+      fullscreenExitGuardTimerRef.current = null
+    }
+    if (active) {
+      mindMapFullscreenRef.current = true
+      return
+    }
+    fullscreenExitGuardTimerRef.current = window.setTimeout(() => {
+      mindMapFullscreenRef.current = false
+      fullscreenExitGuardTimerRef.current = null
+    }, 350)
+  }, [])
+  const handleDialogOpenChange = useCallback((nextOpen: boolean) => {
+    if (shouldBlockMemoryLookupClose({
+      nextOpen,
+      pinned: false,
+      mindMapFullscreenActive: mindMapFullscreenRef.current,
+    })) return
+    onOpenChange(nextOpen)
+  }, [onOpenChange])
 
   const palaces = useMemo(() => flattenPalaces(groupedData), [groupedData])
   const selectedPalace = palaces.find((palace) => palace.id === selectedPalaceId) ?? null
@@ -113,6 +139,12 @@ export function PalaceMemoryLookupDialog({
     setRevealMap(buildAllRevealedState(revealRoot))
     setRedNodeIds(new Set<string>())
   }, [revealRoot, setRedNodeIds, setRevealMap])
+
+  useEffect(() => () => {
+    if (fullscreenExitGuardTimerRef.current != null) {
+      window.clearTimeout(fullscreenExitGuardTimerRef.current)
+    }
+  }, [])
 
   useEffect(() => {
     if (!open) return
@@ -455,6 +487,8 @@ export function PalaceMemoryLookupDialog({
             editorState={flipEditorState}
             readonly
             practiceModeActive
+            browserFullscreenEnabled={false}
+            onFullscreenChange={handleMindMapFullscreenChange}
             syncOnPropChange
             syncIntent="replace"
             syncReason="review_flip"
@@ -472,6 +506,8 @@ export function PalaceMemoryLookupDialog({
             key={`quiz-memory-lookup-${selectedPalaceId}-view`}
             editorState={previewState}
             readonly
+            browserFullscreenEnabled={false}
+            onFullscreenChange={handleMindMapFullscreenChange}
             focusRequestNodeUid={rootNodeUid}
             focusRequestNonce={rootFocusNonce}
             initialViewPolicy="reset"
@@ -490,7 +526,7 @@ export function PalaceMemoryLookupDialog({
   if (!open) return null
 
   const mobileDialog = (
-    <Dialog open={open} onOpenChange={onOpenChange} modal>
+    <Dialog open={open} onOpenChange={handleDialogOpenChange} modal>
       <DialogContent
         layout="unstyled"
         className="fixed inset-0 z-[241] flex h-[100dvh] w-screen max-w-none flex-col overflow-hidden rounded-none border-0 bg-card shadow-2xl lg:hidden"
@@ -543,8 +579,12 @@ export function PalaceMemoryLookupDialog({
   if (layout.collapsed) {
     return (
       <Dialog open={open} onOpenChange={(nextOpen) => {
-          if (!nextOpen && pinned) return
-          onOpenChange(nextOpen)
+          if (shouldBlockMemoryLookupClose({
+            nextOpen,
+            pinned,
+            mindMapFullscreenActive: mindMapFullscreenRef.current,
+          })) return
+          handleDialogOpenChange(nextOpen)
         }} modal={false}>
           <DialogContent
             layout="unstyled"
@@ -579,8 +619,12 @@ export function PalaceMemoryLookupDialog({
 
   return (
     <Dialog open={open} onOpenChange={(nextOpen) => {
-        if (!nextOpen && pinned) return
-        onOpenChange(nextOpen)
+        if (shouldBlockMemoryLookupClose({
+          nextOpen,
+          pinned,
+          mindMapFullscreenActive: mindMapFullscreenRef.current,
+        })) return
+        handleDialogOpenChange(nextOpen)
       }} modal={false}>
         <DialogContent
           layout="unstyled"

@@ -1,14 +1,12 @@
-﻿/* === COMBO MILESTONE BURST (情感化视觉：连击里程碑庆祝) === */
+/* === COMBO MILESTONE BURST (情感化视觉：连击里程碑庆祝) === */
 
 /* CSS 伪全屏：替代浏览器原生 Fullscreen API，保留所有 React overlay 可见性 */
 .memory-anki-mindmap-native-fullscreen {
   position: fixed !important;
-  inset: 0 !important;
+  top: var(--memory-anki-mindmap-fullscreen-top, 0px) !important;
+  left: var(--memory-anki-mindmap-fullscreen-left, 0px) !important;
   z-index: 230 !important;
-  width: 100vw !important;
-  width: 100dvw !important;
-  height: 100vh !important;
-  height: 100dvh !important;
+  width: var(--memory-anki-mindmap-fullscreen-width, 100dvw) !important;
   height: var(--memory-anki-mindmap-fullscreen-height, 100dvh) !important;
   max-width: none !important;
   max-height: none !important;

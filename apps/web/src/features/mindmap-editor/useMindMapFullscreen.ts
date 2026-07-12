@@ -1,90 +1,93 @@
-﻿import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { createActor } from 'xstate'
+import {
+  isMindMapFullscreenState,
+  mindMapPresentationMachine,
+  type PresentationPort,
+} from '@/modules/mindmap/public'
+import { browserPresentationPort } from '@/platform/browser/browserPresentationPort'
 
 interface MindMapFullscreenOptions {
-  immersiveModeActive: boolean
+  getFullscreenTarget: () => HTMLElement | null
+  browserFullscreenEnabled: boolean
   onFullscreenChange?: (active: boolean) => void
-  onFullscreenToggle?: (active?: boolean) => void
   requestFitView: () => void
+  presentationPort?: PresentationPort
 }
 
 export function useMindMapFullscreen({
-  immersiveModeActive,
+  getFullscreenTarget,
+  browserFullscreenEnabled,
   onFullscreenChange,
-  onFullscreenToggle,
   requestFitView,
+  presentationPort = browserPresentationPort,
 }: MindMapFullscreenOptions) {
+  const actorRef = useRef(createActor(mindMapPresentationMachine))
   const [active, setActive] = useState(false)
+  const activeRef = useRef(false)
 
   const requestFitViewOnNextFrame = useCallback(() => {
-    if (typeof window === 'undefined') return
-    window.requestAnimationFrame(() => window.requestAnimationFrame(requestFitView))
-  }, [requestFitView])
+    presentationPort.scheduleLayout(requestFitView)
+  }, [presentationPort, requestFitView])
 
-  const enter = useCallback(async () => {
-    setActive(true)
-    onFullscreenChange?.(true)
+  const publishActive = useCallback((nextActive: boolean) => {
+    if (activeRef.current === nextActive) return
+    activeRef.current = nextActive
+    setActive(nextActive)
+    onFullscreenChange?.(nextActive)
     requestFitViewOnNextFrame()
   }, [onFullscreenChange, requestFitViewOnNextFrame])
 
   const exit = useCallback(async () => {
-    setActive(false)
-    onFullscreenChange?.(false)
-    requestFitViewOnNextFrame()
-  }, [onFullscreenChange, requestFitViewOnNextFrame])
+    const actor = actorRef.current
+    actor.send({ type: 'EXIT_REQUESTED' })
+    publishActive(false)
+    await presentationPort.exitFullscreen()
+    actor.send({ type: 'PRESENTATION_EXITED' })
+  }, [presentationPort, publishActive])
+
+  const enter = useCallback(async () => {
+    const actor = actorRef.current
+    actor.send({ type: 'ENTER_REQUESTED' })
+    publishActive(true)
+    const nativeEntered = browserFullscreenEnabled
+      ? await presentationPort.enterFullscreen(getFullscreenTarget())
+      : false
+    actor.send({ type: nativeEntered ? 'PRESENTATION_ENTERED' : 'PRESENTATION_FAILED' })
+  }, [browserFullscreenEnabled, getFullscreenTarget, presentationPort, publishActive])
 
   const toggle = useCallback(() => {
-    if (active) {
-      void exit()
-      return
+    if (activeRef.current) void exit()
+    else void enter()
+  }, [enter, exit])
+
+  useEffect(() => {
+    const actor = actorRef.current
+    actor.start()
+    const subscription = actor.subscribe((snapshot) => {
+      publishActive(isMindMapFullscreenState(snapshot.value))
+    })
+    return () => {
+      subscription.unsubscribe()
+      actor.stop()
     }
-    if (immersiveModeActive) onFullscreenToggle?.(false)
-    void enter()
-  }, [active, enter, exit, immersiveModeActive, onFullscreenToggle])
+  }, [publishActive])
 
   useEffect(() => {
     if (!active) return
-    const previousBodyOverflow = document.body.style.overflow
-    const previousHtmlOverflow = document.documentElement.style.overflow
-    document.body.style.overflow = 'hidden'
-    document.documentElement.style.overflow = 'hidden'
-    return () => {
-      document.body.style.overflow = previousBodyOverflow
-      document.documentElement.style.overflow = previousHtmlOverflow
-    }
-  }, [active])
-
-  useEffect(() => {
-    if (!active || typeof window === 'undefined') return
-    const root = document.documentElement
-    const previousHeight = root.style.getPropertyValue('--memory-anki-mindmap-fullscreen-height')
-    const updateViewportHeight = () => {
-      const height = window.visualViewport?.height ?? window.innerHeight
-      root.style.setProperty('--memory-anki-mindmap-fullscreen-height', `${height}px`)
-    }
-    updateViewportHeight()
-    window.visualViewport?.addEventListener('resize', updateViewportHeight)
-    window.visualViewport?.addEventListener('scroll', updateViewportHeight)
-    window.addEventListener('resize', updateViewportHeight)
-    return () => {
-      window.visualViewport?.removeEventListener('resize', updateViewportHeight)
-      window.visualViewport?.removeEventListener('scroll', updateViewportHeight)
-      window.removeEventListener('resize', updateViewportHeight)
-      if (previousHeight) root.style.setProperty('--memory-anki-mindmap-fullscreen-height', previousHeight)
-      else root.style.removeProperty('--memory-anki-mindmap-fullscreen-height')
-    }
-  }, [active])
-
-  useEffect(() => {
-    if (!active) return
-    const handleEscape = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape') return
-      event.preventDefault()
-      event.stopPropagation()
+    const viewportSession = presentationPort.lockViewport(requestFitViewOnNextFrame)
+    const escapeSession = presentationPort.onEscape(() => void exit())
+    const fullscreenSession = presentationPort.onFullscreenExit(() => {
+      if (!activeRef.current) return
+      actorRef.current.send({ type: 'HOST_FULLSCREEN_EXITED' })
       void exit()
+    })
+    return () => {
+      fullscreenSession.release()
+      escapeSession.release()
+      viewportSession.release()
     }
-    window.addEventListener('keydown', handleEscape, true)
-    return () => window.removeEventListener('keydown', handleEscape, true)
-  }, [active, exit])
+  }, [active, exit, presentationPort, requestFitViewOnNextFrame])
 
   return { active, enter, exit, toggle }
 }

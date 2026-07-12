@@ -224,6 +224,18 @@ describe('ReviewSession', () => {
     )
   })
 
+  it('redirects stale review session URLs back to the review overview', async () => {
+    mocks.getReviewSessionApi.mockClear()
+    const notFoundError = Object.assign(new Error('not found'), { status: 404 })
+    mocks.getReviewSessionApi.mockRejectedValueOnce(notFoundError)
+
+    render(<ReviewSession />)
+
+    await waitFor(() => {
+      expect(mocks.navigate).toHaveBeenCalledWith('/review', { replace: true })
+    })
+    expect(mocks.getReviewSessionApi).toHaveBeenCalledTimes(1)
+  })
   it('flushes edits on mode exit and still submits only one review completion after switching back', async () => {
     render(<ReviewSession />)
 

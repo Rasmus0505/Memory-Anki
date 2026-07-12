@@ -6,6 +6,15 @@ import type {
   PalaceGroupedListResponse,
 } from '@/shared/api/contracts'
 
+
+export function shouldBlockMemoryLookupClose(input: {
+  nextOpen: boolean
+  pinned: boolean
+  mindMapFullscreenActive: boolean
+}) {
+  return !input.nextOpen && (input.pinned || input.mindMapFullscreenActive)
+}
+
 export type MemoryLookupPreviewMode = 'view' | 'flip'
 
 export function createEmptyGroupedData(): PalaceGroupedListResponse {

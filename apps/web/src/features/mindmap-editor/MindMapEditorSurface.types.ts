@@ -37,6 +37,7 @@ export interface MindMapEditorSurfaceProps {
   practiceModeActive?: boolean
   viewMemoryScope?: string | null
   immersiveModeActive?: boolean
+  browserFullscreenEnabled?: boolean
   aiSplitBusy?: boolean
   syncOnPropChange?: boolean
   syncIntent?: 'soft' | 'replace'

@@ -216,6 +216,31 @@ describe('AppShell', () => {
     expect(mobileNav.querySelector('a[href="/dashboard"]')).toBeTruthy()
   })
 
+  it('rejects stale cross-section history targets in mobile navigation', () => {
+    getRuntimeInfoApi.mockResolvedValue(null)
+    window.localStorage.setItem('memory-anki.page-history.device.v1', JSON.stringify({
+      version: 1,
+      snapshots: [],
+      sectionLastUrls: {
+        palaces: '/palaces/new',
+        knowledge: '/knowledge',
+      },
+      lastWorkspacePath: '/palaces/new',
+    }))
+
+    render(
+      <MemoryRouter initialEntries={['/freestyle']}>
+        <AppShell>
+          <div>content</div>
+        </AppShell>
+      </MemoryRouter>,
+    )
+
+    const mobileNav = screen.getByRole('navigation', { name: '移动端主导航' })
+    expect(mobileNav.querySelector('a[href="/palaces"]')?.textContent).toContain('知识库')
+    expect(mobileNav.querySelector('a[href="/palaces/new"]')?.textContent).toContain('内容创作')
+  })
+
   it('renders the five learning-loop sections and keeps today active', async () => {
     getRuntimeInfoApi.mockResolvedValue({
       channel: 'stable',
@@ -369,7 +394,7 @@ describe('AppShell', () => {
     })
   })
 
-  it('returns review navigation to the last visited review child route', async () => {
+  it('returns review navigation to the stable dashboard after visiting a review session', async () => {
     getRuntimeInfoApi.mockResolvedValue({
       channel: 'stable',
       commit: 'abcdef1234567890',
@@ -393,9 +418,13 @@ describe('AppShell', () => {
       expect(screen.getByText('/profile')).toBeTruthy()
     })
 
-    fireEvent.click(screen.getAllByRole('link', { name: '复习分析' })[0]!)
+    const reviewLinks = screen.getAllByRole('link', { name: '复习分析' })
+    const reviewHrefs = reviewLinks.map((link) => link.getAttribute('href'))
+    expect(reviewHrefs).toContain('/dashboard')
+    const reviewOverviewLink = reviewLinks.find((link) => link.getAttribute('href') === '/dashboard')
+    fireEvent.click(reviewOverviewLink!)
     await waitFor(() => {
-      expect(screen.getByText('/review/session/9')).toBeTruthy()
+      expect(screen.getByText('/dashboard')).toBeTruthy()
     })
   })
 

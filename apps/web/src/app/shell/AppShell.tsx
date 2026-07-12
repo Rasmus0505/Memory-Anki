@@ -1,4 +1,4 @@
-﻿import { memo, useEffect, useState, type PropsWithChildren } from 'react'
+import { memo, useEffect, useState, type PropsWithChildren } from 'react'
 import {
   ChevronRight,
   ClipboardList,
@@ -36,7 +36,6 @@ import {
   recordPageHistorySectionVisit,
   resetPageHistoryStoreForTest,
 } from '@/shared/page-history/pageHistoryStore'
-import { resolvePageHistorySection } from '@/shared/page-history/pageHistoryRoute'
 
 const navSectionLastUrls: Partial<Record<NavSectionKey, string>> = {}
 const warmedNavSections = new Set<NavSectionKey>()
@@ -56,9 +55,22 @@ function findNavSection(pathname: string) {
   return navSections.find((section) => section.matches(pathname)) ?? null
 }
 
+function normalizeRememberedSectionTarget(section: NavSectionDefinition, target: string) {
+  try {
+    const pathname = new URL(target, window.location.origin).pathname
+    if (!section.matches(pathname)) return section.to
+    if (section.key === 'review' && pathname.startsWith('/review/session/')) return section.to
+    return target
+  } catch {
+    return section.to
+  }
+}
+
 function resolveNavSectionTarget(section: NavSectionDefinition) {
   if (!section.rememberLastVisited) return section.to
-  return navSectionLastUrls[section.key] ?? readPageHistorySectionUrl(section.key) ?? section.to
+  const rememberedTarget = navSectionLastUrls[section.key] ?? readPageHistorySectionUrl(section.key)
+  if (!rememberedTarget) return section.to
+  return normalizeRememberedSectionTarget(section, rememberedTarget)
 }
 
 function resolveMobileNavSectionTarget(section: NavSectionDefinition) {
@@ -206,8 +218,9 @@ function SidebarContent({ runtimeInfo }: { runtimeInfo: RuntimeInfo | null }) {
     const matchedSection = findNavSection(pathname)
     if (!matchedSection?.rememberLastVisited) return
     const fullPath = `${pathname}${search}${hash}`
-    navSectionLastUrls[matchedSection.key] = fullPath
-    recordPageHistorySectionVisit(resolvePageHistorySection(pathname), fullPath)
+    const rememberedTarget = normalizeRememberedSectionTarget(matchedSection, fullPath)
+    navSectionLastUrls[matchedSection.key] = rememberedTarget
+    recordPageHistorySectionVisit(matchedSection.key, rememberedTarget)
   }, [hash, pathname, search])
 
   useEffect(() => {
@@ -276,8 +289,9 @@ function MobileBottomNav() {
     const matchedSection = findNavSection(pathname)
     if (!matchedSection?.rememberLastVisited) return
     const fullPath = `${pathname}${search}${hash}`
-    navSectionLastUrls[matchedSection.key] = fullPath
-    recordPageHistorySectionVisit(resolvePageHistorySection(pathname), fullPath)
+    const rememberedTarget = normalizeRememberedSectionTarget(matchedSection, fullPath)
+    navSectionLastUrls[matchedSection.key] = rememberedTarget
+    recordPageHistorySectionVisit(matchedSection.key, rememberedTarget)
   }, [hash, pathname, search])
 
   return (

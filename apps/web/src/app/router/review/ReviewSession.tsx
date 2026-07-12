@@ -1,4 +1,6 @@
-﻿import type { ReviewScheduleSummary } from '@/shared/api/contracts'
+import { useCallback } from 'react'
+import { useNavigate } from 'react-router-dom'
+import type { ReviewScheduleSummary } from '@/shared/api/contracts'
 import {
   clearReviewSessionProgressApi,
   getReviewSessionApi,
@@ -25,18 +27,38 @@ function toContainerSession(session: ReviewScheduleSummary): ReviewSessionContai
   }
 }
 
+function buildReviewTitle(session: ReviewSessionContainerSession) {
+  return session.palace?.title || '未命名宫殿'
+}
+
+function buildReviewEditorState(session: ReviewSessionContainerSession) {
+  return {
+    editor_doc: session.palace?.editor_doc ?? null,
+    editor_config: {},
+    editor_local_config: {},
+    lang: 'zh',
+  }
+}
 export default function ReviewSession() {
+  const navigate = useNavigate()
+
+  const loadReviewSession = useCallback(async (sessionId: number) => {
+    try {
+      return toContainerSession(await getReviewSessionApi(sessionId))
+    } catch (error) {
+      if ((error as { status?: number }).status === 404) {
+        navigate(buildReviewOverviewPath(), { replace: true })
+      }
+      throw error
+    }
+  }, [navigate])
+
   return (
     <ReviewSessionContainer
       eyebrow="正式复习"
-      buildTitle={(session) => session.palace?.title || '未命名宫殿'}
-      buildReviewEditorState={(session) => ({
-        editor_doc: session.palace?.editor_doc ?? null,
-        editor_config: {},
-        editor_local_config: {},
-        lang: 'zh',
-      })}
-      loadSession={async (sessionId) => toContainerSession(await getReviewSessionApi(sessionId))}
+      buildTitle={buildReviewTitle}
+      buildReviewEditorState={buildReviewEditorState}
+      loadSession={loadReviewSession}
       loadProgress={getReviewSessionProgressApi}
       saveProgress={saveReviewSessionProgressApi}
       clearProgress={clearReviewSessionProgressApi}

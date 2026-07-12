@@ -1,4 +1,4 @@
-﻿import {
+import {
   forwardRef,
   useCallback,
   useEffect,
@@ -8,7 +8,6 @@
   useState,
   type KeyboardEvent as ReactKeyboardEvent,
 } from 'react'
-import { createPortal } from 'react-dom'
 import type { MindMapEditorState } from '@/shared/api/contracts'
 import { MindMapCanvas } from '@/shared/ui/mindmap-canvas'
 import type { MindMapCanvasViewCommand } from '@/shared/ui/mindmap-canvas'
@@ -56,6 +55,7 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
   readonly = false,
   practiceModeActive = false,
   immersiveModeActive = false,
+  browserFullscreenEnabled = true,
   aiSplitBusy = false,
   syncReason = null,
   externalSyncKey = null,
@@ -94,7 +94,6 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
   onSegmentRangeDraftChange,
   onAiSplitRequest,
   onFullscreenChange,
-  onFullscreenToggle,
   onUiClearedChange,
   onMiniPalacePour,
   onReady,
@@ -314,9 +313,9 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
   }, [])
 
   const fullscreen = useMindMapFullscreen({
-    immersiveModeActive,
+    getFullscreenTarget: () => frameRef.current,
+    browserFullscreenEnabled,
     onFullscreenChange,
-    onFullscreenToggle,
     requestFitView,
   })
   const nativeFullscreenActive = fullscreen.active
@@ -388,7 +387,9 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
     nodeClickViewportPolicy ?? (preservePracticeViewport ? 'preserve' : 'guided-center')
   const resolvedContentChangeViewportPolicy =
     contentChangeViewportPolicy ?? (preservePracticeViewport ? 'preserve' : 'auto-fit')
-  const frameClassName = buildMindMapEditorSurfaceClassName(className)
+  const frameClassName = `${buildMindMapEditorSurfaceClassName(className)}${
+    nativeFullscreenActive ? ' memory-anki-mindmap-native-fullscreen' : ''
+  }`
   const handleAddChild = useCallback(
     (nodeId: string) => {
       const result = addEditorDocChildWithResult(getCurrentEditorDoc(), nodeId)
@@ -617,22 +618,15 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
       />
     </WidgetErrorBoundary>
   )
-  const fullscreenLayer = nativeFullscreenActive
-    ? createPortal(
-        <div className="memory-anki-mindmap-native-fullscreen" data-testid="mindmap-frame-fullscreen-layer">
-          {canvas}
-        </div>,
-        document.body,
-      )
-    : null
-
   return (
-    <>
-      <div ref={frameRef} className={frameClassName} data-testid="mindmap-frame-native">
-        {nativeFullscreenActive ? null : canvas}
-      </div>
-      {fullscreenLayer}
-    </>
+    <div
+      ref={frameRef}
+      className={frameClassName}
+      data-fullscreen={nativeFullscreenActive ? 'true' : 'false'}
+      data-testid="mindmap-frame-native"
+    >
+      {canvas}
+    </div>
   )
 })
 
