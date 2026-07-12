@@ -1,0 +1,84 @@
+{
+  "schemaVersion": 1,
+  "ports": {
+    "NavigationPort": {
+      "owner": "app/runtime",
+      "adapter": "platform/browser",
+      "capabilities": [
+        "push",
+        "replace",
+        "back"
+      ]
+    },
+    "OverlayCoordinator": {
+      "owner": "app/runtime",
+      "adapter": "app/composition",
+      "capabilities": [
+        "open",
+        "close",
+        "closeReason"
+      ]
+    },
+    "PresentationPort": {
+      "owner": "modules/mindmap/application",
+      "adapter": "platform/browser/browserPresentationPort.ts",
+      "capabilities": [
+        "fullscreen",
+        "viewportLock",
+        "escape",
+        "layoutSchedule"
+      ]
+    },
+    "SessionPort": {
+      "owner": "modules/sessions/application",
+      "adapter": "modules/sessions/infrastructure",
+      "capabilities": [
+        "identity",
+        "timing",
+        "pause",
+        "complete",
+        "idempotentSave"
+      ]
+    },
+    "PersistencePort": {
+      "owner": "app/runtime",
+      "adapter": "platform/persistence",
+      "capabilities": [
+        "versionedLocal",
+        "versionedSession",
+        "offlineQueue",
+        "migration"
+      ]
+    },
+    "PwaRuntimePort": {
+      "owner": "app/runtime",
+      "adapter": "platform/pwa",
+      "capabilities": [
+        "release",
+        "serviceWorker",
+        "cacheReset",
+        "recovery"
+      ]
+    },
+    "ObservabilityPort": {
+      "owner": "app/runtime",
+      "adapter": "platform/observability",
+      "capabilities": [
+        "event",
+        "transition",
+        "request",
+        "errorContext"
+      ]
+    }
+  },
+  "forbiddenInBusinessPresentation": [
+    "window.history",
+    "window.location",
+    "requestFullscreen",
+    "exitFullscreen",
+    "localStorage",
+    "sessionStorage",
+    "fetch",
+    "navigator.serviceWorker"
+  ]
+}

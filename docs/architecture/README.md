@@ -74,6 +74,7 @@ Frontend lint is a zero-warning contract. The `apps/web` lint script runs ESLint
 
 - Fast iteration: `python tools/quality_gate.py`
 - Full handoff: `python tools/quality_gate.py --full` (backend tests, frontend tests/build, and Playwright smoke)
+- Windows launcher smoke after runtime/startup-sensitive changes: `python tools/quality_gate.py --launchers` (really runs `start-pwa.bat` and `start-desktop.bat`, verifies API/Electron readiness, then restores the shared PWA service)
 - Mind-map architecture details: `docs/architecture/mindmap.md`
 - AI runtime boundary: `docs/architecture/ai-runtime.md`
 - Prompt catalog boundary: `docs/architecture/prompt-catalog.md`
@@ -98,3 +99,14 @@ The five idempotent Study Session HTTP writes are composed by `sessions.applicat
 English course/task HTTP wrappers are entity-owned under `apps/web/src/entities/english/api`; features and pages must not recreate `features/english/api`.
 
 Frontend AI scenario/model selection and per-run overrides are entity-owned under `entities/ai-runtime`; business features consume this entity and must not recreate an `ai-config` feature.
+
+
+## Runtime-owned workflows (architecture v2)
+
+The concentrated architecture replacement has started with the two failure-prone learning-loop slices. New business code lives under `apps/web/src/modules`, browser effects live under `apps/web/src/platform`, and XState is restricted to `application/workflows`.
+
+- `freestyle`: `canCompleteRound` is a framework-free domain guard; `FreestyleTrainingMachine` rejects scroll-driven completion.
+- `mindmap`: `MindMapPresentationMachine` owns embedded/fullscreen transitions; `PresentationPort` owns native fullscreen, viewport locking, Escape handling, and layout scheduling.
+- Cross-module imports must use the target module's `public.ts`.
+- `docs/architecture/runtime-ports.yaml`, `use-case-catalog.yaml`, and `event-catalog.yaml` are the machine-readable runtime ownership ledger.
+- The legacy FSD tree remains only for contexts not yet cut over; migrated runtime logic must not move back into it.

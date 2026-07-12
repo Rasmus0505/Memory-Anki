@@ -3,7 +3,9 @@
   "architecture": {
     "backend": "modular-monolith",
     "frontend": "app-pages-widgets-features-entities-shared",
-    "databaseSchemaChanges": false
+    "databaseSchemaChanges": false,
+    "frontendTarget": "app-modules-platform-shared",
+    "workflowRuntime": "xstate-application-only"
   },
   "backend": {
     "targetLayers": [
@@ -169,6 +171,29 @@
       "palace-quiz": [],
       "profile": [],
       "review": []
-    }
+    },
+    "targetLayersV2": [
+      "app",
+      "modules",
+      "platform",
+      "shared"
+    ],
+    "migratedModulesV2": {
+      "freestyle": {
+        "status": "critical-slice",
+        "publicEntry": "src/modules/freestyle/public.ts",
+        "workflow": "FreestyleTrainingMachine"
+      },
+      "mindmap": {
+        "status": "critical-slice",
+        "publicEntry": "src/modules/mindmap/public.ts",
+        "workflow": "MindMapPresentationMachine"
+      }
+    },
+    "runtimeCatalogs": [
+      "runtime-ports.yaml",
+      "use-case-catalog.yaml",
+      "event-catalog.yaml"
+    ]
   }
 }

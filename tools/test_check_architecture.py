@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 from pathlib import Path
 
 
@@ -1062,3 +1063,77 @@ ignore_errors = true
         "`memory_anki.modules.palaces.application.segment_nodes`; type the boundary or use a "
         "narrowly scoped error-code ignore at the external library import."
     ]
+
+
+def _write_runtime_catalogs(root: Path) -> None:
+    architecture = root / "docs/architecture"
+    architecture.mkdir(parents=True, exist_ok=True)
+    for name in ("runtime-ports.yaml", "use-case-catalog.yaml", "event-catalog.yaml"):
+        (architecture / name).write_text("{}", encoding="utf-8")
+
+
+def test_runtime_module_boundary_rejects_xstate_in_domain_and_private_cross_import(tmp_path, monkeypatch):
+    web_src = tmp_path / "apps/web/src"
+    freestyle = web_src / "modules/freestyle"
+    mindmap = web_src / "modules/mindmap"
+    (freestyle / "domain").mkdir(parents=True)
+    mindmap.mkdir(parents=True)
+    manifest = {
+        "name": "freestyle",
+        "owns": [],
+        "forbids": [],
+        "publicEntry": "src/modules/freestyle/public.ts",
+        "workflows": [],
+        "dependencies": [],
+        "requiredTests": [],
+    }
+    (freestyle / "module.yaml").write_text(json.dumps(manifest), encoding="utf-8")
+    (freestyle / "public.ts").write_text("export {}", encoding="utf-8")
+    (freestyle / "domain/rules.ts").write_text(
+        "import { createMachine } from 'xstate'\nimport x from '@/modules/mindmap/domain/private'",
+        encoding="utf-8",
+    )
+    mindmap_manifest = {**manifest, "name": "mindmap", "publicEntry": "src/modules/mindmap/public.ts"}
+    (mindmap / "module.yaml").write_text(json.dumps(mindmap_manifest), encoding="utf-8")
+    (mindmap / "public.ts").write_text("export {}", encoding="utf-8")
+    _write_runtime_catalogs(tmp_path)
+    monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
+
+    errors: list[str] = []
+    check_architecture.check_frontend_runtime_module_boundaries(errors)
+
+    assert any("domain code cannot depend" in error for error in errors)
+    assert any("cross-module imports must use" in error for error in errors)
+
+
+def test_runtime_module_boundary_accepts_workflow_and_public_import(tmp_path, monkeypatch):
+    web_src = tmp_path / "apps/web/src"
+    freestyle = web_src / "modules/freestyle"
+    mindmap = web_src / "modules/mindmap"
+    (freestyle / "application/workflows").mkdir(parents=True)
+    mindmap.mkdir(parents=True)
+    for module in (freestyle, mindmap):
+        payload = {
+            "name": module.name,
+            "owns": [],
+            "forbids": [],
+            "publicEntry": f"src/modules/{module.name}/public.ts",
+            "workflows": [],
+            "dependencies": [],
+            "requiredTests": [],
+        }
+        (module / "module.yaml").write_text(json.dumps(payload), encoding="utf-8")
+        (module / "public.ts").write_text("export {}", encoding="utf-8")
+    (freestyle / "application/workflows/machine.ts").write_text(
+        "import { createMachine } from 'xstate'\nimport '@/modules/mindmap/public'",
+        encoding="utf-8",
+    )
+    _write_runtime_catalogs(tmp_path)
+    monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
+
+    errors: list[str] = []
+    check_architecture.check_frontend_runtime_module_boundaries(errors)
+
+    assert errors == []

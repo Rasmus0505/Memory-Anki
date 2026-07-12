@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "useCases": {
+    "freestyle.completeRound": {
+      "owner": "freestyle",
+      "workflow": "FreestyleTrainingMachine",
+      "guard": "canCompleteRound",
+      "tests": [
+        "trainingRound.test.ts",
+        "freestyleTrainingMachine.test.ts"
+      ]
+    },
+    "mindmap.enterFullscreen": {
+      "owner": "mindmap",
+      "workflow": "MindMapPresentationMachine",
+      "port": "PresentationPort",
+      "tests": [
+        "mindMapPresentationMachine.test.ts",
+        "MindMapEditorSurface.test.tsx"
+      ]
+    },
+    "mindmap.exitFullscreen": {
+      "owner": "mindmap",
+      "workflow": "MindMapPresentationMachine",
+      "port": "PresentationPort",
+      "invariants": [
+        "does not navigate",
+        "does not close parent overlay"
+      ]
+    }
+  }
+}

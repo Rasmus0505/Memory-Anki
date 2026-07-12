@@ -1429,6 +1429,71 @@ def check_mindmap_architecture(errors: list[str]) -> None:
             )
 
 
+
+def check_frontend_runtime_module_boundaries(errors: list[str]) -> None:
+    modules_root = WEB_SRC / "modules"
+    if not modules_root.exists():
+        errors.append("apps/web/src/modules: architecture v2 module root is missing.")
+        return
+
+    required_catalogs = (
+        REPO_ROOT / "docs" / "architecture" / "runtime-ports.yaml",
+        REPO_ROOT / "docs" / "architecture" / "use-case-catalog.yaml",
+        REPO_ROOT / "docs" / "architecture" / "event-catalog.yaml",
+    )
+    for catalog in required_catalogs:
+        if not catalog.exists():
+            errors.append(f"{catalog.relative_to(REPO_ROOT)}: runtime architecture catalog is missing.")
+
+    for module_dir in sorted(path for path in modules_root.iterdir() if path.is_dir()):
+        manifest = module_dir / "module.yaml"
+        public_entry = module_dir / "public.ts"
+        if not manifest.exists():
+            errors.append(f"{module_dir.relative_to(REPO_ROOT)}: module.yaml is required.")
+        else:
+            try:
+                payload = json.loads(manifest.read_text(encoding="utf-8"))
+            except json.JSONDecodeError as exc:
+                errors.append(f"{manifest.relative_to(REPO_ROOT)}: invalid machine-readable manifest: {exc}.")
+            else:
+                if payload.get("name") != module_dir.name:
+                    errors.append(f"{manifest.relative_to(REPO_ROOT)}: manifest name must match its directory.")
+                for field in ("owns", "forbids", "publicEntry", "workflows", "dependencies", "requiredTests"):
+                    if field not in payload:
+                        errors.append(f"{manifest.relative_to(REPO_ROOT)}: missing `{field}`.")
+        if not public_entry.exists():
+            errors.append(f"{module_dir.relative_to(REPO_ROOT)}: public.ts is required.")
+
+        for source in module_dir.rglob("*.ts*"):
+            relative = source.relative_to(REPO_ROOT).as_posix()
+            content = source.read_text(encoding="utf-8")
+            relative_to_module = source.relative_to(module_dir).as_posix()
+            if relative_to_module.startswith("domain/"):
+                for forbidden in ("from 'react'", 'from "react"', "from 'xstate'", 'from "xstate"', "window.", "document.", "fetch("):
+                    if forbidden in content:
+                        errors.append(f"{relative}: domain code cannot depend on `{forbidden}`.")
+            if "xstate" in content and not relative_to_module.startswith("application/workflows/"):
+                errors.append(f"{relative}: XState is restricted to application/workflows.")
+            if relative_to_module.startswith("presentation/"):
+                for forbidden in ("window.history", "window.location", "requestFullscreen", "exitFullscreen", "localStorage", "sessionStorage", "fetch(", "navigator.serviceWorker"):
+                    if forbidden in content:
+                        errors.append(f"{relative}: presentation must use a runtime port instead of `{forbidden}`.")
+
+            for specifier in iter_frontend_import_specifiers(content):
+                if not specifier.startswith("@/modules/"):
+                    continue
+                parts = specifier.split("/")
+                if len(parts) < 3:
+                    continue
+                target_module = parts[2]
+                if target_module == module_dir.name:
+                    continue
+                if specifier != f"@/modules/{target_module}/public":
+                    errors.append(
+                        f"{relative}: cross-module imports must use @/modules/{target_module}/public, not `{specifier}`."
+                    )
+
+
 def main() -> int:
     errors: list[str] = []
     check_context_dependency_map(errors)
@@ -1440,6 +1505,7 @@ def main() -> int:
     check_removed_shared_api_modules(errors)
     check_frontend_generated_api_boundary(errors)
     check_frontend_public_api_surfaces(errors)
+    check_frontend_runtime_module_boundaries(errors)
     check_study_session_legacy_usage(errors)
     check_runtime_data_ignored(errors)
     check_frontend_config_contract(errors)
