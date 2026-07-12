@@ -2,6 +2,8 @@ import * as React from 'react'
 import { GlobalTimerFloatingOverlay } from '@/shared/components/session/GlobalTimerFloatingOverlay'
 import {
   readTimerAutomationConfig,
+  resetTimerAutomationConfig,
+  saveTimerAutomationConfig,
   TIMER_AUTOMATION_UPDATED_EVENT,
   type TimerAutomationConfig,
 } from '@/shared/components/session/timer-automation-config'
@@ -9,6 +11,8 @@ import { onAppEvent } from '@/shared/events/appEvents'
 import {
   getTimerFocusRule,
   readTimerFocusConfig,
+  resetTimerFocusConfig,
+  saveTimerFocusConfig,
   TIMER_FOCUS_UPDATED_EVENT,
   type TimerFocusConfig,
 } from '@/shared/components/session/timer-focus-config'
@@ -17,7 +21,12 @@ import {
   hasDesktopTimerBridge,
   type UnifiedTimerCommand,
 } from '@/shared/components/session/desktopTimerBridge'
-import { updateBreakGuardLog } from '@/shared/components/session/break-guard-config'
+import {
+  resetBreakGuardConfig,
+  saveBreakGuardConfig,
+  updateBreakGuardLog,
+} from '@/shared/components/session/break-guard-config'
+import { TimerAutomationDialog } from '@/shared/components/session/TimerAutomationDialog'
 import { snoozeBreakGuard } from '@/shared/components/session/breakGuardModel'
 import {
   selectActiveTimerEntry,
@@ -40,6 +49,7 @@ export function GlobalTimerProvider({
 }: React.PropsWithChildren) {
   const [entries, setEntries] = React.useState<Record<string, GlobalTimerRegistration>>({})
   const [showInPageTimerOverlay] = React.useState(() => !hasDesktopTimerBridge())
+  const [settingsOpen, setSettingsOpen] = React.useState(false)
   const activeEntry = React.useMemo(() => selectActiveTimerEntry(Object.values(entries)), [entries])
   const [automationConfig, setAutomationConfig] = React.useState<TimerAutomationConfig>(() =>
     readTimerAutomationConfig(),
@@ -71,6 +81,17 @@ export function GlobalTimerProvider({
   } = useBreakGuardMachine({ activeEntry, entries })
   const feedbackSignal = useTimerFocusCycle(activeEntry, focusConfig)
 
+  React.useEffect(() => {
+    const handleMainAppClick = (event: MouseEvent) => {
+      const target = event.target
+      if (target instanceof Element && target.closest('[data-timer-overlay-root="true"]')) return
+      const entry = activeEntryRef.current
+      if (!entry || entry.timer.status !== 'running') return
+      entry.timer.registerActivity('practice_interaction', { source: 'main_app_click' })
+    }
+    document.addEventListener('click', handleMainAppClick, true)
+    return () => document.removeEventListener('click', handleMainAppClick, true)
+  }, [activeEntryRef])
   React.useEffect(() => {
     const unsubscribeAutomation = onAppEvent(TIMER_AUTOMATION_UPDATED_EVENT, (detail) => {
       const nextConfig = detail || readTimerAutomationConfig()
@@ -132,6 +153,11 @@ export function GlobalTimerProvider({
     const currentBreakState = breakStateRef.current
     const config = breakConfigRef.current
     const currentActiveEntry = activeEntryRef.current
+
+    if (command.type === 'openTimerSettings') {
+      setSettingsOpen(true)
+      return
+    }
 
     if (command.type === 'promptBreak') {
       if (config.promptOnWindowLeave) {
@@ -321,7 +347,21 @@ export function GlobalTimerProvider({
           onCommand={handleTimerCommand}
         />
       ) : null}
-    </GlobalTimerActionsContext.Provider>
+      <TimerAutomationDialog
+        open={settingsOpen}
+        config={automationConfig}
+        focusConfig={focusConfig}
+        breakConfig={breakConfig}
+        onOpenChange={setSettingsOpen}
+        onSave={(nextConfig) => setAutomationConfig(saveTimerAutomationConfig(nextConfig))}
+        onFocusConfigSave={(nextConfig) => setFocusConfig(saveTimerFocusConfig(nextConfig))}
+        onBreakConfigSave={(nextConfig) => saveBreakGuardConfig(nextConfig)}
+        onReset={() => {
+          setAutomationConfig(resetTimerAutomationConfig())
+          setFocusConfig(resetTimerFocusConfig())
+          resetBreakGuardConfig()
+        }}
+      />    </GlobalTimerActionsContext.Provider>
   )
 }
 

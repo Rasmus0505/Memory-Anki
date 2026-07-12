@@ -6,7 +6,9 @@ import type {
 
 interface WebkitFullscreenDocument extends Document {
   webkitExitFullscreen?: () => Promise<void> | void
+  webkitCancelFullScreen?: () => Promise<void> | void
   webkitFullscreenElement?: Element | null
+  webkitCurrentFullScreenElement?: Element | null
 }
 
 interface WebkitFullscreenElement extends HTMLElement {
@@ -19,7 +21,10 @@ function session(release: () => void): PresentationSession {
 
 function fullscreenElement() {
   const webkitDocument = document as WebkitFullscreenDocument
-  return document.fullscreenElement ?? webkitDocument.webkitFullscreenElement ?? null
+  return document.fullscreenElement
+    ?? webkitDocument.webkitFullscreenElement
+    ?? webkitDocument.webkitCurrentFullScreenElement
+    ?? null
 }
 
 function viewportMetrics(): PresentationViewport {
@@ -49,7 +54,9 @@ export const browserPresentationPort: PresentationPort = {
   async exitFullscreen() {
     if (!fullscreenElement()) return
     const webkitDocument = document as WebkitFullscreenDocument
-    const exit = document.exitFullscreen ?? webkitDocument.webkitExitFullscreen
+    const exit = document.exitFullscreen
+      ?? webkitDocument.webkitExitFullscreen
+      ?? webkitDocument.webkitCancelFullScreen
     if (!exit) return
     try {
       await exit.call(document)

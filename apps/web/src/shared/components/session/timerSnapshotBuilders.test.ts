@@ -70,7 +70,7 @@ describe('buildStudyTimerSnapshot', () => {
 
   it('shows the 30-second idle warning without changing running timer status', () => {
     const snapshot = buildStudyTimerSnapshot({
-      activeEntry: createEntry({ effectiveSeconds: 120, idleSeconds: 120 }),
+      activeEntry: createEntry({ effectiveSeconds: 120, idleSeconds: 90 }),
       focusConfig: DEFAULT_TIMER_FOCUS_CONFIG,
       automationConfig: DEFAULT_TIMER_AUTOMATION_CONFIG,
     })

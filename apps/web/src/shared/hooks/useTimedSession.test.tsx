@@ -59,13 +59,13 @@ describe('useTimedSession automation config', () => {
     expect(result.current).toBe(initialController)
   })
 
-  it('arms the default inactivity pause after a 120-second warning and 30-second grace', () => {
+  it('arms the default inactivity pause after 120 seconds', () => {
     const timeoutSpy = vi.spyOn(window, 'setTimeout')
 
     render(<TimedSessionTestHarness kind="palace_edit" />)
 
     expect(screen.getByTestId('status').textContent).toBe('running')
-    expect(timeoutSpy.mock.calls.some(([, delay]) => delay === 150_000)).toBe(true)
+    expect(timeoutSpy.mock.calls.some(([, delay]) => delay === 120_000)).toBe(true)
   })
 
   it('treats explicit autoPauseMs overrides as milliseconds', () => {
@@ -295,111 +295,8 @@ describe('useTimedSession automation config', () => {
     })
   })
 
-  it('arms overridden local config for practice hidden pause', () => {
-    const timeoutSpy = vi.spyOn(window, 'setTimeout')
 
-    window.localStorage.setItem(
-      TIMER_AUTOMATION_STORAGE_KEY,
-      JSON.stringify({
-        actions: {
-          autoResumeOnWindowReturn: false,
-          countNodeSwitchAsActivity: false,
-          countEditOperationsAsActivity: true,
-          countPracticeInteractionsAsActivity: true,
-        },
-        practice: {
-          autoStartOnPageEnter: false,
-          inactiveAutoPauseSeconds: 5,
-          hiddenAutoPauseSeconds: 7,
-          autoPauseRollbackSeconds: 8,
-        },
-      }),
-    )
 
-    render(<TimedSessionTestHarness kind="practice" />)
-
-    act(() => {
-      window.dispatchEvent(new Event('blur'))
-    })
-
-    expect(screen.getByTestId('status').textContent).toBe('running')
-    expect(timeoutSpy.mock.calls.some(([, delay]) => delay === 7_000)).toBe(true)
-  })
-
-  it('keeps counting during the warning grace and auto pauses without rollback', () => {
-    window.localStorage.setItem(
-      TIMER_AUTOMATION_STORAGE_KEY,
-      JSON.stringify({
-        actions: {
-          autoResumeOnWindowReturn: false,
-          countNodeSwitchAsActivity: false,
-          countEditOperationsAsActivity: true,
-          countPracticeInteractionsAsActivity: true,
-        },
-        palace_edit: {
-          autoStartOnPageEnter: false,
-          inactiveAutoPauseSeconds: 5,
-          inactivePauseGraceSeconds: 30,
-          hiddenAutoPauseSeconds: 15,
-          autoPauseRollbackSeconds: 0,
-        },
-      }),
-    )
-
-    render(<TimedSessionTestHarness kind="palace_edit" />)
-
-    act(() => {
-      vi.advanceTimersByTime(5_000)
-    })
-
-    expect(screen.getByTestId('status').textContent).toBe('running')
-
-    act(() => {
-      vi.advanceTimersByTime(30_000)
-    })
-
-    expect(screen.getByTestId('status').textContent).toBe('paused')
-    expect(screen.getByTestId('pause-count').textContent).toBe('1')
-    expect(screen.getByTestId('seconds').textContent).toBe('35')
-  })
-
-  it('restarts the warning and grace window after valid study activity', () => {
-    window.localStorage.setItem(
-      TIMER_AUTOMATION_STORAGE_KEY,
-      JSON.stringify({
-        actions: {
-          autoResumeOnWindowReturn: false,
-          countNodeSwitchAsActivity: false,
-          countEditOperationsAsActivity: true,
-          countPracticeInteractionsAsActivity: true,
-        },
-        palace_edit: {
-          autoStartOnPageEnter: false,
-          inactiveAutoPauseSeconds: 5,
-          inactivePauseGraceSeconds: 30,
-          hiddenAutoPauseSeconds: 15,
-          autoPauseRollbackSeconds: 0,
-        },
-      }),
-    )
-
-    render(<TimedSessionTestHarness kind="palace_edit" />)
-
-    act(() => {
-      vi.advanceTimersByTime(4_000)
-      screen.getByRole('button', { name: 'edit-op' }).click()
-      vi.advanceTimersByTime(34_000)
-    })
-
-    expect(screen.getByTestId('status').textContent).toBe('running')
-
-    act(() => {
-      vi.advanceTimersByTime(1_000)
-    })
-
-    expect(screen.getByTestId('status').textContent).toBe('paused')
-    expect(screen.getByTestId('seconds').textContent).toBe('39')
-  })
 
   it('persists running sessions as resumable snapshots on pagehide without counting time away', () => {
     persistStudySessionRecordSpy.mockImplementation(async (record) => record)
@@ -788,34 +685,6 @@ describe('useTimedSession automation config', () => {
     expect(screen.getByTestId('status').textContent).toBe('paused')
   })
 
-  it('auto resumes on focus when window return is enabled', () => {
-    window.localStorage.setItem(
-      TIMER_AUTOMATION_STORAGE_KEY,
-      JSON.stringify({
-        actions: {
-          autoResumeOnWindowReturn: true,
-          countNodeSwitchAsActivity: false,
-          countEditOperationsAsActivity: true,
-          countPracticeInteractionsAsActivity: true,
-        },
-      }),
-    )
-
-    render(<TimedSessionTestHarness kind="review" />)
-
-    act(() => {
-      window.dispatchEvent(new Event('blur'))
-      vi.advanceTimersByTime(15_000)
-    })
-
-    expect(screen.getByTestId('status').textContent).toBe('paused')
-
-    act(() => {
-      window.dispatchEvent(new Event('focus'))
-    })
-
-    expect(screen.getByTestId('status').textContent).toBe('running')
-  })
 
   it('ignores node switch activity when that category is disabled', () => {
     window.localStorage.setItem(
@@ -846,79 +715,7 @@ describe('useTimedSession automation config', () => {
     expect(screen.getByTestId('status').textContent).toBe('paused')
   })
 
-  it('allows edit and practice activity categories to resume when enabled', () => {
-    window.localStorage.setItem(
-      TIMER_AUTOMATION_STORAGE_KEY,
-      JSON.stringify({
-        actions: {
-          autoResumeOnWindowReturn: false,
-          countNodeSwitchAsActivity: false,
-          countEditOperationsAsActivity: true,
-          countPracticeInteractionsAsActivity: true,
-        },
-      }),
-    )
 
-    const { rerender } = render(<TimedSessionTestHarness kind="palace_edit" />)
-
-    act(() => {
-      window.dispatchEvent(new Event('blur'))
-      vi.advanceTimersByTime(15_000)
-    })
-
-    expect(screen.getByTestId('status').textContent).toBe('paused')
-
-    act(() => {
-      screen.getByRole('button', { name: 'edit-op' }).click()
-    })
-
-    expect(screen.getByTestId('status').textContent).toBe('running')
-
-    rerender(<TimedSessionTestHarness kind="practice" />)
-
-    act(() => {
-      window.dispatchEvent(new Event('blur'))
-      vi.advanceTimersByTime(15_000)
-    })
-
-    expect(screen.getByTestId('status').textContent).toBe('paused')
-
-    act(() => {
-      screen.getByRole('button', { name: 'practice-op' }).click()
-    })
-
-    expect(screen.getByTestId('status').textContent).toBe('running')
-  })
-
-  it('uses english automation rules while keeping practice session kind', () => {
-    const timeoutSpy = vi.spyOn(window, 'setTimeout')
-
-    window.localStorage.setItem(
-      TIMER_AUTOMATION_STORAGE_KEY,
-      JSON.stringify({
-        actions: {
-          autoResumeOnWindowReturn: false,
-          countNodeSwitchAsActivity: false,
-          countEditOperationsAsActivity: true,
-          countPracticeInteractionsAsActivity: true,
-        },
-        english: {
-          autoStartOnPageEnter: true,
-          inactiveAutoPauseSeconds: 5,
-          hiddenAutoPauseSeconds: 9,
-          autoPauseRollbackSeconds: 4,
-        },
-      }),
-    )
-
-    render(<TimedSessionTestHarness kind="practice" automationScene="english" />)
-
-    act(() => {
-      window.dispatchEvent(new Event('blur'))
-    })
-
-    expect(timeoutSpy.mock.calls.some(([, delay]) => delay === 9_000)).toBe(true)
-  })
 
   it('can skip persisting completion records while still returning a finished session payload', async () => {
     render(

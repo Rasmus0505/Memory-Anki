@@ -200,7 +200,7 @@ if (hasSingleInstanceLock) app.whenReady().then(async () => {
 ipcMain.on('memory-anki-timer-collapse', (_event, collapsed) => {
   if (!timerWindow) return
   if (collapsed) {
-    timerWindow.setSize(230, 56)
+    timerWindow.setSize(230, 62)
     return
   }
   timerWindow.setSize(320, 180)
@@ -215,11 +215,11 @@ ipcMain.on('memory-anki-timer-command', (_event, command) => {
   if (command?.type === 'collapse') {
     const collapsed = Boolean(command.collapsed)
     if (timerWindow) {
-      timerWindow.setSize(collapsed ? 230 : 320, collapsed ? 56 : 180)
+      timerWindow.setSize(collapsed ? 230 : 320, collapsed ? 62 : 180)
     }
     return
   }
-  if (command?.type === 'openTarget' || (command?.type === 'finishBreak' && command.openTarget)) {
+  if (command?.type === 'openTimerSettings' || command?.type === 'openTarget' || (command?.type === 'finishBreak' && command.openTarget)) {
     ensureMainWindow()
   }
   mainWindow?.webContents.send('memory-anki-timer-command', command)

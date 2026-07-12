@@ -111,7 +111,7 @@ export function useTimedSessionAutoPause(input: {
       idleSecondsRef.current = next.idleSeconds
       setIdleSeconds(next.idleSeconds)
       pushEvent('pause', {
-        reason: 'inactive',
+        reason: 'idle_click_timeout',
         idle_seconds: idleSecondsAtPause,
         rollback_seconds: next.rollbackSeconds,
         warning_seconds: Math.round(resolvedAutomation.inactivityWarningMs / 1000),

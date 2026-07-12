@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { ChevronsDown, ChevronsUp, Pause, Play } from 'lucide-react'
+import { ChevronsDown, ChevronsUp, Pause, Play, Settings2 } from 'lucide-react'
 import { Button } from '@/shared/components/ui/button'
 import { Input } from '@/shared/components/ui/input'
 import {
@@ -144,9 +144,7 @@ export default function TimerOverlayPage() {
   const effectiveSeconds = Math.max(0, snapshot.effectiveSeconds ?? snapshot.displaySeconds ?? 0)
   const roundElapsedSeconds = Math.max(0, snapshot.roundElapsedSeconds ?? 0)
   const roundTargetSeconds = Math.max(0, snapshot.roundTargetSeconds ?? 0)
-  const roundProgress = roundTargetSeconds > 0
-    ? Math.min(1, roundElapsedSeconds / roundTargetSeconds)
-    : 0
+  const roundProgress = Math.max(0, Math.min(1, snapshot.progressValue ?? (roundTargetSeconds > 0 ? roundElapsedSeconds / roundTargetSeconds : 0)))
   const studyStatusText =
     studyPhase === 'idle_warning'
       ? `仍在学习吗？${snapshot.idleWarningRemainingSeconds != null ? ` ${Math.max(0, snapshot.idleWarningRemainingSeconds)} 秒后暂停` : ''}`
@@ -366,14 +364,14 @@ export default function TimerOverlayPage() {
             {snapshot.title}
           </div>
         </div>
-        <button
-          type="button"
-          className="memory-anki-timer-overlay-icon-button"
-          onClick={() => setOverlayCollapsed(true)}
-          title="折叠为胶囊"
-        >
-          <ChevronsDown className="size-4" />
-        </button>
+        <div className="flex items-center gap-1">
+          <button type="button" className="memory-anki-timer-overlay-icon-button" onClick={() => sendCommand({ type: 'openTimerSettings' })} title="打开计时器设置">
+            <Settings2 className="size-4" />
+          </button>
+          <button type="button" className="memory-anki-timer-overlay-icon-button" onClick={() => setOverlayCollapsed(true)} title="折叠为胶囊">
+            <ChevronsDown className="size-4" />
+          </button>
+        </div>
       </div>
 
       <div className="memory-anki-timer-overlay-digits">{clock}</div>
@@ -383,14 +381,14 @@ export default function TimerOverlayPage() {
         <span>{snapshot.mode === 'break' ? snapshot.secondaryText : roundSummaryText}</span>
       </div>
 
-      {snapshot.mode === 'study' && roundTargetSeconds > 0 ? (
+      {snapshot.progressMode !== 'empty' ? (
         <div
           className="memory-anki-timer-round-progress memory-anki-timer-overlay-round-progress"
           role="progressbar"
           aria-label="本轮专注进度"
           aria-valuemin={0}
-          aria-valuemax={roundTargetSeconds}
-          aria-valuenow={Math.min(roundElapsedSeconds, roundTargetSeconds)}
+          aria-valuemax={100}
+          aria-valuenow={Math.round(roundProgress * 100)}
         >
           <span style={{ width: `${roundProgress * 100}%` }} />
         </div>

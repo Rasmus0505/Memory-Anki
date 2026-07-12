@@ -59,10 +59,10 @@ export function buildStudyTimerSnapshot({
   const goalReached = Boolean(activeEntry && roundElapsedSeconds >= primarySeconds)
   const idleSeconds = activeEntry?.timer.idleSeconds ?? 0
   const warningThreshold = Math.max(0, automationRule?.inactiveAutoPauseSeconds ?? 0)
-  const warningGrace = Math.max(0, automationRule?.inactivePauseGraceSeconds ?? 30)
+  const warningWindowSeconds = Math.min(60, warningThreshold)
   const idleWarningRemainingSeconds =
-    activeEntry && status === 'running' && warningGrace > 0 && idleSeconds >= warningThreshold
-      ? Math.max(0, warningThreshold + warningGrace - idleSeconds)
+    activeEntry && status === 'running' && warningThreshold > 0 && idleSeconds >= warningThreshold - warningWindowSeconds
+      ? Math.max(0, warningThreshold - idleSeconds)
       : null
   const studyPhase: UnifiedTimerStudyPhase = !activeEntry
     ? 'idle'
@@ -91,7 +91,17 @@ export function buildStudyTimerSnapshot({
     ? `本轮 ${formatClock(Math.min(roundElapsedSeconds, primarySeconds))}/${formatClock(primarySeconds)} · 第 ${roundIndex} 轮`
     : `本轮 ${formatClock(0)}/${formatClock(primarySeconds)}`
   const suggestedBreakMinutes = Math.max(1, Math.round(focusRule.breakMinutes ?? 5))
-
+  const semanticState = studyPhase === 'goal_reached'
+    ? 'goal'
+    : studyPhase === 'idle_warning'
+      ? 'warning'
+      : studyPhase === 'paused' || studyPhase === 'completed'
+        ? 'paused'
+        : studyPhase === 'focusing'
+          ? 'running'
+          : 'idle'
+  const focusProgress = primarySeconds > 0 ? Math.min(1, roundElapsedSeconds / primarySeconds) : 0
+  const idleProgress = warningThreshold > 0 ? Math.max(0, 1 - idleSeconds / warningThreshold) : 0
   return {
     mode: 'study',
     status,
@@ -122,6 +132,9 @@ export function buildStudyTimerSnapshot({
     idleWarningRemainingSeconds,
     suggestedBreakMinutes,
     feedbackSignal,
+    semanticState,
+    progressMode: studyPhase === 'idle_warning' ? 'idle_timeout' : studyPhase === 'paused' ? 'frozen' : studyPhase === 'idle' ? 'empty' : 'focus_round',
+    progressValue: studyPhase === 'goal_reached' ? 1 : studyPhase === 'idle_warning' ? idleProgress : studyPhase === 'idle' ? 0 : focusProgress,
   }
 }
 
@@ -152,7 +165,12 @@ export function buildBreakTimerSnapshot({
   const plannedText = breakState.plannedMinutes ? `计划 ${breakState.plannedMinutes} 分钟` : '选择这次休息多久'
   const snoozeText = `延后 ${breakState.snoozeCount} 次`
   const resolvedTargetPath = targetPath ?? config.targetPath
-
+  const breakTotalSeconds = Math.max(1, Math.round((breakState.plannedMinutes ?? 1) * 60))
+  const breakProgress = breakState.status === 'expired'
+    ? 1
+    : displaySeconds == null
+      ? 0
+      : Math.max(0, Math.min(1, 1 - displaySeconds / breakTotalSeconds))
   if (breakState.status === 'prompting') {
     return {
       mode: 'break',
@@ -206,5 +224,8 @@ export function buildBreakTimerSnapshot({
     snoozeMinutes: config.snoozeMinutes,
     targetPath: resolvedTargetPath,
     updatedAt: now,
+    semanticState: breakState.status === 'counting_down' ? 'break' : 'idle',
+    progressMode: breakState.status === 'counting_down' ? 'break_countdown' : 'empty',
+    progressValue: breakProgress,
   }
 }

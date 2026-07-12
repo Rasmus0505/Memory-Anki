@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { SessionTimerBar } from '@/shared/components/session/SessionTimerBar'
 import {
@@ -35,20 +35,17 @@ describe('SessionTimerBar', () => {
     const dialogContent = screen.getByTestId('timer-automation-dialog-content')
     expect(dialogContent.className).toContain('overflow-y-auto')
     expect(dialogContent.className).toContain('overscroll-contain')
-    const palaceAutoStart = screen.getByRole('checkbox', { name: /宫殿编辑进入页面自动开始/ })
-    fireEvent.click(palaceAutoStart)
-    const palaceRule = palaceAutoStart.closest('.rounded-lg')
-    expect(palaceRule).not.toBeNull()
-    fireEvent.change(
-      within(palaceRule as HTMLElement).getByRole('textbox', { name: '闲置预警阈值（秒）' }),
-      { target: { value: '45' } },
-    )
+    const autoStart = screen.getByRole('checkbox', { name: /进入学习页面自动开始/ })
+    fireEvent.click(autoStart)
+    fireEvent.change(screen.getByRole('spinbutton', { name: '无点击自动暂停分钟' }), {
+      target: { value: '5' },
+    })
     fireEvent.click(screen.getByRole('button', { name: '保存' }))
 
     const saved = readTimerAutomationConfig()
-    expect(saved.palace_edit.autoStartOnPageEnter).toBe(true)
-    expect(saved.palace_edit.inactiveAutoPauseSeconds).toBe(45)
-    expect(saved.english.autoStartOnPageEnter).toBe(true)
+    expect(saved.shared.autoStartOnPageEnter).toBe(true)
+    expect(saved.shared.inactiveAutoPauseSeconds).toBe(300)
+    expect(saved.english).toEqual(saved.shared)
   })
 
   it('renders the automation dialog with the wider desktop layout container', () => {
@@ -138,13 +135,14 @@ describe('SessionTimerBar', () => {
     window.localStorage.setItem(
       TIMER_AUTOMATION_STORAGE_KEY,
       JSON.stringify({
-        mode: 'scene',
-        actions: {},
-        palace_edit: {
+        schemaVersion: 3,
+        mode: 'global',
+        shared: {
           autoStartOnPageEnter: false,
           inactiveAutoPauseSeconds: 300,
-          hiddenAutoPauseSeconds: 15,
-          autoPauseRollbackSeconds: 20,
+          inactivePauseGraceSeconds: 0,
+          hiddenAutoPauseSeconds: 0,
+          autoPauseRollbackSeconds: 0,
         },
       }),
     )

@@ -1,4 +1,4 @@
-﻿import {
+import {
   getClientPreferenceCacheStatus,
   hasLoadedClientPreferences,
   saveClientPreference,
@@ -59,7 +59,7 @@ export interface TimerFocusConfig {
 
 export const TIMER_FOCUS_STORAGE_KEY = 'memory-anki-timer-focus-config'
 export const TIMER_FOCUS_UPDATED_EVENT = 'memory-anki-timer-focus-change'
-export const TIMER_FOCUS_CONFIG_VERSION = 2
+export const TIMER_FOCUS_CONFIG_VERSION = 3
 
 export const TIMER_FOCUS_SCENE_LABELS: Record<TimerFocusScene, string> = {
   palace_edit: '编辑',
@@ -395,9 +395,15 @@ export function sanitizeTimerFocusConfig(value: unknown): TimerFocusConfig {
     ),
   )
   const feedbackIntensity = requestedFeedbackIntensity ?? DEFAULT_TIMER_FOCUS_CONFIG.feedbackIntensity
+  const global = sanitizeRule(
+    raw.global,
+    DEFAULT_TIMER_FOCUS_CONFIG.global,
+    LEGACY_DEFAULT_TIMER_FOCUS_CONFIG.global,
+    isLegacyConfig,
+  )
   return {
     schemaVersion: TIMER_FOCUS_CONFIG_VERSION,
-    mode: raw.mode === 'scene' ? 'scene' : 'global',
+    mode: 'global',
     feedbackIntensity,
     celebration: sanitizeCelebrationConfig(
       raw.celebration,
@@ -405,57 +411,16 @@ export function sanitizeTimerFocusConfig(value: unknown): TimerFocusConfig {
       legacyFeedbackIntensity,
       isLegacyConfig,
     ),
-    global: sanitizeRule(
-      raw.global,
-      DEFAULT_TIMER_FOCUS_CONFIG.global,
-      LEGACY_DEFAULT_TIMER_FOCUS_CONFIG.global,
-      isLegacyConfig,
-    ),
-    palace_edit: sanitizeRule(
-      raw.palace_edit,
-      DEFAULT_TIMER_FOCUS_CONFIG.palace_edit,
-      LEGACY_DEFAULT_TIMER_FOCUS_CONFIG.palace_edit,
-      isLegacyConfig,
-    ),
-    practice: sanitizeRule(
-      raw.practice,
-      DEFAULT_TIMER_FOCUS_CONFIG.practice,
-      LEGACY_DEFAULT_TIMER_FOCUS_CONFIG.practice,
-      isLegacyConfig,
-    ),
-    quiz: sanitizeRule(
-      raw.quiz,
-      DEFAULT_TIMER_FOCUS_CONFIG.quiz,
-      LEGACY_DEFAULT_TIMER_FOCUS_CONFIG.quiz,
-      isLegacyConfig,
-    ),
-    review: sanitizeRule(
-      raw.review,
-      DEFAULT_TIMER_FOCUS_CONFIG.review,
-      LEGACY_DEFAULT_TIMER_FOCUS_CONFIG.review,
-      isLegacyConfig,
-    ),
-    freestyle: sanitizeRule(
-      raw.freestyle,
-      DEFAULT_TIMER_FOCUS_CONFIG.freestyle,
-      LEGACY_DEFAULT_TIMER_FOCUS_CONFIG.freestyle,
-      isLegacyConfig,
-    ),
-    english: sanitizeRule(
-      raw.english,
-      DEFAULT_TIMER_FOCUS_CONFIG.english,
-      LEGACY_DEFAULT_TIMER_FOCUS_CONFIG.english,
-      isLegacyConfig,
-    ),
-    english_reading: sanitizeRule(
-      raw.english_reading,
-      DEFAULT_TIMER_FOCUS_CONFIG.english_reading,
-      LEGACY_DEFAULT_TIMER_FOCUS_CONFIG.english_reading,
-      isLegacyConfig,
-    ),
+    global,
+    palace_edit: { ...global },
+    practice: { ...global },
+    quiz: { ...global },
+    review: { ...global },
+    freestyle: { ...global },
+    english: { ...global },
+    english_reading: { ...global },
   }
 }
-
 export function readTimerFocusConfig(): TimerFocusConfig {
   const cached = getClientPreferenceCacheStatus(
     'timer_focus_config',

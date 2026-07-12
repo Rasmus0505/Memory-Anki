@@ -60,6 +60,9 @@ export interface UnifiedTimerSnapshot {
   idleWarningRemainingSeconds?: number | null
   suggestedBreakMinutes?: number
   feedbackSignal?: UnifiedTimerFeedbackSignal | null
+  semanticState?: 'running' | 'paused' | 'warning' | 'goal' | 'break' | 'expired' | 'idle'
+  progressMode?: 'focus_round' | 'idle_timeout' | 'break_countdown' | 'frozen' | 'empty'
+  progressValue?: number
 }
 
 export type UnifiedTimerCommand =
@@ -75,6 +78,7 @@ export type UnifiedTimerCommand =
   | { type: 'continueRound' }
   | { type: 'startGoalBreak'; minutes?: number }
   | { type: 'startStudy' }
+  | { type: 'openTimerSettings' }
 
 export interface DesktopTimerBridge {
   isDesktop?: boolean

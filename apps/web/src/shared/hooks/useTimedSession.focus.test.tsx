@@ -84,25 +84,13 @@ describe('useTimedSession focus rounds', () => {
     expect(screen.getByTestId('focus-round-start').textContent).toBe('4')
   })
 
-  it('warns at two minutes, clears on activity, and pauses after the 30-second grace', () => {
+  it('pauses after two minutes without a grace period', () => {
     render(<TimedSessionTestHarness kind="practice" />)
 
     act(() => {
       vi.advanceTimersByTime(120_000)
     })
-    expect(screen.getByTestId('status').textContent).toBe('running')
-    expect(screen.getByTestId('idle-seconds').textContent).toBe('120')
 
-    act(() => {
-      fireEvent.click(screen.getByRole('button', { name: 'practice-op' }))
-      vi.advanceTimersByTime(120_000)
-    })
-    expect(screen.getByTestId('status').textContent).toBe('running')
-
-    act(() => {
-      vi.advanceTimersByTime(30_000)
-    })
     expect(screen.getByTestId('status').textContent).toBe('paused')
-    expect(screen.getByTestId('seconds').textContent).toBe('270')
-  })
-})
+    expect(screen.getByTestId('idle-seconds').textContent).toBe('0')
+  })})

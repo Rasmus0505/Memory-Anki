@@ -28,18 +28,11 @@ export function useGlobalTimerRegistration(entry: {
     becameActiveAt,
     routePath,
   } = entry
-  const notifyStudyActivity = context?.notifyStudyActivity
 
-  const registeredTimer = React.useMemo<TimedSessionController>(() => {
-    if (!notifyStudyActivity) return timer
-    return {
-      ...timer,
-      registerActivity: (activityKind, meta) => {
-        if (!notifyStudyActivity(timer.sessionId)) return
-        timer.registerActivity(activityKind, meta)
-      },
-    }
-  }, [notifyStudyActivity, timer])
+  const registeredTimer = React.useMemo<TimedSessionController>(() => ({
+    ...timer,
+    registerActivity: () => undefined,
+  }), [timer])
 
   React.useEffect(() => {
     if (!context) return
@@ -47,7 +40,7 @@ export function useGlobalTimerRegistration(entry: {
       sessionId: timer.sessionId,
       scene,
       title,
-      timer: registeredTimer,
+      timer,
       isRouteActive,
       becameActiveAt,
       routePath:
@@ -59,7 +52,7 @@ export function useGlobalTimerRegistration(entry: {
     return () => {
       context.removeTimer(timer.sessionId)
     }
-  }, [becameActiveAt, context, isRouteActive, registeredTimer, routePath, scene, timer.sessionId, title])
+  }, [becameActiveAt, context, isRouteActive, routePath, scene, timer, title])
 
   return registeredTimer
 }

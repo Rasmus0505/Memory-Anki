@@ -47,7 +47,7 @@ export type TimerAutomationActivityKind =
 
 export const TIMER_AUTOMATION_STORAGE_KEY = 'memory-anki-timer-automation-config'
 export const TIMER_AUTOMATION_UPDATED_EVENT = APP_EVENT_NAMES.timerAutomationUpdated
-export const TIMER_AUTOMATION_CONFIG_VERSION = 2
+export const TIMER_AUTOMATION_CONFIG_VERSION = 3
 
 const LEGACY_DEFAULT_TIMER_AUTOMATION_CONFIG = {
   mode: 'scene' as const,
@@ -109,7 +109,7 @@ const LEGACY_DEFAULT_TIMER_AUTOMATION_CONFIG = {
 
 export const DEFAULT_TIMER_AUTOMATION_CONFIG: TimerAutomationConfig = {
   schemaVersion: TIMER_AUTOMATION_CONFIG_VERSION,
-  mode: 'scene',
+  mode: 'global',
   actions: {
     autoResumeOnWindowReturn: false,
     countNodeSwitchAsActivity: false,
@@ -119,57 +119,57 @@ export const DEFAULT_TIMER_AUTOMATION_CONFIG: TimerAutomationConfig = {
   shared: {
     autoStartOnPageEnter: false,
     inactiveAutoPauseSeconds: 120,
-    inactivePauseGraceSeconds: 30,
-    hiddenAutoPauseSeconds: 15,
+    inactivePauseGraceSeconds: 0,
+    hiddenAutoPauseSeconds: 0,
     autoPauseRollbackSeconds: 0,
   },
   palace_edit: {
     autoStartOnPageEnter: false,
     inactiveAutoPauseSeconds: 120,
-    inactivePauseGraceSeconds: 30,
-    hiddenAutoPauseSeconds: 15,
+    inactivePauseGraceSeconds: 0,
+    hiddenAutoPauseSeconds: 0,
     autoPauseRollbackSeconds: 0,
   },
   practice: {
     autoStartOnPageEnter: false,
     inactiveAutoPauseSeconds: 120,
-    inactivePauseGraceSeconds: 30,
-    hiddenAutoPauseSeconds: 15,
+    inactivePauseGraceSeconds: 0,
+    hiddenAutoPauseSeconds: 0,
     autoPauseRollbackSeconds: 0,
   },
   quiz: {
-    autoStartOnPageEnter: true,
+    autoStartOnPageEnter: false,
     inactiveAutoPauseSeconds: 120,
-    inactivePauseGraceSeconds: 30,
-    hiddenAutoPauseSeconds: 15,
+    inactivePauseGraceSeconds: 0,
+    hiddenAutoPauseSeconds: 0,
     autoPauseRollbackSeconds: 0,
   },
   review: {
     autoStartOnPageEnter: false,
     inactiveAutoPauseSeconds: 120,
-    inactivePauseGraceSeconds: 30,
-    hiddenAutoPauseSeconds: 15,
+    inactivePauseGraceSeconds: 0,
+    hiddenAutoPauseSeconds: 0,
     autoPauseRollbackSeconds: 0,
   },
   freestyle: {
-    autoStartOnPageEnter: true,
+    autoStartOnPageEnter: false,
     inactiveAutoPauseSeconds: 120,
-    inactivePauseGraceSeconds: 30,
-    hiddenAutoPauseSeconds: 15,
+    inactivePauseGraceSeconds: 0,
+    hiddenAutoPauseSeconds: 0,
     autoPauseRollbackSeconds: 0,
   },
   english: {
-    autoStartOnPageEnter: true,
+    autoStartOnPageEnter: false,
     inactiveAutoPauseSeconds: 120,
-    inactivePauseGraceSeconds: 30,
-    hiddenAutoPauseSeconds: 15,
+    inactivePauseGraceSeconds: 0,
+    hiddenAutoPauseSeconds: 0,
     autoPauseRollbackSeconds: 0,
   },
   english_reading: {
-    autoStartOnPageEnter: true,
+    autoStartOnPageEnter: false,
     inactiveAutoPauseSeconds: 120,
-    inactivePauseGraceSeconds: 30,
-    hiddenAutoPauseSeconds: 15,
+    inactivePauseGraceSeconds: 0,
+    hiddenAutoPauseSeconds: 0,
     autoPauseRollbackSeconds: 0,
   },
 }
@@ -258,22 +258,6 @@ function migrateLegacyField<T>(
   return currentDefault
 }
 
-function sanitizeActivityConfig(
-  value: unknown,
-  fallback: TimerAutomationActivityConfig,
-): TimerAutomationActivityConfig {
-  const raw = value && typeof value === 'object' ? (value as Record<string, unknown>) : {}
-  return {
-    autoResumeOnWindowReturn: sanitizeBoolean(raw.autoResumeOnWindowReturn, fallback.autoResumeOnWindowReturn),
-    countNodeSwitchAsActivity: sanitizeBoolean(raw.countNodeSwitchAsActivity, fallback.countNodeSwitchAsActivity),
-    countEditOperationsAsActivity: sanitizeBoolean(raw.countEditOperationsAsActivity, fallback.countEditOperationsAsActivity),
-    countPracticeInteractionsAsActivity: sanitizeBoolean(
-      raw.countPracticeInteractionsAsActivity,
-      fallback.countPracticeInteractionsAsActivity,
-    ),
-  }
-}
-
 export function sanitizeTimerAutomationConfig(value: unknown): TimerAutomationConfig {
   const raw = value && typeof value === 'object' ? (value as Record<string, unknown>) : {}
   const parsedSchemaVersion = Number(raw.schemaVersion)
@@ -282,100 +266,39 @@ export function sanitizeTimerAutomationConfig(value: unknown): TimerAutomationCo
   const rawActions = raw.actions && typeof raw.actions === 'object' ? (raw.actions as Record<string, unknown>) : {}
   const legacyAutoStartOnPageEnter =
     typeof rawActions.autoStartOnPageEnter === 'boolean' ? rawActions.autoStartOnPageEnter : undefined
-  const practice = sanitizeRule(
-    raw.practice,
-    DEFAULT_TIMER_AUTOMATION_CONFIG.practice,
-    LEGACY_DEFAULT_TIMER_AUTOMATION_CONFIG.practice,
+  const migrated = sanitizeRule(
+    raw.shared,
+    DEFAULT_TIMER_AUTOMATION_CONFIG.shared,
+    LEGACY_DEFAULT_TIMER_AUTOMATION_CONFIG.shared,
     isLegacyConfig,
     legacyAutoStartOnPageEnter,
   )
-  const quiz =
-    raw.quiz === undefined && isLegacyConfig
-      ? {
-          ...practice,
-          autoStartOnPageEnter: DEFAULT_TIMER_AUTOMATION_CONFIG.quiz.autoStartOnPageEnter,
-        }
-      : sanitizeRule(
-          raw.quiz,
-          DEFAULT_TIMER_AUTOMATION_CONFIG.quiz,
-          LEGACY_DEFAULT_TIMER_AUTOMATION_CONFIG.quiz,
-          isLegacyConfig,
-          legacyAutoStartOnPageEnter,
-        )
+  const shared: TimerAutomationRule = {
+    autoStartOnPageEnter: migrated.autoStartOnPageEnter,
+    inactiveAutoPauseSeconds: migrated.inactiveAutoPauseSeconds,
+    inactivePauseGraceSeconds: 0,
+    hiddenAutoPauseSeconds: 0,
+    autoPauseRollbackSeconds: 0,
+  }
   return {
     schemaVersion: TIMER_AUTOMATION_CONFIG_VERSION,
-    mode: raw.mode === 'global' ? 'global' : DEFAULT_TIMER_AUTOMATION_CONFIG.mode,
-    actions: sanitizeActivityConfig(raw.actions, DEFAULT_TIMER_AUTOMATION_CONFIG.actions),
-    shared: sanitizeRule(
-      raw.shared,
-      DEFAULT_TIMER_AUTOMATION_CONFIG.shared,
-      LEGACY_DEFAULT_TIMER_AUTOMATION_CONFIG.shared,
-      isLegacyConfig,
-      legacyAutoStartOnPageEnter,
-    ),
-    palace_edit: sanitizeRule(
-      raw.palace_edit,
-      DEFAULT_TIMER_AUTOMATION_CONFIG.palace_edit,
-      LEGACY_DEFAULT_TIMER_AUTOMATION_CONFIG.palace_edit,
-      isLegacyConfig,
-      legacyAutoStartOnPageEnter,
-    ),
-    practice,
-    quiz,
-    review: sanitizeRule(
-      raw.review,
-      DEFAULT_TIMER_AUTOMATION_CONFIG.review,
-      LEGACY_DEFAULT_TIMER_AUTOMATION_CONFIG.review,
-      isLegacyConfig,
-      legacyAutoStartOnPageEnter,
-    ),
-    freestyle:
-      raw.freestyle === undefined && isLegacyConfig
-        ? {
-            ...quiz,
-          }
-        : sanitizeRule(
-            raw.freestyle,
-            DEFAULT_TIMER_AUTOMATION_CONFIG.freestyle,
-            LEGACY_DEFAULT_TIMER_AUTOMATION_CONFIG.freestyle,
-            isLegacyConfig,
-            legacyAutoStartOnPageEnter,
-          ),
-    english:
-      raw.english === undefined && isLegacyConfig
-        ? {
-            ...practice,
-          }
-        : sanitizeRule(
-            raw.english,
-            DEFAULT_TIMER_AUTOMATION_CONFIG.english,
-            LEGACY_DEFAULT_TIMER_AUTOMATION_CONFIG.english,
-            isLegacyConfig,
-            legacyAutoStartOnPageEnter,
-          ),
-    english_reading:
-      raw.english_reading === undefined && isLegacyConfig
-        ? raw.english === undefined
-          ? {
-              ...DEFAULT_TIMER_AUTOMATION_CONFIG.english_reading,
-            }
-          : sanitizeRule(
-              raw.english,
-              DEFAULT_TIMER_AUTOMATION_CONFIG.english_reading,
-              LEGACY_DEFAULT_TIMER_AUTOMATION_CONFIG.english_reading,
-              isLegacyConfig,
-              legacyAutoStartOnPageEnter,
-            )
-        : sanitizeRule(
-            raw.english_reading,
-            DEFAULT_TIMER_AUTOMATION_CONFIG.english_reading,
-            LEGACY_DEFAULT_TIMER_AUTOMATION_CONFIG.english_reading,
-            isLegacyConfig,
-            legacyAutoStartOnPageEnter,
-          ),
+    mode: 'global',
+    actions: {
+      autoResumeOnWindowReturn: false,
+      countNodeSwitchAsActivity: false,
+      countEditOperationsAsActivity: false,
+      countPracticeInteractionsAsActivity: false,
+    },
+    shared,
+    palace_edit: { ...shared },
+    practice: { ...shared },
+    quiz: { ...shared },
+    review: { ...shared },
+    freestyle: { ...shared },
+    english: { ...shared },
+    english_reading: { ...shared },
   }
 }
-
 export function readTimerAutomationConfig(): TimerAutomationConfig {
   const cached = getClientPreferenceCacheStatus(
     'timer_automation_config',

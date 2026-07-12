@@ -252,7 +252,7 @@ describe('TimerOverlayPage', () => {
     expect(screen.getByText('25:02')).toBeTruthy()
     expect(screen.getByText('第 1 轮目标完成')).toBeTruthy()
     expect(screen.getByText('本轮 25:02/25:00')).toBeTruthy()
-    expect(screen.getByRole('progressbar', { name: '本轮专注进度' }).getAttribute('aria-valuenow')).toBe('1500')
+    expect(screen.getByRole('progressbar', { name: '本轮专注进度' }).getAttribute('aria-valuenow')).toBe('100')
 
     fireEvent.click(screen.getByRole('button', { name: '继续学习' }))
     fireEvent.click(screen.getByRole('button', { name: '休息 5 分钟' }))

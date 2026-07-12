@@ -477,6 +477,8 @@ export function GlobalTimerFloatingOverlay({
         />
       ) : null}
       <div
+data-timer-overlay-root="true"
+        data-semantic-state={snapshot.semanticState ?? 'idle'}
         className="memory-anki-global-timer-layer"
         style={{ left: layout.x, top: layout.y }}
         onPointerMove={handlePointerMoveEvent}

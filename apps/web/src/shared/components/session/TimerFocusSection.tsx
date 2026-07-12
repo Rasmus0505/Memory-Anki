@@ -1,4 +1,3 @@
-import { Button } from '@/shared/components/ui/button'
 import { cn } from '@/shared/lib/utils'
 import type {
   TimerCelebrationVisualPreset,
@@ -9,7 +8,6 @@ import type {
 import {
   DEFAULT_TIMER_FOCUS_CONFIG,
   getTimerFocusRule,
-  TIMER_FOCUS_SCENE_LABELS,
 } from '@/shared/components/session/timer-focus-config'
 import type {
   CelebrationBooleanFieldKey,
@@ -23,7 +21,6 @@ import { FocusRuleEditor } from '@/shared/components/session/TimerFocusRuleEdito
 export function TimerFocusSection({
   focusDraft,
   parsedFocusConfig,
-  onFocusModeChange,
   onFocusFieldChange,
   onFeedbackIntensityChange,
   onCelebrationBooleanChange,
@@ -43,18 +40,6 @@ export function TimerFocusSection({
   onCelebrationVolumeChange: (eventKey: CelebrationEventKey, value: string) => void
   onCelebrationPresetChange: (eventKey: CelebrationEventKey, value: TimerCelebrationVisualPreset) => void
 }) {
-  const focusScenes = Object.keys(TIMER_FOCUS_SCENE_LABELS) as TimerFocusScene[]
-  const focusRuleEditors = focusScenes.map((scene) => (
-    <FocusRuleEditor
-      key={scene}
-      label={TIMER_FOCUS_SCENE_LABELS[scene]}
-      value={focusDraft[scene]}
-      defaults={DEFAULT_TIMER_FOCUS_CONFIG[scene]}
-      onFieldChange={(field, value) => onFocusFieldChange(scene, field, value)}
-      compact
-    />
-  ))
-
   return (
     <div className="rounded-lg border border-border/70 bg-card/70 p-4">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
@@ -63,26 +48,6 @@ export function TimerFocusSection({
           <p className="mt-1 text-xs text-muted-foreground">
             主数字显示累计有效学习时长，下方展示当前 25 分钟轮次进度；阶段提醒不会抢占主视觉。
           </p>
-        </div>
-        <div className="inline-flex rounded-full border border-border/70 bg-background/80 p-1">
-          <Button
-            type="button"
-            size="sm"
-            variant={focusDraft.mode === 'global' ? 'default' : 'ghost'}
-            className="rounded-full px-4"
-            onClick={() => onFocusModeChange('global')}
-          >
-            全局目标
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant={focusDraft.mode === 'scene' ? 'default' : 'ghost'}
-            className="rounded-full px-4"
-            onClick={() => onFocusModeChange('scene')}
-          >
-            单独目标
-          </Button>
         </div>
       </div>
 
@@ -110,18 +75,12 @@ export function TimerFocusSection({
       </div>
 
       <div className="mt-4">
-        {focusDraft.mode === 'global' ? (
-          <FocusRuleEditor
+        <FocusRuleEditor
             label="全局专注目标"
             value={focusDraft.global}
             defaults={DEFAULT_TIMER_FOCUS_CONFIG.global}
             onFieldChange={(field, value) => onFocusFieldChange('global', field, value)}
-          />
-        ) : (
-          <div className="grid gap-3 lg:grid-cols-2">
-            {focusRuleEditors}
-          </div>
-        )}
+        />
       </div>
 
       <details className="mt-4 rounded-lg border border-border/70 bg-background/45 p-4">

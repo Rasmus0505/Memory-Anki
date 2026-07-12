@@ -60,14 +60,11 @@ export function useTimedSessionBrowserPauseEffects({
       if (document.visibilityState === 'hidden') {
         clearTimer(hiddenPauseRef)
         hiddenPauseRef.current = window.setTimeout(() => {
-          pause({ reason: 'hidden' })
+          pause({ reason: 'document_hidden' })
         }, hiddenPauseMs)
         return
       }
       clearTimer(hiddenPauseRef)
-      if (statusRef.current === 'paused') {
-        registerActivity('window_return', { reason: 'visible' })
-      }
     }
 
     const handleBlur = () => {
@@ -77,7 +74,7 @@ export function useTimedSessionBrowserPauseEffects({
       }
       clearTimer(hiddenPauseRef)
       hiddenPauseRef.current = window.setTimeout(() => {
-        pause({ reason: 'blur' })
+        pause({ reason: 'window_blur' })
       }, hiddenPauseMs)
     }
 
@@ -85,9 +82,6 @@ export function useTimedSessionBrowserPauseEffects({
       clearTimer(hiddenPauseRef)
       if (!sceneActiveRef.current) {
         return
-      }
-      if (statusRef.current === 'paused') {
-        registerActivity('window_return', { reason: 'focus' })
       }
     }
 

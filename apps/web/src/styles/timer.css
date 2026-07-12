@@ -781,3 +781,56 @@
     opacity: 1;
   }
 }
+
+.memory-anki-timer-capsule-progress {
+  position: absolute;
+  right: 10px;
+  bottom: 3px;
+  left: 10px;
+  height: 3px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(100, 116, 139, 0.18);
+  pointer-events: none;
+}
+
+.memory-anki-timer-capsule-progress > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: #64748b;
+  transition: width 300ms ease, background-color 200ms ease;
+}
+
+[data-semantic-state='running'] .memory-anki-timer-capsule-progress > span,
+[data-semantic-state='running'].memory-anki-timer-overlay-capsule .memory-anki-timer-capsule-progress > span {
+  background: #10b981;
+}
+
+[data-semantic-state='warning'] .memory-anki-timer-capsule-progress > span,
+[data-semantic-state='warning'].memory-anki-timer-overlay-capsule .memory-anki-timer-capsule-progress > span {
+  background: #f59e0b;
+}
+
+[data-semantic-state='goal'] .memory-anki-timer-capsule-progress > span,
+[data-semantic-state='goal'].memory-anki-timer-overlay-capsule .memory-anki-timer-capsule-progress > span {
+  background: #3b82f6;
+}
+
+[data-semantic-state='break'] .memory-anki-timer-capsule-progress > span,
+[data-semantic-state='break'].memory-anki-timer-overlay-capsule .memory-anki-timer-capsule-progress > span {
+  background: #8b5cf6;
+}
+
+[data-semantic-state='expired'] .memory-anki-timer-capsule-progress > span,
+[data-semantic-state='expired'].memory-anki-timer-overlay-capsule .memory-anki-timer-capsule-progress > span {
+  background: #ef4444;
+}
+
+[data-semantic-state='running'] .memory-anki-global-timer-capsule-dot { background: #10b981; }
+[data-semantic-state='paused'] .memory-anki-global-timer-capsule-dot,
+[data-semantic-state='idle'] .memory-anki-global-timer-capsule-dot { background: #64748b; }
+[data-semantic-state='warning'] .memory-anki-global-timer-capsule-dot { background: #f59e0b; }
+[data-semantic-state='goal'] .memory-anki-global-timer-capsule-dot { background: #3b82f6; }
+[data-semantic-state='break'] .memory-anki-global-timer-capsule-dot { background: #8b5cf6; }
+[data-semantic-state='expired'] .memory-anki-global-timer-capsule-dot { background: #ef4444; }
