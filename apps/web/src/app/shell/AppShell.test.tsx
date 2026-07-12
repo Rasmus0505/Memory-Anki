@@ -190,8 +190,8 @@ describe('AppShell', () => {
 
     await screen.findAllByText(/Stable abcdef12/)
 
-    const libraryLink = screen.getAllByRole('link', { name: '知识库' })[0]
-    const creationLink = screen.getAllByRole('link', { name: '内容创作' })[0]
+    const libraryLink = screen.getAllByRole('link', { name: '知识' })[0]
+    const creationLink = screen.getAllByRole('link', { name: '创建' })[0]
 
     expect(libraryLink.className).toContain('bg-primary')
     expect(creationLink.className).not.toContain('bg-primary')
@@ -210,7 +210,7 @@ describe('AppShell', () => {
 
     const mobileNav = screen.getByRole('navigation', { name: '移动端主导航' })
     expect(mobileNav.className).toContain('lg:hidden')
-    expect(mobileNav.querySelectorAll('a')).toHaveLength(5)
+    expect(mobileNav.querySelectorAll('a')).toHaveLength(4)
     expect(mobileNav.querySelector('a[href="/freestyle"]')?.className).toContain('bg-primary')
     expect(mobileNav.querySelector('a[href="/palaces"]')).toBeTruthy()
     expect(mobileNav.querySelector('a[href="/dashboard"]')).toBeTruthy()
@@ -237,11 +237,11 @@ describe('AppShell', () => {
     )
 
     const mobileNav = screen.getByRole('navigation', { name: '移动端主导航' })
-    expect(mobileNav.querySelector('a[href="/palaces"]')?.textContent).toContain('知识库')
-    expect(mobileNav.querySelector('a[href="/palaces/new"]')?.textContent).toContain('内容创作')
+    expect(mobileNav.querySelector('a[href="/palaces"]')?.textContent).toContain('知识')
+    expect(mobileNav.querySelector('a[href="/palaces/new"]')?.textContent).toContain('创建')
   })
 
-  it('renders the five learning-loop sections and keeps today active', async () => {
+  it('renders the four learning-loop sections and keeps today active', async () => {
     getRuntimeInfoApi.mockResolvedValue({
       channel: 'stable',
       commit: 'abcdef1234567890',
@@ -263,10 +263,10 @@ describe('AppShell', () => {
     const navLabels = screen
       .getAllByRole('link')
       .map((link) => link.textContent?.trim() || '')
-      .filter((label) => ['今日学习', '知识库', '内容创作', '复习分析', '系统设置'].includes(label))
+      .filter((label) => ['今日', '知识', '创建', '洞察'].includes(label))
 
-    expect(navLabels.slice(0, 5)).toEqual(['今日学习', '知识库', '内容创作', '复习分析', '系统设置'])
-    const freestyleLink = screen.getAllByRole('link', { name: '今日学习' })[0]
+    expect(navLabels.slice(0, 4)).toEqual(['今日', '知识', '创建', '洞察'])
+    const freestyleLink = screen.getAllByRole('link', { name: '今日' })[0]
     expect(freestyleLink.className).toContain('bg-primary')
 
     preloadFreestylePage.mockClear()
@@ -294,7 +294,7 @@ describe('AppShell', () => {
 
     await screen.findAllByText(/Stable abcdef12/)
 
-    const creationLink = screen.getAllByRole('link', { name: '内容创作' })[0]
+    const creationLink = screen.getAllByRole('link', { name: '创建' })[0]
     expect(creationLink.className).toContain('bg-primary')
   })
 
@@ -319,7 +319,7 @@ describe('AppShell', () => {
     await screen.findAllByText(/Stable abcdef12/)
     const beforeHoverCalls = prefetchPalaceSubjectShelfApi.mock.calls.length
 
-    fireEvent.mouseEnter(screen.getAllByRole('link', { name: '知识库' })[0]!)
+    fireEvent.mouseEnter(screen.getAllByRole('link', { name: '知识' })[0]!)
 
     expect(prefetchPalaceSubjectShelfApi.mock.calls.length).toBe(beforeHoverCalls + 1)
     expect(prefetchPalacesGroupedSummaryApi.mock.calls.length).toBeGreaterThanOrEqual(1)
@@ -377,9 +377,9 @@ describe('AppShell', () => {
     await screen.findAllByText(/Stable abcdef12/)
     expect(screen.getByText('/palaces/30/edit?miniPalaceId=5&miniPalaceMode=edit#mindmap')).toBeTruthy()
 
-    fireEvent.click(screen.getAllByRole('link', { name: '系统设置' })[0]!)
+    fireEvent.click(screen.getAllByRole('link', { name: '今日' })[0]!)
     await waitFor(() => {
-      expect(screen.getByText('/profile')).toBeTruthy()
+      expect(screen.getByText('/freestyle')).toBeTruthy()
     })
 
     const rememberedPalacePath = '/palaces/30/edit?miniPalaceId=5&miniPalaceMode=edit#mindmap'
@@ -388,7 +388,7 @@ describe('AppShell', () => {
     expect(desktopLinks.some((link) => link.getAttribute('href') === rememberedPalacePath)).toBe(true)
     expect(mobileNav.querySelector(`a[href="${rememberedPalacePath}"]`)).toBeTruthy()
 
-    fireEvent.click(screen.getAllByRole('link', { name: '内容创作' })[0]!)
+    fireEvent.click(screen.getAllByRole('link', { name: '创建' })[0]!)
     await waitFor(() => {
       expect(screen.getByText(rememberedPalacePath)).toBeTruthy()
     })
@@ -413,12 +413,12 @@ describe('AppShell', () => {
     )
 
     await screen.findAllByText(/Stable abcdef12/)
-    fireEvent.click(screen.getAllByRole('link', { name: '系统设置' })[0]!)
+    fireEvent.click(screen.getAllByRole('link', { name: '今日' })[0]!)
     await waitFor(() => {
-      expect(screen.getByText('/profile')).toBeTruthy()
+      expect(screen.getByText('/freestyle')).toBeTruthy()
     })
 
-    const reviewLinks = screen.getAllByRole('link', { name: '复习分析' })
+    const reviewLinks = screen.getAllByRole('link', { name: '洞察' })
     const reviewHrefs = reviewLinks.map((link) => link.getAttribute('href'))
     expect(reviewHrefs).toContain('/dashboard')
     const reviewOverviewLink = reviewLinks.find((link) => link.getAttribute('href') === '/dashboard')

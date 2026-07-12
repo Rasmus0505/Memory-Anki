@@ -91,7 +91,7 @@ describe('GlobalCommandPalette', () => {
     expect(screen.getByText('新建宫殿')).toBeTruthy()
     expect(screen.getByText('搜索宫殿')).toBeTruthy()
 
-    for (const label of ['今日学习', '知识库', '内容创作', '复习分析', '系统设置']) {
+    for (const label of ['今日', '知识', '创建', '洞察']) {
       expect(screen.getByText(label)).toBeTruthy()
     }
 
@@ -113,8 +113,8 @@ describe('GlobalCommandPalette', () => {
     openPalette()
 
     expect(await screen.findByText('最近访问')).toBeTruthy()
-    expect(screen.getByText('知识库 · /palaces')).toBeTruthy()
-    expect(screen.queryByText('复习分析 · /review')).toBeNull()
+    expect(screen.getByText('知识 · /palaces')).toBeTruthy()
+    expect(screen.queryByText('洞察 · /review')).toBeNull()
   })
 
   it('does not trigger global shortcuts from editable fields', async () => {
@@ -134,9 +134,7 @@ describe('GlobalCommandPalette', () => {
     fireEvent.keyDown(window, { key: '?' })
 
     expect(await screen.findByText('快捷键')).toBeTruthy()
-    expect(screen.getByText('标记/取消专项知识点')).toBeTruthy()
     expect(screen.getAllByText('隐藏/取消子级知识点显示').length).toBeGreaterThanOrEqual(1)
-    expect(screen.getByText('Shift+F')).toBeTruthy()
     expect(screen.getAllByText('Shift+H').length).toBeGreaterThanOrEqual(1)
   })
 

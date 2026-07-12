@@ -29,12 +29,14 @@ from memory_anki.core.runtime_activity import (
     stop_runtime_activity_heartbeat,
 )
 from memory_anki.infrastructure.db._tables._base import get_session as _get_session
+from memory_anki.modules.ai_learning.presentation import router as ai_learning_router
 from memory_anki.modules.backups.application.backup_lifecycle import (
     create_shutdown_backup,
     start_periodic_backup_loop,
     stop_periodic_backup_loop,
 )
 from memory_anki.modules.backups.presentation import router as backups_router
+from memory_anki.modules.batch_generation.presentation import router as batch_generation_router
 from memory_anki.modules.dashboard.presentation import router as dashboard_router
 from memory_anki.modules.english.presentation import router as english_router
 from memory_anki.modules.english_reading.presentation import router as english_reading_router
@@ -151,7 +153,9 @@ ensure_runtime_dirs()
 app.mount("/api/attachments", StaticFiles(directory=str(ATTACHMENTS_DIR)), name="attachments")
 
 app.include_router(palace_router.router, prefix="/api/v1")
+app.include_router(ai_learning_router.router, prefix="/api/v1")
 app.include_router(backups_router.router, prefix="/api/v1")
+app.include_router(batch_generation_router, prefix="/api/v1")
 app.include_router(palace_quiz_router.router, prefix="/api/v1")
 app.include_router(palace_quiz_workspace_router.router, prefix="/api/v1")
 app.include_router(review_router.router, prefix="/api/v1")
@@ -174,3 +178,4 @@ if __name__ == "__main__":
     import uvicorn
 
     uvicorn.run("memory_anki.app.main:app", host="127.0.0.1", port=8012)
+

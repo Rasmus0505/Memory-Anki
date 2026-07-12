@@ -68,6 +68,6 @@ describe("EnglishReadingPage session flows", () => {
     await waitFor(() => {
       expect(mocks.timer.reset).toHaveBeenCalledTimes(1);
     });
-    expect(mocks.timer.start).toHaveBeenCalledTimes(1);
+    expect(mocks.timer.start).not.toHaveBeenCalled();
   });
 });

@@ -287,6 +287,17 @@ SCENES: tuple[AiSceneDefinition, ...] = (
         source_location="apps/api/src/memory_anki/modules/palace_quiz/application/ai_service.py",
     ),
     AiSceneDefinition(
+        key="review_ai_learning",
+        label="复习 AI 学习工作台",
+        description="复习中的提问、讲解、即时出题和知识纠错。",
+        category_key="llm",
+        config_key="scene_model_review_ai_learning",
+        thinking_config_key="scene_model_review_ai_learning_thinking_enabled",
+        default_model=DASHSCOPE_TEXT_MODEL,
+        legacy_config_keys=("ai_model_text",),
+        legacy_thinking_config_keys=("ai_model_text_thinking_enabled",),
+        source_location="apps/api/src/memory_anki/modules/ai_learning/application/service.py",
+    ),    AiSceneDefinition(
         key="quiz_review_mindmap_generation",
         label="复习脑图出题",
         description="基于当前复习脑图与关联宫殿上下文生成一组综合题，并自动写入题库。",
@@ -469,3 +480,4 @@ def category_model_config_key(category_key: AiModelType) -> str:
 
 def category_thinking_config_key(category_key: AiModelType) -> str:
     return f"category_model_{category_key}_thinking_enabled"
+

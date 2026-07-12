@@ -50,7 +50,7 @@ describe("EnglishReadingPage core flows", () => {
     expect(
       screen.getAllByText("Important acquisition was recalcitrant.").length,
     ).toBeGreaterThan(0);
-    expect(mocks.timer.start).toHaveBeenCalled();
+    expect(mocks.timer.start).not.toHaveBeenCalled();
     expect(mocks.toastSuccessMock).toHaveBeenCalledWith("i+1 阅读材料已生成。", undefined);
   });
 

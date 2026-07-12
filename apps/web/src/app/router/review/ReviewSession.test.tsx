@@ -79,7 +79,6 @@ vi.mock('@/entities/palace/api', () => ({
   getPalaceEditorApi: vi.fn(),
   savePalaceEditorApi: vi.fn(),
   savePalaceEditorWithOptionsApi: vi.fn(),
-  togglePalaceFocusNodeApi: vi.fn(),
 }))
 
 vi.mock('@/shared/hooks/useMindMapDocumentSession', () => ({

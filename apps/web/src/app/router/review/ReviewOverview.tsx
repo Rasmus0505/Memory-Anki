@@ -261,8 +261,8 @@ export default function ReviewOverview() {
       ) : null}
 
       {health?.needs_repair ? (
-        <Card className="memory-anki-warm-panel memory-anki-surface-glow border-warning/40 bg-warning/5">
-          <CardContent className="flex flex-wrap items-center justify-between gap-3 p-4 text-sm text-warning">
+        <Card className="memory-anki-warm-panel memory-anki-surface-glow border-warning/45 bg-warning/10">
+          <CardContent className="flex flex-wrap items-center justify-between gap-3 p-4 text-sm font-medium text-amber-800 dark:text-amber-200">
             <span className="min-w-0 flex-1">
               检测到 {health.total_issues} 处复习进度异常（孤儿进度 {health.orphan_progress_count}、
               孤儿会话 {health.orphan_study_session_count}、阶段断档 {health.stage_gap_palace_count}），建议立即修复。
@@ -271,7 +271,7 @@ export default function ReviewOverview() {
               type="button"
               size="sm"
               variant="outline"
-              className="border-warning/30 bg-background/80 text-warning hover:bg-warning/10"
+              className="border-warning/40 bg-background/80 text-amber-800 hover:bg-warning/15 dark:text-amber-200"
               disabled={repairing}
               onClick={() => void handleRepairStageProgress()}
             >
@@ -302,9 +302,9 @@ export default function ReviewOverview() {
         </Card>
       ) : null}
 
-      <Card className="memory-anki-warm-panel memory-anki-surface-glow border-border/60 bg-card/90">
-        <CardHeader>
-          <CardTitle className="text-base">待处理任务</CardTitle>
+      <Card className="memory-anki-warm-panel memory-anki-surface-glow border-border/70 bg-card/90">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-lg tracking-tight">待处理任务</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
           {queue.reviews.length > 0 ? (
@@ -315,20 +315,20 @@ export default function ReviewOverview() {
                 onFocus={() => prefetchStudySession('review-session', review.id, () => Promise.all([getReviewSessionApi(review.id), getReviewSessionProgressApi(review.id)]).then(([session, progress]) => ({ session, progress })))}
                 onMouseEnter={() => prefetchStudySession('review-session', review.id, () => Promise.all([getReviewSessionApi(review.id), getReviewSessionProgressApi(review.id)]).then(([session, progress]) => ({ session, progress })))}
               >
-                <div className="memory-anki-soft-card flex items-center justify-between rounded-[24px] border border-border/60 bg-background/80 px-4 py-4 transition-all hover:-translate-y-[1px] hover:bg-secondary/75">
+                <div className="memory-anki-soft-card flex items-center justify-between gap-4 rounded-2xl border border-border/70 bg-background/80 px-4 py-4 transition-all hover:-translate-y-[1px] hover:border-primary/35 hover:bg-secondary/75">
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
-                      <Brain className="size-4 text-muted-foreground" />
-                      <span className="truncate font-medium">{review.palace?.title || '未命名宫殿'}</span>
+                      <Brain className="size-4 shrink-0 text-primary" />
+                      <span className="truncate font-semibold text-foreground">{review.palace?.title || '未命名宫殿'}</span>
                     </div>
-                    <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                    <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
                       <span>{formatReviewStage(review.review_type, review.review_number)}</span>
                       <span>间隔 {review.interval_days} 天</span>
                       {review.schedule_count > 1 ? <span>累计 {review.schedule_count} 次待复习</span> : <span>1 个宫殿复习对象</span>}
                       {review.overdue_schedule_count > 0 ? <span>{review.overdue_schedule_count} 次已逾期</span> : null}
                     </div>
                   </div>
-                  <Button size="sm">
+                  <Button size="sm" className="shrink-0 shadow-sm">
                     开始复习
                     <ArrowRight className="ml-2 size-4" />
                   </Button>

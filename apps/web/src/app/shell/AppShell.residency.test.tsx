@@ -75,7 +75,7 @@ describe('AppShell residency navigation memory', () => {
       target: { value: 'persisted palace state' },
     })
 
-    fireEvent.click(screen.getAllByRole('link', { name: '今日学习' })[0]!)
+    fireEvent.click(screen.getAllByRole('link', { name: '今日' })[0]!)
     await waitFor(() => {
       expect(screen.getByTestId('page:/palaces/30/edit').getAttribute('data-active')).toBe('false')
       expect(screen.getByTestId('page:/freestyle').getAttribute('data-active')).toBe('true')
@@ -85,7 +85,7 @@ describe('AppShell residency navigation memory', () => {
       target: { value: 'persisted english state' },
     })
 
-    fireEvent.click(screen.getAllByRole('link', { name: '内容创作' })[0]!)
+    fireEvent.click(screen.getAllByRole('link', { name: '创建' })[0]!)
     await waitFor(() => {
       expect(screen.getByText('/palaces/30/edit?miniPalaceId=5&miniPalaceMode=edit')).toBeTruthy()
       expect(screen.getByTestId('page:/palaces/30/edit').getAttribute('data-active')).toBe('true')
@@ -97,7 +97,7 @@ describe('AppShell residency navigation memory', () => {
     expect((screen.getByLabelText('input:/freestyle') as HTMLInputElement).value).toBe(
       'persisted english state',
     )
-    expect(screen.getAllByRole('link', { name: '内容创作' })[1]?.getAttribute('href')).toBe(
+    expect(screen.getAllByRole('link', { name: '创建' })[1]?.getAttribute('href')).toBe(
       '/palaces/30/edit?miniPalaceId=5&miniPalaceMode=edit',
     )
   })
