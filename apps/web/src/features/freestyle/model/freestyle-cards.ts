@@ -53,7 +53,6 @@ export function flattenPalaceOptions(
         }
       : null,
     needs_practice: item.needs_practice,
-    focus_count: item.focus_count,
   }))
 }
 

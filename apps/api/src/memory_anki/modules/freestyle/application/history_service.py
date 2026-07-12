@@ -12,6 +12,7 @@ from memory_anki.infrastructure.db._tables.palaces import (
     FreestyleQuizAttempt,
     PalaceQuizQuestion,
 )
+from memory_anki.modules.palace_quiz.api import record_attempt_event
 
 FREESTYLE_HISTORY_MODES = {"today", "free"}
 AI_EXPLANATION_OPERATIONS = {
@@ -136,19 +137,35 @@ def create_question_attempt(session: Session, payload: dict[str, Any]) -> dict[s
         question_id=question_id,
         palace_id=_int_or_none(payload.get("palace_id")) or getattr(question, "palace_id", None),
         palace_title=_text(payload.get("palace_title"), 200),
-        mini_palace_id=_int_or_none(payload.get("mini_palace_id")) or getattr(question, "mini_palace_id", None),
+        mini_palace_id=_int_or_none(payload.get("mini_palace_id"))
+        or getattr(question, "mini_palace_id", None),
         mini_palace_name=_text(payload.get("mini_palace_name"), 200),
         chapter_id=_int_or_none(payload.get("chapter_id"))
         or getattr(question, "classified_chapter_id", None)
         or getattr(question, "source_chapter_id", None),
         chapter_name=_text(payload.get("chapter_name"), 200),
         mode=_normalize_mode(payload.get("mode")),
-        question_type=_text(payload.get("question_type") or getattr(question, "question_type", ""), 32),
+        question_type=_text(
+            payload.get("question_type") or getattr(question, "question_type", ""), 32
+        ),
         stem_snapshot=_text(payload.get("stem_snapshot") or getattr(question, "stem", "")),
         answer_payload_json=_json_dump(payload.get("answer_payload")),
         is_correct=is_correct if isinstance(is_correct, bool) else None,
     )
     session.add(row)
+    record_attempt_event(
+        session,
+        {
+            **payload,
+            "question_id": question_id,
+            "palace_id": row.palace_id,
+            "chapter_id": row.chapter_id,
+            "scene": f"freestyle_{row.mode}",
+            "answer_payload": payload.get("answer_payload"),
+            "is_correct": row.is_correct,
+        },
+        commit=False,
+    )
     session.commit()
     session.refresh(row)
     return _attempt_row_payload(row)
@@ -196,13 +213,16 @@ def create_question_explanation(session: Session, payload: dict[str, Any]) -> di
         question_id=question_id,
         palace_id=_int_or_none(payload.get("palace_id")) or getattr(question, "palace_id", None),
         palace_title=_text(payload.get("palace_title"), 200),
-        mini_palace_id=_int_or_none(payload.get("mini_palace_id")) or getattr(question, "mini_palace_id", None),
+        mini_palace_id=_int_or_none(payload.get("mini_palace_id"))
+        or getattr(question, "mini_palace_id", None),
         mini_palace_name=_text(payload.get("mini_palace_name"), 200),
         chapter_id=_int_or_none(payload.get("chapter_id"))
         or getattr(question, "classified_chapter_id", None)
         or getattr(question, "source_chapter_id", None),
         chapter_name=_text(payload.get("chapter_name"), 200),
-        question_type=_text(payload.get("question_type") or getattr(question, "question_type", ""), 32),
+        question_type=_text(
+            payload.get("question_type") or getattr(question, "question_type", ""), 32
+        ),
         stem_snapshot=_text(payload.get("stem_snapshot") or getattr(question, "stem", "")),
         user_question=user_question,
         explanation_text=explanation_text,

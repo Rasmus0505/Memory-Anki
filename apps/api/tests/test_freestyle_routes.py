@@ -56,7 +56,6 @@ class FreestyleRouteTests(RouterTestCase):
             archived=False,
             mastered=False,
             needs_practice=True,
-            focus_node_uids_json=json.dumps(["focus-a"], ensure_ascii=False),
         )
         archived_palace = Palace(title="归档宫殿", archived=True, mastered=False)
         session.add_all([palace, practice_palace, archived_palace])
@@ -71,7 +70,7 @@ class FreestyleRouteTests(RouterTestCase):
         )
         mini_palace = PalaceMiniPalace(
             palace_id=palace.id,
-            name="细胞核专项训练",
+            name="细胞核迷你宫殿训练",
             node_uids_json=json.dumps(["a"], ensure_ascii=False),
             needs_practice=True,
             sort_order=0,

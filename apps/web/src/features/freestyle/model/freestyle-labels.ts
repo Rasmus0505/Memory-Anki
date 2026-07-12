@@ -12,7 +12,7 @@ import type { FreestyleMode } from '@/features/freestyle/model/today-training'
 export const CONTENT_TYPE_LABELS: Record<FreestyleContentType, string> = {
   quiz_question: '宫殿题卡',
   review: '正式复习',
-  practice: '专项练习',
+  practice: '加强练习',
   english: '英语听力',
   english_reading: '英语阅读',
 }

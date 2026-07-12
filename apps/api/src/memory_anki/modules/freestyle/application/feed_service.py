@@ -15,7 +15,7 @@ from memory_anki.infrastructure.db._tables.palaces import (
 )
 from memory_anki.modules.english.api import get_recent_unfinished_course_payload
 from memory_anki.modules.english_reading.api import list_recent_materials
-from memory_anki.modules.palaces.api import parse_focus_node_uids, resolve_palace_title
+from memory_anki.modules.palaces.api import resolve_palace_title
 from memory_anki.modules.reviews.api import is_schedule_due
 
 from .card_context import palace_context
@@ -207,8 +207,6 @@ def _practice_palace_ids(palaces: list[Palace]) -> set[int]:
     for palace in palaces:
         if bool(getattr(palace, "needs_practice", False)):
             ids.add(palace.id)
-        if parse_focus_node_uids(palace):
-            ids.add(palace.id)
         if any(bool(getattr(item, "needs_practice", False)) for item in palace.mini_palaces or []):
             ids.add(palace.id)
     return ids
@@ -308,7 +306,7 @@ def _build_practice_cards(
                     card_id=f"practice:palace:{palace.id}",
                     content_type=CONTENT_TYPE_PRACTICE,
                     action_kind="practice",
-                    title=f"专项练习：{palace_title}",
+                    title=f"加强练习：{palace_title}",
                     subtitle="这个宫殿被标记为需要练习",
                     href=f"/palaces/{palace.id}/practice",
                     priority=72,
@@ -316,35 +314,20 @@ def _build_practice_cards(
                     palace=palace,
                 )
             )
-        focus_count = len(parse_focus_node_uids(palace))
-        if focus_count > 0:
-            cards.append(
-                _action_card(
-                    card_id=f"practice:focus:{palace.id}",
-                    content_type=CONTENT_TYPE_PRACTICE,
-                    action_kind="focus_practice",
-                    title=f"重点练习：{palace_title}",
-                    subtitle=f"{focus_count} 个重点节点",
-                    href=f"/palaces/{palace.id}/focus-practice",
-                    priority=70,
-                    reason="重点节点",
-                    palace=palace,
-                )
-            )
         for mini_palace in palace.mini_palaces or []:
             if not bool(getattr(mini_palace, "needs_practice", False)):
                 continue
-            name = mini_palace.name or f"专项训练 {mini_palace.sort_order + 1}"
+            name = mini_palace.name or f"迷你宫殿训练 {mini_palace.sort_order + 1}"
             cards.append(
                 _action_card(
                     card_id=f"practice:mini:{mini_palace.id}",
                     content_type=CONTENT_TYPE_PRACTICE,
                     action_kind="mini_practice",
-                    title=f"专项训练：{name}",
+                    title=f"迷你宫殿训练：{name}",
                     subtitle=palace_title,
                     href=f"/mini-palaces/{mini_palace.id}/practice",
                     priority=68,
-                    reason="专项训练需要练习",
+                    reason="迷你宫殿训练需要练习",
                     palace=palace,
                     extra={
                         "mini_palace_id": mini_palace.id,

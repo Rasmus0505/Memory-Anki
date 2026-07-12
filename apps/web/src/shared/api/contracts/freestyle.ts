@@ -17,7 +17,6 @@ export type FreestyleContentType =
 export type FreestyleActionKind =
   | 'review'
   | 'practice'
-  | 'focus_practice'
   | 'mini_practice'
   | 'english'
   | 'english_reading'
@@ -46,7 +45,6 @@ export interface FreestylePalaceContext {
   primary_chapter?: FreestyleChapterContext | null
   parent_chapter?: FreestyleChapterContext | null
   needs_practice?: boolean
-  focus_count?: number
 }
 
 export interface FreestyleMiniPalaceContext {

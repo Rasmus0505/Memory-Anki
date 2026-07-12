@@ -84,6 +84,7 @@ def _load_chapter_questions_by_palace(
         .filter(
             PalaceQuizQuestion.source_chapter_id.in_(all_chapter_ids),
             PalaceQuizQuestion.deleted_at.is_(None),
+            PalaceQuizQuestion.lifecycle_status == "published",
             or_(
                 PalaceQuizQuestion.palace_id.is_(None),
                 Palace.deleted_at.is_(None),
@@ -170,3 +171,4 @@ __all__ = [
     "CONTENT_TYPE_QUIZ_QUESTION",
     "build_quiz_cards",
 ]
+

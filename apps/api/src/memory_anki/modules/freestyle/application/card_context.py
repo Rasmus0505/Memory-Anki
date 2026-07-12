@@ -5,7 +5,6 @@ from typing import Any
 from memory_anki.infrastructure.db._tables.knowledge import Chapter
 from memory_anki.infrastructure.db._tables.palaces import Palace, PalaceMiniPalace
 from memory_anki.modules.palaces.api import (
-    parse_focus_node_uids,
     resolve_palace_subject,
     resolve_palace_title,
 )
@@ -55,7 +54,6 @@ def palace_context(palace: Palace) -> dict[str, Any]:
         "primary_chapter": chapter_context(primary_chapter),
         "parent_chapter": chapter_context(parent_chapter),
         "needs_practice": bool(getattr(palace, "needs_practice", False)),
-        "focus_count": len(parse_focus_node_uids(palace)),
     }
 
 
