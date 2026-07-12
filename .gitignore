@@ -79,3 +79,4 @@ _DEBUG_FALLBACK.json
 # NOTE: do not blanket-ignore *.png — it would swallow docs/assets; ignore by path instead.
 **/nul
 *.baiduyun.uploading.cfg
+/timer-layout-verified.png
