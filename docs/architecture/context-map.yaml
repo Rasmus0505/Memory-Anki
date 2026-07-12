@@ -1,0 +1,174 @@
+{
+  "schemaVersion": 1,
+  "architecture": {
+    "backend": "modular-monolith",
+    "frontend": "app-pages-widgets-features-entities-shared",
+    "databaseSchemaChanges": false
+  },
+  "backend": {
+    "targetLayers": [
+      "domain",
+      "application",
+      "ports",
+      "infrastructure",
+      "presentation"
+    ],
+    "contexts": {
+      "backups": {
+        "status": "migrated",
+        "publicEntry": "memory_anki.modules.backups.api"
+      },
+      "dashboard": {
+        "status": "migrated"
+      },
+      "english": {
+        "status": "migrated",
+        "publicEntry": "memory_anki.modules.english.api"
+      },
+      "english_reading": {
+        "status": "migrated",
+        "publicEntry": "memory_anki.modules.english_reading.api"
+      },
+      "freestyle": {
+        "status": "migrated"
+      },
+      "knowledge": {
+        "status": "migrated"
+      },
+      "mindmap": {
+        "status": "retired",
+        "replacedBy": [
+          "mindmap_document",
+          "mindmap_learning"
+        ]
+      },
+      "mindmap_document": {
+        "status": "migrated",
+        "publicEntry": "memory_anki.modules.mindmap_document.api"
+      },
+      "mindmap_learning": {
+        "status": "migrated"
+      },
+      "palace_quiz": {
+        "status": "migrated",
+        "publicEntry": "memory_anki.modules.palace_quiz.api"
+      },
+      "palaces": {
+        "status": "migrated",
+        "publicEntry": "memory_anki.modules.palaces.api"
+      },
+      "reviews": {
+        "status": "migrated",
+        "publicEntry": "memory_anki.modules.reviews.api"
+      },
+      "search": {
+        "status": "migrated"
+      },
+      "sessions": {
+        "status": "migrated",
+        "publicEntry": "memory_anki.modules.sessions.api"
+      },
+      "settings": {
+        "status": "migrated",
+        "publicEntry": "memory_anki.modules.settings.api"
+      }
+    },
+    "allowedCrossContextDependencies": {
+      "backups": [
+        "mindmap_document"
+      ],
+      "dashboard": [
+        "palaces",
+        "reviews",
+        "sessions"
+      ],
+      "english": [
+        "sessions",
+        "settings"
+      ],
+      "english_reading": [
+        "reviews",
+        "sessions",
+        "settings"
+      ],
+      "freestyle": [
+        "english",
+        "english_reading",
+        "palace_quiz",
+        "palaces",
+        "reviews"
+      ],
+      "knowledge": [
+        "backups",
+        "mindmap_document",
+        "palaces"
+      ],
+      "palace_quiz": [
+        "backups",
+        "mindmap_document",
+        "palaces",
+        "settings"
+      ],
+      "palaces": [
+        "backups",
+        "mindmap_document",
+        "reviews",
+        "sessions",
+        "settings"
+      ],
+      "reviews": [
+        "mindmap_document",
+        "palaces",
+        "sessions"
+      ],
+      "search": [
+        "palaces"
+      ],
+      "sessions": [],
+      "settings": [
+        "backups",
+        "reviews"
+      ]
+    },
+    "unitOfWorkManagedUseCases": [
+      "modules/knowledge/application/chapter_service.py",
+      "modules/knowledge/application/editor_state_service.py",
+      "modules/knowledge/application/subject_service.py",
+      "modules/palaces/application/attachment_service.py",
+      "modules/palaces/application/editor_state_service.py",
+      "modules/palaces/application/mini_palace_records.py",
+      "modules/palaces/application/focus_service.py",
+      "modules/palaces/application/import_export_service.py",
+      "modules/palaces/application/palace_service.py",
+      "modules/palaces/application/palace_template_service.py",
+      "modules/palaces/application/segment_management_service.py",
+      "modules/palace_quiz/application/question_mutation_commands.py",
+      "modules/reviews/application/review_commands.py",
+      "modules/reviews/application/review_repair_service.py",
+      "modules/sessions/application/study_session_commands.py"
+    ]
+  },
+  "frontend": {
+    "targetLayers": [
+      "app",
+      "pages",
+      "widgets",
+      "features",
+      "entities",
+      "shared"
+    ],
+    "allowedFeatureDependencies": {
+      "english": [],
+      "english-reading": [],
+      "freestyle": [],
+      "knowledge": [],
+      "mindmap-import": [],
+      "mini-palace": [],
+      "palace-catalog": [],
+      "palace-edit": [],
+      "palace-quiz": [],
+      "profile": [],
+      "review": []
+    }
+  }
+}

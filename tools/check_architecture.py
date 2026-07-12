@@ -5,6 +5,7 @@ import json
 import posixpath
 import re
 import subprocess
+import tomllib
 from pathlib import Path
 
 
@@ -14,12 +15,29 @@ WEB_ROOT = REPO_ROOT / "apps" / "web"
 API_SRC = REPO_ROOT / "apps" / "api" / "src" / "memory_anki"
 ALEMBIC_VERSIONS = REPO_ROOT / "apps" / "api" / "alembic" / "versions"
 STORAGE_LAYOUT_PATH = REPO_ROOT / "apps" / "api" / "storage-layout.json"
-BOUNDARY_EXCEPTIONS_PATH = REPO_ROOT / "docs" / "architecture" / "boundary-exceptions.json"
+API_PYPROJECT_PATH = REPO_ROOT / "apps" / "api" / "pyproject.toml"
+BOUNDARY_EXCEPTIONS_PATH = (
+    REPO_ROOT / "docs" / "architecture" / "boundary-exceptions.json"
+)
+CONTEXT_MAP_PATH = REPO_ROOT / "docs" / "architecture" / "context-map.yaml"
 PALACE_QUIZ_APPLICATION = API_SRC / "modules" / "palace_quiz" / "application"
 SETTINGS_MODULE = API_SRC / "modules" / "settings"
-WEB_LAYER_DIRS = ("app", "features", "entities", "shared")
+WEB_LAYER_DIRS = ("app", "pages", "widgets", "features", "entities", "shared")
 WEB_API_PORT = "8012"
 WEB_API_BASE_URL = f"http://127.0.0.1:{WEB_API_PORT}"
+
+AI_RUNTIME_PORT_MANAGED_FILES = {
+    "modules/palaces/application/peg_association_service.py",
+    "modules/palaces/application/mindmap_ai_split/config_loader.py",
+    "modules/palaces/application/mindmap_ai_split/contracts.py",
+    "modules/palaces/application/mindmap_ai_split/gateway.py",
+    "modules/palaces/application/mindmap_ai_split_service.py",
+    "modules/palaces/application/mindmap_import/runtime.py",
+    "modules/palaces/application/mindmap_import_job_api.py",
+    "modules/palaces/application/mindmap_import_job_execution.py",
+    "modules/palaces/application/mindmap_import_job_runtime.py",
+    "modules/palaces/application/mindmap_import_job_service.py",
+}
 
 FORBIDDEN_WEB_IMPORTS = {
     "@/shared/api/client": "Pages and features must import scoped API wrappers or contracts instead of the legacy shared/api/client aggregator.",
@@ -49,12 +67,37 @@ FORBIDDEN_REMOVED_SHARED_API_DIRS = {
     "palaces": "palace API submodules belong in entities/palace/api; import preview/job submodules belong in entities/knowledge-import/api.",
 }
 FORBIDDEN_REMOVED_FEATURE_API_FILES = {
+    "features/english/api/englishApi.ts": "English course and task API wrappers belong in entities/english/api.",
     "features/palace-quiz/api/quizApi.ts": "quiz question and generation API wrappers belong in entities/quiz/api; palace-quiz may keep only page-specific API composition.",
     "features/mini-palace/api/miniPalaceApi.ts": "mini palace API wrappers are cross-feature entity endpoints; keep them in entities/mini-palace/api.",
     "features/palace-segments/api/palaceSegmentsApi.ts": "palace segment API wrappers are cross-feature entity endpoints; keep them in entities/palace-segment/api.",
     "entities/palace/api/structureApi.ts": "split palace structure API wrappers by owner: entities/mini-palace, entities/palace-segment, entities/palace/api/stateApi, or practiceApi.",
 }
 FORBIDDEN_REMOVED_FEATURE_FILES = {
+    "features/ai-config": "reusable AI runtime selection and run configuration belong in entities/ai-runtime.",
+    "features/review/hooks/useReviewFeedback.ts": "cross-scene review feedback orchestration belongs in entities/review/model.",
+    "features/review/model/review-feedback.ts": "review reward and feedback state belongs in entities/review/model.",
+    "features/review/reviewSessionRoutes.ts": "review route builders belong in entities/review/model/routes.",
+    "features/review/studyWarmup.ts": "study-session promise warmup is shared infrastructure; business loaders stay with their composing page or feature.",
+    "features/palace-edit/PalaceEditPage.tsx": "route-level Palace editor composition belongs in pages/create/PalaceEditorPage.tsx.",
+    "features/palace-edit/PalaceEditSkeleton.tsx": "Palace editor page loading UI belongs beside the page in pages/create.",
+    "features/palace-edit/components/PalaceKnowledgeOutlinePanel.tsx": "route-level Knowledge outline and mind-map editor composition belongs beside pages/create/PalaceEditorPage.tsx.",
+    "features/palace-edit/components/PalaceVersionDialog.tsx": "route-level Palace version preview and mind-map editor composition belongs beside pages/create/PalaceEditorPage.tsx.",
+    "features/knowledge/KnowledgePage.tsx": "route-level Knowledge composition belongs in pages/library/KnowledgeLibraryPage.tsx.",
+    "features/knowledge/components/KnowledgeMindMapImportDrawer.tsx": "Knowledge import and editor composition belongs beside the Knowledge library page.",
+    "features/palace-quiz/QuizLauncherProvider.tsx": "application-wide quiz launcher composition belongs in widgets/quiz-launcher.",
+    "features/palace-quiz/QuizQuestionInteraction.tsx": "cross-scene quiz interaction UI belongs in entities/quiz.",
+    "features/palace-quiz/hooks/useQuizAttemptOrchestration.ts": "cross-scene quiz attempt orchestration belongs in entities/quiz.",
+    "features/palace-quiz/model/quizResultFeedback.ts": "cross-scene quiz feedback belongs in entities/quiz.",
+    "features/palace-quiz/components/PalaceQuizMemoryLookupDialog.tsx": "cross-feature palace memory lookup composition belongs in widgets/palace-memory-lookup.",
+    "features/palace-quiz/model/memoryLookupDialogSupport.ts": "palace memory lookup composition belongs in widgets/palace-memory-lookup.",
+    "features/palace-quiz/model/memoryLookupLayout.ts": "palace memory lookup layout belongs in widgets/palace-memory-lookup.",
+    "features/review/components/MindMapReviewFlow.tsx": "cross-feature review, mini-palace, quiz, and mind-map composition belongs in widgets/mindmap-review-flow.",
+    "features/review/hooks/useMindMapReviewFlowController.ts": "cross-feature review-flow orchestration belongs in widgets/mindmap-review-flow.",
+    "features/review/ReviewSessionContainer.tsx": "route-level review session composition belongs in widgets/mindmap-review-flow.",
+    "features/review/components/ReviewFlowMapPanel.tsx": "mind-map editor composition for review sessions belongs in widgets/mindmap-review-flow.",
+    "features/review/ReviewFeedbackPreviewPage.tsx": "the obsolete standalone feedback preview page was replaced by the profile feedback route and must not be recreated.",
+    "features/mindmap-editor/useMindMapDocumentSession.ts": "persisted document session ownership belongs in entities/mindmap-document/model.",
     "features/palace-edit/components/PalaceMindMapImportDrawer.tsx": "shared mind-map import UI belongs in features/mindmap-import, not palace-edit.",
     "features/palace-edit/components/palace-import-drawer": "shared mind-map import drawer internals belong in features/mindmap-import, not palace-edit.",
     "features/palace-edit/hooks/useMindMapImport.ts": "shared mind-map import workflow belongs in features/mindmap-import, not palace-edit.",
@@ -209,17 +252,26 @@ BACKEND_STUDY_SESSION_LEGACY_PATTERNS = (
     "query(TimeRecord",
 )
 FRONTEND_IMPORT_FROM_PATTERN = re.compile(r"\bfrom\s+['\"]([^'\"]+)['\"]")
-FRONTEND_DYNAMIC_IMPORT_PATTERN = re.compile(r"\bimport\s*\(\s*['\"]([^'\"]+)['\"]\s*\)")
+FRONTEND_DYNAMIC_IMPORT_PATTERN = re.compile(
+    r"\bimport\s*\(\s*['\"]([^'\"]+)['\"]\s*\)"
+)
 FRONTEND_SIDE_EFFECT_IMPORT_PATTERN = re.compile(
     r"^\s*(?:import|export)\s+['\"]([^'\"]+)['\"]", re.MULTILINE
 )
-GENERATED_API_IMPORT_ALLOWED_SOURCES = ("shared/api/contracts.ts", "shared/api/contracts/")
+GENERATED_API_IMPORT_ALLOWED_SOURCES = (
+    "shared/api/contracts.ts",
+    "shared/api/contracts/",
+)
 GENERATED_API_MODULE = "shared/api/generated"
 
 
 def iter_files(root: Path, suffixes: tuple[str, ...]):
     for path in root.rglob("*"):
-        if path.is_file() and path.suffix in suffixes and "__pycache__" not in path.parts:
+        if (
+            path.is_file()
+            and path.suffix in suffixes
+            and "__pycache__" not in path.parts
+        ):
             yield path
 
 
@@ -235,6 +287,214 @@ def path_for_exception(path: Path) -> str:
     return path.relative_to(REPO_ROOT).as_posix()
 
 
+def load_context_map() -> dict:
+    if not CONTEXT_MAP_PATH.exists():
+        return {}
+    payload = json.loads(CONTEXT_MAP_PATH.read_text(encoding="utf-8"))
+    return payload if isinstance(payload, dict) else {}
+
+
+def resolve_frontend_import_path(path: Path, specifier: str) -> str | None:
+    normalized = specifier.replace("\\", "/").split("?", 1)[0].split("#", 1)[0]
+    if normalized.startswith("@/"):
+        return normalized[2:]
+    if not normalized.startswith("."):
+        return None
+    source_dir = path.relative_to(WEB_SRC).parent.as_posix()
+    resolved = posixpath.normpath(posixpath.join(source_dir, normalized))
+    for suffix in (".ts", ".tsx", ".js", ".jsx"):
+        if resolved.endswith(suffix):
+            resolved = resolved[: -len(suffix)]
+            break
+    return resolved
+
+
+def check_context_dependency_map(errors: list[str]) -> None:
+    payload = load_context_map()
+    if payload.get("schemaVersion") != 1:
+        errors.append("docs/architecture/context-map.yaml: schemaVersion must be 1.")
+        return
+
+    backend = payload.get("backend") if isinstance(payload.get("backend"), dict) else {}
+    contexts = (
+        backend.get("contexts") if isinstance(backend.get("contexts"), dict) else {}
+    )
+    actual_contexts = (
+        {
+            path.name
+            for path in (API_SRC / "modules").iterdir()
+            if path.is_dir() and path.name != "__pycache__"
+        }
+        if (API_SRC / "modules").exists()
+        else set()
+    )
+    declared_contexts = set(contexts)
+    for name in sorted(actual_contexts - declared_contexts):
+        errors.append(
+            f"docs/architecture/context-map.yaml: backend context `{name}` is not declared."
+        )
+    for name in sorted(declared_contexts - actual_contexts):
+        if contexts.get(name, {}).get("status") not in {"target", "retired"}:
+            errors.append(
+                f"docs/architecture/context-map.yaml: declared backend context `{name}` does not exist."
+            )
+
+    allowed_backend_raw = backend.get("allowedCrossContextDependencies")
+    allowed_backend = {
+        str(source): {str(target) for target in targets}
+        for source, targets in (
+            allowed_backend_raw.items() if isinstance(allowed_backend_raw, dict) else []
+        )
+        if isinstance(targets, list)
+    }
+    for path in iter_files(API_SRC / "modules", (".py",)):
+        source_module = module_name_for_api_path(path)
+        source_owner = owning_backend_module(source_module)
+        if not source_owner:
+            continue
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+        except SyntaxError:
+            continue
+        for node in ast.walk(tree):
+            imported_module = imported_module_from_node(node)
+            if not imported_module:
+                continue
+            target_owner = owning_backend_module(imported_module)
+            if not target_owner or target_owner == source_owner:
+                continue
+            relative = path.relative_to(REPO_ROOT).as_posix()
+            if target_owner not in allowed_backend.get(source_owner, set()):
+                errors.append(
+                    f"{relative}: new cross-context dependency `{source_owner} -> {target_owner}` "
+                    "is not registered in context-map.yaml."
+                )
+                continue
+            public_entry = str(contexts.get(target_owner, {}).get("publicEntry") or "")
+            if public_entry and imported_module != public_entry:
+                errors.append(
+                    f"{relative}: registered cross-context dependency `{source_owner} -> "
+                    f"{target_owner}` must import public entry `{public_entry}`, not "
+                    f"`{imported_module}`."
+                )
+
+    for path in iter_files(API_SRC / "modules/reviews", (".py",)):
+        content = path.read_text(encoding="utf-8")
+        if "memory_anki.modules.persistence" in content:
+            errors.append(
+                f"{path.relative_to(REPO_ROOT).as_posix()}: Reviews must use platform "
+                "MutationIdentity/MutationResponseStore instead of Persistence internals."
+            )
+
+    for path in iter_files(API_SRC / "modules/sessions", (".py",)):
+        content = path.read_text(encoding="utf-8")
+        if "memory_anki.modules.persistence" in content:
+            errors.append(
+                f"{path.relative_to(REPO_ROOT).as_posix()}: Sessions must use platform "
+                "MutationIdentity/MutationResponseStore instead of Persistence internals."
+            )
+
+    for path in iter_files(API_SRC / "modules/knowledge", (".py",)):
+        content = path.read_text(encoding="utf-8")
+        if "memory_anki.modules.persistence" in content:
+            errors.append(
+                f"{path.relative_to(REPO_ROOT).as_posix()}: Knowledge must use platform "
+                "MutationIdentity/MutationResponseStore instead of Persistence internals."
+            )
+
+    for path in iter_files(API_SRC / "modules/palaces", (".py",)):
+        content = path.read_text(encoding="utf-8")
+        if "memory_anki.modules.persistence" in content:
+            errors.append(
+                f"{path.relative_to(REPO_ROOT).as_posix()}: Palace must use the platform "
+                "MutationIdentity/MutationResponseStore boundary instead of Persistence internals."
+            )
+
+    managed_use_cases = backend.get("unitOfWorkManagedUseCases")
+    for relative in managed_use_cases if isinstance(managed_use_cases, list) else []:
+        path = API_SRC / str(relative)
+        if not path.exists():
+            errors.append(
+                f"docs/architecture/context-map.yaml: managed use case `{relative}` does not exist."
+            )
+            continue
+        content = path.read_text(encoding="utf-8")
+        if re.search(r"\bsession\.(?:commit|rollback)\s*\(", content):
+            errors.append(
+                f"{path.relative_to(REPO_ROOT).as_posix()}: transaction-managed use cases must "
+                "commit or roll back through UnitOfWork."
+            )
+        if "UnitOfWork" not in content:
+            errors.append(
+                f"{path.relative_to(REPO_ROOT).as_posix()}: transaction-managed use case must "
+                "depend on the UnitOfWork protocol."
+            )
+
+    mini_palace_records = API_SRC / "modules/palaces/application/mini_palace_records.py"
+    if mini_palace_records.exists():
+        content = mini_palace_records.read_text(encoding="utf-8")
+        list_match = re.search(
+            r"def list_palace_mini_palaces\(.*?(?=\ndef |\Z)",
+            content,
+            flags=re.DOTALL,
+        )
+        if list_match and re.search(
+            r"\b(?:cleanup_mini_palace_node_uids|session\.(?:commit|flush|refresh))\b",
+            list_match.group(0),
+        ):
+            errors.append(
+                "modules/palaces/application/mini_palace_records.py: mini-palace list "
+                "queries must not repair or persist node bindings."
+            )
+
+    frontend = (
+        payload.get("frontend") if isinstance(payload.get("frontend"), dict) else {}
+    )
+    allowed_frontend_raw = frontend.get("allowedFeatureDependencies")
+    allowed_frontend = {
+        str(source): {str(target) for target in targets}
+        for source, targets in (
+            allowed_frontend_raw.items()
+            if isinstance(allowed_frontend_raw, dict)
+            else []
+        )
+        if isinstance(targets, list)
+    }
+    for path in iter_files(WEB_SRC, (".ts", ".tsx")):
+        relative = path.relative_to(WEB_SRC).as_posix()
+        if is_frontend_test_file(relative):
+            continue
+        relative_parts = path.relative_to(WEB_SRC).parts
+        if len(relative_parts) < 2 or relative_parts[0] not in {"features", "entities"}:
+            continue
+        source_layer, source_owner = relative_parts[0], relative_parts[1]
+        for specifier in iter_frontend_import_specifiers(
+            path.read_text(encoding="utf-8")
+        ):
+            resolved = resolve_frontend_import_path(path, specifier)
+            if not resolved or not resolved.startswith("features/"):
+                continue
+            target_parts = resolved.split("/")
+            if len(target_parts) < 2:
+                continue
+            target_owner = target_parts[1]
+            if source_layer == "entities":
+                errors.append(
+                    f"{path.relative_to(WEB_SRC).as_posix()}: entities must not import feature `{target_owner}`; "
+                    "move the contract to an entity or shared module."
+                )
+                continue
+            if (
+                target_owner != source_owner
+                and target_owner not in allowed_frontend.get(source_owner, set())
+            ):
+                errors.append(
+                    f"{path.relative_to(WEB_SRC).as_posix()}: new feature dependency "
+                    f"`{source_owner} -> {target_owner}` is not registered in context-map.yaml; "
+                    "compose features in pages/widgets instead."
+                )
+
+
 def is_backend_boundary_exception(
     *,
     source_module: str,
@@ -246,7 +506,9 @@ def is_backend_boundary_exception(
     for item in exceptions:
         source = str(item.get("source") or "")
         target = str(item.get("target") or "")
-        allowed_files = {str(value).replace("\\", "/") for value in item.get("allowed_files", [])}
+        allowed_files = {
+            str(value).replace("\\", "/") for value in item.get("allowed_files", [])
+        }
         if not source_module.startswith(source):
             continue
         if not imported_module.startswith(target):
@@ -259,7 +521,10 @@ def is_backend_boundary_exception(
 def check_forbidden_imports(errors: list[str]) -> None:
     for path in iter_files(WEB_SRC, (".ts", ".tsx")):
         relative = path.relative_to(WEB_SRC).as_posix()
-        if not path.relative_to(WEB_SRC).parts or path.relative_to(WEB_SRC).parts[0] not in WEB_LAYER_DIRS:
+        if (
+            not path.relative_to(WEB_SRC).parts
+            or path.relative_to(WEB_SRC).parts[0] not in WEB_LAYER_DIRS
+        ):
             continue
         content = path.read_text(encoding="utf-8")
         for forbidden_import, message in FORBIDDEN_WEB_IMPORTS.items():
@@ -271,7 +536,9 @@ def check_forbidden_imports(errors: list[str]) -> None:
             for forbidden_import, message in FORBIDDEN_DASHBOARD_IMPORTS.items():
                 if forbidden_import in content:
                     errors.append(f"{relative}: {message}")
-        if relative.startswith("features/review/") or relative.startswith("app/router/"):
+        if relative.startswith("features/review/") or relative.startswith(
+            "app/router/"
+        ):
             for forbidden_import, message in FORBIDDEN_REVIEW_API_IMPORTS.items():
                 if forbidden_import in content:
                     errors.append(f"{relative}: {message}")
@@ -324,7 +591,10 @@ def check_router_residency(errors: list[str]) -> None:
             errors.append(
                 f"{relative}: business page code must live in features/*; app/router is only for route wiring and redirects."
             )
-        if any(part in FORBIDDEN_ROUTER_RESIDENT_DIRS for part in path.relative_to(router_dir).parts):
+        if any(
+            part in FORBIDDEN_ROUTER_RESIDENT_DIRS
+            for part in path.relative_to(router_dir).parts
+        ):
             errors.append(
                 f"{relative}: palace catalog components must live in features/palace-catalog, not app/router."
             )
@@ -339,7 +609,9 @@ def check_shared_local_storage_facade(errors: list[str]) -> None:
                 f"shared/lib/localStorage.ts: must not hard-code business preference key `{storage_key}`; "
                 "pass explicit preference ownership from entities/preferences or the caller."
             )
-    forbidden_registry = WEB_SRC / "shared" / "preferences" / "localPreferenceRegistry.ts"
+    forbidden_registry = (
+        WEB_SRC / "shared" / "preferences" / "localPreferenceRegistry.ts"
+    )
     if forbidden_registry.exists():
         errors.append(
             "shared/preferences/localPreferenceRegistry.ts: removed transition registry must stay deleted; "
@@ -389,8 +661,12 @@ def iter_frontend_import_specifiers(content: str) -> set[str]:
     return specifiers
 
 
-def frontend_import_matches_module(path: Path, specifier: str, module_path: str) -> bool:
-    normalized_specifier = specifier.replace("\\", "/").split("?", 1)[0].split("#", 1)[0]
+def frontend_import_matches_module(
+    path: Path, specifier: str, module_path: str
+) -> bool:
+    normalized_specifier = (
+        specifier.replace("\\", "/").split("?", 1)[0].split("#", 1)[0]
+    )
     if normalized_specifier == f"@/{module_path}" or normalized_specifier.startswith(
         f"@/{module_path}/"
     ):
@@ -399,12 +675,16 @@ def frontend_import_matches_module(path: Path, specifier: str, module_path: str)
         return False
 
     source_dir = path.relative_to(WEB_SRC).parent.as_posix()
-    normalized_target = posixpath.normpath(posixpath.join(source_dir, normalized_specifier))
+    normalized_target = posixpath.normpath(
+        posixpath.join(source_dir, normalized_specifier)
+    )
     for suffix in (".ts", ".tsx", ".js", ".jsx"):
         if normalized_target.endswith(suffix):
             normalized_target = normalized_target[: -len(suffix)]
             break
-    return normalized_target == module_path or normalized_target.startswith(f"{module_path}/")
+    return normalized_target == module_path or normalized_target.startswith(
+        f"{module_path}/"
+    )
 
 
 def check_frontend_generated_api_boundary(errors: list[str]) -> None:
@@ -444,11 +724,17 @@ def check_frontend_public_api_surfaces(errors: list[str]) -> None:
                 f"{relative}: production code must import {layer}/{owner} APIs through "
                 f"`@/{layer}/{owner}/api`, not internal API file `{module_name}`."
             )
-        for forbidden_import, message in FORBIDDEN_PRODUCTION_ENTITY_API_DEEP_IMPORTS.items():
+        for (
+            forbidden_import,
+            message,
+        ) in FORBIDDEN_PRODUCTION_ENTITY_API_DEEP_IMPORTS.items():
             if forbidden_import in content:
                 errors.append(f"{relative}: {message}")
         if not relative.startswith("features/mindmap-import/"):
-            for forbidden_import, message in FORBIDDEN_PRODUCTION_FEATURE_DEEP_IMPORTS.items():
+            for (
+                forbidden_import,
+                message,
+            ) in FORBIDDEN_PRODUCTION_FEATURE_DEEP_IMPORTS.items():
                 if forbidden_import in content:
                     errors.append(f"{relative}: {message}")
 
@@ -478,7 +764,9 @@ def check_study_session_legacy_usage(errors: list[str]) -> None:
             if relative.startswith(BACKEND_LEGACY_TIME_RECORD_MODULE):
                 continue
             content = path.read_text(encoding="utf-8")
-            if any(pattern in content for pattern in BACKEND_STUDY_SESSION_LEGACY_PATTERNS):
+            if any(
+                pattern in content for pattern in BACKEND_STUDY_SESSION_LEGACY_PATTERNS
+            ):
                 errors.append(
                     f"{path.relative_to(REPO_ROOT)}: production backend modules must use "
                     "modules.sessions StudySession services instead of TimeRecord/time_records."
@@ -498,7 +786,10 @@ def check_frontend_config_contract(errors: list[str]) -> None:
     package_json = json.loads((WEB_ROOT / "package.json").read_text(encoding="utf-8"))
     scripts = package_json.get("scripts", {})
     openapi_script = str(scripts.get("openapi:types", ""))
-    if f"{WEB_API_BASE_URL}/openapi.json" not in openapi_script or "127.0.0.1:8000/openapi.json" in openapi_script:
+    if (
+        f"{WEB_API_BASE_URL}/openapi.json" not in openapi_script
+        or "127.0.0.1:8000/openapi.json" in openapi_script
+    ):
         errors.append(
             "apps/web/package.json: openapi:types must target the backend dev port "
             f"127.0.0.1:{WEB_API_PORT}."
@@ -539,12 +830,16 @@ def check_frontend_config_contract(errors: list[str]) -> None:
             ).splitlines()
         )
     except Exception as exc:
-        errors.append(f"git ls-files failed while checking tracked generated output: {exc}")
+        errors.append(
+            f"git ls-files failed while checking tracked generated output: {exc}"
+        )
         return
 
     package_lock = "apps/web/package-lock.json"
     if package_lock not in tracked_files:
-        errors.append("apps/web/package-lock.json: npm lockfile must be tracked as the only frontend lockfile.")
+        errors.append(
+            "apps/web/package-lock.json: npm lockfile must be tracked as the only frontend lockfile."
+        )
 
     forbidden_tracked_files = {
         "apps/web/pnpm-lock.yaml": "npm is the only supported frontend package manager.",
@@ -568,6 +863,27 @@ def check_frontend_config_contract(errors: list[str]) -> None:
             errors.append(f"{relative}: Python package metadata is generated output.")
 
 
+def check_mypy_typed_boundary_modules(errors: list[str]) -> None:
+    if not API_PYPROJECT_PATH.exists():
+        return
+    payload = tomllib.loads(API_PYPROJECT_PATH.read_text(encoding="utf-8"))
+    overrides = payload.get("tool", {}).get("mypy", {}).get("overrides", [])
+    ignored_modules: set[str] = set()
+    for override in overrides:
+        if not isinstance(override, dict) or not override.get("ignore_errors"):
+            continue
+        modules = override.get("module", [])
+        if isinstance(modules, str):
+            ignored_modules.add(modules)
+        elif isinstance(modules, list):
+            ignored_modules.update(item for item in modules if isinstance(item, str))
+    for module in sorted(ignored_modules):
+        errors.append(
+            f"apps/api/pyproject.toml: whole-module mypy ignore_errors is forbidden for `{module}`; "
+            "type the boundary or use a narrowly scoped error-code ignore at the external library import."
+        )
+
+
 def check_storage_layout_contract(errors: list[str]) -> None:
     payload = json.loads(STORAGE_LAYOUT_PATH.read_text(encoding="utf-8"))
     items = payload.get("managed_items", [])
@@ -577,21 +893,31 @@ def check_storage_layout_contract(errors: list[str]) -> None:
     keys = set()
     for item in items:
         if not isinstance(item, dict):
-            errors.append("apps/api/storage-layout.json: every managed item must be an object.")
+            errors.append(
+                "apps/api/storage-layout.json: every managed item must be an object."
+            )
             continue
         key = str(item.get("key") or "")
         keys.add(key)
         relative_path = str(item.get("relative_path") or "")
         kind = str(item.get("kind") or "")
         if not key or not relative_path:
-            errors.append("apps/api/storage-layout.json: every managed item needs key and relative_path.")
+            errors.append(
+                "apps/api/storage-layout.json: every managed item needs key and relative_path."
+            )
         if kind not in {"file", "directory"}:
-            errors.append(f"apps/api/storage-layout.json: `{key}` must declare kind file or directory.")
+            errors.append(
+                f"apps/api/storage-layout.json: `{key}` must declare kind file or directory."
+            )
         if "backup" not in item:
-            errors.append(f"apps/api/storage-layout.json: `{key}` must explicitly declare backup true/false.")
+            errors.append(
+                f"apps/api/storage-layout.json: `{key}` must explicitly declare backup true/false."
+            )
     missing = sorted(REQUIRED_STORAGE_KEYS - keys)
     for key in missing:
-        errors.append(f"apps/api/storage-layout.json: missing managed runtime item `{key}`.")
+        errors.append(
+            f"apps/api/storage-layout.json: missing managed runtime item `{key}`."
+        )
 
 
 def module_name_for_api_path(path: Path) -> str:
@@ -616,19 +942,26 @@ def imported_module_from_node(node: ast.AST) -> str | None:
     return None
 
 
-def is_private_backend_cross_module_import(source_module: str, imported_module: str) -> bool:
+def is_private_backend_cross_module_import(
+    source_module: str, imported_module: str
+) -> bool:
     if not imported_module.startswith("memory_anki.modules."):
         return False
     source_owner = owning_backend_module(source_module)
     target_owner = owning_backend_module(imported_module)
     if not source_owner or not target_owner or source_owner == target_owner:
         return False
-    if any(segment in imported_module for segment in BACKEND_PRIVATE_CROSS_MODULE_SEGMENTS):
+    if any(
+        segment in imported_module for segment in BACKEND_PRIVATE_CROSS_MODULE_SEGMENTS
+    ):
         return True
     tail = imported_module.split(".")[-1]
     if tail.startswith("_"):
         return True
-    return any(name in imported_module.split(".") for name in BACKEND_CROSS_MODULE_PRIVATE_NAMES)
+    return any(
+        name in imported_module.split(".")
+        for name in BACKEND_CROSS_MODULE_PRIVATE_NAMES
+    )
 
 
 def check_backend_module_boundaries(errors: list[str]) -> None:
@@ -656,6 +989,218 @@ def check_backend_module_boundaries(errors: list[str]) -> None:
                     f"{path.relative_to(REPO_ROOT)}: cross-module import `{imported_module}` reaches a private layer; "
                     "use a public contract/port or register a bounded exception."
                 )
+
+
+def check_ai_runtime_port_boundaries(errors: list[str]) -> None:
+    forbidden_prefixes = (
+        "memory_anki.modules.settings.application.ai_model_registry",
+        "memory_anki.modules.settings.application.ai_prompts",
+        "memory_anki.modules.settings.application.ai_prompt_templates",
+    )
+    managed_paths = {API_SRC / relative for relative in AI_RUNTIME_PORT_MANAGED_FILES}
+    managed_application_roots = (
+        API_SRC / "modules" / "palace_quiz" / "application",
+        API_SRC / "modules" / "english_reading" / "application",
+        API_SRC / "modules" / "english" / "application",
+    )
+    for application_root in managed_application_roots:
+        managed_paths.update(iter_files(application_root, (".py",)))
+    for path in managed_paths:
+        if not path.exists():
+            continue
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            imported_module = imported_module_from_node(node)
+            if imported_module and imported_module.startswith(forbidden_prefixes):
+                errors.append(
+                    f"{path.relative_to(REPO_ROOT).as_posix()}: migrated AI use cases must depend "
+                    "on platform application ports, not settings application internals."
+                )
+                break
+
+
+def check_review_application_boundary(errors: list[str]) -> None:
+    application_root = API_SRC / "modules" / "reviews" / "application"
+    forbidden_prefix = "memory_anki.modules.palaces"
+    for path in iter_files(application_root, (".py",)):
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            imported_module = imported_module_from_node(node)
+            if imported_module and imported_module.startswith(forbidden_prefix):
+                errors.append(
+                    f"{path.relative_to(REPO_ROOT).as_posix()}: reviews application must "
+                    "depend on pure document contracts or injected ports, not the palace context."
+                )
+                break
+
+
+def check_palace_review_public_facade(errors: list[str]) -> None:
+    palace_root = API_SRC / "modules" / "palaces"
+    forbidden_prefix = "memory_anki.modules.reviews.application"
+    for path in iter_files(palace_root, (".py",)):
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            imported_module = imported_module_from_node(node)
+            if imported_module and imported_module.startswith(forbidden_prefix):
+                errors.append(
+                    f"{path.relative_to(REPO_ROOT).as_posix()}: palace context must import "
+                    "review capabilities through memory_anki.modules.reviews.api."
+                )
+                break
+
+
+def check_palace_read_side_purity(errors: list[str]) -> None:
+    forbidden_repair_files = (
+        API_SRC / "modules" / "palaces" / "application" / "palace_serializer.py",
+        API_SRC / "modules" / "palaces" / "application" / "palace_view_resolvers.py",
+    )
+    for path in forbidden_repair_files:
+        if not path.exists():
+            continue
+        if "reconcile_palace_chapter_binding" in path.read_text(encoding="utf-8"):
+            errors.append(
+                f"{path.relative_to(REPO_ROOT).as_posix()}: read projections must not "
+                "repair palace chapter bindings."
+            )
+
+    maintenance_symbol = "restore_all_archived_palaces"
+    maintenance_path = (
+        API_SRC / "modules" / "palaces" / "application" / "palace_maintenance.py"
+    )
+    for path in iter_files(API_SRC / "modules", (".py",)):
+        if path == maintenance_path:
+            continue
+        if maintenance_symbol in path.read_text(encoding="utf-8"):
+            errors.append(
+                f"{path.relative_to(REPO_ROOT).as_posix()}: legacy palace restoration is "
+                "an explicit maintenance command and cannot run from business queries."
+            )
+
+
+def check_dashboard_public_facades(errors: list[str]) -> None:
+    dashboard_root = API_SRC / "modules" / "dashboard"
+    protected_owners = {"palaces", "reviews", "sessions"}
+    for path in iter_files(dashboard_root, (".py",)):
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            imported_module = imported_module_from_node(node)
+            if not imported_module or not imported_module.startswith(
+                "memory_anki.modules."
+            ):
+                continue
+            parts = imported_module.split(".")
+            owner = parts[2] if len(parts) > 2 else ""
+            if owner in protected_owners and imported_module != (
+                f"memory_anki.modules.{owner}.api"
+            ):
+                errors.append(
+                    f"{path.relative_to(REPO_ROOT).as_posix()}: dashboard must consume "
+                    f"{owner} capabilities through memory_anki.modules.{owner}.api."
+                )
+                break
+
+
+def check_palace_quiz_palace_boundary(errors: list[str]) -> None:
+    quiz_application = API_SRC / "modules" / "palace_quiz" / "application"
+    for path in iter_files(quiz_application, (".py",)):
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            imported_module = imported_module_from_node(node)
+            if not imported_module:
+                continue
+            if imported_module.startswith("memory_anki.modules.palaces") and (
+                imported_module != "memory_anki.modules.palaces.api"
+            ):
+                errors.append(
+                    f"{path.relative_to(REPO_ROOT).as_posix()}: palace_quiz application "
+                    "must consume palace capabilities through memory_anki.modules.palaces.api."
+                )
+                break
+            if imported_module.startswith("memory_anki.modules.mindmap_document") and (
+                imported_module != "memory_anki.modules.mindmap_document.api"
+            ):
+                errors.append(
+                    f"{path.relative_to(REPO_ROOT).as_posix()}: palace_quiz application "
+                    "must consume mind-map document operations through its public facade."
+                )
+                break
+
+
+def check_consumer_context_public_facades(errors: list[str]) -> None:
+    protected_by_consumer = {
+        "english": {"sessions"},
+        "english_reading": {"reviews", "sessions"},
+        "palace_quiz": {"backups"},
+        "palaces": {"backups", "sessions"},
+        "reviews": {"sessions"},
+        "search": {"palaces"},
+        "settings": {"backups", "reviews"},
+        "freestyle": {
+            "english",
+            "english_reading",
+            "palace_quiz",
+            "palaces",
+            "reviews",
+        },
+    }
+    for consumer, protected_owners in protected_by_consumer.items():
+        consumer_root = API_SRC / "modules" / consumer
+        for path in iter_files(consumer_root, (".py",)):
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+            for node in ast.walk(tree):
+                imported_module = imported_module_from_node(node)
+                if not imported_module or not imported_module.startswith(
+                    "memory_anki.modules."
+                ):
+                    continue
+                parts = imported_module.split(".")
+                owner = parts[2] if len(parts) > 2 else ""
+                if owner in protected_owners and imported_module != (
+                    f"memory_anki.modules.{owner}.api"
+                ):
+                    errors.append(
+                        f"{path.relative_to(REPO_ROOT).as_posix()}: {consumer} must "
+                        f"consume {owner} through memory_anki.modules.{owner}.api."
+                    )
+                    break
+
+
+def check_knowledge_context_boundaries(errors: list[str]) -> None:
+    knowledge_root = API_SRC / "modules" / "knowledge"
+    protected_owners = {"backups", "mindmap_document", "palaces"}
+    for path in iter_files(knowledge_root, (".py",)):
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            imported_module = imported_module_from_node(node)
+            if not imported_module or not imported_module.startswith(
+                "memory_anki.modules."
+            ):
+                continue
+            parts = imported_module.split(".")
+            owner = parts[2] if len(parts) > 2 else ""
+            if owner in protected_owners and imported_module != (
+                f"memory_anki.modules.{owner}.api"
+            ):
+                errors.append(
+                    f"{path.relative_to(REPO_ROOT).as_posix()}: knowledge must consume "
+                    f"{owner} through memory_anki.modules.{owner}.api."
+                )
+                break
+
+
+def check_contexts_without_persistence_dependency(errors: list[str]) -> None:
+    for context in ("knowledge", "palace_quiz", "palaces", "reviews", "sessions"):
+        context_root = API_SRC / "modules" / context
+        for path in iter_files(context_root, (".py",)):
+            if "memory_anki.modules.persistence" not in path.read_text(
+                encoding="utf-8"
+            ):
+                continue
+            errors.append(
+                f"{path.relative_to(REPO_ROOT).as_posix()}: {context} must use "
+                "platform mutation and persistence contracts instead of the "
+                "transitional persistence context."
+            )
 
 
 def check_backend_presentation_orm_usage(errors: list[str]) -> None:
@@ -708,7 +1253,8 @@ def check_forward_compatible_migrations(errors: list[str]) -> None:
             (
                 node
                 for node in module.body
-                if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == "upgrade"
+                if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+                and node.name == "upgrade"
             ),
             None,
         )
@@ -721,15 +1267,26 @@ def check_forward_compatible_migrations(errors: list[str]) -> None:
             call_name = ""
             if isinstance(node.func, ast.Attribute):
                 call_name = node.func.attr.casefold()
-            if call_name in {"drop_column", "drop_table", "alter_column", "rename_table"}:
+            if call_name in {
+                "drop_column",
+                "drop_table",
+                "alter_column",
+                "rename_table",
+            }:
                 destructive_pattern = f"{call_name}(...)"
                 break
             for argument in (*node.args, *(keyword.value for keyword in node.keywords)):
-                if not isinstance(argument, ast.Constant) or not isinstance(argument.value, str):
+                if not isinstance(argument, ast.Constant) or not isinstance(
+                    argument.value, str
+                ):
                     continue
                 normalized_argument = argument.value.casefold()
                 matching_pattern = next(
-                    (pattern for pattern in DESTRUCTIVE_MIGRATION_PATTERNS if pattern in normalized_argument),
+                    (
+                        pattern
+                        for pattern in DESTRUCTIVE_MIGRATION_PATTERNS
+                        if pattern in normalized_argument
+                    ),
                     None,
                 )
                 if matching_pattern:
@@ -783,9 +1340,100 @@ def check_settings_module_boundaries(errors: list[str]) -> None:
             )
 
 
+def check_mindmap_architecture(errors: list[str]) -> None:
+    removed_paths = (
+        WEB_SRC / "shared" / "components" / "mindmap",
+        WEB_SRC / "shared" / "components" / "mindmap-host",
+        API_SRC / "modules" / "mindmap" / "application" / "editor_state_service.py",
+        API_SRC / "modules" / "mindmap" / "application" / "editor_state_documents.py",
+        API_SRC / "modules" / "mindmap" / "application" / "editor_state_tree_sync.py",
+    )
+    for path in removed_paths:
+        if path.exists():
+            errors.append(
+                f"{path.relative_to(REPO_ROOT)}: removed mixed mind-map boundary must not be recreated."
+            )
+
+    entity_root = WEB_SRC / "entities" / "mindmap-document"
+    for path in iter_files(entity_root, (".ts", ".tsx")):
+        relative = path.relative_to(REPO_ROOT)
+        content = path.read_text(encoding="utf-8")
+        forbidden = (
+            "from 'react'",
+            'from "react"',
+            "@xyflow/react",
+            "@/features/",
+            "@/entities/palace",
+            "@/entities/knowledge",
+            "@/entities/review",
+        )
+        for token in forbidden:
+            if token in content:
+                errors.append(
+                    f"{relative}: pure mind-map document entity must not depend on `{token}`."
+                )
+
+    canvas_root = WEB_SRC / "shared" / "ui" / "mindmap-canvas"
+    business_tokens = (
+        "miniPalace",
+        "masteryStatus",
+        "manualMasteryLabel",
+        "segmentColor",
+        "focusMarked",
+        "revealState",
+    )
+    for path in iter_files(canvas_root, (".ts", ".tsx")):
+        relative_web = path.relative_to(WEB_SRC).as_posix()
+        if is_frontend_test_file(relative_web):
+            continue
+        content = path.read_text(encoding="utf-8")
+        for token in business_tokens:
+            if token in content:
+                errors.append(
+                    f"{path.relative_to(REPO_ROOT)}: generic canvas must use visual decorations instead of business field `{token}`."
+                )
+
+    document_root = API_SRC / "modules" / "mindmap_document"
+    forbidden_backend = (
+        "sqlalchemy",
+        "fastapi",
+        "memory_anki.infrastructure",
+        "memory_anki.modules.palaces",
+        "memory_anki.modules.knowledge",
+        "memory_anki.modules.backups",
+        "memory_anki.modules.mindmap_learning",
+    )
+    for path in iter_files(document_root, (".py",)):
+        content = path.read_text(encoding="utf-8")
+        for token in forbidden_backend:
+            if token in content:
+                errors.append(
+                    f"{path.relative_to(REPO_ROOT)}: pure mindmap_document must not depend on `{token}`."
+                )
+        if re.search(r"\bid\s*\(", content):
+            errors.append(
+                f"{path_for_exception(path)}: persisted mind-map identity must be deterministic; "
+                "do not derive node IDs from Python object identity."
+            )
+
+    for path in iter_files(API_SRC / "modules", (".py",)):
+        if document_root in path.parents:
+            continue
+        content = path.read_text(encoding="utf-8")
+        if (
+            "memory_anki.modules.mindmap_document.document" in content
+            or "memory_anki.modules.mindmap_document.snapshot" in content
+        ):
+            errors.append(
+                f"{path.relative_to(REPO_ROOT)}: import mindmap_document through its public facade or aggregate-owned service."
+            )
+
+
 def main() -> int:
     errors: list[str] = []
+    check_context_dependency_map(errors)
     check_forbidden_imports(errors)
+    check_mindmap_architecture(errors)
     check_file_sizes(errors)
     check_router_residency(errors)
     check_shared_local_storage_facade(errors)
@@ -796,10 +1444,20 @@ def main() -> int:
     check_runtime_data_ignored(errors)
     check_frontend_config_contract(errors)
     check_storage_layout_contract(errors)
+    check_mypy_typed_boundary_modules(errors)
     check_forward_compatible_migrations(errors)
     check_palace_quiz_application_facades(errors)
     check_settings_module_boundaries(errors)
     check_ai_gateway_boundary(errors)
+    check_ai_runtime_port_boundaries(errors)
+    check_review_application_boundary(errors)
+    check_palace_review_public_facade(errors)
+    check_palace_read_side_purity(errors)
+    check_dashboard_public_facades(errors)
+    check_palace_quiz_palace_boundary(errors)
+    check_consumer_context_public_facades(errors)
+    check_knowledge_context_boundaries(errors)
+    check_contexts_without_persistence_dependency(errors)
     check_backend_module_boundaries(errors)
     check_backend_presentation_orm_usage(errors)
     check_tool_personal_paths(errors)

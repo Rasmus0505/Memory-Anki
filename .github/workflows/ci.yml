@@ -29,6 +29,21 @@ jobs:
           python -m pip install -r requirements-dev.txt
           python -m pip install -e .
 
+      - name: Architecture guard
+        shell: pwsh
+        run: |
+          python tools/check_architecture.py
+          python -m pytest tools/test_check_architecture.py -q
+
+      - name: Static analysis
+        working-directory: apps/api
+        shell: pwsh
+        run: |
+          python -m ruff check src tests
+          python -m mypy
+          $env:PYTHONPATH = "src"
+          lint-imports
+
       - name: Test
         working-directory: apps/api
         shell: pwsh
@@ -58,6 +73,11 @@ jobs:
         shell: pwsh
         run: npm ci --ignore-scripts
 
+      - name: Lint
+        working-directory: apps/web
+        shell: pwsh
+        run: npm run lint
+
       - name: Typecheck
         working-directory: apps/web
         shell: pwsh
@@ -67,3 +87,18 @@ jobs:
         working-directory: apps/web
         shell: pwsh
         run: npm run test
+
+      - name: Build
+        working-directory: apps/web
+        shell: pwsh
+        run: npm run build
+
+      - name: Install Playwright browser
+        working-directory: apps/web
+        shell: pwsh
+        run: npx playwright install chromium
+
+      - name: E2E smoke
+        working-directory: apps/web
+        shell: pwsh
+        run: npm run e2e
