@@ -16,6 +16,13 @@
       "presentation"
     ],
     "contexts": {
+            "ai_learning": {
+        "status": "migrated"
+      },
+"batch_generation": {
+        "status": "migrated",
+        "publicEntry": "memory_anki.modules.batch_generation.application"
+      },
       "backups": {
         "status": "migrated",
         "publicEntry": "memory_anki.modules.backups.api"
@@ -76,6 +83,10 @@
       }
     },
     "allowedCrossContextDependencies": {
+            "ai_learning": [
+        "settings"
+      ],
+"batch_generation": [],
       "backups": [
         "mindmap_document"
       ],
@@ -139,7 +150,6 @@
       "modules/palaces/application/attachment_service.py",
       "modules/palaces/application/editor_state_service.py",
       "modules/palaces/application/mini_palace_records.py",
-      "modules/palaces/application/focus_service.py",
       "modules/palaces/application/import_export_service.py",
       "modules/palaces/application/palace_service.py",
       "modules/palaces/application/palace_template_service.py",

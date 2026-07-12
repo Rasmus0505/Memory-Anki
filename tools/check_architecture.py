@@ -21,6 +21,7 @@ BOUNDARY_EXCEPTIONS_PATH = (
 )
 CONTEXT_MAP_PATH = REPO_ROOT / "docs" / "architecture" / "context-map.yaml"
 PALACE_QUIZ_APPLICATION = API_SRC / "modules" / "palace_quiz" / "application"
+BATCH_GENERATION_APPLICATION = API_SRC / "modules" / "batch_generation" / "application"
 SETTINGS_MODULE = API_SRC / "modules" / "settings"
 WEB_LAYER_DIRS = ("app", "pages", "widgets", "features", "entities", "shared")
 WEB_API_PORT = "8012"
@@ -75,6 +76,7 @@ FORBIDDEN_REMOVED_FEATURE_API_FILES = {
 }
 FORBIDDEN_REMOVED_FEATURE_FILES = {
     "features/ai-config": "reusable AI runtime selection and run configuration belong in entities/ai-runtime.",
+    "features/ai-learning": "AI learning run contracts and API access belong in entities/ai-learning; review-specific composition belongs in widgets.",
     "features/review/hooks/useReviewFeedback.ts": "cross-scene review feedback orchestration belongs in entities/review/model.",
     "features/review/model/review-feedback.ts": "review reward and feedback state belongs in entities/review/model.",
     "features/review/reviewSessionRoutes.ts": "review route builders belong in entities/review/model/routes.",
@@ -216,6 +218,9 @@ HISTORICAL_DESTRUCTIVE_UPGRADE_EXCEPTIONS = {
     ),
     "0021_remove_mindmap_view_preferences.py": (
         "Retires obsolete collapsed-node UI preferences only; no knowledge, review, or learning records are stored in this table."
+    ),
+    "0028_remove_focus_practice.py": (
+        "Explicitly retires the removed focus-practice field after deleting its obsolete progress rows."
     ),
 }
 REQUIRED_STORAGE_KEYS = {
@@ -1430,6 +1435,48 @@ def check_mindmap_architecture(errors: list[str]) -> None:
 
 
 
+def check_unified_training_evidence(errors: list[str]) -> None:
+    nav_path = WEB_SRC / "app" / "shell" / "navSections.ts"
+    nav_content = nav_path.read_text(encoding="utf-8")
+    expected_labels = ("今日", "知识", "创建", "洞察")
+    labels = re.findall(r"label: '([^']+)'", nav_content)
+    if labels != list(expected_labels):
+        errors.append(
+            f"{nav_path.relative_to(REPO_ROOT)}: primary navigation must remain exactly {expected_labels}; got {tuple(labels)}."
+        )
+    if "key: 'profile'" in nav_content:
+        errors.append(
+            f"{nav_path.relative_to(REPO_ROOT)}: settings/profile must not return as a primary learning destination."
+        )
+
+    table_path = API_SRC / "infrastructure" / "db" / "_tables" / "mindmap.py"
+    table_content = table_path.read_text(encoding="utf-8")
+    for field in ("rating_source", "inference_confidence", "response_ms", "operation_id"):
+        if field not in table_content:
+            errors.append(
+                f"{table_path.relative_to(REPO_ROOT)}: recall evidence must retain `{field}`."
+            )
+
+
+def check_removed_focus_practice(errors: list[str]) -> None:
+    forbidden = (
+        "focus-practice",
+        "focus_practice",
+        "focus_node_uids",
+        "focus_count",
+        "toggle_focus_node",
+    )
+    for root in (API_SRC, WEB_SRC):
+        for path in root.rglob("*"):
+            if path.suffix not in {".py", ".ts", ".tsx"}:
+                continue
+            content = path.read_text(encoding="utf-8")
+            for token in forbidden:
+                if token in content:
+                    errors.append(
+                        f"{path.relative_to(REPO_ROOT)}: removed focus-practice capability must not reintroduce `{token}`."
+                    )
+
 def check_frontend_runtime_module_boundaries(errors: list[str]) -> None:
     modules_root = WEB_SRC / "modules"
     if not modules_root.exists():
@@ -1494,11 +1541,47 @@ def check_frontend_runtime_module_boundaries(errors: list[str]) -> None:
                     )
 
 
+
+def check_ai_run_workspace(errors: list[str]) -> None:
+    architecture_doc = REPO_ROOT / "docs" / "architecture" / "ai-run-workspace.md"
+    if not architecture_doc.exists():
+        errors.append("docs/architecture/ai-run-workspace.md: unified AI run lifecycle is missing.")
+
+    router = API_SRC / "modules" / "ai_learning" / "presentation" / "router.py"
+    if not router.exists():
+        errors.append("ai_learning presentation router is required for the AI run workspace.")
+    else:
+        source = router.read_text(encoding="utf-8")
+        for endpoint in (
+            '/preview',
+            '/runs',
+            '/runs/{run_id}/application',
+            '/runs/{run_id}/restore',
+            '/runs/{run_id}/purge',
+        ):
+            if endpoint not in source:
+                errors.append(f"{router.relative_to(REPO_ROOT)}: missing AI run lifecycle endpoint `{endpoint}`.")
+
+    forbidden_call = "autoGenerateAndSavePalaceQuiz("
+    allowed = {
+        "features/palace-quiz/quizGenerationController.ts",
+    }
+    for path in WEB_SRC.rglob("*.ts*"):
+        relative = path.relative_to(WEB_SRC).as_posix()
+        if relative in allowed or relative.endswith(".test.ts") or relative.endswith(".test.tsx"):
+            continue
+        if forbidden_call in path.read_text(encoding="utf-8"):
+            errors.append(
+                f"apps/web/src/{relative}: AI quiz generation must preview before an explicit save; "
+                "do not call autoGenerateAndSavePalaceQuiz from UI code."
+            )
+
 def main() -> int:
     errors: list[str] = []
     check_context_dependency_map(errors)
     check_forbidden_imports(errors)
     check_mindmap_architecture(errors)
+    check_unified_training_evidence(errors)
     check_file_sizes(errors)
     check_router_residency(errors)
     check_shared_local_storage_facade(errors)
@@ -1506,6 +1589,7 @@ def main() -> int:
     check_frontend_generated_api_boundary(errors)
     check_frontend_public_api_surfaces(errors)
     check_frontend_runtime_module_boundaries(errors)
+    check_removed_focus_practice(errors)
     check_study_session_legacy_usage(errors)
     check_runtime_data_ignored(errors)
     check_frontend_config_contract(errors)
@@ -1516,6 +1600,7 @@ def main() -> int:
     check_settings_module_boundaries(errors)
     check_ai_gateway_boundary(errors)
     check_ai_runtime_port_boundaries(errors)
+    check_ai_run_workspace(errors)
     check_review_application_boundary(errors)
     check_palace_review_public_facade(errors)
     check_palace_read_side_purity(errors)
@@ -1527,6 +1612,12 @@ def main() -> int:
     check_backend_module_boundaries(errors)
     check_backend_presentation_orm_usage(errors)
     check_tool_personal_paths(errors)
+    for path in BATCH_GENERATION_APPLICATION.rglob("*.py"):
+        source = path.read_text(encoding="utf-8")
+        if "modules.palaces.infrastructure" in source or "modules.palace_quiz.infrastructure" in source:
+            errors.append(
+                f"{path.relative_to(REPO_ROOT)}: batch generation must use Palace/Quiz public facades instead of internal infrastructure."
+            )
 
     if errors:
         print("Architecture check failed:")
@@ -1540,3 +1631,4 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+

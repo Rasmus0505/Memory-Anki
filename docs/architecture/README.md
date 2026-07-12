@@ -34,6 +34,7 @@ The repository is a local-first Windows product used on two devices. SQLite, fil
 6. Legacy normalization is deterministic across process restarts and devices. Never derive persisted IDs from memory addresses, random values, timestamps, or local paths.
 7. Cross-module dependencies use a public facade, a typed port, or an application event. Private repositories and application internals are not shared APIs.
 8. API inputs use explicit command/query models; compatibility envelopes are isolated and have a removal plan.
+9. Palace focus-practice is retired: runtime code must not recreate focus-node fields, routes, progress kinds, or UI actions.
 
 ## Target Dependency Map
 
@@ -77,6 +78,7 @@ Frontend lint is a zero-warning contract. The `apps/web` lint script runs ESLint
 - Windows launcher smoke after runtime/startup-sensitive changes: `python tools/quality_gate.py --launchers` (really runs `start-pwa.bat` and `start-desktop.bat`, verifies API/Electron readiness, then restores the shared PWA service)
 - Mind-map architecture details: `docs/architecture/mindmap.md`
 - AI runtime boundary: `docs/architecture/ai-runtime.md`
+- AI run workspace lifecycle: `docs/architecture/ai-run-workspace.md`
 - Prompt catalog boundary: `docs/architecture/prompt-catalog.md`
 - Review context boundary: `docs/architecture/review-boundary.md`
 - Read-model purity: `docs/architecture/read-models.md`
@@ -110,3 +112,10 @@ The concentrated architecture replacement has started with the two failure-prone
 - Cross-module imports must use the target module's `public.ts`.
 - `docs/architecture/runtime-ports.yaml`, `use-case-catalog.yaml`, and `event-catalog.yaml` are the machine-readable runtime ownership ledger.
 - The legacy FSD tree remains only for contexts not yet cut over; migrated runtime logic must not move back into it.
+
+- Quiz learning loop: docs/architecture/quiz-learning-loop.md
+- Whole-book batch generation workspace: `docs/architecture/batch-generation-workspace.md`
+- Unified training evidence boundary: `docs/architecture/unified-training-evidence.md`
+
+- AI learning workbench and immutable run records: `docs/architecture/ai-learning-workbench.md`
+
