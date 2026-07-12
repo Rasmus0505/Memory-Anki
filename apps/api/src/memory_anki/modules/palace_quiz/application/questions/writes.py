@@ -27,7 +27,25 @@ def apply_normalized_question_to_row(
     row.options_json = json_dump(normalized["options"], default=[])
     row.answer_payload_json = json_dump(normalized["answer_payload"], default={})
     row.analysis = str(normalized.get("analysis") or "")
-    row.source_meta_json = json_dump(normalized["source_meta"], default={})
+    source_meta = normalized["source_meta"]
+    row.source_meta_json = json_dump(source_meta, default={})
+    if isinstance(source_meta, dict) and (
+        source_meta.get("ai_call_log_id") or source_meta.get("generation_mode")
+    ):
+        row.lifecycle_status = "candidate"
+        evidence = source_meta.get("evidence")
+        if not isinstance(evidence, list):
+            page_numbers = source_meta.get("page_numbers")
+            image_names = source_meta.get("image_names")
+            evidence = [
+                {
+                    "page_numbers": page_numbers or [],
+                    "source_names": image_names or [],
+                    "excerpt": "",
+                }
+            ]
+        row.evidence_json = json_dump(evidence, default=[])
+        row.generation_job_id = str(source_meta.get("generation_job_id") or "") or None
     return row
 
 
@@ -45,6 +63,13 @@ def copy_question_content(
     target.answer_payload_json = source.answer_payload_json
     target.analysis = source.analysis
     target.source_meta_json = source.source_meta_json
+    target.lifecycle_status = source.lifecycle_status
+    target.evidence_json = source.evidence_json
+    target.knowledge_tags_json = source.knowledge_tags_json
+    target.cognitive_level = source.cognitive_level
+    target.difficulty = source.difficulty
+    target.quality_score = source.quality_score
+    target.quality_review_json = source.quality_review_json
     return target
 
 

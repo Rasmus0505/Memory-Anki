@@ -336,7 +336,7 @@ def resolve_question_scope(
     if session is not None and palace_id is None and resolved_source_chapter_id is None:
         raise PalaceQuizValidationError("题目必须至少归属于一个宫殿或章节。")
     if resolved_source_chapter_id is not None and mini_palace_id is not None:
-        raise PalaceQuizValidationError("章节题暂不支持绑定专项训练。")
+        raise PalaceQuizValidationError("章节题暂不支持绑定迷你宫殿训练。")
     return NormalizedQuestionScope(
         mini_palace_id=mini_palace_id,
         source_chapter_id=resolved_source_chapter_id,

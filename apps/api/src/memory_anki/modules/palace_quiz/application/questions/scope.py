@@ -29,7 +29,7 @@ def get_mini_palace_or_raise(
         .first()
     )
     if not mini_palace:
-        raise PalaceQuizValidationError("专项训练不存在，或不属于当前宫殿。")
+        raise PalaceQuizValidationError("迷你宫殿训练不存在，或不属于当前宫殿。")
     return mini_palace
 
 
@@ -49,7 +49,7 @@ def get_origin_question_or_raise(
         .first()
     )
     if not origin_question:
-        raise PalaceQuizValidationError("原始题目不存在，无法建立专项训练归类副本。")
+        raise PalaceQuizValidationError("原始题目不存在，无法建立迷你宫殿训练归类副本。")
     return origin_question
 
 

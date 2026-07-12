@@ -92,6 +92,16 @@ export interface PalaceQuizAnswerPayload {
   }>
 }
 
+export type PalaceQuizLifecycleStatus = 'temporary' | 'candidate' | 'published' | 'rejected'
+
+export interface PalaceQuizEvidenceRef {
+  source_name?: string
+  source_names?: string[]
+  page_numbers?: number[]
+  paragraph?: string
+  node_id?: string
+  excerpt?: string
+}
 export interface PalaceQuizQuestionDraft {
   mini_palace_id?: number | null
   source_chapter_id?: number | null
@@ -115,6 +125,15 @@ export interface PalaceQuizQuestion extends PalaceQuizQuestionDraft {
   correct_count: number
   incorrect_count: number
   attempt_count: number
+  lifecycle_status?: PalaceQuizLifecycleStatus
+  evidence?: PalaceQuizEvidenceRef[]
+  knowledge_tags?: string[]
+  cognitive_level?: string
+  difficulty?: number
+  quality_score?: number | null
+  quality_review?: { passed?: boolean; issues?: string[]; reviewed_at?: string; reviewer?: string }
+  generation_job_id?: string | null
+  version_number?: number
   created_at: string | null
   updated_at: string | null
 }
@@ -274,3 +293,6 @@ export interface PalaceQuizMiniPalaceClassificationResult {
   ai_call_log_id: string | null
   resolved_ai?: ResolvedAiRuntimeMeta | null
 }
+
+
+

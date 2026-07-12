@@ -290,3 +290,4 @@ export function buildChapterSummary(info: { subjectName: string; path: ChapterTr
   if (!info) return '尚未选择题目所属章节'
   return `${info.subjectName} / ${info.path.map((item) => item.name).join(' / ')}`
 }
+

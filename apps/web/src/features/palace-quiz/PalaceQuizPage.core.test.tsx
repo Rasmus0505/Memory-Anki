@@ -263,10 +263,10 @@ describe('PalaceQuizPage core flows', () => {
   it('supports filtering questions by palace scope in manage view', async () => {
     renderPage()
     fireEvent.click(await screen.findByRole('button', { name: '管理' }))
-    fireEvent.click(screen.getByRole('button', { name: '细胞核专项训练' }))
+    fireEvent.click(screen.getByRole('button', { name: '细胞核迷你宫殿训练' }))
     expect(dispatchGlobalFeedbackMock).toHaveBeenCalledWith(
       'quiz_nav_scope_change',
-      expect.objectContaining({ label: '细胞核专项训练', audioScope: 'global' }),
+      expect.objectContaining({ label: '细胞核迷你宫殿训练', audioScope: 'global' }),
     )
     expect(await screen.findByText('细胞核的主要作用是什么？')).toBeTruthy()
     expect(screen.queryByText('简述有丝分裂的意义。')).toBeNull()

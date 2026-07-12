@@ -89,7 +89,7 @@ def prepare_mini_palace_grouping_request(
 ) -> MiniPalaceGroupingPreparedRequest:
     mini_palace_contexts = build_mini_palace_context(palace)
     if len(mini_palace_contexts) == 0:
-        raise PalaceQuizValidationError("当前宫殿还没有专项训练，暂时无法按专项训练分类。")
+        raise PalaceQuizValidationError("当前宫殿还没有迷你宫殿训练，暂时无法按迷你宫殿训练分类。")
     if len(questions) == 0:
         raise PalaceQuizValidationError("没有可分类的题目。")
 
@@ -270,7 +270,7 @@ def apply_grouped_question_copies(
         mini_palace_hit_counts.append(
             {
                 "mini_palace_id": mini_palace_id,
-                "mini_palace_name": group.get("mini_palace_name") or f"专项训练 {mini_palace_id}",
+                "mini_palace_name": group.get("mini_palace_name") or f"迷你宫殿训练 {mini_palace_id}",
                 "question_count": hit_count,
             }
         )

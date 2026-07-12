@@ -153,10 +153,10 @@ export async function generatePalaceQuizPreview(
   )
 }
 
-export async function autoGenerateAndSavePalaceQuiz(
+export async function savePalaceQuizGenerationPreview(
   config: QuizGenerationRequestConfig,
+  preview: PalaceQuizGenerationPreview,
 ): Promise<QuizAutoSaveGenerationResult> {
-  const preview = await generatePalaceQuizPreview(config)
   const questionsToSave = flattenGeneratedQuestions(preview)
   if (questionsToSave.length > 0) {
     if (config.selectedChapterId) {
@@ -176,4 +176,11 @@ export async function autoGenerateAndSavePalaceQuiz(
     preview,
     savedCount: questionsToSave.length,
   }
+}
+
+export async function autoGenerateAndSavePalaceQuiz(
+  config: QuizGenerationRequestConfig,
+): Promise<QuizAutoSaveGenerationResult> {
+  const preview = await generatePalaceQuizPreview(config)
+  return savePalaceQuizGenerationPreview(config, preview)
 }

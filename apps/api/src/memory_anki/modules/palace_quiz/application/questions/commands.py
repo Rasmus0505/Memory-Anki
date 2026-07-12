@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from memory_anki.core.time import utc_now_naive
 from memory_anki.infrastructure.db._tables.palaces import Palace, PalaceQuizQuestion
+from memory_anki.modules.palace_quiz.application.learning_loop import record_attempt_event
 
 from .dedup import find_duplicate_question
 from .dedup_keys import build_question_dedup_key, question_to_dedup_payload
@@ -157,12 +158,16 @@ def _build_update_payload(
     return {
         "mini_palace_id": payload.get("mini_palace_id", question.mini_palace_id),
         "source_chapter_id": payload.get("source_chapter_id", question.source_chapter_id),
-        "classified_chapter_id": payload.get("classified_chapter_id", question.classified_chapter_id),
+        "classified_chapter_id": payload.get(
+            "classified_chapter_id", question.classified_chapter_id
+        ),
         "origin_question_id": payload.get("origin_question_id", question.origin_question_id),
         "question_type": payload.get("question_type", question.question_type),
         "stem": payload.get("stem", question.stem),
         "options": payload.get("options", json_load(question.options_json, [])),
-        "answer_payload": payload.get("answer_payload", json_load(question.answer_payload_json, {})),
+        "answer_payload": payload.get(
+            "answer_payload", json_load(question.answer_payload_json, {})
+        ),
         "analysis": payload.get("analysis", question.analysis),
         "source_meta": payload.get("source_meta", json_load(question.source_meta_json, {})),
     }
@@ -301,6 +306,18 @@ def record_choice_attempt(
         question.correct_count += 1
     else:
         question.incorrect_count += 1
+    record_attempt_event(
+        session,
+        {
+            "question_id": question.id,
+            "palace_id": question.palace_id,
+            "chapter_id": question.classified_chapter_id or question.source_chapter_id,
+            "scene": "palace_quiz",
+            "answer_payload": {"selected_option_id": normalized_selected_option_id},
+            "is_correct": is_correct,
+        },
+        commit=False,
+    )
     return commit_recorded_choice_attempt(
         session,
         row=question,
@@ -356,7 +373,7 @@ def upsert_classified_question_copy(
     mini_palace_id: int,
 ) -> PalaceQuizQuestion:
     if source_question.palace_id is None:
-        raise PalaceQuizValidationError("章节题不能复制到专项训练。")
+        raise PalaceQuizValidationError("章节题不能复制到迷你宫殿训练。")
     palace_id = source_question.palace_id
     validate_mini_palace(session, palace_id, mini_palace_id)
     existing = (

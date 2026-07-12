@@ -341,6 +341,7 @@ export default function PalaceQuizPage() {
           onDeleteQuestion={management.handleDeleteQuestion}
           onSaveQuestion={management.handleSaveQuestion}
           onResetForm={management.resetEditingState}
+          onReviewUpdated={refreshQuestions}
         />
       ) : null}
 
@@ -354,7 +355,7 @@ export default function PalaceQuizPage() {
           promptForAiOptions={promptForAiOptions}
           onSaved={async () => {
             await refreshQuestions()
-            setActiveTab('practice')
+            setActiveTab('manage')
           }}
         />
       ) : null}
@@ -373,3 +374,5 @@ export default function PalaceQuizPage() {
     </div>
   )
 }
+
+

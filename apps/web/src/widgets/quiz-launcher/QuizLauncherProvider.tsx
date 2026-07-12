@@ -7,23 +7,18 @@ import {
   useState,
   type PropsWithChildren,
 } from 'react'
-import { ImagePlus, LoaderCircle, Play, Sparkles } from 'lucide-react'
+import { ImagePlus, LoaderCircle, Play, Save, Sparkles } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { toast } from '@/shared/feedback/toast'
 import { useAiRunConfigDialog } from '@/entities/ai-runtime'
 import {
-  autoGenerateAndSavePalaceQuiz,
+  generatePalaceQuizPreview,
+  savePalaceQuizGenerationPreview,
   type QuizGenerationRequestConfig,
   type QuizLauncherGenerationSourceKind,
 } from '@/features/palace-quiz/quizGenerationController'
-import type { MindMapEditorState, PalaceQuizQuestionType } from '@/shared/api/contracts'
+import type { MindMapEditorState, PalaceQuizGenerationPreview, PalaceQuizQuestionType } from '@/shared/api/contracts'
 import { getPalaceApi } from '@/entities/palace/api'
-import {
-  completeTask,
-  failTask,
-  registerTask,
-  updateTask,
-} from '@/shared/background-tasks/backgroundTaskRegistry'
 import { dispatchGlobalFeedback } from '@/shared/feedback/globalFeedbackModel'
 import { Button } from '@/shared/components/ui/button'
 import {
@@ -88,6 +83,8 @@ export function QuizLauncherProvider({ children }: PropsWithChildren) {
   const [questionCount, setQuestionCount] = useState(6)
   const [error, setError] = useState('')
   const [starting, setStarting] = useState(false)
+  const [generationPreview, setGenerationPreview] = useState<PalaceQuizGenerationPreview | null>(null)
+  const [previewConfig, setPreviewConfig] = useState<QuizGenerationRequestConfig | null>(null)
   const { promptForAiOptions, aiRunConfigDialog } = useAiRunConfigDialog()
 
   useEffect(() => {
@@ -121,6 +118,8 @@ export function QuizLauncherProvider({ children }: PropsWithChildren) {
     setExtraPrompt('')
     setImageFiles([])
     setQuestionCount(6)
+    setGenerationPreview(null)
+    setPreviewConfig(null)
   }, [])
 
   const openQuizLauncher = useCallback((nextRequest: QuizLauncherRequest) => {
@@ -179,101 +178,36 @@ export function QuizLauncherProvider({ children }: PropsWithChildren) {
       const generationConfig = await buildGenerationConfig()
       if (!generationConfig) return
       const aiOptions = await promptForAiOptions({
-        scenarioKey:
-          sourceKind === 'review-mindmap'
-            ? 'quiz_review_mindmap_generation'
-            : 'quiz_image_generation',
-        entrypointKey:
-          sourceKind === 'review-mindmap'
-            ? 'quiz-generate-review-mindmap'
-            : sourceKind === 'image-batch'
-                ? 'quiz-generate-images-batch'
-                : 'quiz-generate-images-single',
-        title:
-          sourceKind === 'review-mindmap'
-            ? '复习脑图做题生成配置'
-            : '图片做题生成配置',
+        scenarioKey: sourceKind === 'review-mindmap' ? 'quiz_review_mindmap_generation' : 'quiz_image_generation',
+        entrypointKey: sourceKind === 'review-mindmap' ? 'quiz-generate-review-mindmap' : sourceKind === 'image-batch' ? 'quiz-generate-images-batch' : 'quiz-generate-images-single',
+        title: sourceKind === 'review-mindmap' ? '复习脑图做题生成配置' : '图片做题生成配置',
+        description: '确认模型和最终提示词后生成预览；预览不会自动写入题库。',
       })
-      if (!aiOptions) {
-        dispatchGlobalFeedback('quiz_generate_cancel', {
-          label: '取消生成',
-          audioScope: 'global',
-        })
-        setStarting(false)
-        return
-      }
-      dispatchGlobalFeedback('quiz_generate_start', {
-        label: sourceKind === 'review-mindmap' ? '复习脑图出题' : '开始生成',
-        audioScope: 'global',
-      })
-      const taskId = `quiz-generation-${request.palaceId}-${Date.now()}`
-      const navigateTarget = `/palaces/${request.palaceId}/quiz?tab=practice`
-      registerTask({
-        id: taskId,
-        section: 'palaces',
-        kind: 'quiz-generation',
-        title: `${palace.title} · 题库生成中`,
-        detail: '已缩成气泡，你可以继续操作脑图。',
-        progress: 8,
-        navigateTarget,
-      })
-
-      closeLauncher()
-
-      void (async () => {
-        try {
-          if (sourceKind === 'review-mindmap') {
-            updateTask(taskId, {
-              progress: 25,
-              detail: '正在根据当前复习脑图生成题目…',
-            })
-          } else {
-            updateTask(taskId, {
-              progress: 18,
-              detail: '正在识别图片并生成题目…',
-            })
-          }
-
-          const result = await autoGenerateAndSavePalaceQuiz({
-            ...generationConfig,
-            aiOptions,
-          })
-
-          updateTask(taskId, {
-            progress: 96,
-            detail: '正在写入题库…',
-          })
-          completeTask(taskId, {
-            detail:
-              result.savedCount > 0
-                ? `已保存 ${result.savedCount} 题，点击去做题。`
-                : '生成完成，但没有可保存的新题。',
-            progress: 100,
-          })
-          dispatchGlobalFeedback('quiz_generate_save', {
-            label: result.savedCount > 0 ? '已入题库' : '生成完成',
-            audioScope: 'global',
-          })
-          toast.success(
-            result.savedCount > 0 ? `已保存 ${result.savedCount} 道题目` : '生成完成',
-          )
-        } catch (nextError) {
-          const message =
-            nextError instanceof Error ? nextError.message : '生成题目失败。'
-          failTask(taskId, message)
-          dispatchGlobalFeedback('quiz_error_ai_failed', {
-            label: '生成失败',
-            audioScope: 'global',
-          })
-          toast.error(message)
-        }
-      })()
+      if (!aiOptions) return
+      const resolvedConfig = { ...generationConfig, aiOptions }
+      const preview = await generatePalaceQuizPreview(resolvedConfig)
+      setPreviewConfig(resolvedConfig)
+      setGenerationPreview(preview)
+      toast.success(`已生成 ${preview.questions.length} 道题目预览`)
     } catch (nextError) {
-      dispatchGlobalFeedback('quiz_error_missing_input', {
-        label: '生成题目失败',
-        audioScope: 'local',
-      })
       setError(nextError instanceof Error ? nextError.message : '生成题目失败。')
+    } finally {
+      setStarting(false)
+    }
+  }
+
+  const handleApplyPreview = async () => {
+    if (!generationPreview || !previewConfig) return
+    setStarting(true)
+    setError('')
+    try {
+      const result = await savePalaceQuizGenerationPreview(previewConfig, generationPreview)
+      dispatchGlobalFeedback('quiz_generate_save', { label: '已入题库', audioScope: 'global' })
+      toast.success(`已保存 ${result.savedCount} 道题目`)
+      navigate(`/palaces/${previewConfig.palaceId}/quiz?tab=practice`)
+      closeLauncher()
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : '保存题目失败。')
     } finally {
       setStarting(false)
     }
@@ -379,7 +313,7 @@ export function QuizLauncherProvider({ children }: PropsWithChildren) {
                         />
                       </label>
                       <div className="rounded-xl border border-border/70 bg-muted/35 px-3 py-3 text-sm text-muted-foreground">
-                        会基于你当前看到的复习脑图生成一组综合题，并在完成后自动写入题库。
+                        会基于当前复习脑图生成综合题预览，确认后才写入题库。
                       </div>
                     </div>
                   ) : null}
@@ -420,6 +354,20 @@ export function QuizLauncherProvider({ children }: PropsWithChildren) {
                   </label>
                 </div>
 
+
+                  {generationPreview ? (
+                    <div className="space-y-3 rounded-xl border border-border/70 bg-muted/20 p-4">
+                      <div className="font-medium">题目预览 · {generationPreview.questions.length} 题</div>
+                      <div className="max-h-64 space-y-2 overflow-auto">
+                        {generationPreview.questions.map((question, index) => (
+                          <div key={`${question.stem}-${index}`} className="rounded-lg border bg-background p-3 text-sm">
+                            <div className="font-medium">{index + 1}. {question.stem}</div>
+                            <div className="mt-1 text-muted-foreground">{question.analysis || '暂无解析'}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
                 {error ? (
                   <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
                     {error}
@@ -433,10 +381,17 @@ export function QuizLauncherProvider({ children }: PropsWithChildren) {
             <Button type="button" variant="outline" onClick={closeLauncher}>
               取消
             </Button>
-            <Button type="button" disabled={loading || starting} onClick={() => void handleStartGeneration()}>
-              {starting ? <LoaderCircle className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
-              生成新题并稍后去做
-            </Button>
+            {generationPreview ? (
+              <Button type="button" disabled={loading || starting} onClick={() => void handleApplyPreview()}>
+                {starting ? <LoaderCircle className="size-4 animate-spin" /> : <Save className="size-4" />}
+                确认保存到题库
+              </Button>
+            ) : (
+              <Button type="button" disabled={loading || starting} onClick={() => void handleStartGeneration()}>
+                {starting ? <LoaderCircle className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
+                生成并预览
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>

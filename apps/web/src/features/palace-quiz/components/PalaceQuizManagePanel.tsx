@@ -12,7 +12,7 @@ import type {
   PalaceQuizOcrSource,
   PalaceQuizQuestion,
 } from '@/shared/api/contracts'
-import { getPalaceQuizOcrSourcesApi } from '@/entities/quiz/api'
+import { getPalaceQuizOcrSourcesApi, reviewQuizQuestionQualityApi, transitionQuizQuestionLifecycleApi } from '@/entities/quiz/api'
 import {
   canManuallyEditQuestion,
   getQuestionOwnershipLabel,
@@ -46,6 +46,7 @@ export function PalaceQuizManagePanel({
   onDeleteQuestion,
   onSaveQuestion,
   onResetForm,
+  onReviewUpdated,
 }: {
   palaceId: number | null
   questions: PalaceQuizQuestion[]
@@ -70,11 +71,24 @@ export function PalaceQuizManagePanel({
   onDeleteQuestion: (questionId: number) => Promise<void>
   onSaveQuestion: () => Promise<void>
   onResetForm: () => void
+  onReviewUpdated: () => Promise<void>
 }) {
   const [ocrSources, setOcrSources] = useState<PalaceQuizOcrSource[]>([])
   const [ocrLoading, setOcrLoading] = useState(false)
   const [ocrError, setOcrError] = useState('')
   const [expandedOcrId, setExpandedOcrId] = useState<number | null>(null)
+  const [reviewingQuestionId, setReviewingQuestionId] = useState<number | null>(null)
+
+  const handleLifecycle = async (question: PalaceQuizQuestion, status: 'published' | 'rejected') => {
+    setReviewingQuestionId(question.id)
+    try {
+      if (status === 'published') await reviewQuizQuestionQualityApi(question.id)
+      await transitionQuizQuestionLifecycleApi(question.id, status)
+      await onReviewUpdated()
+    } finally {
+      setReviewingQuestionId(null)
+    }
+  }
 
   const loadOcrSources = useCallback(async () => {
     if (!palaceId) return
@@ -232,6 +246,9 @@ export function PalaceQuizManagePanel({
                         </div>
                         <div className="flex flex-wrap items-center gap-1.5">
                           <QuestionSourceBadge sourceMeta={question.source_meta} compact />
+                          <Badge variant={question.lifecycle_status === 'published' ? 'secondary' : 'outline'}>
+                            {question.lifecycle_status === 'published' ? '正式题' : question.lifecycle_status === 'candidate' ? '待审核' : question.lifecycle_status === 'temporary' ? '临时题' : '已拒绝'}
+                          </Badge>
                           {question.question_type === 'multiple_choice' ? (
                             <span className="text-[11px] text-muted-foreground">
                               对 {question.correct_count} / 错 {question.incorrect_count}
@@ -241,6 +258,12 @@ export function PalaceQuizManagePanel({
                       </div>
                     </div>
                     <div className="flex shrink-0 gap-1.5">
+                      {question.lifecycle_status !== 'published' && question.lifecycle_status !== 'rejected' ? (
+                        <>
+                          <Button type="button" size="sm" className="h-8 px-2.5" disabled={reviewingQuestionId === question.id} onClick={() => void handleLifecycle(question, 'published')}>审核发布</Button>
+                          <Button type="button" size="sm" variant="ghost" className="h-8 px-2.5" disabled={reviewingQuestionId === question.id} onClick={() => void handleLifecycle(question, 'rejected')}>拒绝</Button>
+                        </>
+                      ) : null}
                       {canManuallyEditQuestion(question.question_type) ? (
                         <Button
                           type="button"
@@ -504,3 +527,6 @@ export function PalaceQuizManagePanel({
     </div>
   )
 }
+
+
+

@@ -24,6 +24,13 @@ from memory_anki.modules.palace_quiz.application.ai_service import (
 from memory_anki.modules.palace_quiz.application.generation.shared import (
     recover_quiz_preview_from_log,
 )
+from memory_anki.modules.palace_quiz.application.learning_loop import (
+    build_mastery_profile,
+    list_review_queue,
+    record_attempt_event,
+    review_and_store_question_quality,
+    transition_question,
+)
 from memory_anki.modules.palace_quiz.application.question_mutation_commands import (
     batch_create_chapter_questions_command,
     batch_create_palace_questions_command,
@@ -193,9 +200,7 @@ def api_create_palace_quiz_question(
             palace_id,
             data,
             uow=SqlAlchemyUnitOfWork(s),
-            before_commit=lambda payload: mutation_store.save(
-                mutation_identity, payload
-            ),
+            before_commit=lambda payload: mutation_store.save(mutation_identity, payload),
         )
         maybe_create_rolling_backup("rolling-create-palace-quiz-question")
         return response
@@ -221,9 +226,7 @@ def api_batch_create_palace_quiz_questions(
             palace_id,
             data,
             uow=SqlAlchemyUnitOfWork(s),
-            before_commit=lambda payload: mutation_store.save(
-                mutation_identity, payload
-            ),
+            before_commit=lambda payload: mutation_store.save(mutation_identity, payload),
         )
         maybe_create_rolling_backup("rolling-batch-create-palace-quiz-questions")
         return response
@@ -249,9 +252,7 @@ def api_batch_create_chapter_quiz_questions(
             chapter_id,
             data,
             uow=SqlAlchemyUnitOfWork(s),
-            before_commit=lambda payload: mutation_store.save(
-                mutation_identity, payload
-            ),
+            before_commit=lambda payload: mutation_store.save(mutation_identity, payload),
         )
         maybe_create_rolling_backup("rolling-batch-create-chapter-quiz-questions")
         return response
@@ -329,6 +330,45 @@ def api_wrong_questions(
     return get_wrong_questions(s, limit)
 
 
+@router.get("/palace-quiz-questions/review-queue")
+def api_quiz_review_queue(
+    palace_id: int | None = None,
+    limit: int = 100,
+    s: Session = Depends(session_dep),
+):
+    return {"items": list_review_queue(s, palace_id=palace_id, limit=limit)}
+
+
+@router.post("/palace-quiz-questions/{question_id}/quality-review")
+def api_review_quiz_question_quality(question_id: int, s: Session = Depends(session_dep)):
+    try:
+        return review_and_store_question_quality(s, question_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.post("/palace-quiz-questions/{question_id}/lifecycle")
+def api_transition_quiz_question(question_id: int, data: dict, s: Session = Depends(session_dep)):
+    try:
+        return {"item": transition_question(s, question_id, str(data.get("status") or ""))}
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/palace-quiz-attempt-events")
+def api_record_quiz_attempt_event(data: dict, s: Session = Depends(session_dep)):
+    return {"item": record_attempt_event(s, data)}
+
+
+@router.get("/palace-quiz-mastery")
+def api_quiz_mastery_profile(
+    palace_id: int | None = None,
+    limit: int = 100,
+    s: Session = Depends(session_dep),
+):
+    return {"items": build_mastery_profile(s, palace_id=palace_id, limit=limit)}
+
+
 @router.post("/palace-quiz-questions/{question_id}/choice-attempts")
 def api_record_choice_attempt(
     question_id: int,
@@ -347,9 +387,7 @@ def api_record_choice_attempt(
             question_id,
             str(data.get("selected_option_id") or ""),
             uow=SqlAlchemyUnitOfWork(s),
-            before_commit=lambda response: mutation_store.save(
-                mutation_identity, response
-            ),
+            before_commit=lambda response: mutation_store.save(mutation_identity, response),
         )
     except Exception as exc:  # pragma: no cover - centralized HTTP mapping
         _raise_http_error(exc)
@@ -432,9 +470,7 @@ async def api_generate_palace_quiz_from_images(
                 extra_prompt=extra_prompt,
                 classify_by_mini_palace=str(classify_by_mini_palace).lower() == "true",
                 selected_chapter_id=(
-                    int(selected_chapter_id)
-                    if str(selected_chapter_id or "").strip()
-                    else None
+                    int(selected_chapter_id) if str(selected_chapter_id or "").strip() else None
                 ),
                 ai_options=_ai_dependencies(s).runtime.normalize_options(
                     json.loads(ai_options) if ai_options else None
@@ -467,9 +503,7 @@ async def api_generate_palace_quiz_from_text_files(
                 extra_prompt=extra_prompt,
                 classify_by_mini_palace=str(classify_by_mini_palace).lower() == "true",
                 selected_chapter_id=(
-                    int(selected_chapter_id)
-                    if str(selected_chapter_id or "").strip()
-                    else None
+                    int(selected_chapter_id) if str(selected_chapter_id or "").strip() else None
                 ),
                 ai_options=_ai_dependencies(s).runtime.normalize_options(
                     json.loads(ai_options) if ai_options else None
@@ -536,7 +570,9 @@ def api_classify_existing_quiz_questions_to_mini_palaces(
                 s,
                 ai_dependencies=_ai_dependencies(s),
                 palace_id=palace_id,
-                ai_options=_ai_dependencies(s).runtime.normalize_options((data or {}).get("ai_options")),
+                ai_options=_ai_dependencies(s).runtime.normalize_options(
+                    (data or {}).get("ai_options")
+                ),
             )
     except Exception as exc:  # pragma: no cover - centralized HTTP mapping
         _raise_http_error(exc)

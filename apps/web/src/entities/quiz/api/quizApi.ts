@@ -310,7 +310,7 @@ export function classifyPalaceQuizQuestionsToMiniPalacesApi(
       body: JSON.stringify(aiOptions ? { ai_options: aiOptions } : {}),
       persistence: {
         resourceKey: `palace:${palaceId}:quiz-classification:mini-palaces`,
-        description: '把记忆宫殿题库归类到专项训练',
+        description: '把记忆宫殿题库归类到迷你宫殿训练',
         replayMode: 'manual',
       },
     },
@@ -340,4 +340,47 @@ export function previewPalaceQuizGenerationFromReviewMindmapApi(
       },
     },
   )
+}
+
+export function getQuizReviewQueueApi(palaceId?: number | null) {
+  const query = palaceId ? `?palace_id=${palaceId}` : ''
+  return request<{ items: PalaceQuizQuestion[] }>(`/palace-quiz-questions/review-queue${query}`)
+}
+
+export function reviewQuizQuestionQualityApi(questionId: number) {
+  return request<{ review: { passed: boolean; score: number; issues: string[] }; question: PalaceQuizQuestion }>(
+    `/palace-quiz-questions/${questionId}/quality-review`,
+    { method: 'POST', body: JSON.stringify({}) },
+  )
+}
+
+export function transitionQuizQuestionLifecycleApi(
+  questionId: number,
+  status: 'temporary' | 'candidate' | 'published' | 'rejected',
+) {
+  return request<{ item: PalaceQuizQuestion }>(`/palace-quiz-questions/${questionId}/lifecycle`, {
+    method: 'POST',
+    body: JSON.stringify({ status }),
+    persistence: {
+      resourceKey: `palace-quiz-question:${questionId}:lifecycle:${status}`,
+      description: '更新题目审核状态',
+      replayMode: 'manual',
+    },
+  })
+}
+
+export function recordQuizAttemptEventApi(data: {
+  question_id: number
+  palace_id?: number | null
+  chapter_id?: number | null
+  scene: string
+  answer_payload: Record<string, unknown>
+  is_correct?: boolean | null
+  duration_ms?: number | null
+  hint_count?: number
+  retry_count?: number
+  confidence?: number | null
+  ai_score?: number | null
+}) {
+  return request('/palace-quiz-attempt-events', { method: 'POST', body: JSON.stringify(data) })
 }
