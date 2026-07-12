@@ -2,6 +2,8 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useState,
+  useSyncExternalStore,
   type Dispatch,
   type MutableRefObject,
   type SetStateAction,
@@ -15,7 +17,9 @@ import {
   type FreestyleConfig,
   type FreestyleProgressSnapshot,
 } from '@/features/freestyle/model/freestyle'
-import { stringListsEqual } from '@/features/freestyle/model/freestyle-cards'
+import { isQuizCard, stringListsEqual } from '@/features/freestyle/model/freestyle-cards'
+import { canCompleteRound as domainCanCompleteRound, clampTrainingIndex, freestyleTrainingMachine } from '@/modules/freestyle/public'
+import { createActor } from 'xstate'
 import {
   buildTodayTrainingQueue,
   buildTodayTrainingSummary,
@@ -90,13 +94,59 @@ export function useTodayTraining({
     [config, feedCards, mode, progress.activeQueueIds, queuePriorityResolvedIdsRef, todayConfig, todaySources],
   )
   const queueSignature = useMemo(() => buildQueueSignature(queue), [queue])
-  const summaryVisible =
-    mode === 'today' &&
-    queue.length > 0 &&
-    progress.currentIndex >= queue.length
+  const trainingCards = useMemo(() => queue.map((card) => ({
+    id: card.id,
+    quizQuestionId: isQuizCard(card) ? card.question.id : null,
+  })), [queue])
+  const resolvedQuestionIds = useMemo(
+    () => new Set(Object.entries(progress.questionStates)
+      .filter(([, state]) => state.resolved === true)
+      .map(([questionId]) => Number(questionId))),
+    [progress.questionStates],
+  )
+  const canCompleteRound = domainCanCompleteRound(trainingCards, {
+    currentIndex: progress.currentIndex,
+    resolvedQuestionIds,
+  })
+  const [trainingActor] = useState(() => createActor(freestyleTrainingMachine).start())
+  const trainingSnapshot = useSyncExternalStore(
+    (listener) => {
+      const subscription = trainingActor.subscribe(listener)
+      return () => subscription.unsubscribe()
+    },
+    () => trainingActor.getSnapshot(),
+    () => trainingActor.getSnapshot(),
+  )
+
+  useEffect(() => {
+    return () => {
+      trainingActor.stop()
+    }
+  }, [trainingActor])
+
+  useEffect(() => {
+    trainingActor.send({
+      type: 'ROUND_SYNCED',
+      cards: trainingCards,
+      currentIndex: progress.currentIndex,
+      resolvedQuestionIds: [...resolvedQuestionIds],
+    })
+    if (
+      mode === 'today' &&
+      progress.currentIndex >= queue.length &&
+      domainCanCompleteRound(trainingCards, { currentIndex: progress.currentIndex, resolvedQuestionIds })
+    ) {
+      trainingActor.send({ type: 'ROUND_COMPLETE_REQUESTED' })
+    }
+  }, [mode, progress.currentIndex, queue.length, resolvedQuestionIds, trainingActor, trainingCards])
+
+  const summaryVisible = mode === 'today' && trainingSnapshot.matches('completed')
   const currentIndex = summaryVisible
     ? queue.length
-    : Math.min(progress.currentIndex, Math.max(0, queue.length - 1))
+    : clampTrainingIndex(trainingCards, {
+      currentIndex: progress.currentIndex,
+      resolvedQuestionIds,
+    })
   const currentCard = queue[currentIndex] ?? null
 
   const setConfigAndPersist = useCallback((updater: (current: FreestyleConfig) => FreestyleConfig) => {
@@ -111,7 +161,9 @@ export function useTodayTraining({
     if (feedLoading) return
     if (queue.length === 0 && !feedError) return
     setProgressAndPersist((current) => {
-      const maxIndex = mode === 'today' ? queue.length : Math.max(0, queue.length - 1)
+      const maxIndex = mode === 'today' && canCompleteRound
+        ? queue.length
+        : Math.max(0, queue.length - 1)
       const nextIndex = Math.min(current.currentIndex, maxIndex)
       const nextActiveQueueIds =
         mode === 'today' && current.activeQueueIds.length === 0
@@ -135,7 +187,7 @@ export function useTodayTraining({
         lastQueueSignature: nextQueueSignature,
       }
     })
-  }, [feedError, feedLoading, mode, queue, queue.length, queueSignature, setProgressAndPersist])
+  }, [canCompleteRound, feedError, feedLoading, mode, queue, queue.length, queueSignature, setProgressAndPersist])
 
   const handleReshuffle = useCallback(() => {
     queuePriorityResolvedIdsRef.current = progress.resolvedQuestionIds
@@ -190,6 +242,7 @@ export function useTodayTraining({
   return {
     queue,
     summaryVisible,
+    canCompleteRound,
     currentIndex,
     currentCard,
     setConfigAndPersist,

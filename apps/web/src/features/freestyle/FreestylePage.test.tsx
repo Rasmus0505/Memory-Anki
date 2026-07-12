@@ -553,7 +553,7 @@ describe('FreestylePage feedback', () => {
     })
   })
 
-  it('shows a today training summary after the fixed round is completed', async () => {
+  it('does not complete today training when navigation or momentum skips unanswered cards', async () => {
     renderPageWithFeed([
       { cards: Array.from({ length: 12 }, (_, index) => quizCard(index + 1)) },
       { cards: [] },
@@ -561,8 +561,27 @@ describe('FreestylePage feedback', () => {
     ])
 
     await screen.findByText('选择题 1')
-    fireEvent.click(screen.getByRole('button', { name: '下一题' }))
-    for (let index = 0; index < 11; index += 1) {
+    const scroller = document.querySelector('[data-page-history-scroll-key="freestyle-cards"]') as HTMLDivElement
+    Object.defineProperty(scroller, 'clientHeight', { configurable: true, value: 700 })
+    Object.defineProperty(scroller, 'scrollTop', { configurable: true, value: 700 * 20, writable: true })
+    fireEvent.scroll(scroller)
+
+    await waitFor(() => {
+      expect(screen.getByText('12/12')).toBeTruthy()
+      expect(readTodayTrainingProgress().currentIndex).toBe(11)
+    })
+    expect(screen.queryByText('本轮完成')).toBeNull()
+  })
+
+  it('shows a today training summary only after every quiz card is answered', async () => {
+    renderPageWithFeed([
+      { cards: Array.from({ length: 12 }, (_, index) => quizCard(index + 1)) },
+      { cards: [] },
+      { cards: [] },
+    ])
+
+    for (let index = 0; index < 12; index += 1) {
+      await answerChoiceAt(index)
       fireEvent.click(screen.getByRole('button', { name: '下一题' }))
     }
 
@@ -651,6 +670,7 @@ describe('FreestylePage feedback', () => {
     await waitFor(() => {
       expect(readTodayTrainingProgress().activeQueueIds).toEqual(['quiz:1'])
     })
+    await answerChoiceAt(0)
     fireEvent.click(screen.getByRole('button', { name: '下一题' }))
     fireEvent.click(await screen.findByRole('button', { name: '再来一轮' }))
 
@@ -678,8 +698,8 @@ describe('FreestylePage feedback', () => {
 
     await waitFor(() => {
       expect(screen.getByText('2/2')).toBeTruthy()
-      expect(screen.getByText('本轮完成')).toBeTruthy()
-      expect(readTodayTrainingProgress().currentIndex).toBe(2)
+      expect(screen.queryByText('本轮完成')).toBeNull()
+      expect(readTodayTrainingProgress().currentIndex).toBe(1)
     })
     expect(screen.queryByText('选择题 4')).toBeNull()
   })

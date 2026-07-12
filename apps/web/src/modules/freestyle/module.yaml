@@ -1,0 +1,12 @@
+{
+  "name": "freestyle",
+  "owns": ["training round", "answer completion rules", "round presentation state"],
+  "forbids": ["browser scrolling side effects", "navigation", "session persistence adapters"],
+  "publicEntry": "src/modules/freestyle/public.ts",
+  "workflows": ["FreestyleTrainingMachine"],
+  "ports": [],
+  "events": ["freestyle.round.completed"],
+  "dependencies": ["sessions"],
+  "invariants": ["SCROLL_SETTLED cannot complete a round", "all quiz cards must be resolved"],
+  "requiredTests": ["trainingRound.test.ts", "freestyleTrainingMachine.test.ts"]
+}

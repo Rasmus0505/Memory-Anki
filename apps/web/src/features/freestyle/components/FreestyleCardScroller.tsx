@@ -31,6 +31,7 @@ export function FreestyleCardScroller({
   config,
   todayConfig,
   queue,
+  canCompleteRound,
   progressQuestionStates,
   answeredQuestionIds,
   todaySummary,
@@ -55,6 +56,7 @@ export function FreestyleCardScroller({
   config: FreestyleConfig
   todayConfig: TodayTrainingConfig
   queue: FreestyleCard[]
+  canCompleteRound: boolean
   progressQuestionStates: Record<number, QuizRuntimeState>
   answeredQuestionIds: Set<number>
   todaySummary: TodayTrainingSummary
@@ -79,7 +81,7 @@ export function FreestyleCardScroller({
       ref={scrollRef}
       data-page-history-scroll-key="freestyle-cards"
       className={cn(
-        'snap-y snap-mandatory overflow-y-auto overflow-x-hidden overscroll-contain scroll-smooth [-webkit-overflow-scrolling:touch] will-change-scroll',
+        'snap-y snap-mandatory overflow-y-auto overflow-x-hidden overscroll-contain will-change-scroll',
         'h-[calc(100dvh-5.5rem-env(safe-area-inset-bottom,0px))] lg:h-[calc(100vh-88px)]',
       )}
       onScroll={onScroll}
@@ -111,7 +113,7 @@ export function FreestyleCardScroller({
               ref={(node) => {
                 cardRefs.current[card.id] = node
               }}
-              className="freestyle-card-enter relative flex min-h-full w-full max-w-[100vw] snap-start items-center justify-center overflow-hidden bg-gradient-to-b from-zinc-950 via-zinc-950 to-zinc-900"
+              className="freestyle-card-enter relative flex min-h-full w-full max-w-[100vw] snap-start [scroll-snap-stop:always] items-center justify-center overflow-hidden bg-gradient-to-b from-zinc-950 via-zinc-950 to-zinc-900"
             >
               {isQuizCard(card) ? (
                 <FreestyleQuizCardView
@@ -128,14 +130,14 @@ export function FreestyleCardScroller({
               )}
             </section>
           ))}
-          {mode === 'today' ? (
+          {mode === 'today' && canCompleteRound ? (
             <section
               ref={(node) => {
                 // Mutable ref registry used by the page-level scroll controller.
                 // eslint-disable-next-line react-hooks/immutability
                 cardRefs.current.__today_summary__ = node
               }}
-              className="freestyle-card-enter relative flex min-h-full w-full max-w-[100vw] snap-start items-center justify-center overflow-hidden bg-gradient-to-b from-zinc-950 via-zinc-950 to-zinc-900"
+              className="freestyle-card-enter relative flex min-h-full w-full max-w-[100vw] snap-start [scroll-snap-stop:always] items-center justify-center overflow-hidden bg-gradient-to-b from-zinc-950 via-zinc-950 to-zinc-900"
             >
               <FreestyleRoundSummaryCard
                 summary={todaySummary}

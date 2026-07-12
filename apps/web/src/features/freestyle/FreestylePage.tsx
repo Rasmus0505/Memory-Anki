@@ -43,6 +43,7 @@ export default function FreestylePage() {
   const [wrongQuestionsOpen, setWrongQuestionsOpen] = useState(false)
   const scrollRef = useRef<HTMLDivElement | null>(null)
   const cardRefs = useRef<Record<string, HTMLElement | null>>({})
+  const requestedScrollIndexRef = useRef<number | null>(null)
   const queueRef = useRef<FreestyleCard[]>([])
   const reducedMotion = usePrefersReducedMotion()
   const { promptForAiOptions, aiRunConfigDialog } = useAiRunConfigDialog()
@@ -102,6 +103,7 @@ export default function FreestylePage() {
   const {
     queue,
     summaryVisible,
+    canCompleteRound,
     currentIndex,
     currentCard,
     setConfigAndPersist,
@@ -152,26 +154,29 @@ export default function FreestylePage() {
   }, [isActive, timer])
 
   useEffect(() => {
+    if (requestedScrollIndexRef.current !== currentIndex) return
+    requestedScrollIndexRef.current = null
     const target = currentCard
       ? cardRefs.current[currentCard.id]
       : summaryVisible
         ? cardRefs.current.__today_summary__
         : null
-    target?.scrollIntoView({ block: 'start' })
-  }, [currentCard, summaryVisible])
+    target?.scrollIntoView({ block: 'start', behavior: 'auto' })
+  }, [currentCard, currentIndex, summaryVisible])
 
   const goToIndex = useCallback(
     (index: number) => {
       if (queue.length === 0) return
-      const maxIndex = mode === 'today' ? queue.length : queue.length - 1
+      const maxIndex = mode === 'today' && canCompleteRound ? queue.length : queue.length - 1
       const nextIndex = Math.max(0, Math.min(index, maxIndex))
+      requestedScrollIndexRef.current = nextIndex
       timer.registerActivity('practice_interaction', { source: 'freestyle_nav' })
       setProgressAndPersist((current) => ({
         ...current,
         currentIndex: nextIndex,
       }))
     },
-    [mode, queue.length, setProgressAndPersist, timer],
+    [canCompleteRound, mode, queue.length, setProgressAndPersist, timer],
   )
 
   const handleScroll = useCallback(() => {
@@ -180,7 +185,7 @@ export default function FreestylePage() {
     const nextIndex = Math.max(
       0,
       Math.min(
-        mode === 'today' ? queue.length : queue.length - 1,
+        mode === 'today' && canCompleteRound ? queue.length : queue.length - 1,
         Math.round(element.scrollTop / Math.max(1, element.clientHeight)),
       ),
     )
@@ -189,7 +194,7 @@ export default function FreestylePage() {
       ...current,
       currentIndex: nextIndex,
     }))
-  }, [mode, progress.currentIndex, queue.length, setProgressAndPersist])
+  }, [canCompleteRound, mode, progress.currentIndex, queue.length, setProgressAndPersist])
 
   const handleKeyDown = useCallback(
     (event: KeyboardEvent<HTMLDivElement>) => {
@@ -334,6 +339,7 @@ export default function FreestylePage() {
           config={config}
           todayConfig={todayConfig}
           queue={queue}
+          canCompleteRound={canCompleteRound}
           progressQuestionStates={progress.questionStates}
           answeredQuestionIds={answeredQuestionIds}
           todaySummary={todaySummary}
