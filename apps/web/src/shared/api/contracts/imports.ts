@@ -1,3 +1,12 @@
+export interface ImportApplyContext {
+  source: 'import'
+  jobId: string | null
+  applyMode: 'replace' | 'append'
+  sourceTitle: string
+  expectedFingerprint?: string | null
+  expectedNodeCount?: number | null
+}
+
 import type { AiRuntimeOptions, ResolvedAiRuntimeMeta } from './profile'
 import type { MindMapDoc } from './mindmap'
 

@@ -2,7 +2,7 @@ import * as React from 'react'
 import {
   useMindMapFeedbackAudio,
   useMindMapFeedbackSettings,
-} from '@/shared/components/mindmap-host/useMindMapFeedback'
+} from '@/shared/feedback/mindmap-audio/useMindMapFeedback'
 import { getReviewFeedbackEffectiveVolume } from '@/shared/feedback/reviewFeedbackSettings'
 import {
   buildFeedbackStyle,

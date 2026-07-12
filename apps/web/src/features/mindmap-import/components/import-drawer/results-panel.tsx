@@ -1,6 +1,5 @@
 ﻿import type { MindMapImportResultsModel } from '@/features/mindmap-import/components/import-drawer/types'
 import { SourceTreeNode } from '@/features/mindmap-import/components/import-drawer/source-tree'
-import { MindMapFrame } from '@/shared/components/mindmap-host'
 import { Badge } from '@/shared/components/ui/badge'
 import { cn } from '@/shared/lib/utils'
 
@@ -22,6 +21,7 @@ export function MindMapImportResultsPanel({
     previewMindMapState,
     previewSectionRef,
     rawModelPreviewText,
+    renderMindMapPreview,
     reviewPreview,
     resolvedPreviewImageUrl,
     sourceKind,
@@ -144,16 +144,7 @@ export function MindMapImportResultsPanel({
               >
                 {previewMindMapState ? (
                   <div className="h-[360px] overflow-hidden rounded-[inherit]" data-testid="mindmap-import-preview-frame">
-                    <MindMapFrame
-                      key={`mindmap-import-preview-${previewFrameVersion}`}
-                      editorState={previewMindMapState}
-                      readonly
-                      syncOnPropChange
-                      forceSyncKey={`preview:${previewFrameVersion}`}
-                      preserveViewOnSync={false}
-                      onEditorStateChange={() => {}}
-                      className="h-full w-full rounded-[inherit] bg-background"
-                    />
+{renderMindMapPreview(previewMindMapState, previewFrameVersion)}
                   </div>
                 ) : sourceTree ? (
                   <div className="max-h-[320px] space-y-3 overflow-y-auto pr-1">

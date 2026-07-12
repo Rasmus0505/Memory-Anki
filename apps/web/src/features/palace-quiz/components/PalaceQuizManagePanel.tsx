@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { CheckCircle2, FileText, LoaderCircle, Plus, RefreshCw, Trash2 } from 'lucide-react'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
@@ -14,7 +14,6 @@ import type {
 } from '@/shared/api/contracts'
 import { getPalaceQuizOcrSourcesApi } from '@/entities/quiz/api'
 import {
-  buildEmptyQuestionForm,
   canManuallyEditQuestion,
   getQuestionOwnershipLabel,
   getQuestionTypeLabel,
@@ -77,7 +76,7 @@ export function PalaceQuizManagePanel({
   const [ocrError, setOcrError] = useState('')
   const [expandedOcrId, setExpandedOcrId] = useState<number | null>(null)
 
-  const loadOcrSources = async () => {
+  const loadOcrSources = useCallback(async () => {
     if (!palaceId) return
     setOcrLoading(true)
     setOcrError('')
@@ -92,13 +91,13 @@ export function PalaceQuizManagePanel({
     } finally {
       setOcrLoading(false)
     }
-  }
+  }, [palaceId])
 
   useEffect(() => {
     setOcrSources([])
     setExpandedOcrId(null)
     if (palaceId) void loadOcrSources()
-  }, [palaceId])
+  }, [loadOcrSources, palaceId])
 
   return (
     <div className="grid gap-4 xl:grid-cols-[minmax(0,1.1fr)_380px]">

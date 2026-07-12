@@ -15,7 +15,7 @@ import {
 import {
   getTimeRecordChartColor,
   timeRecordChartConfig,
-} from '@/features/profile/model/time-record-chart'
+} from '@/entities/session/model'
 import { ChartContainer, ChartTooltipContent } from '@/shared/components/ui/chart'
 
 interface TimeRecordsBreakdownChartProps {

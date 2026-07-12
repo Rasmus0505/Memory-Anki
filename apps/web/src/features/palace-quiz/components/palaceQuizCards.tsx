@@ -2,7 +2,7 @@ import { RotateCcw } from 'lucide-react'
 import {
   QuizQuestionInteraction,
   type QuizRuntimeState,
-} from '@/features/palace-quiz/QuizQuestionInteraction'
+} from '@/entities/quiz'
 import type {
   ChapterTreeNode,
 } from '@/features/palace-quiz/model/palaceQuizPage'

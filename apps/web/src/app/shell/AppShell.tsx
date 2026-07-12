@@ -160,7 +160,7 @@ function NavSectionLink({
       className={cn(
         'group relative flex items-center rounded-lg text-sm font-medium transition-all',
         isActive
-          ? 'bg-primary text-primary-foreground shadow-card'
+          ? 'bg-primary/10 text-primary ring-1 ring-primary/15'
           : 'text-muted-foreground hover:bg-secondary/80 hover:text-foreground',
         compact ? 'justify-center px-2.5 py-2.5' : 'gap-3 px-3.5 py-3',
       )}
@@ -175,7 +175,7 @@ function NavSectionLink({
             'inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[11px] font-semibold tabular-nums',
             compact ? 'absolute right-1 top-1' : 'ml-auto',
             isActive
-              ? 'bg-primary-foreground/20 text-primary-foreground'
+              ? 'bg-primary/15 text-primary'
               : 'bg-info text-info-foreground',
           )}
           title={`${runningCount} 个后台任务进行中`}
@@ -238,18 +238,12 @@ function SidebarContent({ runtimeInfo }: { runtimeInfo: RuntimeInfo | null }) {
           </div>
           {!compact ? (
             <div className="min-w-0">
-              <div className="truncate text-sm font-semibold">记忆宫殿</div>
+              <div className="truncate text-sm font-semibold tracking-tight">Memory Anki</div>
+              <div className="mt-0.5 text-[11px] text-muted-foreground">沉浸知识工作室</div>
               <SidebarClock />
               <div className="mt-2">
                 <RuntimeChannelBadge runtimeInfo={runtimeInfo} />
               </div>
-              {runtimeInfo ? (
-                <div className="mt-2 flex flex-col gap-1 text-[11px] text-muted-foreground">
-                  <div className="truncate" title={runtimeInfo.app_home}>
-                    {runtimeInfo.app_home}
-                  </div>
-                </div>
-              ) : null}
             </div>
           ) : null}
         </NavLink>
@@ -276,9 +270,7 @@ function SidebarContent({ runtimeInfo }: { runtimeInfo: RuntimeInfo | null }) {
 
 function MobileBottomNav() {
   const { pathname, search, hash } = useLocation()
-  const mobileSections = navSections.filter((section) =>
-    ['freestyle', 'palaces', 'review', 'english', 'profile'].includes(section.key),
-  )
+  const mobileSections = navSections
 
   useEffect(() => {
     const matchedSection = findNavSection(pathname)
@@ -349,8 +341,8 @@ function ShellFrame({ children }: PropsWithChildren) {
       <div className="min-h-screen bg-background">
         <aside
           className={cn(
-            'memory-anki-warm-panel fixed inset-y-4 left-4 z-20 hidden flex-col overflow-hidden rounded-xl border border-border/70 bg-card/95 shadow-card backdrop-blur-xl transition-all duration-300 lg:flex',
-            sidebarCollapsed ? 'w-[84px]' : 'w-[250px]',
+            'memory-anki-warm-panel fixed inset-y-3 left-3 z-20 hidden flex-col overflow-hidden rounded-2xl border border-border/80 bg-card shadow-soft transition-all duration-300 lg:flex',
+            sidebarCollapsed ? 'w-[76px]' : 'w-[236px]',
           )}
         >
           <div className={cn('flex justify-end px-3 pt-3', sidebarCollapsed ? 'pb-1' : 'pb-0')}>
@@ -387,10 +379,10 @@ function ShellFrame({ children }: PropsWithChildren) {
         <main
           className={cn(
             'min-w-0 pb-[calc(4.5rem+env(safe-area-inset-bottom,0px))] transition-[padding] duration-300 lg:pb-0',
-            sidebarCollapsed ? 'lg:pl-[122px]' : 'lg:pl-[282px]',
+            sidebarCollapsed ? 'lg:pl-[104px]' : 'lg:pl-[264px]',
           )}
         >
-          <div className="mx-auto w-full max-w-[1680px] px-2 py-2 sm:px-5 sm:py-5 lg:px-6 lg:py-7 xl:px-8">
+          <div className="mx-auto w-full max-w-[1600px] px-2 py-2 sm:px-5 sm:py-5 lg:px-7 lg:py-6 xl:px-9">
             <BackgroundTaskBar />
             {children}
           </div>

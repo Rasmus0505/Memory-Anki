@@ -3,26 +3,27 @@ import { Navigate, Route, Routes, type Location } from 'react-router-dom'
 import { RouteErrorBoundary } from '@/app/providers/RouteErrorBoundary'
 import { LoadingState } from '@/shared/components/state-placeholders'
 import { lazyWithRetry } from '@/shared/lib/lazyWithRetry'
-import DashboardPage from '@/features/dashboard/DashboardPage'
-import PalaceListPage from '@/features/palace-catalog/PalaceListPage'
-import PalaceShelfPage from '@/features/palace-catalog/PalaceShelfPage'
-import PalacePracticePage from '@/app/router/PalacePracticePage'
-import PalaceFocusPracticePage from '@/app/router/PalaceFocusPracticePage'
-import SegmentPracticePage from '@/app/router/SegmentPracticePage'
-import MiniPalacePracticePage from '@/app/router/MiniPalacePracticePage'
+import DashboardPage from '@/pages/insights/InsightsPage'
+import PalaceListPage from '@/pages/library/PalaceListPage'
+import PalaceShelfPage from '@/pages/library/PalaceLibraryPage'
 import ReviewOverviewPage from '@/app/router/review/ReviewOverview'
 import { readLastPageHistoryWorkspacePath } from '@/shared/page-history/pageHistoryStore'
 
 export const preloadPalaceViewPage = () => import('@/app/router/PalaceViewPage')
-export const preloadFreestylePage = () => import('@/features/freestyle/FreestylePage')
-export const preloadKnowledgePage = () => import('@/features/knowledge/KnowledgePage')
-export const preloadEnglishWorkspacePage = () => import('@/features/english/EnglishWorkspacePage')
-export const preloadEnglishCoursePage = () => import('@/features/english/EnglishCoursePage')
-export const preloadEnglishReadingPage = () => import('@/features/english-reading/EnglishReadingPage')
-export const preloadPalaceEditPage = () => import('@/features/palace-edit/PalaceEditPage')
-export const preloadPalaceQuizPage = () => import('@/features/palace-quiz/PalaceQuizPage')
-export const preloadProfilePage = () => import('@/features/profile/ProfileSettingsPage')
+export const preloadFreestylePage = () => import('@/pages/today/TodayLearningPage')
+export const preloadFreestyleSessionPage = () => import('@/pages/today/FreestyleSessionPage')
+export const preloadKnowledgePage = () => import('@/pages/library/KnowledgeLibraryPage')
+export const preloadEnglishWorkspacePage = () => import('@/pages/library/EnglishLibraryPage')
+export const preloadEnglishCoursePage = () => import('@/pages/library/EnglishCoursePage')
+export const preloadEnglishReadingPage = () => import('@/pages/library/EnglishReadingPage')
+export const preloadPalaceEditPage = () => import('@/pages/create/PalaceEditorPage')
+export const preloadPalaceQuizPage = () => import('@/pages/create/QuizWorkspacePage')
+export const preloadProfilePage = () => import('@/pages/settings/SettingsOverviewPage')
 export const preloadReviewSessionPage = () => import('@/app/router/review/ReviewSession')
+export const preloadPalacePracticePage = () => import('@/app/router/PalacePracticePage')
+export const preloadPalaceFocusPracticePage = () => import('@/app/router/PalaceFocusPracticePage')
+export const preloadSegmentPracticePage = () => import('@/app/router/SegmentPracticePage')
+export const preloadMiniPalacePracticePage = () => import('@/app/router/MiniPalacePracticePage')
 
 export function preloadReviewRoutes() {
   void preloadReviewSessionPage()
@@ -32,14 +33,15 @@ export function preloadPracticeRoutes() {
   void preloadPalaceEditPage()
   void preloadPalaceViewPage()
   void preloadPalaceQuizPage()
-  void import('@/app/router/PalacePracticePage')
-  void import('@/app/router/PalaceFocusPracticePage')
-  void import('@/app/router/SegmentPracticePage')
-  void import('@/app/router/MiniPalacePracticePage')
+  void preloadPalacePracticePage()
+  void preloadPalaceFocusPracticePage()
+  void preloadSegmentPracticePage()
+  void preloadMiniPalacePracticePage()
 }
 
 const KnowledgePage = lazyWithRetry(preloadKnowledgePage)
 const FreestylePage = lazyWithRetry(preloadFreestylePage)
+const FreestyleSessionPage = lazyWithRetry(preloadFreestyleSessionPage)
 const EnglishWorkspacePage = lazyWithRetry(preloadEnglishWorkspacePage)
 const EnglishCoursePage = lazyWithRetry(preloadEnglishCoursePage)
 const EnglishReadingPage = lazyWithRetry(preloadEnglishReadingPage)
@@ -47,13 +49,17 @@ const PalaceEditPage = lazyWithRetry(preloadPalaceEditPage)
 const PalaceViewPage = lazyWithRetry(preloadPalaceViewPage)
 const PalaceQuizPage = lazyWithRetry(preloadPalaceQuizPage)
 const ProfilePage = lazyWithRetry(preloadProfilePage)
-const ProfileFeedbackPage = lazyWithRetry(() => import('@/features/profile/ProfileFeedbackPage'))
-const ProfileTimerPage = lazyWithRetry(() => import('@/features/profile/ProfileTimerPage'))
-const ProfileAiPage = lazyWithRetry(() => import('@/features/profile/ProfileAiPage'))
+const ProfileFeedbackPage = lazyWithRetry(() => import('@/pages/settings/FeedbackSettingsPage'))
+const ProfileTimerPage = lazyWithRetry(() => import('@/pages/settings/TimerSettingsPage'))
+const ProfileAiPage = lazyWithRetry(() => import('@/pages/settings/AiSettingsPage'))
 const ProfileBackupsPage = lazyWithRetry(
-  () => import('@/features/profile/ProfileBackupsPage'),
+  () => import('@/pages/settings/BackupSettingsPage'),
 )
 const ReviewSessionPage = lazyWithRetry(preloadReviewSessionPage)
+const PalacePracticePage = lazyWithRetry(preloadPalacePracticePage)
+const PalaceFocusPracticePage = lazyWithRetry(preloadPalaceFocusPracticePage)
+const SegmentPracticePage = lazyWithRetry(preloadSegmentPracticePage)
+const MiniPalacePracticePage = lazyWithRetry(preloadMiniPalacePracticePage)
 const ReviewFeedbackPreviewRoute = lazyWithRetry(
   () => import('@/app/router/ReviewFeedbackPreviewRoute'),
 )
@@ -73,6 +79,7 @@ const REGISTERED_EXACT_PATHS = new Set<string>([
   '/',
   '/dashboard',
   '/freestyle',
+  '/freestyle/session',
   '/knowledge',
   '/english',
   '/english-reading',
@@ -157,6 +164,7 @@ export function AppRoutes({ location }: { location?: Location }) {
           <Route path="/" element={<StartupRedirect />} />
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/freestyle" element={<FreestylePage />} />
+          <Route path="/freestyle/session" element={<FreestyleSessionPage />} />
           <Route path="/palaces" element={<PalaceShelfPage />} />
           <Route path="/english" element={<EnglishWorkspacePage />} />
           <Route path="/english-reading" element={<EnglishReadingPage />} />

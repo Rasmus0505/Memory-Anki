@@ -2,12 +2,12 @@ import { toast as sonnerToast, type ExternalToast } from 'sonner'
 import type {
   MindMapFeedbackEvent,
   MindMapFeedbackOrigin,
-} from '@/shared/components/mindmap-host/hostBridgeUtils'
+} from '@/shared/feedback/feedbackEvents'
 import {
   playWebAudioComboMilestone,
   playWebAudioFeedbackEvent,
   playWebAudioFireworkAccent,
-} from '@/shared/components/mindmap-host/webAudioFeedback'
+} from '@/shared/feedback/mindmap-audio/webAudioFeedback'
 import {
   REVIEW_FEEDBACK_EFFECTIVE_VOLUME_MAX,
   getReviewFeedbackEffectiveVolume,

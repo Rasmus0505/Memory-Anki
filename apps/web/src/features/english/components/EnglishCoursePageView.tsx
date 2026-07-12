@@ -87,7 +87,6 @@ export function EnglishCoursePageView(props: EnglishCoursePageViewProps) {
     course,
     videoRef,
     typingInputRef,
-    timer,
     mediaUrl,
     isCourseDisplayCompleted,
     activeSentence,

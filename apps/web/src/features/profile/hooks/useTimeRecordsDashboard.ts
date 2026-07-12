@@ -444,7 +444,7 @@ export function useTimeRecordsDashboard(
     pageSize,
     totalRecords,
     totalPages,
-    setPage: (value) => setPage(Math.min(Math.max(1, value), totalPages)),
+    setPage: (value) => setPage(Math.max(1, value)),
     setPageSize: (value) => {
       setPageSize(value)
       setPage(1)

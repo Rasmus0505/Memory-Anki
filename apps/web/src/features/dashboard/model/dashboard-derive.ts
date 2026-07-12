@@ -1,6 +1,6 @@
 import type { DashboardResponse } from '@/shared/api/contracts'
 import { formatDuration } from '@/entities/session/model'
-import { getTimeRecordChartColor } from '@/features/profile/model/time-record-chart'
+import { getTimeRecordChartColor } from '@/entities/session/model'
 
 export function formatLearningTooltip(item: DashboardResponse['today_learning_palaces'][number]) {
   const lines = [

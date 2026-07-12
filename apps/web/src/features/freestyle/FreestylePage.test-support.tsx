@@ -54,14 +54,14 @@ vi.mock('@/entities/quiz/api', () => ({
     requestPalaceShortAnswerFeedbackApiMock(...args),
 }))
 
-vi.mock('@/features/palace-quiz/components/PalaceQuizMemoryLookupDialog', () => ({
-  PalaceQuizMemoryLookupDialog: (props: unknown) => {
+vi.mock('@/widgets/palace-memory-lookup', () => ({
+  PalaceMemoryLookupDialog: (props: unknown) => {
     memoryLookupDialogMock(props)
     return null
   },
 }))
 
-vi.mock('@/features/ai-config/useAiRunConfigDialog', () => ({
+vi.mock('@/entities/ai-runtime', () => ({
   useAiRunConfigDialog: () => ({
     promptForAiOptions: (...args: unknown[]) => promptForAiOptionsMock(...args),
     aiRunConfigDialog: null,

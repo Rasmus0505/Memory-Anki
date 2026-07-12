@@ -1,5 +1,4 @@
-import { API_BASE, fetchWithMutationQueue, request, uploadWithFormData } from '@/shared/api/http'
-import { readJsonResponse } from '@/shared/api/jsonResponse'
+import { request, uploadWithFormData } from '@/shared/api/http'
 import type {
   MindMapEditorState,
   PalaceQuizMiniPalaceClassificationResult,
@@ -12,10 +11,6 @@ import type {
   PalaceQuestionExplainResult,
   PalaceShortAnswerFeedback,
 } from '@/shared/api/contracts'
-
-async function readQuizJson<T>(response: Response): Promise<T> {
-  return readJsonResponse<T>(response, { feature: 'Palace quiz API' })
-}
 
 export function getPalaceQuizQuestionsApi(palaceId: number) {
   return request<{ items: PalaceQuizQuestion[] }>(`/palaces/${palaceId}/aggregated-quiz-questions`)

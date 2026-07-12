@@ -11,11 +11,11 @@ import {
   type CompleteFlowPayload,
   type MindMapReviewFlowProps,
   type ReviewFlowSnapshot,
-} from '@/features/review/components/MindMapReviewFlow'
+} from '@/widgets/mindmap-review-flow'
 import { StageSelectDialog } from '@/features/review/components/StageSelectDialog'
-import { consumePrefetchedStudySession, type StudyWarmupKind } from '@/features/review/studyWarmup'
+import { consumePrefetchedStudySession, type StudyWarmupKind } from '@/shared/api/studySessionWarmup'
 
-export type { CompleteFlowPayload } from '@/features/review/components/MindMapReviewFlow'
+export type { CompleteFlowPayload } from '@/widgets/mindmap-review-flow'
 
 export interface PracticeProgressSnapshot {
   completed: boolean

@@ -3,12 +3,6 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { MindMapImportDrawer } from '@/features/mindmap-import/components/MindMapImportDrawer'
 
-vi.mock('@/shared/components/mindmap-host', () => ({
-  MindMapFrame: ({ forceSyncKey }: { forceSyncKey?: string | number | null }) => (
-    <div data-testid="mindmap-frame">{String(forceSyncKey ?? '')}</div>
-  ),
-}))
-
 function buildProps(
   overrides: Partial<React.ComponentProps<typeof MindMapImportDrawer>> = {},
 ): React.ComponentProps<typeof MindMapImportDrawer> {
@@ -31,6 +25,9 @@ function buildProps(
     error: '',
     sourceTree: null,
     previewEditorDoc: null,
+    renderMindMapPreview: (_editorState, version) => (
+      <div data-testid="mindmap-frame">{`preview:${version}`}</div>
+    ),
     extractedText: '',
     imagePreviewUrl: '',
     batchImages: [],
@@ -175,6 +172,9 @@ describe('MindMapImportDrawer', () => {
             children: [{ text: '荷马时期', children: [] }],
           },
           previewEditorDoc: null,
+    renderMindMapPreview: (_editorState, version) => (
+      <div data-testid="mindmap-frame">{`preview:${version}`}</div>
+    ),
         })}
       />,
     )
@@ -212,6 +212,9 @@ describe('MindMapImportDrawer', () => {
             children: [{ text: '荷马时期', children: [] }],
           },
           previewEditorDoc: null,
+    renderMindMapPreview: (_editorState, version) => (
+      <div data-testid="mindmap-frame">{`preview:${version}`}</div>
+    ),
         })}
       />,
     )

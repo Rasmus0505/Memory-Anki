@@ -82,7 +82,7 @@ export function usePageHistoryAdapter({
       entityRevisions: captured.entityRevisions ?? {},
       completionState: captured.completionState ?? null,
     }))
-  }, [fullPath, location.key, pageKey, sectionKey])
+  }, [fullPath, location.key, location.pathname, pageKey, sectionKey])
 
   useLayoutEffect(() => {
     if (!isActive || !ready || restoredKeyRef.current === location.key) return

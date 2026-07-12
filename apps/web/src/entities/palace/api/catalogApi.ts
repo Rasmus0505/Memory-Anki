@@ -1,6 +1,5 @@
 import { API_BASE, request, uploadWithFormData } from '@/shared/api/http'
 import type {
-  MindMapEditorState,
   PalaceEditorMeta,
   PalaceEditorResponse,
   PalaceFocusSessionResponse,

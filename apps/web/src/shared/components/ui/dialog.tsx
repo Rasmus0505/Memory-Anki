@@ -160,12 +160,10 @@ function Dialog({
   onOpenChange,
   children,
   modal = true,
-  className: _className,
 }: PropsWithChildren<{
   open: boolean
   onOpenChange: (open: boolean) => void
   modal?: boolean
-  className?: string
 }>) {
   return (
     <DialogModalContext.Provider value={{ modal }}>

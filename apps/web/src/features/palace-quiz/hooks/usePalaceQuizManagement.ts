@@ -21,7 +21,6 @@ export function usePalaceQuizManagement({
   palaceId,
   questions,
   visibleQuestionIds,
-  filteredQuestions,
   refreshQuestions,
   removeQuestionStates,
   registerQuizActivity,
@@ -30,7 +29,6 @@ export function usePalaceQuizManagement({
   palaceId: number | null
   questions: PalaceQuizQuestion[]
   visibleQuestionIds: number[]
-  filteredQuestions: PalaceQuizQuestion[]
   refreshQuestions: () => Promise<void>
   removeQuestionStates: (questionIds: number[]) => void
   registerQuizActivity: (source: string) => void

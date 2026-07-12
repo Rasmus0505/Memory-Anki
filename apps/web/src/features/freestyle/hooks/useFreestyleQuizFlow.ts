@@ -6,7 +6,7 @@ import {
   useState,
   type MutableRefObject,
 } from 'react'
-import type { useAiRunConfigDialog } from '@/features/ai-config/useAiRunConfigDialog'
+import type { useAiRunConfigDialog } from '@/entities/ai-runtime'
 import { createFreestyleQuestionAttemptApi } from '@/features/freestyle/api'
 import { buildAttemptHistoryPayload } from '@/features/freestyle/model/freestyle-attempts'
 import { isQuizCard } from '@/features/freestyle/model/freestyle-cards'
@@ -21,9 +21,9 @@ import {
   saveTodayTrainingProgress,
   type FreestyleMode,
 } from '@/features/freestyle/model/today-training'
-import type { QuizRuntimeState } from '@/features/palace-quiz/QuizQuestionInteraction'
-import { useQuizAttemptOrchestration } from '@/features/palace-quiz/hooks/useQuizAttemptOrchestration'
-import { emitQuizResultFeedback } from '@/features/palace-quiz/model/quizResultFeedback'
+import type { QuizRuntimeState } from '@/entities/quiz'
+import { useQuizAttemptOrchestration } from '@/entities/quiz'
+import { emitQuizResultFeedback } from '@/entities/quiz'
 import type { FreestyleCard, FreestyleQuizCard } from '@/shared/api/contracts'
 import { emitReviewConfetti } from '@/shared/components/celebration'
 import { appConfirm } from '@/shared/components/ui/native-dialog'

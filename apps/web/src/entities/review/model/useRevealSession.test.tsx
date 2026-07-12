@@ -1,7 +1,7 @@
 import { act, renderHook } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { MindMapEditorState } from '@/shared/api/contracts'
-import type { MindMapSelection } from '@/shared/components/mindmap-host'
+import type { MindMapSelection } from '@/entities/mindmap-document'
 import { useRevealSession } from './useRevealSession'
 
 const editorState: MindMapEditorState = {

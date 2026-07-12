@@ -42,7 +42,7 @@ import {
   getPalaceCatalogScopeTitle,
 } from '@/features/palace-catalog/model/palaceCatalog'
 
-export default function PalaceList() {
+export default function PalaceList({ prefetchReviewSession }: { prefetchReviewSession?: (reviewId: number) => void }) {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -112,6 +112,7 @@ export default function PalaceList() {
     allPalaces,
     fetchData,
     navigate,
+    prefetchReviewSession,
   })
 
   const renderPalaceCard = useCallback(

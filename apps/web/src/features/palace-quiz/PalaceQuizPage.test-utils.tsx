@@ -63,8 +63,8 @@ vi.mock('@/entities/palace/api', () => ({
   getPalaceEditorApi: (...args: unknown[]) => getPalaceEditorApiMock(...args),
 }))
 
-vi.mock('@/shared/components/mindmap-host', () => ({
-  MindMapFrame: (props: {
+vi.mock('@/features/mindmap-editor', () => ({
+  MindMapEditorSurface: (props: {
     editorState?: any
     readonly?: boolean
     focusRequestNodeUid?: string | null
@@ -105,7 +105,7 @@ vi.mock('@/shared/components/mindmap-host', () => ({
   },
 }))
 
-vi.mock('@/features/ai-config/useAiRunConfigDialog', () => ({
+vi.mock('@/entities/ai-runtime', () => ({
   useAiRunConfigDialog: () => ({
     promptForAiOptions: (...args: unknown[]) => promptForAiOptionsMock(...args),
     promptForScenarioAiOptions: (...args: unknown[]) => promptForScenarioAiOptionsMock(...args),

@@ -8,7 +8,7 @@ import {
   YAxis,
 } from 'recharts'
 import { formatDuration, type DailyTrendPoint } from '@/entities/session/model'
-import { timeRecordChartConfig } from '@/features/profile/model/time-record-chart'
+import { timeRecordChartConfig } from '@/entities/session/model'
 import { ChartContainer, ChartTooltipContent } from '@/shared/components/ui/chart'
 
 interface TimeRecordsTrendChartProps {

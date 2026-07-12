@@ -5,7 +5,7 @@ import type {
   FreestyleRange,
   FreestyleQuizCard,
 } from '@/shared/api/contracts'
-import type { QuizRuntimeState } from '@/features/palace-quiz/QuizQuestionInteraction'
+import type { QuizRuntimeState } from '@/entities/quiz'
 
 export type FreestyleOrderMode = 'palace_complete_then_random' | 'random' | 'sequential'
 export type FreestyleActionFrequency = 'none' | 'low' | 'medium' | 'high'

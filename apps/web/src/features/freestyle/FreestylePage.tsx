@@ -1,13 +1,12 @@
 import {
   useCallback,
   useEffect,
-  useMemo,
   useRef,
   useState,
   type KeyboardEvent,
 } from 'react'
 import { useLocation } from 'react-router-dom'
-import { useAiRunConfigDialog } from '@/features/ai-config/useAiRunConfigDialog'
+import { useAiRunConfigDialog } from '@/entities/ai-runtime'
 import { FreestyleActionRail, FreestyleStatsPill } from '@/features/freestyle/components/FreestyleActionRail'
 import { FreestyleCardScroller } from '@/features/freestyle/components/FreestyleCardScroller'
 import { FreestyleDialogsHost } from '@/features/freestyle/components/FreestyleDialogsHost'

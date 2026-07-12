@@ -29,7 +29,6 @@ export function RouteProgressBar() {
   // 当 lazy chunk 触发 Suspense 时，路由变化会有短暂延迟
   // 我们在 pathname 变化时快速 done，如果加载很快用户几乎看不到进度条
   useEffect(() => {
-    const handleStart = () => NProgress.start()
     const handleDone = () => NProgress.done()
 
     // 监听 Suspense 相关的 chunk 加载

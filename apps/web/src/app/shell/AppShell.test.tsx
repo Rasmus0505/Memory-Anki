@@ -19,11 +19,12 @@ const preloadReviewRoutes = vi.fn()
 const preloadEnglishWorkspacePage = vi.fn()
 const preloadEnglishReadingPage = vi.fn()
 const preloadFreestylePage = vi.fn()
+const preloadFreestyleSessionPage = vi.fn()
 const preloadKnowledgePage = vi.fn()
 const preloadPalaceEditPage = vi.fn()
 const preloadProfilePage = vi.fn()
 const backgroundTaskRegistryMock = vi.hoisted(() => ({
-  useRunningTaskCountBySection: vi.fn((_section: unknown) => 0),
+  useRunningTaskCountBySection: vi.fn<(section: unknown) => number>(() => 0),
 }))
 
 vi.mock('@/entities/runtime/api', () => ({
@@ -49,6 +50,7 @@ vi.mock('@/app/router/appRoutes', () => ({
   preloadEnglishWorkspacePage: () => preloadEnglishWorkspacePage(),
   preloadEnglishReadingPage: () => preloadEnglishReadingPage(),
   preloadFreestylePage: () => preloadFreestylePage(),
+  preloadFreestyleSessionPage: () => preloadFreestyleSessionPage(),
   preloadKnowledgePage: () => preloadKnowledgePage(),
   preloadPalaceEditPage: () => preloadPalaceEditPage(),
   preloadProfilePage: () => preloadProfilePage(),
@@ -168,7 +170,7 @@ describe('AppShell', () => {
     expect(await screen.findByText('调用与错误日志')).toBeTruthy()
   })
 
-  it('keeps only the reading nav item active on the english reading route', async () => {
+  it('groups english reading under the knowledge library navigation', async () => {
     getRuntimeInfoApi.mockResolvedValue({
       channel: 'stable',
       commit: 'abcdef1234567890',
@@ -188,11 +190,11 @@ describe('AppShell', () => {
 
     await screen.findAllByText(/Stable abcdef12/)
 
-    const readingLink = screen.getAllByRole('link', { name: '英语阅读' })[0]
-    const englishLink = screen.getAllByRole('link', { name: '英语听力' })[0]
+    const libraryLink = screen.getAllByRole('link', { name: '知识库' })[0]
+    const creationLink = screen.getAllByRole('link', { name: '内容创作' })[0]
 
-    expect(readingLink.className).toContain('bg-primary')
-    expect(englishLink.className).not.toContain('bg-primary')
+    expect(libraryLink.className).toContain('bg-primary')
+    expect(creationLink.className).not.toContain('bg-primary')
   })
 
   it('renders a mobile bottom navigation that reuses the main route targets', async () => {
@@ -211,10 +213,10 @@ describe('AppShell', () => {
     expect(mobileNav.querySelectorAll('a')).toHaveLength(5)
     expect(mobileNav.querySelector('a[href="/freestyle"]')?.className).toContain('bg-primary')
     expect(mobileNav.querySelector('a[href="/palaces"]')).toBeTruthy()
-    expect(mobileNav.querySelector('a[href="/review"]')).toBeTruthy()
+    expect(mobileNav.querySelector('a[href="/dashboard"]')).toBeTruthy()
   })
 
-  it('places freestyle second in the main navigation and keeps it active on its route', async () => {
+  it('renders the five learning-loop sections and keeps today active', async () => {
     getRuntimeInfoApi.mockResolvedValue({
       channel: 'stable',
       commit: 'abcdef1234567890',
@@ -236,10 +238,10 @@ describe('AppShell', () => {
     const navLabels = screen
       .getAllByRole('link')
       .map((link) => link.textContent?.trim() || '')
-      .filter((label) => ['仪表盘', '随心模式', '记忆宫殿'].includes(label))
+      .filter((label) => ['今日学习', '知识库', '内容创作', '复习分析', '系统设置'].includes(label))
 
-    expect(navLabels.slice(0, 3)).toEqual(['仪表盘', '随心模式', '记忆宫殿'])
-    const freestyleLink = screen.getAllByRole('link', { name: '随心模式' })[0]
+    expect(navLabels.slice(0, 5)).toEqual(['今日学习', '知识库', '内容创作', '复习分析', '系统设置'])
+    const freestyleLink = screen.getAllByRole('link', { name: '今日学习' })[0]
     expect(freestyleLink.className).toContain('bg-primary')
 
     preloadFreestylePage.mockClear()
@@ -247,7 +249,7 @@ describe('AppShell', () => {
     expect(preloadFreestylePage).toHaveBeenCalled()
   })
 
-  it('keeps palace navigation active on a palace quiz route', async () => {
+  it('keeps content creation active on a palace quiz route', async () => {
     getRuntimeInfoApi.mockResolvedValue({
       channel: 'stable',
       commit: 'abcdef1234567890',
@@ -267,11 +269,11 @@ describe('AppShell', () => {
 
     await screen.findAllByText(/Stable abcdef12/)
 
-    const palaceLink = screen.getAllByRole('link', { name: '记忆宫殿' })[0]
-    expect(palaceLink.className).toContain('bg-primary')
+    const creationLink = screen.getAllByRole('link', { name: '内容创作' })[0]
+    expect(creationLink.className).toContain('bg-primary')
   })
 
-  it('warms palace navigation targets on hover', async () => {
+  it('warms knowledge library targets on hover', async () => {
     getRuntimeInfoApi.mockResolvedValue({
       channel: 'stable',
       commit: 'abcdef1234567890',
@@ -292,11 +294,11 @@ describe('AppShell', () => {
     await screen.findAllByText(/Stable abcdef12/)
     const beforeHoverCalls = prefetchPalaceSubjectShelfApi.mock.calls.length
 
-    fireEvent.mouseEnter(screen.getAllByRole('link', { name: '记忆宫殿' })[0]!)
+    fireEvent.mouseEnter(screen.getAllByRole('link', { name: '知识库' })[0]!)
 
     expect(prefetchPalaceSubjectShelfApi.mock.calls.length).toBe(beforeHoverCalls + 1)
     expect(prefetchPalacesGroupedSummaryApi.mock.calls.length).toBeGreaterThanOrEqual(1)
-    expect(preloadPracticeRoutes).toHaveBeenCalled()
+    expect(preloadKnowledgePage).toHaveBeenCalled()
   })
 
   it('warms core study routes, queues, and dashboard on startup', async () => {
@@ -329,7 +331,7 @@ describe('AppShell', () => {
     })
   })
 
-  it('returns desktop palace navigation to the last visited child route while mobile uses the shelf root', async () => {
+  it('returns content creation to the last visited editor route', async () => {
     getRuntimeInfoApi.mockResolvedValue({
       channel: 'stable',
       commit: 'abcdef1234567890',
@@ -350,18 +352,18 @@ describe('AppShell', () => {
     await screen.findAllByText(/Stable abcdef12/)
     expect(screen.getByText('/palaces/30/edit?miniPalaceId=5&miniPalaceMode=edit#mindmap')).toBeTruthy()
 
-    fireEvent.click(screen.getAllByRole('link', { name: '英语听力' })[0]!)
+    fireEvent.click(screen.getAllByRole('link', { name: '系统设置' })[0]!)
     await waitFor(() => {
-      expect(screen.getByText('/english')).toBeTruthy()
+      expect(screen.getByText('/profile')).toBeTruthy()
     })
 
     const rememberedPalacePath = '/palaces/30/edit?miniPalaceId=5&miniPalaceMode=edit#mindmap'
     const mobileNav = screen.getByRole('navigation', { name: '移动端主导航' })
     const desktopLinks = screen.getAllByRole('link').filter((link) => !mobileNav.contains(link))
     expect(desktopLinks.some((link) => link.getAttribute('href') === rememberedPalacePath)).toBe(true)
-    expect(mobileNav.querySelector('a[href="/palaces"]')).toBeTruthy()
+    expect(mobileNav.querySelector(`a[href="${rememberedPalacePath}"]`)).toBeTruthy()
 
-    fireEvent.click(screen.getAllByRole('link', { name: '记忆宫殿' })[0]!)
+    fireEvent.click(screen.getAllByRole('link', { name: '内容创作' })[0]!)
     await waitFor(() => {
       expect(screen.getByText(rememberedPalacePath)).toBeTruthy()
     })
@@ -386,12 +388,12 @@ describe('AppShell', () => {
     )
 
     await screen.findAllByText(/Stable abcdef12/)
-    fireEvent.click(screen.getAllByRole('link', { name: '个人中心' })[0]!)
+    fireEvent.click(screen.getAllByRole('link', { name: '系统设置' })[0]!)
     await waitFor(() => {
       expect(screen.getByText('/profile')).toBeTruthy()
     })
 
-    fireEvent.click(screen.getAllByRole('link', { name: '复习' })[0]!)
+    fireEvent.click(screen.getAllByRole('link', { name: '复习分析' })[0]!)
     await waitFor(() => {
       expect(screen.getByText('/review/session/9')).toBeTruthy()
     })

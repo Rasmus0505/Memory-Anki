@@ -9,8 +9,8 @@ import {
 import {
   ReviewSessionContainer,
   type ReviewSessionContainerSession,
-} from '@/features/review/ReviewSessionContainer'
-import { buildReviewOverviewPath } from '@/features/review/reviewSessionRoutes'
+} from '@/widgets/mindmap-review-flow'
+import { buildReviewOverviewPath } from '@/entities/review'
 
 function toContainerSession(session: ReviewScheduleSummary): ReviewSessionContainerSession {
   return {

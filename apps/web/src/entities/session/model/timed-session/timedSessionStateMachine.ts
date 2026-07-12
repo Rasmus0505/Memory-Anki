@@ -7,9 +7,7 @@ import {
 } from '@/entities/session/model'
 import {
   getTimerAutomationRule,
-  isActivityEnabled,
   readTimerAutomationConfig,
-  type TimerAutomationActivityKind,
   type TimerAutomationConfig,
 } from '@/shared/components/session/timer-automation-config'
 import {
@@ -55,6 +53,8 @@ import {
   buildSuspendedSceneLeaveState,
   useTimedSessionSceneLeave,
 } from './timedSessionSceneLeave'
+import { useTimedSessionActivityActions } from './useTimedSessionActivityActions'
+import { useTimedSessionFocusActions } from './useTimedSessionFocusActions'
 import {
   closeSceneSegment,
   createActiveSceneSegment,
@@ -556,98 +556,32 @@ export function useTimedSession({
     [autoPauseRef, closeActiveSceneSegment, hiddenPauseRef, persistSnapshot, pushEvent, resolvedAutomation.resumeWindowMs, resumeSuspendedScene, stopTicker, timedSessionAutoSaveKey],
   )
 
-  const registerActivity = React.useCallback((
-    activityKind: TimerAutomationActivityKind,
-    meta?: TimedSessionMeta,
-  ) => {
-    if (!sceneActiveRef.current) {
-      return
-    }
-    if (!isActivityEnabled(activityKind, automationConfig)) {
-      return
-    }
-    if (statusRef.current === 'idle') {
-      start({ source: 'auto', ...(meta ?? {}) })
-      return
-    }
-    if (statusRef.current === 'paused') {
-      resume({ source: 'auto', ...(meta ?? {}) })
-      return
-    }
-    if (statusRef.current === 'running') {
-      lastActivityAtRef.current = Date.now()
-      armAutoPause()
-    }
-  }, [armAutoPause, automationConfig, resume, start])
-
-  const logEvent = React.useCallback((type: SessionEventRecord['type'], meta?: TimedSessionMeta) => {
-    pushEvent(type, meta)
-  }, [pushEvent])
-
-  const acknowledgeFocusInterval = React.useCallback((count: number, meta?: TimedSessionMeta) => {
-    const safeCount = Math.max(0, Math.round(count))
-    if (safeCount <= focusRoundRef.current.acknowledgedIntervalCount) return
-    const next = {
-      ...focusRoundRef.current,
-      acknowledgedIntervalCount: safeCount,
-    }
-    focusRoundRef.current = next
-    setFocusRound(next)
-    pushEvent('focus_interval_complete', {
-      round_index: next.roundIndex,
-      interval_count: safeCount,
-      ...(meta ?? {}),
-    })
-    markDirty(timedSessionAutoSaveKey, 'focus_interval_complete')
-  }, [pushEvent, timedSessionAutoSaveKey])
-
-  const acknowledgeFocusGoal = React.useCallback((meta?: TimedSessionMeta) => {
-    if (focusRoundRef.current.goalCelebrated) return
-    const next = {
-      ...focusRoundRef.current,
-      goalCelebrated: true,
-    }
-    focusRoundRef.current = next
-    setFocusRound(next)
-    pushEvent('focus_round_complete', {
-      round_index: next.roundIndex,
-      ...(meta ?? {}),
-    })
-    markDirty(timedSessionAutoSaveKey, 'focus_round_complete')
-  }, [pushEvent, timedSessionAutoSaveKey])
-
-  const startNextFocusRound = React.useCallback((meta?: TimedSessionMeta) => {
-    const next: TimedSessionFocusRoundState = {
-      roundIndex: focusRoundRef.current.roundIndex + 1,
-      startedAtEffectiveSeconds: effectiveSecondsRef.current,
-      acknowledgedIntervalCount: 0,
-      goalCelebrated: false,
-    }
-    focusRoundRef.current = next
-    setFocusRound(next)
-    pushEvent('focus_round_continue', {
-      round_index: next.roundIndex,
-      started_at_effective_seconds: next.startedAtEffectiveSeconds,
-      ...(meta ?? {}),
-    })
-    markDirty(timedSessionAutoSaveKey, 'focus_round_continue')
-  }, [pushEvent, timedSessionAutoSaveKey])
-
-  const adjustDuration = React.useCallback((seconds: number) => {
-    effectiveSecondsRef.current = Math.max(0, Math.round(seconds))
-    setEffectiveSeconds(effectiveSecondsRef.current)
-    if (focusRoundRef.current.startedAtEffectiveSeconds > effectiveSecondsRef.current) {
-      const next = { ...DEFAULT_TIMED_SESSION_FOCUS_ROUND }
-      focusRoundRef.current = next
-      setFocusRound(next)
-    }
-    setDurationEdited(true)
-    durationEditedRef.current = true
-    pushEvent('adjust_duration', { seconds: effectiveSecondsRef.current })
-    persistSnapshot()
-    markDirty(timedSessionAutoSaveKey, 'adjust_duration')
-  }, [persistSnapshot, pushEvent, timedSessionAutoSaveKey])
-
+  const { logEvent, registerActivity } = useTimedSessionActivityActions({
+    armAutoPause,
+    automationConfig,
+    lastActivityAtRef,
+    pushEvent,
+    resume,
+    sceneActiveRef,
+    start,
+    statusRef,
+  })
+  const {
+    acknowledgeFocusGoal,
+    acknowledgeFocusInterval,
+    adjustDuration,
+    startNextFocusRound,
+  } = useTimedSessionFocusActions({
+    autoSaveKey: timedSessionAutoSaveKey,
+    durationEditedRef,
+    effectiveSecondsRef,
+    focusRoundRef,
+    persistSnapshot,
+    pushEvent,
+    setDurationEdited,
+    setEffectiveSeconds,
+    setFocusRound,
+  })
   const complete = React.useCallback(
     async (
       method: SessionCompletionMethod,

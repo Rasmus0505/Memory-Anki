@@ -21,12 +21,12 @@ vi.mock('react-router-dom', () => ({
   useParams: () => ({ id: mocks.routeId }),
 }))
 
-vi.mock('@/features/review/studyWarmup', () => ({
+vi.mock('@/shared/api/studySessionWarmup', () => ({
   consumePrefetchedStudySession: (...args: unknown[]) =>
     mocks.consumePrefetchedStudySession(...args),
 }))
 
-vi.mock('@/features/review/components/MindMapReviewFlow', () => ({
+vi.mock('@/widgets/mindmap-review-flow', () => ({
   MindMapReviewFlow: (props: Record<string, any>) => {
     mocks.latestFlowProps = props
     return (

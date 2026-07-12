@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { toast } from '@/shared/feedback/toast'
-import { useAiRunConfigDialog } from '@/features/ai-config/useAiRunConfigDialog'
-import type { MindMapAiSplitRequestPayload, MindMapSelection } from '@/shared/components/mindmap-host'
-import type { MindMapFeedbackEvent, MindMapFeedbackFxPayload } from '@/shared/components/mindmap-host/hostBridgeUtils'
+import { useAiRunConfigDialog } from '@/entities/ai-runtime'
+import type { MindMapSelection } from '@/entities/mindmap-document'
+import type { ImportApplyContext } from '@/shared/api/contracts/imports'
+import type { MindMapAiSplitRequestPayload } from '@/shared/ui/mindmap-canvas/capabilities'
+import type { MindMapFeedbackEvent, MindMapFeedbackFxPayload } from '@/shared/feedback/feedbackEvents'
 import { readTimerAutomationConfig } from '@/shared/components/session/timer-automation-config'
 import { shouldAutoStartOnPageEnter, useTimedSession } from '@/shared/hooks/useTimedSession'
 import { useRouteResidency } from '@/shared/routing/RouteResidency'
@@ -16,12 +18,10 @@ import { usePalacePracticeMode } from '@/features/palace-edit/hooks/usePalacePra
 import { usePalaceSegmentsController } from '@/features/palace-edit/hooks/usePalaceSegmentsController'
 import { usePalaceVersionsController } from '@/features/palace-edit/hooks/usePalaceVersionsController'
 import type { StatusBadgeState } from '@/features/palace-edit/model/palace-edit-types'
-import type { ImportApplyContext } from '@/features/mindmap-import'
 import { splitMindMapNodeApi, togglePalaceFocusNodeApi } from '@/entities/palace/api'
-import { getEnglishContinueCourseApi } from '@/features/english/api'
+import { getEnglishContinueCourseApi } from '@/entities/english/api'
 import type { MindMapEditorState } from '@/shared/api/contracts'
 import { useMemoryAnkiShortcuts } from '@/entities/preferences/model/memoryAnkiShortcuts'
-import { useMiniPalaceController } from '@/features/mini-palace'
 export type { ChapterOption, PalaceMeta } from '@/features/palace-edit/model/palace-edit-types'
 
 function readSelectionNodeUid(nodes: MindMapSelection[]) {
@@ -34,10 +34,7 @@ export function usePalaceEditPage() {
   const { id } = useParams()
   const navigate = useNavigate()
   const location = useLocation()
-  const [searchParams, setSearchParams] = useSearchParams()
   const palaceId = id ? Number(id) : null
-  const miniPalaceIdFromQuery = searchParams.get('miniPalaceId')
-  const miniPalaceModeFromQuery = searchParams.get('miniPalaceMode')
   const [replaceSyncVersion, setReplaceSyncVersion] = useState(0)
   const [selectedNodes, setSelectedNodes] = useState<MindMapSelection[]>([])
   const [modeFocusRequest, setModeFocusRequest] = useState<{
@@ -71,7 +68,6 @@ export function usePalaceEditPage() {
   const palaceTitle = palace?.title || '未命名宫殿'
   const selectedNode = selectedNodes[0] ?? null
   const selectedNodeUid = selectedNode?.uid ? String(selectedNode.uid) : null
-  const selectedNodeText = selectedNode?.text ? String(selectedNode.text) : ''
   const parsedEditorDoc = useMemo(
     () => parseMindMapDoc(documentState.editorState?.editor_doc ?? null),
     [documentState.editorState?.editor_doc],
@@ -95,15 +91,6 @@ export function usePalaceEditPage() {
     palaceId,
     editorState: documentState.editorState,
     title: meta.title || palaceTitle,
-    timer,
-  })
-
-  const miniPalace = useMiniPalaceController({
-    palaceId,
-    title: meta.title || palaceTitle,
-    editorState: documentState.editorState,
-    selectedNodeUid,
-    selectedNodeText,
     timer,
   })
 
@@ -307,44 +294,6 @@ export function usePalaceEditPage() {
     if (!shouldAutoStartOnPageEnter(readTimerAutomationConfig(), 'palace_edit')) return
     timer.start({ source: 'page_enter' })
   }, [documentState.editorState, isActive, palaceId, timer])
-
-  const miniPalaceEditInitializedRef = useRef(false)
-  useEffect(() => {
-    if (!palaceId || !documentState.editorState) return
-    if (!miniPalaceIdFromQuery || miniPalaceModeFromQuery !== 'edit') return
-    if (miniPalaceEditInitializedRef.current) return
-    if (miniPalace.items.length === 0) return
-    const targetMini = miniPalace.items.find(
-      (item) => String(item.id) === miniPalaceIdFromQuery,
-    )
-    if (!targetMini || targetMini.node_uids.length === 0) return
-    miniPalaceEditInitializedRef.current = true
-    miniPalace.startEdit(targetMini)
-  }, [
-    palaceId,
-    documentState.editorState,
-    miniPalaceIdFromQuery,
-    miniPalaceModeFromQuery,
-    miniPalace.items,
-    miniPalace.startEdit,
-  ])
-
-  const clearMiniPalaceQueryParams = useCallback(() => {
-    const next = new URLSearchParams(searchParams)
-    next.delete('miniPalaceId')
-    next.delete('miniPalaceMode')
-    setSearchParams(next, { replace: true })
-  }, [searchParams, setSearchParams])
-
-  const handleMiniPalaceEditSave = useCallback(async () => {
-    await miniPalace.confirmCreate()
-    clearMiniPalaceQueryParams()
-  }, [clearMiniPalaceQueryParams, miniPalace.confirmCreate])
-
-  const handleMiniPalaceEditCancel = useCallback(() => {
-    miniPalace.cancelCreate()
-    clearMiniPalaceQueryParams()
-  }, [clearMiniPalaceQueryParams, miniPalace.cancelCreate])
 
   useEffect(() => {
     timer.setSceneActive?.(isActive, { source: isActive ? 'route_active' : 'route_inactive' })
@@ -551,7 +500,7 @@ export function usePalaceEditPage() {
         setAiSplitBusy(false)
       }
     },
-    [documentState, emitFeedbackFx, palaceId, practice.editorMode, timer],
+    [documentState, emitFeedbackFx, palaceId, practice.editorMode, promptForAiOptions, timer],
   )
 
   const statusBadge: StatusBadgeState = versions.statusBadge
@@ -614,9 +563,6 @@ export function usePalaceEditPage() {
       context?: ImportApplyContext,
     ) => Promise<void>,
     activeMindMapEditorState: practice.activeMindMapEditorState,
-    miniPalace,
-    handleMiniPalaceEditSave,
-    handleMiniPalaceEditCancel,
     practiceVisibleEditorSyncKey: practice.practiceVisibleEditorSyncKey,
     modeFocusRequestNodeUid: modeFocusRequest.nodeUid,
     modeFocusRequestNonce: modeFocusRequest.nonce,

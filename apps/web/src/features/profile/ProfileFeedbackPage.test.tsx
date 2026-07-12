@@ -11,7 +11,7 @@ vi.mock('@/shared/components/celebration', () => ({
   emitReviewConfetti: (...args: unknown[]) => emitReviewConfetti(...args),
 }))
 
-vi.mock('@/shared/components/mindmap-host/useMindMapFeedback', () => ({
+vi.mock('@/shared/feedback/mindmap-audio/useMindMapFeedback', () => ({
   useMindMapFeedbackAudio: () => ({
     playEvent: (...args: unknown[]) => playEvent(...args),
     playComboMilestone: vi.fn(),

@@ -1,4 +1,4 @@
-import type { QuizRuntimeState } from '@/features/palace-quiz/QuizQuestionInteraction'
+import type { QuizRuntimeState } from '@/entities/quiz'
 import type { FreestyleMode } from '@/features/freestyle/model/today-training'
 import type { FreestyleQuizCard } from '@/shared/api/contracts'
 

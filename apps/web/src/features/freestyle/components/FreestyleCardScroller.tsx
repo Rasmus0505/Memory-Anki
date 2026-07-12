@@ -18,7 +18,7 @@ import type {
   TodayTrainingConfig,
   TodayTrainingSummary,
 } from '@/features/freestyle/model/today-training'
-import type { QuizRuntimeState } from '@/features/palace-quiz/QuizQuestionInteraction'
+import type { QuizRuntimeState } from '@/entities/quiz'
 import type { FreestyleCard, FreestyleQuizCard } from '@/shared/api/contracts'
 import { cn } from '@/shared/lib/utils'
 

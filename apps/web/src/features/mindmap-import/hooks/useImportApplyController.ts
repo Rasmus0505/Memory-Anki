@@ -1,13 +1,14 @@
 ﻿import { useRef, useState } from 'react'
 import { toast } from '@/shared/feedback/toast'
 import type { MindMapEditorState } from '@/shared/api/contracts'
+import type { ImportApplyContext } from '@/shared/api/contracts/imports'
 import {
   applyImportedEditorState,
   formatMindMapImportError,
   restoreImportedEditorState,
   type ImportUndoSnapshot,
 } from '@/features/mindmap-import/model/mindmap-import'
-import type { ImportApplyContext, ImportSourceKind } from '@/features/mindmap-import/model/mindmap-import-types'
+import type { ImportSourceKind } from '@/features/mindmap-import/model/mindmap-import-types'
 import { countDocNodes, hasNodeUid } from '@/features/mindmap-import/hooks/mindmap-import-utils'
 import { logAiCall } from '@/shared/logs/model/appLogs'
 

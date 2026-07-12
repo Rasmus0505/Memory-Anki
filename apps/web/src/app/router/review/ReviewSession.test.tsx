@@ -10,7 +10,7 @@ const mocks = vi.hoisted(() => ({
   getReviewSessionProgressApi: vi.fn(),
   clearReviewSessionProgressApi: vi.fn(),
   submitReviewSessionApi: vi.fn(),
-  usePersistedMindMapEditor: vi.fn(),
+  useMindMapDocumentSession: vi.fn(),
   flushSave: vi.fn(),
   setEditorState: vi.fn(),
   latestFlowProps: null as Record<string, unknown> | null,
@@ -30,7 +30,7 @@ vi.mock('sonner', () => ({
   },
 }))
 
-vi.mock('@/features/review/components/MindMapReviewFlow', () => ({
+vi.mock('@/widgets/mindmap-review-flow/MindMapReviewFlow', () => ({
   MindMapReviewFlow: (props: Record<string, any>) => {
     mocks.latestFlowProps = props
     return (
@@ -69,7 +69,7 @@ vi.mock('@/features/review/api', () => ({
   submitReviewSessionApi: (...args: unknown[]) => mocks.submitReviewSessionApi(...args),
 }))
 
-vi.mock('@/features/review/studyWarmup', () => ({
+vi.mock('@/shared/api/studySessionWarmup', () => ({
   consumePrefetchedStudySession: (_kind: string, _id: number, loader: () => Promise<unknown>) =>
     loader(),
 }))
@@ -82,8 +82,8 @@ vi.mock('@/entities/palace/api', () => ({
   togglePalaceFocusNodeApi: vi.fn(),
 }))
 
-vi.mock('@/shared/hooks/usePersistedMindMapEditor', () => ({
-  usePersistedMindMapEditor: (...args: unknown[]) => mocks.usePersistedMindMapEditor(...args),
+vi.mock('@/shared/hooks/useMindMapDocumentSession', () => ({
+  useMindMapDocumentSession: (...args: unknown[]) => mocks.useMindMapDocumentSession(...args),
 }))
 
 describe('ReviewSession', () => {
@@ -94,7 +94,7 @@ describe('ReviewSession', () => {
     mocks.clearReviewSessionProgressApi.mockReset()
     mocks.flushSave.mockReset()
     mocks.setEditorState.mockReset()
-    mocks.usePersistedMindMapEditor.mockReset()
+    mocks.useMindMapDocumentSession.mockReset()
     mocks.latestFlowProps = null
 
     mocks.getReviewSessionApi.mockResolvedValue({
@@ -126,7 +126,7 @@ describe('ReviewSession', () => {
     mocks.clearReviewSessionProgressApi.mockResolvedValue({ ok: true })
     mocks.submitReviewSessionApi.mockResolvedValue({ ok: true, next_id: null, score: 5 })
     mocks.flushSave.mockResolvedValue(undefined)
-    mocks.usePersistedMindMapEditor.mockReturnValue({
+    mocks.useMindMapDocumentSession.mockReturnValue({
       meta: {
         id: 1,
         title: '第四节 收回教育权运动与教会教育的变革',
@@ -190,7 +190,7 @@ describe('ReviewSession', () => {
   })
 
   it('renders the review flow before the full edit editor state finishes loading', async () => {
-    mocks.usePersistedMindMapEditor.mockReturnValue({
+    mocks.useMindMapDocumentSession.mockReturnValue({
       meta: null,
       editorState: null,
       setEditorState: mocks.setEditorState,

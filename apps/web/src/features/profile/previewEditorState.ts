@@ -3,7 +3,7 @@ import type { MindMapEditorState } from '@/shared/api/contracts'
 /**
  * 反馈中心预览用的示例思维导图。
  * 一棵小树：根知识点 + 起点分支（两个待回忆知识点）+ 终点分支（一个待回忆知识点）。
- * 直接喂给 MindMapFrame，配合 useRevealSession 即可走通真实翻卡反馈链路。
+ * 直接喂给 MindMapEditorSurface，配合 useRevealSession 即可走通真实翻卡反馈链路。
  */
 export const PREVIEW_EDITOR_STATE: MindMapEditorState = {
   editor_doc: {

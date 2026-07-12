@@ -1,7 +1,7 @@
 ﻿import { useCallback, useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "@/shared/feedback/toast";
-import { useAiRunConfigDialog } from "@/features/ai-config/useAiRunConfigDialog";
+import { useAiRunConfigDialog } from "@/entities/ai-runtime";
 import { completeEnglishReadingMaterialApi } from "@/features/english-reading/api";
 import { EnglishReadingDialogs } from "@/features/english-reading/components/EnglishReadingDialogs";
 import { EnglishReadingReadingPanels } from "@/features/english-reading/components/EnglishReadingReadingPanels";

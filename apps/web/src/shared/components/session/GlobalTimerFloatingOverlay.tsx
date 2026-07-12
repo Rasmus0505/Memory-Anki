@@ -22,7 +22,7 @@ import {
   type TimerFocusConfig,
 } from '@/shared/components/session/timer-focus-config'
 import { emitTimerCelebration } from '@/shared/components/session/timer-celebration'
-import { useMindMapFeedbackSettings } from '@/shared/components/mindmap-host/useMindMapFeedback'
+import { useMindMapFeedbackSettings } from '@/shared/feedback/mindmap-audio/useMindMapFeedback'
 import { getReviewFeedbackEffectiveVolume } from '@/shared/feedback/reviewFeedbackSettings'
 import { playFeedbackAudio } from '@/shared/feedback/feedbackCenter'
 import {
@@ -75,11 +75,11 @@ export function GlobalTimerFloatingOverlay({
   const [pulseNonce, setPulseNonce] = React.useState(0)
   const [customBreakMinutes, setCustomBreakMinutes] = React.useState('')
   const activeEntry = React.useMemo(() => selectActiveTimerEntry(entries), [entries])
-  const scene = activeEntry?.scene ?? null
   const [isNarrowViewport, setIsNarrowViewport] = React.useState(() =>
     typeof window !== 'undefined' ? window.innerWidth < 640 : false,
   )
   const [freestyleMobileTimerExpanded, setFreestyleMobileTimerExpanded] = React.useState(false)
+  const [idlePanelExpanded, setIdlePanelExpanded] = React.useState(false)
   const lastFeedbackEventIdRef = React.useRef<string | null>(null)
   const breakExpiredNotifiedRef = React.useRef(false)
 
@@ -114,6 +114,7 @@ export function GlobalTimerFloatingOverlay({
 
   React.useEffect(() => {
     setFreestyleMobileTimerExpanded(false)
+    setIdlePanelExpanded(false)
   }, [activeEntry?.sessionId])
 
   React.useEffect(() => {
@@ -199,8 +200,10 @@ export function GlobalTimerFloatingOverlay({
     suppressCapsuleClickRef,
   } = useTimerOverlayDrag(layout, persistLayout)
 
+  const isBreakMode = snapshot.mode === 'break'
   const showFullPanel =
     !layout.collapsed &&
+    (activeEntry !== null || isBreakMode || idlePanelExpanded) &&
     !(useFreestyleMobileCompactTimer && !freestyleMobileTimerExpanded)
   const layoutWidth = layout.width
   const layoutHeight = layout.height
@@ -208,7 +211,6 @@ export function GlobalTimerFloatingOverlay({
     () => createTimerOverlaySizeTokens({ width: layoutWidth, height: layoutHeight }),
     [layoutHeight, layoutWidth],
   )
-  const isBreakMode = snapshot.mode === 'break'
   const isBreakExpired = isBreakMode && snapshot.status === 'expired'
   const studyPhase = snapshot.studyPhase ?? (
     snapshot.status === 'running'
@@ -521,7 +523,10 @@ export function GlobalTimerFloatingOverlay({
                   className="memory-anki-global-timer-icon-button"
                   style={sizeTokens.iconButtonStyle}
                   onPointerDown={(event) => event.stopPropagation()}
-                  onClick={toggleCollapsed}
+                  onClick={() => {
+                    setIdlePanelExpanded(false)
+                    toggleCollapsed()
+                  }}
                   title="折叠为胶囊"
                 >
                   <Shrink className="memory-anki-global-timer-icon" style={sizeTokens.iconStyle} />
@@ -584,6 +589,9 @@ export function GlobalTimerFloatingOverlay({
                 }
                 setFreestyleMobileTimerExpanded(true)
                 return
+              }
+              if (!activeEntry && !isBreakMode) {
+                setIdlePanelExpanded(true)
               }
               persistLayout((current) => ({ ...current, collapsed: false }))
             }}

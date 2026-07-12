@@ -1,12 +1,12 @@
-﻿import { useCallback, useState, type ChangeEvent, type ClipboardEvent } from 'react'
+﻿import { useState, type ChangeEvent, type ClipboardEvent } from 'react'
 import type { MindMapEditorState } from '@/shared/api/contracts'
+import type { ImportApplyContext } from '@/shared/api/contracts/imports'
 import { useImportApplyController } from '@/features/mindmap-import/hooks/useImportApplyController'
 import { useImportBatchState } from '@/features/mindmap-import/hooks/useImportBatchState'
 import { useImportJobController } from '@/features/mindmap-import/hooks/useImportJobController'
-import { useAiRunConfigDialog } from '@/features/ai-config/useAiRunConfigDialog'
+import { useAiRunConfigDialog } from '@/entities/ai-runtime'
 import type {
   BatchImportMeta,
-  ImportApplyContext,
   ImportMode,
   ImportSourceKind,
   MindMapImportWorkflow,
@@ -22,7 +22,6 @@ interface UseMindMapImportOptions {
 
 export type {
   BatchImportImageItem,
-  ImportApplyContext,
   ImportMode,
   ImportSourceKind,
   MindMapImportWorkflow,

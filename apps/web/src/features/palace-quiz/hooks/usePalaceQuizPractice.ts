@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import { useQuizAttemptOrchestration } from '@/features/palace-quiz/hooks/useQuizAttemptOrchestration'
-import type { QuizRuntimeState } from '@/features/palace-quiz/QuizQuestionInteraction'
+import { useQuizAttemptOrchestration } from '@/entities/quiz'
+import type { QuizRuntimeState } from '@/entities/quiz'
 import type { AiRuntimeOptions, PalaceQuizQuestion } from '@/shared/api/contracts'
 import type { dispatchGlobalFeedback } from '@/shared/feedback/globalFeedbackModel'
 

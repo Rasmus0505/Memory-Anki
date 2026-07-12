@@ -1,8 +1,6 @@
 import {
   BookOpen,
-  BookOpenText,
   Brain,
-  Captions,
   FolderTree,
   LayoutDashboard,
   Shuffle,
@@ -16,7 +14,9 @@ import {
   preloadEnglishReadingPage,
   preloadEnglishWorkspacePage,
   preloadFreestylePage,
+  preloadFreestyleSessionPage,
   preloadKnowledgePage,
+  preloadPalaceEditPage,
   preloadPracticeRoutes,
   preloadProfilePage,
   preloadReviewRoutes,
@@ -25,11 +25,8 @@ import { prefetchDashboardApi } from '@/features/dashboard/api'
 import { prefetchReviewQueueApi } from '@/features/review/api'
 
 export type NavSectionKey =
-  | 'dashboard'
   | 'freestyle'
   | 'palaces'
-  | 'english'
-  | 'englishReading'
   | 'knowledge'
   | 'review'
   | 'profile'
@@ -44,90 +41,84 @@ export interface NavSectionDefinition {
   warmup?: () => void
 }
 
+const isPracticeRoute = (pathname: string) =>
+  /^\/palaces\/\d+\/(practice|focus-practice)$/.test(pathname) ||
+  /^\/segments\/\d+\/practice$/.test(pathname) ||
+  /^\/mini-palaces\/\d+\/practice$/.test(pathname)
+
+const isCreationRoute = (pathname: string) =>
+  pathname === '/palaces/new' ||
+  /^\/palaces\/\d+\/(edit|quiz)$/.test(pathname)
+
+const isLibraryRoute = (pathname: string) =>
+  pathname === '/palaces' ||
+  pathname === '/palaces/list' ||
+  /^\/palaces\/\d+$/.test(pathname) ||
+  pathname === '/knowledge' ||
+  pathname.startsWith('/knowledge/') ||
+  pathname === '/english' ||
+  pathname.startsWith('/english/') ||
+  pathname === '/english-reading' ||
+  pathname.startsWith('/english-reading/')
+
 export const navSections: NavSectionDefinition[] = [
-  {
-    key: 'dashboard',
-    to: '/dashboard',
-    label: '仪表盘',
-    icon: LayoutDashboard,
-    rememberLastVisited: false,
-    matches: (pathname) => pathname === '/' || pathname === '/dashboard',
-    warmup: () => {
-      prefetchDashboardApi()
-    },
-  },
   {
     key: 'freestyle',
     to: '/freestyle',
-    label: '随心模式',
+    label: '今日学习',
     icon: Shuffle,
     rememberLastVisited: false,
-    matches: (pathname) => pathname === '/freestyle',
+    matches: (pathname) =>
+      pathname === '/freestyle' ||
+      pathname === '/freestyle/session' ||
+      isPracticeRoute(pathname),
     warmup: () => {
       void preloadFreestylePage()
+      void preloadFreestyleSessionPage()
+      preloadPracticeRoutes()
+      preloadReviewRoutes()
+      prefetchReviewQueueApi()
     },
   },
   {
     key: 'palaces',
     to: '/palaces',
-    label: '记忆宫殿',
+    label: '知识库',
     icon: BookOpen,
     rememberLastVisited: true,
-    matches: (pathname) =>
-      pathname === '/palaces' ||
-      pathname === '/palaces/list' ||
-      pathname === '/palaces/new' ||
-      /^\/palaces\/\d+(?:\/(edit|practice|focus-practice|quiz))?$/.test(pathname),
+    matches: isLibraryRoute,
     warmup: () => {
-      preloadPracticeRoutes()
       prefetchPalaceSubjectShelfApi()
       prefetchPalacesGroupedSummaryApi()
-    },
-  },
-  {
-    key: 'english',
-    to: '/english',
-    label: '英语听力',
-    icon: Captions,
-    rememberLastVisited: true,
-    matches: (pathname) =>
-      pathname === '/english' || /^\/english\/courses\/\d+$/.test(pathname),
-    warmup: () => {
+      void preloadKnowledgePage()
       void preloadEnglishWorkspacePage()
-    },
-  },
-  {
-    key: 'englishReading',
-    to: '/english-reading',
-    label: '英语阅读',
-    icon: BookOpenText,
-    rememberLastVisited: true,
-    matches: (pathname) => pathname === '/english-reading',
-    warmup: () => {
       void preloadEnglishReadingPage()
     },
   },
   {
     key: 'knowledge',
-    to: '/knowledge',
-    label: '知识大纲',
+    to: '/palaces/new',
+    label: '内容创作',
     icon: FolderTree,
     rememberLastVisited: true,
-    matches: (pathname) => pathname === '/knowledge' || pathname.startsWith('/knowledge/'),
+    matches: isCreationRoute,
     warmup: () => {
-      void preloadKnowledgePage()
+      void preloadPalaceEditPage()
     },
   },
   {
     key: 'review',
-    to: '/review',
-    label: '复习',
+    to: '/dashboard',
+    label: '复习分析',
     icon: Brain,
     rememberLastVisited: true,
     matches: (pathname) =>
+      pathname === '/' ||
+      pathname === '/dashboard' ||
       pathname === '/review' ||
-      /^\/review\/session\/\d+$/.test(pathname),
+      pathname.startsWith('/review/'),
     warmup: () => {
+      prefetchDashboardApi()
       preloadReviewRoutes()
       prefetchReviewQueueApi()
     },
@@ -135,7 +126,7 @@ export const navSections: NavSectionDefinition[] = [
   {
     key: 'profile',
     to: '/profile',
-    label: '个人中心',
+    label: '系统设置',
     icon: User,
     rememberLastVisited: true,
     matches: (pathname) => pathname === '/profile' || pathname.startsWith('/profile/'),

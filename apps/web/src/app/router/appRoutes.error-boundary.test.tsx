@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { MemoryRouter, useLocation } from 'react-router-dom'
 import { AppRoutes } from './appRoutes'
 
-vi.mock('@/features/dashboard/DashboardPage', () => ({
+vi.mock('@/pages/insights/InsightsPage', () => ({
   default: (): never => {
     throw new Error('dashboard boom')
   },

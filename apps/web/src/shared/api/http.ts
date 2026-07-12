@@ -443,6 +443,14 @@ export async function uploadWithFormData<T>(
       const parsed = JSON.parse(body) as { detail?: unknown }
       if (typeof parsed.detail === 'string' && parsed.detail.trim()) {
         message = parsed.detail
+      } else if (
+        parsed.detail
+        && typeof parsed.detail === 'object'
+        && 'message' in parsed.detail
+        && typeof parsed.detail.message === 'string'
+        && parsed.detail.message.trim()
+      ) {
+        message = parsed.detail.message
       }
     } catch {
       // Ignore JSON parse failures and use the raw text body.

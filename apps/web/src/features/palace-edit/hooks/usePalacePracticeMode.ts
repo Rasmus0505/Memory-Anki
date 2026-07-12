@@ -10,10 +10,10 @@ import {
   getPracticeSessionProgressApi,
   savePracticeSessionProgressApi,
 } from '@/entities/palace/api'
-import type { MindMapSelection } from '@/shared/components/mindmap-host'
+import type { MindMapSelection } from '@/entities/mindmap-document'
 import type { MindMapEditorState, SessionProgressSnapshot } from '@/shared/api/contracts'
 import type { EditorMode } from '@/features/palace-edit/model/mindmap-editor'
-import { useReviewFeedback } from '@/features/review/hooks/useReviewFeedback'
+import { useReviewFeedback } from '@/entities/review/model/useReviewFeedback'
 
 interface PalacePracticeModeOptions {
   palaceId: number | null

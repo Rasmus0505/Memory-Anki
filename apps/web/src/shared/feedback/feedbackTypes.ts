@@ -2,7 +2,7 @@ import type {
   MindMapFeedbackEvent,
   MindMapFeedbackLevel,
   MindMapFeedbackOrigin,
-} from '@/shared/components/mindmap-host/hostBridgeUtils'
+} from '@/shared/feedback/feedbackEvents'
 
 export type FeedbackVisualKind =
   | 'tap'

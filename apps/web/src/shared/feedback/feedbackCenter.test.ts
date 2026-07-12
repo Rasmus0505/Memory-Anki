@@ -12,7 +12,7 @@ vi.mock('@/shared/feedback/celebrationEngine', () => ({
   launchCelebrationPreset: (...args: unknown[]) => mocks.launchCelebrationPreset(...args),
 }))
 
-vi.mock('@/shared/components/mindmap-host/webAudioFeedback', () => ({
+vi.mock('@/shared/feedback/mindmap-audio/webAudioFeedback', () => ({
   playWebAudioComboMilestone: (...args: unknown[]) => mocks.playWebAudioComboMilestone(...args),
   playWebAudioFeedbackEvent: (...args: unknown[]) => mocks.playWebAudioFeedbackEvent(...args),
   playWebAudioFireworkAccent: (...args: unknown[]) => mocks.playWebAudioFireworkAccent(...args),

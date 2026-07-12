@@ -14,11 +14,3 @@ export interface BatchImportMeta {
   structureImageIndex: number | null
   imageCount: number
 }
-export interface ImportApplyContext {
-  source: 'import'
-  jobId: string | null
-  applyMode: 'replace' | 'append'
-  sourceTitle: string
-  expectedFingerprint?: string | null
-  expectedNodeCount?: number | null
-}

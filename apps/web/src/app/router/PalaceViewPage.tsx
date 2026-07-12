@@ -1,20 +1,21 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { ArrowLeft, FileText, Target } from 'lucide-react'
-import { useQuizLauncher } from '@/features/palace-quiz/QuizLauncherProvider'
+import { useQuizLauncher } from '@/widgets/quiz-launcher'
 import { buildAttachmentUrl, getPalaceEditorApi, savePalaceEditorApi } from '@/entities/palace/api'
 import { PageIntro } from '@/shared/components/layout/PageIntro'
 import { LoadingState } from '@/shared/components/state-placeholders'
 import {
-  MindMapFrame,
+  MindMapEditorSurface,
   MindMapPageToolbar,
-  type MindMapFrameHandle,
-} from '@/shared/components/mindmap-host'
+  type MindMapEditorSurfaceHandle,
+} from '@/features/mindmap-editor'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card'
-import { usePersistedMindMapEditor } from '@/shared/hooks/usePersistedMindMapEditor'
+import { useMindMapDocumentSession } from '@/shared/hooks/useMindMapDocumentSession'
 import { cn } from '@/shared/lib/utils'
+import { readMindMapEditorState } from '@/entities/mindmap-document'
 
 interface PalaceMeta {
   id: number
@@ -30,25 +31,21 @@ export default function PalaceView() {
   const { id } = useParams()
   const { openQuizLauncher } = useQuizLauncher()
   const palaceId = id ? Number(id) : null
-  const mindMapFrameRef = useRef<MindMapFrameHandle | null>(null)
+  const mindMapFrameRef = useRef<MindMapEditorSurfaceHandle | null>(null)
   const [mindMapFullscreen, setMindMapFullscreen] = useState(false)
   const [mindMapNativeFullscreen, setMindMapNativeFullscreen] = useState(false)
   const [mindMapUiCleared, setMindMapUiCleared] = useState(false)
   const [shouldMountMindMap, setShouldMountMindMap] = useState(false)
   const [hostReadyTimedOut, setHostReadyTimedOut] = useState(false)
 
-  const { meta, editorState, isLoading, error } = usePersistedMindMapEditor({
+  const { meta, editorState, isLoading, error } = useMindMapDocumentSession({
     entityId: palaceId,
-    fetcher: getPalaceEditorApi,
-    saver: savePalaceEditorApi,
-    selectMeta: (response) => response.palace as PalaceMeta,
-    selectEditorState: (response) => ({
-      editor_doc: response.editor_doc,
-      editor_config: response.editor_config,
-      editor_local_config: response.editor_local_config,
-      lang: response.lang,
-      editor_fingerprint: response.editor_fingerprint,
-    }),
+    adapter: {
+      load: getPalaceEditorApi,
+      save: savePalaceEditorApi,
+      selectMeta: (response) => response.palace as PalaceMeta,
+      selectEditorState: readMindMapEditorState,
+    },
   })
 
   const palace = meta as PalaceMeta | null
@@ -187,7 +184,7 @@ export default function PalaceView() {
                 </div>
               ) : null}
               {shouldMountMindMap ? (
-                <MindMapFrame
+                <MindMapEditorSurface
                   ref={mindMapFrameRef}
                   key={`readonly-${palace.id}`}
                   editorState={editorState}

@@ -1,3 +1,4 @@
+import { buildSubtreeUidMap } from '@/entities/mindmap-document'
 import { useEffect, useMemo, useState } from 'react'
 import {
   createPalaceSegmentApi,
@@ -7,9 +8,8 @@ import {
 } from '@/entities/palace-segment/api'
 import { appAlert, appConfirm } from '@/shared/components/ui/native-dialog'
 import type { PalaceSegmentSummary } from '@/shared/api/contracts'
-import type { MindMapSelection } from '@/shared/components/mindmap-host'
+import type { MindMapSelection } from '@/entities/mindmap-document'
 import {
-  buildSubtreeUidMap,
   getEarlierDateTime,
   type RangeTarget,
   uniqueStrings,

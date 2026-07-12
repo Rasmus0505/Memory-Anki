@@ -12,6 +12,8 @@ export default defineConfig([
     settings: {
       'boundaries/elements': [
         { type: 'app', pattern: 'src/app/*' },
+        { type: 'pages', pattern: 'src/pages/*' },
+        { type: 'widgets', pattern: 'src/widgets/*' },
         { type: 'features', pattern: 'src/features/*' },
         { type: 'entities', pattern: 'src/entities/*' },
         { type: 'shared', pattern: 'src/shared/*' },
@@ -39,7 +41,9 @@ export default defineConfig([
       'boundaries/element-types': ['error', {
         default: 'disallow',
         rules: [
-          { from: 'app', allow: ['features', 'entities', 'shared', 'app'] },
+          { from: 'app', allow: ['pages', 'widgets', 'features', 'entities', 'shared', 'app'] },
+          { from: 'pages', allow: ['widgets', 'features', 'entities', 'shared', 'pages'] },
+          { from: 'widgets', allow: ['features', 'entities', 'shared', 'widgets'] },
           { from: 'features', allow: ['entities', 'shared', 'features'] },
           { from: 'entities', allow: ['shared', 'entities'] },
           { from: 'shared', allow: ['shared'] },

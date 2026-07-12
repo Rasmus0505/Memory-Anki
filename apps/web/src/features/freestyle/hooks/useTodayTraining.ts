@@ -73,8 +73,6 @@ export function useTodayTraining({
   setFeedLoading: (loading: boolean) => void
   timer: FreestyleTimer
 }) {
-  const activeQueueKey = progress.activeQueueIds.join('|')
-
   const queue = useMemo(
     () => {
       if (mode === 'today') {
@@ -89,7 +87,7 @@ export function useTodayTraining({
         resolvedQuestionIds: queuePriorityResolvedIdsRef.current,
       })
     },
-    [activeQueueKey, config, feedCards, mode, progress.activeQueueIds, queuePriorityResolvedIdsRef, todayConfig, todaySources],
+    [config, feedCards, mode, progress.activeQueueIds, queuePriorityResolvedIdsRef, todayConfig, todaySources],
   )
   const queueSignature = useMemo(() => buildQueueSignature(queue), [queue])
   const summaryVisible =

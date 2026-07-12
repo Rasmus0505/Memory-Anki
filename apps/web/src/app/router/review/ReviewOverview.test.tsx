@@ -38,7 +38,7 @@ vi.mock('@/features/review/components/ReviewLoadForecastCard', () => ({
   ReviewLoadForecastCard: () => <div data-testid="review-load-forecast" />,
 }))
 
-vi.mock('@/features/review/studyWarmup', () => ({
+vi.mock('@/shared/api/studySessionWarmup', () => ({
   prefetchStudySession: vi.fn(),
 }))
 
@@ -107,7 +107,7 @@ describe('ReviewOverview', () => {
     await waitFor(() => expect(mocks.repairReviewStageProgressApi).toHaveBeenCalledTimes(1))
     await waitFor(() => expect(mocks.getReviewStageProgressHealthApi).toHaveBeenCalledTimes(2))
     expect(mocks.getReviewQueueApi).toHaveBeenCalledTimes(2)
-    expect(mocks.toastSuccess).toHaveBeenCalledWith('修复完成：重建 2 个宫殿')
+    expect(mocks.toastSuccess).toHaveBeenCalledWith('修复完成：重建 2 个宫殿', undefined)
   })
 
   it('does not request stage-progress health in chapter review mode', async () => {

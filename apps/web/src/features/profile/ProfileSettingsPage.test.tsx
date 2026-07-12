@@ -3,7 +3,6 @@ import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import ProfileSettingsPage from '@/features/profile/ProfileSettingsPage'
 import * as preferencesApi from '@/entities/preferences/api'
-import * as reviewApi from '@/features/review/api'
 
 vi.mock('@/shared/feedback/toast', () => ({
   toast: {
@@ -64,7 +63,7 @@ describe('ProfileSettingsPage', () => {
 
   it('repairs historical review stage progress from the settings page', async () => {
     mockSettings()
-    const repairSpy = vi.spyOn(reviewApi, 'repairReviewStageProgressApi').mockResolvedValue({
+    const repairSpy = vi.fn().mockResolvedValue({
       ok: true,
       palace_count: 3,
       segment_count: 0,
@@ -72,7 +71,7 @@ describe('ProfileSettingsPage', () => {
 
     render(
       <MemoryRouter initialEntries={['/profile']}>
-        <ProfileSettingsPage />
+        <ProfileSettingsPage repairReviewStageProgress={repairSpy} shortcutsSettings={<div>快捷键设置</div>} />
       </MemoryRouter>,
     )
 
@@ -92,7 +91,7 @@ describe('ProfileSettingsPage', () => {
 
     render(
       <MemoryRouter initialEntries={['/profile']}>
-        <ProfileSettingsPage />
+        <ProfileSettingsPage repairReviewStageProgress={vi.fn()} shortcutsSettings={<div>快捷键设置</div>} />
       </MemoryRouter>,
     )
 

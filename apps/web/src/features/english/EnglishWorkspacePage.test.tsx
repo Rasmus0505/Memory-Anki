@@ -26,7 +26,7 @@ const mocks = vi.hoisted(() => ({
   } | null,
 }))
 
-vi.mock('@/features/english/api', () => ({
+vi.mock('@/entities/english/api', () => ({
   clearEnglishCurrentTaskApi: mocks.clearEnglishCurrentTaskApiMock,
   deleteEnglishCourseApi: mocks.deleteEnglishCourseApiMock,
   getEnglishTaskGenerationLogApi: mocks.getEnglishTaskGenerationLogApiMock,

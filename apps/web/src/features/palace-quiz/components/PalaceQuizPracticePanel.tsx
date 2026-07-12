@@ -2,7 +2,7 @@ import { Button } from '@/shared/components/ui/button'
 import { Badge } from '@/shared/components/ui/badge'
 import { Card, CardContent } from '@/shared/components/ui/card'
 import { QuizQuestionCard } from '@/features/palace-quiz/components/palaceQuizCards'
-import type { QuizRuntimeState } from '@/features/palace-quiz/QuizQuestionInteraction'
+import type { QuizRuntimeState } from '@/entities/quiz'
 import type { MiniPalaceSummary, PalaceQuizQuestion } from '@/shared/api/contracts'
 import type { PalaceQuizScopeKey, PalaceQuizViewMode } from '@/features/palace-quiz/model/palaceQuizPage'
 
@@ -10,14 +10,11 @@ export function PalaceQuizPracticePanel({
   questions,
   miniPalaces,
   questionScope,
-  setQuestionScope,
   rootQuestionCount,
   viewMode,
-  setViewMode,
   filteredQuestions,
   currentQuestion,
   currentQuestionIndex,
-  setCurrentQuestionIndex,
   questionStates,
   onChoiceSelect,
   onStateChange,
@@ -34,14 +31,11 @@ export function PalaceQuizPracticePanel({
   questions: PalaceQuizQuestion[]
   miniPalaces: MiniPalaceSummary[]
   questionScope: PalaceQuizScopeKey
-  setQuestionScope: (value: PalaceQuizScopeKey) => void
   rootQuestionCount: number
   viewMode: PalaceQuizViewMode
-  setViewMode: (value: PalaceQuizViewMode) => void
   filteredQuestions: PalaceQuizQuestion[]
   currentQuestion: PalaceQuizQuestion | null
   currentQuestionIndex: number
-  setCurrentQuestionIndex: React.Dispatch<React.SetStateAction<number>>
   questionStates: Record<number, QuizRuntimeState>
   onChoiceSelect: (question: PalaceQuizQuestion, optionId: string) => void
   onStateChange: (questionId: number, updater: (current: QuizRuntimeState) => QuizRuntimeState) => void

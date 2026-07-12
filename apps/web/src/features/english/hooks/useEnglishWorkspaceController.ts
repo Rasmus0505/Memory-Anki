@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { toast } from '@/shared/feedback/toast'
 import { appConfirm } from '@/shared/components/ui/native-dialog'
 import { useRouteResidency } from '@/shared/routing/RouteResidency'
-import { useAiRunConfigDialog } from '@/features/ai-config/useAiRunConfigDialog'
+import { useAiRunConfigDialog } from '@/entities/ai-runtime'
 import {
   failTask,
   registerTask,
@@ -23,7 +23,7 @@ import {
   retryEnglishCurrentTaskApi,
   subscribeEnglishTaskStream,
   uploadEnglishVideoApi,
-} from '@/features/english/api'
+} from '@/entities/english/api'
 
 function summarizeTaskEvents(events: EnglishGenerationLogEvent[]) {
   return events.slice(-5).reverse()

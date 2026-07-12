@@ -2,15 +2,15 @@ import * as React from 'react'
 import { toast } from '@/shared/feedback/toast'
 import { appConfirm } from '@/shared/components/ui/native-dialog'
 import type { RevealState } from '@/entities/session/model'
-import type { MindMapDoc, MindMapEditorState, MiniPalaceSummary } from '@/shared/api/contracts'
-import type { MindMapSelection } from '@/shared/components/mindmap-host'
+import type { MindMapEditorState, MiniPalaceSummary } from '@/shared/api/contracts'
+import type { MindMapSelection } from '@/entities/mindmap-document'
 import {
   createMiniPalaceApi,
   deleteMiniPalaceApi,
   getMiniPalacesApi,
   updateMiniPalaceApi,
 } from '@/entities/mini-palace/api'
-import { buildSubtreeUidMap } from '@/features/palace-edit/model/mindmap-editor'
+import { buildSubtreeUidMap } from '@/entities/mindmap-document'
 import {
   advanceRevealStateForNodeClick,
   buildReviewTree,
@@ -81,7 +81,7 @@ export function useMiniPalaceController({
   )
   const root = React.useMemo(() => buildReviewTree(parsedDoc, title), [parsedDoc, title])
   const nodeMap = React.useMemo(() => flattenNodes(root), [root])
-  const subtreeUidMap = React.useMemo(() => buildSubtreeUidMap(parsedDoc as MindMapDoc | null), [parsedDoc])
+  const subtreeUidMap = React.useMemo(() => buildSubtreeUidMap(parsedDoc), [parsedDoc])
   const docFingerprint = React.useMemo(() => JSON.stringify(parsedDoc ?? {}), [parsedDoc])
   const validNodeIds = React.useMemo(() => new Set(nodeMap.keys()), [nodeMap])
   const validCheckpointIds = React.useMemo(() => {
@@ -202,7 +202,7 @@ export function useMiniPalaceController({
     timer.registerActivity('practice_interaction', { source: 'mini_palace_create_confirm' })
     try {
       if (activeMiniPalace) {
-        const response = await updateMiniPalaceApi(activeMiniPalace.id, { name: draftName, node_uids: checkpoints })
+        await updateMiniPalaceApi(activeMiniPalace.id, { name: draftName, node_uids: checkpoints })
         await refresh()
         setDraftName('')
         setDraftNodeUids([])

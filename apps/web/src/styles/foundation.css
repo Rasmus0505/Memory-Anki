@@ -4,20 +4,20 @@
   --font-sans: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC", sans-serif;
   --font-mono: ui-monospace, "Cascadia Code", "SFMono-Regular", "Menlo", "Consolas", "Liberation Mono", monospace;
 
-  --color-background: hsl(38 28% 97%);
-  --color-foreground: hsl(224 24% 14%);
+  --color-background: hsl(40 24% 98%);
+  --color-foreground: hsl(221 28% 13%);
   --color-card: hsl(0 0% 100%);
-  --color-card-foreground: hsl(224 24% 14%);
+  --color-card-foreground: hsl(221 28% 13%);
   --color-popover: hsl(0 0% 100%);
-  --color-popover-foreground: hsl(224 24% 14%);
-  --color-primary: hsl(24 76% 43%);
-  --color-primary-foreground: hsl(34 100% 98%);
-  --color-secondary: hsl(220 16% 93%);
-  --color-secondary-foreground: hsl(222 22% 20%);
-  --color-muted: hsl(220 14% 94%);
-  --color-muted-foreground: hsl(220 10% 42%);
-  --color-accent: hsl(32 38% 91%);
-  --color-accent-foreground: hsl(222 22% 20%);
+  --color-popover-foreground: hsl(221 28% 13%);
+  --color-primary: hsl(214 58% 42%);
+  --color-primary-foreground: hsl(0 0% 100%);
+  --color-secondary: hsl(216 20% 95%);
+  --color-secondary-foreground: hsl(221 24% 19%);
+  --color-muted: hsl(216 18% 95%);
+  --color-muted-foreground: hsl(218 10% 43%);
+  --color-accent: hsl(39 68% 92%);
+  --color-accent-foreground: hsl(221 24% 19%);
   --color-destructive: hsl(0 84.2% 60.2%);
   --color-destructive-foreground: hsl(0 0% 98%);
   --color-success: hsl(145 55% 42%);
@@ -31,9 +31,9 @@
   --color-memory-strong: hsl(160 68% 34%);
   --color-memory-medium: hsl(34 92% 52%);
   --color-memory-weak: hsl(0 84.2% 60.2%);
-  --color-border: hsl(220 14% 86%);
-  --color-input: hsl(220 14% 84%);
-  --color-ring: hsl(24 76% 43%);
+  --color-border: hsl(216 18% 88%);
+  --color-input: hsl(216 16% 84%);
+  --color-ring: hsl(214 58% 42%);
   --color-radius: 0.625rem;
 
   --radius-sm: calc(var(--color-radius) - 4px);
@@ -54,8 +54,8 @@
   --color-card-foreground: hsl(36 20% 92%);
   --color-popover: hsl(24 10% 13%);
   --color-popover-foreground: hsl(36 20% 92%);
-  --color-primary: hsl(26 82% 58%);
-  --color-primary-foreground: hsl(24 30% 10%);
+  --color-primary: hsl(211 74% 66%);
+  --color-primary-foreground: hsl(220 30% 9%);
   --color-secondary: hsl(24 8% 18%);
   --color-secondary-foreground: hsl(36 16% 88%);
   --color-muted: hsl(24 8% 16%);
@@ -77,7 +77,7 @@
   --color-memory-weak: hsl(0 72% 62%);
   --color-border: hsl(24 8% 24%);
   --color-input: hsl(24 8% 26%);
-  --color-ring: hsl(26 82% 58%);
+  --color-ring: hsl(211 74% 66%);
 
   --shadow-soft: 0 1px 2px rgba(0, 0, 0, 0.4);
   --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.45), 0 8px 24px rgba(0, 0, 0, 0.45);
@@ -112,8 +112,7 @@ body {
   margin: 0;
   font-family: var(--font-sans);
   background:
-    radial-gradient(circle at top left, rgba(180, 83, 9, 0.06), transparent 26%),
-    linear-gradient(180deg, rgba(248, 250, 252, 0.98), rgba(245, 245, 244, 0.96)),
+    linear-gradient(180deg, hsl(40 28% 99%), hsl(216 22% 97%)),
     var(--color-background);
   color: var(--color-foreground);
   -webkit-font-smoothing: antialiased;

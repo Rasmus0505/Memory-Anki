@@ -122,7 +122,7 @@ function renderShelfStatusSummary(item: PalaceSubjectShelfItem) {
   )
 }
 
-export default function PalaceShelfPage() {
+export default function PalaceShelfPage({ prefetchReviewSession }: { prefetchReviewSession?: (reviewId: number) => void }) {
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const search = searchParams.get('search') || ''
@@ -206,6 +206,7 @@ export default function PalaceShelfPage() {
     allPalaces,
     fetchData,
     navigate,
+    prefetchReviewSession,
   })
   const renderExpandedPalaceCard = useCallback(
     (palace: PalaceGroupedItem) => (

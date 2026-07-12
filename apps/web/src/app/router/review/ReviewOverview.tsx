@@ -16,6 +16,8 @@ import { Skeleton } from '@/shared/components/ui/skeleton'
 import {
   getChapterReviewQueueApi,
   getReviewQueueApi,
+  getReviewSessionApi,
+  getReviewSessionProgressApi,
   getReviewStageProgressHealthApi,
   previewSpreadOverdueApi,
   repairReviewStageProgressApi,
@@ -23,8 +25,8 @@ import {
   undoSpreadOverdueApi,
 } from '@/features/review/api'
 import { ReviewLoadForecastCard } from '@/features/review/components/ReviewLoadForecastCard'
-import { buildReviewSessionPath } from '@/features/review/reviewSessionRoutes'
-import { prefetchStudySession } from '@/features/review/studyWarmup'
+import { buildReviewSessionPath } from '@/entities/review'
+import { prefetchStudySession } from '@/shared/api/studySessionWarmup'
 
 function formatReviewStage(reviewType: string, reviewNumber: number) {
   if (reviewType === '1h') return '首日 1 小时'
@@ -310,8 +312,8 @@ export default function ReviewOverview() {
               <Link
                 key={review.id}
                 to={buildReviewSessionPath(review.id, chapterId)}
-                onFocus={() => prefetchStudySession('review-session', review.id)}
-                onMouseEnter={() => prefetchStudySession('review-session', review.id)}
+                onFocus={() => prefetchStudySession('review-session', review.id, () => Promise.all([getReviewSessionApi(review.id), getReviewSessionProgressApi(review.id)]).then(([session, progress]) => ({ session, progress })))}
+                onMouseEnter={() => prefetchStudySession('review-session', review.id, () => Promise.all([getReviewSessionApi(review.id), getReviewSessionProgressApi(review.id)]).then(([session, progress]) => ({ session, progress })))}
               >
                 <div className="memory-anki-soft-card flex items-center justify-between rounded-[24px] border border-border/60 bg-background/80 px-4 py-4 transition-all hover:-translate-y-[1px] hover:bg-secondary/75">
                   <div className="min-w-0">

@@ -1,4 +1,4 @@
-﻿import * as React from 'react'
+import * as React from 'react'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
@@ -30,7 +30,7 @@ vi.mock('@/shared/components/session/timer-celebration', () => ({
   emitTimerCelebration: (...args: unknown[]) => emitTimerCelebration(...args),
 }))
 
-vi.mock('@/shared/components/mindmap-host/useMindMapFeedback', () => ({
+vi.mock('@/shared/feedback/mindmap-audio/useMindMapFeedback', () => ({
   useMindMapFeedbackSettings: () => ({
     mode: 'immersive',
     soundEnabled: true,
@@ -217,8 +217,10 @@ describe('GlobalTimerProvider', () => {
     expect(screen.getByRole('button', { name: '继续' })).toBeTruthy()
   })
 
-  it('shows the full idle panel when there is no active session', () => {
+  it('defaults to an idle capsule and expands on demand when there is no active session', () => {
     renderOverlay(null)
+
+    fireEvent.click(screen.getByRole('button', { name: '计时器 待开始' }))
 
     expect(screen.getByText('计时器')).toBeTruthy()
     expect(screen.getByText('待开始')).toBeTruthy()
@@ -1323,9 +1325,10 @@ describe('GlobalTimerProvider', () => {
     )
   })
 
-  it('shows a capsule only after manual collapse and keeps it after remount', () => {
+  it('returns an expanded idle timer to its capsule and keeps it after remount', () => {
     const firstRender = renderOverlay(null)
 
+    fireEvent.click(screen.getByRole('button', { name: '计时器 待开始' }))
     fireEvent.click(screen.getByTitle('折叠为胶囊'))
     expect(screen.getByRole('button', { name: '计时器 待开始' })).toBeTruthy()
 
@@ -1335,10 +1338,9 @@ describe('GlobalTimerProvider', () => {
     expect(screen.getByRole('button', { name: '计时器 待开始' })).toBeTruthy()
   })
 
-  it('keeps the collapsed capsule available as a draggable surface', () => {
+  it('keeps the idle capsule available as a draggable surface', () => {
     renderOverlay(null)
 
-    fireEvent.click(screen.getByTitle('折叠为胶囊'))
     const capsule = screen.getByRole('button', { name: '计时器 待开始' })
 
     expect(capsule.className).toContain('memory-anki-global-timer-capsule')
@@ -1374,6 +1376,7 @@ describe('GlobalTimerProvider', () => {
   it('opens the timer automation dialog from the top settings button', () => {
     renderOverlay(null)
 
+    fireEvent.click(screen.getByRole('button', { name: '计时器 待开始' }))
     fireEvent.click(screen.getByTitle('打开计时器设置'))
 
     expect(screen.getByRole('heading', { name: '专注计时设置' })).toBeTruthy()
@@ -1393,6 +1396,7 @@ describe('GlobalTimerProvider', () => {
 
     renderOverlay(null)
 
+    fireEvent.click(screen.getByRole('button', { name: '计时器 待开始' }))
     const layer = document.querySelector('.memory-anki-global-timer-layer') as HTMLDivElement | null
     const panel = document.querySelector('.memory-anki-global-timer-panel') as HTMLDivElement | null
 
@@ -1406,6 +1410,7 @@ describe('GlobalTimerProvider', () => {
   it('renders window-like resize handles around the timer panel', () => {
     renderOverlay(null)
 
+    fireEvent.click(screen.getByRole('button', { name: '计时器 待开始' }))
     expect(screen.getByRole('button', { name: '从上边调整计时器大小' })).toBeTruthy()
     expect(screen.getByRole('button', { name: '从右边调整计时器大小' })).toBeTruthy()
     expect(screen.getByRole('button', { name: '从下边调整计时器大小' })).toBeTruthy()
@@ -1419,6 +1424,7 @@ describe('GlobalTimerProvider', () => {
   it('uses a fixed panel height instead of min-height', () => {
     renderOverlay(null)
 
+    fireEvent.click(screen.getByRole('button', { name: '计时器 待开始' }))
     const panel = document.querySelector('.memory-anki-global-timer-panel') as HTMLDivElement | null
 
     expect(panel?.style.height).toBe('208px')
@@ -1441,6 +1447,7 @@ describe('GlobalTimerProvider', () => {
 
     renderOverlay(null)
 
+    fireEvent.click(screen.getByRole('button', { name: '计时器 待开始' }))
     const panel = document.querySelector('.memory-anki-global-timer-panel') as HTMLDivElement | null
     const pauseButton = screen.getByRole('button', { name: '进入学习页后开始' }) as HTMLButtonElement
 

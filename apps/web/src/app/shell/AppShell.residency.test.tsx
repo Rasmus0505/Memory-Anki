@@ -1,4 +1,4 @@
-﻿import * as React from 'react'
+import * as React from 'react'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -23,6 +23,7 @@ vi.mock('@/app/router/appRoutes', async () => {
     preloadEnglishWorkspacePage: vi.fn(),
     preloadEnglishReadingPage: vi.fn(),
     preloadFreestylePage: vi.fn(),
+    preloadFreestyleSessionPage: vi.fn(),
     preloadKnowledgePage: vi.fn(),
     preloadPalaceEditPage: vi.fn(),
     preloadProfilePage: vi.fn(),
@@ -74,17 +75,17 @@ describe('AppShell residency navigation memory', () => {
       target: { value: 'persisted palace state' },
     })
 
-    fireEvent.click(screen.getAllByRole('link', { name: '英语听力' })[0]!)
+    fireEvent.click(screen.getAllByRole('link', { name: '今日学习' })[0]!)
     await waitFor(() => {
       expect(screen.getByTestId('page:/palaces/30/edit').getAttribute('data-active')).toBe('false')
-      expect(screen.getByTestId('page:/english').getAttribute('data-active')).toBe('true')
+      expect(screen.getByTestId('page:/freestyle').getAttribute('data-active')).toBe('true')
     })
 
-    fireEvent.change(screen.getByLabelText('input:/english'), {
+    fireEvent.change(screen.getByLabelText('input:/freestyle'), {
       target: { value: 'persisted english state' },
     })
 
-    fireEvent.click(screen.getAllByRole('link', { name: '记忆宫殿' })[0]!)
+    fireEvent.click(screen.getAllByRole('link', { name: '内容创作' })[0]!)
     await waitFor(() => {
       expect(screen.getByText('/palaces/30/edit?miniPalaceId=5&miniPalaceMode=edit')).toBeTruthy()
       expect(screen.getByTestId('page:/palaces/30/edit').getAttribute('data-active')).toBe('true')
@@ -93,10 +94,10 @@ describe('AppShell residency navigation memory', () => {
     expect((screen.getByLabelText('input:/palaces/30/edit') as HTMLInputElement).value).toBe(
       'persisted palace state',
     )
-    expect((screen.getByLabelText('input:/english') as HTMLInputElement).value).toBe(
+    expect((screen.getByLabelText('input:/freestyle') as HTMLInputElement).value).toBe(
       'persisted english state',
     )
-    expect(screen.getAllByRole('link', { name: '记忆宫殿' })[1]?.getAttribute('href')).toBe(
+    expect(screen.getAllByRole('link', { name: '内容创作' })[1]?.getAttribute('href')).toBe(
       '/palaces/30/edit?miniPalaceId=5&miniPalaceMode=edit',
     )
   })

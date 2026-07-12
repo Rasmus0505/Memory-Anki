@@ -6,19 +6,31 @@ import type {
   PalaceGroupedListResponse,
   PalaceSegmentSummary,
 } from '@/shared/api/contracts'
-import { deletePalaceApi } from '@/entities/palace/api'
-import { buildReviewSessionPath } from '@/features/review/reviewSessionRoutes'
-import { prefetchStudySession } from '@/features/review/studyWarmup'
+import {
+  deletePalaceApi,
+  getFocusPracticeSessionProgressApi,
+  getPalaceEditorApi,
+  getPalaceFocusSessionApi,
+  getPracticeSessionProgressApi,
+  getSegmentPracticeSessionProgressApi,
+  getMiniPracticeSessionProgressApi,
+} from '@/entities/palace/api'
+import { buildReviewSessionPath } from '@/entities/review'
+import { getPalaceMiniPalaceApi } from '@/entities/mini-palace/api'
+import { getPalaceSegmentApi } from '@/entities/palace-segment/api'
+import { prefetchStudySession } from '@/shared/api/studySessionWarmup'
 
 interface UsePalaceListCardActionsOptions {
   allPalaces: PalaceGroupedItem[]
   fetchData: () => Promise<PalaceGroupedListResponse>
   navigate: (to: string) => void
+  prefetchReviewSession?: (reviewId: number) => void
 }
 
 export function usePalaceListCardActions({
   fetchData,
   navigate,
+  prefetchReviewSession,
 }: UsePalaceListCardActionsOptions) {
   const handleDelete = async (id: number, title: string) => {
     const confirmed = await appConfirm(
@@ -44,11 +56,19 @@ export function usePalaceListCardActions({
   }
 
   const handleWarmPalacePractice = (palace: PalaceGroupedItem) => {
-    prefetchStudySession('palace-practice', palace.id)
+    prefetchStudySession('palace-practice', palace.id, () =>
+      Promise.all([getPalaceEditorApi(palace.id), getPracticeSessionProgressApi(palace.id)]).then(
+        ([session, progress]) => ({ session, progress }),
+      ),
+    )
   }
 
   const handleWarmFocusPractice = (palace: PalaceGroupedItem) => {
-    prefetchStudySession('focus-practice', palace.id)
+    prefetchStudySession('focus-practice', palace.id, () =>
+      Promise.all([getPalaceFocusSessionApi(palace.id), getFocusPracticeSessionProgressApi(palace.id)]).then(
+        ([session, progress]) => ({ session, progress }),
+      ),
+    )
   }
 
   const handleSegmentPractice = (segment: PalaceSegmentSummary) => {
@@ -61,10 +81,14 @@ export function usePalaceListCardActions({
 
   const handleWarmSegmentPractice = (segment: PalaceSegmentSummary) => {
     if (segment.current_review_schedule_id) {
-      prefetchStudySession('review-session', segment.current_review_schedule_id)
+      prefetchReviewSession?.(segment.current_review_schedule_id)
       return
     }
-    prefetchStudySession('segment-practice', segment.id)
+    prefetchStudySession('segment-practice', segment.id, () =>
+      Promise.all([getPalaceSegmentApi(segment.id), getSegmentPracticeSessionProgressApi(segment.id)]).then(
+        ([session, progress]) => ({ session, progress }),
+      ),
+    )
   }
 
   const handleMiniPalacePractice = (mini: MiniPalaceSummary) => {
@@ -72,7 +96,11 @@ export function usePalaceListCardActions({
   }
 
   const handleWarmMiniPalacePractice = (mini: MiniPalaceSummary) => {
-    prefetchStudySession('mini-practice', mini.id)
+    prefetchStudySession('mini-practice', mini.id, () =>
+      Promise.all([getPalaceMiniPalaceApi(mini.id), getMiniPracticeSessionProgressApi(mini.id)]).then(
+        ([session, progress]) => ({ session, progress }),
+      ),
+    )
   }
 
   return {

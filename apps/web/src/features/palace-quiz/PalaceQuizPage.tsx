@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { ArrowLeft, BookOpen } from 'lucide-react'
-import { useAiRunConfigDialog } from '@/features/ai-config/useAiRunConfigDialog'
+import { useAiRunConfigDialog } from '@/entities/ai-runtime'
 import { QuizGenerationWorkspace } from '@/features/palace-quiz/components/QuizGenerationWorkspace'
 import { PalaceQuizManagePanel } from '@/features/palace-quiz/components/PalaceQuizManagePanel'
-import { PalaceQuizMemoryLookupDialog } from '@/features/palace-quiz/components/PalaceQuizMemoryLookupDialog'
+import { PalaceMemoryLookupDialog } from '@/widgets/palace-memory-lookup'
 import { PalaceQuizPracticePanel } from '@/features/palace-quiz/components/PalaceQuizPracticePanel'
 import { PalaceQuizRangeDialog } from '@/features/palace-quiz/components/PalaceQuizRangeDialog'
 import { resetPalaceQuizQuestionAttemptsApi } from '@/entities/quiz/api'
@@ -34,7 +34,7 @@ export default function PalaceQuizPage() {
   const [memoryLookupOpen, setMemoryLookupOpen] = useState(false)
   const [resetAttemptsDialogOpen, setResetAttemptsDialogOpen] = useState(false)
   const [resetAttemptsLoading, setResetAttemptsLoading] = useState(false)
-  const { promptForAiOptions, promptForScenarioAiOptions, aiRunConfigDialog } = useAiRunConfigDialog()
+  const { promptForAiOptions, aiRunConfigDialog } = useAiRunConfigDialog()
   const { palace, questions, loading, error, setQuestions, refreshQuestions } =
     usePalaceQuizResources(palaceId)
   const miniPalaces = palace?.mini_palaces || []
@@ -82,7 +82,6 @@ export default function PalaceQuizPage() {
     palaceId,
     questions,
     visibleQuestionIds: browser.visibleQuestionIds,
-    filteredQuestions: browser.filteredQuestions,
     refreshQuestions,
     removeQuestionStates: practice.removeQuestionStates,
     registerQuizActivity,
@@ -93,7 +92,6 @@ export default function PalaceQuizPage() {
     palace,
     refreshQuestions,
     promptForAiOptions,
-    promptForScenarioAiOptions,
     registerQuizActivity,
     emitQuizFeedback,
   })
@@ -232,7 +230,7 @@ export default function PalaceQuizPage() {
         onConfirm={() => void handleResetVisibleAttempts()}
       />
       {palaceId ? (
-        <PalaceQuizMemoryLookupDialog
+        <PalaceMemoryLookupDialog
           open={memoryLookupOpen}
           onOpenChange={setMemoryLookupOpen}
           currentPalaceId={palaceId}
@@ -298,14 +296,11 @@ export default function PalaceQuizPage() {
           questions={questions}
           miniPalaces={miniPalaces}
           questionScope={browser.questionScope}
-          setQuestionScope={browser.setQuestionScope}
           rootQuestionCount={browser.rootQuestionCount}
           viewMode={browser.viewMode}
-          setViewMode={browser.setViewMode}
           filteredQuestions={browser.filteredQuestions}
           currentQuestion={browser.currentQuestion}
           currentQuestionIndex={browser.currentQuestionIndex}
-          setCurrentQuestionIndex={browser.setCurrentQuestionIndex}
           questionStates={practice.questionStates}
           onChoiceSelect={practice.handleChoiceSelect}
           onStateChange={practice.updateQuestionState}

@@ -1,7 +1,7 @@
 import {
   QuizQuestionInteraction,
   type QuizRuntimeState,
-} from '@/features/palace-quiz/QuizQuestionInteraction'
+} from '@/entities/quiz'
 import {
   QUESTION_TYPE_ACCENT,
   QUESTION_TYPE_DISPLAY,

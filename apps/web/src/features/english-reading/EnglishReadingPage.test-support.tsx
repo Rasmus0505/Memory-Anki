@@ -80,7 +80,7 @@ vi.mock("@/shared/hooks/useTimedSession", () => ({
   }),
 }));
 
-vi.mock("@/features/ai-config/useAiRunConfigDialog", () => ({
+vi.mock("@/entities/ai-runtime", () => ({
   useAiRunConfigDialog: () => ({
     promptForAiOptions: (...args: unknown[]) =>
       englishReadingPageMocks.promptForAiOptionsMock(...args),

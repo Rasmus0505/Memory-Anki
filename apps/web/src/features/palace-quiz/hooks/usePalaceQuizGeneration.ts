@@ -3,7 +3,6 @@ import { toast } from '@/shared/feedback/toast'
 import type { dispatchGlobalFeedback } from '@/shared/feedback/globalFeedbackModel'
 import type {
   AiRuntimeOptions,
-  AiScenarioRuntimeOptionsMap,
   PalaceQuizGenerationPreview,
   PalaceQuizMiniPalaceClassificationResult,
 } from '@/shared/api/contracts'
@@ -25,11 +24,8 @@ import {
   type QuizGenerationSourceKind,
 } from '@/features/palace-quiz/model/palaceQuizPage'
 import {
-  buildQuizGenerationHistoryTitle,
   deleteQuizGenerationHistory,
-  getPreviewQuestionCount,
   loadQuizGenerationHistory,
-  saveQuizGenerationHistory,
   type QuizGenerationHistoryItem,
 } from '@/features/palace-quiz/quiz-generation-history'
 import { persistQuizGenerationHistory } from '@/features/palace-quiz/model/persistQuizGenerationHistory'
@@ -51,7 +47,6 @@ export function usePalaceQuizGeneration({
   palace,
   refreshQuestions,
   promptForAiOptions,
-  promptForScenarioAiOptions,
   registerQuizActivity,
   emitQuizFeedback,
 }: {
@@ -63,16 +58,6 @@ export function usePalaceQuizGeneration({
     entrypointKey: string
     title: string
   }) => Promise<AiRuntimeOptions | null | undefined>
-  promptForScenarioAiOptions: (options: {
-    title: string
-    description: string
-    entries: Array<{
-      scenarioKey: string
-      entrypointKey: string
-      label: string
-      description: string
-    }>
-  }) => Promise<AiScenarioRuntimeOptionsMap | null | undefined>
   registerQuizActivity: (source: string) => void
   emitQuizFeedback: (
     event: Parameters<typeof dispatchGlobalFeedback>[0],
@@ -92,7 +77,7 @@ export function usePalaceQuizGeneration({
   const [generationEnableSecondaryReview, setGenerationEnableSecondaryReview] = useState(false)
   const [generationSaveMode, setGenerationSaveMode] = useState<'append' | 'overwrite'>('append')
   const [generationHistory, setGenerationHistory] = useState<QuizGenerationHistoryItem[]>([])
-  const [historyRegeneratingId, setHistoryRegeneratingId] = useState<string | null>(null)
+  const [historyRegeneratingId] = useState<string | null>(null)
   const [lastFailedConfig, setLastFailedConfig] = useState<GenerationPreviewConfig | null>(null)
   const [classificationLoading, setClassificationLoading] = useState(false)
   const [classificationResult, setClassificationResult] =

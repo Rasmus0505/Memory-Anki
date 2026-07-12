@@ -27,6 +27,7 @@ vi.mock('@/app/router/appRoutes', () => ({
   preloadEnglishWorkspacePage: vi.fn(),
   preloadEnglishReadingPage: vi.fn(),
   preloadFreestylePage: vi.fn(),
+  preloadFreestyleSessionPage: vi.fn(),
   preloadKnowledgePage: vi.fn(),
   preloadProfilePage: vi.fn(),
 }))
@@ -90,7 +91,7 @@ describe('GlobalCommandPalette', () => {
     expect(screen.getByText('新建宫殿')).toBeTruthy()
     expect(screen.getByText('搜索宫殿')).toBeTruthy()
 
-    for (const label of ['仪表盘', '随心模式', '记忆宫殿', '英语听力', '英语阅读', '知识大纲', '复习', '个人中心']) {
+    for (const label of ['今日学习', '知识库', '内容创作', '复习分析', '系统设置']) {
       expect(screen.getByText(label)).toBeTruthy()
     }
 
@@ -112,8 +113,8 @@ describe('GlobalCommandPalette', () => {
     openPalette()
 
     expect(await screen.findByText('最近访问')).toBeTruthy()
-    expect(screen.getByText('记忆宫殿 · /palaces')).toBeTruthy()
-    expect(screen.queryByText('复习 · /review')).toBeNull()
+    expect(screen.getByText('知识库 · /palaces')).toBeTruthy()
+    expect(screen.queryByText('复习分析 · /review')).toBeNull()
   })
 
   it('does not trigger global shortcuts from editable fields', async () => {

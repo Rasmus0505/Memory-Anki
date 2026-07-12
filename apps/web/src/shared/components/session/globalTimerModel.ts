@@ -158,8 +158,27 @@ export function clampTimerOverlayLayoutToViewport(layout: TimerOverlayLayout) {
   }
 }
 
+function migrateLegacyDefaultTimerOverlayLayout(layout: TimerOverlayLayout) {
+  if (typeof window === 'undefined' || window.innerWidth < 1024) return layout
+  const isLegacyDefault =
+    layout.x === 24 &&
+    layout.y === 96 &&
+    layout.width === 320 &&
+    layout.height === 208 &&
+    !layout.collapsed
+  if (!isLegacyDefault) return layout
+  return {
+    ...layout,
+    x: window.innerWidth - layout.width - 24,
+    y: 24,
+  }
+}
+
 export function resolveFloatingTimerLayout(layout: TimerOverlayLayout) {
-  return clampTimerOverlayLayoutToViewport(sanitizeTimerOverlayLayout(layout))
+  const sanitized = sanitizeTimerOverlayLayout(layout)
+  return clampTimerOverlayLayoutToViewport(
+    migrateLegacyDefaultTimerOverlayLayout(sanitized),
+  )
 }
 
 function clampNumber(value: number, minimum: number, maximum: number) {

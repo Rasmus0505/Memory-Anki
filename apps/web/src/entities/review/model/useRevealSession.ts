@@ -1,7 +1,7 @@
 import * as React from 'react'
 import type { RevealState } from '@/entities/session/model'
 import type { MindMapEditorState } from '@/shared/api/contracts'
-import type { MindMapSelection } from '@/shared/components/mindmap-host'
+import type { MindMapSelection } from '@/entities/mindmap-document'
 import {
   advanceRevealStateForNodeClick,
   checkpointNodesRevealed,

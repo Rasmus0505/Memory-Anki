@@ -230,11 +230,3 @@ export function getSegmentDisplayName(segment: PalaceSegmentSummary, index: numb
   }
   return segment.name
 }
-
-export function palaceUsesMiniOnlyReview(
-  palace: {
-    mini_palaces?: Array<unknown>
-  },
-): boolean {
-  return false
-}

@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useState } from "react";
+﻿import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "@/shared/feedback/toast";
 import { getAiCallLogApi, listAiCallLogsApi } from "@/entities/ai-log/api";
@@ -93,7 +93,7 @@ export function useAiWorkspaceController() {
   const [logDetailLoading, setLogDetailLoading] = useState(false);
   const [logDetail, setLogDetail] = useState<AiCallLogDetail | null>(null);
 
-  const hydrateState = (response: AiModelSettingsResponse) => {
+  const hydrateState = useCallback((response: AiModelSettingsResponse) => {
     const nextCategories = response.categories ?? [];
     const nextScenes = response.scenes ?? response.scenarios ?? [];
     setCategories(nextCategories);
@@ -136,9 +136,9 @@ export function useAiWorkspaceController() {
     if (!nextCategories.find((item) => item.key === currentCategoryKey) && nextCategories[0]) {
       setCurrentCategoryKey(nextCategories[0].key);
     }
-  };
+  }, [currentCategoryKey]);
 
-  const loadSettings = async () => {
+  const loadSettings = useCallback(async () => {
     setError(null);
     setLoading(true);
     try {
@@ -152,9 +152,12 @@ export function useAiWorkspaceController() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [hydrateState]);
 
-  const loadLogs = async (nextFilters = logFilters) => {
+  const logFiltersRef = useRef(logFilters);
+  logFiltersRef.current = logFilters;
+
+  const loadLogs = useCallback(async (nextFilters = logFiltersRef.current) => {
     setLogsLoading(true);
     try {
       const response = await listAiCallLogsApi({
@@ -170,17 +173,17 @@ export function useAiWorkspaceController() {
     } finally {
       setLogsLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     void loadSettings();
-  }, []);
+  }, [loadSettings]);
 
   useEffect(() => {
     if (workspaceTab === "observability") {
       void loadLogs();
     }
-  }, [workspaceTab]);
+  }, [loadLogs, workspaceTab]);
 
   const configurableProviders = useMemo(
     () =>
@@ -243,7 +246,10 @@ export function useAiWorkspaceController() {
 
   const currentCategory =
     categories.find((item) => item.key === currentCategoryKey) ?? categories[0] ?? null;
-  const currentCategoryScenes = currentCategory ? groupedScenes[currentCategory.key] ?? [] : [];
+  const currentCategoryScenes = useMemo(
+    () => (currentCategory ? groupedScenes[currentCategory.key] ?? [] : []),
+    [currentCategory, groupedScenes],
+  );
   const filteredCurrentScenes = useMemo(
     () =>
       currentCategoryScenes.filter((scene) => {

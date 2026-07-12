@@ -3,7 +3,6 @@ import {
   buildQuizGenerationHistoryTitle,
   getPreviewQuestionCount,
   saveQuizGenerationHistory,
-  type QuizGenerationHistoryItem,
 } from '@/features/palace-quiz/quiz-generation-history'
 import type { QuizGenerationSourceKind } from '@/features/palace-quiz/model/palaceQuizPage'
 

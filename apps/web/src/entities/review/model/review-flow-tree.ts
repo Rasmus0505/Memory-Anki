@@ -3,7 +3,7 @@ import type {
   MindMapDocNode,
   MindMapEditorState,
 } from '@/shared/api/contracts'
-import type { MindMapSelection } from '@/shared/components/mindmap-host'
+import type { MindMapSelection } from '@/entities/mindmap-document'
 import type { RevealState } from '@/entities/session/model'
 
 export interface ReviewMindMapNode {

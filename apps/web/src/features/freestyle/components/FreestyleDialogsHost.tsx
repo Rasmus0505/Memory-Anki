@@ -7,7 +7,7 @@ import { WrongQuestionsDialog } from '@/features/freestyle/components/WrongQuest
 import type { FreestyleConfig } from '@/features/freestyle/model/freestyle'
 import { isQuizCard } from '@/features/freestyle/model/freestyle-cards'
 import type { FreestyleMode, TodayTrainingConfig } from '@/features/freestyle/model/today-training'
-import { PalaceQuizMemoryLookupDialog } from '@/features/palace-quiz/components/PalaceQuizMemoryLookupDialog'
+import { PalaceMemoryLookupDialog } from '@/widgets/palace-memory-lookup'
 import type { FreestyleCard, FreestylePalaceContext } from '@/shared/api/contracts'
 
 export function FreestyleDialogsHost({
@@ -74,7 +74,7 @@ export function FreestyleDialogsHost({
         onConfigChange={onTodayConfigChange}
       />
       {currentPalaceId ? (
-        <PalaceQuizMemoryLookupDialog
+        <PalaceMemoryLookupDialog
           open={memoryLookupOpen}
           onOpenChange={onMemoryLookupOpenChange}
           currentPalaceId={currentPalaceId}

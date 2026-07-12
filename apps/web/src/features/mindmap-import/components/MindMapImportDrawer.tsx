@@ -161,6 +161,7 @@ export function MindMapImportDrawer(props: MindMapImportDrawerProps) {
     previewSectionRef,
     rawModelPreviewText,
     reviewPreview: props.reviewPreview,
+    renderMindMapPreview: props.renderMindMapPreview,
     resolvedPreviewImageUrl,
     sourceKind: props.sourceKind,
     sourceTree: props.sourceTree,
@@ -239,7 +240,7 @@ export function MindMapImportDrawer(props: MindMapImportDrawerProps) {
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange} modal={false} className={overlayClassName}>
+    <Dialog open={open} onOpenChange={onOpenChange} modal={false}>
       <DialogContent
         data-testid="mindmap-import-dialog-content"
         layout={layoutMode === 'sidebar' ? 'unstyled' : 'centered'}
@@ -249,6 +250,7 @@ export function MindMapImportDrawer(props: MindMapImportDrawerProps) {
             : 'h-[min(92vh,980px)] max-w-[min(92vw,1440px)] rounded-lg border bg-card/98 p-0 shadow-floating',
           'overflow-hidden overscroll-contain',
           className,
+          overlayClassName,
         )}
       >
         <DialogHeader>

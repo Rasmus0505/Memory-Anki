@@ -64,27 +64,6 @@ export function buildMindMapImportValidationFingerprint(
   }
 }
 
-export function buildSubtreeUidMap(doc: MindMapDoc | null) {
-  const subtreeMap = new Map<string, string[]>()
-
-  const walk = (node: MindMapDocNode | null | undefined): string[] => {
-    if (!node || typeof node !== 'object') return []
-    const ownUid =
-      node.data && typeof node.data === 'object' && typeof node.data.uid === 'string'
-        ? node.data.uid
-        : null
-    const childUids = (Array.isArray(node.children) ? node.children : []).flatMap((child) => walk(child))
-    const subtreeUids = ownUid ? [ownUid, ...childUids] : childUids
-    if (ownUid) {
-      subtreeMap.set(ownUid, Array.from(new Set(subtreeUids)))
-    }
-    return subtreeUids
-  }
-
-  walk(doc?.root)
-  return subtreeMap
-}
-
 export function uniqueStrings(values: Iterable<string>) {
   return Array.from(new Set(Array.from(values).filter(Boolean)))
 }

@@ -6,7 +6,7 @@ import { dispatchGlobalFeedback } from '@/shared/feedback/globalFeedbackModel'
 
 const playEvent = vi.fn()
 
-vi.mock('@/shared/components/mindmap-host/useMindMapFeedback', () => ({
+vi.mock('@/shared/feedback/mindmap-audio/useMindMapFeedback', () => ({
   useMindMapFeedbackSettings: () => ({
     animationEnabled: true,
     mode: 'immersive',

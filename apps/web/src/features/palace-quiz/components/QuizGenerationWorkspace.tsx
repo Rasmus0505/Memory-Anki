@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { ArrowDown, ArrowUp, Brain, FileText, ImagePlus, Library, LoaderCircle, Plus, Save, Sparkles, Trash2 } from 'lucide-react'
 import type { AiRuntimeOptions, QuizMatchingItem, QuizSourceRole } from '@/shared/api/contracts'
 import { batchCreateChapterQuizQuestionsApi, batchCreatePalaceQuizQuestionsApi } from '@/entities/quiz/api'

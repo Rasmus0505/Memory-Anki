@@ -1,5 +1,4 @@
 import type {
-  AiRuntimeOptions,
   ResolvedAiRuntimeMeta,
 } from './profile'
 

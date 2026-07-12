@@ -7,7 +7,7 @@ import {
   checkEnglishSentenceApi,
   getEnglishCourseApi,
   updateEnglishCourseProgressApi,
-} from '@/features/english/api'
+} from '@/entities/english/api'
 import { shouldAutoStartOnPageEnter, useTimedSession } from '@/shared/hooks/useTimedSession'
 import { useLatestRef } from '@/shared/hooks/useLatestRef'
 import { readTimerAutomationConfig } from '@/shared/components/session/timer-automation-config'
@@ -122,7 +122,6 @@ export default function EnglishCoursePage() {
     routePath: fullPath,
   })
 
-  const timerRef = useLatestRef(timer)
   const courseRef = useLatestRef<EnglishCourseDetail | null>(course)
   const typingSentenceIndexRef = useLatestRef(typingSentenceIndex)
   const sentencePhaseRef = useLatestRef(sentencePhase)
@@ -318,7 +317,7 @@ export default function EnglishCoursePage() {
       setCourse((current) => (current ? { ...current, progress: nextProgress } : current))
       return nextProgress
     },
-    [],
+    [courseRef],
   )
 
   const startPlaybackWindow = useCallback(
@@ -437,7 +436,7 @@ export default function EnglishCoursePage() {
         pendingSubmissionIndexesRef.current.delete(sentenceIndex)
       }
     },
-    [handlePersistProgress, isSegmentPlayingRef, playWrongSound, rollbackToSentence, sentencePhaseRef],
+    [courseRef, handlePersistProgress, isSegmentPlayingRef, playWrongSound, rollbackToSentence, sentencePhaseRef],
   )
 
   const replayCurrentSentence = useCallback(
@@ -452,7 +451,7 @@ export default function EnglishCoursePage() {
         source,
       })
     },
-    [startPlaybackWindow, typingSentenceIndexRef],
+    [courseRef, startPlaybackWindow, typingSentenceIndexRef],
   )
 
   const handleLocalSentenceCompletion = useCallback(
@@ -610,7 +609,7 @@ export default function EnglishCoursePage() {
   useEffect(() => {
     if (!activeSentence) return
     resetTypingState()
-  }, [activeSentence?.id, resetTypingState])
+  }, [activeSentence, resetTypingState])
 
   useEffect(() => {
     if (!activeSentence || !isSentenceLocallyComplete) return

@@ -1,4 +1,4 @@
-﻿import { useEffect, useState, type FormEvent } from 'react'
+﻿import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
 import { ProfileSkeleton } from './ProfileSkeleton'
 import {
   Download,
@@ -12,7 +12,7 @@ import {
 } from 'lucide-react'
 import { toast } from '@/shared/feedback/toast'
 import { ProfileLayout } from '@/features/profile/ProfileLayout'
-import type { ReviewSettings } from '@/shared/api/contracts'
+import type { ReviewSettings, ReviewStageProgressRepairResponse } from '@/shared/api/contracts'
 import {
   getReviewSettingsApi,
   updateReviewSettingsApi,
@@ -23,16 +23,22 @@ import {
   exportMarkdownUrl,
   importFileApi,
 } from '@/features/profile/api'
-import { repairReviewStageProgressApi } from '@/features/review/api'
 import { Button } from '@/shared/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card'
 import { Input } from '@/shared/components/ui/input'
 import { Label } from '@/shared/components/ui/label'
-import { MemoryAnkiShortcutsSettings } from '@/features/shortcuts/MemoryAnkiShortcutsSettings'
 import { resetPwaRuntime } from '@/pwa/resetPwa'
 import { ThemeSettingsCard } from '@/features/profile/ThemeSettingsCard'
 
-export default function ProfileSettingsPage() {
+interface ProfileSettingsPageProps {
+  repairReviewStageProgress: () => Promise<ReviewStageProgressRepairResponse>
+  shortcutsSettings: ReactNode
+}
+
+export default function ProfileSettingsPage({
+  repairReviewStageProgress,
+  shortcutsSettings,
+}: ProfileSettingsPageProps) {
   const [tab, setTab] = useState<'config' | 'io' | 'shortcuts'>('config')
   const [config, setConfig] = useState<ReviewSettings | null>(null)
   const [clientPreferencesReady, setClientPreferencesReady] = useState(false)
@@ -114,7 +120,7 @@ export default function ProfileSettingsPage() {
     setRepairProgressLoading(true)
     setRepairProgressMessage(null)
     try {
-      const result = await repairReviewStageProgressApi()
+      const result = await repairReviewStageProgress()
       const recoveredCount = result.practice_recovery_count ?? 0
       const migratedCount = (result.orphan_progress_count ?? 0) + (result.orphan_study_session_count ?? 0)
       const syncedCount = result.study_session_count ?? 0
@@ -180,7 +186,7 @@ export default function ProfileSettingsPage() {
       </div>
 
       {tab === 'shortcuts' ? (
-        <MemoryAnkiShortcutsSettings />
+        shortcutsSettings
       ) : tab === 'config' ? (
         <div className="space-y-6">
           <ThemeSettingsCard />

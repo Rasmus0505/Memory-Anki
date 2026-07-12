@@ -51,10 +51,6 @@ vi.mock('@/entities/palace-segment/api', () => ({
   updatePalaceSegmentReviewProgressApi: vi.fn(),
 }))
 
-vi.mock('@/features/review/api', () => ({
-  submitReviewSessionApi: vi.fn(),
-}))
-
 vi.mock('@/entities/preferences/api', () => ({
   getClientPreferencesApi: vi.fn(async () => ({ items: {} })),
   updateClientPreferencesApi: vi.fn(async (data: Record<string, unknown>) => ({ items: data })),

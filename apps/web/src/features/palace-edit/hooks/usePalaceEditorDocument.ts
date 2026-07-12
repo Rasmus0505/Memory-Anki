@@ -5,9 +5,9 @@ import {
   savePalaceEditorApi,
   savePalaceEditorWithOptionsApi,
 } from '@/entities/palace/api'
-import { usePersistedMindMapEditor } from '@/shared/hooks/usePersistedMindMapEditor'
+import { useMindMapDocumentSession } from '@/shared/hooks/useMindMapDocumentSession'
 import type { MindMapEditorState, PalaceEditorResponse } from '@/shared/api/contracts'
-import type { ImportApplyContext } from '@/features/mindmap-import'
+import type { ImportApplyContext } from '@/shared/api/contracts/imports'
 import {
   applyProgrammaticEditorState,
   countEditorDocNodes,
@@ -20,6 +20,7 @@ import {
 } from '@/features/palace-edit/model/mindmap-editor'
 import type { PalaceMeta } from '@/features/palace-edit/model/palace-edit-types'
 import { appConfirm } from '@/shared/components/ui/native-dialog'
+import { readMindMapEditorState } from '@/entities/mindmap-document'
 
 type ImportApplyGuardPhase = 'saving' | 'reloading' | 'awaiting_sync'
 
@@ -66,18 +67,14 @@ export function usePalaceEditorDocument({
     error,
     reload,
     flushSave,
-  } = usePersistedMindMapEditor({
+  } = useMindMapDocumentSession({
     entityId: palaceId,
-    fetcher: getPalaceEditorApi,
-    saver: savePalaceEditorApi,
-    selectMeta: (response) => response.palace as PalaceMeta,
-    selectEditorState: (response) => ({
-      editor_doc: response.editor_doc,
-      editor_config: response.editor_config,
-      editor_local_config: response.editor_local_config,
-      lang: response.lang,
-      editor_fingerprint: response.editor_fingerprint,
-    }),
+    adapter: {
+      load: getPalaceEditorApi,
+      save: savePalaceEditorApi,
+      selectMeta: (response) => response.palace as PalaceMeta,
+      selectEditorState: readMindMapEditorState,
+    },
     onSaveError: async (nextError, pendingState) => {
       if (!nextError.message.includes('危险结构变更')) return false
       const forced = await confirmDangerousPalaceSave(pendingState)
@@ -305,6 +302,7 @@ export function usePalaceEditorDocument({
       savePalaceEditorAfterDangerousConfirm,
       setMeta,
       syncImportApplyGuardWithSavedState,
+      syncAuthoritativeSnapshot,
       effectivePalaceTitle,
     ],
   )

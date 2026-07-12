@@ -3,7 +3,7 @@ import type {
   MindMapFeedbackEvent,
   MindMapFeedbackLevel,
   MindMapFeedbackOrigin,
-} from '@/shared/components/mindmap-host/hostBridgeUtils'
+} from '@/shared/feedback/feedbackEvents'
 import type { FeedbackBurst, FeedbackDescriptor } from './feedbackTypes'
 import { getMindMapFeedbackProfile } from './globalFeedbackProfiles'
 

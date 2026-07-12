@@ -1,4 +1,4 @@
-import type { ChangeEvent, ClipboardEvent, RefObject } from 'react'
+import type { ChangeEvent, ClipboardEvent, ReactNode, RefObject } from 'react'
 import type {
   BatchImportImageItem,
   BatchImportMeta,
@@ -36,6 +36,7 @@ export interface MindMapImportDrawerProps {
   error: string
   sourceTree: MindMapImportSourceTree | null
   previewEditorDoc: MindMapEditorState['editor_doc']
+  renderMindMapPreview: (editorState: MindMapEditorState, version: number) => ReactNode
   extractedText: string
   imagePreviewUrl: string
   batchImages: BatchImportImageItem[]
@@ -107,6 +108,7 @@ export type MindMapImportResultsModel = Pick<
   | 'sourceKind'
   | 'sourceTree'
   | 'reviewPreview'
+  | 'renderMindMapPreview'
 > & {
   hasStreamProgress: boolean
   onStreamPreviewScroll: () => void

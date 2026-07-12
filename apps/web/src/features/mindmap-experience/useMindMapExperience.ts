@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { listMindMapNodeMasteryApi, setMindMapNodeLabelApi } from '@/entities/mindmap-learning'
 import type { MindMapEditorState, MindMapTask } from '@/shared/api/contracts'
-import { auditMindMapEditorDoc, searchMindMapEditorDoc } from '@/shared/components/mindmap'
+import { auditMindMapDocument, searchMindMapDocument } from '@/entities/mindmap-document'
 
 interface UseMindMapExperienceOptions {
   entityType: 'palace' | 'subject'
@@ -35,9 +35,9 @@ export function useMindMapExperience({ entityType, entityId, editorState, defaul
     if (taskStorageKey) localStorage.setItem(taskStorageKey, nextTask)
   }, [taskStorageKey])
 
-  const searchResults = useMemo(() => searchMindMapEditorDoc(editorState?.editor_doc ?? null, searchQuery), [editorState?.editor_doc, searchQuery])
+  const searchResults = useMemo(() => searchMindMapDocument(editorState?.editor_doc ?? null, searchQuery), [editorState?.editor_doc, searchQuery])
   const selectedResult = useMemo(() => searchResults.find((result) => result.nodeUid === selectedSearchUid) ?? searchResults[0] ?? null, [searchResults, selectedSearchUid])
-  const structureIssues = useMemo(() => auditMindMapEditorDoc(editorState?.editor_doc ?? null), [editorState?.editor_doc])
+  const structureIssues = useMemo(() => auditMindMapDocument(editorState?.editor_doc ?? null), [editorState?.editor_doc])
   const setNodeManualLabel = useCallback(async (nodeUid: string, label: 'weak' | 'mastered' | null) => {
     if (entityType !== 'palace' || !entityId) return
     await setMindMapNodeLabelApi(entityId, nodeUid, label)
