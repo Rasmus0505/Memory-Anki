@@ -6,8 +6,7 @@ from typing import Protocol
 
 
 class EnglishTaskRunner(Protocol):
-    def launch(self, task_id: str, target: Callable[[str], None]) -> None:
-        ...
+    def launch(self, task_id: str, target: Callable[[str], None]) -> None: ...
 
 
 class LocalThreadEnglishTaskRunner:

@@ -2,13 +2,11 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from memory_anki.infrastructure.db.deps import session_dep
-from memory_anki.modules.backups.application.backup_palace_restore import (
-    restore_palace_version,
-)
-from memory_anki.modules.backups.application.backup_palace_versions import (
+from memory_anki.modules.backups.api import (
     cleanup_and_list_palace_versions,
     get_palace_version_detail,
     list_palace_versions,
+    restore_palace_version,
 )
 from memory_anki.modules.palaces.application.palace_serializer import palace_json
 from memory_anki.modules.palaces.application.palace_service import get_palace

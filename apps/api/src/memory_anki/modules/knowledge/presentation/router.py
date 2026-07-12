@@ -1,4 +1,5 @@
 """知识体系路由：学科 + 章节。"""
+
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -7,19 +8,20 @@ from sqlalchemy.orm import Session
 
 from memory_anki.infrastructure.db.deps import session_dep
 from memory_anki.modules.knowledge.application import chapter_service, subject_service
+from memory_anki.modules.knowledge.application.editor_state_service import (
+    EditorStateConflictError,
+)
 from memory_anki.modules.knowledge.domain.schemas import (
+    ChapterCreate,
     ChapterUpdate,
     PalaceChapterLinks,
     SubjectCreate,
     SubjectUpdate,
 )
-from memory_anki.modules.mindmap.application.editor_state_service import (
-    EditorStateConflictError,
-)
-from memory_anki.modules.palaces.domain.schemas import ChapterCreate
-from memory_anki.modules.persistence.application.idempotency import (
-    get_idempotent_response,
-    save_idempotent_response,
+from memory_anki.platform.application import mutation_identity_from_headers
+from memory_anki.platform.persistence import (
+    SqlAlchemyMutationResponseStore,
+    SqlAlchemyUnitOfWork,
 )
 
 router = APIRouter(tags=["knowledge"])
@@ -40,6 +42,7 @@ def _internal_error_response(message: str) -> JSONResponse:
 
 # === 学科 ===
 
+
 @router.get("/subjects")
 def list_subjects(
     limit: int | None = Query(default=None, ge=1, le=500),
@@ -51,7 +54,9 @@ def list_subjects(
 
 @router.post("/subjects")
 def create_subject(data: SubjectCreate, request: Request, s: Session = Depends(session_dep)):
-    existing_response = get_idempotent_response(s, request)
+    mutation_identity = mutation_identity_from_headers(request.headers)
+    mutation_store = SqlAlchemyMutationResponseStore(s)
+    existing_response = mutation_store.get(mutation_identity)
     if existing_response is not None:
         return existing_response
     payload = data.model_dump(exclude_unset=True, exclude_none=False)
@@ -60,11 +65,9 @@ def create_subject(data: SubjectCreate, request: Request, s: Session = Depends(s
         name=payload.get("name", ""),
         color=payload.get("color", "#6366f1"),
         sort_order=payload.get("sort_order", 0),
-        before_commit=lambda response: save_idempotent_response(
-            s,
-            request,
-            response,
-            commit=False,
+        uow=SqlAlchemyUnitOfWork(s),
+        before_commit=lambda response: mutation_store.save(
+            mutation_identity, response
         ),
     )
 
@@ -75,6 +78,7 @@ def update_subject(subject_id: int, data: SubjectUpdate, s: Session = Depends(se
         s,
         subject_id,
         data.model_dump(exclude_unset=True, exclude_none=False),
+        uow=SqlAlchemyUnitOfWork(s),
     )
     if sub is None:
         raise HTTPException(status_code=404, detail="not found")
@@ -83,13 +87,18 @@ def update_subject(subject_id: int, data: SubjectUpdate, s: Session = Depends(se
 
 @router.delete("/subjects/{subject_id}")
 def delete_subject(subject_id: int, s: Session = Depends(session_dep)):
-    deleted = subject_service.delete_subject(s, subject_id)
+    deleted = subject_service.delete_subject(
+        s,
+        subject_id,
+        uow=SqlAlchemyUnitOfWork(s),
+    )
     if not deleted:
         raise HTTPException(status_code=404, detail="not found")
     return {"ok": True}
 
 
 # === 章节 ===
+
 
 @router.get("/subjects/{subject_id}/tree")
 def get_tree(subject_id: int, s: Session = Depends(session_dep)):
@@ -112,18 +121,28 @@ def get_subject_editor(subject_id: int, s: Session = Depends(session_dep)):
 def update_subject_editor(subject_id: int, data: dict, s: Session = Depends(session_dep)):
     # Keep this as a free-form dict: the editor document/config payload is an
     # open-ended mind-map state owned by the editor subsystem.
+    uow = SqlAlchemyUnitOfWork(s)
     try:
-        payload = subject_service.save_subject_editor(s, subject_id, data)
+        payload = subject_service.save_subject_editor(s, subject_id, data, uow=uow)
         if payload is None:
             raise HTTPException(status_code=404, detail="not found")
         return payload
     except HTTPException:
         raise
     except EditorStateConflictError as exc:
-        s.rollback()
-        return JSONResponse(status_code=409, content={"detail": str(exc)})
+        uow.rollback()
+        return JSONResponse(
+            status_code=409,
+            content={
+                "detail": {
+                    "code": "mindmap_conflict",
+                    "message": str(exc),
+                    "remoteSnapshot": exc.current_snapshot,
+                }
+            },
+        )
     except Exception:
-        s.rollback()
+        uow.rollback()
         logger.exception("update_subject_editor failed: subject_id=%s", subject_id)
         return _internal_error_response("保存学科编辑器状态失败，请查看服务端日志。")
 
@@ -144,23 +163,24 @@ def create_chapter(
     request: Request,
     s: Session = Depends(session_dep),
 ):
-    existing_response = get_idempotent_response(s, request)
+    mutation_identity = mutation_identity_from_headers(request.headers)
+    mutation_store = SqlAlchemyMutationResponseStore(s)
+    existing_response = mutation_store.get(mutation_identity)
     if existing_response is not None:
         return existing_response
+    uow = SqlAlchemyUnitOfWork(s)
     try:
         return chapter_service.create_chapter(
             s,
             subject_id,
             data,
-            before_commit=lambda result: save_idempotent_response(
-                s,
-                request,
-                result,
-                commit=False,
+            uow=uow,
+            before_commit=lambda result: mutation_store.save(
+                mutation_identity, result
             ),
         )
     except Exception:
-        s.rollback()
+        uow.rollback()
         logger.exception("create_chapter failed: subject_id=%s", subject_id)
         return _internal_error_response("创建章节失败，请查看服务端日志。")
 
@@ -171,6 +191,7 @@ def update_chapter(chapter_id: int, data: ChapterUpdate, s: Session = Depends(se
         s,
         chapter_id,
         data.model_dump(exclude_unset=True, exclude_none=False),
+        uow=SqlAlchemyUnitOfWork(s),
     )
     if chapter is None:
         raise HTTPException(status_code=404, detail="not found")
@@ -180,7 +201,12 @@ def update_chapter(chapter_id: int, data: ChapterUpdate, s: Session = Depends(se
 @router.delete("/chapters/{chapter_id}")
 def delete_chapter(chapter_id: int, force: bool = False, s: Session = Depends(session_dep)):
     try:
-        result = chapter_service.delete_chapter(s, chapter_id, force=force)
+        result = chapter_service.delete_chapter(
+            s,
+            chapter_id,
+            force=force,
+            uow=SqlAlchemyUnitOfWork(s),
+        )
         if result.get("requires_force"):
             return JSONResponse(status_code=409, content=result)
         return result
@@ -191,6 +217,7 @@ def delete_chapter(chapter_id: int, force: bool = False, s: Session = Depends(se
 
 
 # === 宫殿章节关联 ===
+
 
 @router.get("/palaces/{palace_id}/chapters")
 def palace_chapters(palace_id: int, s: Session = Depends(session_dep)):
@@ -208,6 +235,7 @@ def link_chapters(palace_id: int, data: PalaceChapterLinks, s: Session = Depends
         s,
         palace_id,
         data.model_dump(exclude_unset=True, exclude_none=False),
+        uow=SqlAlchemyUnitOfWork(s),
     )
     if result is None:
         raise HTTPException(status_code=404, detail="not found")

@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from memory_anki.infrastructure.db._tables.misc import Config
 from memory_anki.infrastructure.db._tables.palaces import Palace
 from memory_anki.modules.palaces.application import mindmap_ai_split_service as service
+from memory_anki.modules.settings.api import SettingsAiRuntimeProvider, SettingsPromptCatalog
 
 
 def _build_editor_doc() -> dict:
@@ -78,6 +79,14 @@ def _mindmap_ai_split_test_defaults(
     db_session.commit()
 
 
+def _ai_runtime(session: Session) -> SettingsAiRuntimeProvider:
+    return SettingsAiRuntimeProvider(session)
+
+
+def _prompt_catalog(session: Session) -> SettingsPromptCatalog:
+    return SettingsPromptCatalog(session)
+
+
 def _get_palace(session: Session) -> Palace:
     palace = session.query(Palace).first()
     assert palace is not None
@@ -105,6 +114,8 @@ def test_leaf_target_generates_parallel_children_when_no_existing_children(db_se
             _get_palace(db_session),
             editor_doc,
             "target-1",
+            ai_runtime=_ai_runtime(db_session),
+            prompt_catalog=_prompt_catalog(db_session),
         )
 
     children = result.editor_doc["root"]["children"][0]["children"]
@@ -140,6 +151,8 @@ def test_existing_children_only_move_without_rewriting_descendants(db_session: S
             _get_palace(db_session),
             editor_doc,
             "target-1",
+            ai_runtime=_ai_runtime(db_session),
+            prompt_catalog=_prompt_catalog(db_session),
         )
 
     target_children = result.editor_doc["root"]["children"][0]["children"]
@@ -175,6 +188,8 @@ def test_duplicate_and_unknown_assignments_fall_back_to_uncategorized_bucket(db_
             _get_palace(db_session),
             editor_doc,
             "target-1",
+            ai_runtime=_ai_runtime(db_session),
+            prompt_catalog=_prompt_catalog(db_session),
         )
 
     target_children = result.editor_doc["root"]["children"][0]["children"]
@@ -213,6 +228,8 @@ def test_root_target_uid_none_replaces_root_children(db_session: Session):
             _get_palace(db_session),
             editor_doc,
             None,
+            ai_runtime=_ai_runtime(db_session),
+            prompt_catalog=_prompt_catalog(db_session),
         )
 
     root_children = result.editor_doc["root"]["children"]
@@ -234,7 +251,7 @@ def test_split_granularity_is_inferred_from_existing_children(db_session: Sessio
     db_session.add(Config(key="mindmap_ai_split_max_children", value="12"))
     db_session.commit()
 
-    def fake_call(*, config, target_node, existing_children):
+    def fake_call(*, config, target_node, existing_children, prompt_catalog):
         assert config.max_children == 4
         return {
             "new_children": [
@@ -256,6 +273,8 @@ def test_split_granularity_is_inferred_from_existing_children(db_session: Sessio
             _get_palace(db_session),
             editor_doc,
             "target-1",
+            ai_runtime=_ai_runtime(db_session),
+            prompt_catalog=_prompt_catalog(db_session),
         )
 
     children = result.editor_doc["root"]["children"][0]["children"]
@@ -269,7 +288,10 @@ def test_config_falls_back_to_environment_values(db_session: Session, monkeypatc
     monkeypatch.setattr(service, "DASHSCOPE_BASE_URL", "https://example.test/v1")
     monkeypatch.setattr(service, "DASHSCOPE_TEXT_MODEL", "qwen-env")
 
-    config = service.resolve_mindmap_ai_split_config(db_session)
+    config = service.resolve_mindmap_ai_split_config(
+        db_session,
+        ai_runtime=_ai_runtime(db_session),
+    )
 
     assert config.api_key == "env-key"
     assert config.base_url == "https://example.test/v1"
@@ -285,4 +307,7 @@ def test_config_raises_clear_error_when_api_key_is_missing(db_session: Session, 
     db_session.commit()
 
     with pytest.raises(service.MindMapAiSplitError, match="API Key"):
-        service.resolve_mindmap_ai_split_config(db_session)
+        service.resolve_mindmap_ai_split_config(
+            db_session,
+            ai_runtime=_ai_runtime(db_session),
+        )

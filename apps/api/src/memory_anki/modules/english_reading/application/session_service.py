@@ -18,12 +18,10 @@ from sqlalchemy.orm import Session
 from memory_anki.infrastructure.llm.openai_compatible import (
     OpenAICompatibleChatConfig,
 )
-from memory_anki.modules.settings.application.ai_model_registry import (
-    AiRuntimeOptions,
-)
-from memory_anki.modules.settings.application.ai_prompts import get_prompt_template
+from memory_anki.platform.application import AiRuntimeOptions
 
 from . import service as _svc
+from .ai_dependencies import EnglishReadingAiDependencies
 
 
 def plan_yellow_allocations(
@@ -369,6 +367,7 @@ def chunk_sentence_tasks(sentence_tasks: list[dict[str, Any]]) -> list[list[dict
 def generate_sentence_renders_with_ai(
     session: Session,
     *,
+    ai_dependencies: EnglishReadingAiDependencies,
     sentence_tasks: list[dict[str, Any]],
     declared_cefr: str,
     target_cefr: str,
@@ -378,6 +377,7 @@ def generate_sentence_renders_with_ai(
 ) -> tuple[dict[str, dict[str, Any]], list[str]]:
     runtime = _svc._resolve_legacy_dashscope_runtime(
         session,
+        ai_dependencies=ai_dependencies,
         scenario_key="english_reading",
         ai_options=ai_options,
         legacy_default_model=_svc.DASHSCOPE_TEXT_MODEL,
@@ -409,7 +409,7 @@ def generate_sentence_renders_with_ai(
                 for task in batch
             ],
         }
-        base_prompt = get_prompt_template(session, "ai_prompt_english_reading_adapt_sentence")
+        base_prompt = ai_dependencies.prompts.render("ai_prompt_english_reading_adapt_sentence")
         prompt = f"{base_prompt}\n\n输入数据：{json.dumps(prompt_payload, ensure_ascii=False)}"
         try:
             payload, log_id = _svc.call_json_completion_with_log(
@@ -543,7 +543,7 @@ def estimate_sentence_syntax_value(text: str) -> float:
     words = [match.group(0).lower() for match in _svc.WORD_RE.finditer(text)]
     if not words:
         return 0.0
-    score = 0
+    score = 0.0
     word_count = len(words)
     comma_count = text.count(",")
     if word_count > 14:

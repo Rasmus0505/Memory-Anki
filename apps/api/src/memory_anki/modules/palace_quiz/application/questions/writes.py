@@ -101,20 +101,30 @@ def upsert_classified_question_copy_row(
 def commit_new_question(
     session: Session,
     row: PalaceQuizQuestion,
+    *,
+    commit: bool = True,
 ) -> dict[str, object]:
     session.add(row)
-    session.commit()
-    session.refresh(row)
+    if commit:
+        session.commit()
+        session.refresh(row)
+    else:
+        session.flush()
     return serialize_question(row)
 
 
 def commit_new_questions(
     session: Session,
     rows: list[PalaceQuizQuestion],
+    *,
+    commit: bool = True,
 ) -> list[dict[str, object]]:
-    session.commit()
-    for row in rows:
-        session.refresh(row)
+    if commit:
+        session.commit()
+        for row in rows:
+            session.refresh(row)
+    else:
+        session.flush()
     return [serialize_question(row) for row in rows]
 
 
@@ -159,10 +169,14 @@ def commit_recorded_choice_attempt(
     row: PalaceQuizQuestion,
     selected_option_id: str,
     is_correct: bool,
+    commit: bool = True,
 ) -> dict[str, object]:
     row.updated_at = utc_now_naive()
-    session.commit()
-    session.refresh(row)
+    if commit:
+        session.commit()
+        session.refresh(row)
+    else:
+        session.flush()
     return {
         "question": serialize_question(row),
         "selected_option_id": selected_option_id,
@@ -205,6 +219,7 @@ def batch_create_questions_for_scope(
     next_sort_order: int,
     normalize_payload: Callable[[dict[str, object]], dict[str, object]],
     create_row: Callable[[dict[str, object], int], PalaceQuizQuestion],
+    commit: bool = True,
 ) -> list[dict[str, object]]:
     from .dedup import (
         build_existing_import_dedup_keys,
@@ -240,7 +255,7 @@ def batch_create_questions_for_scope(
         row = create_row(normalized, current_sort_order)
         session.add(row)
         rows.append(row)
-    return commit_new_questions(session, rows)
+    return commit_new_questions(session, rows, commit=commit)
 
 
 __all__ = [

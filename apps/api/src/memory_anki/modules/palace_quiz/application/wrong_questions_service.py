@@ -11,7 +11,7 @@ from memory_anki.infrastructure.db._tables.palaces import (
     PalaceQuizQuestion,
 )
 from memory_anki.modules.palace_quiz.application.question_schema import serialize_question
-from memory_anki.modules.palaces.application.title_sync_service import resolve_palace_title
+from memory_anki.modules.palaces.api import resolve_palace_title
 
 
 def get_wrong_questions(session: Session, limit: int = 200) -> dict:

@@ -31,38 +31,13 @@ ignore_missing_imports = true
 packages = ["memory_anki"]
 plugins = ["sqlalchemy.ext.mypy.plugin"]
 
-[[tool.mypy.overrides]]
-module = [
-    "memory_anki.infrastructure.llm.external_ai_call_logs",
-    "memory_anki.modules.backups.application.backup_lifecycle",
-    "memory_anki.modules.english.application.task_service",
-    "memory_anki.modules.english.infrastructure.dashscope_gateway",
-    "memory_anki.modules.english.infrastructure.media",
-    "memory_anki.modules.english_reading.application.session_service",
-    "memory_anki.modules.english_reading.application.version_service",
-    "memory_anki.modules.palace_quiz.application.quiz_generation_service",
-    "memory_anki.modules.palace_quiz.application.quiz_grouping_service",
-    "memory_anki.modules.palace_quiz.application.service",
-    "memory_anki.modules.palaces.application.mindmap_ai_split.tree_ops",
-    "memory_anki.modules.palaces.application.mindmap_import.job_creation",
-    "memory_anki.modules.palaces.application.mindmap_import.job_repository",
-    "memory_anki.modules.palaces.application.mindmap_import.normalization",
-    "memory_anki.modules.palaces.application.mindmap_import_job_service",
-    "memory_anki.modules.palaces.application.segment_nodes",
-    "memory_anki.modules.palaces.application.title_sync_service",
-    "memory_anki.modules.palaces.presentation.router",
-    "memory_anki.modules.reviews.application.review_execution_service",
-    "memory_anki.modules.reviews.presentation.router",
-    "memory_anki.modules.settings.application.ai_model_registry",
-]
-ignore_errors = true
-
 [tool.importlinter]
 root_package = "memory_anki"
 include_external_packages = false
 contracts = [
     { name = "application cannot import presentation", type = "forbidden", source_modules = ["memory_anki.modules.*.application"], forbidden_modules = ["memory_anki.modules.*.presentation"] },
     { name = "domain cannot import application or presentation", type = "forbidden", source_modules = ["memory_anki.modules.*.domain"], forbidden_modules = ["memory_anki.modules.*.application", "memory_anki.modules.*.presentation"] },
+    { name = "application cannot import platform persistence", type = "forbidden", source_modules = ["memory_anki.modules.*.application"], forbidden_modules = ["memory_anki.platform.persistence"] },
 ]
 
 [tool.pytest.ini_options]

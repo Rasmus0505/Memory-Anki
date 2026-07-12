@@ -18,7 +18,7 @@ from memory_anki.infrastructure.llm.external_ai_call_logs import (
     list_external_ai_call_logs,
     resolve_external_ai_call_log_artifact,
 )
-from memory_anki.modules.reviews.application.schedule_service import update_all_pending_schedules
+from memory_anki.modules.reviews.api import rebuild_all_pending_review_schedules
 from memory_anki.modules.settings.application.ai_model_registry import (
     AiModelRegistryError,
     delete_ai_model_catalog_item,
@@ -51,6 +51,8 @@ from memory_anki.modules.settings.presentation.response_models import (
     RuntimeInfoResponse,
     SettingsResponse,
 )
+from memory_anki.platform.application import UnitOfWork
+from memory_anki.platform.persistence import SqlAlchemyUnitOfWork
 
 router = APIRouter(tags=["settings"])
 
@@ -97,7 +99,9 @@ def read_settings(session: Session) -> dict:
     return result
 
 
-def write_settings(data: dict, session: Session) -> dict:
+def write_settings(
+    data: dict, session: Session, *, uow: UnitOfWork
+) -> dict:
     before_settings = read_settings(session)
 
     for key, value in data.items():
@@ -109,8 +113,6 @@ def write_settings(data: dict, session: Session) -> dict:
                 row.updated_at = utc_now_naive()
             else:
                 session.add(Config(key=key, value=str(nextValue)))
-    session.commit()
-
     next_settings = read_settings(session)
     if data.get("apply_to_pending") == "all":
         changed_keys = {
@@ -119,9 +121,10 @@ def write_settings(data: dict, session: Session) -> dict:
             if str(before_settings.get(key, "")) != str(next_settings.get(key, ""))
         }
         if changed_keys:
-            update_all_pending_schedules(session)
+            rebuild_all_pending_review_schedules(session)
             next_settings = read_settings(session)
 
+    uow.commit()
     return next_settings
 
 
@@ -168,7 +171,7 @@ def api_settings(s: Session = Depends(session_dep)):
 
 @router.put("/settings", response_model=SettingsResponse)
 def api_settings_update(data: dict, s: Session = Depends(session_dep)):
-    return write_settings(data, s)
+    return write_settings(data, s, uow=SqlAlchemyUnitOfWork(s))
 
 
 @router.get("/settings/review", response_model=SettingsResponse)
@@ -178,7 +181,7 @@ def api_review_settings(s: Session = Depends(session_dep)):
 
 @router.put("/settings/review", response_model=SettingsResponse)
 def api_review_settings_update(data: dict, s: Session = Depends(session_dep)):
-    return write_settings(data, s)
+    return write_settings(data, s, uow=SqlAlchemyUnitOfWork(s))
 
 
 @router.get("/runtime-info", response_model=RuntimeInfoResponse)

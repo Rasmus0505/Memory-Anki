@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import datetime
 from typing import Any
 
@@ -11,6 +12,7 @@ from memory_anki.modules.palaces.application.segment_nodes import (
     normalize_segment_node_uids,
     serialize_segment_node_uids,
 )
+from memory_anki.platform.application import UnitOfWork
 
 SEGMENT_COLOR_PALETTE = [
     "#14b8a6",
@@ -26,6 +28,9 @@ def create_palace_segment(
     session: Session,
     palace: Palace,
     payload: dict[str, Any],
+    *,
+    uow: UnitOfWork,
+    before_commit: Callable[[PalaceSegment], None] | None = None,
 ) -> PalaceSegment:
     normalized_uids = normalize_segment_node_uids(
         session,
@@ -44,8 +49,10 @@ def create_palace_segment(
     )
     session.add(segment)
     session.flush()
-    session.commit()
-    session.refresh(segment)
+    if before_commit is not None:
+        before_commit(segment)
+    uow.commit()
+    uow.refresh(segment)
     return segment
 
 
@@ -53,6 +60,8 @@ def update_palace_segment(
     session: Session,
     segment: PalaceSegment,
     payload: dict[str, Any],
+    *,
+    uow: UnitOfWork,
 ) -> PalaceSegment:
     if "name" in payload:
         segment.name = str(payload.get("name") or "").strip() or segment.name
@@ -73,14 +82,19 @@ def update_palace_segment(
                 exclude_segment_id=segment.id,
             )
         )
-    session.commit()
-    session.refresh(segment)
+    uow.commit()
+    uow.refresh(segment)
     return segment
 
 
-def delete_palace_segment(session: Session, segment: PalaceSegment) -> None:
+def delete_palace_segment(
+    session: Session,
+    segment: PalaceSegment,
+    *,
+    uow: UnitOfWork,
+) -> None:
     session.delete(segment)
-    session.commit()
+    uow.commit()
 
 
 def get_palace_segment(session: Session, segment_id: int) -> PalaceSegment | None:

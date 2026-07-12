@@ -31,7 +31,9 @@ from memory_anki.modules.dashboard.application.service import (
     build_dashboard_payload,
     build_weekly_report_payload,
 )
-from memory_anki.modules.palaces.application.palace_service import restore_archived_palaces
+from memory_anki.modules.palaces.application.palace_maintenance import (
+    restore_all_archived_palaces,
+)
 from memory_anki.modules.sessions.application.study_session_service import (
     STUDY_DASHBOARD_SCENES,
     current_week_bounds,
@@ -130,17 +132,17 @@ class DatabasePerformanceOptimizationTests(RouterTestCase):
             session.add(Palace(title="Archived", archived=True))
             session.commit()
 
-            self.assertEqual(restore_archived_palaces(session), 1)
+            self.assertEqual(restore_all_archived_palaces(session), 1)
             palace = session.query(Palace).filter_by(title="Archived").one()
             self.assertFalse(palace.archived)
 
             palace.archived = True
             session.commit()
-            self.assertEqual(restore_archived_palaces(session), 0)
+            self.assertEqual(restore_all_archived_palaces(session), 0)
             self.assertTrue(palace.archived)
 
         with self.SessionLocal() as session:
-            self.assertEqual(restore_archived_palaces(session), 1)
+            self.assertEqual(restore_all_archived_palaces(session), 1)
 
     def test_sqlite_pragmas_are_configured_for_file_database_connections(self):
         import sqlite3

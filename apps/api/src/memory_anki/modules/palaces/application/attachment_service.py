@@ -7,6 +7,7 @@ from pathlib import Path
 from sqlalchemy.orm import Session
 
 from memory_anki.infrastructure.db._tables.palaces import Attachment
+from memory_anki.platform.application import UnitOfWork
 
 from .palace_service import get_palace
 
@@ -24,6 +25,7 @@ def create_attachment(
     original_name: str,
     content: bytes,
     attachments_dir: Path,
+    uow: UnitOfWork,
 ) -> Attachment | None:
     if get_palace(session, palace_id) is None:
         return None
@@ -39,10 +41,10 @@ def create_attachment(
     )
     try:
         session.add(attachment)
-        session.commit()
-        session.refresh(attachment)
+        uow.commit()
+        uow.refresh(attachment)
     except Exception:
-        session.rollback()
+        uow.rollback()
         target.unlink(missing_ok=True)
         raise
     return attachment
@@ -66,12 +68,24 @@ def delete_attachment(
     session: Session,
     attachment_id: int,
     attachments_dir: Path,
+    *,
+    uow: UnitOfWork,
 ) -> bool:
     attachment = session.query(Attachment).filter_by(id=attachment_id).first()
     if attachment is None:
         return False
     path = attachments_dir / attachment.filename
-    path.unlink(missing_ok=True)
-    session.delete(attachment)
-    session.commit()
+    quarantine_path = attachments_dir / f".{attachment.filename}.deleting-{uuid.uuid4().hex}"
+    file_was_quarantined = path.exists()
+    if file_was_quarantined:
+        path.replace(quarantine_path)
+    try:
+        session.delete(attachment)
+        uow.commit()
+    except Exception:
+        uow.rollback()
+        if file_was_quarantined and quarantine_path.exists():
+            quarantine_path.replace(path)
+        raise
+    quarantine_path.unlink(missing_ok=True)
     return True

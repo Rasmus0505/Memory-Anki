@@ -11,9 +11,11 @@ from memory_anki.core.config import (
     DASHSCOPE_TEXT_MODEL,
 )
 from memory_anki.infrastructure.db._tables.palaces import Palace
-from memory_anki.modules.mindmap.application.editor_state_documents import normalize_editor_doc
-from memory_anki.modules.settings.application.ai_model_registry import (
+from memory_anki.modules.mindmap_document.api import normalize_editor_doc
+from memory_anki.platform.application import (
     AiRuntimeOptions,
+    AiRuntimeProvider,
+    PromptCatalog,
     serialize_resolved_ai_runtime,
 )
 
@@ -27,7 +29,6 @@ AI_SPLIT_DEFAULT_MAX_CHILDREN = split_contracts.AI_SPLIT_DEFAULT_MAX_CHILDREN
 AI_SPLIT_DEFAULT_TEMPERATURE = split_contracts.AI_SPLIT_DEFAULT_TEMPERATURE
 AI_SPLIT_FALLBACK_BUCKET = split_contracts.AI_SPLIT_FALLBACK_BUCKET
 AI_SPLIT_MAX_CHILDREN_LIMIT = split_contracts.AI_SPLIT_MAX_CHILDREN_LIMIT
-AI_SPLIT_SYSTEM_PROMPT = split_contracts.AI_SPLIT_SYSTEM_PROMPT
 MindMapAiSplitConfig = split_contracts.MindMapAiSplitConfig
 MindMapAiSplitError = split_contracts.MindMapAiSplitError
 MindMapAiSplitResult = split_contracts.MindMapAiSplitResult
@@ -38,10 +39,20 @@ def split_palace_editor_doc_with_ai(
     palace: Palace,
     editor_doc: Any,
     target_node_uid: str | None,
+    *,
+    ai_runtime: AiRuntimeProvider,
+    prompt_catalog: PromptCatalog,
     ai_options: AiRuntimeOptions | None = None,
 ) -> MindMapAiSplitResult:
-    config = resolve_mindmap_ai_split_config(session, ai_options=ai_options)
-    resolved_runtime = config_loader.resolve_runtime(session, ai_options=ai_options)
+    config = resolve_mindmap_ai_split_config(
+        session,
+        ai_runtime=ai_runtime,
+        ai_options=ai_options,
+    )
+    resolved_runtime = config_loader.resolve_runtime(
+        ai_runtime=ai_runtime,
+        ai_options=ai_options,
+    )
     normalized_doc = normalize_editor_doc(editor_doc, root_text=palace.title, root_kind="palace")
     root = ensure_dict(normalized_doc.get("root"))
     normalized_doc["root"] = root
@@ -60,6 +71,7 @@ def split_palace_editor_doc_with_ai(
         config=runtime_config,
         target_node=target_node,
         existing_children=existing_children,
+        prompt_catalog=prompt_catalog,
     )
     generated_children = tree_ops.normalize_generated_children(
         ai_payload.get("new_children"),
@@ -89,10 +101,12 @@ def split_palace_editor_doc_with_ai(
 def resolve_mindmap_ai_split_config(
     session: Session,
     *,
+    ai_runtime: AiRuntimeProvider,
     ai_options: AiRuntimeOptions | None = None,
 ) -> MindMapAiSplitConfig:
     return config_loader.resolve_config(
         session,
+        ai_runtime=ai_runtime,
         ai_options=ai_options,
         legacy_defaults={
             "api_key": DASHSCOPE_API_KEY,
@@ -107,10 +121,12 @@ def _call_mindmap_ai_split_model(
     config: MindMapAiSplitConfig,
     target_node: dict[str, Any],
     existing_children: list[dict[str, Any]],
+    prompt_catalog: PromptCatalog,
 ) -> dict[str, Any]:
     return gateway.call_model(
         config=config,
         target_node=target_node,
         existing_children=existing_children,
+        prompt_catalog=prompt_catalog,
         build_model_input_fn=tree_ops.build_model_input,
     )

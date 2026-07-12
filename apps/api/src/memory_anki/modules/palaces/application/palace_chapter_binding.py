@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from memory_anki.infrastructure.db._tables.knowledge import Chapter
 from memory_anki.infrastructure.db._tables.palaces import Palace, PalaceGroup
-from memory_anki.modules.mindmap.application.editor_state_service import (
+from memory_anki.modules.palaces.application.editor_state_service import (
     sync_palace_editor_root,
 )
 

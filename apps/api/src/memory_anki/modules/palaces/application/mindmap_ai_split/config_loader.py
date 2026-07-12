@@ -5,9 +5,10 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from memory_anki.infrastructure.db._tables.misc import Config
-from memory_anki.modules.settings.application.ai_model_registry import (
+from memory_anki.platform.application import (
     AiRuntimeOptions,
-    resolve_scenario_runtime,
+    AiRuntimeProvider,
+    ResolvedAiRuntime,
 )
 
 from .contracts import (
@@ -29,12 +30,13 @@ def _config_value(session: Session, key: str) -> str:
 def resolve_config(
     session: Session,
     *,
+    ai_runtime: AiRuntimeProvider,
     ai_options: AiRuntimeOptions | None = None,
     legacy_defaults: dict[str, Any] | None = None,
 ) -> MindMapAiSplitConfig:
     rows = session.query(Config).filter(Config.key.in_(AI_SPLIT_CONFIG_KEYS)).all()
     values = {row.key: row.value for row in rows}
-    runtime = resolve_scenario_runtime(session, "ai_split", ai_options=ai_options)
+    runtime = ai_runtime.resolve("ai_split", options=ai_options)
     legacy_values = legacy_defaults or {}
     provider_api_key_key = f"{runtime.provider}_api_key"
     provider_base_url_key = f"{runtime.provider}_base_url"
@@ -100,8 +102,8 @@ def resolve_config(
 
 
 def resolve_runtime(
-    session: Session,
     *,
+    ai_runtime: AiRuntimeProvider,
     ai_options: AiRuntimeOptions | None = None,
-):
-    return resolve_scenario_runtime(session, "ai_split", ai_options=ai_options)
+) -> ResolvedAiRuntime:
+    return ai_runtime.resolve("ai_split", options=ai_options)

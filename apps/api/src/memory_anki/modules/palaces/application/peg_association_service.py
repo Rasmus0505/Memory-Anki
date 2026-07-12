@@ -14,9 +14,10 @@ from memory_anki.infrastructure.llm import (
     OpenAICompatibleProtocolError,
     call_chat_completion_text,
 )
-from memory_anki.modules.settings.application.ai_model_registry import (
+from memory_anki.platform.application import (
     AiRuntimeOptions,
-    resolve_scenario_runtime,
+    AiRuntimeProvider,
+    ResolvedAiRuntime,
     serialize_resolved_ai_runtime,
 )
 
@@ -59,6 +60,7 @@ def suggest_peg_associations(
     max_suggestions: int = DEFAULT_MAX_SUGGESTIONS,
     use_ai: bool = True,
     ai_options: AiRuntimeOptions | None = None,
+    ai_runtime: AiRuntimeProvider,
 ) -> dict[str, Any] | None:
     palace = _get_palace(session, palace_id)
     if palace is None:
@@ -82,10 +84,9 @@ def suggest_peg_associations(
     if not use_ai:
         return fallback
 
-    runtime = resolve_scenario_runtime(
-        session,
+    runtime = ai_runtime.resolve(
         PEG_ASSOCIATION_SCENE_KEY,
-        ai_options=ai_options,
+        options=ai_options,
     )
     fallback["resolved_ai"] = serialize_resolved_ai_runtime(runtime)
     if not runtime.api_key or not runtime.base_url or not runtime.model:
@@ -333,7 +334,7 @@ def _fallback_suggestion(
 
 def _call_ai_suggestions(
     *,
-    runtime,
+    runtime: ResolvedAiRuntime,
     palace: Palace,
     pegs: list[dict[str, Any]],
     knowledge_items: list[dict[str, Any]],

@@ -1,21 +1,23 @@
+from typing import NoReturn
+
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
 from memory_anki.infrastructure.db._tables.knowledge import Chapter
 from memory_anki.infrastructure.db._tables.palaces import Palace, ReviewSchedule
 from memory_anki.infrastructure.db.deps import session_dep
-from memory_anki.modules.palaces.application.palace_serializer import (
+from memory_anki.modules.palaces.api import (
     palace_json as palace_detail_json,
 )
-from memory_anki.modules.palaces.application.segment_review_service import palace_review_stages_json
-from memory_anki.modules.persistence.application.idempotency import (
-    get_idempotent_response,
-    save_idempotent_response,
+from memory_anki.modules.palaces.api import (
+    palace_review_stages_json,
+)
+from memory_anki.modules.reviews.application.review_commands import (
+    spread_overdue_command,
+    submit_review_command,
 )
 from memory_anki.modules.reviews.application.review_execution_service import (
     detect_review_stage_progress_issues,
-    repair_review_stage_progress,
-    submit_review,
 )
 from memory_anki.modules.reviews.application.review_metrics_service import (
     get_review_load_forecast,
@@ -24,11 +26,12 @@ from memory_anki.modules.reviews.application.review_metrics_service import (
 )
 from memory_anki.modules.reviews.application.review_queue_service import (
     get_chapter_queue_payload,
-    get_next_due_review,
     get_overdue_count,
     get_review_queue_payload,
-    spread_overdue,
     undo_spread_overdue,
+)
+from memory_anki.modules.reviews.application.review_repair_service import (
+    repair_review_stage_progress,
 )
 from memory_anki.modules.reviews.application.schedule_service import (
     get_algorithm_stage_labels,
@@ -39,16 +42,21 @@ from memory_anki.modules.reviews.presentation.response_models import (
     ReviewScheduleItem,
     SubmitReviewResponse,
 )
-from memory_anki.modules.sessions.application.session_progress_service import (
+from memory_anki.modules.sessions.api import (
     clear_review_progress,
     get_review_progress,
     upsert_review_progress,
+)
+from memory_anki.platform.application import mutation_identity_from_headers
+from memory_anki.platform.persistence import (
+    SqlAlchemyMutationResponseStore,
+    SqlAlchemyUnitOfWork,
 )
 
 router = APIRouter(tags=["review"])
 
 
-def raise_not_found(message: str = "not found"):
+def raise_not_found(message: str = "not found") -> NoReturn:
     raise HTTPException(status_code=404, detail=message)
 
 
@@ -85,6 +93,7 @@ def schedule_json(schedule: ReviewSchedule, session: Session | None = None) -> d
         stage_labels = get_algorithm_stage_labels(session)
         palace_data["stage_labels"] = stage_labels
         palace_data["review_stages"] = palace_review_stages_json(session, schedule.palace, stage_labels)
+    completed_at = schedule.completed_at
     return {
         "id": schedule.id,
         "palace_id": schedule.palace_id,
@@ -92,11 +101,7 @@ def schedule_json(schedule: ReviewSchedule, session: Session | None = None) -> d
         "interval_days": schedule.interval_days,
         "algorithm_used": schedule.algorithm_used,
         "completed": schedule.completed,
-        "completed_at": (
-            schedule.completed_at.isoformat(timespec="minutes")
-            if getattr(schedule, "completed_at", None)
-            else None
-        ),
+        "completed_at": completed_at.isoformat(timespec="minutes") if completed_at else None,
         "review_number": schedule.review_number,
         "review_type": schedule.review_type,
         "palace": palace_data,
@@ -146,17 +151,20 @@ def api_load_forecast(days: int = 7, session: Session = Depends(session_dep)):
 
 @router.post("/review/spread-overdue")
 def api_spread(data: dict, request: Request, session: Session = Depends(session_dep)):
-    existing_response = get_idempotent_response(session, request)
+    mutation_identity = mutation_identity_from_headers(request.headers)
+    mutation_store = SqlAlchemyMutationResponseStore(session)
+    existing_response = mutation_store.get(mutation_identity)
     if existing_response is not None:
         return existing_response
-    result = spread_overdue(
+    return spread_overdue_command(
         session,
-        int(data.get("days", 7)),
+        days=int(data.get("days", 7)),
         dry_run=bool(data.get("dry_run", False)),
+        uow=SqlAlchemyUnitOfWork(session),
+        before_commit=lambda response: mutation_store.save(
+            mutation_identity, response
+        ),
     )
-    response = {"ok": True, "spread": result["count"], "moves": result["moves"]}
-    save_idempotent_response(session, request, response)
-    return response
 
 
 @router.post("/review/spread-overdue/undo")
@@ -171,7 +179,9 @@ def api_review_stage_progress_health(session: Session = Depends(session_dep)):
 
 @router.post("/review/repair-stage-progress")
 def api_repair_review_stage_progress(session: Session = Depends(session_dep)):
-    result = repair_review_stage_progress(session)
+    result = repair_review_stage_progress(
+        session, uow=SqlAlchemyUnitOfWork(session)
+    )
     return {"ok": True, **result}
 
 
@@ -222,43 +232,21 @@ def api_submit_session(
     request: Request,
     session: Session = Depends(session_dep),
 ):
-    existing_response = get_idempotent_response(session, request)
+    mutation_identity = mutation_identity_from_headers(request.headers)
+    mutation_store = SqlAlchemyMutationResponseStore(session)
+    existing_response = mutation_store.get(mutation_identity)
     if existing_response is not None:
         return existing_response
 
-    log, extra = submit_review(
+    response = submit_review_command(
         session,
         schedule_id,
-        int(data.get("duration_seconds", 0)),
-        str(data.get("completion_mode", "manual_complete")),
-        target_review_number=data.get("target_review_number"),
-        needs_practice=bool(data.get("needs_practice", False)),
-        commit=False,
+        data,
+        uow=SqlAlchemyUnitOfWork(session),
+        before_commit=lambda payload: mutation_store.save(mutation_identity, payload),
     )
-    if not log:
+    if response is None:
         raise_not_found()
-
-    note = str(data.get("note") or "").strip()
-    if note:
-        log.note = note[:2000]
-
-    clear_review_progress(session, schedule_id, commit=False)
-    chapter_id = data.get("chapter_id")
-    next_schedule = get_next_due_review(
-        session,
-        exclude_schedule_id=schedule_id,
-        chapter_id=int(chapter_id) if chapter_id is not None else None,
-    )
-    response = {
-        "ok": True,
-        "completion_mode": data.get("completion_mode"),
-        "score": log.score,
-        "next_id": next_schedule.id if next_schedule else None,
-        "mastered": extra.get("mastered", False),
-    }
-    save_idempotent_response(session, request, response, commit=False)
-    session.commit()
-    session.refresh(log)
     return response
 
 

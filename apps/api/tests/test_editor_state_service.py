@@ -4,12 +4,11 @@ from sqlalchemy import text
 
 from memory_anki.infrastructure.db._tables.knowledge import Chapter, Subject
 from memory_anki.infrastructure.db._tables.palaces import Palace
-from memory_anki.modules.mindmap.application.editor_state_service import (
-    EditorStateConflictError,
+from memory_anki.modules.knowledge.application.editor_state_service import save_subject_editor_state
+from memory_anki.modules.mindmap_document.api import EditorStateConflictError, normalize_editor_doc
+from memory_anki.modules.palaces.application.editor_state_service import (
     get_palace_editor_state,
-    normalize_editor_doc,
     save_palace_editor_state,
-    save_subject_editor_state,
 )
 from memory_anki.modules.palaces.application.mindmap_ai_split.primitives import plain_text
 from memory_anki.modules.palaces.application.title_sync_service import set_palace_chapter_links
@@ -111,7 +110,9 @@ class SubjectEditorStateSyncTests(RouterTestCase):
                     {"palace_id": palace.id},
                 ).fetchall()
             ]
-            chapters = session.query(Chapter).filter_by(subject_id=subject.id).order_by(Chapter.id).all()
+            chapters = (
+                session.query(Chapter).filter_by(subject_id=subject.id).order_by(Chapter.id).all()
+            )
 
             self.assertEqual([chapter.id for chapter in chapters], [parent.id, child.id])
             self.assertEqual(sorted(linked_ids), [parent.id, child.id])
@@ -192,7 +193,9 @@ class SubjectEditorStateSyncTests(RouterTestCase):
                 },
             )
 
-            self.assertEqual(result["editor_doc"]["root"]["children"][0]["data"]["text"], "导入节点1")
+            self.assertEqual(
+                result["editor_doc"]["root"]["children"][0]["data"]["text"], "导入节点1"
+            )
 
     def test_save_palace_editor_state_rejects_stale_expected_fingerprint(self):
         with self.SessionLocal() as session:
@@ -203,9 +206,7 @@ class SubjectEditorStateSyncTests(RouterTestCase):
             initial_doc = {
                 "root": {
                     "data": {"text": "古罗马教育", "memoryAnkiRootKind": "palace"},
-                    "children": [
-                        {"data": {"text": "旧节点", "uid": "node-old"}, "children": []}
-                    ],
+                    "children": [{"data": {"text": "旧节点", "uid": "node-old"}, "children": []}],
                 }
             }
             newer_doc = {

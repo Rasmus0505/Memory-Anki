@@ -2,13 +2,11 @@
 from datetime import datetime, timedelta
 
 from memory_anki.infrastructure.db._tables.misc import Config
-from memory_anki.modules.persistence.application.idempotency import (
-    purge_expired_idempotency_records,
-)
 from memory_anki.modules.settings.presentation.router import read_settings
+from memory_anki.platform.persistence import purge_expired_mutation_responses
 
 
-def test_purge_expired_idempotency_records_deletes_only_old_mutation_rows(db_session):
+def test_purge_expired_mutation_responses_deletes_only_old_mutation_rows(db_session):
     now = datetime(2026, 1, 20, 12, 0, 0)
     old = now - timedelta(days=15)
     fresh = now - timedelta(days=1)
@@ -22,7 +20,7 @@ def test_purge_expired_idempotency_records_deletes_only_old_mutation_rows(db_ses
     )
     db_session.commit()
 
-    deleted = purge_expired_idempotency_records(db_session, now=now)
+    deleted = purge_expired_mutation_responses(db_session, now=now)
 
     assert deleted == 1
     assert db_session.query(Config).filter_by(key="api_mutation.old").first() is None

@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from typing import Any
 
 from sqlalchemy.orm import Session
 
 from memory_anki.infrastructure.db._tables.palaces import Palace, PalaceTemplate
+from memory_anki.platform.application import UnitOfWork
 
 
 class PalaceTemplateError(ValueError):
@@ -34,6 +36,8 @@ def create_template_from_palace(
     palace_id: int,
     name: str,
     description: str,
+    *,
+    uow: UnitOfWork,
 ) -> dict[str, Any]:
     palace = session.get(Palace, palace_id)
     if not palace:
@@ -48,17 +52,19 @@ def create_template_from_palace(
         source_palace_id=palace.id,
     )
     session.add(template)
-    session.commit()
-    session.refresh(template)
+    uow.commit()
+    uow.refresh(template)
     return _template_json(template)
 
 
-def delete_template(session: Session, template_id: int) -> bool:
+def delete_template(
+    session: Session, template_id: int, *, uow: UnitOfWork
+) -> bool:
     template = session.get(PalaceTemplate, template_id)
     if not template:
         return False
     session.delete(template)
-    session.commit()
+    uow.commit()
     return True
 
 
@@ -82,7 +88,14 @@ def _retitle_editor_doc(editor_doc: str, title: str) -> str:
     return json.dumps(doc, ensure_ascii=False)
 
 
-def instantiate_template(session: Session, template_id: int, title: str) -> Palace:
+def instantiate_template(
+    session: Session,
+    template_id: int,
+    title: str,
+    *,
+    uow: UnitOfWork,
+    before_commit: Callable[[Palace], None] | None = None,
+) -> Palace:
     template = session.get(PalaceTemplate, template_id)
     if not template:
         raise PalaceTemplateError("模板不存在。")
@@ -94,6 +107,9 @@ def instantiate_template(session: Session, template_id: int, title: str) -> Pala
         editor_config=template.editor_config or "",
     )
     session.add(palace)
-    session.commit()
-    session.refresh(palace)
+    session.flush()
+    if before_commit is not None:
+        before_commit(palace)
+    uow.commit()
+    uow.refresh(palace)
     return palace

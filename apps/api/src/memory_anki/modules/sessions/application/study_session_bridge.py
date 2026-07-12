@@ -25,6 +25,8 @@ def _normalize_client_source(value: Any) -> str | None:
 def create_completed_study_session_from_time_payload(
     session: Session,
     payload: dict[str, Any],
+    *,
+    commit: bool = True,
 ) -> dict[str, Any] | None:
     from .study_session_service import create_study_session
 
@@ -77,6 +79,7 @@ def create_completed_study_session_from_time_payload(
             "events": payload.get("events") or [],
             "summary": summary_payload,
         },
+        commit=commit,
     )
     return item
 

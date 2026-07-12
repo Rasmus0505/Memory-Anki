@@ -16,9 +16,8 @@ from memory_anki.infrastructure.db._tables.palaces import (
     ReviewSchedule,
     SessionProgress,
 )
-from memory_anki.modules.palaces.application.segment_nodes import collect_doc_nodes_with_descendants
+from memory_anki.modules.mindmap_document.api import collect_node_descendants
 from memory_anki.modules.reviews.application.schedule_rebuild_service import (
-    rebuild_all_pending_review_schedules,
     rebuild_palace_review_schedules,
 )
 from memory_anki.modules.reviews.application.schedule_service import (
@@ -27,11 +26,9 @@ from memory_anki.modules.reviews.application.schedule_service import (
     get_initial_same_day_slot_count,
     is_schedule_due_or_later_today,
 )
-from memory_anki.modules.sessions.application.study_session_bridge import (
-    create_review_study_session,
-)
-from memory_anki.modules.sessions.application.study_session_service import (
+from memory_anki.modules.sessions.api import (
     ACTIVE_STATUSES,
+    create_review_study_session,
 )
 
 
@@ -199,27 +196,16 @@ def submit_review(
     return log, extra
 
 
-def repair_review_stage_progress(session: Session) -> dict:
-    result = rebuild_all_pending_review_schedules(session)
-    orphan_progress_count = _migrate_orphan_review_progress(session)
-    orphan_study_session_count = _migrate_orphan_review_study_sessions(session)
-    practice_recovery_count = _recover_review_progress_from_practice(session)
-    study_session_count = _sync_review_progress_to_study_sessions(session)
-    session.commit()
-    return {
-        **result,
-        "orphan_progress_count": orphan_progress_count,
-        "orphan_study_session_count": orphan_study_session_count,
-        "practice_recovery_count": practice_recovery_count,
-        "study_session_count": study_session_count,
-    }
-
-
-def trigger_review_for_palace(session: Session, palace_id: int) -> None:
+def trigger_review_for_palace(
+    session: Session,
+    palace_id: int,
+    *,
+    commit: bool = True,
+) -> None:
     existing = session.query(ReviewSchedule).filter_by(palace_id=palace_id).first()
     if existing:
         return
-    create_initial_review_schedules(session, palace_id)
+    create_initial_review_schedules(session, palace_id, commit=commit)
 
 
 def _json_loads(raw: str | None, fallback: Any) -> Any:
@@ -249,7 +235,7 @@ def _progress_payload(progress: SessionProgress) -> dict[str, Any]:
 def _valid_node_uids(palace: Palace | None) -> set[str]:
     if palace is None:
         return set()
-    descendants, _ = collect_doc_nodes_with_descendants(palace.editor_doc)
+    descendants, _ = collect_node_descendants(palace.editor_doc)
     return {str(uid) for uid in descendants if str(uid).strip()}
 
 
@@ -258,7 +244,8 @@ def _root_uid(palace: Palace | None) -> str | None:
         return None
     doc = _json_loads(palace.editor_doc, {})
     root = doc.get("root") if isinstance(doc, dict) else None
-    data = root.get("data") if isinstance(root, dict) and isinstance(root.get("data"), dict) else {}
+    raw_data = root.get("data") if isinstance(root, dict) else None
+    data = raw_data if isinstance(raw_data, dict) else {}
     uid = str(data.get("uid") or "").strip()
     return uid or None
 
@@ -278,8 +265,10 @@ def _revealed_count(payload: dict[str, Any], palace: Palace | None, *, include_r
 
 def _clean_progress_payload(payload: dict[str, Any], palace: Palace | None) -> dict[str, Any]:
     valid_uids = _valid_node_uids(palace)
-    reveal_map = payload.get("reveal_map") if isinstance(payload.get("reveal_map"), dict) else {}
-    red_node_ids = payload.get("red_node_ids") if isinstance(payload.get("red_node_ids"), list) else []
+    raw_reveal_map = payload.get("reveal_map")
+    reveal_map = raw_reveal_map if isinstance(raw_reveal_map, dict) else {}
+    raw_red_node_ids = payload.get("red_node_ids")
+    red_node_ids = raw_red_node_ids if isinstance(raw_red_node_ids, list) else []
     return {
         "reveal_map": {
             uid: str(reveal_map.get(uid) or "hidden")

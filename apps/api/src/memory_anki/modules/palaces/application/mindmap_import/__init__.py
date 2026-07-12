@@ -1,3 +1,5 @@
+from memory_anki.core.prompt_text import truncate_prompt_text
+
 from .contracts import (
     PROMPT_TEXT_MAX_CHARS,
     BatchImportPreviewResult,
@@ -21,26 +23,17 @@ from .normalization import (
     build_editor_doc,
     normalize_source_tree,
 )
-from .prompts import (
-    BATCH_PROMPT,
-    PROMPT,
-    TEXT_PROMPT,
-    truncate_prompt_text,
-)
 from .step_protocol import ImportStep
 from .text_utils import clean_inline_text
 
 __all__ = [
-    "BATCH_PROMPT",
     "ERROR_SNIPPET_LIMIT",
     "ImportPreviewResult",
     "ImportStep",
     "ImportStreamEvent",
     "MAX_IMAGE_BYTES",
     "MindMapImportError",
-    "PROMPT",
     "PROMPT_TEXT_MAX_CHARS",
-    "TEXT_PROMPT",
     "TextPreviewResult",
     "BatchImportPreviewResult",
     "build_editor_doc",

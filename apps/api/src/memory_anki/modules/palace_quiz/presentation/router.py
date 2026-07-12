@@ -7,7 +7,10 @@ from sqlalchemy.orm import Session
 
 from memory_anki.core.concurrency_limits import concurrency_slot
 from memory_anki.infrastructure.db.deps import session_dep
-from memory_anki.modules.backups.application.backup_lifecycle import maybe_create_rolling_backup
+from memory_anki.modules.backups.api import maybe_create_rolling_backup
+from memory_anki.modules.palace_quiz.application.ai_dependencies import (
+    PalaceQuizAiDependencies,
+)
 from memory_anki.modules.palace_quiz.application.ai_service import (
     PalaceQuizAiError,
     classify_existing_quiz_questions_to_mini_palaces,
@@ -21,13 +24,16 @@ from memory_anki.modules.palace_quiz.application.ai_service import (
 from memory_anki.modules.palace_quiz.application.generation.shared import (
     recover_quiz_preview_from_log,
 )
+from memory_anki.modules.palace_quiz.application.question_mutation_commands import (
+    batch_create_chapter_questions_command,
+    batch_create_palace_questions_command,
+    create_question_command,
+    record_choice_attempt_command,
+)
 from memory_anki.modules.palace_quiz.application.service import (
     PalaceQuizNotFoundError,
     PalaceQuizValidationError,
-    batch_create_chapter_questions,
-    batch_create_questions,
     batch_delete_questions,
-    create_question,
     dedupe_chapter_questions,
     dedupe_palace_questions,
     delete_question,
@@ -35,22 +41,21 @@ from memory_anki.modules.palace_quiz.application.service import (
     list_chapter_questions,
     list_palace_ocr_sources,
     list_questions,
-    record_choice_attempt,
     reset_question_attempts,
     restore_question,
     update_question,
-    upsert_palace_ocr_sources,
 )
 from memory_anki.modules.palace_quiz.application.wrong_questions_service import (
     get_wrong_questions,
 )
-from memory_anki.modules.persistence.application.idempotency import (
-    get_idempotent_response,
-    save_idempotent_response,
-)
-from memory_anki.modules.settings.application.ai_model_registry import (
+from memory_anki.modules.settings.api import SettingsAiRuntimeProvider, SettingsPromptCatalog
+from memory_anki.platform.application import (
     AiRuntimeOptions,
-    normalize_ai_runtime_options,
+    mutation_identity_from_headers,
+)
+from memory_anki.platform.persistence import (
+    SqlAlchemyMutationResponseStore,
+    SqlAlchemyUnitOfWork,
 )
 
 router = APIRouter(tags=["palace_quiz"])
@@ -68,7 +73,17 @@ def _raise_http_error(error: Exception) -> None:
     raise error
 
 
-def _normalize_ai_runtime_options_by_scenario(value: object) -> dict[str, AiRuntimeOptions] | None:
+def _ai_dependencies(session: Session) -> PalaceQuizAiDependencies:
+    return PalaceQuizAiDependencies(
+        runtime=SettingsAiRuntimeProvider(session),
+        prompts=SettingsPromptCatalog(session),
+    )
+
+
+def _normalize_ai_runtime_options_by_scenario(
+    ai_dependencies: PalaceQuizAiDependencies,
+    value: object,
+) -> dict[str, AiRuntimeOptions] | None:
     if not isinstance(value, dict):
         return None
     normalized: dict[str, AiRuntimeOptions] = {}
@@ -76,7 +91,7 @@ def _normalize_ai_runtime_options_by_scenario(value: object) -> dict[str, AiRunt
         scenario_key = str(raw_key or "").strip()
         if not scenario_key:
             continue
-        normalized[scenario_key] = normalize_ai_runtime_options(raw_options)
+        normalized[scenario_key] = ai_dependencies.runtime.normalize_options(raw_options)
     return normalized or None
 
 
@@ -167,14 +182,22 @@ def api_create_palace_quiz_question(
     request: Request,
     s: Session = Depends(session_dep),
 ):
-    existing_response = get_idempotent_response(s, request)
+    mutation_identity = mutation_identity_from_headers(request.headers)
+    mutation_store = SqlAlchemyMutationResponseStore(s)
+    existing_response = mutation_store.get(mutation_identity)
     if existing_response is not None:
         return existing_response
     try:
-        item = create_question(s, palace_id, data)
+        response = create_question_command(
+            s,
+            palace_id,
+            data,
+            uow=SqlAlchemyUnitOfWork(s),
+            before_commit=lambda payload: mutation_store.save(
+                mutation_identity, payload
+            ),
+        )
         maybe_create_rolling_backup("rolling-create-palace-quiz-question")
-        response = {"item": item}
-        save_idempotent_response(s, request, response)
         return response
     except Exception as exc:  # pragma: no cover - centralized HTTP mapping
         _raise_http_error(exc)
@@ -187,18 +210,22 @@ def api_batch_create_palace_quiz_questions(
     request: Request,
     s: Session = Depends(session_dep),
 ):
-    existing_response = get_idempotent_response(s, request)
+    mutation_identity = mutation_identity_from_headers(request.headers)
+    mutation_store = SqlAlchemyMutationResponseStore(s)
+    existing_response = mutation_store.get(mutation_identity)
     if existing_response is not None:
         return existing_response
     try:
-        payloads = data.get("questions") if isinstance(data, dict) else None
-        items = batch_create_questions(s, palace_id, payloads if isinstance(payloads, list) else [])
-        ocr_sources = data.get("ocr_sources") if isinstance(data, dict) else None
-        if isinstance(ocr_sources, list) and ocr_sources:
-            upsert_palace_ocr_sources(s, palace_id=palace_id, payloads=ocr_sources)
+        response = batch_create_palace_questions_command(
+            s,
+            palace_id,
+            data,
+            uow=SqlAlchemyUnitOfWork(s),
+            before_commit=lambda payload: mutation_store.save(
+                mutation_identity, payload
+            ),
+        )
         maybe_create_rolling_backup("rolling-batch-create-palace-quiz-questions")
-        response = {"items": items}
-        save_idempotent_response(s, request, response)
         return response
     except Exception as exc:  # pragma: no cover - centralized HTTP mapping
         _raise_http_error(exc)
@@ -211,24 +238,22 @@ def api_batch_create_chapter_quiz_questions(
     request: Request,
     s: Session = Depends(session_dep),
 ):
-    existing_response = get_idempotent_response(s, request)
+    mutation_identity = mutation_identity_from_headers(request.headers)
+    mutation_store = SqlAlchemyMutationResponseStore(s)
+    existing_response = mutation_store.get(mutation_identity)
     if existing_response is not None:
         return existing_response
     try:
-        payloads = data.get("questions") if isinstance(data, dict) else None
-        items = batch_create_chapter_questions(
+        response = batch_create_chapter_questions_command(
             s,
             chapter_id,
-            payloads if isinstance(payloads, list) else [],
-            save_mode=str(data.get("save_mode") or "append") if isinstance(data, dict) else "append",
+            data,
+            uow=SqlAlchemyUnitOfWork(s),
+            before_commit=lambda payload: mutation_store.save(
+                mutation_identity, payload
+            ),
         )
-        palace_id = data.get("palace_id") if isinstance(data, dict) else None
-        ocr_sources = data.get("ocr_sources") if isinstance(data, dict) else None
-        if palace_id and isinstance(ocr_sources, list) and ocr_sources:
-            upsert_palace_ocr_sources(s, palace_id=int(palace_id), payloads=ocr_sources)
         maybe_create_rolling_backup("rolling-batch-create-chapter-quiz-questions")
-        response = {"items": items}
-        save_idempotent_response(s, request, response)
         return response
     except Exception as exc:  # pragma: no cover - centralized HTTP mapping
         _raise_http_error(exc)
@@ -311,17 +336,21 @@ def api_record_choice_attempt(
     request: Request,
     s: Session = Depends(session_dep),
 ):
-    existing_response = get_idempotent_response(s, request)
+    mutation_identity = mutation_identity_from_headers(request.headers)
+    mutation_store = SqlAlchemyMutationResponseStore(s)
+    existing_response = mutation_store.get(mutation_identity)
     if existing_response is not None:
         return existing_response
     try:
-        response = record_choice_attempt(
+        return record_choice_attempt_command(
             s,
             question_id,
             str(data.get("selected_option_id") or ""),
+            uow=SqlAlchemyUnitOfWork(s),
+            before_commit=lambda response: mutation_store.save(
+                mutation_identity, response
+            ),
         )
-        save_idempotent_response(s, request, response)
-        return response
     except Exception as exc:  # pragma: no cover - centralized HTTP mapping
         _raise_http_error(exc)
 
@@ -336,9 +365,10 @@ def api_short_answer_feedback(
         with concurrency_slot("ai_generation", rate_limited=True):
             return generate_short_answer_feedback(
                 s,
+                ai_dependencies=_ai_dependencies(s),
                 question_id=question_id,
                 user_answer=str(data.get("user_answer") or ""),
-                ai_options=normalize_ai_runtime_options(data.get("ai_options")),
+                ai_options=_ai_dependencies(s).runtime.normalize_options(data.get("ai_options")),
             )
     except Exception as exc:  # pragma: no cover - centralized HTTP mapping
         _raise_http_error(exc)
@@ -354,9 +384,10 @@ def api_explain_question(
         with concurrency_slot("ai_generation", rate_limited=True):
             return explain_question(
                 s,
+                ai_dependencies=_ai_dependencies(s),
                 question_id=question_id,
                 user_question=str(data.get("user_question") or ""),
-                ai_options=normalize_ai_runtime_options(data.get("ai_options")),
+                ai_options=_ai_dependencies(s).runtime.normalize_options(data.get("ai_options")),
             )
     except Exception as exc:  # pragma: no cover - centralized HTTP mapping
         _raise_http_error(exc)
@@ -395,6 +426,7 @@ async def api_generate_palace_quiz_from_images(
         with concurrency_slot("ai_generation", rate_limited=True):
             return generate_quiz_preview_from_images(
                 s,
+                ai_dependencies=_ai_dependencies(s),
                 palace_id=palace_id,
                 image_items=image_items,
                 extra_prompt=extra_prompt,
@@ -404,7 +436,7 @@ async def api_generate_palace_quiz_from_images(
                     if str(selected_chapter_id or "").strip()
                     else None
                 ),
-                ai_options=normalize_ai_runtime_options(
+                ai_options=_ai_dependencies(s).runtime.normalize_options(
                     json.loads(ai_options) if ai_options else None
                 ),
             )
@@ -429,6 +461,7 @@ async def api_generate_palace_quiz_from_text_files(
         with concurrency_slot("ai_generation", rate_limited=True):
             return generate_quiz_preview_from_text_files(
                 s,
+                ai_dependencies=_ai_dependencies(s),
                 palace_id=palace_id,
                 file_items=file_items,
                 extra_prompt=extra_prompt,
@@ -438,7 +471,7 @@ async def api_generate_palace_quiz_from_text_files(
                     if str(selected_chapter_id or "").strip()
                     else None
                 ),
-                ai_options=normalize_ai_runtime_options(
+                ai_options=_ai_dependencies(s).runtime.normalize_options(
                     json.loads(ai_options) if ai_options else None
                 ),
             )
@@ -456,13 +489,14 @@ def api_generate_palace_quiz_from_review_mindmap(
         with concurrency_slot("ai_generation", rate_limited=True):
             return generate_quiz_preview_from_review_mindmap(
                 s,
+                ai_dependencies=_ai_dependencies(s),
                 palace_id=palace_id,
                 mode=str(data.get("mode") or "chapter"),
                 question_types=list(data.get("question_types") or []),
                 question_count=int(data.get("question_count") or 5),
                 review_editor_doc=data.get("review_editor_doc"),
                 related_palace_ids=list(data.get("related_palace_ids") or []),
-                ai_options=normalize_ai_runtime_options(data.get("ai_options")),
+                ai_options=_ai_dependencies(s).runtime.normalize_options(data.get("ai_options")),
             )
     except Exception as exc:  # pragma: no cover - centralized HTTP mapping
         _raise_http_error(exc)
@@ -478,12 +512,13 @@ def api_generate_chapter_quiz_from_outline(
         with concurrency_slot("ai_generation", rate_limited=True):
             return generate_quiz_preview_from_chapter_outline(
                 s,
+                ai_dependencies=_ai_dependencies(s),
                 chapter_id=chapter_id,
                 question_types=list(data.get("question_types") or []),
                 question_count=int(data.get("question_count") or 5),
                 extra_prompt=str(data.get("extra_prompt") or ""),
                 classify_by_child_chapter=bool(data.get("classify_by_child_chapter", False)),
-                ai_options=normalize_ai_runtime_options(data.get("ai_options")),
+                ai_options=_ai_dependencies(s).runtime.normalize_options(data.get("ai_options")),
             )
     except Exception as exc:  # pragma: no cover - centralized HTTP mapping
         _raise_http_error(exc)
@@ -499,8 +534,9 @@ def api_classify_existing_quiz_questions_to_mini_palaces(
         with concurrency_slot("ai_generation", rate_limited=True):
             return classify_existing_quiz_questions_to_mini_palaces(
                 s,
+                ai_dependencies=_ai_dependencies(s),
                 palace_id=palace_id,
-                ai_options=normalize_ai_runtime_options((data or {}).get("ai_options")),
+                ai_options=_ai_dependencies(s).runtime.normalize_options((data or {}).get("ai_options")),
             )
     except Exception as exc:  # pragma: no cover - centralized HTTP mapping
         _raise_http_error(exc)

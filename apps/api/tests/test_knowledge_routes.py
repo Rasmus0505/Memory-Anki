@@ -1,9 +1,11 @@
 """knowledge routes direct coverage for subjects, chapters, and bindings."""
 import pytest
 
+from memory_anki.infrastructure.db._tables.knowledge import Chapter, Subject
 from memory_anki.modules.knowledge.application import chapter_service, subject_service
 from memory_anki.modules.knowledge.presentation import router as knowledge_router
 from memory_anki.modules.palaces.presentation import router as palace_router
+from memory_anki.platform.application import MUTATION_ID_HEADER
 
 
 @pytest.fixture(autouse=True)
@@ -38,6 +40,35 @@ def subject_id(client) -> int:
 
 
 class TestSubjects:
+    def test_create_replay_does_not_duplicate_subject(self, client, session_factory):
+        headers = {MUTATION_ID_HEADER: "knowledge-subject-replay"}
+
+        first = client.post("/api/v1/subjects", json={"name": "数学"}, headers=headers)
+        second = client.post("/api/v1/subjects", json={"name": "忽略"}, headers=headers)
+
+        assert second.json() == first.json()
+        with session_factory() as session:
+            assert session.query(Subject).count() == 1
+
+    def test_create_rolls_back_when_mutation_response_fails(
+        self, client, session_factory, monkeypatch
+    ):
+        monkeypatch.setattr(
+            knowledge_router.SqlAlchemyMutationResponseStore,
+            "save",
+            lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("cache failed")),
+        )
+
+        with pytest.raises(RuntimeError, match="cache failed"):
+            client.post(
+                "/api/v1/subjects",
+                json={"name": "Must Roll Back"},
+                headers={MUTATION_ID_HEADER: "knowledge-subject-rollback"},
+            )
+
+        with session_factory() as session:
+            assert session.query(Subject).count() == 0
+
     def test_create_and_list(self, client, subject_id):
         items = client.get("/api/v1/subjects").json()
 
@@ -60,6 +91,45 @@ class TestSubjects:
 
 
 class TestChapterTree:
+    def test_create_replay_does_not_duplicate_chapter(
+        self, client, subject_id, session_factory
+    ):
+        headers = {MUTATION_ID_HEADER: "knowledge-chapter-replay"}
+
+        first = client.post(
+            f"/api/v1/subjects/{subject_id}/chapters",
+            json={"name": "第一章"},
+            headers=headers,
+        )
+        second = client.post(
+            f"/api/v1/subjects/{subject_id}/chapters",
+            json={"name": "忽略"},
+            headers=headers,
+        )
+
+        assert second.json() == first.json()
+        with session_factory() as session:
+            assert session.query(Chapter).filter_by(subject_id=subject_id).count() == 1
+
+    def test_create_rolls_back_when_mutation_response_fails(
+        self, client, subject_id, session_factory, monkeypatch
+    ):
+        monkeypatch.setattr(
+            knowledge_router.SqlAlchemyMutationResponseStore,
+            "save",
+            lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("cache failed")),
+        )
+
+        response = client.post(
+            f"/api/v1/subjects/{subject_id}/chapters",
+            json={"name": "Must Roll Back"},
+            headers={MUTATION_ID_HEADER: "knowledge-chapter-rollback"},
+        )
+
+        assert response.status_code == 500
+        with session_factory() as session:
+            assert session.query(Chapter).filter_by(subject_id=subject_id).count() == 0
+
     def test_create_chapter_and_tree(self, client, subject_id):
         chapter = client.post(
             f"/api/v1/subjects/{subject_id}/chapters",

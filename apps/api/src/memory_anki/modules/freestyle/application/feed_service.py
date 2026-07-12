@@ -13,13 +13,10 @@ from memory_anki.infrastructure.db._tables.palaces import (
     PalaceQuizQuestion,
     ReviewSchedule,
 )
-from memory_anki.modules.english.application.course_service import (
-    get_recent_unfinished_course_payload,
-)
-from memory_anki.modules.english_reading.application import service as english_reading_service
-from memory_anki.modules.palaces.application.focus_service import parse_focus_node_uids
-from memory_anki.modules.palaces.application.title_sync_service import resolve_palace_title
-from memory_anki.modules.reviews.application.schedule_service import is_schedule_due
+from memory_anki.modules.english.api import get_recent_unfinished_course_payload
+from memory_anki.modules.english_reading.api import list_recent_materials
+from memory_anki.modules.palaces.api import parse_focus_node_uids, resolve_palace_title
+from memory_anki.modules.reviews.api import is_schedule_due
 
 from .card_context import palace_context
 from .quiz_cards import CONTENT_TYPE_QUIZ_QUESTION, build_quiz_cards
@@ -384,7 +381,7 @@ def _build_english_card_from_course(session: Session, range_filter: str) -> list
 def _build_english_reading_cards(session: Session, range_filter: str) -> list[dict[str, Any]]:
     if range_filter != FREESTYLE_RANGE_ALL:
         return []
-    materials = english_reading_service.list_recent_materials(session, limit=6)
+    materials = list_recent_materials(session, limit=6)
     cards: list[dict[str, Any]] = []
     for material in materials:
         if material.get("latestVersionId") is None:

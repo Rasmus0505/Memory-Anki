@@ -11,9 +11,9 @@ from sqlalchemy.orm import Session
 from memory_anki.infrastructure.db._tables.knowledge import Chapter
 from memory_anki.infrastructure.db._tables.misc import ExternalAiCallLog
 from memory_anki.infrastructure.llm.external_ai_call_logs import get_external_ai_call_log
-from memory_anki.modules.settings.application.ai_model_registry import AiRuntimeOptions
-from memory_anki.modules.settings.application.ai_prompts import render_prompt
+from memory_anki.platform.application import AiRuntimeOptions
 
+from ..ai_dependencies import PalaceQuizAiDependencies
 from ..question_contracts import PalaceQuizValidationError
 from ..quiz_grouping_context import question_payload_for_grouping
 from .shared import (
@@ -116,13 +116,12 @@ def build_child_chapter_grouping_model_input(
 
 def build_child_chapter_grouping_messages(
     *,
+    ai_dependencies: PalaceQuizAiDependencies,
     session: Session,
     model_input: dict[str, Any],
 ) -> tuple[str, list[dict[str, Any]]]:
-    system_prompt = render_prompt(
-        "ai_prompt_palace_quiz_group_by_mini_palace",
-        {},
-        session=session,
+    system_prompt = ai_dependencies.prompts.render(
+        "ai_prompt_palace_quiz_group_by_mini_palace"
     )
     messages: list[dict[str, Any]] = [
         {"role": "system", "content": system_prompt},
@@ -151,6 +150,7 @@ def _ai_service():
 def prepare_child_chapter_grouping_request(
     session: Session,
     *,
+    ai_dependencies: PalaceQuizAiDependencies,
     drafts: list[dict[str, object]],
     child_contexts: list[dict[str, object]],
     ai_options: AiRuntimeOptions | None = None,
@@ -160,11 +160,13 @@ def prepare_child_chapter_grouping_request(
         child_contexts=child_contexts,
     )
     system_prompt, messages = build_child_chapter_grouping_messages(
+        ai_dependencies=ai_dependencies,
         session=session,
         model_input=model_input,
     )
     config, extra_payload, resolved_ai = _ai_service()._build_chat_config(
         session,
+        ai_runtime=ai_dependencies.runtime,
         scenario_key="quiz_mini_palace_grouping",
         ai_options=ai_options,
         temperature=0.2,
@@ -189,6 +191,7 @@ def prepare_child_chapter_grouping_request(
 def group_questions_by_child_chapters(
     session: Session,
     *,
+    ai_dependencies: PalaceQuizAiDependencies,
     drafts: list[dict[str, object]],
     child_contexts: list[dict[str, object]],
     feature: str,
@@ -197,6 +200,7 @@ def group_questions_by_child_chapters(
 ) -> dict[str, object]:
     prepared_request = prepare_child_chapter_grouping_request(
         session,
+        ai_dependencies=ai_dependencies,
         drafts=drafts,
         child_contexts=child_contexts,
         ai_options=ai_options,

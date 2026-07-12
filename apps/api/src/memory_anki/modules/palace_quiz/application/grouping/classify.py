@@ -8,19 +8,13 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from memory_anki.modules.palaces.application.mini_palace_service import (
-    parse_mini_palace_node_uids,
-)
-from memory_anki.modules.palaces.application.segment_nodes import (
-    collect_doc_nodes_with_descendants,
-)
-from memory_anki.modules.settings.application.ai_model_registry import (
-    AiRuntimeOptions,
-)
-from memory_anki.modules.settings.application.ai_prompts import render_prompt
+from memory_anki.modules.mindmap_document.api import collect_node_descendants
+from memory_anki.modules.palaces.api import parse_mini_palace_node_uids
+from memory_anki.platform.application import AiRuntimeOptions
 
 from .. import ai_service as _ai
 from .._question_utils import extract_mini_palace_grouping_payload
+from ..ai_dependencies import PalaceQuizAiDependencies
 from ..question_contracts import PalaceQuizValidationError
 from ..question_schema import serialize_question_rows
 from ..questions.commands import upsert_classified_question_copy
@@ -48,7 +42,7 @@ class ExistingQuestionGroupingRequest:
 
 
 def build_mini_palace_context(palace: Any) -> list[dict[str, Any]]:
-    _, labels = collect_doc_nodes_with_descendants(getattr(palace, "editor_doc", None))
+    _, labels = collect_node_descendants(getattr(palace, "editor_doc", None))
     contexts: list[dict[str, Any]] = []
     for mini_palace in getattr(palace, "mini_palaces", []) or []:
         node_uids = parse_mini_palace_node_uids(getattr(mini_palace, "node_uids_json", None))
@@ -87,6 +81,7 @@ def question_payload_for_grouping(question: dict[str, Any], index: int) -> dict[
 def prepare_mini_palace_grouping_request(
     session: Session,
     *,
+    ai_dependencies: PalaceQuizAiDependencies,
     palace: Any,
     questions: list[dict[str, Any]],
     operation: str,
@@ -101,11 +96,7 @@ def prepare_mini_palace_grouping_request(
     system_prompt = (
         ai_options.prompt_override.strip()
         if ai_options and ai_options.prompt_override and ai_options.prompt_override.strip()
-        else render_prompt(
-            operation,
-            {},
-            session=session,
-        )
+        else ai_dependencies.prompts.render(operation)
     )
     model_input = {
         "mini_palaces": mini_palace_contexts,
@@ -120,6 +111,7 @@ def prepare_mini_palace_grouping_request(
     ]
     config, extra_payload, resolved_ai = _ai._build_chat_config(
         session,
+        ai_runtime=ai_dependencies.runtime,
         scenario_key="quiz_mini_palace_grouping",
         ai_options=ai_options,
         temperature=0.2,
@@ -213,6 +205,7 @@ def build_grouped_preview_from_indexes(
 def group_questions_by_mini_palaces(
     session: Session,
     *,
+    ai_dependencies: PalaceQuizAiDependencies,
     palace: Any,
     questions: list[dict[str, Any]],
     operation: str,
@@ -220,6 +213,7 @@ def group_questions_by_mini_palaces(
 ) -> tuple[dict[str, Any], str, dict[str, Any]]:
     prepared_request = prepare_mini_palace_grouping_request(
         session,
+        ai_dependencies=ai_dependencies,
         palace=palace,
         questions=questions,
         operation=operation,
@@ -304,6 +298,7 @@ def prepare_existing_question_grouping_request(
 def classify_existing_quiz_questions_to_mini_palaces(
     session: Session,
     *,
+    ai_dependencies: PalaceQuizAiDependencies,
     palace_id: int,
     ai_options: AiRuntimeOptions | None = None,
 ) -> dict[str, object]:
@@ -314,6 +309,7 @@ def classify_existing_quiz_questions_to_mini_palaces(
     )
     grouped_preview, log_id, _resolved_ai = group_questions_by_mini_palaces(
         session,
+        ai_dependencies=ai_dependencies,
         palace=prepared_request.palace,
         questions=prepared_request.source_payloads,
         operation="ai_prompt_palace_quiz_classify_existing_to_mini_palace",

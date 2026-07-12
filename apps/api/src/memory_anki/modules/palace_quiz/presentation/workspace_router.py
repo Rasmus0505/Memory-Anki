@@ -8,12 +8,21 @@ from memory_anki.core.runtime_paths import get_app_home
 from memory_anki.infrastructure.db._tables.quiz_generation import QuizPdfAsset
 from memory_anki.infrastructure.db.deps import session_dep
 from memory_anki.modules.palace_quiz.application import workspace_service as service
+from memory_anki.modules.palace_quiz.application.ai_dependencies import PalaceQuizAiDependencies
 from memory_anki.modules.palace_quiz.application.question_contracts import (
     PalaceQuizNotFoundError,
     PalaceQuizValidationError,
 )
+from memory_anki.modules.settings.api import SettingsAiRuntimeProvider, SettingsPromptCatalog
 
 router = APIRouter(tags=["palace_quiz_workspace"])
+
+
+def _ai_dependencies(session: Session) -> PalaceQuizAiDependencies:
+    return PalaceQuizAiDependencies(
+        runtime=SettingsAiRuntimeProvider(session),
+        prompts=SettingsPromptCatalog(session),
+    )
 
 
 def _handle(exc: Exception) -> None:
@@ -179,7 +188,12 @@ def api_reorder_sources(job_id: str, data: dict, s: Session = Depends(session_de
 def api_extract_match(job_id: str, data: dict | None = None, s: Session = Depends(session_dep)):
     try:
         return {
-            "item": service.extract_and_match(s, job_id, ai_options=(data or {}).get("ai_options"))
+            "item": service.extract_and_match(
+                s,
+                job_id,
+                ai_dependencies=_ai_dependencies(s),
+                ai_options=(data or {}).get("ai_options"),
+            )
         }
     except Exception as exc:
         _handle(exc)

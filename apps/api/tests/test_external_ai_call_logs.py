@@ -9,6 +9,11 @@ from memory_anki.infrastructure.llm import external_ai_call_logs
 from memory_anki.modules.palaces.application.mindmap_import import runtime
 
 
+class StaticPromptCatalog:
+    def render(self, key: str, variables: dict[str, object] | None = None) -> str:
+        return "你是思维导图识别助手。"
+
+
 def test_runtime_creates_persistent_ai_call_log_for_import(monkeypatch, tmp_path: Path, test_engine):
     monkeypatch.setattr(external_ai_call_logs, "engine", test_engine)
     monkeypatch.setattr(external_ai_call_logs, "AI_CALL_LOGS_DIR", tmp_path / "ai_call_logs")
@@ -21,6 +26,7 @@ def test_runtime_creates_persistent_ai_call_log_for_import(monkeypatch, tmp_path
     monkeypatch.setattr(runtime, "stream_chat_completion_text", fake_stream_chat_completion_text)
 
     result = runtime.call_dashscope_json(
+        prompt_catalog=StaticPromptCatalog(),
         runtime=runtime.DashscopeImportRuntime(
             api_key="test-key",
             base_url="https://dashscope.test/v1",

@@ -11,6 +11,8 @@ from memory_anki.core.time import utc_now_naive
 from memory_anki.infrastructure.db._tables.misc import Config
 from memory_anki.modules.settings.application.ai_prompt_templates import (
     ENGLISH_READING_GENERATE_PROMPT,
+    ENGLISH_TRANSLATION_BATCH_PROMPT,
+    ENGLISH_TRANSLATION_SINGLE_PROMPT,
     IMPORT_BATCH_MINDMAP_PROMPT,
     IMPORT_IMAGE_MINDMAP_PROMPT,
     IMPORT_IMAGE_TEXT_PROMPT,
@@ -19,6 +21,10 @@ from memory_anki.modules.settings.application.ai_prompt_templates import (
     PALACE_QUIZ_GENERATE_PROMPT,
     PALACE_QUIZ_GROUP_BY_MINI_PALACE_PROMPT,
     PALACE_QUIZ_SHORT_ANSWER_FEEDBACK_PROMPT,
+    PALACE_QUIZ_SOURCE_PAIR_TRANSCRIPTION_PROMPT,
+    build_palace_quiz_generation_user_text,
+    build_palace_quiz_review_mindmap_prompt,
+    build_palace_quiz_text_formatting_prompt,
 )
 
 PROMPT_CONFIG_KEYS = (
@@ -30,7 +36,14 @@ PROMPT_CONFIG_KEYS = (
     "ai_prompt_palace_quiz_classify_existing_to_mini_palace",
     "ai_prompt_palace_quiz_group_by_mini_palace",
     "ai_prompt_palace_quiz_short_answer_feedback",
+    "ai_prompt_palace_quiz_source_pair_transcription",
+    "ai_prompt_palace_quiz_generation_user_text",
+    "ai_prompt_palace_quiz_source_pair_user_text",
+    "ai_prompt_palace_quiz_text_formatting",
+    "ai_prompt_palace_quiz_review_mindmap",
     "ai_prompt_english_reading_generate",
+    "ai_prompt_english_translation_batch",
+    "ai_prompt_english_translation_single",
 )
 
 PROMPT_KEY_ALIASES = {
@@ -72,17 +85,13 @@ _DEFAULT_BATCH_PROMPT_TEMPLATE = (
 
 _DEFAULT_PALACE_QUIZ_GENERATE_TEMPLATE = PALACE_QUIZ_GENERATE_PROMPT
 
-_DEFAULT_PALACE_QUIZ_SHORT_ANSWER_FEEDBACK_TEMPLATE = (
-    PALACE_QUIZ_SHORT_ANSWER_FEEDBACK_PROMPT
-)
+_DEFAULT_PALACE_QUIZ_SHORT_ANSWER_FEEDBACK_TEMPLATE = PALACE_QUIZ_SHORT_ANSWER_FEEDBACK_PROMPT
 
 _DEFAULT_PALACE_QUIZ_CLASSIFY_EXISTING_TO_MINI_PALACE_TEMPLATE = (
     PALACE_QUIZ_CLASSIFY_EXISTING_TO_MINI_PALACE_PROMPT
 )
 
-_DEFAULT_PALACE_QUIZ_GROUP_BY_MINI_PALACE_TEMPLATE = (
-    PALACE_QUIZ_GROUP_BY_MINI_PALACE_PROMPT
-)
+_DEFAULT_PALACE_QUIZ_GROUP_BY_MINI_PALACE_TEMPLATE = PALACE_QUIZ_GROUP_BY_MINI_PALACE_PROMPT
 
 PROMPT_DEFINITIONS: dict[str, PromptTemplateDefinition] = {
     "ai_prompt_import_image_mindmap": PromptTemplateDefinition(
@@ -144,6 +153,63 @@ PROMPT_DEFINITIONS: dict[str, PromptTemplateDefinition] = {
         description="为宫殿简答题的学生作答生成 AI 点评时使用的系统提示词。",
         default_template=_DEFAULT_PALACE_QUIZ_SHORT_ANSWER_FEEDBACK_TEMPLATE,
         source_location="apps/api/src/memory_anki/modules/settings/application/ai_prompts.py",
+    ),
+    "ai_prompt_palace_quiz_source_pair_transcription": PromptTemplateDefinition(
+        key="ai_prompt_palace_quiz_source_pair_transcription",
+        label="宫殿做题题目答案配对",
+        description="区分题目来源与答案来源时使用的严格抄录系统提示词。",
+        default_template=PALACE_QUIZ_SOURCE_PAIR_TRANSCRIPTION_PROMPT,
+    ),
+    "ai_prompt_palace_quiz_generation_user_text": PromptTemplateDefinition(
+        key="ai_prompt_palace_quiz_generation_user_text",
+        label="宫殿做题生成用户指令",
+        description="普通资料生成题目时的用户消息模板。",
+        default_template=build_palace_quiz_generation_user_text(
+            source_label="{{source_label}}",
+            is_source_pair_transcription=False,
+        ),
+        available_placeholders=(_placeholder("source_label", "当前资料来源标签。"),),
+        required_placeholders=("source_label",),
+    ),
+    "ai_prompt_palace_quiz_source_pair_user_text": PromptTemplateDefinition(
+        key="ai_prompt_palace_quiz_source_pair_user_text",
+        label="宫殿做题配对用户指令",
+        description="题目来源与答案来源配对时的用户消息模板。",
+        default_template=build_palace_quiz_generation_user_text(
+            source_label="{{source_label}}",
+            is_source_pair_transcription=True,
+        ),
+        available_placeholders=(_placeholder("source_label", "当前资料来源标签。"),),
+        required_placeholders=("source_label",),
+    ),
+    "ai_prompt_palace_quiz_text_formatting": PromptTemplateDefinition(
+        key="ai_prompt_palace_quiz_text_formatting",
+        label="宫殿题库文本整理",
+        description="将文本、Markdown 或半结构数据整理为题库 JSON。",
+        default_template=build_palace_quiz_text_formatting_prompt("{{extra_prompt}}"),
+        available_placeholders=(_placeholder("extra_prompt", "用户补充要求。"),),
+    ),
+    "ai_prompt_palace_quiz_review_mindmap": PromptTemplateDefinition(
+        key="ai_prompt_palace_quiz_review_mindmap",
+        label="复习脑图出题",
+        description="根据复习脑图和关联宫殿摘要生成题目。",
+        default_template=build_palace_quiz_review_mindmap_prompt(),
+    ),
+    "ai_prompt_english_translation_batch": PromptTemplateDefinition(
+        key="ai_prompt_english_translation_batch",
+        label="英语课程批量翻译",
+        description="英语课程生成时按稳定句子编号批量翻译。",
+        default_template=ENGLISH_TRANSLATION_BATCH_PROMPT,
+        available_placeholders=(_placeholder("source_text", "带稳定编号的英文句子。"),),
+        required_placeholders=("source_text",),
+    ),
+    "ai_prompt_english_translation_single": PromptTemplateDefinition(
+        key="ai_prompt_english_translation_single",
+        label="英语课程单句翻译",
+        description="批量翻译结果不匹配时的单句降级翻译。",
+        default_template=ENGLISH_TRANSLATION_SINGLE_PROMPT,
+        available_placeholders=(_placeholder("source_text", "待翻译的单句英文。"),),
+        required_placeholders=("source_text",),
     ),
     "ai_prompt_english_reading_generate": PromptTemplateDefinition(
         key="ai_prompt_english_reading_generate",

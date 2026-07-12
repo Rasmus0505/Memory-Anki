@@ -3,14 +3,14 @@ from __future__ import annotations
 import logging
 import re
 from collections.abc import Callable
-from dataclasses import replace
+from dataclasses import dataclass
 from pathlib import Path
 from time import monotonic
 from typing import Any
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 import dashscope
-import requests
+import requests  # type: ignore[import-untyped]
 from dashscope.audio.qwen_asr import QwenTranscription
 from dashscope.files import Files
 
@@ -33,11 +33,7 @@ from memory_anki.modules.english.domain.errors import (
     EnglishCourseError,
     EnglishTranslationBatchMismatchError,
 )
-from memory_anki.modules.settings.application.ai_model_registry import (
-    AiRuntimeOptions,
-    is_dashscope_compatible_provider,
-    resolve_scenario_runtime,
-)
+from memory_anki.platform.application import AiRuntimeOptions, PromptCatalog, ResolvedAiRuntime
 
 from .generation_log_store import append_generation_log_event
 
@@ -48,23 +44,33 @@ TRANSLATION_BATCH_SIZE = 40
 TRANSLATION_LINE_RE = re.compile(r"^\[S(?P<index>\d+)\]\s*(?P<text>.*)$")
 
 
+@dataclass(frozen=True, slots=True)
+class LegacyDashscopeRuntime:
+    model: str
+    api_key: str
+    base_url: str
+    provider: str = "dashscope"
+    supports_temperature: bool = True
+    extra_payload: dict[str, Any] | None = None
+
+
 def _resolve_legacy_dashscope_runtime(
-    scenario_key: str,
     *,
     ai_options: AiRuntimeOptions | None = None,
     legacy_default_model: str | None = None,
-):
-    runtime = resolve_scenario_runtime(None, scenario_key, ai_options=ai_options)
-    if not is_dashscope_compatible_provider(runtime.provider):
-        return runtime
-    model = runtime.model
-    if not (ai_options and ai_options.model) and legacy_default_model:
-        model = str(legacy_default_model or runtime.model or "").strip()
-    return replace(
-        runtime,
-        api_model=model,
-        api_key=str(DASHSCOPE_API_KEY or runtime.api_key or "").strip(),
-        base_url=str(DASHSCOPE_BASE_URL or runtime.base_url or "").strip(),
+    resolved_runtime: ResolvedAiRuntime | None = None,
+) -> ResolvedAiRuntime | LegacyDashscopeRuntime:
+    if resolved_runtime is not None:
+        return resolved_runtime
+    model = str(
+        (ai_options.model if ai_options and ai_options.model else None)
+        or legacy_default_model
+        or "qwen3-asr-flash"
+    ).strip()
+    return LegacyDashscopeRuntime(
+        model=model,
+        api_key=str(DASHSCOPE_API_KEY or "").strip(),
+        base_url=str(DASHSCOPE_BASE_URL or "").strip(),
     )
 
 
@@ -75,9 +81,13 @@ class DashscopeEnglishAsrGateway:
         *,
         task_id: str,
         ai_options: AiRuntimeOptions | None = None,
+        resolved_runtime: ResolvedAiRuntime | None = None,
         progress_callback: Callable[[dict[str, Any]], None] | None = None,
     ) -> dict[str, Any]:
-        runtime = _resolve_legacy_dashscope_runtime("asr_course_transcription", ai_options=ai_options)
+        runtime = _resolve_legacy_dashscope_runtime(
+            ai_options=ai_options,
+            resolved_runtime=resolved_runtime,
+        )
         api_key = str(runtime.api_key or "").strip()
         if not api_key:
             raise EnglishCourseError("未配置 ASR 模型对应的 Provider API Key，无法生成英语课程。")
@@ -215,10 +225,17 @@ class DashscopeEnglishAsrGateway:
 
 
 class DashscopeEnglishTranslator:
-    def translate_sentences(self, sentences: list[dict[str, Any]], *, task_id: str) -> list[dict[str, Any]]:
+    def translate_sentences(
+        self,
+        sentences: list[dict[str, Any]],
+        *,
+        task_id: str,
+        prompt_catalog: PromptCatalog,
+        resolved_runtime: ResolvedAiRuntime | None = None,
+    ) -> list[dict[str, Any]]:
         runtime = _resolve_legacy_dashscope_runtime(
-            "translation_course_batch",
             legacy_default_model=ENGLISH_TRANSLATION_MODEL,
+            resolved_runtime=resolved_runtime,
         )
         if not str(runtime.api_key or "").strip():
             raise EnglishCourseError("未配置翻译模型对应的 Provider API Key，无法生成中文译文。")
@@ -239,6 +256,7 @@ class DashscopeEnglishTranslator:
                     runtime_extra_payload=runtime.extra_payload,
                     batch=batch,
                     task_id=task_id,
+                    prompt_catalog=prompt_catalog,
                 )
             )
             translated_count = len(translated_by_index)
@@ -270,6 +288,7 @@ class DashscopeEnglishTranslator:
         runtime_extra_payload: dict[str, Any] | None,
         batch: list[dict[str, Any]],
         task_id: str,
+        prompt_catalog: PromptCatalog,
     ) -> dict[int, str]:
         if not batch:
             return {}
@@ -281,6 +300,7 @@ class DashscopeEnglishTranslator:
                     runtime_extra_payload=runtime_extra_payload,
                     sentence=item,
                     task_id=task_id,
+                    prompt_catalog=prompt_catalog,
                 )
             }
         try:
@@ -289,6 +309,7 @@ class DashscopeEnglishTranslator:
                 runtime_extra_payload=runtime_extra_payload,
                 batch=batch,
                 task_id=task_id,
+                prompt_catalog=prompt_catalog,
             )
         except EnglishTranslationBatchMismatchError as exc:
             append_generation_log_event(
@@ -308,12 +329,14 @@ class DashscopeEnglishTranslator:
                 runtime_extra_payload=runtime_extra_payload,
                 batch=batch[:midpoint],
                 task_id=task_id,
+                prompt_catalog=prompt_catalog,
             )
             right = self.translate_sentence_batch_with_fallback(
                 config=config,
                 runtime_extra_payload=runtime_extra_payload,
                 batch=batch[midpoint:],
                 task_id=task_id,
+                prompt_catalog=prompt_catalog,
             )
             return {**left, **right}
 
@@ -324,10 +347,10 @@ class DashscopeEnglishTranslator:
         runtime_extra_payload: dict[str, Any] | None,
         batch: list[dict[str, Any]],
         task_id: str,
+        prompt_catalog: PromptCatalog,
     ) -> dict[int, str]:
         source_text = "\n".join(
-            f"[S{int(item['index']):04d}] {str(item['text_en'] or '').strip()}"
-            for item in batch
+            f"[S{int(item['index']):04d}] {str(item['text_en'] or '').strip()}" for item in batch
         )
         translation_options = {
             "source_lang": "English",
@@ -362,7 +385,15 @@ class DashscopeEnglishTranslator:
         try:
             response_text = call_chat_completion_text(
                 config=config,
-                messages=[{"role": "user", "content": source_text}],
+                messages=[
+                    {
+                        "role": "user",
+                        "content": prompt_catalog.render(
+                            "ai_prompt_english_translation_batch",
+                            {"source_text": source_text},
+                        ),
+                    }
+                ],
                 extra_payload={
                     **(runtime_extra_payload or {}),
                     "translation_options": translation_options,
@@ -414,6 +445,7 @@ class DashscopeEnglishTranslator:
         runtime_extra_payload: dict[str, Any] | None,
         sentence: dict[str, Any],
         task_id: str,
+        prompt_catalog: PromptCatalog,
     ) -> str:
         source_text = str(sentence.get("text_en") or "").strip()
         translation_options = {
@@ -449,7 +481,15 @@ class DashscopeEnglishTranslator:
         try:
             response_text = call_chat_completion_text(
                 config=config,
-                messages=[{"role": "user", "content": source_text}],
+                messages=[
+                    {
+                        "role": "user",
+                        "content": prompt_catalog.render(
+                            "ai_prompt_english_translation_single",
+                            {"source_text": source_text},
+                        ),
+                    }
+                ],
                 extra_payload={
                     **(runtime_extra_payload or {}),
                     "translation_options": translation_options,
@@ -597,7 +637,12 @@ def sanitize_url(url: str) -> str:
         return url
     sanitized_query = urlencode(
         [
-            (key, "***" if any(token in key.lower() for token in ("token", "signature", "key", "auth")) else value)
+            (
+                key,
+                "***"
+                if any(token in key.lower() for token in ("token", "signature", "key", "auth"))
+                else value,
+            )
             for key, value in parse_qsl(parsed.query, keep_blank_values=True)
         ]
     )

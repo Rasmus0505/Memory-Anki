@@ -23,9 +23,10 @@ from memory_anki.modules.palaces.application.segment_service import (
     update_palace_segment,
 )
 from memory_anki.modules.palaces.presentation.errors import raise_not_found
-from memory_anki.modules.persistence.application.idempotency import (
-    get_idempotent_response,
-    save_idempotent_response,
+from memory_anki.platform.application import mutation_identity_from_headers
+from memory_anki.platform.persistence import (
+    SqlAlchemyMutationResponseStore,
+    SqlAlchemyUnitOfWork,
 )
 
 router = APIRouter()
@@ -53,16 +54,28 @@ def api_create_segment(
     request: Request,
     s: Session = Depends(session_dep),
 ):
-    existing_response = get_idempotent_response(s, request)
+    mutation_identity = mutation_identity_from_headers(request.headers)
+    mutation_store = SqlAlchemyMutationResponseStore(s)
+    existing_response = mutation_store.get(mutation_identity)
     if existing_response is not None:
         return existing_response
     palace = get_palace(s, palace_id)
     if not palace:
         raise_not_found()
-    segment = create_palace_segment(s, palace, data)
+    response: dict = {}
+
+    def prepare_atomic_response(segment) -> None:
+        response.update({"item": segment_summary_json(s, segment)})
+        mutation_store.save(mutation_identity, response)
+
+    create_palace_segment(
+        s,
+        palace,
+        data,
+        uow=SqlAlchemyUnitOfWork(s),
+        before_commit=prepare_atomic_response,
+    )
     _maybe_create_rolling_backup("rolling-create-palace-segment")
-    response = {"item": segment_summary_json(s, segment)}
-    save_idempotent_response(s, request, response)
     return response
 
 
@@ -71,7 +84,9 @@ def api_update_segment(segment_id: int, data: dict, s: Session = Depends(session
     segment = get_palace_segment(s, segment_id)
     if not segment:
         raise_not_found()
-    updated = update_palace_segment(s, segment, data)
+    updated = update_palace_segment(
+        s, segment, data, uow=SqlAlchemyUnitOfWork(s)
+    )
     _maybe_create_rolling_backup("rolling-update-palace-segment")
     return {"item": segment_summary_json(s, updated)}
 
@@ -85,6 +100,7 @@ def api_update_palace_practice_flag(palace_id: int, data: dict, s: Session = Dep
         s,
         palace,
         bool(data.get("needs_practice", False)),
+        uow=SqlAlchemyUnitOfWork(s),
     )
     return {"item": palace_json(palace, s)}
 
@@ -109,6 +125,7 @@ def api_toggle_palace_focus_node(
         palace,
         node_uid,
         target_focused,
+        uow=SqlAlchemyUnitOfWork(s),
     )
     return {
         "ok": True,
@@ -126,7 +143,7 @@ def api_delete_segment(segment_id: int, s: Session = Depends(session_dep)):
     segment = get_palace_segment(s, segment_id)
     if not segment:
         raise_not_found()
-    delete_palace_segment(s, segment)
+    delete_palace_segment(s, segment, uow=SqlAlchemyUnitOfWork(s))
     _maybe_create_rolling_backup("rolling-delete-palace-segment")
     return {"ok": True}
 

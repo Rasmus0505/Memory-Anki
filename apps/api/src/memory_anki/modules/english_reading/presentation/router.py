@@ -8,6 +8,9 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from memory_anki.infrastructure.db.deps import session_dep
+from memory_anki.modules.english_reading.application.ai_dependencies import (
+    EnglishReadingAiDependencies,
+)
 from memory_anki.modules.english_reading.application.service import (
     complete_material,
     create_material,
@@ -27,11 +30,16 @@ from memory_anki.modules.english_reading.application.service import (
     update_profile,
 )
 from memory_anki.modules.english_reading.domain.errors import EnglishReadingError
-from memory_anki.modules.settings.application.ai_model_registry import (
-    normalize_ai_runtime_options,
-)
+from memory_anki.modules.settings.api import SettingsAiRuntimeProvider, SettingsPromptCatalog
 
 router = APIRouter(tags=["english-reading"])
+
+
+def _ai_dependencies(session: Session) -> EnglishReadingAiDependencies:
+    return EnglishReadingAiDependencies(
+        runtime=SettingsAiRuntimeProvider(session),
+        prompts=SettingsPromptCatalog(session),
+    )
 
 
 def _reading_sse(event: str, payload: dict) -> str:
@@ -136,11 +144,12 @@ def api_generate_english_reading_material(
     try:
         return generate_material_version(
             session,
+            ai_dependencies=_ai_dependencies(session),
             material_id=material_id,
             mode=data.mode,
             difficulty_direction=data.difficultyDirection,
             difficulty_delta=data.difficultyDelta,
-            ai_options=normalize_ai_runtime_options(data.ai_options),
+            ai_options=_ai_dependencies(session).runtime.normalize_options(data.ai_options),
         )
     except EnglishReadingError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -156,11 +165,12 @@ def api_stream_generate_english_reading_material(
         try:
             generator = generate_material_version_events(
                 session,
+            ai_dependencies=_ai_dependencies(session),
                 material_id=material_id,
                 mode=data.mode,
                 difficulty_direction=data.difficultyDirection,
                 difficulty_delta=data.difficultyDelta,
-                ai_options=normalize_ai_runtime_options(data.ai_options),
+                ai_options=_ai_dependencies(session).runtime.normalize_options(data.ai_options),
             )
             while True:
                 try:
@@ -242,8 +252,9 @@ def api_translate_english_reading_sentence(
     try:
         return translate_sentence_text(
             session,
+            ai_dependencies=_ai_dependencies(session),
             text=data.text,
-            ai_options=normalize_ai_runtime_options(data.ai_options),
+            ai_options=_ai_dependencies(session).runtime.normalize_options(data.ai_options),
         )
     except EnglishReadingError as exc:
         message = str(exc)

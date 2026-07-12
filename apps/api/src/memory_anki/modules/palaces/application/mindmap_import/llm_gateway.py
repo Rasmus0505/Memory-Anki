@@ -3,9 +3,10 @@ from __future__ import annotations
 from collections.abc import Generator
 from typing import Any
 
+from memory_anki.platform.application import PromptCatalog
+
 from .contracts import ImportStreamEvent
 from .events import stream_text_deltas_as_events
-from .prompts import PROMPT
 from .runtime import (
     DashscopeImportRuntime,
     call_dashscope_batch_json,
@@ -71,15 +72,17 @@ def prepare_batch_items(
 
 def call_json(
     *,
+    prompt_catalog: PromptCatalog,
     runtime: DashscopeImportRuntime,
     image_bytes: bytes,
     filename: str | None,
-    prompt: str = PROMPT,
+    prompt: str | None = None,
     disable_rebalance: bool = False,
     external_log_context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     return call_dashscope_json(
         runtime=runtime,
+        prompt_catalog=prompt_catalog,
         image_bytes=image_bytes,
         filename=filename,
         prompt=prompt,
@@ -90,6 +93,7 @@ def call_json(
 
 def call_text(
     *,
+    prompt_catalog: PromptCatalog,
     runtime: DashscopeImportRuntime,
     image_bytes: bytes,
     filename: str | None,
@@ -97,6 +101,7 @@ def call_text(
 ) -> str:
     return call_dashscope_text(
         runtime=runtime,
+        prompt_catalog=prompt_catalog,
         image_bytes=image_bytes,
         filename=filename,
         external_log_context=external_log_context,
@@ -105,6 +110,7 @@ def call_text(
 
 def call_text_with_images(
     *,
+    prompt_catalog: PromptCatalog,
     runtime: DashscopeImportRuntime,
     image_items: list[tuple[bytes, str | None]],
     page_numbers: list[int] | None,
@@ -113,6 +119,7 @@ def call_text_with_images(
 ) -> str:
     return call_dashscope_text_with_images(
         runtime=runtime,
+        prompt_catalog=prompt_catalog,
         image_items=image_items,
         page_numbers=page_numbers,
         range_prompt=range_prompt,
@@ -122,6 +129,7 @@ def call_text_with_images(
 
 def call_batch_json(
     *,
+    prompt_catalog: PromptCatalog,
     runtime: DashscopeImportRuntime,
     image_items: list[tuple[bytes, str | None]],
     structure_tree: dict[str, Any] | None,
@@ -133,6 +141,7 @@ def call_batch_json(
 ) -> dict[str, Any]:
     return call_dashscope_batch_json(
         runtime=runtime,
+        prompt_catalog=prompt_catalog,
         image_items=image_items,
         structure_tree=structure_tree,
         range_prompt=range_prompt,
@@ -145,11 +154,12 @@ def call_batch_json(
 
 def stream_json(
     *,
+    prompt_catalog: PromptCatalog,
     runtime: DashscopeImportRuntime,
     image_bytes: bytes,
     filename: str | None,
     channel: str,
-    prompt: str = PROMPT,
+    prompt: str | None = None,
     disable_rebalance: bool = False,
     external_log_context: dict[str, Any] | None = None,
 ) -> Generator[ImportStreamEvent, None, dict[str, Any]]:
@@ -157,6 +167,7 @@ def stream_json(
         yield from stream_text_deltas_as_events(
             generator=stream_call_dashscope_json(
                 runtime=runtime,
+                prompt_catalog=prompt_catalog,
                 image_bytes=image_bytes,
                 filename=filename,
                 prompt=prompt,
@@ -170,6 +181,7 @@ def stream_json(
 
 def stream_text(
     *,
+    prompt_catalog: PromptCatalog,
     runtime: DashscopeImportRuntime,
     image_items: list[tuple[bytes, str | None]],
     page_numbers: list[int] | None,
@@ -181,6 +193,7 @@ def stream_text(
         yield from stream_text_deltas_as_events(
             generator=stream_call_dashscope_text(
                 runtime=runtime,
+                prompt_catalog=prompt_catalog,
                 image_items=image_items,
                 page_numbers=page_numbers,
                 range_prompt=range_prompt,
@@ -193,6 +206,7 @@ def stream_text(
 
 def stream_batch_json(
     *,
+    prompt_catalog: PromptCatalog,
     runtime: DashscopeImportRuntime,
     image_items: list[tuple[bytes, str | None]],
     structure_tree: dict[str, Any] | None,
@@ -207,6 +221,7 @@ def stream_batch_json(
         yield from stream_text_deltas_as_events(
             generator=stream_call_dashscope_batch_json(
                 runtime=runtime,
+                prompt_catalog=prompt_catalog,
                 image_items=image_items,
                 structure_tree=structure_tree,
                 range_prompt=range_prompt,

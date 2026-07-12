@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from collections.abc import Generator
 from dataclasses import dataclass
 from typing import Any
@@ -23,7 +24,7 @@ from memory_anki.infrastructure.llm.external_ai_call_logs import (
     complete_external_ai_call_log,
     fail_external_ai_call_log,
 )
-from memory_anki.modules.settings.application import ai_prompts
+from memory_anki.platform.application import PromptCatalog
 
 from .contracts import MindMapImportError
 from .model_io import (
@@ -33,10 +34,6 @@ from .model_io import (
     parse_source_tree_json,
 )
 from .normalization import normalize_source_tree
-from .prompts import (
-    BATCH_PROMPT,
-    PROMPT,
-)
 
 
 @dataclass(frozen=True, slots=True)
@@ -99,14 +96,19 @@ def prepare_batch_image_items(
 
 def call_dashscope_json(
     *,
+    prompt_catalog: PromptCatalog,
     runtime: DashscopeImportRuntime,
     image_bytes: bytes,
     filename: str | None,
-    prompt: str | None = PROMPT,
+    prompt: str | None = None,
     disable_rebalance: bool = False,
     external_log_context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    resolved_prompt = runtime.prompt_override or prompt or PROMPT
+    resolved_prompt = (
+        runtime.prompt_override
+        or prompt
+        or prompt_catalog.render("ai_prompt_import_image_mindmap")
+    )
     content_text = call_dashscope(
         runtime=runtime,
         image_bytes=image_bytes,
@@ -121,6 +123,7 @@ def call_dashscope_json(
 
 def call_dashscope_text(
     *,
+    prompt_catalog: PromptCatalog,
     runtime: DashscopeImportRuntime,
     image_bytes: bytes,
     filename: str | None,
@@ -128,6 +131,7 @@ def call_dashscope_text(
 ) -> str:
     return call_dashscope_text_with_images(
         runtime=runtime,
+        prompt_catalog=prompt_catalog,
         image_items=[(image_bytes, filename)],
         page_numbers=None,
         range_prompt="",
@@ -137,6 +141,7 @@ def call_dashscope_text(
 
 def call_dashscope_text_with_images(
     *,
+    prompt_catalog: PromptCatalog,
     runtime: DashscopeImportRuntime,
     image_items: list[tuple[bytes, str | None]],
     page_numbers: list[int] | None,
@@ -144,7 +149,7 @@ def call_dashscope_text_with_images(
     external_log_context: dict[str, Any] | None = None,
 ) -> str:
     resolved_prompt = _extend_image_prompt(
-        runtime.prompt_override or ai_prompts.render_prompt("ai_prompt_import_image_text", {}),
+        runtime.prompt_override or prompt_catalog.render("ai_prompt_import_image_text"),
         page_numbers=page_numbers,
         range_prompt=range_prompt,
     )
@@ -162,6 +167,7 @@ def call_dashscope_text_with_images(
 
 def call_dashscope_batch_json(
     *,
+    prompt_catalog: PromptCatalog,
     runtime: DashscopeImportRuntime,
     image_items: list[tuple[bytes, str | None]],
     structure_tree: dict[str, Any] | None,
@@ -172,6 +178,7 @@ def call_dashscope_batch_json(
     external_log_context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     prompt = runtime.prompt_override or _build_batch_prompt(
+        prompt_catalog=prompt_catalog,
         structure_tree=structure_tree,
         range_prompt=range_prompt,
         page_numbers=page_numbers,
@@ -192,14 +199,19 @@ def call_dashscope_batch_json(
 
 def stream_call_dashscope_json(
     *,
+    prompt_catalog: PromptCatalog,
     runtime: DashscopeImportRuntime,
     image_bytes: bytes,
     filename: str | None,
-    prompt: str | None = PROMPT,
+    prompt: str | None = None,
     disable_rebalance: bool = False,
     external_log_context: dict[str, Any] | None = None,
 ) -> Generator[str, None, dict[str, Any]]:
-    resolved_prompt = runtime.prompt_override or prompt or PROMPT
+    resolved_prompt = (
+        runtime.prompt_override
+        or prompt
+        or prompt_catalog.render("ai_prompt_import_image_mindmap")
+    )
     content_text = yield from stream_call_dashscope(
         runtime=runtime,
         image_bytes=image_bytes,
@@ -214,6 +226,7 @@ def stream_call_dashscope_json(
 
 def stream_call_dashscope_text(
     *,
+    prompt_catalog: PromptCatalog,
     runtime: DashscopeImportRuntime,
     image_items: list[tuple[bytes, str | None]],
     page_numbers: list[int] | None,
@@ -221,7 +234,7 @@ def stream_call_dashscope_text(
     external_log_context: dict[str, Any] | None = None,
 ) -> Generator[str, None, str]:
     resolved_prompt = _extend_image_prompt(
-        runtime.prompt_override or ai_prompts.render_prompt("ai_prompt_import_image_text", {}),
+        runtime.prompt_override or prompt_catalog.render("ai_prompt_import_image_text"),
         page_numbers=page_numbers,
         range_prompt=range_prompt,
     )
@@ -239,6 +252,7 @@ def stream_call_dashscope_text(
 
 def stream_call_dashscope_batch_json(
     *,
+    prompt_catalog: PromptCatalog,
     runtime: DashscopeImportRuntime,
     image_items: list[tuple[bytes, str | None]],
     structure_tree: dict[str, Any] | None,
@@ -249,6 +263,7 @@ def stream_call_dashscope_batch_json(
     external_log_context: dict[str, Any] | None = None,
 ) -> Generator[str, None, dict[str, Any]]:
     prompt = runtime.prompt_override or _build_batch_prompt(
+        prompt_catalog=prompt_catalog,
         structure_tree=structure_tree,
         range_prompt=range_prompt,
         page_numbers=page_numbers,
@@ -500,15 +515,16 @@ def extract_message_content_text(content: Any) -> str:
 
 def _build_batch_prompt(
     *,
+    prompt_catalog: PromptCatalog,
     structure_tree: dict[str, Any] | None,
     range_prompt: str,
     page_numbers: list[int] | None,
     extracted_text: str | None,
 ) -> str:
-    if structure_tree:
-        prompt = ai_prompts.build_import_batch_prompt(structure_tree=structure_tree)
-    else:
-        prompt = BATCH_PROMPT
+    prompt = prompt_catalog.render(
+        "ai_prompt_import_batch_mindmap",
+        {"structure_tree_json": json.dumps(structure_tree or {}, ensure_ascii=False)},
+    )
     if extracted_text:
         prompt += f"\n\n已提取的图片文字参考：\n{extracted_text}"
     return _extend_image_prompt(prompt, page_numbers=page_numbers, range_prompt=range_prompt)

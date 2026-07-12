@@ -78,11 +78,8 @@ def list_backups() -> list[dict]:
             if not folder.is_dir():
                 continue
             manifest = read_storage_backup_manifest(folder)
-            included_items = (
-                manifest.get("included_items")
-                if isinstance(manifest.get("included_items"), list)
-                else []
-            )
+            raw_included_items = manifest.get("included_items")
+            included_items = raw_included_items if isinstance(raw_included_items, list) else []
             included_keys = {
                 str(item.get("key"))
                 for item in included_items

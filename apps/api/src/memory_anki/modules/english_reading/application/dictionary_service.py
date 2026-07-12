@@ -10,9 +10,7 @@ from __future__ import annotations
 import json
 import math
 import re
-from dataclasses import (
-    replace,
-)
+from dataclasses import replace
 from typing import (
     Any,
 )
@@ -21,7 +19,6 @@ from sqlalchemy.orm import Session
 
 from memory_anki.core.time import utc_now_naive
 from memory_anki.infrastructure.db._tables.english_reading import EnglishReadingDictionaryCache
-from memory_anki.infrastructure.llm.config_helpers import has_non_empty_configs
 from memory_anki.infrastructure.llm.external_ai_call_logs import (
     begin_external_ai_call_log,
     complete_external_ai_call_log,
@@ -31,13 +28,10 @@ from memory_anki.infrastructure.llm.openai_compatible import (
     OpenAICompatibleChatConfig,
 )
 from memory_anki.modules.english_reading.domain.errors import EnglishReadingError
-from memory_anki.modules.settings.application.ai_model_registry import (
-    AiRuntimeOptions,
-    is_dashscope_compatible_provider,
-    resolve_scenario_runtime,
-)
+from memory_anki.platform.application import AiRuntimeOptions
 
 from . import service as _svc
+from .ai_dependencies import EnglishReadingAiDependencies
 
 
 def get_english_reading_runtime() -> _svc.EnglishReadingRuntime:
@@ -113,41 +107,31 @@ def get_dictionary_entry(session: Session, *, word: str) -> dict[str, Any]:
 def _resolve_legacy_dashscope_runtime(
     session: Session,
     *,
+    ai_dependencies: EnglishReadingAiDependencies,
     scenario_key: str,
     ai_options: AiRuntimeOptions | None,
     legacy_default_model: str,
 ):
-    runtime = resolve_scenario_runtime(session, scenario_key, ai_options=ai_options)
-    if not is_dashscope_compatible_provider(runtime.provider):
+    del session
+    runtime = ai_dependencies.runtime.resolve(scenario_key, options=ai_options)
+    if runtime.api_key:
         return runtime
-    configured = has_non_empty_configs(
-        session,
-        {runtime.scene.config_key, "dashscope_api_key", "dashscope_base_url"},
-    )
-    model = runtime.model
-    if not (ai_options and ai_options.model) and not configured[runtime.scene.config_key]:
-        model = str(legacy_default_model or runtime.model or "").strip()
-    api_key = (
-        runtime.api_key
-        if configured["dashscope_api_key"]
-        else str(_svc.DASHSCOPE_API_KEY or "").strip()
-    )
-    base_url = (
-        runtime.base_url
-        if configured["dashscope_base_url"]
-        else str(_svc.DASHSCOPE_BASE_URL or runtime.base_url or "").strip()
-    )
     return replace(
         runtime,
-        api_model=model,
-        api_key=api_key,
-        base_url=base_url,
+        model=(
+            runtime.model
+            if ai_options and ai_options.model
+            else str(legacy_default_model or runtime.model or "").strip()
+        ),
+        api_key=str(_svc.DASHSCOPE_API_KEY or "").strip(),
+        base_url=str(_svc.DASHSCOPE_BASE_URL or runtime.base_url or "").strip(),
     )
 
 
 def translate_sentence_text(
     session: Session,
     *,
+    ai_dependencies: EnglishReadingAiDependencies,
     text: str,
     ai_options: AiRuntimeOptions | None = None,
 ) -> dict[str, str]:
@@ -162,6 +146,7 @@ def translate_sentence_text(
         raise EnglishReadingError("请选择包含英文内容的句子。")
     runtime = _svc._resolve_legacy_dashscope_runtime(
         session,
+        ai_dependencies=ai_dependencies,
         scenario_key="translation",
         ai_options=ai_options,
         legacy_default_model=_svc.ENGLISH_TRANSLATION_MODEL,

@@ -7,9 +7,7 @@ from sqlalchemy.orm import Query, Session
 
 from memory_anki.infrastructure.db._tables.knowledge import Chapter
 from memory_anki.infrastructure.db._tables.palaces import Palace, PalaceQuizQuestion
-from memory_anki.modules.palaces.application.title_sync_service import (
-    get_palace_explicit_chapter_ids,
-)
+from memory_anki.modules.palaces.api import get_palace_explicit_chapter_ids
 
 from ..question_contracts import PalaceQuizNotFoundError
 from ..question_schema import (

@@ -23,15 +23,13 @@ from memory_anki.modules.english.application.startup import (
 from memory_anki.modules.english_reading.application.startup import (
     prepare_english_reading,
 )
-from memory_anki.modules.persistence.application.idempotency import (
-    purge_expired_idempotency_records,
-)
-from memory_anki.modules.sessions.application.study_session_bridge import (
+from memory_anki.modules.sessions.api import (
     ensure_review_log_study_sessions,
 )
 from memory_anki.modules.settings.application.ai_model_registry import (
     ensure_ai_model_catalog_seed,
 )
+from memory_anki.platform.persistence import purge_expired_mutation_responses
 
 STARTUP_MODE_PREPARE = "prepare"
 STARTUP_MODE_SERVE = "serve"
@@ -77,7 +75,7 @@ def run_prepare_runtime() -> StartupState:
         _seed_default_config_rows(session)
         session.commit()
         # Each device only deletes expired local cache rows; repeated cleanup is safe.
-        purge_expired_idempotency_records(session)
+        purge_expired_mutation_responses(session)
         ensure_review_log_study_sessions(session)
         ensure_daily_backup()
         maybe_create_periodic_backup()

@@ -110,7 +110,9 @@ def check_sentence_input(
     course = session.query(EnglishCourse).filter_by(id=course_id).first()
     if course is None:
         raise EnglishCourseError("英语课程不存在。")
-    sentence = next((item for item in course.sentences if item.sentence_index == sentence_index), None)
+    sentence = next(
+        (item for item in course.sentences if item.sentence_index == sentence_index), None
+    )
     if sentence is None:
         raise EnglishCourseError("句子不存在。")
     result = check_sentence_tokens(

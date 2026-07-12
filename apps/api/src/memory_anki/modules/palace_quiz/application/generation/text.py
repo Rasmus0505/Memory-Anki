@@ -9,10 +9,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from memory_anki.modules.settings.application.ai_model_registry import AiRuntimeOptions
-from memory_anki.modules.settings.application.ai_prompt_templates import (
-    build_palace_quiz_text_formatting_prompt,
-)
+from memory_anki.platform.application import AiRuntimeOptions
 
 from .._question_utils import (
     build_generation_source_meta,
@@ -20,6 +17,7 @@ from .._question_utils import (
     finalize_generation_source_meta,
     normalize_generated_question_drafts,
 )
+from ..ai_dependencies import PalaceQuizAiDependencies
 from ..manual_text_quiz_parser import parse_manual_text_quiz_pairs
 from ..question_contracts import PalaceQuizValidationError
 from ..questions.dedup import filter_global_duplicate_import_questions
@@ -57,6 +55,7 @@ def _ai_service():
 def prepare_text_generation_request(
     session: Session,
     *,
+    ai_dependencies: PalaceQuizAiDependencies,
     palace_id: int,
     file_artifacts: list[dict[str, Any]],
     extra_prompt: str,
@@ -73,6 +72,7 @@ def prepare_text_generation_request(
     ai = _ai_service()
     config, extra_payload, resolved_ai = ai._build_chat_config(
         session,
+        ai_runtime=ai_dependencies.runtime,
         scenario_key="quiz_text_generation",
         ai_options=ai_options,
         temperature=0.0,
@@ -84,6 +84,7 @@ def prepare_text_generation_request(
         extra_prompt=extra_prompt,
     )
     messages, system_prompt, model_input = build_text_generation_messages(
+        ai_dependencies=ai_dependencies,
         extra_prompt=extra_prompt,
         file_artifacts=file_artifacts,
         prompt_override=ai_options.prompt_override if ai_options else None,
@@ -153,6 +154,7 @@ def build_text_generation_model_input(
 
 def build_text_generation_messages(
     *,
+    ai_dependencies: PalaceQuizAiDependencies,
     extra_prompt: str,
     file_artifacts: list[dict[str, Any]],
     prompt_override: str | None = None,
@@ -160,7 +162,10 @@ def build_text_generation_messages(
     system_prompt = (
         str(prompt_override).strip()
         if prompt_override and str(prompt_override).strip()
-        else build_palace_quiz_text_formatting_prompt(extra_prompt)
+        else ai_dependencies.prompts.render(
+            "ai_prompt_palace_quiz_text_formatting",
+            {"extra_prompt": extra_prompt},
+        )
     )
     model_input = build_text_generation_model_input(file_artifacts=file_artifacts)
     messages = [
@@ -259,6 +264,7 @@ __all__ = [
 def project_text_generation_preview_result(
     session: Session,
     *,
+    ai_dependencies: PalaceQuizAiDependencies,
     palace: Any,
     palace_id: int,
     log_id: str,
@@ -278,6 +284,7 @@ def project_text_generation_preview_result(
     if classify_by_mini_palace:
         grouped_questions = group_questions_for_preview_scope(
             session,
+            ai_dependencies=ai_dependencies,
             palace=palace,
             drafts=drafts,
             selected_chapter=selected_chapter,
@@ -304,6 +311,7 @@ def project_text_generation_preview_result(
 def build_text_generation_preview_result(
     session: Session,
     *,
+    ai_dependencies: PalaceQuizAiDependencies,
     prepared_request: TextGenerationPreparedRequest,
     palace_id: int,
     response_text: str,
@@ -322,6 +330,7 @@ def build_text_generation_preview_result(
     )
     return project_text_generation_preview_result(
         session,
+        ai_dependencies=ai_dependencies,
         palace=prepared_request.palace,
         palace_id=palace_id,
         log_id=log_id,
@@ -446,6 +455,7 @@ def _collect_direct_questions(
 def generate_quiz_preview_from_text_files(
     session: Session,
     *,
+    ai_dependencies: PalaceQuizAiDependencies,
     palace_id: int,
     file_items: list[tuple[bytes, str | None, str | None]],
     extra_prompt: str,
@@ -487,6 +497,7 @@ def generate_quiz_preview_from_text_files(
     if ai_required_artifacts:
         prepared_request = prepare_text_generation_request(
             session,
+            ai_dependencies=ai_dependencies,
             palace_id=palace_id,
             file_artifacts=ai_required_artifacts,
             extra_prompt=extra_prompt,
@@ -542,6 +553,7 @@ def generate_quiz_preview_from_text_files(
         raise PalaceQuizValidationError("识别到的题目都已存在或无法保存。")
     return project_text_generation_preview_result(
         session,
+        ai_dependencies=ai_dependencies,
         palace=request_context.palace,
         palace_id=palace_id,
         log_id=log_id,

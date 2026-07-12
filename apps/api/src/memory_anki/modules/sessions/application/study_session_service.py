@@ -169,6 +169,8 @@ def append_study_session_events(
     session: Session,
     session_id: str,
     events: list[dict[str, Any]],
+    *,
+    commit: bool = True,
 ) -> dict[str, Any] | None:
     row = session.query(StudySession).filter_by(id=session_id).first()
     if row is None:
@@ -179,12 +181,21 @@ def append_study_session_events(
     current_events.extend(event for event in events if isinstance(event, dict))
     row.events_json = _json_dumps(current_events, "[]")
     row.updated_at = utc_now_naive()
-    session.commit()
-    session.refresh(row)
+    if commit:
+        session.commit()
+        session.refresh(row)
+    else:
+        session.flush()
     return study_session_json(row)
 
 
-def complete_study_session(session: Session, session_id: str, payload: dict[str, Any]) -> dict[str, Any] | None:
+def complete_study_session(
+    session: Session,
+    session_id: str,
+    payload: dict[str, Any],
+    *,
+    commit: bool = True,
+) -> dict[str, Any] | None:
     row = session.query(StudySession).filter_by(id=session_id).first()
     if row is None:
         return None
@@ -207,12 +218,21 @@ def complete_study_session(session: Session, session_id: str, payload: dict[str,
     current_events: list[Any] = _json_loads(row.events_json, [])
     row.events_json = _json_dumps([*(current_events if isinstance(current_events, list) else []), event], "[]")
     row.updated_at = utc_now_naive()
-    session.commit()
-    session.refresh(row)
+    if commit:
+        session.commit()
+        session.refresh(row)
+    else:
+        session.flush()
     return study_session_json(row)
 
 
-def abandon_study_session(session: Session, session_id: str, payload: dict[str, Any]) -> dict[str, Any] | None:
+def abandon_study_session(
+    session: Session,
+    session_id: str,
+    payload: dict[str, Any],
+    *,
+    commit: bool = True,
+) -> dict[str, Any] | None:
     row = session.query(StudySession).filter_by(id=session_id).first()
     if row is None:
         return None
@@ -221,8 +241,11 @@ def abandon_study_session(session: Session, session_id: str, payload: dict[str, 
     row.ended_at = ended_at
     row.completion_method = str(payload.get("completion_method") or "abandoned")
     row.updated_at = utc_now_naive()
-    session.commit()
-    session.refresh(row)
+    if commit:
+        session.commit()
+        session.refresh(row)
+    else:
+        session.flush()
     return study_session_json(row)
 
 

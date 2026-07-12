@@ -29,7 +29,18 @@ NUMBER_WORDS_LT_20 = [
     "eighteen",
     "nineteen",
 ]
-NUMBER_WORDS_TENS = ["", "", "twenty", "thirty", "forty", "fifty", "sixty", "seventy", "eighty", "ninety"]
+NUMBER_WORDS_TENS = [
+    "",
+    "",
+    "twenty",
+    "thirty",
+    "forty",
+    "fifty",
+    "sixty",
+    "seventy",
+    "eighty",
+    "ninety",
+]
 NUMBER_WORDS_SCALES = [
     (1_000_000_000_000, "trillion"),
     (1_000_000_000, "billion"),
@@ -46,7 +57,9 @@ class EnglishSentenceCheckResult:
     normalized_expected: list[str]
 
 
-def check_sentence_tokens(expected_tokens: list[str], input_text: str) -> EnglishSentenceCheckResult:
+def check_sentence_tokens(
+    expected_tokens: list[str], input_text: str
+) -> EnglishSentenceCheckResult:
     normalized_expected = [
         normalize_token(token)
         for token in normalize_learning_token_list(expected_tokens)

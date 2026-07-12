@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.orm import Session
 
 from memory_anki.infrastructure.db.deps import session_dep
@@ -26,14 +26,16 @@ from memory_anki.modules.palaces.application.title_sync_service import (
     build_grouped_palace_list,
     build_subject_shelf_summary,
     get_explicit_chapter_ids_by_palace,
-    reconcile_palace_chapter_binding,
 )
 from memory_anki.modules.palaces.presentation.response_models import PalaceListResponse
-from memory_anki.modules.reviews.application.review_execution_service import (
+from memory_anki.modules.reviews.api import (
+    get_algorithm_stage_labels,
     trigger_review_for_palace,
 )
-from memory_anki.modules.reviews.application.schedule_service import (
-    get_algorithm_stage_labels,
+from memory_anki.platform.application import mutation_identity_from_headers
+from memory_anki.platform.persistence import (
+    SqlAlchemyMutationResponseStore,
+    SqlAlchemyUnitOfWork,
 )
 
 router = APIRouter()
@@ -155,8 +157,6 @@ def api_list_grouped_summary(search: str = "", subject_id: int | None = None, s:
 @router.get("/palaces/subjects")
 def api_list_subject_shelf(search: str = "", s: Session = Depends(session_dep)):
     palaces = list_catalog_palaces(s, search)
-    for palace in palaces:
-        reconcile_palace_chapter_binding(s, palace)
     return build_subject_shelf_summary(s, palaces)
 
 
@@ -173,6 +173,7 @@ def api_create_palace_template(data: dict, s: Session = Depends(session_dep)):
             int(data.get("palace_id") or 0),
             str(data.get("name") or ""),
             str(data.get("description") or ""),
+            uow=SqlAlchemyUnitOfWork(s),
         )
     except PalaceTemplateError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -181,17 +182,41 @@ def api_create_palace_template(data: dict, s: Session = Depends(session_dep)):
 
 @router.delete("/palace-templates/{template_id}")
 def api_delete_palace_template(template_id: int, s: Session = Depends(session_dep)):
-    return {"ok": delete_template(s, template_id)}
+    return {
+        "ok": delete_template(s, template_id, uow=SqlAlchemyUnitOfWork(s))
+    }
 
 
 @router.post("/palace-templates/{template_id}/instantiate")
-def api_instantiate_palace_template(template_id: int, data: dict, s: Session = Depends(session_dep)):
+def api_instantiate_palace_template(
+    template_id: int,
+    data: dict,
+    request: Request,
+    s: Session = Depends(session_dep),
+):
+    mutation_identity = mutation_identity_from_headers(request.headers)
+    mutation_store = SqlAlchemyMutationResponseStore(s)
+    existing_response = mutation_store.get(mutation_identity)
+    if existing_response is not None:
+        return existing_response
+    response: dict = {}
+
+    def prepare_atomic_side_effects(palace) -> None:
+        trigger_review_for_palace(s, palace.id, commit=False)
+        response.update(palace_json(palace, s))
+        mutation_store.save(mutation_identity, response)
+
     try:
-        palace = instantiate_template(s, template_id, str(data.get("title") or ""))
+        instantiate_template(
+            s,
+            template_id,
+            str(data.get("title") or ""),
+            uow=SqlAlchemyUnitOfWork(s),
+            before_commit=prepare_atomic_side_effects,
+        )
     except PalaceTemplateError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    trigger_review_for_palace(s, palace.id)
-    return palace_json(palace, s)
+    return response
 
 
 @router.get("/palaces/deleted")

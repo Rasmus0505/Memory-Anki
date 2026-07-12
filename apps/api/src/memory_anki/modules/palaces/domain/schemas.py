@@ -27,25 +27,6 @@ class PalaceUpdate(BaseModel):
     pegs: list[PegIn] | None = None
 
 
-class ReviewSubmit(BaseModel):
-    score: int
-    duration_seconds: int = 0
-
-
-class ChapterCreate(BaseModel):
-    name: str = ""
-    parent_id: int | None = None
-    notes: str = ""
-    sort_order: int = 0
-
-
-class ChapterUpdate(BaseModel):
-    name: str | None = None
-    notes: str | None = None
-    sort_order: int | None = None
-    parent_id: int | None = None
-
-
 class PegOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

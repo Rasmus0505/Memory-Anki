@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -7,19 +8,15 @@ from sqlalchemy.orm import Session
 from memory_anki.core.time import utc_now_naive
 from memory_anki.infrastructure.db._tables.palaces import Palace, PalaceMiniPalace
 from memory_anki.modules.palaces.application.mini_palace_nodes import (
-    cleanup_mini_palace_node_uids,
     normalize_mini_palace_node_uids,
     parse_mini_palace_node_uids,
     resolve_mini_palace_name,
     serialize_mini_palace_node_uids,
 )
+from memory_anki.platform.application import UnitOfWork
 
 
 def list_palace_mini_palaces(session: Session, palace: Palace) -> list[dict[str, Any]]:
-    changed = cleanup_mini_palace_node_uids(session, palace)
-    if changed:
-        session.commit()
-        session.refresh(palace)
     return [mini_palace_summary_json(item, session) for item in palace.mini_palaces]
 
 
@@ -27,8 +24,14 @@ def mini_palace_summary_json(
     mini_palace: PalaceMiniPalace,
     session: Session | None = None,
 ) -> dict[str, Any]:
-    node_uids = parse_mini_palace_node_uids(mini_palace.node_uids_json)
-    estimated_review_seconds = estimate_mini_review_seconds(mini_palace)
+    stored_node_uids = parse_mini_palace_node_uids(mini_palace.node_uids_json)
+    palace = getattr(mini_palace, "palace", None)
+    node_uids = (
+        normalize_mini_palace_node_uids(palace, stored_node_uids)
+        if palace is not None
+        else stored_node_uids
+    )
+    estimated_review_seconds = max(60, len(node_uids) * 45) if node_uids else 0
     return {
         "id": mini_palace.id,
         "palace_id": mini_palace.palace_id,
@@ -58,6 +61,9 @@ def create_palace_mini_palace(
     session: Session,
     palace: Palace,
     payload: dict[str, Any],
+    *,
+    uow: UnitOfWork,
+    before_commit: Callable[[PalaceMiniPalace], None] | None = None,
 ) -> PalaceMiniPalace:
     normalized_node_uids = normalize_mini_palace_node_uids(
         palace,
@@ -78,8 +84,10 @@ def create_palace_mini_palace(
     )
     session.add(mini_palace)
     session.flush()
-    session.commit()
-    session.refresh(mini_palace)
+    if before_commit is not None:
+        before_commit(mini_palace)
+    uow.commit()
+    uow.refresh(mini_palace)
     return mini_palace
 
 
@@ -87,6 +95,8 @@ def update_palace_mini_palace(
     session: Session,
     mini_palace: PalaceMiniPalace,
     payload: dict[str, Any],
+    *,
+    uow: UnitOfWork,
 ) -> PalaceMiniPalace:
     normalized_node_uids = None
     if "node_uids" in payload:
@@ -108,14 +118,19 @@ def update_palace_mini_palace(
     if "needs_practice" in payload:
         mini_palace.needs_practice = bool(payload.get("needs_practice", False))
     mini_palace.updated_at = utc_now_naive()
-    session.commit()
-    session.refresh(mini_palace)
+    uow.commit()
+    uow.refresh(mini_palace)
     return mini_palace
 
 
-def delete_palace_mini_palace(session: Session, mini_palace: PalaceMiniPalace) -> None:
+def delete_palace_mini_palace(
+    session: Session,
+    mini_palace: PalaceMiniPalace,
+    *,
+    uow: UnitOfWork,
+) -> None:
     session.delete(mini_palace)
-    session.commit()
+    uow.commit()
 
 
 def get_palace_mini_palace(

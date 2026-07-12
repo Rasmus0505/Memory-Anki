@@ -22,16 +22,16 @@ from memory_anki.infrastructure.db._tables.english_reading import (
     EnglishReadingVersion,
 )
 from memory_anki.modules.english_reading.domain.errors import EnglishReadingError
-from memory_anki.modules.settings.application.ai_model_registry import (
-    AiRuntimeOptions,
-)
+from memory_anki.platform.application import AiRuntimeOptions
 
 from . import service as _svc
+from .ai_dependencies import EnglishReadingAiDependencies
 
 
 def generate_material_version(
     session: Session,
     *,
+    ai_dependencies: EnglishReadingAiDependencies,
     material_id: int,
     mode: str = "initial",
     difficulty_direction: str | None = None,
@@ -41,6 +41,7 @@ def generate_material_version(
     return _svc._consume_status_stream(
         _svc.generate_material_version_events(
             session,
+            ai_dependencies=ai_dependencies,
             material_id=material_id,
             mode=mode,
             difficulty_direction=difficulty_direction,
@@ -53,6 +54,7 @@ def generate_material_version(
 def generate_material_version_events(
     session: Session,
     *,
+    ai_dependencies: EnglishReadingAiDependencies,
     material_id: int,
     mode: str = "initial",
     difficulty_direction: str | None = None,
@@ -94,6 +96,7 @@ def generate_material_version_events(
     target_cefr = _svc.numeric_to_target_cefr(target_lexical_i)
     render_payload = yield from _svc.build_reading_version_payload_stream(
         session,
+            ai_dependencies=ai_dependencies,
         text=reading_text,
         material_id=material.id,
         declared_cefr=declared_cefr,
@@ -332,6 +335,7 @@ def _consume_status_stream(stream):
 def build_reading_version_payload(
     session: Session,
     *,
+    ai_dependencies: EnglishReadingAiDependencies,
     text: str,
     material_id: int,
     declared_cefr: str,
@@ -347,6 +351,7 @@ def build_reading_version_payload(
     return _svc._consume_status_stream(
         _svc.build_reading_version_payload_stream(
             session,
+            ai_dependencies=ai_dependencies,
             text=text,
             material_id=material_id,
             declared_cefr=declared_cefr,
@@ -365,6 +370,7 @@ def build_reading_version_payload(
 def build_reading_version_payload_stream(
     session: Session,
     *,
+    ai_dependencies: EnglishReadingAiDependencies,
     text: str,
     material_id: int,
     declared_cefr: str,
@@ -422,6 +428,7 @@ def build_reading_version_payload_stream(
         yield ("status", status)
         ai_surface_resolutions, ai_log_ids = _svc.generate_surface_resolutions_with_ai(
             session,
+            ai_dependencies=ai_dependencies,
             lexicon_state=lexicon_state,
             unresolved_surfaces=still_unresolved,
             declared_cefr=declared_cefr,
@@ -487,6 +494,7 @@ def build_reading_version_payload_stream(
         yield ("status", status)
         ai_sentence_renders, sentence_log_ids = _svc.generate_sentence_renders_with_ai(
             session,
+            ai_dependencies=ai_dependencies,
             sentence_tasks=sentence_tasks,
             declared_cefr=declared_cefr,
             target_cefr=_svc.numeric_to_target_cefr(target_lexical_i),
@@ -510,7 +518,7 @@ def build_reading_version_payload_stream(
     span_counter = 0
     sentence_counter = 0
     version_target_cefr = _svc.numeric_to_target_cefr(target_lexical_i)
-    summary = {
+    summary: dict[str, Any] = {
         "wordCount": total_word_count,
         "greenCount": 0,
         "yellowCount": 0,
@@ -525,7 +533,7 @@ def build_reading_version_payload_stream(
 
     sentence_cursor = 0
     for paragraph in paragraph_sentences:
-        paragraph_payload = {
+        paragraph_payload: dict[str, Any] = {
             "id": f"paragraph-{len(render_blocks) + 1}",
             "sentences": [],
         }
@@ -656,10 +664,10 @@ def resolve_session_version(
         for version in material.versions:
             if version.id == version_id:
                 return version
-    version = _svc.get_latest_version(material)
-    if version is None:
+    latest_version = _svc.get_latest_version(material)
+    if latest_version is None:
         raise EnglishReadingError("当前材料还没有生成阅读版本。")
-    return version
+    return latest_version
 
 
 def serialize_version(version: EnglishReadingVersion) -> dict[str, Any]:

@@ -7,11 +7,10 @@ from sqlalchemy.orm import Session
 from memory_anki.infrastructure.db._tables.palaces import ReviewSchedule
 
 from .palace_serializer import review_plan_item_json
-from .palace_service import get_palace, restore_archived_palaces
+from .palace_service import get_palace
 
 
 def build_palace_review_plan(session: Session, palace_id: int) -> dict | None:
-    restore_archived_palaces(session)
     palace = get_palace(session, palace_id)
     if palace is None:
         return None

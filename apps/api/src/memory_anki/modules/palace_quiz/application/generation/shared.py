@@ -13,23 +13,17 @@ from memory_anki.core.time import utc_now_naive
 from memory_anki.infrastructure.db._tables.knowledge import Chapter
 from memory_anki.infrastructure.db._tables.palaces import Palace, PalaceQuizQuestion
 from memory_anki.infrastructure.llm.external_ai_call_logs import get_external_ai_call_log
-from memory_anki.modules.mindmap.application.editor_state_documents import (
+from memory_anki.modules.mindmap_document.api import (
     deserialize_editor_payload,
 )
-from memory_anki.modules.palaces.application.mindmap_import.model_io import (
+from memory_anki.modules.palaces.api import get_palace_explicit_chapter_ids
+from memory_anki.platform.application import (
+    AiRuntimeOptions,
     build_image_content_part,
     extract_first_json_object,
 )
-from memory_anki.modules.palaces.application.title_sync_service import (
-    get_palace_explicit_chapter_ids,
-)
-from memory_anki.modules.settings.application.ai_model_registry import AiRuntimeOptions
-from memory_anki.modules.settings.application.ai_prompt_templates import (
-    PALACE_QUIZ_SOURCE_PAIR_TRANSCRIPTION_PROMPT,
-    build_palace_quiz_generation_user_text,
-)
-from memory_anki.modules.settings.application.ai_prompts import render_prompt
 
+from ..ai_dependencies import PalaceQuizAiDependencies
 from ..question_contracts import (
     QUESTION_TYPE_SHORT_ANSWER,
     PalaceQuizValidationError,
@@ -335,6 +329,7 @@ def build_quiz_generation_preview_result(
 # === quiz_generation_prompt_messages.py ===
 def build_generation_messages(
     *,
+    ai_dependencies: PalaceQuizAiDependencies,
     session: Session,
     extra_prompt: str,
     source_label: str,
@@ -348,18 +343,22 @@ def build_generation_messages(
         and "答案与解析来源" in source_context
     )
     system_prompt = (
-        PALACE_QUIZ_SOURCE_PAIR_TRANSCRIPTION_PROMPT
+        ai_dependencies.prompts.render("ai_prompt_palace_quiz_source_pair_transcription")
         if is_source_pair_transcription
-        else render_prompt("ai_prompt_palace_quiz_generate", {}, session=session)
+        else ai_dependencies.prompts.render("ai_prompt_palace_quiz_generate")
     )
     if prompt_override and str(prompt_override).strip():
         system_prompt = str(prompt_override).strip()
     user_content: list[dict[str, Any]] = [
         {
             "type": "text",
-            "text": build_palace_quiz_generation_user_text(
-                source_label=source_label,
-                is_source_pair_transcription=is_source_pair_transcription,
+            "text": ai_dependencies.prompts.render(
+                (
+                    "ai_prompt_palace_quiz_source_pair_user_text"
+                    if is_source_pair_transcription
+                    else "ai_prompt_palace_quiz_generation_user_text"
+                ),
+                {"source_label": source_label},
             ),
         }
     ]
@@ -415,6 +414,7 @@ def require_child_chapter_contexts(
 def group_questions_for_child_chapter_preview(
     session: Session,
     *,
+    ai_dependencies: PalaceQuizAiDependencies,
     drafts: list[dict[str, Any]],
     child_contexts: list[dict[str, object]],
     feature: str,
@@ -423,6 +423,7 @@ def group_questions_for_child_chapter_preview(
 ) -> dict[str, Any]:
     return group_questions_by_child_chapters(
         session,
+        ai_dependencies=ai_dependencies,
         drafts=drafts,
         child_contexts=require_child_chapter_contexts(child_contexts),
         feature=feature,
@@ -434,6 +435,7 @@ def group_questions_for_child_chapter_preview(
 def group_questions_for_preview_scope(
     session: Session,
     *,
+    ai_dependencies: PalaceQuizAiDependencies,
     palace: Any,
     drafts: list[dict[str, Any]],
     selected_chapter: Any = None,
@@ -446,6 +448,7 @@ def group_questions_for_preview_scope(
     if selected_chapter is not None:
         return group_questions_for_child_chapter_preview(
             session,
+            ai_dependencies=ai_dependencies,
             drafts=drafts,
             child_contexts=list(child_contexts or []),
             feature=feature,
@@ -454,6 +457,7 @@ def group_questions_for_preview_scope(
         )
     return _grouping_service().group_questions_by_mini_palaces(
         session,
+        ai_dependencies=ai_dependencies,
         palace=palace,
         questions=drafts,
         operation=mini_palace_operation,
@@ -505,13 +509,12 @@ def build_short_answer_feedback_model_input(
 
 def build_short_answer_feedback_messages(
     *,
+    ai_dependencies: PalaceQuizAiDependencies,
     session: Session,
     model_input: dict[str, Any],
 ) -> tuple[str, list[dict[str, object]]]:
-    system_prompt = render_prompt(
-        "ai_prompt_palace_quiz_short_answer_feedback",
-        {},
-        session=session,
+    system_prompt = ai_dependencies.prompts.render(
+        "ai_prompt_palace_quiz_short_answer_feedback"
     )
     messages: list[dict[str, object]] = [
         {"role": "system", "content": system_prompt},
@@ -542,6 +545,7 @@ def _ai_service():
 def prepare_short_answer_feedback_request(
     session: Session,
     *,
+    ai_dependencies: PalaceQuizAiDependencies,
     question_id: int,
     user_answer: str,
     ai_options: AiRuntimeOptions | None,
@@ -553,11 +557,13 @@ def prepare_short_answer_feedback_request(
     )
     model_input = build_short_answer_feedback_model_input(request_context)
     system_prompt, messages = build_short_answer_feedback_messages(
+        ai_dependencies=ai_dependencies,
         session=session,
         model_input=model_input,
     )
     config, extra_payload, resolved_ai = _ai_service()._build_chat_config(
         session,
+        ai_runtime=ai_dependencies.runtime,
         scenario_key="quiz_short_answer_feedback",
         ai_options=ai_options,
         temperature=0.3,
@@ -626,12 +632,14 @@ def _parse_structured_feedback(response_text: str) -> dict[str, object] | None:
 def generate_short_answer_feedback(
     session: Session,
     *,
+    ai_dependencies: PalaceQuizAiDependencies,
     question_id: int,
     user_answer: str,
     ai_options: AiRuntimeOptions | None = None,
 ) -> dict[str, object]:
     prepared_request = prepare_short_answer_feedback_request(
         session,
+        ai_dependencies=ai_dependencies,
         question_id=question_id,
         user_answer=user_answer,
         ai_options=ai_options,

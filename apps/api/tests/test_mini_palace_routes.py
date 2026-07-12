@@ -124,6 +124,10 @@ class MiniPalaceRouteTests(RouterTestCase):
 
         listed = self.client.get(f"/api/v1/palaces/{self.palace_id}/mini-palaces")
         self.assertEqual(listed.json()["items"][0]["node_uids"], ["child-b"])
+        with self.SessionLocal() as session:
+            stored = session.get(PalaceMiniPalace, created["id"])
+            self.assertIsNotNone(stored)
+            self.assertEqual(json.loads(stored.node_uids_json), ["grand-a", "child-b"])
 
         deleted = self.client.delete(f"/api/v1/palace-mini-palaces/{created['id']}")
         self.assertEqual(deleted.json(), {"ok": True})

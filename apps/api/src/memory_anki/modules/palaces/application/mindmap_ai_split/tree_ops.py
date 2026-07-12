@@ -1,10 +1,15 @@
 from __future__ import annotations
 
 import copy
-from typing import Any
+from typing import Any, TypedDict
 from uuid import uuid4
 
 from .primitives import ensure_dict, first_non_empty, plain_identifier, plain_text, stringify
+
+
+class _SplitBucket(TypedDict):
+    node: dict[str, Any]
+    generated: dict[str, str]
 
 
 def infer_split_max_children(
@@ -177,7 +182,7 @@ def build_split_children(
     raw_assignments: Any,
     fallback_bucket: str,
 ) -> tuple[list[dict[str, Any]], int]:
-    bucket_lookup = {
+    bucket_lookup: dict[str, _SplitBucket] = {
         child["id"]: {
             "node": {
                 "data": {

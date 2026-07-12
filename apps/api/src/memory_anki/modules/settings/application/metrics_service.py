@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from memory_anki.core.config import DB_PATH
 from memory_anki.core.time import utc_now_naive
 from memory_anki.infrastructure.db._tables.misc import ExternalAiCallLog
-from memory_anki.modules.backups.application.backup_lifecycle import list_backups
+from memory_anki.modules.backups.api import list_backups
 
 # User-facing core tables only. Names come from infrastructure/db/_tables.
 METRIC_TABLES = [

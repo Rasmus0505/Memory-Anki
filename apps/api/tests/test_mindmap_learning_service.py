@@ -3,7 +3,7 @@ from datetime import timedelta
 from memory_anki.core.time import utc_now_naive
 from memory_anki.infrastructure.db._tables.mindmap import MindMapRecallEvent
 from memory_anki.infrastructure.db._tables.palaces import Palace
-from memory_anki.modules.mindmap.application.learning_service import (
+from memory_anki.modules.mindmap_learning.application.learning_service import (
     create_recall_event,
     list_node_mastery,
     set_node_label,

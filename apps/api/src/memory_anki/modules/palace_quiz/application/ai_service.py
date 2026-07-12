@@ -45,7 +45,6 @@ _FACADE_TRANSPORT_MODEL_KEY = "facade-overridden-transport"
 
 
 def _sync_facade_dependencies() -> None:
-    _runtime.DASHSCOPE_API_KEY = DASHSCOPE_API_KEY
     _runtime.stream_chat_completion_text = stream_chat_completion_text
 
 

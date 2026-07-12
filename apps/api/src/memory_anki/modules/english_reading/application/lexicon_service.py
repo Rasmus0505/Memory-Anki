@@ -20,17 +20,16 @@ from memory_anki.infrastructure.llm.openai_compatible import (
     OpenAICompatibleChatConfig,
 )
 from memory_anki.modules.english_reading.domain.errors import EnglishReadingError
-from memory_anki.modules.settings.application.ai_model_registry import (
-    AiRuntimeOptions,
-)
-from memory_anki.modules.settings.application.ai_prompts import get_prompt_template
+from memory_anki.platform.application import AiRuntimeOptions
 
 from . import service as _svc
+from .ai_dependencies import EnglishReadingAiDependencies
 
 
 def generate_surface_resolutions_with_ai(
     session: Session,
     *,
+    ai_dependencies: EnglishReadingAiDependencies,
     lexicon_state: _svc.LexiconState,
     unresolved_surfaces: set[str],
     declared_cefr: str,
@@ -41,6 +40,7 @@ def generate_surface_resolutions_with_ai(
 ) -> tuple[dict[str, _svc.SurfaceResolution], list[str]]:
     runtime = _svc._resolve_legacy_dashscope_runtime(
         session,
+        ai_dependencies=ai_dependencies,
         scenario_key="english_reading",
         ai_options=ai_options,
         legacy_default_model=_svc.DASHSCOPE_TEXT_MODEL,
@@ -65,7 +65,7 @@ def generate_surface_resolutions_with_ai(
         "unknown_surfaces": requested_surfaces,
         "sentence_tasks": [],
     }
-    base_prompt = get_prompt_template(session, "ai_prompt_english_reading_classify_words")
+    base_prompt = ai_dependencies.prompts.render("ai_prompt_english_reading_classify_words")
     prompt = f"{base_prompt}\n\n输入数据：{json.dumps(prompt_payload, ensure_ascii=False)}"
     try:
         payload, log_id = _svc.call_json_completion_with_log(

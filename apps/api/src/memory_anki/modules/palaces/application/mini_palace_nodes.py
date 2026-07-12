@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from memory_anki.core.time import utc_now_naive
 from memory_anki.infrastructure.db._tables.palaces import Palace, PalaceMiniPalace
-from memory_anki.modules.mindmap.application.editor_state_documents import (
+from memory_anki.modules.mindmap_document.api import (
     deserialize_editor_payload,
 )
 from memory_anki.modules.palaces.application.segment_nodes import (

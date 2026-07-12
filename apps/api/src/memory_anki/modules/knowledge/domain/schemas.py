@@ -19,6 +19,15 @@ class SubjectUpdate(BaseModel):
     sort_order: int | None = None
 
 
+class ChapterCreate(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    name: str = ""
+    parent_id: int | None = None
+    notes: str = ""
+    sort_order: int = 0
+
+
 class ChapterUpdate(BaseModel):
     model_config = ConfigDict(extra="allow")
 

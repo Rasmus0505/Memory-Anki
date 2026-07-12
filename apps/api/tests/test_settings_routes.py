@@ -44,6 +44,25 @@ class TestSettings:
 
 
 class TestReviewSettings:
+    def test_schedule_rebuild_failure_rolls_back_setting_change(
+        self, client, session_factory, monkeypatch
+    ):
+        def fail_rebuild(session):
+            raise RuntimeError("rebuild failed")
+
+        monkeypatch.setattr(
+            settings_router, "rebuild_all_pending_review_schedules", fail_rebuild
+        )
+
+        with pytest.raises(RuntimeError, match="rebuild failed"):
+            client.put(
+                "/api/v1/settings/review",
+                json={"sleep_review_time": "23:45", "apply_to_pending": "all"},
+            )
+
+        with session_factory() as session:
+            assert session.query(Config).filter_by(key="sleep_review_time").first() is None
+
     def test_review_aliases_share_config(self, client):
         response = client.put(
             "/api/v1/settings/review",

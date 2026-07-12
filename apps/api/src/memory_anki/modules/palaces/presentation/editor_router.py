@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from memory_anki.core.concurrency_limits import concurrency_slot
 from memory_anki.infrastructure.db.deps import session_dep
-from memory_anki.modules.mindmap.application.editor_state_service import (
+from memory_anki.modules.palaces.application.editor_state_service import (
     EditorStateConflictError,
     get_palace_editor_state,
 )
@@ -24,9 +24,8 @@ from memory_anki.modules.palaces.application.palace_serializer import (
 )
 from memory_anki.modules.palaces.application.palace_service import get_palace
 from memory_anki.modules.palaces.presentation.errors import raise_not_found
-from memory_anki.modules.settings.application.ai_model_registry import (
-    normalize_ai_runtime_options,
-)
+from memory_anki.modules.settings.api import SettingsAiRuntimeProvider, SettingsPromptCatalog
+from memory_anki.platform.persistence import SqlAlchemyUnitOfWork
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -82,9 +81,14 @@ def api_update_editor(palace_id: int, data: dict, s: Session = Depends(session_d
     if not palace:
         raise_not_found()
     try:
-        state = _save_palace_editor_state(s, palace, data)
+        state = _save_palace_editor_state(
+            s,
+            palace,
+            data,
+            uow=SqlAlchemyUnitOfWork(s),
+        )
     except EditorStateConflictError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
+        raise HTTPException(status_code=409, detail={"code": "mindmap_conflict", "message": str(exc), "remoteSnapshot": exc.current_snapshot}) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     _maybe_create_rolling_backup("rolling-editor-save")
@@ -114,13 +118,16 @@ def api_ai_split_editor_node(palace_id: int, data: dict, s: Session = Depends(se
     if not palace:
         raise_not_found()
     try:
+        ai_runtime = SettingsAiRuntimeProvider(s)
         with concurrency_slot("ai_generation", rate_limited=True):
             result = split_palace_editor_doc_with_ai(
                 s,
                 palace,
                 data.get("editor_doc"),
                 data.get("target_node_uid"),
-                normalize_ai_runtime_options(data.get("ai_options")),
+                ai_runtime=ai_runtime,
+                prompt_catalog=SettingsPromptCatalog(s),
+                ai_options=ai_runtime.normalize_options(data.get("ai_options")),
             )
     except MindMapAiSplitError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

@@ -7,6 +7,7 @@ from memory_anki.modules.knowledge.application import chapter_service, subject_s
 from memory_anki.modules.knowledge.presentation import router as knowledge_router
 from memory_anki.modules.palaces.application import peg_association_service as service
 from memory_anki.modules.palaces.presentation import router as palace_router
+from memory_anki.modules.settings.application import ai_model_registry_runtime
 
 
 @pytest.fixture(autouse=True)
@@ -52,7 +53,7 @@ def _create_palace(client) -> int:
 def _clear_provider_env_defaults(monkeypatch):
     for provider in ("dashscope", "qwen", "zhipu", "siliconflow", "deepseek"):
         monkeypatch.setitem(
-            service.resolve_scenario_runtime.__globals__["PROVIDER_ENV_DEFAULTS"],
+            ai_model_registry_runtime.PROVIDER_ENV_DEFAULTS,
             provider,
             {"api_key": "", "base_url": "https://example.test/v1"},
         )

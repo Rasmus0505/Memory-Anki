@@ -13,15 +13,13 @@ from memory_anki.infrastructure.db._tables.palaces import (
     PalaceQuizQuestion,
     chapter_palace_table,
 )
-from memory_anki.modules.backups.application.backup_lifecycle import (
-    maybe_create_rolling_backup,
-)
-from memory_anki.modules.palaces.application.title_sync_service import (
+from memory_anki.modules.backups.api import maybe_create_rolling_backup
+from memory_anki.modules.knowledge.domain.schemas import ChapterCreate
+from memory_anki.modules.palaces.api import (
     get_palace_explicit_chapter_ids,
-    reconcile_palace_chapter_binding,
-    set_palace_chapter_links,
+    update_palace_chapter_binding,
 )
-from memory_anki.modules.palaces.domain.schemas import ChapterCreate
+from memory_anki.platform.application import UnitOfWork
 
 
 def chapter_json(c: Chapter) -> dict:
@@ -114,6 +112,7 @@ def create_chapter(
     subject_id: int,
     data: ChapterCreate,
     *,
+    uow: UnitOfWork,
     before_commit: Callable[[dict], None] | None = None,
 ) -> dict:
     c = Chapter(
@@ -129,19 +128,26 @@ def create_chapter(
     result = chapter_json(c)
     if before_commit is not None:
         before_commit(result)
-    session.commit()
+    uow.commit()
     maybe_create_rolling_backup("rolling-create-chapter")
     return result
 
 
-def update_chapter(session: Session, chapter_id: int, data: dict) -> dict | None:
+def update_chapter(
+    session: Session,
+    chapter_id: int,
+    data: dict,
+    *,
+    uow: UnitOfWork,
+) -> dict | None:
     c = session.query(Chapter).filter_by(id=chapter_id).first()
     if not c:
         return None
     for key in ("name", "notes", "sort_order", "parent_id"):
         if key in data:
             setattr(c, key, data[key])
-    session.commit()
+    uow.commit()
+    uow.refresh(c)
     maybe_create_rolling_backup("rolling-update-chapter")
     return chapter_json(c)
 
@@ -184,6 +190,7 @@ def delete_chapter(
     chapter_id: int,
     *,
     force: bool = False,
+    uow: UnitOfWork,
 ) -> dict[str, Any]:
     c = session.query(Chapter).filter_by(id=chapter_id).first()
     if not c:
@@ -204,7 +211,7 @@ def delete_chapter(
         PalaceQuizQuestion.source_chapter_id.in_(subtree_ids)
     ).delete(synchronize_session=False)
     _delete_recursive(c, session)
-    session.commit()
+    uow.commit()
     maybe_create_rolling_backup("rolling-delete-chapter")
     return {"ok": True}
 
@@ -213,7 +220,6 @@ def get_palace_chapters(session: Session, palace_id: int) -> list[dict] | None:
     p = session.query(Palace).filter_by(id=palace_id).first()
     if not p:
         return None
-    reconcile_palace_chapter_binding(session, p)
     explicit_ids = get_palace_explicit_chapter_ids(session, p)
     return [
         {
@@ -234,6 +240,8 @@ def link_palace_chapters(
     session: Session,
     palace_id: int,
     data: dict,
+    *,
+    uow: UnitOfWork,
 ) -> dict | None:
     p = session.query(Palace).filter_by(id=palace_id).first()
     if not p:
@@ -241,12 +249,13 @@ def link_palace_chapters(
     ids = [int(chapter_id) for chapter_id in data.get("chapter_ids", [])]
     primary_chapter_id = data.get("primary_chapter_id")
     next_primary = int(primary_chapter_id) if primary_chapter_id is not None else None
-    _, expanded_ids = set_palace_chapter_links(session, p, ids)
-    reconcile_palace_chapter_binding(
+    expanded_ids = update_palace_chapter_binding(
         session,
         p,
+        chapter_ids=ids,
         preferred_primary_chapter_id=next_primary,
     )
-    session.commit()
+    uow.commit()
+    uow.refresh(p)
     maybe_create_rolling_backup("rolling-link-chapters")
     return {"ok": True, "count": len(expanded_ids), "primary_chapter_id": p.primary_chapter_id}

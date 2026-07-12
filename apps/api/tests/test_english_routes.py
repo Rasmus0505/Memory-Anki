@@ -14,6 +14,11 @@ from memory_anki.modules.english.domain.text import (
 )
 from memory_anki.modules.english.infrastructure import dashscope_gateway, paths
 from memory_anki.modules.english.presentation import router as english_router
+from memory_anki.platform.application import (
+    AiRuntimeOptions,
+    PersistedAiRuntime,
+    ResolvedAiRuntime,
+)
 from support import RouterTestCase
 
 TOKEN_VECTOR_PATH = Path(__file__).resolve().parents[2] / "shared" / "english-token-vectors.json"
@@ -35,6 +40,54 @@ class NoopAsrGateway:
 class NoopTranslator:
     def translate_sentences(self, sentences, *, task_id):
         return sentences
+
+
+class StubPromptCatalog:
+    def render(self, key: str, variables: dict[str, object] | None = None) -> str:
+        source_text = str((variables or {}).get("source_text") or "")
+        return f"{key}\n{source_text}"
+
+
+class FakeAiRuntimeProvider:
+    def __init__(self, api_key: str = "current-secret") -> None:
+        self.api_key = api_key
+
+    def normalize_options(self, value):
+        return AiRuntimeOptions()
+
+    def resolve(self, scenario_key, *, options=None):
+        model = options.model if options and options.model else f"{scenario_key}-model"
+        return ResolvedAiRuntime(
+            scene_key=scenario_key,
+            scene_label=scenario_key,
+            model_key=model,
+            model_label=model,
+            model=model,
+            provider="dashscope",
+            model_type="text",
+            has_vision=False,
+            thinking_enabled=False,
+            supports_temperature=True,
+            structured_output_mode="none",
+            input_price_per_million=None,
+            output_price_per_million=None,
+            cached_input_price_per_million=None,
+            api_key=self.api_key,
+            base_url="https://dashscope.test/compatible-mode/v1",
+            extra_payload=None,
+            prompt_override=None,
+            public_metadata={
+                "scenario": scenario_key,
+                "model": model,
+                "provider": "dashscope",
+            },
+        )
+
+    def restore(self, snapshot: PersistedAiRuntime):
+        return self.resolve(
+            snapshot.scenario_key,
+            options=AiRuntimeOptions(model=snapshot.model),
+        )
 
 
 class EnglishRouteTests(RouterTestCase):
@@ -209,11 +262,15 @@ class EnglishRouteTests(RouterTestCase):
         list_response = self.client.get("/api/v1/english/courses")
         calls_after_list = list(calls)
         with self.SessionLocal() as session:
-            duration_after_list = session.query(EnglishCourse).filter_by(id=1).one().duration_seconds
+            duration_after_list = (
+                session.query(EnglishCourse).filter_by(id=1).one().duration_seconds
+            )
 
         repair_response = self.client.post("/api/v1/english/courses/repair-durations")
         with self.SessionLocal() as session:
-            duration_after_repair = session.query(EnglishCourse).filter_by(id=1).one().duration_seconds
+            duration_after_repair = (
+                session.query(EnglishCourse).filter_by(id=1).one().duration_seconds
+            )
 
         self.assertEqual(list_response.status_code, 200)
         self.assertEqual(duration_after_list, 0)
@@ -358,8 +415,12 @@ class EnglishRouteTests(RouterTestCase):
 
     def test_cleanup_marks_running_task_as_interrupted_failed(self):
         with self.SessionLocal() as session:
-            completed = EnglishGenerationTask(id="completed-task", status="completed", stage="completed")
-            already_cleared = EnglishGenerationTask(id="cleared-task", status="cleared", stage="cleared")
+            completed = EnglishGenerationTask(
+                id="completed-task", status="completed", stage="completed"
+            )
+            already_cleared = EnglishGenerationTask(
+                id="cleared-task", status="cleared", stage="cleared"
+            )
             failed = EnglishGenerationTask(id="failed-task", status="failed", stage="failed")
             running = EnglishGenerationTask(id="running-task", status="running", stage="transcribe")
             queued = EnglishGenerationTask(id="queued-task", status="queued", stage="queued")
@@ -382,11 +443,15 @@ class EnglishRouteTests(RouterTestCase):
             result = task_service.cleanup_incomplete_generation_tasks(session)
 
             self.assertEqual(result, {"cleared": 1, "interrupted": 2})
-            self.assertEqual(session.get(EnglishGenerationTask, "completed-task").status, "completed")
+            self.assertEqual(
+                session.get(EnglishGenerationTask, "completed-task").status, "completed"
+            )
             self.assertEqual(session.get(EnglishGenerationTask, "cleared-task").status, "cleared")
             self.assertEqual(session.get(EnglishGenerationTask, "failed-task").status, "failed")
             self.assertEqual(session.get(EnglishGenerationTask, "running-task").status, "failed")
-            self.assertEqual(session.get(EnglishGenerationTask, "running-task").stage, "interrupted")
+            self.assertEqual(
+                session.get(EnglishGenerationTask, "running-task").stage, "interrupted"
+            )
             self.assertEqual(
                 session.get(EnglishGenerationTask, "running-task").message,
                 "生成因服务重启被中断，可点击重试继续。",
@@ -448,7 +513,9 @@ class EnglishRouteTests(RouterTestCase):
         original_dir = paths.task_dir(original["id"])
         (original_dir / "audio.wav").write_bytes(b"cached-audio")
         (original_dir / "runtime_options.json").write_text(
-            json.dumps({"asr": {"model": "cached-model", "thinking_enabled": True}}, ensure_ascii=False),
+            json.dumps(
+                {"asr": {"model": "cached-model", "thinking_enabled": True}}, ensure_ascii=False
+            ),
             encoding="utf-8",
         )
         (original_dir / "asr_result.json").write_text(
@@ -475,6 +542,9 @@ class EnglishRouteTests(RouterTestCase):
         self.assertEqual(response.status_code, 200)
         retry_task = response.json()["task"]
 
+        self.assertEqual(retry_task["ownerId"], original["id"])
+        self.assertEqual(retry_task["operationId"], retry_task["id"])
+        self.assertNotEqual(retry_task["operationId"], original["operationId"])
         self.assertEqual(asr_gateway.calls, 0)
         with self.SessionLocal() as session:
             original_row = session.get(EnglishGenerationTask, original["id"])
@@ -490,6 +560,54 @@ class EnglishRouteTests(RouterTestCase):
             [event["message"] for event in retry_log.json()["events"]],
         )
 
+    def test_task_runtime_snapshot_excludes_credentials_and_exposes_identity(self):
+        provider = FakeAiRuntimeProvider(api_key="must-not-be-persisted")
+        dependencies = task_service.EnglishAiDependencies(provider, StubPromptCatalog())
+        with self.SessionLocal() as session:
+            task = task_service.create_task_row(
+                session,
+                filename="secure.mp4",
+                content_type="video/mp4",
+                file_bytes=b"video",
+                asr_ai_options=AiRuntimeOptions(model="asr-model"),
+                ai_dependencies=dependencies,
+            )
+
+        snapshot_path = paths.task_dir(task["id"]) / task_service.TASK_RUNTIME_FILE
+        snapshot_text = snapshot_path.read_text(encoding="utf-8")
+        snapshot = json.loads(snapshot_text)
+        self.assertNotIn("must-not-be-persisted", snapshot_text)
+        self.assertNotIn("api_key", snapshot_text)
+        self.assertEqual(snapshot["owner_id"], task["id"])
+        self.assertEqual(snapshot["operation_id"], task["id"])
+        self.assertEqual(task["ownerId"], task["id"])
+        self.assertEqual(task["operationId"], task["id"])
+        self.assertEqual(task["resolved_ai"]["model"], "asr-model")
+
+    def test_runtime_restore_uses_current_provider_credential(self):
+        provider = FakeAiRuntimeProvider(api_key="creation-secret")
+        dependencies = task_service.EnglishAiDependencies(provider, StubPromptCatalog())
+        task_path = paths.task_dir("credential-rotation")
+        task_path.mkdir(parents=True, exist_ok=True)
+        task_service.write_task_runtime_snapshot(
+            task_path,
+            owner_id="english-owner",
+            operation_id="credential-rotation",
+            ai_dependencies=dependencies,
+            asr_ai_options=AiRuntimeOptions(model="stable-model"),
+        )
+        provider.api_key = "rotated-secret"
+
+        restored = task_service.restore_task_runtime(
+            task_path,
+            "asr",
+            ai_dependencies=dependencies,
+        )
+
+        self.assertIsNotNone(restored)
+        self.assertEqual(restored.api_key, "rotated-secret")
+        self.assertEqual(restored.model, "stable-model")
+
     def test_translate_sentences_uses_translation_options_and_falls_back_to_single(self):
         recorded_calls: list[dict] = []
 
@@ -502,11 +620,11 @@ class EnglishRouteTests(RouterTestCase):
                     "extra_payload": extra_payload,
                 }
             )
-            if source_text.startswith("[S0000]"):
+            if "ai_prompt_english_translation_batch" in source_text:
                 return "bad translation payload"
-            if source_text == "Hello world.":
+            if source_text.endswith("Hello world."):
                 return "你好，世界。"
-            if source_text == "We keep going.":
+            if source_text.endswith("We keep going."):
                 return "我们继续前进。"
             return "未知"
 
@@ -537,11 +655,16 @@ class EnglishRouteTests(RouterTestCase):
                 },
             ],
             task_id=created["id"],
+            prompt_catalog=StubPromptCatalog(),
         )
 
-        self.assertEqual([item["text_zh"] for item in translated], ["你好，世界。", "我们继续前进。"])
+        self.assertEqual(
+            [item["text_zh"] for item in translated], ["你好，世界。", "我们继续前进。"]
+        )
         self.assertEqual(len(recorded_calls), 3)
-        self.assertTrue(recorded_calls[0]["source_text"].startswith("[S0000] Hello world."))
+        self.assertIn("ai_prompt_english_translation_batch", recorded_calls[0]["source_text"])
+        self.assertIn("[S0000] Hello world.", recorded_calls[0]["source_text"])
+        self.assertIn("ai_prompt_english_translation_single", recorded_calls[1]["source_text"])
         for item in recorded_calls:
             self.assertEqual(
                 item["extra_payload"],
@@ -566,6 +689,7 @@ class EnglishRouteTests(RouterTestCase):
                 runtime_extra_payload=None,
                 sentence={"index": 7, "text_en": "Hello."},
                 task_id="empty-single-task",
+                prompt_catalog=StubPromptCatalog(),
             )
 
         self.assertEqual(str(raised.exception), "单句翻译结果为空。")

@@ -25,16 +25,15 @@ from memory_anki.modules.palaces.application.segment_review_service import (
 )
 from memory_anki.modules.palaces.application.title_sync_service import (
     get_palace_explicit_chapter_ids,
-    reconcile_palace_chapter_binding,
     resolve_palace_binding_status,
     resolve_palace_subject,
     resolve_palace_title,
 )
-from memory_anki.modules.reviews.application.schedule_service import (
+from memory_anki.modules.reviews.api import (
     get_algorithm_stage_labels,
     is_schedule_due,
 )
-from memory_anki.modules.reviews.application.schedule_service import (
+from memory_anki.modules.reviews.api import (
     schedule_display_datetime as review_schedule_display_datetime,
 )
 
@@ -77,7 +76,6 @@ def palace_json(
 ) -> dict:
     explicit_chapter_ids: set[int] = set()
     if session is not None:
-        reconcile_palace_chapter_binding(session, p)
         explicit_chapter_ids = (
             precomputed_explicit_chapter_ids
             if precomputed_explicit_chapter_ids is not None
@@ -183,7 +181,6 @@ def palace_summary_json(
 ) -> dict:
     explicit_chapter_ids: set[int] = set()
     if session is not None:
-        reconcile_palace_chapter_binding(session, p)
         explicit_chapter_ids = (
             precomputed_explicit_chapter_ids
             if precomputed_explicit_chapter_ids is not None

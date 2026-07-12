@@ -42,12 +42,7 @@ from memory_anki.infrastructure.llm.openai_compatible import (
     call_chat_completion_text,  # noqa: F401
 )
 from memory_anki.modules.english_reading.domain.errors import EnglishReadingError
-from memory_anki.modules.settings.application.ai_model_registry import (
-    AiRuntimeOptions,  # noqa: F401
-    is_dashscope_compatible_provider,  # noqa: F401
-    resolve_scenario_runtime,  # noqa: F401
-)
-from memory_anki.modules.settings.application.ai_prompts import get_prompt_template  # noqa: F401
+from memory_anki.platform.application import AiRuntimeOptions  # noqa: F401
 
 CEFR_LEVELS = ("A1", "A2", "B1", "B2", "C1", "C2")
 LEVEL_TO_INDEX = {level: index for index, level in enumerate(CEFR_LEVELS)}

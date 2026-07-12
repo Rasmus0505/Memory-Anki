@@ -53,6 +53,7 @@ def upsert_palace_ocr_sources(
     *,
     palace_id: int,
     payloads: list[dict[str, Any]],
+    commit: bool = True,
 ) -> list[PalaceQuizOcrSource]:
     get_palace_or_raise(session, palace_id)
     rows: list[PalaceQuizOcrSource] = []
@@ -82,9 +83,12 @@ def upsert_palace_ocr_sources(
         row.import_batch = normalized["import_batch"]
         row.updated_at = utc_now_naive()
         rows.append(row)
-    session.commit()
-    for row in rows:
-        session.refresh(row)
+    if commit:
+        session.commit()
+        for row in rows:
+            session.refresh(row)
+    else:
+        session.flush()
     return rows
 
 

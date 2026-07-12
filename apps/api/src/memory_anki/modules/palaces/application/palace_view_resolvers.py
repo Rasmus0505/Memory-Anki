@@ -7,10 +7,7 @@ from sqlalchemy.orm import Session
 
 from memory_anki.infrastructure.db._tables.knowledge import Chapter
 from memory_anki.infrastructure.db._tables.palaces import Palace, PalaceGroup
-from memory_anki.modules.palaces.application.palace_chapter_binding import (
-    _chapter_outline_path,
-    reconcile_palace_chapter_binding,
-)
+from memory_anki.modules.palaces.application.palace_chapter_binding import _chapter_outline_path
 from memory_anki.modules.palaces.application.palace_review_rollups import (
     count_palace_review_units,
 )
@@ -194,7 +191,6 @@ def build_subject_shelf_summary(session: Session, palaces: list[Palace]) -> dict
     now = datetime.now()
 
     for palace in palaces:
-        reconcile_palace_chapter_binding(session, palace)
         subject = resolve_palace_subject(palace)
         subject_key = subject.id if subject is not None else 0
         bucket = subject_buckets.setdefault(
@@ -261,7 +257,6 @@ def build_today_new_palace_outline(session: Session, palaces: list[Palace]) -> l
 
     subject_buckets: dict[int, dict[str, Any]] = {}
     for palace in palaces:
-        reconcile_palace_chapter_binding(session, palace)
         subject = resolve_palace_subject(palace)
         subject_key = subject.id if subject is not None else 0
         subject_bucket = subject_buckets.setdefault(

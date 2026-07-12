@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from memory_anki.core.config import IMPORT_JOBS_DIR as DEFAULT_IMPORT_JOBS_DIR
-from memory_anki.modules.settings.application.ai_model_registry import resolve_scenario_runtime
+from memory_anki.platform.application import AiRuntimeProvider
 
 from . import mindmap_import_job_api as _job_api
 from . import mindmap_import_job_execution as _job_execution
@@ -84,9 +84,6 @@ from .mindmap_import_job_runtime import (
     _prepare_batch_image_items as _prepare_batch_image_items,
 )
 from .mindmap_import_job_runtime import (
-    _resolve_provider_api_key_for_runtime as _resolve_provider_api_key_for_runtime,
-)
-from .mindmap_import_job_runtime import (
     _serialize_runtime_payload as _serialize_runtime_payload,
 )
 from .mindmap_import_job_runtime import (
@@ -142,8 +139,10 @@ def create_batch_import_job(*args, **kwargs):
     if remaining_args:
         raise TypeError("create_batch_import_job accepts only session as a positional argument")
     ai_options = kwargs.pop("ai_options", None)
-    runtime = resolve_scenario_runtime(session, "vision_batch_mindmap", ai_options=ai_options)
+    ai_runtime: AiRuntimeProvider = kwargs.pop("ai_runtime")
+    runtime = ai_runtime.resolve("vision_batch_mindmap", options=ai_options)
     normalized_items, resolved_structure_index = _prepare_batch_image_items(
+        ai_runtime=ai_runtime,
         image_items=kwargs["image_items"],
         structure_image_index=kwargs["structure_image_index"],
     )
@@ -255,7 +254,6 @@ __all__ = [
     "_mark_job_failed",
     "_pause_if_requested",
     "_prepare_batch_image_items",
-    "_resolve_provider_api_key_for_runtime",
     "_run_image_batch_job",
     "_run_image_single_job",
     "_run_job_worker",

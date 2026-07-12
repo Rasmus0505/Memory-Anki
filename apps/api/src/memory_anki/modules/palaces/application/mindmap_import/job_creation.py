@@ -31,7 +31,7 @@ def create_image_job(
         import_error_cls=import_error_cls,
     )
 
-    source_meta = {
+    source_meta: dict[str, object] = {
         "fallback_title": str(fallback_title or "未命名宫殿"),
         "filename": filename or "image.png",
         "image_sha256": job_creation_support.hash_bytes(image_bytes),
@@ -67,7 +67,7 @@ def create_batch_job(
     import_error_cls: type[Exception],
 ) -> MindMapImportJob:
     job_creation_support.validate_entity_key(entity_key, import_error_cls=import_error_cls)
-    source_meta = {
+    source_meta: dict[str, object] = {
         "fallback_title": str(fallback_title or "未命名宫殿"),
         "structure_image_index": resolved_structure_index,
         "ai_runtime": dict(ai_runtime or {}),
@@ -120,8 +120,11 @@ def _create_draft_job_record(
     if existing:
         return existing, False
 
+    operation_id = uuid.uuid4().hex
+    source_meta["owner_id"] = entity_key
+    source_meta["operation_id"] = operation_id
     job = MindMapImportJob(
-        id=uuid.uuid4().hex,
+        id=operation_id,
         entity_key=entity_key,
         source_kind=source_kind,
         mode=mode,

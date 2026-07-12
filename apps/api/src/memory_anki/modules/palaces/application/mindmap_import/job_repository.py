@@ -168,13 +168,20 @@ def serialize_job(job: MindMapImportJob) -> dict[str, Any]:
     usage = json_load(job.usage_json, empty_usage())
     progress = json_load(job.progress_json, empty_progress())
     runtime_meta = source_meta.get("ai_runtime") if isinstance(source_meta, dict) else None
-    resolved_ai = (
-        dict(runtime_meta.get("resolved_ai"))
-        if isinstance(runtime_meta, dict) and isinstance(runtime_meta.get("resolved_ai"), dict)
-        else None
-    )
+    resolved_ai_value = runtime_meta.get("resolved_ai") if isinstance(runtime_meta, dict) else None
+    resolved_ai = dict(resolved_ai_value) if isinstance(resolved_ai_value, dict) else None
     return {
         "id": job.id,
+        "owner_id": (
+            str(source_meta.get("owner_id") or job.entity_key)
+            if isinstance(source_meta, dict)
+            else job.entity_key
+        ),
+        "operation_id": (
+            str(source_meta.get("operation_id") or job.id)
+            if isinstance(source_meta, dict)
+            else job.id
+        ),
         "entity_key": job.entity_key,
         "status": job.status,
         "stage": job.stage,

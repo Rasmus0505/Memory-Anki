@@ -7,13 +7,14 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from memory_anki.modules.settings.application.ai_model_registry import AiRuntimeOptions
+from memory_anki.platform.application import AiRuntimeOptions
 
 from .._question_utils import (
     build_generation_source_meta,
     finalize_generation_source_meta,
     normalize_generated_question_drafts,
 )
+from ..ai_dependencies import PalaceQuizAiDependencies
 from ..question_contracts import PalaceQuizValidationError
 from .ocr_sources import build_uploaded_image_ocr_sources
 from .shared import (
@@ -51,6 +52,7 @@ def _ai_service():
 def prepare_image_generation_request(
     session: Session,
     *,
+    ai_dependencies: PalaceQuizAiDependencies,
     palace_id: int,
     image_items: list[tuple[bytes, str | None]],
     extra_prompt: str,
@@ -69,6 +71,7 @@ def prepare_image_generation_request(
     ai = _ai_service()
     config, extra_payload, resolved_ai = ai._build_chat_config(
         session,
+        ai_runtime=ai_dependencies.runtime,
         scenario_key="quiz_image_generation",
         ai_options=ai_options,
         temperature=0.2,
@@ -80,6 +83,7 @@ def prepare_image_generation_request(
         extra_prompt=extra_prompt,
     )
     messages, system_prompt = build_image_generation_messages(
+        ai_dependencies=ai_dependencies,
         session=session,
         extra_prompt=extra_prompt,
         image_items=image_items,
@@ -175,12 +179,14 @@ def build_image_generation_source_meta(
 
 def build_image_generation_messages(
     *,
+    ai_dependencies: PalaceQuizAiDependencies,
     session,
     extra_prompt: str,
     image_items: list[tuple[bytes, str | None]],
     prompt_override: str | None = None,
 ) -> tuple[list[dict[str, object]], str]:
     messages, system_prompt = build_generation_messages(
+        ai_dependencies=ai_dependencies,
         session=session,
         extra_prompt=extra_prompt,
         source_label="图片识别",
@@ -199,6 +205,7 @@ __all__ = [
 def build_image_generation_preview_result(
     session: Session,
     *,
+    ai_dependencies: PalaceQuizAiDependencies,
     prepared_request: ImageGenerationPreparedRequest,
     palace_id: int,
     response_text: str,
@@ -227,6 +234,7 @@ def build_image_generation_preview_result(
     if classify_by_mini_palace:
         grouped_questions = group_questions_for_preview_scope(
             session,
+        ai_dependencies=ai_dependencies,
             palace=prepared_request.palace,
             drafts=drafts,
             selected_chapter=selected_chapter,
@@ -256,6 +264,7 @@ __all__ = ["build_image_generation_preview_result"]
 def generate_quiz_preview_from_images(
     session: Session,
     *,
+    ai_dependencies: PalaceQuizAiDependencies,
     palace_id: int,
     image_items: list[tuple[bytes, str | None]],
     extra_prompt: str,
@@ -265,6 +274,7 @@ def generate_quiz_preview_from_images(
 ) -> dict[str, object]:
     prepared_request = prepare_image_generation_request(
         session,
+        ai_dependencies=ai_dependencies,
         palace_id=palace_id,
         image_items=image_items,
         extra_prompt=extra_prompt,
@@ -285,6 +295,7 @@ def generate_quiz_preview_from_images(
     )
     return build_image_generation_preview_result(
         session,
+        ai_dependencies=ai_dependencies,
         prepared_request=prepared_request,
         palace_id=palace_id,
         response_text=response_text,

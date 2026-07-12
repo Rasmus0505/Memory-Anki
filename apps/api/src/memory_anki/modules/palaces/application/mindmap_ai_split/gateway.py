@@ -16,7 +16,7 @@ from memory_anki.infrastructure.llm.external_ai_call_logs import (
     complete_external_ai_call_log,
     fail_external_ai_call_log,
 )
-from memory_anki.modules.settings.application.ai_prompts import render_prompt
+from memory_anki.platform.application import PromptCatalog
 
 from .contracts import MindMapAiSplitConfig, MindMapAiSplitError
 from .primitives import extract_json_object
@@ -27,10 +27,11 @@ def call_model(
     config: MindMapAiSplitConfig,
     target_node: dict[str, Any],
     existing_children: list[dict[str, Any]],
+    prompt_catalog: PromptCatalog,
     build_model_input_fn,
 ) -> dict[str, Any]:
     request_url = build_chat_completions_url(config.base_url)
-    system_prompt = render_prompt("ai_prompt_mindmap_ai_split_system", {})
+    system_prompt = prompt_catalog.render("ai_prompt_mindmap_ai_split_system")
     messages: list[dict[str, str]] = [{"role": "system", "content": system_prompt}]
     if config.custom_instruction:
         messages.append(

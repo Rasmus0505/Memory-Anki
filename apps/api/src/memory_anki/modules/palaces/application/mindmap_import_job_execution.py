@@ -10,6 +10,7 @@ from memory_anki.core.config import IMPORT_JOBS_DIR
 from memory_anki.core.time import utc_now_naive
 from memory_anki.infrastructure.db._tables import engine
 from memory_anki.infrastructure.db._tables.misc import MindMapImportJob
+from memory_anki.platform.application import AiRuntimeProvider, PromptCatalog
 
 from .mindmap_import import (
     ERROR_SNIPPET_LIMIT,
@@ -39,14 +40,21 @@ _RUNNING_JOB_THREADS: dict[str, threading.Thread] = {}
 _RUNNING_JOB_LOCK = threading.Lock()
 
 
-def _job_lifecycle_dependencies() -> job_lifecycle.JobLifecycleDependencies:
+def _job_lifecycle_dependencies(
+    ai_runtime: AiRuntimeProvider,
+    prompt_catalog: PromptCatalog,
+) -> job_lifecycle.JobLifecycleDependencies:
     return job_lifecycle.JobLifecycleDependencies(
         session_factory=lambda: Session(engine),
         get_job_fn=job_repository.get_job,
         load_source_meta_fn=lambda job: _json_load(job.source_meta_json, {}),
         get_job_artifact_dir_fn=lambda job_id: job_artifacts.get_job_artifact_dir(IMPORT_JOBS_DIR, job_id),
-        run_image_single_job_fn=_run_image_single_job,
-        run_image_batch_job_fn=_run_image_batch_job,
+        run_image_single_job_fn=lambda *args: _run_image_single_job(
+            *args, ai_runtime=ai_runtime, prompt_catalog=prompt_catalog
+        ),
+        run_image_batch_job_fn=lambda *args: _run_image_batch_job(
+            *args, ai_runtime=ai_runtime, prompt_catalog=prompt_catalog
+        ),
         mark_job_completed_fn=_mark_job_completed,
         mark_job_failed_fn=_mark_job_failed,
         utc_now_fn=utc_now_naive,
@@ -59,12 +67,19 @@ def _job_lifecycle_dependencies() -> job_lifecycle.JobLifecycleDependencies:
     )
 
 
-def run_job_async(job_id: str) -> None:
+def run_job_async(
+    job_id: str,
+    *,
+    ai_runtime: AiRuntimeProvider,
+    prompt_catalog: PromptCatalog,
+) -> None:
     job_lifecycle.run_job_async(
         job_id,
         running_threads=_RUNNING_JOB_THREADS,
         running_lock=_RUNNING_JOB_LOCK,
-        run_job_worker_fn=_run_job_worker,
+        run_job_worker_fn=lambda worker_job_id: _run_job_worker(
+            worker_job_id, ai_runtime=ai_runtime, prompt_catalog=prompt_catalog
+        ),
     )
 
 
@@ -103,10 +118,15 @@ def _pause_if_requested(session: Session, job_id: str) -> bool:
     )
 
 
-def _run_job_worker(job_id: str) -> None:
+def _run_job_worker(
+    job_id: str,
+    *,
+    ai_runtime: AiRuntimeProvider,
+    prompt_catalog: PromptCatalog,
+) -> None:
     job_lifecycle.run_job_worker(
         job_id,
-        deps=_job_lifecycle_dependencies(),
+        deps=_job_lifecycle_dependencies(ai_runtime, prompt_catalog),
         running_threads=_RUNNING_JOB_THREADS,
         running_lock=_RUNNING_JOB_LOCK,
     )
@@ -117,6 +137,9 @@ def _run_image_single_job(
     job: MindMapImportJob,
     source_meta: dict[str, Any],
     artifact_dir: Path,
+    *,
+    ai_runtime: AiRuntimeProvider,
+    prompt_catalog: PromptCatalog,
 ) -> None:
     job_worker.run_image_single_job(
         session,
@@ -127,10 +150,14 @@ def _run_image_single_job(
         find_first_input_file_fn=_find_first_input_file,
         stream_call_dashscope_json=lambda **kwargs: _stream_call_dashscope_json(
             source_meta=source_meta,
+            ai_runtime=ai_runtime,
+            prompt_catalog=prompt_catalog,
             **kwargs,
         ),
         stream_call_dashscope_text=lambda **kwargs: _stream_call_dashscope_text(
             source_meta=source_meta,
+            ai_runtime=ai_runtime,
+            prompt_catalog=prompt_catalog,
             **kwargs,
         ),
     )
@@ -141,6 +168,9 @@ def _run_image_batch_job(
     job: MindMapImportJob,
     source_meta: dict[str, Any],
     artifact_dir: Path,
+    *,
+    ai_runtime: AiRuntimeProvider,
+    prompt_catalog: PromptCatalog,
 ) -> None:
     job_worker.run_image_batch_job(
         session,
@@ -150,10 +180,14 @@ def _run_image_batch_job(
         import_jobs_dir=IMPORT_JOBS_DIR,
         stream_call_dashscope_json=lambda **kwargs: _stream_call_dashscope_json(
             source_meta=source_meta,
+            ai_runtime=ai_runtime,
+            prompt_catalog=prompt_catalog,
             **kwargs,
         ),
         stream_call_dashscope_batch_json=lambda **kwargs: _stream_call_dashscope_batch_json(
             source_meta=source_meta,
+            ai_runtime=ai_runtime,
+            prompt_catalog=prompt_catalog,
             **kwargs,
         ),
     )

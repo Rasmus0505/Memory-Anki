@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from typing import Any
 
-from memory_anki.modules.mindmap.application.editor_state_documents import normalize_editor_doc
+from memory_anki.modules.mindmap_document.api import normalize_editor_doc
 
 from .contracts import MindMapImportError
 from .model_io import MAX_IMAGE_BYTES

@@ -17,7 +17,7 @@ from memory_anki.infrastructure.db._tables.english_reading import (
     EnglishReadingVocabularyNote,
 )
 from memory_anki.modules.english_reading.domain.errors import EnglishReadingError
-from memory_anki.modules.reviews.application.schedule_policy import (
+from memory_anki.modules.reviews.api import (
     build_review_schedule_draft,
     load_review_schedule_policy,
 )

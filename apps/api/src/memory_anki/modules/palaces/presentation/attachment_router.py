@@ -11,6 +11,7 @@ from memory_anki.modules.palaces.application.attachment_service import (
     resolve_attachment_download,
 )
 from memory_anki.modules.palaces.presentation.errors import raise_not_found
+from memory_anki.platform.persistence import SqlAlchemyUnitOfWork
 
 router = APIRouter()
 
@@ -37,6 +38,7 @@ async def api_upload(palace_id: int, file: UploadFile = File(...),
         original_name=original_name,
         content=await file.read(),
         attachments_dir=_attachments_dir(),
+        uow=SqlAlchemyUnitOfWork(s),
     )
     if attachment is None:
         raise_not_found()
@@ -61,6 +63,8 @@ def api_attachment(att_id: int, s: Session = Depends(session_dep)):
 
 @router.delete("/attachments/{att_id}")
 def api_attachment_delete(att_id: int, s: Session = Depends(session_dep)):
-    if delete_attachment(s, att_id, _attachments_dir()):
+    if delete_attachment(
+        s, att_id, _attachments_dir(), uow=SqlAlchemyUnitOfWork(s)
+    ):
         _maybe_create_rolling_backup("rolling-attachment-delete")
     return {"ok": True}

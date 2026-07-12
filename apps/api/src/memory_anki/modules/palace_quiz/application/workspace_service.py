@@ -28,6 +28,9 @@ from memory_anki.modules.palace_quiz.application.question_contracts import (
     PalaceQuizNotFoundError,
     PalaceQuizValidationError,
 )
+from memory_anki.platform.application import AiRuntimeOptions
+
+from .ai_dependencies import PalaceQuizAiDependencies
 
 ROOT = Path("quiz_generation")
 PDF_ROOT = ROOT / "pdf_library"
@@ -430,7 +433,11 @@ def _match_items(previews: list[dict[str, Any]], has_answer_source: bool) -> lis
 
 
 def extract_and_match(
-    session: Session, job_id: str, *, ai_options: dict[str, Any] | None = None
+    session: Session,
+    job_id: str,
+    *,
+    ai_dependencies: PalaceQuizAiDependencies,
+    ai_options: AiRuntimeOptions | dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     job = get_job(session, job_id)
     question_sources = [item for item in job.sources if item.role == "question"]
@@ -442,7 +449,8 @@ def extract_and_match(
     try:
         options = json.loads(job.options_json or "{}")
         classify = bool(options.get("classify_by_mini_palace"))
-        images = [
+        runtime_ai_options = ai_dependencies.runtime.normalize_options(ai_options)
+        images: list[tuple[bytes, str | None]] = [
             (
                 _absolute(item.relative_path).read_bytes(),
                 f"{'题目' if item.role == 'question' else '答案'}_{item.original_name}",
@@ -451,7 +459,7 @@ def extract_and_match(
             if item.source_type == "image"
         ]
         text_sections: list[str] = []
-        text_files = []
+        text_files: list[tuple[bytes, str | None, str | None]] = []
         for source in job.sources:
             text = _source_text(source).strip()
             if text:
@@ -471,22 +479,24 @@ def extract_and_match(
         if images:
             preview = generate_quiz_preview_from_images(
                 session,
+                ai_dependencies=ai_dependencies,
                 palace_id=job.palace_id,
                 image_items=images,
                 extra_prompt=unified_instruction,
                 classify_by_mini_palace=classify,
                 selected_chapter_id=job.selected_chapter_id,
-                ai_options=ai_options,
+                ai_options=runtime_ai_options,
             )
         else:
             preview = generate_quiz_preview_from_text_files(
                 session,
+                ai_dependencies=ai_dependencies,
                 palace_id=job.palace_id,
                 file_items=text_files,
                 extra_prompt=job.extra_prompt,
                 classify_by_mini_palace=classify,
                 selected_chapter_id=job.selected_chapter_id,
-                ai_options=ai_options,
+                ai_options=runtime_ai_options,
             )
         matching = _match_items([preview], any(item.role == "answer" for item in job.sources))
         if not matching:

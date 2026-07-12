@@ -2,10 +2,8 @@ from fastapi import APIRouter
 
 from memory_anki.core.config import ATTACHMENTS_DIR
 from memory_anki.infrastructure.db.deps import session_dep
-from memory_anki.modules.backups.application.backup_lifecycle import (
-    maybe_create_rolling_backup,
-)
-from memory_anki.modules.mindmap.application.editor_state_service import (
+from memory_anki.modules.backups.api import maybe_create_rolling_backup
+from memory_anki.modules.palaces.application.editor_state_service import (
     save_palace_editor_state,
 )
 from memory_anki.modules.palaces.presentation.attachment_router import (

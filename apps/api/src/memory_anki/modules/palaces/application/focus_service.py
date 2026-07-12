@@ -5,6 +5,7 @@ import json
 from sqlalchemy.orm import Session
 
 from memory_anki.infrastructure.db._tables.palaces import Palace
+from memory_anki.platform.application import UnitOfWork
 
 
 def parse_focus_node_uids(palace: Palace | None) -> list[str]:
@@ -60,6 +61,8 @@ def update_focus_node_uid(
     palace: Palace,
     node_uid: str,
     focused: bool | None,
+    *,
+    uow: UnitOfWork,
 ) -> tuple[list[str], bool]:
     normalized_uid = str(node_uid or "").strip()
     if focused is None:
@@ -78,8 +81,8 @@ def update_focus_node_uid(
                 [uid for uid in current_uids if uid != normalized_uid],
             )
             is_focused = False
-    session.commit()
-    session.refresh(palace)
+    uow.commit()
+    uow.refresh(palace)
     return focus_node_uids, is_focused
 
 

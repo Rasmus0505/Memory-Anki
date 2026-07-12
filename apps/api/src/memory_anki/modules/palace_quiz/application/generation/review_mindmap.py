@@ -9,11 +9,9 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from memory_anki.infrastructure.db._tables.palaces import Palace
-from memory_anki.modules.settings.application.ai_model_registry import AiRuntimeOptions
-from memory_anki.modules.settings.application.ai_prompt_templates import (
-    build_palace_quiz_review_mindmap_prompt,
-)
+from memory_anki.platform.application import AiRuntimeOptions
 
+from ..ai_dependencies import PalaceQuizAiDependencies
 from ..question_contracts import (
     QUESTION_TYPES,
     PalaceQuizValidationError,
@@ -45,7 +43,7 @@ from .shared import (
 def compact_mindmap_for_prompt(editor_doc: Any, *, max_nodes: int = 160) -> dict[str, Any]:
     root = (editor_doc or {}).get("root") if isinstance(editor_doc, dict) else None
     if not isinstance(root, dict):
-        from memory_anki.modules.mindmap.application.editor_state_documents import (
+        from memory_anki.modules.mindmap_document.api import (
             deserialize_editor_payload,
         )
 
@@ -165,8 +163,10 @@ def normalize_review_mindmap_question_count(raw_question_count: Any) -> int:
     return max(1, min(question_count, 12))
 
 
-def review_mindmap_system_prompt() -> str:
-    return build_palace_quiz_review_mindmap_prompt()
+def review_mindmap_system_prompt(
+    ai_dependencies: PalaceQuizAiDependencies,
+) -> str:
+    return ai_dependencies.prompts.render("ai_prompt_palace_quiz_review_mindmap")
 
 # === quiz_generation_review_mindmap_request_context.py ===
 @dataclass(frozen=True, slots=True)
@@ -258,13 +258,14 @@ def build_review_mindmap_generation_model_input(
 
 
 def build_review_mindmap_generation_messages(
+    ai_dependencies: PalaceQuizAiDependencies,
     model_input: dict[str, Any],
     prompt_override: str | None = None,
 ) -> tuple[str, list[dict[str, Any]]]:
     system_prompt = (
         str(prompt_override).strip()
         if str(prompt_override or "").strip()
-        else review_mindmap_system_prompt()
+        else review_mindmap_system_prompt(ai_dependencies)
     )
     messages: list[dict[str, Any]] = [
         {"role": "system", "content": system_prompt},
@@ -296,6 +297,7 @@ def _ai_service():
 def prepare_review_mindmap_generation_request(
     session: Session,
     *,
+    ai_dependencies: PalaceQuizAiDependencies,
     palace_id: int,
     mode: str,
     question_types: list[str],
@@ -316,11 +318,13 @@ def prepare_review_mindmap_generation_request(
     source_meta = build_review_mindmap_generation_source_meta(request_context)
     model_input = build_review_mindmap_generation_model_input(request_context)
     system_prompt, messages = build_review_mindmap_generation_messages(
-        model_input,
+        ai_dependencies=ai_dependencies,
+        model_input=model_input,
         prompt_override=ai_options.prompt_override if ai_options else None,
     )
     config, extra_payload, resolved_ai = _ai_service()._build_chat_config(
         session,
+        ai_runtime=ai_dependencies.runtime,
         scenario_key="quiz_review_mindmap_generation",
         ai_options=ai_options,
         temperature=0.25,
@@ -376,6 +380,7 @@ def build_review_mindmap_preview_result(
 def generate_quiz_preview_from_review_mindmap(
     session: Session,
     *,
+    ai_dependencies: PalaceQuizAiDependencies,
     palace_id: int,
     mode: str,
     question_types: list[str],
@@ -386,6 +391,7 @@ def generate_quiz_preview_from_review_mindmap(
 ) -> dict[str, Any]:
     prepared_request = prepare_review_mindmap_generation_request(
         session,
+        ai_dependencies=ai_dependencies,
         palace_id=palace_id,
         mode=mode,
         question_types=question_types,

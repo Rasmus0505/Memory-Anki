@@ -12,18 +12,13 @@ from memory_anki.infrastructure.db._tables.palaces import (
     PalaceMiniPalace,
     ReviewSchedule,
 )
-from memory_anki.modules.palaces.application.palace_service import restore_archived_palaces
-from memory_anki.modules.palaces.application.title_sync_service import (
-    build_today_new_palace_outline,
-)
-from memory_anki.modules.reviews.application.review_metrics_service import (
+from memory_anki.modules.palaces.api import build_today_new_palace_outline
+from memory_anki.modules.reviews.api import (
     get_weekly_stats,
-)
-from memory_anki.modules.reviews.application.schedule_policy import (
     load_review_schedule_policy,
     schedule_display_datetime_for_policy,
 )
-from memory_anki.modules.sessions.application.study_session_service import (
+from memory_anki.modules.sessions.api import (
     FORMAL_REVIEW_SCENES,
     STUDY_DASHBOARD_SCENES,
     current_month_bounds,
@@ -267,7 +262,6 @@ def _dashboard_today_review_groups(
     now: datetime | None = None,
     respect_daily_limit: bool = True,
 ) -> list[dict]:
-    restore_archived_palaces(session)
     current = now or datetime.now()
     today = current.date()
     policy = load_review_schedule_policy(session)
@@ -279,6 +273,7 @@ def _dashboard_today_review_groups(
         .filter(
             ReviewSchedule.completed == False,
             Palace.mastered == False,
+            Palace.archived == False,
             Palace.deleted_at.is_(None),
             or_(
                 ReviewSchedule.scheduled_date <= today,

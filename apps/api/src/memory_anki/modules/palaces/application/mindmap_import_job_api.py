@@ -7,10 +7,7 @@ from sqlalchemy.orm import Session
 
 from memory_anki.core.config import IMPORT_JOBS_DIR
 from memory_anki.infrastructure.db._tables.misc import MindMapImportJob
-from memory_anki.modules.settings.application.ai_model_registry import (
-    AiRuntimeOptions,
-    resolve_scenario_runtime,
-)
+from memory_anki.platform.application import AiRuntimeOptions, AiRuntimeProvider
 
 from .mindmap_import import (
     MAX_IMAGE_BYTES,
@@ -31,12 +28,12 @@ def create_image_import_job(
     image_bytes: bytes,
     filename: str | None,
     fallback_title: str,
+    ai_runtime: AiRuntimeProvider,
     ai_options: AiRuntimeOptions | None = None,
 ) -> MindMapImportJob:
-    runtime = resolve_scenario_runtime(
-        session,
+    runtime = ai_runtime.resolve(
         "vision_image_mindmap" if mode == MODE_MINDMAP else "vision_image_text",
-        ai_options=ai_options,
+        options=ai_options,
     )
     return job_creation.create_image_job(
         session,
@@ -59,9 +56,10 @@ def create_batch_import_job(
     image_items: list[tuple[bytes, str | None]],
     fallback_title: str,
     structure_image_index: int | None,
+    ai_runtime: AiRuntimeProvider,
     ai_options: AiRuntimeOptions | None = None,
 ) -> MindMapImportJob:
-    runtime = resolve_scenario_runtime(session, "vision_batch_mindmap", ai_options=ai_options)
+    runtime = ai_runtime.resolve("vision_batch_mindmap", options=ai_options)
     normalized_items, resolved_structure_index = llm_gateway.prepare_batch_items(
         runtime=llm_gateway.build_runtime(
             api_key=runtime.api_key,

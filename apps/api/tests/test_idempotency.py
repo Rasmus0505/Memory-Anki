@@ -1,78 +1,16 @@
-"""persistence idempotency unit and route-level tests."""
+"""Route-level mutation replay tests."""
 import json
 from datetime import date, timedelta
 
 import pytest
 
-from memory_anki.infrastructure.db._tables.misc import Config
 from memory_anki.infrastructure.db._tables.palaces import (
     Palace,
     ReviewLog,
     ReviewSchedule,
 )
-from memory_anki.modules.persistence.application.idempotency import (
-    MUTATION_ID_HEADER,
-    get_idempotent_response,
-    read_mutation_id,
-    save_idempotent_response,
-)
 from memory_anki.modules.reviews.presentation import router as review_router
-
-
-class FakeRequest:
-    """Minimal Request stand-in; idempotency only reads headers."""
-
-    def __init__(self, headers: dict[str, str]):
-        self.headers = headers
-
-
-class TestReadMutationId:
-    def test_none_request_returns_none(self):
-        assert read_mutation_id(None) is None
-
-    def test_missing_header_returns_none(self):
-        assert read_mutation_id(FakeRequest({})) is None
-
-    def test_blank_header_returns_none(self):
-        assert read_mutation_id(FakeRequest({MUTATION_ID_HEADER: "   "})) is None
-
-    def test_overlong_header_returns_none(self):
-        assert read_mutation_id(FakeRequest({MUTATION_ID_HEADER: "x" * 81})) is None
-
-    def test_valid_header_is_stripped(self):
-        assert read_mutation_id(FakeRequest({MUTATION_ID_HEADER: " abc "})) == "abc"
-
-
-class TestSaveAndGet:
-    def test_roundtrip(self, db_session):
-        request = FakeRequest({MUTATION_ID_HEADER: "mut-1"})
-        save_idempotent_response(db_session, request, {"ok": True, "score": 3})
-        assert get_idempotent_response(db_session, request) == {"ok": True, "score": 3}
-
-    def test_no_header_saves_nothing(self, db_session):
-        save_idempotent_response(db_session, FakeRequest({}), {"ok": True})
-        assert db_session.query(Config).count() == 0
-
-    def test_get_without_saved_row_returns_none(self, db_session):
-        assert get_idempotent_response(
-            db_session,
-            FakeRequest({MUTATION_ID_HEADER: "unknown"}),
-        ) is None
-
-    def test_corrupt_stored_json_returns_none(self, db_session):
-        db_session.add(Config(key="api_mutation.bad", value="{not json"))
-        db_session.commit()
-        assert get_idempotent_response(
-            db_session,
-            FakeRequest({MUTATION_ID_HEADER: "bad"}),
-        ) is None
-
-    def test_save_overwrites_existing_row(self, db_session):
-        request = FakeRequest({MUTATION_ID_HEADER: "mut-2"})
-        save_idempotent_response(db_session, request, {"v": 1})
-        save_idempotent_response(db_session, request, {"v": 2})
-        assert get_idempotent_response(db_session, request) == {"v": 2}
-        assert db_session.query(Config).filter(Config.key.like("api_mutation.%")).count() == 1
+from memory_anki.platform.application import MUTATION_ID_HEADER
 
 
 def _seed_schedule(session_factory) -> int:

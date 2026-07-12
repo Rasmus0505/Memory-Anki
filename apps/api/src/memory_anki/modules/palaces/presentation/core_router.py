@@ -11,7 +11,7 @@ from memory_anki.modules.palaces.application.palace_service import (
     delete_palace,
     get_palace,
     restore_deleted_palace,
-    unarchive_palace,
+    set_palace_archived,
     update_palace,
 )
 from memory_anki.modules.palaces.application.peg_association_service import (
@@ -28,15 +28,14 @@ from memory_anki.modules.palaces.presentation.response_models import (
     PalaceDetailResponse,
     PalaceSummaryResponse,
 )
-from memory_anki.modules.persistence.application.idempotency import (
-    get_idempotent_response,
-    save_idempotent_response,
-)
-from memory_anki.modules.reviews.application.review_execution_service import (
+from memory_anki.modules.reviews.api import (
     trigger_review_for_palace,
 )
-from memory_anki.modules.settings.application.ai_model_registry import (
-    normalize_ai_runtime_options,
+from memory_anki.modules.settings.api import SettingsAiRuntimeProvider
+from memory_anki.platform.application import mutation_identity_from_headers
+from memory_anki.platform.persistence import (
+    SqlAlchemyMutationResponseStore,
+    SqlAlchemyUnitOfWork,
 )
 
 router = APIRouter()
@@ -70,6 +69,7 @@ def api_suggest_peg_associations(
     data: PegAssociationSuggestionRequest,
     s: Session = Depends(session_dep),
 ):
+    ai_runtime = SettingsAiRuntimeProvider(s)
     result = suggest_peg_associations(
         s,
         palace_id,
@@ -77,7 +77,8 @@ def api_suggest_peg_associations(
         chapter_ids=data.chapter_ids,
         max_suggestions=data.max_suggestions,
         use_ai=data.use_ai,
-        ai_options=normalize_ai_runtime_options(data.ai_options),
+        ai_options=ai_runtime.normalize_options(data.ai_options),
+        ai_runtime=ai_runtime,
     )
     if result is None:
         raise_not_found()
@@ -90,15 +91,23 @@ def api_create(
     request: Request,
     s: Session = Depends(session_dep),
 ):
-    existing_response = get_idempotent_response(s, request)
+    mutation_identity = mutation_identity_from_headers(request.headers)
+    mutation_store = SqlAlchemyMutationResponseStore(s)
+    existing_response = mutation_store.get(mutation_identity)
     if existing_response is not None:
         return existing_response
-    palace = create_palace(s, data)
-    trigger_review_for_palace(s, palace.id)
+    def prepare_atomic_side_effects(palace) -> None:
+        trigger_review_for_palace(s, palace.id, commit=False)
+        mutation_store.save(mutation_identity, palace_json(palace, s))
+
+    palace = create_palace(
+        s,
+        data,
+        uow=SqlAlchemyUnitOfWork(s),
+        before_commit=prepare_atomic_side_effects,
+    )
     _maybe_create_rolling_backup("rolling-create-palace")
-    response = palace_json(palace, s)
-    save_idempotent_response(s, request, response)
-    return response
+    return palace_json(palace, s)
 
 
 @router.put("/palaces/{palace_id}", response_model=PalaceDetailResponse)
@@ -106,20 +115,29 @@ def api_update(palace_id: int, data: PalaceUpdate, s: Session = Depends(session_
     p = get_palace(s, palace_id)
     if not p:
         raise_not_found()
-    updated = update_palace(s, p, data)
+    updated = update_palace(
+        s,
+        p,
+        data,
+        uow=SqlAlchemyUnitOfWork(s),
+    )
     _maybe_create_rolling_backup("rolling-update-palace")
     return palace_json(updated, s)
 
 
 @router.delete("/palaces/{palace_id}", response_model=DeleteOkResponse)
 def api_delete(palace_id: int, s: Session = Depends(session_dep)):
-    delete_palace(s, palace_id)
+    delete_palace(s, palace_id, uow=SqlAlchemyUnitOfWork(s))
     return {"ok": True}
 
 
 @router.post("/palaces/{palace_id}/restore", response_model=PalaceDetailResponse)
 def api_restore_deleted_palace(palace_id: int, s: Session = Depends(session_dep)):
-    palace = restore_deleted_palace(s, palace_id)
+    palace = restore_deleted_palace(
+        s,
+        palace_id,
+        uow=SqlAlchemyUnitOfWork(s),
+    )
     if not palace:
         raise_not_found()
     return palace_json(palace, s)
@@ -130,7 +148,12 @@ def api_archive(palace_id: int, data: dict, s: Session = Depends(session_dep)):
     p = get_palace(s, palace_id)
     if not p:
         raise_not_found()
-    palace = unarchive_palace(s, p)
+    palace = set_palace_archived(
+        s,
+        p,
+        bool(data.get("archived", True)),
+        uow=SqlAlchemyUnitOfWork(s),
+    )
     return {"ok": True, "archived": palace.archived}
 
 

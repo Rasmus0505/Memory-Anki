@@ -278,7 +278,7 @@ def serialize_external_ai_call_log(
     request_payload = _json_load(row.request_json, {})
     response_payload = _json_load(row.response_json, {})
     error_payload = _json_load(row.error_json, {})
-    result = {
+    result: dict[str, Any] = {
         "id": row.id,
         "feature": row.feature,
         "operation": row.operation,

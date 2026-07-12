@@ -269,7 +269,6 @@ def rebuild_all_pending_review_schedules(session: Session) -> dict[str, Any]:
         )
         palace_count += 1
 
-    session.commit()
     return {
         "palace_count": palace_count,
         "segment_count": 0,

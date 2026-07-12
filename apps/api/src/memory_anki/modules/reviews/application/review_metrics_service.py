@@ -7,7 +7,7 @@ from datetime import date, datetime, timedelta
 from sqlalchemy.orm import Session
 
 from memory_anki.infrastructure.db._tables.palaces import Palace, ReviewLog
-from memory_anki.modules.sessions.application.study_session_service import (
+from memory_anki.modules.sessions.api import (
     STUDY_DASHBOARD_SCENES,
     get_study_session_duration_seconds,
 )

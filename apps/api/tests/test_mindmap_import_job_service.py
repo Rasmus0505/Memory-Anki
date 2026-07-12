@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
@@ -13,6 +14,15 @@ from memory_anki.modules.palaces.application.mindmap_import import (
     job_repository,
 )
 from memory_anki.modules.palaces.presentation import import_router
+from memory_anki.modules.settings.api import SettingsAiRuntimeProvider, SettingsPromptCatalog
+
+
+def _ai_runtime(session: Session | None = None) -> SettingsAiRuntimeProvider:
+    return SettingsAiRuntimeProvider(session)
+
+
+def _prompt_catalog(session: Session | None = None) -> SettingsPromptCatalog:
+    return SettingsPromptCatalog(session)
 
 
 def _load_job(job_id: str) -> dict:
@@ -50,6 +60,7 @@ def test_same_fingerprint_completed_job_is_reused_without_creating_a_new_job():
             image_bytes=b"image-a",
             filename="demo.png",
             fallback_title="未命名宫殿",
+            ai_runtime=_ai_runtime(session),
         )
 
     with patch.object(
@@ -57,7 +68,7 @@ def test_same_fingerprint_completed_job_is_reused_without_creating_a_new_job():
         "_stream_call_dashscope_json",
         return_value=_stream_return({"title": "导入脑图", "children": [{"text": "节点", "children": []}]}),
     ):
-        job_service._run_job_worker(job.id)
+        job_service._run_job_worker(job.id, ai_runtime=_ai_runtime(), prompt_catalog=_prompt_catalog())
 
     with Session(engine) as session:
         reused = job_service.create_image_import_job(
@@ -67,10 +78,51 @@ def test_same_fingerprint_completed_job_is_reused_without_creating_a_new_job():
             image_bytes=b"image-a",
             filename="demo.png",
             fallback_title="未命名宫殿",
+            ai_runtime=_ai_runtime(session),
         )
 
     assert reused.id == job.id
-    assert _load_job(job.id)["status"] == job_service.JOB_STATUS_COMPLETED
+    payload = _load_job(job.id)
+    assert payload["status"] == job_service.JOB_STATUS_COMPLETED
+    assert payload["owner_id"] == "palace_1"
+    assert payload["operation_id"] == job.id
+    assert payload["source_meta"]["owner_id"] == "palace_1"
+    assert payload["source_meta"]["operation_id"] == job.id
+    assert "api_key" not in payload["source_meta"]["ai_runtime"]
+
+
+
+def test_persisted_runtime_restores_credentials_through_platform_provider():
+    restored_snapshots = []
+
+    class FakeRuntimeProvider:
+        def restore(self, snapshot):
+            restored_snapshots.append(snapshot)
+            return SimpleNamespace(
+                api_key="current-secret",
+                base_url=snapshot.base_url,
+                model=snapshot.model,
+                provider=snapshot.provider,
+                extra_payload=snapshot.extra_payload,
+                prompt_override=snapshot.prompt_override,
+            )
+
+    runtime = job_service._dashscope_runtime(
+        {
+            "ai_runtime": {
+                "scenario_key": "vision_batch_mindmap",
+                "model": "snapshot-model",
+                "provider": "dashscope",
+                "base_url": "https://snapshot.test/v1",
+                "extra_payload": {"enable_thinking": False},
+            }
+        },
+        ai_runtime=FakeRuntimeProvider(),
+    )
+
+    assert runtime.api_key == "current-secret"
+    assert runtime.model == "snapshot-model"
+    assert restored_snapshots[0].scenario_key == "vision_batch_mindmap"
 
 
 def test_resume_after_structure_checkpoint_only_reruns_merge_stage():
@@ -86,6 +138,7 @@ def test_resume_after_structure_checkpoint_only_reruns_merge_stage():
                 image_items=[(b"struct", "structure.png"), (b"body", "body.png")],
                 fallback_title="批量导入",
                 structure_image_index=0,
+                ai_runtime=_ai_runtime(session),
             )
 
     with patch.object(
@@ -97,7 +150,7 @@ def test_resume_after_structure_checkpoint_only_reruns_merge_stage():
         "_stream_call_dashscope_batch_json",
         side_effect=MindMapImportError("merge failed"),
     ):
-        job_service._run_job_worker(job.id)
+        job_service._run_job_worker(job.id, ai_runtime=_ai_runtime(), prompt_catalog=_prompt_catalog())
 
     failed_job = _load_job(job.id)
     assert failed_job["status"] == job_service.JOB_STATUS_FAILED
@@ -111,7 +164,7 @@ def test_resume_after_structure_checkpoint_only_reruns_merge_stage():
         "_stream_call_dashscope_batch_json",
         return_value=_stream_return({"title": "结构", "children": [{"text": "原节点", "children": [{"text": "补充", "children": []}]}]}),
     ) as mock_merge:
-        job_service._run_job_worker(job.id)
+        job_service._run_job_worker(job.id, ai_runtime=_ai_runtime(), prompt_catalog=_prompt_catalog())
 
     completed_job = _load_job(job.id)
     assert completed_job["status"] == job_service.JOB_STATUS_COMPLETED
@@ -135,6 +188,7 @@ def test_batch_job_without_structure_image_uses_direct_generation_flow():
                 image_items=[(b"page-1", "page-1.png"), (b"page-2", "page-2.png")],
                 fallback_title="批量导入",
                 structure_image_index=None,
+                ai_runtime=_ai_runtime(session),
             )
 
     with patch.object(job_service, "_stream_call_dashscope_json") as mock_structure, patch.object(
@@ -150,7 +204,7 @@ def test_batch_job_without_structure_image_uses_direct_generation_flow():
             }
         ),
     ) as mock_merge:
-        job_service._run_job_worker(job.id)
+        job_service._run_job_worker(job.id, ai_runtime=_ai_runtime(), prompt_catalog=_prompt_catalog())
 
     payload = _load_job(job.id)
     assert payload["status"] == job_service.JOB_STATUS_COMPLETED
@@ -173,6 +227,7 @@ def test_non_json_or_html_provider_errors_become_structured_retryable_failures()
             image_bytes=b"image-a",
             filename="demo.png",
             fallback_title="未命名宫殿",
+            ai_runtime=_ai_runtime(session),
         )
 
     with patch.object(
@@ -180,7 +235,7 @@ def test_non_json_or_html_provider_errors_become_structured_retryable_failures()
         "_stream_call_dashscope_json",
         side_effect=MindMapImportError("Internal Server Error"),
     ):
-        job_service._run_job_worker(job.id)
+        job_service._run_job_worker(job.id, ai_runtime=_ai_runtime(), prompt_catalog=_prompt_catalog())
 
     failed_job = _load_job(job.id)
     assert failed_job["status"] == job_service.JOB_STATUS_FAILED
@@ -279,6 +334,7 @@ def test_interrupted_job_can_resume_and_complete_from_checkpoint():
             image_bytes=b"image-a",
             filename="demo.png",
             fallback_title="未命名宫殿",
+            ai_runtime=_ai_runtime(session),
         )
         job.status = job_service.JOB_STATUS_INTERRUPTED
         job_id = job.id
@@ -289,7 +345,7 @@ def test_interrupted_job_can_resume_and_complete_from_checkpoint():
         "_stream_call_dashscope_json",
         return_value=_stream_return({"title": "导入脑图", "children": [{"text": "节点", "children": []}]}),
     ):
-        job_service._run_job_worker(job_id)
+        job_service._run_job_worker(job_id, ai_runtime=_ai_runtime(), prompt_catalog=_prompt_catalog())
 
     payload = _load_job(job_id)
     assert payload["status"] == job_service.JOB_STATUS_COMPLETED
@@ -309,6 +365,7 @@ def test_request_pause_sets_pause_requested_and_worker_lands_on_paused_checkpoin
                 image_items=[(b"struct", "structure.png"), (b"body", "body.png")],
                 fallback_title="批量导入",
                 structure_image_index=0,
+                ai_runtime=_ai_runtime(session),
             )
 
     def _stream_and_request_pause():
@@ -327,7 +384,7 @@ def test_request_pause_sets_pause_requested_and_worker_lands_on_paused_checkpoin
         "_stream_call_dashscope_batch_json",
         return_value=_stream_return({"title": "结构", "children": [{"text": "原节点", "children": []}]}),
     ):
-        job_service._run_job_worker(job.id)
+        job_service._run_job_worker(job.id, ai_runtime=_ai_runtime(), prompt_catalog=_prompt_catalog())
 
     payload = _load_job(job.id)
     assert payload["status"] == job_service.JOB_STATUS_PAUSED
@@ -345,6 +402,7 @@ def test_running_job_serializes_progress_preview_text():
             image_bytes=b"image-a",
             filename="demo.png",
             fallback_title="未命名宫殿",
+            ai_runtime=_ai_runtime(session),
         )
         job_service._set_job_progress(
             session,

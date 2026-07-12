@@ -7,12 +7,12 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from memory_anki.infrastructure.db._tables.palaces import Palace, PalaceSegment, ReviewSchedule
-from memory_anki.modules.reviews.application.schedule_rebuild_service import (
-    infer_completed_stage_count as infer_schedule_completed_stage_count,
-)
-from memory_anki.modules.reviews.application.schedule_service import (
+from memory_anki.modules.reviews.api import (
     get_algorithm_intervals,
     get_config_value,
+)
+from memory_anki.modules.reviews.api import (
+    infer_completed_stage_count as infer_schedule_completed_stage_count,
 )
 
 from .review_progress_datetime import serialize_stage_datetime

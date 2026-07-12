@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from memory_anki.core.concurrency_limits import concurrency_slot
 from memory_anki.infrastructure.db.deps import session_dep
+from memory_anki.modules.english.application.ai_dependencies import EnglishAiDependencies
 from memory_anki.modules.english.application.course_service import (
     check_sentence_input,
     delete_course,
@@ -30,9 +31,7 @@ from memory_anki.modules.english.application.task_service import (
     stream_task_events,
 )
 from memory_anki.modules.english.domain.errors import EnglishCourseError
-from memory_anki.modules.settings.application.ai_model_registry import (
-    normalize_ai_runtime_options,
-)
+from memory_anki.modules.settings.api import SettingsAiRuntimeProvider, SettingsPromptCatalog
 
 router = APIRouter(tags=["english"])
 
@@ -83,14 +82,24 @@ async def api_upload_english_video(
     try:
         with concurrency_slot("heavy_upload"):
             file_bytes = await video_file.read()
+            request_ai = EnglishAiDependencies(
+                SettingsAiRuntimeProvider(session),
+                SettingsPromptCatalog(session),
+            )
+            worker_ai = EnglishAiDependencies(
+                SettingsAiRuntimeProvider(None),
+                SettingsPromptCatalog(None),
+            )
             task = create_generation_task(
                 session,
                 filename=str(video_file.filename or ""),
                 content_type=str(video_file.content_type or "video/mp4"),
                 file_bytes=file_bytes,
-                asr_ai_options=normalize_ai_runtime_options(
+                asr_ai_options=request_ai.runtime.normalize_options(
                     json.loads(ai_options) if ai_options else None
                 ),
+                ai_dependencies=request_ai,
+                worker_ai_dependencies=worker_ai,
             )
         return {"task": task}
     except EnglishCourseError as exc:
@@ -102,7 +111,15 @@ async def api_upload_english_video(
 @router.post("/english/current-task/retry")
 def api_retry_english_current_task(session: Session = Depends(session_dep)):
     try:
-        return {"task": retry_current_task(session)}
+        return {
+            "task": retry_current_task(
+                session,
+                worker_ai_dependencies=EnglishAiDependencies(
+                    SettingsAiRuntimeProvider(None),
+                    SettingsPromptCatalog(None),
+                ),
+            )
+        }
     except EnglishCourseError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 

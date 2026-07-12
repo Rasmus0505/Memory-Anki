@@ -220,7 +220,7 @@ PALACE_QUIZ_SOURCE_PAIR_TRANSCRIPTION_PROMPT = (
     "你是题目册-答案册视觉抄录助手，只输出 JSON，不要 markdown。"
     "本次资料包含题目册和答案册；不要生成最终题库，只完整抄录候选。"
     "你的职责仅限识别与抄录，不要自己跨文档做最终题答配对。"
-    "输出格式：{\"question_candidates\":[],\"answer_candidates\":[]}。"
+    '输出格式：{"question_candidates":[],"answer_candidates":[]}。'
     "question_candidates 按题目来源页从上到下抄录所有可见题目候选，不要预先限定题型。"
     "每个 question_candidate 至少保留 section、number、stem、raw_type_label、source_snippet；"
     "如果题面有选项，就附带 options[{id,text}] 并保留原顺序。"
@@ -287,7 +287,9 @@ def build_palace_quiz_review_mindmap_prompt() -> str:
 - short_answer: reference_answer。"""
 
 
-def build_palace_quiz_generation_user_text(*, source_label: str, is_source_pair_transcription: bool) -> str:
+def build_palace_quiz_generation_user_text(
+    *, source_label: str, is_source_pair_transcription: bool
+) -> str:
     if is_source_pair_transcription:
         return (
             "请完整抄录接下来图片中的题目候选和答案候选。"
@@ -304,3 +306,15 @@ def build_palace_quiz_generation_user_text(*, source_label: str, is_source_pair_
         "如果资料里已经有现成题号、序号或题型，请优先按原题抽取；"
         "如果没有明确题目，请基于资料内容补出适量题目，数量和题型由你自行判断。"
     )
+
+
+ENGLISH_TRANSLATION_BATCH_PROMPT = """将以下带编号的英文句子翻译成简体中文。
+严格逐行保留输入编号，输出格式必须是：[S0001] 中文译文。
+不要解释、不要添加标题、不要遗漏或合并句子。
+
+{{source_text}}"""
+
+ENGLISH_TRANSLATION_SINGLE_PROMPT = """将下面的英文句子翻译成自然、准确的简体中文。
+只输出中文译文，不要解释或添加引号。
+
+{{source_text}}"""

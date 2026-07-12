@@ -3,10 +3,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from memory_anki.modules.settings.application.ai_prompt_templates import (
-    MINDMAP_AI_SPLIT_SYSTEM_PROMPT,
-)
-
 AI_SPLIT_CONFIG_KEYS = (
     "mindmap_ai_split_api_key",
     "mindmap_ai_split_base_url",
@@ -16,7 +12,6 @@ AI_SPLIT_CONFIG_KEYS = (
     "mindmap_ai_split_include_note",
     "mindmap_ai_split_custom_instruction",
 )
-AI_SPLIT_SYSTEM_PROMPT = MINDMAP_AI_SPLIT_SYSTEM_PROMPT
 AI_SPLIT_FALLBACK_BUCKET = "待归类"
 AI_SPLIT_DEFAULT_TEMPERATURE = 0.2
 AI_SPLIT_DEFAULT_MAX_CHILDREN = 5

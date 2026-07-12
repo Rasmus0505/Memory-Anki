@@ -9,9 +9,9 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from memory_anki.infrastructure.db._tables.knowledge import Chapter
-from memory_anki.modules.settings.application.ai_model_registry import AiRuntimeOptions
-from memory_anki.modules.settings.application.ai_prompts import render_prompt
+from memory_anki.platform.application import AiRuntimeOptions
 
+from ..ai_dependencies import PalaceQuizAiDependencies
 from ..question_contracts import QUESTION_TYPES, PalaceQuizValidationError
 from .shared import (
     apply_source_chapter_to_drafts,
@@ -113,6 +113,7 @@ def build_chapter_outline_generation_model_input(
 
 def build_chapter_outline_generation_messages(
     *,
+    ai_dependencies: PalaceQuizAiDependencies,
     session,
     model_input: dict[str, object],
     extra_prompt: str,
@@ -121,7 +122,7 @@ def build_chapter_outline_generation_messages(
     system_prompt = (
         str(prompt_override).strip()
         if str(prompt_override or "").strip()
-        else render_prompt("ai_prompt_palace_quiz_generate", {}, session=session)
+        else ai_dependencies.prompts.render("ai_prompt_palace_quiz_generate")
     )
     messages: list[dict[str, object]] = [{"role": "system", "content": system_prompt}]
     normalized_extra_prompt = str(extra_prompt or "").strip()
@@ -159,6 +160,7 @@ def _ai_service():
 def prepare_chapter_outline_generation_request(
     session: Session,
     *,
+    ai_dependencies: PalaceQuizAiDependencies,
     chapter_id: int,
     question_types: list[str],
     question_count: int,
@@ -180,6 +182,7 @@ def prepare_chapter_outline_generation_request(
     )
     model_input = build_chapter_outline_generation_model_input(request_context)
     system_prompt, messages = build_chapter_outline_generation_messages(
+        ai_dependencies=ai_dependencies,
         session=session,
         model_input=model_input,
         extra_prompt=extra_prompt,
@@ -187,6 +190,7 @@ def prepare_chapter_outline_generation_request(
     )
     config, extra_payload, resolved_ai = _ai_service()._build_chat_config(
         session,
+        ai_runtime=ai_dependencies.runtime,
         scenario_key="quiz_image_generation",
         ai_options=ai_options,
         temperature=0.25,
@@ -215,6 +219,7 @@ def prepare_chapter_outline_generation_request(
 def build_chapter_outline_preview_result(
     session: Session,
     *,
+    ai_dependencies: PalaceQuizAiDependencies,
     prepared_request: ChapterOutlinePreparedRequest,
     chapter_id: int,
     response_text: str,
@@ -233,6 +238,7 @@ def build_chapter_outline_preview_result(
     if classify_by_child_chapter:
         grouped_questions = group_questions_for_child_chapter_preview(
             session=session,
+            ai_dependencies=ai_dependencies,
             drafts=drafts,
             child_contexts=prepared_request.child_contexts,
             feature="章节做题",
@@ -256,6 +262,7 @@ def build_chapter_outline_preview_result(
 def generate_quiz_preview_from_chapter_outline(
     session: Session,
     *,
+    ai_dependencies: PalaceQuizAiDependencies,
     chapter_id: int,
     question_types: list[str],
     question_count: int,
@@ -265,6 +272,7 @@ def generate_quiz_preview_from_chapter_outline(
 ) -> dict[str, object]:
     prepared_request = prepare_chapter_outline_generation_request(
         session,
+        ai_dependencies=ai_dependencies,
         chapter_id=chapter_id,
         question_types=question_types,
         question_count=question_count,
@@ -284,6 +292,7 @@ def generate_quiz_preview_from_chapter_outline(
     )
     return build_chapter_outline_preview_result(
         session,
+        ai_dependencies=ai_dependencies,
         prepared_request=prepared_request,
         chapter_id=chapter_id,
         response_text=response_text,

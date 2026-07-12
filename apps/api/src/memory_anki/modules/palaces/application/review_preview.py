@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from memory_anki.modules.mindmap.application.editor_state_documents import (
+from memory_anki.modules.mindmap_document.api import (
     NODE_UID_KEY,
     plain_editor_text,
 )

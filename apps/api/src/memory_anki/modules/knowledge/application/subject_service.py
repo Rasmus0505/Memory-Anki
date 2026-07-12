@@ -6,15 +6,14 @@ from collections.abc import Callable
 from sqlalchemy.orm import Session
 
 from memory_anki.infrastructure.db._tables.knowledge import Subject
-from memory_anki.modules.backups.application.backup_lifecycle import (
-    maybe_create_rolling_backup,
-)
+from memory_anki.modules.backups.api import maybe_create_rolling_backup
 from memory_anki.modules.knowledge.application.chapter_service import chapter_json
-from memory_anki.modules.mindmap.application.editor_state_service import (
+from memory_anki.modules.knowledge.application.editor_state_service import (
     get_subject_editor_state,
     save_subject_editor_state,
     sync_subject_editor_root,
 )
+from memory_anki.platform.application import UnitOfWork
 
 
 def subject_json(s: Subject) -> dict:
@@ -50,6 +49,7 @@ def create_subject(
     name: str,
     color: str,
     sort_order: int,
+    uow: UnitOfWork,
     before_commit: Callable[[dict], None] | None = None,
 ) -> dict:
     sub = Subject(name=name, color=color, sort_order=sort_order)
@@ -59,11 +59,17 @@ def create_subject(
     response = subject_json(sub)
     if before_commit is not None:
         before_commit(response)
-    session.commit()
+    uow.commit()
     return response
 
 
-def update_subject(session: Session, subject_id: int, data: dict) -> dict | None:
+def update_subject(
+    session: Session,
+    subject_id: int,
+    data: dict,
+    *,
+    uow: UnitOfWork,
+) -> dict | None:
     sub = session.query(Subject).filter_by(id=subject_id).first()
     if not sub:
         return None
@@ -71,16 +77,22 @@ def update_subject(session: Session, subject_id: int, data: dict) -> dict | None
         if key in data:
             setattr(sub, key, data[key])
     sync_subject_editor_root(sub)
-    session.commit()
+    uow.commit()
+    uow.refresh(sub)
     return subject_json(sub)
 
 
-def delete_subject(session: Session, subject_id: int) -> bool:
+def delete_subject(
+    session: Session,
+    subject_id: int,
+    *,
+    uow: UnitOfWork,
+) -> bool:
     sub = session.query(Subject).filter_by(id=subject_id).first()
     if not sub:
         return False
     session.delete(sub)
-    session.commit()
+    uow.commit()
     return True
 
 
@@ -105,13 +117,19 @@ def get_subject_editor_payload(session: Session, subject_id: int) -> dict | None
     }
 
 
-def save_subject_editor(session: Session, subject_id: int, data: dict) -> dict | None:
+def save_subject_editor(
+    session: Session,
+    subject_id: int,
+    data: dict,
+    *,
+    uow: UnitOfWork | None = None,
+) -> dict | None:
     subject = session.query(Subject).filter_by(id=subject_id).first()
     if not subject:
         return None
     result = {
         "subject": subject_json(subject),
-        **save_subject_editor_state(session, subject, data),
+        **save_subject_editor_state(session, subject, data, uow=uow),
     }
     maybe_create_rolling_backup("rolling-subject-editor-save")
     return result

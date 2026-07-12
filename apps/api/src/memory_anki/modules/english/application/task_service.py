@@ -35,21 +35,27 @@ from memory_anki.modules.english.infrastructure.task_runner import (
     EnglishTaskRunner,
     LocalThreadEnglishTaskRunner,
 )
-from memory_anki.modules.sessions.application.study_session_service import (
+from memory_anki.modules.sessions.api import (
     get_english_study_stats,
 )
-from memory_anki.modules.settings.application.ai_model_registry import (
-    AiRuntimeOptions,
-    resolve_scenario_runtime,
-    serialize_resolved_ai_runtime,
-)
+from memory_anki.platform.application import AiRuntimeOptions
 
+from .ai_dependencies import EnglishAiDependencies
 from .asr_normalization import prepare_sentences_from_asr
 from .course_service import (
     finalize_course_from_task,
     get_recent_unfinished_course_payload,
     guess_media_type,
     list_recent_courses,
+)
+from .task_runtime import (
+    TASK_RUNTIME_FILE,
+    load_task_asr_ai_options,
+    load_task_runtime_identity,
+    load_task_runtime_public_metadata,
+    restore_task_runtime,
+    rewrite_task_runtime_identity,
+    write_task_runtime_snapshot,
 )
 
 logger = logging.getLogger(__name__)
@@ -105,6 +111,8 @@ def create_generation_task(
     content_type: str,
     file_bytes: bytes,
     asr_ai_options: AiRuntimeOptions | None = None,
+    ai_dependencies: EnglishAiDependencies | None = None,
+    worker_ai_dependencies: EnglishAiDependencies | None = None,
 ) -> dict[str, Any]:
     current_task = get_current_task(session)
     if current_task is not None:
@@ -124,12 +132,23 @@ def create_generation_task(
         content_type=content_type,
         file_bytes=file_bytes,
         asr_ai_options=asr_ai_options,
+        ai_dependencies=ai_dependencies,
     )
-    get_english_runtime().runner.launch(task["id"], run_generation_task)
+    get_english_runtime().runner.launch(
+        task["id"],
+        lambda task_id: run_generation_task(
+            task_id,
+            ai_dependencies=worker_ai_dependencies,
+        ),
+    )
     return task
 
 
-def retry_current_task(session: Session) -> dict[str, Any]:
+def retry_current_task(
+    session: Session,
+    *,
+    worker_ai_dependencies: EnglishAiDependencies | None = None,
+) -> dict[str, Any]:
     task = get_current_task(session)
     if task is None or task.status != "failed":
         raise EnglishCourseError("当前没有可重试的失败任务。")
@@ -144,17 +163,37 @@ def retry_current_task(session: Session) -> dict[str, Any]:
     )
     old_dir = source_path.parent
     new_dir = task_dir(retry_task["id"])
-    for artifact_name in ("asr_result.json", "audio.wav", "runtime_options.json"):
+    for artifact_name in (
+        "asr_result.json",
+        "audio.wav",
+        "runtime_options.json",
+        "ai_runtime.json",
+    ):
         artifact = old_dir / artifact_name
         if artifact.exists():
             shutil.copy2(artifact, new_dir / artifact_name)
+    rewrite_task_runtime_identity(
+        new_dir,
+        owner_id=load_task_runtime_identity(old_dir)[0] or task.id,
+        operation_id=retry_task["id"],
+    )
     task.status = "retried"
     task.stage = "retried"
     task.message = "已重试，历史日志保留。"
     task.updated_at = utc_now_naive()
     session.commit()
-    get_english_runtime().runner.launch(retry_task["id"], run_generation_task)
-    return retry_task
+    get_english_runtime().runner.launch(
+        retry_task["id"],
+        lambda task_id: run_generation_task(
+            task_id,
+            ai_dependencies=worker_ai_dependencies,
+        ),
+    )
+    session.expire_all()
+    persisted_retry_task = session.get(EnglishGenerationTask, retry_task["id"])
+    if persisted_retry_task is None:
+        raise EnglishCourseError("重试任务创建后无法读取。")
+    return serialize_task(persisted_retry_task)
 
 
 def clear_current_task(session: Session) -> None:
@@ -269,6 +308,7 @@ def create_task_row(
     content_type: str,
     file_bytes: bytes,
     asr_ai_options: AiRuntimeOptions | None = None,
+    ai_dependencies: EnglishAiDependencies | None = None,
 ) -> dict[str, Any]:
     suffix = Path(filename).suffix or ".mp4"
     task_id = uuid.uuid4().hex
@@ -289,6 +329,13 @@ def create_task_row(
             ensure_ascii=False,
         ),
         encoding="utf-8",
+    )
+    write_task_runtime_snapshot(
+        task_path,
+        owner_id=task_id,
+        operation_id=task_id,
+        ai_dependencies=ai_dependencies,
+        asr_ai_options=asr_ai_options,
     )
 
     task = EnglishGenerationTask(
@@ -320,7 +367,11 @@ def create_task_row(
     return serialize_task(task)
 
 
-def run_generation_task(task_id: str) -> None:
+def run_generation_task(
+    task_id: str,
+    *,
+    ai_dependencies: EnglishAiDependencies | None = None,
+) -> None:
     session = get_session()
     try:
         task = session.query(EnglishGenerationTask).filter_by(id=task_id).first()
@@ -398,12 +449,19 @@ def run_generation_task(task_id: str) -> None:
                 message="复用已完成的 ASR 转写结果（未重新调用 ASR）。",
             )
         else:
-            asr_payload = runtime.asr_gateway.transcribe(
-                audio_path,
-                task_id=task_id,
-                ai_options=load_task_asr_ai_options(source_path.parent),
-                progress_callback=asr_progress,
+            asr_runtime = restore_task_runtime(
+                source_path.parent,
+                "asr",
+                ai_dependencies=ai_dependencies,
             )
+            asr_kwargs: dict[str, Any] = {
+                "task_id": task_id,
+                "ai_options": load_task_asr_ai_options(source_path.parent),
+                "progress_callback": asr_progress,
+            }
+            if asr_runtime is not None:
+                asr_kwargs["resolved_runtime"] = asr_runtime
+            asr_payload = runtime.asr_gateway.transcribe(audio_path, **asr_kwargs)
             asr_cache_path.write_text(
                 json.dumps(asr_payload, ensure_ascii=False),
                 encoding="utf-8",
@@ -448,9 +506,19 @@ def run_generation_task(task_id: str) -> None:
             progress_percent=70,
             message=f"正在翻译句子 0/{len(prepared_result.sentences)}",
         )
+        translation_runtime = restore_task_runtime(
+            source_path.parent,
+            "translation",
+            ai_dependencies=ai_dependencies,
+        )
+        translation_kwargs: dict[str, Any] = {"task_id": task_id}
+        if ai_dependencies is not None:
+            translation_kwargs["prompt_catalog"] = ai_dependencies.prompt_catalog
+        if translation_runtime is not None:
+            translation_kwargs["resolved_runtime"] = translation_runtime
         translated_sentences = runtime.translator.translate_sentences(
             prepared_result.sentences,
-            task_id=task_id,
+            **translation_kwargs,
         )
 
         update_task_fields(
@@ -539,9 +607,22 @@ def finalize_generation_task(
                 "sentence_count": len(sentences),
             },
         )
-        shutil.rmtree(task_dir(task_id), ignore_errors=True)
+        cleanup_completed_task_artifacts(task_dir(task_id))
     finally:
         session.close()
+
+
+def cleanup_completed_task_artifacts(task_path: Path) -> None:
+    if not task_path.exists():
+        return
+    preserved_names = {TASK_RUNTIME_FILE}
+    for child in task_path.iterdir():
+        if child.name in preserved_names:
+            continue
+        if child.is_dir():
+            shutil.rmtree(child, ignore_errors=True)
+        else:
+            child.unlink(missing_ok=True)
 
 
 def update_task_fields(
@@ -564,22 +645,13 @@ def update_task_fields(
             session.close()
 
 
-def serialize_task(task: EnglishGenerationTask | None) -> dict[str, Any] | None:
-    if task is None:
-        return None
-    resolved_ai = None
-    try:
-        resolved_ai = serialize_resolved_ai_runtime(
-            resolve_scenario_runtime(
-                None,
-                "asr_course_transcription",
-                ai_options=load_task_asr_ai_options(task_dir(task.id)),
-            )
-        )
-    except Exception:
-        resolved_ai = None
+def serialize_task(task: EnglishGenerationTask) -> dict[str, Any]:
+    owner_id, operation_id = load_task_runtime_identity(task_dir(task.id))
+    resolved_ai = load_task_runtime_public_metadata(task_dir(task.id), "asr")
     return {
         "id": task.id,
+        "ownerId": owner_id or task.id,
+        "operationId": operation_id or task.id,
         "status": task.status,
         "stage": task.stage,
         "progressPercent": int(task.progress_percent or 0),
@@ -602,27 +674,6 @@ def get_current_task(session: Session) -> EnglishGenerationTask | None:
         .filter(EnglishGenerationTask.status.in_(tuple(VISIBLE_TASK_STATUSES)))
         .order_by(EnglishGenerationTask.created_at.desc(), EnglishGenerationTask.id.desc())
         .first()
-    )
-
-
-def load_task_asr_ai_options(task_path: Path) -> AiRuntimeOptions:
-    options_path = task_path / "runtime_options.json"
-    if not options_path.exists():
-        return AiRuntimeOptions()
-    try:
-        payload = json.loads(options_path.read_text(encoding="utf-8"))
-    except Exception:
-        return AiRuntimeOptions()
-    asr_payload = payload.get("asr") if isinstance(payload, dict) else None
-    if not isinstance(asr_payload, dict):
-        return AiRuntimeOptions()
-    return AiRuntimeOptions(
-        model=str(asr_payload.get("model") or "").strip() or None,
-        thinking_enabled=(
-            None
-            if asr_payload.get("thinking_enabled") is None
-            else bool(asr_payload.get("thinking_enabled"))
-        ),
     )
 
 

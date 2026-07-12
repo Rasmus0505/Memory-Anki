@@ -38,7 +38,7 @@ from memory_anki.modules.backups.application.backup_palace_snapshots import (
 from memory_anki.modules.backups.application.backup_palace_versions import (
     create_palace_version,
 )
-from memory_anki.modules.mindmap.application.editor_state_service import save_palace_editor_state
+from memory_anki.modules.palaces.application.editor_state_service import save_palace_editor_state
 from memory_anki.modules.palaces.presentation import router as palace_router
 from memory_anki.modules.reviews.application.review_execution_service import (
     submit_review,
@@ -96,6 +96,22 @@ class ReviewRouteTests(RouterTestCase):
         response = self.client.get("/api/v1/review/overdue-count")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["count"], 1)
+
+    def test_review_queries_do_not_unarchive_palaces(self):
+        with self.SessionLocal() as session:
+            palace = session.query(Palace).filter_by(id=1).one()
+            palace.archived = True
+            session.commit()
+
+        queue_response = self.client.get("/api/v1/review/queue")
+        overdue_response = self.client.get("/api/v1/review/overdue-count")
+
+        self.assertEqual(queue_response.status_code, 200)
+        self.assertEqual(queue_response.json()["reviews"], [])
+        self.assertEqual(overdue_response.status_code, 200)
+        self.assertEqual(overdue_response.json()["count"], 0)
+        with self.SessionLocal() as session:
+            self.assertTrue(session.query(Palace).filter_by(id=1).one().archived)
 
     def test_soft_deleted_palace_is_excluded_from_review_surfaces(self):
         delete_response = self.client.delete("/api/v1/palaces/1")
@@ -583,8 +599,8 @@ class ReviewRouteTests(RouterTestCase):
 
         failing_client = TestClient(self.app, raise_server_exceptions=False)
         with patch.object(
-            review_router,
-            "save_idempotent_response",
+            review_router.SqlAlchemyMutationResponseStore,
+            "save",
             side_effect=RuntimeError("idempotency write failed"),
         ):
             response = failing_client.post(
@@ -1552,7 +1568,7 @@ class ReviewRouteTests(RouterTestCase):
         )
 
         self.assertEqual(stale_save.status_code, 409)
-        self.assertIn("脑图保存冲突", stale_save.json()["detail"])
+        self.assertIn("脑图保存冲突", stale_save.json()["detail"]["message"])
 
     def test_focus_node_endpoint_sets_target_state_idempotently(self):
         first_focus = self.client.put(

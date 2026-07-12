@@ -1,16 +1,15 @@
 import json
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import PlainTextResponse, Response
 from sqlalchemy.orm import Session
 
 from memory_anki.infrastructure.db._tables import get_session
-from memory_anki.infrastructure.db._tables.palaces import Palace
 from memory_anki.infrastructure.db.deps import session_dep
-from memory_anki.modules.backups.application.backup_lifecycle import create_rescue_snapshot
-from memory_anki.modules.backups.application.full_transfer_service import (
+from memory_anki.modules.backups.api import (
     FullTransferError,
     build_full_archive,
+    create_rescue_snapshot,
     import_full_archive,
     inspect_archive,
 )
@@ -36,11 +35,14 @@ from memory_anki.modules.palaces.application.mindmap_import_job_service import (
     wait_for_job_completion,
 )
 from memory_anki.modules.palaces.presentation.errors import raise_bad_request
-from memory_anki.modules.reviews.application.review_execution_service import (
+from memory_anki.modules.reviews.api import (
     trigger_review_for_palace,
 )
-from memory_anki.modules.settings.application.ai_model_registry import (
-    normalize_ai_runtime_options,
+from memory_anki.modules.settings.api import SettingsAiRuntimeProvider, SettingsPromptCatalog
+from memory_anki.platform.application import mutation_identity_from_headers
+from memory_anki.platform.persistence import (
+    SqlAlchemyMutationResponseStore,
+    SqlAlchemyUnitOfWork,
 )
 
 router = APIRouter(tags=["import-export"])
@@ -60,14 +62,17 @@ def _wait_for_job_result(job_id: str) -> dict:
     return result
 
 
-def _parse_form_ai_options(value: str | None):
+def _parse_form_ai_options(
+    ai_runtime: SettingsAiRuntimeProvider,
+    value: str | None,
+):
     if not value:
-        return normalize_ai_runtime_options(None)
+        return ai_runtime.normalize_options(None)
     try:
         payload = json.loads(value)
     except json.JSONDecodeError:
         payload = {}
-    return normalize_ai_runtime_options(payload)
+    return ai_runtime.normalize_options(payload)
 
 
 @router.get("/export/json")
@@ -119,15 +124,35 @@ async def api_import_full(
 
 
 @router.post("/import")
-async def api_import(file: UploadFile = File(...), format: str = "json",
-                     s: Session = Depends(session_dep)):
+async def api_import(
+    request: Request,
+    file: UploadFile = File(...),
+    format: str = "json",
+    s: Session = Depends(session_dep),
+):
+    mutation_identity = mutation_identity_from_headers(request.headers)
+    mutation_store = SqlAlchemyMutationResponseStore(s)
+    existing_response = mutation_store.get(mutation_identity)
+    if existing_response is not None:
+        return existing_response
     content = (await file.read()).decode("utf-8")
+    response: dict = {}
+
+    def prepare_atomic_side_effects(palaces) -> None:
+        for palace in palaces:
+            trigger_review_for_palace(s, palace.id, commit=False)
+        response.update({"ok": True, "count": len(palaces)})
+        mutation_store.save(mutation_identity, response)
+
     try:
-        count = import_json(s, content) if format == "json" else import_markdown(s, content)
-        latest = s.query(Palace).order_by(Palace.id.desc()).limit(count).all()
-        for p in latest:
-            trigger_review_for_palace(s, p.id)
-        return {"ok": True, "count": count}
+        importer = import_json if format == "json" else import_markdown
+        importer(
+            s,
+            content,
+            uow=SqlAlchemyUnitOfWork(s),
+            before_commit=prepare_atomic_side_effects,
+        )
+        return response
     except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -142,6 +167,7 @@ async def api_create_image_import_job(
     s: Session = Depends(session_dep),
 ):
     try:
+        ai_runtime = SettingsAiRuntimeProvider(s)
         job = create_image_import_job(
             s,
             entity_key=entity_key,
@@ -149,7 +175,8 @@ async def api_create_image_import_job(
             image_bytes=await file.read(),
             filename=file.filename,
             fallback_title=fallback_title,
-            ai_options=_parse_form_ai_options(ai_options),
+            ai_runtime=ai_runtime,
+            ai_options=_parse_form_ai_options(ai_runtime, ai_options),
         )
     except MindMapImportError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -169,13 +196,15 @@ async def api_create_batch_import_job(
     for file in files:
         image_items.append((await file.read(), file.filename))
     try:
+        ai_runtime = SettingsAiRuntimeProvider(s)
         job = create_batch_import_job(
             s,
             entity_key=entity_key,
             image_items=image_items,
             fallback_title=fallback_title,
             structure_image_index=structure_image_index,
-            ai_options=_parse_form_ai_options(ai_options),
+            ai_runtime=ai_runtime,
+            ai_options=_parse_form_ai_options(ai_runtime, ai_options),
         )
     except MindMapImportError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -187,7 +216,7 @@ def api_run_import_job(job_id: str, s: Session = Depends(session_dep)):
     job = get_job(s, job_id)
     if not job:
         raise HTTPException(status_code=404, detail="导入任务不存在。")
-    run_job_async(job_id)
+    run_job_async(job_id, ai_runtime=SettingsAiRuntimeProvider(None), prompt_catalog=SettingsPromptCatalog(None))
     return serialize_job(job)
 
 
@@ -245,6 +274,7 @@ async def api_preview_mindmap_import(
 ):
     image_bytes = await file.read()
     try:
+        ai_runtime = SettingsAiRuntimeProvider(s)
         job = create_image_import_job(
             s,
             entity_key=COMPAT_IMAGE_ENTITY_KEY,
@@ -252,11 +282,12 @@ async def api_preview_mindmap_import(
             image_bytes=image_bytes,
             filename=file.filename,
             fallback_title=fallback_title,
-            ai_options=_parse_form_ai_options(ai_options),
+            ai_runtime=ai_runtime,
+            ai_options=_parse_form_ai_options(ai_runtime, ai_options),
         )
     except MindMapImportError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    run_job_async(job.id)
+    run_job_async(job.id, ai_runtime=SettingsAiRuntimeProvider(None), prompt_catalog=SettingsPromptCatalog(None))
     return _wait_for_job_result(job.id)
 
 
@@ -272,17 +303,19 @@ async def api_preview_batch_mindmap_import(
     for file in files:
         image_items.append((await file.read(), file.filename))
     try:
+        ai_runtime = SettingsAiRuntimeProvider(s)
         job = create_batch_import_job(
             s,
             entity_key=COMPAT_BATCH_ENTITY_KEY,
             image_items=image_items,
             fallback_title=fallback_title,
             structure_image_index=structure_image_index,
-            ai_options=_parse_form_ai_options(ai_options),
+            ai_runtime=ai_runtime,
+            ai_options=_parse_form_ai_options(ai_runtime, ai_options),
         )
     except MindMapImportError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    run_job_async(job.id)
+    run_job_async(job.id, ai_runtime=SettingsAiRuntimeProvider(None), prompt_catalog=SettingsPromptCatalog(None))
     return _wait_for_job_result(job.id)
 
 
@@ -294,6 +327,7 @@ async def api_preview_text_import(
 ):
     image_bytes = await file.read()
     try:
+        ai_runtime = SettingsAiRuntimeProvider(s)
         job = create_image_import_job(
             s,
             entity_key=COMPAT_IMAGE_ENTITY_KEY,
@@ -301,9 +335,10 @@ async def api_preview_text_import(
             image_bytes=image_bytes,
             filename=file.filename,
             fallback_title="未命名宫殿",
-            ai_options=_parse_form_ai_options(ai_options),
+            ai_runtime=ai_runtime,
+            ai_options=_parse_form_ai_options(ai_runtime, ai_options),
         )
     except MindMapImportError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    run_job_async(job.id)
+    run_job_async(job.id, ai_runtime=SettingsAiRuntimeProvider(None), prompt_catalog=SettingsPromptCatalog(None))
     return _wait_for_job_result(job.id)

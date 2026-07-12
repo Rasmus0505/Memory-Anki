@@ -101,10 +101,13 @@ class PalaceChapterBindingTests(RouterTestCase):
         self.assertEqual(palace["resolved_title"], "第一节 第九章小节")
         self.assertEqual(palace["resolved_parent_chapter"]["id"], self.chapter9_id)
 
-    def test_read_repairs_stale_primary_binding(self):
+    def test_read_preserves_stale_binding_until_explicit_update(self):
         self.client.put(
             f"/api/v1/palaces/{self.palace_id}/chapters",
-            json={"chapter_ids": [self.chapter10_section1_id], "primary_chapter_id": self.chapter10_section1_id},
+            json={
+                "chapter_ids": [self.chapter10_section1_id],
+                "primary_chapter_id": self.chapter10_section1_id,
+            },
         )
         with self.SessionLocal() as session:
             palace = session.query(Palace).filter_by(id=self.palace_id).first()
@@ -114,9 +117,19 @@ class PalaceChapterBindingTests(RouterTestCase):
             session.commit()
 
         palace = self.client.get(f"/api/v1/palaces/{self.palace_id}").json()
-        self.assertEqual(palace["primary_chapter_id"], self.chapter10_section1_id)
-        self.assertEqual(palace["resolved_title"], "第一节 第十章小节")
-        self.assertEqual(palace["resolved_parent_chapter"]["id"], self.chapter10_id)
+        self.assertEqual(palace["primary_chapter_id"], self.chapter10_id)
+        with self.SessionLocal() as session:
+            persisted = session.query(Palace).filter_by(id=self.palace_id).one()
+            self.assertEqual(persisted.primary_chapter_id, self.chapter10_id)
+
+        updated = self.client.put(
+            f"/api/v1/palaces/{self.palace_id}/chapters",
+            json={
+                "chapter_ids": [self.chapter10_section1_id],
+                "primary_chapter_id": self.chapter10_section1_id,
+            },
+        ).json()
+        self.assertEqual(updated["primary_chapter_id"], self.chapter10_section1_id)
 
     def test_grouped_summary_omits_heavy_fields_and_includes_counts(self):
         self.client.put(

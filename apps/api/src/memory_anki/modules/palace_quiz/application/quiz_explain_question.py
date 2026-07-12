@@ -14,8 +14,9 @@ from memory_anki.infrastructure.db._tables.palaces import (
     PalaceMiniPalace,
     PalaceQuizQuestion,
 )
-from memory_anki.modules.settings.application.ai_model_registry import AiRuntimeOptions
+from memory_anki.platform.application import AiRuntimeOptions
 
+from .ai_dependencies import PalaceQuizAiDependencies
 from .question_contracts import PalaceQuizValidationError, json_load
 from .questions.queries import get_question_or_raise
 
@@ -135,6 +136,7 @@ def _build_question_explain_messages(
 def prepare_question_explain_request(
     session: Session,
     *,
+    ai_dependencies: PalaceQuizAiDependencies,
     question_id: int,
     user_question: str,
     ai_options: AiRuntimeOptions | None,
@@ -151,6 +153,7 @@ def prepare_question_explain_request(
     )
     config, extra_payload, resolved_ai = _ai_service()._build_chat_config(
         session,
+        ai_runtime=ai_dependencies.runtime,
         scenario_key="quiz_short_answer_feedback",
         ai_options=ai_options,
         temperature=0.3,
@@ -176,12 +179,14 @@ def prepare_question_explain_request(
 def explain_question(
     session: Session,
     *,
+    ai_dependencies: PalaceQuizAiDependencies,
     question_id: int,
     user_question: str,
     ai_options: AiRuntimeOptions | None = None,
 ) -> dict[str, object]:
     prepared_request = prepare_question_explain_request(
         session,
+        ai_dependencies=ai_dependencies,
         question_id=question_id,
         user_question=user_question,
         ai_options=ai_options,

@@ -201,7 +201,7 @@ def list_palace_versions(session: Session, palace_id: int) -> list[dict]:
 
 
 def get_palace_version_detail(session: Session, palace_id: int, version_id: int) -> dict | None:
-    from memory_anki.modules.mindmap.application.editor_state_documents import (
+    from memory_anki.modules.mindmap_document.api import (
         DEFAULT_EDITOR_CONFIG,
         DEFAULT_EDITOR_LOCAL_CONFIG,
         normalize_editor_doc,

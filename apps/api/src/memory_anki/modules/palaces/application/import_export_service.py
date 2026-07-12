@@ -2,10 +2,12 @@
 
 import json
 import re
+from collections.abc import Callable
 
 from sqlalchemy.orm import Session
 
 from memory_anki.infrastructure.db._tables.palaces import Palace, Peg
+from memory_anki.platform.application import UnitOfWork
 
 
 def _peg_tree(pegs) -> list[dict]:
@@ -81,11 +83,19 @@ def _import_pegs(session: Session, palace_id: int, pegs_data: list[dict], parent
             _import_pegs(session, palace_id, peg_data["children"], peg.id)
 
 
-def import_json(session: Session, content: str) -> int:
+def import_json(
+    session: Session,
+    content: str,
+    *,
+    uow: UnitOfWork,
+    before_commit: Callable[[list[Palace]], None] | None = None,
+) -> list[Palace]:
     data = json.loads(content)
     if isinstance(data, dict):
         data = [data]
-    count = 0
+    if not isinstance(data, list) or not all(isinstance(item, dict) for item in data):
+        raise ValueError("导入 JSON 必须是宫殿对象或对象数组。")
+    palaces: list[Palace] = []
     for item in data:
         palace = Palace(
             title=item.get("title", ""),
@@ -96,9 +106,13 @@ def import_json(session: Session, content: str) -> int:
         session.add(palace)
         session.flush()
         _import_pegs(session, palace.id, item.get("pegs", []))
-        count += 1
-    session.commit()
-    return count
+        palaces.append(palace)
+    if before_commit is not None:
+        before_commit(palaces)
+    uow.commit()
+    for palace in palaces:
+        uow.refresh(palace)
+    return palaces
 
 
 def _parse_md_pegs(lines: list[str], start_idx: int, depth: int = 0):
@@ -126,9 +140,15 @@ def _parse_md_pegs(lines: list[str], start_idx: int, depth: int = 0):
     return pegs, index
 
 
-def import_markdown(session: Session, content: str) -> int:
+def import_markdown(
+    session: Session,
+    content: str,
+    *,
+    uow: UnitOfWork,
+    before_commit: Callable[[list[Palace]], None] | None = None,
+) -> list[Palace]:
     blocks = re.split(r"\n(?=# )", content)
-    count = 0
+    palaces: list[Palace] = []
     for block in blocks:
         if not block.strip():
             continue
@@ -157,6 +177,10 @@ def import_markdown(session: Session, content: str) -> int:
         session.add(palace)
         session.flush()
         _import_pegs(session, palace.id, pegs_data)
-        count += 1
-    session.commit()
-    return count
+        palaces.append(palace)
+    if before_commit is not None:
+        before_commit(palaces)
+    uow.commit()
+    for palace in palaces:
+        uow.refresh(palace)
+    return palaces

@@ -10,10 +10,6 @@ from memory_anki.infrastructure.db._tables.palaces import (
     ReviewSchedule,
 )
 from memory_anki.infrastructure.db.deps import session_dep
-from memory_anki.modules.persistence.application.idempotency import (
-    get_idempotent_response,
-    save_idempotent_response,
-)
 from memory_anki.modules.sessions.application.session_progress_service import (
     clear_focus_practice_progress,
     clear_mini_practice_progress,
@@ -31,18 +27,18 @@ from memory_anki.modules.sessions.application.session_progress_service import (
     upsert_review_progress,
     upsert_segment_practice_progress,
 )
-from memory_anki.modules.sessions.application.study_session_bridge import (
-    create_completed_study_session_from_time_payload,
+from memory_anki.modules.sessions.application.study_session_commands import (
+    abandon_study_session_command,
+    append_study_session_events_command,
+    complete_study_session_command,
+    create_study_session_command,
+    create_study_session_from_time_record_command,
 )
 from memory_anki.modules.sessions.application.study_session_service import (
-    abandon_study_session,
-    append_study_session_events,
     build_study_session_stats,
     build_time_record_analytics,
     bulk_delete_study_sessions,
-    complete_study_session,
     count_study_sessions,
-    create_study_session,
     delete_study_session,
     get_active_study_session_by_target,
     get_study_session,
@@ -58,6 +54,11 @@ from memory_anki.modules.sessions.domain.schemas import (
     StudySessionCreate,
     StudySessionEventsAppend,
     StudySessionPatch,
+)
+from memory_anki.platform.application import mutation_identity_from_headers
+from memory_anki.platform.persistence import (
+    SqlAlchemyMutationResponseStore,
+    SqlAlchemyUnitOfWork,
 )
 
 router = APIRouter(tags=["sessions"])
@@ -78,15 +79,22 @@ def api_create_study_session(
     request: Request,
     session: Session = Depends(session_dep),
 ):
-    existing_response = get_idempotent_response(session, request)
+    mutation_identity = mutation_identity_from_headers(request.headers)
+    mutation_store = SqlAlchemyMutationResponseStore(session)
+    existing_response = mutation_store.get(mutation_identity)
     if existing_response is not None:
         return existing_response
     try:
-        response = {"item": create_study_session(session, _payload(data))}
+        return create_study_session_command(
+            session,
+            _payload(data),
+            uow=SqlAlchemyUnitOfWork(session),
+            before_commit=lambda response: mutation_store.save(
+                mutation_identity, response
+            ),
+        )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    save_idempotent_response(session, request, response)
-    return response
 
 
 @router.get("/study-sessions/active")
@@ -195,19 +203,21 @@ def api_append_study_session_events(
     request: Request,
     session: Session = Depends(session_dep),
 ):
-    existing_response = get_idempotent_response(session, request)
+    mutation_identity = mutation_identity_from_headers(request.headers)
+    mutation_store = SqlAlchemyMutationResponseStore(session)
+    existing_response = mutation_store.get(mutation_identity)
     if existing_response is not None:
         return existing_response
     events = data.events
-    item = append_study_session_events(
+    response = append_study_session_events_command(
         session,
         study_session_id,
         events if isinstance(events, list) else [],
+        uow=SqlAlchemyUnitOfWork(session),
+        before_commit=lambda payload: mutation_store.save(mutation_identity, payload),
     )
-    if item is None:
+    if response is None:
         _raise_not_found()
-    response = {"item": item}
-    save_idempotent_response(session, request, response)
     return response
 
 
@@ -218,14 +228,20 @@ def api_complete_study_session(
     request: Request,
     session: Session = Depends(session_dep),
 ):
-    existing_response = get_idempotent_response(session, request)
+    mutation_identity = mutation_identity_from_headers(request.headers)
+    mutation_store = SqlAlchemyMutationResponseStore(session)
+    existing_response = mutation_store.get(mutation_identity)
     if existing_response is not None:
         return existing_response
-    item = complete_study_session(session, study_session_id, _payload(data))
-    if item is None:
+    response = complete_study_session_command(
+        session,
+        study_session_id,
+        _payload(data),
+        uow=SqlAlchemyUnitOfWork(session),
+        before_commit=lambda payload: mutation_store.save(mutation_identity, payload),
+    )
+    if response is None:
         _raise_not_found()
-    response = {"item": item}
-    save_idempotent_response(session, request, response)
     return response
 
 
@@ -236,14 +252,20 @@ def api_abandon_study_session(
     request: Request,
     session: Session = Depends(session_dep),
 ):
-    existing_response = get_idempotent_response(session, request)
+    mutation_identity = mutation_identity_from_headers(request.headers)
+    mutation_store = SqlAlchemyMutationResponseStore(session)
+    existing_response = mutation_store.get(mutation_identity)
     if existing_response is not None:
         return existing_response
-    item = abandon_study_session(session, study_session_id, _payload(data))
-    if item is None:
+    response = abandon_study_session_command(
+        session,
+        study_session_id,
+        _payload(data),
+        uow=SqlAlchemyUnitOfWork(session),
+        before_commit=lambda payload: mutation_store.save(mutation_identity, payload),
+    )
+    if response is None:
         _raise_not_found()
-    response = {"item": item}
-    save_idempotent_response(session, request, response)
     return response
 
 
@@ -272,15 +294,22 @@ def api_create_study_session_from_time_record(
 ):
     # Keep this as a free-form dict: legacy timer recovery sends mixed camelCase
     # and snake_case keys that the service normalizes directly.
-    existing_response = get_idempotent_response(session, request)
+    mutation_identity = mutation_identity_from_headers(request.headers)
+    mutation_store = SqlAlchemyMutationResponseStore(session)
+    existing_response = mutation_store.get(mutation_identity)
     if existing_response is not None:
         return existing_response
     try:
-        response = {"item": create_completed_study_session_from_time_payload(session, data)}
+        return create_study_session_from_time_record_command(
+            session,
+            data,
+            uow=SqlAlchemyUnitOfWork(session),
+            before_commit=lambda response: mutation_store.save(
+                mutation_identity, response
+            ),
+        )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    save_idempotent_response(session, request, response)
-    return response
 
 
 @legacy_router.get("/sessions/practice/{palace_id}/progress")

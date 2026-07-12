@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from memory_anki.infrastructure.db.deps import session_dep
 from memory_anki.modules.palaces.application.palace_service import get_palace
 from memory_anki.modules.palaces.presentation.errors import raise_not_found
-from memory_anki.modules.sessions.application.session_progress_service import (
+from memory_anki.modules.sessions.api import (
     clear_practice_progress,
     get_practice_progress,
     upsert_practice_progress,

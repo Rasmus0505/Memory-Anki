@@ -43,6 +43,8 @@ def create_question(
     session: Session,
     palace_id: int,
     payload: dict[str, Any],
+    *,
+    commit: bool = True,
 ) -> dict[str, Any]:
     get_palace_or_raise(session, palace_id)
     normalized = normalize_question_payload(payload, session=session, palace_id=palace_id)
@@ -55,13 +57,15 @@ def create_question(
         source_chapter_id=None,
         sort_order=next_palace_sort_order(session, palace_id) + 1,
     )
-    return commit_new_question(session, row)
+    return commit_new_question(session, row, commit=commit)
 
 
 def batch_create_questions(
     session: Session,
     palace_id: int,
     payloads: list[dict[str, Any]],
+    *,
+    commit: bool = True,
 ) -> list[dict[str, Any]]:
     get_palace_or_raise(session, palace_id)
     existing_questions = (
@@ -88,6 +92,7 @@ def batch_create_questions(
             source_chapter_id=None,
             sort_order=sort_order,
         ),
+        commit=commit,
     )
 
 
@@ -97,6 +102,7 @@ def batch_create_chapter_questions(
     payloads: list[dict[str, Any]],
     *,
     save_mode: str = "append",
+    commit: bool = True,
 ) -> list[dict[str, Any]]:
     get_chapter_or_raise(session, chapter_id)
     normalized_save_mode = str(save_mode or "append").strip().lower()
@@ -140,6 +146,7 @@ def batch_create_chapter_questions(
             source_chapter_id=chapter_id,
             sort_order=sort_order,
         ),
+        commit=commit,
     )
 
 
@@ -277,6 +284,8 @@ def record_choice_attempt(
     session: Session,
     question_id: int,
     selected_option_id: str,
+    *,
+    commit: bool = True,
 ) -> dict[str, object]:
     question = get_question_or_raise(session, question_id)
     if question.question_type != QUESTION_TYPE_MULTIPLE_CHOICE:
@@ -297,6 +306,7 @@ def record_choice_attempt(
         row=question,
         selected_option_id=normalized_selected_option_id,
         is_correct=is_correct,
+        commit=commit,
     )
 
 

@@ -6,8 +6,9 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from memory_anki.infrastructure.db._tables.palaces import Palace
-from memory_anki.modules.mindmap.application.editor_state_documents import (
+from memory_anki.modules.mindmap_document.api import (
     NODE_UID_KEY,
+    collect_node_descendants,
     deserialize_editor_payload,
 )
 
@@ -34,36 +35,15 @@ def serialize_segment_node_uids(node_uids: list[str]) -> str:
 def collect_doc_nodes_with_descendants(
     editor_doc: Any,
 ) -> tuple[dict[str, set[str]], dict[str, str]]:
-    doc = deserialize_editor_payload(editor_doc, {})
-    root = doc.get("root") if isinstance(doc, dict) else None
-    descendants: dict[str, set[str]] = {}
-    labels: dict[str, str] = {}
-
-    def walk(node: Any) -> set[str]:
-        if not isinstance(node, dict):
-            return set()
-        data = node.get("data") if isinstance(node.get("data"), dict) else {}
-        uid = str(data.get(NODE_UID_KEY) or "").strip()
-        text = str(data.get("text") or "").strip()
-        child_sets: set[str] = set()
-        children = node.get("children") if isinstance(node.get("children"), list) else []
-        for child in children:
-            child_sets.update(walk(child))
-        if uid:
-            labels[uid] = text or uid
-            child_sets.add(uid)
-            descendants[uid] = set(child_sets)
-        return child_sets
-
-    walk(root)
-    return descendants, labels
+    return collect_node_descendants(editor_doc)
 
 
 def get_reviewable_doc_node_uids(editor_doc: Any) -> set[str]:
     descendants, _ = collect_doc_nodes_with_descendants(editor_doc)
     doc = deserialize_editor_payload(editor_doc, {})
     root = doc.get("root") if isinstance(doc, dict) else None
-    root_data = root.get("data") if isinstance(root, dict) and isinstance(root.get("data"), dict) else {}
+    raw_root_data = root.get("data") if isinstance(root, dict) else None
+    root_data = raw_root_data if isinstance(raw_root_data, dict) else {}
     root_uid = str(root_data.get(NODE_UID_KEY) or "").strip()
     return {uid for uid in descendants if uid and uid != root_uid}
 
@@ -138,14 +118,17 @@ def build_segments_editor_doc(
         for node_uids in segment_node_uid_lists
         for uid in node_uids
     }
-    root = doc.get("root") if isinstance(doc.get("root"), dict) else {}
+    raw_root = doc.get("root")
+    root = raw_root if isinstance(raw_root, dict) else {}
 
     def keep(node: Any, is_root: bool = False) -> Any:
         if not isinstance(node, dict):
             return None
-        data = node.get("data") if isinstance(node.get("data"), dict) else {}
+        raw_data = node.get("data")
+        data = raw_data if isinstance(raw_data, dict) else {}
         uid = str(data.get(NODE_UID_KEY) or "").strip()
-        children = node.get("children") if isinstance(node.get("children"), list) else []
+        raw_children = node.get("children")
+        children = raw_children if isinstance(raw_children, list) else []
         next_children = [child for child in (keep(child) for child in children) if child]
         if is_root or uid in selected_uids or next_children:
             cloned = json.loads(json.dumps(node, ensure_ascii=False))

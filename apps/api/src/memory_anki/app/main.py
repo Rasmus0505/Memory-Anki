@@ -1,4 +1,4 @@
-﻿import logging
+import logging
 import os
 import re
 from contextlib import asynccontextmanager
@@ -6,7 +6,6 @@ from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import Response
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
@@ -41,9 +40,11 @@ from memory_anki.modules.english.presentation import router as english_router
 from memory_anki.modules.english_reading.presentation import router as english_reading_router
 from memory_anki.modules.freestyle.presentation import router as freestyle_router
 from memory_anki.modules.knowledge.presentation import router as knowledge_router
-from memory_anki.modules.mindmap.presentation import router as mindmap_router
+from memory_anki.modules.mindmap_learning.presentation import router as mindmap_router
 from memory_anki.modules.palace_quiz.presentation import router as palace_quiz_router
-from memory_anki.modules.palace_quiz.presentation import workspace_router as palace_quiz_workspace_router
+from memory_anki.modules.palace_quiz.presentation import (
+    workspace_router as palace_quiz_workspace_router,
+)
 from memory_anki.modules.palaces.presentation import import_router
 from memory_anki.modules.palaces.presentation import router as palace_router
 from memory_anki.modules.reviews.presentation import router as review_router

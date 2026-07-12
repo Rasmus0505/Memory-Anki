@@ -13,12 +13,12 @@ from memory_anki.modules.palaces.application.segment_nodes import (
     parse_segment_node_uids,
     remaining_unclaimed_node_uids,
 )
-from memory_anki.modules.reviews.application.schedule_service import (
+from memory_anki.modules.reviews.api import (
     get_algorithm_stage_labels,
     is_schedule_due,
     schedule_display_datetime,
 )
-from memory_anki.modules.sessions.application.session_progress_service import (
+from memory_anki.modules.sessions.api import (
     calculate_reveal_progress,
     get_review_progress,
 )

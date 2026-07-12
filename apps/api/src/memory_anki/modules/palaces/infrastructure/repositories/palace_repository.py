@@ -53,7 +53,7 @@ class PalaceRepository:
         query = (
             self._session.query(Palace)
             .options(*_detail_loader_options())
-            .filter(Palace.deleted_at.is_(None))
+            .filter(Palace.deleted_at.is_(None), Palace.archived.is_(False))
         )
         if search:
             query = query.filter(Palace.title.ilike(f"%{search}%"))
@@ -63,7 +63,7 @@ class PalaceRepository:
         return query.all()
 
     def count_palaces(self, *, search: str = "") -> int:
-        query = self._session.query(Palace).filter(Palace.deleted_at.is_(None))
+        query = self._session.query(Palace).filter(Palace.deleted_at.is_(None), Palace.archived.is_(False))
         if search:
             query = query.filter(Palace.title.ilike(f"%{search}%"))
         return query.count()
@@ -72,7 +72,7 @@ class PalaceRepository:
         query = (
             self._session.query(Palace)
             .options(*_catalog_loader_options())
-            .filter(Palace.deleted_at.is_(None))
+            .filter(Palace.deleted_at.is_(None), Palace.archived.is_(False))
         )
         if search:
             query = query.filter(Palace.title.ilike(f"%{search}%"))
@@ -148,8 +148,3 @@ class PalaceRepository:
     def flush(self) -> None:
         self._session.flush()
 
-    def commit(self) -> None:
-        self._session.commit()
-
-    def refresh(self, palace: Palace) -> None:
-        self._session.refresh(palace)

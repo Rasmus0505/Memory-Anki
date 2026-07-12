@@ -12,7 +12,6 @@ from .schedule_policy import (
     schedule_display_datetime_for_policy,
 )
 from .schedule_rebuild_service import (
-    rebuild_all_pending_review_schedules,
     rebuild_palace_review_schedules,
 )
 
@@ -123,7 +122,13 @@ def create_review_schedule(
         palace_id=palace_id,
         draft=draft,
     )
-def create_initial_review_schedules(session, palace_id: int, anchor_date: date | None = None) -> None:
+def create_initial_review_schedules(
+    session,
+    palace_id: int,
+    anchor_date: date | None = None,
+    *,
+    commit: bool = True,
+) -> None:
     anchor = anchor_date or date.today()
     intervals = get_algorithm_intervals(session)
     if not intervals:
@@ -139,7 +144,8 @@ def create_initial_review_schedules(session, palace_id: int, anchor_date: date |
             anchor_date=anchor,
             completed=False,
         )
-    session.commit()
+    if commit:
+        session.commit()
 
 def infer_completed_stage_count(session, palace) -> int:
     from memory_anki.infrastructure.db._tables.palaces import ReviewLog
@@ -287,7 +293,3 @@ def _rebuild_palace_review_schedule_model(session, palace) -> int:
         fallback_completed_count=fallback_completed_count,
     )
     return max(len(schedules), completed_stage_count, fallback_completed_count, 1)
-
-
-def update_all_pending_schedules(session) -> None:
-    rebuild_all_pending_review_schedules(session)

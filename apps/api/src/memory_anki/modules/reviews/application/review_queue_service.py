@@ -11,7 +11,6 @@ from sqlalchemy.orm import Session
 
 from memory_anki.infrastructure.db._tables.knowledge import Chapter
 from memory_anki.infrastructure.db._tables.palaces import Palace, ReviewSchedule
-from memory_anki.modules.palaces.application.palace_service import restore_archived_palaces
 from memory_anki.modules.reviews.application.review_metrics_service import (
     get_weekly_stats,
 )
@@ -24,7 +23,6 @@ from memory_anki.modules.reviews.application.schedule_service import (
 
 
 def _due_query(session: Session, chapter_id: int | None = None) -> list[ReviewSchedule]:
-    restore_archived_palaces(session)
     today = date.today()
     now = datetime.now()
     query = (
@@ -33,6 +31,7 @@ def _due_query(session: Session, chapter_id: int | None = None) -> list[ReviewSc
         .filter(
             ReviewSchedule.completed == False,
             Palace.mastered == False,
+            Palace.archived == False,
             Palace.deleted_at.is_(None),
             or_(
                 ReviewSchedule.scheduled_date <= today,
@@ -138,7 +137,6 @@ def get_next_due_review(
 
 
 def get_overdue_count(session: Session) -> int:
-    restore_archived_palaces(session)
     today = date.today()
     today_start = datetime.combine(today, time.min)
     schedules = (
@@ -147,6 +145,7 @@ def get_overdue_count(session: Session) -> int:
         .filter(
             ReviewSchedule.completed == False,
             Palace.mastered == False,
+            Palace.archived == False,
             Palace.deleted_at.is_(None),
             or_(
                 ReviewSchedule.scheduled_date < today,
@@ -215,8 +214,13 @@ def undo_spread_overdue(session: Session) -> int:
     return restored
 
 
-def spread_overdue(session: Session, days: int = 7, dry_run: bool = False) -> dict:
-    restore_archived_palaces(session)
+def spread_overdue(
+    session: Session,
+    days: int = 7,
+    dry_run: bool = False,
+    *,
+    commit: bool = True,
+) -> dict:
     today = date.today()
     candidates = (
         session.query(ReviewSchedule)
@@ -224,6 +228,7 @@ def spread_overdue(session: Session, days: int = 7, dry_run: bool = False) -> di
         .filter(
             ReviewSchedule.completed == False,
             Palace.mastered == False,
+            Palace.archived == False,
             Palace.deleted_at.is_(None),
         )
         .order_by(ReviewSchedule.scheduled_date, ReviewSchedule.id)
@@ -266,7 +271,10 @@ def spread_overdue(session: Session, days: int = 7, dry_run: bool = False) -> di
                 schedule.scheduled_at = datetime.combine(next_date, previous_due_at.time())
     if not dry_run:
         _save_spread_undo_snapshot(session, moves)
-        session.commit()
+        if commit:
+            session.commit()
+        else:
+            session.flush()
     return {"count": len(moves), "moves": moves}
 
 

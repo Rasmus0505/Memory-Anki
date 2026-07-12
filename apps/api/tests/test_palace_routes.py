@@ -2,14 +2,15 @@
 
 import pytest
 
-from memory_anki.infrastructure.db._tables.palaces import Palace
+from memory_anki.infrastructure.db._tables.palaces import Attachment, Palace
 from memory_anki.modules.backups.application.backup_palace_versions import (
     create_palace_version,
 )
 from memory_anki.modules.backups.presentation import router as backups_router
-from memory_anki.modules.mindmap.application.editor_state_documents import (
+from memory_anki.modules.mindmap_document.api import (
     EDITOR_FINGERPRINT_KEY,
 )
+from memory_anki.modules.palaces.presentation import attachment_router
 from memory_anki.modules.palaces.presentation import router as palace_router
 
 
@@ -122,6 +123,21 @@ class TestPalaceCrud:
 
         assert response.status_code == 200
         assert response.json()["title"] == "Test Palace"
+
+    def test_get_detail_does_not_repair_inconsistent_binding(
+        self, client, session_factory, palace_id
+    ):
+        with session_factory() as session:
+            palace = session.get(Palace, palace_id)
+            palace.primary_chapter_id = 999999
+            session.commit()
+
+        response = client.get(f"/api/v1/palaces/{palace_id}")
+
+        assert response.status_code == 200
+        assert response.json()["binding_status"] == "missing"
+        with session_factory() as session:
+            assert session.get(Palace, palace_id).primary_chapter_id == 999999
 
     def test_get_missing_returns_error_payload(self, client):
         assert_missing(client.get("/api/v1/palaces/99999"))
@@ -451,6 +467,62 @@ class TestPalaceAttachments:
     def test_attachment_missing(self, client):
         assert_missing(client.get("/api/v1/attachments/99999"))
 
+    def test_upload_failure_rolls_back_metadata_and_removes_file(
+        self, client, palace_id, session_factory, tmp_path, monkeypatch
+    ):
+        class FailingUnitOfWork:
+            def __init__(self, session):
+                self.session = session
+
+            def commit(self):
+                raise RuntimeError("database failed")
+
+            def rollback(self):
+                self.session.rollback()
+
+            def refresh(self, entity):
+                self.session.refresh(entity)
+
+        monkeypatch.setattr(attachment_router, "SqlAlchemyUnitOfWork", FailingUnitOfWork)
+
+        with pytest.raises(RuntimeError, match="database failed"):
+            client.post(
+                f"/api/v1/palaces/{palace_id}/upload",
+                files={"file": ("failed.txt", b"must disappear", "text/plain")},
+            )
+
+        with session_factory() as session:
+            assert session.query(Attachment).count() == 0
+        assert list(tmp_path.iterdir()) == []
+
+    def test_delete_failure_restores_file_and_metadata(
+        self, client, palace_id, session_factory, tmp_path, monkeypatch
+    ):
+        att_id, filename = upload_attachment(client, palace_id)
+
+        class FailingUnitOfWork:
+            def __init__(self, session):
+                self.session = session
+
+            def commit(self):
+                raise RuntimeError("database failed")
+
+            def rollback(self):
+                self.session.rollback()
+
+            def refresh(self, entity):
+                self.session.refresh(entity)
+
+        monkeypatch.setattr(attachment_router, "SqlAlchemyUnitOfWork", FailingUnitOfWork)
+
+        with pytest.raises(RuntimeError, match="database failed"):
+            client.delete(f"/api/v1/attachments/{att_id}")
+
+        with session_factory() as session:
+            assert session.get(Attachment, att_id) is not None
+        assert (tmp_path / filename).read_bytes() == b"hello"
+        assert not list(tmp_path.glob(f".{filename}.deleting-*"))
+
 
 class TestPracticeSession:
     def test_get_progress_empty(self, client, palace_id):
@@ -506,11 +578,29 @@ class TestPalaceMisc:
     def test_practice_flag_missing(self, client):
         assert_missing(client.put("/api/v1/palaces/99999/practice-flag", json={}))
 
-    def test_archive_endpoint_returns_current_router_behavior(self, client, palace_id):
-        response = client.put(f"/api/v1/palaces/{palace_id}/archive", json={"archived": True})
+    def test_archive_endpoint_persists_and_hides_from_lists(
+        self, client, session_factory, palace_id
+    ):
+        response = client.put(
+            f"/api/v1/palaces/{palace_id}/archive",
+            json={"archived": True},
+        )
 
         assert response.status_code == 200
-        assert response.json() == {"ok": True, "archived": False}
+        assert response.json() == {"ok": True, "archived": True}
+        assert all(item["id"] != palace_id for item in client.get("/api/v1/palaces").json())
+        detail = client.get(f"/api/v1/palaces/{palace_id}")
+        assert detail.status_code == 200
+        assert detail.json()["archived"] is True
+        with session_factory() as session:
+            assert session.get(Palace, palace_id).archived is True
+
+        restored = client.put(
+            f"/api/v1/palaces/{palace_id}/archive",
+            json={"archived": False},
+        )
+        assert restored.json() == {"ok": True, "archived": False}
+        assert any(item["id"] == palace_id for item in client.get("/api/v1/palaces").json())
 
     def test_archive_missing(self, client):
         assert_missing(client.put("/api/v1/palaces/99999/archive", json={"archived": True}))

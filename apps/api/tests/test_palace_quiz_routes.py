@@ -2,12 +2,15 @@ import json
 import unittest
 from unittest.mock import patch
 
+from fastapi.testclient import TestClient
+
 from memory_anki.infrastructure.db._tables.knowledge import Chapter, Subject
 from memory_anki.infrastructure.db._tables.misc import ExternalAiCallLog
 from memory_anki.infrastructure.db._tables.palaces import (
     FreestyleQuizAttempt,
     Palace,
     PalaceMiniPalace,
+    PalaceQuizOcrSource,
     PalaceQuizQuestion,
 )
 from memory_anki.modules.palace_quiz.application import ai_service as palace_quiz_ai_service
@@ -20,6 +23,7 @@ from memory_anki.modules.settings.application.ai_prompt_templates import (
     PALACE_QUIZ_SOURCE_PAIR_TRANSCRIPTION_PROMPT,
 )
 from memory_anki.modules.settings.presentation import router as settings_router
+from memory_anki.platform.application import MUTATION_ID_HEADER
 from support import RouterTestCase
 
 PALACE_QUIZ_PDF_TRANSCRIPTION_PROMPT = PALACE_QUIZ_SOURCE_PAIR_TRANSCRIPTION_PROMPT
@@ -733,6 +737,265 @@ class PalaceQuizRouteTests(RouterTestCase):
             ["true_false", "fill_blank", "matching", "ordering", "categorization"],
         )
         self.assertTrue(items[0]["answer_payload"]["correct_answer"])
+
+    def test_create_question_rolls_back_when_mutation_response_fails(self):
+        with self.SessionLocal() as session:
+            before_count = session.query(PalaceQuizQuestion).count()
+
+        client = TestClient(self.app, raise_server_exceptions=False)
+        with patch.object(
+            palace_quiz_router.SqlAlchemyMutationResponseStore,
+            "save",
+            side_effect=RuntimeError("mutation response failed"),
+        ):
+            response = client.post(
+                "/api/v1/palaces/1/quiz-questions",
+                headers={MUTATION_ID_HEADER: "quiz-create-rollback"},
+                json={
+                    "question_type": "multiple_choice",
+                    "stem": "新的原子题目？",
+                    "options": [
+                        {"id": "A", "text": "甲"},
+                        {"id": "B", "text": "乙"},
+                    ],
+                    "answer_payload": {"correct_option_id": "A"},
+                    "analysis": "测试",
+                },
+            )
+
+        self.assertEqual(response.status_code, 500)
+        with self.SessionLocal() as session:
+            self.assertEqual(session.query(PalaceQuizQuestion).count(), before_count)
+
+    def test_palace_batch_rolls_back_questions_and_ocr_sources(self):
+        with self.SessionLocal() as session:
+            before_questions = session.query(PalaceQuizQuestion).count()
+            before_sources = session.query(PalaceQuizOcrSource).count()
+
+        client = TestClient(self.app, raise_server_exceptions=False)
+        with patch.object(
+            palace_quiz_router.SqlAlchemyMutationResponseStore,
+            "save",
+            side_effect=RuntimeError("mutation response failed"),
+        ):
+            response = client.post(
+                "/api/v1/palaces/1/quiz-questions/batch",
+                headers={MUTATION_ID_HEADER: "quiz-palace-batch-rollback"},
+                json={
+                    "questions": [
+                        {
+                            "question_type": "short_answer",
+                            "stem": "批量原子题？",
+                            "answer_payload": {"reference_answer": "答案"},
+                            "analysis": "测试",
+                        }
+                    ],
+                    "ocr_sources": [
+                        {
+                            "source_kind": "text_files",
+                            "source_set": "text_files",
+                            "page_key": "atomic_001",
+                            "page_number": 1,
+                            "image_path": "atomic.txt",
+                            "raw_text": "OCR",
+                            "lines": [],
+                            "source_meta": {},
+                            "import_batch": "atomic-batch",
+                        }
+                    ],
+                },
+            )
+
+        self.assertEqual(response.status_code, 500)
+        with self.SessionLocal() as session:
+            self.assertEqual(session.query(PalaceQuizQuestion).count(), before_questions)
+            self.assertEqual(session.query(PalaceQuizOcrSource).count(), before_sources)
+
+    def test_chapter_batch_rolls_back_overwrite_and_ocr_sources(self):
+        with self.SessionLocal() as session:
+            existing = PalaceQuizQuestion(
+                palace_id=1,
+                source_chapter_id=self.chapter_id,
+                question_type="short_answer",
+                stem="覆盖前题目",
+                options_json="[]",
+                answer_payload_json=json.dumps({"reference_answer": "旧答案"}),
+                analysis="旧解析",
+                source_meta_json="{}",
+                sort_order=1,
+            )
+            session.add(existing)
+            session.commit()
+            existing_id = existing.id
+            before_sources = session.query(PalaceQuizOcrSource).count()
+
+        client = TestClient(self.app, raise_server_exceptions=False)
+        with patch.object(
+            palace_quiz_router.SqlAlchemyMutationResponseStore,
+            "save",
+            side_effect=RuntimeError("mutation response failed"),
+        ):
+            response = client.post(
+                f"/api/v1/chapters/{self.chapter_id}/quiz-questions/batch",
+                headers={MUTATION_ID_HEADER: "quiz-chapter-batch-rollback"},
+                json={
+                    "palace_id": 1,
+                    "save_mode": "overwrite",
+                    "questions": [
+                        {
+                            "question_type": "short_answer",
+                            "stem": "覆盖后的原子题",
+                            "answer_payload": {"reference_answer": "新答案"},
+                            "analysis": "新解析",
+                        }
+                    ],
+                    "ocr_sources": [
+                        {
+                            "source_kind": "text_files",
+                            "source_set": "text_files",
+                            "page_key": "chapter_atomic_001",
+                            "page_number": 1,
+                            "image_path": "chapter-atomic.txt",
+                            "raw_text": "章节 OCR",
+                            "lines": [],
+                            "source_meta": {},
+                            "import_batch": "chapter-atomic-batch",
+                        }
+                    ],
+                },
+            )
+
+        self.assertEqual(response.status_code, 500)
+        with self.SessionLocal() as session:
+            retained = session.get(PalaceQuizQuestion, existing_id)
+            self.assertIsNotNone(retained)
+            self.assertIsNone(retained.deleted_at)
+            self.assertEqual(
+                session.query(PalaceQuizQuestion)
+                .filter(PalaceQuizQuestion.stem == "覆盖后的原子题")
+                .count(),
+                0,
+            )
+            self.assertEqual(session.query(PalaceQuizOcrSource).count(), before_sources)
+
+    def test_choice_attempt_rolls_back_when_mutation_response_fails(self):
+        with self.SessionLocal() as session:
+            question = session.get(PalaceQuizQuestion, 1)
+            before = (
+                question.attempt_count,
+                question.correct_count,
+                question.incorrect_count,
+            )
+
+        client = TestClient(self.app, raise_server_exceptions=False)
+        with patch.object(
+            palace_quiz_router.SqlAlchemyMutationResponseStore,
+            "save",
+            side_effect=RuntimeError("mutation response failed"),
+        ):
+            response = client.post(
+                "/api/v1/palace-quiz-questions/1/choice-attempts",
+                headers={MUTATION_ID_HEADER: "quiz-choice-rollback"},
+                json={"selected_option_id": "B"},
+            )
+
+        self.assertEqual(response.status_code, 500)
+        with self.SessionLocal() as session:
+            question = session.get(PalaceQuizQuestion, 1)
+            self.assertEqual(
+                (
+                    question.attempt_count,
+                    question.correct_count,
+                    question.incorrect_count,
+                ),
+                before,
+            )
+
+    def test_palace_batch_replays_first_mutation_response(self):
+        headers = {MUTATION_ID_HEADER: "quiz-palace-batch-replay"}
+        first = self.client.post(
+            "/api/v1/palaces/1/quiz-questions/batch",
+            headers=headers,
+            json={
+                "questions": [
+                    {
+                        "question_type": "short_answer",
+                        "stem": "首次重放题",
+                        "answer_payload": {"reference_answer": "首次答案"},
+                        "analysis": "首次解析",
+                    }
+                ],
+                "ocr_sources": [
+                    {
+                        "source_kind": "text_files",
+                        "source_set": "text_files",
+                        "page_key": "replay_first",
+                        "page_number": 1,
+                        "image_path": "first.txt",
+                        "raw_text": "首次 OCR",
+                        "lines": [],
+                        "source_meta": {},
+                        "import_batch": "replay-first",
+                    }
+                ],
+            },
+        )
+        second = self.client.post(
+            "/api/v1/palaces/1/quiz-questions/batch",
+            headers=headers,
+            json={
+                "questions": [
+                    {
+                        "question_type": "short_answer",
+                        "stem": "第二次不应保存",
+                        "answer_payload": {"reference_answer": "第二次答案"},
+                        "analysis": "第二次解析",
+                    }
+                ],
+                "ocr_sources": [
+                    {
+                        "source_kind": "text_files",
+                        "source_set": "text_files",
+                        "page_key": "replay_second",
+                        "page_number": 2,
+                        "image_path": "second.txt",
+                        "raw_text": "第二次 OCR",
+                        "lines": [],
+                        "source_meta": {},
+                        "import_batch": "replay-second",
+                    }
+                ],
+            },
+        )
+
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(second.status_code, 200)
+        self.assertEqual(second.json(), first.json())
+        with self.SessionLocal() as session:
+            self.assertEqual(
+                session.query(PalaceQuizQuestion)
+                .filter(PalaceQuizQuestion.stem == "首次重放题")
+                .count(),
+                1,
+            )
+            self.assertEqual(
+                session.query(PalaceQuizQuestion)
+                .filter(PalaceQuizQuestion.stem == "第二次不应保存")
+                .count(),
+                0,
+            )
+            self.assertEqual(
+                session.query(PalaceQuizOcrSource)
+                .filter(PalaceQuizOcrSource.page_key == "replay_first")
+                .count(),
+                1,
+            )
+            self.assertEqual(
+                session.query(PalaceQuizOcrSource)
+                .filter(PalaceQuizOcrSource.page_key == "replay_second")
+                .count(),
+                0,
+            )
 
     def test_choice_attempts_only_update_multiple_choice_statistics(self):
         correct_response = self.client.post(

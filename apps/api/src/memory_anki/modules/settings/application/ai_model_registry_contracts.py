@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Literal
 
+from memory_anki.platform.application import AiRuntimeOptions as AiRuntimeOptions
+
 AiProviderKey = Literal["dashscope", "qwen", "zhipu", "siliconflow", "deepseek"]
 AiModelType = Literal["llm", "vl", "translation", "asr"]
 
@@ -58,13 +60,6 @@ class AiCategoryConfig:
     model: str | None
     thinking_enabled: bool
     has_shared_config: bool
-
-
-@dataclass(frozen=True, slots=True)
-class AiRuntimeOptions:
-    model: str | None = None
-    thinking_enabled: bool | None = None
-    prompt_override: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
