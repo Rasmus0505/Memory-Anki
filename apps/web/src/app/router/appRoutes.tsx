@@ -18,10 +18,10 @@ export const preloadEnglishCoursePage = () => import('@/pages/library/EnglishCou
 export const preloadEnglishReadingPage = () => import('@/pages/library/EnglishReadingPage')
 export const preloadPalaceEditPage = () => import('@/pages/create/PalaceEditorPage')
 export const preloadPalaceQuizPage = () => import('@/pages/create/QuizWorkspacePage')
+export const preloadBatchGenerationPage = () => import('@/pages/create/BatchGenerationWorkspacePage')
 export const preloadProfilePage = () => import('@/pages/settings/SettingsOverviewPage')
 export const preloadReviewSessionPage = () => import('@/app/router/review/ReviewSession')
 export const preloadPalacePracticePage = () => import('@/app/router/PalacePracticePage')
-export const preloadPalaceFocusPracticePage = () => import('@/app/router/PalaceFocusPracticePage')
 export const preloadSegmentPracticePage = () => import('@/app/router/SegmentPracticePage')
 export const preloadMiniPalacePracticePage = () => import('@/app/router/MiniPalacePracticePage')
 
@@ -34,7 +34,6 @@ export function preloadPracticeRoutes() {
   void preloadPalaceViewPage()
   void preloadPalaceQuizPage()
   void preloadPalacePracticePage()
-  void preloadPalaceFocusPracticePage()
   void preloadSegmentPracticePage()
   void preloadMiniPalacePracticePage()
 }
@@ -48,6 +47,7 @@ const EnglishReadingPage = lazyWithRetry(preloadEnglishReadingPage)
 const PalaceEditPage = lazyWithRetry(preloadPalaceEditPage)
 const PalaceViewPage = lazyWithRetry(preloadPalaceViewPage)
 const PalaceQuizPage = lazyWithRetry(preloadPalaceQuizPage)
+const BatchGenerationPage = lazyWithRetry(preloadBatchGenerationPage)
 const ProfilePage = lazyWithRetry(preloadProfilePage)
 const ProfileFeedbackPage = lazyWithRetry(() => import('@/pages/settings/FeedbackSettingsPage'))
 const ProfileTimerPage = lazyWithRetry(() => import('@/pages/settings/TimerSettingsPage'))
@@ -57,7 +57,6 @@ const ProfileBackupsPage = lazyWithRetry(
 )
 const ReviewSessionPage = lazyWithRetry(preloadReviewSessionPage)
 const PalacePracticePage = lazyWithRetry(preloadPalacePracticePage)
-const PalaceFocusPracticePage = lazyWithRetry(preloadPalaceFocusPracticePage)
 const SegmentPracticePage = lazyWithRetry(preloadSegmentPracticePage)
 const MiniPalacePracticePage = lazyWithRetry(preloadMiniPalacePracticePage)
 const ReviewFeedbackPreviewRoute = lazyWithRetry(
@@ -97,7 +96,7 @@ const REGISTERED_EXACT_PATHS = new Set<string>([
 
 // 已注册的动态段路由（命中后保留原路径）。仅匹配到主段，不含未知后代。
 const REGISTERED_DYNAMIC_PATTERNS = [
-  /^\/palaces\/\d+(?:\/(edit|practice|focus-practice|quiz))?$/,
+  /^\/palaces\/\d+(?:\/(edit|practice|quiz))?$/,
   /^\/segments\/\d+\/practice$/,
   /^\/mini-palaces\/\d+\/practice$/,
   /^\/english\/courses\/\d+$/,
@@ -171,12 +170,12 @@ export function AppRoutes({ location }: { location?: Location }) {
           <Route path="/english/courses/:id" element={<EnglishCoursePage />} />
           <Route path="/palaces/list" element={<PalaceListPage />} />
           <Route path="/palaces/new" element={<PalaceEditPage />} />
+          <Route path="/batch-generation" element={<BatchGenerationPage />} />
           {/* 保留：若删除此行，/palaces/quiz 会被下面的 /palaces/:id 捕获并落到 NaN 坏页。 */}
           <Route path="/palaces/quiz" element={<Navigate to="/palaces" replace />} />
           <Route path="/palaces/:id" element={<PalaceViewPage />} />
           <Route path="/palaces/:id/quiz" element={<PalaceQuizPage />} />
           <Route path="/palaces/:id/practice" element={<PalacePracticePage />} />
-          <Route path="/palaces/:id/focus-practice" element={<PalaceFocusPracticePage />} />
           <Route path="/segments/:id/practice" element={<SegmentPracticePage />} />
           <Route path="/mini-palaces/:id/practice" element={<MiniPalacePracticePage />} />
           <Route path="/palaces/:id/edit" element={<PalaceEditPage />} />

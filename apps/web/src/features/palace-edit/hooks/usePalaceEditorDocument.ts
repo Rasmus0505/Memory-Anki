@@ -61,6 +61,7 @@ export function usePalaceEditorDocument({
     setEditorState,
     replaceEditorState,
     adoptExternalState,
+    isLoadError,
     isSaving,
     hasUnsavedChanges,
     saveStatus,
@@ -346,6 +347,7 @@ export function usePalaceEditorDocument({
     setMeta,
     editorState,
     setEditorState,
+    isLoadError,
     isSaving,
     hasUnsavedChanges,
     saveStatus,
@@ -356,23 +358,11 @@ export function usePalaceEditorDocument({
     setIsCreatingDraft,
     applyImportedPalaceEditorState,
     handleMindMapEditorStateChange,
-    requestDraftPalaceId: requestDraftPalaceId,
+    createDraftPalace,
   }
 }
 
-const pendingDraftCreationByLocationKey = new Map<string, Promise<number>>()
-
-function requestDraftPalaceId(locationKey: string) {
-  const existing = pendingDraftCreationByLocationKey.get(locationKey)
-  if (existing) return existing
-
-  const pending = createPalaceApi({ title: '未命名宫殿', description: '', pegs: [] })
-    .then((created) => created.id as number)
-    .catch((error) => {
-      pendingDraftCreationByLocationKey.delete(locationKey)
-      throw error
-    })
-
-  pendingDraftCreationByLocationKey.set(locationKey, pending)
-  return pending
+async function createDraftPalace() {
+  const created = await createPalaceApi({ title: '未命名宫殿', description: '', pegs: [] })
+  return created.id as number
 }

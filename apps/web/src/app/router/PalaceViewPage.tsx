@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { ArrowLeft, FileText, Target } from 'lucide-react'
+import { ArrowLeft, FileText } from 'lucide-react'
 import { useQuizLauncher } from '@/widgets/quiz-launcher'
 import { buildAttachmentUrl, getPalaceEditorApi, savePalaceEditorApi } from '@/entities/palace/api'
 import { PageIntro } from '@/shared/components/layout/PageIntro'
@@ -22,7 +22,6 @@ interface PalaceMeta {
   title: string
   description: string
   mastered: boolean
-  focus_count?: number
   attachments: Array<{ id: number; original_name: string }>
   chapters: Array<{ id: number; name: string; subject?: { id: number; name: string } | null }>
 }
@@ -127,14 +126,6 @@ export default function PalaceView() {
                   返回列表
                 </Button>
               </Link>
-              {(palace.focus_count ?? 0) > 0 ? (
-                <Link to={`/palaces/${palace.id}/focus-practice`}>
-                  <Button variant="outline" size="sm" className="border-warning/30 bg-warning/5 text-warning hover:bg-warning/10">
-                    <Target className="mr-2 size-4" />
-                    专项训练 {palace.focus_count}
-                  </Button>
-                </Link>
-              ) : null}
               <Badge variant="secondary">只读脑图</Badge>
             </>
           }
@@ -221,11 +212,6 @@ export default function PalaceView() {
             </CardHeader>
             <CardContent className="space-y-3 text-sm text-muted-foreground">
               {palace.mastered ? <Badge variant="secondary">已掌握</Badge> : null}
-              {(palace.focus_count ?? 0) > 0 ? (
-                <Badge variant="outline" className="border-warning/30 text-warning">
-                  专项 {palace.focus_count} 张
-                </Badge>
-              ) : null}
               <div className="rounded-lg bg-background/70 p-3 whitespace-pre-wrap">
                 {palace.description || '当前宫殿没有补充描述。'}
               </div>

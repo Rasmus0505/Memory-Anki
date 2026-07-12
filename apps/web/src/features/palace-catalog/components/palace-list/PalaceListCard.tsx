@@ -1,6 +1,6 @@
-﻿import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
-import { BookOpen, Building2, ChevronDown, ChevronRight, MoreHorizontal, Pencil, Target, Trash2 } from 'lucide-react'
+import { BookOpen, Building2, ChevronDown, ChevronRight, MoreHorizontal, Pencil, Trash2 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { PalaceStageProgress } from '@/features/palace-catalog/components/palace-list/PalaceStageProgress'
 import type { PalaceListViewSettings } from '@/entities/preferences/model/palaceViewSettings'
@@ -35,7 +35,6 @@ interface PalaceListCardProps {
   defaultExpanded?: boolean
   onPalacePractice: (palace: PalaceGroupedItem) => void
   onWarmPalacePractice?: (palace: PalaceGroupedItem) => void
-  onWarmFocusPractice?: (palace: PalaceGroupedItem) => void
   onSegmentPractice: (segment: PalaceSegmentSummary) => void
   onWarmSegmentPractice?: (segment: PalaceSegmentSummary) => void
   onMiniPalacePractice: (miniPalace: MiniPalaceSummary) => void
@@ -153,7 +152,6 @@ export function PalaceListCard({
   defaultExpanded = false,
   onPalacePractice,
   onWarmPalacePractice = () => {},
-  onWarmFocusPractice = () => {},
   onSegmentPractice,
   onWarmSegmentPractice = () => {},
   onMiniPalacePractice,
@@ -273,12 +271,6 @@ export function PalaceListCard({
             ) : (
               <span>{palace.chapters?.length || 0} 章节</span>
             )}
-            {(palace.focus_count ?? 0) > 0 ? (
-              <span className="inline-flex items-center gap-1 text-warning">
-                <Target className="h-3.5 w-3.5" />
-                专项 {(palace.focus_count ?? 0)} 张
-              </span>
-            ) : null}
             {showExpandButton ? (
               <button
                 type="button"
@@ -486,19 +478,6 @@ export function PalaceListCard({
               做题
             </Button>
           </Link>
-          {(palace.focus_count ?? 0) > 0 ? (
-            <Link to={`/palaces/${palace.id}/focus-practice`}>
-              <Button
-                variant="outline"
-                size="sm"
-                className="min-h-11 border-warning/30 bg-warning/5 text-warning hover:bg-warning/10 sm:h-8 sm:min-h-8"
-                onFocus={() => onWarmFocusPractice(palace)}
-                onMouseEnter={() => onWarmFocusPractice(palace)}
-              >
-                专项练习
-              </Button>
-            </Link>
-          ) : null}
           <Link to={`/palaces/${palace.id}/edit`}>
             <Button
               variant="ghost"

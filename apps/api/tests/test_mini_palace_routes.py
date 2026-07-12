@@ -159,7 +159,7 @@ class MiniPalaceRouteTests(RouterTestCase):
             self.assertIsNotNone(palace)
             mini_palace = PalaceMiniPalace(
                 palace_id=palace.id,
-                name="重点专项训练",
+                name="重点迷你宫殿训练",
                 node_uids_json=json.dumps(["child-a"]),
                 sort_order=0,
                 created_at=datetime.now().replace(second=0, microsecond=0),

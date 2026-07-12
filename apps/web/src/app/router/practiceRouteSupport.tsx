@@ -27,6 +27,12 @@ interface PracticeProgressResponse {
   progress: PracticeProgressSnapshot | null
 }
 
+interface PendingStageSubmission<TData> {
+  data: TData
+  payload: CompleteFlowPayload
+  target: PracticeStageTarget
+}
+
 export interface PracticeStageTarget {
   id: number
   stage_labels?: string[]
@@ -106,7 +112,8 @@ export function PracticeSessionRoute<TData, TSession>({
   const [resetVersion, setResetVersion] = useState(0)
   const [hasResumeProgress, setHasResumeProgress] = useState(false)
   const [stageDialogOpen, setStageDialogOpen] = useState(false)
-  const [pendingPayload, setPendingPayload] = useState<CompleteFlowPayload | null>(null)
+  const [pendingStageSubmission, setPendingStageSubmission] =
+    useState<PendingStageSubmission<TData> | null>(null)
   const [submitting, setSubmitting] = useState(false)
 
   useEffect(() => {
@@ -232,7 +239,11 @@ export function PracticeSessionRoute<TData, TSession>({
             }
           }
           if (hasStageChoices(activeStageTarget)) {
-            setPendingPayload(payload)
+            setPendingStageSubmission({
+              data: activeData,
+              payload,
+              target: activeStageTarget,
+            })
             setStageDialogOpen(true)
             return
           }
@@ -249,28 +260,35 @@ export function PracticeSessionRoute<TData, TSession>({
 
       {config.renderAfterFlow?.(data)}
 
-      {hasStageChoices(stageTarget) && pendingPayload ? (
+      {pendingStageSubmission ? (
         <StageSelectDialog
           open={stageDialogOpen}
-          stageLabels={stageTarget.stage_labels ?? []}
-          stages={stageTarget.review_stages ?? []}
-          currentReviewNumber={Math.max(0, (stageTarget.review_stage_completed ?? 0) - 1)}
-          durationSeconds={pendingPayload.durationSeconds}
+          stageLabels={pendingStageSubmission.target.stage_labels ?? []}
+          stages={pendingStageSubmission.target.review_stages ?? []}
+          currentReviewNumber={Math.max(
+            0,
+            (pendingStageSubmission.target.review_stage_completed ?? 0) - 1,
+          )}
+          durationSeconds={pendingStageSubmission.payload.durationSeconds}
           onConfirm={async (targetReviewNumber, needsPractice) => {
             setStageDialogOpen(false)
-            if (!pendingPayload) return
             setSubmitting(true)
             try {
-              await config.submitStage(data, pendingPayload, targetReviewNumber, needsPractice)
+              await config.submitStage(
+                pendingStageSubmission.data,
+                pendingStageSubmission.payload,
+                targetReviewNumber,
+                needsPractice,
+              )
               setHasResumeProgress(false)
             } finally {
               setSubmitting(false)
-              setPendingPayload(null)
+              setPendingStageSubmission(null)
             }
           }}
           onCancel={() => {
             setStageDialogOpen(false)
-            setPendingPayload(null)
+            setPendingStageSubmission(null)
           }}
         />
       ) : null}

@@ -8,9 +8,7 @@ import type {
 } from '@/shared/api/contracts'
 import {
   deletePalaceApi,
-  getFocusPracticeSessionProgressApi,
   getPalaceEditorApi,
-  getPalaceFocusSessionApi,
   getPracticeSessionProgressApi,
   getSegmentPracticeSessionProgressApi,
   getMiniPracticeSessionProgressApi,
@@ -63,13 +61,6 @@ export function usePalaceListCardActions({
     )
   }
 
-  const handleWarmFocusPractice = (palace: PalaceGroupedItem) => {
-    prefetchStudySession('focus-practice', palace.id, () =>
-      Promise.all([getPalaceFocusSessionApi(palace.id), getFocusPracticeSessionProgressApi(palace.id)]).then(
-        ([session, progress]) => ({ session, progress }),
-      ),
-    )
-  }
 
   const handleSegmentPractice = (segment: PalaceSegmentSummary) => {
     if (segment.current_review_schedule_id) {
@@ -106,7 +97,6 @@ export function usePalaceListCardActions({
   return {
     onPalacePractice: (palace: PalaceGroupedItem) => void handlePalacePractice(palace),
     onWarmPalacePractice: handleWarmPalacePractice,
-    onWarmFocusPractice: handleWarmFocusPractice,
     onSegmentPractice: (segment: PalaceSegmentSummary) => void handleSegmentPractice(segment),
     onWarmSegmentPractice: handleWarmSegmentPractice,
     onMiniPalacePractice: (mini: MiniPalaceSummary) => void handleMiniPalacePractice(mini),

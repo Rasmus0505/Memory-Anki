@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useLocation, useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import { toast } from '@/shared/feedback/toast'
 import { useAiRunConfigDialog } from '@/entities/ai-runtime'
 import type { MindMapSelection } from '@/entities/mindmap-document'
@@ -18,7 +18,7 @@ import { usePalacePracticeMode } from '@/features/palace-edit/hooks/usePalacePra
 import { usePalaceSegmentsController } from '@/features/palace-edit/hooks/usePalaceSegmentsController'
 import { usePalaceVersionsController } from '@/features/palace-edit/hooks/usePalaceVersionsController'
 import type { StatusBadgeState } from '@/features/palace-edit/model/palace-edit-types'
-import { splitMindMapNodeApi, togglePalaceFocusNodeApi } from '@/entities/palace/api'
+import { splitMindMapNodeApi } from '@/entities/palace/api'
 import { getEnglishContinueCourseApi } from '@/entities/english/api'
 import type { MindMapEditorState } from '@/shared/api/contracts'
 import { useMemoryAnkiShortcuts } from '@/entities/preferences/model/memoryAnkiShortcuts'
@@ -33,7 +33,6 @@ export function usePalaceEditPage() {
   const { isActive, becameActiveAt, fullPath } = useRouteResidency()
   const { id } = useParams()
   const navigate = useNavigate()
-  const location = useLocation()
   const palaceId = id ? Number(id) : null
   const [replaceSyncVersion, setReplaceSyncVersion] = useState(0)
   const [selectedNodes, setSelectedNodes] = useState<MindMapSelection[]>([])
@@ -44,7 +43,6 @@ export function usePalaceEditPage() {
   const [mindMapFullscreen, setMindMapFullscreen] = useState(false)
   const [aiSplitBusy, setAiSplitBusy] = useState(false)
   const [aiSplitAppliedSyncVersion, setAiSplitAppliedSyncVersion] = useState(0)
-  const [focusNodeUids, setFocusNodeUids] = useState<string[]>([])
   const [feedbackFxSignal, setFeedbackFxSignal] = useState<MindMapFeedbackFxPayload | null>(null)
   const suppressNativeFullscreenExitUntilRef = useRef(0)
   const hardUnloadRef = useRef(false)
@@ -186,13 +184,6 @@ export function usePalaceEditPage() {
     [selectedNode?.uid],
   )
 
-  useEffect(() => {
-    const nextFocusNodeUids = Array.isArray(palace?.focus_node_uids)
-      ? palace.focus_node_uids.map((value) => String(value)).filter(Boolean)
-      : []
-    setFocusNodeUids(nextFocusNodeUids)
-  }, [palace?.focus_node_uids])
-
   const handleMindMapEditorStateChange = useCallback(
     (nextState: MindMapEditorState) => {
       documentState.handleMindMapEditorStateChange(nextState, () => {
@@ -201,58 +192,6 @@ export function usePalaceEditPage() {
     },
     [documentState],
   )
-
-  const toggleFocusNodeUid = useCallback(
-    async (nodeUid: string, source: string) => {
-      if (!palaceId || !nodeUid) return
-      const previousFocusNodeUids = focusNodeUids
-      const wasFocused = previousFocusNodeUids.includes(nodeUid)
-      const optimisticFocusNodeUids = wasFocused
-        ? previousFocusNodeUids.filter((uid) => uid !== nodeUid)
-        : [...previousFocusNodeUids, nodeUid]
-      setFocusNodeUids(optimisticFocusNodeUids)
-      timer.registerActivity('edit_operation', { source })
-      try {
-        const response = await togglePalaceFocusNodeApi(palaceId, nodeUid, !wasFocused)
-        setFocusNodeUids(response.focus_node_uids ?? optimisticFocusNodeUids)
-        emitFeedbackFx(response.focused ? 'node_create' : 'node_delete', {
-          nodeUid,
-          relatedNodeUids: [nodeUid],
-          source: 'toggle_focus_node',
-        })
-        toast.success(response.focused ? '已标记为专项卡' : '已取消专项卡标记')
-      } catch (error) {
-        setFocusNodeUids(previousFocusNodeUids)
-        emitFeedbackFx('save_error', {
-          nodeUid,
-          relatedNodeUids: [nodeUid],
-          source: 'toggle_focus_node_error',
-        })
-        toast.error(error instanceof Error ? error.message : '专项卡标记失败，请稍后重试。')
-      }
-    },
-    [emitFeedbackFx, focusNodeUids, palaceId, timer],
-  )
-
-  const handleEditNodeContextMenu = useCallback(
-    (nodes: MindMapSelection[]) => {
-      if (practice.editorMode !== 'edit') return
-      const nodeUid = nodes[0]?.uid ? String(nodes[0].uid) : ''
-      if (!nodeUid) return
-      void toggleFocusNodeUid(nodeUid, 'mindmap_focus_contextmenu')
-    },
-    [practice.editorMode, toggleFocusNodeUid],
-  )
-
-  const handleShortcutToggleFocusNode = useCallback(() => {
-    if (practice.editorMode !== 'edit') return
-    const nodeUid = selectedNode?.uid ? String(selectedNode.uid) : ''
-    if (!nodeUid) {
-      toast.info('请先选中一个知识点，再标记专项卡。')
-      return
-    }
-    void toggleFocusNodeUid(nodeUid, 'shortcut_toggle_focus_node')
-  }, [practice.editorMode, selectedNode?.uid, toggleFocusNodeUid])
 
   const handleShortcutHideChildCards = useCallback(() => {
     if (practice.editorMode !== 'recall') return
@@ -266,10 +205,9 @@ export function usePalaceEditPage() {
 
   const shortcutHandlers = useMemo(
     () => ({
-      toggle_focus_node: handleShortcutToggleFocusNode,
       hide_child_cards_practice: handleShortcutHideChildCards,
     }),
-    [handleShortcutHideChildCards, handleShortcutToggleFocusNode],
+    [handleShortcutHideChildCards],
   )
 
   useMemoryAnkiShortcuts(
@@ -278,14 +216,17 @@ export function usePalaceEditPage() {
     Boolean(documentState.editorState),
   )
 
-  useEffect(() => {
-    if (palaceId || documentState.isCreatingDraft) return
-    if (id !== undefined) return
+  const handleCreateBlankPalace = useCallback(async () => {
+    if (palaceId || id !== undefined || documentState.isCreatingDraft) return
     documentState.setIsCreatingDraft(true)
-    void documentState.requestDraftPalaceId(location.key).then((createdId) => {
+    try {
+      const createdId = await documentState.createDraftPalace()
       navigate(`/palaces/${createdId}/edit`, { replace: true })
-    })
-  }, [documentState, id, location.key, navigate, palaceId])
+    } catch (error) {
+      documentState.setIsCreatingDraft(false)
+      toast.error(error instanceof Error ? error.message : '创建宫殿失败，请稍后重试。')
+    }
+  }, [documentState, id, navigate, palaceId])
 
   useEffect(() => {
     if (!palaceId || !documentState.editorState) return
@@ -569,7 +510,6 @@ export function usePalaceEditPage() {
     replaceSyncVersion,
     selectedNodes,
     selectedNode,
-    focusNodeUids,
     feedbackFxSignal,
     reviewFxSignal: practice.feedback.reviewFxSignal,
     setSelectedNodes,
@@ -578,6 +518,9 @@ export function usePalaceEditPage() {
     hasUnsavedChanges: documentState.hasUnsavedChanges,
     saveStatus: documentState.saveStatus,
     saveError: documentState.error,
+    isLoadError: documentState.isLoadError,
+    isCreatingDraft: documentState.isCreatingDraft,
+    handleCreateBlankPalace,
     handleMindMapEditorStateChange,
     aiSplitBusy,
     aiSplitAppliedSyncVersion,
@@ -591,7 +534,6 @@ export function usePalaceEditPage() {
     toggleInlinePractice,
     handleInlinePracticeNodeClick,
     handleInlinePracticeNodeContextMenu,
-    handleEditNodeContextMenu,
     handleAiSplitRequest,
     restartInlinePractice: practice.restartInlinePractice,
     handleOpenVersions: versions.handleOpenVersions,

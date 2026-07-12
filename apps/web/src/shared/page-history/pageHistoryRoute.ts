@@ -37,7 +37,6 @@ export function resolvePageHistoryKey(pathname: string) {
     [/^\/palaces\/(\d+)\/edit$/, (match) => `palace:edit:${match[1]}`],
     [/^\/palaces\/(\d+)\/quiz$/, (match) => `palace:quiz:${match[1]}`],
     [/^\/palaces\/(\d+)\/practice$/, (match) => `palace:practice:${match[1]}`],
-    [/^\/palaces\/(\d+)\/focus-practice$/, (match) => `palace:focus-practice:${match[1]}`],
     [/^\/segments\/(\d+)\/practice$/, (match) => `segment:practice:${match[1]}`],
     [/^\/mini-palaces\/(\d+)\/practice$/, (match) => `mini-palace:practice:${match[1]}`],
     [/^\/english\/courses\/(\d+)$/, (match) => `english:course:${match[1]}`],

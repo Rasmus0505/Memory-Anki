@@ -16,10 +16,6 @@ export function getPracticeSessionProgressApi(id: number) {
   return getSessionProgressApi('practice', id)
 }
 
-export function getFocusPracticeSessionProgressApi(id: number) {
-  return getSessionProgressApi('focus-practice', id)
-}
-
 export function getSegmentPracticeSessionProgressApi(id: number) {
   return getSessionProgressApi('segment-practice', id)
 }
@@ -28,16 +24,8 @@ export function savePracticeSessionProgressApi(id: number, data: SessionProgress
   return saveSessionProgressApi('practice', id, data, 'Save practice progress')
 }
 
-export function saveFocusPracticeSessionProgressApi(id: number, data: SessionProgressPayload) {
-  return saveSessionProgressApi('focus-practice', id, data, 'Save focus practice progress')
-}
-
 export function clearPracticeSessionProgressApi(id: number) {
   return clearSessionProgressApi('practice', id, 'Clear practice progress')
-}
-
-export function clearFocusPracticeSessionProgressApi(id: number) {
-  return clearSessionProgressApi('focus-practice', id, 'Clear focus practice progress')
 }
 
 export function saveSegmentPracticeSessionProgressApi(id: number, data: SessionProgressPayload) {

@@ -11,17 +11,14 @@ from memory_anki.infrastructure.db._tables.palaces import (
 )
 from memory_anki.infrastructure.db.deps import session_dep
 from memory_anki.modules.sessions.application.session_progress_service import (
-    clear_focus_practice_progress,
     clear_mini_practice_progress,
     clear_practice_progress,
     clear_review_progress,
     clear_segment_practice_progress,
-    get_focus_practice_progress,
     get_mini_practice_progress,
     get_practice_progress,
     get_review_progress,
     get_segment_practice_progress,
-    upsert_focus_practice_progress,
     upsert_mini_practice_progress,
     upsert_practice_progress,
     upsert_review_progress,
@@ -320,14 +317,6 @@ def api_get_practice_progress(palace_id: int, session: Session = Depends(session
     return {"progress": get_practice_progress(session, palace_id)}
 
 
-@legacy_router.get("/sessions/focus-practice/{palace_id}/progress")
-def api_get_focus_practice_progress(palace_id: int, session: Session = Depends(session_dep)):
-    palace = session.query(Palace).filter_by(id=palace_id).first()
-    if not palace:
-        _raise_not_found()
-    return {"progress": get_focus_practice_progress(session, palace_id)}
-
-
 @legacy_router.put("/sessions/practice/{palace_id}/progress")
 def api_upsert_practice_progress(
     palace_id: int,
@@ -340,27 +329,9 @@ def api_upsert_practice_progress(
     return {"progress": upsert_practice_progress(session, palace_id, _payload(data))}
 
 
-@legacy_router.put("/sessions/focus-practice/{palace_id}/progress")
-def api_upsert_focus_practice_progress(
-    palace_id: int,
-    data: PracticeProgressUpsert,
-    session: Session = Depends(session_dep),
-):
-    palace = session.query(Palace).filter_by(id=palace_id).first()
-    if not palace:
-        _raise_not_found()
-    return {"progress": upsert_focus_practice_progress(session, palace_id, _payload(data))}
-
-
 @legacy_router.delete("/sessions/practice/{palace_id}/progress")
 def api_delete_practice_progress(palace_id: int, session: Session = Depends(session_dep)):
     clear_practice_progress(session, palace_id)
-    return {"ok": True}
-
-
-@legacy_router.delete("/sessions/focus-practice/{palace_id}/progress")
-def api_delete_focus_practice_progress(palace_id: int, session: Session = Depends(session_dep)):
-    clear_focus_practice_progress(session, palace_id)
     return {"ok": True}
 
 

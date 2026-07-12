@@ -24,7 +24,7 @@ export function createMiniPalaceApi(
     body: JSON.stringify(data),
     persistence: {
       resourceKey: `palace:${palaceId}:mini-palaces:create`,
-      description: `创建专项训练：${data.name || '默认命名'}`,
+      description: `创建迷你宫殿训练：${data.name || '默认命名'}`,
       replayMode: 'manual',
     },
   })
@@ -44,7 +44,7 @@ export function updateMiniPalaceApi(
     persistence: {
       resourceKey: `palace-mini-palace:${miniPalaceId}`,
       coalesceKey: `palace-mini-palace:${miniPalaceId}`,
-      description: '保存专项训练',
+      description: '保存迷你宫殿训练',
       replayMode: 'auto',
     },
   })
@@ -55,7 +55,7 @@ export function deleteMiniPalaceApi(miniPalaceId: number) {
     method: 'DELETE',
     persistence: {
       resourceKey: `palace-mini-palace:${miniPalaceId}:delete`,
-      description: '删除专项训练',
+      description: '删除迷你宫殿训练',
       replayMode: 'manual',
     },
   })
@@ -82,7 +82,7 @@ export function updateMiniPalaceReviewProgressApi(
         persistence: {
           resourceKey: `palace-mini-palace:${miniPalaceId}:review-progress`,
           coalesceKey: `palace-mini-palace:${miniPalaceId}:review-progress`,
-          description: '保存专项训练复习进度',
+          description: '保存迷你宫殿训练复习进度',
           replayMode: 'auto',
         },
       },

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
-import { AlertCircle, ArrowLeft, CheckCircle2, History, LayoutTemplate, LoaderCircle, PencilLine } from 'lucide-react'
+import { AlertCircle, ArrowLeft, CheckCircle2, FileStack, History, LayoutTemplate, LoaderCircle, PencilLine } from 'lucide-react'
 import { PageIntro } from '@/shared/components/layout/PageIntro'
 import {
   MindMapEditorSurface,
@@ -246,7 +246,44 @@ export default function PalaceEdit() {
   }, [isActive, mindMapNativeFullscreen])
 
   if (!page.palaceId) {
-    return <PalaceEditorSkeleton />
+    return (
+      <div className="space-y-4">
+        <PageIntro
+          compact
+          title="新建宫殿"
+          description="进入此页面不会创建数据。选择一种方式后，才会创建宫殿。"
+          actions={
+            <Button variant="outline" asChild>
+              <Link to="/palaces">
+                <ArrowLeft className="mr-2 size-4" />
+                返回宫殿
+              </Link>
+            </Button>
+          }
+        />
+        <Card>
+          <CardContent className="flex flex-wrap gap-3 p-6">
+            <Button disabled={page.isCreatingDraft} onClick={() => void page.handleCreateBlankPalace()}>
+              {page.isCreatingDraft ? (
+                <LoaderCircle className="mr-2 size-4 animate-spin" />
+              ) : (
+                <FileStack className="mr-2 size-4" />
+              )}
+              创建空白宫殿
+            </Button>
+            <Button variant="outline" onClick={() => setTemplateDialogOpen(true)}>
+              <LayoutTemplate className="mr-2 size-4" />
+              从模板创建
+            </Button>
+          </CardContent>
+        </Card>
+        <PalaceTemplateDialog
+          open={templateDialogOpen}
+          onOpenChange={setTemplateDialogOpen}
+          onCreated={(palaceId) => navigate(`/palaces/${palaceId}/edit`, { replace: true })}
+        />
+      </div>
+    )
   }
 
   return (
@@ -263,6 +300,14 @@ export default function PalaceEdit() {
                   返回列表
                 </Button>
               </Link>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => navigate('/batch-generation')}
+              >
+                <FileStack className="mr-2 size-4" />
+                整书批量生成
+              </Button>
               {page.palace ? (
                 <>
                   <Button
@@ -301,13 +346,19 @@ export default function PalaceEdit() {
               <Badge variant={page.statusBadge.variant}>
                 {page.statusBadge.label}
               </Badge>
-              <SaveStatusBadge status={page.saveStatus} error={page.saveError} />
+              {!page.isLoadError ? <SaveStatusBadge status={page.saveStatus} error={page.saveError} /> : null}
             </>
           }
         />
       ) : null}
 
-      {!page.mindMapFullscreen && page.saveStatus === 'error' ? (
+      {!page.mindMapFullscreen && page.isLoadError ? (
+        <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
+          无法加载宫殿：{page.saveError || '该宫殿可能已被删除，请返回列表重新选择。'}
+        </div>
+      ) : null}
+
+      {!page.mindMapFullscreen && page.saveStatus === 'error' && !page.isLoadError ? (
         <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
           自动保存暂时失败：{page.saveError || '请检查网络后继续编辑，系统会保留未保存内容并稍后重试。'}
         </div>
@@ -421,7 +472,7 @@ export default function PalaceEdit() {
                     importMindMapAction={{ label: '转脑图', onClick: () => mindMapImport.setImportOpen(true) }}
                     englishAction={{ label: '英语区', onClick: () => { void page.handleOpenEnglishArea() } }}
                     quizAction={{ label: '做题', onClick: handleOpenQuizPage }}
-                    miniPalaceAction={{ label: '专项训练', onClick: miniPalace.openPanel }}
+                    miniPalaceAction={{ label: '迷你宫殿训练', onClick: miniPalace.openPanel }}
                     immersiveAction={{ label: page.mindMapFullscreen ? '退出沉浸模式' : '沉浸模式', onClick: () => { void handleImmersiveToolbarToggle() } }}
                     nativeFullscreenAction={{ label: mindMapNativeFullscreen ? '退出原生全屏' : '原生全屏', onClick: () => { void handleNativeFullscreenToolbarToggle() } }}
                     clearUiAction={{ label: mindMapUiCleared ? '恢复界面' : '清屏', onClick: () => mindMapFrameRef.current?.toggleUiCleared() }}
@@ -496,7 +547,6 @@ export default function PalaceEdit() {
                       selectedNodeUids: page.selectedRangeNodeUids,
                       overriddenConflictNodeUids: page.overriddenConflictNodeUids,
                     }}
-                    focusNodeUids={page.focusNodeUids}
                     focusRequestNodeUid={page.modeFocusRequestNodeUid}
                     focusRequestNonce={page.modeFocusRequestNonce}
                     miniPalaceDraft={miniPalace.hostDraft}
@@ -516,7 +566,7 @@ export default function PalaceEdit() {
                       miniPalaceFrameActive
                         ? miniPalace.handleNodeContextMenu
                         : page.editorMode === 'edit'
-                          ? page.handleEditNodeContextMenu
+                          ? undefined
                           : page.handleInlinePracticeNodeContextMenu
                     }
                     onSegmentSelect={page.setActiveSegmentId}

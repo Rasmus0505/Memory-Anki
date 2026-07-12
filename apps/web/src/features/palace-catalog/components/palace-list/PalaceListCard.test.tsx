@@ -46,7 +46,7 @@ function buildMiniPalace(overrides: Partial<MiniPalaceSummary> = {}): MiniPalace
   return {
     id: 201,
     palace_id: 1,
-    name: '专项训练',
+    name: '迷你宫殿训练',
     node_uids: ['m1'],
     node_count: 22,
     sort_order: 0,
@@ -88,8 +88,6 @@ function buildPalace(overrides: Partial<PalaceGroupedItem> = {}): PalaceGroupedI
     description: '',
     mastered: false,
     needs_practice: false,
-    focus_node_uids: [],
-    focus_count: 0,
     created_at: '2026-06-12T10:00:00+08:00',
     next_review_at: '2026-06-13T10:00:00+08:00',
     has_due_review: true,

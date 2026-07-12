@@ -1,5 +1,5 @@
 import type { MindMapDoc, MindMapEditorState } from './mindmap'
-import type { ReviewPalaceSummary, ReviewStageSummary } from './review'
+import type { ReviewStageSummary } from './review'
 
 export interface PalaceReviewPlanItem {
   date: string | null
@@ -70,8 +70,6 @@ export interface PalaceListItem {
   description: string
   mastered: boolean
   needs_practice?: boolean
-  focus_node_uids?: string[]
-  focus_count?: number
   created_at: string | null
   next_review_at: string | null
   has_due_review: boolean
@@ -119,8 +117,6 @@ export interface PalaceEditorMeta {
   archived?: boolean
   mastered?: boolean
   needs_practice?: boolean
-  focus_node_uids?: string[]
-  focus_count?: number
   created_at?: string | null
   updated_at?: string | null
   primary_chapter_id?: number | null
@@ -159,8 +155,6 @@ export interface PalaceGroupedSummaryItem {
   mastered: boolean
   archived?: boolean
   needs_practice?: boolean
-  focus_node_uids?: string[]
-  focus_count?: number
   created_at: string | null
   updated_at?: string | null
   next_scheduled_date?: string | null
@@ -263,12 +257,6 @@ export interface PalaceVersionDetail extends PalaceVersionSummary {
   editor_config: Record<string, unknown> | string | null
   editor_local_config: Record<string, unknown> | string | null
 }
-export interface PalaceFocusSessionResponse {
-  palace: ReviewPalaceSummary
-  editor_doc: MindMapDoc | string | null
-  focus_node_uids: string[]
-  focus_count: number
-}
 export interface PalaceTemplateSummary {
   id: number
   name: string
@@ -282,7 +270,6 @@ export interface SessionProgressSnapshot {
     | "practice"
     | "review"
     | "segment_practice"
-    | "focus_practice"
     | "mini_practice"
   palace_id: number | null
   review_schedule_id: number | null

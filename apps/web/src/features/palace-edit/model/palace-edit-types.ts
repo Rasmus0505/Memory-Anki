@@ -5,8 +5,6 @@ export interface PalaceMeta {
   title: string
   description: string
   created_at: string | null
-  focus_node_uids?: string[]
-  focus_count?: number
   attachments: Array<{ id: number; original_name: string; file_size: number }>
   chapters: Array<{
     id: number

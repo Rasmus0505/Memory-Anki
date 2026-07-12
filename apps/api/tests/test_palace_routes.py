@@ -1,4 +1,4 @@
-﻿"""Direct tests for the palaces presentation router."""
+"""Direct tests for the palaces presentation router."""
 
 import pytest
 
@@ -254,30 +254,6 @@ class TestPalaceEditor:
         )
 
         assert response.status_code == 409
-
-    def test_focus_session_returns_focus_fields(self, client, palace_id):
-        response = client.get(f"/api/v1/palaces/{palace_id}/focus-session")
-
-        assert response.status_code == 200
-        body = response.json()
-        assert body["focus_node_uids"] == []
-        assert body["focus_count"] == 0
-
-    def test_toggle_focus_node(self, client, palace_id):
-        focused = client.put(
-            f"/api/v1/palaces/{palace_id}/focus-nodes/uid-1",
-            json={"focused": True},
-        ).json()
-        unfocused = client.put(
-            f"/api/v1/palaces/{palace_id}/focus-nodes/uid-1",
-            json={"focused": False},
-        ).json()
-
-        assert focused["focused"] is True
-        assert focused["focus_count"] == 1
-        assert unfocused["focused"] is False
-        assert unfocused["focus_count"] == 0
-
 
 class TestPalaceTemplates:
     def test_template_lifecycle_and_instantiation(self, client, palace_id):

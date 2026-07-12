@@ -10,10 +10,6 @@ from memory_anki.modules.palaces.application.editor_state_service import (
     EditorStateConflictError,
     get_palace_editor_state,
 )
-from memory_anki.modules.palaces.application.focus_service import (
-    build_focus_editor_doc,
-    parse_focus_node_uids,
-)
 from memory_anki.modules.palaces.application.mindmap_ai_split_service import (
     MindMapAiSplitError,
     split_palace_editor_doc_with_ai,
@@ -95,20 +91,6 @@ def api_update_editor(palace_id: int, data: dict, s: Session = Depends(session_d
     return {
         "palace": palace_json(palace, s),
         **state,
-    }
-
-
-@router.get("/palaces/{palace_id}/focus-session")
-def api_get_focus_session(palace_id: int, s: Session = Depends(session_dep)):
-    palace = get_palace(s, palace_id)
-    if not palace:
-        raise_not_found()
-    focus_node_uids = parse_focus_node_uids(palace)
-    return {
-        "palace": palace_json(palace, s),
-        "editor_doc": build_focus_editor_doc(palace),
-        "focus_node_uids": focus_node_uids,
-        "focus_count": len(focus_node_uids),
     }
 
 

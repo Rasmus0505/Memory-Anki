@@ -35,7 +35,7 @@ def mini_palace_summary_json(
     return {
         "id": mini_palace.id,
         "palace_id": mini_palace.palace_id,
-        "name": mini_palace.name or f"专项训练 {mini_palace.sort_order + 1}",
+        "name": mini_palace.name or f"迷你宫殿训练 {mini_palace.sort_order + 1}",
         "node_uids": node_uids,
         "node_count": len(node_uids),
         "sort_order": mini_palace.sort_order,

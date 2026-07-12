@@ -17,7 +17,6 @@ export { getShortcutLabel, getShortcutSignature, isShortcutPressed, normalizeSho
 
 export type ShortcutScene = 'edit' | 'practice' | 'review'
 export type MemoryAnkiShortcutActionId =
-  | 'toggle_focus_node'
   | 'hide_child_cards_practice'
   | 'hide_child_cards_review'
 
@@ -36,13 +35,6 @@ export const MEMORY_ANKI_SHORTCUTS_STORAGE_KEY = 'memory_anki_shortcuts'
 export const MEMORY_ANKI_SHORTCUTS_UPDATED_EVENT = 'memory-anki-shortcuts-change'
 
 export const MEMORY_ANKI_SHORTCUT_ACTIONS: MemoryAnkiShortcutActionDefinition[] = [
-  {
-    id: 'toggle_focus_node',
-    scene: 'edit',
-    label: '标记/取消专项知识点',
-    description: '对当前选中知识点切换专项标记。',
-    defaultBinding: { code: 'KeyF', key: 'f', shift: true, ctrl: false, alt: false, meta: false },
-  },
   {
     id: 'hide_child_cards_practice',
     scene: 'practice',

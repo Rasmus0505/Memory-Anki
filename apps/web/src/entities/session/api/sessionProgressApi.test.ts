@@ -44,12 +44,12 @@ describe('sessionProgressApi', () => {
     }))
 
     await Promise.all([
-      saveSessionProgressApi('focus-practice', 42, {
+      saveSessionProgressApi('practice', 42, {
         reveal_map: {},
         red_node_ids: [],
         completed: false,
       }, 'save one'),
-      saveSessionProgressApi('focus-practice', 42, {
+      saveSessionProgressApi('practice', 42, {
         reveal_map: {},
         red_node_ids: ['node-1'],
         completed: false,
@@ -58,8 +58,8 @@ describe('sessionProgressApi', () => {
 
     expect(studySessionApiMocks.createStudySessionApi).toHaveBeenCalledTimes(2)
     expect(studySessionApiMocks.createStudySessionApi.mock.calls.map(([payload]) => payload.id)).toEqual([
-      'session-progress-focus-practice-42',
-      'session-progress-focus-practice-42',
+      'session-progress-practice-42',
+      'session-progress-practice-42',
     ])
   })
 })

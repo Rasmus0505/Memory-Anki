@@ -37,7 +37,7 @@ describe('usePalaceEditPage mini palace mode', () => {
     })
 
     fireEvent.click(screen.getByRole('button', { name: '选中首子节点' }))
-    fireEvent.click(screen.getByRole('button', { name: '专项训练' }))
+    fireEvent.click(screen.getByRole('button', { name: '迷你宫殿训练' }))
 
     await waitFor(() => {
       expect(screen.getByRole('button', { name: '新建训练关卡' })).toBeTruthy()
@@ -70,7 +70,7 @@ describe('usePalaceEditPage mini palace mode', () => {
     })
 
     fireEvent.click(screen.getByRole('button', { name: '选中根节点' }))
-    fireEvent.click(screen.getByRole('button', { name: '专项训练' }))
+    fireEvent.click(screen.getByRole('button', { name: '迷你宫殿训练' }))
 
     await waitFor(() => {
       expect(screen.getByRole('button', { name: '新建训练关卡' })).toBeTruthy()
@@ -127,7 +127,7 @@ describe('usePalaceEditPage mini palace mode', () => {
       expect(screen.getByText('mini-palace-idle-')).toBeTruthy()
     })
 
-    fireEvent.click(screen.getByRole('button', { name: '专项训练' }))
+    fireEvent.click(screen.getByRole('button', { name: '迷你宫殿训练' }))
 
     await waitFor(() => {
       expect(miniPalaceApi.getMiniPalacesApi).toHaveBeenCalledWith(101)
@@ -278,7 +278,7 @@ describe('usePalaceEditPage mini palace mode', () => {
       expect(screen.getByText('mini-palace-idle-')).toBeTruthy()
     })
 
-    fireEvent.click(screen.getByRole('button', { name: '专项训练' }))
+    fireEvent.click(screen.getByRole('button', { name: '迷你宫殿训练' }))
 
     await waitFor(() => {
       expect(screen.getByRole('button', { name: '编辑' })).toBeTruthy()

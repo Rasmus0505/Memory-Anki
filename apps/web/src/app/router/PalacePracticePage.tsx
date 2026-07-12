@@ -5,7 +5,6 @@ import {
   getPalaceEditorApi,
   getPracticeSessionProgressApi,
   savePracticeSessionProgressApi,
-  togglePalaceFocusNodeApi,
   updatePalacePracticeFlagApi,
 } from '@/entities/palace/api'
 import { submitReviewSessionApi } from '@/features/review/api'
@@ -87,16 +86,6 @@ export default function PalacePracticePage() {
             await updatePalacePracticeFlagApi(palace.id, { needs_practice: false })
           }
         },
-        flowProps: (palace) => ({
-          focusNodeUids: palace.focus_node_uids ?? [],
-          onToggleFocusNode: async (nodeUid) => {
-            await togglePalaceFocusNodeApi(
-              palace.id,
-              nodeUid,
-              !(palace.focus_node_uids ?? []).includes(nodeUid),
-            )
-          },
-        }),
       }}
     />
   )

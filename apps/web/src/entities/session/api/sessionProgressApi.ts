@@ -11,7 +11,6 @@ import {
 
 export type SessionProgressMode =
   | 'practice'
-  | 'focus-practice'
   | 'segment-practice'
   | 'mini-practice'
   | 'review'
@@ -35,7 +34,6 @@ function modeToStudyTarget(mode: SessionProgressMode, id: number): {
   targetType: StudySessionTargetType
   targetId: number
 } {
-  if (mode === 'focus-practice') return { scene: 'focus_practice', targetType: 'palace', targetId: id }
   if (mode === 'segment-practice') return { scene: 'segment_practice', targetType: 'palace_segment', targetId: id }
   if (mode === 'mini-practice') return { scene: 'mini_practice', targetType: 'mini_palace', targetId: id }
   if (mode === 'review') return { scene: 'review', targetType: 'review_schedule', targetId: id }

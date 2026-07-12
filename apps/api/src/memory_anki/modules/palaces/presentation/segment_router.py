@@ -2,9 +2,6 @@ from fastapi import APIRouter, Depends, Request
 from sqlalchemy.orm import Session
 
 from memory_anki.infrastructure.db.deps import session_dep
-from memory_anki.modules.palaces.application.focus_service import (
-    update_focus_node_uid,
-)
 from memory_anki.modules.palaces.application.palace_serializer import palace_json
 from memory_anki.modules.palaces.application.palace_service import (
     get_palace,
@@ -103,40 +100,6 @@ def api_update_palace_practice_flag(palace_id: int, data: dict, s: Session = Dep
         uow=SqlAlchemyUnitOfWork(s),
     )
     return {"item": palace_json(palace, s)}
-
-
-@router.put("/palaces/{palace_id}/focus-nodes/{node_uid}")
-def api_toggle_palace_focus_node(
-    palace_id: int,
-    node_uid: str,
-    data: dict | None = None,
-    s: Session = Depends(session_dep),
-):
-    palace = get_palace(s, palace_id)
-    if not palace:
-        raise_not_found()
-    target_focused = (
-        bool(data.get("focused"))
-        if data is not None and "focused" in data
-        else None
-    )
-    focus_node_uids, focused = update_focus_node_uid(
-        s,
-        palace,
-        node_uid,
-        target_focused,
-        uow=SqlAlchemyUnitOfWork(s),
-    )
-    return {
-        "ok": True,
-        "palace_id": palace.id,
-        "node_uid": node_uid,
-        "focused": focused,
-        "focus_node_uids": focus_node_uids,
-        "focus_count": len(focus_node_uids),
-        "item": palace_json(palace, s),
-    }
-
 
 @router.delete("/palace-segments/{segment_id}")
 def api_delete_segment(segment_id: int, s: Session = Depends(session_dep)):

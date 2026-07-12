@@ -3,7 +3,6 @@ import { consumePrefetchedPromise, prefetchPromise } from './promiseWarmupCache'
 export type StudyWarmupKind =
   | 'review-session'
   | 'palace-practice'
-  | 'focus-practice'
   | 'segment-practice'
   | 'mini-practice'
 

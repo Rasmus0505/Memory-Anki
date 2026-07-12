@@ -4,7 +4,6 @@ ACTIVE_STATUSES = ("active", "paused", "recovered")
 STUDY_DASHBOARD_SCENES = (
     "palace_edit",
     "practice",
-    "focus_practice",
     "segment_practice",
     "mini_practice",
     "review",

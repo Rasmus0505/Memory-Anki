@@ -85,7 +85,7 @@ def resolve_mini_palace_name(
     }
     index = 1
     while True:
-        candidate = f"专项训练 {index}"
+        candidate = f"迷你宫殿训练 {index}"
         if candidate not in existing_names:
             return candidate
         index += 1

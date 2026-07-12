@@ -1570,33 +1570,6 @@ class ReviewRouteTests(RouterTestCase):
         self.assertEqual(stale_save.status_code, 409)
         self.assertIn("脑图保存冲突", stale_save.json()["detail"]["message"])
 
-    def test_focus_node_endpoint_sets_target_state_idempotently(self):
-        first_focus = self.client.put(
-            "/api/v1/palaces/1/focus-nodes/branch-a",
-            json={"focused": True},
-        )
-        second_focus = self.client.put(
-            "/api/v1/palaces/1/focus-nodes/branch-a",
-            json={"focused": True},
-        )
-        self.assertEqual(first_focus.status_code, 200)
-        self.assertEqual(second_focus.status_code, 200)
-        self.assertTrue(second_focus.json()["focused"])
-        self.assertEqual(second_focus.json()["focus_node_uids"], ["branch-a"])
-
-        first_unfocus = self.client.put(
-            "/api/v1/palaces/1/focus-nodes/branch-a",
-            json={"focused": False},
-        )
-        second_unfocus = self.client.put(
-            "/api/v1/palaces/1/focus-nodes/branch-a",
-            json={"focused": False},
-        )
-        self.assertEqual(first_unfocus.status_code, 200)
-        self.assertEqual(second_unfocus.status_code, 200)
-        self.assertFalse(second_unfocus.json()["focused"])
-        self.assertEqual(second_unfocus.json()["focus_node_uids"], [])
-
     def test_get_palace_editor_repairs_saved_review_overlay_doc(self):
         with self.SessionLocal() as session:
             palace = session.query(Palace).filter_by(id=1).first()

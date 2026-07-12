@@ -2,7 +2,6 @@ import { API_BASE, request, uploadWithFormData } from '@/shared/api/http'
 import type {
   PalaceEditorMeta,
   PalaceEditorResponse,
-  PalaceFocusSessionResponse,
   PalaceGroupedListResponse,
   PalaceGroupedSummaryListResponse,
   PalaceListItem,
@@ -113,27 +112,6 @@ export function getPalaceApi(id: number) {
   return request<PalaceEditorMeta>(`/palaces/${id}`)
 }
 
-export function togglePalaceFocusNodeApi(id: number, nodeUid: string, focused?: boolean) {
-  return request<{
-    ok: boolean
-    palace_id: number
-    node_uid: string
-    focused: boolean
-    focus_node_uids: string[]
-    focus_count: number
-    item: PalaceListItem
-  }>(`/palaces/${id}/focus-nodes/${encodeURIComponent(nodeUid)}`, {
-    method: 'PUT',
-    body: focused === undefined ? undefined : JSON.stringify({ focused }),
-    persistence: {
-      resourceKey: `palace:${id}:focus-node:${nodeUid}`,
-      coalesceKey: `palace:${id}:focus-node:${nodeUid}`,
-      description: focused === false ? '取消专项卡标记' : '标记专项卡',
-      replayMode: focused === undefined ? 'manual' : 'auto',
-    },
-  })
-}
-
 export function getPalaceReviewPlanApi(id: number) {
   return request<PalaceReviewPlanResponse>(`/palaces/${id}/review-plan`)
 }
@@ -196,10 +174,6 @@ export function deleteAttachmentApi(id: number) {
 
 export function getPalaceEditorApi(id: number) {
   return request<PalaceEditorResponse>(`/palaces/${id}/editor`)
-}
-
-export function getPalaceFocusSessionApi(id: number) {
-  return request<PalaceFocusSessionResponse>(`/palaces/${id}/focus-session`)
 }
 
 export function listPalaceTemplatesApi() {

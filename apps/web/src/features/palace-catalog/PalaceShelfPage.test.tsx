@@ -1,4 +1,4 @@
-﻿import * as React from 'react'
+import * as React from 'react'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import PalaceShelfPage from '@/features/palace-catalog/PalaceShelfPage'
@@ -141,7 +141,7 @@ function buildGroupedResponse() {
                   {
                     id: 301,
                     palace_id: 101,
-                    name: '专项训练 A',
+                    name: '迷你宫殿训练 A',
                     node_uids: ['mini-a-1'],
                     node_count: 12,
                     sort_order: 0,
@@ -163,7 +163,7 @@ function buildGroupedResponse() {
                   {
                     id: 302,
                     palace_id: 101,
-                    name: '专项训练 B',
+                    name: '迷你宫殿训练 B',
                     node_uids: ['mini-b-1'],
                     node_count: 8,
                     sort_order: 1,
@@ -311,7 +311,7 @@ describe('PalaceShelfPage', () => {
     await screen.findByText('中国近代史')
     fireEvent.click(screen.getByRole('button', { name: '展开' }))
 
-    await screen.findByText('专项训练 A')
+    await screen.findByText('迷你宫殿训练 A')
     expect(screen.getByText('训练关卡')).toBeTruthy()
     expect(screen.getAllByRole('button', { name: /开始复习|练习/ }).length).toBeGreaterThan(1)
     expect(screen.getAllByRole('button', { name: '做题' }).length).toBeGreaterThan(1)

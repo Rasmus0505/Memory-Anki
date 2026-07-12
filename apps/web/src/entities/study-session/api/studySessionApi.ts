@@ -6,7 +6,6 @@ export type StudySessionStatus = 'active' | 'paused' | 'completed' | 'abandoned'
 export type StudySessionScene =
   | 'palace_edit'
   | 'practice'
-  | 'focus_practice'
   | 'segment_practice'
   | 'mini_practice'
   | 'review'

@@ -4,7 +4,6 @@ import {
   FolderTree,
   LayoutDashboard,
   Shuffle,
-  User,
 } from 'lucide-react'
 import {
   prefetchPalacesGroupedSummaryApi,
@@ -18,7 +17,6 @@ import {
   preloadKnowledgePage,
   preloadPalaceEditPage,
   preloadPracticeRoutes,
-  preloadProfilePage,
   preloadReviewRoutes,
 } from '@/app/router/appRoutes'
 import { prefetchDashboardApi } from '@/features/dashboard/api'
@@ -29,7 +27,6 @@ export type NavSectionKey =
   | 'palaces'
   | 'knowledge'
   | 'review'
-  | 'profile'
 
 export interface NavSectionDefinition {
   key: NavSectionKey
@@ -42,12 +39,13 @@ export interface NavSectionDefinition {
 }
 
 const isPracticeRoute = (pathname: string) =>
-  /^\/palaces\/\d+\/(practice|focus-practice)$/.test(pathname) ||
+  /^\/palaces\/\d+\/practice$/.test(pathname) ||
   /^\/segments\/\d+\/practice$/.test(pathname) ||
   /^\/mini-palaces\/\d+\/practice$/.test(pathname)
 
 const isCreationRoute = (pathname: string) =>
   pathname === '/palaces/new' ||
+  pathname === '/batch-generation' ||
   /^\/palaces\/\d+\/(edit|quiz)$/.test(pathname)
 
 const isLibraryRoute = (pathname: string) =>
@@ -65,7 +63,7 @@ export const navSections: NavSectionDefinition[] = [
   {
     key: 'freestyle',
     to: '/freestyle',
-    label: '今日学习',
+    label: '今日',
     icon: Shuffle,
     rememberLastVisited: false,
     matches: (pathname) =>
@@ -83,7 +81,7 @@ export const navSections: NavSectionDefinition[] = [
   {
     key: 'palaces',
     to: '/palaces',
-    label: '知识库',
+    label: '知识',
     icon: BookOpen,
     rememberLastVisited: true,
     matches: isLibraryRoute,
@@ -98,7 +96,7 @@ export const navSections: NavSectionDefinition[] = [
   {
     key: 'knowledge',
     to: '/palaces/new',
-    label: '内容创作',
+    label: '创建',
     icon: FolderTree,
     rememberLastVisited: true,
     matches: isCreationRoute,
@@ -109,7 +107,7 @@ export const navSections: NavSectionDefinition[] = [
   {
     key: 'review',
     to: '/dashboard',
-    label: '复习分析',
+    label: '洞察',
     icon: Brain,
     rememberLastVisited: true,
     matches: (pathname) =>
@@ -121,17 +119,6 @@ export const navSections: NavSectionDefinition[] = [
       prefetchDashboardApi()
       preloadReviewRoutes()
       prefetchReviewQueueApi()
-    },
-  },
-  {
-    key: 'profile',
-    to: '/profile',
-    label: '系统设置',
-    icon: User,
-    rememberLastVisited: true,
-    matches: (pathname) => pathname === '/profile' || pathname.startsWith('/profile/'),
-    warmup: () => {
-      void preloadProfilePage()
     },
   },
 ]

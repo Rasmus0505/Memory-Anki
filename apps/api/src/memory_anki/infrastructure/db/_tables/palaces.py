@@ -67,7 +67,6 @@ class Palace(Base):
     archived: Mapped[bool] = mapped_column(Boolean, default=False)
     mastered: Mapped[bool] = mapped_column(Boolean, default=False)
     needs_practice: Mapped[bool] = mapped_column(Boolean, default=False)
-    focus_node_uids_json: Mapped[str] = mapped_column(Text, default="[]")
     editor_doc: Mapped[str] = mapped_column(Text, default="")
     editor_config: Mapped[str] = mapped_column(Text, default="")
     editor_local_config: Mapped[str] = mapped_column(Text, default="")
@@ -347,13 +346,6 @@ class SessionProgress(Base):
             unique=True,
             sqlite_where=text("session_kind = 'mini_practice' AND mini_palace_id IS NOT NULL"),
         ),
-        Index(
-            "ix_session_progress_focus_practice",
-            "session_kind",
-            "palace_id",
-            unique=True,
-            sqlite_where=text("session_kind = 'focus_practice' AND palace_id IS NOT NULL"),
-        ),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -454,6 +446,7 @@ class PalaceQuizQuestion(Base):
         Index("ix_palace_quiz_questions_source_chapter", "source_chapter_id"),
         Index("ix_palace_quiz_questions_classified_chapter", "classified_chapter_id"),
         Index("ix_palace_quiz_questions_deleted_at", "deleted_at"),
+        Index("ix_palace_quiz_questions_lifecycle_updated", "lifecycle_status", "updated_at"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -484,6 +477,15 @@ class PalaceQuizQuestion(Base):
     answer_payload_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
     analysis: Mapped[str] = mapped_column(Text, nullable=False, default="")
     source_meta_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    lifecycle_status: Mapped[str] = mapped_column(String(24), nullable=False, default="published")
+    evidence_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    knowledge_tags_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    cognitive_level: Mapped[str] = mapped_column(String(32), nullable=False, default="recall")
+    difficulty: Mapped[int] = mapped_column(Integer, nullable=False, default=3)
+    quality_score: Mapped[float | None] = mapped_column(nullable=True)
+    quality_review_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    generation_job_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    version_number: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     correct_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     incorrect_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
@@ -509,6 +511,30 @@ class PalaceQuizQuestion(Base):
         "Chapter",
         foreign_keys=[classified_chapter_id],
     )
+
+
+class QuizAttemptEvent(Base):
+    __tablename__ = "quiz_attempt_events"
+    __table_args__ = (
+        Index("ix_quiz_attempt_events_question_created", "question_id", "created_at"),
+        Index("ix_quiz_attempt_events_scene_created", "scene", "created_at"),
+        Index("ix_quiz_attempt_events_palace_created", "palace_id", "created_at"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    question_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("palace_quiz_questions.id", ondelete="SET NULL"), nullable=True)
+    palace_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("palaces.id", ondelete="SET NULL"), nullable=True)
+    chapter_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("chapters.id", ondelete="SET NULL"), nullable=True)
+    scene: Mapped[str] = mapped_column(String(40), nullable=False, default="quiz")
+    question_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    answer_payload_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    is_correct: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    hint_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    retry_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    confidence: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    ai_score: Mapped[float | None] = mapped_column(nullable=True)
+    created_at: Mapped[datetime | None] = mapped_column(DateTime, default=utc_now_naive)
 
 
 class FreestyleQuizAttempt(Base):
@@ -635,3 +661,4 @@ class PalaceQuizOcrSource(Base):
     )
 
     palace: Mapped[Palace] = relationship("Palace", back_populates="quiz_ocr_sources")
+

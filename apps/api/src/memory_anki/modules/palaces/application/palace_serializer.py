@@ -13,7 +13,6 @@ from __future__ import annotations
 from sqlalchemy.orm import Session
 
 from memory_anki.infrastructure.db._tables.palaces import ReviewSchedule
-from memory_anki.modules.palaces.application.focus_service import parse_focus_node_uids
 from memory_anki.modules.palaces.application.mini_palace_service import (
     list_palace_mini_palaces,
 )
@@ -112,15 +111,12 @@ def palace_json(
     primary_chapter = getattr(p, "primary_chapter", None)
     resolved_subject = resolve_palace_subject(p)
     parent_chapter = primary_chapter.parent if primary_chapter and getattr(primary_chapter, "parent", None) else None
-    focus_node_uids = parse_focus_node_uids(p)
 
     return {
         "id": p.id, "title": p.title, "description": p.description,
         "archived": p.archived, "mastered": p.mastered,
         "editor_doc": p.editor_doc,
         "needs_practice": bool(getattr(p, "needs_practice", False)),
-        "focus_node_uids": focus_node_uids,
-        "focus_count": len(focus_node_uids),
         "created_at": p.created_at.isoformat() if p.created_at else None,
         "updated_at": p.updated_at.isoformat() if p.updated_at else None,
         "next_scheduled_date": next_schedule.scheduled_date.isoformat() if next_schedule and next_schedule.scheduled_date else None,
@@ -212,7 +208,6 @@ def palace_summary_json(
     primary_chapter = getattr(p, "primary_chapter", None)
     resolved_subject = resolve_palace_subject(p)
     parent_chapter = primary_chapter.parent if primary_chapter and getattr(primary_chapter, "parent", None) else None
-    focus_node_uids = parse_focus_node_uids(p)
     chapters = list(getattr(p, "chapters", []) or [])
 
     return {
@@ -222,8 +217,6 @@ def palace_summary_json(
         "archived": p.archived,
         "mastered": p.mastered,
         "needs_practice": bool(getattr(p, "needs_practice", False)),
-        "focus_node_uids": focus_node_uids,
-        "focus_count": len(focus_node_uids),
         "created_at": p.created_at.isoformat() if p.created_at else None,
         "updated_at": p.updated_at.isoformat() if p.updated_at else None,
         "next_scheduled_date": next_schedule.scheduled_date.isoformat() if next_schedule and next_schedule.scheduled_date else None,

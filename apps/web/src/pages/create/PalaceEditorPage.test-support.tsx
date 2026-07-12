@@ -485,7 +485,7 @@ export function setupPalaceEditPageTestDefaults() {
     item: {
       id: 1,
       palace_id: 101,
-      name: '专项训练 1',
+      name: '迷你宫殿训练 1',
       node_uids: ['child-1'],
       node_count: 1,
       sort_order: 0,
@@ -498,7 +498,7 @@ export function setupPalaceEditPageTestDefaults() {
     item: {
       id: 1,
       palace_id: 101,
-      name: '专项训练 1',
+      name: '迷你宫殿训练 1',
       node_uids: ['child-1'],
       node_count: 1,
       sort_order: 0,

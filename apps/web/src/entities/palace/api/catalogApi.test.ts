@@ -14,7 +14,6 @@ import {
   PALACE_CATALOG_INVALIDATED_EVENT,
   prefetchPalacesGroupedApi,
   prefetchPalacesGroupedSummaryApi,
-  togglePalaceFocusNodeApi,
   uploadAttachmentApi,
 } from './catalogApi'
 import { clearPromiseWarmupCacheForTest } from '@/shared/api/promiseWarmupCache'
@@ -81,10 +80,9 @@ describe('palace catalog api', () => {
   })
 
   it('sends persistence metadata for catalog mutations', async () => {
-    requestMock.mockResolvedValueOnce({ ok: true }).mockResolvedValueOnce({ ok: true })
+    requestMock.mockResolvedValueOnce({ ok: true })
 
     await createPalaceApi({ title: 'New palace' })
-    await togglePalaceFocusNodeApi(7, 'peg/one', false)
 
     expect(requestMock).toHaveBeenNthCalledWith(1, '/palaces', {
       method: 'POST',
@@ -93,16 +91,6 @@ describe('palace catalog api', () => {
         resourceKey: 'palace:create:New palace',
         description: '创建宫殿',
         replayMode: 'manual',
-      },
-    })
-    expect(requestMock).toHaveBeenNthCalledWith(2, '/palaces/7/focus-nodes/peg%2Fone', {
-      method: 'PUT',
-      body: JSON.stringify({ focused: false }),
-      persistence: {
-        resourceKey: 'palace:7:focus-node:peg/one',
-        coalesceKey: 'palace:7:focus-node:peg/one',
-        description: '取消专项卡标记',
-        replayMode: 'auto',
       },
     })
   })

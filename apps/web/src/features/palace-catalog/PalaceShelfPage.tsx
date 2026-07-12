@@ -1,4 +1,4 @@
-﻿import { BookOpen, ChevronRight, LayoutGrid, LibraryBig, List, Plus, Rows3, Search, WrapText } from 'lucide-react'
+import { BookOpen, ChevronRight, LayoutGrid, LibraryBig, List, Plus, Rows3, Search, WrapText } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { PageIntro } from '@/shared/components/layout/PageIntro'
@@ -217,7 +217,6 @@ export default function PalaceShelfPage({ prefetchReviewSession }: { prefetchRev
         defaultExpanded
         onPalacePractice={cardActions.onPalacePractice}
         onWarmPalacePractice={cardActions.onWarmPalacePractice}
-        onWarmFocusPractice={cardActions.onWarmFocusPractice}
         onSegmentPractice={cardActions.onSegmentPractice}
         onWarmSegmentPractice={cardActions.onWarmSegmentPractice}
         onMiniPalacePractice={cardActions.onMiniPalacePractice}

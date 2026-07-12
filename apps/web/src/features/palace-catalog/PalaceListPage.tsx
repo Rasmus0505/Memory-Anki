@@ -1,4 +1,4 @@
-﻿import { ArrowLeft, Plus } from 'lucide-react'
+import { ArrowLeft, Plus } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
@@ -125,7 +125,6 @@ export default function PalaceList({ prefetchReviewSession }: { prefetchReviewSe
         defaultExpanded
         onPalacePractice={cardActions.onPalacePractice}
         onWarmPalacePractice={cardActions.onWarmPalacePractice}
-        onWarmFocusPractice={cardActions.onWarmFocusPractice}
         onSegmentPractice={cardActions.onSegmentPractice}
         onWarmSegmentPractice={cardActions.onWarmSegmentPractice}
         onMiniPalacePractice={cardActions.onMiniPalacePractice}
