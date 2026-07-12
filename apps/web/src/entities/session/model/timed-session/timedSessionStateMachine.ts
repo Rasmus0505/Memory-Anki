@@ -1,4 +1,5 @@
 import * as React from 'react'
+import { useStableTimedSessionController } from './useStableTimedSessionController'
 import {
   removePendingTimeRecordRecovery,
   type SessionCompletionMethod,
@@ -714,7 +715,7 @@ export function useTimedSession({
     })
   }, [saveInProgressRecord, timedSessionAutoSaveKey])
 
-  return buildTimedSessionController({
+  return useStableTimedSessionController(buildTimedSessionController({
     sessionId: sessionIdRef.current,
     effectiveSeconds,
     idleSeconds,
@@ -737,5 +738,5 @@ export function useTimedSession({
     adjustDuration,
     complete,
     reset,
-  })
+  }))
 }

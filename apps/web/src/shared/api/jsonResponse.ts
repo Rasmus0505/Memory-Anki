@@ -4,9 +4,36 @@ export function getResponseRequestId(response: Response) {
   return response.headers.get('X-Request-ID') || ''
 }
 
-export function buildRequestError(message: string, requestId: string) {
-  const error = new Error(message) as Error & { requestId?: string }
+export interface RequestErrorContext {
+  feature?: string
+  method?: string
+  url?: string
+  status?: number
+}
+
+function formatRequestErrorMessage(message: string, requestId: string, context?: RequestErrorContext) {
+  const details = [
+    context?.feature ? `操作：${context.feature}` : null,
+    context?.method || context?.url
+      ? `请求：${context?.method?.toUpperCase() || 'HTTP'} ${context?.url || '未知接口'}`
+      : null,
+    context?.status != null ? `HTTP 状态：${context.status}` : null,
+    requestId ? `请求 ID：${requestId}` : null,
+  ].filter(Boolean)
+  return details.length > 0 ? `${message}\n${details.join('\n')}` : message
+}
+
+export function buildRequestError(message: string, requestId: string, context?: RequestErrorContext) {
+  const error = new Error(formatRequestErrorMessage(message, requestId, context)) as Error & {
+    requestId?: string
+    status?: number
+    method?: string
+    url?: string
+  }
   error.requestId = requestId || undefined
+  error.status = context?.status
+  error.method = context?.method
+  error.url = context?.url
   return error
 }
 
@@ -92,7 +119,10 @@ export async function readJsonResponse<T>(
         requestId,
       },
     })
-    throw buildRequestError(message, requestId)
+    throw buildRequestError(message, requestId, {
+      feature: options.feature,
+      status: response.status,
+    })
   }
 
   try {
@@ -115,6 +145,9 @@ export async function readJsonResponse<T>(
         requestId,
       },
     })
-    throw buildRequestError(message, requestId)
+    throw buildRequestError(message, requestId, {
+      feature: options.feature,
+      status: response.status,
+    })
   }
 }

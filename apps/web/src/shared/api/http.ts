@@ -385,7 +385,12 @@ export async function request<T>(url: string, options?: PersistedRequestInit): P
         requestId,
       },
     })
-    throw buildRequestError(message, requestId)
+    throw buildRequestError(message, requestId, {
+      feature: persistence?.description || 'API 请求',
+      method,
+      url: requestUrl,
+      status: response.status,
+    })
   }
 
   if (persistence?.coalesceKey) {
@@ -414,6 +419,12 @@ export async function request<T>(url: string, options?: PersistedRequestInit): P
       throw buildRequestError(
         error instanceof Error ? error.message || 'JSON 解析失败' : 'JSON 解析失败',
         requestId,
+        {
+          feature: persistence?.description || 'API 响应解析',
+          method,
+          url: requestUrl,
+          status: response.status,
+        },
       )
     }
   }

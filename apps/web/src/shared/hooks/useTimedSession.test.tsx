@@ -43,6 +43,22 @@ describe('useTimedSession automation config', () => {
     vi.useRealTimers()
   })
 
+  it('keeps the controller identity stable across unrelated rerenders', () => {
+    const { result, rerender } = renderHook(
+      ({ title }) => useTimedSession({
+        kind: 'practice',
+        title,
+        palaceId: null,
+      }),
+      { initialProps: { title: '随心模式' } },
+    )
+    const initialController = result.current
+
+    rerender({ title: '随心模式' })
+
+    expect(result.current).toBe(initialController)
+  })
+
   it('arms the default inactivity pause after a 120-second warning and 30-second grace', () => {
     const timeoutSpy = vi.spyOn(window, 'setTimeout')
 

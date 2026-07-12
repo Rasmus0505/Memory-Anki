@@ -26,6 +26,10 @@ function sessionProgressResourceKey(mode: SessionProgressMode, id: number) {
   return `session-progress:${mode}:${id}`
 }
 
+function sessionProgressSessionId(mode: SessionProgressMode, id: number) {
+  return `session-progress-${mode}-${id}`
+}
+
 function modeToStudyTarget(mode: SessionProgressMode, id: number): {
   scene: StudySessionScene
   targetType: StudySessionTargetType
@@ -95,6 +99,7 @@ export async function saveSessionProgressApi(
       })
     : await createStudySessionApi({
         ...payload,
+        id: sessionProgressSessionId(mode, id),
         status: 'active',
         started_at: new Date().toISOString(),
       } as StudySessionPayload)

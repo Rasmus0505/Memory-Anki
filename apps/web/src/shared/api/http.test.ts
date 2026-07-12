@@ -150,6 +150,31 @@ describe('shared api http token headers', () => {
     expect(init.body).toBe(formData)
   })
 
+  it('includes actionable request context in HTTP errors', async () => {
+    const fetchMock = vi.fn(async () => new Response(
+      JSON.stringify({ detail: '会话版本冲突，请刷新后重试' }),
+      {
+        status: 409,
+        headers: {
+          'content-type': 'application/json',
+          'X-Request-ID': 'req-session-409',
+        },
+      },
+    ))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(request('/study-sessions/session-1', {
+      method: 'PATCH',
+      body: JSON.stringify({ status: 'active' }),
+      persistence: {
+        resourceKey: 'session:1',
+        description: '保存学习会话',
+      },
+    })).rejects.toThrow(
+      /会话版本冲突，请刷新后重试.*操作：保存学习会话.*请求：PATCH \/api\/v1\/study-sessions\/session-1.*HTTP 状态：409.*请求 ID：req-session-409/s,
+    )
+  })
+
   it('shows shared local service guidance for Electron network failures', async () => {
     vi.stubGlobal('navigator', {
       onLine: true,
