@@ -1,4 +1,4 @@
-﻿import type {
+import type {
   RevealFlowMode,
   ReviewFlowSnapshot,
 } from "@/entities/review/model/review-flow-tree";
@@ -33,8 +33,6 @@ export interface MindMapReviewFlowProps {
   editError?: string | null;
   persistProgress?: boolean;
   initialSnapshot?: ReviewFlowSnapshot | null;
-  focusNodeUids?: string[];
   onSnapshotChange?: (snapshot: ReviewFlowSnapshot) => void;
   onFullscreenChange?: (active: boolean) => void;
-  onToggleFocusNode?: (nodeUid: string) => void | Promise<void>;
 }

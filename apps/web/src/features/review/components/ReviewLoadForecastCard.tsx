@@ -76,9 +76,9 @@ export function ReviewLoadForecastCard() {
   if (!data) return null
 
   return (
-    <Card className="min-w-0 border-border/70">
+    <Card className="min-w-0 border-border/70 bg-card/95 shadow-sm">
       <CardHeader className="flex flex-row items-start justify-between gap-4 pb-2">
-        <CardTitle className="text-base leading-6">
+        <CardTitle className="text-base font-semibold leading-6 tracking-tight">
           未来负载 · {days} 天共 {data.total_upcoming} 项
           {data.overdue_count > 0 ? `（另有 ${data.overdue_count} 项逾期）` : ''}
         </CardTitle>
@@ -129,6 +129,7 @@ export function ReviewLoadForecastCard() {
                 axisLine={false}
                 tickMargin={8}
                 fontSize={11}
+                tick={{ fill: 'var(--color-muted-foreground)' }}
                 interval="preserveStartEnd"
               />
               <YAxis
@@ -138,6 +139,7 @@ export function ReviewLoadForecastCard() {
                 tickMargin={8}
                 width={28}
                 fontSize={11}
+                tick={{ fill: 'var(--color-muted-foreground)' }}
               />
               <Tooltip
                 cursor={{ fill: 'rgba(148,163,184,0.08)' }}

@@ -1,0 +1,8 @@
+﻿import { describe, expect, it } from 'vitest'
+import { buildAiContextEnvelope } from './contextEnvelope'
+const editorState = { editor_doc: { root: { data: { uid: 'root', text: '总论' }, children: [{ data: { uid: 'a', text: 'A', note: 'note-a' }, children: [{ data: { uid: 'a1', text: 'A1' } }] }, { data: { uid: 'b', text: 'B' } }] } }, editor_config: {}, editor_local_config: {}, lang: 'zh', editor_fingerprint: 'rev-1' }
+describe('buildAiContextEnvelope', () => {
+  it('uses active subtree with ancestors by default without mutating source', () => { const before = JSON.stringify(editorState); const result = buildAiContextEnvelope({ editorState, title: '测试', sourceEntityId: '1', sourceRevision: 'rev-1', scope: 'subtree', activeNodeUid: 'a', reviewNodeUids: ['a', 'b'] }); expect(result.node_uids).toEqual(['root', 'a', 'a1']); expect(result.nodes[1].note).toBe('note-a'); expect(JSON.stringify(editorState)).toBe(before) })
+  it('falls back to review scope instead of the full map when no active node exists', () => { const result = buildAiContextEnvelope({ editorState, title: '测试', sourceEntityId: '1', sourceRevision: 'rev-1', scope: 'subtree', reviewNodeUids: ['b'] }); expect(result.node_uids).toEqual(['root', 'b']); expect(result.node_uids).not.toContain('a1') })
+  it('supports full and manual scopes', () => { expect(buildAiContextEnvelope({ editorState, title: '测试', sourceEntityId: '1', sourceRevision: 'rev-1', scope: 'full', reviewNodeUids: [] }).node_uids).toEqual(['root', 'a', 'a1', 'b']); expect(buildAiContextEnvelope({ editorState, title: '测试', sourceEntityId: '1', sourceRevision: 'rev-1', scope: 'manual', manualNodeUids: ['a1'], reviewNodeUids: [] }).node_uids).toEqual(['root', 'a', 'a1']) })
+})

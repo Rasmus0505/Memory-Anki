@@ -1,4 +1,4 @@
-﻿import { Brain, FolderTree, Sparkles, Target } from 'lucide-react'
+import { Brain, FolderTree, Sparkles, Target } from 'lucide-react'
 import type { MindMapHostSegmentRangeDraft, MindMapHostSegmentSummary } from '@/shared/api/contracts'
 import type { ContextMenuAction } from '@/shared/ui/mindmap-canvas/NodeContextMenu'
 import type { MindMapAiSplitRequestPayload } from '@/shared/ui/mindmap-canvas/capabilities'
@@ -26,7 +26,6 @@ interface CapabilityFactoryOptions {
   activeSegmentId: number | null
   segmentColorMode: 'all' | 'active-only' | 'all-with-active-emphasis'
   segmentRangeDraft: MindMapHostSegmentRangeDraft
-  focusNodeUids: string[]
   highlightedNodeUids: string[]
   masteryByNodeUid: Record<string, { status: string; manualLabel?: string | null }>
   miniPalaceDraft: { active: boolean; selectedNodeUids: string[] }
@@ -46,7 +45,6 @@ interface CapabilityFactoryOptions {
 
 export function createMindMapCapabilities(options: CapabilityFactoryOptions): MindMapCapability[] {
   const capabilities: MindMapCapability[] = [
-    { key: 'focus-decoration', graphOptions: { focusNodeUids: options.focusNodeUids } },
     { key: 'search-decoration', graphOptions: { highlightedNodeUids: options.highlightedNodeUids } },
     { key: 'mastery-decoration', graphOptions: { masteryByNodeUid: options.masteryByNodeUid } },
   ]
@@ -129,7 +127,7 @@ function createMiniPalaceCapability(options: CapabilityFactoryOptions): MindMapC
     graphOptions: { miniPalaceDraft: options.miniPalaceDraft },
     locksEditing: true,
     getNodeActions: ({ selection }) => [{
-      label: '选为专项训练知识点',
+      label: '选为迷你宫殿训练知识点',
       icon: Target,
       onClick: () => options.onNodeClick?.(selection),
     }],

@@ -60,3 +60,35 @@ def test_failed_first_attempt_with_successful_retry_still_needs_reinforcement(db
     item = list_node_mastery(db_session, palace.id)[0]
     assert item["status"] == "reinforce"
     assert "纠错成功" in item["reason"]
+
+
+def test_inferred_evidence_is_explainable_and_lower_weight(db_session):
+    palace = _palace(db_session)
+    create_recall_event(db_session, {
+        "id": "inferred-1",
+        "study_session_id": "session-inferred",
+        "palace_id": palace.id,
+        "node_uid": "n1",
+        "source_scene": "formal_review",
+        "recall_round": "first",
+        "rating": 2,
+        "rating_source": "inferred",
+        "inference_confidence": 0.35,
+        "response_ms": 3200,
+        "operation_id": "session-inferred:n1:first",
+    })
+    item = list_node_mastery(db_session, palace.id)[0]
+    assert item["mastery_score"] < 50
+    assert item["evidence_summary"]["inferred_count"] == 1
+    assert item["evidence_summary"]["fuzzy_count"] == 1
+    assert item["suggested_training"] == "spaced_recall"
+    assert item["recent_events"][0]["rating_source"] == "inferred"
+
+
+def test_legacy_remembered_rating_is_normalized_for_mastery(db_session):
+    palace = _palace(db_session)
+    _event(db_session, palace.id, "legacy-1", "legacy-session-1", 5)
+    _event(db_session, palace.id, "legacy-2", "legacy-session-2", 5, offset=1)
+    item = list_node_mastery(db_session, palace.id)[0]
+    assert item["status"] == "stable"
+    assert item["evidence_summary"]["remembered_count"] == 2

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, UniqueConstraint
+from sqlalchemy import DateTime, Float, ForeignKey, Index, Integer, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from memory_anki.core.time import utc_now_naive
@@ -26,6 +26,12 @@ class MindMapRecallEvent(Base):
     source_scene: Mapped[str] = mapped_column(String(40), nullable=False, default="formal_review")
     recall_round: Mapped[str] = mapped_column(String(20), nullable=False, default="first")
     rating: Mapped[int] = mapped_column(Integer, nullable=False)
+    rating_source: Mapped[str] = mapped_column(String(20), nullable=False, default="manual")
+    inference_confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
+    response_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    hint_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    retry_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    operation_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     occurred_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utc_now_naive)
     supersedes_event_id: Mapped[str | None] = mapped_column(String(64), ForeignKey("mindmap_recall_events.id", ondelete="SET NULL"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utc_now_naive)

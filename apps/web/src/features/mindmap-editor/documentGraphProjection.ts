@@ -1,4 +1,4 @@
-﻿import type {
+import type {
   MindMapDoc,
   MindMapDocNode,
   MindMapEditorState,
@@ -34,7 +34,6 @@ export interface EditorDocGraphOptions {
   activeSegmentId?: number | null
   segmentColorMode?: 'all' | 'active-only' | 'all-with-active-emphasis'
   segmentRangeDraft?: MindMapHostSegmentRangeDraft
-  focusNodeUids?: string[]
   miniPalaceDraft?: { active: boolean; selectedNodeUids: string[] }
   revealMap?: Record<string, RevealState>
   readonly?: boolean
@@ -64,7 +63,6 @@ export function editorDocToGraph(
   const edges: GraphData['edges'] = []
   const segmentByNodeUid = buildSegmentByNodeUid(options.segments ?? [])
   const rangeSelected = new Set(options.segmentRangeDraft?.selectedNodeUids ?? [])
-  const focusSet = new Set(options.focusNodeUids ?? [])
   const miniSet = new Set(options.miniPalaceDraft?.selectedNodeUids ?? [])
   const highlightedSet = new Set(options.highlightedNodeUids ?? [])
 
@@ -93,7 +91,6 @@ export function editorDocToGraph(
           revealState,
           borderColor: rangeSelected.has(uid) ? '#0ea5e9' : segmentVisible ? segment?.color : null,
           muted: options.segmentColorMode === 'active-only' && segment != null && !activeSegment,
-          focusMarked: focusSet.has(uid),
           secondaryMarked: miniSet.has(uid),
           highlighted: highlightedSet.has(uid),
           mastery: options.masteryByNodeUid?.[uid],
@@ -158,7 +155,6 @@ function buildNodeVisual(options: {
   revealState?: RevealState
   borderColor: string | null | undefined
   muted: boolean
-  focusMarked: boolean
   secondaryMarked: boolean
   highlighted: boolean
   mastery?: { status: string; manualLabel?: string | null }
@@ -179,7 +175,6 @@ function buildNodeVisual(options: {
     placeholder: options.revealState === 'placeholder',
     borderColor: options.borderColor ?? null,
     outlineTones: [
-      ...(options.focusMarked ? ['danger' as const] : []),
       ...(options.secondaryMarked ? ['info' as const] : []),
     ],
     highlighted: options.highlighted,

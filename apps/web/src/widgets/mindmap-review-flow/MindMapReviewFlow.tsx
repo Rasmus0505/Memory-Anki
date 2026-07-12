@@ -1,6 +1,7 @@
-﻿import { RotateCcw, Sparkles, SquareCheckBig } from "lucide-react";
+import { Bot, RotateCcw, Sparkles, SquareCheckBig } from "lucide-react";
 import { CompletionDecisionDialog } from "@/features/review/components/CompletionDecisionDialog";
 import { ReviewFlowMapPanel } from "./ReviewFlowMapPanel";
+import { AiLearningWorkbench } from "./AiLearningWorkbench";
 import { MindMapRatingHistoryDrawer } from "@/features/review/components/MindMapRatingHistoryDrawer";
 import { useMindMapReviewFlowController } from "./useMindMapReviewFlowController";
 import type { MindMapReviewFlowProps } from "@/features/review/model/mind-map-review-flow";
@@ -17,6 +18,7 @@ import {
 } from "@/shared/components/ui/tooltip";
 import { getReviewFeedbackEffectiveVolume } from "@/shared/feedback/reviewFeedbackSettings";
 import { cn } from "@/shared/lib/utils";
+import * as React from "react";
 
 export type { ReviewFlowSnapshot } from "@/entities/review/model/review-flow-tree";
 export type {
@@ -41,6 +43,7 @@ export function MindMapReviewFlow({
     submitting,
   });
   const effectiveVolume = getReviewFeedbackEffectiveVolume(review.flow.feedback.settings);
+  const [aiWorkbenchOpen, setAiWorkbenchOpen] = React.useState(false);
 
   return (
     <div className={cn("space-y-5", review.flow.screenGlowClass)}>
@@ -187,6 +190,12 @@ export function MindMapReviewFlow({
                 ) : null}
               </div>
               <div className="flex flex-wrap items-center gap-2">
+                {!review.isInlineEditMode ? (
+                  <Button type="button" size="sm" variant={aiWorkbenchOpen ? "secondary" : "outline"} onClick={() => setAiWorkbenchOpen((value) => !value)}>
+                    <Bot className="mr-2 size-4" />
+                    AI 学习
+                  </Button>
+                ) : null}
                 {props.onRestart && !review.isInlineEditMode ? (
                   <Button
                     type="button"
@@ -229,68 +238,81 @@ export function MindMapReviewFlow({
                 review.flow.fullscreen && "h-[calc(100vh-108px)] min-h-0",
               )}
             >
-              <div className="h-full min-h-0">
-                <ReviewFlowMapPanel
-                  fullscreen={review.flow.fullscreen}
-                  displayMode={review.mapDisplayMode}
-                  modeSyncVersion={modeSyncVersion}
-                  viewMemoryScope={viewMemoryScope}
-                  onToggleFullscreen={review.handleFullscreenToggle}
-                  onToggleMode={
-                    review.inlineEditEnabled &&
-                    props.onModeToggle &&
-                    !review.miniPalace.isActive
-                      ? () => {
-                          void props.onModeToggle?.();
-                        }
-                      : undefined
-                  }
-                  visibleEditorState={review.mapEditorState ?? review.flow.visibleEditorState}
-                  editableEditorState={props.editEditorState}
-                  visibleEditorSyncKey={review.mapVisibleSyncKey}
-                  currentPalaceId={props.palaceId}
-                  focusNodeUids={review.focusNodeUids}
-                  reviewFxSignal={review.flow.feedback.reviewFxSignal}
-                  showMiniPalaceButton={Boolean(props.palaceId)}
-                  miniPalaceDraft={review.miniPalace.hostDraft}
-                  miniPalacePracticeActive={
-                    review.miniPalace.isPracticing || review.isDedicatedMiniMode
-                  }
-                  onEditorStateChange={review.handleEditorStateChange}
-                  onNodeActive={review.setActiveNodes}
-                  onNodeClick={
-                    review.miniPalace.isActive
-                      ? review.miniPalace.handleNodeClick
-                      : review.flow.handleNodeClick
-                  }
-                  onNodeContextMenu={
-                    review.miniPalace.isActive
-                      ? review.miniPalace.handleNodeContextMenu
-                      : review.flow.handleNodeContextMenu
-                  }
-                  onNodeHover={
-                    review.miniPalace.isPracticing
-                      ? review.miniPalace.handleNodeHover
-                      : review.isDedicatedMiniMode
-                        ? review.flow.handleNodeHover
+              <div className="relative flex h-full min-h-0">
+                <div className="min-w-0 flex-1">
+                  <ReviewFlowMapPanel
+                    fullscreen={review.flow.fullscreen}
+                    displayMode={review.mapDisplayMode}
+                    modeSyncVersion={modeSyncVersion}
+                    viewMemoryScope={viewMemoryScope}
+                    onToggleFullscreen={review.handleFullscreenToggle}
+                    onToggleMode={
+                      review.inlineEditEnabled &&
+                      props.onModeToggle &&
+                      !review.miniPalace.isActive
+                        ? () => {
+                            void props.onModeToggle?.();
+                          }
                         : undefined
-                  }
-                  onEditNodeContextMenu={review.handleEditNodeContextMenu}
-                  onQuizBreakOpen={review.handleQuizBreakOpen}
-                  onMiniPalaceOpen={review.miniPalace.openPanel}
-                  recallRatings={review.recallRatings.round === 'first' ? review.recallRatings.firstRatings : review.recallRatings.retryRatings}
-                  recallRound={review.recallRatings.round}
-                  weakNodeUids={review.recallRatings.weakNodeUids}
-                  onRateNode={props.studySessionId ? (nodeUid, rating, round) => { void review.recallRatings.rateNode(nodeUid, rating, round) } : undefined}
-                  onOpenRatingHistory={props.studySessionId ? () => review.recallRatings.setHistoryOpen(true) : undefined}
-                  onMiniPalacePour={
-                    review.miniPalace.isPracticing
-                      ? review.miniPalace.handleSpacePour
-                      : review.flow.handleSpacePour
-                  }
+                    }
+                    visibleEditorState={review.mapEditorState ?? review.flow.visibleEditorState}
+                    editableEditorState={props.editEditorState}
+                    visibleEditorSyncKey={review.mapVisibleSyncKey}
+                    currentPalaceId={props.palaceId}
+                    reviewFxSignal={review.flow.feedback.reviewFxSignal}
+                    showMiniPalaceButton={Boolean(props.palaceId)}
+                    miniPalaceDraft={review.miniPalace.hostDraft}
+                    miniPalacePracticeActive={
+                      review.miniPalace.isPracticing || review.isDedicatedMiniMode
+                    }
+                    onEditorStateChange={review.handleEditorStateChange}
+                    onNodeActive={review.setActiveNodes}
+                    onNodeClick={
+                      review.miniPalace.isActive
+                        ? review.miniPalace.handleNodeClick
+                        : review.flow.handleNodeClick
+                    }
+                    onNodeContextMenu={
+                      review.miniPalace.isActive
+                        ? review.miniPalace.handleNodeContextMenu
+                        : review.flow.handleNodeContextMenu
+                    }
+                    onNodeHover={
+                      review.miniPalace.isPracticing
+                        ? review.miniPalace.handleNodeHover
+                        : review.isDedicatedMiniMode
+                          ? review.flow.handleNodeHover
+                          : undefined
+                    }                    onQuizBreakOpen={review.handleQuizBreakOpen}
+                    onMiniPalaceOpen={review.miniPalace.openPanel}
+                    recallRatings={review.recallRatings.round === 'first' ? review.recallRatings.firstRatings : review.recallRatings.retryRatings}
+                    recallRound={review.recallRatings.round}
+                    weakNodeUids={review.recallRatings.weakNodeUids}
+                    onRateNode={props.studySessionId ? (nodeUid, rating, round, evidence) => { void review.recallRatings.rateNode(nodeUid, rating, round, evidence) } : undefined}
+                    onUndoRating={props.studySessionId ? review.recallRatings.undoLastRating : undefined}
+                    onOpenRatingHistory={props.studySessionId ? () => review.recallRatings.setHistoryOpen(true) : undefined}
+                    onMiniPalacePour={
+                      review.miniPalace.isPracticing
+                        ? review.miniPalace.handleSpacePour
+                        : review.flow.handleSpacePour
+                    }
+                  />
+                </div>
+                <AiLearningWorkbench
+                  open={aiWorkbenchOpen}
+                  onOpenChange={setAiWorkbenchOpen}
+                  title={props.title}
+                  palaceId={props.palaceId}
+                  reviewSessionId={props.studySessionId ? Number(props.studySessionId) : null}
+                  editorState={review.mapEditorState ?? review.flow.visibleEditorState}
+                  sourceRevision={(review.mapEditorState ?? review.flow.visibleEditorState).editor_fingerprint ?? String(modeSyncVersion)}
+                  activeNodeUid={review.selectedNodeUid}
+                  reviewNodeUids={review.reviewNodeUids}
+                  redNodeUids={[...review.flow.redNodeIds]}
+                  ratings={new Map([...review.recallRatings.firstRatings, ...review.recallRatings.retryRatings])}
+                  fullscreen={review.flow.fullscreen}
                 />
-              </div>
-            </CardContent>
+              </div>            </CardContent>
           </Card>
       </div>
 
@@ -314,3 +336,7 @@ export function MindMapReviewFlow({
     </div>
   );
 }
+
+
+
+

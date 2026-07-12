@@ -54,7 +54,9 @@ export interface MindMapHostSegmentRangeDraft {
   overriddenConflictNodeUids: string[]
 }
 export type MindMapTask = 'build' | 'learn'
-export type MindMapRecallRating = 1 | 3 | 5
+export type MindMapRecallRating = 1 | 2 | 3
+export type MindMapLegacyRecallRating = MindMapRecallRating | 5
+export type MindMapRecallRatingSource = 'manual' | 'inferred'
 export type MindMapRecallRound = 'first' | 'weak_retry'
 export type MindMapMasteryStatus = 'unknown' | 'stable' | 'reinforce' | 'weak'
 export type MindMapNodeManualLabel = 'weak' | 'mastered' | null
@@ -66,7 +68,13 @@ export interface MindMapRecallEvent {
   node_uid: string
   source_scene: string
   recall_round: MindMapRecallRound
-  rating: MindMapRecallRating
+  rating: MindMapLegacyRecallRating
+  rating_source: MindMapRecallRatingSource
+  inference_confidence: number | null
+  response_ms: number | null
+  hint_count: number
+  retry_count: number
+  operation_id: string | null
   occurred_at: string
   supersedes_event_id: string | null
 }
@@ -82,6 +90,16 @@ export interface MindMapNodeMastery {
   computed_status: MindMapMasteryStatus
   manual_label: MindMapNodeManualLabel
   reason: string
+  mastery_score: number
+  evidence_summary: {
+    event_count: number
+    manual_count: number
+    inferred_count: number
+    forgot_count: number
+    fuzzy_count: number
+    remembered_count: number
+  }
+  suggested_training: 'recall_retry' | 'spaced_recall' | 'application_check'
   priority: number
   orphaned: boolean
   hidden_by_mastered: boolean

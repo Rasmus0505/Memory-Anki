@@ -42,7 +42,7 @@ describe('MindMapPageToolbar', () => {
       <MindMapPageToolbar
         taskControl={{ value: 'build', onChange: vi.fn() }}
         importMindMapAction={{ label: '转脑图', onClick: onImport }}
-        miniPalaceAction={{ label: '专项训练', onClick: onMiniPalace }}
+        miniPalaceAction={{ label: '迷你宫殿训练', onClick: onMiniPalace }}
       />,
     )
 
@@ -52,7 +52,7 @@ describe('MindMapPageToolbar', () => {
     expect(onImport).toHaveBeenCalledTimes(1)
 
     fireEvent.keyDown(screen.getByRole('button', { name: '更多脑图操作' }), { key: 'Enter' })
-    fireEvent.click(await screen.findByRole('menuitem', { name: '专项训练' }))
+    fireEvent.click(await screen.findByRole('menuitem', { name: '迷你宫殿训练' }))
 
     expect(onMiniPalace).toHaveBeenCalledTimes(1)
   })

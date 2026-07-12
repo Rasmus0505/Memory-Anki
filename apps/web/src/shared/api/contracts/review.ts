@@ -20,8 +20,6 @@ export interface ReviewPalaceSummary {
   archived: boolean
   mastered: boolean
   needs_practice?: boolean
-  focus_node_uids?: string[]
-  focus_count?: number
   editor_doc: MindMapDoc | string | null
   pegs: Array<{ id: number; name: string; content: string; children: unknown[] }>
   attachments: Array<{ id: number; filename: string; original_name: string }>

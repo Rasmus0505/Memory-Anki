@@ -86,6 +86,7 @@ export function useMindMapDocumentSession<TResponse, TMeta>({
   const { meta, editorState, error } = session
   const isLoading = session.status === 'loading'
   const isSaving = session.status === 'saving'
+  const isLoadError = session.status === 'error' && session.editorState == null
   const hasUnsavedChanges = session.dirty
   const setMeta = useCallback((nextMeta: TMeta | null) => {
     dispatch({ type: 'meta-replaced', meta: nextMeta })
@@ -539,6 +540,7 @@ export function useMindMapDocumentSession<TResponse, TMeta>({
     armExternalStateGuard,
     releaseExternalStateGuard,
     isLoading,
+    isLoadError,
     isSaving,
     hasUnsavedChanges,
     saveStatus,

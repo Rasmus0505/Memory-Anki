@@ -230,6 +230,7 @@ export function useReviewFlowSession({
     revealedNonRootCount: reveal.revealedNonRootCount,
     visibleEditorSyncKey: reveal.visibleEditorSyncKey,
     redNodeCount: reveal.redNodeIds.size,
+    redNodeIds: reveal.redNodeIds,
     fullscreen,
     completed: reveal.completed,
     setFullscreen,
@@ -243,3 +244,4 @@ export function useReviewFlowSession({
     screenGlowClass,
   }
 }
+

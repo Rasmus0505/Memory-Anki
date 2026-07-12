@@ -55,7 +55,6 @@ export interface MindMapEditorSurfaceProps {
   activeSegmentId?: number | null
   segmentColorMode?: 'all' | 'active-only' | 'all-with-active-emphasis'
   segmentRangeDraft?: MindMapHostSegmentRangeDraft
-  focusNodeUids?: string[]
   highlightedNodeUids?: string[]
   masteryByNodeUid?: Record<string, { status: string; manualLabel?: string | null }>
   focusRequestNodeUid?: string | null

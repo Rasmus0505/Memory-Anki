@@ -91,6 +91,26 @@ function renderPersistedEditorHook(
 }
 
 describe('useMindMapDocumentSession', () => {
+  it('classifies an initial fetch failure as a load error', async () => {
+    const { result } = renderHook(() =>
+      useMindMapDocumentSession<TestResponse, TestMeta>({
+        entityId: 32,
+        fetcher: vi.fn(async () => {
+          throw Object.assign(new Error('not found'), { status: 404 })
+        }),
+        saver: vi.fn(),
+        selectMeta: (response) => response.entity,
+        selectEditorState: (response) => response,
+      }),
+    )
+
+    await waitFor(() => {
+      expect(result.current.isLoadError).toBe(true)
+    })
+    expect(result.current.error).toContain('not found')
+    expect(result.current.saveStatus).toBe('error')
+  })
+
   afterEach(() => {
     vi.useRealTimers()
     vi.restoreAllMocks()

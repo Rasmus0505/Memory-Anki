@@ -72,6 +72,26 @@ describe('MindMapEditorSurface native host', () => {
     expect(frame.firstElementChild).toBe(canvasRoot)
   })
 
+  it('uses the legacy WebKit exit API used by installed PWAs', async () => {
+    const ref = createRef<MindMapEditorSurfaceHandle>()
+    const webkitCancelFullScreen = vi.fn(async () => {})
+    Object.defineProperty(document, 'webkitCurrentFullScreenElement', {
+      configurable: true,
+      value: document.documentElement,
+    })
+    Object.defineProperty(document, 'webkitCancelFullScreen', {
+      configurable: true,
+      value: webkitCancelFullScreen,
+    })
+    render(<MindMapEditorSurface ref={ref} editorState={editorState} onEditorStateChange={vi.fn()} />)
+
+    await act(async () => {
+      await ref.current?.enterNativeFullscreen()
+      await ref.current?.exitNativeFullscreen()
+    })
+
+    expect(webkitCancelFullScreen).toHaveBeenCalledTimes(1)
+  })
   it('toggles fullscreen from the canvas toolbar control', () => {
     const onFullscreenChange = vi.fn()
     render(

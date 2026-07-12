@@ -13,9 +13,14 @@ from memory_anki.infrastructure.db._tables.mindmap import (
 )
 from memory_anki.infrastructure.db._tables.palaces import Palace
 
-VALID_RATINGS = {1, 3, 5}
+VALID_RATINGS = {1, 2, 3, 5}
 VALID_ROUNDS = {"first", "weak_retry"}
 VALID_LABELS = {"weak", "mastered"}
+VALID_RATING_SOURCES = {"manual", "inferred"}
+
+
+def _normalized_rating(rating: int) -> int:
+    return 3 if rating == 5 else rating
 
 
 def _event_json(row: MindMapRecallEvent) -> dict[str, Any]:
@@ -27,6 +32,12 @@ def _event_json(row: MindMapRecallEvent) -> dict[str, Any]:
         "source_scene": row.source_scene,
         "recall_round": row.recall_round,
         "rating": row.rating,
+        "rating_source": row.rating_source,
+        "inference_confidence": row.inference_confidence,
+        "response_ms": row.response_ms,
+        "hint_count": row.hint_count,
+        "retry_count": row.retry_count,
+        "operation_id": row.operation_id,
         "occurred_at": row.occurred_at.isoformat(),
         "supersedes_event_id": row.supersedes_event_id,
     }
@@ -39,8 +50,12 @@ def create_recall_event(session: Session, payload: dict[str, Any]) -> dict[str, 
         return _event_json(existing)
     rating = int(payload.get("rating") or 0)
     recall_round = str(payload.get("recall_round") or "first")
-    if rating not in VALID_RATINGS or recall_round not in VALID_ROUNDS:
+    rating_source = str(payload.get("rating_source") or "manual")
+    if rating not in VALID_RATINGS or recall_round not in VALID_ROUNDS or rating_source not in VALID_RATING_SOURCES:
         raise ValueError("invalid recall rating or round")
+    inference_confidence = payload.get("inference_confidence")
+    if rating_source == "inferred" and inference_confidence is None:
+        raise ValueError("inferred recall rating requires confidence")
     supersedes = str(payload.get("supersedes_event_id") or "").strip() or None
     if supersedes and session.get(MindMapRecallEvent, supersedes) is None:
         raise ValueError("superseded recall event not found")
@@ -52,6 +67,12 @@ def create_recall_event(session: Session, payload: dict[str, Any]) -> dict[str, 
         source_scene=str(payload.get("source_scene") or "formal_review").strip(),
         recall_round=recall_round,
         rating=rating,
+        rating_source=rating_source,
+        inference_confidence=inference_confidence,
+        response_ms=payload.get("response_ms"),
+        hint_count=int(payload.get("hint_count") or 0),
+        retry_count=int(payload.get("retry_count") or 0),
+        operation_id=str(payload.get("operation_id") or "").strip() or None,
         occurred_at=payload.get("occurred_at") or utc_now_naive(),
         supersedes_event_id=supersedes,
     )
@@ -113,18 +134,18 @@ def _status_for(
     recent_three = recent[-3:]
     latest = recent[-1]
     latest_retry = retry_by_session.get(latest.study_session_id)
-    forgot_count = sum(1 for event in recent_three if event.rating == 1)
-    if latest.rating == 1 and (latest_retry is None or latest_retry.rating != 5):
+    forgot_count = sum(1 for event in recent_three if _normalized_rating(event.rating) == 1)
+    if _normalized_rating(latest.rating) == 1 and (latest_retry is None or _normalized_rating(latest_retry.rating) != 3):
         return "weak", "最近首次回忆为忘记，且弱点回合仍未记住", 300 + forgot_count
     if forgot_count >= 2:
         return "weak", "最近三次首次回忆至少两次忘记", 280 + forgot_count
     if (
         len(recent) >= 2
-        and all(event.rating == 5 for event in recent[-2:])
-        and all(event.rating == 5 for event in recent_three)
+        and all(_normalized_rating(event.rating) == 3 for event in recent[-2:])
+        and all(_normalized_rating(event.rating) == 3 for event in recent_three)
     ):
         return "stable", "最近两次首次回忆均记住，且最近三次无模糊或忘记", 20
-    correction = latest.rating in {1, 3} and latest_retry is not None and latest_retry.rating == 5
+    correction = _normalized_rating(latest.rating) in {1, 2} and latest_retry is not None and _normalized_rating(latest_retry.rating) == 3
     if correction:
         return "reinforce", "首次提取不稳，但弱点回合纠错成功", 120
     return "reinforce", "近期回忆结果仍需巩固", 160 + forgot_count * 20
@@ -157,6 +178,15 @@ def list_node_mastery(
             row.study_session_id: row for row in node_rows if row.recall_round == "weak_retry"
         }
         status, reason, priority = _status_for(first, retry_by_session)
+        evidence_rows = node_rows[-10:]
+        weighted: list[float] = []
+        for evidence in evidence_rows:
+            source_weight = 1.0 if evidence.rating_source == "manual" else max(0.2, min(evidence.inference_confidence or 0.35, 0.6))
+            penalty = min(0.5, evidence.hint_count * 0.12 + evidence.retry_count * 0.1)
+            weighted.append(((_normalized_rating(evidence.rating) - 1) / 2) * source_weight * (1 - penalty))
+        mastery_score = round((sum(weighted) / len(weighted)) * 100) if weighted else 0
+        manual_count = sum(1 for evidence in evidence_rows if evidence.rating_source == "manual")
+        inferred_count = len(evidence_rows) - manual_count
         manual_label = labels.get(node_uid)
         orphaned = node_uid not in valid_uids
         effective_status = "weak" if manual_label == "weak" else status
@@ -168,6 +198,16 @@ def list_node_mastery(
             "computed_status": status,
             "manual_label": manual_label,
             "reason": reason,
+            "mastery_score": mastery_score,
+            "evidence_summary": {
+                "event_count": len(evidence_rows),
+                "manual_count": manual_count,
+                "inferred_count": inferred_count,
+                "forgot_count": sum(1 for evidence in evidence_rows if _normalized_rating(evidence.rating) == 1),
+                "fuzzy_count": sum(1 for evidence in evidence_rows if _normalized_rating(evidence.rating) == 2),
+                "remembered_count": sum(1 for evidence in evidence_rows if _normalized_rating(evidence.rating) == 3),
+            },
+            "suggested_training": "recall_retry" if status == "weak" else "spaced_recall" if status == "reinforce" else "application_check",
             "priority": priority + (1000 if manual_label == "weak" else 0),
             "orphaned": orphaned,
             "hidden_by_mastered": hidden_by_mastered,

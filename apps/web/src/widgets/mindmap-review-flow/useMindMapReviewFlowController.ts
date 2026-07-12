@@ -1,4 +1,4 @@
-﻿import * as React from "react";
+import * as React from "react";
 import { toast } from "@/shared/feedback/toast";
 import { useMiniPalaceController } from "@/features/mini-palace";
 import { useQuizLauncher } from "@/widgets/quiz-launcher";
@@ -33,18 +33,9 @@ export function useMindMapReviewFlowController({
   onRestart,
   persistProgress = false,
   initialSnapshot = null,
-  focusNodeUids: initialFocusNodeUids = [],
   onSnapshotChange,
   onFullscreenChange,
-  onToggleFocusNode,
 }: MindMapReviewFlowProps) {
-  const initialFocusNodeUidsKey = React.useMemo(
-    () =>
-      JSON.stringify(
-        initialFocusNodeUids.map((uid) => String(uid)).filter(Boolean).sort(),
-      ),
-    [initialFocusNodeUids],
-  );
   const [feedbackDialogOpen, setFeedbackDialogOpen] = React.useState(false);
   const [completionDialogOpen, setCompletionDialogOpen] = React.useState(false);
   const [savingIncomplete, setSavingIncomplete] = React.useState(false);
@@ -55,9 +46,6 @@ export function useMindMapReviewFlowController({
     copy: string;
     label: string | null;
   } | null>(null);
-  const [focusNodeUids, setFocusNodeUids] = React.useState<string[]>(() =>
-    initialFocusNodeUids.map((uid) => String(uid)).filter(Boolean),
-  );
   const selectedNode = activeNodes[0] ?? null;
   const selectedNodeUid = selectedNode?.uid ? String(selectedNode.uid) : null;
   const selectedNodeText = selectedNode?.text ? String(selectedNode.text) : "";
@@ -156,12 +144,7 @@ export function useMindMapReviewFlowController({
   const mapVisibleSyncKey = miniPalace.isActive
     ? miniPalace.visibleSyncKey
     : flow.visibleEditorSyncKey;
-
-  React.useEffect(() => {
-    setFocusNodeUids(JSON.parse(initialFocusNodeUidsKey) as string[]);
-  }, [initialFocusNodeUidsKey]);
-
-  React.useEffect(() => {
+React.useEffect(() => {
     const previousDisplayMode = previousDisplayModeRef.current;
     if (previousDisplayMode === resolvedDisplayMode) return;
     if (resolvedDisplayMode === "edit") {
@@ -192,41 +175,6 @@ export function useMindMapReviewFlowController({
     [flow.timer, onEditEditorStateChange],
   );
 
-  const toggleFocusNodeUid = React.useCallback(
-    async (nodeUid: string, source: string) => {
-      if (!nodeUid) return;
-      const previousFocusNodeUids = focusNodeUids;
-      const wasFocused = previousFocusNodeUids.includes(nodeUid);
-      const optimisticFocusNodeUids = wasFocused
-        ? previousFocusNodeUids.filter((uid) => uid !== nodeUid)
-        : [...previousFocusNodeUids, nodeUid];
-      setFocusNodeUids(optimisticFocusNodeUids);
-      flow.timer.registerActivity("edit_operation", { source });
-      try {
-        await onToggleFocusNode?.(nodeUid);
-      } catch {
-        setFocusNodeUids(previousFocusNodeUids);
-      }
-    },
-    [flow.timer, focusNodeUids, onToggleFocusNode],
-  );
-
-  const handleEditNodeContextMenu = React.useCallback(
-    (nodes: MindMapSelection[]) => {
-      if (!isInlineEditMode) return;
-      const nodeUid = nodes[0]?.uid ? String(nodes[0].uid) : "";
-      if (!nodeUid) return;
-      void toggleFocusNodeUid(nodeUid, "review_inline_edit_focus_contextmenu");
-    },
-    [isInlineEditMode, toggleFocusNodeUid],
-  );
-
-  const handleShortcutToggleFocusNode = React.useCallback(() => {
-    if (!isInlineEditMode) return;
-    const nodeUid = activeNodes[0]?.uid ? String(activeNodes[0].uid) : "";
-    if (!nodeUid) return;
-    void toggleFocusNodeUid(nodeUid, "shortcut_toggle_focus_node");
-  }, [activeNodes, isInlineEditMode, toggleFocusNodeUid]);
 
   const handleShortcutHideChildCards = React.useCallback(() => {
     if (isInlineEditMode || miniPalace.isPracticing) return;
@@ -237,10 +185,9 @@ export function useMindMapReviewFlowController({
 
   const shortcutHandlers = React.useMemo(
     () => ({
-      toggle_focus_node: handleShortcutToggleFocusNode,
       hide_child_cards_review: handleShortcutHideChildCards,
     }),
-    [handleShortcutHideChildCards, handleShortcutToggleFocusNode],
+    [handleShortcutHideChildCards],
   );
 
   useMemoryAnkiShortcuts(
@@ -428,8 +375,9 @@ export function useMindMapReviewFlowController({
     comboBurst,
     setComboBurst,
     activeNodes,
+    selectedNodeUid,
+    reviewNodeUids,
     setActiveNodes,
-    focusNodeUids,
     inlineEditEnabled,
     resolvedDisplayMode,
     isInlineEditMode,
@@ -441,7 +389,6 @@ export function useMindMapReviewFlowController({
     completeButtonClassName,
     cardFlashClassName,
     handleEditorStateChange,
-    handleEditNodeContextMenu,
     handleFullscreenToggle,
     handleMarkUncompleted,
     handleQuizBreakOpen,
@@ -458,3 +405,5 @@ export function useMindMapReviewFlowController({
 export type MindMapReviewFlowController = ReturnType<
   typeof useMindMapReviewFlowController
 >;
+
+

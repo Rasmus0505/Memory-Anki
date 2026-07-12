@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowRight, CornerUpLeft, Eye, Network } from 'lucide-react'
+import { ArrowRight, CornerUpLeft, Eye, Network, Undo2 } from 'lucide-react'
 import {
   MindMapEditorSurface,
   MindMapPageToolbar,
@@ -11,6 +11,7 @@ import type { MindMapEditorState, MindMapRecallRating, MindMapRecallRound } from
 import type { MindMapReviewFxPayload } from '@/features/mindmap-editor'
 import { normalizeMindMapDocument as normalizeEditorDocTree } from '@/entities/mindmap-document'
 import { cn } from '@/shared/lib/utils'
+import { isEditableKeyboardTarget } from '@/shared/keyboard/keyboardTargets'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
 
@@ -25,7 +26,6 @@ interface ReviewFlowMapPanelProps {
   editableEditorState?: MindMapEditorState | null
   visibleEditorSyncKey?: string | number | null
   currentPalaceId?: number | null
-  focusNodeUids?: string[]
   reviewFxSignal?: MindMapReviewFxPayload | null
   showMiniPalaceButton?: boolean
   miniPalaceDraft?: {
@@ -45,7 +45,8 @@ interface ReviewFlowMapPanelProps {
   recallRatings?: Map<string, MindMapRecallRating>
   recallRound?: MindMapRecallRound
   weakNodeUids?: string[]
-  onRateNode?: (nodeUid: string, rating: MindMapRecallRating, round: MindMapRecallRound) => void
+  onRateNode?: (nodeUid: string, rating: MindMapRecallRating, round: MindMapRecallRound, evidence?: { source?: 'manual' | 'inferred'; confidence?: number | null; responseMs?: number | null }) => void
+  onUndoRating?: () => { node_uid: string } | null
   onOpenRatingHistory?: () => void
 }
 
@@ -134,7 +135,6 @@ export function ReviewFlowMapPanel({
   editableEditorState = null,
   visibleEditorSyncKey = null,
   currentPalaceId = null,
-  focusNodeUids = [],
   reviewFxSignal = null,
   showMiniPalaceButton = false,
   miniPalaceDraft = {
@@ -155,6 +155,7 @@ export function ReviewFlowMapPanel({
   recallRound = 'first',
   weakNodeUids = [],
   onRateNode,
+  onUndoRating,
   onOpenRatingHistory,
 }: ReviewFlowMapPanelProps) {
   const navigate = useNavigate()
@@ -164,6 +165,8 @@ export function ReviewFlowMapPanel({
   const [hostReadyTimedOut, setHostReadyTimedOut] = useState(false)
   const [activeGuidedUid, setActiveGuidedUid] = useState<string | null>(null)
   const [ratingAdvancePending, setRatingAdvancePending] = useState(false)
+  const [inferredNodeUid, setInferredNodeUid] = useState<string | null>(null)
+  const nodeEnteredAtRef = useRef(0)
   const isEditMode = displayMode === 'edit'
   const frameEditorState = isEditMode && editableEditorState ? editableEditorState : visibleEditorState
   const frameSyncIntent = 'soft'
@@ -201,6 +204,10 @@ export function ReviewFlowMapPanel({
 
 
   useEffect(() => {
+    nodeEnteredAtRef.current = Date.now()
+  }, [guidedCurrentUid])
+
+  useEffect(() => {
     if (!guidedCurrentUid || activeGuidedUid === guidedCurrentUid) return
     setActiveGuidedUid(guidedCurrentUid)
   }, [activeGuidedUid, guidedCurrentUid])
@@ -232,18 +239,38 @@ export function ReviewFlowMapPanel({
     setActiveGuidedUid(guidedCurrentNode.uid)
     onNodeClick([toGuidedSelection(guidedCurrentNode)])
   }, [guidedCurrentNode, onNodeClick])
-  const handleGuidedRating = useCallback((rating: MindMapRecallRating) => {
+  const handleGuidedRating = useCallback((rating: MindMapRecallRating, source: 'manual' | 'inferred' = 'manual') => {
     if (!guidedCurrentNode || !onRateNode) return
-    onRateNode(guidedCurrentNode.uid, rating, recallRound)
+    onRateNode(guidedCurrentNode.uid, rating, recallRound, {
+      source,
+      confidence: source === 'inferred' ? 0.35 : null,
+      responseMs: Math.max(0, Date.now() - nodeEnteredAtRef.current),
+    })
+    if (source === 'inferred') setInferredNodeUid(guidedCurrentNode.uid)
+    else setInferredNodeUid(null)
     onNodeClick([toGuidedSelection(guidedCurrentNode)])
     setRatingAdvancePending(true)
   }, [guidedCurrentNode, onNodeClick, onRateNode, recallRound])
+
+  const handleGuidedNext = useCallback(() => {
+    if (!guidedNextNode) return
+    if (guidedCurrentNode && guidedCurrentRevealed && guidedCurrentNode.uid !== guidedModel.rootUid && !recallRatings.has(guidedCurrentNode.uid)) {
+      handleGuidedRating(2, 'inferred')
+      return
+    }
+    selectGuidedNode(guidedNextNode.uid)
+  }, [guidedCurrentNode, guidedCurrentRevealed, guidedModel.rootUid, guidedNextNode, handleGuidedRating, recallRatings, selectGuidedNode])
+
+  const handleUndoRating = useCallback(() => {
+    const latest = onUndoRating?.()
+    if (latest?.node_uid) selectGuidedNode(latest.node_uid)
+  }, [onUndoRating, selectGuidedNode])
 
   useEffect(() => {
     if (isEditMode || !onRateNode) return
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey) return
-      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return
+      if (isEditableKeyboardTarget(event.target) || document.querySelector('[role="dialog"]')) return
       if (event.key === ' ' || event.code === 'Space') {
         if (!guidedCurrentRevealed) {
           event.preventDefault()
@@ -251,14 +278,20 @@ export function ReviewFlowMapPanel({
         }
         return
       }
-      const rating = event.key === '1' ? 1 : event.key === '3' ? 3 : event.key === '5' ? 5 : null
+      if (event.key === 'Backspace' && onUndoRating) {
+        event.preventDefault()
+        handleUndoRating()
+        return
+      }
+      const key = event.key.toLowerCase()
+      const rating = key === '1' || key === 'j' ? 1 : key === '2' || key === 'k' ? 2 : key === '3' || key === 'l' ? 3 : null
       if (!rating || !guidedCurrentRevealed || guidedCurrentNode?.uid === guidedModel.rootUid) return
       event.preventDefault()
       handleGuidedRating(rating)
     }
     window.addEventListener('keydown', onKeyDown, true)
     return () => window.removeEventListener('keydown', onKeyDown, true)
-  }, [guidedCurrentNode?.uid, guidedCurrentRevealed, guidedModel.rootUid, handleGuidedRating, handleGuidedReveal, isEditMode, onRateNode])
+  }, [guidedCurrentNode?.uid, guidedCurrentRevealed, guidedModel.rootUid, handleGuidedRating, handleGuidedReveal, handleUndoRating, isEditMode, onRateNode, onUndoRating])
   const handleNodeActive = useCallback(
     (nodes: MindMapSelection[]) => {
       const nextUid = nodes[0]?.uid ?? null
@@ -339,7 +372,7 @@ export function ReviewFlowMapPanel({
               variant="outline"
               className="min-h-11 px-1 text-xs"
               disabled={!guidedNextNode}
-              onClick={() => selectGuidedNode(guidedNextNode?.uid ?? null)}
+              onClick={handleGuidedNext}
             >
               <ArrowRight className="size-4" />
               下一个
@@ -347,8 +380,8 @@ export function ReviewFlowMapPanel({
             {guidedCurrentRevealed && onRateNode && guidedCurrentNode?.uid !== guidedModel.rootUid ? (
               <div className="col-span-2 grid grid-cols-3 gap-1">
                 <Button type="button" size="sm" variant="destructive" className="min-h-11 px-1 text-xs" onClick={() => handleGuidedRating(1)}>忘记 1</Button>
-                <Button type="button" size="sm" variant="outline" className="min-h-11 px-1 text-xs" onClick={() => handleGuidedRating(3)}>模糊 3</Button>
-                <Button type="button" size="sm" className="min-h-11 px-1 text-xs" onClick={() => handleGuidedRating(5)}>记住 5</Button>
+                <Button type="button" size="sm" variant="outline" className="min-h-11 px-1 text-xs" onClick={() => handleGuidedRating(2)}>模糊 2</Button>
+                <Button type="button" size="sm" className="min-h-11 px-1 text-xs" onClick={() => handleGuidedRating(3)}>记得 3</Button>
               </div>
             ) : (
               <Button type="button" size="sm" className="min-h-11 px-1 text-xs" disabled={!guidedCurrentNode} onClick={handleGuidedReveal}>
@@ -372,10 +405,12 @@ export function ReviewFlowMapPanel({
         <div className="mb-3 hidden items-center justify-between gap-3 rounded-xl border border-border/70 bg-background/95 p-3 md:flex">
           <div className="min-w-0">
             <div className="flex items-center gap-2"><Badge variant={recallRound === 'weak_retry' ? 'warning' : 'secondary'}>{recallRound === 'weak_retry' ? '弱点回合' : '首次回忆'}</Badge><span className="truncate text-sm font-medium">{guidedCurrentNode?.text ?? '选择一个节点'}</span></div>
-            <div className="mt-1 text-xs text-muted-foreground">Space 揭示；揭示后按 1 忘记、3 模糊、5 记住，评分后自动进入下一个。</div>
+            <div className="mt-1 text-xs text-muted-foreground">Space 揭示；按 1/2/3（或 J/K/L）选择忘记/模糊/记得；Backspace 返回最近评分。</div>
           </div>
+          {inferredNodeUid ? <Badge variant="outline">已自动记为模糊，可按 Backspace 修正</Badge> : null}
+          {onUndoRating ? <Button size="sm" variant="ghost" onClick={handleUndoRating}><Undo2 className="size-4" />撤销</Button> : null}
           {guidedCurrentRevealed && guidedCurrentNode?.uid !== guidedModel.rootUid ? (
-            <div className="flex shrink-0 gap-2"><Button variant="destructive" onClick={() => handleGuidedRating(1)}>忘记 1</Button><Button variant="outline" onClick={() => handleGuidedRating(3)}>模糊 3</Button><Button onClick={() => handleGuidedRating(5)}>记住 5</Button></div>
+            <div className="flex shrink-0 gap-2"><Button variant="destructive" onClick={() => handleGuidedRating(1)}>忘记 1</Button><Button variant="outline" onClick={() => handleGuidedRating(2)}>模糊 2</Button><Button onClick={() => handleGuidedRating(3)}>记得 3</Button></div>
           ) : <Button onClick={handleGuidedReveal} disabled={!guidedCurrentNode}><Eye className="size-4" />揭示</Button>}
         </div>
       ) : null}      <MindMapPageToolbar
@@ -448,7 +483,6 @@ export function ReviewFlowMapPanel({
         initialViewPolicy="preserve"
         mobileViewPolicy={isEditMode ? 'map' : 'auto'}
         nodeClickViewportPolicy={isEditMode ? 'guided-center' : 'preserve'}
-        focusNodeUids={focusNodeUids}
         miniPalaceDraft={miniPalaceDraft}
         miniPalacePracticeActive={miniPalacePracticeActive}
         reviewFxSignal={reviewFxSignal}
