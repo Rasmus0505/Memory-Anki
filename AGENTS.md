@@ -7,4 +7,5 @@
 - Preserve dependency direction: presentation/UI composes use cases; domain/document code stays framework-free; cross-module calls use public facades, ports, or events.
 - New asynchronous entity-scoped work must carry stable owner/operation identity so stale requests cannot update another entity.
 - Run `python tools/quality_gate.py` while iterating and `python tools/quality_gate.py --full` before handoff when the environment supports the full suite.
+- After changes that can affect runtime startup, packaging, migrations, dependencies, frontend build output, or launcher scripts, run `python tools/quality_gate.py --launchers`. This is a disruptive Windows smoke test: it really runs `start-pwa.bat` and `start-desktop.bat`, verifies the API and Electron startup, cleans up the test desktop process, and restores the shared PWA service.
 - If architecture changes, update the relevant file under `docs/architecture/` and extend `tools/check_architecture.py` with a focused regression test.

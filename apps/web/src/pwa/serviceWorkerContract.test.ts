@@ -114,6 +114,8 @@ describe('PWA service worker contract', () => {
     expect(sw).toContain('key.startsWith(CACHE_PREFIX)')
     expect(sw).toContain('key.startsWith(LEGACY_CACHE_PREFIX)')
     expect(sw).toContain("new Request(url, { cache: 'reload' })")
+    expect(sw).toContain('Promise.allSettled')
+    expect(sw).toContain('precacheCurrentRelease')
     expect(sw).toContain("'/pwa-reset.html'")
     expect(sw).toContain("'/freestyle'")
     expect(sw).toContain("'/release.json'")

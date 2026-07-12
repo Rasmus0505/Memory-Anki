@@ -6,11 +6,17 @@ const LEGACY_CACHE_PREFIX = 'memory-anki-mobile-'
 const PRECACHE_URLS = ['/', '/freestyle', '/pwa-reset.html', '/offline.html', '/manifest.webmanifest', '/release.json', '/favicon.svg', '/pwa-icon.svg']
 const ZERO_COUNTS = { quiz_question: 0, review: 0, practice: 0, english: 0, english_reading: 0 }
 
-self.addEventListener('install', (event) => {
-  event.waitUntil(caches.open(APP_CACHE).then((cache) => Promise.all(PRECACHE_URLS.map(async (url) => {
+async function precacheCurrentRelease() {
+  const cache = await caches.open(APP_CACHE)
+  await Promise.allSettled(PRECACHE_URLS.map(async (url) => {
     const response = await fetch(new Request(url, { cache: 'reload' }))
-    if (response.ok) await cache.put(url, response)
-  }))).then(() => self.skipWaiting()))
+    if (!response.ok) throw new Error(`Precache failed: ${url} (${response.status})`)
+    await cache.put(url, response)
+  }))
+}
+
+self.addEventListener('install', (event) => {
+  event.waitUntil(precacheCurrentRelease().then(() => self.skipWaiting()))
 })
 
 self.addEventListener('activate', (event) => {

@@ -124,10 +124,16 @@ try {
   $childArgs += @("-ExecutionPolicy", "Bypass", "-File", $resolvedScript)
   $childArgs += @($ScriptArgs)
 
-  & powershell.exe @childArgs 2>&1 | ForEach-Object {
-    $line = [string]$_
-    Add-LaunchLine $line
-    Write-Output $line
+  $previousErrorActionPreference = $ErrorActionPreference
+  try {
+    $ErrorActionPreference = "Continue"
+    & powershell.exe @childArgs 2>&1 | ForEach-Object {
+      $line = [string]$_
+      Add-LaunchLine $line
+      Write-Output $line
+    }
+  } finally {
+    $ErrorActionPreference = $previousErrorActionPreference
   }
   $exitCode = if ($null -eq $LASTEXITCODE) { 0 } else { [int]$LASTEXITCODE }
 } catch {

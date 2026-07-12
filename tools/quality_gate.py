@@ -69,12 +69,16 @@ def _frontend_steps(*, full: bool) -> list[QualityStep]:
     return steps
 
 
-def build_steps(*, area: str, full: bool) -> list[QualityStep]:
+def build_steps(*, area: str, full: bool, launchers: bool = False) -> list[QualityStep]:
     steps: list[QualityStep] = []
     if area in {"all", "backend"}:
         steps.extend(_backend_steps(full=full))
     if area in {"all", "frontend"}:
         steps.extend(_frontend_steps(full=full))
+    if launchers:
+        steps.append(
+            QualityStep("Windows launcher smoke", _python("tools/launcher_smoke.py"), REPO_ROOT)
+        )
     return steps
 
 
@@ -93,8 +97,13 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Run the canonical Memory Anki quality gate.")
     parser.add_argument("--area", choices=("all", "backend", "frontend"), default="all")
     parser.add_argument("--full", action="store_true", help="Also run full tests and frontend build.")
+    parser.add_argument(
+        "--launchers",
+        action="store_true",
+        help="Run disruptive Windows smoke tests for start-pwa.bat and start-desktop.bat.",
+    )
     args = parser.parse_args()
-    return run_steps(build_steps(area=args.area, full=args.full))
+    return run_steps(build_steps(area=args.area, full=args.full, launchers=args.launchers))
 
 
 if __name__ == "__main__":

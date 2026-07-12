@@ -143,6 +143,30 @@ def test_prepare_skips_all_work_when_fingerprints_are_current():
     sync.assert_not_called()
 
 
+
+def test_prepare_repairs_missing_desktop_runtime():
+    fingerprints = {"frontend": "f", "backend": "b", "migrations": "m"}
+    with (
+        patch.object(pwa_server, "service_lock", return_value=nullcontext()),
+        patch.object(pwa_server, "_current_update_fingerprints", return_value=fingerprints),
+        patch.object(pwa_server, "_read_update_state", return_value=fingerprints),
+        patch.object(pwa_server, "_pwa_dist_ready", return_value=True),
+        patch.object(pwa_server, "_desktop_runtime_ready", return_value=False),
+        patch.object(pwa_server, "_database_at_alembic_head", return_value=True),
+        patch.object(pwa_server.dev_server, "kill_memory_anki_desktop_processes"),
+        patch.object(pwa_server.dev_server, "free_port"),
+        patch.object(pwa_server, "_stop_service_unlocked", return_value=True),
+        patch.object(pwa_server.dev_server, "sync_after_stop", return_value=True),
+        patch.object(pwa_server, "_ensure_desktop_runtime", return_value=True) as repair,
+        patch.object(pwa_server, "_ensure_runtime_initialized", return_value=True),
+        patch.object(pwa_server, "_write_update_state") as write_state,
+    ):
+        assert pwa_server.prepare() == 0
+
+    repair.assert_called_once_with()
+    write_state.assert_called_once_with(fingerprints)
+
+
 def test_prepare_only_builds_changed_frontend_and_records_success():
     current = {"frontend": "new", "backend": "same", "migrations": "same"}
     previous = {"frontend": "old", "backend": "same", "migrations": "same"}
@@ -242,6 +266,18 @@ def test_diagnostic_runner_writes_fixed_ai_debug_artifacts():
     assert "git_commit" in runner
 
 
+def test_diagnostic_runner_does_not_promote_child_stderr_to_wrapper_failure():
+    runner = (TOOLS_DIR / "run_with_diagnostics.ps1").read_text(encoding="utf-8")
+
+    invocation = runner.index("& powershell.exe @childArgs 2>&1")
+    relaxed_errors = runner.rindex('$ErrorActionPreference = "Continue"', 0, invocation)
+    restored_errors = runner.index(
+        "$ErrorActionPreference = $previousErrorActionPreference", invocation
+    )
+
+    assert relaxed_errors < invocation < restored_errors
+
+
 def test_tray_and_autostart_launch_shared_service_through_diagnostic_runner():
     tray = (TOOLS_DIR / "pwa_tray.ps1").read_text(encoding="utf-8")
     launcher = (TOOLS_DIR / "pwa_launcher.ps1").read_text(encoding="utf-8")
@@ -272,3 +308,21 @@ def test_retired_0022_revision_remains_available_for_existing_databases():
 
     assert 'revision = "0022_preserve_retired_mindmap_preferences"' in source
     assert 'down_revision = "0021_remove_mindmap_view_preferences"' in source
+def test_quality_gate_exposes_real_launcher_smoke_option():
+    quality_gate = (TOOLS_DIR / "quality_gate.py").read_text(encoding="utf-8")
+    launcher_smoke = (TOOLS_DIR / "launcher_smoke.py").read_text(encoding="utf-8")
+
+    assert '"--launchers"' in quality_gate
+    assert 'QualityStep("Windows launcher smoke"' in quality_gate
+    assert '"start-pwa.bat", "--smoke-test"' in launcher_smoke
+    assert '"start-desktop.bat"' in launcher_smoke
+    assert "OPENAPI_URL" in launcher_smoke
+    assert "_electron_pids" in launcher_smoke
+
+
+def test_agent_rules_require_launcher_smoke_for_runtime_changes():
+    rules = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
+
+    assert "python tools/quality_gate.py --launchers" in rules
+    assert "start-pwa.bat" in rules
+    assert "start-desktop.bat" in rules

@@ -6,7 +6,6 @@ import os
 import hashlib
 import json
 import re
-import json
 import shutil
 import signal
 import sqlite3
@@ -296,6 +295,41 @@ def _validate_web_release() -> bool:
     if missing:
         print(f"[!] PWA index references missing assets: {missing}")
         return False
+    return True
+
+
+def _desktop_runtime_ready() -> bool:
+    if os.name != "nt":
+        return True
+    return (WEB_DIR / "node_modules" / "electron" / "dist" / "electron.exe").is_file()
+
+
+def _ensure_desktop_runtime() -> bool:
+    if _desktop_runtime_ready():
+        return True
+    try:
+        npm = dev_server._resolve_npm()
+    except Exception as exc:
+        print(f"[!] Unable to find npm for Electron repair: {exc}")
+        return False
+    LOGS_DIR.mkdir(parents=True, exist_ok=True)
+    log_path = LOGS_DIR / "electron-install.log"
+    _append_log_separator(log_path, "Electron runtime repair")
+    print(f"[i] Electron runtime is incomplete; repairing it, log: {log_path}")
+    with log_path.open("ab") as log_file:
+        result = subprocess.run(
+            [npm, "rebuild", "electron", "--foreground-scripts"],
+            cwd=str(WEB_DIR),
+            stdout=log_file,
+            stderr=subprocess.STDOUT,
+            stdin=subprocess.DEVNULL,
+            check=False,
+            **dev_server.hidden_process_kwargs(),
+        )
+    if result.returncode != 0 or not _desktop_runtime_ready():
+        print(f"[!] Electron runtime repair failed. See {log_path}")
+        return False
+    print("[ok] Electron desktop runtime is ready")
     return True
 
 
@@ -607,6 +641,7 @@ def prepare(*, build: bool = True) -> int:
         frontend_changed = build and (
             not previous or current["frontend"] != previous.get("frontend") or not _pwa_dist_ready()
         )
+        desktop_runtime_missing = not _desktop_runtime_ready()
         backend_changed = not previous or current["backend"] != previous.get("backend")
         migrations_changed = (
             not previous
@@ -614,13 +649,15 @@ def prepare(*, build: bool = True) -> int:
             or not _database_at_alembic_head()
         )
 
-        if not frontend_changed and not backend_changed and not migrations_changed:
+        if not frontend_changed and not desktop_runtime_missing and not backend_changed and not migrations_changed:
             print(f"[ok] Memory Anki is already up to date ({time.perf_counter() - started_at:.2f}s).")
             return 0
 
         changed = []
         if frontend_changed:
             changed.append("frontend")
+        if desktop_runtime_missing:
+            changed.append("desktop runtime")
         if backend_changed:
             changed.append("backend")
         if migrations_changed:
@@ -634,6 +671,8 @@ def prepare(*, build: bool = True) -> int:
         if not dev_server.sync_after_stop():
             return 1
 
+        if desktop_runtime_missing and not _ensure_desktop_runtime():
+            return 1
         if frontend_changed:
             if not _run_frontend_build():
                 return 1
