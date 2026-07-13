@@ -5,7 +5,13 @@ from pathlib import Path
 import fitz
 import pytest
 
-from memory_anki.infrastructure.db._tables.batch_generation import BatchGenerationStep
+from memory_anki.infrastructure.db._tables.batch_generation import (
+    BatchGenerationAsset,
+    BatchGenerationBook,
+    BatchGenerationSection,
+    BatchGenerationStep,
+    BatchGenerationWorkspace,
+)
 from memory_anki.modules.batch_generation.application.workspace_service import BatchWorkspaceService
 
 
@@ -71,3 +77,58 @@ def test_representative_gate_prompt_preview_and_publish_conflict(db_session, tmp
     plan = service.build_publish_plan(workspace_id)
     assert plan["status"] == "blocked"
     assert plan["conflicts"][0]["reason"] == "unresolved_quality_issues"
+
+
+def test_delete_workspace_removes_rows_and_asset_directory(db_session, tmp_path, monkeypatch) -> None:
+    asset_root = tmp_path / "batch_generation"
+    monkeypatch.setattr(
+        "memory_anki.modules.batch_generation.application.workspace_service.APP_HOME",
+        tmp_path,
+    )
+    monkeypatch.setattr(
+        "memory_anki.modules.batch_generation.application.workspace_service.ASSET_ROOT",
+        asset_root,
+    )
+    source = tmp_path / "待删除教材.pdf"
+    _pdf(source)
+    service = BatchWorkspaceService(db_session)
+    workspace_id = service.create_workspace("删除测试")["id"]
+    snapshot = service.add_pdf(workspace_id, source, "textbook")
+    book_id = snapshot["books"][0]["id"]
+    section_id = snapshot["books"][0]["sections"][0]["id"]
+    asset_id = snapshot["assets"][0]["id"]
+    workspace_dir = asset_root / workspace_id
+
+    result = service.delete_workspace(workspace_id)
+
+    assert result == {"id": workspace_id, "deleted": True}
+    assert not workspace_dir.exists()
+    assert db_session.get(BatchGenerationWorkspace, workspace_id) is None
+    assert db_session.get(BatchGenerationAsset, asset_id) is None
+    assert db_session.get(BatchGenerationBook, book_id) is None
+    assert db_session.get(BatchGenerationSection, section_id) is None
+    with pytest.raises(KeyError, match="workspace not found"):
+        service.delete_workspace(workspace_id)
+
+
+def test_delete_workspace_rejects_asset_path_outside_root(db_session, tmp_path, monkeypatch) -> None:
+    workspace_id = "../outside"
+    db_session.add(
+        BatchGenerationWorkspace(
+            id=workspace_id,
+            title="非法路径测试",
+            operation_id="operation-id",
+            settings_json="{}",
+        )
+    )
+    db_session.commit()
+    monkeypatch.setattr(
+        "memory_anki.modules.batch_generation.application.workspace_service.ASSET_ROOT",
+        tmp_path / "batch_generation",
+    )
+    service = BatchWorkspaceService(db_session)
+
+    with pytest.raises(RuntimeError, match="invalid workspace asset path"):
+        service.delete_workspace(workspace_id)
+
+    assert db_session.get(BatchGenerationWorkspace, workspace_id) is not None

@@ -34,12 +34,14 @@ export function FreestyleSettingsDialog({
   palaceOptions,
   onOpenChange,
   onConfigChange,
+  onClearProgress,
 }: {
   open: boolean
   config: FreestyleConfig
   palaceOptions: FreestylePalaceContext[]
   onOpenChange: (open: boolean) => void
   onConfigChange: (updater: (current: FreestyleConfig) => FreestyleConfig) => void
+  onClearProgress: () => void
 }) {
   const selectedPalaceIds = new Set(config.specificPalaceIds)
   return (
@@ -206,6 +208,9 @@ export function FreestyleSettingsDialog({
         </div>
 
         <DialogFooter>
+          <Button type="button" variant="destructive" onClick={onClearProgress}>
+            清空当前模式进度
+          </Button>
           <Button type="button" onClick={() => onOpenChange(false)}>
             完成
           </Button>

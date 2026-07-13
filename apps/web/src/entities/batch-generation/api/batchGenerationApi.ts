@@ -58,6 +58,13 @@ export function getBatchWorkspace(id: string) {
   return request<BatchWorkspace>(`/batch-generation/workspaces/${id}`)
 }
 
+export function deleteBatchWorkspace(id: string) {
+  return request<{ id: string; deleted: true }>(`/batch-generation/workspaces/${id}`, {
+    method: 'DELETE',
+    persistence: { resourceKey: `batch:delete:${id}`, description: '删除整书批量工作区' },
+  })
+}
+
 export function uploadBatchPdfs(id: string, role: 'textbook' | 'quiz', files: File[]) {
   const formData = new FormData()
   formData.append('role', role)

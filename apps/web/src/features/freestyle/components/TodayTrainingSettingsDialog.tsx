@@ -20,11 +20,13 @@ export function TodayTrainingSettingsDialog({
   config,
   onOpenChange,
   onConfigChange,
+  onClearProgress,
 }: {
   open: boolean
   config: TodayTrainingConfig
   onOpenChange: (open: boolean) => void
   onConfigChange: (updater: (current: TodayTrainingConfig) => TodayTrainingConfig) => void
+  onClearProgress: () => void
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -67,6 +69,9 @@ export function TodayTrainingSettingsDialog({
         </div>
 
         <DialogFooter>
+          <Button type="button" variant="destructive" onClick={onClearProgress}>
+            清空当前模式进度
+          </Button>
           <Button type="button" variant="outline" onClick={() => onConfigChange(() => DEFAULT_TODAY_TRAINING_CONFIG)}>
             恢复默认
           </Button>

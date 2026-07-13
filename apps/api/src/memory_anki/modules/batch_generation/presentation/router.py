@@ -66,6 +66,14 @@ def get_workspace(workspace_id: str, service: BatchWorkspaceService = Depends(wo
         raise _translate_error(exc) from exc
 
 
+@router.delete("/workspaces/{workspace_id}")
+def delete_workspace(workspace_id: str, service: BatchWorkspaceService = Depends(workspace_service_dep)):
+    try:
+        return service.delete_workspace(workspace_id)
+    except Exception as exc:
+        raise _translate_error(exc) from exc
+
+
 @router.post("/workspaces/{workspace_id}/assets")
 async def upload_assets(
     workspace_id: str,

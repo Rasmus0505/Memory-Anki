@@ -48,6 +48,68 @@ class BatchWorkspaceService:
         self.session.commit()
         return self.snapshot(workspace.id)
 
+    def delete_workspace(self, workspace_id: str) -> dict[str, Any]:
+        workspace = self._workspace(workspace_id)
+        root = ASSET_ROOT.resolve()
+        workspace_dir = (ASSET_ROOT / workspace.id).resolve()
+        if workspace_dir.parent != root:
+            raise RuntimeError("invalid workspace asset path")
+
+        tombstone = root / f".deleting-{workspace.id}-{uuid.uuid4()}"
+        moved_assets = False
+        if workspace_dir.exists():
+            root.mkdir(parents=True, exist_ok=True)
+            workspace_dir.rename(tombstone)
+            moved_assets = True
+
+        try:
+            book_ids = [
+                item.id
+                for item in self.session.query(BatchGenerationBook.id)
+                .filter_by(workspace_id=workspace_id)
+                .all()
+            ]
+            section_ids = [
+                item.id
+                for item in self.session.query(BatchGenerationSection.id)
+                .filter(BatchGenerationSection.book_id.in_(book_ids))
+                .all()
+            ] if book_ids else []
+            if section_ids:
+                self.session.query(BatchGenerationQualityIssue).filter(
+                    BatchGenerationQualityIssue.section_id.in_(section_ids)
+                ).delete(synchronize_session=False)
+                self.session.query(BatchGenerationDraft).filter(
+                    BatchGenerationDraft.section_id.in_(section_ids)
+                ).delete(synchronize_session=False)
+                self.session.query(BatchGenerationStep).filter(
+                    BatchGenerationStep.section_id.in_(section_ids)
+                ).delete(synchronize_session=False)
+                self.session.query(BatchGenerationSection).filter(
+                    BatchGenerationSection.id.in_(section_ids)
+                ).delete(synchronize_session=False)
+            self.session.query(BatchGenerationPublishPlan).filter_by(
+                workspace_id=workspace_id
+            ).delete(synchronize_session=False)
+            if book_ids:
+                self.session.query(BatchGenerationBook).filter(
+                    BatchGenerationBook.id.in_(book_ids)
+                ).delete(synchronize_session=False)
+            self.session.query(BatchGenerationAsset).filter_by(
+                workspace_id=workspace_id
+            ).delete(synchronize_session=False)
+            self.session.delete(workspace)
+            self.session.commit()
+        except Exception:
+            self.session.rollback()
+            if moved_assets and tombstone.exists() and not workspace_dir.exists():
+                tombstone.rename(workspace_dir)
+            raise
+
+        if moved_assets:
+            shutil.rmtree(tombstone)
+        return {"id": workspace_id, "deleted": True}
+
     def add_pdf(self, workspace_id: str, source: Path, role: str) -> dict[str, Any]:
         workspace = self._workspace(workspace_id)
         if role not in {"textbook", "quiz"}:

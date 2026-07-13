@@ -19,3 +19,10 @@ The batch generation context owns persistent planning for whole-book and multi-P
 ## First-Version Execution Boundary
 
 The first version provides complete planning, prompt-package inspection, draft persistence, quality checks, and publish-plan review. Actual AI execution and final content publication reuse the existing Palace editor/import and Quiz generation workspaces rather than duplicating those engines.
+
+## Workspace Lifecycle
+
+- Leaving `/batch-generation` returns to the creation root without clearing the active workspace; reopening the batch workspace resumes the saved local workspace ID.
+- Deletion is explicit and destructive. The application removes workspace-owned plans, assets, sections, steps, drafts, quality issues, publish plans, and the workspace directory below `APP_HOME/batch_generation`.
+- Workspace deletion validates that the resolved asset directory remains directly below the batch-generation root and uses a temporary tombstone directory so a failed database transaction can restore the files.
+- Content already published into Palace, Knowledge, or Quiz ownership is not deleted with the batch workspace.

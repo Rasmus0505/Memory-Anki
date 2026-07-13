@@ -20,12 +20,20 @@ import {
   DialogTitle,
 } from '@/shared/components/ui/dialog'
 
-interface AiRunConfigRequest {
+export interface AiGenerationContextOption {
+  id: 'mindmap' | 'quiz' | string
+  label: string
+  description?: string
+  content: string
+}
+
+export interface AiRunConfigRequest {
   scenarioKey: string
   entrypointKey: string
   title: string
   description?: string
   syncScenarioKeys?: string[]
+  contextOptions?: AiGenerationContextOption[]
 }
 
 interface MultiScenarioEntry {
@@ -34,6 +42,7 @@ interface MultiScenarioEntry {
   label?: string
   description?: string
   syncScenarioKeys?: string[]
+  contextOptions?: AiGenerationContextOption[]
 }
 
 interface MultiAiRunConfigRequest {
@@ -153,6 +162,7 @@ export function useAiRunConfigDialog() {
   const [pending, setPending] = React.useState<PendingRequest | null>(null)
   const [selectedConfigs, setSelectedConfigs] = React.useState<Record<string, AiRuntimeOptions>>({})
   const [promptTemplates, setPromptTemplates] = React.useState<Record<string, PromptTemplateSnapshot>>({})
+  const [selectedContexts, setSelectedContexts] = React.useState<Record<string, string[]>>({})
 
   const pendingEntries = React.useMemo(() => pending?.entries ?? [], [pending])
   const currentEntries = React.useMemo(
@@ -212,6 +222,7 @@ export function useAiRunConfigDialog() {
         }
       }
       const nextSelectedConfigs: Record<string, AiRuntimeOptions> = {}
+      const nextSelectedContexts: Record<string, string[]> = {}
       for (const entry of request.entries) {
         const scenario = nextScenarios.find((item) => item.key === entry.scenarioKey)
         if (!scenario) {
@@ -226,6 +237,7 @@ export function useAiRunConfigDialog() {
           recentConfig,
           promptTemplate,
         )
+        nextSelectedContexts[entry.scenarioKey] = []
       }
       if (request.entries.length === 0) {
         toast.error('当前入口没有可选择的 AI 场景。')
@@ -233,6 +245,7 @@ export function useAiRunConfigDialog() {
       }
       return new Promise<AiScenarioRuntimeOptionsMap | undefined>((resolve) => {
         setSelectedConfigs(nextSelectedConfigs)
+        setSelectedContexts(nextSelectedContexts)
         setPending({ ...request, resolve })
       })
     },
@@ -249,6 +262,7 @@ export function useAiRunConfigDialog() {
             scenarioKey: request.scenarioKey,
             entrypointKey: request.entrypointKey,
             syncScenarioKeys: request.syncScenarioKeys,
+            contextOptions: request.contextOptions,
           },
         ],
       })
@@ -261,6 +275,7 @@ export function useAiRunConfigDialog() {
     const resolve = pending?.resolve
     setPending(null)
     setSelectedConfigs({})
+    setSelectedContexts({})
     if (resolve) {
       resolve(undefined)
     }
@@ -288,7 +303,11 @@ export function useAiRunConfigDialog() {
           thinking_enabled: selectedModelMeta.supports_thinking
             ? Boolean(selectedConfig?.thinking_enabled)
             : false,
-          prompt_override: selectedConfig?.prompt_override?.trim() || undefined,
+          prompt_override: buildPromptWithContexts(
+            selectedConfig?.prompt_override?.trim() || '',
+            entry.contextOptions ?? [],
+            selectedContexts[entry.scenarioKey] ?? [],
+          ) || undefined,
         }
         nextPayload[entry.scenarioKey] = payload
       }
@@ -310,13 +329,14 @@ export function useAiRunConfigDialog() {
       const resolve = pending.resolve
       setPending(null)
       setSelectedConfigs({})
+      setSelectedContexts({})
       resolve(nextPayload)
     } catch (error) {
       toast.error(error instanceof Error ? error.message : '保存 AI 生成配置失败。')
     } finally {
       setConfirming(false)
     }
-  }, [closeDialog, pending, scenarios, selectedConfigs])
+  }, [closeDialog, pending, scenarios, selectedConfigs, selectedContexts])
 
   const updateScenarioConfig = React.useCallback(
     (
@@ -389,6 +409,14 @@ export function useAiRunConfigDialog() {
             const selectedModel = selectedConfig?.model?.trim() || ''
             const selectedModelMeta =
               scenario?.available_models.find((item) => item.key === selectedModel) ?? null
+            const enabledContextIds = selectedContexts[entry.scenarioKey] ?? []
+            const contextCharacters = (entry.contextOptions ?? [])
+              .filter((item) => enabledContextIds.includes(item.id))
+              .reduce((total, item) => total + item.content.length, 0)
+            const estimatedTokens = Math.ceil(
+              ((selectedConfig?.prompt_override ?? '').length + contextCharacters) / 1.5,
+            )
+            const exceedsBudget = estimatedTokens > 24000
             return (
               <div
                 key={entry.scenarioKey}
@@ -502,6 +530,40 @@ export function useAiRunConfigDialog() {
                   <span className="text-xs text-muted-foreground">
                     这里会覆盖本次系统提示词；页面里的额外提示词/自然语言提示仍会作为补充要求拼接。
                   </span>
+                  {(entry.contextOptions ?? []).length > 0 ? (
+                    <div className="space-y-2 rounded-lg border border-border/60 bg-muted/10 p-3">
+                      <div className="font-medium">上下文快照</div>
+                      {(entry.contextOptions ?? []).map((context) => (
+                        <label key={context.id} className="flex items-start gap-2 rounded-md border bg-background/70 p-2">
+                          <input
+                            type="checkbox"
+                            className="mt-1 size-4"
+                            checked={enabledContextIds.includes(context.id)}
+                            onChange={(event) => {
+                              setSelectedContexts((current) => {
+                                const ids = current[entry.scenarioKey] ?? []
+                                return {
+                                  ...current,
+                                  [entry.scenarioKey]: event.target.checked
+                                    ? [...ids, context.id]
+                                    : ids.filter((id) => id !== context.id),
+                                }
+                              })
+                            }}
+                          />
+                          <span>
+                            <span className="block font-medium">{context.label}</span>
+                            <span className="text-xs text-muted-foreground">
+                              {context.description || `${context.content.length} 字，约 ${Math.ceil(context.content.length / 1.5)} Token`}
+                            </span>
+                          </span>
+                        </label>
+                      ))}
+                      <div className={exceedsBudget ? 'text-xs text-destructive' : 'text-xs text-muted-foreground'}>
+                        当前调用包约 {estimatedTokens} Token{exceedsBudget ? '，超过 24000 Token 安全预算，请减少上下文或提示词。' : '。'}
+                      </div>
+                    </div>
+                  ) : null}
                 </label>
               </div>
             )
@@ -520,7 +582,14 @@ export function useAiRunConfigDialog() {
             onClick={() => { void handleConfirm() }}
             disabled={confirming || currentEntries.some(({ entry, scenario }) => {
               const selectedModel = selectedConfigs[entry.scenarioKey]?.model?.trim() || ''
-              return !scenario?.available_models.some((item) => item.key === selectedModel)
+              const selectedIds = selectedContexts[entry.scenarioKey] ?? []
+              const contextCharacters = (entry.contextOptions ?? [])
+                .filter((item) => selectedIds.includes(item.id))
+                .reduce((total, item) => total + item.content.length, 0)
+              const exceedsBudget = Math.ceil(
+                ((selectedConfigs[entry.scenarioKey]?.prompt_override ?? '').length + contextCharacters) / 1.5,
+              ) > 24000
+              return exceedsBudget || !scenario?.available_models.some((item) => item.key === selectedModel)
             })}
           >
             {confirming ? '保存中...' : '开始生成'}
@@ -535,4 +604,17 @@ export function useAiRunConfigDialog() {
     promptForScenarioAiOptions,
     aiRunConfigDialog: dialog,
   }
+}
+
+function buildPromptWithContexts(
+  prompt: string,
+  options: AiGenerationContextOption[],
+  selectedIds: string[],
+) {
+  const selected = options.filter((item) => selectedIds.includes(item.id) && item.content.trim())
+  if (selected.length === 0) return prompt
+  const contextText = selected
+    .map((item) => `【${item.label}】\n${item.content.trim()}`)
+    .join('\n\n')
+  return `${prompt.trim()}\n\n以下内容是本次运行创建时的只读上下文快照：\n${contextText}`.trim()
 }

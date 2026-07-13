@@ -13,6 +13,8 @@ from memory_anki.modules.palace_quiz.application.workspace_service import (
     delete_pdf_asset,
     parse_page_numbers,
     reorder_sources,
+    serialize_job,
+    update_job,
     update_matching,
     upload_pdf_asset,
 )
@@ -105,3 +107,27 @@ def test_sources_reorder_and_matching_answer_edit_persist(db_session) -> None:
     question = updated["matching_items"][0]["question"]
     assert question["stem"] == "细胞核的作用？"
     assert question["answer_payload"]["reference_answer"] == "储存遗传信息"
+
+
+def test_quick_generation_job_persists_status_preview_and_run_snapshot(db_session) -> None:
+    job = _seed_job(db_session)
+    preview = {"questions": [], "grouped_questions": None, "ai_call_log_id": "log-1"}
+    updated = update_job(
+        db_session,
+        job["id"],
+        {
+            "status": "preview",
+            "preview": preview,
+            "options": {
+                "quick_generation": True,
+                "source_kind": "text-files",
+                "ai_options": {"model": "qwen-test", "prompt_override": "完整提示词"},
+            },
+        },
+    )
+
+    assert updated["status"] == "preview"
+    assert updated["preview"] == preview
+    persisted = serialize_job(db_session, job["id"])
+    assert persisted["options"]["quick_generation"] is True
+    assert persisted["options"]["ai_options"]["prompt_override"] == "完整提示词"

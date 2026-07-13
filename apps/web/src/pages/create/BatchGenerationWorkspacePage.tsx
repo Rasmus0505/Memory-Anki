@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
-import { AlertTriangle, BookOpen, FileSearch, Save, Sparkles, Upload } from 'lucide-react'
+import { Link, useNavigate } from 'react-router-dom'
+import { AlertTriangle, BookOpen, FileSearch, Save, Sparkles, Trash2, Upload } from 'lucide-react'
 import {
   buildBatchPublishPlan,
   confirmBatchOutline,
   createBatchWorkspace,
+  deleteBatchWorkspace,
   getBatchWorkspace,
   previewBatchPrompt,
   saveBatchDraft,
@@ -20,11 +21,13 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui
 import { Input } from '@/shared/components/ui/input'
 import { Label } from '@/shared/components/ui/label'
 import { Textarea } from '@/shared/components/ui/textarea'
+import { appConfirm } from '@/shared/components/ui/native-dialog'
 
 const STORAGE_KEY = 'memory-anki-batch-workspace-id'
 const outputLabels: Record<OutputMode, string> = { palace: '仅宫殿', quiz: '仅题库', both: '宫殿 + 题库', skip: '跳过' }
 
 export default function BatchGenerationWorkspacePage() {
+  const navigate = useNavigate()
   const [workspace, setWorkspace] = useState<BatchWorkspace | null>(null)
   const [selectedSectionId, setSelectedSectionId] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -94,12 +97,41 @@ export default function BatchGenerationWorkspacePage() {
     }
   }
 
+  async function deleteWorkspace() {
+    if (!workspace) return
+    const confirmed = await appConfirm(
+      '确定删除当前批量生成工作区吗？已上传的 PDF、目录规划和草稿都会永久删除，此操作不可撤销。',
+      {
+        title: '删除批量生成工作区',
+        confirmText: '删除工作区',
+        tone: 'danger',
+      },
+    )
+    if (!confirmed) return
+
+    setBusy(true)
+    try {
+      await deleteBatchWorkspace(workspace.id)
+      if (localStorage.getItem(STORAGE_KEY) === workspace.id) {
+        localStorage.removeItem(STORAGE_KEY)
+      }
+      setWorkspace(null)
+      setSelectedSectionId(null)
+      setPromptPreview(null)
+      setPublishPlan(null)
+      navigate('/palaces/new', { replace: true })
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : '删除工作区失败')
+    } finally {
+      setBusy(false)
+    }
+  }
   if (!workspace) {
     return <main className="mx-auto flex min-h-[70vh] max-w-3xl items-center justify-center p-6"><Card className="w-full"><CardHeader><CardTitle className="flex items-center gap-2"><Sparkles className="size-5" />整书 PDF 批量生成与校正</CardTitle></CardHeader><CardContent className="space-y-4 text-sm text-muted-foreground"><p>创建持久化草稿工作区，先规划目录和页段，再按节生成、预览、纠错和发布。</p><Button onClick={() => void createWorkspace()} disabled={busy}>创建工作区</Button></CardContent></Card></main>
   }
 
   return <main className="mx-auto max-w-[1500px] space-y-4 p-4 lg:p-6">
-    <div className="flex flex-wrap items-center justify-between gap-3"><div><h1 className="text-2xl font-semibold">{workspace.title}</h1><p className="text-sm text-muted-foreground">目录确认 → 代表节 → 批量生成 → 异常复核 → 发布清单</p></div><div className="flex gap-2"><label><input className="hidden" type="file" accept="application/pdf" multiple onChange={(event) => void upload('textbook', event.target.files)} /><Button asChild variant="outline"><span><Upload className="mr-2 size-4" />教材 PDF</span></Button></label><label><input className="hidden" type="file" accept="application/pdf" multiple onChange={(event) => void upload('quiz', event.target.files)} /><Button asChild variant="outline"><span><Upload className="mr-2 size-4" />题库 PDF</span></Button></label><Button onClick={() => void buildBatchPublishPlan(workspace.id).then(setPublishPlan)}><Save className="mr-2 size-4" />发布预检</Button></div></div>
+    <div className="flex flex-wrap items-center justify-between gap-3"><div><h1 className="text-2xl font-semibold">{workspace.title}</h1><p className="text-sm text-muted-foreground">目录确认 → 代表节 → 批量生成 → 异常复核 → 发布清单</p></div><div className="flex gap-2"><label><input className="hidden" type="file" accept="application/pdf" multiple onChange={(event) => void upload('textbook', event.target.files)} /><Button asChild variant="outline"><span><Upload className="mr-2 size-4" />教材 PDF</span></Button></label><label><input className="hidden" type="file" accept="application/pdf" multiple onChange={(event) => void upload('quiz', event.target.files)} /><Button asChild variant="outline"><span><Upload className="mr-2 size-4" />题库 PDF</span></Button></label><Button variant="destructive" disabled={busy} onClick={() => void deleteWorkspace()}><Trash2 className="mr-2 size-4" />删除当前工作区</Button><Button onClick={() => void buildBatchPublishPlan(workspace.id).then(setPublishPlan)}><Save className="mr-2 size-4" />发布预检</Button></div></div>
     {message ? <div className="rounded-md border bg-muted/40 px-3 py-2 text-sm">{message}</div> : null}
     <div className="grid gap-4 xl:grid-cols-[1.2fr_1fr]">
       <section className="space-y-4">

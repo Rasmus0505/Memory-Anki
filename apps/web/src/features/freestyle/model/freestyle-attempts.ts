@@ -39,8 +39,8 @@ export function buildAttemptHistoryPayload(
     question_id: card.question.id,
     palace_id: card.palace_context.id,
     palace_title: card.palace_context.resolved_title || card.palace_context.title || '',
-    mini_palace_id: card.mini_palace_context?.id ?? card.question.mini_palace_id ?? null,
-    mini_palace_name: card.mini_palace_context?.name || card.question.mini_palace?.name || '',
+    mini_palace_id: card.segment_contexts?.[0]?.id ?? null,
+    mini_palace_name: card.segment_contexts?.[0]?.name || '',
     chapter_id:
       card.chapter_context?.id ??
       card.question.classified_chapter_id ??

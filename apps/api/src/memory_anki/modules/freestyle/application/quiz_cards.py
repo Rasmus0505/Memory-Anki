@@ -14,7 +14,7 @@ from memory_anki.infrastructure.db._tables.palaces import (
 )
 from memory_anki.modules.palace_quiz.api import serialize_question
 
-from .card_context import chapter_context, mini_palace_context, palace_context
+from .card_context import chapter_context, palace_context, segment_context
 
 CONTENT_TYPE_QUIZ_QUESTION = "quiz_question"
 
@@ -146,7 +146,7 @@ def build_quiz_cards(
         for question in _iter_palace_questions(palace, chapter_questions_by_palace.get(palace.id, [])):
             if range_filter == wrong_range and int(question.incorrect_count or 0) <= 0:
                 continue
-            mini_palace = question.mini_palace
+            segments = list(getattr(question, "segments", []) or [])
             source_chapter = (
                 question.classified_chapter
                 if question.classified_chapter is not None
@@ -159,9 +159,9 @@ def build_quiz_cards(
                     "content_type": CONTENT_TYPE_QUIZ_QUESTION,
                     "question": serialize_question(question),
                     "palace_context": context,
-                    "mini_palace_context": mini_palace_context(mini_palace),
+                    "segment_contexts": [segment_context(segment) for segment in segments],
                     "chapter_context": chapter_context(source_chapter),
-                    "group_key": f"mini:{mini_palace.id}" if mini_palace else f"palace:{palace.id}",
+                    "group_key": f"palace:{palace.id}",
                 }
             )
     return cards

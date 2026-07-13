@@ -28,7 +28,7 @@ export function FreestyleQuizCardView({
   onRequestShortAnswerFeedback: () => void
 }) {
   const palaceTitle = card.palace_context.resolved_title || card.palace_context.title
-  const miniName = card.mini_palace_context?.name
+  const segmentNames = card.segment_contexts?.map((segment) => segment.name).filter(Boolean).join('、')
   const chapterName = card.chapter_context?.name
   const accent = QUESTION_TYPE_ACCENT[card.question.question_type]
   const isCorrect = state?.correct === true
@@ -62,7 +62,7 @@ export function FreestyleQuizCardView({
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex min-w-0 flex-wrap items-center gap-2">
             <Badge className="border-white/10 bg-white/8 text-zinc-200">{palaceTitle}</Badge>
-            {miniName ? <Badge className="border-white/10 bg-white/5 text-zinc-300">{miniName}</Badge> : null}
+            {segmentNames ? <Badge className="border-white/10 bg-white/5 text-zinc-300">{segmentNames}</Badge> : null}
             {chapterName ? <Badge className="border-white/10 bg-white/5 text-zinc-300">{chapterName}</Badge> : null}
             <Badge className="border-white/10 bg-white/5 text-zinc-300">
               {QUESTION_TYPE_DISPLAY[card.question.question_type] ?? card.question.question_type}

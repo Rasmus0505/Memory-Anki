@@ -148,8 +148,7 @@ def _load_active_palaces(
         session.query(Palace)
         .options(
             selectinload(Palace.chapters).selectinload(Chapter.subject),
-            selectinload(Palace.quiz_questions).selectinload(PalaceQuizQuestion.mini_palace),
-            selectinload(Palace.mini_palaces),
+            selectinload(Palace.quiz_questions).selectinload(PalaceQuizQuestion.segments),
             selectinload(Palace.segments),
         )
         .filter(
@@ -207,7 +206,7 @@ def _practice_palace_ids(palaces: list[Palace]) -> set[int]:
     for palace in palaces:
         if bool(getattr(palace, "needs_practice", False)):
             ids.add(palace.id)
-        if any(bool(getattr(item, "needs_practice", False)) for item in palace.mini_palaces or []):
+        if any(bool(getattr(item, "needs_practice", False)) for item in palace.segments or []):
             ids.add(palace.id)
     return ids
 
@@ -314,24 +313,24 @@ def _build_practice_cards(
                     palace=palace,
                 )
             )
-        for mini_palace in palace.mini_palaces or []:
-            if not bool(getattr(mini_palace, "needs_practice", False)):
+        for segment in palace.segments or []:
+            if not bool(getattr(segment, "needs_practice", False)):
                 continue
-            name = mini_palace.name or f"迷你宫殿训练 {mini_palace.sort_order + 1}"
+            name = segment.name or f"学习组 {segment.sort_order + 1}"
             cards.append(
                 _action_card(
-                    card_id=f"practice:mini:{mini_palace.id}",
+                    card_id=f"practice:segment:{segment.id}",
                     content_type=CONTENT_TYPE_PRACTICE,
-                    action_kind="mini_practice",
-                    title=f"迷你宫殿训练：{name}",
+                    action_kind="segment_practice",
+                    title=f"学习组训练：{name}",
                     subtitle=palace_title,
-                    href=f"/mini-palaces/{mini_palace.id}/practice",
+                    href=f"/segments/{segment.id}/practice",
                     priority=68,
-                    reason="迷你宫殿训练需要练习",
+                    reason="学习组需要练习",
                     palace=palace,
                     extra={
-                        "mini_palace_id": mini_palace.id,
-                        "mini_palace_name": name,
+                        "palace_segment_id": segment.id,
+                        "segment_name": name,
                     },
                 )
             )

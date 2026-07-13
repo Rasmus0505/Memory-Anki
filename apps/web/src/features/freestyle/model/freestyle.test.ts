@@ -34,8 +34,6 @@ function quizCard(id: number, groupKey: string, palaceId = 1): FreestyleCard {
     question: {
       id,
       palace_id: palaceId,
-      mini_palace_id: null,
-      mini_palace: null,
       question_type: 'multiple_choice',
       stem: `题 ${id}`,
       options: [

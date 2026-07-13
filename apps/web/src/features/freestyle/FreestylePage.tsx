@@ -315,6 +315,7 @@ export default function FreestylePage() {
           onStartWrongRetrain={handleStartWrongRetrain}
           onConfigChange={setConfigAndPersist}
           onTodayConfigChange={setTodayConfigAndPersist}
+          onClearProgress={() => void handleClearProgress()}
         />
 
         <FreestyleHudBar

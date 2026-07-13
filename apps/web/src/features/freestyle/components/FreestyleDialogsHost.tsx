@@ -33,6 +33,7 @@ export function FreestyleDialogsHost({
   onStartWrongRetrain,
   onConfigChange,
   onTodayConfigChange,
+  onClearProgress,
 }: {
   aiRunConfigDialog: ReactNode
   settingsOpen: boolean
@@ -56,6 +57,7 @@ export function FreestyleDialogsHost({
   onStartWrongRetrain: () => void
   onConfigChange: (updater: (current: FreestyleConfig) => FreestyleConfig) => void
   onTodayConfigChange: (updater: (current: TodayTrainingConfig) => TodayTrainingConfig) => void
+  onClearProgress: () => void
 }) {
   return (
     <>
@@ -66,12 +68,14 @@ export function FreestyleDialogsHost({
         palaceOptions={palaceOptions}
         onOpenChange={onSettingsOpenChange}
         onConfigChange={onConfigChange}
+        onClearProgress={onClearProgress}
       />
       <TodayTrainingSettingsDialog
         open={todaySettingsOpen}
         config={todayConfig}
         onOpenChange={onTodaySettingsOpenChange}
         onConfigChange={onTodayConfigChange}
+        onClearProgress={onClearProgress}
       />
       {currentPalaceId ? (
         <PalaceMemoryLookupDialog

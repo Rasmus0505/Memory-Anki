@@ -17,7 +17,7 @@ export type FreestyleContentType =
 export type FreestyleActionKind =
   | 'review'
   | 'practice'
-  | 'mini_practice'
+  | 'segment_practice'
   | 'english'
   | 'english_reading'
 
@@ -47,7 +47,7 @@ export interface FreestylePalaceContext {
   needs_practice?: boolean
 }
 
-export interface FreestyleMiniPalaceContext {
+export interface FreestyleSegmentContext {
   id: number
   palace_id: number
   name: string
@@ -61,7 +61,7 @@ export interface FreestyleQuizCard {
   content_type: 'quiz_question'
   question: PalaceQuizQuestion
   palace_context: FreestylePalaceContext
-  mini_palace_context?: FreestyleMiniPalaceContext | null
+  segment_contexts?: FreestyleSegmentContext[]
   chapter_context?: FreestyleChapterContext | null
   group_key: string
 }

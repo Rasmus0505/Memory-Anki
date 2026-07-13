@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from memory_anki.infrastructure.db._tables.knowledge import Chapter
-from memory_anki.infrastructure.db._tables.palaces import Palace, PalaceMiniPalace
+from memory_anki.infrastructure.db._tables.palaces import Palace, PalaceSegment
 from memory_anki.modules.palaces.api import (
     resolve_palace_subject,
     resolve_palace_title,
@@ -57,20 +57,18 @@ def palace_context(palace: Palace) -> dict[str, Any]:
     }
 
 
-def mini_palace_context(mini_palace: PalaceMiniPalace | None) -> dict[str, Any] | None:
-    if mini_palace is None:
-        return None
+def segment_context(segment: PalaceSegment) -> dict[str, Any]:
     return {
-        "id": mini_palace.id,
-        "palace_id": mini_palace.palace_id,
-        "name": mini_palace.name or f"灏忓娈?{mini_palace.sort_order + 1}",
-        "sort_order": mini_palace.sort_order,
-        "needs_practice": bool(getattr(mini_palace, "needs_practice", False)),
+        "id": segment.id,
+        "palace_id": segment.palace_id,
+        "name": segment.name or f"学习组 {segment.sort_order + 1}",
+        "sort_order": segment.sort_order,
+        "needs_practice": bool(getattr(segment, "needs_practice", False)),
     }
 
 
 __all__ = [
     "chapter_context",
-    "mini_palace_context",
+    "segment_context",
     "palace_context",
 ]
