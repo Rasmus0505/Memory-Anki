@@ -30,6 +30,7 @@ import { BackgroundTaskBar } from '@/shared/background-tasks/BackgroundTaskBar'
 import { QuizGenerationBubbleLayer } from '@/shared/background-tasks/QuizGenerationBubbleLayer'
 import { cn } from '@/shared/lib/utils'
 import { GlobalCommandPalette } from '@/app/shell/GlobalCommandPalette'
+import { GlobalBackButton } from '@/app/shell/GlobalBackButton'
 import { navSections, type NavSectionDefinition, type NavSectionKey } from '@/app/shell/navSections'
 import {
   readPageHistorySectionUrl,
@@ -402,6 +403,7 @@ function ShellFrame({ children }: PropsWithChildren) {
           </div>
         </main>
         <MobileBottomNav />
+        <GlobalBackButton />
         <QuizGenerationBubbleLayer />
         <AppLogDrawer open={logDrawerOpen} onOpenChange={setLogDrawerOpen} />
         <GlobalCommandPalette />

@@ -6,8 +6,7 @@ export function resolvePageHistorySection(pathname: string): PageHistorySectionK
   if (
     pathname === '/palaces' ||
     pathname.startsWith('/palaces/') ||
-    pathname.startsWith('/segments/') ||
-    pathname.startsWith('/mini-palaces/')
+    pathname.startsWith('/segments/')
   ) return 'palaces'
   if (pathname === '/english' || pathname.startsWith('/english/')) return 'english'
   if (pathname === '/english-reading' || pathname.startsWith('/english-reading/')) return 'englishReading'
@@ -38,7 +37,6 @@ export function resolvePageHistoryKey(pathname: string) {
     [/^\/palaces\/(\d+)\/quiz$/, (match) => `palace:quiz:${match[1]}`],
     [/^\/palaces\/(\d+)\/practice$/, (match) => `palace:practice:${match[1]}`],
     [/^\/segments\/(\d+)\/practice$/, (match) => `segment:practice:${match[1]}`],
-    [/^\/mini-palaces\/(\d+)\/practice$/, (match) => `mini-palace:practice:${match[1]}`],
     [/^\/english\/courses\/(\d+)$/, (match) => `english:course:${match[1]}`],
     [/^\/review\/session\/(\d+)$/, (match) => `review:session:${match[1]}`],
     [/^\/profile\/(.+)$/, (match) => `profile:${match[1]}`],
@@ -49,4 +47,3 @@ export function resolvePageHistoryKey(pathname: string) {
   }
   return `route:${pathname}`
 }
-
