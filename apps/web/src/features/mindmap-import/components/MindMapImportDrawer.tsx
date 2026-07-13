@@ -110,6 +110,7 @@ export function MindMapImportDrawer(props: MindMapImportDrawerProps) {
   const historyViewModel: MindMapImportHistoryViewModel = {
     history: props.history,
     onDeleteHistory: props.onDeleteHistory,
+    onRerunHistory: props.onRerunHistory,
     onSelectHistory: props.onSelectHistory,
   }
   const sourceConfigModel: MindMapImportSourceConfigModel = {
@@ -135,6 +136,15 @@ export function MindMapImportDrawer(props: MindMapImportDrawerProps) {
     onBatchMoveImage: props.onBatchMoveImage,
     onBatchSetStructureImage: props.onBatchSetStructureImage,
     onBatchStart: props.onBatchStart,
+    pdfDocuments: props.pdfDocuments,
+    selectedPdfDocumentId: props.selectedPdfDocumentId,
+    onSelectedPdfDocumentIdChange: props.onSelectedPdfDocumentIdChange,
+    pdfPageSelection: props.pdfPageSelection,
+    onPdfPageSelectionChange: props.onPdfPageSelectionChange,
+    pdfLibraryLoading: props.pdfLibraryLoading,
+    onPdfUpload: props.onPdfUpload,
+    onPdfDelete: props.onPdfDelete,
+    onPdfStart: props.onPdfStart,
     onFileChange: props.onFileChange,
     onPauseJob: props.onPauseJob,
     onResumeJob: props.onResumeJob,

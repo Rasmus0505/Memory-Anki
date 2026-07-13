@@ -6,7 +6,7 @@ import json
 from collections import OrderedDict
 from datetime import date, datetime, time, timedelta
 
-from sqlalchemy import or_
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from memory_anki.infrastructure.db._tables.knowledge import Chapter
@@ -114,6 +114,77 @@ def get_today_review_groups(
         respect_daily_limit=respect_daily_limit,
         daily_limit=max_per_day,
     )
+
+
+def get_later_today_review_groups(
+    session: Session,
+    chapter_id: int | None = None,
+    *,
+    now: datetime | None = None,
+) -> list[dict]:
+    current = now or datetime.now()
+    today = current.date()
+    tomorrow_start = datetime.combine(today + timedelta(days=1), time.min)
+    next_schedule_ids = (
+        session.query(
+            ReviewSchedule.id.label("schedule_id"),
+            func.row_number()
+            .over(
+                partition_by=ReviewSchedule.palace_id,
+                order_by=(ReviewSchedule.review_number.asc(), ReviewSchedule.id.asc()),
+            )
+            .label("position"),
+        )
+        .join(Palace, Palace.id == ReviewSchedule.palace_id)
+        .filter(
+            ReviewSchedule.completed == False,
+            Palace.mastered == False,
+            Palace.archived == False,
+            Palace.deleted_at.is_(None),
+        )
+    )
+    if chapter_id is not None:
+        next_schedule_ids = next_schedule_ids.filter(Palace.chapters.any(Chapter.id == chapter_id))
+    next_schedule_ids = next_schedule_ids.subquery()
+
+    rows = (
+        session.query(ReviewSchedule)
+        .join(Palace, Palace.id == ReviewSchedule.palace_id)
+        .join(next_schedule_ids, next_schedule_ids.c.schedule_id == ReviewSchedule.id)
+        .filter(
+            next_schedule_ids.c.position == 1,
+            or_(
+                ReviewSchedule.scheduled_date <= today,
+                ReviewSchedule.scheduled_at < tomorrow_start,
+            ),
+        )
+        .order_by(
+            ReviewSchedule.scheduled_date.asc(),
+            ReviewSchedule.review_number.asc(),
+            ReviewSchedule.id.asc(),
+        )
+        .all()
+    )
+
+    groups: list[tuple[datetime, dict]] = []
+    for schedule in rows:
+        if schedule.palace is None:
+            continue
+        due_at = schedule_display_datetime(schedule, schedule.palace, session)
+        if due_at is None or due_at <= current or due_at.date() != today:
+            continue
+        groups.append(
+            (
+                due_at,
+                {
+                    "schedule": schedule,
+                    "schedule_count": 1,
+                    "overdue_schedule_count": 0,
+                    "next_due_date": schedule.scheduled_date,
+                },
+            )
+        )
+    return [group for _, group in sorted(groups, key=lambda item: item[0])]
 
 
 def get_next_due_review(
@@ -299,12 +370,15 @@ def get_review_queue_payload(session: Session, chapter_id: int | None = None) ->
         chapter_id=chapter_id,
         respect_daily_limit=chapter_id is None,
     )
+    later_today_reviews = get_later_today_review_groups(session, chapter_id=chapter_id)
     return {
         "due_count": len(reviews),
+        "later_today_count": len(later_today_reviews),
         "overdue_count": get_overdue_count(session),
         "smoothed_count": smoothed_count,
         "stats": get_weekly_stats(session),
         "reviews": reviews,
+        "later_today_reviews": later_today_reviews,
     }
 
 

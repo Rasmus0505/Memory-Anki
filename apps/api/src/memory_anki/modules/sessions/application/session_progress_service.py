@@ -125,15 +125,6 @@ def get_segment_practice_progress(session: Session, segment_id: int) -> dict | N
     return _progress_json(progress)
 
 
-def get_mini_practice_progress(session: Session, mini_palace_id: int) -> dict | None:
-    progress = (
-        session.query(SessionProgress)
-        .filter_by(session_kind="mini_practice", mini_palace_id=mini_palace_id)
-        .first()
-    )
-    return _progress_json(progress)
-
-
 def upsert_practice_progress(session: Session, palace_id: int, payload: dict) -> dict:
     progress = (
         session.query(SessionProgress)
@@ -211,36 +202,6 @@ def upsert_segment_practice_progress(
     return _progress_json(progress) or {}
 
 
-def upsert_mini_practice_progress(
-    session: Session,
-    mini_palace_id: int,
-    palace_id: int | None,
-    payload: dict,
-) -> dict:
-    progress = (
-        session.query(SessionProgress)
-        .filter_by(session_kind="mini_practice", mini_palace_id=mini_palace_id)
-        .first()
-    )
-    if progress is None:
-        progress = SessionProgress(
-            session_kind="mini_practice",
-            mini_palace_id=mini_palace_id,
-        )
-        session.add(progress)
-
-    progress.palace_id = palace_id
-    progress.review_schedule_id = None
-    progress.palace_segment_id = None
-    progress.reveal_map = _serialize_json(payload.get("reveal_map") or {}, "{}")
-    progress.red_node_ids = _serialize_json(payload.get("red_node_ids") or [], "[]")
-    progress.completed = bool(payload.get("completed", False))
-    progress.updated_at = utc_now_naive()
-    session.commit()
-    session.refresh(progress)
-    return _progress_json(progress) or {}
-
-
 def clear_practice_progress(session: Session, palace_id: int) -> None:
     (
         session.query(SessionProgress)
@@ -266,15 +227,6 @@ def clear_segment_practice_progress(session: Session, segment_id: int) -> None:
     (
         session.query(SessionProgress)
         .filter_by(session_kind="segment_practice", palace_segment_id=segment_id)
-        .delete()
-    )
-    session.commit()
-
-
-def clear_mini_practice_progress(session: Session, mini_palace_id: int) -> None:
-    (
-        session.query(SessionProgress)
-        .filter_by(session_kind="mini_practice", mini_palace_id=mini_palace_id)
         .delete()
     )
     session.commit()

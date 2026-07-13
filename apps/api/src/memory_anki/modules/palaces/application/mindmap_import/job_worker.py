@@ -211,6 +211,7 @@ def run_image_batch_job(
     import_jobs_dir: Path,
     stream_call_dashscope_json,
     stream_call_dashscope_batch_json,
+    stream_call_dashscope_text,
 ) -> None:
     image_items = load_batch_image_items(
         artifact_dir,
@@ -226,6 +227,49 @@ def run_image_batch_job(
     raw_structure_index = source_meta.get("structure_image_index")
     structure_index = int(raw_structure_index) if raw_structure_index is not None else None
     fallback_title = str(source_meta.get("fallback_title") or "未命名宫殿")
+
+    if job.mode == MODE_TEXT:
+        extracted_text_path = artifact_dir / "extracted_text.txt"
+        if not extracted_text_path.exists():
+            _set_progress_step(
+                session,
+                job_id=job.id,
+                import_jobs_dir=import_jobs_dir,
+                step=step_protocol.extract_single_image_text_step(
+                    total_steps=step_protocol.IMAGE_TEXT_TOTAL_STEPS
+                ),
+                preview_text="",
+            )
+            extracted_text = consume_stream_result(
+                session,
+                job_id=job.id,
+                artifact_dir=artifact_dir,
+                generator=stream_call_dashscope_text(
+                    image_items=image_items,
+                    page_numbers=[int(item) for item in source_meta.get("page_selection") or []] or None,
+                    range_prompt="",
+                    channel="text",
+                    external_log_context={
+                        "feature": "PDF 转文字" if job.source_kind == "pdf-document" else "图片转文字",
+                        "operation": "batch_text_extraction",
+                        "job_id": job.id,
+                        "artifact_refs": artifact_refs,
+                    },
+                ),
+                allow_preview_text=True,
+                import_jobs_dir=import_jobs_dir,
+            )
+            write_text(extracted_text_path, extracted_text)
+            update_job_usage(session, job.id, stage_key="text", increment=1)
+            set_job_stage(session, job.id, stage=JOB_STAGE_TEXT)
+        extracted_text = read_text(extracted_text_path)
+        set_job_result(
+            session,
+            job.id,
+            result=build_text_result_payload(extracted_text=extracted_text),
+            stage=JOB_STAGE_COMPLETED,
+        )
+        return
 
     result_path = artifact_dir / "result.json"
     if not result_path.exists():
@@ -260,7 +304,7 @@ def run_image_batch_job(
                     disable_rebalance=True,
                     extracted_text=None,
                     external_log_context={
-                        "feature": "多图转脑图",
+                        "feature": "PDF 转脑图" if job.source_kind == "pdf-document" else "图片转脑图",
                         "operation": "batch_direct_generation",
                         "job_id": job.id,
                         "artifact_refs": artifact_refs,

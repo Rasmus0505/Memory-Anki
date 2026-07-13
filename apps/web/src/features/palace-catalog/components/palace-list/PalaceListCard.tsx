@@ -1,12 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
-import { BookOpen, Building2, ChevronDown, ChevronRight, MoreHorizontal, Pencil, Trash2 } from 'lucide-react'
+import { BookOpen, ChevronDown, ChevronRight, MoreHorizontal, Pencil, Trash2 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { PalaceStageProgress } from '@/features/palace-catalog/components/palace-list/PalaceStageProgress'
 import type { PalaceListViewSettings } from '@/entities/preferences/model/palaceViewSettings'
 import { formatDuration } from '@/entities/session/model'
 import type {
-  MiniPalaceSummary,
   PalaceGroupedItem,
   PalaceSegmentSummary,
 } from '@/shared/api/contracts'
@@ -37,8 +36,6 @@ interface PalaceListCardProps {
   onWarmPalacePractice?: (palace: PalaceGroupedItem) => void
   onSegmentPractice: (segment: PalaceSegmentSummary) => void
   onWarmSegmentPractice?: (segment: PalaceSegmentSummary) => void
-  onMiniPalacePractice: (miniPalace: MiniPalaceSummary) => void
-  onWarmMiniPalacePractice?: (miniPalace: MiniPalaceSummary) => void
   onDelete: (id: number, title: string) => void
 }
 
@@ -154,8 +151,6 @@ export function PalaceListCard({
   onWarmPalacePractice = () => {},
   onSegmentPractice,
   onWarmSegmentPractice = () => {},
-  onMiniPalacePractice,
-  onWarmMiniPalacePractice = () => {},
   onDelete,
 }: PalaceListCardProps) {
   const [menuOpen, setMenuOpen] = useState(false)
@@ -175,7 +170,7 @@ export function PalaceListCard({
           singleSegment.current_review_schedule_id &&
           singleSegment.next_review_at)),
   )
-  const showExpandButton = isMultiSegment || (Array.isArray(palace.mini_palaces) && palace.mini_palaces.length > 0)
+  const showExpandButton = isMultiSegment
   const shouldShowSegmentListWhenExpanded = isMultiSegment
   const shouldShowStageProgress = Array.isArray(palace.stage_labels) && palace.stage_labels.length > 0
   const showPalacePracticeButton = Boolean(palace.needs_practice) && !showSingleSegmentReviewButton
@@ -351,116 +346,6 @@ export function PalaceListCard({
             </p>
           ) : null}
 
-          {expanded && Array.isArray(palace.mini_palaces) && palace.mini_palaces.length > 0 ? (
-            <div className="mt-3 border-t border-border/50 pt-3">
-              <div className="mb-2 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-                <Building2 className="h-3.5 w-3.5" />
-                训练关卡
-              </div>
-
-              <div className={getSegmentListClass(viewSettings.densityMode)}>
-                {palace.mini_palaces.map((mini) => {
-                  return (
-                    <div
-                      key={mini.id}
-                      className={cn(
-                        'border border-border/60 bg-background/70',
-                        getSegmentCardClass(viewSettings.densityMode),
-                      )}
-                    >
-                      <div className="flex flex-wrap items-start gap-3">
-                        <div
-                          className={cn(
-                            'flex shrink-0 items-center justify-center bg-secondary',
-                            getPalaceIconClass(viewSettings.densityMode),
-                          )}
-                        >
-                          <Building2 className="size-4 text-muted-foreground" />
-                        </div>
-
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-2">
-                            <span className="truncate text-sm font-medium">{mini.name}</span>
-                            {mini.is_empty ? (
-                              <Badge variant="destructive" className="text-[10px]">
-                                空
-                              </Badge>
-                            ) : (
-                              <Badge variant="outline" className="text-[10px]">
-                                {mini.node_count} 个知识点
-                              </Badge>
-                            )}
-                            {mini.needs_practice ? (
-                              <Badge className="bg-success text-[10px] text-white hover:bg-success">
-                                需练习
-                              </Badge>
-                            ) : null}
-                          </div>
-                          <div className="mt-1 flex flex-wrap gap-2 text-[11px] text-muted-foreground">
-                            <span>预计 {formatDuration(mini.estimated_review_seconds || 0)}</span>
-                            <span>
-                              {mini.updated_at
-                                ? `更新 ${formatCreatedAt(mini.updated_at)}`
-                                : '未更新'}
-                            </span>
-                          </div>
-                        </div>
-
-                        <div className="flex shrink-0 flex-col items-stretch gap-2 sm:min-w-[132px]">
-                          {mini.is_empty ? (
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="min-h-11 w-full text-xs sm:h-8 sm:min-h-8"
-                              disabled
-                            >
-                              做题
-                            </Button>
-                          ) : (
-                            <Link to={`/palaces/${mini.palace_id}/quiz?tab=practice&miniPalaceId=${mini.id}`}>
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                className="min-h-11 w-full text-xs sm:h-8 sm:min-h-8"
-                              >
-                                做题
-                              </Button>
-                            </Link>
-                          )}
-
-                          <Button
-                            size="sm"
-                            variant="secondary"
-                            className="min-h-11 w-full text-xs sm:h-8 sm:min-h-8"
-                            disabled={mini.is_empty}
-                            onFocus={() => onWarmMiniPalacePractice(mini)}
-                            onMouseEnter={() => onWarmMiniPalacePractice(mini)}
-                            onClick={() => onMiniPalacePractice(mini)}
-                          >
-                            练习
-                          </Button>
-
-                          <Link
-                            to={`/palaces/${mini.palace_id}/edit?miniPalaceId=${mini.id}&miniPalaceMode=edit`}
-                            className="self-end"
-                          >
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="min-h-11 min-w-11 sm:size-8 sm:min-h-8 sm:min-w-8"
-                              aria-label={`编辑 ${mini.name}`}
-                            >
-                              <Pencil className="size-4" />
-                            </Button>
-                          </Link>
-                        </div>
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
-          ) : null}
         </div>
 
         <div className="flex shrink-0 items-center gap-1">

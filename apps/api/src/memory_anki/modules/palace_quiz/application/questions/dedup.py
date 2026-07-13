@@ -26,7 +26,6 @@ def find_duplicate_question(
     if palace_id is not None:
         query = query.filter(
             PalaceQuizQuestion.palace_id == palace_id,
-            PalaceQuizQuestion.mini_palace_id == normalized_payload["mini_palace_id"],
             PalaceQuizQuestion.deleted_at.is_(None),
         )
     else:

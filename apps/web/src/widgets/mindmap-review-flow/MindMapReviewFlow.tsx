@@ -5,7 +5,6 @@ import { AiLearningWorkbench } from "./AiLearningWorkbench";
 import { MindMapRatingHistoryDrawer } from "@/features/review/components/MindMapRatingHistoryDrawer";
 import { useMindMapReviewFlowController } from "./useMindMapReviewFlowController";
 import type { MindMapReviewFlowProps } from "@/features/review/model/mind-map-review-flow";
-import { MiniPalacePanel } from "@/features/mini-palace";
 import { ComboMilestoneBurst, CompletionCelebration } from "@/shared/components/celebration";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
@@ -113,7 +112,7 @@ export function MindMapReviewFlow({
                     已出现 {review.flow.visibleNonRootCount} /{" "}
                     {Math.max(review.flow.totalNodeCount - 1, 0)}
                   </Badge>
-                  {!review.isInlineEditMode && !review.miniPalace.isActive ? (
+                  {!review.isInlineEditMode ? (
                     <TooltipProvider>
                       <Tooltip>
                         <TooltipTrigger asChild>
@@ -201,7 +200,6 @@ export function MindMapReviewFlow({
                     type="button"
                     size="sm"
                     variant="outline"
-                    disabled={review.miniPalace.isActive}
                     onClick={review.flow.handleRestart}
                   >
                     <RotateCcw className="mr-2 size-4" />
@@ -221,7 +219,7 @@ export function MindMapReviewFlow({
                     disabled={
                       submitting ||
                       review.flow.feedback.completionCeremonyActive ||
-                      review.miniPalace.isActive
+                      false
                     }
                     className={review.completeButtonClassName}
                     onClick={() => review.setCompletionDialogOpen(true)}
@@ -247,9 +245,7 @@ export function MindMapReviewFlow({
                     viewMemoryScope={viewMemoryScope}
                     onToggleFullscreen={review.handleFullscreenToggle}
                     onToggleMode={
-                      review.inlineEditEnabled &&
-                      props.onModeToggle &&
-                      !review.miniPalace.isActive
+                      review.inlineEditEnabled && props.onModeToggle
                         ? () => {
                             void props.onModeToggle?.();
                           }
@@ -260,42 +256,18 @@ export function MindMapReviewFlow({
                     visibleEditorSyncKey={review.mapVisibleSyncKey}
                     currentPalaceId={props.palaceId}
                     reviewFxSignal={review.flow.feedback.reviewFxSignal}
-                    showMiniPalaceButton={Boolean(props.palaceId)}
-                    miniPalaceDraft={review.miniPalace.hostDraft}
-                    miniPalacePracticeActive={
-                      review.miniPalace.isPracticing || review.isDedicatedMiniMode
-                    }
                     onEditorStateChange={review.handleEditorStateChange}
                     onNodeActive={review.setActiveNodes}
-                    onNodeClick={
-                      review.miniPalace.isActive
-                        ? review.miniPalace.handleNodeClick
-                        : review.flow.handleNodeClick
-                    }
-                    onNodeContextMenu={
-                      review.miniPalace.isActive
-                        ? review.miniPalace.handleNodeContextMenu
-                        : review.flow.handleNodeContextMenu
-                    }
-                    onNodeHover={
-                      review.miniPalace.isPracticing
-                        ? review.miniPalace.handleNodeHover
-                        : review.isDedicatedMiniMode
-                          ? review.flow.handleNodeHover
-                          : undefined
-                    }                    onQuizBreakOpen={review.handleQuizBreakOpen}
-                    onMiniPalaceOpen={review.miniPalace.openPanel}
+                    onNodeClick={review.flow.handleNodeClick}
+                    onNodeContextMenu={review.flow.handleNodeContextMenu}
+                    onNodeHover={review.isCheckpointMode ? review.flow.handleNodeHover : undefined}
+                    onQuizBreakOpen={review.handleQuizBreakOpen}
                     recallRatings={review.recallRatings.round === 'first' ? review.recallRatings.firstRatings : review.recallRatings.retryRatings}
                     recallRound={review.recallRatings.round}
                     weakNodeUids={review.recallRatings.weakNodeUids}
                     onRateNode={props.studySessionId ? (nodeUid, rating, round, evidence) => { void review.recallRatings.rateNode(nodeUid, rating, round, evidence) } : undefined}
                     onUndoRating={props.studySessionId ? review.recallRatings.undoLastRating : undefined}
                     onOpenRatingHistory={props.studySessionId ? () => review.recallRatings.setHistoryOpen(true) : undefined}
-                    onMiniPalacePour={
-                      review.miniPalace.isPracticing
-                        ? review.miniPalace.handleSpacePour
-                        : review.flow.handleSpacePour
-                    }
                   />
                 </div>
                 <AiLearningWorkbench
@@ -332,7 +304,6 @@ export function MindMapReviewFlow({
 
       <MindMapRatingHistoryDrawer open={review.recallRatings.historyOpen} onOpenChange={review.recallRatings.setHistoryOpen} events={review.recallRatings.currentEvents} onCorrect={(nodeUid, rating, round) => { void review.recallRatings.rateNode(nodeUid, rating, round) }} />
 
-      <MiniPalacePanel controller={review.miniPalace} />
     </div>
   );
 }

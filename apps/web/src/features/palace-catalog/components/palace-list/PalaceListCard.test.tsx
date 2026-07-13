@@ -2,7 +2,7 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { describe, expect, it, vi } from 'vitest'
 import { PalaceListCard } from '@/features/palace-catalog/components/palace-list/PalaceListCard'
-import type { MiniPalaceSummary, PalaceGroupedItem, PalaceSegmentSummary, ReviewStageSummary } from '@/shared/api/contracts'
+import type { PalaceGroupedItem, PalaceSegmentSummary, ReviewStageSummary } from '@/shared/api/contracts'
 
 function buildStage(reviewNumber: number, label: string, completed = false): ReviewStageSummary {
   return {
@@ -42,33 +42,6 @@ function buildSegment(overrides: Partial<PalaceSegmentSummary> = {}): PalaceSegm
   }
 }
 
-function buildMiniPalace(overrides: Partial<MiniPalaceSummary> = {}): MiniPalaceSummary {
-  return {
-    id: 201,
-    palace_id: 1,
-    name: '迷你宫殿训练',
-    node_uids: ['m1'],
-    node_count: 22,
-    sort_order: 0,
-    created_at: '2026-06-12T10:00:00+08:00',
-    updated_at: '2026-06-12T10:00:00+08:00',
-    is_empty: false,
-    needs_practice: false,
-    estimated_review_seconds: 990,
-    review_stage_total: 3,
-    review_stage_completed: 1,
-    review_stage_progress: 0.33,
-    stage_labels: ['1小时', '1天', '2天'],
-    review_stages: [buildStage(0, '1小时', true), buildStage(1, '1天'), buildStage(2, '2天')],
-    next_review_at: '2026-06-13T10:00:00+08:00',
-    has_due_review: true,
-    current_review_schedule_id: 2001,
-    current_review_type: 'normal',
-    active_review_progress: 0.5,
-    ...overrides,
-  }
-}
-
 function buildPalace(overrides: Partial<PalaceGroupedItem> = {}): PalaceGroupedItem {
   return {
     id: 1,
@@ -99,7 +72,6 @@ function buildPalace(overrides: Partial<PalaceGroupedItem> = {}): PalaceGroupedI
     review_stages: [buildStage(0, '1小时', true), buildStage(1, '1天'), buildStage(2, '2天')],
     active_review_progress: 0.2,
     segments: [buildSegment()],
-    mini_palaces: [buildMiniPalace()],
     chapters: [{ id: 2, name: '第二节法国教育的发展' }],
     ...overrides,
   }
@@ -114,7 +86,6 @@ describe('PalaceListCard', () => {
       <MemoryRouter>
         <PalaceListCard
           palace={buildPalace({
-            mini_palaces: [],
             segments: [
               buildSegment({
                 next_review_at: '2026-06-12T09:00:00+08:00',
@@ -125,7 +96,6 @@ describe('PalaceListCard', () => {
           viewSettings={{ layoutMode: 'chapter-double', densityMode: 'comfortable' }}
           onPalacePractice={vi.fn()}
           onSegmentPractice={vi.fn()}
-          onMiniPalacePractice={vi.fn()}
           onDelete={vi.fn()}
         />
       </MemoryRouter>,
@@ -143,7 +113,6 @@ describe('PalaceListCard', () => {
       <MemoryRouter>
         <PalaceListCard
           palace={buildPalace({
-            mini_palaces: [],
             needs_practice: true,
             segments: [
               buildSegment({
@@ -155,7 +124,6 @@ describe('PalaceListCard', () => {
           viewSettings={{ layoutMode: 'chapter-double', densityMode: 'comfortable' }}
           onPalacePractice={onPalacePractice}
           onSegmentPractice={vi.fn()}
-          onMiniPalacePractice={vi.fn()}
           onDelete={vi.fn()}
         />
       </MemoryRouter>,
@@ -177,13 +145,11 @@ describe('PalaceListCard', () => {
       <MemoryRouter>
         <PalaceListCard
           palace={buildPalace({
-            mini_palaces: [],
             segments: [buildSegment({ active_review_progress: 0.4 })],
           })}
           viewSettings={{ layoutMode: 'chapter-double', densityMode: 'comfortable' }}
           onPalacePractice={vi.fn()}
           onSegmentPractice={vi.fn()}
-          onMiniPalacePractice={vi.fn()}
           onDelete={vi.fn()}
         />
       </MemoryRouter>,
@@ -199,7 +165,6 @@ describe('PalaceListCard', () => {
       <MemoryRouter>
         <PalaceListCard
           palace={buildPalace({
-            mini_palaces: [],
             segments: [
               buildSegment({
                 id: 0,
@@ -211,7 +176,6 @@ describe('PalaceListCard', () => {
           viewSettings={{ layoutMode: 'chapter-double', densityMode: 'comfortable' }}
           onPalacePractice={vi.fn()}
           onSegmentPractice={vi.fn()}
-          onMiniPalacePractice={vi.fn()}
           onDelete={vi.fn()}
         />
       </MemoryRouter>,
@@ -229,7 +193,6 @@ describe('PalaceListCard', () => {
       <MemoryRouter>
         <PalaceListCard
           palace={buildPalace({
-            mini_palaces: [],
             segments: [
               buildSegment({ id: 101, display_name: '17—18世纪' }),
               buildSegment({ id: 102, display_name: '19世纪', sort_order: 1 }),
@@ -238,7 +201,6 @@ describe('PalaceListCard', () => {
           viewSettings={{ layoutMode: 'chapter-double', densityMode: 'comfortable' }}
           onPalacePractice={vi.fn()}
           onSegmentPractice={vi.fn()}
-          onMiniPalacePractice={vi.fn()}
           onDelete={vi.fn()}
         />
       </MemoryRouter>,
@@ -262,7 +224,6 @@ describe('PalaceListCard', () => {
       <MemoryRouter>
         <PalaceListCard
           palace={buildPalace({
-            mini_palaces: [],
             segments: [
               buildSegment({
                 id: 0,
@@ -275,7 +236,6 @@ describe('PalaceListCard', () => {
           viewSettings={{ layoutMode: 'chapter-double', densityMode: 'comfortable' }}
           onPalacePractice={vi.fn()}
           onSegmentPractice={onSegmentPractice}
-          onMiniPalacePractice={vi.fn()}
           onDelete={vi.fn()}
         />
       </MemoryRouter>,
@@ -307,7 +267,6 @@ describe('PalaceListCard', () => {
           defaultExpanded
           onPalacePractice={vi.fn()}
           onSegmentPractice={vi.fn()}
-          onMiniPalacePractice={vi.fn()}
           onDelete={vi.fn()}
         />
       </MemoryRouter>,

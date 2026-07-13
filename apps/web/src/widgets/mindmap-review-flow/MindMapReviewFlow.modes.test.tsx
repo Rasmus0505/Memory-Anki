@@ -426,7 +426,7 @@ describe("MindMapReviewFlow modes", () => {
     });
   });
 
-  it("runs dedicated mini-checkpoint mode through the shared flow and requires hover before space pour", async () => {
+  it("runs dedicated segment-checkpoint mode through the shared flow and requires hover before space pour", async () => {
     const miniEditorState = {
       editor_doc: {
         root: {
@@ -454,14 +454,14 @@ describe("MindMapReviewFlow modes", () => {
         title="Root"
         palaceId={1}
         sessionKind="practice"
-        revealMode="mini-checkpoint"
+        revealMode="segment-checkpoint"
         checkpointNodeUids={["child"]}
         reviewEditorState={miniEditorState}
         onComplete={vi.fn()}
       />,
     );
 
-    expect(getLatestMindMapEditorSurfaceProps()?.miniPalacePracticeActive).toBe(true);
+    expect(getLatestMindMapEditorSurfaceProps()?.practiceModeActive).toBe(true);
     expect(getVisibleTextsFromLatestFrame()).toEqual({
       root: "Root",
       child: "待回忆",
@@ -469,7 +469,7 @@ describe("MindMapReviewFlow modes", () => {
     });
 
     await act(async () => {
-      getLatestMindMapEditorSurfaceProps()?.onMiniPalacePour?.();
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: " ", code: "Space", bubbles: true }));
     });
 
     expect(getVisibleTextsFromLatestFrame()).toEqual({
@@ -489,7 +489,7 @@ describe("MindMapReviewFlow modes", () => {
 
     await act(async () => {
       getLatestMindMapEditorSurfaceProps()?.onNodeHover?.([{ uid: "child", text: "Child" }]);
-      getLatestMindMapEditorSurfaceProps()?.onMiniPalacePour?.();
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: " ", code: "Space", bubbles: true }));
     });
 
     expect(getLatestMindMapEditorSurfaceProps()?.reviewFxSignal).toEqual(

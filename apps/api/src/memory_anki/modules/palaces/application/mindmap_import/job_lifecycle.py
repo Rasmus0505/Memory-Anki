@@ -27,6 +27,7 @@ class JobLifecycleDependencies:
     completed_status: str
     source_kind_image_single: str
     source_kind_image_batch: str
+    source_kind_pdf_document: str
     import_error_cls: type[Exception]
 
 
@@ -78,7 +79,7 @@ def run_job_worker(
 
         if job.source_kind == deps.source_kind_image_single:
             deps.run_image_single_job_fn(session, job, source_meta, artifact_dir)
-        elif job.source_kind == deps.source_kind_image_batch:
+        elif job.source_kind in {deps.source_kind_image_batch, deps.source_kind_pdf_document}:
             deps.run_image_batch_job_fn(session, job, source_meta, artifact_dir)
         else:
             raise deps.import_error_cls("Unknown import job source kind.")

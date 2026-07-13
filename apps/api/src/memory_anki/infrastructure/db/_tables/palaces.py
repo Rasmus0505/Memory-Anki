@@ -48,6 +48,24 @@ chapter_palace_table = Table(
     Index("ix_chapter_palaces_palace_chapter", "palace_id", "chapter_id"),
 )
 
+palace_quiz_question_segment_table = Table(
+    "palace_quiz_question_segments",
+    Base.metadata,
+    Column(
+        "question_id",
+        Integer,
+        ForeignKey("palace_quiz_questions.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+    Column(
+        "segment_id",
+        Integer,
+        ForeignKey("palace_segments.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+    Index("ix_quiz_question_segments_segment_question", "segment_id", "question_id"),
+)
+
 
 class Palace(Base):
     __tablename__ = "palaces"
@@ -216,6 +234,7 @@ class PalaceSegment(Base):
     name: Mapped[str] = mapped_column(String(200), nullable=False, default="")
     color: Mapped[str] = mapped_column(String(24), nullable=False, default="#14b8a6")
     node_uids_json: Mapped[str] = mapped_column(Text, default="[]")
+    needs_practice: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime | None] = mapped_column(DateTime, default=utc_now_naive)
     updated_at: Mapped[datetime | None] = mapped_column(
         DateTime,
@@ -225,6 +244,11 @@ class PalaceSegment(Base):
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
 
     palace: Mapped[Palace] = relationship("Palace", back_populates="segments")
+    quiz_questions: Mapped[list[PalaceQuizQuestion]] = relationship(
+        "PalaceQuizQuestion",
+        secondary=palace_quiz_question_segment_table,
+        back_populates="segments",
+    )
 
 
 class PalaceMiniPalace(Base):
@@ -501,6 +525,11 @@ class PalaceQuizQuestion(Base):
     palace: Mapped[Palace] = relationship("Palace", back_populates="quiz_questions")
     mini_palace: Mapped[PalaceMiniPalace | None] = relationship(
         "PalaceMiniPalace",
+        back_populates="quiz_questions",
+    )
+    segments: Mapped[list[PalaceSegment]] = relationship(
+        "PalaceSegment",
+        secondary=palace_quiz_question_segment_table,
         back_populates="quiz_questions",
     )
     source_chapter: Mapped[Chapter | None] = relationship(

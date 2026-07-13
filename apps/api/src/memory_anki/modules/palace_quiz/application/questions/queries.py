@@ -102,7 +102,6 @@ def apply_question_display_order(query: Query) -> Query:
 
 def apply_palace_dedup_order(query: Query) -> Query:
     return query.order_by(
-        PalaceQuizQuestion.mini_palace_id.asc(),
         PalaceQuizQuestion.sort_order.asc(),
         PalaceQuizQuestion.id.asc(),
     )
@@ -134,7 +133,6 @@ def query_root_question_rows(
 ) -> Query:
     return session.query(PalaceQuizQuestion).filter(
         PalaceQuizQuestion.palace_id == palace_id,
-        PalaceQuizQuestion.mini_palace_id.is_(None),
         PalaceQuizQuestion.deleted_at.is_(None),
     )
 

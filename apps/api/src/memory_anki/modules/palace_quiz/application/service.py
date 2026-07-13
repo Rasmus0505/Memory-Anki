@@ -18,7 +18,6 @@ from .questions.commands import (
     reset_question_attempts,
     restore_question,
     update_question,
-    upsert_classified_question_copy,
 )
 from .questions.dedup import (
     dedupe_chapter_questions,
@@ -51,7 +50,6 @@ from .questions.validation import (
     json_dump,
     json_load,
     normalize_question_payload,
-    validate_mini_palace,
 )
 
 __all__ = [
@@ -95,7 +93,5 @@ __all__ = [
     "resolve_minimal_explicit_chapter_ids",
     "serialize_question",
     "update_question",
-    "upsert_classified_question_copy",
     "upsert_palace_ocr_sources",
-    "validate_mini_palace",
 ]

@@ -161,6 +161,23 @@ export function usePalaceSegmentsController({
     setOverriddenConflictNodeUids(uniqueStrings(payload.overriddenConflictNodeUids))
   }
 
+  const handleSegmentRangeNodeClick = (nodes: MindMapSelection[]) => {
+    if (!isSegmentRangeMode) return
+    const nodeUid = nodes[0]?.uid
+    if (!nodeUid) return
+    const subtreeUids = uniqueStrings(subtreeUidMap.get(nodeUid) ?? [nodeUid])
+    setSelectedRangeNodeUids((current) => {
+      const selected = new Set(current)
+      const allSelected = subtreeUids.every((uid) => selected.has(uid))
+      subtreeUids.forEach((uid) => {
+        if (allSelected) selected.delete(uid)
+        else selected.add(uid)
+      })
+      return [...selected]
+    })
+    timer.registerActivity('edit_operation', { source: 'segment_range_node_click' })
+  }
+
   const handleAdjustSegmentRange = (segment: PalaceSegmentSummary) => {
     enterSegmentRangeMode(segment.id)
   }
@@ -218,6 +235,12 @@ export function usePalaceSegmentsController({
     } finally {
       setSegmentSaving(false)
     }
+  }
+
+  const handleToggleSegmentPractice = async (segment: PalaceSegmentSummary) => {
+    if (segment.is_virtual_default) return
+    await updatePalaceSegmentApi(segment.id, { needs_practice: !segment.needs_practice })
+    await refreshSegments()
   }
 
   const handleDeleteSegment = async (segmentId: number) => {
@@ -286,8 +309,10 @@ export function usePalaceSegmentsController({
     handleAdjustSegmentRange,
     handleSegmentRangeModeToggle,
     handleSegmentRangeDraftChange,
+    handleSegmentRangeNodeClick,
     handleConfirmSegmentRange,
     handleSaveSegment,
+    handleToggleSegmentPractice,
     handleDeleteSegment,
     handleMergeSegment,
   }

@@ -12,6 +12,7 @@ export function createPalaceSegmentApi(
     color?: string
     created_at?: string | null
     node_uids: string[]
+    needs_practice?: boolean
   },
 ) {
   return request<{ item: PalaceSegmentSummary }>(`/palaces/${palaceId}/segments`, {
@@ -33,6 +34,7 @@ export function updatePalaceSegmentApi(
     created_at: string | null
     sort_order: number
     node_uids: string[]
+    needs_practice: boolean
   }>,
 ) {
   return request<{ item: PalaceSegmentSummary }>(`/palace-segments/${segmentId}`, {

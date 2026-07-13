@@ -34,7 +34,6 @@ export interface EditorDocGraphOptions {
   activeSegmentId?: number | null
   segmentColorMode?: 'all' | 'active-only' | 'all-with-active-emphasis'
   segmentRangeDraft?: MindMapHostSegmentRangeDraft
-  miniPalaceDraft?: { active: boolean; selectedNodeUids: string[] }
   revealMap?: Record<string, RevealState>
   readonly?: boolean
   highlightedNodeUids?: string[]
@@ -63,7 +62,6 @@ export function editorDocToGraph(
   const edges: GraphData['edges'] = []
   const segmentByNodeUid = buildSegmentByNodeUid(options.segments ?? [])
   const rangeSelected = new Set(options.segmentRangeDraft?.selectedNodeUids ?? [])
-  const miniSet = new Set(options.miniPalaceDraft?.selectedNodeUids ?? [])
   const highlightedSet = new Set(options.highlightedNodeUids ?? [])
 
   const walk = (node: MindMapDocNode, parentId: string | null, depth: number, indexPath: number[]) => {
@@ -91,7 +89,7 @@ export function editorDocToGraph(
           revealState,
           borderColor: rangeSelected.has(uid) ? '#0ea5e9' : segmentVisible ? segment?.color : null,
           muted: options.segmentColorMode === 'active-only' && segment != null && !activeSegment,
-          secondaryMarked: miniSet.has(uid),
+          secondaryMarked: false,
           highlighted: highlightedSet.has(uid),
           mastery: options.masteryByNodeUid?.[uid],
         }),

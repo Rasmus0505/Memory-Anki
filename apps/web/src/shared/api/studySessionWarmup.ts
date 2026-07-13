@@ -4,7 +4,6 @@ export type StudyWarmupKind =
   | 'review-session'
   | 'palace-practice'
   | 'segment-practice'
-  | 'mini-practice'
 
 function studyWarmupKey(kind: StudyWarmupKind, id: number) {
   return `study:${kind}:${id}`

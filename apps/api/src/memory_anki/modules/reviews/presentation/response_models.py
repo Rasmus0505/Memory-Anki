@@ -23,6 +23,7 @@ class ReviewScheduleItem(BaseModel):
     id: int
     palace_id: int
     scheduled_date: str
+    due_at: str | None = None
     interval_days: int | None = None
     algorithm_used: str | None = None
     completed: bool
@@ -42,11 +43,13 @@ class ReviewQueueResponse(BaseModel):
     model_config = ConfigDict(extra="allow")
 
     due_count: int
+    later_today_count: int
     overdue_count: int
     smoothed_count: int
     stats: dict[str, Any]
     chapter: ChapterInfo | None = None
     reviews: list[GroupedReviewScheduleItem]
+    later_today_reviews: list[GroupedReviewScheduleItem]
 
 
 class SubmitReviewResponse(BaseModel):

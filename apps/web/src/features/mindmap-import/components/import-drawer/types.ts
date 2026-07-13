@@ -1,4 +1,5 @@
 import type { ChangeEvent, ClipboardEvent, ReactNode, RefObject } from 'react'
+import type { PdfDocument } from '@/entities/knowledge-import/model'
 import type {
   BatchImportImageItem,
   BatchImportMeta,
@@ -67,18 +68,28 @@ export interface MindMapImportDrawerProps {
   onBatchDeleteImage: (id: string) => void
   onBatchMoveImage: (id: string, direction: 'up' | 'down') => void
   onBatchSetStructureImage: (id: string) => void
+  pdfDocuments?: PdfDocument[]
+  selectedPdfDocumentId?: string
+  onSelectedPdfDocumentIdChange?: (documentId: string) => void
+  pdfPageSelection?: string
+  onPdfPageSelectionChange?: (value: string) => void
+  pdfLibraryLoading?: boolean
+  onPdfUpload?: (event: ChangeEvent<HTMLInputElement>) => void
+  onPdfDelete?: (documentId: string) => void
+  onPdfStart?: () => void
   onApplyReplace: () => void
   onApplyAppend: () => void
   onUndoLastImport: () => void
   onSelectHistory: (item: ImportHistoryItem) => void
   onDeleteHistory: (id: string) => void
+  onRerunHistory?: (id: string) => void
   className?: string
   overlayClassName?: string
 }
 
 export type MindMapImportHistoryViewModel = Pick<
   MindMapImportDrawerProps,
-  'history' | 'onDeleteHistory' | 'onSelectHistory'
+  'history' | 'onDeleteHistory' | 'onSelectHistory' | 'onRerunHistory'
 >
 
 export type MindMapImportFooterModel = Pick<
@@ -153,6 +164,15 @@ export type MindMapImportSourceConfigModel = Pick<
   | 'streamStatusMessage'
   | 'structureImageId'
   | 'undoing'
+  | 'pdfDocuments'
+  | 'selectedPdfDocumentId'
+  | 'onSelectedPdfDocumentIdChange'
+  | 'pdfPageSelection'
+  | 'onPdfPageSelectionChange'
+  | 'pdfLibraryLoading'
+  | 'onPdfUpload'
+  | 'onPdfDelete'
+  | 'onPdfStart'
 > & {
   hasCurrentJob: boolean
   nodeCount: number

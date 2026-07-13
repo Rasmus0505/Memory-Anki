@@ -138,7 +138,7 @@ export function deriveReviewFeedbackTransition({
   const revealedNodeIds = nonRootIds.filter((id) =>
     transitionedToRevealed(previousRevealMap, nextRevealMap, id) ||
     (
-      revealMode === 'mini-checkpoint' &&
+      revealMode === 'segment-checkpoint' &&
       (previousRevealMap[id] ?? 'hidden') === 'hidden' &&
       (nextRevealMap[id] ?? 'hidden') === 'revealed'
     ),

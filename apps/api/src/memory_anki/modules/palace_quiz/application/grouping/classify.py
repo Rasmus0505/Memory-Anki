@@ -9,7 +9,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from memory_anki.modules.mindmap_document.api import collect_node_descendants
-from memory_anki.modules.palaces.api import parse_mini_palace_node_uids
+from memory_anki.modules.palaces.api import parse_segment_node_uids
 from memory_anki.platform.application import AiRuntimeOptions
 
 from .. import ai_service as _ai
@@ -17,7 +17,6 @@ from .._question_utils import extract_mini_palace_grouping_payload
 from ..ai_dependencies import PalaceQuizAiDependencies
 from ..question_contracts import PalaceQuizValidationError
 from ..question_schema import serialize_question_rows
-from ..questions.commands import upsert_classified_question_copy
 from ..questions.queries import get_palace_or_raise, list_root_question_rows
 
 
@@ -44,12 +43,12 @@ class ExistingQuestionGroupingRequest:
 def build_mini_palace_context(palace: Any) -> list[dict[str, Any]]:
     _, labels = collect_node_descendants(getattr(palace, "editor_doc", None))
     contexts: list[dict[str, Any]] = []
-    for mini_palace in getattr(palace, "mini_palaces", []) or []:
-        node_uids = parse_mini_palace_node_uids(getattr(mini_palace, "node_uids_json", None))
+    for mini_palace in getattr(palace, "segments", []) or []:
+        node_uids = parse_segment_node_uids(getattr(mini_palace, "node_uids_json", None))
         node_texts = [labels.get(uid, uid) for uid in node_uids if labels.get(uid, uid)]
         contexts.append(
             {
-                "mini_palace_id": mini_palace.id,
+                "segment_id": mini_palace.id,
                 "name": mini_palace.name,
                 "node_uids": node_uids,
                 "node_texts": node_texts[:24],
@@ -89,7 +88,7 @@ def prepare_mini_palace_grouping_request(
 ) -> MiniPalaceGroupingPreparedRequest:
     mini_palace_contexts = build_mini_palace_context(palace)
     if len(mini_palace_contexts) == 0:
-        raise PalaceQuizValidationError("当前宫殿还没有迷你宫殿训练，暂时无法按迷你宫殿训练分类。")
+        raise PalaceQuizValidationError("当前宫殿还没有学习组，暂时无法按学习组分类。")
     if len(questions) == 0:
         raise PalaceQuizValidationError("没有可分类的题目。")
 
@@ -142,16 +141,16 @@ def build_grouped_preview_from_indexes(
 ) -> dict[str, Any]:
     question_count = len(questions)
     context_by_id = {
-        int(item["mini_palace_id"]): item
+        int(item["segment_id"]): item
         for item in mini_palace_contexts
-        if item.get("mini_palace_id") is not None
+        if item.get("segment_id") is not None
     }
     grouped_questions: list[dict[str, Any]] = []
     assigned_indexes: set[int] = set()
-    for item in grouping_payload.get("mini_palace_groups", []):
+    for item in grouping_payload.get("segment_groups", grouping_payload.get("mini_palace_groups", [])):
         if not isinstance(item, dict):
             continue
-        mini_palace_id = item.get("mini_palace_id")
+        mini_palace_id = item.get("segment_id", item.get("mini_palace_id"))
         question_indexes_raw = item.get("question_indexes")
         try:
             mini_palace_id_int = int(mini_palace_id) if mini_palace_id is not None else 0
@@ -172,12 +171,12 @@ def build_grouped_preview_from_indexes(
             continue
         grouped_questions.append(
             {
-                "mini_palace_id": mini_palace_id_int,
-                "mini_palace_name": context_by_id[mini_palace_id_int]["name"],
+                "segment_id": mini_palace_id_int,
+                "segment_name": context_by_id[mini_palace_id_int]["name"],
                 "questions": [
                     {
                         **questions[index],
-                        "mini_palace_id": mini_palace_id_int,
+                        "segment_ids": [mini_palace_id_int],
                     }
                     for index in question_indexes
                 ],
@@ -197,7 +196,7 @@ def build_grouped_preview_from_indexes(
         unassigned_indexes = [index for index in range(question_count) if index not in assigned_indexes]
 
     return {
-        "mini_palace_groups": grouped_questions,
+        "segment_groups": grouped_questions,
         "unassigned_questions": [questions[index] for index in unassigned_indexes],
     }
 
@@ -247,8 +246,8 @@ def apply_grouped_question_copies(
     source_by_origin = {question.id: question for question in source_questions}
     created_or_updated = 0
     mini_palace_hit_counts: list[dict[str, Any]] = []
-    for group in grouped_preview["mini_palace_groups"]:
-        mini_palace_id = int(group["mini_palace_id"])
+    for group in grouped_preview["segment_groups"]:
+        mini_palace_id = int(group["segment_id"])
         question_items = group.get("questions") or []
         hit_count = 0
         for item in question_items:
@@ -260,17 +259,20 @@ def apply_grouped_question_copies(
             source_question = source_by_origin.get(origin_question_id_int)
             if source_question is None:
                 continue
-            upsert_classified_question_copy(
-                session,
-                source_question=source_question,
-                mini_palace_id=mini_palace_id,
+            segment = next(
+                (item for item in source_question.palace.segments if item.id == mini_palace_id),
+                None,
             )
+            if segment is None:
+                continue
+            if all(item.id != segment.id for item in source_question.segments):
+                source_question.segments.append(segment)
             hit_count += 1
             created_or_updated += 1
         mini_palace_hit_counts.append(
             {
-                "mini_palace_id": mini_palace_id,
-                "mini_palace_name": group.get("mini_palace_name") or f"迷你宫殿训练 {mini_palace_id}",
+                "segment_id": mini_palace_id,
+                "segment_name": group.get("segment_name") or f"学习组 {mini_palace_id}",
                 "question_count": hit_count,
             }
         )
@@ -323,10 +325,10 @@ def classify_existing_quiz_questions_to_mini_palaces(
     session.commit()
     return {
         "palace_id": palace_id,
-        "mini_palace_groups": mini_palace_hit_counts,
+        "segment_groups": mini_palace_hit_counts,
         "unassigned_count": len(grouped_preview.get("unassigned_questions") or []),
         "ai_call_log_id": log_id,
-        "copied_question_count": created_or_updated,
+        "associated_question_count": created_or_updated,
     }
 
 

@@ -140,7 +140,11 @@ def create_batch_import_job(*args, **kwargs):
         raise TypeError("create_batch_import_job accepts only session as a positional argument")
     ai_options = kwargs.pop("ai_options", None)
     ai_runtime: AiRuntimeProvider = kwargs.pop("ai_runtime")
-    runtime = ai_runtime.resolve("vision_batch_mindmap", options=ai_options)
+    mode = kwargs.get("mode", MODE_MINDMAP)
+    runtime = ai_runtime.resolve(
+        "vision_batch_mindmap" if mode == MODE_MINDMAP else "vision_image_text",
+        options=ai_options,
+    )
     normalized_items, resolved_structure_index = _prepare_batch_image_items(
         ai_runtime=ai_runtime,
         image_items=kwargs["image_items"],
@@ -152,10 +156,16 @@ def create_batch_import_job(*args, **kwargs):
         normalized_items=normalized_items,
         resolved_structure_index=resolved_structure_index,
         fallback_title=kwargs["fallback_title"],
+        mode=mode,
         ai_runtime=_serialize_runtime_payload(runtime),
         import_jobs_dir=IMPORT_JOBS_DIR,
         import_error_cls=MindMapImportError,
     )
+
+
+def create_pdf_import_job(*args, **kwargs):
+    _sync_facade_dependencies()
+    return _job_api.create_pdf_import_job(*args, **kwargs)
 
 
 def _is_job_thread_alive(job_id: str) -> bool:
@@ -193,6 +203,11 @@ def list_jobs(*args, **kwargs):
 def delete_job(*args, **kwargs):
     _sync_facade_dependencies()
     return _job_api.delete_job(*args, **kwargs)
+
+
+def rerun_job(*args, **kwargs):
+    _sync_facade_dependencies()
+    return _job_api.rerun_job(*args, **kwargs)
 
 
 def request_pause_job(*args, **kwargs):

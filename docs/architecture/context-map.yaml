@@ -66,6 +66,10 @@
         "status": "migrated",
         "publicEntry": "memory_anki.modules.palaces.api"
       },
+      "pdf_library": {
+        "status": "migrated",
+        "publicEntry": "memory_anki.modules.pdf_library.api"
+      },
       "reviews": {
         "status": "migrated",
         "publicEntry": "memory_anki.modules.reviews.api"
@@ -157,10 +161,12 @@
       "palaces": [
         "backups",
         "mindmap_document",
+        "pdf_library",
         "reviews",
         "sessions",
         "settings"
       ],
+      "pdf_library": [],
       "reviews": [
         "mindmap_document",
         "palaces",
@@ -189,7 +195,6 @@
       "modules/knowledge/application/subject_service.py",
       "modules/palaces/application/attachment_service.py",
       "modules/palaces/application/editor_state_service.py",
-      "modules/palaces/application/mini_palace_records.py",
       "modules/palaces/application/import_export_service.py",
       "modules/palaces/application/palace_service.py",
       "modules/palaces/application/palace_template_service.py",

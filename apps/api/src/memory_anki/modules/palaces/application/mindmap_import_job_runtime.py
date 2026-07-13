@@ -16,6 +16,7 @@ from .mindmap_import.runtime import DashscopeImportRuntime
 MODE_MINDMAP = job_state.MODE_MINDMAP
 MODE_TEXT = job_state.MODE_TEXT
 SOURCE_KIND_IMAGE_BATCH = job_state.SOURCE_KIND_IMAGE_BATCH
+SOURCE_KIND_PDF_DOCUMENT = job_state.SOURCE_KIND_PDF_DOCUMENT
 
 
 def _serialize_runtime_payload(runtime: ResolvedAiRuntime) -> dict[str, Any]:
@@ -73,7 +74,10 @@ def _runtime_snapshot(runtime_meta: dict[str, Any]) -> PersistedAiRuntime:
 
 def _fallback_scenario_key(source_meta: dict[str, Any] | None) -> str:
     if isinstance(source_meta, dict):
-        if str(source_meta.get("source_kind") or "").strip() == SOURCE_KIND_IMAGE_BATCH:
+        if str(source_meta.get("source_kind") or "").strip() in {
+            SOURCE_KIND_IMAGE_BATCH,
+            SOURCE_KIND_PDF_DOCUMENT,
+        }:
             return "vision_batch_mindmap"
         if str(source_meta.get("mode") or "").strip() == MODE_TEXT:
             return "vision_image_text"

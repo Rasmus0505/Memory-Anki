@@ -2,7 +2,6 @@ import { Position, type Edge, type Node } from '@xyflow/react'
 import type { GraphData, MindMapNode } from './adapter'
 import { BRANCH_COLORS } from './branchColors'
 
-export const TOOLBAR_HEIGHT = 54
 const ROOT_X = 52
 const ROOT_Y = 280
 const ROOT_NODE_MIN_WIDTH = 200

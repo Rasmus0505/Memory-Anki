@@ -1,5 +1,7 @@
 """Direct tests for the palaces presentation router."""
 
+import json
+
 import pytest
 
 from memory_anki.infrastructure.db._tables.palaces import Attachment, Palace
@@ -350,6 +352,37 @@ class TestPalaceSegments:
 
         assert response.status_code == 200
         assert response.json()["item"]["name"] == "Renamed Segment"
+
+    def test_segments_allow_overlapping_subtrees(self, client, session_factory, palace_id):
+        with session_factory() as session:
+            palace = session.get(Palace, palace_id)
+            assert palace is not None
+            palace.editor_doc = json.dumps(editor_doc(), ensure_ascii=False)
+            session.commit()
+
+        first = client.post(
+            f"/api/v1/palaces/{palace_id}/segments",
+            json={"name": "A", "node_uids": ["child-1"]},
+        )
+        second = client.post(
+            f"/api/v1/palaces/{palace_id}/segments",
+            json={"name": "B", "node_uids": ["child-1"]},
+        )
+
+        assert first.status_code == 200
+        assert second.status_code == 200
+        assert first.json()["item"]["node_uids"] == ["child-1"]
+        assert second.json()["item"]["node_uids"] == ["child-1"]
+
+    def test_segment_needs_practice_can_be_toggled(self, client, palace_id):
+        segment_id = create_segment(client, palace_id)
+        response = client.put(
+            f"/api/v1/palace-segments/{segment_id}",
+            json={"needs_practice": True},
+        )
+
+        assert response.status_code == 200
+        assert response.json()["item"]["needs_practice"] is True
 
     def test_delete_segment(self, client, palace_id):
         segment_id = create_segment(client, palace_id)

@@ -1,4 +1,5 @@
 import type { PalaceQuizGenerationPreview } from '@/shared/api/contracts'
+import type { QuizGenerationJob } from '@/shared/api/contracts'
 
 export type QuizGenerationSourceKind = 'image-single' | 'image-batch' | 'text-files'
 
@@ -30,43 +31,38 @@ export interface QuizGenerationHistoryItem {
   aiCallLogId: string | null
 }
 
-const HISTORY_STORAGE_PREFIX = 'memory_anki_palace_quiz_generation_history_'
+export const HISTORY_STORAGE_PREFIX = 'memory_anki_palace_quiz_generation_history_'
 
 function historyKey(palaceId: number) {
   return `${HISTORY_STORAGE_PREFIX}${palaceId}`
 }
 
-export function loadQuizGenerationHistory(palaceId: number): QuizGenerationHistoryItem[] {
+export function clearLegacyQuizGenerationHistory(palaceId: number) {
   try {
     window.localStorage.removeItem(historyKey(palaceId))
-    return []
   } catch {
-    return []
+    // Persistent server history remains authoritative when browser storage is unavailable.
   }
 }
 
-export function saveQuizGenerationHistory(
-  palaceId: number,
-  item: Omit<QuizGenerationHistoryItem, 'id' | 'createdAt'>,
-): QuizGenerationHistoryItem[] {
-  const history = loadQuizGenerationHistory(palaceId)
-  const nextItem: QuizGenerationHistoryItem = {
-    ...item,
-    id: `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`,
-    createdAt: new Date().toISOString(),
+export function mapQuizGenerationJobToHistory(job: QuizGenerationJob): QuizGenerationHistoryItem {
+  const options = job.options
+  const sourceKind = (options.source_kind || 'text-files') as QuizGenerationSourceKind
+  return {
+    id: job.id,
+    createdAt: job.created_at || job.updated_at || new Date(0).toISOString(),
+    sourceKind,
+    title: job.title,
+    extraPrompt: job.extra_prompt,
+    enableSecondaryReview: Boolean(options.enable_secondary_review),
+    classifyByMiniPalace: Boolean(options.classify_by_mini_palace),
+    selectedChapterId: job.selected_chapter_id,
+    selectedChapterPath: String(options.selected_chapter_path || ''),
+    imageFileNames: job.sources.map((source) => source.original_name || source.display_name).filter(Boolean),
+    previewQuestionCount: Number(options.preview_question_count || job.preview?.questions.length || 0),
+    savableQuestionCount: Number(options.savable_question_count || 0),
+    aiCallLogId: job.preview?.ai_call_log_id || null,
   }
-  const nextHistory = [nextItem, ...history].slice(0, 12)
-  window.localStorage.setItem(historyKey(palaceId), JSON.stringify(nextHistory))
-  return nextHistory
-}
-
-export function deleteQuizGenerationHistory(
-  palaceId: number,
-  historyId: string,
-): QuizGenerationHistoryItem[] {
-  const nextHistory = loadQuizGenerationHistory(palaceId).filter((item) => item.id !== historyId)
-  window.localStorage.setItem(historyKey(palaceId), JSON.stringify(nextHistory))
-  return nextHistory
 }
 
 export function buildQuizGenerationHistoryTitle(
@@ -90,7 +86,7 @@ export function getPreviewQuestionCount(preview: PalaceQuizGenerationPreview) {
     )
   }
   return (
-    (preview.grouped_questions.mini_palace_groups || []).reduce(
+    (preview.grouped_questions.segment_groups || []).reduce(
       (total, group) => total + group.questions.length,
       0,
     ) + preview.grouped_questions.unassigned_questions.length

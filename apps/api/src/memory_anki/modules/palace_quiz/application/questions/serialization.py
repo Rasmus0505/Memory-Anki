@@ -11,7 +11,7 @@ def serialize_question_content(question: PalaceQuizQuestion) -> dict[str, object
     return {
         "id": question.id,
         "palace_id": question.palace_id,
-        "mini_palace_id": question.mini_palace_id,
+        "segment_ids": [segment.id for segment in getattr(question, "segments", [])],
         "source_chapter_id": question.source_chapter_id,
         "classified_chapter_id": question.classified_chapter_id,
         "origin_question_id": question.origin_question_id,
@@ -39,13 +39,11 @@ def serialize_question_content(question: PalaceQuizQuestion) -> dict[str, object
     }
 
 
-def _serialize_mini_palace_relation(mini_palace: Any) -> dict[str, object] | None:
-    if not mini_palace:
-        return None
-    return {
-        "id": mini_palace.id,
-        "name": mini_palace.name,
-    }
+def _serialize_segment_relations(segments: Any) -> list[dict[str, object]]:
+    return [
+        {"id": segment.id, "name": segment.name, "color": segment.color}
+        for segment in (segments or [])
+    ]
 
 
 def _serialize_source_chapter_relation(source_chapter: Any) -> dict[str, object] | None:
@@ -73,7 +71,7 @@ def _serialize_classified_chapter_relation(
 
 def serialize_question_relations(question: PalaceQuizQuestion) -> dict[str, object]:
     return {
-        "mini_palace": _serialize_mini_palace_relation(getattr(question, "mini_palace", None)),
+        "segments": _serialize_segment_relations(getattr(question, "segments", [])),
         "source_chapter": _serialize_source_chapter_relation(
             getattr(question, "source_chapter", None)
         ),

@@ -27,6 +27,7 @@ export interface PalaceSegmentSummary {
   sort_order: number
   node_uids: string[]
   node_count: number
+  needs_practice?: boolean
   estimated_review_seconds: number
   review_stage_total: number
   review_stage_completed: number
@@ -40,29 +41,6 @@ export interface PalaceSegmentSummary {
   active_review_progress?: number | null
   is_empty: boolean
   is_virtual_default?: boolean
-}
-export interface MiniPalaceSummary {
-  id: number
-  palace_id: number
-  name: string
-  node_uids: string[]
-  node_count: number
-  sort_order: number
-  created_at: string | null
-  updated_at: string | null
-  is_empty: boolean
-  needs_practice?: boolean
-  estimated_review_seconds: number
-  review_stage_total: number
-  review_stage_completed: number
-  review_stage_progress: number
-  stage_labels: string[]
-  review_stages: ReviewStageSummary[]
-  next_review_at: string | null
-  has_due_review: boolean
-  current_review_schedule_id: number | null
-  current_review_type?: string | null
-  active_review_progress?: number | null
 }
 export interface PalaceListItem {
   id: number
@@ -81,7 +59,6 @@ export interface PalaceListItem {
   review_stages?: ReviewStageSummary[]
   active_review_progress?: number | null
   segments: PalaceSegmentSummary[]
-  mini_palaces?: MiniPalaceSummary[]
   chapters?: Array<unknown>
 }
 export interface ChapterSummary {
@@ -141,11 +118,6 @@ export interface PalaceEditorResponse extends MindMapEditorState {
 export interface PalaceSegmentPracticeResponse {
   palace: Pick<PalaceEditorMeta, 'id' | 'title' | 'editor_doc'>
   item: PalaceSegmentSummary
-  editor_doc: MindMapDoc | string | null
-}
-export interface MiniPalacePracticeResponse {
-  palace: Pick<PalaceEditorMeta, 'id' | 'title' | 'editor_doc'> | null
-  item: MiniPalaceSummary
   editor_doc: MindMapDoc | string | null
 }
 export interface PalaceGroupedSummaryItem {
@@ -270,11 +242,9 @@ export interface SessionProgressSnapshot {
     | "practice"
     | "review"
     | "segment_practice"
-    | "mini_practice"
   palace_id: number | null
   review_schedule_id: number | null
   palace_segment_id: number | null
-  mini_palace_id?: number | null
   reveal_map: Record<string, "hidden" | "placeholder" | "revealed">
   red_node_ids: string[]
   completed: boolean

@@ -65,6 +65,7 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
   nodeClickViewportPolicy,
   contentChangeViewportPolicy,
   className,
+  toolbarContent,
   segments = [],
   activeSegmentId = null,
   segmentColorMode = 'all',
@@ -78,10 +79,6 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
   masteryByNodeUid = {},
   focusRequestNodeUid = null,
   focusRequestNonce = 0,
-  miniPalaceDraft = {
-    active: false,
-    selectedNodeUids: [],
-  },
   reviewFxSignal = null,
   feedbackFxSignal = null,
   onEditorStateChange,
@@ -94,7 +91,6 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
   onAiSplitRequest,
   onFullscreenChange,
   onUiClearedChange,
-  onMiniPalacePour,
   onReady,
 }: MindMapEditorSurfaceProps, ref) {
   const frameRef = useRef<HTMLDivElement | null>(null)
@@ -126,7 +122,6 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
       segmentRangeDraft,
       highlightedNodeUids,
       masteryByNodeUid,
-      miniPalaceDraft,
       practiceModeActive,
       revealMap: practiceModeActive ? revealMap : undefined,
       aiSplitBusy,
@@ -135,11 +130,10 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
       onSegmentRangeDraftChange,
       onNodeClick,
       onNodeContextMenu,
-      onMiniPalacePour,
-    }),
+        }),
     [
       activeSegmentId, aiSplitBusy,  highlightedNodeUids, masteryByNodeUid,
-      miniPalaceDraft, onAiSplitRequest, onCreateSegmentFromSelection, onMiniPalacePour,
+      onAiSplitRequest, onCreateSegmentFromSelection,
       onNodeClick, onNodeContextMenu, onSegmentRangeDraftChange, practiceModeActive,
       providedCapabilities, revealMap, segmentColorMode, segmentRangeDraft, segments,
     ],
@@ -583,6 +577,7 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
         practiceModeActive={practiceModeActive}
         focusMode={nativeFullscreenActive || immersiveModeActive}
         showToolbar={!uiCleared}
+        toolbarContent={toolbarContent}
         mobileViewPolicy={mobileViewPolicy}
         nodeClickViewportPolicy={resolvedNodeClickViewportPolicy}
         contentChangeViewportPolicy={resolvedContentChangeViewportPolicy}

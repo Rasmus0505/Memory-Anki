@@ -2,7 +2,7 @@
 
 Route-level composition for Memory Anki. Pages may compose widgets and features, but must not own reusable domain logic or call backend endpoints directly.
 
-`create/PalaceEditorPage` owns route-level composition across palace editing, mind-map editor/import/experience, mini-palace, and quiz-launcher capabilities. Editor-backed Knowledge outline and Palace version preview UI live beside the page; reusable Palace editing state and business panels remain in `features/palace-edit`, which has no production dependency on other features. Mini Palace controller creation, URL deep-link handling, and cross-feature canvas composition remain page-owned.
+`create/PalaceEditorPage` owns route-level composition across palace editing, mind-map editor/import/experience, and quiz-launcher capabilities. Editor-backed Knowledge outline and Palace version preview UI live beside the page; reusable Palace editing state and business panels remain in `features/palace-edit`, which has no production dependency on other features. Learning-group selection and cross-feature canvas composition remain page-owned.
 
 `library/PalaceListPage` and `library/PalaceLibraryPage` own the optional Review-session warmup composition; `features/palace-catalog` owns catalog behavior without importing Review feature internals.
 

@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
 import { AlertCircle, ArrowLeft, CheckCircle2, FileStack, History, LayoutTemplate, LoaderCircle, PencilLine } from 'lucide-react'
 import { PageIntro } from '@/shared/components/layout/PageIntro'
 import {
@@ -21,7 +21,6 @@ import { MindMapImportDrawer, useMindMapImport } from '@/features/mindmap-import
 import { usePalaceEditPage } from '@/features/palace-edit/hooks/usePalaceEditPage'
 import { PalaceKnowledgeOutlinePanel } from './PalaceKnowledgeOutlinePanel'
 import { useQuizLauncher } from '@/widgets/quiz-launcher'
-import { MiniPalacePanel, useMiniPalaceController } from '@/features/mini-palace'
 import { useRouteResidency } from '@/shared/routing/RouteResidency'
 import { useMindMapExperience } from '@/features/mindmap-experience'
 import { createPalaceTemplateApi } from '@/entities/palace/api'
@@ -75,54 +74,6 @@ export default function PalaceEdit() {
   const { isActive, becameActiveAt } = useRouteResidency()
   const navigate = useNavigate()
   const page = usePalaceEditPage()
-  const [searchParams, setSearchParams] = useSearchParams()
-  const miniPalaceIdFromQuery = searchParams.get('miniPalaceId')
-  const miniPalaceModeFromQuery = searchParams.get('miniPalaceMode')
-  const miniPalace = useMiniPalaceController({
-    palaceId: page.palaceId,
-    title: page.title || page.palace?.title || '未命名宫殿',
-    editorState: page.editorState,
-    selectedNodeUid: page.selectedNode?.uid ? String(page.selectedNode.uid) : null,
-    selectedNodeText: page.selectedNode?.text ? String(page.selectedNode.text) : '',
-    timer: page.timer,
-  })
-  const { items: miniPalaceItems, startEdit: startMiniPalaceEdit, confirmCreate: confirmMiniPalaceEdit, cancelCreate: cancelMiniPalaceEdit } = miniPalace
-  const miniPalaceEditInitializedRef = useRef(false)
-
-  useEffect(() => {
-    if (!page.palaceId || !page.editorState) return
-    if (!miniPalaceIdFromQuery || miniPalaceModeFromQuery !== 'edit') return
-    if (miniPalaceEditInitializedRef.current) return
-    if (miniPalaceItems.length === 0) return
-    const targetMini = miniPalaceItems.find((item) => String(item.id) === miniPalaceIdFromQuery)
-    if (!targetMini || targetMini.node_uids.length === 0) return
-    miniPalaceEditInitializedRef.current = true
-    startMiniPalaceEdit(targetMini)
-  }, [
-    miniPalaceItems,
-    startMiniPalaceEdit,
-    miniPalaceIdFromQuery,
-    miniPalaceModeFromQuery,
-    page.editorState,
-    page.palaceId,
-  ])
-
-  const clearMiniPalaceQueryParams = useCallback(() => {
-    const next = new URLSearchParams(searchParams)
-    next.delete('miniPalaceId')
-    next.delete('miniPalaceMode')
-    setSearchParams(next, { replace: true })
-  }, [searchParams, setSearchParams])
-
-  const handleMiniPalaceEditSave = useCallback(async () => {
-    await confirmMiniPalaceEdit()
-    clearMiniPalaceQueryParams()
-  }, [clearMiniPalaceQueryParams, confirmMiniPalaceEdit])
-
-  const handleMiniPalaceEditCancel = useCallback(() => {
-    cancelMiniPalaceEdit()
-    clearMiniPalaceQueryParams()
-  }, [cancelMiniPalaceEdit, clearMiniPalaceQueryParams])
   const { openQuizLauncher } = useQuizLauncher()
   const mindMapFrameRef = useRef<MindMapEditorSurfaceHandle | null>(null)
   const [mindMapUiCleared, setMindMapUiCleared] = useState(false)
@@ -147,12 +98,7 @@ export default function PalaceEdit() {
   })
 
   const selectedNodeLabel = page.selectedNodes?.[0]?.text ?? ''
-  const miniPalaceFrameEditorState =
-    miniPalace.visibleEditorState ??
-    (miniPalace.isActive ? page.editorState : null)
-  const activeFrameEditorState =
-    miniPalaceFrameEditorState ?? page.activeMindMapEditorState
-  const miniPalaceFrameActive = miniPalace.isActive
+  const activeFrameEditorState = page.activeMindMapEditorState
   const mindMapExperience = useMindMapExperience({
     entityType: 'palace',
     entityId: page.palaceId,
@@ -170,7 +116,7 @@ export default function PalaceEdit() {
     if (editorMode !== 'edit') exitInlinePractice()
   }, [becameActiveAt, editorMode, exitInlinePractice, isActive, setMindMapTask])
   const recallModeActive = page.editorMode === 'recall'
-  const readonlyMindMap = mindMapExperience.task === 'learn' || page.editorMode !== 'edit' || miniPalaceFrameActive
+  const readonlyMindMap = mindMapExperience.task === 'learn' || page.editorMode !== 'edit'
   const segmentToolbarOptions = useMemo(
     () =>
       page.segments
@@ -209,26 +155,6 @@ export default function PalaceEdit() {
     } finally {
       setTemplateSaving(false)
     }
-  }
-
-  const handleImmersiveToolbarToggle = async () => {
-    if (mindMapNativeFullscreen) {
-      await mindMapFrameRef.current?.exitNativeFullscreen()
-      page.toggleMindMapFullscreen(true)
-      return
-    }
-    page.toggleMindMapFullscreen()
-  }
-
-  const handleNativeFullscreenToolbarToggle = async () => {
-    if (mindMapNativeFullscreen) {
-      await mindMapFrameRef.current?.exitNativeFullscreen()
-      return
-    }
-    if (page.mindMapFullscreen) {
-      page.toggleMindMapFullscreen(false)
-    }
-    await mindMapFrameRef.current?.enterNativeFullscreen()
   }
 
   const handleOpenQuizPage = () => {
@@ -411,6 +337,7 @@ export default function PalaceEdit() {
             onOpenEdit={page.handleOpenEditSegment}
             onOpenChange={page.setSegmentDialogOpen}
             onSave={page.handleSaveSegment}
+            onTogglePractice={page.handleToggleSegmentPractice}
             onDelete={page.handleDeleteSegment}
             onAdjustRange={page.handleAdjustSegmentRange}
             onMerge={page.handleMergeSegment}
@@ -440,43 +367,6 @@ export default function PalaceEdit() {
             >
               {activeFrameEditorState ? (
                 <div className="flex h-full min-h-0 flex-col gap-3">
-                  <MindMapPageToolbar
-                    taskControl={{
-                      value: mindMapExperience.task,
-                      onChange: (task) => {
-                        mindMapExperience.setTask(task)
-                        if (task === 'build') page.exitInlinePractice()
-                        else page.enterInlinePractice()
-                      },
-                    }}
-                    searchControl={{ value: mindMapExperience.searchQuery, onChange: mindMapExperience.setSearchQuery, resultCount: mindMapExperience.searchResults.length }}
-                    focusAction={mindMapExperience.selectedResult ? { label: '定位结果', onClick: () => mindMapFrameRef.current?.focusNode(mindMapExperience.selectedResult?.nodeUid ?? null) } : selectedNodeUid ? { label: '聚焦节点', onClick: () => mindMapFrameRef.current?.focusNode(selectedNodeUid) } : null}
-                    fitAction={{ label: '适应视图', onClick: () => mindMapFrameRef.current?.fitView() }}
-                    segmentControl={mindMapExperience.task === 'build' ? {
-                      active: page.isSegmentRangeMode,
-                      targetSegmentId: page.rangeTargetSegmentId,
-                      options: segmentToolbarOptions,
-                      onToggle: () => page.handleSegmentRangeModeToggle({ active: !page.isSegmentRangeMode, targetSegmentId: page.rangeTargetSegmentId || 'new' }),
-                      onTargetChange: (targetSegmentId) => page.handleSegmentRangeModeToggle({ active: true, targetSegmentId }),
-                      onConfirm: page.handleConfirmSegmentRange,
-                      onCancel: () => page.handleSegmentRangeModeToggle({ active: false, targetSegmentId: null }),
-                    } : null}
-                    moreActions={[
-                      { label: `结构检查（${mindMapExperience.structureIssues.length}）`, onClick: () => { const issue = mindMapExperience.structureIssues[0]; if (!issue) return toast.success('未发现结构问题'); mindMapFrameRef.current?.focusNode(issue.nodeUid); toast.warning(issue.message) } },
-                      ...(selectedNodeUid ? [
-                        { label: '标记为薄弱', onClick: () => { void mindMapExperience.setNodeManualLabel(selectedNodeUid, 'weak') }, separatorBefore: true },
-                        { label: '标记为已掌握', onClick: () => { void mindMapExperience.setNodeManualLabel(selectedNodeUid, 'mastered') } },
-                        { label: '清除手动标记', onClick: () => { void mindMapExperience.setNodeManualLabel(selectedNodeUid, null) } },
-                      ] : []),
-                    ]}
-                    importMindMapAction={{ label: '转脑图', onClick: () => mindMapImport.setImportOpen(true) }}
-                    englishAction={{ label: '英语区', onClick: () => { void page.handleOpenEnglishArea() } }}
-                    quizAction={{ label: '做题', onClick: handleOpenQuizPage }}
-                    miniPalaceAction={{ label: '迷你宫殿训练', onClick: miniPalace.openPanel }}
-                    immersiveAction={{ label: page.mindMapFullscreen ? '退出沉浸模式' : '沉浸模式', onClick: () => { void handleImmersiveToolbarToggle() } }}
-                    nativeFullscreenAction={{ label: mindMapNativeFullscreen ? '退出原生全屏' : '原生全屏', onClick: () => { void handleNativeFullscreenToolbarToggle() } }}
-                    clearUiAction={{ label: mindMapUiCleared ? '恢复界面' : '清屏', onClick: () => mindMapFrameRef.current?.toggleUiCleared() }}
-                  />
                   {mindMapExperience.task === 'learn' && !mindMapExperience.searchQuery ? (
                     <div className="grid gap-2 rounded-xl border bg-muted/15 p-3 sm:grid-cols-2 lg:grid-cols-4">
                       <button type="button" className="rounded-xl border bg-background p-3 text-left hover:border-primary" onClick={() => page.enterInlinePractice()}><div className="font-medium">主动回忆</div><div className="mt-1 text-xs text-muted-foreground">连续揭示并回忆整张脑图</div></button>
@@ -496,39 +386,62 @@ export default function PalaceEdit() {
                   ) : null}                  <MindMapEditorSurface
                     ref={mindMapFrameRef}
                     editorState={activeFrameEditorState}
+                    toolbarContent={
+                      <MindMapPageToolbar
+                        embedded
+                        taskControl={{
+                      value: mindMapExperience.task,
+                      onChange: (task) => {
+                        mindMapExperience.setTask(task)
+                        if (task === 'build') page.exitInlinePractice()
+                        else page.enterInlinePractice()
+                      },
+                    }}
+                        searchControl={{ value: mindMapExperience.searchQuery, onChange: mindMapExperience.setSearchQuery, resultCount: mindMapExperience.searchResults.length }}
+                        focusAction={mindMapExperience.selectedResult ? { label: '定位结果', onClick: () => mindMapFrameRef.current?.focusNode(mindMapExperience.selectedResult?.nodeUid ?? null) } : selectedNodeUid ? { label: '聚焦节点', onClick: () => mindMapFrameRef.current?.focusNode(selectedNodeUid) } : null}
+                        segmentControl={mindMapExperience.task === 'build' ? {
+                      active: page.isSegmentRangeMode,
+                      targetSegmentId: page.rangeTargetSegmentId,
+                      options: segmentToolbarOptions,
+                      onToggle: () => page.handleSegmentRangeModeToggle({ active: !page.isSegmentRangeMode, targetSegmentId: page.rangeTargetSegmentId || 'new' }),
+                      onTargetChange: (targetSegmentId) => page.handleSegmentRangeModeToggle({ active: true, targetSegmentId }),
+                      onConfirm: page.handleConfirmSegmentRange,
+                      onCancel: () => page.handleSegmentRangeModeToggle({ active: false, targetSegmentId: null }),
+                    } : null}
+                        moreActions={[
+                      { label: `结构检查（${mindMapExperience.structureIssues.length}）`, onClick: () => { const issue = mindMapExperience.structureIssues[0]; if (!issue) return toast.success('未发现结构问题'); mindMapFrameRef.current?.focusNode(issue.nodeUid); toast.warning(issue.message) } },
+                      ...(selectedNodeUid ? [
+                        { label: '标记为薄弱', onClick: () => { void mindMapExperience.setNodeManualLabel(selectedNodeUid, 'weak') }, separatorBefore: true },
+                        { label: '标记为已掌握', onClick: () => { void mindMapExperience.setNodeManualLabel(selectedNodeUid, 'mastered') } },
+                        { label: '清除手动标记', onClick: () => { void mindMapExperience.setNodeManualLabel(selectedNodeUid, null) } },
+                      ] : []),
+                    ]}
+                        importMindMapAction={{ label: '转脑图', onClick: () => mindMapImport.setImportOpen(true), deferUntilMenuClose: true }}
+                        englishAction={{ label: '英语区', onClick: () => { void page.handleOpenEnglishArea() } }}
+                        quizAction={{ label: '做题', onClick: handleOpenQuizPage }}
+                        clearUiAction={{ label: mindMapUiCleared ? '恢复界面' : '清屏', onClick: () => mindMapFrameRef.current?.toggleUiCleared() }}
+                      />
+                    }
                     highlightedNodeUids={mindMapExperience.highlightedNodeUids}
                     masteryByNodeUid={mindMapExperience.masteryByNodeUid}
                     readonly={readonlyMindMap}
-                    practiceModeActive={recallModeActive || miniPalace.isPracticing}
+                    practiceModeActive={recallModeActive}
                     viewMemoryScope={
                       page.palaceId ? `palace-edit:${page.palaceId}` : null
                     }
                     immersiveModeActive={page.mindMapFullscreen}
-                    aiSplitBusy={page.editorMode === 'edit' && !miniPalaceFrameActive ? page.aiSplitBusy : false}
+                    aiSplitBusy={page.editorMode === 'edit' ? page.aiSplitBusy : false}
                     syncOnPropChange
-                    syncIntent={recallModeActive || miniPalaceFrameActive ? 'replace' : 'soft'}
-                    syncReason={
-                      miniPalaceFrameActive
-                        ? 'mini_palace'
-                        : recallModeActive
-                          ? 'review_flip'
-                          : null
-                    }
+                    syncIntent={recallModeActive ? 'replace' : 'soft'}
+                    syncReason={recallModeActive ? 'review_flip' : null}
                     preserveViewOnSync={
-                      miniPalaceFrameActive ||
                       recallModeActive ||
                       mindMapImport.importAppliedSyncVersion > 0 ||
                       page.aiSplitAppliedSyncVersion > 0
                     }
-                    initialViewPolicy={recallModeActive || miniPalaceFrameActive ? 'preserve' : 'reset'}
-                    externalSyncKey={
-                      miniPalaceFrameActive
-                        ? miniPalace.visibleSyncKey
-                        : recallModeActive
-                          ? page.practiceVisibleEditorSyncKey
-                          : mindMapImport.importExternalSyncKey
-                    }
-                    forceSyncKey={`${page.editorMode}:${page.replaceSyncVersion}:${mindMapImport.importAppliedSyncVersion}${miniPalaceFrameActive ? `:${miniPalace.visibleSyncKey}` : ''}`}
+                    initialViewPolicy={recallModeActive ? 'preserve' : 'reset'}
+                    externalSyncKey={recallModeActive ? page.practiceVisibleEditorSyncKey : mindMapImport.importExternalSyncKey}
+                    forceSyncKey={`${page.editorMode}:${page.replaceSyncVersion}:${mindMapImport.importAppliedSyncVersion}`}
                     forceSyncIntent="replace"
                     segments={page.segments
                       .filter((segment) => !segment.is_virtual_default)
@@ -549,7 +462,6 @@ export default function PalaceEdit() {
                     }}
                     focusRequestNodeUid={page.modeFocusRequestNodeUid}
                     focusRequestNonce={page.modeFocusRequestNonce}
-                    miniPalaceDraft={miniPalace.hostDraft}
                     reviewFxSignal={recallModeActive ? page.reviewFxSignal : null}
                     feedbackFxSignal={page.feedbackFxSignal}
                     onEditorStateChange={page.handleMindMapEditorStateChange}
@@ -558,30 +470,23 @@ export default function PalaceEdit() {
                       page.handleMindMapNodeActive(nodes)
                     }}
                     onNodeClick={
-                      miniPalaceFrameActive
-                        ? miniPalace.handleNodeClick
+                      page.isSegmentRangeMode
+                        ? page.handleSegmentRangeNodeClick
                         : page.handleInlinePracticeNodeClick
                     }
-                    onNodeContextMenu={
-                      miniPalaceFrameActive
-                        ? miniPalace.handleNodeContextMenu
-                        : page.editorMode === 'edit'
-                          ? undefined
-                          : page.handleInlinePracticeNodeContextMenu
-                    }
+                    onNodeContextMenu={page.editorMode === 'edit' ? undefined : page.handleInlinePracticeNodeContextMenu}
                     onSegmentSelect={page.setActiveSegmentId}
                     onCreateSegmentFromSelection={page.handleOpenCreateSegment}
                     onSegmentRangeDraftChange={page.handleSegmentRangeDraftChange}
                     onSegmentRangeModeToggle={page.handleSegmentRangeModeToggle}
                     onSegmentRangeConfirm={page.handleConfirmSegmentRange}
-                    onAiSplitRequest={page.editorMode === 'edit' && !miniPalaceFrameActive ? page.handleAiSplitRequest : undefined}
+                    onAiSplitRequest={page.editorMode === 'edit' ? page.handleAiSplitRequest : undefined}
                     onFullscreenChange={(active) => {
                       setMindMapNativeFullscreen(active)
                       page.handleMindMapNativeFullscreenChange(active)
                     }}
                     onFullscreenToggle={page.toggleMindMapFullscreen}
                     onUiClearedChange={setMindMapUiCleared}
-                    onMiniPalacePour={miniPalace.isPracticing ? miniPalace.handleSpacePour : undefined}
                     className={cn(
                       'w-full flex-1 rounded-lg border border-border/70 bg-background',
                       page.mindMapFullscreen ? 'h-full' : 'h-[78vh]',
@@ -603,8 +508,6 @@ export default function PalaceEdit() {
           ) : null}
         </div>
       </div>
-
-      <MiniPalacePanel controller={miniPalace} onEditSave={handleMiniPalaceEditSave} onEditCancel={handleMiniPalaceEditCancel} />
 
       <MindMapImportDrawer
         open={mindMapImport.importOpen}
@@ -666,12 +569,22 @@ export default function PalaceEdit() {
         onBatchDeleteImage={mindMapImport.handleDeleteBatchImage}
         onBatchMoveImage={mindMapImport.handleMoveBatchImage}
         onBatchSetStructureImage={mindMapImport.handleSetStructureImage}
+        pdfDocuments={mindMapImport.pdfDocuments}
+        selectedPdfDocumentId={mindMapImport.selectedPdfDocumentId}
+        onSelectedPdfDocumentIdChange={mindMapImport.setSelectedPdfDocumentId}
+        pdfPageSelection={mindMapImport.pdfPageSelection}
+        onPdfPageSelectionChange={mindMapImport.setPdfPageSelection}
+        pdfLibraryLoading={mindMapImport.pdfLibraryLoading}
+        onPdfUpload={mindMapImport.handlePdfUpload}
+        onPdfDelete={(documentId) => void mindMapImport.handlePdfDelete(documentId)}
+        onPdfStart={mindMapImport.handlePdfImportStart}
         onApplyReplace={mindMapImport.handleImportApplyReplace}
         onApplyAppend={mindMapImport.handleImportApplyAppend}
         onUndoLastImport={mindMapImport.handleUndoLastImport}
         history={mindMapImport.importHistory}
         onSelectHistory={mindMapImport.handleImportSelectHistory}
         onDeleteHistory={mindMapImport.handleImportDeleteHistory}
+        onRerunHistory={mindMapImport.handleImportRerunHistory}
         className={page.mindMapFullscreen ? 'z-[130]' : 'z-[120]'}
         overlayClassName={page.mindMapFullscreen ? 'z-[120]' : 'z-[110]'}
       />

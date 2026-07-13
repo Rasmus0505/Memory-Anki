@@ -26,10 +26,12 @@ from memory_anki.modules.palaces.application.mindmap_import_job_service import (
     complete_job_from_preview,
     create_batch_import_job,
     create_image_import_job,
+    create_pdf_import_job,
     delete_job,
     get_job,
     list_jobs,
     request_pause_job,
+    rerun_job,
     run_job_async,
     serialize_job,
     wait_for_job_completion,
@@ -187,6 +189,7 @@ async def api_create_image_import_job(
 async def api_create_batch_import_job(
     entity_key: str = Form(...),
     fallback_title: str = Form("未命名宫殿"),
+    mode: str = Form("mindmap"),
     structure_image_index: int | None = Form(None),
     ai_options: str = Form(default=""),
     files: list[UploadFile] = File(...),
@@ -202,7 +205,35 @@ async def api_create_batch_import_job(
             entity_key=entity_key,
             image_items=image_items,
             fallback_title=fallback_title,
+            mode=mode,
             structure_image_index=structure_image_index,
+            ai_runtime=ai_runtime,
+            ai_options=_parse_form_ai_options(ai_runtime, ai_options),
+        )
+    except MindMapImportError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return serialize_job(job)
+
+
+@router.post("/import/jobs/pdf")
+def api_create_pdf_import_job(
+    entity_key: str = Form(...),
+    document_id: str = Form(...),
+    page_selection: str = Form(...),
+    mode: str = Form("mindmap"),
+    fallback_title: str = Form("未命名宫殿"),
+    ai_options: str = Form(default=""),
+    s: Session = Depends(session_dep),
+):
+    try:
+        ai_runtime = SettingsAiRuntimeProvider(s)
+        job = create_pdf_import_job(
+            s,
+            entity_key=entity_key,
+            document_id=document_id,
+            page_selection=page_selection,
+            mode=mode,
+            fallback_title=fallback_title,
             ai_runtime=ai_runtime,
             ai_options=_parse_form_ai_options(ai_runtime, ai_options),
         )
@@ -263,6 +294,14 @@ def api_delete_import_job(job_id: str, s: Session = Depends(session_dep)):
     if not job:
         raise HTTPException(status_code=404, detail="导入任务不存在。")
     return {"ok": True, "job": serialize_job(job)}
+
+
+@router.post("/import/jobs/{job_id}/rerun")
+def api_rerun_import_job(job_id: str, s: Session = Depends(session_dep)):
+    try:
+        return serialize_job(rerun_job(s, job_id=job_id))
+    except MindMapImportError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @router.post("/import/preview-mindmap")

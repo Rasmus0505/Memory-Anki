@@ -10,7 +10,6 @@ import {
 } from '@/entities/palace/api'
 import type {
   MindMapEditorState,
-  MiniPalaceSummary,
   ReviewPalaceSummary,
 } from '@/shared/api/contracts'
 import { useMindMapDocumentSession } from '@/shared/hooks/useMindMapDocumentSession'
@@ -44,7 +43,6 @@ export interface ReviewSessionContainerSession {
   stageLabels: string[] | null
   revealMode?: RevealFlowMode
   checkpointNodeUids?: string[]
-  mini_palace?: MiniPalaceSummary | null
   editor_doc?: Record<string, unknown> | string | null
   reviewStages: Array<{
     review_number: number

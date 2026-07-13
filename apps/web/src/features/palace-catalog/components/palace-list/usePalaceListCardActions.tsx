@@ -1,7 +1,6 @@
 import { toast } from '@/shared/feedback/toast'
 import { appConfirm } from '@/shared/components/ui/native-dialog'
 import type {
-  MiniPalaceSummary,
   PalaceGroupedItem,
   PalaceGroupedListResponse,
   PalaceSegmentSummary,
@@ -11,10 +10,8 @@ import {
   getPalaceEditorApi,
   getPracticeSessionProgressApi,
   getSegmentPracticeSessionProgressApi,
-  getMiniPracticeSessionProgressApi,
 } from '@/entities/palace/api'
 import { buildReviewSessionPath } from '@/entities/review'
-import { getPalaceMiniPalaceApi } from '@/entities/mini-palace/api'
 import { getPalaceSegmentApi } from '@/entities/palace-segment/api'
 import { prefetchStudySession } from '@/shared/api/studySessionWarmup'
 
@@ -82,25 +79,11 @@ export function usePalaceListCardActions({
     )
   }
 
-  const handleMiniPalacePractice = (mini: MiniPalaceSummary) => {
-    navigate(`/mini-palaces/${mini.id}/practice`)
-  }
-
-  const handleWarmMiniPalacePractice = (mini: MiniPalaceSummary) => {
-    prefetchStudySession('mini-practice', mini.id, () =>
-      Promise.all([getPalaceMiniPalaceApi(mini.id), getMiniPracticeSessionProgressApi(mini.id)]).then(
-        ([session, progress]) => ({ session, progress }),
-      ),
-    )
-  }
-
   return {
     onPalacePractice: (palace: PalaceGroupedItem) => void handlePalacePractice(palace),
     onWarmPalacePractice: handleWarmPalacePractice,
     onSegmentPractice: (segment: PalaceSegmentSummary) => void handleSegmentPractice(segment),
     onWarmSegmentPractice: handleWarmSegmentPractice,
-    onMiniPalacePractice: (mini: MiniPalaceSummary) => void handleMiniPalacePractice(mini),
-    onWarmMiniPalacePractice: handleWarmMiniPalacePractice,
     onDelete: (id: number, title: string) => void handleDelete(id, title),
     dialogs: null,
   }

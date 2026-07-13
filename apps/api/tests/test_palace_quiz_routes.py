@@ -12,6 +12,7 @@ from memory_anki.infrastructure.db._tables.palaces import (
     PalaceMiniPalace,
     PalaceQuizOcrSource,
     PalaceQuizQuestion,
+    PalaceSegment,
 )
 from memory_anki.modules.palace_quiz.application import ai_service as palace_quiz_ai_service
 from memory_anki.modules.palace_quiz.presentation import router as palace_quiz_router
@@ -94,6 +95,22 @@ class PalaceQuizRouteTests(RouterTestCase):
         subject = Subject(name="生物", color="#22c55e")
         session.add_all([palace, other_palace, subject])
         session.flush()
+        segment_a = PalaceSegment(
+            palace_id=palace.id,
+            name="细胞核学习组",
+            color="#14b8a6",
+            node_uids_json=json.dumps(["cell-core"], ensure_ascii=False),
+            sort_order=0,
+        )
+        segment_b = PalaceSegment(
+            palace_id=palace.id,
+            name="重点学习组",
+            color="#f97316",
+            node_uids_json=json.dumps(["cell-core", "mitosis"], ensure_ascii=False),
+            sort_order=1,
+        )
+        session.add_all([segment_a, segment_b])
+        session.flush()
         chapter = Chapter(subject_id=subject.id, name="细胞生物学", sort_order=0)
         session.add(chapter)
         session.flush()
@@ -175,6 +192,7 @@ class PalaceQuizRouteTests(RouterTestCase):
         self.chapter_id = chapter.id
         self.child_chapter_id = child_chapter.id
         self.unrelated_chapter_id = unrelated_chapter.id
+        self.segment_ids = [segment_a.id, segment_b.id]
 
     def test_quiz_crud_and_palace_isolation(self):
         response = self.client.get("/api/v1/palaces/1/quiz-questions")
@@ -226,6 +244,24 @@ class PalaceQuizRouteTests(RouterTestCase):
         final_response = self.client.get("/api/v1/palaces/2/quiz-questions")
         self.assertEqual(final_response.status_code, 200)
         self.assertEqual(final_response.json()["items"], [])
+
+    def test_question_can_share_content_across_multiple_learning_groups(self):
+        response = self.client.post(
+            "/api/v1/palaces/1/quiz-questions",
+            json={
+                "segment_ids": self.segment_ids,
+                "question_type": "short_answer",
+                "stem": "细胞核与有丝分裂有什么关系？",
+                "answer_payload": {"reference_answer": "细胞核中的遗传物质参与有丝分裂。"},
+                "analysis": "共享题目内容，但可属于多个学习组。",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        item = response.json()["item"]
+        self.assertEqual(item["segment_ids"], self.segment_ids)
+        self.assertEqual([segment["id"] for segment in item["segments"]], self.segment_ids)
+        self.assertEqual(item["attempt_count"], 0)
 
     def test_delete_soft_deletes_hides_from_lists_and_restore_recovers(self):
         with self.SessionLocal() as session:
@@ -2995,7 +3031,7 @@ class PalaceQuizRouteTests(RouterTestCase):
         )
         self.assertEqual(calls[1]["operation"], "palace_quiz_group_by_child_chapter")
 
-    def test_classify_existing_quiz_questions_to_mini_palaces_is_idempotent(self):
+    def test_classify_existing_quiz_questions_to_segments_is_idempotent(self):
         calls: list[dict[str, object]] = []
 
         def fake_call_logged_chat_completion(**kwargs):
@@ -3003,8 +3039,8 @@ class PalaceQuizRouteTests(RouterTestCase):
             return (
                 json.dumps(
                     {
-                        "mini_palace_groups": [
-                            {"mini_palace_id": 1, "question_indexes": [0]}
+                        "segment_groups": [
+                            {"segment_id": 1, "question_indexes": [0]}
                         ],
                         "unassigned_question_indexes": [1],
                     },
@@ -3022,23 +3058,23 @@ class PalaceQuizRouteTests(RouterTestCase):
             ),
         ):
             first_response = self.client.post(
-                "/api/v1/palaces/1/quiz-classification/mini-palaces"
+                "/api/v1/palaces/1/quiz-classification/segments"
             )
             second_response = self.client.post(
-                "/api/v1/palaces/1/quiz-classification/mini-palaces"
+                "/api/v1/palaces/1/quiz-classification/segments"
             )
 
         self.assertEqual(first_response.status_code, 200)
         self.assertEqual(second_response.status_code, 200)
-        self.assertEqual(first_response.json()["copied_question_count"], 1)
+        self.assertEqual(first_response.json()["associated_question_count"], 1)
         listed = self.client.get("/api/v1/palaces/1/quiz-questions")
         self.assertEqual(listed.status_code, 200)
-        self.assertEqual(len(listed.json()["items"]), 3)
-        copied_questions = [
-            item for item in listed.json()["items"] if item["mini_palace_id"] == 1
+        self.assertEqual(len(listed.json()["items"]), 2)
+        associated_questions = [
+            item for item in listed.json()["items"] if 1 in item["segment_ids"]
         ]
-        self.assertEqual(len(copied_questions), 1)
-        self.assertEqual(copied_questions[0]["origin_question_id"], 1)
+        self.assertEqual(len(associated_questions), 1)
+        self.assertEqual(associated_questions[0]["id"], 1)
         self.assertEqual(calls[0]["messages"][0]["content"], calls[1]["messages"][0]["content"])
 
     def test_pdf_generation_can_return_grouped_questions_by_mini_palace(self):
@@ -3444,7 +3480,7 @@ class PalaceQuizRouteTests(RouterTestCase):
         stems = [item["stem"] for item in listed.json()["items"]]
         self.assertEqual(stems, ["新题？"])
 
-    def test_batch_create_chapter_quiz_questions_rejects_mini_palace_binding(self):
+    def test_batch_create_chapter_quiz_questions_rejects_segment_binding(self):
         response = self.client.post(
             f"/api/v1/chapters/{self.chapter_id}/quiz-questions/batch",
             json={
@@ -3452,7 +3488,7 @@ class PalaceQuizRouteTests(RouterTestCase):
                     {
                         "source_chapter_id": self.chapter_id,
                         "classified_chapter_id": self.child_chapter_id,
-                        "mini_palace_id": 1,
+                        "segment_ids": [1],
                         "question_type": "multiple_choice",
                         "stem": "细胞核的主要作用是？",
                         "options": [
@@ -3467,7 +3503,7 @@ class PalaceQuizRouteTests(RouterTestCase):
         )
 
         self.assertEqual(response.status_code, 400)
-        self.assertIn("章节题暂不支持绑定迷你宫殿训练", response.json()["detail"])
+        self.assertIn("章节题暂不支持绑定学习组", response.json()["detail"])
 
     def test_palace_aggregated_questions_include_bound_chapter_questions(self):
         with self.SessionLocal() as session:

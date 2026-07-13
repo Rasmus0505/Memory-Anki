@@ -43,6 +43,7 @@ AI_RUNTIME_PORT_MANAGED_FILES = {
 FORBIDDEN_WEB_IMPORTS = {
     "@/shared/api/client": "Pages and features must import scoped API wrappers or contracts instead of the legacy shared/api/client aggregator.",
     "@/shared/api/modules/palaces": "palace API wrappers belong in entities/palace/api; import preview/job wrappers belong in entities/knowledge-import/api.",
+    "@/entities/ai-runtime/model/": "AI generation consumers must import the shared workbench through the entities/ai-runtime public facade.",
     "@/app/": "features, entities, and shared modules must not import app-layer code; move shared routing/state helpers out of app/router.",
 }
 
@@ -70,11 +71,12 @@ FORBIDDEN_REMOVED_SHARED_API_DIRS = {
 FORBIDDEN_REMOVED_FEATURE_API_FILES = {
     "features/english/api/englishApi.ts": "English course and task API wrappers belong in entities/english/api.",
     "features/palace-quiz/api/quizApi.ts": "quiz question and generation API wrappers belong in entities/quiz/api; palace-quiz may keep only page-specific API composition.",
-    "features/mini-palace/api/miniPalaceApi.ts": "mini palace API wrappers are cross-feature entity endpoints; keep them in entities/mini-palace/api.",
     "features/palace-segments/api/palaceSegmentsApi.ts": "palace segment API wrappers are cross-feature entity endpoints; keep them in entities/palace-segment/api.",
-    "entities/palace/api/structureApi.ts": "split palace structure API wrappers by owner: entities/mini-palace, entities/palace-segment, entities/palace/api/stateApi, or practiceApi.",
+    "entities/palace/api/structureApi.ts": "split palace structure API wrappers by owner: entities/palace-segment or entities/palace/api/stateApi and practiceApi.",
 }
 FORBIDDEN_REMOVED_FEATURE_FILES = {
+    "features/mini-palace": "mini palace is retired; learning groups own local selection, practice, and quiz scope.",
+    "entities/mini-palace": "mini palace APIs and types are retired; use entities/palace-segment.",
     "features/ai-config": "reusable AI runtime selection and run configuration belong in entities/ai-runtime.",
     "features/ai-learning": "AI learning run contracts and API access belong in entities/ai-learning; review-specific composition belongs in widgets.",
     "features/review/hooks/useReviewFeedback.ts": "cross-scene review feedback orchestration belongs in entities/review/model.",
@@ -94,7 +96,7 @@ FORBIDDEN_REMOVED_FEATURE_FILES = {
     "features/palace-quiz/components/PalaceQuizMemoryLookupDialog.tsx": "cross-feature palace memory lookup composition belongs in widgets/palace-memory-lookup.",
     "features/palace-quiz/model/memoryLookupDialogSupport.ts": "palace memory lookup composition belongs in widgets/palace-memory-lookup.",
     "features/palace-quiz/model/memoryLookupLayout.ts": "palace memory lookup layout belongs in widgets/palace-memory-lookup.",
-    "features/review/components/MindMapReviewFlow.tsx": "cross-feature review, mini-palace, quiz, and mind-map composition belongs in widgets/mindmap-review-flow.",
+    "features/review/components/MindMapReviewFlow.tsx": "cross-feature review, quiz, and mind-map composition belongs in widgets/mindmap-review-flow.",
     "features/review/hooks/useMindMapReviewFlowController.ts": "cross-feature review-flow orchestration belongs in widgets/mindmap-review-flow.",
     "features/review/ReviewSessionContainer.tsx": "route-level review session composition belongs in widgets/mindmap-review-flow.",
     "features/review/components/ReviewFlowMapPanel.tsx": "mind-map editor composition for review sessions belongs in widgets/mindmap-review-flow.",
@@ -435,21 +437,20 @@ def check_context_dependency_map(errors: list[str]) -> None:
                 "depend on the UnitOfWork protocol."
             )
 
-    mini_palace_records = API_SRC / "modules/palaces/application/mini_palace_records.py"
-    if mini_palace_records.exists():
-        content = mini_palace_records.read_text(encoding="utf-8")
-        list_match = re.search(
-            r"def list_palace_mini_palaces\(.*?(?=\ndef |\Z)",
-            content,
-            flags=re.DOTALL,
-        )
-        if list_match and re.search(
-            r"\b(?:cleanup_mini_palace_node_uids|session\.(?:commit|flush|refresh))\b",
-            list_match.group(0),
-        ):
+    retired_mini_palace_paths = (
+        API_SRC / "modules/palaces/presentation/mini_palace_router.py",
+        API_SRC / "modules/palaces/application/mini_palace_service.py",
+        API_SRC / "modules/palaces/application/mini_palace_nodes.py",
+        API_SRC / "modules/palaces/application/mini_palace_records.py",
+        WEB_SRC / "features/mini-palace",
+        WEB_SRC / "entities/mini-palace",
+        WEB_SRC / "app/router/MiniPalacePracticePage.tsx",
+    )
+    for retired_path in retired_mini_palace_paths:
+        if retired_path.exists():
             errors.append(
-                "modules/palaces/application/mini_palace_records.py: mini-palace list "
-                "queries must not repair or persist node bindings."
+                f"{retired_path.relative_to(REPO_ROOT).as_posix()}: mini palace is retired; "
+                "learning groups own selection, practice, and quiz scope."
             )
 
     frontend = (

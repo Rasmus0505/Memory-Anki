@@ -62,11 +62,15 @@ def create_batch_job(
     normalized_items: list[tuple[bytes, str | None]],
     resolved_structure_index: int | None,
     fallback_title: str,
+    mode: str,
     ai_runtime: dict[str, object] | None,
     import_jobs_dir: Path,
     import_error_cls: type[Exception],
+    source_kind: str = job_state.SOURCE_KIND_IMAGE_BATCH,
+    source_meta_extra: dict[str, object] | None = None,
 ) -> MindMapImportJob:
     job_creation_support.validate_entity_key(entity_key, import_error_cls=import_error_cls)
+    job_creation_support.validate_mode(mode, import_error_cls=import_error_cls)
     source_meta: dict[str, object] = {
         "fallback_title": str(fallback_title or "未命名宫殿"),
         "structure_image_index": resolved_structure_index,
@@ -79,11 +83,12 @@ def create_batch_job(
             for index, (image_bytes, filename) in enumerate(normalized_items)
         ],
     }
+    source_meta.update(source_meta_extra or {})
     job, created = _create_draft_job_record(
         session,
         entity_key=entity_key,
-        source_kind=job_state.SOURCE_KIND_IMAGE_BATCH,
-        mode=job_state.MODE_MINDMAP,
+        source_kind=source_kind,
+        mode=mode,
         source_meta=source_meta,
     )
     if not created:

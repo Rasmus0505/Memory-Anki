@@ -7,7 +7,6 @@ export type StudySessionScene =
   | 'palace_edit'
   | 'practice'
   | 'segment_practice'
-  | 'mini_practice'
   | 'review'
   | 'quiz'
   | 'freestyle'
@@ -17,7 +16,6 @@ export type StudySessionScene =
 export type StudySessionTargetType =
   | 'palace'
   | 'palace_segment'
-  | 'mini_palace'
   | 'review_schedule'
   | 'english_course'
   | 'english_reading_material'
@@ -38,7 +36,6 @@ export interface StudySessionItem {
   target_id: number | null
   palace_id: number | null
   palace_segment_id: number | null
-  mini_palace_id: number | null
   english_course_id: number | null
   english_reading_material_id: number | null
   title: string
@@ -65,7 +62,6 @@ export interface StudySessionPayload {
   target_id?: number | null
   palace_id?: number | null
   palace_segment_id?: number | null
-  mini_palace_id?: number | null
   english_course_id?: number | null
   english_reading_material_id?: number | null
   title?: string

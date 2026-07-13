@@ -138,7 +138,7 @@ describe('review-flow-tree visible editor state', () => {
     expect(subtreeRevealed[1]).toMatchObject({ lineColor: '#059669', lineWidth: 6 })
   })
 
-  it('keeps standard click semantics when mini-checkpoint mode is enabled', () => {
+  it('keeps standard click semantics when segment-checkpoint mode is enabled', () => {
     const sourceDoc: MindMapDoc = {
       root: {
         data: { text: 'Root', uid: 'root' },
@@ -155,7 +155,7 @@ describe('review-flow-tree visible editor state', () => {
     const nodeMap = flattenNodes(root)
 
     const initial = buildInitialRevealState(root, null, {
-      mode: 'mini-checkpoint',
+      mode: 'segment-checkpoint',
       checkpointIds: ['a1', 'b'],
     })
     expect(initial).toEqual({

@@ -57,9 +57,6 @@ from .questions.validation import (
 from .questions.validation import (
     normalize_question_payload as normalize_question_payload,
 )
-from .questions.validation import (
-    validate_mini_palace as validate_mini_palace,
-)
 
 __all__ = [
     "PalaceQuizNotFoundError",
@@ -81,5 +78,4 @@ __all__ = [
     "question_to_dedup_payload",
     "serialize_question",
     "serialize_question_rows",
-    "validate_mini_palace",
 ]

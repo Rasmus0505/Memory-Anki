@@ -46,6 +46,7 @@ export function useImportJobController(options: UseImportJobControllerOptions) {
     handlePauseJob: runtime.handlePauseJob,
     handleImportSelectHistory: runtime.handleImportSelectHistory,
     handleImportDeleteHistory: runtime.handleImportDeleteHistory,
+    handleImportRerunHistory: runtime.handleImportRerunHistory,
     canResumeJob: Boolean(
       state.currentJobId &&
         state.currentJobStatus &&

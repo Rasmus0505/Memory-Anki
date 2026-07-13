@@ -1,6 +1,6 @@
 export type ImportMode = 'mindmap' | 'text'
 export type MindMapImportWorkflow = 'single' | 'batch'
-export type ImportSourceKind = 'image-single' | 'image-batch'
+export type ImportSourceKind = 'image-single' | 'image-batch' | 'pdf-document'
 export type BatchImportStatus = 'idle' | 'ready' | 'loading' | 'success' | 'error'
 
 export interface BatchImportImageItem {

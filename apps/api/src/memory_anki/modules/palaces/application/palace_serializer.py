@@ -13,9 +13,6 @@ from __future__ import annotations
 from sqlalchemy.orm import Session
 
 from memory_anki.infrastructure.db._tables.palaces import ReviewSchedule
-from memory_anki.modules.palaces.application.mini_palace_service import (
-    list_palace_mini_palaces,
-)
 from memory_anki.modules.palaces.application.segment_review_service import (
     build_palace_default_segment_summary,
     list_palace_segments,
@@ -138,7 +135,6 @@ def palace_json(
                       "subject": {"id": c.subject.id, "name": c.subject.name} if c.subject else None}
                       for c in p.chapters],
         "segments": list_palace_segments(session, p, default_segment_payload=default_segment) if session else [],
-        "mini_palaces": list_palace_mini_palaces(session, p) if session else [],
         "title_mode": getattr(p, "title_mode", "sync") or "sync",
         "manual_title": getattr(p, "manual_title", "") or "",
         "resolved_title": resolve_palace_title(p),
@@ -304,8 +300,7 @@ def palace_card_json(
                 for c in (getattr(p, "chapters", []) or [])
             ],
             "segments": list_palace_segments(session, p, default_segment_payload=default_segment) if session else [],
-            "mini_palaces": list_palace_mini_palaces(session, p) if session else [],
-        }
+            }
     )
     return payload
 
@@ -314,7 +309,7 @@ def palace_editor_meta_json(p, session: Session | None = None) -> dict:
     """Serialize only the palace metadata required by editor/view/review shells.
 
     Keep this payload intentionally lighter than ``palace_json`` by excluding
-    heavy nested structures such as ``pegs``, ``segments`` and ``mini_palaces``.
+    heavy nested structures such as ``pegs`` and ``segments``.
     """
     payload = palace_summary_json(p, session)
     explicit_chapter_ids: set[int] = set()

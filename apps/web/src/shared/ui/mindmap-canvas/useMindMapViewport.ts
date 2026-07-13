@@ -19,7 +19,6 @@ import {
   DROP_HIT_PADDING_X,
   DROP_HIT_PADDING_Y,
   getResolvedNodeSize,
-  TOOLBAR_HEIGHT,
   type DropMode,
   type NodeSize,
   type PreviewState,
@@ -34,7 +33,7 @@ import { dispatchGlobalFeedback } from '@/shared/feedback/globalFeedbackModel'
 const COLUMN_PROBE_PX = 240
 
 interface UseMindMapViewportInput {
-  frameRef: RefObject<HTMLDivElement | null>
+  canvasRef: RefObject<HTMLDivElement | null>
   graphNodes: GraphData['nodes']
   nodes: Node[]
   measuredNodeSizesRef: RefObject<Map<string, NodeSize>>
@@ -44,13 +43,12 @@ interface UseMindMapViewportInput {
   mobileViewPolicy: MindMapMobileViewPolicy
   contentChangeViewportPolicy: MindMapContentChangeViewportPolicy
   practiceModeActive: boolean
-  toolbarVisible: boolean
   viewCommand: MindMapCanvasViewCommand | null
   setNodeSizeVersion: (updater: (version: number) => number) => void
 }
 
 export function useMindMapViewport({
-  frameRef,
+  canvasRef,
   graphNodes,
   nodes,
   measuredNodeSizesRef,
@@ -60,7 +58,6 @@ export function useMindMapViewport({
   mobileViewPolicy,
   contentChangeViewportPolicy,
   practiceModeActive,
-  toolbarVisible,
   viewCommand,
   setNodeSizeVersion,
 }: UseMindMapViewportInput) {
@@ -237,16 +234,13 @@ export function useMindMapViewport({
   }, [graphContentSignature, restorePreservedViewport])
 
   useLayoutEffect(() => {
-    const element = frameRef.current
+    const element = canvasRef.current
     if (!element) return
 
     const updateSize = () => {
       setCanvasSize({
         width: element.clientWidth,
-        height: Math.max(
-          element.clientHeight - (toolbarVisible ? TOOLBAR_HEIGHT : 0),
-          0,
-        ),
+        height: element.clientHeight,
       })
     }
 
@@ -257,7 +251,7 @@ export function useMindMapViewport({
     const observer = new ResizeObserver(updateSize)
     observer.observe(element)
     return () => observer.disconnect()
-  }, [frameRef, toolbarVisible])
+  }, [canvasRef])
 
   const checkOverlap = useCallback(
     (dragId: string, draggedNode?: Node, event?: unknown): PreviewState | null | undefined => {

@@ -69,6 +69,10 @@ export default function SegmentPracticePage() {
         submitStage: async ({ segment }) => {
           await clearSegmentPracticeSessionProgressApi(segment.id)
         },
+        flowProps: ({ segment }) => ({
+          revealMode: 'segment-checkpoint',
+          checkpointNodeUids: segment.node_uids,
+        }),
       }}
     />
   )

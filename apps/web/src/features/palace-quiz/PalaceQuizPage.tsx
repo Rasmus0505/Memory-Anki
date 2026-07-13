@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { ArrowLeft, BookOpen } from 'lucide-react'
 import { useAiRunConfigDialog } from '@/entities/ai-runtime'
+import { getPalaceEditorApi } from '@/entities/palace/api'
 import { QuizGenerationWorkspace } from '@/features/palace-quiz/components/QuizGenerationWorkspace'
 import { PalaceQuizManagePanel } from '@/features/palace-quiz/components/PalaceQuizManagePanel'
 import { PalaceMemoryLookupDialog } from '@/widgets/palace-memory-lookup'
@@ -34,10 +35,47 @@ export default function PalaceQuizPage() {
   const [memoryLookupOpen, setMemoryLookupOpen] = useState(false)
   const [resetAttemptsDialogOpen, setResetAttemptsDialogOpen] = useState(false)
   const [resetAttemptsLoading, setResetAttemptsLoading] = useState(false)
+  const [mindMapPromptContext, setMindMapPromptContext] = useState('')
   const { promptForAiOptions, aiRunConfigDialog } = useAiRunConfigDialog()
   const { palace, questions, loading, error, setQuestions, refreshQuestions } =
     usePalaceQuizResources(palaceId)
-  const miniPalaces = palace?.mini_palaces || []
+  useEffect(() => {
+    if (!palaceId) {
+      setMindMapPromptContext('')
+      return
+    }
+    let cancelled = false
+    void getPalaceEditorApi(palaceId).then((result) => {
+      if (!cancelled) setMindMapPromptContext(JSON.stringify(result.editor_doc))
+    }).catch(() => {
+      if (!cancelled) setMindMapPromptContext('')
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [palaceId])
+  const quizPromptContext = useMemo(
+    () => JSON.stringify(questions.map((question) => ({
+      stem: question.stem,
+      options: question.options,
+      answer: question.answer_payload,
+      analysis: question.analysis,
+    }))),
+    [questions],
+  )
+  const promptForGenerationAiOptions = (request: Parameters<typeof promptForAiOptions>[0]) =>
+    promptForAiOptions({
+      ...request,
+      contextOptions: [
+        ...(mindMapPromptContext
+          ? [{ id: 'mindmap', label: '包含当前思维导图', content: mindMapPromptContext }]
+          : []),
+        ...(questions.length > 0
+          ? [{ id: 'quiz', label: '包含当前题库', content: quizPromptContext }]
+          : []),
+      ],
+    })
+  const miniPalaces = palace?.segments || []
   const timer = useTimedSession({
     kind: 'quiz',
     title: palace?.title ? `${palace.title} · 配套习题` : '宫殿配套习题',
@@ -70,11 +108,11 @@ export default function PalaceQuizPage() {
 
   const browser = usePalaceQuizQuestionBrowser({
     questions,
-    miniPalaceIds: miniPalaces.map((item) => item.id),
+    segmentIds: miniPalaces.map((item) => item.id),
   })
   const practice = usePalaceQuizPractice({
     setQuestions,
-    promptForAiOptions,
+    promptForAiOptions: promptForGenerationAiOptions,
     registerQuizActivity,
     emitQuizFeedback,
   })

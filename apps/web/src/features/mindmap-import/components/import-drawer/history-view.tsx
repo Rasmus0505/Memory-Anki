@@ -1,5 +1,6 @@
 ﻿import { Clock, Trash2 } from 'lucide-react'
 import type { MindMapImportHistoryViewModel } from '@/features/mindmap-import/components/import-drawer/types'
+import { RotateCcw } from 'lucide-react'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
 
@@ -12,7 +13,7 @@ export function MindMapImportHistoryView({
   model,
   onBackToImport,
 }: MindMapImportHistoryViewProps) {
-  const { history, onSelectHistory, onDeleteHistory } = model
+  const { history, onSelectHistory, onDeleteHistory, onRerunHistory } = model
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
@@ -52,6 +53,16 @@ export function MindMapImportHistoryView({
                       {new Date(item.createdAt).toLocaleString()}
                     </div>
                   </button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="min-h-11 min-w-11 sm:size-9 sm:min-h-9 sm:min-w-9"
+                    onClick={() => onRerunHistory?.(item.jobId || item.id)}
+                    title="复跑此记录"
+                  >
+                    <RotateCcw className="size-4" />
+                  </Button>
                   <Button
                     type="button"
                     variant="ghost"

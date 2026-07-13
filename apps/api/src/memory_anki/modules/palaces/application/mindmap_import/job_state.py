@@ -18,6 +18,7 @@ JOB_STAGE_COMPLETED = "completed"
 
 SOURCE_KIND_IMAGE_SINGLE = "image-single"
 SOURCE_KIND_IMAGE_BATCH = "image-batch"
+SOURCE_KIND_PDF_DOCUMENT = "pdf-document"
 
 MODE_MINDMAP = "mindmap"
 MODE_TEXT = "text"

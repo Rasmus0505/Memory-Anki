@@ -34,6 +34,7 @@ JOB_STATUS_PAUSED = job_state.JOB_STATUS_PAUSED
 JOB_STATUS_COMPLETED = job_state.JOB_STATUS_COMPLETED
 SOURCE_KIND_IMAGE_SINGLE = job_state.SOURCE_KIND_IMAGE_SINGLE
 SOURCE_KIND_IMAGE_BATCH = job_state.SOURCE_KIND_IMAGE_BATCH
+SOURCE_KIND_PDF_DOCUMENT = job_state.SOURCE_KIND_PDF_DOCUMENT
 _UNSET = job_state.UNSET
 
 _RUNNING_JOB_THREADS: dict[str, threading.Thread] = {}
@@ -63,6 +64,7 @@ def _job_lifecycle_dependencies(
         completed_status=JOB_STATUS_COMPLETED,
         source_kind_image_single=SOURCE_KIND_IMAGE_SINGLE,
         source_kind_image_batch=SOURCE_KIND_IMAGE_BATCH,
+        source_kind_pdf_document=SOURCE_KIND_PDF_DOCUMENT,
         import_error_cls=MindMapImportError,
     )
 
@@ -185,6 +187,12 @@ def _run_image_batch_job(
             **kwargs,
         ),
         stream_call_dashscope_batch_json=lambda **kwargs: _stream_call_dashscope_batch_json(
+            source_meta=source_meta,
+            ai_runtime=ai_runtime,
+            prompt_catalog=prompt_catalog,
+            **kwargs,
+        ),
+        stream_call_dashscope_text=lambda **kwargs: _stream_call_dashscope_text(
             source_meta=source_meta,
             ai_runtime=ai_runtime,
             prompt_catalog=prompt_catalog,

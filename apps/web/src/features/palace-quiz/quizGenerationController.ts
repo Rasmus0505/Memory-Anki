@@ -62,22 +62,19 @@ export function flattenGeneratedQuestions(
         group.questions.map((question) => ({
           ...question,
           classified_chapter_id: group.classified_chapter_id,
-          mini_palace_id: null,
         })),
       ),
       ...preview.grouped_questions.unassigned_questions.map((question) => ({
         ...question,
-        mini_palace_id: null,
         classified_chapter_id: null,
       })),
     ]
   }
   return [
-    ...(preview.grouped_questions.mini_palace_groups || []).flatMap((group) => group.questions),
+    ...(preview.grouped_questions.segment_groups || []).flatMap((group) => group.questions),
     ...preview.grouped_questions.unassigned_questions.map((question) => ({
       ...question,
-      mini_palace_id: null,
-    })),
+      })),
   ]
 }
 
@@ -89,7 +86,6 @@ export function buildGeneratedQuestionsForChapterSave(
     ...question,
     source_chapter_id: selectedChapterId,
     classified_chapter_id: null,
-    mini_palace_id: null,
   })
 
   if (!preview.grouped_questions) {
@@ -102,7 +98,6 @@ export function buildGeneratedQuestionsForChapterSave(
           ...question,
           source_chapter_id: selectedChapterId,
           classified_chapter_id: group.classified_chapter_id,
-          mini_palace_id: null,
         })),
       ),
       ...preview.grouped_questions.unassigned_questions.map(withSelectedChapterScope),

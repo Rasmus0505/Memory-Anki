@@ -8,7 +8,7 @@ import { Textarea } from '@/shared/components/ui/textarea'
 import { EmptyState } from '@/shared/components/state-placeholders'
 import { cn } from '@/shared/lib/utils'
 import type {
-  MiniPalaceSummary,
+  PalaceSegmentSummary,
   PalaceQuizOcrSource,
   PalaceQuizQuestion,
 } from '@/shared/api/contracts'
@@ -50,7 +50,7 @@ export function PalaceQuizManagePanel({
 }: {
   palaceId: number | null
   questions: PalaceQuizQuestion[]
-  miniPalaces: MiniPalaceSummary[]
+  miniPalaces: PalaceSegmentSummary[]
   questionScope: PalaceQuizScopeKey
   onScopeChange: (scope: PalaceQuizScopeKey, label: string) => void
   filteredQuestions: PalaceQuizQuestion[]
@@ -162,8 +162,8 @@ export function PalaceQuizManagePanel({
                 key={miniPalace.id}
                 type="button"
                 size="sm"
-                variant={questionScope === `mini:${miniPalace.id}` ? 'default' : 'outline'}
-                onClick={() => onScopeChange(`mini:${miniPalace.id}`, miniPalace.name)}
+                variant={questionScope === `segment:${miniPalace.id}` ? 'default' : 'outline'}
+                onClick={() => onScopeChange(`segment:${miniPalace.id}`, miniPalace.name)}
               >
                 {miniPalace.name}
               </Button>
@@ -194,7 +194,7 @@ export function PalaceQuizManagePanel({
               description={
                 questions.length === 0
                   ? '可以先在右侧手动新增一道题，或到 AI 生成里预览后保存到题库。'
-                  : '切换到全部题目，或为这个训练关卡单独新增题目。'
+                  : '切换到全部题目，或为这个学习组单独新增题目。'
               }
               action={
                 questions.length === 0 ? (
@@ -236,7 +236,7 @@ export function PalaceQuizManagePanel({
                             {getQuestionTypeLabel(question.question_type)}
                           </Badge>
                           <Badge
-                            variant={question.mini_palace_id == null ? 'secondary' : 'outline'}
+                            variant={!(question.segment_ids?.length) ? 'secondary' : 'outline'}
                           >
                             {getQuestionOwnershipLabel(question)}
                           </Badge>

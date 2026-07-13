@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import type {
   MindMapEditorState,
   MindMapHostSegmentRangeDraft,
@@ -51,6 +52,7 @@ export interface MindMapEditorSurfaceProps {
   nodeClickViewportPolicy?: MindMapNodeClickViewportPolicy
   contentChangeViewportPolicy?: MindMapContentChangeViewportPolicy
   className?: string
+  toolbarContent?: ReactNode
   segments?: MindMapHostSegmentSummary[]
   activeSegmentId?: number | null
   segmentColorMode?: 'all' | 'active-only' | 'all-with-active-emphasis'
@@ -59,11 +61,6 @@ export interface MindMapEditorSurfaceProps {
   masteryByNodeUid?: Record<string, { status: string; manualLabel?: string | null }>
   focusRequestNodeUid?: string | null
   focusRequestNonce?: number
-  miniPalaceDraft?: {
-    active: boolean
-    selectedNodeUids: string[]
-  }
-  miniPalacePracticeActive?: boolean
   reviewFxSignal?: MindMapReviewFxPayload | null
   feedbackFxSignal?: MindMapFeedbackFxPayload | null
   onEditorStateChange: (nextState: MindMapEditorState) => void
@@ -86,7 +83,6 @@ export interface MindMapEditorSurfaceProps {
   onFullscreenChange?: (active: boolean) => void
   onFullscreenToggle?: (active?: boolean) => void
   onUiClearedChange?: (active: boolean) => void
-  onMiniPalacePour?: () => void
   onReady?: () => void
   onReadyTimeout?: () => void
 }

@@ -5,21 +5,17 @@ from sqlalchemy.orm import Session
 
 from memory_anki.infrastructure.db._tables.palaces import (
     Palace,
-    PalaceMiniPalace,
     PalaceSegment,
     ReviewSchedule,
 )
 from memory_anki.infrastructure.db.deps import session_dep
 from memory_anki.modules.sessions.application.session_progress_service import (
-    clear_mini_practice_progress,
     clear_practice_progress,
     clear_review_progress,
     clear_segment_practice_progress,
-    get_mini_practice_progress,
     get_practice_progress,
     get_review_progress,
     get_segment_practice_progress,
-    upsert_mini_practice_progress,
     upsert_practice_progress,
     upsert_review_progress,
     upsert_segment_practice_progress,
@@ -365,45 +361,6 @@ def api_upsert_segment_practice_progress(
 @legacy_router.delete("/sessions/segment-practice/{segment_id}/progress")
 def api_delete_segment_practice_progress(segment_id: int, session: Session = Depends(session_dep)):
     clear_segment_practice_progress(session, segment_id)
-    return {"ok": True}
-
-
-@legacy_router.get("/sessions/mini-practice/{mini_palace_id}/progress")
-def api_get_mini_practice_progress(
-    mini_palace_id: int,
-    session: Session = Depends(session_dep),
-):
-    mini_palace = session.query(PalaceMiniPalace).filter_by(id=mini_palace_id).first()
-    if not mini_palace:
-        _raise_not_found()
-    return {"progress": get_mini_practice_progress(session, mini_palace_id)}
-
-
-@legacy_router.put("/sessions/mini-practice/{mini_palace_id}/progress")
-def api_upsert_mini_practice_progress(
-    mini_palace_id: int,
-    data: PracticeProgressUpsert,
-    session: Session = Depends(session_dep),
-):
-    mini_palace = session.query(PalaceMiniPalace).filter_by(id=mini_palace_id).first()
-    if not mini_palace:
-        _raise_not_found()
-    return {
-        "progress": upsert_mini_practice_progress(
-            session,
-            mini_palace_id,
-            mini_palace.palace_id,
-            _payload(data),
-        )
-    }
-
-
-@legacy_router.delete("/sessions/mini-practice/{mini_palace_id}/progress")
-def api_delete_mini_practice_progress(
-    mini_palace_id: int,
-    session: Session = Depends(session_dep),
-):
-    clear_mini_practice_progress(session, mini_palace_id)
     return {"ok": True}
 
 

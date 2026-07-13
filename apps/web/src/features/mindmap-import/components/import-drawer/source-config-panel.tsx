@@ -2,6 +2,7 @@
   ArrowDown,
   ArrowUp,
   Check,
+  FileText,
   ImagePlus,
   LoaderCircle,
   Sparkles,
@@ -57,6 +58,15 @@ export function MindMapImportSourceConfigPanel({
     onBatchDeleteImage,
     onBatchMoveImage,
     onBatchSetStructureImage,
+    pdfDocuments = [],
+    selectedPdfDocumentId = '',
+    onSelectedPdfDocumentIdChange = () => {},
+    pdfPageSelection = '1',
+    onPdfPageSelectionChange = () => {},
+    pdfLibraryLoading = false,
+    onPdfUpload = () => {},
+    onPdfDelete = () => {},
+    onPdfStart = () => {},
   } = model
 
   return (
@@ -64,40 +74,90 @@ export function MindMapImportSourceConfigPanel({
       <div className="grid gap-4">
         <div className="flex flex-wrap items-center gap-2">
           <SourceKindButton
-            active={sourceKind === 'image-single'}
+            active={sourceKind !== 'pdf-document'}
             onClick={() => {
-              onSourceKindChange('image-single')
-              onWorkflowChange('single')
+              onSourceKindChange('image-batch')
+              onWorkflowChange('batch')
             }}
             icon={<ImagePlus className="size-4" />}
-            label="单图"
+            label="图片"
           />
-          {mode === 'mindmap' ? (
-            <SourceKindButton
-              active={sourceKind === 'image-batch'}
-              onClick={() => {
-                onSourceKindChange('image-batch')
-                onWorkflowChange('batch')
-              }}
-              icon={<Sparkles className="size-4" />}
-              label="多图"
-            />
-          ) : null}
+          <SourceKindButton
+            active={sourceKind === 'pdf-document'}
+            onClick={() => onSourceKindChange('pdf-document')}
+            icon={<FileText className="size-4" />}
+            label="PDF"
+          />
         </div>
 
-        <label className="flex cursor-pointer items-center justify-center rounded-lg border border-dashed border-border/80 bg-background/70 px-4 py-5 text-sm text-muted-foreground transition-colors hover:text-foreground">
-          <ImagePlus className="mr-2 size-4" />
-          {sourceKind === 'image-batch' ? '批量选择图片或直接在这里粘贴' : '选择图片或直接在这里粘贴'}
-          <input
-            type="file"
-            accept="image/*"
-            multiple={sourceKind === 'image-batch'}
-            className="hidden"
-            onChange={onFileChange}
-          />
-        </label>
+        {sourceKind !== 'pdf-document' ? (
+          <label className="flex cursor-pointer items-center justify-center rounded-lg border border-dashed border-border/80 bg-background/70 px-4 py-5 text-sm text-muted-foreground transition-colors hover:text-foreground">
+            <ImagePlus className="mr-2 size-4" />
+            选择一张或多张图片，或直接在这里粘贴
+            <input type="file" accept="image/*" multiple className="hidden" onChange={onFileChange} />
+          </label>
+        ) : (
+          <div className="space-y-3 rounded-lg border border-border/70 bg-background/60 p-3">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <div className="text-sm font-medium">PDF 资料库</div>
+                <div className="text-xs text-muted-foreground">上传后会持久化保存，可在不同宫殿中重复使用。</div>
+              </div>
+              <label className="inline-flex cursor-pointer items-center rounded-md border px-3 py-2 text-sm hover:bg-secondary">
+                <FileText className="mr-2 size-4" />上传 PDF
+                <input type="file" accept="application/pdf,.pdf" className="hidden" onChange={onPdfUpload} />
+              </label>
+            </div>
+            {pdfDocuments.length > 0 ? (
+              <div className="space-y-3">
+                <div className="flex gap-2">
+                  <select
+                    className="min-h-10 min-w-0 flex-1 rounded-md border bg-background px-3 text-sm"
+                    value={selectedPdfDocumentId}
+                    onChange={(event) => onSelectedPdfDocumentIdChange(event.target.value)}
+                    aria-label="选择 PDF 资料"
+                  >
+                    {pdfDocuments.map((document) => (
+                      <option key={document.id} value={document.id}>
+                        {document.original_name}（{document.page_count} 页）
+                      </option>
+                    ))}
+                  </select>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    title="删除 PDF"
+                    disabled={!selectedPdfDocumentId || loading}
+                    onClick={() => onPdfDelete(selectedPdfDocumentId)}
+                  >
+                    <Trash2 className="size-4" />
+                  </Button>
+                </div>
+                <div className="flex flex-wrap items-end gap-3">
+                  <label className="grid flex-1 gap-1 text-sm">
+                    <span>识别页码</span>
+                    <input
+                      className="min-h-10 rounded-md border bg-background px-3"
+                      value={pdfPageSelection}
+                      onChange={(event) => onPdfPageSelectionChange(event.target.value)}
+                      placeholder="例如 1-5,8,10-12"
+                    />
+                  </label>
+                  <Button onClick={onPdfStart} disabled={!selectedPdfDocumentId || !pdfPageSelection.trim() || loading}>
+                    {loading ? '识别中…' : mode === 'mindmap' ? '开始转脑图' : '开始转文字'}
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div className="flex h-24 items-center justify-center rounded-lg border border-dashed text-sm text-muted-foreground">
+                {pdfLibraryLoading ? '正在加载 PDF 资料库…' : '还没有 PDF，先上传一份资料。'}
+              </div>
+            )}
+          </div>
+        )}
 
-        {sourceKind === 'image-batch' ? (
+        {sourceKind !== 'pdf-document' ? (
           <div className="rounded-lg border border-border/70 bg-background/60 p-3">
             <div className="mb-3 flex items-center justify-between gap-3">
               <div>

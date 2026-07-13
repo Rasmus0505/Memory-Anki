@@ -27,7 +27,6 @@ def _normalize_key_value(value: Any) -> Any:
 
 def build_question_dedup_key(payload: dict[str, Any]) -> str:
     normalized_key_payload = {
-        "mini_palace_id": payload.get("mini_palace_id"),
         "classified_chapter_id": payload.get("classified_chapter_id"),
         "question_type": payload.get("question_type"),
         "stem": _normalize_text_key(payload.get("stem")),
@@ -45,7 +44,6 @@ def build_question_dedup_key(payload: dict[str, Any]) -> str:
 
 def question_to_dedup_payload(question: PalaceQuizQuestion) -> dict[str, Any]:
     return {
-        "mini_palace_id": question.mini_palace_id,
         "classified_chapter_id": question.classified_chapter_id,
         "question_type": question.question_type,
         "stem": question.stem,

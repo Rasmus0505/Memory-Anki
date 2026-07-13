@@ -2,6 +2,7 @@
 import {
   createBatchImportJobApi,
   createImageImportJobApi,
+  createPdfImportJobApi,
 } from '@/entities/knowledge-import/api'
 import { formatMindMapImportError } from '@/features/mindmap-import/model/mindmap-import'
 import {
@@ -133,15 +134,16 @@ export function buildImportJobActions({
     state.setImportError('')
     state.setImportReusedExistingResult(false)
     const aiOptions = await options.promptForAiOptions({
-      scenarioKey: 'vision_batch_mindmap',
-      entrypointKey: 'import-image-batch-mindmap',
-      title: '多图转脑图配置',
+      scenarioKey: options.mode === 'mindmap' ? 'vision_batch_mindmap' : 'vision_image_text',
+      entrypointKey: options.mode === 'mindmap' ? 'import-image-batch-mindmap' : 'import-image-batch-text',
+      title: options.mode === 'mindmap' ? '图片转脑图配置' : '图片转文字配置',
+      contextOptions: options.contextOptions,
     })
     if (!aiOptions) {
       options.setBatchStatus('ready')
       return
     }
-    const feature = describeImportFeature('image-batch', 'mindmap')
+    const feature = describeImportFeature('image-batch', options.mode)
     const requestSummary = hasStructureImage
       ? `共 ${options.batchImagesRef.current.length} 张；模式：结构补全；结构图序号：${resolvedStructureIndex + 1}`
       : `共 ${options.batchImagesRef.current.length} 张；模式：直接生成`
@@ -162,6 +164,7 @@ export function buildImportJobActions({
         {
           entityKey: options.entityKey,
           structureImageIndex: hasStructureImage ? resolvedStructureIndex : undefined,
+          mode: options.mode,
           ai_options: aiOptions,
         },
       )
@@ -206,9 +209,46 @@ export function buildImportJobActions({
     }
   }
 
+  const handlePdfImportStart = async (documentId: string, pageSelection: string) => {
+    if (!options.entityKey) {
+      state.setImportError('当前页面还没有稳固的实体标识，暂时无法创建可恢复任务。')
+      return
+    }
+    if (!documentId) {
+      state.setImportError('请先选择一份 PDF 资料。')
+      return
+    }
+    const aiOptions = await options.promptForAiOptions({
+      scenarioKey: options.mode === 'mindmap' ? 'vision_batch_mindmap' : 'vision_image_text',
+      entrypointKey: options.mode === 'mindmap' ? 'import-pdf-mindmap' : 'import-pdf-text',
+      title: options.mode === 'mindmap' ? 'PDF 转脑图配置' : 'PDF 转文字配置',
+      contextOptions: options.contextOptions,
+    })
+    if (!aiOptions) return
+    resetSharedRequestState()
+    try {
+      const job = await createPdfImportJobApi({
+        entityKey: options.entityKey,
+        documentId,
+        pageSelection,
+        mode: options.mode,
+        ai_options: aiOptions,
+      })
+      state.hydrateJobResult(job, { reused: job.status === 'completed' })
+      await runtime.refreshHistoryJobs(job.id)
+      if (job.status !== 'completed') await runtime.resumeJob(job.id)
+    } catch (nextError) {
+      state.setImportLoading(false)
+      state.setImportError(
+        formatMindMapImportError(nextError instanceof Error ? nextError.message : 'PDF 识别失败。'),
+      )
+    }
+  }
+
   return {
     handleImportImage,
     handleBatchImportStart,
+    handlePdfImportStart,
   }
 }
 

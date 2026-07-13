@@ -5,7 +5,6 @@ import pytest
 from memory_anki.infrastructure.db._tables.misc import StudySession
 from memory_anki.infrastructure.db._tables.palaces import (
     Palace,
-    PalaceMiniPalace,
     PalaceSegment,
     PalaceTemplate,
     ReviewSchedule,
@@ -13,7 +12,6 @@ from memory_anki.infrastructure.db._tables.palaces import (
 from memory_anki.modules.palaces.presentation import (
     catalog_router,
     core_router,
-    mini_palace_router,
     segment_router,
 )
 from memory_anki.modules.palaces.presentation import router as palaces_router
@@ -142,34 +140,6 @@ def test_create_segment_rolls_back_when_idempotency_record_fails(
 
     with session_factory() as session:
         assert session.query(PalaceSegment).filter_by(palace_id=palace_id).count() == 0
-
-
-def test_create_mini_palace_rolls_back_when_idempotency_record_fails(
-    make_client,
-    session_factory,
-    monkeypatch,
-):
-    monkeypatch.setattr(palaces_router, "maybe_create_rolling_backup", lambda *args, **kwargs: None)
-    client = make_client(palaces_router)
-    palace_id = client.post(
-        "/api/v1/palaces",
-        json={"title": "Mini Owner", "description": "", "pegs": []},
-    ).json()["id"]
-    monkeypatch.setattr(
-        mini_palace_router.SqlAlchemyMutationResponseStore,
-        "save",
-        lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("cache failed")),
-    )
-
-    with pytest.raises(RuntimeError, match="cache failed"):
-        client.post(
-            f"/api/v1/palaces/{palace_id}/mini-palaces",
-            json={"name": "Must Roll Back", "node_uids": []},
-            headers={MUTATION_ID_HEADER: "mini-palace-create-rollback"},
-        )
-
-    with session_factory() as session:
-        assert session.query(PalaceMiniPalace).filter_by(palace_id=palace_id).count() == 0
 
 
 def _seed_palace_template(session_factory, name: str = "Atomic Template") -> int:

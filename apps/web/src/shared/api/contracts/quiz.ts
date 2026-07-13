@@ -59,11 +59,6 @@ export interface PalaceQuizOcrSource {
   updated_at: string | null
 }
 
-export interface PalaceQuizMiniPalaceRef {
-  id: number
-  name: string
-}
-
 export interface PalaceQuizAnswerPayload {
   correct_option_id?: string
   reference_answer?: string
@@ -103,7 +98,7 @@ export interface PalaceQuizEvidenceRef {
   excerpt?: string
 }
 export interface PalaceQuizQuestionDraft {
-  mini_palace_id?: number | null
+  segment_ids?: number[]
   source_chapter_id?: number | null
   classified_chapter_id?: number | null
   origin_question_id?: number | null
@@ -118,7 +113,7 @@ export interface PalaceQuizQuestionDraft {
 export interface PalaceQuizQuestion extends PalaceQuizQuestionDraft {
   id: number
   palace_id: number | null
-  mini_palace: PalaceQuizMiniPalaceRef | null
+  segments?: Array<{ id: number; name: string; color: string }>
   source_chapter?: { id: number; name: string; subject_id: number } | null
   classified_chapter?: { id: number; name: string; subject_id: number; parent_id: number | null } | null
   sort_order: number
@@ -138,14 +133,14 @@ export interface PalaceQuizQuestion extends PalaceQuizQuestionDraft {
   updated_at: string | null
 }
 
-export interface PalaceQuizMiniPalaceGroupPreview {
-  mini_palace_id: number
-  mini_palace_name: string
+export interface PalaceQuizSegmentGroupPreview {
+  segment_id: number
+  segment_name: string
   questions: PalaceQuizQuestionDraft[]
 }
 
 export interface PalaceQuizGroupedPreview {
-  mini_palace_groups?: PalaceQuizMiniPalaceGroupPreview[]
+  segment_groups?: PalaceQuizSegmentGroupPreview[]
   child_chapter_groups?: Array<{
     classified_chapter_id: number
     classified_chapter_name: string
@@ -281,11 +276,11 @@ export interface PalaceQuestionExplainResult {
   resolved_ai?: ResolvedAiRuntimeMeta | string | null
 }
 
-export interface PalaceQuizMiniPalaceClassificationResult {
+export interface PalaceQuizSegmentClassificationResult {
   palace_id: number
-  mini_palace_groups: Array<{
-    mini_palace_id: number
-    mini_palace_name: string
+  segment_groups: Array<{
+    segment_id: number
+    segment_name: string
     question_count: number
   }>
   unassigned_count: number

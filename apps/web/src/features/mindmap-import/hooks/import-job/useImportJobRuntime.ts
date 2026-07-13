@@ -16,6 +16,7 @@ import {
   listImportJobsApi,
   pauseImportJobApi,
   runImportJobApi,
+  rerunImportJobApi,
 } from '@/entities/knowledge-import/api'
 import type { ImportJobStateController } from '@/features/mindmap-import/hooks/import-job/useImportJobState'
 import {
@@ -33,6 +34,7 @@ interface UseImportJobRuntimeOptions {
 
 export interface ImportJobRuntimeController {
   refreshHistoryJobs: (preferredActiveJobId?: string | null) => Promise<void>
+  handleImportRerunHistory: (id: string) => Promise<void>
   startPollingJob: (jobId: string) => void
   stopPollingJob: () => void
   resumeJob: (jobId: string) => Promise<void>
@@ -290,6 +292,19 @@ export function useImportJobRuntime({
     }
   }
 
+  const handleImportRerunHistory = async (id: string) => {
+    try {
+      const job = await rerunImportJobApi(id)
+      state.hydrateJobResult(job)
+      await refreshHistoryJobs(job.id)
+      await resumeJob(job.id)
+    } catch (nextError) {
+      state.setImportError(
+        formatMindMapImportError(nextError instanceof Error ? nextError.message : '复跑导入任务失败。'),
+      )
+    }
+  }
+
   return {
     refreshHistoryJobs,
     startPollingJob,
@@ -300,6 +315,7 @@ export function useImportJobRuntime({
     handlePauseJob,
     handleImportSelectHistory,
     handleImportDeleteHistory,
+    handleImportRerunHistory,
   }
 }
 

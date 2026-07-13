@@ -2,22 +2,18 @@ import {
   Maximize2,
   Minimize2,
   Redo2,
-  RefreshCw,
   RotateCcw,
   Undo2,
-  ZoomIn,
-  ZoomOut,
 } from 'lucide-react'
+import type { ReactNode } from 'react'
 
 interface MindMapCanvasToolbarProps {
   focusMode: boolean
   canUndo: boolean
   canRedo: boolean
   showHistoryControls: boolean
+  leadingContent?: ReactNode
   onReflow: () => void
-  onRefresh: () => void
-  onZoomOut: () => void
-  onZoomIn: () => void
   onToggleFocusMode?: () => void
   onUndo?: () => void
   onRedo?: () => void
@@ -28,16 +24,16 @@ export function MindMapCanvasToolbar({
   canUndo,
   canRedo,
   showHistoryControls,
+  leadingContent,
   onReflow,
-  onRefresh,
-  onZoomOut,
-  onZoomIn,
   onToggleFocusMode,
   onUndo,
   onRedo,
 }: MindMapCanvasToolbarProps) {
   return (
-    <div className="flex h-[54px] shrink-0 flex-wrap items-center gap-1 border-b border-border bg-background px-3 py-2">
+    <div className="flex h-[62px] shrink-0 flex-nowrap items-center gap-2 overflow-x-auto border-b border-border bg-background px-3 py-2">
+      {leadingContent}
+      {leadingContent ? <div className="h-5 w-px shrink-0 bg-border" /> : null}
       <button
         type="button"
         onClick={onReflow}
@@ -46,31 +42,6 @@ export function MindMapCanvasToolbar({
       >
         <RotateCcw className="size-4" />
         <span className="text-xs font-medium">整理画布</span>
-      </button>
-      <button
-        type="button"
-        onClick={onRefresh}
-        className="flex size-9 items-center justify-center rounded-xl border border-transparent text-muted-foreground transition-colors hover:border-border hover:bg-muted hover:text-primary"
-        title="刷新脑图"
-      >
-        <RefreshCw className="size-4" />
-      </button>
-      <div className="mx-1 h-5 w-px bg-border" />
-      <button
-        type="button"
-        onClick={onZoomOut}
-        className="flex size-9 items-center justify-center rounded-xl border border-transparent text-muted-foreground transition-colors hover:border-border hover:bg-muted hover:text-primary"
-        title="缩小"
-      >
-        <ZoomOut className="size-4" />
-      </button>
-      <button
-        type="button"
-        onClick={onZoomIn}
-        className="flex size-9 items-center justify-center rounded-xl border border-transparent text-muted-foreground transition-colors hover:border-border hover:bg-muted hover:text-primary"
-        title="放大"
-      >
-        <ZoomIn className="size-4" />
       </button>
       <button
         type="button"
@@ -111,9 +82,6 @@ export function MindMapCanvasToolbar({
           <Redo2 className="size-4" />
         </button>
       ) : null}
-      <div className="ml-auto text-[11px] font-medium tracking-wide text-muted-foreground/70">
-        拖拽时会即时预演落点，只有点击“整理画布”才会全局重排
-      </div>
     </div>
   )
 }

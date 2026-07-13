@@ -1,7 +1,7 @@
 import { request, uploadWithFormData } from '@/shared/api/http'
 import type {
   MindMapEditorState,
-  PalaceQuizMiniPalaceClassificationResult,
+  PalaceQuizSegmentClassificationResult,
   PalaceQuizOcrSource,
   PalaceQuizOcrSourceDraft,
   PalaceQuizGenerationPreview,
@@ -299,18 +299,18 @@ export function previewChapterQuizGenerationFromOutlineApi(
   })
 }
 
-export function classifyPalaceQuizQuestionsToMiniPalacesApi(
+export function classifyPalaceQuizQuestionsToSegmentsApi(
   palaceId: number,
   aiOptions?: import('@/shared/api/contracts').AiRuntimeOptions,
 ) {
-  return request<PalaceQuizMiniPalaceClassificationResult>(
-    `/palaces/${palaceId}/quiz-classification/mini-palaces`,
+  return request<PalaceQuizSegmentClassificationResult>(
+    `/palaces/${palaceId}/quiz-classification/segments`,
     {
       method: 'POST',
       body: JSON.stringify(aiOptions ? { ai_options: aiOptions } : {}),
       persistence: {
-        resourceKey: `palace:${palaceId}:quiz-classification:mini-palaces`,
-        description: '把记忆宫殿题库归类到迷你宫殿训练',
+        resourceKey: `palace:${palaceId}:quiz-classification:segments`,
+        description: '把记忆宫殿题库归类到学习组',
         replayMode: 'manual',
       },
     },

@@ -5,10 +5,10 @@ import { QUIZ_VIEW_MODE_STORAGE_KEY, readPersistedViewMode } from '@/features/pa
 
 export function usePalaceQuizQuestionBrowser({
   questions,
-  miniPalaceIds,
+  segmentIds,
 }: {
   questions: PalaceQuizQuestion[]
-  miniPalaceIds: number[]
+  segmentIds: number[]
 }) {
   const [viewMode, setViewMode] = useState<PalaceQuizViewMode>(readPersistedViewMode)
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0)
@@ -16,11 +16,11 @@ export function usePalaceQuizQuestionBrowser({
 
   const filteredQuestions = useMemo(() => {
     if (questionScope === 'palace') {
-      return questions.filter((question) => question.mini_palace_id == null)
+      return questions.filter((question) => !(question.segment_ids?.length))
     }
-    if (questionScope.startsWith('mini:')) {
-      const miniPalaceId = Number(questionScope.slice(5))
-      return questions.filter((question) => question.mini_palace_id === miniPalaceId)
+    if (questionScope.startsWith('segment:')) {
+      const segmentId = Number(questionScope.slice(8))
+      return questions.filter((question) => question.segment_ids?.includes(segmentId))
     }
     return questions
   }, [questionScope, questions])
@@ -31,7 +31,7 @@ export function usePalaceQuizQuestionBrowser({
   )
   const currentQuestion = filteredQuestions[currentQuestionIndex] || null
   const rootQuestionCount = useMemo(
-    () => questions.filter((question) => question.mini_palace_id == null).length,
+    () => questions.filter((question) => !(question.segment_ids?.length)).length,
     [questions],
   )
 
@@ -50,11 +50,11 @@ export function usePalaceQuizQuestionBrowser({
 
   useEffect(() => {
     if (questionScope === 'all' || questionScope === 'palace') return
-    const miniPalaceId = Number(questionScope.slice(5))
-    if (!miniPalaceIds.includes(miniPalaceId)) {
+    const segmentId = Number(questionScope.slice(8))
+    if (!segmentIds.includes(segmentId)) {
       setQuestionScope('all')
     }
-  }, [miniPalaceIds, questionScope])
+  }, [segmentIds, questionScope])
 
   return {
     viewMode,

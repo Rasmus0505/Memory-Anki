@@ -7,6 +7,8 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
+from memory_anki.infrastructure.db._tables.palaces import PalaceSegment
+
 from ..question_contracts import (
     QUESTION_TYPE_CATEGORIZATION,
     QUESTION_TYPE_FILL_BLANK,
@@ -25,10 +27,8 @@ from ..question_scope_ids import normalize_optional_int
 from .scope import (
     get_chapter_or_raise,
     normalize_classified_chapter_id,
-    normalize_mini_palace_id,
     normalize_origin_question_id,
     normalize_source_chapter_id,
-    validate_mini_palace,
 )
 from .source_meta import normalize_source_meta
 
@@ -301,7 +301,6 @@ def normalize_question_content(
 
 @dataclass(frozen=True, slots=True)
 class NormalizedQuestionScope:
-    mini_palace_id: int | None
     source_chapter_id: int | None
     classified_chapter_id: int | None
     origin_question_id: int | None
@@ -314,11 +313,6 @@ def resolve_question_scope(
     palace_id: int | None = None,
     source_chapter_id: int | None = None,
 ) -> NormalizedQuestionScope:
-    mini_palace_id = normalize_mini_palace_id(
-        session,
-        palace_id,
-        payload.get("mini_palace_id"),
-    )
     resolved_source_chapter_id = normalize_source_chapter_id(
         session,
         payload.get("source_chapter_id", source_chapter_id),
@@ -335,14 +329,37 @@ def resolve_question_scope(
     )
     if session is not None and palace_id is None and resolved_source_chapter_id is None:
         raise PalaceQuizValidationError("题目必须至少归属于一个宫殿或章节。")
-    if resolved_source_chapter_id is not None and mini_palace_id is not None:
-        raise PalaceQuizValidationError("章节题暂不支持绑定迷你宫殿训练。")
     return NormalizedQuestionScope(
-        mini_palace_id=mini_palace_id,
         source_chapter_id=resolved_source_chapter_id,
         classified_chapter_id=classified_chapter_id,
         origin_question_id=origin_question_id,
     )
+
+
+def normalize_segment_ids(
+    value: object,
+    *,
+    session: Session | None,
+    palace_id: int | None,
+) -> list[int]:
+    if value is None:
+        return []
+    if not isinstance(value, list):
+        raise PalaceQuizValidationError("segment_ids 必须是数组。")
+    ids = sorted({int(item) for item in value if isinstance(item, int) and item > 0})
+    if not ids:
+        return []
+    if session is None or palace_id is None:
+        raise PalaceQuizValidationError("章节题暂不支持绑定学习组。")
+    valid_ids = {
+        row.id
+        for row in session.query(PalaceSegment)
+        .filter(PalaceSegment.palace_id == palace_id, PalaceSegment.id.in_(ids))
+        .all()
+    }
+    if valid_ids != set(ids):
+        raise PalaceQuizValidationError("学习组不存在或不属于当前宫殿。")
+    return ids
 
 
 def normalize_question_payload(
@@ -365,7 +382,7 @@ def normalize_question_payload(
     )
     return {
         **content,
-        "mini_palace_id": scope.mini_palace_id,
+        "segment_ids": normalize_segment_ids(payload.get("segment_ids"), session=session, palace_id=palace_id),
         "source_chapter_id": scope.source_chapter_id,
         "classified_chapter_id": scope.classified_chapter_id,
         "origin_question_id": scope.origin_question_id,
@@ -393,7 +410,6 @@ __all__ = [
     "normalize_classified_chapter_id",
     "normalize_fill_blank_answer",
     "normalize_matching_answer",
-    "normalize_mini_palace_id",
     "normalize_multiple_choice_answer",
     "normalize_optional_int",
     "normalize_options",
@@ -406,5 +422,4 @@ __all__ = [
     "normalize_source_chapter_id",
     "normalize_true_false_answer",
     "resolve_question_scope",
-    "validate_mini_palace",
 ]

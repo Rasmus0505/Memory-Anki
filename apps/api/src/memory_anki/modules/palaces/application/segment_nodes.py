@@ -65,29 +65,22 @@ def normalize_segment_node_uids(
     *,
     exclude_segment_id: int | None = None,
 ) -> list[str]:
-    expanded = expand_segment_node_uids(palace, selected_node_uids)
-    taken_uids: set[str] = set()
-    for segment in palace.segments:
-        if exclude_segment_id is not None and segment.id == exclude_segment_id:
-            continue
-        taken_uids.update(parse_segment_node_uids(segment.node_uids_json))
-    return [uid for uid in expanded if uid not in taken_uids]
+    del session, exclude_segment_id
+    return expand_segment_node_uids(palace, selected_node_uids)
 
 
 def cleanup_segment_node_uids(session: Session, palace: Palace) -> bool:
     descendants, _ = collect_doc_nodes_with_descendants(palace.editor_doc)
     valid_uids = set(descendants.keys())
     changed = False
-    claimed_uids: set[str] = set()
     for segment in sorted(palace.segments, key=lambda item: (item.sort_order, item.id)):
         current_uids = parse_segment_node_uids(segment.node_uids_json)
         next_uids: list[str] = []
         for uid in current_uids:
-            if uid not in valid_uids or uid in claimed_uids:
+            if uid not in valid_uids:
                 changed = True
                 continue
             next_uids.append(uid)
-            claimed_uids.add(uid)
         if next_uids != current_uids:
             segment.node_uids_json = serialize_segment_node_uids(next_uids)
             changed = True

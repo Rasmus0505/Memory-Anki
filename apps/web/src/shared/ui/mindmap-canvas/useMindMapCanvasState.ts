@@ -33,6 +33,7 @@ type UseMindMapCanvasStateProps = MindMapCanvasProps & {
 
 export interface UseMindMapCanvasStateResult {
   frameRef: RefObject<HTMLDivElement | null>
+  canvasRef: RefObject<HTMLDivElement | null>
   ctxMenu: { x: number; y: number; nodeId: string } | null
   edgeMenu: { x: number; y: number; edgeId: string; sourceId: string; targetId: string } | null
   canvasSize: { width: number; height: number }
@@ -112,7 +113,6 @@ export function useMindMapCanvasState(
     nodeClickViewportPolicy = 'guided-center',
     contentChangeViewportPolicy = 'auto-fit',
     viewCommand = null,
-    toolbarVisible = true,
     onHostRefresh,
   } = props
 
@@ -122,6 +122,7 @@ export function useMindMapCanvasState(
   const displayEdgesRef = useRef<Edge[]>([])
   const [nodeSizeVersion, setNodeSizeVersion] = useState(0)
   const frameRef = useRef<HTMLDivElement>(null)
+  const canvasRef = useRef<HTMLDivElement>(null)
   const layouted = useMemo(
     () => {
       void nodeSizeVersion
@@ -133,7 +134,7 @@ export function useMindMapCanvasState(
   const [edges, setEdges, onEdgesChange] = useEdgesState(layouted.edges)
 
   const viewport = useMindMapViewport({
-    frameRef,
+    canvasRef,
     graphNodes: graphData.nodes,
     nodes,
     measuredNodeSizesRef,
@@ -143,7 +144,6 @@ export function useMindMapCanvasState(
     mobileViewPolicy,
     contentChangeViewportPolicy,
     practiceModeActive,
-    toolbarVisible,
     viewCommand,
     setNodeSizeVersion,
   })
@@ -353,6 +353,7 @@ export function useMindMapCanvasState(
 
   return {
     frameRef,
+    canvasRef,
     ctxMenu: menus.ctxMenu,
     edgeMenu: menus.edgeMenu,
     canvasSize: viewport.canvasSize,

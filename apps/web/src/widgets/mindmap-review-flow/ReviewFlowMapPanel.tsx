@@ -27,12 +27,6 @@ interface ReviewFlowMapPanelProps {
   visibleEditorSyncKey?: string | number | null
   currentPalaceId?: number | null
   reviewFxSignal?: MindMapReviewFxPayload | null
-  showMiniPalaceButton?: boolean
-  miniPalaceDraft?: {
-    active: boolean
-    selectedNodeUids: string[]
-  }
-  miniPalacePracticeActive?: boolean
   onEditorStateChange?: (nextState: MindMapEditorState) => void
   onNodeClick: (nodes: MindMapSelection[]) => void
   onNodeContextMenu: (nodes: MindMapSelection[]) => void
@@ -40,8 +34,6 @@ interface ReviewFlowMapPanelProps {
   onNodeActive?: (nodes: MindMapSelection[]) => void
   onNodeHover?: (nodes: MindMapSelection[]) => void
   onQuizBreakOpen?: () => void
-  onMiniPalaceOpen?: () => void
-  onMiniPalacePour?: () => void
   recallRatings?: Map<string, MindMapRecallRating>
   recallRound?: MindMapRecallRound
   weakNodeUids?: string[]
@@ -136,12 +128,6 @@ export function ReviewFlowMapPanel({
   visibleEditorSyncKey = null,
   currentPalaceId = null,
   reviewFxSignal = null,
-  showMiniPalaceButton = false,
-  miniPalaceDraft = {
-    active: false,
-    selectedNodeUids: [],
-  },
-  miniPalacePracticeActive = false,
   onEditorStateChange,
   onNodeClick,
   onNodeContextMenu,
@@ -149,8 +135,6 @@ export function ReviewFlowMapPanel({
   onNodeActive,
   onNodeHover,
   onQuizBreakOpen,
-  onMiniPalaceOpen,
-  onMiniPalacePour,
   recallRatings = new Map(),
   recallRound = 'first',
   weakNodeUids = [],
@@ -432,14 +416,6 @@ export function ReviewFlowMapPanel({
               }
             : null
         }
-        miniPalaceAction={
-          showMiniPalaceButton && onMiniPalaceOpen
-            ? {
-                label: '训练关卡',
-                onClick: onMiniPalaceOpen,
-              }
-            : null
-        }
         immersiveAction={{
           label: '半屏编辑',
           active: fullscreen,
@@ -483,15 +459,12 @@ export function ReviewFlowMapPanel({
         initialViewPolicy="preserve"
         mobileViewPolicy={isEditMode ? 'map' : 'auto'}
         nodeClickViewportPolicy={isEditMode ? 'guided-center' : 'preserve'}
-        miniPalaceDraft={miniPalaceDraft}
-        miniPalacePracticeActive={miniPalacePracticeActive}
         reviewFxSignal={reviewFxSignal}
         onEditorStateChange={isEditMode && onEditorStateChange ? onEditorStateChange : () => {}}
         onNodeActive={handleNodeActive}
         onNodeClick={isEditMode ? undefined : onNodeClick}
         onNodeContextMenu={isEditMode ? onEditNodeContextMenu : onNodeContextMenu}
         onNodeHover={isEditMode ? undefined : onNodeHover}
-        onMiniPalacePour={onMiniPalacePour}
         onFullscreenToggle={onToggleFullscreen}
         onFullscreenChange={setNativeFullscreenActive}
         onUiClearedChange={setUiCleared}

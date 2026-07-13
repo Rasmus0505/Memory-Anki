@@ -1,10 +1,17 @@
 ﻿import { useState, type ChangeEvent, type ClipboardEvent } from 'react'
 import type { MindMapEditorState } from '@/shared/api/contracts'
+import { useCallback, useEffect } from 'react'
 import type { ImportApplyContext } from '@/shared/api/contracts/imports'
 import { useImportApplyController } from '@/features/mindmap-import/hooks/useImportApplyController'
 import { useImportBatchState } from '@/features/mindmap-import/hooks/useImportBatchState'
 import { useImportJobController } from '@/features/mindmap-import/hooks/useImportJobController'
 import { useAiRunConfigDialog } from '@/entities/ai-runtime'
+import {
+  deletePdfDocumentApi,
+  listPdfDocumentsApi,
+  uploadPdfDocumentApi,
+} from '@/entities/knowledge-import/api'
+import type { PdfDocument } from '@/entities/knowledge-import/model'
 import type {
   BatchImportMeta,
   ImportMode,
@@ -36,8 +43,12 @@ export function useMindMapImport({
 }: UseMindMapImportOptions) {
   const [controllerError, setControllerError] = useState('')
   const [mode, setModeState] = useState<ImportMode>('mindmap')
-  const [sourceKind, setSourceKindState] = useState<ImportSourceKind>('image-single')
-  const [mindMapWorkflow, setMindMapWorkflowState] = useState<MindMapImportWorkflow>('single')
+  const [sourceKind, setSourceKindState] = useState<ImportSourceKind>('image-batch')
+  const [mindMapWorkflow, setMindMapWorkflowState] = useState<MindMapImportWorkflow>('batch')
+  const [pdfDocuments, setPdfDocuments] = useState<PdfDocument[]>([])
+  const [selectedPdfDocumentId, setSelectedPdfDocumentId] = useState('')
+  const [pdfPageSelection, setPdfPageSelection] = useState('1')
+  const [pdfLibraryLoading, setPdfLibraryLoading] = useState(false)
 
   const batch = useImportBatchState(setControllerError)
   const { promptForAiOptions, aiRunConfigDialog } = useAiRunConfigDialog()
@@ -52,6 +63,14 @@ export function useMindMapImport({
     setBatchStatus: batch.setBatchStatus,
     setLastBatchMeta: batch.setLastBatchMeta,
     promptForAiOptions,
+    contextOptions: editorState
+      ? [{
+          id: 'mindmap',
+          label: '包含当前思维导图',
+          description: '将当前脑图结构作为只读提示词快照，默认不勾选。',
+          content: JSON.stringify(editorState.editor_doc),
+        }]
+      : [],
   })
 
   const apply = useImportApplyController({
@@ -68,21 +87,37 @@ export function useMindMapImport({
     setError: jobs.setImportError,
   })
 
+  const refreshPdfDocuments = useCallback(async () => {
+    setPdfLibraryLoading(true)
+    try {
+      const result = await listPdfDocumentsApi()
+      setPdfDocuments(result.items)
+      setSelectedPdfDocumentId((current) =>
+        current && result.items.some((item) => item.id === current)
+          ? current
+          : result.items[0]?.id ?? '',
+      )
+    } catch {
+      setPdfDocuments([])
+      setSelectedPdfDocumentId('')
+    } finally {
+      setPdfLibraryLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (jobs.importOpen) void refreshPdfDocuments()
+  }, [jobs.importOpen, refreshPdfDocuments])
+
   const setImportMode = (nextMode: ImportMode) => {
     setModeState(nextMode)
     setControllerError('')
     jobs.setImportError('')
-    if (nextMode === 'text' && sourceKind === 'image-batch') {
-      setSourceKindState('image-single')
-      setMindMapWorkflowState('single')
-    }
   }
 
   const setImportSourceKind = (nextSourceKind: ImportSourceKind) => {
     setSourceKindState(nextSourceKind)
-    if (nextSourceKind === 'image-single') {
-      setMindMapWorkflowState('single')
-    } else if (nextSourceKind === 'image-batch') {
+    if (nextSourceKind === 'image-batch') {
       setMindMapWorkflowState('batch')
     }
     setControllerError('')
@@ -91,7 +126,7 @@ export function useMindMapImport({
 
   const setMindMapImportWorkflow = (workflow: MindMapImportWorkflow) => {
     setMindMapWorkflowState(workflow)
-    setSourceKindState(workflow === 'batch' ? 'image-batch' : 'image-single')
+    setSourceKindState('image-batch')
     setControllerError('')
     jobs.setImportError('')
     if (workflow === 'batch') {
@@ -109,21 +144,14 @@ export function useMindMapImport({
       if (file) imageFiles.push(file)
     }
     if (imageFiles.length === 0) return
-    if (mode === 'text' || sourceKind === 'image-single') {
-      void jobs.handleImportImage(imageFiles[0])
-      return
-    }
+    if (sourceKind === 'pdf-document') return
     batch.appendBatchFiles(imageFiles)
   }
 
   const handleImportFileChange = (event: ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files || [])
     if (files.length > 0) {
-      if (mode === 'text' || sourceKind === 'image-single') {
-        void jobs.handleImportImage(files[0])
-      } else {
-        batch.appendBatchFiles(files)
-      }
+      batch.appendBatchFiles(files)
     }
     event.target.value = ''
   }
@@ -156,6 +184,12 @@ export function useMindMapImport({
     importStructureImageId: batch.structureImageId,
     importBatchStatus: batch.batchStatus,
     importBatchMeta: batch.lastBatchMeta as BatchImportMeta | null,
+    pdfDocuments,
+    selectedPdfDocumentId,
+    setSelectedPdfDocumentId,
+    pdfPageSelection,
+    setPdfPageSelection,
+    pdfLibraryLoading,
     importCanAppend: Boolean(selectedNodeUid),
     importCanUndoLastImport: apply.canUndoLastImport,
     importExternalSyncKey: apply.externalSyncKey,
@@ -177,6 +211,20 @@ export function useMindMapImport({
     handleImportPaste,
     handleImportFileChange,
     handleBatchImportStart: () => void jobs.handleBatchImportStart(batch.structureImageId),
+    handlePdfImportStart: () => void jobs.handlePdfImportStart(selectedPdfDocumentId, pdfPageSelection),
+    handlePdfUpload: async (event: ChangeEvent<HTMLInputElement>) => {
+      const file = event.target.files?.[0]
+      event.target.value = ''
+      if (!file) return
+      const document = await uploadPdfDocumentApi(file)
+      await refreshPdfDocuments()
+      setSelectedPdfDocumentId(document.id)
+      setPdfPageSelection(document.page_count > 1 ? `1-${document.page_count}` : '1')
+    },
+    handlePdfDelete: async (documentId: string) => {
+      await deletePdfDocumentApi(documentId)
+      await refreshPdfDocuments()
+    },
     handleDeleteBatchImage: batch.handleDeleteBatchImage,
     handleMoveBatchImage: batch.handleMoveBatchImage,
     handleSetStructureImage: batch.handleSetStructureImage,
@@ -185,6 +233,7 @@ export function useMindMapImport({
     handleImportApplyAppend: apply.handleApplyAppend,
     handleImportSelectHistory: jobs.handleImportSelectHistory,
     handleImportDeleteHistory: jobs.handleImportDeleteHistory,
+    handleImportRerunHistory: jobs.handleImportRerunHistory,
     handleUndoLastImport: apply.handleUndoLastImport,
     aiRunConfigDialog,
   }

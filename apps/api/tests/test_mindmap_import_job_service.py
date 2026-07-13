@@ -3,11 +3,13 @@ from __future__ import annotations
 from types import SimpleNamespace
 from unittest.mock import patch
 
+import fitz
 import pytest
 from sqlalchemy.orm import Session
 
 from memory_anki.infrastructure.db._tables import Base, engine
 from memory_anki.infrastructure.db._tables.misc import MindMapImportJob
+from memory_anki.modules.palaces.application import mindmap_import_job_api
 from memory_anki.modules.palaces.application import mindmap_import_job_service as job_service
 from memory_anki.modules.palaces.application.mindmap_import import (
     MindMapImportError,
@@ -36,6 +38,15 @@ def _stream_return(value):
     if False:
         yield None
     return value
+
+
+def _pdf_bytes() -> bytes:
+    document = fitz.open()
+    document.new_page().insert_text((72, 72), "first")
+    document.new_page().insert_text((72, 72), "second")
+    content = document.tobytes()
+    document.close()
+    return content
 
 
 @pytest.fixture(autouse=True)
@@ -421,3 +432,77 @@ def test_running_job_serializes_progress_preview_text():
     assert payload["progress"]["step"] == 2
     assert payload["progress"]["total_steps"] == 4
     assert payload["progress"]["preview_text"] == '{"title":"导入脑图"}'
+
+
+@pytest.mark.parametrize(
+    ("selection", "expected"),
+    [
+        ("1-3,5,3", [1, 2, 3, 5]),
+        ("5,1", [5, 1]),
+        ("1，3-4", [1, 3, 4]),
+    ],
+)
+def test_pdf_page_selection_parses_ranges_and_preserves_order(selection, expected):
+    assert mindmap_import_job_api.parse_pdf_page_selection(selection, 5) == expected
+
+
+@pytest.mark.parametrize("selection", ["", "3-1", "0,2", "2,6", "abc"])
+def test_pdf_page_selection_rejects_invalid_or_out_of_bounds_values(selection):
+    with pytest.raises(MindMapImportError):
+        mindmap_import_job_api.parse_pdf_page_selection(selection, 5)
+
+
+def test_pdf_job_keeps_source_snapshot_and_rerun_gets_new_operation(tmp_path, monkeypatch):
+    library_dir = tmp_path / "pdf-library"
+    library_dir.mkdir()
+    import_dir = tmp_path / "import-jobs"
+    pdf_path = library_dir / "document.pdf"
+    pdf_path.write_bytes(_pdf_bytes())
+
+    from memory_anki.infrastructure.db._tables.misc import PdfDocument
+
+    with Session(engine) as session:
+        document = PdfDocument(
+            id="pdf-1",
+            filename=pdf_path.name,
+            original_name="课程.pdf",
+            mime_type="application/pdf",
+            file_size=pdf_path.stat().st_size,
+            page_count=2,
+        )
+        session.add(document)
+        session.commit()
+
+        monkeypatch.setattr(job_service, "IMPORT_JOBS_DIR", import_dir)
+        monkeypatch.setattr(mindmap_import_job_api, "PDF_LIBRARY_DIR", library_dir)
+        with patch.object(
+            mindmap_import_job_api.llm_gateway,
+            "prepare_batch_items",
+            side_effect=lambda **kwargs: (kwargs["image_items"], None),
+        ):
+            job = job_service.create_pdf_import_job(
+                session,
+                entity_key="palace_1",
+                document_id=document.id,
+                page_selection="2,1",
+                mode=job_service.MODE_MINDMAP,
+                fallback_title="PDF 导入",
+                ai_runtime=_ai_runtime(session),
+            )
+
+        source_dir = import_dir / job.id
+        assert (source_dir / "source.pdf").read_bytes() == pdf_path.read_bytes()
+        assert job.source_kind == "pdf-document"
+
+        pdf_path.unlink()
+        session.delete(document)
+        session.commit()
+        rerun = job_service.rerun_job(session, job_id=job.id)
+
+    assert rerun.id != job.id
+    assert rerun.entity_key == job.entity_key
+    assert (import_dir / rerun.id / "source.pdf").exists()
+    payload = job_service.serialize_job(rerun)
+    assert payload["operation_id"] == rerun.id
+    assert payload["source_meta"]["rerun_of"] == job.id
+    assert payload["source_meta"]["page_selection"] == [2, 1]

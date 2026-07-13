@@ -23,12 +23,18 @@ interface MindMapToolbarSegmentControl {
   active: boolean; targetSegmentId: number | 'new' | null; options: MindMapToolbarSegmentOption[]; disabled?: boolean
   onToggle: () => void; onTargetChange: (targetSegmentId: number | 'new' | null) => void; onConfirm: () => void; onCancel: () => void
 }
-interface MindMapToolbarAction { label: string; onClick: () => void; disabled?: boolean }
+interface MindMapToolbarAction {
+  label: string
+  onClick: () => void
+  disabled?: boolean
+  deferUntilMenuClose?: boolean
+}
 interface MindMapToolbarModeControl { value: 'edit' | 'preview' | 'recall'; onChange: (value: 'edit' | 'preview' | 'recall') => void; disabled?: boolean }
 interface MindMapToolbarToggleAction extends MindMapToolbarAction { active?: boolean }
 
 export interface MindMapPageToolbarProps {
   compact?: boolean
+  embedded?: boolean
   className?: string
   taskControl?: { value: MindMapTask; onChange: (value: MindMapTask) => void; disabled?: boolean } | null
   searchControl?: { value: string; onChange: (value: string) => void; placeholder?: string; resultCount?: number } | null
@@ -42,7 +48,6 @@ export interface MindMapPageToolbarProps {
   importTextAction?: MindMapToolbarAction | null
   englishAction?: MindMapToolbarAction | null
   quizAction?: MindMapToolbarAction | null
-  miniPalaceAction?: MindMapToolbarAction | null
   immersiveAction?: MindMapToolbarToggleAction | null
   nativeFullscreenAction?: MindMapToolbarToggleAction | null
   clearUiAction?: MindMapToolbarToggleAction | null
@@ -56,18 +61,26 @@ function resolveSegmentTargetLabel(control: MindMapToolbarSegmentControl) {
 
 export function MindMapPageToolbar(props: MindMapPageToolbarProps) {
   const {
-    compact = false, className, taskControl = null, searchControl = null, focusAction = null, fitAction = null,
+    compact = false, embedded = false, className, taskControl = null, searchControl = null, focusAction = null, fitAction = null,
     moreActions = [], segmentControl = null, modeControl = null, modeToggle = null, importMindMapAction = null,
-    importTextAction = null, englishAction = null, quizAction = null, miniPalaceAction = null,
+    importTextAction = null, englishAction = null, quizAction = null,
     immersiveAction = null, nativeFullscreenAction = null, clearUiAction = null,
   } = props
-  const legacyActions = [importMindMapAction, importTextAction, englishAction, quizAction, miniPalaceAction].filter(Boolean) as MindMapToolbarAction[]
+  const legacyActions = [importMindMapAction, importTextAction, englishAction, quizAction].filter(Boolean) as MindMapToolbarAction[]
   const overflowActions = [...moreActions, ...legacyActions, immersiveAction, nativeFullscreenAction, clearUiAction].filter(Boolean) as Array<MindMapToolbarAction & { destructive?: boolean; separatorBefore?: boolean }>
   const modern = Boolean(taskControl || searchControl || focusAction || fitAction || moreActions.length)
 
+  const handleOverflowAction = (action: MindMapToolbarAction) => {
+    if (action.deferUntilMenuClose) {
+      window.setTimeout(action.onClick, 0)
+      return
+    }
+    action.onClick()
+  }
+
   return (
-    <div className={cn('rounded-2xl border border-border/70 bg-background/90 p-3', compact ? 'space-y-2.5' : 'space-y-3', className)}>
-      <div className="flex flex-wrap items-center gap-2">
+    <div className={cn(embedded ? 'flex shrink-0 flex-nowrap items-center gap-2' : 'rounded-2xl border border-border/70 bg-background/90 p-3', !embedded && (compact ? 'space-y-2.5' : 'space-y-3'), className)}>
+      <div className="flex flex-nowrap items-center gap-2">
         {taskControl ? (
           <div className="inline-flex rounded-lg border border-border/70 bg-background p-1">
             {([{ value: 'build', label: '构建', icon: PenLine }, { value: 'learn', label: '学习', icon: Brain }] as const).map(({ value, label, icon: Icon }) => (
@@ -87,6 +100,15 @@ export function MindMapPageToolbar(props: MindMapPageToolbarProps) {
         {focusAction ? <Button type="button" variant="outline" onClick={focusAction.onClick} disabled={focusAction.disabled}><Target className="size-4" />{focusAction.label}</Button> : null}
         {fitAction ? <Button type="button" variant="outline" onClick={fitAction.onClick} disabled={fitAction.disabled}>{fitAction.label}</Button> : null}
         {segmentControl ? <Button type="button" variant={segmentControl.active ? 'default' : 'outline'} onClick={segmentControl.onToggle}><FolderTree className="size-4" />{resolveSegmentTargetLabel(segmentControl)}</Button> : null}
+        {segmentControl?.active ? (
+          <>
+            <select aria-label="学习组目标" className="min-h-10 shrink-0 rounded-md border bg-background px-2 text-sm" value={segmentControl.targetSegmentId === 'new' || segmentControl.targetSegmentId == null ? 'new' : String(segmentControl.targetSegmentId)} onChange={(event) => segmentControl.onTargetChange(event.target.value === 'new' ? 'new' : Number(event.target.value))}>
+              <option value="new">新建学习组</option>{segmentControl.options.map((option) => <option key={option.id} value={option.id}>{option.name}</option>)}
+            </select>
+            <Button size="sm" onClick={segmentControl.onConfirm}>确认</Button>
+            <Button size="sm" variant="outline" onClick={segmentControl.onCancel}>取消</Button>
+          </>
+        ) : null}
         {!modern && modeControl ? (
           <div className="inline-flex rounded-lg border border-border/70 bg-background p-1">
             {([{ value: 'edit', label: '编辑模式', icon: PenLine }, { value: 'preview', label: '预览模式', icon: Eye }, { value: 'recall', label: '回忆模式', icon: Brain }] as const).map(({ value, label, icon: Icon }) => (
@@ -103,19 +125,11 @@ export function MindMapPageToolbar(props: MindMapPageToolbarProps) {
           <DropdownMenu>
             <DropdownMenuTrigger asChild><Button type="button" variant="outline" size="icon" aria-label="更多脑图操作"><MoreHorizontal className="size-4" /></Button></DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="min-w-48">
-              {overflowActions.map((action, index) => <div key={`${action.label}-${index}`}>{action.separatorBefore ? <DropdownMenuSeparator /> : null}<DropdownMenuItem disabled={action.disabled} variant={action.destructive ? 'destructive' : 'default'} onSelect={action.onClick}>{action.label}</DropdownMenuItem></div>)}
+              {overflowActions.map((action, index) => <div key={`${action.label}-${index}`}>{action.separatorBefore ? <DropdownMenuSeparator /> : null}<DropdownMenuItem disabled={action.disabled} variant={action.destructive ? 'destructive' : 'default'} onSelect={() => handleOverflowAction(action)}>{action.label}</DropdownMenuItem></div>)}
             </DropdownMenuContent>
           </DropdownMenu>
         ) : null}
       </div>
-      {segmentControl?.active ? (
-        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-info/20 bg-info/5 p-2">
-          <select aria-label="学习组目标" className="min-h-10 rounded-md border bg-background px-2 text-sm" value={segmentControl.targetSegmentId === 'new' || segmentControl.targetSegmentId == null ? 'new' : String(segmentControl.targetSegmentId)} onChange={(event) => segmentControl.onTargetChange(event.target.value === 'new' ? 'new' : Number(event.target.value))}>
-            <option value="new">新建学习组</option>{segmentControl.options.map((option) => <option key={option.id} value={option.id}>{option.name}</option>)}
-          </select>
-          <Button size="sm" onClick={segmentControl.onConfirm}>确认</Button><Button size="sm" variant="outline" onClick={segmentControl.onCancel}>取消</Button>
-        </div>
-      ) : null}
     </div>
   )
 }

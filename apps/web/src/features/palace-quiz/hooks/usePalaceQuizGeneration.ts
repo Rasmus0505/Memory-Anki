@@ -4,11 +4,11 @@ import type { dispatchGlobalFeedback } from '@/shared/feedback/globalFeedbackMod
 import type {
   AiRuntimeOptions,
   PalaceQuizGenerationPreview,
-  PalaceQuizMiniPalaceClassificationResult,
+  PalaceQuizSegmentClassificationResult,
 } from '@/shared/api/contracts'
 import {
   batchCreateChapterQuizQuestionsApi,
-  classifyPalaceQuizQuestionsToMiniPalacesApi,
+  classifyPalaceQuizQuestionsToSegmentsApi,
   recoverPalaceQuizPreviewFromLogApi,
 } from '@/entities/quiz/api'
 import { listAiCallLogsApi } from '@/entities/ai-log/api'
@@ -24,11 +24,14 @@ import {
   type QuizGenerationSourceKind,
 } from '@/features/palace-quiz/model/palaceQuizPage'
 import {
-  deleteQuizGenerationHistory,
-  loadQuizGenerationHistory,
+  clearLegacyQuizGenerationHistory,
   type QuizGenerationHistoryItem,
 } from '@/features/palace-quiz/quiz-generation-history'
-import { persistQuizGenerationHistory } from '@/features/palace-quiz/model/persistQuizGenerationHistory'
+import {
+  deletePersistentQuizGenerationHistory,
+  loadPersistentQuizGenerationHistory,
+  persistQuizGenerationHistory,
+} from '@/features/palace-quiz/model/persistQuizGenerationHistory'
 import { usePalaceQuizGenerationInputs } from './usePalaceQuizGenerationInputs'
 
 type GenerationPreviewConfig = {
@@ -81,7 +84,7 @@ export function usePalaceQuizGeneration({
   const [lastFailedConfig, setLastFailedConfig] = useState<GenerationPreviewConfig | null>(null)
   const [classificationLoading, setClassificationLoading] = useState(false)
   const [classificationResult, setClassificationResult] =
-    useState<PalaceQuizMiniPalaceClassificationResult | null>(null)
+    useState<PalaceQuizSegmentClassificationResult | null>(null)
   const generationInputs = usePalaceQuizGenerationInputs({
     palace,
     generationLoading,
@@ -125,7 +128,10 @@ export function usePalaceQuizGeneration({
       setGenerationHistory([])
       return
     }
-    setGenerationHistory(loadQuizGenerationHistory(palaceId))
+    clearLegacyQuizGenerationHistory(palaceId)
+    void loadPersistentQuizGenerationHistory(palaceId)
+      .then(setGenerationHistory)
+      .catch(() => setGenerationHistory([]))
   }, [palaceId])
 
   useEffect(() => {
@@ -222,18 +228,19 @@ export function usePalaceQuizGeneration({
         label: config.sourceKind === 'text-files' ? '文本预览' : '图片预览',
         audioScope: 'global',
       })
-      const history = persistQuizGenerationHistory(
+      const historyItem = await persistQuizGenerationHistory(
         palaceId,
         preview,
         config.sourceKind,
-        config.files.map((file) => file.name),
+        config.files,
         config.extraPrompt,
         config.enableSecondaryReview,
         config.classifyByMiniPalace,
         targetChapterId,
         config.selectedChapterSummary,
+        aiOptions,
       )
-      if (history) setGenerationHistory(history)
+      if (historyItem) setGenerationHistory((current) => [historyItem, ...current])
     } catch (nextError) {
       emitQuizFeedback('quiz_error_ai_failed', { label: '生成失败', audioScope: 'global' })
       setLastFailedConfig({ ...config, aiOptions })
@@ -263,9 +270,10 @@ export function usePalaceQuizGeneration({
     applyHistoryConfig(item)
   }
 
-  const handleDeleteGenerationHistory = (historyId: string) => {
+  const handleDeleteGenerationHistory = async (historyId: string) => {
     if (!palaceId) return
-    setGenerationHistory(deleteQuizGenerationHistory(palaceId, historyId))
+    await deletePersistentQuizGenerationHistory(historyId)
+    setGenerationHistory((current) => current.filter((item) => item.id !== historyId))
   }
 
   const handleRetryLastGeneration = async () => {
@@ -369,7 +377,7 @@ export function usePalaceQuizGeneration({
         setClassificationLoading(false)
         return
       }
-      const result = await classifyPalaceQuizQuestionsToMiniPalacesApi(palaceId, aiOptions)
+      const result = await classifyPalaceQuizQuestionsToSegmentsApi(palaceId, aiOptions)
       setClassificationResult(result)
       toast.success('已有题库已按训练关卡重新归类。')
       emitQuizFeedback('quiz_generate_classify_complete', { label: '归类完成', audioScope: 'global' })

@@ -55,7 +55,7 @@ export interface PalaceQuizGenerationInputs {
   allowedChapterIds: Set<number>
   selectedChapterHasChildren: boolean
   generationStreamContentRef: RefObject<HTMLPreElement | null>
-  miniPalaces: NonNullable<PalaceQuizPageMeta['mini_palaces']>
+  miniPalaces: NonNullable<PalaceQuizPageMeta['segments']>
   handleOpenRangeDialog: () => Promise<void>
   handleConfirmRangeSelection: () => void
   setPendingChapterId: Dispatch<SetStateAction<number | null>>
@@ -87,7 +87,7 @@ export function usePalaceQuizGenerationInputs({
   const generationStreamContentRef = useRef<HTMLPreElement | null>(null)
   const generationStreamAutoFollowRef = useRef(true)
 
-  const miniPalaces = palace?.mini_palaces || []
+  const miniPalaces = palace?.segments || []
   const explicitPalaceChapterIds = useMemo(
     () =>
       new Set(

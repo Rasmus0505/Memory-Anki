@@ -197,8 +197,8 @@ export function useReviewFlowSession({
   )
 
   const handleSpacePour = React.useCallback(() => {
-    if (reveal.completed || revealMode !== 'mini-checkpoint') return
-    timer.registerActivity('practice_interaction', { source: 'mini_palace_space_pour' })
+    if (reveal.completed || revealMode !== 'segment-checkpoint') return
+    timer.registerActivity('practice_interaction', { source: 'segment_checkpoint_space_pour' })
     reveal.handleSpacePour()
   }, [reveal, revealMode, timer])
 

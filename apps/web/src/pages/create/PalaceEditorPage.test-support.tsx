@@ -13,7 +13,6 @@ import * as appLogs from '@/shared/logs/model/appLogs'
 import * as knowledgeApi from '@/entities/knowledge/api'
 import * as importApi from '@/entities/knowledge-import/api'
 import * as palaceApi from '@/entities/palace/api'
-import * as miniPalaceApi from '@/entities/mini-palace/api'
 
 vi.mock('sonner', () => ({
   toast: {
@@ -79,6 +78,7 @@ vi.mock('@/features/mindmap-editor', async (importOriginal) => ({
     forceSyncIntent = 'replace',
     syncReason = null,
     onFullscreenToggle,
+    toolbarContent,
     practiceModeActive = false,
     readonly = false,
     preserveViewOnSync = false,
@@ -86,7 +86,6 @@ vi.mock('@/features/mindmap-editor', async (importOriginal) => ({
     aiSplitBusy = false,
     syncOnPropChange = false,
     externalSyncKey = null,
-    miniPalaceDraft = { active: false, selectedNodeUids: [] },
     viewMemoryScope = null,
     focusRequestNodeUid = null,
     focusRequestNonce = 0,
@@ -107,14 +106,11 @@ vi.mock('@/features/mindmap-editor', async (importOriginal) => ({
     aiSplitBusy?: boolean
     syncOnPropChange?: boolean
     externalSyncKey?: string | number | null
-    miniPalaceDraft?: {
-      active: boolean
-      selectedNodeUids: string[]
-    }
     viewMemoryScope?: string | null
     focusRequestNodeUid?: string | null
     focusRequestNonce?: number
     onFullscreenToggle?: (active?: boolean) => void
+    toolbarContent?: React.ReactNode
     editorState?: {
       editor_doc?: {
         root?: {
@@ -157,13 +153,13 @@ vi.mock('@/features/mindmap-editor', async (importOriginal) => ({
     const viewPolicy = preserveViewOnSync ? 'preserve' : initialViewPolicy
     return (
       <div data-testid="mindmap-frame">
+        {toolbarContent}
         <div>{`mindmap-${practiceModeActive ? 'practice' : 'edit'}-${readonly ? 'readonly' : 'editable'}-${shellMode}-${viewPolicy}-import-${syncOnPropChange ? 'sync' : 'nosync'}`}</div>
         <div>{`mindmap-mount-${mountIdRef.current}`}</div>
         <div>{`sync-${syncIntent}-${forceSyncIntent}-${String(forceSyncKey ?? '')}-${String(externalSyncKey ?? '')}-${String(syncReason ?? '')}`}</div>
         <div>{`scope-${String(viewMemoryScope ?? '')}`}</div>
         <div>{`focus-${String(focusRequestNodeUid ?? '')}:${String(focusRequestNonce)}`}</div>
         <div>{`aisplit-${aiSplitBusy ? 'busy' : 'idle'}`}</div>
-        <div>{`mini-palace-${miniPalaceDraft.active ? 'selecting' : 'idle'}-${miniPalaceDraft.selectedNodeUids.join(',')}`}</div>
         <div>{`root-${String(root?.data?.text ?? '')}`}</div>
         <div>{`child-${String(child?.data?.text ?? '')}`}</div>
         <div>{`grandchild-${String(grandchild?.data?.text ?? '')}`}</div>
@@ -261,7 +257,6 @@ vi.mock('@/features/mindmap-editor', async (importOriginal) => ({
     importMindMapAction,
     importTextAction,
     englishAction,
-    miniPalaceAction,
     immersiveAction,
     nativeFullscreenAction,
     clearUiAction,
@@ -327,7 +322,6 @@ vi.mock('@/features/mindmap-editor', async (importOriginal) => ({
       {importMindMapAction ? <button type="button" onClick={importMindMapAction.onClick}>{importMindMapAction.label}</button> : null}
       {importTextAction ? <button type="button" onClick={importTextAction.onClick}>{importTextAction.label}</button> : null}
       {englishAction ? <button type="button" onClick={englishAction.onClick}>{englishAction.label}</button> : null}
-      {miniPalaceAction ? <button type="button" onClick={miniPalaceAction.onClick}>{miniPalaceAction.label}</button> : null}
       {immersiveAction ? <button type="button" onClick={immersiveAction.onClick}>{immersiveAction.label}</button> : null}
       {nativeFullscreenAction ? <button type="button" onClick={nativeFullscreenAction.onClick}>{nativeFullscreenAction.label}</button> : null}
       {clearUiAction ? <button type="button" onClick={clearUiAction.onClick}>{clearUiAction.label}</button> : null}
@@ -364,7 +358,23 @@ vi.mock('@/features/palace-edit/components/PalaceMetaPanel', () => ({
 }))
 
 vi.mock('@/features/palace-edit/components/PalaceSegmentsPanel', () => ({
-  PalaceSegmentsPanel: () => <div>segments</div>,
+  PalaceSegmentsPanel: ({ selectedNodeCount, segmentDialogOpen, segmentName, setSegmentName, onSave }: {
+    selectedNodeCount: number
+    segmentDialogOpen: boolean
+    segmentName: string
+    setSegmentName: (value: string) => void
+    onSave: () => void
+  }) => (
+    <div>
+      <div>{`selected-segment-nodes-${selectedNodeCount}`}</div>
+      {segmentDialogOpen ? (
+        <>
+          <input placeholder="例如：第二学习组" value={segmentName} onChange={(event) => setSegmentName(event.target.value)} />
+          <button type="button" onClick={onSave}>保存学习组</button>
+        </>
+      ) : null}
+    </div>
+  ),
 }))
 
 vi.mock('./PalaceVersionDialog', () => ({
@@ -480,34 +490,6 @@ export function setupPalaceEditPageTestDefaults() {
   vi.spyOn(palaceApi, 'getPracticeSessionProgressApi').mockResolvedValue({ progress: null } as never)
   vi.spyOn(palaceApi, 'savePracticeSessionProgressApi').mockResolvedValue({ progress: {} } as never)
   vi.spyOn(palaceApi, 'clearPracticeSessionProgressApi').mockResolvedValue({ ok: true } as never)
-  vi.spyOn(miniPalaceApi, 'getMiniPalacesApi').mockResolvedValue({ items: [] } as never)
-  vi.spyOn(miniPalaceApi, 'createMiniPalaceApi').mockResolvedValue({
-    item: {
-      id: 1,
-      palace_id: 101,
-      name: '迷你宫殿训练 1',
-      node_uids: ['child-1'],
-      node_count: 1,
-      sort_order: 0,
-      created_at: null,
-      updated_at: null,
-      is_empty: false,
-    },
-  } as never)
-  vi.spyOn(miniPalaceApi, 'updateMiniPalaceApi').mockResolvedValue({
-    item: {
-      id: 1,
-      palace_id: 101,
-      name: '迷你宫殿训练 1',
-      node_uids: ['child-1'],
-      node_count: 1,
-      sort_order: 0,
-      created_at: null,
-      updated_at: null,
-      is_empty: false,
-    },
-  } as never)
-  vi.spyOn(miniPalaceApi, 'deleteMiniPalaceApi').mockResolvedValue({ ok: true } as never)
   vi.spyOn(importApi, 'previewMindMapImportApi').mockResolvedValue({
     ok: true,
     source_tree: {

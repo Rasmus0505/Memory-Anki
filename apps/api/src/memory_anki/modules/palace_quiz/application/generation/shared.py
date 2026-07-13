@@ -87,7 +87,7 @@ def extract_mini_palace_grouping_payload(response_text: str) -> dict[str, Any]:
         parse_error_message="AI 返回的学习组归类 JSON 无法解析。",
         type_error_message="AI 返回的学习组归类结果不是对象。",
     )
-    groups = parsed.get("mini_palace_groups")
+    groups = parsed.get("segment_groups", parsed.get("mini_palace_groups"))
     unassigned = parsed.get("unassigned_question_indexes")
     if not isinstance(groups, list) or not isinstance(unassigned, list):
         raise PalaceQuizAiError("AI 返回的学习组归类结果缺少必需字段。")

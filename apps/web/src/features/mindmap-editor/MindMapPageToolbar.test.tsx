@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { MindMapPageToolbar } from './MindMapPageToolbar'
 
@@ -35,26 +35,20 @@ describe('MindMapPageToolbar', () => {
   })
 
   it('keeps dedicated scene actions accessible in the modern overflow menu', async () => {
-    const onImport = vi.fn()
-    const onMiniPalace = vi.fn()
-
+    const onImport = vi.fn(() => {
+      expect(screen.queryByRole('menuitem', { name: '转脑图' })).toBeNull()
+    })
     render(
       <MindMapPageToolbar
         taskControl={{ value: 'build', onChange: vi.fn() }}
-        importMindMapAction={{ label: '转脑图', onClick: onImport }}
-        miniPalaceAction={{ label: '迷你宫殿训练', onClick: onMiniPalace }}
+        importMindMapAction={{ label: '转脑图', onClick: onImport, deferUntilMenuClose: true }}
       />,
     )
 
     fireEvent.keyDown(screen.getByRole('button', { name: '更多脑图操作' }), { key: 'Enter' })
     fireEvent.click(await screen.findByRole('menuitem', { name: '转脑图' }))
 
-    expect(onImport).toHaveBeenCalledTimes(1)
-
-    fireEvent.keyDown(screen.getByRole('button', { name: '更多脑图操作' }), { key: 'Enter' })
-    fireEvent.click(await screen.findByRole('menuitem', { name: '迷你宫殿训练' }))
-
-    expect(onMiniPalace).toHaveBeenCalledTimes(1)
+    await waitFor(() => expect(onImport).toHaveBeenCalledTimes(1))
   })
 
   it('supports segment target selection, confirm, and cancel', () => {

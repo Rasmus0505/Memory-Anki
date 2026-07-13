@@ -558,7 +558,7 @@ def api_generate_chapter_quiz_from_outline(
         _raise_http_error(exc)
 
 
-@router.post("/palaces/{palace_id}/quiz-classification/mini-palaces")
+@router.post("/palaces/{palace_id}/quiz-classification/segments")
 def api_classify_existing_quiz_questions_to_mini_palaces(
     palace_id: int,
     data: dict | None = None,

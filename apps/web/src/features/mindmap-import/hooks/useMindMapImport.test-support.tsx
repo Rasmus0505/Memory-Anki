@@ -266,7 +266,7 @@ export function setupUseMindMapImportTestContext(): UseMindMapImportTestContext 
     mode === 'text'
       ? buildTextJob('job-text', '第一章\n第一节')
       : buildMindmapJob('job-single', 'Imported', '导入脑图')
-  context.nextBatchJobFactory = () => buildBatchJob('job-batch', 'Batch Imported')
+  context.nextBatchJobFactory = () => buildMindmapJob('job-batch', 'Imported', '导入脑图')
   context.runJobFactory = (jobId) => cloneJob(context.jobsById[jobId])
   context.getJobFactory = (jobId) => cloneJob(context.jobsById[jobId])
 
@@ -348,5 +348,4 @@ export function setupUseMindMapImportTestContext(): UseMindMapImportTestContext 
 
   return context
 }
-
 

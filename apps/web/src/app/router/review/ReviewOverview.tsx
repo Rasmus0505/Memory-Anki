@@ -19,6 +19,7 @@ import {
   getReviewSessionApi,
   getReviewSessionProgressApi,
   getReviewStageProgressHealthApi,
+  invalidateReviewQueueCache,
   previewSpreadOverdueApi,
   repairReviewStageProgressApi,
   spreadOverdueApi,
@@ -32,6 +33,18 @@ function formatReviewStage(reviewType: string, reviewNumber: number) {
   if (reviewType === '1h') return '首日 1 小时'
   if (reviewType === 'sleep') return '首日睡前'
   return `第 ${reviewNumber + 1} 次`
+}
+
+const reviewTimeFormatter = new Intl.DateTimeFormat('zh-CN', {
+  hour: '2-digit',
+  minute: '2-digit',
+  hour12: false,
+})
+
+function formatReviewTime(value: string | null) {
+  if (!value) return '时间待定'
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? '时间待定' : reviewTimeFormatter.format(date)
 }
 
 function ReviewQueueSkeleton() {
@@ -80,14 +93,21 @@ export default function ReviewOverview() {
   const [health, setHealth] = useState<ReviewStageProgressHealthResponse | null>(null)
   const [repairing, setRepairing] = useState(false)
 
-  const loadQueue = useCallback(async () => {
-    setLoadError(null)
-    setQueue(null)
+  const loadQueue = useCallback(async ({ preserveContent = false, invalidateCache = false } = {}) => {
+    if (!preserveContent) {
+      setLoadError(null)
+      setQueue(null)
+    }
+    if (invalidateCache && !chapterId) {
+      invalidateReviewQueueCache()
+    }
     try {
       const nextQueue = chapterId ? await getChapterReviewQueueApi(chapterId) : await getReviewQueueApi()
       setQueue(nextQueue)
     } catch (error) {
-      setLoadError(error instanceof Error ? error.message : '加载复习队列失败。')
+      if (!preserveContent) {
+        setLoadError(error instanceof Error ? error.message : '加载复习队列失败。')
+      }
       throw error
     }
   }, [chapterId])
@@ -95,6 +115,26 @@ export default function ReviewOverview() {
   useEffect(() => {
     void loadQueue().catch(() => undefined)
   }, [loadQueue])
+
+  useEffect(() => {
+    if (!queue || queue.later_today_reviews.length === 0) return
+
+    let earliestDueAt = Number.POSITIVE_INFINITY
+    for (const review of queue.later_today_reviews) {
+      if (!review.due_at) continue
+      const dueAt = new Date(review.due_at).getTime()
+      if (!Number.isNaN(dueAt) && dueAt < earliestDueAt) {
+        earliestDueAt = dueAt
+      }
+    }
+    if (!Number.isFinite(earliestDueAt)) return
+
+    const timeoutId = window.setTimeout(() => {
+      void loadQueue({ preserveContent: true, invalidateCache: true }).catch(() => undefined)
+    }, Math.max(0, earliestDueAt - Date.now() + 250))
+
+    return () => window.clearTimeout(timeoutId)
+  }, [loadQueue, queue])
 
   useEffect(() => {
     if (chapterId) {
@@ -358,6 +398,44 @@ export default function ReviewOverview() {
           )}
         </CardContent>
       </Card>
+
+      {queue.later_today_reviews.length > 0 ? (
+        <Card className="memory-anki-warm-panel memory-anki-surface-glow border-border/70 bg-card/90">
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-lg tracking-tight">
+              <CalendarClock className="size-5 text-warning" />
+              今日稍后到期（{queue.later_today_count}）
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {queue.later_today_reviews.map((review) => (
+              <Link
+                key={review.id}
+                to={buildReviewSessionPath(review.id, chapterId)}
+                onFocus={() => prefetchStudySession('review-session', review.id, () => Promise.all([getReviewSessionApi(review.id), getReviewSessionProgressApi(review.id)]).then(([session, progress]) => ({ session, progress })))}
+                onMouseEnter={() => prefetchStudySession('review-session', review.id, () => Promise.all([getReviewSessionApi(review.id), getReviewSessionProgressApi(review.id)]).then(([session, progress]) => ({ session, progress })))}
+              >
+                <div className="memory-anki-soft-card flex items-center justify-between gap-4 rounded-2xl border border-warning/25 bg-warning/5 px-4 py-4 transition-all hover:-translate-y-[1px] hover:border-warning/45 hover:bg-warning/10">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <Brain className="size-4 shrink-0 text-warning" />
+                      <span className="truncate font-semibold text-foreground">{review.palace?.title || '未命名宫殿'}</span>
+                    </div>
+                    <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                      <span>{formatReviewStage(review.review_type, review.review_number)}</span>
+                      <span>今日 {formatReviewTime(review.due_at)} 到期</span>
+                    </div>
+                  </div>
+                  <Button size="sm" variant="outline" className="shrink-0 border-warning/35 bg-background/80">
+                    提前复习
+                    <ArrowRight className="ml-2 size-4" />
+                  </Button>
+                </div>
+              </Link>
+            ))}
+          </CardContent>
+        </Card>
+      ) : null}
 
       {!chapterId ? <ReviewLoadForecastCard /> : null}
     </div>

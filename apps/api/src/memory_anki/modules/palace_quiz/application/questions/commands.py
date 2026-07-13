@@ -7,7 +7,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from memory_anki.core.time import utc_now_naive
-from memory_anki.infrastructure.db._tables.palaces import Palace, PalaceQuizQuestion
+from memory_anki.infrastructure.db._tables.palaces import Palace, PalaceQuizQuestion, PalaceSegment
 from memory_anki.modules.palace_quiz.application.learning_loop import record_attempt_event
 
 from .dedup import find_duplicate_question
@@ -25,7 +25,6 @@ from .validation import (
     get_chapter_or_raise,
     json_load,
     normalize_question_payload,
-    validate_mini_palace,
 )
 from .writes import (
     batch_create_questions_for_scope,
@@ -36,8 +35,41 @@ from .writes import (
     commit_restored_question,
     commit_updated_question,
     replace_question_with_duplicate,
-    upsert_classified_question_copy_row,
 )
+
+
+def _assign_question_segments(
+    session: Session,
+    row: PalaceQuizQuestion,
+    normalized: dict[str, Any],
+) -> PalaceQuizQuestion:
+    segment_ids = [int(item) for item in normalized.get("segment_ids", [])]
+    row.segments = (
+        session.query(PalaceSegment).filter(PalaceSegment.id.in_(segment_ids)).all()
+        if segment_ids
+        else []
+    )
+    return row
+
+
+def _build_question_row_with_segments(
+    session: Session,
+    *,
+    normalized: dict[str, Any],
+    palace_id: int | None,
+    source_chapter_id: int | None,
+    sort_order: int,
+) -> PalaceQuizQuestion:
+    return _assign_question_segments(
+        session,
+        build_normalized_question_row(
+            normalized=normalized,
+            palace_id=palace_id,
+            source_chapter_id=source_chapter_id,
+            sort_order=sort_order,
+        ),
+        normalized,
+    )
 
 
 def create_question(
@@ -51,8 +83,13 @@ def create_question(
     normalized = normalize_question_payload(payload, session=session, palace_id=palace_id)
     duplicate = find_duplicate_question(session, palace_id, None, normalized)
     if duplicate is not None:
+        _assign_question_segments(session, duplicate, normalized)
+        if commit:
+            session.commit()
+            session.refresh(duplicate)
         return serialize_question(duplicate)
-    row = build_normalized_question_row(
+    row = _build_question_row_with_segments(
+        session,
         normalized=normalized,
         palace_id=palace_id,
         source_chapter_id=None,
@@ -87,7 +124,8 @@ def batch_create_questions(
             session=session,
             palace_id=palace_id,
         ),
-        create_row=lambda normalized, sort_order: build_normalized_question_row(
+        create_row=lambda normalized, sort_order: _build_question_row_with_segments(
+            session,
             normalized=normalized,
             palace_id=palace_id,
             source_chapter_id=None,
@@ -156,7 +194,7 @@ def _build_update_payload(
     payload: dict[str, Any],
 ) -> dict[str, Any]:
     return {
-        "mini_palace_id": payload.get("mini_palace_id", question.mini_palace_id),
+        "segment_ids": payload.get("segment_ids", [segment.id for segment in question.segments]),
         "source_chapter_id": payload.get("source_chapter_id", question.source_chapter_id),
         "classified_chapter_id": payload.get(
             "classified_chapter_id", question.classified_chapter_id
@@ -198,6 +236,7 @@ def update_question(
             kept_row=duplicate,
             removed_row=question,
         )
+    _assign_question_segments(session, question, normalized)
     return commit_updated_question(
         session,
         row=question,
@@ -272,7 +311,6 @@ def restore_question(session: Session, question_id: int) -> dict[str, object]:
     if question.palace_id is not None:
         duplicate_query = duplicate_query.filter(
             PalaceQuizQuestion.palace_id == question.palace_id,
-            PalaceQuizQuestion.mini_palace_id == question.mini_palace_id,
         )
     else:
         duplicate_query = duplicate_query.filter(
@@ -366,43 +404,6 @@ def reset_question_attempts(session: Session, question_ids: list[int]) -> int:
     return len(rows)
 
 
-def upsert_classified_question_copy(
-    session: Session,
-    *,
-    source_question: PalaceQuizQuestion,
-    mini_palace_id: int,
-) -> PalaceQuizQuestion:
-    if source_question.palace_id is None:
-        raise PalaceQuizValidationError("章节题不能复制到迷你宫殿训练。")
-    palace_id = source_question.palace_id
-    validate_mini_palace(session, palace_id, mini_palace_id)
-    existing = (
-        session.query(PalaceQuizQuestion)
-        .filter(
-            PalaceQuizQuestion.palace_id == palace_id,
-            PalaceQuizQuestion.mini_palace_id == mini_palace_id,
-            PalaceQuizQuestion.origin_question_id == source_question.id,
-            PalaceQuizQuestion.deleted_at.is_(None),
-        )
-        .first()
-    )
-    if existing:
-        row = existing
-    else:
-        row = PalaceQuizQuestion(
-            palace_id=palace_id,
-            mini_palace_id=mini_palace_id,
-            origin_question_id=source_question.id,
-            sort_order=next_palace_sort_order(session, palace_id) + 1,
-        )
-        session.add(row)
-    return upsert_classified_question_copy_row(
-        session,
-        row=row,
-        source_question=source_question,
-    )
-
-
 __all__ = [
     "batch_create_chapter_questions",
     "batch_create_questions",
@@ -413,5 +414,4 @@ __all__ = [
     "reset_question_attempts",
     "restore_question",
     "update_question",
-    "upsert_classified_question_copy",
 ]

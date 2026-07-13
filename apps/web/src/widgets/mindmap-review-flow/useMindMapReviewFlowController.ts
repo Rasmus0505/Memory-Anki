@@ -1,6 +1,5 @@
 import * as React from "react";
 import { toast } from "@/shared/feedback/toast";
-import { useMiniPalaceController } from "@/features/mini-palace";
 import { useQuizLauncher } from "@/widgets/quiz-launcher";
 import { getReviewSurpriseCopy } from "@/entities/review/model/review-feedback";
 import { useReviewFlowSession } from "@/features/review/hooks/useReviewFlowSession";
@@ -48,7 +47,6 @@ export function useMindMapReviewFlowController({
   } | null>(null);
   const selectedNode = activeNodes[0] ?? null;
   const selectedNodeUid = selectedNode?.uid ? String(selectedNode.uid) : null;
-  const selectedNodeText = selectedNode?.text ? String(selectedNode.text) : "";
   const recallRatings = useMindMapRecallRatings({ palaceId, studySessionId, enabled: sessionKind === 'review' && Boolean(studySessionId) });
   const reviewNodeUids = React.useMemo(() => {
     const doc = normalizeEditorDocTree(reviewEditorState.editor_doc);
@@ -94,16 +92,6 @@ export function useMindMapReviewFlowController({
     typeof onModeToggle === "function" &&
     typeof onEditEditorStateChange === "function" &&
     Boolean(editEditorState);
-  const miniPalaceSourceEditorState =
-    inlineEditEnabled && editEditorState ? editEditorState : reviewEditorState;
-  const miniPalace = useMiniPalaceController({
-    palaceId,
-    title,
-    editorState: miniPalaceSourceEditorState,
-    selectedNodeUid,
-    selectedNodeText,
-    timer: flow.timer,
-  });
   const { openQuizLauncher } = useQuizLauncher();
 
   const animationEnabled = flow.feedback.animationEnabled;
@@ -133,17 +121,11 @@ export function useMindMapReviewFlowController({
   const resolvedDisplayMode =
     inlineEditEnabled && displayMode === "edit" ? "edit" : "review";
   const isInlineEditMode = resolvedDisplayMode === "edit";
-  const isDedicatedMiniMode = revealMode === "mini-checkpoint";
+  const isCheckpointMode = revealMode === "segment-checkpoint";
   const previousDisplayModeRef = React.useRef(resolvedDisplayMode);
-  const mapDisplayMode: "review" | "edit" = miniPalace.isActive
-    ? "review"
-    : resolvedDisplayMode;
-  const mapEditorState =
-    miniPalace.visibleEditorState ??
-    (miniPalace.isActive ? miniPalaceSourceEditorState : flow.visibleEditorState);
-  const mapVisibleSyncKey = miniPalace.isActive
-    ? miniPalace.visibleSyncKey
-    : flow.visibleEditorSyncKey;
+  const mapDisplayMode: "review" | "edit" = resolvedDisplayMode;
+  const mapEditorState = flow.visibleEditorState;
+  const mapVisibleSyncKey = flow.visibleEditorSyncKey;
 React.useEffect(() => {
     const previousDisplayMode = previousDisplayModeRef.current;
     if (previousDisplayMode === resolvedDisplayMode) return;
@@ -177,11 +159,11 @@ React.useEffect(() => {
 
 
   const handleShortcutHideChildCards = React.useCallback(() => {
-    if (isInlineEditMode || miniPalace.isPracticing) return;
+    if (isInlineEditMode) return;
     const node = activeNodes[0];
     if (!node?.uid) return;
     flow.handleNodeContextMenu([node]);
-  }, [activeNodes, flow, isInlineEditMode, miniPalace.isPracticing]);
+  }, [activeNodes, flow, isInlineEditMode]);
 
   const shortcutHandlers = React.useMemo(
     () => ({
@@ -199,8 +181,7 @@ React.useEffect(() => {
   const handleShortcutAdvanceReview = React.useCallback(() => {
     if (
       isInlineEditMode ||
-      miniPalace.isActive ||
-      isDedicatedMiniMode ||
+      isCheckpointMode ||
       flow.completed ||
       activeNodes.length === 0
     ) {
@@ -210,18 +191,15 @@ React.useEffect(() => {
   }, [
     activeNodes,
     flow,
-    isDedicatedMiniMode,
+    isCheckpointMode,
     isInlineEditMode,
-    miniPalace.isActive,
   ]);
 
-  const handleSpacePourRef = React.useRef(miniPalace.handleSpacePour);
-  handleSpacePourRef.current = miniPalace.isPracticing
-    ? miniPalace.handleSpacePour
-    : flow.handleSpacePour;
+  const handleSpacePourRef = React.useRef(flow.handleSpacePour);
+  handleSpacePourRef.current = flow.handleSpacePour;
 
   React.useEffect(() => {
-    if (!miniPalace.isPracticing && !isDedicatedMiniMode) return;
+    if (!isCheckpointMode) return;
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.defaultPrevented) return;
       if (event.key === " " || event.code === "Space") {
@@ -233,10 +211,10 @@ React.useEffect(() => {
     };
     window.addEventListener("keydown", onKeyDown, true);
     return () => window.removeEventListener("keydown", onKeyDown, true);
-  }, [flow.handleSpacePour, isDedicatedMiniMode, miniPalace.isPracticing]);
+  }, [flow.handleSpacePour, isCheckpointMode]);
 
   React.useEffect(() => {
-    if (isInlineEditMode || miniPalace.isActive || isDedicatedMiniMode) return;
+    if (isInlineEditMode || isCheckpointMode) return;
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey) return;
       if (event.key !== " " && event.code !== "Space") return;
@@ -247,7 +225,7 @@ React.useEffect(() => {
     };
     window.addEventListener("keydown", onKeyDown, true);
     return () => window.removeEventListener("keydown", onKeyDown, true);
-  }, [handleShortcutAdvanceReview, isDedicatedMiniMode, isInlineEditMode, miniPalace.isActive]);
+  }, [handleShortcutAdvanceReview, isCheckpointMode, isInlineEditMode]);
 
   const handleFullscreenToggle = React.useCallback(
     (active?: boolean) => {
@@ -366,7 +344,6 @@ React.useEffect(() => {
 
   return {
     flow,
-    miniPalace,
     feedbackDialogOpen,
     setFeedbackDialogOpen,
     completionDialogOpen,
@@ -381,7 +358,7 @@ React.useEffect(() => {
     inlineEditEnabled,
     resolvedDisplayMode,
     isInlineEditMode,
-    isDedicatedMiniMode,
+    isCheckpointMode,
     mapDisplayMode,
     mapEditorState,
     mapVisibleSyncKey,

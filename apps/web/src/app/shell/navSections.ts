@@ -40,8 +40,7 @@ export interface NavSectionDefinition {
 
 const isPracticeRoute = (pathname: string) =>
   /^\/palaces\/\d+\/practice$/.test(pathname) ||
-  /^\/segments\/\d+\/practice$/.test(pathname) ||
-  /^\/mini-palaces\/\d+\/practice$/.test(pathname)
+  /^\/segments\/\d+\/practice$/.test(pathname)
 
 const isCreationRoute = (pathname: string) =>
   pathname === '/palaces/new' ||

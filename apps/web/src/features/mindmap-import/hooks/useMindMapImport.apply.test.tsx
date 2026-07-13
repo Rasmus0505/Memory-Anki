@@ -17,6 +17,7 @@ describe('useMindMapImport apply flows', () => {
     render(<Harness />)
 
     fireEvent.click(screen.getByRole('button', { name: 'load' }))
+    fireEvent.click(screen.getByRole('button', { name: 'start-batch' }))
     await waitFor(() => {
       expect(screen.getByTestId('preview-doc-root').textContent).toBe('Imported')
     })
@@ -39,6 +40,7 @@ describe('useMindMapImport apply flows', () => {
     render(<Harness applyEditorState={applyEditorState} />)
 
     fireEvent.click(screen.getByRole('button', { name: 'load' }))
+    fireEvent.click(screen.getByRole('button', { name: 'start-batch' }))
     await waitFor(() => {
       expect(screen.getByTestId('preview-doc-root').textContent).toBe('Imported')
     })
@@ -56,10 +58,22 @@ describe('useMindMapImport apply flows', () => {
     })
   })
 
-  it('exposes preview editor docs for single image and batch imports', async () => {
+  it('exposes preview editor docs for one-image and multi-image queue imports', async () => {
+    const context = setupUseMindMapImportTestContext()
+    let runCount = 0
+    context.nextBatchJobFactory = () => {
+      runCount += 1
+      return runCount === 1
+        ? buildMindmapJob('job-one-image', 'Imported', '导入脑图')
+        : buildJob({
+            ...buildMindmapJob('job-multi-image', 'Batch Imported', '批量导入'),
+            source_kind: 'image-batch',
+          })
+    }
     render(<Harness />)
 
     fireEvent.click(screen.getByRole('button', { name: 'load' }))
+    fireEvent.click(screen.getByRole('button', { name: 'start-batch' }))
     await waitFor(() => {
       expect(screen.getByTestId('preview-doc-root').textContent).toBe('Imported')
     })
@@ -96,10 +110,10 @@ describe('useMindMapImport apply flows', () => {
 
   it('builds a fallback preview doc when history only contains source_tree', async () => {
     const context = setupUseMindMapImportTestContext()
-    context.nextImageJobFactory = () =>
+    context.nextBatchJobFactory = () =>
       buildJob({
         id: 'job-fallback',
-        source_kind: 'image-single',
+        source_kind: 'image-batch',
         mode: 'mindmap',
         result: {
           source_tree: {
@@ -116,6 +130,7 @@ describe('useMindMapImport apply flows', () => {
     render(<Harness />)
 
     fireEvent.click(screen.getByRole('button', { name: 'load' }))
+    fireEvent.click(screen.getByRole('button', { name: 'start-batch' }))
     await waitFor(() => {
       expect(screen.getByTestId('preview-doc-root').textContent).toBe('旧草稿')
     })
@@ -128,11 +143,12 @@ describe('useMindMapImport apply flows', () => {
 
   it('reuses an existing completed result without rerunning recognition', async () => {
     const context = setupUseMindMapImportTestContext()
-    context.nextImageJobFactory = () => buildMindmapJob('job-reused', 'Imported', '导入脑图')
+    context.nextBatchJobFactory = () => buildMindmapJob('job-reused', 'Imported', '导入脑图')
 
     render(<Harness />)
 
     fireEvent.click(screen.getByRole('button', { name: 'load' }))
+    fireEvent.click(screen.getByRole('button', { name: 'start-batch' }))
     await waitFor(() => {
       expect(screen.getByTestId('reused-result').textContent).toBe('true')
       expect(screen.getByTestId('current-job-status').textContent).toBe('completed')

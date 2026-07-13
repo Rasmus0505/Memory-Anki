@@ -10,6 +10,7 @@ import type {
   ImportSourceKind,
   MindMapImportWorkflow,
 } from '@/features/mindmap-import/model/mindmap-import-types'
+import type { AiGenerationContextOption } from '@/entities/ai-runtime'
 
 export interface UseImportJobControllerOptions {
   entityKey: string | null
@@ -26,7 +27,9 @@ export interface UseImportJobControllerOptions {
     entrypointKey: string
     title: string
     description?: string
+    contextOptions?: AiGenerationContextOption[]
   }) => Promise<AiRuntimeOptions | undefined>
+  contextOptions?: AiGenerationContextOption[]
 }
 
 export interface ImportJobHydrateOptions {

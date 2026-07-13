@@ -12,7 +12,7 @@
 import { useState } from 'react'
 import { TaskFeedbackPanel } from '@/shared/feedback/FeedbackStatus'
 import type {
-  MiniPalaceSummary,
+  PalaceSegmentSummary,
   PalaceQuizGenerationPreview,
 } from '@/shared/api/contracts'
 import { PreviewQuestionCard } from '@/features/palace-quiz/components/palaceQuizCards'
@@ -23,7 +23,7 @@ import { Button } from '@/shared/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card'
 import { Textarea } from '@/shared/components/ui/textarea'
 import { cn } from '@/shared/lib/utils'
-import type { PalaceQuizMiniPalaceClassificationResult } from '@/shared/api/contracts'
+import type { PalaceQuizSegmentClassificationResult } from '@/shared/api/contracts'
 
 const MANUAL_TEXT_FORMAT_PROMPT = `请把我提供的题目资料整理成 Memory Anki 可识别的唯一 JSON，不要输出 markdown 或解释。
 顶层格式必须是 {"questions":[...]}。
@@ -47,9 +47,9 @@ interface PalaceQuizGenerationPanelProps {
   classification: {
     hasMiniPalaces: boolean
     rootQuestionCount: number
-    miniPalaces: MiniPalaceSummary[]
+    miniPalaces: PalaceSegmentSummary[]
     loading: boolean
-    result: PalaceQuizMiniPalaceClassificationResult | null
+    result: PalaceQuizSegmentClassificationResult | null
     onClassifyExistingQuestions: () => Promise<void>
   }
   source: {
@@ -179,24 +179,24 @@ export function PalaceQuizGenerationPanel({
         {hasMiniPalaces && rootQuestionCount > 0 ? (
           <Card className="border-border/70 bg-card/92">
             <CardHeader>
-              <CardTitle className="text-base">已有题库归类到训练关卡</CardTitle>
+              <CardTitle className="text-base">已有题库归类到学习组</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="rounded-lg border border-border/70 bg-background/70 px-4 py-3 text-sm text-muted-foreground">
-                当前有 {rootQuestionCount} 道记忆宫殿题、{miniPalaces.length} 个训练关卡。这里会判断哪些题同时属于哪些训练关卡，并复制写入对应训练题库。
+                当前有 {rootQuestionCount} 道记忆宫殿题、{miniPalaces.length} 个学习组。这里会判断哪些题同时属于哪些学习组，并复制写入对应训练题库。
               </div>
               {classificationResult ? (
                 <div className="rounded-lg border border-border/70 bg-background/70 px-4 py-3 text-sm">
-                  <div>本次写入 {classificationResult.copied_question_count} 道训练关卡题。</div>
+                  <div>本次写入 {classificationResult.copied_question_count} 道学习组题。</div>
                   {classificationResult.resolved_ai?.model_label ? (
                     <div className="mt-1 text-xs text-muted-foreground">
                       实际模型：{classificationResult.resolved_ai.model_label}
                     </div>
                   ) : null}
                   <div className="mt-2 flex flex-wrap gap-2 text-xs text-muted-foreground">
-                    {classificationResult.mini_palace_groups.map((group) => (
-                      <Badge key={group.mini_palace_id} variant="outline">
-                        {group.mini_palace_name}：{group.question_count}
+                    {classificationResult.segment_groups.map((group) => (
+                      <Badge key={group.segment_id} variant="outline">
+                        {group.segment_name}：{group.question_count}
                       </Badge>
                     ))}
                     <Badge variant="secondary">未归类 {classificationResult.unassigned_count}</Badge>
@@ -370,7 +370,7 @@ export function PalaceQuizGenerationPanel({
                 disabled={!selectedChapterHasChildren}
               />
               <span>
-                <span className="font-medium">按训练关卡分类保存</span>
+                <span className="font-medium">按学习组分类保存</span>
                 <span className="mt-1 block text-muted-foreground">
                   {selectedChapterHasChildren
                     ? '开启后，题目会按当前所选范围的直接子章节分类，并以章节题的形式分别保存。'
@@ -459,7 +459,7 @@ export function PalaceQuizGenerationPanel({
                         </span>
                         <span>预览 {item.previewQuestionCount} 题</span>
                         <span>可保存 {item.savableQuestionCount} 题</span>
-                        {item.classifyByMiniPalace ? <span>按训练关卡分类保存</span> : null}
+                        {item.classifyByMiniPalace ? <span>按学习组分类保存</span> : null}
                         {item.enableSecondaryReview ? <span>二次筛选</span> : null}
                       </div>
                       {item.selectedChapterPath ? (
@@ -655,17 +655,17 @@ export function PalaceQuizGenerationPanel({
                       ))}
                     </div>
                   ))}
-                  {(generationPreview.grouped_questions.mini_palace_groups || []).map((group) => (
-                    <div key={group.mini_palace_id} className="space-y-3">
+                  {(generationPreview.grouped_questions.segment_groups || []).map((group) => (
+                    <div key={group.segment_id} className="space-y-3">
                       <div className="flex items-center gap-2">
-                        <Badge variant="secondary">{group.mini_palace_name}</Badge>
+                        <Badge variant="secondary">{group.segment_name}</Badge>
                         <span className="text-xs text-muted-foreground">
                           {group.questions.length} 题
                         </span>
                       </div>
                       {group.questions.map((question, index) => (
                         <PreviewQuestionCard
-                          key={`${group.mini_palace_id}_${index}_${question.stem}`}
+                          key={`${group.segment_id}_${index}_${question.stem}`}
                           question={question}
                           index={index}
                         />

@@ -1,5 +1,5 @@
 ﻿import { useMemo, useState } from 'react'
-import { CalendarClock, Edit3, GitMerge, Plus, ScanSearch, Trash2 } from 'lucide-react'
+import { CalendarClock, Dumbbell, Edit3, GitMerge, Plus, ScanSearch, Trash2 } from 'lucide-react'
 import type { PalaceSegmentSummary } from '@/shared/api/contracts'
 import { formatDuration } from '@/entities/session/model'
 import {
@@ -42,6 +42,7 @@ interface PalaceSegmentsPanelProps {
   onOpenEdit: (segment: PalaceSegmentSummary) => void
   onOpenChange: (open: boolean) => void
   onSave: () => void | Promise<void>
+  onTogglePractice: (segment: PalaceSegmentSummary) => void | Promise<void>
   onDelete: (segmentId: number) => void | Promise<void>
   onAdjustRange: (segment: PalaceSegmentSummary) => void
   onMerge: (sourceSegmentId: number, targetSegmentId: number) => void | Promise<void>
@@ -91,6 +92,7 @@ export function PalaceSegmentsPanel({
   onOpenEdit,
   onOpenChange,
   onSave,
+  onTogglePractice,
   onDelete,
   onAdjustRange,
   onMerge,
@@ -197,6 +199,18 @@ export function PalaceSegmentsPanel({
                         <ScanSearch className="mr-2 size-4" />
                         调整范围
                       </Button>
+                      {segment.is_virtual_default ? null : (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant={segment.needs_practice ? 'default' : 'outline'}
+                          className="min-h-11 sm:h-8 sm:min-h-8"
+                          onClick={() => void onTogglePractice(segment)}
+                        >
+                          <Dumbbell className="mr-2 size-4" />
+                          {segment.needs_practice ? '已标记练习' : '标记练习'}
+                        </Button>
+                      )}
                       {segments.length > 1 && !segment.is_virtual_default ? (
                         <Button
                           type="button"

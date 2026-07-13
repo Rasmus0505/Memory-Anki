@@ -435,6 +435,89 @@ class ReviewRouteTests(RouterTestCase):
         self.assertEqual(payload["reviews"][0]["schedule_count"], 2)
         self.assertEqual(payload["reviews"][0]["overdue_schedule_count"], 2)
 
+    def test_review_queue_lists_only_next_later_today_schedule_per_palace(self):
+        now = datetime.combine(date.today(), time(hour=12))
+        first_due_at = now + timedelta(hours=1)
+        second_due_at = now + timedelta(hours=2)
+        tomorrow_due_at = now + timedelta(days=1)
+
+        class FixedDateTime(datetime):
+            @classmethod
+            def now(cls, tz=None):
+                return now if tz is None else now.replace(tzinfo=tz)
+
+        with self.SessionLocal() as session:
+            subject = Subject(name="稍后复习学科", color="#6366f1")
+            chapter = Chapter(subject=subject, name="稍后复习章节", sort_order=0)
+            later_palace = Palace(title="Today Later Palace", description="")
+            tomorrow_palace = Palace(title="Tomorrow Palace", description="")
+            session.add_all([subject, chapter, later_palace, tomorrow_palace])
+            session.flush()
+            later_palace.chapters.append(chapter)
+            session.add_all(
+                [
+                    ReviewSchedule(
+                        palace_id=later_palace.id,
+                        scheduled_date=first_due_at.date(),
+                        scheduled_at=first_due_at,
+                        interval_days=1,
+                        algorithm_used="ebbinghaus",
+                        completed=False,
+                        review_number=0,
+                        review_type="1h",
+                    ),
+                    ReviewSchedule(
+                        palace_id=later_palace.id,
+                        scheduled_date=second_due_at.date(),
+                        scheduled_at=second_due_at,
+                        interval_days=1,
+                        algorithm_used="ebbinghaus",
+                        completed=False,
+                        review_number=1,
+                        review_type="sleep",
+                    ),
+                    ReviewSchedule(
+                        palace_id=tomorrow_palace.id,
+                        scheduled_date=tomorrow_due_at.date(),
+                        scheduled_at=tomorrow_due_at,
+                        interval_days=1,
+                        algorithm_used="ebbinghaus",
+                        completed=False,
+                        review_number=0,
+                        review_type="standard",
+                    ),
+                ]
+            )
+            session.commit()
+            chapter_id = chapter.id
+
+        with patch(
+            "memory_anki.modules.reviews.application.review_queue_service.datetime",
+            FixedDateTime,
+        ):
+            response = self.client.get("/api/v1/review/queue")
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["later_today_count"], 1)
+        self.assertEqual(len(payload["later_today_reviews"]), 1)
+        later_review = payload["later_today_reviews"][0]
+        self.assertEqual(later_review["palace"]["title"], "Today Later Palace")
+        self.assertEqual(later_review["review_number"], 0)
+        self.assertEqual(later_review["due_at"], first_due_at.isoformat(timespec="minutes"))
+
+        with patch(
+            "memory_anki.modules.reviews.application.review_queue_service.datetime",
+            FixedDateTime,
+        ):
+            chapter_response = self.client.get(f"/api/v1/review/chapter/{chapter_id}/queue")
+        self.assertEqual(chapter_response.status_code, 200)
+        self.assertEqual(chapter_response.json()["later_today_count"], 1)
+
+        with self.SessionLocal() as session:
+            log, _ = submit_review(session, later_review["id"], commit=False)
+            self.assertIsNotNone(log)
+            session.rollback()
+
     def test_review_queue_auto_smoothing_skips_unstarted_overdue_palace(self):
         with self.SessionLocal() as session:
             session.add_all(

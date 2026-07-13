@@ -3,7 +3,7 @@ import { Badge } from '@/shared/components/ui/badge'
 import { Card, CardContent } from '@/shared/components/ui/card'
 import { QuizQuestionCard } from '@/features/palace-quiz/components/palaceQuizCards'
 import type { QuizRuntimeState } from '@/entities/quiz'
-import type { MiniPalaceSummary, PalaceQuizQuestion } from '@/shared/api/contracts'
+import type { PalaceSegmentSummary, PalaceQuizQuestion } from '@/shared/api/contracts'
 import type { PalaceQuizScopeKey, PalaceQuizViewMode } from '@/features/palace-quiz/model/palaceQuizPage'
 
 export function PalaceQuizPracticePanel({
@@ -29,7 +29,7 @@ export function PalaceQuizPracticePanel({
   resetAttemptsLoading,
 }: {
   questions: PalaceQuizQuestion[]
-  miniPalaces: MiniPalaceSummary[]
+  miniPalaces: PalaceSegmentSummary[]
   questionScope: PalaceQuizScopeKey
   rootQuestionCount: number
   viewMode: PalaceQuizViewMode
@@ -95,12 +95,12 @@ export function PalaceQuizPracticePanel({
             key={miniPalace.id}
             type="button"
             size="sm"
-            variant={questionScope === `mini:${miniPalace.id}` ? 'default' : 'outline'}
-            onClick={() => onScopeFeedback(`mini:${miniPalace.id}`, miniPalace.name)}
+            variant={questionScope === `segment:${miniPalace.id}` ? 'default' : 'outline'}
+            onClick={() => onScopeFeedback(`segment:${miniPalace.id}`, miniPalace.name)}
           >
             {miniPalace.name}
             <Badge variant="secondary" className="ml-2">
-              {questions.filter((question) => question.mini_palace_id === miniPalace.id).length}
+              {questions.filter((question) => question.segment_ids?.includes(miniPalace.id)).length}
             </Badge>
           </Button>
         ))}

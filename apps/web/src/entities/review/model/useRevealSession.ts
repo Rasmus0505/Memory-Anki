@@ -191,7 +191,7 @@ export function useRevealSession({
   }, [])
 
   const handleSpacePour = React.useCallback(() => {
-    if (mode !== 'mini-checkpoint') return
+    if (mode !== 'segment-checkpoint') return
     const targetId = hoveredNodeIdRef.current
     if (!targetId) return
     setRevealMap((current) =>
@@ -229,7 +229,7 @@ export function useRevealSession({
   )
   const checkpointRevealComplete = React.useMemo(
     () =>
-      mode === 'mini-checkpoint'
+      mode === 'segment-checkpoint'
         ? checkpointNodesRevealed(root, normalizedCheckpointIds, revealMap)
         : false,
     [mode, normalizedCheckpointIds, revealMap, root],

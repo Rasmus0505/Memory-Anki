@@ -62,6 +62,7 @@ export interface MindMapCanvasProps {
   canMoveDown?: (nodeId: string) => boolean
   readonly?: boolean
   showToolbar?: boolean
+  toolbarContent?: ReactNode
   onNodeActivate?: (nodeId: string) => void
   onNodeContextAction?: (nodeId: string) => void
   onNodeHover?: (nodeId: string | null) => void
@@ -254,17 +255,15 @@ function MindMapCanvasInner({
           canUndo={state.canUndo}
           canRedo={state.canRedo}
           showHistoryControls={state.canShowHistoryControls}
+          leadingContent={props.toolbarContent}
           onReflow={state.resetLayout}
-          onRefresh={state.refreshCanvas}
-          onZoomOut={state.zoomOutCanvas}
-          onZoomIn={state.zoomInCanvas}
           onToggleFocusMode={handleToggleFocusMode}
           onUndo={props.onUndo}
           onRedo={props.onRedo}
         />
       ) : null}
 
-      <div className="min-h-0 flex-1">
+      <div ref={state.canvasRef} className="min-h-0 flex-1" data-testid="mindmap-canvas-viewport-host">
         {state.isCanvasReady ? (
           <div className="relative h-full">
             <MindMapCanvasViewport

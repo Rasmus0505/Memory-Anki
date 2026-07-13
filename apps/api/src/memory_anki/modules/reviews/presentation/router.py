@@ -35,6 +35,7 @@ from memory_anki.modules.reviews.application.review_repair_service import (
 )
 from memory_anki.modules.reviews.application.schedule_service import (
     get_algorithm_stage_labels,
+    schedule_display_datetime,
 )
 from memory_anki.modules.reviews.presentation.response_models import (
     OverdueCountResponse,
@@ -94,10 +95,12 @@ def schedule_json(schedule: ReviewSchedule, session: Session | None = None) -> d
         palace_data["stage_labels"] = stage_labels
         palace_data["review_stages"] = palace_review_stages_json(session, schedule.palace, stage_labels)
     completed_at = schedule.completed_at
+    due_at = schedule_display_datetime(schedule, schedule.palace, session) if schedule.palace and session else None
     return {
         "id": schedule.id,
         "palace_id": schedule.palace_id,
         "scheduled_date": schedule.scheduled_date.isoformat(),
+        "due_at": due_at.isoformat(timespec="minutes") if due_at else None,
         "interval_days": schedule.interval_days,
         "algorithm_used": schedule.algorithm_used,
         "completed": schedule.completed,
@@ -121,11 +124,15 @@ def grouped_schedule_json(group: dict, session: Session | None = None) -> dict:
 def queue_payload_json(payload: dict, session: Session | None = None) -> dict:
     return {
         "due_count": payload["due_count"],
+        "later_today_count": payload["later_today_count"],
         "overdue_count": payload["overdue_count"],
         "smoothed_count": payload["smoothed_count"],
         "stats": payload["stats"],
         "chapter": chapter_json(payload.get("chapter")),
         "reviews": [grouped_schedule_json(group, session) for group in payload["reviews"]],
+        "later_today_reviews": [
+            grouped_schedule_json(group, session) for group in payload["later_today_reviews"]
+        ],
     }
 
 

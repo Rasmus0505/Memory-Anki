@@ -1,4 +1,4 @@
-import { Brain, FolderTree, Sparkles, Target } from 'lucide-react'
+import { Brain, FolderTree, Sparkles } from 'lucide-react'
 import type { MindMapHostSegmentRangeDraft, MindMapHostSegmentSummary } from '@/shared/api/contracts'
 import type { ContextMenuAction } from '@/shared/ui/mindmap-canvas/NodeContextMenu'
 import type { MindMapAiSplitRequestPayload } from '@/shared/ui/mindmap-canvas/capabilities'
@@ -28,7 +28,6 @@ interface CapabilityFactoryOptions {
   segmentRangeDraft: MindMapHostSegmentRangeDraft
   highlightedNodeUids: string[]
   masteryByNodeUid: Record<string, { status: string; manualLabel?: string | null }>
-  miniPalaceDraft: { active: boolean; selectedNodeUids: string[] }
   practiceModeActive: boolean
   revealMap?: Record<string, 'hidden' | 'placeholder' | 'revealed'>
   aiSplitBusy: boolean
@@ -40,7 +39,6 @@ interface CapabilityFactoryOptions {
   }) => void
   onNodeClick?: (nodes: MindMapSelection[]) => void
   onNodeContextMenu?: (nodes: MindMapSelection[]) => void
-  onMiniPalacePour?: () => void
 }
 
 export function createMindMapCapabilities(options: CapabilityFactoryOptions): MindMapCapability[] {
@@ -55,7 +53,6 @@ export function createMindMapCapabilities(options: CapabilityFactoryOptions): Mi
     capabilities.push(createSegmentCapability(options))
   }
   if (options.onAiSplitRequest) capabilities.push(createAiSplitCapability(options))
-  if (options.miniPalaceDraft.active) capabilities.push(createMiniPalaceCapability(options))
   if (options.practiceModeActive) capabilities.push(createPracticeCapability(options))
 
   return capabilities
@@ -117,24 +114,6 @@ function createAiSplitCapability(options: CapabilityFactoryOptions): MindMapCapa
           is_root: isRoot,
         }),
       }]
-    },
-  }
-}
-
-function createMiniPalaceCapability(options: CapabilityFactoryOptions): MindMapCapability {
-  return {
-    key: 'mini-palace',
-    graphOptions: { miniPalaceDraft: options.miniPalaceDraft },
-    locksEditing: true,
-    getNodeActions: ({ selection }) => [{
-      label: '选为迷你宫殿训练知识点',
-      icon: Target,
-      onClick: () => options.onNodeClick?.(selection),
-    }],
-    handleFocusToggle: () => {
-      if (!options.onMiniPalacePour) return false
-      options.onMiniPalacePour()
-      return true
     },
   }
 }

@@ -35,6 +35,7 @@ export interface ReviewScheduleSummary {
   id: number
   palace_id: number
   scheduled_date: string
+  due_at: string | null
   interval_days: number
   algorithm_used: string
   completed: boolean
@@ -48,6 +49,7 @@ export interface ReviewScheduleSummary {
 }
 export interface ReviewQueueResponse {
   due_count: number
+  later_today_count: number
   overdue_count: number
   smoothed_count: number
   stats: {
@@ -57,6 +59,7 @@ export interface ReviewQueueResponse {
   }
   chapter: ReviewQueueChapter | null
   reviews: ReviewScheduleSummary[]
+  later_today_reviews: ReviewScheduleSummary[]
 }
 export interface SpreadOverdueMove {
   schedule_id: number

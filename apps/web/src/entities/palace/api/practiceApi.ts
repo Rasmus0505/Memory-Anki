@@ -36,26 +36,6 @@ export function clearSegmentPracticeSessionProgressApi(id: number) {
   return clearSessionProgressApi('segment-practice', id, 'Clear segment practice progress')
 }
 
-export function getMiniPracticeSessionProgressApi(miniPalaceId: number) {
-  return getSessionProgressApi('mini-practice', miniPalaceId)
-}
-
-export function saveMiniPracticeSessionProgressApi(
-  miniPalaceId: number,
-  data: SessionProgressPayload,
-) {
-  return saveSessionProgressApi(
-    'mini-practice',
-    miniPalaceId,
-    data,
-    'Save mini practice progress',
-  )
-}
-
-export function clearMiniPracticeSessionProgressApi(miniPalaceId: number) {
-  return clearSessionProgressApi('mini-practice', miniPalaceId)
-}
-
 export function getPalaceVersionsApi(id: number) {
   return request<PalaceVersionListResponse>(`/palaces/${id}/versions`)
 }

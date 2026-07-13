@@ -23,7 +23,6 @@ export const preloadProfilePage = () => import('@/pages/settings/SettingsOvervie
 export const preloadReviewSessionPage = () => import('@/app/router/review/ReviewSession')
 export const preloadPalacePracticePage = () => import('@/app/router/PalacePracticePage')
 export const preloadSegmentPracticePage = () => import('@/app/router/SegmentPracticePage')
-export const preloadMiniPalacePracticePage = () => import('@/app/router/MiniPalacePracticePage')
 
 export function preloadReviewRoutes() {
   void preloadReviewSessionPage()
@@ -35,7 +34,6 @@ export function preloadPracticeRoutes() {
   void preloadPalaceQuizPage()
   void preloadPalacePracticePage()
   void preloadSegmentPracticePage()
-  void preloadMiniPalacePracticePage()
 }
 
 const KnowledgePage = lazyWithRetry(preloadKnowledgePage)
@@ -58,7 +56,6 @@ const ProfileBackupsPage = lazyWithRetry(
 const ReviewSessionPage = lazyWithRetry(preloadReviewSessionPage)
 const PalacePracticePage = lazyWithRetry(preloadPalacePracticePage)
 const SegmentPracticePage = lazyWithRetry(preloadSegmentPracticePage)
-const MiniPalacePracticePage = lazyWithRetry(preloadMiniPalacePracticePage)
 const ReviewFeedbackPreviewRoute = lazyWithRetry(
   () => import('@/app/router/ReviewFeedbackPreviewRoute'),
 )
@@ -98,7 +95,6 @@ const REGISTERED_EXACT_PATHS = new Set<string>([
 const REGISTERED_DYNAMIC_PATTERNS = [
   /^\/palaces\/\d+(?:\/(edit|practice|quiz))?$/,
   /^\/segments\/\d+\/practice$/,
-  /^\/mini-palaces\/\d+\/practice$/,
   /^\/english\/courses\/\d+$/,
   /^\/review\/session\/\d+$/,
 ]
@@ -110,7 +106,6 @@ const DYNAMIC_PREFIX_FALLBACKS = [
   { match: /^\/english\/courses\/(\d+)(?:\/.*)?$/, build: (id: string) => `/english/courses/${id}` },
   { match: /^\/review\/session\/(\d+)(?:\/.*)?$/, build: (id: string) => `/review/session/${id}` },
   { match: /^\/segments\/(\d+)\/practice(?:\/.*)?$/, build: (id: string) => `/segments/${id}/practice` },
-  { match: /^\/mini-palaces\/(\d+)\/practice(?:\/.*)?$/, build: (id: string) => `/mini-palaces/${id}/practice` },
 ]
 
 // 顶层 section 前缀：未知的子路径回退到 section 入口。
@@ -177,7 +172,6 @@ export function AppRoutes({ location }: { location?: Location }) {
           <Route path="/palaces/:id/quiz" element={<PalaceQuizPage />} />
           <Route path="/palaces/:id/practice" element={<PalacePracticePage />} />
           <Route path="/segments/:id/practice" element={<SegmentPracticePage />} />
-          <Route path="/mini-palaces/:id/practice" element={<MiniPalacePracticePage />} />
           <Route path="/palaces/:id/edit" element={<PalaceEditPage />} />
           <Route path="/knowledge" element={<KnowledgePage />} />
           <Route path="/review" element={<ReviewOverviewPage />} />

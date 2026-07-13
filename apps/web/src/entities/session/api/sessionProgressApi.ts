@@ -12,7 +12,6 @@ import {
 export type SessionProgressMode =
   | 'practice'
   | 'segment-practice'
-  | 'mini-practice'
   | 'review'
 
 export interface SessionProgressPayload {
@@ -35,7 +34,6 @@ function modeToStudyTarget(mode: SessionProgressMode, id: number): {
   targetId: number
 } {
   if (mode === 'segment-practice') return { scene: 'segment_practice', targetType: 'palace_segment', targetId: id }
-  if (mode === 'mini-practice') return { scene: 'mini_practice', targetType: 'mini_palace', targetId: id }
   if (mode === 'review') return { scene: 'review', targetType: 'review_schedule', targetId: id }
   return { scene: 'practice', targetType: 'palace', targetId: id }
 }
@@ -49,7 +47,6 @@ function studySessionToProgress(item: StudySessionItem | null): SessionProgressS
     palace_id: item.palace_id,
     review_schedule_id: item.target_type === 'review_schedule' ? item.target_id : null,
     palace_segment_id: item.palace_segment_id,
-    mini_palace_id: item.mini_palace_id,
     reveal_map: (progress.reveal_map || {}) as SessionProgressSnapshot['reveal_map'],
     red_node_ids: (progress.red_node_ids || []) as string[],
     completed: Boolean(progress.completed),

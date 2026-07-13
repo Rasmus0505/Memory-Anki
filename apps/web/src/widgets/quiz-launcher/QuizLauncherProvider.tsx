@@ -49,7 +49,6 @@ interface QuizLauncherContextValue {
 interface LauncherPalaceMeta {
   id: number
   title: string
-  mini_palaces?: Array<{ id: number; name: string }>
   chapters?: Array<{
     id: number
     subject?: { id: number; name: string } | null

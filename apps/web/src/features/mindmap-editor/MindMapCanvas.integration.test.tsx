@@ -268,6 +268,23 @@ describe('MindMapCanvas recovery', () => {
     expect(screen.getByTestId('react-flow').textContent).toContain('root')
   })
 
+  it('measures the canvas host directly instead of subtracting a toolbar height', () => {
+    render(
+      <MindMapCanvas
+        graphData={graphData}
+        selectedNodeId={null}
+        onNodeSelect={vi.fn()}
+        onAddChild={vi.fn()}
+        onAddSibling={vi.fn()}
+        onDelete={vi.fn()}
+      />,
+    )
+
+    const viewport = screen.getByTestId('mindmap-canvas-viewport-host').querySelector('[style*="width"]') as HTMLElement
+    expect(viewport.style.width).toBe('800px')
+    expect(viewport.style.height).toBe('600px')
+  })
+
   it('keeps card selection separate from editing across the full frame and canvas flow', async () => {
     render(<ControlledMindMapEditorSurface />)
     const child = await screen.findByRole('button', { name: '知识点' })

@@ -1,6 +1,6 @@
 import type {
-  MiniPalaceSummary,
-  PalaceQuizMiniPalaceClassificationResult,
+  PalaceSegmentSummary,
+  PalaceQuizSegmentClassificationResult,
   PalaceQuizQuestion,
   PalaceQuizQuestionDraft,
   PalaceQuizQuestionType,
@@ -9,14 +9,14 @@ import type {
 
 export type PalaceQuizTabKey = 'practice' | 'manage' | 'generate'
 export type PalaceQuizViewMode = 'single' | 'list'
-export type PalaceQuizScopeKey = 'all' | 'palace' | `mini:${number}`
+export type PalaceQuizScopeKey = 'all' | 'palace' | `segment:${number}`
 
 export interface PalaceQuizPageMeta {
   id: number
   title: string
   primary_chapter_id?: number | null
   primary_chapter?: { id: number; name: string; subject_id: number | null; parent_id?: number | null } | null
-  mini_palaces?: MiniPalaceSummary[]
+  segments?: PalaceSegmentSummary[]
   chapters?: Array<{
     id: number
     name?: string
@@ -54,7 +54,7 @@ export interface PalaceQuizGenerationStateSnapshot {
   sourceKind: QuizGenerationSourceKind
   previewQuestionCount: number
   selectedChapterSummary: string
-  classificationResult: PalaceQuizMiniPalaceClassificationResult | null
+  classificationResult: PalaceQuizSegmentClassificationResult | null
 }
 
 export type QuizGenerationSourceKind = 'image-single' | 'image-batch' | 'text-files'
@@ -182,8 +182,8 @@ export function getQuestionOwnershipLabel(question: PalaceQuizQuestion) {
   if (question.classified_chapter?.name) {
     return `章节题 · ${question.classified_chapter.name}`
   }
-  if (question.mini_palace?.name) {
-    return `训练关卡 · ${question.mini_palace.name}`
+  if (question.segments?.length) {
+    return `学习组 · ${question.segments.map((segment) => segment.name).join('、')}`
   }
   return '大宫殿'
 }

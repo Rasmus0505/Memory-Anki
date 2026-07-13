@@ -16,9 +16,6 @@ from memory_anki.modules.palaces.presentation.core_router import router as core_
 from memory_anki.modules.palaces.presentation.editor_router import (
     router as editor_router,
 )
-from memory_anki.modules.palaces.presentation.mini_palace_router import (
-    router as mini_palace_router,
-)
 from memory_anki.modules.palaces.presentation.practice_progress_router import (
     router as practice_progress_router,
 )
@@ -43,7 +40,6 @@ router.include_router(catalog_router)
 router.include_router(core_router)
 router.include_router(editor_router)
 router.include_router(segment_router)
-router.include_router(mini_palace_router)
 router.include_router(practice_progress_router)
 router.include_router(version_router)
 router.include_router(attachment_router)

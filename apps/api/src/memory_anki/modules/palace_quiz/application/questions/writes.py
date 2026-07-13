@@ -18,7 +18,6 @@ def apply_normalized_question_to_row(
     row: PalaceQuizQuestion,
     normalized: dict[str, object],
 ) -> PalaceQuizQuestion:
-    row.mini_palace_id = _optional_int(normalized.get("mini_palace_id"))
     row.source_chapter_id = _optional_int(normalized.get("source_chapter_id"))
     row.classified_chapter_id = _optional_int(normalized.get("classified_chapter_id"))
     row.origin_question_id = _optional_int(normalized.get("origin_question_id"))

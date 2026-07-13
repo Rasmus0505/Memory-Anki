@@ -20,7 +20,7 @@ export interface ReviewFlowSnapshot {
   completed: boolean
 }
 
-export type RevealFlowMode = 'standard' | 'mini-checkpoint'
+export type RevealFlowMode = 'standard' | 'segment-checkpoint'
 
 export interface RevealFlowOptions {
   mode?: RevealFlowMode
@@ -156,7 +156,7 @@ export function buildInitialRevealState(
   previous: Record<string, RevealState> | null = null,
   options: RevealFlowOptions = {},
 ) {
-  if (options.mode === 'mini-checkpoint') {
+  if (options.mode === 'segment-checkpoint') {
     return buildCheckpointRevealState(root, options.checkpointIds ?? [], previous)
   }
   const next: Record<string, RevealState> = {}

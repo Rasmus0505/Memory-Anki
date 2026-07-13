@@ -11,7 +11,7 @@ function buildProps(
     onOpenChange: vi.fn(),
     mode: 'mindmap',
     onModeChange: vi.fn(),
-    sourceKind: 'image-single',
+    sourceKind: 'image-batch',
     onSourceKindChange: vi.fn(),
     onWorkflowChange: vi.fn(),
     loading: false,
@@ -338,12 +338,42 @@ describe('MindMapImportDrawer', () => {
     expect(screen.getByText(/已完成 1 次 AI 调用/)).toBeTruthy()
   })
 
-  it('does not render the removed pdf preview sidebar', () => {
+  it('uses one image queue and starts recognition explicitly', () => {
     render(<MindMapImportDrawer {...buildProps()} />)
 
-    expect(screen.queryByTestId('mindmap-import-pdf-sidebar')).toBeNull()
-    expect(screen.queryByText('当前识别页预览')).toBeNull()
-    expect(screen.queryByRole('button', { name: '学科 PDF' })).toBeNull()
+    expect(screen.getByText('选择一张或多张图片，或直接在这里粘贴')).toBeTruthy()
+    expect(screen.queryByText('单图')).toBeNull()
+    expect(screen.queryByText('多图')).toBeNull()
+    const startButton = screen.getByRole('button', { name: '开始识别' }) as HTMLButtonElement
+    expect(startButton.disabled).toBe(true)
+  })
+
+  it('shows the persistent PDF library and starts selected pages explicitly', () => {
+    const onPdfStart = vi.fn()
+    render(
+      <MindMapImportDrawer
+        {...buildProps({
+          sourceKind: 'pdf-document',
+          pdfDocuments: [{
+            id: 'pdf-1',
+            original_name: '课程资料.pdf',
+            mime_type: 'application/pdf',
+            file_size: 1024,
+            page_count: 12,
+            created_at: '2026-07-13T00:00:00',
+          }],
+          selectedPdfDocumentId: 'pdf-1',
+          pdfPageSelection: '1-3,8',
+          onPdfStart,
+        })}
+      />,
+    )
+
+    expect(screen.getByText('PDF 资料库')).toBeTruthy()
+    expect(screen.getByText(/持久化保存/)).toBeTruthy()
+    expect((screen.getByLabelText('选择 PDF 资料') as HTMLSelectElement).value).toBe('pdf-1')
+    fireEvent.click(screen.getByRole('button', { name: '开始转脑图' }))
+    expect(onPdfStart).toHaveBeenCalledTimes(1)
   })
 
   it('shows a pending pause label while waiting for the current step to finish', () => {

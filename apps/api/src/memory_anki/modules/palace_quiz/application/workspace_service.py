@@ -239,6 +239,13 @@ def update_job(session: Session, job_id: str, data: dict[str, Any]) -> dict[str,
         job.extra_prompt = str(data.get("extra_prompt") or "")
     if "options" in data:
         job.options_json = json.dumps(data.get("options") or {}, ensure_ascii=False)
+    if "status" in data:
+        job.status = str(data.get("status") or job.status)
+    if "preview" in data:
+        preview = data.get("preview")
+        job.preview_json = json.dumps(preview, ensure_ascii=False) if preview is not None else None
+    if "error_message" in data:
+        job.error_message = str(data.get("error_message") or "")
     session.commit()
     return _job_dict(job)
 

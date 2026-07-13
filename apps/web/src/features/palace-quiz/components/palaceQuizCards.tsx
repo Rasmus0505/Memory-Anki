@@ -225,7 +225,7 @@ export function QuizQuestionCard({
         <div className={cn(compact ? 'space-y-1.5' : 'space-y-2')}>
           <div className={cn('flex flex-wrap items-center', compact ? 'gap-1.5' : 'gap-2')}>
             <Badge variant="outline">{getQuestionTypeLabel(question.question_type)}</Badge>
-            <Badge variant={question.mini_palace_id == null ? 'secondary' : 'outline'}>
+            <Badge variant={!(question.segment_ids?.length) ? 'secondary' : 'outline'}>
               {getQuestionOwnershipLabel(question)}
             </Badge>
             <QuestionSourceBadge sourceMeta={question.source_meta} compact={compact} />

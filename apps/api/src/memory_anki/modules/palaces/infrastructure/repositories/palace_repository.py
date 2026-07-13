@@ -23,7 +23,6 @@ def _catalog_loader_options():
         selectinload(Palace.review_schedules),
         selectinload(Palace.review_logs),
         selectinload(Palace.segments),
-        selectinload(Palace.mini_palaces),
     )
 
 
