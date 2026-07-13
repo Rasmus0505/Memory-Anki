@@ -20,6 +20,7 @@ def test_start_reuses_healthy_shared_service():
         patch.object(pwa_server.dev_server, "list_listening_pids", return_value=[42]),
         patch.object(pwa_server, "_is_memory_anki_service_process", return_value=True),
         patch.object(pwa_server, "_pwa_is_ready", return_value=True),
+        patch.object(pwa_server, "_database_at_alembic_head", return_value=True),
         patch.object(pwa_server, "_start_backend") as start_backend,
         patch.object(pwa_server, "_supervise") as supervise,
     ):
@@ -27,6 +28,38 @@ def test_start_reuses_healthy_shared_service():
 
     start_backend.assert_not_called()
     supervise.assert_not_called()
+
+
+def test_start_restarts_healthy_service_when_database_is_behind_head():
+    process = SimpleNamespace(pid=1234)
+    call_order: list[str] = []
+    with (
+        patch.object(pwa_server, "service_lock", return_value=nullcontext()),
+        patch.object(pwa_server.dev_server, "list_listening_pids", return_value=[42]),
+        patch.object(pwa_server, "_is_memory_anki_service_process", return_value=True),
+        patch.object(pwa_server, "_pwa_is_ready", return_value=True),
+        patch.object(pwa_server, "_database_at_alembic_head", return_value=False),
+        patch.object(
+            pwa_server,
+            "_stop_service_unlocked",
+            side_effect=lambda: call_order.append("stop") or True,
+        ),
+        patch.object(pwa_server, "_pwa_dist_ready", return_value=True),
+        patch.object(
+            pwa_server,
+            "_prepare_runtime",
+            side_effect=lambda: call_order.append("prepare") or True,
+        ),
+        patch.object(
+            pwa_server,
+            "_start_backend",
+            side_effect=lambda: call_order.append("start") or process,
+        ),
+        patch.object(pwa_server, "_wait_for_pwa", return_value=True),
+    ):
+        assert pwa_server.start(supervise=False) == 0
+
+    assert call_order == ["stop", "prepare", "start"]
 
 
 def test_start_prepares_migrations_before_starting_backend():

@@ -562,7 +562,14 @@ def start(
             )
             return 1
 
-        if pids and _pwa_is_ready() and not build and not sync:
+        can_reuse_service = (
+            bool(pids)
+            and _pwa_is_ready()
+            and not build
+            and not sync
+            and _database_at_alembic_head()
+        )
+        if can_reuse_service:
             print("[ok] Reusing running Memory Anki service")
         else:
             if pids and not _stop_service_unlocked():
