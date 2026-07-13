@@ -127,6 +127,9 @@ function writeStoredFloatingLayout(storageKey: string, layout: FloatingDialogLay
 
 const DialogModalContext = createContext<{ modal: boolean }>({ modal: true })
 const DialogTitleTextContext = createContext<((title: string) => void) | null>(null)
+const DialogDragHandleContext = createContext<
+  ((event: ReactPointerEvent<HTMLElement>) => void) | null
+>(null)
 
 function containsDialogPart(
   children: ReactNode,
@@ -462,28 +465,23 @@ const DialogContent = forwardRef<
           : props.style
       }
     >
-      {floatingEnabled ? (
-        <div
-          className="absolute inset-x-0 top-0 z-10 h-12 cursor-move"
-          aria-hidden="true"
-          onPointerDown={beginDrag}
-        />
-      ) : null}
-      <DialogTitleTextContext.Provider
-        value={(title) => {
-          if (!capsuleLabel && title.trim()) setDerivedCapsuleLabel(title.trim())
-        }}
-      >
-        {hasDialogTitle ? null : (
-          <DialogPrimitive.Title className="sr-only">{fallbackTitle}</DialogPrimitive.Title>
-        )}
-        {!hasDialogDescription && accessibleDescription ? (
-          <DialogPrimitive.Description className="sr-only">
-            {accessibleDescription}
-          </DialogPrimitive.Description>
-        ) : null}
-        {children}
-      </DialogTitleTextContext.Provider>
+      <DialogDragHandleContext.Provider value={floatingEnabled ? beginDrag : null}>
+        <DialogTitleTextContext.Provider
+          value={(title) => {
+            if (!capsuleLabel && title.trim()) setDerivedCapsuleLabel(title.trim())
+          }}
+        >
+          {hasDialogTitle ? null : (
+            <DialogPrimitive.Title className="sr-only">{fallbackTitle}</DialogPrimitive.Title>
+          )}
+          {!hasDialogDescription && accessibleDescription ? (
+            <DialogPrimitive.Description className="sr-only">
+              {accessibleDescription}
+            </DialogPrimitive.Description>
+          ) : null}
+          {children}
+        </DialogTitleTextContext.Provider>
+      </DialogDragHandleContext.Provider>
       {floatingEnabled ? (
         <div
           className="absolute right-3 top-3 z-20 flex items-center gap-1"
@@ -567,8 +565,15 @@ const DialogContent = forwardRef<
 })
 
 function DialogHeader({ children }: PropsWithChildren) {
+  const beginDrag = useContext(DialogDragHandleContext)
   return (
-    <div className="flex cursor-move items-start justify-between gap-4 border-b px-6 py-4 pr-28">
+    <div
+      className={cn(
+        'flex items-start justify-between gap-4 border-b px-6 py-4 pr-28',
+        beginDrag ? 'cursor-move' : '',
+      )}
+      onPointerDown={beginDrag ?? undefined}
+    >
       <div className="flex flex-col gap-1">{children}</div>
     </div>
   )

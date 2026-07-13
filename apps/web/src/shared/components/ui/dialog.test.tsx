@@ -144,6 +144,50 @@ describe('Dialog', () => {
     expect(stored.collapsed).toBe(true)
   })
 
+  it('keeps header controls clickable while blank header space remains draggable', () => {
+    const onAction = vi.fn()
+
+    render(
+      <Dialog open onOpenChange={vi.fn()}>
+        <DialogContent floatingId="header-drag-test">
+          <DialogHeader>
+            <div>
+              <DialogTitle>header drag dialog</DialogTitle>
+              <button type="button" onClick={onAction}>toolbar action</button>
+            </div>
+          </DialogHeader>
+          dialog body
+        </DialogContent>
+      </Dialog>,
+    )
+
+    const action = screen.getByRole('button', { name: 'toolbar action' })
+    fireEvent.pointerDown(action, { clientX: 100, clientY: 100 })
+    fireEvent.click(action)
+    fireEvent.pointerMove(window, { clientX: 180, clientY: 160 })
+    fireEvent.pointerUp(window)
+
+    expect(onAction).toHaveBeenCalledTimes(1)
+    expect(window.localStorage.getItem('memory-anki-floating-dialog:header-drag-test')).toBeNull()
+
+    const header = screen.getByText('header drag dialog').closest('div.cursor-move')
+    expect(header).toBeTruthy()
+    fireEvent(
+      header as HTMLElement,
+      new MouseEvent('pointerdown', { bubbles: true, clientX: 100, clientY: 100 }),
+    )
+    window.dispatchEvent(
+      new MouseEvent('pointermove', { bubbles: true, clientX: 180, clientY: 160 }),
+    )
+    window.dispatchEvent(new MouseEvent('pointerup', { bubbles: true }))
+
+    const stored = JSON.parse(
+      window.localStorage.getItem('memory-anki-floating-dialog:header-drag-test') || '{}',
+    )
+    expect(stored.x).toBeGreaterThan(16)
+    expect(stored.y).toBeGreaterThan(16)
+  })
+
   it('prevents outside dismissal while pinned', () => {
     const onOpenChange = vi.fn()
 
