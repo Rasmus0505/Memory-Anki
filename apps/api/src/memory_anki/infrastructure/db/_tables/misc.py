@@ -108,6 +108,19 @@ class MindMapImportJob(Base):
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
 
+class PdfDocument(Base):
+    __tablename__ = "pdf_documents"
+    __table_args__ = (Index("ix_pdf_documents_created", "created_at", "id"),)
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    filename: Mapped[str] = mapped_column(String(300), nullable=False, unique=True)
+    original_name: Mapped[str] = mapped_column(String(300), nullable=False)
+    mime_type: Mapped[str] = mapped_column(String(120), nullable=False, default="application/pdf")
+    file_size: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    page_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_at: Mapped[datetime | None] = mapped_column(DateTime, default=utc_now_naive)
+
+
 class ExternalAiCallLog(Base):
     __tablename__ = "external_ai_call_logs"
     __table_args__ = (

@@ -49,6 +49,7 @@ from memory_anki.modules.palace_quiz.presentation import (
 )
 from memory_anki.modules.palaces.presentation import import_router
 from memory_anki.modules.palaces.presentation import router as palace_router
+from memory_anki.modules.pdf_library import router as pdf_library_router
 from memory_anki.modules.reviews.presentation import router as review_router
 from memory_anki.modules.search.presentation import router as search_router
 from memory_anki.modules.sessions.presentation import router as sessions_router
@@ -162,6 +163,7 @@ app.include_router(review_router.router, prefix="/api/v1")
 app.include_router(sessions_router.router, prefix="/api/v1")
 app.include_router(settings_router.router, prefix="/api/v1")
 app.include_router(import_router.router, prefix="/api/v1")
+app.include_router(pdf_library_router, prefix="/api/v1")
 app.include_router(knowledge_router.router, prefix="/api/v1")
 app.include_router(mindmap_router.router, prefix="/api/v1")
 app.include_router(english_router.router, prefix="/api/v1")

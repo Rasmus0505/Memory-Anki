@@ -202,14 +202,12 @@ export default function Knowledge() {
           ...question,
           source_chapter_id: preview.chapter_id ?? selectedChapterId ?? null,
           classified_chapter_id: group.classified_chapter_id,
-          mini_palace_id: null,
         })),
       )
       const unassigned = grouped.unassigned_questions.map((question) => ({
         ...question,
         source_chapter_id: preview.chapter_id ?? selectedChapterId ?? null,
         classified_chapter_id: null,
-        mini_palace_id: null,
       }))
       return [...assigned, ...unassigned]
     }
@@ -217,8 +215,7 @@ export default function Knowledge() {
       ...question,
       source_chapter_id: preview.chapter_id ?? selectedChapterId ?? null,
       classified_chapter_id: null,
-      mini_palace_id: null,
-    }))
+      }))
   }, [selectedChapterId])
 
   const refreshSubjects = async (nextSelectedId?: number | null) => {

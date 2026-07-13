@@ -135,7 +135,7 @@ export interface MindMapImportJob {
   stage: MindMapImportJobStage
   resumable: boolean
   pause_requested?: boolean
-  source_kind: 'image-single' | 'image-batch'
+  source_kind: 'image-single' | 'image-batch' | 'pdf-document'
   mode: 'mindmap' | 'text'
   source_meta?: Record<string, unknown>
   result?: MindMapImportJobResult | null

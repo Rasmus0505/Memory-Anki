@@ -12,6 +12,7 @@ import {
   parseImportStreamResponse,
   readImportJson,
 } from './importResponse'
+import type { PdfDocument } from '../model/importTypes'
 
 export async function previewMindMapImportApi(file: File, handlers?: ImportStreamHandlers) {
   const form = new FormData()
@@ -96,6 +97,7 @@ export async function createBatchImportJobApi(
     entityKey: string
     fallbackTitle?: string
     structureImageIndex?: number
+    mode?: 'mindmap' | 'text'
     ai_options?: AiRuntimeOptions
   },
 ) {
@@ -104,6 +106,7 @@ export async function createBatchImportJobApi(
   if (options.fallbackTitle) {
     form.append('fallback_title', options.fallbackTitle)
   }
+  form.append('mode', options.mode ?? 'mindmap')
   if (typeof options.structureImageIndex === 'number') {
     form.append('structure_image_index', String(options.structureImageIndex))
   }
@@ -120,6 +123,56 @@ export async function createBatchImportJobApi(
     {
       resourceKey: `import-job:batch:${options.entityKey}:${files.map((file) => file.name).join(',')}`,
       description: '创建批量导入任务',
+      replayMode: 'manual',
+    },
+  )
+  return readImportJson<MindMapImportJob>(response)
+}
+
+export async function listPdfDocumentsApi() {
+  return request<{ items: PdfDocument[] }>('/pdf-library')
+}
+
+export async function uploadPdfDocumentApi(file: File) {
+  const form = new FormData()
+  form.append('file', file)
+  const response = await fetchWithMutationQueue(
+    `${API_BASE}/pdf-library`,
+    { method: 'POST', body: form },
+    {
+      resourceKey: `pdf-library:upload:${file.name}:${file.size}`,
+      description: `上传 PDF：${file.name}`,
+      replayMode: 'manual',
+    },
+  )
+  return readImportJson<PdfDocument>(response)
+}
+
+export async function deletePdfDocumentApi(documentId: string) {
+  return request<{ ok: boolean }>(`/pdf-library/${documentId}`, { method: 'DELETE' })
+}
+
+export async function createPdfImportJobApi(options: {
+  entityKey: string
+  documentId: string
+  pageSelection: string
+  mode: 'mindmap' | 'text'
+  fallbackTitle?: string
+  ai_options?: AiRuntimeOptions
+}) {
+  const form = new FormData()
+  form.append('entity_key', options.entityKey)
+  form.append('document_id', options.documentId)
+  form.append('page_selection', options.pageSelection)
+  form.append('mode', options.mode)
+  if (options.fallbackTitle) form.append('fallback_title', options.fallbackTitle)
+  if (options.ai_options) form.append('ai_options', JSON.stringify(options.ai_options))
+  const response = await fetchWithMutationQueue(
+    `${API_BASE}/import/jobs/pdf`,
+    { method: 'POST', body: form },
+    {
+      resourceKey: `import-job:pdf:${options.entityKey}:${options.documentId}:${options.pageSelection}`,
+      description: '创建 PDF 导入任务',
       replayMode: 'manual',
     },
   )
@@ -201,4 +254,17 @@ export async function deleteImportJobApi(jobId: string) {
     },
   )
   return readImportJson<{ ok: boolean; job: MindMapImportJob }>(response)
+}
+
+export async function rerunImportJobApi(jobId: string) {
+  const response = await fetchWithMutationQueue(
+    `${API_BASE}/import/jobs/${jobId}/rerun`,
+    { method: 'POST' },
+    {
+      resourceKey: `import-job:${jobId}:rerun`,
+      description: '复跑导入任务',
+      replayMode: 'manual',
+    },
+  )
+  return readImportJson<MindMapImportJob>(response)
 }
