@@ -6,6 +6,31 @@ const DropdownMenu = DropdownMenuPrimitive.Root
 const DropdownMenuTrigger = DropdownMenuPrimitive.Trigger
 const DropdownMenuGroup = DropdownMenuPrimitive.Group
 
+function useDropdownMenuActionCoordinator() {
+  const [open, setOpen] = React.useState(false)
+  const [pendingActionVersion, setPendingActionVersion] = React.useState(0)
+  const pendingActionRef = React.useRef<(() => void) | null>(null)
+
+  const runAction = React.useCallback((action: () => void, afterClose = false) => {
+    if (!afterClose) {
+      action()
+      return
+    }
+    pendingActionRef.current = action
+    setOpen(false)
+    setPendingActionVersion((current) => current + 1)
+  }, [])
+
+  React.useEffect(() => {
+    if (open || !pendingActionRef.current) return
+    const action = pendingActionRef.current
+    pendingActionRef.current = null
+    action()
+  }, [open, pendingActionVersion])
+
+  return { open, setOpen, runAction }
+}
+
 const DropdownMenuContent = React.forwardRef<
   React.ElementRef<typeof DropdownMenuPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Content>
@@ -84,4 +109,5 @@ export {
   DropdownMenuSeparator,
   DropdownMenuLabel,
   DropdownMenuGroup,
+  useDropdownMenuActionCoordinator,
 }

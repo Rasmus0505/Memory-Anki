@@ -92,7 +92,7 @@ describe('MindMapEditorSurface native host', () => {
 
     expect(webkitCancelFullScreen).toHaveBeenCalledTimes(1)
   })
-  it('toggles fullscreen from the canvas toolbar control', () => {
+  it('toggles fullscreen from the canvas toolbar control', async () => {
     const onFullscreenChange = vi.fn()
     render(
       <MindMapEditorSurface
@@ -104,15 +104,39 @@ describe('MindMapEditorSurface native host', () => {
 
     const frame = screen.getByTestId('mindmap-frame-native')
     const canvasRoot = frame.firstElementChild
-    fireEvent.click(screen.getByTitle('进入画布专注模式'))
+    await act(async () => {
+      fireEvent.click(screen.getByTitle('进入系统全屏'))
+    })
     expect(frame.className).toContain('memory-anki-mindmap-native-fullscreen')
     expect(frame.firstElementChild).toBe(canvasRoot)
     expect(onFullscreenChange).toHaveBeenLastCalledWith(true)
 
-    fireEvent.click(screen.getByTitle('退出画布专注模式'))
+    await act(async () => {
+      fireEvent.click(screen.getByTitle('退出系统全屏'))
+    })
     expect(frame.className).not.toContain('memory-anki-mindmap-native-fullscreen')
     expect(frame.firstElementChild).toBe(canvasRoot)
     expect(onFullscreenChange).toHaveBeenLastCalledWith(false)
+  })
+
+  it('delegates the primary fullscreen control to the web fullscreen host', async () => {
+    const onFullscreenToggle = vi.fn()
+    render(
+      <MindMapEditorSurface
+        editorState={editorState}
+        onEditorStateChange={vi.fn()}
+        onFullscreenToggle={onFullscreenToggle}
+      />,
+    )
+
+    await act(async () => {
+      fireEvent.click(screen.getByTitle('进入网页内全屏'))
+    })
+
+    expect(onFullscreenToggle).toHaveBeenCalledTimes(1)
+    expect(screen.getByTestId('mindmap-frame-native').className).not.toContain(
+      'memory-anki-mindmap-native-fullscreen',
+    )
   })
 
   it('does not close a parent immersive flow when entering canvas fullscreen', async () => {

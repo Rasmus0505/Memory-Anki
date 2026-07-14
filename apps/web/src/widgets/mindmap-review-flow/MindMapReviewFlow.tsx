@@ -1,6 +1,6 @@
 import { Bot, RotateCcw, Sparkles, SquareCheckBig } from "lucide-react";
 import { CompletionDecisionDialog } from "@/features/review/components/CompletionDecisionDialog";
-import { ReviewFlowMapPanel } from "./ReviewFlowMapPanel";
+import { FlipCardMindMapPanel } from "./FlipCardMindMapPanel";
 import { AiLearningWorkbench } from "./AiLearningWorkbench";
 import { MindMapRatingHistoryDrawer } from "@/features/review/components/MindMapRatingHistoryDrawer";
 import { useMindMapReviewFlowController } from "./useMindMapReviewFlowController";
@@ -238,7 +238,7 @@ export function MindMapReviewFlow({
             >
               <div className="relative flex h-full min-h-0">
                 <div className="min-w-0 flex-1">
-                  <ReviewFlowMapPanel
+                  <FlipCardMindMapPanel
                     fullscreen={review.flow.fullscreen}
                     displayMode={review.mapDisplayMode}
                     modeSyncVersion={modeSyncVersion}

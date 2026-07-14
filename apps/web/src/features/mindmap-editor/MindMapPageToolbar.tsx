@@ -13,6 +13,7 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
+  useDropdownMenuActionCoordinator,
 } from '@/shared/components/ui/dropdown-menu'
 import { Input } from '@/shared/components/ui/input'
 import { cn } from '@/shared/lib/utils'
@@ -27,7 +28,7 @@ interface MindMapToolbarAction {
   label: string
   onClick: () => void
   disabled?: boolean
-  deferUntilMenuClose?: boolean
+  opensOverlay?: boolean
 }
 interface MindMapToolbarModeControl { value: 'edit' | 'preview' | 'recall'; onChange: (value: 'edit' | 'preview' | 'recall') => void; disabled?: boolean }
 interface MindMapToolbarToggleAction extends MindMapToolbarAction { active?: boolean }
@@ -69,14 +70,7 @@ export function MindMapPageToolbar(props: MindMapPageToolbarProps) {
   const legacyActions = [importMindMapAction, importTextAction, englishAction, quizAction].filter(Boolean) as MindMapToolbarAction[]
   const overflowActions = [...moreActions, ...legacyActions, immersiveAction, nativeFullscreenAction, clearUiAction].filter(Boolean) as Array<MindMapToolbarAction & { destructive?: boolean; separatorBefore?: boolean }>
   const modern = Boolean(taskControl || searchControl || focusAction || fitAction || moreActions.length)
-
-  const handleOverflowAction = (action: MindMapToolbarAction) => {
-    if (action.deferUntilMenuClose) {
-      window.setTimeout(action.onClick, 0)
-      return
-    }
-    action.onClick()
-  }
+  const overflowMenu = useDropdownMenuActionCoordinator()
 
   return (
     <div className={cn(embedded ? 'flex shrink-0 flex-nowrap items-center gap-2' : 'rounded-2xl border border-border/70 bg-background/90 p-3', !embedded && (compact ? 'space-y-2.5' : 'space-y-3'), className)}>
@@ -122,10 +116,10 @@ export function MindMapPageToolbar(props: MindMapPageToolbarProps) {
         {!modern && nativeFullscreenAction ? <Button type="button" variant="outline" onClick={nativeFullscreenAction.onClick}>{nativeFullscreenAction.label}</Button> : null}
         {!modern && clearUiAction ? <Button type="button" variant="outline" onClick={clearUiAction.onClick}>{clearUiAction.label}</Button> : null}
         {modern && overflowActions.length ? (
-          <DropdownMenu>
+          <DropdownMenu open={overflowMenu.open} onOpenChange={overflowMenu.setOpen}>
             <DropdownMenuTrigger asChild><Button type="button" variant="outline" size="icon" aria-label="更多脑图操作"><MoreHorizontal className="size-4" /></Button></DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="min-w-48">
-              {overflowActions.map((action, index) => <div key={`${action.label}-${index}`}>{action.separatorBefore ? <DropdownMenuSeparator /> : null}<DropdownMenuItem disabled={action.disabled} variant={action.destructive ? 'destructive' : 'default'} onSelect={() => handleOverflowAction(action)}>{action.label}</DropdownMenuItem></div>)}
+              {overflowActions.map((action, index) => <div key={`${action.label}-${index}`}>{action.separatorBefore ? <DropdownMenuSeparator /> : null}<DropdownMenuItem disabled={action.disabled} variant={action.destructive ? 'destructive' : 'default'} onSelect={(event) => { if (action.opensOverlay) event.preventDefault(); overflowMenu.runAction(action.onClick, action.opensOverlay) }}>{action.label}</DropdownMenuItem></div>)}
             </DropdownMenuContent>
           </DropdownMenu>
         ) : null}

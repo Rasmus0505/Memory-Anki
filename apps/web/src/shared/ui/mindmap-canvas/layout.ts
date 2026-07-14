@@ -4,15 +4,10 @@ import { BRANCH_COLORS } from './branchColors'
 
 const ROOT_X = 52
 const ROOT_Y = 280
-const ROOT_NODE_MIN_WIDTH = 200
-const ROOT_NODE_MAX_WIDTH = 330
 const ROOT_NODE_MIN_HEIGHT = 40
-const BRANCH_NODE_MIN_WIDTH = 180
-const BRANCH_NODE_MAX_WIDTH = 300
 const BRANCH_NODE_MIN_HEIGHT = 34
-const LEAF_NODE_MIN_WIDTH = 160
-const LEAF_NODE_MAX_WIDTH = 280
 const LEAF_NODE_MIN_HEIGHT = 30
+const NODE_MAX_VISUAL_CHARACTERS = 20
 const ROOT_GAP_X = 48
 const CHILD_GAP_X = 30
 const ROOT_STACK_GAP = 28
@@ -107,11 +102,9 @@ export function getNodeRole(node?: NodeSizeSource): LayoutRole {
 }
 
 function getBaseNodeSize(role: LayoutRole): {
-  minWidth: number
-  maxWidth: number
   minHeight: number
-  horizontalPadding: number
-  verticalPadding: number
+  horizontalChrome: number
+  verticalChrome: number
   lineHeight: number
   averageCharWidth: number
   metaHeight: number
@@ -119,35 +112,29 @@ function getBaseNodeSize(role: LayoutRole): {
   switch (role) {
     case 'root':
       return {
-        minWidth: ROOT_NODE_MIN_WIDTH,
-        maxWidth: ROOT_NODE_MAX_WIDTH,
         minHeight: ROOT_NODE_MIN_HEIGHT,
-        horizontalPadding: 24,
-        verticalPadding: 12,
+        horizontalChrome: 34,
+        verticalChrome: 22,
         lineHeight: 20,
         averageCharWidth: 14,
         metaHeight: 0,
       }
     case 'branch':
       return {
-        minWidth: BRANCH_NODE_MIN_WIDTH,
-        maxWidth: BRANCH_NODE_MAX_WIDTH,
         minHeight: BRANCH_NODE_MIN_HEIGHT,
-        horizontalPadding: 14,
-        verticalPadding: 10,
+        horizontalChrome: 26,
+        verticalChrome: 18,
         lineHeight: 17,
         averageCharWidth: 13,
         metaHeight: 0,
       }
     default:
       return {
-        minWidth: LEAF_NODE_MIN_WIDTH,
-        maxWidth: LEAF_NODE_MAX_WIDTH,
         minHeight: LEAF_NODE_MIN_HEIGHT,
-        horizontalPadding: 14,
-        verticalPadding: 9,
+        horizontalChrome: 22,
+        verticalChrome: 14,
         lineHeight: 17,
-        averageCharWidth: 12,
+        averageCharWidth: 12.5,
         metaHeight: 0,
       }
   }
@@ -171,10 +158,13 @@ export function getNodeSize(
     .split(/\r?\n/)
     .reduce((longest, line) => Math.max(longest, getWeightedTextLength(line)), 0)
   const naturalWidth = Math.ceil(
-    longestLineLength * base.averageCharWidth + base.horizontalPadding,
+    longestLineLength * base.averageCharWidth + base.horizontalChrome,
   )
-  const width = Math.min(base.maxWidth, Math.max(base.minWidth, naturalWidth))
-  const contentWidth = Math.max(width - base.horizontalPadding, base.averageCharWidth)
+  const maxWidth = Math.ceil(
+    NODE_MAX_VISUAL_CHARACTERS * base.averageCharWidth + base.horizontalChrome,
+  )
+  const width = Math.min(maxWidth, Math.max(base.horizontalChrome + base.averageCharWidth, naturalWidth))
+  const contentWidth = Math.max(width - base.horizontalChrome, base.averageCharWidth)
   const charsPerLine = Math.max(1, Math.floor(contentWidth / base.averageCharWidth))
   const textLineCount = label
     .split(/\r?\n/)
@@ -182,7 +172,7 @@ export function getNodeSize(
   const textHeight = textLineCount * base.lineHeight
   const height = Math.max(
     base.minHeight,
-    Math.ceil(base.verticalPadding + textHeight + base.metaHeight),
+    Math.ceil(base.verticalChrome + textHeight + base.metaHeight),
   )
 
   return { width, height }

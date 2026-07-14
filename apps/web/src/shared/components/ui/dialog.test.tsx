@@ -85,6 +85,28 @@ describe('Dialog', () => {
     expect(screen.getByText('floating').className).toContain('z-[241]')
   })
 
+  it('keeps a non-modal workbench open during outside interaction when dismissal is disabled', () => {
+    const onOpenChange = vi.fn()
+
+    render(
+      <>
+        <button type={'button'}>outside control</button>
+        <Dialog open onOpenChange={onOpenChange} modal={false}>
+          <DialogContent floating={false} dismissOnInteractOutside={false}>
+            <DialogTitle>persistent workbench</DialogTitle>
+            workbench body
+          </DialogContent>
+        </Dialog>
+      </>,
+    )
+
+    fireEvent.pointerDown(screen.getByRole('button', { name: 'outside control' }))
+    fireEvent.focus(screen.getByRole('button', { name: 'outside control' }))
+
+    expect(onOpenChange).not.toHaveBeenCalledWith(false)
+    expect(screen.getByRole('dialog', { name: 'persistent workbench' })).toBeTruthy()
+  })
+
   it('collapses a floating dialog into a draggable capsule and restores it', () => {
     render(
       <Dialog open onOpenChange={vi.fn()}>

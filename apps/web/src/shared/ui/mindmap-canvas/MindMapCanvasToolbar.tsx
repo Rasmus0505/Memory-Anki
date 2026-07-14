@@ -2,6 +2,7 @@ import {
   Maximize2,
   Minimize2,
   Redo2,
+  RefreshCw,
   RotateCcw,
   Undo2,
 } from 'lucide-react'
@@ -9,11 +10,13 @@ import type { ReactNode } from 'react'
 
 interface MindMapCanvasToolbarProps {
   focusMode: boolean
+  focusModeLabel?: string
   canUndo: boolean
   canRedo: boolean
   showHistoryControls: boolean
   leadingContent?: ReactNode
   onReflow: () => void
+  onRefreshHost: () => void
   onToggleFocusMode?: () => void
   onUndo?: () => void
   onRedo?: () => void
@@ -21,11 +24,13 @@ interface MindMapCanvasToolbarProps {
 
 export function MindMapCanvasToolbar({
   focusMode,
+  focusModeLabel = '网页内全屏',
   canUndo,
   canRedo,
   showHistoryControls,
   leadingContent,
   onReflow,
+  onRefreshHost,
   onToggleFocusMode,
   onUndo,
   onRedo,
@@ -42,6 +47,13 @@ export function MindMapCanvasToolbar({
       >
         <RotateCcw className="size-4" />
         <span className="text-xs font-medium">整理画布</span>
+      </button>      <button
+        type="button"
+        onClick={onRefreshHost}
+        className="flex size-9 items-center justify-center rounded-xl border border-transparent text-muted-foreground transition-colors hover:border-border hover:bg-muted hover:text-primary"
+        title="刷新脑图"
+      >
+        <RefreshCw className="size-4" />
       </button>
       <button
         type="button"
@@ -51,7 +63,7 @@ export function MindMapCanvasToolbar({
             ? 'border-info/30 bg-info/5 text-info hover:border-info/50 hover:bg-info/10'
             : 'border-transparent text-muted-foreground hover:border-border hover:bg-muted hover:text-primary'
         }`}
-        title={focusMode ? '退出画布专注模式' : '进入画布专注模式'}
+        title={`${focusMode ? '退出' : '进入'}${focusModeLabel}`}
       >
         {focusMode ? (
           <Minimize2 className="size-4" />

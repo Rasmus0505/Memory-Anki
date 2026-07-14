@@ -31,7 +31,7 @@ from memory_anki.modules.palaces.presentation.response_models import (
 from memory_anki.modules.reviews.api import (
     trigger_review_for_palace,
 )
-from memory_anki.modules.settings.api import SettingsAiRuntimeProvider
+from memory_anki.modules.settings.api import SettingsAiRuntimeProvider, SettingsPromptCatalog
 from memory_anki.platform.application import mutation_identity_from_headers
 from memory_anki.platform.persistence import (
     SqlAlchemyMutationResponseStore,
@@ -79,6 +79,7 @@ def api_suggest_peg_associations(
         use_ai=data.use_ai,
         ai_options=ai_runtime.normalize_options(data.ai_options),
         ai_runtime=ai_runtime,
+        prompt_catalog=SettingsPromptCatalog(s),
     )
     if result is None:
         raise_not_found()

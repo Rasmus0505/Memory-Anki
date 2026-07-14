@@ -10,6 +10,7 @@ import {
   renderInRouter,
   setupMindMapReviewFlowTest,
   timer,
+  useTimedSessionMock,
 } from "@/widgets/mindmap-review-flow/MindMapReviewFlow.test-support";
 import { MindMapReviewFlow } from "@/widgets/mindmap-review-flow";
 
@@ -48,11 +49,19 @@ describe("MindMapReviewFlow modes", () => {
     await waitFor(() => {
       expect(screen.getByText("frame-readonly-immersive")).toBeTruthy();
     });
+    expect(timer.registerActivity).toHaveBeenCalledWith(
+      "practice_interaction",
+      { source: "review_fullscreen_enter" },
+    );
+    expect(useTimedSessionMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({ autoPauseMs: 24 * 60 * 60 * 1000 }),
+    );
 
     fireEvent.click(screen.getByRole("button", { name: "退出原生全屏" }));
     await waitFor(() => {
       expect(screen.getByText("frame-readonly-immersive")).toBeTruthy();
     });
+
 
     const latestCall = getLatestMindMapEditorSurfaceProps();
     expect(latestCall?.readonly).toBe(true);

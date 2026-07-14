@@ -10,6 +10,7 @@ import {
   type EdgeMouseHandler,
   type Node,
   type OnMove,
+  type Viewport,
 } from '@xyflow/react'
 import type { LayoutRole } from './layout'
 import { nodeTypes } from './NodeCard'
@@ -36,6 +37,8 @@ interface MindMapCanvasViewportProps {
   onMoveStart?: OnMove
   onMove?: OnMove
   onMoveEnd?: OnMove
+  viewport: Viewport
+  onViewportChange: (viewport: Viewport) => void
   readonly?: boolean
   mobileGuided?: boolean
   preserveViewport?: boolean
@@ -63,9 +66,10 @@ export function MindMapCanvasViewport({
   onMoveStart,
   onMove,
   onMoveEnd,
+  viewport,
+  onViewportChange,
   readonly = false,
   mobileGuided = false,
-  preserveViewport = false,
 }: MindMapCanvasViewportProps) {
   const largeGraph = nodes.length >= 240
   const simplifiedDecorations = isDraggingNode || mobileGuided || largeGraph
@@ -91,6 +95,8 @@ export function MindMapCanvasViewport({
         onMoveStart={onMoveStart}
         onMove={onMove}
         onMoveEnd={onMoveEnd}
+        viewport={viewport}
+        onViewportChange={onViewportChange}
         nodesDraggable={!readonly}
         nodesConnectable={false}
         nodesFocusable={false}
@@ -98,14 +104,13 @@ export function MindMapCanvasViewport({
         deleteKeyCode={null}
         elementsSelectable
         nodeTypes={nodeTypes}
-        defaultViewport={{ x: 4, y: 18, zoom: 0.99 }}
         minZoom={0.38}
         maxZoom={1.4}
         proOptions={{ hideAttribution: true }}
         panOnScroll={!mobileGuided}
         panOnDrag
-        autoPanOnNodeDrag={!preserveViewport}
-        autoPanOnConnect={!preserveViewport}
+        autoPanOnNodeDrag={false}
+        autoPanOnConnect={false}
         zoomOnPinch
         zoomOnDoubleClick={readonly && !mobileGuided}
         zoomActivationKeyCode="Control"

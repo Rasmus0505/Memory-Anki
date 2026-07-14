@@ -1,5 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { useState } from 'react'
 import { describe, expect, it, vi } from 'vitest'
+import { Dialog, DialogContent, DialogTitle } from '@/shared/components/ui/dialog'
 import { MindMapPageToolbar } from './MindMapPageToolbar'
 
 describe('MindMapPageToolbar', () => {
@@ -35,13 +37,11 @@ describe('MindMapPageToolbar', () => {
   })
 
   it('keeps dedicated scene actions accessible in the modern overflow menu', async () => {
-    const onImport = vi.fn(() => {
-      expect(screen.queryByRole('menuitem', { name: '转脑图' })).toBeNull()
-    })
+    const onImport = vi.fn()
     render(
       <MindMapPageToolbar
         taskControl={{ value: 'build', onChange: vi.fn() }}
-        importMindMapAction={{ label: '转脑图', onClick: onImport, deferUntilMenuClose: true }}
+        importMindMapAction={{ label: '转脑图', onClick: onImport, opensOverlay: true }}
       />,
     )
 
@@ -51,6 +51,60 @@ describe('MindMapPageToolbar', () => {
     await waitFor(() => expect(onImport).toHaveBeenCalledTimes(1))
   })
 
+  it('opens a non-modal overlay only after the overflow menu has closed', async () => {
+    function Harness() {
+      const [open, setOpen] = useState(false)
+      return (
+        <>
+          <MindMapPageToolbar
+            taskControl={{ value: 'build', onChange: vi.fn() }}
+            importMindMapAction={{ label: '转脑图', onClick: () => setOpen(true), opensOverlay: true }}
+          />
+          <Dialog open={open} onOpenChange={setOpen} modal={false}>
+            <DialogContent floating={false}>
+              <DialogTitle>图片转脑图</DialogTitle>
+            </DialogContent>
+          </Dialog>
+        </>
+      )
+    }
+
+    render(<Harness />)
+
+    fireEvent.keyDown(screen.getByRole('button', { name: '更多脑图操作' }), { key: 'Enter' })
+    fireEvent.click(await screen.findByRole('menuitem', { name: '转脑图' }))
+
+    expect(await screen.findByRole('dialog', { name: '图片转脑图' })).toBeTruthy()
+    expect(screen.queryByRole('menuitem', { name: '转脑图' })).toBeNull()
+  })
+
+  it('renders export and import actions in the requested overflow order', async () => {
+    const onExport = vi.fn()
+    const onImport = vi.fn()
+    render(
+      <MindMapPageToolbar
+        taskControl={{ value: 'build', onChange: vi.fn() }}
+        moreActions={[
+          { label: '结构检查（0）', onClick: vi.fn() },
+          { label: '导出脑图', onClick: onExport, separatorBefore: true },
+          { label: '导入脑图', onClick: onImport, opensOverlay: true },
+        ]}
+        importMindMapAction={{ label: '转脑图', onClick: vi.fn(), opensOverlay: true }}
+      />,
+    )
+
+    fireEvent.keyDown(screen.getByRole('button', { name: '更多脑图操作' }), { key: 'Enter' })
+    const menuItems = await screen.findAllByRole('menuitem')
+    expect(menuItems.map((item) => item.textContent)).toEqual([
+      '结构检查（0）',
+      '导出脑图',
+      '导入脑图',
+      '转脑图',
+    ])
+
+    fireEvent.click(screen.getByRole('menuitem', { name: '导出脑图' }))
+    expect(onExport).toHaveBeenCalledTimes(1)
+  })
   it('supports segment target selection, confirm, and cancel', () => {
     const onToggle = vi.fn()
     const onTargetChange = vi.fn()

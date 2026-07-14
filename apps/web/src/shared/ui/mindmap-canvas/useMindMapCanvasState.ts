@@ -15,6 +15,7 @@ import {
   type Edge,
   type EdgeMouseHandler,
   type Node,
+  type Viewport,
 } from '@xyflow/react'
 import type { ContextMenuAction } from './NodeContextMenu'
 import { applyMindMapLayout, type NodeSize } from './layout'
@@ -29,6 +30,8 @@ import type { MindMapCanvasProps } from './MindMapCanvas'
 type UseMindMapCanvasStateProps = MindMapCanvasProps & {
   toolbarVisible?: boolean
   onHostRefresh?: () => void
+  controlledViewport: Viewport
+  onControlledViewportChange: (viewport: Viewport) => void
 }
 
 export interface UseMindMapCanvasStateResult {
@@ -70,7 +73,9 @@ export interface UseMindMapCanvasStateResult {
   handleMoveStart: ReturnType<typeof useMindMapViewport>['handleMoveStart']
   handleMove: ReturnType<typeof useMindMapViewport>['handleMove']
   handleMoveEnd: ReturnType<typeof useMindMapViewport>['handleMoveEnd']
+  handleViewportChange: ReturnType<typeof useMindMapViewport>['handleViewportChange']
   preserveViewport: boolean
+  controlledViewport: Viewport
 }
 
 
@@ -82,6 +87,7 @@ export function useMindMapCanvasState(
     selectedNodeId,
     editingNodeId = null,
     editingDraft = null,
+    selectEditingText = false,
     onNodeSelect,
     onEditingNodeChange,
     onEditingDraftChange,
@@ -110,10 +116,12 @@ export function useMindMapCanvasState(
     buildNodeActions: buildCustomNodeActions,
     practiceModeActive = false,
     mobileViewPolicy = 'auto',
-    nodeClickViewportPolicy = 'guided-center',
-    contentChangeViewportPolicy = 'auto-fit',
+    nodeClickViewportPolicy = 'preserve',
+    contentChangeViewportPolicy = 'preserve',
     viewCommand = null,
     onHostRefresh,
+    controlledViewport,
+    onControlledViewportChange,
   } = props
 
   const measuredNodeSizesRef = useRef<Map<string, NodeSize>>(new Map())
@@ -135,6 +143,8 @@ export function useMindMapCanvasState(
 
   const viewport = useMindMapViewport({
     canvasRef,
+    controlledViewport,
+    onControlledViewportChange,
     graphNodes: graphData.nodes,
     nodes,
     measuredNodeSizesRef,
@@ -143,7 +153,6 @@ export function useMindMapCanvasState(
     readonly,
     mobileViewPolicy,
     contentChangeViewportPolicy,
-    practiceModeActive,
     viewCommand,
     setNodeSizeVersion,
   })
@@ -239,6 +248,7 @@ export function useMindMapCanvasState(
       selectedNodeId,
       editingNodeId,
       editingDraft,
+      selectEditingText,
       onStartEdit: handleStartEdit,
       onCancelEdit: handleCancelEdit,
       onEditTextChange: onEditingDraftChange,
@@ -253,7 +263,7 @@ export function useMindMapCanvasState(
     })
     displayNodesRef.current = nextDisplayNodes
     return nextDisplayNodes
-  }, [draggingNodeIdRef, editingDraft, editingNodeId, handleCancelEdit, handleFinishEditAndClose, handleStartEdit, handleTouchLongPress, isDraggingNode, nodes, onAddChild, onAddSibling, onDelete, onEditingDraftChange, previewLayout, previewState, readonly, selectedNodeId, touchLongPressEnabled, viewport.handleNodeMeasure])
+  }, [draggingNodeIdRef, editingDraft, editingNodeId, handleCancelEdit, handleFinishEditAndClose, handleStartEdit, handleTouchLongPress, isDraggingNode, nodes, onAddChild, onAddSibling, onDelete, onEditingDraftChange, previewLayout, previewState, readonly, selectEditingText, selectedNodeId, touchLongPressEnabled, viewport.handleNodeMeasure])
 
   const displayEdges = useMemo(() => {
     const baseEdges = previewLayout?.edges ?? edges
@@ -262,29 +272,20 @@ export function useMindMapCanvasState(
     return nextDisplayEdges
   }, [edges, menus.selectedEdgeId, previewLayout])
 
-  const layoutAnchorNodeId = selectedNodeId ?? editingNodeId ?? graphData.nodes[0]?.id ?? null
-  const preserveNodeScreenPosition = viewport.preserveNodeScreenPosition
-
   useEffect(() => {
     const nextLayout = applyMindMapLayout(graphData, measuredNodeSizesRef.current)
-    setNodes((currentNodes) => {
-      preserveNodeScreenPosition(layoutAnchorNodeId, currentNodes, nextLayout.nodes)
-      return nextLayout.nodes
-    })
+    setNodes(nextLayout.nodes)
     setEdges(nextLayout.edges)
     clearEdgeSelection()
     resetDragState()
-  }, [clearEdgeSelection, graphData, layoutAnchorNodeId, resetDragState, setEdges, setNodes, preserveNodeScreenPosition])
+  }, [clearEdgeSelection, graphData, resetDragState, setEdges, setNodes])
 
   useEffect(() => {
     if (nodeSizeVersion === 0 || isDraggingNodeRef.current) return
     const nextLayout = applyMindMapLayout(graphData, measuredNodeSizesRef.current)
-    setNodes((currentNodes) => {
-      preserveNodeScreenPosition(layoutAnchorNodeId, currentNodes, nextLayout.nodes)
-      return nextLayout.nodes
-    })
+    setNodes(nextLayout.nodes)
     setEdges(nextLayout.edges)
-  }, [graphData, layoutAnchorNodeId, nodeSizeVersion, setEdges, setNodes, preserveNodeScreenPosition])
+  }, [graphData, nodeSizeVersion, setEdges, setNodes])
 
   const nodeActions = useMemo(
     () => buildNodeActions({
@@ -390,6 +391,8 @@ export function useMindMapCanvasState(
     handleMoveStart: viewport.handleMoveStart,
     handleMove: viewport.handleMove,
     handleMoveEnd: viewport.handleMoveEnd,
+    handleViewportChange: viewport.handleViewportChange,
     preserveViewport: viewport.preserveViewport,
+    controlledViewport: viewport.controlledViewport,
   }
 }

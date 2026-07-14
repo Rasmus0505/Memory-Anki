@@ -11,7 +11,6 @@ interface MindMapFullscreenOptions {
   getFullscreenTarget: () => HTMLElement | null
   browserFullscreenEnabled: boolean
   onFullscreenChange?: (active: boolean) => void
-  requestFitView: () => void
   presentationPort?: PresentationPort
 }
 
@@ -19,24 +18,18 @@ export function useMindMapFullscreen({
   getFullscreenTarget,
   browserFullscreenEnabled,
   onFullscreenChange,
-  requestFitView,
   presentationPort = browserPresentationPort,
 }: MindMapFullscreenOptions) {
   const actorRef = useRef(createActor(mindMapPresentationMachine))
   const [active, setActive] = useState(false)
   const activeRef = useRef(false)
 
-  const requestFitViewOnNextFrame = useCallback(() => {
-    presentationPort.scheduleLayout(requestFitView)
-  }, [presentationPort, requestFitView])
-
   const publishActive = useCallback((nextActive: boolean) => {
     if (activeRef.current === nextActive) return
     activeRef.current = nextActive
     setActive(nextActive)
     onFullscreenChange?.(nextActive)
-    requestFitViewOnNextFrame()
-  }, [onFullscreenChange, requestFitViewOnNextFrame])
+  }, [onFullscreenChange])
 
   const exit = useCallback(async () => {
     const actor = actorRef.current
@@ -75,7 +68,7 @@ export function useMindMapFullscreen({
 
   useEffect(() => {
     if (!active) return
-    const viewportSession = presentationPort.lockViewport(requestFitViewOnNextFrame)
+    const viewportSession = presentationPort.lockViewport(() => {})
     const escapeSession = presentationPort.onEscape(() => void exit())
     const fullscreenSession = presentationPort.onFullscreenExit(() => {
       if (!activeRef.current) return
@@ -87,7 +80,7 @@ export function useMindMapFullscreen({
       escapeSession.release()
       viewportSession.release()
     }
-  }, [active, exit, presentationPort, requestFitViewOnNextFrame])
+  }, [active, exit, presentationPort])
 
   return { active, enter, exit, toggle }
 }

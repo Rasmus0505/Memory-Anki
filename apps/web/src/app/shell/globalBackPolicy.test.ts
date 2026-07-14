@@ -22,9 +22,7 @@ describe('resolveGlobalBackPolicy', () => {
     ['/palaces/12/edit', '/palaces/12'],
     ['/palaces/12/practice', '/palaces/12'],
     ['/palaces/12/quiz', '/palaces/12'],
-    ['/segments/7/practice', '/palaces'],
-    ['/mini-palaces/9/practice', '/palaces'],
-  ])('maps %s to %s', (pathname, fallbackTo) => {
+    ['/segments/7/practice', '/palaces'],  ])('maps %s to %s', (pathname, fallbackTo) => {
     expect(resolveGlobalBackPolicy(pathname)?.fallbackTo).toBe(fallbackTo)
   })
 

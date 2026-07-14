@@ -188,8 +188,8 @@ export const palaceResponse = {
   title: '细胞生物学宫殿',
   primary_chapter_id: 1,
   primary_chapter: { id: 1, name: '第三章', subject_id: 2, parent_id: null },
-  mini_palaces: [
-    { id: 21, palace_id: 1, name: '细胞核迷你宫殿训练', node_uids: [], node_count: 1, sort_order: 0 },
+  segments: [
+    { id: 21, palace_id: 1, name: '细胞核学习组', display_name: '细胞核学习组', color: '#14b8a6', node_count: 1, sort_order: 0, is_virtual_default: false },
   ],
   chapters: [
     {
@@ -240,8 +240,7 @@ export const palaceLookupGroupedResponse = {
               group_id: null,
               group_sort_order: 0,
               chapters: palaceResponse.chapters,
-              segments: [],
-              mini_palaces: palaceResponse.mini_palaces,
+              segments: palaceResponse.segments,
             },
             {
               id: 2,
@@ -389,9 +388,9 @@ export const baseQuestions = [
     ],
     answer_payload: { correct_option_id: 'A' },
     analysis: '细胞核储存遗传物质并控制细胞活动。',
-    mini_palace_id: 21,
+    mini_palace_id: null,
     origin_question_id: 11,
-    mini_palace: { id: 21, name: '细胞核迷你宫殿训练' },
+    mini_palace: null,
     source_meta: {
       source_kind: 'manual',
       page_numbers: null,
@@ -401,6 +400,7 @@ export const baseQuestions = [
       generated_at: '2026-06-12T00:00:00',
       generation_mode: 'manual',
     },
+    segment_ids: [21],
     sort_order: 3,
     correct_count: 0,
     incorrect_count: 0,

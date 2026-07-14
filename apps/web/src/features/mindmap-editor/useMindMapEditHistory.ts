@@ -100,6 +100,26 @@ export function useMindMapEditHistory(
     [publish, replaceHistory],
   )
 
+  const stage = useCallback((editorDoc: EditorDoc) => {
+    const current = currentEditorDocRef.current
+    if (fingerprint(current) === fingerprint(editorDoc)) return false
+    publish(editorDoc)
+    return true
+  }, [publish])
+
+  const commitFrom = useCallback(
+    (baseEditorDoc: EditorDoc, editorDoc: EditorDoc) => {
+      if (fingerprint(baseEditorDoc) === fingerprint(editorDoc)) {
+        publish(baseEditorDoc)
+        return false
+      }
+      replaceHistory(pushMindMapHistory(historyRef.current, baseEditorDoc))
+      publish(editorDoc)
+      return true
+    },
+    [publish, replaceHistory],
+  )
+
   const undo = useCallback(() => {
     const result = undoMindMapHistory(historyRef.current, currentEditorDocRef.current)
     if (!result) return false
@@ -136,6 +156,8 @@ export function useMindMapEditHistory(
   return {
     ...availability,
     commit,
+    stage,
+    commitFrom,
     undo,
     redo,
     getCurrentEditorDoc,

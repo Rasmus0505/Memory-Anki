@@ -67,10 +67,11 @@ describe('usePalaceEditPage inline practice mode', () => {
       expect(screen.getByText('mindmap-practice-readonly-toolbar-preserve-import-sync')).toBeTruthy()
       expect(
         screen.getByText((content) =>
-          content.startsWith('sync-replace-replace-recall:0:0-{"docFingerprint":'),
+          content.startsWith('sync-soft-soft--{"docFingerprint":'),
         ),
       ).toBeTruthy()
       expect(screen.getByText('scope-palace-edit:101')).toBeTruthy()
+      expect(screen.getByText('flip-policies-auto-preserve')).toBeTruthy()
       expect(screen.getByRole('button', { name: '构建' })).toBeTruthy()
     })
 
@@ -126,7 +127,7 @@ describe('usePalaceEditPage inline practice mode', () => {
     })
     expect(
       screen.getByText((content) =>
-        content.startsWith('sync-replace-replace-recall:0:0-{"docFingerprint":'),
+        content.startsWith('sync-soft-soft--{"docFingerprint":'),
       ),
     ).toBeTruthy()
     expect(getMindMapTexts()).toEqual({
@@ -273,7 +274,7 @@ describe('usePalaceEditPage inline practice mode', () => {
     })
     expect(
       screen.getByText((content) =>
-        content.startsWith('sync-replace-replace-recall:0:0-{"docFingerprint":'),
+        content.startsWith('sync-soft-soft--{"docFingerprint":'),
       ),
     ).toBeTruthy()
 

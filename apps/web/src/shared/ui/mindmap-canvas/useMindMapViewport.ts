@@ -34,6 +34,8 @@ const COLUMN_PROBE_PX = 240
 
 interface UseMindMapViewportInput {
   canvasRef: RefObject<HTMLDivElement | null>
+  controlledViewport: Viewport
+  onControlledViewportChange: (viewport: Viewport) => void
   graphNodes: GraphData['nodes']
   nodes: Node[]
   measuredNodeSizesRef: RefObject<Map<string, NodeSize>>
@@ -42,13 +44,14 @@ interface UseMindMapViewportInput {
   readonly: boolean
   mobileViewPolicy: MindMapMobileViewPolicy
   contentChangeViewportPolicy: MindMapContentChangeViewportPolicy
-  practiceModeActive: boolean
   viewCommand: MindMapCanvasViewCommand | null
   setNodeSizeVersion: (updater: (version: number) => number) => void
 }
 
 export function useMindMapViewport({
   canvasRef,
+  controlledViewport,
+  onControlledViewportChange,
   graphNodes,
   nodes,
   measuredNodeSizesRef,
@@ -57,7 +60,6 @@ export function useMindMapViewport({
   readonly,
   mobileViewPolicy,
   contentChangeViewportPolicy,
-  practiceModeActive,
   viewCommand,
   setNodeSizeVersion,
 }: UseMindMapViewportInput) {
@@ -65,9 +67,8 @@ export function useMindMapViewport({
   const pendingMeasuredNodeSizesRef = useRef<Map<string, NodeSize>>(new Map())
   const measureFrameRef = useRef<number | null>(null)
   const handledViewCommandNonceRef = useRef<number | null>(null)
-  const hasRunInitialMobileFitRef = useRef(false)
   const lastPreviewFeedbackRef = useRef('')
-  const preservedViewportRef = useRef<Viewport>({ x: 4, y: 18, zoom: 0.99 })
+  const preservedViewportRef = useRef<Viewport>(controlledViewport)
   const restoreViewportFrameRef = useRef<number | null>(null)
   const explicitViewportChangeRef = useRef(false)
   const manualViewportGestureRef = useRef(false)
@@ -80,9 +81,12 @@ export function useMindMapViewport({
       readonly &&
       canvasSize.width > 0 &&
       canvasSize.width < 768)
-  const preserveViewport =
-    practiceModeActive && contentChangeViewportPolicy === 'preserve'
+  const preserveViewport = contentChangeViewportPolicy === 'preserve'
   const graphContentSignature = useMemo(() => JSON.stringify(graphNodes), [graphNodes])
+
+  useLayoutEffect(() => {
+    preservedViewportRef.current = controlledViewport
+  }, [controlledViewport])
 
   const restorePreservedViewport = useCallback((currentViewport?: Viewport) => {
     if (!preserveViewport || explicitViewportChangeRef.current) return
@@ -104,57 +108,39 @@ export function useMindMapViewport({
     })
   }, [getViewport, preserveViewport, setViewport])
 
-  const preserveNodeScreenPosition = useCallback((
-    nodeId: string | null | undefined,
-    previousNodes: Node[],
-    nextNodes: Node[],
-  ) => {
-    if (!preserveViewport || !nodeId || explicitViewportChangeRef.current) return
-    const previousNode = previousNodes.find((node) => node.id === nodeId)
-    const nextNode = nextNodes.find((node) => node.id === nodeId)
-    if (!previousNode || !nextNode) return
-
-    const current = getViewport()
-    const nextViewport = {
-      x: current.x + (previousNode.position.x - nextNode.position.x) * current.zoom,
-      y: current.y + (previousNode.position.y - nextNode.position.y) * current.zoom,
-      zoom: current.zoom,
-    }
-    preservedViewportRef.current = nextViewport
-    if (
-      Math.abs(nextViewport.x - current.x) < 0.01 &&
-      Math.abs(nextViewport.y - current.y) < 0.01
-    ) {
-      return
-    }
-    void setViewport(nextViewport, { duration: 0 })
-  }, [getViewport, preserveViewport, setViewport])
-
   const handleMoveStart = useCallback<OnMove>((event) => {
     if (!preserveViewport || !event) return
-    const target = event.target instanceof Element ? event.target : null
-    const touchCount = 'touches' in event ? event.touches.length : 0
-    manualViewportGestureRef.current = touchCount >= 2 || !target?.closest('.react-flow__node')
+    // 只要存在浏览器交互事件，就视为用户主动平移或缩放；程序化相机变化的 event 为 null。
+    manualViewportGestureRef.current = true
   }, [preserveViewport])
+
+  const handleViewportChange = useCallback((viewport: Viewport) => {
+    if (!preserveViewport || manualViewportGestureRef.current || explicitViewportChangeRef.current) {
+      preservedViewportRef.current = viewport
+      onControlledViewportChange(viewport)
+    }
+  }, [onControlledViewportChange, preserveViewport])
 
   const handleMove = useCallback<OnMove>((_event, viewport) => {
     if (!preserveViewport) return
     if (manualViewportGestureRef.current || explicitViewportChangeRef.current) {
       preservedViewportRef.current = viewport
+      onControlledViewportChange(viewport)
       return
     }
     restorePreservedViewport(viewport)
-  }, [preserveViewport, restorePreservedViewport])
+  }, [onControlledViewportChange, preserveViewport, restorePreservedViewport])
 
   const handleMoveEnd = useCallback<OnMove>((_event, viewport) => {
     if (!preserveViewport) return
     if (manualViewportGestureRef.current || explicitViewportChangeRef.current) {
       preservedViewportRef.current = viewport
+      onControlledViewportChange(viewport)
     } else {
       restorePreservedViewport(viewport)
     }
     manualViewportGestureRef.current = false
-  }, [preserveViewport, restorePreservedViewport])
+  }, [onControlledViewportChange, preserveViewport, restorePreservedViewport])
 
   const runExplicitViewportChange = useCallback((change: () => void, duration: number) => {
     explicitViewportChangeRef.current = true
@@ -163,11 +149,13 @@ export function useMindMapViewport({
     }
     change()
     explicitViewportTimeoutRef.current = window.setTimeout(() => {
-      preservedViewportRef.current = getViewport()
+      const viewport = getViewport()
+      preservedViewportRef.current = viewport
+      onControlledViewportChange(viewport)
       explicitViewportChangeRef.current = false
       explicitViewportTimeoutRef.current = null
     }, duration + 40)
-  }, [getViewport])
+  }, [getViewport, onControlledViewportChange])
   const childrenByParent = useMemo(() => {
     const next = new Map<string, string[]>()
     for (const node of graphNodes) {
@@ -226,8 +214,8 @@ export function useMindMapViewport({
 
   useLayoutEffect(() => {
     if (!preserveViewport || !isCanvasReady) return
-    preservedViewportRef.current = getViewport()
-  }, [getViewport, isCanvasReady, preserveViewport])
+    restorePreservedViewport()
+  }, [isCanvasReady, preserveViewport, restorePreservedViewport])
 
   useLayoutEffect(() => {
     restorePreservedViewport()
@@ -238,10 +226,11 @@ export function useMindMapViewport({
     if (!element) return
 
     const updateSize = () => {
-      setCanvasSize({
-        width: element.clientWidth,
-        height: element.clientHeight,
-      })
+      const width = element.clientWidth
+      const height = element.clientHeight
+      // 窗口失焦、切换全屏或系统工作区变化时可能短暂读到 0，保留最后一次有效尺寸以免卸载画布。
+      if (width <= 0 || height <= 0) return
+      setCanvasSize({ width, height })
     }
 
     updateSize()
@@ -392,19 +381,6 @@ export function useMindMapViewport({
   }, [runExplicitViewportChange, zoomOut])
 
   useEffect(() => {
-    if (!mobileGuidedActive || !isCanvasReady || graphNodes.length === 0) return
-    if (contentChangeViewportPolicy === 'preserve' && hasRunInitialMobileFitRef.current) return
-    hasRunInitialMobileFitRef.current = true
-    runFitView(180)
-  }, [
-    contentChangeViewportPolicy,
-    graphNodes.length,
-    isCanvasReady,
-    mobileGuidedActive,
-    runFitView,
-  ])
-
-  useEffect(() => {
     if (!viewCommand || !isCanvasReady) return
     if (handledViewCommandNonceRef.current === viewCommand.nonce) return
     handledViewCommandNonceRef.current = viewCommand.nonce
@@ -434,10 +410,11 @@ export function useMindMapViewport({
     isCanvasReady,
     mobileGuidedActive,
     preserveViewport,
-    preserveNodeScreenPosition,
+    controlledViewport,
     handleMoveStart,
     handleMove,
     handleMoveEnd,
+    handleViewportChange,
     runFitView,
     centerNodeInCanvas,
     checkOverlap,

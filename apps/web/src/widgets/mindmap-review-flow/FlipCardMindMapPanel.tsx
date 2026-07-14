@@ -1,10 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ArrowRight, CornerUpLeft, Eye, Network, Undo2 } from 'lucide-react'
 import {
   MindMapEditorSurface,
   MindMapPageToolbar,
   type MindMapEditorSurfaceHandle,
+  type MindMapEditorSurfaceProps,
+  type MindMapPageToolbarProps,
   type MindMapSelection,
 } from '@/features/mindmap-editor'
 import type { MindMapEditorState, MindMapRecallRating, MindMapRecallRound } from '@/shared/api/contracts'
@@ -15,11 +17,46 @@ import { isEditableKeyboardTarget } from '@/shared/keyboard/keyboardTargets'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
 
-interface ReviewFlowMapPanelProps {
+type FlipCardToolbarExtensions = Pick<
+  MindMapPageToolbarProps,
+  | 'embedded'
+  | 'taskControl'
+  | 'searchControl'
+  | 'focusAction'
+  | 'fitAction'
+  | 'moreActions'
+  | 'segmentControl'
+  | 'importMindMapAction'
+  | 'importTextAction'
+  | 'englishAction'
+>
+
+type FlipCardSurfaceExtensions = Pick<
+  MindMapEditorSurfaceProps,
+  | 'segments'
+  | 'activeSegmentId'
+  | 'segmentColorMode'
+  | 'segmentRangeDraft'
+  | 'highlightedNodeUids'
+  | 'masteryByNodeUid'
+  | 'focusRequestNodeUid'
+  | 'focusRequestNonce'
+  | 'feedbackFxSignal'
+  | 'onSegmentSelect'
+  | 'onCreateSegmentFromSelection'
+  | 'onSegmentRangeDraftChange'
+  | 'onSegmentRangeModeToggle'
+  | 'onSegmentRangeConfirm'
+>
+
+export interface FlipCardMindMapPanelProps extends FlipCardSurfaceExtensions {
   fullscreen: boolean
   displayMode?: 'review' | 'edit'
   modeSyncVersion?: number
   viewMemoryScope?: string | null
+  className?: string
+  surfaceClassName?: string
+  toolbarExtensions?: FlipCardToolbarExtensions
   onToggleFullscreen: (active?: boolean) => void
   onToggleMode?: () => void
   visibleEditorState: MindMapEditorState
@@ -34,6 +71,8 @@ interface ReviewFlowMapPanelProps {
   onNodeActive?: (nodes: MindMapSelection[]) => void
   onNodeHover?: (nodes: MindMapSelection[]) => void
   onQuizBreakOpen?: () => void
+  onNativeFullscreenChange?: (active: boolean) => void
+  onUiClearedChange?: (active: boolean) => void
   recallRatings?: Map<string, MindMapRecallRating>
   recallRound?: MindMapRecallRound
   weakNodeUids?: string[]
@@ -116,11 +155,14 @@ function toGuidedSelection(node: GuidedMindMapNode): MindMapSelection {
   }
 }
 
-export function ReviewFlowMapPanel({
+export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipCardMindMapPanelProps>(function FlipCardMindMapPanel({
   fullscreen,
   displayMode = 'review',
   modeSyncVersion = 0,
   viewMemoryScope = null,
+  className,
+  surfaceClassName,
+  toolbarExtensions,
   onToggleFullscreen,
   onToggleMode,
   visibleEditorState,
@@ -135,13 +177,29 @@ export function ReviewFlowMapPanel({
   onNodeActive,
   onNodeHover,
   onQuizBreakOpen,
+  onNativeFullscreenChange,
+  onUiClearedChange,
+  segments,
+  activeSegmentId,
+  segmentColorMode,
+  segmentRangeDraft,
+  highlightedNodeUids,
+  masteryByNodeUid,
+  focusRequestNodeUid,
+  focusRequestNonce,
+  feedbackFxSignal,
+  onSegmentSelect,
+  onCreateSegmentFromSelection,
+  onSegmentRangeDraftChange,
+  onSegmentRangeModeToggle,
+  onSegmentRangeConfirm,
   recallRatings = new Map(),
   recallRound = 'first',
   weakNodeUids = [],
   onRateNode,
   onUndoRating,
   onOpenRatingHistory,
-}: ReviewFlowMapPanelProps) {
+}: FlipCardMindMapPanelProps, forwardedRef) {
   const navigate = useNavigate()
   const frameRef = useRef<MindMapEditorSurfaceHandle | null>(null)
   const [nativeFullscreenActive, setNativeFullscreenActive] = useState(false)
@@ -152,6 +210,15 @@ export function ReviewFlowMapPanel({
   const [inferredNodeUid, setInferredNodeUid] = useState<string | null>(null)
   const nodeEnteredAtRef = useRef(0)
   const isEditMode = displayMode === 'edit'
+
+  useImperativeHandle(forwardedRef, () => ({
+    setUiCleared: (nextValue) => frameRef.current?.setUiCleared(nextValue),
+    toggleUiCleared: () => frameRef.current?.toggleUiCleared(),
+    focusNode: (nodeUid) => frameRef.current?.focusNode(nodeUid),
+    fitView: () => frameRef.current?.fitView(),
+    enterNativeFullscreen: () => frameRef.current?.enterNativeFullscreen() ?? Promise.resolve(),
+    exitNativeFullscreen: () => frameRef.current?.exitNativeFullscreen() ?? Promise.resolve(),
+  }), [])
   const frameEditorState = isEditMode && editableEditorState ? editableEditorState : visibleEditorState
   const frameSyncIntent = 'soft'
   const frameForceSyncKey = modeSyncVersion > 0 ? `${displayMode}:${modeSyncVersion}` : undefined
@@ -286,25 +353,17 @@ export function ReviewFlowMapPanel({
     },
     [onNodeActive],
   )
-  const handleImmersiveToggle = useCallback(async () => {
-    if (nativeFullscreenActive) {
-      await frameRef.current?.exitNativeFullscreen()
-      onToggleFullscreen(true)
-      return
-    }
+  const handleImmersiveToggle = useCallback(() => {
     onToggleFullscreen()
-  }, [nativeFullscreenActive, onToggleFullscreen])
+  }, [onToggleFullscreen])
 
   const handleNativeFullscreenToggle = useCallback(async () => {
     if (nativeFullscreenActive) {
       await frameRef.current?.exitNativeFullscreen()
       return
     }
-    if (fullscreen) {
-      onToggleFullscreen(false)
-    }
     await frameRef.current?.enterNativeFullscreen()
-  }, [fullscreen, nativeFullscreenActive, onToggleFullscreen])
+  }, [nativeFullscreenActive])
 
   const handleOpenQuizPage = useCallback(() => {
     if (onQuizBreakOpen) {
@@ -316,7 +375,7 @@ export function ReviewFlowMapPanel({
   }, [currentPalaceId, navigate, onQuizBreakOpen])
 
   return (
-    <div className={cn('h-full min-h-0', fullscreen && 'flex h-full flex-col')}>
+    <div className={cn('h-full min-h-0', fullscreen && 'flex h-full flex-col', className)}>
       {!isEditMode ? (
         <div className="mb-3 space-y-2 rounded-xl border border-border/70 bg-background/95 p-2 shadow-sm md:hidden">
           <div className="flex min-h-9 items-center gap-1 overflow-hidden px-1 text-xs text-muted-foreground">
@@ -398,8 +457,12 @@ export function ReviewFlowMapPanel({
           ) : <Button onClick={handleGuidedReveal} disabled={!guidedCurrentNode}><Eye className="size-4" />揭示</Button>}
         </div>
       ) : null}      <MindMapPageToolbar
-        moreActions={onOpenRatingHistory ? [{ label: '本轮评分记录', onClick: onOpenRatingHistory }] : []}
-        className={cn('mb-3', !isEditMode && 'hidden md:block')}
+        {...toolbarExtensions}
+        moreActions={[
+          ...(toolbarExtensions?.moreActions ?? []),
+          ...(onOpenRatingHistory ? [{ label: '本轮评分记录', onClick: onOpenRatingHistory }] : []),
+        ]}
+        className={cn('mb-3', !isEditMode && !toolbarExtensions?.taskControl && 'hidden md:block')}
         modeToggle={
           onToggleMode
             ? {
@@ -417,14 +480,14 @@ export function ReviewFlowMapPanel({
             : null
         }
         immersiveAction={{
-          label: '半屏编辑',
+          label: fullscreen ? '退出网页内全屏' : '网页内全屏',
           active: fullscreen,
           onClick: () => {
             void handleImmersiveToggle()
           },
         }}
         nativeFullscreenAction={{
-          label: '全屏编辑',
+          label: nativeFullscreenActive ? '退出系统全屏' : '系统全屏',
           active: nativeFullscreenActive,
           onClick: () => {
             void handleNativeFullscreenToggle()
@@ -460,21 +523,42 @@ export function ReviewFlowMapPanel({
         mobileViewPolicy={isEditMode ? 'map' : 'auto'}
         nodeClickViewportPolicy={isEditMode ? 'guided-center' : 'preserve'}
         reviewFxSignal={reviewFxSignal}
+        feedbackFxSignal={feedbackFxSignal}
+        segments={segments}
+        activeSegmentId={activeSegmentId}
+        segmentColorMode={segmentColorMode}
+        segmentRangeDraft={segmentRangeDraft}
+        highlightedNodeUids={highlightedNodeUids}
+        masteryByNodeUid={masteryByNodeUid}
+        focusRequestNodeUid={focusRequestNodeUid}
+        focusRequestNonce={focusRequestNonce}
         onEditorStateChange={isEditMode && onEditorStateChange ? onEditorStateChange : () => {}}
         onNodeActive={handleNodeActive}
         onNodeClick={isEditMode ? undefined : onNodeClick}
         onNodeContextMenu={isEditMode ? onEditNodeContextMenu : onNodeContextMenu}
         onNodeHover={isEditMode ? undefined : onNodeHover}
+        onSegmentSelect={onSegmentSelect}
+        onCreateSegmentFromSelection={onCreateSegmentFromSelection}
+        onSegmentRangeDraftChange={onSegmentRangeDraftChange}
+        onSegmentRangeModeToggle={onSegmentRangeModeToggle}
+        onSegmentRangeConfirm={onSegmentRangeConfirm}
         onFullscreenToggle={onToggleFullscreen}
-        onFullscreenChange={setNativeFullscreenActive}
-        onUiClearedChange={setUiCleared}
+        onFullscreenChange={(active) => {
+          setNativeFullscreenActive(active)
+          onNativeFullscreenChange?.(active)
+        }}
+        onUiClearedChange={(active) => {
+          setUiCleared(active)
+          onUiClearedChange?.(active)
+        }}
         onReady={() => setHostReadyTimedOut(false)}
         onReadyTimeout={() => setHostReadyTimedOut(true)}
         className={cn(
           'w-full rounded-lg border border-border/70 bg-background',
           fullscreen ? 'h-full' : 'h-[64vh]',
+          surfaceClassName,
         )}
       />
     </div>
   )
-}
+})

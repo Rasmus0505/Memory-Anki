@@ -125,7 +125,7 @@ function writeStoredFloatingLayout(storageKey: string, layout: FloatingDialogLay
   }
 }
 
-const DialogModalContext = createContext<{ modal: boolean }>({ modal: true })
+const DialogModalContext = createContext<{ modal: boolean; open: boolean }>({ modal: true, open: false })
 const DialogTitleTextContext = createContext<((title: string) => void) | null>(null)
 const DialogDragHandleContext = createContext<
   ((event: ReactPointerEvent<HTMLElement>) => void) | null
@@ -169,7 +169,7 @@ function Dialog({
   modal?: boolean
 }>) {
   return (
-    <DialogModalContext.Provider value={{ modal }}>
+    <DialogModalContext.Provider value={{ modal, open }}>
       <DialogPrimitive.Root open={open} onOpenChange={onOpenChange} modal={modal}>
         {children}
       </DialogPrimitive.Root>
@@ -184,6 +184,8 @@ const DialogContent = forwardRef<
     showCloseButton?: boolean
     floating?: boolean
     floatingId?: string
+    expandOnOpen?: boolean
+    dismissOnInteractOutside?: boolean
     capsuleLabel?: string
     accessibleTitle?: string
     accessibleDescription?: string
@@ -196,6 +198,8 @@ const DialogContent = forwardRef<
     showCloseButton = false,
     floating,
     floatingId,
+    expandOnOpen = false,
+    dismissOnInteractOutside = true,
     capsuleLabel,
     accessibleTitle,
     accessibleDescription,
@@ -206,7 +210,7 @@ const DialogContent = forwardRef<
   },
   ref,
 ) {
-  const { modal } = useContext(DialogModalContext)
+  const { modal, open } = useContext(DialogModalContext)
   const resolvedLayout = layout ?? (modal ? 'centered' : 'unstyled')
   const floatingEnabled = (floating ?? resolvedLayout === 'centered') && !isCoarsePointerViewport()
   const stableFloatingId = useMemo(
@@ -263,6 +267,13 @@ const DialogContent = forwardRef<
     if (!floatingEnabled) return
     setFloatingLayout(readStoredFloatingLayout(storageKey))
   }, [floatingEnabled, storageKey])
+
+  useEffect(() => {
+    if (!open || !floatingEnabled || !expandOnOpen) return
+    persistFloatingLayout((current) =>
+      current.collapsed ? { ...current, collapsed: false } : current,
+    )
+  }, [expandOnOpen, floatingEnabled, open, persistFloatingLayout])
 
   useEffect(() => {
     if (!floatingEnabled) return
@@ -392,7 +403,7 @@ const DialogContent = forwardRef<
     className,
   )
 
-  if (floatingEnabled && floatingLayout.collapsed) {
+  if (floatingEnabled && floatingLayout.collapsed && !(open && expandOnOpen)) {
     return (
       <DialogPrimitive.Portal>
         {modal ? (
@@ -409,10 +420,12 @@ const DialogContent = forwardRef<
           {...props}
           aria-describedby={undefined}
           onPointerDownOutside={(event) => {
+            if (!dismissOnInteractOutside) event.preventDefault()
             if (floatingLayout.pinned) event.preventDefault()
             onPointerDownOutside?.(event)
           }}
           onInteractOutside={(event) => {
+            if (!dismissOnInteractOutside) event.preventDefault()
             if (floatingLayout.pinned) event.preventDefault()
             onInteractOutside?.(event)
           }}
@@ -442,10 +455,12 @@ const DialogContent = forwardRef<
       ref={mergedRef}
       {...contentProps}
       onPointerDownOutside={(event) => {
+        if (!dismissOnInteractOutside) event.preventDefault()
         if (floatingLayout.pinned) event.preventDefault()
         onPointerDownOutside?.(event)
       }}
       onInteractOutside={(event) => {
+        if (!dismissOnInteractOutside) event.preventDefault()
         if (floatingLayout.pinned) event.preventDefault()
         onInteractOutside?.(event)
       }}

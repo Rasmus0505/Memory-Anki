@@ -117,7 +117,7 @@ describe('MindMapEditorSurface viewport preservation', () => {
     expect(canvas.getAttribute('data-content-change-viewport-policy')).toBe('preserve')
   })
 
-  it('keeps guided defaults outside preserved practice mode', () => {
+  it('keeps preserve defaults outside practice mode', () => {
     renderFrame({
       readonly: true,
       practiceModeActive: false,
@@ -126,8 +126,8 @@ describe('MindMapEditorSurface viewport preservation', () => {
 
     const canvas = screen.getByTestId('mock-mind-map-canvas')
 
-    expect(canvas.getAttribute('data-node-click-viewport-policy')).toBe('guided-center')
-    expect(canvas.getAttribute('data-content-change-viewport-policy')).toBe('auto-fit')
+    expect(canvas.getAttribute('data-node-click-viewport-policy')).toBe('preserve')
+    expect(canvas.getAttribute('data-content-change-viewport-policy')).toBe('preserve')
   })
 
   it('still includes sync changes in the recovery key when view preservation is disabled', () => {

@@ -47,6 +47,9 @@ type MindMapInteractionState =
       nodeId: string
       originalText: string
       draftText: string
+      selectAllOnStart?: boolean
+      createdFromDoc?: MindMapEditorState['editor_doc']
+      returnNodeId?: string
     }
 
 export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindMapEditorSurfaceProps>(function MindMapEditorSurface({
@@ -90,6 +93,7 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
   onSegmentRangeDraftChange,
   onAiSplitRequest,
   onFullscreenChange,
+  onFullscreenToggle,
   onUiClearedChange,
   onReady,
 }: MindMapEditorSurfaceProps, ref) {
@@ -102,6 +106,7 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
   const [uiCleared, setUiCleared] = useState(false)
   const [viewCommand, setViewCommand] = useState<MindMapCanvasViewCommand | null>(null)
   const viewCommandNonceRef = useRef(0)
+  const pendingKeyboardFocusNodeIdRef = useRef<string | null>(null)
   const editorDoc = editorState.editor_doc
   const normalizedEditorState = useMemo<MindMapEditorState>(
     () => ({
@@ -208,6 +213,8 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
     canUndo,
     canRedo,
     commit: commitEditorDoc,
+    stage: stageEditorDoc,
+    commitFrom: commitEditorDocFrom,
     undo: undoEditorDoc,
     redo: redoEditorDoc,
     getCurrentEditorDoc,
@@ -225,21 +232,44 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
     onNodeActive?.([])
   }, [graphData.nodes, onNodeActive, replaceInteraction, selectedNodeId])
 
+  useEffect(() => {
+    const nodeId = pendingKeyboardFocusNodeIdRef.current
+    if (!nodeId) return
+    const timer = window.setTimeout(() => {
+      const frame = frameRef.current
+      if (!frame) return
+      focusMindMapNodeText(frame, nodeId)
+      pendingKeyboardFocusNodeIdRef.current = null
+    }, 0)
+    return () => window.clearTimeout(timer)
+  }, [graphData.nodes])
+
   const commitEditingDraft = useCallback(() => {
     const current = interactionRef.current
     if (current.mode !== 'editing') return
     const text = current.draftText.trim()
     if (text && text !== current.originalText) {
-      commitEditorDoc(editEditorDocNode(getCurrentEditorDoc(), current.nodeId, text))
+      const nextEditorDoc = editEditorDocNode(getCurrentEditorDoc(), current.nodeId, text)
+      if (current.createdFromDoc) commitEditorDocFrom(current.createdFromDoc, nextEditorDoc)
+      else commitEditorDoc(nextEditorDoc)
+    } else if (current.createdFromDoc) {
+      commitEditorDocFrom(current.createdFromDoc, getCurrentEditorDoc())
     }
     replaceInteraction({ mode: 'selected', nodeId: current.nodeId })
-  }, [commitEditorDoc, getCurrentEditorDoc, replaceInteraction])
+  }, [commitEditorDoc, commitEditorDocFrom, getCurrentEditorDoc, replaceInteraction])
 
   const cancelEditing = useCallback(() => {
     const current = interactionRef.current
     if (current.mode !== 'editing') return
+    if (current.createdFromDoc) {
+      stageEditorDoc(current.createdFromDoc)
+      const returnNodeId = current.returnNodeId ?? null
+      replaceInteraction(returnNodeId ? { mode: 'selected', nodeId: returnNodeId } : { mode: 'idle' })
+      onNodeActive?.(buildSelectionFromDoc(current.createdFromDoc, returnNodeId))
+      return
+    }
     replaceInteraction({ mode: 'selected', nodeId: current.nodeId })
-  }, [replaceInteraction])
+  }, [onNodeActive, replaceInteraction, stageEditorDoc])
 
   const beginEditingNode = useCallback(
     (nodeId: string) => {
@@ -253,6 +283,7 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
         nodeId,
         originalText: text,
         draftText: text,
+        selectAllOnStart: false,
       })
       onNodeActive?.(selection)
     },
@@ -308,7 +339,6 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
     getFullscreenTarget: () => frameRef.current,
     browserFullscreenEnabled,
     onFullscreenChange,
-    requestFitView,
   })
   const nativeFullscreenActive = fullscreen.active
   const enterNativeFullscreen = fullscreen.enter
@@ -374,18 +404,18 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
   )
 
   const canEdit = !readonly && !practiceModeActive && !capabilities.some((capability) => capability.locksEditing)
-  const preservePracticeViewport = practiceModeActive && preserveViewOnSync
   const resolvedNodeClickViewportPolicy =
-    nodeClickViewportPolicy ?? (preservePracticeViewport ? 'preserve' : 'guided-center')
+    nodeClickViewportPolicy ?? 'preserve'
   const resolvedContentChangeViewportPolicy =
-    contentChangeViewportPolicy ?? (preservePracticeViewport ? 'preserve' : 'auto-fit')
+    contentChangeViewportPolicy ?? 'preserve'
   const frameClassName = `${buildMindMapEditorSurfaceClassName(className)}${
     nativeFullscreenActive ? ' memory-anki-mindmap-native-fullscreen' : ''
   }`
   const handleAddChild = useCallback(
     (nodeId: string) => {
-      const result = addEditorDocChildWithResult(getCurrentEditorDoc(), nodeId)
-      if (!result.nodeUid || !commitEditorDoc(result.editorDoc)) return
+      const baseEditorDoc = getCurrentEditorDoc()
+      const result = addEditorDocChildWithResult(baseEditorDoc, nodeId)
+      if (!result.nodeUid || !stageEditorDoc(result.editorDoc)) return
       const selection = buildSelectionFromDoc(result.editorDoc, result.nodeUid)
       const text = selection[0]?.text || '新知识点'
       replaceInteraction({
@@ -393,15 +423,28 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
         nodeId: result.nodeUid,
         originalText: text,
         draftText: text,
+        selectAllOnStart: true,
+        createdFromDoc: baseEditorDoc,
+        returnNodeId: nodeId,
       })
       onNodeActive?.(selection)
+    },
+    [getCurrentEditorDoc, onNodeActive, replaceInteraction, stageEditorDoc],
+  )
+  const handleAddChildWithoutFocus = useCallback(
+    (nodeId: string) => {
+      const result = addEditorDocChildWithResult(getCurrentEditorDoc(), nodeId)
+      if (!result.nodeUid || !commitEditorDoc(result.editorDoc)) return
+      replaceInteraction({ mode: 'selected', nodeId })
+      onNodeActive?.(buildSelectionFromDoc(result.editorDoc, nodeId))
     },
     [commitEditorDoc, getCurrentEditorDoc, onNodeActive, replaceInteraction],
   )
   const handleAddSibling = useCallback(
     (nodeId: string) => {
-      const result = addEditorDocSiblingWithResult(getCurrentEditorDoc(), nodeId)
-      if (!result.nodeUid || !commitEditorDoc(result.editorDoc)) return
+      const baseEditorDoc = getCurrentEditorDoc()
+      const result = addEditorDocSiblingWithResult(baseEditorDoc, nodeId)
+      if (!result.nodeUid || !stageEditorDoc(result.editorDoc)) return
       const selection = buildSelectionFromDoc(result.editorDoc, result.nodeUid)
       const text = selection[0]?.text || '新知识点'
       replaceInteraction({
@@ -409,10 +452,13 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
         nodeId: result.nodeUid,
         originalText: text,
         draftText: text,
+        selectAllOnStart: true,
+        createdFromDoc: baseEditorDoc,
+        returnNodeId: nodeId,
       })
       onNodeActive?.(selection)
     },
-    [commitEditorDoc, getCurrentEditorDoc, onNodeActive, replaceInteraction],
+    [getCurrentEditorDoc, onNodeActive, replaceInteraction, stageEditorDoc],
   )
   const handleDeleteNode = useCallback(
     (nodeId: string) => {
@@ -446,10 +492,18 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
   const handleEditNode = useCallback(
     (nodeId: string, text: string) => {
       const trimmed = text.trim()
-      if (trimmed) commitEditorDoc(editEditorDocNode(getCurrentEditorDoc(), nodeId, trimmed))
+      const current = interactionRef.current
+      if (trimmed) {
+        const nextEditorDoc = editEditorDocNode(getCurrentEditorDoc(), nodeId, trimmed)
+        if (current.mode === 'editing' && current.nodeId === nodeId && current.createdFromDoc) {
+          commitEditorDocFrom(current.createdFromDoc, nextEditorDoc)
+        } else {
+          commitEditorDoc(nextEditorDoc)
+        }
+      }
       replaceInteraction({ mode: 'selected', nodeId })
     },
-    [commitEditorDoc, getCurrentEditorDoc, replaceInteraction],
+    [commitEditorDoc, commitEditorDocFrom, getCurrentEditorDoc, replaceInteraction],
   )
   const handleReparentNode = useCallback(
     (sourceId: string, targetId: string) =>
@@ -506,7 +560,8 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
 
       if (event.key === 'Tab' && !event.ctrlKey && !event.metaKey && !event.altKey) {
         event.preventDefault()
-        handleAddChild(selectedNodeId)
+        pendingKeyboardFocusNodeIdRef.current = selectedNodeId
+        handleAddChildWithoutFocus(selectedNodeId)
         return
       }
       if (
@@ -545,7 +600,7 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
       canEdit,
       editingNodeId,
       graphData.nodes,
-      handleAddChild,
+      handleAddChildWithoutFocus,
       handleAddSibling,
       handleDeleteNode,
       redoEditorDoc,
@@ -563,8 +618,10 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
 
   const handleFocusToggle = useCallback(() => {
     const handled = capabilities.some((capability) => capability.handleFocusToggle?.())
-    if (!handled) toggleCanvasFullscreen()
-  }, [capabilities, toggleCanvasFullscreen])
+    if (handled) return
+    if (onFullscreenToggle) onFullscreenToggle()
+    else toggleCanvasFullscreen()
+  }, [capabilities, onFullscreenToggle, toggleCanvasFullscreen])
 
   const canvas = (
     <WidgetErrorBoundary label="思维导图">
@@ -573,9 +630,11 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
         selectedNodeId={selectedNodeId}
         editingNodeId={editingNodeId}
         editingDraft={editingDraft}
+        selectEditingText={interaction.mode === 'editing' && Boolean(interaction.selectAllOnStart)}
         readonly={!canEdit}
         practiceModeActive={practiceModeActive}
-        focusMode={nativeFullscreenActive || immersiveModeActive}
+        focusMode={onFullscreenToggle ? immersiveModeActive : nativeFullscreenActive}
+        focusModeLabel={onFullscreenToggle ? '网页内全屏' : '系统全屏'}
         showToolbar={!uiCleared}
         toolbarContent={toolbarContent}
         mobileViewPolicy={mobileViewPolicy}
@@ -625,11 +684,18 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
 
 MindMapEditorSurface.displayName = 'MindMapEditorSurface'
 
-export type { MindMapEditorSurfaceHandle } from './MindMapEditorSurface.types'
+export type { MindMapEditorSurfaceHandle, MindMapEditorSurfaceProps } from './MindMapEditorSurface.types'
 
 function isEditableKeyboardTarget(target: HTMLElement | null) {
   if (!target) return false
   return Boolean(target.closest('input, textarea, select, [contenteditable="true"]'))
+}
+
+function focusMindMapNodeText(container: HTMLElement, nodeId: string) {
+  const shell = Array.from(
+    container.querySelectorAll<HTMLElement>('[data-mindmap-node-id]'),
+  ).find((element) => element.dataset.mindmapNodeId === nodeId)
+  shell?.querySelector<HTMLButtonElement>('.mindmap-node-text')?.focus()
 }
 
 function isNonNodeInteractiveTarget(target: HTMLElement | null) {

@@ -83,6 +83,8 @@ vi.mock('@/features/mindmap-editor', async (importOriginal) => ({
     readonly = false,
     preserveViewOnSync = false,
     initialViewPolicy = 'preserve',
+    mobileViewPolicy = 'map',
+    nodeClickViewportPolicy = 'guided-center',
     aiSplitBusy = false,
     syncOnPropChange = false,
     externalSyncKey = null,
@@ -103,6 +105,8 @@ vi.mock('@/features/mindmap-editor', async (importOriginal) => ({
     readonly?: boolean
     preserveViewOnSync?: boolean
     initialViewPolicy?: 'preserve' | 'reset'
+    mobileViewPolicy?: 'map' | 'guided' | 'auto'
+    nodeClickViewportPolicy?: 'preserve' | 'guided-center'
     aiSplitBusy?: boolean
     syncOnPropChange?: boolean
     externalSyncKey?: string | number | null
@@ -139,6 +143,8 @@ vi.mock('@/features/mindmap-editor', async (importOriginal) => ({
     React.useImperativeHandle(ref, () => ({
       setUiCleared: vi.fn(),
       toggleUiCleared: vi.fn(),
+      focusNode: vi.fn(),
+      fitView: vi.fn(),
       enterNativeFullscreen: vi.fn(async () => {}),
       exitNativeFullscreen: vi.fn(async () => {}),
     }))
@@ -157,6 +163,7 @@ vi.mock('@/features/mindmap-editor', async (importOriginal) => ({
         <div>{`mindmap-${practiceModeActive ? 'practice' : 'edit'}-${readonly ? 'readonly' : 'editable'}-${shellMode}-${viewPolicy}-import-${syncOnPropChange ? 'sync' : 'nosync'}`}</div>
         <div>{`mindmap-mount-${mountIdRef.current}`}</div>
         <div>{`sync-${syncIntent}-${forceSyncIntent}-${String(forceSyncKey ?? '')}-${String(externalSyncKey ?? '')}-${String(syncReason ?? '')}`}</div>
+        <div>{`flip-policies-${mobileViewPolicy}-${nodeClickViewportPolicy}`}</div>
         <div>{`scope-${String(viewMemoryScope ?? '')}`}</div>
         <div>{`focus-${String(focusRequestNodeUid ?? '')}:${String(focusRequestNonce)}`}</div>
         <div>{`aisplit-${aiSplitBusy ? 'busy' : 'idle'}`}</div>
@@ -254,6 +261,7 @@ vi.mock('@/features/mindmap-editor', async (importOriginal) => ({
     segmentControl,
     modeControl,
     modeToggle,
+    moreActions,
     importMindMapAction,
     importTextAction,
     englishAction,
@@ -319,6 +327,9 @@ vi.mock('@/features/mindmap-editor', async (importOriginal) => ({
         </>
       ) : null}
       {modeToggle ? <button type="button" onClick={modeToggle.onClick}>{modeToggle.label}</button> : null}
+      {(moreActions ?? []).map((action: { label: string; onClick: () => void; disabled?: boolean }) => (
+        <button key={action.label} type="button" disabled={action.disabled} onClick={action.onClick}>{action.label}</button>
+      ))}
       {importMindMapAction ? <button type="button" onClick={importMindMapAction.onClick}>{importMindMapAction.label}</button> : null}
       {importTextAction ? <button type="button" onClick={importTextAction.onClick}>{importTextAction.label}</button> : null}
       {englishAction ? <button type="button" onClick={englishAction.onClick}>{englishAction.label}</button> : null}

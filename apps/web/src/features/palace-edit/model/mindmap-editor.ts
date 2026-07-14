@@ -44,6 +44,9 @@ export function buildMindMapImportValidationFingerprint(
       delete nextData.uid
       delete nextData.memoryAnkiId
       delete nextData.memoryAnkiNodeType
+      if (nextData.note == null || nextData.note === '') {
+        delete nextData.note
+      }
       if (isRoot) {
         nextData.text = palaceTitle || String(nextData.text ?? '')
         nextData.memoryAnkiRootKind = 'palace'

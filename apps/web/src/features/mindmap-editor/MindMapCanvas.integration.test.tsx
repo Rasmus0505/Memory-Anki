@@ -210,10 +210,12 @@ describe('MindMapCanvas recovery', () => {
   let heightSpy: ReturnType<typeof vi.spyOn>
   let originalRequestAnimationFrame: typeof window.requestAnimationFrame
   let originalCancelAnimationFrame: typeof window.cancelAnimationFrame
+  let originalResizeObserver: typeof globalThis.ResizeObserver
 
   beforeEach(() => {
     originalRequestAnimationFrame = window.requestAnimationFrame
     originalCancelAnimationFrame = window.cancelAnimationFrame
+    originalResizeObserver = globalThis.ResizeObserver
     window.requestAnimationFrame = vi.fn((callback: FrameRequestCallback) => {
       callback(0)
       return 1
@@ -242,6 +244,11 @@ describe('MindMapCanvas recovery', () => {
     window.cancelAnimationFrame = originalCancelAnimationFrame
     widthSpy.mockRestore()
     heightSpy.mockRestore()
+    Object.defineProperty(globalThis, 'ResizeObserver', {
+      configurable: true,
+      writable: true,
+      value: originalResizeObserver,
+    })
   })
 
   it('rebuilds the ReactFlow provider when refreshing the mind map host', () => {
@@ -292,13 +299,13 @@ describe('MindMapCanvas recovery', () => {
     fireEvent.click(child)
     expect(screen.queryByRole('textbox', { name: '编辑节点文本' })).toBeNull()
 
+    child.focus()
     fireEvent.keyDown(child, { key: 'Tab' })
-    const newNodeEditor = await screen.findByRole('textbox', { name: '编辑节点文本' })
-    expect(document.activeElement).toBe(newNodeEditor)
-    expect((newNodeEditor as HTMLTextAreaElement).value).toBe('新知识点')
-
-    fireEvent.keyDown(newNodeEditor, { key: 'Enter' })
     const committedNewNode = await screen.findByRole('button', { name: '新知识点' })
+    expect(screen.queryByRole('textbox', { name: '编辑节点文本' })).toBeNull()
+    await waitFor(() => {
+      expect(document.activeElement).toBe(screen.getByRole('button', { name: '知识点' }))
+    })
 
     fireEvent.doubleClick(committedNewNode)
     const reopenedEditor = await screen.findByRole('textbox', { name: '编辑节点文本' })
@@ -422,7 +429,7 @@ describe('MindMapCanvas recovery', () => {
     expect(screen.queryByRole('button', { name: '隐藏这个分支' })).toBeNull()
   })
 
-  it('centers guided mobile node clicks only when the click viewport policy allows it', async () => {
+  it('preserves guided mobile node clicks unless centering is explicitly requested', () => {
     const { rerender } = render(
       <MindMapCanvas
         graphData={graphData}
@@ -435,13 +442,11 @@ describe('MindMapCanvas recovery', () => {
       />,
     )
 
-    await waitFor(() => expect(reactFlowMockState.fitView).toHaveBeenCalled())
-    reactFlowMockState.fitView.mockClear()
     fireEvent.click(screen.getByTestId('node-root'))
 
-    expect(reactFlowMockState.setCenter).toHaveBeenCalled()
+    expect(reactFlowMockState.setCenter).not.toHaveBeenCalled()
+    expect(reactFlowMockState.fitView).not.toHaveBeenCalled()
 
-    reactFlowMockState.setCenter.mockClear()
     rerender(
       <MindMapCanvas
         graphData={graphData}
@@ -451,17 +456,17 @@ describe('MindMapCanvas recovery', () => {
         onAddSibling={vi.fn()}
         onDelete={vi.fn()}
         mobileViewPolicy="guided"
-        nodeClickViewportPolicy="preserve"
+        nodeClickViewportPolicy="guided-center"
       />,
     )
 
     fireEvent.click(screen.getByTestId('node-root'))
 
-    expect(reactFlowMockState.setCenter).not.toHaveBeenCalled()
+    expect(reactFlowMockState.setCenter).toHaveBeenCalled()
     expect(reactFlowMockState.fitView).not.toHaveBeenCalled()
   })
 
-  it('keeps guided mobile content changes from fitting again when preserving the viewport', async () => {
+  it('keeps guided mobile content changes from fitting the viewport', async () => {
     const { rerender } = render(
       <MindMapCanvas
         graphData={graphData}
@@ -475,8 +480,7 @@ describe('MindMapCanvas recovery', () => {
       />,
     )
 
-    await waitFor(() => expect(reactFlowMockState.fitView).toHaveBeenCalledTimes(1))
-    reactFlowMockState.fitView.mockClear()
+    expect(reactFlowMockState.fitView).not.toHaveBeenCalled()
 
     rerender(
       <MindMapCanvas
@@ -565,7 +569,112 @@ describe('MindMapCanvas recovery', () => {
       ),
     )
   })
-  it('keeps the default guided mobile auto-fit behavior for content changes', async () => {
+
+  it('keeps the user viewport after the React Flow host is rebuilt', async () => {
+    let hostResizeCallback: ResizeObserverCallback | null = null
+    class MockResizeObserver {
+      private readonly callback: ResizeObserverCallback
+
+      constructor(callback: ResizeObserverCallback) {
+        this.callback = callback
+      }
+
+      observe(target: Element) {
+        if (target.getAttribute('data-testid') === 'mindmap-canvas-viewport-host') {
+          hostResizeCallback = this.callback
+        }
+      }
+
+      disconnect() {}
+      unobserve() {}
+    }
+    Object.defineProperty(globalThis, 'ResizeObserver', {
+      configurable: true,
+      writable: true,
+      value: MockResizeObserver,
+    })
+
+    const { rerender } = render(
+      <MindMapCanvas
+        graphData={expandedGraphData}
+        selectedNodeId={null}
+        onNodeSelect={vi.fn()}
+        onAddChild={vi.fn()}
+        onAddSibling={vi.fn()}
+        onDelete={vi.fn()}
+        contentChangeViewportPolicy="preserve"
+      />,
+    )
+
+    const userViewport = { x: 146, y: -83, zoom: 0.78 }
+    await waitFor(() => expect(reactFlowMockState.reactFlowProps?.viewport).toBeTruthy())
+    const moveStart = reactFlowMockState.reactFlowProps?.onMoveStart as
+      | ((event: MouseEvent, viewport: typeof userViewport) => void)
+      | undefined
+    const viewportChange = reactFlowMockState.reactFlowProps?.onViewportChange as
+      | ((viewport: typeof userViewport) => void)
+      | undefined
+    const moveEnd = reactFlowMockState.reactFlowProps?.onMoveEnd as
+      | ((event: MouseEvent, viewport: typeof userViewport) => void)
+      | undefined
+
+    act(() => {
+      const event = new MouseEvent('mousedown')
+      moveStart?.(event, userViewport)
+      viewportChange?.(userViewport)
+      moveEnd?.(event, userViewport)
+    })
+
+    await waitFor(() =>
+      expect(reactFlowMockState.reactFlowProps?.viewport).toEqual(userViewport),
+    )
+
+    act(() => {
+      viewportChange?.({ x: 0, y: 0, zoom: 1 })
+    })
+    expect(reactFlowMockState.reactFlowProps?.viewport).toEqual(userViewport)
+
+    widthSpy.mockReturnValue(0)
+    heightSpy.mockReturnValue(0)
+    act(() => {
+      hostResizeCallback?.([], {} as ResizeObserver)
+    })
+    expect(screen.getByTestId('react-flow')).toBeTruthy()
+    expect(reactFlowMockState.reactFlowProps?.viewport).toEqual(userViewport)
+
+    widthSpy.mockReturnValue(1024)
+    heightSpy.mockReturnValue(720)
+    act(() => {
+      hostResizeCallback?.([], {} as ResizeObserver)
+    })
+    expect(reactFlowMockState.reactFlowProps?.viewport).toEqual(userViewport)
+
+    rerender(
+      <MindMapCanvas
+        graphData={relabeledGraphData}
+        selectedNodeId={null}
+        onNodeSelect={vi.fn()}
+        onAddChild={vi.fn()}
+        onAddSibling={vi.fn()}
+        onDelete={vi.fn()}
+        contentChangeViewportPolicy="preserve"
+      />,
+    )
+    expect(reactFlowMockState.reactFlowProps?.viewport).toEqual(userViewport)
+
+    const providerBeforeRefresh = screen.getByTestId('react-flow-provider').dataset.providerId
+
+    fireEvent.click(screen.getByTitle('刷新脑图'))
+
+    await waitFor(() =>
+      expect(screen.getByTestId('react-flow-provider').dataset.providerId).not.toBe(
+        providerBeforeRefresh,
+      ),
+    )
+    expect(reactFlowMockState.reactFlowProps?.viewport).toEqual(userViewport)
+  })
+
+  it('keeps the default guided mobile viewport stable across content changes', async () => {
     const { rerender } = render(
       <MindMapCanvas
         graphData={graphData}
@@ -578,8 +687,7 @@ describe('MindMapCanvas recovery', () => {
       />,
     )
 
-    await waitFor(() => expect(reactFlowMockState.fitView).toHaveBeenCalledTimes(1))
-    reactFlowMockState.fitView.mockClear()
+    expect(reactFlowMockState.fitView).not.toHaveBeenCalled()
 
     rerender(
       <MindMapCanvas
@@ -593,6 +701,7 @@ describe('MindMapCanvas recovery', () => {
       />,
     )
 
-    await waitFor(() => expect(reactFlowMockState.fitView).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(screen.getByTestId('node-child')).toBeTruthy())
+    expect(reactFlowMockState.fitView).not.toHaveBeenCalled()
   })
 })

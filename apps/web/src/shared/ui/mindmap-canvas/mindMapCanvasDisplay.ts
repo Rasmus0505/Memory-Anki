@@ -11,6 +11,7 @@ interface BuildDisplayNodesInput {
   selectedNodeId: string | null
   editingNodeId: string | null
   editingDraft: string | null
+  selectEditingText?: boolean
   onStartEdit: (nodeId: string) => void
   onCancelEdit: (nodeId: string) => void
   onEditTextChange?: (nodeId: string, text: string) => void
@@ -34,6 +35,7 @@ export function buildDisplayNodes({
   selectedNodeId,
   editingNodeId,
   editingDraft,
+  selectEditingText = false,
   onStartEdit,
   onCancelEdit,
   onEditTextChange,
@@ -66,6 +68,7 @@ export function buildDisplayNodes({
       selected: node.id === selectedNodeId,
       editing: node.id === editingNodeId,
       editText: node.id === editingNodeId ? editingDraft : null,
+      selectEditText: node.id === editingNodeId && selectEditingText,
       dropHighlight: Boolean(preview),
       dropMode: preview?.mode ?? null,
       previewShifted: shifted && !isSource,

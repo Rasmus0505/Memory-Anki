@@ -167,7 +167,7 @@ describe('NodeCard', () => {
 
     const button = screen.getByRole('button', { name: longLabel })
     expect(button.className).toContain('whitespace-pre-wrap')
-    expect(button.className).toContain('break-words')
+    expect(button.className).toContain('break-all')
     expect(button.className).not.toContain('truncate')
   })
 
@@ -243,6 +243,45 @@ describe('NodeCard', () => {
     fireEvent.keyDown(textarea, { key: 'Enter' })
 
     expect(onFinishEdit).toHaveBeenCalledWith('peg-1', '更新内容')
+  })
+
+  it('keeps the caret position while controlled draft updates propagate', () => {
+    const onEditTextChange = vi.fn()
+    renderNodeCard({ label: 'abcdef', onEditTextChange })
+    fireEvent.doubleClick(screen.getByRole('button', { name: 'abcdef' }))
+    const textarea = screen.getByRole('textbox') as HTMLTextAreaElement
+
+    textarea.setSelectionRange(2, 3)
+    fireEvent.change(textarea, {
+      target: { value: 'abdef', selectionStart: 2, selectionEnd: 2 },
+    })
+
+    expect(textarea.value).toBe('abdef')
+    expect(textarea.selectionStart).toBe(2)
+    expect(textarea.selectionEnd).toBe(2)
+    expect(onEditTextChange).toHaveBeenLastCalledWith('peg-1', 'abdef')
+  })
+
+  it('uses local text undo without leaving edit mode', () => {
+    renderNodeCard({ label: '原始内容' })
+    fireEvent.doubleClick(screen.getByRole('button', { name: '原始内容' }))
+    const textarea = screen.getByRole('textbox') as HTMLTextAreaElement
+
+    fireEvent.change(textarea, { target: { value: '原始内' } })
+    fireEvent.keyDown(textarea, { key: 'z', ctrlKey: true })
+
+    expect(screen.getByRole('textbox')).toBe(textarea)
+    expect(textarea.value).toBe('原始内容')
+  })
+
+  it('shows a distinct editor without an internal scrollbar', () => {
+    renderNodeCard({ label: '编辑视觉' })
+    fireEvent.doubleClick(screen.getByRole('button', { name: '编辑视觉' }))
+    const textarea = screen.getByRole('textbox')
+
+    expect(textarea.className).toContain('border-blue-500')
+    expect(textarea.className).toContain('overflow-hidden')
+    expect(textarea.style.scrollbarWidth).toBe('none')
   })
 
   it('maps readonly double click to the recall cancel handler', () => {

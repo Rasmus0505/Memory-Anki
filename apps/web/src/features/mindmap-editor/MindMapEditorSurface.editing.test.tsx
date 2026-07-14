@@ -17,6 +17,7 @@ vi.mock('@/shared/ui/mindmap-canvas', async () => {
         onKeyDownCapture={props.onKeyDownCapture}
         data-node-count={props.graphData.nodes.length}
         data-editing-node={props.editingNodeId ?? ''}
+        data-selected-node={props.selectedNodeId ?? ''}
         data-can-undo={props.canUndo ? 'yes' : 'no'}
         data-can-redo={props.canRedo ? 'yes' : 'no'}
       >
@@ -30,6 +31,10 @@ vi.mock('@/shared/ui/mindmap-canvas', async () => {
             选择 {node.id}
           </button>
         ))}
+        <button type="button" onClick={() => props.onAddChild('child')}>新增 child 子级</button>
+        {props.editingNodeId ? (
+          <button type="button" onClick={() => props.onEdit(props.editingNodeId, '首次命名')}>提交首次命名</button>
+        ) : null}
       </div>
     ),
   }
@@ -60,7 +65,7 @@ function ControlledFrame() {
 }
 
 describe('MindMapEditorSurface editing workflow', () => {
-  it('uses Enter for editing and Tab for immediate child creation editing', async () => {
+  it('uses Enter for editing and keeps focus on the selected card after Tab creates a child', async () => {
     render(<ControlledFrame />)
     const childButton = screen.getByRole('button', { name: '选择 child' })
     fireEvent.click(childButton)
@@ -74,7 +79,24 @@ describe('MindMapEditorSurface editing workflow', () => {
 
     await waitFor(() => {
       expect(screen.getByTestId('editing-canvas').getAttribute('data-node-count')).toBe('4')
+      expect(screen.getByTestId('editing-canvas').getAttribute('data-editing-node')).toBe('')
+      expect(screen.getByTestId('editing-canvas').getAttribute('data-selected-node')).toBe('child')
+    })
+  })
+
+  it('merges child creation and first naming into one global undo transaction', async () => {
+    render(<ControlledFrame />)
+    fireEvent.click(screen.getByRole('button', { name: '新增 child 子级' }))
+
+    await waitFor(() => {
+      expect(screen.getByTestId('editing-canvas').getAttribute('data-node-count')).toBe('4')
       expect(screen.getByTestId('editing-canvas').getAttribute('data-editing-node')).not.toBe('')
+    })
+    fireEvent.click(screen.getByRole('button', { name: '提交首次命名' }))
+    fireEvent.keyDown(screen.getByTestId('editing-canvas'), { key: 'z', ctrlKey: true })
+
+    await waitFor(() => {
+      expect(screen.getByTestId('editing-canvas').getAttribute('data-node-count')).toBe('3')
     })
   })
 

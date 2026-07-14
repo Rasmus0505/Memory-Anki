@@ -11,7 +11,7 @@ vi.mock('@xyflow/react', () => ({
   },
   Controls: () => <div data-testid="controls" />,
   MiniMap: () => <div data-testid="minimap" />,
-  ReactFlow: ({ children, nodesDraggable, nodesFocusable, edgesFocusable, deleteKeyCode, panOnScroll, zoomOnDoubleClick }: {
+  ReactFlow: ({ children, nodesDraggable, nodesFocusable, edgesFocusable, deleteKeyCode, panOnScroll, zoomOnDoubleClick, autoPanOnNodeDrag, autoPanOnConnect, viewport }: {
     children: React.ReactNode
     nodesDraggable: boolean
     nodesFocusable: boolean
@@ -19,6 +19,9 @@ vi.mock('@xyflow/react', () => ({
     deleteKeyCode: unknown
     panOnScroll: boolean
     zoomOnDoubleClick: boolean
+    autoPanOnNodeDrag: boolean
+    autoPanOnConnect: boolean
+    viewport: { x: number; y: number; zoom: number }
   }) => (
     <div
       data-testid="react-flow"
@@ -28,6 +31,9 @@ vi.mock('@xyflow/react', () => ({
       data-delete-key-code={String(deleteKeyCode)}
       data-pan-on-scroll={String(panOnScroll)}
       data-zoom-on-double-click={String(zoomOnDoubleClick)}
+      data-auto-pan-on-node-drag={String(autoPanOnNodeDrag)}
+      data-auto-pan-on-connect={String(autoPanOnConnect)}
+      data-viewport={`${viewport.x},${viewport.y},${viewport.zoom}`}
     >
       {children}
     </div>
@@ -66,6 +72,8 @@ function renderViewport(overrides?: Partial<React.ComponentProps<typeof MindMapC
     onEdgeClick: vi.fn(),
     onEdgeDoubleClick: vi.fn(),
     onPaneClick: vi.fn(),
+    viewport: { x: 4, y: 18, zoom: 0.99 },
+    onViewportChange: vi.fn(),
     ...overrides,
   }
   return render(<MindMapCanvasViewport {...props} />)
@@ -81,6 +89,9 @@ describe('MindMapCanvasViewport', () => {
     expect(screen.getByTestId('react-flow').dataset.nodesFocusable).toBe('false')
     expect(screen.getByTestId('react-flow').dataset.edgesFocusable).toBe('false')
     expect(screen.getByTestId('react-flow').dataset.deleteKeyCode).toBe('null')
+    expect(screen.getByTestId('react-flow').dataset.autoPanOnNodeDrag).toBe('false')
+    expect(screen.getByTestId('react-flow').dataset.autoPanOnConnect).toBe('false')
+    expect(screen.getByTestId('react-flow').dataset.viewport).toBe('4,18,0.99')
   })
 
   it('hides decorative layers while dragging', () => {

@@ -44,7 +44,6 @@ export function usePalaceEditPage() {
   const [aiSplitBusy, setAiSplitBusy] = useState(false)
   const [aiSplitAppliedSyncVersion, setAiSplitAppliedSyncVersion] = useState(0)
   const [feedbackFxSignal, setFeedbackFxSignal] = useState<MindMapFeedbackFxPayload | null>(null)
-  const suppressNativeFullscreenExitUntilRef = useRef(0)
   const hardUnloadRef = useRef(false)
   const feedbackFxNonceRef = useRef(0)
   const selectedNodeUidRef = useRef<string | null>(null)
@@ -301,19 +300,10 @@ export function usePalaceEditPage() {
     (active?: boolean) => {
       timer.registerActivity('edit_operation', { source: 'mind_map_immersive_toggle' })
       emitFeedbackFx('mode_switch', { source: 'mind_map_immersive_toggle' })
-      if (active === true) {
-        suppressNativeFullscreenExitUntilRef.current = Date.now() + 1500
-      }
       setMindMapFullscreen((current) => (typeof active === 'boolean' ? active : !current))
     },
     [emitFeedbackFx, timer],
   )
-
-  const handleMindMapNativeFullscreenChange = useCallback((active: boolean) => {
-    if (active) return
-    if (Date.now() < suppressNativeFullscreenExitUntilRef.current) return
-    setMindMapFullscreen(false)
-  }, [])
 
   const handleOpenEnglishArea = useCallback(async () => {
     try {
@@ -467,7 +457,6 @@ export function usePalaceEditPage() {
     mindMapFullscreen,
     setMindMapFullscreen,
     toggleMindMapFullscreen,
-    handleMindMapNativeFullscreenChange,
     handleOpenEnglishArea,
     versions: versions.versions,
     removedDuplicateCount: versions.removedDuplicateCount,

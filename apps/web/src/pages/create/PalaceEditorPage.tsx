@@ -6,6 +6,7 @@ import {
   MindMapEditorSurface,
   MindMapPageToolbar,
   type MindMapEditorSurfaceHandle,
+  type MindMapPageToolbarProps,
 } from '@/features/mindmap-editor'
 import { Button } from '@/shared/components/ui/button'
 import { Badge } from '@/shared/components/ui/badge'
@@ -17,6 +18,7 @@ import { PalaceMetaPanel } from '@/features/palace-edit/components/PalaceMetaPan
 import { PalaceSegmentsPanel } from '@/features/palace-edit/components/PalaceSegmentsPanel'
 import { PalaceTemplateDialog } from '@/features/palace-edit/components/PalaceTemplateDialog'
 import { PalaceVersionDialog } from './PalaceVersionDialog'
+import { usePalaceMindMapFileTransfer } from '@/features/palace-edit/hooks/usePalaceMindMapFileTransfer'
 import { MindMapImportDrawer, useMindMapImport } from '@/features/mindmap-import'
 import { usePalaceEditPage } from '@/features/palace-edit/hooks/usePalaceEditPage'
 import { PalaceKnowledgeOutlinePanel } from './PalaceKnowledgeOutlinePanel'
@@ -27,6 +29,7 @@ import { createPalaceTemplateApi } from '@/entities/palace/api'
 import { appPrompt } from '@/shared/components/ui/native-dialog'
 import { toast } from '@/shared/feedback/toast'
 import { PalaceEditorSkeleton } from './PalaceEditorSkeleton'
+import { FlipCardMindMapPanel } from '@/widgets/mindmap-review-flow'
 
 function SaveStatusBadge({
   status,
@@ -116,7 +119,6 @@ export default function PalaceEdit() {
     if (editorMode !== 'edit') exitInlinePractice()
   }, [becameActiveAt, editorMode, exitInlinePractice, isActive, setMindMapTask])
   const recallModeActive = page.editorMode === 'recall'
-  const readonlyMindMap = mindMapExperience.task === 'learn' || page.editorMode !== 'edit'
   const segmentToolbarOptions = useMemo(
     () =>
       page.segments
@@ -124,6 +126,19 @@ export default function PalaceEdit() {
         .map((segment) => ({
           id: segment.id,
           name: segment.name,
+        })),
+    [page.segments],
+  )
+  const mindMapSegments = useMemo(
+    () =>
+      page.segments
+        .filter((segment) => !segment.is_virtual_default)
+        .map((segment) => ({
+          id: segment.id,
+          name: segment.name,
+          color: segment.color,
+          created_at: segment.created_at,
+          node_uids: segment.node_uids,
         })),
     [page.segments],
   )
@@ -157,12 +172,119 @@ export default function PalaceEdit() {
     }
   }
 
+  const mindMapFileTransfer = usePalaceMindMapFileTransfer({
+    editorState: page.editorState,
+    palaceTitle: page.palace?.title || page.title || '未命名宫殿',
+    applyEditorState: page.applyImportedPalaceEditorState,
+  })
   const handleOpenQuizPage = () => {
     if (!page.palaceId) return
     openQuizLauncher({
       palaceId: page.palaceId,
       scene: recallModeActive ? 'practice' : 'edit',
     })
+  }
+
+  const mindMapToolbarExtensions: Pick<
+    MindMapPageToolbarProps,
+    | 'embedded'
+    | 'taskControl'
+    | 'searchControl'
+    | 'focusAction'
+    | 'segmentControl'
+    | 'moreActions'
+    | 'importMindMapAction'
+    | 'englishAction'
+    | 'nativeFullscreenAction'
+  > = {
+    embedded: true,
+    taskControl: {
+      value: mindMapExperience.task,
+      onChange: (task) => {
+        mindMapExperience.setTask(task)
+        if (task === 'build') page.exitInlinePractice()
+        else page.enterInlinePractice()
+      },
+    },
+    searchControl: {
+      value: mindMapExperience.searchQuery,
+      onChange: mindMapExperience.setSearchQuery,
+      resultCount: mindMapExperience.searchResults.length,
+    },
+    focusAction: mindMapExperience.selectedResult
+      ? {
+          label: '定位结果',
+          onClick: () => mindMapFrameRef.current?.focusNode(mindMapExperience.selectedResult?.nodeUid ?? null),
+        }
+      : selectedNodeUid
+        ? {
+            label: '聚焦节点',
+            onClick: () => mindMapFrameRef.current?.focusNode(selectedNodeUid),
+          }
+        : null,
+    segmentControl: mindMapExperience.task === 'build'
+      ? {
+          active: page.isSegmentRangeMode,
+          targetSegmentId: page.rangeTargetSegmentId,
+          options: segmentToolbarOptions,
+          onToggle: () => page.handleSegmentRangeModeToggle({
+            active: !page.isSegmentRangeMode,
+            targetSegmentId: page.rangeTargetSegmentId || 'new',
+          }),
+          onTargetChange: (targetSegmentId) => page.handleSegmentRangeModeToggle({
+            active: true,
+            targetSegmentId,
+          }),
+          onConfirm: page.handleConfirmSegmentRange,
+          onCancel: () => page.handleSegmentRangeModeToggle({ active: false, targetSegmentId: null }),
+        }
+      : null,
+    moreActions: [
+      {
+        label: `结构检查（${mindMapExperience.structureIssues.length}）`,
+        onClick: () => {
+          const issue = mindMapExperience.structureIssues[0]
+          if (!issue) return toast.success('未发现结构问题')
+          mindMapFrameRef.current?.focusNode(issue.nodeUid)
+          toast.warning(issue.message)
+        },
+      },
+      ...mindMapFileTransfer.toolbarActions,
+      ...(selectedNodeUid
+        ? [
+            {
+              label: '标记为薄弱',
+              onClick: () => { void mindMapExperience.setNodeManualLabel(selectedNodeUid, 'weak') },
+              separatorBefore: true,
+            },
+            {
+              label: '标记为已掌握',
+              onClick: () => { void mindMapExperience.setNodeManualLabel(selectedNodeUid, 'mastered') },
+            },
+            {
+              label: '清除手动标记',
+              onClick: () => { void mindMapExperience.setNodeManualLabel(selectedNodeUid, null) },
+            },
+          ]
+        : []),
+    ],
+    importMindMapAction: {
+      label: '转脑图',
+      onClick: () => mindMapImport.setImportOpen(true),
+      opensOverlay: true,
+    },
+    englishAction: {
+      label: '英语区',
+      onClick: () => { void page.handleOpenEnglishArea() },
+    },
+    nativeFullscreenAction: {
+      label: mindMapNativeFullscreen ? '退出系统全屏' : '系统全屏',
+      active: mindMapNativeFullscreen,
+      onClick: () => {
+        if (mindMapNativeFullscreen) void mindMapFrameRef.current?.exitNativeFullscreen()
+        else void mindMapFrameRef.current?.enterNativeFullscreen()
+      },
+    },
   }
 
   useEffect(() => {
@@ -214,6 +336,7 @@ export default function PalaceEdit() {
 
   return (
     <div className="space-y-3">
+      {mindMapFileTransfer.input}
       {!page.mindMapFullscreen ? (
         <PageIntro
           compact
@@ -383,115 +506,115 @@ export default function PalaceEdit() {
                         </button>
                       ))}
                     </div>
-                  ) : null}                  <MindMapEditorSurface
-                    ref={mindMapFrameRef}
-                    editorState={activeFrameEditorState}
-                    toolbarContent={
-                      <MindMapPageToolbar
-                        embedded
-                        taskControl={{
-                      value: mindMapExperience.task,
-                      onChange: (task) => {
-                        mindMapExperience.setTask(task)
-                        if (task === 'build') page.exitInlinePractice()
-                        else page.enterInlinePractice()
-                      },
-                    }}
-                        searchControl={{ value: mindMapExperience.searchQuery, onChange: mindMapExperience.setSearchQuery, resultCount: mindMapExperience.searchResults.length }}
-                        focusAction={mindMapExperience.selectedResult ? { label: '定位结果', onClick: () => mindMapFrameRef.current?.focusNode(mindMapExperience.selectedResult?.nodeUid ?? null) } : selectedNodeUid ? { label: '聚焦节点', onClick: () => mindMapFrameRef.current?.focusNode(selectedNodeUid) } : null}
-                        segmentControl={mindMapExperience.task === 'build' ? {
-                      active: page.isSegmentRangeMode,
-                      targetSegmentId: page.rangeTargetSegmentId,
-                      options: segmentToolbarOptions,
-                      onToggle: () => page.handleSegmentRangeModeToggle({ active: !page.isSegmentRangeMode, targetSegmentId: page.rangeTargetSegmentId || 'new' }),
-                      onTargetChange: (targetSegmentId) => page.handleSegmentRangeModeToggle({ active: true, targetSegmentId }),
-                      onConfirm: page.handleConfirmSegmentRange,
-                      onCancel: () => page.handleSegmentRangeModeToggle({ active: false, targetSegmentId: null }),
-                    } : null}
-                        moreActions={[
-                      { label: `结构检查（${mindMapExperience.structureIssues.length}）`, onClick: () => { const issue = mindMapExperience.structureIssues[0]; if (!issue) return toast.success('未发现结构问题'); mindMapFrameRef.current?.focusNode(issue.nodeUid); toast.warning(issue.message) } },
-                      ...(selectedNodeUid ? [
-                        { label: '标记为薄弱', onClick: () => { void mindMapExperience.setNodeManualLabel(selectedNodeUid, 'weak') }, separatorBefore: true },
-                        { label: '标记为已掌握', onClick: () => { void mindMapExperience.setNodeManualLabel(selectedNodeUid, 'mastered') } },
-                        { label: '清除手动标记', onClick: () => { void mindMapExperience.setNodeManualLabel(selectedNodeUid, null) } },
-                      ] : []),
-                    ]}
-                        importMindMapAction={{ label: '转脑图', onClick: () => mindMapImport.setImportOpen(true), deferUntilMenuClose: true }}
-                        englishAction={{ label: '英语区', onClick: () => { void page.handleOpenEnglishArea() } }}
-                        quizAction={{ label: '做题', onClick: handleOpenQuizPage }}
-                        clearUiAction={{ label: mindMapUiCleared ? '恢复界面' : '清屏', onClick: () => mindMapFrameRef.current?.toggleUiCleared() }}
-                      />
-                    }
-                    highlightedNodeUids={mindMapExperience.highlightedNodeUids}
-                    masteryByNodeUid={mindMapExperience.masteryByNodeUid}
-                    readonly={readonlyMindMap}
-                    practiceModeActive={recallModeActive}
-                    viewMemoryScope={
-                      page.palaceId ? `palace-edit:${page.palaceId}` : null
-                    }
-                    immersiveModeActive={page.mindMapFullscreen}
-                    aiSplitBusy={page.editorMode === 'edit' ? page.aiSplitBusy : false}
-                    syncOnPropChange
-                    syncIntent={recallModeActive ? 'replace' : 'soft'}
-                    syncReason={recallModeActive ? 'review_flip' : null}
-                    preserveViewOnSync={
-                      recallModeActive ||
-                      mindMapImport.importAppliedSyncVersion > 0 ||
-                      page.aiSplitAppliedSyncVersion > 0
-                    }
-                    initialViewPolicy={recallModeActive ? 'preserve' : 'reset'}
-                    externalSyncKey={recallModeActive ? page.practiceVisibleEditorSyncKey : mindMapImport.importExternalSyncKey}
-                    forceSyncKey={`${page.editorMode}:${page.replaceSyncVersion}:${mindMapImport.importAppliedSyncVersion}`}
-                    forceSyncIntent="replace"
-                    segments={page.segments
-                      .filter((segment) => !segment.is_virtual_default)
-                      .map((segment) => ({
-                        id: segment.id,
-                        name: segment.name,
-                        color: segment.color,
-                        created_at: segment.created_at,
-                        node_uids: segment.node_uids,
-                      }))}
-                    activeSegmentId={page.activeSegmentId}
-                    segmentColorMode="all-with-active-emphasis"
-                    segmentRangeDraft={{
-                      active: page.isSegmentRangeMode,
-                      targetSegmentId: page.rangeTargetSegmentId,
-                      selectedNodeUids: page.selectedRangeNodeUids,
-                      overriddenConflictNodeUids: page.overriddenConflictNodeUids,
-                    }}
-                    focusRequestNodeUid={page.modeFocusRequestNodeUid}
-                    focusRequestNonce={page.modeFocusRequestNonce}
-                    reviewFxSignal={recallModeActive ? page.reviewFxSignal : null}
-                    feedbackFxSignal={page.feedbackFxSignal}
-                    onEditorStateChange={page.handleMindMapEditorStateChange}
-                    onNodeActive={(nodes) => {
-                      page.timer.registerActivity('node_switch', { source: 'node_active' })
-                      page.handleMindMapNodeActive(nodes)
-                    }}
-                    onNodeClick={
-                      page.isSegmentRangeMode
-                        ? page.handleSegmentRangeNodeClick
-                        : page.handleInlinePracticeNodeClick
-                    }
-                    onNodeContextMenu={page.editorMode === 'edit' ? undefined : page.handleInlinePracticeNodeContextMenu}
-                    onSegmentSelect={page.setActiveSegmentId}
-                    onCreateSegmentFromSelection={page.handleOpenCreateSegment}
-                    onSegmentRangeDraftChange={page.handleSegmentRangeDraftChange}
-                    onSegmentRangeModeToggle={page.handleSegmentRangeModeToggle}
-                    onSegmentRangeConfirm={page.handleConfirmSegmentRange}
-                    onAiSplitRequest={page.editorMode === 'edit' ? page.handleAiSplitRequest : undefined}
-                    onFullscreenChange={(active) => {
-                      setMindMapNativeFullscreen(active)
-                      page.handleMindMapNativeFullscreenChange(active)
-                    }}
-                    onFullscreenToggle={page.toggleMindMapFullscreen}
-                    onUiClearedChange={setMindMapUiCleared}
-                    className={cn(
-                      'w-full flex-1 rounded-lg border border-border/70 bg-background',
-                      page.mindMapFullscreen ? 'h-full' : 'h-[78vh]',
-                    )}
-                  />
+                  ) : null}
+                  {recallModeActive ? (
+                    <FlipCardMindMapPanel
+                      ref={mindMapFrameRef}
+                      fullscreen={page.mindMapFullscreen}
+                      modeSyncVersion={page.replaceSyncVersion + mindMapImport.importAppliedSyncVersion}
+                      viewMemoryScope={page.palaceId ? `palace-edit:${page.palaceId}` : null}
+                      toolbarExtensions={mindMapToolbarExtensions}
+                      visibleEditorState={activeFrameEditorState}
+                      visibleEditorSyncKey={page.practiceVisibleEditorSyncKey}
+                      currentPalaceId={page.palaceId}
+                      reviewFxSignal={page.reviewFxSignal}
+                      feedbackFxSignal={page.feedbackFxSignal}
+                      highlightedNodeUids={mindMapExperience.highlightedNodeUids}
+                      masteryByNodeUid={mindMapExperience.masteryByNodeUid}
+                      segments={mindMapSegments}
+                      activeSegmentId={page.activeSegmentId}
+                      segmentColorMode="all-with-active-emphasis"
+                      segmentRangeDraft={{
+                        active: page.isSegmentRangeMode,
+                        targetSegmentId: page.rangeTargetSegmentId,
+                        selectedNodeUids: page.selectedRangeNodeUids,
+                        overriddenConflictNodeUids: page.overriddenConflictNodeUids,
+                      }}
+                      focusRequestNodeUid={page.modeFocusRequestNodeUid}
+                      focusRequestNonce={page.modeFocusRequestNonce}
+                      onNodeActive={(nodes) => {
+                        page.timer.registerActivity('node_switch', { source: 'node_active' })
+                        page.handleMindMapNodeActive(nodes)
+                      }}
+                      onNodeClick={page.handleInlinePracticeNodeClick}
+                      onNodeContextMenu={page.handleInlinePracticeNodeContextMenu}
+                      onQuizBreakOpen={handleOpenQuizPage}
+                      onSegmentSelect={page.setActiveSegmentId}
+                      onCreateSegmentFromSelection={page.handleOpenCreateSegment}
+                      onSegmentRangeDraftChange={page.handleSegmentRangeDraftChange}
+                      onSegmentRangeModeToggle={page.handleSegmentRangeModeToggle}
+                      onSegmentRangeConfirm={page.handleConfirmSegmentRange}
+                      onNativeFullscreenChange={(active) => {
+                        setMindMapNativeFullscreen(active)
+                      }}
+                      onToggleFullscreen={page.toggleMindMapFullscreen}
+                      onUiClearedChange={setMindMapUiCleared}
+                      className="flex flex-1 flex-col"
+                      surfaceClassName={page.mindMapFullscreen ? 'h-full' : 'h-[78vh]'}
+                    />
+                  ) : (
+                    <MindMapEditorSurface
+                      ref={mindMapFrameRef}
+                      editorState={activeFrameEditorState}
+                      toolbarContent={
+                        <MindMapPageToolbar
+                          {...mindMapToolbarExtensions}
+                          quizAction={{ label: '做题', onClick: handleOpenQuizPage }}
+                          clearUiAction={{
+                            label: mindMapUiCleared ? '恢复界面' : '清屏',
+                            onClick: () => mindMapFrameRef.current?.toggleUiCleared(),
+                          }}
+                        />
+                      }
+                      highlightedNodeUids={mindMapExperience.highlightedNodeUids}
+                      masteryByNodeUid={mindMapExperience.masteryByNodeUid}
+                      viewMemoryScope={page.palaceId ? `palace-edit:${page.palaceId}` : null}
+                      immersiveModeActive={page.mindMapFullscreen}
+                      aiSplitBusy={page.aiSplitBusy}
+                      syncOnPropChange
+                      syncIntent="soft"
+                      preserveViewOnSync={
+                        mindMapImport.importAppliedSyncVersion > 0 || page.aiSplitAppliedSyncVersion > 0
+                      }
+                      initialViewPolicy="reset"
+                      externalSyncKey={mindMapImport.importExternalSyncKey}
+                      forceSyncKey={`edit:${page.replaceSyncVersion}:${mindMapImport.importAppliedSyncVersion}`}
+                      forceSyncIntent="replace"
+                      segments={mindMapSegments}
+                      activeSegmentId={page.activeSegmentId}
+                      segmentColorMode="all-with-active-emphasis"
+                      segmentRangeDraft={{
+                        active: page.isSegmentRangeMode,
+                        targetSegmentId: page.rangeTargetSegmentId,
+                        selectedNodeUids: page.selectedRangeNodeUids,
+                        overriddenConflictNodeUids: page.overriddenConflictNodeUids,
+                      }}
+                      focusRequestNodeUid={page.modeFocusRequestNodeUid}
+                      focusRequestNonce={page.modeFocusRequestNonce}
+                      feedbackFxSignal={page.feedbackFxSignal}
+                      onEditorStateChange={page.handleMindMapEditorStateChange}
+                      onNodeActive={(nodes) => {
+                        page.timer.registerActivity('node_switch', { source: 'node_active' })
+                        page.handleMindMapNodeActive(nodes)
+                      }}
+                      onNodeClick={page.isSegmentRangeMode ? page.handleSegmentRangeNodeClick : undefined}
+                      onSegmentSelect={page.setActiveSegmentId}
+                      onCreateSegmentFromSelection={page.handleOpenCreateSegment}
+                      onSegmentRangeDraftChange={page.handleSegmentRangeDraftChange}
+                      onSegmentRangeModeToggle={page.handleSegmentRangeModeToggle}
+                      onSegmentRangeConfirm={page.handleConfirmSegmentRange}
+                      onAiSplitRequest={page.handleAiSplitRequest}
+                      onFullscreenChange={(active) => {
+                        setMindMapNativeFullscreen(active)
+                      }}
+                      onFullscreenToggle={page.toggleMindMapFullscreen}
+                      onUiClearedChange={setMindMapUiCleared}
+                      className={cn(
+                        'w-full flex-1 rounded-lg border border-border/70 bg-background',
+                        page.mindMapFullscreen ? 'h-full' : 'h-[78vh]',
+                      )}
+                    />
+                  )}
                 </div>
               ) : (
                 <PalaceEditorSkeleton />
@@ -554,6 +677,9 @@ export default function PalaceEdit() {
         currentJobUsage={mindMapImport.currentJobUsage}
         currentJobError={mindMapImport.currentJobError}
         currentJobResolvedAi={mindMapImport.currentJobResolvedAi}
+        currentJobResult={mindMapImport.currentJobResult}
+        onRetryVision={() => void mindMapImport.handleRetryVision()}
+        onReformatFromOcr={() => void mindMapImport.handleReformatFromOcr()}
         currentJobPauseRequested={mindMapImport.currentJobPauseRequested}
         canResumeJob={mindMapImport.canResumeJob}
         canPauseJob={mindMapImport.canPauseJob}

@@ -13,6 +13,7 @@ describe('MindMapCanvasToolbar', () => {
         showHistoryControls
         leadingContent={<button type="button">学习组</button>}
         onReflow={onReflow}
+        onRefreshHost={vi.fn()}
         onToggleFocusMode={vi.fn()}
         onUndo={vi.fn()}
         onRedo={vi.fn()}
@@ -22,7 +23,7 @@ describe('MindMapCanvasToolbar', () => {
     const toolbar = screen.getByRole('button', { name: '学习组' }).parentElement
     expect(toolbar?.className).toContain('flex-nowrap')
     expect(toolbar?.className).toContain('overflow-x-auto')
-    expect(screen.queryByTitle('刷新脑图')).toBeNull()
+    expect(screen.getByTitle('刷新脑图')).toBeTruthy()
     expect(screen.queryByTitle('放大')).toBeNull()
     expect(screen.queryByTitle('缩小')).toBeNull()
     expect(screen.queryByText(/拖拽时会即时预演落点/)).toBeNull()

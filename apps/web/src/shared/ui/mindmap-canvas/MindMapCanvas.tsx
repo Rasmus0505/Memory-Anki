@@ -1,5 +1,6 @@
 import {
   ReactFlowProvider,
+  type Viewport,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import {
@@ -37,6 +38,7 @@ export interface MindMapCanvasProps {
   selectedNodeId: string | null
   editingNodeId?: string | null
   editingDraft?: string | null
+  selectEditingText?: boolean
   onNodeSelect: (nodeId: string | null) => void
   onEditingNodeChange?: (nodeId: string | null) => void
   onEditingDraftChange?: (nodeId: string, text: string) => void
@@ -52,6 +54,7 @@ export interface MindMapCanvasProps {
   onUndo?: () => void
   onRedo?: () => void
   focusMode?: boolean
+  focusModeLabel?: string
   onToggleFocusMode?: () => void
   onEdgeDelete?: (edgeId: string, sourceId: string, targetId: string) => void
   onEdgeInsert?: (edgeId: string, sourceId: string, targetId: string) => void
@@ -161,10 +164,13 @@ class MindMapCanvasErrorBoundary extends Component<
 type MindMapCanvasInnerProps = MindMapCanvasProps & {
   onAutoRecover: (reason: string, signature: string) => void
   onHostRefresh: () => void
+  controlledViewport: Viewport
+  onControlledViewportChange: (viewport: Viewport) => void
 }
 
 function MindMapCanvasInner({
   focusMode = false,
+  focusModeLabel = '网页内全屏',
   onToggleFocusMode,
   showToolbar = true,
   className,
@@ -252,11 +258,13 @@ function MindMapCanvasInner({
       {showToolbar ? (
         <MindMapCanvasToolbar
           focusMode={focusMode}
+          focusModeLabel={focusModeLabel}
           canUndo={state.canUndo}
           canRedo={state.canRedo}
           showHistoryControls={state.canShowHistoryControls}
           leadingContent={props.toolbarContent}
           onReflow={state.resetLayout}
+          onRefreshHost={onHostRefresh}
           onToggleFocusMode={handleToggleFocusMode}
           onUndo={props.onUndo}
           onRedo={props.onRedo}
@@ -288,6 +296,8 @@ function MindMapCanvasInner({
               onMoveStart={state.handleMoveStart}
               onMove={state.handleMove}
               onMoveEnd={state.handleMoveEnd}
+              viewport={state.controlledViewport}
+              onViewportChange={state.handleViewportChange}
               readonly={Boolean(props.readonly)}
               mobileGuided={state.mobileGuidedActive}
               preserveViewport={state.preserveViewport}
@@ -337,6 +347,8 @@ function MindMapCanvasInner({
 
 export function MindMapCanvas(props: MindMapCanvasProps) {
   const [hostEpoch, setHostEpoch] = useState(0)
+  // 相机状态放在 Provider 外层，容器重建或短暂零尺寸时也不会丢失用户视口。
+  const [controlledViewport, setControlledViewport] = useState<Viewport>({ x: 4, y: 18, zoom: 0.99 })
   const autoRecoveredSignaturesRef = useRef<Set<string>>(new Set())
   const hostResetKey = `${String(props.recoveryKey ?? '')}:${hostEpoch}`
   const refreshHost = useCallback(() => {
@@ -360,6 +372,8 @@ export function MindMapCanvas(props: MindMapCanvasProps) {
       <ReactFlowProvider key={hostResetKey}>
         <MindMapCanvasInner
           {...props}
+          controlledViewport={controlledViewport}
+          onControlledViewportChange={setControlledViewport}
           onAutoRecover={handleAutoRecover}
           onHostRefresh={refreshHost}
         />

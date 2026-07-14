@@ -6,6 +6,7 @@ import {
   useRef,
   useState,
   type ChangeEvent,
+  type CompositionEvent,
   type KeyboardEvent,
   type MouseEvent,
   type PointerEvent,
@@ -34,6 +35,7 @@ type NodeCardData = MindMapNode & {
   previewGhost?: boolean
   editing?: boolean
   editText?: string | null
+  selectEditText?: boolean
   readonly?: boolean
   onStartEdit?: (nodeId: string) => void
   onCancelEdit?: (nodeId: string) => void
@@ -51,6 +53,12 @@ const MEASURE_DELTA_PX = 1
 const LONG_PRESS_DELAY_MS = 550
 const LONG_PRESS_MOVE_TOLERANCE_PX = 18
 const SYNTHETIC_CONTEXT_MENU_WINDOW_MS = 1_000
+
+interface EditSnapshot {
+  value: string
+  selectionStart: number
+  selectionEnd: number
+}
 
 function AdaptiveNodeToolbar({ nodeId, children }: { nodeId: string; children: ReactNode }) {
   const placement = useStore(
@@ -118,7 +126,6 @@ function MindMapNodeCard({ data, id }: NodeProps) {
     metadata.layoutRole ?? (depth === 0 ? 'root' : 'branch'),
   ) as LayoutRole
   const isRoot = layoutRole === 'root'
-  const nodeSize = getNodeSize(layoutRole, nodeData.label)
   const [localEdit, setLocalEdit] = useState(false)
   const [editText, setEditText] = useState(nodeData.label)
   const shellRef = useRef<HTMLDivElement>(null)
@@ -132,9 +139,16 @@ function MindMapNodeCard({ data, id }: NodeProps) {
   const [longPressPending, setLongPressPending] = useState(false)
   const editingIsControlled = typeof nodeData.editing === 'boolean'
   const isEditing = editingIsControlled ? Boolean(nodeData.editing) : localEdit
-  const editValue = typeof nodeData.editText === 'string' ? nodeData.editText : editText
+  const editValue = editText
+  const nodeSize = getNodeSize(layoutRole, isEditing ? editValue : nodeData.label)
   const readonly = Boolean(nodeData.readonly)
   const onMeasure = nodeData.onMeasure
+  const wasEditingRef = useRef(false)
+  const editHistoryRef = useRef<{ past: EditSnapshot[]; future: EditSnapshot[] }>({ past: [], future: [] })
+  const pendingInputSnapshotRef = useRef<EditSnapshot | null>(null)
+  const compositionStartSnapshotRef = useRef<EditSnapshot | null>(null)
+  const isComposingRef = useRef(false)
+  const editSessionClosedRef = useRef(false)
 
   const visual = (metadata.visual ?? {}) as MindMapNodeVisual
   const concealed = Boolean(visual.concealText)
@@ -185,13 +199,49 @@ function MindMapNodeCard({ data, id }: NodeProps) {
     return () => observer.disconnect()
   }, [reportMeasuredSize])
 
+  const resizeEditor = useCallback(() => {
+    const input = inputRef.current
+    if (!input) return
+    input.style.height = 'auto'
+    input.style.height = `${input.scrollHeight}px`
+  }, [])
+
+  const restoreEditSnapshot = useCallback((snapshot: EditSnapshot) => {
+    setEditText(snapshot.value)
+    nodeData.onEditTextChange?.(id, snapshot.value)
+    requestAnimationFrame(() => {
+      resizeEditor()
+      inputRef.current?.setSelectionRange(snapshot.selectionStart, snapshot.selectionEnd)
+    })
+  }, [id, nodeData, resizeEditor])
+
   useEffect(() => {
-    if (isEditing && inputRef.current) {
-      inputRef.current.focus()
-      inputRef.current.style.height = 'auto'
-      inputRef.current.style.height = `${inputRef.current.scrollHeight}px`
+    if (!isEditing) {
+      wasEditingRef.current = false
+      return
     }
-  }, [isEditing])
+    if (wasEditingRef.current) return
+    wasEditingRef.current = true
+    const initialValue = typeof nodeData.editText === 'string' ? nodeData.editText : nodeData.label
+    setEditText(initialValue)
+    editHistoryRef.current = { past: [], future: [] }
+    pendingInputSnapshotRef.current = null
+    compositionStartSnapshotRef.current = null
+    isComposingRef.current = false
+    editSessionClosedRef.current = false
+    const input = inputRef.current
+    if (input) {
+      input.focus()
+      resizeEditor()
+    }
+    requestAnimationFrame(() => {
+      const input = inputRef.current
+      if (!input) return
+      const selectionStart = nodeData.selectEditText ? 0 : initialValue.length
+      const selectionEnd = nodeData.selectEditText ? initialValue.length : initialValue.length
+      input.setSelectionRange(selectionStart, selectionEnd)
+    })
+  }, [isEditing, nodeData.editText, nodeData.label, nodeData.selectEditText, resizeEditor])
 
   const startEdit = useCallback(
     (event?: MouseEvent) => {
@@ -223,6 +273,8 @@ function MindMapNodeCard({ data, id }: NodeProps) {
   )
 
   const commitEdit = useCallback(() => {
+    if (editSessionClosedRef.current) return
+    editSessionClosedRef.current = true
     if (editValue.trim()) {
       dispatchGlobalFeedback('text_commit', {
         point: getElementFeedbackPoint(inputRef.current),
@@ -245,7 +297,35 @@ function MindMapNodeCard({ data, id }: NodeProps) {
 
   const handleKeyDown = useCallback(
     (event: KeyboardEvent<HTMLTextAreaElement>) => {
+      const primaryModifier = event.ctrlKey || event.metaKey
+      const lowerKey = event.key.toLowerCase()
+      if (primaryModifier && (lowerKey === 'z' || lowerKey === 'y')) {
+        event.preventDefault()
+        event.stopPropagation()
+        const history = editHistoryRef.current
+        const currentSnapshot = {
+          value: editValue,
+          selectionStart: event.currentTarget.selectionStart,
+          selectionEnd: event.currentTarget.selectionEnd,
+        }
+        const redoRequested = lowerKey === 'y' || event.shiftKey
+        if (redoRequested) {
+          const next = history.future.pop()
+          if (!next) return
+          history.past.push(currentSnapshot)
+          restoreEditSnapshot(next)
+        } else {
+          const previous = history.past.pop()
+          if (!previous) return
+          history.future.push(currentSnapshot)
+          restoreEditSnapshot(previous)
+        }
+        return
+      }
       if (event.key === 'Escape') {
+        event.preventDefault()
+        event.stopPropagation()
+        editSessionClosedRef.current = true
         setLocalEdit(false)
         setEditText(nodeData.label)
         nodeData.onCancelEdit?.(id)
@@ -279,14 +359,58 @@ function MindMapNodeCard({ data, id }: NodeProps) {
         event.currentTarget.blur()
       }
     },
-    [editValue, id, nodeData, updateEditValue],
+    [editValue, id, nodeData, restoreEditSnapshot, updateEditValue],
   )
 
+  const handleBeforeInput = useCallback(() => {
+    const input = inputRef.current
+    if (!input || isComposingRef.current) return
+    pendingInputSnapshotRef.current = {
+      value: editValue,
+      selectionStart: input.selectionStart,
+      selectionEnd: input.selectionEnd,
+    }
+  }, [editValue])
+
   const handleInput = useCallback((event: ChangeEvent<HTMLTextAreaElement>) => {
+    if (!isComposingRef.current) {
+      const snapshot = pendingInputSnapshotRef.current ?? {
+        value: editValue,
+        selectionStart: Math.min(event.target.selectionStart, editValue.length),
+        selectionEnd: Math.min(event.target.selectionEnd, editValue.length),
+      }
+      if (snapshot.value !== event.target.value) {
+        editHistoryRef.current.past.push(snapshot)
+        editHistoryRef.current.future = []
+      }
+      pendingInputSnapshotRef.current = null
+    }
     updateEditValue(event.target.value)
-    event.target.style.height = 'auto'
-    event.target.style.height = `${event.target.scrollHeight}px`
-  }, [updateEditValue])
+    requestAnimationFrame(resizeEditor)
+  }, [editValue, resizeEditor, updateEditValue])
+
+  const handleCompositionStart = useCallback(() => {
+    const input = inputRef.current
+    if (!input) return
+    isComposingRef.current = true
+    compositionStartSnapshotRef.current = {
+      value: editValue,
+      selectionStart: input.selectionStart,
+      selectionEnd: input.selectionEnd,
+    }
+  }, [editValue])
+
+  const handleCompositionEnd = useCallback((event: CompositionEvent<HTMLTextAreaElement>) => {
+    isComposingRef.current = false
+    const snapshot = compositionStartSnapshotRef.current
+    compositionStartSnapshotRef.current = null
+    if (snapshot && snapshot.value !== event.currentTarget.value) {
+      editHistoryRef.current.past.push(snapshot)
+      editHistoryRef.current.future = []
+    }
+    updateEditValue(event.currentTarget.value)
+    requestAnimationFrame(resizeEditor)
+  }, [resizeEditor, updateEditValue])
 
   const dropHighlightCls = nodeData.dropHighlight
     ? dropMode === 'inside'
@@ -298,7 +422,7 @@ function MindMapNodeCard({ data, id }: NodeProps) {
     'flex items-center rounded-xl border bg-white',
     'transition-[box-shadow,opacity,transform] duration-100',
     isRoot ? 'border-zinc-300 shadow-sm justify-center' : 'border-zinc-200 shadow-sm',
-    nodeData.selected ? 'ring-2 ring-zinc-800/30' : '',
+    nodeData.selected ? 'ring-2 ring-blue-500/55 ring-offset-1 ring-offset-white' : '',
     dropHighlightCls,
     previewAdopt ? 'ring-1 ring-blue-400/40' : '',
     placeholder ? 'ring-2 ring-amber-400/35' : '',
@@ -307,7 +431,7 @@ function MindMapNodeCard({ data, id }: NodeProps) {
   ].filter(Boolean).join(' ')
 
   const textCls = [
-    'w-full appearance-none border-0 bg-transparent p-0 break-words whitespace-pre-wrap',
+    'w-full appearance-none border-0 bg-transparent p-0 break-all whitespace-pre-wrap',
     readonly ? 'cursor-default' : 'cursor-text',
     concealed ? 'blur-[3px] select-none' : '',
     isRoot
@@ -318,6 +442,11 @@ function MindMapNodeCard({ data, id }: NodeProps) {
   ].filter(Boolean).join(' ')
 
   const paddingCls = isRoot ? 'px-4 py-2.5' : depth === 1 ? 'px-3 py-2' : 'px-2.5 py-1.5'
+  const editorTextCls = isRoot
+    ? 'text-center text-[14px] font-semibold leading-5'
+    : depth === 1
+      ? 'text-left text-[13px] font-medium leading-[17px]'
+      : 'text-left text-[12.5px] font-normal leading-[17px]'
   const borderStyle = visual.borderColor ? { borderColor: visual.borderColor } : undefined
 
   const clearLongPress = useCallback(() => {
@@ -418,6 +547,7 @@ function MindMapNodeCard({ data, id }: NodeProps) {
       onPointerMove={handlePointerMove}
       onPointerUp={finishPointerInteraction}
       onPointerCancel={finishPointerInteraction}
+      data-mindmap-node-id={id}
       className={[
         'group relative transition-[opacity,transform] duration-100',
         previewShifted ? 'translate-y-2' : '',
@@ -487,11 +617,18 @@ function MindMapNodeCard({ data, id }: NodeProps) {
           ref={inputRef}
           value={editValue}
           onChange={handleInput}
+          onBeforeInput={handleBeforeInput}
+          onCompositionStart={handleCompositionStart}
+          onCompositionEnd={handleCompositionEnd}
           onKeyDown={handleKeyDown}
           onBlur={commitEdit}
           aria-label="编辑节点文本"
-          className="nodrag nopan nowheel min-h-[30px] w-full resize-none rounded-xl border border-zinc-400 bg-white px-3 py-2 text-sm leading-5 text-zinc-900 outline-none ring-2 ring-zinc-800/15"
-          style={{ minHeight: nodeSize.height }}
+          className={[
+            'nodrag nopan nowheel block w-full resize-none overflow-hidden rounded-xl border-2 border-blue-500 bg-blue-50/45 text-zinc-900 outline-none ring-4 ring-blue-400/20',
+            paddingCls,
+            editorTextCls,
+          ].join(' ')}
+          style={{ height: nodeSize.height, minHeight: nodeSize.height, scrollbarWidth: 'none' }}
           rows={1}
         />
       ) : (
@@ -549,4 +686,3 @@ function MindMapNodeCard({ data, id }: NodeProps) {
 const nodeTypes = { mindmapNode: memo(MindMapNodeCard) }
 export { nodeTypes }
 export default MindMapNodeCard
-
