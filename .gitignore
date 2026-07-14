@@ -80,3 +80,6 @@ _DEBUG_FALLBACK.json
 **/nul
 *.baiduyun.uploading.cfg
 /timer-layout-verified.png
+/current-jobs.json
+/current-prompts.json
+/germany-palace-completed.png
