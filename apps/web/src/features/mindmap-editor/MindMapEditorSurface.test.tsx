@@ -50,6 +50,22 @@ describe('MindMapEditorSurface native host', () => {
 
     expect(requestFullscreen).toHaveBeenCalledTimes(1)
     expect(requestFullscreen.mock.instances[0]).toBe(screen.getByTestId('mindmap-frame-native'))
+    expect(screen.getByTestId('mindmap-frame-native').dataset.presentationMode).toBe('native')
+  })
+
+  it('reports viewport mode when the native fullscreen request is rejected', async () => {
+    const ref = createRef<MindMapEditorSurfaceHandle>()
+    Object.defineProperty(HTMLElement.prototype, 'requestFullscreen', {
+      configurable: true,
+      value: vi.fn(async () => { throw new Error('not allowed') }),
+    })
+    render(<MindMapEditorSurface ref={ref} editorState={editorState} onEditorStateChange={vi.fn()} />)
+
+    await act(async () => {
+      await ref.current?.enterFullscreen()
+    })
+
+    expect(screen.getByTestId('mindmap-frame-native').dataset.presentationMode).toBe('viewport')
   })
 
   it('keeps the fullscreen handle contract', async () => {
@@ -162,7 +178,7 @@ describe('MindMapEditorSurface native host', () => {
     expect(onFullscreenToggle).not.toHaveBeenCalled()
   })
 
-  it('uses CSS-only fullscreen for embedded dialog canvases', async () => {
+  it('uses viewport-only fullscreen without requesting the native API', async () => {
     const ref = createRef<MindMapEditorSurfaceHandle>()
     const requestFullscreen = vi.fn(async () => {})
     Object.defineProperty(HTMLElement.prototype, 'requestFullscreen', {
@@ -173,7 +189,7 @@ describe('MindMapEditorSurface native host', () => {
       <MindMapEditorSurface
         ref={ref}
         editorState={editorState}
-        browserFullscreenEnabled={false}
+        presentationStrategy={'viewport-only'}
         onEditorStateChange={vi.fn()}
       />,
     )
@@ -186,6 +202,33 @@ describe('MindMapEditorSurface native host', () => {
     expect(screen.getByTestId('mindmap-frame-native').className).toContain(
       'memory-anki-mindmap-native-fullscreen',
     )
+    expect(screen.getByTestId('mindmap-frame-native').dataset.presentationMode).toBe('viewport')
+  })
+
+  it('uses the canvas fullscreen control for viewport-only PWA presentation', async () => {
+    const onFullscreenToggle = vi.fn()
+    const requestFullscreen = vi.fn(async () => {})
+    Object.defineProperty(HTMLElement.prototype, 'requestFullscreen', {
+      configurable: true,
+      value: requestFullscreen,
+    })
+    render(
+      <MindMapEditorSurface
+        editorState={editorState}
+        presentationStrategy={'viewport-only'}
+        onEditorStateChange={vi.fn()}
+        onFullscreenToggle={onFullscreenToggle}
+      />,
+    )
+
+    await act(async () => {
+      fireEvent.click(screen.getByTitle('进入全屏'))
+    })
+
+    expect(onFullscreenToggle).not.toHaveBeenCalled()
+    expect(requestFullscreen).not.toHaveBeenCalled()
+    expect(screen.getByTestId('mindmap-frame-native').dataset.presentationMode).toBe('viewport')
+    expect(screen.getByTitle('退出全屏')).toBeTruthy()
   })
 
   it('locks page scrolling while fullscreen is active', async () => {
@@ -222,10 +265,17 @@ describe('MindMapEditorSurface native host', () => {
       value: viewport,
     })
 
-    render(<MindMapEditorSurface ref={ref} editorState={editorState} onEditorStateChange={vi.fn()} />)
+    render(
+      <MindMapEditorSurface
+        ref={ref}
+        editorState={editorState}
+        presentationStrategy={'viewport-only'}
+        onEditorStateChange={vi.fn()}
+      />,
+    )
 
     await act(async () => {
-      await ref.current?.enterNativeFullscreen()
+      await ref.current?.enterFullscreen()
     })
 
     expect(document.body.style.position).toBe('fixed')
@@ -235,8 +285,18 @@ describe('MindMapEditorSurface native host', () => {
     expect(document.documentElement.style.getPropertyValue('--memory-anki-mindmap-fullscreen-width')).toBe('390px')
     expect(document.documentElement.style.getPropertyValue('--memory-anki-mindmap-fullscreen-height')).toBe('720px')
 
+    Object.defineProperties(viewport, {
+      offsetTop: { configurable: true, value: 0 },
+      offsetLeft: { configurable: true, value: 0 },
+      width: { configurable: true, value: 844 },
+      height: { configurable: true, value: 390 },
+    })
+    act(() => viewport.dispatchEvent(new Event('resize')))
+    expect(document.documentElement.style.getPropertyValue('--memory-anki-mindmap-fullscreen-width')).toBe('844px')
+    expect(document.documentElement.style.getPropertyValue('--memory-anki-mindmap-fullscreen-height')).toBe('390px')
+
     await act(async () => {
-      await ref.current?.exitNativeFullscreen()
+      await ref.current?.exitFullscreen()
     })
 
     expect(document.body.style.position).toBe('')

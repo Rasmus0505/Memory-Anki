@@ -487,7 +487,7 @@ export function PalaceMemoryLookupDialog({
             editorState={flipEditorState}
             readonly
             practiceModeActive
-            browserFullscreenEnabled={false}
+            presentationStrategy={'viewport-only'}
             onFullscreenChange={handleMindMapFullscreenChange}
             syncOnPropChange
             syncIntent="replace"
@@ -506,7 +506,7 @@ export function PalaceMemoryLookupDialog({
             key={`quiz-memory-lookup-${selectedPalaceId}-view`}
             editorState={previewState}
             readonly
-            browserFullscreenEnabled={false}
+            presentationStrategy={'viewport-only'}
             onFullscreenChange={handleMindMapFullscreenChange}
             focusRequestNodeUid={rootNodeUid}
             focusRequestNonce={rootFocusNonce}

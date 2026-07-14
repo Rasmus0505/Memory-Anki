@@ -16,6 +16,7 @@ import { cn } from '@/shared/lib/utils'
 import { isEditableKeyboardTarget } from '@/shared/keyboard/keyboardTargets'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
+import { detectClientSource } from '@/shared/lib/clientSource'
 
 type FlipCardToolbarExtensions = Pick<
   MindMapPageToolbarProps,
@@ -42,6 +43,7 @@ type FlipCardSurfaceExtensions = Pick<
   | 'focusRequestNodeUid'
   | 'focusRequestNonce'
   | 'feedbackFxSignal'
+  | 'presentationStrategy'
   | 'onSegmentSelect'
   | 'onCreateSegmentFromSelection'
   | 'onSegmentRangeDraftChange'
@@ -188,6 +190,7 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
   focusRequestNodeUid,
   focusRequestNonce,
   feedbackFxSignal,
+  presentationStrategy,
   onSegmentSelect,
   onCreateSegmentFromSelection,
   onSegmentRangeDraftChange,
@@ -201,6 +204,8 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
   onOpenRatingHistory,
 }: FlipCardMindMapPanelProps, forwardedRef) {
   const navigate = useNavigate()
+  const resolvedPresentationStrategy = presentationStrategy
+    ?? (detectClientSource() === 'pwa' ? 'viewport-only' : 'native-preferred')
   const frameRef = useRef<MindMapEditorSurfaceHandle | null>(null)
   const [nativeFullscreenActive, setNativeFullscreenActive] = useState(false)
   const [uiCleared, setUiCleared] = useState(false)
@@ -216,6 +221,8 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
     toggleUiCleared: () => frameRef.current?.toggleUiCleared(),
     focusNode: (nodeUid) => frameRef.current?.focusNode(nodeUid),
     fitView: () => frameRef.current?.fitView(),
+    enterFullscreen: () => frameRef.current?.enterFullscreen() ?? Promise.resolve(),
+    exitFullscreen: () => frameRef.current?.exitFullscreen() ?? Promise.resolve(),
     enterNativeFullscreen: () => frameRef.current?.enterNativeFullscreen() ?? Promise.resolve(),
     exitNativeFullscreen: () => frameRef.current?.exitNativeFullscreen() ?? Promise.resolve(),
   }), [])
@@ -362,10 +369,10 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
 
   const handleNativeFullscreenToggle = useCallback(async () => {
     if (nativeFullscreenActive) {
-      await frameRef.current?.exitNativeFullscreen()
+      await frameRef.current?.exitFullscreen()
       return
     }
-    await frameRef.current?.enterNativeFullscreen()
+    await frameRef.current?.enterFullscreen()
   }, [nativeFullscreenActive])
 
   const handleOpenQuizPage = useCallback(() => {
@@ -482,7 +489,7 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
               }
             : null
         }
-        immersiveAction={{
+        immersiveAction={resolvedPresentationStrategy === 'viewport-only' ? null : {
           label: fullscreen ? '退出网页内全屏' : '网页内全屏',
           active: fullscreen,
           onClick: () => {
@@ -490,7 +497,9 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
           },
         }}
         nativeFullscreenAction={{
-          label: nativeFullscreenActive ? '退出系统全屏' : '系统全屏',
+          label: resolvedPresentationStrategy === 'viewport-only'
+            ? nativeFullscreenActive ? '退出全屏' : '全屏'
+            : nativeFullscreenActive ? '退出系统全屏' : '系统全屏',
           active: nativeFullscreenActive,
           onClick: () => {
             void handleNativeFullscreenToggle()
@@ -511,6 +520,7 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
       <MindMapEditorSurface
         ref={frameRef}
         editorState={frameEditorState}
+        presentationStrategy={resolvedPresentationStrategy}
         readonly={!isEditMode}
         practiceModeActive={!isEditMode}
         viewMemoryScope={viewMemoryScope}

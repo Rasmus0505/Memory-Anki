@@ -49,10 +49,12 @@ import type {
 } from '@/shared/api/contracts'
 import { readMindMapEditorState } from '@/entities/mindmap-document'
 import { APP_EVENT_NAMES, onAppEvent } from '@/shared/events/appEvents'
+import { detectClientSource } from '@/shared/lib/clientSource'
 
 type ChapterDetail = ChapterDetailResponse
 
 export default function Knowledge() {
+  const isPwaClient = detectClientSource() === 'pwa'
   const mindMapFrameRef = useRef<MindMapEditorSurfaceHandle | null>(null)
   const [subjects, setSubjects] = useState<SubjectSummary[]>([])
   const [selectedSubjectId, setSelectedSubjectId] = useState<number | null>(null)
@@ -369,7 +371,7 @@ export default function Knowledge() {
 
   const handleImmersiveToolbarToggle = async () => {
     if (mindMapNativeFullscreen) {
-      await mindMapFrameRef.current?.exitNativeFullscreen()
+      await mindMapFrameRef.current?.exitFullscreen()
       setMindMapFullscreen(true)
       return
     }
@@ -378,13 +380,13 @@ export default function Knowledge() {
 
   const handleNativeFullscreenToolbarToggle = async () => {
     if (mindMapNativeFullscreen) {
-      await mindMapFrameRef.current?.exitNativeFullscreen()
+      await mindMapFrameRef.current?.exitFullscreen()
       return
     }
     if (mindMapFullscreen) {
       setMindMapFullscreen(false)
     }
-    await mindMapFrameRef.current?.enterNativeFullscreen()
+    await mindMapFrameRef.current?.enterFullscreen()
   }
 
   return (
@@ -599,8 +601,8 @@ export default function Knowledge() {
                       mindMapFrameRef.current?.focusNode(issue.nodeUid)
                       toast.warning(issue.message)
                     } },
-                    { label: mindMapFullscreen ? '退出沉浸模式' : '沉浸模式', onClick: () => { void handleImmersiveToolbarToggle() }, separatorBefore: true },
-                    { label: mindMapNativeFullscreen ? '退出原生全屏' : '原生全屏', onClick: () => { void handleNativeFullscreenToolbarToggle() } },
+                    ...(!isPwaClient ? [{ label: mindMapFullscreen ? '退出沉浸模式' : '沉浸模式', onClick: () => { void handleImmersiveToolbarToggle() }, separatorBefore: true }] : []),
+                    { label: isPwaClient ? mindMapNativeFullscreen ? '退出全屏' : '全屏' : mindMapNativeFullscreen ? '退出原生全屏' : '原生全屏', onClick: () => { void handleNativeFullscreenToolbarToggle() }, separatorBefore: isPwaClient },
                     { label: mindMapUiCleared ? '恢复界面' : '清屏', onClick: () => mindMapFrameRef.current?.toggleUiCleared() },
                   ]}
                 />
@@ -620,6 +622,7 @@ export default function Knowledge() {
                   ref={mindMapFrameRef}
                   key={`subject-frame:${selectedSubjectId}:${mindMapImport.importAppliedSyncVersion}`}
                   editorState={editorState}
+                  presentationStrategy={isPwaClient ? 'viewport-only' : 'native-preferred'}
                   readonly={mindMapExperience.task === 'learn'}
                   highlightedNodeUids={mindMapExperience.highlightedNodeUids}
                   immersiveModeActive={mindMapFullscreen}

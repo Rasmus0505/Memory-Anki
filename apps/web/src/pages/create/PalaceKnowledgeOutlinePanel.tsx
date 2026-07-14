@@ -13,6 +13,7 @@ import { Badge } from '@/shared/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card'
 import { useMindMapDocumentSession } from '@/shared/hooks/useMindMapDocumentSession'
 import { cn } from '@/shared/lib/utils'
+import { detectClientSource } from '@/shared/lib/clientSource'
 
 interface PalaceKnowledgeOutlinePanelProps {
   palace: PalaceMeta | null
@@ -31,6 +32,7 @@ export function PalaceKnowledgeOutlinePanel({
   explicitChapterIds,
   chapterOptions,
 }: PalaceKnowledgeOutlinePanelProps) {
+  const isPwaClient = detectClientSource() === 'pwa'
   const mindMapFrameRef = useRef<MindMapEditorSurfaceHandle | null>(null)
   const flatOptions = useMemo(() => flattenChapterOptions(chapterOptions), [chapterOptions])
   const availableSubjects = useMemo(() => {
@@ -84,7 +86,7 @@ export function PalaceKnowledgeOutlinePanel({
 
   const handleImmersiveToolbarToggle = async () => {
     if (mindMapNativeFullscreen) {
-      await mindMapFrameRef.current?.exitNativeFullscreen()
+      await mindMapFrameRef.current?.exitFullscreen()
       setMindMapFullscreen(true)
       return
     }
@@ -93,13 +95,13 @@ export function PalaceKnowledgeOutlinePanel({
 
   const handleNativeFullscreenToolbarToggle = async () => {
     if (mindMapNativeFullscreen) {
-      await mindMapFrameRef.current?.exitNativeFullscreen()
+      await mindMapFrameRef.current?.exitFullscreen()
       return
     }
     if (mindMapFullscreen) {
       setMindMapFullscreen(false)
     }
-    await mindMapFrameRef.current?.enterNativeFullscreen()
+    await mindMapFrameRef.current?.enterFullscreen()
   }
 
   return (
@@ -143,7 +145,7 @@ export function PalaceKnowledgeOutlinePanel({
               <div className="flex h-full min-h-0 flex-col gap-3">
                 <MindMapPageToolbar
                   compact
-                  immersiveAction={{
+                  immersiveAction={isPwaClient ? null : {
                     label: '半屏编辑',
                     active: mindMapFullscreen,
                     onClick: () => {
@@ -151,7 +153,9 @@ export function PalaceKnowledgeOutlinePanel({
                     },
                   }}
                   nativeFullscreenAction={{
-                    label: '全屏编辑',
+                    label: isPwaClient
+                      ? mindMapNativeFullscreen ? '退出全屏' : '全屏编辑'
+                      : '全屏编辑',
                     active: mindMapNativeFullscreen,
                     onClick: () => {
                       void handleNativeFullscreenToolbarToggle()
@@ -167,6 +171,7 @@ export function PalaceKnowledgeOutlinePanel({
                   ref={mindMapFrameRef}
                   key={`subject-outline-${selectedSubjectId}`}
                   editorState={editorState}
+                  presentationStrategy={isPwaClient ? 'viewport-only' : 'native-preferred'}
                   immersiveModeActive={mindMapFullscreen}
                   syncOnPropChange
                   onEditorStateChange={(nextState: MindMapEditorState) => {

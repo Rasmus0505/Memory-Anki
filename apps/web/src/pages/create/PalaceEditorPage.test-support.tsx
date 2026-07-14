@@ -146,6 +146,8 @@ vi.mock('@/features/mindmap-editor', async (importOriginal) => ({
       toggleUiCleared: vi.fn(),
       focusNode: vi.fn(),
       fitView: vi.fn(),
+      enterFullscreen: vi.fn(async () => {}),
+      exitFullscreen: vi.fn(async () => {}),
       enterNativeFullscreen: vi.fn(async () => {}),
       exitNativeFullscreen: vi.fn(async () => {}),
     }))

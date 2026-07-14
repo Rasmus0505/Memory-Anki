@@ -17,6 +17,13 @@
 | 复习揭示、评分、掌握度 | `widgets/mindmap-review-flow` 宿主和 capability 输入 |
 | 知识体系导图 | `pages/library/KnowledgeLibraryPage` 宿主 |
 
+## 展示策略
+
+- `MindMapPresentationMachine` 明确区分 `nativeFullscreen` 与 `viewportFullscreen`，原生 Fullscreen API 被拒绝时只能进入 viewport 模式，不得继续上报为系统全屏。
+- `MindMapEditorSurface` 接受 `presentationStrategy`：桌面默认 `native-preferred`，已安装 PWA 默认 `viewport-only`。业务宿主只组合按钮和文案，不直接操作浏览器全屏、滚动锁或视口监听。
+- `PresentationPort` 继续拥有 Fullscreen API、`visualViewport`、页面滚动锁、Escape 和布局调度。viewport 模式使用稳定画布宿主覆盖应用外壳，并由 CSS safe-area inset 保护交互控件。
+- Electron 保留现有网页内沉浸与系统全屏入口；PWA 只暴露一个“全屏”入口，其产品语义是占满可用视觉视口，不承诺隐藏 iOS 系统状态栏或 Home Indicator。
+
 `MindMapEditorSurface` 不直接调用业务 API。业务页面通过 `MindMapPersistenceAdapter` 提供加载和保存，通过 `MindMapCapability[]` 提供装饰与动作。
 
 

@@ -30,6 +30,7 @@ import { appPrompt } from '@/shared/components/ui/native-dialog'
 import { toast } from '@/shared/feedback/toast'
 import { PalaceEditorSkeleton } from './PalaceEditorSkeleton'
 import { FlipCardMindMapPanel } from '@/widgets/mindmap-review-flow'
+import { detectClientSource } from '@/shared/lib/clientSource'
 
 function SaveStatusBadge({
   status,
@@ -278,11 +279,11 @@ export default function PalaceEdit() {
       onClick: () => { void page.handleOpenEnglishArea() },
     },
     nativeFullscreenAction: {
-      label: mindMapNativeFullscreen ? '退出系统全屏' : '系统全屏',
+      label: detectClientSource() === 'pwa' ? mindMapNativeFullscreen ? '退出全屏' : '全屏' : mindMapNativeFullscreen ? '退出系统全屏' : '系统全屏',
       active: mindMapNativeFullscreen,
       onClick: () => {
-        if (mindMapNativeFullscreen) void mindMapFrameRef.current?.exitNativeFullscreen()
-        else void mindMapFrameRef.current?.enterNativeFullscreen()
+        if (mindMapNativeFullscreen) void mindMapFrameRef.current?.exitFullscreen()
+        else void mindMapFrameRef.current?.enterFullscreen()
       },
     },
   }
@@ -290,7 +291,7 @@ export default function PalaceEdit() {
   useEffect(() => {
     if (isActive) return
     if (!mindMapNativeFullscreen) return
-    void mindMapFrameRef.current?.exitNativeFullscreen()
+    void mindMapFrameRef.current?.exitFullscreen()
   }, [isActive, mindMapNativeFullscreen])
 
   if (!page.palaceId) {

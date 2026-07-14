@@ -1,6 +1,6 @@
 /* === COMBO MILESTONE BURST (情感化视觉：连击里程碑庆祝) === */
 
-/* CSS 伪全屏：替代浏览器原生 Fullscreen API，保留所有 React overlay 可见性 */
+/* 展示层全屏：原生全屏与 PWA visualViewport 全屏共用同一个稳定宿主。 */
 .memory-anki-mindmap-native-fullscreen {
   position: fixed !important;
   top: var(--memory-anki-mindmap-fullscreen-top, 0px) !important;
@@ -15,6 +15,15 @@
   background: #f8fafc !important;
   overflow: hidden !important;
   overscroll-behavior: contain !important;
+}
+
+.memory-anki-mindmap-native-fullscreen[data-presentation-mode='viewport'] {
+  box-sizing: border-box !important;
+  padding:
+    env(safe-area-inset-top, 0px)
+    env(safe-area-inset-right, 0px)
+    env(safe-area-inset-bottom, 0px)
+    env(safe-area-inset-left, 0px) !important;
 }
 
 .memory-anki-combo-burst-overlay {

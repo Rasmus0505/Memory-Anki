@@ -38,6 +38,7 @@ import {
 import { useMindMapEditHistory } from './useMindMapEditHistory'
 import { useMindMapFullscreen } from './useMindMapFullscreen'
 import { createMindMapCapabilities, mergeMindMapGraphOptions } from './capabilities'
+import { detectClientSource } from '@/shared/lib/clientSource'
 
 type MindMapInteractionState =
   | { mode: 'idle' }
@@ -58,7 +59,7 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
   readonly = false,
   practiceModeActive = false,
   immersiveModeActive = false,
-  browserFullscreenEnabled = true,
+  presentationStrategy = detectClientSource() === 'pwa' ? 'viewport-only' : 'native-preferred',
   aiSplitBusy = false,
   syncReason = null,
   externalSyncKey = null,
@@ -337,7 +338,7 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
 
   const fullscreen = useMindMapFullscreen({
     getFullscreenTarget: () => frameRef.current,
-    browserFullscreenEnabled,
+    presentationStrategy,
     onFullscreenChange,
   })
   const nativeFullscreenActive = fullscreen.active
@@ -397,6 +398,8 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
       toggleUiCleared: () => setUiCleared((current) => !current),
       focusNode: requestFocusNode,
       fitView: requestFitView,
+      enterFullscreen: enterNativeFullscreen,
+      exitFullscreen: exitNativeFullscreen,
       enterNativeFullscreen,
       exitNativeFullscreen,
     }),
@@ -619,9 +622,11 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
   const handleFocusToggle = useCallback(() => {
     const handled = capabilities.some((capability) => capability.handleFocusToggle?.())
     if (handled) return
-    if (onFullscreenToggle) onFullscreenToggle()
+    if (onFullscreenToggle && presentationStrategy === 'native-preferred') onFullscreenToggle()
     else toggleCanvasFullscreen()
-  }, [capabilities, onFullscreenToggle, toggleCanvasFullscreen])
+  }, [capabilities, onFullscreenToggle, presentationStrategy, toggleCanvasFullscreen])
+
+  const usesSurfaceFullscreen = presentationStrategy === 'viewport-only' || !onFullscreenToggle
 
   const canvas = (
     <WidgetErrorBoundary label="思维导图">
@@ -633,8 +638,8 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
         selectEditingText={interaction.mode === 'editing' && Boolean(interaction.selectAllOnStart)}
         readonly={!canEdit}
         practiceModeActive={practiceModeActive}
-        focusMode={onFullscreenToggle ? immersiveModeActive : nativeFullscreenActive}
-        focusModeLabel={onFullscreenToggle ? '网页内全屏' : '系统全屏'}
+        focusMode={usesSurfaceFullscreen ? nativeFullscreenActive : immersiveModeActive}
+        focusModeLabel={presentationStrategy === 'viewport-only' ? '全屏' : onFullscreenToggle ? '网页内全屏' : '系统全屏'}
         showToolbar={!uiCleared}
         toolbarContent={toolbarContent}
         mobileViewPolicy={mobileViewPolicy}
@@ -675,6 +680,7 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
       ref={frameRef}
       className={frameClassName}
       data-fullscreen={nativeFullscreenActive ? 'true' : 'false'}
+      data-presentation-mode={fullscreen.mode}
       data-testid="mindmap-frame-native"
     >
       {canvas}

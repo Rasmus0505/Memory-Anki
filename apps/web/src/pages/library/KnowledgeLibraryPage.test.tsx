@@ -70,12 +70,14 @@ vi.mock('@/features/mindmap-editor', () => ({
     forceSyncKey = null,
     initialViewPolicy = 'preserve',
     viewMemoryScope = null,
+    presentationStrategy = 'native-preferred',
     onNodeActive,
   }: {
     syncIntent?: 'soft' | 'replace'
     forceSyncKey?: string | number | null
     initialViewPolicy?: 'preserve' | 'reset'
     viewMemoryScope?: string | null
+    presentationStrategy?: 'native-preferred' | 'viewport-only'
     onNodeActive?: (nodes: Array<{
       uid: string | null
       text: string
@@ -88,6 +90,10 @@ vi.mock('@/features/mindmap-editor', () => ({
     React.useImperativeHandle(ref, () => ({
       setUiCleared: vi.fn(),
       toggleUiCleared: vi.fn(),
+      focusNode: vi.fn(),
+      fitView: vi.fn(),
+      enterFullscreen: vi.fn(async () => {}),
+      exitFullscreen: vi.fn(async () => {}),
       enterNativeFullscreen: vi.fn(async () => {}),
       exitNativeFullscreen: vi.fn(async () => {}),
     }))
@@ -102,6 +108,7 @@ vi.mock('@/features/mindmap-editor', () => ({
         <div>{`knowledge-force-${String(forceSyncKey ?? '')}`}</div>
         <div>{`knowledge-view-policy-${initialViewPolicy}`}</div>
         <div>{`knowledge-view-scope-${String(viewMemoryScope ?? '')}`}</div>
+        <div>{`knowledge-presentation-${presentationStrategy}`}</div>
         <button
           type="button"
           onClick={() =>
@@ -128,6 +135,7 @@ vi.mock('@/features/mindmap-editor', () => ({
     immersiveAction,
     nativeFullscreenAction,
     clearUiAction,
+    moreActions = [],
   }: Record<string, any>) => (
     <div data-testid="knowledge-mindmap-toolbar">
       {importMindMapAction ? <button type="button" onClick={importMindMapAction.onClick}>{importMindMapAction.label}</button> : null}
@@ -135,6 +143,9 @@ vi.mock('@/features/mindmap-editor', () => ({
       {immersiveAction ? <button type="button" onClick={immersiveAction.onClick}>{immersiveAction.label}</button> : null}
       {nativeFullscreenAction ? <button type="button" onClick={nativeFullscreenAction.onClick}>{nativeFullscreenAction.label}</button> : null}
       {clearUiAction ? <button type="button" onClick={clearUiAction.onClick}>{clearUiAction.label}</button> : null}
+      {moreActions.map((action: { label: string; onClick: () => void }) => (
+        <button key={action.label} type={'button'} onClick={action.onClick}>{action.label}</button>
+      ))}
     </div>
   ),
 }))
@@ -151,6 +162,14 @@ describe('KnowledgePage mind map host refresh behavior', () => {
     knowledgeReplaceEditorStateMock.mockReset()
     knowledgeMindMapMockState.nextMountId = 1
     knowledgeImportMockState.importAppliedSyncVersion = 0
+    Object.defineProperty(window, 'matchMedia', {
+      configurable: true,
+      value: vi.fn(() => ({
+        matches: false,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+      })),
+    })
     knowledgeUseMindMapImportMock.mockImplementation(() => ({
       importExternalSyncKey: null,
       importAppliedSyncVersion: knowledgeImportMockState.importAppliedSyncVersion,
@@ -198,6 +217,32 @@ describe('KnowledgePage mind map host refresh behavior', () => {
       palaces: [],
     } as never)
     vi.spyOn(knowledgeApi, 'deleteChapterApi').mockResolvedValue({ ok: true })
+  })
+
+  it('uses one viewport fullscreen action in an installed PWA', async () => {
+    Object.defineProperty(window, 'matchMedia', {
+      configurable: true,
+      value: vi.fn((query: string) => ({
+        matches: query === '(display-mode: standalone)',
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+      })),
+    })
+
+    render(<KnowledgePage />)
+
+    expect(await screen.findByText('knowledge-presentation-viewport-only')).toBeTruthy()
+    expect(screen.getByRole('button', { name: '全屏' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: '沉浸模式' })).toBeNull()
+    expect(screen.queryByRole('button', { name: '原生全屏' })).toBeNull()
+  })
+
+  it('preserves the existing desktop fullscreen actions', async () => {
+    render(<KnowledgePage />)
+
+    expect(await screen.findByText('knowledge-presentation-native-preferred')).toBeTruthy()
+    expect(screen.getByRole('button', { name: '沉浸模式' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: '原生全屏' })).toBeTruthy()
   })
 
   it('keeps the same host instance when saving subject info and stays on soft sync', async () => {

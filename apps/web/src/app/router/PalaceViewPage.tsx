@@ -16,6 +16,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui
 import { useMindMapDocumentSession } from '@/shared/hooks/useMindMapDocumentSession'
 import { cn } from '@/shared/lib/utils'
 import { readMindMapEditorState } from '@/entities/mindmap-document'
+import { detectClientSource } from '@/shared/lib/clientSource'
 
 interface PalaceMeta {
   id: number
@@ -30,6 +31,7 @@ export default function PalaceView() {
   const { id } = useParams()
   const { openQuizLauncher } = useQuizLauncher()
   const palaceId = id ? Number(id) : null
+  const isPwaClient = detectClientSource() === 'pwa'
   const mindMapFrameRef = useRef<MindMapEditorSurfaceHandle | null>(null)
   const [mindMapFullscreen, setMindMapFullscreen] = useState(false)
   const [mindMapNativeFullscreen, setMindMapNativeFullscreen] = useState(false)
@@ -86,7 +88,7 @@ export default function PalaceView() {
 
   const handleImmersiveToolbarToggle = async () => {
     if (mindMapNativeFullscreen) {
-      await mindMapFrameRef.current?.exitNativeFullscreen()
+      await mindMapFrameRef.current?.exitFullscreen()
       setMindMapFullscreen(true)
       return
     }
@@ -95,13 +97,13 @@ export default function PalaceView() {
 
   const handleNativeFullscreenToolbarToggle = async () => {
     if (mindMapNativeFullscreen) {
-      await mindMapFrameRef.current?.exitNativeFullscreen()
+      await mindMapFrameRef.current?.exitFullscreen()
       return
     }
     if (mindMapFullscreen) {
       setMindMapFullscreen(false)
     }
-    await mindMapFrameRef.current?.enterNativeFullscreen()
+    await mindMapFrameRef.current?.enterFullscreen()
   }
 
   const handleOpenQuizPage = () => {
@@ -149,7 +151,7 @@ export default function PalaceView() {
                   label: '做题',
                   onClick: handleOpenQuizPage,
                 }}
-                immersiveAction={{
+                immersiveAction={isPwaClient ? null : {
                   label: '半屏编辑',
                   active: mindMapFullscreen,
                   onClick: () => {
@@ -157,7 +159,9 @@ export default function PalaceView() {
                   },
                 }}
                 nativeFullscreenAction={{
-                  label: '全屏编辑',
+                  label: isPwaClient
+                    ? mindMapNativeFullscreen ? '退出全屏' : '全屏编辑'
+                    : '全屏编辑',
                   active: mindMapNativeFullscreen,
                   onClick: () => {
                     void handleNativeFullscreenToolbarToggle()
@@ -180,6 +184,7 @@ export default function PalaceView() {
                   key={`readonly-${palace.id}`}
                   editorState={editorState}
                   readonly
+                  presentationStrategy={isPwaClient ? 'viewport-only' : 'native-preferred'}
                   immersiveModeActive={mindMapFullscreen}
                   onEditorStateChange={() => {}}
                   onFullscreenToggle={setMindMapFullscreen}
