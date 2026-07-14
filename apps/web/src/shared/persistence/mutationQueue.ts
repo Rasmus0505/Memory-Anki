@@ -1,4 +1,5 @@
 import { isConflictResponse } from '@/shared/api/conflict'
+import { getApiToken } from '@/shared/api/apiToken'
 
 export type MutationQueueStatus = 'pending' | 'syncing' | 'failed' | 'conflict' | 'manual'
 
@@ -270,6 +271,10 @@ function buildReplayHeaders(item: PersistedMutation) {
   const headers = new Headers(item.headers)
   headers.set(MUTATION_HEADER, item.mutationId)
   headers.set(REPLAY_HEADER, 'true')
+  const apiToken = getApiToken()
+  if (apiToken) {
+    headers.set('X-Memory-Anki-Token', apiToken)
+  }
   if (item.bodyKind === 'formData') {
     headers.delete('Content-Type')
   }

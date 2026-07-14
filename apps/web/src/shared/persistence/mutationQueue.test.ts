@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { setApiToken } from '@/shared/api/apiToken'
 import {
   confirmQueuedMutationOverwrite,
   enqueueMutation,
@@ -11,6 +12,7 @@ const REMOVED_MUTATION_QUEUE_EVENT = ['memory-anki', 'mutation-queue:changed'].j
 
 describe('mutationQueue', () => {
   beforeEach(async () => {
+    window.localStorage.clear()
     await resetMutationQueueForTest()
   })
 
@@ -86,6 +88,31 @@ describe('mutationQueue', () => {
     const headers = init?.headers as Headers
     expect(headers.get('X-Memory-Anki-Mutation-ID')).toBe(item.mutationId)
     expect(headers.get('X-Memory-Anki-Queued-Replay')).toBe('true')
+    expect(await readQueuedMutations()).toHaveLength(0)
+  })
+
+  it('injects the current API token when replaying a legacy queued mutation', async () => {
+    setApiToken('current-pwa-token')
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ ok: true }), { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await enqueueMutation({
+      mutationId: 'legacy-mutation',
+      resourceKey: 'study-session:legacy-record',
+      description: '恢复旧学习会话',
+      url: '/api/v1/study-sessions/from-time-record',
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      bodyKind: 'json',
+      body: JSON.stringify({ id: 'legacy-record' }),
+      replayMode: 'auto',
+    })
+
+    await replayQueuedMutations()
+
+    const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit]
+    const headers = init?.headers as Headers
+    expect(headers.get('X-Memory-Anki-Token')).toBe('current-pwa-token')
     expect(await readQueuedMutations()).toHaveLength(0)
   })
 

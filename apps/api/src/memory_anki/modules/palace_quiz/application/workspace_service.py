@@ -243,7 +243,7 @@ def update_job(session: Session, job_id: str, data: dict[str, Any]) -> dict[str,
         job.status = str(data.get("status") or job.status)
     if "preview" in data:
         preview = data.get("preview")
-        job.preview_json = json.dumps(preview, ensure_ascii=False) if preview is not None else None
+        job.preview_json = json.dumps(preview, ensure_ascii=False) if preview is not None else ""
     if "error_message" in data:
         job.error_message = str(data.get("error_message") or "")
     session.commit()

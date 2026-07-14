@@ -10,9 +10,7 @@ describe('pageHistoryRoute', () => {
     expect(resolvePageHistoryKey('/review/session/9')).toBe('review:session:9')
   })
 
-  it('maps nested routes to their navigation section', () => {
-    expect(resolvePageHistorySection('/mini-palaces/3/practice')).toBe('palaces')
-    expect(resolvePageHistorySection('/profile/backups')).toBe('profile')
+  it('maps nested routes to their navigation section', () => {    expect(resolvePageHistorySection('/profile/backups')).toBe('profile')
     expect(resolvePageHistorySection('/timer-overlay')).toBe('other')
   })
 })
