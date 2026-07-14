@@ -38,15 +38,14 @@ def _backend_steps(*, full: bool) -> list[QualityStep]:
     import_env["PYTHONPATH"] = str(API_ROOT / "src")
     steps = [
         QualityStep("architecture", _python("tools/check_architecture.py"), REPO_ROOT),
-        QualityStep("architecture v3", _python("tools/check_architecture_v3.py"), REPO_ROOT),
-        QualityStep(
-            "architecture v3 tests",
-            _python("-m", "pytest", "tools/test_check_architecture_v3.py", "-q"),
-            REPO_ROOT,
-        ),
         QualityStep(
             "architecture tests",
             _python("-m", "pytest", "tools/test_check_architecture.py", "-q"),
+            REPO_ROOT,
+        ),
+        QualityStep(
+            "data integrity tooling tests",
+            _python("-m", "pytest", "tools/test_data_integrity_manifest.py", "-q"),
             REPO_ROOT,
         ),
         QualityStep("backend ruff", _python("-m", "ruff", "check", "src", "tests"), API_ROOT),

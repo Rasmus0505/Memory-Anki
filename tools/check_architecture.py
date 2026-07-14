@@ -360,7 +360,7 @@ def check_context_dependency_map(errors: list[str]) -> None:
         if not source_owner:
             continue
         try:
-            tree = ast.parse(path.read_text(encoding="utf-8"))
+            tree = ast.parse(path.read_text(encoding="utf-8").lstrip("\ufeff"))
         except SyntaxError:
             continue
         for node in ast.walk(tree):
@@ -975,7 +975,7 @@ def check_backend_module_boundaries(errors: list[str]) -> None:
     for path in iter_files(API_SRC / "modules", (".py",)):
         source_module = module_name_for_api_path(path)
         try:
-            tree = ast.parse(path.read_text(encoding="utf-8"))
+            tree = ast.parse(path.read_text(encoding="utf-8").lstrip("\ufeff"))
         except SyntaxError as exc:
             errors.append(f"{path.relative_to(REPO_ROOT)}: cannot parse imports: {exc}")
             continue
@@ -1014,7 +1014,7 @@ def check_ai_runtime_port_boundaries(errors: list[str]) -> None:
     for path in managed_paths:
         if not path.exists():
             continue
-        tree = ast.parse(path.read_text(encoding="utf-8"))
+        tree = ast.parse(path.read_text(encoding="utf-8").lstrip("\ufeff"))
         for node in ast.walk(tree):
             imported_module = imported_module_from_node(node)
             if imported_module and imported_module.startswith(forbidden_prefixes):
@@ -1029,7 +1029,7 @@ def check_review_application_boundary(errors: list[str]) -> None:
     application_root = API_SRC / "modules" / "reviews" / "application"
     forbidden_prefix = "memory_anki.modules.palaces"
     for path in iter_files(application_root, (".py",)):
-        tree = ast.parse(path.read_text(encoding="utf-8"))
+        tree = ast.parse(path.read_text(encoding="utf-8").lstrip("\ufeff"))
         for node in ast.walk(tree):
             imported_module = imported_module_from_node(node)
             if imported_module and imported_module.startswith(forbidden_prefix):
@@ -1044,7 +1044,7 @@ def check_palace_review_public_facade(errors: list[str]) -> None:
     palace_root = API_SRC / "modules" / "palaces"
     forbidden_prefix = "memory_anki.modules.reviews.application"
     for path in iter_files(palace_root, (".py",)):
-        tree = ast.parse(path.read_text(encoding="utf-8"))
+        tree = ast.parse(path.read_text(encoding="utf-8").lstrip("\ufeff"))
         for node in ast.walk(tree):
             imported_module = imported_module_from_node(node)
             if imported_module and imported_module.startswith(forbidden_prefix):
@@ -1087,7 +1087,7 @@ def check_dashboard_public_facades(errors: list[str]) -> None:
     dashboard_root = API_SRC / "modules" / "dashboard"
     protected_owners = {"palaces", "reviews", "sessions"}
     for path in iter_files(dashboard_root, (".py",)):
-        tree = ast.parse(path.read_text(encoding="utf-8"))
+        tree = ast.parse(path.read_text(encoding="utf-8").lstrip("\ufeff"))
         for node in ast.walk(tree):
             imported_module = imported_module_from_node(node)
             if not imported_module or not imported_module.startswith(
@@ -1109,7 +1109,7 @@ def check_dashboard_public_facades(errors: list[str]) -> None:
 def check_palace_quiz_palace_boundary(errors: list[str]) -> None:
     quiz_application = API_SRC / "modules" / "palace_quiz" / "application"
     for path in iter_files(quiz_application, (".py",)):
-        tree = ast.parse(path.read_text(encoding="utf-8"))
+        tree = ast.parse(path.read_text(encoding="utf-8").lstrip("\ufeff"))
         for node in ast.walk(tree):
             imported_module = imported_module_from_node(node)
             if not imported_module:
@@ -1152,7 +1152,7 @@ def check_consumer_context_public_facades(errors: list[str]) -> None:
     for consumer, protected_owners in protected_by_consumer.items():
         consumer_root = API_SRC / "modules" / consumer
         for path in iter_files(consumer_root, (".py",)):
-            tree = ast.parse(path.read_text(encoding="utf-8"))
+            tree = ast.parse(path.read_text(encoding="utf-8").lstrip("\ufeff"))
             for node in ast.walk(tree):
                 imported_module = imported_module_from_node(node)
                 if not imported_module or not imported_module.startswith(
@@ -1175,7 +1175,7 @@ def check_knowledge_context_boundaries(errors: list[str]) -> None:
     knowledge_root = API_SRC / "modules" / "knowledge"
     protected_owners = {"backups", "mindmap_document", "palaces"}
     for path in iter_files(knowledge_root, (".py",)):
-        tree = ast.parse(path.read_text(encoding="utf-8"))
+        tree = ast.parse(path.read_text(encoding="utf-8").lstrip("\ufeff"))
         for node in ast.walk(tree):
             imported_module = imported_module_from_node(node)
             if not imported_module or not imported_module.startswith(
@@ -1433,8 +1433,112 @@ def check_mindmap_architecture(errors: list[str]) -> None:
             errors.append(
                 f"{path.relative_to(REPO_ROOT)}: import mindmap_document through its public facade or aggregate-owned service."
             )
+    palace_editor = WEB_SRC / 'pages' / 'create' / 'PalaceEditorPage.tsx'
+    if palace_editor.exists():
+        content = palace_editor.read_text(encoding='utf-8')
+        relative_palace_editor = palace_editor.relative_to(REPO_ROOT).as_posix()
+        if 'deferUntilMenuClose' in content or 'setTimeout(() => mindMapImport.setImportOpen' in content:
+            errors.append(f'{relative_palace_editor}: overlay launch timing belongs in the shared dropdown coordinator, not the palace page.')
+        if 'importMindMapAction' in content and 'opensOverlay: true' not in content:
+            errors.append(f'{relative_palace_editor}: mind-map import actions opened from overflow menus must declare opensOverlay: true.')
+        if (WEB_SRC / 'widgets' / 'mindmap-review-flow').exists() and (
+            "from '@/widgets/mindmap-review-flow'" not in content
+            or 'FlipCardMindMapPanel' not in content
+        ):
+            errors.append(
+                f'{relative_palace_editor}: Palace learning must consume the public FlipCardMindMapPanel widget.'
+            )
+        for forbidden_flip_token in (
+            'practiceModeActive={recallModeActive}',
+            "syncReason={recallModeActive ? 'review_flip'",
+            "nodeClickViewportPolicy=",
+        ):
+            if forbidden_flip_token in content:
+                errors.append(
+                    f'{relative_palace_editor}: flip-card invariant `{forbidden_flip_token}` belongs in FlipCardMindMapPanel.'
+                )
+
+    flip_card_panel = WEB_SRC / 'widgets' / 'mindmap-review-flow' / 'FlipCardMindMapPanel.tsx'
+    if not flip_card_panel.exists() and (WEB_SRC / 'widgets' / 'mindmap-review-flow').exists():
+        errors.append(
+            'apps/web/src/widgets/mindmap-review-flow/FlipCardMindMapPanel.tsx: global flip-card panel is missing.'
+        )
+    elif flip_card_panel.exists():
+        content = flip_card_panel.read_text(encoding='utf-8')
+        required_flip_invariants = (
+            'practiceModeActive={!isEditMode}',
+            "syncReason={isEditMode ? null : 'review_flip'}",
+            "nodeClickViewportPolicy={isEditMode ? 'guided-center' : 'preserve'}",
+        )
+        for required_flip_invariant in required_flip_invariants:
+            if required_flip_invariant not in content:
+                errors.append(
+                    f'{flip_card_panel.relative_to(REPO_ROOT).as_posix()}: missing flip-card invariant `{required_flip_invariant}`.'
+                )
+
+    import_drawer = WEB_SRC / 'features' / 'mindmap-import' / 'components' / 'MindMapImportDrawer.tsx'
+    if import_drawer.exists():
+        content = import_drawer.read_text(encoding='utf-8')
+        if 'dismissOnInteractOutside={false}' not in content:
+            errors.append(
+                f'{import_drawer.relative_to(REPO_ROOT).as_posix()}: the non-modal import workbench must ignore outside focus and pointer dismissal.'
+            )
+
+    import_runtime = API_SRC / "modules" / "palaces" / "application" / "mindmap_import_job_runtime.py"
+    import_worker = API_SRC / "modules" / "palaces" / "application" / "mindmap_import" / "job_worker.py"
+    prompt_runtime = API_SRC / "modules" / "palaces" / "application" / "mindmap_import" / "runtime.py"
+    required_import_tokens = {
+        import_runtime: ("vision_ai_runtime", "formatter_ai_runtime", "mindmap_ocr_formatter"),
+        import_worker: ("vision_response.txt", "ocr_combined.txt", "formatter_response.txt", "final_tree.json"),
+        prompt_runtime: ("ai_prompt_import_document_mindmap", "ai_prompt_import_batch_mindmap", "ai_prompt_import_ocr_mindmap_format"),
+    }
+    for path, required_tokens in required_import_tokens.items():
+        if not path.exists():
+            continue
+        content = path.read_text(encoding="utf-8")
+        for token in required_tokens:
+            if token not in content:
+                errors.append(
+                    f"{path.relative_to(REPO_ROOT).as_posix()}: mind-map import pipeline must retain `{token}`."
+                )
 
 
+def check_prompt_catalog_boundaries(errors: list[str]) -> None:
+    forbidden_batch_prompts = (
+        "将本节教材转换为结构清晰、可编辑的记忆宫殿草稿。",
+        "基于教材与题库证据生成可审阅的题目草稿，不得编造来源。",
+    )
+    batch_page = WEB_SRC / "pages" / "create" / "BatchGenerationWorkspacePage.tsx"
+    if batch_page.exists():
+        source = batch_page.read_text(encoding="utf-8")
+        for prompt in forbidden_batch_prompts:
+            if prompt in source:
+                errors.append(
+                    f"{batch_page.relative_to(REPO_ROOT)}: batch generation system prompts must be compiled through PromptCatalog."
+                )
+
+    for path in (API_SRC / "modules").rglob("application/*.py"):
+        if SETTINGS_MODULE in path.parents:
+            continue
+        source = path.read_text(encoding="utf-8")
+        if "modules.settings.infrastructure" in source or "modules.settings.application" in source:
+            errors.append(
+                f"{path.relative_to(REPO_ROOT)}: business application code must depend on platform PromptCatalog, not settings implementations."
+            )
+
+    prompt_models = API_SRC / "infrastructure" / "db" / "_tables" / "misc.py"
+    if prompt_models.exists():
+        source = prompt_models.read_text(encoding="utf-8")
+        for model_name in (
+            "AiPromptBlock",
+            "AiPromptBlockVersion",
+            "AiPromptSceneDefault",
+            "AiPromptSceneVersion",
+        ):
+            if f"class {model_name}" not in source:
+                errors.append(
+                    f"{prompt_models.relative_to(REPO_ROOT)}: missing settings-owned `{model_name}` model."
+                )
 
 def check_unified_training_evidence(errors: list[str]) -> None:
     nav_path = WEB_SRC / "app" / "shell" / "navSections.ts"
@@ -1478,21 +1582,42 @@ def check_removed_focus_practice(errors: list[str]) -> None:
                         f"{path.relative_to(REPO_ROOT)}: removed focus-practice capability must not reintroduce `{token}`."
                     )
 
+RETIRED_PLACEHOLDER_MODULES = {
+    "ai_authoring",
+    "assessment",
+    "learning_record",
+    "library",
+    "maintenance",
+    "memory_content",
+    "preferences",
+    "training",
+}
+
+
+def check_retired_placeholder_modules(errors: list[str]) -> None:
+    roots = (API_SRC / "modules", WEB_SRC / "modules")
+    for root in roots:
+        for module_name in sorted(RETIRED_PLACEHOLDER_MODULES):
+            candidate = root / module_name
+            if candidate.exists():
+                errors.append(
+                    f"ARCH-MODULE-001 {candidate.relative_to(REPO_ROOT).as_posix()}: "
+                    "retired placeholder module must not be recreated before it owns a complete runtime slice."
+                )
+
 def check_frontend_runtime_module_boundaries(errors: list[str]) -> None:
     modules_root = WEB_SRC / "modules"
     if not modules_root.exists():
         errors.append("apps/web/src/modules: architecture v2 module root is missing.")
         return
 
-    required_catalogs = (
-        REPO_ROOT / "docs" / "architecture" / "runtime-ports.yaml",
-        REPO_ROOT / "docs" / "architecture" / "use-case-catalog.yaml",
-        REPO_ROOT / "docs" / "architecture" / "event-catalog.yaml",
-    )
-    for catalog in required_catalogs:
-        if not catalog.exists():
-            errors.append(f"{catalog.relative_to(REPO_ROOT)}: runtime architecture catalog is missing.")
-
+    architecture = load_context_map()
+    runtime = architecture.get("runtime") if isinstance(architecture.get("runtime"), dict) else {}
+    for field in ("ports", "useCases", "events", "frontendModules"):
+        if not isinstance(runtime.get(field), dict):
+            errors.append(
+                f"docs/architecture/context-map.yaml: runtime catalog is missing `{field}`."
+            )
     for module_dir in sorted(path for path in modules_root.iterdir() if path.is_dir()):
         manifest = module_dir / "module.yaml"
         public_entry = module_dir / "public.ts"
@@ -1589,6 +1714,7 @@ def main() -> int:
     check_removed_shared_api_modules(errors)
     check_frontend_generated_api_boundary(errors)
     check_frontend_public_api_surfaces(errors)
+    check_retired_placeholder_modules(errors)
     check_frontend_runtime_module_boundaries(errors)
     check_removed_focus_practice(errors)
     check_study_session_legacy_usage(errors)
@@ -1601,6 +1727,7 @@ def main() -> int:
     check_settings_module_boundaries(errors)
     check_ai_gateway_boundary(errors)
     check_ai_runtime_port_boundaries(errors)
+    check_prompt_catalog_boundaries(errors)
     check_ai_run_workspace(errors)
     check_review_application_boundary(errors)
     check_palace_review_public_facade(errors)

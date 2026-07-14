@@ -54,7 +54,7 @@ graph LR
 
 Feature-to-feature production imports are forbidden; cross-feature composition belongs in `pages` or `widgets`. Backend cross-context calls are allowed only when registered in the context map and imported through the target context's declared public `api` entry. Private application, infrastructure, and presentation modules are never cross-context APIs.
 
-`docs/architecture/context-map.yaml` is the machine-readable architecture ledger. It inventories migrated backend contexts, records the explicit public cross-context dependency graph, enforces zero production feature-to-feature imports, and lists use cases whose transactions are managed through `UnitOfWork`. New dependency edges are rejected until intentionally designed and registered. The frontend ledger measures production imports only; test mocks and fixtures do not create runtime architecture debt.
+`docs/architecture/context-map.yaml` is the single machine-readable architecture ledger. It inventories real backend contexts, frontend runtime modules, public dependency edges, ports, use cases, events, and `UnitOfWork` ownership. Placeholder target modules are forbidden: a module is registered only after a complete runtime slice exists. New dependency edges are rejected until intentionally designed and registered.
 
 Application transaction ownership is explicit: presentation constructs infrastructure adapters, application use cases depend on `memory_anki.platform.application.UnitOfWork`, and only the adapter calls the concrete ORM transaction.
 
@@ -88,7 +88,7 @@ Frontend lint is a zero-warning contract. The `apps/web` lint script runs ESLint
 - Backup context boundary: `docs/architecture/backup-boundary.md`
 - Quiz frontend boundary: `docs/architecture/quiz-frontend-boundary.md`
 - Knowledge context boundary: `docs/architecture/knowledge-boundary.md`
-- Context and dependency ledger: `docs/architecture/context-map.yaml`
+- Single architecture ledger: `docs/architecture/context-map.yaml`
 - Temporary file-level exceptions: `docs/architecture/boundary-exceptions.json`
 ## Mutation identity boundary
 
@@ -103,15 +103,15 @@ English course/task HTTP wrappers are entity-owned under `apps/web/src/entities/
 Frontend AI scenario/model selection and per-run overrides are entity-owned under `entities/ai-runtime`; business features consume this entity and must not recreate an `ai-config` feature.
 
 
-## Runtime-owned workflows (architecture v2)
+## Runtime-owned workflows
 
 The concentrated architecture replacement has started with the two failure-prone learning-loop slices. New business code lives under `apps/web/src/modules`, browser effects live under `apps/web/src/platform`, and XState is restricted to `application/workflows`.
 
 - `freestyle`: `canCompleteRound` is a framework-free domain guard; `FreestyleTrainingMachine` rejects scroll-driven completion.
 - `mindmap`: `MindMapPresentationMachine` owns embedded/fullscreen transitions; `PresentationPort` owns native fullscreen, viewport locking, Escape handling, and layout scheduling.
 - Cross-module imports must use the target module's `public.ts`.
-- `docs/architecture/runtime-ports.yaml`, `use-case-catalog.yaml`, and `event-catalog.yaml` are the machine-readable runtime ownership ledger.
-- The legacy FSD tree remains only for contexts not yet cut over; migrated runtime logic must not move back into it.
+- Runtime ports, use cases, events, and frontend module ownership are embedded in `docs/architecture/context-map.yaml`; no parallel architecture catalogs are maintained.
+- The current FSD tree remains the production ownership map outside completed runtime slices; migrated runtime logic must not move back into it. Empty future-facing module scaffolds are forbidden.
 
 - Quiz learning loop: docs/architecture/quiz-learning-loop.md
 - Whole-book batch generation workspace: `docs/architecture/batch-generation-workspace.md`

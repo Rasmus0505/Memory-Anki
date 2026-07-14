@@ -30,4 +30,7 @@ Idempotent review submission and overdue spreading are composed in `review_comma
 
 ## Frontend review-flow composition
 
-`widgets/mindmap-review-flow` owns the cross-feature session surface that combines Review use cases, Mini Palace training, quiz launching, and mind-map editing. `features/review` no longer imports Mini Palace or Mind-map Editor; reusable state transforms remain under `entities/review`.
+`widgets/mindmap-review-flow` owns the cross-feature flip-card session surface that combines Review use cases, Palace learning, quiz launching, and mind-map editing. Its public `FlipCardMindMapPanel` is the only host allowed to configure flip-card synchronization, viewport preservation, keyboard/touch progression, fullscreen, and clear-UI behavior. Palace learning and formal Review provide separate progress data and callbacks; formal Review alone adds rating evidence and review completion. `features/review` does not import Palace or Mind-map Editor; reusable state transforms remain under `entities/review`.
+## Manual stage correction
+
+Manual palace stage adjustment is a Review-owned scheduling correction, even when the action starts from the Palace catalog UI. Preview requests may simulate schedule rebuilding but must roll back all database changes. Apply requests rebuild palace-level schedules through the Review use case, use mutation identity and one `UnitOfWork`, reject stale `expected_completed_count` values, and store a separate adjustment audit record. They must not create `ReviewLog` or `StudySession` rows and must not alter learning-group progress.

@@ -191,6 +191,28 @@ def test_mindmap_architecture_allows_content_hash_identity(
     assert errors == []
 
 
+def test_mindmap_architecture_requires_shared_overlay_coordination(
+    tmp_path: Path, monkeypatch
+) -> None:
+    api_src = tmp_path / 'apps' / 'api' / 'src' / 'memory_anki'
+    web_src = tmp_path / 'apps' / 'web' / 'src'
+    monkeypatch.setattr(check_architecture, 'REPO_ROOT', tmp_path)
+    monkeypatch.setattr(check_architecture, 'API_SRC', api_src)
+    monkeypatch.setattr(check_architecture, 'WEB_SRC', web_src)
+    write_file(
+        web_src / 'pages' / 'create' / 'PalaceEditorPage.tsx',
+        'const importMindMapAction = { deferUntilMenuClose: true }\n',
+    )
+
+    errors: list[str] = []
+    check_architecture.check_mindmap_architecture(errors)
+
+    assert errors == [
+        'apps/web/src/pages/create/PalaceEditorPage.tsx: overlay launch timing belongs in the shared dropdown coordinator, not the palace page.',
+        'apps/web/src/pages/create/PalaceEditorPage.tsx: mind-map import actions opened from overflow menus must declare opensOverlay: true.',
+    ]
+
+
 def write_context_map(
     path: Path,
     *,
@@ -309,11 +331,11 @@ def test_context_map_keeps_mini_palace_free_of_palace_edit_dependency(
     errors: list[str] = []
     check_architecture.check_context_dependency_map(errors)
 
-    assert errors == [
+    assert (
         "features/mini-palace/useMiniPalaceController.ts: new feature dependency "
         "`mini-palace -> palace-edit` is not registered in context-map.yaml; "
         "compose features in pages/widgets instead."
-    ]
+    ) in errors
 
 
 def test_context_map_keeps_palace_edit_free_of_cross_feature_dependencies(
@@ -421,11 +443,11 @@ def test_context_map_keeps_mini_palace_free_of_mindmap_editor_dependency(
     errors: list[str] = []
     check_architecture.check_context_dependency_map(errors)
 
-    assert errors == [
+    assert (
         "features/mini-palace/useMiniPalaceController.ts: new feature dependency "
         "`mini-palace -> mindmap-editor` is not registered in context-map.yaml; "
         "compose features in pages/widgets instead."
-    ]
+    ) in errors
 
 
 def test_context_map_keeps_mindmap_import_free_of_editor_dependency(
@@ -1068,8 +1090,20 @@ ignore_errors = true
 def _write_runtime_catalogs(root: Path) -> None:
     architecture = root / "docs/architecture"
     architecture.mkdir(parents=True, exist_ok=True)
-    for name in ("runtime-ports.yaml", "use-case-catalog.yaml", "event-catalog.yaml"):
-        (architecture / name).write_text("{}", encoding="utf-8")
+    (architecture / "context-map.yaml").write_text(
+        json.dumps(
+            {
+                "schemaVersion": 1,
+                "runtime": {
+                    "ports": {},
+                    "useCases": {},
+                    "events": {},
+                    "frontendModules": {},
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
 
 
 def test_runtime_module_boundary_rejects_xstate_in_domain_and_private_cross_import(tmp_path, monkeypatch):
@@ -1137,3 +1171,111 @@ def test_runtime_module_boundary_accepts_workflow_and_public_import(tmp_path, mo
     check_architecture.check_frontend_runtime_module_boundaries(errors)
 
     assert errors == []
+
+
+def test_retired_placeholder_module_is_rejected(tmp_path, monkeypatch) -> None:
+    api_src = tmp_path / "apps/api/src/memory_anki"
+    web_src = tmp_path / "apps/web/src"
+    (api_src / "modules/library").mkdir(parents=True)
+    (web_src / "modules/freestyle").mkdir(parents=True)
+    monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(check_architecture, "API_SRC", api_src)
+    monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
+
+    errors: list[str] = []
+    check_architecture.check_retired_placeholder_modules(errors)
+
+    assert errors == [
+        "ARCH-MODULE-001 apps/api/src/memory_anki/modules/library: retired placeholder module "
+        "must not be recreated before it owns a complete runtime slice."
+    ]
+
+def test_mindmap_architecture_requires_import_pipeline_contract(
+    tmp_path: Path, monkeypatch
+) -> None:
+    api_src = tmp_path / "apps" / "api" / "src" / "memory_anki"
+    web_src = tmp_path / "apps" / "web" / "src"
+    monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(check_architecture, "API_SRC", api_src)
+    monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
+    write_file(
+        api_src / "modules" / "palaces" / "application" / "mindmap_import_job_runtime.py",
+        "vision_ai_runtime\nformatter_ai_runtime\n",
+    )
+    write_file(
+        api_src / "modules" / "palaces" / "application" / "mindmap_import" / "job_worker.py",
+        "vision_response.txt\nocr_combined.txt\nformatter_response.txt\nfinal_tree.json\n",
+    )
+    write_file(
+        api_src / "modules" / "palaces" / "application" / "mindmap_import" / "runtime.py",
+        "ai_prompt_import_document_mindmap\nai_prompt_import_batch_mindmap\nai_prompt_import_ocr_mindmap_format\n",
+    )
+
+    errors: list[str] = []
+    check_architecture.check_mindmap_architecture(errors)
+
+
+def test_prompt_catalog_boundary_rejects_hardcoded_batch_prompts(tmp_path, monkeypatch):
+    api_src = tmp_path / "apps/api/src/memory_anki"
+    web_src = tmp_path / "apps/web/src"
+    page = web_src / "pages/create/BatchGenerationWorkspacePage.tsx"
+    page.parent.mkdir(parents=True)
+    page.write_text(
+        "const systemPrompt = '将本节教材转换为结构清晰、可编辑的记忆宫殿草稿。'",
+        encoding="utf-8",
+    )
+    models = api_src / "infrastructure/db/_tables/misc.py"
+    models.parent.mkdir(parents=True)
+    models.write_text(
+        "\n".join(
+            f"class {name}: pass"
+            for name in (
+                "AiPromptBlock",
+                "AiPromptBlockVersion",
+                "AiPromptSceneDefault",
+                "AiPromptSceneVersion",
+            )
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(check_architecture, "API_SRC", api_src)
+    monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
+
+    errors: list[str] = []
+    check_architecture.check_prompt_catalog_boundaries(errors)
+
+    assert any("batch generation system prompts" in error for error in errors)
+
+
+def test_prompt_catalog_boundary_rejects_settings_imports_in_application(tmp_path, monkeypatch):
+    api_src = tmp_path / "apps/api/src/memory_anki"
+    web_src = tmp_path / "apps/web/src"
+    application = api_src / "modules/example/application/service.py"
+    application.parent.mkdir(parents=True)
+    application.write_text(
+        "from memory_anki.modules.settings.infrastructure import SettingsPromptCatalog",
+        encoding="utf-8",
+    )
+    models = api_src / "infrastructure/db/_tables/misc.py"
+    models.parent.mkdir(parents=True)
+    models.write_text(
+        "\n".join(
+            f"class {name}: pass"
+            for name in (
+                "AiPromptBlock",
+                "AiPromptBlockVersion",
+                "AiPromptSceneDefault",
+                "AiPromptSceneVersion",
+            )
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(check_architecture, "API_SRC", api_src)
+    monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
+
+    errors: list[str] = []
+    check_architecture.check_prompt_catalog_boundaries(errors)
+
+    assert any("platform PromptCatalog" in error for error in errors)

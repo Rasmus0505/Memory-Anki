@@ -29,6 +29,6 @@ The projection does not replace the existing review scheduler. AI may evaluate o
 ## UI ownership
 
 - `features/review/hooks/useMindMapRecallRatings.ts` owns optimistic evidence writes, legacy normalization, and correction linkage.
-- `widgets/mindmap-review-flow/ReviewFlowMapPanel.tsx` owns keyboard/touch capture and node progression.
+- `widgets/mindmap-review-flow/FlipCardMindMapPanel.tsx` owns shared flip-card rendering, keyboard/touch capture, node progression, and viewport preservation for Palace learning and formal Review.
 - Global rating shortcuts are disabled for editable targets and open dialogs.
 - `1/2/3` and `J/K/L` submit manual ratings; moving forward without rating submits a low-confidence fuzzy inference; `Backspace` returns to the latest rated node for correction.

@@ -3,9 +3,7 @@
   "architecture": {
     "backend": "modular-monolith",
     "frontend": "app-pages-widgets-features-entities-shared",
-    "databaseSchemaChanges": false,
-    "frontendTarget": "app-modules-platform-shared",
-    "workflowRuntime": "xstate-application-only"
+    "databaseSchemaChanges": false
   },
   "backend": {
     "targetLayers": [
@@ -84,38 +82,6 @@
       "settings": {
         "status": "migrated",
         "publicEntry": "memory_anki.modules.settings.api"
-      },
-      "library": {
-        "status": "target",
-        "architectureVersion": 3
-      },
-      "memory_content": {
-        "status": "target",
-        "architectureVersion": 3
-      },
-      "assessment": {
-        "status": "target",
-        "architectureVersion": 3
-      },
-      "learning_record": {
-        "status": "target",
-        "architectureVersion": 3
-      },
-      "training": {
-        "status": "target",
-        "architectureVersion": 3
-      },
-      "ai_authoring": {
-        "status": "target",
-        "architectureVersion": 3
-      },
-      "preferences": {
-        "status": "target",
-        "architectureVersion": 3
-      },
-      "maintenance": {
-        "status": "target",
-        "architectureVersion": 3
       }
     },
     "allowedCrossContextDependencies": {
@@ -179,15 +145,7 @@
       "settings": [
         "backups",
         "reviews"
-      ],
-      "library": [],
-      "memory_content": [],
-      "assessment": [],
-      "learning_record": [],
-      "training": [],
-      "ai_authoring": [],
-      "preferences": [],
-      "maintenance": []
+      ]
     },
     "unitOfWorkManagedUseCases": [
       "modules/knowledge/application/chapter_service.py",
@@ -226,29 +184,152 @@
       "palace-quiz": [],
       "profile": [],
       "review": []
+    }
+  },
+  "runtime": {
+    "ports": {
+      "NavigationPort": {
+        "owner": "app/runtime",
+        "adapter": "platform/browser",
+        "capabilities": [
+          "push",
+          "replace",
+          "back"
+        ]
+      },
+      "OverlayCoordinator": {
+        "owner": "app/runtime",
+        "adapter": "app/composition",
+        "capabilities": [
+          "open",
+          "close",
+          "closeReason"
+        ]
+      },
+      "PresentationPort": {
+        "owner": "modules/mindmap/application",
+        "adapter": "platform/browser/browserPresentationPort.ts",
+        "capabilities": [
+          "fullscreen",
+          "viewportLock",
+          "escape",
+          "layoutSchedule"
+        ]
+      },
+      "SessionPort": {
+        "owner": "modules/sessions/application",
+        "adapter": "modules/sessions/infrastructure",
+        "capabilities": [
+          "identity",
+          "timing",
+          "pause",
+          "complete",
+          "idempotentSave"
+        ]
+      },
+      "PersistencePort": {
+        "owner": "app/runtime",
+        "adapter": "platform/persistence",
+        "capabilities": [
+          "versionedLocal",
+          "versionedSession",
+          "offlineQueue",
+          "migration"
+        ]
+      },
+      "PwaRuntimePort": {
+        "owner": "app/runtime",
+        "adapter": "platform/pwa",
+        "capabilities": [
+          "release",
+          "serviceWorker",
+          "cacheReset",
+          "recovery"
+        ]
+      },
+      "ObservabilityPort": {
+        "owner": "app/runtime",
+        "adapter": "platform/observability",
+        "capabilities": [
+          "event",
+          "transition",
+          "request",
+          "errorContext"
+        ]
+      }
     },
-    "targetLayersV2": [
-      "app",
-      "modules",
-      "platform",
-      "shared"
+    "forbiddenInBusinessPresentation": [
+      "window.history",
+      "window.location",
+      "requestFullscreen",
+      "exitFullscreen",
+      "localStorage",
+      "sessionStorage",
+      "fetch",
+      "navigator.serviceWorker"
     ],
-    "migratedModulesV2": {
+    "useCases": {
+      "freestyle.completeRound": {
+        "owner": "freestyle",
+        "workflow": "FreestyleTrainingMachine",
+        "guard": "canCompleteRound",
+        "tests": [
+          "trainingRound.test.ts",
+          "freestyleTrainingMachine.test.ts"
+        ]
+      },
+      "mindmap.enterFullscreen": {
+        "owner": "mindmap",
+        "workflow": "MindMapPresentationMachine",
+        "port": "PresentationPort",
+        "tests": [
+          "mindMapPresentationMachine.test.ts",
+          "MindMapEditorSurface.test.tsx"
+        ]
+      },
+      "mindmap.exitFullscreen": {
+        "owner": "mindmap",
+        "workflow": "MindMapPresentationMachine",
+        "port": "PresentationPort",
+        "invariants": [
+          "does not navigate",
+          "does not close parent overlay"
+        ]
+      }
+    },
+    "events": {
+      "freestyle.round.completed": {
+        "owner": "freestyle",
+        "producer": "FreestyleTrainingMachine",
+        "consumers": [
+          "sessions"
+        ],
+        "precondition": "canCompleteRound"
+      },
+      "mindmap.presentation.entered": {
+        "owner": "mindmap",
+        "producer": "MindMapPresentationMachine",
+        "consumers": []
+      },
+      "mindmap.presentation.exited": {
+        "owner": "mindmap",
+        "producer": "MindMapPresentationMachine",
+        "consumers": [],
+        "forbiddenConsequences": [
+          "navigation.back",
+          "overlay.close"
+        ]
+      }
+    },
+    "frontendModules": {
       "freestyle": {
-        "status": "critical-slice",
         "publicEntry": "src/modules/freestyle/public.ts",
         "workflow": "FreestyleTrainingMachine"
       },
       "mindmap": {
-        "status": "critical-slice",
         "publicEntry": "src/modules/mindmap/public.ts",
         "workflow": "MindMapPresentationMachine"
       }
-    },
-    "runtimeCatalogs": [
-      "runtime-ports.yaml",
-      "use-case-catalog.yaml",
-      "event-catalog.yaml"
-    ]
+    }
   }
 }
