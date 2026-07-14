@@ -168,8 +168,30 @@ def serialize_job(job: MindMapImportJob) -> dict[str, Any]:
     usage = json_load(job.usage_json, empty_usage())
     progress = json_load(job.progress_json, empty_progress())
     runtime_meta = source_meta.get("ai_runtime") if isinstance(source_meta, dict) else None
+    vision_runtime_meta = (
+        source_meta.get("vision_ai_runtime") if isinstance(source_meta, dict) else None
+    )
+    formatter_runtime_meta = (
+        source_meta.get("formatter_ai_runtime") if isinstance(source_meta, dict) else None
+    )
     resolved_ai_value = runtime_meta.get("resolved_ai") if isinstance(runtime_meta, dict) else None
     resolved_ai = dict(resolved_ai_value) if isinstance(resolved_ai_value, dict) else None
+    vision_resolved_value = (
+        vision_runtime_meta.get("resolved_ai")
+        if isinstance(vision_runtime_meta, dict)
+        else resolved_ai_value
+    )
+    formatter_resolved_value = (
+        formatter_runtime_meta.get("resolved_ai")
+        if isinstance(formatter_runtime_meta, dict)
+        else None
+    )
+    vision_resolved_ai = (
+        dict(vision_resolved_value) if isinstance(vision_resolved_value, dict) else resolved_ai
+    )
+    formatter_resolved_ai = (
+        dict(formatter_resolved_value) if isinstance(formatter_resolved_value, dict) else None
+    )
     return {
         "id": job.id,
         "owner_id": (
@@ -193,6 +215,16 @@ def serialize_job(job: MindMapImportJob) -> dict[str, Any]:
         "source_meta": source_meta,
         "result": result or None,
         "resolved_ai": resolved_ai,
+        "pipeline_strategy": result.get("pipeline_strategy") if isinstance(result, dict) else None,
+        "vision_resolved_ai": (
+            result.get("vision_resolved_ai") if isinstance(result, dict) else None
+        ) or vision_resolved_ai,
+        "formatter_resolved_ai": (
+            result.get("formatter_resolved_ai") if isinstance(result, dict) else None
+        ) or formatter_resolved_ai,
+        "fallback_reason": result.get("fallback_reason") if isinstance(result, dict) else None,
+        "ocr_pages": result.get("ocr_pages", []) if isinstance(result, dict) else [],
+        "stage_usage": result.get("stage_usage", {}) if isinstance(result, dict) else {},
         "error": error or None,
         "usage": usage,
         "progress": progress,

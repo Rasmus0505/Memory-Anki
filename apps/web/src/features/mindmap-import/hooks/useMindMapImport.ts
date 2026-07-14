@@ -1,4 +1,4 @@
-﻿import { useState, type ChangeEvent, type ClipboardEvent } from 'react'
+import { useState, type ChangeEvent, type ClipboardEvent } from 'react'
 import type { MindMapEditorState } from '@/shared/api/contracts'
 import { useCallback, useEffect } from 'react'
 import type { ImportApplyContext } from '@/shared/api/contracts/imports'
@@ -51,7 +51,7 @@ export function useMindMapImport({
   const [pdfLibraryLoading, setPdfLibraryLoading] = useState(false)
 
   const batch = useImportBatchState(setControllerError)
-  const { promptForAiOptions, aiRunConfigDialog } = useAiRunConfigDialog()
+  const { promptForAiOptions, promptForScenarioAiOptions, aiRunConfigDialog } = useAiRunConfigDialog()
   const jobs = useImportJobController({
     entityKey,
     mode,
@@ -63,6 +63,7 @@ export function useMindMapImport({
     setBatchStatus: batch.setBatchStatus,
     setLastBatchMeta: batch.setLastBatchMeta,
     promptForAiOptions,
+    promptForScenarioAiOptions,
     contextOptions: editorState
       ? [{
           id: 'mindmap',
@@ -202,12 +203,15 @@ export function useMindMapImport({
     currentJobUsage: jobs.currentJobUsage,
     currentJobError: jobs.currentJobError,
     currentJobResolvedAi: jobs.currentJobResolvedAi,
+    currentJobResult: jobs.currentJobResult,
     currentJobPauseRequested: jobs.currentJobPauseRequested,
     canResumeJob: jobs.canResumeJob,
     canPauseJob: jobs.canPauseJob,
     importReusedExistingResult: jobs.importReusedExistingResult,
     handleResumeJob: jobs.handleResumeJob,
     handlePauseJob: jobs.handlePauseJob,
+    handleRetryVision: jobs.handleRetryVision,
+    handleReformatFromOcr: jobs.handleReformatFromOcr,
     handleImportPaste,
     handleImportFileChange,
     handleBatchImportStart: () => void jobs.handleBatchImportStart(batch.structureImageId),

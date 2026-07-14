@@ -26,12 +26,21 @@ export interface MindMapImportSourceTree {
 export interface MindMapReviewPreview {
   node_count: number
   estimated_review_seconds: number
-  estimated_review_time?: string
-  suggested_segment_count: number
+  estimated_review_time?: string | {
+    min_seconds: number
+    max_seconds: number
+    min_minutes: number
+    max_minutes: number
+  }
+  suggested_segment_count?: number
   suggested_segments: Array<{
     title: string
     node_count: number
-  }>
+  }> | {
+    count?: number
+    items?: Array<{ title: string; node_count: number }>
+    list?: Array<{ title: string; node_count: number }>
+  }
   difficulty_distribution: Record<string, number>
   warnings: string[]
 }
@@ -127,6 +136,20 @@ export interface MindMapImportJobResult {
   ocr_grounding_used?: boolean
   ocr_text_chars?: number | null
   review_preview?: MindMapReviewPreview | null
+  pipeline_strategy?: 'vision_direct' | 'vision_ocr_fallback' | 'ocr_first' | 'explicit_structure'
+  vision_resolved_ai?: ResolvedAiRuntimeMeta | null
+  formatter_resolved_ai?: ResolvedAiRuntimeMeta | null
+  fallback_reason?: string | null
+  ocr_pages?: Array<{
+    page_number: number
+    text: string
+    reused?: boolean
+    usage?: Record<string, number> | null
+    finish_reason?: string | null
+  }>
+  stage_usage?: Record<string, unknown>
+  vision_response?: string
+  formatter_response?: string
 }
 export interface MindMapImportJob {
   id: string
@@ -140,6 +163,12 @@ export interface MindMapImportJob {
   source_meta?: Record<string, unknown>
   result?: MindMapImportJobResult | null
   resolved_ai?: ResolvedAiRuntimeMeta | null
+  pipeline_strategy?: MindMapImportJobResult['pipeline_strategy'] | null
+  vision_resolved_ai?: ResolvedAiRuntimeMeta | null
+  formatter_resolved_ai?: ResolvedAiRuntimeMeta | null
+  fallback_reason?: string | null
+  ocr_pages?: NonNullable<MindMapImportJobResult['ocr_pages']>
+  stage_usage?: Record<string, unknown>
   error?: MindMapImportJobError | null
   usage?: MindMapImportJobUsage
   progress?: MindMapImportJobProgress | null

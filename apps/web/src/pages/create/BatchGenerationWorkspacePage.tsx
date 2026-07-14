@@ -15,6 +15,7 @@ import {
   type BatchWorkspace,
   type OutputMode,
 } from '@/entities/batch-generation/api'
+import { previewAiPromptCompositionApi } from '@/entities/preferences/api'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card'
@@ -81,7 +82,14 @@ export default function BatchGenerationWorkspacePage() {
 
   async function showPrompt(kind: 'palace' | 'quiz') {
     if (!selectedSection) return
-    const result = await previewBatchPrompt(selectedSection.id, { kind, model: kind === 'palace' ? 'qwen3-vl-flash' : 'deepseek-v4-flash', system_prompt: kind === 'palace' ? '将本节教材转换为结构清晰、可编辑的记忆宫殿草稿。' : '基于教材与题库证据生成可审阅的题目草稿，不得编造来源。', user_prompt: `处理章节：${selectedSection.title}，页码 ${selectedSection.start_page}-${selectedSection.end_page}。` })
+    const sceneKey = kind === 'palace' ? 'batch_palace_generation' : 'batch_quiz_generation'
+    const compiledPrompt = await previewAiPromptCompositionApi(sceneKey, {})
+    const result = await previewBatchPrompt(selectedSection.id, {
+      kind,
+      model: kind === 'palace' ? 'qwen3-vl-flash' : 'deepseek-v4-flash',
+      system_prompt: compiledPrompt.text,
+      user_prompt: `处理章节：${selectedSection.title}，页码 ${selectedSection.start_page}-${selectedSection.end_page}。`,
+    })
     setPromptPreview(result)
   }
 

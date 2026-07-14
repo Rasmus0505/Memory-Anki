@@ -20,6 +20,7 @@ from .runtime import (
     parse_dashscope_response_stream,
     prepare_batch_image_items,
     stream_call_dashscope_batch_json,
+    stream_call_dashscope_formatter_json,
     stream_call_dashscope_json,
     stream_call_dashscope_text,
 )
@@ -234,6 +235,28 @@ def stream_batch_json(
         )
     )
 
+
+def stream_formatter_json(
+    *,
+    prompt_catalog: PromptCatalog,
+    runtime: DashscopeImportRuntime,
+    extracted_text: str,
+    target_title: str,
+    channel: str,
+    external_log_context: dict[str, Any] | None = None,
+) -> Generator[ImportStreamEvent, None, dict[str, Any]]:
+    return (
+        yield from stream_text_deltas_as_events(
+            generator=stream_call_dashscope_formatter_json(
+                prompt_catalog=prompt_catalog,
+                runtime=runtime,
+                extracted_text=extracted_text,
+                target_title=target_title,
+                external_log_context=external_log_context,
+            ),
+            channel=channel,
+        )
+    )
 
 parse_response_stream = parse_dashscope_response_stream
 extract_stream_delta = extract_dashscope_stream_delta

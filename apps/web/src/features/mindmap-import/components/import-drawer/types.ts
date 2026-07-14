@@ -10,6 +10,7 @@ import type { ImportHistoryItem } from '@/features/mindmap-import/model/mindmap-
 import type {
   MindMapEditorState,
   MindMapImportJobError,
+  MindMapImportJobResult,
   MindMapImportJobStage,
   MindMapImportJobStatus,
   MindMapImportJobUsage,
@@ -52,12 +53,15 @@ export interface MindMapImportDrawerProps {
   currentJobUsage: MindMapImportJobUsage | null
   currentJobError: MindMapImportJobError | null
   currentJobResolvedAi: ResolvedAiRuntimeMeta | null
+  currentJobResult?: MindMapImportJobResult | null
   currentJobPauseRequested: boolean
   canResumeJob: boolean
   canPauseJob: boolean
   reusedExistingResult: boolean
   onResumeJob: () => void
   onPauseJob: () => void
+  onRetryVision?: () => void
+  onReformatFromOcr?: () => void
   targetNodeLabel: string
   canAppend: boolean
   canUndoLastImport: boolean
@@ -120,6 +124,9 @@ export type MindMapImportResultsModel = Pick<
   | 'sourceTree'
   | 'reviewPreview'
   | 'renderMindMapPreview'
+  | 'currentJobResult'
+  | 'onRetryVision'
+  | 'onReformatFromOcr'
 > & {
   hasStreamProgress: boolean
   onStreamPreviewScroll: () => void

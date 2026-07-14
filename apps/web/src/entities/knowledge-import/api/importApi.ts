@@ -99,6 +99,8 @@ export async function createBatchImportJobApi(
     structureImageIndex?: number
     mode?: 'mindmap' | 'text'
     ai_options?: AiRuntimeOptions
+    vision_ai_options?: AiRuntimeOptions
+    formatter_ai_options?: AiRuntimeOptions
   },
 ) {
   const form = new FormData()
@@ -110,9 +112,9 @@ export async function createBatchImportJobApi(
   if (typeof options.structureImageIndex === 'number') {
     form.append('structure_image_index', String(options.structureImageIndex))
   }
-  if (options.ai_options) {
-    form.append('ai_options', JSON.stringify(options.ai_options))
-  }
+  if (options.ai_options) form.append('ai_options', JSON.stringify(options.ai_options))
+  if (options.vision_ai_options) form.append('vision_ai_options', JSON.stringify(options.vision_ai_options))
+  if (options.formatter_ai_options) form.append('formatter_ai_options', JSON.stringify(options.formatter_ai_options))
   files.forEach((file) => form.append('files', file))
   const response = await fetchWithMutationQueue(
     `${API_BASE}/import/jobs/batch`,
@@ -159,6 +161,8 @@ export async function createPdfImportJobApi(options: {
   mode: 'mindmap' | 'text'
   fallbackTitle?: string
   ai_options?: AiRuntimeOptions
+  vision_ai_options?: AiRuntimeOptions
+  formatter_ai_options?: AiRuntimeOptions
 }) {
   const form = new FormData()
   form.append('entity_key', options.entityKey)
@@ -167,12 +171,40 @@ export async function createPdfImportJobApi(options: {
   form.append('mode', options.mode)
   if (options.fallbackTitle) form.append('fallback_title', options.fallbackTitle)
   if (options.ai_options) form.append('ai_options', JSON.stringify(options.ai_options))
+  if (options.vision_ai_options) form.append('vision_ai_options', JSON.stringify(options.vision_ai_options))
+  if (options.formatter_ai_options) form.append('formatter_ai_options', JSON.stringify(options.formatter_ai_options))
   const response = await fetchWithMutationQueue(
     `${API_BASE}/import/jobs/pdf`,
     { method: 'POST', body: form },
     {
       resourceKey: `import-job:pdf:${options.entityKey}:${options.documentId}:${options.pageSelection}`,
       description: '创建 PDF 导入任务',
+      replayMode: 'manual',
+    },
+  )
+  return readImportJson<MindMapImportJob>(response)
+}
+
+export async function retryVisionImportJobApi(jobId: string) {
+  const response = await fetchWithMutationQueue(
+    `${API_BASE}/import/jobs/${jobId}/retry-vision`,
+    { method: 'POST' },
+    {
+      resourceKey: `import-job:${jobId}:retry-vision`,
+      description: '重试视觉识别',
+      replayMode: 'manual',
+    },
+  )
+  return readImportJson<MindMapImportJob>(response)
+}
+
+export async function reformatImportJobFromOcrApi(jobId: string) {
+  const response = await fetchWithMutationQueue(
+    `${API_BASE}/import/jobs/${jobId}/reformat-ocr`,
+    { method: 'POST' },
+    {
+      resourceKey: `import-job:${jobId}:reformat-ocr`,
+      description: '使用 OCR 原文重新整理',
       replayMode: 'manual',
     },
   )

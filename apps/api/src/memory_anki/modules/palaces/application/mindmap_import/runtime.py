@@ -376,6 +376,10 @@ def iter_dashscope_with_images_stream(
         content.append({"type": "text", "text": f"第 {index} 张图片："})
         content.append(build_image_content_part(image_bytes=image_bytes, filename=filename))
     log_context = external_log_context or {}
+    raw_stream_metadata = log_context.get("stream_metadata")
+    stream_metadata: dict[str, Any] = (
+        raw_stream_metadata if isinstance(raw_stream_metadata, dict) else {}
+    )
     log_id = begin_external_ai_call_log(
         feature=str(log_context.get("feature") or "外部 AI 调用"),
         operation=str(log_context.get("operation") or "vision_chat_completion"),
@@ -414,20 +418,33 @@ def iter_dashscope_with_images_stream(
             ],
             response_format=response_format,
             extra_payload=runtime.extra_payload,
+            stream_metadata=stream_metadata,
         )
         complete_external_ai_call_log(
             log_id,
             response_payload={
                 "response_text": final_text,
+                "stream_metadata": stream_metadata,
             },
         )
         return final_text
     except OpenAICompatibleProtocolError as exc:
+        stream_metadata.update({
+            "error_code": exc.code,
+            "request_id": exc.request_id or stream_metadata.get("request_id"),
+            "last_raw_frame": exc.raw_frame or stream_metadata.get("last_raw_frame"),
+            "partial_response": exc.partial_response,
+        })
         fail_external_ai_call_log(
             log_id,
             error_payload={
                 "type": "protocol_error",
                 "message": str(exc),
+                "code": exc.code,
+                "request_id": exc.request_id,
+                "raw_frame": exc.raw_frame,
+                "partial_response": exc.partial_response,
+                "stream_metadata": stream_metadata,
             },
         )
         raise MindMapImportError(str(exc)) from exc
@@ -475,6 +492,28 @@ def iter_dashscope_with_images_stream(
         ) from exc
 
 
+def stream_call_dashscope_formatter_json(
+    *,
+    prompt_catalog: PromptCatalog,
+    runtime: DashscopeImportRuntime,
+    extracted_text: str,
+    target_title: str,
+    external_log_context: dict[str, Any] | None = None,
+) -> Generator[str, None, dict[str, Any]]:
+    prompt = prompt_catalog.render(
+        "ai_prompt_import_ocr_mindmap_format",
+        {"target_title": target_title, "ocr_text": extracted_text},
+    )
+    content_text = yield from stream_call_dashscope_with_images(
+        runtime=runtime,
+        image_items=[],
+        prompt=prompt,
+        response_format={"type": "json_object"},
+        external_log_context=external_log_context,
+    )
+    source_tree = parse_source_tree_json(content_text)
+    return normalize_source_tree(source_tree, disable_rebalance=True)
+
 def parse_dashscope_response_stream(response: Any) -> Generator[str, None, str]:
     try:
         return (
@@ -521,10 +560,13 @@ def _build_batch_prompt(
     page_numbers: list[int] | None,
     extracted_text: str | None,
 ) -> str:
-    prompt = prompt_catalog.render(
-        "ai_prompt_import_batch_mindmap",
-        {"structure_tree_json": json.dumps(structure_tree or {}, ensure_ascii=False)},
-    )
+    if structure_tree is None:
+        prompt = prompt_catalog.render("ai_prompt_import_document_mindmap")
+    else:
+        prompt = prompt_catalog.render(
+            "ai_prompt_import_batch_mindmap",
+            {"structure_tree_json": json.dumps(structure_tree, ensure_ascii=False)},
+        )
     if extracted_text:
         prompt += f"\n\n已提取的图片文字参考：\n{extracted_text}"
     return _extend_image_prompt(prompt, page_numbers=page_numbers, range_prompt=range_prompt)

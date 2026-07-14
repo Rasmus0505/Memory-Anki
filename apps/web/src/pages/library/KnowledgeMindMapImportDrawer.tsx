@@ -1,4 +1,4 @@
-﻿import { MindMapImportDrawer, useMindMapImport } from '@/features/mindmap-import'
+import { MindMapImportDrawer, useMindMapImport } from '@/features/mindmap-import'
 import { MindMapEditorSurface } from '@/features/mindmap-editor'
 
 interface KnowledgeMindMapImportDrawerProps {
@@ -55,6 +55,9 @@ export function KnowledgeMindMapImportDrawer({
       currentJobUsage={mindMapImport.currentJobUsage}
       currentJobError={mindMapImport.currentJobError}
       currentJobResolvedAi={mindMapImport.currentJobResolvedAi}
+        currentJobResult={mindMapImport.currentJobResult}
+        onRetryVision={() => void mindMapImport.handleRetryVision()}
+        onReformatFromOcr={() => void mindMapImport.handleReformatFromOcr()}
       currentJobPauseRequested={mindMapImport.currentJobPauseRequested}
       canResumeJob={mindMapImport.canResumeJob}
       canPauseJob={mindMapImport.canPauseJob}

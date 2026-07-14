@@ -1,4 +1,4 @@
-﻿import { useEffect, useRef } from 'react'
+import { useEffect, useRef } from 'react'
 import { logAiCall } from '@/shared/logs/model/appLogs'
 import type { ImportHistoryItem } from '@/features/mindmap-import/model/mindmap-import'
 import { formatMindMapImportError } from '@/features/mindmap-import/model/mindmap-import'
@@ -17,6 +17,8 @@ import {
   pauseImportJobApi,
   runImportJobApi,
   rerunImportJobApi,
+  retryVisionImportJobApi,
+  reformatImportJobFromOcrApi,
 } from '@/entities/knowledge-import/api'
 import type { ImportJobStateController } from '@/features/mindmap-import/hooks/import-job/useImportJobState'
 import {
@@ -43,6 +45,8 @@ export interface ImportJobRuntimeController {
   handlePauseJob: () => Promise<void>
   handleImportSelectHistory: (item: ImportHistoryItem) => Promise<void>
   handleImportDeleteHistory: (id: string) => Promise<void>
+  handleRetryVision: () => Promise<void>
+  handleReformatFromOcr: () => Promise<void>
 }
 
 export function useImportJobRuntime({
@@ -305,6 +309,26 @@ export function useImportJobRuntime({
     }
   }
 
+  const restartCurrentJob = async (strategy: 'vision' | 'ocr') => {
+    if (!state.currentJobId) return
+    try {
+      const job = strategy === 'vision'
+        ? await retryVisionImportJobApi(state.currentJobId)
+        : await reformatImportJobFromOcrApi(state.currentJobId)
+      state.hydrateJobResult(job, { preservePreviewUrl: true })
+      await refreshHistoryJobs(job.id)
+      await resumeJob(job.id)
+    } catch (nextError) {
+      state.setImportError(
+        formatMindMapImportError(
+          nextError instanceof Error ? nextError.message : '重新识别失败。',
+        ),
+      )
+    }
+  }
+
+  const handleRetryVision = () => restartCurrentJob('vision')
+  const handleReformatFromOcr = () => restartCurrentJob('ocr')
   return {
     refreshHistoryJobs,
     startPollingJob,
@@ -316,6 +340,8 @@ export function useImportJobRuntime({
     handleImportSelectHistory,
     handleImportDeleteHistory,
     handleImportRerunHistory,
+    handleRetryVision,
+    handleReformatFromOcr,
   }
 }
 

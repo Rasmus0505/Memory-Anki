@@ -95,6 +95,9 @@ from .mindmap_import_job_runtime import (
 from .mindmap_import_job_runtime import (
     _stream_call_dashscope_text as _stream_call_dashscope_text,
 )
+from .mindmap_import_job_runtime import (
+    _stream_call_formatter_json as _stream_call_formatter_json,
+)
 
 JOB_STATUS_DRAFT = job_state.JOB_STATUS_DRAFT
 JOB_STATUS_RUNNING = job_state.JOB_STATUS_RUNNING
@@ -120,6 +123,7 @@ def _sync_facade_dependencies() -> None:
     _job_execution._stream_call_dashscope_json = _stream_call_dashscope_json
     _job_execution._stream_call_dashscope_text = _stream_call_dashscope_text
     _job_execution._stream_call_dashscope_batch_json = _stream_call_dashscope_batch_json
+    _job_execution._stream_call_formatter_json = _stream_call_formatter_json
     _job_runtime._prepare_batch_image_items = _prepare_batch_image_items
 
 
@@ -139,16 +143,26 @@ def create_batch_import_job(*args, **kwargs):
     if remaining_args:
         raise TypeError("create_batch_import_job accepts only session as a positional argument")
     ai_options = kwargs.pop("ai_options", None)
+    vision_ai_options = kwargs.pop("vision_ai_options", None)
+    formatter_ai_options = kwargs.pop("formatter_ai_options", None)
     ai_runtime: AiRuntimeProvider = kwargs.pop("ai_runtime")
     mode = kwargs.get("mode", MODE_MINDMAP)
-    runtime = ai_runtime.resolve(
-        "vision_batch_mindmap" if mode == MODE_MINDMAP else "vision_image_text",
-        options=ai_options,
+    structure_image_index = kwargs["structure_image_index"]
+    scenario_key = (
+        "vision_structure_mindmap"
+        if mode == MODE_MINDMAP and structure_image_index is not None
+        else "vision_batch_mindmap" if mode == MODE_MINDMAP else "vision_image_text"
+    )
+    runtime = ai_runtime.resolve(scenario_key, options=vision_ai_options or ai_options)
+    formatter_runtime = (
+        ai_runtime.resolve("mindmap_ocr_formatter", options=formatter_ai_options)
+        if mode == MODE_MINDMAP
+        else None
     )
     normalized_items, resolved_structure_index = _prepare_batch_image_items(
         ai_runtime=ai_runtime,
         image_items=kwargs["image_items"],
-        structure_image_index=kwargs["structure_image_index"],
+        structure_image_index=structure_image_index,
     )
     return job_creation.create_batch_job(
         session,
@@ -160,8 +174,13 @@ def create_batch_import_job(*args, **kwargs):
         ai_runtime=_serialize_runtime_payload(runtime),
         import_jobs_dir=IMPORT_JOBS_DIR,
         import_error_cls=MindMapImportError,
+        source_meta_extra={
+            "vision_ai_runtime": _serialize_runtime_payload(runtime),
+            "formatter_ai_runtime": (
+                _serialize_runtime_payload(formatter_runtime) if formatter_runtime else {}
+            ),
+        },
     )
-
 
 def create_pdf_import_job(*args, **kwargs):
     _sync_facade_dependencies()

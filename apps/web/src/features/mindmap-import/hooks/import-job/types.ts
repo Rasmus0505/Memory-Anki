@@ -1,6 +1,7 @@
-﻿import type { RefObject } from 'react'
+import type { RefObject } from 'react'
 import type {
   AiRuntimeOptions,
+  AiScenarioRuntimeOptionsMap,
   MindMapEditorState,
 } from '@/shared/api/contracts'
 import type {
@@ -10,7 +11,7 @@ import type {
   ImportSourceKind,
   MindMapImportWorkflow,
 } from '@/features/mindmap-import/model/mindmap-import-types'
-import type { AiGenerationContextOption } from '@/entities/ai-runtime'
+import type { AiGenerationContextOption, MultiAiRunConfigRequest } from '@/entities/ai-runtime'
 
 export interface UseImportJobControllerOptions {
   entityKey: string | null
@@ -29,6 +30,9 @@ export interface UseImportJobControllerOptions {
     description?: string
     contextOptions?: AiGenerationContextOption[]
   }) => Promise<AiRuntimeOptions | undefined>
+  promptForScenarioAiOptions: (
+    request: MultiAiRunConfigRequest,
+  ) => Promise<AiScenarioRuntimeOptionsMap | undefined>
   contextOptions?: AiGenerationContextOption[]
 }
 

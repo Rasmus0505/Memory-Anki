@@ -27,6 +27,7 @@ from .mindmap_import_job_runtime import (
     _stream_call_dashscope_batch_json,
     _stream_call_dashscope_json,
     _stream_call_dashscope_text,
+    _stream_call_formatter_json,
 )
 
 JOB_STATUS_RUNNING = job_state.JOB_STATUS_RUNNING
@@ -193,6 +194,12 @@ def _run_image_batch_job(
             **kwargs,
         ),
         stream_call_dashscope_text=lambda **kwargs: _stream_call_dashscope_text(
+            source_meta=source_meta,
+            ai_runtime=ai_runtime,
+            prompt_catalog=prompt_catalog,
+            **kwargs,
+        ),
+        stream_call_formatter_json=lambda **kwargs: _stream_call_formatter_json(
             source_meta=source_meta,
             ai_runtime=ai_runtime,
             prompt_catalog=prompt_catalog,

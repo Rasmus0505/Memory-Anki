@@ -68,10 +68,21 @@ def create_batch_import_job(
     mode: str = MODE_MINDMAP,
     ai_runtime: AiRuntimeProvider,
     ai_options: AiRuntimeOptions | None = None,
+    vision_ai_options: AiRuntimeOptions | None = None,
+    formatter_ai_options: AiRuntimeOptions | None = None,
 ) -> MindMapImportJob:
     runtime = ai_runtime.resolve(
-        "vision_batch_mindmap" if mode == MODE_MINDMAP else "vision_image_text",
-        options=ai_options,
+        (
+            "vision_structure_mindmap"
+            if mode == MODE_MINDMAP and structure_image_index is not None
+            else "vision_batch_mindmap" if mode == MODE_MINDMAP else "vision_image_text"
+        ),
+        options=vision_ai_options or ai_options,
+    )
+    formatter_runtime = (
+        ai_runtime.resolve("mindmap_ocr_formatter", options=formatter_ai_options)
+        if mode == MODE_MINDMAP
+        else None
     )
     normalized_items, resolved_structure_index = llm_gateway.prepare_batch_items(
         runtime=llm_gateway.build_runtime(
@@ -94,6 +105,12 @@ def create_batch_import_job(
         ai_runtime=_serialize_runtime_payload(runtime),
         import_jobs_dir=IMPORT_JOBS_DIR,
         import_error_cls=MindMapImportError,
+        source_meta_extra={
+            "vision_ai_runtime": _serialize_runtime_payload(runtime),
+            "formatter_ai_runtime": (
+                _serialize_runtime_payload(formatter_runtime) if formatter_runtime else {}
+            ),
+        },
     )
 
 
@@ -135,6 +152,8 @@ def create_pdf_import_job(
     fallback_title: str,
     ai_runtime: AiRuntimeProvider,
     ai_options: AiRuntimeOptions | None = None,
+    vision_ai_options: AiRuntimeOptions | None = None,
+    formatter_ai_options: AiRuntimeOptions | None = None,
 ) -> MindMapImportJob:
     document = get_pdf_document(session, document_id)
     if document is None:
@@ -144,14 +163,24 @@ def create_pdf_import_job(
         raise MindMapImportError("PDF 文件缺失，请重新上传。")
     pages = parse_pdf_page_selection(page_selection, document.page_count)
     rendered_items: list[tuple[bytes, str | None]] = []
+    selected_pdf_bytes: bytes
     with fitz.open(source_path) as pdf:
+        selected_pdf = fitz.open()
         for page_number in pages:
             pixmap = pdf.load_page(page_number - 1).get_pixmap(matrix=fitz.Matrix(2, 2), alpha=False)
             rendered_items.append((pixmap.tobytes("png"), f"page-{page_number}.png"))
+            selected_pdf.insert_pdf(pdf, from_page=page_number - 1, to_page=page_number - 1)
+        selected_pdf_bytes = selected_pdf.tobytes(garbage=3, deflate=True)
+        selected_pdf.close()
 
     runtime = ai_runtime.resolve(
         "vision_batch_mindmap" if mode == MODE_MINDMAP else "vision_image_text",
-        options=ai_options,
+        options=vision_ai_options or ai_options,
+    )
+    formatter_runtime = (
+        ai_runtime.resolve("mindmap_ocr_formatter", options=formatter_ai_options)
+        if mode == MODE_MINDMAP
+        else None
     )
     normalized_items, _ = llm_gateway.prepare_batch_items(
         runtime=llm_gateway.build_runtime(
@@ -180,12 +209,20 @@ def create_pdf_import_job(
             "pdf_document_id": document.id,
             "document_original_name": document.original_name,
             "page_selection": pages,
+            "vision_ai_runtime": _serialize_runtime_payload(runtime),
+            "formatter_ai_runtime": (
+                _serialize_runtime_payload(formatter_runtime) if formatter_runtime else {}
+            ),
         },
     )
     artifact_dir = job_artifacts.get_job_artifact_dir(IMPORT_JOBS_DIR, job.id)
     pdf_snapshot = artifact_dir / "source.pdf"
     if not pdf_snapshot.exists():
-        pdf_snapshot.write_bytes(source_path.read_bytes())
+        try:
+            job_artifacts.write_bytes(pdf_snapshot, selected_pdf_bytes)
+        except OSError as exc:
+            job_creation.discard_created_job(session, job, import_jobs_dir=IMPORT_JOBS_DIR)
+            raise MindMapImportError(job_creation.artifact_write_error_message(exc)) from exc
     return job
 
 
@@ -201,7 +238,9 @@ def delete_job(session: Session, *, job_id: str) -> MindMapImportJob | None:
     return job_repository.delete_job(session, job_id=job_id)
 
 
-def rerun_job(session: Session, *, job_id: str) -> MindMapImportJob:
+def rerun_job(
+    session: Session, *, job_id: str, pipeline_strategy: str | None = None
+) -> MindMapImportJob:
     source = job_repository.get_job(session, job_id)
     if source is None:
         raise MindMapImportError("导入任务不存在。")
@@ -210,6 +249,8 @@ def rerun_job(session: Session, *, job_id: str) -> MindMapImportJob:
     source_meta["owner_id"] = source.entity_key
     source_meta["operation_id"] = operation_id
     source_meta["rerun_of"] = source.id
+    if pipeline_strategy:
+        source_meta["requested_pipeline_strategy"] = pipeline_strategy
     job = MindMapImportJob(
         id=operation_id,
         entity_key=source.entity_key,
@@ -232,8 +273,13 @@ def rerun_job(session: Session, *, job_id: str) -> MindMapImportJob:
     target_dir = job_artifacts.get_job_artifact_dir(IMPORT_JOBS_DIR, job.id)
     target_dir.mkdir(parents=True, exist_ok=True)
     for path in source_dir.iterdir() if source_dir.exists() else []:
-        if path.is_file() and (path.name.startswith("input") or path.name in {"source.pdf", "source_meta.json"}):
+        if path.is_file() and (
+            path.name.startswith("input")
+            or path.name in {"source.pdf", "source_meta.json", "ocr_combined.txt"}
+        ):
             shutil.copy2(path, target_dir / path.name)
+        elif path.is_dir() and path.name == "ocr" and pipeline_strategy == "ocr_reformat":
+            shutil.copytree(path, target_dir / path.name, dirs_exist_ok=True)
     job_artifacts.write_json(target_dir / "source_meta.json", source_meta)
     return job
 

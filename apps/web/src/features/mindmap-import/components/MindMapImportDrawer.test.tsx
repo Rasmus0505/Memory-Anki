@@ -1,4 +1,4 @@
-﻿import * as React from 'react'
+import * as React from 'react'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { MindMapImportDrawer } from '@/features/mindmap-import/components/MindMapImportDrawer'
@@ -91,6 +91,19 @@ describe('MindMapImportDrawer', () => {
 
   afterEach(() => {
     vi.restoreAllMocks()
+    window.localStorage.clear()
+  })
+
+  it('expands on open even when its previous floating state was collapsed', async () => {
+    window.localStorage.setItem(
+      'memory-anki-floating-dialog:mindmap-import',
+      JSON.stringify({ x: 80, y: 80, width: 820, height: null, collapsed: true, pinned: false }),
+    )
+
+    render(<MindMapImportDrawer {...buildProps()} />)
+
+    expect(await screen.findByTestId('mindmap-import-dialog-content')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: '恢复图片转脑图' })).toBeNull()
   })
 
   it('uses a single scroll container for the main import panel', () => {
@@ -399,4 +412,39 @@ describe('MindMapImportDrawer', () => {
     expect(screen.queryByText('严格还原 PDF 自带脑图结构')).toBeNull()
     expect(screen.queryByText('当前结果仅供预览，不可直接覆盖或追加到正式脑图。')).toBeNull()
   })
-})
+
+  it('shows pipeline artifacts and manual retry actions without applying automatically', () => {
+    const onRetryVision = vi.fn()
+    const onReformatFromOcr = vi.fn()
+    const onApplyReplace = vi.fn()
+    render(
+      <MindMapImportDrawer
+        {...buildProps({
+          sourceTree: { title: '德国近代教育', children: [{ text: '第斯多惠—影响', children: [] }] },
+          currentJobResult: {
+            pipeline_strategy: 'vision_ocr_fallback',
+            fallback_reason: '模型输出因长度限制被截断。',
+            vision_response: '{"title":"德国近代教育"',
+            vision_resolved_ai: {
+              scene_key: 'vision_batch_mindmap', model_key: 'qwen3-vl-flash', model_label: 'Qwen3 VL Flash', provider: 'qwen', model_type: 'vl', has_vision: true, thinking_enabled: false,
+            },
+            formatter_resolved_ai: {
+              scene_key: 'mindmap_ocr_formatter', model_key: 'deepseek-v4-flash', model_label: 'DeepSeek V4 Flash', provider: 'deepseek', model_type: 'llm', has_vision: false, thinking_enabled: false,
+            },
+            ocr_pages: [{ page_number: 68, text: '第斯多惠\n影响' }],
+          },
+          onRetryVision,
+          onReformatFromOcr,
+          onApplyReplace,
+        })}
+      />,
+    )
+
+    expect(screen.getByText('回退原因：模型输出因长度限制被截断。')).toBeTruthy()
+    expect(screen.getByText('逐页 OCR 原文（1 页）')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: '使用 OCR 原文重新整理' }))
+    fireEvent.click(screen.getByRole('button', { name: '重试视觉识别' }))
+    expect(onReformatFromOcr).toHaveBeenCalledTimes(1)
+    expect(onRetryVision).toHaveBeenCalledTimes(1)
+    expect(onApplyReplace).not.toHaveBeenCalled()
+  })})

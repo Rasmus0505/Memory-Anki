@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import shutil
 import uuid
 from pathlib import Path
 
@@ -48,10 +49,14 @@ def create_image_job(
         return job
 
     artifact_dir = job_artifacts.get_job_artifact_dir(import_jobs_dir, job.id)
-    artifact_dir.mkdir(parents=True, exist_ok=True)
-    extension = Path(filename or "").suffix or job_creation_support.guess_extension_from_filename(filename)
-    job_artifacts.write_bytes(artifact_dir / f"input{extension}", image_bytes)
-    job_artifacts.write_json(artifact_dir / "source_meta.json", source_meta)
+    try:
+        artifact_dir.mkdir(parents=True, exist_ok=True)
+        extension = Path(filename or "").suffix or job_creation_support.guess_extension_from_filename(filename)
+        job_artifacts.write_bytes(artifact_dir / f"input{extension}", image_bytes)
+        job_artifacts.write_json(artifact_dir / "source_meta.json", source_meta)
+    except OSError as exc:
+        _discard_incomplete_job(session, job, artifact_dir)
+        raise import_error_cls(_artifact_write_error_message(exc)) from exc
     return _touch_created_job(session, job.id, import_error_cls=import_error_cls)
 
 
@@ -95,12 +100,36 @@ def create_batch_job(
         return job
 
     artifact_dir = job_artifacts.get_job_artifact_dir(import_jobs_dir, job.id)
-    artifact_dir.mkdir(parents=True, exist_ok=True)
-    for index, (image_bytes, filename) in enumerate(normalized_items):
-        extension = Path(filename or "").suffix or job_creation_support.guess_extension_from_filename(filename)
-        job_artifacts.write_bytes(artifact_dir / f"input-{index}{extension}", image_bytes)
-    job_artifacts.write_json(artifact_dir / "source_meta.json", source_meta)
+    try:
+        artifact_dir.mkdir(parents=True, exist_ok=True)
+        for index, (image_bytes, filename) in enumerate(normalized_items):
+            extension = Path(filename or "").suffix or job_creation_support.guess_extension_from_filename(filename)
+            job_artifacts.write_bytes(artifact_dir / f"input-{index}{extension}", image_bytes)
+        job_artifacts.write_json(artifact_dir / "source_meta.json", source_meta)
+    except OSError as exc:
+        _discard_incomplete_job(session, job, artifact_dir)
+        raise import_error_cls(_artifact_write_error_message(exc)) from exc
     return _touch_created_job(session, job.id, import_error_cls=import_error_cls)
+
+
+def discard_created_job(session: Session, job: MindMapImportJob, *, import_jobs_dir: Path) -> None:
+    _discard_incomplete_job(session, job, job_artifacts.get_job_artifact_dir(import_jobs_dir, job.id))
+
+
+def artifact_write_error_message(exc: OSError) -> str:
+    return _artifact_write_error_message(exc)
+
+
+def _discard_incomplete_job(session: Session, job: MindMapImportJob, artifact_dir: Path) -> None:
+    session.delete(job)
+    session.commit()
+    shutil.rmtree(artifact_dir, ignore_errors=True)
+
+
+def _artifact_write_error_message(exc: OSError) -> str:
+    if getattr(exc, "errno", None) == 28:
+        return "本机存储空间不足，无法保存导入任务。请清理磁盘空间后重试。"
+    return "保存导入任务文件失败，请检查本机存储目录是否可写。"
 
 
 def _create_draft_job_record(

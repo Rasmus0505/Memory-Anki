@@ -1,4 +1,4 @@
-﻿import { buildImportJobActions } from '@/features/mindmap-import/hooks/import-job/actions'
+import { buildImportJobActions } from '@/features/mindmap-import/hooks/import-job/actions'
 import type { UseImportJobControllerOptions } from '@/features/mindmap-import/hooks/import-job/types'
 import { useImportJobRuntime } from '@/features/mindmap-import/hooks/import-job/useImportJobRuntime'
 import { useImportJobState } from '@/features/mindmap-import/hooks/import-job/useImportJobState'
@@ -39,6 +39,7 @@ export function useImportJobController(options: UseImportJobControllerOptions) {
     currentJobUsage: state.currentJobUsage,
     currentJobError: state.currentJobError,
     currentJobResolvedAi: state.currentJobResolvedAi,
+    currentJobResult: state.currentJobResult,
     currentJobPauseRequested: state.currentJobPauseRequested,
     importReusedExistingResult: state.importReusedExistingResult,
     ...actions,
@@ -47,6 +48,8 @@ export function useImportJobController(options: UseImportJobControllerOptions) {
     handleImportSelectHistory: runtime.handleImportSelectHistory,
     handleImportDeleteHistory: runtime.handleImportDeleteHistory,
     handleImportRerunHistory: runtime.handleImportRerunHistory,
+    handleRetryVision: runtime.handleRetryVision,
+    handleReformatFromOcr: runtime.handleReformatFromOcr,
     canResumeJob: Boolean(
       state.currentJobId &&
         state.currentJobStatus &&

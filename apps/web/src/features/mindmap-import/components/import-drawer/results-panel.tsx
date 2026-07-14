@@ -1,6 +1,7 @@
-﻿import type { MindMapImportResultsModel } from '@/features/mindmap-import/components/import-drawer/types'
+import type { MindMapImportResultsModel } from '@/features/mindmap-import/components/import-drawer/types'
 import { SourceTreeNode } from '@/features/mindmap-import/components/import-drawer/source-tree'
 import { Badge } from '@/shared/components/ui/badge'
+import { Button } from '@/shared/components/ui/button'
 import { cn } from '@/shared/lib/utils'
 
 interface MindMapImportResultsPanelProps {
@@ -12,6 +13,9 @@ export function MindMapImportResultsPanel({
 }: MindMapImportResultsPanelProps) {
   const {
     batchMeta,
+    currentJobResult,
+    onRetryVision,
+    onReformatFromOcr,
     extractedText,
     hasStreamProgress,
     loading,
@@ -29,6 +33,24 @@ export function MindMapImportResultsPanel({
     streamPreviewContentRef,
     streamStepLabel,
   } = model
+  const estimatedReviewTimeLabel = reviewPreview
+    ? typeof reviewPreview.estimated_review_time === 'string'
+      ? reviewPreview.estimated_review_time
+      : reviewPreview.estimated_review_time
+        ? `${reviewPreview.estimated_review_time.min_minutes}–${reviewPreview.estimated_review_time.max_minutes} 分钟`
+        : `${Math.max(1, Math.round(reviewPreview.estimated_review_seconds / 60))} 分钟`
+    : ''
+  const suggestedSegments = reviewPreview
+    ? Array.isArray(reviewPreview.suggested_segments)
+      ? reviewPreview.suggested_segments
+      : reviewPreview.suggested_segments.items ?? reviewPreview.suggested_segments.list ?? []
+    : []
+  const suggestedSegmentCount = reviewPreview
+    ? reviewPreview.suggested_segment_count ??
+      (Array.isArray(reviewPreview.suggested_segments)
+        ? reviewPreview.suggested_segments.length
+        : reviewPreview.suggested_segments.count ?? suggestedSegments.length)
+    : 0
 
   return (
     <div data-testid="mindmap-import-results" className="px-6 py-5">
@@ -87,6 +109,46 @@ export function MindMapImportResultsPanel({
                 </div>
               </div>
 
+              {currentJobResult ? (
+                <div className="space-y-3 rounded-lg border border-border/70 bg-background/70 p-3 text-sm">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge variant="secondary">{currentJobResult.pipeline_strategy || '等待流水线'}</Badge>
+                    {currentJobResult.vision_resolved_ai?.model_label ? (
+                      <Badge variant="outline">视觉：{currentJobResult.vision_resolved_ai.model_label}</Badge>
+                    ) : null}
+                    {currentJobResult.formatter_resolved_ai?.model_label ? (
+                      <Badge variant="outline">整理：{currentJobResult.formatter_resolved_ai.model_label}</Badge>
+                    ) : null}
+                  </div>
+                  {currentJobResult.fallback_reason ? (
+                    <div className="text-muted-foreground">回退原因：{currentJobResult.fallback_reason}</div>
+                  ) : null}
+                  {currentJobResult.vision_response ? (
+                    <details>
+                      <summary className="cursor-pointer font-medium">视觉模型原始输出</summary>
+                      <pre className="mt-2 max-h-56 overflow-auto whitespace-pre-wrap break-words rounded-md bg-muted/50 p-3 text-xs">{currentJobResult.vision_response}</pre>
+                    </details>
+                  ) : null}
+                  {currentJobResult.ocr_pages?.length ? (
+                    <details>
+                      <summary className="cursor-pointer font-medium">逐页 OCR 原文（{currentJobResult.ocr_pages.length} 页）</summary>
+                      <div className="mt-2 max-h-72 space-y-3 overflow-auto rounded-md bg-muted/50 p-3">
+                        {currentJobResult.ocr_pages.map((page) => (
+                          <section key={page.page_number}>
+                            <div className="mb-1 font-medium">PDF 第 {page.page_number} 页</div>
+                            <pre className="whitespace-pre-wrap break-words text-xs">{page.text}</pre>
+                          </section>
+                        ))}
+                      </div>
+                    </details>
+                  ) : null}
+                  <div className="flex flex-wrap gap-2">
+                    <Button type="button" variant="outline" size="sm" onClick={onReformatFromOcr} disabled={!onReformatFromOcr}>使用 OCR 原文重新整理</Button>
+                    <Button type="button" variant="outline" size="sm" onClick={onRetryVision} disabled={!onRetryVision}>重试视觉识别</Button>
+                  </div>
+                </div>
+              ) : null}
+
               <div className="flex items-center justify-between gap-3">
                 <div className="text-sm font-medium">
                   结构预览
@@ -109,19 +171,18 @@ export function MindMapImportResultsPanel({
                   <div>
                     <div className="text-xs text-muted-foreground">预计每次复习</div>
                     <div className="font-semibold text-foreground">
-                      {reviewPreview.estimated_review_time ||
-                        `${Math.max(1, Math.round(reviewPreview.estimated_review_seconds / 60))} 分钟`}
+                      {estimatedReviewTimeLabel}
                     </div>
                   </div>
                   <div>
                     <div className="text-xs text-muted-foreground">建议学习组</div>
-                    <div className="font-semibold text-foreground">{reviewPreview.suggested_segment_count} 组</div>
+                    <div className="font-semibold text-foreground">{suggestedSegmentCount} 组</div>
                   </div>
-                  {reviewPreview.suggested_segments.length > 0 ? (
+                  {suggestedSegments.length > 0 ? (
                     <div className="md:col-span-3">
                       <div className="mb-1 text-xs text-muted-foreground">学习组建议</div>
                       <div className="flex flex-wrap gap-1.5">
-                        {reviewPreview.suggested_segments.slice(0, 5).map((segment, index) => (
+                        {suggestedSegments.slice(0, 5).map((segment, index) => (
                           <Badge key={`${segment.title}-${index}`} variant="secondary">
                             {segment.title} · {segment.node_count}
                           </Badge>

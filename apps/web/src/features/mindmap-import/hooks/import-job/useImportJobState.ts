@@ -1,8 +1,9 @@
-﻿import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type {
   MindMapEditorState,
   MindMapImportJob,
   MindMapImportJobError,
+  MindMapImportJobResult,
   MindMapImportJobStage,
   MindMapImportJobStatus,
   MindMapImportJobUsage,
@@ -48,6 +49,7 @@ export interface ImportJobStateController {
   currentJobUsage: MindMapImportJobUsage | null
   currentJobError: MindMapImportJobError | null
   currentJobResolvedAi: ResolvedAiRuntimeMeta | null
+  currentJobResult: MindMapImportJobResult | null
   currentJobPauseRequested: boolean
   importReusedExistingResult: boolean
   reusedExistingResultRef: React.MutableRefObject<boolean>
@@ -89,6 +91,7 @@ export function useImportJobState({
   const [currentJobUsage, setCurrentJobUsage] = useState<MindMapImportJobUsage | null>(null)
   const [currentJobError, setCurrentJobError] = useState<MindMapImportJobError | null>(null)
   const [currentJobResolvedAi, setCurrentJobResolvedAi] = useState<ResolvedAiRuntimeMeta | null>(null)
+  const [currentJobResult, setCurrentJobResult] = useState<MindMapImportJobResult | null>(null)
   const [currentJobPauseRequested, setCurrentJobPauseRequested] = useState(false)
   const [reusedExistingResult, setReusedExistingResultState] = useState(false)
   const reusedExistingResultRef = useRef(false)
@@ -122,6 +125,7 @@ export function useImportJobState({
     setCurrentJobUsage(null)
     setCurrentJobError(null)
     setCurrentJobResolvedAi(null)
+    setCurrentJobResult(null)
     setCurrentJobPauseRequested(false)
   }
 
@@ -145,7 +149,8 @@ export function useImportJobState({
     setCurrentJobStage(job.stage)
     setCurrentJobUsage(job.usage ?? null)
     setCurrentJobError(job.error ?? null)
-    setCurrentJobResolvedAi(job.resolved_ai ?? null)
+    setCurrentJobResolvedAi(job.vision_resolved_ai ?? job.resolved_ai ?? null)
+    setCurrentJobResult(result)
     setCurrentJobPauseRequested(Boolean(job.pause_requested))
     setImportReusedExistingResult(Boolean(options?.reused))
     setModeState(job.mode)
@@ -251,6 +256,7 @@ export function useImportJobState({
     currentJobUsage,
     currentJobError,
     currentJobResolvedAi,
+    currentJobResult,
     currentJobPauseRequested,
     importReusedExistingResult: reusedExistingResult,
     reusedExistingResultRef,

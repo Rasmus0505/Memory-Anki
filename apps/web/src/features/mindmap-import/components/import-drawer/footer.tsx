@@ -1,4 +1,4 @@
-﻿import { Check, Copy } from 'lucide-react'
+import { Check, Copy } from 'lucide-react'
 import type { MindMapImportFooterModel } from '@/features/mindmap-import/components/import-drawer/types'
 import { Button } from '@/shared/components/ui/button'
 
@@ -52,7 +52,7 @@ export function MindMapImportFooter({ model, copied, onCopyText }: MindMapImport
                 {applying ? '应用中…' : '追加到选中知识点'}
               </Button>
               <Button onClick={onApplyReplace} disabled={!sourceTree || loading || applying || undoing}>
-                {applying ? '应用中…' : '覆盖当前脑图'}
+                {applying ? '应用中…' : '应用到宫殿（覆盖）'}
               </Button>
             </div>
           </div>

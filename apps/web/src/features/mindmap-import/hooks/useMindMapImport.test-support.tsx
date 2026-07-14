@@ -1,4 +1,4 @@
-﻿import * as React from 'react'
+import * as React from 'react'
 import { vi } from 'vitest'
 import { useMindMapImport } from '@/features/mindmap-import/hooks/useMindMapImport'
 import type { MindMapEditorState, MindMapImportJob } from '@/shared/api/contracts'
@@ -6,10 +6,12 @@ import * as importApi from '@/entities/knowledge-import/api'
 import * as profileApi from '@/entities/preferences/api'
 
 export const promptForAiOptionsMock = vi.fn()
+export const promptForScenarioAiOptionsMock = vi.fn()
 
 vi.mock('@/entities/ai-runtime', () => ({
   useAiRunConfigDialog: () => ({
     promptForAiOptions: (...args: unknown[]) => promptForAiOptionsMock(...args),
+    promptForScenarioAiOptions: (...args: unknown[]) => promptForScenarioAiOptionsMock(...args),
     aiRunConfigDialog: null,
   }),
 }))
@@ -259,6 +261,8 @@ export function setupUseMindMapImportTestContext(): UseMindMapImportTestContext 
   localStorage.clear()
   promptForAiOptionsMock.mockReset()
   promptForAiOptionsMock.mockResolvedValue({})
+  promptForScenarioAiOptionsMock.mockReset()
+  promptForScenarioAiOptionsMock.mockImplementation(async (request: { entries?: Array<{ scenarioKey: string }> }) => Object.fromEntries((request.entries ?? []).map((entry) => [entry.scenarioKey, {}])))
 
   const context = {} as UseMindMapImportTestContext
   context.jobsById = {}

@@ -192,6 +192,8 @@ async def api_create_batch_import_job(
     mode: str = Form("mindmap"),
     structure_image_index: int | None = Form(None),
     ai_options: str = Form(default=""),
+    vision_ai_options: str = Form(default=""),
+    formatter_ai_options: str = Form(default=""),
     files: list[UploadFile] = File(...),
     s: Session = Depends(session_dep),
 ):
@@ -209,6 +211,8 @@ async def api_create_batch_import_job(
             structure_image_index=structure_image_index,
             ai_runtime=ai_runtime,
             ai_options=_parse_form_ai_options(ai_runtime, ai_options),
+            vision_ai_options=_parse_form_ai_options(ai_runtime, vision_ai_options),
+            formatter_ai_options=_parse_form_ai_options(ai_runtime, formatter_ai_options),
         )
     except MindMapImportError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -223,6 +227,8 @@ def api_create_pdf_import_job(
     mode: str = Form("mindmap"),
     fallback_title: str = Form("未命名宫殿"),
     ai_options: str = Form(default=""),
+    vision_ai_options: str = Form(default=""),
+    formatter_ai_options: str = Form(default=""),
     s: Session = Depends(session_dep),
 ):
     try:
@@ -236,6 +242,8 @@ def api_create_pdf_import_job(
             fallback_title=fallback_title,
             ai_runtime=ai_runtime,
             ai_options=_parse_form_ai_options(ai_runtime, ai_options),
+            vision_ai_options=_parse_form_ai_options(ai_runtime, vision_ai_options),
+            formatter_ai_options=_parse_form_ai_options(ai_runtime, formatter_ai_options),
         )
     except MindMapImportError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -273,6 +281,21 @@ def api_complete_import_job_from_preview(job_id: str, data: dict, s: Session = D
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return serialize_job(job)
 
+
+@router.post("/import/jobs/{job_id}/retry-vision")
+def api_retry_import_job_vision(job_id: str, s: Session = Depends(session_dep)):
+    try:
+        return serialize_job(rerun_job(s, job_id=job_id, pipeline_strategy="vision_retry"))
+    except MindMapImportError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.post("/import/jobs/{job_id}/reformat-ocr")
+def api_reformat_import_job_from_ocr(job_id: str, s: Session = Depends(session_dep)):
+    try:
+        return serialize_job(rerun_job(s, job_id=job_id, pipeline_strategy="ocr_reformat"))
+    except MindMapImportError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 @router.get("/import/jobs/{job_id}")
 def api_get_import_job(job_id: str, s: Session = Depends(session_dep)):
@@ -336,6 +359,8 @@ async def api_preview_batch_mindmap_import(
     fallback_title: str = "未命名宫殿",
     structure_image_index: int | None = None,
     ai_options: str = Form(default=""),
+    vision_ai_options: str = Form(default=""),
+    formatter_ai_options: str = Form(default=""),
     s: Session = Depends(session_dep),
 ):
     image_items: list[tuple[bytes, str | None]] = []
@@ -351,6 +376,8 @@ async def api_preview_batch_mindmap_import(
             structure_image_index=structure_image_index,
             ai_runtime=ai_runtime,
             ai_options=_parse_form_ai_options(ai_runtime, ai_options),
+            vision_ai_options=_parse_form_ai_options(ai_runtime, vision_ai_options),
+            formatter_ai_options=_parse_form_ai_options(ai_runtime, formatter_ai_options),
         )
     except MindMapImportError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

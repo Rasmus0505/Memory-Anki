@@ -1,4 +1,4 @@
-﻿import {
+import {
   ArrowLeft,
   ArrowRightToLine,
   Clock,
@@ -171,6 +171,9 @@ export function MindMapImportDrawer(props: MindMapImportDrawerProps) {
     previewSectionRef,
     rawModelPreviewText,
     reviewPreview: props.reviewPreview,
+    currentJobResult: props.currentJobResult,
+    onRetryVision: props.onRetryVision,
+    onReformatFromOcr: props.onReformatFromOcr,
     renderMindMapPreview: props.renderMindMapPreview,
     resolvedPreviewImageUrl,
     sourceKind: props.sourceKind,
@@ -253,6 +256,9 @@ export function MindMapImportDrawer(props: MindMapImportDrawerProps) {
     <Dialog open={open} onOpenChange={onOpenChange} modal={false}>
       <DialogContent
         data-testid="mindmap-import-dialog-content"
+        floatingId={'mindmap-import'}
+        expandOnOpen
+        dismissOnInteractOutside={false}
         layout={layoutMode === 'sidebar' ? 'unstyled' : 'centered'}
         className={cn(
           layoutMode === 'sidebar'

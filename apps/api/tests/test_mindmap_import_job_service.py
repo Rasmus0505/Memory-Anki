@@ -17,6 +17,7 @@ from memory_anki.modules.palaces.application.mindmap_import import (
 )
 from memory_anki.modules.palaces.presentation import import_router
 from memory_anki.modules.settings.api import SettingsAiRuntimeProvider, SettingsPromptCatalog
+from memory_anki.platform.application import AiRuntimeOptions
 
 
 def _ai_runtime(session: Session | None = None) -> SettingsAiRuntimeProvider:
@@ -491,7 +492,8 @@ def test_pdf_job_keeps_source_snapshot_and_rerun_gets_new_operation(tmp_path, mo
             )
 
         source_dir = import_dir / job.id
-        assert (source_dir / "source.pdf").read_bytes() == pdf_path.read_bytes()
+        with fitz.open(source_dir / "source.pdf") as snapshot:
+            assert snapshot.page_count == 2
         assert job.source_kind == "pdf-document"
 
         pdf_path.unlink()
@@ -506,3 +508,198 @@ def test_pdf_job_keeps_source_snapshot_and_rerun_gets_new_operation(tmp_path, mo
     assert payload["operation_id"] == rerun.id
     assert payload["source_meta"]["rerun_of"] == job.id
     assert payload["source_meta"]["page_selection"] == [2, 1]
+
+
+def test_pdf_job_reports_storage_exhaustion_and_removes_incomplete_job(tmp_path, monkeypatch):
+    library_dir = tmp_path / "pdf-library"
+    library_dir.mkdir()
+    import_dir = tmp_path / "import-jobs"
+    pdf_path = library_dir / "document.pdf"
+    pdf_path.write_bytes(_pdf_bytes())
+
+    from memory_anki.infrastructure.db._tables.misc import PdfDocument
+
+    with Session(engine) as session:
+        document = PdfDocument(
+            id="pdf-storage-full",
+            filename=pdf_path.name,
+            original_name="课程.pdf",
+            mime_type="application/pdf",
+            file_size=pdf_path.stat().st_size,
+            page_count=2,
+        )
+        session.add(document)
+        session.commit()
+
+        monkeypatch.setattr(job_service, "IMPORT_JOBS_DIR", import_dir)
+        monkeypatch.setattr(mindmap_import_job_api, "PDF_LIBRARY_DIR", library_dir)
+        with (
+            patch.object(
+                mindmap_import_job_api.llm_gateway,
+                "prepare_batch_items",
+                side_effect=lambda **kwargs: (kwargs["image_items"], None),
+            ),
+            patch.object(
+                mindmap_import_job_api.job_artifacts,
+                "write_bytes",
+                side_effect=OSError(28, "No space left on device"),
+            ),
+        ):
+            with pytest.raises(MindMapImportError, match="存储空间不足"):
+                job_service.create_pdf_import_job(
+                    session,
+                    entity_key="palace_storage_full",
+                    document_id=document.id,
+                    page_selection="1-2",
+                    mode=job_service.MODE_MINDMAP,
+                    fallback_title="PDF 导入",
+                    ai_runtime=_ai_runtime(session),
+                )
+
+        assert (
+            session.query(MindMapImportJob)
+            .filter(MindMapImportJob.entity_key == "palace_storage_full")
+            .count()
+            == 0
+        )
+        assert not import_dir.exists() or not any(import_dir.iterdir())
+
+
+@pytest.mark.parametrize(
+    'direct_error',
+    [
+        MindMapImportError('模型返回内容不是有效的脑图 JSON。'),
+        RuntimeError('DataInspectionFailed: output rejected'),
+    ],
+)
+def test_invalid_direct_generation_falls_back_to_page_ocr_and_formatter(direct_error):
+    with patch.object(
+        job_service,
+        "_prepare_batch_image_items",
+        return_value=([(b"page-1", "page-1.png"), (b"page-2", "page-2.png")], None),
+    ):
+        with Session(engine) as session:
+            job = job_service.create_batch_import_job(
+                session,
+                entity_key="palace_1",
+                image_items=[(b"page-1", "page-1.png"), (b"page-2", "page-2.png")],
+                fallback_title="德国近代教育",
+                structure_image_index=None,
+                ai_runtime=_ai_runtime(session),
+            )
+
+    with patch.object(
+        job_service,
+        "_stream_call_dashscope_batch_json",
+        side_effect=direct_error,
+    ) as direct_call, patch.object(
+        job_service,
+        "_stream_call_dashscope_text",
+        side_effect=[_stream_return("第斯多惠\n影响"), _stream_return("第四节 俄国近代教育")],
+    ) as ocr_call, patch.object(
+        job_service,
+        "_stream_call_formatter_json",
+        return_value=_stream_return(
+            {
+                "title": "德国近代教育",
+                "children": [
+                    {
+                        "text": "第斯多惠",
+                        "children": [{"text": "影响", "children": []}],
+                    }
+                ],
+            }
+        ),
+    ) as formatter_call:
+        job_service._run_job_worker(job.id, ai_runtime=_ai_runtime(), prompt_catalog=_prompt_catalog())
+
+    payload = _load_job(job.id)
+    assert payload["status"] == job_service.JOB_STATUS_COMPLETED, payload
+    assert payload["pipeline_strategy"] == "vision_ocr_fallback"
+    assert payload["fallback_reason"] == str(direct_error)
+    assert [item["page_number"] for item in payload["ocr_pages"]] == [1, 2]
+    assert payload["result"]["source_tree"]["children"][0]["text"] == "第斯多惠"
+    assert direct_call.call_count == 1
+    assert ocr_call.call_count == 2
+    assert formatter_call.call_count == 1
+
+
+def test_ocr_resume_reuses_successful_page_artifact():
+    with patch.object(
+        job_service,
+        "_prepare_batch_image_items",
+        return_value=([(b"page-1", "page-1.png"), (b"page-2", "page-2.png")], None),
+    ):
+        with Session(engine) as session:
+            job = job_service.create_batch_import_job(
+                session,
+                entity_key="palace_1",
+                image_items=[(b"page-1", "page-1.png"), (b"page-2", "page-2.png")],
+                fallback_title="德国近代教育",
+                structure_image_index=None,
+                ai_runtime=_ai_runtime(session),
+            )
+    artifact_dir = job_service.get_job_artifact_dir(job.id)
+    (artifact_dir / "ocr").mkdir(parents=True, exist_ok=True)
+    (artifact_dir / "ocr" / "page-1.txt").write_text("已保存第一页", encoding="utf-8")
+
+    with patch.object(
+        job_service,
+        "_stream_call_dashscope_batch_json",
+        side_effect=MindMapImportError("direct failed"),
+    ), patch.object(
+        job_service,
+        "_stream_call_dashscope_text",
+        return_value=_stream_return("第二页"),
+    ) as ocr_call, patch.object(
+        job_service,
+        "_stream_call_formatter_json",
+        return_value=_stream_return(
+            {"title": "德国近代教育", "children": [{"text": "内容", "children": []}]}
+        ),
+    ):
+        job_service._run_job_worker(job.id, ai_runtime=_ai_runtime(), prompt_catalog=_prompt_catalog())
+
+    payload = _load_job(job.id)
+    assert payload["status"] == job_service.JOB_STATUS_COMPLETED, payload
+    assert ocr_call.call_count == 1
+    assert payload["ocr_pages"][0]["reused"] is True
+    assert payload["ocr_pages"][1]["reused"] is False
+
+def test_ocr_role_model_skips_direct_generation():
+    with patch.object(
+        job_service,
+        "_prepare_batch_image_items",
+        return_value=([(b"page-1", "page-1.png")], None),
+    ):
+        with Session(engine) as session:
+            job = job_service.create_batch_import_job(
+                session,
+                entity_key="palace_1",
+                image_items=[(b"page-1", "page-1.png")],
+                fallback_title="德国近代教育",
+                structure_image_index=None,
+                ai_runtime=_ai_runtime(session),
+                vision_ai_options=AiRuntimeOptions(model="qwen3.5-ocr"),
+            )
+
+    with patch.object(job_service, "_stream_call_dashscope_batch_json") as direct_call, patch.object(
+        job_service,
+        "_stream_call_dashscope_text",
+        return_value=_stream_return("第斯多惠\n影响"),
+    ) as ocr_call, patch.object(
+        job_service,
+        "_stream_call_formatter_json",
+        return_value=_stream_return(
+            {"title": "德国近代教育", "children": [{"text": "第斯多惠—影响", "children": []}]}
+        ),
+    ) as formatter_call:
+        job_service._run_job_worker(job.id, ai_runtime=_ai_runtime(), prompt_catalog=_prompt_catalog())
+
+    payload = _load_job(job.id)
+    assert payload["status"] == job_service.JOB_STATUS_COMPLETED
+    assert payload["pipeline_strategy"] == "ocr_first"
+    assert direct_call.call_count == 0
+    assert ocr_call.call_count == 1
+    assert formatter_call.call_count == 1
+    assert payload["vision_resolved_ai"]["vision_processing_role"] == "ocr_extraction"
