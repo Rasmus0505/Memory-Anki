@@ -29,7 +29,20 @@ class OpenAICompatibleError(RuntimeError):
 
 
 class OpenAICompatibleProtocolError(OpenAICompatibleError):
-    pass
+    def __init__(
+        self,
+        message: str,
+        *,
+        code: str | None = None,
+        request_id: str | None = None,
+        raw_frame: str | None = None,
+        partial_response: str = "",
+    ) -> None:
+        self.code = code
+        self.request_id = request_id
+        self.raw_frame = raw_frame
+        self.partial_response = partial_response
+        super().__init__(message)
 
 
 class OpenAICompatibleHttpError(OpenAICompatibleError):
@@ -150,6 +163,7 @@ def parse_chat_completion_stream(
     *,
     protocol_error_message: str = DEFAULT_PROTOCOL_ERROR_MESSAGE,
     empty_response_message: str = DEFAULT_EMPTY_RESPONSE_MESSAGE,
+    metadata: dict[str, Any] | None = None,
 ) -> Generator[str, None, str]:
     saw_stream_payload = False
     accumulated_text = ""
@@ -171,6 +185,55 @@ def parse_chat_completion_stream(
         saw_stream_payload = True
         if payload_text == "[DONE]":
             break
+        if metadata is not None:
+            metadata["last_raw_frame"] = payload_text
+        try:
+            payload = json.loads(payload_text)
+        except json.JSONDecodeError as exc:
+            raise OpenAICompatibleProtocolError(
+                protocol_error_message,
+                raw_frame=payload_text,
+                partial_response=accumulated_text,
+            ) from exc
+        if not isinstance(payload, dict):
+            raise OpenAICompatibleProtocolError(
+                protocol_error_message,
+                raw_frame=payload_text,
+                partial_response=accumulated_text,
+            )
+        error_payload = payload.get("error")
+        if isinstance(error_payload, dict):
+            code = str(error_payload.get("code") or payload.get("code") or "").strip() or None
+            request_id = str(
+                error_payload.get("request_id")
+                or payload.get("request_id")
+                or payload.get("id")
+                or ""
+            ).strip() or None
+            message = str(error_payload.get("message") or payload.get("message") or protocol_error_message).strip()
+            raise OpenAICompatibleProtocolError(
+                message,
+                code=code,
+                request_id=request_id,
+                raw_frame=payload_text,
+                partial_response=accumulated_text,
+            )
+        if metadata is not None:
+            usage = payload.get("usage")
+            if isinstance(usage, dict):
+                metadata["usage"] = dict(usage)
+            request_id = str(payload.get("request_id") or payload.get("id") or "").strip()
+            if request_id:
+                metadata["request_id"] = request_id
+        choices = payload.get("choices")
+        if not isinstance(choices, list) or not choices:
+            continue
+        choice = choices[0]
+        if not isinstance(choice, dict):
+            continue
+        finish_reason = choice.get("finish_reason")
+        if finish_reason and metadata is not None:
+            metadata["finish_reason"] = str(finish_reason)
         delta_text = extract_chat_completion_stream_delta(
             payload_text,
             protocol_error_message=protocol_error_message,
@@ -201,6 +264,16 @@ def parse_chat_completion_stream(
 
     if not accumulated_text.strip():
         raise OpenAICompatibleProtocolError(empty_response_message)
+    if metadata is not None:
+        metadata["partial_response"] = accumulated_text
+    if metadata is not None and metadata.get("finish_reason") == "length":
+        raise OpenAICompatibleProtocolError(
+            "模型输出因长度限制被截断。",
+            code="output_truncated",
+            request_id=str(metadata.get("request_id") or "") or None,
+            raw_frame=str(metadata.get("last_raw_frame") or "") or None,
+            partial_response=accumulated_text,
+        )
     return accumulated_text.strip()
 
 
@@ -271,6 +344,7 @@ def stream_chat_completion_text(
     messages: list[dict[str, Any]],
     response_format: dict[str, Any] | None = None,
     extra_payload: dict[str, Any] | None = None,
+    stream_metadata: dict[str, Any] | None = None,
 ) -> Generator[str, None, str]:
     payload = _build_payload(
         config=config,
@@ -300,7 +374,7 @@ def stream_chat_completion_text(
                 raise error from exc
         else:
             try:
-                return (yield from parse_chat_completion_stream(response))
+                return (yield from parse_chat_completion_stream(response, metadata=stream_metadata))
             finally:
                 response.close()
         _sleep_before_retry(

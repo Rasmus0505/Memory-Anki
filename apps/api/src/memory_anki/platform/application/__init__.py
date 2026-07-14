@@ -15,7 +15,7 @@ from .mutations import (
     MutationResponseStore,
     mutation_identity_from_headers,
 )
-from .prompt_catalog import PromptCatalog
+from .prompt_catalog import CompiledPromptSnapshot, PromptCatalog, PromptRunSelection
 from .unit_of_work import UnitOfWork
 
 __all__ = [
@@ -28,6 +28,8 @@ __all__ = [
     "MutationResponseStore",
     "PersistedAiRuntime",
     "PromptCatalog",
+    "PromptRunSelection",
+    "CompiledPromptSnapshot",
     "ResolvedAiRuntime",
     "UnitOfWork",
     "mutation_identity_from_headers",

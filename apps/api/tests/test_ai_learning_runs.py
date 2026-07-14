@@ -45,6 +45,12 @@ class Provider:
         )
 
 
+class Catalog:
+    def render(self, key, variables=None):
+        assert key == "ai_prompt_ai_learning_workbench"
+        return f"学习工作台规则\n\n{(variables or {}).get('task_instruction', '')}"
+
+
 def draft(operation_id="op-1"):
     return AiRunDraft.model_validate(
         {
@@ -72,18 +78,18 @@ def test_preview_and_execution_are_consistent_and_secret_free(monkeypatch):
     Base.metadata.create_all(engine)
     monkeypatch.setattr(service, "call_chat_completion_text", lambda **kwargs: "回答")
     with Session(engine) as session:
-        expected = service.preview_run(draft())
-        result = service.execute_run(session, draft(), Provider())
+        expected = service.preview_run(draft(), Catalog())
+        result = service.execute_run(session, draft(), Provider(), Catalog())
         assert result["status"] == "completed" and result["response_text"] == "回答"
         assert result["request"]["messages"] == expected["messages"]
         assert "SECRET" not in str(result)
-        assert service.execute_run(session, draft(), Provider())["id"] == result["id"]
+        assert service.execute_run(session, draft(), Provider(), Catalog())["id"] == result["id"]
 
 
 def test_long_context_warns_without_silent_truncation():
     value = draft("op-2")
     value.context.estimated_tokens = 25000
-    preview = service.preview_run(value)
+    preview = service.preview_run(value, Catalog())
     assert preview["warnings"] and len(preview["context_text"]) > 0
 
 
@@ -103,9 +109,9 @@ def test_context_selection_lifecycle_and_soft_delete(monkeypatch):
         }
     ]
     with Session(engine) as session:
-        preview = service.preview_run(value)
+        preview = service.preview_run(value, Catalog())
         assert "当前题库" in preview["context_text"]
-        result = service.execute_run(session, value, Provider())
+        result = service.execute_run(session, value, Provider(), Catalog())
         accepted = service.set_application_status(session, result["id"], "accepted", {})
         assert accepted["application_status"] == "accepted"
         deleted = service.set_deleted(session, result["id"], True)
@@ -130,7 +136,7 @@ def test_quiz_result_is_structured_and_items_can_be_reviewed(monkeypatch):
     value.task_key = "quiz"
     value.output_type = "quiz_draft"
     with Session(engine) as session:
-        result = service.execute_run(session, value, Provider())
+        result = service.execute_run(session, value, Provider(), Catalog())
         assert result["result"]["kind"] == "quiz_draft"
         assert result["result"]["questions"][0]["decision"] == "pending"
         reviewed = service.set_item_decision(session, result["id"], "q1", "accepted")

@@ -17,6 +17,7 @@ from memory_anki.infrastructure.llm import (
 from memory_anki.platform.application import (
     AiRuntimeOptions,
     AiRuntimeProvider,
+    PromptCatalog,
     ResolvedAiRuntime,
     serialize_resolved_ai_runtime,
 )
@@ -25,31 +26,6 @@ PEG_ASSOCIATION_SCENE_KEY = "peg_association_suggestions"
 DEFAULT_MAX_SUGGESTIONS = 5
 MAX_SUGGESTIONS_LIMIT = 12
 MAX_CONTEXT_ITEMS = 24
-
-SYSTEM_PROMPT = """你是记忆宫殿联想建议助手。只输出 JSON 对象，不要 markdown。
-
-任务：基于输入的宫殿记忆桩和知识点，生成可执行的联想建议，帮助用户把知识点挂到具体记忆桩上。
-
-输出格式：
-{
-  "suggestions": [
-    {
-      "peg_id": 1,
-      "knowledge_text": "知识点原文或短句",
-      "association": "具体画面化联想",
-      "rationale": "为什么这个桩适合承载该知识点",
-      "keywords": ["关键词"]
-    }
-  ]
-}
-
-要求：
-1. peg_id 必须来自输入 pegs。
-2. association 要具体、有画面感、可复述，不要泛泛说“联想到”。
-3. 不要编造输入之外的专业事实。
-4. suggestions 数量不要超过输入 max_suggestions。
-"""
-
 
 def suggest_peg_associations(
     session: Session,
@@ -61,6 +37,7 @@ def suggest_peg_associations(
     use_ai: bool = True,
     ai_options: AiRuntimeOptions | None = None,
     ai_runtime: AiRuntimeProvider,
+    prompt_catalog: PromptCatalog,
 ) -> dict[str, Any] | None:
     palace = _get_palace(session, palace_id)
     if palace is None:
@@ -95,6 +72,10 @@ def suggest_peg_associations(
     try:
         return _call_ai_suggestions(
             runtime=runtime,
+            system_prompt=(
+                runtime.prompt_override
+                or prompt_catalog.render("ai_prompt_peg_association")
+            ),
             palace=palace,
             pegs=pegs,
             knowledge_items=knowledge_items,
@@ -335,6 +316,7 @@ def _fallback_suggestion(
 def _call_ai_suggestions(
     *,
     runtime: ResolvedAiRuntime,
+    system_prompt: str,
     palace: Palace,
     pegs: list[dict[str, Any]],
     knowledge_items: list[dict[str, Any]],
@@ -359,7 +341,7 @@ def _call_ai_suggestions(
             timeout_seconds=90,
         ),
         messages=[
-            {"role": "system", "content": runtime.prompt_override or SYSTEM_PROMPT},
+            {"role": "system", "content": system_prompt},
             {"role": "user", "content": json.dumps(model_input, ensure_ascii=False)},
         ],
         response_format={"type": "json_object"},

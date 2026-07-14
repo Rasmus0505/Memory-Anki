@@ -32,6 +32,17 @@ from memory_anki.modules.settings.application.ai_model_registry import (
 from memory_anki.modules.settings.application.ai_model_registry_catalog import (
     normalize_provider_key,
 )
+from memory_anki.modules.settings.application.ai_prompt_composition import (
+    activate_block_version,
+    activate_scene_version,
+    compile_prompt,
+    list_block_versions,
+    list_prompt_blocks,
+    list_scene_defaults,
+    list_scene_versions,
+    save_prompt_block,
+    save_scene_default,
+)
 from memory_anki.modules.settings.application.ai_prompt_versions import (
     activate_prompt_version,
     create_prompt_candidates,
@@ -214,6 +225,87 @@ def api_update_client_preferences(data: dict, s: Session = Depends(session_dep))
 @router.get("/settings/ai-prompts")
 def api_ai_prompt_settings(s: Session = Depends(session_dep)):
     return {"items": list_prompt_templates(s)}
+
+
+@router.get("/settings/ai-prompt-blocks")
+def api_ai_prompt_blocks(s: Session = Depends(session_dep)):
+    return {"items": list_prompt_blocks(s)}
+
+
+@router.put("/settings/ai-prompt-blocks/{block_key}")
+def api_ai_prompt_block_update(block_key: str, data: dict, s: Session = Depends(session_dep)):
+    try:
+        return save_prompt_block(s, block_key, data)
+    except AiPromptValidationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.get("/settings/ai-prompt-blocks/{block_key}/versions")
+def api_ai_prompt_block_versions(block_key: str, s: Session = Depends(session_dep)):
+    try:
+        return {"items": list_block_versions(s, block_key)}
+    except AiPromptValidationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/settings/ai-prompt-blocks/{block_key}/versions/{version_id}/activate")
+def api_ai_prompt_block_version_activate(
+    block_key: str,
+    version_id: str,
+    s: Session = Depends(session_dep),
+):
+    try:
+        return activate_block_version(s, block_key, version_id)
+    except AiPromptValidationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.get("/settings/ai-prompt-scenes")
+def api_ai_prompt_scenes(s: Session = Depends(session_dep)):
+    return {"items": list_scene_defaults(s)}
+
+
+@router.put("/settings/ai-prompt-scenes/{scene_key}/default")
+def api_ai_prompt_scene_default_update(
+    scene_key: str,
+    data: dict,
+    s: Session = Depends(session_dep),
+):
+    try:
+        return save_scene_default(s, scene_key, data)
+    except AiPromptValidationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.get("/settings/ai-prompt-scenes/{scene_key}/versions")
+def api_ai_prompt_scene_versions(scene_key: str, s: Session = Depends(session_dep)):
+    try:
+        return {"items": list_scene_versions(s, scene_key)}
+    except AiPromptValidationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/settings/ai-prompt-scenes/{scene_key}/versions/{version_id}/activate")
+def api_ai_prompt_scene_version_activate(
+    scene_key: str,
+    version_id: str,
+    s: Session = Depends(session_dep),
+):
+    try:
+        return activate_scene_version(s, scene_key, version_id)
+    except AiPromptValidationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/settings/ai-prompt-compose/preview")
+def api_ai_prompt_compose_preview(data: dict, s: Session = Depends(session_dep)):
+    try:
+        scene_key = str(data.get("scene_key") or "")
+        variables = data.get("variables") if isinstance(data.get("variables"), dict) else {}
+        selection = data.get("selection") if isinstance(data.get("selection"), dict) else None
+        return compile_prompt(scene_key, variables, session=s, selection=selection)
+    except AiPromptValidationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.put("/settings/ai-prompts")

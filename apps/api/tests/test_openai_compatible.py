@@ -65,3 +65,76 @@ def test_parse_chat_completion_stream_falls_back_to_non_stream_body() -> None:
         next(generator)
 
     assert stop.value.value == "直接返回"
+
+
+def test_parse_chat_completion_stream_tolerates_usage_frame_without_choices() -> None:
+    class FakeResponse:
+        def __iter__(self):
+            return iter(
+                [
+                    b'data: {"choices":[{"delta":{"content":"\xe6\xad\xa3\xe6\x96\x87"}}]}\n',
+                    b'data: {"choices":[],"usage":{"prompt_tokens":12,"completion_tokens":3}}\n',
+                    b'data: {"choices":[{"delta":{},"finish_reason":"stop"}]}\n',
+                    b"data: [DONE]\n",
+                ]
+            )
+
+        def read(self):
+            return b""
+
+    metadata: dict[str, object] = {}
+    generator = client.parse_chat_completion_stream(FakeResponse(), metadata=metadata)
+    assert next(generator) == "正文"
+    with pytest.raises(StopIteration) as stop:
+        next(generator)
+
+    assert stop.value.value == "正文"
+    assert metadata["finish_reason"] == "stop"
+    assert metadata["usage"] == {"prompt_tokens": 12, "completion_tokens": 3}
+
+
+def test_parse_chat_completion_stream_exposes_error_frame_details() -> None:
+    class FakeResponse:
+        def __iter__(self):
+            return iter(
+                [
+                    b'data: {"choices":[{"delta":{"content":"\xe5\x8d\x8a\xe6\x88\xaa"}}]}\n',
+                    b'data: {"error":{"code":"BadRequest","message":"invalid image","request_id":"req-1"}}\n',
+                ]
+            )
+
+        def read(self):
+            return b""
+
+    generator = client.parse_chat_completion_stream(FakeResponse())
+    assert next(generator) == "半截"
+    with pytest.raises(client.OpenAICompatibleProtocolError) as error:
+        next(generator)
+
+    assert str(error.value) == "invalid image"
+    assert error.value.code == "BadRequest"
+    assert error.value.request_id == "req-1"
+    assert error.value.partial_response == "半截"
+
+
+def test_parse_chat_completion_stream_rejects_length_finish_reason() -> None:
+    class FakeResponse:
+        def __iter__(self):
+            return iter(
+                [
+                    b'data: {"choices":[{"delta":{"content":"\xe5\x8d\x8a\xe6\x88\xaa"}}]}\n',
+                    b'data: {"choices":[{"delta":{},"finish_reason":"length"}]}\n',
+                    b"data: [DONE]\n",
+                ]
+            )
+
+        def read(self):
+            return b""
+
+    generator = client.parse_chat_completion_stream(FakeResponse(), metadata={})
+    assert next(generator) == "半截"
+    with pytest.raises(client.OpenAICompatibleProtocolError) as error:
+        next(generator)
+
+    assert error.value.code == "output_truncated"
+    assert error.value.partial_response == "半截"

@@ -10,18 +10,24 @@ from sqlalchemy.orm import Session
 from memory_anki.core.time import utc_now_naive
 from memory_anki.infrastructure.db._tables.misc import Config
 from memory_anki.modules.settings.application.ai_prompt_templates import (
+    AI_LEARNING_WORKBENCH_PROMPT,
+    BATCH_PALACE_GENERATION_PROMPT,
+    BATCH_QUIZ_GENERATION_PROMPT,
     ENGLISH_READING_GENERATE_PROMPT,
     ENGLISH_TRANSLATION_BATCH_PROMPT,
     ENGLISH_TRANSLATION_SINGLE_PROMPT,
     IMPORT_BATCH_MINDMAP_PROMPT,
+    IMPORT_DOCUMENT_MINDMAP_PROMPT,
     IMPORT_IMAGE_MINDMAP_PROMPT,
     IMPORT_IMAGE_TEXT_PROMPT,
+    IMPORT_OCR_MINDMAP_FORMAT_PROMPT,
     MINDMAP_AI_SPLIT_SYSTEM_PROMPT,
     PALACE_QUIZ_CLASSIFY_EXISTING_TO_MINI_PALACE_PROMPT,
     PALACE_QUIZ_GENERATE_PROMPT,
     PALACE_QUIZ_GROUP_BY_MINI_PALACE_PROMPT,
     PALACE_QUIZ_SHORT_ANSWER_FEEDBACK_PROMPT,
     PALACE_QUIZ_SOURCE_PAIR_TRANSCRIPTION_PROMPT,
+    PEG_ASSOCIATION_PROMPT,
     build_palace_quiz_generation_user_text,
     build_palace_quiz_review_mindmap_prompt,
     build_palace_quiz_text_formatting_prompt,
@@ -31,7 +37,13 @@ PROMPT_CONFIG_KEYS = (
     "ai_prompt_import_image_mindmap",
     "ai_prompt_import_image_text",
     "ai_prompt_import_batch_mindmap",
+    "ai_prompt_import_document_mindmap",
+    "ai_prompt_import_ocr_mindmap_format",
     "ai_prompt_mindmap_ai_split_system",
+    "ai_prompt_peg_association",
+    "ai_prompt_ai_learning_workbench",
+    "ai_prompt_batch_palace_generation",
+    "ai_prompt_batch_quiz_generation",
     "ai_prompt_palace_quiz_generate",
     "ai_prompt_palace_quiz_classify_existing_to_mini_palace",
     "ai_prompt_palace_quiz_group_by_mini_palace",
@@ -108,6 +120,25 @@ PROMPT_DEFINITIONS: dict[str, PromptTemplateDefinition] = {
         default_template=IMPORT_IMAGE_TEXT_PROMPT,
         source_location="apps/api/src/memory_anki/modules/palaces/application/mindmap_import/prompts.py",
     ),
+    "ai_prompt_import_document_mindmap": PromptTemplateDefinition(
+        key="ai_prompt_import_document_mindmap",
+        label="教材正文直接转脑图",
+        description="普通 PDF 或未指定结构图的多图正文直接生成脑图。",
+        default_template=IMPORT_DOCUMENT_MINDMAP_PROMPT,
+        source_location="apps/api/src/memory_anki/modules/palaces/application/mindmap_import/runtime.py",
+    ),
+    "ai_prompt_import_ocr_mindmap_format": PromptTemplateDefinition(
+        key="ai_prompt_import_ocr_mindmap_format",
+        label="OCR 原文整理脑图",
+        description="把带页码的逐页 OCR 原文整理为严格脑图 JSON。",
+        default_template=IMPORT_OCR_MINDMAP_FORMAT_PROMPT,
+        source_location="apps/api/src/memory_anki/modules/palaces/application/mindmap_import/runtime.py",
+        available_placeholders=(
+            _placeholder("target_title", "当前宫殿的目标章节标题；占位标题时为空。"),
+            _placeholder("ocr_text", "带 PDF 页码标记的逐页 OCR 原文。"),
+        ),
+        required_placeholders=("target_title", "ocr_text"),
+    ),
     "ai_prompt_import_batch_mindmap": PromptTemplateDefinition(
         key="ai_prompt_import_batch_mindmap",
         label="多图转脑图（兼容）",
@@ -125,6 +156,38 @@ PROMPT_DEFINITIONS: dict[str, PromptTemplateDefinition] = {
         description="脑图 AI 分卡发送给文本模型的系统提示词。",
         default_template=MINDMAP_AI_SPLIT_SYSTEM_PROMPT,
         source_location="apps/api/src/memory_anki/modules/palaces/application/mindmap_ai_split/contracts.py",
+    ),
+    "ai_prompt_peg_association": PromptTemplateDefinition(
+        key="ai_prompt_peg_association",
+        label="记忆桩联想建议",
+        description="根据记忆桩和知识点生成可挂载的联想建议。",
+        default_template=PEG_ASSOCIATION_PROMPT,
+        source_location="apps/api/src/memory_anki/modules/palaces/application/peg_association_service.py",
+    ),
+    "ai_prompt_ai_learning_workbench": PromptTemplateDefinition(
+        key="ai_prompt_ai_learning_workbench",
+        label="复习 AI 学习工作台",
+        description="复习中的提问、讲解、出题和纠错共用提示词。",
+        default_template=AI_LEARNING_WORKBENCH_PROMPT,
+        source_location="apps/api/src/memory_anki/modules/ai_learning/application/service.py",
+        available_placeholders=(
+            _placeholder("task_instruction", "当前学习任务的专用要求。"),
+        ),
+        required_placeholders=("task_instruction",),
+    ),
+    "ai_prompt_batch_palace_generation": PromptTemplateDefinition(
+        key="ai_prompt_batch_palace_generation",
+        label="整本教材批量生成宫殿",
+        description="整本教材工作区按章节生成宫殿草稿。",
+        default_template=BATCH_PALACE_GENERATION_PROMPT,
+        source_location="apps/api/src/memory_anki/modules/batch_generation/application/workspace_service.py",
+    ),
+    "ai_prompt_batch_quiz_generation": PromptTemplateDefinition(
+        key="ai_prompt_batch_quiz_generation",
+        label="整本教材批量生成题目",
+        description="整本教材工作区按章节生成题目草稿。",
+        default_template=BATCH_QUIZ_GENERATION_PROMPT,
+        source_location="apps/api/src/memory_anki/modules/batch_generation/application/workspace_service.py",
     ),
     "ai_prompt_palace_quiz_generate": PromptTemplateDefinition(
         key="ai_prompt_palace_quiz_generate",
@@ -276,11 +339,15 @@ def list_prompt_templates(session: Session) -> list[dict[str, Any]]:
     from .ai_prompt_versions import ensure_prompt_versions
 
     ensure_prompt_versions(session)
+    from .ai_prompt_composition import PROMPT_SCENE_BINDINGS, compile_prompt_for_key
+
     overrides = _get_template_override_map(session)
     items: list[dict[str, Any]] = []
     for key in PROMPT_CONFIG_KEYS:
         definition = _definition_for(key)
-        current_template = _normalize_template(overrides.get(key) or definition.default_template)
+        compiled = compile_prompt_for_key(key, session=session)
+        current_template = _normalize_template(compiled["text"])
+        default_compiled = compile_prompt_for_key(key, session=None)
         active_version = (
             session.query(AiPromptVersion)
             .filter_by(prompt_key=key, status="active")
@@ -302,7 +369,7 @@ def list_prompt_templates(session: Session) -> list[dict[str, Any]]:
                 "label": definition.label,
                 "description": definition.description,
                 "template": current_template,
-                "default_template": definition.default_template,
+                "default_template": default_compiled["text"],
                 "is_customized": key in overrides
                 and _normalize_template(overrides[key])
                 != _normalize_template(definition.default_template),
@@ -322,6 +389,8 @@ def list_prompt_templates(session: Session) -> list[dict[str, Any]]:
                     {"name": item.name, "description": item.description}
                     for item in definition.available_placeholders
                 ],
+                "scene_key": PROMPT_SCENE_BINDINGS.get(key),
+                "composition": compiled,
             }
         )
     return items
@@ -356,7 +425,10 @@ def reset_prompt_templates(
 def render_prompt(
     key: str, variables: dict[str, Any] | None = None, *, session: Session | None = None
 ) -> str:
-    template = get_prompt_template(session, key)
+    from .ai_prompt_composition import compile_prompt_for_key
+
+    compiled = compile_prompt_for_key(key, variables, session=session)
+    template = compiled["text"]
     variables = variables or {}
 
     def _replace(match: re.Match[str]) -> str:

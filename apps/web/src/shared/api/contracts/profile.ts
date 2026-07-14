@@ -50,6 +50,81 @@ export interface AiPromptTemplate {
   available_placeholders: AiPromptPlaceholder[]
   active_version_id?: string | null
   candidate_version?: AiPromptVersionSummary | null
+  scene_key?: string | null
+  composition?: CompiledPromptSnapshot | null
+}
+
+export type AiPromptLayer = 'role' | 'task' | 'content' | 'boundary' | 'output' | 'quality'
+
+export interface AiPromptBlock {
+  key: string
+  label: string
+  description: string
+  layer: AiPromptLayer
+  sort_order: number
+  template: string
+  active_version_id?: string | null
+  is_builtin: boolean
+  is_active: boolean
+  applicable_scene_keys: string[]
+  placeholders: string[]
+  affected_scene_keys: string[]
+}
+
+export interface AiPromptBlockVersion {
+  id: string
+  block_key: string
+  template: string
+  status: 'active' | 'archived'
+  source: string
+  created_at?: string | null
+  activated_at?: string | null
+}
+
+export interface AiPromptRunSelection {
+  block_keys?: string[]
+  scene_instruction?: string
+  run_instruction?: string
+}
+
+export interface CompiledPromptSnapshot {
+  scene_key: string
+  prompt_key: string
+  text: string
+  block_keys: string[]
+  block_versions: Record<string, string | null>
+  scene_instruction: string
+  run_instruction: string
+  scene_version_id?: string | null
+  warnings: string[]
+  estimated_tokens: number
+}
+
+export interface AiPromptSceneDefault {
+  scene_key: string
+  prompt_key: string
+  label: string
+  description: string
+  block_keys: string[]
+  blocks: AiPromptBlock[]
+  scene_instruction: string
+  active_version_id: string
+  source: string
+  recommended_block_keys: string[]
+  compiled_prompt: string
+  warnings: string[]
+  estimated_tokens: number
+}
+
+export interface AiPromptSceneVersion {
+  id: string
+  scene_key: string
+  block_keys: string[]
+  scene_instruction: string
+  status: 'active' | 'archived'
+  source: string
+  created_at?: string | null
+  activated_at?: string | null
 }
 export interface AiPromptVersionSummary {
   id: string
@@ -77,6 +152,7 @@ export interface AiRuntimeOptions {
   model?: string
   thinking_enabled?: boolean | null
   prompt_override?: string | null
+  prompt_options?: AiPromptRunSelection | null
 }
 export type AiScenarioRuntimeOptionsMap = Record<string, AiRuntimeOptions>
 export type AiProviderKey = 'dashscope' | 'qwen' | 'zhipu' | 'siliconflow' | 'deepseek'
@@ -92,6 +168,7 @@ export interface ResolvedAiRuntimeMeta {
   model_type: AiModelType
   model_type_label?: string
   has_vision: boolean
+  vision_processing_role?: 'direct_generation' | 'ocr_extraction' | null
   thinking_enabled: boolean
 }
 
@@ -104,6 +181,7 @@ export interface AiModelCatalogItem {
   model_type: AiModelType
   model_type_label: string
   has_vision: boolean
+  vision_processing_role?: 'direct_generation' | 'ocr_extraction' | null
   supports_thinking: boolean
   supports_temperature: boolean
   structured_output_mode: 'json_schema' | 'json_object' | 'prompt_only'

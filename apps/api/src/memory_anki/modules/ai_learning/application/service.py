@@ -13,6 +13,7 @@ from memory_anki.modules.ai_learning.domain.schemas import AiRunDraft
 from memory_anki.platform.application import (
     AiRuntimeOptions,
     AiRuntimeProvider,
+    PromptCatalog,
     extract_first_json_object,
     serialize_resolved_ai_runtime,
 )
@@ -58,7 +59,7 @@ def _selection_payload(item: Any) -> dict[str, Any]:
     return item.model_dump()
 
 
-def preview_run(draft: AiRunDraft) -> dict[str, Any]:
+def preview_run(draft: AiRunDraft, prompt_catalog: PromptCatalog) -> dict[str, Any]:
     context_text = serialize_context(draft.context.model_dump())
     selected_contexts = [
         item
@@ -74,10 +75,19 @@ def preview_run(draft: AiRunDraft) -> dict[str, Any]:
                 for item in selected_contexts
             ]
         )
-    system_prompt = (
+    base_prompt = (
         draft.ai_options.prompt_override.strip()
         if draft.ai_options and draft.ai_options.prompt_override
-        else TASK_INSTRUCTIONS[draft.task_key]
+        else prompt_catalog.render(
+            "ai_prompt_ai_learning_workbench",
+            {"task_instruction": TASK_INSTRUCTIONS[draft.task_key]},
+        )
+    )
+    task_instruction = TASK_INSTRUCTIONS[draft.task_key]
+    system_prompt = (
+        base_prompt
+        if task_instruction in base_prompt
+        else f"{base_prompt}\n\n当前任务要求：{task_instruction}"
     )
     user_prompt = draft.user_prompt.strip() or DEFAULT_REQUESTS[draft.task_key]
     messages = [
@@ -200,11 +210,12 @@ def execute_run(
     session: Session,
     draft: AiRunDraft,
     runtime_provider: AiRuntimeProvider,
+    prompt_catalog: PromptCatalog,
 ) -> dict[str, Any]:
     existing = session.query(AiLearningRun).filter_by(operation_id=draft.operation_id).one_or_none()
     if existing is not None:
         return serialize_run(existing)
-    preview = preview_run(draft)
+    preview = preview_run(draft, prompt_catalog)
     row = AiLearningRun(
         id=str(uuid.uuid4()),
         thread_id=draft.thread_id or str(uuid.uuid4()),
@@ -246,6 +257,7 @@ def execute_run(
                 model=normalized.model,
                 thinking_enabled=normalized.thinking_enabled,
                 prompt_override=normalized.prompt_override,
+                prompt_options=normalized.prompt_options,
             ),
         )
         row.model_meta_json = _json(serialize_resolved_ai_runtime(runtime))

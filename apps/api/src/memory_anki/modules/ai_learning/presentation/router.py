@@ -18,19 +18,26 @@ from memory_anki.modules.ai_learning.domain.schemas import (
     AiRunFeedback,
     AiRunItemDecision,
 )
-from memory_anki.modules.settings.api import SettingsAiRuntimeProvider
+from memory_anki.modules.settings.api import SettingsAiRuntimeProvider, SettingsPromptCatalog
 
 router = APIRouter(prefix="/ai-learning", tags=["ai-learning"])
 
 
 @router.post("/preview")
-def api_preview_run(data: AiRunDraft):
-    return {"preview": preview_run(data)}
+def api_preview_run(data: AiRunDraft, session: Session = Depends(session_dep)):
+    return {"preview": preview_run(data, SettingsPromptCatalog(session))}
 
 
 @router.post("/runs")
 def api_execute_run(data: AiRunDraft, session: Session = Depends(session_dep)):
-    return {"item": execute_run(session, data, SettingsAiRuntimeProvider(session))}
+    return {
+        "item": execute_run(
+            session,
+            data,
+            SettingsAiRuntimeProvider(session),
+            SettingsPromptCatalog(session),
+        )
+    }
 
 
 @router.get("/runs")

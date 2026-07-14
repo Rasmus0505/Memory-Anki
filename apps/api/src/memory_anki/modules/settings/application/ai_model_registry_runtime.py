@@ -49,6 +49,12 @@ def mask_secret(value: str) -> str:
     return f"{secret[:4]}{'*' * max(4, len(secret) - 8)}{secret[-4:]}"
 
 
+OCR_EXTRACTION_MODEL_KEYS = {"qwen3.5-ocr", "qwen-vl-ocr"}
+
+
+def vision_processing_role(model_key: str) -> str:
+    return "ocr_extraction" if str(model_key or "").strip() in OCR_EXTRACTION_MODEL_KEYS else "direct_generation"
+
 def serialize_model_row(row: AiModelCatalog) -> dict[str, Any]:
     label = row.display_name
     if row.model_type == "llm":
@@ -68,6 +74,7 @@ def serialize_model_row(row: AiModelCatalog) -> dict[str, Any]:
             else row.model_type
         ),
         "has_vision": bool(row.has_vision),
+        "vision_processing_role": vision_processing_role(row.key) if row.has_vision else None,
         "supports_thinking": bool(row.supports_thinking),
         "supports_temperature": bool(row.supports_temperature),
         "structured_output_mode": str(row.structured_output_mode or "json_object"),
@@ -275,10 +282,13 @@ def normalize_ai_runtime_options(value: Any) -> AiRuntimeOptions:
         if isinstance(raw_prompt_override, str) and raw_prompt_override.strip()
         else None
     )
+    raw_prompt_options = value.get("prompt_options")
+    prompt_options = dict(raw_prompt_options) if isinstance(raw_prompt_options, dict) else None
     return AiRuntimeOptions(
         model=model or None,
         thinking_enabled=thinking_enabled,
         prompt_override=prompt_override,
+        prompt_options=prompt_options,
     )
 
 
@@ -422,6 +432,7 @@ def resolve_scenario_runtime(
             thinking_enabled=effective_thinking_enabled,
         ),
         prompt_override=runtime_options.prompt_override,
+        prompt_options=runtime_options.prompt_options,
     )
 
 
@@ -437,6 +448,9 @@ def serialize_resolved_ai_runtime(runtime: ResolvedAiModelRuntime) -> dict[str, 
         "model_type": runtime.model_type,
         "model_type_label": MODEL_TYPE_LABELS.get(runtime.model_type, runtime.model_type),
         "has_vision": runtime.has_vision,
+        "vision_processing_role": (
+            vision_processing_role(runtime.model_key) if runtime.has_vision else None
+        ),
         "thinking_enabled": runtime.thinking_enabled,
         "structured_output_mode": runtime.structured_output_mode,
         "input_price_per_million": runtime.input_price_per_million,

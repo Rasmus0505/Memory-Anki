@@ -34,6 +34,7 @@ class SettingsAiRuntimeProvider:
             model=options.model,
             thinking_enabled=options.thinking_enabled,
             prompt_override=options.prompt_override,
+            prompt_options=options.prompt_options,
         )
 
     def resolve(
@@ -46,6 +47,7 @@ class SettingsAiRuntimeProvider:
             model=options.model if options else None,
             thinking_enabled=options.thinking_enabled if options else None,
             prompt_override=options.prompt_override if options else None,
+            prompt_options=options.prompt_options if options else None,
         )
         runtime = resolve_scenario_runtime(
             self._session,
@@ -72,6 +74,7 @@ class SettingsAiRuntimeProvider:
             base_url=runtime.base_url,
             extra_payload=runtime.extra_payload,
             prompt_override=runtime.prompt_override,
+            prompt_options=runtime.prompt_options,
             public_metadata=metadata,
         )
     def restore(self, snapshot: PersistedAiRuntime) -> ResolvedAiRuntime:
@@ -80,6 +83,7 @@ class SettingsAiRuntimeProvider:
             options=AiRuntimeOptions(
                 model=snapshot.model,
                 prompt_override=snapshot.prompt_override,
+                prompt_options=snapshot.prompt_options,
             ),
         )
         provider = snapshot.provider.strip().lower()
@@ -109,5 +113,5 @@ class SettingsAiRuntimeProvider:
             base_url=snapshot.base_url,
             extra_payload=snapshot.extra_payload,
             prompt_override=snapshot.prompt_override,
+            prompt_options=snapshot.prompt_options,
         )
-

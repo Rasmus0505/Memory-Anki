@@ -76,6 +76,7 @@ def persisted_runtime_to_payload(runtime: PersistedAiRuntime) -> dict[str, Any]:
         "base_url": runtime.base_url,
         "extra_payload": runtime.extra_payload,
         "prompt_override": runtime.prompt_override,
+        "prompt_options": runtime.prompt_options,
     }
 
 
@@ -89,6 +90,11 @@ def persisted_runtime_from_payload(payload: dict[str, Any]) -> PersistedAiRuntim
             payload.get("extra_payload") if isinstance(payload.get("extra_payload"), dict) else None
         ),
         prompt_override=str(payload.get("prompt_override") or "") or None,
+        prompt_options=(
+            dict(raw_prompt_options)
+            if isinstance((raw_prompt_options := payload.get("prompt_options")), dict)
+            else None
+        ),
     )
 
 

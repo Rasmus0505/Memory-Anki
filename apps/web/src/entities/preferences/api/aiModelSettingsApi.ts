@@ -4,6 +4,10 @@ import type {
   AiModelImpactResponse,
   AiModelSettingsResponse,
   AiPromptTemplateListResponse,
+  AiPromptBlock,
+  AiPromptRunSelection,
+  AiPromptSceneDefault,
+  CompiledPromptSnapshot,
 } from '@/shared/api/contracts'
 
 export function getAiModelScenariosApi() {
@@ -12,6 +16,43 @@ export function getAiModelScenariosApi() {
 
 export function getAiPromptTemplatesApi() {
   return request<AiPromptTemplateListResponse>('/settings/ai-prompts')
+}
+
+export function getAiPromptBlocksApi() {
+  return request<{ items: AiPromptBlock[] }>('/settings/ai-prompt-blocks')
+}
+
+export function getAiPromptScenesApi() {
+  return request<{ items: AiPromptSceneDefault[] }>('/settings/ai-prompt-scenes')
+}
+
+export function previewAiPromptCompositionApi(
+  sceneKey: string,
+  selection: AiPromptRunSelection,
+  variables: Record<string, unknown> = {},
+) {
+  return request<CompiledPromptSnapshot>('/settings/ai-prompt-compose/preview', {
+    method: 'POST',
+    body: JSON.stringify({ scene_key: sceneKey, selection, variables }),
+  })
+}
+
+export function saveAiPromptSceneDefaultApi(sceneKey: string, selection: AiPromptRunSelection) {
+  return request<AiPromptSceneDefault>(
+    `/settings/ai-prompt-scenes/${encodeURIComponent(sceneKey)}/default`,
+    {
+      method: 'PUT',
+      body: JSON.stringify({
+        block_keys: selection.block_keys ?? [],
+        scene_instruction: selection.scene_instruction ?? '',
+      }),
+      persistence: {
+        resourceKey: `settings:ai-prompt-scene:${sceneKey}`,
+        description: '保存场景默认提示词组合',
+        replayMode: 'manual',
+      },
+    },
+  )
 }
 
 export function updateAiModelScenariosApi(data: {

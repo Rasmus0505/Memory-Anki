@@ -1,14 +1,28 @@
-﻿import * as React from 'react'
+import * as React from 'react'
 import { toast } from '@/shared/feedback/toast'
 import type {
   AiModelScenario,
-  AiPromptTemplate,
+  AiPromptBlock,
+  AiPromptRunSelection,
+  AiPromptSceneDefault,
   AiScenarioRuntimeOptionsMap,
   AiRuntimeOptions,
 } from '@/shared/api/contracts'
 import {
+  buildDefaultAiConfig,
+  getScenarioPromptTemplateKey,
+  normalizeScenarioAiConfig,
+  readRecentAiConfig,
+  type PromptTemplateSnapshot,
+  writeRecentAiConfig,
+} from './aiRunConfigPersistence'
+import {
+  getAiPromptBlocksApi,
+  getAiPromptScenesApi,
   getAiPromptTemplatesApi,
   getAiModelScenariosApi,
+  previewAiPromptCompositionApi,
+  saveAiPromptSceneDefaultApi,
 } from '@/entities/preferences/api'
 import { Button } from '@/shared/components/ui/button'
 import {
@@ -36,7 +50,7 @@ export interface AiRunConfigRequest {
   contextOptions?: AiGenerationContextOption[]
 }
 
-interface MultiScenarioEntry {
+export interface MultiScenarioEntry {
   scenarioKey: string
   entrypointKey: string
   label?: string
@@ -45,7 +59,7 @@ interface MultiScenarioEntry {
   contextOptions?: AiGenerationContextOption[]
 }
 
-interface MultiAiRunConfigRequest {
+export interface MultiAiRunConfigRequest {
   title: string
   description?: string
   entries: MultiScenarioEntry[]
@@ -55,104 +69,11 @@ interface PendingRequest extends MultiAiRunConfigRequest {
   resolve: (value: AiScenarioRuntimeOptionsMap | undefined) => void
 }
 
-const RECENT_AI_CONFIG_PREFIX = 'memory-anki.ai-runtime-recent.'
-
-const SCENARIO_PROMPT_TEMPLATE_KEYS = {
-  vision_image_mindmap: 'ai_prompt_import_image_mindmap',
-  vision_image_text: 'ai_prompt_import_image_text',
-  vision_batch_mindmap: 'ai_prompt_import_batch_mindmap',
-  quiz_image_generation: 'ai_prompt_palace_quiz_generate',
-  quiz_text_generation: 'ai_prompt_palace_quiz_generate',
-  quiz_review_mindmap_generation: 'ai_prompt_palace_quiz_review_mindmap',
-  quiz_mini_palace_grouping: 'ai_prompt_palace_quiz_group_by_mini_palace',
-} as const satisfies Record<string, AiPromptTemplate['key']>
-
-type ScenarioPromptTemplateKey = keyof typeof SCENARIO_PROMPT_TEMPLATE_KEYS
-
-function getScenarioPromptTemplateKey(scenarioKey: string) {
-  return Object.prototype.hasOwnProperty.call(SCENARIO_PROMPT_TEMPLATE_KEYS, scenarioKey)
-    ? SCENARIO_PROMPT_TEMPLATE_KEYS[scenarioKey as ScenarioPromptTemplateKey]
-    : undefined
-}
-
-interface PromptTemplateSnapshot {
-  template: string
-  defaultTemplate: string
-}
-
 interface AiRunConfigCatalog {
   scenarios: AiModelScenario[]
   promptTemplates: Record<string, PromptTemplateSnapshot>
-}
-
-function recentConfigKey(entrypointKey: string, scenarioKey: string) {
-  return `${RECENT_AI_CONFIG_PREFIX}${entrypointKey}.${scenarioKey}`
-}
-
-function readRecentAiConfig(entrypointKey: string, scenarioKey: string): AiRuntimeOptions | null {
-  if (typeof window === 'undefined') return null
-  try {
-    const raw =
-      window.localStorage.getItem(recentConfigKey(entrypointKey, scenarioKey)) ||
-      window.localStorage.getItem(`${RECENT_AI_CONFIG_PREFIX}${entrypointKey}`)
-    if (!raw) return null
-    const parsed = JSON.parse(raw) as AiRuntimeOptions
-    if (!parsed || typeof parsed !== 'object') return null
-    return {
-      model: typeof parsed.model === 'string' && parsed.model.trim() ? parsed.model : undefined,
-      thinking_enabled:
-        typeof parsed.thinking_enabled === 'boolean' ? parsed.thinking_enabled : undefined,
-      prompt_override:
-        typeof parsed.prompt_override === 'string' && parsed.prompt_override.trim()
-          ? parsed.prompt_override
-          : undefined,
-    }
-  } catch {
-    return null
-  }
-}
-
-function writeRecentAiConfig(entrypointKey: string, scenarioKey: string, value: AiRuntimeOptions) {
-  if (typeof window === 'undefined') return
-  try {
-    window.localStorage.setItem(
-      recentConfigKey(entrypointKey, scenarioKey),
-      JSON.stringify(value),
-    )
-  } catch {
-    // Ignore local storage failures and keep the current run usable.
-  }
-}
-
-function buildDefaultAiConfig(
-  scenario: AiModelScenario,
-  promptTemplate?: PromptTemplateSnapshot | null,
-): AiRuntimeOptions {
-  return {
-    model: scenario.default_model,
-    thinking_enabled: scenario.default_thinking_enabled,
-    prompt_override: promptTemplate?.template || promptTemplate?.defaultTemplate || undefined,
-  }
-}
-
-function normalizeScenarioAiConfig(
-  scenario: AiModelScenario,
-  value: AiRuntimeOptions | null | undefined,
-  promptTemplate?: PromptTemplateSnapshot | null,
-): AiRuntimeOptions {
-  const fallback = buildDefaultAiConfig(scenario, promptTemplate)
-  const model = value?.model?.trim()
-  const matchedModel = scenario.available_models.find((item) => item.key === model)
-  const resolvedModel = matchedModel?.key ?? fallback.model
-  const resolvedMetadata = scenario.available_models.find((item) => item.key === resolvedModel)
-  const thinkingEnabled = resolvedMetadata?.supports_thinking
-    ? Boolean(value?.thinking_enabled ?? fallback.thinking_enabled)
-    : false
-  return {
-    model: resolvedModel,
-    thinking_enabled: thinkingEnabled,
-    prompt_override: value?.prompt_override?.trim() || fallback.prompt_override,
-  }
+  promptBlocks: AiPromptBlock[]
+  promptScenes: Record<string, AiPromptSceneDefault>
 }
 
 export function useAiRunConfigDialog() {
@@ -162,6 +83,9 @@ export function useAiRunConfigDialog() {
   const [pending, setPending] = React.useState<PendingRequest | null>(null)
   const [selectedConfigs, setSelectedConfigs] = React.useState<Record<string, AiRuntimeOptions>>({})
   const [promptTemplates, setPromptTemplates] = React.useState<Record<string, PromptTemplateSnapshot>>({})
+  const [promptBlocks, setPromptBlocks] = React.useState<AiPromptBlock[]>([])
+  const [promptScenes, setPromptScenes] = React.useState<Record<string, AiPromptSceneDefault>>({})
+  const [savingDefaults, setSavingDefaults] = React.useState<Record<string, boolean>>({})
   const [selectedContexts, setSelectedContexts] = React.useState<Record<string, string[]>>({})
 
   const pendingEntries = React.useMemo(() => pending?.entries ?? [], [pending])
@@ -172,16 +96,19 @@ export function useAiRunConfigDialog() {
         scenario: scenarios.find((item) => item.key === entry.scenarioKey) ?? null,
         recentConfig: readRecentAiConfig(entry.entrypointKey, entry.scenarioKey),
         promptTemplate: promptTemplates[getScenarioPromptTemplateKey(entry.scenarioKey) ?? ''] ?? null,
+        promptScene: promptScenes[entry.scenarioKey] ?? null,
       })),
-    [pendingEntries, promptTemplates, scenarios],
+    [pendingEntries, promptScenes, promptTemplates, scenarios],
   )
 
   const loadScenarios = React.useCallback(async () => {
     setLoading(true)
     try {
-      const [response, promptResponse] = await Promise.all([
+      const [response, promptResponse, blockResponse, sceneResponse] = await Promise.all([
         getAiModelScenariosApi(),
         getAiPromptTemplatesApi().catch(() => ({ items: [] })),
+        getAiPromptBlocksApi().catch(() => ({ items: [] })),
+        getAiPromptScenesApi().catch(() => ({ items: [] })),
       ])
       const nextScenes = response.scenes ?? response.scenarios ?? []
       const nextPromptTemplates = Object.fromEntries(
@@ -195,9 +122,16 @@ export function useAiRunConfigDialog() {
       )
       setScenarios(nextScenes)
       setPromptTemplates(nextPromptTemplates)
+      setPromptBlocks(blockResponse.items ?? [])
+      const nextPromptScenes = Object.fromEntries(
+        (sceneResponse.items ?? []).map((item) => [item.scene_key, item]),
+      )
+      setPromptScenes(nextPromptScenes)
       return {
         scenarios: nextScenes,
         promptTemplates: nextPromptTemplates,
+        promptBlocks: blockResponse.items ?? [],
+        promptScenes: nextPromptScenes,
       } satisfies AiRunConfigCatalog
     } catch (error) {
       const message = error instanceof Error ? error.message : '无法加载 AI 运行配置。'
@@ -212,11 +146,13 @@ export function useAiRunConfigDialog() {
     async (request: MultiAiRunConfigRequest) => {
       let nextScenarios = scenarios
       let nextPromptTemplates = promptTemplates
+      let nextPromptScenes = promptScenes
       if (nextScenarios.length === 0) {
         try {
           const catalog = await loadScenarios()
           nextScenarios = catalog.scenarios
           nextPromptTemplates = catalog.promptTemplates
+          nextPromptScenes = catalog.promptScenes
         } catch {
           return undefined
         }
@@ -236,6 +172,7 @@ export function useAiRunConfigDialog() {
           scenario,
           recentConfig,
           promptTemplate,
+          nextPromptScenes[entry.scenarioKey] ?? null,
         )
         nextSelectedContexts[entry.scenarioKey] = []
       }
@@ -249,7 +186,7 @@ export function useAiRunConfigDialog() {
         setPending({ ...request, resolve })
       })
     },
-    [loadScenarios, promptTemplates, scenarios],
+    [loadScenarios, promptScenes, promptTemplates, scenarios],
   )
 
   const promptForAiOptions = React.useCallback(
@@ -298,16 +235,26 @@ export function useAiRunConfigDialog() {
         if (!scenario || !selectedModelMeta) {
           throw new Error('当前入口缺少有效的模型配置，无法确认。')
         }
+        const promptOptions: AiPromptRunSelection = {
+          block_keys: selectedConfig?.prompt_options?.block_keys ?? [],
+          scene_instruction: selectedConfig?.prompt_options?.scene_instruction ?? '',
+          run_instruction: buildPromptWithContexts(
+            selectedConfig?.prompt_options?.run_instruction?.trim() || '',
+            entry.contextOptions ?? [],
+            selectedContexts[entry.scenarioKey] ?? [],
+          ),
+        }
+        const manualOverride = selectedConfig?.prompt_override?.trim() || ''
+        const compiled = manualOverride
+          ? null
+          : await previewAiPromptCompositionApi(entry.scenarioKey, promptOptions)
         const payload: AiRuntimeOptions = {
           model: selectedModelMeta.key,
           thinking_enabled: selectedModelMeta.supports_thinking
             ? Boolean(selectedConfig?.thinking_enabled)
             : false,
-          prompt_override: buildPromptWithContexts(
-            selectedConfig?.prompt_override?.trim() || '',
-            entry.contextOptions ?? [],
-            selectedContexts[entry.scenarioKey] ?? [],
-          ) || undefined,
+          prompt_override: manualOverride || compiled?.text || undefined,
+          prompt_options: promptOptions,
         }
         nextPayload[entry.scenarioKey] = payload
       }
@@ -358,9 +305,9 @@ export function useAiRunConfigDialog() {
     const promptTemplate = promptTemplates[promptTemplateKey] ?? null
     setSelectedConfigs((current) => ({
       ...current,
-      [scenarioKey]: buildDefaultAiConfig(scenario, promptTemplate),
+      [scenarioKey]: buildDefaultAiConfig(scenario, promptTemplate, promptScenes[scenarioKey] ?? null),
     }))
-  }, [promptTemplates, scenarios])
+  }, [promptScenes, promptTemplates, scenarios])
 
   const applyScenarioRecentChoice = React.useCallback(
     (scenarioKey: string, entrypointKey: string) => {
@@ -372,10 +319,15 @@ export function useAiRunConfigDialog() {
       const promptTemplate = promptTemplates[promptTemplateKey] ?? null
       setSelectedConfigs((current) => ({
         ...current,
-        [scenarioKey]: normalizeScenarioAiConfig(scenario, recentConfig, promptTemplate),
+        [scenarioKey]: normalizeScenarioAiConfig(
+          scenario,
+          recentConfig,
+          promptTemplate,
+          promptScenes[scenarioKey] ?? null,
+        ),
       }))
     },
-    [promptTemplates, scenarios],
+    [promptScenes, promptTemplates, scenarios],
   )
 
   const resetAllToDefaults = React.useCallback(() => {
@@ -388,10 +340,40 @@ export function useAiRunConfigDialog() {
       nextSelectedConfigs[entry.scenarioKey] = buildDefaultAiConfig(
         scenario,
         promptTemplates[promptTemplateKey] ?? null,
+        promptScenes[entry.scenarioKey] ?? null,
       )
     }
     setSelectedConfigs(nextSelectedConfigs)
-  }, [pending, promptTemplates, scenarios])
+  }, [pending, promptScenes, promptTemplates, scenarios])
+
+  const saveCurrentAsDefault = React.useCallback(async (sceneKey: string) => {
+    const selection = selectedConfigs[sceneKey]?.prompt_options
+    if (!selection) return
+    setSavingDefaults((current) => ({ ...current, [sceneKey]: true }))
+    try {
+      const saved = await saveAiPromptSceneDefaultApi(sceneKey, {
+        block_keys: selection.block_keys ?? [],
+        scene_instruction: selection.scene_instruction ?? '',
+      })
+      setPromptScenes((current) => ({ ...current, [sceneKey]: saved }))
+      setSelectedConfigs((current) => ({
+        ...current,
+        [sceneKey]: {
+          ...current[sceneKey],
+          prompt_options: {
+            block_keys: saved.block_keys,
+            scene_instruction: saved.scene_instruction,
+            run_instruction: current[sceneKey]?.prompt_options?.run_instruction ?? '',
+          },
+        },
+      }))
+      toast.success(`${saved.label} 已设为以后默认`)
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '保存场景默认提示词失败。')
+    } finally {
+      setSavingDefaults((current) => ({ ...current, [sceneKey]: false }))
+    }
+  }, [selectedConfigs])
 
   const dialog = (
     <Dialog open={Boolean(pending)} onOpenChange={(open) => { if (!open) closeDialog() }}>
@@ -404,17 +386,28 @@ export function useAiRunConfigDialog() {
         </DialogHeader>
 
         <div className="max-h-[70vh] space-y-4 overflow-y-auto pr-1">
-          {currentEntries.map(({ entry, scenario, recentConfig, promptTemplate }) => {
+          {currentEntries.map(({ entry, scenario, recentConfig, promptTemplate, promptScene }) => {
             const selectedConfig = selectedConfigs[entry.scenarioKey]
             const selectedModel = selectedConfig?.model?.trim() || ''
             const selectedModelMeta =
               scenario?.available_models.find((item) => item.key === selectedModel) ?? null
             const enabledContextIds = selectedContexts[entry.scenarioKey] ?? []
+            const selection = selectedConfig?.prompt_options ?? {}
+            const selectedBlockKeys = selection.block_keys ?? []
+            const availableBlocks = promptBlocks.filter((block) => (
+              block.is_active
+              && (block.applicable_scene_keys.length === 0 || block.applicable_scene_keys.includes(entry.scenarioKey))
+            ))
+            const localPreview = compileLocalPromptPreview(
+              availableBlocks,
+              selection,
+              promptScene?.recommended_block_keys ?? [],
+            )
             const contextCharacters = (entry.contextOptions ?? [])
               .filter((item) => enabledContextIds.includes(item.id))
               .reduce((total, item) => total + item.content.length, 0)
             const estimatedTokens = Math.ceil(
-              ((selectedConfig?.prompt_override ?? '').length + contextCharacters) / 1.5,
+              ((selectedConfig?.prompt_override || localPreview.text).length + contextCharacters) / 1.5,
             )
             const exceedsBudget = estimatedTokens > 24000
             return (
@@ -512,24 +505,116 @@ export function useAiRunConfigDialog() {
                   </div>
                 </div>
 
-                <label className="grid min-h-[260px] gap-2 text-sm">
-                  <span className="font-medium">本次提示词</span>
-                  <textarea
-                    aria-label="本次提示词"
-                    value={selectedConfig?.prompt_override ?? ''}
-                    onChange={(event) => {
-                      const nextPrompt = event.target.value
-                      updateScenarioConfig(entry.scenarioKey, (current) => ({
-                        ...current,
-                        prompt_override: nextPrompt,
-                      }))
-                    }}
-                    placeholder={promptTemplate?.defaultTemplate || '可填写本次完整系统提示词；留空则使用场景默认模板。'}
-                    className="min-h-[220px] resize-y rounded-lg border border-input bg-background px-4 py-3 font-mono text-xs leading-5"
-                  />
-                  <span className="text-xs text-muted-foreground">
-                    这里会覆盖本次系统提示词；页面里的额外提示词/自然语言提示仍会作为补充要求拼接。
-                  </span>
+                <div className="grid min-h-[260px] gap-3 text-sm">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-medium">提示词组合</span>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={Boolean(savingDefaults[entry.scenarioKey])}
+                      onClick={() => { void saveCurrentAsDefault(entry.scenarioKey) }}
+                    >
+                      {savingDefaults[entry.scenarioKey] ? '保存中...' : '设为以后默认'}
+                    </Button>
+                  </div>
+
+                  <div className="grid gap-2 rounded-lg border border-border/60 bg-background/70 p-3 sm:grid-cols-2">
+                    {availableBlocks.map((block) => (
+                      <label key={block.key} className="flex items-start gap-2 rounded-md border bg-background p-2">
+                        <input
+                          type="checkbox"
+                          className="mt-1 size-4"
+                          checked={selectedBlockKeys.includes(block.key)}
+                          onChange={(event) => {
+                            updateScenarioConfig(entry.scenarioKey, (current) => {
+                              const currentKeys = current?.prompt_options?.block_keys ?? []
+                              return {
+                                ...current,
+                                prompt_options: {
+                                  ...current?.prompt_options,
+                                  block_keys: event.target.checked
+                                    ? [...currentKeys, block.key]
+                                    : currentKeys.filter((key) => key !== block.key),
+                                },
+                              }
+                            })
+                          }}
+                        />
+                        <span>
+                          <span className="block font-medium">{block.label}</span>
+                          <span className="text-xs text-muted-foreground">{block.description}</span>
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+
+                  <label className="grid gap-2">
+                    <span className="font-medium">场景特殊提示词</span>
+                    <textarea
+                      aria-label="场景特殊提示词"
+                      value={selection.scene_instruction ?? ''}
+                      onChange={(event) => {
+                        updateScenarioConfig(entry.scenarioKey, (current) => ({
+                          ...current,
+                          prompt_options: {
+                            ...current?.prompt_options,
+                            scene_instruction: event.target.value,
+                          },
+                        }))
+                      }}
+                      className="min-h-[110px] resize-y rounded-lg border border-input bg-background px-4 py-3 font-mono text-xs leading-5"
+                    />
+                  </label>
+
+                  <label className="grid gap-2">
+                    <span className="font-medium">本次运行追加要求</span>
+                    <textarea
+                      aria-label="本次运行追加要求"
+                      value={selection.run_instruction ?? ''}
+                      onChange={(event) => {
+                        updateScenarioConfig(entry.scenarioKey, (current) => ({
+                          ...current,
+                          prompt_options: {
+                            ...current?.prompt_options,
+                            run_instruction: event.target.value,
+                          },
+                        }))
+                      }}
+                      placeholder="仅影响本次运行，不会写入以后默认。"
+                      className="min-h-[80px] resize-y rounded-lg border border-input bg-background px-4 py-3 text-sm"
+                    />
+                  </label>
+
+                  <div className="space-y-2 rounded-lg border border-border/60 bg-muted/10 p-3">
+                    <div className="font-medium">最终编译预览</div>
+                    <pre className="max-h-56 overflow-auto whitespace-pre-wrap rounded-md bg-background p-3 text-xs leading-5">
+                      {selectedConfig?.prompt_override?.trim() || localPreview.text || '当前组合为空。'}
+                    </pre>
+                    {localPreview.warnings.map((warning) => (
+                      <div key={warning} className="text-xs text-amber-600">{warning}</div>
+                    ))}
+                  </div>
+
+                  <details className="rounded-lg border border-dashed border-border/60 bg-background/60 p-3">
+                    <summary className="cursor-pointer text-sm font-medium">完整覆盖（高级兼容）</summary>
+                    <textarea
+                      aria-label="完整覆盖提示词"
+                      value={selectedConfig?.prompt_override ?? ''}
+                      onChange={(event) => {
+                        updateScenarioConfig(entry.scenarioKey, (current) => ({
+                          ...current,
+                          prompt_override: event.target.value,
+                        }))
+                      }}
+                      placeholder={promptTemplate?.defaultTemplate || '填写后将绕过提示词块组合。'}
+                      className="mt-3 min-h-[140px] w-full resize-y rounded-lg border border-input bg-background px-4 py-3 font-mono text-xs leading-5"
+                    />
+                    <div className="mt-2 text-xs text-muted-foreground">
+                      仅用于兼容旧流程；浏览器不会再把完整覆盖内容保存为以后默认。
+                    </div>
+                  </details>
+
                   {(entry.contextOptions ?? []).length > 0 ? (
                     <div className="space-y-2 rounded-lg border border-border/60 bg-muted/10 p-3">
                       <div className="font-medium">上下文快照</div>
@@ -564,7 +649,7 @@ export function useAiRunConfigDialog() {
                       </div>
                     </div>
                   ) : null}
-                </label>
+                </div>
               </div>
             )
           })}
@@ -617,4 +702,45 @@ function buildPromptWithContexts(
     .map((item) => `【${item.label}】\n${item.content.trim()}`)
     .join('\n\n')
   return `${prompt.trim()}\n\n以下内容是本次运行创建时的只读上下文快照：\n${contextText}`.trim()
+}
+
+const PROMPT_LAYER_ORDER: Record<AiPromptBlock['layer'], number> = {
+  role: 10,
+  task: 20,
+  content: 30,
+  boundary: 40,
+  output: 50,
+  quality: 60,
+}
+
+function compileLocalPromptPreview(
+  blocks: AiPromptBlock[],
+  selection: AiPromptRunSelection,
+  recommendedBlockKeys: string[],
+) {
+  const selectedKeys = selection.block_keys ?? []
+  const selectedBlocks = blocks
+    .filter((block) => selectedKeys.includes(block.key))
+    .sort((left, right) => (
+      PROMPT_LAYER_ORDER[left.layer] - PROMPT_LAYER_ORDER[right.layer]
+      || left.sort_order - right.sort_order
+      || left.key.localeCompare(right.key)
+    ))
+  const parts = selectedBlocks.map((block) => block.template.trim()).filter(Boolean)
+  if (selection.scene_instruction?.trim()) parts.push(selection.scene_instruction.trim())
+  if (selection.run_instruction?.trim()) {
+    parts.push(`本次运行追加要求：\n${selection.run_instruction.trim()}`)
+  }
+  const text = parts.join('\n\n')
+  const warnings = recommendedBlockKeys
+    .filter((key) => !selectedKeys.includes(key))
+    .map((key) => `已取消推荐提示词块：${key}`)
+  if (!text.trim()) warnings.push('最终提示词为空。')
+  if (/第一张(?:图片|图像).{0,12}结构图/.test(text) && !text.includes('显式')) {
+    warnings.push('检测到未声明的“第一张图是结构图”假设。')
+  }
+  if (text.includes('不要总结') && /(概括|精简|简洁)/.test(text)) {
+    warnings.push('检测到“禁止总结”与“概括/精简”可能冲突。')
+  }
+  return { text, warnings }
 }

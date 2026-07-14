@@ -82,6 +82,7 @@ class ResolvedAiModelRuntime:
     base_url: str
     extra_payload: dict[str, Any] | None
     prompt_override: str | None = None
+    prompt_options: dict[str, Any] | None = None
 
     @property
     def model(self) -> str:

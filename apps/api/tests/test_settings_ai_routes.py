@@ -151,6 +151,76 @@ class SettingsAiRouteTests(RouterTestCase):
         self.assertEqual(response.status_code, 400)
         self.assertIn("未知占位符", response.json()["detail"])
 
+    def test_prompt_blocks_compile_in_fixed_layers_and_allow_missing_recommended_blocks(self):
+        blocks_response = self.client.get("/api/v1/settings/ai-prompt-blocks")
+        self.assertEqual(blocks_response.status_code, 200)
+        block_keys = {item["key"] for item in blocks_response.json()["items"]}
+        self.assertIn("content.fidelity", block_keys)
+        self.assertIn("output.mindmap_json", block_keys)
+
+        preview = self.client.post(
+            "/api/v1/settings/ai-prompt-compose/preview",
+            json={
+                "scene_key": "vision_batch_mindmap",
+                "selection": {
+                    "block_keys": ["quality.json_integrity", "content.fidelity"],
+                    "scene_instruction": "场景规则",
+                    "run_instruction": "本次只处理第 64-68 页",
+                },
+            },
+        )
+        self.assertEqual(preview.status_code, 200)
+        payload = preview.json()
+        self.assertLess(payload["text"].index("严格保留"), payload["text"].index("输出前检查"))
+        self.assertTrue(payload["text"].endswith("本次运行追加要求：\n本次只处理第 64-68 页"))
+        self.assertTrue(any("boundary.document_chapter" in item for item in payload["warnings"]))
+
+    def test_scene_default_activates_immediately_and_can_roll_back(self):
+        before = self.client.get("/api/v1/settings/ai-prompt-scenes").json()["items"]
+        scene = next(item for item in before if item["scene_key"] == "vision_batch_mindmap")
+        original_version = scene["active_version_id"]
+
+        saved = self.client.put(
+            "/api/v1/settings/ai-prompt-scenes/vision_batch_mindmap/default",
+            json={
+                "block_keys": ["content.fidelity", "output.mindmap_json"],
+                "scene_instruction": "新的场景默认要求",
+            },
+        )
+        self.assertEqual(saved.status_code, 200)
+        self.assertNotEqual(saved.json()["active_version_id"], original_version)
+        self.assertIn("新的场景默认要求", saved.json()["compiled_prompt"])
+
+        versions = self.client.get(
+            "/api/v1/settings/ai-prompt-scenes/vision_batch_mindmap/versions"
+        ).json()["items"]
+        self.assertEqual(len(versions), 2)
+        restored = self.client.post(
+            f"/api/v1/settings/ai-prompt-scenes/vision_batch_mindmap/versions/{original_version}/activate"
+        )
+        self.assertEqual(restored.status_code, 200)
+        self.assertEqual(restored.json()["active_version_id"], original_version)
+
+    def test_shared_block_update_requires_affected_scene_acknowledgement(self):
+        blocks = self.client.get("/api/v1/settings/ai-prompt-blocks").json()["items"]
+        block = next(item for item in blocks if item["key"] == "content.fidelity")
+        self.assertIn("vision_batch_mindmap", block["affected_scene_keys"])
+
+        rejected = self.client.put(
+            "/api/v1/settings/ai-prompt-blocks/content.fidelity",
+            json={"template": "更新后的忠实规则"},
+        )
+        self.assertEqual(rejected.status_code, 400)
+        accepted = self.client.put(
+            "/api/v1/settings/ai-prompt-blocks/content.fidelity",
+            json={
+                "template": "更新后的忠实规则",
+                "acknowledged_scene_keys": block["affected_scene_keys"],
+            },
+        )
+        self.assertEqual(accepted.status_code, 200)
+        self.assertEqual(accepted.json()["template"], "更新后的忠实规则")
+
     def test_ai_model_settings_list_qwen_provider_and_shared_category_fields(self):
         with self.SessionLocal() as session:
             session.add(

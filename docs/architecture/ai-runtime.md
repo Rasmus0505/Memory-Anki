@@ -29,3 +29,5 @@ Business modules must not import `settings.application` or `settings.infrastruct
 4. Business use cases accept a provider explicitly; they do not resolve global settings themselves.
 5. Persisted worker snapshots never contain API keys; workers restore the current credential at execution time.
 6. Entity-scoped background work persists stable owner and operation identities before launch.
+7. `AiRuntimeOptions.prompt_options` carries the modular prompt selection independently from model resolution.
+8. Persisted runtime snapshots retain `prompt_options` and the compiled `prompt_override` for reproducibility, while remaining compatible with historical snapshots that only contain `prompt_override`.

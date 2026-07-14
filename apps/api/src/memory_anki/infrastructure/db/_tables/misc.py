@@ -180,6 +180,74 @@ class AiPromptVersion(Base):
     activated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
 
+class AiPromptBlock(Base):
+    __tablename__ = "ai_prompt_blocks"
+
+    key: Mapped[str] = mapped_column(String(120), primary_key=True)
+    label: Mapped[str] = mapped_column(String(200), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    layer: Mapped[str] = mapped_column(String(40), nullable=False)
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    applicable_scenes_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    placeholders_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    active_version_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    is_builtin: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_at: Mapped[datetime | None] = mapped_column(DateTime, default=utc_now_naive)
+    updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime,
+        default=utc_now_naive,
+        onupdate=utc_now_naive,
+    )
+
+
+class AiPromptBlockVersion(Base):
+    __tablename__ = "ai_prompt_block_versions"
+    __table_args__ = (
+        Index("ix_ai_prompt_block_versions_key_created", "block_key", "created_at"),
+        Index("ix_ai_prompt_block_versions_key_status", "block_key", "status"),
+    )
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    block_key: Mapped[str] = mapped_column(String(120), nullable=False)
+    template: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(String(24), nullable=False, default="active")
+    source: Mapped[str] = mapped_column(String(24), nullable=False, default="custom")
+    created_at: Mapped[datetime | None] = mapped_column(DateTime, default=utc_now_naive)
+    activated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
+class AiPromptSceneDefault(Base):
+    __tablename__ = "ai_prompt_scene_defaults"
+
+    scene_key: Mapped[str] = mapped_column(String(120), primary_key=True)
+    prompt_key: Mapped[str] = mapped_column(String(120), nullable=False)
+    active_version_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    created_at: Mapped[datetime | None] = mapped_column(DateTime, default=utc_now_naive)
+    updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime,
+        default=utc_now_naive,
+        onupdate=utc_now_naive,
+    )
+
+
+class AiPromptSceneVersion(Base):
+    __tablename__ = "ai_prompt_scene_versions"
+    __table_args__ = (
+        Index("ix_ai_prompt_scene_versions_scene_created", "scene_key", "created_at"),
+        Index("ix_ai_prompt_scene_versions_scene_status", "scene_key", "status"),
+    )
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    scene_key: Mapped[str] = mapped_column(String(120), nullable=False)
+    block_keys_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    scene_instruction: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    status: Mapped[str] = mapped_column(String(24), nullable=False, default="active")
+    source: Mapped[str] = mapped_column(String(24), nullable=False, default="builtin")
+    created_at: Mapped[datetime | None] = mapped_column(DateTime, default=utc_now_naive)
+    activated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
 class AiEvalRun(Base):
     __tablename__ = "ai_eval_runs"
     __table_args__ = (Index("ix_ai_eval_runs_prompt_created", "prompt_key", "created_at"),)

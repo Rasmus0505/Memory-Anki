@@ -12,6 +12,8 @@ vi.mock('sonner', () => ({
 
 describe('ProfileAiPromptsPage', () => {
   it('loads prompt templates and saves a customized prompt', async () => {
+    vi.spyOn(profileApi, 'getAiPromptBlocksApi').mockResolvedValue({ items: [] })
+    vi.spyOn(profileApi, 'getAiPromptScenesApi').mockResolvedValue({ items: [] })
     vi.spyOn(profileApi, 'getAiPromptTemplatesApi').mockResolvedValue({
       items: [
         {
@@ -57,6 +59,7 @@ describe('ProfileAiPromptsPage', () => {
       expect(screen.getByRole('heading', { name: 'AI 提示词' })).toBeTruthy()
     })
 
+    fireEvent.click(screen.getByRole('button', { name: '完整模板兼容' }))
     fireEvent.change(screen.getByRole('textbox'), {
       target: { value: '自定义模板 {{structure_tree_json}}' },
     })

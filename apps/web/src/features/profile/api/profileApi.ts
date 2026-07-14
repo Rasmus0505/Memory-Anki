@@ -1,6 +1,11 @@
 import { API_BASE, request, uploadWithFormData } from '@/shared/api/http'
 import type {
   AiEvalRun,
+  AiPromptBlock,
+  AiPromptBlockVersion,
+  AiPromptRunSelection,
+  AiPromptSceneDefault,
+  AiPromptSceneVersion,
   AiPromptTemplateListResponse,
   AiPromptVersionSummary,
   AiQualitySummary,
@@ -14,6 +19,69 @@ import type {
 
 export function getAiPromptTemplatesApi() {
   return request<AiPromptTemplateListResponse>('/settings/ai-prompts')
+}
+
+export function getAiPromptBlocksApi() {
+  return request<{ items: AiPromptBlock[] }>('/settings/ai-prompt-blocks')
+}
+
+export function saveAiPromptBlockApi(block: AiPromptBlock) {
+  return request<AiPromptBlock>(`/settings/ai-prompt-blocks/${encodeURIComponent(block.key)}`, {
+    method: 'PUT',
+    body: JSON.stringify({
+      label: block.label,
+      description: block.description,
+      layer: block.layer,
+      sort_order: block.sort_order,
+      template: block.template,
+      is_active: block.is_active,
+      applicable_scene_keys: block.applicable_scene_keys,
+      acknowledged_scene_keys: block.affected_scene_keys,
+    }),
+  })
+}
+
+export function getAiPromptBlockVersionsApi(blockKey: string) {
+  return request<{ items: AiPromptBlockVersion[] }>(
+    `/settings/ai-prompt-blocks/${encodeURIComponent(blockKey)}/versions`,
+  )
+}
+
+export function activateAiPromptBlockVersionApi(blockKey: string, versionId: string) {
+  return request<AiPromptBlock>(
+    `/settings/ai-prompt-blocks/${encodeURIComponent(blockKey)}/versions/${encodeURIComponent(versionId)}/activate`,
+    { method: 'POST' },
+  )
+}
+
+export function getAiPromptScenesApi() {
+  return request<{ items: AiPromptSceneDefault[] }>('/settings/ai-prompt-scenes')
+}
+
+export function saveAiPromptSceneDefaultApi(sceneKey: string, selection: AiPromptRunSelection) {
+  return request<AiPromptSceneDefault>(
+    `/settings/ai-prompt-scenes/${encodeURIComponent(sceneKey)}/default`,
+    {
+      method: 'PUT',
+      body: JSON.stringify({
+        block_keys: selection.block_keys ?? [],
+        scene_instruction: selection.scene_instruction ?? '',
+      }),
+    },
+  )
+}
+
+export function getAiPromptSceneVersionsApi(sceneKey: string) {
+  return request<{ items: AiPromptSceneVersion[] }>(
+    `/settings/ai-prompt-scenes/${encodeURIComponent(sceneKey)}/versions`,
+  )
+}
+
+export function activateAiPromptSceneVersionApi(sceneKey: string, versionId: string) {
+  return request<AiPromptSceneDefault>(
+    `/settings/ai-prompt-scenes/${encodeURIComponent(sceneKey)}/versions/${encodeURIComponent(versionId)}/activate`,
+    { method: 'POST' },
+  )
 }
 
 export function updateAiPromptTemplatesApi(templates: Record<string, string>) {

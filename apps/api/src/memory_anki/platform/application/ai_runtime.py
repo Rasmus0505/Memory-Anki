@@ -9,6 +9,7 @@ class AiRuntimeOptions:
     model: str | None = None
     thinking_enabled: bool | None = None
     prompt_override: str | None = None
+    prompt_options: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -19,6 +20,7 @@ class PersistedAiRuntime:
     base_url: str
     extra_payload: dict[str, Any] | None = None
     prompt_override: str | None = None
+    prompt_options: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -42,6 +44,7 @@ class ResolvedAiRuntime:
     extra_payload: dict[str, Any] | None
     prompt_override: str | None
     public_metadata: dict[str, Any]
+    prompt_options: dict[str, Any] | None = None
 
 
 class AiRuntimeProvider(Protocol):
@@ -67,6 +70,7 @@ def persist_ai_runtime(runtime: ResolvedAiRuntime) -> PersistedAiRuntime:
         base_url=runtime.base_url,
         extra_payload=runtime.extra_payload,
         prompt_override=runtime.prompt_override,
+        prompt_options=runtime.prompt_options,
     )
 
 
